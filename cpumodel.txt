@@ -1,0 +1,2588 @@
+下面给你两份交付物（都按你当前约束：**外部工具服务接入（Remote API）+ 私有化部署 + 输出以 3D/CSV/图片为主** 来设计）：
+
+1. **平台自身 API 的 OpenAPI 文档草案（YAML）**
+2. **数据库 ERD + Alembic 迁移策略 + PostgreSQL 初始化脚本（schema + seed）**
+
+> 说明：我把所有核心实体的 `id` 统一设计为 `UUID`（私有化部署下也推荐），避免 ID 可枚举；并且便于以后做文件下载、回调等“对外暴露链接”的安全性。你如果更想用自增 bigint，也很容易替换（迁移策略里我会说怎么改）。
+
+---
+
+# 1) 平台自身 API：OpenAPI 3.0 草案（openapi.yaml）
+
+> 这是“可导入 Swagger UI / Postman”的草案，覆盖：Auth、Tools/Versions、Tags、Favorites、Files、Tasks、Tool API Keys、Callback（异步任务回传）、Health。
+> 你们实现时可以先照这个落 FastAPI 路由，再按实际字段微调。
+
+```yaml
+openapi: 3.0.3
+info:
+  title: Remote Tool Platform API
+  version: 0.1.0
+  description: >
+    Platform API for registering remote tools (OpenAPI schema import), running tasks,
+    managing files, and receiving async callbacks from tools.
+servers:
+  - url: https://{host}/api/v1
+    variables:
+      host:
+        default: localhost:8000
+
+tags:
+  - name: Health
+  - name: Auth
+  - name: Users
+  - name: Tools
+  - name: ToolVersions
+  - name: ToolApiKeys
+  - name: Tags
+  - name: Favorites
+  - name: Files
+  - name: Tasks
+  - name: Callbacks
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    toolApiKey:
+      type: apiKey
+      in: header
+      name: X-TOOL-API-KEY
+
+  schemas:
+    UUID:
+      type: string
+      format: uuid
+
+    DateTime:
+      type: string
+      format: date-time
+
+    ErrorResponse:
+      type: object
+      properties:
+        error_code:
+          type: string
+          example: VALIDATION_ERROR
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+
+    PageMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+          minimum: 1
+          example: 1
+        page_size:
+          type: integer
+          minimum: 1
+          maximum: 200
+          example: 20
+        total:
+          type: integer
+          minimum: 0
+          example: 135
+
+    PaginatedTools:
+      type: object
+      properties:
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tool'
+
+    PaginatedTasks:
+      type: object
+      properties:
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Task'
+
+    UserRole:
+      type: string
+      enum: [user, admin]
+
+    UserStatus:
+      type: string
+      enum: [active, disabled]
+
+    ToolVisibility:
+      type: string
+      enum: [public, private]
+
+    ToolPublishStatus:
+      type: string
+      enum: [enabled, disabled]
+
+    TaskStatus:
+      type: string
+      enum: [PENDING, RUNNING, SUCCESS, FAILURE, CANCELED]
+
+    TaskMode:
+      type: string
+      enum: [sync, async]
+
+    FileSourceType:
+      type: string
+      enum: [user_input, tool_output]
+
+    User:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/UUID'
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+        role:
+          $ref: '#/components/schemas/UserRole'
+        status:
+          $ref: '#/components/schemas/UserStatus'
+        created_at:
+          $ref: '#/components/schemas/DateTime'
+        updated_at:
+          $ref: '#/components/schemas/DateTime'
+      required: [id, email, display_name, role, status, created_at, updated_at]
+
+    AuthRegisterRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 80
+      required: [email, password, display_name]
+
+    AuthLoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required: [email, password]
+
+    AuthTokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          example: bearer
+        expires_in:
+          type: integer
+          example: 3600
+        user:
+          $ref: '#/components/schemas/User'
+      required: [access_token, token_type, expires_in, user]
+
+    Tag:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/UUID'
+        name:
+          type: string
+      required: [id, name]
+
+    ToolStats:
+      type: object
+      properties:
+        favorites_count:
+          type: integer
+          minimum: 0
+        runs_count:
+          type: integer
+          minimum: 0
+
+    Tool:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/UUID'
+        owner_id:
+          $ref: '#/components/schemas/UUID'
+        name:
+          type: string
+          maxLength: 120
+        slug:
+          type: string
+          maxLength: 160
+        description:
+          type: string
+        visibility:
+          $ref: '#/components/schemas/ToolVisibility'
+        publish_status:
+          $ref: '#/components/schemas/ToolPublishStatus'
+        current_version_id:
+          $ref: '#/components/schemas/UUID'
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tag'
+        stats:
+          $ref: '#/components/schemas/ToolStats'
+        created_at:
+          $ref: '#/components/schemas/DateTime'
+        updated_at:
+          $ref: '#/components/schemas/DateTime'
+      required: [id, owner_id, name, slug, visibility, publish_status, created_at, updated_at]
+
+    ToolCreateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        slug:
+          type: string
+          maxLength: 160
+          description: Unique identifier used in URLs (optional; server can generate)
+        description:
+          type: string
+        visibility:
+          $ref: '#/components/schemas/ToolVisibility'
+        tags:
+          type: array
+          items:
+            type: string
+          description: Tag names; server will create missing tags
+      required: [name]
+
+    ToolUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        description:
+          type: string
+        visibility:
+          $ref: '#/components/schemas/ToolVisibility'
+        publish_status:
+          $ref: '#/components/schemas/ToolPublishStatus'
+        tags:
+          type: array
+          items:
+            type: string
+
+    ToolVersion:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/UUID'
+        tool_id:
+          $ref: '#/components/schemas/UUID'
+        version:
+          type: string
+          maxLength: 40
+          example: v1.0.0
+        base_url:
+          type: string
+          example: https://tool.example.com
+        method:
+          type: string
+          enum: [GET, POST, PUT, PATCH, DELETE]
+        path:
+          type: string
+          example: /predict
+        operation_id:
+          type: string
+          description: operationId extracted from OpenAPI (optional)
+        openapi_schema:
+          type: object
+          additionalProperties: true
+        runner_type:
+          type: string
+          enum: [remote]
+          example: remote
+        auth_type:
+          type: string
+          enum: [none, api_key]
+        estimated_runtime_sec:
+          type: integer
+          minimum: 1
+          example: 30
+        created_by:
+          $ref: '#/components/schemas/UUID'
+        created_at:
+          $ref: '#/components/schemas/DateTime'
+      required: [id, tool_id, version, base_url, method, path, openapi_schema, runner_type, auth_type, created_by, created_at]
+
+    ToolVersionCreateRequest:
+      type: object
+      properties:
+        version:
+          type: string
+          maxLength: 40
+        base_url:
+          type: string
+          description: Base URL of the remote tool service
+        method:
+          type: string
+          enum: [GET, POST, PUT, PATCH, DELETE]
+        path:
+          type: string
+          description: API path of selected endpoint (e.g., /run)
+        operation_id:
+          type: string
+        openapi_schema:
+          type: object
+          additionalProperties: true
+        auth_type:
+          type: string
+          enum: [none, api_key]
+        estimated_runtime_sec:
+          type: integer
+          minimum: 1
+      required: [version, base_url, method, path, openapi_schema]
+
+    ToolApiKey:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/UUID'
+        tool_id:
+          $ref: '#/components/schemas/UUID'
+        name:
+          type: string
+        status:
+          type: string
+          enum: [active, revoked]
+        created_at:
+          $ref: '#/components/schemas/DateTime'
+      required: [id, tool_id, status, created_at]
+
+    ToolApiKeyCreateResponse:
+      type: object
+      properties:
+        key:
+          type: string
+          description: Only returned once at creation time. Store it safely.
+        api_key:
+          $ref: '#/components/schemas/ToolApiKey'
+      required: [key, api_key]
+
+    File:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/UUID'
+        owner_id:
+          $ref: '#/components/schemas/UUID'
+        source_type:
+          $ref: '#/components/schemas/FileSourceType'
+        filename:
+          type: string
+        content_type:
+          type: string
+        size_bytes:
+          type: integer
+          minimum: 0
+        sha256:
+          type: string
+          nullable: true
+        created_at:
+          $ref: '#/components/schemas/DateTime'
+        expires_at:
+          $ref: '#/components/schemas/DateTime'
+          nullable: true
+        is_public:
+          type: boolean
+        download_url:
+          type: string
+          nullable: true
+          description: Optional pre-signed URL for immediate download
+      required: [id, source_type, filename, size_bytes, created_at, is_public]
+
+    FileCreateResponse:
+      type: object
+      properties:
+        file:
+          $ref: '#/components/schemas/File'
+      required: [file]
+
+    SignedUrlResponse:
+      type: object
+      properties:
+        url:
+          type: string
+        expires_in:
+          type: integer
+          example: 600
+      required: [url, expires_in]
+
+    # ---- Output normalization (front-end renderer) ----
+    VisualFile:
+      type: object
+      properties:
+        name:
+          type: string
+          example: structure.pdb
+        type:
+          type: string
+          description: Rendering type (e.g., 3D, img, CSV, markdown)
+          example: 3D
+        format:
+          type: string
+          description: Format hint (e.g., pdb, cif, png, csv)
+          example: pdb
+        path:
+          type: string
+          description: HTTP(S) URL pointing to the file
+        download_url:
+          type: string
+          nullable: true
+        params:
+          type: object
+          additionalProperties: true
+          nullable: true
+      required: [name, type, format, path]
+
+    VisualGroup:
+      type: object
+      properties:
+        group_id:
+          type: string
+          example: main
+        group_name:
+          type: string
+          example: Main Results
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/VisualFile'
+      required: [group_id, files]
+
+    TextDataItem:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          example: text
+        content:
+          oneOf:
+            - type: string
+            - type: object
+              additionalProperties: true
+            - type: array
+              items: {}
+      required: [name, type, content]
+
+    NormalizedOutput:
+      type: object
+      properties:
+        visual_data:
+          type: array
+          items:
+            $ref: '#/components/schemas/VisualGroup'
+        text_data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TextDataItem'
+        download_url:
+          type: string
+          nullable: true
+        meta:
+          type: object
+          additionalProperties: true
+          nullable: true
+
+    Task:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/UUID'
+        user_id:
+          $ref: '#/components/schemas/UUID'
+          nullable: true
+        tool_id:
+          $ref: '#/components/schemas/UUID'
+        tool_version_id:
+          $ref: '#/components/schemas/UUID'
+        job_name:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/TaskStatus'
+        task_mode:
+          $ref: '#/components/schemas/TaskMode'
+        created_at:
+          $ref: '#/components/schemas/DateTime'
+        started_at:
+          $ref: '#/components/schemas/DateTime'
+          nullable: true
+        finished_at:
+          $ref: '#/components/schemas/DateTime'
+          nullable: true
+        error_message:
+          type: string
+          nullable: true
+        input_params:
+          type: object
+          additionalProperties: true
+          nullable: true
+        input_file_ids:
+          type: array
+          items:
+            $ref: '#/components/schemas/UUID'
+          nullable: true
+        raw_output:
+          type: object
+          additionalProperties: true
+          nullable: true
+        normalized_output:
+          $ref: '#/components/schemas/NormalizedOutput'
+          nullable: true
+      required: [id, tool_id, tool_version_id, status, task_mode, created_at]
+
+    TaskCreateRequest:
+      type: object
+      properties:
+        tool_version_id:
+          $ref: '#/components/schemas/UUID'
+        job_name:
+          type: string
+          maxLength: 120
+        params:
+          type: object
+          additionalProperties: true
+          description: JSON parameters to pass to remote tool endpoint
+        file_ids:
+          type: array
+          items:
+            $ref: '#/components/schemas/UUID'
+          description: Input files uploaded to platform
+        wait_for_result:
+          type: boolean
+          default: false
+          description: If true, server may block for a short time to return immediate result for sync tools.
+        client_timeout_sec:
+          type: integer
+          minimum: 1
+          maximum: 120
+          default: 30
+      required: [tool_version_id, params]
+
+    TaskRetryResponse:
+      type: object
+      properties:
+        new_task_id:
+          $ref: '#/components/schemas/UUID'
+      required: [new_task_id]
+
+    TaskCallbackRequest:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/TaskStatus'
+        progress:
+          type: number
+          minimum: 0
+          maximum: 1
+          nullable: true
+        result:
+          type: object
+          additionalProperties: true
+          nullable: true
+          description: Raw tool result or already-normalized output
+        normalized_output:
+          $ref: '#/components/schemas/NormalizedOutput'
+          nullable: true
+        error_message:
+          type: string
+          nullable: true
+        logs:
+          type: array
+          items:
+            type: object
+            properties:
+              level:
+                type: string
+                example: INFO
+              message:
+                type: string
+              ts:
+                $ref: '#/components/schemas/DateTime'
+      required: [status]
+
+paths:
+  /healthz:
+    get:
+      tags: [Health]
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthRegisterRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthLoginRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /me:
+    get:
+      tags: [Users]
+      summary: Get current user
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+  /tags:
+    get:
+      tags: [Tags]
+      summary: List tags
+      parameters:
+        - in: query
+          name: keyword
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Tag'
+
+  /tools:
+    get:
+      tags: [Tools]
+      summary: List tools (public/custom/favorite)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: tab
+          schema:
+            type: string
+            enum: [public, custom, favorite]
+            default: public
+        - in: query
+          name: keyword
+          schema:
+            type: string
+        - in: query
+          name: tags
+          schema:
+            type: string
+          description: Comma-separated tag names
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [latest, hottest, favorites]
+            default: latest
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: page_size
+          schema:
+            type: integer
+            default: 20
+            maximum: 200
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTools'
+
+    post:
+      tags: [Tools]
+      summary: Create a tool (custom tool container; versions added separately)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToolCreateRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tool'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /tools/{tool_id}:
+    get:
+      tags: [Tools]
+      summary: Get tool detail
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: tool_id
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tool'
+        '404':
+          description: Not found
+
+    patch:
+      tags: [Tools]
+      summary: Update tool basic info / tags / visibility / publish status
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: tool_id
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToolUpdateRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tool'
+
+  /tools/{tool_id}/favorite:
+    post:
+      tags: [Favorites]
+      summary: Favorite a tool
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: tool_id
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '204':
+          description: No content
+    delete:
+      tags: [Favorites]
+      summary: Unfavorite a tool
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: tool_id
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '204':
+          description: No content
+
+  /tools/{tool_id}/versions:
+    get:
+      tags: [ToolVersions]
+      summary: List versions of a tool
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: tool_id
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ToolVersion'
+
+    post:
+      tags: [ToolVersions]
+      summary: Create a new tool version (store OpenAPI schema snapshot + selected operation)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: tool_id
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToolVersionCreateRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolVersion'
+
+  /tool-versions/{tool_version_id}:
+    get:
+      tags: [ToolVersions]
+      summary: Get tool version detail
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: tool_version_id
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolVersion'
+
+  /tools/{tool_id}/api-keys:
+    get:
+      tags: [ToolApiKeys]
+      summary: List tool API keys (masked)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: tool_id
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ToolApiKey'
+
+    post:
+      tags: [ToolApiKeys]
+      summary: Create tool API key (returned once)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: tool_id
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolApiKeyCreateResponse'
+
+  /tools/{tool_id}/api-keys/{api_key_id}:
+    delete:
+      tags: [ToolApiKeys]
+      summary: Revoke tool API key
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: tool_id
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - in: path
+          name: api_key_id
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '204':
+          description: No content
+
+  /files:
+    post:
+      tags: [Files]
+      summary: Upload user input file
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                expires_in_sec:
+                  type: integer
+                  nullable: true
+                  description: Optional TTL
+              required: [file]
+      responses:
+        '201':
+          description: Uploaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileCreateResponse'
+
+  /tool-files:
+    post:
+      tags: [Files]
+      summary: Upload tool output file (tool authentication)
+      security:
+        - toolApiKey: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                task_id:
+                  $ref: '#/components/schemas/UUID'
+                expires_in_sec:
+                  type: integer
+                  nullable: true
+              required: [file]
+      responses:
+        '201':
+          description: Uploaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileCreateResponse'
+        '401':
+          description: Unauthorized
+
+  /files/{file_id}:
+    get:
+      tags: [Files]
+      summary: Get file metadata
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: file_id
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/File'
+
+  /files/{file_id}/download-url:
+    get:
+      tags: [Files]
+      summary: Get signed download URL
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: file_id
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - in: query
+          name: expires_in
+          schema:
+            type: integer
+            default: 600
+            maximum: 86400
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignedUrlResponse'
+
+  /tasks:
+    get:
+      tags: [Tasks]
+      summary: List tasks
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: status
+          schema:
+            $ref: '#/components/schemas/TaskStatus'
+        - in: query
+          name: tool_id
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - in: query
+          name: mine
+          schema:
+            type: boolean
+            default: true
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: page_size
+          schema:
+            type: integer
+            default: 20
+            maximum: 200
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTasks'
+
+    post:
+      tags: [Tasks]
+      summary: Create a task (run a remote tool version)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskCreateRequest'
+      responses:
+        '201':
+          description: Created (may already include result for fast sync tools)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+
+  /tasks/{task_id}:
+    get:
+      tags: [Tasks]
+      summary: Get task detail
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: task_id
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+
+  /tasks/{task_id}/retry:
+    post:
+      tags: [Tasks]
+      summary: Retry a task (creates a new task with same inputs)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: task_id
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskRetryResponse'
+
+  /tasks/{task_id}/callback:
+    post:
+      tags: [Callbacks]
+      summary: Callback from remote tool to update task status/result
+      security:
+        - toolApiKey: []
+      parameters:
+        - in: path
+          name: task_id
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskCallbackRequest'
+      responses:
+        '204':
+          description: Updated
+        '401':
+          description: Unauthorized
+        '404':
+          description: Not found
+```
+
+---
+
+# 2) 数据库 ERD（Mermaid 可直接贴到文档/Draw.io/Markdown 支持处）
+
+> 这个 ERD 与上面 API 及“外部工具接入 + 异步回调 + 文件托管”的流程完全匹配。
+> 你们做前后端联调时，围绕 `tasks / task_inputs / task_outputs / files` 这四张就能跑起来。
+
+```mermaid
+erDiagram
+  users {
+    uuid id PK
+    citext email "UNIQUE"
+    text password_hash
+    text display_name
+    text role
+    text status
+    timestamptz created_at
+    timestamptz updated_at
+  }
+
+  tools {
+    uuid id PK
+    uuid owner_id FK
+    text name
+    text slug "UNIQUE"
+    text description
+    text visibility
+    text publish_status
+    uuid current_version_id FK
+    timestamptz created_at
+    timestamptz updated_at
+  }
+
+  tool_versions {
+    uuid id PK
+    uuid tool_id FK
+    text version
+    text base_url
+    text method
+    text path
+    text operation_id
+    jsonb openapi_schema
+    text runner_type
+    text auth_type
+    int estimated_runtime_sec
+    uuid created_by FK
+    timestamptz created_at
+  }
+
+  tags {
+    uuid id PK
+    text name "UNIQUE"
+  }
+
+  tool_tag_map {
+    uuid tool_id FK
+    uuid tag_id FK
+  }
+
+  tool_favorites {
+    uuid user_id FK
+    uuid tool_id FK
+    timestamptz created_at
+  }
+
+  tool_examples {
+    uuid id PK
+    uuid tool_version_id FK
+    text name
+    jsonb params
+    timestamptz created_at
+  }
+
+  tool_api_keys {
+    uuid id PK
+    uuid tool_id FK
+    text key_hash
+    text name
+    text status
+    timestamptz created_at
+  }
+
+  files {
+    uuid id PK
+    uuid owner_id FK
+    text source_type
+    text bucket
+    text object_key
+    text filename
+    text content_type
+    bigint size_bytes
+    text sha256
+    boolean is_public
+    timestamptz created_at
+    timestamptz expires_at
+  }
+
+  tasks {
+    uuid id PK
+    uuid user_id FK
+    uuid tool_id FK
+    uuid tool_version_id FK
+    text job_name
+    text status
+    text task_mode
+    timestamptz created_at
+    timestamptz started_at
+    timestamptz finished_at
+    text error_message
+    int cost_units
+  }
+
+  task_inputs {
+    uuid task_id PK, FK
+    jsonb params
+    jsonb file_ids
+    timestamptz created_at
+  }
+
+  task_outputs {
+    uuid task_id PK, FK
+    jsonb raw_output
+    jsonb normalized
+    timestamptz created_at
+  }
+
+  task_logs {
+    uuid id PK
+    uuid task_id FK
+    text level
+    text message
+    timestamptz created_at
+  }
+
+  users ||--o{ tools : owns
+  tools ||--o{ tool_versions : has
+  tools ||--o{ tool_api_keys : has
+  tools ||--o{ tool_tag_map : tagged
+  tags ||--o{ tool_tag_map : maps
+  users ||--o{ tool_favorites : favorites
+  tools ||--o{ tool_favorites : favored_by
+  tool_versions ||--o{ tool_examples : has
+  users ||--o{ files : owns
+  users ||--o{ tasks : runs
+  tools ||--o{ tasks : used_by
+  tool_versions ||--o{ tasks : executed
+  tasks ||--|| task_inputs : has
+  tasks ||--|| task_outputs : has
+  tasks ||--o{ task_logs : writes
+```
+
+---
+
+# 3) 迁移策略：推荐 Alembic（FastAPI + SQLAlchemy 2.0）
+
+## 3.1 为什么这里推荐 Alembic
+
+* 你前面平台设计倾向 FastAPI（Python），工具生态也多 Python，Alembic 迁移最顺手
+* JSONB、索引、约束、枚举（CHECK）等都能精细控制
+* 私有化部署场景下，用 “**容器启动时初始化一次 + Alembic 持续演进**” 很稳
+
+## 3.2 目录与流程建议
+
+建议结构：
+
+```
+backend/
+  app/
+    db/
+      base.py            # DeclarativeBase
+      session.py         # engine/session
+      models/            # SQLAlchemy models
+    api/                 # routers
+  alembic/
+    versions/
+  alembic.ini
+```
+
+初始化步骤（示例）：
+
+1. `alembic init alembic`
+2. 在 `alembic/env.py` 里引入 `Base.metadata`
+3. 第一次建表：
+
+   * 方式 A（推荐）：写好 models 后 `alembic revision --autogenerate -m "init"`
+   * 方式 B：直接手写 `op.create_table`（更可控）
+
+上线/部署时：
+
+* 每次发布：先跑 `alembic upgrade head`
+* 回滚：`alembic downgrade -1`（仅在你确认安全时用）
+
+## 3.3 迁移策略关键点（避免踩坑）
+
+1. **枚举字段（role/status/visibility/status 等）**：
+   MVP 建议用 `TEXT + CHECK`，避免 PostgreSQL ENUM 之后改 enum 值很麻烦。
+2. **OpenAPI schema / params / outputs**：
+   用 `JSONB`，并且对检索字段（如 tags、status、created_at）建索引即可。
+3. **updated_at 自动更新**：
+   用触发器（SQL）或在 ORM 层事件钩子；私有化部署推荐 DB 触发器更一致。
+4. **文件表清理（expires_at）**：
+   不靠 DB 自动清理，靠一个定时任务（Celery beat / cronjob）扫过期对象并删 MinIO/S3 与 DB 记录。
+
+---
+
+# 4) PostgreSQL 初始化脚本（schema + seed）
+
+> 下面脚本可拆成两份：
+>
+> * `001_schema.sql`：建表/索引/触发器
+> * `002_seed.sql`：插入默认 tag 等
+>   你用 Docker Compose 私有化部署时，挂载到 `postgres:/docker-entrypoint-initdb.d/` 即可自动执行（首次初始化）。
+
+## 4.1 001_schema.sql
+
+```sql
+-- 001_schema.sql
+-- PostgreSQL >= 13
+BEGIN;
+
+-- UUID
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- Case-insensitive email
+CREATE EXTENSION IF NOT EXISTS citext;
+
+-- Updated_at trigger helper
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS trigger AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- -----------------------
+-- users
+-- -----------------------
+CREATE TABLE IF NOT EXISTS users (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  email         citext NOT NULL UNIQUE,
+  password_hash text NOT NULL,
+  display_name  text NOT NULL,
+  role          text NOT NULL DEFAULT 'user' CHECK (role IN ('user','admin')),
+  status        text NOT NULL DEFAULT 'active' CHECK (status IN ('active','disabled')),
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now()
+);
+
+DROP TRIGGER IF EXISTS trg_users_updated_at ON users;
+CREATE TRIGGER trg_users_updated_at
+BEFORE UPDATE ON users
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE INDEX IF NOT EXISTS idx_users_created_at ON users(created_at);
+
+-- -----------------------
+-- tools
+-- -----------------------
+CREATE TABLE IF NOT EXISTS tools (
+  id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  owner_id          uuid NOT NULL REFERENCES users(id),
+  name              text NOT NULL,
+  slug              text NOT NULL UNIQUE,
+  description       text,
+  visibility        text NOT NULL DEFAULT 'public' CHECK (visibility IN ('public','private')),
+  publish_status    text NOT NULL DEFAULT 'enabled' CHECK (publish_status IN ('enabled','disabled')),
+  current_version_id uuid,
+  created_at        timestamptz NOT NULL DEFAULT now(),
+  updated_at        timestamptz NOT NULL DEFAULT now()
+);
+
+DROP TRIGGER IF EXISTS trg_tools_updated_at ON tools;
+CREATE TRIGGER trg_tools_updated_at
+BEFORE UPDATE ON tools
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE INDEX IF NOT EXISTS idx_tools_owner ON tools(owner_id);
+CREATE INDEX IF NOT EXISTS idx_tools_visibility ON tools(visibility, publish_status);
+CREATE INDEX IF NOT EXISTS idx_tools_created_at ON tools(created_at DESC);
+
+-- -----------------------
+-- tool_versions
+-- -----------------------
+CREATE TABLE IF NOT EXISTS tool_versions (
+  id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tool_id              uuid NOT NULL REFERENCES tools(id) ON DELETE CASCADE,
+  version              text NOT NULL,
+  base_url             text NOT NULL,
+  method               text NOT NULL CHECK (method IN ('GET','POST','PUT','PATCH','DELETE')),
+  path                 text NOT NULL,
+  operation_id         text,
+  openapi_schema       jsonb NOT NULL,
+  runner_type          text NOT NULL DEFAULT 'remote' CHECK (runner_type IN ('remote')),
+  auth_type            text NOT NULL DEFAULT 'none' CHECK (auth_type IN ('none','api_key')),
+  estimated_runtime_sec int NOT NULL DEFAULT 30 CHECK (estimated_runtime_sec > 0),
+  created_by           uuid NOT NULL REFERENCES users(id),
+  created_at           timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(tool_id, version)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tool_versions_tool ON tool_versions(tool_id, created_at DESC);
+
+-- tools.current_version_id -> tool_versions.id  (add FK after both exist)
+ALTER TABLE tools
+  DROP CONSTRAINT IF EXISTS fk_tools_current_version;
+ALTER TABLE tools
+  ADD CONSTRAINT fk_tools_current_version
+  FOREIGN KEY (current_version_id) REFERENCES tool_versions(id);
+
+-- -----------------------
+-- tags / tool_tag_map
+-- -----------------------
+CREATE TABLE IF NOT EXISTS tags (
+  id    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name  text NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS tool_tag_map (
+  tool_id uuid NOT NULL REFERENCES tools(id) ON DELETE CASCADE,
+  tag_id  uuid NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+  PRIMARY KEY (tool_id, tag_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tool_tag_tag ON tool_tag_map(tag_id);
+
+-- -----------------------
+-- tool_favorites
+-- -----------------------
+CREATE TABLE IF NOT EXISTS tool_favorites (
+  user_id    uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  tool_id    uuid NOT NULL REFERENCES tools(id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, tool_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_fav_tool ON tool_favorites(tool_id);
+
+-- -----------------------
+-- tool_examples
+-- -----------------------
+CREATE TABLE IF NOT EXISTS tool_examples (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tool_version_id uuid NOT NULL REFERENCES tool_versions(id) ON DELETE CASCADE,
+  name            text NOT NULL,
+  params          jsonb NOT NULL,
+  created_at      timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_examples_version ON tool_examples(tool_version_id);
+
+-- -----------------------
+-- tool_api_keys
+-- -----------------------
+CREATE TABLE IF NOT EXISTS tool_api_keys (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tool_id    uuid NOT NULL REFERENCES tools(id) ON DELETE CASCADE,
+  key_hash   text NOT NULL,
+  name       text,
+  status     text NOT NULL DEFAULT 'active' CHECK (status IN ('active','revoked')),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_tool_api_keys_tool ON tool_api_keys(tool_id);
+
+-- -----------------------
+-- files
+-- -----------------------
+CREATE TABLE IF NOT EXISTS files (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  owner_id     uuid REFERENCES users(id),
+  source_type  text NOT NULL CHECK (source_type IN ('user_input','tool_output')),
+  bucket       text NOT NULL,
+  object_key   text NOT NULL,
+  filename     text NOT NULL,
+  content_type text,
+  size_bytes   bigint NOT NULL CHECK (size_bytes >= 0),
+  sha256       text,
+  is_public    boolean NOT NULL DEFAULT false,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  expires_at   timestamptz,
+  UNIQUE(bucket, object_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_files_owner ON files(owner_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_files_expires ON files(expires_at);
+
+-- -----------------------
+-- tasks / inputs / outputs / logs
+-- -----------------------
+CREATE TABLE IF NOT EXISTS tasks (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id         uuid REFERENCES users(id),
+  tool_id         uuid NOT NULL REFERENCES tools(id),
+  tool_version_id uuid NOT NULL REFERENCES tool_versions(id),
+  job_name        text,
+  status          text NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','RUNNING','SUCCESS','FAILURE','CANCELED')),
+  task_mode       text NOT NULL DEFAULT 'sync' CHECK (task_mode IN ('sync','async')),
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  started_at      timestamptz,
+  finished_at     timestamptz,
+  error_message   text,
+  cost_units      int NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_tasks_user ON tasks(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tasks_tool ON tasks(tool_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+
+CREATE TABLE IF NOT EXISTS task_inputs (
+  task_id    uuid PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
+  params     jsonb NOT NULL,
+  file_ids   jsonb,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS task_outputs (
+  task_id    uuid PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
+  raw_output jsonb,
+  normalized jsonb,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS task_logs (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  task_id    uuid NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  level      text NOT NULL DEFAULT 'INFO',
+  message    text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_logs_task ON task_logs(task_id, created_at);
+
+COMMIT;
+```
+
+## 4.2 002_seed.sql（默认标签等）
+
+```sql
+-- 002_seed.sql
+BEGIN;
+
+-- Default tags (可按你领域扩展)
+INSERT INTO tags(name) VALUES
+  ('3D-structure'),
+  ('bioinformatics'),
+  ('chemistry'),
+  ('csv'),
+  ('image'),
+  ('visualization')
+ON CONFLICT (name) DO NOTHING;
+
+COMMIT;
+```
+
+---
+
+# 5) 你们落地实现时的“对接关键点”（简短但很实用）
+
+因为你提到输出以 **3D、CSV、图片** 为主，我建议平台后端在写 `task_outputs.normalized` 时做一个**统一规范化**：
+
+* 若工具返回的是文件 URL（或工具先把文件上传到平台 `/tool-files` 得到平台 URL），平台存：
+
+  * `visual_data[].files[].type`：`3D | CSV | img`
+  * `format`：`pdb/cif/sdf/csv/png/jpg`
+  * `path`：平台对象存储的可访问地址（最好走签名 URL）
+
+前端就可以按 `type+format` 直接渲染：
+
+* 3D：Mol* / NGL 读取 pdb/cif
+* CSV：表格预览 + 下载
+* img：图片预览
+
+---
+
+如果你希望我再往下“把这两份交付物变成可直接开工的工程模板”，我可以继续给你：
+
+* **FastAPI 路由骨架（按 OpenAPI 的 endpoints 生成）**
+* **SQLAlchemy models（对应 ERD）+ Alembic 初始 revision 文件**
+* **Docker Compose（Postgres + Redis + MinIO + Backend）**
+
+你只要告诉我你后端技术栈最终确定是 **FastAPI+SQLAlchemy** 还是 **Node（NestJS）+Prisma**，我就按其中一个给你“可复制进仓库”的版本。
+
+
+
+下面给你一套**可直接跑起来**的 FastAPI 路由骨架，路径与我前面给你的 OpenAPI（平台自身 API）**一一对应**。
+你可以先用它把 Swagger UI 跑通、前端联调跑通，然后再把每个 handler 里的 `TODO` 换成真实的 service/DB 逻辑。
+
+---
+
+## 目录结构建议
+
+```
+backend/
+  app/
+    main.py
+    api/
+      router.py
+      deps.py
+      routes/
+        health.py
+        auth.py
+        users.py
+        tags.py
+        tools.py
+        tool_versions.py
+        files.py
+        tasks.py
+        callbacks.py
+    schemas/
+      common.py
+      auth.py
+      tags.py
+      tools.py
+      files.py
+      tasks.py
+```
+
+---
+
+## 运行方式（最小依赖）
+
+`requirements.txt`（最简能跑 Swagger + 上传文件）
+
+```txt
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic
+```
+
+启动：
+
+```bash
+uvicorn app.main:app --reload
+```
+
+打开：
+
+* Swagger UI：`http://127.0.0.1:8000/docs`
+* OpenAPI JSON：`http://127.0.0.1:8000/openapi.json`
+
+---
+
+# 代码骨架
+
+> 说明：
+>
+> * 所有接口都挂在 `/api/v1` 前缀下（与你的 OpenAPI 一致）。
+> * `deps.py` 里做了“开发态假的鉴权”，方便你立刻联调。上线时你再替换为 JWT/数据库校验即可。
+> * `toolApiKey` 鉴权通过 `X-TOOL-API-KEY` header 演示。
+
+---
+
+## app/main.py
+
+```python
+from fastapi import FastAPI
+from app.api.router import api_router
+
+app = FastAPI(
+    title="Remote Tool Platform API",
+    version="0.1.0",
+)
+
+app.include_router(api_router, prefix="/api/v1")
+```
+
+---
+
+## app/api/router.py
+
+```python
+from fastapi import APIRouter
+
+from app.api.routes.health import router as health_router
+from app.api.routes.auth import router as auth_router
+from app.api.routes.users import router as users_router
+from app.api.routes.tags import router as tags_router
+from app.api.routes.tools import router as tools_router
+from app.api.routes.tool_versions import router as tool_versions_router
+from app.api.routes.files import router as files_router
+from app.api.routes.tasks import router as tasks_router
+from app.api.routes.callbacks import router as callbacks_router
+
+api_router = APIRouter()
+
+api_router.include_router(health_router, tags=["Health"])
+api_router.include_router(auth_router, tags=["Auth"])
+api_router.include_router(users_router, tags=["Users"])
+api_router.include_router(tags_router, tags=["Tags"])
+api_router.include_router(tools_router, tags=["Tools"])
+api_router.include_router(tool_versions_router, tags=["ToolVersions"])
+api_router.include_router(files_router, tags=["Files"])
+api_router.include_router(tasks_router, tags=["Tasks"])
+api_router.include_router(callbacks_router, tags=["Callbacks"])
+```
+
+---
+
+## app/api/deps.py（依赖：Bearer / Tool API Key）
+
+```python
+from typing import Optional
+from fastapi import Depends, Header, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+
+from app.schemas.common import User
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
+
+def get_current_user_optional(token: Optional[str] = Depends(oauth2_scheme)) -> Optional[User]:
+    """
+    开发态：只要带了 Authorization: Bearer xxx 就认为已登录。
+    你上线时：这里替换成 JWT 校验 + DB 查用户。
+    """
+    if not token:
+        return None
+
+    # Demo user
+    return User(
+        id="00000000-0000-0000-0000-000000000001",
+        email="dev@example.com",
+        display_name="Dev User",
+        role="admin",
+        status="active",
+        created_at="2025-01-01T00:00:00Z",
+        updated_at="2025-01-01T00:00:00Z",
+    )
+
+def get_current_user(user: Optional[User] = Depends(get_current_user_optional)) -> User:
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    return user
+
+def require_tool_api_key(x_tool_api_key: Optional[str] = Header(default=None, alias="X-TOOL-API-KEY")) -> str:
+    """
+    工具回调/工具上传文件使用。
+    上线时：对 x_tool_api_key 做哈希比对/状态检查，并绑定 tool_id 权限。
+    """
+    if not x_tool_api_key:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing X-TOOL-API-KEY")
+    return x_tool_api_key
+```
+
+---
+
+# Schemas（Pydantic）
+
+## app/schemas/common.py
+
+```python
+from typing import Any, Dict, Optional, Literal
+from pydantic import BaseModel, Field
+
+
+class ErrorResponse(BaseModel):
+    error_code: str = Field(..., example="VALIDATION_ERROR")
+    message: str
+    details: Optional[Dict[str, Any]] = None
+
+
+class PageMeta(BaseModel):
+    page: int = 1
+    page_size: int = 20
+    total: int = 0
+
+
+class User(BaseModel):
+    id: str
+    email: str
+    display_name: str
+    role: Literal["user", "admin"] = "user"
+    status: Literal["active", "disabled"] = "active"
+    created_at: str
+    updated_at: str
+```
+
+---
+
+## app/schemas/auth.py
+
+```python
+from pydantic import BaseModel, Field
+from app.schemas.common import User
+
+
+class AuthRegisterRequest(BaseModel):
+    email: str
+    password: str = Field(..., min_length=8)
+    display_name: str
+
+
+class AuthLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class AuthTokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int = 3600
+    user: User
+```
+
+---
+
+## app/schemas/tags.py
+
+```python
+from pydantic import BaseModel
+
+class Tag(BaseModel):
+    id: str
+    name: str
+```
+
+---
+
+## app/schemas/tools.py
+
+```python
+from typing import Any, Dict, List, Optional, Literal
+from pydantic import BaseModel, Field
+from app.schemas.common import PageMeta
+from app.schemas.tags import Tag
+
+
+class ToolStats(BaseModel):
+    favorites_count: int = 0
+    runs_count: int = 0
+
+
+class Tool(BaseModel):
+    id: str
+    owner_id: str
+    name: str
+    slug: str
+    description: Optional[str] = None
+    visibility: Literal["public", "private"] = "public"
+    publish_status: Literal["enabled", "disabled"] = "enabled"
+    current_version_id: Optional[str] = None
+    tags: List[Tag] = []
+    stats: ToolStats = ToolStats()
+    created_at: str
+    updated_at: str
+
+
+class ToolCreateRequest(BaseModel):
+    name: str = Field(..., max_length=120)
+    slug: Optional[str] = Field(default=None, max_length=160)
+    description: Optional[str] = None
+    visibility: Literal["public", "private"] = "public"
+    tags: List[str] = []
+
+
+class ToolUpdateRequest(BaseModel):
+    name: Optional[str] = Field(default=None, max_length=120)
+    description: Optional[str] = None
+    visibility: Optional[Literal["public", "private"]] = None
+    publish_status: Optional[Literal["enabled", "disabled"]] = None
+    tags: Optional[List[str]] = None
+
+
+class PaginatedTools(BaseModel):
+    meta: PageMeta
+    items: List[Tool]
+
+
+class ToolVersion(BaseModel):
+    id: str
+    tool_id: str
+    version: str
+    base_url: str
+    method: Literal["GET", "POST", "PUT", "PATCH", "DELETE"]
+    path: str
+    operation_id: Optional[str] = None
+    openapi_schema: Dict[str, Any]
+    runner_type: Literal["remote"] = "remote"
+    auth_type: Literal["none", "api_key"] = "none"
+    estimated_runtime_sec: int = 30
+    created_by: str
+    created_at: str
+
+
+class ToolVersionCreateRequest(BaseModel):
+    version: str
+    base_url: str
+    method: Literal["GET", "POST", "PUT", "PATCH", "DELETE"]
+    path: str
+    operation_id: Optional[str] = None
+    openapi_schema: Dict[str, Any]
+    auth_type: Literal["none", "api_key"] = "none"
+    estimated_runtime_sec: int = 30
+
+
+class ToolApiKey(BaseModel):
+    id: str
+    tool_id: str
+    name: Optional[str] = None
+    status: Literal["active", "revoked"] = "active"
+    created_at: str
+
+
+class ToolApiKeyCreateResponse(BaseModel):
+    key: str
+    api_key: ToolApiKey
+```
+
+---
+
+## app/schemas/files.py
+
+```python
+from typing import Optional, Literal
+from pydantic import BaseModel
+
+
+class File(BaseModel):
+    id: str
+    owner_id: Optional[str] = None
+    source_type: Literal["user_input", "tool_output"]
+    filename: str
+    content_type: Optional[str] = None
+    size_bytes: int
+    sha256: Optional[str] = None
+    created_at: str
+    expires_at: Optional[str] = None
+    is_public: bool = False
+    download_url: Optional[str] = None
+
+
+class FileCreateResponse(BaseModel):
+    file: File
+
+
+class SignedUrlResponse(BaseModel):
+    url: str
+    expires_in: int
+```
+
+---
+
+## app/schemas/tasks.py
+
+```python
+from typing import Any, Dict, List, Optional, Literal, Union
+from pydantic import BaseModel
+from app.schemas.common import PageMeta
+
+
+class VisualFile(BaseModel):
+    name: str
+    type: str   # e.g. "3D" | "CSV" | "img"
+    format: str # e.g. "pdb" | "cif" | "csv" | "png"
+    path: str
+    download_url: Optional[str] = None
+    params: Optional[Dict[str, Any]] = None
+
+
+class VisualGroup(BaseModel):
+    group_id: str
+    group_name: Optional[str] = None
+    files: List[VisualFile]
+
+
+class TextDataItem(BaseModel):
+    name: str
+    type: str
+    content: Union[str, Dict[str, Any], List[Any]]
+
+
+class NormalizedOutput(BaseModel):
+    visual_data: List[VisualGroup] = []
+    text_data: List[TextDataItem] = []
+    download_url: Optional[str] = None
+    meta: Optional[Dict[str, Any]] = None
+
+
+class Task(BaseModel):
+    id: str
+    user_id: Optional[str] = None
+    tool_id: str
+    tool_version_id: str
+    job_name: Optional[str] = None
+    status: Literal["PENDING", "RUNNING", "SUCCESS", "FAILURE", "CANCELED"] = "PENDING"
+    task_mode: Literal["sync", "async"] = "sync"
+    created_at: str
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+    error_message: Optional[str] = None
+
+    input_params: Optional[Dict[str, Any]] = None
+    input_file_ids: Optional[List[str]] = None
+
+    raw_output: Optional[Dict[str, Any]] = None
+    normalized_output: Optional[NormalizedOutput] = None
+
+
+class PaginatedTasks(BaseModel):
+    meta: PageMeta
+    items: List[Task]
+
+
+class TaskCreateRequest(BaseModel):
+    tool_version_id: str
+    job_name: Optional[str] = None
+    params: Dict[str, Any]
+    file_ids: List[str] = []
+    wait_for_result: bool = False
+    client_timeout_sec: int = 30
+
+
+class TaskRetryResponse(BaseModel):
+    new_task_id: str
+
+
+class TaskCallbackLogItem(BaseModel):
+    level: str = "INFO"
+    message: str
+    ts: Optional[str] = None
+
+
+class TaskCallbackRequest(BaseModel):
+    status: Literal["PENDING", "RUNNING", "SUCCESS", "FAILURE", "CANCELED"]
+    progress: Optional[float] = None
+    result: Optional[Dict[str, Any]] = None
+    normalized_output: Optional[NormalizedOutput] = None
+    error_message: Optional[str] = None
+    logs: Optional[List[TaskCallbackLogItem]] = None
+```
+
+---
+
+# 路由实现（Routes）
+
+## app/api/routes/health.py
+
+```python
+from fastapi import APIRouter
+
+router = APIRouter()
+
+@router.get("/healthz", summary="Health check")
+def healthz():
+    return {"status": "ok"}
+```
+
+---
+
+## app/api/routes/auth.py
+
+```python
+from uuid import uuid4
+from fastapi import APIRouter, status
+
+from app.schemas.auth import AuthRegisterRequest, AuthLoginRequest, AuthTokenResponse
+from app.schemas.common import User
+
+router = APIRouter(prefix="/auth")
+
+@router.post("/register", response_model=AuthTokenResponse, status_code=status.HTTP_201_CREATED, summary="Register user")
+def register(req: AuthRegisterRequest):
+    # TODO: create user in DB, hash password, issue JWT
+    user = User(
+        id=str(uuid4()),
+        email=req.email,
+        display_name=req.display_name,
+        role="user",
+        status="active",
+        created_at="2025-01-01T00:00:00Z",
+        updated_at="2025-01-01T00:00:00Z",
+    )
+    return AuthTokenResponse(access_token="dev-token", expires_in=3600, user=user)
+
+@router.post("/login", response_model=AuthTokenResponse, summary="Login")
+def login(req: AuthLoginRequest):
+    # TODO: verify credentials, issue JWT
+    user = User(
+        id=str(uuid4()),
+        email=req.email,
+        display_name="User",
+        role="user",
+        status="active",
+        created_at="2025-01-01T00:00:00Z",
+        updated_at="2025-01-01T00:00:00Z",
+    )
+    return AuthTokenResponse(access_token="dev-token", expires_in=3600, user=user)
+```
+
+---
+
+## app/api/routes/users.py
+
+```python
+from fastapi import APIRouter, Depends
+from app.api.deps import get_current_user
+from app.schemas.common import User
+
+router = APIRouter()
+
+@router.get("/me", response_model=User, summary="Get current user")
+def me(user: User = Depends(get_current_user)):
+    return user
+```
+
+---
+
+## app/api/routes/tags.py
+
+```python
+from typing import List, Optional
+from fastapi import APIRouter, Query
+
+from app.schemas.tags import Tag
+
+router = APIRouter()
+
+@router.get("/tags", response_model=List[Tag], summary="List tags")
+def list_tags(keyword: Optional[str] = None, limit: int = Query(default=50, le=200)):
+    # TODO: fetch from DB with keyword filter
+    return []
+```
+
+---
+
+## app/api/routes/tools.py
+
+```python
+from typing import Optional, List
+from uuid import uuid4
+from fastapi import APIRouter, Depends, Query, Response, status, HTTPException
+
+from app.api.deps import get_current_user
+from app.schemas.common import User, PageMeta
+from app.schemas.tools import (
+    Tool, ToolCreateRequest, ToolUpdateRequest, PaginatedTools,
+    ToolVersion, ToolVersionCreateRequest,
+    ToolApiKey, ToolApiKeyCreateResponse
+)
+from app.schemas.tags import Tag
+
+router = APIRouter()
+
+@router.get("/tools", response_model=PaginatedTools, summary="List tools (public/custom/favorite)")
+def list_tools(
+    tab: str = Query(default="public", pattern="^(public|custom|favorite)$"),
+    keyword: Optional[str] = None,
+    tags: Optional[str] = None,
+    sort: str = Query(default="latest", pattern="^(latest|hottest|favorites)$"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=200),
+    user: User = Depends(get_current_user),
+):
+    # TODO: query DB by tab/keyword/tags/sort with pagination
+    return PaginatedTools(meta=PageMeta(page=page, page_size=page_size, total=0), items=[])
+
+@router.post("/tools", response_model=Tool, status_code=status.HTTP_201_CREATED, summary="Create a tool")
+def create_tool(req: ToolCreateRequest, user: User = Depends(get_current_user)):
+    # TODO: insert tool + tag mapping
+    tool_id = str(uuid4())
+    now = "2025-01-01T00:00:00Z"
+    return Tool(
+        id=tool_id,
+        owner_id=user.id,
+        name=req.name,
+        slug=req.slug or f"tool-{tool_id[:8]}",
+        description=req.description,
+        visibility=req.visibility,
+        publish_status="enabled",
+        current_version_id=None,
+        tags=[Tag(id=str(uuid4()), name=t) for t in req.tags],
+        created_at=now,
+        updated_at=now,
+    )
+
+@router.get("/tools/{tool_id}", response_model=Tool, summary="Get tool detail")
+def get_tool(tool_id: str, user: User = Depends(get_current_user)):
+    # TODO: fetch tool detail from DB
+    raise HTTPException(status_code=404, detail="Not implemented: get_tool")
+
+@router.patch("/tools/{tool_id}", response_model=Tool, summary="Update tool")
+def update_tool(tool_id: str, req: ToolUpdateRequest, user: User = Depends(get_current_user)):
+    # TODO: update tool in DB (permission check: owner/admin)
+    raise HTTPException(status_code=404, detail="Not implemented: update_tool")
+
+@router.post("/tools/{tool_id}/favorite", status_code=status.HTTP_204_NO_CONTENT, summary="Favorite a tool")
+def favorite_tool(tool_id: str, user: User = Depends(get_current_user)):
+    # TODO: insert into tool_favorites
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+@router.delete("/tools/{tool_id}/favorite", status_code=status.HTTP_204_NO_CONTENT, summary="Unfavorite a tool")
+def unfavorite_tool(tool_id: str, user: User = Depends(get_current_user)):
+    # TODO: delete from tool_favorites
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+@router.get("/tools/{tool_id}/versions", response_model=List[ToolVersion], summary="List tool versions")
+def list_versions(tool_id: str, user: User = Depends(get_current_user)):
+    # TODO: fetch versions from DB
+    return []
+
+@router.post("/tools/{tool_id}/versions", response_model=ToolVersion, status_code=status.HTTP_201_CREATED, summary="Create tool version")
+def create_version(tool_id: str, req: ToolVersionCreateRequest, user: User = Depends(get_current_user)):
+    # TODO: validate OpenAPI schema; save snapshot; set tools.current_version_id (optional)
+    version_id = str(uuid4())
+    now = "2025-01-01T00:00:00Z"
+    return ToolVersion(
+        id=version_id,
+        tool_id=tool_id,
+        version=req.version,
+        base_url=req.base_url,
+        method=req.method,
+        path=req.path,
+        operation_id=req.operation_id,
+        openapi_schema=req.openapi_schema,
+        runner_type="remote",
+        auth_type=req.auth_type,
+        estimated_runtime_sec=req.estimated_runtime_sec,
+        created_by=user.id,
+        created_at=now,
+    )
+
+@router.get("/tools/{tool_id}/api-keys", response_model=List[ToolApiKey], summary="List tool API keys (masked)")
+def list_tool_api_keys(tool_id: str, user: User = Depends(get_current_user)):
+    # TODO: list keys for tool (owner/admin)
+    return []
+
+@router.post("/tools/{tool_id}/api-keys", response_model=ToolApiKeyCreateResponse, status_code=status.HTTP_201_CREATED, summary="Create tool API key")
+def create_tool_api_key(tool_id: str, payload: dict = None, user: User = Depends(get_current_user)):
+    # TODO: generate key, hash it, store hash, return plaintext once
+    api_key_id = str(uuid4())
+    now = "2025-01-01T00:00:00Z"
+    key_plain = "toolkey_" + str(uuid4())
+    api_key = ToolApiKey(id=api_key_id, tool_id=tool_id, name=(payload or {}).get("name"), status="active", created_at=now)
+    return ToolApiKeyCreateResponse(key=key_plain, api_key=api_key)
+
+@router.delete("/tools/{tool_id}/api-keys/{api_key_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Revoke tool API key")
+def revoke_tool_api_key(tool_id: str, api_key_id: str, user: User = Depends(get_current_user)):
+    # TODO: mark key status revoked (owner/admin)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+```
+
+---
+
+## app/api/routes/tool_versions.py
+
+```python
+from fastapi import APIRouter, Depends, HTTPException
+from app.api.deps import get_current_user
+from app.schemas.common import User
+from app.schemas.tools import ToolVersion
+
+router = APIRouter()
+
+@router.get("/tool-versions/{tool_version_id}", response_model=ToolVersion, summary="Get tool version detail")
+def get_tool_version(tool_version_id: str, user: User = Depends(get_current_user)):
+    # TODO: fetch from DB
+    raise HTTPException(status_code=404, detail="Not implemented: get_tool_version")
+```
+
+---
+
+## app/api/routes/files.py
+
+```python
+from uuid import uuid4
+from fastapi import APIRouter, Depends, UploadFile, File as UploadFileParam, Form, Query
+from app.api.deps import get_current_user, require_tool_api_key
+from app.schemas.common import User
+from app.schemas.files import File as FileSchema, FileCreateResponse, SignedUrlResponse
+
+router = APIRouter()
+
+@router.post("/files", response_model=FileCreateResponse, status_code=201, summary="Upload user input file")
+async def upload_user_file(
+    file: UploadFile = UploadFileParam(...),
+    expires_in_sec: int | None = Form(default=None),
+    user: User = Depends(get_current_user),
+):
+    # TODO: store to object storage; create DB record
+    file_id = str(uuid4())
+    now = "2025-01-01T00:00:00Z"
+    return FileCreateResponse(
+        file=FileSchema(
+            id=file_id,
+            owner_id=user.id,
+            source_type="user_input",
+            filename=file.filename or "uploaded.bin",
+            content_type=file.content_type,
+            size_bytes=0,
+            created_at=now,
+            expires_at=None,
+            is_public=False,
+            download_url=None,
+        )
+    )
+
+@router.post("/tool-files", response_model=FileCreateResponse, status_code=201, summary="Upload tool output file (tool authentication)")
+async def upload_tool_file(
+    file: UploadFile = UploadFileParam(...),
+    task_id: str | None = Form(default=None),
+    expires_in_sec: int | None = Form(default=None),
+    x_tool_api_key: str = Depends(require_tool_api_key),
+):
+    # TODO: validate tool api key; store file; bind to task if task_id provided
+    file_id = str(uuid4())
+    now = "2025-01-01T00:00:00Z"
+    return FileCreateResponse(
+        file=FileSchema(
+            id=file_id,
+            owner_id=None,
+            source_type="tool_output",
+            filename=file.filename or "output.bin",
+            content_type=file.content_type,
+            size_bytes=0,
+            created_at=now,
+            expires_at=None,
+            is_public=False,
+            download_url=None,
+        )
+    )
+
+@router.get("/files/{file_id}", response_model=FileSchema, summary="Get file metadata")
+def get_file(file_id: str, user: User = Depends(get_current_user)):
+    # TODO: permission check + DB fetch
+    raise NotImplementedError("get_file not implemented")
+
+@router.get("/files/{file_id}/download-url", response_model=SignedUrlResponse, summary="Get signed download URL")
+def get_signed_download_url(
+    file_id: str,
+    expires_in: int = Query(default=600, le=86400),
+    user: User = Depends(get_current_user),
+):
+    # TODO: permission check + generate pre-signed URL from object storage
+    return SignedUrlResponse(url=f"https://files.local/signed/{file_id}", expires_in=expires_in)
+```
+
+---
+
+## app/api/routes/tasks.py
+
+```python
+from typing import Optional
+from uuid import uuid4
+from fastapi import APIRouter, Depends, Query, status, HTTPException
+
+from app.api.deps import get_current_user
+from app.schemas.common import User, PageMeta
+from app.schemas.tasks import (
+    Task, PaginatedTasks, TaskCreateRequest, TaskRetryResponse
+)
+
+router = APIRouter()
+
+@router.get("/tasks", response_model=PaginatedTasks, summary="List tasks")
+def list_tasks(
+    status_: Optional[str] = Query(default=None, alias="status"),
+    tool_id: Optional[str] = None,
+    mine: bool = True,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=200),
+    user: User = Depends(get_current_user),
+):
+    # TODO: query tasks from DB with filters
+    return PaginatedTasks(meta=PageMeta(page=page, page_size=page_size, total=0), items=[])
+
+@router.post("/tasks", response_model=Task, status_code=status.HTTP_201_CREATED, summary="Create a task (run a remote tool version)")
+def create_task(req: TaskCreateRequest, user: User = Depends(get_current_user)):
+    # TODO:
+    # 1) create task + task_inputs in DB
+    # 2) call remote tool API (sync) OR dispatch async + wait callback
+    task_id = str(uuid4())
+    now = "2025-01-01T00:00:00Z"
+    return Task(
+        id=task_id,
+        user_id=user.id,
+        tool_id="00000000-0000-0000-0000-000000000010",
+        tool_version_id=req.tool_version_id,
+        job_name=req.job_name,
+        status="PENDING",
+        task_mode="async",
+        created_at=now,
+        input_params=req.params,
+        input_file_ids=req.file_ids,
+        raw_output=None,
+        normalized_output=None,
+    )
+
+@router.get("/tasks/{task_id}", response_model=Task, summary="Get task detail")
+def get_task(task_id: str, user: User = Depends(get_current_user)):
+    # TODO: fetch task + inputs + outputs from DB
+    raise HTTPException(status_code=404, detail="Not implemented: get_task")
+
+@router.post("/tasks/{task_id}/retry", response_model=TaskRetryResponse, summary="Retry a task")
+def retry_task(task_id: str, user: User = Depends(get_current_user)):
+    # TODO: clone inputs -> create new task
+    return TaskRetryResponse(new_task_id=str(uuid4()))
+```
+
+---
+
+## app/api/routes/callbacks.py
+
+```python
+from fastapi import APIRouter, Depends, Response, status
+
+from app.api.deps import require_tool_api_key
+from app.schemas.tasks import TaskCallbackRequest
+
+router = APIRouter()
+
+@router.post("/tasks/{task_id}/callback", status_code=status.HTTP_204_NO_CONTENT, summary="Callback from remote tool to update task status/result")
+def task_callback(
+    task_id: str,
+    body: TaskCallbackRequest,
+    x_tool_api_key: str = Depends(require_tool_api_key),
+):
+    # TODO:
+    # 1) validate tool api key -> tool_id
+    # 2) check task belongs to tool_id (prevent spoof)
+    # 3) update tasks.status / error_message
+    # 4) upsert task_outputs (raw_output/normalized)
+    # 5) insert task_logs if body.logs present
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+```
+
+---
+
+## 下一步（我建议你直接照这个顺序实现）
+
+如果你要把“外部工具服务接入”真正跑通，建议你下一步实现的顺序是：
+
+1. `/tools` + `/tools/{id}/versions`：把工具注册+版本schema入库跑通
+2. `/files` + `/tool-files`：把输入/输出文件托管跑通（MinIO/S3）
+3. `/tasks`：创建任务时调用远端工具（先只做同步/短超时），把结果写入 `task_outputs.normalized`
+4. `/tasks/{id}/callback`：把异步回调写库跑通
+
+---
+
+如果你愿意，我可以继续把这一套**直接打包成一个可运行的 FastAPI 项目模板**（包含：SQLAlchemy models、Alembic 初始 migration、Docker Compose（Postgres+MinIO+Redis+Backend）），你复制进去就能启动。你只要回我一句：
+
+* 你后端 ORM 用 **SQLAlchemy 2.0** 还是 **SQLModel**？
+  我就按其中一种给你完整工程模板。
