@@ -1,0 +1,36 @@
+# LVPocket Service 依赖清单
+# Python 3.6 兼容（TensorFlow 1.15 镜像）
+
+# Web 框架
+fastapi==0.68.2
+uvicorn[standard]==0.15.0
+python-multipart==0.0.5
+
+# 数据验证
+pydantic==1.8.2
+
+# 异步 IO
+aiofiles==0.7.0
+aiohttp==3.8.1
+
+# 科学计算
+numpy==1.18.5
+scipy==1.4.1
+scikit-image==0.17.2
+h5py==2.10.0
+pandas==1.1.5
+
+# 深度学习 (TensorFlow 1.15 已在基础镜像中)
+# tensorflow-gpu==1.15.0  # 已在基础镜像中
+keras==2.2.5
+
+# 生物信息学
+biopython==1.78
+
+# 分子处理 (通过 apt 安装 python3-openbabel)
+# openbabel 通过系统包安装
+
+# 开发依赖 (可选)
+# pytest==6.2.5
+# pytest-asyncio==0.18.3
+# httpx==0.23.0
