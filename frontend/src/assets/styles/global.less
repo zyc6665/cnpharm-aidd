@@ -1,0 +1,262 @@
+// ============================================
+// CPUModel 全局样式
+// ============================================
+
+@import './variables.less';
+
+// 重置样式
+// --------------------------------------------
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: @font-family;
+  font-size: @font-size-md;
+  line-height: @line-height-base;
+  color: @text-color-light-primary;
+  background-color: @bg-light;
+  min-height: 100vh;
+}
+
+a {
+  color: @accent-color;
+  text-decoration: none;
+  transition: color @transition-fast;
+
+  &:hover {
+    color: @accent-color-hover;
+  }
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+// 滚动条样式
+// --------------------------------------------
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: @border-radius-sm;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: @border-radius-sm;
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.25);
+  }
+}
+
+// 暗色主题滚动条
+[data-theme="dark"] {
+  ::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.25);
+    }
+  }
+}
+
+// 工具类
+// --------------------------------------------
+
+// 文本对齐
+.text-left { text-align: left; }
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+
+// 文本省略
+.text-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.text-ellipsis-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.text-ellipsis-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+// Flex 布局
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.flex-wrap { flex-wrap: wrap; }
+.items-center { align-items: center; }
+.items-start { align-items: flex-start; }
+.items-end { align-items: flex-end; }
+.justify-center { justify-content: center; }
+.justify-between { justify-content: space-between; }
+.justify-around { justify-content: space-around; }
+.justify-evenly { justify-content: space-evenly; }
+.flex-1 { flex: 1; }
+.gap-xs { gap: @spacing-xs; }
+.gap-sm { gap: @spacing-sm; }
+.gap-md { gap: @spacing-md; }
+.gap-lg { gap: @spacing-lg; }
+
+// 间距
+.mt-xs { margin-top: @spacing-xs; }
+.mt-sm { margin-top: @spacing-sm; }
+.mt-md { margin-top: @spacing-md; }
+.mt-lg { margin-top: @spacing-lg; }
+.mt-xl { margin-top: @spacing-xl; }
+
+.mb-xs { margin-bottom: @spacing-xs; }
+.mb-sm { margin-bottom: @spacing-sm; }
+.mb-md { margin-bottom: @spacing-md; }
+.mb-lg { margin-bottom: @spacing-lg; }
+.mb-xl { margin-bottom: @spacing-xl; }
+
+.mx-auto { margin-left: auto; margin-right: auto; }
+
+.p-xs { padding: @spacing-xs; }
+.p-sm { padding: @spacing-sm; }
+.p-md { padding: @spacing-md; }
+.p-lg { padding: @spacing-lg; }
+.p-xl { padding: @spacing-xl; }
+
+// 宽高
+.w-full { width: 100%; }
+.h-full { height: 100%; }
+.min-h-screen { min-height: 100vh; }
+
+// 容器
+.container {
+  width: 100%;
+  max-width: @container-xxl;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: @spacing-md;
+  padding-right: @spacing-md;
+
+  @media (min-width: @screen-sm) {
+    padding-left: @spacing-lg;
+    padding-right: @spacing-lg;
+  }
+}
+
+// 渐变背景
+.gradient-bg {
+  background: linear-gradient(135deg, @primary-gradient-start 0%, @primary-gradient-mid 50%, @primary-gradient-end 100%);
+}
+
+// 卡片样式
+.card {
+  background: @bg-card-light;
+  border-radius: @border-radius-lg;
+  box-shadow: @shadow-card;
+  padding: @spacing-lg;
+  transition: all @transition-base;
+
+  &:hover {
+    box-shadow: @shadow-xl;
+  }
+}
+
+.card-dark {
+  background: @bg-card-dark;
+  border: 1px solid @border-color-dark;
+  border-radius: @border-radius-lg;
+  padding: @spacing-lg;
+  transition: all @transition-base;
+
+  &:hover {
+    background: @bg-card-hover-dark;
+    border-color: @border-color-dark-hover;
+  }
+}
+
+// 金色按钮
+.btn-gold {
+  background: linear-gradient(135deg, @accent-color 0%, @accent-color-hover 100%);
+  color: @bg-dark;
+  border: none;
+  padding: @spacing-sm @spacing-lg;
+  border-radius: @border-radius-md;
+  font-weight: @font-weight-semibold;
+  cursor: pointer;
+  transition: all @transition-base;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: @shadow-glow;
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+}
+
+// 动画
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out;
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.5s ease-out;
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}

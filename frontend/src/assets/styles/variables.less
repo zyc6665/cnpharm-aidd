@@ -1,0 +1,192 @@
+// ============================================
+// CPUModel 全局样式变量
+// ============================================
+
+// 色彩系统
+// --------------------------------------------
+
+// 主色调 - 深色渐变背景
+@primary-gradient-start: #0f0c29;
+@primary-gradient-mid: #302b63;
+@primary-gradient-end: #24243e;
+
+// 强调色 - 金色
+@accent-color: #FFD700;
+@accent-color-hover: #FFC107;
+@accent-color-light: rgba(255, 215, 0, 0.1);
+@accent-color-border: rgba(255, 215, 0, 0.3);
+
+// 功能色
+@success-color: #52c41a;
+@warning-color: #faad14;
+@error-color: #ff4d4f;
+@info-color: #1890ff;
+
+// 中性色
+@text-color-primary: #ffffff;
+@text-color-secondary: rgba(255, 255, 255, 0.85);
+@text-color-tertiary: rgba(255, 255, 255, 0.65);
+@text-color-disabled: rgba(255, 255, 255, 0.45);
+
+// 浅色主题文字
+@text-color-light-primary: #1f1f1f;
+@text-color-light-secondary: rgba(0, 0, 0, 0.65);
+@text-color-light-tertiary: rgba(0, 0, 0, 0.45);
+
+// 背景色
+@bg-dark: #0f0c29;
+@bg-dark-secondary: #1a1a2e;
+@bg-dark-tertiary: #16213e;
+@bg-card-dark: rgba(255, 255, 255, 0.05);
+@bg-card-hover-dark: rgba(255, 255, 255, 0.08);
+
+@bg-light: #f5f5f5;
+@bg-light-secondary: #ffffff;
+@bg-card-light: #ffffff;
+
+// 边框色
+@border-color-dark: rgba(255, 255, 255, 0.1);
+@border-color-dark-hover: rgba(255, 255, 255, 0.2);
+@border-color-light: #d9d9d9;
+
+// 间距系统
+// --------------------------------------------
+@spacing-xs: 4px;
+@spacing-sm: 8px;
+@spacing-md: 16px;
+@spacing-lg: 24px;
+@spacing-xl: 32px;
+@spacing-xxl: 48px;
+
+// 圆角
+// --------------------------------------------
+@border-radius-sm: 4px;
+@border-radius-md: 8px;
+@border-radius-lg: 12px;
+@border-radius-xl: 16px;
+@border-radius-round: 50%;
+
+// 字体
+// --------------------------------------------
+@font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+  'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+  'Noto Color Emoji';
+@font-family-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+
+@font-size-xs: 12px;
+@font-size-sm: 14px;
+@font-size-md: 16px;
+@font-size-lg: 18px;
+@font-size-xl: 20px;
+@font-size-xxl: 24px;
+@font-size-xxxl: 30px;
+@font-size-title: 38px;
+@font-size-hero: 56px;
+
+@font-weight-regular: 400;
+@font-weight-medium: 500;
+@font-weight-semibold: 600;
+@font-weight-bold: 700;
+
+@line-height-tight: 1.25;
+@line-height-base: 1.5;
+@line-height-loose: 1.75;
+
+// 阴影
+// --------------------------------------------
+@shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+@shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+@shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+@shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+@shadow-glow: 0 0 20px rgba(255, 215, 0, 0.3);
+@shadow-card: 0 4px 20px rgba(0, 0, 0, 0.15);
+
+// 过渡动画
+// --------------------------------------------
+@transition-fast: 0.15s ease;
+@transition-base: 0.3s ease;
+@transition-slow: 0.5s ease;
+
+// 响应式断点
+// --------------------------------------------
+@screen-xs: 480px;
+@screen-sm: 576px;
+@screen-md: 768px;
+@screen-lg: 992px;
+@screen-xl: 1200px;
+@screen-xxl: 1600px;
+
+// 容器宽度
+@container-sm: 540px;
+@container-md: 720px;
+@container-lg: 960px;
+@container-xl: 1140px;
+@container-xxl: 1320px;
+
+// Z-index 层级
+// --------------------------------------------
+@z-index-dropdown: 1000;
+@z-index-sticky: 1020;
+@z-index-fixed: 1030;
+@z-index-modal-backdrop: 1040;
+@z-index-modal: 1050;
+@z-index-popover: 1060;
+@z-index-tooltip: 1070;
+
+// 布局尺寸
+// --------------------------------------------
+@header-height: 64px;
+@sider-width: 240px;
+@sider-collapsed-width: 80px;
+@footer-height: 64px;
+
+// 扩展颜色变量 (用于组件)
+// --------------------------------------------
+@primary-color: #1890ff;
+@primary-color-light: rgba(24, 144, 255, 0.1);
+@success-color-light: rgba(82, 196, 26, 0.1);
+@warning-color-light: rgba(250, 173, 20, 0.1);
+@error-color-light: rgba(255, 77, 79, 0.1);
+@bg-color-light: #fafafa;
+@transition-duration: 0.3s;
+@text-color-light: @text-color-light-primary;
+@breakpoint-md: @screen-md;
+@border-radius-base: @border-radius-md;
+
+// Mixins
+// --------------------------------------------
+
+// 卡片样式 mixin
+.card() {
+  background: @bg-light-secondary;
+  border-radius: @border-radius-lg;
+  padding: @spacing-lg;
+  box-shadow: @shadow-sm;
+  border: 1px solid @border-color-light;
+  transition: all @transition-base;
+
+  &:hover {
+    box-shadow: @shadow-md;
+  }
+}
+
+// 渐变背景 mixin
+.gradient-bg() {
+  background: linear-gradient(135deg, @primary-gradient-start 0%, @primary-gradient-mid 50%, @primary-gradient-end 100%);
+}
+
+// 文字溢出省略 mixin
+.text-ellipsis() {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// 多行文字溢出省略 mixin
+.text-ellipsis-lines(@lines: 2) {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: @lines;
+  line-clamp: @lines;
+  overflow: hidden;
+}

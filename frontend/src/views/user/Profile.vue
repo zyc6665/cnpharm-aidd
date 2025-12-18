@@ -1,0 +1,334 @@
+<template>
+  <div class="user-profile">
+    <a-card :title="t('user.profile')">
+      <a-form
+        :model="form"
+        :rules="rules"
+        :label-col="{ span: 6 }"
+        :wrapper-col="{ span: 14 }"
+        @finish="handleSubmit"
+      >
+        <a-form-item :label="t('user.avatar')" name="avatar">
+          <a-upload
+            v-model:file-list="avatarList"
+            list-type="picture-card"
+            :show-upload-list="false"
+            :before-upload="beforeUpload"
+            :custom-request="handleAvatarUpload"
+          >
+            <div v-if="form.avatar" class="avatar-wrapper">
+              <a-avatar :size="100" :src="form.avatar" />
+              <div class="avatar-mask">
+                <CameraOutlined />
+              </div>
+            </div>
+            <div v-else class="upload-placeholder">
+              <PlusOutlined />
+              <div class="ant-upload-text">{{ t('user.uploadAvatar') }}</div>
+            </div>
+          </a-upload>
+        </a-form-item>
+
+        <a-form-item :label="t('auth.username')" name="username">
+          <a-input v-model:value="form.username" :maxlength="20" />
+        </a-form-item>
+
+        <a-form-item :label="t('auth.email')">
+          <a-input :value="userStore.user?.email" disabled />
+          <template #extra>
+            <a @click="showEmailChangeModal = true">{{ t('user.changeEmail') }}</a>
+          </template>
+        </a-form-item>
+
+        <a-form-item :label="t('user.invitationCode')">
+          <a-input-group compact>
+            <a-input
+              :value="userStore.user?.invitation_code"
+              readonly
+              style="width: calc(100% - 80px)"
+            />
+            <a-button @click="copyInviteCode">
+              <CopyOutlined />
+            </a-button>
+          </a-input-group>
+          <template #extra>
+            {{ t('user.inviteCodeTip') }}
+          </template>
+        </a-form-item>
+
+        <a-form-item :label="t('user.memberStatus')">
+          <div class="member-info">
+            <a-tag :color="getMemberColor()">{{ getMemberName() }}</a-tag>
+            <span v-if="userStore.memberExpireAt" class="expire-date">
+              {{ t('credits.expireAt') }}: {{ formatDate(userStore.memberExpireAt) }}
+            </span>
+            <a-button type="link" size="small" @click="goToMembership">
+              {{ userStore.role === 'vip' ? t('credits.renew') : t('credits.upgrade') }}
+            </a-button>
+          </div>
+        </a-form-item>
+
+        <a-form-item :label="t('user.credits')">
+          <div class="credits-info">
+            <span class="credits-value">💎 {{ userStore.credits }}</span>
+            <a-button type="link" size="small" @click="goToCredits">
+              {{ t('user.viewDetails') }}
+            </a-button>
+          </div>
+        </a-form-item>
+
+        <a-form-item :label="t('user.createdAt')">
+          {{ formatDate(userStore.user?.created_at) }}
+        </a-form-item>
+
+        <a-form-item :wrapper-col="{ offset: 6, span: 14 }">
+          <a-button type="primary" html-type="submit" :loading="loading">
+            {{ t('common.save') }}
+          </a-button>
+        </a-form-item>
+      </a-form>
+    </a-card>
+
+    <!-- 修改邮箱弹窗 -->
+    <a-modal
+      v-model:open="showEmailChangeModal"
+      :title="t('user.changeEmail')"
+      @ok="handleEmailChange"
+      :confirm-loading="emailChangeLoading"
+    >
+      <a-form :model="emailForm" layout="vertical">
+        <a-form-item :label="t('user.newEmail')">
+          <a-input v-model:value="emailForm.newEmail" />
+        </a-form-item>
+        <a-form-item :label="t('user.verifyCode')">
+          <a-input-group compact>
+            <a-input
+              v-model:value="emailForm.code"
+              style="width: calc(100% - 120px)"
+            />
+            <a-button
+              :disabled="countdown > 0"
+              @click="sendEmailCode"
+            >
+              {{ countdown > 0 ? `${countdown}s` : t('user.sendCode') }}
+            </a-button>
+          </a-input-group>
+        </a-form-item>
+      </a-form>
+    </a-modal>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+import { PlusOutlined, CameraOutlined, CopyOutlined } from '@ant-design/icons-vue'
+import { message } from 'ant-design-vue'
+import type { UploadProps, UploadFile } from 'ant-design-vue'
+import dayjs from 'dayjs'
+import { useUserStore } from '@/stores'
+
+const router = useRouter()
+const { t } = useI18n()
+const userStore = useUserStore()
+
+const loading = ref(false)
+const avatarList = ref<UploadFile[]>([])
+const showEmailChangeModal = ref(false)
+const emailChangeLoading = ref(false)
+const countdown = ref(0)
+
+const form = reactive({
+  avatar: userStore.user?.avatar || '',
+  username: userStore.user?.username || ''
+})
+
+const emailForm = reactive({
+  newEmail: '',
+  code: ''
+})
+
+const rules = {
+  username: [
+    { required: true, message: t('auth.validation.usernameRequired') },
+    { min: 3, max: 20, message: t('auth.validation.usernameLength') }
+  ]
+}
+
+const formatDate = (date?: string) => {
+  return date ? dayjs(date).format('YYYY-MM-DD') : '-'
+}
+
+const getMemberColor = () => {
+  const colors: Record<string, string> = {
+    admin: 'red',
+    vip: 'gold',
+    user: 'blue',
+    guest: 'default'
+  }
+  return colors[userStore.role] || 'default'
+}
+
+const getMemberName = () => {
+  const names: Record<string, string> = {
+    admin: t('credits.planAdmin'),
+    vip: t('credits.planVIP'),
+    user: t('credits.planFree'),
+    guest: t('credits.planGuest')
+  }
+  return names[userStore.role] || t('credits.planFree')
+}
+
+const beforeUpload: UploadProps['beforeUpload'] = (file) => {
+  const isImage = file.type.startsWith('image/')
+  if (!isImage) {
+    message.error(t('user.avatarTypeError'))
+    return false
+  }
+  const isLt2M = file.size / 1024 / 1024 < 2
+  if (!isLt2M) {
+    message.error(t('user.avatarSizeError'))
+    return false
+  }
+  return true
+}
+
+const handleAvatarUpload = async ({ file }: { file: File }) => {
+  // TODO: 实现头像上传
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    form.avatar = e.target?.result as string
+  }
+  reader.readAsDataURL(file)
+}
+
+const copyInviteCode = async () => {
+  const code = userStore.user?.invitation_code
+  if (code) {
+    await navigator.clipboard.writeText(code)
+    message.success(t('common.copySuccess'))
+  }
+}
+
+const goToMembership = () => {
+  router.push('/credits')
+}
+
+const goToCredits = () => {
+  router.push('/credits')
+}
+
+const sendEmailCode = async () => {
+  if (!emailForm.newEmail) {
+    message.error(t('user.enterNewEmail'))
+    return
+  }
+  // TODO: 发送验证码
+  countdown.value = 60
+  const timer = setInterval(() => {
+    countdown.value--
+    if (countdown.value === 0) {
+      clearInterval(timer)
+    }
+  }, 1000)
+  message.success(t('user.codeSent'))
+}
+
+const handleEmailChange = async () => {
+  emailChangeLoading.value = true
+  try {
+    // TODO: 实现邮箱修改
+    message.success(t('user.emailChanged'))
+    showEmailChangeModal.value = false
+  } finally {
+    emailChangeLoading.value = false
+  }
+}
+
+const handleSubmit = async () => {
+  loading.value = true
+  try {
+    await userStore.updateProfile({
+      username: form.username,
+      avatar: form.avatar
+    })
+    message.success(t('common.success'))
+  } catch {
+    // 错误已处理
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  if (userStore.user) {
+    form.avatar = userStore.user.avatar || ''
+    form.username = userStore.user.username
+  }
+})
+</script>
+
+<style scoped lang="less">
+@import '@/assets/styles/variables.less';
+
+.user-profile {
+  .avatar-wrapper {
+    position: relative;
+    display: inline-block;
+
+    .avatar-mask {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 24px;
+      opacity: 0;
+      transition: opacity @transition-duration;
+      border-radius: 50%;
+    }
+
+    &:hover .avatar-mask {
+      opacity: 1;
+    }
+  }
+
+  .upload-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100px;
+    height: 100px;
+  }
+
+  .member-info {
+    display: flex;
+    align-items: center;
+    gap: @spacing-sm;
+
+    .expire-date {
+      color: @text-color-light-secondary;
+      font-size: @font-size-sm;
+    }
+  }
+
+  .credits-info {
+    display: flex;
+    align-items: center;
+    gap: @spacing-sm;
+
+    .credits-value {
+      font-size: @font-size-lg;
+      font-weight: @font-weight-semibold;
+      color: @warning-color;
+    }
+  }
+}
+</style>

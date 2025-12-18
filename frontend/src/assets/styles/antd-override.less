@@ -1,0 +1,35 @@
+// ============================================
+// Ant Design Vue 主题定制
+// ============================================
+
+@import './variables.less';
+
+// 覆盖 Ant Design 变量
+:root {
+  // 主色
+  --ant-primary-color: @accent-color;
+  --ant-primary-color-hover: @accent-color-hover;
+
+  // 功能色
+  --ant-success-color: @success-color;
+  --ant-warning-color: @warning-color;
+  --ant-error-color: @error-color;
+  --ant-info-color: @info-color;
+
+  // 边框圆角
+  --ant-border-radius-base: @border-radius-md;
+  --ant-border-radius-sm: @border-radius-sm;
+
+  // 字体
+  --ant-font-family: @font-family;
+  --ant-font-size-base: @font-size-sm;
+}
+
+// 暗色主题
+[data-theme="dark"] {
+  --ant-component-background: @bg-dark-secondary;
+  --ant-body-background: @bg-dark;
+  --ant-text-color: @text-color-primary;
+  --ant-text-color-secondary: @text-color-secondary;
+  --ant-border-color-base: @border-color-dark;
+}

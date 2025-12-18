@@ -1,0 +1,43 @@
+import { get, post, del } from './request'
+import type { ApiResponse } from '@/types/api'
+import type { Task, TaskCreateParams, TaskLog, TaskStatus, PaginatedResponse, PaginationParams } from '@/types/models'
+
+export interface TaskListParams extends PaginationParams {
+  status?: TaskStatus
+  tool_id?: number
+}
+
+// 获取任务列表
+export const getTaskList = (params?: TaskListParams): Promise<ApiResponse<PaginatedResponse<Task>>> => {
+  return get<PaginatedResponse<Task>>('/tasks', params as Record<string, unknown>)
+}
+
+// 创建任务
+export const createTask = (data: TaskCreateParams): Promise<ApiResponse<Task>> => {
+  return post<Task>('/tasks', data)
+}
+
+// 获取任务详情
+export const getTaskDetail = (id: string): Promise<ApiResponse<Task>> => {
+  return get<Task>(`/tasks/${id}`)
+}
+
+// 删除任务
+export const deleteTask = (id: string): Promise<ApiResponse<null>> => {
+  return del<null>(`/tasks/${id}`)
+}
+
+// 取消任务
+export const cancelTask = (id: string): Promise<ApiResponse<Task>> => {
+  return post<Task>(`/tasks/${id}/cancel`)
+}
+
+// 重试任务
+export const retryTask = (id: string): Promise<ApiResponse<Task>> => {
+  return post<Task>(`/tasks/${id}/retry`)
+}
+
+// 获取任务日志
+export const getTaskLogs = (id: string): Promise<ApiResponse<TaskLog[]>> => {
+  return get<TaskLog[]>(`/tasks/${id}/logs`)
+}
