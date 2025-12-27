@@ -1,0 +1,433 @@
+# ============================================================================
+# SciTool - 开发环境 Docker Compose 配置
+# ============================================================================
+#
+# 特性:
+#   ✅ 后端热重载 - 修改代码自动重启
+#   ✅ 源码挂载 - 宿主机直接编辑代码
+#   ✅ 完整服务栈 - 后端 + Redis + Celery + Flower
+#   ✅ 开发调试 - 日志实时输出
+#
+# 使用方法:
+#   1. 启动所有服务:
+#      docker-compose up -d
+#
+#   2. 查看实时日志:
+#      docker-compose logs -f backend
+#      docker-compose logs -f celery-worker
+#
+#   3. 重启后端（手动触发）:
+#      docker-compose restart backend
+#
+#   4. 停止所有服务:
+#      docker-compose down
+#
+#   5. 重新构建镜像:
+#      docker-compose build --no-cache backend
+#
+# 访问地址:
+#   - 后端 API: http://localhost:8000
+#   - API 文档: http://localhost:8000/docs
+#   - Flower 监控: http://localhost:9555 (admin/scitool123)
+#   - Redis: localhost:9500
+#
+# ============================================================================
+# Docker Compose 配置
+# 注意: 省略 version 字段以支持最新的 Compose 规范
+# ============================================================================
+
+services:
+  # ==========================================================================
+  # Redis - 消息队列 & 缓存
+  # ==========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: scitool-redis
+    restart: unless-stopped
+
+    # ========== 端口映射 ==========
+    ports:
+      - "9500:6379"               # 宿主机:容器内部
+
+    # ========== 命令参数 ==========
+    command: >
+      redis-server
+      --port 6379
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 2gb
+      --maxmemory-policy allkeys-lru
+      --requirepass scitool123
+
+    # ========== 数据卷 ==========
+    volumes:
+      - redis-data:/data
+
+    # ========== 健康检查 ==========
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "scitool123", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+    # ========== 日志配置 ==========
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+    # ========== 网络 ==========
+    networks:
+      - cpumodel
+
+  # ==========================================================================
+  # Backend - FastAPI 后端服务（开发模式 + 热重载）
+  # ==========================================================================
+  backend:
+    image: scitool-backend:dev
+    container_name: scitool-backend
+    restart: unless-stopped
+
+    # ========== 构建配置 ==========
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development         # 使用开发阶段
+
+    # ========== 启动命令（热重载模式） ==========
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+      --reload-dir /app/app
+      --log-level info
+
+    # ========== 端口映射 ==========
+    ports:
+      - "9501:8000"               # FastAPI 端口
+
+    # ========== 环境变量 ==========
+    environment:
+      # ----- 应用配置 -----
+      APP_NAME: 科学计算工具管理平台
+      ENVIRONMENT: development
+      DEBUG: "true"
+
+      # ----- 数据库配置 -----
+      DATABASE_URL: sqlite+aiosqlite:///./storage/scitool.db
+
+      # ----- Redis配置 -----
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 0
+      REDIS_PASSWORD: scitool123
+
+      # ----- Celery配置 -----
+      CELERY_BROKER_URL: redis://:scitool123@redis:6379/1
+      CELERY_RESULT_BACKEND: redis://:scitool123@redis:6379/2
+      CELERY_TIMEZONE: Asia/Shanghai
+
+      # ----- 日志配置 -----
+      LOG_LEVEL: INFO
+
+      # ----- Python环境 -----
+      PYTHONUNBUFFERED: 1
+      PYTHONDONTWRITEBYTECODE: 1  # 不生成 .pyc 文件
+
+    # ========== 数据卷（关键！支持热重载） ==========
+    volumes:
+      # 源代码挂载（修改即生效）
+      - ./backend/app:/app/app:rw
+
+      # 数据库和上传文件
+      - ./backend/storage:/app/storage:rw
+
+      # requirements.txt（如果修改依赖需要重新构建）
+      - ./backend/requirements.txt:/app/requirements.txt:ro
+
+      # Docker Socket（Docker执行器需要）
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    # ========== 依赖 ==========
+    depends_on:
+      redis:
+        condition: service_healthy
+
+    # ========== 健康检查 ==========
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+    # ========== 日志配置 ==========
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+    # ========== 网络 ==========
+    networks:
+      - cpumodel
+
+  # ==========================================================================
+  # Celery Worker - 任务执行引擎（默认队列 + 热重载）
+  # ==========================================================================
+  celery-worker:
+    image: scitool-backend:dev
+    container_name: scitool-celery-worker
+    restart: unless-stopped
+
+    # ========== 启动命令（开发模式支持代码重载） ==========
+    # watchfiles 会监控文件变化并重启 worker
+    command: >
+      watchfiles
+      --filter python
+      'celery -A app.worker.celery_app worker --loglevel=info --concurrency=4 --queues=default,high_priority,cpu_queue --hostname=worker@scitool'
+      /app/app
+
+    # ========== 环境变量 ==========
+    environment:
+      DATABASE_URL: sqlite+aiosqlite:///./storage/scitool.db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 0
+      REDIS_PASSWORD: scitool123
+      CELERY_BROKER_URL: redis://:scitool123@redis:6379/1
+      CELERY_RESULT_BACKEND: redis://:scitool123@redis:6379/2
+      CELERY_TIMEZONE: Asia/Shanghai
+      LOG_LEVEL: INFO
+      PYTHONUNBUFFERED: 1
+      PYTHONDONTWRITEBYTECODE: 1
+
+    # ========== 数据卷（与后端共享代码） ==========
+    volumes:
+      # 源代码挂载（热重载）
+      - ./backend/app:/app/app:rw
+
+      # 共享数据库和上传文件
+      - ./backend/storage:/app/storage:rw
+
+      # Docker Socket
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    # ========== 依赖 ==========
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_started
+
+    # ========== 健康检查 ==========
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.worker.celery_app inspect ping || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+    # ========== 日志配置 ==========
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+    # ========== 网络 ==========
+    networks:
+      - cpumodel
+
+  # ==========================================================================
+  # Celery Worker - GPU任务队列（可选）
+  # ==========================================================================
+  celery-worker-gpu:
+    image: scitool-backend:dev
+    container_name: scitool-celery-worker-gpu
+    restart: unless-stopped
+    profiles: ["gpu"]            # 默认不启动，需要 --profile gpu
+
+    # ========== 启动命令 ==========
+    command: >
+      watchfiles
+      --filter python
+      'celery -A app.worker.celery_app worker --loglevel=info --concurrency=1 --queues=gpu_queue --hostname=gpu-worker@scitool'
+      /app/app
+
+    # ========== 环境变量 ==========
+    environment:
+      DATABASE_URL: sqlite+aiosqlite:///./storage/scitool.db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: scitool123
+      CELERY_BROKER_URL: redis://:scitool123@redis:6379/1
+      CELERY_RESULT_BACKEND: redis://:scitool123@redis:6379/2
+      LOG_LEVEL: INFO
+      PYTHONUNBUFFERED: 1
+      CUDA_VISIBLE_DEVICES: 0
+
+    # ========== 数据卷 ==========
+    volumes:
+      - ./backend/app:/app/app:rw
+      - ./backend/storage:/app/storage:rw
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    # ========== GPU配置 ==========
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+    # ========== 依赖 ==========
+    depends_on:
+      redis:
+        condition: service_healthy
+
+    # ========== 网络 ==========
+    networks:
+      - cpumodel
+
+  # ==========================================================================
+  # Flower - Celery监控面板
+  # ==========================================================================
+  flower:
+    image: mher/flower:2.0
+    container_name: scitool-flower
+    restart: unless-stopped
+
+    # ========== 端口映射 ==========
+    ports:
+      - "9555:9555"
+
+    # ========== 启动命令 ==========
+    command: >
+      celery
+      --broker=redis://:scitool123@redis:6379/1
+      flower
+      --port=9555
+      --basic_auth=admin:scitool123
+      --broker_api=redis://:scitool123@redis:6379/1
+
+    # ========== 环境变量 ==========
+    environment:
+      CELERY_BROKER_URL: redis://:scitool123@redis:6379/1
+      CELERY_RESULT_BACKEND: redis://:scitool123@redis:6379/2
+      FLOWER_PORT: 9555
+
+    # ========== 依赖 ==========
+    depends_on:
+      redis:
+        condition: service_healthy
+
+    # ========== 健康检查 ==========
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9555"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # ========== 日志配置 ==========
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+    # ========== 网络 ==========
+    networks:
+      - cpumodel
+
+# ============================================================================
+# Docker 卷定义
+# ============================================================================
+volumes:
+  # Redis持久化数据
+  redis-data:
+    driver: local
+
+# ============================================================================
+# 网络定义
+# ============================================================================
+networks:
+  cpumodel:
+    name: cpumodel
+    driver: bridge
+
+# ============================================================================
+# 开发使用说明
+# ============================================================================
+#
+# 1. 首次启动（会自动构建镜像）:
+#    docker-compose up -d
+#
+# 2. 查看所有服务状态:
+#    docker-compose ps
+#
+# 3. 查看后端实时日志:
+#    docker-compose logs -f backend
+#
+# 4. 进入后端容器调试:
+#    docker-compose exec backend bash
+#    docker-compose exec backend python -c "import app; print(app.__file__)"
+#
+# 5. 重启单个服务:
+#    docker-compose restart backend
+#    docker-compose restart celery-worker
+#
+# 6. 修改代码后:
+#    - 后端会自动重载（uvicorn --reload）
+#    - Celery Worker 会自动重载（watchfiles）
+#    - 无需手动重启！
+#
+# 7. 如果修改了依赖（requirements.txt）:
+#    docker-compose build --no-cache backend
+#    docker-compose up -d --force-recreate backend
+#
+# 8. 启动 GPU Worker（需要 NVIDIA GPU）:
+#    docker-compose --profile gpu up -d celery-worker-gpu
+#
+# 9. 停止并清理:
+#    docker-compose down                    # 停止服务
+#    docker-compose down -v                 # 停止并删除卷
+#
+# 10. 数据库迁移:
+#     docker-compose exec backend alembic upgrade head
+#
+# 11. 测试 API:
+#     curl http://localhost:8000/api/v1/health
+#     浏览器访问: http://localhost:8000/docs
+#
+# ============================================================================
+# 故障排查
+# ============================================================================
+#
+# 1. 后端无法启动:
+#    - 检查日志: docker-compose logs backend
+#    - 检查端口占用: lsof -i :8000
+#    - 重新构建: docker-compose build --no-cache backend
+#
+# 2. 热重载不生效:
+#    - 确认代码挂载: docker-compose exec backend ls -la /app/app
+#    - 检查文件权限: ls -la backend/app/
+#    - 重启服务: docker-compose restart backend
+#
+# 3. Celery Worker 连接失败:
+#    - 检查 Redis: docker-compose exec redis redis-cli -a scitool123 ping
+#    - 检查网络: docker network inspect cpumodel
+#    - 查看 Worker 日志: docker-compose logs celery-worker
+#
+# 4. 数据库锁定:
+#    - SQLite 多进程访问可能锁定
+#    - 停止所有服务: docker-compose down
+#    - 删除数据库文件: rm backend/storage/scitool.db
+#    - 重新初始化: docker-compose up -d
+#
+# ============================================================================

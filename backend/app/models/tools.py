@@ -24,6 +24,20 @@ class ToolType(str, enum.Enum):
     PYTHON_SCRIPT = "python_script"
 
 
+class ToolProviderType(str, enum.Enum):
+    """工具提供者类型"""
+    PLATFORM = "platform"  # 平台官方工具
+    USER = "user"          # 用户贡献工具
+
+
+class ToolReviewStatus(str, enum.Enum):
+    """工具审核状态"""
+    NOT_REQUIRED = "not_required"  # 无需审核（平台官方工具）
+    PENDING = "pending"            # 待审核
+    APPROVED = "approved"          # 已通过
+    REJECTED = "rejected"          # 已拒绝
+
+
 # 工具-标签关联表
 tool_tag_association = Table(
     "tool_tag_map",
@@ -41,18 +55,24 @@ class Tool(Base, UUIDMixin, TimestampMixin):
     name = Column(String(100), nullable=False)
     slug = Column(String(100), unique=True, nullable=False, index=True)
     description = Column(Text, nullable=True)
-    icon_url = Column(String(500), nullable=True)
+    icon = Column(String(100), nullable=True)  # 工具图标（emoji或图标名）
+    icon_url = Column(String(500), nullable=True)  # 工具图标URL
+    category = Column(String(50), nullable=True, index=True)  # 工具分类
 
     # 状态
     status = Column(String(20), default=ToolStatus.DRAFT.value, nullable=False)
     is_public = Column(Boolean, default=True)
 
+    # === 新增字段：工具提供者和审核相关 ===
+    provider_type = Column(String(20), default=ToolProviderType.USER.value, nullable=False, index=True)
+    review_status = Column(String(20), default=ToolReviewStatus.PENDING.value, nullable=False, index=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    reviewed_by = Column(String(36), ForeignKey("users.id"), nullable=True)
+    reject_reason = Column(Text, nullable=True)
+    # === 新增字段结束 ===
+
     # 版本管理
     current_version_id = Column(String(36), nullable=True)
-
-    # 统计
-    usage_count = Column(Integer, default=0)
-    favorite_count = Column(Integer, default=0)
 
     # 配置
     gpu_required = Column(Boolean, default=False)
@@ -60,10 +80,13 @@ class Tool(Base, UUIDMixin, TimestampMixin):
     timeout_sec = Column(Integer, default=600)
 
     # 关系
-    owner = relationship("User", back_populates="tools")
+    owner = relationship("User", back_populates="tools", foreign_keys=[owner_id])
+    reviewer = relationship("User", foreign_keys=[reviewed_by])
     versions = relationship("ToolVersion", back_populates="tool", cascade="all, delete-orphan")
+    current_version = relationship("ToolVersion", foreign_keys=[current_version_id], primaryjoin="Tool.current_version_id==ToolVersion.id", uselist=False, post_update=True)
     tags = relationship("Tag", secondary=tool_tag_association, back_populates="tools")
     tasks = relationship("Task", back_populates="tool")
+    statistics = relationship("ToolStatistics", back_populates="tool", uselist=False)
 
 
 class ToolVersion(Base, UUIDMixin, TimestampMixin):
@@ -72,6 +95,7 @@ class ToolVersion(Base, UUIDMixin, TimestampMixin):
 
     tool_id = Column(String(36), ForeignKey("tools.id"), nullable=False, index=True)
     version = Column(String(50), nullable=False)
+    changelog = Column(Text, nullable=True)  # 版本更新日志
     notes = Column(Text, nullable=True)
 
     # 配置
@@ -94,7 +118,7 @@ class ToolVersion(Base, UUIDMixin, TimestampMixin):
     deprecated_at = Column(DateTime, nullable=True)
 
     # 关系
-    tool = relationship("Tool", back_populates="versions")
+    tool = relationship("Tool", back_populates="versions", foreign_keys=[tool_id])
     tasks = relationship("Task", back_populates="tool_version")
 
 

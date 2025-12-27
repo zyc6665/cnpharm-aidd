@@ -12,6 +12,7 @@ from app.database.base import Base, TimestampMixin, UUIDMixin
 class FileSourceType(str, enum.Enum):
     """文件来源类型"""
     USER_INPUT = "user_input"
+    UPLOAD = "upload"  # 用户上传
     TOOL_OUTPUT = "tool_output"
     SYSTEM = "system"
 
@@ -26,7 +27,7 @@ class File(Base, UUIDMixin, TimestampMixin):
     # 文件信息
     filename = Column(String(255), nullable=False)
     content_type = Column(String(100), nullable=True)
-    size = Column(Integer, nullable=False)  # 文件大小（字节）
+    size_bytes = Column(Integer, nullable=False)  # 文件大小（字节）
     sha256 = Column(String(64), nullable=False, index=True)
 
     # 存储信息
@@ -43,7 +44,6 @@ class File(Base, UUIDMixin, TimestampMixin):
 
     # 生命周期
     expires_at = Column(DateTime, nullable=True)
-    download_count = Column(Integer, default=0)
     last_accessed_at = Column(DateTime, nullable=True)
     deleted_at = Column(DateTime, nullable=True)  # 软删除时间
 
@@ -56,6 +56,7 @@ class File(Base, UUIDMixin, TimestampMixin):
     # 关系
     owner = relationship("User", back_populates="files")
     access_logs = relationship("FileAccessLog", back_populates="file", cascade="all, delete-orphan")
+    statistics = relationship("FileStatistics", back_populates="file", uselist=False)
 
 
 class FileAccessLog(Base, UUIDMixin):

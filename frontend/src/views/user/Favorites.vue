@@ -37,11 +37,11 @@
                   <template #description>
                     <p class="tool-description">{{ tool.description }}</p>
                     <div class="tool-meta">
-                      <a-tag :color="getCategoryColor(tool.category?.slug)">
-                        {{ tool.category?.name || tool.category }}
+                      <a-tag :color="getCategoryColor(tool.category)">
+                        {{ tool.category }}
                       </a-tag>
                       <span class="tool-stats">
-                        <PlayCircleOutlined /> {{ tool.run_count || 0 }}
+                        <PlayCircleOutlined /> {{ tool.run_count || tool.usage_count || 0 }}
                       </span>
                     </div>
                   </template>
@@ -123,8 +123,9 @@ const getCategoryColor = (category?: string) => {
 const fetchFavorites = async () => {
   loading.value = true
   try {
-    await toolsStore.fetchFavoriteTools()
-    favorites.value = toolsStore.favoriteToolsList
+    // 使用现有的fetchTools方法，传入view='favorites'
+    await toolsStore.fetchTools({ view: 'favorites' })
+    favorites.value = toolsStore.tools
   } catch {
     // 错误已处理
   } finally {
@@ -136,7 +137,7 @@ const handleSearch = () => {
   // 搜索在 computed 中处理
 }
 
-const goToTool = (id: number) => {
+const goToTool = (id: string) => {
   router.push(`/tools/${id}`)
 }
 
@@ -144,11 +145,11 @@ const goToTools = () => {
   router.push('/tools')
 }
 
-const runTool = (id: number) => {
+const runTool = (id: string) => {
   router.push(`/tools/${id}`)
 }
 
-const handleUnfavorite = (toolId: number) => {
+const handleUnfavorite = (toolId: string) => {
   Modal.confirm({
     title: t('user.unfavoriteConfirm'),
     content: t('user.unfavoriteConfirmContent'),

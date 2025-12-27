@@ -59,3 +59,10 @@ class QuotaExceededException(AppException):
 
     def __init__(self, message: str = "配额超出", detail: Optional[Any] = None):
         super().__init__(message, code=429, detail=detail)
+
+
+class TooManyRequestsException(AppException):
+    """请求过于频繁异常"""
+
+    def __init__(self, message: str = "请求过于频繁", detail: Optional[Any] = None):
+        super().__init__(message, code=429, detail=detail)

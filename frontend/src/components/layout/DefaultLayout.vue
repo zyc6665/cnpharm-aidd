@@ -48,7 +48,7 @@
           <template v-if="isLoggedIn">
             <a-dropdown>
               <a-button type="text" class="user-btn">
-                <a-avatar :size="28">
+                <a-avatar :size="28" :src="userStore.avatar">
                   {{ username.charAt(0).toUpperCase() }}
                 </a-avatar>
                 <span class="username">{{ username }}</span>

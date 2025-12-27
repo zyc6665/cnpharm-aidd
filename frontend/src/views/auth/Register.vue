@@ -314,11 +314,10 @@
     loading.value = true
     try {
       await userStore.register({
-        username: formState.username,
         email: formState.email,
         password: formState.password,
-        code: formState.code,
-        invitation_code: formState.invitation_code || undefined
+        verification_code: formState.code,
+        display_name: formState.username || undefined
       })
       message.success(t('auth.registerSuccess'))
       router.push('/')

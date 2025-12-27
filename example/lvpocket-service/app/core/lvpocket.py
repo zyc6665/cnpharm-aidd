@@ -202,12 +202,54 @@ class LVPocketPredictor:
             # 配置 TensorFlow 日志级别
             os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
+            # 应用模型加载兼容性补丁（解决 Python 版本不兼容问题）
+            try:
+                from app.core.model_loader_patch import apply_patches
+                apply_patches()
+                logger.info("已应用模型加载兼容性补丁")
+            except Exception as patch_error:
+                logger.warning(f"应用兼容性补丁失败: {patch_error}")
+
+            # ========== 关键修复：在导入 LV_former 之前注入必要的模块 ==========
+            # 这些模块需要在 LV_former 的 load_model 中使用
+            import tensorflow as tf
+            import numpy as np
+            import math
+            import builtins
+
+            # 注入到 builtins，确保 LV_former 中的 Lambda 层可以访问
+            builtins.tf = tf
+            builtins.np = np
+            builtins.numpy = np
+            builtins.math = math
+
+            logger.info("已注入必要模块到 builtins (tf, np, math)")
+            # ====================================================================
+
             # 从 LVpocket 源代码导入所需模块
             # 参考 predict.py 第 16-17 行
             from model.LV_former import LV_NET
             from tfbio.data import Featurizer
             import pybel
             import openbabel
+
+            # ========== 关键修复：修补 LV_former 模块的 globals ==========
+            # 确保 LV_NET.load_model 可以访问所有必要的自定义层
+            import model.LV_former as lv_former
+
+            # 添加缺失的自定义层到 LV_former 的 globals
+            if hasattr(lv_former, 'EncoderLayer'):
+                # EncoderLayer 已经在模块中，但可能没有被 load_model 识别
+                # 我们需要确保它在 custom_objects 中
+                pass
+
+            # 注入 numpy 到 LV_former 模块（Lambda 层需要）
+            if not hasattr(lv_former, 'np'):
+                lv_former.np = np
+                lv_former.numpy = np
+
+            logger.info("已修补 LV_former 模块的 globals")
+            # ====================================================================
 
             self._LV_NET = LV_NET
             self._Featurizer = Featurizer

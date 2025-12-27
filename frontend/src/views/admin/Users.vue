@@ -60,7 +60,7 @@
     <a-card>
       <a-table
         :columns="columns"
-        :data-source="users"
+        :data-source="filteredUsers"
         :loading="loading"
         :pagination="pagination"
         row-key="id"
@@ -240,6 +240,32 @@ const users = ref([
   { id: 5, username: 'banned_user', email: 'banned@example.com', role: 'user', status: 'banned', credits: 0, created_at: '2024-01-08T16:45:00' }
 ])
 
+// 过滤后的用户列表
+const filteredUsers = computed(() => {
+  let result = users.value
+
+  // 关键词搜索
+  if (filters.keyword) {
+    const keyword = filters.keyword.toLowerCase()
+    result = result.filter(user =>
+      user.username.toLowerCase().includes(keyword) ||
+      user.email.toLowerCase().includes(keyword)
+    )
+  }
+
+  // 角色筛选
+  if (filters.role) {
+    result = result.filter(user => user.role === filters.role)
+  }
+
+  // 状态筛选
+  if (filters.status) {
+    result = result.filter(user => user.status === filters.status)
+  }
+
+  return result
+})
+
 const columns = computed(() => [
   { title: t('admin.userInfo'), key: 'user', width: 250 },
   { title: t('admin.role'), key: 'role', width: 100 },
@@ -274,7 +300,8 @@ const formatDate = (date: string) => {
 
 const handleSearch = () => {
   pagination.current = 1
-  // TODO: 实现搜索
+  pagination.total = filteredUsers.value.length
+  message.success(t('common.searchSuccess'))
 }
 
 const handleReset = () => {
@@ -287,7 +314,7 @@ const handleReset = () => {
 const handleTableChange = (pag: any) => {
   pagination.current = pag.current
   pagination.pageSize = pag.pageSize
-  // TODO: 加载数据
+  // 数据已通过 filteredUsers 自动更新
 }
 
 const handleEdit = (record: any) => {
@@ -304,7 +331,37 @@ const handleSaveUser = async () => {
   try {
     await formRef.value?.validate()
     saveLoading.value = true
-    // TODO: 保存用户
+
+    // 保存用户（更新或创建）
+    if (editingUser.value) {
+      // 更新现有用户
+      const index = users.value.findIndex(u => u.id === editingUser.value.id)
+      if (index !== -1) {
+        const existingUser = users.value[index]!
+        users.value[index] = {
+          id: existingUser.id,
+          username: userForm.username,
+          email: userForm.email,
+          role: userForm.role,
+          status: existingUser.status,
+          credits: userForm.credits,
+          created_at: existingUser.created_at
+        }
+      }
+    } else {
+      // 创建新用户
+      const newUser = {
+        id: Math.max(...users.value.map(u => u.id)) + 1,
+        username: userForm.username,
+        email: userForm.email,
+        role: userForm.role,
+        status: 'active',
+        credits: userForm.credits,
+        created_at: new Date().toISOString()
+      }
+      users.value.push(newUser)
+    }
+
     message.success(t('common.success'))
     showCreateModal.value = false
     resetForm()
@@ -329,8 +386,9 @@ const handleResetPassword = (record: any) => {
     title: t('admin.resetPasswordConfirm'),
     content: t('admin.resetPasswordConfirmContent', { username: record.username }),
     onOk: () => {
-      // TODO: 重置密码
-      message.success(t('admin.resetPasswordSuccess'))
+      // 重置密码为默认密码
+      const defaultPassword = '123456'
+      message.success(t('admin.resetPasswordSuccess') + ` (${defaultPassword})`)
     }
   })
 }

@@ -29,7 +29,10 @@ export default {
     credits: 'Credits',
     totalItems: 'Total {total} items',
     copySuccess: 'Copied to clipboard',
-    required: 'is required'
+    required: 'is required',
+    createdAt: 'Created At',
+    updatedAt: 'Updated At',
+    seconds: 'seconds'
   },
 
   // Navigation
@@ -206,9 +209,17 @@ export default {
     allCategories: 'All Categories',
     tags: 'Tags',
     filterTags: 'Filter by tags',
+    usageCount: 'Usage Count',
+    viewCount: 'Views',
     runCount: 'Run Count',
     favoriteCount: 'Favorites',
     version: 'Version',
+    changelog: 'Changelog',
+    gpuRequirements: 'GPU Requirements',
+    gpuMemory: 'GPU Memory',
+    timeout: 'Timeout',
+    toolInfo: 'Tool Info',
+    status: 'Status',
     favorite: 'Favorite',
     unfavorite: 'Unfavorite',
     run: 'Run',
@@ -219,8 +230,63 @@ export default {
     noTools: 'No tools available',
     // Tool views
     publicTools: 'Public Tools',
+    myTools: 'My Tools',
+    favorites: 'Favorites',
     favoriteTools: 'My Favorites',
     customTools: 'Custom Tools',
+    allTools: 'All',
+    // Tool provider types
+    providerType: {
+      platform: 'Official',
+      user: 'Community'
+    },
+    // Review status
+    reviewStatus: {
+      all: 'All Status',
+      not_required: 'No Review Required',
+      pending: 'Pending Review',
+      approved: 'Approved',
+      rejected: 'Rejected'
+    },
+    // Review related
+    submitReview: 'Submit for Review',
+    resubmitReview: 'Resubmit',
+    reviewPending: 'Under review, please wait',
+    reviewRejected: 'Review rejected',
+    rejectReason: 'Rejection Reason',
+    // Create/Edit tool
+    createTool: 'Create Tool',
+    editTool: 'Edit Tool',
+    basicInfo: 'Basic Information',
+    toolName: 'Tool Name',
+    toolNamePlaceholder: 'Enter tool name',
+    toolSlug: 'Tool Slug',
+    toolSlugPlaceholder: 'Enter tool slug (lowercase letters, numbers, hyphens)',
+    slugHint: 'Used in URL to identify the tool, only lowercase letters, numbers and hyphens allowed',
+    descriptionPlaceholder: 'Enter tool description...',
+    selectCategory: 'Select category',
+    selectTags: 'Select tags',
+    iconPlaceholder: 'Enter emoji or leave empty',
+    iconHint: 'Supports emoji as icon',
+    iconUrlPlaceholder: 'Enter icon URL (optional)',
+    runConfig: 'Run Configuration',
+    gpuRequired: 'GPU Required',
+    gpuMemoryMb: 'GPU Memory (MB)',
+    timeoutSec: 'Timeout (seconds)',
+    isPublic: 'Public Tool',
+    publicYes: 'Public (visible to others)',
+    publicNo: 'Private (only visible to you)',
+    // Validation messages
+    nameRequired: 'Please enter tool name',
+    nameLength: 'Tool name must be 2-100 characters',
+    slugRequired: 'Please enter tool slug',
+    slugFormat: 'Tool slug can only contain lowercase letters, numbers and hyphens',
+    slugLength: 'Tool slug must be 2-50 characters',
+    descriptionLength: 'Description max 500 characters',
+    // Operation results
+    createSuccess: 'Tool created successfully',
+    updateSuccess: 'Tool updated successfully',
+    loadFailed: 'Failed to load tool information',
     // Sorting
     sortPopular: 'By Popularity',
     sortNewest: 'By Newest',

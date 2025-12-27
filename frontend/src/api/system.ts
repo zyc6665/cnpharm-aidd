@@ -22,22 +22,24 @@ export const getSystemConfig = (): Promise<ApiResponse<Record<string, unknown>>>
   return get<Record<string, unknown>>('/system/config')
 }
 
-// 获取 GPU 信息
-export const getGPUInfo = (): Promise<ApiResponse<GPUInfo[]>> => {
-  return get<GPUInfo[]>('/gpu/info')
-}
+// ==================== GPU 相关接口（后端GPU路由未注册，暂时不可用） ====================
 
-// 获取 GPU 摘要
-export const getGPUSummary = (): Promise<ApiResponse<GPUSummary>> => {
-  return get<GPUSummary>('/gpu/summary')
-}
+// 获取 GPU 信息（后端未注册GPU路由）
+// export const getGPUInfo = (): Promise<ApiResponse<GPUInfo[]>> => {
+//   return get<GPUInfo[]>('/gpu/info')
+// }
 
-// 获取 GPU 统计
-export const getGPUStats = (): Promise<ApiResponse<GPUInfo[]>> => {
-  return get<GPUInfo[]>('/gpu/stats')
-}
+// 获取 GPU 摘要（后端未注册GPU路由）
+// export const getGPUSummary = (): Promise<ApiResponse<GPUSummary>> => {
+//   return get<GPUSummary>('/gpu/summary')
+// }
 
-// GPU 健康检查
-export const getGPUHealth = (): Promise<ApiResponse<{ healthy: boolean; message: string }>> => {
-  return get<{ healthy: boolean; message: string }>('/gpu/health')
-}
+// 获取 GPU 统计（后端未注册GPU路由）
+// export const getGPUStats = (): Promise<ApiResponse<GPUInfo[]>> => {
+//   return get<GPUInfo[]>('/gpu/stats')
+// }
+
+// GPU 健康检查（后端未注册GPU路由）
+// export const getGPUHealth = (): Promise<ApiResponse<{ healthy: boolean; message: string }>> => {
+//   return get<{ healthy: boolean; message: string }>('/gpu/health')
+// }

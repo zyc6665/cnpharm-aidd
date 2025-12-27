@@ -5,6 +5,7 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 from pydantic import BaseModel, Field
 from app.schemas.common import TimestampMixin
+from app.schemas.statistics import FileStatisticsResponse
 
 
 class FileResponse(TimestampMixin):
@@ -16,7 +17,7 @@ class FileResponse(TimestampMixin):
     source_type: str
     is_public: bool
     expires_at: Optional[datetime]
-    download_count: int
+    statistics: Optional[FileStatisticsResponse] = None
 
     class Config:
         from_attributes = True

@@ -6,37 +6,46 @@
         <p class="page-subtitle">{{ t('tools.subtitle') }}</p>
       </div>
 
-      <!-- 三视图切换标签 -->
+      <!-- 视图切换标签 -->
       <div class="view-tabs">
-        <a-tabs v-model:activeKey="currentView" @change="handleViewChange">
-          <a-tab-pane key="public">
-            <template #tab>
-              <span class="tab-label">
-                <AppstoreOutlined />
-                {{ t('tools.publicTools') }}
-                <a-badge v-if="total > 0" :count="total" :overflow-count="999" class="tab-badge" />
-              </span>
-            </template>
-          </a-tab-pane>
-          <a-tab-pane key="favorite" :disabled="!userStore.isLoggedIn">
-            <template #tab>
-              <span class="tab-label">
-                <HeartOutlined />
-                {{ t('tools.favoriteTools') }}
-                <a-badge v-if="favoritesTotal > 0" :count="favoritesTotal" :overflow-count="999" class="tab-badge" />
-              </span>
-            </template>
-          </a-tab-pane>
-          <a-tab-pane key="custom" :disabled="!userStore.isLoggedIn">
-            <template #tab>
-              <span class="tab-label">
-                <UserOutlined />
-                {{ t('tools.customTools') }}
-                <a-badge v-if="customTotal > 0" :count="customTotal" :overflow-count="999" class="tab-badge" />
-              </span>
-            </template>
-          </a-tab-pane>
-        </a-tabs>
+        <a-radio-group v-model:value="currentView" button-style="solid" size="large" @change="handleViewChange">
+          <a-radio-button value="public">
+            <AppstoreOutlined />
+            {{ t('tools.publicTools') }}
+          </a-radio-button>
+          <a-radio-button v-if="isLoggedIn" value="my">
+            <UserOutlined />
+            {{ t('tools.myTools') }}
+          </a-radio-button>
+          <a-radio-button v-if="isLoggedIn" value="favorites">
+            <HeartOutlined />
+            {{ t('tools.favorites') }}
+          </a-radio-button>
+        </a-radio-group>
+
+        <!-- 创建工具按钮 -->
+        <a-button v-if="isLoggedIn" type="primary" size="large" @click="goToCreate">
+          <PlusOutlined />
+          {{ t('tools.createTool') }}
+        </a-button>
+
+        <!-- 工具来源筛选（仅公开视图） -->
+        <a-radio-group
+          v-if="currentView === 'public'"
+          v-model:value="providerFilter"
+          size="large"
+          @change="handleProviderChange"
+        >
+          <a-radio-button value="">{{ t('tools.allTools') }}</a-radio-button>
+          <a-radio-button value="platform">
+            <SafetyCertificateOutlined />
+            {{ t('tools.providerType.platform') }}
+          </a-radio-button>
+          <a-radio-button value="user">
+            <TeamOutlined />
+            {{ t('tools.providerType.user') }}
+          </a-radio-button>
+        </a-radio-group>
       </div>
 
       <!-- 搜索和筛选 -->
@@ -57,29 +66,42 @@
           allow-clear
           @change="handleCategoryChange"
         >
-          <a-select-option v-for="cat in categories" :key="cat.id" :value="cat.id">
+          <a-select-option v-for="cat in categories" :key="cat.name" :value="cat.name">
             <span class="category-option">
-              <span v-if="cat.icon" class="category-icon">{{ cat.icon }}</span>
               {{ cat.name }}
-              <span v-if="cat.tool_count" class="category-count">({{ cat.tool_count }})</span>
+              <span v-if="cat.count" class="category-count">({{ cat.count }})</span>
             </span>
           </a-select-option>
         </a-select>
         <a-select
-          v-model:value="selectedTags"
+          v-model:value="selectedTag"
           :placeholder="t('tools.filterTags')"
           size="large"
           style="width: 200px"
-          mode="multiple"
           allow-clear
-          :max-tag-count="2"
           @change="handleTagChange"
         >
-          <a-select-option v-for="tag in tags" :key="tag.id" :value="tag.id">
+          <a-select-option v-for="tag in tags" :key="tag.id" :value="tag.name">
             <a-tag :color="tag.color" size="small">{{ tag.name }}</a-tag>
           </a-select-option>
         </a-select>
-        <a-dropdown v-if="currentView === 'public'">
+
+        <!-- 我的工具视图的审核状态筛选 -->
+        <a-select
+          v-if="currentView === 'my'"
+          v-model:value="reviewStatusFilter"
+          :placeholder="t('tools.reviewStatus.all')"
+          size="large"
+          style="width: 160px"
+          allow-clear
+          @change="handleReviewStatusChange"
+        >
+          <a-select-option value="pending">{{ t('tools.reviewStatus.pending') }}</a-select-option>
+          <a-select-option value="approved">{{ t('tools.reviewStatus.approved') }}</a-select-option>
+          <a-select-option value="rejected">{{ t('tools.reviewStatus.rejected') }}</a-select-option>
+        </a-select>
+
+        <a-dropdown>
           <a-button size="large">
             <SortAscendingOutlined />
             {{ sortLabel }}
@@ -95,21 +117,6 @@
         </a-dropdown>
       </div>
 
-      <!-- 游客模式提示 -->
-      <a-alert
-        v-if="userStore.isGuest && (currentView === 'favorite' || currentView === 'custom')"
-        type="warning"
-        show-icon
-        :message="t('tools.guestWarning')"
-        style="margin-bottom: 16px"
-      >
-        <template #action>
-          <a-button size="small" type="primary" @click="goLogin">
-            {{ t('auth.goLogin') }}
-          </a-button>
-        </template>
-      </a-alert>
-
       <!-- 工具列表 -->
       <a-spin :spinning="loading">
         <div v-if="displayTools.length" class="tools-grid">
@@ -122,12 +129,35 @@
                     <ToolOutlined v-else />
                   </div>
                   <div class="tool-badges">
-                    <a-tag v-if="tool.category" color="gold">{{ tool.category.name }}</a-tag>
-                    <a-tag v-if="tool.is_free" color="green">{{ t('tools.free') }}</a-tag>
+                    <!-- 工具来源标签 -->
+                    <a-tag v-if="tool.provider_type === 'platform'" color="blue">
+                      <SafetyCertificateOutlined />
+                      {{ t('tools.providerType.platform') }}
+                    </a-tag>
+                    <a-tag v-else-if="tool.provider_type === 'user'" color="green">
+                      <TeamOutlined />
+                      {{ t('tools.providerType.user') }}
+                    </a-tag>
+                    <!-- 审核状态标签（仅我的工具视图） -->
+                    <a-tag v-if="currentView === 'my'" :color="getReviewStatusColor(tool.review_status)">
+                      {{ t(`tools.reviewStatus.${tool.review_status}`) }}
+                    </a-tag>
+                    <a-tag v-if="tool.gpu_required" color="purple">GPU</a-tag>
                   </div>
                 </div>
                 <h3 class="tool-name">{{ tool.name }}</h3>
                 <p class="tool-desc">{{ tool.description }}</p>
+
+                <!-- 拒绝原因提示（仅我的工具视图） -->
+                <a-alert
+                  v-if="currentView === 'my' && tool.review_status === 'rejected' && tool.reject_reason"
+                  type="error"
+                  :message="t('tools.rejectReason')"
+                  :description="tool.reject_reason"
+                  show-icon
+                  class="reject-alert"
+                />
+
                 <div class="tool-tags" v-if="tool.tags?.length">
                   <a-tag
                     v-for="tag in tool.tags.slice(0, 3)"
@@ -142,7 +172,11 @@
                   <div class="tool-stats">
                     <span class="tool-stat">
                       <PlayCircleOutlined />
-                      {{ formatNumber(tool.run_count) }}
+                      {{ formatNumber(tool.usage_count) }}
+                    </span>
+                    <span class="tool-stat">
+                      <EyeOutlined />
+                      {{ formatNumber(tool.view_count) }}
                     </span>
                     <span class="tool-stat">
                       <HeartFilled v-if="tool.is_favorited" class="favorited" />
@@ -150,31 +184,21 @@
                       {{ formatNumber(tool.favorite_count) }}
                     </span>
                   </div>
-                  <div class="tool-credits" v-if="!tool.is_free">
-                    <ThunderboltOutlined />
-                    {{ tool.credits }} {{ t('common.credits') }}
-                  </div>
                 </div>
               </div>
             </a-col>
           </a-row>
         </div>
-        <a-empty v-else :description="emptyText">
-          <template v-if="currentView === 'favorite'" #extra>
-            <a-button type="primary" @click="currentView = 'public'">
-              {{ t('tools.browseTools') }}
-            </a-button>
-          </template>
-        </a-empty>
+        <a-empty v-else :description="t('tools.noTools')" />
       </a-spin>
 
       <!-- 分页 -->
-      <div v-if="currentTotal > pageSize" class="pagination">
+      <div v-if="displayTotal > pageSize" class="pagination">
         <a-pagination
           v-model:current="currentPage"
-          :total="currentTotal"
+          :total="displayTotal"
           :page-size="pageSize"
-          :show-total="(total: number) => t('common.totalItems', { total })"
+          :show-total="(t: number) => `共 ${t} 条`"
           show-quick-jumper
           show-size-changer
           :page-size-options="['12', '24', '48']"
@@ -195,14 +219,17 @@
     PlayCircleOutlined,
     HeartOutlined,
     HeartFilled,
-    AppstoreOutlined,
-    UserOutlined,
+    EyeOutlined,
     SortAscendingOutlined,
     DownOutlined,
-    ThunderboltOutlined
+    AppstoreOutlined,
+    UserOutlined,
+    SafetyCertificateOutlined,
+    TeamOutlined,
+    PlusOutlined
   } from '@ant-design/icons-vue'
   import { useToolsStore, useUserStore } from '@/stores'
-  import type { ToolView } from '@/types/models'
+  import type { ToolView, ToolProviderType, ToolReviewStatus } from '@/types/models'
 
   const router = useRouter()
   const { t } = useI18n()
@@ -210,41 +237,35 @@
   const userStore = useUserStore()
 
   const searchKeyword = ref('')
-  const selectedCategory = ref<number | undefined>()
-  const selectedTags = ref<number[]>([])
+  const selectedCategory = ref<string | undefined>()
+  const selectedTag = ref<string | undefined>()
   const currentPage = ref(1)
   const pageSize = ref(12)
   const sortBy = ref('popular')
   const currentView = ref<ToolView>('public')
+  const providerFilter = ref<ToolProviderType | ''>('')
+  const reviewStatusFilter = ref<ToolReviewStatus | undefined>()
 
   const loading = computed(() => toolsStore.loading)
+  const isLoggedIn = computed(() => userStore.isLoggedIn)
+
+  // 根据视图类型获取工具列表
+  const displayTools = computed(() => {
+    if (currentView.value === 'my') {
+      return toolsStore.myTools
+    }
+    return toolsStore.tools
+  })
+
+  const displayTotal = computed(() => {
+    if (currentView.value === 'my') {
+      return toolsStore.myToolsTotal
+    }
+    return toolsStore.total
+  })
+
   const categories = computed(() => toolsStore.categories)
   const tags = computed(() => toolsStore.tags)
-  const total = computed(() => toolsStore.total)
-  const favoritesTotal = computed(() => toolsStore.favoritesTotal)
-  const customTotal = computed(() => toolsStore.customTotal)
-
-  const displayTools = computed(() => {
-    switch (currentView.value) {
-      case 'favorite':
-        return toolsStore.favoriteToolsList
-      case 'custom':
-        return toolsStore.customToolsList
-      default:
-        return toolsStore.tools
-    }
-  })
-
-  const currentTotal = computed(() => {
-    switch (currentView.value) {
-      case 'favorite':
-        return favoritesTotal.value
-      case 'custom':
-        return customTotal.value
-      default:
-        return total.value
-    }
-  })
 
   const sortLabel = computed(() => {
     const labels: Record<string, string> = {
@@ -255,18 +276,11 @@
     return labels[sortBy.value] || t('tools.sortPopular')
   })
 
-  const emptyText = computed(() => {
-    switch (currentView.value) {
-      case 'favorite':
-        return t('tools.noFavorites')
-      case 'custom':
-        return t('tools.noCustomTools')
-      default:
-        return t('tools.noTools')
-    }
-  })
-
   const formatNumber = (num: number) => {
+    // 处理 undefined/null 的情况
+    if (num == null || num === undefined) {
+      return '0'
+    }
     if (num >= 10000) {
       return (num / 10000).toFixed(1) + 'w'
     }
@@ -276,31 +290,61 @@
     return num.toString()
   }
 
-  const fetchData = async () => {
-    const params: Record<string, unknown> = {
-      keyword: searchKeyword.value || undefined,
-      category_id: selectedCategory.value,
-      tag_ids: selectedTags.value.length > 0 ? selectedTags.value : undefined,
-      page: currentPage.value,
-      page_size: pageSize.value,
-      sort_by: sortBy.value
+  const getReviewStatusColor = (status: ToolReviewStatus) => {
+    const colors: Record<ToolReviewStatus, string> = {
+      not_required: 'blue',
+      pending: 'orange',
+      approved: 'green',
+      rejected: 'red'
     }
+    return colors[status] || 'default'
+  }
 
-    switch (currentView.value) {
-      case 'favorite':
-        await toolsStore.fetchFavoriteTools(params)
-        break
-      case 'custom':
-        await toolsStore.fetchCustomTools(params)
-        break
-      default:
-        await toolsStore.fetchTools(params)
+  const fetchData = async () => {
+    if (currentView.value === 'my') {
+      await toolsStore.fetchMyTools({
+        page: currentPage.value,
+        page_size: pageSize.value,
+        review_status: reviewStatusFilter.value,
+        sort_by: sortBy.value
+      })
+    } else if (currentView.value === 'favorites') {
+      await toolsStore.fetchTools({
+        view: 'favorites',
+        search: searchKeyword.value || undefined,
+        category: selectedCategory.value,
+        tag: selectedTag.value,
+        page: currentPage.value,
+        page_size: pageSize.value,
+        sort_by: sortBy.value
+      })
+    } else {
+      await toolsStore.fetchTools({
+        view: 'public',
+        search: searchKeyword.value || undefined,
+        category: selectedCategory.value,
+        tag: selectedTag.value,
+        provider_type: providerFilter.value || undefined,
+        page: currentPage.value,
+        page_size: pageSize.value,
+        sort_by: sortBy.value
+      })
     }
   }
 
-  const handleViewChange = (view: string) => {
-    currentView.value = view as ToolView
-    toolsStore.setCurrentView(view as ToolView)
+  const handleViewChange = () => {
+    currentPage.value = 1
+    reviewStatusFilter.value = undefined
+    providerFilter.value = ''
+    fetchData()
+  }
+
+  const handleProviderChange = () => {
+    currentPage.value = 1
+    fetchData()
+  }
+
+  const handleReviewStatusChange = () => {
     currentPage.value = 1
     fetchData()
   }
@@ -337,20 +381,13 @@
     fetchData()
   }
 
-  const goToDetail = (id: number) => {
+  const goToDetail = (id: string) => {
     router.push(`/tools/${id}`)
   }
 
-  const goLogin = () => {
-    router.push('/login')
+  const goToCreate = () => {
+    router.push('/tools/create')
   }
-
-  // 监听用户登录状态，自动刷新收藏数
-  watch(() => userStore.isLoggedIn, (isLoggedIn) => {
-    if (isLoggedIn) {
-      toolsStore.fetchFavoriteTools({ page: 1, page_size: 1 })
-    }
-  })
 
   onMounted(async () => {
     await Promise.all([
@@ -358,11 +395,6 @@
       toolsStore.fetchCategories(),
       toolsStore.fetchTags()
     ])
-
-    // 如果已登录，获取收藏数
-    if (userStore.isLoggedIn) {
-      toolsStore.fetchFavoriteTools({ page: 1, page_size: 1 })
-    }
   })
 </script>
 
@@ -390,39 +422,12 @@
     font-size: @font-size-lg;
   }
 
-  // 视图切换标签
   .view-tabs {
-    margin-bottom: @spacing-lg;
-
-    :deep(.ant-tabs-nav) {
-      margin-bottom: 0;
-
-      &::before {
-        border-bottom: none;
-      }
-    }
-
-    .tab-label {
-      display: flex;
-      align-items: center;
-      gap: @spacing-xs;
-
-      .anticon {
-        font-size: 16px;
-      }
-    }
-
-    .tab-badge {
-      margin-left: @spacing-xs;
-
-      :deep(.ant-badge-count) {
-        background: @accent-color;
-        font-size: 10px;
-        height: 16px;
-        min-width: 16px;
-        line-height: 16px;
-      }
-    }
+    display: flex;
+    justify-content: center;
+    gap: @spacing-lg;
+    margin-bottom: @spacing-xl;
+    flex-wrap: wrap;
   }
 
   .filter-bar {
@@ -435,10 +440,6 @@
       display: flex;
       align-items: center;
       gap: @spacing-xs;
-
-      .category-icon {
-        font-size: 16px;
-      }
 
       .category-count {
         color: @text-color-light-tertiary;
@@ -486,6 +487,8 @@
     display: flex;
     gap: @spacing-xs;
     flex-wrap: wrap;
+    max-width: 60%;
+    justify-content: flex-end;
   }
 
   .tool-name {
@@ -500,6 +503,12 @@
     font-size: @font-size-sm;
     flex: 1;
     .text-ellipsis-lines(2);
+  }
+
+  .reject-alert {
+    margin-top: @spacing-sm;
+    margin-bottom: @spacing-sm;
+    font-size: @font-size-xs;
   }
 
   .tool-tags {
@@ -534,15 +543,6 @@
     .favorited {
       color: @error-color;
     }
-  }
-
-  .tool-credits {
-    display: flex;
-    align-items: center;
-    gap: @spacing-xs;
-    color: @warning-color;
-    font-size: @font-size-sm;
-    font-weight: @font-weight-medium;
   }
 
   .pagination {

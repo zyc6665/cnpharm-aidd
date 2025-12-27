@@ -66,24 +66,24 @@ async def notify_task_error(task_id: str, error: str):
     max_retries=3,
     default_retry_delay=60
 )
-def execute_tool_task(self, task_id: str, params: Dict[str, Any]):
+def execute_tool_task(self, task_id: str, tool_version_id: str):
     """
     执行工具任务
 
     Args:
         task_id: 任务ID
-        params: 任务参数
+        tool_version_id: 工具版本ID
 
     Returns:
         执行结果
     """
-    logger.info(f"开始执行任务: {task_id}")
+    logger.info(f"开始执行任务: {task_id}, 工具版本: {tool_version_id}")
 
     try:
         # 在异步上下文中执行
         loop = asyncio.get_event_loop()
         result = loop.run_until_complete(
-            _execute_tool_task_impl(task_id, params)
+            _execute_tool_task_impl(task_id, tool_version_id)
         )
         logger.info(f"任务完成: {task_id}")
         return result
@@ -94,7 +94,7 @@ def execute_tool_task(self, task_id: str, params: Dict[str, Any]):
         raise self.retry(exc=exc)
 
 
-async def _execute_tool_task_impl(task_id: str, params: Dict[str, Any]) -> Dict[str, Any]:
+async def _execute_tool_task_impl(task_id: str, tool_version_id: str) -> Dict[str, Any]:
     """
     任务执行实现
 
@@ -134,29 +134,44 @@ async def _execute_tool_task_impl(task_id: str, params: Dict[str, Any]) -> Dict[
         await notify_task_log(task_id, "INFO", "任务开始执行")
 
         try:
-            # TODO: 实际的工具执行逻辑
-            # 这里应该根据 tool_version 的 config 来决定执行方式：
-            # 1. 调用远程 API
-            # 2. 执行 Docker 容器
-            # 3. 执行本地脚本
+            # ==================== 实际的工具执行逻辑 ====================
+            from app.models.tools import ToolVersion
+            from app.models.tasks import TaskInput
+            from app.tasks.executor import TaskExecutor
 
-            # 模拟执行过程
-            for progress in [0.2, 0.4, 0.6, 0.8, 1.0]:
+            # 获取工具版本配置
+            version_result = await db.execute(
+                select(ToolVersion).where(ToolVersion.id == tool_version_id)
+            )
+            tool_version = version_result.scalar_one()
+
+            # 获取任务输入参数
+            input_result = await db.execute(
+                select(TaskInput).where(TaskInput.task_id == task_id)
+            )
+            task_input = input_result.scalar_one_or_none()
+            params = task_input.params if task_input else {}
+
+            logger.info(f"执行工具 {tool_version.tool_id}, 类型: {tool_version.config.get('executor_type')}")
+
+            # 定义进度回调函数
+            async def progress_callback(progress: float, message: str):
+                """进度更新回调"""
                 task.progress = progress
-                progress_msg = f"执行进度: {int(progress * 100)}%"
-                task.progress_message = progress_msg
+                task.progress_message = message
                 await db.commit()
 
                 # WebSocket 通知：进度更新
-                await notify_task_progress(task_id, progress, progress_msg)
-                await asyncio.sleep(0.5)  # 模拟耗时操作
+                await notify_task_progress(task_id, progress, message)
+                await notify_task_log(task_id, "INFO", message)
 
-            # 模拟结果
-            output_result = {
-                "status": "success",
-                "message": "工具执行完成",
-                "data": params  # 实际应该是工具的输出
-            }
+            # 创建执行器并执行
+            # 使用正确的构造函数签名：TaskExecutor(task, tool_version)
+            executor = TaskExecutor(task, tool_version)
+
+            # 执行任务
+            output_result = await executor.execute()
+            logger.info(f"任务 {task_id} 执行成功")
 
             # 创建输出记录
             output = TaskOutput(

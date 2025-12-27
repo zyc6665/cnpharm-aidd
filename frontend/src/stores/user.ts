@@ -33,6 +33,7 @@ export const useUserStore = defineStore('user', () => {
   const hasEnoughCredits = computed(() => (required: number) => credits.value >= required)
   const memberExpireAt = computed(() => userInfo.value?.member_expire_at)
   const invitationCode = computed(() => userInfo.value?.invitation_code)
+  const avatar = computed(() => userInfo.value?.avatar || '')
 
   // Aliases for backwards compatibility
   const user = computed(() => userInfo.value)
@@ -93,8 +94,8 @@ export const useUserStore = defineStore('user', () => {
   }
 
   // 发送邮箱验证码
-  const sendEmailCode = async (email: string) => {
-    return await apiSendEmailCode(email)
+  const sendEmailCode = async (email: string, purpose: 'register' | 'reset_password' = 'register') => {
+    return await apiSendEmailCode(email, purpose)
   }
 
   const logout = async () => {
@@ -102,6 +103,8 @@ export const useUserStore = defineStore('user', () => {
       if (!isGuest.value) {
         await apiLogout()
       }
+    } catch {
+      // 忽略退出登录的错误（如 401），因为无论如何都要清除本地数据
     } finally {
       token.value = null
       refreshToken.value = null
@@ -184,11 +187,13 @@ export const useUserStore = defineStore('user', () => {
   }
 
   // 更新个人资料
-  const updateProfile = async (data: { username?: string; avatar?: string }) => {
-    // TODO: 实现 API 调用
-    if (userInfo.value) {
-      userInfo.value = { ...userInfo.value, ...data }
-    }
+  const updateProfile = async (data: { username?: string; avatar_url?: string }) => {
+    const { updateUserProfile } = await import('@/api/users')
+    const res = await updateUserProfile({
+      avatar_url: data.avatar_url
+    })
+    userInfo.value = res.data
+    return res.data
   }
 
   // 修改密码
@@ -234,6 +239,7 @@ export const useUserStore = defineStore('user', () => {
     hasEnoughCredits,
     memberExpireAt,
     invitationCode,
+    avatar,
     // Aliases
     user,
     role,
@@ -257,6 +263,6 @@ export const useUserStore = defineStore('user', () => {
   }
 }, {
   persist: {
-    pick: ['token', 'refreshToken', 'isGuest', 'credits']
+    pick: ['userInfo', 'isGuest', 'credits']
   }
 })

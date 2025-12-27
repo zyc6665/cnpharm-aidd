@@ -1,5 +1,6 @@
 # 科学计算工具管理平台
-
+  cd /data/zhouyc/cpumodel_sciminer/backend
+  python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/Python-3.10+-green.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-teal.svg)](https://fastapi.tiangolo.com/)

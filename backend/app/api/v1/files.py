@@ -5,17 +5,18 @@ import os
 import hashlib
 import aiofiles
 from pathlib import Path
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlalchemy.orm import joinedload
 from typing import Optional, List
 from datetime import datetime, timedelta
 
 from app.database.session import get_db
 from app.models.users import User
 from app.models.files import File as FileModel, FileSourceType
-from app.auth.dependencies import get_current_user, get_admin_user
+from app.auth.dependencies import get_current_user, get_admin_user, get_current_user_optional
 from app.schemas.files import FileResponse as FileSchema, FileUploadResponse, FileDownloadUrl
 from app.common.responses import success_response, error_response
 from app.common.exceptions import NotFoundException, ForbiddenException, ValidationException
@@ -149,7 +150,9 @@ async def list_files(
     db: AsyncSession = Depends(get_db)
 ):
     """获取文件列表"""
-    query = select(FileModel).where(FileModel.owner_id == current_user.id)
+    query = select(FileModel).options(
+        joinedload(FileModel.statistics)
+    ).where(FileModel.owner_id == current_user.id)
 
     if source_type:
         query = query.where(FileModel.source_type == source_type)
@@ -191,7 +194,9 @@ async def get_file_info(
 ):
     """获取文件信息"""
     result = await db.execute(
-        select(FileModel).where(FileModel.id == file_id)
+        select(FileModel).options(
+            joinedload(FileModel.statistics)
+        ).where(FileModel.id == file_id)
     )
     file = result.scalar_one_or_none()
 
@@ -200,7 +205,7 @@ async def get_file_info(
 
     # 权限检查
     if not file.is_public and file.owner_id != current_user.id:
-        is_admin = current_user.role.value == "admin"
+        is_admin = current_user.role == "admin"
         if not is_admin:
             raise ForbiddenException("无权访问此文件")
 
@@ -214,22 +219,28 @@ async def get_file_info(
 @router.get("/{file_id}/download")
 async def download_file(
     file_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
-    """下载文件"""
+    """下载文件（公开文件支持匿名访问）"""
     result = await db.execute(
-        select(FileModel).where(FileModel.id == file_id)
+        select(FileModel).options(
+            joinedload(FileModel.statistics)
+        ).where(FileModel.id == file_id)
     )
     file = result.scalar_one_or_none()
 
     if not file:
         raise NotFoundException("文件不存在")
 
-    # 权限检查
-    if not file.is_public and file.owner_id != current_user.id:
-        is_admin = current_user.role.value == "admin"
-        if not is_admin:
+    # 权限检查：公开文件允许匿名访问
+    if not file.is_public:
+        if not current_user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="需要登录才能访问此文件"
+            )
+        if file.owner_id != current_user.id and current_user.role != "admin":
             raise ForbiddenException("无权下载此文件")
 
     # 检查是否过期
@@ -241,8 +252,16 @@ async def download_file(
     if not file_path.exists():
         raise NotFoundException("文件已被删除")
 
-    # 更新下载计数
-    file.download_count += 1
+    # 更新下载计数（通过statistics表）
+    if not file.statistics:
+        from app.models.statistics import FileStatistics
+        file.statistics = FileStatistics(file_id=file.id)
+        db.add(file.statistics)
+    # 处理None值
+    if file.statistics.download_count is None:
+        file.statistics.download_count = 0
+    file.statistics.download_count += 1
+    file.statistics.last_downloaded_at = datetime.utcnow()
     await db.commit()
 
     return FileResponse(
@@ -261,7 +280,9 @@ async def get_download_url(
 ):
     """获取文件下载URL（本地存储直接返回下载接口）"""
     result = await db.execute(
-        select(FileModel).where(FileModel.id == file_id)
+        select(FileModel).options(
+            joinedload(FileModel.statistics)
+        ).where(FileModel.id == file_id)
     )
     file = result.scalar_one_or_none()
 
@@ -270,7 +291,7 @@ async def get_download_url(
 
     # 权限检查
     if not file.is_public and file.owner_id != current_user.id:
-        is_admin = current_user.role.value == "admin"
+        is_admin = current_user.role == "admin"
         if not is_admin:
             raise ForbiddenException("无权访问此文件")
 
@@ -301,7 +322,7 @@ async def delete_file(
         raise NotFoundException("文件不存在")
 
     # 权限检查
-    is_admin = current_user.role.value == "admin"
+    is_admin = current_user.role == "admin"
     if file.owner_id != current_user.id and not is_admin:
         raise ForbiddenException("无权删除此文件")
 
@@ -338,7 +359,7 @@ async def batch_delete_files(
             continue
 
         # 权限检查
-        is_admin = current_user.role.value == "admin"
+        is_admin = current_user.role == "admin"
         if file.owner_id != current_user.id and not is_admin:
             failed_ids.append(file_id)
             continue

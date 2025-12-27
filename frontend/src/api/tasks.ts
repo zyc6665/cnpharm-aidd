@@ -4,7 +4,7 @@ import type { Task, TaskCreateParams, TaskLog, TaskStatus, PaginatedResponse, Pa
 
 export interface TaskListParams extends PaginationParams {
   status?: TaskStatus
-  tool_id?: number
+  tool_id?: string
 }
 
 // 获取任务列表

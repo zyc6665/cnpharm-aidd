@@ -15,11 +15,11 @@
                 <div class="tool-meta">
                   <h1 class="tool-name">{{ tool.name }}</h1>
                   <div class="tool-tags">
-                    <a-tag v-if="tool.category" color="gold">{{ tool.category.name }}</a-tag>
+                    <a-tag v-if="tool.category" color="gold">{{ tool.category }}</a-tag>
                     <a-tag v-for="tag in tool.tags" :key="tag.id" :color="tag.color">
                       {{ tag.name }}
                     </a-tag>
-                    <a-tag v-if="tool.is_free" color="green">{{ t('tools.free') }}</a-tag>
+                    <a-tag v-if="tool.gpu_required" color="purple">GPU</a-tag>
                   </div>
                 </div>
                 <div class="tool-actions">
@@ -32,93 +32,37 @@
                     <HeartOutlined v-else />
                     {{ tool.is_favorited ? t('tools.unfavorite') : t('tools.favorite') }}
                   </a-button>
-                  <a-dropdown v-if="tool.versions?.length">
-                    <a-button>
-                      v{{ tool.version }}
-                      <DownOutlined />
-                    </a-button>
-                    <template #overlay>
-                      <a-menu @click="handleVersionChange">
-                        <a-menu-item v-for="ver in tool.versions" :key="ver">
-                          v{{ ver }}
-                        </a-menu-item>
-                      </a-menu>
-                    </template>
-                  </a-dropdown>
+                  <a-tag v-if="tool.current_version" color="blue">
+                    v{{ tool.current_version.version }}
+                  </a-tag>
                 </div>
               </div>
 
               <p class="tool-description">{{ tool.description }}</p>
 
-              <!-- 工具详细介绍 -->
-              <div v-if="tool.introduction" class="tool-introduction">
-                <h3>{{ t('tools.introduction') }}</h3>
-                <p>{{ tool.introduction }}</p>
-              </div>
-
-              <!-- 功能特点 -->
-              <div v-if="tool.features?.length" class="tool-features">
-                <h3>{{ t('tools.features') }}</h3>
-                <ul>
-                  <li v-for="(feature, idx) in tool.features" :key="idx">
-                    <CheckCircleOutlined class="feature-icon" />
-                    {{ feature }}
-                  </li>
-                </ul>
-              </div>
-
-              <!-- 使用步骤 -->
-              <div v-if="tool.steps?.length" class="tool-steps">
-                <h3>{{ t('tools.howToUse') }}</h3>
-                <a-steps direction="vertical" size="small">
-                  <a-step v-for="(step, idx) in tool.steps" :key="idx" :title="`${t('tools.step')} ${idx + 1}`" :description="step" />
-                </a-steps>
-              </div>
-
               <div class="tool-stats">
                 <span class="stat-item">
                   <PlayCircleOutlined />
-                  {{ t('tools.runCount') }}: {{ formatNumber(tool.run_count) }}
+                  {{ t('tools.usageCount') }}: {{ formatNumber(tool.statistics?.usage_count) }}
+                </span>
+                <span class="stat-item">
+                  <EyeOutlined />
+                  {{ t('tools.viewCount') }}: {{ formatNumber(tool.statistics?.view_count) }}
                 </span>
                 <span class="stat-item">
                   <HeartOutlined />
-                  {{ t('tools.favoriteCount') }}: {{ formatNumber(tool.favorite_count) }}
+                  {{ t('tools.favoriteCount') }}: {{ formatNumber(tool.statistics?.favorite_count) }}
                 </span>
-                <span class="stat-item">
+                <span v-if="tool.current_version" class="stat-item">
                   <TagOutlined />
-                  {{ t('tools.version') }}: v{{ tool.version }}
-                </span>
-                <span v-if="tool.avg_duration" class="stat-item">
-                  <ClockCircleOutlined />
-                  {{ t('tools.avgDuration') }}: {{ formatDuration(tool.avg_duration) }}
+                  {{ t('tools.version') }}: v{{ tool.current_version.version }}
                 </span>
               </div>
 
-              <!-- 参考文献 -->
-              <div v-if="tool.references?.length" class="tool-references">
-                <h3>{{ t('tools.references') }}</h3>
-                <ul>
-                  <li v-for="(ref, idx) in tool.references" :key="idx">
-                    <a :href="ref.url" target="_blank" rel="noopener">
-                      {{ ref.title }}
-                      <span v-if="ref.authors" class="ref-authors"> - {{ ref.authors }}</span>
-                      <span v-if="ref.year" class="ref-year">({{ ref.year }})</span>
-                    </a>
-                  </li>
-                </ul>
-              </div>
-
-              <!-- 外部链接 -->
-              <div class="tool-links">
-                <a v-if="tool.github_url" :href="tool.github_url" target="_blank" rel="noopener" class="tool-link">
-                  <GithubOutlined /> GitHub
-                </a>
-                <a v-if="tool.paper_url" :href="tool.paper_url" target="_blank" rel="noopener" class="tool-link">
-                  <FileTextOutlined /> {{ t('tools.paper') }}
-                </a>
-                <a v-if="tool.doc_url" :href="tool.doc_url" target="_blank" rel="noopener" class="tool-link">
-                  <BookOutlined /> {{ t('tools.documentation') }}
-                </a>
+              <!-- 版本更新日志 -->
+              <div v-if="tool.current_version?.changelog" class="tool-changelog">
+                <h3>{{ t('tools.changelog') }}</h3>
+                <p>{{ tool.current_version.changelog }}</p>
               </div>
             </div>
 
@@ -126,23 +70,20 @@
             <div class="tool-form card">
               <h2 class="section-title">{{ t('tools.parameters') }}</h2>
 
-              <!-- 积分消耗提示 -->
+              <!-- 游客警告 -->
               <a-alert
-                v-if="!tool.is_free"
-                type="info"
+                v-if="userStore.isGuest"
+                type="warning"
                 show-icon
                 style="margin-bottom: 16px"
               >
                 <template #message>
-                  {{ t('tools.creditsCost', { credits: tool.credits }) }}
-                  <span v-if="userStore.credits < tool.credits" class="insufficient">
-                    ({{ t('tools.insufficientCredits') }})
-                  </span>
+                  {{ t('tools.guestWarning') }}
                 </template>
               </a-alert>
 
               <a-form ref="formRef" :model="formState" layout="vertical" @finish="handleSubmit">
-                <template v-for="(prop, key) in tool.input_schema?.properties" :key="key">
+                <template v-for="(prop, key) in flattenedSchema?.properties" :key="key">
                   <a-form-item
                     :name="key"
                     :label="prop.title"
@@ -157,11 +98,11 @@
                     />
                     <!-- 文本域 -->
                     <a-textarea
-                      v-else-if="prop.type === 'string' && (prop.format === 'textarea' || prop.format === 'fasta')"
+                      v-else-if="prop.type === 'string' && (prop.format === 'textarea' || prop.format === 'fasta' || prop.format === 'pdb')"
                       v-model:value="formState[key]"
                       :placeholder="prop.description"
-                      :rows="prop.format === 'fasta' ? 8 : 4"
-                      :class="{ 'fasta-input': prop.format === 'fasta' }"
+                      :rows="prop.format === 'fasta' || prop.format === 'pdb' ? 8 : 4"
+                      :class="{ 'code-input': prop.format === 'fasta' || prop.format === 'pdb' }"
                     />
                     <!-- 数字输入 -->
                     <a-input-number
@@ -178,7 +119,7 @@
                     />
                     <!-- 下拉选择 -->
                     <a-select
-                      v-else-if="prop.type === 'select' || prop.enum"
+                      v-else-if="prop.type === 'select' || (prop.enum && prop.type !== 'array')"
                       v-model:value="formState[key]"
                       :placeholder="prop.description"
                     >
@@ -186,9 +127,20 @@
                         {{ opt }}
                       </a-select-option>
                     </a-select>
+                    <!-- 数组多选（enum） -->
+                    <a-select
+                      v-else-if="prop.type === 'array' && prop.items?.enum"
+                      v-model:value="formState[key]"
+                      mode="multiple"
+                      :placeholder="prop.description"
+                    >
+                      <a-select-option v-for="opt in prop.items.enum" :key="opt" :value="opt">
+                        {{ opt }}
+                      </a-select-option>
+                    </a-select>
                     <!-- 文件上传 -->
                     <a-upload
-                      v-else-if="prop.type === 'file'"
+                      v-else-if="prop.type === 'file' || prop.format === 'uri' || prop.format === 'file'"
                       v-model:file-list="fileList[key]"
                       :accept="prop.accept"
                       :before-upload="() => false"
@@ -207,14 +159,6 @@
                     </a-upload>
                   </a-form-item>
                 </template>
-
-                <!-- 示例参数按钮 -->
-                <a-form-item v-if="tool.example_params">
-                  <a-button type="link" @click="loadExampleParams">
-                    <ExperimentOutlined />
-                    {{ t('tools.loadExample') }}
-                  </a-button>
-                </a-form-item>
 
                 <a-form-item>
                   <a-space>
@@ -237,58 +181,56 @@
             </div>
           </div>
 
-          <!-- 右侧：同类推荐 -->
+          <!-- 右侧：工具信息 -->
           <div class="tool-sidebar">
-            <div class="related-tools card">
+            <!-- GPU 要求 -->
+            <div v-if="tool.gpu_required" class="gpu-info card">
               <h3 class="sidebar-title">
-                <AppstoreOutlined />
-                {{ t('tools.relatedTools') }}
+                <ThunderboltOutlined />
+                {{ t('tools.gpuRequirements') }}
               </h3>
-              <a-spin :spinning="relatedLoading">
-                <div v-if="relatedTools.length" class="related-list">
-                  <div
-                    v-for="related in relatedTools"
-                    :key="related.id"
-                    class="related-item"
-                    @click="goToTool(related.id)"
-                  >
-                    <div class="related-icon">
-                      <span v-if="related.icon">{{ related.icon }}</span>
-                      <ToolOutlined v-else />
-                    </div>
-                    <div class="related-info">
-                      <h4 class="related-name">{{ related.name }}</h4>
-                      <p class="related-desc">{{ related.description }}</p>
-                      <div class="related-stats">
-                        <span>
-                          <PlayCircleOutlined />
-                          {{ formatNumber(related.run_count) }}
-                        </span>
-                        <span v-if="related.credits > 0">
-                          <ThunderboltOutlined />
-                          {{ related.credits }}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <a-empty v-else :description="t('tools.noRelatedTools')" :image="Empty.PRESENTED_IMAGE_SIMPLE" />
-              </a-spin>
+              <div class="gpu-details">
+                <span v-if="tool.gpu_memory_mb">
+                  {{ t('tools.gpuMemory') }}: {{ (tool.gpu_memory_mb / 1024).toFixed(1) }} GB
+                </span>
+                <span v-if="tool.timeout_sec">
+                  {{ t('tools.timeout') }}: {{ tool.timeout_sec }} {{ t('common.seconds') }}
+                </span>
+              </div>
             </div>
 
-            <!-- 输入输出格式说明 -->
-            <div v-if="tool.input_formats?.length || tool.output_formats?.length" class="formats-info card">
+            <!-- 工具标签 -->
+            <div v-if="tool.tags?.length" class="tags-info card">
               <h3 class="sidebar-title">
-                <FileTextOutlined />
-                {{ t('tools.formatInfo') }}
+                <TagOutlined />
+                {{ t('tools.tags') }}
               </h3>
-              <div v-if="tool.input_formats?.length" class="format-section">
-                <h4>{{ t('tools.inputFormats') }}</h4>
-                <a-tag v-for="fmt in tool.input_formats" :key="fmt" color="blue">{{ fmt }}</a-tag>
+              <div class="tags-list">
+                <a-tag v-for="tag in tool.tags" :key="tag.id" :color="tag.color">
+                  {{ tag.name }}
+                </a-tag>
               </div>
-              <div v-if="tool.output_formats?.length" class="format-section">
-                <h4>{{ t('tools.outputFormats') }}</h4>
-                <a-tag v-for="fmt in tool.output_formats" :key="fmt" color="green">{{ fmt }}</a-tag>
+            </div>
+
+            <!-- 工具状态 -->
+            <div class="status-info card">
+              <h3 class="sidebar-title">
+                <InfoCircleOutlined />
+                {{ t('tools.toolInfo') }}
+              </h3>
+              <div class="info-list">
+                <div class="info-item">
+                  <span class="info-label">{{ t('tools.status') }}:</span>
+                  <a-tag :color="getStatusColor(tool.status)">{{ tool.status }}</a-tag>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">{{ t('common.createdAt') }}:</span>
+                  <span>{{ formatDate(tool.created_at) }}</span>
+                </div>
+                <div v-if="tool.updated_at" class="info-item">
+                  <span class="info-label">{{ t('common.updatedAt') }}:</span>
+                  <span>{{ formatDate(tool.updated_at) }}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -303,7 +245,7 @@
   import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { useI18n } from 'vue-i18n'
-  import { message, Empty } from 'ant-design-vue'
+  import { message } from 'ant-design-vue'
   import type { FormInstance, Rule } from 'ant-design-vue/es/form'
   import type { UploadFile } from 'ant-design-vue'
   import {
@@ -311,21 +253,15 @@
     HeartOutlined,
     HeartFilled,
     PlayCircleOutlined,
+    EyeOutlined,
     TagOutlined,
     UploadOutlined,
-    ClockCircleOutlined,
-    DownOutlined,
-    CheckCircleOutlined,
-    GithubOutlined,
-    FileTextOutlined,
-    BookOutlined,
     ThunderboltOutlined,
-    AppstoreOutlined,
-    ExperimentOutlined,
-    FileOutlined
+    FileOutlined,
+    InfoCircleOutlined
   } from '@ant-design/icons-vue'
   import { useToolsStore, useTasksStore, useUserStore } from '@/stores'
-  import type { SchemaProperty, RelatedTool } from '@/types/models'
+  import type { SchemaProperty, ToolSchema } from '@/types/models'
   import { uploadFile } from '@/api/files'
 
   const route = useRoute()
@@ -339,20 +275,68 @@
   const loading = ref(false)
   const submitting = ref(false)
   const favoriteLoading = ref(false)
-  const relatedLoading = ref(false)
   const tool = computed(() => toolsStore.currentTool)
-  const relatedTools = ref<RelatedTool[]>([])
   const formState = reactive<Record<string, unknown>>({})
   const fileList = reactive<Record<string, UploadFile[]>>({})
+
+  // 从 current_version.config 中获取 input_schema
+  const inputSchema = computed<ToolSchema | undefined>(() => {
+    const config = tool.value?.current_version?.config
+    if (config && typeof config === 'object' && 'input_schema' in config) {
+      return config.input_schema as ToolSchema
+    }
+    return undefined
+  })
+
+  // 扁平化嵌套的schema结构，支持params和input_files
+  const flattenedSchema = computed<ToolSchema | undefined>(() => {
+    if (!inputSchema.value?.properties) return undefined
+
+    const flattened: Record<string, SchemaProperty> = {}
+    const required: string[] = []
+
+    for (const [key, prop] of Object.entries(inputSchema.value.properties)) {
+      // 如果是嵌套对象（params、input_files等），展开其子属性
+      if (prop.type === 'object' && prop.properties) {
+        for (const [subKey, subProp] of Object.entries(prop.properties)) {
+          const flatKey = `${key}.${subKey}`
+          flattened[flatKey] = {
+            ...subProp,
+            _parentKey: key,
+            _originalKey: subKey
+          }
+          // 检查是否必填
+          if (prop.required?.includes(subKey)) {
+            required.push(flatKey)
+          }
+        }
+      } else {
+        // 非嵌套属性直接添加
+        flattened[key] = prop
+        if (inputSchema.value.required?.includes(key)) {
+          required.push(key)
+        }
+      }
+    }
+
+    return {
+      type: 'object',
+      properties: flattened,
+      required
+    }
+  })
 
   const canSubmit = computed(() => {
     if (!userStore.isAuthenticated) return false
     if (userStore.isGuest) return false
-    if (tool.value && !tool.value.is_free && userStore.credits < tool.value.credits) return false
     return true
   })
 
   const formatNumber = (num: number) => {
+    // 处理 undefined/null 的情况
+    if (num == null || num === undefined) {
+      return '0'
+    }
     if (num >= 10000) {
       return (num / 10000).toFixed(1) + 'w'
     }
@@ -362,15 +346,23 @@
     return num.toString()
   }
 
-  const formatDuration = (ms: number) => {
-    if (ms < 1000) return `${ms}ms`
-    if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
-    return `${(ms / 60000).toFixed(1)}min`
+  const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleDateString()
+  }
+
+  const getStatusColor = (status: string) => {
+    const colors: Record<string, string> = {
+      draft: 'default',
+      published: 'success',
+      disabled: 'warning',
+      deprecated: 'error'
+    }
+    return colors[status] || 'default'
   }
 
   const getFieldRules = (key: string, prop: SchemaProperty): Rule[] => {
     const rules: Rule[] = []
-    const schema = tool.value?.input_schema
+    const schema = flattenedSchema.value
     if (schema?.required?.includes(key)) {
       rules.push({ required: true, message: `${prop.title} ${t('common.required')}` })
     }
@@ -397,18 +389,6 @@
     }
   }
 
-  const handleVersionChange = ({ key }: { key: string }) => {
-    // TODO: 切换工具版本
-    message.info(t('tools.switchingVersion', { version: key }))
-  }
-
-  const loadExampleParams = () => {
-    if (tool.value?.example_params) {
-      Object.assign(formState, tool.value.example_params)
-      message.success(t('tools.exampleLoaded'))
-    }
-  }
-
   const resetForm = () => {
     formRef.value?.resetFields()
     Object.keys(fileList).forEach(key => {
@@ -428,22 +408,41 @@
       return
     }
 
-    if (tool.value && !tool.value.is_free && userStore.credits < tool.value.credits) {
-      message.warning(t('tools.insufficientCredits'))
-      return
-    }
-
     submitting.value = true
     try {
       // 处理文件上传
-      const fileIds: number[] = []
-      for (const [key, files] of Object.entries(fileList)) {
-        if (files.length > 0) {
-          const fileItem = files[0]
+      const fileIds: string[] = []
+      const organizedData: Record<string, any> = {}
+
+      for (const [key, value] of Object.entries(formState)) {
+        // 检查是否是文件字段
+        if (fileList[key] && fileList[key].length > 0) {
+          const fileItem = fileList[key][0]
           if (fileItem && fileItem.originFileObj) {
             const res = await uploadFile(fileItem.originFileObj as File)
-            fileIds.push(res.data.id)
-            formState[key] = res.data.id
+            fileIds.push(res.data.id.toString())
+
+            // 将文件URL存储到对应的字段
+            const prop = flattenedSchema.value?.properties?.[key]
+            if (prop?._parentKey && prop?._originalKey) {
+              if (!organizedData[prop._parentKey]) {
+                organizedData[prop._parentKey] = {}
+              }
+              organizedData[prop._parentKey][prop._originalKey] = `/api/v1/files/${res.data.id}/download`
+            } else {
+              organizedData[key] = `/api/v1/files/${res.data.id}/download`
+            }
+          }
+        } else if (value !== undefined && value !== null && value !== '') {
+          // 处理普通字段，重新组织成嵌套结构
+          const prop = flattenedSchema.value?.properties?.[key]
+          if (prop?._parentKey && prop?._originalKey) {
+            if (!organizedData[prop._parentKey]) {
+              organizedData[prop._parentKey] = {}
+            }
+            organizedData[prop._parentKey][prop._originalKey] = value
+          } else {
+            organizedData[key] = value
           }
         }
       }
@@ -451,14 +450,9 @@
       // 创建任务
       const task = await tasksStore.createTask({
         tool_id: tool.value!.id,
-        input_params: { ...formState },
-        input_file_ids: fileIds.length > 0 ? fileIds : undefined
+        params: organizedData,
+        file_ids: fileIds.length > 0 ? fileIds : undefined
       })
-
-      // 扣除积分
-      if (tool.value && !tool.value.is_free) {
-        userStore.consumeCredits(tool.value.credits)
-      }
 
       message.success(t('tasks.created'))
       router.push(`/tasks/${task.id}`)
@@ -469,21 +463,16 @@
     }
   }
 
-  const goToTool = (id: number) => {
-    router.push(`/tools/${id}`)
-  }
-
   onMounted(async () => {
-    const id = Number(route.params.id)
+    const id = route.params.id as string
     if (id) {
       loading.value = true
-      relatedLoading.value = true
       try {
         await toolsStore.fetchToolDetail(id)
 
         // 初始化表单默认值
-        if (tool.value?.input_schema?.properties) {
-          for (const [key, prop] of Object.entries(tool.value.input_schema.properties)) {
+        if (flattenedSchema.value?.properties) {
+          for (const [key, prop] of Object.entries(flattenedSchema.value.properties)) {
             if (prop.default !== undefined) {
               formState[key] = prop.default
             }
@@ -493,13 +482,8 @@
             }
           }
         }
-
-        // 获取同类推荐
-        const related = await toolsStore.fetchRelatedTools(id, 4)
-        relatedTools.value = related
       } finally {
         loading.value = false
-        relatedLoading.value = false
       }
     }
   })
@@ -582,6 +566,7 @@
       display: flex;
       gap: @spacing-sm;
       flex-shrink: 0;
+      align-items: flex-start;
     }
 
     .tool-description {
@@ -589,61 +574,6 @@
       font-size: @font-size-md;
       margin-bottom: @spacing-lg;
       line-height: @line-height-loose;
-    }
-
-    .tool-introduction,
-    .tool-features,
-    .tool-steps,
-    .tool-references {
-      margin-bottom: @spacing-lg;
-
-      h3 {
-        font-size: @font-size-lg;
-        font-weight: @font-weight-semibold;
-        margin-bottom: @spacing-md;
-      }
-    }
-
-    .tool-features ul {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-
-      li {
-        display: flex;
-        align-items: flex-start;
-        gap: @spacing-sm;
-        padding: @spacing-xs 0;
-
-        .feature-icon {
-          color: @success-color;
-          margin-top: 4px;
-        }
-      }
-    }
-
-    .tool-references ul {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-
-      li {
-        padding: @spacing-xs 0;
-
-        a {
-          color: @accent-color;
-
-          &:hover {
-            color: @accent-color-hover;
-          }
-        }
-
-        .ref-authors,
-        .ref-year {
-          color: @text-color-light-tertiary;
-          font-size: @font-size-sm;
-        }
-      }
     }
 
     .tool-stats {
@@ -660,24 +590,20 @@
       color: @text-color-light-tertiary;
     }
 
-    .tool-links {
-      display: flex;
-      gap: @spacing-md;
+    .tool-changelog {
+      margin-top: @spacing-lg;
+      padding-top: @spacing-lg;
+      border-top: 1px solid @border-color-light;
 
-      .tool-link {
-        display: flex;
-        align-items: center;
-        gap: @spacing-xs;
-        color: @accent-color;
-        padding: @spacing-xs @spacing-sm;
-        border: 1px solid @accent-color;
-        border-radius: @border-radius-sm;
-        transition: all 0.3s;
+      h3 {
+        font-size: @font-size-md;
+        font-weight: @font-weight-semibold;
+        margin-bottom: @spacing-sm;
+      }
 
-        &:hover {
-          background: @accent-color;
-          color: @bg-light;
-        }
+      p {
+        color: @text-color-light-secondary;
+        font-size: @font-size-sm;
       }
     }
   }
@@ -689,11 +615,7 @@
       margin-bottom: @spacing-lg;
     }
 
-    .insufficient {
-      color: @error-color;
-    }
-
-    .fasta-input {
+    .code-input {
       font-family: monospace;
     }
 
@@ -724,86 +646,41 @@
     gap: @spacing-xs;
   }
 
-  .related-tools {
-    .related-list {
+  .gpu-info {
+    .gpu-details {
       display: flex;
       flex-direction: column;
-      gap: @spacing-md;
-    }
-
-    .related-item {
-      display: flex;
-      gap: @spacing-sm;
-      padding: @spacing-sm;
-      border-radius: @border-radius-md;
-      cursor: pointer;
-      transition: background 0.3s;
-
-      &:hover {
-        background: rgba(0, 0, 0, 0.02);
-      }
-    }
-
-    .related-icon {
-      width: 40px;
-      height: 40px;
-      border-radius: @border-radius-sm;
-      background: @accent-color-light;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 20px;
-      color: @accent-color;
-      flex-shrink: 0;
-    }
-
-    .related-info {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .related-name {
+      gap: @spacing-xs;
+      color: @text-color-light-secondary;
       font-size: @font-size-sm;
-      font-weight: @font-weight-medium;
-      margin-bottom: 2px;
-      .text-ellipsis();
-    }
-
-    .related-desc {
-      font-size: @font-size-xs;
-      color: @text-color-light-tertiary;
-      margin-bottom: 4px;
-      .text-ellipsis();
-    }
-
-    .related-stats {
-      display: flex;
-      gap: @spacing-sm;
-      font-size: @font-size-xs;
-      color: @text-color-light-tertiary;
-
-      span {
-        display: flex;
-        align-items: center;
-        gap: 2px;
-      }
     }
   }
 
-  .formats-info {
-    .format-section {
-      margin-bottom: @spacing-md;
+  .tags-info {
+    .tags-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: @spacing-xs;
+    }
+  }
 
-      &:last-child {
-        margin-bottom: 0;
-      }
+  .status-info {
+    .info-list {
+      display: flex;
+      flex-direction: column;
+      gap: @spacing-sm;
+    }
 
-      h4 {
-        font-size: @font-size-sm;
-        font-weight: @font-weight-medium;
-        margin-bottom: @spacing-xs;
-        color: @text-color-light-secondary;
-      }
+    .info-item {
+      display: flex;
+      align-items: center;
+      gap: @spacing-sm;
+      font-size: @font-size-sm;
+    }
+
+    .info-label {
+      color: @text-color-light-tertiary;
+      min-width: 70px;
     }
   }
 

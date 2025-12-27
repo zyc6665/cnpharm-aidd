@@ -10,14 +10,14 @@
           layout="vertical"
           @finish="handleSubmit"
         >
-          <a-form-item name="username" :label="t('auth.username')">
+          <a-form-item name="email" :label="t('auth.email')">
             <a-input
-              v-model:value="formState.username"
+              v-model:value="formState.email"
               size="large"
-              :placeholder="t('auth.validation.usernameRequired')"
+              :placeholder="t('auth.validation.emailRequired')"
             >
               <template #prefix>
-                <UserOutlined />
+                <MailOutlined />
               </template>
             </a-input>
           </a-form-item>
@@ -132,7 +132,7 @@
   import { message } from 'ant-design-vue'
   import type { FormInstance, Rule } from 'ant-design-vue/es/form'
   import {
-    UserOutlined,
+    MailOutlined,
     LockOutlined,
     EyeOutlined,
     CloseCircleOutlined,
@@ -152,14 +152,15 @@
   const guestModalVisible = ref(false)
 
   const formState = reactive({
-    username: '',
+    email: '',
     password: '',
     remember: true
   })
 
   const rules: Record<string, Rule[]> = {
-    username: [
-      { required: true, message: t('auth.validation.usernameRequired'), trigger: 'blur' }
+    email: [
+      { required: true, message: t('auth.validation.emailRequired'), trigger: 'blur' },
+      { type: 'email', message: t('auth.validation.emailInvalid'), trigger: 'blur' }
     ],
     password: [
       { required: true, message: t('auth.validation.passwordRequired'), trigger: 'blur' }
@@ -170,7 +171,7 @@
     loading.value = true
     try {
       await userStore.login({
-        username: formState.username,
+        email: formState.email,
         password: formState.password
       })
       message.success(t('auth.loginSuccess'))

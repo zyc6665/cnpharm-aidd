@@ -1,10 +1,11 @@
 # backend/app/api/v1/tasks.py
 """任务管理API"""
 
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 from typing import Optional, List
 
 from app.database.session import get_db
@@ -18,6 +19,7 @@ from app.schemas.tasks import (
 from app.common.responses import success_response, error_response
 from app.common.exceptions import NotFoundException, ForbiddenException, ValidationException
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -36,7 +38,7 @@ async def list_tasks(
     )
 
     # 普通用户只能看自己的任务
-    is_admin = current_user.role.value == "admin"
+    is_admin = current_user.role == "admin"
     if not is_admin:
         query = query.where(Task.user_id == current_user.id)
 
@@ -102,7 +104,7 @@ async def get_task(
         raise NotFoundException("任务不存在")
 
     # 权限检查
-    is_admin = current_user.role.value == "admin"
+    is_admin = current_user.role == "admin"
     if not is_admin and task.user_id != current_user.id:
         raise ForbiddenException("无权访问此任务")
 
@@ -120,7 +122,7 @@ async def get_task(
     if task.outputs:
         task_data["outputs"] = {
             "result": task.outputs[0].result if task.outputs else None,
-            "file_ids": [out.file_id for out in task.outputs if out.file_id],
+            "file_ids": task.outputs[0].file_ids if task.outputs else [],
             "output_type": task.outputs[0].output_type if task.outputs else "json"
         }
 
@@ -136,7 +138,10 @@ async def create_task(
     """创建任务"""
     # 检查工具是否存在
     result = await db.execute(
-        select(Tool).options(selectinload(Tool.current_version))
+        select(Tool).options(
+            selectinload(Tool.current_version),
+            joinedload(Tool.statistics)
+        )
         .where(Tool.id == task_data.tool_id)
     )
     tool = result.scalar_one_or_none()
@@ -156,7 +161,7 @@ async def create_task(
         user_id=current_user.id,
         tool_id=task_data.tool_id,
         tool_version_id=version_id,
-        status=TaskStatus.PENDING,
+        status=TaskStatus.PENDING.value,
         priority=task_data.priority,
         progress=0.0
     )
@@ -172,14 +177,53 @@ async def create_task(
     )
     db.add(task_input)
 
-    # 增加工具使用次数
-    tool.usage_count += 1
+    # 增加工具使用次数（通过statistics表）
+    if not tool.statistics:
+        from app.models.statistics import ToolStatistics
+        tool.statistics = ToolStatistics(tool_id=tool.id)
+        db.add(tool.statistics)
+    tool.statistics.usage_count += 1
+    tool.statistics.last_used_at = datetime.utcnow()
 
     await db.commit()
     await db.refresh(task)
 
-    # 这里应该触发任务执行（在实际环境中会发送到Celery队列）
-    # 为了演示，我们直接返回任务信息
+    # ==================== 分发任务到Celery队列 ====================
+    from app.tasks.queue_manager import TaskQueueManager
+
+    # 获取工具版本配置（用于确定队列）
+    version_result = await db.execute(
+        select(ToolVersion).where(ToolVersion.id == version_id)
+    )
+    tool_version = version_result.scalar_one()
+
+    # 确定任务队列
+    queue = TaskQueueManager.determine_queue(
+        tool_config=tool_version.config,
+        user_role=current_user.role,
+        priority=task_data.priority
+    )
+
+    # 分发任务到队列
+    try:
+        celery_task = TaskQueueManager.enqueue_task(
+            task_id=str(task.id),
+            tool_version_id=str(version_id),
+            queue=queue
+        )
+
+        # 保存Celery任务ID
+        task.celery_task_id = celery_task.id
+        await db.commit()
+
+        logger.info(f"Task {task.id} enqueued to {queue}")
+
+    except Exception as e:
+        logger.error(f"Failed to enqueue task {task.id}: {e}")
+        task.status = TaskStatus.FAILURE.value
+        task.error_message = f"任务分发失败: {str(e)}"
+        await db.commit()
+        raise HTTPException(status_code=500, detail="任务分发失败")
 
     return success_response(
         data=TaskResponse.model_validate(task).model_dump(),
@@ -203,15 +247,24 @@ async def cancel_task(
         raise NotFoundException("任务不存在")
 
     # 权限检查
-    is_admin = current_user.role.value == "admin"
+    is_admin = current_user.role == "admin"
     if not is_admin and task.user_id != current_user.id:
         raise ForbiddenException("无权操作此任务")
 
     # 只能取消等待中或运行中的任务
-    if task.status not in [TaskStatus.PENDING, TaskStatus.RUNNING]:
+    if task.status not in [TaskStatus.PENDING.value, TaskStatus.RUNNING.value]:
         raise ValidationException("任务状态不允许取消")
 
-    task.status = TaskStatus.CANCELED
+    # 撤销Celery任务（如果有）
+    if task.celery_task_id:
+        from app.tasks.queue_manager import TaskQueueManager
+        try:
+            TaskQueueManager.revoke_task(task.celery_task_id)
+            logger.info(f"Celery task {task.celery_task_id} revoked for task {task.id}")
+        except Exception as e:
+            logger.error(f"Failed to revoke Celery task {task.celery_task_id}: {e}")
+
+    task.status = TaskStatus.CANCELED.value
     await db.commit()
 
     return success_response(message="任务已取消")
@@ -233,16 +286,16 @@ async def retry_task(
         raise NotFoundException("任务不存在")
 
     # 权限检查
-    is_admin = current_user.role.value == "admin"
+    is_admin = current_user.role == "admin"
     if not is_admin and task.user_id != current_user.id:
         raise ForbiddenException("无权操作此任务")
 
     # 只能重试失败或取消的任务
-    if task.status not in [TaskStatus.FAILURE, TaskStatus.CANCELED]:
+    if task.status not in [TaskStatus.FAILURE.value, TaskStatus.CANCELED.value]:
         raise ValidationException("任务状态不允许重试")
 
     # 重置任务状态
-    task.status = TaskStatus.PENDING
+    task.status = TaskStatus.PENDING.value
     task.progress = 0.0
     task.progress_message = None
     task.error_message = None
@@ -252,6 +305,49 @@ async def retry_task(
     task.execution_time_sec = None
 
     await db.commit()
+
+    # ==================== 重新入队任务 ====================
+    from app.tasks.queue_manager import TaskQueueManager
+
+    # 获取工具版本配置
+    version_result = await db.execute(
+        select(ToolVersion).where(ToolVersion.id == task.tool_version_id)
+    )
+    tool_version = version_result.scalar_one()
+
+    # 获取用户信息
+    user_result = await db.execute(
+        select(User).where(User.id == task.user_id)
+    )
+    user = user_result.scalar_one()
+
+    # 确定任务队列（使用原始优先级）
+    queue = TaskQueueManager.determine_queue(
+        tool_config=tool_version.config,
+        user_role=user.role,
+        priority=task.priority
+    )
+
+    # 重新入队
+    try:
+        celery_task = TaskQueueManager.enqueue_task(
+            task_id=str(task.id),
+            tool_version_id=str(task.tool_version_id),
+            queue=queue
+        )
+
+        # 更新Celery任务ID
+        task.celery_task_id = celery_task.id
+        await db.commit()
+
+        logger.info(f"Task {task.id} re-enqueued to {queue} (retry {task.retry_count})")
+
+    except Exception as e:
+        logger.error(f"Failed to re-enqueue task {task.id}: {e}")
+        task.status = TaskStatus.FAILURE.value
+        task.error_message = f"任务重新分发失败: {str(e)}"
+        await db.commit()
+        raise HTTPException(status_code=500, detail="任务重新分发失败")
 
     return success_response(message="任务已重新提交")
 
@@ -275,7 +371,7 @@ async def get_task_logs(
     if not task:
         raise NotFoundException("任务不存在")
 
-    is_admin = current_user.role.value == "admin"
+    is_admin = current_user.role == "admin"
     if not is_admin and task.user_id != current_user.id:
         raise ForbiddenException("无权访问此任务")
 

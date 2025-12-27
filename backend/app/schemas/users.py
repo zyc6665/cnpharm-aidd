@@ -5,6 +5,7 @@ from typing import Optional
 from datetime import datetime
 from pydantic import BaseModel, Field, EmailStr
 from app.schemas.common import TimestampMixin
+from app.schemas.statistics import UserStatisticsResponse
 
 
 class UserCreate(BaseModel):
@@ -12,6 +13,12 @@ class UserCreate(BaseModel):
     email: EmailStr = Field(..., description="邮箱")
     password: str = Field(..., min_length=6, max_length=100, description="密码")
     display_name: Optional[str] = Field(None, max_length=100, description="显示名称")
+    verification_code: str = Field(
+        ...,
+        min_length=6,
+        max_length=6,
+        description="邮箱验证码"
+    )
 
 
 class UserLogin(BaseModel):
@@ -36,8 +43,7 @@ class UserResponse(TimestampMixin):
     status: str
     daily_task_limit: int
     max_file_size_mb: int
-    total_tasks: int
-    total_success_tasks: int
+    statistics: Optional[UserStatisticsResponse] = None
 
     class Config:
         from_attributes = True

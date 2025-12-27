@@ -1,30 +1,31 @@
 // 用户相关类型
 export interface UserInfo {
-  id: number
-  username: string
+  id: string  // UUID
   email: string
-  role: 'user' | 'vip' | 'admin' | 'guest'
-  avatar?: string
-  is_active: boolean
-  credits: number
-  member_expire_at?: string
-  invitation_code?: string
+  display_name?: string
+  username?: string  // 用户名（兼容旧代码）
+  avatar_url?: string
+  avatar?: string  // 头像URL（兼容旧代码，实际使用avatar_url）
+  role: 'user' | 'vip' | 'admin'
+  status: 'active' | 'inactive' | 'banned'
+  credits?: number  // 积分余额
+  member_expire_at?: string  // 会员过期时间
+  invitation_code?: string  // 邀请码
   created_at: string
   updated_at: string
 }
 
 export interface LoginParams {
-  username: string
+  email: string
   password: string
   remember?: boolean
 }
 
 export interface RegisterParams {
-  username: string
   email: string
   password: string
-  code: string
-  invitation_code?: string
+  verification_code: string
+  display_name?: string
 }
 
 export interface GuestLoginResponse {
@@ -39,9 +40,12 @@ export interface AuthTokens {
   token_type: string
 }
 
-export interface LoginResponse extends AuthTokens {
+export interface LoginResponse {
   user: UserInfo
-  credits: number
+  access_token: string
+  refresh_token: string
+  token_type: string
+  credits?: number  // 积分余额（兼容旧代码）
 }
 
 // 积分相关类型
@@ -89,43 +93,45 @@ export interface SignInInfo {
 }
 
 // 工具相关类型
-export type ToolView = 'public' | 'custom' | 'favorite'
+export type ToolView = 'public' | 'my' | 'favorites'
+export type ToolProviderType = 'platform' | 'user'
+export type ToolReviewStatus = 'not_required' | 'pending' | 'approved' | 'rejected'
 
 export interface Tool {
-  id: number
+  id: string  // UUID
   name: string
   slug: string
-  description: string
+  description?: string
   icon?: string
-  category_id: number
-  category?: Category
+  icon_url?: string
+  category?: string  // 分类名称
   tags: Tag[]
-  status: 'draft' | 'published' | 'deprecated'
-  version: string
-  versions?: string[]
-  input_schema: ToolSchema
-  output_schema?: ToolSchema
-  config?: Record<string, unknown>
+  status: 'draft' | 'published' | 'disabled' | 'deprecated'
+  is_public?: boolean
+  // 新增字段
+  provider_type: ToolProviderType
+  review_status: ToolReviewStatus
+  reviewed_at?: string
+  reviewed_by?: string
+  reject_reason?: string
+  provider_label?: string  // 前端展示用：官方/社区
+  // 原有字段
+  current_version_id?: string
+  current_version?: ToolVersion
+  usage_count: number
+  view_count: number
   favorite_count: number
-  run_count: number
-  avg_duration?: number
-  credits: number
-  estimated_time?: string
-  is_favorited?: boolean
-  is_free?: boolean
-  creator?: string
-  introduction?: string
-  features?: string[]
-  steps?: string[]
-  input_formats?: string[]
-  output_formats?: string[]
-  references?: ToolReference[]
-  github_url?: string
-  paper_url?: string
-  doc_url?: string
-  example_params?: Record<string, unknown>
+  gpu_required: boolean
+  gpu_memory_mb?: number
+  timeout_sec?: number
+  owner_id?: string
+  is_favorited?: boolean  // 额外字段，由API返回
   created_at: string
-  updated_at: string
+  updated_at?: string
+  // 兼容旧代码的字段
+  version?: string
+  run_count?: number
+  credits?: number
 }
 
 export interface ToolSchema {
@@ -135,17 +141,28 @@ export interface ToolSchema {
 }
 
 export interface SchemaProperty {
-  type: 'string' | 'number' | 'boolean' | 'file' | 'select' | 'array'
-  title: string
+  type: 'string' | 'number' | 'boolean' | 'file' | 'select' | 'array' | 'object'
+  title?: string
   description?: string
   default?: unknown
   enum?: unknown[]
-  format?: 'textarea' | 'fasta' | 'pdb' | 'email' | 'url'
+  format?: 'textarea' | 'fasta' | 'pdb' | 'email' | 'url' | 'uri' | 'file'
   accept?: string
   minLength?: number
   maxLength?: number
   minimum?: number
   maximum?: number
+  // 嵌套对象支持
+  properties?: Record<string, SchemaProperty>
+  required?: string[]
+  // 数组类型支持
+  items?: {
+    type?: string
+    enum?: unknown[]
+  }
+  // 扁平化元数据
+  _parentKey?: string
+  _originalKey?: string
 }
 
 export interface ToolReference {
@@ -156,63 +173,99 @@ export interface ToolReference {
 }
 
 export interface Category {
-  id: number
   name: string
-  slug: string
-  description?: string
-  icon?: string
-  tool_count?: number
+  count: number
 }
 
 export interface Tag {
-  id: number
+  id: string  // UUID
   name: string
-  color?: string
+  description?: string
+  color: string
+  sort_order: number
+  created_at?: string
+  updated_at?: string
 }
 
 export interface ToolVersion {
-  id: number
-  tool_id: number
+  id: string  // UUID
+  tool_id: string
   version: string
   changelog?: string
-  is_current: boolean
-  created_at: string
+  notes?: string
+  config: Record<string, unknown>  // 包含 input_schema, output_schema 等
+  is_active: boolean
+  deprecated: boolean
+  created_at?: string
+  updated_at?: string
 }
 
 export interface RelatedTool {
-  id: number
+  id: string
   name: string
-  description: string
+  description?: string
   icon?: string
-  credits: number
-  run_count: number
+  usage_count: number
+  favorite_count: number
 }
 
 // 任务相关类型
 export type TaskStatus = 'pending' | 'running' | 'success' | 'failure' | 'canceled'
 
+export interface TaskInput {
+  params: Record<string, unknown>
+  file_ids: string[]
+}
+
+export interface TaskOutput {
+  result: Record<string, unknown> | null
+  file_ids: string[]
+  output_type: string
+}
+
 export interface Task {
   id: string
-  tool_id: number
+  tool_id: string  // UUID
+  tool_name?: string  // 工具名称（API额外返回）
+  tool_slug?: string  // 工具标识（API额外返回）
   tool?: Tool
-  user_id: number
+  user_id: string  // UUID
   status: TaskStatus
   progress: number
-  input_params: Record<string, unknown>
-  input_files?: FileInfo[]
-  output_data?: Record<string, unknown>
-  output_files?: FileInfo[]
+  progress_message?: string
+  inputs?: TaskInput
+  outputs?: TaskOutput
   error_message?: string
   started_at?: string
-  completed_at?: string
+  finished_at?: string
+  completed_at?: string  // 完成时间（兼容旧代码，实际使用finished_at）
+  execution_time_sec?: number
   created_at: string
   updated_at: string
+  // 兼容旧代码的字段
+  input_files?: Array<{
+    id?: string | number
+    original_name?: string
+    filename?: string
+    size?: number
+    url?: string
+  }>
+  output_data?: unknown
+  output_files?: Array<{
+    id?: string | number
+    original_name?: string
+    filename?: string
+    size?: number
+    url?: string
+  }>
 }
 
 export interface TaskCreateParams {
-  tool_id: number
-  input_params: Record<string, unknown>
-  input_file_ids?: number[]
+  tool_id: string
+  tool_version_id?: string
+  params: Record<string, unknown>
+  file_ids?: string[]
+  priority?: 'low' | 'normal' | 'high'
 }
 
 export interface TaskLog {
@@ -304,4 +357,37 @@ export interface WSMessage {
   status?: TaskStatus
   message?: string
   data?: unknown
+}
+
+// 工具审核相关类型
+export interface ToolReviewRequest {
+  action: 'approve' | 'reject'
+  reject_reason?: string
+}
+
+export interface ToolReviewResponse {
+  id: string
+  review_status: ToolReviewStatus
+  reviewed_at?: string
+  reject_reason?: string
+}
+
+export interface SetPlatformToolRequest {
+  is_platform: boolean
+}
+
+// 工具创建参数
+export interface ToolCreateParams {
+  name: string
+  slug: string
+  description?: string
+  category?: string
+  icon?: string
+  icon_url?: string
+  is_public?: boolean
+  gpu_required?: boolean
+  gpu_memory_mb?: number
+  timeout_sec?: number
+  tag_ids?: string[]
+  provider_type?: ToolProviderType
 }

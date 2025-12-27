@@ -57,25 +57,25 @@ class Settings(BaseSettings):
     MODEL_DIR: str = "/data/zhouyc/cpumodel_sciminer/example/lvpocket-service/model/LVpocket/trained_model"
 
     # 各 SCOP 分类对应的模型文件名
-    # 需要从 Zenodo 下载: https://doi.org/10.5281/zenodo.10633690
+    # 实际使用 newbest/new_best 目录中的微调模型
     MODEL_FILES: Dict[str, str] = {
         # 基线模型（默认）
-        "baseline": "scale_0.5_1.h5",
+        "baseline": "newbest/new_best/baseline_model.hdf",
         # α 类蛋白质模型
-        "alpha": "alpha_model.h5",
+        "alpha": "newbest/new_best/α_finetuned_model.hdf",
         # β 类蛋白质模型
-        "beta": "beta_model.h5",
+        "beta": "newbest/new_best/β_finetuned_model.hdf",
         # α/β 类蛋白质模型
-        "alpha_beta": "alpha_beta_model.h5",
+        "alpha_beta": "newbest/new_best/α_and_β_finetuned_model.hdf",
         # α+β 类蛋白质模型
-        "alpha_plus_beta": "alpha_plus_beta_model.h5",
+        "alpha_plus_beta": "newbest/new_best/α_or_β_finetuned_model.hdf",
     }
 
     # 默认使用的模型（基线模型）
     DEFAULT_MODEL: str = "baseline"
 
     # 旧的单模型配置（保持兼容）
-    MODEL_PATH: str = "/data/zhouyc/cpumodel_sciminer/example/lvpocket-service/model/LVpocket/trained_model/scale_0.5_1.h5"
+    MODEL_PATH: str = "/data/zhouyc/cpumodel_sciminer/example/lvpocket-service/model/LVpocket/trained_model/newbest/new_best/baseline_model.hdf"
     MODEL_VERSION: str = "1.0.0"
 
     # 模型参数（参考 predict.py 默认参数）

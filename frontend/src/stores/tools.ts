@@ -1,66 +1,47 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Tool, Category, Tag, RelatedTool, ToolView } from '@/types/models'
+import type { Tool, Category, Tag, ToolView, ToolProviderType } from '@/types/models'
 import {
   getToolList,
+  getMyToolList,
   getToolDetail,
   getCategories,
   getTags,
   favoriteTool,
   unfavoriteTool,
-  getFavoriteTools,
-  getCustomTools,
-  getRelatedTools,
-  getPopularTools,
-  getRecentTools
+  submitToolReview,
+  adminReviewTool,
+  adminGetPendingReviews,
+  type ToolListParams,
+  type MyToolListParams
 } from '@/api/tools'
 
 export const useToolsStore = defineStore('tools', () => {
   // State
   const tools = ref<Tool[]>([])
-  const favoriteToolsList = ref<Tool[]>([])
-  const customToolsList = ref<Tool[]>([])
-  const relatedToolsList = ref<RelatedTool[]>([])
-  const popularToolsList = ref<Tool[]>([])
-  const recentToolsList = ref<Tool[]>([])
+  const myTools = ref<Tool[]>([])
+  const pendingReviewTools = ref<Tool[]>([])
   const categories = ref<Category[]>([])
   const tags = ref<Tag[]>([])
   const currentTool = ref<Tool | null>(null)
   const currentView = ref<ToolView>('public')
   const loading = ref(false)
   const total = ref(0)
-  const favoritesTotal = ref(0)
-  const customTotal = ref(0)
+  const myToolsTotal = ref(0)
+  const pendingReviewTotal = ref(0)
 
   // Getters
-  const currentToolsList = computed(() => {
-    switch (currentView.value) {
-      case 'favorite':
-        return favoriteToolsList.value
-      case 'custom':
-        return customToolsList.value
-      default:
-        return tools.value
-    }
-  })
-
-  const currentTotal = computed(() => {
-    switch (currentView.value) {
-      case 'favorite':
-        return favoritesTotal.value
-      case 'custom':
-        return customTotal.value
-      default:
-        return total.value
-    }
-  })
+  const currentToolsList = computed(() => tools.value)
+  const currentTotal = computed(() => total.value)
+  const platformTools = computed(() => tools.value.filter(t => t.provider_type === 'platform'))
+  const communityTools = computed(() => tools.value.filter(t => t.provider_type === 'user'))
 
   // Actions
   const setCurrentView = (view: ToolView) => {
     currentView.value = view
   }
 
-  const fetchTools = async (params?: Record<string, unknown>) => {
+  const fetchTools = async (params?: ToolListParams) => {
     loading.value = true
     try {
       const res = await getToolList(params)
@@ -72,62 +53,33 @@ export const useToolsStore = defineStore('tools', () => {
     }
   }
 
-  const fetchFavoriteTools = async (params?: Record<string, unknown>) => {
+  // 获取我的工具列表
+  const fetchMyTools = async (params?: MyToolListParams) => {
     loading.value = true
     try {
-      const res = await getFavoriteTools(params)
-      favoriteToolsList.value = res.data.items
-      favoritesTotal.value = res.data.total
+      const res = await getMyToolList(params)
+      myTools.value = res.data.items
+      myToolsTotal.value = res.data.total
       return res.data
     } finally {
       loading.value = false
     }
   }
 
-  const fetchCustomTools = async (params?: Record<string, unknown>) => {
+  // 获取待审核工具列表（管理员）
+  const fetchPendingReviewTools = async (params?: { page?: number; page_size?: number }) => {
     loading.value = true
     try {
-      const res = await getCustomTools(params)
-      customToolsList.value = res.data.items
-      customTotal.value = res.data.total
+      const res = await adminGetPendingReviews(params)
+      pendingReviewTools.value = res.data.items
+      pendingReviewTotal.value = res.data.total
       return res.data
     } finally {
       loading.value = false
     }
   }
 
-  const fetchRelatedTools = async (toolId: number, limit?: number) => {
-    try {
-      const res = await getRelatedTools(toolId, limit)
-      relatedToolsList.value = res.data
-      return res.data
-    } catch {
-      relatedToolsList.value = []
-      return []
-    }
-  }
-
-  const fetchPopularTools = async (limit?: number) => {
-    try {
-      const res = await getPopularTools(limit)
-      popularToolsList.value = res.data
-      return res.data
-    } catch {
-      return []
-    }
-  }
-
-  const fetchRecentTools = async (limit?: number) => {
-    try {
-      const res = await getRecentTools(limit)
-      recentToolsList.value = res.data
-      return res.data
-    } catch {
-      return []
-    }
-  }
-
-  const fetchToolDetail = async (id: number) => {
+  const fetchToolDetail = async (id: string) => {
     loading.value = true
     try {
       const res = await getToolDetail(id)
@@ -158,10 +110,8 @@ export const useToolsStore = defineStore('tools', () => {
     }
   }
 
-  const toggleFavorite = async (toolId: number) => {
-    const tool = tools.value.find(t => t.id === toolId)
-      || favoriteToolsList.value.find(t => t.id === toolId)
-      || currentTool.value
+  const toggleFavorite = async (toolId: string) => {
+    const tool = tools.value.find(t => t.id === toolId) || currentTool.value
     if (!tool) return
 
     try {
@@ -169,12 +119,6 @@ export const useToolsStore = defineStore('tools', () => {
         await unfavoriteTool(toolId)
         tool.is_favorited = false
         tool.favorite_count--
-        // 从收藏列表移除
-        const idx = favoriteToolsList.value.findIndex(t => t.id === toolId)
-        if (idx > -1) {
-          favoriteToolsList.value.splice(idx, 1)
-          favoritesTotal.value--
-        }
       } else {
         await favoriteTool(toolId)
         tool.is_favorited = true
@@ -185,45 +129,70 @@ export const useToolsStore = defineStore('tools', () => {
     }
   }
 
+  // 提交工具审核
+  const submitReview = async (toolId: string) => {
+    try {
+      const res = await submitToolReview(toolId)
+      // 更新本地状态
+      const tool = myTools.value.find(t => t.id === toolId)
+      if (tool) {
+        tool.review_status = res.data.review_status as Tool['review_status']
+      }
+      return res.data
+    } catch {
+      throw new Error('提交审核失败')
+    }
+  }
+
+  // 审核工具（管理员）
+  const reviewTool = async (toolId: string, action: 'approve' | 'reject', rejectReason?: string) => {
+    try {
+      const res = await adminReviewTool(toolId, {
+        action,
+        reject_reason: rejectReason
+      })
+      // 从待审核列表中移除
+      pendingReviewTools.value = pendingReviewTools.value.filter(t => t.id !== toolId)
+      pendingReviewTotal.value--
+      return res.data
+    } catch {
+      throw new Error('审核失败')
+    }
+  }
+
   const clearCurrentTool = () => {
     currentTool.value = null
-    relatedToolsList.value = []
   }
 
   return {
     // State
     tools,
-    favoriteToolsList,
-    customToolsList,
-    relatedToolsList,
-    popularToolsList,
-    recentToolsList,
+    myTools,
+    pendingReviewTools,
     categories,
     tags,
     currentTool,
     currentView,
     loading,
     total,
-    favoritesTotal,
-    customTotal,
-    // Aliases
-    favorites: favoriteToolsList,
+    myToolsTotal,
+    pendingReviewTotal,
     // Getters
     currentToolsList,
     currentTotal,
+    platformTools,
+    communityTools,
     // Actions
     setCurrentView,
     fetchTools,
-    fetchFavoriteTools,
-    fetchFavorites: fetchFavoriteTools,
-    fetchCustomTools,
-    fetchRelatedTools,
-    fetchPopularTools,
-    fetchRecentTools,
+    fetchMyTools,
+    fetchPendingReviewTools,
     fetchToolDetail,
     fetchCategories,
     fetchTags,
     toggleFavorite,
+    submitReview,
+    reviewTool,
     clearCurrentTool
   }
 })

@@ -39,15 +39,12 @@ class User(Base, UUIDMixin, TimestampMixin):
     daily_task_limit = Column(Integer, default=50)
     max_file_size_mb = Column(Integer, default=100)
 
-    # 统计
-    total_tasks = Column(Integer, default=0)
-    total_success_tasks = Column(Integer, default=0)
-
     # 关系
     sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
-    tools = relationship("Tool", back_populates="owner")
+    tools = relationship("Tool", back_populates="owner", foreign_keys="Tool.owner_id")
     tasks = relationship("Task", back_populates="user")
     files = relationship("File", back_populates="owner")
+    statistics = relationship("UserStatistics", back_populates="user", uselist=False)
 
 
 class UserSession(Base, UUIDMixin, TimestampMixin):

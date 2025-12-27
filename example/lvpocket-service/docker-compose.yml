@@ -1,50 +1,56 @@
 # ============================================================================
-# LVPocket Service Docker Compose 配置
+# LVPocket Service Docker Compose 配置 - 现代化方案 A
 # ============================================================================
+#
+# 基于 NVIDIA NGC TensorFlow 1.15 镜像 (Python 3.8, CUDA 11.x)
 #
 # 使用方法:
 #   1. 首次构建并启动:
-#      docker-compose up -d --build
+#      docker compose up -d --build
 #
 #   2. 仅启动（已构建）:
-#      docker-compose up -d
+#      docker compose up -d
 #
 #   3. 查看日志:
-#      docker-compose logs -f lvpocket-service
+#      docker compose logs -f lvpocket-service
 #
 #   4. 停止服务:
-#      docker-compose down
+#      docker compose down
 #
-#   5. 重新构建:
-#      docker-compose build --no-cache
+#   5. 重新构建（无缓存）:
+#      docker compose build --no-cache
 #
 #   6. 进入容器调试:
-#      docker-compose exec lvpocket-service bash
+#      docker compose exec lvpocket-service bash
+#
+#   7. 查看服务状态:
+#      docker compose ps
 #
 # 前置条件:
-#   - 安装 Docker 和 Docker Compose
-#   - 安装 NVIDIA Container Toolkit（GPU 支持）
-#   - 下载模型文件到 model/LVpocket/trained_model/scale_0.5_1.h5
+#   - Docker >= 20.10 (支持 docker compose V2)
+#   - NVIDIA Container Toolkit（GPU 支持）
+#   - 下载模型文件到 model/LVpocket/trained_model/
 #     下载地址: https://doi.org/10.5281/zenodo.10633690
 #
 # ============================================================================
-
-version: "3.8"
 
 services:
   lvpocket-service:
     # ========== 构建配置 ==========
     build:
-      context: .                    # 构建上下文目录
-      dockerfile: Dockerfile        # Dockerfile 路径
+      context: .
+      dockerfile: Dockerfile
+      # 构建参数（可选）
+      args:
+        - OPENBABEL_VERSION=3.1.1
 
-    # 镜像名称和标签（可修改）
+    # 镜像名称和标签
     image: lvpocket-service:1.0.0
 
-    # 容器名称（可修改）
+    # 容器名称
     container_name: lvpocket-service
 
-    # 重启策略: no | always | on-failure | unless-stopped
+    # 重启策略
     restart: unless-stopped
 
     # ========== GPU 配置 ==========
@@ -55,153 +61,130 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              # count: 1           # 使用的 GPU 数量
-              # device_ids: ['0']  # 或指定 GPU ID
-              count: all           # 使用所有可用 GPU
+              count: all           # 使用所有可用 GPU，或指定 count: 1
               capabilities: [gpu]
+        # 可选：资源限制
+        # limits:
+        #   memory: 16G
 
     # ========== 端口映射 ==========
-    # 格式: "主机端口:容器端口"
     ports:
-      - "8000:8000"                 # API 服务端口
+      - "9502:8000"
 
     # ========== 环境变量 ==========
-    # 这些变量会覆盖 Dockerfile 中的默认值
     environment:
       # ----- 服务配置 -----
-      - APP_NAME=LVPocket Service   # 应用名称
-      - APP_VERSION=1.0.0           # 应用版本
-      - LOG_LEVEL=INFO              # 日志级别: DEBUG | INFO | WARNING | ERROR
-      - HOST=0.0.0.0                # 监听地址
-      - PORT=8000                   # 监听端口
-      - WORKERS=1                   # Uvicorn worker 数量
+      - APP_NAME=LVPocket Service
+      - APP_VERSION=1.0.0
+      - LOG_LEVEL=INFO
+      - HOST=0.0.0.0
+      - PORT=8000
+      - WORKERS=1
 
       # ----- LVpocket 源码路径 -----
-      # 用于导入 model.LV_former 和 tfbio.data 模块
       - LVPOCKET_SOURCE_PATH=/app/model/LVpocket
 
       # ----- 模型配置 -----
-      # 模型目录（包含所有 SCOP 分类模型）
       - MODEL_DIR=/app/model/LVpocket/trained_model
-      # 模型文件路径（容器内路径）- 保持兼容
       - MODEL_PATH=/app/model/LVpocket/trained_model/scale_0.5_1.h5
       - MODEL_VERSION=1.0.0
-      # 体素分辨率 (Å)，参考 predict.py --scale
       - SCALE=0.5
-      # 最大距离阈值，参考 predict.py --max_dist
       - MAX_DIST=35.0
 
       # ----- SCOP 结构分类配置 -----
-      # 默认使用的结构分类模型
-      # 可选值: baseline | alpha | beta | alpha_beta | alpha_plus_beta
-      # - baseline: 基线模型，适用于所有蛋白质（默认）
-      # - alpha: α 类蛋白质，主要由 α 螺旋组成
-      # - beta: β 类蛋白质，主要由 β 折叠组成
-      # - alpha_beta: α/β 类蛋白质，α 螺旋和 β 折叠交替排列
-      # - alpha_plus_beta: α+β 类蛋白质，α 螺旋和 β 折叠分离排列
+      # baseline | alpha | beta | alpha_beta | alpha_plus_beta
       - DEFAULT_STRUCTURE_CLASS=baseline
 
       # ----- 预测参数 -----
-      # 默认口袋预测阈值 (0-1)，值越大检测越严格
       - DEFAULT_THRESHOLD=0.5
-      # 默认最小口袋体素数，过滤掉太小的口袋
       - DEFAULT_MIN_SIZE=50
 
       # ----- 文件配置 -----
-      # 最大上传文件大小 (bytes)，默认 50MB
       - MAX_FILE_SIZE=52428800
-      # 请求超时时间（秒）
       - REQUEST_TIMEOUT=300
 
       # ----- GPU/TensorFlow 配置 -----
-      # 使用的 GPU 设备 ID（多卡用逗号分隔，如 0,1）
       - CUDA_VISIBLE_DEVICES=0
-      # 允许 TensorFlow GPU 内存动态增长（推荐开启）
       - TF_FORCE_GPU_ALLOW_GROWTH=true
-      # TensorFlow 日志级别: 0=全部, 1=过滤INFO, 2=过滤WARNING, 3=过滤ERROR
       - TF_CPP_MIN_LOG_LEVEL=2
+      # 禁用 TF 自动混合精度（保持模型兼容）
+      - TF_ENABLE_AUTO_MIXED_PRECISION=0
 
     # ========== 数据卷挂载 ==========
-    # 格式: 主机路径:容器路径[:权限]
-    # 权限: ro=只读, rw=读写（默认）
     volumes:
+      # 应用代码（开发模式可热重载）
+      - ./app:/app/app:rw
+
       # 模型和 LVpocket 源码（只读）
-      # 目录结构: model/LVpocket/
       - ./model:/app/model:ro
 
-      # 输入文件目录（可选，用于批量处理）
-      - ./data/input:/app/data/input
+      # 输入/输出文件目录
+      - ./data/input:/app/data/input:rw
+      - ./data/output:/app/data/output:rw
 
-      # 输出文件目录（预测结果保存位置）
-      - ./data/output:/app/data/output
-
-      # 临时文件（使用 Docker 卷，容器删除后清除）
+      # 临时文件卷
       - lvpocket-temp:/tmp/lvpocket
 
     # ========== 健康检查 ==========
     healthcheck:
-      # 检查 API 健康端点
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
-      interval: 30s          # 检查间隔
-      timeout: 10s           # 超时时间
-      retries: 3             # 失败重试次数
-      start_period: 60s      # 启动等待时间（模型加载需要时间）
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s      # NGC 镜像较大，启动时间增加
 
     # ========== 日志配置 ==========
     logging:
-      driver: "json-file"    # 日志驱动
+      driver: "json-file"
       options:
-        max-size: "100m"     # 单个日志文件最大大小
-        max-file: "3"        # 保留的日志文件数量
+        max-size: "100m"
+        max-file: "3"
 
     # ========== 网络配置 ==========
     networks:
-      - cpumodel-net
+      - cpumodel
 
 # ========== Docker 卷定义 ==========
 volumes:
-  # 临时文件卷
   lvpocket-temp:
     driver: local
 
 # ========== 网络定义 ==========
 networks:
-  cpumodel-net:
+  cpumodel:
     driver: bridge
 
 # ============================================================================
-# 常用修改场景
+# 常用命令速查
 # ============================================================================
 #
-# 1. 修改端口:
-#    ports:
-#      - "9000:8000"         # 主机 9000 端口映射到容器 8000
+# 构建并启动:
+#   docker compose up -d --build
 #
-# 2. 使用指定 GPU:
-#    environment:
-#      - CUDA_VISIBLE_DEVICES=1    # 使用第二张 GPU
+# 查看日志:
+#   docker compose logs -f
 #
-# 3. 调整预测参数:
-#    environment:
-#      - DEFAULT_THRESHOLD=0.6     # 更严格的阈值
-#      - DEFAULT_MIN_SIZE=100      # 过滤更小的口袋
+# 停止并删除:
+#   docker compose down
 #
-# 4. 增加内存限制:
-#    deploy:
-#      resources:
-#        limits:
-#          memory: 16G             # 限制最大内存
+# 停止并删除（包括卷）:
+#   docker compose down -v
 #
-# 5. 不使用 GPU（CPU 模式）:
-#    # 注释掉整个 deploy 部分
-#    # deploy:
-#    #   resources:
-#    #     ...
+# 重启服务:
+#   docker compose restart
 #
-# 6. 使用外部模型文件:
-#    volumes:
-#      - /path/to/your/model:/app/model:ro
-#    environment:
-#      - MODEL_PATH=/app/model/your_model.h5
+# 进入容器:
+#   docker compose exec lvpocket-service bash
+#
+# 查看资源使用:
+#   docker stats lvpocket-service
+#
+# ============================================================================
+# CPU 模式（无 GPU）
+# ============================================================================
+#
+# 如果没有 GPU，注释掉 deploy 部分，并设置:
+#   environment:
+#     - CUDA_VISIBLE_DEVICES=""
 #
 # ============================================================================

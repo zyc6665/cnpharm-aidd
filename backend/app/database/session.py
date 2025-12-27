@@ -35,6 +35,18 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
+async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
+    """获取异步数据库会话（用于非依赖注入场景）"""
+    async with async_session_factory() as session:
+        try:
+            yield session
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
+
+
 async def init_db():
     """初始化数据库（创建所有表）"""
     from app.database.base import Base

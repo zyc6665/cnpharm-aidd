@@ -34,8 +34,11 @@ def is_gpu_available() -> bool:
     try:
         import tensorflow as tf
 
-        # TensorFlow 1.15 兼容方式
-        if hasattr(tf, "config"):
+        # 检查 TF 版本，使用对应的 API
+        tf_version = tf.__version__
+        is_tf2 = tf_version.startswith("2.")
+
+        if is_tf2 and hasattr(tf.config, "list_physical_devices"):
             # TF 2.x 方式
             gpus = tf.config.list_physical_devices("GPU")
             return len(gpus) > 0
@@ -61,8 +64,12 @@ def get_gpu_info() -> GPUInfo:
     try:
         import tensorflow as tf
 
+        # 检查 TF 版本
+        tf_version = tf.__version__
+        is_tf2 = tf_version.startswith("2.")
+
         # 检查是否有 GPU
-        if hasattr(tf, "config"):
+        if is_tf2 and hasattr(tf.config, "list_physical_devices"):
             # TF 2.x
             gpus = tf.config.list_physical_devices("GPU")
             if not gpus:
@@ -133,16 +140,20 @@ def configure_gpu_memory_growth():
     try:
         import tensorflow as tf
 
-        if hasattr(tf, "config"):
+        # 检查 TF 版本
+        tf_version = tf.__version__
+        is_tf2 = tf_version.startswith("2.")
+
+        if is_tf2 and hasattr(tf.config, "list_physical_devices"):
             # TF 2.x
             gpus = tf.config.list_physical_devices("GPU")
             for gpu in gpus:
                 tf.config.experimental.set_memory_growth(gpu, True)
             logger.info(f"已配置 {len(gpus)} 个 GPU 内存按需增长")
         else:
-            # TF 1.x - 通过 session config 配置
-            # 这个配置会在创建 session 时使用
-            logger.info("TF 1.x: GPU 内存配置将在创建 Session 时应用")
+            # TF 1.x - 通过环境变量或 session config 配置
+            # 环境变量 TF_FORCE_GPU_ALLOW_GROWTH=true 已在 Dockerfile 中设置
+            logger.info("TF 1.x: GPU 内存增长已通过环境变量配置")
 
     except Exception as e:
         logger.warning(f"配置 GPU 内存增长失败: {e}")

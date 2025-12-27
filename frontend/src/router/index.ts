@@ -37,6 +37,18 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'tools.title' }
   },
   {
+    path: '/tools/create',
+    name: 'ToolCreate',
+    component: () => import('@/views/tools/Create.vue'),
+    meta: { title: 'tools.createTool', requiresAuth: true }
+  },
+  {
+    path: '/tools/:id/edit',
+    name: 'ToolEdit',
+    component: () => import('@/views/tools/Create.vue'),
+    meta: { title: 'tools.editTool', requiresAuth: true }
+  },
+  {
     path: '/tools/:id',
     name: 'ToolDetail',
     component: () => import('@/views/tools/Detail.vue'),

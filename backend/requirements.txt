@@ -20,6 +20,9 @@ email-validator==2.1.0
 # HTTP Client
 httpx==0.26.0
 
+# Email
+aiosmtplib==3.0.1
+
 # File handling
 aiofiles==23.2.1
 
@@ -29,11 +32,18 @@ psutil==5.9.8
 # Utilities
 python-dotenv==1.0.0
 
-# Celery (optional, for production)
-celery==5.3.6
+# Development tools
+watchfiles==0.21.0         # 文件监控和热重载
 
-# Redis (optional, for production)
+# Celery 任务队列
+celery[redis]==5.3.6
+flower==2.0.1              # Celery监控面板
+
+# Redis
 redis==5.0.1
+
+# Docker SDK（用于Docker执行器）
+docker==7.0.0
 
 # MinIO (optional, for production)
 minio==7.2.3

@@ -224,6 +224,94 @@ async def supported_formats():
 
 
 @router.post(
+    "/predict/json",
+    response_model=PredictResponse,
+    responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    tags=["预测"],
+)
+async def predict_json(
+    request: PredictRequest,
+    predictor: LVPocketPredictor = Depends(get_predictor),
+    file_handler: FileHandler = Depends(get_file_handler),
+):
+    """
+    执行蛋白质结合口袋预测（纯 JSON 方式）
+
+    通过 JSON 请求体传递参数和文件 URL。
+
+    ## 结构分类 (structure_class)
+
+    根据蛋白质的二级结构选择对应的预训练模型，可获得更好的预测效果：
+    - **baseline**: 基线模型（默认），适用于所有蛋白质
+    - **alpha**: α 类蛋白质，主要由 α 螺旋组成
+    - **beta**: β 类蛋白质，主要由 β 折叠组成
+    - **alpha_beta**: α/β 类蛋白质，α 螺旋和 β 折叠交替排列
+    - **alpha_plus_beta**: α+β 类蛋白质，α 螺旋和 β 折叠分离排列
+    """
+    protein_path = None
+
+    try:
+        # JSON 请求
+        task_id = request.task_id or str(uuid.uuid4())
+        threshold = request.params.threshold
+        min_size = request.params.min_size
+        output_formats = request.params.output_formats
+        structure_class = request.params.structure_class.value
+
+        # 下载文件
+        protein_path, _ = await file_handler.download_file(
+            request.input_files.protein_file
+        )
+
+        # 执行预测
+        result = predictor.predict(
+            protein_file=protein_path,
+            threshold=threshold,
+            min_size=min_size,
+            output_formats=output_formats,
+            structure_class=structure_class,
+        )
+
+        # 构建响应
+        pockets = [_pocket_data_to_info(p) for p in result.pockets]
+
+        # 生成输出文件
+        output_files = await _generate_output_files(
+            task_id=task_id,
+            pockets=result.pockets,
+            protein_atoms=result.protein_info.atoms,
+            output_formats=output_formats,
+            file_handler=file_handler,
+            protein_name=result.protein_info.name,
+        )
+
+        return PredictResponse(
+            success=True,
+            result=PredictResult(
+                task_id=task_id,
+                protein_name=result.protein_info.name,
+                num_atoms=result.protein_info.num_atoms,
+                num_pockets=len(pockets),
+                processing_time=round(result.processing_time, 3),
+                structure_class=result.structure_class,
+                model_file=result.model_file,
+                pockets=pockets,
+            ),
+            output_files=output_files,
+        )
+
+    except LVPocketError:
+        raise
+    except Exception as e:
+        logger.exception(f"预测失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # 清理临时文件
+        if protein_path and protein_path.exists():
+            await file_handler.cleanup_file(protein_path)
+
+
+@router.post(
     "/predict",
     response_model=PredictResponse,
     responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},

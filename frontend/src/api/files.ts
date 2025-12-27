@@ -1,10 +1,30 @@
-import { get, post, del, upload } from './request'
+import { get, post, del } from './request'
 import type { ApiResponse } from '@/types/api'
 import type { FileInfo, FileUploadResponse, PaginatedResponse, PaginationParams } from '@/types/models'
 
 // 上传文件
-export const uploadFile = (file: File, onProgress?: (percent: number) => void): Promise<ApiResponse<FileUploadResponse>> => {
-  return upload<FileUploadResponse>('/files/upload', file, onProgress)
+export const uploadFile = (
+  file: File,
+  options?: {
+    is_public?: boolean
+    onProgress?: (percent: number) => void
+  }
+): Promise<ApiResponse<FileUploadResponse>> => {
+  const formData = new FormData()
+  formData.append('file', file)
+  if (options?.is_public !== undefined) {
+    formData.append('is_public', String(options.is_public))
+  }
+
+  return post<FileUploadResponse>('/files/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    onUploadProgress: (progressEvent) => {
+      if (options?.onProgress && progressEvent.total) {
+        const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+        options.onProgress(percent)
+      }
+    }
+  })
 }
 
 // 获取文件列表

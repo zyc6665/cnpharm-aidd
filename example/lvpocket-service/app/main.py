@@ -6,7 +6,6 @@ FastAPI 应用入口
 
 import logging
 import sys
-from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -32,35 +31,6 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """
-    应用生命周期管理
-
-    启动时加载模型，关闭时释放资源
-    """
-    # 启动时
-    logger.info(f"启动 {settings.APP_NAME} v{settings.APP_VERSION}")
-
-    # 配置 GPU 内存
-    configure_gpu_memory_growth()
-
-    # 加载模型
-    logger.info("正在加载模型...")
-    success = model_manager.load_model()
-    if success:
-        logger.info("模型加载成功")
-    else:
-        logger.warning("模型加载失败，服务将以降级模式运行")
-
-    yield
-
-    # 关闭时
-    logger.info("正在关闭服务...")
-    model_manager.unload_model()
-    logger.info("服务已关闭")
 
 
 # 创建 FastAPI 应用
@@ -91,8 +61,34 @@ LVPocket Service - 蛋白质结合口袋预测服务
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
-    lifespan=lifespan,
 )
+
+
+# 启动事件 (Python 3.6 兼容方式)
+@app.on_event("startup")
+async def startup_event():
+    """应用启动时加载模型"""
+    logger.info(f"启动 {settings.APP_NAME} v{settings.APP_VERSION}")
+
+    # 配置 GPU 内存
+    configure_gpu_memory_growth()
+
+    # 加载模型
+    logger.info("正在加载模型...")
+    success = model_manager.load_model()
+    if success:
+        logger.info("模型加载成功")
+    else:
+        logger.warning("模型加载失败，服务将以降级模式运行")
+
+
+# 关闭事件
+@app.on_event("shutdown")
+async def shutdown_event():
+    """应用关闭时释放资源"""
+    logger.info("正在关闭服务...")
+    model_manager.unload_model()
+    logger.info("服务已关闭")
 
 # 配置 CORS
 app.add_middleware(
@@ -108,7 +104,7 @@ app.add_exception_handler(LVPocketError, lvpocket_exception_handler)
 app.add_exception_handler(Exception, generic_exception_handler)
 
 # 注册路由
-app.include_router(router, tags=["LVPocket API"])
+app.include_router(router, prefix="/api/v1", tags=["LVPocket API"])
 
 
 # 根路径重定向到文档

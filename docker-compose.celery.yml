@@ -1,0 +1,357 @@
+# ============================================================================
+# SciTool - Celery 任务队列 & Redis 配置
+# ============================================================================
+#
+# 使用方法:
+#   1. 首次启动:
+#      docker-compose -f docker-compose.celery.yml up -d
+#
+#   2. 查看日志:
+#      docker-compose -f docker-compose.celery.yml logs -f
+#
+#   3. 查看Celery Worker日志:
+#      docker-compose -f docker-compose.celery.yml logs -f celery-worker
+#
+#   4. 访问监控面板:
+#      Flower: http://localhost:9555
+#
+#   5. 停止服务:
+#      docker-compose -f docker-compose.celery.yml down
+#
+#   6. 重启服务:
+#      docker-compose -f docker-compose.celery.yml restart
+#
+#   7. 查看Celery任务状态:
+#      docker-compose -f docker-compose.celery.yml exec celery-worker \
+#        celery -A app.celery_app.celery_app inspect active
+#
+# 前置条件:
+#   - cpumodel 网络已存在（由主应用创建）
+#   - 如不存在，请先创建: docker network create cpumodel
+#
+# ============================================================================
+
+version: "3.8"
+
+services:
+  # ==========================================================================
+  # Redis - 消息队列 & 缓存
+  # ==========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: scitool-redis
+    restart: unless-stopped
+
+    # ========== 端口映射 ==========
+    ports:
+      - "9500:6379"               # Redis端口 (宿主机:容器内部)
+
+    # ========== 命令参数 ==========
+    command: >
+      redis-server
+      --port 6379                  # 容器内部监听端口
+      --appendonly yes             # 启用AOF持久化
+      --appendfsync everysec       # 每秒同步一次
+      --maxmemory 2gb              # 最大内存限制
+      --maxmemory-policy allkeys-lru  # LRU淘汰策略
+      --requirepass scitool123     # Redis密码（生产环境请修改）
+
+    # ========== 数据卷 ==========
+    volumes:
+      - redis-data:/data          # Redis持久化数据
+
+    # ========== 健康检查 ==========
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "scitool123", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+    # ========== 日志配置 ==========
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+    # ========== 网络 ==========
+    networks:
+      - cpumodel
+
+  # ==========================================================================
+  # Celery Worker - 任务执行引擎 (默认队列)
+  # ==========================================================================
+  celery-worker:
+    image: scitool-backend:latest   # 使用后端相同镜像
+    container_name: scitool-celery-worker
+    restart: unless-stopped
+
+    # ========== 构建配置（首次需要构建镜像） ==========
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+
+    # ========== 启动命令 ==========
+    command: >
+      celery -A app.celery_app.celery_app worker
+      --loglevel=info
+      --concurrency=4
+      --queues=default
+      --hostname=worker@scitool
+      --max-tasks-per-child=50
+
+    # ========== 环境变量 ==========
+    environment:
+      # ----- 数据库配置 -----
+      DATABASE_URL: sqlite+aiosqlite:////app/storage/scitool.db
+
+      # ----- Redis配置 -----
+      REDIS_HOST: redis
+      REDIS_PORT: 6379          # 容器内部端口
+      REDIS_DB: 0
+      REDIS_PASSWORD: scitool123
+
+      # ----- Celery配置 -----
+      CELERY_BROKER_URL: redis://:scitool123@redis:6379/1
+      CELERY_RESULT_BACKEND: redis://:scitool123@redis:6379/2
+
+      # ----- 日志配置 -----
+      LOG_LEVEL: INFO
+
+      # ----- Python环境 -----
+      PYTHONUNBUFFERED: 1
+
+    # ========== 数据卷 ==========
+    volumes:
+      # 共享数据库（与后端共享）
+      - ./backend/storage:/app/storage
+
+      # 共享上传文件
+      - ./backend/storage/uploads:/app/storage/uploads
+
+      # Docker Socket（Docker执行器需要）
+      - /var/run/docker.sock:/var/run/docker.sock
+
+      # 源代码挂载（开发模式）
+      - ./backend/app:/app/app
+
+    # ========== 依赖 ==========
+    depends_on:
+      redis:
+        condition: service_healthy
+
+    # ========== 健康检查 ==========
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.celery_app.celery_app inspect ping || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+    # ========== 日志配置 ==========
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+    # ========== 网络 ==========
+    networks:
+      - cpumodel
+
+  # ==========================================================================
+  # Celery Worker - GPU任务队列 (可选，需要GPU服务器)
+  # ==========================================================================
+  celery-worker-gpu:
+    image: scitool-backend:latest
+    container_name: scitool-celery-worker-gpu
+    restart: unless-stopped
+
+    # ========== 启动命令 ==========
+    command: >
+      celery -A app.celery_app.celery_app worker
+      --loglevel=info
+      --concurrency=1
+      --queues=gpu_queue
+      --hostname=gpu-worker@scitool
+      --max-tasks-per-child=10
+
+    # ========== 环境变量 ==========
+    environment:
+      DATABASE_URL: sqlite+aiosqlite:////app/storage/scitool.db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379          # 容器内部端口
+      REDIS_PASSWORD: scitool123
+      CELERY_BROKER_URL: redis://:scitool123@redis:6379/1
+      CELERY_RESULT_BACKEND: redis://:scitool123@redis:6379/2
+      LOG_LEVEL: INFO
+      PYTHONUNBUFFERED: 1
+
+      # GPU配置
+      CUDA_VISIBLE_DEVICES: 0     # 使用第一张GPU
+
+    # ========== 数据卷 ==========
+    volumes:
+      - ./backend/storage:/app/storage
+      - ./backend/storage/uploads:/app/storage/uploads
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./backend/app:/app/app
+
+    # ========== GPU配置 ==========
+    # 需要安装 NVIDIA Container Toolkit
+    # 如无GPU，注释掉整个 deploy 部分
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1              # 使用1张GPU
+              capabilities: [gpu]
+
+    # ========== 依赖 ==========
+    depends_on:
+      redis:
+        condition: service_healthy
+
+    # ========== 日志配置 ==========
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+    # ========== 网络 ==========
+    networks:
+      - cpumodel
+
+    # ========== 配置说明 ==========
+    # 如果没有GPU，可以注释掉整个 celery-worker-gpu 服务
+
+  # ==========================================================================
+  # Flower - Celery监控面板
+  # ==========================================================================
+  flower:
+    image: mher/flower:2.0
+    container_name: scitool-flower
+    restart: unless-stopped
+
+    # ========== 端口映射 ==========
+    ports:
+      - "9555:9555"               # Flower Web界面
+
+    # ========== 启动命令 ==========
+    command: >
+      celery
+      --broker=redis://:scitool123@redis:6379/1
+      flower
+      --port=9555
+      --basic_auth=admin:scitool123
+      --broker_api=redis://:scitool123@redis:6379/1
+
+    # ========== 环境变量 ==========
+    environment:
+      CELERY_BROKER_URL: redis://:scitool123@redis:6379/1
+      CELERY_RESULT_BACKEND: redis://:scitool123@redis:6379/2
+      FLOWER_PORT: 9555
+
+    # ========== 依赖 ==========
+    depends_on:
+      redis:
+        condition: service_healthy
+
+    # ========== 健康检查 ==========
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9555"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # ========== 日志配置 ==========
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+    # ========== 网络 ==========
+    networks:
+      - cpumodel
+
+# ============================================================================
+# Docker 卷定义
+# ============================================================================
+volumes:
+  # Redis持久化数据
+  redis-data:
+    driver: local
+
+# ============================================================================
+# 网络定义 - 使用外部网络
+# ============================================================================
+networks:
+  cpumodel:
+    external: true                # 使用外部已存在的网络
+    name: cpumodel                # 网络名称
+
+# ============================================================================
+# 常用管理命令
+# ============================================================================
+#
+# 1. 查看活跃任务:
+#    docker-compose -f docker-compose.celery.yml exec celery-worker \
+#      celery -A app.celery_app.celery_app inspect active
+#
+# 2. 查看注册的任务:
+#    docker-compose -f docker-compose.celery.yml exec celery-worker \
+#      celery -A app.celery_app.celery_app inspect registered
+#
+# 3. 查看Worker状态:
+#    docker-compose -f docker-compose.celery.yml exec celery-worker \
+#      celery -A app.celery_app.celery_app inspect stats
+#
+# 4. 清空任务队列:
+#    docker-compose -f docker-compose.celery.yml exec celery-worker \
+#      celery -A app.celery_app.celery_app purge
+#
+# 5. 重启Worker:
+#    docker-compose -f docker-compose.celery.yml restart celery-worker
+#
+# 6. 查看Redis信息:
+#    docker-compose -f docker-compose.celery.yml exec redis \
+#      redis-cli -a scitool123 info
+#
+# 7. 监控Redis内存:
+#    docker-compose -f docker-compose.celery.yml exec redis \
+#      redis-cli -a scitool123 info memory
+#
+# 8. 查看Redis队列长度:
+#    docker-compose -f docker-compose.celery.yml exec redis \
+#      redis-cli -a scitool123 llen celery
+#
+# ============================================================================
+# 故障排查
+# ============================================================================
+#
+# 1. Worker无法连接Redis:
+#    - 检查网络: docker network inspect cpumodel
+#    - 检查Redis密码是否一致
+#    - 查看Redis日志: docker-compose -f docker-compose.celery.yml logs redis
+#
+# 2. 任务一直PENDING:
+#    - 检查Worker是否运行: docker ps | grep celery-worker
+#    - 查看Worker日志: docker-compose -f docker-compose.celery.yml logs celery-worker
+#    - 确认任务队列配置正确
+#
+# 3. GPU Worker无法启动:
+#    - 检查NVIDIA驱动: nvidia-smi
+#    - 检查Container Toolkit: docker run --rm --gpus all nvidia/cuda:11.0-base nvidia-smi
+#    - 如无GPU，注释掉 celery-worker-gpu 服务
+#
+# 4. Flower无法访问:
+#    - 检查端口占用: netstat -nltp | grep 9555
+#    - 检查防火墙设置
+#    - 默认登录: admin / scitool123
+#
+# ============================================================================

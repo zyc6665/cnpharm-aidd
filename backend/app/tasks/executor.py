@@ -140,16 +140,37 @@ class RemoteAPIExecutor(BaseExecutor):
 
     async def _prepare_request_data(self) -> Dict[str, Any]:
         """准备请求数据"""
-        request_data = {
-            "task_id": str(self.task.id),
-            "params": {}
-        }
+        request_data = {}
 
         # 获取任务输入参数
         if self.task.inputs:
-            request_data["params"] = self.task.inputs.params or {}
+            input_params = self.task.inputs.params or {}
 
-            # 下载输入文件
+            # 检查是否需要包装为 request 对象（用于某些 API 如 LVPocket）
+            request_wrapper = self.config.get("request_wrapper", False)
+
+            # 分离 params 和 input_files
+            # 如果输入参数包含 params 和 input_files，直接使用
+            if "params" in input_params and "input_files" in input_params:
+                inner_data = {
+                    "task_id": str(self.task.id),
+                    "params": input_params["params"],
+                    "input_files": input_params["input_files"]
+                }
+
+                if request_wrapper:
+                    # 包装为 request 对象（LVPocket API 格式）
+                    request_data = inner_data
+                else:
+                    request_data = inner_data
+            else:
+                # 否则将所有参数放在 params 下（向后兼容）
+                request_data = {
+                    "task_id": str(self.task.id),
+                    "params": input_params
+                }
+
+            # 处理文件ID（如果有上传的文件）
             if self.task.inputs.file_ids:
                 files = await self._download_input_files()
                 request_data["files"] = files
@@ -158,29 +179,123 @@ class RemoteAPIExecutor(BaseExecutor):
 
     async def _download_input_files(self) -> List[str]:
         """下载输入文件到本地"""
-        from app.storage.factory import get_storage
+        from sqlalchemy import select
+        from app.models.files import File as FileModel
+        from app.database.session import get_async_session
 
         file_paths = []
         work_dir = self._get_work_dir()
-        storage = get_storage()
+        input_dir = os.path.join(work_dir, "input")
+        os.makedirs(input_dir, exist_ok=True)
 
-        for file_id in self.task.inputs.file_ids:
+        async for session in get_async_session():
             try:
-                # 这里需要从数据库获取文件信息并下载
-                # 暂时返回文件ID列表
-                file_paths.append(file_id)
+                for file_id in self.task.inputs.file_ids:
+                    # 查询文件记录
+                    result = await session.execute(
+                        select(FileModel).where(FileModel.id == file_id)
+                    )
+                    file_record = result.scalar_one_or_none()
+
+                    if not file_record:
+                        logger.warning(f"Input file {file_id} not found, skipping")
+                        continue
+
+                    # 检查源文件是否存在
+                    if not file_record.storage_path or not os.path.exists(file_record.storage_path):
+                        logger.error(f"Input file {file_record.filename} not found in storage")
+                        continue
+
+                    # 复制文件到输入目录
+                    dst_path = os.path.join(input_dir, file_record.filename)
+                    shutil.copy2(file_record.storage_path, dst_path)
+                    file_paths.append(dst_path)
+                    logger.info(f"Downloaded input file: {file_record.filename}")
+
+                break
             except Exception as e:
-                logger.error(f"Failed to download file {file_id}: {e}")
+                logger.error(f"Failed to download input files: {e}")
+                raise TaskExecutionError(f"Failed to download input files: {str(e)}")
 
         return file_paths
 
     async def _process_output_files(self, output_files: List[Dict]) -> List[str]:
         """处理输出文件"""
-        # 上传输出文件到存储
+        from sqlalchemy.ext.asyncio import AsyncSession
+        from app.models.files import File as FileModel, FileSourceType
+        from app.database.session import get_async_session
+        import hashlib
+
         uploaded_ids = []
-        for file_info in output_files:
-            # 实际实现需要上传文件到存储
-            uploaded_ids.append(str(uuid.uuid4()))
+
+        async for session in get_async_session():
+            try:
+                for file_info in output_files:
+                    url = file_info.get("url")
+                    # 兼容 "name" 和 "filename" 两种字段名
+                    filename = file_info.get("name") or file_info.get("filename", f"output_{uuid.uuid4()}.dat")
+
+                    if not url:
+                        logger.warning(f"Output file {filename} missing URL, skipping")
+                        continue
+
+                    try:
+                        # 从远程URL下载文件
+                        async with httpx.AsyncClient(timeout=300) as client:
+                            response = await client.get(url)
+                            response.raise_for_status()
+                            content = response.content
+
+                        # 计算文件信息
+                        sha256_hash = hashlib.sha256(content).hexdigest()
+                        file_size = len(content)
+                        content_type = response.headers.get("content-type", "application/octet-stream")
+
+                        # 创建文件记录
+                        file_record = FileModel(
+                            filename=filename,
+                            content_type=content_type,
+                            size_bytes=file_size,
+                            sha256=sha256_hash,
+                            source_type=FileSourceType.TOOL_OUTPUT.value,
+                            owner_id=self.task.user_id,
+                            is_public=False,
+                            is_permanent=False
+                        )
+
+                        session.add(file_record)
+                        await session.flush()
+
+                        # 保存到存储
+                        from app.api.v1.files import get_file_path
+                        storage_path = get_file_path(file_record.id, filename)
+                        storage_path.parent.mkdir(parents=True, exist_ok=True)
+
+                        # 写入文件
+                        with open(storage_path, "wb") as f:
+                            f.write(content)
+
+                        # 更新存储路径
+                        file_record.storage_path = str(storage_path)
+                        await session.flush()
+
+                        uploaded_ids.append(file_record.id)
+                        logger.info(f"Processed output file from {url} -> {file_record.id}")
+
+                    except httpx.HTTPError as e:
+                        logger.error(f"Failed to download output file from {url}: {e}")
+                        continue
+                    except Exception as e:
+                        logger.error(f"Failed to process output file {filename}: {e}")
+                        continue
+
+                await session.commit()
+                break
+            except Exception as e:
+                logger.error(f"Failed to process output files: {e}")
+                await session.rollback()
+                raise TaskExecutionError(f"Failed to process output files: {str(e)}")
+
         return uploaded_ids
 
     def _flatten_params(self, data: Dict[str, Any]) -> Dict[str, str]:
@@ -314,9 +429,47 @@ class DockerExecutor(BaseExecutor):
         work_dir = self._get_work_dir()
         input_dir = os.path.join(work_dir, "input")
 
-        # 下载文件到输入目录
-        # 实际实现需要从存储下载
-        pass
+        # 从数据库获取文件记录并复制到工作目录
+        from sqlalchemy import select
+        from sqlalchemy.ext.asyncio import AsyncSession
+        from app.models.files import File as FileModel
+        from app.database.session import get_async_session
+
+        async for session in get_async_session():
+            try:
+                for file_id in self.task.inputs.file_ids:
+                    # 查询文件记录
+                    result = await session.execute(
+                        select(FileModel).where(FileModel.id == file_id)
+                    )
+                    file_record = result.scalar_one_or_none()
+
+                    if not file_record:
+                        logger.warning(f"Input file {file_id} not found, skipping")
+                        continue
+
+                    # 检查源文件是否存在
+                    if not file_record.storage_path or not os.path.exists(file_record.storage_path):
+                        raise TaskExecutionError(
+                            f"Input file {file_record.filename} not found in storage",
+                            details={"file_id": file_id, "storage_path": file_record.storage_path}
+                        )
+
+                    # 复制文件到输入目录
+                    dst_path = os.path.join(input_dir, file_record.filename)
+                    try:
+                        shutil.copy2(file_record.storage_path, dst_path)
+                        logger.info(f"Prepared input file: {file_record.filename}")
+                    except Exception as e:
+                        raise TaskExecutionError(
+                            f"Failed to prepare input file {file_record.filename}: {str(e)}",
+                            details={"file_id": file_id, "error": str(e)}
+                        )
+                break
+            except Exception as e:
+                if isinstance(e, TaskExecutionError):
+                    raise
+                raise TaskExecutionError(f"Failed to prepare input files: {str(e)}")
 
     async def _collect_output_files(self) -> List[str]:
         """收集输出文件"""
@@ -326,12 +479,69 @@ class DockerExecutor(BaseExecutor):
         if not os.path.exists(output_dir):
             return []
 
+        from sqlalchemy.ext.asyncio import AsyncSession
+        from app.models.files import File as FileModel, FileSourceType
+        from app.database.session import get_async_session
+        from pathlib import Path
+        import hashlib
+
         uploaded_ids = []
-        for filename in os.listdir(output_dir):
-            file_path = os.path.join(output_dir, filename)
-            if os.path.isfile(file_path):
-                # 实际实现需要上传到存储
-                uploaded_ids.append(str(uuid.uuid4()))
+
+        async for session in get_async_session():
+            try:
+                for filename in os.listdir(output_dir):
+                    file_path = os.path.join(output_dir, filename)
+                    if not os.path.isfile(file_path):
+                        continue
+
+                    try:
+                        # 读取文件内容并计算SHA256
+                        with open(file_path, "rb") as f:
+                            content = f.read()
+
+                        sha256_hash = hashlib.sha256(content).hexdigest()
+                        file_size = len(content)
+
+                        # 创建文件记录
+                        file_record = FileModel(
+                            filename=filename,
+                            content_type="application/octet-stream",  # 通用类型
+                            size_bytes=file_size,
+                            sha256=sha256_hash,
+                            source_type=FileSourceType.TOOL_OUTPUT.value,
+                            owner_id=self.task.user_id,
+                            is_public=False,
+                            is_permanent=False  # 任务输出文件临时存储
+                        )
+
+                        session.add(file_record)
+                        await session.flush()
+
+                        # 保存到存储（使用与上传API相同的逻辑）
+                        from app.api.v1.files import get_file_path
+                        storage_path = get_file_path(file_record.id, filename)
+                        storage_path.parent.mkdir(parents=True, exist_ok=True)
+
+                        # 复制文件到存储位置
+                        shutil.copy2(file_path, str(storage_path))
+
+                        # 更新存储路径
+                        file_record.storage_path = str(storage_path)
+                        await session.flush()
+
+                        uploaded_ids.append(file_record.id)
+                        logger.info(f"Collected output file: {filename} -> {file_record.id}")
+
+                    except Exception as e:
+                        logger.error(f"Failed to collect output file {filename}: {e}")
+                        continue
+
+                await session.commit()
+                break
+            except Exception as e:
+                logger.error(f"Failed to collect output files: {e}")
+                await session.rollback()
+                raise TaskExecutionError(f"Failed to collect output files: {str(e)}")
 
         return uploaded_ids
 
@@ -421,6 +631,11 @@ class PythonScriptExecutor(BaseExecutor):
             # 解析输出
             output = self._parse_script_output(work_dir, process.stdout)
 
+            # 收集输出文件
+            output_files = await self._collect_output_files()
+            if output_files:
+                output["output_file_ids"] = output_files
+
             return {
                 "success": True,
                 "result": output,
@@ -452,6 +667,82 @@ class PythonScriptExecutor(BaseExecutor):
             return json.loads(stdout)
         except:
             return {"raw_output": stdout}
+
+    async def _collect_output_files(self) -> List[str]:
+        """收集输出文件"""
+        work_dir = self._get_work_dir()
+        output_dir = os.path.join(work_dir, "output")
+
+        if not os.path.exists(output_dir):
+            return []
+
+        from sqlalchemy.ext.asyncio import AsyncSession
+        from app.models.files import File as FileModel, FileSourceType
+        from app.database.session import get_async_session
+        from pathlib import Path
+        import hashlib
+
+        uploaded_ids = []
+
+        async for session in get_async_session():
+            try:
+                for filename in os.listdir(output_dir):
+                    file_path = os.path.join(output_dir, filename)
+
+                    # 跳过 result.json（这是结果数据，不是输出文件）
+                    if filename == "result.json" or not os.path.isfile(file_path):
+                        continue
+
+                    try:
+                        # 读取文件内容并计算SHA256
+                        with open(file_path, "rb") as f:
+                            content = f.read()
+
+                        sha256_hash = hashlib.sha256(content).hexdigest()
+                        file_size = len(content)
+
+                        # 创建文件记录
+                        file_record = FileModel(
+                            filename=filename,
+                            content_type="application/octet-stream",
+                            size_bytes=file_size,
+                            sha256=sha256_hash,
+                            source_type=FileSourceType.TOOL_OUTPUT.value,
+                            owner_id=self.task.user_id,
+                            is_public=False,
+                            is_permanent=False
+                        )
+
+                        session.add(file_record)
+                        await session.flush()
+
+                        # 保存到存储
+                        from app.api.v1.files import get_file_path
+                        storage_path = get_file_path(file_record.id, filename)
+                        storage_path.parent.mkdir(parents=True, exist_ok=True)
+
+                        # 复制文件到存储位置
+                        shutil.copy2(file_path, str(storage_path))
+
+                        # 更新存储路径
+                        file_record.storage_path = str(storage_path)
+                        await session.flush()
+
+                        uploaded_ids.append(file_record.id)
+                        logger.info(f"Collected output file: {filename} -> {file_record.id}")
+
+                    except Exception as e:
+                        logger.error(f"Failed to collect output file {filename}: {e}")
+                        continue
+
+                await session.commit()
+                break
+            except Exception as e:
+                logger.error(f"Failed to collect output files: {e}")
+                await session.rollback()
+                raise TaskExecutionError(f"Failed to collect output files: {str(e)}")
+
+        return uploaded_ids
 
 
 class TaskExecutor:
@@ -491,41 +782,24 @@ class TaskExecutor:
 
         Returns:
             Dict[str, Any]: 执行结果
+
+        Note:
+            状态管理由Worker层统一负责,此方法只负责执行逻辑
         """
         executor = self._get_executor()
 
         try:
-            # 更新任务状态为运行中
-            TaskStateMachine.start(self.task, progress_message="任务开始执行")
-
             # 执行任务
             result = await executor.execute()
-
-            # 更新任务状态为成功
-            TaskStateMachine.complete(self.task, success=True, progress_message="任务执行成功")
-
             return result
 
-        except TaskExecutionError as e:
-            # 执行失败
-            logger.error(f"Task {self.task.id} execution failed: {e.message}")
-            TaskStateMachine.complete(
-                self.task,
-                success=False,
-                error_message=e.message,
-                progress_message="任务执行失败"
-            )
+        except TaskExecutionError:
+            # 重新抛出TaskExecutionError,由Worker层处理
             raise
 
         except Exception as e:
-            # 未知错误
+            # 包装其他异常为TaskExecutionError
             logger.exception(f"Task {self.task.id} unexpected error: {e}")
-            TaskStateMachine.complete(
-                self.task,
-                success=False,
-                error_message=str(e),
-                progress_message="任务执行发生未知错误"
-            )
             raise TaskExecutionError(f"Unexpected error: {str(e)}")
 
     async def execute_with_progress(

@@ -4,16 +4,22 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 from typing import Optional
 
 from app.database.session import get_db
-from app.models.users import User, UserRole, UserSession
+from app.models.users import User, UserRole, UserSession, UserStatus
 from app.auth.jwt_handler import JWTHandler
 from app.auth.password import hash_password, verify_password
 from app.auth.dependencies import get_current_user
 from app.schemas.users import (
     UserCreate, UserLogin, UserResponse, TokenResponse,
     UserUpdate, PasswordChange
+)
+from app.schemas.verification import PasswordResetRequest
+from app.services.verification.service import (
+    get_verification_service,
+    InvalidCodeError
 )
 from app.common.responses import success_response, error_response
 from app.common.exceptions import (
@@ -30,7 +36,28 @@ async def register(
     user_data: UserCreate,
     db: AsyncSession = Depends(get_db)
 ):
-    """用户注册"""
+    """
+    用户注册
+
+    需要先调用 /verification/send-code 获取验证码。
+
+    - **email**: 邮箱地址
+    - **password**: 密码（6-100 位）
+    - **display_name**: 显示名称（可选）
+    - **verification_code**: 邮箱验证码（6 位）
+    """
+    # 验证验证码
+    verification_service = await get_verification_service(db)
+    try:
+        await verification_service.verify_code(
+            email=user_data.email,
+            code=user_data.verification_code,
+            purpose="register",
+            mark_used=True
+        )
+    except InvalidCodeError as e:
+        raise ValidationException(str(e))
+
     # 检查邮箱是否已存在
     result = await db.execute(
         select(User).where(User.email == user_data.email)
@@ -38,21 +65,14 @@ async def register(
     if result.scalar_one_or_none():
         raise ConflictException("邮箱已被注册")
 
-    # 检查用户名是否已存在
-    result = await db.execute(
-        select(User).where(User.username == user_data.username)
-    )
-    if result.scalar_one_or_none():
-        raise ConflictException("用户名已被使用")
-
     # 创建用户
     hashed_pwd = hash_password(user_data.password)
     user = User(
-        username=user_data.username,
         email=user_data.email,
-        hashed_password=hashed_pwd,
-        nickname=user_data.nickname or user_data.username,
-        role=UserRole.USER
+        password_hash=hashed_pwd,
+        display_name=user_data.display_name,
+        role=UserRole.USER.value,
+        status=UserStatus.ACTIVE.value
     )
 
     db.add(user)
@@ -63,7 +83,7 @@ async def register(
     access_token = jwt_handler.create_access_token(
         user_id=user.id,
         email=user.email,
-        role=user.role.value
+        role=user.role
     )
     refresh_token = jwt_handler.create_refresh_token(user_id=user.id)
 
@@ -83,31 +103,35 @@ async def login(
     login_data: UserLogin,
     db: AsyncSession = Depends(get_db)
 ):
-    """用户登录"""
-    # 查找用户（支持邮箱或用户名登录）
+    """
+    用户登录
+
+    - **email**: 邮箱地址
+    - **password**: 密码
+    """
+    # 查找用户
     result = await db.execute(
-        select(User).where(
-            (User.email == login_data.email_or_username) |
-            (User.username == login_data.email_or_username)
-        )
+        select(User)
+        .options(joinedload(User.statistics))
+        .where(User.email == login_data.email)
     )
     user = result.scalar_one_or_none()
 
     if not user:
         raise UnauthorizedException("用户不存在")
 
-    if not user.is_active:
+    if user.status != UserStatus.ACTIVE.value:
         raise UnauthorizedException("账户已被禁用")
 
     # 验证密码
-    if not verify_password(login_data.password, user.hashed_password):
+    if not verify_password(login_data.password, user.password_hash):
         raise UnauthorizedException("密码错误")
 
     # 生成令牌
     access_token = jwt_handler.create_access_token(
         user_id=user.id,
         email=user.email,
-        role=user.role.value
+        role=user.role
     )
     refresh_token = jwt_handler.create_refresh_token(user_id=user.id)
 
@@ -120,6 +144,48 @@ async def login(
         },
         message="登录成功"
     )
+
+
+@router.post("/reset-password", response_model=dict)
+async def reset_password(
+    data: PasswordResetRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    重置密码
+
+    需要先调用 /verification/send-code 获取验证码（purpose=reset_password）。
+
+    - **email**: 邮箱地址
+    - **code**: 验证码
+    - **new_password**: 新密码
+    """
+    # 验证验证码
+    verification_service = await get_verification_service(db)
+    try:
+        await verification_service.verify_code(
+            email=data.email,
+            code=data.code,
+            purpose="reset_password",
+            mark_used=True
+        )
+    except InvalidCodeError as e:
+        raise ValidationException(str(e))
+
+    # 查找用户
+    result = await db.execute(
+        select(User).where(User.email == data.email)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise NotFoundException("用户不存在")
+
+    # 更新密码
+    user.password_hash = hash_password(data.new_password)
+    await db.commit()
+
+    return success_response(message="密码重置成功")
 
 
 @router.post("/refresh", response_model=dict)
@@ -141,14 +207,14 @@ async def refresh_token(
     )
     user = result.scalar_one_or_none()
 
-    if not user or not user.is_active:
+    if not user or user.status != UserStatus.ACTIVE.value:
         raise UnauthorizedException("用户不存在或已被禁用")
 
     # 生成新令牌
     new_access_token = jwt_handler.create_access_token(
         user_id=user.id,
         email=user.email,
-        role=user.role.value
+        role=user.role
     )
     new_refresh_token = jwt_handler.create_refresh_token(user_id=user.id)
 
@@ -160,61 +226,6 @@ async def refresh_token(
         },
         message="令牌刷新成功"
     )
-
-
-@router.get("/me", response_model=dict)
-async def get_current_user_info(
-    current_user: User = Depends(get_current_user)
-):
-    """获取当前用户信息"""
-    return success_response(
-        data=UserResponse.model_validate(current_user).model_dump()
-    )
-
-
-@router.put("/me", response_model=dict)
-async def update_current_user(
-    user_data: UserUpdate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """更新当前用户信息"""
-    update_data = user_data.model_dump(exclude_unset=True)
-
-    for field, value in update_data.items():
-        setattr(current_user, field, value)
-
-    await db.commit()
-    await db.refresh(current_user)
-
-    return success_response(
-        data=UserResponse.model_validate(current_user).model_dump(),
-        message="更新成功"
-    )
-
-
-@router.post("/change-password", response_model=dict)
-async def change_password(
-    password_data: PasswordChange,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """修改密码"""
-    # 验证旧密码
-    if not verify_password(
-        password_data.old_password,
-        current_user.hashed_password
-    ):
-        raise ValidationException("旧密码错误")
-
-    # 更新密码
-    current_user.hashed_password = hash_password(
-        password_data.new_password
-    )
-
-    await db.commit()
-
-    return success_response(message="密码修改成功")
 
 
 @router.post("/logout", response_model=dict)

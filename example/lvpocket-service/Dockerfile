@@ -1,178 +1,233 @@
 # ============================================================================
-# LVPocket Service Dockerfile
+# LVPocket Service Dockerfile - Python 3.8 现代化方案
 # ============================================================================
+#
+# 基于 NVIDIA NGC TensorFlow 1.15 镜像 (Python 3.8)，使用转换后的兼容模型
 #
 # 构建命令:
 #   docker build -t lvpocket-service:1.0.0 .
 #
 # 运行命令 (GPU):
-#   docker run --gpus all -p 8000:8000 lvpocket-service:1.0.0
+#   docker run --gpus all -p 9502:9502 lvpocket-service:1.0.0
 #
 # 运行命令 (CPU):
-#   docker run -p 8000:8000 lvpocket-service:1.0.0
+#   docker run -p 9502:9502 -e CUDA_VISIBLE_DEVICES="" lvpocket-service:1.0.0
 #
 # ============================================================================
 
 # ============================================
-# 阶段1: 构建阶段 - 安装依赖
+# 阶段1: 构建阶段 - 编译依赖
 # ============================================
-FROM tensorflow/tensorflow:1.15.0-gpu-py3 AS builder
+# 使用 NVIDIA NGC TensorFlow 1.15 镜像 (Python 3.8, CUDA 11.0)
+FROM nvcr.io/nvidia/tensorflow:20.12-tf1-py3 AS builder
 
-# 设置环境变量，避免交互式安装
+# 设置环境变量
 ENV DEBIAN_FRONTEND=noninteractive
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 
-# 安装系统依赖
-# - build-essential: 编译工具
-# - cmake: 构建系统
-# - libopenbabel-dev/openbabel: 分子处理库
-# - swig: 接口生成器
+# -------- 安装系统依赖 --------
+# build-essential: 编译工具链
+# cmake: 构建系统
+# swig: Python 绑定生成器
+# libeigen3-dev: 线性代数库 (OpenBabel 依赖)
+# libboost-all-dev: Boost 库 (OpenBabel 依赖)
+# libcairo2-dev: 2D 图形库 (OpenBabel 可选)
+# rapidjson-dev: JSON 解析 (OpenBabel 3.x 依赖)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     cmake \
-    libopenbabel-dev \
-    openbabel \
-    python3-openbabel \
     swig \
+    python3-dev \
+    libeigen3-dev \
+    libboost-all-dev \
+    libcairo2-dev \
+    rapidjson-dev \
+    wget \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
-# 升级 pip
-RUN python -m pip install --upgrade pip setuptools wheel
+# -------- 编译安装 OpenBabel 3.1.1 --------
+# OpenBabel 3.x 优势:
+# - 更好的 Python 3 支持
+# - 更稳定的 SWIG 绑定
+# - 持续维护
+ARG OPENBABEL_VERSION=3.1.1
+RUN cd /tmp && \
+    wget -q https://github.com/openbabel/openbabel/archive/refs/tags/openbabel-3-1-1.tar.gz && \
+    tar xzf openbabel-3-1-1.tar.gz && \
+    cd openbabel-openbabel-3-1-1 && \
+    mkdir build && cd build && \
+    cmake .. \
+        -DCMAKE_INSTALL_PREFIX=/usr/local \
+        -DPYTHON_EXECUTABLE=/usr/bin/python3 \
+        -DPYTHON_BINDINGS=ON \
+        -DRUN_SWIG=ON \
+        -DWITH_COORDGEN=OFF \
+        -DWITH_MAEPARSER=OFF \
+        -DBUILD_GUI=OFF && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig && \
+    cd /tmp && rm -rf openbabel-*
 
-# 复制依赖文件
+# 验证 OpenBabel 安装
+RUN python3 -c "from openbabel import pybel; print(f'OpenBabel {pybel.ob.OBReleaseVersion()} OK')"
+
+# -------- 创建 pybel 兼容层 --------
+# OpenBabel 3.x 使用 `from openbabel import pybel`
+# 但 tfbio 和 LVPocket 使用旧式 `import pybel`
+# 创建兼容层使两种导入方式都能工作
+RUN echo 'from openbabel.pybel import *' > /usr/local/lib/python3.8/dist-packages/pybel.py && \
+    echo 'from openbabel import openbabel' > /usr/local/lib/python3.8/dist-packages/openbabel_compat.py
+
+# 验证兼容层
+RUN python3 -c "import pybel; print('pybel compat OK')"
+
+# -------- 安装 tfbio --------
+# tfbio 仅在 conda cheminfIBB 频道提供，从本地复制安装
+# 这是 LVPocket 的核心依赖，提供分子特征化和网格生成功能
+COPY tfbio /opt/tfbio
+RUN cd /opt/tfbio && pip install --no-cache-dir -e .
+
+# 验证 tfbio 安装
+RUN python3 -c "import tfbio.data; print('tfbio OK')"
+
+# -------- 升级 pip 并安装 Python 依赖 --------
+RUN pip install --upgrade pip setuptools wheel -i https://pypi.tuna.tsinghua.edu.cn/simple
+
 COPY requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt \
+    -i https://pypi.tuna.tsinghua.edu.cn/simple \
+    --trusted-host pypi.tuna.tsinghua.edu.cn \
+    --timeout 120
 
-# 安装 Python 依赖
-RUN pip install --no-cache-dir -r /tmp/requirements.txt
+# 验证关键依赖
+RUN python3 -c "import tensorflow as tf; print(f'TensorFlow {tf.__version__} OK')" && \
+    python3 -c "import keras; print(f'Keras {keras.__version__} OK')" && \
+    python3 -c "import numpy; print(f'NumPy {numpy.__version__} OK')" && \
+    python3 -c "import scipy; print(f'SciPy {scipy.__version__} OK')" && \
+    python3 -c "import skimage; print(f'scikit-image {skimage.__version__} OK')"
 
 
 # ============================================
 # 阶段2: 运行阶段
 # ============================================
-FROM tensorflow/tensorflow:1.15.0-gpu-py3
+FROM nvcr.io/nvidia/tensorflow:20.12-tf1-py3
 
 # ---------- 基础环境变量 ----------
 ENV DEBIAN_FRONTEND=noninteractive
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
-# 禁用 Python 输出缓冲
 ENV PYTHONUNBUFFERED=1
-# 禁止生成 .pyc 文件
 ENV PYTHONDONTWRITEBYTECODE=1
 
 # ---------- TensorFlow 配置 ----------
-# 日志级别: 0=全部, 1=过滤INFO, 2=过滤WARNING, 3=过滤ERROR
 ENV TF_CPP_MIN_LOG_LEVEL=2
-# 允许 GPU 内存动态增长（推荐）
 ENV TF_FORCE_GPU_ALLOW_GROWTH=true
+# 禁用 TF 自动混合精度（保持与原始模型兼容）
+ENV TF_ENABLE_AUTO_MIXED_PRECISION=0
 
 # ---------- 应用配置 ----------
 ENV APP_NAME="LVPocket Service"
 ENV APP_VERSION="1.0.0"
-# 监听地址，0.0.0.0 表示所有网卡
 ENV HOST=0.0.0.0
-# 监听端口
-ENV PORT=8000
-# Uvicorn worker 数量
+ENV PORT=9502
 ENV WORKERS=1
-# 日志级别: DEBUG | INFO | WARNING | ERROR
 ENV LOG_LEVEL=INFO
 
 # ---------- LVpocket 配置 ----------
-# LVpocket 源代码路径（用于导入 model.LV_former 和 tfbio.data）
-# 目录结构: /app/model/LVpocket/
 ENV LVPOCKET_SOURCE_PATH=/app/model/LVpocket
-
-# ---------- 模型配置 ----------
-# 模型目录（包含所有 SCOP 分类模型）
 ENV MODEL_DIR=/app/model/LVpocket/trained_model
-# 模型文件路径（参考 predict.py）- 保持兼容
-ENV MODEL_PATH=/app/model/LVpocket/trained_model/scale_0.5_1.h5
+ENV MODEL_PATH=/app/model/LVpocket/trained_model/newbest/new_best/baseline_model.hdf
 ENV MODEL_VERSION=1.0.0
-# 体素分辨率 (Å)，参考 predict.py --scale 默认值
 ENV SCALE=0.5
-# 最大距离阈值，参考 predict.py --max_dist 默认值
 ENV MAX_DIST=35.0
-
-# ---------- 多模型配置（SCOP 结构分类）----------
-# 默认使用的结构分类模型
-# 可选值: baseline | alpha | beta | alpha_beta | alpha_plus_beta
 ENV DEFAULT_STRUCTURE_CLASS=baseline
 
 # ---------- 预测参数 ----------
-# 默认口袋预测阈值 (0-1)
 ENV DEFAULT_THRESHOLD=0.5
-# 默认最小口袋体素数
 ENV DEFAULT_MIN_SIZE=50
 
 # ---------- 文件配置 ----------
-# 临时文件目录
 ENV TEMP_DIR=/tmp/lvpocket
-# 输出文件目录
 ENV OUTPUT_DIR=/app/data/output
-# 最大上传文件大小 (bytes)，默认 50MB
 ENV MAX_FILE_SIZE=52428800
 
-# 安装运行时依赖
-# - libopenbabel6: OpenBabel 运行时库
-# - curl: 健康检查
+# -------- 安装运行时依赖 --------
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libopenbabel6 \
-    openbabel \
-    python3-openbabel \
     curl \
+    libboost-all-dev \
+    libcairo2 \
     && rm -rf /var/lib/apt/lists/*
 
-# 从构建阶段复制 Python 包
-COPY --from=builder /usr/local/lib/python3.6/dist-packages /usr/local/lib/python3.6/dist-packages
+# -------- 从构建阶段复制 OpenBabel --------
+# 复制库文件
+COPY --from=builder /usr/local/lib/libopenbabel* /usr/local/lib/
+COPY --from=builder /usr/local/lib/libinchi* /usr/local/lib/
+COPY --from=builder /usr/local/lib/openbabel /usr/local/lib/openbabel
 
-# 设置工作目录
+# 复制 OpenBabel Python 绑定 (Python 3.8)
+COPY --from=builder /usr/local/lib/python3.8/dist-packages/openbabel /usr/local/lib/python3.8/dist-packages/openbabel
+COPY --from=builder /usr/local/lib/python3.8/dist-packages/pybel.py /usr/local/lib/python3.8/dist-packages/pybel.py
+
+# -------- 从构建阶段复制 tfbio --------
+COPY --from=builder /opt/tfbio /opt/tfbio
+ENV PYTHONPATH=/opt/tfbio:$PYTHONPATH
+
+# -------- 从构建阶段复制 Python 包 --------
+COPY --from=builder /usr/local/lib/python3.8/dist-packages /usr/local/lib/python3.8/dist-packages
+
+# 更新动态链接库缓存
+RUN ldconfig
+
+# 验证运行时依赖
+RUN python3 -c "from openbabel import pybel; print('openbabel.pybel OK')" && \
+    python3 -c "import pybel; print('pybel compat OK')" && \
+    python3 -c "import tfbio.data; print('tfbio OK')" && \
+    python3 -c "import keras; print('keras OK')"
+
+# -------- 设置工作目录 --------
 WORKDIR /app
 
 # 创建必要目录
 RUN mkdir -p /app/model /app/data/input /app/data/output /tmp/lvpocket
 
-# 复制 model 目录（包含 LVpocket 源码和模型文件）
-# 目录结构:
-#   model/
-#   └── LVpocket/
-#       ├── model/           # LV_former.py
-#       ├── tfbio/           # data.py
-#       ├── scripts/
-#       └── trained_model/   # scale_0.5_1.h5
+# -------- 复制应用文件 --------
+# 复制 model 目录（包含 LVpocket 源码和转换后的模型文件）
 COPY model/ /app/model/
 
 # 复制应用代码
 COPY app/ /app/app/
 
-# 创建非 root 用户（安全最佳实践）
+# -------- 安全配置 --------
+# 创建非 root 用户
 RUN groupadd -r lvpocket && useradd -r -g lvpocket lvpocket \
     && chown -R lvpocket:lvpocket /app /tmp/lvpocket
 
-# 切换到非 root 用户
 USER lvpocket
 
-# 健康检查
-# - interval: 检查间隔
-# - timeout: 超时时间
-# - start_period: 启动等待时间（模型加载需要时间）
-# - retries: 失败重试次数
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+# -------- 健康检查 --------
+HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
     CMD curl -f http://localhost:${PORT}/api/v1/health || exit 1
 
 # 暴露端口
 EXPOSE ${PORT}
 
-# 启动命令
-# 使用 uvicorn 运行 FastAPI 应用
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# -------- 启动命令 --------
+# 生产环境不启用 --reload
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "9502"]
 
 # ============================================================================
 # 构建说明
 # ============================================================================
 #
-# 1. 目录结构要求:
+# 1. 基础镜像说明:
+#    - 使用 NVIDIA NGC TensorFlow 1.15 镜像 (nvcr.io/nvidia/tensorflow:20.12-tf1-py3)
+#    - Python 3.8, CUDA 11.0, cuDNN 8.x
+#    - 使用转换后的 Python 3.8 兼容模型（已移除优化器权重）
+#
+# 2. 目录结构要求:
 #    lvpocket-service/
 #    ├── Dockerfile
 #    ├── requirements.txt
@@ -181,32 +236,40 @@ CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "
 #    │   ├── config.py
 #    │   ├── api/
 #    │   └── core/
+#    ├── tfbio/                  # tfbio 源码（已修复 heavydegree）
 #    └── model/
 #        └── LVpocket/           # LVpocket 源码
-#            ├── model/
-#            │   └── LV_former.py
-#            ├── tfbio/
-#            │   └── data.py
-#            └── trained_model/
-#                ├── scale_0.5_1.h5      # baseline 模型（必需）
-#                ├── alpha_model.h5       # α 类模型（可选）
-#                ├── beta_model.h5        # β 类模型（可选）
-#                ├── alpha_beta_model.h5  # α/β 类模型（可选）
-#                └── alpha_plus_beta_model.h5  # α+β 类模型（可选）
+#            ├── model/          # LV_former.py
+#            ├── scripts/
+#            └── trained_model/  # 转换后的模型文件（Python 3.8 兼容）
 #
-# 2. 模型文件下载:
-#    从 Zenodo 下载: https://doi.org/10.5281/zenodo.10633690
+# 3. 模型文件说明:
+#    - 使用 convert_models.py 转换后的模型
+#    - 已移除优化器权重，体积减小 69%
+#    - 兼容 Python 3.8 + TensorFlow 1.15
 #
-# 3. SCOP 结构分类模型说明:
-#    - baseline: 基线模型，适用于所有蛋白质（默认）
-#    - alpha: α 类蛋白质，主要由 α 螺旋组成
-#    - beta: β 类蛋白质，主要由 β 折叠组成
-#    - alpha_beta: α/β 类蛋白质，α 螺旋和 β 折叠交替排列
-#    - alpha_plus_beta: α+β 类蛋白质，α 螺旋和 β 折叠分离排列
+# 4. SCOP 结构分类模型:
+#    - baseline: 基线模型（默认）
+#    - alpha: α 类蛋白质
+#    - beta: β 类蛋白质
+#    - alpha_beta: α/β 类蛋白质
+#    - alpha_plus_beta: α+β 类蛋白质
 #
-# 4. 多阶段构建优势:
-#    - 减小最终镜像大小
-#    - 不包含构建工具
-#    - 更安全
+# 5. 依赖版本:
+#    - TensorFlow: 1.15.5
+#    - Keras: 2.3.1 (独立版本，兼容 Python 3.8)
+#    - OpenBabel: 3.1.1
+#    - tfbio: 0.3 (from source, 已修复 heavydegree)
+#    - Python: 3.8
+#    - FastAPI: 0.95.0
+#    - uvicorn: 0.21.0
+#    - NumPy: 1.19.5
+#    - SciPy: 1.7.3
+#
+# 6. 关键修复:
+#    - tfbio/tfbio/data.py: heavyvalence → heavydegree (OpenBabel 3.x API)
+#    - app/api/routes.py: 移除 prefix，在 main.py 中统一配置
+#    - app/main.py: include_router 添加 prefix="/api/v1"
+#    - app/core/model_loader_patch.py: 强制 compile=False 加载模型
 #
 # ============================================================================

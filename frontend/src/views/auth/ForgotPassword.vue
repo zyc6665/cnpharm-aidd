@@ -179,7 +179,7 @@
     LockOutlined,
     ArrowLeftOutlined
   } from '@ant-design/icons-vue'
-  import { forgotPassword, verifyEmailCode, resetPassword } from '@/api/auth'
+  import { sendEmailCode, verifyEmailCode, resetPassword } from '@/api/auth'
 
   const router = useRouter()
   const { t } = useI18n()
@@ -278,7 +278,7 @@
   const handleSendCode = async () => {
     loading.value = true
     try {
-      await forgotPassword(emailFormState.email)
+      await sendEmailCode(emailFormState.email, 'reset_password')
       message.success(t('auth.codeSent'))
       currentStep.value = 1
       startCountdown()
@@ -293,7 +293,7 @@
   const handleResendCode = async () => {
     loading.value = true
     try {
-      await forgotPassword(emailFormState.email)
+      await sendEmailCode(emailFormState.email, 'reset_password')
       message.success(t('auth.codeSent'))
       startCountdown()
     } catch {
@@ -307,7 +307,7 @@
   const handleVerifyCode = async () => {
     loading.value = true
     try {
-      const res = await verifyEmailCode(emailFormState.email, codeFormState.code)
+      const res = await verifyEmailCode(emailFormState.email, codeFormState.code, 'reset_password')
       if (res.data.valid) {
         // 保存重置 token（实际实现中验证成功后后端会返回 token）
         resetToken.value = codeFormState.code
@@ -326,7 +326,7 @@
   const handleResetPassword = async () => {
     loading.value = true
     try {
-      await resetPassword(resetToken.value, passwordFormState.password)
+      await resetPassword(emailFormState.email, resetToken.value, passwordFormState.password)
       currentStep.value = 3
     } catch {
       // 错误已在请求层处理

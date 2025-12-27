@@ -116,7 +116,9 @@ request.interceptors.response.use(
         } catch {
           // 刷新失败，清除 Token 并跳转登录
           clearTokens()
-          window.location.href = '/login'
+          // 使用 router 导航而不是强制刷新页面
+          const router = (await import('@/router')).default
+          router.push({ name: 'Login', query: { redirect: window.location.pathname } })
           return Promise.reject(error)
         } finally {
           isRefreshing = false
@@ -124,13 +126,19 @@ request.interceptors.response.use(
       } else {
         // 没有 Refresh Token，跳转登录
         clearTokens()
-        window.location.href = '/login'
+        // 使用 router 导航而不是强制刷新页面
+        const router = (await import('@/router')).default
+        router.push({ name: 'Login', query: { redirect: window.location.pathname } })
       }
     }
 
     // 其他错误处理
-    const errorMessage = error.response?.data?.message || error.message || '请求失败'
-    message.error(errorMessage)
+    // 对于 logout 接口的 401 错误，不显示错误消息（因为退出登录即使失败也会清除本地数据）
+    const isLogoutRequest = originalRequest.url?.includes('/auth/logout')
+    if (!(error.response?.status === 401 && isLogoutRequest)) {
+      const errorMessage = error.response?.data?.message || error.message || '请求失败'
+      message.error(errorMessage)
+    }
 
     return Promise.reject(error)
   }
@@ -149,6 +157,11 @@ export const post = <T>(url: string, data?: unknown, config?: AxiosRequestConfig
 // 封装 PUT 请求
 export const put = <T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<ApiResponse<T>> => {
   return request.put(url, data, config)
+}
+
+// 封装 PATCH 请求
+export const patch = <T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<ApiResponse<T>> => {
+  return request.patch(url, data, config)
 }
 
 // 封装 DELETE 请求

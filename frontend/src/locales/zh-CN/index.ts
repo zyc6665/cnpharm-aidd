@@ -29,7 +29,10 @@ export default {
     credits: '积分',
     totalItems: '共 {total} 条',
     copySuccess: '复制成功',
-    required: '为必填项'
+    required: '为必填项',
+    createdAt: '创建时间',
+    updatedAt: '更新时间',
+    seconds: '秒'
   },
 
   // 导航
@@ -206,9 +209,17 @@ export default {
     allCategories: '全部分类',
     tags: '标签',
     filterTags: '按标签筛选',
+    usageCount: '使用次数',
+    viewCount: '浏览次数',
     runCount: '运行次数',
     favoriteCount: '收藏数',
     version: '版本',
+    changelog: '更新日志',
+    gpuRequirements: 'GPU 要求',
+    gpuMemory: 'GPU 显存',
+    timeout: '超时时间',
+    toolInfo: '工具信息',
+    status: '状态',
     favorite: '收藏',
     unfavorite: '取消收藏',
     run: '运行',
@@ -218,9 +229,64 @@ export default {
     history: '历史版本',
     noTools: '暂无工具',
     // 工具视图
-    publicTools: '公共工具',
+    publicTools: '公开工具',
+    myTools: '我的工具',
+    favorites: '收藏夹',
     favoriteTools: '我的收藏',
     customTools: '自定义工具',
+    allTools: '全部',
+    // 工具来源
+    providerType: {
+      platform: '官方',
+      user: '社区'
+    },
+    // 审核状态
+    reviewStatus: {
+      all: '全部状态',
+      not_required: '无需审核',
+      pending: '待审核',
+      approved: '已通过',
+      rejected: '已拒绝'
+    },
+    // 审核相关
+    submitReview: '提交审核',
+    resubmitReview: '重新提交',
+    reviewPending: '审核中，请耐心等待',
+    reviewRejected: '审核未通过',
+    rejectReason: '拒绝原因',
+    // 创建/编辑工具
+    createTool: '创建工具',
+    editTool: '编辑工具',
+    basicInfo: '基本信息',
+    toolName: '工具名称',
+    toolNamePlaceholder: '请输入工具名称',
+    toolSlug: '工具标识',
+    toolSlugPlaceholder: '请输入工具标识（英文小写、数字、短横线）',
+    slugHint: '用于URL中标识工具，只能包含小写字母、数字和短横线',
+    descriptionPlaceholder: '请输入工具描述...',
+    selectCategory: '请选择分类',
+    selectTags: '请选择标签',
+    iconPlaceholder: '输入 emoji 或留空',
+    iconHint: '支持 emoji 表情作为图标',
+    iconUrlPlaceholder: '输入图标URL（可选）',
+    runConfig: '运行配置',
+    gpuRequired: '需要 GPU',
+    gpuMemoryMb: 'GPU 显存 (MB)',
+    timeoutSec: '超时时间 (秒)',
+    isPublic: '公开工具',
+    publicYes: '公开（其他用户可见）',
+    publicNo: '私有（仅自己可见）',
+    // 验证消息
+    nameRequired: '请输入工具名称',
+    nameLength: '工具名称长度为 2-100 个字符',
+    slugRequired: '请输入工具标识',
+    slugFormat: '工具标识只能包含小写字母、数字和短横线',
+    slugLength: '工具标识长度为 2-50 个字符',
+    descriptionLength: '描述最多 500 个字符',
+    // 操作结果
+    createSuccess: '工具创建成功',
+    updateSuccess: '工具更新成功',
+    loadFailed: '加载工具信息失败',
     // 排序
     sortPopular: '按热度',
     sortNewest: '按最新',

@@ -5,6 +5,7 @@ from typing import Optional, List
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select, func, update
+from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
 
@@ -118,7 +119,7 @@ async def update_current_user_info(
     return UserResponse.model_validate(current_user)
 
 
-@router.post("/me/change-password", summary="修改密码")
+@router.put("/me/password", summary="修改密码")
 async def change_password(
     password_change: PasswordChange,
     current_user: User = Depends(get_current_user),
@@ -143,7 +144,7 @@ async def change_password(
 # ==================== 管理员接口 ====================
 
 @router.get(
-    "/admin/users",
+    "/admin",
     response_model=UserListResponse,
     summary="获取用户列表（管理员）"
 )
@@ -166,7 +167,7 @@ async def admin_get_users(
     - 分页
     """
     # 构建查询
-    query = select(User)
+    query = select(User).options(joinedload(User.statistics))
 
     # 关键词搜索
     if keyword:
@@ -204,7 +205,7 @@ async def admin_get_users(
 
 
 @router.get(
-    "/admin/users/{user_id}",
+    "/admin/{user_id}",
     response_model=UserResponse,
     summary="获取用户详情（管理员）"
 )
@@ -229,7 +230,7 @@ async def admin_get_user(
 
 
 @router.patch(
-    "/admin/users/{user_id}",
+    "/admin/{user_id}",
     response_model=UserResponse,
     summary="更新用户信息（管理员）"
 )
@@ -299,7 +300,7 @@ async def admin_update_user(
 
 
 @router.delete(
-    "/admin/users/{user_id}",
+    "/admin/{user_id}",
     summary="删除用户（管理员）"
 )
 async def admin_delete_user(

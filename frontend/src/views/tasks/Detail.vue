@@ -134,7 +134,7 @@
                 </h3>
                 <a-descriptions :column="1" bordered size="small">
                   <a-descriptions-item
-                    v-for="(value, key) in task.input_params"
+                    v-for="(value, key) in task.inputs?.params"
                     :key="key"
                     :label="String(key)"
                   >
@@ -365,6 +365,15 @@ import { useWebSocket } from '@/composables/useWebSocket'
 import { getTaskLogs } from '@/api/tasks'
 import type { TaskStatus, TaskLog, Task, FileInfo } from '@/types/models'
 
+// 定义文件类型接口（兼容旧代码）
+interface TaskFile {
+  id?: string | number
+  original_name?: string
+  filename?: string
+  size?: number
+  url?: string
+}
+
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
@@ -451,8 +460,8 @@ const calculateDuration = (start: string, end: string) => {
   return `${Math.floor(diff / 3600)}h ${Math.floor((diff % 3600) / 60)}m`
 }
 
-const formatFileSize = (bytes: number) => {
-  if (bytes === 0) return '0 B'
+const formatFileSize = (bytes?: number) => {
+  if (!bytes || bytes === 0) return '0 B'
   const k = 1024
   const sizes = ['B', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
@@ -515,14 +524,15 @@ const handleDelete = () => {
   })
 }
 
-const downloadFile = (file: FileInfo) => {
+const downloadFile = (file: TaskFile | FileInfo) => {
   if (file.url) {
     window.open(file.url, '_blank')
   }
 }
 
 const downloadAllFiles = () => {
-  task.value?.output_files?.forEach(file => {
+  const files = task.value?.output_files as TaskFile[] | undefined
+  files?.forEach(file => {
     if (file.url) {
       window.open(file.url, '_blank')
     }

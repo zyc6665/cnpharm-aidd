@@ -113,7 +113,7 @@
     <a-card>
       <a-table
         :columns="columns"
-        :data-source="tasks"
+        :data-source="filteredTasks"
         :loading="loading"
         :pagination="pagination"
         :row-selection="rowSelection"
@@ -231,7 +231,7 @@
         </a-descriptions>
 
         <a-divider>{{ t('tasks.inputParams') }}</a-divider>
-        <pre class="json-view">{{ JSON.stringify(selectedTask.input_params, null, 2) }}</pre>
+        <pre class="json-view">{{ JSON.stringify(selectedTask.params, null, 2) }}</pre>
 
         <template v-if="selectedTask.error_message">
           <a-divider>{{ t('tasks.errorMessage') }}</a-divider>
@@ -293,12 +293,48 @@ const rowSelection = computed(() => ({
 
 // 模拟任务数据
 const tasks = ref([
-  { id: 1001, name: 'LVPocket预测任务', tool_name: 'LVPocket', status: 'running', progress: 65, user: { username: 'researcher1' }, created_at: '2024-01-15T10:30:00', started_at: '2024-01-15T10:31:00', input_params: { pdb_file: 'protein.pdb', model: 'lv_net_v2' } },
-  { id: 1002, name: '蛋白质结构预测', tool_name: 'AlphaFold', status: 'success', progress: 100, user: { username: 'scientist2' }, created_at: '2024-01-15T09:20:00', started_at: '2024-01-15T09:21:00', completed_at: '2024-01-15T10:15:00', input_params: { sequence: 'MKFLILLFNILCLFPVLAADNHGVGP...' } },
-  { id: 1003, name: '分子对接模拟', tool_name: 'AutoDock', status: 'pending', progress: 0, user: { username: 'chemist3' }, created_at: '2024-01-15T11:00:00', input_params: { receptor: 'receptor.pdbqt', ligand: 'ligand.mol2' } },
-  { id: 1004, name: '序列比对分析', tool_name: 'BLAST', status: 'failure', progress: 30, user: { username: 'biologist4' }, created_at: '2024-01-14T16:45:00', started_at: '2024-01-14T16:46:00', error_message: 'Database connection timeout', input_params: { query: 'sequence.fasta', database: 'nr' } },
-  { id: 1005, name: '批量结构预测', tool_name: 'LVPocket', status: 'canceled', progress: 45, user: { username: 'analyst5' }, created_at: '2024-01-14T14:30:00', started_at: '2024-01-14T14:31:00', input_params: { pdb_file: 'batch_proteins.zip' } }
+  { id: 1001, name: 'LVPocket预测任务', tool_name: 'LVPocket', tool_id: 1, status: 'running', progress: 65, user: { username: 'researcher1' }, created_at: '2024-01-15T10:30:00', started_at: '2024-01-15T10:31:00', params: { pdb_file: 'protein.pdb', model: 'lv_net_v2' } },
+  { id: 1002, name: '蛋白质结构预测', tool_name: 'AlphaFold', tool_id: 2, status: 'success', progress: 100, user: { username: 'scientist2' }, created_at: '2024-01-15T09:20:00', started_at: '2024-01-15T09:21:00', completed_at: '2024-01-15T10:15:00', params: { sequence: 'MKFLILLFNILCLFPVLAADNHGVGP...' } },
+  { id: 1003, name: '分子对接模拟', tool_name: 'AutoDock', tool_id: 3, status: 'pending', progress: 0, user: { username: 'chemist3' }, created_at: '2024-01-15T11:00:00', params: { receptor: 'receptor.pdbqt', ligand: 'ligand.mol2' } },
+  { id: 1004, name: '序列比对分析', tool_name: 'BLAST', tool_id: 4, status: 'failure', progress: 30, user: { username: 'biologist4' }, created_at: '2024-01-14T16:45:00', started_at: '2024-01-14T16:46:00', error_message: 'Database connection timeout', params: { query: 'sequence.fasta', database: 'nr' } },
+  { id: 1005, name: '批量结构预测', tool_name: 'LVPocket', tool_id: 1, status: 'canceled', progress: 45, user: { username: 'analyst5' }, created_at: '2024-01-14T14:30:00', started_at: '2024-01-14T14:31:00', params: { pdb_file: 'batch_proteins.zip' } }
 ])
+
+// 过滤后的任务列表
+const filteredTasks = computed(() => {
+  let result = tasks.value
+
+  // 关键词搜索
+  if (filters.keyword) {
+    const keyword = filters.keyword.toLowerCase()
+    result = result.filter(task =>
+      task.name.toLowerCase().includes(keyword) ||
+      task.tool_name.toLowerCase().includes(keyword) ||
+      task.user.username.toLowerCase().includes(keyword)
+    )
+  }
+
+  // 工具筛选
+  if (filters.tool_id) {
+    result = result.filter(task => task.tool_id === filters.tool_id)
+  }
+
+  // 状态筛选
+  if (filters.status) {
+    result = result.filter(task => task.status === filters.status)
+  }
+
+  // 日期范围筛选
+  if (filters.dateRange && filters.dateRange.length === 2) {
+    const [start, end] = filters.dateRange
+    result = result.filter(task => {
+      const taskDate = dayjs(task.created_at)
+      return taskDate.isAfter(start.startOf('day')) && taskDate.isBefore(end.endOf('day'))
+    })
+  }
+
+  return result
+})
 
 const columns = computed(() => [
   { title: t('admin.taskInfo'), key: 'task', width: 200 },
@@ -352,7 +388,8 @@ const handleClearCompleted = () => {
 
 const handleSearch = () => {
   pagination.current = 1
-  // TODO: 实现搜索
+  pagination.total = filteredTasks.value.length
+  message.success(t('common.searchSuccess'))
 }
 
 const handleReset = () => {

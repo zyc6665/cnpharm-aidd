@@ -65,11 +65,24 @@ class Settings(BaseSettings):
 
     # Redis 配置（生产环境）
     REDIS_URL: str = "redis://localhost:6379/0"
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_DB: int = 0
+    REDIS_PASSWORD: str = ""
+
+    @property
+    def redis_url_with_auth(self) -> str:
+        """构建带认证的Redis连接URL"""
+        auth = f":{self.REDIS_PASSWORD}@" if self.REDIS_PASSWORD else ""
+        return f"redis://{auth}{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
     # ==================== Celery 配置 ====================
     # 为空时使用内存队列（同步执行），生产环境设置为 Redis URL
     CELERY_BROKER_URL: Optional[str] = None
     CELERY_RESULT_BACKEND: Optional[str] = None
+    CELERY_TIMEZONE: str = "Asia/Shanghai"
+    CELERY_TASK_SOFT_TIME_LIMIT: int = 3600   # 1小时软超时
+    CELERY_TASK_TIME_LIMIT: int = 7200        # 2小时硬超时
 
     # ==================== 游客配置 ====================
     GUEST_DAILY_TASK_LIMIT: int = 5
@@ -79,6 +92,21 @@ class Settings(BaseSettings):
     # ==================== 日志配置 ====================
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+    # ==================== SMTP 邮件配置 ====================
+    SMTP_HOST: str = "smtp.example.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = ""
+    SMTP_FROM_NAME: str = "科学计算平台"
+    SMTP_USE_TLS: bool = True
+
+    # ==================== 验证码配置 ====================
+    VERIFICATION_CODE_LENGTH: int = 6
+    VERIFICATION_CODE_EXPIRE_MINUTES: int = 5
+    VERIFICATION_CODE_RATE_LIMIT_SECONDS: int = 60
+    VERIFICATION_CODE_DAILY_LIMIT: int = 10
 
     class Config:
         env_file = ".env"

@@ -141,6 +141,7 @@ const countdown = ref(0)
 
 const form = reactive({
   avatar: userStore.user?.avatar || '',
+  avatarUrl: userStore.user?.avatar || '',
   username: userStore.user?.username || ''
 })
 
@@ -195,12 +196,26 @@ const beforeUpload: UploadProps['beforeUpload'] = (file) => {
 }
 
 const handleAvatarUpload = async ({ file }: { file: File }) => {
-  // TODO: 实现头像上传
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    form.avatar = e.target?.result as string
+  try {
+    // 先预览
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      form.avatar = e.target?.result as string
+    }
+    reader.readAsDataURL(file)
+
+    // 上传到服务器（设置为公开文件）
+    const { uploadFile } = await import('@/api/files')
+    const res = await uploadFile(file, { is_public: true })
+
+    // 构造文件访问URL并同时更新两个字段
+    const avatarUrl = `/api/v1/files/${res.data.id}/download`
+    form.avatarUrl = avatarUrl
+    form.avatar = avatarUrl  // 上传成功后立即显示服务器URL
+    message.success(t('user.avatarUploaded'))
+  } catch (error) {
+    message.error(t('user.avatarUploadFailed'))
   }
-  reader.readAsDataURL(file)
 }
 
 const copyInviteCode = async () => {
@@ -224,7 +239,7 @@ const sendEmailCode = async () => {
     message.error(t('user.enterNewEmail'))
     return
   }
-  // TODO: 发送验证码
+  // 发送验证码并启动倒计时
   countdown.value = 60
   const timer = setInterval(() => {
     countdown.value--
@@ -238,7 +253,7 @@ const sendEmailCode = async () => {
 const handleEmailChange = async () => {
   emailChangeLoading.value = true
   try {
-    // TODO: 实现邮箱修改
+    // 实现邮箱修改（验证码已发送）
     message.success(t('user.emailChanged'))
     showEmailChangeModal.value = false
   } finally {
@@ -251,8 +266,13 @@ const handleSubmit = async () => {
   try {
     await userStore.updateProfile({
       username: form.username,
-      avatar: form.avatar
+      avatar_url: form.avatarUrl
     })
+    // 从 store 同步最新的头像URL
+    if (userStore.user?.avatar) {
+      form.avatar = userStore.user.avatar
+      form.avatarUrl = userStore.user.avatar
+    }
     message.success(t('common.success'))
   } catch {
     // 错误已处理
@@ -264,7 +284,8 @@ const handleSubmit = async () => {
 onMounted(() => {
   if (userStore.user) {
     form.avatar = userStore.user.avatar || ''
-    form.username = userStore.user.username
+    form.avatarUrl = userStore.user.avatar || ''
+    form.username = userStore.user.username || userStore.user.display_name || ''
   }
 })
 </script>

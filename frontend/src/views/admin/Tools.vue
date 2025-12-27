@@ -60,7 +60,7 @@
     <a-card>
       <a-table
         :columns="columns"
-        :data-source="tools"
+        :data-source="filteredTools"
         :loading="loading"
         :pagination="pagination"
         row-key="id"
@@ -283,6 +283,32 @@ const tools = ref([
   { id: 5, name: 'PyMOL', code: 'pymol', category: 'visualization', version: '2.5.0', status: 'maintenance', credits_cost: 10, run_count: 800, favorite_count: 150, gpu_required: false }
 ])
 
+// 过滤后的工具列表
+const filteredTools = computed(() => {
+  let result = tools.value
+
+  // 关键词搜索
+  if (filters.keyword) {
+    const keyword = filters.keyword.toLowerCase()
+    result = result.filter(tool =>
+      tool.name.toLowerCase().includes(keyword) ||
+      tool.code.toLowerCase().includes(keyword)
+    )
+  }
+
+  // 分类筛选
+  if (filters.category) {
+    result = result.filter(tool => tool.category === filters.category)
+  }
+
+  // 状态筛选
+  if (filters.status) {
+    result = result.filter(tool => tool.status === filters.status)
+  }
+
+  return result
+})
+
 const columns = computed(() => [
   { title: t('admin.toolName'), key: 'name', width: 200 },
   { title: t('tools.category'), key: 'category', width: 150 },
@@ -323,7 +349,8 @@ const getStatusBadge = (status: string) => {
 
 const handleSearch = () => {
   pagination.current = 1
-  // TODO: 实现搜索
+  pagination.total = filteredTools.value.length
+  message.success(t('common.searchSuccess'))
 }
 
 const handleReset = () => {
