@@ -32,6 +32,10 @@
             <ToolOutlined />
             <span>{{ t('admin.tools') }}</span>
           </a-menu-item>
+          <a-menu-item key="tool-categories" @click="navigate('tool-categories')">
+            <AppstoreOutlined />
+            <span>{{ t('admin.toolCategories') }}</span>
+          </a-menu-item>
           <a-menu-item key="tasks" @click="navigate('tasks')">
             <CloudServerOutlined />
             <span>{{ t('admin.tasks') }}</span>
@@ -112,6 +116,7 @@ import {
   DashboardOutlined,
   UserOutlined,
   ToolOutlined,
+  AppstoreOutlined,
   CloudServerOutlined,
   SettingOutlined,
   MenuFoldOutlined,
@@ -135,6 +140,7 @@ const pageTitles: Record<string, string> = {
   dashboard: 'admin.dashboard',
   users: 'admin.users',
   tools: 'admin.tools',
+  'tool-categories': 'admin.toolCategories',
   tasks: 'admin.tasks',
   system: 'admin.system'
 }

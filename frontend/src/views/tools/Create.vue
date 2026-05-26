@@ -59,13 +59,13 @@
 
             <a-row :gutter="24">
               <a-col :span="12">
-                <a-form-item :label="t('tools.category')" name="category">
+                <a-form-item :label="t('tools.category')" name="category_id">
                   <a-select
-                    v-model:value="formState.category"
+                    v-model:value="formState.category_id"
                     :placeholder="t('tools.selectCategory')"
                     allow-clear
                   >
-                    <a-select-option v-for="cat in categories" :key="cat.name" :value="cat.name">
+                    <a-select-option v-for="cat in categories" :key="cat.id" :value="cat.id">
                       {{ cat.name }}
                     </a-select-option>
                   </a-select>
@@ -353,7 +353,7 @@
     name: '',
     slug: '',
     description: '',
-    category: undefined,
+    category_id: '',
     icon: '',
     icon_url: '',
     is_public: true,
@@ -420,7 +420,7 @@
       formState.name = tool.name
       formState.slug = tool.slug
       formState.description = tool.description || ''
-      formState.category = tool.category
+      formState.category_id = tool.category_id || ''
       formState.icon = tool.icon || ''
       formState.icon_url = tool.icon_url || ''
       formState.is_public = tool.is_public ?? true
@@ -505,7 +505,7 @@
         name: formState.name,
         slug: formState.slug,
         description: formState.description || undefined,
-        category: formState.category,
+        category_id: formState.category_id,
         icon: formState.icon || undefined,
         icon_url: formState.icon_url || undefined,
         is_public: formState.is_public,
@@ -537,7 +537,7 @@
         return
       }
 
-      router.push('/tools?view=my')
+      router.push('/admin/tools')
     } catch {
       // 错误已在请求层处理
     } finally {

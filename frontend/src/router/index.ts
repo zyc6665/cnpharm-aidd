@@ -37,18 +37,6 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'tools.title' }
   },
   {
-    path: '/tools/create',
-    name: 'ToolCreate',
-    component: () => import('@/views/tools/Create.vue'),
-    meta: { title: 'tools.createTool', requiresAuth: true }
-  },
-  {
-    path: '/tools/:id/edit',
-    name: 'ToolEdit',
-    component: () => import('@/views/tools/Create.vue'),
-    meta: { title: 'tools.editTool', requiresAuth: true }
-  },
-  {
     path: '/tools/:id',
     name: 'ToolDetail',
     component: () => import('@/views/tools/Detail.vue'),
@@ -119,6 +107,12 @@ const routes: RouteRecordRaw[] = [
         name: 'AdminTools',
         component: () => import('@/views/admin/Tools.vue'),
         meta: { title: 'admin.tools' }
+      },
+      {
+        path: 'tool-categories',
+        name: 'AdminToolCategories',
+        component: () => import('@/views/admin/ToolCategories.vue'),
+        meta: { title: 'admin.toolCategories' }
       },
       {
         path: 'tasks',

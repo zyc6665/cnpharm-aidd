@@ -1,16 +1,11 @@
 # backend/app/schemas/tools.py
 """工具相关Schema"""
 
-from typing import Optional, List, Dict, Any, Literal
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 from pydantic import BaseModel, Field
 from app.schemas.common import TimestampMixin
 from app.schemas.statistics import ToolStatisticsResponse
-
-
-# === 枚举类型定义 ===
-ProviderType = Literal["platform", "user"]
-ReviewStatus = Literal["not_required", "pending", "approved", "rejected"]
 
 
 class TagCreate(BaseModel):
@@ -65,11 +60,53 @@ class ToolVersionResponse(TimestampMixin):
         from_attributes = True
 
 
+class ToolCategoryCreate(BaseModel):
+    """创建工具分类"""
+    name: str = Field(..., max_length=100, description="分类名称")
+    slug: str = Field(..., max_length=100, pattern="^[a-z0-9-]+$", description="分类标识")
+    description: Optional[str] = Field(None, description="分类描述")
+    sort_order: int = Field(default=0, description="排序值")
+    is_enabled: bool = Field(default=True, description="是否启用")
+
+
+class ToolCategoryUpdate(BaseModel):
+    """更新工具分类"""
+    name: Optional[str] = Field(None, max_length=100, description="分类名称")
+    slug: Optional[str] = Field(None, max_length=100, pattern="^[a-z0-9-]+$", description="分类标识")
+    description: Optional[str] = Field(None, description="分类描述")
+    sort_order: Optional[int] = Field(None, description="排序值")
+
+
+class ToolCategoryStatusUpdate(BaseModel):
+    """更新工具分类状态"""
+    is_enabled: bool = Field(..., description="是否启用")
+
+
+class ToolCategoryReorderRequest(BaseModel):
+    """工具分类重排请求"""
+    category_ids: List[str] = Field(..., min_length=1, description="按顺序排列的分类ID列表")
+
+
+class ToolCategoryResponse(TimestampMixin):
+    """工具分类响应"""
+    id: str
+    name: str
+    slug: str
+    description: Optional[str] = None
+    sort_order: int
+    is_enabled: bool
+    tool_count: Optional[int] = None
+
+    class Config:
+        from_attributes = True
+
+
 class ToolCreate(BaseModel):
     """创建工具"""
     name: str = Field(..., max_length=100, description="工具名称")
     slug: str = Field(..., max_length=100, pattern="^[a-z0-9-]+$", description="工具标识")
     description: Optional[str] = Field(None, description="工具描述")
+    category_id: str = Field(..., description="工具分类ID")
     category: Optional[str] = Field(None, max_length=50, description="工具分类")
     icon: Optional[str] = Field(None, max_length=100, description="图标(emoji或名称)")
     icon_url: Optional[str] = Field(None, max_length=500, description="图标URL")
@@ -78,8 +115,6 @@ class ToolCreate(BaseModel):
     gpu_memory_mb: int = Field(default=0, ge=0, description="GPU显存需求(MB)")
     timeout_sec: int = Field(default=600, ge=60, le=3600, description="超时时间(秒)")
     tag_ids: List[str] = Field(default_factory=list, description="标签ID列表")
-    # 新增：工具提供者类型（仅管理员可指定为 platform）
-    provider_type: Optional[ProviderType] = Field(None, description="工具提供者类型（仅管理员可指定）")
     # 初始版本
     initial_version: Optional[ToolVersionCreate] = Field(None, description="初始版本")
 
@@ -88,6 +123,7 @@ class ToolUpdate(BaseModel):
     """更新工具"""
     name: Optional[str] = Field(None, max_length=100, description="工具名称")
     description: Optional[str] = Field(None, description="工具描述")
+    category_id: Optional[str] = Field(None, description="工具分类ID")
     category: Optional[str] = Field(None, max_length=50, description="工具分类")
     icon: Optional[str] = Field(None, max_length=100, description="图标")
     icon_url: Optional[str] = Field(None, max_length=500, description="图标URL")
@@ -106,18 +142,12 @@ class ToolResponse(TimestampMixin):
     name: str
     slug: str
     description: Optional[str] = None
+    category_id: Optional[str] = None
     category: Optional[str] = None
     icon: Optional[str] = None
     icon_url: Optional[str] = None
     status: str
     is_public: bool
-    # 新增字段
-    provider_type: str = "user"
-    review_status: str = "pending"
-    reviewed_at: Optional[datetime] = None
-    reviewed_by: Optional[str] = None
-    reject_reason: Optional[str] = None
-    provider_label: Optional[str] = None  # 前端展示用：官方/社区
     # 原有字段
     current_version_id: Optional[str] = None
     gpu_required: bool = False
@@ -137,15 +167,12 @@ class ToolListResponse(BaseModel):
     name: str
     slug: str
     description: Optional[str] = None
+    category_id: Optional[str] = None
     category: Optional[str] = None
     icon: Optional[str] = None
     icon_url: Optional[str] = None
     status: str
     is_public: bool = True
-    # 新增字段
-    provider_type: str = "user"
-    review_status: str = "pending"
-    provider_label: Optional[str] = None  # 前端展示用：官方/社区
     owner_id: Optional[str] = None
     # 原有字段
     gpu_required: bool = False
@@ -156,24 +183,3 @@ class ToolListResponse(BaseModel):
 
     class Config:
         from_attributes = True
-
-
-# === 新增：审核相关 Schema ===
-
-class ToolReviewRequest(BaseModel):
-    """审核工具请求"""
-    action: Literal["approve", "reject"] = Field(..., description="审核动作")
-    reject_reason: Optional[str] = Field(None, description="拒绝原因（拒绝时必填）")
-
-
-class ToolReviewResponse(BaseModel):
-    """审核工具响应"""
-    id: str
-    review_status: str
-    reviewed_at: Optional[datetime] = None
-    reject_reason: Optional[str] = None
-
-
-class SetPlatformToolRequest(BaseModel):
-    """设置为平台官方工具请求"""
-    is_platform: bool = Field(..., description="是否设为官方工具")

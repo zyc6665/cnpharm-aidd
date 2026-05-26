@@ -32,13 +32,15 @@ export default {
     required: '为必填项',
     createdAt: '创建时间',
     updatedAt: '更新时间',
-    seconds: '秒'
+    seconds: '秒',
+    sort: '排序'
   },
 
   // 导航
   nav: {
     home: '首页',
     tools: '工具',
+    cpupdb: 'CPUPDB',
     tasks: '任务',
     admin: '管理',
     login: '登录',
@@ -59,25 +61,29 @@ export default {
       getStarted: '开始使用',
       learnMore: '了解更多'
     },
-    scenarios: {
-      title: '应用场景',
-      subtitle: '为科研工作者提供全方位的计算生物学解决方案',
+    workflow: {
+      title: '平台功能',
+      subtitle: '沿着 AIDD 流程打通从口袋识别到先导优化的核心计算环节',
       items: {
-        structure: {
-          title: '蛋白质结构预测',
-          description: '基于深度学习的蛋白质三维结构预测与分析'
+        pocketExploration: {
+          title: '口袋探索',
+          description: '快速识别靶点结构中的关键结合口袋与可成药位点'
         },
-        docking: {
-          title: '分子对接',
-          description: '高精度的蛋白质-配体分子对接模拟'
+        moleculeGenerationOrVirtualScreening: {
+          title: '分子生成或虚拟筛选',
+          description: '围绕已知口袋特征生成候选分子，或通过虚拟筛选快速缩小候选空间'
         },
-        analysis: {
-          title: '序列分析',
-          description: '多序列比对、进化分析与功能预测'
+        molecularDockingAndAffinityPrediction: {
+          title: '分子对接及结合亲和力预测',
+          description: '评估候选分子与靶点口袋的结合姿态，并预测潜在结合亲和力'
         },
-        visualization: {
-          title: '结构可视化',
-          description: '交互式的分子结构3D可视化展示'
+        propertyPrediction: {
+          title: '性质预测',
+          description: '联合评估活性、理化性质与 ADMET 等关键指标'
+        },
+        leadOptimization: {
+          title: '先导化合物优化',
+          description: '基于多目标结果迭代筛选并优化先导化合物设计'
         }
       }
     },
@@ -146,7 +152,7 @@ export default {
     invalidCode: '验证码错误或已过期',
     // 邀请码
     invitationCode: '邀请码',
-    invitationCodePlaceholder: '选填，填写可获得额外积分',
+    invitationCodePlaceholder: '选填，用于关联邀请人',
     invitationBonus: '填写邀请码可额外获得 {bonus} 积分',
     invalidInvitationCode: '无效的邀请码',
     // 密码强度
@@ -363,6 +369,15 @@ export default {
     inputFiles: '输入文件',
     outputFiles: '输出文件',
     outputResults: '输出结果',
+    resultVisualization: '结果可视化',
+    visualizationHint: '系统会优先叠加输入口袋与生成分子，便于快速检查构象与结合位置。',
+    visualizationFiles: '可视化文件',
+    visualizationLoading: '正在加载三维结果...',
+    visualizationFailed: '三维结果加载失败',
+    visualizationUnsupported: '当前输出文件暂不支持在线预览',
+    visualizationUnsupportedDesc: '目前已接入 PDB / mmCIF / PDBQT / SDF / MOL2 在线可视化，其它格式仍可直接下载。',
+    visualizationPartialSupport: '部分结果文件未接入在线预览',
+    visualizationPartialSupportDesc: '已优先展示可识别的结构或分子文件，其余文件请通过下方下载查看。',
     cancel: '取消',
     retry: '重试',
     delete: '删除',
@@ -556,6 +571,17 @@ export default {
     // 工具管理
     createTool: '创建工具',
     editTool: '编辑工具',
+    toolsSubtitle: '统一维护工具目录与分类归属',
+    toolCategories: '分类管理',
+    toolCategoriesSubtitle: '集中维护工具分类、状态与排序',
+    createCategory: '新建分类',
+    editCategory: '编辑分类',
+    categoryName: '分类名称',
+    categorySlug: '分类标识',
+    enterCategoryName: '请输入分类名称',
+    enterCategorySlug: '请输入分类标识',
+    deleteCategoryConfirm: '确定要删除此分类吗？',
+    deleteCategoryConfirmContent: '删除分类 {name} 后将无法恢复',
     searchToolPlaceholder: '搜索工具名称或代码...',
     categoryStructure: '结构预测',
     categoryDocking: '分子对接',

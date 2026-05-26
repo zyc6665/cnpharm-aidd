@@ -47,6 +47,19 @@ tool_tag_association = Table(
 )
 
 
+class ToolCategory(Base, UUIDMixin, TimestampMixin):
+    """工具分类表"""
+    __tablename__ = "tool_categories"
+
+    name = Column(String(100), unique=True, nullable=False, index=True)
+    slug = Column(String(100), unique=True, nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    sort_order = Column(Integer, default=0, nullable=False)
+    is_enabled = Column(Boolean, default=True, nullable=False, index=True)
+
+    tools = relationship("Tool", back_populates="tool_category")
+
+
 class Tool(Base, UUIDMixin, TimestampMixin):
     """工具表"""
     __tablename__ = "tools"
@@ -58,6 +71,7 @@ class Tool(Base, UUIDMixin, TimestampMixin):
     icon = Column(String(100), nullable=True)  # 工具图标（emoji或图标名）
     icon_url = Column(String(500), nullable=True)  # 工具图标URL
     category = Column(String(50), nullable=True, index=True)  # 工具分类
+    category_id = Column(String(36), ForeignKey("tool_categories.id"), nullable=True, index=True)
 
     # 状态
     status = Column(String(20), default=ToolStatus.DRAFT.value, nullable=False)
@@ -82,6 +96,7 @@ class Tool(Base, UUIDMixin, TimestampMixin):
     # 关系
     owner = relationship("User", back_populates="tools", foreign_keys=[owner_id])
     reviewer = relationship("User", foreign_keys=[reviewed_by])
+    tool_category = relationship("ToolCategory", back_populates="tools")
     versions = relationship("ToolVersion", back_populates="tool", cascade="all, delete-orphan")
     current_version = relationship("ToolVersion", foreign_keys=[current_version_id], primaryjoin="Tool.current_version_id==ToolVersion.id", uselist=False, post_update=True)
     tags = relationship("Tag", secondary=tool_tag_association, back_populates="tools")

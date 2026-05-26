@@ -32,13 +32,15 @@ export default {
     required: 'is required',
     createdAt: 'Created At',
     updatedAt: 'Updated At',
-    seconds: 'seconds'
+    seconds: 'seconds',
+    sort: 'Sort'
   },
 
   // Navigation
   nav: {
     home: 'Home',
     tools: 'Tools',
+    cpupdb: 'CPUPDB',
     tasks: 'Tasks',
     admin: 'Admin',
     login: 'Login',
@@ -59,25 +61,31 @@ export default {
       getStarted: 'Get Started',
       learnMore: 'Learn More'
     },
-    scenarios: {
-      title: 'Use Cases',
-      subtitle: 'Comprehensive computational biology solutions for researchers',
+    workflow: {
+      title: 'Platform Functions',
+      subtitle: 'Connect the core AIDD steps from pocket identification to lead optimization',
       items: {
-        structure: {
-          title: 'Protein Structure Prediction',
-          description: 'Deep learning-based protein 3D structure prediction and analysis'
+        pocketExploration: {
+          title: 'Pocket Exploration',
+          description: 'Identify binding pockets and druggable target regions from structural data'
         },
-        docking: {
-          title: 'Molecular Docking',
-          description: 'High-precision protein-ligand molecular docking simulation'
+        moleculeGenerationOrVirtualScreening: {
+          title: 'Molecule Generation or Virtual Screening',
+          description:
+            'Generate pocket-aware candidates or narrow the search space rapidly through virtual screening'
         },
-        analysis: {
-          title: 'Sequence Analysis',
-          description: 'Multiple sequence alignment, evolutionary analysis and function prediction'
+        molecularDockingAndAffinityPrediction: {
+          title: 'Molecular Docking and Binding Affinity Prediction',
+          description:
+            'Evaluate binding poses against target pockets and estimate potential binding affinity'
         },
-        visualization: {
-          title: 'Structure Visualization',
-          description: 'Interactive 3D molecular structure visualization'
+        propertyPrediction: {
+          title: 'Property Prediction',
+          description: 'Predict potency, physicochemical traits and ADMET-related performance'
+        },
+        leadOptimization: {
+          title: 'Lead Optimization',
+          description: 'Iterate on multi-objective results to refine and prioritize lead compounds'
         }
       }
     },
@@ -146,7 +154,7 @@ export default {
     invalidCode: 'Invalid or expired verification code',
     // Invitation code
     invitationCode: 'Invitation Code',
-    invitationCodePlaceholder: 'Optional, get extra credits',
+    invitationCodePlaceholder: 'Optional, used to link your inviter',
     invitationBonus: 'Get extra {bonus} credits with invitation code',
     invalidInvitationCode: 'Invalid invitation code',
     // Password strength
@@ -363,6 +371,15 @@ export default {
     inputFiles: 'Input Files',
     outputFiles: 'Output Files',
     outputResults: 'Output Results',
+    resultVisualization: 'Result Visualization',
+    visualizationHint: 'Input pocket files are overlaid with generated molecules first for quick inspection of binding poses.',
+    visualizationFiles: 'visualization files',
+    visualizationLoading: 'Loading 3D results...',
+    visualizationFailed: 'Failed to load 3D results',
+    visualizationUnsupported: 'These output files are not supported for online preview yet',
+    visualizationUnsupportedDesc: 'PDB / mmCIF / PDBQT / SDF / MOL2 previews are enabled first. Other files can still be downloaded directly.',
+    visualizationPartialSupport: 'Some result files are not available for online preview',
+    visualizationPartialSupportDesc: 'Recognized structure and molecule files are shown first. Download the remaining files below.',
     cancel: 'Cancel',
     retry: 'Retry',
     delete: 'Delete',
@@ -556,6 +573,17 @@ export default {
     // Tool Management
     createTool: 'Create Tool',
     editTool: 'Edit Tool',
+    toolsSubtitle: 'Maintain the tool catalog and category assignment in one place',
+    toolCategories: 'Category Management',
+    toolCategoriesSubtitle: 'Manage tool categories, status and display order in one place',
+    createCategory: 'Create Category',
+    editCategory: 'Edit Category',
+    categoryName: 'Category Name',
+    categorySlug: 'Category Slug',
+    enterCategoryName: 'Please enter category name',
+    enterCategorySlug: 'Please enter category slug',
+    deleteCategoryConfirm: 'Delete this category?',
+    deleteCategoryConfirmContent: 'Category {name} will be permanently removed',
     searchToolPlaceholder: 'Search tool name or code...',
     categoryStructure: 'Structure Prediction',
     categoryDocking: 'Molecular Docking',

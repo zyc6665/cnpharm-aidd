@@ -93,28 +93,20 @@ export interface SignInInfo {
 }
 
 // 工具相关类型
-export type ToolView = 'public' | 'my' | 'favorites'
-export type ToolProviderType = 'platform' | 'user'
-export type ToolReviewStatus = 'not_required' | 'pending' | 'approved' | 'rejected'
+export type ToolView = 'public' | 'favorites'
 
 export interface Tool {
   id: string  // UUID
   name: string
   slug: string
   description?: string
+  category_id?: string
   icon?: string
   icon_url?: string
   category?: string  // 分类名称
   tags: Tag[]
   status: 'draft' | 'published' | 'disabled' | 'deprecated'
   is_public?: boolean
-  // 新增字段
-  provider_type: ToolProviderType
-  review_status: ToolReviewStatus
-  reviewed_at?: string
-  reviewed_by?: string
-  reject_reason?: string
-  provider_label?: string  // 前端展示用：官方/社区
   // 原有字段
   current_version_id?: string
   current_version?: ToolVersion
@@ -182,8 +174,14 @@ export interface ToolReference {
 }
 
 export interface Category {
+  id: string
   name: string
-  count: number
+  slug: string
+  description?: string
+  sort_order: number
+  is_enabled?: boolean
+  tool_count?: number
+  count?: number
 }
 
 export interface Tag {
@@ -257,6 +255,7 @@ export interface Task {
     original_name?: string
     filename?: string
     size?: number
+    content_type?: string
     url?: string
   }>
   output_data?: unknown
@@ -265,6 +264,7 @@ export interface Task {
     original_name?: string
     filename?: string
     size?: number
+    content_type?: string
     url?: string
   }>
 }
@@ -368,29 +368,12 @@ export interface WSMessage {
   data?: unknown
 }
 
-// 工具审核相关类型
-export interface ToolReviewRequest {
-  action: 'approve' | 'reject'
-  reject_reason?: string
-}
-
-export interface ToolReviewResponse {
-  id: string
-  review_status: ToolReviewStatus
-  reviewed_at?: string
-  reject_reason?: string
-}
-
-export interface SetPlatformToolRequest {
-  is_platform: boolean
-}
-
 // 工具创建参数
 export interface ToolCreateParams {
   name: string
   slug: string
   description?: string
-  category?: string
+  category_id: string
   icon?: string
   icon_url?: string
   is_public?: boolean
@@ -398,5 +381,4 @@ export interface ToolCreateParams {
   gpu_memory_mb?: number
   timeout_sec?: number
   tag_ids?: string[]
-  provider_type?: ToolProviderType
 }

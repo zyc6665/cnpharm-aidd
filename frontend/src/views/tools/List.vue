@@ -13,37 +13,9 @@
             <AppstoreOutlined />
             {{ t('tools.publicTools') }}
           </a-radio-button>
-          <a-radio-button v-if="isLoggedIn" value="my">
-            <UserOutlined />
-            {{ t('tools.myTools') }}
-          </a-radio-button>
           <a-radio-button v-if="isLoggedIn" value="favorites">
             <HeartOutlined />
             {{ t('tools.favorites') }}
-          </a-radio-button>
-        </a-radio-group>
-
-        <!-- 创建工具按钮 -->
-        <a-button v-if="isLoggedIn" type="primary" size="large" @click="goToCreate">
-          <PlusOutlined />
-          {{ t('tools.createTool') }}
-        </a-button>
-
-        <!-- 工具来源筛选（仅公开视图） -->
-        <a-radio-group
-          v-if="currentView === 'public'"
-          v-model:value="providerFilter"
-          size="large"
-          @change="handleProviderChange"
-        >
-          <a-radio-button value="">{{ t('tools.allTools') }}</a-radio-button>
-          <a-radio-button value="platform">
-            <SafetyCertificateOutlined />
-            {{ t('tools.providerType.platform') }}
-          </a-radio-button>
-          <a-radio-button value="user">
-            <TeamOutlined />
-            {{ t('tools.providerType.user') }}
           </a-radio-button>
         </a-radio-group>
       </div>
@@ -86,21 +58,6 @@
           </a-select-option>
         </a-select>
 
-        <!-- 我的工具视图的审核状态筛选 -->
-        <a-select
-          v-if="currentView === 'my'"
-          v-model:value="reviewStatusFilter"
-          :placeholder="t('tools.reviewStatus.all')"
-          size="large"
-          style="width: 160px"
-          allow-clear
-          @change="handleReviewStatusChange"
-        >
-          <a-select-option value="pending">{{ t('tools.reviewStatus.pending') }}</a-select-option>
-          <a-select-option value="approved">{{ t('tools.reviewStatus.approved') }}</a-select-option>
-          <a-select-option value="rejected">{{ t('tools.reviewStatus.rejected') }}</a-select-option>
-        </a-select>
-
         <a-dropdown>
           <a-button size="large">
             <SortAscendingOutlined />
@@ -128,34 +85,9 @@
                     <span v-if="tool.icon">{{ tool.icon }}</span>
                     <ToolOutlined v-else />
                   </div>
-                  <div class="tool-badges">
-                    <!-- 工具来源标签 -->
-                    <a-tag v-if="tool.provider_type === 'platform'" color="blue">
-                      <SafetyCertificateOutlined />
-                      {{ t('tools.providerType.platform') }}
-                    </a-tag>
-                    <a-tag v-else-if="tool.provider_type === 'user'" color="green">
-                      <TeamOutlined />
-                      {{ t('tools.providerType.user') }}
-                    </a-tag>
-                    <!-- 审核状态标签（仅我的工具视图） -->
-                    <a-tag v-if="currentView === 'my'" :color="getReviewStatusColor(tool.review_status)">
-                      {{ t(`tools.reviewStatus.${tool.review_status}`) }}
-                    </a-tag>
-                  </div>
                 </div>
                 <h3 class="tool-name">{{ tool.name }}</h3>
                 <p class="tool-desc">{{ tool.description }}</p>
-
-                <!-- 拒绝原因提示（仅我的工具视图） -->
-                <a-alert
-                  v-if="currentView === 'my' && tool.review_status === 'rejected' && tool.reject_reason"
-                  type="error"
-                  :message="t('tools.rejectReason')"
-                  :description="tool.reject_reason"
-                  show-icon
-                  class="reject-alert"
-                />
 
                 <div class="tool-tags" v-if="tool.tags?.length">
                   <a-tag
@@ -210,7 +142,7 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, computed, onMounted, watch } from 'vue'
+  import { ref, computed, onMounted } from 'vue'
   import { useRouter } from 'vue-router'
   import { useI18n } from 'vue-i18n'
   import {
@@ -222,13 +154,9 @@
     SortAscendingOutlined,
     DownOutlined,
     AppstoreOutlined,
-    UserOutlined,
-    SafetyCertificateOutlined,
-    TeamOutlined,
-    PlusOutlined
   } from '@ant-design/icons-vue'
   import { useToolsStore, useUserStore } from '@/stores'
-  import type { ToolView, ToolProviderType, ToolReviewStatus } from '@/types/models'
+  import type { ToolView } from '@/types/models'
 
   const router = useRouter()
   const { t } = useI18n()
@@ -242,26 +170,12 @@
   const pageSize = ref(12)
   const sortBy = ref('popular')
   const currentView = ref<ToolView>('public')
-  const providerFilter = ref<ToolProviderType | ''>('')
-  const reviewStatusFilter = ref<ToolReviewStatus | undefined>()
 
   const loading = computed(() => toolsStore.loading)
   const isLoggedIn = computed(() => userStore.isLoggedIn)
 
-  // 根据视图类型获取工具列表
-  const displayTools = computed(() => {
-    if (currentView.value === 'my') {
-      return toolsStore.myTools
-    }
-    return toolsStore.tools
-  })
-
-  const displayTotal = computed(() => {
-    if (currentView.value === 'my') {
-      return toolsStore.myToolsTotal
-    }
-    return toolsStore.total
-  })
+  const displayTools = computed(() => toolsStore.tools)
+  const displayTotal = computed(() => toolsStore.total)
 
   const categories = computed(() => toolsStore.categories)
   const tags = computed(() => toolsStore.tags)
@@ -289,25 +203,8 @@
     return num.toString()
   }
 
-  const getReviewStatusColor = (status: ToolReviewStatus) => {
-    const colors: Record<ToolReviewStatus, string> = {
-      not_required: 'blue',
-      pending: 'orange',
-      approved: 'green',
-      rejected: 'red'
-    }
-    return colors[status] || 'default'
-  }
-
   const fetchData = async () => {
-    if (currentView.value === 'my') {
-      await toolsStore.fetchMyTools({
-        page: currentPage.value,
-        page_size: pageSize.value,
-        review_status: reviewStatusFilter.value,
-        sort_by: sortBy.value
-      })
-    } else if (currentView.value === 'favorites') {
+    if (currentView.value === 'favorites') {
       await toolsStore.fetchTools({
         view: 'favorites',
         search: searchKeyword.value || undefined,
@@ -323,7 +220,6 @@
         search: searchKeyword.value || undefined,
         category: selectedCategory.value,
         tag: selectedTag.value,
-        provider_type: providerFilter.value || undefined,
         page: currentPage.value,
         page_size: pageSize.value,
         sort_by: sortBy.value
@@ -332,18 +228,6 @@
   }
 
   const handleViewChange = () => {
-    currentPage.value = 1
-    reviewStatusFilter.value = undefined
-    providerFilter.value = ''
-    fetchData()
-  }
-
-  const handleProviderChange = () => {
-    currentPage.value = 1
-    fetchData()
-  }
-
-  const handleReviewStatusChange = () => {
     currentPage.value = 1
     fetchData()
   }
@@ -382,10 +266,6 @@
 
   const goToDetail = (id: string) => {
     router.push(`/tools/${id}`)
-  }
-
-  const goToCreate = () => {
-    router.push('/tools/create')
   }
 
   onMounted(async () => {
@@ -502,12 +382,6 @@
     font-size: @font-size-sm;
     flex: 1;
     .text-ellipsis-lines(2);
-  }
-
-  .reject-alert {
-    margin-top: @spacing-sm;
-    margin-bottom: @spacing-sm;
-    font-size: @font-size-xs;
   }
 
   .tool-tags {
