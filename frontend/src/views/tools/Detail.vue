@@ -19,7 +19,6 @@
                     <a-tag v-for="tag in tool.tags" :key="tag.id" :color="tag.color">
                       {{ tag.name }}
                     </a-tag>
-                    <a-tag v-if="tool.gpu_required" color="purple">GPU</a-tag>
                   </div>
                 </div>
                 <div class="tool-actions">
@@ -183,22 +182,6 @@
 
           <!-- 右侧：工具信息 -->
           <div class="tool-sidebar">
-            <!-- GPU 要求 -->
-            <div v-if="tool.gpu_required" class="gpu-info card">
-              <h3 class="sidebar-title">
-                <ThunderboltOutlined />
-                {{ t('tools.gpuRequirements') }}
-              </h3>
-              <div class="gpu-details">
-                <span v-if="tool.gpu_memory_mb">
-                  {{ t('tools.gpuMemory') }}: {{ (tool.gpu_memory_mb / 1024).toFixed(1) }} GB
-                </span>
-                <span v-if="tool.timeout_sec">
-                  {{ t('tools.timeout') }}: {{ tool.timeout_sec }} {{ t('common.seconds') }}
-                </span>
-              </div>
-            </div>
-
             <!-- 工具标签 -->
             <div v-if="tool.tags?.length" class="tags-info card">
               <h3 class="sidebar-title">
@@ -332,7 +315,7 @@
     return true
   })
 
-  const formatNumber = (num: number) => {
+  const formatNumber = (num?: number | null) => {
     // 处理 undefined/null 的情况
     if (num == null || num === undefined) {
       return '0'
@@ -644,16 +627,6 @@
     display: flex;
     align-items: center;
     gap: @spacing-xs;
-  }
-
-  .gpu-info {
-    .gpu-details {
-      display: flex;
-      flex-direction: column;
-      gap: @spacing-xs;
-      color: @text-color-light-secondary;
-      font-size: @font-size-sm;
-    }
   }
 
   .tags-info {

@@ -142,7 +142,6 @@
                     <a-tag v-if="currentView === 'my'" :color="getReviewStatusColor(tool.review_status)">
                       {{ t(`tools.reviewStatus.${tool.review_status}`) }}
                     </a-tag>
-                    <a-tag v-if="tool.gpu_required" color="purple">GPU</a-tag>
                   </div>
                 </div>
                 <h3 class="tool-name">{{ tool.name }}</h3>

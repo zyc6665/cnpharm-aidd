@@ -56,27 +56,6 @@
           </template>
         </a-form-item>
 
-        <a-form-item :label="t('user.memberStatus')">
-          <div class="member-info">
-            <a-tag :color="getMemberColor()">{{ getMemberName() }}</a-tag>
-            <span v-if="userStore.memberExpireAt" class="expire-date">
-              {{ t('credits.expireAt') }}: {{ formatDate(userStore.memberExpireAt) }}
-            </span>
-            <a-button type="link" size="small" @click="goToMembership">
-              {{ userStore.role === 'vip' ? t('credits.renew') : t('credits.upgrade') }}
-            </a-button>
-          </div>
-        </a-form-item>
-
-        <a-form-item :label="t('user.credits')">
-          <div class="credits-info">
-            <span class="credits-value">💎 {{ userStore.credits }}</span>
-            <a-button type="link" size="small" @click="goToCredits">
-              {{ t('user.viewDetails') }}
-            </a-button>
-          </div>
-        </a-form-item>
-
         <a-form-item :label="t('user.createdAt')">
           {{ formatDate(userStore.user?.created_at) }}
         </a-form-item>
@@ -121,7 +100,6 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { PlusOutlined, CameraOutlined, CopyOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
@@ -129,7 +107,6 @@ import type { UploadProps, UploadFile } from 'ant-design-vue'
 import dayjs from 'dayjs'
 import { useUserStore } from '@/stores'
 
-const router = useRouter()
 const { t } = useI18n()
 const userStore = useUserStore()
 
@@ -159,26 +136,6 @@ const rules = {
 
 const formatDate = (date?: string) => {
   return date ? dayjs(date).format('YYYY-MM-DD') : '-'
-}
-
-const getMemberColor = () => {
-  const colors: Record<string, string> = {
-    admin: 'red',
-    vip: 'gold',
-    user: 'blue',
-    guest: 'default'
-  }
-  return colors[userStore.role] || 'default'
-}
-
-const getMemberName = () => {
-  const names: Record<string, string> = {
-    admin: t('credits.planAdmin'),
-    vip: t('credits.planVIP'),
-    user: t('credits.planFree'),
-    guest: t('credits.planGuest')
-  }
-  return names[userStore.role] || t('credits.planFree')
 }
 
 const beforeUpload: UploadProps['beforeUpload'] = (file) => {
@@ -224,14 +181,6 @@ const copyInviteCode = async () => {
     await navigator.clipboard.writeText(code)
     message.success(t('common.copySuccess'))
   }
-}
-
-const goToMembership = () => {
-  router.push('/credits')
-}
-
-const goToCredits = () => {
-  router.push('/credits')
 }
 
 const sendEmailCode = async () => {

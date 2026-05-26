@@ -183,9 +183,6 @@
         <a-form-item :label="t('admin.serviceUrl')" name="service_url">
           <a-input v-model:value="toolForm.service_url" placeholder="http://localhost:8000" />
         </a-form-item>
-        <a-form-item :label="t('admin.gpuRequired')">
-          <a-switch v-model:checked="toolForm.gpu_required" />
-        </a-form-item>
       </a-form>
     </a-modal>
 

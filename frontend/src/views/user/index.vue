@@ -33,10 +33,6 @@
                 <HeartOutlined />
                 {{ t('user.favorites') }}
               </a-menu-item>
-              <a-menu-item key="credits" @click="navigate('credits')">
-                <WalletOutlined />
-                {{ t('nav.credits') }}
-              </a-menu-item>
               <a-menu-divider />
               <a-menu-item key="logout" danger @click="handleLogout">
                 <LogoutOutlined />
@@ -65,7 +61,6 @@ import {
   UserOutlined,
   SettingOutlined,
   HeartOutlined,
-  WalletOutlined,
   LogoutOutlined
 } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
@@ -114,9 +109,7 @@ const getRoleName = () => {
 }
 
 const navigate = (key: string) => {
-  if (key === 'credits') {
-    router.push('/credits')
-  } else if (key === 'profile') {
+  if (key === 'profile') {
     router.push('/user')
   } else {
     router.push(`/user/${key}`)

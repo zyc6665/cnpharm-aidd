@@ -46,21 +46,6 @@
         </a-card>
       </a-col>
 
-      <a-col :xs="24" :sm="12" :lg="6">
-        <a-card class="stat-card">
-          <a-statistic
-            :title="t('admin.stats.gpuUsage')"
-            :value="stats.gpuUsage"
-            suffix="%"
-            :prefix="h(ThunderboltOutlined)"
-          />
-          <a-progress
-            :percent="stats.gpuUsage"
-            :show-info="false"
-            :stroke-color="getProgressColor(stats.gpuUsage)"
-          />
-        </a-card>
-      </a-col>
     </a-row>
 
     <a-row :gutter="[16, 16]" class="section">
@@ -96,14 +81,6 @@
               <a-progress
                 :percent="systemStatus.disk"
                 :stroke-color="getProgressColor(systemStatus.disk)"
-                size="small"
-              />
-            </div>
-            <div class="status-item">
-              <span class="label">{{ t('admin.gpuMemory') }}</span>
-              <a-progress
-                :percent="systemStatus.gpuMemory"
-                :stroke-color="getProgressColor(systemStatus.gpuMemory)"
                 size="small"
               />
             </div>
@@ -198,7 +175,6 @@ import {
   UserOutlined,
   ToolOutlined,
   CloudServerOutlined,
-  ThunderboltOutlined,
   ArrowUpOutlined
 } from '@ant-design/icons-vue'
 import dayjs from 'dayjs'
@@ -216,16 +192,14 @@ const stats = reactive({
   totalTools: 15,
   activeTools: 12,
   totalTasks: 8934,
-  runningTasks: 7,
-  gpuUsage: 65
+  runningTasks: 7
 })
 
 // 系统状态
 const systemStatus = reactive({
   cpu: 45,
   memory: 62,
-  disk: 38,
-  gpuMemory: 72
+  disk: 38
 })
 
 // 最近任务

@@ -67,13 +67,6 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/tasks/Detail.vue'),
     meta: { title: 'tasks.detail', requiresAuth: true }
   },
-  // 积分中心
-  {
-    path: '/credits',
-    name: 'Credits',
-    component: () => import('@/views/credits/index.vue'),
-    meta: { title: 'credits.title', requiresAuth: true }
-  },
   // 用户中心
   {
     path: '/user',

@@ -113,24 +113,7 @@
             <a-divider orientation="left">{{ t('tools.runConfig') }}</a-divider>
 
             <a-row :gutter="24">
-              <a-col :span="8">
-                <a-form-item :label="t('tools.gpuRequired')" name="gpu_required">
-                  <a-switch v-model:checked="formState.gpu_required" />
-                </a-form-item>
-              </a-col>
-              <a-col :span="8">
-                <a-form-item :label="t('tools.gpuMemoryMb')" name="gpu_memory_mb">
-                  <a-input-number
-                    v-model:value="formState.gpu_memory_mb"
-                    :min="0"
-                    :max="65536"
-                    :step="1024"
-                    :disabled="!formState.gpu_required"
-                    style="width: 100%"
-                  />
-                </a-form-item>
-              </a-col>
-              <a-col :span="8">
+              <a-col :span="12">
                 <a-form-item :label="t('tools.timeoutSec')" name="timeout_sec">
                   <a-input-number
                     v-model:value="formState.timeout_sec"

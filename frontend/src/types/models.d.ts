@@ -121,6 +121,15 @@ export interface Tool {
   usage_count: number
   view_count: number
   favorite_count: number
+  statistics?: {
+    usage_count: number
+    view_count: number
+    favorite_count: number
+    success_rate?: number
+    avg_execution_time?: number
+    last_used_at?: string | null
+    last_updated_at?: string
+  }
   gpu_required: boolean
   gpu_memory_mb?: number
   timeout_sec?: number

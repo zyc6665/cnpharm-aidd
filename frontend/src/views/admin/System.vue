@@ -36,43 +36,6 @@
         </a-card>
       </a-tab-pane>
 
-      <!-- 积分设置 -->
-      <a-tab-pane key="credits" :tab="t('admin.creditsSettings')">
-        <a-card :title="t('admin.creditsConfig')">
-          <a-form
-            :model="creditsForm"
-            :label-col="{ span: 6 }"
-            :wrapper-col="{ span: 14 }"
-          >
-            <a-form-item :label="t('admin.signupBonus')">
-              <a-input-number v-model:value="creditsForm.signupBonus" :min="0" />
-              <template #extra>{{ t('admin.signupBonusDesc') }}</template>
-            </a-form-item>
-            <a-form-item :label="t('admin.dailySigninBonus')">
-              <a-input-number v-model:value="creditsForm.dailySigninBonus" :min="0" />
-            </a-form-item>
-            <a-form-item :label="t('admin.inviteBonus')">
-              <a-input-number v-model:value="creditsForm.inviteBonus" :min="0" />
-              <template #extra>{{ t('admin.inviteBonusDesc') }}</template>
-            </a-form-item>
-            <a-form-item :label="t('admin.inviteRebate')">
-              <a-input-number
-                v-model:value="creditsForm.inviteRebate"
-                :min="0"
-                :max="100"
-                :formatter="(value: number) => `${value}%`"
-                :parser="(value: string) => Number(value.replace('%', ''))"
-              />
-            </a-form-item>
-            <a-form-item :wrapper-col="{ offset: 6, span: 14 }">
-              <a-button type="primary" @click="handleSaveCredits">
-                {{ t('common.save') }}
-              </a-button>
-            </a-form-item>
-          </a-form>
-        </a-card>
-      </a-tab-pane>
-
       <!-- 任务设置 -->
       <a-tab-pane key="tasks" :tab="t('admin.taskSettings')">
         <a-card :title="t('admin.taskConfig')">
@@ -229,29 +192,6 @@
           </a-descriptions>
         </a-card>
 
-        <a-card :title="t('admin.gpuInfo')" style="margin-top: 16px">
-          <a-table
-            :columns="gpuColumns"
-            :data-source="gpuInfo"
-            :pagination="false"
-            size="small"
-          >
-            <template #bodyCell="{ column, record }">
-              <template v-if="column.key === 'memory'">
-                <a-progress
-                  :percent="Math.round(record.memoryUsed / record.memoryTotal * 100)"
-                  size="small"
-                />
-                <span class="memory-text">
-                  {{ record.memoryUsed }}MB / {{ record.memoryTotal }}MB
-                </span>
-              </template>
-              <template v-else-if="column.key === 'utilization'">
-                <a-progress :percent="record.utilization" size="small" />
-              </template>
-            </template>
-          </a-table>
-        </a-card>
       </a-tab-pane>
     </a-tabs>
   </div>
@@ -273,14 +213,6 @@ const generalForm = reactive({
   contactEmail: 'support@cpumodel.com',
   allowRegistration: true,
   maintenanceMode: false
-})
-
-// 积分设置
-const creditsForm = reactive({
-  signupBonus: 100,
-  dailySigninBonus: 5,
-  inviteBonus: 100,
-  inviteRebate: 10
 })
 
 // 任务设置
@@ -313,27 +245,8 @@ const emailForm = reactive({
   useTLS: true
 })
 
-// GPU 信息
-const gpuInfo = ref([
-  { id: 0, name: 'NVIDIA GeForce RTX 4090', memoryTotal: 24576, memoryUsed: 8192, utilization: 35, temperature: 45 },
-  { id: 1, name: 'NVIDIA GeForce RTX 4090', memoryTotal: 24576, memoryUsed: 12288, utilization: 68, temperature: 52 }
-])
-
-const gpuColumns = [
-  { title: 'ID', dataIndex: 'id', key: 'id', width: 60 },
-  { title: t('admin.gpuName'), dataIndex: 'name', key: 'name' },
-  { title: t('admin.gpuMemory'), key: 'memory', width: 200 },
-  { title: t('admin.gpuUtilization'), key: 'utilization', width: 150 },
-  { title: t('admin.gpuTemperature'), dataIndex: 'temperature', key: 'temperature', width: 100, customRender: ({ text }: { text: number }) => `${text}°C` }
-]
-
 const handleSaveGeneral = () => {
   // 保存基本设置（数据已通过 reactive 自动更新）
-  message.success(t('common.success'))
-}
-
-const handleSaveCredits = () => {
-  // 保存积分设置（数据已通过 reactive 自动更新）
   message.success(t('common.success'))
 }
 
@@ -365,13 +278,4 @@ const handleTestEmail = () => {
 
 <style scoped lang="less">
 @import '@/assets/styles/variables.less';
-
-.admin-system {
-  .memory-text {
-    display: block;
-    font-size: @font-size-sm;
-    color: @text-color-light-secondary;
-    margin-top: @spacing-xs;
-  }
-}
 </style>
