@@ -12,17 +12,43 @@
       <div class="placeholder-list">
         <div class="placeholder-card">
           <h3 class="placeholder-title">{{ t('workflow.placeholders.inputSummary.title') }}</h3>
-          <div v-if="sessionArtifacts.length" class="artifact-list">
-            <div v-for="artifact in sessionArtifacts" :key="artifact.id" class="artifact-item">
-              <div class="artifact-copy">
-                <strong class="artifact-name">{{ artifact.name }}</strong>
-                <p class="artifact-meta">
-                  {{ artifact.semanticType }} · {{ t(`workflow.steps.${artifact.stepKey}.title`) }}
-                </p>
+          <div v-if="sessionArtifacts.length" class="artifact-groups">
+            <div v-if="currentArtifacts.length" class="artifact-group">
+              <h4 class="artifact-group-title">{{ t('workflow.artifacts.currentGroup') }}</h4>
+              <div class="artifact-list">
+                <div v-for="artifact in currentArtifacts" :key="artifact.id" class="artifact-item">
+                  <div class="artifact-copy">
+                    <strong class="artifact-name">{{ artifact.name }}</strong>
+                    <p class="artifact-meta">{{ t('workflow.artifacts.sourceStep', { step: t(`workflow.steps.${artifact.stepKey}.title`) }) }}</p>
+                    <p class="artifact-meta">{{ t('workflow.artifacts.sourceTool', { tool: getToolLabel(artifact.toolSlug) }) }}</p>
+                    <p class="artifact-meta">{{ t('workflow.artifacts.generatedAt', { time: formatDateTime(artifact.createdAt) }) }}</p>
+                  </div>
+                  <div class="artifact-tags">
+                    <a-tag color="green">{{ t('workflow.artifacts.ready') }}</a-tag>
+                    <a-tag v-if="isAutoBoundArtifact(artifact.id)" color="blue">
+                      {{ t('workflow.artifacts.autoBound') }}
+                    </a-tag>
+                    <a-tag v-if="isSwitchableArtifact(artifact.id)">
+                      {{ t('workflow.artifacts.switchable') }}
+                    </a-tag>
+                  </div>
+                </div>
               </div>
-              <div class="artifact-tags">
-                <a-tag v-if="isInvalidArtifact(artifact.id)">{{ t('workflow.artifacts.invalidated') }}</a-tag>
-                <a-tag v-else color="green">{{ t('workflow.artifacts.ready') }}</a-tag>
+            </div>
+            <div v-if="invalidatedArtifacts.length" class="artifact-group">
+              <h4 class="artifact-group-title">{{ t('workflow.artifacts.invalidatedGroup') }}</h4>
+              <div class="artifact-list">
+                <div v-for="artifact in invalidatedArtifacts" :key="artifact.id" class="artifact-item">
+                  <div class="artifact-copy">
+                    <strong class="artifact-name">{{ artifact.name }}</strong>
+                    <p class="artifact-meta">{{ t('workflow.artifacts.sourceStep', { step: t(`workflow.steps.${artifact.stepKey}.title`) }) }}</p>
+                    <p class="artifact-meta">{{ t('workflow.artifacts.sourceTool', { tool: getToolLabel(artifact.toolSlug) }) }}</p>
+                    <p class="artifact-meta">{{ t('workflow.artifacts.generatedAt', { time: formatDateTime(artifact.createdAt) }) }}</p>
+                  </div>
+                  <div class="artifact-tags">
+                    <a-tag>{{ t('workflow.artifacts.invalidated') }}</a-tag>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -49,15 +75,19 @@
 
 <script setup lang="ts">
   import { computed } from 'vue'
+  import dayjs from 'dayjs'
   import { useI18n } from 'vue-i18n'
-  import { useWorkflowStore } from '@/stores'
+  import { useToolsStore, useWorkflowStore } from '@/stores'
   import type { WorkflowStepCatalogItem } from '@/workflow/aidd-catalog'
+  import { resolveWorkflowInputSourcesForTool } from '@/workflow/artifact-resolver'
+  import type { WorkflowBoundToolSlug } from '@/workflow/tool-bindings'
 
   const props = defineProps<{
     step: WorkflowStepCatalogItem
   }>()
 
   const { t } = useI18n()
+  const toolsStore = useToolsStore()
   const workflowStore = useWorkflowStore()
 
   const sessionArtifacts = computed(() => {
@@ -66,10 +96,66 @@
     })
   })
 
+  const currentArtifacts = computed(() => {
+    return sessionArtifacts.value.filter((artifact) => !isInvalidArtifact(artifact.id))
+  })
+
+  const invalidatedArtifacts = computed(() => {
+    return sessionArtifacts.value.filter((artifact) => isInvalidArtifact(artifact.id))
+  })
+
   const activeTask = computed(() => workflowStore.taskByStep[props.step.key] ?? null)
+  const selectedToolSlug = computed(() => {
+    return (workflowStore.selectedToolByStep[props.step.key] ?? null) as WorkflowBoundToolSlug | null
+  })
+
+  const autoBoundArtifactIds = computed(() => {
+    if (!selectedToolSlug.value) {
+      return new Set<string>()
+    }
+
+    return new Set(
+      resolveWorkflowInputSourcesForTool({
+        toolSlug: selectedToolSlug.value,
+        artifacts: workflowStore.artifacts,
+        invalidArtifactIds: workflowStore.invalidArtifactIds
+      })
+        .map((source) => source.artifact?.id)
+        .filter((artifactId): artifactId is string => typeof artifactId === 'string')
+    )
+  })
+
+  const validArtifactCountBySemanticType = computed(() => {
+    return currentArtifacts.value.reduce<Record<string, number>>((accumulator, artifact) => {
+      accumulator[artifact.semanticType] = (accumulator[artifact.semanticType] ?? 0) + 1
+      return accumulator
+    }, {})
+  })
 
   function isInvalidArtifact(artifactId: string): boolean {
     return workflowStore.invalidArtifactIds.includes(artifactId)
+  }
+
+  function isAutoBoundArtifact(artifactId: string): boolean {
+    return autoBoundArtifactIds.value.has(artifactId)
+  }
+
+  function isSwitchableArtifact(artifactId: string): boolean {
+    const artifact = currentArtifacts.value.find((item) => item.id === artifactId)
+
+    if (!artifact || !isAutoBoundArtifact(artifactId)) {
+      return false
+    }
+
+    return (validArtifactCountBySemanticType.value[artifact.semanticType] ?? 0) > 1
+  }
+
+  function getToolLabel(toolSlug: string): string {
+    return toolsStore.workflowToolOptions.find((tool) => tool.slug === toolSlug)?.name ?? toolSlug
+  }
+
+  function formatDateTime(value: string): string {
+    return dayjs(value).format('YYYY-MM-DD HH:mm:ss')
   }
 </script>
 
@@ -123,6 +209,25 @@
     gap: @spacing-md;
   }
 
+  .artifact-groups {
+    display: flex;
+    flex-direction: column;
+    gap: @spacing-md;
+  }
+
+  .artifact-group {
+    display: flex;
+    flex-direction: column;
+    gap: @spacing-sm;
+  }
+
+  .artifact-group-title {
+    margin: 0;
+    font-size: @font-size-sm;
+    font-weight: @font-weight-semibold;
+    color: @text-color-light-secondary;
+  }
+
   .placeholder-card {
     border: 1px solid @border-color-light;
     border-radius: @border-radius-md;
@@ -155,7 +260,12 @@
     margin-bottom: @spacing-xs;
   }
 
-  .artifact-meta,
+  .artifact-meta {
+    margin: 0 0 @spacing-xs;
+    color: @text-color-light-secondary;
+    font-size: @font-size-sm;
+  }
+
   .task-summary-label,
   .task-summary-value {
     margin: 0;

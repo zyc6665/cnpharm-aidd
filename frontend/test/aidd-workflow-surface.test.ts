@@ -146,7 +146,8 @@ test('流程运行面板应提供文件上传、提交、重置和自动绑定�
   const source = readSource('src/components/workflow/WorkflowRunPanel.vue')
 
   assert.equal(source.includes('a-upload'), true)
-  assert.equal(source.includes('html-type="submit"'), true)
+  assert.equal(source.includes('submitWorkflowForm'), true)
+  assert.equal(source.includes('workflow.actions.'), true)
   assert.equal(source.includes("t('common.reset')"), true)
   assert.equal(source.includes('bound-source-list'), true)
 })

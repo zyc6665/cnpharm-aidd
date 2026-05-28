@@ -143,7 +143,14 @@ export default {
     },
     artifacts: {
       ready: 'Ready',
-      invalidated: 'Invalidated'
+      invalidated: 'Invalidated',
+      currentGroup: 'Current Valid Artifacts',
+      invalidatedGroup: 'Invalidated Artifacts',
+      sourceStep: 'Source Step: {step}',
+      sourceTool: 'Source Tool: {tool}',
+      generatedAt: 'Generated At: {time}',
+      autoBound: 'Auto-bound Now',
+      switchable: 'Switchable Source'
     },
     stepStatus: {
       idle: 'Idle',
@@ -153,6 +160,37 @@ export default {
       failed: 'Failed',
       invalidated: 'Invalidated',
       needs_tool_selection: 'Reselect Tool'
+    },
+    stepHints: {
+      startHere: 'Start here by uploading or binding the protein structure input.',
+      awaitingInputs: 'Waiting for upstream steps to produce the required input.',
+      selectTool: 'Inputs are ready. Pick a tool for this step first.',
+      ready: 'This step is ready to run after you confirm the parameters.',
+      running: 'The task is running. Keep an eye on artifacts and task status.',
+      completed: 'This step already has reusable results for downstream work.',
+      failed: 'The last run failed. Adjust parameters and try again.',
+      invalidated: 'Upstream outputs changed and this step needs to be refreshed.',
+      toolUnavailable: 'No tool is currently available for this step.'
+    },
+    actions: {
+      title: 'Current Action',
+      runStep: 'Run This Step',
+      rerunStep: 'Rerun This Step',
+      running: 'Wait For Current Task',
+      selectTool: 'Select An Available Tool',
+      toolUnavailable: 'Wait For Tool Availability',
+      continueNextStep: 'Continue to {step}',
+      viewTask: 'View Task Detail'
+    },
+    statusSummary: {
+      awaitInput: 'This step is still waiting for upstream inputs.',
+      ready: 'Inputs and tool are ready. You can submit this step now.',
+      running: 'The current task is running. You can inspect intermediate outputs.',
+      completed: 'This step already has results. Continue downstream or rerun it.',
+      failed: 'The last run failed. Adjust the parameters and try again.',
+      invalidated: 'Upstream results changed. Rerun this step to refresh the outputs.',
+      selectTool: 'Inputs are ready for this step. Select an available tool first.',
+      toolUnavailable: 'No tool is available for this step yet, so the workflow cannot proceed.'
     },
     invalidations: {
       notice: 'Rerunning this upstream step invalidates completed downstream results and they will need confirmation again.'

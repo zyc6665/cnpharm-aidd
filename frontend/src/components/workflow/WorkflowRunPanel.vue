@@ -53,6 +53,22 @@
 
       <a-spin :spinning="selectedToolLoading || submitting">
         <div v-if="selectedTool && flattenedSchema" class="form-shell">
+          <div class="action-summary-card">
+            <div class="action-summary-copy">
+              <span class="action-summary-label">{{ t('workflow.actions.title') }}</span>
+              <strong class="action-summary-title">{{ t(`workflow.actions.${primaryActionKey}`) }}</strong>
+              <p class="action-summary-desc">{{ t(`workflow.statusSummary.${statusSummaryKey}`) }}</p>
+            </div>
+            <div class="action-summary-tags">
+              <a-tag :color="currentStepStatusColor">
+                {{ t(`workflow.stepStatus.${currentStepStatus}`) }}
+              </a-tag>
+              <a-tag v-if="activeTask" color="blue">
+                #{{ activeTask.id }}
+              </a-tag>
+            </div>
+          </div>
+
           <div class="bound-source-list">
             <h3 class="section-subtitle-inline">{{ t('workflow.boundSources.title') }}</h3>
             <div
@@ -139,21 +155,37 @@
             </template>
 
             <a-form-item>
-              <a-space>
-                <a-button
-                  type="primary"
-                  html-type="submit"
-                  size="large"
-                  :loading="submitting"
-                  :disabled="selectedToolSlug == null"
-                >
-                  <PlayCircleOutlined />
-                  {{ t('tools.runTool') }}
-                </a-button>
-                <a-button size="large" @click="resetForm">
-                  {{ t('common.reset') }}
-                </a-button>
-              </a-space>
+              <div class="form-action-bar">
+                <div class="form-action-copy">
+                  <strong class="form-action-title">{{ t(`workflow.actions.${primaryActionKey}`) }}</strong>
+                  <p class="form-action-desc">{{ t(`workflow.statusSummary.${statusSummaryKey}`) }}</p>
+                </div>
+                <a-space wrap>
+                  <a-button
+                    type="primary"
+                    size="large"
+                    @click="submitWorkflowForm"
+                    :loading="submitting"
+                    :disabled="primaryActionDisabled"
+                  >
+                    <PlayCircleOutlined />
+                    {{ t(`workflow.actions.${primaryActionKey}`) }}
+                  </a-button>
+                  <a-button size="large" @click="resetForm">
+                    {{ t('common.reset') }}
+                  </a-button>
+                  <a-button
+                    v-if="nextStep && currentStepStatus === 'completed'"
+                    size="large"
+                    @click="goToNextStep"
+                  >
+                    {{ t('workflow.actions.continueNextStep', { step: t(`workflow.steps.${nextStep.key}.title`) }) }}
+                  </a-button>
+                  <a-button v-if="activeTask" size="large" @click="openTaskDetail">
+                    {{ t('workflow.actions.viewTask') }}
+                  </a-button>
+                </a-space>
+              </div>
             </a-form-item>
           </a-form>
         </div>
@@ -175,6 +207,7 @@
 
 <script setup lang="ts">
   import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
+  import { useRouter } from 'vue-router'
   import { useI18n } from 'vue-i18n'
   import type { FormInstance, Rule } from 'ant-design-vue/es/form'
   import type { UploadFile } from 'ant-design-vue'
@@ -191,6 +224,7 @@
   } from '@/types/models'
   import type { WorkflowArtifact, WorkflowArtifactSemanticType, WorkflowStepKey } from '@/workflow/artifact-types'
   import { resolveWorkflowInputSourcesForTool } from '@/workflow/artifact-resolver'
+  import { AIDD_WORKFLOW_STEP_MAP, AIDD_WORKFLOW_STEP_ORDER } from '@/workflow/aidd-catalog'
   import {
     buildTaskSubmissionPayload,
     buildToolFormInitialState,
@@ -220,6 +254,7 @@
   }>()
 
   const { t } = useI18n()
+  const router = useRouter()
   const tasksStore = useTasksStore()
   const workflowStore = useWorkflowStore()
 
@@ -294,6 +329,109 @@
     return Object.entries(workflowStore.stepStateByKey)
       .filter(([stepKey, stepState]) => stepKey !== props.step.key && stepState?.status === 'invalidated')
       .map(([stepKey]) => stepKey)
+  })
+
+  const currentStepState = computed(() => workflowStore.stepStateByKey[props.step.key] ?? null)
+  const currentStepStatus = computed(() => currentStepState.value?.status ?? 'idle')
+  const activeTask = computed(() => {
+    return workflowStore.taskByStep[props.step.key] ?? currentStepState.value?.task ?? null
+  })
+
+  const currentStepStatusColor = computed(() => {
+    const colorMap = {
+      idle: 'default',
+      ready: 'blue',
+      running: 'processing',
+      completed: 'green',
+      failed: 'red',
+      invalidated: 'orange',
+      needs_tool_selection: 'gold'
+    } as const
+
+    return colorMap[currentStepStatus.value]
+  })
+
+  const currentToolAvailability = computed<WorkflowToolAvailability | null>(() => {
+    if (!props.selectedToolSlug) {
+      return null
+    }
+
+    return props.toolViewModel.tools.find((tool) => tool.slug === props.selectedToolSlug)?.availability ?? null
+  })
+
+  const nextStep = computed(() => {
+    const currentIndex = AIDD_WORKFLOW_STEP_ORDER.indexOf(props.step.key)
+    const nextStepKey = currentIndex >= 0 ? AIDD_WORKFLOW_STEP_ORDER[currentIndex + 1] : undefined
+    return nextStepKey ? AIDD_WORKFLOW_STEP_MAP[nextStepKey] ?? null : null
+  })
+
+  const primaryActionKey = computed(() => {
+    if (submitting.value || currentStepStatus.value === 'running') {
+      return 'running'
+    }
+
+    if (
+      props.toolViewModel.availableToolSlugs.length === 0 ||
+      currentToolAvailability.value === 'missing'
+    ) {
+      return 'toolUnavailable'
+    }
+
+    if (!props.selectedToolSlug) {
+      return 'selectTool'
+    }
+
+    if (
+      currentStepStatus.value === 'completed' ||
+      currentStepStatus.value === 'failed' ||
+      currentStepStatus.value === 'invalidated'
+    ) {
+      return 'rerunStep'
+    }
+
+    return 'runStep'
+  })
+
+  const statusSummaryKey = computed(() => {
+    if (
+      props.toolViewModel.availableToolSlugs.length === 0 ||
+      currentToolAvailability.value === 'missing'
+    ) {
+      return 'toolUnavailable'
+    }
+
+    switch (currentStepStatus.value) {
+      case 'ready':
+        return 'ready'
+      case 'running':
+        return 'running'
+      case 'completed':
+        return 'completed'
+      case 'failed':
+        return 'failed'
+      case 'invalidated':
+        return 'invalidated'
+      case 'needs_tool_selection':
+        return 'selectTool'
+      default:
+        return 'awaitInput'
+    }
+  })
+
+  const primaryActionDisabled = computed(() => {
+    if (submitting.value || selectedToolLoading.value) {
+      return true
+    }
+
+    if (
+      props.selectedToolSlug == null ||
+      props.toolViewModel.availableToolSlugs.length === 0 ||
+      currentToolAvailability.value === 'missing'
+    ) {
+      return true
+    }
+
+    return selectedTool.value == null || flattenedSchema.value == null
   })
 
   function selectTool(toolSlug: WorkflowBoundToolSlug, availability: WorkflowToolAvailability) {
@@ -388,6 +526,31 @@
     formRef.value?.resetFields()
     workflowStore.setStepFormDraft(props.step.key, {})
     applyInitialFormState(props.step.key, flattenedSchema.value, true)
+  }
+
+  async function submitWorkflowForm() {
+    if (primaryActionDisabled.value) {
+      return
+    }
+
+    await formRef.value?.validate()
+    await handleSubmit()
+  }
+
+  function goToNextStep() {
+    if (!nextStep.value) {
+      return
+    }
+
+    workflowStore.setActiveStep(nextStep.value.key)
+  }
+
+  function openTaskDetail() {
+    if (!activeTask.value?.id) {
+      return
+    }
+
+    router.push(`/tasks/${activeTask.value.id}`)
   }
 
   function clearTaskPoll() {
@@ -653,12 +816,57 @@
     gap: @spacing-lg;
   }
 
+  .action-summary-card,
   .bound-source-list,
-  .placeholder-card {
+  .placeholder-card,
+  .form-action-bar {
     border: 1px solid @border-color-light;
     border-radius: @border-radius-md;
     padding: @spacing-md;
     background: @bg-card-light;
+  }
+
+  .action-summary-card,
+  .form-action-bar {
+    display: flex;
+    justify-content: space-between;
+    gap: @spacing-md;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .action-summary-copy,
+  .form-action-copy {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .action-summary-label {
+    display: inline-block;
+    margin-bottom: @spacing-xs;
+    color: @text-color-light-secondary;
+    font-size: @font-size-sm;
+  }
+
+  .action-summary-title,
+  .form-action-title {
+    display: block;
+    font-size: @font-size-md;
+    font-weight: @font-weight-semibold;
+  }
+
+  .action-summary-desc,
+  .form-action-desc {
+    margin: @spacing-xs 0 0;
+    color: @text-color-light-secondary;
+    font-size: @font-size-sm;
+    line-height: @line-height-base;
+  }
+
+  .action-summary-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: @spacing-xs;
   }
 
   .section-subtitle-inline {

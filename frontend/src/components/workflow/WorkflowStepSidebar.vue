@@ -20,6 +20,9 @@
                 {{ t(`workflow.stepStatus.${getStepStatus(step.key)}`) }}
               </a-tag>
             </div>
+            <p class="step-hint">
+              {{ t(`workflow.stepHints.${getStepHintKey(step.key, index)}`) }}
+            </p>
             <div v-if="getToolViewModel(step.key)" class="step-meta">
               <a-tag color="green">
                 {{ t('workflow.toolStatus.availableCount', { count: getToolViewModel(step.key)?.availableToolSlugs.length ?? 0 }) }}
@@ -72,6 +75,7 @@
 
   function getStepStatusColor(status: WorkflowStepStatus): string | undefined {
     const colorMap: Partial<Record<WorkflowStepStatus, string>> = {
+      idle: 'default',
       ready: 'blue',
       running: 'processing',
       completed: 'green',
@@ -81,6 +85,32 @@
     }
 
     return colorMap[status]
+  }
+
+  function getStepHintKey(stepKey: WorkflowStepKey, index: number): string {
+    const toolViewModel = getToolViewModel(stepKey)
+
+    if (toolViewModel && toolViewModel.availableToolSlugs.length === 0) {
+      return 'toolUnavailable'
+    }
+
+    const status = getStepStatus(stepKey)
+    switch (status) {
+      case 'ready':
+        return 'ready'
+      case 'running':
+        return 'running'
+      case 'completed':
+        return 'completed'
+      case 'failed':
+        return 'failed'
+      case 'invalidated':
+        return 'invalidated'
+      case 'needs_tool_selection':
+        return 'selectTool'
+      default:
+        return index === 0 ? 'startHere' : 'awaitingInputs'
+    }
   }
 
   function selectStep(stepKey: WorkflowStepKey) {
@@ -178,5 +208,12 @@
 
   .step-status-row {
     margin-top: @spacing-sm;
+  }
+
+  .step-hint {
+    margin: @spacing-xs 0 0;
+    color: @text-color-light-secondary;
+    font-size: @font-size-sm;
+    line-height: @line-height-base;
   }
 </style>

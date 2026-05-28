@@ -143,7 +143,14 @@ export default {
     },
     artifacts: {
       ready: '已就绪',
-      invalidated: '已失效'
+      invalidated: '已失效',
+      currentGroup: '当前有效产物',
+      invalidatedGroup: '已失效产物',
+      sourceStep: '来源步骤：{step}',
+      sourceTool: '来源工具：{tool}',
+      generatedAt: '生成时间：{time}',
+      autoBound: '当前已绑定',
+      switchable: '可切换来源'
     },
     stepStatus: {
       idle: '未开始',
@@ -153,6 +160,37 @@ export default {
       failed: '执行失败',
       invalidated: '结果失效',
       needs_tool_selection: '需重新选工具'
+    },
+    stepHints: {
+      startHere: '从这里开始上传或绑定蛋白结构输入。',
+      awaitingInputs: '等待上游步骤产出当前所需输入。',
+      selectTool: '输入已齐全，请先选择当前步骤的工具。',
+      ready: '当前步骤已具备执行条件，可以继续配置并运行。',
+      running: '任务正在运行中，可以留意右侧产物和任务状态。',
+      completed: '当前步骤已有可复用结果，可以继续下游流程。',
+      failed: '上次执行失败，建议调整参数后重试。',
+      invalidated: '上游结果已更新，当前步骤结果需要重新确认。',
+      toolUnavailable: '当前步骤暂时没有可用工具。'
+    },
+    actions: {
+      title: '当前动作',
+      runStep: '运行当前步骤',
+      rerunStep: '重新运行当前步骤',
+      running: '等待当前任务完成',
+      selectTool: '先选择可用工具',
+      toolUnavailable: '等待工具上线',
+      continueNextStep: '进入下一步：{step}',
+      viewTask: '查看任务详情'
+    },
+    statusSummary: {
+      awaitInput: '当前步骤仍在等待上游输入结果。',
+      ready: '输入和工具都已就绪，可以提交本步骤任务。',
+      running: '当前步骤任务正在执行，可继续查看中间结果。',
+      completed: '当前步骤已有结果，可继续进入下一步或重新运行。',
+      failed: '当前步骤上次执行失败，可直接调整参数重试。',
+      invalidated: '上游结果发生变化，请重新运行本步骤以刷新结果。',
+      selectTool: '当前步骤输入已具备，请先选择一个可用工具。',
+      toolUnavailable: '当前步骤尚无可用工具，暂时无法继续。'
     },
     invalidations: {
       notice: '上游步骤即将重跑，已完成的下游结果会被标记为失效，需重新确认。'
