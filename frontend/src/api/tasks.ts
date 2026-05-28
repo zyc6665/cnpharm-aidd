@@ -5,6 +5,13 @@ import type { Task, TaskCreateParams, TaskLog, TaskStatus, PaginatedResponse, Pa
 export interface TaskListParams extends PaginationParams {
   status?: TaskStatus
   tool_id?: string
+  keyword?: string
+}
+
+export const TERMINAL_TASK_STATUSES: readonly TaskStatus[] = ['success', 'failure', 'canceled']
+
+export function isTaskTerminalStatus(status: TaskStatus): boolean {
+  return TERMINAL_TASK_STATUSES.includes(status)
 }
 
 // 获取任务列表
@@ -38,6 +45,6 @@ export const retryTask = (id: string): Promise<ApiResponse<Task>> => {
 }
 
 // 获取任务日志
-export const getTaskLogs = (id: string): Promise<ApiResponse<TaskLog[]>> => {
-  return get<TaskLog[]>(`/tasks/${id}/logs`)
+export const getTaskLogs = (id: string): Promise<ApiResponse<PaginatedResponse<TaskLog>>> => {
+  return get<PaginatedResponse<TaskLog>>(`/tasks/${id}/logs`)
 }

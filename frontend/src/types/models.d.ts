@@ -7,12 +7,37 @@ export interface UserInfo {
   avatar_url?: string
   avatar?: string  // 头像URL（兼容旧代码，实际使用avatar_url）
   role: 'user' | 'vip' | 'admin'
-  status: 'active' | 'inactive' | 'banned'
+  status: 'active' | 'disabled' | 'pending'
   credits?: number  // 积分余额
   member_expire_at?: string  // 会员过期时间
   invitation_code?: string  // 邀请码
+  daily_task_limit?: number
+  max_file_size_mb?: number
+  statistics?: {
+    total_tasks?: number
+    successful_tasks?: number
+    failed_tasks?: number
+    total_tool_usage?: number
+    last_active_at?: string | null
+  }
   created_at: string
   updated_at: string
+}
+
+export interface AdminUserListResponse {
+  total: number
+  items: UserInfo[]
+  page: number
+  page_size: number
+}
+
+export interface AdminUserStats {
+  total_users: number
+  active_users: number
+  vip_users: number
+  admin_users: number
+  new_users_today: number
+  new_users_this_week: number
 }
 
 export interface LoginParams {
@@ -135,20 +160,46 @@ export interface Tool {
   credits?: number
 }
 
+export interface ToolOptionSummary {
+  id: Tool['id']
+  slug: Tool['slug']
+  name: Tool['name']
+  description?: Tool['description']
+  icon?: Tool['icon']
+  icon_url?: Tool['icon_url']
+  status: Tool['status']
+  is_public?: Tool['is_public']
+}
+
 export interface ToolSchema {
   type: 'object'
   properties: Record<string, SchemaProperty>
   required?: string[]
 }
 
+export type SchemaValueType =
+  | 'string'
+  | 'number'
+  | 'integer'
+  | 'boolean'
+  | 'file'
+  | 'select'
+  | 'array'
+  | 'object'
+  | 'null'
+
 export interface SchemaProperty {
-  type: 'string' | 'number' | 'boolean' | 'file' | 'select' | 'array' | 'object'
+  type?: SchemaValueType | SchemaValueType[]
   title?: string
   description?: string
   default?: unknown
   enum?: unknown[]
   format?: 'textarea' | 'fasta' | 'pdb' | 'email' | 'url' | 'uri' | 'file'
   accept?: string
+  hidden?: boolean
+  readOnly?: boolean
+  disabled?: boolean
+  hint?: string
   minLength?: number
   maxLength?: number
   minimum?: number
@@ -158,12 +209,13 @@ export interface SchemaProperty {
   required?: string[]
   // 数组类型支持
   items?: {
-    type?: string
+    type?: SchemaValueType | SchemaValueType[]
     enum?: unknown[]
   }
   // 扁平化元数据
   _parentKey?: string
   _originalKey?: string
+  _platformManaged?: boolean
 }
 
 export interface ToolReference {
@@ -236,7 +288,9 @@ export interface Task {
   tool_name?: string  // 工具名称（API额外返回）
   tool_slug?: string  // 工具标识（API额外返回）
   tool?: Tool
-  user_id: string  // UUID
+  user_id?: string  // UUID
+  user_name?: string
+  user_email?: string
   status: TaskStatus
   progress: number
   progress_message?: string
@@ -247,8 +301,10 @@ export interface Task {
   finished_at?: string
   completed_at?: string  // 完成时间（兼容旧代码，实际使用finished_at）
   execution_time_sec?: number
+  retry_count?: number
+  priority?: string
   created_at: string
-  updated_at: string
+  updated_at?: string
   // 兼容旧代码的字段
   input_files?: Array<{
     id?: string | number
@@ -275,6 +331,11 @@ export interface TaskCreateParams {
   params: Record<string, unknown>
   file_ids?: string[]
   priority?: 'low' | 'normal' | 'high'
+}
+
+export interface ToolPreparedSubmissionPayload {
+  params: Record<string, unknown>
+  file_ids?: string[]
 }
 
 export interface TaskLog {
@@ -326,10 +387,14 @@ export interface GPUSummary {
 // 系统相关类型
 export interface SystemHealth {
   status: 'healthy' | 'degraded' | 'unhealthy'
-  database: boolean
-  cache: boolean
-  storage: boolean
-  gpu: boolean
+  version: string
+  environment: string
+  services: Array<{
+    name: string
+    status: 'healthy' | 'unhealthy' | 'unknown'
+    latency_ms?: number
+    message?: string
+  }>
   timestamp: string
 }
 
@@ -337,9 +402,46 @@ export interface SystemStats {
   total_users: number
   total_tools: number
   total_tasks: number
-  total_storage: number
-  active_tasks: number
-  gpu_usage: GPUSummary
+  total_files: number
+  pending_tasks: number
+  running_tasks: number
+  completed_tasks: number
+  failed_tasks: number
+  active_connections: number
+}
+
+export interface SystemInfo {
+  app_name: string
+  app_version: string
+  environment: string
+  debug: boolean
+  python_version: string
+  platform: string
+  hostname: string
+  database_type: string
+  storage_backend: string
+  cache_backend: string
+  task_queue: string
+  cpu_count: number
+  memory_total_gb: number
+  memory_available_gb: number
+  memory_percent: number
+  disk_total_gb: number
+  disk_free_gb: number
+  disk_percent: number
+}
+
+export interface SystemConfig {
+  environment: string
+  debug: boolean
+  api_prefix: string
+  database: Record<string, unknown>
+  storage: Record<string, unknown>
+  cache: Record<string, unknown>
+  jwt: Record<string, unknown>
+  guest: Record<string, unknown>
+  cors_origins: string[]
+  log_level: string
 }
 
 // 分页相关类型

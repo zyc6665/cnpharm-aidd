@@ -22,19 +22,30 @@
     <!-- Scenarios Section -->
     <section class="scenarios-section">
       <div class="container">
-        <h2 class="section-title">{{ t('home.scenarios.title') }}</h2>
-        <p class="section-subtitle">{{ t('home.scenarios.subtitle') }}</p>
-        <a-row :gutter="[24, 24]">
-          <a-col v-for="(item, key) in scenarios" :key="key" :xs="24" :sm="12" :lg="6">
-            <div class="scenario-card">
-              <div class="scenario-icon">
+        <h2 class="section-title">{{ t('home.workflow.title') }}</h2>
+        <p class="section-subtitle">{{ t('home.workflow.subtitle') }}</p>
+        <div class="workflow-entry">
+          <router-link to="/workflow">
+            <a-button type="primary" size="large" class="btn-gold">
+              {{ t('workflow.entry.home') }}
+            </a-button>
+          </router-link>
+        </div>
+        <div class="workflow-flow">
+          <template v-for="(item, index) in workflowSteps" :key="item.key">
+            <div class="workflow-step">
+              <div class="workflow-icon">
                 <component :is="item.icon" />
               </div>
-              <h3 class="scenario-title">{{ t(`home.scenarios.items.${key}.title`) }}</h3>
-              <p class="scenario-desc">{{ t(`home.scenarios.items.${key}.description`) }}</p>
+              <div class="workflow-index">0{{ index + 1 }}</div>
+              <h3 class="workflow-title">{{ t(`home.workflow.items.${item.key}.title`) }}</h3>
+              <p class="workflow-desc">{{ t(`home.workflow.items.${item.key}.description`) }}</p>
             </div>
-          </a-col>
-        </a-row>
+            <div v-if="index < workflowSteps.length - 1" class="workflow-arrow">
+              <RightOutlined />
+            </div>
+          </template>
+        </div>
       </div>
     </section>
 
@@ -75,11 +86,11 @@
 <script setup lang="ts">
   import { useI18n } from 'vue-i18n'
   import {
+    RightOutlined,
+    SearchOutlined,
     ExperimentOutlined,
     NodeIndexOutlined,
     LineChartOutlined,
-    EyeOutlined,
-    ThunderboltOutlined,
     CloudOutlined,
     ApiOutlined,
     SafetyOutlined
@@ -87,15 +98,15 @@
 
   const { t } = useI18n()
 
-  const scenarios = {
-    structure: { icon: ExperimentOutlined },
-    docking: { icon: NodeIndexOutlined },
-    analysis: { icon: LineChartOutlined },
-    visualization: { icon: EyeOutlined }
-  }
+  const workflowSteps = [
+    { key: 'pocketExploration', icon: SearchOutlined },
+    { key: 'moleculeGenerationOrVirtualScreening', icon: ExperimentOutlined },
+    { key: 'molecularDockingAndAffinityPrediction', icon: NodeIndexOutlined },
+    { key: 'propertyPrediction', icon: LineChartOutlined },
+    { key: 'leadOptimization', icon: SafetyOutlined }
+  ]
 
   const features = {
-    gpu: { icon: ThunderboltOutlined },
     cloud: { icon: CloudOutlined },
     api: { icon: ApiOutlined },
     security: { icon: SafetyOutlined }
@@ -196,26 +207,86 @@
     background: @bg-light;
   }
 
-  .scenario-card {
+  .workflow-flow {
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    gap: @spacing-sm;
+    flex-wrap: wrap;
+  }
+
+  .workflow-entry {
+    display: flex;
+    justify-content: center;
+    margin-bottom: @spacing-xl;
+  }
+
+  .workflow-step {
     .card();
     text-align: center;
-    height: 100%;
+    width: 210px;
+    min-height: 240px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    position: relative;
 
-    .scenario-icon {
-      font-size: 48px;
-      color: @accent-color;
-      margin-bottom: @spacing-md;
+    @media (max-width: @screen-lg) {
+      width: calc(50% - @spacing-lg);
     }
 
-    .scenario-title {
-      font-size: @font-size-lg;
-      font-weight: @font-weight-semibold;
-      margin-bottom: @spacing-sm;
+    @media (max-width: @screen-sm) {
+      width: 100%;
+      min-height: auto;
     }
+  }
 
-    .scenario-desc {
-      color: @text-color-light-secondary;
-      font-size: @font-size-sm;
+  .workflow-icon {
+    width: 72px;
+    height: 72px;
+    border-radius: @border-radius-round;
+    background: @accent-color-light;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 30px;
+    color: @accent-color;
+    margin-bottom: @spacing-md;
+  }
+
+  .workflow-index {
+    font-size: @font-size-xs;
+    font-weight: @font-weight-bold;
+    letter-spacing: 0.12em;
+    color: @accent-color;
+    margin-bottom: @spacing-sm;
+  }
+
+  .workflow-title {
+    font-size: @font-size-lg;
+    font-weight: @font-weight-semibold;
+    margin-bottom: @spacing-sm;
+  }
+
+  .workflow-desc {
+    color: @text-color-light-secondary;
+    font-size: @font-size-sm;
+    line-height: @line-height-base;
+  }
+
+  .workflow-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: @accent-color;
+    font-size: 24px;
+    min-width: 28px;
+
+    @media (max-width: @screen-sm) {
+      transform: rotate(90deg);
+      width: 100%;
+      min-height: 32px;
     }
   }
 

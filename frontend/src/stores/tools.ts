@@ -1,11 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Tool, Category, Tag, ToolView } from '@/types/models'
+import type { Tool, Category, Tag, ToolView, ToolOptionSummary } from '@/types/models'
 import {
   getToolList,
   getToolDetail,
   getCategories,
   getTags,
+  getWorkflowToolOptions,
   favoriteTool,
   unfavoriteTool,
   type ToolListParams
@@ -13,6 +14,7 @@ import {
 
 export const useToolsStore = defineStore('tools', () => {
   const tools = ref<Tool[]>([])
+  const workflowToolOptions = ref<ToolOptionSummary[]>([])
   const categories = ref<Category[]>([])
   const tags = ref<Tag[]>([])
   const currentTool = ref<Tool | null>(null)
@@ -47,6 +49,17 @@ export const useToolsStore = defineStore('tools', () => {
       return res.data
     } finally {
       loading.value = false
+    }
+  }
+
+  const fetchWorkflowTools = async () => {
+    try {
+      const res = await getWorkflowToolOptions()
+      workflowToolOptions.value = res.data
+      return res.data
+    } catch {
+      workflowToolOptions.value = []
+      return []
     }
   }
 
@@ -95,6 +108,7 @@ export const useToolsStore = defineStore('tools', () => {
 
   return {
     tools,
+    workflowToolOptions,
     categories,
     tags,
     currentTool,
@@ -106,6 +120,7 @@ export const useToolsStore = defineStore('tools', () => {
     setCurrentView,
     fetchTools,
     fetchToolDetail,
+    fetchWorkflowTools,
     fetchCategories,
     fetchTags,
     toggleFavorite,

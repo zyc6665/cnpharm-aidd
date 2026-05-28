@@ -1,3 +1,26 @@
+const workflowSteps = {
+  pocketExploration: {
+    title: '口袋探索',
+    description: '快速识别靶点结构中的关键结合口袋与可成药位点'
+  },
+  moleculeGenerationOrVirtualScreening: {
+    title: '分子生成或虚拟筛选',
+    description: '围绕已知口袋特征生成候选分子，或通过虚拟筛选快速缩小候选空间'
+  },
+  molecularDockingAndAffinityPrediction: {
+    title: '分子对接及结合亲和力预测',
+    description: '评估候选分子与靶点口袋的结合姿态，并预测潜在结合亲和力'
+  },
+  propertyPrediction: {
+    title: '性质预测',
+    description: '联合评估活性、理化性质与 ADMET 等关键指标'
+  },
+  leadOptimization: {
+    title: '先导化合物优化',
+    description: '基于多目标结果迭代筛选并优化先导化合物设计'
+  }
+}
+
 export default {
   // 通用
   common: {
@@ -64,28 +87,7 @@ export default {
     workflow: {
       title: '平台功能',
       subtitle: '沿着 AIDD 流程打通从口袋识别到先导优化的核心计算环节',
-      items: {
-        pocketExploration: {
-          title: '口袋探索',
-          description: '快速识别靶点结构中的关键结合口袋与可成药位点'
-        },
-        moleculeGenerationOrVirtualScreening: {
-          title: '分子生成或虚拟筛选',
-          description: '围绕已知口袋特征生成候选分子，或通过虚拟筛选快速缩小候选空间'
-        },
-        molecularDockingAndAffinityPrediction: {
-          title: '分子对接及结合亲和力预测',
-          description: '评估候选分子与靶点口袋的结合姿态，并预测潜在结合亲和力'
-        },
-        propertyPrediction: {
-          title: '性质预测',
-          description: '联合评估活性、理化性质与 ADMET 等关键指标'
-        },
-        leadOptimization: {
-          title: '先导化合物优化',
-          description: '基于多目标结果迭代筛选并优化先导化合物设计'
-        }
-      }
+      items: workflowSteps
     },
     features: {
       title: '平台特性',
@@ -118,6 +120,69 @@ export default {
       title: '立即开始您的研究',
       description: '注册即可免费使用基础功能，开启计算生物学之旅',
       button: '免费注册'
+    }
+  },
+
+  workflow: {
+    title: '流程工作台',
+    subtitle: '按 AIDD 五步流程组织工具、输入与结果，当前版本先提供静态工作台骨架',
+    entry: {
+      home: '进入流程工作台',
+      tools: '按流程使用工具'
+    },
+    toolStatus: {
+      recommended: '推荐',
+      available: '可用',
+      unavailable: '暂未上线',
+      availableCount: '{count} 个可用工具',
+      missingCount: '{count} 个暂未上线'
+    },
+    boundSources: {
+      title: '当前自动绑定来源',
+      waiting: '等待上游结果'
+    },
+    artifacts: {
+      ready: '已就绪',
+      invalidated: '已失效'
+    },
+    stepStatus: {
+      idle: '未开始',
+      ready: '可执行',
+      running: '运行中',
+      completed: '已完成',
+      failed: '执行失败',
+      invalidated: '结果失效',
+      needs_tool_selection: '需重新选工具'
+    },
+    invalidations: {
+      notice: '上游步骤即将重跑，已完成的下游结果会被标记为失效，需重新确认。'
+    },
+    steps: workflowSteps,
+    columns: {
+      steps: '流程步骤',
+      stepsHint: '固定五步顺序，后续会在这里承载状态、产物和跳转控制。',
+      tools: '工具与参数',
+      toolsHint: '预留当前步骤的推荐工具、筛选结果和参数入口。',
+      workspace: '工作区',
+      workspaceHint: '预留输入摘要、任务状态和结果预览面板。'
+    },
+    placeholders: {
+      availableTools: {
+        title: '工具列表占位',
+        description: '这里会显示当前步骤可用工具、推荐项和选择状态。'
+      },
+      parameterSetup: {
+        title: '参数配置占位',
+        description: '这里会承载表单、输入映射和提交前检查。'
+      },
+      inputSummary: {
+        title: '输入摘要占位',
+        description: '这里会汇总上游产物、绑定文件和当前任务上下文。'
+      },
+      resultPreview: {
+        title: '结果预览占位',
+        description: '这里会展示任务状态、关键输出和后续步骤提示。'
+      }
     }
   },
 
@@ -370,8 +435,20 @@ export default {
     outputFiles: '输出文件',
     outputResults: '输出结果',
     resultVisualization: '结果可视化',
+    csvPreview: 'CSV 结果预览',
+    csvVisualizationHint: '检测到 CSV 结果后，将按表格展示数据，并在可识别的 SMILES 列旁直接渲染二维分子结构。',
+    csvSummary: '共 {rows} 行，{columns} 列。表格区域支持独立滚动，便于浏览长结果集。',
+    csvStructure: '分子结构',
+    csvLoadFailed: 'CSV 结果加载失败',
+    csvEmpty: 'CSV 结果为空',
+    csvEmptyDesc: '当前结果文件没有可展示的数据行，请先检查工具输出是否正常。',
+    csvFileMissing: '缺少 CSV 文件下载地址',
     visualizationHint: '系统会优先叠加输入口袋与生成分子，便于快速检查构象与结合位置。',
     visualizationFiles: '可视化文件',
+    visualizationSelectableHint: '检测到多个三维结果，输入结构会保持固定，点击列表即可逐个查看生成分子或对接姿态。',
+    visualizationResultList: '输出结果列表',
+    visualizationResultListDesc: '共 {count} 个结果项，当前三维视图一次只展示选中的一个输出。',
+    visualizationInputPinned: '固定输入结构',
     visualizationLoading: '正在加载三维结果...',
     visualizationFailed: '三维结果加载失败',
     visualizationUnsupported: '当前输出文件暂不支持在线预览',
@@ -552,14 +629,26 @@ export default {
     searchUserPlaceholder: '搜索用户名或邮箱...',
     status: '状态',
     active: '活跃',
+    disabled: '已禁用',
     inactive: '未激活',
     banned: '已封禁',
+    pending: '待审核',
     credits: '积分',
+    createUserSuccess: '用户创建成功',
     selectRole: '请选择角色',
+    selectStatus: '请选择状态',
     resetPassword: '重置密码',
     resetPasswordConfirm: '确定要重置密码吗？',
     resetPasswordConfirmContent: '将为用户 {username} 重置密码',
     resetPasswordSuccess: '密码已重置',
+    softDeleteUser: '软删除',
+    softDeleteUserConfirm: '确定要软删除此用户吗？',
+    softDeleteUserConfirmContent: '软删除后用户 {username} 将无法登录，但相关数据会保留',
+    softDeleteUserSuccess: '用户已软删除',
+    hardDeleteUser: '真删除',
+    hardDeleteUserConfirm: '确定要彻底删除此用户吗？',
+    hardDeleteUserConfirmContent: '彻底删除用户 {username} 后，将级联清理其任务、文件、工具和会话数据，且无法恢复',
+    hardDeleteUserSuccess: '用户已彻底删除',
     banUser: '封禁用户',
     banUserConfirm: '确定要封禁此用户吗？',
     banUserConfirmContent: '封禁后用户 {username} 将无法登录',
@@ -571,6 +660,15 @@ export default {
     // 工具管理
     createTool: '创建工具',
     editTool: '编辑工具',
+    importToolConfig: '导入配置',
+    importToolConfigTitle: '导入 platform_tool.json',
+    importToolConfigDescription: '粘贴或读取 AI 生成的 platform_tool.json，系统会自动校验并创建工具与版本',
+    importToolConfigPlaceholder: '请粘贴完整的 platform_tool.json 内容',
+    importToolConfigFromFile: '从 JSON 文件读取',
+    importToolConfigPublish: '导入后直接发布',
+    importToolConfigSuccess: '工具配置导入成功',
+    importToolConfigRequired: '请先粘贴 platform_tool.json 内容',
+    importToolConfigInvalid: 'platform_tool.json 不是有效的 JSON',
     toolsSubtitle: '统一维护工具目录与分类归属',
     toolCategories: '分类管理',
     toolCategoriesSubtitle: '集中维护工具分类、状态与排序',
@@ -580,6 +678,7 @@ export default {
     categorySlug: '分类标识',
     enterCategoryName: '请输入分类名称',
     enterCategorySlug: '请输入分类标识',
+    invalidCategorySlug: '分类标识只能包含小写字母、数字和连字符',
     deleteCategoryConfirm: '确定要删除此分类吗？',
     deleteCategoryConfirmContent: '删除分类 {name} 后将无法恢复',
     searchToolPlaceholder: '搜索工具名称或代码...',
@@ -656,6 +755,21 @@ export default {
     maxRetries: '最大重试次数',
     cleanupDays: '自动清理天数',
     cleanupDaysDesc: '超过此天数的已完成任务将被自动清理',
+    runtimeStats: '运行统计',
+    configSnapshot: '配置快照',
+    environment: '运行环境',
+    debugMode: '调试模式',
+    hostname: '主机名',
+    cacheBackend: '缓存后端',
+    storageBackend: '存储后端',
+    taskQueue: '任务队列',
+    cpuCount: 'CPU核心数',
+    memoryTotal: '总内存',
+    memoryAvailable: '可用内存',
+    diskTotal: '磁盘总量',
+    diskFree: '磁盘可用',
+    totalFiles: '文件总数',
+    activeConnections: '活动连接数',
     storageConfig: '存储配置',
     storageType: '存储类型',
     localStorage: '本地存储',

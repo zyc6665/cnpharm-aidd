@@ -2,7 +2,7 @@ import { get, post, put, patch, del } from './request'
 import type { ApiResponse } from '@/types/api'
 import type {
   Tool, Category, Tag, ToolVersion, PaginatedResponse, PaginationParams,
-  ToolView, ToolCreateParams
+  ToolView, ToolCreateParams, ToolOptionSummary
 } from '@/types/models'
 
 export interface ToolListParams extends PaginationParams {
@@ -13,9 +13,47 @@ export interface ToolListParams extends PaginationParams {
   view?: ToolView    // 视图类型：public/favorites
 }
 
+export interface ToolImportConfigParams {
+  config: Record<string, unknown>
+  category_id?: string
+  publish?: boolean
+}
+
+export interface ToolImportConfigResult {
+  created_new_tool: boolean
+  tool: Tool
+  version: ToolVersion
+}
+
+function toToolOptionSummary(tool: Tool): ToolOptionSummary {
+  return {
+    id: tool.id,
+    slug: tool.slug,
+    name: tool.name,
+    description: tool.description,
+    icon: tool.icon,
+    icon_url: tool.icon_url,
+    status: tool.status,
+    is_public: tool.is_public
+  }
+}
+
 // 获取工具列表
 export const getToolList = (params?: ToolListParams): Promise<ApiResponse<PaginatedResponse<Tool>>> => {
   return get<PaginatedResponse<Tool>>('/tools', params as Record<string, unknown>)
+}
+
+export const getWorkflowToolOptions = async (): Promise<ApiResponse<ToolOptionSummary[]>> => {
+  const response = await getToolList({
+    view: 'public',
+    page: 1,
+    page_size: 200
+  })
+
+  return {
+    ...response,
+    data: response.data.items.map(toToolOptionSummary)
+  }
 }
 
 // 获取工具详情
@@ -26,6 +64,11 @@ export const getToolDetail = (id: string): Promise<ApiResponse<Tool>> => {
 // 创建工具（管理员）
 export const createTool = (data: ToolCreateParams): Promise<ApiResponse<Tool>> => {
   return post<Tool>('/tools', data)
+}
+
+// 导入工具配置（管理员）
+export const importToolConfig = (data: ToolImportConfigParams): Promise<ApiResponse<ToolImportConfigResult>> => {
+  return post<ToolImportConfigResult>('/tools/import-config', data)
 }
 
 // 更新工具（管理员）

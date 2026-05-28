@@ -1,3 +1,26 @@
+const workflowSteps = {
+  pocketExploration: {
+    title: 'Pocket Exploration',
+    description: 'Identify binding pockets and druggable target regions from structural data'
+  },
+  moleculeGenerationOrVirtualScreening: {
+    title: 'Molecule Generation or Virtual Screening',
+    description: 'Generate pocket-aware candidates or narrow the search space rapidly through virtual screening'
+  },
+  molecularDockingAndAffinityPrediction: {
+    title: 'Molecular Docking and Binding Affinity Prediction',
+    description: 'Evaluate binding poses against target pockets and estimate potential binding affinity'
+  },
+  propertyPrediction: {
+    title: 'Property Prediction',
+    description: 'Predict potency, physicochemical traits and ADMET-related performance'
+  },
+  leadOptimization: {
+    title: 'Lead Optimization',
+    description: 'Iterate on multi-objective results to refine and prioritize lead compounds'
+  }
+}
+
 export default {
   // Common
   common: {
@@ -64,30 +87,7 @@ export default {
     workflow: {
       title: 'Platform Functions',
       subtitle: 'Connect the core AIDD steps from pocket identification to lead optimization',
-      items: {
-        pocketExploration: {
-          title: 'Pocket Exploration',
-          description: 'Identify binding pockets and druggable target regions from structural data'
-        },
-        moleculeGenerationOrVirtualScreening: {
-          title: 'Molecule Generation or Virtual Screening',
-          description:
-            'Generate pocket-aware candidates or narrow the search space rapidly through virtual screening'
-        },
-        molecularDockingAndAffinityPrediction: {
-          title: 'Molecular Docking and Binding Affinity Prediction',
-          description:
-            'Evaluate binding poses against target pockets and estimate potential binding affinity'
-        },
-        propertyPrediction: {
-          title: 'Property Prediction',
-          description: 'Predict potency, physicochemical traits and ADMET-related performance'
-        },
-        leadOptimization: {
-          title: 'Lead Optimization',
-          description: 'Iterate on multi-objective results to refine and prioritize lead compounds'
-        }
-      }
+      items: workflowSteps
     },
     features: {
       title: 'Platform Features',
@@ -120,6 +120,69 @@ export default {
       title: 'Start Your Research Today',
       description: 'Register for free basic features and begin your computational biology journey',
       button: 'Sign Up Free'
+    }
+  },
+
+  workflow: {
+    title: 'Workflow Workbench',
+    subtitle: 'Organize tools, inputs and results along the five AIDD steps with a static workbench skeleton for now',
+    entry: {
+      home: 'Open Workflow Workbench',
+      tools: 'Use Tools by Workflow'
+    },
+    toolStatus: {
+      recommended: 'Recommended',
+      available: 'Available',
+      unavailable: 'Unavailable',
+      availableCount: '{count} available',
+      missingCount: '{count} unavailable'
+    },
+    boundSources: {
+      title: 'Current Auto-bound Sources',
+      waiting: 'Waiting for upstream result'
+    },
+    artifacts: {
+      ready: 'Ready',
+      invalidated: 'Invalidated'
+    },
+    stepStatus: {
+      idle: 'Idle',
+      ready: 'Ready',
+      running: 'Running',
+      completed: 'Completed',
+      failed: 'Failed',
+      invalidated: 'Invalidated',
+      needs_tool_selection: 'Reselect Tool'
+    },
+    invalidations: {
+      notice: 'Rerunning this upstream step invalidates completed downstream results and they will need confirmation again.'
+    },
+    steps: workflowSteps,
+    columns: {
+      steps: 'Workflow Steps',
+      stepsHint: 'The fixed five-step order will later host status, artifacts and navigation controls.',
+      tools: 'Tools and Parameters',
+      toolsHint: 'Reserved for recommended tools, filtered options and parameter entry for the active step.',
+      workspace: 'Workspace',
+      workspaceHint: 'Reserved for input summaries, task status and result preview panels.'
+    },
+    placeholders: {
+      availableTools: {
+        title: 'Tool list placeholder',
+        description: 'Available tools, recommendations and selection state will appear here for the active step.'
+      },
+      parameterSetup: {
+        title: 'Parameter setup placeholder',
+        description: 'Forms, input bindings and pre-submit checks will live here.'
+      },
+      inputSummary: {
+        title: 'Input summary placeholder',
+        description: 'Upstream artifacts, bound files and current task context will be summarized here.'
+      },
+      resultPreview: {
+        title: 'Result preview placeholder',
+        description: 'Task status, key outputs and downstream guidance will be shown here.'
+      }
     }
   },
 
@@ -372,8 +435,20 @@ export default {
     outputFiles: 'Output Files',
     outputResults: 'Output Results',
     resultVisualization: 'Result Visualization',
+    csvPreview: 'CSV Preview',
+    csvVisualizationHint: 'CSV outputs are rendered as a scrollable table, and recognized SMILES columns get an inline 2D molecule preview.',
+    csvSummary: '{rows} rows and {columns} columns. The table area scrolls independently for long result sets.',
+    csvStructure: 'Structure',
+    csvLoadFailed: 'Failed to load CSV result',
+    csvEmpty: 'CSV result is empty',
+    csvEmptyDesc: 'No data rows are available in this result file. Check whether the tool produced the expected output.',
+    csvFileMissing: 'Missing CSV file download URL',
     visualizationHint: 'Input pocket files are overlaid with generated molecules first for quick inspection of binding poses.',
     visualizationFiles: 'visualization files',
+    visualizationSelectableHint: 'Multiple 3D outputs were detected. The input structure stays fixed while you inspect one generated molecule or pose at a time.',
+    visualizationResultList: 'Output Results',
+    visualizationResultListDesc: '{count} result items are available. The 3D viewport shows one selected output at a time.',
+    visualizationInputPinned: 'Pinned Input Structure',
     visualizationLoading: 'Loading 3D results...',
     visualizationFailed: 'Failed to load 3D results',
     visualizationUnsupported: 'These output files are not supported for online preview yet',
@@ -554,14 +629,27 @@ export default {
     searchUserPlaceholder: 'Search username or email...',
     status: 'Status',
     active: 'Active',
+    disabled: 'Disabled',
     inactive: 'Inactive',
     banned: 'Banned',
+    pending: 'Pending Review',
     credits: 'Credits',
+    createUserSuccess: 'User created',
     selectRole: 'Please select role',
+    selectStatus: 'Please select status',
     resetPassword: 'Reset Password',
     resetPasswordConfirm: 'Reset password?',
     resetPasswordConfirmContent: 'Reset password for user {username}',
     resetPasswordSuccess: 'Password reset',
+    softDeleteUser: 'Soft Delete',
+    softDeleteUserConfirm: 'Soft delete this user?',
+    softDeleteUserConfirmContent: 'User {username} will not be able to sign in, but related data will be kept',
+    softDeleteUserSuccess: 'User soft deleted',
+    hardDeleteUser: 'Hard Delete',
+    hardDeleteUserConfirm: 'Permanently delete this user?',
+    hardDeleteUserConfirmContent:
+      'Deleting user {username} will cascade-remove their tasks, files, tools and sessions and cannot be undone',
+    hardDeleteUserSuccess: 'User permanently deleted',
     banUser: 'Ban User',
     banUserConfirm: 'Ban this user?',
     banUserConfirmContent: 'User {username} will not be able to login',
@@ -573,6 +661,16 @@ export default {
     // Tool Management
     createTool: 'Create Tool',
     editTool: 'Edit Tool',
+    importToolConfig: 'Import Config',
+    importToolConfigTitle: 'Import platform_tool.json',
+    importToolConfigDescription:
+      'Paste or load the AI-generated platform_tool.json and the system will validate it before creating the tool and version',
+    importToolConfigPlaceholder: 'Paste the full platform_tool.json content',
+    importToolConfigFromFile: 'Load from JSON file',
+    importToolConfigPublish: 'Publish immediately after import',
+    importToolConfigSuccess: 'Tool config imported successfully',
+    importToolConfigRequired: 'Please paste the platform_tool.json content first',
+    importToolConfigInvalid: 'platform_tool.json is not valid JSON',
     toolsSubtitle: 'Maintain the tool catalog and category assignment in one place',
     toolCategories: 'Category Management',
     toolCategoriesSubtitle: 'Manage tool categories, status and display order in one place',
@@ -582,6 +680,7 @@ export default {
     categorySlug: 'Category Slug',
     enterCategoryName: 'Please enter category name',
     enterCategorySlug: 'Please enter category slug',
+    invalidCategorySlug: 'Category slug can only contain lowercase letters, numbers, and hyphens',
     deleteCategoryConfirm: 'Delete this category?',
     deleteCategoryConfirmContent: 'Category {name} will be permanently removed',
     searchToolPlaceholder: 'Search tool name or code...',
@@ -658,6 +757,21 @@ export default {
     maxRetries: 'Max Retries',
     cleanupDays: 'Auto Cleanup Days',
     cleanupDaysDesc: 'Completed tasks older than this will be auto deleted',
+    runtimeStats: 'Runtime Stats',
+    configSnapshot: 'Configuration Snapshot',
+    environment: 'Environment',
+    debugMode: 'Debug Mode',
+    hostname: 'Hostname',
+    cacheBackend: 'Cache Backend',
+    storageBackend: 'Storage Backend',
+    taskQueue: 'Task Queue',
+    cpuCount: 'CPU Cores',
+    memoryTotal: 'Total Memory',
+    memoryAvailable: 'Available Memory',
+    diskTotal: 'Total Disk',
+    diskFree: 'Free Disk',
+    totalFiles: 'Total Files',
+    activeConnections: 'Active Connections',
     storageConfig: 'Storage Configuration',
     storageType: 'Storage Type',
     localStorage: 'Local Storage',

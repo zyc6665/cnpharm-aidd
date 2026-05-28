@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useUserStore } from '@/stores'
+import i18n from '@/locales'
 
 // 路由配置
 const routes: RouteRecordRaw[] = [
@@ -35,6 +36,12 @@ const routes: RouteRecordRaw[] = [
     name: 'Tools',
     component: () => import('@/views/tools/List.vue'),
     meta: { title: 'tools.title' }
+  },
+  {
+    path: '/workflow',
+    name: 'Workflow',
+    component: () => import('@/views/workflow/index.vue'),
+    meta: { title: 'workflow.title' }
   },
   {
     path: '/tools/:id',
@@ -103,6 +110,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'admin.users' }
       },
       {
+        path: 'tools/create',
+        name: 'AdminToolCreate',
+        component: () => import('@/views/tools/Create.vue'),
+        meta: { title: 'tools.createTool' }
+      },
+      {
+        path: 'tools/:id/edit',
+        name: 'AdminToolEdit',
+        component: () => import('@/views/tools/Create.vue'),
+        meta: { title: 'tools.editTool' }
+      },
+      {
         path: 'tools',
         name: 'AdminTools',
         component: () => import('@/views/admin/Tools.vue'),
@@ -165,7 +184,9 @@ router.beforeEach(async (to, _from, next) => {
   const userStore = useUserStore()
 
   // 设置页面标题
-  document.title = `${to.meta.title || 'CPUModel'} - CPUModel`
+  const titleKey = typeof to.meta.title === 'string' ? to.meta.title : ''
+  const translatedTitle = titleKey ? i18n.global.t(titleKey) : 'CPUModel'
+  document.title = `${translatedTitle} - CPUModel`
 
   // 访客页面（已登录用户重定向到首页）
   if (to.meta.guest && userStore.isLoggedIn) {

@@ -6,6 +6,18 @@
         <p class="page-subtitle">{{ t('tools.subtitle') }}</p>
       </div>
 
+      <div class="workflow-entry-card">
+        <div class="workflow-entry-copy">
+          <h2 class="workflow-entry-title">{{ t('workflow.title') }}</h2>
+          <p class="workflow-entry-desc">{{ t('workflow.subtitle') }}</p>
+        </div>
+        <router-link to="/workflow">
+          <a-button type="primary" size="large">
+            {{ t('workflow.entry.tools') }}
+          </a-button>
+        </router-link>
+      </div>
+
       <!-- 视图切换标签 -->
       <div class="view-tabs">
         <a-radio-group v-model:value="currentView" button-style="solid" size="large" @change="handleViewChange">
@@ -299,6 +311,35 @@
   .page-subtitle {
     color: @text-color-light-secondary;
     font-size: @font-size-lg;
+  }
+
+  .workflow-entry-card {
+    .card();
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: @spacing-lg;
+    margin-bottom: @spacing-xl;
+
+    @media (max-width: @screen-md) {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+  }
+
+  .workflow-entry-copy {
+    flex: 1;
+  }
+
+  .workflow-entry-title {
+    font-size: @font-size-xl;
+    font-weight: @font-weight-semibold;
+    margin-bottom: @spacing-xs;
+  }
+
+  .workflow-entry-desc {
+    color: @text-color-light-secondary;
+    margin: 0;
   }
 
   .view-tabs {
