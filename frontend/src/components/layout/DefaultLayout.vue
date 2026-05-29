@@ -8,6 +8,10 @@
           <span class="logo-text">CPUModel</span>
         </router-link>
 
+        <a-button type="text" class="mobile-menu-btn" @click="mobileDrawerOpen = true">
+          <MenuOutlined />
+        </a-button>
+
         <!-- 导航菜单 -->
         <a-menu
           v-model:selectedKeys="selectedKeys"
@@ -15,22 +19,13 @@
           theme="dark"
           class="nav-menu"
         >
-          <a-menu-item key="home">
-            <router-link to="/">{{ t('nav.home') }}</router-link>
-          </a-menu-item>
-          <a-menu-item key="tools">
-            <router-link to="/tools">{{ t('nav.tools') }}</router-link>
-          </a-menu-item>
-          <a-menu-item key="cpupdb">
-            <a :href="cpupdbUrl" target="_blank" rel="noreferrer">
-              {{ t('nav.cpupdb') }}
+          <a-menu-item v-for="item in visibleNavItems" :key="item.key">
+            <router-link v-if="item.to" :to="item.to">
+              {{ t(item.labelKey) }}
+            </router-link>
+            <a v-else :href="item.href" target="_blank" rel="noreferrer">
+              {{ t(item.labelKey) }}
             </a>
-          </a-menu-item>
-          <a-menu-item v-if="isLoggedIn" key="tasks">
-            <router-link to="/tasks">{{ t('nav.tasks') }}</router-link>
-          </a-menu-item>
-          <a-menu-item v-if="isAdmin" key="admin">
-            <router-link to="/admin">{{ t('nav.admin') }}</router-link>
           </a-menu-item>
         </a-menu>
 
@@ -93,6 +88,26 @@
       </div>
     </a-layout-header>
 
+    <a-drawer
+      v-model:open="mobileDrawerOpen"
+      placement="left"
+      class="mobile-nav-drawer"
+      :title="'CPUModel'"
+      :width="280"
+      @close="mobileDrawerOpen = false"
+    >
+      <a-menu
+        :selectedKeys="selectedKeys"
+        mode="inline"
+        class="mobile-drawer-menu"
+        @click="handleMobileNavClick"
+      >
+        <a-menu-item v-for="item in visibleNavItems" :key="item.key">
+          {{ t(item.labelKey) }}
+        </a-menu-item>
+      </a-menu>
+    </a-drawer>
+
     <!-- 主内容区 -->
     <a-layout-content class="content">
       <router-view v-slot="{ Component }">
@@ -126,6 +141,7 @@
   import { useI18n } from 'vue-i18n'
   import { message } from 'ant-design-vue'
   import {
+    MenuOutlined,
     GlobalOutlined,
     UserOutlined,
     SettingOutlined,
@@ -142,11 +158,32 @@
   const appStore = useAppStore()
 
   const selectedKeys = ref<string[]>([])
+  const mobileDrawerOpen = ref(false)
   const cpupdbUrl = 'https://www.cpupdb.com'
 
   const isLoggedIn = computed(() => userStore.isLoggedIn)
   const isAdmin = computed(() => userStore.isAdmin)
   const username = computed(() => userStore.username)
+
+  const navItems = [
+    { key: 'home', labelKey: 'nav.home', to: '/' },
+    { key: 'tools', labelKey: 'nav.tools', to: '/tools' },
+    { key: 'cpupdb', labelKey: 'nav.cpupdb', href: cpupdbUrl },
+    { key: 'tasks', labelKey: 'nav.tasks', to: '/tasks', requiresAuth: true },
+    { key: 'admin', labelKey: 'nav.admin', to: '/admin', requiresAdmin: true }
+  ]
+
+  const visibleNavItems = computed(() => {
+    return navItems.filter(item => {
+      if (item.requiresAdmin) {
+        return isAdmin.value
+      }
+      if (item.requiresAuth) {
+        return isLoggedIn.value
+      }
+      return true
+    })
+  })
 
   // 监听路由变化更新选中菜单
   watch(
@@ -173,8 +210,27 @@
     appStore.setLocale(key as Locale)
   }
 
+  const handleMobileNavClick = ({ key }: { key: string }) => {
+    const item = visibleNavItems.value.find(navItem => navItem.key === key)
+    mobileDrawerOpen.value = false
+
+    if (!item) {
+      return
+    }
+
+    if (item.to) {
+      router.push(item.to)
+      return
+    }
+
+    if (item.href) {
+      window.open(item.href, '_blank', 'noopener,noreferrer')
+    }
+  }
+
   // 用户菜单点击
   const handleUserMenuClick = async ({ key }: { key: string }) => {
+    mobileDrawerOpen.value = false
     switch (key) {
       case 'profile':
         router.push('/user')
@@ -233,6 +289,16 @@
       font-weight: @font-weight-bold;
       color: @accent-color;
       letter-spacing: 1px;
+    }
+  }
+
+  .mobile-menu-btn {
+    display: none;
+    color: @text-color-secondary;
+    margin-right: @spacing-sm;
+
+    &:hover {
+      color: @accent-color;
     }
   }
 
@@ -325,6 +391,65 @@
   .footer-copyright {
     color: @text-color-disabled;
     font-size: @font-size-sm;
+  }
+
+  .mobile-nav-drawer {
+    :deep(.ant-drawer-header) {
+      border-bottom: 1px solid @border-color-light;
+    }
+
+    :deep(.ant-drawer-title) {
+      color: @bg-dark;
+      font-weight: @font-weight-bold;
+    }
+  }
+
+  .mobile-drawer-menu {
+    border-inline-end: none;
+  }
+
+  @media (max-width: @screen-md) {
+    .header-content {
+      padding: 0 @spacing-md;
+    }
+
+    .logo {
+      margin-right: auto;
+    }
+
+    .mobile-menu-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      order: -1;
+    }
+
+    .nav-menu {
+      display: none;
+    }
+
+    .header-actions {
+      gap: @spacing-xs;
+
+      .username {
+        display: none;
+      }
+
+      .ml-sm {
+        margin-left: 0;
+      }
+    }
+
+    .footer-links {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: @spacing-sm @spacing-md;
+
+      a {
+        margin: 0;
+      }
+    }
   }
 
   // 页面切换动画
