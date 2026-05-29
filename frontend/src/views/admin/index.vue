@@ -36,6 +36,10 @@
             <AppstoreOutlined />
             <span>{{ t('admin.toolCategories') }}</span>
           </a-menu-item>
+          <a-menu-item key="workbench-groups" @click="navigate('workbench-groups')">
+            <ClusterOutlined />
+            <span>{{ t('admin.workbenchGroups') }}</span>
+          </a-menu-item>
           <a-menu-item key="tasks" @click="navigate('tasks')">
             <CloudServerOutlined />
             <span>{{ t('admin.tasks') }}</span>
@@ -117,6 +121,7 @@ import {
   UserOutlined,
   ToolOutlined,
   AppstoreOutlined,
+  ClusterOutlined,
   CloudServerOutlined,
   SettingOutlined,
   MenuFoldOutlined,
@@ -141,6 +146,7 @@ const pageTitles: Record<string, string> = {
   users: 'admin.users',
   tools: 'admin.tools',
   'tool-categories': 'admin.toolCategories',
+  'workbench-groups': 'admin.workbenchGroups',
   tasks: 'admin.tasks',
   system: 'admin.system'
 }

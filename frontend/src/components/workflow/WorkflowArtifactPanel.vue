@@ -1,72 +1,89 @@
 <template>
-  <section class="workflow-column workspace-column">
+  <section class="workflow-column artifacts-column">
     <div class="column-card">
-      <h2 class="column-title">{{ t('workflow.columns.workspace') }}</h2>
-      <p class="column-subtitle">{{ t('workflow.columns.workspaceHint') }}</p>
-
-      <div class="active-step-banner">
-        <span class="active-step-label">{{ t('workflow.columns.tools') }}</span>
-        <strong class="active-step-value">{{ t(`workflow.steps.${step.key}.title`) }}</strong>
+      <div class="column-header">
+        <div>
+          <h2 class="column-title">{{ t('workflow.columns.artifacts') }}</h2>
+          <p class="column-subtitle">{{ t('workflow.columns.artifactsHint') }}</p>
+        </div>
+        <a-button
+          v-if="userStore.isLoggedIn"
+          type="link"
+          size="small"
+          :loading="artifactsStore.loading"
+          @click="refreshArtifacts"
+        >
+          {{ t('common.refresh') }}
+        </a-button>
       </div>
 
-      <div class="placeholder-list">
-        <div class="placeholder-card">
-          <h3 class="placeholder-title">{{ t('workflow.placeholders.inputSummary.title') }}</h3>
-          <div v-if="sessionArtifacts.length" class="artifact-groups">
-            <div v-if="currentArtifacts.length" class="artifact-group">
-              <h4 class="artifact-group-title">{{ t('workflow.artifacts.currentGroup') }}</h4>
-              <div class="artifact-list">
-                <div v-for="artifact in currentArtifacts" :key="artifact.id" class="artifact-item">
-                  <div class="artifact-copy">
-                    <strong class="artifact-name">{{ artifact.name }}</strong>
-                    <p class="artifact-meta">{{ t('workflow.artifacts.sourceStep', { step: t(`workflow.steps.${artifact.stepKey}.title`) }) }}</p>
-                    <p class="artifact-meta">{{ t('workflow.artifacts.sourceTool', { tool: getToolLabel(artifact.toolSlug) }) }}</p>
-                    <p class="artifact-meta">{{ t('workflow.artifacts.generatedAt', { time: formatDateTime(artifact.createdAt) }) }}</p>
-                  </div>
-                  <div class="artifact-tags">
-                    <a-tag color="green">{{ t('workflow.artifacts.ready') }}</a-tag>
-                    <a-tag v-if="isAutoBoundArtifact(artifact.id)" color="blue">
-                      {{ t('workflow.artifacts.autoBound') }}
-                    </a-tag>
-                    <a-tag v-if="isSwitchableArtifact(artifact.id)">
-                      {{ t('workflow.artifacts.switchable') }}
-                    </a-tag>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div v-if="invalidatedArtifacts.length" class="artifact-group">
-              <h4 class="artifact-group-title">{{ t('workflow.artifacts.invalidatedGroup') }}</h4>
-              <div class="artifact-list">
-                <div v-for="artifact in invalidatedArtifacts" :key="artifact.id" class="artifact-item">
-                  <div class="artifact-copy">
-                    <strong class="artifact-name">{{ artifact.name }}</strong>
-                    <p class="artifact-meta">{{ t('workflow.artifacts.sourceStep', { step: t(`workflow.steps.${artifact.stepKey}.title`) }) }}</p>
-                    <p class="artifact-meta">{{ t('workflow.artifacts.sourceTool', { tool: getToolLabel(artifact.toolSlug) }) }}</p>
-                    <p class="artifact-meta">{{ t('workflow.artifacts.generatedAt', { time: formatDateTime(artifact.createdAt) }) }}</p>
-                  </div>
-                  <div class="artifact-tags">
-                    <a-tag>{{ t('workflow.artifacts.invalidated') }}</a-tag>
-                  </div>
-                </div>
-              </div>
-            </div>
+      <a-alert
+        v-if="!userStore.isLoggedIn"
+        type="info"
+        show-icon
+        style="margin-bottom: 16px"
+      >
+        <template #message>
+          {{ t('auth.loginRequired') }}
+        </template>
+      </a-alert>
+
+      <div v-else class="artifact-groups">
+        <div v-if="activeTask" class="task-summary-card">
+          <div class="task-summary-row">
+            <span class="task-summary-label">{{ t('workflow.currentTool.lastTask') }}</span>
+            <strong class="task-summary-value">#{{ activeTask.id }}</strong>
           </div>
-          <p v-else class="placeholder-desc">{{ t('workflow.placeholders.inputSummary.description') }}</p>
+          <div class="task-summary-row">
+            <span class="task-summary-label">{{ t('tasks.status') }}</span>
+            <span class="task-summary-value">{{ activeTask.status }}</span>
+          </div>
+          <div class="task-summary-row">
+            <span class="task-summary-label">{{ t('tasks.progress') }}</span>
+            <span class="task-summary-value">{{ activeTask.progress }}%</span>
+          </div>
         </div>
-        <div class="placeholder-card">
-          <h3 class="placeholder-title">{{ t('workflow.placeholders.resultPreview.title') }}</h3>
-          <div v-if="activeTask" class="task-summary">
-            <div class="task-summary-row">
-              <span class="task-summary-label">{{ t('tasks.status') }}</span>
-              <span class="task-summary-value">{{ activeTask.status }}</span>
-            </div>
-            <div class="task-summary-row">
-              <span class="task-summary-label">{{ t('tasks.progress') }}</span>
-              <span class="task-summary-value">{{ activeTask.progress }}%</span>
+
+        <div class="artifact-group">
+          <h3 class="artifact-group-title">{{ t('workflow.artifacts.currentGroup') }}</h3>
+          <div v-if="currentGroupArtifacts.length > 0" class="artifact-list">
+            <div v-for="artifact in currentGroupArtifacts" :key="artifact.id" class="artifact-item">
+              <div class="artifact-copy">
+                <strong class="artifact-name">{{ artifact.filename }}</strong>
+                <p class="artifact-meta">
+                  {{ t('workflow.artifacts.sourceTool', { tool: artifact.tool_name }) }}
+                </p>
+                <p class="artifact-meta">
+                  {{ t('workflow.artifacts.generatedAt', { time: formatDateTime(artifact.created_at) }) }}
+                </p>
+              </div>
+              <a-button type="link" size="small" @click="openTaskDetail(artifact.task_id)">
+                {{ t('workflow.currentTool.viewTask') }}
+              </a-button>
             </div>
           </div>
-          <p v-else class="placeholder-desc">{{ t('workflow.placeholders.resultPreview.description') }}</p>
+          <a-empty v-else :description="t('workflow.artifacts.emptyCurrentGroup')" />
+        </div>
+
+        <div class="artifact-group">
+          <h3 class="artifact-group-title">{{ t('workflow.artifacts.recentGroup') }}</h3>
+          <div v-if="recentArtifacts.length > 0" class="artifact-list">
+            <div v-for="artifact in recentArtifacts" :key="artifact.id" class="artifact-item">
+              <div class="artifact-copy">
+                <strong class="artifact-name">{{ artifact.filename }}</strong>
+                <p class="artifact-meta">
+                  {{ t('workflow.artifacts.sourceTool', { tool: artifact.tool_name }) }}
+                </p>
+                <p class="artifact-meta">
+                  {{ t('workflow.artifacts.generatedAt', { time: formatDateTime(artifact.created_at) }) }}
+                </p>
+              </div>
+              <a-button type="link" size="small" @click="openTaskDetail(artifact.task_id)">
+                {{ t('workflow.currentTool.viewTask') }}
+              </a-button>
+            </div>
+          </div>
+          <a-empty v-else :description="t('workflow.artifacts.emptyRecent')" />
         </div>
       </div>
     </div>
@@ -75,83 +92,63 @@
 
 <script setup lang="ts">
   import { computed } from 'vue'
+  import { useRouter } from 'vue-router'
   import dayjs from 'dayjs'
   import { useI18n } from 'vue-i18n'
-  import { useToolsStore, useWorkflowStore } from '@/stores'
-  import type { WorkflowStepCatalogItem } from '@/workflow/aidd-catalog'
-  import { resolveWorkflowInputSourcesForTool } from '@/workflow/artifact-resolver'
-  import type { WorkflowBoundToolSlug } from '@/workflow/tool-bindings'
+  import { useArtifactsStore, useUserStore, useWorkflowStore } from '@/stores'
+  import type { WorkbenchGroup } from '@/types/models'
 
   const props = defineProps<{
-    step: WorkflowStepCatalogItem
+    group?: WorkbenchGroup | null
+    selectedToolSlug?: string | null
   }>()
 
   const { t } = useI18n()
-  const toolsStore = useToolsStore()
+  const router = useRouter()
+  const artifactsStore = useArtifactsStore()
+  const userStore = useUserStore()
   const workflowStore = useWorkflowStore()
 
-  const sessionArtifacts = computed(() => {
-    return [...workflowStore.artifacts].sort((left, right) => {
-      return Date.parse(right.createdAt) - Date.parse(left.createdAt)
+  const currentGroupToolSlugs = computed(() => {
+    return new Set((props.group?.tools ?? []).map((tool) => tool.slug))
+  })
+
+  const sortedArtifacts = computed(() => {
+    return [...artifactsStore.items].sort((left, right) => {
+      return Date.parse(right.created_at) - Date.parse(left.created_at)
     })
   })
 
-  const currentArtifacts = computed(() => {
-    return sessionArtifacts.value.filter((artifact) => !isInvalidArtifact(artifact.id))
-  })
-
-  const invalidatedArtifacts = computed(() => {
-    return sessionArtifacts.value.filter((artifact) => isInvalidArtifact(artifact.id))
-  })
-
-  const activeTask = computed(() => workflowStore.taskByStep[props.step.key] ?? null)
-  const selectedToolSlug = computed(() => {
-    return (workflowStore.selectedToolByStep[props.step.key] ?? null) as WorkflowBoundToolSlug | null
-  })
-
-  const autoBoundArtifactIds = computed(() => {
-    if (!selectedToolSlug.value) {
-      return new Set<string>()
+  const currentGroupArtifacts = computed(() => {
+    if (currentGroupToolSlugs.value.size === 0) {
+      return []
     }
 
-    return new Set(
-      resolveWorkflowInputSourcesForTool({
-        toolSlug: selectedToolSlug.value,
-        artifacts: workflowStore.artifacts,
-        invalidArtifactIds: workflowStore.invalidArtifactIds
-      })
-        .map((source) => source.artifact?.id)
-        .filter((artifactId): artifactId is string => typeof artifactId === 'string')
-    )
+    return sortedArtifacts.value
+      .filter((artifact) => currentGroupToolSlugs.value.has(artifact.tool_slug))
+      .slice(0, 8)
   })
 
-  const validArtifactCountBySemanticType = computed(() => {
-    return currentArtifacts.value.reduce<Record<string, number>>((accumulator, artifact) => {
-      accumulator[artifact.semanticType] = (accumulator[artifact.semanticType] ?? 0) + 1
-      return accumulator
-    }, {})
-  })
+  const recentArtifacts = computed(() => sortedArtifacts.value.slice(0, 8))
 
-  function isInvalidArtifact(artifactId: string): boolean {
-    return workflowStore.invalidArtifactIds.includes(artifactId)
-  }
-
-  function isAutoBoundArtifact(artifactId: string): boolean {
-    return autoBoundArtifactIds.value.has(artifactId)
-  }
-
-  function isSwitchableArtifact(artifactId: string): boolean {
-    const artifact = currentArtifacts.value.find((item) => item.id === artifactId)
-
-    if (!artifact || !isAutoBoundArtifact(artifactId)) {
-      return false
+  const activeTask = computed(() => {
+    if (!props.selectedToolSlug) {
+      return null
     }
 
-    return (validArtifactCountBySemanticType.value[artifact.semanticType] ?? 0) > 1
+    return workflowStore.taskByTool[props.selectedToolSlug] ?? null
+  })
+
+  async function refreshArtifacts() {
+    if (!userStore.isLoggedIn) {
+      return
+    }
+
+    await artifactsStore.fetchArtifacts({ page: 1, page_size: 100 })
   }
 
-  function getToolLabel(toolSlug: string): string {
-    return toolsStore.workflowToolOptions.find((tool) => tool.slug === toolSlug)?.name ?? toolSlug
+  function openTaskDetail(taskId: string) {
+    router.push(`/tasks/${taskId}`)
   }
 
   function formatDateTime(value: string): string {
@@ -171,6 +168,13 @@
     height: 100%;
   }
 
+  .column-header {
+    display: flex;
+    justify-content: space-between;
+    gap: @spacing-md;
+    align-items: flex-start;
+  }
+
   .column-title {
     font-size: @font-size-xl;
     font-weight: @font-weight-semibold;
@@ -182,37 +186,10 @@
     margin-bottom: @spacing-lg;
   }
 
-  .active-step-banner {
-    display: flex;
-    align-items: center;
-    gap: @spacing-sm;
-    border: 1px solid @border-color-light;
-    border-radius: @border-radius-md;
-    padding: @spacing-sm @spacing-md;
-    margin-bottom: @spacing-md;
-    background: @bg-card-light;
-  }
-
-  .active-step-label {
-    color: @text-color-light-secondary;
-    font-size: @font-size-sm;
-  }
-
-  .active-step-value {
-    color: @text-color-primary;
-    font-size: @font-size-md;
-  }
-
-  .placeholder-list {
-    display: flex;
-    flex-direction: column;
-    gap: @spacing-md;
-  }
-
   .artifact-groups {
     display: flex;
     flex-direction: column;
-    gap: @spacing-md;
+    gap: @spacing-lg;
   }
 
   .artifact-group {
@@ -228,15 +205,8 @@
     color: @text-color-light-secondary;
   }
 
-  .placeholder-card {
-    border: 1px solid @border-color-light;
-    border-radius: @border-radius-md;
-    padding: @spacing-md;
-    background: @bg-card-light;
-  }
-
   .artifact-list,
-  .task-summary {
+  .task-summary-card {
     display: flex;
     flex-direction: column;
     gap: @spacing-sm;
@@ -260,33 +230,24 @@
     margin-bottom: @spacing-xs;
   }
 
-  .artifact-meta {
-    margin: 0 0 @spacing-xs;
-    color: @text-color-light-secondary;
-    font-size: @font-size-sm;
-  }
-
-  .task-summary-label,
-  .task-summary-value {
+  .artifact-meta,
+  .task-summary-label {
     margin: 0;
     color: @text-color-light-secondary;
-    font-size: @font-size-sm;
-  }
-
-  .artifact-tags {
-    flex-shrink: 0;
-  }
-
-  .placeholder-title {
-    font-size: @font-size-md;
-    font-weight: @font-weight-semibold;
-    margin-bottom: @spacing-xs;
-  }
-
-  .placeholder-desc {
-    margin: 0;
-    color: @text-color-light-secondary;
-    font-size: @font-size-sm;
+    font-size: @font-size-xs;
     line-height: @line-height-base;
+  }
+
+  .task-summary-card {
+    border: 1px solid @border-color-light;
+    border-radius: @border-radius-md;
+    padding: @spacing-md;
+    background: @bg-card-light;
+  }
+
+  .task-summary-value {
+    color: @text-color-primary;
+    font-size: @font-size-sm;
+    text-align: right;
   }
 </style>

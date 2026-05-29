@@ -2,7 +2,7 @@ import { get, post, put, patch, del } from './request'
 import type { ApiResponse } from '@/types/api'
 import type {
   Tool, Category, Tag, ToolVersion, PaginatedResponse, PaginationParams,
-  ToolView, ToolCreateParams, ToolOptionSummary
+  ToolView, ToolCreateParams, ToolOptionSummary, WorkbenchGroup, WorkbenchGroupMapping
 } from '@/types/models'
 
 export interface ToolListParams extends PaginationParams {
@@ -47,13 +47,17 @@ export const getWorkflowToolOptions = async (): Promise<ApiResponse<ToolOptionSu
   const response = await getToolList({
     view: 'public',
     page: 1,
-    page_size: 200
+    page_size: 100
   })
 
   return {
     ...response,
     data: response.data.items.map(toToolOptionSummary)
   }
+}
+
+export const getWorkbenchGroups = (): Promise<ApiResponse<WorkbenchGroup[]>> => {
+  return get<WorkbenchGroup[]>('/tools/workbench-groups')
 }
 
 // 获取工具详情
@@ -131,6 +135,62 @@ export const createTag = (data: { name: string; color?: string; description?: st
 
 export const adminGetToolCategories = (): Promise<ApiResponse<Category[]>> => {
   return get<Category[]>('/admin/tool-categories')
+}
+
+export const adminGetWorkbenchGroups = (): Promise<ApiResponse<WorkbenchGroup[]>> => {
+  return get<WorkbenchGroup[]>('/admin/workbench-groups')
+}
+
+export const adminCreateWorkbenchGroup = (data: {
+  name: string
+  slug: string
+  description?: string
+  sort_order?: number
+  is_enabled?: boolean
+}): Promise<ApiResponse<WorkbenchGroup>> => {
+  return post<WorkbenchGroup>('/admin/workbench-groups', data)
+}
+
+export const adminUpdateWorkbenchGroup = (id: string, data: {
+  name?: string
+  slug?: string
+  description?: string
+  sort_order?: number
+  is_enabled?: boolean
+}): Promise<ApiResponse<WorkbenchGroup>> => {
+  return put<WorkbenchGroup>(`/admin/workbench-groups/${id}`, data)
+}
+
+export const adminReorderWorkbenchGroups = (group_ids: string[]): Promise<ApiResponse<WorkbenchGroup[]>> => {
+  return post<WorkbenchGroup[]>('/admin/workbench-groups/reorder', { group_ids })
+}
+
+export const adminGetWorkbenchGroupMappings = (): Promise<ApiResponse<WorkbenchGroupMapping[]>> => {
+  return get<WorkbenchGroupMapping[]>('/admin/workbench-group-mappings')
+}
+
+export const adminCreateWorkbenchGroupMapping = (data: {
+  tool_id: string
+  group_id: string
+  sort_order?: number
+  is_recommended?: boolean
+  is_enabled?: boolean
+}): Promise<ApiResponse<WorkbenchGroupMapping>> => {
+  return post<WorkbenchGroupMapping>('/admin/workbench-group-mappings', data)
+}
+
+export const adminUpdateWorkbenchGroupMapping = (id: string, data: {
+  tool_id?: string
+  group_id?: string
+  sort_order?: number
+  is_recommended?: boolean
+  is_enabled?: boolean
+}): Promise<ApiResponse<WorkbenchGroupMapping>> => {
+  return put<WorkbenchGroupMapping>(`/admin/workbench-group-mappings/${id}`, data)
+}
+
+export const adminDeleteWorkbenchGroupMapping = (id: string): Promise<ApiResponse<null>> => {
+  return del<null>(`/admin/workbench-group-mappings/${id}`)
 }
 
 export const adminCreateToolCategory = (data: {

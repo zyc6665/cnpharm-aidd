@@ -124,11 +124,31 @@ export default {
   },
 
   workflow: {
-    title: '流程工作台',
-    subtitle: '按 AIDD 五步流程组织工具、输入与结果，当前版本先提供静态工作台骨架',
+    title: '工具工作台',
+    subtitle: '按研究分组浏览工具，在同一空间复用历史产物并继续发起计算任务',
     entry: {
-      home: '进入流程工作台',
-      tools: '按流程使用工具'
+      home: '进入工具工作台',
+      tools: '按分组使用工具'
+    },
+    groups: {
+      empty: '当前还没有可用分组',
+      noTools: '当前分组下暂时没有可用工具',
+      descriptionFallback: '这个分组正在等待管理员补充分组说明。',
+      toolCount: '{count} 个工具',
+      recommendedCount: '{count} 个推荐工具'
+    },
+    currentGroup: {
+      label: '当前分组'
+    },
+    currentTool: {
+      label: '当前工具',
+      descriptionFallback: '请在当前分组内选择一个工具开始使用。',
+      runAction: '运行当前工具',
+      runHint: '支持本地上传，也支持直接复用“我的产物”中的历史输出文件。',
+      viewDetail: '查看工具详情',
+      viewTask: '查看任务详情',
+      lastTask: '最近一次任务',
+      empty: '请选择当前分组中的一个工具'
     },
     toolStatus: {
       recommended: '推荐',
@@ -142,85 +162,21 @@ export default {
       waiting: '等待上游结果'
     },
     artifacts: {
-      ready: '已就绪',
-      invalidated: '已失效',
-      currentGroup: '当前有效产物',
-      invalidatedGroup: '已失效产物',
-      sourceStep: '来源步骤：{step}',
+      currentGroup: '当前分组产物',
+      recentGroup: '我的最近产物',
+      emptyCurrentGroup: '当前分组还没有可复用产物',
+      emptyRecent: '你还没有可复用的历史输出文件',
       sourceTool: '来源工具：{tool}',
-      generatedAt: '生成时间：{time}',
-      autoBound: '当前已绑定',
-      switchable: '可切换来源'
-    },
-    stepStatus: {
-      idle: '未开始',
-      ready: '可执行',
-      running: '运行中',
-      completed: '已完成',
-      failed: '执行失败',
-      invalidated: '结果失效',
-      needs_tool_selection: '需重新选工具'
-    },
-    stepHints: {
-      startHere: '从这里开始上传或绑定蛋白结构输入。',
-      awaitingInputs: '等待上游步骤产出当前所需输入。',
-      selectTool: '输入已齐全，请先选择当前步骤的工具。',
-      ready: '当前步骤已具备执行条件，可以继续配置并运行。',
-      running: '任务正在运行中，可以留意右侧产物和任务状态。',
-      completed: '当前步骤已有可复用结果，可以继续下游流程。',
-      failed: '上次执行失败，建议调整参数后重试。',
-      invalidated: '上游结果已更新，当前步骤结果需要重新确认。',
-      toolUnavailable: '当前步骤暂时没有可用工具。'
-    },
-    actions: {
-      title: '当前动作',
-      runStep: '运行当前步骤',
-      rerunStep: '重新运行当前步骤',
-      running: '等待当前任务完成',
-      selectTool: '先选择可用工具',
-      toolUnavailable: '等待工具上线',
-      continueNextStep: '进入下一步：{step}',
-      viewTask: '查看任务详情'
-    },
-    statusSummary: {
-      awaitInput: '当前步骤仍在等待上游输入结果。',
-      ready: '输入和工具都已就绪，可以提交本步骤任务。',
-      running: '当前步骤任务正在执行，可继续查看中间结果。',
-      completed: '当前步骤已有结果，可继续进入下一步或重新运行。',
-      failed: '当前步骤上次执行失败，可直接调整参数重试。',
-      invalidated: '上游结果发生变化，请重新运行本步骤以刷新结果。',
-      selectTool: '当前步骤输入已具备，请先选择一个可用工具。',
-      toolUnavailable: '当前步骤尚无可用工具，暂时无法继续。'
-    },
-    invalidations: {
-      notice: '上游步骤即将重跑，已完成的下游结果会被标记为失效，需重新确认。'
+      generatedAt: '生成时间：{time}'
     },
     steps: workflowSteps,
     columns: {
-      steps: '流程步骤',
-      stepsHint: '固定五步顺序，后续会在这里承载状态、产物和跳转控制。',
+      groups: '工具分组',
+      groupsHint: '按研究主题查看可用工具与推荐项，不强制固定执行顺序。',
       tools: '工具与参数',
-      toolsHint: '预留当前步骤的推荐工具、筛选结果和参数入口。',
-      workspace: '工作区',
-      workspaceHint: '预留输入摘要、任务状态和结果预览面板。'
-    },
-    placeholders: {
-      availableTools: {
-        title: '工具列表占位',
-        description: '这里会显示当前步骤可用工具、推荐项和选择状态。'
-      },
-      parameterSetup: {
-        title: '参数配置占位',
-        description: '这里会承载表单、输入映射和提交前检查。'
-      },
-      inputSummary: {
-        title: '输入摘要占位',
-        description: '这里会汇总上游产物、绑定文件和当前任务上下文。'
-      },
-      resultPreview: {
-        title: '结果预览占位',
-        description: '这里会展示任务状态、关键输出和后续步骤提示。'
-      }
+      toolsHint: '在当前分组中选择工具、填写参数，并按需复用历史产物文件。',
+      artifacts: '我的产物',
+      artifactsHint: '这里展示你自己的历史输出文件，可在任意工具的文件参数中直接复用。'
     }
   },
 
@@ -404,6 +360,10 @@ export default {
     noFavorites: '暂无收藏的工具',
     noCustomTools: '暂无自定义工具',
     browseTools: '浏览工具',
+    fileSourceUpload: '本地上传',
+    fileSourceArtifact: '我的产物',
+    selectArtifact: '选择历史产物',
+    noArtifacts: '暂无可复用产物',
     // 游客提示
     guestWarning: '游客模式功能受限，请登录后使用完整功能',
     // 工具详情
@@ -708,6 +668,8 @@ export default {
     importToolConfigRequired: '请先粘贴 platform_tool.json 内容',
     importToolConfigInvalid: 'platform_tool.json 不是有效的 JSON',
     toolsSubtitle: '统一维护工具目录与分类归属',
+    workbenchGroups: '工作台分组',
+    workbenchGroupsSubtitle: '维护工具工作台分组、推荐顺序与映射关系',
     toolCategories: '分类管理',
     toolCategoriesSubtitle: '集中维护工具分类、状态与排序',
     createCategory: '新建分类',

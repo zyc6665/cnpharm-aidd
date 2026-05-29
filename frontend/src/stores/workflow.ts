@@ -1,31 +1,16 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import type { TaskStatus } from '@/types/models'
-import {
-  type WorkflowArtifact,
-  type WorkflowSelectedToolMap,
-  type WorkflowSession,
-  type WorkflowStepDraftMap,
-  type WorkflowStepKey,
-  type WorkflowStepRecord,
-  type WorkflowStepStateMap,
-  type WorkflowTaskMap,
-  type WorkflowTaskRef
-} from '@/workflow/artifact-types'
-import { AIDD_WORKFLOW_STEP_ORDER } from '@/workflow/aidd-catalog'
-import { buildWorkflowStepRecordFromTask, toWorkflowTaskRef } from '@/workflow/task-state'
-import { extractArtifactsFromTaskResult } from '@/workflow/artifact-resolver'
-import { invalidateCompletedDownstreamSteps, computeStepReadinessStatus } from '@/workflow/workflow-state'
-import type { WorkflowBoundToolSlug } from '@/workflow/tool-bindings'
+import type { WorkflowTaskRef } from '@/workflow/artifact-types'
+import { toWorkflowTaskRef } from '@/workflow/task-state'
 
-function getInitialActiveStepKey(): WorkflowStepKey {
-  const initialStepKey = AIDD_WORKFLOW_STEP_ORDER[0]
-
-  if (!initialStepKey) {
-    throw new Error('AIDD workflow step order must define at least one step')
-  }
-
-  return initialStepKey
+interface WorkflowWorkbenchSession {
+  sessionId: string
+  activeGroupId: string | null
+  selectedToolByGroup: Record<string, string>
+  toolFormDrafts: Record<string, Record<string, unknown>>
+  taskByTool: Record<string, WorkflowTaskRef>
+  lastUpdatedAt: string
+  ownerUserId?: string
 }
 
 function nowIsoString(): string {
@@ -40,16 +25,13 @@ function createWorkflowSessionId(): string {
   return `workflow-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
-function createInitialWorkflowSession(ownerUserId?: string): WorkflowSession {
+function createInitialWorkflowSession(ownerUserId?: string): WorkflowWorkbenchSession {
   return {
     sessionId: createWorkflowSessionId(),
-    activeStepKey: getInitialActiveStepKey(),
-    selectedToolByStep: {},
-    stepFormDrafts: {},
-    taskByStep: {},
-    stepStateByKey: {},
-    artifacts: [],
-    invalidArtifactIds: [],
+    activeGroupId: null,
+    selectedToolByGroup: {},
+    toolFormDrafts: {},
+    taskByTool: {},
     lastUpdatedAt: nowIsoString(),
     ownerUserId
   }
@@ -59,25 +41,19 @@ export const useWorkflowStore = defineStore('workflow', () => {
   const initialSession = createInitialWorkflowSession()
 
   const sessionId = ref(initialSession.sessionId)
-  const activeStepKey = ref<WorkflowStepKey>(initialSession.activeStepKey)
-  const selectedToolByStep = ref<WorkflowSelectedToolMap>(initialSession.selectedToolByStep)
-  const stepFormDrafts = ref<WorkflowStepDraftMap>(initialSession.stepFormDrafts)
-  const taskByStep = ref<WorkflowTaskMap>(initialSession.taskByStep)
-  const stepStateByKey = ref<WorkflowStepStateMap>(initialSession.stepStateByKey)
-  const artifacts = ref<WorkflowArtifact[]>(initialSession.artifacts)
-  const invalidArtifactIds = ref<string[]>(initialSession.invalidArtifactIds)
+  const activeGroupId = ref<string | null>(initialSession.activeGroupId)
+  const selectedToolByGroup = ref<Record<string, string>>(initialSession.selectedToolByGroup)
+  const toolFormDrafts = ref<Record<string, Record<string, unknown>>>(initialSession.toolFormDrafts)
+  const taskByTool = ref<Record<string, WorkflowTaskRef>>(initialSession.taskByTool)
   const lastUpdatedAt = ref(initialSession.lastUpdatedAt)
   const ownerUserId = ref<string | undefined>(initialSession.ownerUserId)
 
-  const session = computed<WorkflowSession>(() => ({
+  const session = computed<WorkflowWorkbenchSession>(() => ({
     sessionId: sessionId.value,
-    activeStepKey: activeStepKey.value,
-    selectedToolByStep: selectedToolByStep.value,
-    stepFormDrafts: stepFormDrafts.value,
-    taskByStep: taskByStep.value,
-    stepStateByKey: stepStateByKey.value,
-    artifacts: artifacts.value,
-    invalidArtifactIds: invalidArtifactIds.value,
+    activeGroupId: activeGroupId.value,
+    selectedToolByGroup: selectedToolByGroup.value,
+    toolFormDrafts: toolFormDrafts.value,
+    taskByTool: taskByTool.value,
     lastUpdatedAt: lastUpdatedAt.value,
     ownerUserId: ownerUserId.value
   }))
@@ -86,210 +62,101 @@ export const useWorkflowStore = defineStore('workflow', () => {
     lastUpdatedAt.value = nowIsoString()
   }
 
-  function setStepState(stepKey: WorkflowStepKey, nextState: Partial<WorkflowStepRecord>) {
-    stepStateByKey.value = {
-      ...stepStateByKey.value,
-      [stepKey]: {
-        ...stepStateByKey.value[stepKey],
-        ...nextState,
-        updatedAt: nowIsoString()
-      }
-    }
-  }
-
-  function refreshStepReadiness(stepKey: WorkflowStepKey) {
-    const currentState = stepStateByKey.value[stepKey]
-
-    if (
-      currentState?.status === 'running' ||
-      currentState?.status === 'completed' ||
-      currentState?.status === 'failed' ||
-      currentState?.status === 'invalidated'
-    ) {
-      return
-    }
-
-    const nextStatus = computeStepReadinessStatus({
-      stepKey,
-      artifacts: artifacts.value,
-      selectedToolSlug: selectedToolByStep.value[stepKey] as WorkflowBoundToolSlug | undefined,
-      invalidArtifactIds: invalidArtifactIds.value
-    })
-
-    setStepState(stepKey, {
-      status: nextStatus,
-      toolSlug: selectedToolByStep.value[stepKey]
-    })
-  }
-
-  function refreshAllStepReadiness() {
-    for (const stepKey of AIDD_WORKFLOW_STEP_ORDER) {
-      refreshStepReadiness(stepKey)
-    }
-  }
-
   function resetSession(nextOwnerUserId?: string) {
     const nextSession = createInitialWorkflowSession(nextOwnerUserId)
 
     sessionId.value = nextSession.sessionId
-    activeStepKey.value = nextSession.activeStepKey
-    selectedToolByStep.value = nextSession.selectedToolByStep
-    stepFormDrafts.value = nextSession.stepFormDrafts
-    taskByStep.value = nextSession.taskByStep
-    stepStateByKey.value = nextSession.stepStateByKey
-    artifacts.value = nextSession.artifacts
-    invalidArtifactIds.value = nextSession.invalidArtifactIds
+    activeGroupId.value = nextSession.activeGroupId
+    selectedToolByGroup.value = nextSession.selectedToolByGroup
+    toolFormDrafts.value = nextSession.toolFormDrafts
+    taskByTool.value = nextSession.taskByTool
     lastUpdatedAt.value = nextSession.lastUpdatedAt
     ownerUserId.value = nextSession.ownerUserId
   }
 
-  function setOwnerUserId(userId?: string) {
-    ownerUserId.value = userId
-    touchSession()
-  }
-
-  function setActiveStep(stepKey: WorkflowStepKey) {
-    activeStepKey.value = stepKey
-    touchSession()
-  }
-
-  function selectTool(stepKey: WorkflowStepKey, toolSlug: WorkflowBoundToolSlug) {
-    selectedToolByStep.value = {
-      ...selectedToolByStep.value,
-      [stepKey]: toolSlug
+  function syncOwnerUserId(nextOwnerUserId?: string) {
+    if (ownerUserId.value !== nextOwnerUserId) {
+      resetSession(nextOwnerUserId)
     }
-    refreshStepReadiness(stepKey)
+  }
+
+  function setActiveGroup(groupId: string | null) {
+    activeGroupId.value = groupId
     touchSession()
   }
 
-  function setStepFormDraft(stepKey: WorkflowStepKey, draft: Record<string, unknown>) {
-    stepFormDrafts.value = {
-      ...stepFormDrafts.value,
-      [stepKey]: draft
+  function selectTool(groupId: string, toolSlug: string) {
+    selectedToolByGroup.value = {
+      ...selectedToolByGroup.value,
+      [groupId]: toolSlug
     }
     touchSession()
   }
 
-  function recordTask(stepKey: WorkflowStepKey, taskInput: WorkflowTaskRef) {
-    const task = toWorkflowTaskRef(taskInput)
-
-    taskByStep.value = {
-      ...taskByStep.value,
-      [stepKey]: task
+  function setToolFormDraft(toolSlug: string, draft: Record<string, unknown>) {
+    toolFormDrafts.value = {
+      ...toolFormDrafts.value,
+      [toolSlug]: draft
     }
-
-    if (task.tool_slug) {
-      selectedToolByStep.value = {
-        ...selectedToolByStep.value,
-        [stepKey]: task.tool_slug
-      }
-    }
-
-    setStepState(
-      stepKey,
-      buildWorkflowStepRecordFromTask({
-        stepKey,
-        task,
-        previousStepRecord: stepStateByKey.value[stepKey]
-      })
-    )
     touchSession()
   }
 
-  function registerArtifacts(nextArtifacts: WorkflowArtifact[]) {
-    const artifactMap = new Map(artifacts.value.map((artifact) => [artifact.id, artifact]))
-
-    for (const artifact of nextArtifacts) {
-      artifactMap.set(artifact.id, artifact)
+  function clearToolFormDraft(toolSlug: string) {
+    if (!toolFormDrafts.value[toolSlug]) {
+      return
     }
 
-    artifacts.value = Array.from(artifactMap.values())
-    invalidArtifactIds.value = invalidArtifactIds.value.filter(
-      (artifactId) => !nextArtifacts.some((artifact) => artifact.id === artifactId)
-    )
-    refreshAllStepReadiness()
+    const nextDrafts = { ...toolFormDrafts.value }
+    delete nextDrafts[toolSlug]
+    toolFormDrafts.value = nextDrafts
     touchSession()
   }
 
-  function registerTaskArtifacts(stepKey: WorkflowStepKey, toolSlug: WorkflowBoundToolSlug, taskInput: WorkflowTaskRef) {
-    const task = toWorkflowTaskRef(taskInput)
-    const nextArtifacts = extractArtifactsFromTaskResult({
-      stepKey,
-      toolSlug,
-      task
-    })
-
-    if (nextArtifacts.length > 0) {
-      registerArtifacts(nextArtifacts)
+  function recordTask(toolSlug: string, taskInput: WorkflowTaskRef) {
+    taskByTool.value = {
+      ...taskByTool.value,
+      [toolSlug]: toWorkflowTaskRef(taskInput)
     }
-
-    return nextArtifacts
-  }
-
-  function invalidateArtifacts(artifactIds: Iterable<string>) {
-    const nextInvalidArtifactIds = new Set(invalidArtifactIds.value)
-
-    for (const artifactId of artifactIds) {
-      nextInvalidArtifactIds.add(artifactId)
-    }
-
-    invalidArtifactIds.value = Array.from(nextInvalidArtifactIds)
-    refreshAllStepReadiness()
     touchSession()
   }
 
-  function invalidateDownstreamFrom(stepKey: WorkflowStepKey) {
-    stepStateByKey.value = invalidateCompletedDownstreamSteps({
-      fromStepKey: stepKey,
-      stepStateByKey: stepStateByKey.value
-    })
+  function clearTask(toolSlug: string) {
+    if (!taskByTool.value[toolSlug]) {
+      return
+    }
 
-    const currentIndex = AIDD_WORKFLOW_STEP_ORDER.indexOf(stepKey)
-    const downstreamSteps = new Set(AIDD_WORKFLOW_STEP_ORDER.slice(currentIndex + 1))
-
-    invalidateArtifacts(
-      artifacts.value
-        .filter((artifact) => downstreamSteps.has(artifact.stepKey))
-        .map((artifact) => artifact.id)
-    )
+    const nextTasks = { ...taskByTool.value }
+    delete nextTasks[toolSlug]
+    taskByTool.value = nextTasks
+    touchSession()
   }
 
   return {
     sessionId,
-    activeStepKey,
-    selectedToolByStep,
-    stepFormDrafts,
-    taskByStep,
-    stepStateByKey,
-    artifacts,
-    invalidArtifactIds,
+    activeGroupId,
+    selectedToolByGroup,
+    toolFormDrafts,
+    taskByTool,
     lastUpdatedAt,
     ownerUserId,
     session,
     resetSession,
-    setOwnerUserId,
-    setActiveStep,
+    syncOwnerUserId,
+    setActiveGroup,
     selectTool,
-    setStepFormDraft,
+    setToolFormDraft,
+    clearToolFormDraft,
     recordTask,
-    registerArtifacts,
-    registerTaskArtifacts,
-    invalidateArtifacts,
-    invalidateDownstreamFrom,
-    refreshStepReadiness,
-    refreshAllStepReadiness
+    clearTask
   }
 }, {
   persist: {
     pick: [
       'sessionId',
-      'activeStepKey',
-      'selectedToolByStep',
-      'stepFormDrafts',
-      'taskByStep',
-      'stepStateByKey',
-      'artifacts',
-      'invalidArtifactIds',
+      'activeGroupId',
+      'selectedToolByGroup',
+      'toolFormDrafts',
+      'taskByTool',
       'lastUpdatedAt',
       'ownerUserId'
     ]

@@ -124,11 +124,31 @@ export default {
   },
 
   workflow: {
-    title: 'Workflow Workbench',
-    subtitle: 'Organize tools, inputs and results along the five AIDD steps with a static workbench skeleton for now',
+    title: 'Tool Workbench',
+    subtitle: 'Browse tools by research group, reuse historical artifacts, and launch the next task from one workspace',
     entry: {
-      home: 'Open Workflow Workbench',
-      tools: 'Use Tools by Workflow'
+      home: 'Open Tool Workbench',
+      tools: 'Use Tools by Group'
+    },
+    groups: {
+      empty: 'No workbench groups are available yet',
+      noTools: 'No tool is available in this group yet',
+      descriptionFallback: 'This group is waiting for the administrator to add a description.',
+      toolCount: '{count} tools',
+      recommendedCount: '{count} recommended'
+    },
+    currentGroup: {
+      label: 'Current Group'
+    },
+    currentTool: {
+      label: 'Current Tool',
+      descriptionFallback: 'Pick a tool from the current group to start.',
+      runAction: 'Run Current Tool',
+      runHint: 'You can upload a local file or directly reuse a historical output from My Artifacts.',
+      viewDetail: 'View Tool Detail',
+      viewTask: 'View Task Detail',
+      lastTask: 'Latest Task',
+      empty: 'Select a tool from the current group'
     },
     toolStatus: {
       recommended: 'Recommended',
@@ -142,85 +162,21 @@ export default {
       waiting: 'Waiting for upstream result'
     },
     artifacts: {
-      ready: 'Ready',
-      invalidated: 'Invalidated',
-      currentGroup: 'Current Valid Artifacts',
-      invalidatedGroup: 'Invalidated Artifacts',
-      sourceStep: 'Source Step: {step}',
+      currentGroup: 'Current Group Artifacts',
+      recentGroup: 'My Recent Artifacts',
+      emptyCurrentGroup: 'No reusable artifact is available for this group yet',
+      emptyRecent: 'You do not have any reusable output file yet',
       sourceTool: 'Source Tool: {tool}',
-      generatedAt: 'Generated At: {time}',
-      autoBound: 'Auto-bound Now',
-      switchable: 'Switchable Source'
-    },
-    stepStatus: {
-      idle: 'Idle',
-      ready: 'Ready',
-      running: 'Running',
-      completed: 'Completed',
-      failed: 'Failed',
-      invalidated: 'Invalidated',
-      needs_tool_selection: 'Reselect Tool'
-    },
-    stepHints: {
-      startHere: 'Start here by uploading or binding the protein structure input.',
-      awaitingInputs: 'Waiting for upstream steps to produce the required input.',
-      selectTool: 'Inputs are ready. Pick a tool for this step first.',
-      ready: 'This step is ready to run after you confirm the parameters.',
-      running: 'The task is running. Keep an eye on artifacts and task status.',
-      completed: 'This step already has reusable results for downstream work.',
-      failed: 'The last run failed. Adjust parameters and try again.',
-      invalidated: 'Upstream outputs changed and this step needs to be refreshed.',
-      toolUnavailable: 'No tool is currently available for this step.'
-    },
-    actions: {
-      title: 'Current Action',
-      runStep: 'Run This Step',
-      rerunStep: 'Rerun This Step',
-      running: 'Wait For Current Task',
-      selectTool: 'Select An Available Tool',
-      toolUnavailable: 'Wait For Tool Availability',
-      continueNextStep: 'Continue to {step}',
-      viewTask: 'View Task Detail'
-    },
-    statusSummary: {
-      awaitInput: 'This step is still waiting for upstream inputs.',
-      ready: 'Inputs and tool are ready. You can submit this step now.',
-      running: 'The current task is running. You can inspect intermediate outputs.',
-      completed: 'This step already has results. Continue downstream or rerun it.',
-      failed: 'The last run failed. Adjust the parameters and try again.',
-      invalidated: 'Upstream results changed. Rerun this step to refresh the outputs.',
-      selectTool: 'Inputs are ready for this step. Select an available tool first.',
-      toolUnavailable: 'No tool is available for this step yet, so the workflow cannot proceed.'
-    },
-    invalidations: {
-      notice: 'Rerunning this upstream step invalidates completed downstream results and they will need confirmation again.'
+      generatedAt: 'Generated At: {time}'
     },
     steps: workflowSteps,
     columns: {
-      steps: 'Workflow Steps',
-      stepsHint: 'The fixed five-step order will later host status, artifacts and navigation controls.',
+      groups: 'Tool Groups',
+      groupsHint: 'Browse tools by research theme and recommendations without enforcing a fixed order.',
       tools: 'Tools and Parameters',
-      toolsHint: 'Reserved for recommended tools, filtered options and parameter entry for the active step.',
-      workspace: 'Workspace',
-      workspaceHint: 'Reserved for input summaries, task status and result preview panels.'
-    },
-    placeholders: {
-      availableTools: {
-        title: 'Tool list placeholder',
-        description: 'Available tools, recommendations and selection state will appear here for the active step.'
-      },
-      parameterSetup: {
-        title: 'Parameter setup placeholder',
-        description: 'Forms, input bindings and pre-submit checks will live here.'
-      },
-      inputSummary: {
-        title: 'Input summary placeholder',
-        description: 'Upstream artifacts, bound files and current task context will be summarized here.'
-      },
-      resultPreview: {
-        title: 'Result preview placeholder',
-        description: 'Task status, key outputs and downstream guidance will be shown here.'
-      }
+      toolsHint: 'Choose a tool in the current group, fill in the parameters, and reuse historical files when needed.',
+      artifacts: 'My Artifacts',
+      artifactsHint: 'Your own historical output files appear here and can be reused in file fields across tools.'
     }
   },
 
@@ -404,6 +360,10 @@ export default {
     noFavorites: 'No favorite tools yet',
     noCustomTools: 'No custom tools yet',
     browseTools: 'Browse Tools',
+    fileSourceUpload: 'Upload',
+    fileSourceArtifact: 'My Artifacts',
+    selectArtifact: 'Select Artifact',
+    noArtifacts: 'No reusable artifacts yet',
     // Guest warning
     guestWarning: 'Guest mode has limited features. Please login for full access',
     // Tool detail
@@ -710,6 +670,8 @@ export default {
     importToolConfigRequired: 'Please paste the platform_tool.json content first',
     importToolConfigInvalid: 'platform_tool.json is not valid JSON',
     toolsSubtitle: 'Maintain the tool catalog and category assignment in one place',
+    workbenchGroups: 'Workbench Groups',
+    workbenchGroupsSubtitle: 'Manage tool workbench groups, recommendations, and mappings in one place',
     toolCategories: 'Category Management',
     toolCategoriesSubtitle: 'Manage tool categories, status and display order in one place',
     createCategory: 'Create Category',

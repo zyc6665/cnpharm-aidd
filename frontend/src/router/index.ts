@@ -134,6 +134,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'admin.toolCategories' }
       },
       {
+        path: 'workbench-groups',
+        name: 'AdminWorkbenchGroups',
+        component: () => import('@/views/admin/WorkbenchGroups.vue'),
+        meta: { title: 'admin.workbenchGroups' }
+      },
+      {
         path: 'tasks',
         name: 'AdminTasks',
         component: () => import('@/views/admin/Tasks.vue'),

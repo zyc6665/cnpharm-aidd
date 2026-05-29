@@ -11,6 +11,8 @@ api_router.include_router(verification.router, prefix="/verification", tags=["�
 api_router.include_router(users.router, prefix="/users", tags=["用户"])
 api_router.include_router(tools.router, prefix="/tools", tags=["工具"])
 api_router.include_router(tools.admin_category_router)
+api_router.include_router(tools.admin_workbench_group_router)
+api_router.include_router(tools.admin_workbench_group_mapping_router)
 api_router.include_router(tasks.router, prefix="/tasks", tags=["任务"])
 api_router.include_router(files.router, prefix="/files", tags=["文件"])
 api_router.include_router(system.router, prefix="/system", tags=["系统"])

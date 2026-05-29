@@ -2,7 +2,10 @@
 """工具管理API"""
 
 from datetime import datetime
+from pathlib import Path
+import sys
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, and_
 from sqlalchemy.orm import selectinload, joinedload
@@ -12,6 +15,7 @@ from app.database.session import get_db
 from app.models.users import User
 from app.models.tools import (
     Tool, ToolCategory, ToolVersion, Tag, ToolFavorite, ToolStatus,
+    ToolWorkbenchGroup, ToolWorkbenchGroupMapping,
     ToolProviderType, ToolReviewStatus
 )
 from app.auth.dependencies import get_current_user, get_current_user_optional, get_admin_user
@@ -19,13 +23,28 @@ from app.schemas.tools import (
     ToolCreate, ToolUpdate, ToolResponse, ToolListResponse,
     ToolVersionCreate, ToolVersionResponse, TagCreate, TagResponse,
     ToolCategoryCreate, ToolCategoryUpdate, ToolCategoryResponse,
-    ToolCategoryStatusUpdate, ToolCategoryReorderRequest
+    ToolCategoryStatusUpdate, ToolCategoryReorderRequest, ToolImportRequest,
+    ToolWorkbenchGroupCreate, ToolWorkbenchGroupUpdate, ToolWorkbenchGroupResponse,
+    ToolWorkbenchGroupReorderRequest, ToolWorkbenchGroupMappingCreate,
+    ToolWorkbenchGroupMappingUpdate, ToolWorkbenchGroupMappingResponse,
+    ToolWorkbenchGroupToolResponse, ToolWorkbenchGroupPublicResponse,
 )
 from app.common.responses import success_response, error_response
 from app.common.exceptions import NotFoundException, ForbiddenException, ConflictException, ValidationException
 
+PROJECT_ROOT = Path(__file__).resolve().parents[4]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from tool_import_config import ToolImportConfigError, validate_tool_import_config
+
 router = APIRouter()
 admin_category_router = APIRouter(prefix="/admin/tool-categories", tags=["工具分类管理"])
+admin_workbench_group_router = APIRouter(prefix="/admin/workbench-groups", tags=["工具工作台分组管理"])
+admin_workbench_group_mapping_router = APIRouter(
+    prefix="/admin/workbench-group-mappings",
+    tags=["工具工作台分组映射管理"],
+)
 
 
 def serialize_tool(tool: Tool, schema_class=ToolResponse) -> dict:
@@ -43,6 +62,163 @@ def serialize_category(category: ToolCategory, tool_count: Optional[int] = None)
         category_data["tool_count"] = tool_count
         category_data["count"] = tool_count
     return category_data
+
+
+def serialize_workbench_group(group: ToolWorkbenchGroup) -> dict:
+    """统一序列化工作台分组响应。"""
+    return ToolWorkbenchGroupResponse.model_validate(group).model_dump()
+
+
+def serialize_workbench_group_mapping(mapping: ToolWorkbenchGroupMapping) -> dict:
+    """统一序列化工作台分组映射响应。"""
+    return ToolWorkbenchGroupMappingResponse.model_validate(mapping).model_dump()
+
+
+def serialize_public_workbench_group_tool(
+    tool: Tool,
+    *,
+    is_recommended: bool,
+    sort_order: int,
+) -> dict:
+    """统一序列化公开工作台分组中的工具摘要。"""
+    return ToolWorkbenchGroupToolResponse.model_validate(
+        {
+            "id": tool.id,
+            "name": tool.name,
+            "slug": tool.slug,
+            "description": tool.description,
+            "category_id": tool.category_id,
+            "category": tool.tool_category.name if tool.tool_category else tool.category,
+            "icon": tool.icon,
+            "icon_url": tool.icon_url,
+            "status": tool.status,
+            "is_public": tool.is_public,
+            "is_recommended": is_recommended,
+            "sort_order": sort_order,
+        }
+    ).model_dump()
+
+
+def serialize_public_workbench_group(group: ToolWorkbenchGroup, tools: List[dict]) -> dict:
+    """统一序列化公开工作台分组响应。"""
+    group_data = ToolWorkbenchGroupPublicResponse.model_validate(
+        {
+            "id": group.id,
+            "name": group.name,
+            "slug": group.slug,
+            "description": group.description,
+            "sort_order": group.sort_order,
+            "created_at": group.created_at,
+            "updated_at": group.updated_at,
+            "tools": tools,
+        }
+    ).model_dump()
+    return group_data
+
+
+async def commit_or_raise_conflict(db: AsyncSession, message: str) -> None:
+    """提交事务并将唯一约束冲突转换为业务异常。"""
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise ConflictException(message) from exc
+
+
+async def list_workbench_groups_in_order(db: AsyncSession) -> List[ToolWorkbenchGroup]:
+    """按排序读取全部工作台分组。"""
+    result = await db.execute(
+        select(ToolWorkbenchGroup)
+        .order_by(ToolWorkbenchGroup.sort_order.asc(), ToolWorkbenchGroup.created_at.asc())
+    )
+    return list(result.scalars().all())
+
+
+def resequence_workbench_groups(groups: List[ToolWorkbenchGroup]) -> None:
+    """将工作台分组排序重排为连续值。"""
+    for index, group in enumerate(groups):
+        group.sort_order = index
+
+
+async def move_workbench_group_to_position(
+    db: AsyncSession,
+    group: ToolWorkbenchGroup,
+    target_position: int,
+) -> List[ToolWorkbenchGroup]:
+    """将工作台分组移动到指定位置并重排全部分组。"""
+    groups = await list_workbench_groups_in_order(db)
+    ordered_groups = [item for item in groups if item.id != group.id]
+    if target_position > len(ordered_groups):
+        raise ValidationException("工作台分组排序值超出范围")
+
+    ordered_groups.insert(target_position, group)
+    resequence_workbench_groups(ordered_groups)
+    return ordered_groups
+
+
+async def list_group_mappings_in_order(
+    db: AsyncSession,
+    group_id: str,
+    exclude_mapping_id: Optional[str] = None,
+) -> List[ToolWorkbenchGroupMapping]:
+    """按排序读取指定分组内映射。"""
+    query = (
+        select(ToolWorkbenchGroupMapping)
+        .where(ToolWorkbenchGroupMapping.group_id == group_id)
+        .order_by(
+            ToolWorkbenchGroupMapping.sort_order.asc(),
+            ToolWorkbenchGroupMapping.created_at.asc(),
+        )
+    )
+    if exclude_mapping_id:
+        query = query.where(ToolWorkbenchGroupMapping.id != exclude_mapping_id)
+
+    result = await db.execute(query)
+    return list(result.scalars().all())
+
+
+def resequence_group_mappings(mappings: List[ToolWorkbenchGroupMapping]) -> None:
+    """将分组内映射排序重排为连续值。"""
+    for index, mapping in enumerate(mappings):
+        mapping.sort_order = index
+
+
+async def move_mapping_between_groups(
+    db: AsyncSession,
+    mapping: ToolWorkbenchGroupMapping,
+    target_group_id: str,
+    target_position: int,
+) -> None:
+    """移动映射并维护受影响分组的顺序。"""
+    source_group_id = mapping.group_id
+
+    if source_group_id == target_group_id:
+        ordered_mappings = await list_group_mappings_in_order(db, source_group_id, exclude_mapping_id=mapping.id)
+        if target_position > len(ordered_mappings):
+            raise ValidationException("工作台分组映射排序值超出范围")
+        if len(ordered_mappings) == 0:
+            mapping.sort_order = target_position
+            return
+        ordered_mappings.insert(target_position, mapping)
+        resequence_group_mappings(ordered_mappings)
+        return
+
+    source_mappings = await list_group_mappings_in_order(db, source_group_id, exclude_mapping_id=mapping.id)
+    target_mappings = await list_group_mappings_in_order(db, target_group_id)
+
+    if target_position > len(target_mappings):
+        raise ValidationException("工作台分组映射排序值超出范围")
+
+    if len(target_mappings) == 0:
+        mapping.group_id = target_group_id
+        mapping.sort_order = target_position
+        resequence_group_mappings(source_mappings)
+        return
+
+    mapping.group_id = target_group_id
+    target_mappings.insert(target_position, mapping)
+    resequence_group_mappings(source_mappings)
+    resequence_group_mappings(target_mappings)
 
 
 async def require_active_tool_category(db: AsyncSession, category_id: str) -> ToolCategory:
@@ -78,6 +254,96 @@ async def load_tool_for_response(db: AsyncSession, tool_id: str) -> Tool:
     if not tool:
         raise NotFoundException("工具不存在")
     return tool
+
+
+async def create_or_update_tool_from_import(
+    db: AsyncSession,
+    current_user: User,
+    import_data: ToolImportRequest,
+) -> dict:
+    """根据导入配置创建工具或追加版本。"""
+    try:
+        normalized_config = validate_tool_import_config(import_data.config)
+    except ToolImportConfigError as exc:
+        raise ValidationException(str(exc)) from exc
+
+    category = None
+    if import_data.category_id:
+        category = await require_active_tool_category(db, import_data.category_id)
+
+    result = await db.execute(select(Tool).where(Tool.slug == normalized_config["slug"]))
+    tool = result.scalar_one_or_none()
+    created_new_tool = tool is None
+
+    tool_fields = {
+        "name": normalized_config["name"],
+        "description": normalized_config.get("description", ""),
+        "icon": normalized_config.get("icon", "🔧"),
+        "icon_url": normalized_config.get("icon_url"),
+        "is_public": normalized_config.get("is_public", True),
+        "gpu_required": normalized_config.get("gpu_required", False),
+        "gpu_memory_mb": normalized_config.get("gpu_memory_mb", 0),
+        "timeout_sec": normalized_config.get(
+            "timeout_sec",
+            normalized_config["tool_config"].get("timeout_sec", 600),
+        ),
+    }
+
+    if created_new_tool:
+        tool = Tool(
+            owner_id=current_user.id,
+            slug=normalized_config["slug"],
+            category=normalized_config.get("category", "imported"),
+            status=ToolStatus.DRAFT.value,
+            provider_type=ToolProviderType.PLATFORM.value,
+            review_status=ToolReviewStatus.NOT_REQUIRED.value,
+            **tool_fields,
+        )
+        db.add(tool)
+        await db.flush()
+    else:
+        for field, value in tool_fields.items():
+            setattr(tool, field, value)
+
+    if category:
+        tool.category_id = category.id
+        tool.category = category.name
+    elif normalized_config.get("category"):
+        tool.category = normalized_config["category"]
+
+    version_value = normalized_config["version"]
+    result = await db.execute(
+        select(ToolVersion).where(
+            ToolVersion.tool_id == tool.id,
+            ToolVersion.version == version_value,
+        )
+    )
+    if result.scalar_one_or_none():
+        raise ConflictException("版本号已存在")
+
+    tool_version = ToolVersion(
+        tool_id=tool.id,
+        version=version_value,
+        changelog=normalized_config.get("changelog", "Initial version"),
+        notes=normalized_config.get("notes"),
+        config=normalized_config["tool_config"],
+        is_active=True,
+    )
+    db.add(tool_version)
+    await db.flush()
+
+    tool.current_version_id = tool_version.id
+    if import_data.publish:
+        tool.status = ToolStatus.PUBLISHED.value
+
+    await db.commit()
+    tool_response = await load_tool_for_response(db, tool.id)
+
+    return {
+        "created_new_tool": created_new_tool,
+        "tool": serialize_tool(tool_response),
+        "version": ToolVersionResponse.model_validate(tool_version).model_dump(),
+    }
 
 
 # ==================== 工具列表接口 ====================
@@ -173,6 +439,61 @@ async def list_tools(
             "total_pages": (total + page_size - 1) // page_size
         }
     )
+
+
+@router.get("/workbench-groups", response_model=dict)
+async def list_public_workbench_groups(
+    db: AsyncSession = Depends(get_db),
+):
+    """获取公开工具工作台分组。"""
+    group_result = await db.execute(
+        select(ToolWorkbenchGroup)
+        .where(ToolWorkbenchGroup.is_enabled.is_(True))
+        .order_by(ToolWorkbenchGroup.sort_order.asc(), ToolWorkbenchGroup.created_at.asc())
+    )
+    groups = list(group_result.scalars().all())
+    if not groups:
+        return success_response(data=[])
+
+    group_ids = [group.id for group in groups]
+    mapping_result = await db.execute(
+        select(ToolWorkbenchGroupMapping)
+        .options(joinedload(ToolWorkbenchGroupMapping.tool).joinedload(Tool.tool_category))
+        .join(ToolWorkbenchGroup, ToolWorkbenchGroup.id == ToolWorkbenchGroupMapping.group_id)
+        .join(Tool, Tool.id == ToolWorkbenchGroupMapping.tool_id)
+        .where(
+            ToolWorkbenchGroupMapping.group_id.in_(group_ids),
+            ToolWorkbenchGroupMapping.is_enabled.is_(True),
+            Tool.status == ToolStatus.PUBLISHED.value,
+            Tool.is_public.is_(True),
+        )
+        .order_by(
+            ToolWorkbenchGroup.sort_order.asc(),
+            ToolWorkbenchGroupMapping.sort_order.asc(),
+            ToolWorkbenchGroupMapping.created_at.asc(),
+        )
+    )
+    mappings = list(mapping_result.scalars().all())
+
+    tools_by_group_id: dict[str, List[dict]] = {group.id: [] for group in groups}
+    for mapping in mappings:
+        if mapping.tool is None:
+            continue
+        tools_by_group_id[mapping.group_id].append(
+            serialize_public_workbench_group_tool(
+                mapping.tool,
+                is_recommended=mapping.is_recommended,
+                sort_order=mapping.sort_order,
+            )
+        )
+
+    payload = [
+        serialize_public_workbench_group(group, tools_by_group_id.get(group.id, []))
+        for group in groups
+    ]
+    return success_response(data=payload)
+
+
 @router.get("/categories", response_model=dict)
 async def list_categories(
     db: AsyncSession = Depends(get_db)
@@ -268,6 +589,16 @@ async def get_tool(
 
 
 # ==================== 工具创建/更新/删除 ====================
+
+@router.post("/import-config", response_model=dict)
+async def import_tool_config(
+    import_data: ToolImportRequest,
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """管理员导入 platform_tool 配置。"""
+    result = await create_or_update_tool_from_import(db, current_user, import_data)
+    return success_response(data=result, message="工具配置导入成功")
 
 @router.post("", response_model=dict)
 async def create_tool(
@@ -781,3 +1112,238 @@ async def admin_delete_tool_category(
     await db.delete(category)
     await db.commit()
     return success_response(message="工具分类删除成功")
+
+
+@admin_workbench_group_router.get("", response_model=dict)
+async def admin_list_workbench_groups(
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """管理员获取全部工作台分组。"""
+    groups = [serialize_workbench_group(group) for group in await list_workbench_groups_in_order(db)]
+    return success_response(data=groups)
+
+
+@admin_workbench_group_router.post("", response_model=dict)
+async def admin_create_workbench_group(
+    group_data: ToolWorkbenchGroupCreate,
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """管理员创建工作台分组。"""
+    existing = await db.execute(
+        select(ToolWorkbenchGroup).where(
+            or_(ToolWorkbenchGroup.name == group_data.name, ToolWorkbenchGroup.slug == group_data.slug)
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise ConflictException("工作台分组名称或标识已存在")
+
+    sort_order = group_data.sort_order
+    if "sort_order" not in group_data.model_fields_set:
+        max_sort_result = await db.execute(select(func.max(ToolWorkbenchGroup.sort_order)))
+        sort_order = (max_sort_result.scalar() or 0) + 1
+
+    group = ToolWorkbenchGroup(
+        name=group_data.name,
+        slug=group_data.slug,
+        description=group_data.description,
+        sort_order=sort_order,
+        is_enabled=group_data.is_enabled,
+    )
+    db.add(group)
+    await commit_or_raise_conflict(db, "工作台分组名称或标识已存在")
+    await db.refresh(group)
+    return success_response(data=serialize_workbench_group(group), message="工作台分组创建成功")
+
+
+@admin_workbench_group_router.post("/reorder", response_model=dict)
+async def admin_reorder_workbench_groups(
+    reorder_data: ToolWorkbenchGroupReorderRequest,
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """管理员重排工作台分组。"""
+    all_groups = await list_workbench_groups_in_order(db)
+    all_group_ids = [group.id for group in all_groups]
+    if (
+        len(reorder_data.group_ids) != len(all_group_ids)
+        or len(set(reorder_data.group_ids)) != len(reorder_data.group_ids)
+        or set(reorder_data.group_ids) != set(all_group_ids)
+    ):
+        raise ValidationException("工作台分组重排必须包含全部且唯一的分组ID")
+
+    groups = {group.id: group for group in all_groups}
+    resequence_workbench_groups([groups[group_id] for group_id in reorder_data.group_ids])
+
+    await db.commit()
+    ordered_groups = [serialize_workbench_group(groups[group_id]) for group_id in reorder_data.group_ids]
+    return success_response(data=ordered_groups, message="工作台分组排序更新成功")
+
+
+@admin_workbench_group_router.put("/{group_id}", response_model=dict)
+async def admin_update_workbench_group(
+    group_id: str,
+    group_data: ToolWorkbenchGroupUpdate,
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """管理员更新工作台分组。"""
+    result = await db.execute(select(ToolWorkbenchGroup).where(ToolWorkbenchGroup.id == group_id))
+    group = result.scalar_one_or_none()
+    if not group:
+        raise NotFoundException("工作台分组不存在")
+
+    update_data = group_data.model_dump(exclude_unset=True)
+    sort_order = update_data.pop("sort_order", None)
+    if "name" in update_data or "slug" in update_data:
+        conflict_conditions = []
+        if "name" in update_data:
+            conflict_conditions.append(ToolWorkbenchGroup.name == update_data["name"])
+        if "slug" in update_data:
+            conflict_conditions.append(ToolWorkbenchGroup.slug == update_data["slug"])
+        conflict_result = await db.execute(
+            select(ToolWorkbenchGroup).where(
+                ToolWorkbenchGroup.id != group_id,
+                or_(*conflict_conditions)
+            )
+        )
+        if conflict_result.scalar_one_or_none():
+            raise ConflictException("工作台分组名称或标识已存在")
+
+    for field, value in update_data.items():
+        setattr(group, field, value)
+
+    if sort_order is not None and sort_order != group.sort_order:
+        await move_workbench_group_to_position(db, group, sort_order)
+
+    await commit_or_raise_conflict(db, "工作台分组名称或标识已存在")
+    await db.refresh(group)
+    return success_response(data=serialize_workbench_group(group), message="工作台分组更新成功")
+
+
+@admin_workbench_group_mapping_router.get("", response_model=dict)
+async def admin_list_workbench_group_mappings(
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """管理员获取全部工作台分组映射。"""
+    result = await db.execute(
+        select(ToolWorkbenchGroupMapping)
+        .join(ToolWorkbenchGroup, ToolWorkbenchGroup.id == ToolWorkbenchGroupMapping.group_id)
+        .order_by(
+            ToolWorkbenchGroup.sort_order.asc(),
+            ToolWorkbenchGroupMapping.sort_order.asc(),
+            ToolWorkbenchGroupMapping.created_at.asc(),
+        )
+    )
+    mappings = [serialize_workbench_group_mapping(mapping) for mapping in result.scalars().all()]
+    return success_response(data=mappings)
+
+
+@admin_workbench_group_mapping_router.post("", response_model=dict)
+async def admin_create_workbench_group_mapping(
+    mapping_data: ToolWorkbenchGroupMappingCreate,
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """管理员创建工作台分组映射。"""
+    tool = await db.get(Tool, mapping_data.tool_id)
+    if not tool:
+        raise ValidationException("工具不存在")
+
+    group = await db.get(ToolWorkbenchGroup, mapping_data.group_id)
+    if not group:
+        raise ValidationException("工作台分组不存在")
+
+    existing = await db.execute(
+        select(ToolWorkbenchGroupMapping).where(
+            ToolWorkbenchGroupMapping.tool_id == mapping_data.tool_id,
+            ToolWorkbenchGroupMapping.group_id == mapping_data.group_id,
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise ConflictException("工具与工作台分组映射已存在")
+
+    mapping = ToolWorkbenchGroupMapping(**mapping_data.model_dump())
+    db.add(mapping)
+    await commit_or_raise_conflict(db, "工具与工作台分组映射已存在")
+    await db.refresh(mapping)
+    return success_response(data=serialize_workbench_group_mapping(mapping), message="工作台分组映射创建成功")
+
+
+@admin_workbench_group_mapping_router.put("/{mapping_id}", response_model=dict)
+async def admin_update_workbench_group_mapping(
+    mapping_id: str,
+    mapping_data: ToolWorkbenchGroupMappingUpdate,
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """管理员更新工作台分组映射。"""
+    mapping = await db.get(ToolWorkbenchGroupMapping, mapping_id)
+    if not mapping:
+        raise NotFoundException("工作台分组映射不存在")
+
+    update_data = mapping_data.model_dump(exclude_unset=True)
+    requested_sort_order = update_data.pop("sort_order", None)
+    new_tool_id = update_data.get("tool_id", mapping.tool_id)
+    new_group_id = update_data.get("group_id", mapping.group_id)
+
+    if "tool_id" in update_data:
+        tool = await db.get(Tool, new_tool_id)
+        if not tool:
+            raise ValidationException("工具不存在")
+
+    if "group_id" in update_data:
+        group = await db.get(ToolWorkbenchGroup, new_group_id)
+        if not group:
+            raise ValidationException("工作台分组不存在")
+
+    if new_tool_id != mapping.tool_id or new_group_id != mapping.group_id:
+        conflict_result = await db.execute(
+            select(ToolWorkbenchGroupMapping).where(
+                ToolWorkbenchGroupMapping.id != mapping_id,
+                ToolWorkbenchGroupMapping.tool_id == new_tool_id,
+                ToolWorkbenchGroupMapping.group_id == new_group_id,
+            )
+        )
+        if conflict_result.scalar_one_or_none():
+            raise ConflictException("工具与工作台分组映射已存在")
+
+    if requested_sort_order is not None:
+        if new_group_id != mapping.group_id or requested_sort_order != mapping.sort_order:
+            await move_mapping_between_groups(db, mapping, new_group_id, requested_sort_order)
+        update_data["group_id"] = mapping.group_id
+        update_data["sort_order"] = mapping.sort_order
+    elif new_group_id != mapping.group_id:
+        current_group_mappings = await list_group_mappings_in_order(db, new_group_id)
+        await move_mapping_between_groups(db, mapping, new_group_id, len(current_group_mappings))
+        update_data["group_id"] = mapping.group_id
+        update_data["sort_order"] = mapping.sort_order
+
+    for field, value in update_data.items():
+        setattr(mapping, field, value)
+
+    await commit_or_raise_conflict(db, "工具与工作台分组映射已存在")
+    await db.refresh(mapping)
+    return success_response(data=serialize_workbench_group_mapping(mapping), message="工作台分组映射更新成功")
+
+
+@admin_workbench_group_mapping_router.delete("/{mapping_id}", response_model=dict)
+async def admin_delete_workbench_group_mapping(
+    mapping_id: str,
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """管理员删除工作台分组映射。"""
+    mapping = await db.get(ToolWorkbenchGroupMapping, mapping_id)
+    if not mapping:
+        raise NotFoundException("工作台分组映射不存在")
+
+    group_id = mapping.group_id
+    await db.delete(mapping)
+    await db.flush()
+    remaining_mappings = await list_group_mappings_in_order(db, group_id, exclude_mapping_id=mapping_id)
+    resequence_group_mappings(remaining_mappings)
+    await db.commit()
+    return success_response(message="工作台分组映射删除成功")

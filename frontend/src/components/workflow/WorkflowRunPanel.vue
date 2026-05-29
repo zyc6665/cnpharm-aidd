@@ -4,82 +4,98 @@
       <h2 class="column-title">{{ t('workflow.columns.tools') }}</h2>
       <p class="column-subtitle">{{ t('workflow.columns.toolsHint') }}</p>
 
-      <div class="active-step-banner">
-        <span class="active-step-label">{{ t('workflow.columns.steps') }}</span>
-        <strong class="active-step-value">{{ t(`workflow.steps.${step.key}.title`) }}</strong>
+      <div v-if="group" class="group-banner">
+        <div class="group-banner-copy">
+          <span class="group-banner-label">{{ t('workflow.currentGroup.label') }}</span>
+          <strong class="group-banner-title">{{ group.name }}</strong>
+          <p v-if="group.description" class="group-banner-desc">{{ group.description }}</p>
+        </div>
+      </div>
+
+      <div v-if="group?.tools.length" class="tool-option-list">
+        <div
+          v-for="toolOption in group.tools"
+          :key="toolOption.slug"
+          :class="['tool-option-card', { 'tool-option-active': selectedToolSlug === toolOption.slug }]"
+          @click="selectTool(toolOption.slug)"
+        >
+          <div class="tool-option-copy">
+            <h3 class="tool-option-title">{{ toolOption.name }}</h3>
+            <p class="tool-option-desc">{{ toolOption.description || toolOption.slug }}</p>
+          </div>
+          <div class="tool-option-tags">
+            <a-tag v-if="toolOption.is_recommended" color="gold">
+              {{ t('workflow.toolStatus.recommended') }}
+            </a-tag>
+            <a-tag color="green">{{ t('workflow.toolStatus.available') }}</a-tag>
+          </div>
+        </div>
       </div>
 
       <a-alert
-        v-if="invalidatedDownstreamStepKeys.length > 0"
+        v-else-if="group"
+        type="info"
+        show-icon
+        style="margin-bottom: 16px"
+      >
+        <template #message>
+          {{ t('workflow.groups.noTools') }}
+        </template>
+      </a-alert>
+
+      <a-alert
+        v-if="!userStore.isAuthenticated"
+        type="info"
+        show-icon
+        style="margin-bottom: 16px"
+      >
+        <template #message>
+          {{ t('auth.loginRequired') }}
+        </template>
+      </a-alert>
+      <a-alert
+        v-else-if="userStore.isGuest"
         type="warning"
         show-icon
         style="margin-bottom: 16px"
       >
         <template #message>
-          {{ t('workflow.invalidations.notice') }}
+          {{ t('tools.guestWarning') }}
         </template>
       </a-alert>
 
-      <div class="tool-option-list">
-        <div
-          v-for="toolOption in toolViewModel.tools"
-          :key="toolOption.slug"
-          :class="[
-            'tool-option-card',
-            {
-              'tool-option-active': selectedToolSlug === toolOption.slug,
-              'tool-option-missing': toolOption.availability === 'missing'
-            }
-          ]"
-          @click="selectTool(toolOption.slug, toolOption.availability)"
-        >
-          <div class="tool-option-copy">
-            <h3 class="tool-option-title">{{ toolOption.tool?.name ?? toolOption.slug }}</h3>
-            <p class="tool-option-desc">{{ toolOption.tool?.description ?? toolOption.slug }}</p>
-          </div>
-          <div class="tool-option-tags">
-            <a-tag v-if="toolOption.isRecommended" color="gold">
-              {{ t('workflow.toolStatus.recommended') }}
-            </a-tag>
-            <a-tag v-if="toolOption.availability === 'available'" color="green">
-              {{ t('workflow.toolStatus.available') }}
-            </a-tag>
-            <a-tag v-else>
-              {{ t('workflow.toolStatus.unavailable') }}
-            </a-tag>
-          </div>
-        </div>
-      </div>
-
       <a-spin :spinning="selectedToolLoading || submitting">
-        <div v-if="selectedTool && flattenedSchema" class="form-shell">
+        <div v-if="selectedTool && selectedToolSlug && group" class="form-shell">
           <div class="action-summary-card">
             <div class="action-summary-copy">
-              <span class="action-summary-label">{{ t('workflow.actions.title') }}</span>
-              <strong class="action-summary-title">{{ t(`workflow.actions.${primaryActionKey}`) }}</strong>
-              <p class="action-summary-desc">{{ t(`workflow.statusSummary.${statusSummaryKey}`) }}</p>
+              <span class="action-summary-label">{{ t('workflow.currentTool.label') }}</span>
+              <strong class="action-summary-title">{{ selectedTool.name }}</strong>
+              <p class="action-summary-desc">
+                {{ selectedTool.description || t('workflow.currentTool.descriptionFallback') }}
+              </p>
             </div>
             <div class="action-summary-tags">
-              <a-tag :color="currentStepStatusColor">
-                {{ t(`workflow.stepStatus.${currentStepStatus}`) }}
+              <a-tag v-if="selectedToolSummary?.is_recommended" color="gold">
+                {{ t('workflow.toolStatus.recommended') }}
               </a-tag>
-              <a-tag v-if="activeTask" color="blue">
-                #{{ activeTask.id }}
+              <a-tag v-if="activeTask" :color="taskStatusColor(activeTask.status)">
+                {{ activeTask.status }}
               </a-tag>
             </div>
           </div>
 
-          <div class="bound-source-list">
-            <h3 class="section-subtitle-inline">{{ t('workflow.boundSources.title') }}</h3>
-            <div
-              v-for="source in boundSources"
-              :key="`${source.field}:${source.semanticType}`"
-              class="bound-source-item"
-            >
-              <span class="bound-source-field">{{ source.field }}</span>
-              <span class="bound-source-value">
-                {{ source.artifact?.name ?? t('workflow.boundSources.waiting') }}
-              </span>
+          <div v-if="activeTask" class="task-summary-card">
+            <div class="task-summary-row">
+              <span class="task-summary-label">{{ t('tasks.status') }}</span>
+              <span class="task-summary-value">{{ activeTask.status }}</span>
+            </div>
+            <div class="task-summary-row">
+              <span class="task-summary-label">{{ t('tasks.progress') }}</span>
+              <span class="task-summary-value">{{ activeTask.progress }}%</span>
+            </div>
+            <div v-if="activeTask.error_message" class="task-summary-row">
+              <span class="task-summary-label">{{ t('common.error') }}</span>
+              <span class="task-summary-value">{{ activeTask.error_message }}</span>
             </div>
           </div>
 
@@ -133,32 +149,23 @@
                     {{ opt }}
                   </a-select-option>
                 </a-select>
-                <a-upload
+                <ArtifactFilePicker
                   v-else-if="prop.type === 'file' || prop.format === 'uri' || prop.format === 'file'"
-                  v-model:file-list="fileList[key]"
+                  :upload-list="fileList[key] ?? []"
+                  :selected-artifact="selectedArtifacts[key] ?? null"
                   :accept="prop.accept"
-                  :before-upload="() => false"
-                  :max-count="1"
-                >
-                  <a-button>
-                    <UploadOutlined />
-                    {{ t('tools.selectFile') }}
-                  </a-button>
-                  <template #itemRender="{ file }">
-                    <span class="file-item">
-                      <FileOutlined />
-                      {{ file.name }}
-                    </span>
-                  </template>
-                </a-upload>
+                  :allow-artifacts="userStore.isLoggedIn"
+                  @update:upload-list="(files) => handleFileListChange(String(key), files)"
+                  @update:selected-artifact="(artifact) => handleArtifactSelection(String(key), artifact)"
+                />
               </a-form-item>
             </template>
 
             <a-form-item>
               <div class="form-action-bar">
                 <div class="form-action-copy">
-                  <strong class="form-action-title">{{ t(`workflow.actions.${primaryActionKey}`) }}</strong>
-                  <p class="form-action-desc">{{ t(`workflow.statusSummary.${statusSummaryKey}`) }}</p>
+                  <strong class="form-action-title">{{ t('workflow.currentTool.runAction') }}</strong>
+                  <p class="form-action-desc">{{ t('workflow.currentTool.runHint') }}</p>
                 </div>
                 <a-space wrap>
                   <a-button
@@ -166,23 +173,19 @@
                     size="large"
                     @click="submitWorkflowForm"
                     :loading="submitting"
-                    :disabled="primaryActionDisabled"
+                    :disabled="submitDisabled"
                   >
                     <PlayCircleOutlined />
-                    {{ t(`workflow.actions.${primaryActionKey}`) }}
+                    {{ t('tools.runTool') }}
                   </a-button>
                   <a-button size="large" @click="resetForm">
                     {{ t('common.reset') }}
                   </a-button>
-                  <a-button
-                    v-if="nextStep && currentStepStatus === 'completed'"
-                    size="large"
-                    @click="goToNextStep"
-                  >
-                    {{ t('workflow.actions.continueNextStep', { step: t(`workflow.steps.${nextStep.key}.title`) }) }}
+                  <a-button size="large" @click="openToolDetail">
+                    {{ t('workflow.currentTool.viewDetail') }}
                   </a-button>
                   <a-button v-if="activeTask" size="large" @click="openTaskDetail">
-                    {{ t('workflow.actions.viewTask') }}
+                    {{ t('workflow.currentTool.viewTask') }}
                   </a-button>
                 </a-space>
               </div>
@@ -190,16 +193,14 @@
           </a-form>
         </div>
 
-        <div v-else class="placeholder-list">
-          <div class="placeholder-card">
-            <h3 class="placeholder-title">{{ t('workflow.placeholders.availableTools.title') }}</h3>
-            <p class="placeholder-desc">{{ t('workflow.placeholders.availableTools.description') }}</p>
-          </div>
-          <div class="placeholder-card">
-            <h3 class="placeholder-title">{{ t('workflow.placeholders.parameterSetup.title') }}</h3>
-            <p class="placeholder-desc">{{ t('workflow.placeholders.parameterSetup.description') }}</p>
-          </div>
-        </div>
+        <a-empty
+          v-else-if="group && group.tools.length > 0"
+          :description="t('workflow.currentTool.empty')"
+        />
+        <a-empty
+          v-else
+          :description="t('workflow.groups.empty')"
+        />
       </a-spin>
     </div>
   </section>
@@ -211,51 +212,43 @@
   import { useI18n } from 'vue-i18n'
   import type { FormInstance, Rule } from 'ant-design-vue/es/form'
   import type { UploadFile } from 'ant-design-vue'
-  import { FileOutlined, PlayCircleOutlined, UploadOutlined } from '@ant-design/icons-vue'
+  import { PlayCircleOutlined } from '@ant-design/icons-vue'
+  import ArtifactFilePicker from '@/components/tools/ArtifactFilePicker.vue'
   import { getTaskDetail, isTaskTerminalStatus } from '@/api/tasks'
   import { getToolDetail } from '@/api/tools'
   import { uploadFile } from '@/api/files'
-  import { useTasksStore, useWorkflowStore } from '@/stores'
+  import { useArtifactsStore, useTasksStore, useUserStore, useWorkflowStore } from '@/stores'
   import type {
+    ArtifactFile,
     SchemaProperty,
     Tool,
     ToolPreparedSubmissionPayload,
-    ToolSchema
+    ToolSchema,
+    WorkbenchGroup
   } from '@/types/models'
-  import type { WorkflowArtifact, WorkflowArtifactSemanticType, WorkflowStepKey } from '@/workflow/artifact-types'
-  import { resolveWorkflowInputSourcesForTool } from '@/workflow/artifact-resolver'
-  import { AIDD_WORKFLOW_STEP_MAP, AIDD_WORKFLOW_STEP_ORDER } from '@/workflow/aidd-catalog'
   import {
     buildTaskSubmissionPayload,
     buildToolFormInitialState,
-    flattenToolInputSchema,
     isFileSchemaProperty,
+    flattenToolInputSchema,
     type UploadedToolFile
   } from '@/views/tools/detail-schema'
-  import type { WorkflowStepCatalogItem } from '@/workflow/aidd-catalog'
   import { toWorkflowTaskRef } from '@/workflow/task-state'
-  import type { WorkflowBoundToolSlug } from '@/workflow/tool-bindings'
-  import type { WorkflowStepToolViewModel, WorkflowToolAvailability } from '@/workflow/step-tools'
-
-  interface WorkflowBoundSourceItem {
-    field: string
-    semanticType: WorkflowArtifactSemanticType
-    artifact: WorkflowArtifact | null
-  }
 
   const props = defineProps<{
-    step: WorkflowStepCatalogItem
-    toolViewModel: WorkflowStepToolViewModel
-    selectedToolSlug?: WorkflowBoundToolSlug | null
+    group?: WorkbenchGroup | null
+    selectedToolSlug?: string | null
   }>()
 
   const emit = defineEmits<{
-    selectTool: [toolSlug: WorkflowBoundToolSlug]
+    selectTool: [toolSlug: string]
   }>()
 
   const { t } = useI18n()
   const router = useRouter()
+  const artifactsStore = useArtifactsStore()
   const tasksStore = useTasksStore()
+  const userStore = useUserStore()
   const workflowStore = useWorkflowStore()
 
   const formRef = ref<FormInstance>()
@@ -264,11 +257,12 @@
   const submitting = ref(false)
   const formState = reactive<Record<string, unknown>>({})
   const fileList = reactive<Record<string, UploadFile[]>>({})
+  const selectedArtifacts = reactive<Record<string, ArtifactFile | undefined>>({})
   let detailRequestToken = 0
   let pollTimer: number | null = null
 
   const selectedToolSummary = computed(() => {
-    return props.toolViewModel.tools.find((tool) => tool.slug === props.selectedToolSlug)?.tool ?? null
+    return props.group?.tools.find((tool) => tool.slug === props.selectedToolSlug) ?? null
   })
 
   const inputSchema = computed<ToolSchema | undefined>(() => {
@@ -287,155 +281,48 @@
     return undefined
   })
 
-  const flattenedSchema = computed<ToolSchema | undefined>(() => {
-    return flattenToolInputSchema(inputSchema.value)
-  })
-
-  const boundSources = computed<WorkflowBoundSourceItem[]>(() => {
-    if (!props.selectedToolSlug) {
-      return []
+  const flattenedSchema = computed<ToolSchema>(() => {
+    return flattenToolInputSchema(inputSchema.value) ?? {
+      type: 'object',
+      properties: {},
+      required: []
     }
-
-    return resolveWorkflowInputSourcesForTool({
-      toolSlug: props.selectedToolSlug,
-      artifacts: workflowStore.artifacts,
-      invalidArtifactIds: workflowStore.invalidArtifactIds
-    })
   })
 
-  const linkedArtifactFiles = computed<Record<string, UploadedToolFile>>(() => {
-    const schema = flattenedSchema.value?.properties
-    if (!schema) {
-      return {}
-    }
-
-    return boundSources.value.reduce<Record<string, UploadedToolFile>>((accumulator, source) => {
-      const prop = schema[source.field]
-      if (!prop || !isFileSchemaProperty(prop) || !source.artifact?.url) {
-        return accumulator
-      }
-
-      accumulator[source.field] = {
-        fileId: String(source.artifact.fileId ?? source.artifact.id),
-        filename: source.artifact.name,
-        downloadUrl: source.artifact.url
-      }
-
-      return accumulator
-    }, {})
-  })
-
-  const invalidatedDownstreamStepKeys = computed(() => {
-    return Object.entries(workflowStore.stepStateByKey)
-      .filter(([stepKey, stepState]) => stepKey !== props.step.key && stepState?.status === 'invalidated')
-      .map(([stepKey]) => stepKey)
-  })
-
-  const currentStepState = computed(() => workflowStore.stepStateByKey[props.step.key] ?? null)
-  const currentStepStatus = computed(() => currentStepState.value?.status ?? 'idle')
   const activeTask = computed(() => {
-    return workflowStore.taskByStep[props.step.key] ?? currentStepState.value?.task ?? null
-  })
-
-  const currentStepStatusColor = computed(() => {
-    const colorMap = {
-      idle: 'default',
-      ready: 'blue',
-      running: 'processing',
-      completed: 'green',
-      failed: 'red',
-      invalidated: 'orange',
-      needs_tool_selection: 'gold'
-    } as const
-
-    return colorMap[currentStepStatus.value]
-  })
-
-  const currentToolAvailability = computed<WorkflowToolAvailability | null>(() => {
     if (!props.selectedToolSlug) {
       return null
     }
 
-    return props.toolViewModel.tools.find((tool) => tool.slug === props.selectedToolSlug)?.availability ?? null
+    return workflowStore.taskByTool[props.selectedToolSlug] ?? null
   })
 
-  const nextStep = computed(() => {
-    const currentIndex = AIDD_WORKFLOW_STEP_ORDER.indexOf(props.step.key)
-    const nextStepKey = currentIndex >= 0 ? AIDD_WORKFLOW_STEP_ORDER[currentIndex + 1] : undefined
-    return nextStepKey ? AIDD_WORKFLOW_STEP_MAP[nextStepKey] ?? null : null
-  })
-
-  const primaryActionKey = computed(() => {
-    if (submitting.value || currentStepStatus.value === 'running') {
-      return 'running'
-    }
-
-    if (
-      props.toolViewModel.availableToolSlugs.length === 0 ||
-      currentToolAvailability.value === 'missing'
-    ) {
-      return 'toolUnavailable'
-    }
-
-    if (!props.selectedToolSlug) {
-      return 'selectTool'
-    }
-
-    if (
-      currentStepStatus.value === 'completed' ||
-      currentStepStatus.value === 'failed' ||
-      currentStepStatus.value === 'invalidated'
-    ) {
-      return 'rerunStep'
-    }
-
-    return 'runStep'
-  })
-
-  const statusSummaryKey = computed(() => {
-    if (
-      props.toolViewModel.availableToolSlugs.length === 0 ||
-      currentToolAvailability.value === 'missing'
-    ) {
-      return 'toolUnavailable'
-    }
-
-    switch (currentStepStatus.value) {
-      case 'ready':
-        return 'ready'
-      case 'running':
-        return 'running'
-      case 'completed':
-        return 'completed'
-      case 'failed':
-        return 'failed'
-      case 'invalidated':
-        return 'invalidated'
-      case 'needs_tool_selection':
-        return 'selectTool'
-      default:
-        return 'awaitInput'
-    }
-  })
-
-  const primaryActionDisabled = computed(() => {
+  const submitDisabled = computed(() => {
     if (submitting.value || selectedToolLoading.value) {
       return true
     }
 
-    if (
-      props.selectedToolSlug == null ||
-      props.toolViewModel.availableToolSlugs.length === 0 ||
-      currentToolAvailability.value === 'missing'
-    ) {
+    if (!userStore.isAuthenticated || userStore.isGuest) {
       return true
     }
 
-    return selectedTool.value == null || flattenedSchema.value == null
+    return !selectedTool.value || !props.selectedToolSlug
   })
 
-  function selectTool(toolSlug: WorkflowBoundToolSlug, availability: WorkflowToolAvailability) {
-    if (availability === 'missing' || props.selectedToolSlug === toolSlug) {
+  function taskStatusColor(status: string): string {
+    const colorMap: Record<string, string> = {
+      pending: 'gold',
+      running: 'processing',
+      success: 'green',
+      failure: 'red',
+      canceled: 'default'
+    }
+
+    return colorMap[status] ?? 'default'
+  }
+
+  function selectTool(toolSlug: string) {
+    if (props.selectedToolSlug === toolSlug) {
       return
     }
 
@@ -462,44 +349,37 @@
     }
   }
 
-  function applyInitialFormState(stepKey: WorkflowStepKey, schema?: ToolSchema, resetDraft = false) {
-    const draft = resetDraft ? {} : workflowStore.stepFormDrafts[stepKey]
+  function replaceSelectedArtifacts(nextKeys: string[]) {
+    for (const key of Object.keys(selectedArtifacts)) {
+      delete selectedArtifacts[key]
+    }
+
+    for (const key of nextKeys) {
+      selectedArtifacts[key] = undefined
+    }
+  }
+
+  function applyInitialFormState(toolSlug: string, schema: ToolSchema, resetDraft = false) {
+    const draft = resetDraft ? {} : workflowStore.toolFormDrafts[toolSlug]
     const initialState = buildToolFormInitialState({
       flattenedSchema: schema,
       draft
     })
 
-    if (schema?.properties) {
-      for (const source of boundSources.value) {
-        const prop = schema.properties[source.field]
-        const metadataValue = source.artifact?.metadata?.value
-
-        if (
-          !prop ||
-          isFileSchemaProperty(prop) ||
-          metadataValue === undefined ||
-          Object.prototype.hasOwnProperty.call(initialState.formState, source.field)
-        ) {
-          continue
-        }
-
-        initialState.formState[source.field] = metadataValue
-      }
-    }
-
     replaceFormState(initialState.formState)
     replaceFileList(initialState.fileFieldKeys)
+    replaceSelectedArtifacts(initialState.fileFieldKeys)
   }
 
   function getFieldRules(key: string, prop: SchemaProperty): Rule[] {
     const rules: Rule[] = []
     const schema = flattenedSchema.value
 
-    if (schema?.required?.includes(key)) {
+    if (schema.required?.includes(key)) {
       if (isFileSchemaProperty(prop)) {
         rules.push({
           validator: async () => {
-            if (fileList[key]?.length) {
+            if (fileList[key]?.length || selectedArtifacts[key]) {
               return Promise.resolve()
             }
             return Promise.reject(new Error(`${prop.title} ${t('common.required')}`))
@@ -522,27 +402,38 @@
     return rules
   }
 
+  function handleFileListChange(key: string, files: UploadFile[]) {
+    fileList[key] = files
+  }
+
+  function handleArtifactSelection(key: string, artifact: ArtifactFile | null) {
+    selectedArtifacts[key] = artifact ?? undefined
+  }
+
   function resetForm() {
     formRef.value?.resetFields()
-    workflowStore.setStepFormDraft(props.step.key, {})
-    applyInitialFormState(props.step.key, flattenedSchema.value, true)
+
+    if (props.selectedToolSlug) {
+      workflowStore.clearToolFormDraft(props.selectedToolSlug)
+      applyInitialFormState(props.selectedToolSlug, flattenedSchema.value, true)
+    }
+  }
+
+  async function refreshArtifacts() {
+    if (!userStore.isLoggedIn) {
+      return
+    }
+
+    await artifactsStore.fetchArtifacts({ page: 1, page_size: 100 })
   }
 
   async function submitWorkflowForm() {
-    if (primaryActionDisabled.value) {
+    if (submitDisabled.value) {
       return
     }
 
     await formRef.value?.validate()
     await handleSubmit()
-  }
-
-  function goToNextStep() {
-    if (!nextStep.value) {
-      return
-    }
-
-    workflowStore.setActiveStep(nextStep.value.key)
   }
 
   function openTaskDetail() {
@@ -553,6 +444,14 @@
     router.push(`/tasks/${activeTask.value.id}`)
   }
 
+  function openToolDetail() {
+    if (!selectedTool.value?.id) {
+      return
+    }
+
+    router.push(`/tools/${selectedTool.value.id}`)
+  }
+
   function clearTaskPoll() {
     if (pollTimer !== null) {
       window.clearTimeout(pollTimer)
@@ -560,43 +459,55 @@
     }
   }
 
-  async function pollTaskUntilTerminal(taskId: string) {
+  async function pollTaskUntilTerminal(taskId: string, toolSlug: string) {
     clearTaskPoll()
 
     const poll = async () => {
-      const response = await getTaskDetail(taskId)
-      workflowStore.recordTask(props.step.key, toWorkflowTaskRef(response.data))
+      try {
+        const response = await getTaskDetail(taskId)
+        workflowStore.recordTask(toolSlug, toWorkflowTaskRef(response.data))
 
-      if (response.data.status === 'success' && props.selectedToolSlug) {
-        workflowStore.registerTaskArtifacts(props.step.key, props.selectedToolSlug, toWorkflowTaskRef(response.data))
+        if (isTaskTerminalStatus(response.data.status)) {
+          clearTaskPoll()
+          if (response.data.status === 'success') {
+            await refreshArtifacts()
+          }
+          return
+        }
+
+        pollTimer = window.setTimeout(poll, 3000)
+      } catch {
+        pollTimer = window.setTimeout(poll, 5000)
       }
-
-      if (isTaskTerminalStatus(response.data.status)) {
-        clearTaskPoll()
-        return
-      }
-
-      pollTimer = window.setTimeout(poll, 3000)
     }
 
     pollTimer = window.setTimeout(poll, 3000)
   }
 
   async function handleSubmit() {
-    const schema = flattenedSchema.value
     const toolId = selectedTool.value?.id
+    const toolSlug = props.selectedToolSlug
 
-    if (!schema || !toolId) {
+    if (!toolId || !toolSlug) {
       return
     }
 
     submitting.value = true
     try {
-      workflowStore.invalidateDownstreamFrom(props.step.key)
+      const uploadedFiles: Record<string, UploadedToolFile | undefined> = {}
 
-      const uploadedFiles: Record<string, UploadedToolFile | undefined> = {
-        ...linkedArtifactFiles.value
+      for (const [key, artifact] of Object.entries(selectedArtifacts)) {
+        if (!artifact) {
+          continue
+        }
+
+        uploadedFiles[key] = {
+          fileId: artifact.id,
+          filename: artifact.filename,
+          downloadUrl: artifact.download_url
+        }
       }
+
       for (const [key, items] of Object.entries(fileList)) {
         const fileItem = items?.[0]
         if (!fileItem?.originFileObj) {
@@ -612,7 +523,7 @@
       }
 
       const payload = buildTaskSubmissionPayload({
-        flattenedSchema: schema,
+        flattenedSchema: flattenedSchema.value,
         formState,
         uploadedFiles,
         executorType: executorType.value
@@ -628,11 +539,12 @@
         ...preparedPayload
       })
 
-      workflowStore.recordTask(props.step.key, toWorkflowTaskRef(task))
-      if (task.status === 'success' && props.selectedToolSlug) {
-        workflowStore.registerTaskArtifacts(props.step.key, props.selectedToolSlug, toWorkflowTaskRef(task))
+      workflowStore.recordTask(toolSlug, toWorkflowTaskRef(task))
+      if (task.status === 'success') {
+        await refreshArtifacts()
+      } else {
+        await pollTaskUntilTerminal(task.id, toolSlug)
       }
-      await pollTaskUntilTerminal(task.id)
     } finally {
       submitting.value = false
     }
@@ -640,15 +552,16 @@
 
   watch(
     () => props.selectedToolSlug,
-    async (selectedToolSlug) => {
+    async () => {
       const requestToken = ++detailRequestToken
       const toolId = selectedToolSummary.value?.id
 
-      if (!selectedToolSlug || !toolId) {
+      if (!toolId) {
         selectedToolLoading.value = false
         selectedTool.value = null
         replaceFormState({})
         replaceFileList([])
+        replaceSelectedArtifacts([])
         return
       }
 
@@ -672,15 +585,16 @@
   )
 
   watch(
-    () => [props.step.key, flattenedSchema.value, props.selectedToolSlug] as const,
-    ([stepKey, schema, selectedToolSlug]) => {
-      if (!selectedToolSlug) {
+    () => [props.selectedToolSlug, flattenedSchema.value] as const,
+    ([toolSlug, schema]) => {
+      if (!toolSlug) {
         replaceFormState({})
         replaceFileList([])
+        replaceSelectedArtifacts([])
         return
       }
 
-      applyInitialFormState(stepKey, schema)
+      applyInitialFormState(toolSlug, schema)
     },
     { immediate: true }
   )
@@ -688,7 +602,11 @@
   watch(
     formState,
     () => {
-      workflowStore.setStepFormDraft(props.step.key, { ...formState })
+      if (!props.selectedToolSlug) {
+        return
+      }
+
+      workflowStore.setToolFormDraft(props.selectedToolSlug, { ...formState })
     },
     { deep: true }
   )
@@ -731,15 +649,37 @@
     margin-bottom: @spacing-lg;
   }
 
-  .active-step-banner {
-    display: flex;
-    align-items: center;
-    gap: @spacing-sm;
+  .group-banner {
     border: 1px solid @border-color-light;
     border-radius: @border-radius-md;
-    padding: @spacing-sm @spacing-md;
+    padding: @spacing-md;
     margin-bottom: @spacing-md;
     background: fade(@accent-color-light, 35%);
+  }
+
+  .group-banner-label,
+  .action-summary-label {
+    display: inline-block;
+    margin-bottom: @spacing-xs;
+    color: @text-color-light-secondary;
+    font-size: @font-size-sm;
+  }
+
+  .group-banner-title,
+  .action-summary-title,
+  .form-action-title {
+    display: block;
+    font-size: @font-size-md;
+    font-weight: @font-weight-semibold;
+  }
+
+  .group-banner-desc,
+  .action-summary-desc,
+  .form-action-desc {
+    margin: @spacing-xs 0 0;
+    color: @text-color-light-secondary;
+    font-size: @font-size-sm;
+    line-height: @line-height-base;
   }
 
   .tool-option-list {
@@ -771,11 +711,6 @@
     box-shadow: @shadow-sm;
   }
 
-  .tool-option-missing {
-    cursor: default;
-    opacity: 0.72;
-  }
-
   .tool-option-copy {
     min-width: 0;
     flex: 1;
@@ -800,16 +735,6 @@
     justify-content: flex-end;
   }
 
-  .active-step-label {
-    color: @text-color-light-secondary;
-    font-size: @font-size-sm;
-  }
-
-  .active-step-value {
-    color: @text-color-primary;
-    font-size: @font-size-md;
-  }
-
   .form-shell {
     display: flex;
     flex-direction: column;
@@ -817,8 +742,7 @@
   }
 
   .action-summary-card,
-  .bound-source-list,
-  .placeholder-card,
+  .task-summary-card,
   .form-action-bar {
     border: 1px solid @border-color-light;
     border-radius: @border-radius-md;
@@ -841,86 +765,32 @@
     flex: 1;
   }
 
-  .action-summary-label {
-    display: inline-block;
-    margin-bottom: @spacing-xs;
-    color: @text-color-light-secondary;
-    font-size: @font-size-sm;
-  }
-
-  .action-summary-title,
-  .form-action-title {
-    display: block;
-    font-size: @font-size-md;
-    font-weight: @font-weight-semibold;
-  }
-
-  .action-summary-desc,
-  .form-action-desc {
-    margin: @spacing-xs 0 0;
-    color: @text-color-light-secondary;
-    font-size: @font-size-sm;
-    line-height: @line-height-base;
-  }
-
   .action-summary-tags {
     display: flex;
     flex-wrap: wrap;
     gap: @spacing-xs;
   }
 
-  .section-subtitle-inline {
-    font-size: @font-size-md;
-    font-weight: @font-weight-semibold;
-    margin-bottom: @spacing-sm;
+  .task-summary-card {
+    display: flex;
+    flex-direction: column;
+    gap: @spacing-sm;
   }
 
-  .bound-source-item {
+  .task-summary-row {
     display: flex;
     justify-content: space-between;
     gap: @spacing-md;
-    padding: @spacing-xs 0;
-    border-top: 1px solid @border-color-light;
-
-    &:first-of-type {
-      border-top: 0;
-      padding-top: 0;
-    }
   }
 
-  .bound-source-field {
+  .task-summary-label {
     color: @text-color-light-secondary;
     font-size: @font-size-sm;
   }
 
-  .bound-source-value {
+  .task-summary-value {
     color: @text-color-primary;
     font-size: @font-size-sm;
     text-align: right;
-  }
-
-  .placeholder-list {
-    display: flex;
-    flex-direction: column;
-    gap: @spacing-md;
-  }
-
-  .placeholder-title {
-    font-size: @font-size-md;
-    font-weight: @font-weight-semibold;
-    margin-bottom: @spacing-xs;
-  }
-
-  .placeholder-desc {
-    margin: 0;
-    color: @text-color-light-secondary;
-    font-size: @font-size-sm;
-    line-height: @line-height-base;
-  }
-
-  .file-item {
-    display: inline-flex;
-    align-items: center;
-    gap: @spacing-xs;
   }
 </style>

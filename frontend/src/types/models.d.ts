@@ -236,6 +236,44 @@ export interface Category {
   count?: number
 }
 
+export interface WorkbenchGroupTool {
+  id: string
+  name: string
+  slug: string
+  description?: string
+  category_id?: string
+  category?: string
+  icon?: string
+  icon_url?: string
+  status: Tool['status']
+  is_public?: boolean
+  is_recommended: boolean
+  sort_order: number
+}
+
+export interface WorkbenchGroup {
+  id: string
+  name: string
+  slug: string
+  description?: string
+  sort_order: number
+  is_enabled?: boolean
+  tools: WorkbenchGroupTool[]
+  created_at?: string
+  updated_at?: string
+}
+
+export interface WorkbenchGroupMapping {
+  id: string
+  tool_id: string
+  group_id: string
+  sort_order: number
+  is_recommended: boolean
+  is_enabled: boolean
+  created_at?: string
+  updated_at?: string
+}
+
 export interface Tag {
   id: string  // UUID
   name: string
@@ -363,6 +401,21 @@ export interface FileUploadResponse {
   id: number
   filename: string
   url: string
+}
+
+export interface ArtifactFile {
+  id: string
+  filename: string
+  content_type?: string
+  size_bytes: number
+  source_type: string
+  download_url: string
+  task_id: string
+  tool_id: string
+  tool_name: string
+  tool_slug: string
+  created_at: string
+  updated_at?: string
 }
 
 // GPU 相关类型

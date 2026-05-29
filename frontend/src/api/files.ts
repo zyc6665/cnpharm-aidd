@@ -1,6 +1,12 @@
 import { get, post, del } from './request'
 import type { ApiResponse } from '@/types/api'
-import type { FileInfo, FileUploadResponse, PaginatedResponse, PaginationParams } from '@/types/models'
+import type {
+  ArtifactFile,
+  FileInfo,
+  FileUploadResponse,
+  PaginatedResponse,
+  PaginationParams
+} from '@/types/models'
 
 // 上传文件
 export const uploadFile = (
@@ -30,6 +36,12 @@ export const uploadFile = (
 // 获取文件列表
 export const getFileList = (params?: PaginationParams): Promise<ApiResponse<PaginatedResponse<FileInfo>>> => {
   return get<PaginatedResponse<FileInfo>>('/files', params as Record<string, unknown>)
+}
+
+export const getArtifactFiles = (
+  params?: PaginationParams & { search?: string }
+): Promise<ApiResponse<PaginatedResponse<ArtifactFile>>> => {
+  return get<PaginatedResponse<ArtifactFile>>('/files/artifacts', params as Record<string, unknown>)
 }
 
 // 获取文件信息

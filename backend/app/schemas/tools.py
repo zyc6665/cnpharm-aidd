@@ -36,10 +36,12 @@ class ToolVersionCreate(BaseModel):
     is_active: bool = Field(default=True, description="是否激活")
     # config结构:
     # {
-    #     "type": "remote_api|docker_image|python_script",
+    #     "type": "remote_api|docker_image|python_script|ssh_job",
     #     "endpoint": "http://...",
     #     "method": "POST",
     #     "headers": {},
+    #     "host": "gpu-node-01",  # ssh_job
+    #     "entrypoint": "/app/platform_run.sh",  # ssh_job
     #     "input_schema": {},
     #     "output_schema": {},
     # }
@@ -101,6 +103,102 @@ class ToolCategoryResponse(TimestampMixin):
         from_attributes = True
 
 
+class ToolWorkbenchGroupCreate(BaseModel):
+    """创建工具工作台分组"""
+    name: str = Field(..., max_length=100, description="分组名称")
+    slug: str = Field(..., max_length=100, pattern="^[a-z0-9-]+$", description="分组标识")
+    description: Optional[str] = Field(None, description="分组描述")
+    sort_order: int = Field(default=0, ge=0, description="排序值")
+    is_enabled: bool = Field(default=True, description="是否启用")
+
+
+class ToolWorkbenchGroupUpdate(BaseModel):
+    """更新工具工作台分组"""
+    name: Optional[str] = Field(None, max_length=100, description="分组名称")
+    slug: Optional[str] = Field(None, max_length=100, pattern="^[a-z0-9-]+$", description="分组标识")
+    description: Optional[str] = Field(None, description="分组描述")
+    sort_order: Optional[int] = Field(None, ge=0, description="排序值")
+    is_enabled: Optional[bool] = Field(None, description="是否启用")
+
+
+class ToolWorkbenchGroupResponse(TimestampMixin):
+    """工具工作台分组响应"""
+    id: str
+    name: str
+    slug: str
+    description: Optional[str] = None
+    sort_order: int
+    is_enabled: bool
+
+    class Config:
+        from_attributes = True
+
+
+class ToolWorkbenchGroupReorderRequest(BaseModel):
+    """工具工作台分组重排请求"""
+    group_ids: List[str] = Field(..., min_length=1, description="按顺序排列的分组ID列表")
+
+
+class ToolWorkbenchGroupMappingCreate(BaseModel):
+    """创建工具工作台分组映射"""
+    tool_id: str = Field(..., description="工具ID")
+    group_id: str = Field(..., description="工作台分组ID")
+    sort_order: int = Field(default=0, ge=0, description="排序值")
+    is_recommended: bool = Field(default=False, description="是否推荐")
+    is_enabled: bool = Field(default=True, description="是否启用")
+
+
+class ToolWorkbenchGroupMappingUpdate(BaseModel):
+    """更新工具工作台分组映射"""
+    tool_id: Optional[str] = Field(None, description="工具ID")
+    group_id: Optional[str] = Field(None, description="工作台分组ID")
+    sort_order: Optional[int] = Field(None, ge=0, description="排序值")
+    is_recommended: Optional[bool] = Field(None, description="是否推荐")
+    is_enabled: Optional[bool] = Field(None, description="是否启用")
+
+
+class ToolWorkbenchGroupMappingResponse(TimestampMixin):
+    """工具工作台分组映射响应"""
+    id: str
+    tool_id: str
+    group_id: str
+    sort_order: int
+    is_recommended: bool
+    is_enabled: bool
+
+    class Config:
+        from_attributes = True
+
+
+class ToolWorkbenchGroupToolResponse(BaseModel):
+    """工作台分组中的工具摘要响应"""
+    id: str
+    name: str
+    slug: str
+    description: Optional[str] = None
+    category_id: Optional[str] = None
+    category: Optional[str] = None
+    icon: Optional[str] = None
+    icon_url: Optional[str] = None
+    status: str
+    is_public: bool
+    is_recommended: bool = False
+    sort_order: int = 0
+
+
+class ToolWorkbenchGroupPublicResponse(TimestampMixin):
+    """公开工具工作台分组响应"""
+    id: str
+    name: str
+    slug: str
+    description: Optional[str] = None
+    sort_order: int
+    tools: List[ToolWorkbenchGroupToolResponse] = Field(default_factory=list)
+
+    class Config:
+        from_attributes = True
+
+
 class ToolCreate(BaseModel):
     """创建工具"""
     name: str = Field(..., max_length=100, description="工具名称")
@@ -133,6 +231,13 @@ class ToolUpdate(BaseModel):
     gpu_memory_mb: Optional[int] = Field(None, ge=0, description="GPU显存需求(MB)")
     timeout_sec: Optional[int] = Field(None, ge=60, le=3600, description="超时时间(秒)")
     tag_ids: Optional[List[str]] = Field(None, description="标签ID列表")
+
+
+class ToolImportRequest(BaseModel):
+    """导入平台工具配置。"""
+    config: Dict[str, Any] = Field(..., description="platform_tool.json 内容")
+    category_id: Optional[str] = Field(None, description="导入后绑定的工具分类ID")
+    publish: bool = Field(default=False, description="导入后是否直接发布")
 
 
 class ToolResponse(TimestampMixin):

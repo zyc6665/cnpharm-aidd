@@ -137,25 +137,16 @@
                         {{ opt }}
                       </a-select-option>
                     </a-select>
-                    <!-- 文件上传 -->
-                    <a-upload
+                    <!-- 文件上传 / 产物选择 -->
+                    <ArtifactFilePicker
                       v-else-if="prop.type === 'file' || prop.format === 'uri' || prop.format === 'file'"
-                      v-model:file-list="fileList[key]"
+                      :upload-list="fileList[key] ?? []"
+                      :selected-artifact="selectedArtifacts[key] ?? null"
                       :accept="prop.accept"
-                      :before-upload="() => false"
-                      :max-count="1"
-                    >
-                      <a-button>
-                        <UploadOutlined />
-                        {{ t('tools.selectFile') }}
-                      </a-button>
-                      <template #itemRender="{ file }">
-                        <span class="file-item">
-                          <FileOutlined />
-                          {{ file.name }}
-                        </span>
-                      </template>
-                    </a-upload>
+                      :allow-artifacts="userStore.isLoggedIn"
+                      @update:upload-list="(files) => handleFileListChange(String(key), files)"
+                      @update:selected-artifact="(artifact) => handleArtifactSelection(String(key), artifact)"
+                    />
                   </a-form-item>
                 </template>
 
@@ -168,7 +159,7 @@
                       :loading="submitting"
                       :disabled="!canSubmit"
                     >
-                      <ThunderboltOutlined />
+                      <PlayCircleOutlined />
                       {{ t('tools.runTool') }}
                     </a-button>
                     <a-button size="large" @click="resetForm">
@@ -238,14 +229,18 @@
     PlayCircleOutlined,
     EyeOutlined,
     TagOutlined,
-    UploadOutlined,
-    ThunderboltOutlined,
-    FileOutlined,
     InfoCircleOutlined
   } from '@ant-design/icons-vue'
+  import ArtifactFilePicker from '@/components/tools/ArtifactFilePicker.vue'
   import { useToolsStore, useTasksStore, useUserStore } from '@/stores'
-  import type { SchemaProperty, ToolSchema } from '@/types/models'
+  import type { ArtifactFile, SchemaProperty, ToolSchema } from '@/types/models'
   import { uploadFile } from '@/api/files'
+  import {
+    buildTaskSubmissionPayload,
+    flattenToolInputSchema,
+    isFileSchemaProperty,
+    type UploadedToolFile
+  } from './detail-schema'
 
   const route = useRoute()
   const router = useRouter()
@@ -261,6 +256,7 @@
   const tool = computed(() => toolsStore.currentTool)
   const formState = reactive<Record<string, unknown>>({})
   const fileList = reactive<Record<string, UploadFile[]>>({})
+  const selectedArtifacts = reactive<Record<string, ArtifactFile | undefined>>({})
 
   // 从 current_version.config 中获取 input_schema
   const inputSchema = computed<ToolSchema | undefined>(() => {
@@ -271,42 +267,17 @@
     return undefined
   })
 
-  // 扁平化嵌套的schema结构，支持params和input_files
+  const executorType = computed<string | undefined>(() => {
+    const config = tool.value?.current_version?.config
+    if (config && typeof config === 'object' && 'type' in config && typeof config.type === 'string') {
+      return config.type
+    }
+    return undefined
+  })
+
+  // 扁平化并归一化 schema，隐藏平台内部字段并兼容 input_files / integer / nullable
   const flattenedSchema = computed<ToolSchema | undefined>(() => {
-    if (!inputSchema.value?.properties) return undefined
-
-    const flattened: Record<string, SchemaProperty> = {}
-    const required: string[] = []
-
-    for (const [key, prop] of Object.entries(inputSchema.value.properties)) {
-      // 如果是嵌套对象（params、input_files等），展开其子属性
-      if (prop.type === 'object' && prop.properties) {
-        for (const [subKey, subProp] of Object.entries(prop.properties)) {
-          const flatKey = `${key}.${subKey}`
-          flattened[flatKey] = {
-            ...subProp,
-            _parentKey: key,
-            _originalKey: subKey
-          }
-          // 检查是否必填
-          if (prop.required?.includes(subKey)) {
-            required.push(flatKey)
-          }
-        }
-      } else {
-        // 非嵌套属性直接添加
-        flattened[key] = prop
-        if (inputSchema.value.required?.includes(key)) {
-          required.push(key)
-        }
-      }
-    }
-
-    return {
-      type: 'object',
-      properties: flattened,
-      required
-    }
+    return flattenToolInputSchema(inputSchema.value)
   })
 
   const canSubmit = computed(() => {
@@ -347,7 +318,19 @@
     const rules: Rule[] = []
     const schema = flattenedSchema.value
     if (schema?.required?.includes(key)) {
-      rules.push({ required: true, message: `${prop.title} ${t('common.required')}` })
+      if (isFileSchemaProperty(prop)) {
+        rules.push({
+          validator: async () => {
+            if (fileList[key]?.length || selectedArtifacts[key]) {
+              return Promise.resolve()
+            }
+            return Promise.reject(new Error(`${prop.title} ${t('common.required')}`))
+          },
+          trigger: 'change'
+        })
+      } else {
+        rules.push({ required: true, message: `${prop.title} ${t('common.required')}` })
+      }
     }
     if (prop.minLength) {
       rules.push({ min: prop.minLength, message: t('validation.minLength', { min: prop.minLength }) })
@@ -377,6 +360,23 @@
     Object.keys(fileList).forEach(key => {
       fileList[key] = []
     })
+    Object.keys(selectedArtifacts).forEach(key => {
+      selectedArtifacts[key] = undefined
+    })
+  }
+
+  const handleFileListChange = (key: string, files: UploadFile[]) => {
+    fileList[key] = files
+    if (files.length > 0) {
+      selectedArtifacts[key] = undefined
+    }
+  }
+
+  const handleArtifactSelection = (key: string, artifact: ArtifactFile | null) => {
+    selectedArtifacts[key] = artifact ?? undefined
+    if (artifact) {
+      fileList[key] = []
+    }
   }
 
   const handleSubmit = async () => {
@@ -393,48 +393,51 @@
 
     submitting.value = true
     try {
-      // 处理文件上传
-      const fileIds: string[] = []
-      const organizedData: Record<string, any> = {}
+      const schema = flattenedSchema.value
+      if (!schema) {
+        message.error(t('common.noData'))
+        return
+      }
 
-      for (const [key, value] of Object.entries(formState)) {
-        // 检查是否是文件字段
-        if (fileList[key] && fileList[key].length > 0) {
-          const fileItem = fileList[key][0]
-          if (fileItem && fileItem.originFileObj) {
-            const res = await uploadFile(fileItem.originFileObj as File)
-            fileIds.push(res.data.id.toString())
+      const uploadedFiles: Record<string, UploadedToolFile | undefined> = {}
+      for (const [key, artifact] of Object.entries(selectedArtifacts)) {
+        if (!artifact) {
+          continue
+        }
 
-            // 将文件URL存储到对应的字段
-            const prop = flattenedSchema.value?.properties?.[key]
-            if (prop?._parentKey && prop?._originalKey) {
-              if (!organizedData[prop._parentKey]) {
-                organizedData[prop._parentKey] = {}
-              }
-              organizedData[prop._parentKey][prop._originalKey] = `/api/v1/files/${res.data.id}/download`
-            } else {
-              organizedData[key] = `/api/v1/files/${res.data.id}/download`
-            }
-          }
-        } else if (value !== undefined && value !== null && value !== '') {
-          // 处理普通字段，重新组织成嵌套结构
-          const prop = flattenedSchema.value?.properties?.[key]
-          if (prop?._parentKey && prop?._originalKey) {
-            if (!organizedData[prop._parentKey]) {
-              organizedData[prop._parentKey] = {}
-            }
-            organizedData[prop._parentKey][prop._originalKey] = value
-          } else {
-            organizedData[key] = value
-          }
+        uploadedFiles[key] = {
+          fileId: artifact.id,
+          filename: artifact.filename,
+          downloadUrl: artifact.download_url
         }
       }
+
+      for (const [key, items] of Object.entries(fileList)) {
+        const fileItem = items?.[0]
+        if (!fileItem?.originFileObj) {
+          continue
+        }
+
+        const res = await uploadFile(fileItem.originFileObj as File)
+        uploadedFiles[key] = {
+          fileId: res.data.id.toString(),
+          filename: res.data.filename,
+          downloadUrl: `/api/v1/files/${res.data.id}/download`
+        }
+      }
+
+      const payload = buildTaskSubmissionPayload({
+        flattenedSchema: schema,
+        formState,
+        uploadedFiles,
+        executorType: executorType.value
+      })
 
       // 创建任务
       const task = await tasksStore.createTask({
         tool_id: tool.value!.id,
-        params: organizedData,
-        file_ids: fileIds.length > 0 ? fileIds : undefined
+        params: payload.params,
+        file_ids: payload.fileIds.length > 0 ? payload.fileIds : undefined
       })
 
       message.success(t('tasks.created'))
@@ -460,8 +463,9 @@
               formState[key] = prop.default
             }
             // 初始化文件列表
-            if (prop.type === 'file') {
+            if (isFileSchemaProperty(prop)) {
               fileList[key] = []
+              selectedArtifacts[key] = undefined
             }
           }
         }

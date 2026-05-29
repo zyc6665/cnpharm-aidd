@@ -8,19 +8,19 @@
 
       <div class="workflow-layout">
         <WorkflowStepSidebar
-          :steps="workflowSteps"
-          :active-step-key="activeStep.key"
-          :step-states="workflowStore.stepStateByKey"
-          :tool-view-models="stepToolViewModels"
-          @select="handleStepSelect"
+          :groups="groups"
+          :active-group-id="activeGroup?.id ?? null"
+          @select="handleGroupSelect"
         />
         <WorkflowRunPanel
-          :step="activeStep"
-          :tool-view-model="activeStepToolViewModel"
+          :group="activeGroup"
           :selected-tool-slug="activeSelectedToolSlug"
           @select-tool="handleToolSelect"
         />
-        <WorkflowArtifactPanel :step="activeStep" />
+        <WorkflowArtifactPanel
+          :group="activeGroup"
+          :selected-tool-slug="activeSelectedToolSlug"
+        />
       </div>
     </div>
   </div>
@@ -32,82 +32,103 @@
   import WorkflowArtifactPanel from '@/components/workflow/WorkflowArtifactPanel.vue'
   import WorkflowRunPanel from '@/components/workflow/WorkflowRunPanel.vue'
   import WorkflowStepSidebar from '@/components/workflow/WorkflowStepSidebar.vue'
-  import { useToolsStore, useWorkflowStore } from '@/stores'
-  import {
-    AIDD_WORKFLOW_STEP_MAP,
-    AIDD_WORKFLOW_STEPS,
-    type WorkflowStepCatalogItem
-  } from '@/workflow/aidd-catalog'
-  import type { WorkflowStepKey } from '@/workflow/artifact-types'
-  import { buildWorkflowStepToolViewModel } from '@/workflow/step-tools'
-  import type { WorkflowBoundToolSlug } from '@/workflow/tool-bindings'
+  import { useArtifactsStore, useToolsStore, useUserStore, useWorkflowStore } from '@/stores'
 
   const { t } = useI18n()
+  const artifactsStore = useArtifactsStore()
   const toolsStore = useToolsStore()
+  const userStore = useUserStore()
   const workflowStore = useWorkflowStore()
-  const workflowSteps = AIDD_WORKFLOW_STEPS
 
-  function getInitialWorkflowStep(): WorkflowStepCatalogItem {
-    const initialStep = workflowSteps[0]
-
-    if (!initialStep) {
-      throw new Error('AIDD workflow steps must define at least one step')
+  const groups = computed(() => toolsStore.workbenchGroups)
+  const activeGroup = computed(() => {
+    if (groups.value.length === 0) {
+      return null
     }
 
-    return initialStep
-  }
-
-  const activeStep = computed(() => {
-    return AIDD_WORKFLOW_STEP_MAP[workflowStore.activeStepKey] ?? getInitialWorkflowStep()
+    return groups.value.find((group) => group.id === workflowStore.activeGroupId) ?? groups.value[0] ?? null
   })
 
-  const stepToolViewModels = computed(() => {
-    return Object.fromEntries(
-      workflowSteps.map((step) => [
-        step.key,
-        buildWorkflowStepToolViewModel({
-          stepKey: step.key,
-          tools: toolsStore.workflowToolOptions
-        })
-      ])
-    ) as Record<WorkflowStepKey, ReturnType<typeof buildWorkflowStepToolViewModel>>
-  })
-
-  const activeStepToolViewModel = computed(() => stepToolViewModels.value[activeStep.value.key])
   const activeSelectedToolSlug = computed(() => {
-    return (workflowStore.selectedToolByStep[activeStep.value.key] ?? null) as WorkflowBoundToolSlug | null
+    if (!activeGroup.value) {
+      return null
+    }
+
+    return workflowStore.selectedToolByGroup[activeGroup.value.id] ?? null
   })
 
-  function handleStepSelect(stepKey: WorkflowStepKey) {
-    workflowStore.setActiveStep(stepKey)
+  function getDefaultToolSlug(groupId: string): string | null {
+    const group = groups.value.find((item) => item.id === groupId)
+    if (!group || group.tools.length === 0) {
+      return null
+    }
+
+    return group.tools.find((tool) => tool.is_recommended)?.slug ?? group.tools[0]?.slug ?? null
   }
 
-  function handleToolSelect(toolSlug: WorkflowBoundToolSlug) {
-    workflowStore.selectTool(activeStep.value.key, toolSlug)
+  function handleGroupSelect(groupId: string) {
+    workflowStore.setActiveGroup(groupId)
+  }
+
+  function handleToolSelect(toolSlug: string) {
+    if (!activeGroup.value) {
+      return
+    }
+
+    workflowStore.selectTool(activeGroup.value.id, toolSlug)
   }
 
   watch(
-    activeStepToolViewModel,
-    (viewModel) => {
-      const currentSelectedToolSlug = activeSelectedToolSlug.value
+    groups,
+    (nextGroups) => {
+      if (nextGroups.length === 0) {
+        workflowStore.setActiveGroup(null)
+        return
+      }
 
-      if (
-        viewModel.defaultSelectedToolSlug &&
-        (
-          currentSelectedToolSlug === null ||
-          !viewModel.availableToolSlugs.includes(currentSelectedToolSlug)
-        )
-      ) {
-        workflowStore.selectTool(viewModel.stepKey, viewModel.defaultSelectedToolSlug)
+      const activeGroupId = workflowStore.activeGroupId
+      if (!activeGroupId || !nextGroups.some((group) => group.id === activeGroupId)) {
+        workflowStore.setActiveGroup(nextGroups[0]?.id ?? null)
       }
     },
     { immediate: true }
   )
 
+  watch(
+    activeGroup,
+    (group) => {
+      if (!group) {
+        return
+      }
+
+      const selectedToolSlug = workflowStore.selectedToolByGroup[group.id]
+      if (!selectedToolSlug || !group.tools.some((tool) => tool.slug === selectedToolSlug)) {
+        const fallbackToolSlug = getDefaultToolSlug(group.id)
+        if (fallbackToolSlug) {
+          workflowStore.selectTool(group.id, fallbackToolSlug)
+        }
+      }
+    },
+    { immediate: true }
+  )
+
+  watch(
+    () => [userStore.isLoggedIn, userStore.user?.id] as const,
+    async ([isLoggedIn, userId]) => {
+      workflowStore.syncOwnerUserId(isLoggedIn ? userId ?? undefined : undefined)
+
+      if (!isLoggedIn) {
+        artifactsStore.resetArtifacts()
+        return
+      }
+
+      await artifactsStore.fetchArtifacts({ page: 1, page_size: 100 })
+    },
+    { immediate: true }
+  )
+
   onMounted(async () => {
-    if (toolsStore.workflowToolOptions.length === 0) {
-      await toolsStore.fetchWorkflowTools()
-    }
+    await toolsStore.fetchWorkbenchGroups()
   })
 </script>
 

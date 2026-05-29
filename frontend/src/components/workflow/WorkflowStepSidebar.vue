@@ -1,120 +1,60 @@
 <template>
-  <section class="workflow-column steps-column">
+  <section class="workflow-column groups-column">
     <div class="column-card">
-      <h2 class="column-title">{{ t('workflow.columns.steps') }}</h2>
-      <p class="column-subtitle">{{ t('workflow.columns.stepsHint') }}</p>
+      <h2 class="column-title">{{ t('workflow.columns.groups') }}</h2>
+      <p class="column-subtitle">{{ t('workflow.columns.groupsHint') }}</p>
 
-      <div class="step-list">
-        <div
-          v-for="(step, index) in steps"
-          :key="step.key"
-          :class="['step-card', { 'step-card-active': isActiveStep(step.key, index) }]"
-          @click="selectStep(step.key)"
+      <div v-if="groups.length > 0" class="group-list">
+        <button
+          v-for="group in groups"
+          :key="group.id"
+          type="button"
+          :class="['group-card', { 'group-card-active': group.id === activeGroupId }]"
+          @click="selectGroup(group.id)"
         >
-          <div class="step-index">0{{ index + 1 }}</div>
-          <div class="step-copy">
-            <h3 class="step-title">{{ t(`workflow.steps.${step.key}.title`) }}</h3>
-            <p class="step-desc">{{ t(`workflow.steps.${step.key}.description`) }}</p>
-            <div class="step-status-row">
-              <a-tag :color="getStepStatusColor(getStepStatus(step.key))">
-                {{ t(`workflow.stepStatus.${getStepStatus(step.key)}`) }}
-              </a-tag>
-            </div>
-            <p class="step-hint">
-              {{ t(`workflow.stepHints.${getStepHintKey(step.key, index)}`) }}
+          <div class="group-copy">
+            <h3 class="group-title">{{ group.name }}</h3>
+            <p class="group-desc">
+              {{ group.description || t('workflow.groups.descriptionFallback') }}
             </p>
-            <div v-if="getToolViewModel(step.key)" class="step-meta">
-              <a-tag color="green">
-                {{ t('workflow.toolStatus.availableCount', { count: getToolViewModel(step.key)?.availableToolSlugs.length ?? 0 }) }}
+            <div class="group-meta">
+              <a-tag color="blue">
+                {{ t('workflow.groups.toolCount', { count: group.tools.length }) }}
               </a-tag>
-              <a-tag v-if="(getToolViewModel(step.key)?.missingToolSlugs.length ?? 0) > 0">
-                {{ t('workflow.toolStatus.missingCount', { count: getToolViewModel(step.key)?.missingToolSlugs.length ?? 0 }) }}
+              <a-tag v-if="getRecommendedCount(group) > 0" color="gold">
+                {{ t('workflow.groups.recommendedCount', { count: getRecommendedCount(group) }) }}
               </a-tag>
             </div>
           </div>
-        </div>
+        </button>
       </div>
+
+      <a-empty v-else :description="t('workflow.groups.empty')" />
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
   import { useI18n } from 'vue-i18n'
-  import type { WorkflowStepCatalogItem } from '@/workflow/aidd-catalog'
-  import type { WorkflowStepKey, WorkflowStepStateMap, WorkflowStepStatus } from '@/workflow/artifact-types'
-  import type { WorkflowStepToolViewModel } from '@/workflow/step-tools'
+  import type { WorkbenchGroup } from '@/types/models'
 
   const props = defineProps<{
-    steps: readonly WorkflowStepCatalogItem[]
-    activeStepKey?: WorkflowStepKey | null
-    stepStates?: WorkflowStepStateMap
-    toolViewModels?: Partial<Record<WorkflowStepKey, WorkflowStepToolViewModel>>
+    groups: WorkbenchGroup[]
+    activeGroupId?: string | null
   }>()
 
   const emit = defineEmits<{
-    select: [stepKey: WorkflowStepKey]
+    select: [groupId: string]
   }>()
 
   const { t } = useI18n()
 
-  function isActiveStep(stepKey: WorkflowStepKey, index: number): boolean {
-    if (props.activeStepKey) {
-      return props.activeStepKey === stepKey
-    }
-
-    return index === 0
+  function getRecommendedCount(group: WorkbenchGroup): number {
+    return group.tools.filter((tool) => tool.is_recommended).length
   }
 
-  function getToolViewModel(stepKey: WorkflowStepKey): WorkflowStepToolViewModel | null {
-    return props.toolViewModels?.[stepKey] ?? null
-  }
-
-  function getStepStatus(stepKey: WorkflowStepKey): WorkflowStepStatus {
-    return props.stepStates?.[stepKey]?.status ?? 'idle'
-  }
-
-  function getStepStatusColor(status: WorkflowStepStatus): string | undefined {
-    const colorMap: Partial<Record<WorkflowStepStatus, string>> = {
-      idle: 'default',
-      ready: 'blue',
-      running: 'processing',
-      completed: 'green',
-      failed: 'red',
-      invalidated: 'orange',
-      needs_tool_selection: 'gold'
-    }
-
-    return colorMap[status]
-  }
-
-  function getStepHintKey(stepKey: WorkflowStepKey, index: number): string {
-    const toolViewModel = getToolViewModel(stepKey)
-
-    if (toolViewModel && toolViewModel.availableToolSlugs.length === 0) {
-      return 'toolUnavailable'
-    }
-
-    const status = getStepStatus(stepKey)
-    switch (status) {
-      case 'ready':
-        return 'ready'
-      case 'running':
-        return 'running'
-      case 'completed':
-        return 'completed'
-      case 'failed':
-        return 'failed'
-      case 'invalidated':
-        return 'invalidated'
-      case 'needs_tool_selection':
-        return 'selectTool'
-      default:
-        return index === 0 ? 'startHere' : 'awaitingInputs'
-    }
-  }
-
-  function selectStep(stepKey: WorkflowStepKey) {
-    emit('select', stepKey)
+  function selectGroup(groupId: string) {
+    emit('select', groupId)
   }
 </script>
 
@@ -141,21 +81,20 @@
     margin-bottom: @spacing-lg;
   }
 
-  .step-list {
+  .group-list {
     display: flex;
     flex-direction: column;
     gap: @spacing-md;
   }
 
-  .step-card {
-    display: flex;
-    gap: @spacing-md;
-    align-items: flex-start;
+  .group-card {
+    width: 100%;
     border: 1px solid @border-color-light;
     border-radius: @border-radius-md;
     padding: @spacing-md;
     background: @bg-card-light;
     cursor: pointer;
+    text-align: left;
     transition: border-color 0.2s ease, transform 0.2s ease;
 
     &:hover {
@@ -164,56 +103,32 @@
     }
   }
 
-  .step-card-active {
+  .group-card-active {
     border-color: @accent-color;
     box-shadow: @shadow-sm;
   }
 
-  .step-index {
-    min-width: 44px;
-    height: 44px;
-    border-radius: @border-radius-round;
-    background: @accent-color-light;
-    color: @accent-color;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: @font-size-sm;
-    font-weight: @font-weight-bold;
-  }
-
-  .step-copy {
+  .group-copy {
     min-width: 0;
   }
 
-  .step-title {
+  .group-title {
     font-size: @font-size-md;
     font-weight: @font-weight-semibold;
     margin-bottom: @spacing-xs;
   }
 
-  .step-desc {
+  .group-desc {
     margin: 0;
     color: @text-color-light-secondary;
     font-size: @font-size-sm;
     line-height: @line-height-base;
   }
 
-  .step-meta {
+  .group-meta {
     display: flex;
     flex-wrap: wrap;
     gap: @spacing-xs;
     margin-top: @spacing-sm;
-  }
-
-  .step-status-row {
-    margin-top: @spacing-sm;
-  }
-
-  .step-hint {
-    margin: @spacing-xs 0 0;
-    color: @text-color-light-secondary;
-    font-size: @font-size-sm;
-    line-height: @line-height-base;
   }
 </style>

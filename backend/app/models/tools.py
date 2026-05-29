@@ -2,7 +2,7 @@
 """工具相关模型"""
 
 from datetime import datetime
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, Text, ForeignKey, JSON, Table
+from sqlalchemy import Column, String, Integer, Boolean, DateTime, Text, ForeignKey, JSON, Table, UniqueConstraint
 from sqlalchemy.orm import relationship
 import enum
 
@@ -22,6 +22,7 @@ class ToolType(str, enum.Enum):
     REMOTE_API = "remote_api"
     DOCKER_IMAGE = "docker_image"
     PYTHON_SCRIPT = "python_script"
+    SSH_JOB = "ssh_job"
 
 
 class ToolProviderType(str, enum.Enum):
@@ -58,6 +59,40 @@ class ToolCategory(Base, UUIDMixin, TimestampMixin):
     is_enabled = Column(Boolean, default=True, nullable=False, index=True)
 
     tools = relationship("Tool", back_populates="tool_category")
+
+
+class ToolWorkbenchGroup(Base, UUIDMixin, TimestampMixin):
+    """工具工作台分组表"""
+    __tablename__ = "tool_workbench_groups"
+
+    name = Column(String(100), unique=True, nullable=False, index=True)
+    slug = Column(String(100), unique=True, nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    sort_order = Column(Integer, default=0, nullable=False)
+    is_enabled = Column(Boolean, default=True, nullable=False, index=True)
+
+    tool_mappings = relationship(
+        "ToolWorkbenchGroupMapping",
+        back_populates="group",
+        cascade="all, delete-orphan",
+    )
+
+
+class ToolWorkbenchGroupMapping(Base, UUIDMixin, TimestampMixin):
+    """工具与工作台分组映射表"""
+    __tablename__ = "tool_workbench_group_mappings"
+    __table_args__ = (
+        UniqueConstraint("tool_id", "group_id", name="uq_tool_workbench_group_mapping_tool_group"),
+    )
+
+    tool_id = Column(String(36), ForeignKey("tools.id"), nullable=False, index=True)
+    group_id = Column(String(36), ForeignKey("tool_workbench_groups.id"), nullable=False, index=True)
+    sort_order = Column(Integer, default=0, nullable=False)
+    is_recommended = Column(Boolean, default=False, nullable=False)
+    is_enabled = Column(Boolean, default=True, nullable=False, index=True)
+
+    tool = relationship("Tool", back_populates="workbench_group_mappings")
+    group = relationship("ToolWorkbenchGroup", back_populates="tool_mappings")
 
 
 class Tool(Base, UUIDMixin, TimestampMixin):
@@ -101,7 +136,18 @@ class Tool(Base, UUIDMixin, TimestampMixin):
     current_version = relationship("ToolVersion", foreign_keys=[current_version_id], primaryjoin="Tool.current_version_id==ToolVersion.id", uselist=False, post_update=True)
     tags = relationship("Tag", secondary=tool_tag_association, back_populates="tools")
     tasks = relationship("Task", back_populates="tool")
-    statistics = relationship("ToolStatistics", back_populates="tool", uselist=False)
+    statistics = relationship(
+        "ToolStatistics",
+        back_populates="tool",
+        uselist=False,
+        cascade="all, delete-orphan",
+        single_parent=True,
+    )
+    workbench_group_mappings = relationship(
+        "ToolWorkbenchGroupMapping",
+        back_populates="tool",
+        cascade="all, delete-orphan",
+    )
 
 
 class ToolVersion(Base, UUIDMixin, TimestampMixin):
@@ -117,12 +163,14 @@ class ToolVersion(Base, UUIDMixin, TimestampMixin):
     config = Column(JSON, nullable=False)
     # config结构:
     # {
-    #     "type": "remote_api|docker_image|python_script",
+    #     "type": "remote_api|docker_image|python_script|ssh_job",
     #     "endpoint": "http://...",  # remote_api
     #     "method": "POST",          # remote_api
     #     "headers": {},             # remote_api
     #     "image": "...",            # docker_image
     #     "command": [...],          # docker_image
+    #     "host": "gpu-node-01",    # ssh_job
+    #     "entrypoint": "/app/platform_run.sh",  # ssh_job
     #     "input_schema": {...},     # JSON Schema
     #     "output_schema": {...},    # JSON Schema
     # }

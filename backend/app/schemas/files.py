@@ -36,3 +36,20 @@ class FileDownloadUrl(BaseModel):
     """文件下载URL"""
     url: str = Field(..., description="下载URL")
     expires_in: int = Field(..., description="过期时间(秒)")
+
+
+class ArtifactFileResponse(TimestampMixin):
+    """我的产物文件响应"""
+    id: str
+    filename: str
+    content_type: Optional[str]
+    size_bytes: int
+    source_type: str
+    download_url: str
+    task_id: str
+    tool_id: str
+    tool_name: str
+    tool_slug: str
+
+    class Config:
+        from_attributes = True
