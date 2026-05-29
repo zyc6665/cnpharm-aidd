@@ -1,0 +1,70 @@
+{
+  "task_id": "b4f1ab41-b91e-4cfd-a0bd-3678b95ba7ec",
+  "protein_pdb": "/workspace/platform-jobs/b4f1ab41-b91e-4cfd-a0bd-3678b95ba7ec/input/protein.pdb",
+  "model_choice": "auto",
+  "selected_model": "a+b.hdf",
+  "selected_model_path": "/workspace/LVpocket-2/new_best/a+b.hdf",
+  "classification": {
+    "enabled": true,
+    "method": "PSIPRED secondary-structure classification",
+    "predicted_class": 3,
+    "selected_model": "a+b.hdf",
+    "fasta": "/workspace/platform-jobs/b4f1ab41-b91e-4cfd-a0bd-3678b95ba7ec/work/lvpocket_work/classification/input.fasta",
+    "horiz": "/workspace/platform-jobs/b4f1ab41-b91e-4cfd-a0bd-3678b95ba7ec/work/lvpocket_work/classification/input.horiz"
+  },
+  "pocket_count": 1,
+  "pockets": [
+    {
+      "id": "pocket0",
+      "mol2": "artifacts/lv_results/input/pocket0.mol2",
+      "pdb": "artifacts/lv_results/input/pocket0.pdb"
+    }
+  ],
+  "raw_output_dir": "/workspace/platform-jobs/b4f1ab41-b91e-4cfd-a0bd-3678b95ba7ec/work/lvpocket_work/lvpocket_raw",
+  "device": "cpu",
+  "artifacts": [
+    {
+      "name": "input.fasta",
+      "path": "artifacts/classification/input.fasta",
+      "content_type": "text/plain"
+    },
+    {
+      "name": "input.horiz",
+      "path": "artifacts/classification/input.horiz",
+      "content_type": "text/plain"
+    },
+    {
+      "name": "input.ss",
+      "path": "artifacts/classification/input.ss",
+      "content_type": "text/plain"
+    },
+    {
+      "name": "input.ss2",
+      "path": "artifacts/classification/input.ss2",
+      "content_type": "text/plain"
+    },
+    {
+      "name": "selected_model.txt",
+      "path": "artifacts/classification/selected_model.txt",
+      "content_type": "text/plain"
+    },
+    {
+      "name": "pocket0.mol2",
+      "path": "artifacts/lv_results/input/pocket0.mol2",
+      "content_type": "chemical/x-mol2"
+    },
+    {
+      "name": "pocket0.pdb",
+      "path": "artifacts/lv_results/input/pocket0.pdb",
+      "content_type": "chemical/x-pdb"
+    },
+    {
+      "name": "pockets.cmap",
+      "path": "artifacts/lv_results/input/pockets.cmap",
+      "content_type": "application/octet-stream"
+    }
+  ],
+  "metrics": {
+    "duration_sec": 71.25947213172913
+  }
+}

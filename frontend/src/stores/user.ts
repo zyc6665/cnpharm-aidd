@@ -1,15 +1,14 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { UserInfo, LoginParams, RegisterParams, SignInInfo } from '@/types/models'
+import type { UserInfo, LoginParams, RegisterParams } from '@/types/models'
+import { normalizeUserInfo } from '@/utils/user-normalization'
 import {
   login as apiLogin,
   register as apiRegister,
   logout as apiLogout,
   getCurrentUser,
   guestLogin as apiGuestLogin,
-  sendEmailCode as apiSendEmailCode,
-  dailySignIn as apiDailySignIn,
-  getSignInInfo as apiGetSignInInfo
+  sendEmailCode as apiSendEmailCode
 } from '@/api/auth'
 import { setToken, setRefreshToken, clearTokens, getToken } from '@/api/request'
 
@@ -18,25 +17,19 @@ export const useUserStore = defineStore('user', () => {
   const token = ref<string | null>(getToken())
   const refreshToken = ref<string | null>(null)
   const userInfo = ref<UserInfo | null>(null)
-  const credits = ref(0)
   const isGuest = ref(false)
   const loading = ref(false)
-  const signInInfo = ref<SignInInfo | null>(null)
 
   // Getters
   const isLoggedIn = computed(() => !!token.value && !isGuest.value)
   const isAuthenticated = computed(() => !!token.value)
-  const isAdmin = computed(() => userInfo.value?.role === 'admin')
-  const isVip = computed(() => userInfo.value?.role === 'vip' || userInfo.value?.role === 'admin')
-  const username = computed(() => userInfo.value?.username || (isGuest.value ? '游客' : ''))
-  const userRole = computed(() => userInfo.value?.role || (isGuest.value ? 'guest' : 'user'))
-  const hasEnoughCredits = computed(() => (required: number) => credits.value >= required)
-  const memberExpireAt = computed(() => userInfo.value?.member_expire_at)
-  const invitationCode = computed(() => userInfo.value?.invitation_code)
-  const avatar = computed(() => userInfo.value?.avatar || '')
+  const user = computed(() => normalizeUserInfo(userInfo.value))
+  const isAdmin = computed(() => user.value?.role === 'admin')
+  const username = computed(() => user.value?.username || (isGuest.value ? '游客' : ''))
+  const userRole = computed(() => user.value?.role || (isGuest.value ? 'guest' : 'user'))
+  const avatar = computed(() => user.value?.avatar || '')
 
   // Aliases for backwards compatibility
-  const user = computed(() => userInfo.value)
   const role = computed(() => userRole.value)
 
   // Actions
@@ -46,8 +39,7 @@ export const useUserStore = defineStore('user', () => {
       const res = await apiLogin(params)
       token.value = res.data.access_token
       refreshToken.value = res.data.refresh_token
-      userInfo.value = res.data.user
-      credits.value = res.data.credits || res.data.user.credits || 0
+      userInfo.value = normalizeUserInfo(res.data.user)
       isGuest.value = false
       setToken(res.data.access_token)
       setRefreshToken(res.data.refresh_token)
@@ -65,8 +57,7 @@ export const useUserStore = defineStore('user', () => {
       if (res.data.access_token) {
         token.value = res.data.access_token
         refreshToken.value = res.data.refresh_token
-        userInfo.value = res.data.user
-        credits.value = res.data.credits || 100 // 注册奖励积分
+        userInfo.value = normalizeUserInfo(res.data.user)
         isGuest.value = false
         setToken(res.data.access_token)
         setRefreshToken(res.data.refresh_token)
@@ -84,7 +75,6 @@ export const useUserStore = defineStore('user', () => {
       const res = await apiGuestLogin()
       token.value = res.data.access_token
       isGuest.value = true
-      credits.value = 0
       userInfo.value = null
       setToken(res.data.access_token)
       return res.data
@@ -109,9 +99,7 @@ export const useUserStore = defineStore('user', () => {
       token.value = null
       refreshToken.value = null
       userInfo.value = null
-      credits.value = 0
       isGuest.value = false
-      signInInfo.value = null
       clearTokens()
     }
   }
@@ -121,15 +109,13 @@ export const useUserStore = defineStore('user', () => {
     loading.value = true
     try {
       const res = await getCurrentUser()
-      userInfo.value = res.data
-      credits.value = res.data.credits || 0
+      userInfo.value = normalizeUserInfo(res.data)
       return res.data
     } catch {
       // Token 无效，清除状态
       token.value = null
       refreshToken.value = null
       userInfo.value = null
-      credits.value = 0
       isGuest.value = false
       clearTokens()
       return null
@@ -138,51 +124,9 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
-  // 获取积分（刷新）
-  const fetchCredits = async () => {
-    if (!token.value || isGuest.value) return
-    const res = await getCurrentUser()
-    credits.value = res.data.credits || 0
-  }
-
-  // 消费积分（本地更新）
-  const consumeCredits = (amount: number) => {
-    credits.value -= amount
-  }
-
-  // 增加积分（本地更新）
-  const addCredits = (amount: number) => {
-    credits.value += amount
-  }
-
-  // 每日签到
-  const dailySignIn = async () => {
-    if (isGuest.value) {
-      throw new Error('游客模式不支持签到')
-    }
-    const res = await apiDailySignIn()
-    if (res.data.reward) {
-      credits.value += res.data.reward
-    }
-    await fetchSignInInfo()
-    return res.data
-  }
-
-  // 获取签到信息
-  const fetchSignInInfo = async () => {
-    if (isGuest.value) return null
-    try {
-      const res = await apiGetSignInInfo()
-      signInInfo.value = res.data
-      return res.data
-    } catch {
-      return null
-    }
-  }
-
   const updateUserInfo = (info: Partial<UserInfo>) => {
     if (userInfo.value) {
-      userInfo.value = { ...userInfo.value, ...info }
+      userInfo.value = normalizeUserInfo({ ...userInfo.value, ...info })
     }
   }
 
@@ -192,7 +136,10 @@ export const useUserStore = defineStore('user', () => {
     const res = await updateUserProfile({
       avatar_url: data.avatar_url
     })
-    userInfo.value = res.data
+    userInfo.value = normalizeUserInfo({
+      ...userInfo.value,
+      ...res.data
+    })
     return res.data
   }
 
@@ -225,20 +172,14 @@ export const useUserStore = defineStore('user', () => {
     token,
     refreshToken,
     userInfo,
-    credits,
     isGuest,
     loading,
-    signInInfo,
     // Getters
     isLoggedIn,
     isAuthenticated,
     isAdmin,
-    isVip,
     username,
     userRole,
-    hasEnoughCredits,
-    memberExpireAt,
-    invitationCode,
     avatar,
     // Aliases
     user,
@@ -250,11 +191,6 @@ export const useUserStore = defineStore('user', () => {
     sendEmailCode,
     logout,
     fetchUserInfo,
-    fetchCredits,
-    consumeCredits,
-    addCredits,
-    dailySignIn,
-    fetchSignInInfo,
     updateUserInfo,
     refreshAccessToken,
     // Additional actions
@@ -263,6 +199,6 @@ export const useUserStore = defineStore('user', () => {
   }
 }, {
   persist: {
-    pick: ['userInfo', 'isGuest', 'credits']
+    pick: ['userInfo', 'isGuest']
   }
 })

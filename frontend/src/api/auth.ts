@@ -1,13 +1,13 @@
 import { get, post, put, patch } from './request'
 import type { ApiResponse } from '@/types/api'
+import { buildRefreshTokenRequestConfig } from './auth-request-policy'
 import type {
   UserInfo,
   LoginParams,
   RegisterParams,
   LoginResponse,
   AuthTokens,
-  GuestLoginResponse,
-  SignInInfo
+  GuestLoginResponse
 } from '@/types/models'
 
 // 用户登录
@@ -53,7 +53,7 @@ export const verifyEmailCode = (
 
 // 刷新 Token
 export const refreshToken = (refresh_token: string): Promise<ApiResponse<AuthTokens>> => {
-  return post<AuthTokens>('/auth/refresh', { refresh_token })
+  return post<AuthTokens>('/auth/refresh', undefined, buildRefreshTokenRequestConfig(refresh_token))
 }
 
 // 登出
@@ -94,34 +94,6 @@ export const resetPassword = (
     email,
     code,
     new_password: newPassword
-  })
-}
-
-// 每日签到（临时实现，返回模拟数据）
-export const dailySignIn = (): Promise<ApiResponse<{ reward: number; streak: number }>> => {
-  // TODO: 后端实现后替换为真实API调用
-  return Promise.resolve({
-    code: 200,
-    message: 'success',
-    data: {
-      reward: 10,
-      streak: 1
-    }
-  })
-}
-
-// 获取签到信息（临时实现，返回模拟数据）
-export const getSignInInfo = (): Promise<ApiResponse<SignInInfo>> => {
-  // TODO: 后端实现后替换为真实API调用
-  return Promise.resolve({
-    code: 200,
-    message: 'success',
-    data: {
-      signed_days: 0,
-      already_signed: false,
-      today_reward: 10,
-      streak_bonus: false
-    }
   })
 }
 

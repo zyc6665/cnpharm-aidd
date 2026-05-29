@@ -60,6 +60,41 @@ async def notify_task_error(task_id: str, error: str):
 
 # ==================== 工具任务执行 ====================
 
+def _extract_output_file_ids(output_result: Dict[str, Any]) -> list[str]:
+    """从执行结果中提取输出文件ID列表"""
+    file_ids: list[str] = []
+
+    direct_file_ids = output_result.get("output_file_ids")
+    if isinstance(direct_file_ids, list):
+        file_ids.extend(str(file_id) for file_id in direct_file_ids if file_id)
+
+    nested_result = output_result.get("result")
+    if isinstance(nested_result, dict):
+        nested_file_ids = nested_result.get("output_file_ids")
+        if isinstance(nested_file_ids, list):
+            file_ids.extend(str(file_id) for file_id in nested_file_ids if file_id)
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for file_id in file_ids:
+        if file_id in seen:
+            continue
+        seen.add(file_id)
+        deduped.append(file_id)
+
+    return deduped
+
+
+def prepare_task_output(output_result: Dict[str, Any]) -> Dict[str, Any]:
+    """规范化任务输出，供持久化与接口层统一消费"""
+    file_ids = _extract_output_file_ids(output_result)
+
+    return {
+        "result": output_result,
+        "file_ids": file_ids,
+        "output_type": "visualization" if file_ids else "json",
+    }
+
 @shared_task(
     bind=True,
     name="app.worker.tasks.execute_tool_task",
@@ -150,6 +185,7 @@ async def _execute_tool_task_impl(task_id: str, tool_version_id: str) -> Dict[st
                 select(TaskInput).where(TaskInput.task_id == task_id)
             )
             task_input = input_result.scalar_one_or_none()
+            task.inputs = task_input
             params = task_input.params if task_input else {}
 
             logger.info(f"执行工具 {tool_version.tool_id}, 类型: {tool_version.config.get('executor_type')}")
@@ -174,10 +210,12 @@ async def _execute_tool_task_impl(task_id: str, tool_version_id: str) -> Dict[st
             logger.info(f"任务 {task_id} 执行成功")
 
             # 创建输出记录
+            prepared_output = prepare_task_output(output_result)
             output = TaskOutput(
                 task_id=task_id,
-                result=output_result,
-                output_type="json"
+                result=prepared_output["result"],
+                file_ids=prepared_output["file_ids"],
+                output_type=prepared_output["output_type"]
             )
             db.add(output)
 

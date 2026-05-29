@@ -113,13 +113,7 @@
               <template v-if="invitationValidating" #suffix>
                 <LoadingOutlined />
               </template>
-              <template v-else-if="invitationBonus > 0" #suffix>
-                <CheckCircleOutlined style="color: #52c41a" />
-              </template>
             </a-input>
-            <div v-if="invitationBonus > 0" class="invitation-bonus">
-              <GiftOutlined /> {{ t('auth.invitationBonus', { bonus: invitationBonus }) }}
-            </div>
           </a-form-item>
 
           <!-- 服务条款 -->
@@ -167,7 +161,6 @@
     MailOutlined,
     SafetyOutlined,
     GiftOutlined,
-    CheckCircleOutlined,
     LoadingOutlined
   } from '@ant-design/icons-vue'
   import { useUserStore } from '@/stores'
@@ -183,7 +176,6 @@
   const countdown = ref(0)
   const countdownTimer = ref<NodeJS.Timeout | null>(null)
   const invitationValidating = ref(false)
-  const invitationBonus = ref(0)
 
   // 密码强度
   const passwordStrength = ref(0)
@@ -288,23 +280,17 @@
   // 验证邀请码
   const validateInvitation = async () => {
     if (!formState.invitation_code) {
-      invitationBonus.value = 0
       return
     }
 
     invitationValidating.value = true
     try {
       const res = await validateInvitationCode(formState.invitation_code)
-      if (res.data.valid && res.data.bonus) {
-        invitationBonus.value = res.data.bonus
-      } else {
-        invitationBonus.value = 0
-        if (!res.data.valid) {
-          message.warning(t('auth.invalidInvitationCode'))
-        }
+      if (!res.data.valid) {
+        message.warning(t('auth.invalidInvitationCode'))
       }
     } catch {
-      invitationBonus.value = 0
+      // 错误已在请求层处理
     } finally {
       invitationValidating.value = false
     }
@@ -391,17 +377,6 @@
     .strength-text {
       font-size: @font-size-sm;
       transition: color 0.3s;
-    }
-  }
-
-  // 邀请码奖励提示
-  .invitation-bonus {
-    margin-top: @spacing-xs;
-    color: @success-color;
-    font-size: @font-size-sm;
-
-    .anticon {
-      margin-right: 4px;
     }
   }
 

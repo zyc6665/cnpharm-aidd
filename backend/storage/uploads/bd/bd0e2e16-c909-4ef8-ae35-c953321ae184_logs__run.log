@@ -1,0 +1,65 @@
+Janus-QUBO platform runner
+Model root: /workspace/Janus-QUBO
+Python: /home/zhuwy/.conda/envs/janus-qubo/bin/python
+Input dir: /workspace/platform-jobs/02496c2e-e830-417a-9136-174c51b0c47a/input
+Output dir: /workspace/platform-jobs/02496c2e-e830-417a-9136-174c51b0c47a/output
+Work dir: /workspace/platform-jobs/02496c2e-e830-417a-9136-174c51b0c47a/work
+Params JSON: /workspace/platform-jobs/02496c2e-e830-417a-9136-174c51b0c47a/params.json
+Task ID: 02496c2e-e830-417a-9136-174c51b0c47a
+Task name: janus_qubo_ga_generation
+Selected method: ga
+QUBO CSV: /workspace/Janus-QUBO/Qmol_FM/example_data/qubo_128.csv
+Checkpoint: /workspace/Janus-QUBO/recon_loss=0.0043.ckpt
+Device: cpu
+Runtime work directory: /workspace/platform-jobs/02496c2e-e830-417a-9136-174c51b0c47a/work/janus_qubo_runtime_1640946
+Capability: GA QUBO latent generation + Block_bAE SMILES decoding
+Running command:
+  /home/zhuwy/.conda/envs/janus-qubo/bin/python /workspace/Janus-QUBO/Qmol_FM/sample_ga.py --qubo_csv /workspace/Janus-QUBO/Qmol_FM/example_data/qubo_128.csv --output_h5 /workspace/platform-jobs/02496c2e-e830-417a-9136-174c51b0c47a/work/janus_qubo_runtime_1640946/generated_latent_codes.h5 --n_samples 5 --n_dim 128 --pop_size 20 --n_generations 3 --cx_prob 0.7 --mut_prob 0.2 --mut_indpb 0.05 --tournsize 3 --elite_size 2 --seed 42
+2026-05-29 09:38:43,157 [INFO] Loading QUBO matrix from: /workspace/Janus-QUBO/Qmol_FM/example_data/qubo_128.csv
+2026-05-29 09:38:43,185 [INFO] QUBO matrix shape: (128, 128)
+2026-05-29 09:38:43,482 [INFO] Starting GA generation: pop_size=20, generations=3
+GA Evolution:   0%|          | 0/3 [00:00<?, ?it/s]GA Evolution: 100%|██████████| 3/3 [00:00<00:00, 391.47it/s]
+2026-05-29 09:38:43,733 [INFO] 
+GA Evolution Summary:
+2026-05-29 09:38:43,733 [INFO]   Initial best energy: 0.748067
+2026-05-29 09:38:43,733 [INFO]   Final best energy: 0.220046
+2026-05-29 09:38:43,733 [INFO]   Improvement: 0.528021
+2026-05-29 09:38:43,762 [INFO]   Total unique samples: 59
+2026-05-29 09:38:43,794 [INFO] 
+Generated 5 samples
+2026-05-29 09:38:43,794 [INFO] Energy range: [0.220046, 0.516252]
+2026-05-29 09:38:43,794 [INFO] Mean energy: 0.356251
+2026-05-29 09:38:43,794 [INFO] Saving results to: /workspace/platform-jobs/02496c2e-e830-417a-9136-174c51b0c47a/work/janus_qubo_runtime_1640946/generated_latent_codes.h5
+2026-05-29 09:38:43,841 [INFO] ✅ GA generation completed!
+Running command:
+  /home/zhuwy/.conda/envs/janus-qubo/bin/python /workspace/Janus-QUBO/Block_bAE/latent_to_smiles.py --input_h5 /workspace/platform-jobs/02496c2e-e830-417a-9136-174c51b0c47a/work/janus_qubo_runtime_1640946/generated_latent_codes.h5 --model_ckpt_path /workspace/Janus-QUBO/recon_loss=0.0043.ckpt --vocab_path /workspace/Janus-QUBO/Block_bAE/vocab/vocabulary.json --output_h5 /workspace/platform-jobs/02496c2e-e830-417a-9136-174c51b0c47a/work/janus_qubo_runtime_1640946/generated_smiles.h5 --device cpu --decode_batch_size 5 --reconstruct_batch_size 5
+2026-05-29 09:40:01,613 [INFO] Reading latent_codes and labels from /workspace/platform-jobs/02496c2e-e830-417a-9136-174c51b0c47a/work/janus_qubo_runtime_1640946/generated_latent_codes.h5
+2026-05-29 09:40:01,695 [WARNING] 'labels' dataset not found in input file, generating default labels.
+2026-05-29 09:40:01,695 [INFO] Loading VAE model: /workspace/Janus-QUBO/recon_loss=0.0043.ckpt
+2026-05-29 09:40:01,695 [INFO] Loading vocabulary: /workspace/Janus-QUBO/Block_bAE/vocab/vocabulary.json
+2026-05-29 09:40:01,724 [INFO] SMILESReconstructor initialized - Vocab size: 38, Standardize: True
+2026-05-29 09:40:01,724 [INFO] Starting decoding latent_codes → SMILES, total 5 samples
+[INFO] Detected 1 GPU(s), using Queue-based multi-process decoding...
+/home/zhuwy/.conda/envs/janus-qubo/lib/python3.10/site-packages/lightning_fabric/utilities/cloud_io.py:73: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+
+******************** [INIT] HYPERPARAMETER VERIFICATION ********************
+**********************************************************************
+
+2026-05-29 09:40:12,598 [INFO] Initializing VAE with [TRANSFORMER] Encoder.
+/home/zhuwy/.conda/envs/janus-qubo/lib/python3.10/site-packages/torch/nn/modules/transformer.py:379: UserWarning: enable_nested_tensor is True, but self.use_nested_tensor is False because encoder_layer was not TransformerEncoderLayer
+  warnings.warn(
+2026-05-29 09:40:12,781 [INFO] Sharing weights between embedding and output projection layers.
+2026-05-29 09:40:17,052 [INFO] Model compiled successfully.
+[cpu] Decoding:   0%|          | 0/1 [00:00<?, ?it/s]/home/zhuwy/.conda/envs/janus-qubo/lib/python3.10/site-packages/torch/amp/autocast_mode.py:266: UserWarning: User provided device_type of 'cuda', but CUDA is not available. Disabling
+  warnings.warn(
+[cpu] Decoding: 100%|██████████| 1/1 [00:06<00:00,  6.60s/it][cpu] Decoding: 100%|██████████| 1/1 [00:06<00:00,  6.60s/it]
+2026-05-29 09:40:26,414 [INFO] Starting reconstruction of 5 ID sequences to SMILES...
+2026-05-29 09:40:26,415 [INFO] Reconstructing SMILES using 1 tasks on 128 worker processes
+[CPU] Iter 0 Reconstructing SMILES:   0%|          | 0/1 [00:00<?, ?it/s][CPU] Iter 0 Reconstructing SMILES: 100%|██████████| 1/1 [00:00<00:00, 34.08it/s]
+2026-05-29 09:40:34,209 [INFO] Reconstruction complete - Success: 5, Failed: 0 (Success rate: 100.00%)
+2026-05-29 09:40:34,210 [INFO] Failed SELFIES saved to failed_selfies_iter00.log
+2026-05-29 09:40:34,210 [INFO] Saving SMILES to HDF5: /workspace/platform-jobs/02496c2e-e830-417a-9136-174c51b0c47a/work/janus_qubo_runtime_1640946/generated_smiles.h5
+2026-05-29 09:40:34,212 [INFO] ✅ Conversion completed and saved successfully!
+Artifacts written to: /workspace/platform-jobs/02496c2e-e830-417a-9136-174c51b0c47a/output/artifacts
+Result JSON written: /workspace/platform-jobs/02496c2e-e830-417a-9136-174c51b0c47a/output/result.json
+Janus-QUBO platform run completed

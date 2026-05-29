@@ -1,0 +1,125 @@
+"""ssh_job 执行方式的后端支持测试。"""
+
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+BACKEND_ROOT = PROJECT_ROOT / "backend"
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from app.tasks.executor import SSHJobExecutor, TaskExecutor
+from app.tasks.queue_manager import TaskQueue, TaskQueueManager
+from app.config import bootstrap_process_env
+
+
+def _build_task(task_id: str = "task-123") -> SimpleNamespace:
+    return SimpleNamespace(
+        id=task_id,
+        user_id="user-123",
+        inputs=SimpleNamespace(params={"num_samples": 4}, file_ids=[]),
+    )
+
+
+def _build_tool_version(config: dict) -> SimpleNamespace:
+    return SimpleNamespace(config=config)
+
+
+def test_determine_queue_routes_non_gpu_ssh_job_to_cpu_queue() -> None:
+    """ssh_job 默认应进入 CPU 队列，而不是 API 默认队列。"""
+    queue = TaskQueueManager.determine_queue(
+        {
+            "type": "ssh_job",
+            "gpu_required": False,
+        }
+    )
+
+    assert queue == TaskQueue.CPU_QUEUE.value
+
+
+def test_task_executor_returns_ssh_job_executor() -> None:
+    """执行器工厂应识别 ssh_job。"""
+    executor = TaskExecutor(
+        _build_task(),
+        _build_tool_version(
+            {
+                "type": "ssh_job",
+                "host": "gpu-node-01.internal",
+                "username": "runner",
+                "auth_ref": "ssh_gpu_node_01",
+                "runner_mode": "shell",
+                "remote_base_dir": "/srv/platform-jobs",
+                "entrypoint": "/opt/models/platform_run.sh",
+            }
+        ),
+    )._get_executor()
+
+    assert isinstance(executor, SSHJobExecutor)
+
+
+def test_ssh_job_executor_builds_container_runtime_paths_and_command() -> None:
+    """docker_exec 模式应区分宿主机目录和容器内目录。"""
+    config = {
+        "type": "ssh_job",
+        "host": "gpu-node-01.internal",
+        "username": "runner",
+        "auth_ref": "ssh_gpu_node_01",
+        "runner_mode": "docker_exec",
+        "remote_base_dir": "/srv/platform-jobs",
+        "container_base_dir": "/workspace/platform-jobs",
+        "entrypoint": "/app/platform_run.sh",
+        "container_name": "targetdiff-prod",
+        "env": {"CUDA_VISIBLE_DEVICES": "0"},
+    }
+    executor = SSHJobExecutor(_build_task("task-123"), _build_tool_version(config))
+
+    remote_paths = executor._build_remote_paths()
+    command = executor._build_remote_exec_command(remote_paths)
+
+    assert remote_paths["host_task_dir"] == "/srv/platform-jobs/task-123"
+    assert remote_paths["runtime_task_dir"] == "/workspace/platform-jobs/task-123"
+    assert "docker exec targetdiff-prod bash -lc" in command
+    assert "--output-dir /workspace/platform-jobs/task-123/output" in command
+    assert "export CUDA_VISIBLE_DEVICES=0" in command
+
+
+def test_ssh_job_executor_supports_password_auth(monkeypatch, tmp_path) -> None:
+    """密码认证模式应正确解析 password_ref。"""
+    password_file = tmp_path / "ssh_4090_password"
+    password_file.write_text("super-secret\n", encoding="utf-8")
+    monkeypatch.setenv("SSH_PASSWORD_REF_DIR", str(tmp_path))
+
+    config = {
+        "type": "ssh_job",
+        "host": "4090",
+        "username": "zhouyc",
+        "auth_type": "password",
+        "password_ref": "ssh_4090_password",
+        "runner_mode": "shell",
+        "remote_base_dir": "/srv/platform-jobs",
+        "entrypoint": "/app/platform_run.sh",
+        "strict_host_key_checking": False,
+    }
+    executor = SSHJobExecutor(_build_task("task-456"), _build_tool_version(config))
+
+    auth_settings = executor._resolve_auth_settings()
+
+    assert auth_settings["auth_type"] == "password"
+    assert auth_settings["password"] == "super-secret"
+    assert auth_settings["key_path"] is None
+
+
+def test_bootstrap_process_env_loads_secret_refs_from_dotenv(monkeypatch, tmp_path) -> None:
+    """本地 .env 中的 SSH_PASSWORD_REF_* 应注入进程环境，供 ssh_job 执行器读取。"""
+    env_file = tmp_path / ".env"
+    env_file.write_text("SSH_PASSWORD_REF_SSH_4090_ZHOUYC=super-secret\n", encoding="utf-8")
+    monkeypatch.delenv("SSH_PASSWORD_REF_SSH_4090_ZHOUYC", raising=False)
+
+    bootstrap_process_env(str(env_file))
+
+    assert os.environ.get("SSH_PASSWORD_REF_SSH_4090_ZHOUYC") == "super-secret"

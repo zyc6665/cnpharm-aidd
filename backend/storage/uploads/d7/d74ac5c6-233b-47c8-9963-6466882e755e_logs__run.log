@@ -1,0 +1,1331 @@
+[platform_run] task_id=a5fe8777-4ff9-4ffc-bd3e-a96b4f4f8d4d
+[platform_run] model_root=/workspace/LVpocket
+[platform_run] input_dir=/workspace/platform-jobs/a5fe8777-4ff9-4ffc-bd3e-a96b4f4f8d4d/input
+[platform_run] output_dir=/workspace/platform-jobs/a5fe8777-4ff9-4ffc-bd3e-a96b4f4f8d4d/output
+[platform_run] work_dir=/workspace/platform-jobs/a5fe8777-4ff9-4ffc-bd3e-a96b4f4f8d4d/work
+[platform_run] params_json=/workspace/platform-jobs/a5fe8777-4ff9-4ffc-bd3e-a96b4f4f8d4d/params.json
+[platform_run] requested_device=cpu
+[platform_run] protein_pdb=/workspace/platform-jobs/a5fe8777-4ff9-4ffc-bd3e-a96b4f4f8d4d/input/protein.pdb
+[platform_run] model_choice=auto
+[platform_run] predict_device=cpu
+[lvpocket] running: /workspace/LVpocket/env/bin/python /workspace/LVpocket/pdb_to_fasta.py --pdb_file /workspace/platform-jobs/a5fe8777-4ff9-4ffc-bd3e-a96b4f4f8d4d/input/protein.pdb --fasta_file /workspace/platform-jobs/a5fe8777-4ff9-4ffc-bd3e-a96b4f4f8d4d/work/lvpocket_work/classification/input.fasta
+[lvpocket] running: /workspace/LVpocket/psipred/runpsipred /workspace/platform-jobs/a5fe8777-4ff9-4ffc-bd3e-a96b4f4f8d4d/work/lvpocket_work/classification/input.fasta
+Running PSI-BLAST with sequence /workspace/platform-jobs/a5fe8777-4ff9-4ffc-bd3e-a96b4f4f8d4d/work/lvpocket_work/classification/input.fasta ...
+Predicting secondary structure...
+Pass1 ...
+Pass2 ...
+Cleaning up ...
+Final output files: input.ss2 input.horiz
+Finished.
+[lvpocket] running: /workspace/LVpocket/env/bin/python -c 
+import sys
+import numpy as np
+from pathlib import Path
+
+model_root = Path(sys.argv[1])
+horiz_path = Path(sys.argv[2])
+selected_path = Path(sys.argv[3])
+sys.path.insert(0, str(model_root / "SCOP_Classifier"))
+
+from SSP import horizRead
+from predict import computeFeature, predictA
+
+ss = horizRead(str(horiz_path))
+features = np.array([computeFeature(ss["SSseq"][0])])
+pred = int(predictA(features)[0])
+mapping = {0: "all_a.hdf", 1: "all_b.hdf", 2: "a_or_.hdf", 3: "a+b.hdf"}
+model_name = mapping.get(pred, "all_scpdb.hdf")
+selected_path.write_text(model_name + "\n", encoding="utf-8")
+print("{}\t{}".format(pred, model_name))
+ /workspace/LVpocket /workspace/platform-jobs/a5fe8777-4ff9-4ffc-bd3e-a96b4f4f8d4d/work/lvpocket_work/classification/input.horiz /workspace/platform-jobs/a5fe8777-4ff9-4ffc-bd3e-a96b4f4f8d4d/work/lvpocket_work/classification/selected_model.txt
+[lvpocket] classifier stdout: 3	a+b.hdf
+[lvpocket] running: /workspace/LVpocket/env/bin/python /workspace/LVpocket/scripts/predict.py --input /workspace/platform-jobs/a5fe8777-4ff9-4ffc-bd3e-a96b4f4f8d4d/input/protein.pdb --output /workspace/platform-jobs/a5fe8777-4ff9-4ffc-bd3e-a96b4f4f8d4d/work/lvpocket_work/lvpocket_raw --model /workspace/LVpocket/new_best/a+b.hdf --format pdb
+2026-05-29 08:35:37.596513: E tensorflow/stream_executor/cuda/cuda_driver.cc:300] failed call to cuInit: CUDA_ERROR_NO_DEVICE: no CUDA-capable device is detected
+/workspace/LVpocket/env/lib/python3.6/site-packages/tensorflow/python/framework/dtypes.py:523: FutureWarning: Passing (type, 1) or '1type' as a synonym of type is deprecated; in a future version of numpy, it will be understood as (type, (1,)) / '(1,)type'.
+  _np_qint8 = np.dtype([("qint8", np.int8, 1)])
+/workspace/LVpocket/env/lib/python3.6/site-packages/tensorflow/python/framework/dtypes.py:524: FutureWarning: Passing (type, 1) or '1type' as a synonym of type is deprecated; in a future version of numpy, it will be understood as (type, (1,)) / '(1,)type'.
+  _np_quint8 = np.dtype([("quint8", np.uint8, 1)])
+/workspace/LVpocket/env/lib/python3.6/site-packages/tensorflow/python/framework/dtypes.py:525: FutureWarning: Passing (type, 1) or '1type' as a synonym of type is deprecated; in a future version of numpy, it will be understood as (type, (1,)) / '(1,)type'.
+  _np_qint16 = np.dtype([("qint16", np.int16, 1)])
+/workspace/LVpocket/env/lib/python3.6/site-packages/tensorflow/python/framework/dtypes.py:526: FutureWarning: Passing (type, 1) or '1type' as a synonym of type is deprecated; in a future version of numpy, it will be understood as (type, (1,)) / '(1,)type'.
+  _np_quint16 = np.dtype([("quint16", np.uint16, 1)])
+/workspace/LVpocket/env/lib/python3.6/site-packages/tensorflow/python/framework/dtypes.py:527: FutureWarning: Passing (type, 1) or '1type' as a synonym of type is deprecated; in a future version of numpy, it will be understood as (type, (1,)) / '(1,)type'.
+  _np_qint32 = np.dtype([("qint32", np.int32, 1)])
+/workspace/LVpocket/env/lib/python3.6/site-packages/tensorflow/python/framework/dtypes.py:532: FutureWarning: Passing (type, 1) or '1type' as a synonym of type is deprecated; in a future version of numpy, it will be understood as (type, (1,)) / '(1,)type'.
+  np_resource = np.dtype([("resource", np.ubyte, 1)])
+Using TensorFlow backend.
+[lvpocket] running: /workspace/LVpocket/env/bin/python /workspace/LVpocket/trans.py --result_path /workspace/platform-jobs/a5fe8777-4ff9-4ffc-bd3e-a96b4f4f8d4d/work/lvpocket_work/lvpocket_raw/input
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type: XX as elements instead.
+==============================
+*** Open Babel Warning  in Translate
+  Cannot perform atom type translation: table cannot find requested types.
+[lvpocket] completed with 1 pockets using a+b.hdf
+[platform_run] completed

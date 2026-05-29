@@ -3,6 +3,7 @@ import { useUserStore } from '@/stores'
 import type { WSMessage } from '@/types/models'
 
 type MessageHandler = (message: WSMessage) => void
+const DEFAULT_WS_PATH = '/api/v1/ws'
 
 export function useWebSocket() {
   const userStore = useUserStore()
@@ -17,16 +18,22 @@ export function useWebSocket() {
 
   let pingInterval: ReturnType<typeof setInterval> | null = null
   let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
+  let currentPath = DEFAULT_WS_PATH
 
-  const getWebSocketUrl = () => {
+  const getWebSocketUrl = (path: string) => {
+    const configuredBaseUrl = import.meta.env.VITE_WS_URL?.trim()
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const host = import.meta.env.VITE_WS_HOST || window.location.host
-    const token = userStore.token
-    return `${protocol}//${host}/api/v1/ws?token=${token}`
+    const baseUrl = configuredBaseUrl
+      ? configuredBaseUrl.replace(/\/+$/, '')
+      : `${protocol}//${window.location.host}`
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`
+    const token = userStore.token ?? ''
+    const separator = normalizedPath.includes('?') ? '&' : '?'
+    return `${baseUrl}${normalizedPath}${separator}token=${encodeURIComponent(token)}`
   }
 
-  const connect = () => {
-    if (ws.value?.readyState === WebSocket.OPEN) {
+  const connect = (path = DEFAULT_WS_PATH) => {
+    if (ws.value?.readyState === WebSocket.OPEN || ws.value?.readyState === WebSocket.CONNECTING) {
       return
     }
 
@@ -36,7 +43,8 @@ export function useWebSocket() {
     }
 
     try {
-      const url = getWebSocketUrl()
+      currentPath = path
+      const url = getWebSocketUrl(path)
       ws.value = new WebSocket(url)
 
       ws.value.onopen = () => {
@@ -118,7 +126,7 @@ export function useWebSocket() {
 
     pingInterval = setInterval(() => {
       if (ws.value?.readyState === WebSocket.OPEN) {
-        send({ type: 'ping' })
+        send({ action: 'ping' })
       }
     }, 30000) // 每30秒发送一次心跳
   }
@@ -140,7 +148,7 @@ export function useWebSocket() {
 
     reconnectTimeout = setTimeout(() => {
       reconnectTimeout = null
-      connect()
+      connect(currentPath)
     }, delay)
   }
 
@@ -158,12 +166,12 @@ export function useWebSocket() {
 
   // 订阅特定任务
   const subscribeTask = (taskId: string) => {
-    send({ type: 'subscribe', task_id: taskId })
+    send({ action: 'subscribe_task', task_id: taskId })
   }
 
   // 取消订阅特定任务
   const unsubscribeTask = (taskId: string) => {
-    send({ type: 'unsubscribe', task_id: taskId })
+    send({ action: 'unsubscribe_task', task_id: taskId })
   }
 
   // 组件卸载时自动清理

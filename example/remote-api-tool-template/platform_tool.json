@@ -1,0 +1,247 @@
+{
+  "name": "Remote API Tool Template",
+  "slug": "remote-api-tool-template",
+  "description": "通用 remote_api 工具服务模板",
+  "icon": "🧪",
+  "category": "template",
+  "version": "0.1.0",
+  "changelog": "Initial template version",
+  "tool_config": {
+    "type": "remote_api",
+    "endpoint": "http://remote-api-tool-template:8000/predict",
+    "method": "POST",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "timeout_sec": 600,
+    "input_schema": {
+      "$defs": {
+        "PredictionInputFiles": {
+          "description": "示例文件输入模型。",
+          "properties": {
+            "input_file": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "输入文件下载 URL",
+              "title": "Input File"
+            }
+          },
+          "title": "PredictionInputFiles",
+          "type": "object"
+        },
+        "PredictionParams": {
+          "description": "示例参数模型。\n\nAI 或管理员应根据实际模型交付物替换该结构。",
+          "properties": {
+            "sample_id": {
+              "description": "样本标识",
+              "title": "Sample Id",
+              "type": "string"
+            },
+            "threshold": {
+              "default": 0.5,
+              "description": "阈值参数",
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "title": "Threshold",
+              "type": "number"
+            },
+            "top_k": {
+              "default": 5,
+              "description": "返回结果数量",
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Top K",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "sample_id"
+          ],
+          "title": "PredictionParams",
+          "type": "object"
+        }
+      },
+      "description": "统一预测请求体。",
+      "properties": {
+        "task_id": {
+          "description": "平台任务 ID",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/PredictionParams",
+          "description": "业务参数"
+        },
+        "input_files": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PredictionInputFiles"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "输入文件 URL 集合"
+        }
+      },
+      "required": [
+        "task_id",
+        "params"
+      ],
+      "title": "PredictRequest",
+      "type": "object"
+    },
+    "output_schema": {
+      "$defs": {
+        "ErrorInfo": {
+          "description": "标准错误结构。",
+          "properties": {
+            "code": {
+              "description": "错误代码",
+              "title": "Code",
+              "type": "string"
+            },
+            "message": {
+              "description": "错误信息",
+              "title": "Message",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "title": "ErrorInfo",
+          "type": "object"
+        },
+        "OutputFile": {
+          "description": "输出文件描述。",
+          "properties": {
+            "name": {
+              "description": "输出文件名",
+              "title": "Name",
+              "type": "string"
+            },
+            "url": {
+              "description": "输出文件下载 URL",
+              "title": "Url",
+              "type": "string"
+            },
+            "size": {
+              "description": "文件大小（字节）",
+              "title": "Size",
+              "type": "integer"
+            },
+            "content_type": {
+              "description": "文件 MIME 类型",
+              "title": "Content Type",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "url",
+            "size",
+            "content_type"
+          ],
+          "title": "OutputFile",
+          "type": "object"
+        },
+        "PredictionResult": {
+          "description": "示例结果模型。\n\nAI 或管理员应根据真实模型输出替换该结构。",
+          "properties": {
+            "summary": {
+              "description": "结果摘要",
+              "title": "Summary",
+              "type": "string"
+            },
+            "score": {
+              "description": "示例分数",
+              "title": "Score",
+              "type": "number"
+            },
+            "top_k": {
+              "description": "实际使用的 top_k",
+              "title": "Top K",
+              "type": "integer"
+            },
+            "used_files": {
+              "description": "参与计算的本地文件路径",
+              "items": {
+                "type": "string"
+              },
+              "title": "Used Files",
+              "type": "array"
+            }
+          },
+          "required": [
+            "summary",
+            "score",
+            "top_k"
+          ],
+          "title": "PredictionResult",
+          "type": "object"
+        }
+      },
+      "description": "统一预测响应体。",
+      "properties": {
+        "success": {
+          "description": "是否成功",
+          "title": "Success",
+          "type": "boolean"
+        },
+        "task_id": {
+          "description": "平台任务 ID",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PredictionResult"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "预测结果"
+        },
+        "output_files": {
+          "description": "输出文件列表",
+          "items": {
+            "$ref": "#/$defs/OutputFile"
+          },
+          "title": "Output Files",
+          "type": "array"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ErrorInfo"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "错误信息"
+        }
+      },
+      "required": [
+        "success",
+        "task_id"
+      ],
+      "title": "PredictResponse",
+      "type": "object"
+    }
+  }
+}

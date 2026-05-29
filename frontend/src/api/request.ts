@@ -1,6 +1,11 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig, AxiosError, type InternalAxiosRequestConfig } from 'axios'
 import { message } from 'ant-design-vue'
 import type { ApiResponse, ApiError } from '@/types/api'
+import {
+  buildRefreshTokenRequestConfig,
+  shouldAttachAuthHeader,
+  shouldAttemptTokenRefresh
+} from './auth-request-policy'
 
 // 创建 axios 实例
 const request: AxiosInstance = axios.create({
@@ -61,7 +66,7 @@ const onTokenRefreshed = (token: string) => {
 request.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const token = getToken()
-    if (token && config.headers) {
+    if (token && config.headers && shouldAttachAuthHeader(config.url)) {
       config.headers.Authorization = `Bearer ${token}`
     }
     return config
@@ -78,9 +83,10 @@ request.interceptors.response.use(
   },
   async (error: AxiosError<ApiError>) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
+    const canRefreshToken = shouldAttemptTokenRefresh(originalRequest?.url)
 
     // 401 未授权，尝试刷新 Token
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && canRefreshToken && !originalRequest._retry) {
       if (isRefreshing) {
         // 等待 Token 刷新完成
         return new Promise(resolve => {
@@ -101,7 +107,8 @@ request.interceptors.response.use(
         try {
           const response = await axios.post<ApiResponse<{ access_token: string; refresh_token: string }>>(
             `${import.meta.env.VITE_API_BASE_URL}/auth/refresh`,
-            { refresh_token: refreshToken }
+            undefined,
+            buildRefreshTokenRequestConfig(refreshToken)
           )
 
           const { access_token, refresh_token: newRefreshToken } = response.data.data

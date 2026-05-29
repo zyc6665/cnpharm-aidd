@@ -1,0 +1,13 @@
+MolP-PC platform runner
+Model root: /workspace/MolP-PC
+Python: /home/zhuwy/.conda/envs/molp-pc/bin/python
+Input dir: /workspace/platform-jobs/3b8cdff2-7a48-4d2e-96c2-d1a3a95c866f/input
+Output dir: /workspace/platform-jobs/3b8cdff2-7a48-4d2e-96c2-d1a3a95c866f/output
+Work dir: /workspace/platform-jobs/3b8cdff2-7a48-4d2e-96c2-d1a3a95c866f/work
+Params JSON: /workspace/platform-jobs/3b8cdff2-7a48-4d2e-96c2-d1a3a95c866f/params.json
+Traceback (most recent call last):
+  File "/workspace/platform-jobs/3b8cdff2-7a48-4d2e-96c2-d1a3a95c866f/work/molp_pc_platform_runner.py", line 174, in <module>
+    main()
+  File "/workspace/platform-jobs/3b8cdff2-7a48-4d2e-96c2-d1a3a95c866f/work/molp_pc_platform_runner.py", line 73, in main
+    raise ValueError(
+ValueError: params.json must provide input_files.smiles_csv, or input/ must contain exactly one CSV file

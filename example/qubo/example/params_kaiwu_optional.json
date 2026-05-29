@@ -1,0 +1,15 @@
+{
+  "task_id": "example-kaiwu-ising",
+  "task_name": "janus_qubo_kaiwu_ising",
+  "params": {
+    "method": "kaiwu",
+    "user_id": "YOUR_KAIWU_USER_ID",
+    "sdk_code": "YOUR_KAIWU_SDK_CODE",
+    "num_solutions": 100,
+    "decode_smiles": true,
+    "device": "cpu"
+  },
+  "input_files": {
+    "ising_csv": "input/ising_129.csv"
+  }
+}

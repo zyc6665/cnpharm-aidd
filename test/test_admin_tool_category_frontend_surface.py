@@ -38,6 +38,9 @@ def test_admin_tool_categories_page_has_management_actions():
     assert "moveCategory" in page_source
     assert "ArrowUpOutlined" in page_source
     assert "ArrowDownOutlined" in page_source
+    assert "normalizeCategorySlug" in page_source
+    assert "formState.slug or formState.name" not in page_source
+    assert "formState.slug || formState.name" in page_source
 
 
 def test_admin_tool_forms_use_category_id_and_public_create_entry_is_removed():

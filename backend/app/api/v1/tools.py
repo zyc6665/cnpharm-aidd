@@ -1222,6 +1222,33 @@ async def admin_update_workbench_group(
     return success_response(data=serialize_workbench_group(group), message="工作台分组更新成功")
 
 
+@admin_workbench_group_router.delete("/{group_id}", response_model=dict)
+async def admin_delete_workbench_group(
+    group_id: str,
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """管理员删除工作台分组。"""
+    group = await db.get(ToolWorkbenchGroup, group_id)
+    if not group:
+        raise NotFoundException("工作台分组不存在")
+
+    mapping_count_result = await db.execute(
+        select(func.count(ToolWorkbenchGroupMapping.id)).where(
+            ToolWorkbenchGroupMapping.group_id == group_id
+        )
+    )
+    if (mapping_count_result.scalar() or 0) > 0:
+        raise ConflictException("工作台分组下仍有关联工具，无法删除")
+
+    await db.delete(group)
+    await db.flush()
+    remaining_groups = await list_workbench_groups_in_order(db)
+    resequence_workbench_groups(remaining_groups)
+    await db.commit()
+    return success_response(message="工作台分组删除成功")
+
+
 @admin_workbench_group_mapping_router.get("", response_model=dict)
 async def admin_list_workbench_group_mappings(
     current_user: User = Depends(get_admin_user),

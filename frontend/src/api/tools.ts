@@ -165,6 +165,10 @@ export const adminReorderWorkbenchGroups = (group_ids: string[]): Promise<ApiRes
   return post<WorkbenchGroup[]>('/admin/workbench-groups/reorder', { group_ids })
 }
 
+export const adminDeleteWorkbenchGroup = (id: string): Promise<ApiResponse<null>> => {
+  return del<null>(`/admin/workbench-groups/${id}`)
+}
+
 export const adminGetWorkbenchGroupMappings = (): Promise<ApiResponse<WorkbenchGroupMapping[]>> => {
   return get<WorkbenchGroupMapping[]>('/admin/workbench-group-mappings')
 }

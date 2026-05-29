@@ -277,6 +277,7 @@ export default {
     usageCount: 'Usage Count',
     viewCount: 'Views',
     runCount: 'Run Count',
+    runs: 'runs',
     favoriteCount: 'Favorites',
     version: 'Version',
     changelog: 'Changelog',

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -64,4 +64,73 @@ test('工具相关页面不应再暴露 GPU 管理 UI', () => {
   assert.equal(createSource.includes("t('tools.gpuMemoryMb')"), false)
 
   assert.equal(adminToolsSource.includes("t('admin.gpuRequired')"), false)
+})
+
+test('积分中心相关前端模块应已删除', () => {
+  const storesIndexSource = readSource('src/stores/index.ts')
+
+  assert.equal(existsSync(resolve(rootDir, 'src/views/credits/index.vue')), false)
+  assert.equal(existsSync(resolve(rootDir, 'src/stores/credits.ts')), false)
+  assert.equal(existsSync(resolve(rootDir, 'src/api/credits.ts')), false)
+  assert.equal(storesIndexSource.includes('useCreditsStore'), false)
+})
+
+test('后台与任务页不应再显示积分字段', () => {
+  const adminUsersSource = readSource('src/views/admin/Users.vue')
+  const adminToolsSource = readSource('src/views/admin/Tools.vue')
+  const taskDetailSource = readSource('src/views/tasks/Detail.vue')
+
+  assert.equal(adminUsersSource.includes("column.key === 'credits'"), false)
+  assert.equal(adminUsersSource.includes('userForm.credits'), false)
+
+  assert.equal(adminToolsSource.includes("column.key === 'credits'"), false)
+  assert.equal(adminToolsSource.includes('toolForm.credits_cost'), false)
+
+  assert.equal(taskDetailSource.includes('task.tool.credits'), false)
+})
+
+test('首页与注册页不应再宣传 GPU 或积分奖励', () => {
+  const homeSource = readSource('src/views/home/index.vue')
+  const registerSource = readSource('src/views/auth/Register.vue')
+
+  assert.equal(homeSource.includes('ThunderboltOutlined'), false)
+  assert.equal(homeSource.includes('gpu:'), false)
+
+  assert.equal(registerSource.includes('invitationBonus'), false)
+  assert.equal(registerSource.includes("t('auth.invitationBonus')"), false)
+})
+
+test('管理员工具管理页应接入完整工具创建与编辑路由', () => {
+  const routerSource = readSource('src/router/index.ts')
+  const adminToolsSource = readSource('src/views/admin/Tools.vue')
+  const createSource = readSource('src/views/tools/Create.vue')
+
+  assert.equal(routerSource.includes("path: 'tools/create'"), true)
+  assert.equal(routerSource.includes("name: 'AdminToolCreate'"), true)
+  assert.equal(routerSource.includes("path: 'tools/:id/edit'"), true)
+  assert.equal(routerSource.includes("name: 'AdminToolEdit'"), true)
+
+  assert.equal(adminToolsSource.includes("router.push('/admin/tools/create')"), true)
+  assert.equal(adminToolsSource.includes("router.push(`/admin/tools/${tool.id}/edit`)"), true)
+  assert.equal(adminToolsSource.includes('showCreateModal'), false)
+
+  assert.equal(createSource.includes("route.name === 'AdminToolEdit'"), true)
+  assert.equal(createSource.includes('createToolVersion'), true)
+  assert.equal(createSource.includes("value=\"ssh_job\""), true)
+  assert.equal(createSource.includes('ssh_host'), true)
+  assert.equal(createSource.includes('ssh_auth_type'), true)
+  assert.equal(createSource.includes('ssh_auth_ref'), true)
+  assert.equal(createSource.includes('ssh_password_ref'), true)
+})
+
+test('管理员工具管理页应提供 platform_tool.json 导入入口', () => {
+  const adminToolsSource = readSource('src/views/admin/Tools.vue')
+  const toolsApiSource = readSource('src/api/tools.ts')
+
+  assert.equal(adminToolsSource.includes('handleImportConfig'), true)
+  assert.equal(adminToolsSource.includes('importConfigText'), true)
+  assert.equal(adminToolsSource.includes('importToolConfig'), true)
+
+  assert.equal(toolsApiSource.includes('importToolConfig'), true)
+  assert.equal(toolsApiSource.includes('/tools/import-config'), true)
 })

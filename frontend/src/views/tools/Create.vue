@@ -168,6 +168,7 @@
                 <a-radio value="remote_api">远程API</a-radio>
                 <a-radio value="docker_image">Docker镜像</a-radio>
                 <a-radio value="python_script">Python脚本</a-radio>
+                <a-radio value="ssh_job">SSH作业</a-radio>
               </a-radio-group>
             </a-form-item>
 
@@ -186,8 +187,6 @@
                 <a-select v-model:value="formState.api_method">
                   <a-select-option value="GET">GET</a-select-option>
                   <a-select-option value="POST">POST</a-select-option>
-                  <a-select-option value="PUT">PUT</a-select-option>
-                  <a-select-option value="DELETE">DELETE</a-select-option>
                 </a-select>
               </a-form-item>
 
@@ -252,6 +251,189 @@
               </a-form-item>
             </template>
 
+            <!-- SSH 作业配置 -->
+            <template v-if="formState.tool_type === 'ssh_job'">
+              <a-divider orientation="left">SSH作业配置</a-divider>
+
+              <a-row :gutter="24">
+                <a-col :span="16">
+                  <a-form-item label="远端主机" name="ssh_host" :rules="[{ required: true, message: '请输入远端主机地址' }]">
+                    <a-input
+                      v-model:value="formState.ssh_host"
+                      placeholder="例如：gpu-node-01.internal"
+                    />
+                  </a-form-item>
+                </a-col>
+                <a-col :span="8">
+                  <a-form-item label="SSH端口" name="ssh_port">
+                    <a-input-number
+                      v-model:value="formState.ssh_port"
+                      :min="1"
+                      :max="65535"
+                      style="width: 100%"
+                    />
+                  </a-form-item>
+                </a-col>
+              </a-row>
+
+              <a-row :gutter="24">
+                <a-col :span="12">
+                  <a-form-item label="SSH用户" name="ssh_username" :rules="[{ required: true, message: '请输入SSH用户名' }]">
+                    <a-input
+                      v-model:value="formState.ssh_username"
+                      placeholder="例如：platform_runner"
+                    />
+                  </a-form-item>
+                </a-col>
+                <a-col :span="12">
+                  <a-form-item label="认证方式" name="ssh_auth_type">
+                    <a-select v-model:value="formState.ssh_auth_type">
+                      <a-select-option value="key">私钥引用</a-select-option>
+                      <a-select-option value="password">密码引用</a-select-option>
+                    </a-select>
+                  </a-form-item>
+                </a-col>
+              </a-row>
+
+              <a-row :gutter="24">
+                <a-col :span="12">
+                  <a-form-item
+                    v-if="formState.ssh_auth_type === 'password'"
+                    label="密码引用"
+                    name="ssh_password_ref"
+                    :rules="[{ required: true, message: '请输入密码引用名' }]"
+                  >
+                    <a-input
+                      v-model:value="formState.ssh_password_ref"
+                      placeholder="例如：ssh_gpu_node_01_password"
+                    />
+                    <template #extra>
+                      <span class="form-extra">引用 Worker 节点预置的 SSH 密码，不在配置中保存明文密码</span>
+                    </template>
+                  </a-form-item>
+                  <a-form-item
+                    v-else
+                    label="私钥引用"
+                    name="ssh_auth_ref"
+                    :rules="[{ required: true, message: '请输入私钥引用名' }]"
+                  >
+                    <a-input
+                      v-model:value="formState.ssh_auth_ref"
+                      placeholder="例如：ssh_gpu_node_01"
+                    />
+                    <template #extra>
+                      <span class="form-extra">引用 Worker 节点预置的 SSH 私钥，不在配置中保存明文密钥</span>
+                    </template>
+                  </a-form-item>
+                </a-col>
+              </a-row>
+
+              <a-row :gutter="24">
+                <a-col :span="12">
+                  <a-form-item label="运行模式" name="ssh_runner_mode">
+                    <a-select v-model:value="formState.ssh_runner_mode">
+                      <a-select-option value="docker_exec">docker_exec</a-select-option>
+                      <a-select-option value="shell">shell</a-select-option>
+                    </a-select>
+                  </a-form-item>
+                </a-col>
+                <a-col :span="12">
+                  <a-form-item label="远端任务根目录" name="ssh_remote_base_dir" :rules="[{ required: true, message: '请输入远端任务根目录' }]">
+                    <a-input
+                      v-model:value="formState.ssh_remote_base_dir"
+                      placeholder="例如：/srv/platform-jobs"
+                    />
+                  </a-form-item>
+                </a-col>
+              </a-row>
+
+              <a-row :gutter="24">
+                <a-col :span="12">
+                  <a-form-item label="统一入口脚本" name="ssh_entrypoint" :rules="[{ required: true, message: '请输入统一入口脚本路径' }]">
+                    <a-input
+                      v-model:value="formState.ssh_entrypoint"
+                      placeholder="例如：/app/platform_run.sh"
+                    />
+                  </a-form-item>
+                </a-col>
+                <a-col v-if="formState.ssh_runner_mode === 'docker_exec'" :span="12">
+                  <a-form-item label="远端容器名" name="ssh_container_name" :rules="[{ required: true, message: '请输入远端容器名' }]">
+                    <a-input
+                      v-model:value="formState.ssh_container_name"
+                      placeholder="例如：targetdiff-prod"
+                    />
+                  </a-form-item>
+                </a-col>
+                <a-col v-else :span="12">
+                  <a-form-item label="运行设备（可选）" name="ssh_device">
+                    <a-input
+                      v-model:value="formState.ssh_device"
+                      placeholder="例如：cuda:0"
+                    />
+                  </a-form-item>
+                </a-col>
+              </a-row>
+
+              <a-row v-if="formState.ssh_runner_mode === 'docker_exec'" :gutter="24">
+                <a-col :span="12">
+                  <a-form-item label="容器内任务根目录（可选）" name="ssh_container_base_dir">
+                    <a-input
+                      v-model:value="formState.ssh_container_base_dir"
+                      placeholder="例如：/workspace/platform-jobs"
+                    />
+                    <template #extra>
+                      <span class="form-extra">宿主机与容器内挂载路径不一致时填写</span>
+                    </template>
+                  </a-form-item>
+                </a-col>
+                <a-col :span="12">
+                  <a-form-item label="运行设备（可选）" name="ssh_device">
+                    <a-input
+                      v-model:value="formState.ssh_device"
+                      placeholder="例如：cuda:0"
+                    />
+                  </a-form-item>
+                </a-col>
+              </a-row>
+
+              <a-form-item label="环境变量（可选）" name="ssh_env">
+                <a-textarea
+                  v-model:value="sshEnvText"
+                  placeholder='{"CUDA_VISIBLE_DEVICES": "0"}'
+                  :rows="3"
+                />
+                <template #extra>
+                  <span class="form-extra">JSON格式的环境变量，会在远端入口脚本前注入</span>
+                </template>
+              </a-form-item>
+
+              <a-form-item label="输出文件匹配规则（可选）" name="ssh_output_globs">
+                <a-textarea
+                  v-model:value="sshOutputGlobsText"
+                  placeholder='["output/result.json", "output/logs/run.log", "output/artifacts/**/*"]'
+                  :rows="3"
+                />
+                <template #extra>
+                  <span class="form-extra">JSON数组格式，只允许匹配 output/ 目录下的文件</span>
+                </template>
+              </a-form-item>
+
+              <a-row :gutter="24">
+                <a-col :span="12">
+                  <a-form-item label="执行后清理远端目录" name="ssh_cleanup_remote">
+                    <a-switch v-model:checked="formState.ssh_cleanup_remote" />
+                    <span class="switch-label">{{ formState.ssh_cleanup_remote ? '开启' : '关闭' }}</span>
+                  </a-form-item>
+                </a-col>
+                <a-col :span="12">
+                  <a-form-item label="严格校验主机指纹" name="ssh_strict_host_key_checking">
+                    <a-switch v-model:checked="formState.ssh_strict_host_key_checking" />
+                    <span class="switch-label">{{ formState.ssh_strict_host_key_checking ? '开启' : '关闭' }}</span>
+                  </a-form-item>
+                </a-col>
+              </a-row>
+            </template>
+
             <!-- 参数定义 -->
             <a-divider orientation="left">参数定义</a-divider>
 
@@ -307,7 +489,7 @@
     SaveOutlined
   } from '@ant-design/icons-vue'
   import { useToolsStore } from '@/stores'
-  import { createTool, updateTool, getToolDetail } from '@/api/tools'
+  import { createTool, createToolVersion, updateTool, getToolDetail } from '@/api/tools'
   import type { ToolCreateParams } from '@/types/models'
 
   const route = useRoute()
@@ -318,9 +500,13 @@
   const formRef = ref<FormInstance>()
   const loading = ref(false)
   const submitting = ref(false)
+  const originalVersion = ref('')
+  const originalChangelog = ref('')
+  const originalNotes = ref('')
+  const originalConfigSnapshot = ref('')
 
   // 判断是编辑还是创建
-  const isEdit = computed(() => route.name === 'ToolEdit')
+  const isEdit = computed(() => route.name === 'AdminToolEdit' || route.name === 'ToolEdit')
   const toolId = computed(() => route.params.id as string)
 
   // 扩展的表单状态接口
@@ -331,10 +517,10 @@
     changelog: string
     notes: string
     // 工具类型
-    tool_type: 'remote_api' | 'docker_image' | 'python_script'
+    tool_type: 'remote_api' | 'docker_image' | 'python_script' | 'ssh_job'
     // API配置
     api_endpoint: string
-    api_method: 'GET' | 'POST' | 'PUT' | 'DELETE'
+    api_method: 'GET' | 'POST'
     api_headers: Record<string, string>
     // Docker配置
     docker_image: string
@@ -343,6 +529,23 @@
     // Python配置
     python_script: string
     python_args: string
+    // SSH 配置
+    ssh_host: string
+    ssh_port: number
+    ssh_username: string
+    ssh_auth_type: 'key' | 'password'
+    ssh_auth_ref: string
+    ssh_password_ref: string
+    ssh_runner_mode: 'docker_exec' | 'shell'
+    ssh_remote_base_dir: string
+    ssh_container_base_dir: string
+    ssh_entrypoint: string
+    ssh_container_name: string
+    ssh_device: string
+    ssh_env: Record<string, string>
+    ssh_output_globs: string[]
+    ssh_cleanup_remote: boolean
+    ssh_strict_host_key_checking: boolean
     // 参数定义
     input_schema: string  // JSON字符串
     output_schema: string  // JSON字符串
@@ -378,6 +581,23 @@
     // Python配置
     python_script: '',
     python_args: '',
+    // SSH配置
+    ssh_host: '',
+    ssh_port: 22,
+    ssh_username: '',
+    ssh_auth_type: 'key',
+    ssh_auth_ref: '',
+    ssh_password_ref: '',
+    ssh_runner_mode: 'docker_exec',
+    ssh_remote_base_dir: '',
+    ssh_container_base_dir: '',
+    ssh_entrypoint: '',
+    ssh_container_name: '',
+    ssh_device: '',
+    ssh_env: {},
+    ssh_output_globs: [],
+    ssh_cleanup_remote: true,
+    ssh_strict_host_key_checking: true,
     // 参数定义
     input_schema: '{}',
     output_schema: '{}'
@@ -386,6 +606,99 @@
   // 辅助变量：用于JSON格式的文本输入
   const apiHeadersText = ref('{}')
   const dockerEnvText = ref('{}')
+  const sshEnvText = ref('{}')
+  const sshOutputGlobsText = ref('["output/result.json", "output/logs/run.log", "output/artifacts/**/*"]')
+
+  const formatJsonText = (value: unknown, fallback: string) => {
+    if (value == null) {
+      return fallback
+    }
+
+    try {
+      return JSON.stringify(value, null, 2)
+    } catch {
+      return fallback
+    }
+  }
+
+  const normalizeForComparison = (value: unknown): unknown => {
+    if (Array.isArray(value)) {
+      return value.map(item => normalizeForComparison(item))
+    }
+
+    if (value && typeof value === 'object') {
+      return Object.keys(value as Record<string, unknown>)
+        .sort()
+        .reduce<Record<string, unknown>>((acc, key) => {
+          acc[key] = normalizeForComparison((value as Record<string, unknown>)[key])
+          return acc
+        }, {})
+    }
+
+    return value
+  }
+
+  const serializeForComparison = (value: unknown) => {
+    try {
+      return JSON.stringify(normalizeForComparison(value))
+    } catch {
+      return ''
+    }
+  }
+
+  const parseToolConfigIntoForm = (config?: Record<string, unknown>) => {
+    if (!config || typeof config.type !== 'string') {
+      return
+    }
+
+    if (config.type === 'remote_api') {
+      formState.tool_type = 'remote_api'
+      formState.api_endpoint = String(config.endpoint || '')
+      formState.api_method = config.method === 'GET' ? 'GET' : 'POST'
+      apiHeadersText.value = formatJsonText(config.headers || {}, '{}')
+    } else if (config.type === 'docker_image') {
+      formState.tool_type = 'docker_image'
+      formState.docker_image = String(config.image || '')
+      if (Array.isArray(config.command)) {
+        formState.docker_command = config.command.map(item => String(item)).join(' ')
+      } else {
+        formState.docker_command = String(config.command || '')
+      }
+      dockerEnvText.value = formatJsonText(config.env || {}, '{}')
+    } else if (config.type === 'python_script') {
+      formState.tool_type = 'python_script'
+      formState.python_script = String(config.script_path || config.script || '')
+      if (Array.isArray(config.args)) {
+        formState.python_args = config.args.map(item => String(item)).join(' ')
+      } else {
+        formState.python_args = String(config.args || '')
+      }
+    } else if (config.type === 'ssh_job') {
+      formState.tool_type = 'ssh_job'
+      formState.ssh_host = String(config.host || '')
+      formState.ssh_port = Number(config.port || 22)
+      formState.ssh_username = String(config.username || '')
+      formState.ssh_auth_type = config.auth_type === 'password' ? 'password' : 'key'
+      formState.ssh_auth_ref = String(config.auth_ref || '')
+      formState.ssh_password_ref = String(config.password_ref || '')
+      formState.ssh_runner_mode = config.runner_mode === 'shell' ? 'shell' : 'docker_exec'
+      formState.ssh_remote_base_dir = String(config.remote_base_dir || '')
+      formState.ssh_container_base_dir = String(config.container_base_dir || '')
+      formState.ssh_entrypoint = String(config.entrypoint || '')
+      formState.ssh_container_name = String(config.container_name || '')
+      formState.ssh_device = String(config.device || '')
+      formState.ssh_cleanup_remote = config.cleanup_remote !== false
+      formState.ssh_strict_host_key_checking = config.strict_host_key_checking !== false
+      sshEnvText.value = formatJsonText(config.env || {}, '{}')
+      sshOutputGlobsText.value = formatJsonText(
+        Array.isArray(config.output_globs) ? config.output_globs : [],
+        '[]'
+      )
+    }
+
+    formState.input_schema = formatJsonText(config.input_schema || {}, '{}')
+    formState.output_schema = formatJsonText(config.output_schema || {}, '{}')
+  }
 
   // 表单验证规则
   const formRules: Record<string, Rule[]> = {
@@ -428,6 +741,15 @@
       formState.gpu_memory_mb = tool.gpu_memory_mb
       formState.timeout_sec = tool.timeout_sec || 3600
       formState.tag_ids = tool.tags?.map(t => t.id) || []
+      formState.version = tool.current_version?.version || formState.version
+      formState.changelog = tool.current_version?.changelog || ''
+      formState.notes = tool.current_version?.notes || ''
+      originalVersion.value = tool.current_version?.version || ''
+      originalChangelog.value = tool.current_version?.changelog || ''
+      originalNotes.value = tool.current_version?.notes || ''
+      originalConfigSnapshot.value = serializeForComparison(tool.current_version?.config || {})
+
+      parseToolConfigIntoForm(tool.current_version?.config as Record<string, unknown> | undefined)
     } catch {
       message.error(t('tools.loadFailed'))
       router.push('/tools')
@@ -449,6 +771,8 @@
       // 解析 JSON 字符串
       let apiHeaders: Record<string, string> = {}
       let dockerEnv: Record<string, string> = {}
+      let sshEnv: Record<string, string> = {}
+      let sshOutputGlobs: string[] = []
       let inputSchema: Record<string, unknown> = {}
       let outputSchema: Record<string, unknown> = {}
 
@@ -458,6 +782,15 @@
         }
         if (formState.tool_type === 'docker_image' && dockerEnvText.value.trim()) {
           dockerEnv = JSON.parse(dockerEnvText.value)
+        }
+        if (formState.tool_type === 'ssh_job' && sshEnvText.value.trim()) {
+          sshEnv = JSON.parse(sshEnvText.value)
+        }
+        if (formState.tool_type === 'ssh_job' && sshOutputGlobsText.value.trim()) {
+          sshOutputGlobs = JSON.parse(sshOutputGlobsText.value)
+          if (!Array.isArray(sshOutputGlobs)) {
+            throw new Error('ssh_output_globs must be an array')
+          }
         }
         if (formState.input_schema.trim()) {
           inputSchema = JSON.parse(formState.input_schema)
@@ -474,8 +807,14 @@
       // 构建 config 对象
       const config: Record<string, unknown> = {
         type: formState.tool_type,
+        timeout_sec: formState.timeout_sec,
+        gpu_required: formState.gpu_required,
         input_schema: inputSchema,
         output_schema: outputSchema
+      }
+
+      if (formState.gpu_memory_mb !== undefined) {
+        config.gpu_memory_mb = formState.gpu_memory_mb
       }
 
       // 根据工具类型添加特定配置
@@ -488,15 +827,49 @@
       } else if (formState.tool_type === 'docker_image') {
         config.image = formState.docker_image
         if (formState.docker_command) {
-          config.command = formState.docker_command
+          config.command = formState.docker_command.trim().split(/\s+/)
         }
         if (Object.keys(dockerEnv).length > 0) {
           config.env = dockerEnv
         }
       } else if (formState.tool_type === 'python_script') {
-        config.script = formState.python_script
+        config.script_path = formState.python_script
         if (formState.python_args) {
-          config.args = formState.python_args
+          config.args = formState.python_args.trim().split(/\s+/)
+        }
+      } else if (formState.tool_type === 'ssh_job') {
+        config.host = formState.ssh_host
+        config.port = formState.ssh_port
+        config.username = formState.ssh_username
+        config.auth_type = formState.ssh_auth_type
+        if (formState.ssh_auth_type === 'password') {
+          config.password_ref = formState.ssh_password_ref
+        } else {
+          config.auth_ref = formState.ssh_auth_ref
+        }
+        config.runner_mode = formState.ssh_runner_mode
+        config.remote_base_dir = formState.ssh_remote_base_dir
+        config.entrypoint = formState.ssh_entrypoint
+        config.cleanup_remote = formState.ssh_cleanup_remote
+        config.strict_host_key_checking = formState.ssh_strict_host_key_checking
+
+        if (formState.ssh_runner_mode === 'docker_exec') {
+          config.container_name = formState.ssh_container_name
+          if (formState.ssh_container_base_dir) {
+            config.container_base_dir = formState.ssh_container_base_dir
+          }
+        }
+
+        if (formState.ssh_device) {
+          config.device = formState.ssh_device
+        }
+
+        if (Object.keys(sshEnv).length > 0) {
+          config.env = sshEnv
+        }
+
+        if (sshOutputGlobs.length > 0) {
+          config.output_globs = sshOutputGlobs
         }
       }
 
@@ -515,6 +888,19 @@
         tag_ids: formState.tag_ids.length > 0 ? formState.tag_ids : undefined
       }
 
+      const versionConfigChanged = isEdit.value && (
+        formState.version !== originalVersion.value ||
+        formState.changelog !== originalChangelog.value ||
+        formState.notes !== originalNotes.value ||
+        serializeForComparison(config) !== originalConfigSnapshot.value
+      )
+
+      if (versionConfigChanged && formState.version === originalVersion.value) {
+        message.error('修改版本配置时请填写新的版本号')
+        submitting.value = false
+        return
+      }
+
       // 添加版本信息（仅创建模式）
       if (!isEdit.value) {
         data.initial_version = {
@@ -528,7 +914,16 @@
 
       if (isEdit.value) {
         await updateTool(toolId.value, data)
-        message.success(t('tools.updateSuccess'))
+        if (versionConfigChanged) {
+          await createToolVersion(toolId.value, {
+            version: formState.version,
+            changelog: formState.changelog || undefined,
+            notes: formState.notes || undefined,
+            config,
+            is_active: true
+          })
+        }
+        message.success(versionConfigChanged ? '工具与版本更新成功' : t('tools.updateSuccess'))
       } else {
         const res = await createTool(data)
         message.success(t('tools.createSuccess'))

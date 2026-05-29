@@ -282,8 +282,7 @@ import {
 import { message } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
-import { useTasksStore, useToolsStore, useUserStore } from '@/stores'
-import { useWebSocket } from '@/composables/useWebSocket'
+import { useTasksStore, useToolsStore } from '@/stores'
 import type { TaskStatus } from '@/types/models'
 
 type TabKey = 'all' | 'running' | 'history'
@@ -292,7 +291,6 @@ const router = useRouter()
 const { t } = useI18n()
 const tasksStore = useTasksStore()
 const toolsStore = useToolsStore()
-const userStore = useUserStore()
 
 // 状态
 const currentTab = ref<TabKey>('all')
@@ -303,9 +301,6 @@ const currentPage = ref(1)
 const pageSize = ref(10)
 const refreshing = ref(false)
 const autoRefresh = ref(true)
-
-// WebSocket 连接
-const { connect, disconnect, onMessage } = useWebSocket()
 
 // 计算属性
 const loading = computed(() => tasksStore.loading)
@@ -509,15 +504,6 @@ const goToTools = () => {
   router.push('/tools')
 }
 
-// WebSocket 消息处理
-const handleWSMessage = (msg: { type: string; task_id?: string; progress?: number; status?: TaskStatus }) => {
-  if (msg.type === 'progress' && msg.task_id) {
-    tasksStore.updateTaskProgress(msg.task_id, msg.progress || 0, msg.status)
-  } else if (msg.type === 'completed' || msg.type === 'failed') {
-    fetchTasks()
-  }
-}
-
 // 自动刷新定时器
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 
@@ -553,17 +539,10 @@ onMounted(async () => {
     toolsStore.fetchTools({ page: 1, page_size: 100 })
   ])
 
-  // 如果已登录，连接 WebSocket
-  if (userStore.isLoggedIn) {
-    connect()
-    onMessage(handleWSMessage)
-  }
-
   startAutoRefresh()
 })
 
 onUnmounted(() => {
-  disconnect()
   stopAutoRefresh()
 })
 </script>

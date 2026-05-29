@@ -1,0 +1,167 @@
+{
+  "name": "MolP-PC Property Prediction",
+  "slug": "molp-pc-property-prediction",
+  "description": "基于 MolP-PC 的分子属性预测工具。平台上传包含 SMILES 列的 CSV 后，通过 SSH job 调用统一 platform_run.sh 执行预测。",
+  "icon": "M",
+  "category": "molecular-property-prediction",
+  "version": "0.1.1",
+  "changelog": "Switch to direct host IP and password authentication for working ssh_job execution.",
+  "tool_config": {
+    "type": "ssh_job",
+    "host": "10.202.2.228",
+    "port": 22,
+    "username": "zhouyc",
+    "auth_type": "password",
+    "password_ref": "ssh_4090_zhouyc",
+    "runner_mode": "docker_exec",
+    "remote_base_dir": "/data/zhouyc/kaiwu/platform-jobs",
+    "container_base_dir": "/workspace/platform-jobs",
+    "entrypoint": "/workspace/MolP-PC/platform_run.sh",
+    "container_name": "kaiwu",
+    "timeout_sec": 7200,
+    "cleanup_remote": false,
+    "strict_host_key_checking": false,
+    "env": {
+      "MOLP_PC_PYTHON": "/home/zhuwy/.conda/envs/molp-pc/bin/python",
+      "DGLBACKEND": "pytorch"
+    },
+    "output_globs": [
+      "output/result.json",
+      "output/logs/run.log",
+      "output/artifacts/**/*"
+    ],
+    "example_params": {
+      "smiles_csv": "input/smiles.csv",
+      "device": "cpu"
+    },
+    "platform_run_params_example": {
+      "task_name": "molp_pc_property_prediction",
+      "params": {
+        "device": "cpu"
+      },
+      "input_files": {
+        "smiles_csv": "input/smiles.csv"
+      }
+    },
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "smiles_csv": {
+          "type": "string",
+          "format": "file",
+          "title": "SMILES CSV 文件",
+          "description": "上传包含 SMILES 列的 CSV 文件。平台会把该文件上传到任务 input/ 目录，并在执行时转换为 input_files.smiles_csv。",
+          "ui:accept": ".csv",
+          "ui:maxSize": 52428800
+        },
+        "device": {
+          "type": "string",
+          "title": "运行设备",
+          "description": "运行设备。CPU 环境选择 cpu；GPU 环境可选择 cuda:0 等。",
+          "default": "cpu",
+          "enum": [
+            "cpu",
+            "cuda:0",
+            "cuda:1",
+            "cuda:2",
+            "cuda:3"
+          ]
+        }
+      },
+      "required": [
+        "smiles_csv"
+      ]
+    },
+    "output_schema": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "description": "任务是否执行成功"
+        },
+        "message": {
+          "type": "string",
+          "description": "执行结果摘要"
+        },
+        "outputs": {
+          "type": "object",
+          "description": "模型输出摘要",
+          "properties": {
+            "task_id": {
+              "type": "string"
+            },
+            "task_name": {
+              "type": "string"
+            },
+            "input_rows": {
+              "type": "integer",
+              "description": "输入 CSV 数据行数"
+            },
+            "predicted_rows": {
+              "type": "integer",
+              "description": "预测结果数据行数"
+            },
+            "prediction_file": {
+              "type": "string",
+              "description": "预测结果 CSV 在 output/ 下的相对路径"
+            },
+            "device": {
+              "type": "string",
+              "description": "实际使用的运行设备"
+            }
+          }
+        },
+        "artifacts": {
+          "type": "array",
+          "description": "可回传平台的结果文件描述",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "content_type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "path"
+            ]
+          }
+        },
+        "metrics": {
+          "type": "object",
+          "description": "执行耗时等附加指标",
+          "properties": {
+            "duration_sec": {
+              "type": "number"
+            }
+          }
+        },
+        "error": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "失败时的错误结构",
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "details": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "required": [
+        "success",
+        "message"
+      ]
+    }
+  }
+}

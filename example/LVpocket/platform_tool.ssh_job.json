@@ -1,0 +1,120 @@
+{
+  "name": "LVpocket Pocket Prediction",
+  "slug": "lvpocket-pocket-prediction",
+  "description": "Experimental TensorFlow 2 LVpocket deployment for RTX 4090 inference. Supports automatic secondary-structure classification through local PSIPRED to select the LVpocket weight.",
+  "icon": "L",
+  "category": "bioinformatics",
+  "version": "0.1.2",
+  "changelog": "Switch to the LVpocket-2 TensorFlow 2 runtime with direct host IP, password authentication, docker_exec, and explicit PATH export.",
+  "tool_config": {
+    "type": "ssh_job",
+    "host": "10.202.2.228",
+    "port": 22,
+    "username": "zhouyc",
+    "auth_type": "password",
+    "password_ref": "ssh_4090_zhouyc",
+    "runner_mode": "docker_exec",
+    "remote_base_dir": "/data/zhouyc/kaiwu/platform-jobs",
+    "container_base_dir": "/workspace/platform-jobs",
+    "entrypoint": "/workspace/LVpocket-2/platform_run.sh",
+    "container_name": "kaiwu",
+    "timeout_sec": 7200,
+    "cleanup_remote": false,
+    "strict_host_key_checking": false,
+    "env": {
+      "MODEL_PYTHON": "/workspace/LVpocket-2/env/bin/python",
+      "PATH": "/workspace/LVpocket-2/env/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    },
+    "output_globs": [
+      "output/result.json",
+      "output/logs/run.log",
+      "output/artifacts/**/*"
+    ],
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "protein_pdb": {
+          "type": "string",
+          "format": "file",
+          "title": "Protein PDB",
+          "description": "Protein receptor structure in PDB format.",
+          "ui:accept": ".pdb"
+        },
+        "model_choice": {
+          "type": "string",
+          "title": "Model weight",
+          "description": "auto runs PSIPRED secondary-structure classification and selects the LVpocket weight. Manual choices map to new_best/*.hdf.",
+          "default": "auto",
+          "enum": ["auto", "all_scpdb", "alpha", "beta", "alpha_beta", "alpha_and_beta"]
+        },
+        "device": {
+          "type": "string",
+          "title": "Device",
+          "description": "auto/gpu uses the TensorFlow 2 GPU runtime. cpu disables CUDA for parity or troubleshooting.",
+          "default": "auto",
+          "enum": ["auto", "gpu", "cpu"]
+        }
+      },
+      "required": ["protein_pdb"]
+    },
+    "output_schema": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        },
+        "outputs": {
+          "type": "object",
+          "properties": {
+            "selected_model": {
+              "type": "string"
+            },
+            "model_choice": {
+              "type": "string"
+            },
+            "classification": {
+              "type": "object"
+            },
+            "pocket_count": {
+              "type": "integer"
+            },
+            "pockets": {
+              "type": "array"
+            },
+            "device": {
+              "type": "string"
+            }
+          }
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "content_type": {
+                "type": "string"
+              }
+            },
+            "required": ["name", "path"]
+          }
+        },
+        "metrics": {
+          "type": "object"
+        },
+        "error": {
+          "type": ["object", "null"]
+        }
+      },
+      "required": ["success", "message", "outputs", "artifacts"]
+    }
+  }
+}

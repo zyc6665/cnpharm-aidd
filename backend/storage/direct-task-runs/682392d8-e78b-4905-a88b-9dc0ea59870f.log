@@ -1,0 +1,68 @@
+2026-05-28 03:12:59,296 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-05-28 03:12:59,331 INFO sqlalchemy.engine.Engine SELECT tasks.user_id, tasks.session_id, tasks.tool_id, tasks.tool_version_id, tasks.status, tasks.priority, tasks.started_at, tasks.finished_at, tasks.execution_time_sec, tasks.progress, tasks.progress_message, tasks.error_message, tasks.retry_count, tasks.max_retries, tasks.gpu_node_id, tasks.gpu_index, tasks.gpu_memory_allocated_mb, tasks.extra_data, tasks.id, tasks.created_at, tasks.updated_at 
+FROM tasks 
+WHERE tasks.id = ?
+2026-05-28 03:12:59,331 INFO sqlalchemy.engine.Engine [generated in 0.00021s] ('682392d8-e78b-4905-a88b-9dc0ea59870f',)
+2026-05-28 03:12:59,336 INFO sqlalchemy.engine.Engine UPDATE tasks SET status=?, started_at=?, progress_message=?, updated_at=? WHERE tasks.id = ?
+2026-05-28 03:12:59,336 INFO sqlalchemy.engine.Engine [generated in 0.00021s] ('RUNNING', '2026-05-28 03:12:59.334439', '任务开始执行', '2026-05-28 03:12:59.336033', '682392d8-e78b-4905-a88b-9dc0ea59870f')
+2026-05-28 03:12:59,338 INFO sqlalchemy.engine.Engine INSERT INTO task_logs (task_id, timestamp, level, message, log_data, id) VALUES (?, ?, ?, ?, ?, ?)
+2026-05-28 03:12:59,338 INFO sqlalchemy.engine.Engine [generated in 0.00021s] ('682392d8-e78b-4905-a88b-9dc0ea59870f', '2026-05-28 03:12:59.338005', 'INFO', '任务开始执行', '{}', 'e7610138-5f2f-48c8-808b-0589ff6e2709')
+2026-05-28 03:12:59,338 INFO sqlalchemy.engine.Engine COMMIT
+2026-05-28 03:12:59,666 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-05-28 03:12:59,667 INFO sqlalchemy.engine.Engine SELECT tool_versions.tool_id, tool_versions.version, tool_versions.changelog, tool_versions.notes, tool_versions.config, tool_versions.is_active, tool_versions.deprecated, tool_versions.deprecated_at, tool_versions.id, tool_versions.created_at, tool_versions.updated_at 
+FROM tool_versions 
+WHERE tool_versions.id = ?
+2026-05-28 03:12:59,667 INFO sqlalchemy.engine.Engine [generated in 0.00016s] ('c8028092-71b9-45b6-b14a-3bf1c789742d',)
+2026-05-28 03:12:59,669 INFO sqlalchemy.engine.Engine SELECT task_inputs.task_id, task_inputs.params, task_inputs.file_ids, task_inputs.id, task_inputs.created_at, task_inputs.updated_at 
+FROM task_inputs 
+WHERE task_inputs.task_id = ?
+2026-05-28 03:12:59,669 INFO sqlalchemy.engine.Engine [generated in 0.00012s] ('682392d8-e78b-4905-a88b-9dc0ea59870f',)
+2026-05-28 03:12:59,671 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-05-28 03:12:59,673 INFO sqlalchemy.engine.Engine SELECT files.owner_id, files.session_id, files.filename, files.content_type, files.size_bytes, files.sha256, files.storage_backend, files.storage_path, files.source_type, files.is_public, files.is_corrupted, files.is_permanent, files.expires_at, files.last_accessed_at, files.deleted_at, files.reference_count, files.file_meta, files.id, files.created_at, files.updated_at 
+FROM files 
+WHERE files.id = ?
+2026-05-28 03:12:59,673 INFO sqlalchemy.engine.Engine [generated in 0.00012s] ('3c49b1da-a758-45cf-9582-23a07387ad00',)
+2026-05-28 03:12:59,676 INFO sqlalchemy.engine.Engine SELECT files.owner_id, files.session_id, files.filename, files.content_type, files.size_bytes, files.sha256, files.storage_backend, files.storage_path, files.source_type, files.is_public, files.is_corrupted, files.is_permanent, files.expires_at, files.last_accessed_at, files.deleted_at, files.reference_count, files.file_meta, files.id, files.created_at, files.updated_at 
+FROM files 
+WHERE files.id = ?
+2026-05-28 03:12:59,676 INFO sqlalchemy.engine.Engine [cached since 0.002927s ago] ('32653a85-bc85-45aa-b1cb-a7e0ed546b2d',)
+2026-05-28 03:12:59,677 INFO sqlalchemy.engine.Engine ROLLBACK
+2026-05-28 03:13:58,737 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-05-28 03:13:58,739 INFO sqlalchemy.engine.Engine INSERT INTO files (owner_id, session_id, filename, content_type, size_bytes, sha256, storage_backend, storage_path, source_type, is_public, is_corrupted, is_permanent, expires_at, last_accessed_at, deleted_at, reference_count, file_meta, id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+2026-05-28 03:13:58,739 INFO sqlalchemy.engine.Engine [generated in 0.00049s] ('c708fb51-b68a-4a0e-a76e-b8e13cc32d97', None, 'logs__run.log', 'application/octet-stream', 2535, '6523a3df478742670e639460491b885aa4c1010fc57c32f5fc3e8d150495ec9b', 'local', None, 'tool_output', 0, 0, 0, None, None, None, 1, '{"relative_path": "logs/run.log"}', '45071470-e2b0-4aae-8ef0-e75ce48de628', '2026-05-28 03:13:58.739455', '2026-05-28 03:13:58.739460')
+2026-05-28 03:13:58,741 INFO sqlalchemy.engine.Engine UPDATE files SET storage_path=?, updated_at=? WHERE files.id = ?
+2026-05-28 03:13:58,741 INFO sqlalchemy.engine.Engine [generated in 0.00015s] ('storage/uploads/45/45071470-e2b0-4aae-8ef0-e75ce48de628_logs__run.log', '2026-05-28 03:13:58.741796', '45071470-e2b0-4aae-8ef0-e75ce48de628')
+2026-05-28 03:13:58,742 INFO sqlalchemy.engine.Engine COMMIT
+2026-05-28 03:13:59,015 INFO sqlalchemy.engine.Engine SELECT task_inputs.task_id AS task_inputs_task_id, task_inputs.params AS task_inputs_params, task_inputs.file_ids AS task_inputs_file_ids, task_inputs.id AS task_inputs_id, task_inputs.created_at AS task_inputs_created_at, task_inputs.updated_at AS task_inputs_updated_at 
+FROM task_inputs 
+WHERE ? = task_inputs.task_id
+2026-05-28 03:13:59,015 INFO sqlalchemy.engine.Engine [generated in 0.00019s] ('682392d8-e78b-4905-a88b-9dc0ea59870f',)
+2026-05-28 03:13:59,017 INFO sqlalchemy.engine.Engine UPDATE tasks SET status=?, finished_at=?, progress_message=?, error_message=?, updated_at=? WHERE tasks.id = ?
+2026-05-28 03:13:59,017 INFO sqlalchemy.engine.Engine [generated in 0.00017s] ('FAILURE', '2026-05-28 03:13:59.012541', '任务失败: SSH job execution failed with code 1', 'SSH job execution failed with code 1', '2026-05-28 03:13:59.017658', '682392d8-e78b-4905-a88b-9dc0ea59870f')
+2026-05-28 03:13:59,019 INFO sqlalchemy.engine.Engine INSERT INTO task_logs (task_id, timestamp, level, message, log_data, id) VALUES (?, ?, ?, ?, ?, ?)
+2026-05-28 03:13:59,019 INFO sqlalchemy.engine.Engine [cached since 59.68s ago] ('682392d8-e78b-4905-a88b-9dc0ea59870f', '2026-05-28 03:13:59.018948', 'ERROR', '任务执行失败: SSH job execution failed with code 1', '{}', '86e9105b-ed69-432e-8920-e426cbcc06dd')
+2026-05-28 03:13:59,019 INFO sqlalchemy.engine.Engine COMMIT
+Traceback (most recent call last):
+  File "<string>", line 11, in <module>
+    asyncio.run(_execute_tool_task_impl('682392d8-e78b-4905-a88b-9dc0ea59870f', 'c8028092-71b9-45b6-b14a-3bf1c789742d'))
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/anaconda3/lib/python3.13/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/root/anaconda3/lib/python3.13/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/root/anaconda3/lib/python3.13/asyncio/base_events.py", line 725, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/data/zhouyc/cpumodel_sciminer/backend/app/worker/tasks.py", line 209, in _execute_tool_task_impl
+    output_result = await executor.execute()
+                    ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhouyc/cpumodel_sciminer/backend/app/tasks/executor.py", line 1586, in execute
+    result = await executor.execute()
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhouyc/cpumodel_sciminer/backend/app/tasks/executor.py", line 797, in execute
+    raise TaskExecutionError(
+    ...<7 lines>...
+    )
+app.tasks.executor.TaskExecutionError: SSH job execution failed with code 1

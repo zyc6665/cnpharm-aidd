@@ -2,19 +2,24 @@
 """任务管理API"""
 
 import logging
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_, update
 from sqlalchemy.orm import selectinload, joinedload
-from typing import Optional, List
+from typing import Any, Optional
 
+from app.config import settings, use_direct_task_execution
 from app.database.session import get_db
+from app.models.files import File as FileModel
+from app.models.statistics import ToolStatistics
 from app.models.users import User
 from app.models.tools import Tool, ToolVersion
 from app.models.tasks import Task, TaskInput, TaskOutput, TaskLog, TaskStatus
+from app.tasks.direct_runner import direct_task_runner
 from app.auth.dependencies import get_current_user, get_admin_user
 from app.schemas.tasks import (
-    TaskCreate, TaskResponse, TaskListResponse, TaskLogResponse
+    TaskCreate, TaskResponse, TaskListResponse
 )
 from app.common.responses import success_response, error_response
 from app.common.exceptions import NotFoundException, ForbiddenException, ValidationException
@@ -23,18 +28,160 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _normalize_task_status(status: Optional[str]) -> Optional[str]:
+    if not status:
+        return status
+    return status.lower()
+
+
+def _dedupe_file_ids(file_ids: list[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for file_id in file_ids:
+        if not file_id or file_id in seen:
+            continue
+        seen.add(file_id)
+        ordered.append(file_id)
+    return ordered
+
+
+def _extract_file_ids_from_result(result: Any) -> list[str]:
+    if not isinstance(result, dict):
+        return []
+
+    file_ids = result.get("output_file_ids")
+    if isinstance(file_ids, list):
+        return [str(file_id) for file_id in file_ids]
+
+    nested_result = result.get("result")
+    if isinstance(nested_result, dict):
+        nested_file_ids = nested_result.get("output_file_ids")
+        if isinstance(nested_file_ids, list):
+            return [str(file_id) for file_id in nested_file_ids]
+
+    return []
+
+
+def _extract_primary_output_data(result: Any) -> Any:
+    if not isinstance(result, dict):
+        return result
+
+    nested_result = result.get("result")
+    if isinstance(nested_result, dict):
+        return nested_result
+
+    return result
+
+
+def _serialize_task_log(log: TaskLog) -> dict[str, Any]:
+    return {
+        "id": log.id,
+        "task_id": log.task_id,
+        "timestamp": log.timestamp,
+        "level": (log.level or "INFO").lower(),
+        "message": log.message,
+        "metadata": log.log_data or {},
+    }
+
+
+async def _load_files(db: AsyncSession, file_ids: list[str]) -> list[dict[str, Any]]:
+    if not file_ids:
+        return []
+
+    result = await db.execute(
+        select(FileModel).where(FileModel.id.in_(file_ids))
+    )
+    files = {file.id: file for file in result.scalars().all()}
+
+    serialized: list[dict[str, Any]] = []
+    for file_id in file_ids:
+        file = files.get(file_id)
+        if not file:
+            logger.warning("Task detail references missing file id %s", file_id)
+            continue
+
+        original_name = file.file_meta.get("original_name") if isinstance(file.file_meta, dict) else None
+        serialized.append({
+            "id": file.id,
+            "filename": file.filename,
+            "original_name": original_name or file.filename,
+            "size": file.size_bytes,
+            "content_type": file.content_type,
+            "url": f"/api/v1/files/{file.id}/download",
+        })
+
+    return serialized
+
+
+def _serialize_task_tool(tool: Optional[Tool]) -> Optional[dict[str, Any]]:
+    if not tool:
+        return None
+
+    current_version = None
+    if tool.current_version:
+        current_version = {
+            "id": tool.current_version.id,
+            "tool_id": tool.current_version.tool_id,
+            "version": tool.current_version.version,
+            "config": tool.current_version.config,
+            "is_active": tool.current_version.is_active,
+            "deprecated": tool.current_version.deprecated,
+        }
+
+    return {
+        "id": tool.id,
+        "name": tool.name,
+        "slug": tool.slug,
+        "description": tool.description,
+        "icon": tool.icon,
+        "status": tool.status,
+        "version": tool.current_version.version if tool.current_version else None,
+        "run_count": tool.statistics.usage_count if tool.statistics else 0,
+        "current_version": current_version,
+    }
+
+
+async def _record_tool_usage(db: AsyncSession, tool_id: str) -> None:
+    """确保工具统计存在，并记录一次使用。"""
+    now = datetime.utcnow()
+
+    update_result = await db.execute(
+        update(ToolStatistics)
+        .where(ToolStatistics.tool_id == tool_id)
+        .values(
+            usage_count=ToolStatistics.usage_count + 1,
+            last_used_at=now,
+            last_updated_at=now,
+        )
+    )
+    if update_result.rowcount:
+        return
+
+    statistics = ToolStatistics(
+        tool_id=tool_id,
+        usage_count=1,
+        last_used_at=now,
+        last_updated_at=now,
+    )
+    db.add(statistics)
+    await db.flush()
+
+
 @router.get("", response_model=dict)
 async def list_tasks(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     status: Optional[str] = None,
     tool_id: Optional[str] = None,
+    keyword: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """获取任务列表"""
+    normalized_status = status.upper() if status else None
     query = select(Task).options(
-        selectinload(Task.tool)
+        selectinload(Task.tool),
+        joinedload(Task.user)
     )
 
     # 普通用户只能看自己的任务
@@ -43,12 +190,29 @@ async def list_tasks(
         query = query.where(Task.user_id == current_user.id)
 
     # 状态过滤
-    if status:
-        query = query.where(Task.status == status)
+    if normalized_status:
+        query = query.where(Task.status == normalized_status)
 
     # 工具过滤
     if tool_id:
         query = query.where(Task.tool_id == tool_id)
+
+    # 关键词过滤
+    if keyword:
+        search_pattern = f"%{keyword}%"
+        query = query.join(Tool, Task.tool_id == Tool.id, isouter=True).join(
+            User,
+            Task.user_id == User.id,
+            isouter=True
+        ).where(
+            or_(
+                Task.id.ilike(search_pattern),
+                Tool.name.ilike(search_pattern),
+                Tool.slug.ilike(search_pattern),
+                User.email.ilike(search_pattern),
+                User.display_name.ilike(search_pattern)
+            )
+        )
 
     # 计算总数
     count_query = select(func.count()).select_from(query.subquery())
@@ -66,9 +230,14 @@ async def list_tasks(
     task_list = []
     for task in tasks:
         task_dict = TaskListResponse.model_validate(task).model_dump()
+        task_dict["status"] = _normalize_task_status(task.status)
         if task.tool:
             task_dict["tool_name"] = task.tool.name
             task_dict["tool_slug"] = task.tool.slug
+        task_dict["user_id"] = task.user_id
+        if task.user:
+            task_dict["user_name"] = task.user.display_name or task.user.email.split("@")[0]
+            task_dict["user_email"] = task.user.email
         task_list.append(task_dict)
 
     return success_response(
@@ -92,7 +261,8 @@ async def get_task(
     result = await db.execute(
         select(Task)
         .options(
-            selectinload(Task.tool),
+            selectinload(Task.tool).selectinload(Tool.current_version),
+            selectinload(Task.tool).selectinload(Tool.statistics),
             selectinload(Task.inputs),
             selectinload(Task.outputs)
         )
@@ -108,23 +278,45 @@ async def get_task(
     if not is_admin and task.user_id != current_user.id:
         raise ForbiddenException("无权访问此任务")
 
-    task_data = TaskResponse.model_validate(task).model_dump()
-    if task.tool:
-        task_data["tool_name"] = task.tool.name
-        task_data["tool_slug"] = task.tool.slug
-
-    # 构建输入输出
-    if task.inputs:
-        task_data["inputs"] = {
-            "params": task.inputs[0].params if task.inputs else {},
-            "file_ids": [inp.file_id for inp in task.inputs if inp.file_id]
-        }
+    input_file_ids = task.inputs.file_ids if task.inputs and task.inputs.file_ids else []
+    output_file_ids = []
     if task.outputs:
-        task_data["outputs"] = {
-            "result": task.outputs[0].result if task.outputs else None,
-            "file_ids": task.outputs[0].file_ids if task.outputs else [],
-            "output_type": task.outputs[0].output_type if task.outputs else "json"
-        }
+        output_file_ids = task.outputs.file_ids or _extract_file_ids_from_result(task.outputs.result)
+    output_file_ids = _dedupe_file_ids([str(file_id) for file_id in output_file_ids])
+
+    task_data = {
+        "id": task.id,
+        "user_id": task.user_id,
+        "tool_id": task.tool_id,
+        "tool_version_id": task.tool_version_id,
+        "tool_name": task.tool.name if task.tool else None,
+        "tool_slug": task.tool.slug if task.tool else None,
+        "tool": _serialize_task_tool(task.tool),
+        "status": _normalize_task_status(task.status),
+        "priority": task.priority,
+        "progress": task.progress,
+        "progress_message": task.progress_message,
+        "error_message": task.error_message,
+        "started_at": task.started_at,
+        "finished_at": task.finished_at,
+        "completed_at": task.finished_at,
+        "execution_time_sec": task.execution_time_sec,
+        "retry_count": task.retry_count,
+        "created_at": task.created_at,
+        "updated_at": task.updated_at,
+        "inputs": {
+            "params": task.inputs.params if task.inputs else {},
+            "file_ids": input_file_ids,
+        },
+        "outputs": {
+            "result": task.outputs.result if task.outputs else None,
+            "file_ids": output_file_ids,
+            "output_type": task.outputs.output_type if task.outputs else "json",
+        },
+        "output_data": _extract_primary_output_data(task.outputs.result) if task.outputs else None,
+        "input_files": await _load_files(db, input_file_ids),
+        "output_files": await _load_files(db, output_file_ids),
+    }
 
     return success_response(data=task_data)
 
@@ -173,50 +365,48 @@ async def create_task(
     task_input = TaskInput(
         task_id=task.id,
         params=task_data.params,
-        file_id=task_data.file_ids[0] if task_data.file_ids else None
+        file_ids=task_data.file_ids or []
     )
     db.add(task_input)
 
-    # 增加工具使用次数（通过statistics表）
-    if not tool.statistics:
-        from app.models.statistics import ToolStatistics
-        tool.statistics = ToolStatistics(tool_id=tool.id)
-        db.add(tool.statistics)
-    tool.statistics.usage_count += 1
-    tool.statistics.last_used_at = datetime.utcnow()
+    # 增加工具使用次数（通过 statistics 表）
+    await _record_tool_usage(db, str(tool.id))
 
     await db.commit()
     await db.refresh(task)
 
-    # ==================== 分发任务到Celery队列 ====================
-    from app.tasks.queue_manager import TaskQueueManager
-
-    # 获取工具版本配置（用于确定队列）
-    version_result = await db.execute(
-        select(ToolVersion).where(ToolVersion.id == version_id)
-    )
-    tool_version = version_result.scalar_one()
-
-    # 确定任务队列
-    queue = TaskQueueManager.determine_queue(
-        tool_config=tool_version.config,
-        user_role=current_user.role,
-        priority=task_data.priority
-    )
-
-    # 分发任务到队列
     try:
-        celery_task = TaskQueueManager.enqueue_task(
-            task_id=str(task.id),
-            tool_version_id=str(version_id),
-            queue=queue
-        )
+        if use_direct_task_execution():
+            direct_task_runner.schedule_task(
+                task_id=str(task.id),
+                tool_version_id=str(version_id),
+            )
+            logger.info("Task %s scheduled in direct mode", task.id)
+        else:
+            # ==================== 分发任务到Celery队列 ====================
+            from app.tasks.queue_manager import TaskQueueManager
 
-        # 保存Celery任务ID
-        task.celery_task_id = celery_task.id
-        await db.commit()
+            version_result = await db.execute(
+                select(ToolVersion).where(ToolVersion.id == version_id)
+            )
+            tool_version = version_result.scalar_one()
 
-        logger.info(f"Task {task.id} enqueued to {queue}")
+            queue = TaskQueueManager.determine_queue(
+                tool_config=tool_version.config,
+                user_role=current_user.role,
+                priority=task_data.priority
+            )
+
+            celery_task = TaskQueueManager.enqueue_task(
+                task_id=str(task.id),
+                tool_version_id=str(version_id),
+                queue=queue
+            )
+
+            task.celery_task_id = celery_task.id
+            await db.commit()
+
+            logger.info(f"Task {task.id} enqueued to {queue}")
 
     except Exception as e:
         logger.error(f"Failed to enqueue task {task.id}: {e}")
@@ -226,7 +416,23 @@ async def create_task(
         raise HTTPException(status_code=500, detail="任务分发失败")
 
     return success_response(
-        data=TaskResponse.model_validate(task).model_dump(),
+        data={
+            "id": task.id,
+            "user_id": task.user_id,
+            "tool_id": task.tool_id,
+            "tool_version_id": task.tool_version_id,
+            "status": _normalize_task_status(task.status),
+            "priority": task.priority,
+            "progress": task.progress,
+            "progress_message": task.progress_message,
+            "error_message": task.error_message,
+            "started_at": task.started_at,
+            "finished_at": task.finished_at,
+            "execution_time_sec": task.execution_time_sec,
+            "retry_count": task.retry_count,
+            "created_at": task.created_at,
+            "updated_at": task.updated_at,
+        },
         message="任务创建成功"
     )
 
@@ -255,8 +461,9 @@ async def cancel_task(
     if task.status not in [TaskStatus.PENDING.value, TaskStatus.RUNNING.value]:
         raise ValidationException("任务状态不允许取消")
 
-    # 撤销Celery任务（如果有）
-    if task.celery_task_id:
+    if use_direct_task_execution():
+        direct_task_runner.cancel_task(str(task.id))
+    elif task.celery_task_id:
         from app.tasks.queue_manager import TaskQueueManager
         try:
             TaskQueueManager.revoke_task(task.celery_task_id)
@@ -306,41 +513,42 @@ async def retry_task(
 
     await db.commit()
 
-    # ==================== 重新入队任务 ====================
-    from app.tasks.queue_manager import TaskQueueManager
-
-    # 获取工具版本配置
-    version_result = await db.execute(
-        select(ToolVersion).where(ToolVersion.id == task.tool_version_id)
-    )
-    tool_version = version_result.scalar_one()
-
-    # 获取用户信息
-    user_result = await db.execute(
-        select(User).where(User.id == task.user_id)
-    )
-    user = user_result.scalar_one()
-
-    # 确定任务队列（使用原始优先级）
-    queue = TaskQueueManager.determine_queue(
-        tool_config=tool_version.config,
-        user_role=user.role,
-        priority=task.priority
-    )
-
-    # 重新入队
     try:
-        celery_task = TaskQueueManager.enqueue_task(
-            task_id=str(task.id),
-            tool_version_id=str(task.tool_version_id),
-            queue=queue
-        )
+        if use_direct_task_execution():
+            direct_task_runner.schedule_task(
+                task_id=str(task.id),
+                tool_version_id=str(task.tool_version_id),
+            )
+            logger.info("Task %s rescheduled in direct mode", task.id)
+        else:
+            from app.tasks.queue_manager import TaskQueueManager
 
-        # 更新Celery任务ID
-        task.celery_task_id = celery_task.id
-        await db.commit()
+            version_result = await db.execute(
+                select(ToolVersion).where(ToolVersion.id == task.tool_version_id)
+            )
+            tool_version = version_result.scalar_one()
 
-        logger.info(f"Task {task.id} re-enqueued to {queue} (retry {task.retry_count})")
+            user_result = await db.execute(
+                select(User).where(User.id == task.user_id)
+            )
+            user = user_result.scalar_one()
+
+            queue = TaskQueueManager.determine_queue(
+                tool_config=tool_version.config,
+                user_role=user.role,
+                priority=task.priority
+            )
+
+            celery_task = TaskQueueManager.enqueue_task(
+                task_id=str(task.id),
+                tool_version_id=str(task.tool_version_id),
+                queue=queue
+            )
+
+            task.celery_task_id = celery_task.id
+            await db.commit()
+
+            logger.info(f"Task {task.id} re-enqueued to {queue} (retry {task.retry_count})")
 
     except Exception as e:
         logger.error(f"Failed to re-enqueue task {task.id}: {e}")
@@ -395,7 +603,7 @@ async def get_task_logs(
 
     return success_response(
         data={
-            "items": [TaskLogResponse.model_validate(log).model_dump() for log in logs],
+            "items": [_serialize_task_log(log) for log in logs],
             "total": total,
             "page": page,
             "page_size": page_size,

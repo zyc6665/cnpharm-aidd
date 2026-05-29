@@ -1,0 +1,44 @@
+GCDM Python dependency check passed
+Resolved platform config: /workspace/platform-jobs/5ee0cee5-0326-4feb-baa2-3680cb655bcd/work/platform_run_config.json
+{
+  "task_id": "5ee0cee5-0326-4feb-baa2-3680cb655bcd",
+  "pocket_pdb": "/workspace/platform-jobs/5ee0cee5-0326-4feb-baa2-3680cb655bcd/input/3rfm_a2a-pocket10.pdb",
+  "n_samples": 8,
+  "num_nodes_lig": null,
+  "sanitize": false,
+  "relax": false,
+  "all_frags": false,
+  "resamplings": 1,
+  "jump_length": 1,
+  "timesteps": null,
+  "device": "cuda:6"
+}
+Task ID: 5ee0cee5-0326-4feb-baa2-3680cb655bcd
+Model root: /workspace/GCDM-2model_claude
+Checkpoint: /workspace/GCDM-2model_claude/weights/gcdm_crossdocked_ca_cond_gcpnet_epoch376.ckpt
+Python: /home/zhuwy/.conda/envs/STD-Diff/bin/python
+CUDA_VISIBLE_DEVICES: 6
+Running GCDM command:
+  /home/zhuwy/.conda/envs/STD-Diff/bin/python  /workspace/GCDM-2model_claude/generate_ligands.py  /workspace/GCDM-2model_claude/weights/gcdm_crossdocked_ca_cond_gcpnet_epoch376.ckpt  --pdbfile  /workspace/platform-jobs/5ee0cee5-0326-4feb-baa2-3680cb655bcd/input/3rfm_a2a-pocket10.pdb  --outdir  /workspace/platform-jobs/5ee0cee5-0326-4feb-baa2-3680cb655bcd/work/generated  --resi_list  --n_samples  8  --resamplings  1  --jump_length  1
+[07:33:34] WARNING: could not find number of expected rings. Switching to an approximate ring finding algorithm.
+[07:33:34] WARNING: could not find number of expected rings. Switching to an approximate ring finding algorithm.
+[07:33:34] WARNING: could not find number of expected rings. Switching to an approximate ring finding algorithm.
+[07:33:34] WARNING: could not find number of expected rings. Switching to an approximate ring finding algorithm.
+alphas2 [9.99990000e-01 9.99988000e-01 9.99982000e-01 ... 2.59676966e-05
+ 1.39959211e-05 1.00039959e-05]
+gamma [-11.51291546 -11.33059532 -10.92513058 ...  10.55863126  11.17673063
+  11.51251595]
+Entropy of n_nodes: H[N] 7.167821407318115
+Entropy of n_nodes: H[N] 5.954160690307617
+Entropy of n_nodes: H[N] 5.444125175476074
+alphas2 [9.99990000e-01 9.99988000e-01 9.99982000e-01 ... 2.59676966e-05
+ 1.39959211e-05 1.00039959e-05]
+gamma [-11.51291546 -11.33059532 -10.92513058 ...  10.55863126  11.17673063
+  11.51251595]
+Entropy of n_nodes: H[N] 7.136703968048096
+Entropy of n_nodes: H[N] 5.947751998901367
+Entropy of n_nodes: H[N] 5.452476978302002
+Auto-sampling superpolymer atom count from learned distribution
+Wrote SDF file to /workspace/platform-jobs/5ee0cee5-0326-4feb-baa2-3680cb655bcd/work/generated/3rfm_a2a-pocket10_mol.sdf
+Result written to: /workspace/platform-jobs/5ee0cee5-0326-4feb-baa2-3680cb655bcd/output/result.json
+Artifact written to: /workspace/platform-jobs/5ee0cee5-0326-4feb-baa2-3680cb655bcd/output/artifacts/generated_molecules.sdf

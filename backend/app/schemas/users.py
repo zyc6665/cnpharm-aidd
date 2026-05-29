@@ -3,7 +3,7 @@
 
 from typing import Optional
 from datetime import datetime
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field, EmailStr, field_validator
 from app.schemas.common import TimestampMixin
 from app.schemas.statistics import UserStatisticsResponse
 
@@ -44,6 +44,16 @@ class UserResponse(TimestampMixin):
     daily_task_limit: int
     max_file_size_mb: int
     statistics: Optional[UserStatisticsResponse] = None
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def normalize_status(cls, value: str) -> str:
+        """兼容旧状态值，统一对外返回当前枚举。"""
+        legacy_status_map = {
+            "inactive": "disabled",
+            "banned": "disabled",
+        }
+        return legacy_status_map.get(value, value)
 
     class Config:
         from_attributes = True

@@ -1,0 +1,170 @@
+{
+  "name": "FlowPepDock Protein-Peptide Docking",
+  "slug": "flowpepdock-docking",
+  "description": "Generate candidate peptide docking poses for an uploaded receptor PDB and peptide PDB using FlowPepDock.",
+  "icon": "F",
+  "category": "bioinformatics",
+  "version": "0.1.2",
+  "changelog": "Add explicit PATH export so platform_run.sh can resolve python inside the FlowPepDock conda environment.",
+  "tool_config": {
+    "type": "ssh_job",
+    "host": "10.202.2.228",
+    "port": 22,
+    "username": "zhouyc",
+    "auth_type": "password",
+    "password_ref": "ssh_4090_zhouyc",
+    "runner_mode": "docker_exec",
+    "remote_base_dir": "/data/zhouyc/kaiwu/platform-jobs",
+    "container_base_dir": "/workspace/platform-jobs",
+    "entrypoint": "/workspace/FlowPepDock_handover_20260507/platform_run.sh",
+    "container_name": "kaiwu",
+    "timeout_sec": 7200,
+    "cleanup_remote": false,
+    "strict_host_key_checking": false,
+    "env": {
+      "MODEL_PYTHON": "/home/zhuwy/.conda/envs/flowpepdock/bin/python",
+      "PATH": "/home/zhuwy/.conda/envs/flowpepdock/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    },
+    "output_globs": [
+      "output/result.json",
+      "output/logs/run.log",
+      "output/artifacts/**/*"
+    ],
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "receptor_pdb": {
+          "type": "string",
+          "format": "file",
+          "title": "Receptor PDB",
+          "description": "Protein receptor structure in PDB format.",
+          "ui:accept": ".pdb"
+        },
+        "peptide_pdb": {
+          "type": "string",
+          "format": "file",
+          "title": "Peptide PDB",
+          "description": "Initial peptide structure in PDB format.",
+          "ui:accept": ".pdb"
+        },
+        "complex_name": {
+          "type": "string",
+          "title": "Complex name",
+          "description": "Optional name used for the output subdirectory."
+        },
+        "n_samples": {
+          "type": "integer",
+          "title": "Pose count",
+          "description": "Number of peptide poses to generate.",
+          "default": 10,
+          "minimum": 1,
+          "maximum": 50
+        },
+        "batch_size": {
+          "type": "integer",
+          "title": "Batch size",
+          "description": "Number of complexes per batch. GPU memory use roughly scales with batch_size multiplied by pose count.",
+          "default": 1,
+          "minimum": 1,
+          "maximum": 16
+        },
+        "flow_num_steps": {
+          "type": "integer",
+          "title": "Flow steps",
+          "description": "Number of Flow inference steps for the default checkpoint.",
+          "default": 10,
+          "minimum": 1,
+          "maximum": 50
+        },
+        "flow_solver": {
+          "type": "string",
+          "title": "Flow solver",
+          "description": "Numerical solver used by the Flow sampler.",
+          "default": "euler",
+          "enum": ["euler", "heun"]
+        },
+        "device": {
+          "type": "string",
+          "title": "Device",
+          "description": "Runtime device. cuda:N sets CUDA_VISIBLE_DEVICES=N and calls inference.py with gpu.",
+          "default": "auto",
+          "enum": ["auto", "cpu", "gpu", "cuda:0", "cuda:1", "cuda:2", "cuda:3"]
+        },
+        "cpu": {
+          "type": "integer",
+          "title": "CPU budget",
+          "description": "CPU worker budget used by preprocessing and dataloading.",
+          "default": 4,
+          "minimum": 1,
+          "maximum": 64
+        },
+        "save_visualisation": {
+          "type": "boolean",
+          "title": "Save reverse process",
+          "description": "Write reverse-process trajectory PDB files in addition to final poses.",
+          "default": false
+        }
+      },
+      "required": ["receptor_pdb", "peptide_pdb"]
+    },
+    "output_schema": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        },
+        "outputs": {
+          "type": "object",
+          "properties": {
+            "complex_count": {
+              "type": "integer"
+            },
+            "pose_file_count": {
+              "type": "integer"
+            },
+            "n_samples": {
+              "type": "integer"
+            },
+            "batch_size": {
+              "type": "integer"
+            },
+            "flow_num_steps": {
+              "type": "integer"
+            },
+            "flow_solver": {
+              "type": "string"
+            }
+          }
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "content_type": {
+                "type": "string"
+              }
+            },
+            "required": ["name", "path"]
+          }
+        },
+        "metrics": {
+          "type": "object"
+        },
+        "error": {
+          "type": ["object", "null"]
+        }
+      },
+      "required": ["success", "message", "outputs", "artifacts"]
+    }
+  }
+}

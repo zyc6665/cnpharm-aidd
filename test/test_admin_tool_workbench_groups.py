@@ -302,6 +302,42 @@ async def test_admin_can_reorder_workbench_groups(
 
 
 @pytest.mark.asyncio
+async def test_admin_can_delete_empty_workbench_group(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    existing_groups: tuple[ToolWorkbenchGroup, ToolWorkbenchGroup],
+):
+    """管理员可以删除没有映射的工作台分组。"""
+    _, group_b = existing_groups
+
+    delete_response = await api_client.delete(
+        f"/api/v1/admin/workbench-groups/{group_b.id}",
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert delete_response.status_code == 200
+    assert await db_session.get(ToolWorkbenchGroup, group_b.id) is None
+
+
+@pytest.mark.asyncio
+async def test_admin_cannot_delete_workbench_group_with_mappings(
+    api_client: httpx.AsyncClient,
+    existing_groups: tuple[ToolWorkbenchGroup, ToolWorkbenchGroup],
+    existing_mapping: ToolWorkbenchGroupMapping,
+):
+    """管理员不能删除仍有关联映射的工作台分组。"""
+    group_a, _ = existing_groups
+
+    delete_response = await api_client.delete(
+        f"/api/v1/admin/workbench-groups/{group_a.id}",
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert delete_response.status_code == 409
+    assert delete_response.json()["message"] == "工作台分组下仍有关联工具，无法删除"
+
+
+@pytest.mark.asyncio
 async def test_admin_can_create_workbench_group_mapping(
     api_client: httpx.AsyncClient,
     tool_record: Tool,
@@ -592,6 +628,12 @@ async def test_non_admin_cannot_access_workbench_group_admin_endpoints(
         json={"group_ids": [group_a.id]},
     )
     assert reorder_groups_response.status_code == 403
+
+    delete_group_response = await api_client.delete(
+        f"/api/v1/admin/workbench-groups/{group_a.id}",
+        headers={"Authorization": "Bearer user-token"},
+    )
+    assert delete_group_response.status_code == 403
 
     create_mapping_response = await api_client.post(
         "/api/v1/admin/workbench-group-mappings",

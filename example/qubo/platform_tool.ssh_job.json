@@ -1,0 +1,316 @@
+{
+  "name": "Janus-QUBO GA Generation",
+  "slug": "janus-qubo-ga-generation",
+  "description": "基于 Janus-QUBO 的分子生成工具。使用 GA 在 QUBO 二进制 latent 空间生成候选，并通过 Block_bAE checkpoint 解码为 SMILES。",
+  "icon": "J",
+  "category": "molecular-generation",
+  "version": "0.1.0",
+  "changelog": "Initial ssh_job deployment config for Janus-QUBO GA generation and SMILES decoding with direct host IP and password authentication.",
+  "tool_config": {
+    "type": "ssh_job",
+    "host": "10.202.2.228",
+    "port": 22,
+    "username": "zhouyc",
+    "auth_type": "password",
+    "password_ref": "ssh_4090_zhouyc",
+    "runner_mode": "docker_exec",
+    "remote_base_dir": "/data/zhouyc/kaiwu/platform-jobs",
+    "container_base_dir": "/workspace/platform-jobs",
+    "entrypoint": "/workspace/Janus-QUBO/platform_run.sh",
+    "container_name": "kaiwu",
+    "timeout_sec": 7200,
+    "cleanup_remote": false,
+    "strict_host_key_checking": false,
+    "env": {
+      "JANUS_QUBO_PYTHON": "/home/zhuwy/.conda/envs/janus-qubo/bin/python",
+      "JANUS_QUBO_CKPT": "/workspace/Janus-QUBO/recon_loss=0.0043.ckpt",
+      "PATH": "/home/zhuwy/.conda/envs/janus-qubo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "PYTHONNOUSERSITE": "1"
+    },
+    "output_globs": [
+      "output/result.json",
+      "output/logs/run.log",
+      "output/artifacts/**/*"
+    ],
+    "example_params": {
+      "n_samples": 5,
+      "pop_size": 20,
+      "n_generations": 3,
+      "elite_size": 2,
+      "seed": 42,
+      "device": "cpu"
+    },
+    "platform_run_params_example": {
+      "task_name": "janus_qubo_ga_generation",
+      "params": {
+        "method": "ga",
+        "n_samples": 5,
+        "pop_size": 20,
+        "n_generations": 3,
+        "elite_size": 2,
+        "seed": 42,
+        "device": "cpu"
+      },
+      "input_files": {}
+    },
+    "kaiwu_platform_run_params_example": {
+      "task_name": "janus_qubo_kaiwu_ising",
+      "params": {
+        "method": "kaiwu",
+        "user_id": "YOUR_KAIWU_USER_ID",
+        "sdk_code": "YOUR_KAIWU_SDK_CODE",
+        "num_solutions": 100,
+        "decode_smiles": true,
+        "device": "cpu"
+      },
+      "input_files": {
+        "ising_csv": "input/ising_matrix.csv"
+      }
+    },
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "method": {
+          "type": "string",
+          "title": "运行方法",
+          "description": "默认使用 GA；只有选择 kaiwu 时才需要上传 Ising CSV 并填写 Kaiwu 凭证。",
+          "default": "ga",
+          "enum": [
+            "ga",
+            "kaiwu"
+          ]
+        },
+        "qubo_csv": {
+          "type": "string",
+          "format": "file",
+          "title": "QUBO CSV 文件",
+          "description": "可选。上传自定义 QUBO 矩阵 CSV；为空时使用仓库内置 Qmol_FM/example_data/qubo_128.csv。",
+          "ui:accept": ".csv",
+          "ui:maxSize": 52428800
+        },
+        "ising_csv": {
+          "type": "string",
+          "format": "file",
+          "title": "Ising CSV 文件",
+          "description": "仅 method=kaiwu 时需要。上传 Kaiwu 求解使用的 Ising 矩阵 CSV。",
+          "ui:accept": ".csv",
+          "ui:maxSize": 52428800
+        },
+        "user_id": {
+          "type": "string",
+          "title": "Kaiwu User ID",
+          "description": "仅 method=kaiwu 时需要。也可由远端环境变量 JANUS_QUBO_KAIWU_USER_ID 提供。"
+        },
+        "sdk_code": {
+          "type": "string",
+          "title": "Kaiwu SDK Code",
+          "description": "仅 method=kaiwu 时需要。也可由远端环境变量 JANUS_QUBO_KAIWU_SDK_CODE 提供。",
+          "ui:widget": "password"
+        },
+        "num_solutions": {
+          "type": "integer",
+          "title": "Kaiwu 求解数量",
+          "description": "仅 method=kaiwu 时使用，指定返回的 Ising/QUBO 解数量。",
+          "default": 100,
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "decode_smiles": {
+          "type": "boolean",
+          "title": "解码 SMILES",
+          "description": "仅 method=kaiwu 时使用。开启后会将 Kaiwu 输出的 latent code 继续用 Block_bAE 解码为 SMILES。",
+          "default": true
+        },
+        "n_samples": {
+          "type": "integer",
+          "title": "候选分子数量",
+          "description": "GA 模式下保存 energy 最低的候选 latent/SMILES 数量。",
+          "default": 100,
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "pop_size": {
+          "type": "integer",
+          "title": "GA 种群大小",
+          "description": "遗传算法 population size。",
+          "default": 200,
+          "minimum": 2,
+          "maximum": 10000
+        },
+        "n_generations": {
+          "type": "integer",
+          "title": "GA 迭代代数",
+          "description": "遗传算法迭代代数。",
+          "default": 50,
+          "minimum": 1,
+          "maximum": 5000
+        },
+        "elite_size": {
+          "type": "integer",
+          "title": "精英保留数量",
+          "description": "每代保留的最优个体数量，必须小于 pop_size。",
+          "default": 10,
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "cx_prob": {
+          "type": "number",
+          "title": "交叉概率",
+          "description": "GA crossover probability。",
+          "default": 0.7,
+          "minimum": 0,
+          "maximum": 1
+        },
+        "mut_prob": {
+          "type": "number",
+          "title": "突变概率",
+          "description": "GA mutation probability。",
+          "default": 0.2,
+          "minimum": 0,
+          "maximum": 1
+        },
+        "mut_indpb": {
+          "type": "number",
+          "title": "单 bit 突变概率",
+          "description": "每个 bit 的独立突变概率。",
+          "default": 0.05,
+          "minimum": 0,
+          "maximum": 1
+        },
+        "seed": {
+          "type": "integer",
+          "title": "随机种子",
+          "default": 42
+        },
+        "device": {
+          "type": "string",
+          "title": "解码设备",
+          "description": "当前已验证 CPU；如部署 CUDA 版 PyTorch 可使用 cuda:0。",
+          "default": "cpu",
+          "enum": [
+            "cpu",
+            "cuda:0",
+            "cuda:1",
+            "cuda:2",
+            "cuda:3"
+          ]
+        }
+      },
+      "required": []
+    },
+    "output_schema": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "description": "任务是否执行成功"
+        },
+        "message": {
+          "type": "string",
+          "description": "执行结果摘要"
+        },
+        "outputs": {
+          "type": "object",
+          "description": "模型输出摘要",
+          "properties": {
+            "method": {
+              "type": "string"
+            },
+            "generated_count": {
+              "type": "integer"
+            },
+            "successful_smiles_count": {
+              "type": "integer"
+            },
+            "failed_smiles_count": {
+              "type": "integer"
+            },
+            "smiles_csv": {
+              "type": "string"
+            },
+            "latent_h5": {
+              "type": "string"
+            },
+            "smiles_h5": {
+              "type": "string"
+            },
+            "latent_csv": {
+              "type": "string"
+            },
+            "latent_dim": {
+              "type": "integer"
+            },
+            "num_solutions": {
+              "type": "integer"
+            },
+            "decode_smiles": {
+              "type": "boolean"
+            },
+            "min_energy": {
+              "type": "number"
+            },
+            "max_energy": {
+              "type": "number"
+            },
+            "mean_energy": {
+              "type": "number"
+            },
+            "device": {
+              "type": "string"
+            }
+          }
+        },
+        "artifacts": {
+          "type": "array",
+          "description": "可回传平台的结果文件描述",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "content_type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "path"
+            ]
+          }
+        },
+        "metrics": {
+          "type": "object",
+          "description": "执行耗时等附加指标",
+          "properties": {
+            "duration_sec": {
+              "type": "number"
+            }
+          }
+        },
+        "error": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "失败时的错误结构",
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "details": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "required": [
+        "success",
+        "message"
+      ]
+    }
+  }
+}

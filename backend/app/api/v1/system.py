@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from app.database.session import get_db
 from app.config import settings, is_development, is_production, use_async_tasks
 from app.auth.dependencies import get_admin_user
+from app.common.responses import success_response
 from app.models.users import User
 
 router = APIRouter()
@@ -256,7 +257,7 @@ async def _check_celery() -> ServiceStatus:
 
 @router.get(
     "/info",
-    response_model=SystemInfoResponse,
+    response_model=dict,
     summary="获取系统信息"
 )
 async def get_system_info(
@@ -285,25 +286,27 @@ async def get_system_info(
     # 任务队列
     task_queue = "Celery" if use_async_tasks() else "Sync (开发模式)"
 
-    return SystemInfoResponse(
-        app_name=settings.APP_NAME,
-        app_version=settings.APP_VERSION,
-        environment=settings.ENVIRONMENT,
-        debug=settings.DEBUG,
-        python_version=platform.python_version(),
-        platform=f"{platform.system()} {platform.release()}",
-        hostname=platform.node(),
-        database_type=db_type,
-        storage_backend=settings.STORAGE_BACKEND,
-        cache_backend=settings.CACHE_BACKEND,
-        task_queue=task_queue,
-        cpu_count=psutil.cpu_count(),
-        memory_total_gb=round(memory.total / (1024**3), 2),
-        memory_available_gb=round(memory.available / (1024**3), 2),
-        memory_percent=memory.percent,
-        disk_total_gb=round(disk.total / (1024**3), 2),
-        disk_free_gb=round(disk.free / (1024**3), 2),
-        disk_percent=disk.percent
+    return success_response(
+        data=SystemInfoResponse(
+            app_name=settings.APP_NAME,
+            app_version=settings.APP_VERSION,
+            environment=settings.ENVIRONMENT,
+            debug=settings.DEBUG,
+            python_version=platform.python_version(),
+            platform=f"{platform.system()} {platform.release()}",
+            hostname=platform.node(),
+            database_type=db_type,
+            storage_backend=settings.STORAGE_BACKEND,
+            cache_backend=settings.CACHE_BACKEND,
+            task_queue=task_queue,
+            cpu_count=psutil.cpu_count(),
+            memory_total_gb=round(memory.total / (1024**3), 2),
+            memory_available_gb=round(memory.available / (1024**3), 2),
+            memory_percent=memory.percent,
+            disk_total_gb=round(disk.total / (1024**3), 2),
+            disk_free_gb=round(disk.free / (1024**3), 2),
+            disk_percent=disk.percent
+        ).model_dump()
     )
 
 
@@ -311,7 +314,7 @@ async def get_system_info(
 
 @router.get(
     "/stats",
-    response_model=SystemStatsResponse,
+    response_model=dict,
     summary="获取系统统计"
 )
 async def get_system_stats(
@@ -373,16 +376,18 @@ async def get_system_stats(
     # WebSocket 连接数
     active_connections = ws_manager.get_connection_count()
 
-    return SystemStatsResponse(
-        total_users=total_users,
-        total_tools=total_tools,
-        total_tasks=total_tasks,
-        total_files=total_files,
-        pending_tasks=pending_tasks,
-        running_tasks=running_tasks,
-        completed_tasks=completed_tasks,
-        failed_tasks=failed_tasks,
-        active_connections=active_connections
+    return success_response(
+        data=SystemStatsResponse(
+            total_users=total_users,
+            total_tools=total_tools,
+            total_tasks=total_tasks,
+            total_files=total_files,
+            pending_tasks=pending_tasks,
+            running_tasks=running_tasks,
+            completed_tasks=completed_tasks,
+            failed_tasks=failed_tasks,
+            active_connections=active_connections
+        ).model_dump()
     )
 
 
@@ -397,33 +402,35 @@ async def get_system_config(
 
     注意：敏感信息（密钥、密码等）会被隐藏
     """
-    return {
-        "environment": settings.ENVIRONMENT,
-        "debug": settings.DEBUG,
-        "api_prefix": settings.API_V1_PREFIX,
-        "database": {
-            "type": "SQLite" if "sqlite" in settings.DATABASE_URL else "PostgreSQL",
-            "pool_size": settings.DB_POOL_SIZE,
-            "max_overflow": settings.DB_MAX_OVERFLOW
-        },
-        "storage": {
-            "backend": settings.STORAGE_BACKEND,
-            "path": settings.STORAGE_PATH if settings.STORAGE_BACKEND == "local" else None,
-            "max_file_size_mb": settings.MAX_FILE_SIZE_MB
-        },
-        "cache": {
-            "backend": settings.CACHE_BACKEND
-        },
-        "jwt": {
-            "algorithm": settings.JWT_ALGORITHM,
-            "access_token_expire_minutes": settings.ACCESS_TOKEN_EXPIRE_MINUTES,
-            "refresh_token_expire_days": settings.REFRESH_TOKEN_EXPIRE_DAYS
-        },
-        "guest": {
-            "daily_task_limit": settings.GUEST_DAILY_TASK_LIMIT,
-            "max_file_size_mb": settings.GUEST_MAX_FILE_SIZE_MB,
-            "session_hours": settings.GUEST_SESSION_HOURS
-        },
-        "cors_origins": settings.CORS_ORIGINS,
-        "log_level": settings.LOG_LEVEL
-    }
+    return success_response(
+        data={
+            "environment": settings.ENVIRONMENT,
+            "debug": settings.DEBUG,
+            "api_prefix": settings.API_V1_PREFIX,
+            "database": {
+                "type": "SQLite" if "sqlite" in settings.DATABASE_URL else "PostgreSQL",
+                "pool_size": settings.DB_POOL_SIZE,
+                "max_overflow": settings.DB_MAX_OVERFLOW
+            },
+            "storage": {
+                "backend": settings.STORAGE_BACKEND,
+                "path": settings.STORAGE_PATH if settings.STORAGE_BACKEND == "local" else None,
+                "max_file_size_mb": settings.MAX_FILE_SIZE_MB
+            },
+            "cache": {
+                "backend": settings.CACHE_BACKEND
+            },
+            "jwt": {
+                "algorithm": settings.JWT_ALGORITHM,
+                "access_token_expire_minutes": settings.ACCESS_TOKEN_EXPIRE_MINUTES,
+                "refresh_token_expire_days": settings.REFRESH_TOKEN_EXPIRE_DAYS
+            },
+            "guest": {
+                "daily_task_limit": settings.GUEST_DAILY_TASK_LIMIT,
+                "max_file_size_mb": settings.GUEST_MAX_FILE_SIZE_MB,
+                "session_hours": settings.GUEST_SESSION_HOURS
+            },
+            "cors_origins": settings.CORS_ORIGINS,
+            "log_level": settings.LOG_LEVEL
+        }
+    )

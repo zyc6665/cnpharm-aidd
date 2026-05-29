@@ -1,9 +1,22 @@
 # backend/app/config.py
 """应用配置管理"""
 
+import os
 from functools import lru_cache
 from typing import Optional, List, Literal
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
+
+
+def bootstrap_process_env(env_file: str = ".env") -> bool:
+    """将 .env 中的额外 secret 变量注入当前进程环境。"""
+    if not os.path.exists(env_file):
+        return False
+
+    return load_dotenv(env_file, override=False)
+
+
+bootstrap_process_env()
 
 
 class Settings(BaseSettings):
@@ -83,6 +96,7 @@ class Settings(BaseSettings):
     CELERY_TIMEZONE: str = "Asia/Shanghai"
     CELERY_TASK_SOFT_TIME_LIMIT: int = 3600   # 1小时软超时
     CELERY_TASK_TIME_LIMIT: int = 7200        # 2小时硬超时
+    TASK_EXECUTION_BACKEND: Literal["celery", "direct"] = "celery"
 
     # ==================== 游客配置 ====================
     GUEST_DAILY_TASK_LIMIT: int = 5
@@ -139,3 +153,14 @@ def is_production() -> bool:
 def use_async_tasks() -> bool:
     """是否使用异步任务队列"""
     return bool(settings.CELERY_BROKER_URL)
+
+
+def use_direct_task_execution() -> bool:
+    """是否使用当前进程内 direct 任务执行。"""
+    if settings.TASK_EXECUTION_BACKEND == "direct":
+        return True
+
+    if settings.TASK_EXECUTION_BACKEND == "celery" and not settings.CELERY_BROKER_URL:
+        return True
+
+    return False

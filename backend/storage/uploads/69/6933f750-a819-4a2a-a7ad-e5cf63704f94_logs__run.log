@@ -1,0 +1,37 @@
+[platform_run] task_id=cff61d88-0783-4b71-bd8e-2ecd80f9c3a0
+[platform_run] model_root=/workspace/FlowPepDock_handover_20260507
+[platform_run] input_dir=/workspace/platform-jobs/cff61d88-0783-4b71-bd8e-2ecd80f9c3a0/input
+[platform_run] output_dir=/workspace/platform-jobs/cff61d88-0783-4b71-bd8e-2ecd80f9c3a0/output
+[platform_run] work_dir=/workspace/platform-jobs/cff61d88-0783-4b71-bd8e-2ecd80f9c3a0/work
+[platform_run] params_json=/workspace/platform-jobs/cff61d88-0783-4b71-bd8e-2ecd80f9c3a0/params.json
+[platform_run] requested_device=auto
+[platform_run] resolved input_csv=/workspace/platform-jobs/cff61d88-0783-4b71-bd8e-2ecd80f9c3a0/work/input_manifest.csv
+[platform_run] raw_output_dir=/workspace/platform-jobs/cff61d88-0783-4b71-bd8e-2ecd80f9c3a0/work/flowpepdock_raw_output
+[platform_run] infer_device=gpu
+[platform_run] N=1 batch_size=1 flow_num_steps=1
+[platform_run] CUDA_VISIBLE_DEVICES=0
+[platform_run] running model command
+[info] merged ckpt config into inference args (all keys; CLI args still take precedence)
+[flow-infer] self_cond=False sparse_interface=False sparse_topk=0 final_refine=False
+[info] peptide_source fixed: pdb
+Generating ESM language model embeddings for protein
+Traceback (most recent call last):
+  File "/workspace/FlowPepDock_handover_20260507/inference.py", line 1868, in <module>
+    main(_args)
+  File "/workspace/FlowPepDock_handover_20260507/inference.py", line 1654, in main
+    inference_dataset = prepare_data(args, score_model_args)
+  File "/workspace/FlowPepDock_handover_20260507/inference.py", line 812, in prepare_data
+    return InferenceDataset(
+  File "/workspace/FlowPepDock_handover_20260507/utils/inference_utils.py", line 1137, in __init__
+    model = model.cuda()
+  File "/home/zhuwy/.conda/envs/flowpepdock/lib/python3.9/site-packages/torch/nn/modules/module.py", line 688, in cuda
+    return self._apply(lambda t: t.cuda(device))
+  File "/home/zhuwy/.conda/envs/flowpepdock/lib/python3.9/site-packages/torch/nn/modules/module.py", line 578, in _apply
+    module._apply(fn)
+  File "/home/zhuwy/.conda/envs/flowpepdock/lib/python3.9/site-packages/torch/nn/modules/module.py", line 601, in _apply
+    param_applied = fn(param)
+  File "/home/zhuwy/.conda/envs/flowpepdock/lib/python3.9/site-packages/torch/nn/modules/module.py", line 688, in <lambda>
+    return self._apply(lambda t: t.cuda(device))
+RuntimeError: CUDA error: out of memory
+CUDA kernel errors might be asynchronously reported at some other API call,so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1.

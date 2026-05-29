@@ -97,7 +97,7 @@ services:
       celery -A app.celery_app.celery_app worker
       --loglevel=info
       --concurrency=4
-      --queues=default
+      --queues=default,high_priority,cpu_queue
       --hostname=worker@scitool
       --max-tasks-per-child=50
 
@@ -121,6 +121,9 @@ services:
 
       # ----- Python环境 -----
       PYTHONUNBUFFERED: 1
+
+      # ----- SSH 作业认证（ssh_job 运行时实际使用） -----
+      SSH_PASSWORD_REF_SSH_4090_ZHOUYC: ${SSH_PASSWORD_REF_SSH_4090_ZHOUYC:-}
 
     # ========== 数据卷 ==========
     volumes:
@@ -190,6 +193,9 @@ services:
 
       # GPU配置
       CUDA_VISIBLE_DEVICES: 0     # 使用第一张GPU
+
+      # ----- SSH 作业认证（如后续 ssh_job 标记为 GPU 任务，会由该 Worker 消费） -----
+      SSH_PASSWORD_REF_SSH_4090_ZHOUYC: ${SSH_PASSWORD_REF_SSH_4090_ZHOUYC:-}
 
     # ========== 数据卷 ==========
     volumes:

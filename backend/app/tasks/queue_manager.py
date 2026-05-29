@@ -71,7 +71,7 @@ class TaskQueueManager:
             return TaskQueue.GPU_QUEUE.value
 
         # 3. 普通CPU任务
-        if tool_config.get("type") in ["docker_image", "python_script"]:
+        if tool_config.get("type") in ["docker_image", "python_script", "ssh_job"]:
             return TaskQueue.CPU_QUEUE.value
 
         # 4. 默认队列（API调用等）

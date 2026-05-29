@@ -277,6 +277,7 @@ export default {
     usageCount: '使用次数',
     viewCount: '浏览次数',
     runCount: '运行次数',
+    runs: '次运行',
     favoriteCount: '收藏数',
     version: '版本',
     changelog: '更新日志',

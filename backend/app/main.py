@@ -6,10 +6,11 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.config import settings
+from app.config import settings, use_direct_task_execution
 from app.database.session import init_db
 from app.api.v1 import api_router
 from app.common.exceptions import AppException
+from app.tasks.direct_runner import direct_task_runner
 
 
 @asynccontextmanager
@@ -20,6 +21,8 @@ async def lifespan(app: FastAPI):
     print("✅ 数据库初始化完成")
     yield
     # 关闭时清理资源
+    if use_direct_task_execution():
+        await direct_task_runner.shutdown()
     print("👋 应用关闭")
 
 

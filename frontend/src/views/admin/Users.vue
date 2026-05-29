@@ -2,19 +2,41 @@
   <div class="admin-users">
     <div class="page-header">
       <h2>{{ t('admin.users') }}</h2>
-      <a-button type="primary" @click="showCreateModal = true">
-        <PlusOutlined /> {{ t('admin.createUser') }}
+      <a-button type="primary" @click="openCreateModal">
+        {{ t('admin.createUser') }}
       </a-button>
     </div>
 
-    <!-- 搜索筛选 -->
+    <a-row :gutter="16" class="stats-row">
+      <a-col :xs="12" :sm="6">
+        <a-card class="stat-card" :loading="loading">
+          <a-statistic :title="t('admin.stats.totalUsers')" :value="stats?.total_users ?? 0" />
+        </a-card>
+      </a-col>
+      <a-col :xs="12" :sm="6">
+        <a-card class="stat-card" :loading="loading">
+          <a-statistic :title="t('admin.active')" :value="stats?.active_users ?? 0" />
+        </a-card>
+      </a-col>
+      <a-col :xs="12" :sm="6">
+        <a-card class="stat-card" :loading="loading">
+          <a-statistic :title="t('user.role.vip')" :value="stats?.vip_users ?? 0" />
+        </a-card>
+      </a-col>
+      <a-col :xs="12" :sm="6">
+        <a-card class="stat-card" :loading="loading">
+          <a-statistic :title="t('user.role.admin')" :value="stats?.admin_users ?? 0" />
+        </a-card>
+      </a-col>
+    </a-row>
+
     <a-card class="filter-card">
       <a-form layout="inline">
         <a-form-item :label="t('admin.keyword')">
           <a-input
             v-model:value="filters.keyword"
             :placeholder="t('admin.searchUserPlaceholder')"
-            style="width: 200px"
+            style="width: 220px"
             @pressEnter="handleSearch"
           />
         </a-form-item>
@@ -22,25 +44,24 @@
           <a-select
             v-model:value="filters.role"
             :placeholder="t('common.all')"
-            style="width: 120px"
+            style="width: 140px"
             allowClear
           >
             <a-select-option value="admin">{{ t('user.role.admin') }}</a-select-option>
             <a-select-option value="vip">{{ t('user.role.vip') }}</a-select-option>
             <a-select-option value="user">{{ t('user.role.user') }}</a-select-option>
-            <a-select-option value="guest">{{ t('user.role.guest') }}</a-select-option>
           </a-select>
         </a-form-item>
         <a-form-item :label="t('admin.status')">
           <a-select
             v-model:value="filters.status"
             :placeholder="t('common.all')"
-            style="width: 120px"
+            style="width: 140px"
             allowClear
           >
             <a-select-option value="active">{{ t('admin.active') }}</a-select-option>
-            <a-select-option value="inactive">{{ t('admin.inactive') }}</a-select-option>
-            <a-select-option value="banned">{{ t('admin.banned') }}</a-select-option>
+            <a-select-option value="disabled">{{ t('admin.disabled') }}</a-select-option>
+            <a-select-option value="pending">{{ t('admin.pending') }}</a-select-option>
           </a-select>
         </a-form-item>
         <a-form-item>
@@ -56,11 +77,10 @@
       </a-form>
     </a-card>
 
-    <!-- 用户列表 -->
     <a-card>
       <a-table
         :columns="columns"
-        :data-source="filteredUsers"
+        :data-source="users"
         :loading="loading"
         :pagination="pagination"
         row-key="id"
@@ -69,11 +89,11 @@
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'user'">
             <div class="user-cell">
-              <a-avatar :size="40" :src="record.avatar">
-                {{ record.username?.charAt(0).toUpperCase() }}
+              <a-avatar :size="40" :src="record.avatar_url">
+                {{ getUserInitial(record) }}
               </a-avatar>
               <div class="user-info">
-                <span class="username">{{ record.username }}</span>
+                <span class="username">{{ getUserDisplayName(record) }}</span>
                 <span class="email">{{ record.email }}</span>
               </div>
             </div>
@@ -84,85 +104,124 @@
             </a-tag>
           </template>
           <template v-else-if="column.key === 'status'">
-            <a-badge
-              :status="getStatusBadge(record.status)"
-              :text="t(`admin.${record.status}`)"
-            />
-          </template>
-          <template v-else-if="column.key === 'credits'">
-            💎 {{ record.credits || 0 }}
+            <a-badge :status="getStatusBadge(record.status)" :text="t(`admin.${record.status}`)" />
           </template>
           <template v-else-if="column.key === 'created_at'">
             {{ formatDate(record.created_at) }}
           </template>
           <template v-else-if="column.key === 'actions'">
-            <a-space>
-              <a-tooltip :title="t('common.edit')">
-                <a-button type="link" size="small" @click="handleEdit(record)">
-                  <EditOutlined />
-                </a-button>
-              </a-tooltip>
-              <a-tooltip :title="t('admin.resetPassword')">
-                <a-button type="link" size="small" @click="handleResetPassword(record)">
-                  <KeyOutlined />
-                </a-button>
-              </a-tooltip>
-              <a-dropdown>
-                <a-button type="link" size="small">
-                  <MoreOutlined />
-                </a-button>
-                <template #overlay>
-                  <a-menu>
-                    <a-menu-item v-if="record.status !== 'banned'" @click="handleBan(record)">
-                      <StopOutlined /> {{ t('admin.banUser') }}
-                    </a-menu-item>
-                    <a-menu-item v-else @click="handleUnban(record)">
-                      <CheckOutlined /> {{ t('admin.unbanUser') }}
-                    </a-menu-item>
-                    <a-menu-item danger @click="handleDelete(record)">
-                      <DeleteOutlined /> {{ t('common.delete') }}
-                    </a-menu-item>
-                  </a-menu>
-                </template>
-              </a-dropdown>
+            <a-space size="small" wrap>
+              <a-button type="link" size="small" @click="handleEdit(record)">
+                {{ t('common.edit') }}
+              </a-button>
+              <a-button type="link" size="small" @click="openResetPasswordModal(record)">
+                {{ t('admin.resetPassword') }}
+              </a-button>
+              <a-button type="link" size="small" danger @click="handleSoftDelete(record)">
+                {{ t('admin.softDeleteUser') }}
+              </a-button>
+              <a-button type="link" size="small" danger @click="handleHardDelete(record)">
+                {{ t('admin.hardDeleteUser') }}
+              </a-button>
             </a-space>
           </template>
         </template>
       </a-table>
     </a-card>
 
-    <!-- 创建/编辑用户弹窗 -->
     <a-modal
       v-model:open="showCreateModal"
-      :title="editingUser ? t('admin.editUser') : t('admin.createUser')"
-      @ok="handleSaveUser"
+      :title="t('admin.createUser')"
+      :confirm-loading="createLoading"
+      @ok="handleCreateUser"
+      @cancel="resetCreateForm"
+    >
+      <a-form
+        ref="createFormRef"
+        :model="createForm"
+        :rules="createFormRules"
+        :label-col="{ span: 6 }"
+        :wrapper-col="{ span: 16 }"
+      >
+        <a-form-item :label="t('auth.email')" name="email">
+          <a-input v-model:value="createForm.email" />
+        </a-form-item>
+        <a-form-item :label="t('common.name')" name="display_name">
+          <a-input v-model:value="createForm.display_name" />
+        </a-form-item>
+        <a-form-item :label="t('auth.password')" name="password">
+          <a-input-password v-model:value="createForm.password" />
+        </a-form-item>
+        <a-form-item :label="t('admin.role')" name="role">
+          <a-select v-model:value="createForm.role">
+            <a-select-option v-for="option in roleOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item :label="t('admin.status')" name="status">
+          <a-select v-model:value="createForm.status">
+            <a-select-option v-for="option in statusOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+      </a-form>
+    </a-modal>
+
+    <a-modal
+      v-model:open="showEditModal"
+      :title="t('admin.editUser')"
       :confirm-loading="saveLoading"
+      @ok="handleSaveUser"
+      @cancel="resetEditForm"
     >
       <a-form
         ref="formRef"
-        :model="userForm"
+        :model="editForm"
         :rules="formRules"
         :label-col="{ span: 6 }"
         :wrapper-col="{ span: 16 }"
       >
-        <a-form-item :label="t('auth.username')" name="username">
-          <a-input v-model:value="userForm.username" />
-        </a-form-item>
         <a-form-item :label="t('auth.email')" name="email">
-          <a-input v-model:value="userForm.email" />
-        </a-form-item>
-        <a-form-item v-if="!editingUser" :label="t('auth.password')" name="password">
-          <a-input-password v-model:value="userForm.password" />
+          <a-input v-model:value="editForm.email" />
         </a-form-item>
         <a-form-item :label="t('admin.role')" name="role">
-          <a-select v-model:value="userForm.role">
-            <a-select-option value="admin">{{ t('user.role.admin') }}</a-select-option>
-            <a-select-option value="vip">{{ t('user.role.vip') }}</a-select-option>
-            <a-select-option value="user">{{ t('user.role.user') }}</a-select-option>
+          <a-select v-model:value="editForm.role">
+            <a-select-option v-for="option in roleOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item :label="t('admin.credits')" name="credits">
-          <a-input-number v-model:value="userForm.credits" :min="0" style="width: 100%" />
+        <a-form-item :label="t('admin.status')" name="status">
+          <a-select v-model:value="editForm.status">
+            <a-select-option v-for="option in statusOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+      </a-form>
+    </a-modal>
+
+    <a-modal
+      v-model:open="showResetPasswordModal"
+      :title="t('admin.resetPassword')"
+      :confirm-loading="resetPasswordLoading"
+      @ok="handleResetPassword"
+      @cancel="resetResetPasswordForm"
+    >
+      <p v-if="resetPasswordUser" class="reset-password-hint">
+        {{ t('admin.resetPasswordConfirmContent', { username: getUserDisplayName(resetPasswordUser) }) }}
+      </p>
+      <a-form
+        ref="resetPasswordFormRef"
+        :model="resetPasswordForm"
+        :rules="resetPasswordRules"
+        :label-col="{ span: 6 }"
+        :wrapper-col="{ span: 16 }"
+      >
+        <a-form-item :label="t('auth.newPassword')" name="new_password">
+          <a-input-password v-model:value="resetPasswordForm.new_password" />
         </a-form-item>
       </a-form>
     </a-modal>
@@ -170,30 +229,39 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import {
-  PlusOutlined,
-  SearchOutlined,
-  ReloadOutlined,
-  EditOutlined,
-  KeyOutlined,
-  MoreOutlined,
-  StopOutlined,
-  CheckOutlined,
-  DeleteOutlined
-} from '@ant-design/icons-vue'
+import { ReloadOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
 import type { FormInstance } from 'ant-design-vue'
 import dayjs from 'dayjs'
+import {
+  adminCreateUser,
+  adminDeleteUser,
+  adminGetUsers,
+  adminGetUserStats,
+  adminResetUserPassword,
+  adminUpdateUser
+} from '@/api/users'
+import type { AdminResetUserPasswordParams, AdminUserCreateParams } from '@/api/users'
+import type { AdminUserStats, UserInfo } from '@/types/models'
 
 const { t } = useI18n()
 
 const loading = ref(false)
+const createLoading = ref(false)
 const saveLoading = ref(false)
+const resetPasswordLoading = ref(false)
 const showCreateModal = ref(false)
-const editingUser = ref<any>(null)
+const showEditModal = ref(false)
+const showResetPasswordModal = ref(false)
+const createFormRef = ref<FormInstance>()
 const formRef = ref<FormInstance>()
+const resetPasswordFormRef = ref<FormInstance>()
+const users = ref<UserInfo[]>([])
+const stats = ref<AdminUserStats | null>(null)
+const editingUser = ref<UserInfo | null>(null)
+const resetPasswordUser = ref<UserInfo | null>(null)
 
 const filters = reactive({
   keyword: '',
@@ -204,22 +272,41 @@ const filters = reactive({
 const pagination = reactive({
   current: 1,
   pageSize: 10,
-  total: 100
+  total: 0,
+  showSizeChanger: true
 })
 
-const userForm = reactive({
-  username: '',
+const createForm = reactive<AdminUserCreateParams>({
   email: '',
+  display_name: '',
   password: '',
   role: 'user',
-  credits: 0
+  status: 'active'
 })
 
-const formRules = {
-  username: [
-    { required: true, message: t('auth.validation.usernameRequired') },
-    { min: 3, max: 20, message: t('auth.validation.usernameLength') }
-  ],
+const editForm = reactive({
+  email: '',
+  role: 'user',
+  status: 'active'
+})
+
+const resetPasswordForm = reactive<AdminResetUserPasswordParams>({
+  new_password: ''
+})
+
+const roleOptions = computed(() => ([
+  { value: 'admin', label: t('user.role.admin') },
+  { value: 'vip', label: t('user.role.vip') },
+  { value: 'user', label: t('user.role.user') }
+]))
+
+const statusOptions = computed(() => ([
+  { value: 'active', label: t('admin.active') },
+  { value: 'disabled', label: t('admin.disabled') },
+  { value: 'pending', label: t('admin.pending') }
+]))
+
+const createFormRules = computed(() => ({
   email: [
     { required: true, message: t('auth.validation.emailRequired') },
     { type: 'email', message: t('auth.validation.emailInvalid') }
@@ -228,52 +315,40 @@ const formRules = {
     { required: true, message: t('auth.validation.passwordRequired') },
     { min: 6, message: t('auth.validation.passwordLength') }
   ],
-  role: [{ required: true, message: t('admin.selectRole') }]
-}
+  role: [{ required: true, message: t('admin.selectRole') }],
+  status: [{ required: true, message: t('admin.selectStatus') }]
+}))
 
-// 模拟用户数据
-const users = ref([
-  { id: 1, username: 'admin', email: 'admin@example.com', role: 'admin', status: 'active', credits: 9999, created_at: '2024-01-01T00:00:00' },
-  { id: 2, username: 'vipuser', email: 'vip@example.com', role: 'vip', status: 'active', credits: 1000, created_at: '2024-01-10T10:00:00' },
-  { id: 3, username: 'researcher', email: 'researcher@example.com', role: 'user', status: 'active', credits: 200, created_at: '2024-01-15T14:30:00' },
-  { id: 4, username: 'scientist', email: 'scientist@example.com', role: 'user', status: 'inactive', credits: 50, created_at: '2024-01-12T09:15:00' },
-  { id: 5, username: 'banned_user', email: 'banned@example.com', role: 'user', status: 'banned', credits: 0, created_at: '2024-01-08T16:45:00' }
-])
+const formRules = computed(() => ({
+  email: [
+    { required: true, message: t('auth.validation.emailRequired') },
+    { type: 'email', message: t('auth.validation.emailInvalid') }
+  ],
+  role: [{ required: true, message: t('admin.selectRole') }],
+  status: [{ required: true, message: t('admin.selectStatus') }]
+}))
 
-// 过滤后的用户列表
-const filteredUsers = computed(() => {
-  let result = users.value
-
-  // 关键词搜索
-  if (filters.keyword) {
-    const keyword = filters.keyword.toLowerCase()
-    result = result.filter(user =>
-      user.username.toLowerCase().includes(keyword) ||
-      user.email.toLowerCase().includes(keyword)
-    )
-  }
-
-  // 角色筛选
-  if (filters.role) {
-    result = result.filter(user => user.role === filters.role)
-  }
-
-  // 状态筛选
-  if (filters.status) {
-    result = result.filter(user => user.status === filters.status)
-  }
-
-  return result
-})
+const resetPasswordRules = computed(() => ({
+  new_password: [
+    { required: true, message: t('auth.validation.passwordRequired') },
+    { min: 6, message: t('auth.validation.passwordLength') }
+  ]
+}))
 
 const columns = computed(() => [
-  { title: t('admin.userInfo'), key: 'user', width: 250 },
-  { title: t('admin.role'), key: 'role', width: 100 },
-  { title: t('admin.status'), key: 'status', width: 100 },
-  { title: t('admin.credits'), key: 'credits', width: 100 },
-  { title: t('admin.registerTime'), key: 'created_at', width: 150 },
-  { title: t('common.actions'), key: 'actions', width: 150, fixed: 'right' }
+  { title: t('admin.userInfo'), key: 'user', width: 280 },
+  { title: t('admin.role'), key: 'role', width: 120 },
+  { title: t('admin.status'), key: 'status', width: 120 },
+  { title: t('admin.registerTime'), key: 'created_at', width: 180 },
+  { title: t('common.actions'), key: 'actions', width: 260 }
 ])
+
+const getUserDisplayName = (user: UserInfo) => user.display_name || user.email.split('@')[0]
+
+const getUserInitial = (user: UserInfo) => {
+  const displayName = getUserDisplayName(user)
+  return displayName ? displayName.charAt(0).toUpperCase() : 'U'
+}
 
 const getRoleColor = (role: string) => {
   const colors: Record<string, string> = {
@@ -288,139 +363,197 @@ const getRoleColor = (role: string) => {
 const getStatusBadge = (status: string) => {
   const badges: Record<string, 'success' | 'default' | 'error'> = {
     active: 'success',
-    inactive: 'default',
-    banned: 'error'
+    disabled: 'error',
+    pending: 'default'
   }
   return badges[status] || 'default'
 }
 
-const formatDate = (date: string) => {
-  return dayjs(date).format('YYYY-MM-DD HH:mm')
+const formatDate = (date: string) => dayjs(date).format('YYYY-MM-DD HH:mm')
+
+const fetchUsers = async () => {
+  loading.value = true
+  try {
+    const res = await adminGetUsers({
+      page: pagination.current,
+      page_size: pagination.pageSize,
+      keyword: filters.keyword || undefined,
+      role: filters.role,
+      status: filters.status
+    })
+    users.value = res.data.items
+    pagination.total = res.data.total
+  } catch {
+    users.value = []
+    pagination.total = 0
+  } finally {
+    loading.value = false
+  }
 }
 
-const handleSearch = () => {
-  pagination.current = 1
-  pagination.total = filteredUsers.value.length
-  message.success(t('common.searchSuccess'))
+const fetchStats = async () => {
+  try {
+    const res = await adminGetUserStats()
+    stats.value = res.data
+  } catch {
+    stats.value = null
+  }
 }
 
-const handleReset = () => {
-  filters.keyword = ''
-  filters.role = undefined
-  filters.status = undefined
-  handleSearch()
+const refreshUsersPage = async () => {
+  await Promise.allSettled([fetchUsers(), fetchStats()])
 }
 
-const handleTableChange = (pag: any) => {
-  pagination.current = pag.current
-  pagination.pageSize = pag.pageSize
-  // 数据已通过 filteredUsers 自动更新
+const resetCreateForm = () => {
+  createForm.email = ''
+  createForm.display_name = ''
+  createForm.password = ''
+  createForm.role = 'user'
+  createForm.status = 'active'
 }
 
-const handleEdit = (record: any) => {
-  editingUser.value = record
-  userForm.username = record.username
-  userForm.email = record.email
-  userForm.password = ''
-  userForm.role = record.role
-  userForm.credits = record.credits
+const resetEditForm = () => {
+  editingUser.value = null
+  editForm.email = ''
+  editForm.role = 'user'
+  editForm.status = 'active'
+}
+
+const resetResetPasswordForm = () => {
+  resetPasswordUser.value = null
+  resetPasswordForm.new_password = ''
+}
+
+const openCreateModal = () => {
   showCreateModal.value = true
 }
 
+const handleCreateUser = async () => {
+  try {
+    await createFormRef.value?.validate()
+  } catch {
+    return
+  }
+
+  createLoading.value = true
+  try {
+    await adminCreateUser({ ...createForm })
+    message.success(t('admin.createUserSuccess'))
+    showCreateModal.value = false
+    resetCreateForm()
+    await refreshUsersPage()
+  } finally {
+    createLoading.value = false
+  }
+}
+
+const handleSearch = async () => {
+  pagination.current = 1
+  await fetchUsers()
+}
+
+const handleReset = async () => {
+  filters.keyword = ''
+  filters.role = undefined
+  filters.status = undefined
+  pagination.current = 1
+  await fetchUsers()
+}
+
+const handleTableChange = async (pag: { current?: number; pageSize?: number }) => {
+  pagination.current = pag.current || 1
+  pagination.pageSize = pag.pageSize || 10
+  await fetchUsers()
+}
+
+const handleEdit = (record: UserInfo) => {
+  editingUser.value = record
+  editForm.email = record.email
+  editForm.role = record.role
+  editForm.status = record.status
+  showEditModal.value = true
+}
+
 const handleSaveUser = async () => {
+  if (!editingUser.value) return
+
   try {
     await formRef.value?.validate()
-    saveLoading.value = true
-
-    // 保存用户（更新或创建）
-    if (editingUser.value) {
-      // 更新现有用户
-      const index = users.value.findIndex(u => u.id === editingUser.value.id)
-      if (index !== -1) {
-        const existingUser = users.value[index]!
-        users.value[index] = {
-          id: existingUser.id,
-          username: userForm.username,
-          email: userForm.email,
-          role: userForm.role,
-          status: existingUser.status,
-          credits: userForm.credits,
-          created_at: existingUser.created_at
-        }
-      }
-    } else {
-      // 创建新用户
-      const newUser = {
-        id: Math.max(...users.value.map(u => u.id)) + 1,
-        username: userForm.username,
-        email: userForm.email,
-        role: userForm.role,
-        status: 'active',
-        credits: userForm.credits,
-        created_at: new Date().toISOString()
-      }
-      users.value.push(newUser)
-    }
-
-    message.success(t('common.success'))
-    showCreateModal.value = false
-    resetForm()
   } catch {
-    // 验证失败
+    return
+  }
+
+  saveLoading.value = true
+  try {
+    await adminUpdateUser(editingUser.value.id, {
+      email: editForm.email,
+      role: editForm.role,
+      status: editForm.status
+    })
+    message.success(t('common.success'))
+    showEditModal.value = false
+    resetEditForm()
+    await refreshUsersPage()
   } finally {
     saveLoading.value = false
   }
 }
 
-const resetForm = () => {
-  editingUser.value = null
-  userForm.username = ''
-  userForm.email = ''
-  userForm.password = ''
-  userForm.role = 'user'
-  userForm.credits = 0
+const openResetPasswordModal = (record: UserInfo) => {
+  resetPasswordUser.value = record
+  resetPasswordForm.new_password = ''
+  showResetPasswordModal.value = true
 }
 
-const handleResetPassword = (record: any) => {
-  Modal.confirm({
-    title: t('admin.resetPasswordConfirm'),
-    content: t('admin.resetPasswordConfirmContent', { username: record.username }),
-    onOk: () => {
-      // 重置密码为默认密码
-      const defaultPassword = '123456'
-      message.success(t('admin.resetPasswordSuccess') + ` (${defaultPassword})`)
-    }
-  })
+const handleResetPassword = async () => {
+  if (!resetPasswordUser.value) return
+
+  try {
+    await resetPasswordFormRef.value?.validate()
+  } catch {
+    return
+  }
+
+  resetPasswordLoading.value = true
+  try {
+    await adminResetUserPassword(resetPasswordUser.value.id, { ...resetPasswordForm })
+    message.success(t('admin.resetPasswordSuccess'))
+    showResetPasswordModal.value = false
+    resetResetPasswordForm()
+  } finally {
+    resetPasswordLoading.value = false
+  }
 }
 
-const handleBan = (record: any) => {
+const handleSoftDelete = (record: UserInfo) => {
   Modal.confirm({
-    title: t('admin.banUserConfirm'),
-    content: t('admin.banUserConfirmContent', { username: record.username }),
+    title: t('admin.softDeleteUserConfirm'),
+    content: t('admin.softDeleteUserConfirmContent', { username: getUserDisplayName(record) }),
     okType: 'danger',
-    onOk: () => {
-      record.status = 'banned'
-      message.success(t('admin.banUserSuccess'))
+    onOk: async () => {
+      await adminDeleteUser(record.id)
+      message.success(t('admin.softDeleteUserSuccess'))
+      await refreshUsersPage()
     }
   })
 }
 
-const handleUnban = (record: any) => {
-  record.status = 'active'
-  message.success(t('admin.unbanUserSuccess'))
-}
-
-const handleDelete = (record: any) => {
+const handleHardDelete = (record: UserInfo) => {
   Modal.confirm({
-    title: t('admin.deleteUserConfirm'),
-    content: t('admin.deleteUserConfirmContent', { username: record.username }),
+    title: t('admin.hardDeleteUserConfirm'),
+    content: t('admin.hardDeleteUserConfirmContent', { username: getUserDisplayName(record) }),
     okType: 'danger',
-    onOk: () => {
-      users.value = users.value.filter(u => u.id !== record.id)
-      message.success(t('common.success'))
+    onOk: async () => {
+      await adminDeleteUser(record.id, true)
+      message.success(t('admin.hardDeleteUserSuccess'))
+      await refreshUsersPage()
     }
   })
 }
+
+onMounted(async () => {
+  await refreshUsersPage()
+})
 </script>
 
 <style scoped lang="less">
@@ -428,18 +561,31 @@ const handleDelete = (record: any) => {
 
 .admin-users {
   .page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
     margin-bottom: @spacing-lg;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
 
     h2 {
       margin: 0;
     }
   }
 
+  .stats-row {
+    margin-bottom: @spacing-lg;
+  }
+
+  .stat-card {
+    text-align: center;
+  }
+
   .filter-card {
     margin-bottom: @spacing-lg;
+  }
+
+  .reset-password-hint {
+    margin-bottom: @spacing-md;
+    color: @text-color-light-secondary;
   }
 
   .user-cell {
@@ -450,15 +596,15 @@ const handleDelete = (record: any) => {
     .user-info {
       display: flex;
       flex-direction: column;
+    }
 
-      .username {
-        font-weight: @font-weight-medium;
-      }
+    .username {
+      font-weight: @font-weight-medium;
+    }
 
-      .email {
-        font-size: @font-size-sm;
-        color: @text-color-light-secondary;
-      }
+    .email {
+      color: @text-color-light-secondary;
+      font-size: @font-size-sm;
     }
   }
 }

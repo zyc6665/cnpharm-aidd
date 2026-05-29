@@ -1,0 +1,11 @@
+{
+  "input_csv": "/workspace/platform-jobs/7e5be2f1-4c08-41be-a18d-e2eedfe0fdab/work/input_manifest.csv",
+  "raw_output_dir": "/workspace/platform-jobs/7e5be2f1-4c08-41be-a18d-e2eedfe0fdab/work/flowpepdock_raw_output",
+  "complex_name": "flowpepdock-1ggd-rerun-cuda6",
+  "n_samples": 1,
+  "batch_size": 1,
+  "flow_num_steps": 1,
+  "flow_solver": "euler",
+  "device": "gpu",
+  "cpu": 2
+}

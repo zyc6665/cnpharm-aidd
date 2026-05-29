@@ -1,0 +1,25 @@
+MolP-PC platform runner
+Model root: /workspace/MolP-PC
+Python: /home/zhuwy/.conda/envs/molp-pc/bin/python
+Input dir: /workspace/platform-jobs/bf8d9b0f-41d6-4984-9e72-dd5f42b48f1e/input
+Output dir: /workspace/platform-jobs/bf8d9b0f-41d6-4984-9e72-dd5f42b48f1e/output
+Work dir: /workspace/platform-jobs/bf8d9b0f-41d6-4984-9e72-dd5f42b48f1e/work
+Params JSON: /workspace/platform-jobs/bf8d9b0f-41d6-4984-9e72-dd5f42b48f1e/params.json
+Task ID: bf8d9b0f-41d6-4984-9e72-dd5f42b48f1e
+Task name: molp_pc_property_prediction
+Input source: input_files.smiles_csv
+Input CSV: /workspace/platform-jobs/bf8d9b0f-41d6-4984-9e72-dd5f42b48f1e/input/smiles.csv
+Input rows: 1
+Device: cpu
+Original entry: predict/test.py::predict(path, name)
+Runtime work directory: /workspace/platform-jobs/bf8d9b0f-41d6-4984-9e72-dd5f42b48f1e/work/molp_pc_runtime_1503768
+/home/zhuwy/.conda/envs/molp-pc/lib/python3.8/site-packages/dgl/heterograph.py:72: DGLWarning: Recommend creating graphs by `dgl.graph(data)` instead of `dgl.DGLGraph(data)`.
+  dgl_warning('Recommend creating graphs by `dgl.graph(data)`'
+1/1 molecule is transformed!
+[](0) is transformed failed!
+测试集构造完成，共1个样本
+Predicted_Label
+0
+Artifact written: /workspace/platform-jobs/bf8d9b0f-41d6-4984-9e72-dd5f42b48f1e/output/artifacts/cb_data_result.csv
+Result JSON written: /workspace/platform-jobs/bf8d9b0f-41d6-4984-9e72-dd5f42b48f1e/output/result.json
+MolP-PC platform run completed

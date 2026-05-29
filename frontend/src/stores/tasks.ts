@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { Task, TaskStatus, TaskCreateParams } from '@/types/models'
 import { getTaskList, getTaskDetail, createTask as apiCreateTask, cancelTask as apiCancelTask, retryTask as apiRetryTask, deleteTask as apiDeleteTask } from '@/api/tasks'
+import { normalizeTaskSummaries, normalizeTaskSummary } from '@/utils/task-normalization'
 
 export const useTasksStore = defineStore('tasks', () => {
   // State
@@ -15,7 +16,7 @@ export const useTasksStore = defineStore('tasks', () => {
     loading.value = true
     try {
       const res = await getTaskList(params)
-      tasks.value = res.data.items
+      tasks.value = normalizeTaskSummaries(res.data.items)
       total.value = res.data.total
       return res.data
     } finally {
@@ -39,7 +40,7 @@ export const useTasksStore = defineStore('tasks', () => {
     try {
       const res = await apiCreateTask(params)
       // 添加到列表开头
-      tasks.value.unshift(res.data)
+      tasks.value.unshift(normalizeTaskSummary(res.data))
       total.value++
       return res.data
     } finally {
@@ -53,7 +54,7 @@ export const useTasksStore = defineStore('tasks', () => {
       // 更新列表中的任务状态
       const index = tasks.value.findIndex(t => t.id === id)
       if (index !== -1) {
-        tasks.value[index] = res.data
+        tasks.value[index] = normalizeTaskSummary(res.data)
       }
       if (currentTask.value?.id === id) {
         currentTask.value = res.data
@@ -70,7 +71,7 @@ export const useTasksStore = defineStore('tasks', () => {
       // 更新列表中的任务状态
       const index = tasks.value.findIndex(t => t.id === id)
       if (index !== -1) {
-        tasks.value[index] = res.data
+        tasks.value[index] = normalizeTaskSummary(res.data)
       }
       if (currentTask.value?.id === id) {
         currentTask.value = res.data

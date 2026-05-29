@@ -5,10 +5,16 @@
         <h2>{{ t('admin.tools') }}</h2>
         <p>{{ t('admin.toolsSubtitle') }}</p>
       </div>
-      <a-button type="primary" @click="openCreateModal">
-        <PlusOutlined />
-        {{ t('admin.createTool') }}
-      </a-button>
+      <a-space>
+        <a-button @click="openImportModal">
+          <UploadOutlined />
+          {{ t('admin.importToolConfig') }}
+        </a-button>
+        <a-button type="primary" @click="openCreatePage">
+          <PlusOutlined />
+          {{ t('admin.createTool') }}
+        </a-button>
+      </a-space>
     </div>
 
     <a-card class="filter-card">
@@ -18,6 +24,7 @@
             v-model:value="filters.keyword"
             :placeholder="t('admin.searchToolPlaceholder')"
             style="width: 220px"
+            @pressEnter="fetchTools"
           />
         </a-form-item>
         <a-form-item :label="t('tools.category')">
@@ -47,7 +54,7 @@
         </a-form-item>
         <a-form-item>
           <a-space>
-            <a-button type="primary" @click="fetchTools">
+            <a-button type="primary" @click="handleSearch">
               <SearchOutlined />
               {{ t('common.search') }}
             </a-button>
@@ -63,10 +70,11 @@
     <a-card>
       <a-table
         :columns="columns"
-        :data-source="filteredTools"
+        :data-source="tools"
         :loading="loading"
-        :pagination="false"
+        :pagination="pagination"
         row-key="id"
+        @change="handleTableChange"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'name'">
@@ -107,29 +115,51 @@
       </a-table>
     </a-card>
 
+    <input
+      ref="importConfigFileInput"
+      type="file"
+      accept=".json,application/json"
+      class="hidden-file-input"
+      @change="handleImportConfigFileChange"
+    />
+
     <a-modal
-      v-model:open="showCreateModal"
-      :title="editingTool ? t('admin.editTool') : t('admin.createTool')"
-      :confirm-loading="saving"
-      @ok="handleSaveTool"
-      @cancel="resetForm"
+      :open="importModalVisible"
+      :title="t('admin.importToolConfigTitle')"
+      :confirm-loading="importing"
+      @ok="handleImportConfig"
+      @cancel="resetImportModal"
     >
-      <a-form ref="formRef" :model="toolForm" :rules="formRules" layout="vertical">
-        <a-form-item :label="t('admin.toolName')" name="name">
-          <a-input v-model:value="toolForm.name" />
-        </a-form-item>
-        <a-form-item :label="t('admin.toolCode')" name="slug">
-          <a-input v-model:value="toolForm.slug" :disabled="!!editingTool" />
-        </a-form-item>
-        <a-form-item :label="t('common.description')" name="description">
-          <a-textarea v-model:value="toolForm.description" :rows="3" />
-        </a-form-item>
-        <a-form-item :label="t('tools.category')" name="category_id">
-          <a-select v-model:value="toolForm.category_id">
+      <p class="import-config-description">{{ t('admin.importToolConfigDescription') }}</p>
+      <a-form layout="vertical">
+        <a-form-item :label="t('tools.category')">
+          <a-select
+            v-model:value="importCategoryId"
+            :placeholder="t('common.all')"
+            allow-clear
+          >
             <a-select-option v-for="category in categories" :key="category.id" :value="category.id">
               {{ category.name }}
             </a-select-option>
           </a-select>
+        </a-form-item>
+        <a-form-item>
+          <a-checkbox v-model:checked="importPublish">
+            {{ t('admin.importToolConfigPublish') }}
+          </a-checkbox>
+        </a-form-item>
+        <a-form-item :label="t('admin.importToolConfig')">
+          <a-space direction="vertical" style="width: 100%">
+            <a-button @click="triggerImportConfigFile">
+              <UploadOutlined />
+              {{ t('admin.importToolConfigFromFile') }}
+            </a-button>
+            <a-textarea
+              v-model:value="importConfigText"
+              :rows="14"
+              :placeholder="t('admin.importToolConfigPlaceholder')"
+            />
+          </a-space>
         </a-form-item>
       </a-form>
     </a-modal>
@@ -138,34 +168,37 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import type { FormInstance } from 'ant-design-vue'
 import { message, Modal } from 'ant-design-vue'
 import {
   DeleteOutlined,
   EditOutlined,
   PlusOutlined,
   ReloadOutlined,
-  SearchOutlined
+  SearchOutlined,
+  UploadOutlined
 } from '@ant-design/icons-vue'
-import type { Category, Tool, ToolCreateParams } from '@/types/models'
+import type { Category, Tool } from '@/types/models'
 import {
   adminGetToolCategories,
-  createTool,
   deleteTool,
   getToolList,
-  updateTool
+  importToolConfig
 } from '@/api/tools'
 
 const { t } = useI18n()
+const router = useRouter()
 
 const loading = ref(false)
-const saving = ref(false)
-const showCreateModal = ref(false)
-const formRef = ref<FormInstance>()
 const categories = ref<Category[]>([])
 const tools = ref<Tool[]>([])
-const editingTool = ref<Tool | null>(null)
+const importModalVisible = ref(false)
+const importing = ref(false)
+const importConfigText = ref('')
+const importCategoryId = ref<string | undefined>()
+const importPublish = ref(false)
+const importConfigFileInput = ref<HTMLInputElement | null>(null)
 
 const filters = reactive({
   keyword: '',
@@ -173,18 +206,12 @@ const filters = reactive({
   status: undefined as string | undefined
 })
 
-const toolForm = reactive({
-  name: '',
-  slug: '',
-  description: '',
-  category_id: ''
+const pagination = reactive({
+  current: 1,
+  pageSize: 10,
+  total: 0,
+  showSizeChanger: true
 })
-
-const formRules = computed(() => ({
-  name: [{ required: true, message: t('admin.enterToolName') }],
-  slug: [{ required: true, message: t('admin.enterToolCode') }],
-  category_id: [{ required: true, message: t('admin.selectCategory') }]
-}))
 
 const columns = computed(() => [
   { title: t('admin.toolName'), key: 'name' },
@@ -193,18 +220,6 @@ const columns = computed(() => [
   { title: t('admin.statistics'), key: 'stats', width: 140 },
   { title: t('common.actions'), key: 'actions', width: 180 }
 ])
-
-const filteredTools = computed(() => {
-  return tools.value.filter(tool => {
-    const matchKeyword =
-      !filters.keyword ||
-      tool.name.toLowerCase().includes(filters.keyword.toLowerCase()) ||
-      tool.slug.toLowerCase().includes(filters.keyword.toLowerCase())
-    const matchCategory = !filters.category || tool.category_id === filters.category
-    const matchStatus = !filters.status || tool.status === filters.status
-    return matchKeyword && matchCategory && matchStatus
-  })
-})
 
 const statusColor = (status: Tool['status']) => {
   const mapping: Record<Tool['status'], string> = {
@@ -224,73 +239,101 @@ const fetchCategories = async () => {
 const fetchTools = async () => {
   loading.value = true
   try {
-    const res = await getToolList({ status: filters.status })
+    const res = await getToolList({
+      page: pagination.current,
+      page_size: pagination.pageSize,
+      search: filters.keyword || undefined,
+      category: filters.category,
+      status: filters.status
+    })
     tools.value = res.data.items
+    pagination.total = res.data.total
   } finally {
     loading.value = false
   }
-}
-
-const resetForm = () => {
-  editingTool.value = null
-  toolForm.name = ''
-  toolForm.slug = ''
-  toolForm.description = ''
-  toolForm.category_id = ''
 }
 
 const resetFilters = async () => {
   filters.keyword = ''
   filters.category = undefined
   filters.status = undefined
+  pagination.current = 1
   await fetchTools()
 }
 
-const openCreateModal = () => {
-  resetForm()
-  showCreateModal.value = true
+const handleSearch = async () => {
+  pagination.current = 1
+  await fetchTools()
 }
 
-const handleEdit = (tool: Tool) => {
-  editingTool.value = tool
-  toolForm.name = tool.name
-  toolForm.slug = tool.slug
-  toolForm.description = tool.description || ''
-  toolForm.category_id = tool.category_id || ''
-  showCreateModal.value = true
+const handleTableChange = async (pag: { current?: number; pageSize?: number }) => {
+  pagination.current = pag.current || 1
+  pagination.pageSize = pag.pageSize || 10
+  await fetchTools()
 }
 
-const handleSaveTool = async () => {
-  try {
-    await formRef.value?.validate()
-  } catch {
+const openCreatePage = () => {
+  router.push('/admin/tools/create')
+}
+
+const openImportModal = () => {
+  importModalVisible.value = true
+}
+
+const resetImportModal = () => {
+  importModalVisible.value = false
+  importConfigText.value = ''
+  importCategoryId.value = undefined
+  importPublish.value = false
+}
+
+const triggerImportConfigFile = () => {
+  importConfigFileInput.value?.click()
+}
+
+const handleImportConfigFileChange = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) {
     return
   }
 
-  saving.value = true
+  importConfigText.value = await file.text()
+  input.value = ''
+}
+
+const handleImportConfig = async () => {
+  if (!importConfigText.value.trim()) {
+    message.error(t('admin.importToolConfigRequired'))
+    return
+  }
+
+  let parsedConfig: Record<string, unknown>
   try {
-    if (editingTool.value) {
-      await updateTool(editingTool.value.id, {
-        name: toolForm.name,
-        description: toolForm.description || undefined,
-        category_id: toolForm.category_id
-      })
-    } else {
-      const payload: ToolCreateParams = {
-        name: toolForm.name,
-        slug: toolForm.slug,
-        description: toolForm.description || undefined,
-        category_id: toolForm.category_id
-      }
-      await createTool(payload)
-    }
-    message.success(t('common.success'))
-    showCreateModal.value = false
-    resetForm()
+    parsedConfig = JSON.parse(importConfigText.value)
+  } catch {
+    message.error(t('admin.importToolConfigInvalid'))
+    return
+  }
+
+  importing.value = true
+  try {
+    const response = await importToolConfig({
+      config: parsedConfig,
+      category_id: importCategoryId.value,
+      publish: importPublish.value
+    })
+
+    message.success(`${response.data.tool.name} · ${t('admin.importToolConfigSuccess')}`)
+    resetImportModal()
     await fetchTools()
   } finally {
-    saving.value = false
+    importing.value = false
   }
+}
+
+const handleEdit = (tool: Tool) => {
+  router.push(`/admin/tools/${tool.id}/edit`)
 }
 
 const handleDelete = (tool: Tool) => {
@@ -336,6 +379,15 @@ onMounted(async () => {
     margin-bottom: @spacing-lg;
   }
 
+  .hidden-file-input {
+    display: none;
+  }
+
+  .import-config-description {
+    margin-bottom: @spacing-md;
+    color: @text-color-light-secondary;
+  }
+
   .tool-cell {
     display: flex;
     align-items: center;
@@ -360,11 +412,11 @@ onMounted(async () => {
   }
 
   .name {
-    font-weight: @font-weight-semibold;
+    font-weight: @font-weight-medium;
   }
 
   .meta {
-    color: @text-color-light-tertiary;
+    color: @text-color-light-secondary;
     font-size: @font-size-sm;
   }
 }

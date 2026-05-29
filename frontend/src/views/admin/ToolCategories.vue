@@ -98,6 +98,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { FormInstance } from 'ant-design-vue'
 import { message, Modal } from 'ant-design-vue'
+import { isAxiosError } from 'axios'
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,
@@ -143,11 +144,23 @@ const columns = computed(() => [
   { title: t('common.actions'), key: 'actions', width: 260 }
 ])
 
+const normalizeCategorySlug = (value: string) => {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
 const fetchCategories = async () => {
   loading.value = true
   try {
     const res = await adminGetToolCategories()
     categories.value = res.data
+  } catch {
+    categories.value = []
   } finally {
     loading.value = false
   }
@@ -180,35 +193,50 @@ const handleSave = async () => {
     return
   }
 
+  const normalizedSlug = normalizeCategorySlug(formState.slug || formState.name)
+  if (!normalizedSlug) {
+    message.error(t('admin.invalidCategorySlug'))
+    return
+  }
+
   saving.value = true
   try {
     if (editingCategory.value) {
       await adminUpdateToolCategory(editingCategory.value.id, {
         name: formState.name,
-        slug: formState.slug,
+        slug: normalizedSlug,
         description: formState.description || undefined
       })
       message.success(t('common.success'))
     } else {
       await adminCreateToolCategory({
         name: formState.name,
-        slug: formState.slug,
+        slug: normalizedSlug,
         description: formState.description || undefined
       })
       message.success(t('common.success'))
     }
+    formState.slug = normalizedSlug
     showCreateModal.value = false
     resetForm()
     await fetchCategories()
+  } catch (error) {
+    if (isAxiosError(error) && error.response?.status === 422) {
+      message.error(t('admin.invalidCategorySlug'))
+    }
   } finally {
     saving.value = false
   }
 }
 
 const handleToggleStatus = async (record: Category) => {
-  await adminToggleToolCategory(record.id, !record.is_enabled)
-  message.success(t('common.success'))
-  await fetchCategories()
+  try {
+    await adminToggleToolCategory(record.id, !record.is_enabled)
+    message.success(t('common.success'))
+    await fetchCategories()
+  } catch {
+    // 请求层已处理错误提示
+  }
 }
 
 const handleDelete = (record: Category) => {
@@ -217,9 +245,13 @@ const handleDelete = (record: Category) => {
     content: t('admin.deleteCategoryConfirmContent', { name: record.name }),
     okType: 'danger',
     onOk: async () => {
-      await adminDeleteToolCategory(record.id)
-      message.success(t('common.success'))
-      await fetchCategories()
+      try {
+        await adminDeleteToolCategory(record.id)
+        message.success(t('common.success'))
+        await fetchCategories()
+      } catch {
+        // 请求层已处理错误提示
+      }
     }
   })
 }
@@ -237,12 +269,16 @@ const moveCategory = async (record: Category, offset: -1 | 1) => {
     return
   }
   reordered.splice(targetIndex, 0, moved)
-  await adminReorderToolCategories(reordered.map(item => item.id))
-  await fetchCategories()
+  try {
+    await adminReorderToolCategories(reordered.map(item => item.id))
+    await fetchCategories()
+  } catch {
+    // 请求层已处理错误提示
+  }
 }
 
 onMounted(() => {
-  fetchCategories()
+  void fetchCategories()
 })
 </script>
 

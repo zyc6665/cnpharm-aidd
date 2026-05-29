@@ -1,0 +1,154 @@
+{
+  "name": "MSIGN Protein-Ligand Affinity Prediction",
+  "slug": "msign-affinity-prediction",
+  "description": "Predict protein-ligand binding affinity from uploaded protein PDB and ligand PDB using MSIGN.",
+  "icon": "M",
+  "category": "bioinformatics",
+  "version": "0.1.1",
+  "changelog": "Switch to direct host IP and password authentication, and export PATH for the MSIGN conda environment.",
+  "tool_config": {
+    "type": "ssh_job",
+    "host": "10.202.2.228",
+    "port": 22,
+    "username": "zhouyc",
+    "auth_type": "password",
+    "password_ref": "ssh_4090_zhouyc",
+    "runner_mode": "docker_exec",
+    "remote_base_dir": "/data/zhouyc/kaiwu/platform-jobs",
+    "container_base_dir": "/workspace/platform-jobs",
+    "entrypoint": "/workspace/MSIGN/platform_run.sh",
+    "container_name": "kaiwu",
+    "timeout_sec": 7200,
+    "cleanup_remote": false,
+    "strict_host_key_checking": false,
+    "env": {
+      "MODEL_PYTHON": "/home/zhuwy/.conda/envs/MSIGN/bin/python",
+      "PATH": "/home/zhuwy/.conda/envs/MSIGN/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    },
+    "output_globs": [
+      "output/result.json",
+      "output/logs/run.log",
+      "output/artifacts/**/*"
+    ],
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "protein_pdb": {
+          "type": "string",
+          "format": "file",
+          "title": "Protein PDB",
+          "description": "Protein receptor structure in PDB format.",
+          "ui:accept": ".pdb"
+        },
+        "ligand_pdb": {
+          "type": "string",
+          "format": "file",
+          "title": "Ligand PDB",
+          "description": "Ligand structure in PDB format. PDB with reasonable atom coordinates and bonding information is recommended.",
+          "ui:accept": ".pdb"
+        },
+        "complex_id": {
+          "type": "string",
+          "title": "Complex ID",
+          "description": "Optional id used for generated intermediate filenames and result metadata."
+        },
+        "distance": {
+          "type": "number",
+          "title": "Pocket cutoff",
+          "description": "Distance cutoff in Angstrom for pocket extraction and ligand-pocket interaction edges.",
+          "default": 5.0,
+          "minimum": 0.1,
+          "maximum": 20.0
+        },
+        "model_variant": {
+          "type": "string",
+          "title": "Model variant",
+          "description": "MSIGN checkpoint used for prediction.",
+          "default": "full_finetune",
+          "enum": ["full_finetune", "pretrain_general"]
+        },
+        "device": {
+          "type": "string",
+          "title": "Device",
+          "description": "Runtime device. cuda:N sets CUDA_VISIBLE_DEVICES=N and runs inside the task as cuda:0.",
+          "default": "cpu",
+          "enum": ["cpu", "auto", "gpu", "cuda", "cuda:0", "cuda:1", "cuda:2", "cuda:3"]
+        }
+      },
+      "required": ["protein_pdb", "ligand_pdb"]
+    },
+    "output_schema": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        },
+        "outputs": {
+          "type": "object",
+          "properties": {
+            "complex_id": {
+              "type": "string"
+            },
+            "prediction": {
+              "type": "object",
+              "properties": {
+                "predicted_affinity": {
+                  "type": "number"
+                },
+                "predicted_ligand_to_pocket": {
+                  "type": "number"
+                },
+                "predicted_pocket_to_ligand": {
+                  "type": "number"
+                },
+                "scale": {
+                  "type": "string"
+                }
+              }
+            },
+            "preprocessing": {
+              "type": "object"
+            },
+            "model_name": {
+              "type": "string"
+            },
+            "device": {
+              "type": "string"
+            },
+            "distance_angstrom": {
+              "type": "number"
+            }
+          }
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "content_type": {
+                "type": "string"
+              }
+            },
+            "required": ["name", "path"]
+          }
+        },
+        "metrics": {
+          "type": "object"
+        },
+        "error": {
+          "type": ["object", "null"]
+        }
+      },
+      "required": ["success", "message", "outputs", "artifacts"]
+    }
+  }
+}

@@ -109,6 +109,9 @@ services:
     ports:
       - "9501:8000"               # FastAPI 端口
 
+    env_file:
+      - ./backend/.env
+
     # ========== 环境变量 ==========
     environment:
       # ----- 应用配置 -----
@@ -129,6 +132,7 @@ services:
       CELERY_BROKER_URL: redis://:scitool123@redis:6379/1
       CELERY_RESULT_BACKEND: redis://:scitool123@redis:6379/2
       CELERY_TIMEZONE: Asia/Shanghai
+      TASK_EXECUTION_BACKEND: direct
 
       # ----- 日志配置 -----
       LOG_LEVEL: INFO
@@ -205,6 +209,9 @@ services:
       PYTHONUNBUFFERED: 1
       PYTHONDONTWRITEBYTECODE: 1
 
+      # ----- SSH 作业认证（ssh_job 运行时实际使用） -----
+      SSH_PASSWORD_REF_SSH_4090_ZHOUYC: ${SSH_PASSWORD_REF_SSH_4090_ZHOUYC:-}
+
     # ========== 数据卷（与后端共享代码） ==========
     volumes:
       # 源代码挂载（热重载）
@@ -269,6 +276,9 @@ services:
       LOG_LEVEL: INFO
       PYTHONUNBUFFERED: 1
       CUDA_VISIBLE_DEVICES: 0
+
+      # ----- SSH 作业认证（如后续 ssh_job 标记为 GPU 任务，会由该 Worker 消费） -----
+      SSH_PASSWORD_REF_SSH_4090_ZHOUYC: ${SSH_PASSWORD_REF_SSH_4090_ZHOUYC:-}
 
     # ========== 数据卷 ==========
     volumes:

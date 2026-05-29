@@ -1,0 +1,13 @@
+{
+  "task_name": "msign_affinity_prediction",
+  "params": {
+    "complex_id": "molecule_1",
+    "distance": 5.0,
+    "model_variant": "full_finetune",
+    "device": "cpu"
+  },
+  "input_files": {
+    "protein_pdb": "input/protein.pdb",
+    "ligand_pdb": "input/ligand.pdb"
+  }
+}

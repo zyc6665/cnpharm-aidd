@@ -13,17 +13,17 @@
       </a-breadcrumb>
 
       <a-spin :spinning="loading">
-        <div v-if="task" class="detail-content">
-          <!-- 任务状态卡片 -->
-          <div class="status-card" :class="[`status-${task.status}`]">
-            <div class="status-main">
-              <div class="status-icon">
-                <LoadingOutlined v-if="task.status === 'running'" spin />
-                <ClockCircleOutlined v-else-if="task.status === 'pending'" />
-                <CheckCircleOutlined v-else-if="task.status === 'success'" />
-                <CloseCircleOutlined v-else-if="task.status === 'failure'" />
-                <StopOutlined v-else-if="task.status === 'canceled'" />
-              </div>
+          <div v-if="task" class="detail-content">
+            <!-- 任务状态卡片 -->
+            <div class="status-card" :class="[`status-${taskStatus}`]">
+              <div class="status-main">
+                <div class="status-icon">
+                  <LoadingOutlined v-if="taskStatus === 'running'" spin />
+                  <ClockCircleOutlined v-else-if="taskStatus === 'pending'" />
+                  <CheckCircleOutlined v-else-if="taskStatus === 'success'" />
+                  <CloseCircleOutlined v-else-if="taskStatus === 'failure'" />
+                  <StopOutlined v-else-if="taskStatus === 'canceled'" />
+                </div>
               <div class="status-info">
                 <h1 class="task-title">{{ task.tool?.name || t('tasks.unknownTool') }}</h1>
                 <div class="task-meta">
@@ -31,8 +31,8 @@
                     <CopyOutlined @click.stop="copyTaskId" />
                     ID: {{ task.id }}
                   </span>
-                  <a-tag :color="getStatusColor(task.status)" size="large">
-                    {{ getStatusText(task.status) }}
+                  <a-tag :color="getStatusColor(taskStatus)" size="large">
+                    {{ getStatusText(taskStatus) }}
                   </a-tag>
                 </div>
               </div>
@@ -41,7 +41,7 @@
             <div class="status-actions">
               <a-space>
                 <a-button
-                  v-if="task.status === 'running' || task.status === 'pending'"
+                  v-if="taskStatus === 'running' || taskStatus === 'pending'"
                   danger
                   @click="handleCancel"
                 >
@@ -49,7 +49,7 @@
                   {{ t('tasks.cancel') }}
                 </a-button>
                 <a-button
-                  v-if="task.status === 'failure'"
+                  v-if="taskStatus === 'failure'"
                   type="primary"
                   @click="handleRetry"
                 >
@@ -57,7 +57,7 @@
                   {{ t('tasks.retry') }}
                 </a-button>
                 <a-button
-                  v-if="['success', 'failure', 'canceled'].includes(task.status)"
+                  v-if="['success', 'failure', 'canceled'].includes(taskStatus)"
                   danger
                   @click="handleDelete"
                 >
@@ -73,7 +73,7 @@
           </div>
 
           <!-- 进度条（运行中显示） -->
-          <div v-if="task.status === 'running'" class="progress-section">
+          <div v-if="taskStatus === 'running'" class="progress-section">
             <div class="progress-header">
               <span>{{ t('tasks.progress') }}</span>
               <span class="progress-percent">{{ task.progress }}%</span>
@@ -115,9 +115,9 @@
                   </a-timeline-item>
                   <a-timeline-item
                     v-if="task.completed_at"
-                    :color="task.status === 'success' ? 'green' : task.status === 'failure' ? 'red' : 'gray'"
+                    :color="taskStatus === 'success' ? 'green' : taskStatus === 'failure' ? 'red' : 'gray'"
                   >
-                    <p class="timeline-title">{{ getCompletedTitle(task.status) }}</p>
+                    <p class="timeline-title">{{ getCompletedTitle(taskStatus) }}</p>
                     <p class="timeline-time">{{ formatTime(task.completed_at) }}</p>
                     <p v-if="task.started_at" class="timeline-duration">
                       {{ t('tasks.duration') }}: {{ calculateDuration(task.started_at, task.completed_at) }}
@@ -161,17 +161,19 @@
               </div>
 
               <!-- 输出结果 -->
-              <div v-if="task.status === 'success'" class="info-card">
+              <div v-if="taskStatus === 'success'" class="info-card">
                 <h3 class="card-title">
                   <CheckCircleOutlined />
                   {{ t('tasks.outputResults') }}
                 </h3>
 
+                <ResultVisualizationPanel :task="task" />
+
                 <!-- 输出数据 -->
-                <div v-if="task.output_data && Object.keys(task.output_data).length" class="output-data">
+                <div v-if="outputDataEntries.length" class="output-data">
                   <a-descriptions :column="1" bordered size="small">
                     <a-descriptions-item
-                      v-for="(value, key) in task.output_data"
+                      v-for="[key, value] in outputDataEntries"
                       :key="key"
                       :label="String(key)"
                     >
@@ -212,7 +214,7 @@
               </div>
 
               <!-- 错误信息 -->
-              <div v-if="task.status === 'failure' && task.error_message" class="info-card error">
+              <div v-if="taskStatus === 'failure' && task.error_message" class="info-card error">
                 <h3 class="card-title">
                   <CloseCircleOutlined />
                   {{ t('tasks.errorMessage') }}
@@ -279,10 +281,6 @@
                     <div class="stat-item">
                       <PlayCircleOutlined />
                       <span>{{ task.tool.run_count }} {{ t('tools.runs') }}</span>
-                    </div>
-                    <div class="stat-item">
-                      <ThunderboltOutlined />
-                      <span>{{ task.tool.credits }} {{ t('common.credits') }}</span>
                     </div>
                   </div>
                   <a-button type="primary" block @click="goToTool">
@@ -355,15 +353,18 @@ import {
   ReloadOutlined,
   ToolOutlined,
   PlayCircleOutlined,
-  ThunderboltOutlined,
   HistoryOutlined
 } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
 import dayjs from 'dayjs'
-import { useTasksStore, useUserStore } from '@/stores'
+import { useTasksStore } from '@/stores'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { getTaskLogs } from '@/api/tasks'
-import type { TaskStatus, TaskLog, Task, FileInfo } from '@/types/models'
+import type { WSMessage, TaskStatus, TaskLog, Task, FileInfo } from '@/types/models'
+import ResultVisualizationPanel from '@/components/tasks/ResultVisualizationPanel.vue'
+import { normalizeTaskStatus } from '@/components/tasks/result-visualization'
+import { triggerProtectedFileDownload } from '@/utils/protected-file-access'
+import { extractTaskLogs } from './logs'
 
 // 定义文件类型接口（兼容旧代码）
 interface TaskFile {
@@ -378,7 +379,6 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const tasksStore = useTasksStore()
-const userStore = useUserStore()
 
 const taskId = computed(() => route.params.id as string)
 
@@ -390,9 +390,27 @@ const relatedTasks = ref<Task[]>([])
 // WebSocket
 const { connect, disconnect, onMessage } = useWebSocket()
 
+const normalizeLogLevel = (level?: string): 'info' | 'warning' | 'error' => {
+  const normalized = level?.toLowerCase()
+  if (normalized === 'warning' || normalized === 'error') {
+    return normalized
+  }
+  return 'info'
+}
+
 // 计算属性
 const loading = computed(() => tasksStore.loading)
 const task = computed(() => tasksStore.currentTask)
+const taskStatus = computed<TaskStatus>(() => normalizeTaskStatus(task.value?.status))
+const outputDataEntries = computed<[string, unknown][]>(() => {
+  const outputData = task.value?.output_data
+
+  if (!outputData || typeof outputData !== 'object' || Array.isArray(outputData)) {
+    return []
+  }
+
+  return Object.entries(outputData as Record<string, unknown>)
+})
 
 // 方法
 const getStatusColor = (status: TaskStatus) => {
@@ -483,7 +501,7 @@ const fetchLogs = async () => {
   logsLoading.value = true
   try {
     const res = await getTaskLogs(taskId.value)
-    logs.value = res.data
+    logs.value = extractTaskLogs(res.data)
   } catch {
     // 错误已处理
   } finally {
@@ -524,19 +542,24 @@ const handleDelete = () => {
   })
 }
 
-const downloadFile = (file: TaskFile | FileInfo) => {
-  if (file.url) {
-    window.open(file.url, '_blank')
+const downloadFile = async (file: TaskFile | FileInfo) => {
+  try {
+    await triggerProtectedFileDownload(file)
+  } catch (cause) {
+    const errorMessage = cause instanceof Error ? cause.message : String(cause)
+    message.error(errorMessage)
   }
 }
 
-const downloadAllFiles = () => {
+const downloadAllFiles = async () => {
   const files = task.value?.output_files as TaskFile[] | undefined
-  files?.forEach(file => {
-    if (file.url) {
-      window.open(file.url, '_blank')
-    }
-  })
+  if (!files?.length) {
+    return
+  }
+
+  for (const file of files) {
+    await downloadFile(file)
+  }
 }
 
 const goToTool = () => {
@@ -554,22 +577,47 @@ const goBack = () => {
 }
 
 // WebSocket 消息处理
-const handleWSMessage = (msg: { type: string; task_id?: string; progress?: number; status?: TaskStatus; message?: string }) => {
+const handleWSMessage = (msg: WSMessage) => {
   if (msg.task_id !== taskId.value) return
 
-  if (msg.type === 'progress') {
-    tasksStore.updateTaskProgress(msg.task_id!, msg.progress || 0, msg.status)
-  } else if (msg.type === 'log' && msg.message) {
+  if (msg.type === 'task_progress') {
+    const nextStatus = msg.status ? normalizeTaskStatus(msg.status) : undefined
+    const progress = typeof msg.progress_percent === 'number'
+      ? msg.progress_percent
+      : Math.round((msg.progress ?? 0) * 100)
+    tasksStore.updateTaskProgress(msg.task_id!, progress, nextStatus)
+  } else if (msg.type === 'task_log' && msg.log) {
     logs.value.push({
       id: Date.now(),
       task_id: msg.task_id!,
-      level: 'info',
-      message: msg.message,
+      level: normalizeLogLevel(msg.level),
+      message: msg.log,
       timestamp: new Date().toISOString()
     })
-  } else if (msg.type === 'completed' || msg.type === 'failed') {
-    fetchTaskDetail()
-    fetchLogs()
+  } else if (msg.type === 'task_status' && msg.status) {
+    const nextStatus = normalizeTaskStatus(msg.status)
+    tasksStore.updateTaskProgress(taskId.value, task.value?.progress ?? 0, nextStatus)
+    if (['success', 'failure', 'canceled'].includes(nextStatus)) {
+      void fetchTaskDetail()
+      void fetchLogs()
+    }
+  } else if (msg.type === 'task_complete') {
+    tasksStore.updateTaskProgress(taskId.value, 100, 'success')
+    void fetchTaskDetail()
+    void fetchLogs()
+  } else if (msg.type === 'task_error') {
+    tasksStore.updateTaskProgress(taskId.value, task.value?.progress ?? 0, 'failure')
+    if (msg.error) {
+      logs.value.push({
+        id: Date.now(),
+        task_id: msg.task_id!,
+        level: 'error',
+        message: msg.error,
+        timestamp: new Date().toISOString()
+      })
+    }
+    void fetchTaskDetail()
+    void fetchLogs()
   }
 }
 
@@ -579,7 +627,7 @@ let refreshTimer: ReturnType<typeof setInterval> | null = null
 const startRefresh = () => {
   if (refreshTimer) return
   refreshTimer = setInterval(() => {
-    if (task.value?.status === 'running') {
+    if (taskStatus.value === 'running') {
       fetchTaskDetail()
     }
   }, 5000)
@@ -593,10 +641,16 @@ const stopRefresh = () => {
 }
 
 // 监听任务状态变化
-watch(() => task.value?.status, (status) => {
-  if (status && ['success', 'failure', 'canceled'].includes(status)) {
-    stopRefresh()
-    fetchLogs()
+watch(taskStatus, status => {
+  if (status === 'running') {
+    startRefresh()
+    return
+  }
+
+  stopRefresh()
+
+  if (['success', 'failure', 'canceled'].includes(status)) {
+    void fetchLogs()
   }
 })
 
@@ -606,13 +660,11 @@ onMounted(async () => {
   await fetchLogs()
 
   // 连接 WebSocket
-  if (userStore.isLoggedIn) {
-    connect()
-    onMessage(handleWSMessage)
-  }
+  connect(`/api/v1/ws/tasks/${taskId.value}`)
+  onMessage(handleWSMessage)
 
   // 如果任务正在运行，启动定时刷新
-  if (task.value?.status === 'running') {
+  if (taskStatus.value === 'running') {
     startRefresh()
   }
 })

@@ -277,28 +277,5 @@ onMounted(() => {
     width: 100px;
     height: 100px;
   }
-
-  .member-info {
-    display: flex;
-    align-items: center;
-    gap: @spacing-sm;
-
-    .expire-date {
-      color: @text-color-light-secondary;
-      font-size: @font-size-sm;
-    }
-  }
-
-  .credits-info {
-    display: flex;
-    align-items: center;
-    gap: @spacing-sm;
-
-    .credits-value {
-      font-size: @font-size-lg;
-      font-weight: @font-weight-semibold;
-      color: @warning-color;
-    }
-  }
 }
 </style>

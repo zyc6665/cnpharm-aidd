@@ -78,7 +78,7 @@ class TaskLogResponse(BaseModel):
     timestamp: datetime
     level: str
     message: str
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+    metadata: Dict[str, Any] = Field(default_factory=dict, validation_alias="log_data")
 
     class Config:
         from_attributes = True

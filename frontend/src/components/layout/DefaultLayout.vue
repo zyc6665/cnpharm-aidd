@@ -21,6 +21,11 @@
           <a-menu-item key="tools">
             <router-link to="/tools">{{ t('nav.tools') }}</router-link>
           </a-menu-item>
+          <a-menu-item key="cpupdb">
+            <a :href="cpupdbUrl" target="_blank" rel="noreferrer">
+              {{ t('nav.cpupdb') }}
+            </a>
+          </a-menu-item>
           <a-menu-item v-if="isLoggedIn" key="tasks">
             <router-link to="/tasks">{{ t('nav.tasks') }}</router-link>
           </a-menu-item>
@@ -137,6 +142,7 @@
   const appStore = useAppStore()
 
   const selectedKeys = ref<string[]>([])
+  const cpupdbUrl = 'https://www.cpupdb.com'
 
   const isLoggedIn = computed(() => userStore.isLoggedIn)
   const isAdmin = computed(() => userStore.isAdmin)

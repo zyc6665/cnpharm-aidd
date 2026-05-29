@@ -1,0 +1,65 @@
+[platform_run] task_id=e9e194d3-5879-44d8-8c40-61f3a973e6bf
+[platform_run] model_root=/workspace/FlowPepDock_handover_20260507
+[platform_run] input_dir=/workspace/platform-jobs/e9e194d3-5879-44d8-8c40-61f3a973e6bf/input
+[platform_run] output_dir=/workspace/platform-jobs/e9e194d3-5879-44d8-8c40-61f3a973e6bf/output
+[platform_run] work_dir=/workspace/platform-jobs/e9e194d3-5879-44d8-8c40-61f3a973e6bf/work
+[platform_run] params_json=/workspace/platform-jobs/e9e194d3-5879-44d8-8c40-61f3a973e6bf/params.json
+[platform_run] requested_device=auto
+[platform_run] resolved input_csv=/workspace/platform-jobs/e9e194d3-5879-44d8-8c40-61f3a973e6bf/work/input_manifest.csv
+[platform_run] raw_output_dir=/workspace/platform-jobs/e9e194d3-5879-44d8-8c40-61f3a973e6bf/work/flowpepdock_raw_output
+[platform_run] infer_device=gpu
+[platform_run] N=1 batch_size=1 flow_num_steps=1
+[platform_run] CUDA_VISIBLE_DEVICES=6
+[platform_run] running model command
+[info] merged ckpt config into inference args (all keys; CLI args still take precedence)
+[flow-infer] self_cond=False sparse_interface=False sparse_topk=0 final_refine=False
+[info] peptide_source fixed: pdb
+Generating ESM language model embeddings for protein
+Processing 1 of 1 batches (2 sequences)
+Generating ESM language model embeddings for peptide
+Processing 1 of 1 batches (1 sequences)
+[loader] mode=dataloader batch_size=1 workers=1 pin_memory=True persistent=True prefetch=2
+Loaded pretrained weights from train_models/CGTensorProductEquivariantModel/flowpepdock_best.pt
+Size of test dataset:  1
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:04<00:00,  4.61s/it]100%|██████████| 1/1 [00:04<00:00,  4.61s/it]
+Failed on flowpepdock-1ggd-smoke-cuda6 nvrtc: error: invalid value for --gpu-architecture (-arch)
+
+nvrtc compilation failed: 
+
+#define NAN __int_as_float(0x7fffffff)
+#define POS_INFINITY __int_as_float(0x7f800000)
+#define NEG_INFINITY __int_as_float(0xff800000)
+
+
+template<typename T>
+__device__ T maximum(T a, T b) {
+  return isnan(a) ? a : (a > b ? a : b);
+}
+
+template<typename T>
+__device__ T minimum(T a, T b) {
+  return isnan(a) ? a : (a < b ? a : b);
+}
+
+extern "C" __global__
+void fused_pow_pow_pow_s_12617535746975804811(float* tz_1, float* ty_1, float* tx_1, float* aten_mul_7, float* aten_mul_6, float* aten_mul_4, float* aten_mul_2, float* aten_add, float* aten_mul, float* aten_pow) {
+{
+if ((long long)(threadIdx.x) + 512ll * (long long)(blockIdx.x)<4968ll ? 1 : 0) {
+    float ty_1_1 = __ldg(ty_1 + 3ll * ((long long)(threadIdx.x) + 512ll * (long long)(blockIdx.x)));
+    aten_pow[(long long)(threadIdx.x) + 512ll * (long long)(blockIdx.x)] = ty_1_1 * ty_1_1;
+    float tz_1_1 = __ldg(tz_1 + 3ll * ((long long)(threadIdx.x) + 512ll * (long long)(blockIdx.x)));
+    float tx_1_1 = __ldg(tx_1 + 3ll * ((long long)(threadIdx.x) + 512ll * (long long)(blockIdx.x)));
+    aten_mul[(long long)(threadIdx.x) + 512ll * (long long)(blockIdx.x)] = (tz_1_1 * tz_1_1 - tx_1_1 * tx_1_1) * 1.936491727828979f;
+    aten_add[(long long)(threadIdx.x) + 512ll * (long long)(blockIdx.x)] = tx_1_1 * tx_1_1 + tz_1_1 * tz_1_1;
+    aten_mul_2[(long long)(threadIdx.x) + 512ll * (long long)(blockIdx.x)] = (ty_1_1 * ty_1_1 - (tx_1_1 * tx_1_1 + tz_1_1 * tz_1_1) * 0.5f) * 2.2360680103302f;
+    aten_mul_4[(long long)(threadIdx.x) + 512ll * (long long)(blockIdx.x)] = (ty_1_1 * 3.872983455657959f) * tz_1_1;
+    aten_mul_6[(long long)(threadIdx.x) + 512ll * (long long)(blockIdx.x)] = (tx_1_1 * 3.872983455657959f) * ty_1_1;
+    aten_mul_7[(long long)(threadIdx.x) + 512ll * (long long)(blockIdx.x)] = (tx_1_1 * 3.872983455657959f) * tz_1_1;
+  }}
+}
+
+[timing] batch_loop fetch=0.4ms process=4.608s
+Failed for 1 complexes
+Skipped 0 complexes
+Results are in /workspace/platform-jobs/e9e194d3-5879-44d8-8c40-61f3a973e6bf/work/flowpepdock_raw_output
+[timing] run_summary data=39.114s model=5.074s confidence=0.0ms loop_fetch=0.4ms loop_process=4.608s loop_total=4.677s

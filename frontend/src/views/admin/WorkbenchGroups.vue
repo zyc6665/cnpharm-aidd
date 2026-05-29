@@ -58,6 +58,15 @@
                 <a-button size="small" @click="editGroup(item)">
                   {{ t('common.edit') }}
                 </a-button>
+                <a-popconfirm
+                  :title="t('admin.deleteCategoryConfirm')"
+                  :description="t('admin.deleteCategoryConfirmContent', { name: item.name })"
+                  @confirm="deleteGroup(item.id)"
+                >
+                  <a-button size="small" danger>
+                    {{ t('common.delete') }}
+                  </a-button>
+                </a-popconfirm>
               </template>
             </a-list-item>
           </template>
@@ -148,6 +157,7 @@
   import {
     adminCreateWorkbenchGroup,
     adminCreateWorkbenchGroupMapping,
+    adminDeleteWorkbenchGroup,
     adminDeleteWorkbenchGroupMapping,
     adminGetWorkbenchGroupMappings,
     adminGetWorkbenchGroups,
@@ -231,10 +241,22 @@
   }
 
   const submitGroup = async () => {
-    const slug = normalizeSlug(groupForm.slug || groupForm.name)
-    if (!groupForm.name || !slug) {
+    const trimmedName = groupForm.name.trim()
+    const rawSlug = groupForm.slug.trim()
+
+    if (!trimmedName) {
+      message.warning(t('admin.enterCategoryName'))
       return
     }
+
+    const slug = normalizeSlug(rawSlug || trimmedName)
+    if (!slug) {
+      message.warning(rawSlug ? t('admin.invalidCategorySlug') : t('admin.enterCategorySlug'))
+      return
+    }
+
+    groupForm.name = trimmedName
+    groupForm.slug = slug
 
     savingGroup.value = true
     try {
@@ -258,6 +280,15 @@
     } finally {
       savingGroup.value = false
     }
+  }
+
+  const deleteGroup = async (id: string) => {
+    await adminDeleteWorkbenchGroup(id)
+    if (editingGroupId.value === id) {
+      resetGroupForm()
+    }
+    await fetchData()
+    message.success(t('common.success'))
   }
 
   const submitMapping = async () => {

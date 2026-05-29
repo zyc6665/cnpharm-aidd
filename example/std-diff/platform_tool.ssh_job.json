@@ -1,0 +1,222 @@
+{
+  "name": "GCDM Pocket Generation",
+  "slug": "gcdm-pocket-generation",
+  "description": "基于 GCDM 的 pocket 条件分子生成工具，通过 SSH 登录宿主机并 docker exec 进入 kaiwu 容器运行。",
+  "icon": "G",
+  "category": "molecular-generation",
+  "version": "0.1.2",
+  "changelog": "Use direct host IP with sshpass auth and disable strict host key checking",
+  "tool_config": {
+    "type": "ssh_job",
+    "host": "10.202.2.228",
+    "port": 22,
+    "username": "zhouyc",
+    "auth_type": "password",
+    "password_ref": "ssh_4090_zhouyc",
+    "runner_mode": "docker_exec",
+    "remote_base_dir": "/data/zhouyc/kaiwu/platform-jobs",
+    "container_base_dir": "/workspace/platform-jobs",
+    "entrypoint": "/workspace/GCDM-2model_claude/platform_run.sh",
+    "container_name": "kaiwu",
+    "timeout_sec": 7200,
+    "cleanup_remote": false,
+    "strict_host_key_checking": false,
+    "env": {
+      "GCDM_PYTHON": "/home/zhuwy/.conda/envs/STD-Diff/bin/python"
+    },
+    "output_globs": [
+      "output/result.json",
+      "output/logs/run.log",
+      "output/artifacts/**/*"
+    ],
+    "example_params": {
+      "task_name": "pocket_generation",
+      "params": {
+        "n_samples": 2,
+        "sanitize": false,
+        "relax": false,
+        "resamplings": 1,
+        "jump_length": 1,
+        "device": "cuda:0"
+      },
+      "input_files": {
+        "pocket_pdb": "input/2opa_pocket10.pdb"
+      }
+    },
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "task_id": {
+          "type": "string",
+          "description": "平台任务 ID",
+          "hidden": true
+        },
+        "task_name": {
+          "type": "string",
+          "description": "模型侧能力名称，固定为 pocket_generation",
+          "default": "pocket_generation",
+          "hidden": true
+        },
+        "params": {
+          "type": "object",
+          "description": "GCDM pocket 条件分子生成参数",
+          "properties": {
+            "n_samples": {
+              "type": "integer",
+              "description": "希望生成的候选分子数量",
+              "default": 8,
+              "minimum": 1,
+              "maximum": 256
+            },
+            "num_nodes_lig": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "description": "固定 superpolymer 节点数；为空时从模型学习分布采样",
+              "default": null,
+              "minimum": 1
+            },
+            "sanitize": {
+              "type": "boolean",
+              "description": "是否启用 RDKit sanitize；true 可能过滤掉价态非法候选",
+              "default": false
+            },
+            "relax": {
+              "type": "boolean",
+              "description": "是否启用 UFF relax",
+              "default": false
+            },
+            "all_frags": {
+              "type": "boolean",
+              "description": "是否保留所有 fragment；默认只保留最大 fragment",
+              "default": false
+            },
+            "resamplings": {
+              "type": "integer",
+              "description": "inpainting resampling 次数",
+              "default": 1,
+              "minimum": 1,
+              "maximum": 100
+            },
+            "jump_length": {
+              "type": "integer",
+              "description": "resampling jump length",
+              "default": 1,
+              "minimum": 1,
+              "maximum": 100
+            },
+            "timesteps": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "description": "采样步数；为空时使用 checkpoint 默认配置",
+              "default": null,
+              "minimum": 1
+            },
+            "device": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "运行设备，例如 cuda:0 或 cpu",
+              "default": "cuda:0"
+            }
+          }
+        },
+        "input_files": {
+          "type": "object",
+          "description": "输入文件映射，平台应上传 pocket PDB 到 input/ 下",
+          "properties": {
+            "pocket_pdb": {
+              "type": "string",
+              "title": "Pocket PDB 文件",
+              "format": "file",
+              "accept": ".pdb",
+              "description": "上传已裁剪的 pocket PDB 文件"
+            }
+          },
+          "required": [
+            "pocket_pdb"
+          ]
+        }
+      },
+      "required": [
+        "task_id",
+        "params",
+        "input_files"
+      ]
+    },
+    "output_schema": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "description": "任务是否执行成功"
+        },
+        "message": {
+          "type": "string",
+          "description": "执行结果摘要"
+        },
+        "outputs": {
+          "type": "object",
+          "description": "模型输出摘要",
+          "properties": {
+            "generated_molecule_count": {
+              "type": "integer",
+              "description": "SDF 中写出的分子数量"
+            }
+          }
+        },
+        "artifacts": {
+          "type": "array",
+          "description": "可回传平台的结果文件描述",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "content_type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "path"
+            ]
+          }
+        },
+        "metrics": {
+          "type": "object",
+          "description": "执行耗时等附加指标",
+          "properties": {
+            "duration_sec": {
+              "type": "number"
+            }
+          }
+        },
+        "error": {
+          "type": "object",
+          "description": "失败时的错误结构",
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "details": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "required": [
+        "success",
+        "message"
+      ]
+    }
+  }
+}

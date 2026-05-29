@@ -12,8 +12,14 @@ import sys
 import os
 from pathlib import Path
 
+from tool_import_config import (
+    ToolImportConfigError,
+    load_tool_import_config,
+    resolve_script_relative_path,
+)
+
 # 切换到脚本所在目录
-script_dir = Path(__file__).parent
+script_dir = Path(__file__).resolve().parent
 os.chdir(script_dir / "backend")
 
 sys.path.insert(0, str(script_dir / "backend"))
@@ -26,10 +32,9 @@ async def create_tool_from_config(config_file: str):
     from app.models.users import User
     from sqlalchemy import select
 
-    # 读取配置（使用绝对路径）
-    config_path = script_dir / config_file
-    with open(config_path, "r", encoding="utf-8") as f:
-        config = json.load(f)
+    # 读取并校验配置（使用绝对路径）
+    config_path = resolve_script_relative_path(__file__, config_file)
+    config = load_tool_import_config(config_path)
 
     async for db in get_db():
         try:
@@ -193,10 +198,27 @@ def main():
 
     parser = argparse.ArgumentParser(description="工具创建和测试助手")
     parser.add_argument("--config", required=True, help="工具配置文件路径")
+    parser.add_argument("--validate-only", action="store_true", help="仅校验配置，不写入数据库")
     parser.add_argument("--test", action="store_true", help="创建后立即测试")
     parser.add_argument("--test-params", help="测试参数JSON文件")
 
     args = parser.parse_args()
+
+    config_path = resolve_script_relative_path(__file__, args.config)
+    try:
+        normalized_config = load_tool_import_config(config_path)
+    except ToolImportConfigError as exc:
+        print(f"❌ 配置校验失败: {exc}")
+        sys.exit(1)
+
+    print("✅ 配置校验通过")
+    print(f"   名称: {normalized_config['name']}")
+    print(f"   Slug: {normalized_config['slug']}")
+    print(f"   版本: {normalized_config['version']}")
+    print(f"   类型: {normalized_config['tool_config']['type']}")
+
+    if args.validate_only:
+        sys.exit(0)
 
     # 创建工具
     result = asyncio.run(create_tool_from_config(args.config))
@@ -207,7 +229,7 @@ def main():
     # 测试工具
     if args.test and args.test_params:
         # 使用绝对路径读取测试参数
-        test_params_path = script_dir / args.test_params
+        test_params_path = resolve_script_relative_path(__file__, args.test_params)
         with open(test_params_path, "r", encoding="utf-8") as f:
             test_params = json.load(f)
 

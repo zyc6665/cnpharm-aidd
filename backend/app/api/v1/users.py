@@ -4,15 +4,20 @@
 from typing import Optional, List
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy import select, func, update
+from sqlalchemy import select, func, or_, delete, update
 from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
 
 from app.database.session import get_db
-from app.models.users import User, UserRole
+from app.models.files import File, FileAccessLog
+from app.models.statistics import FileStatistics, ToolStatistics, UserStatistics
+from app.models.tasks import Task, TaskInput, TaskOutput, TaskLog
+from app.models.tools import Tool, ToolFavorite, ToolVersion, tool_tag_association
+from app.models.users import User, UserRole, UserSession, UserStatus
 from app.auth.dependencies import get_current_user, get_admin_user
 from app.auth.password import hash_password, verify_password
+from app.common.responses import success_response
 from app.schemas.users import UserResponse
 
 router = APIRouter()
@@ -39,8 +44,22 @@ class AdminUserUpdate(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     role: Optional[str] = Field(None, description="角色: user, vip, admin")
-    status: Optional[str] = Field(None, description="状态: active, inactive, banned")
+    status: Optional[str] = Field(None, description="状态: active, disabled, pending")
     credit_balance: Optional[int] = Field(None, ge=0, description="积分余额")
+
+
+class AdminUserCreate(BaseModel):
+    """管理员创建用户"""
+    email: str = Field(..., description="邮箱")
+    display_name: Optional[str] = Field(None, description="显示名称")
+    password: str = Field(..., min_length=6, max_length=50, description="初始密码")
+    role: str = Field(default=UserRole.USER.value, description="角色: user, vip, admin")
+    status: str = Field(default=UserStatus.ACTIVE.value, description="状态: active, disabled, pending")
+
+
+class AdminPasswordReset(BaseModel):
+    """管理员重置用户密码"""
+    new_password: str = Field(..., min_length=6, max_length=50, description="新密码")
 
 
 class UserListResponse(BaseModel):
@@ -59,6 +78,126 @@ class UserStatsResponse(BaseModel):
     admin_users: int
     new_users_today: int
     new_users_this_week: int
+
+
+LEGACY_DISABLED_USER_STATUSES = ("inactive", "banned")
+
+
+def normalize_user_status(status_value: Optional[str]) -> Optional[str]:
+    """将旧状态值归一化为当前用户状态枚举。"""
+    if status_value is None:
+        return None
+
+    legacy_status_map = {
+        "inactive": UserStatus.DISABLED.value,
+        "banned": UserStatus.DISABLED.value,
+    }
+    return legacy_status_map.get(status_value, status_value)
+
+
+def validate_user_role(role_value: str) -> str:
+    """校验用户角色。"""
+    valid_roles = [role.value for role in UserRole]
+    if role_value not in valid_roles:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"无效的角色，可选值: {valid_roles}"
+        )
+    return role_value
+
+
+def validate_user_status(status_value: str) -> str:
+    """校验并归一化用户状态。"""
+    normalized_status = normalize_user_status(status_value)
+    valid_statuses = [user_status.value for user_status in UserStatus]
+    if normalized_status not in valid_statuses:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"无效的状态，可选值: {valid_statuses}"
+        )
+    return normalized_status
+
+
+async def load_user_with_statistics(db: AsyncSession, user_id: str) -> Optional[User]:
+    """加载带统计信息的用户。"""
+    result = await db.execute(
+        select(User)
+        .options(joinedload(User.statistics))
+        .where(User.id == user_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def ensure_user_email_unique(db: AsyncSession, email: str, exclude_user_id: Optional[str] = None) -> None:
+    """确保用户邮箱唯一。"""
+    filters = [User.email == email]
+    if exclude_user_id:
+        filters.append(User.id != exclude_user_id)
+
+    result = await db.execute(select(User).where(*filters))
+    if result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="该邮箱已被使用"
+        )
+
+
+async def hard_delete_user_related_resources(db: AsyncSession, user_id: str) -> None:
+    """彻底删除用户及其关联资源。"""
+    await db.execute(
+        update(Tool)
+        .where(Tool.reviewed_by == user_id)
+        .values(reviewed_by=None)
+    )
+
+    owned_tool_ids_result = await db.execute(select(Tool.id).where(Tool.owner_id == user_id))
+    owned_tool_ids = owned_tool_ids_result.scalars().all()
+
+    task_query = select(Task.id).where(Task.user_id == user_id)
+    if owned_tool_ids:
+        task_query = select(Task.id).where(
+            or_(
+                Task.user_id == user_id,
+                Task.tool_id.in_(owned_tool_ids),
+            )
+        )
+    task_ids_result = await db.execute(task_query)
+    task_ids = task_ids_result.scalars().all()
+
+    if task_ids:
+        await db.execute(delete(TaskLog).where(TaskLog.task_id.in_(task_ids)))
+        await db.execute(delete(TaskInput).where(TaskInput.task_id.in_(task_ids)))
+        await db.execute(delete(TaskOutput).where(TaskOutput.task_id.in_(task_ids)))
+        await db.execute(delete(Task).where(Task.id.in_(task_ids)))
+
+    owned_file_ids_result = await db.execute(select(File.id).where(File.owner_id == user_id))
+    owned_file_ids = owned_file_ids_result.scalars().all()
+
+    file_access_log_filter = FileAccessLog.user_id == user_id
+    if owned_file_ids:
+        file_access_log_filter = or_(
+            FileAccessLog.user_id == user_id,
+            FileAccessLog.file_id.in_(owned_file_ids),
+        )
+
+    await db.execute(delete(FileAccessLog).where(file_access_log_filter))
+
+    if owned_file_ids:
+        await db.execute(delete(FileStatistics).where(FileStatistics.file_id.in_(owned_file_ids)))
+        await db.execute(delete(File).where(File.id.in_(owned_file_ids)))
+
+    await db.execute(delete(ToolFavorite).where(ToolFavorite.user_id == user_id))
+
+    if owned_tool_ids:
+        await db.execute(delete(ToolFavorite).where(ToolFavorite.tool_id.in_(owned_tool_ids)))
+        await db.execute(delete(tool_tag_association).where(tool_tag_association.c.tool_id.in_(owned_tool_ids)))
+        await db.execute(delete(ToolStatistics).where(ToolStatistics.tool_id.in_(owned_tool_ids)))
+        await db.execute(delete(ToolVersion).where(ToolVersion.tool_id.in_(owned_tool_ids)))
+        await db.execute(delete(Tool).where(Tool.id.in_(owned_tool_ids)))
+
+    await db.execute(delete(UserSession).where(UserSession.user_id == user_id))
+    await db.execute(delete(UserStatistics).where(UserStatistics.user_id == user_id))
+    await db.execute(delete(User).where(User.id == user_id))
 
 
 # ==================== 当前用户接口 ====================
@@ -96,17 +235,7 @@ async def update_current_user_info(
 
     # 检查邮箱唯一性
     if "email" in update_data and update_data["email"]:
-        result = await db.execute(
-            select(User).where(
-                User.email == update_data["email"],
-                User.id != current_user.id
-            )
-        )
-        if result.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="该邮箱已被使用"
-            )
+        await ensure_user_email_unique(db, update_data["email"], exclude_user_id=current_user.id)
 
     # 更新用户信息
     for key, value in update_data.items():
@@ -143,9 +272,36 @@ async def change_password(
 
 # ==================== 管理员接口 ====================
 
+@router.post(
+    "/admin",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="创建用户（管理员）"
+)
+async def admin_create_user(
+    user_data: AdminUserCreate,
+    admin_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """管理员直接创建用户。"""
+    await ensure_user_email_unique(db, user_data.email)
+
+    created_user = User(
+        email=user_data.email,
+        display_name=user_data.display_name,
+        password_hash=hash_password(user_data.password),
+        role=validate_user_role(user_data.role),
+        status=validate_user_status(user_data.status),
+    )
+    db.add(created_user)
+    await db.commit()
+
+    loaded_user = await load_user_with_statistics(db, created_user.id)
+    return UserResponse.model_validate(loaded_user)
+
 @router.get(
     "/admin",
-    response_model=UserListResponse,
+    response_model=dict,
     summary="获取用户列表（管理员）"
 )
 async def admin_get_users(
@@ -172,7 +328,7 @@ async def admin_get_users(
     # 关键词搜索
     if keyword:
         query = query.where(
-            (User.username.ilike(f"%{keyword}%")) |
+            (User.display_name.ilike(f"%{keyword}%")) |
             (User.email.ilike(f"%{keyword}%"))
         )
 
@@ -182,7 +338,16 @@ async def admin_get_users(
 
     # 状态筛选
     if status_filter:
-        query = query.where(User.status == status_filter)
+        normalized_status = normalize_user_status(status_filter)
+        if normalized_status == UserStatus.DISABLED.value:
+            query = query.where(
+                or_(
+                    User.status == UserStatus.DISABLED.value,
+                    User.status.in_(LEGACY_DISABLED_USER_STATUSES),
+                )
+            )
+        else:
+            query = query.where(User.status == normalized_status)
 
     # 获取总数
     count_query = select(func.count()).select_from(query.subquery())
@@ -196,151 +361,19 @@ async def admin_get_users(
     result = await db.execute(query)
     users = result.scalars().all()
 
-    return UserListResponse(
-        total=total,
-        items=[UserResponse.model_validate(u) for u in users],
-        page=page,
-        page_size=page_size
+    return success_response(
+        data=UserListResponse(
+            total=total,
+            items=[UserResponse.model_validate(u) for u in users],
+            page=page,
+            page_size=page_size,
+        ).model_dump()
     )
-
-
-@router.get(
-    "/admin/{user_id}",
-    response_model=UserResponse,
-    summary="获取用户详情（管理员）"
-)
-async def admin_get_user(
-    user_id: str,
-    admin_user: User = Depends(get_admin_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """获取指定用户的详细信息（仅管理员可访问）"""
-    result = await db.execute(
-        select(User).where(User.id == user_id)
-    )
-    user = result.scalar_one_or_none()
-
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="用户不存在"
-        )
-
-    return UserResponse.model_validate(user)
-
-
-@router.patch(
-    "/admin/{user_id}",
-    response_model=UserResponse,
-    summary="更新用户信息（管理员）"
-)
-async def admin_update_user(
-    user_id: str,
-    user_update: AdminUserUpdate,
-    admin_user: User = Depends(get_admin_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    更新指定用户的信息（仅管理员可访问）
-
-    可更新字段：
-    - email: 邮箱
-    - phone: 手机号
-    - role: 角色
-    - status: 状态
-    - credit_balance: 积分余额
-    """
-    result = await db.execute(
-        select(User).where(User.id == user_id)
-    )
-    user = result.scalar_one_or_none()
-
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="用户不存在"
-        )
-
-    # 不允许管理员修改自己的角色
-    if user_id == admin_user.id and user_update.role:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="不允许修改自己的角色"
-        )
-
-    update_data = user_update.model_dump(exclude_unset=True)
-
-    # 验证角色
-    if "role" in update_data:
-        valid_roles = [r.value for r in UserRole]
-        if update_data["role"] not in valid_roles:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"无效的角色，可选值: {valid_roles}"
-            )
-
-    # 验证状态
-    if "status" in update_data:
-        valid_statuses = ["active", "inactive", "banned"]
-        if update_data["status"] not in valid_statuses:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"无效的状态，可选值: {valid_statuses}"
-            )
-
-    # 更新用户信息
-    for key, value in update_data.items():
-        setattr(user, key, value)
-
-    user.updated_at = datetime.utcnow()
-    await db.commit()
-    await db.refresh(user)
-
-    return UserResponse.model_validate(user)
-
-
-@router.delete(
-    "/admin/{user_id}",
-    summary="删除用户（管理员）"
-)
-async def admin_delete_user(
-    user_id: str,
-    admin_user: User = Depends(get_admin_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    删除指定用户（仅管理员可访问）
-
-    注意：实际上是将用户状态设置为 banned，而不是物理删除
-    """
-    if user_id == admin_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="不允许删除自己的账号"
-        )
-
-    result = await db.execute(
-        select(User).where(User.id == user_id)
-    )
-    user = result.scalar_one_or_none()
-
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="用户不存在"
-        )
-
-    # 软删除：设置状态为 banned
-    user.status = "banned"
-    user.updated_at = datetime.utcnow()
-    await db.commit()
-
-    return {"message": "用户已删除"}
 
 
 @router.get(
     "/admin/stats",
-    response_model=UserStatsResponse,
+    response_model=dict,
     summary="获取用户统计（管理员）"
 )
 async def admin_get_user_stats(
@@ -388,11 +421,181 @@ async def admin_get_user_stats(
     )
     new_users_this_week = week_result.scalar()
 
-    return UserStatsResponse(
-        total_users=total_users,
-        active_users=active_users,
-        vip_users=vip_users,
-        admin_users=admin_users,
-        new_users_today=new_users_today,
-        new_users_this_week=new_users_this_week
+    return success_response(
+        data=UserStatsResponse(
+            total_users=total_users,
+            active_users=active_users,
+            vip_users=vip_users,
+            admin_users=admin_users,
+            new_users_today=new_users_today,
+            new_users_this_week=new_users_this_week,
+        ).model_dump()
     )
+
+
+@router.get(
+    "/admin/{user_id}",
+    response_model=UserResponse,
+    summary="获取用户详情（管理员）"
+)
+async def admin_get_user(
+    user_id: str,
+    admin_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """获取指定用户的详细信息（仅管理员可访问）"""
+    result = await db.execute(
+        select(User)
+        .options(joinedload(User.statistics))
+        .where(User.id == user_id)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="用户不存在"
+        )
+
+    return UserResponse.model_validate(user)
+
+
+@router.patch(
+    "/admin/{user_id}",
+    response_model=UserResponse,
+    summary="更新用户信息（管理员）"
+)
+async def admin_update_user(
+    user_id: str,
+    user_update: AdminUserUpdate,
+    admin_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    更新指定用户的信息（仅管理员可访问）
+
+    可更新字段：
+    - email: 邮箱
+    - phone: 手机号
+    - role: 角色
+    - status: 状态
+    - credit_balance: 积分余额
+    """
+    result = await db.execute(
+        select(User)
+        .options(joinedload(User.statistics))
+        .where(User.id == user_id)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="用户不存在"
+        )
+
+    # 不允许管理员修改自己的角色
+    if user_id == admin_user.id and user_update.role:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="不允许修改自己的角色"
+        )
+
+    update_data = user_update.model_dump(exclude_unset=True)
+
+    # 验证角色
+    if "role" in update_data:
+        update_data["role"] = validate_user_role(update_data["role"])
+
+    # 验证状态
+    if "status" in update_data:
+        update_data["status"] = validate_user_status(update_data["status"])
+
+    if "email" in update_data and update_data["email"]:
+        await ensure_user_email_unique(db, update_data["email"], exclude_user_id=user_id)
+
+    # 更新用户信息
+    for key, value in update_data.items():
+        setattr(user, key, value)
+
+    user.updated_at = datetime.utcnow()
+    await db.commit()
+
+    refreshed_result = await db.execute(
+        select(User)
+        .options(joinedload(User.statistics))
+        .where(User.id == user_id)
+    )
+    refreshed_user = refreshed_result.scalar_one()
+    return UserResponse.model_validate(refreshed_user)
+
+
+@router.post(
+    "/admin/{user_id}/reset-password",
+    summary="重置用户密码（管理员）"
+)
+async def admin_reset_user_password(
+    user_id: str,
+    password_reset: AdminPasswordReset,
+    admin_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """管理员直接重置目标用户密码。"""
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="用户不存在"
+        )
+
+    user.password_hash = hash_password(password_reset.new_password)
+    user.updated_at = datetime.utcnow()
+    await db.commit()
+
+    return {"message": "密码重置成功"}
+
+
+@router.delete(
+    "/admin/{user_id}",
+    summary="删除用户（管理员）"
+)
+async def admin_delete_user(
+    user_id: str,
+    hard: bool = Query(False, description="是否彻底删除"),
+    admin_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    删除指定用户（仅管理员可访问）
+
+    默认软删除，将用户状态设置为 disabled。
+    传入 hard=true 时会级联清理关联数据并彻底删除用户。
+    """
+    if user_id == admin_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="不允许删除自己的账号"
+        )
+
+    result = await db.execute(
+        select(User).where(User.id == user_id)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="用户不存在"
+        )
+
+    if hard:
+        await hard_delete_user_related_resources(db, user_id)
+        await db.commit()
+        return {"message": "用户已彻底删除"}
+
+    # 软删除：统一设置为 disabled
+    user.status = UserStatus.DISABLED.value
+    user.updated_at = datetime.utcnow()
+    await db.commit()
+
+    return {"message": "用户已删除"}

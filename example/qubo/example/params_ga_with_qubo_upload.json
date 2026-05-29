@@ -1,0 +1,17 @@
+{
+  "task_id": "example-ga-upload-qubo",
+  "task_name": "janus_qubo_ga_generation",
+  "params": {
+    "method": "ga",
+    "n_dim": 128,
+    "n_samples": 5,
+    "pop_size": 20,
+    "n_generations": 3,
+    "elite_size": 2,
+    "seed": 42,
+    "device": "cpu"
+  },
+  "input_files": {
+    "qubo_csv": "input/qubo_128.csv"
+  }
+}

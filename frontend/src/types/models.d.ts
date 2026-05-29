@@ -515,11 +515,28 @@ export interface PaginatedResponse<T> {
 
 // WebSocket 消息类型
 export interface WSMessage {
-  type: 'progress' | 'status' | 'log' | 'completed' | 'failed' | 'pong'
+  type:
+    | 'connected'
+    | 'subscribed'
+    | 'unsubscribed'
+    | 'task_status'
+    | 'task_progress'
+    | 'task_log'
+    | 'task_complete'
+    | 'task_error'
+    | 'error'
+    | 'pong'
   task_id?: string
   progress?: number
+  progress_percent?: number
   status?: TaskStatus
   message?: string
+  log?: string
+  level?: string
+  error?: string
+  result?: unknown
+  connection_id?: string
+  timestamp?: string
   data?: unknown
 }
 

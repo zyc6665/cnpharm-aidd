@@ -61,6 +61,22 @@ class Task(Base, UUIDMixin, TimestampMixin):
     # 元数据
     extra_data = Column(JSON, default=dict)  # 原 metadata，避免保留字冲突
 
+    @property
+    def celery_task_id(self):
+        """兼容旧代码，从 extra_data 中读取 Celery 任务 ID。"""
+        data = self.extra_data or {}
+        return data.get("celery_task_id")
+
+    @celery_task_id.setter
+    def celery_task_id(self, value):
+        """兼容旧代码，将 Celery 任务 ID 写入 extra_data。"""
+        data = dict(self.extra_data or {})
+        if value:
+            data["celery_task_id"] = value
+        else:
+            data.pop("celery_task_id", None)
+        self.extra_data = data
+
     # 关系
     user = relationship("User", back_populates="tasks")
     tool = relationship("Tool", back_populates="tasks")

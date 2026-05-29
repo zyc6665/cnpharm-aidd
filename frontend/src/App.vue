@@ -12,7 +12,6 @@
   import zhCN from 'ant-design-vue/es/locale/zh_CN'
   import enUS from 'ant-design-vue/es/locale/en_US'
   import DefaultLayout from '@/components/layout/DefaultLayout.vue'
-  import AdminLayout from '@/components/layout/AdminLayout.vue'
   import { useAppStore, useUserStore } from '@/stores'
 
   const route = useRoute()
@@ -26,11 +25,9 @@
 
   // 根据路由选择布局
   const layout = computed(() => {
-    if (route.path.startsWith('/admin')) {
-      return AdminLayout
-    }
-    // 认证页面和错误页面不需要布局
+    // 管理后台、认证页面和错误页面由各自路由组件自行控制布局
     if (
+      route.path.startsWith('/admin') ||
       route.path.startsWith('/login') ||
       route.path.startsWith('/register') ||
       route.path.startsWith('/forgot-password') ||

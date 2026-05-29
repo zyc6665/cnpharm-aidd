@@ -1,0 +1,695 @@
+[platform_run] task_id=b4f1ab41-b91e-4cfd-a0bd-3678b95ba7ec
+[platform_run] model_root=/workspace/LVpocket-2
+[platform_run] input_dir=/workspace/platform-jobs/b4f1ab41-b91e-4cfd-a0bd-3678b95ba7ec/input
+[platform_run] output_dir=/workspace/platform-jobs/b4f1ab41-b91e-4cfd-a0bd-3678b95ba7ec/output
+[platform_run] work_dir=/workspace/platform-jobs/b4f1ab41-b91e-4cfd-a0bd-3678b95ba7ec/work
+[platform_run] params_json=/workspace/platform-jobs/b4f1ab41-b91e-4cfd-a0bd-3678b95ba7ec/params.json
+[platform_run] requested_device=auto
+[platform_run] protein_pdb=/workspace/platform-jobs/b4f1ab41-b91e-4cfd-a0bd-3678b95ba7ec/input/protein.pdb
+[platform_run] model_choice=auto
+[platform_run] predict_device=cpu
+[lvpocket] running: /workspace/LVpocket-2/env/bin/python /workspace/LVpocket-2/pdb_to_fasta.py --pdb_file /workspace/platform-jobs/b4f1ab41-b91e-4cfd-a0bd-3678b95ba7ec/input/protein.pdb --fasta_file /workspace/platform-jobs/b4f1ab41-b91e-4cfd-a0bd-3678b95ba7ec/work/lvpocket_work/classification/input.fasta
+[lvpocket] running: /workspace/LVpocket-2/psipred/runpsipred /workspace/platform-jobs/b4f1ab41-b91e-4cfd-a0bd-3678b95ba7ec/work/lvpocket_work/classification/input.fasta
+Running PSI-BLAST with sequence /workspace/platform-jobs/b4f1ab41-b91e-4cfd-a0bd-3678b95ba7ec/work/lvpocket_work/classification/input.fasta ...
+Predicting secondary structure...
+Pass1 ...
+Pass2 ...
+Cleaning up ...
+Final output files: input.ss2 input.horiz
+Finished.
+[lvpocket] running: /workspace/LVpocket-2/env/bin/python -c 
+import sys
+import numpy as np
+from pathlib import Path
+
+model_root = Path(sys.argv[1])
+horiz_path = Path(sys.argv[2])
+selected_path = Path(sys.argv[3])
+sys.path.insert(0, str(model_root / "SCOP_Classifier"))
+
+from SSP import horizRead
+from predict import computeFeature, predictA
+
+ss = horizRead(str(horiz_path))
+features = np.array([computeFeature(ss["SSseq"][0])])
+pred = int(predictA(features)[0])
+mapping = {0: "all_a.hdf", 1: "all_b.hdf", 2: "a_or_.hdf", 3: "a+b.hdf"}
+model_name = mapping.get(pred, "all_scpdb.hdf")
+selected_path.write_text(model_name + "\n", encoding="utf-8")
+print("{}\t{}".format(pred, model_name))
+ /workspace/LVpocket-2 /workspace/platform-jobs/b4f1ab41-b91e-4cfd-a0bd-3678b95ba7ec/work/lvpocket_work/classification/input.horiz /workspace/platform-jobs/b4f1ab41-b91e-4cfd-a0bd-3678b95ba7ec/work/lvpocket_work/classification/selected_model.txt
+[lvpocket] classifier stdout: 1/1 [==============================] - ETA: 0s
+1/1 [==============================] - 1s 714ms/step
+3	a+b.hdf
+[lvpocket] running: /workspace/LVpocket-2/env/bin/python /workspace/LVpocket-2/scripts/predict.py --input /workspace/platform-jobs/b4f1ab41-b91e-4cfd-a0bd-3678b95ba7ec/input/protein.pdb --output /workspace/platform-jobs/b4f1ab41-b91e-4cfd-a0bd-3678b95ba7ec/work/lvpocket_work/lvpocket_raw --model /workspace/LVpocket-2/new_best/a+b.hdf --format pdb
+2026-05-29 09:56:44.793037: E external/local_xla/xla/stream_executor/cuda/cuda_dnn.cc:9261] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
+2026-05-29 09:56:44.793175: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:607] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
+2026-05-29 09:56:44.794504: E external/local_xla/xla/stream_executor/cuda/cuda_blas.cc:1515] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
+2026-05-29 09:56:57.139889: E external/local_xla/xla/stream_executor/cuda/cuda_driver.cc:274] failed call to cuInit: CUDA_ERROR_NO_DEVICE: no CUDA-capable device is detected
+==============================
+*** Open Babel Warning  in PerceiveBondOrders
+  Failed to kekulize aromatic bonds in OBMol::PerceiveBondOrders (title is /workspace/platform-jobs/b4f1ab41-b91e-4cfd-a0bd-3678b95ba7ec/input/protein.pdb)
+
+1/1 [==============================] - ETA: 0s1/1 [==============================] - 2s 2s/step
+/workspace/LVpocket-2/env/lib/python3.10/site-packages/openbabel/__init__.py:14: UserWarning: "import openbabel" is deprecated, instead use "from openbabel import openbabel"
+  warnings.warn('"import openbabel" is deprecated, instead use "from openbabel import openbabel"')
+1/1 [==============================] - ETA: 0s1/1 [==============================] - 0s 270ms/step
+[lvpocket] running: /workspace/LVpocket-2/env/bin/python /workspace/LVpocket-2/trans.py --result_path /workspace/platform-jobs/b4f1ab41-b91e-4cfd-a0bd-3678b95ba7ec/work/lvpocket_work/lvpocket_raw/input
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+==============================
+*** Open Babel Warning  in ReadMolecule
+  This Mol2 file is non-standard. Problem with molecule: ***** Cannot interpret atom types correctly, instead attempting to interpret atom type:  as elements instead.
+[lvpocket] completed with 1 pockets using a+b.hdf
+[platform_run] completed
