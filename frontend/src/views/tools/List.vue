@@ -88,7 +88,15 @@
         <div v-if="displayTools.length" class="tools-grid">
           <a-row :gutter="[24, 24]">
             <a-col v-for="tool in displayTools" :key="tool.id" :xs="24" :sm="12" :lg="8" :xl="6">
-              <div class="tool-card" @click="goToDetail(tool.id)">
+              <div
+                class="tool-card"
+                role="button"
+                tabindex="0"
+                :aria-label="tool.name"
+                @click="goToDetail(tool.id)"
+                @keydown.enter="goToDetail(tool.id)"
+                @keydown.space.prevent="goToDetail(tool.id)"
+              >
                 <div class="tool-header">
                   <div class="tool-icon">
                     <span v-if="tool.icon">{{ tool.icon }}</span>
@@ -350,13 +358,42 @@
 
   .tool-card {
     .card();
+    position: relative;
+    overflow: hidden;
+    min-height: 234px;
     cursor: pointer;
     height: 100%;
     display: flex;
     flex-direction: column;
+    border-radius: @border-radius-md;
+    background: linear-gradient(180deg, @bg-card-light 0%, @bg-color-light 100%);
 
-    &:hover {
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, @accent-color, @primary-color);
+      opacity: 0;
+      transition: opacity @transition-base;
+    }
+
+    &:hover,
+    &:focus-visible {
       transform: translateY(-4px);
+      border-color: @accent-color-border;
+      box-shadow: @shadow-md;
+
+      &::before {
+        opacity: 1;
+      }
+    }
+
+    &:focus-visible {
+      outline: 3px solid rgba(24, 144, 255, 0.28);
+      outline-offset: 3px;
     }
   }
 
@@ -371,20 +408,13 @@
     width: 48px;
     height: 48px;
     border-radius: @border-radius-md;
-    background: @accent-color-light;
+    background: linear-gradient(135deg, @accent-color-light, @primary-color-light);
+    border: 1px solid rgba(255, 215, 0, 0.18);
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 24px;
     color: @accent-color;
-  }
-
-  .tool-badges {
-    display: flex;
-    gap: @spacing-xs;
-    flex-wrap: wrap;
-    max-width: 60%;
-    justify-content: flex-end;
   }
 
   .tool-name {
@@ -397,6 +427,7 @@
   .tool-desc {
     color: @text-color-light-secondary;
     font-size: @font-size-sm;
+    line-height: @line-height-base;
     flex: 1;
     .text-ellipsis-lines(2);
   }
