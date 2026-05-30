@@ -1,7 +1,7 @@
 <template>
   <div class="user-favorites">
-    <a-card :title="t('user.favorites')">
-      <template #extra>
+    <AppPageHeader :title="t('user.favorites')">
+      <template #actions>
         <a-input-search
           v-model:value="searchKeyword"
           :placeholder="t('tools.search')"
@@ -9,6 +9,9 @@
           @search="handleSearch"
         />
       </template>
+    </AppPageHeader>
+
+    <a-card class="favorites-card">
 
       <a-spin :spinning="loading">
         <template v-if="favorites.length > 0">
@@ -111,6 +114,7 @@ import {
   HeartFilled
 } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
+import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import { useToolsStore } from '@/stores'
 import type { Tool } from '@/types/models'
 

@@ -1,6 +1,7 @@
 <template>
   <div class="user-settings">
-    <a-card :title="t('user.settings')">
+    <AppPageHeader :title="t('user.settings')" />
+    <a-card class="settings-card">
       <a-tabs v-model:activeKey="activeTab">
         <!-- 密码设置 -->
         <a-tab-pane key="password" :tab="t('user.changePassword')">
@@ -162,6 +163,7 @@ import { ref, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { DesktopOutlined, MobileOutlined } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
+import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import { useUserStore } from '@/stores'
 
 const { t } = useI18n()

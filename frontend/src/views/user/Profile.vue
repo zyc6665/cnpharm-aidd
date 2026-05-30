@@ -1,6 +1,7 @@
 <template>
   <div class="user-profile">
-    <a-card :title="t('user.profile')">
+    <AppPageHeader :title="t('user.profile')" />
+    <a-card class="profile-card">
       <a-form
         :model="form"
         :rules="rules"
@@ -105,6 +106,7 @@ import { PlusOutlined, CameraOutlined, CopyOutlined } from '@ant-design/icons-vu
 import { message } from 'ant-design-vue'
 import type { UploadProps, UploadFile } from 'ant-design-vue'
 import dayjs from 'dayjs'
+import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import { useUserStore } from '@/stores'
 
 const { t } = useI18n()
