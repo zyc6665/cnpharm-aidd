@@ -1,6 +1,6 @@
 <template>
   <div class="workflow-page">
-    <div class="container workflow-shell">
+    <div class="workflow-shell">
       <AppPageHeader :title="t('workflow.title')" :subtitle="t('workflow.subtitle')" />
 
       <div class="workflow-layout">
@@ -134,7 +134,7 @@
   @import '@/assets/styles/variables.less';
 
   .workflow-page {
-    padding: @spacing-xl 0;
+    padding: @spacing-xl 0 @spacing-xxl;
     min-height: calc(100vh - @header-height - @footer-height);
     background:
       linear-gradient(180deg, rgba(24, 144, 255, 0.06) 0%, rgba(255, 255, 255, 0) 260px),
@@ -142,12 +142,14 @@
   }
 
   .workflow-shell {
-    max-width: 1480px;
+    width: min(100%, calc(100vw - 32px));
+    max-width: none;
+    margin: 0 auto;
   }
 
   .workflow-layout {
     display: grid;
-    grid-template-columns: minmax(240px, 280px) minmax(420px, 1fr) minmax(300px, 340px);
+    grid-template-columns: minmax(260px, 320px) minmax(0, 1fr) minmax(320px, 380px);
     gap: @spacing-lg;
     align-items: start;
 

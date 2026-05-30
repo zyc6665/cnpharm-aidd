@@ -686,20 +686,24 @@
   }
 
   .tool-option-list {
-    display: flex;
-    flex-direction: column;
-    gap: @spacing-md;
-    margin-bottom: @spacing-md;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: @spacing-lg;
+    align-content: start;
+    margin-bottom: @spacing-lg;
   }
 
   .tool-option-card {
     display: flex;
+    flex-direction: column;
     justify-content: space-between;
+    align-items: flex-start;
     gap: @spacing-md;
+    min-height: 132px;
     width: 100%;
     border: 1px solid @border-color-light;
     border-radius: @border-radius-md;
-    padding: @spacing-md;
+    padding: @spacing-lg;
     background: @bg-card-light;
     cursor: pointer;
     text-align: left;
@@ -745,7 +749,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: @spacing-xs;
-    justify-content: flex-end;
+    justify-content: flex-start;
   }
 
   .form-shell {
@@ -841,6 +845,18 @@
     .form-action-buttons :deep(.ant-space-item),
     .form-action-buttons :deep(.ant-btn) {
       width: 100%;
+    }
+  }
+
+  @media (max-width: @screen-sm) {
+    .tool-option-list {
+      grid-template-columns: minmax(0, 1fr);
+      gap: @spacing-md;
+    }
+
+    .tool-option-card {
+      min-height: auto;
+      padding: @spacing-md;
     }
   }
 </style>

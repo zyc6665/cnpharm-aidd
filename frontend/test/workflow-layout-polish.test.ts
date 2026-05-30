@@ -25,11 +25,25 @@ test('工作台页面应提供更稳的三栏布局和窄屏顺序', () => {
   const runPanelSource = readSource('src/components/workflow/WorkflowRunPanel.vue')
 
   assert.equal(pageSource.includes('workflow-shell'), true)
-  assert.equal(pageSource.includes('grid-template-columns: minmax(240px, 280px) minmax(420px, 1fr) minmax(300px, 340px)'), true)
+  assert.equal(pageSource.includes('class="workflow-shell"'), true)
+  assert.equal(pageSource.includes('container workflow-shell'), false)
+  assert.equal(pageSource.includes('max-width: none'), true)
+  assert.equal(pageSource.includes('width: min(100%, calc(100vw - 32px))'), true)
+  assert.equal(pageSource.includes('grid-template-columns: minmax(260px, 320px) minmax(0, 1fr) minmax(320px, 380px)'), true)
   assert.equal(pageSource.includes('align-items: start'), true)
   assert.equal(pageSource.includes('order:'), true)
   assert.equal(runPanelSource.includes('form-action-buttons'), true)
   assert.equal(runPanelSource.includes(':deep(.ant-space-item)'), true)
+})
+
+test('工作台工具卡片应在宽屏使用更舒展的响应式网格', () => {
+  const runPanelSource = readSource('src/components/workflow/WorkflowRunPanel.vue')
+
+  assert.equal(runPanelSource.includes('grid-template-columns: repeat(auto-fit, minmax(280px, 1fr))'), true)
+  assert.equal(runPanelSource.includes('gap: @spacing-lg'), true)
+  assert.equal(runPanelSource.includes('min-height: 132px'), true)
+  assert.equal(runPanelSource.includes('padding: @spacing-lg'), true)
+  assert.equal(runPanelSource.includes('align-content: start'), true)
 })
 
 test('工作台左右栏应支持桌面吸顶和长列表内部滚动', () => {
