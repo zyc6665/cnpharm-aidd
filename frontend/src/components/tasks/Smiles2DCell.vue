@@ -13,7 +13,6 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import SmilesDrawer from 'smiles-drawer'
 
 const props = defineProps<{
   smiles: string
@@ -35,7 +34,19 @@ interface SmilesDrawerModule {
   }
 }
 
-const smilesDrawer = SmilesDrawer as SmilesDrawerModule
+let smilesDrawerPromise: Promise<SmilesDrawerModule> | null = null
+
+async function loadSmilesDrawer(): Promise<SmilesDrawerModule> {
+  if (!smilesDrawerPromise) {
+    smilesDrawerPromise = (async () => {
+      const module = await import('smiles-drawer')
+      return module.default as SmilesDrawerModule
+    })()
+  }
+
+  return smilesDrawerPromise
+}
+
 const svgRef = ref<SVGSVGElement | null>(null)
 const renderFailed = ref(false)
 const normalizedSmiles = computed(() => props.smiles.trim())
@@ -56,6 +67,7 @@ async function renderSmiles() {
   }
 
   try {
+    const smilesDrawer = await loadSmilesDrawer()
     const tree = await new Promise<unknown>((resolve, reject) => {
       smilesDrawer.parse(normalizedSmiles.value, resolve, reject)
     })

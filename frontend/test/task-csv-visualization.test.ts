@@ -79,5 +79,7 @@ test('CSV viewer 源码应使用滚动表格和 2D 分子单元格组件', () =>
   assert.equal(viewerSource.includes('scroll'), true)
   assert.equal(viewerSource.includes('Smiles2DCell'), true)
   assert.equal(smilesCellSource.includes('smiles-drawer'), true)
+  assert.equal(smilesCellSource.includes("import SmilesDrawer from 'smiles-drawer'"), false)
+  assert.equal(smilesCellSource.includes("await import('smiles-drawer')"), true)
   assert.equal(panelSource.includes('CsvResultViewer'), true)
 })
