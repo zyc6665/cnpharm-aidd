@@ -47,14 +47,38 @@
                   </template>
                 </a-card-meta>
                 <template #actions>
+                  <a-tooltip :title="t('tools.viewDetail')">
+                    <a-button
+                      type="text"
+                      shape="circle"
+                      class="favorite-card-action"
+                      :aria-label="t('tools.viewDetail')"
+                      @click.stop="goToTool(tool.id)"
+                    >
+                      <EyeOutlined />
+                    </a-button>
+                  </a-tooltip>
                   <a-tooltip :title="t('tools.run')">
-                    <PlayCircleOutlined @click.stop="runTool(tool.id)" />
+                    <a-button
+                      type="text"
+                      shape="circle"
+                      class="favorite-card-action"
+                      :aria-label="t('tools.run')"
+                      @click.stop="runTool(tool.id)"
+                    >
+                      <PlayCircleOutlined />
+                    </a-button>
                   </a-tooltip>
                   <a-tooltip :title="t('tools.unfavorite')">
-                    <HeartFilled
-                      class="favorite-icon"
+                    <a-button
+                      type="text"
+                      shape="circle"
+                      class="favorite-card-action favorite-icon"
+                      :aria-label="t('tools.unfavorite')"
                       @click.stop="handleUnfavorite(tool.id)"
-                    />
+                    >
+                      <HeartFilled />
+                    </a-button>
                   </a-tooltip>
                 </template>
               </a-card>
@@ -81,6 +105,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   ExperimentOutlined,
+  EyeOutlined,
   PlayCircleOutlined,
   HeartOutlined,
   HeartFilled
@@ -220,8 +245,24 @@ onMounted(() => {
       }
     }
 
+    .favorite-card-action {
+      color: @text-color-light-secondary;
+
+      &:hover,
+      &:focus-visible {
+        color: @primary-color;
+        background: @primary-color-light;
+      }
+    }
+
     .favorite-icon {
       color: @error-color;
+
+      &:hover,
+      &:focus-visible {
+        color: @error-color;
+        background: @error-color-light;
+      }
     }
 
     :deep(.ant-card-actions) {
