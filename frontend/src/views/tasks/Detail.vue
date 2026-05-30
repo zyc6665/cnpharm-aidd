@@ -14,6 +14,41 @@
 
       <a-spin :spinning="loading">
           <div v-if="task" class="detail-content">
+            <AppPageHeader :title="detailTitle" :subtitle="detailSubtitle">
+              <template #actions>
+                <a-space class="task-detail-actions" wrap>
+                  <a-button
+                    v-if="taskStatus === 'running' || taskStatus === 'pending'"
+                    danger
+                    @click="handleCancel"
+                  >
+                    <template #icon><StopOutlined /></template>
+                    {{ t('tasks.cancel') }}
+                  </a-button>
+                  <a-button
+                    v-if="taskStatus === 'failure'"
+                    type="primary"
+                    @click="handleRetry"
+                  >
+                    <template #icon><RedoOutlined /></template>
+                    {{ t('tasks.retry') }}
+                  </a-button>
+                  <a-button
+                    v-if="['success', 'failure', 'canceled'].includes(taskStatus)"
+                    danger
+                    @click="handleDelete"
+                  >
+                    <template #icon><DeleteOutlined /></template>
+                    {{ t('tasks.delete') }}
+                  </a-button>
+                  <a-button @click="goBack">
+                    <template #icon><ArrowLeftOutlined /></template>
+                    {{ t('common.back') }}
+                  </a-button>
+                </a-space>
+              </template>
+            </AppPageHeader>
+
             <!-- 任务状态卡片 -->
             <div class="status-card" :class="[`status-${taskStatus}`]">
               <div class="status-main">
@@ -25,8 +60,8 @@
                   <StopOutlined v-else-if="taskStatus === 'canceled'" />
                 </div>
               <div class="status-info">
-                <h1 class="task-title">{{ task.tool?.name || t('tasks.unknownTool') }}</h1>
-                <div class="task-meta">
+                <span class="status-label">{{ t('common.status') }}</span>
+                <div class="status-line">
                   <span class="task-id">
                     <CopyOutlined @click.stop="copyTaskId" />
                     ID: {{ task.id }}
@@ -36,39 +71,6 @@
                   </a-tag>
                 </div>
               </div>
-            </div>
-
-            <div class="status-actions">
-              <a-space>
-                <a-button
-                  v-if="taskStatus === 'running' || taskStatus === 'pending'"
-                  danger
-                  @click="handleCancel"
-                >
-                  <template #icon><StopOutlined /></template>
-                  {{ t('tasks.cancel') }}
-                </a-button>
-                <a-button
-                  v-if="taskStatus === 'failure'"
-                  type="primary"
-                  @click="handleRetry"
-                >
-                  <template #icon><RedoOutlined /></template>
-                  {{ t('tasks.retry') }}
-                </a-button>
-                <a-button
-                  v-if="['success', 'failure', 'canceled'].includes(taskStatus)"
-                  danger
-                  @click="handleDelete"
-                >
-                  <template #icon><DeleteOutlined /></template>
-                  {{ t('tasks.delete') }}
-                </a-button>
-                <a-button @click="goBack">
-                  <template #icon><ArrowLeftOutlined /></template>
-                  {{ t('common.back') }}
-                </a-button>
-              </a-space>
             </div>
           </div>
 
@@ -361,6 +363,7 @@ import { useTasksStore } from '@/stores'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { getTaskLogs } from '@/api/tasks'
 import type { WSMessage, TaskStatus, TaskLog, Task, FileInfo } from '@/types/models'
+import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import ResultVisualizationPanel from '@/components/tasks/ResultVisualizationPanel.vue'
 import { normalizeTaskStatus } from '@/components/tasks/result-visualization'
 import { triggerProtectedFileDownload } from '@/utils/protected-file-access'
@@ -410,6 +413,14 @@ const outputDataEntries = computed<[string, unknown][]>(() => {
   }
 
   return Object.entries(outputData as Record<string, unknown>)
+})
+const detailTitle = computed(() => task.value?.tool?.name || t('tasks.taskDetail'))
+const detailSubtitle = computed(() => {
+  if (!task.value) {
+    return t('tasks.detail')
+  }
+
+  return `${getStatusText(taskStatus.value)} · ${formatTime(task.value.created_at)}`
 })
 
 // 方法
@@ -688,6 +699,10 @@ onUnmounted(() => {
   margin-bottom: @spacing-lg;
 }
 
+.task-detail-actions {
+  justify-content: flex-end;
+}
+
 // 状态卡片
 .status-card {
   .card();
@@ -736,16 +751,21 @@ onUnmounted(() => {
   }
 
   .status-info {
-    .task-title {
-      font-size: @font-size-xxl;
-      font-weight: @font-weight-bold;
-      margin: 0 0 @spacing-xs 0;
+    min-width: 0;
+
+    .status-label {
+      display: block;
+      margin-bottom: @spacing-xs;
+      color: @text-color-light-secondary;
+      font-size: @font-size-sm;
+      font-weight: @font-weight-medium;
     }
 
-    .task-meta {
+    .status-line {
       display: flex;
       align-items: center;
       gap: @spacing-md;
+      flex-wrap: wrap;
 
       .task-id {
         display: flex;
@@ -754,6 +774,7 @@ onUnmounted(() => {
         color: @text-color-light-tertiary;
         font-family: monospace;
         font-size: @font-size-sm;
+        word-break: break-all;
         cursor: pointer;
 
         &:hover {
@@ -929,6 +950,11 @@ onUnmounted(() => {
 
 // 工具卡片
 .tool-card {
+  @media (min-width: @screen-lg) {
+    position: sticky;
+    top: @spacing-lg;
+  }
+
   .tool-info {
     .tool-header {
       display: flex;
@@ -1012,17 +1038,28 @@ onUnmounted(() => {
 
 // 响应式
 @media (max-width: @breakpoint-md) {
+  .task-detail-actions {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
   .status-card {
     flex-direction: column;
     align-items: flex-start;
 
-    .status-actions {
+    .status-main {
       width: 100%;
+      align-items: flex-start;
+    }
 
-      :deep(.ant-space) {
-        width: 100%;
-        flex-wrap: wrap;
-      }
+    .status-icon {
+      font-size: 36px;
+    }
+
+    .status-line {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: @spacing-sm;
     }
   }
 }
