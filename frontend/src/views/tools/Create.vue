@@ -1,18 +1,20 @@
 <template>
   <div class="tool-create-page">
     <div class="container">
-      <div class="page-header">
+      <AppPageHeader :title="isEdit ? t('tools.editTool') : t('tools.createTool')">
+        <template #actions>
         <a-button @click="goBack">
           <ArrowLeftOutlined />
           {{ t('common.back') }}
         </a-button>
-        <h1 class="page-title">{{ isEdit ? t('tools.editTool') : t('tools.createTool') }}</h1>
-      </div>
+        </template>
+      </AppPageHeader>
 
       <a-spin :spinning="loading">
         <a-card class="form-card">
           <a-form
             ref="formRef"
+            class="tool-form"
             :model="formState"
             :rules="formRules"
             layout="vertical"
@@ -488,6 +490,7 @@
     ArrowLeftOutlined,
     SaveOutlined
   } from '@ant-design/icons-vue'
+  import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import { useToolsStore } from '@/stores'
   import { createTool, createToolVersion, updateTool, getToolDetail } from '@/api/tools'
   import type { ToolCreateParams } from '@/types/models'
@@ -966,19 +969,6 @@
     min-height: calc(100vh - @header-height - @footer-height);
   }
 
-  .page-header {
-    display: flex;
-    align-items: center;
-    gap: @spacing-lg;
-    margin-bottom: @spacing-xl;
-  }
-
-  .page-title {
-    font-size: @font-size-xxl;
-    font-weight: @font-weight-bold;
-    margin: 0;
-  }
-
   .form-card {
     max-width: 900px;
     margin: 0 auto;
@@ -1013,6 +1003,15 @@
     &:hover {
       background: @accent-color-hover;
       border-color: @accent-color-hover;
+    }
+  }
+
+  @media (max-width: @screen-md) {
+    :deep(.tool-form .ant-col-8),
+    :deep(.tool-form .ant-col-12),
+    :deep(.tool-form .ant-col-16) {
+      flex: 0 0 100%;
+      max-width: 100%;
     }
   }
 </style>
