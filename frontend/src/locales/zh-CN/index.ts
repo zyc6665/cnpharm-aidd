@@ -587,6 +587,7 @@ export default {
   admin: {
     title: '管理后台',
     dashboard: '仪表盘',
+    dashboardSubtitle: '集中查看用户、工具与任务运行情况，快速判断平台健康度',
     users: '用户管理',
     tools: '工具管理',
     tasks: '任务管理',

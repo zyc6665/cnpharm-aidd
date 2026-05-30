@@ -587,6 +587,7 @@ export default {
   admin: {
     title: 'Admin Panel',
     dashboard: 'Dashboard',
+    dashboardSubtitle: 'Review users, tools and task activity in one operational overview',
     users: 'User Management',
     tools: 'Tool Management',
     tasks: 'Task Management',
