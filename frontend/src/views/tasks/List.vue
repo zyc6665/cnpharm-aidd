@@ -131,7 +131,12 @@
             :key="task.id"
             class="task-card"
             :class="{ 'is-running': task.status === 'running' }"
+            role="button"
+            tabindex="0"
+            :aria-label="`${task.tool?.name || t('tasks.unknownTool')} ${getStatusText(task.status)}`"
             @click="goToDetail(task.id)"
+            @keydown.enter="goToDetail(task.id)"
+            @keydown.space.prevent="goToDetail(task.id)"
           >
             <div class="task-main">
               <div class="task-info">
@@ -190,7 +195,7 @@
             </div>
 
             <div class="task-actions" @click.stop>
-              <a-space>
+              <a-space class="task-action-space" wrap>
                 <a-tooltip :title="t('tasks.viewDetail')">
                   <a-button type="link" @click="goToDetail(task.id)">
                     <EyeOutlined />
@@ -680,8 +685,14 @@ onUnmounted(() => {
   align-items: center;
   cursor: pointer;
 
-  &:hover {
+  &:hover,
+  &:focus-visible {
     transform: translateX(4px);
+  }
+
+  &:focus-visible {
+    outline: 3px solid rgba(24, 144, 255, 0.28);
+    outline-offset: 3px;
   }
 
   &.is-running {
@@ -720,10 +731,13 @@ onUnmounted(() => {
   }
 
   .task-meta {
+    min-width: 0;
+
     .task-title {
       font-size: @font-size-md;
       font-weight: @font-weight-semibold;
       margin: 0 0 @spacing-xs 0;
+      word-break: break-word;
     }
 
     .task-id {
@@ -735,6 +749,7 @@ onUnmounted(() => {
 
   .task-details {
     display: flex;
+    flex-wrap: wrap;
     gap: @spacing-lg;
     color: @text-color-light-secondary;
     font-size: @font-size-sm;
@@ -770,6 +785,10 @@ onUnmounted(() => {
     border-left: 1px solid @border-color-light;
     padding-left: @spacing-md;
     margin-left: @spacing-md;
+
+    .task-action-space {
+      justify-content: flex-end;
+    }
   }
 }
 
@@ -805,6 +824,10 @@ onUnmounted(() => {
       padding-top: @spacing-md;
       margin-left: 0;
       width: 100%;
+
+      .task-action-space {
+        justify-content: flex-start;
+      }
     }
   }
 
