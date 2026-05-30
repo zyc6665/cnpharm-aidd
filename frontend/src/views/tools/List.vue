@@ -34,16 +34,16 @@
         <a-input-search
           v-model:value="searchKeyword"
           :placeholder="t('tools.search')"
+          class="tool-search-input"
           size="large"
-          style="max-width: 400px"
           allow-clear
           @search="handleSearch"
         />
         <a-select
           v-model:value="selectedCategory"
           :placeholder="t('tools.allCategories')"
+          class="tool-filter-select"
           size="large"
-          style="width: 200px"
           allow-clear
           @change="handleCategoryChange"
         >
@@ -57,8 +57,8 @@
         <a-select
           v-model:value="selectedTag"
           :placeholder="t('tools.filterTags')"
+          class="tool-filter-select"
           size="large"
-          style="width: 200px"
           allow-clear
           @change="handleTagChange"
         >
@@ -82,6 +82,12 @@
           </template>
         </a-dropdown>
       </AppFilterBar>
+
+      <div class="tools-results-summary">
+        <span>{{ currentViewLabel }}</span>
+        <span>{{ t('common.totalItems', { total: displayTotal }) }}</span>
+        <span class="tools-results-sort">{{ sortLabel }}</span>
+      </div>
 
       <!-- 工具列表 -->
       <a-spin :spinning="loading">
@@ -206,6 +212,9 @@
       name: t('tools.sortName')
     }
     return labels[sortBy.value] || t('tools.sortPopular')
+  })
+  const currentViewLabel = computed(() => {
+    return currentView.value === 'favorites' ? t('tools.favorites') : t('tools.publicTools')
   })
 
   const formatNumber = (num: number) => {
@@ -352,6 +361,28 @@
     }
   }
 
+  .tool-search-input {
+    width: min(400px, 100%);
+  }
+
+  .tool-filter-select {
+    width: 200px;
+  }
+
+  .tools-results-summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: @spacing-sm @spacing-md;
+    margin: -@spacing-md 0 @spacing-lg;
+    color: @text-color-light-secondary;
+    font-size: @font-size-sm;
+  }
+
+  .tools-results-sort {
+    color: @text-color-light-tertiary;
+  }
+
   .tools-grid {
     margin-bottom: @spacing-xl;
   }
@@ -469,5 +500,16 @@
   .pagination {
     display: flex;
     justify-content: center;
+  }
+
+  @media (max-width: @screen-sm) {
+    .tool-search-input,
+    .tool-filter-select {
+      width: 100%;
+    }
+
+    .tools-results-summary {
+      margin-top: -@spacing-sm;
+    }
   }
 </style>
