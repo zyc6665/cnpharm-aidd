@@ -1,5 +1,5 @@
 <template>
-  <header class="app-page-header">
+  <header class="app-page-header" :class="`app-page-header--${align}`">
     <div class="app-page-header__copy">
       <p v-if="eyebrow" class="app-page-header__eyebrow">{{ eyebrow }}</p>
       <h1 class="app-page-header__title">{{ title }}</h1>
@@ -12,11 +12,14 @@
 </template>
 
 <script setup lang="ts">
-  defineProps<{
+  withDefaults(defineProps<{
     title: string
     subtitle?: string
     eyebrow?: string
-  }>()
+    align?: 'start' | 'center'
+  }>(), {
+    align: 'start'
+  })
 </script>
 
 <style scoped lang="less">
@@ -33,6 +36,23 @@
   .app-page-header__copy {
     min-width: 0;
     max-width: 760px;
+  }
+
+  .app-page-header--center {
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+
+    .app-page-header__copy {
+      max-width: 840px;
+      margin: 0 auto;
+    }
+
+    .app-page-header__subtitle {
+      max-width: 760px;
+      margin-right: auto;
+      margin-left: auto;
+    }
   }
 
   .app-page-header__eyebrow {

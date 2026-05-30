@@ -20,6 +20,8 @@ test('应提供统一的页面标题组件承载标题、副标题和操作区',
   assert.equal(source.includes("defineProps<{"), true)
   assert.equal(source.includes('title: string'), true)
   assert.equal(source.includes('subtitle?: string'), true)
+  assert.equal(source.includes("align?: 'start' | 'center'"), true)
+  assert.equal(source.includes('app-page-header--center'), true)
   assert.equal(source.includes('<slot name="actions"'), true)
 })
 

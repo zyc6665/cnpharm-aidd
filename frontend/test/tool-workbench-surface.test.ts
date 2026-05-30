@@ -39,6 +39,13 @@ test('/workflow 页面应读取工作台分组而不是旧的工作流工具集�
   assert.equal(source.includes('fetchWorkflowTools'), false)
 })
 
+test('工作台页头标题与副标题应居中展示', () => {
+  const source = readSource('src/views/workflow/index.vue')
+
+  assert.equal(source.includes('<AppPageHeader'), true)
+  assert.equal(source.includes('align="center"'), true)
+})
+
 test('共享产物文件选择器组件文件应存在', () => {
   assert.equal(existsSync(resolve(rootDir, 'src/components/tools/ArtifactFilePicker.vue')), true)
 })

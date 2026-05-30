@@ -1,7 +1,7 @@
 <template>
   <div class="workflow-page">
     <div class="workflow-shell">
-      <AppPageHeader :title="t('workflow.title')" :subtitle="t('workflow.subtitle')" />
+      <AppPageHeader :title="t('workflow.title')" :subtitle="t('workflow.subtitle')" align="center" />
 
       <div class="workflow-layout">
         <WorkflowStepSidebar
