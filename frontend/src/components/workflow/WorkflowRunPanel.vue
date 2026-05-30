@@ -12,26 +12,34 @@
         </div>
       </div>
 
-      <div v-if="group?.tools.length" class="tool-option-list">
-        <button
-          v-for="toolOption in group.tools"
-          :key="toolOption.slug"
-          type="button"
-          class="tool-option-card"
-          :class="{ 'tool-option-active': selectedToolSlug === toolOption.slug }"
-          @click="selectTool(toolOption.slug)"
+      <div v-if="group?.tools.length" class="tool-select-panel">
+        <div class="tool-select-meta">
+          <span class="tool-select-label">{{ t('workflow.currentTool.label') }}</span>
+          <strong class="tool-select-title">{{ selectedToolSummary?.name ?? group.tools[0]?.name }}</strong>
+        </div>
+        <a-select
+          class="tool-select"
+          size="large"
+          :value="selectedToolSlug ?? undefined"
+          :placeholder="t('workflow.currentTool.empty')"
+          @change="handleToolSelectChange"
         >
-          <div class="tool-option-copy">
-            <h3 class="tool-option-title">{{ toolOption.name }}</h3>
-            <p class="tool-option-desc">{{ toolOption.description || toolOption.slug }}</p>
-          </div>
-          <div class="tool-option-tags">
-            <a-tag v-if="toolOption.is_recommended" color="gold">
-              {{ t('workflow.toolStatus.recommended') }}
-            </a-tag>
-            <a-tag color="green">{{ t('workflow.toolStatus.available') }}</a-tag>
-          </div>
-        </button>
+          <a-select-option
+            v-for="toolOption in group.tools"
+            :key="toolOption.slug"
+            :value="toolOption.slug"
+          >
+            <div class="tool-select-option">
+              <span class="tool-select-option-name">{{ toolOption.name }}</span>
+              <span class="tool-select-option-tags">
+                <a-tag v-if="toolOption.is_recommended" color="gold">
+                  {{ t('workflow.toolStatus.recommended') }}
+                </a-tag>
+                <a-tag color="green">{{ t('workflow.toolStatus.available') }}</a-tag>
+              </span>
+            </div>
+          </a-select-option>
+        </a-select>
       </div>
 
       <a-alert
@@ -329,6 +337,10 @@
     }
 
     emit('selectTool', toolSlug)
+  }
+
+  function handleToolSelectChange(value: string) {
+    selectTool(value)
   }
 
   function replaceFormState(nextState: Record<string, unknown>) {
@@ -685,71 +697,58 @@
     line-height: @line-height-base;
   }
 
-  .tool-option-list {
+  .tool-select-panel {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: @spacing-lg;
-    align-content: start;
-    margin-bottom: @spacing-lg;
-  }
-
-  .tool-option-card {
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    align-items: flex-start;
+    grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
     gap: @spacing-md;
-    min-height: 132px;
-    width: 100%;
-    border: 1px solid @border-color-light;
+    align-items: end;
+    margin-bottom: @spacing-lg;
+    padding: @spacing-md;
+    border: 1px solid #e8edf5;
     border-radius: @border-radius-md;
-    padding: @spacing-lg;
-    background: @bg-card-light;
-    cursor: pointer;
-    text-align: left;
-    transition: border-color 0.2s ease, transform 0.2s ease;
-
-    &:hover,
-    &:focus-visible {
-      border-color: @accent-color;
-      transform: translateY(-1px);
-    }
-
-    &:focus-visible {
-      outline: 3px solid rgba(24, 144, 255, 0.28);
-      outline-offset: 3px;
-    }
+    background: linear-gradient(180deg, #fff 0%, #fbfdff 100%);
   }
 
-  .tool-option-active {
-    border-color: @accent-color;
-    box-shadow: inset 3px 0 0 @accent-color, @shadow-sm;
-  }
-
-  .tool-option-copy {
+  .tool-select-meta {
     min-width: 0;
-    flex: 1;
   }
 
-  .tool-option-title {
+  .tool-select-label {
+    display: block;
+    margin-bottom: @spacing-xs;
+    color: @text-color-light-secondary;
+    font-size: @font-size-xs;
+  }
+
+  .tool-select-title {
+    display: block;
+    color: @text-color-light-primary;
     font-size: @font-size-md;
     font-weight: @font-weight-semibold;
-    margin-bottom: @spacing-xs;
-  }
-
-  .tool-option-desc {
-    margin: 0;
-    color: @text-color-light-secondary;
-    font-size: @font-size-sm;
-    line-height: @line-height-base;
     overflow-wrap: anywhere;
   }
 
-  .tool-option-tags {
+  .tool-select {
+    width: 100%;
+  }
+
+  .tool-select-option {
     display: flex;
-    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: @spacing-sm;
+    align-items: center;
+  }
+
+  .tool-select-option-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .tool-select-option-tags {
+    display: inline-flex;
+    flex: none;
     gap: @spacing-xs;
-    justify-content: flex-start;
   }
 
   .form-shell {
@@ -830,13 +829,11 @@
       grid-column: auto;
     }
 
-    .tool-option-card,
     .action-summary-card,
     .form-action-bar {
       flex-direction: column;
     }
 
-    .tool-option-tags,
     .form-action-buttons {
       justify-content: flex-start;
     }
@@ -849,14 +846,9 @@
   }
 
   @media (max-width: @screen-sm) {
-    .tool-option-list {
+    .tool-select-panel {
       grid-template-columns: minmax(0, 1fr);
       gap: @spacing-md;
-    }
-
-    .tool-option-card {
-      min-height: auto;
-      padding: @spacing-md;
     }
   }
 </style>

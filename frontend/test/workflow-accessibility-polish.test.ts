@@ -10,13 +10,14 @@ function readSource(relativePath: string): string {
   return readFileSync(resolve(rootDir, relativePath), 'utf8')
 }
 
-test('工作台工具选项应使用原生按钮承载选择交互', () => {
+test('工作台工具选择应使用下拉控件减少卡片噪音', () => {
   const source = readSource('src/components/workflow/WorkflowRunPanel.vue')
 
-  assert.equal(source.includes('<button'), true)
-  assert.equal(source.includes('type="button"'), true)
-  assert.equal(source.includes('class="tool-option-card"'), true)
-  assert.equal(source.includes('&:focus-visible'), true)
+  assert.equal(source.includes('<a-select'), true)
+  assert.equal(source.includes('class="tool-select"'), true)
+  assert.equal(source.includes('@change="handleToolSelectChange"'), true)
+  assert.equal(source.includes('tool-select-panel'), true)
+  assert.equal(source.includes('tool-option-card'), false)
 })
 
 test('工作台浅色任务摘要应使用浅色主题文字变量', () => {

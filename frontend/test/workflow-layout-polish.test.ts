@@ -36,14 +36,15 @@ test('工作台页面应提供更稳的三栏布局和窄屏顺序', () => {
   assert.equal(runPanelSource.includes(':deep(.ant-space-item)'), true)
 })
 
-test('工作台工具卡片应在宽屏使用更舒展的响应式网格', () => {
+test('工作台工具选择应改为紧凑下拉区而不是卡片网格', () => {
   const runPanelSource = readSource('src/components/workflow/WorkflowRunPanel.vue')
 
-  assert.equal(runPanelSource.includes('grid-template-columns: repeat(auto-fit, minmax(280px, 1fr))'), true)
-  assert.equal(runPanelSource.includes('gap: @spacing-lg'), true)
-  assert.equal(runPanelSource.includes('min-height: 132px'), true)
-  assert.equal(runPanelSource.includes('padding: @spacing-lg'), true)
-  assert.equal(runPanelSource.includes('align-content: start'), true)
+  assert.equal(runPanelSource.includes('tool-select-panel'), true)
+  assert.equal(runPanelSource.includes('tool-select-meta'), true)
+  assert.equal(runPanelSource.includes('tool-select'), true)
+  assert.equal(runPanelSource.includes('<a-select'), true)
+  assert.equal(runPanelSource.includes('tool-option-card'), false)
+  assert.equal(runPanelSource.includes('repeat(auto-fit, minmax(280px, 1fr))'), false)
 })
 
 test('工作台左右栏应支持桌面吸顶和长列表内部滚动', () => {
@@ -77,4 +78,16 @@ test('工作台产物应按任务归类并限制每个任务的预览数量', ()
   assert.equal(zhLocaleSource.includes('moreArtifacts'), true)
   assert.equal(enLocaleSource.includes('taskCount'), true)
   assert.equal(enLocaleSource.includes('moreArtifacts'), true)
+})
+
+test('工作台任务产物卡片头部应放松任务 ID、来源和时间的布局', () => {
+  const artifactPanelSource = readSource('src/components/workflow/WorkflowArtifactPanel.vue')
+
+  assert.equal(artifactPanelSource.includes('artifact-task-kicker'), true)
+  assert.equal(artifactPanelSource.includes('artifact-task-id'), true)
+  assert.equal(artifactPanelSource.includes('artifact-task-meta-grid'), true)
+  assert.equal(artifactPanelSource.includes('artifact-task-meta-item'), true)
+  assert.equal(artifactPanelSource.includes('font-family: @font-family-mono'), true)
+  assert.equal(artifactPanelSource.includes('gap: @spacing-md'), true)
+  assert.equal(artifactPanelSource.includes('padding: @spacing-lg'), true)
 })

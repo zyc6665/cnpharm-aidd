@@ -53,14 +53,9 @@
               class="artifact-task-card"
             >
               <div class="artifact-task-header">
-                <div class="artifact-copy">
-                  <strong class="artifact-task-title">#{{ taskGroup.taskId }}</strong>
-                  <p class="artifact-meta">
-                    {{ t('workflow.artifacts.sourceTool', { tool: taskGroup.toolName }) }}
-                  </p>
-                  <p class="artifact-meta">
-                    {{ t('workflow.artifacts.generatedAt', { time: formatDateTime(taskGroup.latestCreatedAt) }) }}
-                  </p>
+                <div class="artifact-task-main">
+                  <span class="artifact-task-kicker">{{ t('workflow.artifacts.taskLabel') }}</span>
+                  <strong class="artifact-task-id">#{{ taskGroup.taskId }}</strong>
                 </div>
                 <div class="artifact-action">
                   <a-tag class="artifact-task-count">
@@ -74,6 +69,16 @@
                   >
                     {{ t('workflow.currentTool.viewTask') }}
                   </a-button>
+                </div>
+              </div>
+              <div class="artifact-task-meta-grid">
+                <div class="artifact-task-meta-item">
+                  <span class="artifact-meta-label">{{ t('workflow.artifacts.sourceToolLabel') }}</span>
+                  <strong class="artifact-meta-value">{{ taskGroup.toolName }}</strong>
+                </div>
+                <div class="artifact-task-meta-item">
+                  <span class="artifact-meta-label">{{ t('workflow.artifacts.generatedAtLabel') }}</span>
+                  <strong class="artifact-meta-value">{{ formatDateTime(taskGroup.latestCreatedAt) }}</strong>
                 </div>
               </div>
               <div class="artifact-list artifact-list-compact">
@@ -100,14 +105,9 @@
               class="artifact-task-card"
             >
               <div class="artifact-task-header">
-                <div class="artifact-copy">
-                  <strong class="artifact-task-title">#{{ taskGroup.taskId }}</strong>
-                  <p class="artifact-meta">
-                    {{ t('workflow.artifacts.sourceTool', { tool: taskGroup.toolName }) }}
-                  </p>
-                  <p class="artifact-meta">
-                    {{ t('workflow.artifacts.generatedAt', { time: formatDateTime(taskGroup.latestCreatedAt) }) }}
-                  </p>
+                <div class="artifact-task-main">
+                  <span class="artifact-task-kicker">{{ t('workflow.artifacts.taskLabel') }}</span>
+                  <strong class="artifact-task-id">#{{ taskGroup.taskId }}</strong>
                 </div>
                 <div class="artifact-action">
                   <a-tag class="artifact-task-count">
@@ -121,6 +121,16 @@
                   >
                     {{ t('workflow.currentTool.viewTask') }}
                   </a-button>
+                </div>
+              </div>
+              <div class="artifact-task-meta-grid">
+                <div class="artifact-task-meta-item">
+                  <span class="artifact-meta-label">{{ t('workflow.artifacts.sourceToolLabel') }}</span>
+                  <strong class="artifact-meta-value">{{ taskGroup.toolName }}</strong>
+                </div>
+                <div class="artifact-task-meta-item">
+                  <span class="artifact-meta-label">{{ t('workflow.artifacts.generatedAtLabel') }}</span>
+                  <strong class="artifact-meta-value">{{ formatDateTime(taskGroup.latestCreatedAt) }}</strong>
                 </div>
               </div>
               <div class="artifact-list artifact-list-compact">
@@ -318,7 +328,10 @@
   }
 
   .artifact-task-card {
-    padding: @spacing-md;
+    display: flex;
+    flex-direction: column;
+    gap: @spacing-md;
+    padding: @spacing-lg;
     border: 1px solid #e8edf5;
     border-radius: @border-radius-md;
     background: linear-gradient(180deg, #fff 0%, #fbfdff 100%);
@@ -328,16 +341,62 @@
   .artifact-task-header {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: @spacing-sm;
+    gap: @spacing-md;
     align-items: start;
-    margin-bottom: @spacing-sm;
   }
 
-  .artifact-task-title {
+  .artifact-task-main {
+    min-width: 0;
+  }
+
+  .artifact-task-kicker {
     display: block;
     margin-bottom: @spacing-xs;
+    color: @text-color-light-secondary;
+    font-size: @font-size-xs;
+    line-height: @line-height-base;
+  }
+
+  .artifact-task-id {
+    display: block;
+    padding: @spacing-xs @spacing-sm;
+    border: 1px solid #e8edf5;
+    border-radius: @border-radius-sm;
+    background: #f8fafc;
     color: @text-color-light-primary;
-    font-size: @font-size-sm;
+    font-family: @font-family-mono;
+    font-size: @font-size-xs;
+    line-height: @line-height-base;
+    overflow-wrap: anywhere;
+  }
+
+  .artifact-task-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: @spacing-sm;
+  }
+
+  .artifact-task-meta-item {
+    min-width: 0;
+    padding: @spacing-sm @spacing-md;
+    border: 1px solid #eef2f7;
+    border-radius: @border-radius-md;
+    background: #f8fafc;
+  }
+
+  .artifact-meta-label {
+    display: block;
+    margin-bottom: @spacing-xs;
+    color: @text-color-light-secondary;
+    font-size: @font-size-xs;
+    line-height: @line-height-base;
+  }
+
+  .artifact-meta-value {
+    display: block;
+    color: @text-color-light-primary;
+    font-size: @font-size-xs;
+    line-height: @line-height-base;
     overflow-wrap: anywhere;
   }
 
@@ -431,7 +490,8 @@
   @media (max-width: @screen-sm) {
     .column-header,
     .artifact-item,
-    .artifact-task-header {
+    .artifact-task-header,
+    .artifact-task-meta-grid {
       grid-template-columns: minmax(0, 1fr);
     }
 
