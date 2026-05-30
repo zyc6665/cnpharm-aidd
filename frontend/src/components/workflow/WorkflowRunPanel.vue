@@ -13,10 +13,12 @@
       </div>
 
       <div v-if="group?.tools.length" class="tool-option-list">
-        <div
+        <button
           v-for="toolOption in group.tools"
           :key="toolOption.slug"
-          :class="['tool-option-card', { 'tool-option-active': selectedToolSlug === toolOption.slug }]"
+          type="button"
+          class="tool-option-card"
+          :class="{ 'tool-option-active': selectedToolSlug === toolOption.slug }"
           @click="selectTool(toolOption.slug)"
         >
           <div class="tool-option-copy">
@@ -29,7 +31,7 @@
             </a-tag>
             <a-tag color="green">{{ t('workflow.toolStatus.available') }}</a-tag>
           </div>
-        </div>
+        </button>
       </div>
 
       <a-alert
@@ -693,16 +695,24 @@
     display: flex;
     justify-content: space-between;
     gap: @spacing-md;
+    width: 100%;
     border: 1px solid @border-color-light;
     border-radius: @border-radius-md;
     padding: @spacing-md;
     background: @bg-card-light;
     cursor: pointer;
+    text-align: left;
     transition: border-color 0.2s ease, transform 0.2s ease;
 
-    &:hover {
+    &:hover,
+    &:focus-visible {
       border-color: @accent-color;
       transform: translateY(-1px);
+    }
+
+    &:focus-visible {
+      outline: 3px solid rgba(24, 144, 255, 0.28);
+      outline-offset: 3px;
     }
   }
 
@@ -789,7 +799,7 @@
   }
 
   .task-summary-value {
-    color: @text-color-primary;
+    color: @text-color-light-primary;
     font-size: @font-size-sm;
     text-align: right;
   }

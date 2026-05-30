@@ -246,7 +246,7 @@
   }
 
   .task-summary-value {
-    color: @text-color-primary;
+    color: @text-color-light-primary;
     font-size: @font-size-sm;
     text-align: right;
   }
