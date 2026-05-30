@@ -80,7 +80,7 @@
                 <a-avatar :size="32" :src="userStore.user?.avatar">
                   <template #icon><UserOutlined /></template>
                 </a-avatar>
-                <span>{{ userStore.user?.username }}</span>
+                <span class="user-name">{{ userStore.user?.username }}</span>
               </a-space>
               <template #overlay>
                 <a-menu>
@@ -263,6 +263,15 @@ const handleLogout = () => {
       &:hover {
         background: @bg-color-light;
       }
+
+      .user-name {
+        display: inline-block;
+        max-width: 140px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        vertical-align: middle;
+        white-space: nowrap;
+      }
     }
   }
 }
@@ -273,5 +282,38 @@ const handleLogout = () => {
   background: #fff;
   border-radius: @border-radius-lg;
   min-height: calc(100vh - 64px - 48px);
+}
+
+@media (max-width: @screen-md) {
+  .admin-header {
+    padding: 0 @spacing-md;
+
+    .header-left {
+      min-width: 0;
+      gap: @spacing-sm;
+    }
+
+    :deep(.ant-breadcrumb) {
+      max-width: 42vw;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .header-right .user-dropdown {
+      padding: @spacing-xs;
+
+      .user-name {
+        display: none;
+      }
+    }
+  }
+
+  .admin-content {
+    margin: @spacing-md;
+    padding: @spacing-md;
+    border-radius: @border-radius-md;
+    min-height: calc(100vh - 64px - 32px);
+  }
 }
 </style>
