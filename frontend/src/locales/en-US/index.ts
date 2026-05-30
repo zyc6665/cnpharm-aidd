@@ -371,6 +371,7 @@ export default {
     selectArtifact: 'Select Artifact',
     noArtifacts: 'No reusable artifacts yet',
     selectCompatibleArtifact: 'Select Compatible Artifact by Task',
+    selectArtifactTask: 'Select Task First',
     noCompatibleArtifacts: 'No task artifact matches this input format',
     // Guest warning
     guestWarning: 'Guest mode has limited features. Please login for full access',

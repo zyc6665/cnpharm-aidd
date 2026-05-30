@@ -33,22 +33,25 @@
           {{ t('common.refresh') }}
         </a-button>
       </div>
-      <a-select
+      <div
         v-if="artifactTaskGroups.length > 0"
-        class="artifact-select"
-        :value="selectedArtifact?.id"
-        :loading="artifactsStore.loading"
-        :placeholder="t('tools.noArtifacts')"
-        show-search
-        allow-clear
-        option-filter-prop="label"
-        @change="handleArtifactSelect"
+        class="artifact-cascade"
       >
-        <a-select-opt-group
-          v-for="taskGroup in artifactTaskGroups"
-          :key="taskGroup.taskId"
+        <a-select
+          class="artifact-task-select"
+          :value="selectedTaskId"
+          :loading="artifactsStore.loading"
+          :placeholder="t('tools.selectArtifactTask')"
+          show-search
+          option-filter-prop="label"
+          @change="handleTaskSelect"
         >
-          <template #label>
+          <a-select-option
+            v-for="taskGroup in artifactTaskGroups"
+            :key="taskGroup.taskId"
+            :value="taskGroup.taskId"
+            :label="`${taskGroup.taskId} ${taskGroup.toolName}`"
+          >
             <div class="artifact-task-option-label">
               <span class="artifact-task-option-main">#{{ taskGroup.taskId }}</span>
               <span class="artifact-task-option-sub">{{ taskGroup.toolName }}</span>
@@ -56,20 +59,31 @@
                 {{ t('workflow.artifacts.taskCount', { count: taskGroup.artifacts.length }) }}
               </a-tag>
             </div>
-          </template>
+          </a-select-option>
+        </a-select>
+        <a-select
+          class="artifact-file-select"
+          :value="selectedArtifact?.id"
+          :loading="artifactsStore.loading"
+          :placeholder="t('tools.noArtifacts')"
+          show-search
+          allow-clear
+          option-filter-prop="label"
+          @change="handleArtifactSelect"
+        >
           <a-select-option
-            v-for="artifact in taskGroup.artifacts"
+            v-for="artifact in selectedTaskArtifacts"
             :key="artifact.id"
             :value="artifact.id"
-            :label="`${artifact.filename} ${taskGroup.toolName} ${taskGroup.taskId}`"
+            :label="`${artifact.filename} ${selectedTaskGroup?.toolName ?? ''} ${selectedTaskId ?? ''}`"
           >
             <div class="artifact-option">
               <span class="artifact-option-name">{{ artifact.filename }}</span>
               <span class="artifact-option-meta">{{ formatArtifactMeta(artifact) }}</span>
             </div>
           </a-select-option>
-        </a-select-opt-group>
-      </a-select>
+        </a-select>
+      </div>
       <a-empty
         v-else
         class="artifact-empty"
@@ -111,9 +125,18 @@
   const { t } = useI18n()
   const artifactsStore = useArtifactsStore()
   const sourceMode = ref<'upload' | 'artifact'>('upload')
+  const selectedTaskId = ref<string>()
 
   const artifactTaskGroups = computed(() => {
     return groupCompatibleArtifactsByTask(artifactsStore.items, props.accept)
+  })
+
+  const selectedTaskGroup = computed(() => {
+    return artifactTaskGroups.value.find((group) => group.taskId === selectedTaskId.value) ?? null
+  })
+
+  const selectedTaskArtifacts = computed(() => {
+    return selectedTaskGroup.value?.artifacts ?? []
   })
 
   const compatibleArtifacts = computed(() => {
@@ -149,6 +172,7 @@
     }
 
     emit('update:uploadList', [])
+    syncSelectedTask()
   }
 
   function handleUploadListChange(files: UploadFile[]) {
@@ -164,8 +188,16 @@
       return
     }
 
-    const artifact = compatibleArtifacts.value.find((item) => item.id === artifactId) ?? null
+    const artifact = selectedTaskArtifacts.value.find((item) => item.id === artifactId) ?? null
     emit('update:selectedArtifact', artifact)
+    emit('update:uploadList', [])
+  }
+
+  function handleTaskSelect(taskId: string) {
+    selectedTaskId.value = taskId
+    if (props.selectedArtifact?.task_id !== taskId) {
+      emit('update:selectedArtifact', null)
+    }
     emit('update:uploadList', [])
   }
 
@@ -173,10 +205,36 @@
     return `${artifact.tool_name} · ${dayjs(artifact.created_at).format('YYYY-MM-DD HH:mm')}`
   }
 
+  function syncSelectedTask() {
+    if (!props.allowArtifacts) {
+      selectedTaskId.value = undefined
+      return
+    }
+
+    if (props.selectedArtifact && compatibleArtifacts.value.some((artifact) => artifact.id === props.selectedArtifact?.id)) {
+      selectedTaskId.value = props.selectedArtifact.task_id
+      return
+    }
+
+    if (selectedTaskId.value && artifactTaskGroups.value.some((group) => group.taskId === selectedTaskId.value)) {
+      return
+    }
+
+    selectedTaskId.value = artifactTaskGroups.value[0]?.taskId
+  }
+
   watch(
     () => [props.selectedArtifact, props.allowArtifacts] as const,
     () => {
       syncSourceMode()
+    },
+    { immediate: true }
+  )
+
+  watch(
+    () => [props.selectedArtifact?.id, props.allowArtifacts, props.accept, artifactTaskGroups.value.map((group) => group.taskId).join('|')] as const,
+    () => {
+      syncSelectedTask()
     },
     { immediate: true }
   )
@@ -236,6 +294,18 @@
     width: 100%;
   }
 
+  .artifact-cascade {
+    display: grid;
+    grid-template-columns: minmax(180px, 280px) minmax(0, 1fr);
+    gap: @spacing-sm;
+    align-items: start;
+  }
+
+  .artifact-task-select,
+  .artifact-file-select {
+    width: 100%;
+  }
+
   .artifact-task-option-label {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -292,5 +362,11 @@
     border: 1px dashed #d8e1ee;
     border-radius: @border-radius-md;
     background: #fbfdff;
+  }
+
+  @media (max-width: @screen-sm) {
+    .artifact-cascade {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
 </style>

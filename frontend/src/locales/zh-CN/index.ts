@@ -371,6 +371,7 @@ export default {
     selectArtifact: '选择历史产物',
     noArtifacts: '暂无可复用产物',
     selectCompatibleArtifact: '按任务选择兼容产物',
+    selectArtifactTask: '先选择任务',
     noCompatibleArtifacts: '没有匹配当前输入格式的任务产物',
     // 游客提示
     guestWarning: '游客模式功能受限，请登录后使用完整功能',
