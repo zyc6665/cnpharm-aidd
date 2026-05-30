@@ -370,6 +370,8 @@ export default {
     fileSourceArtifact: 'My Artifacts',
     selectArtifact: 'Select Artifact',
     noArtifacts: 'No reusable artifacts yet',
+    selectCompatibleArtifact: 'Select Compatible Artifact by Task',
+    noCompatibleArtifacts: 'No task artifact matches this input format',
     // Guest warning
     guestWarning: 'Guest mode has limited features. Please login for full access',
     // Tool detail

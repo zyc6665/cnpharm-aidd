@@ -28,19 +28,52 @@
 
     <div v-else class="source-panel artifact-panel">
       <div class="artifact-toolbar">
-        <span class="artifact-toolbar-label">{{ t('tools.selectArtifact') }}</span>
+        <span class="artifact-toolbar-label">{{ t('tools.selectCompatibleArtifact') }}</span>
         <a-button type="link" size="small" :loading="artifactsStore.loading" @click="refreshArtifacts">
           {{ t('common.refresh') }}
         </a-button>
       </div>
       <a-select
+        v-if="artifactTaskGroups.length > 0"
+        class="artifact-select"
         :value="selectedArtifact?.id"
-        :options="artifactOptions"
         :loading="artifactsStore.loading"
         :placeholder="t('tools.noArtifacts')"
         show-search
         allow-clear
+        option-filter-prop="label"
         @change="handleArtifactSelect"
+      >
+        <a-select-opt-group
+          v-for="taskGroup in artifactTaskGroups"
+          :key="taskGroup.taskId"
+        >
+          <template #label>
+            <div class="artifact-task-option-label">
+              <span class="artifact-task-option-main">#{{ taskGroup.taskId }}</span>
+              <span class="artifact-task-option-sub">{{ taskGroup.toolName }}</span>
+              <a-tag class="artifact-task-option-count">
+                {{ t('workflow.artifacts.taskCount', { count: taskGroup.artifacts.length }) }}
+              </a-tag>
+            </div>
+          </template>
+          <a-select-option
+            v-for="artifact in taskGroup.artifacts"
+            :key="artifact.id"
+            :value="artifact.id"
+            :label="`${artifact.filename} ${taskGroup.toolName} ${taskGroup.taskId}`"
+          >
+            <div class="artifact-option">
+              <span class="artifact-option-name">{{ artifact.filename }}</span>
+              <span class="artifact-option-meta">{{ formatArtifactMeta(artifact) }}</span>
+            </div>
+          </a-select-option>
+        </a-select-opt-group>
+      </a-select>
+      <a-empty
+        v-else
+        class="artifact-empty"
+        :description="t('tools.noCompatibleArtifacts')"
       />
     </div>
   </div>
@@ -49,10 +82,12 @@
 <script setup lang="ts">
   import { computed, onMounted, ref, watch } from 'vue'
   import { useI18n } from 'vue-i18n'
+  import dayjs from 'dayjs'
   import type { UploadFile } from 'ant-design-vue'
   import { UploadOutlined } from '@ant-design/icons-vue'
   import { useArtifactsStore } from '@/stores'
   import type { ArtifactFile } from '@/types/models'
+  import { groupCompatibleArtifactsByTask } from './artifact-selection'
 
   const props = withDefaults(
     defineProps<{
@@ -77,11 +112,12 @@
   const artifactsStore = useArtifactsStore()
   const sourceMode = ref<'upload' | 'artifact'>('upload')
 
-  const artifactOptions = computed(() => {
-    return artifactsStore.items.map((artifact) => ({
-      label: artifact.filename,
-      value: artifact.id
-    }))
+  const artifactTaskGroups = computed(() => {
+    return groupCompatibleArtifactsByTask(artifactsStore.items, props.accept)
+  })
+
+  const compatibleArtifacts = computed(() => {
+    return artifactTaskGroups.value.flatMap((group) => group.artifacts)
   })
 
   function syncSourceMode() {
@@ -128,9 +164,13 @@
       return
     }
 
-    const artifact = artifactsStore.items.find((item) => item.id === artifactId) ?? null
+    const artifact = compatibleArtifacts.value.find((item) => item.id === artifactId) ?? null
     emit('update:selectedArtifact', artifact)
     emit('update:uploadList', [])
+  }
+
+  function formatArtifactMeta(artifact: ArtifactFile): string {
+    return `${artifact.tool_name} · ${dayjs(artifact.created_at).format('YYYY-MM-DD HH:mm')}`
   }
 
   watch(
@@ -139,6 +179,19 @@
       syncSourceMode()
     },
     { immediate: true }
+  )
+
+  watch(
+    compatibleArtifacts,
+    (nextArtifacts) => {
+      if (!props.selectedArtifact) {
+        return
+      }
+
+      if (!nextArtifacts.some((artifact) => artifact.id === props.selectedArtifact?.id)) {
+        emit('update:selectedArtifact', null)
+      }
+    }
   )
 
   onMounted(async () => {
@@ -175,7 +228,69 @@
   }
 
   .artifact-toolbar-label {
-    color: @text-color-secondary;
+    color: @text-color-light-secondary;
     font-size: @font-size-sm;
+  }
+
+  .artifact-select {
+    width: 100%;
+  }
+
+  .artifact-task-option-label {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: @spacing-xs @spacing-sm;
+    align-items: center;
+    padding: @spacing-xs 0;
+  }
+
+  .artifact-task-option-main,
+  .artifact-task-option-sub {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .artifact-task-option-main {
+    color: @text-color-light-primary;
+    font-family: @font-family-mono;
+    font-size: @font-size-xs;
+  }
+
+  .artifact-task-option-sub {
+    color: @text-color-light-secondary;
+    font-size: @font-size-xs;
+  }
+
+  .artifact-task-option-count {
+    grid-row: span 2;
+    margin-inline-end: 0;
+  }
+
+  .artifact-option {
+    display: flex;
+    flex-direction: column;
+    gap: @spacing-xs;
+    min-width: 0;
+  }
+
+  .artifact-option-name {
+    overflow: hidden;
+    color: @text-color-light-primary;
+    text-overflow: ellipsis;
+  }
+
+  .artifact-option-meta {
+    overflow: hidden;
+    color: @text-color-light-secondary;
+    font-size: @font-size-xs;
+    text-overflow: ellipsis;
+  }
+
+  .artifact-empty {
+    padding: @spacing-md;
+    border: 1px dashed #d8e1ee;
+    border-radius: @border-radius-md;
+    background: #fbfdff;
   }
 </style>

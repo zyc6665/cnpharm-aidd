@@ -43,6 +43,16 @@ test('共享产物文件选择器组件文件应存在', () => {
   assert.equal(existsSync(resolve(rootDir, 'src/components/tools/ArtifactFilePicker.vue')), true)
 })
 
+test('共享产物文件选择器应按任务分组并使用兼容文件过滤', () => {
+  const source = readSource('src/components/tools/ArtifactFilePicker.vue')
+
+  assert.equal(source.includes('groupCompatibleArtifactsByTask'), true)
+  assert.equal(source.includes('artifactTaskGroups'), true)
+  assert.equal(source.includes('a-select-opt-group'), true)
+  assert.equal(source.includes('artifact-task-option-label'), true)
+  assert.equal(source.includes('tools.noCompatibleArtifacts'), true)
+})
+
 test('普通工具详情页应引用共享产物文件选择器', () => {
   const source = readSource('src/views/tools/Detail.vue')
 
