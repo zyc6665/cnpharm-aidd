@@ -14,7 +14,7 @@ test('顶部导航应提供 CPUPDB 占位入口', () => {
   const layoutSource = readSource('src/components/layout/DefaultLayout.vue')
 
   assert.equal(layoutSource.includes("const cpupdbUrl = 'https://www.cpupdb.com'"), true)
-  assert.equal(layoutSource.includes("t('nav.cpupdb')"), true)
+  assert.equal(layoutSource.includes("key: 'cpupdb', labelKey: 'nav.cpupdb', href: cpupdbUrl"), true)
 })
 
 test('首页第二屏应改为 AIDD 平台功能流程', () => {
@@ -59,4 +59,15 @@ test('首页第二屏应改为 AIDD 平台功能流程', () => {
   )
   assert.equal(enLocaleSource.includes("title: 'Property Prediction'"), true)
   assert.equal(enLocaleSource.includes("title: 'Lead Optimization'"), true)
+})
+
+test('首页首屏应提供产品化工作台视觉预览', () => {
+  const homeSource = readSource('src/views/home/index.vue')
+
+  assert.equal(homeSource.includes('hero-shell'), true)
+  assert.equal(homeSource.includes('hero-copy'), true)
+  assert.equal(homeSource.includes('hero-preview'), true)
+  assert.equal(homeSource.includes('preview-pipeline'), true)
+  assert.equal(homeSource.includes('preview-structure'), true)
+  assert.equal(homeSource.includes('preview-metrics'), true)
 })
