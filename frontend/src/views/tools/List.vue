@@ -146,7 +146,7 @@
           v-model:current="currentPage"
           :total="displayTotal"
           :page-size="pageSize"
-          :show-total="(t: number) => `共 ${t} 条`"
+          :show-total="(total: number) => t('common.totalItems', { total })"
           show-quick-jumper
           show-size-changer
           :page-size-options="['12', '24', '48']"
