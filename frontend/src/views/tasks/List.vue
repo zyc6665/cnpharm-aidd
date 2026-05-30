@@ -43,7 +43,7 @@
       </div>
 
       <!-- 筛选栏 -->
-      <div class="filter-bar">
+      <AppFilterBar>
         <a-input-search
           v-model:value="searchKeyword"
           :placeholder="t('tasks.searchPlaceholder')"
@@ -80,7 +80,7 @@
           <template #icon><ReloadOutlined /></template>
           {{ t('common.refresh') }}
         </a-button>
-      </div>
+      </AppFilterBar>
 
       <!-- 实时监控面板（运行中标签页显示） -->
       <div v-if="currentTab === 'running' && runningTasks.length > 0" class="monitor-panel">
@@ -257,6 +257,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import AppFilterBar from '@/components/common/AppFilterBar.vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import {
   UnorderedListOutlined,
@@ -596,13 +597,6 @@ onUnmounted(() => {
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.6; }
-}
-
-.filter-bar {
-  display: flex;
-  gap: @spacing-md;
-  margin-bottom: @spacing-xl;
-  flex-wrap: wrap;
 }
 
 // 实时监控面板

@@ -30,7 +30,7 @@
       </div>
 
       <!-- 搜索和筛选 -->
-      <div class="filter-bar">
+      <AppFilterBar>
         <a-input-search
           v-model:value="searchKeyword"
           :placeholder="t('tools.search')"
@@ -81,7 +81,7 @@
             </a-menu>
           </template>
         </a-dropdown>
-      </div>
+      </AppFilterBar>
 
       <!-- 工具列表 -->
       <a-spin :spinning="loading">
@@ -154,6 +154,7 @@
   import { ref, computed, onMounted } from 'vue'
   import { useRouter } from 'vue-router'
   import { useI18n } from 'vue-i18n'
+  import AppFilterBar from '@/components/common/AppFilterBar.vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import {
     ToolOutlined,
@@ -332,21 +333,14 @@
     flex-wrap: wrap;
   }
 
-  .filter-bar {
+  .category-option {
     display: flex;
-    gap: @spacing-md;
-    margin-bottom: @spacing-xl;
-    flex-wrap: wrap;
+    align-items: center;
+    gap: @spacing-xs;
 
-    .category-option {
-      display: flex;
-      align-items: center;
-      gap: @spacing-xs;
-
-      .category-count {
-        color: @text-color-light-tertiary;
-        font-size: @font-size-sm;
-      }
+    .category-count {
+      color: @text-color-light-tertiary;
+      font-size: @font-size-sm;
     }
   }
 
