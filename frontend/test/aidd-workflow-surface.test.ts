@@ -62,18 +62,19 @@ test('store 入口应导出 useWorkflowStore', () => {
   assert.equal(source.includes("export { useWorkflowStore } from './workflow'"), true)
 })
 
-test('流程工作台 store 应启用持久化并声明核心状态与动作', () => {
+test('工具工作台 store 应启用持久化并声明核心状态与动作', () => {
   const source = readSource('src/stores/workflow.ts')
 
   assert.equal(source.includes('persist:'), true)
   assert.equal(source.includes('sessionId'), true)
-  assert.equal(source.includes('activeStepKey'), true)
-  assert.equal(source.includes('artifacts'), true)
-  assert.equal(source.includes('taskByStep'), true)
+  assert.equal(source.includes('activeGroupId'), true)
+  assert.equal(source.includes('selectedToolByGroup'), true)
+  assert.equal(source.includes('toolFormDrafts'), true)
+  assert.equal(source.includes('taskByTool'), true)
   assert.equal(source.includes('resetSession'), true)
   assert.equal(source.includes('selectTool'), true)
   assert.equal(source.includes('recordTask'), true)
-  assert.equal(source.includes('registerArtifacts'), true)
+  assert.equal(source.includes('setToolFormDraft'), true)
 })
 
 test('流程步骤 catalog 模块文件应存在', () => {
@@ -142,12 +143,13 @@ test('流程运行面板应复用 schema 扁平化与任务提交载荷构建工
   assert.equal(source.includes('buildTaskSubmissionPayload'), true)
 })
 
-test('流程运行面板应提供文件上传、提交、重置和自动绑定来源展示', () => {
+test('流程运行面板应提供产物选择、提交、重置和工具跳转操作', () => {
   const source = readSource('src/components/workflow/WorkflowRunPanel.vue')
 
-  assert.equal(source.includes('a-upload'), true)
+  assert.equal(source.includes('ArtifactFilePicker'), true)
   assert.equal(source.includes('submitWorkflowForm'), true)
-  assert.equal(source.includes('workflow.actions.'), true)
+  assert.equal(source.includes('workflow.currentTool.runAction'), true)
   assert.equal(source.includes("t('common.reset')"), true)
-  assert.equal(source.includes('bound-source-list'), true)
+  assert.equal(source.includes('openToolDetail'), true)
+  assert.equal(source.includes('openTaskDetail'), true)
 })
