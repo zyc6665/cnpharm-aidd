@@ -15,7 +15,7 @@
       </template>
     </AppPageHeader>
 
-    <a-card class="filter-card">
+    <AppFilterBar>
       <a-form layout="inline">
         <a-form-item :label="t('admin.keyword')">
           <a-input
@@ -63,7 +63,7 @@
           </a-space>
         </a-form-item>
       </a-form>
-    </a-card>
+    </AppFilterBar>
 
     <a-card>
       <a-table
@@ -169,6 +169,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { message, Modal } from 'ant-design-vue'
+import AppFilterBar from '@/components/common/AppFilterBar.vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import {
   DeleteOutlined,
@@ -357,10 +358,6 @@ onMounted(async () => {
 @import '@/assets/styles/variables.less';
 
 .admin-tools {
-  .filter-card {
-    margin-bottom: @spacing-lg;
-  }
-
   .hidden-file-input {
     display: none;
   }

@@ -27,6 +27,18 @@
     min-width: 0;
   }
 
+  :deep(.ant-form) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: @spacing-md;
+    width: 100%;
+  }
+
+  :deep(.ant-form-item) {
+    margin: 0;
+  }
+
   @media (max-width: @screen-sm) {
     .app-filter-bar {
       align-items: stretch;
@@ -40,6 +52,18 @@
     :deep(.ant-btn) {
       width: 100% !important;
       max-width: none !important;
+    }
+
+    :deep(.ant-form) {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    :deep(.ant-form-item),
+    :deep(.ant-form-item-control),
+    :deep(.ant-form-item-control-input),
+    :deep(.ant-form-item-control-input-content) {
+      width: 100%;
     }
   }
 </style>

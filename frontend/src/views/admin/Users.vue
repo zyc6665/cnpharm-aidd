@@ -31,7 +31,7 @@
       </a-col>
     </a-row>
 
-    <a-card class="filter-card">
+    <AppFilterBar>
       <a-form layout="inline">
         <a-form-item :label="t('admin.keyword')">
           <a-input
@@ -76,7 +76,7 @@
           </a-space>
         </a-form-item>
       </a-form>
-    </a-card>
+    </AppFilterBar>
 
     <a-card>
       <a-table
@@ -236,6 +236,7 @@ import { ReloadOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
 import type { FormInstance } from 'ant-design-vue'
 import dayjs from 'dayjs'
+import AppFilterBar from '@/components/common/AppFilterBar.vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import {
   adminCreateUser,
@@ -568,10 +569,6 @@ onMounted(async () => {
 
   .stat-card {
     text-align: center;
-  }
-
-  .filter-card {
-    margin-bottom: @spacing-lg;
   }
 
   .reset-password-hint {

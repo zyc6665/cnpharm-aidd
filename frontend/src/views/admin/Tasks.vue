@@ -31,7 +31,7 @@
       </a-col>
     </a-row>
 
-    <a-card class="filter-card">
+    <AppFilterBar>
       <a-form layout="inline">
         <a-form-item :label="t('admin.keyword')">
           <a-input
@@ -78,7 +78,7 @@
           </a-space>
         </a-form-item>
       </a-form>
-    </a-card>
+    </AppFilterBar>
 
     <a-card>
       <a-table
@@ -215,6 +215,7 @@ import {
 } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
 import dayjs from 'dayjs'
+import AppFilterBar from '@/components/common/AppFilterBar.vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import { getTaskList, getTaskDetail, cancelTask, retryTask, deleteTask } from '@/api/tasks'
 import { getSystemStats } from '@/api/system'
@@ -404,10 +405,6 @@ onMounted(async () => {
 
   .stat-card {
     text-align: center;
-  }
-
-  .filter-card {
-    margin-bottom: @spacing-lg;
   }
 
   .task-cell,
