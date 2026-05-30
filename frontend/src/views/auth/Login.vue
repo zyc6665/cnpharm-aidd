@@ -1,15 +1,12 @@
 <template>
-  <div class="auth-page">
-    <div class="auth-container">
-      <div class="auth-card">
-        <h1 class="auth-title">{{ t('auth.login') }}</h1>
-        <a-form
-          ref="formRef"
-          :model="formState"
-          :rules="rules"
-          layout="vertical"
-          @finish="handleSubmit"
-        >
+  <AuthShell :title="t('auth.login')">
+    <a-form
+      ref="formRef"
+      :model="formState"
+      :rules="rules"
+      layout="vertical"
+      @finish="handleSubmit"
+    >
           <a-form-item name="email" :label="t('auth.email')">
             <a-input
               v-model:value="formState.email"
@@ -69,9 +66,7 @@
             <span>{{ t('auth.noAccount') }}</span>
             <router-link to="/register">{{ t('auth.goRegister') }}</router-link>
           </div>
-        </a-form>
-      </div>
-    </div>
+    </a-form>
 
     <!-- 游客模式确认弹窗 -->
     <a-modal
@@ -122,7 +117,7 @@
         </div>
       </div>
     </a-modal>
-  </div>
+  </AuthShell>
 </template>
 
 <script setup lang="ts">
@@ -138,6 +133,7 @@
     CloseCircleOutlined,
     CheckCircleOutlined
   } from '@ant-design/icons-vue'
+  import AuthShell from '@/components/auth/AuthShell.vue'
   import { useUserStore } from '@/stores'
 
   const router = useRouter()
@@ -207,35 +203,6 @@
 
 <style scoped lang="less">
   @import '@/assets/styles/variables.less';
-
-  .auth-page {
-    min-height: 100vh;
-    .gradient-bg();
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: @spacing-lg;
-  }
-
-  .auth-container {
-    width: 100%;
-    max-width: 420px;
-  }
-
-  .auth-card {
-    background: rgba(255, 255, 255, 0.95);
-    border-radius: @border-radius-lg;
-    padding: @spacing-xl;
-    box-shadow: @shadow-xl;
-  }
-
-  .auth-title {
-    font-size: @font-size-xxl;
-    font-weight: @font-weight-bold;
-    text-align: center;
-    margin-bottom: @spacing-xl;
-    color: @bg-dark;
-  }
 
   .form-extra {
     display: flex;

@@ -1,9 +1,5 @@
 <template>
-  <div class="auth-page">
-    <div class="auth-container">
-      <div class="auth-card">
-        <h1 class="auth-title">{{ t('auth.forgotPassword') }}</h1>
-        <p class="auth-desc">{{ t('auth.forgotPasswordDesc') }}</p>
+  <AuthShell :title="t('auth.forgotPassword')" :description="t('auth.forgotPasswordDesc')">
 
         <!-- 步骤指示器 -->
         <a-steps :current="currentStep" size="small" class="auth-steps">
@@ -162,9 +158,7 @@
             <ArrowLeftOutlined /> {{ t('common.back') }} {{ t('auth.login') }}
           </router-link>
         </div>
-      </div>
-    </div>
-  </div>
+  </AuthShell>
 </template>
 
 <script setup lang="ts">
@@ -179,6 +173,7 @@
     LockOutlined,
     ArrowLeftOutlined
   } from '@ant-design/icons-vue'
+  import AuthShell from '@/components/auth/AuthShell.vue'
   import { sendEmailCode, verifyEmailCode, resetPassword } from '@/api/auth'
 
   const router = useRouter()
@@ -350,41 +345,6 @@
 
 <style scoped lang="less">
   @import '@/assets/styles/variables.less';
-
-  .auth-page {
-    min-height: 100vh;
-    .gradient-bg();
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: @spacing-lg;
-  }
-
-  .auth-container {
-    width: 100%;
-    max-width: 420px;
-  }
-
-  .auth-card {
-    background: rgba(255, 255, 255, 0.95);
-    border-radius: @border-radius-lg;
-    padding: @spacing-xl;
-    box-shadow: @shadow-xl;
-  }
-
-  .auth-title {
-    font-size: @font-size-xxl;
-    font-weight: @font-weight-bold;
-    text-align: center;
-    margin-bottom: @spacing-sm;
-    color: @bg-dark;
-  }
-
-  .auth-desc {
-    text-align: center;
-    color: @text-color-light-secondary;
-    margin-bottom: @spacing-lg;
-  }
 
   .auth-steps {
     margin-bottom: @spacing-xl;
