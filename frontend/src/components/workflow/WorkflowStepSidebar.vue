@@ -68,6 +68,14 @@
   .column-card {
     .card();
     height: 100%;
+    border-color: #e8edf5;
+
+    @media (min-width: @screen-md) {
+      position: sticky;
+      top: @spacing-lg;
+      max-height: calc(100vh - 112px);
+      overflow-y: auto;
+    }
   }
 
   .column-title {
@@ -97,15 +105,21 @@
     text-align: left;
     transition: border-color 0.2s ease, transform 0.2s ease;
 
-    &:hover {
+    &:hover,
+    &:focus-visible {
       border-color: @accent-color;
       transform: translateY(-1px);
+    }
+
+    &:focus-visible {
+      outline: 3px solid rgba(24, 144, 255, 0.28);
+      outline-offset: 3px;
     }
   }
 
   .group-card-active {
     border-color: @accent-color;
-    box-shadow: @shadow-sm;
+    box-shadow: inset 3px 0 0 @accent-color, @shadow-sm;
   }
 
   .group-copy {
@@ -123,6 +137,7 @@
     color: @text-color-light-secondary;
     font-size: @font-size-sm;
     line-height: @line-height-base;
+    overflow-wrap: anywhere;
   }
 
   .group-meta {

@@ -169,7 +169,7 @@
                   <strong class="form-action-title">{{ t('workflow.currentTool.runAction') }}</strong>
                   <p class="form-action-desc">{{ t('workflow.currentTool.runHint') }}</p>
                 </div>
-                <a-space wrap>
+                <a-space class="form-action-buttons" wrap>
                   <a-button
                     type="primary"
                     size="large"
@@ -638,6 +638,7 @@
   .column-card {
     .card();
     height: 100%;
+    border-color: #e8edf5;
   }
 
   .column-title {
@@ -718,7 +719,7 @@
 
   .tool-option-active {
     border-color: @accent-color;
-    box-shadow: @shadow-sm;
+    box-shadow: inset 3px 0 0 @accent-color, @shadow-sm;
   }
 
   .tool-option-copy {
@@ -736,6 +737,8 @@
     margin: 0;
     color: @text-color-light-secondary;
     font-size: @font-size-sm;
+    line-height: @line-height-base;
+    overflow-wrap: anywhere;
   }
 
   .tool-option-tags {
@@ -775,6 +778,20 @@
     flex: 1;
   }
 
+  .action-summary-title,
+  .form-action-title,
+  .task-summary-value {
+    overflow-wrap: anywhere;
+  }
+
+  .form-action-buttons {
+    justify-content: flex-end;
+  }
+
+  .form-action-buttons :deep(.ant-space-item) {
+    display: flex;
+  }
+
   .action-summary-tags {
     display: flex;
     flex-wrap: wrap;
@@ -802,5 +819,28 @@
     color: @text-color-light-primary;
     font-size: @font-size-sm;
     text-align: right;
+  }
+
+  @media (max-width: @screen-md) {
+    .tools-column {
+      grid-column: auto;
+    }
+
+    .tool-option-card,
+    .action-summary-card,
+    .form-action-bar {
+      flex-direction: column;
+    }
+
+    .tool-option-tags,
+    .form-action-buttons {
+      justify-content: flex-start;
+    }
+
+    .form-action-buttons,
+    .form-action-buttons :deep(.ant-space-item),
+    .form-action-buttons :deep(.ant-btn) {
+      width: 100%;
+    }
   }
 </style>

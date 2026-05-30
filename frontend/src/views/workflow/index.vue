@@ -1,6 +1,6 @@
 <template>
   <div class="workflow-page">
-    <div class="container">
+    <div class="container workflow-shell">
       <AppPageHeader :title="t('workflow.title')" :subtitle="t('workflow.subtitle')" />
 
       <div class="workflow-layout">
@@ -136,20 +136,46 @@
   .workflow-page {
     padding: @spacing-xl 0;
     min-height: calc(100vh - @header-height - @footer-height);
-    background: @bg-light;
+    background:
+      linear-gradient(180deg, rgba(24, 144, 255, 0.06) 0%, rgba(255, 255, 255, 0) 260px),
+      @bg-light;
+  }
+
+  .workflow-shell {
+    max-width: 1480px;
   }
 
   .workflow-layout {
     display: grid;
-    grid-template-columns: 280px minmax(0, 1fr) 320px;
+    grid-template-columns: minmax(240px, 280px) minmax(420px, 1fr) minmax(300px, 340px);
     gap: @spacing-lg;
+    align-items: start;
 
     @media (max-width: @screen-xl) {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+
+      :deep(.artifacts-column) {
+        grid-column: 1 / -1;
+        order: 3;
+      }
     }
 
     @media (max-width: @screen-md) {
       grid-template-columns: minmax(0, 1fr);
+      gap: @spacing-md;
+
+      :deep(.groups-column) {
+        order: 1;
+      }
+
+      :deep(.tools-column) {
+        order: 2;
+      }
+
+      :deep(.artifacts-column) {
+        grid-column: auto;
+        order: 3;
+      }
     }
   }
 </style>

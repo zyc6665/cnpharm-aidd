@@ -57,9 +57,16 @@
                   {{ t('workflow.artifacts.generatedAt', { time: formatDateTime(artifact.created_at) }) }}
                 </p>
               </div>
-              <a-button type="link" size="small" @click="openTaskDetail(artifact.task_id)">
-                {{ t('workflow.currentTool.viewTask') }}
-              </a-button>
+              <div class="artifact-action">
+                <a-button
+                  type="link"
+                  size="small"
+                  class="artifact-action-button"
+                  @click="openTaskDetail(artifact.task_id)"
+                >
+                  {{ t('workflow.currentTool.viewTask') }}
+                </a-button>
+              </div>
             </div>
           </div>
           <a-empty v-else :description="t('workflow.artifacts.emptyCurrentGroup')" />
@@ -78,9 +85,16 @@
                   {{ t('workflow.artifacts.generatedAt', { time: formatDateTime(artifact.created_at) }) }}
                 </p>
               </div>
-              <a-button type="link" size="small" @click="openTaskDetail(artifact.task_id)">
-                {{ t('workflow.currentTool.viewTask') }}
-              </a-button>
+              <div class="artifact-action">
+                <a-button
+                  type="link"
+                  size="small"
+                  class="artifact-action-button"
+                  @click="openTaskDetail(artifact.task_id)"
+                >
+                  {{ t('workflow.currentTool.viewTask') }}
+                </a-button>
+              </div>
             </div>
           </div>
           <a-empty v-else :description="t('workflow.artifacts.emptyRecent')" />
@@ -166,6 +180,14 @@
   .column-card {
     .card();
     height: 100%;
+    border-color: #e8edf5;
+
+    @media (min-width: @screen-md) {
+      position: sticky;
+      top: @spacing-lg;
+      max-height: calc(100vh - 112px);
+      overflow-y: auto;
+    }
   }
 
   .column-header {
@@ -212,12 +234,22 @@
     gap: @spacing-sm;
   }
 
-  .artifact-item,
   .task-summary-row {
     display: flex;
     justify-content: space-between;
     gap: @spacing-sm;
     align-items: flex-start;
+  }
+
+  .artifact-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: @spacing-sm;
+    align-items: start;
+    padding: @spacing-sm;
+    border: 1px solid #eef2f7;
+    border-radius: @border-radius-md;
+    background: #fff;
   }
 
   .artifact-copy {
@@ -228,6 +260,7 @@
     display: block;
     font-size: @font-size-sm;
     margin-bottom: @spacing-xs;
+    overflow-wrap: anywhere;
   }
 
   .artifact-meta,
@@ -236,6 +269,18 @@
     color: @text-color-light-secondary;
     font-size: @font-size-xs;
     line-height: @line-height-base;
+    overflow-wrap: anywhere;
+  }
+
+  .artifact-action {
+    align-self: start;
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .artifact-action-button {
+    padding-inline: @spacing-xs;
+    white-space: nowrap;
   }
 
   .task-summary-card {
@@ -249,5 +294,21 @@
     color: @text-color-light-primary;
     font-size: @font-size-sm;
     text-align: right;
+    overflow-wrap: anywhere;
+  }
+
+  @media (max-width: @screen-sm) {
+    .column-header,
+    .artifact-item {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .column-header {
+      display: grid;
+    }
+
+    .artifact-action {
+      justify-content: flex-start;
+    }
   }
 </style>
