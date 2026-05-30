@@ -6,6 +6,7 @@
         <!-- 密码设置 -->
         <a-tab-pane key="password" :tab="t('user.changePassword')">
           <a-form
+            class="settings-form"
             :model="passwordForm"
             :rules="passwordRules"
             :label-col="{ span: 6 }"
@@ -32,6 +33,7 @@
         <!-- 通知设置 -->
         <a-tab-pane key="notification" :tab="t('user.notificationSettings')">
           <a-form
+            class="settings-form"
             :model="notificationForm"
             :label-col="{ span: 6 }"
             :wrapper-col="{ span: 14 }"
@@ -62,6 +64,7 @@
         <!-- 隐私设置 -->
         <a-tab-pane key="privacy" :tab="t('user.privacySettings')">
           <a-form
+            class="settings-form"
             :model="privacyForm"
             :label-col="{ span: 6 }"
             :wrapper-col="{ span: 14 }"
@@ -346,6 +349,35 @@ const handleDeleteAccount = () => {
       &.danger .security-info h4 {
         color: @error-color;
       }
+    }
+  }
+
+  @media (max-width: @screen-md) {
+    .settings-form {
+      :deep(.ant-form-item) {
+        flex-direction: column;
+      }
+
+      :deep(.ant-form-item-label),
+      :deep(.ant-form-item-control) {
+        flex: 0 0 100%;
+        max-width: 100%;
+        text-align: left;
+      }
+
+      :deep(.ant-form-item-control) {
+        margin-left: 0;
+      }
+
+      :deep(.ant-btn-primary) {
+        width: 100%;
+      }
+    }
+
+    .security-list .security-item {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: @spacing-md;
     }
   }
 }

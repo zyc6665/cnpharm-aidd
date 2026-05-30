@@ -5,7 +5,7 @@
         <a-input-search
           v-model:value="searchKeyword"
           :placeholder="t('tools.search')"
-          style="width: 200px"
+          class="favorites-search-input"
           @search="handleSearch"
         />
       </template>
@@ -203,6 +203,10 @@ onMounted(() => {
 @import '@/assets/styles/variables.less';
 
 .user-favorites {
+  .favorites-search-input {
+    width: min(240px, 100%);
+  }
+
   .tool-card {
     height: 100%;
 
@@ -273,6 +277,12 @@ onMounted(() => {
       li {
         margin: 0;
       }
+    }
+  }
+
+  @media (max-width: @screen-sm) {
+    .favorites-search-input {
+      width: 100%;
     }
   }
 }

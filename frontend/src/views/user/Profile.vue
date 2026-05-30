@@ -3,6 +3,7 @@
     <AppPageHeader :title="t('user.profile')" />
     <a-card class="profile-card">
       <a-form
+        class="profile-form"
         :model="form"
         :rules="rules"
         :label-col="{ span: 6 }"
@@ -278,6 +279,29 @@ onMounted(() => {
     justify-content: center;
     width: 100px;
     height: 100px;
+  }
+
+  @media (max-width: @screen-md) {
+    .profile-form {
+      :deep(.ant-form-item) {
+        flex-direction: column;
+      }
+
+      :deep(.ant-form-item-label),
+      :deep(.ant-form-item-control) {
+        flex: 0 0 100%;
+        max-width: 100%;
+        text-align: left;
+      }
+
+      :deep(.ant-form-item-control) {
+        margin-left: 0;
+      }
+
+      :deep(.ant-btn-primary) {
+        width: 100%;
+      }
+    }
   }
 }
 </style>
