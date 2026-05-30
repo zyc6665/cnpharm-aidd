@@ -1,11 +1,6 @@
 <template>
   <div class="admin-workbench-groups">
-    <div class="page-header">
-      <div>
-        <h2>{{ t('admin.workbenchGroups') }}</h2>
-        <p>{{ t('admin.workbenchGroupsSubtitle') }}</p>
-      </div>
-    </div>
+    <AppPageHeader :title="t('admin.workbenchGroups')" :subtitle="t('admin.workbenchGroupsSubtitle')" />
 
     <div class="page-grid">
       <a-card class="group-form">
@@ -153,6 +148,7 @@
   import { onMounted, reactive, ref } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { message } from 'ant-design-vue'
+  import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import type { Tool, WorkbenchGroup, WorkbenchGroupMapping } from '@/types/models'
   import {
     adminCreateWorkbenchGroup,
@@ -359,10 +355,6 @@
 
 <style scoped lang="less">
   @import '@/assets/styles/variables.less';
-
-  .page-header {
-    margin-bottom: @spacing-lg;
-  }
 
   .page-grid {
     display: grid;

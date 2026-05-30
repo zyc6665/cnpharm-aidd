@@ -1,11 +1,12 @@
 <template>
   <div class="admin-tasks">
-    <div class="page-header">
-      <h2>{{ t('admin.tasks') }}</h2>
+    <AppPageHeader :title="t('admin.tasks')">
+      <template #actions>
       <a-button @click="handleRefresh">
         <ReloadOutlined /> {{ t('common.refresh') }}
       </a-button>
-    </div>
+      </template>
+    </AppPageHeader>
 
     <a-row :gutter="16" class="stats-row">
       <a-col :xs="12" :sm="6">
@@ -214,6 +215,7 @@ import {
 } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
 import dayjs from 'dayjs'
+import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import { getTaskList, getTaskDetail, cancelTask, retryTask, deleteTask } from '@/api/tasks'
 import { getSystemStats } from '@/api/system'
 import { getToolList } from '@/api/tools'
@@ -396,17 +398,6 @@ onMounted(async () => {
 @import '@/assets/styles/variables.less';
 
 .admin-tasks {
-  .page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: @spacing-lg;
-
-    h2 {
-      margin: 0;
-    }
-  }
-
   .stats-row {
     margin-bottom: @spacing-lg;
   }

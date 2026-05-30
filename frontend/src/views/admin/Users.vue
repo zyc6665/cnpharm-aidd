@@ -1,11 +1,12 @@
 <template>
   <div class="admin-users">
-    <div class="page-header">
-      <h2>{{ t('admin.users') }}</h2>
+    <AppPageHeader :title="t('admin.users')">
+      <template #actions>
       <a-button type="primary" @click="openCreateModal">
         {{ t('admin.createUser') }}
       </a-button>
-    </div>
+      </template>
+    </AppPageHeader>
 
     <a-row :gutter="16" class="stats-row">
       <a-col :xs="12" :sm="6">
@@ -235,6 +236,7 @@ import { ReloadOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
 import type { FormInstance } from 'ant-design-vue'
 import dayjs from 'dayjs'
+import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import {
   adminCreateUser,
   adminDeleteUser,
@@ -560,17 +562,6 @@ onMounted(async () => {
 @import '@/assets/styles/variables.less';
 
 .admin-users {
-  .page-header {
-    margin-bottom: @spacing-lg;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-
-    h2 {
-      margin: 0;
-    }
-  }
-
   .stats-row {
     margin-bottom: @spacing-lg;
   }

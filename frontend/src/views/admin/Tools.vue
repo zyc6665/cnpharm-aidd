@@ -1,10 +1,7 @@
 <template>
   <div class="admin-tools">
-    <div class="page-header">
-      <div>
-        <h2>{{ t('admin.tools') }}</h2>
-        <p>{{ t('admin.toolsSubtitle') }}</p>
-      </div>
+    <AppPageHeader :title="t('admin.tools')" :subtitle="t('admin.toolsSubtitle')">
+      <template #actions>
       <a-space>
         <a-button @click="openImportModal">
           <UploadOutlined />
@@ -15,7 +12,8 @@
           {{ t('admin.createTool') }}
         </a-button>
       </a-space>
-    </div>
+      </template>
+    </AppPageHeader>
 
     <a-card class="filter-card">
       <a-form layout="inline">
@@ -171,6 +169,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { message, Modal } from 'ant-design-vue'
+import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import {
   DeleteOutlined,
   EditOutlined,
@@ -358,23 +357,6 @@ onMounted(async () => {
 @import '@/assets/styles/variables.less';
 
 .admin-tools {
-  .page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: @spacing-lg;
-    margin-bottom: @spacing-lg;
-
-    h2 {
-      margin: 0;
-    }
-
-    p {
-      margin: @spacing-xs 0 0;
-      color: @text-color-light-secondary;
-    }
-  }
-
   .filter-card {
     margin-bottom: @spacing-lg;
   }

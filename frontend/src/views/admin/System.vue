@@ -1,11 +1,12 @@
 <template>
   <div class="admin-system">
-    <div class="page-header">
-      <h2>{{ t('admin.system') }}</h2>
+    <AppPageHeader :title="t('admin.system')">
+      <template #actions>
       <a-button @click="refreshSystemData">
         <ReloadOutlined /> {{ t('common.refresh') }}
       </a-button>
-    </div>
+      </template>
+    </AppPageHeader>
 
     <a-row :gutter="[16, 16]">
       <a-col :xs="24" :xl="14">
@@ -68,6 +69,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
 import { ReloadOutlined } from '@ant-design/icons-vue'
+import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import { getSystemConfig, getSystemInfo, getSystemStats } from '@/api/system'
 import type { SystemConfig, SystemInfo, SystemStats } from '@/types/models'
 
@@ -112,17 +114,6 @@ onMounted(() => {
 @import '@/assets/styles/variables.less';
 
 .admin-system {
-  .page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: @spacing-lg;
-
-    h2 {
-      margin: 0;
-    }
-  }
-
   .config-card {
     margin-top: @spacing-lg;
   }

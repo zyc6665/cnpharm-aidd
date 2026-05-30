@@ -1,15 +1,13 @@
 <template>
   <div class="admin-tool-categories">
-    <div class="page-header">
-      <div>
-        <h2>{{ t('admin.toolCategories') }}</h2>
-        <p>{{ t('admin.toolCategoriesSubtitle') }}</p>
-      </div>
+    <AppPageHeader :title="t('admin.toolCategories')" :subtitle="t('admin.toolCategoriesSubtitle')">
+      <template #actions>
       <a-button type="primary" @click="openCreateModal">
         <PlusOutlined />
         {{ t('admin.createCategory') }}
       </a-button>
-    </div>
+      </template>
+    </AppPageHeader>
 
     <a-card>
       <a-table
@@ -106,6 +104,7 @@ import {
   EditOutlined,
   PlusOutlined
 } from '@ant-design/icons-vue'
+import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import type { Category } from '@/types/models'
 import {
   adminCreateToolCategory,
@@ -286,23 +285,6 @@ onMounted(() => {
 @import '@/assets/styles/variables.less';
 
 .admin-tool-categories {
-  .page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: @spacing-lg;
-    margin-bottom: @spacing-lg;
-
-    h2 {
-      margin: 0;
-    }
-
-    p {
-      margin: @spacing-xs 0 0;
-      color: @text-color-light-secondary;
-    }
-  }
-
   .name-cell {
     display: flex;
     flex-direction: column;
