@@ -2,38 +2,44 @@
   <div class="tool-detail-page">
     <div class="container">
       <a-spin :spinning="loading">
-        <div v-if="tool" class="tool-detail">
-          <!-- 左侧：工具信息 + 参数表单 -->
-          <div class="tool-main">
-            <!-- 工具信息卡片 -->
-            <div class="tool-info card">
+        <div v-if="tool" class="tool-detail-shell">
+          <AppPageHeader :title="tool.name" :subtitle="detailSubtitle">
+            <template #actions>
+              <a-space class="tool-detail-actions" wrap>
+                <a-button
+                  :type="tool.is_favorited ? 'primary' : 'default'"
+                  :loading="favoriteLoading"
+                  @click="handleFavorite"
+                >
+                  <HeartFilled v-if="tool.is_favorited" />
+                  <HeartOutlined v-else />
+                  {{ tool.is_favorited ? t('tools.unfavorite') : t('tools.favorite') }}
+                </a-button>
+                <a-tag v-if="tool.current_version" color="blue">
+                  v{{ tool.current_version.version }}
+                </a-tag>
+              </a-space>
+            </template>
+          </AppPageHeader>
+
+          <div class="tool-detail">
+            <!-- 左侧：工具信息 + 参数表单 -->
+            <div class="tool-main">
+              <!-- 工具信息卡片 -->
+              <div class="tool-info tool-overview card">
               <div class="tool-header">
                 <div class="tool-icon">
                   <span v-if="tool.icon">{{ tool.icon }}</span>
                   <ToolOutlined v-else />
                 </div>
                 <div class="tool-meta">
-                  <h1 class="tool-name">{{ tool.name }}</h1>
+                  <h2 class="overview-title">{{ t('tools.toolInfo') }}</h2>
                   <div class="tool-tags">
                     <a-tag v-if="tool.category" color="gold">{{ tool.category }}</a-tag>
                     <a-tag v-for="tag in tool.tags" :key="tag.id" :color="tag.color">
                       {{ tag.name }}
                     </a-tag>
                   </div>
-                </div>
-                <div class="tool-actions">
-                  <a-button
-                    :type="tool.is_favorited ? 'primary' : 'default'"
-                    :loading="favoriteLoading"
-                    @click="handleFavorite"
-                  >
-                    <HeartFilled v-if="tool.is_favorited" />
-                    <HeartOutlined v-else />
-                    {{ tool.is_favorited ? t('tools.unfavorite') : t('tools.favorite') }}
-                  </a-button>
-                  <a-tag v-if="tool.current_version" color="blue">
-                    v{{ tool.current_version.version }}
-                  </a-tag>
                 </div>
               </div>
 
@@ -150,8 +156,8 @@
                   </a-form-item>
                 </template>
 
-                <a-form-item>
-                  <a-space>
+                <a-form-item class="tool-form-actions">
+                  <a-space wrap>
                     <a-button
                       type="primary"
                       html-type="submit"
@@ -209,6 +215,7 @@
             </div>
           </div>
         </div>
+        </div>
         <a-empty v-else :description="t('common.noData')" />
       </a-spin>
     </div>
@@ -231,6 +238,7 @@
     TagOutlined,
     InfoCircleOutlined
   } from '@ant-design/icons-vue'
+  import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import ArtifactFilePicker from '@/components/tools/ArtifactFilePicker.vue'
   import { useToolsStore, useTasksStore, useUserStore } from '@/stores'
   import type { ArtifactFile, SchemaProperty, ToolSchema } from '@/types/models'
@@ -284,6 +292,13 @@
     if (!userStore.isAuthenticated) return false
     if (userStore.isGuest) return false
     return true
+  })
+  const detailSubtitle = computed(() => {
+    if (!tool.value) {
+      return t('tools.detail')
+    }
+
+    return `${t('tools.usageCount')}: ${formatNumber(tool.value.statistics?.usage_count)} · ${t('tools.viewCount')}: ${formatNumber(tool.value.statistics?.view_count)}`
   })
 
   const formatNumber = (num?: number | null) => {
@@ -488,6 +503,11 @@
     min-height: calc(100vh - @header-height - @footer-height);
   }
 
+  .tool-detail-actions {
+    align-items: center;
+    justify-content: flex-end;
+  }
+
   .tool-detail {
     display: grid;
     grid-template-columns: 1fr 320px;
@@ -500,6 +520,7 @@
 
   .card {
     background: @bg-light;
+    border: 1px solid #eef0f5;
     border-radius: @border-radius-lg;
     padding: @spacing-lg;
     box-shadow: @shadow-sm;
@@ -537,9 +558,9 @@
       min-width: 200px;
     }
 
-    .tool-name {
-      font-size: @font-size-xxl;
-      font-weight: @font-weight-bold;
+    .overview-title {
+      font-size: @font-size-lg;
+      font-weight: @font-weight-semibold;
       margin-bottom: @spacing-sm;
     }
 
@@ -547,13 +568,6 @@
       display: flex;
       gap: @spacing-xs;
       flex-wrap: wrap;
-    }
-
-    .tool-actions {
-      display: flex;
-      gap: @spacing-sm;
-      flex-shrink: 0;
-      align-items: flex-start;
     }
 
     .tool-description {
@@ -611,6 +625,10 @@
       align-items: center;
       gap: @spacing-xs;
     }
+
+    .tool-form-actions {
+      margin-bottom: 0;
+    }
   }
 
   // 右侧栏
@@ -618,6 +636,12 @@
     display: flex;
     flex-direction: column;
     gap: @spacing-lg;
+
+    @media (min-width: @screen-lg) {
+      position: sticky;
+      top: @spacing-lg;
+      align-self: start;
+    }
 
     @media (max-width: @screen-lg) {
       order: -1;
@@ -668,6 +692,35 @@
     &:hover {
       background: @accent-color-hover;
       border-color: @accent-color-hover;
+    }
+  }
+
+  @media (max-width: @screen-md) {
+    .tool-detail-page {
+      padding: @spacing-lg 0;
+    }
+
+    .tool-detail-actions {
+      justify-content: flex-start;
+      width: 100%;
+    }
+
+    .card {
+      padding: @spacing-md;
+    }
+
+    .tool-info .tool-header {
+      align-items: flex-start;
+    }
+
+    .tool-form-actions {
+      :deep(.ant-space) {
+        width: 100%;
+      }
+
+      :deep(.ant-btn) {
+        width: 100%;
+      }
     }
   }
 </style>
