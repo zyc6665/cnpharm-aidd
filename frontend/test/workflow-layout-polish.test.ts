@@ -44,3 +44,23 @@ test('工作台左右栏应支持桌面吸顶和长列表内部滚动', () => {
   assert.equal(artifactPanelSource.includes('overflow-y: auto'), true)
   assert.equal(sidebarSource.includes('&:focus-visible'), true)
 })
+
+test('工作台产物应按任务归类并限制每个任务的预览数量', () => {
+  const artifactPanelSource = readSource('src/components/workflow/WorkflowArtifactPanel.vue')
+  const zhLocaleSource = readSource('src/locales/zh-CN/index.ts')
+  const enLocaleSource = readSource('src/locales/en-US/index.ts')
+
+  assert.equal(artifactPanelSource.includes('groupArtifactsByTask'), true)
+  assert.equal(artifactPanelSource.includes('currentGroupTaskGroups'), true)
+  assert.equal(artifactPanelSource.includes('recentTaskGroups'), true)
+  assert.equal(artifactPanelSource.includes('ARTIFACT_TASK_PREVIEW_LIMIT'), true)
+  assert.equal(artifactPanelSource.includes('visibleArtifacts'), true)
+  assert.equal(artifactPanelSource.includes('artifact-task-card'), true)
+  assert.equal(artifactPanelSource.includes('artifact-task-count'), true)
+  assert.equal(artifactPanelSource.includes('workflow.artifacts.taskCount'), true)
+  assert.equal(artifactPanelSource.includes('workflow.artifacts.moreArtifacts'), true)
+  assert.equal(zhLocaleSource.includes('taskCount'), true)
+  assert.equal(zhLocaleSource.includes('moreArtifacts'), true)
+  assert.equal(enLocaleSource.includes('taskCount'), true)
+  assert.equal(enLocaleSource.includes('moreArtifacts'), true)
+})

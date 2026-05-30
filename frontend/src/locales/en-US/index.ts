@@ -167,7 +167,9 @@ export default {
       emptyCurrentGroup: 'No reusable artifact is available for this group yet',
       emptyRecent: 'You do not have any reusable output file yet',
       sourceTool: 'Source Tool: {tool}',
-      generatedAt: 'Generated At: {time}'
+      generatedAt: 'Generated At: {time}',
+      taskCount: '{count} artifacts',
+      moreArtifacts: '{count} more artifacts. Open task details to view all'
     },
     steps: workflowSteps,
     columns: {

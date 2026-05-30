@@ -167,7 +167,9 @@ export default {
       emptyCurrentGroup: '当前分组还没有可复用产物',
       emptyRecent: '你还没有可复用的历史输出文件',
       sourceTool: '来源工具：{tool}',
-      generatedAt: '生成时间：{time}'
+      generatedAt: '生成时间：{time}',
+      taskCount: '{count} 个产物',
+      moreArtifacts: '还有 {count} 个产物，进入任务详情查看'
     },
     steps: workflowSteps,
     columns: {
