@@ -165,6 +165,8 @@
                   :selected-artifact="selectedArtifacts[key] ?? null"
                   :accept="prop.accept"
                   :allow-artifacts="userStore.isLoggedIn"
+                  :current-tool-id="selectedTool?.id ?? selectedToolSummary?.id"
+                  :current-tool-slug="selectedTool?.slug ?? selectedToolSummary?.slug"
                   @update:upload-list="(files) => handleFileListChange(String(key), files)"
                   @update:selected-artifact="(artifact) => handleArtifactSelection(String(key), artifact)"
                 />

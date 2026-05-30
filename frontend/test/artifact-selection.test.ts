@@ -47,3 +47,20 @@ test('groupCompatibleArtifactsByTask 应在未指定 accept 时仍隐藏噪音�
 
   assert.deepEqual(groups.map((group) => group.artifacts.map((item) => item.id)), [['result-file']])
 })
+
+test('groupCompatibleArtifactsByTask 应只展示当前工具产生的任务', async () => {
+  const { groupCompatibleArtifactsByTask } = await import('../src/components/tools/artifact-selection.ts')
+
+  const groups = groupCompatibleArtifactsByTask(
+    [
+      artifact({ id: 'same-tool-a', task_id: 'task-a', tool_id: 'tool-current', tool_slug: 'current-tool', created_at: '2026-05-29T08:00:00Z' }),
+      artifact({ id: 'same-tool-b', task_id: 'task-b', tool_id: 'tool-current', tool_slug: 'current-tool', created_at: '2026-05-29T09:00:00Z' }),
+      artifact({ id: 'other-tool', task_id: 'task-c', tool_id: 'tool-other', tool_slug: 'other-tool', created_at: '2026-05-29T10:00:00Z' })
+    ],
+    '.pdb',
+    { toolId: 'tool-current', toolSlug: 'current-tool' }
+  )
+
+  assert.deepEqual(groups.map((group) => group.taskId), ['task-b', 'task-a'])
+  assert.deepEqual(groups.flatMap((group) => group.artifacts.map((item) => item.id)), ['same-tool-b', 'same-tool-a'])
+})

@@ -109,11 +109,15 @@
       selectedArtifact?: ArtifactFile | null
       accept?: string
       allowArtifacts?: boolean
+      currentToolId?: string | null
+      currentToolSlug?: string | null
     }>(),
     {
       selectedArtifact: null,
       accept: undefined,
-      allowArtifacts: true
+      allowArtifacts: true,
+      currentToolId: null,
+      currentToolSlug: null
     }
   )
 
@@ -128,7 +132,10 @@
   const selectedTaskId = ref<string>()
 
   const artifactTaskGroups = computed(() => {
-    return groupCompatibleArtifactsByTask(artifactsStore.items, props.accept)
+    return groupCompatibleArtifactsByTask(artifactsStore.items, props.accept, {
+      toolId: props.currentToolId,
+      toolSlug: props.currentToolSlug
+    })
   })
 
   const selectedTaskGroup = computed(() => {
@@ -232,7 +239,14 @@
   )
 
   watch(
-    () => [props.selectedArtifact?.id, props.allowArtifacts, props.accept, artifactTaskGroups.value.map((group) => group.taskId).join('|')] as const,
+    () => [
+      props.selectedArtifact?.id,
+      props.allowArtifacts,
+      props.accept,
+      props.currentToolId,
+      props.currentToolSlug,
+      artifactTaskGroups.value.map((group) => group.taskId).join('|')
+    ] as const,
     () => {
       syncSelectedTask()
     },

@@ -7,6 +7,11 @@ export interface ArtifactTaskOptionGroup {
   artifacts: ArtifactFile[]
 }
 
+export interface ArtifactTaskFilterOptions {
+  toolId?: string | null
+  toolSlug?: string | null
+}
+
 const NOISE_FILE_PATTERNS = [
   /(^|\/)(logs?|stderr|stdout)(\/|\.|$)/i,
   /(^|\/)(intermediate|tmp|temp|cache|workdir|scratch)(\/|$)/i,
@@ -72,13 +77,27 @@ export function filterCompatibleArtifacts(artifacts: ArtifactFile[], accept?: st
   })
 }
 
+function isArtifactFromTool(artifact: ArtifactFile, options?: ArtifactTaskFilterOptions): boolean {
+  const toolId = options?.toolId?.trim()
+  const toolSlug = options?.toolSlug?.trim()
+
+  if (!toolId && !toolSlug) {
+    return true
+  }
+
+  return artifact.tool_id === toolId || artifact.tool_slug === toolSlug
+}
+
 export function groupCompatibleArtifactsByTask(
   artifacts: ArtifactFile[],
-  accept?: string
+  accept?: string,
+  options?: ArtifactTaskFilterOptions
 ): ArtifactTaskOptionGroup[] {
   const taskMap = new Map<string, ArtifactFile[]>()
+  const compatibleArtifacts = filterCompatibleArtifacts(artifacts, accept)
+    .filter((item) => isArtifactFromTool(item, options))
 
-  for (const artifact of filterCompatibleArtifacts(artifacts, accept)) {
+  for (const artifact of compatibleArtifacts) {
     const taskArtifacts = taskMap.get(artifact.task_id) ?? []
     taskArtifacts.push(artifact)
     taskMap.set(artifact.task_id, taskArtifacts)

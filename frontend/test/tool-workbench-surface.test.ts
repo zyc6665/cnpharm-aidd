@@ -48,6 +48,8 @@ test('共享产物文件选择器应使用任务和产物二级下拉并过滤�
 
   assert.equal(source.includes('groupCompatibleArtifactsByTask'), true)
   assert.equal(source.includes('artifactTaskGroups'), true)
+  assert.equal(source.includes('currentToolId'), true)
+  assert.equal(source.includes('currentToolSlug'), true)
   assert.equal(source.includes('artifact-task-select'), true)
   assert.equal(source.includes('artifact-file-select'), true)
   assert.equal(source.includes('selectedTaskId'), true)
@@ -63,12 +65,16 @@ test('普通工具详情页应引用共享产物文件选择器', () => {
   const source = readSource('src/views/tools/Detail.vue')
 
   assert.equal(source.includes('ArtifactFilePicker'), true)
+  assert.equal(source.includes(':current-tool-id="tool?.id"'), true)
+  assert.equal(source.includes(':current-tool-slug="tool?.slug"'), true)
 })
 
 test('工作台运行区应复用共享产物选择器并移除强流程推进文案', () => {
   const source = readSource('src/components/workflow/WorkflowRunPanel.vue')
 
   assert.equal(source.includes('ArtifactFilePicker'), true)
+  assert.equal(source.includes(':current-tool-id="selectedTool?.id ?? selectedToolSummary?.id"'), true)
+  assert.equal(source.includes(':current-tool-slug="selectedTool?.slug ?? selectedToolSummary?.slug"'), true)
   assert.equal(source.includes('workflow.actions.continueNextStep'), false)
   assert.equal(source.includes('workflow.invalidations.notice'), false)
 })
