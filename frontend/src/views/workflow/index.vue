@@ -1,10 +1,7 @@
 <template>
   <div class="workflow-page">
     <div class="container">
-      <div class="page-header">
-        <h1 class="page-title">{{ t('workflow.title') }}</h1>
-        <p class="page-subtitle">{{ t('workflow.subtitle') }}</p>
-      </div>
+      <AppPageHeader :title="t('workflow.title')" :subtitle="t('workflow.subtitle')" />
 
       <div class="workflow-layout">
         <WorkflowStepSidebar
@@ -29,6 +26,7 @@
 <script setup lang="ts">
   import { computed, onMounted, watch } from 'vue'
   import { useI18n } from 'vue-i18n'
+  import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import WorkflowArtifactPanel from '@/components/workflow/WorkflowArtifactPanel.vue'
   import WorkflowRunPanel from '@/components/workflow/WorkflowRunPanel.vue'
   import WorkflowStepSidebar from '@/components/workflow/WorkflowStepSidebar.vue'
@@ -139,24 +137,6 @@
     padding: @spacing-xl 0;
     min-height: calc(100vh - @header-height - @footer-height);
     background: @bg-light;
-  }
-
-  .page-header {
-    text-align: center;
-    margin-bottom: @spacing-xl;
-  }
-
-  .page-title {
-    font-size: @font-size-xxxl;
-    font-weight: @font-weight-bold;
-    margin-bottom: @spacing-sm;
-  }
-
-  .page-subtitle {
-    max-width: 760px;
-    margin: 0 auto;
-    color: @text-color-light-secondary;
-    font-size: @font-size-lg;
   }
 
   .workflow-layout {

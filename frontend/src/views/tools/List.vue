@@ -1,10 +1,7 @@
 <template>
   <div class="tools-page">
     <div class="container">
-      <div class="page-header">
-        <h1 class="page-title">{{ t('tools.title') }}</h1>
-        <p class="page-subtitle">{{ t('tools.subtitle') }}</p>
-      </div>
+      <AppPageHeader :title="t('tools.title')" :subtitle="t('tools.subtitle')" />
 
       <div class="workflow-entry-card">
         <div class="workflow-entry-copy">
@@ -157,6 +154,7 @@
   import { ref, computed, onMounted } from 'vue'
   import { useRouter } from 'vue-router'
   import { useI18n } from 'vue-i18n'
+  import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import {
     ToolOutlined,
     PlayCircleOutlined,
@@ -295,22 +293,6 @@
   .tools-page {
     padding: @spacing-xl 0;
     min-height: calc(100vh - @header-height - @footer-height);
-  }
-
-  .page-header {
-    text-align: center;
-    margin-bottom: @spacing-xl;
-  }
-
-  .page-title {
-    font-size: @font-size-xxxl;
-    font-weight: @font-weight-bold;
-    margin-bottom: @spacing-sm;
-  }
-
-  .page-subtitle {
-    color: @text-color-light-secondary;
-    font-size: @font-size-lg;
   }
 
   .workflow-entry-card {

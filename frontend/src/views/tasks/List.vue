@@ -1,10 +1,7 @@
 <template>
   <div class="tasks-page">
     <div class="container">
-      <div class="page-header">
-        <h1 class="page-title">{{ t('tasks.title') }}</h1>
-        <p class="page-subtitle">{{ t('tasks.subtitle') }}</p>
-      </div>
+      <AppPageHeader :title="t('tasks.title')" :subtitle="t('tasks.subtitle')" />
 
       <!-- 三标签页切换 -->
       <div class="view-tabs">
@@ -260,6 +257,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import {
   UnorderedListOutlined,
   SyncOutlined,
@@ -553,22 +551,6 @@ onUnmounted(() => {
 .tasks-page {
   padding: @spacing-xl 0;
   min-height: calc(100vh - @header-height - @footer-height);
-}
-
-.page-header {
-  text-align: center;
-  margin-bottom: @spacing-xl;
-}
-
-.page-title {
-  font-size: @font-size-xxxl;
-  font-weight: @font-weight-bold;
-  margin-bottom: @spacing-sm;
-}
-
-.page-subtitle {
-  color: @text-color-light-secondary;
-  font-size: @font-size-lg;
 }
 
 // 视图切换标签
