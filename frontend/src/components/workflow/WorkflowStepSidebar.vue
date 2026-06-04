@@ -9,7 +9,7 @@
           v-for="group in groups"
           :key="group.id"
           type="button"
-          :class="['group-card', { 'group-card-active': group.id === activeGroupId }]"
+          :class="['group-card', 'group-rail-card', { 'group-card-active': group.id === activeGroupId }]"
           @click="selectGroup(group.id)"
         >
           <div class="group-copy">
@@ -63,19 +63,23 @@
 
   .workflow-column {
     min-width: 0;
+
+    @media (min-width: @screen-md) {
+      position: sticky;
+      top: calc(@header-height + @spacing-md);
+      align-self: start;
+      z-index: 2;
+      max-height: calc(100vh - @header-height - @spacing-xl);
+      overflow-y: auto;
+    }
   }
 
   .column-card {
     .card();
     height: 100%;
-    border-color: #e8edf5;
-
-    @media (min-width: @screen-md) {
-      position: sticky;
-      top: @spacing-lg;
-      max-height: calc(100vh - 112px);
-      overflow-y: auto;
-    }
+    border: 1px solid rgba(205, 217, 235, 0.9);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(246, 249, 255, 0.98) 100%);
+    box-shadow: 0 18px 36px rgb(15 23 42 / 5%);
   }
 
   .column-title {
@@ -97,18 +101,19 @@
 
   .group-card {
     width: 100%;
-    border: 1px solid @border-color-light;
-    border-radius: @border-radius-md;
+    border: 1px solid rgba(214, 224, 238, 0.92);
+    border-radius: @border-radius-lg;
     padding: @spacing-md;
-    background: @bg-card-light;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
     cursor: pointer;
     text-align: left;
-    transition: border-color 0.2s ease, transform 0.2s ease;
+    transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
 
     &:hover,
     &:focus-visible {
       border-color: @accent-color;
       transform: translateY(-1px);
+      box-shadow: 0 14px 28px rgb(15 23 42 / 6%);
     }
 
     &:focus-visible {
@@ -119,7 +124,9 @@
 
   .group-card-active {
     border-color: @accent-color;
-    box-shadow: inset 3px 0 0 @accent-color, @shadow-sm;
+    box-shadow:
+      inset 4px 0 0 @accent-color,
+      0 18px 34px rgb(15 23 42 / 7%);
   }
 
   .group-copy {

@@ -14,6 +14,22 @@
       "Content-Type": "application/json"
     },
     "timeout_sec": 600,
+    "examples": [
+      {
+        "name": "Remote API 模板示例",
+        "description": "使用模板输入文件与基础阈值参数演示 remote_api 请求格式。",
+        "params": {
+          "params": {
+            "sample_id": "demo-sample",
+            "threshold": 0.5,
+            "top_k": 5
+          }
+        },
+        "input_files": {
+          "input_file": "example-input.dat"
+        }
+      }
+    ],
     "input_schema": {
       "$defs": {
         "PredictionInputFiles": {

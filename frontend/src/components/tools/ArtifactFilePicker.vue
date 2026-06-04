@@ -33,57 +33,138 @@
           {{ t('common.refresh') }}
         </a-button>
       </div>
-      <div
-        v-if="artifactTaskGroups.length > 0"
-        class="artifact-cascade"
-      >
-        <a-select
-          class="artifact-task-select"
-          :value="selectedTaskId"
-          :loading="artifactsStore.loading"
-          :placeholder="t('tools.selectArtifactTask')"
-          show-search
-          option-filter-prop="label"
-          @change="handleTaskSelect"
-        >
-          <a-select-option
-            v-for="taskGroup in artifactTaskGroups"
-            :key="taskGroup.taskId"
-            :value="taskGroup.taskId"
-            :label="`${taskGroup.taskId} ${taskGroup.toolName}`"
+
+      <div v-if="artifactGroupNodes.length > 0" class="artifact-flow">
+        <div class="artifact-path">
+          <button
+            v-for="segment in pathSegments"
+            :key="segment.step"
+            type="button"
+            class="artifact-path-segment"
+            :class="{
+              'is-active': activeStep === segment.step,
+              'is-complete': segment.complete
+            }"
+            :disabled="!segment.clickable"
+            @click="handlePathSegmentClick(segment.step)"
           >
-            <div class="artifact-task-option-label">
-              <span class="artifact-task-option-main">#{{ taskGroup.taskId }}</span>
-              <span class="artifact-task-option-sub">{{ taskGroup.toolName }}</span>
-              <a-tag class="artifact-task-option-count">
-                {{ t('workflow.artifacts.taskCount', { count: taskGroup.artifacts.length }) }}
+            <span class="artifact-path-kicker">{{ segment.label }}</span>
+            <strong class="artifact-path-value">{{ segment.value }}</strong>
+          </button>
+        </div>
+
+        <div class="artifact-step-panel">
+          <div class="artifact-step-header">
+            <div class="artifact-step-copy">
+              <span class="artifact-step-kicker">{{ currentStepLabel }}</span>
+              <strong class="artifact-step-title">{{ currentStepTitle }}</strong>
+            </div>
+            <a-tag class="artifact-step-count">{{ currentStepCount }}</a-tag>
+          </div>
+
+          <div v-if="activeStep === 'group'" class="artifact-step-list">
+            <button
+              v-for="groupNode in artifactGroupNodes"
+              :key="groupNode.groupId"
+              type="button"
+              class="artifact-step-option"
+              :class="{ 'is-selected': selectedGroupId === groupNode.groupId }"
+              @click="handleGroupSelect(groupNode.groupId)"
+            >
+              <span class="artifact-step-option-copy">
+                <strong class="artifact-step-option-title">
+                  {{ groupNode.isUngrouped ? t('workflow.artifacts.ungroupedGroup') : groupNode.groupName }}
+                </strong>
+                <span class="artifact-step-option-meta">{{ t('tools.artifactGroupMeta') }}</span>
+              </span>
+              <a-tag class="artifact-step-option-count">{{ groupNode.tools.length }}</a-tag>
+            </button>
+          </div>
+
+          <div v-else-if="activeStep === 'tool'" class="artifact-step-list">
+            <button
+              v-for="toolNode in selectedGroupTools"
+              :key="toolNode.toolSlug"
+              type="button"
+              class="artifact-step-option"
+              :class="{ 'is-selected': selectedToolSlug === toolNode.toolSlug }"
+              @click="handleToolSelect(toolNode.toolSlug)"
+            >
+              <span class="artifact-step-option-copy">
+                <strong class="artifact-step-option-title">{{ toolNode.toolName }}</strong>
+                <span class="artifact-step-option-meta">{{ t('tools.artifactToolMeta') }}</span>
+              </span>
+              <a-tag class="artifact-step-option-count">{{ toolNode.tasks.length }}</a-tag>
+            </button>
+          </div>
+
+          <div v-else-if="activeStep === 'task'" class="artifact-step-list">
+            <button
+              v-for="taskNode in selectedToolTasks"
+              :key="taskNode.taskId"
+              type="button"
+              class="artifact-step-option"
+              :class="{ 'is-selected': selectedTaskId === taskNode.taskId }"
+              @click="handleTaskSelect(taskNode.taskId)"
+            >
+              <span class="artifact-step-option-copy">
+                <strong class="artifact-step-option-title">#{{ taskNode.taskId }}</strong>
+                <span class="artifact-step-option-meta">{{ formatTaskMeta(taskNode) }}</span>
+              </span>
+              <a-tag class="artifact-step-option-count">
+                {{ t('workflow.artifacts.taskCount', { count: taskNode.artifacts.length }) }}
               </a-tag>
-            </div>
-          </a-select-option>
-        </a-select>
-        <a-select
-          class="artifact-file-select"
-          :value="selectedArtifact?.id"
-          :loading="artifactsStore.loading"
-          :placeholder="t('tools.noArtifacts')"
-          show-search
-          allow-clear
-          option-filter-prop="label"
-          @change="handleArtifactSelect"
-        >
-          <a-select-option
-            v-for="artifact in selectedTaskArtifacts"
-            :key="artifact.id"
-            :value="artifact.id"
-            :label="`${artifact.filename} ${selectedTaskGroup?.toolName ?? ''} ${selectedTaskId ?? ''}`"
+            </button>
+          </div>
+
+          <div v-else class="artifact-step-list">
+            <button
+              v-for="artifact in selectedTaskArtifacts"
+              :key="artifact.id"
+              type="button"
+              class="artifact-step-option"
+              :class="{
+                'is-selected': selectedArtifact?.id === artifact.id,
+                'is-focused': focusedArtifactId === artifact.id && selectedArtifact?.id !== artifact.id
+              }"
+              @click="handleArtifactSelect(artifact.id)"
+            >
+              <span class="artifact-step-option-copy">
+                <strong class="artifact-step-option-title">{{ artifact.filename }}</strong>
+                <span class="artifact-step-option-meta">{{ formatArtifactMeta(artifact) }}</span>
+              </span>
+              <a-tag v-if="selectedArtifact?.id === artifact.id" color="blue" class="artifact-step-option-count">
+                {{ t('tools.artifactSelectedTag') }}
+              </a-tag>
+              <a-tag
+                v-else-if="focusedArtifactId === artifact.id"
+                color="gold"
+                class="artifact-step-option-count"
+              >
+                {{ t('tools.artifactFocusTag') }}
+              </a-tag>
+            </button>
+          </div>
+        </div>
+
+        <div class="artifact-selection-summary">
+          <div class="artifact-selection-summary-copy">
+            <span class="artifact-selection-summary-label">{{ summaryLabel }}</span>
+            <strong class="artifact-selection-summary-title">{{ summaryTitle }}</strong>
+            <p class="artifact-selection-summary-meta">{{ summaryMeta }}</p>
+          </div>
+          <a-button
+            v-if="selectedArtifact"
+            type="link"
+            size="small"
+            class="artifact-selection-summary-action"
+            @click="clearArtifactSelection"
           >
-            <div class="artifact-option">
-              <span class="artifact-option-name">{{ artifact.filename }}</span>
-              <span class="artifact-option-meta">{{ formatArtifactMeta(artifact) }}</span>
-            </div>
-          </a-select-option>
-        </a-select>
+            {{ t('tools.clearArtifactSelection') }}
+          </a-button>
+        </div>
       </div>
+
       <a-empty
         v-else
         class="artifact-empty"
@@ -99,9 +180,17 @@
   import dayjs from 'dayjs'
   import type { UploadFile } from 'ant-design-vue'
   import { UploadOutlined } from '@ant-design/icons-vue'
-  import { useArtifactsStore } from '@/stores'
+  import { useArtifactsStore, useToolsStore } from '@/stores'
   import type { ArtifactFile } from '@/types/models'
-  import { groupCompatibleArtifactsByTask } from './artifact-selection'
+  import {
+    buildWorkflowArtifactHierarchy,
+    type WorkflowArtifactGroupNode,
+    type WorkflowArtifactSelectionPath,
+    type WorkflowArtifactTaskNode,
+    type WorkflowArtifactToolNode
+  } from '../../workflow/artifact-hierarchy.ts'
+
+  type ArtifactStep = 'group' | 'tool' | 'task' | 'artifact'
 
   const props = withDefaults(
     defineProps<{
@@ -111,13 +200,19 @@
       allowArtifacts?: boolean
       currentToolId?: string | null
       currentToolSlug?: string | null
+      preferredGroupId?: string | null
+      preferredToolSlug?: string | null
+      externalSelectionPath?: WorkflowArtifactSelectionPath | null
     }>(),
     {
       selectedArtifact: null,
       accept: undefined,
       allowArtifacts: true,
       currentToolId: null,
-      currentToolSlug: null
+      currentToolSlug: null,
+      preferredGroupId: null,
+      preferredToolSlug: null,
+      externalSelectionPath: null
     }
   )
 
@@ -128,26 +223,194 @@
 
   const { t } = useI18n()
   const artifactsStore = useArtifactsStore()
+  const toolsStore = useToolsStore()
   const sourceMode = ref<'upload' | 'artifact'>('upload')
+  const activeStep = ref<ArtifactStep>('group')
+  const selectedGroupId = ref<string>()
+  const selectedToolSlug = ref<string>()
   const selectedTaskId = ref<string>()
+  const focusedArtifactId = ref<string>()
 
-  const artifactTaskGroups = computed(() => {
-    return groupCompatibleArtifactsByTask(artifactsStore.items, props.accept, {
-      toolId: props.currentToolId,
-      toolSlug: props.currentToolSlug
-    })
+  const artifactGroupNodes = computed(() => {
+    return buildWorkflowArtifactHierarchy({
+      groups: toolsStore.workbenchGroups,
+      artifacts: artifactsStore.items,
+      accept: props.accept,
+      scope: 'global'
+    }).groups
   })
 
-  const selectedTaskGroup = computed(() => {
-    return artifactTaskGroups.value.find((group) => group.taskId === selectedTaskId.value) ?? null
+  const selectedGroupNode = computed<WorkflowArtifactGroupNode | null>(() => {
+    return artifactGroupNodes.value.find((group) => group.groupId === selectedGroupId.value) ?? null
+  })
+
+  const selectedGroupTools = computed(() => {
+    return selectedGroupNode.value?.tools ?? []
+  })
+
+  const selectedToolNode = computed<WorkflowArtifactToolNode | null>(() => {
+    return selectedGroupTools.value.find((tool) => tool.toolSlug === selectedToolSlug.value) ?? null
+  })
+
+  const selectedToolTasks = computed(() => {
+    return selectedToolNode.value?.tasks ?? []
+  })
+
+  const selectedTaskNode = computed<WorkflowArtifactTaskNode | null>(() => {
+    return selectedToolTasks.value.find((task) => task.taskId === selectedTaskId.value) ?? null
   })
 
   const selectedTaskArtifacts = computed(() => {
-    return selectedTaskGroup.value?.artifacts ?? []
+    return selectedTaskNode.value?.artifacts ?? []
   })
 
   const compatibleArtifacts = computed(() => {
-    return artifactTaskGroups.value.flatMap((group) => group.artifacts)
+    return artifactGroupNodes.value.flatMap((group) =>
+      group.tools.flatMap((tool) =>
+        tool.tasks.flatMap((task) => task.artifacts)
+      )
+    )
+  })
+
+  const highlightedArtifact = computed(() => {
+    return selectedTaskArtifacts.value.find((artifact) => artifact.id === focusedArtifactId.value) ?? null
+  })
+
+  const pathSegments = computed(() => {
+    return [
+      {
+        step: 'group' as const,
+        label: t('tools.artifactGroupLabel'),
+        value: selectedGroupNode.value
+          ? (selectedGroupNode.value.isUngrouped ? t('workflow.artifacts.ungroupedGroup') : selectedGroupNode.value.groupName)
+          : t('tools.selectArtifactGroup'),
+        clickable: artifactGroupNodes.value.length > 0,
+        complete: Boolean(selectedGroupNode.value)
+      },
+      {
+        step: 'tool' as const,
+        label: t('tools.artifactToolLabel'),
+        value: selectedToolNode.value?.toolName ?? t('tools.selectArtifactTool'),
+        clickable: Boolean(selectedGroupNode.value),
+        complete: Boolean(selectedToolNode.value)
+      },
+      {
+        step: 'task' as const,
+        label: t('tools.artifactTaskLabel'),
+        value: selectedTaskNode.value ? `#${selectedTaskNode.value.taskId}` : t('tools.selectArtifactTask'),
+        clickable: Boolean(selectedToolNode.value),
+        complete: Boolean(selectedTaskNode.value)
+      },
+      {
+        step: 'artifact' as const,
+        label: t('tools.artifactOutputLabel'),
+        value: props.selectedArtifact?.filename ?? highlightedArtifact.value?.filename ?? t('tools.selectArtifactOutput'),
+        clickable: Boolean(selectedTaskNode.value),
+        complete: Boolean(props.selectedArtifact ?? highlightedArtifact.value)
+      }
+    ]
+  })
+
+  const currentStepLabel = computed(() => {
+    switch (activeStep.value) {
+      case 'group':
+        return t('tools.artifactGroupLabel')
+      case 'tool':
+        return t('tools.artifactToolLabel')
+      case 'task':
+        return t('tools.artifactTaskLabel')
+      case 'artifact':
+      default:
+        return t('tools.artifactOutputLabel')
+    }
+  })
+
+  const currentStepTitle = computed(() => {
+    switch (activeStep.value) {
+      case 'group':
+        return t('tools.selectArtifactGroup')
+      case 'tool':
+        return t('tools.selectArtifactTool')
+      case 'task':
+        return t('tools.selectArtifactTask')
+      case 'artifact':
+      default:
+        return t('tools.selectArtifactOutput')
+    }
+  })
+
+  const currentStepCount = computed(() => {
+    switch (activeStep.value) {
+      case 'group':
+        return artifactGroupNodes.value.length
+      case 'tool':
+        return selectedGroupTools.value.length
+      case 'task':
+        return selectedToolTasks.value.length
+      case 'artifact':
+      default:
+        return selectedTaskArtifacts.value.length
+    }
+  })
+
+  const summaryLabel = computed(() => {
+    if (props.selectedArtifact) {
+      return t('tools.artifactSummarySelected')
+    }
+
+    if (highlightedArtifact.value) {
+      return t('tools.artifactSummaryFocused')
+    }
+
+    return t('tools.artifactSummaryPending')
+  })
+
+  const summaryTitle = computed(() => {
+    if (props.selectedArtifact) {
+      return props.selectedArtifact.filename
+    }
+
+    if (highlightedArtifact.value) {
+      return highlightedArtifact.value.filename
+    }
+
+    if (selectedTaskNode.value) {
+      return `#${selectedTaskNode.value.taskId}`
+    }
+
+    if (selectedToolNode.value) {
+      return selectedToolNode.value.toolName
+    }
+
+    if (selectedGroupNode.value) {
+      return selectedGroupNode.value.isUngrouped ? t('workflow.artifacts.ungroupedGroup') : selectedGroupNode.value.groupName
+    }
+
+    return t('tools.noArtifacts')
+  })
+
+  const summaryMeta = computed(() => {
+    if (props.selectedArtifact) {
+      return formatArtifactMeta(props.selectedArtifact)
+    }
+
+    if (highlightedArtifact.value) {
+      return formatArtifactMeta(highlightedArtifact.value)
+    }
+
+    if (selectedTaskNode.value) {
+      return formatTaskMeta(selectedTaskNode.value)
+    }
+
+    if (selectedToolNode.value) {
+      return t('tools.artifactToolMeta')
+    }
+
+    if (selectedGroupNode.value) {
+      return t('tools.artifactGroupMeta')
+    }
+
+    return t('tools.noCompatibleArtifacts')
   })
 
   function syncSourceMode() {
@@ -168,7 +431,40 @@
     if (!props.allowArtifacts) {
       return
     }
+
     await artifactsStore.fetchArtifacts({ page: 1, page_size: 100 })
+  }
+
+  function resetUploadSelection() {
+    if (props.uploadList.length > 0) {
+      emit('update:uploadList', [])
+    }
+  }
+
+  function clearSelectedArtifactValue() {
+    focusedArtifactId.value = undefined
+    if (props.selectedArtifact) {
+      emit('update:selectedArtifact', null)
+    }
+  }
+
+  function activateDeepestMissingStep() {
+    if (!selectedGroupId.value) {
+      activeStep.value = 'group'
+      return
+    }
+
+    if (!selectedToolSlug.value) {
+      activeStep.value = 'tool'
+      return
+    }
+
+    if (!selectedTaskId.value) {
+      activeStep.value = 'task'
+      return
+    }
+
+    activeStep.value = 'artifact'
   }
 
   function handleSourceModeChange(value: 'upload' | 'artifact') {
@@ -179,7 +475,7 @@
     }
 
     emit('update:uploadList', [])
-    syncSelectedTask()
+    syncSelectionPath()
   }
 
   function handleUploadListChange(files: UploadFile[]) {
@@ -189,45 +485,211 @@
     }
   }
 
-  function handleArtifactSelect(artifactId: string | undefined) {
-    if (!artifactId) {
-      emit('update:selectedArtifact', null)
-      return
-    }
+  function handleGroupSelect(groupId: string) {
+    selectedGroupId.value = groupId
+    selectedToolSlug.value = undefined
+    selectedTaskId.value = undefined
+    clearSelectedArtifactValue()
+    resetUploadSelection()
+    activeStep.value = 'tool'
+  }
 
-    const artifact = selectedTaskArtifacts.value.find((item) => item.id === artifactId) ?? null
-    emit('update:selectedArtifact', artifact)
-    emit('update:uploadList', [])
+  function handleToolSelect(toolSlug: string) {
+    selectedToolSlug.value = toolSlug
+    selectedTaskId.value = undefined
+    clearSelectedArtifactValue()
+    resetUploadSelection()
+    activeStep.value = 'task'
   }
 
   function handleTaskSelect(taskId: string) {
     selectedTaskId.value = taskId
-    if (props.selectedArtifact?.task_id !== taskId) {
+    clearSelectedArtifactValue()
+    resetUploadSelection()
+    activeStep.value = 'artifact'
+  }
+
+  function handleArtifactSelect(artifactId: string | undefined) {
+    if (!artifactId) {
       emit('update:selectedArtifact', null)
+      focusedArtifactId.value = undefined
+      return
     }
-    emit('update:uploadList', [])
+
+    const artifact = selectedTaskArtifacts.value.find((item) => item.id === artifactId) ?? null
+    focusedArtifactId.value = artifactId
+    emit('update:selectedArtifact', artifact)
+    resetUploadSelection()
+    activeStep.value = 'artifact'
+  }
+
+  function handlePathSegmentClick(step: ArtifactStep) {
+    if (step === 'group') {
+      selectedToolSlug.value = undefined
+      selectedTaskId.value = undefined
+      clearSelectedArtifactValue()
+      activeStep.value = 'group'
+      return
+    }
+
+    if (step === 'tool' && selectedGroupId.value) {
+      selectedTaskId.value = undefined
+      clearSelectedArtifactValue()
+      activeStep.value = 'tool'
+      return
+    }
+
+    if (step === 'task' && selectedToolSlug.value) {
+      clearSelectedArtifactValue()
+      activeStep.value = 'task'
+      return
+    }
+
+    if (step === 'artifact' && selectedTaskId.value) {
+      activeStep.value = 'artifact'
+    }
+  }
+
+  function clearArtifactSelection() {
+    clearSelectedArtifactValue()
+    activeStep.value = selectedTaskId.value ? 'artifact' : 'task'
   }
 
   function formatArtifactMeta(artifact: ArtifactFile): string {
     return `${artifact.tool_name} · ${dayjs(artifact.created_at).format('YYYY-MM-DD HH:mm')}`
   }
 
-  function syncSelectedTask() {
+  function formatTaskMeta(taskNode: WorkflowArtifactTaskNode): string {
+    return `${selectedToolNode.value?.toolName ?? '-'} · ${dayjs(taskNode.latestCreatedAt).format('YYYY-MM-DD HH:mm')}`
+  }
+
+  function findArtifactLocation(artifactId: string) {
+    for (const groupNode of artifactGroupNodes.value) {
+      for (const toolNode of groupNode.tools) {
+        for (const taskNode of toolNode.tasks) {
+          if (taskNode.artifacts.some((artifact) => artifact.id === artifactId)) {
+            return {
+              groupId: groupNode.groupId,
+              toolSlug: toolNode.toolSlug,
+              taskId: taskNode.taskId
+            }
+          }
+        }
+      }
+    }
+
+    return null
+  }
+
+  function resolvePreferredGroupId(): string | undefined {
+    if (props.preferredGroupId && artifactGroupNodes.value.some((group) => group.groupId === props.preferredGroupId)) {
+      return props.preferredGroupId
+    }
+
+    return artifactGroupNodes.value[0]?.groupId
+  }
+
+  function resolvePreferredToolSlug(groupNode: WorkflowArtifactGroupNode | null): string | undefined {
+    if (!groupNode) {
+      return undefined
+    }
+
+    const preferredToolSlug = props.preferredToolSlug ?? props.currentToolSlug
+    if (preferredToolSlug && groupNode.tools.some((tool) => tool.toolSlug === preferredToolSlug)) {
+      return preferredToolSlug
+    }
+
+    return undefined
+  }
+
+  function syncSelectionPath() {
     if (!props.allowArtifacts) {
+      selectedGroupId.value = undefined
+      selectedToolSlug.value = undefined
       selectedTaskId.value = undefined
+      focusedArtifactId.value = undefined
+      activeStep.value = 'group'
       return
     }
 
     if (props.selectedArtifact && compatibleArtifacts.value.some((artifact) => artifact.id === props.selectedArtifact?.id)) {
-      selectedTaskId.value = props.selectedArtifact.task_id
+      const artifactLocation = findArtifactLocation(props.selectedArtifact.id)
+      if (artifactLocation) {
+        selectedGroupId.value = artifactLocation.groupId
+        selectedToolSlug.value = artifactLocation.toolSlug
+        selectedTaskId.value = artifactLocation.taskId
+        focusedArtifactId.value = props.selectedArtifact.id
+        activeStep.value = 'artifact'
+        return
+      }
+    }
+
+    const nextGroupId = selectedGroupId.value && artifactGroupNodes.value.some((group) => group.groupId === selectedGroupId.value)
+      ? selectedGroupId.value
+      : resolvePreferredGroupId()
+    selectedGroupId.value = nextGroupId
+
+    const nextGroupNode = artifactGroupNodes.value.find((group) => group.groupId === nextGroupId) ?? null
+    if (!nextGroupNode) {
+      selectedToolSlug.value = undefined
+      selectedTaskId.value = undefined
+      focusedArtifactId.value = undefined
+      activeStep.value = 'group'
       return
     }
 
-    if (selectedTaskId.value && artifactTaskGroups.value.some((group) => group.taskId === selectedTaskId.value)) {
+    const nextToolSlug = selectedToolSlug.value && nextGroupNode.tools.some((tool) => tool.toolSlug === selectedToolSlug.value)
+      ? selectedToolSlug.value
+      : resolvePreferredToolSlug(nextGroupNode)
+    selectedToolSlug.value = nextToolSlug
+
+    const nextToolNode = nextGroupNode.tools.find((tool) => tool.toolSlug === nextToolSlug) ?? null
+    if (!nextToolNode) {
+      selectedTaskId.value = undefined
+      focusedArtifactId.value = undefined
+      activeStep.value = 'tool'
       return
     }
 
-    selectedTaskId.value = artifactTaskGroups.value[0]?.taskId
+    if (!selectedTaskId.value || !nextToolNode.tasks.some((task) => task.taskId === selectedTaskId.value)) {
+      selectedTaskId.value = undefined
+    }
+
+    if (!props.selectedArtifact) {
+      focusedArtifactId.value = undefined
+    }
+
+    activateDeepestMissingStep()
+  }
+
+  function syncExternalSelectionPath(path: WorkflowArtifactSelectionPath | null) {
+    if (!path || !props.allowArtifacts || artifactGroupNodes.value.length === 0) {
+      return
+    }
+
+    const artifactLocation = path.artifactId ? findArtifactLocation(path.artifactId) : null
+    const nextGroupId = path.groupId ?? artifactLocation?.groupId
+    if (nextGroupId && artifactGroupNodes.value.some((group) => group.groupId === nextGroupId)) {
+      selectedGroupId.value = nextGroupId
+    }
+
+    const nextGroupNode = artifactGroupNodes.value.find((group) => group.groupId === selectedGroupId.value) ?? null
+    const nextToolSlug = path.toolSlug ?? artifactLocation?.toolSlug
+    if (nextToolSlug && nextGroupNode?.tools.some((tool) => tool.toolSlug === nextToolSlug)) {
+      selectedToolSlug.value = nextToolSlug
+    }
+
+    const nextToolNode = nextGroupNode?.tools.find((tool) => tool.toolSlug === selectedToolSlug.value) ?? null
+    const nextTaskId = path.taskId ?? artifactLocation?.taskId
+    if (nextTaskId && nextToolNode?.tasks.some((task) => task.taskId === nextTaskId)) {
+      selectedTaskId.value = nextTaskId
+    }
+
+    if (path.artifactId && selectedTaskArtifacts.value.some((artifact) => artifact.id === path.artifactId)) {
+      focusedArtifactId.value = path.artifactId
+    }
+
+    activateDeepestMissingStep()
   }
 
   watch(
@@ -243,12 +705,30 @@
       props.selectedArtifact?.id,
       props.allowArtifacts,
       props.accept,
-      props.currentToolId,
       props.currentToolSlug,
-      artifactTaskGroups.value.map((group) => group.taskId).join('|')
+      props.preferredGroupId,
+      props.preferredToolSlug,
+      artifactGroupNodes.value
+        .map((group) => `${group.groupId}:${group.tools.map((tool) => `${tool.toolSlug}:${tool.tasks.map((task) => task.taskId).join(',')}`).join('|')}`)
+        .join(';')
     ] as const,
     () => {
-      syncSelectedTask()
+      syncSelectionPath()
+      syncExternalSelectionPath(props.externalSelectionPath ?? null)
+    },
+    { immediate: true }
+  )
+
+  watch(
+    () => [
+      props.externalSelectionPath?.token,
+      props.externalSelectionPath?.groupId,
+      props.externalSelectionPath?.toolSlug,
+      props.externalSelectionPath?.taskId,
+      props.externalSelectionPath?.artifactId
+    ] as const,
+    () => {
+      syncExternalSelectionPath(props.externalSelectionPath ?? null)
     },
     { immediate: true }
   )
@@ -256,12 +736,12 @@
   watch(
     compatibleArtifacts,
     (nextArtifacts) => {
-      if (!props.selectedArtifact) {
-        return
+      if (props.selectedArtifact && !nextArtifacts.some((artifact) => artifact.id === props.selectedArtifact?.id)) {
+        emit('update:selectedArtifact', null)
       }
 
-      if (!nextArtifacts.some((artifact) => artifact.id === props.selectedArtifact?.id)) {
-        emit('update:selectedArtifact', null)
+      if (focusedArtifactId.value && !nextArtifacts.some((artifact) => artifact.id === focusedArtifactId.value)) {
+        focusedArtifactId.value = undefined
       }
     }
   )
@@ -304,71 +784,208 @@
     font-size: @font-size-sm;
   }
 
-  .artifact-select {
-    width: 100%;
-  }
-
-  .artifact-cascade {
-    display: grid;
-    grid-template-columns: minmax(180px, 280px) minmax(0, 1fr);
+  .artifact-flow {
+    display: flex;
+    flex-direction: column;
     gap: @spacing-sm;
-    align-items: start;
   }
 
-  .artifact-task-select,
-  .artifact-file-select {
-    width: 100%;
-  }
-
-  .artifact-task-option-label {
+  .artifact-path {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: @spacing-xs @spacing-sm;
-    align-items: center;
-    padding: @spacing-xs 0;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: @spacing-sm;
   }
 
-  .artifact-task-option-main,
-  .artifact-task-option-sub {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  .artifact-path-segment {
+    display: flex;
+    flex-direction: column;
+    gap: @spacing-xs;
+    padding: @spacing-sm @spacing-md;
+    border: 1px solid #d8e1ee;
+    border-radius: @border-radius-md;
+    background: #fff;
+    text-align: left;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+    cursor: pointer;
   }
 
-  .artifact-task-option-main {
+  .artifact-path-segment:disabled {
+    cursor: not-allowed;
+    opacity: 0.72;
+  }
+
+  .artifact-path-segment:not(:disabled):hover {
+    border-color: rgba(24, 144, 255, 0.45);
+    box-shadow: 0 8px 18px rgb(24 144 255 / 8%);
+    transform: translateY(-1px);
+  }
+
+  .artifact-path-segment.is-active {
+    border-color: rgba(24, 144, 255, 0.6);
+    box-shadow: 0 0 0 3px rgb(24 144 255 / 10%);
+  }
+
+  .artifact-path-segment.is-complete .artifact-path-value {
     color: @text-color-light-primary;
-    font-family: @font-family-mono;
-    font-size: @font-size-xs;
   }
 
-  .artifact-task-option-sub {
+  .artifact-path-kicker {
     color: @text-color-light-secondary;
     font-size: @font-size-xs;
   }
 
-  .artifact-task-option-count {
-    grid-row: span 2;
-    margin-inline-end: 0;
+  .artifact-path-value {
+    overflow: hidden;
+    color: @text-color-light-secondary;
+    font-size: @font-size-sm;
+    font-weight: @font-weight-medium;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  .artifact-option {
+  .artifact-step-panel {
+    display: flex;
+    flex-direction: column;
+    gap: @spacing-sm;
+    padding: @spacing-md;
+    border: 1px solid #d8e1ee;
+    border-radius: @border-radius-md;
+    background: linear-gradient(180deg, #fff 0%, #fbfdff 100%);
+  }
+
+  .artifact-step-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: @spacing-sm;
+  }
+
+  .artifact-step-copy {
     display: flex;
     flex-direction: column;
     gap: @spacing-xs;
     min-width: 0;
   }
 
-  .artifact-option-name {
-    overflow: hidden;
-    color: @text-color-light-primary;
-    text-overflow: ellipsis;
+  .artifact-step-kicker {
+    color: @text-color-light-secondary;
+    font-size: @font-size-xs;
   }
 
-  .artifact-option-meta {
+  .artifact-step-title {
+    color: @text-color-light-primary;
+    font-size: @font-size-sm;
+    font-weight: @font-weight-semibold;
+  }
+
+  .artifact-step-count {
+    margin-inline-end: 0;
+  }
+
+  .artifact-step-list {
+    display: flex;
+    flex-direction: column;
+    gap: @spacing-xs;
+  }
+
+  .artifact-step-option {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: @spacing-sm;
+    align-items: center;
+    padding: @spacing-sm @spacing-md;
+    border: 1px solid #e8edf5;
+    border-radius: @border-radius-md;
+    background: #fff;
+    text-align: left;
+    transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+    cursor: pointer;
+  }
+
+  .artifact-step-option:hover {
+    border-color: rgba(24, 144, 255, 0.45);
+    background: #f8fbff;
+  }
+
+  .artifact-step-option.is-selected {
+    border-color: rgba(24, 144, 255, 0.6);
+    box-shadow: 0 0 0 3px rgb(24 144 255 / 10%);
+  }
+
+  .artifact-step-option.is-focused {
+    border-color: rgba(250, 173, 20, 0.55);
+    background: #fffdf4;
+  }
+
+  .artifact-step-option-copy {
+    display: flex;
+    flex-direction: column;
+    gap: @spacing-xs;
+    min-width: 0;
+  }
+
+  .artifact-step-option-title {
+    overflow: hidden;
+    color: @text-color-light-primary;
+    font-size: @font-size-sm;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .artifact-step-option-meta {
     overflow: hidden;
     color: @text-color-light-secondary;
     font-size: @font-size-xs;
     text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .artifact-step-option-count {
+    margin-inline-end: 0;
+    white-space: nowrap;
+  }
+
+  .artifact-selection-summary {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: @spacing-sm;
+    padding: @spacing-md;
+    border: 1px dashed #d8e1ee;
+    border-radius: @border-radius-md;
+    background: #fbfdff;
+  }
+
+  .artifact-selection-summary-copy {
+    display: flex;
+    flex-direction: column;
+    gap: @spacing-xs;
+    min-width: 0;
+  }
+
+  .artifact-selection-summary-label {
+    color: @text-color-light-secondary;
+    font-size: @font-size-xs;
+  }
+
+  .artifact-selection-summary-title {
+    overflow: hidden;
+    color: @text-color-light-primary;
+    font-size: @font-size-sm;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .artifact-selection-summary-meta {
+    margin: 0;
+    color: @text-color-light-secondary;
+    font-size: @font-size-xs;
+    line-height: @line-height-base;
+    overflow-wrap: anywhere;
+  }
+
+  .artifact-selection-summary-action {
+    padding-inline: 0;
   }
 
   .artifact-empty {
@@ -378,8 +995,13 @@
     background: #fbfdff;
   }
 
-  @media (max-width: @screen-sm) {
-    .artifact-cascade {
+  @media (max-width: @screen-md) {
+    .artifact-path {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .artifact-step-option,
+    .artifact-selection-summary {
       grid-template-columns: minmax(0, 1fr);
     }
   }

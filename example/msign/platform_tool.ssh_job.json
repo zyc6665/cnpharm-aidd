@@ -30,6 +30,22 @@
       "output/logs/run.log",
       "output/artifacts/**/*"
     ],
+    "examples": [
+      {
+        "name": "molecule_1 亲和力预测示例",
+        "description": "使用内置 protein.pdb 与 ligand.pdb 运行 MSIGN 亲和力预测。",
+        "params": {
+          "complex_id": "molecule_1",
+          "distance": 5.0,
+          "model_variant": "full_finetune",
+          "device": "cpu"
+        },
+        "input_files": {
+          "protein_pdb": "examples/pdb/molecule_1/protein.pdb",
+          "ligand_pdb": "examples/pdb/molecule_1/ligand.pdb"
+        }
+      }
+    ],
     "input_schema": {
       "type": "object",
       "properties": {

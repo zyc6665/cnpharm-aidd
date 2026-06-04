@@ -277,6 +277,7 @@ async def list_artifact_files(
                 updated_at=file_record.updated_at,
                 download_url=f"/api/v1/files/{file_record.id}/download",
                 task_id=task.id,
+                task_name=task.name,
                 tool_id=tool.id,
                 tool_name=tool.name,
                 tool_slug=tool.slug,

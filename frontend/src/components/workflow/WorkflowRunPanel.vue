@@ -1,45 +1,40 @@
 <template>
   <section class="workflow-column tools-column">
-    <div class="column-card">
+    <div class="column-card tool-lab-panel">
       <h2 class="column-title">{{ t('workflow.columns.tools') }}</h2>
       <p class="column-subtitle">{{ t('workflow.columns.toolsHint') }}</p>
-
-      <div v-if="group" class="group-banner">
-        <div class="group-banner-copy">
-          <span class="group-banner-label">{{ t('workflow.currentGroup.label') }}</span>
-          <strong class="group-banner-title">{{ group.name }}</strong>
-          <p v-if="group.description" class="group-banner-desc">{{ group.description }}</p>
-        </div>
-      </div>
 
       <div v-if="group?.tools.length" class="tool-select-panel">
         <div class="tool-select-meta">
           <span class="tool-select-label">{{ t('workflow.currentTool.label') }}</span>
           <strong class="tool-select-title">{{ selectedToolSummary?.name ?? group.tools[0]?.name }}</strong>
+          <p v-if="selectedToolDescription" class="tool-select-desc">{{ selectedToolDescription }}</p>
         </div>
-        <a-select
-          class="tool-select"
-          size="large"
-          :value="selectedToolSlug ?? undefined"
-          :placeholder="t('workflow.currentTool.empty')"
-          @change="handleToolSelectChange"
-        >
-          <a-select-option
-            v-for="toolOption in group.tools"
-            :key="toolOption.slug"
-            :value="toolOption.slug"
+        <div class="tool-select-control">
+          <a-select
+            class="tool-select"
+            size="large"
+            :value="selectedToolSlug ?? undefined"
+            :placeholder="t('workflow.currentTool.empty')"
+            @change="handleToolSelectChange"
           >
-            <div class="tool-select-option">
-              <span class="tool-select-option-name">{{ toolOption.name }}</span>
-              <span class="tool-select-option-tags">
-                <a-tag v-if="toolOption.is_recommended" color="gold">
-                  {{ t('workflow.toolStatus.recommended') }}
-                </a-tag>
-                <a-tag color="green">{{ t('workflow.toolStatus.available') }}</a-tag>
-              </span>
-            </div>
-          </a-select-option>
-        </a-select>
+            <a-select-option
+              v-for="toolOption in group.tools"
+              :key="toolOption.slug"
+              :value="toolOption.slug"
+            >
+              <div class="tool-select-option">
+                <span class="tool-select-option-name">{{ toolOption.name }}</span>
+                <span class="tool-select-option-tags">
+                  <a-tag v-if="toolOption.is_recommended" color="gold">
+                    {{ t('workflow.toolStatus.recommended') }}
+                  </a-tag>
+                  <a-tag color="green">{{ t('workflow.toolStatus.available') }}</a-tag>
+                </span>
+              </div>
+            </a-select-option>
+          </a-select>
+        </div>
       </div>
 
       <a-alert
@@ -76,40 +71,13 @@
 
       <a-spin :spinning="selectedToolLoading || submitting">
         <div v-if="selectedTool && selectedToolSlug && group" class="form-shell">
-          <div class="action-summary-card">
-            <div class="action-summary-copy">
-              <span class="action-summary-label">{{ t('workflow.currentTool.label') }}</span>
-              <strong class="action-summary-title">{{ selectedTool.name }}</strong>
-              <p class="action-summary-desc">
-                {{ selectedTool.description || t('workflow.currentTool.descriptionFallback') }}
-              </p>
-            </div>
-            <div class="action-summary-tags">
-              <a-tag v-if="selectedToolSummary?.is_recommended" color="gold">
-                {{ t('workflow.toolStatus.recommended') }}
-              </a-tag>
-              <a-tag v-if="activeTask" :color="taskStatusColor(activeTask.status)">
-                {{ activeTask.status }}
-              </a-tag>
-            </div>
-          </div>
-
-          <div v-if="activeTask" class="task-summary-card">
-            <div class="task-summary-row">
-              <span class="task-summary-label">{{ t('tasks.status') }}</span>
-              <span class="task-summary-value">{{ activeTask.status }}</span>
-            </div>
-            <div class="task-summary-row">
-              <span class="task-summary-label">{{ t('tasks.progress') }}</span>
-              <span class="task-summary-value">{{ activeTask.progress }}%</span>
-            </div>
-            <div v-if="activeTask.error_message" class="task-summary-row">
-              <span class="task-summary-label">{{ t('common.error') }}</span>
-              <span class="task-summary-value">{{ activeTask.error_message }}</span>
-            </div>
-          </div>
-
           <a-form ref="formRef" :model="formState" layout="vertical" @finish="handleSubmit">
+            <a-form-item :label="t('tasks.name')">
+              <a-input
+                v-model:value="taskName"
+                :placeholder="t('tasks.namePlaceholder')"
+              />
+            </a-form-item>
             <template v-for="(prop, key) in flattenedSchema.properties" :key="key">
               <a-form-item
                 :name="key"
@@ -165,8 +133,11 @@
                   :selected-artifact="selectedArtifacts[key] ?? null"
                   :accept="prop.accept"
                   :allow-artifacts="userStore.isLoggedIn"
+                  :preferred-group-id="group?.id"
+                  :preferred-tool-slug="selectedTool?.slug ?? selectedToolSummary?.slug"
                   :current-tool-id="selectedTool?.id ?? selectedToolSummary?.id"
                   :current-tool-slug="selectedTool?.slug ?? selectedToolSummary?.slug"
+                  :external-selection-path="artifactSelectionPath"
                   @update:upload-list="(files) => handleFileListChange(String(key), files)"
                   @update:selected-artifact="(artifact) => handleArtifactSelection(String(key), artifact)"
                 />
@@ -203,6 +174,31 @@
               </div>
             </a-form-item>
           </a-form>
+
+          <a-collapse
+            v-model:activeKey="resultPanelActiveKeys"
+            class="result-collapse"
+            :bordered="false"
+          >
+            <a-collapse-panel key="result">
+              <template #header>
+                <div class="result-collapse-header">
+                  <div class="result-collapse-copy">
+                    <span class="result-collapse-label">{{ t('tasks.result') }}</span>
+                    <strong class="result-collapse-title">{{ t('workflow.results.title') }}</strong>
+                    <p class="result-collapse-desc">{{ resultPanelHint }}</p>
+                  </div>
+                  <a-tag v-if="activeTask" :color="taskStatusColor(activeTask.status)">
+                    {{ activeTask.status }}
+                  </a-tag>
+                </div>
+              </template>
+              <WorkflowTaskResultPanel
+                :task-id="resolvedResultTaskId"
+                :task-summary="resultTaskSummary"
+              />
+            </a-collapse-panel>
+          </a-collapse>
         </div>
 
         <a-empty
@@ -226,6 +222,7 @@
   import type { UploadFile } from 'ant-design-vue'
   import { PlayCircleOutlined } from '@ant-design/icons-vue'
   import ArtifactFilePicker from '@/components/tools/ArtifactFilePicker.vue'
+  import WorkflowTaskResultPanel from '@/components/workflow/WorkflowTaskResultPanel.vue'
   import { getTaskDetail, isTaskTerminalStatus } from '@/api/tasks'
   import { getToolDetail } from '@/api/tools'
   import { uploadFile } from '@/api/files'
@@ -246,14 +243,20 @@
     type UploadedToolFile
   } from '@/views/tools/detail-schema'
   import { toWorkflowTaskRef } from '@/workflow/task-state'
+  import type { WorkflowTaskRef } from '@/workflow/artifact-types'
+  import type { WorkflowArtifactSelectionPath } from '../../workflow/artifact-hierarchy.ts'
 
   const props = defineProps<{
     group?: WorkbenchGroup | null
     selectedToolSlug?: string | null
+    artifactSelectionPath?: WorkflowArtifactSelectionPath | null
+    resultTaskId?: string | null
+    resultTaskSummary?: WorkflowTaskRef | null
   }>()
 
   const emit = defineEmits<{
     selectTool: [toolSlug: string]
+    resultTaskChange: [taskId: string]
   }>()
 
   const { t } = useI18n()
@@ -267,6 +270,8 @@
   const selectedTool = ref<Tool | null>(null)
   const selectedToolLoading = ref(false)
   const submitting = ref(false)
+  const taskName = ref('')
+  const resultPanelActiveKeys = ref<string[]>([])
   const formState = reactive<Record<string, unknown>>({})
   const fileList = reactive<Record<string, UploadFile[]>>({})
   const selectedArtifacts = reactive<Record<string, ArtifactFile | undefined>>({})
@@ -275,6 +280,10 @@
 
   const selectedToolSummary = computed(() => {
     return props.group?.tools.find((tool) => tool.slug === props.selectedToolSlug) ?? null
+  })
+
+  const selectedToolDescription = computed(() => {
+    return selectedTool.value?.description || selectedToolSummary.value?.description || t('workflow.currentTool.descriptionFallback')
   })
 
   const inputSchema = computed<ToolSchema | undefined>(() => {
@@ -307,6 +316,35 @@
     }
 
     return workflowStore.taskByTool[props.selectedToolSlug] ?? null
+  })
+
+  const resolvedResultTaskId = computed(() => {
+    return props.resultTaskId ?? activeTask.value?.id ?? null
+  })
+
+  const resultTaskSummary = computed<WorkflowTaskRef | null>(() => {
+    if (!resolvedResultTaskId.value) {
+      return null
+    }
+
+    if (props.resultTaskSummary?.id === resolvedResultTaskId.value) {
+      return props.resultTaskSummary
+    }
+
+    if (activeTask.value?.id === resolvedResultTaskId.value) {
+      return activeTask.value
+    }
+
+    return null
+  })
+
+  const resultPanelHint = computed(() => {
+    if (!activeTask.value) {
+      return t('workflow.results.emptyHint')
+    }
+
+    const taskName = activeTask.value.name || t('workflow.results.latestTask')
+    return `${taskName} · ${activeTask.value.progress}%`
   })
 
   const submitDisabled = computed(() => {
@@ -428,6 +466,7 @@
 
   function resetForm() {
     formRef.value?.resetFields()
+    taskName.value = ''
 
     if (props.selectedToolSlug) {
       workflowStore.clearToolFormDraft(props.selectedToolSlug)
@@ -551,11 +590,15 @@
       }
 
       const task = await tasksStore.createTask({
+        name: taskName.value.trim() || undefined,
         tool_id: toolId,
         ...preparedPayload
       })
 
       workflowStore.recordTask(toolSlug, toWorkflowTaskRef(task))
+      emit('resultTaskChange', task.id)
+      resultPanelActiveKeys.value = ['result']
+      taskName.value = ''
       if (task.status === 'success') {
         await refreshArtifacts()
       } else {
@@ -569,6 +612,7 @@
   watch(
     () => props.selectedToolSlug,
     async () => {
+      taskName.value = ''
       const requestToken = ++detailRequestToken
       const toolId = selectedToolSummary.value?.id
 
@@ -652,7 +696,28 @@
   .column-card {
     .card();
     height: 100%;
-    border-color: #e8edf5;
+    border: 1px solid rgba(205, 217, 235, 0.9);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(246, 250, 255, 0.99) 100%);
+    box-shadow: 0 22px 44px rgb(15 23 42 / 6%);
+  }
+
+  .tool-lab-panel {
+    position: relative;
+    overflow: hidden;
+
+    &::before {
+      content: '';
+      position: absolute;
+      inset: 0 0 auto;
+      height: 180px;
+      background: linear-gradient(135deg, rgba(13, 110, 253, 0.08) 0%, rgba(111, 66, 193, 0.08) 100%);
+      pointer-events: none;
+    }
+
+    > * {
+      position: relative;
+      z-index: 1;
+    }
   }
 
   .column-title {
@@ -666,32 +731,12 @@
     margin-bottom: @spacing-lg;
   }
 
-  .group-banner {
-    border: 1px solid @border-color-light;
-    border-radius: @border-radius-md;
-    padding: @spacing-md;
-    margin-bottom: @spacing-md;
-    background: fade(@accent-color-light, 35%);
-  }
-
-  .group-banner-label,
-  .action-summary-label {
-    display: inline-block;
-    margin-bottom: @spacing-xs;
-    color: @text-color-light-secondary;
-    font-size: @font-size-sm;
-  }
-
-  .group-banner-title,
-  .action-summary-title,
   .form-action-title {
     display: block;
     font-size: @font-size-md;
     font-weight: @font-weight-semibold;
   }
 
-  .group-banner-desc,
-  .action-summary-desc,
   .form-action-desc {
     margin: @spacing-xs 0 0;
     color: @text-color-light-secondary;
@@ -701,14 +746,15 @@
 
   .tool-select-panel {
     display: grid;
-    grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+    grid-template-columns: minmax(240px, 1fr) minmax(260px, 0.8fr);
     gap: @spacing-md;
-    align-items: end;
+    align-items: start;
     margin-bottom: @spacing-lg;
     padding: @spacing-md;
-    border: 1px solid #e8edf5;
-    border-radius: @border-radius-md;
-    background: linear-gradient(180deg, #fff 0%, #fbfdff 100%);
+    border: 1px solid rgba(210, 221, 236, 0.9);
+    border-radius: @border-radius-lg;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    box-shadow: 0 16px 30px rgb(15 23 42 / 4%);
   }
 
   .tool-select-meta {
@@ -728,6 +774,20 @@
     font-size: @font-size-md;
     font-weight: @font-weight-semibold;
     overflow-wrap: anywhere;
+  }
+
+  .tool-select-desc {
+    margin: @spacing-xs 0 0;
+    color: @text-color-light-secondary;
+    font-size: @font-size-sm;
+    line-height: @line-height-base;
+  }
+
+  .tool-select-control {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: @spacing-sm;
   }
 
   .tool-select {
@@ -759,33 +819,29 @@
     gap: @spacing-lg;
   }
 
-  .action-summary-card,
-  .task-summary-card,
-  .form-action-bar {
-    border: 1px solid @border-color-light;
-    border-radius: @border-radius-md;
-    padding: @spacing-md;
-    background: @bg-card-light;
+  .form-action-bar,
+  .result-collapse {
+    border: 1px solid rgba(210, 221, 236, 0.9);
+    border-radius: @border-radius-lg;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 251, 255, 0.98) 100%);
+    box-shadow: 0 16px 30px rgb(15 23 42 / 4%);
   }
 
-  .action-summary-card,
   .form-action-bar {
     display: flex;
     justify-content: space-between;
     gap: @spacing-md;
     align-items: flex-start;
     flex-wrap: wrap;
+    padding: @spacing-md;
   }
 
-  .action-summary-copy,
   .form-action-copy {
     min-width: 0;
     flex: 1;
   }
 
-  .action-summary-title,
-  .form-action-title,
-  .task-summary-value {
+  .form-action-title {
     overflow-wrap: anywhere;
   }
 
@@ -797,33 +853,60 @@
     display: flex;
   }
 
-  .action-summary-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: @spacing-xs;
+  .result-collapse {
+    overflow: hidden;
+
+    :deep(.ant-collapse-item) {
+      border-bottom: 0;
+    }
+
+    :deep(.ant-collapse-header) {
+      align-items: center;
+      padding: @spacing-md !important;
+    }
+
+    :deep(.ant-collapse-content) {
+      background: transparent;
+      border-top: 1px solid rgba(210, 221, 236, 0.9);
+    }
+
+    :deep(.ant-collapse-content-box) {
+      padding: @spacing-md;
+    }
   }
 
-  .task-summary-card {
+  .result-collapse-header {
     display: flex;
-    flex-direction: column;
-    gap: @spacing-sm;
-  }
-
-  .task-summary-row {
-    display: flex;
+    align-items: flex-start;
     justify-content: space-between;
     gap: @spacing-md;
+    width: 100%;
   }
 
-  .task-summary-label {
+  .result-collapse-copy {
+    min-width: 0;
+  }
+
+  .result-collapse-label {
+    display: block;
+    margin-bottom: @spacing-xs;
+    color: @text-color-light-secondary;
+    font-size: @font-size-xs;
+  }
+
+  .result-collapse-title {
+    display: block;
+    color: @text-color-light-primary;
+    font-size: @font-size-md;
+    font-weight: @font-weight-semibold;
+  }
+
+  .result-collapse-desc {
+    margin: @spacing-xs 0 0;
     color: @text-color-light-secondary;
     font-size: @font-size-sm;
-  }
-
-  .task-summary-value {
-    color: @text-color-light-primary;
-    font-size: @font-size-sm;
-    text-align: right;
+    line-height: @line-height-base;
+    overflow-wrap: anywhere;
   }
 
   @media (max-width: @screen-md) {
@@ -831,7 +914,6 @@
       grid-column: auto;
     }
 
-    .action-summary-card,
     .form-action-bar {
       flex-direction: column;
     }

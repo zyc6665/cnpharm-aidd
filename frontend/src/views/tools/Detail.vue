@@ -73,7 +73,9 @@
 
             <!-- 参数表单 -->
             <div class="tool-form card">
-              <h2 class="section-title">{{ t('tools.parameters') }}</h2>
+              <div class="section-header">
+                <h2 class="section-title">{{ t('tools.parameters') }}</h2>
+              </div>
 
               <!-- 游客警告 -->
               <a-alert
@@ -87,7 +89,21 @@
                 </template>
               </a-alert>
 
+              <ToolExamplePanel
+                v-if="example"
+                :example="example"
+                :applying="applyingExample"
+                @preview-file="handlePreviewExampleFile"
+                @use-example="handleUseExample"
+              />
+
               <a-form ref="formRef" :model="formState" layout="vertical" @finish="handleSubmit">
+                <a-form-item :label="t('tasks.name')">
+                  <a-input
+                    v-model:value="taskName"
+                    :placeholder="t('tasks.namePlaceholder')"
+                  />
+                </a-form-item>
                 <template v-for="(prop, key) in flattenedSchema?.properties" :key="key">
                   <a-form-item
                     :name="key"
@@ -155,6 +171,16 @@
                       @update:upload-list="(files) => handleFileListChange(String(key), files)"
                       @update:selected-artifact="(artifact) => handleArtifactSelection(String(key), artifact)"
                     />
+                    <div
+                      v-if="isFileSchemaProperty(prop) && exampleFiles[String(key)]"
+                      class="example-file-binding"
+                    >
+                      <FileTextOutlined />
+                      <span>{{ t('tools.exampleFileBound') }}: {{ exampleFiles[String(key)]?.filename }}</span>
+                      <a-button type="link" size="small" @click="clearExampleFile(String(key))">
+                        {{ t('common.clear') }}
+                      </a-button>
+                    </div>
                   </a-form-item>
                 </template>
 
@@ -221,6 +247,26 @@
         <a-empty v-else :description="t('common.noData')" />
       </a-spin>
     </div>
+    <a-modal
+      v-model:open="previewOpen"
+      :title="preview?.filename || t('tools.exampleFilePreview')"
+      :footer="null"
+      width="760px"
+    >
+      <a-spin :spinning="previewLoading">
+        <div v-if="preview" class="example-preview">
+          <a-alert
+            v-if="preview.truncated"
+            type="info"
+            show-icon
+            :message="t('tools.previewTruncated')"
+            style="margin-bottom: 12px"
+          />
+          <pre v-if="preview.previewable" class="example-preview-content">{{ preview.content }}</pre>
+          <a-empty v-else :description="t('tools.previewUnavailable')" />
+        </div>
+      </a-spin>
+    </a-modal>
   </div>
 </template>
 
@@ -238,15 +284,26 @@
     PlayCircleOutlined,
     EyeOutlined,
     TagOutlined,
-    InfoCircleOutlined
+    InfoCircleOutlined,
+    FileTextOutlined
   } from '@ant-design/icons-vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import ArtifactFilePicker from '@/components/tools/ArtifactFilePicker.vue'
+  import ToolExamplePanel from '@/components/tools/ToolExamplePanel.vue'
   import { useToolsStore, useTasksStore, useUserStore } from '@/stores'
-  import type { ArtifactFile, SchemaProperty, ToolSchema } from '@/types/models'
+  import type {
+    ArtifactFile,
+    FileUploadResponse,
+    SchemaProperty,
+    ToolExample,
+    ToolExampleFilePreview,
+    ToolSchema
+  } from '@/types/models'
   import { uploadFile } from '@/api/files'
+  import { applyToolExample, getToolExample, previewToolExampleFile } from '@/api/tools'
   import {
     buildTaskSubmissionPayload,
+    flattenExampleParams,
     flattenToolInputSchema,
     isFileSchemaProperty,
     type UploadedToolFile
@@ -264,9 +321,16 @@
   const submitting = ref(false)
   const favoriteLoading = ref(false)
   const tool = computed(() => toolsStore.currentTool)
+  const taskName = ref('')
   const formState = reactive<Record<string, unknown>>({})
   const fileList = reactive<Record<string, UploadFile[]>>({})
   const selectedArtifacts = reactive<Record<string, ArtifactFile | undefined>>({})
+  const example = ref<ToolExample | null>(null)
+  const applyingExample = ref(false)
+  const previewOpen = ref(false)
+  const previewLoading = ref(false)
+  const preview = ref<ToolExampleFilePreview | null>(null)
+  const exampleFiles = reactive<Record<string, FileUploadResponse | undefined>>({})
 
   // 从 current_version.config 中获取 input_schema
   const inputSchema = computed<ToolSchema | undefined>(() => {
@@ -338,7 +402,7 @@
       if (isFileSchemaProperty(prop)) {
         rules.push({
           validator: async () => {
-            if (fileList[key]?.length || selectedArtifacts[key]) {
+            if (fileList[key]?.length || selectedArtifacts[key] || exampleFiles[key]) {
               return Promise.resolve()
             }
             return Promise.reject(new Error(`${prop.title} ${t('common.required')}`))
@@ -374,11 +438,15 @@
 
   const resetForm = () => {
     formRef.value?.resetFields()
+    taskName.value = ''
     Object.keys(fileList).forEach(key => {
       fileList[key] = []
     })
     Object.keys(selectedArtifacts).forEach(key => {
       selectedArtifacts[key] = undefined
+    })
+    Object.keys(exampleFiles).forEach(key => {
+      exampleFiles[key] = undefined
     })
   }
 
@@ -386,6 +454,7 @@
     fileList[key] = files
     if (files.length > 0) {
       selectedArtifacts[key] = undefined
+      exampleFiles[key] = undefined
     }
   }
 
@@ -393,6 +462,102 @@
     selectedArtifacts[key] = artifact ?? undefined
     if (artifact) {
       fileList[key] = []
+      exampleFiles[key] = undefined
+    }
+  }
+
+  const clearExampleFile = (key: string) => {
+    exampleFiles[key] = undefined
+  }
+
+  const fetchExample = async (toolId: string) => {
+    try {
+      const res = await getToolExample(toolId)
+      example.value = res.data
+    } catch {
+      example.value = null
+    }
+  }
+
+  const applyExampleParams = (params: Record<string, unknown>) => {
+    const schema = flattenedSchema.value
+    if (!schema) {
+      return
+    }
+
+    const flattenedValues = flattenExampleParams(schema, params)
+    Object.entries(flattenedValues).forEach(([key, value]) => {
+      formState[key] = value
+    })
+  }
+
+  const resolveExampleFileFormKey = (field: string): string => {
+    const properties = flattenedSchema.value?.properties
+    if (!properties) {
+      return field
+    }
+
+    if (Object.prototype.hasOwnProperty.call(properties, field)) {
+      return field
+    }
+
+    const nestedMatch = Object.entries(properties).find(([, prop]) => {
+      return isFileSchemaProperty(prop) && prop._originalKey === field
+    })
+    return nestedMatch?.[0] ?? field
+  }
+
+  const handleUseExample = async () => {
+    if (!tool.value || !example.value) {
+      return
+    }
+
+    if (!userStore.isLoggedIn) {
+      message.warning(t('auth.loginRequired'))
+      router.push('/login')
+      return
+    }
+
+    if (userStore.isGuest) {
+      message.warning(t('auth.guestCannotSubmit'))
+      return
+    }
+
+    applyingExample.value = true
+    try {
+      const res = await applyToolExample(tool.value.id)
+      applyExampleParams(res.data.params)
+
+      Object.entries(res.data.files).forEach(([field, file]) => {
+        const formKey = resolveExampleFileFormKey(field)
+        exampleFiles[formKey] = file
+        fileList[formKey] = []
+        selectedArtifacts[formKey] = undefined
+      })
+
+      message.success(t('tools.exampleLoaded'))
+    } catch {
+      // 错误已在请求层处理
+    } finally {
+      applyingExample.value = false
+    }
+  }
+
+  const handlePreviewExampleFile = async (field: string) => {
+    if (!tool.value) {
+      return
+    }
+
+    previewOpen.value = true
+    previewLoading.value = true
+    preview.value = null
+    try {
+      const res = await previewToolExampleFile(tool.value.id, field)
+      preview.value = res.data
+    } catch {
+      previewOpen.value = false
+    } finally {
+      previewLoading.value = false
     }
   }
 
@@ -417,6 +582,18 @@
       }
 
       const uploadedFiles: Record<string, UploadedToolFile | undefined> = {}
+      for (const [key, file] of Object.entries(exampleFiles)) {
+        if (!file) {
+          continue
+        }
+
+        uploadedFiles[key] = {
+          fileId: file.id.toString(),
+          filename: file.filename,
+          downloadUrl: `/api/v1/files/${file.id}/download`
+        }
+      }
+
       for (const [key, artifact] of Object.entries(selectedArtifacts)) {
         if (!artifact) {
           continue
@@ -452,6 +629,7 @@
 
       // 创建任务
       const task = await tasksStore.createTask({
+        name: taskName.value.trim() || undefined,
         tool_id: tool.value!.id,
         params: payload.params,
         file_ids: payload.fileIds.length > 0 ? payload.fileIds : undefined
@@ -483,9 +661,11 @@
             if (isFileSchemaProperty(prop)) {
               fileList[key] = []
               selectedArtifacts[key] = undefined
+              exampleFiles[key] = undefined
             }
           }
         }
+        await fetchExample(id)
       } finally {
         loading.value = false
       }
@@ -612,10 +792,19 @@
   }
 
   .tool-form {
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: @spacing-md;
+      margin-bottom: @spacing-lg;
+      flex-wrap: wrap;
+    }
+
     .section-title {
       font-size: @font-size-lg;
       font-weight: @font-weight-semibold;
-      margin-bottom: @spacing-lg;
+      margin-bottom: 0;
     }
 
     .code-input {
@@ -631,6 +820,36 @@
     .tool-form-actions {
       margin-bottom: 0;
     }
+  }
+
+  .example-file-binding {
+    display: flex;
+    align-items: center;
+    gap: @spacing-xs;
+    margin-top: @spacing-sm;
+    padding: 6px 10px;
+    border: 1px solid #d9f7be;
+    border-radius: @border-radius-base;
+    background: #fcfff7;
+    color: @text-color-light-secondary;
+    font-size: @font-size-sm;
+    flex-wrap: wrap;
+  }
+
+  .example-preview-content {
+    max-height: 520px;
+    overflow: auto;
+    margin: 0;
+    padding: @spacing-md;
+    border: 1px solid #eef0f5;
+    border-radius: @border-radius-base;
+    background: #0f172a;
+    color: #e5e7eb;
+    font-family: monospace;
+    font-size: 12px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 
   // 右侧栏
@@ -719,6 +938,14 @@
       :deep(.ant-space) {
         width: 100%;
       }
+
+      :deep(.ant-btn) {
+        width: 100%;
+      }
+    }
+
+    .tool-form .section-header {
+      align-items: stretch;
 
       :deep(.ant-btn) {
         width: 100%;

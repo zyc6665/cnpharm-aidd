@@ -1,4 +1,4 @@
-import type { ArtifactFile } from '@/types/models'
+import type { ArtifactFile } from '../../types/models.d.ts'
 
 export interface ArtifactTaskOptionGroup {
   taskId: string

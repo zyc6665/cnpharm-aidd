@@ -40,6 +40,7 @@ export function normalizeTaskSummary(task: Task): Task {
 
   return {
     ...task,
+    name: task.name,
     tool_name: task.tool_name || normalizedTool?.name,
     tool_slug: task.tool_slug || normalizedTool?.slug,
     tool: normalizedTool,

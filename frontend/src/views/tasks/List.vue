@@ -103,7 +103,7 @@
             @click="goToDetail(task.id)"
           >
             <div class="monitor-card-header">
-              <span class="tool-name">{{ task.tool?.name || t('tasks.unknownTool') }}</span>
+              <span class="tool-name">{{ task.name || task.tool?.name || t('tasks.unknownTool') }}</span>
               <a-tag :color="getStatusColor(task.status)">
                 {{ getStatusText(task.status) }}
               </a-tag>
@@ -133,7 +133,7 @@
             :class="{ 'is-running': task.status === 'running' }"
             role="button"
             tabindex="0"
-            :aria-label="`${task.tool?.name || t('tasks.unknownTool')} ${getStatusText(task.status)}`"
+            :aria-label="`${task.name || task.tool?.name || t('tasks.unknownTool')} ${getStatusText(task.status)}`"
             @click="goToDetail(task.id)"
             @keydown.enter="goToDetail(task.id)"
             @keydown.space.prevent="goToDetail(task.id)"
@@ -146,8 +146,11 @@
                     <ToolOutlined v-else />
                   </div>
                   <div class="task-meta">
-                    <h3 class="task-title">{{ task.tool?.name || t('tasks.unknownTool') }}</h3>
-                    <span class="task-id">ID: {{ task.id.slice(0, 8) }}...</span>
+                    <h3 class="task-title">{{ task.name || task.tool?.name || t('tasks.unknownTool') }}</h3>
+                    <span class="task-id">
+                      <template v-if="task.name && task.tool?.name">{{ task.tool.name }} · </template>
+                      ID: {{ task.id.slice(0, 8) }}...
+                    </span>
                   </div>
                 </div>
                 <div class="task-details">
@@ -299,7 +302,7 @@ const toolsStore = useToolsStore()
 // 状态
 const currentTab = ref<TabKey>('all')
 const searchKeyword = ref('')
-const selectedTool = ref<number | undefined>()
+const selectedTool = ref<string | undefined>()
 const dateRange = ref<[Dayjs, Dayjs] | null>(null)
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -335,6 +338,7 @@ const displayTasks = computed(() => {
   if (searchKeyword.value) {
     const keyword = searchKeyword.value.toLowerCase()
     filtered = filtered.filter(t =>
+      t.name?.toLowerCase().includes(keyword) ||
       t.tool?.name?.toLowerCase().includes(keyword) ||
       t.id.toLowerCase().includes(keyword)
     )
@@ -433,6 +437,10 @@ const fetchTasks = async () => {
 
   if (selectedTool.value) {
     params.tool_id = selectedTool.value
+  }
+
+  if (searchKeyword.value.trim()) {
+    params.keyword = searchKeyword.value.trim()
   }
 
   if (currentTab.value === 'running') {

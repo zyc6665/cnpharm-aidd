@@ -1,0 +1,163 @@
+{
+  "name": "DualPep Peptide Activity and Toxicity Prediction",
+  "slug": "dualpep-peptide-prediction",
+  "description": "Predict peptide antimicrobial activity, inferred MIC, toxicity probability, and joint therapeutic reward using DualPep models.",
+  "icon": "D",
+  "category": "bioinformatics",
+  "version": "0.1.0",
+  "changelog": "Initial ssh_job wrapper for DualPep activity/toxicity/joint-reward prediction with direct host IP and password authentication.",
+  "tool_config": {
+    "type": "ssh_job",
+    "host": "10.202.2.228",
+    "port": 22,
+    "username": "zhouyc",
+    "auth_type": "password",
+    "password_ref": "ssh_4090_zhouyc",
+    "runner_mode": "docker_exec",
+    "remote_base_dir": "/data/zhouyc/kaiwu/platform-jobs",
+    "container_base_dir": "/workspace/platform-jobs",
+    "entrypoint": "/workspace/TheraPainter/platform_run.sh",
+    "container_name": "kaiwu",
+    "timeout_sec": 7200,
+    "cleanup_remote": false,
+    "strict_host_key_checking": false,
+    "env": {
+      "MODEL_PYTHON": "/home/zhuwy/.conda/envs/TheraPainter/bin/python",
+      "PATH": "/home/zhuwy/.conda/envs/TheraPainter/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "THERAPAINTER_DEFAULT_TASK": "dualpep_predict"
+    },
+    "output_globs": [
+      "output/result.json",
+      "output/logs/run.log",
+      "output/artifacts/**/*"
+    ],
+    "examples": [
+      {
+        "name": "DualPep 多肽预测示例",
+        "description": "使用内置 TXT 序列文件预测抗菌活性、毒性概率与联合奖励。",
+        "params": {
+          "prediction_mode": "joint",
+          "device": "cpu",
+          "batch_size": 8,
+          "deduplicate": true
+        },
+        "input_files": {
+          "sequences_file": "example/sequences.txt"
+        }
+      }
+    ],
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "sequences": {
+          "type": ["array", "string"],
+          "title": "Peptide sequence",
+          "description": "One or more peptide sequences using canonical amino-acid letters. Enter a single sequence, a string array, or newline/comma-separated sequences.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sequences_file": {
+          "type": "string",
+          "format": "file",
+          "title": "Sequences file",
+          "description": "TXT/TSV file. Each line can be a sequence or TSV with name and sequence columns.",
+          "ui:accept": ".txt,.tsv,.csv"
+        },
+        "prediction_mode": {
+          "type": "string",
+          "title": "Prediction mode",
+          "description": "joint returns activity, toxicity and final therapeutic reward. activity/toxicity run a single branch.",
+          "default": "joint",
+          "enum": ["joint", "activity", "toxicity"]
+        },
+        "device": {
+          "type": "string",
+          "title": "Device",
+          "description": "Runtime device. cuda:N sets CUDA_VISIBLE_DEVICES=N and runs as cuda:0 inside the task.",
+          "default": "cpu",
+          "enum": ["cpu", "auto", "gpu", "cuda", "cuda:0", "cuda:1", "cuda:2", "cuda:3"]
+        },
+        "batch_size": {
+          "type": "integer",
+          "title": "Batch size",
+          "description": "Inference batch size for DualPep branches.",
+          "default": 16,
+          "minimum": 1,
+          "maximum": 512
+        },
+        "deduplicate": {
+          "type": "boolean",
+          "title": "Deduplicate",
+          "description": "Remove duplicate sequences before prediction.",
+          "default": true
+        }
+      },
+      "required": [],
+      "anyOf": [
+        {
+          "required": ["sequences"]
+        },
+        {
+          "required": ["sequences_file"]
+        }
+      ]
+    },
+    "output_schema": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        },
+        "outputs": {
+          "type": "object",
+          "properties": {
+            "task": {
+              "type": "string"
+            },
+            "prediction_mode": {
+              "type": "string"
+            },
+            "sequence_count": {
+              "type": "integer"
+            },
+            "top_prediction": {
+              "type": "object"
+            },
+            "device": {
+              "type": "string"
+            }
+          }
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "content_type": {
+                "type": "string"
+              }
+            },
+            "required": ["name", "path"]
+          }
+        },
+        "metrics": {
+          "type": "object"
+        },
+        "error": {
+          "type": ["object", "null"]
+        }
+      },
+      "required": ["success", "message", "outputs", "artifacts"]
+    }
+  }
+}

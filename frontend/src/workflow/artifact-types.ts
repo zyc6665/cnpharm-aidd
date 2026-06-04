@@ -54,6 +54,7 @@ export interface WorkflowTaskRef
   extends Pick<
     Task,
     | 'id'
+    | 'name'
     | 'tool_id'
     | 'tool_slug'
     | 'status'

@@ -1,0 +1,110 @@
+"""LangGraph node functions for AIDD planning."""
+
+from __future__ import annotations
+
+from dataclasses import asdict
+from typing import Any
+
+from app.agents.aidd.capabilities import AIDD_TOOL_CAPABILITIES
+from app.agents.aidd.graph_state import AIDDGraphState
+from app.agents.aidd.plan_schema import (
+    build_planning_prompt,
+    parse_model_plan,
+)
+from app.agents.aidd.planner import infer_aidd_input_type
+
+
+def _capability_to_tool_summary(tool_slug: str) -> dict[str, Any]:
+    capability = AIDD_TOOL_CAPABILITIES[tool_slug]
+    return {
+        "tool_slug": tool_slug,
+        "capability": capability.capability,
+        "stage": capability.stage,
+        "inputs": [item.semantic_type for item in capability.inputs],
+        "outputs": [item.semantic_type for item in capability.outputs],
+        "defaults": dict(capability.defaults),
+    }
+
+
+def load_context_node(state: AIDDGraphState) -> AIDDGraphState:
+    return {"status": "context_loaded"}
+
+
+def classify_input_node(state: AIDDGraphState) -> AIDDGraphState:
+    input_type = infer_aidd_input_type(
+        message=state.get("message", ""),
+        filename=state.get("input_filename", ""),
+    )
+    return {
+        "input_type": input_type,
+        "semantic_inputs": {
+            input_type: {
+                "source": "agent_input",
+                "file_id": state.get("input_file_id"),
+                "filename": state.get("input_filename"),
+            }
+        },
+        "status": "input_classified",
+    }
+
+
+def discover_tools_node(state: AIDDGraphState) -> AIDDGraphState:
+    configured_slugs = set(state.get("configured_tool_slugs") or AIDD_TOOL_CAPABILITIES.keys())
+    available_tools = [
+        _capability_to_tool_summary(tool_slug)
+        for tool_slug in AIDD_TOOL_CAPABILITIES
+        if tool_slug in configured_slugs
+    ]
+    return {
+        "available_tools": available_tools,
+        "status": "tools_discovered",
+    }
+
+
+async def plan_steps_node(state: AIDDGraphState) -> AIDDGraphState:
+    from app.agents.aidd.llm_client import request_structured_plan
+
+    prompt = build_planning_prompt(
+        message=state.get("message", ""),
+        semantic_inputs=state.get("semantic_inputs", {}),
+        available_tools=state.get("available_tools", []),
+        requested_outputs=state.get("requested_outputs", []),
+    )
+    raw_plan = await request_structured_plan(state["model_service"], prompt)
+    return {
+        "planning_prompt": prompt,
+        "raw_plan": raw_plan,
+        "status": "plan_received",
+    }
+
+
+def validate_plan_node(state: AIDDGraphState) -> AIDDGraphState:
+    plan = parse_model_plan(
+        state.get("raw_plan", ""),
+        available_tools=state.get("available_tools", []),
+    )
+    return {
+        "plan": plan.model_dump(),
+        "reasoning_summary": plan.reasoning_summary,
+        "analysis_trace": plan.analysis_trace,
+        "status": "planned",
+    }
+
+
+def execute_step_node(state: AIDDGraphState) -> AIDDGraphState:
+    return {"status": state.get("status", "planned")}
+
+
+def observe_result_node(state: AIDDGraphState) -> AIDDGraphState:
+    return {"observations": state.get("observations", [])}
+
+
+def replan_or_finish_node(state: AIDDGraphState) -> AIDDGraphState:
+    return {"status": state.get("status", "planned")}
+
+
+def route_after_replan(state: AIDDGraphState) -> str:
+    status = state.get("status")
+    if status in {"waiting_task", "success", "failure"}:
+        return status
+    return "execute_step"

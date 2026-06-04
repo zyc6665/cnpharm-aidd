@@ -34,6 +34,7 @@ class Task(Base, UUIDMixin, TimestampMixin):
     session_id = Column(String(36), nullable=True, index=True)  # 游客session
     tool_id = Column(String(36), ForeignKey("tools.id"), nullable=False, index=True)
     tool_version_id = Column(String(36), ForeignKey("tool_versions.id"), nullable=False)
+    name = Column(String(120), nullable=True, index=True)
 
     # 状态
     status = Column(String(20), default=TaskStatus.PENDING.value, nullable=False, index=True)

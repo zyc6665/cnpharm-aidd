@@ -1,0 +1,199 @@
+{
+  "name": "TheraPainter Peptide Sequence Optimization",
+  "slug": "therapainter-peptide-evolve",
+  "description": "Optimize seed peptide sequences using the TheraPainter reinforcement-learning mutator and DualPep reward model.",
+  "icon": "T",
+  "category": "bioinformatics",
+  "version": "0.1.0",
+  "changelog": "Initial ssh_job wrapper for RL-based peptide sequence evolution with direct host IP and password authentication.",
+  "tool_config": {
+    "type": "ssh_job",
+    "host": "10.202.2.228",
+    "port": 22,
+    "username": "zhouyc",
+    "auth_type": "password",
+    "password_ref": "ssh_4090_zhouyc",
+    "runner_mode": "docker_exec",
+    "remote_base_dir": "/data/zhouyc/kaiwu/platform-jobs",
+    "container_base_dir": "/workspace/platform-jobs",
+    "entrypoint": "/workspace/TheraPainter/platform_run.sh",
+    "container_name": "kaiwu",
+    "timeout_sec": 14400,
+    "cleanup_remote": false,
+    "strict_host_key_checking": false,
+    "env": {
+      "MODEL_PYTHON": "/home/zhuwy/.conda/envs/TheraPainter/bin/python",
+      "PATH": "/home/zhuwy/.conda/envs/TheraPainter/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "THERAPAINTER_DEFAULT_TASK": "therapainter_evolve"
+    },
+    "output_globs": [
+      "output/result.json",
+      "output/logs/run.log",
+      "output/artifacts/**/*"
+    ],
+    "examples": [
+      {
+        "name": "TheraPainter 种子序列优化示例",
+        "description": "使用内置 TXT 种子序列文件进行小步数多肽序列优化。",
+        "params": {
+          "device": "cpu",
+          "reward_device": "cpu",
+          "steps": 1,
+          "iterations": 1,
+          "batch_size": 4,
+          "evolve_batch_size": 4,
+          "init_topn": 4,
+          "seed": 1234
+        },
+        "input_files": {
+          "sequences_file": "example/sequences.txt"
+        }
+      }
+    ],
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "sequences": {
+          "type": ["array", "string"],
+          "title": "Seed peptide sequence",
+          "description": "One or more seed peptide sequences using canonical amino-acid letters. Enter a single sequence, a string array, or newline/comma-separated sequences.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sequences_file": {
+          "type": "string",
+          "format": "file",
+          "title": "Seed sequences file",
+          "description": "TXT/TSV file. Each line can be a sequence or TSV with name and sequence columns.",
+          "ui:accept": ".txt,.tsv,.csv"
+        },
+        "device": {
+          "type": "string",
+          "title": "Device",
+          "description": "Runtime device for the generator/RL loop.",
+          "default": "cuda:0",
+          "enum": ["cpu", "auto", "gpu", "cuda", "cuda:0", "cuda:1", "cuda:2", "cuda:3"]
+        },
+        "reward_device": {
+          "type": "string",
+          "title": "Reward device",
+          "description": "Device for DualPep reward inference. Usually the same as device for single-GPU deployment.",
+          "default": "cuda:0",
+          "enum": ["cpu", "auto", "gpu", "cuda", "cuda:0", "cuda:1", "cuda:2", "cuda:3"]
+        },
+        "steps": {
+          "type": "integer",
+          "title": "Optimization steps",
+          "description": "RL evolution steps. Higher values produce more candidates and take longer.",
+          "default": 1,
+          "minimum": 1,
+          "maximum": 40
+        },
+        "iterations": {
+          "type": "integer",
+          "title": "Mutation iterations",
+          "description": "Number of mutation iterations per step.",
+          "default": 1,
+          "minimum": 1,
+          "maximum": 20
+        },
+        "batch_size": {
+          "type": "integer",
+          "title": "Reward batch size",
+          "description": "Batch size used by DualPep reward branches.",
+          "default": 4,
+          "minimum": 1,
+          "maximum": 128
+        },
+        "evolve_batch_size": {
+          "type": "integer",
+          "title": "Evolve batch size",
+          "description": "Batch size for the RL mutator.",
+          "default": 4,
+          "minimum": 1,
+          "maximum": 128
+        },
+        "init_topn": {
+          "type": "integer",
+          "title": "Initial seed count",
+          "description": "Maximum number of uploaded seed sequences to use.",
+          "default": 4,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "seed": {
+          "type": "integer",
+          "title": "Random seed",
+          "description": "Random seed for the RL optimization run.",
+          "default": 1234
+        }
+      },
+      "required": [],
+      "anyOf": [
+        {
+          "required": ["sequences"]
+        },
+        {
+          "required": ["sequences_file"]
+        }
+      ]
+    },
+    "output_schema": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        },
+        "outputs": {
+          "type": "object",
+          "properties": {
+            "task": {
+              "type": "string"
+            },
+            "seed_count": {
+              "type": "integer"
+            },
+            "candidate_count": {
+              "type": "integer"
+            },
+            "best_candidates": {
+              "type": "array"
+            },
+            "device": {
+              "type": "string"
+            }
+          }
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "content_type": {
+                "type": "string"
+              }
+            },
+            "required": ["name", "path"]
+          }
+        },
+        "metrics": {
+          "type": "object"
+        },
+        "error": {
+          "type": ["object", "null"]
+        }
+      },
+      "required": ["success", "message", "outputs", "artifacts"]
+    }
+  }
+}

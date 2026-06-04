@@ -2,7 +2,8 @@ import { get, post, put, patch, del } from './request'
 import type { ApiResponse } from '@/types/api'
 import type {
   Tool, Category, Tag, ToolVersion, PaginatedResponse, PaginationParams,
-  ToolView, ToolCreateParams, ToolOptionSummary, WorkbenchGroup, WorkbenchGroupMapping
+  ToolView, ToolCreateParams, ToolOptionSummary, WorkbenchGroup, WorkbenchGroupMapping,
+  ToolExample, ToolExampleApplyResult, ToolExampleFilePreview
 } from '@/types/models'
 
 export interface ToolListParams extends PaginationParams {
@@ -63,6 +64,21 @@ export const getWorkbenchGroups = (): Promise<ApiResponse<WorkbenchGroup[]>> => 
 // 获取工具详情
 export const getToolDetail = (id: string): Promise<ApiResponse<Tool>> => {
   return get<Tool>(`/tools/${id}`)
+}
+
+export const getToolExample = (id: string): Promise<ApiResponse<ToolExample | null>> => {
+  return get<ToolExample | null>(`/tools/${id}/example`)
+}
+
+export const applyToolExample = (id: string): Promise<ApiResponse<ToolExampleApplyResult>> => {
+  return post<ToolExampleApplyResult>(`/tools/${id}/example/apply`)
+}
+
+export const previewToolExampleFile = (
+  id: string,
+  field: string
+): Promise<ApiResponse<ToolExampleFilePreview>> => {
+  return get<ToolExampleFilePreview>(`/tools/${id}/example/files/${encodeURIComponent(field)}/preview`)
 }
 
 // 创建工具（管理员）

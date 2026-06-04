@@ -73,6 +73,20 @@ function includesObjectType(type?: SchemaProperty['type']): boolean {
   return Array.isArray(type) ? type.includes('object') : type === 'object'
 }
 
+function shouldRenderStringArrayAsText(rawProperty: SchemaProperty): boolean {
+  const type = rawProperty.type
+  const itemType = rawProperty.items?.type
+  const itemAllowsString = Array.isArray(itemType) ? itemType.includes('string') : itemType === 'string'
+
+  return (
+    Array.isArray(type) &&
+    type.includes('array') &&
+    type.includes('string') &&
+    itemAllowsString &&
+    !rawProperty.items?.enum
+  )
+}
+
 function hasValue(value: unknown): boolean {
   if (value === undefined || value === null || value === '') {
     return false
@@ -135,16 +149,19 @@ function normalizeFlattenedProperty(
     return null
   }
 
+  const renderStringArrayAsText = shouldRenderStringArrayAsText(rawProperty)
   const normalizedType =
     parentKey === 'input_files' || rawProperty.format === 'file' || rawProperty.format === 'uri'
       ? 'file'
-      : normalizeSchemaType(rawProperty.type)
+      : renderStringArrayAsText
+        ? 'string'
+        : normalizeSchemaType(rawProperty.type)
 
   return {
     ...rawProperty,
     type: normalizedType,
     title: rawProperty.title || toLabel(fieldKey),
-    format: parentKey === 'input_files' ? 'file' : rawProperty.format,
+    format: parentKey === 'input_files' ? 'file' : renderStringArrayAsText ? 'textarea' : rawProperty.format,
     _parentKey: parentKey,
     _originalKey: originalKey,
     _platformManaged: platformManaged
@@ -224,6 +241,32 @@ export function buildToolFormInitialState(
     formState,
     fileFieldKeys
   }
+}
+
+export function flattenExampleParams(
+  flattenedSchema: ToolSchema,
+  exampleParams: Record<string, unknown>
+): Record<string, unknown> {
+  const values: Record<string, unknown> = {}
+
+  for (const [key, prop] of Object.entries(flattenedSchema.properties)) {
+    if (prop._parentKey && prop._originalKey) {
+      const parentValue = exampleParams[prop._parentKey]
+      if (parentValue && typeof parentValue === 'object' && !Array.isArray(parentValue)) {
+        const nestedValues = parentValue as Record<string, unknown>
+        if (Object.prototype.hasOwnProperty.call(nestedValues, prop._originalKey)) {
+          values[key] = nestedValues[prop._originalKey]
+        }
+      }
+      continue
+    }
+
+    if (Object.prototype.hasOwnProperty.call(exampleParams, key)) {
+      values[key] = exampleParams[key]
+    }
+  }
+
+  return values
 }
 
 export function buildTaskSubmissionPayload(

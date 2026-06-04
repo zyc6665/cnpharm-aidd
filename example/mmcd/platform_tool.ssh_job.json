@@ -1,0 +1,226 @@
+{
+  "name": "MMCD Therapeutic Peptide Generator",
+  "slug": "mmcd-peptide-generation",
+  "description": "Generate therapeutic peptide sequences with MMCD, optionally generating peptide backbone PDB structures or building structures from an uploaded FASTA file.",
+  "icon": "M",
+  "category": "bioinformatics",
+  "version": "0.1.0",
+  "changelog": "Initial ssh_job wrapper for MMCD peptide generation and optional structure generation with direct host IP and password authentication.",
+  "tool_config": {
+    "type": "ssh_job",
+    "host": "10.202.2.228",
+    "port": 22,
+    "username": "zhouyc",
+    "auth_type": "password",
+    "password_ref": "ssh_4090_zhouyc",
+    "runner_mode": "docker_exec",
+    "remote_base_dir": "/data/zhouyc/kaiwu/platform-jobs",
+    "container_base_dir": "/workspace/platform-jobs",
+    "entrypoint": "/workspace/MMCD/MMCD_0/platform_run.sh",
+    "container_name": "kaiwu",
+    "timeout_sec": 7200,
+    "cleanup_remote": false,
+    "strict_host_key_checking": false,
+    "env": {
+      "MODEL_PYTHON": "/home/zhuwy/.conda/envs/MMCD/bin/python",
+      "PATH": "/home/zhuwy/.conda/envs/MMCD/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    },
+    "output_globs": [
+      "output/result.json",
+      "output/logs/run.log",
+      "output/artifacts/**/*"
+    ],
+    "examples": [
+      {
+        "name": "FASTA 结构生成示例",
+        "description": "使用内置 sequences.fasta，为示例多肽序列生成结构。",
+        "params": {
+          "mode": "structure_from_fasta",
+          "checkpoint_preset": "default",
+          "sampling_steps": 50,
+          "struct_postprocess": "none",
+          "device": "cpu",
+          "seed": 2023
+        },
+        "input_files": {
+          "fasta": "example/input/sequences.fasta"
+        }
+      }
+    ],
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "title": "Run mode",
+          "description": "peptide_generation generates new peptide sequences; structure_from_fasta generates PDB structures for an uploaded FASTA file.",
+          "default": "peptide_generation",
+          "enum": ["peptide_generation", "structure_from_fasta"]
+        },
+        "fasta": {
+          "type": "string",
+          "format": "file",
+          "title": "Input FASTA",
+          "description": "Required only when mode is structure_from_fasta.",
+          "ui:accept": ".fasta,.fa,.faa,.txt"
+        },
+        "checkpoint_preset": {
+          "type": "string",
+          "title": "Checkpoint preset",
+          "description": "Default uses the main total-loss checkpoint. Structure uses the structure-prior checkpoint.",
+          "default": "default",
+          "enum": ["default", "structure", "last"]
+        },
+        "n_seq": {
+          "type": "integer",
+          "title": "Sequence count",
+          "description": "Number of peptide sequences to generate. Ignored for structure_from_fasta.",
+          "default": 5,
+          "minimum": 1,
+          "maximum": 100
+        },
+        "seq_batch_size": {
+          "type": "integer",
+          "title": "Sequence batch size",
+          "description": "Batch size used by the sequence denoising sampler.",
+          "default": 5,
+          "minimum": 1,
+          "maximum": 100
+        },
+        "sampling_steps": {
+          "type": "integer",
+          "title": "Sampling steps",
+          "description": "Diffusion sampling steps. 50 is suitable for smoke tests; 1000 is the formal setting.",
+          "default": 50,
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "seq_sampling_profile": {
+          "type": "string",
+          "title": "Sequence sampling profile",
+          "description": "bare is the minimal sampler; enhanced enables legacy prior/property/repetition guards.",
+          "default": "bare",
+          "enum": ["bare", "enhanced"]
+        },
+        "seq_temperature": {
+          "type": "number",
+          "title": "Sequence temperature",
+          "description": "Sampling temperature for peptide sequence generation.",
+          "default": 1.0,
+          "minimum": 0.1,
+          "maximum": 3.0
+        },
+        "seq_top_k": {
+          "type": "integer",
+          "title": "Top-k",
+          "description": "Top-k sequence sampling filter. Use 0 to disable.",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 50
+        },
+        "generate_structures": {
+          "type": "boolean",
+          "title": "Generate PDB structures",
+          "description": "When enabled, MMCD also samples peptide backbone structures. This is slower than sequence-only generation.",
+          "default": false
+        },
+        "struct_postprocess": {
+          "type": "string",
+          "title": "Structure postprocess",
+          "description": "Optional postprocess applied during structure generation.",
+          "default": "none",
+          "enum": ["none", "torsion", "relax", "torsion+relax"]
+        },
+        "relax_steps": {
+          "type": "integer",
+          "title": "Relax steps",
+          "description": "Relaxation steps when structure postprocess uses relax. 0 means model default.",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "device": {
+          "type": "string",
+          "title": "Device",
+          "description": "Runtime device. cuda:N sets CUDA_VISIBLE_DEVICES=N and calls MMCD with cuda:0.",
+          "default": "auto",
+          "enum": ["auto", "cpu", "gpu", "cuda:0", "cuda:1", "cuda:2", "cuda:3"]
+        },
+        "seed": {
+          "type": "integer",
+          "title": "Random seed",
+          "description": "Random seed used for sequence and structure sampling.",
+          "default": 2023,
+          "minimum": 0,
+          "maximum": 2147483647
+        }
+      },
+      "required": []
+    },
+    "output_schema": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        },
+        "outputs": {
+          "type": "object",
+          "properties": {
+            "task_name": {
+              "type": "string"
+            },
+            "sequence_count": {
+              "type": "integer"
+            },
+            "structure_file_count": {
+              "type": "integer"
+            },
+            "generate_structures": {
+              "type": "boolean"
+            },
+            "n_seq": {
+              "type": "integer"
+            },
+            "sampling_steps": {
+              "type": ["integer", "null"]
+            },
+            "seq_sampling_profile": {
+              "type": "string"
+            },
+            "device": {
+              "type": "string"
+            }
+          }
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "content_type": {
+                "type": "string"
+              }
+            },
+            "required": ["name", "path"]
+          }
+        },
+        "metrics": {
+          "type": "object"
+        },
+        "error": {
+          "type": ["object", "null"]
+        }
+      },
+      "required": ["success", "message", "outputs", "artifacts"]
+    }
+  }
+}

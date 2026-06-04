@@ -273,6 +273,33 @@ async def test_create_task_uses_direct_runner_when_enabled(
 
 
 @pytest.mark.asyncio
+async def test_create_task_api_uses_shared_task_creation_service(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    published_tool: Tool,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """任务 API 应保持现有行为，后续 agent 可以复用同一任务创建服务。"""
+    runner = RecordingDirectRunner()
+    monkeypatch.setattr(tasks_api.settings, "TASK_EXECUTION_BACKEND", "direct", raising=False)
+    monkeypatch.setattr(tasks_api, "direct_task_runner", runner, raising=False)
+
+    response = await api_client.post(
+        "/api/v1/tasks",
+        headers={"Authorization": "Bearer admin-token"},
+        json={
+            "tool_id": published_tool.id,
+            "params": {"alpha": 1},
+            "file_ids": [],
+        },
+    )
+
+    assert response.status_code == 200
+    task_id = response.json()["data"]["id"]
+    assert runner.scheduled == [(task_id, published_tool.current_version_id)]
+
+
+@pytest.mark.asyncio
 async def test_retry_task_uses_direct_runner_when_enabled(
     api_client: httpx.AsyncClient,
     db_session: AsyncSession,

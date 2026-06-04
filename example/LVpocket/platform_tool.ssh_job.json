@@ -30,6 +30,19 @@
       "output/logs/run.log",
       "output/artifacts/**/*"
     ],
+    "examples": [
+      {
+        "name": "默认蛋白口袋预测示例",
+        "description": "使用内置 protein.pdb，自动选择 LVpocket 权重并在 CPU/GPU 自动模式下运行。",
+        "params": {
+          "model_choice": "auto",
+          "device": "auto"
+        },
+        "input_files": {
+          "protein_pdb": "input/protein.pdb"
+        }
+      }
+    ],
     "input_schema": {
       "type": "object",
       "properties": {

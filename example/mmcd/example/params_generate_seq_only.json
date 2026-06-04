@@ -1,0 +1,15 @@
+{
+  "task_id": "example-mmcd-seq-only",
+  "task_name": "mmcd_peptide_generation",
+  "params": {
+    "checkpoint": "ckpt/2026_01_08_20_35_surface_geotopo_dcmha_geomloss_2026_01_19_10_35/mmcd-epoch=703-val_total_loss=3.6661.ckpt",
+    "n_seq": 5,
+    "seq_batch_size": 5,
+    "sampling_steps": 50,
+    "seq_sampling_profile": "bare",
+    "no_struct": true,
+    "device": "cpu",
+    "seed": 2023
+  },
+  "input_files": {}
+}

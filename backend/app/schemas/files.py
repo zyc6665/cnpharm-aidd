@@ -47,6 +47,7 @@ class ArtifactFileResponse(TimestampMixin):
     source_type: str
     download_url: str
     task_id: str
+    task_name: Optional[str] = None
     tool_id: str
     tool_name: str
     tool_slug: str

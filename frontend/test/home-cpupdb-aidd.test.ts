@@ -71,3 +71,70 @@ test('首页首屏应提供产品化工作台视觉预览', () => {
   assert.equal(homeSource.includes('preview-structure'), true)
   assert.equal(homeSource.includes('preview-metrics'), true)
 })
+
+test('首页平台特性区应改为 CPUModel 与 CPUPDB 的双栏叙事介绍区', () => {
+  const homeSource = readSource('src/views/home/index.vue')
+  const zhLocaleSource = readSource('src/locales/zh-CN/index.ts')
+  const enLocaleSource = readSource('src/locales/en-US/index.ts')
+
+  assert.equal(homeSource.includes('foundation-section'), true)
+  assert.equal(homeSource.includes("t('home.foundation.title')"), true)
+  assert.equal(homeSource.includes("t('home.foundation.platform.title')"), true)
+  assert.equal(homeSource.includes("t('home.foundation.cpupdb.title')"), true)
+  assert.equal(homeSource.includes('https://www.cpupdb.com'), true)
+  assert.equal(homeSource.includes('https://www.cpupdb.com/help.html'), true)
+  assert.equal(homeSource.includes("t('home.features.title')"), false)
+  assert.equal(homeSource.includes('const features = {'), false)
+
+  assert.equal(zhLocaleSource.includes("foundation: {"), true)
+  assert.equal(zhLocaleSource.includes("title: '平台模型与数据底座'"), true)
+  assert.equal(zhLocaleSource.includes("title: 'CPUModel 工作台'"), true)
+  assert.equal(zhLocaleSource.includes("title: 'CPUPDB'"), true)
+
+  assert.equal(enLocaleSource.includes("foundation: {"), true)
+  assert.equal(enLocaleSource.includes("title: 'Platform Model & Data Foundation'"), true)
+  assert.equal(enLocaleSource.includes("title: 'CPUModel Workbench'"), true)
+  assert.equal(enLocaleSource.includes("title: 'CPUPDB'"), true)
+})
+
+test('首页平台功能区应升级为与下方大甲板同系的流程甲板', () => {
+  const homeSource = readSource('src/views/home/index.vue')
+
+  assert.equal(homeSource.includes('workflow-shell'), true)
+  assert.equal(homeSource.includes('workflow-bridge'), true)
+  assert.equal(homeSource.includes('workflow-track'), true)
+  assert.equal(homeSource.includes('workflow-connector'), true)
+  assert.equal(homeSource.includes('workflow-step-card'), true)
+  assert.equal(homeSource.includes('workflow-step-kicker'), true)
+  assert.equal(homeSource.includes('workflow-step-glow'), true)
+  assert.equal(homeSource.includes('workflow-step-copy'), true)
+})
+
+test('首页中段甲板应具备滚动进入动效与渐进显隐状态', () => {
+  const homeSource = readSource('src/views/home/index.vue')
+
+  assert.equal(homeSource.includes('IntersectionObserver'), true)
+  assert.equal(homeSource.includes('workflowRevealRef'), true)
+  assert.equal(homeSource.includes('foundationRevealRef'), true)
+  assert.equal(homeSource.includes('section-visible'), true)
+  assert.equal(homeSource.includes('--reveal-delay'), true)
+  assert.equal(homeSource.includes('prefers-reduced-motion: reduce'), true)
+})
+
+test('首页两个中段甲板应使用相同的外层宽度约束', () => {
+  const homeSource = readSource('src/views/home/index.vue')
+
+  assert.equal(
+    homeSource.includes('.scenarios-section .container,\n  .foundation-section .container'),
+    true
+  )
+  assert.equal(homeSource.includes('max-width: 1480px;'), true)
+})
+
+test('首页两个中段甲板应共享同一套上下留白节奏', () => {
+  const homeSource = readSource('src/views/home/index.vue')
+
+  assert.equal(homeSource.includes('--deck-stack-gap'), true)
+  assert.equal(homeSource.includes('padding: @spacing-xxl 0 var(--deck-stack-gap);'), true)
+  assert.equal(homeSource.includes('padding: var(--deck-stack-gap) 0 @spacing-xxl;'), true)
+})

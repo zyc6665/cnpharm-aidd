@@ -43,6 +43,26 @@
         "pocket_pdb": "input/2opa_pocket10.pdb"
       }
     },
+    "examples": [
+      {
+        "name": "Pocket 条件分子生成示例",
+        "description": "使用内置 pocket PDB，以小样本参数运行 GCDM pocket 条件分子生成。",
+        "params": {
+          "task_name": "pocket_generation",
+          "params": {
+            "n_samples": 2,
+            "sanitize": false,
+            "relax": false,
+            "resamplings": 1,
+            "jump_length": 1,
+            "device": "cuda:0"
+          }
+        },
+        "input_files": {
+          "pocket_pdb": "example/3rfm_a2a-pocket10.pdb"
+        }
+      }
+    ],
     "input_schema": {
       "type": "object",
       "properties": {

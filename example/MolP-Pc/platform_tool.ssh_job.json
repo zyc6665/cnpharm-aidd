@@ -34,6 +34,18 @@
       "smiles_csv": "input/smiles.csv",
       "device": "cpu"
     },
+    "examples": [
+      {
+        "name": "SMILES CSV 属性预测示例",
+        "description": "使用内置 smiles.csv，在 CPU 环境下运行 MolP-PC 属性预测。",
+        "params": {
+          "device": "cpu"
+        },
+        "input_files": {
+          "smiles_csv": "examples/sample_input/smiles.csv"
+        }
+      }
+    ],
     "platform_run_params_example": {
       "task_name": "molp_pc_property_prediction",
       "params": {

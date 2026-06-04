@@ -40,6 +40,22 @@
       "seed": 42,
       "device": "cpu"
     },
+    "examples": [
+      {
+        "name": "GA 默认生成示例",
+        "description": "使用 CPU 与小规模遗传算法参数生成候选 SMILES。",
+        "params": {
+          "method": "ga",
+          "n_samples": 5,
+          "pop_size": 20,
+          "n_generations": 3,
+          "elite_size": 2,
+          "seed": 42,
+          "device": "cpu"
+        },
+        "input_files": {}
+      }
+    ],
     "platform_run_params_example": {
       "task_name": "janus_qubo_ga_generation",
       "params": {

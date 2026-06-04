@@ -21,6 +21,7 @@ export function mapTaskStatusToWorkflowStepStatus(taskStatus: TaskStatus): Workf
 export function toWorkflowTaskRef(task: Task | WorkflowTaskRef): WorkflowTaskRef {
   return {
     id: task.id,
+    name: task.name,
     tool_id: task.tool_id,
     tool_slug: task.tool_slug,
     status: task.status,

@@ -372,3 +372,49 @@ def test_ssh_job_templates_mark_platform_managed_fields_as_hidden() -> None:
         assert task_name.get("hidden") is True
         assert pocket_pdb.get("format") == "file"
         assert pocket_pdb.get("accept") == ".pdb"
+
+
+def test_therapainter_exposes_single_seed_sequence_field() -> None:
+    """TheraPainter 不应同时暴露单条和多条种子肽序列入口。"""
+    template_path = Path("example/therapainter/platform_tool.therapainter_evolve.ssh_job.json")
+    with template_path.open("r", encoding="utf-8") as template_file:
+        raw_config = json.load(template_file)
+
+    input_schema = raw_config["tool_config"]["input_schema"]
+    properties = input_schema["properties"]
+    seed_like_fields = [
+        key
+        for key, value in properties.items()
+        if "seed peptide" in str(value.get("title", "")).lower()
+    ]
+
+    assert "sequence" not in properties
+    assert seed_like_fields == ["sequences"]
+    assert properties["sequences"]["title"] == "Seed peptide sequence"
+    assert input_schema["anyOf"] == [
+        {"required": ["sequences"]},
+        {"required": ["sequences_file"]},
+    ]
+
+
+def test_dualpep_exposes_single_peptide_sequence_field() -> None:
+    """DualPep 不应同时暴露单条和多条肽序列入口。"""
+    template_path = Path("example/therapainter/platform_tool.dualpep_predict.ssh_job.json")
+    with template_path.open("r", encoding="utf-8") as template_file:
+        raw_config = json.load(template_file)
+
+    input_schema = raw_config["tool_config"]["input_schema"]
+    properties = input_schema["properties"]
+    peptide_sequence_fields = [
+        key
+        for key, value in properties.items()
+        if "peptide sequence" in str(value.get("title", "")).lower()
+    ]
+
+    assert "sequence" not in properties
+    assert peptide_sequence_fields == ["sequences"]
+    assert properties["sequences"]["title"] == "Peptide sequence"
+    assert input_schema["anyOf"] == [
+        {"required": ["sequences"]},
+        {"required": ["sequences_file"]},
+    ]

@@ -12,7 +12,7 @@ export const useTasksStore = defineStore('tasks', () => {
   const total = ref(0)
 
   // Actions
-  const fetchTasks = async (params?: { status?: TaskStatus; tool_id?: string; page?: number; page_size?: number }) => {
+  const fetchTasks = async (params?: { status?: TaskStatus; tool_id?: string; keyword?: string; page?: number; page_size?: number }) => {
     loading.value = true
     try {
       const res = await getTaskList(params)

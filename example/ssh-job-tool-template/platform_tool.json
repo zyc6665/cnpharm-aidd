@@ -38,6 +38,22 @@
         "pocket_pdb": "input/example_pocket10.pdb"
       }
     },
+    "examples": [
+      {
+        "name": "SSH Job 模板示例",
+        "description": "使用一个最小 pocket PDB 文件演示 ssh_job 工具输入格式。",
+        "params": {
+          "task_name": "pocket_generation",
+          "params": {
+            "num_samples": 8,
+            "batch_size": 4
+          }
+        },
+        "input_files": {
+          "pocket_pdb": "input/example_pocket10.pdb"
+        }
+      }
+    ],
     "input_schema": {
       "type": "object",
       "properties": {

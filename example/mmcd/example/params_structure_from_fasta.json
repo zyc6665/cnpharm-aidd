@@ -1,0 +1,13 @@
+{
+  "task_id": "example-mmcd-structure-from-fasta",
+  "task_name": "mmcd_structure_from_fasta",
+  "params": {
+    "checkpoint": "ckpt/2026_01_08_20_35_surface_geotopo_dcmha_geomloss_2026_01_19_10_35/mmcd-epoch=703-val_total_loss=3.6661.ckpt",
+    "sampling_steps": 50,
+    "struct_postprocess": "none",
+    "device": "cpu"
+  },
+  "input_files": {
+    "fasta": "input/sequences.fasta"
+  }
+}

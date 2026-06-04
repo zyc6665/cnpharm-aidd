@@ -30,6 +30,26 @@
       "output/logs/run.log",
       "output/artifacts/**/*"
     ],
+    "examples": [
+      {
+        "name": "1GGD 蛋白-肽对接示例",
+        "description": "使用 1GGD receptor 与 peptide PDB 运行小规模 FlowPepDock 对接。",
+        "params": {
+          "complex_name": "1ggd",
+          "n_samples": 2,
+          "batch_size": 1,
+          "flow_num_steps": 5,
+          "flow_solver": "euler",
+          "device": "cpu",
+          "cpu": 4,
+          "save_visualisation": false
+        },
+        "input_files": {
+          "receptor_pdb": "example/1ggd/receptor.pdb",
+          "peptide_pdb": "example/1ggd/peptide.pdb"
+        }
+      }
+    ],
     "input_schema": {
       "type": "object",
       "properties": {

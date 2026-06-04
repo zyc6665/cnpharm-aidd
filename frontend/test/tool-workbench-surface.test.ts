@@ -30,6 +30,7 @@ test('工作台左栏应转为分组栏语义而不是步骤栏语义', () => {
 
   assert.equal(source.includes('workflow.columns.groups'), true)
   assert.equal(source.includes('workflow.columns.steps'), false)
+  assert.equal(source.includes('group-rail-card'), true)
 })
 
 test('/workflow 页面应读取工作台分组而不是旧的工作流工具集合', () => {
@@ -44,25 +45,25 @@ test('工作台页头标题与副标题应居中展示', () => {
 
   assert.equal(source.includes('<AppPageHeader'), true)
   assert.equal(source.includes('align="center"'), true)
+  assert.equal(source.includes('workflow-deck'), true)
 })
 
 test('共享产物文件选择器组件文件应存在', () => {
   assert.equal(existsSync(resolve(rootDir, 'src/components/tools/ArtifactFilePicker.vue')), true)
 })
 
-test('共享产物文件选择器应使用任务和产物二级下拉并过滤兼容文件', () => {
+test('共享产物文件选择器应使用路径式四级选择并过滤兼容文件', () => {
   const source = readSource('src/components/tools/ArtifactFilePicker.vue')
 
-  assert.equal(source.includes('groupCompatibleArtifactsByTask'), true)
-  assert.equal(source.includes('artifactTaskGroups'), true)
+  assert.equal(source.includes('buildWorkflowArtifactHierarchy'), true)
   assert.equal(source.includes('currentToolId'), true)
   assert.equal(source.includes('currentToolSlug'), true)
-  assert.equal(source.includes('artifact-task-select'), true)
-  assert.equal(source.includes('artifact-file-select'), true)
+  assert.equal(source.includes('artifact-path'), true)
+  assert.equal(source.includes('artifact-step-panel'), true)
   assert.equal(source.includes('selectedTaskId'), true)
-  assert.equal(source.includes('selectedTaskGroup'), true)
-  assert.equal(source.includes('selectedTaskArtifacts'), true)
-  assert.equal(source.includes('handleTaskSelect'), true)
+  assert.equal(source.includes('selectedGroupId'), true)
+  assert.equal(source.includes('selectedToolSlug'), true)
+  assert.equal(source.includes('activeStep'), true)
   assert.equal(source.includes('a-select-opt-group'), false)
   assert.equal(source.includes('tools.noCompatibleArtifacts'), true)
   assert.equal(source.includes('tools.selectArtifactTask'), true)
@@ -84,6 +85,7 @@ test('工作台运行区应复用共享产物选择器并移除强流程推进�
   assert.equal(source.includes(':current-tool-slug="selectedTool?.slug ?? selectedToolSummary?.slug"'), true)
   assert.equal(source.includes('workflow.actions.continueNextStep'), false)
   assert.equal(source.includes('workflow.invalidations.notice'), false)
+  assert.equal(source.includes('tool-lab-panel'), true)
 })
 
 test('工作台右栏应展示我的产物而不是旧的流程工作区', () => {
@@ -92,6 +94,8 @@ test('工作台右栏应展示我的产物而不是旧的流程工作区', () =>
   assert.equal(source.includes('useArtifactsStore'), true)
   assert.equal(source.includes('workflow.columns.artifacts'), true)
   assert.equal(source.includes('workflow.columns.workspace'), false)
+  assert.equal(source.includes('artifact-lab-panel'), true)
+  assert.equal(source.includes('artifact-task-short-id'), true)
 })
 
 test('工具 API 应暴露工作台分组相关方法', () => {

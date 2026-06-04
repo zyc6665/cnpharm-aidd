@@ -9,7 +9,7 @@
         <a-breadcrumb-item>
           <router-link to="/tasks">{{ t('tasks.title') }}</router-link>
         </a-breadcrumb-item>
-        <a-breadcrumb-item>{{ task?.tool?.name || t('tasks.taskDetail') }}</a-breadcrumb-item>
+        <a-breadcrumb-item>{{ task?.name || task?.tool?.name || t('tasks.taskDetail') }}</a-breadcrumb-item>
       </a-breadcrumb>
 
       <a-spin :spinning="loading">
@@ -170,49 +170,7 @@
                 </h3>
 
                 <ResultVisualizationPanel :task="task" />
-
-                <!-- 输出数据 -->
-                <div v-if="outputDataEntries.length" class="output-data">
-                  <a-descriptions :column="1" bordered size="small">
-                    <a-descriptions-item
-                      v-for="[key, value] in outputDataEntries"
-                      :key="key"
-                      :label="String(key)"
-                    >
-                      <template v-if="typeof value === 'object'">
-                        <pre class="json-display">{{ JSON.stringify(value, null, 2) }}</pre>
-                      </template>
-                      <template v-else>
-                        {{ value }}
-                      </template>
-                    </a-descriptions-item>
-                  </a-descriptions>
-                </div>
-
-                <!-- 输出文件 -->
-                <div v-if="task.output_files?.length" class="files-section">
-                  <h4>{{ t('tasks.outputFiles') }}</h4>
-                  <div class="file-list">
-                    <div v-for="file in task.output_files" :key="file.id" class="file-item downloadable">
-                      <FileOutlined />
-                      <span class="file-name">{{ file.original_name }}</span>
-                      <span class="file-size">{{ formatFileSize(file.size) }}</span>
-                      <a-button type="link" size="small" @click="downloadFile(file)">
-                        <DownloadOutlined />
-                        {{ t('common.download') }}
-                      </a-button>
-                    </div>
-                  </div>
-                  <a-button
-                    v-if="task.output_files.length > 1"
-                    type="primary"
-                    class="download-all-btn"
-                    @click="downloadAllFiles"
-                  >
-                    <DownloadOutlined />
-                    {{ t('tasks.downloadAll') }}
-                  </a-button>
-                </div>
+                <TaskOutputSummary :task="task" />
               </div>
 
               <!-- 错误信息 -->
@@ -242,21 +200,7 @@
                     <ReloadOutlined />
                   </a-button>
                 </h3>
-                <div class="logs-container">
-                  <div v-if="logs.length" class="logs-list">
-                    <div
-                      v-for="log in logs"
-                      :key="log.id"
-                      class="log-item"
-                      :class="[`log-${log.level}`]"
-                    >
-                      <span class="log-time">{{ formatLogTime(log.timestamp) }}</span>
-                      <a-tag :color="getLogColor(log.level)" size="small">{{ log.level.toUpperCase() }}</a-tag>
-                      <span class="log-message">{{ log.message }}</span>
-                    </div>
-                  </div>
-                  <a-empty v-else :description="t('tasks.noLogs')" />
-                </div>
+                <TaskLogPreview :logs="logs" :max-items="0" />
               </div>
             </a-col>
 
@@ -350,7 +294,6 @@ import {
   FieldTimeOutlined,
   SettingOutlined,
   FileOutlined,
-  DownloadOutlined,
   FileTextOutlined,
   ReloadOutlined,
   ToolOutlined,
@@ -362,21 +305,13 @@ import dayjs from 'dayjs'
 import { useTasksStore } from '@/stores'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { getTaskLogs } from '@/api/tasks'
-import type { WSMessage, TaskStatus, TaskLog, Task, FileInfo } from '@/types/models'
+import type { WSMessage, TaskStatus, TaskLog, Task } from '@/types/models'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import ResultVisualizationPanel from '@/components/tasks/ResultVisualizationPanel.vue'
+import TaskLogPreview from '@/components/tasks/TaskLogPreview.vue'
+import TaskOutputSummary from '@/components/tasks/TaskOutputSummary.vue'
 import { normalizeTaskStatus } from '@/components/tasks/result-visualization'
-import { triggerProtectedFileDownload } from '@/utils/protected-file-access'
 import { extractTaskLogs } from './logs'
-
-// 定义文件类型接口（兼容旧代码）
-interface TaskFile {
-  id?: string | number
-  original_name?: string
-  filename?: string
-  size?: number
-  url?: string
-}
 
 const route = useRoute()
 const router = useRouter()
@@ -405,16 +340,7 @@ const normalizeLogLevel = (level?: string): 'info' | 'warning' | 'error' => {
 const loading = computed(() => tasksStore.loading)
 const task = computed(() => tasksStore.currentTask)
 const taskStatus = computed<TaskStatus>(() => normalizeTaskStatus(task.value?.status))
-const outputDataEntries = computed<[string, unknown][]>(() => {
-  const outputData = task.value?.output_data
-
-  if (!outputData || typeof outputData !== 'object' || Array.isArray(outputData)) {
-    return []
-  }
-
-  return Object.entries(outputData as Record<string, unknown>)
-})
-const detailTitle = computed(() => task.value?.tool?.name || t('tasks.taskDetail'))
+const detailTitle = computed(() => task.value?.name || task.value?.tool?.name || t('tasks.taskDetail'))
 const detailSubtitle = computed(() => {
   if (!task.value) {
     return t('tasks.detail')
@@ -455,21 +381,19 @@ const getCompletedTitle = (status: TaskStatus) => {
   return titles[status] || t('tasks.completed')
 }
 
-const getLogColor = (level: string) => {
-  const colors: Record<string, string> = {
-    info: 'blue',
-    warning: 'orange',
-    error: 'red'
-  }
-  return colors[level] || 'default'
-}
-
 const formatTime = (time: string) => {
   return dayjs(time).format('YYYY-MM-DD HH:mm:ss')
 }
 
-const formatLogTime = (time: string) => {
-  return dayjs(time).format('HH:mm:ss.SSS')
+const formatFileSize = (bytes?: number) => {
+  if (!bytes || bytes === 0) {
+    return '0 B'
+  }
+
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`
 }
 
 const formatDuration = (startTime: string) => {
@@ -487,14 +411,6 @@ const calculateDuration = (start: string, end: string) => {
   if (diff < 60) return `${diff}s`
   if (diff < 3600) return `${Math.floor(diff / 60)}m ${diff % 60}s`
   return `${Math.floor(diff / 3600)}h ${Math.floor((diff % 3600) / 60)}m`
-}
-
-const formatFileSize = (bytes?: number) => {
-  if (!bytes || bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
 const copyTaskId = async () => {
@@ -551,26 +467,6 @@ const handleDelete = () => {
       router.push('/tasks')
     }
   })
-}
-
-const downloadFile = async (file: TaskFile | FileInfo) => {
-  try {
-    await triggerProtectedFileDownload(file)
-  } catch (cause) {
-    const errorMessage = cause instanceof Error ? cause.message : String(cause)
-    message.error(errorMessage)
-  }
-}
-
-const downloadAllFiles = async () => {
-  const files = task.value?.output_files as TaskFile[] | undefined
-  if (!files?.length) {
-    return
-  }
-
-  for (const file of files) {
-    await downloadFile(file)
-  }
 }
 
 const goToTool = () => {

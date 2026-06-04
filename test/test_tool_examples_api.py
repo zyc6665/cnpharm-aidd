@@ -1,0 +1,273 @@
+"""工具示例 API 测试。"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+import httpx
+import pytest
+import pytest_asyncio
+from fastapi import Header, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+BACKEND_ROOT = PROJECT_ROOT / "backend"
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from app.auth.dependencies import get_current_user, get_current_user_optional
+from app.database.base import Base
+from app.database.session import get_db
+from app.main import app
+from app.models import files as _files_models  # noqa: F401
+from app.models import statistics as _statistics_models  # noqa: F401
+from app.models import tasks as _task_models  # noqa: F401
+from app.models import users as _user_models  # noqa: F401
+from app.models.tools import Tool, ToolStatus, ToolVersion
+from app.models.users import User, UserRole, UserStatus
+
+
+@pytest_asyncio.fixture
+async def db_session() -> AsyncSession:
+    """创建隔离数据库会话。"""
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    session_factory = async_sessionmaker(
+        engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autoflush=False,
+    )
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    async with session_factory() as session:
+        yield session
+
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def regular_user(db_session: AsyncSession) -> User:
+    """创建普通用户。"""
+    user = User(
+        email="user@example.com",
+        password_hash="hashed-password",
+        display_name="User",
+        role=UserRole.USER.value,
+        status=UserStatus.ACTIVE.value,
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture
+async def api_client(db_session: AsyncSession, regular_user: User):
+    """创建带依赖覆盖的 API 客户端。"""
+
+    async def override_get_db():
+        yield db_session
+
+    async def override_get_current_user(
+        authorization: str | None = Header(default=None),
+    ) -> User:
+        if authorization == "Bearer user-token":
+            return regular_user
+        raise HTTPException(status_code=401, detail="未提供认证凭证")
+
+    async def override_get_current_user_optional(
+        authorization: str | None = Header(default=None),
+    ) -> User | None:
+        if authorization == "Bearer user-token":
+            return regular_user
+        return None
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[get_current_user_optional] = override_get_current_user_optional
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        yield client
+
+    app.dependency_overrides.clear()
+
+
+async def create_tool_with_config(db_session: AsyncSession, config: dict, slug: str = "example-tool") -> Tool:
+    """创建带当前版本配置的工具。"""
+    tool = Tool(
+        owner_id="owner-id",
+        name="Example Tool",
+        slug=slug,
+        description="Tool with examples",
+        status=ToolStatus.PUBLISHED.value,
+        is_public=True,
+    )
+    db_session.add(tool)
+    await db_session.flush()
+
+    version = ToolVersion(
+        tool_id=tool.id,
+        version="1.0.0",
+        config=config,
+        is_active=True,
+    )
+    db_session.add(version)
+    await db_session.flush()
+
+    tool.current_version_id = version.id
+    await db_session.commit()
+    await db_session.refresh(tool)
+    return tool
+
+
+@pytest.mark.asyncio
+async def test_get_tool_example_returns_default_example_with_files(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    tmp_path: Path,
+):
+    """获取工具示例应返回参数与声明的示例文件元数据。"""
+    input_dir = tmp_path / "input"
+    input_dir.mkdir()
+    (input_dir / "protein.pdb").write_text("ATOM      1  N   GLY A   1\n", encoding="utf-8")
+    tool = await create_tool_with_config(
+        db_session,
+        {
+            "type": "ssh_job",
+            "example_base_dir": str(tmp_path),
+            "examples": [
+                {
+                    "name": "默认示例",
+                    "description": "使用内置 PDB 文件",
+                    "params": {"model_choice": "auto"},
+                    "input_files": {"protein_pdb": "input/protein.pdb"},
+                }
+            ],
+            "input_schema": {"type": "object", "properties": {}},
+            "output_schema": {"type": "object", "properties": {}},
+        },
+    )
+
+    response = await api_client.get(f"/api/v1/tools/{tool.id}/example")
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["name"] == "默认示例"
+    assert payload["params"] == {"model_choice": "auto"}
+    assert payload["input_files"][0]["field"] == "protein_pdb"
+    assert payload["input_files"][0]["filename"] == "protein.pdb"
+    assert payload["input_files"][0]["exists"] is True
+    assert payload["input_files"][0]["previewable"] is True
+
+
+@pytest.mark.asyncio
+async def test_tool_example_apply_registers_example_file_for_user(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    tmp_path: Path,
+):
+    """应用示例应把示例文件注册为当前用户可提交文件。"""
+    input_dir = tmp_path / "input"
+    input_dir.mkdir()
+    (input_dir / "protein.pdb").write_text("ATOM      1  N   GLY A   1\n", encoding="utf-8")
+    tool = await create_tool_with_config(
+        db_session,
+        {
+            "type": "ssh_job",
+            "example_base_dir": str(tmp_path),
+            "example_params": {
+                "params": {"device": "cpu"},
+                "input_files": {"protein_pdb": "input/protein.pdb"},
+            },
+            "input_schema": {"type": "object", "properties": {}},
+            "output_schema": {"type": "object", "properties": {}},
+        },
+    )
+
+    response = await api_client.post(
+        f"/api/v1/tools/{tool.id}/example/apply",
+        headers={"Authorization": "Bearer user-token"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["params"] == {"device": "cpu"}
+    assert payload["files"]["protein_pdb"]["filename"] == "protein.pdb"
+    assert payload["files"]["protein_pdb"]["id"]
+
+
+@pytest.mark.asyncio
+async def test_tool_example_file_preview_returns_text_content(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    tmp_path: Path,
+):
+    """示例文件预览应返回文本内容。"""
+    input_dir = tmp_path / "input"
+    input_dir.mkdir()
+    (input_dir / "protein.pdb").write_text("ATOM      1  N   GLY A   1\n", encoding="utf-8")
+    tool = await create_tool_with_config(
+        db_session,
+        {
+            "type": "ssh_job",
+            "example_base_dir": str(tmp_path),
+            "examples": [
+                {
+                    "name": "默认示例",
+                    "params": {},
+                    "input_files": {"protein_pdb": "input/protein.pdb"},
+                }
+            ],
+            "input_schema": {"type": "object", "properties": {}},
+            "output_schema": {"type": "object", "properties": {}},
+        },
+    )
+
+    response = await api_client.get(f"/api/v1/tools/{tool.id}/example/files/protein_pdb/preview")
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["filename"] == "protein.pdb"
+    assert payload["previewable"] is True
+    assert "ATOM" in payload["content"]
+    assert payload["truncated"] is False
+
+
+@pytest.mark.asyncio
+async def test_tool_example_rejects_path_traversal(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    tmp_path: Path,
+):
+    """示例路径不能越过示例根目录。"""
+    tool = await create_tool_with_config(
+        db_session,
+        {
+            "type": "ssh_job",
+            "example_base_dir": str(tmp_path),
+            "examples": [
+                {
+                    "name": "默认示例",
+                    "params": {},
+                    "input_files": {"protein_pdb": "../secret.txt"},
+                }
+            ],
+            "input_schema": {"type": "object", "properties": {}},
+            "output_schema": {"type": "object", "properties": {}},
+        },
+    )
+
+    response = await api_client.get(f"/api/v1/tools/{tool.id}/example")
+
+    assert response.status_code == 422
+

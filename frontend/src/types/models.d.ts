@@ -297,6 +297,37 @@ export interface ToolVersion {
   updated_at?: string
 }
 
+export interface ToolExampleFile {
+  field: string
+  path: string
+  filename: string
+  size_bytes?: number
+  content_type?: string
+  exists: boolean
+  previewable: boolean
+}
+
+export interface ToolExample {
+  name: string
+  description?: string
+  params: Record<string, unknown>
+  input_files: ToolExampleFile[]
+}
+
+export interface ToolExampleApplyResult {
+  params: Record<string, unknown>
+  files: Record<string, FileUploadResponse>
+}
+
+export interface ToolExampleFilePreview {
+  field: string
+  filename: string
+  content_type?: string
+  content?: string
+  truncated: boolean
+  previewable: boolean
+}
+
 export interface RelatedTool {
   id: string
   name: string
@@ -322,6 +353,7 @@ export interface TaskOutput {
 
 export interface Task {
   id: string
+  name?: string
   tool_id: string  // UUID
   tool_name?: string  // 工具名称（API额外返回）
   tool_slug?: string  // 工具标识（API额外返回）
@@ -364,6 +396,7 @@ export interface Task {
 }
 
 export interface TaskCreateParams {
+  name?: string
   tool_id: string
   tool_version_id?: string
   params: Record<string, unknown>
@@ -384,6 +417,74 @@ export interface TaskLog {
   timestamp: string
 }
 
+// AIDD 智能体相关类型
+export type AiddAgentInputType = 'protein_pdb' | 'pocket_pdb'
+
+export type AiddAgentRunStatus =
+  | 'pending'
+  | 'planning'
+  | 'running'
+  | 'waiting_task'
+  | 'success'
+  | 'failure'
+  | 'canceled'
+
+export type AiddAgentStepStatus =
+  | 'pending'
+  | 'ready'
+  | 'running'
+  | 'waiting_task'
+  | 'success'
+  | 'failure'
+  | 'skipped'
+  | 'canceled'
+
+export interface AiddAgentRunStep {
+  id: string
+  step_key: string
+  tool_slug: string
+  tool_id?: string | null
+  task_id?: string | null
+  status: AiddAgentStepStatus
+  sort_order: number
+  depends_on_step_ids: string[]
+  semantic_inputs: Record<string, unknown>
+  semantic_outputs: Record<string, unknown>
+  params: Record<string, unknown>
+  input_file_ids: string[]
+  output_file_ids: string[]
+  error_message?: string | null
+  started_at?: string | null
+  finished_at?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface AiddAgentRun {
+  id: string
+  message: string
+  intent: string
+  status: AiddAgentRunStatus
+  input_type: AiddAgentInputType
+  input_file_id?: string | null
+  requested_outputs: string[]
+  plan: Record<string, unknown>
+  summary?: string | null
+  error_message?: string | null
+  finished_at?: string | null
+  created_at: string
+  updated_at: string
+  steps: AiddAgentRunStep[]
+}
+
+export interface AiddAgentRunCreateParams {
+  message: string
+  input_file_id: string
+  input_type?: AiddAgentInputType
+  requested_outputs?: string[]
+  params?: Record<string, unknown>
+}
+
 // 文件相关类型
 export interface FileInfo {
   id: number
@@ -398,9 +499,12 @@ export interface FileInfo {
 }
 
 export interface FileUploadResponse {
-  id: number
+  id: string
   filename: string
-  url: string
+  size_bytes?: number
+  content_type?: string
+  sha256?: string
+  url?: string
 }
 
 export interface ArtifactFile {
@@ -411,6 +515,7 @@ export interface ArtifactFile {
   source_type: string
   download_url: string
   task_id: string
+  task_name?: string
   tool_id: string
   tool_name: string
   tool_slug: string
@@ -495,6 +600,56 @@ export interface SystemConfig {
   guest: Record<string, unknown>
   cors_origins: string[]
   log_level: string
+}
+
+export type ModelServiceProviderType = 'openai_compatible'
+
+export interface ModelService {
+  id: string
+  name: string
+  provider_type: ModelServiceProviderType
+  base_url: string
+  model_name: string
+  is_default: boolean
+  is_enabled: boolean
+  timeout_seconds: number
+  max_tokens: number
+  temperature: number
+  has_api_key: boolean
+  api_key_masked?: string | null
+  last_test_status?: 'success' | 'failure' | string | null
+  last_test_message?: string | null
+  last_tested_at?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ModelServiceListResponse {
+  items: ModelService[]
+  total: number
+}
+
+export interface ModelServiceCreateParams {
+  name: string
+  provider_type: ModelServiceProviderType
+  base_url: string
+  api_key?: string | null
+  model_name: string
+  is_default: boolean
+  is_enabled: boolean
+  timeout_seconds: number
+  max_tokens: number
+  temperature: number
+}
+
+export type ModelServiceUpdateParams = Partial<ModelServiceCreateParams>
+
+export interface ModelServiceTestResult {
+  id: string
+  success: boolean
+  message: string
+  last_test_status: string
+  last_tested_at: string
 }
 
 // 分页相关类型

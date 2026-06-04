@@ -5,6 +5,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 from pydantic import BaseModel, Field
 from app.schemas.common import TimestampMixin
+from app.schemas.files import FileUploadResponse
 from app.schemas.statistics import ToolStatisticsResponse
 
 
@@ -238,6 +239,41 @@ class ToolImportRequest(BaseModel):
     config: Dict[str, Any] = Field(..., description="platform_tool.json 内容")
     category_id: Optional[str] = Field(None, description="导入后绑定的工具分类ID")
     publish: bool = Field(default=False, description="导入后是否直接发布")
+
+
+class ToolExampleFileResponse(BaseModel):
+    """工具示例文件响应。"""
+    field: str
+    path: str
+    filename: str
+    size_bytes: Optional[int] = None
+    content_type: Optional[str] = None
+    exists: bool = False
+    previewable: bool = False
+
+
+class ToolExampleResponse(BaseModel):
+    """工具示例响应。"""
+    name: str
+    description: Optional[str] = None
+    params: Dict[str, Any] = Field(default_factory=dict)
+    input_files: List[ToolExampleFileResponse] = Field(default_factory=list)
+
+
+class ToolExampleApplyResponse(BaseModel):
+    """工具示例应用响应。"""
+    params: Dict[str, Any] = Field(default_factory=dict)
+    files: Dict[str, FileUploadResponse] = Field(default_factory=dict)
+
+
+class ToolExampleFilePreviewResponse(BaseModel):
+    """工具示例文件预览响应。"""
+    field: str
+    filename: str
+    content_type: Optional[str] = None
+    content: Optional[str] = None
+    truncated: bool = False
+    previewable: bool = False
 
 
 class ToolResponse(TimestampMixin):

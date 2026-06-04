@@ -51,7 +51,7 @@ async def init_db():
     """初始化数据库（创建所有表）"""
     from app.database.base import Base
     # 导入所有模型以便注册
-    from app.models import users, tools, tasks, files  # noqa
+    from app.models import users, tools, tasks, files, agent, system_settings  # noqa
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

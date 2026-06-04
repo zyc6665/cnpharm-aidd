@@ -17,6 +17,10 @@ from app.models.users import User
 from app.models.tools import Tool, ToolVersion
 from app.models.tasks import Task, TaskInput, TaskOutput, TaskLog, TaskStatus
 from app.tasks.direct_runner import direct_task_runner
+from app.tasks.service import (
+    create_and_schedule_tool_task,
+    record_tool_usage,
+)
 from app.auth.dependencies import get_current_user, get_admin_user
 from app.schemas.tasks import (
     TaskCreate, TaskResponse, TaskListResponse
@@ -32,6 +36,46 @@ def _normalize_task_status(status: Optional[str]) -> Optional[str]:
     if not status:
         return status
     return status.lower()
+
+
+def _sanitize_task_name(name: Optional[str]) -> Optional[str]:
+    if name is None:
+        return None
+
+    normalized = name.strip()
+    return normalized or None
+
+
+def _build_default_task_name(
+    *,
+    tool_name: Optional[str],
+    created_at: Optional[datetime],
+    task_id: Optional[str],
+) -> str:
+    if tool_name and created_at:
+        return f"{tool_name} {created_at.strftime('%Y-%m-%d %H:%M')}"
+
+    if tool_name:
+        return tool_name
+
+    if task_id:
+        return f"Task {str(task_id)[:8]}"
+
+    return "Task"
+
+
+def _resolve_task_display_name(
+    *,
+    name: Optional[str],
+    tool_name: Optional[str],
+    created_at: Optional[datetime],
+    task_id: Optional[str],
+) -> str:
+    return _sanitize_task_name(name) or _build_default_task_name(
+        tool_name=tool_name,
+        created_at=created_at,
+        task_id=task_id,
+    )
 
 
 def _dedupe_file_ids(file_ids: list[str]) -> list[str]:
@@ -143,28 +187,7 @@ def _serialize_task_tool(tool: Optional[Tool]) -> Optional[dict[str, Any]]:
 
 async def _record_tool_usage(db: AsyncSession, tool_id: str) -> None:
     """确保工具统计存在，并记录一次使用。"""
-    now = datetime.utcnow()
-
-    update_result = await db.execute(
-        update(ToolStatistics)
-        .where(ToolStatistics.tool_id == tool_id)
-        .values(
-            usage_count=ToolStatistics.usage_count + 1,
-            last_used_at=now,
-            last_updated_at=now,
-        )
-    )
-    if update_result.rowcount:
-        return
-
-    statistics = ToolStatistics(
-        tool_id=tool_id,
-        usage_count=1,
-        last_used_at=now,
-        last_updated_at=now,
-    )
-    db.add(statistics)
-    await db.flush()
+    await record_tool_usage(db, tool_id)
 
 
 @router.get("", response_model=dict)
@@ -207,6 +230,7 @@ async def list_tasks(
         ).where(
             or_(
                 Task.id.ilike(search_pattern),
+                Task.name.ilike(search_pattern),
                 Tool.name.ilike(search_pattern),
                 Tool.slug.ilike(search_pattern),
                 User.email.ilike(search_pattern),
@@ -234,6 +258,12 @@ async def list_tasks(
         if task.tool:
             task_dict["tool_name"] = task.tool.name
             task_dict["tool_slug"] = task.tool.slug
+        task_dict["name"] = _resolve_task_display_name(
+            name=task.name,
+            tool_name=task.tool.name if task.tool else None,
+            created_at=task.created_at,
+            task_id=task.id,
+        )
         task_dict["user_id"] = task.user_id
         if task.user:
             task_dict["user_name"] = task.user.display_name or task.user.email.split("@")[0]
@@ -286,6 +316,12 @@ async def get_task(
 
     task_data = {
         "id": task.id,
+        "name": _resolve_task_display_name(
+            name=task.name,
+            tool_name=task.tool.name if task.tool else None,
+            created_at=task.created_at,
+            task_id=task.id,
+        ),
         "user_id": task.user_id,
         "tool_id": task.tool_id,
         "tool_version_id": task.tool_version_id,
@@ -328,96 +364,17 @@ async def create_task(
     db: AsyncSession = Depends(get_db)
 ):
     """创建任务"""
-    # 检查工具是否存在
-    result = await db.execute(
-        select(Tool).options(
-            selectinload(Tool.current_version),
-            joinedload(Tool.statistics)
-        )
-        .where(Tool.id == task_data.tool_id)
+    task = await create_and_schedule_tool_task(
+        db=db,
+        current_user=current_user,
+        task_data=task_data,
+        direct_runner=direct_task_runner,
     )
-    tool = result.scalar_one_or_none()
-
-    if not tool:
-        raise NotFoundException("工具不存在")
-
-    # 确定使用的版本
-    version_id = task_data.tool_version_id
-    if not version_id:
-        if not tool.current_version_id:
-            raise ValidationException("工具没有可用版本")
-        version_id = tool.current_version_id
-
-    # 创建任务
-    task = Task(
-        user_id=current_user.id,
-        tool_id=task_data.tool_id,
-        tool_version_id=version_id,
-        status=TaskStatus.PENDING.value,
-        priority=task_data.priority,
-        progress=0.0
-    )
-
-    db.add(task)
-    await db.flush()
-
-    # 创建任务输入
-    task_input = TaskInput(
-        task_id=task.id,
-        params=task_data.params,
-        file_ids=task_data.file_ids or []
-    )
-    db.add(task_input)
-
-    # 增加工具使用次数（通过 statistics 表）
-    await _record_tool_usage(db, str(tool.id))
-
-    await db.commit()
-    await db.refresh(task)
-
-    try:
-        if use_direct_task_execution():
-            direct_task_runner.schedule_task(
-                task_id=str(task.id),
-                tool_version_id=str(version_id),
-            )
-            logger.info("Task %s scheduled in direct mode", task.id)
-        else:
-            # ==================== 分发任务到Celery队列 ====================
-            from app.tasks.queue_manager import TaskQueueManager
-
-            version_result = await db.execute(
-                select(ToolVersion).where(ToolVersion.id == version_id)
-            )
-            tool_version = version_result.scalar_one()
-
-            queue = TaskQueueManager.determine_queue(
-                tool_config=tool_version.config,
-                user_role=current_user.role,
-                priority=task_data.priority
-            )
-
-            celery_task = TaskQueueManager.enqueue_task(
-                task_id=str(task.id),
-                tool_version_id=str(version_id),
-                queue=queue
-            )
-
-            task.celery_task_id = celery_task.id
-            await db.commit()
-
-            logger.info(f"Task {task.id} enqueued to {queue}")
-
-    except Exception as e:
-        logger.error(f"Failed to enqueue task {task.id}: {e}")
-        task.status = TaskStatus.FAILURE.value
-        task.error_message = f"任务分发失败: {str(e)}"
-        await db.commit()
-        raise HTTPException(status_code=500, detail="任务分发失败")
 
     return success_response(
         data={
             "id": task.id,
+            "name": task.name,
             "user_id": task.user_id,
             "tool_id": task.tool_id,
             "tool_version_id": task.tool_version_id,

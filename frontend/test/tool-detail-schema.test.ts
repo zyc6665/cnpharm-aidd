@@ -67,6 +67,20 @@ const molpPcSchema = {
   required: ['smiles_csv']
 } as const
 
+const peptideSequenceSchema = {
+  type: 'object',
+  properties: {
+    sequences: {
+      type: ['array', 'string'],
+      title: 'Peptide sequence',
+      description: 'One or more peptide sequences using canonical amino-acid letters.',
+      items: {
+        type: 'string'
+      }
+    }
+  }
+} as const
+
 test('工具详情 schema 适配应隐藏平台内部字段并正确归一化文件与数字类型', () => {
   const flattened = flattenToolInputSchema(gcdmSchema as never)
 
@@ -176,4 +190,12 @@ test('ssh_job 顶层文件字段应拆分为 params 和 input_files', () => {
     },
     fileIds: ['file-3']
   })
+})
+
+test('字符串数组联合类型肽序列字段应归一化为多行文本输入', () => {
+  const flattened = flattenToolInputSchema(peptideSequenceSchema as never)
+
+  assert.notEqual(flattened, undefined)
+  assert.equal(flattened?.properties.sequences?.type, 'string')
+  assert.equal(flattened?.properties.sequences?.format, 'textarea')
 })

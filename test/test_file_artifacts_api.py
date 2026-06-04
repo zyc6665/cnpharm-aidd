@@ -204,6 +204,7 @@ async def create_task_with_output(
     version: ToolVersion,
     *,
     output_file_ids: list[str],
+    task_name: str | None = None,
 ) -> Task:
     """创建带输出文件的任务。"""
     task = Task(
@@ -211,6 +212,7 @@ async def create_task_with_output(
         tool_id=tool.id,
         tool_version_id=version.id,
         status=TaskStatus.SUCCESS.value,
+        name=task_name,
     )
     db_session.add(task)
     await db_session.flush()
@@ -372,7 +374,48 @@ async def test_artifacts_api_returns_task_and_tool_summary_fields(
     assert response.status_code == 200
     item = response.json()["data"]["items"][0]
     assert item["task_id"] == task.id
+    assert item["task_name"] is None
     assert item["tool_id"] == tool.id
     assert item["tool_name"] == "Pocket Generator"
     assert item["tool_slug"] == "pocket-generator"
     assert item["download_url"] == f"/api/v1/files/{artifact_file.id}/download"
+
+
+@pytest.mark.asyncio
+async def test_artifacts_api_returns_task_name_when_available(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    current_user: User,
+    tool_category: ToolCategory,
+):
+    """接口应返回任务名称，供工作台优先展示任务名。"""
+    tool, version = await create_tool_with_version(
+        db_session,
+        current_user,
+        tool_category,
+        name="Lead Finder",
+        slug="lead-finder",
+    )
+    artifact_file = await create_file_record(
+        db_session,
+        current_user,
+        filename="lead-output.sdf",
+        source_type=FileSourceType.TOOL_OUTPUT,
+    )
+    await create_task_with_output(
+        db_session,
+        current_user,
+        tool,
+        version,
+        output_file_ids=[artifact_file.id],
+        task_name="先导化合物筛选批次 A",
+    )
+
+    response = await api_client.get(
+        "/api/v1/files/artifacts",
+        headers={"Authorization": "Bearer owner-token"},
+    )
+
+    assert response.status_code == 200
+    item = response.json()["data"]["items"][0]
+    assert item["task_name"] == "先导化合物筛选批次 A"
