@@ -5,6 +5,7 @@
     :class="[`is-${node.type}`, `status-${status}`, { 'is-selected': selected }]"
     :style="{ left: `${node.position.x}px`, top: `${node.position.y}px` }"
     @click="$emit('select-node', node.id)"
+    @pointerdown="handlePointerDown"
   >
     <span class="node-kind">{{ node.type }}</span>
     <span class="node-title">{{ title }}</span>
@@ -18,7 +19,7 @@
   import type { WorkflowCanvasNode } from '@/workflow/template-types'
   import WorkflowNodeStatusBadge from './WorkflowNodeStatusBadge.vue'
 
-  defineProps<{
+  const props = defineProps<{
     node: WorkflowCanvasNode
     title: string
     subtitle?: string
@@ -26,9 +27,48 @@
     selected?: boolean
   }>()
 
-  defineEmits<{
+  const emit = defineEmits<{
     (event: 'select-node', nodeId: string): void
+    (event: 'move-node', payload: { nodeId: string; position: { x: number; y: number } }): void
   }>()
+
+  function handlePointerDown(event: PointerEvent) {
+    if (event.button !== 0) {
+      return
+    }
+
+    const startX = event.clientX
+    const startY = event.clientY
+    const startPosition = props.node.position
+    let hasDragged = false
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const deltaX = moveEvent.clientX - startX
+      const deltaY = moveEvent.clientY - startY
+      if (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2) {
+        hasDragged = true
+      }
+
+      emit('move-node', {
+        nodeId: props.node.id,
+        position: {
+          x: startPosition.x + deltaX,
+          y: startPosition.y + deltaY
+        }
+      })
+    }
+
+    const handlePointerUp = () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', handlePointerUp)
+      if (hasDragged) {
+        event.preventDefault()
+      }
+    }
+
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp, { once: true })
+  }
 </script>
 
 <style scoped lang="less">
@@ -49,7 +89,9 @@
     box-shadow: @shadow-md;
     color: @text-color-light-primary;
     text-align: left;
-    cursor: pointer;
+    cursor: grab;
+    user-select: none;
+    touch-action: none;
     transition:
       transform @transition-fast,
       border-color @transition-fast,
@@ -62,6 +104,10 @@
     border-color: rgba(24, 144, 255, 0.46);
     box-shadow: @shadow-lg;
     outline: none;
+  }
+
+  .workflow-canvas-node:active {
+    cursor: grabbing;
   }
 
   .workflow-canvas-node.is-selected {

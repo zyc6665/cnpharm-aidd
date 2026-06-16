@@ -1,7 +1,14 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
+import type { WorkflowDefinition } from '@/api/workflows'
 import type { WorkflowTaskRef } from '@/workflow/artifact-types'
 import { toWorkflowTaskRef } from '@/workflow/task-state'
+import type { WorkflowCanvasNode } from '@/workflow/template-types'
+
+export interface WorkflowCanvasPosition {
+  x: number
+  y: number
+}
 
 interface WorkflowWorkbenchSession {
   sessionId: string
@@ -15,6 +22,7 @@ interface WorkflowWorkbenchSession {
   taskByTool: Record<string, WorkflowTaskRef>
   taskByNode: Record<string, WorkflowTaskRef>
   artifactBindingsByNode: Record<string, Record<string, string>>
+  nodePositionById: Record<string, WorkflowCanvasPosition>
   lastUpdatedAt: string
   ownerUserId?: string
 }
@@ -44,6 +52,7 @@ function createInitialWorkflowSession(ownerUserId?: string): WorkflowWorkbenchSe
     taskByTool: {},
     taskByNode: {},
     artifactBindingsByNode: {},
+    nodePositionById: {},
     lastUpdatedAt: nowIsoString(),
     ownerUserId
   }
@@ -65,6 +74,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
   const artifactBindingsByNode = ref<Record<string, Record<string, string>>>(
     initialSession.artifactBindingsByNode
   )
+  const nodePositionById = ref<Record<string, WorkflowCanvasPosition>>(initialSession.nodePositionById)
   const lastUpdatedAt = ref(initialSession.lastUpdatedAt)
   const ownerUserId = ref<string | undefined>(initialSession.ownerUserId)
 
@@ -80,6 +90,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
     taskByTool: taskByTool.value,
     taskByNode: taskByNode.value,
     artifactBindingsByNode: artifactBindingsByNode.value,
+    nodePositionById: nodePositionById.value,
     lastUpdatedAt: lastUpdatedAt.value,
     ownerUserId: ownerUserId.value
   }))
@@ -102,6 +113,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
     taskByTool.value = nextSession.taskByTool
     taskByNode.value = nextSession.taskByNode
     artifactBindingsByNode.value = nextSession.artifactBindingsByNode
+    nodePositionById.value = nextSession.nodePositionById
     lastUpdatedAt.value = nextSession.lastUpdatedAt
     ownerUserId.value = nextSession.ownerUserId
   }
@@ -123,6 +135,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
     nodeFormDrafts.value = {}
     taskByNode.value = {}
     artifactBindingsByNode.value = {}
+    nodePositionById.value = {}
     touchSession()
   }
 
@@ -206,6 +219,55 @@ export const useWorkflowStore = defineStore('workflow', () => {
     touchSession()
   }
 
+  function moveNode(nodeId: string, position: WorkflowCanvasPosition) {
+    nodePositionById.value = {
+      ...nodePositionById.value,
+      [nodeId]: {
+        x: Math.max(0, Math.round(position.x)),
+        y: Math.max(0, Math.round(position.y))
+      }
+    }
+    touchSession()
+  }
+
+  function setNodePositions(positions: Record<string, WorkflowCanvasPosition>) {
+    nodePositionById.value = Object.entries(positions).reduce<Record<string, WorkflowCanvasPosition>>(
+      (nextPositions, [nodeId, position]) => {
+        nextPositions[nodeId] = {
+          x: Math.max(0, Math.round(position.x)),
+          y: Math.max(0, Math.round(position.y))
+        }
+        return nextPositions
+      },
+      {}
+    )
+    touchSession()
+  }
+
+  function exportWorkflowNodes(nodes: WorkflowCanvasNode[]) {
+    return nodes.map(node => ({
+      ...node,
+      position: nodePositionById.value[node.id] ?? node.position
+    }))
+  }
+
+  function applyWorkflowDefinition(workflow: WorkflowDefinition) {
+    templateId.value = workflow.template_id
+    selectedToolByNode.value = workflow.selected_tool_by_node ?? {}
+    artifactBindingsByNode.value = workflow.artifact_bindings_by_node ?? {}
+    taskByNode.value = {}
+    activeNodeId.value = workflow.nodes[0]?.id ?? null
+
+    setNodePositions(
+      workflow.nodes.reduce<Record<string, WorkflowCanvasPosition>>((positions, node) => {
+        if (node.position) {
+          positions[node.id] = node.position
+        }
+        return positions
+      }, {})
+    )
+  }
+
   function clearTask(toolSlug: string) {
     if (!taskByTool.value[toolSlug]) {
       return
@@ -229,6 +291,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
     taskByTool,
     taskByNode,
     artifactBindingsByNode,
+    nodePositionById,
     lastUpdatedAt,
     ownerUserId,
     session,
@@ -245,6 +308,10 @@ export const useWorkflowStore = defineStore('workflow', () => {
     recordTask,
     recordNodeTask,
     setNodeArtifactBinding,
+    moveNode,
+    setNodePositions,
+    exportWorkflowNodes,
+    applyWorkflowDefinition,
     clearTask
   }
 }, {
@@ -261,6 +328,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
       'taskByTool',
       'taskByNode',
       'artifactBindingsByNode',
+      'nodePositionById',
       'lastUpdatedAt',
       'ownerUserId'
     ]

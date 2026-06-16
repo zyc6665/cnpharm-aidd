@@ -5,6 +5,44 @@
 
       <a-tabs v-model:activeKey="activeMode" class="workflow-mode-tabs">
         <a-tab-pane key="manual" :tab="t('workflow.mode.manual')">
+          <div class="workflow-definition-bar">
+            <a-input
+              v-model:value="workflowName"
+              class="workflow-name-input"
+              placeholder="Workflow name"
+            />
+            <a-select
+              v-model:value="selectedSavedWorkflowId"
+              class="workflow-load-select"
+              allow-clear
+              placeholder="Saved workflows"
+              :loading="workflowDefinitionsStore.loading"
+              :options="savedWorkflowOptions"
+            />
+            <a-space size="small" wrap>
+              <a-button
+                type="primary"
+                :loading="workflowDefinitionsStore.saving"
+                @click="handleSaveWorkflow"
+              >
+                Save
+              </a-button>
+              <a-button
+                :disabled="!selectedSavedWorkflowId"
+                :loading="workflowDefinitionsStore.loading"
+                @click="handleLoadWorkflow"
+              >
+                Load
+              </a-button>
+              <a-button
+                :disabled="readyToolNodeIds.length === 0"
+                @click="handleRunReadyNodes"
+              >
+                Run ready nodes
+              </a-button>
+            </a-space>
+          </div>
+
           <div class="workflow-template-layout">
             <aside class="template-step-rail">
               <div class="template-selector">
@@ -36,7 +74,9 @@
               :template="activeTemplate"
               :active-node-id="activeNode?.id ?? null"
               :node-statuses="nodeStatuses"
+              :node-positions="workflowStore.nodePositionById"
               @select-node="workflowStore.setActiveNode"
+              @move-node="workflowStore.moveNode"
             />
 
             <WorkflowNodeInspector
@@ -69,7 +109,16 @@
   import WorkflowNodeInspector from '@/components/workflow/WorkflowNodeInspector.vue'
   import WorkflowNodeStatusBadge from '@/components/workflow/WorkflowNodeStatusBadge.vue'
   import WorkflowTemplateCanvas from '@/components/workflow/WorkflowTemplateCanvas.vue'
-  import { useArtifactsStore, useTasksStore, useToolsStore, useUserStore, useWorkflowStore } from '@/stores'
+  import {
+    useArtifactsStore,
+    useTasksStore,
+    useToolsStore,
+    useUserStore,
+    useWorkflowDefinitionsStore,
+    useWorkflowStore
+  } from '@/stores'
+  import type { WorkflowDefinitionPayload } from '@/api/workflows'
+  import { resolveReadyToolNodeIds } from '@/workflow/template-runner'
   import { resolveWorkflowCanvasNodeStatus } from '@/workflow/template-state'
   import {
     AIDD_WORKFLOW_TEMPLATE,
@@ -83,10 +132,13 @@
   const toolsStore = useToolsStore()
   const userStore = useUserStore()
   const workflowStore = useWorkflowStore()
+  const workflowDefinitionsStore = useWorkflowDefinitionsStore()
 
   type WorkflowMode = 'manual' | 'agent'
 
   const activeMode = ref<WorkflowMode>('manual')
+  const workflowName = ref('AIDD workflow')
+  const selectedSavedWorkflowId = ref<string | undefined>()
 
   const activeTemplate = computed(() => {
     return getWorkflowTemplateById(workflowStore.templateId) ?? AIDD_WORKFLOW_TEMPLATE
@@ -112,6 +164,13 @@
     }))
   })
 
+  const savedWorkflowOptions = computed(() => {
+    return workflowDefinitionsStore.workflowDefinitions.map(workflow => ({
+      value: workflow.id,
+      label: workflow.name
+    }))
+  })
+
   const nodeStatuses = computed(() => {
     return activeTemplate.value.nodes.reduce<Record<string, ReturnType<typeof resolveWorkflowCanvasNodeStatus>>>(
       (statuses, node) => {
@@ -125,6 +184,13 @@
       },
       {}
     )
+  })
+
+  const readyToolNodeIds = computed(() => {
+    return resolveReadyToolNodeIds({
+      template: activeTemplate.value,
+      nodeStatuses: nodeStatuses.value
+    })
   })
 
   function handleTemplateChange(templateId: unknown) {
@@ -169,6 +235,57 @@
       await artifactsStore.fetchArtifacts({ page: 1, page_size: 100 })
     } catch {
       // 请求层会展示错误信息。
+    }
+  }
+
+  async function handleSaveWorkflow() {
+    const name = workflowName.value.trim() || 'AIDD workflow'
+    const payload: WorkflowDefinitionPayload = {
+      name,
+      template_id: activeTemplate.value.id,
+      nodes: workflowStore.exportWorkflowNodes(activeTemplate.value.nodes),
+      edges: activeTemplate.value.edges,
+      selected_tool_by_node: workflowStore.selectedToolByNode,
+      artifact_bindings_by_node: workflowStore.artifactBindingsByNode,
+      status: 'draft'
+    }
+
+    try {
+      const saved = await workflowDefinitionsStore.saveWorkflowDefinition(
+        payload,
+        selectedSavedWorkflowId.value ?? workflowDefinitionsStore.currentWorkflowDefinition?.id
+      )
+      selectedSavedWorkflowId.value = saved.id
+      workflowName.value = saved.name
+      message.success('工作流已保存')
+    } catch {
+      // 请求层会展示错误信息。
+    }
+  }
+
+  async function handleLoadWorkflow() {
+    if (!selectedSavedWorkflowId.value) {
+      return
+    }
+
+    try {
+      const workflow = await workflowDefinitionsStore.loadWorkflowDefinition(selectedSavedWorkflowId.value)
+      workflowStore.applyWorkflowDefinition(workflow)
+      workflowName.value = workflow.name
+      message.success('工作流已加载')
+    } catch {
+      // 请求层会展示错误信息。
+    }
+  }
+
+  async function handleRunReadyNodes() {
+    if (readyToolNodeIds.value.length === 0) {
+      message.info('当前没有可运行节点')
+      return
+    }
+
+    for (const nodeId of readyToolNodeIds.value) {
+      await handleRunNode(nodeId)
     }
   }
 
@@ -233,10 +350,15 @@
 
       if (!isLoggedIn) {
         artifactsStore.resetArtifacts()
+        workflowDefinitionsStore.clearCurrentWorkflowDefinition()
+        selectedSavedWorkflowId.value = undefined
         return
       }
 
-      await artifactsStore.fetchArtifacts({ page: 1, page_size: 100 })
+      await Promise.allSettled([
+        artifactsStore.fetchArtifacts({ page: 1, page_size: 100 }),
+        workflowDefinitionsStore.fetchWorkflowDefinitions({ page: 1, page_size: 100 })
+      ])
     },
     { immediate: true }
   )
@@ -291,6 +413,26 @@
       color: @primary-color;
       font-weight: 700;
     }
+  }
+
+  .workflow-definition-bar {
+    display: flex;
+    align-items: center;
+    gap: @spacing-sm;
+    padding: @spacing-md;
+    margin-bottom: @spacing-md;
+    border: 1px solid rgba(24, 144, 255, 0.12);
+    border-radius: @border-radius-md;
+    background: rgba(255, 255, 255, 0.86);
+    box-shadow: @shadow-sm;
+  }
+
+  .workflow-name-input {
+    width: min(280px, 100%);
+  }
+
+  .workflow-load-select {
+    width: min(320px, 100%);
   }
 
   .workflow-template-layout {
@@ -373,6 +515,16 @@
   }
 
   @media (max-width: @screen-md) {
+    .workflow-definition-bar {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .workflow-name-input,
+    .workflow-load-select {
+      width: 100%;
+    }
+
     .workflow-template-layout {
       grid-template-columns: 1fr;
     }

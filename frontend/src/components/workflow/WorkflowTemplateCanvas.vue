@@ -30,7 +30,7 @@
         </svg>
 
         <WorkflowCanvasNodeView
-          v-for="node in template.nodes"
+          v-for="node in resolvedNodes"
           :key="node.id"
           :node="node"
           :title="formatKey(node.titleKey)"
@@ -38,6 +38,7 @@
           :status="resolvedNodeStatuses[node.id] ?? 'idle'"
           :selected="node.id === activeNodeId"
           @select-node="$emit('select-node', $event)"
+          @move-node="$emit('move-node', $event.nodeId, $event.position)"
         />
       </div>
     </div>
@@ -59,18 +60,26 @@
     template: WorkflowTemplate
     activeNodeId?: string | null
     nodeStatuses?: Record<string, WorkflowStepStatus>
+    nodePositions?: Record<string, { x: number; y: number }>
   }>()
 
   defineEmits<{
     (event: 'select-node', nodeId: string): void
+    (event: 'move-node', nodeId: string, position: { x: number; y: number }): void
   }>()
 
   const templateName = computed(() => formatKey(props.template.nameKey))
   const resolvedNodeStatuses = computed(() => props.nodeStatuses ?? {})
+  const resolvedNodes = computed(() => {
+    return props.template.nodes.map(node => ({
+      ...node,
+      position: props.nodePositions?.[node.id] ?? node.position
+    }))
+  })
 
   const canvasSize = computed(() => {
-    const maxX = Math.max(...props.template.nodes.map(node => node.position.x), 0)
-    const maxY = Math.max(...props.template.nodes.map(node => node.position.y), 0)
+    const maxX = Math.max(...resolvedNodes.value.map(node => node.position.x), 0)
+    const maxY = Math.max(...resolvedNodes.value.map(node => node.position.y), 0)
 
     return {
       width: maxX + NODE_WIDTH + CANVAS_PADDING,
@@ -79,7 +88,7 @@
   })
 
   const nodeById = computed(() => {
-    return props.template.nodes.reduce<Record<string, WorkflowCanvasNodeModel>>((nodes, node) => {
+    return resolvedNodes.value.reduce<Record<string, WorkflowCanvasNodeModel>>((nodes, node) => {
       nodes[node.id] = node
       return nodes
     }, {})
