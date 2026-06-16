@@ -2,80 +2,106 @@
   <div class="home-page">
     <!-- Hero Section -->
     <section class="hero-section">
-      <div class="hero-shell">
-        <div class="hero-copy">
-          <div class="hero-kicker">
-            <span class="kicker-mark"></span>
-            CPUModel AIDD Workspace
-          </div>
-          <h1 class="hero-title">{{ t('home.hero.title') }}</h1>
-          <p class="hero-subtitle">{{ t('home.hero.subtitle') }}</p>
-          <p class="hero-description">{{ t('home.hero.description') }}</p>
-          <div class="hero-actions">
-            <router-link to="/tools">
-              <a-button type="primary" size="large" class="btn-gold">
-                {{ t('home.hero.getStarted') }}
-              </a-button>
-            </router-link>
-            <a-button size="large" ghost>
-              {{ t('home.hero.learnMore') }}
-            </a-button>
-          </div>
-        </div>
-
-        <div class="hero-preview" aria-hidden="true">
-          <div class="preview-topbar">
-            <div class="preview-window-dots">
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
-            <span class="preview-status">LIVE RUN</span>
-          </div>
-
-          <div class="preview-panel preview-pipeline">
-            <div class="preview-panel-title">
-              <span>Pipeline</span>
-              <strong>05 steps</strong>
-            </div>
-            <div class="preview-stage" v-for="step in previewSteps" :key="step.label">
-              <span class="stage-dot" :class="`stage-dot-${step.state}`"></span>
-              <span class="stage-label">{{ step.label }}</span>
-              <strong>{{ step.value }}</strong>
-            </div>
-          </div>
-
-          <div class="preview-grid">
-            <div class="preview-panel preview-structure">
-              <div class="preview-panel-title">
-                <span>Binding pocket</span>
-                <strong>-9.8</strong>
-              </div>
-              <div class="structure-canvas">
-                <span class="bond bond-a"></span>
-                <span class="bond bond-b"></span>
-                <span class="bond bond-c"></span>
-                <span class="atom atom-a"></span>
-                <span class="atom atom-b"></span>
-                <span class="atom atom-c"></span>
-                <span class="atom atom-d"></span>
-                <span class="pocket-ring pocket-a"></span>
-                <span class="pocket-ring pocket-b"></span>
-              </div>
-            </div>
-
-            <div class="preview-panel preview-metrics">
-              <div class="preview-panel-title">
-                <span>Lead score</span>
-                <strong>Rank 03</strong>
-              </div>
-              <div class="metric-row" v-for="metric in previewMetrics" :key="metric.label">
-                <div class="metric-copy">
-                  <span>{{ metric.label }}</span>
-                  <strong>{{ metric.value }}</strong>
+      <div class="container">
+        <div class="hero-panel">
+          <div class="hero-panel-shell deck-surface">
+            <div class="hero-shell">
+              <div class="hero-copy">
+                <div class="hero-kicker">
+                  <span class="kicker-mark"></span>
+                  CPUModel AIDD Workspace
                 </div>
-                <div class="metric-track">
-                  <span class="metric-fill" :style="{ width: metric.width }"></span>
+                <h1 class="hero-title">{{ t('home.hero.title') }}</h1>
+                <p class="hero-subtitle">{{ t('home.hero.subtitle') }}</p>
+                <p class="hero-description">{{ t('home.hero.description') }}</p>
+                <div class="hero-meta" aria-hidden="true">
+                  <div class="hero-meta-item">
+                    <span class="hero-meta-label">Research mode</span>
+                    <strong>Target to lead</strong>
+                  </div>
+                  <div class="hero-meta-item">
+                    <span class="hero-meta-label">Workspace</span>
+                    <strong>Reusable artifacts</strong>
+                  </div>
+                  <div class="hero-meta-item">
+                    <span class="hero-meta-label">Focus</span>
+                    <strong>Structures and pathology</strong>
+                  </div>
+                </div>
+                <div class="hero-actions">
+                  <router-link to="/tools">
+                    <a-button type="primary" size="large" class="btn-panel-primary">
+                      {{ t('home.hero.getStarted') }}
+                    </a-button>
+                  </router-link>
+                  <a-button size="large" class="btn-panel-secondary">
+                    {{ t('home.hero.learnMore') }}
+                  </a-button>
+                </div>
+              </div>
+
+              <div class="hero-preview" aria-hidden="true">
+                <div class="hero-signal-bar">
+                  <span class="hero-signal-track hero-signal-primary"></span>
+                  <span class="hero-signal-track hero-signal-secondary"></span>
+                </div>
+                <div class="preview-topbar">
+                  <div class="preview-window-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                  <span class="preview-status">LIVE RUN</span>
+                </div>
+
+                <div class="hero-preview-stack">
+                  <div class="preview-panel preview-pipeline">
+                    <div class="preview-panel-title">
+                      <span>Pipeline</span>
+                      <strong>05 steps</strong>
+                    </div>
+                    <div class="preview-stage" v-for="step in previewSteps" :key="step.label">
+                      <span class="stage-dot" :class="`stage-dot-${step.state}`"></span>
+                      <span class="stage-label">{{ step.label }}</span>
+                      <strong>{{ step.value }}</strong>
+                    </div>
+                  </div>
+
+                  <div class="preview-grid">
+                    <div class="preview-panel preview-structure">
+                      <div class="preview-panel-title">
+                        <span>Binding pocket</span>
+                        <strong>-9.8</strong>
+                      </div>
+                      <div class="structure-canvas">
+                        <span class="bond bond-a"></span>
+                        <span class="bond bond-b"></span>
+                        <span class="bond bond-c"></span>
+                        <span class="atom atom-a"></span>
+                        <span class="atom atom-b"></span>
+                        <span class="atom atom-c"></span>
+                        <span class="atom atom-d"></span>
+                        <span class="pocket-ring pocket-a"></span>
+                        <span class="pocket-ring pocket-b"></span>
+                      </div>
+                    </div>
+
+                    <div class="preview-panel preview-metrics">
+                      <div class="preview-panel-title">
+                        <span>Lead score</span>
+                        <strong>Rank 03</strong>
+                      </div>
+                      <div class="metric-row" v-for="metric in previewMetrics" :key="metric.label">
+                        <div class="metric-copy">
+                          <span>{{ metric.label }}</span>
+                          <strong>{{ metric.value }}</strong>
+                        </div>
+                        <div class="metric-track">
+                          <span class="metric-fill" :style="{ width: metric.width }"></span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -84,11 +110,11 @@
       </div>
     </section>
 
-    <!-- Scenarios Section -->
-    <section class="scenarios-section">
+    <!-- Unified Deck Section -->
+    <section class="home-deck-section">
       <div class="container">
-        <div ref="workflowRevealRef" class="workflow-shell" :class="{ 'section-visible': isWorkflowVisible }">
-          <div class="workflow-shell-head" :class="{ 'section-visible': isWorkflowVisible }">
+        <div ref="deckRevealRef" class="home-deck-shell" :class="{ 'section-visible': isDeckVisible }">
+          <div class="deck-section-head" :class="{ 'section-visible': isDeckVisible }">
             <div class="workflow-bridge" aria-hidden="true">
               <span class="workflow-bridge-mark"></span>
               <span class="workflow-bridge-copy">CPUModel AIDD Deck</span>
@@ -96,128 +122,180 @@
 
             <h2 class="section-title">{{ t('home.workflow.title') }}</h2>
             <p class="section-subtitle">{{ t('home.workflow.subtitle') }}</p>
+          </div>
 
-            <div class="workflow-entry">
-              <router-link to="/workflow">
-                <a-button type="primary" size="large" class="btn-gold">
-                  {{ t('workflow.entry.home') }}
-                </a-button>
-              </router-link>
+          <div class="workflow-layer">
+            <div class="workflow-shell" :class="{ 'section-visible': isDeckVisible }">
+              <div class="workflow-shell-head" :class="{ 'section-visible': isDeckVisible }">
+                <div class="workflow-entry">
+                  <router-link to="/workflow">
+                    <a-button type="primary" size="large" class="btn-panel-primary">
+                      {{ t('workflow.entry.home') }}
+                    </a-button>
+                  </router-link>
+                </div>
+              </div>
+
+              <div class="workflow-track">
+                <template v-for="(item, index) in workflowSteps" :key="item.key">
+                  <article
+                    class="workflow-step-card"
+                    :class="{ 'section-visible': isDeckVisible }"
+                    :style="{ '--reveal-delay': `${140 + index * 90}ms` }"
+                  >
+                    <span class="workflow-step-glow" aria-hidden="true"></span>
+                    <div class="workflow-step-kicker">0{{ index + 1 }}</div>
+                    <div class="workflow-step-copy">
+                      <div class="workflow-icon">
+                        <component :is="item.icon" />
+                      </div>
+                      <h3 class="workflow-title">{{ t(`home.workflow.items.${item.key}.title`) }}</h3>
+                      <p class="workflow-desc">{{ t(`home.workflow.items.${item.key}.description`) }}</p>
+                    </div>
+                  </article>
+
+                  <div
+                    v-if="index < workflowSteps.length - 1"
+                    class="workflow-connector"
+                    :class="{ 'section-visible': isDeckVisible }"
+                    :style="{ '--reveal-delay': `${180 + index * 90}ms` }"
+                    aria-hidden="true"
+                  >
+                    <span class="workflow-connector-line"></span>
+                    <RightOutlined />
+                    <span class="workflow-connector-line"></span>
+                  </div>
+                </template>
+              </div>
             </div>
           </div>
 
-          <div class="workflow-track">
-            <template v-for="(item, index) in workflowSteps" :key="item.key">
-              <article
-                class="workflow-step-card"
-                :class="{ 'section-visible': isWorkflowVisible }"
-                :style="{ '--reveal-delay': `${140 + index * 90}ms` }"
-              >
-                <span class="workflow-step-glow" aria-hidden="true"></span>
-                <div class="workflow-step-kicker">0{{ index + 1 }}</div>
-                <div class="workflow-step-copy">
-                  <div class="workflow-icon">
-                    <component :is="item.icon" />
-                  </div>
-                  <h3 class="workflow-title">{{ t(`home.workflow.items.${item.key}.title`) }}</h3>
-                  <p class="workflow-desc">{{ t(`home.workflow.items.${item.key}.description`) }}</p>
-                </div>
-              </article>
-
-              <div
-                v-if="index < workflowSteps.length - 1"
-                class="workflow-connector"
-                :class="{ 'section-visible': isWorkflowVisible }"
-                :style="{ '--reveal-delay': `${180 + index * 90}ms` }"
-                aria-hidden="true"
-              >
-                <span class="workflow-connector-line"></span>
-                <RightOutlined />
-                <span class="workflow-connector-line"></span>
-              </div>
-            </template>
+          <div class="deck-bridge" :class="{ 'section-visible': isDeckVisible }" :style="{ '--reveal-delay': '520ms' }">
+            <span class="deck-panel-divider" aria-hidden="true"></span>
+            <p class="deck-bridge-copy">{{ t('home.foundation.subtitle') }}</p>
+            <span class="deck-panel-divider" aria-hidden="true"></span>
           </div>
-        </div>
-      </div>
-    </section>
 
-    <!-- Foundation Section -->
-    <section class="foundation-section">
-      <div class="container">
-        <div class="foundation-head" :class="{ 'section-visible': isFoundationVisible }">
-          <h2 class="section-title">{{ t('home.foundation.title') }}</h2>
-          <p class="section-subtitle">{{ t('home.foundation.subtitle') }}</p>
-        </div>
+          <div class="platform-layer">
+            <div class="foundation-head" :class="{ 'section-visible': isDeckVisible }">
+              <h2 class="section-title">{{ t('home.foundation.title') }}</h2>
+            </div>
 
-        <div
-          ref="foundationRevealRef"
-          class="foundation-shell"
-          :class="{ 'section-visible': isFoundationVisible }"
-          :style="{ '--reveal-delay': '100ms' }"
-        >
-          <div class="foundation-grid">
-            <article
-              class="foundation-panel foundation-panel-platform"
-              :class="{ 'section-visible': isFoundationVisible }"
-              :style="{ '--reveal-delay': '180ms' }"
+            <div
+              class="foundation-shell"
+              :class="{ 'section-visible': isDeckVisible }"
+              :style="{ '--reveal-delay': '620ms' }"
             >
-              <div class="foundation-kicker">{{ t('home.foundation.platform.kicker') }}</div>
-              <h3 class="foundation-title">{{ t('home.foundation.platform.title') }}</h3>
-              <p class="foundation-description">{{ t('home.foundation.platform.description') }}</p>
-
-              <ul class="foundation-points">
-                <li v-for="(pointKey, index) in foundationPlatformPoints" :key="pointKey" class="foundation-point">
-                  <span class="foundation-point-index">0{{ index + 1 }}</span>
-                  <span class="foundation-point-copy">{{ t(`home.foundation.platform.points.${pointKey}`) }}</span>
-                </li>
-              </ul>
-
-              <div class="foundation-actions">
-                <router-link to="/workflow">
-                  <a-button type="primary" size="large" class="btn-gold">
-                    {{ t('home.foundation.platform.action') }}
-                  </a-button>
-                </router-link>
-              </div>
-            </article>
-
-            <article
-              class="foundation-panel foundation-panel-cpupdb"
-              :class="{ 'section-visible': isFoundationVisible }"
-              :style="{ '--reveal-delay': '300ms' }"
-            >
-              <div class="foundation-kicker">{{ t('home.foundation.cpupdb.kicker') }}</div>
-              <h3 class="foundation-title">{{ t('home.foundation.cpupdb.title') }}</h3>
-              <p class="foundation-description">{{ t('home.foundation.cpupdb.description') }}</p>
-
-              <ul class="foundation-points">
-                <li v-for="(pointKey, index) in foundationCpupdbPoints" :key="pointKey" class="foundation-point">
-                  <span class="foundation-point-index">0{{ index + 1 }}</span>
-                  <span class="foundation-point-copy">{{ t(`home.foundation.cpupdb.points.${pointKey}`) }}</span>
-                </li>
-              </ul>
-
-              <div class="foundation-actions">
-                <a
-                  href="https://www.cpupdb.com"
-                  target="_blank"
-                  rel="noreferrer"
-                  class="foundation-link"
+              <div class="foundation-grid">
+                <article
+                  class="foundation-panel foundation-panel-paiwsit"
+                  :class="{ 'section-visible': isDeckVisible }"
+                  :style="{ '--reveal-delay': '720ms' }"
                 >
-                  <a-button size="large" class="btn-outline-light">
-                    {{ t('home.foundation.cpupdb.action') }}
-                  </a-button>
-                </a>
-                <a
-                  href="https://www.cpupdb.com/help.html"
-                  target="_blank"
-                  rel="noreferrer"
-                  class="foundation-help-link"
+                  <div class="foundation-card-head">
+                    <div class="foundation-kicker">{{ t('home.foundation.paiwsit.kicker') }}</div>
+                    <h3 class="foundation-title">{{ t('home.foundation.paiwsit.title') }}</h3>
+                    <p class="foundation-card-tagline">{{ t('home.foundation.paiwsit.kicker') }}</p>
+                    <p class="foundation-description">{{ t('home.foundation.paiwsit.description') }}</p>
+                  </div>
+
+                  <ul class="foundation-points">
+                    <li v-for="(pointKey, index) in foundationPaiwsitPoints" :key="pointKey" class="foundation-point">
+                      <span class="foundation-point-index">0{{ index + 1 }}</span>
+                      <span class="foundation-point-copy">{{ t(`home.foundation.paiwsit.points.${pointKey}`) }}</span>
+                    </li>
+                  </ul>
+
+                  <div class="foundation-card-footer">
+                    <div class="foundation-actions">
+                      <a
+                        href="http://www.paiwsit.com/"
+                        target="_blank"
+                        rel="noreferrer"
+                        class="foundation-link"
+                      >
+                        <a-button type="primary" size="large" class="btn-panel-primary">
+                          {{ t('home.foundation.paiwsit.action') }}
+                        </a-button>
+                      </a>
+                    </div>
+                  </div>
+                </article>
+
+                <article
+                  class="foundation-panel foundation-panel-cpupdb"
+                  :class="{ 'section-visible': isDeckVisible }"
+                  :style="{ '--reveal-delay': '810ms' }"
                 >
-                  {{ t('home.foundation.cpupdb.help') }}
-                </a>
+                  <div class="foundation-card-head">
+                    <div class="foundation-kicker">{{ t('home.foundation.cpupdb.kicker') }}</div>
+                    <h3 class="foundation-title">{{ t('home.foundation.cpupdb.title') }}</h3>
+                    <p class="foundation-card-tagline">{{ t('home.foundation.cpupdb.kicker') }}</p>
+                    <p class="foundation-description">{{ t('home.foundation.cpupdb.description') }}</p>
+                  </div>
+
+                  <ul class="foundation-points">
+                    <li v-for="(pointKey, index) in foundationCpupdbPoints" :key="pointKey" class="foundation-point">
+                      <span class="foundation-point-index">0{{ index + 1 }}</span>
+                      <span class="foundation-point-copy">{{ t(`home.foundation.cpupdb.points.${pointKey}`) }}</span>
+                    </li>
+                  </ul>
+
+                  <div class="foundation-card-footer">
+                    <div class="foundation-actions">
+                      <a
+                        href="https://www.cpupdb.com"
+                        target="_blank"
+                        rel="noreferrer"
+                        class="foundation-link"
+                      >
+                        <a-button size="large" class="btn-outline-light">
+                          {{ t('home.foundation.cpupdb.action') }}
+                        </a-button>
+                      </a>
+                      <a
+                        href="https://www.cpupdb.com/help.html"
+                        target="_blank"
+                        rel="noreferrer"
+                        class="foundation-help-link"
+                      >
+                        {{ t('home.foundation.cpupdb.help') }}
+                      </a>
+                    </div>
+                  </div>
+                </article>
+
+                <article
+                  class="foundation-panel foundation-panel-platform"
+                  :class="{ 'section-visible': isDeckVisible }"
+                  :style="{ '--reveal-delay': '900ms' }"
+                >
+                  <div class="foundation-card-head">
+                    <div class="foundation-kicker">{{ t('home.foundation.platform.kicker') }}</div>
+                    <h3 class="foundation-title">{{ t('home.foundation.platform.title') }}</h3>
+                    <p class="foundation-card-tagline">{{ t('home.foundation.platform.kicker') }}</p>
+                    <p class="foundation-description">{{ t('home.foundation.platform.description') }}</p>
+                  </div>
+
+                  <ul class="foundation-points">
+                    <li v-for="(pointKey, index) in foundationPlatformPoints" :key="pointKey" class="foundation-point">
+                      <span class="foundation-point-index">0{{ index + 1 }}</span>
+                      <span class="foundation-point-copy">{{ t(`home.foundation.platform.points.${pointKey}`) }}</span>
+                    </li>
+                  </ul>
+
+                  <div class="foundation-card-footer">
+                    <div class="foundation-actions">
+                      <router-link to="/workflow">
+                        <a-button size="large" class="btn-outline-light">
+                          {{ t('home.foundation.platform.action') }}
+                        </a-button>
+                      </router-link>
+                    </div>
+                  </div>
+                </article>
               </div>
-            </article>
+            </div>
           </div>
         </div>
       </div>
@@ -226,13 +304,17 @@
     <!-- CTA Section -->
     <section class="cta-section">
       <div class="container">
-        <h2 class="cta-title">{{ t('home.cta.title') }}</h2>
-        <p class="cta-description">{{ t('home.cta.description') }}</p>
-        <router-link to="/register">
-          <a-button type="primary" size="large" class="btn-gold">
-            {{ t('home.cta.button') }}
-          </a-button>
-        </router-link>
+        <div class="cta-panel">
+          <div class="cta-panel-shell deck-surface">
+            <h2 class="cta-title">{{ t('home.cta.title') }}</h2>
+            <p class="cta-description">{{ t('home.cta.description') }}</p>
+            <router-link to="/register">
+              <a-button type="primary" size="large" class="btn-panel-primary">
+                {{ t('home.cta.button') }}
+              </a-button>
+            </router-link>
+          </div>
+        </div>
       </div>
     </section>
   </div>
@@ -251,10 +333,8 @@
   } from '@ant-design/icons-vue'
 
   const { t } = useI18n()
-  const workflowRevealRef = ref<HTMLElement | null>(null)
-  const foundationRevealRef = ref<HTMLElement | null>(null)
-  const isWorkflowVisible = ref(false)
-  const isFoundationVisible = ref(false)
+  const deckRevealRef = ref<HTMLElement | null>(null)
+  const isDeckVisible = ref(false)
 
   let revealObserver: IntersectionObserver | null = null
 
@@ -279,13 +359,13 @@
     { label: 'Safety', value: '0.81', width: '81%' }
   ]
 
-  const foundationPlatformPoints = ['groupedTools', 'reusableArtifacts', 'chainedWorkflow']
+  const foundationPaiwsitPoints = ['annotatedSlides', 'aiHeatmap', 'pathologyEvidence']
   const foundationCpupdbPoints = ['structures', 'dynamics', 'analysis']
+  const foundationPlatformPoints = ['groupedTools', 'reusableArtifacts', 'chainedWorkflow']
 
   onMounted(() => {
     if (typeof window === 'undefined' || !('IntersectionObserver' in window)) {
-      isWorkflowVisible.value = true
-      isFoundationVisible.value = true
+      isDeckVisible.value = true
       return
     }
 
@@ -294,12 +374,8 @@
         entries.forEach(entry => {
           if (!entry.isIntersecting) return
 
-          if (entry.target === workflowRevealRef.value) {
-            isWorkflowVisible.value = true
-          }
-
-          if (entry.target === foundationRevealRef.value) {
-            isFoundationVisible.value = true
+          if (entry.target === deckRevealRef.value) {
+            isDeckVisible.value = true
           }
 
           revealObserver?.unobserve(entry.target)
@@ -311,12 +387,8 @@
       }
     )
 
-    if (workflowRevealRef.value) {
-      revealObserver.observe(workflowRevealRef.value)
-    }
-
-    if (foundationRevealRef.value) {
-      revealObserver.observe(foundationRevealRef.value)
+    if (deckRevealRef.value) {
+      revealObserver.observe(deckRevealRef.value)
     }
   })
 
@@ -334,39 +406,66 @@
     --deck-stack-gap: @spacing-lg;
   }
 
-  // Hero Section
-  .hero-section {
+  .deck-surface {
     position: relative;
+    border: 1px solid rgba(124, 152, 185, 0.2);
+    border-radius: 32px;
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.78) 0%, rgba(247, 251, 255, 0.96) 100%);
+    box-shadow: 0 24px 72px rgba(18, 38, 63, 0.08);
+    backdrop-filter: blur(18px);
     overflow: hidden;
-    min-height: 680px;
-    display: flex;
-    align-items: center;
-    padding: 72px @spacing-lg 56px;
-    background:
-      linear-gradient(135deg, rgba(15, 12, 41, 0.96) 0%, rgba(24, 54, 73, 0.96) 48%, rgba(36, 36, 62, 0.98) 100%),
-      repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.055) 0 1px, transparent 1px 96px),
-      repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.04) 0 1px, transparent 1px 96px);
 
     &::before {
       content: '';
       position: absolute;
       inset: 0;
-      background: linear-gradient(115deg, rgba(255, 215, 0, 0.16), transparent 34%, rgba(58, 211, 181, 0.14) 72%, transparent);
-      opacity: 0.84;
+      background:
+        linear-gradient(130deg, rgba(24, 144, 255, 0.08), transparent 38%, rgba(255, 215, 0, 0.08)),
+        repeating-linear-gradient(90deg, rgba(15, 23, 42, 0.025) 0 1px, transparent 1px 92px),
+        repeating-linear-gradient(0deg, rgba(15, 23, 42, 0.02) 0 1px, transparent 1px 92px);
+      opacity: 0.95;
+      pointer-events: none;
+    }
+  }
+
+  // Hero Section
+  .hero-section {
+    position: relative;
+    padding: 72px 0 @spacing-xxl;
+    background:
+      radial-gradient(circle at top left, rgba(24, 144, 255, 0.11), transparent 32%),
+      radial-gradient(circle at bottom right, rgba(255, 215, 0, 0.08), transparent 30%),
+      linear-gradient(180deg, #f4f8fd 0%, #eff5fb 100%);
+    overflow: hidden;
+
+    &::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        repeating-linear-gradient(90deg, rgba(15, 23, 42, 0.03) 0 1px, transparent 1px 92px),
+        repeating-linear-gradient(0deg, rgba(15, 23, 42, 0.025) 0 1px, transparent 1px 92px);
       pointer-events: none;
     }
 
     @media (max-width: @screen-md) {
       min-height: auto;
-      padding: @spacing-xxl @spacing-md;
+      padding: @spacing-xxl 0;
     }
+  }
+
+  .hero-panel {
+    position: relative;
+    z-index: 1;
+  }
+
+  .hero-panel-shell {
+    padding: @spacing-xl;
   }
 
   .hero-shell {
     position: relative;
     z-index: 1;
-    width: min(1180px, 100%);
-    margin: 0 auto;
     display: grid;
     grid-template-columns: minmax(0, 0.95fr) minmax(430px, 1.05fr);
     gap: @spacing-xxl;
@@ -379,11 +478,11 @@
   }
 
   .hero-copy {
-    max-width: 590px;
+    max-width: 540px;
     text-align: left;
 
     @media (max-width: @screen-lg) {
-      max-width: 760px;
+      max-width: 720px;
     }
   }
 
@@ -392,7 +491,7 @@
     align-items: center;
     gap: @spacing-sm;
     margin-bottom: @spacing-lg;
-    color: rgba(255, 255, 255, 0.78);
+    color: @text-color-light-secondary;
     font-family: @font-family-mono;
     font-size: @font-size-xs;
     font-weight: @font-weight-semibold;
@@ -411,7 +510,7 @@
     font-size: @font-size-hero;
     line-height: 1.08;
     font-weight: @font-weight-bold;
-    color: @text-color-primary;
+    color: @text-color-light-primary;
     margin-bottom: @spacing-md;
     animation: fadeInUp 0.6s ease-out;
 
@@ -423,7 +522,7 @@
   .hero-subtitle {
     font-size: @font-size-xxl;
     line-height: @line-height-tight;
-    color: @accent-color;
+    color: #2468a2;
     margin-bottom: @spacing-sm;
     animation: fadeInUp 0.6s ease-out 0.1s both;
 
@@ -433,16 +532,52 @@
   }
 
   .hero-description {
-    max-width: 540px;
+    max-width: 500px;
     font-size: @font-size-lg;
     line-height: @line-height-loose;
-    color: @text-color-secondary;
+    color: @text-color-light-secondary;
     margin-bottom: @spacing-xl;
     animation: fadeInUp 0.6s ease-out 0.2s both;
 
     @media (max-width: @screen-md) {
       font-size: @font-size-md;
     }
+  }
+
+  .hero-meta {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: @spacing-sm;
+    margin-bottom: @spacing-xl;
+
+    @media (max-width: @screen-md) {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .hero-meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 12px;
+    border: 1px solid rgba(124, 152, 185, 0.16);
+    border-radius: @border-radius-lg;
+    background: rgba(255, 255, 255, 0.54);
+
+    strong {
+      color: @text-color-light-primary;
+      font-size: @font-size-sm;
+      font-weight: @font-weight-semibold;
+      line-height: 1.4;
+    }
+  }
+
+  .hero-meta-label {
+    color: @text-color-light-tertiary;
+    font-family: @font-family-mono;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
   }
 
   .hero-actions {
@@ -455,32 +590,49 @@
     .ant-btn {
       min-width: 132px;
     }
-
-    .ant-btn-ghost {
-      color: @text-color-primary;
-      border-color: rgba(255, 255, 255, 0.42);
-      background: rgba(255, 255, 255, 0.04);
-
-      &:hover {
-        color: @accent-color;
-        border-color: @accent-color;
-      }
-    }
   }
 
   .hero-preview {
     width: 100%;
-    border: 1px solid rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(124, 152, 185, 0.18);
     border-radius: @border-radius-md;
     padding: @spacing-md;
-    background: rgba(8, 12, 28, 0.72);
-    box-shadow: 0 28px 80px rgba(0, 0, 0, 0.34);
+    background: rgba(237, 244, 252, 0.9);
+    box-shadow: 0 28px 80px rgba(18, 38, 63, 0.14);
     backdrop-filter: blur(18px);
     animation: fadeInUp 0.7s ease-out 0.15s both;
 
     @media (max-width: @screen-sm) {
       padding: @spacing-sm;
     }
+  }
+
+  .hero-signal-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: @spacing-sm;
+  }
+
+  .hero-signal-track {
+    display: block;
+    height: 4px;
+    border-radius: 999px;
+  }
+
+  .hero-signal-primary {
+    width: 128px;
+    background: linear-gradient(90deg, @accent-color, #8fe8d4);
+  }
+
+  .hero-signal-secondary {
+    width: 72px;
+    background: rgba(24, 144, 255, 0.16);
+  }
+
+  .hero-preview-stack {
+    display: flex;
+    flex-direction: column;
+    gap: @spacing-sm;
   }
 
   .preview-topbar {
@@ -490,7 +642,7 @@
     justify-content: space-between;
     padding: 0 @spacing-sm;
     margin-bottom: @spacing-sm;
-    color: rgba(255, 255, 255, 0.68);
+    color: @text-color-light-secondary;
     font-family: @font-family-mono;
     font-size: @font-size-xs;
   }
@@ -506,15 +658,15 @@
       background: rgba(255, 255, 255, 0.28);
 
       &:nth-child(1) {
-        background: #ff7a7a;
+        background: #ff8f8f;
       }
 
       &:nth-child(2) {
-        background: #ffd666;
+        background: #ffd98c;
       }
 
       &:nth-child(3) {
-        background: #5cdb95;
+        background: #7bd7ac;
       }
     }
   }
@@ -524,9 +676,9 @@
   }
 
   .preview-panel {
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(124, 152, 185, 0.16);
     border-radius: @border-radius-md;
-    background: rgba(255, 255, 255, 0.07);
+    background: rgba(255, 255, 255, 0.66);
   }
 
   .preview-panel-title {
@@ -535,11 +687,11 @@
     justify-content: space-between;
     gap: @spacing-md;
     padding: @spacing-md @spacing-md @spacing-sm;
-    color: rgba(255, 255, 255, 0.7);
+    color: @text-color-light-secondary;
     font-size: @font-size-xs;
 
     strong {
-      color: @text-color-primary;
+      color: @text-color-light-primary;
       font-family: @font-family-mono;
       font-size: @font-size-xs;
     }
@@ -559,8 +711,8 @@
     margin: 0 @spacing-sm @spacing-xs;
     padding: 0 @spacing-sm;
     border-radius: @border-radius-sm;
-    color: rgba(255, 255, 255, 0.72);
-    background: rgba(255, 255, 255, 0.045);
+    color: @text-color-light-secondary;
+    background: rgba(241, 246, 252, 0.92);
 
     strong {
       color: @accent-color;
@@ -574,7 +726,7 @@
     width: 9px;
     height: 9px;
     border-radius: @border-radius-round;
-    background: rgba(255, 255, 255, 0.3);
+    background: rgba(15, 23, 42, 0.16);
   }
 
   .stage-dot-done {
@@ -611,9 +763,9 @@
     overflow: hidden;
     border-radius: @border-radius-md;
     background:
-      linear-gradient(145deg, rgba(143, 232, 212, 0.16), rgba(255, 215, 0, 0.08)),
-      repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.06) 0 1px, transparent 1px 38px),
-      repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 38px);
+      linear-gradient(145deg, rgba(143, 232, 212, 0.14), rgba(255, 215, 0, 0.08)),
+      repeating-linear-gradient(90deg, rgba(15, 23, 42, 0.04) 0 1px, transparent 1px 38px),
+      repeating-linear-gradient(0deg, rgba(15, 23, 42, 0.035) 0 1px, transparent 1px 38px);
   }
 
   .bond,
@@ -715,11 +867,11 @@
     justify-content: space-between;
     gap: @spacing-md;
     margin-bottom: @spacing-xs;
-    color: rgba(255, 255, 255, 0.72);
+    color: @text-color-light-secondary;
     font-size: @font-size-xs;
 
     strong {
-      color: @text-color-primary;
+      color: @text-color-light-primary;
       font-family: @font-family-mono;
       font-size: @font-size-xs;
     }
@@ -729,7 +881,7 @@
     height: 7px;
     overflow: hidden;
     border-radius: @border-radius-sm;
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(15, 23, 42, 0.08);
   }
 
   .metric-fill {
@@ -754,10 +906,10 @@
     margin-bottom: @spacing-xl;
   }
 
-  // Scenarios Section
-  .scenarios-section {
+  // Unified Deck Section
+  .home-deck-section {
     position: relative;
-    padding: @spacing-xxl 0 var(--deck-stack-gap);
+    padding: @spacing-xxl 0 @spacing-xxl;
     background:
       radial-gradient(circle at top left, rgba(24, 144, 255, 0.11), transparent 32%),
       radial-gradient(circle at bottom right, rgba(255, 215, 0, 0.08), transparent 30%),
@@ -775,42 +927,43 @@
     }
   }
 
-  .scenarios-section .container,
-  .foundation-section .container {
+  .home-deck-section .container {
     max-width: 1480px;
   }
 
-  .workflow-shell {
-    position: relative;
-    padding: @spacing-lg;
-    border: 1px solid rgba(124, 152, 185, 0.2);
-    border-radius: 32px;
-    background: linear-gradient(145deg, rgba(255, 255, 255, 0.76) 0%, rgba(247, 251, 255, 0.94) 100%);
-    box-shadow: 0 24px 72px rgba(18, 38, 63, 0.08);
-    backdrop-filter: blur(18px);
-    overflow: hidden;
-
-    &::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(130deg, rgba(24, 144, 255, 0.08), transparent 38%, rgba(255, 215, 0, 0.1));
-      opacity: 0.95;
-      pointer-events: none;
-    }
-
-    @media (max-width: @screen-sm) {
-      padding: @spacing-lg;
-      border-radius: 26px;
-    }
+  .home-deck-shell {
+    padding: @spacing-xl;
+    border-radius: 34px;
   }
 
-  .workflow-shell-head,
-  .workflow-track {
+  .deck-section-head,
+  .workflow-layer,
+  .platform-layer,
+  .deck-bridge,
+  .workflow-shell {
     position: relative;
     z-index: 1;
   }
 
+  .deck-section-head {
+    --reveal-delay: 30ms;
+    margin-bottom: @spacing-xl;
+    text-align: center;
+  }
+
+  .workflow-layer {
+    --reveal-delay: 90ms;
+  }
+
+  .platform-layer {
+    --reveal-delay: 580ms;
+  }
+
+  .home-deck-shell,
+  .deck-section-head,
+  .workflow-layer,
+  .deck-bridge,
+  .platform-layer,
   .workflow-shell,
   .workflow-shell-head,
   .workflow-step-card,
@@ -832,6 +985,11 @@
     transform: translate3d(0, 18px, 0) scaleX(0.94);
   }
 
+  .home-deck-shell.section-visible,
+  .deck-section-head.section-visible,
+  .workflow-layer.section-visible,
+  .deck-bridge.section-visible,
+  .platform-layer.section-visible,
   .workflow-shell.section-visible,
   .workflow-shell-head.section-visible,
   .workflow-step-card.section-visible,
@@ -843,11 +1001,19 @@
     transform: translate3d(0, 0, 0);
   }
 
+  .workflow-shell {
+    padding: @spacing-lg;
+    border: 1px solid rgba(124, 152, 185, 0.16);
+    border-radius: 30px;
+    background: rgba(255, 255, 255, 0.46);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.48);
+  }
+
   .workflow-shell-head {
     display: flex;
     flex-direction: column;
     align-items: center;
-    margin-bottom: @spacing-xl;
+    margin-bottom: @spacing-lg;
     text-align: center;
   }
 
@@ -1030,53 +1196,53 @@
     }
   }
 
-  .scenarios-section :deep(.ant-btn.btn-gold) {
-    box-shadow: 0 14px 28px rgba(255, 215, 0, 0.16);
-
-    &:hover {
-      box-shadow: 0 18px 34px rgba(255, 215, 0, 0.22);
-    }
+  .deck-bridge {
+    display: grid;
+    grid-template-columns: minmax(40px, 1fr) auto minmax(40px, 1fr);
+    align-items: center;
+    gap: @spacing-md;
+    margin: @spacing-xl 0;
   }
 
-  // Foundation Section
-  .foundation-section {
-    position: relative;
-    padding: var(--deck-stack-gap) 0 @spacing-xxl;
-    background:
-      radial-gradient(circle at top left, rgba(24, 144, 255, 0.12), transparent 32%),
-      radial-gradient(circle at bottom right, rgba(255, 215, 0, 0.1), transparent 30%),
-      linear-gradient(180deg, #eef4fb 0%, #f7fbff 100%);
-    overflow: hidden;
+  .deck-bridge-copy {
+    margin: 0;
+    max-width: 70ch;
+    color: @text-color-light-secondary;
+    font-size: @font-size-md;
+    line-height: @line-height-loose;
+    text-align: center;
+  }
 
-    &::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background:
-        repeating-linear-gradient(90deg, rgba(15, 23, 42, 0.03) 0 1px, transparent 1px 92px),
-        repeating-linear-gradient(0deg, rgba(15, 23, 42, 0.025) 0 1px, transparent 1px 92px);
-      pointer-events: none;
-    }
+  .deck-panel-divider {
+    display: block;
+    height: 1px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(24, 144, 255, 0.1), rgba(255, 215, 0, 0.5), rgba(24, 144, 255, 0.1));
   }
 
   .foundation-shell {
     position: relative;
-    padding: @spacing-lg;
-    border: 1px solid rgba(124, 152, 185, 0.22);
-    border-radius: 28px;
-    background: linear-gradient(145deg, rgba(255, 255, 255, 0.78) 0%, rgba(247, 251, 255, 0.96) 100%);
-    box-shadow: 0 24px 70px rgba(18, 38, 63, 0.08);
-    backdrop-filter: blur(18px);
+    padding: @spacing-lg 0 0;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
   }
 
   .foundation-head {
-    --reveal-delay: 40ms;
+    --reveal-delay: 620ms;
+    margin-bottom: @spacing-lg;
+    text-align: center;
   }
 
   .foundation-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(12, minmax(0, 1fr));
     gap: @spacing-lg;
+
+    @media (max-width: 1280px) {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 
     @media (max-width: @screen-lg) {
       grid-template-columns: 1fr;
@@ -1103,6 +1269,22 @@
       opacity: 0.9;
       pointer-events: none;
     }
+
+    @media (min-width: 1281px) {
+      grid-column: span 3;
+    }
+  }
+
+  .foundation-panel-paiwsit {
+    @media (min-width: 1281px) {
+      grid-column: span 6;
+    }
+  }
+
+  .foundation-panel-paiwsit::before {
+    background:
+      radial-gradient(circle at top left, rgba(179, 38, 30, 0.16), transparent 34%),
+      linear-gradient(135deg, rgba(190, 74, 47, 0.18), transparent 42%, rgba(255, 215, 0, 0.1));
   }
 
   .foundation-panel-platform::before {
@@ -1114,6 +1296,9 @@
   }
 
   .foundation-kicker,
+  .foundation-card-head,
+  .foundation-card-footer,
+  .foundation-card-tagline,
   .foundation-title,
   .foundation-description,
   .foundation-actions,
@@ -1144,12 +1329,32 @@
     line-height: @line-height-tight;
   }
 
+  .foundation-card-head {
+    display: flex;
+    flex-direction: column;
+    gap: @spacing-sm;
+  }
+
+  .foundation-card-tagline {
+    margin: -2px 0 0;
+    color: #2468a2;
+    font-family: @font-family-mono;
+    font-size: 11px;
+    font-weight: @font-weight-semibold;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
   .foundation-description {
     margin: 0;
     color: @text-color-light-secondary;
     font-size: @font-size-md;
     line-height: @line-height-loose;
     max-width: 42ch;
+  }
+
+  .foundation-panel-paiwsit .foundation-description {
+    max-width: 58ch;
   }
 
   .foundation-points {
@@ -1208,6 +1413,10 @@
     padding-top: @spacing-sm;
   }
 
+  .foundation-card-footer {
+    margin-top: auto;
+  }
+
   .foundation-link {
     display: inline-flex;
   }
@@ -1224,6 +1433,10 @@
 
   @media (prefers-reduced-motion: reduce) {
     .workflow-shell,
+    .deck-section-head,
+    .workflow-layer,
+    .deck-bridge,
+    .platform-layer,
     .workflow-shell-head,
     .workflow-step-card,
     .workflow-connector,
@@ -1239,29 +1452,41 @@
 
   // CTA Section
   .cta-section {
-    .gradient-bg();
-    padding: @spacing-xxl 0;
+    position: relative;
+    padding: 0 0 @spacing-xxl;
+    background:
+      radial-gradient(circle at top left, rgba(24, 144, 255, 0.11), transparent 32%),
+      radial-gradient(circle at bottom right, rgba(255, 215, 0, 0.08), transparent 30%),
+      linear-gradient(180deg, #eff5fb 0%, #f6fbff 100%);
     text-align: center;
+  }
+
+  .cta-panel {
+    position: relative;
+    z-index: 1;
+  }
+
+  .cta-panel-shell {
+    padding: @spacing-xxl @spacing-xl;
   }
 
   .cta-title {
     font-size: @font-size-xxxl;
     font-weight: @font-weight-bold;
-    color: @text-color-primary;
+    color: @text-color-light-primary;
     margin-bottom: @spacing-md;
   }
 
   .cta-description {
     font-size: @font-size-lg;
-    color: @text-color-secondary;
+    color: @text-color-light-secondary;
     margin-bottom: @spacing-xl;
     max-width: 600px;
     margin-left: auto;
     margin-right: auto;
   }
 
-  // 金色按钮
-  .btn-gold {
+  .btn-panel-primary {
     background: linear-gradient(135deg, @accent-color 0%, @accent-color-hover 100%);
     border: none;
     color: @bg-dark;
@@ -1274,6 +1499,7 @@
     }
   }
 
+  .btn-panel-secondary,
   .btn-outline-light {
     border: 1px solid rgba(24, 144, 255, 0.28);
     background: rgba(255, 255, 255, 0.8);
@@ -1285,6 +1511,18 @@
       color: @accent-color;
       background: rgba(255, 255, 255, 0.96);
       transform: translateY(-2px);
+    }
+  }
+
+  .hero-section,
+  .home-deck-section,
+  .cta-section {
+    .btn-panel-primary {
+      box-shadow: 0 14px 28px rgba(255, 215, 0, 0.16);
+
+      &:hover {
+        box-shadow: 0 18px 34px rgba(255, 215, 0, 0.22);
+      }
     }
   }
 

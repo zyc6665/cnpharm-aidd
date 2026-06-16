@@ -69,7 +69,8 @@ async function expandSingleSdfEntry(
       ...entry,
       key: `${entry.key}::${index + 1}`,
       label: `${entry.label} #${index + 1}`,
-      url
+      url,
+      sdfRecordIndex: index
     }
   })
 

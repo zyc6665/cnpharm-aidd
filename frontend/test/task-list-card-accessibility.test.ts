@@ -29,3 +29,11 @@ test('任务列表卡片应在窄屏下稳定换行操作区', () => {
   assert.equal(source.includes('flex-wrap: wrap'), true)
   assert.equal(source.includes('word-break: break-word'), true)
 })
+
+test('任务列表卡片不应展示成功任务运行时长', () => {
+  const source = readSource('src/views/tasks/List.vue')
+
+  assert.equal(source.includes('class="duration"'), false)
+  assert.equal(source.includes('FieldTimeOutlined'), false)
+  assert.equal(source.includes('calculateDuration('), false)
+})

@@ -54,6 +54,73 @@ def test_property_prediction_can_be_appended_when_requested() -> None:
     assert [step.step_key for step in plan.steps] == [
         "pocket_prediction",
         "molecule_generation",
+        "sdf_to_smiles",
         "property_prediction",
     ]
+    assert plan.steps[2].tool_slug == "builtin-sdf-to-smiles-csv"
+    assert plan.steps[2].inputs == {"generated_ligand": "step:molecule_generation:generated_ligand"}
+    assert plan.steps[3].depends_on == ["sdf_to_smiles"]
+    assert plan.steps[3].inputs == {"smiles_csv": "step:sdf_to_smiles:smiles_csv"}
+
+
+def test_affinity_prediction_uses_uploaded_ligand_when_available() -> None:
+    plan = build_aidd_plan(
+        message="用上传蛋白和配体预测亲和力",
+        input_type="protein_pdb",
+        requested_outputs=["affinity_report"],
+        params={"available_inputs": ["protein_pdb", "ligand_pdb"]},
+    )
+
+    assert [step.step_key for step in plan.steps] == ["affinity_prediction"]
+    assert plan.steps[0].tool_slug == "msign-affinity-prediction"
+    assert plan.steps[0].inputs == {
+        "protein_pdb": "agent_input:protein_pdb",
+        "ligand_pdb": "agent_input:ligand_pdb",
+    }
+
+
+def test_generated_sdf_is_converted_to_ligand_pdb_before_affinity_prediction() -> None:
+    plan = build_aidd_plan(
+        message="从蛋白生成分子并预测亲和力",
+        input_type="protein_pdb",
+        requested_outputs=["generated_ligand", "affinity_report"],
+        params={},
+    )
+
+    assert [step.step_key for step in plan.steps] == [
+        "pocket_prediction",
+        "molecule_generation",
+        "sdf_to_ligand_pdb",
+        "affinity_prediction",
+    ]
+    assert plan.steps[2].tool_slug == "builtin-sdf-to-pdb"
     assert plan.steps[2].depends_on == ["molecule_generation"]
+    assert plan.steps[2].inputs == {"generated_ligand": "step:molecule_generation:generated_ligand"}
+    assert plan.steps[3].tool_slug == "msign-affinity-prediction"
+    assert plan.steps[3].depends_on == ["sdf_to_ligand_pdb"]
+    assert plan.steps[3].inputs == {
+        "protein_pdb": "agent_input:protein_pdb",
+        "ligand_pdb": "step:sdf_to_ligand_pdb:ligand_pdb",
+    }
+
+
+def test_vina_scoring_is_inserted_when_ranking_generated_ligands() -> None:
+    plan = build_aidd_plan(
+        message="生成分子后用 QED、SA、Vina 进行排序评估",
+        input_type="protein_pdb",
+        requested_outputs=["generated_ligand", "ranking_csv"],
+        params={},
+    )
+
+    assert [step.step_key for step in plan.steps] == [
+        "pocket_prediction",
+        "molecule_generation",
+        "sdf_to_ligand_pdb",
+        "vina_docking",
+    ]
+    assert plan.steps[3].tool_slug == "builtin-vina-docking"
+    assert plan.steps[3].depends_on == ["sdf_to_ligand_pdb"]
+    assert plan.steps[3].inputs == {
+        "protein_pdb": "agent_input:protein_pdb",
+        "ligand_pdb": "step:sdf_to_ligand_pdb:ligand_pdb",
+    }

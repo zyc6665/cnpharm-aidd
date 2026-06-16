@@ -22,6 +22,7 @@ import shutil
 import subprocess
 import tempfile
 import uuid
+import zipfile
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
@@ -759,6 +760,37 @@ class SSHJobExecutor(BaseExecutor):
 
     SUPPORTED_RUNNER_MODES = {"docker_exec", "shell"}
 
+    async def recover_remote_result(self) -> Optional[Dict[str, Any]]:
+        """补抓远端已完成任务的 output/result.json 与产物文件。"""
+        auth_settings = self._resolve_auth_settings()
+        remote_paths = self._build_remote_paths()
+        command_env = self._build_command_env(auth_settings)
+
+        if not await self._remote_result_exists(auth_settings, remote_paths, command_env):
+            return None
+
+        try:
+            download_root = await self._download_remote_outputs(
+                auth_settings=auth_settings,
+                remote_paths=remote_paths,
+                required=True,
+                extra_env=command_env,
+            )
+            result = self._load_result_json(download_root)
+            output_file_ids = await self._collect_output_files(download_root)
+            if output_file_ids:
+                result["output_file_ids"] = output_file_ids
+
+            return {
+                "success": True,
+                "result": result,
+                "output_file_ids": output_file_ids,
+                "stdout": "",
+                "stderr": "",
+            }
+        finally:
+            self._cleanup_work_dir()
+
     async def execute(self) -> Dict[str, Any]:
         """通过 SSH 上传输入、调用远端脚本并拉回输出。"""
         timeout = self.config.get("timeout_sec", 3600)
@@ -900,6 +932,23 @@ class SSHJobExecutor(BaseExecutor):
 
         workflow_result["cleanup_error"] = cleanup_error
         return workflow_result
+
+    async def _remote_result_exists(
+        self,
+        auth_settings: Dict[str, Optional[str]],
+        remote_paths: Dict[str, str],
+        extra_env: Optional[Dict[str, str]] = None,
+    ) -> bool:
+        """检查远端 output/result.json 是否存在。"""
+        check_command = "test -f {}".format(
+            shlex.quote(posixpath.join(remote_paths["host_output_dir"], "result.json"))
+        )
+        process = await self._run_local_command(
+            self._build_ssh_command(auth_settings, check_command),
+            timeout=60,
+            extra_env=extra_env,
+        )
+        return process.returncode == 0
 
     async def _prepare_local_task_bundle(self) -> Dict[str, str]:
         """准备本地待上传任务包。"""
@@ -1326,7 +1375,7 @@ class SSHJobExecutor(BaseExecutor):
         if not os.path.exists(output_root):
             return []
 
-        matched_files = self._expand_output_globs(download_root, output_root)
+        matched_files = self._prepare_output_files_for_collection(download_root, output_root)
         if not matched_files:
             return []
 
@@ -1405,6 +1454,55 @@ class SSHJobExecutor(BaseExecutor):
             if output_path.is_file():
                 matched_files[str(output_path)] = None
         return list(matched_files.keys())
+
+    def _prepare_output_files_for_collection(self, download_root: str, output_root: str) -> List[str]:
+        """展开输出文件，并将大量单分子 SDF 目录收敛为 ZIP。"""
+        matched_files = self._expand_output_globs(download_root, output_root)
+        if not matched_files:
+            return []
+
+        return self._zip_bulk_sdf_directory_outputs(matched_files, output_root)
+
+    def _zip_bulk_sdf_directory_outputs(self, matched_files: List[str], output_root: str) -> List[str]:
+        """把 artifacts/SDF/*.sdf 这类大量散文件打包，避免结果列表过长。"""
+        threshold = int(self.config.get("bulk_sdf_zip_threshold", 10))
+        if threshold <= 0:
+            return matched_files
+
+        sdf_dirs: Dict[str, List[str]] = {}
+        for file_path in matched_files:
+            path = Path(file_path)
+            if path.suffix.lower() != ".sdf" or path.parent.name.lower() != "sdf":
+                continue
+            sdf_dirs.setdefault(str(path.parent), []).append(file_path)
+
+        zip_paths: Dict[str, str] = {}
+        for dir_path, sdf_files in sdf_dirs.items():
+            if len(sdf_files) < threshold:
+                continue
+
+            directory = Path(dir_path)
+            zip_path = directory.with_suffix(".zip")
+            with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                for child in sorted(directory.rglob("*")):
+                    if child.is_file() and child != zip_path:
+                        archive.write(child, child.relative_to(directory.parent).as_posix())
+            zip_paths[dir_path] = str(zip_path)
+
+        if not zip_paths:
+            return matched_files
+
+        prepared_files: Dict[str, None] = {}
+        for file_path in matched_files:
+            parent_dir = str(Path(file_path).parent)
+            if parent_dir in zip_paths:
+                continue
+            prepared_files[file_path] = None
+
+        for zip_path in zip_paths.values():
+            prepared_files[zip_path] = None
+
+        return list(prepared_files.keys())
 
     async def _cleanup_remote_task_dir(
         self,

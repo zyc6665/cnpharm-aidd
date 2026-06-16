@@ -58,6 +58,7 @@ def _serialize_run(run: AgentRun) -> dict[str, Any]:
         "status": run.status,
         "input_type": run.input_type,
         "input_file_id": run.input_file_id,
+        "input_files": (run.plan or {}).get("input_files") or {},
         "requested_outputs": run.requested_outputs or [],
         "plan": run.plan or {},
         "summary": run.summary,

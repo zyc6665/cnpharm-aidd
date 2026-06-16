@@ -1,0 +1,187 @@
+"""Direct 模式 ssh_job 结果恢复。"""
+
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import logging
+from collections.abc import Awaitable, Callable
+from datetime import datetime, timedelta
+
+from sqlalchemy import and_, or_, outerjoin, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload, selectinload
+
+from app.database.session import async_session_factory
+from app.models.tasks import Task, TaskLog, TaskOutput, TaskStatus
+from app.models.tools import ToolType
+from app.tasks.executor import SSHJobExecutor, TaskExecutionError
+from app.tasks.molecule_scoring import append_molecule_scoring_artifacts
+from app.worker.tasks import prepare_task_output
+
+logger = logging.getLogger(__name__)
+
+SHUTDOWN_CANCEL_MESSAGE = "开发模式 direct 任务已取消"
+RECOVERED_SUCCESS_MESSAGE = "任务执行成功（远端结果自动补回）"
+RECOVERED_FAILURE_MESSAGE = "任务执行失败（远端结果自动补回）"
+
+
+async def reconcile_orphaned_direct_tasks(db: AsyncSession) -> int:
+    """扫描并补回热重载后遗留的 direct ssh_job 任务。"""
+    stmt = (
+        select(Task)
+        .options(
+            joinedload(Task.tool_version),
+            joinedload(Task.outputs),
+            selectinload(Task.inputs),
+        )
+        .select_from(outerjoin(Task, TaskOutput, TaskOutput.task_id == Task.id))
+        .where(TaskOutput.id.is_(None))
+        .where(
+            or_(
+                Task.status == TaskStatus.RUNNING.value,
+                and_(
+                    Task.status == TaskStatus.CANCELED.value,
+                    Task.progress_message == SHUTDOWN_CANCEL_MESSAGE,
+                ),
+            )
+        )
+    )
+
+    result = await db.execute(stmt)
+    tasks = result.unique().scalars().all()
+    recovered_count = 0
+
+    for task in tasks:
+        tool_version = task.tool_version
+        config = tool_version.config if tool_version else {}
+        if not isinstance(config, dict) or config.get("type") != ToolType.SSH_JOB.value:
+            continue
+
+        executor = SSHJobExecutor(task, tool_version)
+        try:
+            output_result = await executor.recover_remote_result()
+        except TaskExecutionError:
+            logger.exception("Failed to reconcile direct ssh_job task %s", task.id)
+            continue
+
+        if not output_result:
+            continue
+
+        try:
+            output_result = await append_molecule_scoring_artifacts(
+                db,
+                task,
+                tool_version,
+                output_result,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Recovered task %s molecule scoring failed, keeping original result: %s",
+                task.id,
+                exc,
+            )
+
+        prepared_output = prepare_task_output(output_result)
+        task_output = task.outputs or TaskOutput(task_id=task.id)
+        task_output.result = prepared_output["result"]
+        task_output.file_ids = prepared_output["file_ids"]
+        task_output.output_type = prepared_output["output_type"]
+        db.add(task_output)
+
+        remote_result = output_result.get("result", {}) if isinstance(output_result, dict) else {}
+        remote_success = bool(remote_result.get("success", True))
+        duration = None
+        metrics = remote_result.get("metrics")
+        if isinstance(metrics, dict) and isinstance(metrics.get("duration_sec"), (int, float)):
+            duration = float(metrics["duration_sec"])
+
+        task.finished_at = (
+            task.started_at + timedelta(seconds=duration)
+            if duration is not None and task.started_at
+            else datetime.utcnow()
+        )
+        if duration is not None:
+            task.execution_time_sec = int(duration)
+        task.progress = 1.0 if remote_success else task.progress
+        task.status = TaskStatus.SUCCESS.value if remote_success else TaskStatus.FAILURE.value
+        task.progress_message = (
+            RECOVERED_SUCCESS_MESSAGE if remote_success else RECOVERED_FAILURE_MESSAGE
+        )
+        task.error_message = None if remote_success else (
+            remote_result.get("message") or "SSH job reported failure"
+        )
+
+        db.add(
+            TaskLog(
+                task_id=task.id,
+                level="INFO",
+                message=(
+                    "从远端 output 目录自动补回任务结果"
+                    if remote_success
+                    else "从远端 output 目录自动补回失败结果"
+                ),
+            )
+        )
+        await db.commit()
+        recovered_count += 1
+
+    return recovered_count
+
+
+async def reconcile_all_orphaned_direct_tasks() -> int:
+    async with async_session_factory() as session:
+        return await reconcile_orphaned_direct_tasks(session)
+
+
+class DirectTaskRecoveryLoop:
+    """周期性恢复已脱离当前进程但仍在远端执行的 direct ssh_job 任务。"""
+
+    def __init__(
+        self,
+        *,
+        reconcile: Callable[[], Awaitable[object]],
+        interval_seconds: float = 10.0,
+    ) -> None:
+        self._reconcile = reconcile
+        self._interval_seconds = interval_seconds
+        self._task: asyncio.Task | None = None
+        self._stop_event: asyncio.Event | None = None
+
+    @property
+    def is_running(self) -> bool:
+        return bool(self._task and not self._task.done())
+
+    def start(self) -> None:
+        if self.is_running:
+            return
+        self._stop_event = asyncio.Event()
+        self._task = asyncio.create_task(self._run(), name="direct-task-recovery-loop")
+
+    async def stop(self) -> None:
+        if not self._task:
+            return
+        if self._stop_event:
+            self._stop_event.set()
+        self._task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await self._task
+
+    async def _run(self) -> None:
+        assert self._stop_event is not None
+        while not self._stop_event.is_set():
+            try:
+                await self._reconcile()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("Direct task recovery loop failed")
+            try:
+                await asyncio.wait_for(self._stop_event.wait(), timeout=self._interval_seconds)
+            except TimeoutError:
+                continue
+
+
+direct_task_recovery_loop = DirectTaskRecoveryLoop(
+    reconcile=reconcile_all_orphaned_direct_tasks,
+)

@@ -173,6 +173,7 @@ async def _execute_tool_task_impl(task_id: str, tool_version_id: str) -> Dict[st
             from app.models.tools import ToolVersion
             from app.models.tasks import TaskInput
             from app.tasks.executor import TaskExecutor
+            from app.tasks.molecule_scoring import append_molecule_scoring_artifacts
 
             # 获取工具版本配置
             version_result = await db.execute(
@@ -208,6 +209,19 @@ async def _execute_tool_task_impl(task_id: str, tool_version_id: str) -> Dict[st
             # 执行任务
             output_result = await executor.execute()
             logger.info(f"任务 {task_id} 执行成功")
+            try:
+                output_result = await append_molecule_scoring_artifacts(
+                    db,
+                    task,
+                    tool_version,
+                    output_result,
+                )
+            except Exception as scoring_exc:
+                logger.warning(
+                    "任务 %s 分子评分后处理失败，保留原始生成结果: %s",
+                    task_id,
+                    scoring_exc,
+                )
 
             # 创建输出记录
             prepared_output = prepare_task_output(output_result)

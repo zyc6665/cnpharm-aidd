@@ -182,7 +182,13 @@ async def aidd_tools(db_session: AsyncSession, current_user: User) -> dict[str, 
         slug="gcdm-pocket-generation",
         name="STD-Diff",
     )
-    return {lvpocket.slug: lvpocket, gcdm.slug: gcdm}
+    msign = await create_tool(
+        db_session,
+        current_user,
+        slug="msign-affinity-prediction",
+        name="MSIGN",
+    )
+    return {lvpocket.slug: lvpocket, gcdm.slug: gcdm, msign.slug: msign}
 
 
 async def fake_structured_plan(service, prompt):
@@ -234,6 +240,50 @@ async def protein_file(db_session: AsyncSession, current_user: User) -> FileMode
     return file_record
 
 
+@pytest_asyncio.fixture
+async def ligand_file(db_session: AsyncSession, current_user: User) -> FileModel:
+    file_record = FileModel(
+        owner_id=current_user.id,
+        filename="ligand.pdb",
+        content_type="chemical/x-pdb",
+        size_bytes=96,
+        sha256=hashlib.sha256(b"ligand").hexdigest(),
+        source_type=FileSourceType.UPLOAD.value,
+        storage_path="/tmp/ligand.pdb",
+        is_public=False,
+    )
+    db_session.add(file_record)
+    await db_session.commit()
+    await db_session.refresh(file_record)
+    return file_record
+
+
+async def fake_affinity_plan(service, prompt):
+    return """
+    {
+      "intent": "predict_affinity_from_uploaded_complex",
+      "reasoning_summary": "识别到蛋白和配体输入，直接运行亲和力预测。",
+      "analysis_trace": [
+        "输入判断：识别为蛋白结构和配体结构文件。",
+        "工具发现：发现亲和力预测能力。",
+        "工具编排：把两个上传文件绑定到同一步骤。"
+      ],
+      "steps": [
+        {
+          "step_key": "affinity_prediction",
+          "capability": "affinity_prediction",
+          "tool_slug": "msign-affinity-prediction",
+          "inputs": {
+            "protein_pdb": "agent_input:protein_pdb",
+            "ligand_pdb": "agent_input:ligand_pdb"
+          },
+          "params": {"device": "cpu"}
+        }
+      ]
+    }
+    """
+
+
 @pytest.mark.asyncio
 async def test_create_agent_run_from_protein_creates_run_and_first_step(
     api_client: httpx.AsyncClient,
@@ -283,6 +333,115 @@ async def test_create_agent_run_from_protein_creates_run_and_first_step(
     assert "reasoning_content" not in data["plan"]
     assert data["steps"][0]["tool_slug"] == "lvpocket-pocket-prediction"
     assert data["steps"][0]["task_id"] == "task-pocket"
+
+
+@pytest.mark.asyncio
+async def test_create_agent_run_accepts_multiple_semantic_input_files(
+    api_client: httpx.AsyncClient,
+    aidd_tools: dict[str, Tool],
+    protein_file: FileModel,
+    ligand_file: FileModel,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    created_payloads = []
+
+    async def fake_create_task(*, db, current_user, task_data, direct_runner=None):
+        created_payloads.append(task_data)
+        return SimpleNamespace(
+            id="task-affinity",
+            tool_id=task_data.tool_id,
+            tool_version_id=None,
+            status="PENDING",
+            progress=0,
+        )
+
+    monkeypatch.setattr(
+        "app.agents.aidd.service.create_and_schedule_tool_task",
+        fake_create_task,
+    )
+    monkeypatch.setattr(
+        "app.agents.aidd.llm_client.request_structured_plan",
+        fake_affinity_plan,
+    )
+
+    response = await api_client.post(
+        "/api/v1/agents/aidd/runs",
+        headers={"Authorization": "Bearer owner-token"},
+        json={
+            "message": "上传蛋白和配体预测亲和力",
+            "input_file_id": protein_file.id,
+            "input_files": {
+                "protein_pdb": protein_file.id,
+                "ligand_pdb": ligand_file.id,
+            },
+            "requested_outputs": ["affinity_report"],
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["input_files"] == {
+        "protein_pdb": protein_file.id,
+        "ligand_pdb": ligand_file.id,
+    }
+    assert data["steps"][0]["tool_slug"] == "msign-affinity-prediction"
+    assert data["steps"][0]["input_file_ids"] == [protein_file.id, ligand_file.id]
+    assert created_payloads[0].file_ids == [protein_file.id, ligand_file.id]
+    assert created_payloads[0].params["input_files"] == {
+        "protein_pdb": "input/protein.pdb",
+        "ligand_pdb": "input/ligand.pdb",
+    }
+
+
+@pytest.mark.asyncio
+async def test_create_agent_run_classifies_uploaded_file_ids_without_semantic_labels(
+    api_client: httpx.AsyncClient,
+    aidd_tools: dict[str, Tool],
+    protein_file: FileModel,
+    ligand_file: FileModel,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    created_payloads = []
+
+    async def fake_create_task(*, db, current_user, task_data, direct_runner=None):
+        created_payloads.append(task_data)
+        return SimpleNamespace(
+            id="task-affinity-auto",
+            tool_id=task_data.tool_id,
+            tool_version_id=None,
+            status="PENDING",
+            progress=0,
+        )
+
+    monkeypatch.setattr(
+        "app.agents.aidd.service.create_and_schedule_tool_task",
+        fake_create_task,
+    )
+    monkeypatch.setattr(
+        "app.agents.aidd.llm_client.request_structured_plan",
+        fake_affinity_plan,
+    )
+
+    response = await api_client.post(
+        "/api/v1/agents/aidd/runs",
+        headers={"Authorization": "Bearer owner-token"},
+        json={
+            "message": "上传这两个文件，预测蛋白和配体的亲和力",
+            "input_file_ids": [protein_file.id, ligand_file.id],
+            "requested_outputs": ["affinity_report"],
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["input_file_id"] == protein_file.id
+    assert data["input_files"] == {
+        "protein_pdb": protein_file.id,
+        "ligand_pdb": ligand_file.id,
+    }
+    assert data["plan"]["input_files"] == data["input_files"]
+    assert data["steps"][0]["input_file_ids"] == [protein_file.id, ligand_file.id]
+    assert created_payloads[0].file_ids == [protein_file.id, ligand_file.id]
 
 
 @pytest.mark.asyncio

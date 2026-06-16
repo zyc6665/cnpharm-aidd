@@ -182,6 +182,93 @@ async def test_regular_user_cannot_write_tools(
 
 
 @pytest.mark.asyncio
+async def test_admin_can_update_tool_slug(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    admin_user: User,
+):
+    """管理员编辑工具时应能修改工具标识。"""
+    category = ToolCategory(
+        name="Generation",
+        slug="generation",
+        sort_order=0,
+        is_enabled=True,
+    )
+    db_session.add(category)
+    await db_session.flush()
+
+    tool = Tool(
+        owner_id=admin_user.id,
+        name="PIDiff",
+        slug="pocket2mol-pocket-ligand-generation",
+        description="pocket ligand generation",
+        category_id=category.id,
+        category=category.name,
+        status=ToolStatus.PUBLISHED.value,
+        is_public=True,
+    )
+    db_session.add(tool)
+    await db_session.commit()
+
+    response = await api_client.put(
+        f"/api/v1/tools/{tool.id}",
+        headers={"Authorization": "Bearer admin-token"},
+        json={"slug": "pidiff-pocket-ligand-generation"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["slug"] == "pidiff-pocket-ligand-generation"
+    await db_session.refresh(tool)
+    assert tool.slug == "pidiff-pocket-ligand-generation"
+
+
+@pytest.mark.asyncio
+async def test_admin_update_tool_slug_rejects_duplicate(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    admin_user: User,
+):
+    """管理员不能把工具标识改成另一个工具已占用的标识。"""
+    category = ToolCategory(
+        name="Generation",
+        slug="generation",
+        sort_order=0,
+        is_enabled=True,
+    )
+    db_session.add(category)
+    await db_session.flush()
+
+    first_tool = Tool(
+        owner_id=admin_user.id,
+        name="First Tool",
+        slug="first-tool",
+        category_id=category.id,
+        category=category.name,
+        status=ToolStatus.PUBLISHED.value,
+        is_public=True,
+    )
+    second_tool = Tool(
+        owner_id=admin_user.id,
+        name="Second Tool",
+        slug="second-tool",
+        category_id=category.id,
+        category=category.name,
+        status=ToolStatus.PUBLISHED.value,
+        is_public=True,
+    )
+    db_session.add_all([first_tool, second_tool])
+    await db_session.commit()
+
+    response = await api_client.put(
+        f"/api/v1/tools/{second_tool.id}",
+        headers={"Authorization": "Bearer admin-token"},
+        json={"slug": "first-tool"},
+    )
+
+    assert response.status_code == 409
+
+
+@pytest.mark.asyncio
 async def test_admin_create_tool_requires_valid_enabled_category(
     api_client: httpx.AsyncClient,
     db_session: AsyncSession,
@@ -289,3 +376,47 @@ async def test_disabled_category_cannot_be_used_for_tool_update(
     )
 
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_admin_can_update_long_running_tool_timeout(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    admin_user: User,
+):
+    """长任务工具的超时时间可以在编辑时保留。"""
+    category = ToolCategory(
+        name="Generation",
+        slug="generation",
+        sort_order=0,
+        is_enabled=True,
+    )
+    db_session.add(category)
+    await db_session.flush()
+
+    tool = Tool(
+        owner_id=admin_user.id,
+        name="Long Running Tool",
+        slug="long-running-tool",
+        description="requires long execution window",
+        category_id=category.id,
+        category=category.name,
+        status=ToolStatus.PUBLISHED.value,
+        is_public=True,
+        timeout_sec=14400,
+    )
+    db_session.add(tool)
+    await db_session.commit()
+
+    response = await api_client.put(
+        f"/api/v1/tools/{tool.id}",
+        headers={"Authorization": "Bearer admin-token"},
+        json={
+            "name": "Long Running Tool",
+            "category_id": category.id,
+            "timeout_sec": 14400,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["timeout_sec"] == 14400

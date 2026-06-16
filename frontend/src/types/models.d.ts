@@ -380,6 +380,7 @@ export interface Task {
     id?: string | number
     original_name?: string
     filename?: string
+    relative_path?: string
     size?: number
     content_type?: string
     url?: string
@@ -389,6 +390,7 @@ export interface Task {
     id?: string | number
     original_name?: string
     filename?: string
+    relative_path?: string
     size?: number
     content_type?: string
     url?: string
@@ -418,7 +420,7 @@ export interface TaskLog {
 }
 
 // AIDD 智能体相关类型
-export type AiddAgentInputType = 'protein_pdb' | 'pocket_pdb'
+export type AiddAgentInputType = 'protein_pdb' | 'pocket_pdb' | 'ligand_pdb' | 'smiles_csv' | 'generated_ligand'
 
 export type AiddAgentRunStatus =
   | 'pending'
@@ -467,6 +469,7 @@ export interface AiddAgentRun {
   status: AiddAgentRunStatus
   input_type: AiddAgentInputType
   input_file_id?: string | null
+  input_files: Record<string, string>
   requested_outputs: string[]
   plan: Record<string, unknown>
   summary?: string | null
@@ -479,7 +482,9 @@ export interface AiddAgentRun {
 
 export interface AiddAgentRunCreateParams {
   message: string
-  input_file_id: string
+  input_file_id?: string
+  input_file_ids?: string[]
+  input_files?: Record<string, string>
   input_type?: AiddAgentInputType
   requested_outputs?: string[]
   params?: Record<string, unknown>

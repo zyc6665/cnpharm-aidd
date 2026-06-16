@@ -88,12 +88,6 @@
                 '100%': '#87d068',
               }"
             />
-            <div class="progress-info">
-              <span v-if="task.started_at">
-                <ClockCircleOutlined />
-                {{ t('tasks.runningTime') }}: {{ formatDuration(task.started_at) }}
-              </span>
-            </div>
           </div>
 
           <!-- 主体内容 -->
@@ -121,9 +115,6 @@
                   >
                     <p class="timeline-title">{{ getCompletedTitle(taskStatus) }}</p>
                     <p class="timeline-time">{{ formatTime(task.completed_at) }}</p>
-                    <p v-if="task.started_at" class="timeline-duration">
-                      {{ t('tasks.duration') }}: {{ calculateDuration(task.started_at, task.completed_at) }}
-                    </p>
                   </a-timeline-item>
                 </a-timeline>
               </div>
@@ -394,23 +385,6 @@ const formatFileSize = (bytes?: number) => {
   const sizes = ['B', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`
-}
-
-const formatDuration = (startTime: string) => {
-  const start = dayjs(startTime)
-  const now = dayjs()
-  const diff = now.diff(start, 'second')
-
-  if (diff < 60) return `${diff}s`
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ${diff % 60}s`
-  return `${Math.floor(diff / 3600)}h ${Math.floor((diff % 3600) / 60)}m`
-}
-
-const calculateDuration = (start: string, end: string) => {
-  const diff = dayjs(end).diff(dayjs(start), 'second')
-  if (diff < 60) return `${diff}s`
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ${diff % 60}s`
-  return `${Math.floor(diff / 3600)}h ${Math.floor((diff % 3600) / 60)}m`
 }
 
 const copyTaskId = async () => {
@@ -744,11 +718,6 @@ onUnmounted(() => {
   color: @text-color-light-secondary;
   font-size: @font-size-sm;
   margin: @spacing-xs 0;
-}
-
-.timeline-duration {
-  color: @primary-color;
-  font-size: @font-size-sm;
 }
 
 // JSON 显示

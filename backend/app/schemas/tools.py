@@ -9,6 +9,9 @@ from app.schemas.files import FileUploadResponse
 from app.schemas.statistics import ToolStatisticsResponse
 
 
+MAX_TOOL_TIMEOUT_SEC = 86400
+
+
 class TagCreate(BaseModel):
     """创建标签"""
     name: str = Field(..., max_length=50, description="标签名称")
@@ -212,7 +215,7 @@ class ToolCreate(BaseModel):
     is_public: bool = Field(default=True, description="是否公开")
     gpu_required: bool = Field(default=False, description="是否需要GPU")
     gpu_memory_mb: int = Field(default=0, ge=0, description="GPU显存需求(MB)")
-    timeout_sec: int = Field(default=600, ge=60, le=3600, description="超时时间(秒)")
+    timeout_sec: int = Field(default=600, ge=60, le=MAX_TOOL_TIMEOUT_SEC, description="超时时间(秒)")
     tag_ids: List[str] = Field(default_factory=list, description="标签ID列表")
     # 初始版本
     initial_version: Optional[ToolVersionCreate] = Field(None, description="初始版本")
@@ -221,6 +224,7 @@ class ToolCreate(BaseModel):
 class ToolUpdate(BaseModel):
     """更新工具"""
     name: Optional[str] = Field(None, max_length=100, description="工具名称")
+    slug: Optional[str] = Field(None, max_length=100, pattern="^[a-z0-9-]+$", description="工具标识")
     description: Optional[str] = Field(None, description="工具描述")
     category_id: Optional[str] = Field(None, description="工具分类ID")
     category: Optional[str] = Field(None, max_length=50, description="工具分类")
@@ -230,7 +234,7 @@ class ToolUpdate(BaseModel):
     status: Optional[str] = Field(None, description="状态")
     gpu_required: Optional[bool] = Field(None, description="是否需要GPU")
     gpu_memory_mb: Optional[int] = Field(None, ge=0, description="GPU显存需求(MB)")
-    timeout_sec: Optional[int] = Field(None, ge=60, le=3600, description="超时时间(秒)")
+    timeout_sec: Optional[int] = Field(None, ge=60, le=MAX_TOOL_TIMEOUT_SEC, description="超时时间(秒)")
     tag_ids: Optional[List[str]] = Field(None, description="标签ID列表")
 
 

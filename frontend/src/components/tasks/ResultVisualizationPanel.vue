@@ -40,7 +40,7 @@
             <span class="output-browser__meta">
               <span class="output-browser__name">{{ entry.label }}</span>
               <span class="output-browser__desc">
-                {{ entry.extension.replace('.', '').toUpperCase() }}
+                {{ entry.scoreLabel || entry.extension.replace('.', '').toUpperCase() }}
               </span>
             </span>
           </button>
@@ -96,6 +96,11 @@ import {
 } from './result-visualization'
 import { detectCsvResultFile } from './csv-result'
 import { expandSdfOutputEntries } from './sdf-result'
+import {
+  detectSdfScoreRankingFile,
+  preferTopRankedSdfFiles,
+  rankSdfEntriesByScoreFile
+} from './sdf-ranking'
 
 const props = defineProps<{
   task: Task
@@ -104,8 +109,25 @@ const props = defineProps<{
 const { t } = useI18n()
 
 const hasOutputFiles = computed(() => Boolean(props.task.output_files?.length))
-const baseScene = computed(() => buildVisualizationScene(props.task))
-const csvResultFile = computed(() => props.task.output_files?.find(file => detectCsvResultFile(file)) || null)
+const preferredTask = computed(() => ({
+  ...props.task,
+  output_files: preferTopRankedSdfFiles(props.task.output_files)
+}))
+const usingTopRankedSdf = computed(() => (
+  Boolean(props.task.output_files?.length) &&
+  preferredTask.value.output_files !== props.task.output_files
+))
+const baseScene = computed(() => buildVisualizationScene(preferredTask.value))
+const scoreRankingFile = computed(
+  () => props.task.output_files?.find(file => detectSdfScoreRankingFile(file)) || null
+)
+const csvResultFile = computed(() => {
+  if (baseScene.value.outputEntries.length) {
+    return null
+  }
+
+  return props.task.output_files?.find(file => detectCsvResultFile(file)) || null
+})
 const selectedOutputKey = ref<string | null>(null)
 const expandedOutputEntries = ref<typeof baseScene.value.outputEntries | null>(null)
 let revokeExpandedOutputs: (() => void) | null = null
@@ -129,13 +151,22 @@ async function hydrateExpandedOutputEntries() {
     const shouldUseExpandedEntries =
       expanded.entries.length !== baseScene.value.outputEntries.length ||
       expanded.entries.some((entry, index) => entry.key !== baseScene.value.outputEntries[index]?.key)
+    const rankedEntries = usingTopRankedSdf.value
+      ? expanded.entries
+      : await rankSdfEntriesByScoreFile(expanded.entries, scoreRankingFile.value)
+    const shouldUseRankedEntries =
+      rankedEntries.length !== expanded.entries.length ||
+      rankedEntries.some((entry, index) => (
+        entry.key !== expanded.entries[index]?.key ||
+        entry.scoreLabel !== expanded.entries[index]?.scoreLabel
+      ))
 
-    if (!shouldUseExpandedEntries) {
+    if (!shouldUseExpandedEntries && !shouldUseRankedEntries) {
       expanded.revoke()
       return
     }
 
-    expandedOutputEntries.value = expanded.entries
+    expandedOutputEntries.value = rankedEntries
     revokeExpandedOutputs = expanded.revoke
   } catch (error) {
     cleanupExpandedOutputs()
@@ -149,6 +180,13 @@ watch(
     void hydrateExpandedOutputEntries()
   },
   { immediate: true }
+)
+
+watch(
+  () => scoreRankingFile.value ? `${scoreRankingFile.value.id}:${scoreRankingFile.value.url}` : '',
+  () => {
+    void hydrateExpandedOutputEntries()
+  },
 )
 
 onUnmounted(() => {

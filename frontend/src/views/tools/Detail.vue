@@ -6,6 +6,10 @@
           <AppPageHeader :title="tool.name" :subtitle="detailSubtitle">
             <template #actions>
               <a-space class="tool-detail-actions" wrap>
+                <a-button @click="documentationOpen = true">
+                  <InfoCircleOutlined />
+                  {{ t('tools.viewIntroduction') }}
+                </a-button>
                 <a-button
                   :type="tool.is_favorited ? 'primary' : 'default'"
                   :loading="favoriteLoading"
@@ -164,7 +168,7 @@
                       v-else-if="prop.type === 'file' || prop.format === 'uri' || prop.format === 'file'"
                       :upload-list="fileList[key] ?? []"
                       :selected-artifact="selectedArtifacts[key] ?? null"
-                      :accept="prop.accept"
+                      :accept="getFileAccept(String(key), prop)"
                       :allow-artifacts="userStore.isLoggedIn"
                       :current-tool-id="tool?.id"
                       :current-tool-slug="tool?.slug"
@@ -172,12 +176,48 @@
                       @update:selected-artifact="(artifact) => handleArtifactSelection(String(key), artifact)"
                     />
                     <div
+                      v-if="showSdfToPdbConverter(String(key))"
+                      class="sdf-converter"
+                    >
+                      <div class="sdf-converter__copy">
+                        <strong>SDF 转 Ligand PDB</strong>
+                        <span>上传一个 SDF 文件，转换后自动填入 ligand_pdb。</span>
+                      </div>
+                      <a-upload
+                        accept=".sdf"
+                        :show-upload-list="false"
+                        :before-upload="createSdfUploadBefore(String(key))"
+                      >
+                        <a-button size="small" :loading="sdfConversionLoading[String(key)]">
+                          <FileTextOutlined />
+                          上传 SDF 并转换
+                        </a-button>
+                      </a-upload>
+                    </div>
+                    <div
+                      v-if="showSdfToPdbConverter(String(key)) && sdfConversionStatusText(String(key))"
+                      class="sdf-converter-status"
+                      :class="{ 'is-error': Boolean(sdfConversionErrors[String(key)]) }"
+                    >
+                      {{ sdfConversionStatusText(String(key)) }}
+                    </div>
+                    <div
                       v-if="isFileSchemaProperty(prop) && exampleFiles[String(key)]"
                       class="example-file-binding"
                     >
                       <FileTextOutlined />
                       <span>{{ t('tools.exampleFileBound') }}: {{ exampleFiles[String(key)]?.filename }}</span>
                       <a-button type="link" size="small" @click="clearExampleFile(String(key))">
+                        {{ t('common.clear') }}
+                      </a-button>
+                    </div>
+                    <div
+                      v-if="isFileSchemaProperty(prop) && convertedFiles[String(key)]"
+                      class="converted-file-binding"
+                    >
+                      <FileTextOutlined />
+                      <span>已转换: {{ convertedFiles[String(key)]?.filename }}</span>
+                      <a-button type="link" size="small" @click="clearConvertedFile(String(key))">
                         {{ t('common.clear') }}
                       </a-button>
                     </div>
@@ -267,11 +307,20 @@
         </div>
       </a-spin>
     </a-modal>
+    <a-modal
+      v-model:open="documentationOpen"
+      :title="t('tools.introduction')"
+      :footer="null"
+      width="860px"
+      class="tool-documentation-modal"
+    >
+      <div class="tool-documentation-content" v-html="documentationHtml"></div>
+    </a-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-  import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
+  import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { useI18n } from 'vue-i18n'
   import { message } from 'ant-design-vue'
@@ -299,7 +348,7 @@
     ToolExampleFilePreview,
     ToolSchema
   } from '@/types/models'
-  import { uploadFile } from '@/api/files'
+  import { uploadFile, convertSdfToPdb } from '@/api/files'
   import { applyToolExample, getToolExample, previewToolExampleFile } from '@/api/tools'
   import {
     buildTaskSubmissionPayload,
@@ -308,6 +357,11 @@
     isFileSchemaProperty,
     type UploadedToolFile
   } from './detail-schema'
+  import {
+    buildFallbackToolDocumentation,
+    renderMarkdownToHtml,
+    type ToolDocumentationLabels
+  } from './tool-documentation'
 
   const route = useRoute()
   const router = useRouter()
@@ -331,18 +385,42 @@
   const previewLoading = ref(false)
   const preview = ref<ToolExampleFilePreview | null>(null)
   const exampleFiles = reactive<Record<string, FileUploadResponse | undefined>>({})
+  const convertedFiles = reactive<Record<string, FileUploadResponse | undefined>>({})
+  const sdfConversionLoading = reactive<Record<string, boolean>>({})
+  const sdfConversionErrors = reactive<Record<string, string | undefined>>({})
+  const documentationOpen = ref(false)
+
+  const toolConfig = computed<Record<string, unknown> | undefined>(() => {
+    const config = tool.value?.current_version?.config
+    return config && typeof config === 'object'
+      ? config as Record<string, unknown>
+      : undefined
+  })
 
   // 从 current_version.config 中获取 input_schema
   const inputSchema = computed<ToolSchema | undefined>(() => {
-    const config = tool.value?.current_version?.config
+    const config = toolConfig.value
     if (config && typeof config === 'object' && 'input_schema' in config) {
       return config.input_schema as ToolSchema
     }
     return undefined
   })
 
+  const outputSchema = computed<ToolSchema | undefined>(() => {
+    const config = toolConfig.value
+    if (config && typeof config === 'object' && 'output_schema' in config) {
+      return config.output_schema as ToolSchema
+    }
+    return undefined
+  })
+
+  const outputGlobs = computed<string[]>(() => {
+    const globs = toolConfig.value?.output_globs
+    return Array.isArray(globs) ? globs.filter((item): item is string => typeof item === 'string') : []
+  })
+
   const executorType = computed<string | undefined>(() => {
-    const config = tool.value?.current_version?.config
+    const config = toolConfig.value
     if (config && typeof config === 'object' && 'type' in config && typeof config.type === 'string') {
       return config.type
     }
@@ -357,6 +435,7 @@
   const canSubmit = computed(() => {
     if (!userStore.isAuthenticated) return false
     if (userStore.isGuest) return false
+    if (Object.values(sdfConversionLoading).some(Boolean)) return false
     return true
   })
   const detailSubtitle = computed(() => {
@@ -366,6 +445,40 @@
 
     return `${t('tools.usageCount')}: ${formatNumber(tool.value.statistics?.usage_count)} · ${t('tools.viewCount')}: ${formatNumber(tool.value.statistics?.view_count)}`
   })
+  const documentationLabels = computed<ToolDocumentationLabels>(() => ({
+    title: t('tools.introduction'),
+    overview: t('tools.modelOverview'),
+    parameters: t('tools.parameterDocs'),
+    outputs: t('tools.outputDocs'),
+    outputPatterns: t('tools.outputPatterns'),
+    name: t('common.name'),
+    required: t('common.required'),
+    optional: t('common.optional'),
+    defaultValue: t('tools.defaultValue'),
+    type: t('tools.fieldType'),
+    description: t('common.description'),
+    range: t('tools.valueRange'),
+    noDocumentation: t('tools.noDocumentation')
+  }))
+  const configuredDocumentationMarkdown = computed(() => {
+    const markdown = toolConfig.value?.documentation_markdown
+    return typeof markdown === 'string' ? markdown.trim() : ''
+  })
+  const documentationMarkdown = computed(() => {
+    if (configuredDocumentationMarkdown.value) {
+      return configuredDocumentationMarkdown.value
+    }
+
+    return buildFallbackToolDocumentation({
+      toolName: tool.value?.name || t('tools.detail'),
+      description: tool.value?.description,
+      inputSchema: flattenedSchema.value,
+      outputSchema: outputSchema.value,
+      outputGlobs: outputGlobs.value,
+      labels: documentationLabels.value
+    })
+  })
+  const documentationHtml = computed(() => renderMarkdownToHtml(documentationMarkdown.value))
 
   const formatNumber = (num?: number | null) => {
     // 处理 undefined/null 的情况
@@ -402,7 +515,14 @@
       if (isFileSchemaProperty(prop)) {
         rules.push({
           validator: async () => {
-            if (fileList[key]?.length || selectedArtifacts[key] || exampleFiles[key]) {
+            if (
+              sdfConversionLoading[key] ||
+              formState[key] ||
+              fileList[key]?.length ||
+              selectedArtifacts[key] ||
+              exampleFiles[key] ||
+              convertedFiles[key]
+            ) {
               return Promise.resolve()
             }
             return Promise.reject(new Error(`${prop.title} ${t('common.required')}`))
@@ -448,14 +568,65 @@
     Object.keys(exampleFiles).forEach(key => {
       exampleFiles[key] = undefined
     })
+    Object.keys(convertedFiles).forEach(key => {
+      convertedFiles[key] = undefined
+    })
+    Object.keys(sdfConversionErrors).forEach(key => {
+      sdfConversionErrors[key] = undefined
+    })
+  }
+
+  const clearFieldValidation = (key: string) => {
+    const form = formRef.value as (FormInstance & { clearValidate?: (names?: string[]) => void }) | undefined
+    form?.clearValidate?.([key])
+  }
+
+  const getSchemaAccept = (prop: SchemaProperty): string | undefined => {
+    const uiAccept = (prop as SchemaProperty & { 'ui:accept'?: unknown })['ui:accept']
+    return typeof uiAccept === 'string' ? uiAccept : prop.accept
+  }
+
+  const getFileAccept = (key: string, prop: SchemaProperty): string | undefined => {
+    const accept = getSchemaAccept(prop)
+    if (!showSdfToPdbConverter(key)) {
+      return accept
+    }
+
+    const tokens = new Set(
+      (accept || '.pdb')
+        .split(',')
+        .map(item => item.trim())
+        .filter(Boolean)
+    )
+    tokens.add('.sdf')
+    return Array.from(tokens).join(',')
   }
 
   const handleFileListChange = (key: string, files: UploadFile[]) => {
     fileList[key] = files
     if (files.length > 0) {
+      const uploadedFile = files[0]!
+      const rawFile = uploadedFile.originFileObj as File | undefined
+      const filename = rawFile?.name || uploadedFile.name || ''
+      if (showSdfToPdbConverter(key) && rawFile && filename.toLowerCase().endsWith('.sdf')) {
+        fileList[key] = []
+        formState[key] = undefined
+        clearFieldValidation(key)
+        void handleSdfToPdbConversion(key, rawFile)
+        return
+      }
+
       selectedArtifacts[key] = undefined
       exampleFiles[key] = undefined
+      convertedFiles[key] = undefined
+      sdfConversionErrors[key] = undefined
+      formState[key] = uploadedFile?.uid ?? uploadedFile?.name
+      clearFieldValidation(key)
+      return
     }
+    convertedFiles[key] = undefined
+    sdfConversionErrors[key] = undefined
+    formState[key] = undefined
   }
 
   const handleArtifactSelection = (key: string, artifact: ArtifactFile | null) => {
@@ -463,11 +634,98 @@
     if (artifact) {
       fileList[key] = []
       exampleFiles[key] = undefined
+      convertedFiles[key] = undefined
+      sdfConversionErrors[key] = undefined
+      formState[key] = artifact.id
+      clearFieldValidation(key)
+    } else {
+      formState[key] = undefined
     }
   }
 
   const clearExampleFile = (key: string) => {
     exampleFiles[key] = undefined
+    formState[key] = undefined
+  }
+
+  const clearConvertedFile = (key: string) => {
+    convertedFiles[key] = undefined
+    fileList[key] = []
+    formState[key] = undefined
+    sdfConversionErrors[key] = undefined
+    void nextTick().then(() => formRef.value?.validateFields([key]).catch(() => undefined))
+  }
+
+  const createConvertedUploadFile = (file: FileUploadResponse): UploadFile => {
+    return {
+      uid: `converted-${file.id}`,
+      name: file.filename,
+      status: 'done',
+      url: `/api/v1/files/${file.id}/download`
+    }
+  }
+
+  const showSdfToPdbConverter = (key: string) => {
+    return tool.value?.slug === 'msign-affinity-prediction' && (key === 'ligand_pdb' || key.endsWith('.ligand_pdb'))
+  }
+
+  const sdfConversionStatusText = (key: string) => {
+    if (sdfConversionErrors[key]) {
+      return sdfConversionErrors[key]
+    }
+    if (sdfConversionLoading[key]) {
+      return '正在转换 SDF，请稍候...'
+    }
+    if (convertedFiles[key]) {
+      return `转换成功，已生成 ${convertedFiles[key]?.filename}`
+    }
+    return ''
+  }
+
+  const getRequestErrorMessage = (error: unknown): string => {
+    const responseMessage = (error as { response?: { data?: { message?: unknown } } })?.response?.data?.message
+    if (typeof responseMessage === 'string' && responseMessage.trim()) {
+      return responseMessage
+    }
+
+    const message = (error as { message?: unknown })?.message
+    return typeof message === 'string' && message.trim() ? message : 'SDF 转 PDB 失败，请检查文件格式或后端转换服务'
+  }
+
+  const handleSdfToPdbConversion = async (key: string, file: File) => {
+    if (!file.name.toLowerCase().endsWith('.sdf')) {
+      message.warning('请上传 SDF 文件')
+      return
+    }
+
+    sdfConversionLoading[key] = true
+    sdfConversionErrors[key] = undefined
+    clearFieldValidation(key)
+    try {
+      const res = await convertSdfToPdb(file)
+      convertedFiles[key] = res.data
+      fileList[key] = [createConvertedUploadFile(res.data)]
+      selectedArtifacts[key] = undefined
+      exampleFiles[key] = undefined
+      formState[key] = res.data.id
+      await nextTick()
+      clearFieldValidation(key)
+      message.success('SDF 已转换为 PDB')
+    } catch (error) {
+      convertedFiles[key] = undefined
+      fileList[key] = []
+      formState[key] = undefined
+      sdfConversionErrors[key] = getRequestErrorMessage(error)
+    } finally {
+      sdfConversionLoading[key] = false
+    }
+  }
+
+  const createSdfUploadBefore = (key: string) => {
+    return (file: File) => {
+      void handleSdfToPdbConversion(key, file)
+      return false
+    }
   }
 
   const fetchExample = async (toolId: string) => {
@@ -533,6 +791,8 @@
         exampleFiles[formKey] = file
         fileList[formKey] = []
         selectedArtifacts[formKey] = undefined
+        convertedFiles[formKey] = undefined
+        formState[formKey] = file.id
       })
 
       message.success(t('tools.exampleLoaded'))
@@ -583,6 +843,18 @@
 
       const uploadedFiles: Record<string, UploadedToolFile | undefined> = {}
       for (const [key, file] of Object.entries(exampleFiles)) {
+        if (!file) {
+          continue
+        }
+
+        uploadedFiles[key] = {
+          fileId: file.id.toString(),
+          filename: file.filename,
+          downloadUrl: `/api/v1/files/${file.id}/download`
+        }
+      }
+
+      for (const [key, file] of Object.entries(convertedFiles)) {
         if (!file) {
           continue
         }
@@ -662,6 +934,9 @@
               fileList[key] = []
               selectedArtifacts[key] = undefined
               exampleFiles[key] = undefined
+              convertedFiles[key] = undefined
+              sdfConversionLoading[key] = false
+              sdfConversionErrors[key] = undefined
             }
           }
         }
@@ -836,6 +1111,51 @@
     flex-wrap: wrap;
   }
 
+  .sdf-converter {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: @spacing-sm;
+    margin-top: @spacing-sm;
+    padding: 8px 10px;
+    border: 1px solid #d6e4ff;
+    border-radius: @border-radius-base;
+    background: #f8fbff;
+    flex-wrap: wrap;
+  }
+
+  .sdf-converter__copy {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    color: @text-color-light-secondary;
+    font-size: @font-size-sm;
+  }
+
+  .sdf-converter-status {
+    margin-top: @spacing-xs;
+    color: @text-color-light-secondary;
+    font-size: @font-size-sm;
+
+    &.is-error {
+      color: @error-color;
+    }
+  }
+
+  .converted-file-binding {
+    display: flex;
+    align-items: center;
+    gap: @spacing-xs;
+    margin-top: @spacing-sm;
+    padding: 6px 10px;
+    border: 1px solid #d6e4ff;
+    border-radius: @border-radius-base;
+    background: #f8fbff;
+    color: @text-color-light-secondary;
+    font-size: @font-size-sm;
+    flex-wrap: wrap;
+  }
+
   .example-preview-content {
     max-height: 520px;
     overflow: auto;
@@ -850,6 +1170,90 @@
     line-height: 1.55;
     white-space: pre-wrap;
     word-break: break-word;
+  }
+
+  .tool-documentation-content {
+    max-height: 68vh;
+    overflow: auto;
+    color: @text-color-light-secondary;
+    line-height: @line-height-loose;
+
+    :deep(h1),
+    :deep(h2),
+    :deep(h3) {
+      color: @text-color-light-primary;
+      font-weight: @font-weight-semibold;
+      margin: @spacing-lg 0 @spacing-sm;
+    }
+
+    :deep(h1) {
+      margin-top: 0;
+      font-size: 24px;
+    }
+
+    :deep(h2) {
+      font-size: @font-size-lg;
+    }
+
+    :deep(h3) {
+      font-size: @font-size-md;
+    }
+
+    :deep(p),
+    :deep(ul),
+    :deep(table),
+    :deep(pre) {
+      margin-bottom: @spacing-md;
+    }
+
+    :deep(ul) {
+      padding-left: @spacing-xl;
+    }
+
+    :deep(table) {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: @font-size-sm;
+    }
+
+    :deep(th),
+    :deep(td) {
+      padding: 8px 10px;
+      border: 1px solid #eef0f5;
+      vertical-align: top;
+    }
+
+    :deep(th) {
+      background: #f8fafc;
+      color: @text-color-light-primary;
+      font-weight: @font-weight-semibold;
+    }
+
+    :deep(code) {
+      padding: 2px 5px;
+      border-radius: 4px;
+      background: #f1f5f9;
+      color: #334155;
+      font-family: monospace;
+      font-size: 12px;
+    }
+
+    :deep(pre) {
+      padding: @spacing-md;
+      border-radius: @border-radius-base;
+      background: #0f172a;
+      overflow: auto;
+
+      code {
+        padding: 0;
+        background: transparent;
+        color: #e5e7eb;
+      }
+    }
+
+    :deep(a) {
+      color: @accent-color;
+    }
   }
 
   // 右侧栏

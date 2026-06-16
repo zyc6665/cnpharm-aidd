@@ -33,6 +33,17 @@ export const uploadFile = (
   })
 }
 
+export const convertSdfToPdb = (
+  file: File
+): Promise<ApiResponse<FileUploadResponse>> => {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  return post<FileUploadResponse>('/files/convert/sdf-to-pdb', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
 // 获取文件列表
 export const getFileList = (params?: PaginationParams): Promise<ApiResponse<PaginatedResponse<FileInfo>>> => {
   return get<PaginatedResponse<FileInfo>>('/files', params as Record<string, unknown>)

@@ -332,6 +332,7 @@ def test_tool_category_schema_contracts():
     tool_list_fields = tool_schemas.ToolListResponse.model_fields
 
     assert "category_id" in tool_create_fields, "ToolCreate 缺少 category_id"
+    assert "slug" in tool_update_fields, "ToolUpdate 缺少 slug"
     assert "category_id" in tool_update_fields, "ToolUpdate 缺少 category_id"
     assert "category_id" in tool_response_fields, "ToolResponse 缺少 category_id"
     assert "category" in tool_response_fields, "ToolResponse 缺少兼容展示字段 category"

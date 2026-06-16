@@ -20,6 +20,15 @@ def read_path(data: Any, path: str | None) -> Any:
     return current
 
 
+def read_output_data_path(data: Any, path: str | None) -> Any:
+    value = read_path(data, path)
+    if value is not None:
+        return value
+    if isinstance(data, dict) and isinstance(data.get("result"), dict):
+        return read_path(data["result"], path)
+    return None
+
+
 def file_matches(file_data: dict[str, Any], output: CapabilityOutput) -> bool:
     return file_match_score(file_data, output) is not None
 
@@ -55,6 +64,26 @@ def file_match_score(file_data: dict[str, Any], output: CapabilityOutput) -> int
     return score
 
 
+def parse_sdf_smiles(content: str) -> list[str]:
+    smiles_values: list[str] = []
+    for block in content.split("$$$$"):
+        lines = [line.rstrip() for line in block.splitlines()]
+        for index, line in enumerate(lines):
+            normalized = line.strip().lower()
+            if not normalized.startswith("> <"):
+                continue
+            field_name = normalized[3:].strip(" <>").lower()
+            if field_name not in {"smiles", "canonical_smiles"}:
+                continue
+            for value_line in lines[index + 1 :]:
+                value = value_line.strip()
+                if value:
+                    smiles_values.append(value)
+                    break
+            break
+    return smiles_values
+
+
 def extract_semantic_outputs(
     *,
     capability: ToolCapability,
@@ -79,9 +108,20 @@ def extract_semantic_outputs(
                     "url": matched_file.get("url"),
                     "content_type": matched_file.get("content_type"),
                 }
+                if (
+                    output.semantic_type == "generated_ligand"
+                    and str(matched_file.get("content_type") or "").startswith("chemical/x-mdl-sdfile")
+                ):
+                    smiles_candidates = parse_sdf_smiles(Path(str(matched_file.get("path") or "")).read_text(encoding="utf-8")) if matched_file.get("path") else []
+                    if smiles_candidates:
+                        semantic_outputs["smiles_csv"] = {
+                            "source": "output_data",
+                            "path": "generated_smiles.csv",
+                            "value": "\n".join(["SMILES,id", *[f"{smiles},mol_{index + 1}" for index, smiles in enumerate(smiles_candidates)]]),
+                        }
             continue
 
-        value = read_path(output_data, output.path)
+        value = read_output_data_path(output_data, output.path)
         if value is not None:
             semantic_outputs[output.semantic_type] = {
                 "source": "output_data",

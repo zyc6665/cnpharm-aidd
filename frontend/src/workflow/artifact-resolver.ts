@@ -1,5 +1,14 @@
-import type { WorkflowArtifact, WorkflowArtifactSemanticType, WorkflowStepKey, WorkflowTaskRef } from './artifact-types.ts'
-import { WORKFLOW_TOOL_BINDINGS, type WorkflowBoundToolSlug, type WorkflowToolOutputExtractor } from './tool-bindings.ts'
+import type {
+  WorkflowArtifact,
+  WorkflowArtifactSemanticType,
+  WorkflowStepKey,
+  WorkflowTaskRef
+} from './artifact-types.ts'
+import {
+  WORKFLOW_TOOL_BINDINGS,
+  type WorkflowBoundToolSlug,
+  type WorkflowToolOutputExtractor
+} from './tool-bindings.ts'
 
 function isNewerArtifact(candidate: WorkflowArtifact, current: WorkflowArtifact): boolean {
   const candidateTimestamp = Date.parse(candidate.createdAt)
@@ -35,6 +44,65 @@ export function selectLatestValidArtifactBySemanticType(input: {
   }
 
   return latestArtifact
+}
+
+function getArtifactPreferenceRank(input: {
+  artifact: WorkflowArtifact
+  preferredArtifactNameIncludes?: readonly string[]
+}): number {
+  const preferences = input.preferredArtifactNameIncludes
+  if (!preferences?.length) {
+    return Number.POSITIVE_INFINITY
+  }
+
+  const artifactName = input.artifact.name.toLowerCase()
+  const matchedIndex = preferences.findIndex((token) => artifactName.includes(token.toLowerCase()))
+  return matchedIndex === -1 ? Number.POSITIVE_INFINITY : matchedIndex
+}
+
+function selectArtifactForFieldBinding(input: {
+  artifacts: WorkflowArtifact[]
+  semanticType: WorkflowArtifactSemanticType
+  invalidArtifactIds?: Iterable<string>
+  preferredArtifactNameIncludes?: readonly string[]
+}): WorkflowArtifact | null {
+  const invalidArtifactIds = new Set(input.invalidArtifactIds)
+  let selectedArtifact: WorkflowArtifact | null = null
+
+  for (const artifact of input.artifacts) {
+    if (artifact.semanticType !== input.semanticType) {
+      continue
+    }
+
+    if (invalidArtifactIds.has(artifact.id)) {
+      continue
+    }
+
+    if (selectedArtifact === null) {
+      selectedArtifact = artifact
+      continue
+    }
+
+    const candidateRank = getArtifactPreferenceRank({
+      artifact,
+      preferredArtifactNameIncludes: input.preferredArtifactNameIncludes
+    })
+    const currentRank = getArtifactPreferenceRank({
+      artifact: selectedArtifact,
+      preferredArtifactNameIncludes: input.preferredArtifactNameIncludes
+    })
+
+    if (candidateRank < currentRank) {
+      selectedArtifact = artifact
+      continue
+    }
+
+    if (candidateRank === currentRank && isNewerArtifact(artifact, selectedArtifact)) {
+      selectedArtifact = artifact
+    }
+  }
+
+  return selectedArtifact
 }
 
 function matchesOutputFile(input: {
@@ -153,10 +221,14 @@ export function resolveWorkflowInputSourcesForTool(input: {
   return binding.fieldBindings.map((fieldBinding) => ({
     field: fieldBinding.field,
     semanticType: fieldBinding.semanticType,
-    artifact: selectLatestValidArtifactBySemanticType({
+    artifact: selectArtifactForFieldBinding({
       artifacts: input.artifacts,
       semanticType: fieldBinding.semanticType,
-      invalidArtifactIds: input.invalidArtifactIds
+      invalidArtifactIds: input.invalidArtifactIds,
+      preferredArtifactNameIncludes:
+        'preferredArtifactNameIncludes' in fieldBinding
+          ? fieldBinding.preferredArtifactNameIncludes
+          : undefined
     })
   }))
 }

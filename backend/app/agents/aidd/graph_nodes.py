@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
 from typing import Any
 
 from app.agents.aidd.capabilities import AIDD_TOOL_CAPABILITIES
@@ -12,18 +11,12 @@ from app.agents.aidd.plan_schema import (
     parse_model_plan,
 )
 from app.agents.aidd.planner import infer_aidd_input_type
+from app.agents.aidd.registry import capability_to_tool_summary
 
 
 def _capability_to_tool_summary(tool_slug: str) -> dict[str, Any]:
     capability = AIDD_TOOL_CAPABILITIES[tool_slug]
-    return {
-        "tool_slug": tool_slug,
-        "capability": capability.capability,
-        "stage": capability.stage,
-        "inputs": [item.semantic_type for item in capability.inputs],
-        "outputs": [item.semantic_type for item in capability.outputs],
-        "defaults": dict(capability.defaults),
-    }
+    return capability_to_tool_summary(capability)
 
 
 def load_context_node(state: AIDDGraphState) -> AIDDGraphState:
@@ -31,6 +24,15 @@ def load_context_node(state: AIDDGraphState) -> AIDDGraphState:
 
 
 def classify_input_node(state: AIDDGraphState) -> AIDDGraphState:
+    if state.get("input_files"):
+        semantic_inputs = state["input_files"]
+        input_type = state.get("input_type") or next(iter(semantic_inputs.keys()))
+        return {
+            "input_type": input_type,
+            "semantic_inputs": semantic_inputs,
+            "status": "input_classified",
+        }
+
     input_type = infer_aidd_input_type(
         message=state.get("message", ""),
         filename=state.get("input_filename", ""),
@@ -49,11 +51,17 @@ def classify_input_node(state: AIDDGraphState) -> AIDDGraphState:
 
 
 def discover_tools_node(state: AIDDGraphState) -> AIDDGraphState:
+    if "configured_tools" in state:
+        return {
+            "available_tools": state.get("configured_tools") or [],
+            "status": "tools_discovered",
+        }
+
     configured_slugs = set(state.get("configured_tool_slugs") or AIDD_TOOL_CAPABILITIES.keys())
     available_tools = [
         _capability_to_tool_summary(tool_slug)
-        for tool_slug in AIDD_TOOL_CAPABILITIES
-        if tool_slug in configured_slugs
+        for tool_slug, capability in AIDD_TOOL_CAPABILITIES.items()
+        if capability.virtual or tool_slug in configured_slugs
     ]
     return {
         "available_tools": available_tools,

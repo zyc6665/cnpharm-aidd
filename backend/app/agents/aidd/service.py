@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -10,15 +11,18 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.agents.aidd.capabilities import get_capability
+from app.agents.aidd.builtin_tools import BuiltinToolFile, run_builtin_tool
+from app.agents.aidd.capabilities import AIDD_TOOL_CAPABILITIES, ToolCapability
+from app.agents.aidd.input_classifier import classify_aidd_input_file
 from app.agents.aidd.outputs import extract_semantic_outputs
 from app.agents.aidd.payloads import build_agent_task_payload
 from app.agents.aidd.graph import build_plan_with_langgraph
 from app.agents.aidd.planner import AIDDPlan, infer_aidd_input_type
+from app.agents.aidd.registry import capability_from_tool, load_tool_capability
 from app.config import settings
 from app.common.exceptions import ForbiddenException, NotFoundException, ValidationException
 from app.models.agent import AgentRun, AgentRunStep
-from app.models.files import File as FileModel
+from app.models.files import File as FileModel, FileSourceType
 from app.models.statistics import FileStatistics
 from app.models.tasks import Task, TaskStatus
 from app.models.tools import Tool, ToolStatus
@@ -29,6 +33,13 @@ from app.tasks.service import create_and_schedule_tool_task
 
 
 TERMINAL_RUN_STATUSES = {"success", "failure", "canceled"}
+SUPPORTED_AGENT_INPUT_TYPES = {
+    "protein_pdb",
+    "pocket_pdb",
+    "ligand_pdb",
+    "smiles_csv",
+    "generated_ligand",
+}
 
 
 def _file_download_url(file_id: str) -> str:
@@ -51,6 +62,56 @@ def _input_filename(file_record: FileModel) -> str:
     return file_record.filename
 
 
+def _run_input_files(run: AgentRun) -> dict[str, str]:
+    plan = run.plan or {}
+    input_files = plan.get("input_files")
+    if isinstance(input_files, dict):
+        return {
+            str(semantic_type): str(file_id)
+            for semantic_type, file_id in input_files.items()
+            if isinstance(semantic_type, str) and file_id
+        }
+    if run.input_file_id and run.input_type:
+        return {run.input_type: str(run.input_file_id)}
+    return {}
+
+
+def _storage_file_path(file_id: str, filename: str) -> Path:
+    storage_root = Path(settings.STORAGE_PATH)
+    return storage_root / file_id[:2] / f"{file_id}_{filename}"
+
+
+async def _create_agent_output_file(
+    db: AsyncSession,
+    *,
+    owner_id: str,
+    filename: str,
+    content: bytes,
+    content_type: str,
+    source_file_id: str | None = None,
+) -> FileModel:
+    file_record = FileModel(
+        owner_id=owner_id,
+        filename=filename,
+        content_type=content_type,
+        size_bytes=len(content),
+        sha256=hashlib.sha256(content).hexdigest(),
+        source_type=FileSourceType.TOOL_OUTPUT.value,
+        storage_path="pending",
+        is_public=False,
+        file_meta={"generated_by": "aidd_agent", "source_file_id": source_file_id},
+    )
+    db.add(file_record)
+    await db.flush()
+
+    target_path = _storage_file_path(str(file_record.id), filename)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    target_path.write_bytes(content)
+    file_record.storage_path = str(target_path)
+    await db.flush()
+    return file_record
+
+
 async def _load_owned_file(
     db: AsyncSession,
     *,
@@ -66,6 +127,10 @@ async def _load_owned_file(
 
 
 async def _load_available_tool(db: AsyncSession, tool_slug: str) -> Tool:
+    capability = AIDD_TOOL_CAPABILITIES.get(tool_slug)
+    if capability and capability.virtual:
+        raise ValidationException(f"内置智能体能力不应加载平台工具: {tool_slug}")
+
     result = await db.execute(
         select(Tool)
         .options(selectinload(Tool.current_version))
@@ -78,6 +143,8 @@ async def _load_available_tool(db: AsyncSession, tool_slug: str) -> Tool:
         raise ValidationException(f"智能体工具不可用: {tool_slug}")
     if not tool.current_version:
         raise ValidationException(f"智能体工具没有可用版本: {tool_slug}")
+    if tool.current_version.is_active is not True or tool.current_version.deprecated is True:
+        raise ValidationException(f"智能体工具当前版本不可用: {tool_slug}")
     return tool
 
 
@@ -100,31 +167,127 @@ async def _load_run_for_user(
     return run
 
 
+async def _load_agent_input_files(
+    db: AsyncSession,
+    *,
+    current_user: User,
+    run_data: AIDDRunCreate,
+) -> tuple[dict[str, FileModel], FileModel, str, dict[str, dict[str, Any]]]:
+    requested_input_files = dict(run_data.input_files or {})
+    input_file_ids = list(run_data.input_file_ids or [])
+    primary_file: FileModel | None = None
+
+    if run_data.input_file_id:
+        primary_file = await _load_owned_file(
+            db,
+            file_id=run_data.input_file_id,
+            current_user=current_user,
+        )
+        primary_type = run_data.input_type or infer_aidd_input_type(
+            message=run_data.message,
+            filename=_input_filename(primary_file),
+        )
+        requested_input_files.setdefault(primary_type, run_data.input_file_id)
+        if run_data.input_file_id not in input_file_ids:
+            input_file_ids.insert(0, run_data.input_file_id)
+
+    for file_id in input_file_ids:
+        if file_id not in requested_input_files.values():
+            await _load_owned_file(
+                db,
+                file_id=file_id,
+                current_user=current_user,
+            )
+
+    if not requested_input_files:
+        if not input_file_ids:
+            raise ValidationException("请至少提供一个智能体输入文件")
+
+    semantic_files: dict[str, FileModel] = {}
+    for semantic_type, file_id in requested_input_files.items():
+        if semantic_type not in SUPPORTED_AGENT_INPUT_TYPES:
+            raise ValidationException(f"Unsupported AIDD input semantic type: {semantic_type}")
+        semantic_files[semantic_type] = await _load_owned_file(
+            db,
+            file_id=file_id,
+            current_user=current_user,
+        )
+
+    classified_files: dict[str, dict[str, Any]] = {}
+    used_semantic_types = set(semantic_files.keys())
+    for file_id in input_file_ids:
+        if file_id in requested_input_files.values():
+            continue
+        file_record = await _load_owned_file(db, file_id=file_id, current_user=current_user)
+        classified = classify_aidd_input_file(
+            file_record,
+            message=run_data.message,
+            used_semantic_types=used_semantic_types,
+        )
+        semantic_files.setdefault(classified.semantic_type, file_record)
+        used_semantic_types.add(classified.semantic_type)
+        classified_files[file_record.id] = {
+            "semantic_type": classified.semantic_type,
+            "confidence": classified.confidence,
+            "reason": classified.reason,
+        }
+
+    if primary_file is None:
+        primary_semantic_type = (
+            run_data.input_type
+            if run_data.input_type in semantic_files
+            else next(iter(semantic_files.keys()))
+        )
+        primary_file = semantic_files[primary_semantic_type]
+    else:
+        primary_semantic_type = next(
+            (
+                semantic_type
+                for semantic_type, file_record in semantic_files.items()
+                if file_record.id == primary_file.id
+            ),
+            run_data.input_type or infer_aidd_input_type(
+                message=run_data.message,
+                filename=_input_filename(primary_file),
+            ),
+        )
+
+    return semantic_files, primary_file, str(primary_semantic_type), classified_files
+
+
 async def create_agent_run(
     db: AsyncSession,
     *,
     current_user: User,
     run_data: AIDDRunCreate,
 ) -> AgentRun:
-    input_file = await _load_owned_file(
-        db,
-        file_id=run_data.input_file_id,
-        current_user=current_user,
-    )
-    if run_data.input_type and run_data.input_type not in {"protein_pdb", "pocket_pdb"}:
+    if run_data.input_type and run_data.input_type not in SUPPORTED_AGENT_INPUT_TYPES:
         raise ValidationException(f"Unsupported AIDD input_type: {run_data.input_type}")
-    input_type = run_data.input_type or infer_aidd_input_type(
-        message=run_data.message,
-        filename=_input_filename(input_file),
+    input_files, input_file, input_type, classified_files = await _load_agent_input_files(
+        db,
+        current_user=current_user,
+        run_data=run_data,
     )
+    plan_params = {
+        **run_data.params,
+        "available_inputs": sorted(input_files.keys()),
+    }
 
     plan, input_type = await build_plan_with_langgraph(
         db,
         message=run_data.message,
         input_file=input_file,
+        input_files=input_files,
+        input_type=input_type,
         requested_outputs=run_data.requested_outputs,
-        params=run_data.params,
+        params=plan_params,
     )
+    plan_data = plan.model_dump()
+    plan_data["input_files"] = {
+        semantic_type: file_record.id for semantic_type, file_record in input_files.items()
+    }
+    if classified_files:
+        plan_data["classified_input_files"] = classified_files
 
     run = AgentRun(
         user_id=current_user.id,
@@ -134,7 +297,7 @@ async def create_agent_run(
         input_type=input_type,
         input_file_id=input_file.id,
         requested_outputs=plan.requested_outputs,
-        plan=plan.model_dump(),
+        plan=plan_data,
     )
     db.add(run)
     await db.flush()
@@ -174,12 +337,19 @@ async def _resolve_semantic_files(
     steps_by_key: dict[str, AgentRunStep],
 ) -> dict[str, dict[str, str]]:
     semantic_files: dict[str, dict[str, str]] = {}
+    run_input_files = _run_input_files(run)
 
     for semantic_type, source in (step.semantic_inputs or {}).items():
-        if source == "agent_input":
-            if not run.input_file_id:
+        if source == "agent_input" or (
+            isinstance(source, str) and source.startswith("agent_input:")
+        ):
+            semantic_key = semantic_type
+            if isinstance(source, str) and source.startswith("agent_input:"):
+                semantic_key = source.split(":", 1)[1] or semantic_type
+            file_id = run_input_files.get(semantic_key) or run.input_file_id
+            if not file_id:
                 raise ValidationException("智能体运行缺少输入文件")
-            file_record = await db.get(FileModel, run.input_file_id)
+            file_record = await db.get(FileModel, file_id)
             if not file_record:
                 raise NotFoundException("智能体输入文件不存在")
             semantic_files[semantic_type] = _file_payload(file_record)
@@ -216,8 +386,10 @@ async def _schedule_step(
     step: AgentRunStep,
     steps_by_key: dict[str, AgentRunStep],
 ) -> None:
-    capability = get_capability(step.tool_slug)
     tool = await _load_available_tool(db, step.tool_slug)
+    capability = capability_from_tool(tool)
+    if capability is None:
+        raise ValidationException(f"智能体工具缺少 agent_capability 配置: {step.tool_slug}")
     semantic_files = await _resolve_semantic_files(
         db,
         run=run,
@@ -251,6 +423,70 @@ async def _schedule_step(
     step.started_at = datetime.utcnow()
 
 
+async def _run_virtual_step(
+    db: AsyncSession,
+    *,
+    run: AgentRun,
+    step: AgentRunStep,
+    steps_by_key: dict[str, AgentRunStep],
+) -> bool:
+    capability = AIDD_TOOL_CAPABILITIES.get(step.tool_slug)
+    if not capability or not capability.virtual:
+        return False
+
+    semantic_files = await _resolve_semantic_files(
+        db,
+        run=run,
+        step=step,
+        steps_by_key=steps_by_key,
+    )
+    builtin_files: dict[str, BuiltinToolFile] = {}
+    input_file_ids: list[str] = []
+    for semantic_type, file_payload in semantic_files.items():
+        file_id = str(file_payload["file_id"])
+        file_record = await db.get(FileModel, file_id)
+        if not file_record:
+            raise NotFoundException("内置智能体工具输入文件不存在")
+        if not file_record.storage_path:
+            raise NotFoundException("内置智能体工具输入文件缺少存储路径")
+        builtin_files[semantic_type] = BuiltinToolFile(
+            file_id=file_record.id,
+            filename=file_record.filename,
+            path=Path(file_record.storage_path),
+            content_type=file_record.content_type,
+        )
+        input_file_ids.append(file_record.id)
+
+    result = run_builtin_tool(step.tool_slug, builtin_files)
+    semantic_outputs: dict[str, dict[str, Any]] = {}
+    output_file_ids: list[str] = []
+    for artifact in result.artifacts:
+        output_file = await _create_agent_output_file(
+            db,
+            owner_id=run.user_id,
+            filename=artifact.filename,
+            content=artifact.content,
+            content_type=artifact.content_type,
+            source_file_id=artifact.source_file_id,
+        )
+        output_file_ids.append(output_file.id)
+        semantic_outputs[artifact.semantic_type] = {
+            "source": "output_files",
+            "file_id": output_file.id,
+            "filename": output_file.filename,
+            "url": _file_download_url(output_file.id),
+            "content_type": output_file.content_type,
+        }
+
+    step.status = "success"
+    step.started_at = step.started_at or datetime.utcnow()
+    step.finished_at = datetime.utcnow()
+    step.input_file_ids = input_file_ids
+    step.output_file_ids = output_file_ids
+    step.semantic_outputs = semantic_outputs
+    return True
+
+
 async def start_ready_steps(
     db: AsyncSession,
     *,
@@ -268,13 +504,20 @@ async def start_ready_steps(
             continue
 
         try:
-            await _schedule_step(
+            handled_virtual = await _run_virtual_step(
                 db,
-                current_user=current_user,
                 run=run,
                 step=step,
                 steps_by_key=steps_by_key,
             )
+            if not handled_virtual:
+                await _schedule_step(
+                    db,
+                    current_user=current_user,
+                    run=run,
+                    step=step,
+                    steps_by_key=steps_by_key,
+                )
         except Exception as exc:
             step.status = "failure"
             step.error_message = str(exc)
@@ -285,8 +528,12 @@ async def start_ready_steps(
             raise
 
         scheduled_count += 1
+        steps_by_key[step.step_key] = step
+        if handled_virtual:
+            run.status = "pending"
+            continue
         run.status = "waiting_task"
-        # First version schedules newly ready work one wave at a time.
+        # Platform tasks are scheduled one wave at a time.
         break
 
     if scheduled_count == 0 and run.status == "planning":
@@ -478,11 +725,14 @@ async def _load_task_output_files(
 
 def _required_outputs_present(
     *,
-    tool_slug: str,
+    capability: ToolCapability,
     semantic_outputs: dict[str, dict[str, Any]],
 ) -> bool:
-    capability = get_capability(tool_slug)
-    return all(output.semantic_type in semantic_outputs for output in capability.outputs)
+    return all(
+        output.semantic_type in semantic_outputs
+        for output in capability.outputs
+        if output.required
+    )
 
 
 async def _mark_run_success_if_complete(db: AsyncSession, run: AgentRun) -> None:
@@ -490,6 +740,67 @@ async def _mark_run_success_if_complete(db: AsyncSession, run: AgentRun) -> None
         run.status = "success"
         run.finished_at = datetime.utcnow()
         await db.commit()
+
+
+async def _try_replan_failed_step_with_uploaded_inputs(
+    db: AsyncSession,
+    *,
+    run: AgentRun,
+    failed_step: AgentRunStep,
+    error_message: str,
+) -> bool:
+    uploaded_inputs = _run_input_files(run)
+    if not uploaded_inputs:
+        return False
+
+    changed = False
+    for downstream in run.steps:
+        if downstream.status not in {"pending", "ready"}:
+            continue
+
+        semantic_inputs = dict(downstream.semantic_inputs or {})
+        rewritten_inputs: dict[str, str] = {}
+        step_changed = False
+
+        for semantic_type, source in semantic_inputs.items():
+            if not isinstance(source, str) or not source.startswith("step:"):
+                rewritten_inputs[semantic_type] = source
+                continue
+
+            _, dependency_key, _dependency_semantic_type = source.split(":", 2)
+            if dependency_key != failed_step.step_key or semantic_type not in uploaded_inputs:
+                rewritten_inputs[semantic_type] = source
+                continue
+
+            rewritten_inputs[semantic_type] = f"agent_input:{semantic_type}"
+            step_changed = True
+
+        if not step_changed:
+            continue
+
+        downstream.semantic_inputs = rewritten_inputs
+        downstream.depends_on_step_ids = [
+            dependency_key
+            for dependency_key in (downstream.depends_on_step_ids or [])
+            if dependency_key != failed_step.step_key
+        ]
+        downstream.status = "pending"
+        changed = True
+
+    if not changed:
+        return False
+
+    failed_step.status = "skipped"
+    failed_step.error_message = f"上游任务失败，已改用上传文件继续: {error_message}"
+    failed_step.finished_at = datetime.utcnow()
+    run.status = "pending"
+    run.error_message = None
+    await db.commit()
+
+    user = await db.get(User, run.user_id)
+    if user:
+        await start_ready_steps(db, current_user=user, run_id=run.id)
+    return True
 
 
 async def reconcile_waiting_agent_steps(
@@ -530,8 +841,16 @@ async def reconcile_waiting_agent_steps(
 
         processed_count += 1
         if task.status in {TaskStatus.FAILURE.value, TaskStatus.CANCELED.value}:
+            error_message = task.error_message or "任务执行失败"
+            if await _try_replan_failed_step_with_uploaded_inputs(
+                db,
+                run=run,
+                failed_step=step,
+                error_message=error_message,
+            ):
+                continue
             step.status = "failure"
-            step.error_message = task.error_message or "任务执行失败"
+            step.error_message = error_message
             step.finished_at = datetime.utcnow()
             run.status = "failure"
             run.error_message = step.error_message
@@ -541,15 +860,24 @@ async def reconcile_waiting_agent_steps(
         file_ids = [str(file_id) for file_id in (task.outputs.file_ids if task.outputs else [])]
         output_files = await _load_task_output_files(db, file_ids)
         output_data = task.outputs.result if task.outputs else None
+        capability = await load_tool_capability(db, step.tool_slug)
         semantic_outputs = extract_semantic_outputs(
-            capability=get_capability(step.tool_slug),
+            capability=capability,
             task_output_files=output_files,
             output_data=output_data,
         )
 
-        if not _required_outputs_present(tool_slug=step.tool_slug, semantic_outputs=semantic_outputs):
+        if not _required_outputs_present(capability=capability, semantic_outputs=semantic_outputs):
+            error_message = "任务成功但缺少智能体所需语义产物"
+            if await _try_replan_failed_step_with_uploaded_inputs(
+                db,
+                run=run,
+                failed_step=step,
+                error_message=error_message,
+            ):
+                continue
             step.status = "failure"
-            step.error_message = "任务成功但缺少智能体所需语义产物"
+            step.error_message = error_message
             step.finished_at = datetime.utcnow()
             run.status = "failure"
             run.error_message = step.error_message

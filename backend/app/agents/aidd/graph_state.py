@@ -11,6 +11,7 @@ class AIDDGraphState(TypedDict, total=False):
     message: str
     input_file_id: str
     input_filename: str
+    input_files: dict[str, dict[str, Any]]
     input_type: str
     requested_outputs: list[str]
     params: dict[str, Any]
@@ -24,6 +25,7 @@ class AIDDGraphState(TypedDict, total=False):
     analysis_trace: list[str]
     observations: list[dict[str, Any]]
     final_outputs: dict[str, Any]
+    configured_tools: list[dict[str, Any]]
     status: str
     error: str | None
     model_service: Any

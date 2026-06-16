@@ -145,10 +145,12 @@ async def _load_files(db: AsyncSession, file_ids: list[str]) -> list[dict[str, A
             continue
 
         original_name = file.file_meta.get("original_name") if isinstance(file.file_meta, dict) else None
+        relative_path = file.file_meta.get("relative_path") if isinstance(file.file_meta, dict) else None
         serialized.append({
             "id": file.id,
             "filename": file.filename,
             "original_name": original_name or file.filename,
+            "relative_path": relative_path,
             "size": file.size_bytes,
             "content_type": file.content_type,
             "url": f"/api/v1/files/{file.id}/download",

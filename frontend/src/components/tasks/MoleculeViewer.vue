@@ -24,6 +24,8 @@ import 'molstar/build/viewer/molstar.css'
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { Viewer as MolstarViewer } from 'molstar/lib/apps/viewer/app'
+import { PluginCommands } from 'molstar/lib/mol-plugin/commands'
+import { Asset } from 'molstar/lib/mol-util/assets'
 
 import type { VisualizationScene } from './result-visualization'
 import { createProtectedObjectUrl } from '@/utils/protected-file-access'
@@ -41,10 +43,57 @@ const error = ref('')
 let viewer: MolstarViewer | null = null
 let resizeObserver: ResizeObserver | null = null
 let revokeEntryUrls: Array<() => void> = []
+let removeLayoutSyncListener: (() => void) | null = null
 
 function cleanupEntryUrls() {
   revokeEntryUrls.forEach(revoke => revoke())
   revokeEntryUrls = []
+}
+
+function syncFullscreenLayout() {
+  if (!viewer) {
+    return
+  }
+
+  const layoutState = viewer.plugin.layout.state
+
+  if (layoutState.expandToFullscreen && !layoutState.isExpanded) {
+    void PluginCommands.Layout.Update(viewer.plugin, {
+      state: {
+        isExpanded: true,
+        expandToFullscreen: true
+      }
+    })
+    return
+  }
+
+  if (!layoutState.expandToFullscreen && layoutState.isExpanded) {
+    void PluginCommands.Layout.Update(viewer.plugin, {
+      state: {
+        isExpanded: false
+      }
+    })
+  }
+}
+
+async function loadReceptorStructure(
+  currentViewer: MolstarViewer,
+  entry: VisualizationScene['entries'][number],
+  url: string
+) {
+  const data = await currentViewer.plugin.builders.data.download(
+    {
+      url: Asset.Url(url),
+      isBinary: false,
+      label: entry.label
+    },
+    { state: { isGhost: true } }
+  )
+  const trajectory = await currentViewer.plugin.builders.structure.parseTrajectory(data, entry.format)
+
+  await currentViewer.plugin.builders.structure.hierarchy.applyPreset(trajectory, 'default', {
+    representationPreset: 'polymer-cartoon'
+  })
 }
 
 async function ensureViewer() {
@@ -60,12 +109,19 @@ async function ensureViewer() {
     collapseRightPanel: true,
     viewportShowControls: false,
     viewportShowExpand: false,
+    viewportShowToggleFullscreen: true,
     viewportShowSettings: false,
     viewportShowSelectionMode: false,
     viewportShowAnimation: false,
     viewportShowTrajectoryControls: false,
     viewportShowScreenshotControls: false
   })
+
+  const subscription = viewer.plugin.layout.events.updated.subscribe(() => {
+    syncFullscreenLayout()
+    viewer?.handleResize()
+  })
+  removeLayoutSyncListener = () => subscription.unsubscribe()
 }
 
 async function renderScene() {
@@ -96,6 +152,11 @@ async function renderScene() {
 
     try {
       for (const { entry, resource } of entryResources) {
+        if (entry.role === 'receptor') {
+          await loadReceptorStructure(viewer, entry, resource.url)
+          continue
+        }
+
         await viewer.loadStructureFromUrl(resource.url, entry.format, false, {
           label: entry.label
         })
@@ -137,6 +198,8 @@ watch(
 onUnmounted(() => {
   cleanupEntryUrls()
   resizeObserver?.disconnect()
+  removeLayoutSyncListener?.()
+  removeLayoutSyncListener = null
   viewer?.dispose()
   viewer = null
 })
@@ -146,6 +209,7 @@ onUnmounted(() => {
 .molecule-viewer {
   position: relative;
   min-height: 520px;
+  height: 520px;
   border-radius: 20px;
   overflow: hidden;
   background:
@@ -155,7 +219,8 @@ onUnmounted(() => {
 
 .viewer-canvas {
   width: 100%;
-  min-height: 520px;
+  min-height: 100%;
+  height: 100%;
 }
 
 .viewer-canvas--hidden {
@@ -190,7 +255,17 @@ onUnmounted(() => {
 .molecule-viewer :deep(.msp-layout-region),
 .molecule-viewer :deep(.msp-layout-static) {
   width: 100%;
-  height: 520px;
+  min-height: 100%;
+  height: 100%;
+}
+
+.molecule-viewer :deep(.msp-layout-expanded),
+.molecule-viewer :deep(.msp-layout-expanded .msp-layout-main),
+.molecule-viewer :deep(.msp-layout-expanded .msp-layout-static),
+.molecule-viewer :deep(.msp-viewport-expanded) {
+  min-height: 100dvh;
+  height: 100dvh;
+  z-index: 1100;
 }
 
 .molecule-viewer :deep(.msp-viewport) {

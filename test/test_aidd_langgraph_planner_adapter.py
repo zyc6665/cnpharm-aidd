@@ -29,6 +29,18 @@ AVAILABLE_TOOLS = [
         "inputs": ["pocket_pdb"],
         "outputs": ["generated_ligand"],
     },
+    {
+        "tool_slug": "builtin-sdf-to-smiles-csv",
+        "capability": "format_conversion",
+        "inputs": ["generated_ligand"],
+        "outputs": ["smiles_csv"],
+    },
+    {
+        "tool_slug": "molp-pc-property-prediction",
+        "capability": "property_prediction",
+        "inputs": ["smiles_csv"],
+        "outputs": ["property_report"],
+    },
 ]
 
 
@@ -94,6 +106,56 @@ def test_parse_model_plan_accepts_valid_json_plan():
         "gcdm-pocket-generation",
     ]
     assert plan.steps[1].depends_on == ["pocket_prediction"]
+
+
+def test_parse_model_plan_repairs_generated_ligand_smiles_csv_reference():
+    plan = parse_model_plan(
+        """
+        {
+          "intent": "score_generated_molecules",
+          "steps": [
+            {
+              "step_key": "pocket_prediction",
+              "capability": "pocket_prediction",
+              "tool_slug": "lvpocket-pocket-prediction",
+              "inputs": {"protein_pdb": "agent_input"},
+              "params": {}
+            },
+            {
+              "step_key": "molecule_generation",
+              "capability": "molecule_generation",
+              "tool_slug": "gcdm-pocket-generation",
+              "inputs": {"pocket_pdb": "step:pocket_prediction:pocket_pdb"},
+              "params": {}
+            },
+            {
+              "step_key": "property_prediction",
+              "capability": "property_prediction",
+              "tool_slug": "molp-pc-property-prediction",
+              "inputs": {"smiles_csv": "step:molecule_generation:smiles_csv"},
+              "params": {}
+            }
+          ]
+        }
+        """,
+        available_tools=AVAILABLE_TOOLS,
+    )
+
+    assert [step.step_key for step in plan.steps] == [
+        "pocket_prediction",
+        "molecule_generation",
+        "sdf_to_smiles",
+        "property_prediction",
+    ]
+    conversion_step = plan.steps[2]
+    assert conversion_step.tool_slug == "builtin-sdf-to-smiles-csv"
+    assert conversion_step.capability == "format_conversion"
+    assert conversion_step.inputs == {
+        "generated_ligand": "step:molecule_generation:generated_ligand"
+    }
+    assert conversion_step.depends_on == ["molecule_generation"]
+    assert plan.steps[3].inputs == {"smiles_csv": "step:sdf_to_smiles:smiles_csv"}
+    assert plan.steps[3].depends_on == ["sdf_to_smiles"]
 
 
 def test_parse_model_plan_rejects_unknown_tool():

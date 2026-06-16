@@ -66,3 +66,16 @@ def test_admin_tool_forms_use_category_id_and_public_create_entry_is_removed():
     assert "name: 'ToolCreate'" not in read_source("frontend/src/router/index.ts")
     assert "selectedCategory" in list_source
     assert "category: selectedCategory.value" in list_source
+
+
+def test_admin_tool_form_exposes_agent_capability_config():
+    """管理员工具表单应暴露 Agent 动态注册配置，而不是只能手写隐藏 JSON。"""
+    create_source = read_source("frontend/src/views/tools/Create.vue")
+
+    assert "Agent 编排能力" in create_source
+    assert "agent_capability_enabled" in create_source
+    assert "agent_capability" in create_source
+    assert "molecule_generation" in create_source
+    assert "agent_inputs" in create_source
+    assert "agent_outputs" in create_source
+    assert "config.agent_capability" in create_source

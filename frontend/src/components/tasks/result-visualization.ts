@@ -16,6 +16,7 @@ export interface TaskFileReference {
   content_type?: string
   size?: number
   url?: string
+  relative_path?: string
 }
 
 export interface VisualizationSceneEntry {
@@ -26,6 +27,9 @@ export interface VisualizationSceneEntry {
   role: VisualizationRole
   format: SupportedVisualizationFormat
   extension: string
+  relativePath?: string
+  scoreLabel?: string
+  sdfRecordIndex?: number
 }
 
 export interface VisualizationScene {
@@ -100,7 +104,7 @@ function buildRenderableEntries(
         return null
       }
 
-      return {
+      const entry: VisualizationSceneEntry = {
         key: `${source}-${file.id ?? getFileLabel(file)}`,
         url: file.url,
         label: getFileLabel(file),
@@ -109,6 +113,12 @@ function buildRenderableEntries(
         format,
         extension
       }
+
+      if (file.relative_path) {
+        entry.relativePath = file.relative_path
+      }
+
+      return entry
     })
     .filter((entry): entry is VisualizationSceneEntry => entry !== null)
 }

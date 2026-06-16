@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.agents.aidd.graph_nodes import (
     classify_input_node,
@@ -18,9 +16,9 @@ from app.agents.aidd.graph_nodes import (
 )
 from app.agents.aidd.graph_state import AIDDGraphState
 from app.agents.aidd.planner import AIDDPlan, AIDDPlanStep
+from app.agents.aidd.registry import load_available_tool_summaries
 from app.common.exceptions import ValidationException
 from app.models.files import File as FileModel
-from app.models.tools import Tool, ToolStatus
 from app.services.model_services import get_default_model_service
 
 
@@ -49,19 +47,6 @@ def build_aidd_graph():
     return workflow.compile()
 
 
-async def _available_tool_slugs(db: AsyncSession) -> list[str]:
-    result = await db.execute(
-        select(Tool)
-        .options(selectinload(Tool.current_version))
-        .where(Tool.status == ToolStatus.PUBLISHED.value, Tool.is_public.is_(True))
-    )
-    return [
-        tool.slug
-        for tool in result.scalars().all()
-        if tool.current_version is not None
-    ]
-
-
 def _plan_dict_to_aidd_plan(plan_data: dict, requested_outputs: list[str]) -> AIDDPlan:
     return AIDDPlan(
         intent=plan_data["intent"],
@@ -86,18 +71,31 @@ async def build_plan_with_langgraph(
     *,
     message: str,
     input_file: FileModel,
+    input_files: dict[str, FileModel] | None = None,
+    input_type: str | None = None,
     requested_outputs: list[str],
     params: dict,
 ) -> tuple[AIDDPlan, str]:
     model_service = await get_default_model_service(db)
     graph = build_aidd_graph()
+    semantic_input_payload = {
+        semantic_type: {
+            "source": "agent_input",
+            "file_id": file_record.id,
+            "filename": file_record.filename,
+        }
+        for semantic_type, file_record in (input_files or {}).items()
+    }
+
     state: AIDDGraphState = {
         "message": message,
         "input_file_id": input_file.id,
         "input_filename": input_file.filename,
+        "input_files": semantic_input_payload,
+        "input_type": input_type,
         "requested_outputs": requested_outputs,
         "params": params,
-        "configured_tool_slugs": await _available_tool_slugs(db),
+        "configured_tools": await load_available_tool_summaries(db),
         "model_service": model_service,
     }
 

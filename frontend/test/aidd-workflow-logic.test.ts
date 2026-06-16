@@ -535,3 +535,36 @@ test('下游工具应解析出当前可自动带入的输入来源', async () =>
   assert.equal(inputSources[1]?.field, 'ligand_file')
   assert.equal(inputSources[1]?.artifact?.id, 'ligand-1')
 })
+
+test('GCDM 应优先复用 protein_pocket_residues 而不是 pocket0 产物', async () => {
+  const resolveWorkflowInputSourcesForTool =
+    await loadNamedFunction<ResolveWorkflowInputSourcesForTool>(
+      '../src/workflow/artifact-resolver.ts',
+      'resolveWorkflowInputSourcesForTool'
+    )
+
+  const inputSources = resolveWorkflowInputSourcesForTool({
+    toolSlug: 'gcdm-pocket-generation',
+    artifacts: [
+      createArtifact({
+        id: 'pocket-grid',
+        semanticType: 'pocket_structure',
+        stepKey: 'pocketExploration',
+        toolSlug: 'pocket-explorer',
+        name: 'artifacts__lv_results__input__pocket0.pdb',
+        createdAt: '2026-05-28T12:00:00Z'
+      }),
+      createArtifact({
+        id: 'pocket-residues',
+        semanticType: 'pocket_structure',
+        stepKey: 'pocketExploration',
+        toolSlug: 'pocket-explorer',
+        name: 'artifacts__lv_results__input__protein_pocket_residues.pdb',
+        createdAt: '2026-05-28T11:00:00Z'
+      })
+    ]
+  })
+
+  assert.equal(inputSources[0]?.field, 'input_files.pocket_pdb')
+  assert.equal(inputSources[0]?.artifact?.id, 'pocket-residues')
+})

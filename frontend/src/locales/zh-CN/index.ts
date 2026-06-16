@@ -54,6 +54,7 @@ export default {
     totalItems: '共 {total} 条',
     copySuccess: '复制成功',
     required: '为必填项',
+    optional: '可选',
     createdAt: '创建时间',
     updatedAt: '更新时间',
     seconds: '秒',
@@ -113,23 +114,23 @@ export default {
       }
     },
     foundation: {
-      title: '平台模型与数据底座',
-      subtitle: 'CPUModel 提供面向 AIDD 的工作台能力，CPUPDB 提供结构、口袋与动力学信息支撑，帮助研究流程从任务执行走向结构认知。',
-      platform: {
-        kicker: 'Platform Model',
-        title: 'CPUModel 工作台',
-        description: 'CPUModel 是一个面向 AIDD 流程的计算工作台，而不是零散工具集合。',
+      title: '靶点发现与平台底座',
+      subtitle: '从肿瘤病理图像入口、结构与口袋依据，到实际 AIDD 计算工作台，首页按 PAIWSIT、CPUPDB 与 CPUModel 串起研究路径。',
+      paiwsit: {
+        kicker: 'Target Discovery Entry',
+        title: 'PAIWSIT',
+        description: 'PAIWSIT 是面向肿瘤研究的病理学家标注与 AI 赋能全切片图像数据库，可作为从组织病理表型切入靶点发现与机制研究的数据入口。',
         points: {
-          groupedTools: '按研究分组组织工具与流程路径',
-          reusableArtifacts: '在任务之间复用历史产物继续计算',
-          chainedWorkflow: '串联口袋识别、筛选、对接与性质评估'
+          annotatedSlides: '提供病理学家标注的肿瘤全切片图像资源',
+          aiHeatmap: '支持 AI 辅助异常区域识别与热图可视化',
+          pathologyEvidence: '为靶点发现提供病理表型与组织层证据'
         },
-        action: '进入工具工作台'
+        action: '访问 PAIWSIT'
       },
       cpupdb: {
         kicker: 'Pocket Data Foundation',
         title: 'CPUPDB',
-        description: 'CPUPDB 是平台的重要结构与口袋数据底座之一，面向蛋白-配体口袋、多构象状态与相互作用分析。',
+        description: '从病理与生物学线索进一步下钻到蛋白结构、口袋、多构象和相互作用分析，为后续筛选与设计提供结构依据。',
         points: {
           structures: '覆盖蛋白结构、配体、口袋与结合位点信息',
           dynamics: '引入动力学数据，用于观察构象变化与隐蔽口袋',
@@ -137,6 +138,17 @@ export default {
         },
         action: '访问 CPUPDB',
         help: '查看帮助文档'
+      },
+      platform: {
+        kicker: 'AIDD Workbench',
+        title: 'CPUModel 工作台',
+        description: '将靶点线索、结构数据与计算工具接到同一个工作台中，继续完成筛选、对接、性质评估与结果复用。',
+        points: {
+          groupedTools: '按研究分组组织工具与流程路径',
+          reusableArtifacts: '在任务之间复用历史产物继续计算',
+          chainedWorkflow: '串联口袋识别、筛选、对接与性质评估'
+        },
+        action: '进入工具工作台'
       }
     },
     tools: {
@@ -165,7 +177,7 @@ export default {
     agent: {
       kicker: 'AIDD Agent',
       title: 'Agent 模式',
-      subtitle: '输入研究目标并上传结构文件，平台会根据目标、上传文件与可用能力自动选择工具并编排任务。',
+      subtitle: '输入研究目标并上传一个或多个文件，平台会根据目标、文件内容与可用能力自动选择工具并编排任务。',
       autoRouting: '自动编排',
       messageLabel: '研究目标',
       messagePlaceholder: '例如：说明研究目标与关注点，Agent 会根据上传文件自动判断需要执行哪些工具',
@@ -173,6 +185,9 @@ export default {
       proteinInput: '蛋白质 PDB',
       pocketInput: '口袋 PDB',
       fileLabel: '上传文件',
+      inputFiles: '上传文件',
+      selectInputFiles: '选择文件',
+      fileAutoDetectHint: '自动识别文件类型：支持 PDB、CIF、SDF、CSV，Agent 会结合文件名、内容和研究目标判断用途。',
       generationCount: '生成数量',
       run: '运行智能体',
       sync: '同步状态',
@@ -187,7 +202,7 @@ export default {
       empty: '创建运行后，这里会显示每个工具步骤。',
       noRun: '等待创建智能体运行',
       viewTask: '查看任务',
-      uploadRequired: '请先上传 PDB 文件',
+      uploadRequired: '请至少上传一个输入文件',
       loginRequired: '请先登录后运行智能体',
       defaultMessage: '根据上传文件和研究目标自动编排可用工具',
       created: '智能体运行已创建',
@@ -487,6 +502,17 @@ export default {
     // 工具详情
     free: '免费',
     introduction: '工具介绍',
+    viewIntroduction: '工具介绍',
+    documentationMarkdown: '介绍文档 Markdown',
+    documentationMarkdownHint: '支持 Markdown。内容将随当前工具版本保存，修改后需要创建新版本。',
+    modelOverview: '模型介绍',
+    parameterDocs: '参数说明',
+    outputDocs: '输出文件',
+    outputPatterns: '输出路径规则',
+    defaultValue: '默认值',
+    fieldType: '类型',
+    valueRange: '范围',
+    noDocumentation: '暂无详细介绍',
     features: '功能特点',
     howToUse: '使用方法',
     step: '步骤',
@@ -574,6 +600,9 @@ export default {
     csvEmpty: 'CSV 结果为空',
     csvEmptyDesc: '当前结果文件没有可展示的数据行，请先检查工具输出是否正常。',
     csvFileMissing: '缺少 CSV 文件下载地址',
+    jsonResultFields: '{count} 个字段',
+    jsonResultItems: '{count} 项',
+    jsonResultRaw: '原始 JSON',
     visualizationHint: '系统会优先叠加输入口袋与生成分子，便于快速检查构象与结合位置。',
     visualizationFiles: '可视化文件',
     visualizationSelectableHint: '检测到多个三维结果，输入结构会保持固定，点击列表即可逐个查看生成分子或对接姿态。',
@@ -591,6 +620,18 @@ export default {
     delete: '删除',
     download: '下载',
     downloadAll: '下载全部',
+    exportMolpPcCsv: '导出 MolP-Pc CSV',
+    exportMolpPcCsvSuccess: '已导出 MolP-Pc CSV',
+    exportMolpPcCsvNoSource: '没有可用于导出的 CSV 产物',
+    exportMolpPcCsvNoSmiles: '当前 CSV 产物缺少 SMILES 列，无法导出 MolP-Pc CSV',
+    allTaskTypes: '全部类型',
+    agentTasks: '智能体任务',
+    standaloneToolTasks: '独立工具任务',
+    agentRun: '智能体会话',
+    agentRunSteps: '会话工具任务',
+    agentRunProgress: '{completed}/{total} 步完成，{failed} 步失败',
+    agentViewTask: '查看任务',
+    agentNoLinkedTask: '暂无关联任务',
     viewDetail: '查看详情',
     viewTool: '查看工具',
     goToTools: '去创建任务',
