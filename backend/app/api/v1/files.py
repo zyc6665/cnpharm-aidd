@@ -4,6 +4,12 @@
 import os
 import hashlib
 import aiofiles
+import io
+import re
+import shutil
+import subprocess
+import tempfile
+import uuid
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status
 from fastapi.responses import FileResponse
@@ -54,6 +60,107 @@ def get_file_path(file_id: str, filename: str) -> Path:
     # 使用文件ID的前两位作为子目录，避免单目录文件过多
     subdir = file_id[:2]
     return STORAGE_PATH / subdir / f"{file_id}_{filename}"
+
+
+def _safe_converted_pdb_filename(filename: str | None) -> str:
+    """根据上传文件名生成安全的 PDB 文件名。"""
+    raw_name = Path(filename or "ligand.sdf").name
+    stem = Path(raw_name).stem or "ligand"
+    safe_stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", stem).strip("._") or "ligand"
+    return f"{safe_stem}.pdb"
+
+
+def _normalize_pdb_block(pdb_text: str) -> str:
+    """标准化 toolkit 生成的 PDB 文本。"""
+    normalized = pdb_text.replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not normalized:
+        raise ValidationException("SDF 转 PDB 结果为空")
+    if "HETATM" not in normalized and "ATOM" not in normalized:
+        raise ValidationException("SDF 转 PDB 结果缺少原子记录")
+    if not normalized.endswith("END"):
+        normalized = f"{normalized}\nEND"
+    return f"{normalized}\n"
+
+
+def _first_sdf_record_bytes(sdf_content: bytes) -> bytes:
+    """提取第一条 SDF 记录，并保留 SDF 必需的三行 header。"""
+    first_record = sdf_content.replace(b"\r\n", b"\n").replace(b"\r", b"\n").split(b"$$$$", 1)[0]
+    if not first_record.strip():
+        raise ValidationException("SDF 文件为空")
+
+    lines = first_record.split(b"\n")
+    counts_index = next((index for index, line in enumerate(lines) if b"V2000" in line or b"V3000" in line), None)
+    if counts_index is None:
+        return first_record.rstrip() + b"\n$$$$\n"
+
+    header_lines = lines[:counts_index]
+    body_lines = lines[counts_index:]
+    if len(header_lines) > 3:
+        header_lines = header_lines[-3:]
+    elif len(header_lines) < 3:
+        header_lines = ([b""] * (3 - len(header_lines))) + header_lines
+
+    return b"\n".join(header_lines + body_lines).rstrip() + b"\n$$$$\n"
+
+
+def _convert_sdf_to_pdb_with_rdkit(sdf_content: bytes) -> str | None:
+    """优先用 RDKit 转换第一条有效 SDF 分子；未安装 RDKit 时返回 None。"""
+    try:
+        from rdkit import Chem
+    except ImportError:
+        return None
+
+    supplier = Chem.ForwardSDMolSupplier(
+        io.BytesIO(sdf_content),
+        sanitize=False,
+        removeHs=False,
+        strictParsing=False,
+    )
+    for mol in supplier:
+        if mol is None or mol.GetNumAtoms() == 0:
+            continue
+        return _normalize_pdb_block(Chem.MolToPDBBlock(mol))
+
+    raise ValidationException("RDKit 无法从 SDF 中读取有效分子")
+
+
+def _convert_sdf_to_pdb_with_openbabel(sdf_content: bytes) -> str | None:
+    """使用 OpenBabel 命令行转换第一条 SDF 分子；未安装 obabel 时返回 None。"""
+    obabel = shutil.which("obabel")
+    if not obabel:
+        return None
+
+    with tempfile.TemporaryDirectory(prefix="sdf-to-pdb-") as tmp_dir:
+        input_path = Path(tmp_dir) / "ligand.sdf"
+        output_path = Path(tmp_dir) / "ligand.pdb"
+        input_path.write_bytes(_first_sdf_record_bytes(sdf_content))
+
+        result = subprocess.run(
+            [obabel, "-isdf", str(input_path), "-opdb", "-O", str(output_path)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout or "OpenBabel 转换失败").strip()
+            raise ValidationException(f"OpenBabel 转换失败: {detail}")
+        if not output_path.exists():
+            raise ValidationException("OpenBabel 未生成 PDB 文件")
+        return _normalize_pdb_block(output_path.read_text(encoding="utf-8", errors="replace"))
+
+
+def _convert_sdf_to_pdb_with_toolkit(sdf_content: bytes) -> tuple[str, str]:
+    """使用 RDKit 或 OpenBabel 将 SDF 第一条有效分子转换为 PDB。"""
+    rdkit_pdb = _convert_sdf_to_pdb_with_rdkit(sdf_content)
+    if rdkit_pdb is not None:
+        return rdkit_pdb, "rdkit"
+
+    openbabel_pdb = _convert_sdf_to_pdb_with_openbabel(sdf_content)
+    if openbabel_pdb is not None:
+        return openbabel_pdb, "openbabel"
+
+    raise ValidationException("后端未安装 RDKit 或 OpenBabel，无法进行可靠的 SDF 到 PDB 转换")
 
 
 @router.post("/upload", response_model=dict)
@@ -292,6 +399,76 @@ async def list_artifact_files(
             "page_size": page_size,
             "total_pages": (total + page_size - 1) // page_size if total else 0,
         }
+    )
+
+
+@router.post("/convert/sdf-to-pdb", response_model=dict)
+async def convert_sdf_to_pdb(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """上传 SDF 并转换为 ligand PDB 文件。"""
+    ensure_storage_dir()
+
+    file_content = await file.read()
+    file_size = len(file_content)
+    max_size = settings.MAX_FILE_SIZE_MB * 1024 * 1024
+    if file_size > max_size:
+        raise ValidationException(f"文件大小超过限制 ({settings.MAX_FILE_SIZE_MB}MB)")
+
+    lower_name = (file.filename or "").lower()
+    lower_type = (file.content_type or "").lower()
+    if not lower_name.endswith(".sdf") and lower_type not in {
+        "chemical/x-mdl-sdfile",
+        "chemical/x-sdf",
+        "application/sdf",
+        "application/octet-stream",
+    }:
+        raise ValidationException("请上传 SDF 文件")
+
+    pdb_text, converter = _convert_sdf_to_pdb_with_toolkit(file_content)
+    output_filename = _safe_converted_pdb_filename(file.filename)
+    output_content = pdb_text.encode("utf-8")
+    sha256 = hashlib.sha256(output_content).hexdigest()
+    file_id = str(uuid.uuid4())
+    file_path = get_file_path(file_id, output_filename)
+
+    file_record = FileModel(
+        id=file_id,
+        filename=output_filename,
+        content_type="chemical/x-pdb",
+        size_bytes=len(output_content),
+        sha256=sha256,
+        storage_path=str(file_path),
+        source_type=FileSourceType.UPLOAD.value,
+        is_public=False,
+        owner_id=current_user.id,
+        file_meta={
+            "original_name": output_filename,
+            "converted_from": file.filename,
+            "conversion": "sdf-to-pdb",
+            "converter": converter,
+        },
+    )
+    db.add(file_record)
+
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    async with aiofiles.open(file_path, "wb") as converted_file:
+        await converted_file.write(output_content)
+
+    await db.commit()
+    await db.refresh(file_record)
+
+    return success_response(
+        data=FileUploadResponse(
+            id=file_record.id,
+            filename=file_record.filename,
+            size_bytes=file_record.size_bytes,
+            content_type=file_record.content_type,
+            sha256=file_record.sha256,
+        ).model_dump(),
+        message="SDF 已转换为 PDB"
     )
 
 

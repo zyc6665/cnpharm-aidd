@@ -1,6 +1,6 @@
 import Papa from 'papaparse'
 
-interface CsvTaskFileReference {
+export interface CsvTaskFileReference {
   filename?: string
   original_name?: string
   content_type?: string

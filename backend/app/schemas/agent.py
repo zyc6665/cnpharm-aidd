@@ -10,7 +10,9 @@ class AIDDRunCreate(BaseModel):
     """Create an AIDD agent run."""
 
     message: str = Field(..., min_length=1)
-    input_file_id: str
+    input_file_id: Optional[str] = None
+    input_file_ids: list[str] = Field(default_factory=list)
+    input_files: dict[str, str] = Field(default_factory=dict)
     input_type: Optional[str] = None
     requested_outputs: list[str] = Field(default_factory=lambda: ["generated_ligand"])
     params: dict[str, Any] = Field(default_factory=dict)
@@ -48,6 +50,7 @@ class AIDDRunResponse(BaseModel):
     status: str
     input_type: str
     input_file_id: Optional[str] = None
+    input_files: dict[str, str] = Field(default_factory=dict)
     requested_outputs: list[str]
     plan: dict[str, Any]
     summary: Optional[str] = None

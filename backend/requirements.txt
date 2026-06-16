@@ -31,6 +31,9 @@ aiosmtplib==3.0.1
 # File handling
 aiofiles==23.2.1
 
+# Molecule scoring
+rdkit==2024.9.6
+
 # System monitoring
 psutil==5.9.8
 

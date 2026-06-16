@@ -12,7 +12,9 @@ SemanticType = Literal[
     "generated_ligand",
     "ligand_pdb",
     "smiles_csv",
+    "ranking_csv",
     "docking_pose",
+    "docking_report",
     "affinity_report",
     "property_report",
     "optimized_lead",
@@ -40,6 +42,7 @@ class CapabilityOutput:
     source: Literal["output_files", "output_data"]
     match: OutputMatch | None = None
     path: str | None = None
+    required: bool = True
 
 
 @dataclass(frozen=True)
@@ -50,6 +53,7 @@ class ToolCapability:
     inputs: tuple[CapabilityInput, ...]
     outputs: tuple[CapabilityOutput, ...]
     defaults: dict[str, object] = field(default_factory=dict)
+    virtual: bool = False
 
 
 AIDD_TOOL_CAPABILITIES: dict[str, ToolCapability] = {
@@ -93,8 +97,103 @@ AIDD_TOOL_CAPABILITIES: dict[str, ToolCapability] = {
                 "output_files",
                 OutputMatch(extension=".sdf"),
             ),
+            CapabilityOutput(
+                "smiles_csv",
+                "output_files",
+                OutputMatch(
+                    extension=".csv",
+                    filename_contains_any=("smiles", "smile"),
+                ),
+                required=False,
+            ),
         ),
         defaults={"params.n_samples": 8, "params.device": "cuda:0"},
+    ),
+    "builtin-sdf-to-smiles-csv": ToolCapability(
+        tool_slug="builtin-sdf-to-smiles-csv",
+        capability="format_conversion",
+        stage="artifact_conversion",
+        inputs=(
+            CapabilityInput(
+                "generated_ligand",
+                "generated_ligand",
+                accepted_extensions=(".sdf",),
+            ),
+        ),
+        outputs=(
+            CapabilityOutput(
+                "smiles_csv",
+                "output_files",
+                OutputMatch(
+                    extension=".csv",
+                    filename_contains_any=("smiles",),
+                    content_type="text/csv",
+                ),
+            ),
+        ),
+        virtual=True,
+    ),
+    "builtin-sdf-to-pdb": ToolCapability(
+        tool_slug="builtin-sdf-to-pdb",
+        capability="format_conversion",
+        stage="artifact_conversion",
+        inputs=(
+            CapabilityInput(
+                "generated_ligand",
+                "generated_ligand",
+                accepted_extensions=(".sdf",),
+            ),
+        ),
+        outputs=(
+            CapabilityOutput(
+                "ligand_pdb",
+                "output_files",
+                OutputMatch(
+                    extension=".pdb",
+                    filename_contains_any=("ligand",),
+                    content_type="chemical/x-pdb",
+                ),
+            ),
+        ),
+        virtual=True,
+    ),
+    "builtin-vina-docking": ToolCapability(
+        tool_slug="builtin-vina-docking",
+        capability="docking_scoring",
+        stage="docking_scoring",
+        inputs=(
+            CapabilityInput(
+                "protein_pdb",
+                "protein_pdb",
+                accepted_extensions=(".pdb",),
+            ),
+            CapabilityInput(
+                "ligand_pdb",
+                "ligand_pdb",
+                accepted_extensions=(".pdb",),
+            ),
+        ),
+        outputs=(
+            CapabilityOutput(
+                "docking_report",
+                "output_files",
+                OutputMatch(
+                    extension=".json",
+                    filename_contains_any=("vina", "docking"),
+                    content_type="application/json",
+                ),
+            ),
+            CapabilityOutput(
+                "ranking_csv",
+                "output_files",
+                OutputMatch(
+                    extension=".csv",
+                    filename_contains_any=("ranking", "vina"),
+                    content_type="text/csv",
+                ),
+            ),
+        ),
+        virtual=True,
     ),
     "molp-pc-property-prediction": ToolCapability(
         tool_slug="molp-pc-property-prediction",

@@ -1,24 +1,22 @@
 <template>
   <div v-if="hasContent" class="task-output-summary">
     <div v-if="outputDataEntries.length" class="output-data">
-      <a-descriptions :column="1" bordered size="small">
-        <a-descriptions-item
-          v-for="[key, value] in outputDataEntries"
-          :key="key"
-          :label="String(key)"
-        >
-          <template v-if="typeof value === 'object'">
-            <pre class="json-display">{{ JSON.stringify(value, null, 2) }}</pre>
-          </template>
-          <template v-else>
-            {{ value }}
-          </template>
-        </a-descriptions-item>
-      </a-descriptions>
+      <JsonResultRenderer :value="outputData" />
     </div>
 
     <div v-if="outputFiles.length" class="files-section">
-      <h4>{{ t('tasks.outputFiles') }}</h4>
+      <div class="files-header">
+        <h4>{{ t('tasks.outputFiles') }}</h4>
+        <a-button
+          v-if="canShowMolpPcCsvExport"
+          size="small"
+          :loading="exportingMolpPcCsv"
+          @click="exportMolpPcCsv"
+        >
+          <DownloadOutlined />
+          {{ t('tasks.exportMolpPcCsv') }}
+        </a-button>
+      </div>
       <div class="file-list">
         <div
           v-for="file in outputFiles"
@@ -49,12 +47,18 @@
 </template>
 
 <script setup lang="ts">
-  import { computed } from 'vue'
+  import { computed, ref } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { message } from 'ant-design-vue'
   import { DownloadOutlined, FileOutlined } from '@ant-design/icons-vue'
   import type { Task } from '@/types/models'
-  import { triggerProtectedFileDownload } from '@/utils/protected-file-access'
+  import { fetchProtectedFileText, triggerProtectedFileDownload } from '@/utils/protected-file-access'
+  import JsonResultRenderer from './JsonResultRenderer.vue'
+  import {
+    buildMolpPcCsv,
+    canExportMolpPcCsv,
+    selectMolpPcCsvSourceFile
+  } from './molp-pc-export'
 
   interface TaskOutputFile {
     id?: string | number
@@ -73,6 +77,7 @@
   })
 
   const { t } = useI18n()
+  const exportingMolpPcCsv = ref(false)
 
   const outputDataEntries = computed<[string, unknown][]>(() => {
     const outputData = props.task.output_data
@@ -84,9 +89,13 @@
     return Object.entries(outputData as Record<string, unknown>)
   })
 
+  const outputData = computed(() => props.task.output_data)
+
   const outputFiles = computed<TaskOutputFile[]>(() => {
     return props.task.output_files ?? []
   })
+
+  const canShowMolpPcCsvExport = computed(() => canExportMolpPcCsv(outputFiles.value))
 
   const hasContent = computed(() => {
     return outputDataEntries.value.length > 0 || outputFiles.value.length > 0
@@ -117,6 +126,49 @@
       await downloadFile(file)
     }
   }
+
+  function triggerTextDownload(filename: string, content: string) {
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+
+    try {
+      anchor.href = url
+      anchor.download = filename
+      document.body.appendChild(anchor)
+      anchor.click()
+    } finally {
+      anchor.remove()
+      URL.revokeObjectURL(url)
+    }
+  }
+
+  async function exportMolpPcCsv() {
+    const sourceFile = selectMolpPcCsvSourceFile(outputFiles.value)
+    if (!sourceFile?.url) {
+      message.error(t('tasks.exportMolpPcCsvNoSource'))
+      return
+    }
+
+    exportingMolpPcCsv.value = true
+    try {
+      const sourceCsv = await fetchProtectedFileText(sourceFile.url)
+      const molpPcCsv = buildMolpPcCsv(sourceCsv)
+
+      if (!molpPcCsv) {
+        message.error(t('tasks.exportMolpPcCsvNoSmiles'))
+        return
+      }
+
+      triggerTextDownload('molp_pc_smiles.csv', molpPcCsv)
+      message.success(t('tasks.exportMolpPcCsvSuccess'))
+    } catch (cause) {
+      const errorMessage = cause instanceof Error ? cause.message : String(cause)
+      message.error(errorMessage)
+    } finally {
+      exportingMolpPcCsv.value = false
+    }
+  }
 </script>
 
 <style scoped lang="less">
@@ -126,15 +178,6 @@
     display: flex;
     flex-direction: column;
     gap: @spacing-lg;
-  }
-
-  .json-display {
-    margin: 0;
-    padding: @spacing-sm;
-    border-radius: @border-radius-md;
-    background: #f8fafc;
-    color: @text-color-light-primary;
-    overflow-x: auto;
   }
 
   .files-section {
@@ -148,6 +191,13 @@
       font-weight: @font-weight-semibold;
       color: @text-color-light-primary;
     }
+  }
+
+  .files-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: @spacing-md;
   }
 
   .file-list {

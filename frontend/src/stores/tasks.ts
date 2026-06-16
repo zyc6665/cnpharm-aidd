@@ -4,6 +4,8 @@ import type { Task, TaskStatus, TaskCreateParams } from '@/types/models'
 import { getTaskList, getTaskDetail, createTask as apiCreateTask, cancelTask as apiCancelTask, retryTask as apiRetryTask, deleteTask as apiDeleteTask } from '@/api/tasks'
 import { normalizeTaskSummaries, normalizeTaskSummary } from '@/utils/task-normalization'
 
+const FULL_TASK_PAGE_SIZE = 100
+
 export const useTasksStore = defineStore('tasks', () => {
   // State
   const tasks = ref<Task[]>([])
@@ -19,6 +21,39 @@ export const useTasksStore = defineStore('tasks', () => {
       tasks.value = normalizeTaskSummaries(res.data.items)
       total.value = res.data.total
       return res.data
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const fetchAllTasks = async (params?: { tool_id?: string; keyword?: string }) => {
+    loading.value = true
+    try {
+      const firstPage = await getTaskList({
+        ...params,
+        page: 1,
+        page_size: FULL_TASK_PAGE_SIZE
+      })
+      const allItems = [...firstPage.data.items]
+      const pageCount = Math.ceil(firstPage.data.total / FULL_TASK_PAGE_SIZE)
+
+      for (let page = 2; page <= pageCount; page += 1) {
+        const res = await getTaskList({
+          ...params,
+          page,
+          page_size: FULL_TASK_PAGE_SIZE
+        })
+        allItems.push(...res.data.items)
+      }
+
+      tasks.value = normalizeTaskSummaries(allItems)
+      total.value = firstPage.data.total
+      return {
+        ...firstPage.data,
+        items: tasks.value,
+        page: 1,
+        page_size: allItems.length
+      }
     } finally {
       loading.value = false
     }
@@ -124,6 +159,7 @@ export const useTasksStore = defineStore('tasks', () => {
     total,
     // Actions
     fetchTasks,
+    fetchAllTasks,
     fetchTaskDetail,
     createTask,
     cancelTask,

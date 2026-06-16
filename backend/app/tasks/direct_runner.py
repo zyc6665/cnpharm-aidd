@@ -21,6 +21,7 @@ class DirectTaskRunner:
 
     def __init__(self) -> None:
         self._tasks: Dict[str, asyncio.Task] = {}
+        self._shutdown_task_ids: set[str] = set()
 
     def schedule_task(self, task_id: str, tool_version_id: str) -> asyncio.Task:
         """注册并启动后台任务。"""
@@ -47,14 +48,24 @@ class DirectTaskRunner:
         return True
 
     async def shutdown(self) -> None:
-        """应用关闭时取消所有未完成的 direct 任务。"""
-        pending_tasks = [task for task in self._tasks.values() if not task.done()]
-        for background_task in pending_tasks:
+        """应用关闭时中断当前进程内任务，但不把它们误标为用户取消。"""
+        pending_items = [
+            (task_id, task)
+            for task_id, task in self._tasks.items()
+            if not task.done()
+        ]
+        self._shutdown_task_ids = {task_id for task_id, _ in pending_items}
+
+        for _, background_task in pending_items:
             background_task.cancel()
 
-        if pending_tasks:
-            await asyncio.gather(*pending_tasks, return_exceptions=True)
+        if pending_items:
+            await asyncio.gather(
+                *(task for _, task in pending_items),
+                return_exceptions=True,
+            )
 
+        self._shutdown_task_ids.clear()
         self._tasks.clear()
 
     async def _run_task(self, task_id: str, tool_version_id: str) -> None:
@@ -64,8 +75,14 @@ class DirectTaskRunner:
         try:
             await _execute_tool_task_impl(task_id, tool_version_id)
         except asyncio.CancelledError:
-            await self._mark_task_canceled(task_id, "开发模式 direct 任务已取消")
-            logger.info("Direct task %s cancelled", task_id)
+            if task_id in self._shutdown_task_ids:
+                logger.info(
+                    "Direct task %s interrupted by process shutdown; leave state for reconciliation",
+                    task_id,
+                )
+            else:
+                await self._mark_task_canceled(task_id, "开发模式 direct 任务已取消")
+                logger.info("Direct task %s cancelled", task_id)
             raise
         except Exception:
             logger.exception("Direct task %s failed", task_id)

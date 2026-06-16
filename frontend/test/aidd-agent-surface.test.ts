@@ -98,3 +98,22 @@ test('Agent 面板应显示历史聊天并支持切换历史运行', () => {
   assert.equal(enSource.includes('Delete Chat'), true)
   assert.equal(enSource.includes('Delete tasks and artifacts too'), true)
 })
+
+test('Agent 面板应支持普通多文件上传并提交 input_file_ids', () => {
+  const panelSource = readSource('src/components/workflow/AiddAgentPanel.vue')
+  const modelsSource = readSource('src/types/models.d.ts')
+  const zhSource = readSource('src/locales/zh-CN/index.ts')
+
+  assert.equal(modelsSource.includes('input_file_ids?: string[]'), true)
+  assert.equal(modelsSource.includes('input_files?: Record<string, string>'), true)
+  assert.equal(modelsSource.includes('input_files: Record<string, string>'), true)
+  assert.equal(panelSource.includes('agentFileUploads'), true)
+  assert.equal(panelSource.includes(':multiple="true"'), true)
+  assert.equal(panelSource.includes('input_file_ids: uploadedFileIds'), true)
+  assert.equal(panelSource.includes('semanticFileUploads'), false)
+  assert.equal(panelSource.includes('semanticFileOptions'), false)
+  assert.equal(panelSource.includes('input_files: uploadedSemanticFiles'), false)
+  assert.equal(zhSource.includes('自动识别文件类型'), true)
+  assert.equal(zhSource.includes('配体 PDB'), false)
+  assert.equal(zhSource.includes('SMILES CSV'), false)
+})

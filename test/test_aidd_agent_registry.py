@@ -1,0 +1,183 @@
+"""AIDD dynamic tool capability registry tests."""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+import pytest
+import pytest_asyncio
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+BACKEND_ROOT = PROJECT_ROOT / "backend"
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from app.agents.aidd.registry import load_available_tool_summaries  # noqa: E402
+from app.database.base import Base  # noqa: E402
+from app.models import tools as _tools_models  # noqa: F401,E402
+from app.models import users as _users_models  # noqa: F401,E402
+from app.models.tools import Tool, ToolStatus, ToolVersion  # noqa: E402
+from app.models.users import User, UserRole, UserStatus  # noqa: E402
+
+
+@pytest_asyncio.fixture
+async def db_session() -> AsyncSession:
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    session_factory = async_sessionmaker(
+        engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autoflush=False,
+    )
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    async with session_factory() as session:
+        yield session
+
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def user(db_session: AsyncSession) -> User:
+    user_record = User(
+        email="owner@example.com",
+        password_hash="hashed-password",
+        role=UserRole.USER.value,
+        status=UserStatus.ACTIVE.value,
+    )
+    db_session.add(user_record)
+    await db_session.commit()
+    await db_session.refresh(user_record)
+    return user_record
+
+
+async def create_tool_with_agent_config(
+    db_session: AsyncSession,
+    owner: User,
+    *,
+    slug: str,
+    status: str = ToolStatus.PUBLISHED.value,
+    is_public: bool = True,
+    version_active: bool = True,
+    deprecated: bool = False,
+    agent_enabled: bool = True,
+) -> Tool:
+    tool = Tool(
+        owner_id=owner.id,
+        name=slug,
+        slug=slug,
+        status=status,
+        is_public=is_public,
+    )
+    db_session.add(tool)
+    await db_session.flush()
+
+    version = ToolVersion(
+        tool_id=tool.id,
+        version="1.0.0",
+        config={
+            "type": "ssh_job",
+            "agent_capability": {
+                "enabled": agent_enabled,
+                "capability": "property_prediction",
+                "stage": "property_prediction",
+                "inputs": [
+                    {
+                        "semantic_type": "smiles_csv",
+                        "field": "smiles_csv",
+                        "accepted_extensions": [".csv"],
+                    }
+                ],
+                "outputs": [
+                    {
+                        "semantic_type": "property_report",
+                        "source": "output_files",
+                        "match": {"extension": ".csv", "filename_contains_any": ["admet"]},
+                    }
+                ],
+                "defaults": {"device": "cpu"},
+            },
+        },
+        is_active=version_active,
+        deprecated=deprecated,
+    )
+    db_session.add(version)
+    await db_session.flush()
+    tool.current_version_id = version.id
+    await db_session.commit()
+    await db_session.refresh(tool)
+    return tool
+
+
+@pytest.mark.asyncio
+async def test_dynamic_agent_capability_is_discovered_from_tool_config(
+    db_session: AsyncSession,
+    user: User,
+) -> None:
+    await create_tool_with_agent_config(db_session, user, slug="dynamic-admet")
+
+    summaries = await load_available_tool_summaries(db_session)
+    dynamic = next(item for item in summaries if item["tool_slug"] == "dynamic-admet")
+
+    assert dynamic["capability"] == "property_prediction"
+    assert dynamic["inputs"] == ["smiles_csv"]
+    assert dynamic["outputs"] == ["property_report"]
+    assert dynamic["defaults"] == {"device": "cpu"}
+    assert dynamic["virtual"] is False
+
+
+@pytest.mark.asyncio
+async def test_dynamic_agent_capability_syncs_tool_availability(
+    db_session: AsyncSession,
+    user: User,
+) -> None:
+    await create_tool_with_agent_config(db_session, user, slug="available-agent-tool")
+    await create_tool_with_agent_config(
+        db_session,
+        user,
+        slug="draft-agent-tool",
+        status=ToolStatus.DRAFT.value,
+    )
+    await create_tool_with_agent_config(
+        db_session,
+        user,
+        slug="private-agent-tool",
+        is_public=False,
+    )
+    await create_tool_with_agent_config(
+        db_session,
+        user,
+        slug="inactive-version-tool",
+        version_active=False,
+    )
+    await create_tool_with_agent_config(
+        db_session,
+        user,
+        slug="deprecated-version-tool",
+        deprecated=True,
+    )
+    await create_tool_with_agent_config(
+        db_session,
+        user,
+        slug="disabled-agent-config-tool",
+        agent_enabled=False,
+    )
+
+    tool_slugs = {item["tool_slug"] for item in await load_available_tool_summaries(db_session)}
+
+    assert "available-agent-tool" in tool_slugs
+    assert "draft-agent-tool" not in tool_slugs
+    assert "private-agent-tool" not in tool_slugs
+    assert "inactive-version-tool" not in tool_slugs
+    assert "deprecated-version-tool" not in tool_slugs
+    assert "disabled-agent-config-tool" not in tool_slugs

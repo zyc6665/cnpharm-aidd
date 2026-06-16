@@ -36,18 +36,19 @@
         </a-form-item>
 
         <div class="agent-submit-row">
-          <a-form-item class="agent-file-field" :label="t('workflow.agent.fileLabel')">
+          <a-form-item class="agent-file-field" :label="t('workflow.agent.inputFiles')">
             <a-upload
-              v-model:file-list="uploadList"
-              accept=".pdb,.ent,.cif"
+              v-model:file-list="agentFileUploads"
+              accept=".pdb,.ent,.cif,.sdf,.csv"
               :before-upload="beforeUpload"
-              :max-count="1"
+              :multiple="true"
             >
               <a-button>
                 <UploadOutlined />
-                {{ t('tools.selectFile') }}
+                {{ t('workflow.agent.selectInputFiles') }}
               </a-button>
             </a-upload>
+            <p class="agent-file-hint">{{ t('workflow.agent.fileAutoDetectHint') }}</p>
           </a-form-item>
 
           <div class="agent-actions">
@@ -210,7 +211,7 @@
   const userStore = useUserStore()
 
   const runMessage = ref('')
-  const uploadList = ref<UploadFile[]>([])
+  const agentFileUploads = ref<UploadFile[]>([])
   const submitting = ref(false)
   const syncing = ref(false)
   const deletingRunId = ref<string | null>(null)
@@ -367,18 +368,22 @@
       return
     }
 
-    const uploadItem = uploadList.value[0]
-    if (!uploadItem?.originFileObj) {
+    const selectedFiles = agentFileUploads.value.filter(item => Boolean(item.originFileObj))
+    if (selectedFiles.length === 0) {
       message.warning(t('workflow.agent.uploadRequired'))
       return
     }
 
     submitting.value = true
     try {
-      const uploaded = await uploadFile(uploadItem.originFileObj as File)
+      const uploadedFileIds: string[] = []
+      for (const uploadItem of selectedFiles) {
+        const uploaded = await uploadFile(uploadItem.originFileObj as File)
+        uploadedFileIds.push(uploaded.data.id.toString())
+      }
       const run = await agentsStore.createRun({
         message: runMessage.value.trim() || t('workflow.agent.defaultMessage'),
-        input_file_id: uploaded.data.id.toString()
+        input_file_ids: uploadedFileIds
       })
 
       agentsStore.pollRunUntilTerminal(run.id)
@@ -569,6 +574,13 @@
     flex: 1;
   }
 
+  .agent-file-hint {
+    margin: @spacing-xs 0 0;
+    color: @text-color-light-secondary;
+    font-size: @font-size-xs;
+    line-height: @line-height-base;
+  }
+
   .agent-actions {
     display: flex;
     flex-wrap: wrap;
@@ -741,6 +753,10 @@
     .agent-actions,
     .agent-actions :deep(.ant-btn) {
       width: 100%;
+    }
+
+    .semantic-file-grid {
+      grid-template-columns: 1fr;
     }
   }
 </style>

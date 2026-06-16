@@ -10,6 +10,7 @@ import httpx
 import pytest
 import pytest_asyncio
 from fastapi import Header, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -157,3 +158,86 @@ async def test_upload_file_returns_existing_record_when_duplicate_rows_exist(
     assert body["data"]["id"] == newer_file.id
     assert body["data"]["filename"] == "receptor-new.pdb"
     assert body["data"]["sha256"] == sha256
+
+
+@pytest.mark.asyncio
+async def test_convert_uploaded_sdf_to_pdb_creates_pdb_file(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    admin_user: User,
+):
+    """上传 SDF 转 PDB 应生成可直接绑定工具输入的 PDB 文件记录。"""
+    sdf_content = b"""
+  demo
+  platform
+
+  3  2  0  0  0  0            999 V2000
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.2000    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.1000    0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0
+  1  3  1  0
+M  END
+$$$$
+"""
+
+    response = await api_client.post(
+        "/api/v1/files/convert/sdf-to-pdb",
+        headers={"Authorization": "Bearer admin-token"},
+        files={"file": ("ligand.sdf", sdf_content, "chemical/x-mdl-sdfile")},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"]["filename"] == "ligand.pdb"
+    assert body["data"]["content_type"] == "chemical/x-pdb"
+
+    result = await db_session.execute(
+        select(FileModel).where(FileModel.id == body["data"]["id"])
+    )
+    converted_file = result.scalar_one()
+
+    assert converted_file.owner_id == admin_user.id
+    assert converted_file.source_type == FileSourceType.UPLOAD.value
+    assert converted_file.file_meta["converted_from"] == "ligand.sdf"
+    assert converted_file.file_meta["converter"] in {"rdkit", "openbabel"}
+    pdb_text = Path(converted_file.storage_path).read_text(encoding="utf-8")
+    assert "HETATM" in pdb_text
+    assert pdb_text.rstrip().endswith("END")
+
+
+@pytest.mark.asyncio
+async def test_convert_uploaded_sdf_with_blank_title_line(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+):
+    """RDKit 生成的 SDF 可能第一行标题为空，转换时必须保留三行 header。"""
+    sdf_content = b"""
+     RDKit          3D
+
+  3  2  0  0  0  0            999 V2000
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.2000    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.1000    0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0
+  1  3  1  0
+M  END
+$$$$
+"""
+
+    response = await api_client.post(
+        "/api/v1/files/convert/sdf-to-pdb",
+        headers={"Authorization": "Bearer admin-token"},
+        files={"file": ("rdkit.sdf", sdf_content, "chemical/x-mdl-sdfile")},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    result = await db_session.execute(
+        select(FileModel).where(FileModel.id == body["data"]["id"])
+    )
+    converted_file = result.scalar_one()
+    pdb_text = Path(converted_file.storage_path).read_text(encoding="utf-8")
+
+    assert "HETATM" in pdb_text
+    assert converted_file.file_meta["converter"] in {"rdkit", "openbabel"}

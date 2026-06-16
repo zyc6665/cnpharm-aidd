@@ -54,6 +54,7 @@ export default {
     totalItems: 'Total {total} items',
     copySuccess: 'Copied to clipboard',
     required: 'is required',
+    optional: 'Optional',
     createdAt: 'Created At',
     updatedAt: 'Updated At',
     seconds: 'seconds',
@@ -113,23 +114,23 @@ export default {
       }
     },
     foundation: {
-      title: 'Platform Model & Data Foundation',
-      subtitle: 'CPUModel provides an AIDD-oriented workbench, while CPUPDB contributes structural, pocket, and dynamics context to move workflows from execution toward structural insight.',
-      platform: {
-        kicker: 'Platform Model',
-        title: 'CPUModel Workbench',
-        description: 'CPUModel is an AIDD-oriented computational workbench rather than a loose collection of isolated tools.',
+      title: 'Target Discovery & Platform Foundation',
+      subtitle: 'The homepage now connects the research path from pathology-first target discovery, to structural pocket evidence, and then into the CPUModel AIDD workbench.',
+      paiwsit: {
+        kicker: 'Target Discovery Entry',
+        title: 'PAIWSIT',
+        description: 'PAIWSIT is a pathologists-annotated and AI-empowered tumor whole-slide image database that can serve as an entry point from tissue pathology phenotypes into target discovery and mechanism research.',
         points: {
-          groupedTools: 'Organize tools and research paths by themed groups',
-          reusableArtifacts: 'Reuse historical artifacts between tasks to continue computation',
-          chainedWorkflow: 'Chain pocket discovery, screening, docking, and property evaluation'
+          annotatedSlides: 'Provides pathologist-annotated tumor whole-slide image resources',
+          aiHeatmap: 'Supports AI-assisted abnormal-region detection with heatmap visualization',
+          pathologyEvidence: 'Adds pathology phenotype and tissue-level evidence for target discovery'
         },
-        action: 'Open Tool Workbench'
+        action: 'Visit PAIWSIT'
       },
       cpupdb: {
         kicker: 'Pocket Data Foundation',
         title: 'CPUPDB',
-        description: 'CPUPDB is one of the platform’s key structural and pocket data foundations for protein-ligand pockets, multi-conformation states, and interaction analysis.',
+        description: 'It carries pathology and biology clues down into protein structures, pockets, multi-conformation states, and interaction analysis for later screening and design.',
         points: {
           structures: 'Covers protein structures, ligands, pockets, and binding-site information',
           dynamics: 'Brings in dynamics data to observe conformational shifts and cryptic pockets',
@@ -137,6 +138,17 @@ export default {
         },
         action: 'Visit CPUPDB',
         help: 'View Help Docs'
+      },
+      platform: {
+        kicker: 'AIDD Workbench',
+        title: 'CPUModel Workbench',
+        description: 'CPUModel brings target clues, structural data, and computational tools into one workspace to continue screening, docking, property evaluation, and artifact reuse.',
+        points: {
+          groupedTools: 'Organize tools and research paths by themed groups',
+          reusableArtifacts: 'Reuse historical artifacts between tasks to continue computation',
+          chainedWorkflow: 'Chain pocket discovery, screening, docking, and property evaluation'
+        },
+        action: 'Open Tool Workbench'
       }
     },
     tools: {
@@ -165,7 +177,7 @@ export default {
     agent: {
       kicker: 'AIDD Agent',
       title: 'Agent Mode',
-      subtitle: 'Enter a research goal and upload a structure file. The platform selects tools and orchestrates tasks from the uploaded file and available capabilities.',
+      subtitle: 'Enter a research goal and upload one or more files. The platform selects tools and orchestrates tasks from the file contents, goal, and available capabilities.',
       autoRouting: 'Auto Orchestration',
       messageLabel: 'Research Goal',
       messagePlaceholder: 'Example: describe the research goal and focus, and the agent will decide which tools to run from the uploaded file',
@@ -173,6 +185,9 @@ export default {
       proteinInput: 'Protein PDB',
       pocketInput: 'Pocket PDB',
       fileLabel: 'Uploaded File',
+      inputFiles: 'Uploaded Files',
+      selectInputFiles: 'Select Files',
+      fileAutoDetectHint: 'File types are detected automatically. Supports PDB, CIF, SDF, and CSV inputs.',
       generationCount: 'Generation Count',
       run: 'Run Agent',
       sync: 'Sync Status',
@@ -187,7 +202,7 @@ export default {
       empty: 'Steps will appear here after a run is created.',
       noRun: 'Waiting for an agent run',
       viewTask: 'View Task',
-      uploadRequired: 'Upload a PDB file first',
+      uploadRequired: 'Upload at least one input file first',
       loginRequired: 'Please log in before running the agent',
       defaultMessage: 'Automatically orchestrate available tools from the uploaded file and goal',
       created: 'Agent run created',
@@ -487,6 +502,17 @@ export default {
     // Tool detail
     free: 'Free',
     introduction: 'Introduction',
+    viewIntroduction: 'Introduction',
+    documentationMarkdown: 'Introduction Markdown',
+    documentationMarkdownHint: 'Supports Markdown. This content is saved with the current tool version, and changes require a new version.',
+    modelOverview: 'Model Overview',
+    parameterDocs: 'Parameters',
+    outputDocs: 'Output Files',
+    outputPatterns: 'Output Path Patterns',
+    defaultValue: 'Default',
+    fieldType: 'Type',
+    valueRange: 'Range',
+    noDocumentation: 'No detailed introduction is available yet.',
     features: 'Features',
     howToUse: 'How to Use',
     step: 'Step',
@@ -574,6 +600,9 @@ export default {
     csvEmpty: 'CSV result is empty',
     csvEmptyDesc: 'No data rows are available in this result file. Check whether the tool produced the expected output.',
     csvFileMissing: 'Missing CSV file download URL',
+    jsonResultFields: '{count} fields',
+    jsonResultItems: '{count} items',
+    jsonResultRaw: 'Raw JSON',
     visualizationHint: 'Input pocket files are overlaid with generated molecules first for quick inspection of binding poses.',
     visualizationFiles: 'visualization files',
     visualizationSelectableHint: 'Multiple 3D outputs were detected. The input structure stays fixed while you inspect one generated molecule or pose at a time.',
@@ -591,6 +620,18 @@ export default {
     delete: 'Delete',
     download: 'Download',
     downloadAll: 'Download All',
+    exportMolpPcCsv: 'Export MolP-Pc CSV',
+    exportMolpPcCsvSuccess: 'MolP-Pc CSV exported',
+    exportMolpPcCsvNoSource: 'No CSV artifact is available for export',
+    exportMolpPcCsvNoSmiles: 'The CSV artifact does not contain a SMILES column',
+    allTaskTypes: 'All Types',
+    agentTasks: 'Agent Tasks',
+    standaloneToolTasks: 'Standalone Tool Tasks',
+    agentRun: 'Agent Session',
+    agentRunSteps: 'Session Tool Tasks',
+    agentRunProgress: '{completed}/{total} steps completed, {failed} failed',
+    agentViewTask: 'View Task',
+    agentNoLinkedTask: 'No linked task',
     viewDetail: 'View Detail',
     viewTool: 'View Tool',
     goToTools: 'Create Task',

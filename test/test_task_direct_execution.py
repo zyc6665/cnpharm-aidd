@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -28,10 +29,14 @@ from app.models import files as _files_models  # noqa: F401
 from app.models import statistics as _statistics_models  # noqa: F401
 from app.models import tasks as _task_models  # noqa: F401
 from app.models import users as _user_models  # noqa: F401
+from app.models.tasks import TaskLog, TaskOutput
 from app.models.statistics import ToolStatistics
 from app.models.tasks import Task, TaskInput, TaskStatus
 from app.models.tools import Tool, ToolStatus, ToolVersion
 from app.models.users import User, UserRole, UserStatus
+from app.tasks.direct_recovery import reconcile_orphaned_direct_tasks
+from app.tasks.direct_runner import DirectTaskRunner
+from app.tasks.executor import SSHJobExecutor
 from app.tasks.queue_manager import TaskQueueManager
 from app.api.v1 import tasks as tasks_api
 
@@ -381,3 +386,118 @@ async def test_cancel_task_cancels_registered_direct_task(
     refreshed_task = await db_session.get(Task, task.id)
     assert refreshed_task is not None
     assert refreshed_task.status == TaskStatus.CANCELED.value
+
+
+@pytest.mark.asyncio
+async def test_direct_runner_shutdown_does_not_mark_task_canceled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """进程关闭引发的 direct 中断不应误记为用户取消。"""
+    runner = DirectTaskRunner()
+    canceled_task_ids: list[str] = []
+
+    async def fake_impl(task_id: str, tool_version_id: str) -> None:
+        await asyncio.sleep(10)
+
+    async def fake_mark(task_id: str, message: str) -> None:
+        canceled_task_ids.append(task_id)
+
+    monkeypatch.setattr("app.worker.tasks._execute_tool_task_impl", fake_impl)
+    monkeypatch.setattr(runner, "_mark_task_canceled", fake_mark)
+
+    runner.schedule_task("task-shutdown", "tool-version")
+    await asyncio.sleep(0)
+    await runner.shutdown()
+
+    assert canceled_task_ids == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("initial_status", [TaskStatus.RUNNING.value, TaskStatus.CANCELED.value])
+async def test_reconcile_orphaned_direct_tasks_recovers_remote_success_result(
+    db_session: AsyncSession,
+    admin_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+    initial_status: str,
+) -> None:
+    """热重载后可从远端 output 目录补回 ssh_job 成功结果。"""
+    tool = Tool(
+        owner_id=admin_user.id,
+        name="Recover SSH Tool",
+        slug=f"recover-ssh-tool-{initial_status.lower()}",
+        description="Recoverable ssh_job tool",
+        category="generation",
+        status=ToolStatus.PUBLISHED.value,
+        is_public=True,
+    )
+    db_session.add(tool)
+    await db_session.flush()
+
+    version = ToolVersion(
+        tool_id=tool.id,
+        version="1.0.0",
+        config={
+            "type": "ssh_job",
+            "host": "10.202.2.228",
+            "username": "zhouyc",
+            "auth_type": "password",
+            "password_ref": "ssh_4090_zhouyc",
+            "runner_mode": "docker_exec",
+            "remote_base_dir": "/srv/platform-jobs",
+            "entrypoint": "/app/platform_run.sh",
+            "container_name": "kaiwu",
+        },
+        is_active=True,
+    )
+    db_session.add(version)
+    await db_session.flush()
+
+    task = Task(
+        user_id=admin_user.id,
+        tool_id=tool.id,
+        tool_version_id=version.id,
+        status=initial_status,
+        priority="normal",
+        progress=0.0,
+        progress_message="开发模式 direct 任务已取消" if initial_status == TaskStatus.CANCELED.value else "任务开始执行",
+    )
+    db_session.add(task)
+    await db_session.flush()
+    db_session.add(TaskInput(task_id=task.id, params={"foo": "bar"}, file_ids=[]))
+    await db_session.commit()
+
+    async def fake_recover(self) -> dict:
+        return {
+            "success": True,
+            "result": {
+                "success": True,
+                "message": "recovered",
+                "metrics": {"duration_sec": 12.7},
+                "output_file_ids": ["file-1", "file-2"],
+            },
+            "output_file_ids": ["file-1", "file-2"],
+            "stdout": "",
+            "stderr": "",
+        }
+
+    monkeypatch.setattr(SSHJobExecutor, "recover_remote_result", fake_recover)
+
+    recovered = await reconcile_orphaned_direct_tasks(db_session)
+    assert recovered == 1
+
+    refreshed_task = await db_session.get(Task, task.id)
+    assert refreshed_task is not None
+    assert refreshed_task.status == TaskStatus.SUCCESS.value
+    assert refreshed_task.progress == 1.0
+    assert refreshed_task.progress_message == "任务执行成功（远端结果自动补回）"
+    assert refreshed_task.execution_time_sec == 12
+
+    result = await db_session.execute(select(TaskOutput).where(TaskOutput.task_id == task.id))
+    task_output = result.scalar_one_or_none()
+    assert task_output is not None
+    assert task_output.output_type == "visualization"
+    assert task_output.file_ids == ["file-1", "file-2"]
+
+    log_result = await db_session.execute(select(TaskLog).where(TaskLog.task_id == task.id))
+    logs = log_result.scalars().all()
+    assert any(log.message == "从远端 output 目录自动补回任务结果" for log in logs)

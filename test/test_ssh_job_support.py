@@ -123,3 +123,41 @@ def test_bootstrap_process_env_loads_secret_refs_from_dotenv(monkeypatch, tmp_pa
     bootstrap_process_env(str(env_file))
 
     assert os.environ.get("SSH_PASSWORD_REF_SSH_4090_ZHOUYC") == "super-secret"
+
+
+def test_ssh_job_executor_zips_bulk_sdf_directory_outputs(tmp_path) -> None:
+    """大量单分子 SDF 应打包成 ZIP，避免任务输出列表过长。"""
+    output_root = tmp_path / "download" / "output"
+    sdf_dir = output_root / "artifacts" / "SDF"
+    sdf_dir.mkdir(parents=True)
+    for index in range(12):
+        (sdf_dir / f"{index}.sdf").write_text(f"mol-{index}\n", encoding="utf-8")
+    (output_root / "artifacts" / "metadata.csv").write_text("index,sdf_file\n", encoding="utf-8")
+
+    executor = SSHJobExecutor(
+        _build_task("task-bulk-sdf"),
+        _build_tool_version(
+            {
+                "type": "ssh_job",
+                "host": "gpu-node-01.internal",
+                "username": "runner",
+                "runner_mode": "shell",
+                "remote_base_dir": "/srv/platform-jobs",
+                "entrypoint": "/opt/models/platform_run.sh",
+                "output_globs": ["output/artifacts/**/*"],
+            }
+        ),
+    )
+
+    matched_files = executor._prepare_output_files_for_collection(
+        str(tmp_path / "download"),
+        str(output_root),
+    )
+    relative_paths = {
+        Path(file_path).relative_to(output_root).as_posix()
+        for file_path in matched_files
+    }
+
+    assert "artifacts/SDF.zip" in relative_paths
+    assert "artifacts/metadata.csv" in relative_paths
+    assert not any(path.startswith("artifacts/SDF/") for path in relative_paths)

@@ -48,6 +48,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
     curl \
+    openbabel \
     openssh-client \
     sshpass \
     vim \
@@ -84,6 +85,7 @@ WORKDIR /app
 # 仅安装运行时依赖（不需要编译工具）
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    openbabel \
     openssh-client \
     sshpass \
     && rm -rf /var/lib/apt/lists/*

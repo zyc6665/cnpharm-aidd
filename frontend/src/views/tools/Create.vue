@@ -461,6 +461,140 @@
               </template>
             </a-form-item>
 
+            <a-form-item :label="t('tools.documentationMarkdown')" name="documentation_markdown">
+              <a-textarea
+                v-model:value="formState.documentation_markdown"
+                class="tool-documentation-editor"
+                placeholder="## 模型介绍&#10;&#10;## 参数说明&#10;&#10;## 输出文件"
+                :rows="10"
+              />
+              <template #extra>
+                <span class="form-extra">{{ t('tools.documentationMarkdownHint') }}</span>
+              </template>
+            </a-form-item>
+
+            <!-- Agent 编排能力 -->
+            <a-divider orientation="left">Agent 编排能力</a-divider>
+
+            <a-form-item label="Agent 可用" name="agent_capability_enabled">
+              <a-switch
+                v-model:checked="formState.agent_capability_enabled"
+                @change="handleAgentCapabilityToggle"
+              />
+              <span class="switch-label">{{ formState.agent_capability_enabled ? '开启' : '关闭' }}</span>
+              <template #extra>
+                <span class="form-extra">开启后，此工具会进入 AIDD Agent 动态工具注册表。</span>
+              </template>
+            </a-form-item>
+
+            <template v-if="formState.agent_capability_enabled">
+              <a-row :gutter="24">
+                <a-col :span="12">
+                  <a-form-item label="Agent 能力" name="agent_capability">
+                    <a-select v-model:value="formState.agent_capability">
+                      <a-select-option value="pocket_prediction">口袋预测 pocket_prediction</a-select-option>
+                      <a-select-option value="molecule_generation">分子生成 molecule_generation</a-select-option>
+                      <a-select-option value="format_conversion">格式转换 format_conversion</a-select-option>
+                      <a-select-option value="docking">分子对接 docking</a-select-option>
+                      <a-select-option value="affinity_prediction">亲和力预测 affinity_prediction</a-select-option>
+                      <a-select-option value="property_prediction">性质预测 property_prediction</a-select-option>
+                      <a-select-option value="general_tool">通用工具 general_tool</a-select-option>
+                    </a-select>
+                  </a-form-item>
+                </a-col>
+                <a-col :span="12">
+                  <a-form-item label="Agent 阶段" name="agent_stage">
+                    <a-input
+                      v-model:value="formState.agent_stage"
+                      placeholder="默认与能力一致，例如 molecule_generation"
+                    />
+                  </a-form-item>
+                </a-col>
+              </a-row>
+
+              <div class="agent-capability-block">
+                <div class="agent-capability-header">
+                  <span>输入语义映射</span>
+                  <a-button size="small" @click="addAgentInput">
+                    <PlusOutlined />
+                    添加输入
+                  </a-button>
+                </div>
+                <a-row
+                  v-for="(input, index) in formState.agent_inputs"
+                  :key="`agent-input-${index}`"
+                  :gutter="12"
+                  class="agent-capability-row"
+                >
+                  <a-col :span="7">
+                    <a-input v-model:value="input.semantic_type" placeholder="semantic_type，如 pocket_pdb" />
+                  </a-col>
+                  <a-col :span="7">
+                    <a-input v-model:value="input.field" placeholder="工具字段，如 protein_pdb" />
+                  </a-col>
+                  <a-col :span="7">
+                    <a-input v-model:value="input.accepted_extensions" placeholder="扩展名，如 .pdb,.sdf" />
+                  </a-col>
+                  <a-col :span="3">
+                    <a-button block danger @click="removeAgentInput(index)">
+                      <DeleteOutlined />
+                    </a-button>
+                  </a-col>
+                </a-row>
+              </div>
+
+              <div class="agent-capability-block">
+                <div class="agent-capability-header">
+                  <span>输出语义映射</span>
+                  <a-button size="small" @click="addAgentOutput">
+                    <PlusOutlined />
+                    添加输出
+                  </a-button>
+                </div>
+                <a-row
+                  v-for="(output, index) in formState.agent_outputs"
+                  :key="`agent-output-${index}`"
+                  :gutter="12"
+                  class="agent-capability-row"
+                >
+                  <a-col :span="5">
+                    <a-input v-model:value="output.semantic_type" placeholder="semantic_type，如 generated_ligand" />
+                  </a-col>
+                  <a-col :span="4">
+                    <a-select v-model:value="output.source">
+                      <a-select-option value="output_files">文件</a-select-option>
+                      <a-select-option value="output_data">结果数据</a-select-option>
+                    </a-select>
+                  </a-col>
+                  <a-col :span="4">
+                    <a-input v-model:value="output.path" placeholder="数据路径，可选" />
+                  </a-col>
+                  <a-col :span="4">
+                    <a-input v-model:value="output.match_extension" placeholder="扩展名，如 .sdf" />
+                  </a-col>
+                  <a-col :span="4">
+                    <a-input v-model:value="output.filename_contains_any" placeholder="文件名关键词，逗号分隔" />
+                  </a-col>
+                  <a-col :span="2">
+                    <a-switch v-model:checked="output.required" />
+                  </a-col>
+                  <a-col :span="1">
+                    <a-button danger @click="removeAgentOutput(index)">
+                      <DeleteOutlined />
+                    </a-button>
+                  </a-col>
+                </a-row>
+              </div>
+
+              <a-form-item label="Agent 默认参数 JSON" name="agent_defaults">
+                <a-textarea
+                  v-model:value="agentDefaultsText"
+                  placeholder='{"params.n_samples": 8, "params.device": "cuda:0"}'
+                  :rows="3"
+                />
+              </a-form-item>
+            </template>
+
             <!-- 提交按钮 -->
             <a-form-item class="form-actions">
               <a-space size="middle">
@@ -488,6 +622,8 @@
   import type { FormInstance, Rule } from 'ant-design-vue/es/form'
   import {
     ArrowLeftOutlined,
+    DeleteOutlined,
+    PlusOutlined,
     SaveOutlined
   } from '@ant-design/icons-vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
@@ -511,6 +647,21 @@
   // 判断是编辑还是创建
   const isEdit = computed(() => route.name === 'AdminToolEdit' || route.name === 'ToolEdit')
   const toolId = computed(() => route.params.id as string)
+
+  interface AgentCapabilityInputForm {
+    semantic_type: string
+    field: string
+    accepted_extensions: string
+  }
+
+  interface AgentCapabilityOutputForm {
+    semantic_type: string
+    source: 'output_files' | 'output_data'
+    path: string
+    match_extension: string
+    filename_contains_any: string
+    required: boolean
+  }
 
   // 扩展的表单状态接口
   interface ExtendedFormState extends ToolCreateParams {
@@ -552,6 +703,13 @@
     // 参数定义
     input_schema: string  // JSON字符串
     output_schema: string  // JSON字符串
+    documentation_markdown: string
+    // Agent 编排能力
+    agent_capability_enabled: boolean
+    agent_capability: string
+    agent_stage: string
+    agent_inputs: AgentCapabilityInputForm[]
+    agent_outputs: AgentCapabilityOutputForm[]
   }
 
   // 表单状态
@@ -603,7 +761,14 @@
     ssh_strict_host_key_checking: true,
     // 参数定义
     input_schema: '{}',
-    output_schema: '{}'
+    output_schema: '{}',
+    documentation_markdown: '',
+    // Agent 编排能力
+    agent_capability_enabled: false,
+    agent_capability: 'molecule_generation',
+    agent_stage: 'molecule_generation',
+    agent_inputs: [],
+    agent_outputs: []
   })
 
   // 辅助变量：用于JSON格式的文本输入
@@ -611,6 +776,64 @@
   const dockerEnvText = ref('{}')
   const sshEnvText = ref('{}')
   const sshOutputGlobsText = ref('["output/result.json", "output/logs/run.log", "output/artifacts/**/*"]')
+  const agentDefaultsText = ref('{}')
+
+  const splitCommaList = (value: string): string[] => {
+    return value
+      .split(',')
+      .map(item => item.trim())
+      .filter(Boolean)
+  }
+
+  const joinStringList = (value: unknown): string => {
+    return Array.isArray(value) ? value.map(item => String(item)).join(',') : ''
+  }
+
+  const createAgentInput = (): AgentCapabilityInputForm => ({
+    semantic_type: '',
+    field: '',
+    accepted_extensions: ''
+  })
+
+  const createAgentOutput = (): AgentCapabilityOutputForm => ({
+    semantic_type: '',
+    source: 'output_files',
+    path: '',
+    match_extension: '',
+    filename_contains_any: '',
+    required: true
+  })
+
+  const addAgentInput = () => {
+    formState.agent_inputs.push(createAgentInput())
+  }
+
+  const removeAgentInput = (index: number) => {
+    formState.agent_inputs.splice(index, 1)
+  }
+
+  const addAgentOutput = () => {
+    formState.agent_outputs.push(createAgentOutput())
+  }
+
+  const removeAgentOutput = (index: number) => {
+    formState.agent_outputs.splice(index, 1)
+  }
+
+  const handleAgentCapabilityToggle = (checked: boolean | string | number) => {
+    if (!checked) {
+      return
+    }
+    if (formState.agent_inputs.length === 0) {
+      addAgentInput()
+    }
+    if (formState.agent_outputs.length === 0) {
+      addAgentOutput()
+    }
+    if (!formState.agent_stage.trim()) {
+      formState.agent_stage = formState.agent_capability
+    }
+  }
 
   const formatJsonText = (value: unknown, fallback: string) => {
     if (value == null) {
@@ -622,6 +845,10 @@
     } catch {
       return fallback
     }
+  }
+
+  const isRecord = (value: unknown): value is Record<string, unknown> => {
+    return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
   }
 
   const normalizeForComparison = (value: unknown): unknown => {
@@ -649,10 +876,50 @@
     }
   }
 
+  const parseAgentCapabilityIntoForm = (config: Record<string, unknown>) => {
+    const rawCapability = config.agent_capability
+    if (!isRecord(rawCapability)) {
+      formState.agent_capability_enabled = false
+      formState.agent_inputs = []
+      formState.agent_outputs = []
+      agentDefaultsText.value = '{}'
+      return
+    }
+
+    formState.agent_capability_enabled = rawCapability.enabled === true
+    formState.agent_capability = String(rawCapability.capability || 'molecule_generation')
+    formState.agent_stage = String(rawCapability.stage || rawCapability.capability || 'molecule_generation')
+    agentDefaultsText.value = formatJsonText(rawCapability.defaults || {}, '{}')
+
+    formState.agent_inputs = Array.isArray(rawCapability.inputs)
+      ? rawCapability.inputs.filter(isRecord).map(item => ({
+        semantic_type: String(item.semantic_type || ''),
+        field: String(item.field || item.semantic_type || ''),
+        accepted_extensions: joinStringList(item.accepted_extensions)
+      }))
+      : []
+
+    formState.agent_outputs = Array.isArray(rawCapability.outputs)
+      ? rawCapability.outputs.filter(isRecord).map(item => {
+        const match = isRecord(item.match) ? item.match : {}
+        return {
+          semantic_type: String(item.semantic_type || ''),
+          source: item.source === 'output_data' ? 'output_data' : 'output_files',
+          path: String(item.path || ''),
+          match_extension: String(match.extension || ''),
+          filename_contains_any: joinStringList(match.filename_contains_any),
+          required: item.required !== false
+        }
+      })
+      : []
+  }
+
   const parseToolConfigIntoForm = (config?: Record<string, unknown>) => {
     if (!config || typeof config.type !== 'string') {
       return
     }
+
+    parseAgentCapabilityIntoForm(config)
 
     if (config.type === 'remote_api') {
       formState.tool_type = 'remote_api'
@@ -701,6 +968,10 @@
 
     formState.input_schema = formatJsonText(config.input_schema || {}, '{}')
     formState.output_schema = formatJsonText(config.output_schema || {}, '{}')
+    formState.documentation_markdown =
+      typeof config.documentation_markdown === 'string'
+        ? config.documentation_markdown
+        : ''
   }
 
   // 表单验证规则
@@ -778,6 +1049,7 @@
       let sshOutputGlobs: string[] = []
       let inputSchema: Record<string, unknown> = {}
       let outputSchema: Record<string, unknown> = {}
+      let agentDefaults: Record<string, unknown> = {}
 
       try {
         if (formState.tool_type === 'remote_api' && apiHeadersText.value.trim()) {
@@ -801,10 +1073,26 @@
         if (formState.output_schema.trim()) {
           outputSchema = JSON.parse(formState.output_schema)
         }
+        if (formState.agent_capability_enabled && agentDefaultsText.value.trim()) {
+          agentDefaults = JSON.parse(agentDefaultsText.value)
+          if (!isRecord(agentDefaults)) {
+            throw new Error('agent defaults must be an object')
+          }
+        }
       } catch (e) {
         message.error('JSON 格式错误，请检查配置')
         submitting.value = false
         return
+      }
+
+      if (formState.agent_capability_enabled) {
+        const validInputCount = formState.agent_inputs.filter(input => input.semantic_type.trim()).length
+        const validOutputCount = formState.agent_outputs.filter(output => output.semantic_type.trim()).length
+        if (!formState.agent_capability.trim() || validInputCount === 0 || validOutputCount === 0) {
+          message.error('Agent 编排能力需要填写能力、至少一个输入和至少一个输出')
+          submitting.value = false
+          return
+        }
       }
 
       // 构建 config 对象
@@ -814,6 +1102,46 @@
         gpu_required: formState.gpu_required,
         input_schema: inputSchema,
         output_schema: outputSchema
+      }
+
+      if (formState.documentation_markdown.trim()) {
+        config.documentation_markdown = formState.documentation_markdown.trim()
+      }
+
+      if (formState.agent_capability_enabled) {
+        config.agent_capability = {
+          enabled: true,
+          capability: formState.agent_capability.trim(),
+          stage: formState.agent_stage.trim() || formState.agent_capability.trim(),
+          inputs: formState.agent_inputs
+            .filter(input => input.semantic_type.trim())
+            .map(input => ({
+              semantic_type: input.semantic_type.trim(),
+              field: input.field.trim() || input.semantic_type.trim(),
+              accepted_extensions: splitCommaList(input.accepted_extensions)
+            })),
+          outputs: formState.agent_outputs
+            .filter(output => output.semantic_type.trim())
+            .map(output => {
+              const match: Record<string, unknown> = {}
+              if (output.match_extension.trim()) {
+                match.extension = output.match_extension.trim()
+              }
+              const filenameContainsAny = splitCommaList(output.filename_contains_any)
+              if (filenameContainsAny.length > 0) {
+                match.filename_contains_any = filenameContainsAny
+              }
+
+              return {
+                semantic_type: output.semantic_type.trim(),
+                source: output.source,
+                path: output.path.trim() || undefined,
+                required: output.required,
+                match: Object.keys(match).length > 0 ? match : undefined
+              }
+            }),
+          defaults: agentDefaults
+        }
       }
 
       if (formState.gpu_memory_mb !== undefined) {
@@ -982,6 +1310,27 @@
   .switch-label {
     margin-left: @spacing-sm;
     color: @text-color-light-secondary;
+  }
+
+  .agent-capability-block {
+    margin-bottom: @spacing-lg;
+    padding: @spacing-md;
+    border: 1px solid @border-color-light;
+    border-radius: @border-radius-base;
+    background: @bg-color-light;
+  }
+
+  .agent-capability-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: @spacing-sm;
+    color: @text-color-light-primary;
+    font-weight: @font-weight-medium;
+  }
+
+  .agent-capability-row + .agent-capability-row {
+    margin-top: @spacing-sm;
   }
 
   .form-actions {

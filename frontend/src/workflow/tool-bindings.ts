@@ -4,6 +4,7 @@ export interface WorkflowToolFieldBinding {
   readonly semanticType: WorkflowArtifactSemanticType
   readonly field: string
   readonly required?: boolean
+  readonly preferredArtifactNameIncludes?: readonly string[]
 }
 
 type WorkflowToolOutputFileMatch =
@@ -70,7 +71,8 @@ export const WORKFLOW_TOOL_BINDINGS = {
       {
         semanticType: 'pocket_structure',
         field: 'input_files.pocket_pdb',
-        required: true
+        required: true,
+        preferredArtifactNameIncludes: ['protein_pocket_residues', 'pocket0']
       }
     ],
     outputExtractors: [

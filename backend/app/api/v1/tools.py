@@ -1000,11 +1000,18 @@ async def update_tool(
 
     update_data.pop("category", None)
 
+    if "slug" in update_data and update_data["slug"] != tool.slug:
+        slug_conflict = await db.execute(
+            select(Tool.id).where(Tool.slug == update_data["slug"], Tool.id != tool.id)
+        )
+        if slug_conflict.scalar_one_or_none():
+            raise ConflictException("工具标识已存在")
+
     # 更新字段
     for field, value in update_data.items():
         setattr(tool, field, value)
 
-    await db.commit()
+    await commit_or_raise_conflict(db, "工具标识已存在")
     tool_response = await load_tool_for_response(db, tool.id)
 
     return success_response(data=serialize_tool(tool_response), message="工具更新成功")
