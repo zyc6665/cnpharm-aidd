@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Node / frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Local runtime data
+backend/storage/*.db
+backend/storage/*.db-*
+backend/storage/*.backup*.db
+backend/storage/*.db.backup.*
+backend/storage/uploads/
+backend/storage/direct-task-runs/
+backend/storage/recovery-downloads/
+/storage/
+/logs/
+
+# Local environment
+.env
+*.local
+
+# OS / editor
+.DS_Store
+/.idea/
+/.vscode/
+
+# Local scratch files
+*.log
