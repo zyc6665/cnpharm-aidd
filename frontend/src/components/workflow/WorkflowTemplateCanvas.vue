@@ -37,8 +37,10 @@
           :subtitle="node.descriptionKey ? formatKey(node.descriptionKey) : undefined"
           :status="resolvedNodeStatuses[node.id] ?? 'idle'"
           :selected="node.id === activeNodeId"
+          :deletable="node.type !== 'input'"
           @select-node="$emit('select-node', $event)"
           @move-node="$emit('move-node', $event.nodeId, $event.position)"
+          @delete-node="$emit('delete-node', $event)"
         />
       </div>
     </div>
@@ -63,9 +65,11 @@
     nodePositions?: Record<string, { x: number; y: number }>
   }>()
 
-  defineEmits<{
+  const emit = defineEmits<{
     (event: 'select-node', nodeId: string): void
     (event: 'move-node', nodeId: string, position: { x: number; y: number }): void
+    (event: 'add-tool-node', toolSlug: string): void
+    (event: 'delete-node', nodeId: string): void
   }>()
 
   const templateName = computed(() => formatKey(props.template.nameKey))
@@ -128,6 +132,7 @@
       .replace(/\s+/g, ' ')
       .trim()
   }
+
 </script>
 
 <style scoped lang="less">

@@ -12,6 +12,13 @@ export interface WorkflowNodeArtifactRecommendation extends WorkflowNodeInputReq
   artifact: ArtifactFile | null
 }
 
+export interface WorkflowEdgeSuggestion {
+  sourceNodeId: string
+  sourceNodeTitle: string
+  targetNodeId: string
+  semanticType: WorkflowArtifactSemanticType
+}
+
 export function resolveNodeInputRequirements(input: {
   template: WorkflowTemplate
   nodeId: string
@@ -52,4 +59,43 @@ function findLatestArtifactForTask(artifacts: ArtifactFile[], taskId: string): A
   return artifacts
     .filter(artifact => artifact.task_id === taskId)
     .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at))[0] ?? null
+}
+
+export function suggestWorkflowEdgesForNode(input: {
+  template: WorkflowTemplate
+  nodeId: string
+}): WorkflowEdgeSuggestion[] {
+  const targetNode = input.template.nodes.find(node => node.id === input.nodeId)
+  if (!targetNode?.requiredInputTypes?.length) {
+    return []
+  }
+
+  const existingEdgeKeys = new Set(
+    input.template.edges
+      .filter(edge => edge.target === input.nodeId && edge.artifactType)
+      .map(edge => `${edge.source}:${edge.artifactType}`)
+  )
+
+  return targetNode.requiredInputTypes.flatMap(semanticType => {
+    return input.template.nodes
+      .filter(node => node.id !== input.nodeId)
+      .filter(node => node.producedOutputTypes?.includes(semanticType))
+      .filter(node => !existingEdgeKeys.has(`${node.id}:${semanticType}`))
+      .map(node => ({
+        sourceNodeId: node.id,
+        sourceNodeTitle: formatKey(node.titleKey),
+        targetNodeId: input.nodeId,
+        semanticType
+      }))
+  })
+}
+
+function formatKey(key: string): string {
+  const segments = key.split('.')
+  const lastSegment = segments[segments.length - 1] ?? key
+  return lastSegment
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/[-_]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-import { resolveReadyToolNodeIds } from '../src/workflow/template-runner.ts'
+import { resolveReadyToolNodeIds, resolveWorkflowExecutionOrder } from '../src/workflow/template-runner.ts'
 import type { WorkflowTemplate } from '../src/workflow/template-types.ts'
 
 const template: WorkflowTemplate = {
@@ -44,6 +44,49 @@ test('resolveReadyToolNodeIds returns only tool nodes currently marked ready', (
   )
 })
 
+test('resolveWorkflowExecutionOrder sorts ready tool nodes by graph dependencies', () => {
+  const dependentTemplate: WorkflowTemplate = {
+    ...template,
+    nodes: [
+      { id: 'input', type: 'input', titleKey: 'input', position: { x: 0, y: 0 } },
+      {
+        id: 'third',
+        type: 'tool',
+        titleKey: 'third',
+        position: { x: 320, y: 0 },
+        toolSlugs: ['tool-c']
+      },
+      {
+        id: 'first',
+        type: 'tool',
+        titleKey: 'first',
+        position: { x: 120, y: 0 },
+        toolSlugs: ['tool-a']
+      },
+      {
+        id: 'second',
+        type: 'tool',
+        titleKey: 'second',
+        position: { x: 220, y: 0 },
+        toolSlugs: ['tool-b']
+      }
+    ],
+    edges: [
+      { id: 'edge-input-first', source: 'input', target: 'first' },
+      { id: 'edge-first-second', source: 'first', target: 'second' },
+      { id: 'edge-second-third', source: 'second', target: 'third' }
+    ]
+  }
+
+  assert.deepEqual(
+    resolveWorkflowExecutionOrder({
+      template: dependentTemplate,
+      candidateNodeIds: ['third', 'first', 'second']
+    }),
+    ['first', 'second', 'third']
+  )
+})
+
 test('workflow page exposes save, load and run-ready controls', () => {
   const source = readFileSync(resolve('src/views/workflow/index.vue'), 'utf8')
 
@@ -51,8 +94,33 @@ test('workflow page exposes save, load and run-ready controls', () => {
     'handleSaveWorkflow',
     'handleLoadWorkflow',
     'handleRunReadyNodes',
+    'runWorkflowUntilBlocked',
+    'pollNodeTaskUntilTerminal',
     'resolveReadyToolNodeIds',
+    'resolveWorkflowExecutionOrder',
+    'prepareWorkflowNodeTaskPayload',
+    'buildTaskSubmissionPayload',
+    'flattenToolInputSchema',
+    'getToolDetail',
     'workflow-definition-bar'
+  ]) {
+    assert.equal(source.includes(marker), true, `missing ${marker}`)
+  }
+})
+
+test('workflow page uses editable graph for canvas, save, edges, and available tools', () => {
+  const source = readFileSync(resolve('src/views/workflow/index.vue'), 'utf8')
+
+  for (const marker of [
+    'editableTemplate',
+    'availableWorkflowTools',
+    'handleAddToolNode',
+    'handleDeleteNode',
+    'handleAddEdge',
+    'workflowStore.canvasNodes',
+    'workflowStore.canvasEdges',
+    'workflowStore.ensureCanvasFromTemplate',
+    'toolsStore.fetchWorkflowTools'
   ]) {
     assert.equal(source.includes(marker), true, `missing ${marker}`)
   }

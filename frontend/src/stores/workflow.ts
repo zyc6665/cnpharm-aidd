@@ -3,7 +3,7 @@ import { defineStore } from 'pinia'
 import type { WorkflowDefinition } from '@/api/workflows'
 import type { WorkflowTaskRef } from '@/workflow/artifact-types'
 import { toWorkflowTaskRef } from '@/workflow/task-state'
-import type { WorkflowCanvasNode } from '@/workflow/template-types'
+import type { WorkflowCanvasEdge, WorkflowCanvasNode, WorkflowTemplate } from '@/workflow/template-types'
 
 export interface WorkflowCanvasPosition {
   x: number
@@ -23,8 +23,17 @@ interface WorkflowWorkbenchSession {
   taskByNode: Record<string, WorkflowTaskRef>
   artifactBindingsByNode: Record<string, Record<string, string>>
   nodePositionById: Record<string, WorkflowCanvasPosition>
+  canvasNodes: WorkflowCanvasNode[]
+  canvasEdges: WorkflowCanvasEdge[]
   lastUpdatedAt: string
   ownerUserId?: string
+}
+
+interface AddToolNodeInput {
+  toolSlug: string
+  toolName?: string
+  toolDescription?: string
+  position?: WorkflowCanvasPosition
 }
 
 function nowIsoString(): string {
@@ -53,9 +62,19 @@ function createInitialWorkflowSession(ownerUserId?: string): WorkflowWorkbenchSe
     taskByNode: {},
     artifactBindingsByNode: {},
     nodePositionById: {},
+    canvasNodes: [],
+    canvasEdges: [],
     lastUpdatedAt: nowIsoString(),
     ownerUserId
   }
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function normalizeRecord<T>(value: unknown): Record<string, T> {
+  return isPlainRecord(value) ? value as Record<string, T> : {}
 }
 
 export const useWorkflowStore = defineStore('workflow', () => {
@@ -75,6 +94,8 @@ export const useWorkflowStore = defineStore('workflow', () => {
     initialSession.artifactBindingsByNode
   )
   const nodePositionById = ref<Record<string, WorkflowCanvasPosition>>(initialSession.nodePositionById)
+  const canvasNodes = ref<WorkflowCanvasNode[]>(initialSession.canvasNodes)
+  const canvasEdges = ref<WorkflowCanvasEdge[]>(initialSession.canvasEdges)
   const lastUpdatedAt = ref(initialSession.lastUpdatedAt)
   const ownerUserId = ref<string | undefined>(initialSession.ownerUserId)
 
@@ -91,12 +112,39 @@ export const useWorkflowStore = defineStore('workflow', () => {
     taskByNode: taskByNode.value,
     artifactBindingsByNode: artifactBindingsByNode.value,
     nodePositionById: nodePositionById.value,
+    canvasNodes: canvasNodes.value,
+    canvasEdges: canvasEdges.value,
     lastUpdatedAt: lastUpdatedAt.value,
     ownerUserId: ownerUserId.value
   }))
 
   function touchSession() {
     lastUpdatedAt.value = nowIsoString()
+  }
+
+  function normalizeSessionShape() {
+    if (typeof templateId.value !== 'string' || !templateId.value) {
+      templateId.value = 'aidd-template'
+    }
+
+    if (activeNodeId.value !== null && typeof activeNodeId.value !== 'string') {
+      activeNodeId.value = null
+    }
+
+    if (activeGroupId.value !== null && typeof activeGroupId.value !== 'string') {
+      activeGroupId.value = null
+    }
+
+    selectedToolByGroup.value = normalizeRecord<string>(selectedToolByGroup.value)
+    selectedToolByNode.value = normalizeRecord<string>(selectedToolByNode.value)
+    toolFormDrafts.value = normalizeRecord<Record<string, unknown>>(toolFormDrafts.value)
+    nodeFormDrafts.value = normalizeRecord<Record<string, unknown>>(nodeFormDrafts.value)
+    taskByTool.value = normalizeRecord<WorkflowTaskRef>(taskByTool.value)
+    taskByNode.value = normalizeRecord<WorkflowTaskRef>(taskByNode.value)
+    artifactBindingsByNode.value = normalizeRecord<Record<string, string>>(artifactBindingsByNode.value)
+    nodePositionById.value = normalizeRecord<WorkflowCanvasPosition>(nodePositionById.value)
+    canvasNodes.value = Array.isArray(canvasNodes.value) ? canvasNodes.value : []
+    canvasEdges.value = Array.isArray(canvasEdges.value) ? canvasEdges.value : []
   }
 
   function resetSession(nextOwnerUserId?: string) {
@@ -114,6 +162,8 @@ export const useWorkflowStore = defineStore('workflow', () => {
     taskByNode.value = nextSession.taskByNode
     artifactBindingsByNode.value = nextSession.artifactBindingsByNode
     nodePositionById.value = nextSession.nodePositionById
+    canvasNodes.value = nextSession.canvasNodes
+    canvasEdges.value = nextSession.canvasEdges
     lastUpdatedAt.value = nextSession.lastUpdatedAt
     ownerUserId.value = nextSession.ownerUserId
   }
@@ -136,6 +186,8 @@ export const useWorkflowStore = defineStore('workflow', () => {
     taskByNode.value = {}
     artifactBindingsByNode.value = {}
     nodePositionById.value = {}
+    canvasNodes.value = []
+    canvasEdges.value = []
     touchSession()
   }
 
@@ -244,11 +296,177 @@ export const useWorkflowStore = defineStore('workflow', () => {
     touchSession()
   }
 
-  function exportWorkflowNodes(nodes: WorkflowCanvasNode[]) {
-    return nodes.map(node => ({
+  function ensureCanvasFromTemplate(template: WorkflowTemplate) {
+    if (canvasNodes.value.length > 0) {
+      return
+    }
+
+    canvasNodes.value = template.nodes.map(node => ({
       ...node,
       position: nodePositionById.value[node.id] ?? node.position
     }))
+    canvasEdges.value = template.edges.map(edge => ({ ...edge }))
+    syncCanvasNodeSemanticTypes()
+    touchSession()
+  }
+
+  function syncCanvasNodeSemanticTypes() {
+    type ArtifactType = NonNullable<WorkflowCanvasEdge['artifactType']>
+    const requiredByNode = new Map<string, Set<ArtifactType>>()
+    const producedByNode = new Map<string, Set<ArtifactType>>()
+
+    for (const edge of canvasEdges.value) {
+      if (!edge.artifactType) {
+        continue
+      }
+
+      if (!requiredByNode.has(edge.target)) {
+        requiredByNode.set(edge.target, new Set())
+      }
+      if (!producedByNode.has(edge.source)) {
+        producedByNode.set(edge.source, new Set())
+      }
+
+      requiredByNode.get(edge.target)?.add(edge.artifactType)
+      producedByNode.get(edge.source)?.add(edge.artifactType)
+    }
+
+    canvasNodes.value = canvasNodes.value.map(node => {
+      const requiredInputTypes = Array.from(requiredByNode.get(node.id) ?? [])
+      const producedOutputTypes = Array.from(new Set<ArtifactType>([
+        ...((node.producedOutputTypes ?? []) as ArtifactType[]),
+        ...Array.from(producedByNode.get(node.id) ?? [])
+      ]))
+
+      return {
+        ...node,
+        requiredInputTypes,
+        producedOutputTypes
+      }
+    })
+  }
+
+  function addToolNode(input: AddToolNodeInput): WorkflowCanvasNode {
+    const nodeId = `tool-${input.toolSlug}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    const position = input.position ?? {
+      x: 320 + canvasNodes.value.length * 32,
+      y: 120 + canvasNodes.value.length * 24
+    }
+    const node: WorkflowCanvasNode = {
+      id: nodeId,
+      type: 'tool',
+      toolSlugs: [input.toolSlug],
+      recommendedToolSlug: input.toolSlug,
+      titleKey: input.toolName || input.toolSlug,
+      descriptionKey: input.toolDescription,
+      position,
+      requiredInputTypes: [],
+      producedOutputTypes: []
+    }
+
+    canvasNodes.value = [...canvasNodes.value, node]
+    selectedToolByNode.value = {
+      ...selectedToolByNode.value,
+      [nodeId]: input.toolSlug
+    }
+    nodePositionById.value = {
+      ...nodePositionById.value,
+      [nodeId]: position
+    }
+    activeNodeId.value = nodeId
+    touchSession()
+    return node
+  }
+
+  function deleteCanvasNode(nodeId: string) {
+    const node = canvasNodes.value.find(item => item.id === nodeId)
+    if (!node || node.type === 'input') {
+      return
+    }
+
+    canvasNodes.value = canvasNodes.value.filter(item => item.id !== nodeId)
+    canvasEdges.value = canvasEdges.value.filter(edge => edge.source !== nodeId && edge.target !== nodeId)
+
+    const nextPositions = { ...nodePositionById.value }
+    const nextSelectedTools = { ...selectedToolByNode.value }
+    const nextNodeDrafts = { ...nodeFormDrafts.value }
+    const nextTasks = { ...taskByNode.value }
+    const nextBindings = { ...artifactBindingsByNode.value }
+
+    delete nextPositions[nodeId]
+    delete nextSelectedTools[nodeId]
+    delete nextNodeDrafts[nodeId]
+    delete nextTasks[nodeId]
+    delete nextBindings[nodeId]
+
+    nodePositionById.value = nextPositions
+    selectedToolByNode.value = nextSelectedTools
+    nodeFormDrafts.value = nextNodeDrafts
+    taskByNode.value = nextTasks
+    artifactBindingsByNode.value = nextBindings
+
+    if (activeNodeId.value === nodeId) {
+      activeNodeId.value = canvasNodes.value[0]?.id ?? null
+    }
+    touchSession()
+  }
+
+  function addCanvasEdge(input: {
+    source: string
+    target: string
+    artifactType?: WorkflowCanvasEdge['artifactType']
+  }): WorkflowCanvasEdge | null {
+    if (input.source === input.target) {
+      return null
+    }
+
+    const hasSource = canvasNodes.value.some(node => node.id === input.source)
+    const hasTarget = canvasNodes.value.some(node => node.id === input.target)
+    if (!hasSource || !hasTarget) {
+      return null
+    }
+
+    const existing = canvasEdges.value.find(edge => (
+      edge.source === input.source &&
+      edge.target === input.target &&
+      edge.artifactType === input.artifactType
+    ))
+    if (existing) {
+      return existing
+    }
+
+    const edge: WorkflowCanvasEdge = {
+      id: `edge-${input.source}-${input.target}-${Date.now()}`,
+      source: input.source,
+      target: input.target,
+      artifactType: input.artifactType
+    }
+    canvasEdges.value = [...canvasEdges.value, edge]
+    syncCanvasNodeSemanticTypes()
+    touchSession()
+    return edge
+  }
+
+  function deleteCanvasEdge(edgeId: string) {
+    if (!canvasEdges.value.some(edge => edge.id === edgeId)) {
+      return
+    }
+
+    canvasEdges.value = canvasEdges.value.filter(edge => edge.id !== edgeId)
+    syncCanvasNodeSemanticTypes()
+    touchSession()
+  }
+
+  function exportWorkflowNodes(nodes: WorkflowCanvasNode[]) {
+    const sourceNodes = canvasNodes.value.length ? canvasNodes.value : nodes
+    return sourceNodes.map(node => ({
+      ...node,
+      position: nodePositionById.value[node.id] ?? node.position
+    }))
+  }
+
+  function exportWorkflowEdges(edges: WorkflowCanvasEdge[]) {
+    return canvasNodes.value.length ? canvasEdges.value : edges
   }
 
   function applyWorkflowDefinition(workflow: WorkflowDefinition) {
@@ -256,6 +474,9 @@ export const useWorkflowStore = defineStore('workflow', () => {
     selectedToolByNode.value = workflow.selected_tool_by_node ?? {}
     artifactBindingsByNode.value = workflow.artifact_bindings_by_node ?? {}
     taskByNode.value = {}
+    canvasNodes.value = workflow.nodes.map(node => node as WorkflowCanvasNode)
+    canvasEdges.value = workflow.edges.map(edge => edge as WorkflowCanvasEdge)
+    syncCanvasNodeSemanticTypes()
     activeNodeId.value = workflow.nodes[0]?.id ?? null
 
     setNodePositions(
@@ -292,10 +513,13 @@ export const useWorkflowStore = defineStore('workflow', () => {
     taskByNode,
     artifactBindingsByNode,
     nodePositionById,
+    canvasNodes,
+    canvasEdges,
     lastUpdatedAt,
     ownerUserId,
     session,
     resetSession,
+    normalizeSessionShape,
     syncOwnerUserId,
     setTemplate,
     setActiveNode,
@@ -310,7 +534,14 @@ export const useWorkflowStore = defineStore('workflow', () => {
     setNodeArtifactBinding,
     moveNode,
     setNodePositions,
+    ensureCanvasFromTemplate,
+    syncCanvasNodeSemanticTypes,
+    addToolNode,
+    deleteCanvasNode,
+    addCanvasEdge,
+    deleteCanvasEdge,
     exportWorkflowNodes,
+    exportWorkflowEdges,
     applyWorkflowDefinition,
     clearTask
   }
@@ -329,6 +560,8 @@ export const useWorkflowStore = defineStore('workflow', () => {
       'taskByNode',
       'artifactBindingsByNode',
       'nodePositionById',
+      'canvasNodes',
+      'canvasEdges',
       'lastUpdatedAt',
       'ownerUserId'
     ]

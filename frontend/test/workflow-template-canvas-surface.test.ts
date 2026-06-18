@@ -33,3 +33,12 @@ test('workflow template canvas exposes graph interaction surface', () => {
   assert.equal(edge.includes('workflow-canvas-edge'), true)
   assert.equal(badge.includes('workflow-node-status-badge'), true)
 })
+
+test('workflow template canvas stays focused on the graph surface', () => {
+  const canvas = readSource('src/components/workflow/WorkflowTemplateCanvas.vue')
+
+  assert.equal(canvas.includes('canvas-viewport'), true)
+  assert.equal(canvas.includes('canvas-surface'), true)
+  assert.equal(canvas.includes('canvas-tool-library'), false)
+  assert.equal(canvas.includes('filteredToolOptions'), false)
+})

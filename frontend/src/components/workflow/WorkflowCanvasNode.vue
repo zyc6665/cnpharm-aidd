@@ -1,17 +1,30 @@
 <template>
-  <button
-    type="button"
+  <div
+    role="button"
+    tabindex="0"
     class="workflow-canvas-node"
     :class="[`is-${node.type}`, `status-${status}`, { 'is-selected': selected }]"
     :style="{ left: `${node.position.x}px`, top: `${node.position.y}px` }"
     @click="$emit('select-node', node.id)"
+    @keydown.enter.prevent="$emit('select-node', node.id)"
+    @keydown.space.prevent="$emit('select-node', node.id)"
     @pointerdown="handlePointerDown"
   >
+    <button
+      v-if="deletable"
+      type="button"
+      class="node-delete-button"
+      aria-label="Delete node"
+      @click.stop="$emit('delete-node', node.id)"
+      @pointerdown.stop
+    >
+      ×
+    </button>
     <span class="node-kind">{{ node.type }}</span>
     <span class="node-title">{{ title }}</span>
     <span v-if="subtitle" class="node-subtitle">{{ subtitle }}</span>
     <WorkflowNodeStatusBadge :status="status" />
-  </button>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -25,10 +38,12 @@
     subtitle?: string
     status: WorkflowStepStatus
     selected?: boolean
+    deletable?: boolean
   }>()
 
   const emit = defineEmits<{
     (event: 'select-node', nodeId: string): void
+    (event: 'delete-node', nodeId: string): void
     (event: 'move-node', payload: { nodeId: string; position: { x: number; y: number } }): void
   }>()
 
@@ -108,6 +123,32 @@
 
   .workflow-canvas-node:active {
     cursor: grabbing;
+  }
+
+  .node-delete-button {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255, 77, 79, 0.26);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.94);
+    color: @error-color;
+    font-size: 16px;
+    font-weight: 800;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .node-delete-button:hover,
+  .node-delete-button:focus-visible {
+    background: @error-color;
+    color: #fff;
+    outline: none;
   }
 
   .workflow-canvas-node.is-selected {

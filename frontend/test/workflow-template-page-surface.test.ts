@@ -18,6 +18,36 @@ test('workflow page mounts template canvas and inspector in manual mode', () => 
   }
 })
 
+test('workflow page exposes a sidebar tool library and run summary', () => {
+  for (const marker of [
+    'workflow-status-summary',
+    'readyNodeCount',
+    'blockedNodeCount',
+    'runningNodeCount',
+    'completedNodeCount',
+    'failedNodeCount',
+    'resolveNodeStatusReason',
+    'workflow-sidebar-tool-library',
+    'sidebarToolSearchKeyword',
+    'filteredSidebarToolOptions',
+    '运行可执行节点',
+    '保存',
+    '加载'
+  ]) {
+    assert.equal(source.includes(marker), true, `missing ${marker}`)
+  }
+})
+
+test('workflow page exposes workflow result report integration', () => {
+  for (const marker of [
+    'WorkflowResultsReportPanel',
+    'workflow-results-region',
+    'workflowReportRows'
+  ]) {
+    assert.equal(source.includes(marker), true, `missing ${marker}`)
+  }
+})
+
 test('workflow page keeps agent mode available', () => {
   assert.equal(source.includes('<AiddAgentPanel />'), true)
   assert.equal(source.includes("key=\"agent\""), true)
