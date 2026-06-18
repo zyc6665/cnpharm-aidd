@@ -5,20 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
+from app.services.semantic_types import CanonicalSemanticType
 
-SemanticType = Literal[
-    "protein_pdb",
-    "pocket_pdb",
-    "generated_ligand",
-    "ligand_pdb",
-    "smiles_csv",
-    "ranking_csv",
-    "docking_pose",
-    "docking_report",
-    "affinity_report",
-    "property_report",
-    "optimized_lead",
-]
+SemanticType = CanonicalSemanticType
 
 
 @dataclass(frozen=True)

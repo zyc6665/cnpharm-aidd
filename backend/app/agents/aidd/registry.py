@@ -17,6 +17,12 @@ from app.agents.aidd.capabilities import (
 )
 from app.common.exceptions import ValidationException
 from app.models.tools import Tool, ToolStatus
+from app.services.tool_contracts import (
+    build_tool_contract,
+    build_virtual_tool_contract,
+    tool_contract_to_agent_summary,
+)
+from app.services.semantic_types import normalize_semantic_type
 
 
 AGENT_CAPABILITY_CONFIG_KEY = "agent_capability"
@@ -50,8 +56,8 @@ def capability_from_config(tool_slug: str, config: dict[str, Any]) -> ToolCapabi
 
     inputs = tuple(
         CapabilityInput(
-            str(item["semantic_type"]),
-            str(item.get("field") or item["semantic_type"]),
+            normalize_semantic_type(str(item["semantic_type"])),
+            str(item.get("field") or normalize_semantic_type(str(item["semantic_type"]))),
             required=bool(item.get("required", True)),
             accepted_extensions=_as_tuple(item.get("accepted_extensions")),
         )
@@ -60,7 +66,7 @@ def capability_from_config(tool_slug: str, config: dict[str, Any]) -> ToolCapabi
     )
     outputs = tuple(
         CapabilityOutput(
-            str(item["semantic_type"]),
+            normalize_semantic_type(str(item["semantic_type"])),
             str(item.get("source") or "output_files"),
             match=_parse_output_match(item.get("match")),
             path=str(item["path"]) if item.get("path") else None,
@@ -99,15 +105,7 @@ def capability_from_tool(tool: Tool) -> ToolCapability | None:
 
 
 def capability_to_tool_summary(capability: ToolCapability) -> dict[str, Any]:
-    return {
-        "tool_slug": capability.tool_slug,
-        "capability": capability.capability,
-        "stage": capability.stage,
-        "inputs": [item.semantic_type for item in capability.inputs],
-        "outputs": [item.semantic_type for item in capability.outputs],
-        "defaults": dict(capability.defaults),
-        "virtual": capability.virtual,
-    }
+    return tool_contract_to_agent_summary(build_virtual_tool_contract(capability))
 
 
 def builtin_tool_summaries() -> list[dict[str, Any]]:
@@ -152,10 +150,26 @@ async def load_available_tool_capabilities(db: AsyncSession) -> list[ToolCapabil
 
 
 async def load_available_tool_summaries(db: AsyncSession) -> list[dict[str, Any]]:
-    return [
-        capability_to_tool_summary(capability)
-        for capability in await load_available_tool_capabilities(db)
-    ]
+    result = await db.execute(
+        select(Tool)
+        .options(selectinload(Tool.current_version))
+        .where(Tool.status == ToolStatus.PUBLISHED.value, Tool.is_public.is_(True))
+    )
+    summaries: list[dict[str, Any]] = []
+    for tool in result.scalars().all():
+        if not _tool_is_agent_available(tool):
+            continue
+        capability = capability_from_tool(tool)
+        if capability is None:
+            continue
+        summaries.append(
+            tool_contract_to_agent_summary(
+                build_tool_contract(tool, capability=capability)
+            )
+        )
+
+    summaries.extend(builtin_tool_summaries())
+    return summaries
 
 
 async def load_tool_capability(db: AsyncSession, tool_slug: str) -> ToolCapability:

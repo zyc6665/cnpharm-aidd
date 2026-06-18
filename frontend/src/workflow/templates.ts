@@ -12,7 +12,7 @@ export const AIDD_WORKFLOW_TEMPLATE: WorkflowTemplate = {
       titleKey: 'workflow.nodes.inputProtein.title',
       descriptionKey: 'workflow.nodes.inputProtein.description',
       position: { x: 40, y: 160 },
-      producedOutputTypes: ['protein_structure']
+      producedOutputTypes: ['protein_pdb']
     },
     {
       id: 'tool-pocket-exploration',
@@ -23,8 +23,8 @@ export const AIDD_WORKFLOW_TEMPLATE: WorkflowTemplate = {
       titleKey: 'home.workflow.items.pocketExploration.title',
       descriptionKey: 'home.workflow.items.pocketExploration.description',
       position: { x: 280, y: 160 },
-      requiredInputTypes: ['protein_structure'],
-      producedOutputTypes: ['pocket_structure']
+      requiredInputTypes: ['protein_pdb'],
+      producedOutputTypes: ['pocket_pdb']
     },
     {
       id: 'tool-molecule-generation',
@@ -35,7 +35,7 @@ export const AIDD_WORKFLOW_TEMPLATE: WorkflowTemplate = {
       titleKey: 'home.workflow.items.moleculeGenerationOrVirtualScreening.title',
       descriptionKey: 'home.workflow.items.moleculeGenerationOrVirtualScreening.description',
       position: { x: 540, y: 80 },
-      requiredInputTypes: ['pocket_structure'],
+      requiredInputTypes: ['pocket_pdb'],
       producedOutputTypes: ['generated_ligand']
     },
     {
@@ -47,7 +47,7 @@ export const AIDD_WORKFLOW_TEMPLATE: WorkflowTemplate = {
       titleKey: 'home.workflow.items.molecularDockingAndAffinityPrediction.title',
       descriptionKey: 'home.workflow.items.molecularDockingAndAffinityPrediction.description',
       position: { x: 800, y: 160 },
-      requiredInputTypes: ['protein_structure', 'generated_ligand'],
+      requiredInputTypes: ['protein_pdb', 'generated_ligand'],
       producedOutputTypes: ['docking_pose', 'affinity_report']
     },
     {
@@ -88,19 +88,19 @@ export const AIDD_WORKFLOW_TEMPLATE: WorkflowTemplate = {
       id: 'edge-input-pocket',
       source: 'input-protein',
       target: 'tool-pocket-exploration',
-      artifactType: 'protein_structure'
+      artifactType: 'protein_pdb'
     },
     {
       id: 'edge-pocket-generation',
       source: 'tool-pocket-exploration',
       target: 'tool-molecule-generation',
-      artifactType: 'pocket_structure'
+      artifactType: 'pocket_pdb'
     },
     {
       id: 'edge-input-docking',
       source: 'input-protein',
       target: 'tool-docking',
-      artifactType: 'protein_structure'
+      artifactType: 'protein_pdb'
     },
     {
       id: 'edge-generation-docking',

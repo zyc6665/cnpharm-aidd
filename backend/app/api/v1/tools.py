@@ -36,10 +36,12 @@ from app.schemas.tools import (
     ToolWorkbenchGroupReorderRequest, ToolWorkbenchGroupMappingCreate,
     ToolWorkbenchGroupMappingUpdate, ToolWorkbenchGroupMappingResponse,
     ToolWorkbenchGroupToolResponse, ToolWorkbenchGroupPublicResponse,
+    ToolContractResponse,
 )
 from app.schemas.files import FileUploadResponse
 from app.common.responses import success_response, error_response
 from app.common.exceptions import NotFoundException, ForbiddenException, ConflictException, ValidationException
+from app.services.tool_contracts import build_tool_contract
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 if str(PROJECT_ROOT) not in sys.path:
@@ -102,6 +104,7 @@ def serialize_public_workbench_group_tool(
     sort_order: int,
 ) -> dict:
     """统一序列化公开工作台分组中的工具摘要。"""
+    contract = build_validated_tool_contract(tool) if tool.current_version else None
     return ToolWorkbenchGroupToolResponse.model_validate(
         {
             "id": tool.id,
@@ -116,6 +119,7 @@ def serialize_public_workbench_group_tool(
             "is_public": tool.is_public,
             "is_recommended": is_recommended,
             "sort_order": sort_order,
+            "contract": contract,
         }
     ).model_dump()
 
@@ -150,6 +154,40 @@ async def load_tool_with_current_version(db: AsyncSession, tool_id: str) -> Tool
     if not tool.current_version:
         raise ValidationException("工具暂无可用版本")
     return tool
+
+
+def collect_tool_contract_validation_errors(tool: Tool) -> list[str]:
+    """复用导入配置校验逻辑检查当前工具版本契约。"""
+    current_version = tool.current_version
+    if current_version is None:
+        return ["工具暂无可用版本"]
+    config = current_version.config
+    if not isinstance(config, dict):
+        return ["工具当前版本配置必须是对象"]
+
+    validation_payload = {
+        "name": tool.name,
+        "slug": tool.slug,
+        "description": tool.description or "",
+        "version": current_version.version,
+        "tool_config": config,
+    }
+    try:
+        validate_tool_import_config(validation_payload)
+    except ToolImportConfigError as exc:
+        return [str(exc)]
+    return []
+
+
+def build_validated_tool_contract(tool: Tool) -> dict:
+    """构建带校验状态的工具契约。"""
+    errors = collect_tool_contract_validation_errors(tool)
+    contract = build_tool_contract(tool)
+    contract["validation"] = {
+        "status": "invalid" if errors else "valid",
+        "errors": errors,
+    }
+    return ToolContractResponse.model_validate(contract).model_dump(by_alias=True)
 
 
 def get_default_tool_example(config: dict) -> Optional[dict]:
@@ -652,7 +690,10 @@ async def list_public_workbench_groups(
     group_ids = [group.id for group in groups]
     mapping_result = await db.execute(
         select(ToolWorkbenchGroupMapping)
-        .options(joinedload(ToolWorkbenchGroupMapping.tool).joinedload(Tool.tool_category))
+        .options(
+            joinedload(ToolWorkbenchGroupMapping.tool).joinedload(Tool.tool_category),
+            joinedload(ToolWorkbenchGroupMapping.tool).joinedload(Tool.current_version),
+        )
         .join(ToolWorkbenchGroup, ToolWorkbenchGroup.id == ToolWorkbenchGroupMapping.group_id)
         .join(Tool, Tool.id == ToolWorkbenchGroupMapping.tool_id)
         .where(
@@ -773,6 +814,33 @@ async def apply_tool_example(
         files=registered_files,
     )
     return success_response(data=payload.model_dump(), message="示例已应用")
+
+
+@router.get("/{tool_id}/contract", response_model=dict)
+async def get_tool_contract(
+    tool_id: str,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+):
+    """获取工具标准契约。"""
+    result = await db.execute(
+        select(Tool)
+        .options(selectinload(Tool.current_version))
+        .where(Tool.id == tool_id)
+    )
+    tool = result.scalar_one_or_none()
+    if not tool:
+        raise NotFoundException("工具不存在")
+
+    is_admin = current_user and current_user.role == "admin"
+    is_owner = current_user and tool.owner_id == current_user.id
+    if not is_admin and not is_owner and tool.status != ToolStatus.PUBLISHED.value:
+        raise NotFoundException("工具不存在")
+
+    if not tool.current_version:
+        raise ValidationException("工具暂无可用版本")
+
+    return success_response(data=build_validated_tool_contract(tool))
 
 
 @router.get("/{tool_id}/example/files/{field}/preview", response_model=dict)

@@ -1,4 +1,6 @@
-"""工作流定义 Schema"""
+"""Workflow API schemas."""
+
+from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Literal, Optional
@@ -52,3 +54,71 @@ class WorkflowDefinitionResponse(WorkflowDefinitionBase):
 
     class Config:
         from_attributes = True
+
+
+class WorkflowTemplateCreate(BaseModel):
+    """Create a reusable workflow template."""
+
+    name: str = Field(..., min_length=1, max_length=160)
+    description: str | None = None
+    definition: dict[str, Any] = Field(default_factory=dict)
+    is_public: bool = False
+
+
+class WorkflowTemplateUpdate(BaseModel):
+    """Update a workflow template."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    description: str | None = None
+    definition: dict[str, Any] | None = None
+    is_public: bool | None = None
+    status: str | None = None
+
+
+class WorkflowTemplateDuplicate(BaseModel):
+    """Duplicate a workflow template."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+
+
+class WorkflowRunCreate(BaseModel):
+    """Create a workflow run from a template."""
+
+    name: str | None = Field(default=None, max_length=160)
+    input_files: dict[str, str] = Field(default_factory=dict)
+    params: dict[str, Any] = Field(default_factory=dict)
+
+
+class WorkflowTemplateResponse(BaseModel):
+    """Workflow template response."""
+
+    id: str
+    owner_id: str
+    name: str
+    description: str | None = None
+    status: str
+    definition: dict[str, Any]
+    is_public: bool
+    version: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class WorkflowRunResponse(BaseModel):
+    """Workflow run response."""
+
+    id: str
+    owner_id: str
+    template_id: str | None = None
+    name: str
+    status: str
+    definition: dict[str, Any]
+    input_files: dict[str, str]
+    execution_order: list[str]
+    node_states: dict[str, Any]
+    artifact_lineage: dict[str, Any]
+    error_message: str | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime

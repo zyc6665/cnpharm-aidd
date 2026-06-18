@@ -4,9 +4,11 @@ import type {
   WorkflowStepKey,
   WorkflowTaskRef
 } from './artifact-types.ts'
+import { normalizeWorkflowSemanticType } from './semantic-types.ts'
 import {
   WORKFLOW_TOOL_BINDINGS,
   type WorkflowBoundToolSlug,
+  type WorkflowToolBindingConfig,
   type WorkflowToolOutputExtractor
 } from './tool-bindings.ts'
 
@@ -27,10 +29,11 @@ export function selectLatestValidArtifactBySemanticType(input: {
   invalidArtifactIds?: Iterable<string>
 }): WorkflowArtifact | null {
   const invalidArtifactIds = new Set(input.invalidArtifactIds)
+  const requestedSemanticType = normalizeWorkflowSemanticType(input.semanticType)
   let latestArtifact: WorkflowArtifact | null = null
 
   for (const artifact of input.artifacts) {
-    if (artifact.semanticType !== input.semanticType) {
+    if (normalizeWorkflowSemanticType(artifact.semanticType) !== requestedSemanticType) {
       continue
     }
 
@@ -67,10 +70,11 @@ function selectArtifactForFieldBinding(input: {
   preferredArtifactNameIncludes?: readonly string[]
 }): WorkflowArtifact | null {
   const invalidArtifactIds = new Set(input.invalidArtifactIds)
+  const requestedSemanticType = normalizeWorkflowSemanticType(input.semanticType)
   let selectedArtifact: WorkflowArtifact | null = null
 
   for (const artifact of input.artifacts) {
-    if (artifact.semanticType !== input.semanticType) {
+    if (normalizeWorkflowSemanticType(artifact.semanticType) !== requestedSemanticType) {
       continue
     }
 
@@ -113,7 +117,18 @@ function matchesOutputFile(input: {
   const contentType = input.file.content_type ?? ''
   const { match } = input.extractor
 
+  if (match.extension && !filename.toLowerCase().endsWith(match.extension.toLowerCase())) {
+    return false
+  }
+
   if (match.filenameIncludes && !filename.includes(match.filenameIncludes)) {
+    return false
+  }
+
+  if (
+    match.filenameIncludesAny?.length &&
+    !match.filenameIncludesAny.some((token) => filename.includes(token))
+  ) {
     return false
   }
 
@@ -148,10 +163,22 @@ export function extractArtifactsFromTaskResult(input: {
     return []
   }
 
+  return extractArtifactsFromTaskResultWithBinding({
+    stepKey: input.stepKey,
+    binding,
+    task: input.task
+  })
+}
+
+export function extractArtifactsFromTaskResultWithBinding(input: {
+  stepKey: WorkflowStepKey
+  binding: WorkflowToolBindingConfig
+  task: WorkflowTaskRef
+}): WorkflowArtifact[] {
   const createdAt = input.task.finished_at ?? input.task.updated_at ?? input.task.created_at
   const artifacts: WorkflowArtifact[] = []
 
-  for (const extractor of binding.outputExtractors) {
+  for (const extractor of input.binding.outputExtractors) {
     if (extractor.source === 'output_files') {
       const outputFiles = input.task.output_files ?? []
 
@@ -165,7 +192,7 @@ export function extractArtifactsFromTaskResult(input: {
           semanticType: extractor.semanticType,
           name: file.original_name ?? file.filename ?? `${extractor.semanticType}-${input.task.id}`,
           stepKey: input.stepKey,
-          toolSlug: input.toolSlug,
+          toolSlug: input.binding.toolSlug,
           taskId: input.task.id,
           fileId: file.id,
           url: file.url,
@@ -190,7 +217,7 @@ export function extractArtifactsFromTaskResult(input: {
       semanticType: extractor.semanticType,
       name: `${extractor.semanticType}-${input.task.id}`,
       stepKey: input.stepKey,
-      toolSlug: input.toolSlug,
+      toolSlug: input.binding.toolSlug,
       taskId: input.task.id,
       createdAt,
       metadata: {
@@ -218,7 +245,23 @@ export function resolveWorkflowInputSourcesForTool(input: {
     return []
   }
 
-  return binding.fieldBindings.map((fieldBinding) => ({
+  return resolveWorkflowInputSourcesForBinding({
+    binding,
+    artifacts: input.artifacts,
+    invalidArtifactIds: input.invalidArtifactIds
+  })
+}
+
+export function resolveWorkflowInputSourcesForBinding(input: {
+  binding: WorkflowToolBindingConfig
+  artifacts: WorkflowArtifact[]
+  invalidArtifactIds?: Iterable<string>
+}): Array<{
+  field: string
+  semanticType: WorkflowArtifactSemanticType
+  artifact: WorkflowArtifact | null
+}> {
+  return input.binding.fieldBindings.map((fieldBinding) => ({
     field: fieldBinding.field,
     semanticType: fieldBinding.semanticType,
     artifact: selectArtifactForFieldBinding({

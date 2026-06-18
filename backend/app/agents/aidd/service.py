@@ -18,7 +18,11 @@ from app.agents.aidd.outputs import extract_semantic_outputs
 from app.agents.aidd.payloads import build_agent_task_payload
 from app.agents.aidd.graph import build_plan_with_langgraph
 from app.agents.aidd.planner import AIDDPlan, infer_aidd_input_type
-from app.agents.aidd.registry import capability_from_tool, load_tool_capability
+from app.agents.aidd.registry import (
+    capability_from_tool,
+    load_available_tool_summaries,
+    load_tool_capability,
+)
 from app.config import settings
 from app.common.exceptions import ForbiddenException, NotFoundException, ValidationException
 from app.models.agent import AgentRun, AgentRunStep
@@ -29,17 +33,30 @@ from app.models.tools import Tool, ToolStatus
 from app.models.users import User
 from app.schemas.agent import AIDDRunCreate
 from app.schemas.tasks import TaskCreate
+from app.services.semantic_types import CANONICAL_AGENT_INPUT_TYPES, normalize_semantic_type
 from app.tasks.service import create_and_schedule_tool_task
 
 
 TERMINAL_RUN_STATUSES = {"success", "failure", "canceled"}
-SUPPORTED_AGENT_INPUT_TYPES = {
-    "protein_pdb",
-    "pocket_pdb",
-    "ligand_pdb",
-    "smiles_csv",
-    "generated_ligand",
-}
+SUPPORTED_AGENT_INPUT_TYPES = CANONICAL_AGENT_INPUT_TYPES
+
+
+def _normalize_agent_input_type(value: str | None) -> str | None:
+    if not value:
+        return value
+    return normalize_semantic_type(value)
+
+
+def _normalize_semantic_file_map(input_files: dict[str, str]) -> dict[str, str]:
+    normalized: dict[str, str] = {}
+    for semantic_type, file_id in input_files.items():
+        canonical_type = normalize_semantic_type(str(semantic_type))
+        if canonical_type in normalized and normalized[canonical_type] != file_id:
+            raise ValidationException(
+                f"Duplicate AIDD input semantic type after normalization: {canonical_type}"
+            )
+        normalized[canonical_type] = file_id
+    return normalized
 
 
 def _file_download_url(file_id: str) -> str:
@@ -66,14 +83,54 @@ def _run_input_files(run: AgentRun) -> dict[str, str]:
     plan = run.plan or {}
     input_files = plan.get("input_files")
     if isinstance(input_files, dict):
-        return {
+        return _normalize_semantic_file_map({
             str(semantic_type): str(file_id)
             for semantic_type, file_id in input_files.items()
             if isinstance(semantic_type, str) and file_id
-        }
+        })
     if run.input_file_id and run.input_type:
-        return {run.input_type: str(run.input_file_id)}
+        return {str(normalize_semantic_type(run.input_type)): str(run.input_file_id)}
     return {}
+
+
+def _summary_slug(tool_summary: dict[str, Any]) -> str:
+    return str(tool_summary.get("slug") or tool_summary.get("tool_slug") or "")
+
+
+def _build_step_contract_traces(
+    *,
+    plan: AIDDPlan,
+    available_tools: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    tools_by_slug = {
+        slug: tool_summary
+        for tool_summary in available_tools
+        if (slug := _summary_slug(tool_summary))
+    }
+    traces: dict[str, dict[str, Any]] = {}
+
+    for plan_step in plan.steps:
+        tool_summary = tools_by_slug.get(plan_step.tool_slug)
+        if not tool_summary:
+            continue
+        slug = _summary_slug(tool_summary)
+        traces[plan_step.step_key] = {
+            "id": tool_summary.get("id"),
+            "slug": slug,
+            "tool_slug": slug,
+            "name": tool_summary.get("name") or slug,
+            "capability": tool_summary.get("capability"),
+            "stage": tool_summary.get("stage"),
+            "contract_version": tool_summary.get("contract_version"),
+            "tool_version": tool_summary.get("tool_version"),
+            "semantic_inputs": dict(plan_step.inputs or {}),
+            "input_bindings": list(tool_summary.get("input_bindings") or []),
+            "output_rules": list(tool_summary.get("output_rules") or []),
+            "executor": dict(tool_summary.get("executor") or {}),
+            "virtual": bool(tool_summary.get("virtual")),
+        }
+
+    return traces
 
 
 def _storage_file_path(file_id: str, filename: str) -> Path:
@@ -173,7 +230,7 @@ async def _load_agent_input_files(
     current_user: User,
     run_data: AIDDRunCreate,
 ) -> tuple[dict[str, FileModel], FileModel, str, dict[str, dict[str, Any]]]:
-    requested_input_files = dict(run_data.input_files or {})
+    requested_input_files = _normalize_semantic_file_map(dict(run_data.input_files or {}))
     input_file_ids = list(run_data.input_file_ids or [])
     primary_file: FileModel | None = None
 
@@ -183,7 +240,7 @@ async def _load_agent_input_files(
             file_id=run_data.input_file_id,
             current_user=current_user,
         )
-        primary_type = run_data.input_type or infer_aidd_input_type(
+        primary_type = _normalize_agent_input_type(run_data.input_type) or infer_aidd_input_type(
             message=run_data.message,
             filename=_input_filename(primary_file),
         )
@@ -233,9 +290,10 @@ async def _load_agent_input_files(
         }
 
     if primary_file is None:
+        requested_input_type = _normalize_agent_input_type(run_data.input_type)
         primary_semantic_type = (
-            run_data.input_type
-            if run_data.input_type in semantic_files
+            requested_input_type
+            if requested_input_type in semantic_files
             else next(iter(semantic_files.keys()))
         )
         primary_file = semantic_files[primary_semantic_type]
@@ -246,7 +304,7 @@ async def _load_agent_input_files(
                 for semantic_type, file_record in semantic_files.items()
                 if file_record.id == primary_file.id
             ),
-            run_data.input_type or infer_aidd_input_type(
+            _normalize_agent_input_type(run_data.input_type) or infer_aidd_input_type(
                 message=run_data.message,
                 filename=_input_filename(primary_file),
             ),
@@ -261,7 +319,8 @@ async def create_agent_run(
     current_user: User,
     run_data: AIDDRunCreate,
 ) -> AgentRun:
-    if run_data.input_type and run_data.input_type not in SUPPORTED_AGENT_INPUT_TYPES:
+    input_type = _normalize_agent_input_type(run_data.input_type)
+    if input_type and input_type not in SUPPORTED_AGENT_INPUT_TYPES:
         raise ValidationException(f"Unsupported AIDD input_type: {run_data.input_type}")
     input_files, input_file, input_type, classified_files = await _load_agent_input_files(
         db,
@@ -279,13 +338,18 @@ async def create_agent_run(
         input_file=input_file,
         input_files=input_files,
         input_type=input_type,
-        requested_outputs=run_data.requested_outputs,
+        requested_outputs=[normalize_semantic_type(output) for output in run_data.requested_outputs],
         params=plan_params,
     )
+    available_tool_summaries = await load_available_tool_summaries(db)
     plan_data = plan.model_dump()
     plan_data["input_files"] = {
         semantic_type: file_record.id for semantic_type, file_record in input_files.items()
     }
+    plan_data["step_contracts"] = _build_step_contract_traces(
+        plan=plan,
+        available_tools=available_tool_summaries,
+    )
     if classified_files:
         plan_data["classified_input_files"] = classified_files
 
@@ -345,7 +409,7 @@ async def _resolve_semantic_files(
         ):
             semantic_key = semantic_type
             if isinstance(source, str) and source.startswith("agent_input:"):
-                semantic_key = source.split(":", 1)[1] or semantic_type
+                semantic_key = normalize_semantic_type(source.split(":", 1)[1] or semantic_type)
             file_id = run_input_files.get(semantic_key) or run.input_file_id
             if not file_id:
                 raise ValidationException("智能体运行缺少输入文件")
@@ -362,7 +426,12 @@ async def _resolve_semantic_files(
                 raise ValidationException(f"依赖步骤不存在: {dependency_key}")
             dependency_output = (dependency.semantic_outputs or {}).get(dependency_semantic_type)
             if not dependency_output or not dependency_output.get("file_id"):
-                raise ValidationException(f"依赖步骤缺少产物: {dependency_semantic_type}")
+                source_task = f", source_task={dependency.task_id}" if dependency.task_id else ""
+                raise ValidationException(
+                    "依赖步骤缺少产物: "
+                    f"required={semantic_type}, source_step={dependency_key}, "
+                    f"source_output={dependency_semantic_type}{source_task}"
+                )
             semantic_files[semantic_type] = {
                 "file_id": str(dependency_output["file_id"]),
                 "filename": str(dependency_output.get("filename") or dependency_output["file_id"]),
@@ -735,6 +804,60 @@ def _required_outputs_present(
     )
 
 
+def _format_output_rule(output: Any) -> str:
+    parts = [
+        f"semantic_type={getattr(output, 'semantic_type', '')}",
+        f"source={getattr(output, 'source', '')}",
+    ]
+    if getattr(output, "path", None):
+        parts.append(f"path={output.path}")
+
+    match = getattr(output, "match", None)
+    if match:
+        match_parts: list[str] = []
+        if getattr(match, "extension", None):
+            match_parts.append(f"extension={match.extension}")
+        if getattr(match, "filename_contains_any", None):
+            tokens = ",".join(str(token) for token in match.filename_contains_any)
+            match_parts.append(f"filename_contains_any={tokens}")
+        if getattr(match, "content_type", None):
+            match_parts.append(f"content_type={match.content_type}")
+        if match_parts:
+            parts.append("match=(" + "; ".join(match_parts) + ")")
+
+    return ", ".join(parts)
+
+
+def _missing_required_output_descriptions(
+    *,
+    capability: ToolCapability,
+    semantic_outputs: dict[str, dict[str, Any]],
+) -> list[str]:
+    return [
+        _format_output_rule(output)
+        for output in capability.outputs
+        if output.required and output.semantic_type not in semantic_outputs
+    ]
+
+
+def _missing_required_outputs_message(
+    *,
+    capability: ToolCapability,
+    semantic_outputs: dict[str, dict[str, Any]],
+    step: AgentRunStep,
+) -> str:
+    missing_rules = _missing_required_output_descriptions(
+        capability=capability,
+        semantic_outputs=semantic_outputs,
+    )
+    detail = "; ".join(missing_rules) if missing_rules else "未知必需输出"
+    return (
+        "任务成功但缺少智能体所需语义产物: "
+        f"tool={step.tool_slug}, capability={capability.capability}, "
+        f"step={step.step_key}, missing=[{detail}]"
+    )
+
+
 async def _mark_run_success_if_complete(db: AsyncSession, run: AgentRun) -> None:
     if run.steps and all(step.status == "success" for step in run.steps):
         run.status = "success"
@@ -868,7 +991,11 @@ async def reconcile_waiting_agent_steps(
         )
 
         if not _required_outputs_present(capability=capability, semantic_outputs=semantic_outputs):
-            error_message = "任务成功但缺少智能体所需语义产物"
+            error_message = _missing_required_outputs_message(
+                capability=capability,
+                semantic_outputs=semantic_outputs,
+                step=step,
+            )
             if await _try_replan_failed_step_with_uploaded_inputs(
                 db,
                 run=run,

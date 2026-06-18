@@ -55,7 +55,7 @@ test('node input requirements follow incoming semantic edges', () => {
 
   assert.deepEqual(
     requirements.map(requirement => requirement.semanticType).sort(),
-    ['generated_ligand', 'protein_structure']
+    ['generated_ligand', 'protein_pdb']
   )
 })
 
@@ -92,6 +92,6 @@ test('artifact recommendation marks missing input when upstream task is unavaila
   })
 
   assert.equal(recommendations.length, 1)
-  assert.equal(recommendations[0]?.semanticType, 'pocket_structure')
+  assert.equal(recommendations[0]?.semanticType, 'pocket_pdb')
   assert.equal(recommendations[0]?.artifact, null)
 })

@@ -4,18 +4,16 @@ export interface WorkflowToolFieldBinding {
   readonly semanticType: WorkflowArtifactSemanticType
   readonly field: string
   readonly required?: boolean
+  readonly acceptedExtensions?: readonly string[]
   readonly preferredArtifactNameIncludes?: readonly string[]
 }
 
-type WorkflowToolOutputFileMatch =
-  | {
-      readonly filenameIncludes: string
-      readonly contentType?: string
-    }
-  | {
-      readonly filenameIncludes?: string
-      readonly contentType: string
-    }
+interface WorkflowToolOutputFileMatch {
+  readonly filenameIncludes?: string
+  readonly filenameIncludesAny?: readonly string[]
+  readonly extension?: string
+  readonly contentType?: string
+}
 
 interface WorkflowToolFileOutputExtractor {
   readonly semanticType: WorkflowArtifactSemanticType
@@ -45,17 +43,17 @@ export const WORKFLOW_TOOL_BINDINGS = {
   'pocket-explorer': {
     toolSlug: 'pocket-explorer',
     stepKey: 'pocketExploration',
-    acceptedInputTypes: ['protein_structure'],
+    acceptedInputTypes: ['protein_pdb'],
     fieldBindings: [
       {
-        semanticType: 'protein_structure',
-        field: 'protein_structure',
+        semanticType: 'protein_pdb',
+        field: 'protein_pdb',
         required: true
       }
     ],
     outputExtractors: [
       {
-        semanticType: 'pocket_structure',
+        semanticType: 'pocket_pdb',
         source: 'output_files',
         match: {
           filenameIncludes: 'pocket'
@@ -66,10 +64,10 @@ export const WORKFLOW_TOOL_BINDINGS = {
   'gcdm-pocket-generation': {
     toolSlug: 'gcdm-pocket-generation',
     stepKey: 'moleculeGenerationOrVirtualScreening',
-    acceptedInputTypes: ['pocket_structure'],
+    acceptedInputTypes: ['pocket_pdb'],
     fieldBindings: [
       {
-        semanticType: 'pocket_structure',
+        semanticType: 'pocket_pdb',
         field: 'input_files.pocket_pdb',
         required: true,
         preferredArtifactNameIncludes: ['protein_pocket_residues', 'pocket0']
@@ -88,11 +86,11 @@ export const WORKFLOW_TOOL_BINDINGS = {
   'targetdiff-service': {
     toolSlug: 'targetdiff-service',
     stepKey: 'moleculeGenerationOrVirtualScreening',
-    acceptedInputTypes: ['pocket_structure'],
+    acceptedInputTypes: ['pocket_pdb'],
     fieldBindings: [
       {
-        semanticType: 'pocket_structure',
-        field: 'pocket_structure',
+        semanticType: 'pocket_pdb',
+        field: 'pocket_pdb',
         required: true
       }
     ],
@@ -107,10 +105,10 @@ export const WORKFLOW_TOOL_BINDINGS = {
   'molecular-docking': {
     toolSlug: 'molecular-docking',
     stepKey: 'molecularDockingAndAffinityPrediction',
-    acceptedInputTypes: ['protein_structure', 'generated_ligand'],
+    acceptedInputTypes: ['protein_pdb', 'generated_ligand'],
     fieldBindings: [
       {
-        semanticType: 'protein_structure',
+        semanticType: 'protein_pdb',
         field: 'receptor_file',
         required: true
       },

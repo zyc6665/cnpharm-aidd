@@ -1,6 +1,14 @@
 import { del, get, post, put } from './request'
 import type { ApiResponse } from '@/types/api'
-import type { PaginatedResponse, PaginationParams } from '@/types/models'
+import type {
+  PaginatedResponse,
+  PaginationParams,
+  WorkflowRun,
+  WorkflowRunCreateParams,
+  WorkflowTemplate,
+  WorkflowTemplateCreateParams,
+  WorkflowTemplateUpdateParams
+} from '@/types/models'
 
 export interface WorkflowCanvasPosition {
   x: number
@@ -80,4 +88,59 @@ export const updateWorkflowDefinition = (
 
 export const deleteWorkflowDefinition = (id: string): Promise<ApiResponse<null>> => {
   return del<null>(`/workflows/${id}`)
+}
+
+export const getWorkflowTemplates = (): Promise<ApiResponse<PaginatedResponse<WorkflowTemplate>>> => {
+  return get<PaginatedResponse<WorkflowTemplate>>('/workflows/templates')
+}
+
+export const getWorkflowRuns = (params?: {
+  template_id?: string
+  page?: number
+  page_size?: number
+}): Promise<ApiResponse<PaginatedResponse<WorkflowRun>>> => {
+  return get<PaginatedResponse<WorkflowRun>>('/workflows/runs', params)
+}
+
+export const getWorkflowTemplate = (id: string): Promise<ApiResponse<WorkflowTemplate>> => {
+  return get<WorkflowTemplate>(`/workflows/templates/${id}`)
+}
+
+export const createWorkflowTemplate = (
+  data: WorkflowTemplateCreateParams
+): Promise<ApiResponse<WorkflowTemplate>> => {
+  return post<WorkflowTemplate>('/workflows/templates', data)
+}
+
+export const updateWorkflowTemplate = (
+  id: string,
+  data: WorkflowTemplateUpdateParams
+): Promise<ApiResponse<WorkflowTemplate>> => {
+  return put<WorkflowTemplate>(`/workflows/templates/${id}`, data)
+}
+
+export const duplicateWorkflowTemplate = (
+  id: string,
+  data: { name?: string } = {}
+): Promise<ApiResponse<WorkflowTemplate>> => {
+  return post<WorkflowTemplate>(`/workflows/templates/${id}/duplicate`, data)
+}
+
+export const deleteWorkflowTemplate = (id: string): Promise<ApiResponse<{ id: string }>> => {
+  return del<{ id: string }>(`/workflows/templates/${id}`)
+}
+
+export const createWorkflowRun = (
+  templateId: string,
+  data: WorkflowRunCreateParams
+): Promise<ApiResponse<WorkflowRun>> => {
+  return post<WorkflowRun>(`/workflows/templates/${templateId}/runs`, data)
+}
+
+export const getWorkflowRun = (runId: string): Promise<ApiResponse<WorkflowRun>> => {
+  return get<WorkflowRun>(`/workflows/runs/${runId}`)
+}
+
+export const syncWorkflowRun = (runId: string): Promise<ApiResponse<WorkflowRun>> => {
+  return post<WorkflowRun>(`/workflows/runs/${runId}/sync`)
 }

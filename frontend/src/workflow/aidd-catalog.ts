@@ -19,8 +19,8 @@ export const AIDD_WORKFLOW_STEPS: readonly WorkflowStepCatalogItem[] = [
     key: 'pocketExploration',
     titleKey: 'home.workflow.items.pocketExploration.title',
     descriptionKey: 'home.workflow.items.pocketExploration.description',
-    requiredInputTypes: ['protein_structure'],
-    producedOutputTypes: ['pocket_structure'],
+    requiredInputTypes: ['protein_pdb'],
+    producedOutputTypes: ['pocket_pdb'],
     toolSlugs: ['pocket-explorer'],
     recommendedToolSlug: 'pocket-explorer'
   },
@@ -28,7 +28,7 @@ export const AIDD_WORKFLOW_STEPS: readonly WorkflowStepCatalogItem[] = [
     key: 'moleculeGenerationOrVirtualScreening',
     titleKey: 'home.workflow.items.moleculeGenerationOrVirtualScreening.title',
     descriptionKey: 'home.workflow.items.moleculeGenerationOrVirtualScreening.description',
-    requiredInputTypes: ['pocket_structure'],
+    requiredInputTypes: ['pocket_pdb'],
     producedOutputTypes: ['generated_ligand'],
     toolSlugs: ['gcdm-pocket-generation', 'targetdiff-service'],
     recommendedToolSlug: 'gcdm-pocket-generation'
@@ -37,7 +37,7 @@ export const AIDD_WORKFLOW_STEPS: readonly WorkflowStepCatalogItem[] = [
     key: 'molecularDockingAndAffinityPrediction',
     titleKey: 'home.workflow.items.molecularDockingAndAffinityPrediction.title',
     descriptionKey: 'home.workflow.items.molecularDockingAndAffinityPrediction.description',
-    requiredInputTypes: ['protein_structure', 'generated_ligand'],
+    requiredInputTypes: ['protein_pdb', 'generated_ligand'],
     producedOutputTypes: ['docking_pose', 'affinity_report'],
     toolSlugs: ['molecular-docking'],
     recommendedToolSlug: 'molecular-docking'

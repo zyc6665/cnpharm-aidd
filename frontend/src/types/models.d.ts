@@ -169,6 +169,7 @@ export interface ToolOptionSummary {
   icon_url?: Tool['icon_url']
   status: Tool['status']
   is_public?: Tool['is_public']
+  contract?: ToolContract
 }
 
 export interface ToolSchema {
@@ -225,6 +226,72 @@ export interface ToolReference {
   year?: number
 }
 
+export interface ToolContractVersion {
+  id?: string | null
+  version?: string | null
+  is_active?: boolean | null
+  deprecated?: boolean | null
+}
+
+export interface ToolContractExecutor {
+  type: string
+  timeout_sec?: number | null
+}
+
+export interface ToolCapabilityInput {
+  semantic_type: string
+  field: string
+  required?: boolean
+  accepted_extensions?: string[]
+}
+
+export interface ToolCapabilityOutputMatch {
+  extension?: string | null
+  filename_contains_any?: string[]
+  content_type?: string | null
+}
+
+export interface ToolCapabilityOutput {
+  semantic_type: string
+  source: 'output_files' | 'output_data'
+  match?: ToolCapabilityOutputMatch | null
+  path?: string | null
+  required?: boolean
+}
+
+export interface ToolContractCapability {
+  enabled: boolean
+  capability?: string | null
+  stage?: string | null
+  inputs: ToolCapabilityInput[]
+  outputs: ToolCapabilityOutput[]
+  defaults: Record<string, unknown>
+  virtual?: boolean
+}
+
+export interface ToolContractValidation {
+  status: 'valid' | 'invalid'
+  errors: string[]
+}
+
+export interface ToolContract {
+  contract_version: string
+  id?: string | null
+  slug: string
+  name: string
+  description?: string | null
+  status: Tool['status'] | 'virtual' | string
+  is_public?: boolean | null
+  version?: ToolContractVersion | null
+  executor: ToolContractExecutor
+  schema: {
+    input: ToolSchema
+    output: ToolSchema
+  }
+  capability: ToolContractCapability
+  validation: ToolContractValidation
+}
+
 export interface Category {
   id: string
   name: string
@@ -249,6 +316,7 @@ export interface WorkbenchGroupTool {
   is_public?: boolean
   is_recommended: boolean
   sort_order: number
+  contract?: ToolContract
 }
 
 export interface WorkbenchGroup {
@@ -261,6 +329,85 @@ export interface WorkbenchGroup {
   tools: WorkbenchGroupTool[]
   created_at?: string
   updated_at?: string
+}
+
+export interface WorkflowDefinitionNode {
+  id: string
+  kind?: 'input' | 'tool' | string
+  type?: string
+  semantic_type?: string
+  tool_id?: string
+  tool_slug?: string
+  tool_version?: ToolContractVersion | null
+  semantic_inputs?: Record<string, string>
+  params?: Record<string, unknown>
+  [key: string]: unknown
+}
+
+export interface WorkflowDefinitionEdge {
+  source: string
+  target: string
+  source_output?: string
+  target_input?: string
+  [key: string]: unknown
+}
+
+export interface WorkflowDefinition {
+  nodes: WorkflowDefinitionNode[]
+  edges: WorkflowDefinitionEdge[]
+  [key: string]: unknown
+}
+
+export interface WorkflowTemplate {
+  id: string
+  owner_id: string
+  name: string
+  description?: string | null
+  status: 'draft' | 'published' | string
+  definition: WorkflowDefinition
+  is_public: boolean
+  version: number
+  created_at: string
+  updated_at: string
+}
+
+export interface WorkflowRun {
+  id: string
+  owner_id: string
+  template_id?: string | null
+  name: string
+  status: 'pending' | 'running' | 'waiting_task' | 'success' | 'failure' | 'canceled' | string
+  definition: WorkflowDefinition
+  input_files: Record<string, string>
+  execution_order: string[]
+  node_states: Record<string, unknown>
+  artifact_lineage: Record<string, unknown>
+  error_message?: string | null
+  started_at?: string | null
+  finished_at?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface WorkflowTemplateCreateParams {
+  name: string
+  description?: string | null
+  definition: WorkflowDefinition
+  is_public?: boolean
+}
+
+export interface WorkflowTemplateUpdateParams {
+  name?: string
+  description?: string | null
+  definition?: WorkflowDefinition
+  is_public?: boolean
+  status?: string
+}
+
+export interface WorkflowRunCreateParams {
+  name?: string
+  input_files: Record<string, string>
+  params?: Record<string, unknown>
 }
 
 export interface WorkbenchGroupMapping {
@@ -524,6 +671,8 @@ export interface ArtifactFile {
   tool_id: string
   tool_name: string
   tool_slug: string
+  semantic_type?: string | null
+  semantic_source?: string | null
   created_at: string
   updated_at?: string
 }

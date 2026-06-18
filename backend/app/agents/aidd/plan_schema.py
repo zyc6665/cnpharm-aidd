@@ -117,6 +117,10 @@ def _tool_outputs(tool: dict[str, Any] | None) -> set[str]:
     return {str(output) for output in tool.get("outputs", [])}
 
 
+def _tool_slug(tool: dict[str, Any]) -> str:
+    return str(tool.get("slug") or tool.get("tool_slug") or "")
+
+
 def _unique_step_key(base: str, used_step_keys: set[str]) -> str:
     if base not in used_step_keys:
         return base
@@ -240,7 +244,11 @@ def parse_model_plan(
     if not plan.steps:
         raise PlanValidationError("模型计划至少需要一个步骤")
 
-    tools_by_slug = {tool["tool_slug"]: tool for tool in available_tools}
+    tools_by_slug = {
+        slug: tool
+        for tool in available_tools
+        if (slug := _tool_slug(tool))
+    }
     plan = _repair_generated_ligand_smiles_sources(plan, tools_by_slug=tools_by_slug)
     seen_step_keys: set[str] = set()
     normalized_steps: list[AIDDGraphPlanStep] = []

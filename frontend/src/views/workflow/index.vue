@@ -44,6 +44,115 @@
             </a-space>
           </div>
 
+          <div class="workflow-template-toolbar">
+            <a-input
+              v-model:value="workflowTemplateName"
+              class="workflow-name-input"
+              :placeholder="t('workflow.templates.namePlaceholder')"
+            />
+            <a-select
+              class="workflow-load-select"
+              :value="workflowStore.activeWorkflowTemplateId"
+              :placeholder="t('workflow.templates.loadPlaceholder')"
+              :options="workflowTemplateOptions"
+              :loading="workflowStore.isLoadingWorkflowTemplates"
+              allow-clear
+              @change="handleTemplateSelect"
+            />
+            <a-space size="small" wrap>
+              <a-button @click="handleNewWorkflowTemplate">
+                {{ t('workflow.templates.new') }}
+              </a-button>
+              <a-button
+                type="primary"
+                :loading="workflowStore.isSavingWorkflowTemplate"
+                @click="handleSaveWorkflowTemplate"
+              >
+                {{ t('workflow.templates.save') }}
+              </a-button>
+              <a-button
+                :disabled="!workflowStore.activeWorkflowTemplateId"
+                :loading="workflowStore.isSavingWorkflowTemplate"
+                @click="handleDuplicateWorkflowTemplate"
+              >
+                {{ t('workflow.templates.duplicate') }}
+              </a-button>
+              <a-popconfirm
+                :title="t('workflow.templates.deleteConfirm')"
+                :ok-text="t('common.delete')"
+                :cancel-text="t('common.cancel')"
+                placement="bottomRight"
+                @confirm="handleDeleteWorkflowTemplate"
+              >
+                <a-button
+                  danger
+                  :disabled="!workflowStore.activeWorkflowTemplateId"
+                  :loading="workflowStore.isSavingWorkflowTemplate"
+                >
+                  {{ t('workflow.templates.delete') }}
+                </a-button>
+              </a-popconfirm>
+              <a-button
+                :disabled="!workflowStore.activeWorkflowTemplateId && !workflowTemplateName.trim()"
+                :loading="workflowStore.isRunningWorkflowTemplate"
+                @click="handleRunWorkflowTemplate"
+              >
+                {{ t('workflow.templates.run') }}
+              </a-button>
+            </a-space>
+          </div>
+
+          <div v-if="workflowInputRequirements.length > 0" class="workflow-run-input-panel">
+            <div class="run-input-header">
+              <span>{{ t('workflow.templates.requiredInputs') }}</span>
+              <a-button
+                size="small"
+                :disabled="artifactsStore.loading || artifactsStore.items.length === 0"
+                @click="autofillWorkflowInputSelections"
+              >
+                {{ t('workflow.templates.autoFillInputs') }}
+              </a-button>
+            </div>
+            <div class="run-input-grid">
+              <label
+                v-for="semanticType in workflowInputRequirements"
+                :key="semanticType"
+                class="run-input-field"
+              >
+                <span>{{ semanticType }}</span>
+                <a-select
+                  :value="workflowRunInputSelections[semanticType]"
+                  :options="getArtifactOptionsForSemanticType(semanticType)"
+                  :placeholder="t('workflow.templates.selectInputArtifact')"
+                  :loading="artifactsStore.loading"
+                  allow-clear
+                  show-search
+                  option-filter-prop="label"
+                  @change="handleWorkflowInputSelect(semanticType, $event)"
+                />
+              </label>
+            </div>
+          </div>
+
+          <WorkflowRunHistoryPanel
+            v-if="userStore.isLoggedIn"
+            :runs="workflowStore.workflowRuns"
+            :active-run-id="workflowStore.activeWorkflowRunId"
+            :loading="workflowStore.isLoadingWorkflowRuns"
+            :has-more="workflowStore.hasMoreWorkflowRuns"
+            :loading-more="workflowStore.isLoadingMoreWorkflowRuns"
+            @select="handleWorkflowRunSelect"
+            @refresh="handleRefreshWorkflowRuns"
+            @load-more="handleLoadMoreWorkflowRuns"
+          />
+
+          <WorkflowRunStatusPanel
+            v-if="workflowStore.activeWorkflowRun"
+            :run="workflowStore.activeWorkflowRun"
+            :syncing="workflowStore.isSyncingWorkflowRun || workflowStore.isLoadingWorkflowRun"
+            @sync="handleSyncWorkflowRun"
+          />
+
           <section class="workflow-preflight-region">
             <WorkflowPreflightPanel
               :preflight="workflowPreflight"
@@ -185,6 +294,8 @@
   import WorkflowNodeInspector from '@/components/workflow/WorkflowNodeInspector.vue'
   import WorkflowPreflightPanel from '@/components/workflow/WorkflowPreflightPanel.vue'
   import WorkflowResultsReportPanel from '@/components/workflow/WorkflowResultsReportPanel.vue'
+  import WorkflowRunHistoryPanel from '@/components/workflow/WorkflowRunHistoryPanel.vue'
+  import WorkflowRunStatusPanel from '@/components/workflow/WorkflowRunStatusPanel.vue'
   import WorkflowNodeStatusBadge from '@/components/workflow/WorkflowNodeStatusBadge.vue'
   import WorkflowTemplateCanvas from '@/components/workflow/WorkflowTemplateCanvas.vue'
   import {
@@ -198,8 +309,19 @@
   import type { WorkflowDefinitionPayload } from '@/api/workflows'
   import { getTaskDetail, isTaskTerminalStatus } from '@/api/tasks'
   import { getToolDetail } from '@/api/tools'
-  import { resolveReadyToolNodeIds, resolveWorkflowExecutionOrder } from '@/workflow/template-runner'
+  import {
+    resolveReadyToolNodeIds,
+    resolveWorkflowExecutionOrder,
+    validateWorkflowDefinition,
+    validateWorkflowExecutionOrder
+  } from '@/workflow/template-runner'
   import { buildWorkflowPreflight } from '@/workflow/preflight'
+  import {
+    buildWorkflowInputFileMap,
+    extractWorkflowInputRequirements,
+    findLatestArtifactForSemanticType
+  } from '@/workflow/workflow-definitions'
+  import { shouldAutoSyncWorkflowRun } from '@/workflow/workflow-runs'
   import { toWorkflowTaskRef } from '@/workflow/task-state'
   import { resolveWorkflowCanvasNodeStatus } from '@/workflow/template-state'
   import {
@@ -215,7 +337,12 @@
   } from '@/workflow/templates'
   import type { WorkflowArtifactSemanticType, WorkflowTaskRef } from '@/workflow/artifact-types'
   import type { WorkflowReportRow } from '@/workflow/report'
-  import type { ArtifactFile, Tool, ToolSchema } from '@/types/models'
+  import type {
+    ArtifactFile,
+    Tool,
+    ToolSchema,
+    WorkflowDefinition
+  } from '@/types/models'
 
   const { t } = useI18n()
   const artifactsStore = useArtifactsStore()
@@ -230,9 +357,12 @@
 
   const activeMode = ref<WorkflowMode>('manual')
   const workflowName = ref('AIDD workflow')
+  const workflowTemplateName = ref('AIDD workflow')
   const selectedSavedWorkflowId = ref<string | undefined>()
   const runningWorkflow = ref(false)
   const sidebarToolSearchKeyword = ref('')
+  const workflowRunInputSelections = ref<Record<string, string | undefined>>({})
+  const workflowRunAutoSyncTimer = ref<number | null>(null)
 
   const activeTemplate = computed(() => {
     return getWorkflowTemplateById(workflowStore.templateId) ?? AIDD_WORKFLOW_TEMPLATE
@@ -269,6 +399,23 @@
       value: workflow.id,
       label: workflow.name
     }))
+  })
+
+  const workflowTemplateOptions = computed(() => {
+    return workflowStore.workflowTemplates.map(template => ({
+      value: template.id,
+      label: template.name
+    }))
+  })
+
+  const currentWorkflowDefinition = computed<WorkflowDefinition>(() => buildCurrentWorkflowDefinition())
+
+  const workflowInputRequirements = computed(() => {
+    return extractWorkflowInputRequirements(currentWorkflowDefinition.value)
+  })
+
+  const selectedWorkflowInputFiles = computed(() => {
+    return buildWorkflowInputFileMap(workflowInputRequirements.value, workflowRunInputSelections.value)
   })
 
   const availableWorkflowTools = computed(() => {
@@ -636,6 +783,282 @@
     }
   }
 
+  function buildCurrentWorkflowDefinition(): WorkflowDefinition {
+    const nodes = editableTemplate.value.nodes.map(node => ({
+      id: node.id,
+      kind: node.type === 'input' ? 'input' : 'tool',
+      type: node.type,
+      semantic_type: node.requiredInputTypes?.[0] ?? node.recommendedToolSlug ?? node.id,
+      tool_slug: node.type === 'tool'
+        ? resolveSelectedToolSlug(node.id) ?? node.recommendedToolSlug ?? undefined
+        : undefined,
+      semantic_inputs: buildSemanticInputsForNode(node.id),
+      params: workflowStore.nodeFormDrafts[node.id] ?? {},
+      position: node.position
+    }))
+
+    const edges = editableTemplate.value.edges.map(edge => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      source_output: edge.artifactType,
+      target_input: edge.artifactType
+    }))
+
+    return { nodes, edges }
+  }
+
+  function buildSemanticInputsForNode(nodeId: string) {
+    const semanticInputs: Record<string, string> = {}
+    const node = editableTemplate.value.nodes.find(item => item.id === nodeId)
+    if (!node) {
+      return semanticInputs
+    }
+
+    const incomingEdges = editableTemplate.value.edges.filter(edge => edge.target === nodeId)
+    for (const edge of incomingEdges) {
+      if (!edge.artifactType) {
+        continue
+      }
+      const sourceNode = editableTemplate.value.nodes.find(item => item.id === edge.source)
+      if (!sourceNode) {
+        continue
+      }
+      semanticInputs[edge.artifactType] = sourceNode.type === 'input'
+        ? `workflow_input:${edge.artifactType}`
+        : `node:${edge.source}:${edge.artifactType}`
+    }
+
+    for (const inputType of node.requiredInputTypes ?? []) {
+      if (!semanticInputs[inputType]) {
+        semanticInputs[inputType] = `workflow_input:${inputType}`
+      }
+    }
+
+    return semanticInputs
+  }
+
+  async function handleNewWorkflowTemplate() {
+    workflowStore.clearActiveWorkflowTemplate()
+    workflowTemplateName.value = ''
+    selectedSavedWorkflowId.value = undefined
+  }
+
+  async function handleTemplateSelect(templateId: string | undefined) {
+    if (!templateId) {
+      workflowStore.clearActiveWorkflowTemplate()
+      return
+    }
+
+    try {
+      const template = await workflowStore.loadWorkflowTemplate(templateId)
+      workflowTemplateName.value = template.name
+      selectedSavedWorkflowId.value = template.id
+      workflowStore.applyWorkflowDefinition({
+        template_id: template.id,
+        name: template.name,
+        description: template.description ?? undefined,
+        nodes: (template.definition.nodes ?? []).map((node: any) => ({
+          id: node.id,
+          type: node.kind === 'input' ? 'input' : 'tool',
+          titleKey: node.tool_slug || node.semantic_type || node.id,
+          descriptionKey: node.tool_slug || node.semantic_type || node.id,
+          position: node.position ?? { x: 0, y: 0 },
+          toolSlugs: node.tool_slug ? [node.tool_slug] : [],
+          recommendedToolSlug: node.tool_slug ?? undefined,
+          requiredInputTypes: Object.keys(node.semantic_inputs ?? {}),
+          producedOutputTypes: []
+        })),
+        edges: (template.definition.edges ?? []).map((edge: any, index: number) => ({
+          id: edge.id ?? `edge-${index}`,
+          source: edge.source,
+          target: edge.target,
+          artifactType: edge.source_output ?? edge.target_input
+        })),
+        selected_tool_by_node: {},
+        artifact_bindings_by_node: {},
+        status: 'draft'
+      } as any)
+    } catch {
+      // 请求层会展示错误信息。
+    }
+  }
+
+  async function handleSaveWorkflowTemplate() {
+    const payload = {
+      name: workflowTemplateName.value.trim() || 'AIDD workflow',
+      description: workflowStore.activeWorkflowTemplate?.description ?? '',
+      definition: buildCurrentWorkflowDefinition(),
+      is_public: workflowStore.activeWorkflowTemplate?.is_public ?? false
+    }
+
+    try {
+      const template = workflowStore.activeWorkflowTemplateId
+        ? await workflowStore.updateSavedWorkflowTemplate(workflowStore.activeWorkflowTemplateId, payload)
+        : await workflowStore.saveWorkflowTemplate(payload)
+      workflowTemplateName.value = template.name
+      selectedSavedWorkflowId.value = template.id
+      message.success('工作流模板已保存')
+    } catch {
+      // 请求层会展示错误信息。
+    }
+  }
+
+  async function handleDuplicateWorkflowTemplate() {
+    const templateId = workflowStore.activeWorkflowTemplateId
+    if (!templateId) {
+      return
+    }
+
+    try {
+      const duplicated = await workflowStore.duplicateSavedWorkflowTemplate(
+        templateId,
+        `${workflowTemplateName.value || 'AIDD workflow'} Copy`
+      )
+      workflowTemplateName.value = duplicated.name
+      selectedSavedWorkflowId.value = duplicated.id
+      message.success('工作流模板已复制')
+    } catch {
+      // 请求层会展示错误信息。
+    }
+  }
+
+  async function handleDeleteWorkflowTemplate() {
+    const templateId = workflowStore.activeWorkflowTemplateId
+    if (!templateId) {
+      return
+    }
+
+    try {
+      await workflowStore.removeWorkflowTemplate(templateId)
+      workflowTemplateName.value = 'AIDD workflow'
+      selectedSavedWorkflowId.value = undefined
+      message.success('工作流模板已删除')
+    } catch {
+      // 请求层会展示错误信息。
+    }
+  }
+
+  async function handleRunWorkflowTemplate() {
+    const definition = buildCurrentWorkflowDefinition()
+    const validationResult = validateWorkflowDefinition(definition)
+    const executionValidationResult = validateWorkflowExecutionOrder(definition)
+    if (!validationResult.valid || !executionValidationResult.valid) {
+      message.warning(validationResult.message ?? executionValidationResult.message)
+      return
+    }
+
+    const templateId = workflowStore.activeWorkflowTemplateId
+    let activeTemplateId = templateId
+    if (!activeTemplateId) {
+      const template = await workflowStore.saveWorkflowTemplate({
+        name: workflowTemplateName.value.trim() || 'AIDD workflow',
+        definition: buildCurrentWorkflowDefinition(),
+        is_public: false
+      })
+      activeTemplateId = template.id
+      selectedSavedWorkflowId.value = template.id
+    }
+
+    const run = await workflowStore.runWorkflowTemplate(activeTemplateId!, {
+      name: workflowTemplateName.value.trim() || 'AIDD workflow',
+      input_files: selectedWorkflowInputFiles.value
+    })
+    await workflowStore.loadWorkflowRuns({ template_id: activeTemplateId!, page: 1, page_size: 20 })
+    await workflowStore.loadWorkflowRun(run.id)
+  }
+
+  async function handleRefreshWorkflowRuns() {
+    const templateId = workflowStore.activeWorkflowTemplateId ?? undefined
+    await workflowStore.loadWorkflowRuns({ template_id: templateId, page: 1, page_size: 20 })
+  }
+
+  async function handleLoadMoreWorkflowRuns() {
+    const templateId = workflowStore.activeWorkflowTemplateId ?? undefined
+    if (!workflowStore.hasMoreWorkflowRuns) {
+      return
+    }
+    await workflowStore.loadWorkflowRuns(
+      {
+        template_id: templateId,
+        page: workflowStore.workflowRunsPagination.page + 1,
+        page_size: workflowStore.workflowRunsPagination.pageSize
+      },
+      { append: true }
+    )
+  }
+
+  async function handleWorkflowRunSelect(runId: string) {
+    await workflowStore.loadWorkflowRun(runId)
+    await scheduleWorkflowRunAutoSync()
+  }
+
+  async function handleSyncWorkflowRun() {
+    await workflowStore.syncActiveWorkflowRun()
+  }
+
+  async function autofillWorkflowInputSelections() {
+    const nextSelections: Record<string, string | undefined> = {}
+    for (const semanticType of workflowInputRequirements.value) {
+      const artifact = findLatestArtifactForSemanticType(artifactsStore.items, semanticType)
+      nextSelections[semanticType] = artifact?.id
+    }
+    workflowRunInputSelections.value = nextSelections
+  }
+
+  function getArtifactOptionsForSemanticType(semanticType: string) {
+    return artifactsStore.items
+      .filter(artifact => artifact.semantic_type === semanticType)
+      .map(artifact => ({
+        value: artifact.id,
+        label: `${artifact.filename} · ${artifact.tool_name}`
+      }))
+  }
+
+  function handleWorkflowInputSelect(semanticType: string, artifactId: string | undefined) {
+    workflowRunInputSelections.value = {
+      ...workflowRunInputSelections.value,
+      [semanticType]: artifactId
+    }
+  }
+
+  async function scheduleWorkflowRunAutoSync() {
+    clearWorkflowRunAutoSync()
+    const run = workflowStore.activeWorkflowRun
+    if (!shouldAutoSyncWorkflowRun(run, {
+      isLoggedIn: userStore.isLoggedIn,
+      isLoading: workflowStore.isLoadingWorkflowRun,
+      isSyncing: workflowStore.isSyncingWorkflowRun
+    })) {
+      return
+    }
+
+    workflowRunAutoSyncTimer.value = window.setInterval(async () => {
+      await workflowStore.syncActiveWorkflowRun()
+    }, 5000)
+  }
+
+  function clearWorkflowRunAutoSync() {
+    if (workflowRunAutoSyncTimer.value !== null) {
+      window.clearInterval(workflowRunAutoSyncTimer.value)
+      workflowRunAutoSyncTimer.value = null
+    }
+  }
+
+  async function restoreActiveWorkflowTemplate() {
+    if (!workflowStore.activeWorkflowTemplateId) {
+      return
+    }
+    await handleTemplateSelect(workflowStore.activeWorkflowTemplateId)
+  }
+
+  async function restoreActiveWorkflowRun() {
+    if (!workflowStore.activeWorkflowRunId) {
+      return
+    }
+    await workflowStore.loadWorkflowRun(workflowStore.activeWorkflowRunId)
+  }
+
   async function handleLoadWorkflow() {
     if (!selectedSavedWorkflowId.value) {
       return
@@ -761,15 +1184,25 @@
         artifactsStore.resetArtifacts()
         workflowDefinitionsStore.clearCurrentWorkflowDefinition()
         selectedSavedWorkflowId.value = undefined
+        clearWorkflowRunAutoSync()
         return
       }
 
       await Promise.allSettled([
         artifactsStore.fetchArtifacts({ page: 1, page_size: 100 }),
-        workflowDefinitionsStore.fetchWorkflowDefinitions({ page: 1, page_size: 100 })
+        workflowDefinitionsStore.fetchWorkflowDefinitions({ page: 1, page_size: 100 }),
+        workflowStore.loadWorkflowTemplates(),
+        workflowStore.loadWorkflowRuns({ page: 1, page_size: 20 })
       ])
     },
     { immediate: true }
+  )
+
+  watch(
+    () => workflowStore.activeWorkflowRunId,
+    async () => {
+      await scheduleWorkflowRunAutoSync()
+    }
   )
 
   onMounted(async () => {
@@ -778,6 +1211,15 @@
       toolsStore.fetchWorkflowTools()
     ])
   })
+
+  onMounted(async () => {
+    await restoreActiveWorkflowTemplate()
+    await restoreActiveWorkflowRun()
+  })
+
+  function buildWorkflowReportRows() {
+    return workflowReportRows.value
+  }
 </script>
 
 <style scoped lang="less">

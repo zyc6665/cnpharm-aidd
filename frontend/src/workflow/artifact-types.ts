@@ -1,4 +1,8 @@
 import type { Task } from '@/types/models'
+import {
+  WORKFLOW_ARTIFACT_SEMANTIC_TYPES,
+  type WorkflowArtifactSemanticType
+} from './semantic-types.ts'
 
 export const WORKFLOW_STEP_KEYS = [
   'pocketExploration',
@@ -22,18 +26,7 @@ export const WORKFLOW_STEP_STATUSES = [
 
 export type WorkflowStepStatus = (typeof WORKFLOW_STEP_STATUSES)[number]
 
-export const WORKFLOW_ARTIFACT_SEMANTIC_TYPES = [
-  'protein_structure',
-  'pocket_structure',
-  'generated_ligand',
-  'virtual_screening_hits',
-  'docking_pose',
-  'affinity_report',
-  'property_report',
-  'optimized_lead'
-] as const
-
-export type WorkflowArtifactSemanticType = (typeof WORKFLOW_ARTIFACT_SEMANTIC_TYPES)[number]
+export { WORKFLOW_ARTIFACT_SEMANTIC_TYPES, type WorkflowArtifactSemanticType }
 
 export interface WorkflowArtifact {
   id: string

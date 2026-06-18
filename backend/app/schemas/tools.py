@@ -3,7 +3,7 @@
 
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from app.schemas.common import TimestampMixin
 from app.schemas.files import FileUploadResponse
 from app.schemas.statistics import ToolStatisticsResponse
@@ -188,6 +188,26 @@ class ToolWorkbenchGroupToolResponse(BaseModel):
     is_public: bool
     is_recommended: bool = False
     sort_order: int = 0
+    contract: Optional[Dict[str, Any]] = None
+
+
+class ToolContractResponse(BaseModel):
+    """工具契约响应。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    contract_version: str
+    id: Optional[str] = None
+    slug: Optional[str] = None
+    name: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[str] = None
+    is_public: Optional[bool] = None
+    version: Optional[Dict[str, Any]] = None
+    executor: Dict[str, Any] = Field(default_factory=dict)
+    schema_: Dict[str, Any] = Field(default_factory=dict, alias="schema")
+    capability: Dict[str, Any] = Field(default_factory=dict)
+    validation: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ToolWorkbenchGroupPublicResponse(TimestampMixin):

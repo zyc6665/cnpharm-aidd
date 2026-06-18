@@ -1,0 +1,146 @@
+from types import SimpleNamespace
+import sys
+from pathlib import Path
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+BACKEND_ROOT = PROJECT_ROOT / "backend"
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from app.agents.aidd.capabilities import AIDD_TOOL_CAPABILITIES
+from app.agents.aidd.plan_schema import parse_model_plan
+from app.agents.aidd.registry import capability_to_tool_summary
+from app.services.tool_contracts import build_tool_contract
+
+
+def test_build_tool_contract_normalizes_identity_executor_schema_and_capability():
+    tool = SimpleNamespace(
+        id="tool-1",
+        slug="gcdm-pocket-generation",
+        name="GCDM Pocket Generation",
+        description="Generate ligands from a pocket",
+        status="published",
+        is_public=True,
+        current_version=SimpleNamespace(
+            id="version-1",
+            version="1.0.0",
+            config={
+                "type": "ssh_job",
+                "timeout_sec": 3600,
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"pocket_pdb": {"type": "string"}},
+                    "required": ["pocket_pdb"],
+                },
+                "output_schema": {"type": "object", "properties": {"success": {"type": "boolean"}}},
+                "agent_capability": {
+                    "enabled": True,
+                    "stage": "molecule_generation",
+                    "capability": "molecule_generation",
+                    "inputs": [
+                        {
+                            "semantic_type": "pocket_pdb",
+                            "field": "input_files.pocket_pdb",
+                            "required": True,
+                        }
+                    ],
+                    "outputs": [
+                        {
+                            "semantic_type": "generated_ligand",
+                            "source": "output_files",
+                            "match": {"extension": ".sdf"},
+                        }
+                    ],
+                    "defaults": {"params.n_samples": 8},
+                },
+            },
+        ),
+    )
+
+    contract = build_tool_contract(tool)
+
+    assert contract["contract_version"] == "1.0"
+    assert contract["id"] == "tool-1"
+    assert contract["slug"] == "gcdm-pocket-generation"
+    assert contract["executor"] == {"type": "ssh_job", "timeout_sec": 3600}
+    assert contract["schema"]["input"]["required"] == ["pocket_pdb"]
+    assert contract["schema"]["output"]["properties"]["success"]["type"] == "boolean"
+    assert contract["capability"]["enabled"] is True
+    assert contract["capability"]["inputs"][0]["semantic_type"] == "pocket_pdb"
+    assert contract["capability"]["outputs"][0]["semantic_type"] == "generated_ligand"
+
+
+def test_agent_tool_summary_keeps_legacy_tool_slug_but_exposes_contract_slug():
+    summary = capability_to_tool_summary(AIDD_TOOL_CAPABILITIES["gcdm-pocket-generation"])
+
+    assert summary["slug"] == "gcdm-pocket-generation"
+    assert summary["tool_slug"] == "gcdm-pocket-generation"
+    assert summary["capability"] == "molecule_generation"
+    assert summary["inputs"] == ["pocket_pdb"]
+    assert summary["outputs"] == ["generated_ligand", "smiles_csv"]
+
+
+def test_tool_contract_normalizes_legacy_semantic_aliases():
+    tool = SimpleNamespace(
+        id="tool-legacy",
+        slug="legacy-pocket-tool",
+        name="Legacy Pocket Tool",
+        description="Old workflow naming",
+        status="published",
+        is_public=True,
+        current_version=SimpleNamespace(
+            id="version-legacy",
+            version="1.0.0",
+            config={
+                "type": "remote_api",
+                "timeout_sec": 600,
+                "input_schema": {"type": "object", "properties": {"protein_pdb": {"type": "string"}}},
+                "output_schema": {"type": "object", "properties": {"success": {"type": "boolean"}}},
+                "agent_capability": {
+                    "enabled": True,
+                    "stage": "pocket_exploration",
+                    "capability": "pocket_prediction",
+                    "inputs": [
+                        {"semantic_type": "protein_structure", "field": "protein_pdb"},
+                    ],
+                    "outputs": [
+                        {"semantic_type": "pocket_structure", "source": "output_files"},
+                    ],
+                },
+            },
+        ),
+    )
+
+    contract = build_tool_contract(tool)
+
+    assert contract["capability"]["inputs"][0]["semantic_type"] == "protein_pdb"
+    assert contract["capability"]["outputs"][0]["semantic_type"] == "pocket_pdb"
+
+
+def test_planner_available_tools_use_contract_slug_as_source_of_truth():
+    plan = parse_model_plan(
+        """
+        {
+          "intent": "property_prediction",
+          "steps": [
+            {
+              "step_key": "predict_property",
+              "capability": "property_prediction",
+              "tool_slug": "molp-pc-property-prediction",
+              "inputs": {"smiles_csv": "agent_input"},
+              "params": {}
+            }
+          ]
+        }
+        """,
+        available_tools=[
+            {
+                "slug": "molp-pc-property-prediction",
+                "capability": "property_prediction",
+                "outputs": ["property_report"],
+            }
+        ],
+    )
+
+    assert plan.steps[0].tool_slug == "molp-pc-property-prediction"
