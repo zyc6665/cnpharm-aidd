@@ -14,6 +14,7 @@ import json
 from sqlalchemy import select, func, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.time import utcnow
 from app.models.files import File, FileAccessLog
 from app.models.tasks import Task, TaskInput
 
@@ -107,7 +108,7 @@ class FileLifecycleManager:
             raise FileNotFoundError(f"File not found: {file_id}")
 
         # 计算新的过期时间
-        now = datetime.utcnow()
+        now = utcnow()
         if file.expires_at:
             new_expires_at = max(
                 file.expires_at,
@@ -213,7 +214,7 @@ class FileLifecycleManager:
             raise FileNotFoundError(f"File not found: {file_id}")
 
         file.is_permanent = False
-        file.expires_at = datetime.utcnow() + timedelta(days=expiration_days)
+        file.expires_at = utcnow() + timedelta(days=expiration_days)
         await self.db.commit()
         await self.db.refresh(file)
 
@@ -238,7 +239,7 @@ class FileLifecycleManager:
         Returns:
             CleanupResult: 清理结果
         """
-        now = datetime.utcnow()
+        now = utcnow()
         cleaned_count = 0
         freed_bytes = 0
         skipped_in_use = 0
@@ -352,7 +353,7 @@ class FileLifecycleManager:
         Returns:
             FileStatistics: 文件统计信息
         """
-        now = datetime.utcnow()
+        now = utcnow()
 
         # 总文件数和大小
         total_result = await self.db.execute(
@@ -421,7 +422,7 @@ class FileLifecycleManager:
         Returns:
             List[File]: 即将过期的文件列表
         """
-        now = datetime.utcnow()
+        now = utcnow()
         result = await self.db.execute(
             select(File).where(
                 File.expires_at != None,
@@ -485,7 +486,7 @@ class FileLifecycleManager:
             user_id=user_id,
             session_id=session_id,
             action=action,
-            accessed_at=datetime.utcnow()
+            accessed_at=utcnow()
         )
         self.db.add(access_log)
 
@@ -525,7 +526,7 @@ class FileLifecycleManager:
         Returns:
             int: 删除的文件数
         """
-        cutoff = datetime.utcnow() - timedelta(days=older_than_days)
+        cutoff = utcnow() - timedelta(days=older_than_days)
 
         result = await self.db.execute(
             select(File).where(

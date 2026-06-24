@@ -9,6 +9,7 @@ from typing import Optional, Tuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.time import utcnow
 from app.config import settings, is_development
 from app.services.verification.storage import (
     VerificationStorageBase,
@@ -92,7 +93,7 @@ class VerificationService:
         """
         last_send_time = await self.storage.get_last_send_time(email, purpose)
         if last_send_time:
-            elapsed = (datetime.utcnow() - last_send_time).total_seconds()
+            elapsed = (utcnow() - last_send_time).total_seconds()
             if elapsed < self.rate_limit_seconds:
                 remaining = int(self.rate_limit_seconds - elapsed)
                 raise RateLimitError(f"发送过于频繁，请 {remaining} 秒后重试")
@@ -140,7 +141,7 @@ class VerificationService:
 
         # 生成验证码
         code = self._generate_code()
-        expires_at = datetime.utcnow() + timedelta(minutes=self.expire_minutes)
+        expires_at = utcnow() + timedelta(minutes=self.expire_minutes)
 
         # 保存验证码
         await self.storage.save_code(
@@ -200,7 +201,7 @@ class VerificationService:
 
         stored_code, expires_at = stored
 
-        if datetime.utcnow() > expires_at:
+        if utcnow() > expires_at:
             raise InvalidCodeError("验证码已过期")
 
         if stored_code != code:

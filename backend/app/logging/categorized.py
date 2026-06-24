@@ -10,6 +10,7 @@
 from datetime import datetime
 from typing import Any, Dict, Optional
 import logging
+from app.common.time import utcnow
 
 
 class CategorizedLogger:
@@ -64,7 +65,7 @@ class CategorizedLogger:
             "client_ip": client_ip,
             "user_agent": user_agent[:100] if user_agent else None,
             "request_id": request_id,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": utcnow().isoformat()
         }
 
         if extra:
@@ -119,7 +120,7 @@ class CategorizedLogger:
             "changes": changes,
             "result": result,
             "reason": reason,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": utcnow().isoformat()
         }
 
         if extra:
@@ -160,7 +161,7 @@ class CategorizedLogger:
             "request_id": request_id,
             "context": context,
             "stack_trace": stack_trace,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": utcnow().isoformat()
         }
 
         if extra:
@@ -198,7 +199,7 @@ class CategorizedLogger:
             "user_id": user_id,
             "client_ip": client_ip,
             "details": details,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": utcnow().isoformat()
         }
 
         if extra:

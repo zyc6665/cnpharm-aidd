@@ -27,8 +27,7 @@ class TagResponse(TimestampMixin):
     color: str
     sort_order: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ToolVersionCreate(BaseModel):
@@ -62,8 +61,7 @@ class ToolVersionResponse(TimestampMixin):
     is_active: bool
     deprecated: bool
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ToolCategoryCreate(BaseModel):
@@ -103,8 +101,7 @@ class ToolCategoryResponse(TimestampMixin):
     is_enabled: bool
     tool_count: Optional[int] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ToolWorkbenchGroupCreate(BaseModel):
@@ -134,8 +131,7 @@ class ToolWorkbenchGroupResponse(TimestampMixin):
     sort_order: int
     is_enabled: bool
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ToolWorkbenchGroupReorderRequest(BaseModel):
@@ -170,8 +166,7 @@ class ToolWorkbenchGroupMappingResponse(TimestampMixin):
     is_recommended: bool
     is_enabled: bool
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ToolWorkbenchGroupToolResponse(BaseModel):
@@ -219,8 +214,7 @@ class ToolWorkbenchGroupPublicResponse(TimestampMixin):
     sort_order: int
     tools: List[ToolWorkbenchGroupToolResponse] = Field(default_factory=list)
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ToolCreate(BaseModel):
@@ -322,8 +316,7 @@ class ToolResponse(TimestampMixin):
     current_version: Optional[ToolVersionResponse] = None
     statistics: Optional[ToolStatisticsResponse] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ToolListResponse(BaseModel):
@@ -346,5 +339,4 @@ class ToolListResponse(BaseModel):
     statistics: Optional[ToolStatisticsResponse] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

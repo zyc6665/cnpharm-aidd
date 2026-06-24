@@ -19,6 +19,7 @@ from sqlalchemy.orm import joinedload
 from typing import Optional, List
 from datetime import datetime, timedelta
 
+from app.common.time import utcnow
 from app.database.session import get_db
 from app.models.users import User
 from app.models.files import File as FileModel, FileSourceType
@@ -219,7 +220,7 @@ async def upload_file(
     # 创建文件记录
     expires_at = None
     if expires_hours:
-        expires_at = datetime.utcnow() + timedelta(hours=expires_hours)
+        expires_at = utcnow() + timedelta(hours=expires_hours)
 
     file_record = FileModel(
         filename=file.filename,
@@ -281,7 +282,7 @@ async def list_files(
     # 排除已过期文件
     query = query.where(
         (FileModel.expires_at.is_(None)) |
-        (FileModel.expires_at > datetime.utcnow())
+        (FileModel.expires_at > utcnow())
     )
 
     # 计算总数
@@ -351,7 +352,7 @@ async def list_artifact_files(
         FileModel.owner_id == current_user.id,
         FileModel.source_type == FileSourceType.TOOL_OUTPUT.value,
         FileModel.deleted_at.is_(None),
-        or_(FileModel.expires_at.is_(None), FileModel.expires_at > datetime.utcnow()),
+        or_(FileModel.expires_at.is_(None), FileModel.expires_at > utcnow()),
     )
 
     if search:
@@ -496,7 +497,7 @@ async def get_file_info(
             raise ForbiddenException("无权访问此文件")
 
     # 检查是否过期
-    if file.expires_at and file.expires_at < datetime.utcnow():
+    if file.expires_at and file.expires_at < utcnow():
         raise NotFoundException("文件已过期")
 
     return success_response(data=FileSchema.model_validate(file).model_dump())
@@ -530,7 +531,7 @@ async def download_file(
             raise ForbiddenException("无权下载此文件")
 
     # 检查是否过期
-    if file.expires_at and file.expires_at < datetime.utcnow():
+    if file.expires_at and file.expires_at < utcnow():
         raise NotFoundException("文件已过期")
 
     # 检查文件是否存在
@@ -547,7 +548,7 @@ async def download_file(
     if file.statistics.download_count is None:
         file.statistics.download_count = 0
     file.statistics.download_count += 1
-    file.statistics.last_downloaded_at = datetime.utcnow()
+    file.statistics.last_downloaded_at = utcnow()
     await db.commit()
 
     return FileResponse(

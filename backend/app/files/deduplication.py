@@ -14,6 +14,7 @@ import logging
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.time import utcnow
 from app.models.files import File, FileAccessLog
 
 if TYPE_CHECKING:
@@ -130,7 +131,7 @@ class FileDeduplicator:
         if extend_retention and existing.expires_at:
             new_expires_at = max(
                 existing.expires_at,
-                datetime.utcnow() + timedelta(days=self.DEFAULT_RETENTION_DAYS)
+                utcnow() + timedelta(days=self.DEFAULT_RETENTION_DAYS)
             )
             existing.expires_at = new_expires_at
 
@@ -192,7 +193,7 @@ class FileDeduplicator:
             user_id=user_id,
             session_id=session_id,
             action="reference",
-            accessed_at=datetime.utcnow()
+            accessed_at=utcnow()
         )
         self.db.add(access_log)
 
@@ -288,7 +289,7 @@ class FileDeduplicator:
             return False
 
         # 检查是否过期
-        if file.expires_at and file.expires_at > datetime.utcnow():
+        if file.expires_at and file.expires_at > utcnow():
             return False
 
         return True

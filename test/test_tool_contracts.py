@@ -11,7 +11,7 @@ if str(BACKEND_ROOT) not in sys.path:
 from app.agents.aidd.capabilities import AIDD_TOOL_CAPABILITIES
 from app.agents.aidd.plan_schema import parse_model_plan
 from app.agents.aidd.registry import capability_to_tool_summary
-from app.services.tool_contracts import build_tool_contract
+from app.services.tool_contracts import build_tool_contract, collect_tool_contract_validation_errors
 
 
 def test_build_tool_contract_normalizes_identity_executor_schema_and_capability():
@@ -144,3 +144,40 @@ def test_planner_available_tools_use_contract_slug_as_source_of_truth():
     )
 
     assert plan.steps[0].tool_slug == "molp-pc-property-prediction"
+
+
+def test_contract_validation_reports_enabled_capability_shape_errors():
+    tool = SimpleNamespace(
+        id="tool-invalid",
+        slug="invalid-workflow-tool",
+        name="Invalid Workflow Tool",
+        description="Broken agent capability",
+        status="draft",
+        is_public=False,
+        current_version=SimpleNamespace(
+            id="version-invalid",
+            version="0.1.0",
+            is_active=True,
+            deprecated=False,
+            config={
+                "type": "remote_api",
+                "timeout_sec": 120,
+                "input_schema": {"type": "object", "properties": {}},
+                "output_schema": {"type": "object", "properties": {}},
+                "agent_capability": {
+                    "enabled": True,
+                    "capability": "",
+                    "stage": "",
+                    "inputs": [],
+                    "outputs": [],
+                },
+            },
+        ),
+    )
+
+    errors = collect_tool_contract_validation_errors(tool)
+
+    assert any("agent_capability.capability" in error for error in errors)
+    assert any("agent_capability.stage" in error for error in errors)
+    assert any("agent_capability.inputs" in error for error in errors)
+    assert any("agent_capability.outputs" in error for error in errors)

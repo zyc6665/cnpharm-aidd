@@ -12,7 +12,6 @@ import {
   syncWorkflowRun,
   updateWorkflowTemplate
 } from '@/api/workflows'
-import type { WorkflowDefinition as LegacyWorkflowDefinition } from '@/api/workflows'
 import type {
   WorkflowDefinition,
   WorkflowRun,
@@ -21,37 +20,25 @@ import type {
   WorkflowTemplateCreateParams,
   WorkflowTemplateUpdateParams
 } from '@/types/models'
-import type { WorkflowTaskRef } from '@/workflow/artifact-types'
+import {
+  WORKFLOW_ARTIFACT_SEMANTIC_TYPES,
+  type WorkflowArtifactSemanticType,
+  type WorkflowTaskRef
+} from '@/workflow/artifact-types'
 import { toWorkflowTaskRef } from '@/workflow/task-state'
 import type {
   WorkflowCanvasEdge,
   WorkflowCanvasNode,
   WorkflowTemplate as CanvasWorkflowTemplate
 } from '@/workflow/template-types'
-
-export interface WorkflowCanvasPosition {
-  x: number
-  y: number
-}
-
-interface WorkflowWorkbenchSession {
-  sessionId: string
-  templateId: string
-  activeNodeId: string | null
-  activeGroupId: string | null
-  selectedToolByGroup: Record<string, string>
-  selectedToolByNode: Record<string, string>
-  toolFormDrafts: Record<string, Record<string, unknown>>
-  nodeFormDrafts: Record<string, Record<string, unknown>>
-  taskByTool: Record<string, WorkflowTaskRef>
-  taskByNode: Record<string, WorkflowTaskRef>
-  artifactBindingsByNode: Record<string, Record<string, string>>
-  nodePositionById: Record<string, WorkflowCanvasPosition>
-  canvasNodes: WorkflowCanvasNode[]
-  canvasEdges: WorkflowCanvasEdge[]
-  lastUpdatedAt: string
-  ownerUserId?: string
-}
+import {
+  createInitialWorkflowSession,
+  normalizeRecord,
+  nowIsoString,
+  type WorkflowCanvasPosition,
+  type WorkflowWorkbenchSession,
+  type WorkflowRunsPagination
+} from './workflow-session'
 
 interface AddToolNodeInput {
   toolSlug: string
@@ -60,52 +47,38 @@ interface AddToolNodeInput {
   position?: WorkflowCanvasPosition
 }
 
-interface WorkflowRunsPagination {
-  total: number
-  page: number
-  pageSize: number
-  totalPages: number
+type WorkflowDefinitionLike = {
+  template_id: string
+  nodes: Array<{
+    id: string
+    kind?: 'input' | 'tool' | string
+    type?: string
+    semantic_type?: string
+    tool_slug?: string
+    semantic_inputs?: Record<string, string>
+    position?: WorkflowCanvasPosition
+  }>
+  edges: Array<{
+    id?: string
+    source: string
+    target: string
+    artifactType?: string
+    source_output?: string
+    target_input?: string
+  }>
+  selected_tool_by_node?: Record<string, string>
+  artifact_bindings_by_node?: Record<string, Record<string, string>>
 }
 
-function nowIsoString(): string {
-  return new Date().toISOString()
-}
-
-function createWorkflowSessionId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID()
+function resolveCanvasEdgeArtifactType(value: unknown): WorkflowCanvasEdge['artifactType'] {
+  if (
+    typeof value === 'string' &&
+    WORKFLOW_ARTIFACT_SEMANTIC_TYPES.includes(value as WorkflowArtifactSemanticType)
+  ) {
+    return value as WorkflowArtifactSemanticType
   }
 
-  return `workflow-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-}
-
-function createInitialWorkflowSession(ownerUserId?: string): WorkflowWorkbenchSession {
-  return {
-    sessionId: createWorkflowSessionId(),
-    templateId: 'aidd-template',
-    activeNodeId: null,
-    activeGroupId: null,
-    selectedToolByGroup: {},
-    selectedToolByNode: {},
-    toolFormDrafts: {},
-    nodeFormDrafts: {},
-    taskByTool: {},
-    taskByNode: {},
-    artifactBindingsByNode: {},
-    nodePositionById: {},
-    canvasNodes: [],
-    canvasEdges: [],
-    lastUpdatedAt: nowIsoString(),
-    ownerUserId
-  }
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
-}
-
-function normalizeRecord<T>(value: unknown): Record<string, T> {
-  return isPlainRecord(value) ? value as Record<string, T> : {}
+  return undefined
 }
 
 export const useWorkflowStore = defineStore('workflow', () => {
@@ -534,13 +507,20 @@ export const useWorkflowStore = defineStore('workflow', () => {
     return canvasNodes.value.length ? canvasEdges.value : edges
   }
 
-  function applyWorkflowDefinition(workflow: LegacyWorkflowDefinition) {
+  function applyWorkflowDefinition(workflow: WorkflowDefinitionLike) {
     templateId.value = workflow.template_id
     selectedToolByNode.value = workflow.selected_tool_by_node ?? {}
     artifactBindingsByNode.value = workflow.artifact_bindings_by_node ?? {}
     taskByNode.value = {}
     canvasNodes.value = workflow.nodes.map(node => node as WorkflowCanvasNode)
-    canvasEdges.value = workflow.edges.map(edge => edge as WorkflowCanvasEdge)
+    canvasEdges.value = workflow.edges.map((edge, index) => ({
+      id: edge.id ?? `edge-${index}`,
+      source: edge.source,
+      target: edge.target,
+      artifactType: resolveCanvasEdgeArtifactType(
+        edge.artifactType ?? edge.source_output ?? edge.target_input
+      )
+    }))
     syncCanvasNodeSemanticTypes()
     activeNodeId.value = workflow.nodes[0]?.id ?? null
 
@@ -562,6 +542,40 @@ export const useWorkflowStore = defineStore('workflow', () => {
     const nextTasks = { ...taskByTool.value }
     delete nextTasks[toolSlug]
     taskByTool.value = nextTasks
+    touchSession()
+  }
+
+  function clearNodeTask(nodeId: string) {
+    if (!taskByNode.value[nodeId]) {
+      return
+    }
+
+    const nextTasks = { ...taskByNode.value }
+    delete nextTasks[nodeId]
+    taskByNode.value = nextTasks
+    touchSession()
+  }
+
+  function clearNodeTasks(nodeIds: string[]) {
+    if (nodeIds.length === 0) {
+      return
+    }
+
+    const nextTasks = { ...taskByNode.value }
+    let changed = false
+
+    for (const nodeId of nodeIds) {
+      if (nextTasks[nodeId]) {
+        delete nextTasks[nodeId]
+        changed = true
+      }
+    }
+
+    if (!changed) {
+      return
+    }
+
+    taskByNode.value = nextTasks
     touchSession()
   }
 
@@ -835,6 +849,8 @@ export const useWorkflowStore = defineStore('workflow', () => {
     exportWorkflowEdges,
     applyWorkflowDefinition,
     clearTask,
+    clearNodeTask,
+    clearNodeTasks,
     loadWorkflowTemplates,
     loadWorkflowRuns,
     loadWorkflowTemplate,

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, onScopeDispose } from 'vue'
 import type { UserInfo, LoginParams, RegisterParams } from '@/types/models'
 import { normalizeUserInfo } from '@/utils/user-normalization'
 import {
@@ -10,15 +10,23 @@ import {
   guestLogin as apiGuestLogin,
   sendEmailCode as apiSendEmailCode
 } from '@/api/auth'
-import { setToken, setRefreshToken, clearTokens, getToken } from '@/api/request'
+import {
+  AUTH_CLEARED_EVENT,
+  setToken,
+  setRefreshToken,
+  clearTokens,
+  getToken,
+  getRefreshToken
+} from '@/api/request'
 
 export const useUserStore = defineStore('user', () => {
   // State
   const token = ref<string | null>(getToken())
-  const refreshToken = ref<string | null>(null)
+  const refreshToken = ref<string | null>(getRefreshToken())
   const userInfo = ref<UserInfo | null>(null)
   const isGuest = ref(false)
   const loading = ref(false)
+  const authReady = ref(!getToken())
 
   // Getters
   const isLoggedIn = computed(() => !!token.value && !isGuest.value)
@@ -31,6 +39,21 @@ export const useUserStore = defineStore('user', () => {
 
   // Aliases for backwards compatibility
   const role = computed(() => userRole.value)
+
+  const clearLocalAuthState = () => {
+    token.value = null
+    refreshToken.value = null
+    userInfo.value = null
+    isGuest.value = false
+    authReady.value = true
+  }
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener(AUTH_CLEARED_EVENT, clearLocalAuthState)
+    onScopeDispose(() => {
+      window.removeEventListener(AUTH_CLEARED_EVENT, clearLocalAuthState)
+    })
+  }
 
   // Actions
   const login = async (params: LoginParams) => {
@@ -46,7 +69,22 @@ export const useUserStore = defineStore('user', () => {
       return res.data
     } finally {
       loading.value = false
+      authReady.value = true
     }
+  }
+
+  const bootstrapAuthState = async () => {
+    if (!token.value || isGuest.value) {
+      authReady.value = true
+      return null
+    }
+
+    if (!userInfo.value) {
+      return await fetchUserInfo()
+    }
+
+    authReady.value = true
+    return userInfo.value
   }
 
   const register = async (params: RegisterParams) => {
@@ -65,6 +103,7 @@ export const useUserStore = defineStore('user', () => {
       return res.data
     } finally {
       loading.value = false
+      authReady.value = true
     }
   }
 
@@ -80,6 +119,7 @@ export const useUserStore = defineStore('user', () => {
       return res.data
     } finally {
       loading.value = false
+      authReady.value = true
     }
   }
 
@@ -96,10 +136,7 @@ export const useUserStore = defineStore('user', () => {
     } catch {
       // 忽略退出登录的错误（如 401），因为无论如何都要清除本地数据
     } finally {
-      token.value = null
-      refreshToken.value = null
-      userInfo.value = null
-      isGuest.value = false
+      clearLocalAuthState()
       clearTokens()
     }
   }
@@ -113,14 +150,12 @@ export const useUserStore = defineStore('user', () => {
       return res.data
     } catch {
       // Token 无效，清除状态
-      token.value = null
-      refreshToken.value = null
-      userInfo.value = null
-      isGuest.value = false
+      clearLocalAuthState()
       clearTokens()
       return null
     } finally {
       loading.value = false
+      authReady.value = true
     }
   }
 
@@ -160,6 +195,7 @@ export const useUserStore = defineStore('user', () => {
       refreshToken.value = res.data.refresh_token
       setToken(res.data.access_token)
       setRefreshToken(res.data.refresh_token)
+      authReady.value = true
       return true
     } catch {
       await logout()
@@ -174,6 +210,7 @@ export const useUserStore = defineStore('user', () => {
     userInfo,
     isGuest,
     loading,
+    authReady,
     // Getters
     isLoggedIn,
     isAuthenticated,
@@ -191,6 +228,7 @@ export const useUserStore = defineStore('user', () => {
     sendEmailCode,
     logout,
     fetchUserInfo,
+    bootstrapAuthState,
     updateUserInfo,
     refreshAccessToken,
     // Additional actions

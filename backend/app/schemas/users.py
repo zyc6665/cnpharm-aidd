@@ -3,7 +3,7 @@
 
 from typing import Optional
 from datetime import datetime
-from pydantic import BaseModel, Field, EmailStr, field_validator
+from pydantic import BaseModel, ConfigDict, Field, EmailStr, field_validator
 from app.schemas.common import TimestampMixin
 from app.schemas.statistics import UserStatisticsResponse
 
@@ -55,8 +55,7 @@ class UserResponse(TimestampMixin):
         }
         return legacy_status_map.get(value, value)
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TokenResponse(BaseModel):

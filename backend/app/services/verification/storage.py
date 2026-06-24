@@ -14,6 +14,7 @@ import json
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, delete
 
+from app.common.time import utcnow
 from app.config import settings, is_development
 from app.models.verification import VerificationCode, VerificationDailyCount
 
@@ -118,7 +119,7 @@ class DatabaseStorage(VerificationStorageBase):
                     VerificationCode.email == email,
                     VerificationCode.purpose == purpose,
                     VerificationCode.is_used == False,
-                    VerificationCode.expires_at > datetime.utcnow()
+                    VerificationCode.expires_at > utcnow()
                 )
             ).order_by(VerificationCode.created_at.desc())
         )
@@ -160,7 +161,7 @@ class DatabaseStorage(VerificationStorageBase):
 
     async def get_daily_count(self, email: str) -> int:
         """获取今日发送次数"""
-        today = datetime.utcnow().strftime("%Y-%m-%d")
+        today = utcnow().strftime("%Y-%m-%d")
         result = await self.db.execute(
             select(VerificationDailyCount.count).where(
                 and_(
@@ -174,7 +175,7 @@ class DatabaseStorage(VerificationStorageBase):
 
     async def increment_daily_count(self, email: str) -> int:
         """增加今日发送次数"""
-        today = datetime.utcnow().strftime("%Y-%m-%d")
+        today = utcnow().strftime("%Y-%m-%d")
         result = await self.db.execute(
             select(VerificationDailyCount).where(
                 and_(
@@ -225,7 +226,7 @@ class CacheStorage(VerificationStorageBase):
 
     def _daily_count_key(self, email: str) -> str:
         """生成每日计数缓存键"""
-        today = datetime.utcnow().strftime("%Y-%m-%d")
+        today = utcnow().strftime("%Y-%m-%d")
         return f"{self.prefix}daily:{email}:{today}"
 
     async def save_code(
@@ -237,7 +238,7 @@ class CacheStorage(VerificationStorageBase):
         ip_address: Optional[str] = None
     ) -> bool:
         """保存验证码到缓存"""
-        ttl = int((expires_at - datetime.utcnow()).total_seconds())
+        ttl = int((expires_at - utcnow()).total_seconds())
         if ttl <= 0:
             return False
 
@@ -257,7 +258,7 @@ class CacheStorage(VerificationStorageBase):
         # 记录发送时间
         await self.cache.set(
             self._send_time_key(email, purpose),
-            datetime.utcnow().isoformat(),
+            utcnow().isoformat(),
             expire=settings.VERIFICATION_CODE_RATE_LIMIT_SECONDS
         )
 
@@ -274,7 +275,7 @@ class CacheStorage(VerificationStorageBase):
             return None
 
         expires_at = datetime.fromisoformat(data["expires_at"])
-        if expires_at <= datetime.utcnow():
+        if expires_at <= utcnow():
             return None
 
         return (data["code"], expires_at)
@@ -306,7 +307,7 @@ class CacheStorage(VerificationStorageBase):
             new_count = 1
 
         # 设置过期时间为当天剩余秒数
-        now = datetime.utcnow()
+        now = utcnow()
         end_of_day = now.replace(hour=23, minute=59, second=59)
         ttl = int((end_of_day - now).total_seconds()) + 1
 

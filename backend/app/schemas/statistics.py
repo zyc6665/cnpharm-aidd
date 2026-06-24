@@ -3,7 +3,7 @@
 
 from typing import Optional
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class UserStatisticsResponse(BaseModel):
@@ -16,8 +16,7 @@ class UserStatisticsResponse(BaseModel):
     last_task_at: Optional[datetime] = Field(None, description="最后任务时间")
     last_updated_at: datetime = Field(..., description="最后更新时间")
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ToolStatisticsResponse(BaseModel):
@@ -31,8 +30,7 @@ class ToolStatisticsResponse(BaseModel):
     last_used_at: Optional[datetime] = Field(None, description="最后使用时间")
     last_updated_at: datetime = Field(..., description="最后更新时间")
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class FileStatisticsResponse(BaseModel):
@@ -44,5 +42,4 @@ class FileStatisticsResponse(BaseModel):
     last_view_at: Optional[datetime] = Field(None, description="最后浏览时间")
     last_updated_at: datetime = Field(..., description="最后更新时间")
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

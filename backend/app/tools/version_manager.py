@@ -13,6 +13,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.common.time import utcnow
 from app.models.tools import Tool, ToolVersion, ToolStatus
 
 if TYPE_CHECKING:
@@ -191,7 +192,7 @@ class ToolVersionManager:
 
         # 标记为废弃
         version.deprecated = True
-        version.deprecated_at = datetime.utcnow()
+        version.deprecated_at = utcnow()
         version.is_active = False
 
         # 可以在notes中记录废弃原因

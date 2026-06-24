@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 import uuid
 from jose import jwt, JWTError
+from app.common.time import utcnow
 from app.config import settings
 
 
@@ -25,7 +26,7 @@ class JWTHandler:
         extra_claims: Optional[Dict[str, Any]] = None
     ) -> str:
         """生成Access Token"""
-        now = datetime.utcnow()
+        now = utcnow()
         expire = now + timedelta(minutes=self.access_token_expire_minutes)
 
         payload = {
@@ -45,7 +46,7 @@ class JWTHandler:
 
     def create_refresh_token(self, user_id: str) -> str:
         """生成Refresh Token"""
-        now = datetime.utcnow()
+        now = utcnow()
         expire = now + timedelta(days=self.refresh_token_expire_days)
 
         payload = {

@@ -2,10 +2,12 @@
 """SQLAlchemy Base类和Mixin"""
 
 import uuid
-from datetime import datetime
 from typing import Any
+
 from sqlalchemy import Column, DateTime, String
 from sqlalchemy.orm import declarative_base, declared_attr
+
+from app.common.time import utcnow
 
 
 class CustomBase:
@@ -28,8 +30,8 @@ Base = declarative_base(cls=CustomBase)
 
 class TimestampMixin:
     """时间戳Mixin"""
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
 
 
 class UUIDMixin:

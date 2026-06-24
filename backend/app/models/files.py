@@ -1,12 +1,10 @@
 # backend/app/models/files.py
-"""文件相关模型"""
-
-from datetime import datetime
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, JSON
-from sqlalchemy.orm import relationship
 import enum
 
-from app.database.base import Base, TimestampMixin, UUIDMixin
+from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, JSON
+from sqlalchemy.orm import relationship
+
+from app.database.base import Base, TimestampMixin, UUIDMixin, utcnow
 
 
 class FileSourceType(str, enum.Enum):
@@ -69,7 +67,7 @@ class FileAccessLog(Base, UUIDMixin):
 
     # 访问信息
     action = Column(String(50), nullable=False)  # upload, download, reference, delete
-    accessed_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    accessed_at = Column(DateTime, default=utcnow, nullable=False)
     ip_address = Column(String(50), nullable=True)
     user_agent = Column(String(500), nullable=True)
 

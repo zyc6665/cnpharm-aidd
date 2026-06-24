@@ -39,3 +39,7 @@ backend/storage/recovery-downloads/
 
 # Local scratch files
 *.log
+*.pid
+*.sqlite3
+.coverage
+htmlcov/

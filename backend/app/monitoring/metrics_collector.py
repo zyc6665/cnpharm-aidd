@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 import asyncio
 import logging
 
+from app.common.time import utcnow
 from app.monitoring.prometheus_metrics import get_metrics, PrometheusMetrics
 from app.monitoring.alert_manager import get_alert_manager, AlertSeverity
 
@@ -53,7 +54,7 @@ class MetricsCollector:
             Dict[str, Any]: 采集结果
         """
         results = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": utcnow().isoformat(),
             "gpu": None,
             "tasks": None,
             "files": None,
@@ -211,7 +212,7 @@ class MetricsCollector:
             async with self.db_factory() as db:
                 # 活跃用户（最近1小时有会话）
                 from datetime import timedelta
-                cutoff = datetime.utcnow() - timedelta(hours=1)
+                cutoff = utcnow() - timedelta(hours=1)
 
                 active_result = await db.execute(
                     select(func.count(func.distinct(UserSession.user_id))).where(

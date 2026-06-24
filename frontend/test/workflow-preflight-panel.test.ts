@@ -10,12 +10,13 @@ test('workflow preflight panel component renders summary, issues, and run action
 
   const source = readFileSync(componentPath, 'utf8')
   for (const marker of [
-    '运行前检查',
+    "workflow.preflight.title",
     'preflight.primaryMessage',
     'preflight.issues',
     'preflight.canRun',
     'run-ready-nodes',
-    '查看节点'
+    "workflow.preflight.viewNode",
+    "workflow.preflight.runReadyNodes"
   ]) {
     assert.equal(source.includes(marker), true, `missing ${marker}`)
   }

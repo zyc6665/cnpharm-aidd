@@ -41,9 +41,7 @@
 
   // 初始化：获取用户信息
   onMounted(async () => {
-    if (userStore.isLoggedIn && !userStore.userInfo) {
-      await userStore.fetchUserInfo()
-    }
+    await userStore.bootstrapAuthState()
   })
 </script>
 

@@ -15,6 +15,7 @@ import logging
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.time import utcnow
 from app.models.files import File, FileAccessLog
 
 logger = logging.getLogger(__name__)
@@ -82,7 +83,7 @@ class FileReferenceManager:
         file.reference_count = new_count
 
         # 更新最后访问时间
-        file.last_accessed_at = datetime.utcnow()
+        file.last_accessed_at = utcnow()
 
         # 记录访问日志
         access_log = FileAccessLog(
@@ -90,7 +91,7 @@ class FileReferenceManager:
             user_id=user_id,
             session_id=session_id,
             action=f"increment_reference:{reason}",
-            accessed_at=datetime.utcnow()
+            accessed_at=utcnow()
         )
         self.db.add(access_log)
 
@@ -151,7 +152,7 @@ class FileReferenceManager:
             user_id=user_id,
             session_id=session_id,
             action=f"decrement_reference:{reason}",
-            accessed_at=datetime.utcnow()
+            accessed_at=utcnow()
         )
         self.db.add(access_log)
 
@@ -219,7 +220,7 @@ class FileReferenceManager:
         if (file.reference_count or 0) > 0:
             return False
 
-        now = datetime.utcnow()
+        now = utcnow()
 
         # 如果已过期，设置为软删除
         if file.expires_at and file.expires_at < now:

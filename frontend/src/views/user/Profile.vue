@@ -19,7 +19,7 @@
             :custom-request="handleAvatarUpload"
           >
             <div v-if="form.avatar" class="avatar-wrapper">
-              <a-avatar :size="100" :src="form.avatar" />
+              <ProtectedAvatar :size="100" :src="form.avatar" />
               <div class="avatar-mask">
                 <CameraOutlined />
               </div>
@@ -108,6 +108,7 @@ import { message } from 'ant-design-vue'
 import type { UploadProps, UploadFile } from 'ant-design-vue'
 import dayjs from 'dayjs'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
+import ProtectedAvatar from '@/components/common/ProtectedAvatar.vue'
 import { useUserStore } from '@/stores'
 
 const { t } = useI18n()

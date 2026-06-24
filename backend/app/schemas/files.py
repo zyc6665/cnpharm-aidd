@@ -3,7 +3,7 @@
 
 from typing import Optional, Dict, Any
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from app.schemas.common import TimestampMixin
 from app.schemas.statistics import FileStatisticsResponse
 
@@ -19,8 +19,7 @@ class FileResponse(TimestampMixin):
     expires_at: Optional[datetime]
     statistics: Optional[FileStatisticsResponse] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class FileUploadResponse(BaseModel):
@@ -52,5 +51,4 @@ class ArtifactFileResponse(TimestampMixin):
     tool_name: str
     tool_slug: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

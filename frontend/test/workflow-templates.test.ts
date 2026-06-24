@@ -3,6 +3,10 @@ import assert from 'node:assert/strict'
 
 import {
   AIDD_WORKFLOW_TEMPLATE,
+  GENERATION_TO_PROPERTY_TEMPLATE,
+  POCKET_TO_GENERATION_TEMPLATE,
+  PROTEIN_LIGAND_TO_DOCKING_TEMPLATE,
+  PROTEIN_TO_POCKET_TEMPLATE,
   WORKFLOW_TEMPLATES,
   getWorkflowTemplateById
 } from '../src/workflow/templates.ts'
@@ -29,5 +33,22 @@ test('AIDD workflow template defines a connected node graph', () => {
 test('workflow templates can be resolved by id', () => {
   assert.equal(WORKFLOW_TEMPLATES.includes(AIDD_WORKFLOW_TEMPLATE), true)
   assert.equal(getWorkflowTemplateById('aidd-template'), AIDD_WORKFLOW_TEMPLATE)
+  assert.equal(getWorkflowTemplateById('protein-pocket-template'), PROTEIN_TO_POCKET_TEMPLATE)
+  assert.equal(getWorkflowTemplateById('pocket-generation-template'), POCKET_TO_GENERATION_TEMPLATE)
+  assert.equal(getWorkflowTemplateById('protein-ligand-docking-template'), PROTEIN_LIGAND_TO_DOCKING_TEMPLATE)
+  assert.equal(getWorkflowTemplateById('generation-property-template'), GENERATION_TO_PROPERTY_TEMPLATE)
   assert.equal(getWorkflowTemplateById('missing-template'), null)
+})
+
+test('workflow templates include stage-oriented researcher presets', () => {
+  const templateIds = new Set(WORKFLOW_TEMPLATES.map((template) => template.id))
+
+  for (const templateId of [
+    'protein-pocket-template',
+    'pocket-generation-template',
+    'protein-ligand-docking-template',
+    'generation-property-template'
+  ]) {
+    assert.equal(templateIds.has(templateId), true, `missing ${templateId}`)
+  }
 })

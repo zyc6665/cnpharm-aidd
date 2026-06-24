@@ -12,6 +12,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import asyncio
 import logging
 
+from app.common.time import utcnow
+
 logger = logging.getLogger(__name__)
 
 
@@ -177,7 +179,7 @@ class GPUShortageHandler:
             user_id=user_id,
             tool_id=tool_id,
             priority=priority,
-            queued_at=datetime.utcnow(),
+            queued_at=utcnow(),
             gpu_memory_required=gpu_memory_required,
             supports_cpu_fallback=supports_cpu
         )
@@ -286,7 +288,7 @@ class GPUShortageHandler:
         Returns:
             List[WaitingTask]: 等待过长的任务列表
         """
-        now = datetime.utcnow()
+        now = utcnow()
         long_waiting = []
 
         for task in self._waiting_queue:
@@ -304,7 +306,7 @@ class GPUShortageHandler:
         """
         long_waiting = await self.check_long_waiting_tasks()
         notified = []
-        now = datetime.utcnow()
+        now = utcnow()
 
         for task in long_waiting:
             # 检查是否已在一小时内通知过
@@ -403,7 +405,7 @@ class GPUShortageHandler:
         Returns:
             Dict: 统计信息
         """
-        now = datetime.utcnow()
+        now = utcnow()
         priority_counts = {p.value: 0 for p in QueuePriority}
         total_wait_time = 0
 
@@ -427,7 +429,7 @@ class GPUShortageHandler:
         Returns:
             List[str]: 被清理的任务ID列表
         """
-        now = datetime.utcnow()
+        now = utcnow()
         expired = []
         remaining = []
 

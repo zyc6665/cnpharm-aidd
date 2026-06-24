@@ -14,6 +14,8 @@ import logging
 import os
 import shutil
 
+from app.common.time import utcnow
+
 logger = logging.getLogger(__name__)
 
 
@@ -124,7 +126,7 @@ class StorageFallbackStrategy:
             self._health_status[backend] = StorageHealth(
                 backend=backend,
                 is_healthy=True,
-                last_check=datetime.utcnow()
+                last_check=utcnow()
             )
 
     async def use_local_storage(
@@ -256,7 +258,7 @@ class StorageFallbackStrategy:
 
         start_time = time.time()
         health = self._health_status[backend]
-        health.last_check = datetime.utcnow()
+        health.last_check = utcnow()
 
         try:
             if backend == StorageBackend.LOCAL:
@@ -356,7 +358,7 @@ class StorageFallbackStrategy:
             source_backend=source_backend,
             target_backend=target_backend,
             status=MigrationStatus.PENDING,
-            created_at=datetime.utcnow()
+            created_at=utcnow()
         )
         self._migration_queue.append(task)
         logger.info(f"Migration task added for file {file_id}")
@@ -413,7 +415,7 @@ class StorageFallbackStrategy:
                         )
                         if success:
                             task.status = MigrationStatus.COMPLETED
-                            task.completed_at = datetime.utcnow()
+                            task.completed_at = utcnow()
                             stats["success"] += 1
                         else:
                             task.status = MigrationStatus.FAILED
@@ -520,7 +522,7 @@ class StorageFallbackStrategy:
             int: 清理的文件数
         """
         cleaned = 0
-        cutoff = datetime.utcnow() - timedelta(days=max_age_days)
+        cutoff = utcnow() - timedelta(days=max_age_days)
 
         for root, dirs, files in os.walk(self.config.local_storage_path):
             for file in files:

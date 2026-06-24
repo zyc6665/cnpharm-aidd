@@ -72,3 +72,66 @@ test('buildWorkflowPreflight disables full run when no tool nodes are runnable',
   assert.equal(preflight.issues.some(issue => issue.type === 'failed'), true)
   assert.equal(preflight.primaryMessage, '当前没有可运行节点')
 })
+
+test('buildWorkflowPreflight reports missing workflow input and invalid semantic edges', () => {
+  const preflight = buildWorkflowPreflight({
+    template: {
+      ...template,
+      nodes: [
+        { id: 'input-protein', type: 'input', titleKey: 'workflow.nodes.inputProtein.title', position: { x: 0, y: 0 }, producedOutputTypes: ['protein_pdb'] },
+        {
+          id: 'tool-pocket',
+          type: 'tool',
+          titleKey: 'home.workflow.items.pocketExploration.title',
+          position: { x: 160, y: 0 },
+          requiredInputTypes: ['protein_pdb'],
+          toolSlugs: ['pocket-explorer'],
+          recommendedToolSlug: 'pocket-explorer'
+        }
+      ],
+      edges: [
+        { id: 'edge-a', source: 'input-protein', target: 'tool-pocket', artifactType: 'protein_pdb' },
+        { id: 'edge-b', source: 'input-protein', target: 'tool-pocket', artifactType: 'generated_ligand' }
+      ]
+    },
+    nodeStatuses: {
+      'input-protein': 'completed',
+      'tool-pocket': 'idle'
+    },
+    readyNodeIds: [],
+    selectedWorkflowInputFiles: {},
+    selectedToolByNode: {
+      'tool-pocket': 'pocket-explorer'
+    },
+    toolsBySlug: {
+      'pocket-explorer': {
+        slug: 'pocket-explorer',
+        contract: {
+          contract_version: 'v1',
+          slug: 'pocket-explorer',
+          name: 'Pocket Explorer',
+          status: 'published',
+          executor: { type: 'python' },
+          schema: {
+            input: { type: 'object', properties: {} },
+            output: { type: 'object', properties: {} }
+          },
+          capability: {
+            enabled: true,
+            inputs: [],
+            outputs: [],
+            defaults: {}
+          },
+          validation: {
+            status: 'valid',
+            errors: []
+          }
+        }
+      }
+    }
+  })
+
+  assert.equal(preflight.issues.some(issue => issue.type === 'missing_workflow_input'), true)
+  assert.equal(preflight.issues.some(issue => issue.type === 'invalid_semantic_edge'), true)
+  assert.equal(preflight.primaryMessage, '请先补齐工作流输入')
+})

@@ -12,6 +12,7 @@ from typing import Any, Callable, Dict, List, Optional
 import asyncio
 import logging
 import json
+from app.common.time import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +146,7 @@ class AlertManager:
             message=message,
             severity=severity,
             source=source,
-            timestamp=datetime.utcnow(),
+            timestamp=utcnow(),
             labels=labels or {},
             annotations=annotations or {}
         )
@@ -173,7 +174,7 @@ class AlertManager:
         await self._record_alert(alert)
 
         # 更新冷却时间
-        self._last_alert_times[dedupe_key] = datetime.utcnow()
+        self._last_alert_times[dedupe_key] = utcnow()
 
         return alert
 
@@ -195,7 +196,7 @@ class AlertManager:
         for alert in self._alert_history:
             if alert.id == alert_id and not alert.resolved:
                 alert.resolved = True
-                alert.resolved_at = datetime.utcnow()
+                alert.resolved_at = utcnow()
                 if message:
                     alert.annotations["resolve_message"] = message
 
@@ -221,7 +222,7 @@ class AlertManager:
         if last_time is None:
             return True
 
-        elapsed = (datetime.utcnow() - last_time).total_seconds()
+        elapsed = (utcnow() - last_time).total_seconds()
         return elapsed >= cooldown
 
     async def _log_alert(self, alert: Alert) -> None:

@@ -11,6 +11,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
 
+from app.common.time import utcnow
 from app.database.session import get_db
 from app.config import settings, is_development, is_production, use_async_tasks
 from app.auth.dependencies import get_admin_user
@@ -138,17 +139,17 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         status=overall_status,
         version=settings.APP_VERSION,
         environment=settings.ENVIRONMENT,
-        timestamp=datetime.utcnow().isoformat(),
+        timestamp=utcnow().isoformat(),
         services=services
     )
 
 
 async def _check_database(db: AsyncSession) -> ServiceStatus:
     """检查数据库连接"""
-    start = datetime.utcnow()
+    start = utcnow()
     try:
         await db.execute(text("SELECT 1"))
-        latency = (datetime.utcnow() - start).total_seconds() * 1000
+        latency = (utcnow() - start).total_seconds() * 1000
         return ServiceStatus(
             name="database",
             status="healthy",
@@ -165,7 +166,7 @@ async def _check_database(db: AsyncSession) -> ServiceStatus:
 
 async def _check_cache() -> ServiceStatus:
     """检查缓存服务"""
-    start = datetime.utcnow()
+    start = utcnow()
     try:
         from app.cache import get_cache_backend
         cache = get_cache_backend()
@@ -177,7 +178,7 @@ async def _check_cache() -> ServiceStatus:
         result = await cache.get(test_key)
         await cache.delete(test_key)
 
-        latency = (datetime.utcnow() - start).total_seconds() * 1000
+        latency = (utcnow() - start).total_seconds() * 1000
 
         if result == test_value:
             return ServiceStatus(

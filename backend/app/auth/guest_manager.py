@@ -15,6 +15,7 @@ import logging
 from sqlalchemy import select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.time import utcnow
 from app.models.users import UserSession
 
 if TYPE_CHECKING:
@@ -138,7 +139,7 @@ class GuestManager:
             Dict[str, Any]: 包含guest_session_id和limitations的字典
         """
         session_id = str(uuid.uuid4())
-        now = datetime.utcnow()
+        now = utcnow()
         expires_at = now + self.GUEST_SESSION_TTL
 
         # 构建Session数据
@@ -236,7 +237,7 @@ class GuestManager:
 
             if session:
                 # 检查是否过期
-                if session.expires_at and session.expires_at < datetime.utcnow():
+                if session.expires_at and session.expires_at < utcnow():
                     raise GuestSessionError("Guest session has expired")
 
                 # 重建Session数据
@@ -245,7 +246,7 @@ class GuestManager:
 
                 # 更新缓存
                 if self.cache:
-                    ttl = int((session.expires_at - datetime.utcnow()).total_seconds())
+                    ttl = int((session.expires_at - utcnow()).total_seconds())
                     if ttl > 0:
                         await self.cache.set(
                             f"{self.CACHE_PREFIX}{session_id}",
@@ -341,7 +342,7 @@ class GuestManager:
         elif usage_type == "concurrent_task":
             session_data.usage["concurrent_tasks"] = session_data.usage.get("concurrent_tasks", 0) + 1
 
-        session_data.usage["last_activity"] = datetime.utcnow().isoformat()
+        session_data.usage["last_activity"] = utcnow().isoformat()
 
         # 更新缓存
         if self.cache:
@@ -359,7 +360,7 @@ class GuestManager:
                 ).values(
                     session_data=session_data.to_dict(),
                     tasks_today=session_data.usage.get("tasks_today", 0),
-                    last_task_date=datetime.utcnow()
+                    last_task_date=utcnow()
                 )
             )
             await db.commit()
@@ -481,7 +482,7 @@ class GuestManager:
         Returns:
             int: 清理的Session数量
         """
-        now = datetime.utcnow()
+        now = utcnow()
 
         result = await db.execute(
             delete(UserSession).where(

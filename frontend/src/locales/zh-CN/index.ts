@@ -174,6 +174,11 @@ export default {
       manual: '手动模式',
       agent: 'Agent 模式'
     },
+    definition: {
+      namePlaceholder: '工作流名称',
+      loadPlaceholder: '已保存工作流',
+      templateLabel: '模板选择'
+    },
     templates: {
       kicker: '工作流模板',
       unsaved: '未保存的工作台编排',
@@ -209,7 +214,113 @@ export default {
       restoreRunFailed: '最近一次工作流运行已不可访问',
       runStatus: '最近一次运行',
       nodeProgress: '{completed}/{total} 个节点完成',
-      taskId: '任务：{id}'
+      taskId: '任务：{id}',
+      toolVersion: '版本：{id}',
+      inputFileIds: '输入文件：{ids}',
+      outputSemanticTypes: '输出语义：{types}',
+      missingSemanticOutputs: '缺失输出：{types}',
+      presets: {
+        fullPipeline: {
+          name: '完整 AIDD 流程',
+          description: '从蛋白结构输入开始，串联口袋识别、分子生成、对接、性质预测与先导优化。'
+        },
+        proteinToPocket: {
+          name: 'Protein PDB 到口袋预测',
+          description: '从蛋白结构出发，快速识别潜在口袋并输出后续可用的口袋结构。'
+        },
+        pocketToGeneration: {
+          name: 'Pocket PDB 到分子生成',
+          description: '基于已有口袋结构生成候选分子，用于后续筛选或对接。'
+        },
+        proteinLigandToDocking: {
+          name: 'Protein + ligand 到对接与亲和力',
+          description: '使用蛋白与候选分子直接评估结合姿态与亲和力结果。'
+        },
+        generationToProperty: {
+          name: '分子生成结果到性质预测',
+          description: '对已有候选分子进行理化性质与 ADMET 相关评估。'
+        }
+      }
+    },
+    nodeState: {
+      ready: '可运行',
+      running: '运行中',
+      completed: '已完成',
+      failed: '失败',
+      missingTool: '缺少工具',
+      invalidated: '需重跑',
+      waitingInput: '等待输入',
+      inputNode: '输入节点',
+      pending: '待准备'
+    },
+    nodeType: {
+      input: '输入',
+      tool: '工具',
+      result: '结果',
+      artifact: '产物'
+    },
+    canvas: {
+      title: '模板图谱',
+      nodes: '{count} 个节点',
+      edges: '{count} 条连线'
+    },
+    palette: {
+      title: '工具库',
+      searchPlaceholder: '搜索工具',
+      filterStage: '按阶段筛选',
+      filterInput: '按输入语义筛选',
+      filterOutput: '按输出语义筛选',
+      filterExecutor: '按执行器筛选',
+      addNode: '添加节点',
+      empty: '暂无匹配工具，请调整筛选条件或搜索关键词'
+    },
+    preflight: {
+      title: '运行前检查',
+      readyCount: '可运行 {count}',
+      blockedCount: '阻塞 {count}',
+      completedCount: '完成 {count}',
+      failedCount: '失败 {count}',
+      summaryTitle: '流程运行建议',
+      noIssues: '当前没有阻塞问题，可以继续运行可执行节点。',
+      viewNode: '查看节点',
+      runReadyNodes: '运行可执行节点',
+      runHint: '会按依赖顺序运行已满足输入条件的节点，遇到失败会暂停。',
+      hintRunning: '已有节点正在运行，建议等待当前任务结束后再继续。',
+      hintBlocked: '可以先运行已就绪节点，阻塞节点会在上游产物生成后自动进入可运行状态。',
+      hintReady: '当前已有节点满足运行条件，可以启动流程推进。',
+      hintEmpty: '请先补齐工具选择、输入文件或上游产物，再启动流程。'
+    },
+    inspector: {
+      noSelectedNode: '未选择节点',
+      configTab: '配置',
+      dependenciesTab: '依赖',
+      resultsTab: '结果',
+      toolSelector: '工具选择',
+      selectTool: '选择工具',
+      noToolRequired: '当前节点无需工具。',
+      nodeExecution: '节点执行',
+      runCurrentNode: '运行当前节点',
+      rerunCurrentNode: '重跑当前节点',
+      rerunDownstream: '重跑当前节点及下游',
+      viewTaskDetail: '查看任务详情',
+      recommendedEdges: '推荐连线',
+      noRecommendedEdges: '暂无推荐连线',
+      upstreamEdge: '上游连线',
+      artifactFallback: '产物',
+      deleteEdge: '删除连线',
+      sourceNode: '上游节点',
+      artifactType: '产物类型',
+      addEdge: '添加连线',
+      requiredInput: '必需输入',
+      missingArtifact: '缺少上游产物',
+      noRequiredInput: '当前节点无需输入',
+      producedOutput: '产出结果',
+      noProducedOutput: '当前节点暂无产出',
+      taskResult: '任务结果',
+      noTaskResult: '当前没有任务结果',
+      outputFiles: '输出文件',
+      downloadOutput: '下载输出',
+      noOutputFiles: '当前还没有可下载的输出文件'
     },
     runStatus: {
       pending: '等待中',
@@ -339,6 +450,44 @@ export default {
       moreArtifacts: '还有 {count} 个产物，进入任务详情查看'
     },
     steps: workflowSteps,
+    nodes: {
+      inputProtein: {
+        title: '蛋白结构输入',
+        description: '上传或选择 Protein PDB 文件，作为口袋识别和对接的公共输入。'
+      },
+      inputPocket: {
+        title: '口袋结构输入',
+        description: '上传或选择 Pocket PDB 文件，直接进入分子生成阶段。'
+      },
+      inputLigand: {
+        title: '配体结构输入',
+        description: '上传候选配体结构文件，用于后续对接或分析。'
+      },
+      inputGeneratedLigand: {
+        title: '候选分子输入',
+        description: '复用历史生成分子或上传候选分子文件，用于下游评估。'
+      },
+      resultSummary: {
+        title: '优化结果汇总',
+        description: '汇总最终先导优化结果与关键输出，便于复核与导出。'
+      },
+      resultPocket: {
+        title: '口袋结果',
+        description: '查看口袋预测结果，为下游分子生成准备输入。'
+      },
+      resultGeneratedLigand: {
+        title: '分子生成结果',
+        description: '查看生成的候选分子，供后续对接或性质预测复用。'
+      },
+      resultDocking: {
+        title: '对接结果',
+        description: '查看对接姿态与亲和力输出，辅助筛选候选分子。'
+      },
+      resultProperty: {
+        title: '性质预测结果',
+        description: '查看理化与 ADMET 预测结果，辅助后续决策。'
+      }
+    },
     columns: {
       groups: '工具分组',
       groupsHint: '按研究主题查看可用工具与推荐项，不强制固定执行顺序。',

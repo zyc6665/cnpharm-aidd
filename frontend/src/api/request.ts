@@ -19,6 +19,7 @@ const request: AxiosInstance = axios.create({
 // Token 存储 key
 const TOKEN_KEY = 'cpumodel_token'
 const REFRESH_TOKEN_KEY = 'cpumodel_refresh_token'
+export const AUTH_CLEARED_EVENT = 'cpumodel-auth-cleared'
 
 // 获取 Token
 export const getToken = (): string | null => {
@@ -44,6 +45,9 @@ export const setRefreshToken = (token: string): void => {
 export const clearTokens = (): void => {
   localStorage.removeItem(TOKEN_KEY)
   localStorage.removeItem(REFRESH_TOKEN_KEY)
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(AUTH_CLEARED_EVENT))
+  }
 }
 
 // 是否正在刷新 Token

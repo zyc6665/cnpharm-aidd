@@ -174,6 +174,11 @@ export default {
       manual: 'Manual Mode',
       agent: 'Agent Mode'
     },
+    definition: {
+      namePlaceholder: 'Workflow name',
+      loadPlaceholder: 'Saved workflows',
+      templateLabel: 'Template selection'
+    },
     templates: {
       kicker: 'Workflow Template',
       unsaved: 'Unsaved workbench arrangement',
@@ -209,7 +214,113 @@ export default {
       restoreRunFailed: 'The latest workflow run is no longer available',
       runStatus: 'Latest Run',
       nodeProgress: '{completed}/{total} nodes complete',
-      taskId: 'Task: {id}'
+      taskId: 'Task: {id}',
+      toolVersion: 'Version: {id}',
+      inputFileIds: 'Input files: {ids}',
+      outputSemanticTypes: 'Output semantics: {types}',
+      missingSemanticOutputs: 'Missing outputs: {types}',
+      presets: {
+        fullPipeline: {
+          name: 'Full AIDD Pipeline',
+          description: 'Start from a protein structure and chain pocket discovery, generation, docking, property prediction, and lead optimization.'
+        },
+        proteinToPocket: {
+          name: 'Protein PDB to Pocket Prediction',
+          description: 'Start from a protein structure and identify candidate pockets for downstream design work.'
+        },
+        pocketToGeneration: {
+          name: 'Pocket PDB to Molecule Generation',
+          description: 'Generate candidate molecules from an existing pocket structure for later screening or docking.'
+        },
+        proteinLigandToDocking: {
+          name: 'Protein + Ligand to Docking and Affinity',
+          description: 'Use a protein and candidate ligand directly to evaluate poses and affinity-related outputs.'
+        },
+        generationToProperty: {
+          name: 'Molecule Generation to Property Prediction',
+          description: 'Evaluate physicochemical and ADMET-related properties for existing candidate molecules.'
+        }
+      }
+    },
+    nodeState: {
+      ready: 'Ready',
+      running: 'Running',
+      completed: 'Completed',
+      failed: 'Failed',
+      missingTool: 'Tool Needed',
+      invalidated: 'Needs Rerun',
+      waitingInput: 'Waiting Input',
+      inputNode: 'Input Node',
+      pending: 'Pending'
+    },
+    nodeType: {
+      input: 'Input',
+      tool: 'Tool',
+      result: 'Result',
+      artifact: 'Artifact'
+    },
+    canvas: {
+      title: 'Template Graph',
+      nodes: '{count} nodes',
+      edges: '{count} edges'
+    },
+    palette: {
+      title: 'Tool Library',
+      searchPlaceholder: 'Search tools',
+      filterStage: 'Filter by stage',
+      filterInput: 'Filter by input semantic',
+      filterOutput: 'Filter by output semantic',
+      filterExecutor: 'Filter by executor',
+      addNode: 'Add node',
+      empty: 'No matching tool. Adjust filters or search keywords.'
+    },
+    preflight: {
+      title: 'Preflight Check',
+      readyCount: 'Ready {count}',
+      blockedCount: 'Blocked {count}',
+      completedCount: 'Completed {count}',
+      failedCount: 'Failed {count}',
+      summaryTitle: 'Execution Guidance',
+      noIssues: 'There is no blocking issue right now. You can continue with ready nodes.',
+      viewNode: 'View Node',
+      runReadyNodes: 'Run Ready Nodes',
+      runHint: 'Ready nodes run in dependency order and the workflow pauses on failure.',
+      hintRunning: 'Some nodes are already running. Wait for the current tasks to finish before continuing.',
+      hintBlocked: 'You can run ready nodes first. Blocked nodes will become runnable after upstream artifacts are produced.',
+      hintReady: 'Some nodes already satisfy run conditions and can be started now.',
+      hintEmpty: 'Select the required tool, input file, or upstream artifact before starting the workflow.'
+    },
+    inspector: {
+      noSelectedNode: 'No selected node',
+      configTab: 'Config',
+      dependenciesTab: 'Dependencies',
+      resultsTab: 'Results',
+      toolSelector: 'Tool Selector',
+      selectTool: 'Select tool',
+      noToolRequired: 'This node does not require a tool.',
+      nodeExecution: 'Node Execution',
+      runCurrentNode: 'Run Current Node',
+      rerunCurrentNode: 'Rerun Current Node',
+      rerunDownstream: 'Rerun Node and Downstream',
+      viewTaskDetail: 'View Task Detail',
+      recommendedEdges: 'Suggested Edges',
+      noRecommendedEdges: 'No suggested edge',
+      upstreamEdge: 'Upstream Edge',
+      artifactFallback: 'Artifact',
+      deleteEdge: 'Delete Edge',
+      sourceNode: 'Source Node',
+      artifactType: 'Artifact Type',
+      addEdge: 'Add Edge',
+      requiredInput: 'Required Input',
+      missingArtifact: 'Missing upstream artifact',
+      noRequiredInput: 'No required input',
+      producedOutput: 'Produced Output',
+      noProducedOutput: 'No produced output',
+      taskResult: 'Task Result',
+      noTaskResult: 'No task result',
+      outputFiles: 'Output Files',
+      downloadOutput: 'Download Output',
+      noOutputFiles: 'No downloadable output file yet'
     },
     runStatus: {
       pending: 'Pending',
@@ -339,6 +450,44 @@ export default {
       moreArtifacts: '{count} more artifacts. Open task details to view all'
     },
     steps: workflowSteps,
+    nodes: {
+      inputProtein: {
+        title: 'Protein Structure Input',
+        description: 'Upload or reuse a Protein PDB file as the shared input for pocket discovery and docking.'
+      },
+      inputPocket: {
+        title: 'Pocket Structure Input',
+        description: 'Upload or reuse a Pocket PDB file to start directly from the generation stage.'
+      },
+      inputLigand: {
+        title: 'Ligand Structure Input',
+        description: 'Upload a candidate ligand structure for docking or later analysis.'
+      },
+      inputGeneratedLigand: {
+        title: 'Generated Molecule Input',
+        description: 'Reuse historical generated molecules or upload candidate molecules for downstream evaluation.'
+      },
+      resultSummary: {
+        title: 'Optimization Summary',
+        description: 'Collect final lead optimization outputs for review and export.'
+      },
+      resultPocket: {
+        title: 'Pocket Result',
+        description: 'Review pocket prediction outputs before moving on to molecule generation.'
+      },
+      resultGeneratedLigand: {
+        title: 'Generation Result',
+        description: 'Review generated candidate molecules for downstream docking or property prediction.'
+      },
+      resultDocking: {
+        title: 'Docking Result',
+        description: 'Review binding poses and affinity-related outputs for candidate prioritization.'
+      },
+      resultProperty: {
+        title: 'Property Prediction Result',
+        description: 'Review physicochemical and ADMET predictions before the next decision.'
+      }
+    },
     columns: {
       groups: 'Tool Groups',
       groupsHint: 'Browse tools by research theme and recommendations without enforcing a fixed order.',

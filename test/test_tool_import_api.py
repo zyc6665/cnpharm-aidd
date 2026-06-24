@@ -26,7 +26,14 @@ from app.models import files as _files_models  # noqa: F401
 from app.models import statistics as _statistics_models  # noqa: F401
 from app.models import tasks as _task_models  # noqa: F401
 from app.models import users as _user_models  # noqa: F401
-from app.models.tools import ToolCategory
+from app.models.tools import (
+    Tool,
+    ToolCategory,
+    ToolProviderType,
+    ToolReviewStatus,
+    ToolStatus,
+    ToolVersion,
+)
 from app.models.users import User, UserRole, UserStatus
 
 
@@ -218,6 +225,18 @@ def build_ssh_job_config(version: str = "1.0.0") -> dict:
     }
 
 
+def build_invalid_workflow_capability_config(version: str = "1.0.0") -> dict:
+    config = build_remote_api_config(version=version)
+    config["tool_config"]["agent_capability"] = {
+        "enabled": True,
+        "capability": "molecule_generation",
+        "stage": "molecule_generation",
+        "inputs": [],
+        "outputs": [],
+    }
+    return config
+
+
 @pytest.mark.asyncio
 async def test_admin_can_import_tool_config_and_normalize_legacy_schema(
     api_client: httpx.AsyncClient,
@@ -322,3 +341,108 @@ async def test_import_tool_config_rejects_invalid_config(
 
     assert response.status_code == 422
     assert "tool_config.method" in response.json()["message"]
+
+
+@pytest.mark.asyncio
+async def test_import_tool_config_rejects_invalid_enabled_agent_capability(
+    api_client: httpx.AsyncClient,
+):
+    """导入时应拒绝启用但不完整的工作流能力配置。"""
+    response = await api_client.post(
+        "/api/v1/tools/import-config",
+        headers={"Authorization": "Bearer admin-token"},
+        json={"config": build_invalid_workflow_capability_config()},
+    )
+
+    assert response.status_code == 422
+    assert "agent_capability.inputs" in response.json()["message"]
+
+
+@pytest.mark.asyncio
+async def test_publish_tool_rejects_invalid_current_version_contract(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    admin_user: User,
+):
+    """发布时应拒绝当前版本契约无效的工具。"""
+    tool = Tool(
+        owner_id=admin_user.id,
+        name="Broken Workflow Tool",
+        slug="broken-workflow-tool",
+        description="Broken workflow capability",
+        category="generation",
+        status=ToolStatus.DRAFT.value,
+        is_public=True,
+        provider_type=ToolProviderType.PLATFORM.value,
+        review_status=ToolReviewStatus.NOT_REQUIRED.value,
+        timeout_sec=120,
+    )
+    db_session.add(tool)
+    await db_session.flush()
+
+    version = ToolVersion(
+        tool_id=tool.id,
+        version="0.1.0",
+        changelog="Initial import",
+        config=build_invalid_workflow_capability_config()["tool_config"],
+        is_active=True,
+    )
+    db_session.add(version)
+    await db_session.flush()
+
+    tool.current_version_id = version.id
+    await db_session.commit()
+
+    response = await api_client.post(
+        f"/api/v1/tools/{tool.id}/publish",
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 422
+    assert "agent_capability.inputs" in response.json()["message"]
+
+
+@pytest.mark.asyncio
+async def test_get_tool_contract_returns_actionable_validation_errors(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    admin_user: User,
+):
+    """查询契约时应返回可操作的校验错误。"""
+    tool = Tool(
+        owner_id=admin_user.id,
+        name="Broken Contract Tool",
+        slug="broken-contract-tool",
+        description="Broken contract capability",
+        category="generation",
+        status=ToolStatus.DRAFT.value,
+        is_public=False,
+        provider_type=ToolProviderType.PLATFORM.value,
+        review_status=ToolReviewStatus.NOT_REQUIRED.value,
+        timeout_sec=120,
+    )
+    db_session.add(tool)
+    await db_session.flush()
+
+    version = ToolVersion(
+        tool_id=tool.id,
+        version="0.1.0",
+        changelog="Initial import",
+        config=build_invalid_workflow_capability_config()["tool_config"],
+        is_active=True,
+    )
+    db_session.add(version)
+    await db_session.flush()
+
+    tool.current_version_id = version.id
+    await db_session.commit()
+
+    response = await api_client.get(
+        f"/api/v1/tools/{tool.id}/contract",
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["validation"]["status"] == "invalid"
+    assert any("agent_capability.inputs" in error for error in payload["validation"]["errors"])

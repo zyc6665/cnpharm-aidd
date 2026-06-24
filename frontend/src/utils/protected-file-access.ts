@@ -105,6 +105,15 @@ function isBrowserObjectUrl(url: string): boolean {
   return url.startsWith('blob:') || url.startsWith('data:')
 }
 
+export function isProtectedFileDownloadUrl(url: string): boolean {
+  try {
+    const pathname = new URL(url, window.location.origin).pathname
+    return /^\/api\/v1\/files\/[^/]+\/download$/.test(pathname)
+  } catch {
+    return /^\/api\/v1\/files\/[^/]+\/download$/.test(url)
+  }
+}
+
 export async function createProtectedObjectUrl(
   fileUrl: string,
   dependencies: ProtectedFileAccessDependencies = {}

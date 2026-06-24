@@ -2,26 +2,26 @@
   <section class="workflow-preflight-panel">
     <div class="preflight-header">
       <div>
-        <span class="preflight-kicker">运行前检查</span>
+        <span class="preflight-kicker">{{ t('workflow.preflight.title') }}</span>
         <h3>{{ preflight.primaryMessage }}</h3>
       </div>
       <a-space size="small" wrap>
-        <a-tag color="green">可运行 {{ preflight.runnableCount }}</a-tag>
-        <a-tag color="orange">阻塞 {{ preflight.blockedCount }}</a-tag>
-        <a-tag color="blue">完成 {{ preflight.completedCount }}</a-tag>
-        <a-tag v-if="preflight.failedCount" color="red">失败 {{ preflight.failedCount }}</a-tag>
+        <a-tag color="green">{{ t('workflow.preflight.readyCount', { count: preflight.runnableCount }) }}</a-tag>
+        <a-tag color="orange">{{ t('workflow.preflight.blockedCount', { count: preflight.blockedCount }) }}</a-tag>
+        <a-tag color="blue">{{ t('workflow.preflight.completedCount', { count: preflight.completedCount }) }}</a-tag>
+        <a-tag v-if="preflight.failedCount" color="red">{{ t('workflow.preflight.failedCount', { count: preflight.failedCount }) }}</a-tag>
       </a-space>
     </div>
 
     <div class="preflight-body">
       <div class="preflight-summary">
-        <strong>流程运行建议</strong>
+        <strong>{{ t('workflow.preflight.summaryTitle') }}</strong>
         <p>{{ summaryHint }}</p>
       </div>
 
       <div class="preflight-issues">
         <div v-if="preflight.issues.length === 0" class="preflight-empty">
-          当前没有阻塞问题，可以继续运行可执行节点。
+          {{ t('workflow.preflight.noIssues') }}
         </div>
         <div
           v-for="issue in preflight.issues"
@@ -35,7 +35,7 @@
             <p>{{ issue.detail }}</p>
           </div>
           <a-button size="small" @click="$emit('select-node', issue.nodeId)">
-            查看节点
+            {{ t('workflow.preflight.viewNode') }}
           </a-button>
         </div>
       </div>
@@ -48,10 +48,10 @@
         :loading="running"
         @click="$emit('run-ready-nodes')"
       >
-        运行可执行节点
+        {{ t('workflow.preflight.runReadyNodes') }}
       </a-button>
       <span class="preflight-action-hint">
-        会按依赖顺序运行已满足输入条件的节点，遇到失败会暂停。
+        {{ t('workflow.preflight.runHint') }}
       </span>
     </div>
   </section>
@@ -59,6 +59,7 @@
 
 <script setup lang="ts">
   import { computed } from 'vue'
+  import { useI18n } from 'vue-i18n'
   import type { WorkflowPreflightSummary } from '@/workflow/preflight'
 
   const props = defineProps<{
@@ -70,18 +71,19 @@
     (event: 'run-ready-nodes'): void
     (event: 'select-node', nodeId: string): void
   }>()
+  const { t } = useI18n()
 
   const summaryHint = computed(() => {
     if (props.preflight.runningCount > 0) {
-      return '已有节点正在运行，建议等待当前任务结束后再继续。'
+      return t('workflow.preflight.hintRunning')
     }
     if (props.preflight.runnableCount > 0 && props.preflight.blockedCount > 0) {
-      return '可以先运行已就绪节点，阻塞节点会在上游产物生成后自动进入可运行状态。'
+      return t('workflow.preflight.hintBlocked')
     }
     if (props.preflight.runnableCount > 0) {
-      return '当前已有节点满足运行条件，可以启动流程推进。'
+      return t('workflow.preflight.hintReady')
     }
-    return '请先补齐工具选择、输入文件或上游产物，再启动流程。'
+    return t('workflow.preflight.hintEmpty')
   })
 </script>
 

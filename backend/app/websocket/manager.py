@@ -10,6 +10,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from enum import Enum
 
 import logging
+from app.common.time import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +66,7 @@ class WebSocketManager:
     def _generate_connection_id(self) -> str:
         """生成连接 ID"""
         self._connection_counter += 1
-        return f"conn_{self._connection_counter}_{datetime.utcnow().timestamp()}"
+        return f"conn_{self._connection_counter}_{utcnow().timestamp()}"
 
     async def connect(
         self,
@@ -104,7 +105,7 @@ class WebSocketManager:
         await self.send_personal(connection_id, {
             "type": MessageType.CONNECTED.value,
             "connection_id": connection_id,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": utcnow().isoformat()
         })
 
         return connection_id
@@ -223,7 +224,7 @@ class WebSocketManager:
             return
 
         message["task_id"] = task_id
-        message["timestamp"] = datetime.utcnow().isoformat()
+        message["timestamp"] = utcnow().isoformat()
 
         for connection_id in list(self._task_subscriptions[task_id]):
             await self.send_personal(connection_id, message)
@@ -235,7 +236,7 @@ class WebSocketManager:
         Args:
             message: 消息内容
         """
-        message["timestamp"] = datetime.utcnow().isoformat()
+        message["timestamp"] = utcnow().isoformat()
 
         for connection_id in list(self._connections.keys()):
             await self.send_personal(connection_id, message)

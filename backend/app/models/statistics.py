@@ -1,11 +1,10 @@
 # backend/app/models/statistics.py
 """统计数据模型 - 符合第三范式"""
 
-from datetime import datetime
 from sqlalchemy import Column, String, Integer, Float, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 
-from app.database.base import Base
+from app.database.base import Base, utcnow
 
 
 class UserStatistics(Base):
@@ -18,7 +17,7 @@ class UserStatistics(Base):
     total_failed_tasks = Column(Integer, default=0, nullable=False)
     total_credits_used = Column(Float, default=0.0, nullable=False)
     last_task_at = Column(DateTime, nullable=True)
-    last_updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    last_updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
 
     # 关系
     user = relationship("User", back_populates="statistics")
@@ -38,7 +37,7 @@ class ToolStatistics(Base):
     success_rate = Column(Float, default=0.0, nullable=False)
     avg_execution_time = Column(Float, default=0.0, nullable=False)
     last_used_at = Column(DateTime, nullable=True)
-    last_updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    last_updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
 
     # 关系
     tool = relationship("Tool", back_populates="statistics")
@@ -56,7 +55,7 @@ class FileStatistics(Base):
     view_count = Column(Integer, default=0, nullable=False)
     last_download_at = Column(DateTime, nullable=True)
     last_view_at = Column(DateTime, nullable=True)
-    last_updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    last_updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
 
     # 关系
     file = relationship("File", back_populates="statistics")

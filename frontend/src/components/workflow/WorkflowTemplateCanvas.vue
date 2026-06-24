@@ -2,12 +2,12 @@
   <div class="workflow-template-canvas">
     <div class="canvas-toolbar">
       <div>
-        <span class="canvas-kicker">Template graph</span>
+        <span class="canvas-kicker">{{ t('workflow.canvas.title') }}</span>
         <h3>{{ templateName }}</h3>
       </div>
       <a-space size="small">
-        <a-tag>{{ template.nodes.length }} nodes</a-tag>
-        <a-tag>{{ template.edges.length }} edges</a-tag>
+        <a-tag>{{ t('workflow.canvas.nodes', { count: template.nodes.length }) }}</a-tag>
+        <a-tag>{{ t('workflow.canvas.edges', { count: template.edges.length }) }}</a-tag>
       </a-space>
     </div>
 
@@ -33,8 +33,8 @@
           v-for="node in resolvedNodes"
           :key="node.id"
           :node="node"
-          :title="formatKey(node.titleKey)"
-          :subtitle="node.descriptionKey ? formatKey(node.descriptionKey) : undefined"
+          :title="resolveLabel(node.titleKey)"
+          :subtitle="node.descriptionKey ? resolveLabel(node.descriptionKey) : undefined"
           :status="resolvedNodeStatuses[node.id] ?? 'idle'"
           :selected="node.id === activeNodeId"
           :deletable="node.type !== 'input'"
@@ -49,6 +49,7 @@
 
 <script setup lang="ts">
   import { computed } from 'vue'
+  import { useI18n } from 'vue-i18n'
   import type { WorkflowStepStatus } from '@/workflow/artifact-types'
   import type { WorkflowCanvasNode as WorkflowCanvasNodeModel, WorkflowTemplate } from '@/workflow/template-types'
   import WorkflowCanvasEdge from './WorkflowCanvasEdge.vue'
@@ -57,6 +58,7 @@
   const NODE_WIDTH = 188
   const NODE_HEIGHT = 112
   const CANVAS_PADDING = 64
+  const { t, te } = useI18n()
 
   const props = defineProps<{
     template: WorkflowTemplate
@@ -72,7 +74,7 @@
     (event: 'delete-node', nodeId: string): void
   }>()
 
-  const templateName = computed(() => formatKey(props.template.nameKey))
+  const templateName = computed(() => resolveLabel(props.template.nameKey))
   const resolvedNodeStatuses = computed(() => props.nodeStatuses ?? {})
   const resolvedNodes = computed(() => {
     return props.template.nodes.map(node => ({
@@ -123,7 +125,11 @@
     })
   })
 
-  function formatKey(key: string): string {
+  function resolveLabel(key: string): string {
+    if (te(key)) {
+      return t(key)
+    }
+
     const segments = key.split('.')
     const lastSegment = segments[segments.length - 1] ?? key
     return lastSegment

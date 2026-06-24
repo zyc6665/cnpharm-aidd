@@ -6,17 +6,21 @@ import asyncio
 import contextlib
 import logging
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from sqlalchemy import and_, or_, outerjoin, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
+from app.config import settings
+from app.database.base import utcnow
 from app.database.session import async_session_factory
 from app.models.tasks import Task, TaskLog, TaskOutput, TaskStatus
 from app.models.tools import ToolType
+from app.services.workflow_reconciliation import reconcile_waiting_workflow_runs
 from app.tasks.executor import SSHJobExecutor, TaskExecutionError
 from app.tasks.molecule_scoring import append_molecule_scoring_artifacts
+from app.tasks.service import create_and_schedule_tool_task
 from app.worker.tasks import prepare_task_output
 
 logger = logging.getLogger(__name__)
@@ -24,6 +28,11 @@ logger = logging.getLogger(__name__)
 SHUTDOWN_CANCEL_MESSAGE = "开发模式 direct 任务已取消"
 RECOVERED_SUCCESS_MESSAGE = "任务执行成功（远端结果自动补回）"
 RECOVERED_FAILURE_MESSAGE = "任务执行失败（远端结果自动补回）"
+
+
+def _is_workflow_node_task(task: Task) -> bool:
+    params = (task.inputs.params or {}) if task.inputs else {}
+    return bool(params.get("workflow_run_id") and params.get("workflow_node_id"))
 
 
 async def reconcile_orphaned_direct_tasks(db: AsyncSession) -> int:
@@ -51,6 +60,7 @@ async def reconcile_orphaned_direct_tasks(db: AsyncSession) -> int:
     result = await db.execute(stmt)
     tasks = result.unique().scalars().all()
     recovered_count = 0
+    recovered_workflow_task = False
 
     for task in tasks:
         tool_version = task.tool_version
@@ -99,7 +109,7 @@ async def reconcile_orphaned_direct_tasks(db: AsyncSession) -> int:
         task.finished_at = (
             task.started_at + timedelta(seconds=duration)
             if duration is not None and task.started_at
-            else datetime.utcnow()
+            else utcnow()
         )
         if duration is not None:
             task.execution_time_sec = int(duration)
@@ -125,6 +135,17 @@ async def reconcile_orphaned_direct_tasks(db: AsyncSession) -> int:
         )
         await db.commit()
         recovered_count += 1
+        recovered_workflow_task = recovered_workflow_task or _is_workflow_node_task(task)
+
+    if recovered_workflow_task:
+        try:
+            await reconcile_waiting_workflow_runs(
+                db,
+                batch_size=settings.WORKFLOW_RECONCILE_BATCH_SIZE,
+                schedule_task_fn=create_and_schedule_tool_task,
+            )
+        except Exception:
+            logger.exception("Failed to reconcile workflow runs after direct task recovery")
 
     return recovered_count
 

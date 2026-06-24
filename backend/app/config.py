@@ -4,8 +4,9 @@
 import os
 from functools import lru_cache
 from typing import Optional, List, Literal
+
 from dotenv import load_dotenv
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 def bootstrap_process_env(env_file: str = ".env") -> bool:
@@ -98,6 +99,8 @@ class Settings(BaseSettings):
     CELERY_TASK_SOFT_TIME_LIMIT: int = 3600   # 1小时软超时
     CELERY_TASK_TIME_LIMIT: int = 7200        # 2小时硬超时
     TASK_EXECUTION_BACKEND: Literal["celery", "direct"] = "celery"
+    WORKFLOW_RECONCILE_INTERVAL_SECONDS: int = 5
+    WORKFLOW_RECONCILE_BATCH_SIZE: int = 20
 
     # ==================== 游客配置 ====================
     GUEST_DAILY_TASK_LIMIT: int = 5
@@ -123,11 +126,12 @@ class Settings(BaseSettings):
     VERIFICATION_CODE_RATE_LIMIT_SECONDS: int = 60
     VERIFICATION_CODE_DAILY_LIMIT: int = 10
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = True
-        extra = "ignore"  # 忽略未定义的环境变量
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+        extra="ignore",
+    )
 
 
 @lru_cache()

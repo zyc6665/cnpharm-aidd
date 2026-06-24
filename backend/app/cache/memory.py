@@ -7,6 +7,7 @@ from typing import Optional, Any, List, Dict
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 
+from app.common.time import utcnow
 from app.cache.base import CacheBackend
 
 
@@ -20,7 +21,7 @@ class CacheEntry:
         """检查是否过期"""
         if self.expires_at is None:
             return False
-        return datetime.utcnow() > self.expires_at
+        return utcnow() > self.expires_at
 
 
 class MemoryCacheBackend(CacheBackend):
@@ -37,7 +38,7 @@ class MemoryCacheBackend(CacheBackend):
 
     async def _cleanup_expired(self):
         """清理过期缓存"""
-        now = datetime.utcnow()
+        now = utcnow()
         expired_keys = [
             key for key, entry in self._cache.items()
             if entry.expires_at and entry.expires_at < now
@@ -66,7 +67,7 @@ class MemoryCacheBackend(CacheBackend):
         async with self._lock:
             expires_at = None
             if expire:
-                expires_at = datetime.utcnow() + timedelta(seconds=expire)
+                expires_at = utcnow() + timedelta(seconds=expire)
 
             self._cache[key] = CacheEntry(value=value, expires_at=expires_at)
 
@@ -101,7 +102,7 @@ class MemoryCacheBackend(CacheBackend):
             entry = self._cache.get(key)
             if entry is None:
                 return False
-            entry.expires_at = datetime.utcnow() + timedelta(seconds=seconds)
+            entry.expires_at = utcnow() + timedelta(seconds=seconds)
             return True
 
     async def ttl(self, key: str) -> int:
@@ -112,7 +113,7 @@ class MemoryCacheBackend(CacheBackend):
                 return -2
             if entry.expires_at is None:
                 return -1
-            remaining = (entry.expires_at - datetime.utcnow()).total_seconds()
+            remaining = (entry.expires_at - utcnow()).total_seconds()
             return max(0, int(remaining))
 
     async def incr(self, key: str, amount: int = 1) -> int:

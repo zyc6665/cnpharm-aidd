@@ -6,9 +6,9 @@
         <a-col :xs="24" :md="6">
           <div class="user-sidebar">
             <div class="user-profile-card user-sidebar-card">
-              <a-avatar :size="80" :src="userStore.user?.avatar">
+              <ProtectedAvatar :size="80" :src="userStore.user?.avatar">
                 <template #icon><UserOutlined /></template>
-              </a-avatar>
+              </ProtectedAvatar>
               <div class="user-profile-copy">
                 <h3 class="username">{{ userStore.user?.username || t('user.guest') }}</h3>
                 <p class="email">{{ userStore.user?.email || '' }}</p>
@@ -67,6 +67,7 @@ import {
 } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
 import { useUserStore } from '@/stores'
+import ProtectedAvatar from '@/components/common/ProtectedAvatar.vue'
 
 const router = useRouter()
 const route = useRoute()

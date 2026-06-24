@@ -7,6 +7,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.time import utcnow
 from app.common.exceptions import NotFoundException, ValidationException
 from app.common.secret_crypto import decrypt_secret, encrypt_secret, mask_secret
 from app.models.system_settings import ModelService
@@ -162,7 +163,7 @@ async def test_model_service(
     success, message = await test_openai_compatible_service(service)
     service.last_test_status = "success" if success else "failure"
     service.last_test_message = message
-    service.last_tested_at = datetime.utcnow()
+    service.last_tested_at = utcnow()
     await db.flush()
     await db.refresh(service)
 

@@ -13,6 +13,8 @@ import asyncio
 import logging
 import time
 
+from app.common.time import utcnow
+
 logger = logging.getLogger(__name__)
 
 
@@ -83,7 +85,7 @@ class HealthChecker:
         self.db_factory = db_session_factory
         self.cache = cache_client
         self.version = version
-        self.start_time = start_time or datetime.utcnow()
+        self.start_time = start_time or utcnow()
 
     async def health_check(self) -> SystemHealth:
         """综合健康检查
@@ -120,11 +122,11 @@ class HealthChecker:
                 elif result.status == HealthStatus.DEGRADED and overall_status == HealthStatus.HEALTHY:
                     overall_status = HealthStatus.DEGRADED
 
-        uptime = (datetime.utcnow() - self.start_time).total_seconds()
+        uptime = (utcnow() - self.start_time).total_seconds()
 
         return SystemHealth(
             status=overall_status,
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=utcnow().isoformat(),
             version=self.version,
             uptime_seconds=uptime,
             components=components,
@@ -163,7 +165,7 @@ class HealthChecker:
         return {
             "ready": ready,
             "checks": checks,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": utcnow().isoformat()
         }
 
     async def liveness_check(self) -> Dict[str, Any]:
@@ -177,8 +179,8 @@ class HealthChecker:
         # 存活检查应该简单快速
         return {
             "alive": True,
-            "timestamp": datetime.utcnow().isoformat(),
-            "uptime_seconds": (datetime.utcnow() - self.start_time).total_seconds()
+            "timestamp": utcnow().isoformat(),
+            "uptime_seconds": (utcnow() - self.start_time).total_seconds()
         }
 
     async def _check_database(self) -> ComponentHealth:

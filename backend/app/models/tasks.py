@@ -1,12 +1,10 @@
 # backend/app/models/tasks.py
-"""任务相关模型"""
-
-from datetime import datetime
-from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, Text, ForeignKey, JSON
-from sqlalchemy.orm import relationship
 import enum
 
-from app.database.base import Base, TimestampMixin, UUIDMixin
+from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, Text, ForeignKey, JSON
+from sqlalchemy.orm import relationship
+
+from app.database.base import Base, TimestampMixin, UUIDMixin, utcnow
 
 
 class TaskStatus(str, enum.Enum):
@@ -127,7 +125,7 @@ class TaskLog(Base, UUIDMixin):
     __tablename__ = "task_logs"
 
     task_id = Column(String(36), ForeignKey("tasks.id"), nullable=False, index=True)
-    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+    timestamp = Column(DateTime, default=utcnow, nullable=False)
     level = Column(String(20), default="INFO")  # DEBUG, INFO, WARNING, ERROR
     message = Column(Text, nullable=False)
     log_data = Column(JSON, default=dict)  # 原 metadata，避免保留字冲突

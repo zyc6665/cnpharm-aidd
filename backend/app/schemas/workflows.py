@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 WorkflowDefinitionStatus = Literal["draft", "active", "archived"]
@@ -52,8 +52,7 @@ class WorkflowDefinitionResponse(WorkflowDefinitionBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class WorkflowTemplateCreate(BaseModel):
@@ -89,6 +88,38 @@ class WorkflowRunCreate(BaseModel):
     params: dict[str, Any] = Field(default_factory=dict)
 
 
+class WorkflowRunMissingOutputMatch(BaseModel):
+    extension: str | None = None
+    filename_contains_any: list[str] = Field(default_factory=list)
+    content_type: str | None = None
+
+
+class WorkflowRunMissingOutput(BaseModel):
+    semantic_type: str
+    source: str
+    path: str | None = None
+    required: bool = True
+    match: WorkflowRunMissingOutputMatch = Field(default_factory=WorkflowRunMissingOutputMatch)
+
+
+class WorkflowRunNodeState(BaseModel):
+    status: str
+    tool_id: str | None = None
+    tool_slug: str | None = None
+    tool_version_id: str | None = None
+    tool_version: dict[str, Any] | None = None
+    semantic_inputs: dict[str, Any] = Field(default_factory=dict)
+    params: dict[str, Any] = Field(default_factory=dict)
+    input_file_ids: list[str] = Field(default_factory=list)
+    output_file_ids: list[str] = Field(default_factory=list)
+    semantic_outputs: dict[str, Any] = Field(default_factory=dict)
+    missing_outputs: list[WorkflowRunMissingOutput] = Field(default_factory=list)
+    task_id: str | None = None
+    error_message: str | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
+
+
 class WorkflowTemplateResponse(BaseModel):
     """Workflow template response."""
 
@@ -115,7 +146,7 @@ class WorkflowRunResponse(BaseModel):
     definition: dict[str, Any]
     input_files: dict[str, str]
     execution_order: list[str]
-    node_states: dict[str, Any]
+    node_states: dict[str, WorkflowRunNodeState]
     artifact_lineage: dict[str, Any]
     error_message: str | None = None
     started_at: datetime | None = None

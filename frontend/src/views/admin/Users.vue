@@ -90,9 +90,9 @@
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'user'">
             <div class="user-cell">
-              <a-avatar :size="40" :src="record.avatar_url">
-                {{ getUserInitial(record) }}
-              </a-avatar>
+                <ProtectedAvatar :size="40" :src="record.avatar_url">
+                  {{ getUserInitial(record) }}
+                </ProtectedAvatar>
               <div class="user-info">
                 <span class="username">{{ getUserDisplayName(record) }}</span>
                 <span class="email">{{ record.email }}</span>
@@ -233,6 +233,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ReloadOutlined, SearchOutlined } from '@ant-design/icons-vue'
+import ProtectedAvatar from '@/components/common/ProtectedAvatar.vue'
 import { message, Modal } from 'ant-design-vue'
 import type { FormInstance } from 'ant-design-vue'
 import dayjs from 'dayjs'

@@ -15,6 +15,7 @@ import logging.handlers
 import os
 import shutil
 import time
+from app.common.time import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -460,7 +461,7 @@ class LogRotationManager:
             int: 清理的文件数
         """
         cleaned = 0
-        cutoff = datetime.utcnow() - timedelta(days=max_age_days)
+        cutoff = utcnow() - timedelta(days=max_age_days)
 
         for name, handler in self._handlers.items():
             if hasattr(handler, "baseFilename"):

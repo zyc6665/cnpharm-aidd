@@ -10,6 +10,7 @@ from typing import Dict
 
 from sqlalchemy import select
 
+from app.common.time import utcnow
 from app.database.session import async_session_factory
 from app.models.tasks import Task, TaskLog, TaskStatus
 
@@ -99,7 +100,7 @@ class DirectTaskRunner:
                 return
 
             task.status = TaskStatus.CANCELED.value
-            task.finished_at = datetime.utcnow()
+            task.finished_at = utcnow()
             task.progress_message = message
 
             db.add(

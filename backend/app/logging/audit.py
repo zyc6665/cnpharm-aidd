@@ -14,6 +14,7 @@ import logging
 import os
 import uuid
 
+from app.common.time import isoformat_z, utcnow
 from app.logging.rotation import (
     LogRotationConfig,
     TimeRotationConfig,
@@ -112,7 +113,7 @@ class AuditEvent:
         """转换为字典"""
         return {
             "id": self.id,
-            "timestamp": self.timestamp.isoformat() + "Z",
+            "timestamp": isoformat_z(self.timestamp),
             "action": self.action.value,
             "result": self.result.value,
             "user_id": self.user_id,
@@ -658,7 +659,7 @@ class AuditLogReader:
         Returns:
             Dict: 活动统计
         """
-        start_time = datetime.utcnow() - timedelta(days=days)
+        start_time = utcnow() - timedelta(days=days)
         events = self.query(
             start_time=start_time,
             user_id=user_id,

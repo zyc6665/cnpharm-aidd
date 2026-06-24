@@ -14,6 +14,8 @@ import logging.handlers
 import os
 import sys
 
+from app.common.time import isoformat_z, utcnow
+
 
 @dataclass
 class LogConfig:
@@ -56,7 +58,7 @@ class CustomJsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         """格式化日志记录"""
         log_data = {
-            "@timestamp": datetime.utcnow().isoformat() + "Z",
+            "@timestamp": isoformat_z(utcnow()),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),

@@ -9,6 +9,7 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
 
+from app.common.time import utcnow
 from app.database.session import get_db
 from app.models.files import File, FileAccessLog
 from app.models.statistics import FileStatistics, ToolStatistics, UserStatistics
@@ -241,7 +242,7 @@ async def update_current_user_info(
     for key, value in update_data.items():
         setattr(current_user, key, value)
 
-    current_user.updated_at = datetime.utcnow()
+    current_user.updated_at = utcnow()
     await db.commit()
     await db.refresh(current_user)
 
@@ -264,7 +265,7 @@ async def change_password(
 
     # 更新密码
     current_user.password_hash = hash_password(password_change.new_password)
-    current_user.updated_at = datetime.utcnow()
+    current_user.updated_at = utcnow()
     await db.commit()
 
     return {"message": "密码修改成功"}
@@ -383,7 +384,7 @@ async def admin_get_user_stats(
     """获取用户统计信息（仅管理员可访问）"""
     from datetime import timedelta
 
-    now = datetime.utcnow()
+    now = utcnow()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_start = today_start - timedelta(days=today_start.weekday())
 
@@ -518,7 +519,7 @@ async def admin_update_user(
     for key, value in update_data.items():
         setattr(user, key, value)
 
-    user.updated_at = datetime.utcnow()
+    user.updated_at = utcnow()
     await db.commit()
 
     refreshed_result = await db.execute(
@@ -549,7 +550,7 @@ async def admin_reset_user_password(
         )
 
     user.password_hash = hash_password(password_reset.new_password)
-    user.updated_at = datetime.utcnow()
+    user.updated_at = utcnow()
     await db.commit()
 
     return {"message": "密码重置成功"}
@@ -595,7 +596,7 @@ async def admin_delete_user(
 
     # 软删除：统一设置为 disabled
     user.status = UserStatus.DISABLED.value
-    user.updated_at = datetime.utcnow()
+    user.updated_at = utcnow()
     await db.commit()
 
     return {"message": "用户已删除"}

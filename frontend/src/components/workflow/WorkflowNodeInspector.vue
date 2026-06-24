@@ -3,39 +3,39 @@
     <a-empty
       v-if="!node"
       class="inspector-empty"
-      description="No selected node"
+      :description="t('workflow.inspector.noSelectedNode')"
     />
 
     <template v-else>
       <div class="inspector-header">
-        <span class="inspector-kicker">{{ node.type }}</span>
-        <h3>{{ formatKey(node.titleKey) }}</h3>
-        <p v-if="node.descriptionKey">{{ formatKey(node.descriptionKey) }}</p>
+        <span class="inspector-kicker">{{ t(`workflow.nodeType.${node.type}`) }}</span>
+        <h3>{{ resolveLabel(node.titleKey) }}</h3>
+        <p v-if="node.descriptionKey">{{ resolveLabel(node.descriptionKey) }}</p>
         <WorkflowNodeStatusBadge :status="status" />
       </div>
 
       <a-tabs class="inspector-detail-tabs">
-        <a-tab-pane key="config" tab="配置">
+        <a-tab-pane key="config" :tab="t('workflow.inspector.configTab')">
           <section class="inspector-section">
-            <div class="section-title">Tool selector</div>
+            <div class="section-title">{{ t('workflow.inspector.toolSelector') }}</div>
             <a-select
               v-if="node.type === 'tool'"
               class="tool-selector"
               :value="selectedToolSlug"
               :options="toolOptions"
-              placeholder="选择工具"
+              :placeholder="t('workflow.inspector.selectTool')"
               @change="handleToolChange"
             />
             <a-alert
               v-else
               type="info"
               show-icon
-              message="This node does not require a tool."
+              :message="t('workflow.inspector.noToolRequired')"
             />
           </section>
 
           <section v-if="node.type === 'tool'" class="inspector-section">
-            <div class="section-title">Node execution</div>
+            <div class="section-title">{{ t('workflow.inspector.nodeExecution') }}</div>
             <WorkflowNodeRunPanel
               :node-id="node.id"
               :selected-tool-slug="selectedToolSlug"
@@ -48,14 +48,14 @@
           <div v-else class="inspector-actions">
             <a-button type="primary" block :disabled="!canRun" @click="$emit('run-node', node.id)">
               <PlayCircleOutlined />
-              Run current node
+              {{ t('workflow.inspector.runCurrentNode') }}
             </a-button>
           </div>
         </a-tab-pane>
 
-        <a-tab-pane key="dependencies" tab="依赖">
+        <a-tab-pane key="dependencies" :tab="t('workflow.inspector.dependenciesTab')">
           <section v-if="node.type !== 'input'" class="inspector-section">
-            <div class="section-title">推荐连线</div>
+            <div class="section-title">{{ t('workflow.inspector.recommendedEdges') }}</div>
             <div v-if="edgeSuggestions.length" class="edge-suggestion-list">
               <div
                 v-for="suggestion in edgeSuggestions"
@@ -67,23 +67,23 @@
                   <small>{{ suggestion.semanticType }}</small>
                 </span>
                 <a-button size="small" type="primary" ghost @click="handleAddSuggestedEdge(suggestion)">
-                  添加连线
+                  {{ t('workflow.inspector.addEdge') }}
                 </a-button>
               </div>
             </div>
-            <a-empty v-else description="暂无推荐连线" />
+            <a-empty v-else :description="t('workflow.inspector.noRecommendedEdges')" />
           </section>
 
           <section v-if="node.type !== 'input'" class="inspector-section">
-            <div class="section-title">Upstream edge</div>
+            <div class="section-title">{{ t('workflow.inspector.upstreamEdge') }}</div>
             <div v-if="upstreamEdges.length" class="upstream-edge-list">
               <div v-for="edge in upstreamEdges" :key="edge.id" class="upstream-edge-item">
                 <span class="upstream-edge-copy">
                   <strong>{{ formatNodeTitle(edge.source) }}</strong>
-                  <small>{{ edge.artifactType ?? 'artifact' }}</small>
+                  <small>{{ edge.artifactType ?? t('workflow.inspector.artifactFallback') }}</small>
                 </span>
                 <a-button size="small" danger @click="handleDeleteEdge(edge.id)">
-                  Delete edge
+                  {{ t('workflow.inspector.deleteEdge') }}
                 </a-button>
               </div>
             </div>
@@ -91,23 +91,23 @@
               <a-select
                 v-model:value="edgeSourceNodeId"
                 class="edge-select"
-                placeholder="Source node"
+                :placeholder="t('workflow.inspector.sourceNode')"
                 :options="sourceNodeOptions"
               />
               <a-select
                 v-model:value="edgeArtifactType"
                 class="edge-select"
-                placeholder="Artifact type"
+                :placeholder="t('workflow.inspector.artifactType')"
                 :options="artifactTypeOptions"
               />
               <a-button block :disabled="!edgeSourceNodeId || !edgeArtifactType" @click="handleAddEdge">
-                Add edge
+                {{ t('workflow.inspector.addEdge') }}
               </a-button>
             </div>
           </section>
 
           <section class="inspector-section">
-            <div class="section-title">Required input</div>
+            <div class="section-title">{{ t('workflow.inspector.requiredInput') }}</div>
             <div v-if="inputRecommendations.length" class="input-recommendation-list">
               <div
                 v-for="recommendation in inputRecommendations"
@@ -118,7 +118,7 @@
                 <span v-if="recommendation.artifact" class="artifact-name">
                   {{ recommendation.artifact.filename }}
                 </span>
-                <span v-else class="artifact-missing">Missing upstream artifact</span>
+                <span v-else class="artifact-missing">{{ t('workflow.inspector.missingArtifact') }}</span>
               </div>
             </div>
             <div v-else-if="node.requiredInputTypes?.length" class="semantic-list">
@@ -126,23 +126,34 @@
                 {{ inputType }}
               </a-tag>
             </div>
-            <a-empty v-else description="No required input" />
+            <a-empty v-else :description="t('workflow.inspector.noRequiredInput')" />
           </section>
 
           <section class="inspector-section">
-            <div class="section-title">Produced output</div>
+            <div class="section-title">{{ t('workflow.inspector.producedOutput') }}</div>
             <div v-if="node.producedOutputTypes?.length" class="semantic-list">
               <a-tag v-for="outputType in node.producedOutputTypes" :key="outputType" color="green">
                 {{ outputType }}
               </a-tag>
             </div>
-            <a-empty v-else description="No produced output" />
+            <a-empty v-else :description="t('workflow.inspector.noProducedOutput')" />
           </section>
         </a-tab-pane>
 
-        <a-tab-pane key="results" tab="结果">
+        <a-tab-pane key="results" :tab="t('workflow.inspector.resultsTab')">
           <section class="inspector-section">
-            <div class="section-title">Task result</div>
+            <div class="section-title">{{ t('workflow.inspector.taskResult') }}</div>
+            <div v-if="node.type === 'tool'" class="result-actions">
+              <a-button size="small" type="primary" :disabled="!canRerun" @click="$emit('run-node', node.id)">
+                {{ t('workflow.inspector.rerunCurrentNode') }}
+              </a-button>
+              <a-button size="small" :disabled="!task" @click="$emit('rerun-downstream', node.id)">
+                {{ t('workflow.inspector.rerunDownstream') }}
+              </a-button>
+              <a-button size="small" :disabled="!task" @click="$emit('view-task-detail', node.id)">
+                {{ t('workflow.inspector.viewTaskDetail') }}
+              </a-button>
+            </div>
             <div v-if="task" class="task-result">
               <span class="task-id">{{ task.id }}</span>
               <a-tag>{{ task.status }}</a-tag>
@@ -153,7 +164,23 @@
               />
               <p v-if="task.error_message" class="task-error">{{ task.error_message }}</p>
             </div>
-            <a-empty v-else description="No task result" />
+            <a-empty v-else :description="t('workflow.inspector.noTaskResult')" />
+          </section>
+
+          <section class="inspector-section">
+            <div class="section-title">{{ t('workflow.inspector.outputFiles') }}</div>
+            <div v-if="outputArtifacts.length" class="output-artifact-list">
+              <div v-for="artifact in outputArtifacts" :key="artifact.id" class="output-artifact-item">
+                <span class="output-artifact-copy">
+                  <strong>{{ artifact.filename }}</strong>
+                  <small>{{ artifact.semantic_type || t('workflow.inspector.artifactFallback') }}</small>
+                </span>
+                <a-button size="small" @click="handleDownloadOutput(artifact)">
+                  {{ t('workflow.inspector.downloadOutput') }}
+                </a-button>
+              </div>
+            </div>
+            <a-empty v-else :description="t('workflow.inspector.noOutputFiles')" />
           </section>
         </a-tab-pane>
       </a-tabs>
@@ -163,6 +190,8 @@
 
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue'
+  import { useI18n } from 'vue-i18n'
+  import { message } from 'ant-design-vue'
   import { PlayCircleOutlined } from '@ant-design/icons-vue'
   import {
     WORKFLOW_ARTIFACT_SEMANTIC_TYPES,
@@ -178,6 +207,7 @@
   import type { WorkflowCanvasNode } from '@/workflow/template-types'
   import type { WorkflowTemplate } from '@/workflow/template-types'
   import type { ArtifactFile } from '@/types/models'
+  import { triggerProtectedFileDownload } from '@/utils/protected-file-access'
   import WorkflowNodeRunPanel from './WorkflowNodeRunPanel.vue'
   import WorkflowNodeStatusBadge from './WorkflowNodeStatusBadge.vue'
 
@@ -204,12 +234,15 @@
     (event: 'add-edge', input: { source: string; target: string; artifactType: WorkflowArtifactSemanticType }): void
     (event: 'delete-edge', edgeId: string): void
     (event: 'run-node', nodeId: string): void
+    (event: 'rerun-downstream', nodeId: string): void
+    (event: 'view-task-detail', nodeId: string): void
     (event: 'task-submitted', taskId: string): void
   }>()
 
   const edgeSourceNodeId = ref<string | undefined>()
   const edgeArtifactType = ref<WorkflowArtifactSemanticType | undefined>()
   const status = computed<WorkflowStepStatus>(() => props.status ?? 'idle')
+  const { t, te } = useI18n()
 
   const toolOptions = computed(() => {
     const tools = props.availableTools?.length
@@ -227,13 +260,13 @@
       .filter(item => item.id !== props.node?.id)
       .map(item => ({
         value: item.id,
-        label: formatKey(item.titleKey)
+        label: resolveLabel(item.titleKey)
       }))
   })
 
   const nodeTitleById = computed(() => {
     return (props.template?.nodes ?? []).reduce<Record<string, string>>((titles, item) => {
-      titles[item.id] = formatKey(item.titleKey)
+      titles[item.id] = resolveLabel(item.titleKey)
       return titles
     }, {})
   })
@@ -285,6 +318,22 @@
     return status.value === 'ready' || status.value === 'failed' || status.value === 'invalidated'
   })
 
+  const canRerun = computed(() => {
+    if (!props.node || props.node.type !== 'tool') {
+      return false
+    }
+
+    return Boolean(props.selectedToolSlug || props.node.recommendedToolSlug || props.node.toolSlugs?.[0])
+  })
+
+  const outputArtifacts = computed(() => {
+    if (!props.task?.id) {
+      return []
+    }
+
+    return (props.artifacts ?? []).filter((artifact) => artifact.task_id === props.task?.id)
+  })
+
   function handleToolChange(toolSlug: unknown) {
     if (!props.node || typeof toolSlug !== 'string') {
       return
@@ -321,6 +370,18 @@
     return nodeTitleById.value[nodeId] ?? nodeId
   }
 
+  async function handleDownloadOutput(artifact: ArtifactFile) {
+    try {
+      await triggerProtectedFileDownload({
+        url: artifact.download_url,
+        filename: artifact.filename,
+        original_name: artifact.filename,
+      })
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : t('common.error'))
+    }
+  }
+
   watch(
     () => props.node?.id,
     () => {
@@ -329,7 +390,11 @@
     }
   )
 
-  function formatKey(key: string): string {
+  function resolveLabel(key: string): string {
+    if (te(key)) {
+      return t(key)
+    }
+
     const segments = key.split('.')
     const lastSegment = segments[segments.length - 1] ?? key
     return lastSegment
@@ -497,6 +562,50 @@
     display: grid;
     gap: @spacing-sm;
     margin-top: @spacing-sm;
+  }
+
+  .result-actions,
+  .output-artifact-list {
+    display: grid;
+    gap: @spacing-sm;
+    margin-top: @spacing-sm;
+  }
+
+  .result-actions {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
+
+  .output-artifact-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: @spacing-sm;
+    padding: @spacing-xs @spacing-sm;
+    border: 1px solid @border-color-light;
+    border-radius: @border-radius-sm;
+    background: rgba(255, 255, 255, 0.74);
+  }
+
+  .output-artifact-copy {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+  }
+
+  .output-artifact-copy strong,
+  .output-artifact-copy small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .output-artifact-copy strong {
+    color: @text-color-light-primary;
+    font-size: @font-size-xs;
+  }
+
+  .output-artifact-copy small {
+    color: @text-color-light-secondary;
   }
 
   .task-id {

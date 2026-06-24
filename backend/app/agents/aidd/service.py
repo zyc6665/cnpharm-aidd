@@ -11,6 +11,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.common.time import utcnow
 from app.agents.aidd.builtin_tools import BuiltinToolFile, run_builtin_tool
 from app.agents.aidd.capabilities import AIDD_TOOL_CAPABILITIES, ToolCapability
 from app.agents.aidd.input_classifier import classify_aidd_input_file
@@ -489,7 +490,7 @@ async def _schedule_step(
     step.status = "waiting_task"
     step.input_file_ids = payload.file_ids
     step.params = payload.params
-    step.started_at = datetime.utcnow()
+    step.started_at = utcnow()
 
 
 async def _run_virtual_step(
@@ -548,8 +549,8 @@ async def _run_virtual_step(
         }
 
     step.status = "success"
-    step.started_at = step.started_at or datetime.utcnow()
-    step.finished_at = datetime.utcnow()
+    step.started_at = step.started_at or utcnow()
+    step.finished_at = utcnow()
     step.input_file_ids = input_file_ids
     step.output_file_ids = output_file_ids
     step.semantic_outputs = semantic_outputs
@@ -592,7 +593,7 @@ async def start_ready_steps(
             step.error_message = str(exc)
             run.status = "failure"
             run.error_message = str(exc)
-            run.finished_at = datetime.utcnow()
+            run.finished_at = utcnow()
             await db.commit()
             raise
 
@@ -646,11 +647,11 @@ async def cancel_agent_run(
     run = await _load_run_for_user(db, run_id=run_id, current_user=current_user)
     if run.status not in TERMINAL_RUN_STATUSES:
         run.status = "canceled"
-        run.finished_at = datetime.utcnow()
+        run.finished_at = utcnow()
         for step in run.steps:
             if step.status in {"pending", "ready", "waiting_task", "running"}:
                 step.status = "canceled"
-                step.finished_at = datetime.utcnow()
+                step.finished_at = utcnow()
         await db.commit()
     return await _load_run_for_user(db, run_id=run.id, current_user=current_user)
 
@@ -861,7 +862,7 @@ def _missing_required_outputs_message(
 async def _mark_run_success_if_complete(db: AsyncSession, run: AgentRun) -> None:
     if run.steps and all(step.status == "success" for step in run.steps):
         run.status = "success"
-        run.finished_at = datetime.utcnow()
+        run.finished_at = utcnow()
         await db.commit()
 
 
@@ -915,7 +916,7 @@ async def _try_replan_failed_step_with_uploaded_inputs(
 
     failed_step.status = "skipped"
     failed_step.error_message = f"上游任务失败，已改用上传文件继续: {error_message}"
-    failed_step.finished_at = datetime.utcnow()
+    failed_step.finished_at = utcnow()
     run.status = "pending"
     run.error_message = None
     await db.commit()
@@ -955,7 +956,7 @@ async def reconcile_waiting_agent_steps(
             step.error_message = "关联任务不存在"
             run.status = "failure"
             run.error_message = step.error_message
-            run.finished_at = datetime.utcnow()
+            run.finished_at = utcnow()
             processed_count += 1
             continue
 
@@ -974,10 +975,10 @@ async def reconcile_waiting_agent_steps(
                 continue
             step.status = "failure"
             step.error_message = error_message
-            step.finished_at = datetime.utcnow()
+            step.finished_at = utcnow()
             run.status = "failure"
             run.error_message = step.error_message
-            run.finished_at = datetime.utcnow()
+            run.finished_at = utcnow()
             continue
 
         file_ids = [str(file_id) for file_id in (task.outputs.file_ids if task.outputs else [])]
@@ -1005,10 +1006,10 @@ async def reconcile_waiting_agent_steps(
                 continue
             step.status = "failure"
             step.error_message = error_message
-            step.finished_at = datetime.utcnow()
+            step.finished_at = utcnow()
             run.status = "failure"
             run.error_message = step.error_message
-            run.finished_at = datetime.utcnow()
+            run.finished_at = utcnow()
             continue
 
         step.status = "success"
@@ -1018,7 +1019,7 @@ async def reconcile_waiting_agent_steps(
             for value in semantic_outputs.values()
             if value.get("source") == "output_files" and value.get("file_id")
         ]
-        step.finished_at = datetime.utcnow()
+        step.finished_at = utcnow()
 
         await db.commit()
         user = await db.get(User, run.user_id)

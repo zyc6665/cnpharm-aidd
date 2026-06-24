@@ -48,9 +48,9 @@
           <template v-if="isLoggedIn">
             <a-dropdown>
               <a-button type="text" class="user-btn">
-                <a-avatar :size="28" :src="userStore.avatar">
+                <ProtectedAvatar :size="28" :src="userStore.avatar">
                   {{ username.charAt(0).toUpperCase() }}
-                </a-avatar>
+                </ProtectedAvatar>
                 <span class="username">{{ username }}</span>
               </a-button>
               <template #overlay>
@@ -150,6 +150,7 @@
   } from '@ant-design/icons-vue'
   import { useUserStore, useAppStore } from '@/stores'
   import { setLocale, type Locale } from '@/locales'
+  import ProtectedAvatar from '@/components/common/ProtectedAvatar.vue'
 
   const route = useRoute()
   const router = useRouter()

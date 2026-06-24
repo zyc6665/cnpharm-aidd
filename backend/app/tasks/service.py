@@ -13,6 +13,7 @@ from sqlalchemy.orm import joinedload, selectinload
 
 from app.config import use_direct_task_execution
 from app.common.exceptions import NotFoundException, ValidationException
+from app.database.base import utcnow
 from app.models.statistics import ToolStatistics
 from app.models.tasks import Task, TaskInput, TaskStatus
 from app.models.tools import Tool, ToolVersion
@@ -66,7 +67,7 @@ def resolve_task_display_name(
 
 async def record_tool_usage(db: AsyncSession, tool_id: str) -> None:
     """Ensure tool statistics exists, then record one use."""
-    now = datetime.utcnow()
+    now = utcnow()
 
     update_result = await db.execute(
         update(ToolStatistics)

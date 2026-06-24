@@ -68,6 +68,16 @@ def test_use_direct_task_execution_falls_back_when_celery_not_configured(
     assert use_direct_task_execution() is True
 
 
+def test_workflow_reconciliation_settings_are_exposed() -> None:
+    """工作流后台对账应暴露显式配置项。"""
+    from app.config import settings
+
+    assert hasattr(settings, "WORKFLOW_RECONCILE_INTERVAL_SECONDS")
+    assert hasattr(settings, "WORKFLOW_RECONCILE_BATCH_SIZE")
+    assert settings.WORKFLOW_RECONCILE_INTERVAL_SECONDS > 0
+    assert settings.WORKFLOW_RECONCILE_BATCH_SIZE > 0
+
+
 @pytest_asyncio.fixture
 async def db_session() -> AsyncSession:
     """创建隔离数据库会话。"""
@@ -501,3 +511,100 @@ async def test_reconcile_orphaned_direct_tasks_recovers_remote_success_result(
     log_result = await db_session.execute(select(TaskLog).where(TaskLog.task_id == task.id))
     logs = log_result.scalars().all()
     assert any(log.message == "从远端 output 目录自动补回任务结果" for log in logs)
+
+
+@pytest.mark.asyncio
+async def test_reconcile_orphaned_direct_tasks_triggers_workflow_reconciliation_for_workflow_tasks(
+    db_session: AsyncSession,
+    admin_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """补回工作流节点任务后，应主动触发工作流对账续跑。"""
+    from app.config import settings
+
+    tool = Tool(
+        owner_id=admin_user.id,
+        name="Recover Workflow SSH Tool",
+        slug="recover-workflow-ssh-tool",
+        description="Recoverable workflow ssh_job tool",
+        category="generation",
+        status=ToolStatus.PUBLISHED.value,
+        is_public=True,
+    )
+    db_session.add(tool)
+    await db_session.flush()
+
+    version = ToolVersion(
+        tool_id=tool.id,
+        version="1.0.0",
+        config={
+            "type": "ssh_job",
+            "host": "10.202.2.228",
+            "username": "zhouyc",
+            "auth_type": "password",
+            "password_ref": "ssh_4090_zhouyc",
+            "runner_mode": "docker_exec",
+            "remote_base_dir": "/srv/platform-jobs",
+            "entrypoint": "/app/platform_run.sh",
+            "container_name": "kaiwu",
+        },
+        is_active=True,
+    )
+    db_session.add(version)
+    await db_session.flush()
+
+    task = Task(
+        user_id=admin_user.id,
+        tool_id=tool.id,
+        tool_version_id=version.id,
+        status=TaskStatus.RUNNING.value,
+        priority="normal",
+        progress=0.0,
+        progress_message="任务开始执行",
+    )
+    db_session.add(task)
+    await db_session.flush()
+    db_session.add(
+        TaskInput(
+            task_id=task.id,
+            params={
+                "workflow_run_id": "run-1",
+                "workflow_node_id": "node-1",
+            },
+            file_ids=[],
+        )
+    )
+    await db_session.commit()
+
+    async def fake_recover(self) -> dict:
+        return {
+            "success": True,
+            "result": {
+                "success": True,
+                "message": "recovered",
+                "metrics": {"duration_sec": 3},
+                "output_file_ids": ["file-1"],
+            },
+            "output_file_ids": ["file-1"],
+            "stdout": "",
+            "stderr": "",
+        }
+
+    calls: list[tuple[int, object]] = []
+
+    async def fake_reconcile_workflows(db, *, batch_size, schedule_task_fn) -> int:
+        calls.append((batch_size, schedule_task_fn))
+        return 1
+
+    monkeypatch.setattr(SSHJobExecutor, "recover_remote_result", fake_recover)
+    monkeypatch.setattr(
+        "app.tasks.direct_recovery.reconcile_waiting_workflow_runs",
+        fake_reconcile_workflows,
+    )
+
+    recovered = await reconcile_orphaned_direct_tasks(db_session)
+
+    assert recovered == 1
+    assert len(calls) == 1
+    assert calls[0][0] == settings.WORKFLOW_RECONCILE_BATCH_SIZE
+    assert calls[0][1] is not None

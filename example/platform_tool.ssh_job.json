@@ -1,0 +1,86 @@
+{
+  "name": "SSH Job Tool Template",
+  "slug": "ssh-job-tool-template",
+  "description": "通用 ssh_job 工具配置模板，用于复用远端已有模型容器或运行环境",
+  "icon": "S",
+  "category": "template",
+  "version": "0.1.0",
+  "changelog": "Initial ssh_job template version",
+  "tool_config": {
+    "type": "ssh_job",
+    "host": "gpu-node-01.internal",
+    "port": 22,
+    "username": "platform_runner",
+    "auth_ref": "ssh_gpu_node_01",
+    "runner_mode": "docker_exec",
+    "remote_base_dir": "/srv/platform-jobs",
+    "container_base_dir": "/workspace/platform-jobs",
+    "entrypoint": "/app/platform_run.sh",
+    "container_name": "targetdiff-prod",
+    "timeout_sec": 3600,
+    "cleanup_remote": true,
+    "strict_host_key_checking": true,
+    "output_globs": [
+      "output/result.json",
+      "output/logs/run.log",
+      "output/artifacts/**/*"
+    ],
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "task_id": {
+          "type": "string",
+          "description": "平台任务 ID",
+          "hidden": true
+        },
+        "task_name": {
+          "type": "string",
+          "description": "模型侧能力名称",
+          "hidden": true
+        },
+        "params": {
+          "type": "object",
+          "description": "业务参数集合"
+        },
+        "input_files": {
+          "type": "object",
+          "properties": {
+            "pocket_pdb": {
+              "type": "string",
+              "title": "Pocket PDB 文件",
+              "format": "file",
+              "accept": ".pdb",
+              "description": "上传已裁剪的 pocket PDB 文件"
+            }
+          },
+          "required": [
+            "pocket_pdb"
+          ]
+        }
+      },
+      "required": [
+        "task_id",
+        "params",
+        "input_files"
+      ]
+    },
+    "output_schema": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        },
+        "outputs": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "success",
+        "message"
+      ]
+    }
+  }
+}

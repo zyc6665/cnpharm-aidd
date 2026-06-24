@@ -77,9 +77,9 @@
           <div class="header-right">
             <a-dropdown>
               <a-space class="user-dropdown">
-                <a-avatar :size="32" :src="userStore.user?.avatar">
+                <ProtectedAvatar :size="32" :src="userStore.user?.avatar">
                   <template #icon><UserOutlined /></template>
-                </a-avatar>
+                </ProtectedAvatar>
                 <span class="user-name">{{ userStore.user?.username }}</span>
               </a-space>
               <template #overlay>
@@ -131,6 +131,7 @@ import {
 } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
 import { useUserStore } from '@/stores'
+import ProtectedAvatar from '@/components/common/ProtectedAvatar.vue'
 
 const router = useRouter()
 const route = useRoute()

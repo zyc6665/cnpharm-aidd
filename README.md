@@ -29,7 +29,9 @@
 | 数据库 | SQLite | PostgreSQL |
 | 文件存储 | 本地文件系统 | MinIO (S3) |
 | 缓存 | 内存缓存 | Redis |
-| 任务队列 | 同步执行 | Celery + Redis |
+| 任务队列 | direct 进程内执行（仅开发调试） | Celery + Redis |
+
+> 工作流、Agent 和 ssh_job 这类长时任务在生产环境应使用 `Celery + Redis`。`direct` 模式仅用于本地开发联调，进程重启、热更新或单进程阻塞都会直接影响任务连续性。
 
 ---
 
@@ -48,8 +50,14 @@
 
 - **框架**：Vue 3 + Vite
 - **状态管理**：Pinia
-- **UI组件**：Element Plus
+- **UI组件**：Ant Design Vue
 - **图表**：ECharts
+
+### 当前开发约定
+
+- 当前团队协作分支：`6.16`
+- 当前工作目录：`/data/zhouyc/cpumodel_sciminer`
+- 新开发工作默认直接在上述目录和分支上进行
 
 ### 系统架构图
 
@@ -222,7 +230,10 @@ celery -A app.worker.celery_app worker --loglevel=info
 | `STORAGE_PATH` | ./storage/uploads | 本地存储路径 |
 | `CACHE_BACKEND` | memory | 缓存后端：memory/redis |
 | `REDIS_URL` | redis://localhost:6379/0 | Redis连接 |
-| `CELERY_BROKER_URL` | (空) | Celery消息代理，空则同步执行 |
+| `CELERY_BROKER_URL` | (空) | Celery消息代理；`TASK_EXECUTION_BACKEND=celery` 且未配置时会回退到 `direct` |
+| `TASK_EXECUTION_BACKEND` | celery | `celery` 或 `direct`，`direct` 仅建议开发使用 |
+| `WORKFLOW_RECONCILE_INTERVAL_SECONDS` | 5 | 工作流后台对账轮询间隔（秒） |
+| `WORKFLOW_RECONCILE_BATCH_SIZE` | 20 | 单次工作流对账最大处理数 |
 | `MAX_FILE_SIZE_MB` | 100 | 最大文件大小(MB) |
 
 完整配置示例见 `backend/.env.example`
@@ -324,12 +335,14 @@ count = await cache.incr("page_views")
 ### 任务执行
 
 ```python
-from app.worker import execute_tool_task
+from app.tasks.service import create_and_schedule_tool_task
 
-# 开发模式：同步执行
-# 生产模式：异步执行（Celery）
-execute_tool_task.delay(task_id, params)
+# 统一通过任务创建服务调度
+# 开发模式：根据配置走 direct 进程内执行
+# 生产模式：根据配置走 Celery + Redis 异步执行
 ```
+
+对于需要跨进程恢复、长时间排队或多用户并发的真实药研工作流，不要依赖 `direct` 模式。
 
 ---
 

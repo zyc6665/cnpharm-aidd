@@ -14,6 +14,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Dict, Optional, Set
 import logging
 
+from app.common.time import utcnow
 from app.models.tasks import TaskStatus
 
 if TYPE_CHECKING:
@@ -164,7 +165,7 @@ class TaskStateMachine:
         task.status = to_status.value
 
         # 状态转换副作用
-        now = datetime.utcnow()
+        now = utcnow()
 
         if to_status == TaskStatus.RUNNING:
             # 开始执行

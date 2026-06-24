@@ -39,7 +39,20 @@
         </a-tag>
         <div class="run-node-main">
           <strong>{{ node.toolSlug || node.id }}</strong>
+          <span v-if="node.toolVersionId" class="run-node-meta">
+            {{ t('workflow.templates.toolVersion', { id: node.toolVersionId }) }}
+          </span>
           <span v-if="node.taskId">{{ t('workflow.templates.taskId', { id: node.taskId }) }}</span>
+          <span v-if="node.inputFileIds.length" class="run-node-meta">
+            {{ t('workflow.templates.inputFileIds', { ids: node.inputFileIds.join(', ') }) }}
+          </span>
+          <span v-if="node.outputSemanticTypes.length" class="run-node-meta">
+            {{ t('workflow.templates.outputSemanticTypes', { types: node.outputSemanticTypes.join(', ') }) }}
+          </span>
+          <span v-if="node.paramsText" class="run-node-meta">{{ node.paramsText }}</span>
+          <span v-if="node.missingOutputs.length" class="run-node-error">
+            {{ t('workflow.templates.missingSemanticOutputs', { types: node.missingOutputs.map(item => item.semantic_type).join(', ') }) }}
+          </span>
           <span v-if="node.errorMessage" class="run-node-error">{{ node.errorMessage }}</span>
         </div>
       </div>
@@ -179,5 +192,9 @@
 
   .run-node-error {
     color: @error-color;
+  }
+
+  .run-node-meta {
+    color: @text-color-light-secondary;
   }
 </style>

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
+import importlib.util
 import sys
 from pathlib import Path
 
@@ -10,6 +12,7 @@ import httpx
 import pytest
 import pytest_asyncio
 from fastapi import Header, HTTPException
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -423,6 +426,13 @@ async def test_create_workflow_run_preflights_required_inputs(
     assert run["input_files"] == {"protein_pdb": protein_file.id}
     assert run["execution_order"] == ["pocket_prediction"]
     assert run["node_states"]["pocket_prediction"]["status"] == "waiting_task"
+    assert run["node_states"]["pocket_prediction"]["tool_version_id"] == pocket_tool.current_version_id
+    params = run["node_states"]["pocket_prediction"]["params"]
+    assert params["device"] == "cpu"
+    assert params["workflow_node_id"] == "pocket_prediction"
+    assert params["workflow_node_type"] == "tool"
+    assert params["workflow_run_id"] == run["id"]
+    assert params["workflow_template_id"] == template_id
     assert run["node_states"]["pocket_prediction"]["task_id"]
     assert run["node_states"]["pocket_prediction"]["input_file_ids"] == [protein_file.id]
     assert run["definition"]["nodes"][1]["tool_version"]["version"] == "1.0.0"
@@ -610,6 +620,204 @@ async def test_sync_workflow_run_extracts_outputs_and_schedules_downstream(
 
 
 @pytest.mark.asyncio
+async def test_workflow_reconciliation_service_advances_waiting_runs(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    pocket_tool: Tool,
+    generation_tool: Tool,
+    protein_file: FileModel,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.services.workflows.create_and_schedule_tool_task",
+        create_fake_scheduled_task,
+    )
+    create_response = await api_client.post(
+        "/api/v1/workflows/templates",
+        headers={"Authorization": "Bearer owner-token"},
+        json={
+            "name": "Protein to Generation",
+            "definition": linear_generation_definition(pocket_tool, generation_tool),
+        },
+    )
+    template_id = create_response.json()["data"]["id"]
+    run_response = await api_client.post(
+        f"/api/v1/workflows/templates/{template_id}/runs",
+        headers={"Authorization": "Bearer owner-token"},
+        json={"input_files": {"protein_pdb": protein_file.id}},
+    )
+    run = run_response.json()["data"]
+    first_task_id = run["node_states"]["pocket_prediction"]["task_id"]
+
+    pocket_output = FileModel(
+        owner_id=owner.id,
+        filename="best_pocket.pdb",
+        content_type="chemical/x-pdb",
+        size_bytes=128,
+        sha256=hashlib.sha256(b"pocket-reconcile").hexdigest(),
+        source_type=FileSourceType.TOOL_OUTPUT.value,
+        storage_path="/tmp/best_pocket_reconcile.pdb",
+        is_public=False,
+    )
+    db_session.add(pocket_output)
+    await db_session.flush()
+    task = await db_session.get(Task, first_task_id)
+    task.status = TaskStatus.SUCCESS.value
+    db_session.add(TaskOutput(task_id=task.id, result={"ok": True}, file_ids=[pocket_output.id]))
+    await db_session.commit()
+
+    module_spec = importlib.util.find_spec("app.services.workflow_reconciliation")
+    assert module_spec is not None
+    workflow_reconciliation = importlib.import_module("app.services.workflow_reconciliation")
+
+    processed = await workflow_reconciliation.reconcile_waiting_workflow_runs(
+        db_session,
+        batch_size=10,
+        schedule_task_fn=create_fake_scheduled_task,
+    )
+
+    assert processed == 1
+    run_record = await db_session.get(WorkflowRun, run["id"])
+    assert run_record is not None
+    downstream_state = (run_record.node_states or {})["molecule_generation"]
+    assert downstream_state["status"] == "waiting_task"
+    assert downstream_state["task_id"]
+
+
+@pytest.mark.asyncio
+async def test_sync_workflow_run_does_not_duplicate_pending_node_task_when_task_id_exists(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    pocket_tool: Tool,
+    generation_tool: Tool,
+    protein_file: FileModel,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.services.workflows.create_and_schedule_tool_task",
+        create_fake_scheduled_task,
+    )
+    create_response = await api_client.post(
+        "/api/v1/workflows/templates",
+        headers={"Authorization": "Bearer owner-token"},
+        json={
+            "name": "Protein to Generation",
+            "definition": linear_generation_definition(pocket_tool, generation_tool),
+        },
+    )
+    template_id = create_response.json()["data"]["id"]
+    run_response = await api_client.post(
+        f"/api/v1/workflows/templates/{template_id}/runs",
+        headers={"Authorization": "Bearer owner-token"},
+        json={"input_files": {"protein_pdb": protein_file.id}},
+    )
+    run = run_response.json()["data"]
+    first_task_id = run["node_states"]["pocket_prediction"]["task_id"]
+
+    pocket_output = FileModel(
+        owner_id=owner.id,
+        filename="best_pocket_duplicate_guard.pdb",
+        content_type="chemical/x-pdb",
+        size_bytes=128,
+        sha256=hashlib.sha256(b"pocket-duplicate-guard").hexdigest(),
+        source_type=FileSourceType.TOOL_OUTPUT.value,
+        storage_path="/tmp/best_pocket_duplicate_guard.pdb",
+        is_public=False,
+    )
+    db_session.add(pocket_output)
+    await db_session.flush()
+    task = await db_session.get(Task, first_task_id)
+    task.status = TaskStatus.SUCCESS.value
+    db_session.add(TaskOutput(task_id=task.id, result={"ok": True}, file_ids=[pocket_output.id]))
+    await db_session.commit()
+
+    first_sync = await api_client.post(
+        f"/api/v1/workflows/runs/{run['id']}/sync",
+        headers={"Authorization": "Bearer owner-token"},
+    )
+    assert first_sync.status_code == 200
+    first_synced_run = first_sync.json()["data"]
+    downstream_state = first_synced_run["node_states"]["molecule_generation"]
+    original_downstream_task_id = downstream_state["task_id"]
+
+    run_record = await db_session.get(WorkflowRun, run["id"])
+    node_states = dict(run_record.node_states or {})
+    mutated_downstream_state = dict(node_states["molecule_generation"])
+    mutated_downstream_state["status"] = "pending"
+    node_states["molecule_generation"] = mutated_downstream_state
+    run_record.node_states = node_states
+    await db_session.commit()
+    await db_session.refresh(run_record)
+
+    second_sync = await api_client.post(
+        f"/api/v1/workflows/runs/{run['id']}/sync",
+        headers={"Authorization": "Bearer owner-token"},
+    )
+
+    assert second_sync.status_code == 200
+    second_synced_run = second_sync.json()["data"]
+    second_downstream_state = second_synced_run["node_states"]["molecule_generation"]
+    assert second_downstream_state["task_id"] == original_downstream_task_id
+
+    task_count_result = await db_session.execute(select(func.count()).select_from(Task))
+    assert task_count_result.scalar_one() == 2
+
+
+@pytest.mark.asyncio
+async def test_sync_workflow_run_failure_stops_downstream_scheduling(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    pocket_tool: Tool,
+    generation_tool: Tool,
+    protein_file: FileModel,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.services.workflows.create_and_schedule_tool_task",
+        create_fake_scheduled_task,
+    )
+    create_response = await api_client.post(
+        "/api/v1/workflows/templates",
+        headers={"Authorization": "Bearer owner-token"},
+        json={
+            "name": "Failure Stops Downstream",
+            "definition": linear_generation_definition(pocket_tool, generation_tool),
+        },
+    )
+    template_id = create_response.json()["data"]["id"]
+    run_response = await api_client.post(
+        f"/api/v1/workflows/templates/{template_id}/runs",
+        headers={"Authorization": "Bearer owner-token"},
+        json={"input_files": {"protein_pdb": protein_file.id}},
+    )
+    run = run_response.json()["data"]
+    first_task_id = run["node_states"]["pocket_prediction"]["task_id"]
+
+    first_task = await db_session.get(Task, first_task_id)
+    assert first_task is not None
+    first_task.status = TaskStatus.FAILURE.value
+    first_task.error_message = "upstream failure"
+    await db_session.commit()
+
+    sync_response = await api_client.post(
+        f"/api/v1/workflows/runs/{run['id']}/sync",
+        headers={"Authorization": "Bearer owner-token"},
+    )
+
+    assert sync_response.status_code == 200
+    synced = sync_response.json()["data"]
+    assert synced["status"] == "failure"
+    assert synced["node_states"]["pocket_prediction"]["status"] == "failure"
+    assert synced["node_states"]["molecule_generation"]["status"] == "pending"
+    assert synced["node_states"]["molecule_generation"].get("task_id") is None
+
+    task_count_result = await db_session.execute(select(func.count()).select_from(Task))
+    assert task_count_result.scalar_one() == 1
+
+
+@pytest.mark.asyncio
 async def test_workflow_template_rejects_cycles(
     api_client: httpx.AsyncClient,
     pocket_tool: Tool,
@@ -670,6 +878,8 @@ async def test_workflow_template_accepts_tool_slug_only_nodes(
     run = run_response.json()["data"]
     assert run["execution_order"] == ["pocket_prediction"]
     assert run["node_states"]["pocket_prediction"]["tool_slug"] == pocket_tool.slug
+    tool_node = next(node for node in run["definition"]["nodes"] if node["id"] == "pocket_prediction")
+    assert tool_node["tool_version"]["id"] == pocket_tool.current_version_id
     assert run["node_states"]["pocket_prediction"]["status"] == "waiting_task"
 
 
@@ -740,3 +950,49 @@ async def test_workflow_template_rejects_semantic_input_cycles(
 
     assert response.status_code == 422
     assert "cycle" in response.json()["message"].lower()
+
+
+@pytest.mark.asyncio
+async def test_sync_workflow_run_records_missing_required_output_details(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    pocket_tool: Tool,
+    protein_file: FileModel,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.services.workflows.create_and_schedule_tool_task",
+        create_fake_scheduled_task,
+    )
+    create_response = await api_client.post(
+        "/api/v1/workflows/templates",
+        headers={"Authorization": "Bearer owner-token"},
+        json={"name": "Protein to Pocket", "definition": template_definition(pocket_tool)},
+    )
+    template_id = create_response.json()["data"]["id"]
+    run_response = await api_client.post(
+        f"/api/v1/workflows/templates/{template_id}/runs",
+        headers={"Authorization": "Bearer owner-token"},
+        json={"input_files": {"protein_pdb": protein_file.id}},
+    )
+    run = run_response.json()["data"]
+    task_id = run["node_states"]["pocket_prediction"]["task_id"]
+
+    task = await db_session.get(Task, task_id)
+    task.status = TaskStatus.SUCCESS.value
+    db_session.add(TaskOutput(task_id=task.id, result={"ok": True}, file_ids=[]))
+    await db_session.commit()
+
+    sync_response = await api_client.post(
+        f"/api/v1/workflows/runs/{run['id']}/sync",
+        headers={"Authorization": "Bearer owner-token"},
+    )
+
+    assert sync_response.status_code == 200
+    synced = sync_response.json()["data"]
+    node_state = synced["node_states"]["pocket_prediction"]
+    assert synced["status"] == "failure"
+    assert "pocket_pdb" in node_state["error_message"]
+    assert node_state["missing_outputs"][0]["semantic_type"] == "pocket_pdb"
+    assert node_state["missing_outputs"][0]["match"]["extension"] == ".pdb"

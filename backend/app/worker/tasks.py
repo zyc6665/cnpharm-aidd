@@ -8,6 +8,8 @@ from typing import Dict, Any, Optional
 from celery import shared_task
 from celery.utils.log import get_task_logger
 
+from app.common.time import utcnow
+
 logger = get_task_logger(__name__)
 
 
@@ -151,7 +153,7 @@ async def _execute_tool_task_impl(task_id: str, tool_version_id: str) -> Dict[st
 
         # 更新状态为运行中
         task.status = TaskStatus.RUNNING.value
-        task.started_at = datetime.utcnow()
+        task.started_at = utcnow()
         task.progress = 0.0
         task.progress_message = "任务开始执行"
 
@@ -235,7 +237,7 @@ async def _execute_tool_task_impl(task_id: str, tool_version_id: str) -> Dict[st
 
             # 更新任务状态
             task.status = TaskStatus.SUCCESS.value
-            task.finished_at = datetime.utcnow()
+            task.finished_at = utcnow()
             task.execution_time_sec = int(
                 (task.finished_at - task.started_at).total_seconds()
             )
@@ -260,7 +262,7 @@ async def _execute_tool_task_impl(task_id: str, tool_version_id: str) -> Dict[st
         except Exception as e:
             # 更新失败状态
             task.status = TaskStatus.FAILURE.value
-            task.finished_at = datetime.utcnow()
+            task.finished_at = utcnow()
             task.error_message = str(e)
             task.progress_message = f"任务失败: {str(e)}"
 
@@ -313,7 +315,7 @@ async def _cleanup_expired_files_impl() -> int:
         result = await db.execute(
             select(File).where(
                 File.expires_at.isnot(None),
-                File.expires_at < datetime.utcnow()
+                File.expires_at < utcnow()
             )
         )
         expired_files = result.scalars().all()

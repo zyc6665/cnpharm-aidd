@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 import logging
 import json
 
+from app.common.time import utcnow
 from app.gpu.detector import GPUDetector, GPUStats, get_gpu_detector
 
 logger = logging.getLogger(__name__)
@@ -81,7 +82,7 @@ class GPUMonitor:
         Returns:
             GPUMetrics: GPU指标数据
         """
-        timestamp = datetime.utcnow()
+        timestamp = utcnow()
         alerts = []
 
         if not self.detector.is_available():
@@ -133,7 +134,7 @@ class GPUMonitor:
             List[GPUAlert]: 告警列表
         """
         alerts = []
-        now = datetime.utcnow()
+        now = utcnow()
 
         # 温度检查
         if stat.temperature_celsius >= self.TEMPERATURE_CRITICAL:
@@ -262,7 +263,7 @@ class GPUMonitor:
         """
         health = {
             "healthy": True,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": utcnow().isoformat(),
             "gpu_available": self.detector.is_available(),
             "gpu_count": 0,
             "issues": [],

@@ -41,7 +41,11 @@ from app.schemas.tools import (
 from app.schemas.files import FileUploadResponse
 from app.common.responses import success_response, error_response
 from app.common.exceptions import NotFoundException, ForbiddenException, ConflictException, ValidationException
-from app.services.tool_contracts import build_tool_contract
+from app.services.tool_contracts import (
+    build_tool_contract,
+    collect_tool_contract_config_validation_errors,
+    collect_tool_contract_validation_errors,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 if str(PROJECT_ROOT) not in sys.path:
@@ -156,32 +160,27 @@ async def load_tool_with_current_version(db: AsyncSession, tool_id: str) -> Tool
     return tool
 
 
-def collect_tool_contract_validation_errors(tool: Tool) -> list[str]:
-    """复用导入配置校验逻辑检查当前工具版本契约。"""
-    current_version = tool.current_version
-    if current_version is None:
-        return ["工具暂无可用版本"]
-    config = current_version.config
-    if not isinstance(config, dict):
-        return ["工具当前版本配置必须是对象"]
-
-    validation_payload = {
-        "name": tool.name,
-        "slug": tool.slug,
-        "description": tool.description or "",
-        "version": current_version.version,
-        "tool_config": config,
-    }
-    try:
-        validate_tool_import_config(validation_payload)
-    except ToolImportConfigError as exc:
-        return [str(exc)]
-    return []
-
-
 def build_validated_tool_contract(tool: Tool) -> dict:
     """构建带校验状态的工具契约。"""
-    errors = collect_tool_contract_validation_errors(tool)
+    errors: list[str] = []
+    current_version = tool.current_version
+    config = current_version.config if current_version is not None else None
+
+    if current_version is not None and isinstance(config, dict):
+        validation_payload = {
+            "name": tool.name,
+            "slug": tool.slug,
+            "description": tool.description or "",
+            "version": current_version.version,
+            "tool_config": config,
+        }
+        try:
+            validate_tool_import_config(validation_payload)
+        except ToolImportConfigError as exc:
+            errors.append(str(exc))
+
+    errors.extend(collect_tool_contract_validation_errors(tool))
+    errors = list(dict.fromkeys(errors))
     contract = build_tool_contract(tool)
     contract["validation"] = {
         "status": "invalid" if errors else "valid",
@@ -498,6 +497,14 @@ async def create_or_update_tool_from_import(
         normalized_config = validate_tool_import_config(import_data.config)
     except ToolImportConfigError as exc:
         raise ValidationException(str(exc)) from exc
+
+    contract_errors = collect_tool_contract_config_validation_errors(
+        tool_slug=normalized_config["slug"],
+        config=normalized_config["tool_config"],
+        current_version_active=True,
+    )
+    if contract_errors:
+        raise ValidationException("；".join(contract_errors))
 
     category = None
     if import_data.category_id:
@@ -1124,16 +1131,11 @@ async def publish_tool(
     - 仅管理员可发布工具
     - 工具需要有可用版本才能发布
     """
-    result = await db.execute(
-        select(Tool).where(Tool.id == tool_id)
-    )
-    tool = result.scalar_one_or_none()
+    tool = await load_tool_with_current_version(db, tool_id)
 
-    if not tool:
-        raise NotFoundException("工具不存在")
-
-    if not tool.current_version_id:
-        raise ForbiddenException("工具没有可用版本，无法发布")
+    errors = build_validated_tool_contract(tool)["validation"]["errors"]
+    if errors:
+        raise ValidationException("；".join(str(error) for error in errors))
 
     tool.status = ToolStatus.PUBLISHED.value
     await db.commit()

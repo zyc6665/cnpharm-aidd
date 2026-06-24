@@ -13,6 +13,11 @@ This repository is a scientific computing tool platform with a FastAPI backend a
 - `pytest test`: run the Python test suite from the repository root.
 - `./start-celery.sh`: start Redis, Celery worker, and Flower via `docker-compose.celery.yml`.
 
+## Workspace Convention
+
+Do active development on branch `6.16` in `/data/zhouyc/cpumodel_sciminer`. Avoid side worktrees unless the task explicitly requires isolation, and keep runtime artifacts out of Git.
+
+
 ## Coding Style & Naming Conventions
 
 Use Python 3.10+ and keep backend modules small and service-oriented. Prefer `snake_case` for Python files, functions, and variables, and `PascalCase` for Pydantic and ORM classes. Vue components should use `PascalCase.vue`; composables should use `useXxx.ts`. Frontend formatting follows `frontend/.prettierrc`: 2 spaces, single quotes, no semicolons, 100-character line width, LF endings. ESLint allows Vue single-word component names and warns on explicit `any`.

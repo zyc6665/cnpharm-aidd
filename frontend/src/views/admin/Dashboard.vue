@@ -106,9 +106,9 @@
           >
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'avatar'">
-                <a-avatar :size="32" :src="record.avatar_url">
+                <ProtectedAvatar :size="32" :src="record.avatar_url">
                   {{ getUserInitial(record) }}
-                </a-avatar>
+                </ProtectedAvatar>
               </template>
               <template v-else-if="column.key === 'user'">
                 <div class="user-cell">
@@ -143,6 +143,7 @@ import {
   ToolOutlined,
   UserOutlined
 } from '@ant-design/icons-vue'
+import ProtectedAvatar from '@/components/common/ProtectedAvatar.vue'
 import dayjs from 'dayjs'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import { adminGetUsers, adminGetUserStats } from '@/api/users'

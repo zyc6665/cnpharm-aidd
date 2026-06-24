@@ -39,6 +39,8 @@ export interface WorkflowToolBindingConfig {
   readonly outputExtractors: readonly WorkflowToolOutputExtractor[]
 }
 
+// Migration-only fallback for legacy tools that do not yet embed a valid ToolContract.
+// New workflow-capable imports should rely on backend contracts instead of extending this map.
 export const WORKFLOW_TOOL_BINDINGS = {
   'pocket-explorer': {
     toolSlug: 'pocket-explorer',

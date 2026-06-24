@@ -12,6 +12,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import asyncio
 import logging
 
+from app.common.time import utcnow
 from app.monitoring.alert_manager import AlertManager, AlertSeverity, get_alert_manager
 
 logger = logging.getLogger(__name__)
@@ -202,7 +203,7 @@ class AlertRuleEngine:
             return None
 
         state = self.states[rule_name]
-        now = datetime.utcnow()
+        now = utcnow()
 
         # 检查冷却时间
         if state.last_triggered:
@@ -522,7 +523,7 @@ async def check_task_failure_rate() -> float:
 
     async with async_session_factory() as session:
         # 查询最近1小时的任务
-        since = datetime.utcnow() - timedelta(hours=1)
+        since = utcnow() - timedelta(hours=1)
 
         total_query = select(func.count(Task.id)).where(
             Task.created_at >= since

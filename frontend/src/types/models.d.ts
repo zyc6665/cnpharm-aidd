@@ -380,13 +380,45 @@ export interface WorkflowRun {
   definition: WorkflowDefinition
   input_files: Record<string, string>
   execution_order: string[]
-  node_states: Record<string, unknown>
+  node_states: Record<string, WorkflowRunNodeState>
   artifact_lineage: Record<string, unknown>
   error_message?: string | null
   started_at?: string | null
   finished_at?: string | null
   created_at: string
   updated_at: string
+}
+
+export interface WorkflowRunMissingOutputMatch {
+  extension?: string | null
+  filename_contains_any: string[]
+  content_type?: string | null
+}
+
+export interface WorkflowRunMissingOutput {
+  semantic_type: string
+  source: string
+  path?: string | null
+  required: boolean
+  match: WorkflowRunMissingOutputMatch
+}
+
+export interface WorkflowRunNodeState {
+  status: string
+  tool_id?: string | null
+  tool_slug?: string | null
+  tool_version_id?: string | null
+  tool_version?: ToolContractVersion | null
+  semantic_inputs?: Record<string, unknown>
+  params?: Record<string, unknown>
+  input_file_ids?: string[]
+  output_file_ids?: string[]
+  semantic_outputs?: Record<string, unknown>
+  missing_outputs?: WorkflowRunMissingOutput[]
+  task_id?: string | null
+  error_message?: string | null
+  started_at?: string | null
+  finished_at?: string | null
 }
 
 export interface WorkflowTemplateCreateParams {

@@ -11,6 +11,7 @@ from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
 import asyncio
 import logging
 import random
+from app.common.time import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -254,9 +255,9 @@ class ExternalAPIHandler:
             Dict[str, Any]: 健康检查结果
         """
         try:
-            start = datetime.utcnow()
+            start = utcnow()
             await asyncio.wait_for(check_func(), timeout=10.0)
-            latency = (datetime.utcnow() - start).total_seconds() * 1000
+            latency = (utcnow() - start).total_seconds() * 1000
 
             return {
                 "api_name": self.api_name,
