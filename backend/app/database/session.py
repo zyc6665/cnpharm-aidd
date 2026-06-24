@@ -1,13 +1,18 @@
 # backend/app/database/session.py
 """数据库会话管理"""
 
+import logging
 from typing import AsyncGenerator
+from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from app.config import settings
+from app.config import resolve_database_url, settings
+
+
+logger = logging.getLogger(__name__)
 
 # 创建异步引擎
 engine = create_async_engine(
-    settings.DATABASE_URL,
+    resolve_database_url(settings.DATABASE_URL),
     echo=settings.DEBUG,
     future=True,
 )
@@ -48,10 +53,35 @@ async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db():
-    """初始化数据库（创建所有表）"""
+    """初始化数据库。
+
+    开发环境保留 create_all 作为缺表兜底，生产和预发布环境依赖 Alembic 迁移。
+    """
     from app.database.base import Base
     # 导入所有模型以便注册
-    from app.models import users, tools, tasks, files, agent, workflows, system_settings  # noqa
+    from app.models import agent, files, statistics, system_settings, tasks, tools, users, verification, workflows  # noqa
+
+    if settings.ENVIRONMENT != "development":
+        logger.info("Skip create_all outside development; rely on Alembic migrations")
+        return
+
+    def _create_missing_tables(sync_conn) -> None:
+        inspector = inspect(sync_conn)
+        existing_tables = set(inspector.get_table_names())
+        metadata_tables = set(Base.metadata.tables.keys())
+        missing_tables = sorted(metadata_tables - existing_tables)
+        if not missing_tables:
+            return
+
+        Base.metadata.create_all(
+            bind=sync_conn,
+            tables=[Base.metadata.tables[name] for name in missing_tables],
+            checkfirst=True,
+        )
+        logger.warning(
+            "Development fallback created missing tables via create_all: %s",
+            ", ".join(missing_tables),
+        )
 
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(_create_missing_tables)

@@ -17,6 +17,7 @@
 - Phase 4 completed: `/workflow` page is split into composables and focused child components; page size reduced below 700 lines.
 - Phase 5 completed: stage-oriented workflow presets, workflow i18n cleanup, richer preflight diagnostics, node action shortcuts, and multi-dimensional tool palette filters are implemented.
 - Phase 6 completed: production reconciliation loop, direct-recovery handoff, idempotent node scheduling, and long-run hardening are implemented.
+- Phase 7 completed: Alembic baseline, development fallback policy, and SQLite migration dry run are implemented.
 
 ---
 

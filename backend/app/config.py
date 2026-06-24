@@ -3,18 +3,42 @@
 
 import os
 from functools import lru_cache
+from pathlib import Path
 from typing import Optional, List, Literal
 
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+
+
 def bootstrap_process_env(env_file: str = ".env") -> bool:
     """将 .env 中的额外 secret 变量注入当前进程环境。"""
-    if not os.path.exists(env_file):
-        return False
+    env_path = Path(env_file)
+    if not env_path.exists():
+        fallback_path = BACKEND_ROOT / ".env"
+        if not fallback_path.exists():
+            return False
+        env_path = fallback_path
 
-    return load_dotenv(env_file, override=False)
+    return load_dotenv(env_path, override=False)
+
+
+def resolve_database_url(database_url: str) -> str:
+    """将相对 SQLite URL 固定到 backend 目录，避免受运行 cwd 影响。"""
+    prefixes = (
+        "sqlite+aiosqlite:///./",
+        "sqlite:///./",
+    )
+    for prefix in prefixes:
+        if not database_url.startswith(prefix):
+            continue
+        relative_part = database_url[len(prefix):]
+        absolute_path = (BACKEND_ROOT / relative_part).resolve()
+        base_prefix = prefix.split("./", 1)[0]
+        return f"{base_prefix}{absolute_path}"
+    return database_url
 
 
 bootstrap_process_env()
