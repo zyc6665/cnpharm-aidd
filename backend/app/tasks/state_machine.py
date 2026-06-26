@@ -3,7 +3,7 @@
 
 根据详细设计说明书 4.1 节实现。
 状态转换规则：
-- PENDING -> RUNNING, CANCELED
+- PENDING -> RUNNING, CANCELED, FAILURE (启动前校验失败)
 - RUNNING -> SUCCESS, FAILURE, CANCELED, PENDING (GPU不足重新入队)
 - SUCCESS -> (终态)
 - FAILURE -> PENDING (重试)
@@ -52,7 +52,8 @@ class TaskStateMachine:
     TRANSITIONS: Dict[TaskStatus, Set[TaskStatus]] = {
         TaskStatus.PENDING: {
             TaskStatus.RUNNING,
-            TaskStatus.CANCELED
+            TaskStatus.CANCELED,
+            TaskStatus.FAILURE  # 启动前校验或调度失败
         },
         TaskStatus.RUNNING: {
             TaskStatus.SUCCESS,
@@ -65,7 +66,9 @@ class TaskStateMachine:
             TaskStatus.PENDING  # 重试
         },
         TaskStatus.CANCELED: {
-            TaskStatus.PENDING  # 重新提交
+            TaskStatus.PENDING,  # 重新提交
+            TaskStatus.SUCCESS,  # 远端结果补回时发现实际成功
+            TaskStatus.FAILURE,  # 远端结果补回时发现实际失败
         }
     }
 

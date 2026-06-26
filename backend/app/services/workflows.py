@@ -1,46 +1,29 @@
-"""Workflow service compatibility facade."""
+"""Workflow orchestration facade.
+
+This module only contains cross-cutting orchestration functions that need to
+wire together multiple workflow sub-services. Concrete CRUD and validation
+helpers live in:
+
+- app.services.workflow_templates
+- app.services.workflow_runs
+- app.services.workflow_validation
+- app.services.workflow_scheduler
+"""
 
 from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.users import User
-from app.models.workflows import WorkflowRun, WorkflowTemplate
-from app.schemas.workflows import (
-    WorkflowRunCreate,
-    WorkflowTemplateCreate,
-    WorkflowTemplateDuplicate,
-    WorkflowTemplateUpdate,
-)
+from app.models.workflows import WorkflowRun
+from app.schemas.workflows import WorkflowRunCreate
 from app.tasks.service import create_and_schedule_tool_task
 
 from app.services.workflow_runs import (
     create_workflow_run as _create_workflow_run,
-    get_workflow_run,
-    list_workflow_runs,
-    load_run_for_user,
     sync_workflow_run as _sync_workflow_run,
 )
 from app.services.workflow_scheduler import start_ready_workflow_nodes as _start_ready_workflow_nodes
-from app.services.workflow_templates import (
-    create_workflow_template,
-    delete_workflow_template,
-    duplicate_workflow_template,
-    get_workflow_template,
-    list_workflow_templates,
-    load_template_for_user,
-    update_workflow_template,
-)
-from app.services.workflow_validation import (
-    is_tool_node,
-    node_id,
-    nodes_by_id,
-    required_workflow_inputs,
-    validate_workflow_definition,
-    workflow_dependency_map,
-    workflow_edges,
-    workflow_nodes,
-)
 
 
 async def start_ready_workflow_nodes(
@@ -88,26 +71,7 @@ async def sync_workflow_run(
 
 
 __all__ = [
-    "create_and_schedule_tool_task",
     "create_workflow_run",
-    "create_workflow_template",
-    "delete_workflow_template",
-    "duplicate_workflow_template",
-    "get_workflow_run",
-    "get_workflow_template",
-    "is_tool_node",
-    "list_workflow_runs",
-    "list_workflow_templates",
-    "load_run_for_user",
-    "load_template_for_user",
-    "node_id",
-    "nodes_by_id",
-    "required_workflow_inputs",
     "start_ready_workflow_nodes",
     "sync_workflow_run",
-    "update_workflow_template",
-    "validate_workflow_definition",
-    "workflow_dependency_map",
-    "workflow_edges",
-    "workflow_nodes",
 ]

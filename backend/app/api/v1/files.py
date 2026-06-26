@@ -34,17 +34,9 @@ from app.schemas.files import (
 from app.common.responses import success_response, error_response
 from app.common.exceptions import NotFoundException, ForbiddenException, ValidationException
 from app.config import settings
+from app.files.storage_path import STORAGE_PATH, ensure_storage_dir, get_file_path
 
 router = APIRouter()
-
-# 存储目录
-STORAGE_PATH = Path(settings.STORAGE_PATH)
-
-
-def ensure_storage_dir():
-    """确保存储目录存在"""
-    STORAGE_PATH.mkdir(parents=True, exist_ok=True)
-
 
 async def calculate_sha256(file: UploadFile) -> str:
     """计算文件SHA256哈希"""
@@ -54,13 +46,6 @@ async def calculate_sha256(file: UploadFile) -> str:
         sha256_hash.update(chunk)
     await file.seek(0)
     return sha256_hash.hexdigest()
-
-
-def get_file_path(file_id: str, filename: str) -> Path:
-    """获取文件存储路径"""
-    # 使用文件ID的前两位作为子目录，避免单目录文件过多
-    subdir = file_id[:2]
-    return STORAGE_PATH / subdir / f"{file_id}_{filename}"
 
 
 def _safe_converted_pdb_filename(filename: str | None) -> str:

@@ -13,6 +13,7 @@ from sqlalchemy import select
 from app.common.time import utcnow
 from app.database.session import async_session_factory
 from app.models.tasks import Task, TaskLog, TaskStatus
+from app.tasks.state_machine import TaskStateMachine
 
 logger = logging.getLogger(__name__)
 
@@ -99,8 +100,7 @@ class DirectTaskRunner:
             if task.status == TaskStatus.CANCELED.value:
                 return
 
-            task.status = TaskStatus.CANCELED.value
-            task.finished_at = utcnow()
+            TaskStateMachine.cancel(task)
             task.progress_message = message
 
             db.add(

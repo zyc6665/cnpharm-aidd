@@ -9,6 +9,8 @@ from celery import shared_task
 from celery.utils.log import get_task_logger
 
 from app.common.time import utcnow
+from app.tasks.naming import _extract_file_ids_from_result
+from app.tasks.state_machine import TaskStateMachine
 
 logger = get_task_logger(__name__)
 
@@ -64,27 +66,7 @@ async def notify_task_error(task_id: str, error: str):
 
 def _extract_output_file_ids(output_result: Dict[str, Any]) -> list[str]:
     """从执行结果中提取输出文件ID列表"""
-    file_ids: list[str] = []
-
-    direct_file_ids = output_result.get("output_file_ids")
-    if isinstance(direct_file_ids, list):
-        file_ids.extend(str(file_id) for file_id in direct_file_ids if file_id)
-
-    nested_result = output_result.get("result")
-    if isinstance(nested_result, dict):
-        nested_file_ids = nested_result.get("output_file_ids")
-        if isinstance(nested_file_ids, list):
-            file_ids.extend(str(file_id) for file_id in nested_file_ids if file_id)
-
-    deduped: list[str] = []
-    seen: set[str] = set()
-    for file_id in file_ids:
-        if file_id in seen:
-            continue
-        seen.add(file_id)
-        deduped.append(file_id)
-
-    return deduped
+    return _extract_file_ids_from_result(output_result, dedupe=True, skip_empty=True)
 
 
 def prepare_task_output(output_result: Dict[str, Any]) -> Dict[str, Any]:
@@ -152,10 +134,7 @@ async def _execute_tool_task_impl(task_id: str, tool_version_id: str) -> Dict[st
             raise ValueError(f"任务不存在: {task_id}")
 
         # 更新状态为运行中
-        task.status = TaskStatus.RUNNING.value
-        task.started_at = utcnow()
-        task.progress = 0.0
-        task.progress_message = "任务开始执行"
+        TaskStateMachine.start(task, progress_message="任务开始执行")
 
         # 添加日志
         log = TaskLog(
@@ -196,8 +175,7 @@ async def _execute_tool_task_impl(task_id: str, tool_version_id: str) -> Dict[st
             # 定义进度回调函数
             async def progress_callback(progress: float, message: str):
                 """进度更新回调"""
-                task.progress = progress
-                task.progress_message = message
+                TaskStateMachine.update_progress(task, progress, message)
                 await db.commit()
 
                 # WebSocket 通知：进度更新
@@ -236,13 +214,15 @@ async def _execute_tool_task_impl(task_id: str, tool_version_id: str) -> Dict[st
             db.add(output)
 
             # 更新任务状态
-            task.status = TaskStatus.SUCCESS.value
-            task.finished_at = utcnow()
+            TaskStateMachine.complete(
+                task,
+                success=True,
+                progress_message="任务执行成功",
+            )
             task.execution_time_sec = int(
                 (task.finished_at - task.started_at).total_seconds()
             )
             task.progress = 1.0
-            task.progress_message = "任务执行成功"
 
             # 添加完成日志
             log = TaskLog(
@@ -261,10 +241,12 @@ async def _execute_tool_task_impl(task_id: str, tool_version_id: str) -> Dict[st
 
         except Exception as e:
             # 更新失败状态
-            task.status = TaskStatus.FAILURE.value
-            task.finished_at = utcnow()
-            task.error_message = str(e)
-            task.progress_message = f"任务失败: {str(e)}"
+            TaskStateMachine.complete(
+                task,
+                success=False,
+                error_message=str(e),
+                progress_message=f"任务失败: {str(e)}",
+            )
 
             # 添加错误日志
             log = TaskLog(

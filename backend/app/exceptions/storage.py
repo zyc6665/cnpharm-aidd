@@ -12,10 +12,12 @@ import asyncio
 import hashlib
 import logging
 
+from app.common.exceptions import AppException
+
 logger = logging.getLogger(__name__)
 
 
-class StorageException(Exception):
+class StorageException(AppException):
     """存储异常基类"""
 
     def __init__(
@@ -25,11 +27,12 @@ class StorageException(Exception):
         file_path: Optional[str] = None,
         operation: Optional[str] = None
     ):
-        self.message = message
+        detail = {"storage_backend": storage_backend, "file_path": file_path, "operation": operation}
+        detail = {k: v for k, v in detail.items() if v is not None}
+        super().__init__(message, code=500, detail=detail or None)
         self.storage_backend = storage_backend
         self.file_path = file_path
         self.operation = operation
-        super().__init__(message)
 
     def to_dict(self) -> Dict[str, Any]:
         return {

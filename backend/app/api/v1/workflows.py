@@ -22,16 +22,14 @@ from app.schemas.workflows import (
     WorkflowTemplateDuplicate,
     WorkflowTemplateUpdate,
 )
-from app.services.workflows import (
-    create_workflow_run,
+from app.services.workflows import create_workflow_run, sync_workflow_run
+from app.services.workflow_runs import get_workflow_run, list_workflow_runs
+from app.services.workflow_templates import (
     create_workflow_template,
     delete_workflow_template,
     duplicate_workflow_template,
-    get_workflow_run,
     get_workflow_template,
-    list_workflow_runs,
     list_workflow_templates,
-    sync_workflow_run,
     update_workflow_template,
 )
 

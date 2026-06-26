@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 from typing import Optional
 
 from fastapi import HTTPException
@@ -20,49 +19,15 @@ from app.models.tools import Tool, ToolVersion
 from app.models.users import User
 from app.schemas.tasks import TaskCreate
 from app.tasks.direct_runner import direct_task_runner as default_direct_task_runner
+from app.tasks.naming import (
+    _sanitize_task_name,
+    _build_default_task_name,
+    resolve_task_display_name,
+)
+from app.tasks.state_machine import TaskStateMachine
 
 
 logger = logging.getLogger(__name__)
-
-
-def _sanitize_task_name(name: Optional[str]) -> Optional[str]:
-    if name is None:
-        return None
-
-    normalized = name.strip()
-    return normalized or None
-
-
-def _build_default_task_name(
-    *,
-    tool_name: Optional[str],
-    created_at: Optional[datetime],
-    task_id: Optional[str],
-) -> str:
-    if tool_name and created_at:
-        return f"{tool_name} {created_at.strftime('%Y-%m-%d %H:%M')}"
-
-    if tool_name:
-        return tool_name
-
-    if task_id:
-        return f"Task {str(task_id)[:8]}"
-
-    return "Task"
-
-
-def resolve_task_display_name(
-    *,
-    name: Optional[str],
-    tool_name: Optional[str],
-    created_at: Optional[datetime],
-    task_id: Optional[str],
-) -> str:
-    return _sanitize_task_name(name) or _build_default_task_name(
-        tool_name=tool_name,
-        created_at=created_at,
-        task_id=task_id,
-    )
 
 
 async def record_tool_usage(db: AsyncSession, tool_id: str) -> None:
@@ -183,8 +148,11 @@ async def create_and_schedule_tool_task(
 
     except Exception as exc:
         logger.error("Failed to enqueue task %s: %s", task.id, exc)
-        task.status = TaskStatus.FAILURE.value
-        task.error_message = f"任务分发失败: {str(exc)}"
+        TaskStateMachine.complete(
+            task,
+            success=False,
+            error_message=f"任务分发失败: {str(exc)}",
+        )
         await db.commit()
         raise HTTPException(status_code=500, detail="任务分发失败") from exc
 

@@ -26,11 +26,14 @@ import zipfile
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 import logging
 
 import httpx
 
+from app.database.session import get_async_session
+from app.files.storage_path import get_file_path
+from app.models.files import File as FileModel, FileSourceType
 from app.models.tasks import TaskStatus
 from app.models.tools import ToolType
 from app.tasks.state_machine import TaskStateMachine
@@ -84,6 +87,98 @@ class BaseExecutor(ABC):
                 logger.debug(f"Cleaned up work directory: {self.work_dir}")
             except Exception as e:
                 logger.warning(f"Failed to cleanup work directory: {e}")
+
+    async def _collect_output_files(
+        self,
+        source_paths: List[str],
+        *,
+        output_root: Optional[str] = None,
+        file_meta_builder: Optional[Callable[[str, str], Optional[Dict[str, Any]]]] = None,
+        filename_builder: Optional[Callable[[str, str], str]] = None,
+        skip_names: Optional[set[str]] = None,
+    ) -> List[str]:
+        """收集并持久化输出文件。
+
+        Args:
+            source_paths: 待收集的源文件绝对路径列表。
+            output_root: 用于计算相对路径的根目录（可选）。
+            file_meta_builder: 接收 (source_path, relative_path) 返回 file_meta 的回调（可选）。
+            filename_builder: 接收 (source_path, relative_path) 返回持久化文件名的回调（可选）。
+            skip_names: 需要跳过的文件名集合（可选）。
+
+        Returns:
+            收集到的文件 ID 列表。
+        """
+        uploaded_ids: List[str] = []
+        skip_names = skip_names or set()
+
+        async for session in get_async_session():
+            try:
+                for source_path in source_paths:
+                    if not os.path.isfile(source_path):
+                        continue
+
+                    relative_path = (
+                        os.path.relpath(source_path, output_root)
+                        if output_root
+                        else os.path.basename(source_path)
+                    )
+                    basename = os.path.basename(source_path)
+
+                    if basename in skip_names or relative_path in skip_names:
+                        continue
+
+                    try:
+                        with open(source_path, "rb") as f:
+                            content = f.read()
+
+                        filename = (
+                            filename_builder(source_path, relative_path)
+                            if filename_builder
+                            else basename
+                        )
+                        content_type = mimetypes.guess_type(source_path)[0] or "application/octet-stream"
+                        file_meta = (
+                            file_meta_builder(source_path, relative_path)
+                            if file_meta_builder
+                            else None
+                        )
+
+                        file_record = FileModel(
+                            filename=filename,
+                            content_type=content_type,
+                            size_bytes=len(content),
+                            sha256=hashlib.sha256(content).hexdigest(),
+                            source_type=FileSourceType.TOOL_OUTPUT.value,
+                            owner_id=self.task.user_id,
+                            is_public=False,
+                            is_permanent=False,
+                            file_meta=file_meta,
+                        )
+                        session.add(file_record)
+                        await session.flush()
+
+                        storage_path = get_file_path(file_record.id, filename)
+                        storage_path.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(source_path, str(storage_path))
+
+                        file_record.storage_path = str(storage_path)
+                        await session.flush()
+
+                        uploaded_ids.append(file_record.id)
+                        logger.info(f"Collected output file: {relative_path} -> {file_record.id}")
+                    except Exception as e:
+                        logger.error(f"Failed to collect output file {source_path}: {e}")
+                        continue
+
+                await session.commit()
+                break
+            except Exception as e:
+                logger.error(f"Failed to collect output files: {e}")
+                await session.rollback()
+                raise TaskExecutionError(f"Failed to collect output files: {str(e)}")
+
+        return uploaded_ids
 
 
 class RemoteAPIExecutor(BaseExecutor):
@@ -277,7 +372,7 @@ class RemoteAPIExecutor(BaseExecutor):
                         await session.flush()
 
                         # 保存到存储
-                        from app.api.v1.files import get_file_path
+                        from app.files.storage_path import get_file_path
                         storage_path = get_file_path(file_record.id, filename)
                         storage_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -489,71 +584,11 @@ class DockerExecutor(BaseExecutor):
         if not os.path.exists(output_dir):
             return []
 
-        from sqlalchemy.ext.asyncio import AsyncSession
-        from app.models.files import File as FileModel, FileSourceType
-        from app.database.session import get_async_session
-        from pathlib import Path
-        import hashlib
-
-        uploaded_ids = []
-
-        async for session in get_async_session():
-            try:
-                for filename in os.listdir(output_dir):
-                    file_path = os.path.join(output_dir, filename)
-                    if not os.path.isfile(file_path):
-                        continue
-
-                    try:
-                        # 读取文件内容并计算SHA256
-                        with open(file_path, "rb") as f:
-                            content = f.read()
-
-                        sha256_hash = hashlib.sha256(content).hexdigest()
-                        file_size = len(content)
-
-                        # 创建文件记录
-                        file_record = FileModel(
-                            filename=filename,
-                            content_type="application/octet-stream",  # 通用类型
-                            size_bytes=file_size,
-                            sha256=sha256_hash,
-                            source_type=FileSourceType.TOOL_OUTPUT.value,
-                            owner_id=self.task.user_id,
-                            is_public=False,
-                            is_permanent=False  # 任务输出文件临时存储
-                        )
-
-                        session.add(file_record)
-                        await session.flush()
-
-                        # 保存到存储（使用与上传API相同的逻辑）
-                        from app.api.v1.files import get_file_path
-                        storage_path = get_file_path(file_record.id, filename)
-                        storage_path.parent.mkdir(parents=True, exist_ok=True)
-
-                        # 复制文件到存储位置
-                        shutil.copy2(file_path, str(storage_path))
-
-                        # 更新存储路径
-                        file_record.storage_path = str(storage_path)
-                        await session.flush()
-
-                        uploaded_ids.append(file_record.id)
-                        logger.info(f"Collected output file: {filename} -> {file_record.id}")
-
-                    except Exception as e:
-                        logger.error(f"Failed to collect output file {filename}: {e}")
-                        continue
-
-                await session.commit()
-                break
-            except Exception as e:
-                logger.error(f"Failed to collect output files: {e}")
-                await session.rollback()
-                raise TaskExecutionError(f"Failed to collect output files: {str(e)}")
-
-        return uploaded_ids
+        source_paths = [
+            os.path.join(output_dir, filename)
+            for filename in os.listdir(output_dir)
+        ]
+        return await super()._collect_output_files(source_paths)
 
     def _parse_docker_output(self, stdout: str) -> Dict[str, Any]:
         """解析Docker输出"""
@@ -686,73 +721,11 @@ class PythonScriptExecutor(BaseExecutor):
         if not os.path.exists(output_dir):
             return []
 
-        from sqlalchemy.ext.asyncio import AsyncSession
-        from app.models.files import File as FileModel, FileSourceType
-        from app.database.session import get_async_session
-        from pathlib import Path
-        import hashlib
-
-        uploaded_ids = []
-
-        async for session in get_async_session():
-            try:
-                for filename in os.listdir(output_dir):
-                    file_path = os.path.join(output_dir, filename)
-
-                    # 跳过 result.json（这是结果数据，不是输出文件）
-                    if filename == "result.json" or not os.path.isfile(file_path):
-                        continue
-
-                    try:
-                        # 读取文件内容并计算SHA256
-                        with open(file_path, "rb") as f:
-                            content = f.read()
-
-                        sha256_hash = hashlib.sha256(content).hexdigest()
-                        file_size = len(content)
-
-                        # 创建文件记录
-                        file_record = FileModel(
-                            filename=filename,
-                            content_type="application/octet-stream",
-                            size_bytes=file_size,
-                            sha256=sha256_hash,
-                            source_type=FileSourceType.TOOL_OUTPUT.value,
-                            owner_id=self.task.user_id,
-                            is_public=False,
-                            is_permanent=False
-                        )
-
-                        session.add(file_record)
-                        await session.flush()
-
-                        # 保存到存储
-                        from app.api.v1.files import get_file_path
-                        storage_path = get_file_path(file_record.id, filename)
-                        storage_path.parent.mkdir(parents=True, exist_ok=True)
-
-                        # 复制文件到存储位置
-                        shutil.copy2(file_path, str(storage_path))
-
-                        # 更新存储路径
-                        file_record.storage_path = str(storage_path)
-                        await session.flush()
-
-                        uploaded_ids.append(file_record.id)
-                        logger.info(f"Collected output file: {filename} -> {file_record.id}")
-
-                    except Exception as e:
-                        logger.error(f"Failed to collect output file {filename}: {e}")
-                        continue
-
-                await session.commit()
-                break
-            except Exception as e:
-                logger.error(f"Failed to collect output files: {e}")
-                await session.rollback()
-                raise TaskExecutionError(f"Failed to collect output files: {str(e)}")
-
-        return uploaded_ids
+        source_paths = [
+            os.path.join(output_dir, filename)
+            for filename in os.listdir(output_dir)
+        ]
+        return await super()._collect_output_files(source_paths, skip_names={"result.json"})
 
 
 class SSHJobExecutor(BaseExecutor):
@@ -1379,63 +1352,19 @@ class SSHJobExecutor(BaseExecutor):
         if not matched_files:
             return []
 
-        from app.api.v1.files import get_file_path
-        from app.database.session import get_async_session
-        from app.models.files import File as FileModel, FileSourceType
+        def _filename_builder(source_path: str, relative_path: str) -> str:
+            return relative_path.replace(os.sep, "__")
 
-        uploaded_ids: List[str] = []
+        def _file_meta_builder(source_path: str, relative_path: str) -> Dict[str, Any]:
+            return {"relative_path": relative_path}
 
-        async for session in get_async_session():
-            try:
-                for file_path in matched_files:
-                    relative_path = os.path.relpath(file_path, output_root)
-                    if relative_path == "result.json":
-                        continue
-
-                    try:
-                        with open(file_path, "rb") as output_file:
-                            content = output_file.read()
-
-                        file_hash = hashlib.sha256(content).hexdigest()
-                        file_size = len(content)
-                        content_type = mimetypes.guess_type(file_path)[0] or "application/octet-stream"
-                        storage_name = relative_path.replace(os.sep, "__")
-
-                        file_record = FileModel(
-                            filename=storage_name,
-                            content_type=content_type,
-                            size_bytes=file_size,
-                            sha256=file_hash,
-                            source_type=FileSourceType.TOOL_OUTPUT.value,
-                            owner_id=self.task.user_id,
-                            is_public=False,
-                            is_permanent=False,
-                            file_meta={"relative_path": relative_path},
-                        )
-                        session.add(file_record)
-                        await session.flush()
-
-                        storage_path = get_file_path(file_record.id, storage_name)
-                        storage_path.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(file_path, str(storage_path))
-
-                        file_record.storage_path = str(storage_path)
-                        await session.flush()
-
-                        uploaded_ids.append(file_record.id)
-                        logger.info(f"Collected SSH output file: {relative_path} -> {file_record.id}")
-                    except Exception as exc:
-                        logger.error(f"Failed to collect SSH output file {relative_path}: {exc}")
-                        continue
-
-                await session.commit()
-                break
-            except Exception as exc:
-                logger.error(f"Failed to collect SSH output files: {exc}")
-                await session.rollback()
-                raise TaskExecutionError(f"Failed to collect SSH output files: {str(exc)}")
-
-        return uploaded_ids
+        return await super()._collect_output_files(
+            matched_files,
+            output_root=output_root,
+            filename_builder=_filename_builder,
+            file_meta_builder=_file_meta_builder,
+            skip_names={"result.json"},
+        )
 
     def _expand_output_globs(self, download_root: str, output_root: str) -> List[str]:
         """展开 output_globs，默认回收 output 下所有文件。"""

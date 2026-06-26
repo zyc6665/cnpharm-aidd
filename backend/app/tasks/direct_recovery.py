@@ -21,6 +21,7 @@ from app.services.workflow_reconciliation import reconcile_waiting_workflow_runs
 from app.tasks.executor import SSHJobExecutor, TaskExecutionError
 from app.tasks.molecule_scoring import append_molecule_scoring_artifacts
 from app.tasks.service import create_and_schedule_tool_task
+from app.tasks.state_machine import TaskStateMachine
 from app.worker.tasks import prepare_task_output
 
 logger = logging.getLogger(__name__)
@@ -113,14 +114,21 @@ async def reconcile_orphaned_direct_tasks(db: AsyncSession) -> int:
         )
         if duration is not None:
             task.execution_time_sec = int(duration)
-        task.progress = 1.0 if remote_success else task.progress
-        task.status = TaskStatus.SUCCESS.value if remote_success else TaskStatus.FAILURE.value
-        task.progress_message = (
-            RECOVERED_SUCCESS_MESSAGE if remote_success else RECOVERED_FAILURE_MESSAGE
-        )
-        task.error_message = None if remote_success else (
-            remote_result.get("message") or "SSH job reported failure"
-        )
+
+        if remote_success:
+            task.error_message = None
+            TaskStateMachine.complete(
+                task,
+                success=True,
+                progress_message=RECOVERED_SUCCESS_MESSAGE,
+            )
+        else:
+            TaskStateMachine.complete(
+                task,
+                success=False,
+                error_message=remote_result.get("message") or "SSH job reported failure",
+                progress_message=RECOVERED_FAILURE_MESSAGE,
+            )
 
         db.add(
             TaskLog(

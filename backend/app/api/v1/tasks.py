@@ -2,7 +2,6 @@
 """任务管理API"""
 
 import logging
-from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, update
@@ -21,6 +20,13 @@ from app.tasks.service import (
     create_and_schedule_tool_task,
     record_tool_usage,
 )
+from app.tasks.naming import (
+    _sanitize_task_name,
+    _build_default_task_name,
+    resolve_task_display_name as _resolve_task_display_name,
+    _dedupe_file_ids,
+    _extract_file_ids_from_result,
+)
 from app.auth.dependencies import get_current_user, get_admin_user
 from app.schemas.tasks import (
     TaskCreate, TaskResponse, TaskListResponse
@@ -36,74 +42,6 @@ def _normalize_task_status(status: Optional[str]) -> Optional[str]:
     if not status:
         return status
     return status.lower()
-
-
-def _sanitize_task_name(name: Optional[str]) -> Optional[str]:
-    if name is None:
-        return None
-
-    normalized = name.strip()
-    return normalized or None
-
-
-def _build_default_task_name(
-    *,
-    tool_name: Optional[str],
-    created_at: Optional[datetime],
-    task_id: Optional[str],
-) -> str:
-    if tool_name and created_at:
-        return f"{tool_name} {created_at.strftime('%Y-%m-%d %H:%M')}"
-
-    if tool_name:
-        return tool_name
-
-    if task_id:
-        return f"Task {str(task_id)[:8]}"
-
-    return "Task"
-
-
-def _resolve_task_display_name(
-    *,
-    name: Optional[str],
-    tool_name: Optional[str],
-    created_at: Optional[datetime],
-    task_id: Optional[str],
-) -> str:
-    return _sanitize_task_name(name) or _build_default_task_name(
-        tool_name=tool_name,
-        created_at=created_at,
-        task_id=task_id,
-    )
-
-
-def _dedupe_file_ids(file_ids: list[str]) -> list[str]:
-    seen: set[str] = set()
-    ordered: list[str] = []
-    for file_id in file_ids:
-        if not file_id or file_id in seen:
-            continue
-        seen.add(file_id)
-        ordered.append(file_id)
-    return ordered
-
-
-def _extract_file_ids_from_result(result: Any) -> list[str]:
-    if not isinstance(result, dict):
-        return []
-
-    file_ids = result.get("output_file_ids")
-    if isinstance(file_ids, list):
-        return [str(file_id) for file_id in file_ids]
-
-    nested_result = result.get("result")
-    if isinstance(nested_result, dict):
-        nested_file_ids = nested_result.get("output_file_ids")
-        if isinstance(nested_file_ids, list):
-            return [str(file_id) for file_id in nested_file_ids]
-
-    return []
 
 
 def _extract_primary_output_data(result: Any) -> Any:

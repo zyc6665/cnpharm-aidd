@@ -11,6 +11,7 @@ from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
 import asyncio
 import logging
 import random
+from app.common.exceptions import AppException
 from app.common.time import utcnow
 
 logger = logging.getLogger(__name__)
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
-class ExternalAPIException(Exception):
+class ExternalAPIException(AppException):
     """外部API异常基类"""
 
     def __init__(
@@ -28,11 +29,10 @@ class ExternalAPIException(Exception):
         status_code: Optional[int] = None,
         response_body: Optional[str] = None
     ):
-        self.message = message
+        super().__init__(message, code=status_code or 500, detail=response_body)
         self.api_name = api_name
         self.status_code = status_code
         self.response_body = response_body
-        super().__init__(message)
 
     def to_dict(self) -> Dict[str, Any]:
         return {

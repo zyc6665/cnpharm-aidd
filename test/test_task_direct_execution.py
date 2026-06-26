@@ -498,7 +498,7 @@ async def test_reconcile_orphaned_direct_tasks_recovers_remote_success_result(
     refreshed_task = await db_session.get(Task, task.id)
     assert refreshed_task is not None
     assert refreshed_task.status == TaskStatus.SUCCESS.value
-    assert refreshed_task.progress == 1.0
+    assert refreshed_task.progress == 100.0
     assert refreshed_task.progress_message == "任务执行成功（远端结果自动补回）"
     assert refreshed_task.execution_time_sec == 12
 
