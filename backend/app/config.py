@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional, List, Literal
 
 from dotenv import load_dotenv
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -75,11 +76,21 @@ class Settings(BaseSettings):
     DB_POOL_RECYCLE: int = 3600
 
     # ==================== JWT配置 ====================
-    JWT_SECRET_KEY: str = "your-secret-key-change-in-production"
+    # 生产/预发布环境必须配置长度不少于 32 的强密钥
+    JWT_SECRET_KEY: str = ""
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     SETTINGS_ENCRYPTION_KEY: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _validate_jwt_secret_key(self):
+        """非开发环境强制校验 JWT_SECRET_KEY。"""
+        if self.ENVIRONMENT in {"staging", "production"} and len(self.JWT_SECRET_KEY) < 32:
+            raise ValueError(
+                f"JWT_SECRET_KEY must be at least 32 characters long in {self.ENVIRONMENT} environment"
+            )
+        return self
 
     # ==================== 存储配置 ====================
     # 存储后端: local | minio
@@ -125,6 +136,9 @@ class Settings(BaseSettings):
     TASK_EXECUTION_BACKEND: Literal["celery", "direct"] = "celery"
     WORKFLOW_RECONCILE_INTERVAL_SECONDS: int = 5
     WORKFLOW_RECONCILE_BATCH_SIZE: int = 20
+
+    # ==================== AIDD Agent 配置 ====================
+    ENABLE_DATABASE_TOOLS: bool = False
 
     # ==================== 游客配置 ====================
     GUEST_DAILY_TASK_LIMIT: int = 5

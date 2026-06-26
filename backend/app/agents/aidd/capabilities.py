@@ -229,6 +229,223 @@ AIDD_TOOL_CAPABILITIES: dict[str, ToolCapability] = {
         ),
         defaults={"device": "cpu"},
     ),
+    # ------------------------------------------------------------------
+    # ADMET / 毒性 / 合成可及性（基于 SMILES 列表）
+    # ------------------------------------------------------------------
+    "builtin-admet-prediction": ToolCapability(
+        tool_slug="builtin-admet-prediction",
+        capability="admet_prediction",
+        stage="admet_prediction",
+        inputs=(
+            CapabilityInput(
+                "smiles_csv",
+                "smiles_csv",
+                accepted_extensions=(".csv",),
+            ),
+        ),
+        outputs=(
+            CapabilityOutput(
+                "admet_report",
+                "output_files",
+                OutputMatch(
+                    extension=".csv",
+                    filename_contains_any=("admet",),
+                    content_type="text/csv",
+                ),
+            ),
+        ),
+        virtual=True,
+    ),
+    "builtin-toxicity-prediction": ToolCapability(
+        tool_slug="builtin-toxicity-prediction",
+        capability="toxicity_prediction",
+        stage="toxicity_prediction",
+        inputs=(
+            CapabilityInput(
+                "smiles_csv",
+                "smiles_csv",
+                accepted_extensions=(".csv",),
+            ),
+        ),
+        outputs=(
+            CapabilityOutput(
+                "toxicity_report",
+                "output_files",
+                OutputMatch(
+                    extension=".csv",
+                    filename_contains_any=("toxicity", "tox"),
+                    content_type="text/csv",
+                ),
+            ),
+        ),
+        virtual=True,
+    ),
+    "builtin-synthetic-accessibility": ToolCapability(
+        tool_slug="builtin-synthetic-accessibility",
+        capability="synthetic_accessibility",
+        stage="synthetic_accessibility",
+        inputs=(
+            CapabilityInput(
+                "smiles_csv",
+                "smiles_csv",
+                accepted_extensions=(".csv",),
+            ),
+        ),
+        outputs=(
+            CapabilityOutput(
+                "synthetic_accessibility",
+                "output_files",
+                OutputMatch(
+                    extension=".csv",
+                    filename_contains_any=("sa", "synthetic_accessibility", "synthetic"),
+                    content_type="text/csv",
+                ),
+            ),
+        ),
+        virtual=True,
+    ),
+    # ------------------------------------------------------------------
+    # 分子动力学 / 相互作用分析
+    # ------------------------------------------------------------------
+    "builtin-molecular-dynamics": ToolCapability(
+        tool_slug="builtin-molecular-dynamics",
+        capability="molecular_dynamics",
+        stage="molecular_dynamics",
+        inputs=(
+            CapabilityInput(
+                "protein_pdb",
+                "protein_pdb",
+                accepted_extensions=(".pdb",),
+            ),
+            CapabilityInput(
+                "ligand_pdb",
+                "ligand_pdb",
+                accepted_extensions=(".pdb",),
+            ),
+        ),
+        outputs=(
+            CapabilityOutput(
+                "molecular_dynamics_trajectory",
+                "output_files",
+                OutputMatch(
+                    extension=".xtc",
+                    filename_contains_any=("trajectory", "traj"),
+                ),
+                required=False,
+            ),
+            CapabilityOutput(
+                "molecular_dynamics_trajectory",
+                "output_files",
+                OutputMatch(
+                    extension=".dcd",
+                    filename_contains_any=("trajectory", "traj"),
+                ),
+                required=False,
+            ),
+        ),
+        virtual=True,
+    ),
+    "builtin-interaction-analysis": ToolCapability(
+        tool_slug="builtin-interaction-analysis",
+        capability="interaction_analysis",
+        stage="interaction_analysis",
+        inputs=(
+            CapabilityInput(
+                "protein_pdb",
+                "protein_pdb",
+                accepted_extensions=(".pdb",),
+            ),
+            CapabilityInput(
+                "ligand_pdb",
+                "ligand_pdb",
+                accepted_extensions=(".pdb",),
+            ),
+        ),
+        outputs=(
+            CapabilityOutput(
+                "interaction_report",
+                "output_files",
+                OutputMatch(
+                    extension=".json",
+                    filename_contains_any=("interaction",),
+                    content_type="application/json",
+                ),
+            ),
+        ),
+        virtual=True,
+    ),
+    # ------------------------------------------------------------------
+    # 化学数据库查询（virtual tools，结果统一输出 database_query_result）
+    # ------------------------------------------------------------------
+    "builtin-query-chembl": ToolCapability(
+        tool_slug="builtin-query-chembl",
+        capability="database_query",
+        stage="database_query",
+        inputs=(
+            CapabilityInput(
+                "smiles_csv",
+                "smiles_csv",
+                accepted_extensions=(".csv",),
+                required=False,
+            ),
+        ),
+        outputs=(
+            CapabilityOutput(
+                "database_query_result",
+                "output_data",
+                path="result.database_query_result",
+            ),
+        ),
+        virtual=True,
+    ),
+    "builtin-query-pubchem": ToolCapability(
+        tool_slug="builtin-query-pubchem",
+        capability="database_query",
+        stage="database_query",
+        inputs=(
+            CapabilityInput(
+                "smiles_csv",
+                "smiles_csv",
+                accepted_extensions=(".csv",),
+                required=False,
+            ),
+        ),
+        outputs=(
+            CapabilityOutput(
+                "database_query_result",
+                "output_data",
+                path="result.database_query_result",
+            ),
+        ),
+        virtual=True,
+    ),
+    "builtin-query-pdbbind": ToolCapability(
+        tool_slug="builtin-query-pdbbind",
+        capability="database_query",
+        stage="database_query",
+        inputs=(
+            CapabilityInput(
+                "protein_pdb",
+                "protein_pdb",
+                accepted_extensions=(".pdb",),
+                required=False,
+            ),
+            CapabilityInput(
+                "ligand_pdb",
+                "ligand_pdb",
+                accepted_extensions=(".pdb",),
+                required=False,
+            ),
+        ),
+        outputs=(
+            CapabilityOutput(
+                "database_query_result",
+                "output_data",
+                path="result.database_query_result",
+            ),
+        ),
+        virtual=True,
+    ),
 }
 
 

@@ -17,6 +17,15 @@ CanonicalSemanticType = Literal[
     "affinity_report",
     "property_report",
     "optimized_lead",
+    "admet_report",
+    "toxicity_report",
+    "synthetic_accessibility",
+    "molecular_dynamics_trajectory",
+    "interaction_report",
+    "docking_pose_diffdock",
+    "docking_pose_gnina",
+    "docking_pose_smina",
+    "database_query_result",
 ]
 
 CANONICAL_SEMANTIC_TYPES: frozenset[str] = frozenset(
@@ -32,12 +41,30 @@ CANONICAL_SEMANTIC_TYPES: frozenset[str] = frozenset(
         "affinity_report",
         "property_report",
         "optimized_lead",
+        "admet_report",
+        "toxicity_report",
+        "synthetic_accessibility",
+        "molecular_dynamics_trajectory",
+        "interaction_report",
+        "docking_pose_diffdock",
+        "docking_pose_gnina",
+        "docking_pose_smina",
+        "database_query_result",
     )
 )
 
 SEMANTIC_TYPE_ALIASES: dict[str, CanonicalSemanticType] = {
     "protein_structure": "protein_pdb",
     "pocket_structure": "pocket_pdb",
+    "md_traj": "molecular_dynamics_trajectory",
+    "trajectory": "molecular_dynamics_trajectory",
+    "sa_score": "synthetic_accessibility",
+    "synthetic_accessibility_score": "synthetic_accessibility",
+    "interactions": "interaction_report",
+    "interaction_fingerprint": "interaction_report",
+    "chembl_result": "database_query_result",
+    "pubchem_result": "database_query_result",
+    "pdbbind_result": "database_query_result",
 }
 
 CANONICAL_AGENT_INPUT_TYPES: frozenset[str] = frozenset(
@@ -47,6 +74,7 @@ CANONICAL_AGENT_INPUT_TYPES: frozenset[str] = frozenset(
         "ligand_pdb",
         "smiles_csv",
         "generated_ligand",
+        "database_query_result",
     )
 )
 

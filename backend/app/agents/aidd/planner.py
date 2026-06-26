@@ -99,6 +99,51 @@ def build_aidd_plan(
         or "对接" in message
         or "排序" in message
     )
+    wants_property = (
+        "property_report" in normalized_outputs
+        or "性质" in message
+        or "property" in message.lower()
+    )
+    wants_admet = (
+        "admet_report" in normalized_outputs
+        or "admet" in message.lower()
+        or "admet" in message.upper()
+    )
+    wants_toxicity = (
+        "toxicity_report" in normalized_outputs
+        or "毒性" in message
+        or "toxicity" in message.lower()
+    )
+    wants_sa = (
+        "synthetic_accessibility" in normalized_outputs
+        or "合成可及性" in message
+        or "synthetic accessibility" in message.lower()
+        or "sa score" in message.lower()
+    )
+    wants_md = (
+        "molecular_dynamics_trajectory" in normalized_outputs
+        or "分子动力学" in message
+        or "molecular dynamics" in message.lower()
+        or "md simulation" in message.lower()
+    )
+    wants_interaction = (
+        "interaction_report" in normalized_outputs
+        or "相互作用" in message
+        or "interaction" in message.lower()
+        or "蛋白配体相互作用" in message
+    )
+    wants_database = (
+        "database_query_result" in normalized_outputs
+        or "数据库" in message
+        or "chembl" in message.lower()
+        or "pubchem" in message.lower()
+        or "pdbbind" in message.lower()
+    )
+    wants_property = (
+        "property_report" in normalized_outputs
+        or "性质" in message
+        or "property" in message.lower()
+    )
     if wants_docking and {"protein_pdb", "ligand_pdb"}.issubset(available_inputs):
         steps = [
             AIDDPlanStep(
@@ -210,16 +255,60 @@ def build_aidd_plan(
             ],
         )
 
-    wants_property = (
-        "property_report" in normalized_outputs
-        or "性质" in message
-        or "property" in message.lower()
-    )
-    if input_type == "smiles_csv":
+    # ------------------------------------------------------------------
+    # 数据库查询优先路径：仅请求 database_query_result 时直接查询
+    # ------------------------------------------------------------------
+    if wants_database and not any([wants_docking, wants_affinity, wants_property, wants_admet, wants_toxicity, wants_sa, wants_md, wants_interaction]):
+        if "pubchem" in message.lower() or (normalized_outputs and "pubchem" in str(normalized_outputs).lower()):
+            return AIDDPlan(
+                intent="query_pubchem",
+                requested_outputs=normalized_outputs,
+                steps=[
+                    AIDDPlanStep(
+                        step_key="query_pubchem",
+                        tool_slug="builtin-query-pubchem",
+                        depends_on=[],
+                        inputs={"smiles_csv": "agent_input:smiles_csv"} if input_type == "smiles_csv" else {},
+                        params={},
+                    )
+                ],
+            )
+        if "pdbbind" in message.lower() or (normalized_outputs and "pdbbind" in str(normalized_outputs).lower()):
+            return AIDDPlan(
+                intent="query_pdbbind",
+                requested_outputs=normalized_outputs,
+                steps=[
+                    AIDDPlanStep(
+                        step_key="query_pdbbind",
+                        tool_slug="builtin-query-pdbbind",
+                        depends_on=[],
+                        inputs={"protein_pdb": "agent_input:protein_pdb"} if input_type == "protein_pdb" else {},
+                        params={},
+                    )
+                ],
+            )
         return AIDDPlan(
-            intent="predict_properties_from_uploaded_smiles",
+            intent="query_chembl",
             requested_outputs=normalized_outputs,
             steps=[
+                AIDDPlanStep(
+                    step_key="query_chembl",
+                    tool_slug="builtin-query-chembl",
+                    depends_on=[],
+                    inputs={"smiles_csv": "agent_input:smiles_csv"} if input_type == "smiles_csv" else {},
+                    params={},
+                )
+            ],
+        )
+
+    # ------------------------------------------------------------------
+    # 分子级别预测：property / ADMET / toxicity / synthetic accessibility
+    # ------------------------------------------------------------------
+    wants_molecule_level = wants_property or wants_admet or wants_toxicity or wants_sa
+    if wants_molecule_level and input_type == "smiles_csv":
+        steps: list[AIDDPlanStep] = []
+        if wants_property:
+            steps.append(
                 AIDDPlanStep(
                     step_key="property_prediction",
                     tool_slug="molp-pc-property-prediction",
@@ -227,27 +316,153 @@ def build_aidd_plan(
                     inputs={"smiles_csv": "agent_input:smiles_csv"},
                     params={"device": params.get("property_device", "cpu")},
                 )
-            ],
-        )
-    if input_type == "generated_ligand" and wants_property:
-        return AIDDPlan(
-            intent="predict_properties_from_uploaded_sdf",
-            requested_outputs=normalized_outputs,
-            steps=[
+            )
+        if wants_admet:
+            steps.append(
                 AIDDPlanStep(
-                    step_key="sdf_to_smiles",
-                    tool_slug="builtin-sdf-to-smiles-csv",
+                    step_key="admet_prediction",
+                    tool_slug="builtin-admet-prediction",
                     depends_on=[],
-                    inputs={"generated_ligand": "agent_input:generated_ligand"},
+                    inputs={"smiles_csv": "agent_input:smiles_csv"},
                     params={},
-                ),
+                )
+            )
+        if wants_toxicity:
+            steps.append(
+                AIDDPlanStep(
+                    step_key="toxicity_prediction",
+                    tool_slug="builtin-toxicity-prediction",
+                    depends_on=[],
+                    inputs={"smiles_csv": "agent_input:smiles_csv"},
+                    params={},
+                )
+            )
+        if wants_sa:
+            steps.append(
+                AIDDPlanStep(
+                    step_key="synthetic_accessibility",
+                    tool_slug="builtin-synthetic-accessibility",
+                    depends_on=[],
+                    inputs={"smiles_csv": "agent_input:smiles_csv"},
+                    params={},
+                )
+            )
+        if not steps:
+            steps.append(
+                AIDDPlanStep(
+                    step_key="property_prediction",
+                    tool_slug="molp-pc-property-prediction",
+                    depends_on=[],
+                    inputs={"smiles_csv": "agent_input:smiles_csv"},
+                    params={"device": params.get("property_device", "cpu")},
+                )
+            )
+        return AIDDPlan(
+            intent="predict_molecule_properties_from_smiles",
+            requested_outputs=normalized_outputs,
+            steps=steps,
+        )
+    if wants_molecule_level and input_type == "generated_ligand":
+        steps = [
+            AIDDPlanStep(
+                step_key="sdf_to_smiles",
+                tool_slug="builtin-sdf-to-smiles-csv",
+                depends_on=[],
+                inputs={"generated_ligand": "agent_input:generated_ligand"},
+                params={},
+            ),
+        ]
+        if wants_property:
+            steps.append(
                 AIDDPlanStep(
                     step_key="property_prediction",
                     tool_slug="molp-pc-property-prediction",
                     depends_on=["sdf_to_smiles"],
                     inputs={"smiles_csv": "step:sdf_to_smiles:smiles_csv"},
                     params={"device": params.get("property_device", "cpu")},
-                ),
+                )
+            )
+        if wants_admet:
+            steps.append(
+                AIDDPlanStep(
+                    step_key="admet_prediction",
+                    tool_slug="builtin-admet-prediction",
+                    depends_on=["sdf_to_smiles"],
+                    inputs={"smiles_csv": "step:sdf_to_smiles:smiles_csv"},
+                    params={},
+                )
+            )
+        if wants_toxicity:
+            steps.append(
+                AIDDPlanStep(
+                    step_key="toxicity_prediction",
+                    tool_slug="builtin-toxicity-prediction",
+                    depends_on=["sdf_to_smiles"],
+                    inputs={"smiles_csv": "step:sdf_to_smiles:smiles_csv"},
+                    params={},
+                )
+            )
+        if wants_sa:
+            steps.append(
+                AIDDPlanStep(
+                    step_key="synthetic_accessibility",
+                    tool_slug="builtin-synthetic-accessibility",
+                    depends_on=["sdf_to_smiles"],
+                    inputs={"smiles_csv": "step:sdf_to_smiles:smiles_csv"},
+                    params={},
+                )
+            )
+        if len(steps) == 1:
+            steps.append(
+                AIDDPlanStep(
+                    step_key="property_prediction",
+                    tool_slug="molp-pc-property-prediction",
+                    depends_on=["sdf_to_smiles"],
+                    inputs={"smiles_csv": "step:sdf_to_smiles:smiles_csv"},
+                    params={"device": params.get("property_device", "cpu")},
+                )
+            )
+        return AIDDPlan(
+            intent="predict_molecule_properties_from_sdf",
+            requested_outputs=normalized_outputs,
+            steps=steps,
+        )
+
+    # ------------------------------------------------------------------
+    # 蛋白/复合物级别：MD / interaction
+    # ------------------------------------------------------------------
+    if wants_md and {"protein_pdb", "ligand_pdb"}.issubset(available_inputs):
+        return AIDDPlan(
+            intent="run_molecular_dynamics",
+            requested_outputs=normalized_outputs,
+            steps=[
+                AIDDPlanStep(
+                    step_key="molecular_dynamics",
+                    tool_slug="builtin-molecular-dynamics",
+                    depends_on=[],
+                    inputs={
+                        "protein_pdb": "agent_input:protein_pdb",
+                        "ligand_pdb": "agent_input:ligand_pdb",
+                    },
+                    params={},
+                )
+            ],
+        )
+    if wants_interaction and {"protein_pdb", "ligand_pdb"}.issubset(available_inputs):
+        return AIDDPlan(
+            intent="analyze_interactions",
+            requested_outputs=normalized_outputs,
+            steps=[
+                AIDDPlanStep(
+                    step_key="interaction_analysis",
+                    tool_slug="builtin-interaction-analysis",
+                    depends_on=[],
+                    inputs={
+                        "protein_pdb": "agent_input:protein_pdb",
+                        "ligand_pdb": "agent_input:ligand_pdb",
+                    },
+                    params={},
+                )
             ],
         )
 
@@ -345,6 +560,101 @@ def build_aidd_plan(
                 depends_on=["sdf_to_smiles"],
                 inputs={"smiles_csv": "step:sdf_to_smiles:smiles_csv"},
                 params={"device": params.get("property_device", "cpu")},
+            )
+        )
+
+    # ------------------------------------------------------------------
+    # 在 generation 路径末尾追加 ADMET / toxicity / SA / interaction / MD
+    # ------------------------------------------------------------------
+    needs_smiles_for_molecule_level = wants_admet or wants_toxicity or wants_sa
+    if needs_smiles_for_molecule_level and not any(step.step_key == "sdf_to_smiles" for step in steps):
+        steps.append(
+            AIDDPlanStep(
+                step_key="sdf_to_smiles",
+                tool_slug="builtin-sdf-to-smiles-csv",
+                depends_on=["molecule_generation"],
+                inputs={"generated_ligand": "step:molecule_generation:generated_ligand"},
+                params={},
+            )
+        )
+    smiles_source = "step:sdf_to_smiles:smiles_csv" if any(step.step_key == "sdf_to_smiles" for step in steps) else "agent_input:smiles_csv"
+
+    if wants_admet:
+        steps.append(
+            AIDDPlanStep(
+                step_key="admet_prediction",
+                tool_slug="builtin-admet-prediction",
+                depends_on=["sdf_to_smiles"] if any(step.step_key == "sdf_to_smiles" for step in steps) else [],
+                inputs={"smiles_csv": smiles_source},
+                params={},
+            )
+        )
+    if wants_toxicity:
+        steps.append(
+            AIDDPlanStep(
+                step_key="toxicity_prediction",
+                tool_slug="builtin-toxicity-prediction",
+                depends_on=["sdf_to_smiles"] if any(step.step_key == "sdf_to_smiles" for step in steps) else [],
+                inputs={"smiles_csv": smiles_source},
+                params={},
+            )
+        )
+    if wants_sa:
+        steps.append(
+            AIDDPlanStep(
+                step_key="synthetic_accessibility",
+                tool_slug="builtin-synthetic-accessibility",
+                depends_on=["sdf_to_smiles"] if any(step.step_key == "sdf_to_smiles" for step in steps) else [],
+                inputs={"smiles_csv": smiles_source},
+                params={},
+            )
+        )
+
+    if wants_interaction and input_type == "protein_pdb":
+        if not any(step.step_key == "sdf_to_ligand_pdb" for step in steps):
+            steps.append(
+                AIDDPlanStep(
+                    step_key="sdf_to_ligand_pdb",
+                    tool_slug="builtin-sdf-to-pdb",
+                    depends_on=["molecule_generation"],
+                    inputs={"generated_ligand": "step:molecule_generation:generated_ligand"},
+                    params={},
+                )
+            )
+        steps.append(
+            AIDDPlanStep(
+                step_key="interaction_analysis",
+                tool_slug="builtin-interaction-analysis",
+                depends_on=["sdf_to_ligand_pdb"],
+                inputs={
+                    "protein_pdb": "agent_input:protein_pdb",
+                    "ligand_pdb": "step:sdf_to_ligand_pdb:ligand_pdb",
+                },
+                params={},
+            )
+        )
+
+    if wants_md and input_type == "protein_pdb":
+        if not any(step.step_key == "sdf_to_ligand_pdb" for step in steps):
+            steps.append(
+                AIDDPlanStep(
+                    step_key="sdf_to_ligand_pdb",
+                    tool_slug="builtin-sdf-to-pdb",
+                    depends_on=["molecule_generation"],
+                    inputs={"generated_ligand": "step:molecule_generation:generated_ligand"},
+                    params={},
+                )
+            )
+        steps.append(
+            AIDDPlanStep(
+                step_key="molecular_dynamics",
+                tool_slug="builtin-molecular-dynamics",
+                depends_on=["sdf_to_ligand_pdb"],
+                inputs={
+                    "protein_pdb": "agent_input:protein_pdb",
+                    "ligand_pdb": "step:sdf_to_ligand_pdb:ligand_pdb",
+                },
+                params={},
             )
         )
 

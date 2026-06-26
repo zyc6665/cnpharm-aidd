@@ -39,15 +39,25 @@ def test_discover_tools_filters_configured_slugs():
         }
     )
 
-    assert [tool["tool_slug"] for tool in state["available_tools"]] == [
-        "lvpocket-pocket-prediction",
+    slugs = [tool["tool_slug"] for tool in state["available_tools"]]
+    assert slugs[0] == "lvpocket-pocket-prediction"
+    # 所有 virtual builtin tools 都应该被发现
+    expected_virtual = {
         "builtin-sdf-to-smiles-csv",
         "builtin-sdf-to-pdb",
         "builtin-vina-docking",
-    ]
+        "builtin-admet-prediction",
+        "builtin-toxicity-prediction",
+        "builtin-synthetic-accessibility",
+        "builtin-molecular-dynamics",
+        "builtin-interaction-analysis",
+        "builtin-query-chembl",
+        "builtin-query-pubchem",
+        "builtin-query-pdbbind",
+    }
+    virtual_slugs = {tool["tool_slug"] for tool in state["available_tools"] if tool.get("virtual")}
+    assert expected_virtual.issubset(virtual_slugs)
     assert state["available_tools"][1]["virtual"] is True
-    assert state["available_tools"][2]["virtual"] is True
-    assert state["available_tools"][3]["virtual"] is True
 
 
 def test_validate_plan_node_parses_model_output():
