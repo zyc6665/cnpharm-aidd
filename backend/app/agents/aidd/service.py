@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.common.time import utcnow
-from app.agents.aidd.builtin_tools import BuiltinToolFile, run_builtin_tool
+from app.agents.aidd.builtin_tools import BuiltinToolFile, BuiltinToolOutput, run_builtin_tool
 from app.agents.aidd.capabilities import AIDD_TOOL_CAPABILITIES, ToolCapability
 from app.agents.aidd.input_classifier import classify_aidd_input_file
 from app.agents.aidd.outputs import extract_semantic_outputs
@@ -530,6 +530,8 @@ async def _run_virtual_step(
     result = run_builtin_tool(step.tool_slug, builtin_files)
     semantic_outputs: dict[str, dict[str, Any]] = {}
     output_file_ids: list[str] = []
+
+    # 1. 文件类 artifact
     for artifact in result.artifacts:
         output_file = await _create_agent_output_file(
             db,
@@ -546,6 +548,28 @@ async def _run_virtual_step(
             "filename": output_file.filename,
             "url": _file_download_url(output_file.id),
             "content_type": output_file.content_type,
+        }
+
+    # 2. 结构化数据 output（数据库查询结果等）→ 保存为 JSON 文件
+    for output in result.outputs:
+        import json as _json
+
+        content = _json.dumps(output.data, ensure_ascii=False, indent=2).encode("utf-8")
+        output_file = await _create_agent_output_file(
+            db,
+            owner_id=run.user_id,
+            filename=f"{output.semantic_type}.json",
+            content=content,
+            content_type="application/json",
+            source_file_id=None,
+        )
+        output_file_ids.append(output_file.id)
+        semantic_outputs[output.semantic_type] = {
+            "source": "output_data",
+            "file_id": output_file.id,
+            "filename": output_file.filename,
+            "url": _file_download_url(output_file.id),
+            "content_type": "application/json",
         }
 
     step.status = "success"

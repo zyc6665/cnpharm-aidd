@@ -116,7 +116,7 @@ def test_vina_scoring_is_inserted_when_ranking_generated_ligands() -> None:
         "pocket_prediction",
         "molecule_generation",
         "sdf_to_ligand_pdb",
-        "vina_docking",
+        "docking",
     ]
     assert plan.steps[3].tool_slug == "builtin-vina-docking"
     assert plan.steps[3].depends_on == ["sdf_to_ligand_pdb"]

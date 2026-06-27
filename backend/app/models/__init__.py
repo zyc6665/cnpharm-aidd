@@ -16,6 +16,7 @@ from app.models.workflows import WorkflowDefinition, WorkflowRun, WorkflowTempla
 from app.models.system_settings import ModelService
 from app.models.verification import VerificationCode, VerificationDailyCount, VerificationPurpose
 from app.models.statistics import UserStatistics, ToolStatistics, FileStatistics
+from app.models.tool_capabilities import ToolCapability
 
 __all__ = [
     "User", "UserSession",
@@ -28,4 +29,5 @@ __all__ = [
     "ModelService",
     "VerificationCode", "VerificationDailyCount", "VerificationPurpose",
     "UserStatistics", "ToolStatistics", "FileStatistics",
+    "ToolCapability",
 ]

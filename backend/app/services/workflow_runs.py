@@ -25,6 +25,8 @@ from app.services.workflow_artifacts import (
 from app.services.workflow_scheduler import (
     initial_node_states,
     load_available_workflow_tool,
+    reconcile_loop_body,
+    reconcile_map_sub_tasks,
     start_ready_workflow_nodes,
     utcnow,
     utcnow_iso,
@@ -32,7 +34,10 @@ from app.services.workflow_scheduler import (
 )
 from app.services.workflow_templates import load_template_for_user
 from app.services.workflow_validation import (
+    is_loop_node,
+    is_map_node,
     is_tool_node,
+    nodes_by_id,
     required_workflow_inputs,
     validate_workflow_definition,
     workflow_nodes,
@@ -172,6 +177,34 @@ async def sync_workflow_run(
         state = dict(node_states.get(node_id) or {})
         if state.get("status") != "waiting_task":
             continue
+
+        # Map nodes have sub-tasks; delegate to reconcile_map_sub_tasks
+        definition = dict(run.definition or {})
+        indexed_nodes = nodes_by_id(definition)
+        node = indexed_nodes.get(node_id)
+        if is_map_node(node) and state.get("sub_tasks"):
+            await reconcile_map_sub_tasks(
+                db,
+                node_id=node_id,
+                state=state,
+                node_states=node_states,
+                run=run,
+            )
+            if state.get("status") not in ("waiting_task",):
+                continue
+
+        # Loop nodes have body sub-tasks; delegate to reconcile_loop_body
+        if is_loop_node(node) and state.get("loop_body_states"):
+            await reconcile_loop_body(
+                db,
+                node_id=node_id,
+                node=node,
+                state=state,
+                node_states=node_states,
+                run=run,
+            )
+            if state.get("status") not in ("waiting_task",):
+                continue
 
         task_id = state.get("task_id")
         if not task_id:

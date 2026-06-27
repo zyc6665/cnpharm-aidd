@@ -11,7 +11,7 @@ import shlex
 import shutil
 import subprocess
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from app.agents.aidd.outputs import parse_sdf_smiles
@@ -36,8 +36,17 @@ class BuiltinToolArtifact:
 
 
 @dataclass(frozen=True)
+class BuiltinToolOutput:
+    """非文件的语义输出（数据库查询结果、分析报告等）。"""
+
+    semantic_type: str
+    data: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class BuiltinToolResult:
-    artifacts: tuple[BuiltinToolArtifact, ...]
+    artifacts: tuple[BuiltinToolArtifact, ...] = ()
+    outputs: tuple[BuiltinToolOutput, ...] = ()
 
 
 def _smiles_csv_content(smiles_values: list[str]) -> bytes:
@@ -430,11 +439,312 @@ def _run_vina_docking_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResu
     )
 
 
+# ======================================================================
+# 数据库查询工具（从 CSV / PDB 输入提取参数，调用 database_tools）
+# ======================================================================
+
+
+def _read_smiles_from_csv(csv_path: Path) -> list[str]:
+    """从 SMILES CSV 文件中提取 SMILES 列表。"""
+    text = csv_path.read_text(encoding="utf-8")
+    reader = csv.DictReader(io.StringIO(text))
+    smiles_values: list[str] = []
+    for row in reader:
+        smiles = (row.get("SMILES") or row.get("smiles") or "").strip()
+        if smiles:
+            smiles_values.append(smiles)
+    return smiles_values
+
+
+def _run_query_chembl_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResult:
+    """builtin-query-chembl: 从 SMILES CSV 提取分子，查询 ChEMBL。"""
+    from app.agents.aidd.database_tools import query_chembl as _query_chembl
+    from app.config import settings as _settings
+
+    if not _settings.ENABLE_DATABASE_TOOLS:
+        raise ValidationException("数据库查询工具已禁用")
+
+    csv_file = files.get("smiles_csv")
+    smiles_list = _read_smiles_from_csv(csv_file.path) if csv_file else []
+    if not smiles_list:
+        raise ValidationException("query_chembl 需要 smiles_csv 输入文件")
+
+    import asyncio as _asyncio
+
+    result = _asyncio.run(_query_chembl(smiles=smiles_list[0]))
+    return BuiltinToolResult(
+        outputs=(
+            BuiltinToolOutput(semantic_type="database_query_result", data=result),
+        )
+    )
+
+
+def _run_query_pubchem_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResult:
+    """builtin-query-pubchem: 从 SMILES CSV 提取分子，查询 PubChem。"""
+    from app.agents.aidd.database_tools import query_pubchem as _query_pubchem
+    from app.config import settings as _settings
+
+    if not _settings.ENABLE_DATABASE_TOOLS:
+        raise ValidationException("数据库查询工具已禁用")
+
+    csv_file = files.get("smiles_csv")
+    smiles_list = _read_smiles_from_csv(csv_file.path) if csv_file else []
+    if not smiles_list:
+        raise ValidationException("query_pubchem 需要 smiles_csv 输入文件")
+
+    import asyncio as _asyncio
+
+    result = _asyncio.run(_query_pubchem(smiles=smiles_list[0]))
+    return BuiltinToolResult(
+        outputs=(
+            BuiltinToolOutput(semantic_type="database_query_result", data=result),
+        )
+    )
+
+
+def _run_query_pdbbind_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResult:
+    """builtin-query-pdbbind: 从 PDB 文件名提取 PDB ID，查询 PDBbind。"""
+    from app.agents.aidd.database_tools import query_pdbbind as _query_pdbbind
+    from app.config import settings as _settings
+
+    import asyncio as _asyncio
+
+    if not _settings.ENABLE_DATABASE_TOOLS:
+        raise ValidationException("数据库查询工具已禁用")
+
+    protein_file = files.get("protein_pdb")
+    ligand_file = files.get("ligand_pdb")
+
+    pdb_id: str | None = None
+    if protein_file:
+        stem = Path(protein_file.filename).stem
+        # 尝试提取 4 字符 PDB ID
+        match = re.search(r"(\d[A-Za-z\d]{3})", stem)
+        pdb_id = match.group(1) if match else stem[:4]
+
+    ligand_name: str | None = None
+    if ligand_file:
+        ligand_name = Path(ligand_file.filename).stem
+
+    import asyncio as _asyncio
+
+    result = _asyncio.run(
+        _query_pdbbind(protein_pdb_id=pdb_id, ligand_name=ligand_name)
+    )
+    return BuiltinToolResult(
+        outputs=(
+            BuiltinToolOutput(semantic_type="database_query_result", data=result),
+        )
+    )
+
+
+# ======================================================================
+# ADMET / Toxicity / SA（SMILES CSV → 结构化报告）
+# ======================================================================
+
+
+def _run_admet_prediction_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResult:
+    """builtin-admet-prediction: 对 SMILES CSV 执行 ADMET 预测。"""
+    csv_file = files.get("smiles_csv")
+    smiles_list = _read_smiles_from_csv(csv_file.path) if csv_file else []
+    if not smiles_list:
+        raise ValidationException("admet_prediction 需要 smiles_csv 输入文件")
+
+    records: list[dict[str, Any]] = []
+    for smiles in smiles_list:
+        records.append({
+            "smiles": smiles,
+            "note": "ADMET prediction via builtin tool (configure external ADMET service for real predictions)",
+        })
+
+    return BuiltinToolResult(
+        artifacts=(
+            BuiltinToolArtifact(
+                semantic_type="admet_report",
+                filename=f"{csv_file.filename.rsplit('.', 1)[0]}_admet.csv" if csv_file else "admet_report.csv",
+                content=_dicts_to_csv_bytes(records),
+                content_type="text/csv",
+                source_file_id=csv_file.file_id if csv_file else None,
+            ),
+        )
+    )
+
+
+def _run_toxicity_prediction_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResult:
+    """builtin-toxicity-prediction: 对 SMILES CSV 执行毒性预测。"""
+    csv_file = files.get("smiles_csv")
+    smiles_list = _read_smiles_from_csv(csv_file.path) if csv_file else []
+    if not smiles_list:
+        raise ValidationException("toxicity_prediction 需要 smiles_csv 输入文件")
+
+    records: list[dict[str, Any]] = []
+    for smiles in smiles_list:
+        records.append({
+            "smiles": smiles,
+            "note": "Toxicity prediction via builtin tool (configure external toxicity service for real predictions)",
+        })
+
+    return BuiltinToolResult(
+        artifacts=(
+            BuiltinToolArtifact(
+                semantic_type="toxicity_report",
+                filename=f"{csv_file.filename.rsplit('.', 1)[0]}_toxicity.csv" if csv_file else "toxicity_report.csv",
+                content=_dicts_to_csv_bytes(records),
+                content_type="text/csv",
+                source_file_id=csv_file.file_id if csv_file else None,
+            ),
+        )
+    )
+
+
+def _run_synthetic_accessibility_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResult:
+    """builtin-synthetic-accessibility: 对 SMILES CSV 计算合成可及性分数。"""
+    csv_file = files.get("smiles_csv")
+    smiles_list = _read_smiles_from_csv(csv_file.path) if csv_file else []
+    if not smiles_list:
+        raise ValidationException("synthetic_accessibility 需要 smiles_csv 输入文件")
+
+    records: list[dict[str, Any]] = []
+    for smiles in smiles_list:
+        records.append({
+            "smiles": smiles,
+            "sa_score": None,
+            "note": "Synthetic accessibility via builtin tool (configure external SA predictor for real scores)",
+        })
+
+    return BuiltinToolResult(
+        artifacts=(
+            BuiltinToolArtifact(
+                semantic_type="synthetic_accessibility",
+                filename=f"{csv_file.filename.rsplit('.', 1)[0]}_sa.csv" if csv_file else "synthetic_accessibility.csv",
+                content=_dicts_to_csv_bytes(records),
+                content_type="text/csv",
+                source_file_id=csv_file.file_id if csv_file else None,
+            ),
+        )
+    )
+
+
+# ======================================================================
+# MD / Interaction（占位实现，等待对接外部服务）
+# ======================================================================
+
+
+def _run_molecular_dynamics_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResult:
+    """builtin-molecular-dynamics: 对蛋白-配体复合物运行分子动力学模拟。"""
+    protein_file = files.get("protein_pdb")
+    ligand_file = files.get("ligand_pdb")
+    if not protein_file or not ligand_file:
+        raise ValidationException("molecular_dynamics 需要 protein_pdb 和 ligand_pdb 输入")
+
+    report = {
+        "protein_file_id": protein_file.file_id,
+        "protein_filename": protein_file.filename,
+        "ligand_file_id": ligand_file.file_id,
+        "ligand_filename": ligand_file.filename,
+        "note": "Molecular dynamics simulation via builtin tool (configure external MD engine for real simulations)",
+    }
+    return BuiltinToolResult(
+        outputs=(
+            BuiltinToolOutput(
+                semantic_type="molecular_dynamics_trajectory",
+                data=report,
+            ),
+        )
+    )
+
+
+def _run_interaction_analysis_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResult:
+    """builtin-interaction-analysis: 分析蛋白-配体相互作用。"""
+    protein_file = files.get("protein_pdb")
+    ligand_file = files.get("ligand_pdb")
+    if not protein_file or not ligand_file:
+        raise ValidationException("interaction_analysis 需要 protein_pdb 和 ligand_pdb 输入")
+
+    report = {
+        "protein_file_id": protein_file.file_id,
+        "protein_filename": protein_file.filename,
+        "ligand_file_id": ligand_file.file_id,
+        "ligand_filename": ligand_file.filename,
+        "interactions": [],
+        "note": "Interaction analysis via builtin tool (configure external analysis service for real predictions)",
+    }
+    content = json.dumps(report, ensure_ascii=False, indent=2).encode("utf-8")
+    return BuiltinToolResult(
+        artifacts=(
+            BuiltinToolArtifact(
+                semantic_type="interaction_report",
+                filename=f"{Path(ligand_file.filename).stem}_interaction.json",
+                content=content,
+                content_type="application/json",
+                source_file_id=ligand_file.file_id,
+            ),
+        )
+    )
+
+
+# ======================================================================
+# 辅助函数
+# ======================================================================
+
+
+def _dicts_to_csv_bytes(records: list[dict[str, Any]]) -> bytes:
+    """将字典列表转换为 CSV 字节流。"""
+    if not records:
+        return b""
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=list(records[0].keys()), lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(records)
+    return output.getvalue().encode("utf-8")
+
+
+# ======================================================================
+# 统一分发入口
+# ======================================================================
+
+
+_BUILTIN_TOOL_REGISTRY: dict[str, str] = {
+    "builtin-sdf-to-smiles-csv": "sdf_to_smiles_csv",
+    "builtin-sdf-to-pdb": "sdf_to_pdb",
+    "builtin-vina-docking": "vina_docking",
+    "builtin-query-chembl": "query_chembl",
+    "builtin-query-pubchem": "query_pubchem",
+    "builtin-query-pdbbind": "query_pdbbind",
+    "builtin-admet-prediction": "admet_prediction",
+    "builtin-toxicity-prediction": "toxicity_prediction",
+    "builtin-synthetic-accessibility": "synthetic_accessibility",
+    "builtin-molecular-dynamics": "molecular_dynamics",
+    "builtin-interaction-analysis": "interaction_analysis",
+}
+
+
 def run_builtin_tool(tool_slug: str, files: dict[str, BuiltinToolFile]) -> BuiltinToolResult:
-    if tool_slug == "builtin-sdf-to-smiles-csv":
+    handler_key = _BUILTIN_TOOL_REGISTRY.get(tool_slug)
+    if handler_key is None:
+        raise ValidationException(f"未知内置智能体工具: {tool_slug}")
+
+    if handler_key == "sdf_to_smiles_csv":
         return _run_sdf_to_smiles_csv_tool(files)
-    if tool_slug == "builtin-sdf-to-pdb":
+    if handler_key == "sdf_to_pdb":
         return _run_sdf_to_pdb_tool(files)
-    if tool_slug == "builtin-vina-docking":
+    if handler_key == "vina_docking":
         return _run_vina_docking_tool(files)
-    raise ValidationException(f"未知内置智能体工具: {tool_slug}")
+    if handler_key == "query_chembl":
+        return _run_query_chembl_tool(files)
+    if handler_key == "query_pubchem":
+        return _run_query_pubchem_tool(files)
+    if handler_key == "query_pdbbind":
+        return _run_query_pdbbind_tool(files)
+    if handler_key == "admet_prediction":
+        return _run_admet_prediction_tool(files)
+    if handler_key == "toxicity_prediction":
+        return _run_toxicity_prediction_tool(files)
+    if handler_key == "synthetic_accessibility":
+        return _run_synthetic_accessibility_tool(files)
+    if handler_key == "molecular_dynamics":
+        return _run_molecular_dynamics_tool(files)
+    if handler_key == "interaction_analysis":
+        return _run_interaction_analysis_tool(files)
+
+    raise ValidationException(f"未实现的内置工具处理器: {tool_slug}")

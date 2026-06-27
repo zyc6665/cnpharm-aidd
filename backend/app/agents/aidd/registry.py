@@ -1,4 +1,10 @@
-"""Dynamic AIDD agent capability registry."""
+"""Dynamic AIDD agent capability registry.
+
+Resolution order (per tool):
+1. DB ``tool_capabilities`` table (explicit registration)
+2. Tool version config ``agent_capability`` (dynamic discovery)
+3. Static ``AIDD_TOOL_CAPABILITIES`` dict (legacy fallback)
+"""
 
 from __future__ import annotations
 
@@ -16,6 +22,7 @@ from app.agents.aidd.capabilities import (
     ToolCapability,
 )
 from app.common.exceptions import ValidationException
+from app.models.tool_capabilities import ToolCapability as ToolCapabilityModel
 from app.models.tools import Tool, ToolStatus
 from app.services.tool_contracts import (
     build_tool_contract,
@@ -46,6 +53,41 @@ def _parse_output_match(data: Any) -> OutputMatch | None:
         filename_contains_any=_as_tuple(data.get("filename_contains_any")),
         content_type=str(data["content_type"]) if data.get("content_type") else None,
     )
+
+
+def _db_row_to_capability(row: ToolCapabilityModel) -> ToolCapability:
+    """Convert a DB row to the domain dataclass."""
+    return ToolCapability(
+        tool_slug=row.capability,  # capability 字段存储工具 slug
+        capability=row.capability,
+        stage=row.stage,
+        inputs=tuple(
+            CapabilityInput(
+                normalize_semantic_type(str(item["semantic_type"])),
+                str(item.get("field") or normalize_semantic_type(str(item["semantic_type"]))),
+                required=bool(item.get("required", True)),
+                accepted_extensions=_as_tuple(item.get("accepted_extensions")),
+            )
+            for item in (row.inputs or [])
+        ),
+        outputs=tuple(
+            CapabilityOutput(
+                normalize_semantic_type(str(item["semantic_type"])),
+                str(item.get("source") or "output_files"),
+                match=_parse_output_match(item.get("match")),
+                path=str(item["path"]) if item.get("path") else None,
+                required=bool(item.get("required", True)),
+            )
+            for item in (row.outputs or [])
+        ),
+        defaults=dict(row.defaults or {}),
+        virtual=False,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Config-based discovery (existing mechanism, kept as fallback)
+# ---------------------------------------------------------------------------
 
 
 def capability_from_config(tool_slug: str, config: dict[str, Any]) -> ToolCapability | None:
@@ -104,6 +146,11 @@ def capability_from_tool(tool: Tool) -> ToolCapability | None:
     return None
 
 
+# ---------------------------------------------------------------------------
+# Summary helpers
+# ---------------------------------------------------------------------------
+
+
 def capability_to_tool_summary(capability: ToolCapability) -> dict[str, Any]:
     return tool_contract_to_agent_summary(build_virtual_tool_contract(capability))
 
@@ -114,6 +161,11 @@ def builtin_tool_summaries() -> list[dict[str, Any]]:
         for capability in AIDD_TOOL_CAPABILITIES.values()
         if capability.virtual
     ]
+
+
+# ---------------------------------------------------------------------------
+# Tool availability check
+# ---------------------------------------------------------------------------
 
 
 def _tool_is_agent_available(tool: Tool) -> bool:
@@ -127,20 +179,75 @@ def _tool_is_agent_available(tool: Tool) -> bool:
     )
 
 
-async def load_available_tool_capabilities(db: AsyncSession) -> list[ToolCapability]:
-    result = await db.execute(
-        select(Tool)
-        .options(selectinload(Tool.current_version))
-        .where(Tool.status == ToolStatus.PUBLISHED.value, Tool.is_public.is_(True))
-    )
-    capabilities: list[ToolCapability] = []
-    for tool in result.scalars().all():
-        if not _tool_is_agent_available(tool):
-            continue
-        capability = capability_from_tool(tool)
-        if capability is not None:
-            capabilities.append(capability)
+# ---------------------------------------------------------------------------
+# DB-first capability loading (primary path)
+# ---------------------------------------------------------------------------
 
+
+async def _load_db_capabilities(db: AsyncSession) -> dict[str, ToolCapability]:
+    """Load capabilities from the DB table, keyed by tool_id (or slug for builtins)."""
+    result = await db.execute(
+        select(ToolCapabilityModel).where(
+            ToolCapabilityModel.is_enabled.is_(True),
+            ToolCapabilityModel.is_builtin.is_(False),
+        )
+    )
+    db_caps: dict[str, ToolCapability] = {}
+    for row in result.scalars().all():
+        if not row.inputs or not row.outputs:
+            continue
+        capability = _db_row_to_capability(row)
+        db_caps[row.tool_id] = capability
+    return db_caps
+
+
+async def load_available_tool_capabilities(db: AsyncSession) -> list[ToolCapability]:
+    """Return all capabilities available to the AIDD agent.
+
+    Priority: DB table → config-based → static registry.
+    Virtual (built-in) tools are always included from the static registry.
+    """
+    # 1. Load DB-registered capabilities
+    db_caps = await _load_db_capabilities(db)
+
+    capabilities: list[ToolCapability] = []
+
+    # 2. If DB has entries, resolve tools to filter out unavailable ones
+    if db_caps:
+        tool_ids = list(db_caps.keys())
+        result = await db.execute(
+            select(Tool)
+            .options(selectinload(Tool.current_version))
+            .where(Tool.id.in_(tool_ids))
+        )
+        for tool in result.scalars().all():
+            if _tool_is_agent_available(tool) and tool.id in db_caps:
+                cap = db_caps[tool.id]
+                # Rebuild with the actual tool_slug from the Tool record
+                capabilities.append(ToolCapability(
+                    tool_slug=tool.slug,
+                    capability=cap.capability,
+                    stage=cap.stage,
+                    inputs=cap.inputs,
+                    outputs=cap.outputs,
+                    defaults=cap.defaults,
+                    virtual=False,
+                ))
+    else:
+        # 3. Fallback: load from tool configs + static registry (existing logic)
+        result = await db.execute(
+            select(Tool)
+            .options(selectinload(Tool.current_version))
+            .where(Tool.status == ToolStatus.PUBLISHED.value, Tool.is_public.is_(True))
+        )
+        for tool in result.scalars().all():
+            if not _tool_is_agent_available(tool):
+                continue
+            capability = capability_from_tool(tool)
+            if capability is not None:
+                capabilities.append(capability)
+
+    # 4. Always include virtual (built-in) tools from static registry
     capabilities.extend(
         capability
         for capability in AIDD_TOOL_CAPABILITIES.values()
@@ -150,39 +257,70 @@ async def load_available_tool_capabilities(db: AsyncSession) -> list[ToolCapabil
 
 
 async def load_available_tool_summaries(db: AsyncSession) -> list[dict[str, Any]]:
-    result = await db.execute(
-        select(Tool)
-        .options(selectinload(Tool.current_version))
-        .where(Tool.status == ToolStatus.PUBLISHED.value, Tool.is_public.is_(True))
-    )
+    """Return agent-consumable tool summaries for all available capabilities."""
+    caps = await load_available_tool_capabilities(db)
     summaries: list[dict[str, Any]] = []
-    for tool in result.scalars().all():
-        if not _tool_is_agent_available(tool):
-            continue
-        capability = capability_from_tool(tool)
-        if capability is None:
-            continue
-        summaries.append(
-            tool_contract_to_agent_summary(
-                build_tool_contract(tool, capability=capability)
+    for cap in caps:
+        if cap.virtual:
+            summaries.append(capability_to_tool_summary(cap))
+        else:
+            # For real tools, build from the tool record
+            result = await db.execute(
+                select(Tool)
+                .options(selectinload(Tool.current_version))
+                .where(Tool.slug == cap.tool_slug)
             )
-        )
-
-    summaries.extend(builtin_tool_summaries())
+            tool = result.scalar_one_or_none()
+            if tool and _tool_is_agent_available(tool):
+                summaries.append(
+                    tool_contract_to_agent_summary(
+                        build_tool_contract(tool, capability=cap)
+                    )
+                )
     return summaries
 
 
 async def load_tool_capability(db: AsyncSession, tool_slug: str) -> ToolCapability:
+    """Load a single tool's capability by slug.
+
+    Resolution order: DB table → config-based → static registry.
+    """
+    # 1. Static virtual tools
     static_capability = AIDD_TOOL_CAPABILITIES.get(tool_slug)
     if static_capability and static_capability.virtual:
         return static_capability
 
-    result = await db.execute(
+    # 2. Check DB table (parenthesised import to avoid Base.metadata registration races)
+    from app.models.tool_capabilities import ToolCapability as TCM
+
+    tool_result = await db.execute(
         select(Tool)
         .options(selectinload(Tool.current_version))
         .where(Tool.slug == tool_slug)
     )
-    tool = result.scalar_one_or_none()
+    tool = tool_result.scalar_one_or_none()
+
+    if tool:
+        db_result = await db.execute(
+            select(TCM).where(
+                TCM.tool_id == tool.id,
+                TCM.is_enabled.is_(True),
+            )
+        )
+        db_row = db_result.scalar_one_or_none()
+        if db_row and db_row.inputs and db_row.outputs:
+            cap = _db_row_to_capability(db_row)
+            return ToolCapability(
+                tool_slug=tool_slug,
+                capability=cap.capability,
+                stage=cap.stage,
+                inputs=cap.inputs,
+                outputs=cap.outputs,
+                defaults=cap.defaults,
+                virtual=False,
+            )
+
+    # 3. Fallback: config-based + static registry
     if not tool:
         raise ValidationException(f"智能体工具未配置: {tool_slug}")
     if not _tool_is_agent_available(tool):
@@ -192,3 +330,49 @@ async def load_tool_capability(db: AsyncSession, tool_slug: str) -> ToolCapabili
     if capability is None:
         raise ValidationException(f"智能体工具缺少 agent_capability 配置: {tool_slug}")
     return capability
+
+
+# ---------------------------------------------------------------------------
+# Capability registration helper (for tool import pipeline)
+# ---------------------------------------------------------------------------
+
+
+async def upsert_capability_from_config(
+    db: AsyncSession,
+    tool: Tool,
+) -> ToolCapabilityModel | None:
+    """Insert or update a DB capability row from the tool's current version config.
+
+    Returns the model row if ``agent_capability`` is present and enabled, else None.
+    """
+    # Re-query with eager-load to avoid MissingGreenlet on lazy relationships
+    reload_result = await db.execute(
+        select(Tool)
+        .options(selectinload(Tool.current_version))
+        .where(Tool.id == tool.id)
+    )
+    fresh_tool = reload_result.scalar_one()
+
+    config = fresh_tool.current_version.config if fresh_tool.current_version is not None else {}
+    raw = config.get(AGENT_CAPABILITY_CONFIG_KEY)
+    if not isinstance(raw, dict) or raw.get("enabled") is not True:
+        return None
+
+    result = await db.execute(
+        select(ToolCapabilityModel).where(ToolCapabilityModel.tool_id == fresh_tool.id)
+    )
+    row = result.scalar_one_or_none()
+    if row is None:
+        row = ToolCapabilityModel(tool_id=fresh_tool.id)
+        db.add(row)
+
+    row.capability = str(raw.get("capability") or fresh_tool.slug)
+    row.stage = str(raw.get("stage") or raw.get("capability") or "general")
+    row.inputs = raw.get("inputs", [])
+    row.outputs = raw.get("outputs", [])
+    row.defaults = raw.get("defaults", {})
+    row.is_builtin = False
+    row.is_enabled = True
+
+    await db.flush()
+    return row

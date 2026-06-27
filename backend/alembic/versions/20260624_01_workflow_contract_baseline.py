@@ -19,7 +19,7 @@ depends_on = None
 
 def _metadata():
     from app.database.base import Base
-    from app.models import agent, files, statistics, system_settings, tasks, tools, users, verification, workflows  # noqa: F401
+    from app.models import agent, files, statistics, system_settings, tasks, tool_capabilities, tools, users, verification, workflows  # noqa: F401
 
     return Base.metadata
 

@@ -43,11 +43,11 @@ def test_alembic_sqlite_upgrade_and_downgrade_dry_run(tmp_path: Path) -> None:
     with sqlite3.connect(db_path) as conn:
         tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
 
-    assert {"alembic_version", "users", "tools", "tasks", "files", "workflow_runs"}.issubset(
+    assert {"alembic_version", "users", "tools", "tasks", "files", "workflow_runs", "tool_capabilities"}.issubset(
         tables
     )
 
-    downgrade = _run_alembic("downgrade", "-1", env=env)
+    downgrade = _run_alembic("downgrade", "base", env=env)
     assert downgrade.returncode == 0, downgrade.stderr or downgrade.stdout
 
     with sqlite3.connect(db_path) as conn:
@@ -64,4 +64,4 @@ def test_alembic_heads_command_works_from_backend_directory() -> None:
     result = _run_backend_alembic("heads", env=os.environ.copy())
 
     assert result.returncode == 0, result.stderr or result.stdout
-    assert "20260624_01" in result.stdout
+    assert "20260627_01" in result.stdout

@@ -55,6 +55,21 @@ class TaskExecutionError(Exception):
         super().__init__(message)
 
 
+class GPUAllocationFailed(TaskExecutionError):
+    """GPU 资源分配失败，可触发重试逻辑。"""
+
+    def __init__(
+        self,
+        message: str,
+        wait_position: Optional[int] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        self.wait_position = wait_position
+        merged_details = details or {}
+        merged_details.setdefault("wait_position", wait_position)
+        super().__init__(message, details=merged_details)
+
+
 class BaseExecutor(ABC):
     """执行器基类"""
 
@@ -1597,6 +1612,87 @@ class TaskExecutor:
 
         return executor_class(self.task, self.tool_version)
 
+    async def _allocate_gpu(self) -> Optional[Dict[str, Any]]:
+        """如果需要 GPU，分配 GPU 资源并回写 task 字段。
+
+        Returns:
+            分配成功时返回 allocation info dict；不需要 GPU 时返回 None。
+
+        Raises:
+            GPUAllocationFailed: GPU 分配失败
+        """
+        gpu_required = self.config.get("gpu_required", False)
+        if not gpu_required:
+            return None
+
+        memory_required = self.config.get("gpu_memory_required_mb", 4096)
+
+        from app.database.session import get_async_session
+        from app.gpu.allocator import GPUAllocator
+
+        async for session in get_async_session():
+            try:
+                allocator = GPUAllocator(session)
+                result = await allocator.allocate(
+                    task_id=str(self.task.id),
+                    memory_required_mb=memory_required,
+                )
+
+                if result.success:
+                    self.task.gpu_node_id = result.gpu_node_id
+                    self.task.gpu_index = result.gpu_index
+                    self.task.gpu_memory_allocated_mb = result.allocated_memory_mb
+                    await session.commit()
+                    logger.info(
+                        "GPU allocated: task=%s node=%s gpu=%d memory=%dMB",
+                        self.task.id,
+                        result.gpu_node_id,
+                        result.gpu_index,
+                        result.allocated_memory_mb,
+                    )
+                    return {
+                        "allocation_id": result.allocation_id,
+                        "node_id": result.gpu_node_id,
+                        "gpu_index": result.gpu_index,
+                        "memory_mb": result.allocated_memory_mb,
+                    }
+
+                raise GPUAllocationFailed(
+                    message=result.message or "No GPU resources available",
+                    wait_position=result.wait_position,
+                )
+            except GPUAllocationFailed:
+                raise
+            except Exception as exc:
+                await session.rollback()
+                raise TaskExecutionError(
+                    f"GPU allocation unexpected error: {str(exc)}"
+                ) from exc
+
+    async def _release_gpu(self) -> None:
+        """释放已分配的 GPU 资源。"""
+        if not self.task.gpu_node_id:
+            return
+
+        from app.database.session import get_async_session
+        from app.gpu.allocator import GPUAllocator
+
+        async for session in get_async_session():
+            try:
+                allocator = GPUAllocator(session)
+                await allocator.release(task_id=str(self.task.id))
+                self.task.gpu_node_id = None
+                self.task.gpu_index = None
+                self.task.gpu_memory_allocated_mb = None
+                await session.commit()
+                logger.info("GPU released for task %s", self.task.id)
+            except Exception as exc:
+                logger.warning(
+                    "Failed to release GPU allocation for task %s: %s",
+                    self.task.id,
+                    exc,
+                )
+
     async def execute(self) -> Dict[str, Any]:
         """执行任务
 
@@ -1609,9 +1705,15 @@ class TaskExecutor:
         executor = self._get_executor()
 
         try:
+            # GPU 分配
+            await self._allocate_gpu()
+
             # 执行任务
             result = await executor.execute()
             return result
+
+        except GPUAllocationFailed:
+            raise
 
         except TaskExecutionError:
             # 重新抛出TaskExecutionError,由Worker层处理
@@ -1622,11 +1724,18 @@ class TaskExecutor:
             logger.exception(f"Task {self.task.id} unexpected error: {e}")
             raise TaskExecutionError(f"Unexpected error: {str(e)}")
 
+        finally:
+            # GPU 释放
+            await self._release_gpu()
+
     async def execute_with_progress(
         self,
         progress_callback: Optional[callable] = None
     ) -> Dict[str, Any]:
         """执行任务并报告进度
+
+        集成 GPU 分配：若 GPU 分配失败且未超过最大重试次数，
+        通过状态机回到 PENDING 重新入队。
 
         Args:
             progress_callback: 进度回调函数，接收(progress, message)参数
@@ -1646,6 +1755,30 @@ class TaskExecutor:
             await report_progress(0, "任务准备中")
             TaskStateMachine.start(self.task)
 
+            # GPU 分配
+            try:
+                await self._allocate_gpu()
+            except GPUAllocationFailed as exc:
+                if self.task.retry_count < self.task.max_retries:
+                    TaskStateMachine.transition(
+                        self.task,
+                        TaskStatus.PENDING,
+                        progress_message=(
+                            f"GPU分配失败: {exc.message}，"
+                            f"重试 {self.task.retry_count}/{self.task.max_retries}"
+                        ),
+                    )
+                else:
+                    TaskStateMachine.complete(
+                        self.task,
+                        success=False,
+                        error_message=(
+                            f"GPU分配失败(已达最大重试 {self.task.max_retries}): "
+                            f"{exc.message}"
+                        ),
+                    )
+                raise
+
             await report_progress(10, "任务开始执行")
             result = await executor.execute()
 
@@ -1653,6 +1786,9 @@ class TaskExecutor:
             TaskStateMachine.complete(self.task, success=True)
 
             return result
+
+        except GPUAllocationFailed:
+            raise
 
         except TaskExecutionError as e:
             logger.error(f"Task {self.task.id} execution failed: {e.message}")
@@ -1671,3 +1807,7 @@ class TaskExecutor:
                 error_message=str(e)
             )
             raise TaskExecutionError(f"Unexpected error: {str(e)}")
+
+        finally:
+            # GPU 释放（无论成功失败都执行）
+            await self._release_gpu()

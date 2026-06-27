@@ -198,7 +198,7 @@ class TaskStateMachine:
 
         elif to_status == TaskStatus.PENDING and old_status in {TaskStatus.FAILURE, TaskStatus.CANCELED}:
             # 重试/重新提交
-            task.retry_count += 1
+            task.retry_count = (task.retry_count or 0) + 1
             task.error_message = None
             task.started_at = None
             task.finished_at = None
@@ -208,6 +208,7 @@ class TaskStateMachine:
 
         elif to_status == TaskStatus.PENDING and old_status == TaskStatus.RUNNING:
             # GPU不足重新入队
+            task.retry_count = (task.retry_count or 0) + 1
             task.progress_message = progress_message or "GPU资源不足，重新入队等待"
             task.started_at = None
 
