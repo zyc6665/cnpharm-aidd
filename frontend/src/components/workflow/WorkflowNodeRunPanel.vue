@@ -26,69 +26,18 @@
             <a-input v-model:value="taskName" placeholder="Optional task name" />
           </a-form-item>
 
-          <template v-for="(prop, key) in flattenedSchema.properties" :key="key">
-            <a-form-item
-              :name="key"
-              :label="prop.title"
-              :rules="getFieldRules(String(key), prop)"
-              :extra="prop.description"
-            >
-              <a-input
-                v-if="prop.type === 'string' && !prop.format && !prop.enum"
-                v-model:value="formState[key]"
-                :placeholder="prop.description"
-              />
-              <a-textarea
-                v-else-if="prop.type === 'string' && (prop.format === 'textarea' || prop.format === 'fasta' || prop.format === 'pdb')"
-                v-model:value="formState[key]"
-                :placeholder="prop.description"
-                :rows="prop.format === 'fasta' || prop.format === 'pdb' ? 8 : 4"
-                :class="{ 'code-input': prop.format === 'fasta' || prop.format === 'pdb' }"
-              />
-              <a-input-number
-                v-else-if="prop.type === 'number'"
-                v-model:value="formState[key]"
-                :min="prop.minimum"
-                :max="prop.maximum"
-                style="width: 100%"
-              />
-              <a-switch
-                v-else-if="prop.type === 'boolean'"
-                v-model:checked="formState[key]"
-              />
-              <a-select
-                v-else-if="prop.type === 'select' || (prop.enum && prop.type !== 'array')"
-                v-model:value="formState[key]"
-                :placeholder="prop.description"
-              >
-                <a-select-option v-for="opt in prop.enum" :key="String(opt)" :value="opt">
-                  {{ opt }}
-                </a-select-option>
-              </a-select>
-              <a-select
-                v-else-if="prop.type === 'array' && prop.items?.enum"
-                v-model:value="formState[key]"
-                mode="multiple"
-                :placeholder="prop.description"
-              >
-                <a-select-option v-for="opt in prop.items.enum" :key="String(opt)" :value="opt">
-                  {{ opt }}
-                </a-select-option>
-              </a-select>
-              <ArtifactFilePicker
-                v-else-if="isFileSchemaProperty(prop)"
-                :upload-list="fileList[String(key)] ?? []"
-                :selected-artifact="selectedArtifacts[String(key)] ?? null"
-                :accept="prop.accept"
-                :allow-artifacts="userStore.isLoggedIn"
-                :current-tool-id="selectedTool.id"
-                :current-tool-slug="selectedTool.slug"
-                :preferred-tool-slug="selectedTool.slug"
-                @update:upload-list="(files) => handleFileListChange(String(key), files)"
-                @update:selected-artifact="(artifact) => handleArtifactSelection(String(key), artifact)"
-              />
-            </a-form-item>
-          </template>
+          <ToolParameterForm
+            :schema="flattenedSchema"
+            :form-state="formState"
+            :file-list="fileList"
+            :selected-artifacts="selectedArtifacts"
+            :allow-artifacts="userStore.isLoggedIn"
+            :tool-id="selectedTool?.id"
+            :tool-slug="selectedTool?.slug"
+            :preferred-tool-slug="selectedTool?.slug"
+            @update:file-list="handleFileListChange"
+            @update:selected-artifact="handleArtifactSelection"
+          />
 
           <div v-if="autoBoundArtifacts.length" class="auto-bound-artifacts">
             <a-tag v-for="artifact in autoBoundArtifacts" :key="artifact.id" color="blue">
@@ -121,20 +70,19 @@
 
 <script setup lang="ts">
   import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
-  import type { FormInstance, Rule } from 'ant-design-vue/es/form'
+  import type { FormInstance } from 'ant-design-vue/es/form'
   import type { UploadFile } from 'ant-design-vue'
   import { PlayCircleOutlined } from '@ant-design/icons-vue'
-  import ArtifactFilePicker from '@/components/tools/ArtifactFilePicker.vue'
+  import ToolParameterForm from '@/components/workflow/ToolParameterForm.vue'
   import { getTaskDetail, isTaskTerminalStatus } from '@/api/tasks'
   import { getToolDetail } from '@/api/tools'
   import { uploadFile } from '@/api/files'
   import { useArtifactsStore, useTasksStore, useUserStore, useWorkflowStore } from '@/stores'
-  import type { ArtifactFile, SchemaProperty, Tool, ToolSchema } from '@/types/models'
+  import type { ArtifactFile, Tool, ToolSchema } from '@/types/models'
   import {
     buildTaskSubmissionPayload,
     buildToolFormInitialState,
     flattenToolInputSchema,
-    isFileSchemaProperty,
     type UploadedToolFile
   } from '@/views/tools/detail-schema'
   import { toWorkflowTaskRef } from '@/workflow/task-state'
@@ -280,36 +228,6 @@
     replaceFileList(initialState.fileFieldKeys)
     replaceSelectedArtifacts(initialState.fileFieldKeys)
     applyRecommendedArtifacts(initialState.fileFieldKeys)
-  }
-
-  function getFieldRules(key: string, prop: SchemaProperty): Rule[] {
-    const rules: Rule[] = []
-
-    if (flattenedSchema.value.required?.includes(key)) {
-      if (isFileSchemaProperty(prop)) {
-        rules.push({
-          validator: async () => {
-            if (fileList[key]?.length || selectedArtifacts[key]) {
-              return Promise.resolve()
-            }
-            return Promise.reject(new Error(`${prop.title} required`))
-          },
-          trigger: 'change'
-        })
-      } else {
-        rules.push({ required: true, message: `${prop.title} required` })
-      }
-    }
-
-    if (prop.minLength) {
-      rules.push({ min: prop.minLength, message: `Min length ${prop.minLength}` })
-    }
-
-    if (prop.maxLength) {
-      rules.push({ max: prop.maxLength, message: `Max length ${prop.maxLength}` })
-    }
-
-    return rules
   }
 
   function handleFileListChange(key: string, files: UploadFile[]) {

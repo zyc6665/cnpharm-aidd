@@ -10,7 +10,7 @@ import {
   getWorkflowTemplate,
   getWorkflowTemplates,
   syncWorkflowRun,
-  updateWorkflowTemplate
+  updateWorkflowTemplate,
 } from '@/api/workflows'
 import type {
   WorkflowDefinition,
@@ -18,27 +18,24 @@ import type {
   WorkflowRunCreateParams,
   WorkflowTemplate as SavedWorkflowTemplate,
   WorkflowTemplateCreateParams,
-  WorkflowTemplateUpdateParams
+  WorkflowTemplateUpdateParams,
 } from '@/types/models'
-import {
-  WORKFLOW_ARTIFACT_SEMANTIC_TYPES,
-  type WorkflowArtifactSemanticType,
-  type WorkflowTaskRef
-} from '@/workflow/artifact-types'
-import { toWorkflowTaskRef } from '@/workflow/task-state'
+import { type WorkflowTaskRef } from '@/workflow/artifact-types'
 import type {
   WorkflowCanvasEdge,
   WorkflowCanvasNode,
-  WorkflowTemplate as CanvasWorkflowTemplate
+  WorkflowTemplate as CanvasWorkflowTemplate,
 } from '@/workflow/template-types'
 import {
   createInitialWorkflowSession,
-  normalizeRecord,
   nowIsoString,
   type WorkflowCanvasPosition,
   type WorkflowWorkbenchSession,
-  type WorkflowRunsPagination
+  type WorkflowRunsPagination,
 } from './workflow-session'
+import { useWorkflowCanvasStore } from './workflow-canvas'
+import { useWorkflowFormDraftStore } from './workflow-form-draft'
+import { useWorkflowTaskBindingStore } from './workflow-task-binding'
 
 interface AddToolNodeInput {
   toolSlug: string
@@ -70,45 +67,24 @@ type WorkflowDefinitionLike = {
   artifact_bindings_by_node?: Record<string, Record<string, string>>
 }
 
-function resolveCanvasEdgeArtifactType(value: unknown): WorkflowCanvasEdge['artifactType'] {
-  if (
-    typeof value === 'string' &&
-    WORKFLOW_ARTIFACT_SEMANTIC_TYPES.includes(value as WorkflowArtifactSemanticType)
-  ) {
-    return value as WorkflowArtifactSemanticType
-  }
-
-  return undefined
-}
-
 export const useWorkflowStore = defineStore('workflow', () => {
-  const initialSession = createInitialWorkflowSession()
+  // ── sub-stores ──
+  const canvas = useWorkflowCanvasStore()
+  const formDraft = useWorkflowFormDraftStore()
+  const taskBinding = useWorkflowTaskBindingStore()
 
+  // ── session metadata ──
+  const initialSession = createInitialWorkflowSession()
   const sessionId = ref(initialSession.sessionId)
   const templateId = ref(initialSession.templateId)
-  const activeNodeId = ref<string | null>(initialSession.activeNodeId)
-  const activeGroupId = ref<string | null>(initialSession.activeGroupId)
-  const selectedToolByGroup = ref<Record<string, string>>(initialSession.selectedToolByGroup)
-  const selectedToolByNode = ref<Record<string, string>>(initialSession.selectedToolByNode)
-  const toolFormDrafts = ref<Record<string, Record<string, unknown>>>(initialSession.toolFormDrafts)
-  const nodeFormDrafts = ref<Record<string, Record<string, unknown>>>(initialSession.nodeFormDrafts)
-  const taskByTool = ref<Record<string, WorkflowTaskRef>>(initialSession.taskByTool)
-  const taskByNode = ref<Record<string, WorkflowTaskRef>>(initialSession.taskByNode)
-  const artifactBindingsByNode = ref<Record<string, Record<string, string>>>(
-    initialSession.artifactBindingsByNode
-  )
-  const nodePositionById = ref<Record<string, WorkflowCanvasPosition>>(initialSession.nodePositionById)
-  const canvasNodes = ref<WorkflowCanvasNode[]>(initialSession.canvasNodes)
-  const canvasEdges = ref<WorkflowCanvasEdge[]>(initialSession.canvasEdges)
   const lastUpdatedAt = ref(initialSession.lastUpdatedAt)
   const ownerUserId = ref<string | undefined>(initialSession.ownerUserId)
+
+  // ── API state (non-persisted) ──
   const workflowTemplates = ref<SavedWorkflowTemplate[]>([])
   const workflowRuns = ref<WorkflowRun[]>([])
   const workflowRunsPagination = ref<WorkflowRunsPagination>({
-    total: 0,
-    page: 1,
-    pageSize: 20,
-    totalPages: 0
+    total: 0, page: 1, pageSize: 20, totalPages: 0,
   })
   const activeWorkflowTemplate = ref<SavedWorkflowTemplate | null>(null)
   const activeWorkflowRun = ref<WorkflowRun | null>(null)
@@ -122,89 +98,60 @@ export const useWorkflowStore = defineStore('workflow', () => {
   const isRunningWorkflowTemplate = ref(false)
   const isSyncingWorkflowRun = ref(false)
 
+  // ── session computed ──
   const session = computed<WorkflowWorkbenchSession>(() => ({
     sessionId: sessionId.value,
     templateId: templateId.value,
-    activeNodeId: activeNodeId.value,
-    activeGroupId: activeGroupId.value,
-    selectedToolByGroup: selectedToolByGroup.value,
-    selectedToolByNode: selectedToolByNode.value,
-    toolFormDrafts: toolFormDrafts.value,
-    nodeFormDrafts: nodeFormDrafts.value,
-    taskByTool: taskByTool.value,
-    taskByNode: taskByNode.value,
-    artifactBindingsByNode: artifactBindingsByNode.value,
-    nodePositionById: nodePositionById.value,
-    canvasNodes: canvasNodes.value,
-    canvasEdges: canvasEdges.value,
+    activeNodeId: canvas.activeNodeId,
+    activeGroupId: canvas.activeGroupId,
+    selectedToolByGroup: formDraft.selectedToolByGroup,
+    selectedToolByNode: formDraft.selectedToolByNode,
+    toolFormDrafts: formDraft.toolFormDrafts,
+    nodeFormDrafts: formDraft.nodeFormDrafts,
+    taskByTool: taskBinding.taskByTool,
+    taskByNode: taskBinding.taskByNode,
+    artifactBindingsByNode: taskBinding.artifactBindingsByNode,
+    nodePositionById: canvas.nodePositionById,
+    canvasNodes: canvas.canvasNodes,
+    canvasEdges: canvas.canvasEdges,
     lastUpdatedAt: lastUpdatedAt.value,
-    ownerUserId: ownerUserId.value
+    ownerUserId: ownerUserId.value,
   }))
+
+  const hasMoreWorkflowRuns = computed(() =>
+    workflowRunsPagination.value.page < workflowRunsPagination.value.totalPages,
+  )
 
   function touchSession() {
     lastUpdatedAt.value = nowIsoString()
   }
 
-  const hasMoreWorkflowRuns = computed(() =>
-    workflowRunsPagination.value.page < workflowRunsPagination.value.totalPages
-  )
-
+  // ── lifecycle ──
   function normalizeSessionShape() {
     if (typeof templateId.value !== 'string' || !templateId.value) {
       templateId.value = 'aidd-template'
     }
-
-    if (activeNodeId.value !== null && typeof activeNodeId.value !== 'string') {
-      activeNodeId.value = null
-    }
-
-    if (activeGroupId.value !== null && typeof activeGroupId.value !== 'string') {
-      activeGroupId.value = null
-    }
-
-    selectedToolByGroup.value = normalizeRecord<string>(selectedToolByGroup.value)
-    selectedToolByNode.value = normalizeRecord<string>(selectedToolByNode.value)
-    toolFormDrafts.value = normalizeRecord<Record<string, unknown>>(toolFormDrafts.value)
-    nodeFormDrafts.value = normalizeRecord<Record<string, unknown>>(nodeFormDrafts.value)
-    taskByTool.value = normalizeRecord<WorkflowTaskRef>(taskByTool.value)
-    taskByNode.value = normalizeRecord<WorkflowTaskRef>(taskByNode.value)
-    artifactBindingsByNode.value = normalizeRecord<Record<string, string>>(artifactBindingsByNode.value)
-    nodePositionById.value = normalizeRecord<WorkflowCanvasPosition>(nodePositionById.value)
-    canvasNodes.value = Array.isArray(canvasNodes.value) ? canvasNodes.value : []
-    canvasEdges.value = Array.isArray(canvasEdges.value) ? canvasEdges.value : []
+    canvas.normalizeShape()
+    formDraft.normalizeShape()
+    taskBinding.normalizeShape()
   }
 
   function resetSession(nextOwnerUserId?: string) {
-    const nextSession = createInitialWorkflowSession(nextOwnerUserId)
-
-    sessionId.value = nextSession.sessionId
-    templateId.value = nextSession.templateId
-    activeNodeId.value = nextSession.activeNodeId
-    activeGroupId.value = nextSession.activeGroupId
-    selectedToolByGroup.value = nextSession.selectedToolByGroup
-    selectedToolByNode.value = nextSession.selectedToolByNode
-    toolFormDrafts.value = nextSession.toolFormDrafts
-    nodeFormDrafts.value = nextSession.nodeFormDrafts
-    taskByTool.value = nextSession.taskByTool
-    taskByNode.value = nextSession.taskByNode
-    artifactBindingsByNode.value = nextSession.artifactBindingsByNode
-    nodePositionById.value = nextSession.nodePositionById
-    canvasNodes.value = nextSession.canvasNodes
-    canvasEdges.value = nextSession.canvasEdges
-    lastUpdatedAt.value = nextSession.lastUpdatedAt
-    ownerUserId.value = nextSession.ownerUserId
+    const next = createInitialWorkflowSession(nextOwnerUserId)
+    sessionId.value = next.sessionId
+    templateId.value = next.templateId
+    lastUpdatedAt.value = next.lastUpdatedAt
+    ownerUserId.value = next.ownerUserId
+    canvas.reset()
+    formDraft.reset()
+    taskBinding.reset()
   }
 
   function syncOwnerUserId(nextOwnerUserId?: string) {
     if (ownerUserId.value !== nextOwnerUserId) {
       resetSession(nextOwnerUserId)
       workflowRuns.value = []
-      workflowRunsPagination.value = {
-        total: 0,
-        page: 1,
-        pageSize: 20,
-        totalPages: 0
-      }
+      workflowRunsPagination.value = { total: 0, page: 1, pageSize: 20, totalPages: 0 }
       activeWorkflowTemplate.value = null
       activeWorkflowTemplateId.value = null
       activeWorkflowRun.value = null
@@ -213,377 +160,81 @@ export const useWorkflowStore = defineStore('workflow', () => {
   }
 
   function setTemplate(nextTemplateId: string) {
-    if (templateId.value === nextTemplateId) {
-      return
-    }
-
+    if (templateId.value === nextTemplateId) return
     templateId.value = nextTemplateId
-    activeNodeId.value = null
-    selectedToolByNode.value = {}
-    nodeFormDrafts.value = {}
-    taskByNode.value = {}
-    artifactBindingsByNode.value = {}
-    nodePositionById.value = {}
-    canvasNodes.value = []
-    canvasEdges.value = []
+    canvas.reset()
+    formDraft.reset()
+    taskBinding.reset()
     touchSession()
   }
 
-  function setActiveNode(nodeId: string | null) {
-    activeNodeId.value = nodeId
-    touchSession()
-  }
-
-  function setActiveGroup(groupId: string | null) {
-    activeGroupId.value = groupId
-    touchSession()
-  }
-
-  function selectTool(groupId: string, toolSlug: string) {
-    selectedToolByGroup.value = {
-      ...selectedToolByGroup.value,
-      [groupId]: toolSlug
-    }
-    touchSession()
-  }
-
-  function selectNodeTool(nodeId: string, toolSlug: string) {
-    selectedToolByNode.value = {
-      ...selectedToolByNode.value,
-      [nodeId]: toolSlug
-    }
-    touchSession()
-  }
-
-  function setToolFormDraft(toolSlug: string, draft: Record<string, unknown>) {
-    toolFormDrafts.value = {
-      ...toolFormDrafts.value,
-      [toolSlug]: draft
-    }
-    touchSession()
-  }
-
-  function setNodeFormDraft(nodeId: string, draft: Record<string, unknown>) {
-    nodeFormDrafts.value = {
-      ...nodeFormDrafts.value,
-      [nodeId]: draft
-    }
-    touchSession()
-  }
-
-  function clearToolFormDraft(toolSlug: string) {
-    if (!toolFormDrafts.value[toolSlug]) {
-      return
-    }
-
-    const nextDrafts = { ...toolFormDrafts.value }
-    delete nextDrafts[toolSlug]
-    toolFormDrafts.value = nextDrafts
-    touchSession()
-  }
-
-  function recordTask(toolSlug: string, taskInput: WorkflowTaskRef) {
-    taskByTool.value = {
-      ...taskByTool.value,
-      [toolSlug]: toWorkflowTaskRef(taskInput)
-    }
-    touchSession()
-  }
-
-  function recordNodeTask(nodeId: string, taskInput: WorkflowTaskRef) {
-    taskByNode.value = {
-      ...taskByNode.value,
-      [nodeId]: toWorkflowTaskRef(taskInput)
-    }
-    touchSession()
-  }
-
-  function setNodeArtifactBinding(nodeId: string, field: string, artifactId: string) {
-    artifactBindingsByNode.value = {
-      ...artifactBindingsByNode.value,
-      [nodeId]: {
-        ...(artifactBindingsByNode.value[nodeId] ?? {}),
-        [field]: artifactId
-      }
-    }
-    touchSession()
-  }
-
-  function moveNode(nodeId: string, position: WorkflowCanvasPosition) {
-    nodePositionById.value = {
-      ...nodePositionById.value,
-      [nodeId]: {
-        x: Math.max(0, Math.round(position.x)),
-        y: Math.max(0, Math.round(position.y))
-      }
-    }
-    touchSession()
-  }
-
-  function setNodePositions(positions: Record<string, WorkflowCanvasPosition>) {
-    nodePositionById.value = Object.entries(positions).reduce<Record<string, WorkflowCanvasPosition>>(
-      (nextPositions, [nodeId, position]) => {
-        nextPositions[nodeId] = {
-          x: Math.max(0, Math.round(position.x)),
-          y: Math.max(0, Math.round(position.y))
-        }
-        return nextPositions
-      },
-      {}
-    )
-    touchSession()
-  }
-
-  function ensureCanvasFromTemplate(template: CanvasWorkflowTemplate) {
-    if (canvasNodes.value.length > 0) {
-      return
-    }
-
-    canvasNodes.value = template.nodes.map(node => ({
-      ...node,
-      position: nodePositionById.value[node.id] ?? node.position
-    }))
-    canvasEdges.value = template.edges.map(edge => ({ ...edge }))
-    syncCanvasNodeSemanticTypes()
-    touchSession()
-  }
-
-  function syncCanvasNodeSemanticTypes() {
-    type ArtifactType = NonNullable<WorkflowCanvasEdge['artifactType']>
-    const requiredByNode = new Map<string, Set<ArtifactType>>()
-    const producedByNode = new Map<string, Set<ArtifactType>>()
-
-    for (const edge of canvasEdges.value) {
-      if (!edge.artifactType) {
-        continue
-      }
-
-      if (!requiredByNode.has(edge.target)) {
-        requiredByNode.set(edge.target, new Set())
-      }
-      if (!producedByNode.has(edge.source)) {
-        producedByNode.set(edge.source, new Set())
-      }
-
-      requiredByNode.get(edge.target)?.add(edge.artifactType)
-      producedByNode.get(edge.source)?.add(edge.artifactType)
-    }
-
-    canvasNodes.value = canvasNodes.value.map(node => {
-      const requiredInputTypes = Array.from(requiredByNode.get(node.id) ?? [])
-      const producedOutputTypes = Array.from(new Set<ArtifactType>([
-        ...((node.producedOutputTypes ?? []) as ArtifactType[]),
-        ...Array.from(producedByNode.get(node.id) ?? [])
-      ]))
-
-      return {
-        ...node,
-        requiredInputTypes,
-        producedOutputTypes
-      }
-    })
-  }
+  // ── delegation: canvas ──
+  const setActiveNode = (nodeId: string | null) => { canvas.setActiveNode(nodeId); touchSession() }
+  const setActiveGroup = (groupId: string | null) => { canvas.setActiveGroup(groupId); touchSession() }
+  const moveNode = (nodeId: string, pos: WorkflowCanvasPosition) => { canvas.moveNode(nodeId, pos); touchSession() }
+  const setNodePositions = (p: Record<string, WorkflowCanvasPosition>) => { canvas.setNodePositions(p); touchSession() }
+  const ensureCanvasFromTemplate = (t: CanvasWorkflowTemplate) => { canvas.ensureCanvasFromTemplate(t); touchSession() }
+  const syncCanvasNodeSemanticTypes = () => canvas.syncNodeSemanticTypes()
+  const exportWorkflowNodes = (n: WorkflowCanvasNode[]) => canvas.exportNodes(n)
+  const exportWorkflowEdges = (e: WorkflowCanvasEdge[]) => canvas.exportEdges(e)
+  const addCanvasEdge = (i: Parameters<typeof canvas.addEdge>[0]) => { const r = canvas.addEdge(i); touchSession(); return r }
+  const deleteCanvasEdge = (id: string) => { canvas.deleteEdge(id); touchSession() }
 
   function addToolNode(input: AddToolNodeInput): WorkflowCanvasNode {
     const nodeId = `tool-${input.toolSlug}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
-    const position = input.position ?? {
-      x: 320 + canvasNodes.value.length * 32,
-      y: 120 + canvasNodes.value.length * 24
-    }
-    const node: WorkflowCanvasNode = {
+    const node = canvas.addNode({
       id: nodeId,
-      type: 'tool',
-      toolSlugs: [input.toolSlug],
-      recommendedToolSlug: input.toolSlug,
-      titleKey: input.toolName || input.toolSlug,
-      descriptionKey: input.toolDescription,
-      position,
-      requiredInputTypes: [],
-      producedOutputTypes: []
-    }
-
-    canvasNodes.value = [...canvasNodes.value, node]
-    selectedToolByNode.value = {
-      ...selectedToolByNode.value,
-      [nodeId]: input.toolSlug
-    }
-    nodePositionById.value = {
-      ...nodePositionById.value,
-      [nodeId]: position
-    }
-    activeNodeId.value = nodeId
+      toolSlug: input.toolSlug,
+      toolName: input.toolName,
+      toolDescription: input.toolDescription,
+      position: input.position,
+    })
+    formDraft.selectNodeTool(nodeId, input.toolSlug)
     touchSession()
     return node
   }
 
   function deleteCanvasNode(nodeId: string) {
-    const node = canvasNodes.value.find(item => item.id === nodeId)
-    if (!node || node.type === 'input') {
-      return
-    }
-
-    canvasNodes.value = canvasNodes.value.filter(item => item.id !== nodeId)
-    canvasEdges.value = canvasEdges.value.filter(edge => edge.source !== nodeId && edge.target !== nodeId)
-
-    const nextPositions = { ...nodePositionById.value }
-    const nextSelectedTools = { ...selectedToolByNode.value }
-    const nextNodeDrafts = { ...nodeFormDrafts.value }
-    const nextTasks = { ...taskByNode.value }
-    const nextBindings = { ...artifactBindingsByNode.value }
-
-    delete nextPositions[nodeId]
-    delete nextSelectedTools[nodeId]
-    delete nextNodeDrafts[nodeId]
-    delete nextTasks[nodeId]
-    delete nextBindings[nodeId]
-
-    nodePositionById.value = nextPositions
-    selectedToolByNode.value = nextSelectedTools
-    nodeFormDrafts.value = nextNodeDrafts
-    taskByNode.value = nextTasks
-    artifactBindingsByNode.value = nextBindings
-
-    if (activeNodeId.value === nodeId) {
-      activeNodeId.value = canvasNodes.value[0]?.id ?? null
-    }
+    // Check existence first (preserves old guard: input nodes cannot be deleted)
+    const exists = (canvas.canvasNodes as WorkflowCanvasNode[]).some(
+      (n) => n.id === nodeId && n.type !== 'input',
+    )
+    if (!exists) return
+    canvas.deleteNode(nodeId)
+    formDraft.removeNodeSelection(nodeId)
+    formDraft.clearNodeFormDraft(nodeId)
+    taskBinding.clearNodeTask(nodeId)
+    taskBinding.clearNodeArtifactBindings(nodeId)
     touchSession()
-  }
-
-  function addCanvasEdge(input: {
-    source: string
-    target: string
-    artifactType?: WorkflowCanvasEdge['artifactType']
-  }): WorkflowCanvasEdge | null {
-    if (input.source === input.target) {
-      return null
-    }
-
-    const hasSource = canvasNodes.value.some(node => node.id === input.source)
-    const hasTarget = canvasNodes.value.some(node => node.id === input.target)
-    if (!hasSource || !hasTarget) {
-      return null
-    }
-
-    const existing = canvasEdges.value.find(edge => (
-      edge.source === input.source &&
-      edge.target === input.target &&
-      edge.artifactType === input.artifactType
-    ))
-    if (existing) {
-      return existing
-    }
-
-    const edge: WorkflowCanvasEdge = {
-      id: `edge-${input.source}-${input.target}-${Date.now()}`,
-      source: input.source,
-      target: input.target,
-      artifactType: input.artifactType
-    }
-    canvasEdges.value = [...canvasEdges.value, edge]
-    syncCanvasNodeSemanticTypes()
-    touchSession()
-    return edge
-  }
-
-  function deleteCanvasEdge(edgeId: string) {
-    if (!canvasEdges.value.some(edge => edge.id === edgeId)) {
-      return
-    }
-
-    canvasEdges.value = canvasEdges.value.filter(edge => edge.id !== edgeId)
-    syncCanvasNodeSemanticTypes()
-    touchSession()
-  }
-
-  function exportWorkflowNodes(nodes: WorkflowCanvasNode[]) {
-    const sourceNodes = canvasNodes.value.length ? canvasNodes.value : nodes
-    return sourceNodes.map(node => ({
-      ...node,
-      position: nodePositionById.value[node.id] ?? node.position
-    }))
-  }
-
-  function exportWorkflowEdges(edges: WorkflowCanvasEdge[]) {
-    return canvasNodes.value.length ? canvasEdges.value : edges
   }
 
   function applyWorkflowDefinition(workflow: WorkflowDefinitionLike) {
     templateId.value = workflow.template_id
-    selectedToolByNode.value = workflow.selected_tool_by_node ?? {}
-    artifactBindingsByNode.value = workflow.artifact_bindings_by_node ?? {}
-    taskByNode.value = {}
-    canvasNodes.value = workflow.nodes.map(node => node as WorkflowCanvasNode)
-    canvasEdges.value = workflow.edges.map((edge, index) => ({
-      id: edge.id ?? `edge-${index}`,
-      source: edge.source,
-      target: edge.target,
-      artifactType: resolveCanvasEdgeArtifactType(
-        edge.artifactType ?? edge.source_output ?? edge.target_input
-      )
-    }))
-    syncCanvasNodeSemanticTypes()
-    activeNodeId.value = workflow.nodes[0]?.id ?? null
-
-    setNodePositions(
-      workflow.nodes.reduce<Record<string, WorkflowCanvasPosition>>((positions, node) => {
-        if (node.position) {
-          positions[node.id] = node.position
-        }
-        return positions
-      }, {})
-    )
-  }
-
-  function clearTask(toolSlug: string) {
-    if (!taskByTool.value[toolSlug]) {
-      return
-    }
-
-    const nextTasks = { ...taskByTool.value }
-    delete nextTasks[toolSlug]
-    taskByTool.value = nextTasks
+    formDraft.selectedToolByNode = workflow.selected_tool_by_node ?? {}
+    taskBinding.artifactBindingsByNode = workflow.artifact_bindings_by_node ?? {}
+    taskBinding.reset() // clears tasks only
+    canvas.applyDefinition(workflow)
     touchSession()
   }
 
-  function clearNodeTask(nodeId: string) {
-    if (!taskByNode.value[nodeId]) {
-      return
-    }
+  // ── delegation: form draft ──
+  const selectTool = (groupId: string, toolSlug: string) => { formDraft.selectTool(groupId, toolSlug); touchSession() }
+  const selectNodeTool = (nodeId: string, toolSlug: string) => { formDraft.selectNodeTool(nodeId, toolSlug); touchSession() }
+  const setToolFormDraft = (toolSlug: string, draft: Record<string, unknown>) => { formDraft.setToolFormDraft(toolSlug, draft); touchSession() }
+  const setNodeFormDraft = (nodeId: string, draft: Record<string, unknown>) => { formDraft.setNodeFormDraft(nodeId, draft); touchSession() }
+  const clearToolFormDraft = (toolSlug: string) => { formDraft.clearToolFormDraft(toolSlug); touchSession() }
 
-    const nextTasks = { ...taskByNode.value }
-    delete nextTasks[nodeId]
-    taskByNode.value = nextTasks
-    touchSession()
-  }
+  // ── delegation: task binding ──
+  const recordTask = (toolSlug: string, task: WorkflowTaskRef) => { taskBinding.recordTask(toolSlug, task); touchSession() }
+  const recordNodeTask = (nodeId: string, task: WorkflowTaskRef) => { taskBinding.recordNodeTask(nodeId, task); touchSession() }
+  const setNodeArtifactBinding = (nodeId: string, field: string, artifactId: string) => { taskBinding.setNodeArtifactBinding(nodeId, field, artifactId); touchSession() }
+  const clearTask = (toolSlug: string) => { taskBinding.clearTask(toolSlug); touchSession() }
+  const clearNodeTask = (nodeId: string) => { taskBinding.clearNodeTask(nodeId); touchSession() }
+  const clearNodeTasks = (nodeIds: string[]) => { taskBinding.clearNodeTasks(nodeIds); touchSession() }
 
-  function clearNodeTasks(nodeIds: string[]) {
-    if (nodeIds.length === 0) {
-      return
-    }
-
-    const nextTasks = { ...taskByNode.value }
-    let changed = false
-
-    for (const nodeId of nodeIds) {
-      if (nextTasks[nodeId]) {
-        delete nextTasks[nodeId]
-        changed = true
-      }
-    }
-
-    if (!changed) {
-      return
-    }
-
-    taskByNode.value = nextTasks
-    touchSession()
-  }
-
+  // ── API operations ──
   function upsertWorkflowRun(run: WorkflowRun) {
-    workflowRuns.value = [
-      run,
-      ...workflowRuns.value.filter(item => item.id !== run.id)
-    ]
+    workflowRuns.value = [run, ...workflowRuns.value.filter((item) => item.id !== run.id)]
   }
 
   async function loadWorkflowTemplates() {
@@ -597,13 +248,10 @@ export const useWorkflowStore = defineStore('workflow', () => {
     }
   }
 
-  async function loadWorkflowRuns(params?: {
-    template_id?: string
-    page?: number
-    page_size?: number
-  }, options: {
-    append?: boolean
-  } = {}) {
+  async function loadWorkflowRuns(
+    params?: { template_id?: string; page?: number; page_size?: number },
+    options: { append?: boolean } = {},
+  ) {
     if (options?.append) {
       isLoadingMoreWorkflowRuns.value = true
     } else {
@@ -611,18 +259,15 @@ export const useWorkflowStore = defineStore('workflow', () => {
     }
     try {
       const response = await getWorkflowRuns(params)
-      const nextItems = response.data.items
+      const next = response.data.items
       workflowRuns.value = options?.append
-        ? [
-            ...workflowRuns.value,
-            ...nextItems.filter(item => !workflowRuns.value.some(run => run.id === item.id))
-          ]
-        : nextItems
+        ? [...workflowRuns.value, ...next.filter((item) => !workflowRuns.value.some((r) => r.id === item.id))]
+        : next
       workflowRunsPagination.value = {
         total: response.data.total,
         page: response.data.page,
         pageSize: response.data.page_size,
-        totalPages: response.data.total_pages
+        totalPages: response.data.total_pages,
       }
       return response.data
     } finally {
@@ -634,8 +279,8 @@ export const useWorkflowStore = defineStore('workflow', () => {
     }
   }
 
-  async function loadWorkflowTemplate(templateId: string) {
-    const response = await getWorkflowTemplate(templateId)
+  async function loadWorkflowTemplate(templateIdParam: string) {
+    const response = await getWorkflowTemplate(templateIdParam)
     activeWorkflowTemplate.value = response.data
     activeWorkflowTemplateId.value = response.data.id
     return response.data
@@ -655,17 +300,14 @@ export const useWorkflowStore = defineStore('workflow', () => {
     }
   }
 
-  async function updateSavedWorkflowTemplate(
-    templateId: string,
-    data: WorkflowTemplateUpdateParams
-  ) {
+  async function updateSavedWorkflowTemplate(templateIdParam: string, data: WorkflowTemplateUpdateParams) {
     isSavingWorkflowTemplate.value = true
     try {
-      const response = await updateWorkflowTemplate(templateId, data)
+      const response = await updateWorkflowTemplate(templateIdParam, data)
       activeWorkflowTemplate.value = response.data
       activeWorkflowTemplateId.value = response.data.id
-      workflowTemplates.value = workflowTemplates.value.map(template =>
-        template.id === response.data.id ? response.data : template
+      workflowTemplates.value = workflowTemplates.value.map((t) =>
+        t.id === response.data.id ? response.data : t,
       )
       touchSession()
       return response.data
@@ -674,10 +316,10 @@ export const useWorkflowStore = defineStore('workflow', () => {
     }
   }
 
-  async function duplicateSavedWorkflowTemplate(templateId: string, name?: string) {
+  async function duplicateSavedWorkflowTemplate(templateIdParam: string, name?: string) {
     isSavingWorkflowTemplate.value = true
     try {
-      const response = await duplicateWorkflowTemplate(templateId, { name })
+      const response = await duplicateWorkflowTemplate(templateIdParam, { name })
       activeWorkflowTemplate.value = response.data
       activeWorkflowTemplateId.value = response.data.id
       workflowTemplates.value = [response.data, ...workflowTemplates.value]
@@ -688,12 +330,12 @@ export const useWorkflowStore = defineStore('workflow', () => {
     }
   }
 
-  async function removeWorkflowTemplate(templateId: string) {
+  async function removeWorkflowTemplate(templateIdParam: string) {
     isSavingWorkflowTemplate.value = true
     try {
-      await deleteWorkflowTemplate(templateId)
-      workflowTemplates.value = workflowTemplates.value.filter(template => template.id !== templateId)
-      if (activeWorkflowTemplateId.value === templateId) {
+      await deleteWorkflowTemplate(templateIdParam)
+      workflowTemplates.value = workflowTemplates.value.filter((t) => t.id !== templateIdParam)
+      if (activeWorkflowTemplateId.value === templateIdParam) {
         activeWorkflowTemplate.value = null
         activeWorkflowTemplateId.value = null
       }
@@ -703,13 +345,10 @@ export const useWorkflowStore = defineStore('workflow', () => {
     }
   }
 
-  async function runWorkflowTemplate(
-    templateId: string,
-    input: WorkflowRunCreateParams
-  ) {
+  async function runWorkflowTemplate(templateIdParam: string, input: WorkflowRunCreateParams) {
     isRunningWorkflowTemplate.value = true
     try {
-      const response = await createWorkflowRun(templateId, input)
+      const response = await createWorkflowRun(templateIdParam, input)
       activeWorkflowRun.value = response.data
       activeWorkflowRunId.value = response.data.id
       upsertWorkflowRun(response.data)
@@ -735,10 +374,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
   }
 
   async function syncActiveWorkflowRun(runId = activeWorkflowRunId.value) {
-    if (!runId) {
-      return null
-    }
-
+    if (!runId) return null
     isSyncingWorkflowRun.value = true
     try {
       const response = await syncWorkflowRun(runId)
@@ -762,7 +398,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
       is_public: false,
       version: 1,
       created_at: nowIsoString(),
-      updated_at: nowIsoString()
+      updated_at: nowIsoString(),
     }
     touchSession()
   }
@@ -780,33 +416,37 @@ export const useWorkflowStore = defineStore('workflow', () => {
   }
 
   function selectWorkflowRun(runId: string) {
-    const run = workflowRuns.value.find(item => item.id === runId)
-    if (!run) {
-      return false
-    }
+    const run = workflowRuns.value.find((item) => item.id === runId)
+    if (!run) return false
     activeWorkflowRun.value = run
     activeWorkflowRunId.value = run.id
     touchSession()
     return true
   }
 
+  // ── public API ──
   return {
+    // session
     sessionId,
     templateId,
-    activeNodeId,
-    activeGroupId,
-    selectedToolByGroup,
-    selectedToolByNode,
-    toolFormDrafts,
-    nodeFormDrafts,
-    taskByTool,
-    taskByNode,
-    artifactBindingsByNode,
-    nodePositionById,
-    canvasNodes,
-    canvasEdges,
     lastUpdatedAt,
     ownerUserId,
+    // canvas (re-export sub-store refs for backward compat)
+    activeNodeId: canvas.activeNodeId,
+    activeGroupId: canvas.activeGroupId,
+    nodePositionById: canvas.nodePositionById,
+    canvasNodes: canvas.canvasNodes,
+    canvasEdges: canvas.canvasEdges,
+    // form drafts (re-export sub-store refs)
+    selectedToolByGroup: formDraft.selectedToolByGroup,
+    selectedToolByNode: formDraft.selectedToolByNode,
+    toolFormDrafts: formDraft.toolFormDrafts,
+    nodeFormDrafts: formDraft.nodeFormDrafts,
+    // task bindings (re-export sub-store refs)
+    taskByTool: taskBinding.taskByTool,
+    taskByNode: taskBinding.taskByNode,
+    artifactBindingsByNode: taskBinding.artifactBindingsByNode,
+    // API state
     workflowTemplates,
     workflowRuns,
     workflowRunsPagination,
@@ -821,22 +461,17 @@ export const useWorkflowStore = defineStore('workflow', () => {
     isLoadingWorkflowRun,
     isRunningWorkflowTemplate,
     isSyncingWorkflowRun,
+    // computed
     session,
     hasMoreWorkflowRuns,
+    // lifecyle
     resetSession,
     normalizeSessionShape,
     syncOwnerUserId,
     setTemplate,
+    // canvas delegation
     setActiveNode,
     setActiveGroup,
-    selectTool,
-    selectNodeTool,
-    setToolFormDraft,
-    setNodeFormDraft,
-    clearToolFormDraft,
-    recordTask,
-    recordNodeTask,
-    setNodeArtifactBinding,
     moveNode,
     setNodePositions,
     ensureCanvasFromTemplate,
@@ -848,9 +483,20 @@ export const useWorkflowStore = defineStore('workflow', () => {
     exportWorkflowNodes,
     exportWorkflowEdges,
     applyWorkflowDefinition,
+    // form delegation
+    selectTool,
+    selectNodeTool,
+    setToolFormDraft,
+    setNodeFormDraft,
+    clearToolFormDraft,
+    // task delegation
+    recordTask,
+    recordNodeTask,
+    setNodeArtifactBinding,
     clearTask,
     clearNodeTask,
     clearNodeTasks,
+    // API
     loadWorkflowTemplates,
     loadWorkflowRuns,
     loadWorkflowTemplate,
@@ -864,29 +510,17 @@ export const useWorkflowStore = defineStore('workflow', () => {
     clearActiveWorkflowRun,
     clearActiveWorkflowTemplate,
     selectWorkflowRun,
-    setActiveWorkflowDefinition
+    setActiveWorkflowDefinition,
   }
 }, {
   persist: {
     pick: [
       'sessionId',
       'templateId',
-      'activeNodeId',
-      'activeGroupId',
-      'selectedToolByGroup',
-      'selectedToolByNode',
-      'toolFormDrafts',
-      'nodeFormDrafts',
-      'taskByTool',
-      'taskByNode',
-      'artifactBindingsByNode',
-      'nodePositionById',
-      'canvasNodes',
-      'canvasEdges',
       'lastUpdatedAt',
       'ownerUserId',
       'activeWorkflowTemplateId',
-      'activeWorkflowRunId'
-    ]
-  }
+      'activeWorkflowRunId',
+    ],
+  },
 })
