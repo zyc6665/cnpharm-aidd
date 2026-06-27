@@ -133,8 +133,8 @@
       </div>
 
       <!-- 任务列表 -->
-      <a-spin :spinning="loading">
-        <div v-if="hasDisplayItems" class="tasks-list">
+      <SkeletonList v-if="loading" :count="5" />
+        <div v-else-if="hasDisplayItems" class="tasks-list">
           <section
             v-if="shouldRenderAgentSection && displayAgentRuns.length > 0"
             class="task-section agent-task-section"
@@ -271,7 +271,6 @@
             </a-button>
           </template>
         </a-empty>
-      </a-spin>
 
       <!-- 分页 -->
       <div v-if="currentTotal > pageSize" class="pagination">
@@ -297,6 +296,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AppFilterBar from '@/components/common/AppFilterBar.vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
+import SkeletonList from '@/components/common/SkeletonList.vue'
 import {
   UnorderedListOutlined,
   SyncOutlined,
@@ -687,7 +687,7 @@ onUnmounted(() => {
   margin: -@spacing-sm 0 @spacing-lg;
 
   :deep(.ant-segmented) {
-    background: #f1f5f9;
+    background: @bg-hover;
     padding: 3px;
   }
 }
@@ -696,7 +696,7 @@ onUnmounted(() => {
 .monitor-panel {
   .card();
   margin-bottom: @spacing-xl;
-  background: linear-gradient(135deg, @primary-color-light 0%, #fff 100%);
+  background: linear-gradient(135deg, @accent-color-light 0%, @bg-elevated 100%);
 
   .monitor-header {
     display: flex;
@@ -721,7 +721,7 @@ onUnmounted(() => {
   }
 
   .monitor-card {
-    background: #fff;
+    background: @bg-elevated;
     border-radius: @border-radius-md;
     padding: @spacing-md;
     cursor: pointer;
@@ -796,13 +796,13 @@ onUnmounted(() => {
   }
 
   &:focus-visible {
-    outline: 3px solid rgba(24, 144, 255, 0.28);
+    outline: 3px solid @accent-color-border;
     outline-offset: 3px;
   }
 
   &.is-running {
-    border-left: 3px solid @primary-color;
-    background: linear-gradient(90deg, @primary-color-light 0%, #fff 10%);
+    border-left: 3px solid @accent-color;
+    background: linear-gradient(90deg, @accent-color-light 0%, @bg-elevated 10%);
   }
 
   .task-main {

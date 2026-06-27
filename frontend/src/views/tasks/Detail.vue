@@ -12,8 +12,8 @@
         <a-breadcrumb-item>{{ task?.name || task?.tool?.name || t('tasks.taskDetail') }}</a-breadcrumb-item>
       </a-breadcrumb>
 
-      <a-spin :spinning="loading">
-          <div v-if="task" class="detail-content">
+      <SkeletonDetail v-if="loading" />
+          <div v-else-if="task" class="detail-content">
             <AppPageHeader :title="detailTitle" :subtitle="detailSubtitle">
               <template #actions>
                 <a-space class="task-detail-actions" wrap>
@@ -263,7 +263,6 @@
             </a-button>
           </template>
         </a-result>
-      </a-spin>
     </div>
   </div>
 </template>
@@ -298,6 +297,7 @@ import { useWebSocket } from '@/composables/useWebSocket'
 import { getTaskLogs } from '@/api/tasks'
 import type { WSMessage, TaskStatus, TaskLog, Task } from '@/types/models'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
+import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
 import ResultVisualizationPanel from '@/components/tasks/ResultVisualizationPanel.vue'
 import TaskLogPreview from '@/components/tasks/TaskLogPreview.vue'
 import TaskOutputSummary from '@/components/tasks/TaskOutputSummary.vue'
@@ -585,7 +585,7 @@ onUnmounted(() => {
 
   &.status-running {
     border-left: 4px solid @primary-color;
-    background: linear-gradient(90deg, @primary-color-light 0%, #fff 20%);
+    background: linear-gradient(90deg, @primary-color-light 0%, @bg-elevated 20%);
   }
 
   &.status-success {

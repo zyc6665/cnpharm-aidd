@@ -150,8 +150,8 @@
       :title="t('tasks.detail')"
       width="600"
     >
-      <a-spin :spinning="detailLoading">
-        <template v-if="selectedTask">
+      <SkeletonCard v-if="detailLoading" />
+        <template v-else-if="selectedTask">
           <a-descriptions :column="1" bordered>
             <a-descriptions-item :label="t('common.name')">
               {{ formatTaskTitle(selectedTask) }}
@@ -197,7 +197,6 @@
             <a-alert type="error" :message="selectedTask.error_message" />
           </template>
         </template>
-      </a-spin>
     </a-drawer>
   </div>
 </template>
@@ -217,6 +216,7 @@ import { message, Modal } from 'ant-design-vue'
 import dayjs from 'dayjs'
 import AppFilterBar from '@/components/common/AppFilterBar.vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
+import SkeletonCard from '@/components/common/SkeletonCard.vue'
 import { getTaskList, getTaskDetail, cancelTask, retryTask, deleteTask } from '@/api/tasks'
 import { getSystemStats } from '@/api/system'
 import { getToolList } from '@/api/tools'

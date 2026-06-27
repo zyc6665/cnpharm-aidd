@@ -24,6 +24,7 @@ const workflowSteps = {
 export default {
   // Common
   common: {
+    theme: 'Theme',
     confirm: 'Confirm',
     cancel: 'Cancel',
     save: 'Save',
@@ -64,9 +65,11 @@ export default {
   // Navigation
   nav: {
     home: 'Home',
+    workspace: 'Workspace',
     tools: 'Tools',
     cpupdb: 'CPUPDB',
     tasks: 'Tasks',
+    workflow: 'Workflow',
     admin: 'Admin',
     login: 'Login',
     register: 'Register',
@@ -75,16 +78,65 @@ export default {
     settings: 'Settings',
     favorites: 'Favorites'
   },
+  command: {
+    placeholder: 'Search pages, commands…',
+    noResults: 'No results',
+    newTask: 'New Task',
+    toggleTheme: 'Toggle Theme',
+    group: {
+      navigate: 'Navigation',
+      actions: 'Actions'
+    }
+  },
+
+  // Workspace
+  workspace: {
+    title: 'Workspace',
+    goodMorning: 'Good morning',
+    goodAfternoon: 'Good afternoon',
+    goodEvening: 'Good evening',
+    recentTasks: 'Recent Tasks',
+    noRecentTasks: 'No tasks yet. Start your first computation.',
+    startFirst: 'Browse Tools',
+    quickActions: 'Quick Actions',
+    newWorkflow: 'New Workflow',
+    browseTools: 'Browse Tools',
+    viewTasks: 'View Tasks',
+    activeWorkflows: 'Active Workflows',
+  },
 
   // Home
   home: {
     title: 'Home',
+    badge: 'AI-Powered Scientific Computing',
     hero: {
-      title: 'CPUModel',
-      subtitle: 'Computational Biology Platform',
-      description: 'Professional platform for protein structure prediction, molecular docking and bioinformatics analysis',
-      getStarted: 'Get Started',
-      learnMore: 'Learn More'
+      title: 'From target to lead compound, in one workspace',
+      description: 'Pocket identification, virtual screening, molecular docking, ADMET prediction — all computational steps orchestrated, executed, and traced on one platform',
+      cta: 'Get Started Free',
+      secondary: 'Browse Tools',
+    },
+    values: {
+      reproducible: {
+        title: 'Reproducible',
+        desc: 'Full input chain tracing, versioned workflows, immutable artifacts — every computation is auditable.',
+      },
+      composable: {
+        title: 'Composable',
+        desc: 'Chain tools into workflow DAGs with conditionals, loops, and parallel execution.',
+      },
+      trusted: {
+        title: 'Trusted',
+        desc: 'GPU scheduling, file deduplication, access control — production infrastructure for research computing.',
+      },
+    },
+    capabilities: {
+      title: 'Full AIDD Pipeline Coverage',
+      subtitle: 'From target analysis to lead optimization, tools for every stage of the drug discovery pipeline.',
+    },
+    platform: {
+      title: 'Open Platform',
+      desc: 'CPUModel integrates deeply with PAIWSIT, CPUPDB, and other scientific databases — a complete chain from data to discovery.',
+      cta: 'Get Started',
     },
     workflow: {
       title: 'Platform Functions',
@@ -594,6 +646,7 @@ export default {
     filterTags: 'Filter by tags',
     usageCount: 'Usage Count',
     viewCount: 'Views',
+    viewDetail: 'View Details',
     runCount: 'Run Count',
     runs: 'runs',
     favoriteCount: 'Favorites',
@@ -650,6 +703,8 @@ export default {
     descriptionPlaceholder: 'Enter tool description...',
     selectCategory: 'Select category',
     selectTags: 'Select tags',
+    icon: 'Icon',
+    iconUrl: 'Icon URL',
     iconPlaceholder: 'Enter emoji or leave empty',
     iconHint: 'Supports emoji as icon',
     iconUrlPlaceholder: 'Enter icon URL (optional)',
@@ -695,6 +750,7 @@ export default {
     artifactGroupMeta: 'Browse reusable sources by workbench group',
     artifactToolMeta: 'View historical tasks for this tool',
     artifactSelectedTag: 'Selected',
+    clearArtifactSelection: 'Clear artifact selection',
     artifactFocusTag: 'Panel Focus',
     artifactSummarySelected: 'Selected Artifact',
     artifactSummaryFocused: 'Path Focused from Panel',
@@ -891,6 +947,8 @@ export default {
     newPassword: 'New Password',
     avatar: 'Avatar',
     uploadAvatar: 'Upload Avatar',
+    avatarUploaded: 'Avatar uploaded successfully',
+    avatarUploadFailed: 'Avatar upload failed',
     avatarTypeError: 'Only image files are allowed',
     avatarSizeError: 'Image size cannot exceed 2MB',
     invitationCode: 'Invitation Code',

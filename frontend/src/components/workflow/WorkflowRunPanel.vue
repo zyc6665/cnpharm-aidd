@@ -669,7 +669,7 @@
     padding: @spacing-md;
     border: 1px solid rgba(210, 221, 236, 0.9);
     border-radius: @border-radius-lg;
-    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    background: linear-gradient(180deg, @bg-elevated 0%, @accent-color-light 100%);
     box-shadow: 0 16px 30px rgb(15 23 42 / 4%);
   }
 

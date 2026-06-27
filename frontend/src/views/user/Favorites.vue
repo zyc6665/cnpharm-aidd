@@ -13,8 +13,8 @@
 
     <a-card class="favorites-card">
 
-      <a-spin :spinning="loading">
-        <template v-if="favorites.length > 0">
+      <SkeletonList v-if="loading" :count="5" />
+        <template v-else-if="favorites.length > 0">
           <a-row :gutter="[16, 16]">
             <a-col
               v-for="tool in filteredFavorites"
@@ -97,7 +97,6 @@
             {{ t('user.exploreTool') }}
           </a-button>
         </a-empty>
-      </a-spin>
     </a-card>
   </div>
 </template>
@@ -115,6 +114,7 @@ import {
 } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
+import SkeletonList from '@/components/common/SkeletonList.vue'
 import { useToolsStore } from '@/stores'
 import type { Tool } from '@/types/models'
 

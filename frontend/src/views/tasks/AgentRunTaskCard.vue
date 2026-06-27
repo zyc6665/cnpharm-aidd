@@ -188,7 +188,7 @@
 
     &.is-active {
       border-left-color: @primary-color;
-      background: linear-gradient(90deg, @primary-color-light 0%, #fff 12%);
+      background: linear-gradient(90deg, @primary-color-light 0%, @bg-elevated 12%);
     }
 
     &.is-expanded {
@@ -211,7 +211,7 @@
     cursor: pointer;
 
     &:focus-visible {
-      outline: 3px solid rgba(24, 144, 255, 0.28);
+      outline: 3px solid rgba(59, 130, 246, 0.2);
       outline-offset: -3px;
     }
   }
@@ -228,7 +228,7 @@
     width: 42px;
     height: 42px;
     border-radius: @border-radius-md;
-    background: #eef2ff;
+    background: @accent-color-light;
     color: #3730a3;
     display: flex;
     align-items: center;
@@ -313,7 +313,7 @@
     padding: @spacing-sm @spacing-md;
     border: 1px solid @border-color-light;
     border-radius: @border-radius-md;
-    background: #fff;
+    background: @bg-elevated;
   }
 
   .agent-step__index {

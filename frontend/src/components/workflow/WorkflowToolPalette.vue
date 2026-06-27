@@ -136,7 +136,7 @@ const { t } = useI18n()
   display: grid;
   gap: 3px;
   padding: @spacing-sm;
-  border: 1px solid rgba(24, 144, 255, 0.12);
+  border: 1px solid @border-color-hover;
   border-radius: @border-radius-sm;
   background: rgba(255, 255, 255, 0.82);
   text-align: left;
@@ -145,7 +145,7 @@ const { t } = useI18n()
 
 .sidebar-tool-item:hover,
 .sidebar-tool-item:focus-visible {
-  border-color: rgba(24, 144, 255, 0.42);
+  border-color: rgba(59, 130, 246, 0.3);
   background: @primary-color-light;
   outline: none;
 }

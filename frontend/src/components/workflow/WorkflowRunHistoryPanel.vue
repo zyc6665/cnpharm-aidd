@@ -115,7 +115,7 @@
 
     &.active,
     &:hover {
-      border-color: rgba(24, 144, 255, 0.55);
+      border-color: rgba(59, 130, 246, 0.4);
       background: rgba(230, 244, 255, 0.78);
     }
   }

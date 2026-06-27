@@ -213,7 +213,7 @@
     padding: @spacing-sm @spacing-md;
     border: 1px solid rgba(220, 227, 240, 0.92);
     border-radius: @border-radius-md;
-    background: linear-gradient(180deg, #fff 0%, #f8fbff 100%);
+    background: linear-gradient(180deg, @bg-elevated 0%, @accent-color-light 100%);
   }
 
   .file-name {

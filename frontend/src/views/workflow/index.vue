@@ -465,7 +465,7 @@ onBeforeUnmount(() => {
   padding: @spacing-xl 0 @spacing-xxl;
   background:
     radial-gradient(circle at top, rgba(13, 110, 253, 0.08) 0%, rgba(255, 255, 255, 0) 32%),
-    linear-gradient(180deg, rgba(24, 144, 255, 0.06) 0%, rgba(255, 255, 255, 0) 260px),
+    linear-gradient(180deg, rgba(59, 130, 246, 0.04) 0%, rgba(255, 255, 255, 0) 260px),
     @bg-light;
 }
 
@@ -510,7 +510,7 @@ onBeforeUnmount(() => {
   gap: @spacing-sm;
   padding: @spacing-md;
   margin-bottom: @spacing-md;
-  border: 1px solid rgba(24, 144, 255, 0.12);
+  border: 1px solid @border-color-hover;
   border-radius: @border-radius-md;
   background: rgba(255, 255, 255, 0.86);
   box-shadow: @shadow-sm;
@@ -544,7 +544,7 @@ onBeforeUnmount(() => {
   max-height: 720px;
   display: flex;
   flex-direction: column;
-  border: 1px solid rgba(24, 144, 255, 0.12);
+  border: 1px solid @border-color-hover;
   border-radius: @border-radius-md;
   background: @bg-light-secondary;
   box-shadow: @shadow-sm;
@@ -593,7 +593,7 @@ onBeforeUnmount(() => {
 
 .template-node-item:hover,
 .template-node-item.is-active {
-  border-color: rgba(24, 144, 255, 0.22);
+  border-color: rgba(59, 130, 246, 0.16);
   background: @primary-color-light;
 }
 
@@ -630,7 +630,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: @spacing-xs;
   padding: @spacing-xs @spacing-sm;
-  border: 1px solid rgba(24, 144, 255, 0.1);
+  border: 1px solid @accent-color-border;
   border-radius: @border-radius-sm;
   background: rgba(255, 255, 255, 0.78);
 }

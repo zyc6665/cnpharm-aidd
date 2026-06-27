@@ -40,7 +40,7 @@
           </div>
           <div class="task-summary-grid">
             <div class="task-summary-row">
-              <span class="task-summary-label">{{ t('tasks.status') }}</span>
+              <span class="task-summary-label">{{ t('common.status') }}</span>
               <span class="task-summary-value">{{ activeTask.status }}</span>
             </div>
             <div class="task-summary-row">
@@ -656,7 +656,7 @@
     padding: @spacing-sm @spacing-md;
     border: 1px solid rgba(210, 220, 235, 0.92);
     border-radius: @border-radius-lg;
-    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    background: linear-gradient(180deg, @bg-elevated 0%, @accent-color-light 100%);
     box-shadow: 0 10px 24px rgb(15 23 42 / 4%);
   }
 
@@ -694,7 +694,7 @@
   }
 
   .artifact-tool-section.is-active {
-    border-color: rgba(24, 144, 255, 0.4);
+    border-color: rgba(59, 130, 246, 0.3);
     box-shadow: 0 0 0 3px rgb(24 144 255 / 8%);
   }
 
@@ -736,7 +736,7 @@
     padding: @spacing-lg;
     border: 1px solid rgba(215, 224, 238, 0.92);
     border-radius: @border-radius-lg;
-    background: linear-gradient(180deg, #fff 0%, #f8fbff 100%);
+    background: linear-gradient(180deg, @bg-elevated 0%, @accent-color-light 100%);
     box-shadow: 0 14px 30px rgb(15 23 42 / 5%);
   }
 
@@ -793,7 +793,7 @@
     padding: 2px @spacing-xs;
     border: 1px solid rgba(205, 217, 235, 0.9);
     border-radius: 999px;
-    background: #f8fbff;
+    background: @accent-color-light;
     color: #355070;
     font-family: @font-family-mono;
     white-space: nowrap;
@@ -890,7 +890,7 @@
     padding: @spacing-sm;
     border: 1px solid #eef2f7;
     border-radius: @border-radius-md;
-    background: #fff;
+    background: @bg-elevated;
   }
 
   .artifact-item-button {
@@ -898,8 +898,8 @@
   }
 
   .artifact-item-button:hover {
-    border-color: rgba(24, 144, 255, 0.45);
-    background: #f8fbff;
+    border-color: rgba(59, 130, 246, 0.35);
+    background: @accent-color-light;
   }
 
   .artifact-list-compact {
@@ -907,7 +907,7 @@
 
     .artifact-item {
       padding: @spacing-xs @spacing-sm;
-      background: #f8fafc;
+      background: @bg-hover;
     }
   }
 

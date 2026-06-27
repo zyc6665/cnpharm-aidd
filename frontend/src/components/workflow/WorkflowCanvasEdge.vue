@@ -47,12 +47,12 @@
 
   .edge-path {
     fill: none;
-    stroke: rgba(24, 144, 255, 0.55);
+    stroke: rgba(59, 130, 246, 0.4);
     stroke-width: 2;
   }
 
   .edge-path-shadow {
-    stroke: rgba(24, 144, 255, 0.12);
+    stroke: @border-color-hover;
     stroke-width: 9;
   }
 

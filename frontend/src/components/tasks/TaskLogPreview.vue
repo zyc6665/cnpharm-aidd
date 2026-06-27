@@ -88,7 +88,7 @@
     gap: @spacing-sm;
     padding: @spacing-sm @spacing-md;
     border-radius: @border-radius-md;
-    background: #f8fafc;
+    background: @bg-hover;
     border: 1px solid #e8edf5;
     font-size: @font-size-sm;
 

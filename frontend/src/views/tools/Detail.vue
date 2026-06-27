@@ -1,8 +1,8 @@
 <template>
   <div class="tool-detail-page">
     <div class="container">
-      <a-spin :spinning="loading">
-        <div v-if="tool" class="tool-detail-shell">
+      <SkeletonDetail v-if="loading" />
+        <div v-else-if="tool" class="tool-detail-shell">
           <AppPageHeader :title="tool.name" :subtitle="detailSubtitle">
             <template #actions>
               <a-space class="tool-detail-actions" wrap>
@@ -285,7 +285,6 @@
         </div>
         </div>
         <a-empty v-else :description="t('common.noData')" />
-      </a-spin>
     </div>
     <a-modal
       v-model:open="previewOpen"
@@ -293,8 +292,8 @@
       :footer="null"
       width="760px"
     >
-      <a-spin :spinning="previewLoading">
-        <div v-if="preview" class="example-preview">
+      <SkeletonCard v-if="previewLoading" />
+        <div v-else-if="preview" class="example-preview">
           <a-alert
             v-if="preview.truncated"
             type="info"
@@ -305,7 +304,6 @@
           <pre v-if="preview.previewable" class="example-preview-content">{{ preview.content }}</pre>
           <a-empty v-else :description="t('tools.previewUnavailable')" />
         </div>
-      </a-spin>
     </a-modal>
     <a-modal
       v-model:open="documentationOpen"
@@ -339,6 +337,8 @@
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import ArtifactFilePicker from '@/components/tools/ArtifactFilePicker.vue'
   import ToolExamplePanel from '@/components/tools/ToolExamplePanel.vue'
+  import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
+  import SkeletonCard from '@/components/common/SkeletonCard.vue'
   import { useToolsStore, useTasksStore, useUserStore } from '@/stores'
   import type {
     ArtifactFile,
@@ -976,8 +976,8 @@
   }
 
   .card {
-    background: @bg-light;
-    border: 1px solid #eef0f5;
+    background: @bg-elevated;
+    border: 1px solid @border-color;
     border-radius: @border-radius-lg;
     padding: @spacing-lg;
     box-shadow: @shadow-sm;
@@ -1103,10 +1103,10 @@
     gap: @spacing-xs;
     margin-top: @spacing-sm;
     padding: 6px 10px;
-    border: 1px solid #d9f7be;
+    border: 1px solid @success-color-light;
     border-radius: @border-radius-base;
-    background: #fcfff7;
-    color: @text-color-light-secondary;
+    background: @success-color-light;
+    color: @text-primary;
     font-size: @font-size-sm;
     flex-wrap: wrap;
   }
@@ -1118,9 +1118,9 @@
     gap: @spacing-sm;
     margin-top: @spacing-sm;
     padding: 8px 10px;
-    border: 1px solid #d6e4ff;
+    border: 1px solid @accent-color-border;
     border-radius: @border-radius-base;
-    background: #f8fbff;
+    background: @accent-color-light;
     flex-wrap: wrap;
   }
 
@@ -1128,13 +1128,13 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
-    color: @text-color-light-secondary;
+    color: @text-primary;
     font-size: @font-size-sm;
   }
 
   .sdf-converter-status {
     margin-top: @spacing-xs;
-    color: @text-color-light-secondary;
+    color: @text-secondary;
     font-size: @font-size-sm;
 
     &.is-error {
@@ -1148,10 +1148,10 @@
     gap: @spacing-xs;
     margin-top: @spacing-sm;
     padding: 6px 10px;
-    border: 1px solid #d6e4ff;
+    border: 1px solid @accent-color-border;
     border-radius: @border-radius-base;
-    background: #f8fbff;
-    color: @text-color-light-secondary;
+    background: @accent-color-light;
+    color: @text-primary;
     font-size: @font-size-sm;
     flex-wrap: wrap;
   }
@@ -1161,7 +1161,7 @@
     overflow: auto;
     margin: 0;
     padding: @spacing-md;
-    border: 1px solid #eef0f5;
+    border: 1px solid @border-color;
     border-radius: @border-radius-base;
     background: #0f172a;
     color: #e5e7eb;
@@ -1219,21 +1219,21 @@
     :deep(th),
     :deep(td) {
       padding: 8px 10px;
-      border: 1px solid #eef0f5;
+      border: 1px solid @border-color;
       vertical-align: top;
     }
 
     :deep(th) {
-      background: #f8fafc;
-      color: @text-color-light-primary;
+      background: @bg-hover;
+      color: @text-primary;
       font-weight: @font-weight-semibold;
     }
 
     :deep(code) {
       padding: 2px 5px;
       border-radius: 4px;
-      background: #f1f5f9;
-      color: #334155;
+      background: @bg-hover;
+      color: @text-secondary;
       font-family: monospace;
       font-size: 12px;
     }
@@ -1241,13 +1241,14 @@
     :deep(pre) {
       padding: @spacing-md;
       border-radius: @border-radius-base;
-      background: #0f172a;
+      background: @bg-body;
+      border: 1px solid @border-color;
       overflow: auto;
 
       code {
         padding: 0;
         background: transparent;
-        color: #e5e7eb;
+        color: @text-primary;
       }
     }
 

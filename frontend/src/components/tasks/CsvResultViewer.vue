@@ -156,7 +156,7 @@ watch(
   border-radius: 20px;
   background:
     radial-gradient(circle at top right, rgba(34, 197, 94, 0.08), transparent 28%),
-    linear-gradient(180deg, #ffffff, #f8fafc);
+    linear-gradient(180deg, @bg-elevated, @bg-hover);
   border: 1px solid #e2e8f0;
 }
 

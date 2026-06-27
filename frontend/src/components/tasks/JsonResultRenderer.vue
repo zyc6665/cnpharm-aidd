@@ -140,7 +140,7 @@
     padding: @spacing-sm @spacing-md;
     border: 1px solid rgba(220, 227, 240, 0.92);
     border-radius: @border-radius-sm;
-    background: #fff;
+    background: @bg-elevated;
   }
 
   .json-result-label {
@@ -178,7 +178,7 @@
     padding: @spacing-md;
     border: 1px solid rgba(205, 214, 229, 0.95);
     border-radius: @border-radius-md;
-    background: linear-gradient(180deg, #fbfdff 0%, #f7faff 100%);
+    background: linear-gradient(180deg, @accent-color-light 0%, #f7faff 100%);
   }
 
   .json-result-section__header {
@@ -216,7 +216,7 @@
     padding: @spacing-sm;
     border: 1px solid rgba(220, 227, 240, 0.9);
     border-radius: @border-radius-sm;
-    background: #fff;
+    background: @bg-elevated;
   }
 
   .json-result-array__index {

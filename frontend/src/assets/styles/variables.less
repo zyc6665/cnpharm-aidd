@@ -1,56 +1,13 @@
 // ============================================
-// CPUModel 全局样式变量
+// CPUModel 全局样式变量 — Dark-first 主题系统
 // ============================================
 
-// 色彩系统
-// --------------------------------------------
+// ── 字体（Inter 通过 index.html link 预加载） ──
+@font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+  'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+@font-family-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
 
-// 主色调 - 深色渐变背景
-@primary-gradient-start: #0f0c29;
-@primary-gradient-mid: #302b63;
-@primary-gradient-end: #24243e;
-
-// 强调色 - 金色
-@accent-color: #FFD700;
-@accent-color-hover: #FFC107;
-@accent-color-light: rgba(255, 215, 0, 0.1);
-@accent-color-border: rgba(255, 215, 0, 0.3);
-
-// 功能色
-@success-color: #52c41a;
-@warning-color: #faad14;
-@error-color: #ff4d4f;
-@info-color: #1890ff;
-
-// 中性色
-@text-color-primary: #ffffff;
-@text-color-secondary: rgba(255, 255, 255, 0.85);
-@text-color-tertiary: rgba(255, 255, 255, 0.65);
-@text-color-disabled: rgba(255, 255, 255, 0.45);
-
-// 浅色主题文字
-@text-color-light-primary: #1f1f1f;
-@text-color-light-secondary: rgba(0, 0, 0, 0.65);
-@text-color-light-tertiary: rgba(0, 0, 0, 0.45);
-
-// 背景色
-@bg-dark: #0f0c29;
-@bg-dark-secondary: #1a1a2e;
-@bg-dark-tertiary: #16213e;
-@bg-card-dark: rgba(255, 255, 255, 0.05);
-@bg-card-hover-dark: rgba(255, 255, 255, 0.08);
-
-@bg-light: #f5f5f5;
-@bg-light-secondary: #ffffff;
-@bg-card-light: #ffffff;
-
-// 边框色
-@border-color-dark: rgba(255, 255, 255, 0.1);
-@border-color-dark-hover: rgba(255, 255, 255, 0.2);
-@border-color-light: #d9d9d9;
-
-// 间距系统
-// --------------------------------------------
+// ── 间距系统 ──
 @spacing-xs: 4px;
 @spacing-sm: 8px;
 @spacing-md: 16px;
@@ -58,21 +15,14 @@
 @spacing-xl: 32px;
 @spacing-xxl: 48px;
 
-// 圆角
-// --------------------------------------------
+// ── 圆角 ──
 @border-radius-sm: 4px;
 @border-radius-md: 8px;
 @border-radius-lg: 12px;
 @border-radius-xl: 16px;
 @border-radius-round: 50%;
 
-// 字体
-// --------------------------------------------
-@font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
-  'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
-  'Noto Color Emoji';
-@font-family-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
-
+// ── 字体大小 ──
 @font-size-xs: 12px;
 @font-size-sm: 14px;
 @font-size-md: 16px;
@@ -92,23 +42,20 @@
 @line-height-base: 1.5;
 @line-height-loose: 1.75;
 
-// 阴影
-// --------------------------------------------
-@shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-@shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-@shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-@shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-@shadow-glow: 0 0 20px rgba(255, 215, 0, 0.3);
-@shadow-card: 0 4px 20px rgba(0, 0, 0, 0.15);
+// ── 阴影 ──
+@shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+@shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
+@shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
+@shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 10px 10px -5px rgba(0, 0, 0, 0.3);
+@shadow-glow: 0 0 20px rgba(59, 130, 246, 0.2);
+@shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.4), 0 1px 2px -1px rgba(0, 0, 0, 0.3);
 
-// 过渡动画
-// --------------------------------------------
-@transition-fast: 0.15s ease;
-@transition-base: 0.3s ease;
-@transition-slow: 0.5s ease;
+// ── 过渡 ──
+@transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+@transition-base: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+@transition-slow: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
-// 响应式断点
-// --------------------------------------------
+// ── 断点 ──
 @screen-xs: 480px;
 @screen-sm: 576px;
 @screen-md: 768px;
@@ -116,73 +63,159 @@
 @screen-xl: 1200px;
 @screen-xxl: 1600px;
 
-// 容器宽度
+// ── 容器 ──
 @container-sm: 540px;
 @container-md: 720px;
 @container-lg: 960px;
 @container-xl: 1140px;
 @container-xxl: 1320px;
 
-// Z-index 层级
-// --------------------------------------------
+// ── 布局尺寸 ──
+@header-height: 0px; // 移除顶部导航，sidebar 是唯一导航
+@sidebar-width: 240px;
+@sidebar-collapsed-width: 56px;
+@footer-height: 0px; // 默认无 footer
+
+// ── Z-index ──
 @z-index-dropdown: 1000;
 @z-index-sticky: 1020;
-@z-index-fixed: 1030;
-@z-index-modal-backdrop: 1040;
-@z-index-modal: 1050;
-@z-index-popover: 1060;
-@z-index-tooltip: 1070;
+@z-index-sidebar: 1030;
+@z-index-command-palette: 1040;
+@z-index-modal-backdrop: 1050;
+@z-index-modal: 1060;
+@z-index-toast: 1070;
+@z-index-tooltip: 1080;
 
-// 布局尺寸
-// --------------------------------------------
-@header-height: 64px;
-@sider-width: 240px;
-@sider-collapsed-width: 80px;
-@footer-height: 64px;
+// 旧 z-index 别名（兼容现有组件）
+@z-index-fixed: @z-index-sidebar;
+@z-index-popover: @z-index-tooltip;
 
-// 扩展颜色变量 (用于组件)
-// --------------------------------------------
-@primary-color: #1890ff;
-@primary-color-light: rgba(24, 144, 255, 0.1);
-@success-color-light: rgba(82, 196, 26, 0.1);
-@warning-color-light: rgba(250, 173, 20, 0.1);
-@error-color-light: rgba(255, 77, 79, 0.1);
-@bg-color-light: #fafafa;
-@transition-duration: 0.3s;
-@text-color-light: @text-color-light-primary;
+// ═══════════════════════════════════════════════
+// 暗色主题变量（默认）
+// ═══════════════════════════════════════════════
+
+// 强调色 — 暗色模式稍亮
+@accent-color: #3B82F6;
+@accent-color-hover: #60A5FA;
+@accent-color-active: #2563EB;
+@accent-color-light: rgba(59, 130, 246, 0.12);
+@accent-color-border: rgba(59, 130, 246, 0.2);
+
+// 功能色 — 暗色模式调亮
+@success-color: #22c55e;
+@success-color-light: rgba(34, 197, 94, 0.12);
+@warning-color: #f59e0b;
+@warning-color-light: rgba(245, 158, 11, 0.12);
+@error-color: #ef4444;
+@error-color-light: rgba(239, 68, 68, 0.12);
+@info-color: #3B82F6;
+@info-color-light: rgba(59, 130, 246, 0.12);
+
+// 中性色
+@neutral-50: #f8fafc;
+@neutral-100: #f1f5f9;
+@neutral-200: #e2e8f0;
+@neutral-300: #cbd5e1;
+@neutral-400: #94a3b8;
+@neutral-500: #64748b;
+@neutral-600: #475569;
+@neutral-700: #334155;
+@neutral-800: #1e293b;
+@neutral-900: #0f172a;
+@neutral-950: #020617;
+
+// 背景色
+@bg-body: #09090b;
+@bg-surface: #131318;
+@bg-elevated: #1a1a21;
+@bg-hover: rgba(255, 255, 255, 0.04);
+@bg-active: rgba(255, 255, 255, 0.06);
+
+// 文字色
+@text-primary: #f1f5f9;
+@text-secondary: #94a3b8;
+@text-tertiary: #64748b;
+@text-disabled: #475569;
+
+// 边框色
+@border-color: rgba(255, 255, 255, 0.06);
+@border-color-hover: rgba(255, 255, 255, 0.1);
+
+// 滚动条
+@scrollbar-track: rgba(255, 255, 255, 0.02);
+@scrollbar-thumb: rgba(255, 255, 255, 0.08);
+@scrollbar-thumb-hover: rgba(255, 255, 255, 0.14);
+
+// ═══════════════════════════════════════════════
+// 浅色主题覆盖（暗色模式下通过 [data-theme="light"] 应用）
+// ═══════════════════════════════════════════════
+
+// 扩展颜色变量（用于 antd 兼容）
+@primary-color: @accent-color;
+@primary-color-light: @accent-color-light;
+
+// 旧变量别名（兼容过渡期）
+@primary-gradient-start: @accent-color-light;
+@primary-gradient-mid: rgba(59, 130, 246, 0.06);
+@primary-gradient-end: rgba(59, 130, 246, 0.03);
+
+@bg-dark: @bg-body;
+@bg-dark-secondary: @bg-surface;
+@bg-dark-tertiary: @bg-elevated;
+@bg-card-dark: @bg-elevated;
+@bg-card-hover-dark: @bg-hover;
+
+// 旧变量别名（兼容过渡期 — 默认暗色主题，命名保持兼容）
+@bg-light: @bg-body;
+@bg-light-secondary: @bg-surface;
+@bg-card-light: @bg-elevated;
+@bg-card-hover-light: @bg-hover;
+
+@border-color-dark: @border-color;
+@border-color-dark-hover: @border-color-hover;
+@border-color-light: @border-color;
+
+@text-color-primary: @text-primary;
+@text-color-secondary: @text-secondary;
+@text-color-tertiary: @text-tertiary;
+@text-color-disabled: @text-disabled;
+
+@text-color-light-primary: @text-primary;
+@text-color-light-secondary: @text-secondary;
+@text-color-light-tertiary: @text-tertiary;
+@text-color-light-disabled: @text-disabled;
+
+@bg-color-light: @bg-body;
+@transition-duration: 0.2s;
+@text-color-light: @text-primary;
 @breakpoint-md: @screen-md;
 @border-radius-base: @border-radius-md;
 
-// Mixins
-// --------------------------------------------
+// ── Mixins ──
 
-// 卡片样式 mixin
 .card() {
-  background: @bg-light-secondary;
+  background: @bg-elevated;
   border-radius: @border-radius-lg;
   padding: @spacing-lg;
-  box-shadow: @shadow-sm;
-  border: 1px solid @border-color-light;
+  border: 1px solid @border-color;
   transition: all @transition-base;
 
   &:hover {
+    border-color: @border-color-hover;
     box-shadow: @shadow-md;
   }
 }
 
-// 渐变背景 mixin
 .gradient-bg() {
-  background: linear-gradient(135deg, @primary-gradient-start 0%, @primary-gradient-mid 50%, @primary-gradient-end 100%);
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.06), rgba(59, 130, 246, 0.02), transparent);
 }
 
-// 文字溢出省略 mixin
 .text-ellipsis() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-// 多行文字溢出省略 mixin
 .text-ellipsis-lines(@lines: 2) {
   display: -webkit-box;
   -webkit-box-orient: vertical;

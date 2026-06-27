@@ -148,7 +148,7 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    border: 1px solid rgba(24, 144, 255, 0.12);
+    border: 1px solid @border-color-hover;
     border-radius: @border-radius-md;
     background:
       linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(250, 252, 255, 0.94)),
@@ -186,8 +186,8 @@
     min-height: 560px;
     overflow: auto;
     background-image:
-      linear-gradient(rgba(24, 144, 255, 0.08) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(24, 144, 255, 0.08) 1px, transparent 1px);
+      linear-gradient(rgba(59, 130, 246, 0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(59, 130, 246, 0.06) 1px, transparent 1px);
     background-size: 28px 28px;
   }
 

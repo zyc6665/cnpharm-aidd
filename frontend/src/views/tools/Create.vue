@@ -10,8 +10,8 @@
         </template>
       </AppPageHeader>
 
-      <a-spin :spinning="loading">
-        <a-card class="form-card">
+      <SkeletonDetail v-if="loading" />
+        <a-card v-else class="form-card">
           <a-form
             ref="formRef"
             class="tool-form"
@@ -609,7 +609,6 @@
             </a-form-item>
           </a-form>
         </a-card>
-      </a-spin>
     </div>
   </div>
 </template>
@@ -627,6 +626,7 @@
     SaveOutlined
   } from '@ant-design/icons-vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
   import { useToolsStore } from '@/stores'
   import { createTool, createToolVersion, updateTool, getToolDetail } from '@/api/tools'
   import type { ToolCreateParams } from '@/types/models'

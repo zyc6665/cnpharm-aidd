@@ -101,9 +101,9 @@
   .auth-shell__card {
     width: min(100%, 520px);
     padding: @spacing-xl;
-    border: 1px solid rgba(255, 255, 255, 0.18);
+    border: 1px solid @border-color-hover;
     border-radius: @border-radius-md;
-    background: rgba(255, 255, 255, 0.96);
+    background: @bg-elevated;
     box-shadow: @shadow-xl;
   }
 
@@ -123,7 +123,7 @@
 
   .auth-shell__title {
     margin: 0;
-    color: @bg-dark;
+    color: @text-primary;
     font-size: @font-size-xxxl;
     font-weight: @font-weight-bold;
     line-height: @line-height-tight;
@@ -131,7 +131,7 @@
 
   .auth-shell__description {
     margin: @spacing-sm 0 0;
-    color: @text-color-light-secondary;
+    color: @text-secondary;
     font-size: @font-size-md;
     line-height: @line-height-base;
   }

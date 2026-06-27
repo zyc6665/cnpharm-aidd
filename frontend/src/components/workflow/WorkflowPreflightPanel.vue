@@ -91,7 +91,7 @@
   @import '@/assets/styles/variables.less';
 
   .workflow-preflight-panel {
-    border: 1px solid rgba(24, 144, 255, 0.12);
+    border: 1px solid @border-color-hover;
     border-radius: @border-radius-md;
     background: rgba(255, 255, 255, 0.96);
     box-shadow: @shadow-sm;
@@ -166,7 +166,7 @@
     padding: @spacing-md;
     border: 1px solid @border-color-light;
     border-radius: @border-radius-sm;
-    background: #fff;
+    background: @bg-elevated;
   }
 
   .preflight-empty {
@@ -186,8 +186,8 @@
   }
 
   .preflight-issue.is-info {
-    border-color: rgba(24, 144, 255, 0.2);
-    background: rgba(24, 144, 255, 0.05);
+    border-color: rgba(59, 130, 246, 0.14);
+    background: @accent-color-light;
   }
 
   .issue-copy {

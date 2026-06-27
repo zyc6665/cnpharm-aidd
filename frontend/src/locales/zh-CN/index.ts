@@ -24,6 +24,7 @@ const workflowSteps = {
 export default {
   // 通用
   common: {
+    theme: '主题',
     confirm: '确认',
     cancel: '取消',
     save: '保存',
@@ -64,9 +65,11 @@ export default {
   // 导航
   nav: {
     home: '首页',
+    workspace: '工作台',
     tools: '工具',
     cpupdb: 'CPUPDB',
     tasks: '任务',
+    workflow: '工作流',
     admin: '管理',
     login: '登录',
     register: '注册',
@@ -75,16 +78,65 @@ export default {
     settings: '设置',
     favorites: '收藏'
   },
+  command: {
+    placeholder: '搜索页面、命令…',
+    noResults: '无匹配结果',
+    newTask: '创建新任务',
+    toggleTheme: '切换主题',
+    group: {
+      navigate: '页面导航',
+      actions: '快捷操作'
+    }
+  },
+
+  // 工作台
+  workspace: {
+    title: '工作台',
+    goodMorning: '早上好',
+    goodAfternoon: '下午好',
+    goodEvening: '晚上好',
+    recentTasks: '最近任务',
+    noRecentTasks: '还没有任务，开始你的第一个计算',
+    startFirst: '浏览工具',
+    quickActions: '快速操作',
+    newWorkflow: '新建工作流',
+    browseTools: '浏览工具',
+    viewTasks: '查看任务',
+    activeWorkflows: '活跃工作流',
+  },
 
   // 首页
   home: {
     title: '首页',
+    badge: 'AI 驱动的科学计算平台',
     hero: {
-      title: 'CPUModel',
-      subtitle: '计算生物学工具平台',
-      description: '专业的蛋白质结构预测、分子对接与生物信息学分析平台',
-      getStarted: '开始使用',
-      learnMore: '了解更多'
+      title: '从靶点到先导化合物，一个工作台完成',
+      description: '口袋识别、虚拟筛选、分子对接、ADMET 预测——所有计算环节在同一平台上编排、执行、追溯',
+      cta: '免费注册',
+      secondary: '浏览工具',
+    },
+    values: {
+      reproducible: {
+        title: '可复现',
+        desc: '完整的输入链追溯、版本化工作流、不可变制品——每一次计算都有据可查',
+      },
+      composable: {
+        title: '可编排',
+        desc: '将工具组合为工作流 DAG，支持条件分支、循环迭代、并行计算',
+      },
+      trusted: {
+        title: '可信任',
+        desc: 'GPU 调度、文件去重、权限控制——为科研计算打造的生产级基础设施',
+      },
+    },
+    capabilities: {
+      title: 'AIDD 全流程覆盖',
+      subtitle: '沿着药物发现管线，从靶点分析到先导优化，每个阶段都有工具支撑',
+    },
+    platform: {
+      title: '开放平台',
+      desc: 'CPUModel 与 PAIWSIT、CPUPDB 等科学数据库深度集成，构建从数据到发现的完整链路',
+      cta: '开始使用',
     },
     workflow: {
       title: '平台功能',
@@ -594,6 +646,7 @@ export default {
     filterTags: '按标签筛选',
     usageCount: '使用次数',
     viewCount: '浏览次数',
+    viewDetail: '查看详情',
     runCount: '运行次数',
     runs: '次运行',
     favoriteCount: '收藏数',
@@ -650,6 +703,8 @@ export default {
     descriptionPlaceholder: '请输入工具描述...',
     selectCategory: '请选择分类',
     selectTags: '请选择标签',
+    icon: '图标',
+    iconUrl: '图标URL',
     iconPlaceholder: '输入 emoji 或留空',
     iconHint: '支持 emoji 表情作为图标',
     iconUrlPlaceholder: '输入图标URL（可选）',
@@ -695,6 +750,7 @@ export default {
     artifactGroupMeta: '按工作台分组浏览可复用来源',
     artifactToolMeta: '查看该工具下的历史任务',
     artifactSelectedTag: '已选中',
+    clearArtifactSelection: '清除产物选择',
     artifactFocusTag: '右侧定位',
     artifactSummarySelected: '当前已选产物',
     artifactSummaryFocused: '右侧已定位到来源路径',
@@ -891,6 +947,8 @@ export default {
     newPassword: '新密码',
     avatar: '头像',
     uploadAvatar: '上传头像',
+    avatarUploaded: '头像上传成功',
+    avatarUploadFailed: '头像上传失败',
     avatarTypeError: '只能上传图片文件',
     avatarSizeError: '图片大小不能超过2MB',
     invitationCode: '邀请码',

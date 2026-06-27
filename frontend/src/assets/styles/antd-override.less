@@ -1,20 +1,44 @@
 // ============================================
-// Ant Design Vue 主题定制
+// Ant Design Vue 主题定制 — Dark-first
 // ============================================
 
 @import './variables.less';
 
-// 覆盖 Ant Design 变量
 :root {
   // 主色
   --ant-primary-color: @accent-color;
   --ant-primary-color-hover: @accent-color-hover;
+  --ant-primary-color-active: @accent-color-active;
+  --ant-primary-1: @accent-color-light;
+  --ant-primary-color-outline: @accent-color-border;
 
   // 功能色
   --ant-success-color: @success-color;
   --ant-warning-color: @warning-color;
   --ant-error-color: @error-color;
   --ant-info-color: @info-color;
+
+  // 暗色默认
+  --ant-body-background: @bg-body;
+  --ant-component-background: @bg-surface;
+  --ant-popover-background: @bg-elevated;
+  --ant-text-color: @text-primary;
+  --ant-text-color-secondary: @text-secondary;
+  --ant-border-color-base: @border-color;
+  --ant-border-color-split: @border-color;
+  --ant-disabled-color: @text-disabled;
+
+  // 输入框
+  --ant-input-bg: @bg-surface;
+  --ant-input-border-color: @border-color-hover;
+
+  // 表格
+  --ant-table-header-bg: @bg-surface;
+  --ant-table-row-hover-bg: @bg-hover;
+
+  // 下拉
+  --ant-select-dropdown-bg: @bg-elevated;
+  --ant-select-background: @bg-surface;
 
   // 边框圆角
   --ant-border-radius-base: @border-radius-md;
@@ -23,13 +47,32 @@
   // 字体
   --ant-font-family: @font-family;
   --ant-font-size-base: @font-size-sm;
+
+  // 阴影
+  --ant-shadow-2: @shadow-md;
 }
 
-// 暗色主题
-[data-theme="dark"] {
-  --ant-component-background: @bg-dark-secondary;
-  --ant-body-background: @bg-dark;
-  --ant-text-color: @text-color-primary;
-  --ant-text-color-secondary: @text-color-secondary;
-  --ant-border-color-base: @border-color-dark;
+// 浅色主题覆盖
+[data-theme="light"] {
+  --ant-primary-color: #2563EB;
+  --ant-primary-color-hover: #1D4ED8;
+  --ant-primary-color-active: #1E40AF;
+
+  --ant-body-background: @bg-light;
+  --ant-component-background: #ffffff;
+  --ant-popover-background: #ffffff;
+  --ant-text-color: @text-color-light-primary;
+  --ant-text-color-secondary: @text-color-light-secondary;
+  --ant-border-color-base: @border-color-light;
+  --ant-border-color-split: @border-color-light;
+  --ant-disabled-color: @text-color-light-disabled;
+
+  --ant-input-bg: #ffffff;
+  --ant-input-border-color: @border-color-light;
+
+  --ant-table-header-bg: @bg-light;
+  --ant-table-row-hover-bg: @bg-light;
+
+  --ant-select-dropdown-bg: #ffffff;
+  --ant-select-background: #ffffff;
 }

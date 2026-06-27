@@ -7,7 +7,7 @@ export type Theme = 'light' | 'dark'
 export const useAppStore = defineStore('app', () => {
   // State
   const locale = ref<Locale>('zh-CN')
-  const theme = ref<Theme>('light')
+  const theme = ref<Theme>('dark')
   const collapsed = ref(false)
   const loading = ref(false)
 

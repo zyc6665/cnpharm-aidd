@@ -90,8 +90,8 @@
       </div>
 
       <!-- 工具列表 -->
-      <a-spin :spinning="loading">
-        <div v-if="displayTools.length" class="tools-grid">
+      <SkeletonList v-if="loading" :count="8" />
+        <div v-else-if="displayTools.length" class="tools-grid">
           <a-row :gutter="[24, 24]">
             <a-col v-for="tool in displayTools" :key="tool.id" :xs="24" :sm="12" :lg="8" :xl="6">
               <div
@@ -144,7 +144,6 @@
           </a-row>
         </div>
         <a-empty v-else :description="t('tools.noTools')" />
-      </a-spin>
 
       <!-- 分页 -->
       <div v-if="displayTotal > pageSize" class="pagination">
@@ -170,6 +169,7 @@
   import { useI18n } from 'vue-i18n'
   import AppFilterBar from '@/components/common/AppFilterBar.vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import SkeletonList from '@/components/common/SkeletonList.vue'
   import {
     ToolOutlined,
     PlayCircleOutlined,
@@ -423,7 +423,7 @@
     }
 
     &:focus-visible {
-      outline: 3px solid rgba(24, 144, 255, 0.28);
+      outline: 3px solid @accent-color-border;
       outline-offset: 3px;
     }
   }
@@ -440,7 +440,7 @@
     height: 48px;
     border-radius: @border-radius-md;
     background: linear-gradient(135deg, @accent-color-light, @primary-color-light);
-    border: 1px solid rgba(255, 215, 0, 0.18);
+    border: 1px solid @accent-color-border;
     display: flex;
     align-items: center;
     justify-content: center;

@@ -175,7 +175,7 @@ onBeforeUnmount(() => {
   .card();
   text-align: center;
   margin-bottom: @spacing-lg;
-  border-color: #eef0f5;
+  border-color: @border-color;
   overflow: hidden;
 
   .user-profile-copy {
@@ -205,7 +205,7 @@ onBeforeUnmount(() => {
 .user-menu {
   .card();
   padding: @spacing-sm 0;
-  border-color: #eef0f5;
+  border-color: @border-color;
   overflow: hidden;
 
   :deep(.ant-menu-item) {

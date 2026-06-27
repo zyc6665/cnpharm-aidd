@@ -803,7 +803,7 @@
     padding: @spacing-sm @spacing-md;
     border: 1px solid #d8e1ee;
     border-radius: @border-radius-md;
-    background: #fff;
+    background: @bg-elevated;
     text-align: left;
     transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
     cursor: pointer;
@@ -815,13 +815,13 @@
   }
 
   .artifact-path-segment:not(:disabled):hover {
-    border-color: rgba(24, 144, 255, 0.45);
+    border-color: rgba(59, 130, 246, 0.35);
     box-shadow: 0 8px 18px rgb(24 144 255 / 8%);
     transform: translateY(-1px);
   }
 
   .artifact-path-segment.is-active {
-    border-color: rgba(24, 144, 255, 0.6);
+    border-color: rgba(59, 130, 246, 0.45);
     box-shadow: 0 0 0 3px rgb(24 144 255 / 10%);
   }
 
@@ -850,7 +850,7 @@
     padding: @spacing-md;
     border: 1px solid #d8e1ee;
     border-radius: @border-radius-md;
-    background: linear-gradient(180deg, #fff 0%, #fbfdff 100%);
+    background: linear-gradient(180deg, @bg-elevated 0%, @accent-color-light 100%);
   }
 
   .artifact-step-header {
@@ -896,19 +896,19 @@
     padding: @spacing-sm @spacing-md;
     border: 1px solid #e8edf5;
     border-radius: @border-radius-md;
-    background: #fff;
+    background: @bg-elevated;
     text-align: left;
     transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
     cursor: pointer;
   }
 
   .artifact-step-option:hover {
-    border-color: rgba(24, 144, 255, 0.45);
-    background: #f8fbff;
+    border-color: rgba(59, 130, 246, 0.35);
+    background: @accent-color-light;
   }
 
   .artifact-step-option.is-selected {
-    border-color: rgba(24, 144, 255, 0.6);
+    border-color: rgba(59, 130, 246, 0.45);
     box-shadow: 0 0 0 3px rgb(24 144 255 / 10%);
   }
 
@@ -953,7 +953,7 @@
     padding: @spacing-md;
     border: 1px dashed #d8e1ee;
     border-radius: @border-radius-md;
-    background: #fbfdff;
+    background: @accent-color-light;
   }
 
   .artifact-selection-summary-copy {
@@ -992,7 +992,7 @@
     padding: @spacing-md;
     border: 1px dashed #d8e1ee;
     border-radius: @border-radius-md;
-    background: #fbfdff;
+    background: @accent-color-light;
   }
 
   @media (max-width: @screen-md) {

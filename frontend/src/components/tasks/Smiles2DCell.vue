@@ -109,7 +109,7 @@ onMounted(() => {
   border-radius: 14px;
   background:
     radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 48%),
-    linear-gradient(180deg, #f8fafc, #eef2ff);
+    linear-gradient(180deg, @bg-hover, @accent-color-light);
   border: 1px solid #dbe4ff;
   overflow: hidden;
 }

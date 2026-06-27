@@ -425,7 +425,7 @@
     display: grid;
     gap: 4px;
     padding: @spacing-sm;
-    border: 1px solid rgba(24, 144, 255, 0.12);
+    border: 1px solid @border-color-hover;
     border-radius: @border-radius-sm;
     background: rgba(255, 255, 255, 0.78);
   }

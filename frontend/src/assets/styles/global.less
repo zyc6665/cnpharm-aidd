@@ -1,11 +1,10 @@
 // ============================================
-// CPUModel 全局样式
+// CPUModel 全局样式 — Dark-first
 // ============================================
 
 @import './variables.less';
 
-// 重置样式
-// --------------------------------------------
+// ── 重置 ──
 *,
 *::before,
 *::after {
@@ -18,14 +17,15 @@ html {
   font-size: 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  color-scheme: dark;
 }
 
 body {
   font-family: @font-family;
-  font-size: @font-size-md;
+  font-size: @font-size-sm;
   line-height: @line-height-base;
-  color: @text-color-light-primary;
-  background-color: @bg-light;
+  color: @text-primary;
+  background-color: @bg-body;
   min-height: 100vh;
 }
 
@@ -44,72 +44,77 @@ img {
   height: auto;
 }
 
-// 滚动条样式
-// --------------------------------------------
+// ── 滚动条（暗色） ──
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.05);
-  border-radius: @border-radius-sm;
+  background: @scrollbar-track;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.15);
-  border-radius: @border-radius-sm;
+  background: @scrollbar-thumb;
+  border-radius: 999px;
 
   &:hover {
-    background: rgba(0, 0, 0, 0.25);
+    background: @scrollbar-thumb-hover;
   }
 }
 
-// 暗色主题滚动条
-[data-theme="dark"] {
+// ── 选择文本 ──
+::selection {
+  background: @accent-color-light;
+  color: @text-primary;
+}
+
+// ── 聚焦环 ──
+:focus-visible {
+  outline: 2px solid @accent-color;
+  outline-offset: 2px;
+}
+
+// ── 浅色主题覆盖 ──
+[data-theme="light"] {
+  color-scheme: light;
+
+  body {
+    color: @text-color-light-primary;
+    background-color: @bg-light;
+  }
+
+  a {
+    color: @accent-color;
+
+    &:hover {
+      color: @accent-color-hover;
+    }
+  }
+
   ::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(0, 0, 0, 0.04);
   }
 
   ::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.15);
+    background: rgba(0, 0, 0, 0.12);
 
     &:hover {
-      background: rgba(255, 255, 255, 0.25);
+      background: rgba(0, 0, 0, 0.22);
     }
   }
 }
 
-// 工具类
-// --------------------------------------------
+// ── 工具类 ──
 
-// 文本对齐
 .text-left { text-align: left; }
 .text-center { text-align: center; }
 .text-right { text-align: right; }
 
-// 文本省略
-.text-ellipsis {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+.text-ellipsis { .text-ellipsis(); }
+.text-ellipsis-2 { .text-ellipsis-lines(2); }
+.text-ellipsis-3 { .text-ellipsis-lines(3); }
 
-.text-ellipsis-2 {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.text-ellipsis-3 {
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-// Flex 布局
 .flex { display: flex; }
 .flex-col { flex-direction: column; }
 .flex-wrap { flex-wrap: wrap; }
@@ -126,7 +131,6 @@ img {
 .gap-md { gap: @spacing-md; }
 .gap-lg { gap: @spacing-lg; }
 
-// 间距
 .mt-xs { margin-top: @spacing-xs; }
 .mt-sm { margin-top: @spacing-sm; }
 .mt-md { margin-top: @spacing-md; }
@@ -147,12 +151,10 @@ img {
 .p-lg { padding: @spacing-lg; }
 .p-xl { padding: @spacing-xl; }
 
-// 宽高
 .w-full { width: 100%; }
 .h-full { height: 100%; }
 .min-h-screen { min-height: 100vh; }
 
-// 容器
 .container {
   width: 100%;
   max-width: @container-xxl;
@@ -167,72 +169,52 @@ img {
   }
 }
 
-// 渐变背景
-.gradient-bg {
-  background: linear-gradient(135deg, @primary-gradient-start 0%, @primary-gradient-mid 50%, @primary-gradient-end 100%);
-}
+// ── 通用卡片 ──
+.card { .card(); }
 
-// 卡片样式
-.card {
-  background: @bg-card-light;
-  border-radius: @border-radius-lg;
-  box-shadow: @shadow-card;
-  padding: @spacing-lg;
-  transition: all @transition-base;
-
-  &:hover {
-    box-shadow: @shadow-xl;
-  }
-}
-
-.card-dark {
-  background: @bg-card-dark;
-  border: 1px solid @border-color-dark;
-  border-radius: @border-radius-lg;
-  padding: @spacing-lg;
-  transition: all @transition-base;
-
-  &:hover {
-    background: @bg-card-hover-dark;
-    border-color: @border-color-dark-hover;
-  }
-}
-
-// 金色按钮
-.btn-gold {
-  background: linear-gradient(135deg, @accent-color 0%, @accent-color-hover 100%);
-  color: @bg-dark;
+// ── 按钮 ──
+.btn-primary {
+  background: @accent-color;
+  color: #ffffff;
   border: none;
   padding: @spacing-sm @spacing-lg;
   border-radius: @border-radius-md;
   font-weight: @font-weight-semibold;
+  font-size: @font-size-sm;
   cursor: pointer;
-  transition: all @transition-base;
+  transition: all @transition-fast;
+  font-family: @font-family;
 
   &:hover {
-    transform: translateY(-2px);
+    background: @accent-color-hover;
+    transform: translateY(-1px);
     box-shadow: @shadow-glow;
   }
 
   &:active {
     transform: translateY(0);
+    background: @accent-color-active;
+  }
+
+  &:focus-visible {
+    outline: 2px solid @accent-color;
+    outline-offset: 2px;
   }
 }
 
-// 动画
+// 旧别名兼容
+.btn-gold { .btn-primary(); }
+
+// ── 动画 ──
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes fadeInUp {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(12px);
   }
   to {
     opacity: 1;
@@ -240,23 +222,26 @@ img {
   }
 }
 
-@keyframes float {
-  0%, 100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-10px);
-  }
+@keyframes skeletonPulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.7; }
 }
 
 .animate-fade-in {
-  animation: fadeIn 0.5s ease-out;
+  animation: fadeIn 0.3s @transition-base;
 }
 
 .animate-fade-in-up {
-  animation: fadeInUp 0.5s ease-out;
+  animation: fadeInUp 0.4s @transition-base;
 }
 
-.animate-float {
-  animation: float 3s ease-in-out infinite;
+// ── 减动效 ──
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

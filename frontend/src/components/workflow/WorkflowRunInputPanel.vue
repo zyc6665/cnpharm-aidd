@@ -61,7 +61,7 @@ function resolveOptions(semanticType: string) {
 .workflow-run-input-panel {
   padding: @spacing-md;
   margin-bottom: @spacing-md;
-  border: 1px solid rgba(24, 144, 255, 0.12);
+  border: 1px solid @border-color-hover;
   border-radius: @border-radius-md;
   background: rgba(255, 255, 255, 0.86);
   box-shadow: @shadow-sm;

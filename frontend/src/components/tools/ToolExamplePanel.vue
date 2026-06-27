@@ -143,7 +143,7 @@
     padding: @spacing-sm @spacing-md;
     border: 1px solid #d6e4ff;
     border-radius: @border-radius-base;
-    background: #fff;
+    background: @bg-elevated;
     color: @text-color-light;
     font-family: monospace;
     font-size: 12px;
@@ -167,7 +167,7 @@
     padding: 4px 8px;
     border: 1px solid #d6e4ff;
     border-radius: @border-radius-base;
-    background: #fff;
+    background: @bg-elevated;
     color: @text-color-light;
     cursor: pointer;
 
@@ -175,7 +175,7 @@
       cursor: not-allowed;
       color: @text-color-light-tertiary;
       background: #f7f8fa;
-      border-color: #eef0f5;
+      border-color: @border-color;
     }
   }
 

@@ -512,9 +512,9 @@
     gap: @spacing-sm;
     min-width: 0;
     padding: @spacing-sm;
-    border: 1px solid rgba(24, 144, 255, 0.18);
+    border: 1px solid @accent-color-border;
     border-radius: @border-radius-md;
-    background: rgba(24, 144, 255, 0.045);
+    background: @accent-color-light;
     color: @text-color-light-primary;
     font-size: @font-size-sm;
   }
@@ -607,7 +607,7 @@
     padding: @spacing-sm @spacing-md;
     border-left: 3px solid @primary-color;
     border-radius: @border-radius-sm;
-    background: linear-gradient(90deg, rgba(24, 144, 255, 0.09), rgba(24, 144, 255, 0.025));
+    background: linear-gradient(90deg, rgba(59, 130, 246, 0.07), rgba(59, 130, 246, 0.02));
   }
 
   .agent-analysis-list {
@@ -636,7 +636,7 @@
     padding: @spacing-sm;
     border: 1px solid rgba(214, 224, 238, 0.92);
     border-radius: @border-radius-md;
-    background: #fff;
+    background: @bg-elevated;
   }
 
   .history-head {
@@ -677,8 +677,8 @@
 
     &:hover,
     &.is-active {
-      border-color: rgba(24, 144, 255, 0.35);
-      background: rgba(24, 144, 255, 0.07);
+      border-color: rgba(59, 130, 246, 0.25);
+      background: rgba(59, 130, 246, 0.05);
     }
   }
 
@@ -720,7 +720,7 @@
     padding: @spacing-sm @spacing-md;
     border: 1px solid rgba(214, 224, 238, 0.92);
     border-radius: @border-radius-md;
-    background: #fff;
+    background: @bg-elevated;
   }
 
   .step-main {

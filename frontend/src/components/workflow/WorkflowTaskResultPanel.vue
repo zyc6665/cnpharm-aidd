@@ -350,7 +350,7 @@
     flex-wrap: wrap;
     padding: @spacing-md;
     border-radius: @border-radius-md;
-    background: #f8fafc;
+    background: @bg-hover;
     border: 1px solid #e8edf5;
 
     &.is-success {
@@ -400,7 +400,7 @@
     padding: @spacing-md;
     border: 1px solid rgba(220, 227, 240, 0.92);
     border-radius: @border-radius-md;
-    background: #fff;
+    background: @bg-elevated;
   }
 
   .workflow-result-progress__header {

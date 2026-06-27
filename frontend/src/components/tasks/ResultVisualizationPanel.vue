@@ -283,7 +283,7 @@ const panelDescription = computed(() => {
   border-radius: 20px;
   background:
     radial-gradient(circle at top right, rgba(56, 189, 248, 0.08), transparent 28%),
-    linear-gradient(180deg, #ffffff, #f8fafc);
+    linear-gradient(180deg, @bg-elevated, @bg-hover);
   border: 1px solid #e2e8f0;
 }
 
@@ -321,7 +321,7 @@ const panelDescription = computed(() => {
   padding: 12px 14px;
   border: 1px solid #dbe4ff;
   border-radius: 16px;
-  background: #f8fbff;
+  background: @accent-color-light;
   color: #0f172a;
   text-align: left;
   cursor: pointer;
@@ -393,7 +393,7 @@ const panelDescription = computed(() => {
   gap: 10px;
   padding: 10px 14px;
   border-radius: 999px;
-  background: #f8fafc;
+  background: @bg-hover;
   border: 1px solid #e2e8f0;
   color: #0f172a;
 }

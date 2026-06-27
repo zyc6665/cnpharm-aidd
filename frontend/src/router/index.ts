@@ -4,12 +4,19 @@ import i18n from '@/locales'
 
 // 路由配置
 const routes: RouteRecordRaw[] = [
-  // 首页
+  // 首页（品牌页）
   {
     path: '/',
     name: 'Home',
     component: () => import('@/views/home/index.vue'),
     meta: { title: 'home.title' }
+  },
+  // 工作台仪表盘（登录后默认页）
+  {
+    path: '/workspace',
+    name: 'Workspace',
+    component: () => import('@/views/workspace/index.vue'),
+    meta: { title: 'nav.workspace', requiresAuth: true }
   },
   // 认证相关
   {
@@ -89,7 +96,7 @@ const routes: RouteRecordRaw[] = [
       }
     ]
   },
-  // 管理后台
+  // 管理后台（AppShell 提供侧边栏，admin/index.vue 提供 tabs）
   {
     path: '/admin',
     name: 'Admin',
@@ -194,9 +201,15 @@ router.beforeEach(async (to, _from, next) => {
   const translatedTitle = titleKey ? i18n.global.t(titleKey) : 'CPUModel'
   document.title = `${translatedTitle} - CPUModel`
 
-  // 访客页面（已登录用户重定向到首页）
+  // 访客页面（已登录用户重定向到工作台）
   if (to.meta.guest && userStore.isLoggedIn) {
-    next('/')
+    next('/workspace')
+    return
+  }
+
+  // 首页访问（已登录用户重定向到工作台）
+  if (to.path === '/' && userStore.isLoggedIn) {
+    next('/workspace')
     return
   }
 

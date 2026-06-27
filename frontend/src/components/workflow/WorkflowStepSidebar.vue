@@ -104,7 +104,7 @@
     border: 1px solid rgba(214, 224, 238, 0.92);
     border-radius: @border-radius-lg;
     padding: @spacing-md;
-    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    background: linear-gradient(180deg, @bg-elevated 0%, @accent-color-light 100%);
     cursor: pointer;
     text-align: left;
     transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
@@ -117,7 +117,7 @@
     }
 
     &:focus-visible {
-      outline: 3px solid rgba(24, 144, 255, 0.28);
+      outline: 3px solid rgba(59, 130, 246, 0.2);
       outline-offset: 3px;
     }
   }

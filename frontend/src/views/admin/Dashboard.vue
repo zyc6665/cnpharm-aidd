@@ -240,7 +240,7 @@ onMounted(() => {
     position: relative;
     overflow: hidden;
     height: 100%;
-    border: 1px solid #eef0f5;
+    border: 1px solid @border-color;
     border-radius: @border-radius-lg;
     box-shadow: @shadow-sm;
 
@@ -311,13 +311,13 @@ onMounted(() => {
 
   .dashboard-panel {
     height: 100%;
-    border: 1px solid #eef0f5;
+    border: 1px solid @border-color;
     border-radius: @border-radius-lg;
     box-shadow: @shadow-sm;
 
     :deep(.ant-card-head) {
       min-height: 52px;
-      border-bottom-color: #eef0f5;
+      border-bottom-color: @border-color;
     }
 
     :deep(.ant-card-head-title) {

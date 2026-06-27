@@ -123,7 +123,7 @@
   .workflow-results-report-panel {
     margin-top: @spacing-md;
     padding: @spacing-lg;
-    border: 1px solid rgba(24, 144, 255, 0.12);
+    border: 1px solid @border-color-hover;
     border-radius: @border-radius-md;
     background: rgba(255, 255, 255, 0.92);
     box-shadow: @shadow-sm;

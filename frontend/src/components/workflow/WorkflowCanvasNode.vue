@@ -98,7 +98,7 @@
     align-items: flex-start;
     gap: 7px;
     padding: @spacing-md;
-    border: 1px solid rgba(24, 144, 255, 0.18);
+    border: 1px solid @accent-color-border;
     border-radius: @border-radius-md;
     background: rgba(255, 255, 255, 0.96);
     box-shadow: @shadow-md;
@@ -116,7 +116,7 @@
   .workflow-canvas-node:hover,
   .workflow-canvas-node:focus-visible {
     transform: translateY(-2px);
-    border-color: rgba(24, 144, 255, 0.46);
+    border-color: rgba(59, 130, 246, 0.35);
     box-shadow: @shadow-lg;
     outline: none;
   }

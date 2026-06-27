@@ -412,7 +412,7 @@
     min-width: 0;
     max-height: 720px;
     overflow: auto;
-    border: 1px solid rgba(24, 144, 255, 0.12);
+    border: 1px solid @border-color-hover;
     border-radius: @border-radius-md;
     background: @bg-light-secondary;
     box-shadow: @shadow-sm;
@@ -489,8 +489,8 @@
   }
 
   .edge-suggestion-item {
-    border-color: rgba(24, 144, 255, 0.18);
-    background: rgba(24, 144, 255, 0.05);
+    border-color: @accent-color-border;
+    background: @accent-color-light;
   }
 
   .edge-suggestion-copy,
