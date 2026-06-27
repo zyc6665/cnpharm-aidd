@@ -22,9 +22,10 @@ def test_admin_tool_categories_route_and_entry_exist():
     assert "name: 'AdminToolCategories'" in router_source
     assert "ToolCategories.vue" in router_source
 
-    assert "key=\"tool-categories\"" in admin_index_source
-    assert "navigate('tool-categories')" in admin_index_source
-    assert "t('admin.toolCategories')" in admin_index_source
+    # Phase 3: admin/index.vue 改用数据驱动 v-for 循环 adminTabs 数组
+    assert "key: 'tool-categories'" in admin_index_source
+    assert "labelKey: 'admin.toolCategories'" in admin_index_source
+    assert "navigate(tab.key)" in admin_index_source
 
 
 def test_admin_tool_categories_page_has_management_actions():
@@ -52,11 +53,10 @@ def test_admin_tool_forms_use_category_id_and_public_create_entry_is_removed():
 
     assert "adminGetToolCategories" in api_source
 
-    assert "toolForm.category_id" in admin_tools_source
+    # Phase 3: admin/Tools.vue 工具表单交棒给 Create.vue，使用 router.push 而非内联 createTool/updateTool
     assert "adminGetToolCategories" in admin_tools_source
-    assert "createTool(" in admin_tools_source
-    assert "updateTool(" in admin_tools_source
-    assert "category_id:" in admin_tools_source
+    assert "openCreatePage" in admin_tools_source  # 跳转到 Create.vue
+    assert "category_id" in admin_tools_source  # import 等流程仍使用 category_id
 
     assert "name=\"category_id\"" in create_source
     assert "formState.category_id" in create_source

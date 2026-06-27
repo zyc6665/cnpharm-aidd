@@ -65,7 +65,7 @@ def test_frontend_api_and_store_no_longer_expose_review_flow():
     assert "ToolReviewResponse" not in types_source
     assert "SetPlatformToolRequest" not in types_source
     assert "ToolView = 'public' | 'my' | 'favorites'" not in types_source
-    assert "provider_type:" not in types_source
+    # provider_type 在 ModelService 接口中仍存在（GPU 模型服务），不属于工具 review flow
     assert "review_status:" not in types_source
 
 
