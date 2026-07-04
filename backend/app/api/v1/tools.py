@@ -2,8 +2,6 @@
 """工具管理API"""
 
 from datetime import datetime
-from pathlib import Path
-import sys
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,17 +35,12 @@ from app.services.tool_examples import (
     build_tool_example_file_preview,
     build_tool_example_response,
 )
+from app.services.tool_import_config import ToolImportConfigError, validate_tool_import_config
 from app.services.tool_contracts import (
     build_tool_contract,
     collect_tool_contract_config_validation_errors,
     collect_tool_contract_validation_errors,
 )
-
-PROJECT_ROOT = Path(__file__).resolve().parents[4]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
-from tool_import_config import ToolImportConfigError, validate_tool_import_config
 
 router = APIRouter()
 admin_category_router = APIRouter(prefix="/admin/tool-categories", tags=["工具分类管理"])

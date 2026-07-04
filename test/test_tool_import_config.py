@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
 
-from tool_import_config import (
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+BACKEND_ROOT = PROJECT_ROOT / "backend"
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from app.services.tool_import_config import (
     ToolImportConfigError,
     normalize_tool_import_config,
     resolve_script_relative_path,
@@ -93,6 +99,15 @@ def test_validate_rejects_invalid_http_method() -> None:
                 },
             }
         )
+
+
+def test_tools_api_uses_backend_package_import_for_tool_config() -> None:
+    """工具 API 不应通过修改 sys.path 依赖仓库根目录模块。"""
+    source = Path("backend/app/api/v1/tools.py").read_text(encoding="utf-8")
+
+    assert "sys.path.insert" not in source
+    assert "from tool_import_config import" not in source
+    assert "from app.services.tool_import_config import" in source
 
 
 def test_normalize_python_script_aliases_script_to_script_path() -> None:
