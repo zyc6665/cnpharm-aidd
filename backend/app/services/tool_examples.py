@@ -42,6 +42,7 @@ TEXT_PREVIEW_EXTENSIONS = {
     ".md",
 }
 EXAMPLE_PREVIEW_MAX_BYTES = 64 * 1024
+_EXAMPLE_BASE_DIR_INDEX: dict[Path, dict[str, Path]] = {}
 
 
 def get_default_tool_example(config: dict) -> Optional[dict]:
@@ -90,17 +91,33 @@ def resolve_example_base_dir(tool: Tool, config: dict) -> Path:
             base_path = PROJECT_ROOT / base_path
         return base_path.resolve()
 
-    example_root = PROJECT_ROOT / "example"
+    example_root = (PROJECT_ROOT / "example").resolve()
+    slug_index = _get_example_base_dir_index(example_root)
+    if tool.slug in slug_index:
+        return slug_index[tool.slug]
+
+    return (example_root / tool.slug).resolve()
+
+
+def _get_example_base_dir_index(example_root: Path) -> dict[str, Path]:
+    """构建并缓存示例配置 slug 到目录的索引。"""
+    cached_index = _EXAMPLE_BASE_DIR_INDEX.get(example_root)
+    if cached_index is not None:
+        return cached_index
+
+    slug_index: dict[str, Path] = {}
     for config_path in example_root.rglob("platform_tool*.json"):
         try:
             with config_path.open("r", encoding="utf-8") as config_file:
                 raw_config = json.load(config_file)
         except (OSError, ValueError):
             continue
-        if raw_config.get("slug") == tool.slug:
-            return config_path.parent.resolve()
+        slug = raw_config.get("slug")
+        if isinstance(slug, str) and slug.strip():
+            slug_index.setdefault(slug, config_path.parent.resolve())
 
-    return (example_root / tool.slug).resolve()
+    _EXAMPLE_BASE_DIR_INDEX[example_root] = slug_index
+    return slug_index
 
 
 def resolve_example_file_path(base_dir: Path, relative_path: str) -> Path:

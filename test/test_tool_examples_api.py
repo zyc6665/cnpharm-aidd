@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -28,6 +30,7 @@ from app.models import tasks as _task_models  # noqa: F401
 from app.models import users as _user_models  # noqa: F401
 from app.models.tools import Tool, ToolStatus, ToolVersion
 from app.models.users import User, UserRole, UserStatus
+from app.services import tool_examples
 
 
 @pytest_asyncio.fixture
@@ -128,6 +131,38 @@ async def create_tool_with_config(db_session: AsyncSession, config: dict, slug: 
     await db_session.commit()
     await db_session.refresh(tool)
     return tool
+
+
+def test_resolve_example_base_dir_reuses_slug_index(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    """未显式配置 example_base_dir 时，同一索引应复用而不是每次递归扫描。"""
+    example_root = tmp_path / "example"
+    tool_dir = example_root / "cached-tool"
+    tool_dir.mkdir(parents=True)
+    (tool_dir / "platform_tool.json").write_text(
+        json.dumps({"slug": "cached-tool"}),
+        encoding="utf-8",
+    )
+    original_rglob = Path.rglob
+    scan_count = 0
+
+    def counting_rglob(self: Path, pattern: str):
+        nonlocal scan_count
+        if self == example_root and pattern == "platform_tool*.json":
+            scan_count += 1
+        return original_rglob(self, pattern)
+
+    monkeypatch.setattr(tool_examples, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(Path, "rglob", counting_rglob)
+
+    tool = SimpleNamespace(slug="cached-tool")
+    config: dict = {}
+
+    assert tool_examples.resolve_example_base_dir(tool, config) == tool_dir.resolve()
+    assert tool_examples.resolve_example_base_dir(tool, config) == tool_dir.resolve()
+    assert scan_count == 1
 
 
 @pytest.mark.asyncio
@@ -270,4 +305,3 @@ async def test_tool_example_rejects_path_traversal(
     response = await api_client.get(f"/api/v1/tools/{tool.id}/example")
 
     assert response.status_code == 422
-
