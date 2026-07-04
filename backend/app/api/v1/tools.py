@@ -28,7 +28,7 @@ from app.schemas.tools import (
     ToolWorkbenchGroupToolResponse, ToolWorkbenchGroupPublicResponse,
     ToolContractResponse,
 )
-from app.common.responses import success_response, error_response
+from app.common.responses import paginated_response, success_response, error_response
 from app.common.exceptions import NotFoundException, ForbiddenException, ConflictException, ValidationException
 from app.services.tool_examples import (
     apply_tool_example_to_user,
@@ -488,14 +488,11 @@ async def list_tools(
 
     items = [serialize_tool(t, ToolListResponse) for t in tools]
 
-    return success_response(
-        data={
-            "items": items,
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": (total + page_size - 1) // page_size
-        }
+    return paginated_response(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
     )
 
 
