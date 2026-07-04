@@ -24,7 +24,7 @@ from app.database.session import get_db
 from app.models.users import User
 from app.models.files import File as FileModel, FileSourceType
 from app.models.tasks import Task
-from app.auth.dependencies import get_current_user, get_admin_user, get_current_user_optional
+from app.auth.dependencies import get_current_user, get_current_user_optional
 from app.schemas.files import (
     FileResponse as FileSchema,
     FileUploadResponse,
@@ -34,7 +34,7 @@ from app.schemas.files import (
 from app.common.responses import paginated_response, success_response
 from app.common.exceptions import NotFoundException, ForbiddenException, ValidationException
 from app.config import settings
-from app.files.storage_path import STORAGE_PATH, ensure_storage_dir, get_file_path
+from app.files.storage_path import ensure_storage_dir, get_file_path
 
 router = APIRouter()
 

@@ -1,20 +1,18 @@
 # backend/app/api/v1/auth.py
 """认证API"""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
-from typing import Optional
 
 from app.database.session import get_db
-from app.models.users import User, UserRole, UserSession, UserStatus
+from app.models.users import User, UserRole, UserStatus
 from app.auth.jwt_handler import JWTHandler
 from app.auth.password import hash_password, verify_password
 from app.auth.dependencies import get_current_user
 from app.schemas.users import (
-    UserCreate, UserLogin, UserResponse, TokenResponse,
-    UserUpdate, PasswordChange
+    UserCreate, UserLogin, UserResponse,
 )
 from app.schemas.verification import PasswordResetRequest
 from app.services.verification.service import (

@@ -4,32 +4,29 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_, update
+from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload, joinedload
 from typing import Any, Optional
 
 from app.config import use_direct_task_execution
 from app.database.session import get_db
 from app.models.files import File as FileModel
-from app.models.statistics import ToolStatistics
 from app.models.users import User
 from app.models.tools import Tool, ToolVersion
-from app.models.tasks import Task, TaskInput, TaskOutput, TaskLog, TaskStatus
+from app.models.tasks import Task, TaskLog, TaskStatus
 from app.tasks.direct_runner import direct_task_runner
 from app.tasks.service import (
     create_and_schedule_tool_task,
     record_tool_usage,
 )
 from app.tasks.naming import (
-    _sanitize_task_name,
-    _build_default_task_name,
     resolve_task_display_name as _resolve_task_display_name,
     _dedupe_file_ids,
     _extract_file_ids_from_result,
 )
 from app.auth.dependencies import get_current_user, get_admin_user
 from app.schemas.tasks import (
-    TaskCreate, TaskResponse, TaskListResponse
+    TaskCreate, TaskListResponse
 )
 from app.common.responses import paginated_response, success_response
 from app.common.exceptions import NotFoundException, ForbiddenException, ValidationException

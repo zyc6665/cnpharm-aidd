@@ -4,16 +4,15 @@
 import os
 import platform
 import psutil
-from typing import Dict, Any, Optional, List
-from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Optional, List
+from fastapi import APIRouter, Depends, status
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app.common.time import utcnow
 from app.database.session import get_db
-from app.config import settings, is_development, is_production, use_async_tasks
+from app.config import settings, use_async_tasks
 from app.auth.dependencies import get_admin_user
 from app.common.responses import success_response
 from app.models.users import User

@@ -7,9 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.session import get_db
 from app.schemas.verification import (
     SendCodeRequest,
-    SendCodeResponse,
     VerifyCodeRequest,
-    VerifyCodeResponse
 )
 from app.services.verification.service import (
     get_verification_service,

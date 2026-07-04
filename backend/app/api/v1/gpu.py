@@ -9,8 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.auth.dependencies import get_current_user, get_admin_user
-from app.gpu.detector import get_gpu_detector, GPUInfo, GPUStats
-from app.gpu.allocator import GPUAllocator, AllocationResult, TaskPriority
+from app.gpu.detector import get_gpu_detector
+from app.gpu.allocator import GPUAllocator, TaskPriority
 from app.gpu.monitor import GPUMonitor
 
 router = APIRouter(prefix="/gpu", tags=["GPU资源管理"])

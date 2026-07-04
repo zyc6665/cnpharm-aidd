@@ -2,10 +2,8 @@
 """WebSocket 接口"""
 
 from typing import Optional
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 
-from app.database.session import get_db
 from app.websocket import ws_manager
 from app.auth.jwt_handler import decode_token
 
