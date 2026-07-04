@@ -4,7 +4,7 @@
 负责定时采集系统各项指标并更新Prometheus指标。
 """
 
-from datetime import datetime
+from datetime import timedelta
 from typing import Any, Dict, Optional
 import asyncio
 import logging
@@ -211,12 +211,13 @@ class MetricsCollector:
 
             async with self.db_factory() as db:
                 # 活跃用户（最近1小时有会话）
-                from datetime import timedelta
                 cutoff = utcnow() - timedelta(hours=1)
 
                 active_result = await db.execute(
                     select(func.count(func.distinct(UserSession.user_id))).where(
-                        UserSession.last_activity_at >= cutoff
+                        UserSession.user_id.is_not(None),
+                        UserSession.is_guest == False,
+                        UserSession.updated_at >= cutoff,
                     )
                 )
                 active_users = active_result.scalar() or 0
@@ -225,11 +226,10 @@ class MetricsCollector:
                 guest_count = 0
                 if self.cache:
                     try:
-                        # 假设游客会话存储在特定键模式下
-                        keys = await self.cache.keys("guest:session:*")
+                        keys = await self.cache.keys("guest:*")
                         guest_count = len(keys) if keys else 0
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning(f"Guest session metrics collection failed: {e}")
 
             # 更新指标
             self.metrics.set_active_users(registered=active_users, guest=guest_count)
