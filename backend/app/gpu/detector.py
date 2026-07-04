@@ -314,7 +314,8 @@ class GPUDetector:
             return 0
         try:
             return pynvml.nvmlDeviceGetCount()
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to read GPU device count: %s", e)
             return 0
 
     def __del__(self):
@@ -322,8 +323,8 @@ class GPUDetector:
         if self.initialized:
             try:
                 pynvml.nvmlShutdown()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Failed to shutdown NVML: %s", e)
 
 
 # 全局单例
