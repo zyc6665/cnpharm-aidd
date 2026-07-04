@@ -10,6 +10,7 @@ import {
   validateWorkflowDefinition,
   validateWorkflowExecutionOrder,
 } from '@/workflow/template-runner'
+import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@/workflow/template-types'
 import { useArtifactsStore, useUserStore, useWorkflowDefinitionsStore, useWorkflowStore } from '@/stores'
 import type {
   ArtifactFile,
@@ -29,7 +30,11 @@ export function useWorkflowPersistence(input: {
   artifactsStore: ArtifactsStore
   workflowStore: WorkflowStore
   workflowDefinitionsStore: WorkflowDefinitionsStore
-  editableTemplate: ComputedRef<{ id: string; nodes: any[]; edges: any[] }>
+  editableTemplate: ComputedRef<{
+    id: string
+    nodes: WorkflowCanvasNode[]
+    edges: WorkflowCanvasEdge[]
+  }>
   workflowInputRequirements: ComputedRef<string[]>
   buildCurrentWorkflowDefinition: () => WorkflowDefinition
 }) {

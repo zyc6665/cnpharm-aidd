@@ -47,3 +47,12 @@ test('workflow store 应将 session helper 抽离到独立模块', () => {
 
   assert.equal(storeSource.includes("from './workflow-session'"), true)
 })
+
+test('工作流持久化 composable 不应使用 any[] 描述画布节点和边', () => {
+  const source = readSource('src/composables/useWorkflowPersistence.ts')
+
+  assert.equal(source.includes('WorkflowCanvasNode'), true)
+  assert.equal(source.includes('WorkflowCanvasEdge'), true)
+  assert.equal(source.includes('nodes: any[]'), false)
+  assert.equal(source.includes('edges: any[]'), false)
+})
