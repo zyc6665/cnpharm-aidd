@@ -122,12 +122,25 @@ class ParamikoSSHTransport:
 
     def close(self) -> None:
         """关闭连接。"""
+        close_error: Exception | None = None
         if self.sftp is not None:
-            self.sftp.close()
-            self.sftp = None
+            try:
+                self.sftp.close()
+            except Exception as exc:
+                close_error = exc
+            finally:
+                self.sftp = None
         if self.client is not None:
-            self.client.close()
-            self.client = None
+            try:
+                self.client.close()
+            except Exception as exc:
+                if close_error is None:
+                    close_error = exc
+            finally:
+                self.client = None
+
+        if close_error is not None:
+            raise close_error
 
     def ensure_dir(self, remote_dir: str) -> None:
         """递归确保远端目录存在。"""

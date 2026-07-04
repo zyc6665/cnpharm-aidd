@@ -133,3 +133,43 @@ def test_paramiko_transport_connects_with_key_auth_and_known_hosts(
     assert fake_client.connect_kwargs is not None
     assert fake_client.connect_kwargs["pkey"] is fake_key
     assert fake_client.connect_kwargs["port"] == 2222
+
+
+def test_paramiko_transport_close_releases_client_when_sftp_close_fails() -> None:
+    """SFTP 关闭失败时仍应关闭 SSH client 并清理引用。"""
+    from app.tasks.ssh_transport import ParamikoSSHTransport
+
+    class FailingSftp:
+        def close(self) -> None:
+            raise RuntimeError("sftp close failed")
+
+    class ClosableClient:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    client = ClosableClient()
+    transport = ParamikoSSHTransport(
+        host="gpu-node-01.internal",
+        port=22,
+        username="runner",
+        auth_settings={
+            "auth_type": "password",
+            "password": "secret",
+            "known_hosts_path": None,
+            "key_path": None,
+        },
+        strict_host_key_checking=False,
+        timeout=30,
+    )
+    transport.sftp = FailingSftp()
+    transport.client = client
+
+    with pytest.raises(RuntimeError, match="sftp close failed"):
+        transport.close()
+
+    assert client.closed is True
+    assert transport.sftp is None
+    assert transport.client is None
