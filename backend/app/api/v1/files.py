@@ -96,8 +96,9 @@ def _convert_sdf_to_pdb_with_rdkit(sdf_content: bytes) -> str | None:
     except ImportError:
         return None
 
+    normalized_sdf = _first_sdf_record_bytes(sdf_content)
     supplier = Chem.ForwardSDMolSupplier(
-        io.BytesIO(sdf_content),
+        io.BytesIO(normalized_sdf),
         sanitize=False,
         removeHs=False,
         strictParsing=False,
