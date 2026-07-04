@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useUserStore } from '@/stores'
+import { setLoginRedirectHandler } from '@/api/auth-redirect'
 import i18n from '@/locales'
 
 // 路由配置
@@ -190,6 +191,10 @@ const router = createRouter({
       return { top: 0 }
     }
   }
+})
+
+setLoginRedirectHandler((redirectPath: string) => {
+  router.push({ name: 'Login', query: { redirect: redirectPath } })
 })
 
 // 路由守卫

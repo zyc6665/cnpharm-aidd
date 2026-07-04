@@ -6,6 +6,7 @@ import {
   shouldAttachAuthHeader,
   shouldAttemptTokenRefresh
 } from './auth-request-policy'
+import { redirectToLogin } from './auth-redirect'
 
 // 创建 axios 实例
 const request: AxiosInstance = axios.create({
@@ -127,9 +128,7 @@ request.interceptors.response.use(
         } catch {
           // 刷新失败，清除 Token 并跳转登录
           clearTokens()
-          // 使用 router 导航而不是强制刷新页面
-          const router = (await import('@/router')).default
-          router.push({ name: 'Login', query: { redirect: window.location.pathname } })
+          redirectToLogin(window.location.pathname)
           return Promise.reject(error)
         } finally {
           isRefreshing = false
@@ -137,9 +136,7 @@ request.interceptors.response.use(
       } else {
         // 没有 Refresh Token，跳转登录
         clearTokens()
-        // 使用 router 导航而不是强制刷新页面
-        const router = (await import('@/router')).default
-        router.push({ name: 'Login', query: { redirect: window.location.pathname } })
+        redirectToLogin(window.location.pathname)
       }
     }
 
