@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, case, or_
 from sqlalchemy.orm import joinedload
 from typing import Optional, List
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from app.common.time import utcnow
 from app.database.session import get_db

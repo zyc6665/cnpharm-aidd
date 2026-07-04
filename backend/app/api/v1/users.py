@@ -2,7 +2,6 @@
 """用户管理接口"""
 
 from typing import Optional, List
-from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select, func, or_, delete, update
 from sqlalchemy.orm import joinedload

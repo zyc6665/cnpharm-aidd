@@ -8,6 +8,7 @@ from pathlib import Path
 
 BACKEND_APP = Path("backend/app")
 API_COMPOSITION_ROOTS = {Path("main")}
+API_ROUTE_ROOT = BACKEND_APP / "api" / "v1"
 
 
 def _python_source_files() -> list[Path]:
@@ -37,5 +38,58 @@ def test_backend_non_api_modules_do_not_import_api_routes() -> None:
                 for alias in node.names:
                     if alias.name.startswith("app.api.v1"):
                         offenders.append(f"{source_path}:{node.lineno} imports {alias.name}")
+
+    assert offenders == []
+
+
+class _UsedNames(ast.NodeVisitor):
+    """收集模块中实际引用的本地名称。"""
+
+    def __init__(self) -> None:
+        self.names: set[str] = set()
+
+    def visit_Import(self, node: ast.Import) -> None:
+        return
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        return
+
+    def visit_Name(self, node: ast.Name) -> None:
+        self.names.add(node.id)
+
+    def visit_Attribute(self, node: ast.Attribute) -> None:
+        self.visit(node.value)
+
+
+def _imported_names(tree: ast.AST) -> list[tuple[str, int, str]]:
+    """返回导入的本地名称、行号和描述。"""
+    imports: list[tuple[str, int, str]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            if node.module == "__future__":
+                continue
+            module = node.module or ""
+            for alias in node.names:
+                local_name = alias.asname or alias.name.split(".")[0]
+                imports.append((local_name, node.lineno, f"from {module} import {alias.name}"))
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                local_name = alias.asname or alias.name.split(".")[0]
+                imports.append((local_name, node.lineno, f"import {alias.name}"))
+    return imports
+
+
+def test_api_route_modules_do_not_keep_unused_imports() -> None:
+    """API 路由模块不应保留未使用导入。"""
+    offenders: list[str] = []
+
+    for source_path in sorted(API_ROUTE_ROOT.glob("*.py")):
+        tree = ast.parse(source_path.read_text(encoding="utf-8"))
+        used_names = _UsedNames()
+        used_names.visit(tree)
+
+        for local_name, line_no, import_text in _imported_names(tree):
+            if local_name not in used_names.names:
+                offenders.append(f"{source_path}:{line_no} unused {import_text}")
 
     assert offenders == []
