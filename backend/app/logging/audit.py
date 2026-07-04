@@ -8,7 +8,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 import json
 import logging
 import os
@@ -91,7 +91,7 @@ class ResourceType(str, Enum):
 class AuditEvent:
     """审计事件"""
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=utcnow)
     action: AuditAction = AuditAction.READ
     result: AuditResult = AuditResult.SUCCESS
     user_id: Optional[str] = None
@@ -148,6 +148,7 @@ class AuditLogger:
         log_dir: str = "logs/audit",
         enable_file_logging: bool = True,
         enable_db_logging: bool = False,
+        db_writer: Optional[Callable[[AuditEvent], None]] = None,
         sanitize: bool = True
     ):
         """初始化审计日志器
@@ -156,11 +157,14 @@ class AuditLogger:
             log_dir: 日志目录
             enable_file_logging: 是否启用文件日志
             enable_db_logging: 是否启用数据库日志
+            db_writer: 数据库审计写入器
             sanitize: 是否对敏感数据脱敏
         """
         self.log_dir = log_dir
         self.enable_file_logging = enable_file_logging
         self.enable_db_logging = enable_db_logging
+        self._db_writer = db_writer
+        self._db_logging_warning_emitted = False
         self.sanitize = sanitize
 
         # 日志脱敏器
@@ -257,13 +261,24 @@ class AuditLogger:
             self._log_to_db(event)
 
     def _log_to_db(self, event: AuditEvent) -> None:
-        """写入数据库日志（异步）
+        """写入数据库日志
 
         Args:
             event: 审计事件
         """
-        # TODO: 实现数据库写入
-        pass
+        if self._db_writer is None:
+            if not self._db_logging_warning_emitted:
+                logger.warning(
+                    "Database audit logging is enabled, but no db_writer is configured; "
+                    "audit events will only be written to file logs."
+                )
+                self._db_logging_warning_emitted = True
+            return
+
+        try:
+            self._db_writer(event)
+        except Exception:
+            logger.exception("Failed to write audit event to database")
 
     def log_user_action(
         self,
