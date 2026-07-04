@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 from fastapi import WebSocketDisconnect
 
@@ -51,3 +53,18 @@ async def test_task_websocket_reports_invalid_json(monkeypatch):
         ("connection-1", {"type": "error", "message": "无效的 JSON 格式"})
     ]
     assert manager.disconnected == ["connection-1"]
+
+
+@pytest.mark.asyncio
+async def test_get_user_from_token_logs_decode_failure(monkeypatch, caplog):
+    """WebSocket token 解析失败时应匿名兜底并留下排障日志。"""
+
+    def fail_decode(token):
+        raise RuntimeError("bad token")
+
+    monkeypatch.setattr(websocket_api, "decode_token", fail_decode)
+
+    with caplog.at_level(logging.DEBUG, logger="app.api.v1.websocket"):
+        assert await websocket_api.get_user_from_token("invalid-token") is None
+
+    assert "Failed to decode WebSocket token: bad token" in caplog.text

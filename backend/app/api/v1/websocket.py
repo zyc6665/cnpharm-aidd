@@ -31,7 +31,8 @@ async def get_user_from_token(token: Optional[str]) -> Optional[str]:
     try:
         payload = decode_token(token)
         return payload.get("sub")
-    except Exception:
+    except Exception as exc:
+        logger.debug("Failed to decode WebSocket token: %s", exc)
         return None
 
 
