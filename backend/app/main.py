@@ -2,6 +2,8 @@
 """FastAPI 主应用入口"""
 
 from contextlib import asynccontextmanager
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -15,6 +17,8 @@ from app.tasks.direct_runner import direct_task_runner
 from app.agents.aidd.background import agent_reconcile_loop
 from app.services.workflow_reconciliation import workflow_reconcile_loop
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -25,7 +29,7 @@ async def lifespan(app: FastAPI):
     workflow_reconcile_loop.start()
     if use_direct_task_execution():
         direct_task_recovery_loop.start()
-    print("✅ 数据库初始化完成")
+    logger.info("数据库初始化完成")
     yield
     # 关闭时清理资源
     await agent_reconcile_loop.stop()
@@ -33,7 +37,7 @@ async def lifespan(app: FastAPI):
     if use_direct_task_execution():
         await direct_task_recovery_loop.stop()
         await direct_task_runner.shutdown()
-    print("👋 应用关闭")
+    logger.info("应用关闭")
 
 
 # 创建 FastAPI 应用
