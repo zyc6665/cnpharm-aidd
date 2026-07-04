@@ -351,23 +351,23 @@
     padding: @spacing-md;
     border-radius: @border-radius-md;
     background: @bg-hover;
-    border: 1px solid #e8edf5;
+    border: 1px solid @border-color;
 
     &.is-success {
-      border-color: #b7eb8f;
-      background: #f6ffed;
+      border-color: rgba(34, 197, 94, 0.25);
+      background: rgba(34, 197, 94, 0.12);
     }
 
     &.is-failure,
     &.is-canceled {
-      border-color: #ffccc7;
-      background: #fff1f0;
+      border-color: rgba(239, 68, 68, 0.25);
+      background: rgba(239, 68, 68, 0.12);
     }
 
     &.is-running,
     &.is-pending {
-      border-color: #91d5ff;
-      background: #e6f7ff;
+      border-color: rgba(59, 130, 246, 0.25);
+      background: rgba(59, 130, 246, 0.12);
     }
   }
 

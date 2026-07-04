@@ -91,17 +91,19 @@
 @z-index-popover: @z-index-tooltip;
 
 // ═══════════════════════════════════════════════
-// 暗色主题变量（默认）
+// 可主题化的 CSS 自定义属性引用（运行时切换暗/浅色）
 // ═══════════════════════════════════════════════
+// 所有组件直接引用这些 LESS 变量，编译后为 CSS var()，
+// 暗色值作为 fallback，[data-theme="light"] 覆盖浅色值
 
-// 强调色 — 暗色模式稍亮
-@accent-color: #3B82F6;
-@accent-color-hover: #60A5FA;
-@accent-color-active: #2563EB;
-@accent-color-light: rgba(59, 130, 246, 0.12);
-@accent-color-border: rgba(59, 130, 246, 0.2);
+// 强调色
+@accent-color: var(--theme-accent, #3B82F6);
+@accent-color-hover: var(--theme-accent-hover, #60A5FA);
+@accent-color-active: var(--theme-accent-active, #2563EB);
+@accent-color-light: var(--theme-accent-light, rgba(59, 130, 246, 0.12));
+@accent-color-border: var(--theme-accent-border, rgba(59, 130, 246, 0.2));
 
-// 功能色 — 暗色模式调亮
+// 功能色（暗/浅通用，不需变）
 @success-color: #22c55e;
 @success-color-light: rgba(34, 197, 94, 0.12);
 @warning-color: #f59e0b;
@@ -111,7 +113,7 @@
 @info-color: #3B82F6;
 @info-color-light: rgba(59, 130, 246, 0.12);
 
-// 中性色
+// 中性色调色板（参考值，不参与主题切换）
 @neutral-50: #f8fafc;
 @neutral-100: #f1f5f9;
 @neutral-200: #e2e8f0;
@@ -125,21 +127,21 @@
 @neutral-950: #020617;
 
 // 背景色
-@bg-body: #09090b;
-@bg-surface: #131318;
-@bg-elevated: #1a1a21;
-@bg-hover: rgba(255, 255, 255, 0.04);
+@bg-body: var(--theme-bg-body, #09090b);
+@bg-surface: var(--theme-bg-surface, #131318);
+@bg-elevated: var(--theme-bg-elevated, #1a1a21);
+@bg-hover: var(--theme-bg-hover, rgba(255, 255, 255, 0.04));
 @bg-active: rgba(255, 255, 255, 0.06);
 
 // 文字色
-@text-primary: #f1f5f9;
-@text-secondary: #94a3b8;
-@text-tertiary: #64748b;
-@text-disabled: #475569;
+@text-primary: var(--theme-text-primary, #f1f5f9);
+@text-secondary: var(--theme-text-secondary, #94a3b8);
+@text-tertiary: var(--theme-text-tertiary, #64748b);
+@text-disabled: var(--theme-text-disabled, #475569);
 
 // 边框色
-@border-color: rgba(255, 255, 255, 0.06);
-@border-color-hover: rgba(255, 255, 255, 0.1);
+@border-color: var(--theme-border, rgba(255, 255, 255, 0.06));
+@border-color-hover: var(--theme-border-hover, rgba(255, 255, 255, 0.1));
 
 // 滚动条
 @scrollbar-track: rgba(255, 255, 255, 0.02);
@@ -165,29 +167,30 @@
 @bg-card-dark: @bg-elevated;
 @bg-card-hover-dark: @bg-hover;
 
-// 旧变量别名（兼容过渡期 — 默认暗色主题，命名保持兼容）
-@bg-light: @bg-body;
-@bg-light-secondary: @bg-surface;
-@bg-card-light: @bg-elevated;
-@bg-card-hover-light: @bg-hover;
+// ── 旧变量别名（通过 CSS 自定义属性支持运行时主题切换）──
+// 暗色值作为 fallback，[data-theme="light"] 覆盖为浅色值
+@bg-light: var(--theme-bg-light, #09090b);
+@bg-light-secondary: var(--theme-bg-light-secondary, #131318);
+@bg-card-light: var(--theme-bg-card-light, #1a1a21);
+@bg-card-hover-light: var(--theme-bg-card-hover-light, rgba(255, 255, 255, 0.04));
 
 @border-color-dark: @border-color;
 @border-color-dark-hover: @border-color-hover;
-@border-color-light: @border-color;
+@border-color-light: var(--theme-border-light, rgba(255, 255, 255, 0.06));
 
-@text-color-primary: @text-primary;
-@text-color-secondary: @text-secondary;
-@text-color-tertiary: @text-tertiary;
-@text-color-disabled: @text-disabled;
+@text-color-primary: var(--theme-text-primary, #f1f5f9);
+@text-color-secondary: var(--theme-text-secondary, #94a3b8);
+@text-color-tertiary: var(--theme-text-tertiary, #64748b);
+@text-color-disabled: var(--theme-text-disabled, #475569);
 
-@text-color-light-primary: @text-primary;
-@text-color-light-secondary: @text-secondary;
-@text-color-light-tertiary: @text-tertiary;
-@text-color-light-disabled: @text-disabled;
+@text-color-light-primary: var(--theme-text-primary, #f1f5f9);
+@text-color-light-secondary: var(--theme-text-secondary, #94a3b8);
+@text-color-light-tertiary: var(--theme-text-tertiary, #64748b);
+@text-color-light-disabled: var(--theme-text-disabled, #475569);
 
-@bg-color-light: @bg-body;
+@bg-color-light: var(--theme-bg-color-light, #09090b);
 @transition-duration: 0.2s;
-@text-color-light: @text-primary;
+@text-color-light: var(--theme-text-color-light, #f1f5f9);
 @breakpoint-md: @screen-md;
 @border-radius-base: @border-radius-md;
 

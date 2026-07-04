@@ -81,8 +81,8 @@
   @import '@/assets/styles/variables.less';
 
   .example-panel {
-    border: 1px solid #bfd7ff;
-    background: #f7fbff;
+    border: 1px solid @border-color;
+    background: @bg-hover;
     border-radius: @border-radius-lg;
     padding: @spacing-lg;
     margin-bottom: @spacing-lg;
@@ -174,7 +174,7 @@
     &:disabled {
       cursor: not-allowed;
       color: @text-color-light-tertiary;
-      background: #f7f8fa;
+      background: @bg-hover;
       border-color: @border-color;
     }
   }

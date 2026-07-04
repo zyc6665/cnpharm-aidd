@@ -194,14 +194,7 @@ function isActive(paths: string[]): boolean {
 
 // ── 主题切换 ──
 function toggleTheme() {
-  const current = document.documentElement.getAttribute('data-theme')
-  const next = current === 'light' ? null : 'light'
-  if (next) {
-    document.documentElement.setAttribute('data-theme', next)
-  } else {
-    document.documentElement.removeAttribute('data-theme')
-  }
-  appStore.setTheme(next === 'light' ? 'light' : 'dark')
+  appStore.toggleTheme()
 }
 
 // ── 路由过渡 ──

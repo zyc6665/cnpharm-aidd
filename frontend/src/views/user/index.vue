@@ -159,7 +159,7 @@ onBeforeUnmount(() => {
 .user-center-page {
   padding: @spacing-xl 0;
   min-height: calc(100vh - @header-height - @footer-height);
-  background: #f6f8fb;
+  background: @bg-body;
 }
 
 .user-center-shell {

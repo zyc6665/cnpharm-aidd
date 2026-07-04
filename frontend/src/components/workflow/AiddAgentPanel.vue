@@ -596,8 +596,8 @@
     span {
       padding: 4px 8px;
       border-radius: @border-radius-sm;
-      background: #f4f7fb;
-      color: @text-color-light-secondary;
+      background: @bg-hover;
+      color: @text-secondary;
       font-size: @font-size-xs;
     }
   }
@@ -671,7 +671,7 @@
     width: 100%;
     border: 1px solid transparent;
     border-radius: @border-radius-sm;
-    background: #f7f9fc;
+    background: @bg-hover;
     color: @text-color-light-primary;
     transition: border-color @transition-fast, background @transition-fast;
 

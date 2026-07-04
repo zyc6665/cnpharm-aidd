@@ -4,6 +4,71 @@
 
 @import './variables.less';
 
+// ── CSS 自定义属性定义（运行时主题切换）──
+// 暗色作为默认值
+:root {
+  --theme-accent: #3B82F6;
+  --theme-accent-hover: #60A5FA;
+  --theme-accent-active: #2563EB;
+  --theme-accent-light: rgba(59, 130, 246, 0.12);
+  --theme-accent-border: rgba(59, 130, 246, 0.2);
+
+  --theme-bg-body: #09090b;
+  --theme-bg-surface: #131318;
+  --theme-bg-elevated: #1a1a21;
+  --theme-bg-hover: rgba(255, 255, 255, 0.04);
+
+  --theme-text-primary: #f1f5f9;
+  --theme-text-secondary: #94a3b8;
+  --theme-text-tertiary: #64748b;
+  --theme-text-disabled: #475569;
+
+  --theme-border: rgba(255, 255, 255, 0.06);
+  --theme-border-hover: rgba(255, 255, 255, 0.1);
+
+  // *-light 别名
+  --theme-bg-light: #09090b;
+  --theme-bg-light-secondary: #131318;
+  --theme-bg-card-light: #1a1a21;
+  --theme-bg-card-hover-light: rgba(255, 255, 255, 0.04);
+  --theme-bg-color-light: #09090b;
+  --theme-border-light: rgba(255, 255, 255, 0.06);
+  --theme-text-color-light: #f1f5f9;
+}
+
+// 浅色主题覆盖
+[data-theme="light"] {
+  color-scheme: light;
+
+  --theme-accent: #2563EB;
+  --theme-accent-hover: #1D4ED8;
+  --theme-accent-active: #1E40AF;
+  --theme-accent-light: rgba(37, 99, 235, 0.08);
+  --theme-accent-border: rgba(37, 99, 235, 0.15);
+
+  --theme-bg-body: #f8fafc;
+  --theme-bg-surface: #ffffff;
+  --theme-bg-elevated: #ffffff;
+  --theme-bg-hover: rgba(0, 0, 0, 0.03);
+
+  --theme-text-primary: #0f172a;
+  --theme-text-secondary: #475569;
+  --theme-text-tertiary: #94a3b8;
+  --theme-text-disabled: #cbd5e1;
+
+  --theme-border: #e2e8f0;
+  --theme-border-hover: #cbd5e1;
+
+  // *-light 别名
+  --theme-bg-light: #f8fafc;
+  --theme-bg-light-secondary: #f1f5f9;
+  --theme-bg-card-light: #ffffff;
+  --theme-bg-card-hover-light: rgba(0, 0, 0, 0.03);
+  --theme-bg-color-light: #f8fafc;
+  --theme-border-light: #e2e8f0;
+  --theme-text-color-light: #0f172a;
+}
+
 // ── 重置 ──
 *,
 *::before,
@@ -75,23 +140,8 @@ img {
   outline-offset: 2px;
 }
 
-// ── 浅色主题覆盖 ──
+// 浅色主题下的滚动条样式
 [data-theme="light"] {
-  color-scheme: light;
-
-  body {
-    color: @text-color-light-primary;
-    background-color: @bg-light;
-  }
-
-  a {
-    color: @accent-color;
-
-    &:hover {
-      color: @accent-color-hover;
-    }
-  }
-
   ::-webkit-scrollbar-track {
     background: rgba(0, 0, 0, 0.04);
   }

@@ -186,8 +186,8 @@ watch(
 }
 
 .csv-result-viewer__table :deep(.ant-table-thead > tr > th) {
-  background: #eff6ff;
-  color: #0f172a;
+  background: @bg-surface;
+  color: @text-primary;
   font-weight: 600;
 }
 

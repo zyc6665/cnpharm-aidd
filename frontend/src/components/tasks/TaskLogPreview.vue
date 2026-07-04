@@ -93,13 +93,13 @@
     font-size: @font-size-sm;
 
     &.log-warning {
-      background: #fff7e6;
-      border-color: #ffe7ba;
+      background: rgba(245, 158, 11, 0.12);
+      border-color: rgba(245, 158, 11, 0.25);
     }
 
     &.log-error {
-      background: #fff1f0;
-      border-color: #ffccc7;
+      background: rgba(239, 68, 68, 0.12);
+      border-color: rgba(239, 68, 68, 0.25);
     }
   }
 
