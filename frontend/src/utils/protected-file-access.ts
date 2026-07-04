@@ -1,3 +1,8 @@
+import {
+  getGuestSession as getStoredGuestSession,
+  getToken as getStoredToken
+} from './auth-storage.ts'
+
 interface ObjectUrlApi {
   createObjectURL(blob: Blob): string
   revokeObjectURL(url: string): void
@@ -51,14 +56,6 @@ const defaultDownloadDomApi: DownloadDomApi = {
   appendAnchor(anchor) {
     document.body.appendChild(anchor as HTMLAnchorElement)
   }
-}
-
-function getStoredToken(): string | null {
-  return typeof localStorage === 'undefined' ? null : localStorage.getItem('cpumodel_token')
-}
-
-function getStoredGuestSession(): string | null {
-  return typeof localStorage === 'undefined' ? null : localStorage.getItem('cpumodel_guest_session')
 }
 
 async function fetchProtectedFileBlob(url: string, headers: Record<string, string>): Promise<Blob> {

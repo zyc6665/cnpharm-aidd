@@ -7,6 +7,15 @@ import {
   shouldAttemptTokenRefresh
 } from './auth-request-policy'
 import { redirectToLogin } from './auth-redirect'
+import {
+  AUTH_CLEARED_EVENT,
+  clearAuthStorage,
+  getGuestSession,
+  getRefreshToken,
+  getToken,
+  setRefreshToken,
+  setToken
+} from '@/utils/auth-storage'
 
 // 创建 axios 实例
 const request: AxiosInstance = axios.create({
@@ -17,48 +26,19 @@ const request: AxiosInstance = axios.create({
   }
 })
 
-// Token 存储 key
-const TOKEN_KEY = 'cpumodel_token'
-const REFRESH_TOKEN_KEY = 'cpumodel_refresh_token'
-const GUEST_SESSION_KEY = 'cpumodel_guest_session'
-export const AUTH_CLEARED_EVENT = 'cpumodel-auth-cleared'
+export {
+  AUTH_CLEARED_EVENT,
+  getGuestSession,
+  getRefreshToken,
+  getToken,
+  setRefreshToken,
+  setToken,
+  setGuestSession
+} from '@/utils/auth-storage'
 
-// 获取 Token
-export const getToken = (): string | null => {
-  return localStorage.getItem(TOKEN_KEY)
-}
-
-// 设置 Token
-export const setToken = (token: string): void => {
-  localStorage.setItem(TOKEN_KEY, token)
-}
-
-// 获取 Refresh Token
-export const getRefreshToken = (): string | null => {
-  return localStorage.getItem(REFRESH_TOKEN_KEY)
-}
-
-// 设置 Refresh Token
-export const setRefreshToken = (token: string): void => {
-  localStorage.setItem(REFRESH_TOKEN_KEY, token)
-}
-
-export const getGuestSession = (): string | null => {
-  return localStorage.getItem(GUEST_SESSION_KEY)
-}
-
-export const setGuestSession = (sessionId: string): void => {
-  localStorage.setItem(GUEST_SESSION_KEY, sessionId)
-}
-
-// 清除 Token
+// 清除认证状态
 export const clearTokens = (): void => {
-  localStorage.removeItem(TOKEN_KEY)
-  localStorage.removeItem(REFRESH_TOKEN_KEY)
-  localStorage.removeItem(GUEST_SESSION_KEY)
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent(AUTH_CLEARED_EVENT))
-  }
+  clearAuthStorage()
 }
 
 // 是否正在刷新 Token
