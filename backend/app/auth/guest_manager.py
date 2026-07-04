@@ -223,7 +223,10 @@ class GuestManager:
                     data = json.loads(cached_data)
                     return GuestSessionData.from_dict(data)
                 except (json.JSONDecodeError, KeyError):
-                    pass
+                    logger.warning(
+                        "Invalid cached guest session payload; falling back to database",
+                        extra={"session_id": session_id},
+                    )
 
         # 从数据库获取
         if db:
