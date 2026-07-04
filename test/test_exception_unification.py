@@ -1,5 +1,8 @@
 """测试异常体系统一。"""
 
+import logging
+from unittest.mock import AsyncMock
+
 import pytest
 
 from app.common.exceptions import AppException
@@ -10,6 +13,7 @@ from app.exceptions.external_api import (
 )
 from app.exceptions.storage import (
     StorageException,
+    StorageExceptionHandler,
     StorageUploadException,
     StorageQuotaException,
     StorageCorruptionException,
@@ -122,3 +126,23 @@ class TestStorageExceptionInheritance:
         assert exc.actual_hash == "def"
         assert exc.file_path == "foo.txt"
         assert issubclass(StorageCorruptionException, AppException)
+
+    @pytest.mark.asyncio
+    async def test_migrate_to_primary_logs_fallback_delete_failure(self, caplog):
+        primary = AsyncMock()
+        fallback = AsyncMock()
+        fallback.download.return_value = b"content"
+        fallback.delete.side_effect = RuntimeError("delete failed")
+        handler = StorageExceptionHandler(
+            primary_storage=primary,
+            fallback_storage=fallback,
+        )
+
+        with caplog.at_level(logging.WARNING, logger="app.exceptions.storage"):
+            assert await handler.migrate_to_primary("foo/bar.txt") is True
+
+        fallback.download.assert_awaited_once_with("foo/bar.txt")
+        primary.upload.assert_awaited_once_with(b"content", "foo/bar.txt")
+        fallback.delete.assert_awaited_once_with("foo/bar.txt")
+        assert "Failed to delete fallback file after primary migration" in caplog.text
+        assert "foo/bar.txt" in caplog.text

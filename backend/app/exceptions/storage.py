@@ -362,8 +362,13 @@ class StorageExceptionHandler:
             # 删除降级存储中的文件
             try:
                 await self.fallback.delete(file_path)
-            except Exception:
-                pass  # 忽略删除失败
+            except Exception as e:
+                logger.warning(
+                    "Failed to delete fallback file after primary migration for %s: %s",
+                    file_path,
+                    e,
+                    extra={"file_path": file_path},
+                )
 
             logger.info(
                 f"File migrated back to primary storage",
