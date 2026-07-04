@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
-from app.common.responses import success_response
+from app.common.responses import paginated_response, success_response
 from app.database.session import get_db
 from app.models.users import User
 from app.models.workflows import WorkflowDefinition, WorkflowRun, WorkflowTemplate
@@ -115,14 +115,11 @@ async def list_workflow_definitions(
     )
     workflows = result.scalars().all()
 
-    return success_response(
-        data={
-            "items": [_serialize_workflow(workflow) for workflow in workflows],
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": (total + page_size - 1) // page_size,
-        }
+    return paginated_response(
+        items=[_serialize_workflow(workflow) for workflow in workflows],
+        total=total,
+        page=page,
+        page_size=page_size,
     )
 
 
@@ -160,14 +157,11 @@ async def list_templates(
     db: AsyncSession = Depends(get_db),
 ):
     templates = await list_workflow_templates(db, current_user=current_user)
-    return success_response(
-        data={
-            "items": [_serialize_template(template) for template in templates],
-            "total": len(templates),
-            "page": 1,
-            "page_size": len(templates),
-            "total_pages": 1 if templates else 0,
-        }
+    return paginated_response(
+        items=[_serialize_template(template) for template in templates],
+        total=len(templates),
+        page=1,
+        page_size=len(templates),
     )
 
 
@@ -232,14 +226,11 @@ async def list_runs(
         page=page,
         page_size=page_size,
     )
-    return success_response(
-        data={
-            "items": [_serialize_run(run) for run in runs],
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": (total + page_size - 1) // page_size if total else 0,
-        }
+    return paginated_response(
+        items=[_serialize_run(run) for run in runs],
+        total=total,
+        page=page,
+        page_size=page_size,
     )
 
 
