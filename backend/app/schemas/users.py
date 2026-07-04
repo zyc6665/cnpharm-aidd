@@ -21,6 +21,17 @@ class UserCreate(BaseModel):
     )
 
 
+class InvitationCodeValidateRequest(BaseModel):
+    """邀请码校验请求"""
+    code: str = Field(..., min_length=1, max_length=64, description="邀请码")
+
+
+class InvitationCodeValidateResponse(BaseModel):
+    """邀请码校验响应"""
+    valid: bool = Field(..., description="邀请码是否有效")
+    bonus: Optional[int] = Field(None, ge=0, description="邀请码奖励积分")
+
+
 class UserLogin(BaseModel):
     """用户登录"""
     email: EmailStr = Field(..., description="邮箱")

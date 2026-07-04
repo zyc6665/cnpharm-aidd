@@ -89,15 +89,7 @@ export const resetPassword = (
   })
 }
 
-// 验证邀请码（临时实现，返回模拟数据）
+// 验证邀请码
 export const validateInvitationCode = (code: string): Promise<ApiResponse<{ valid: boolean; bonus?: number }>> => {
-  // TODO: 后端实现后替换为真实API调用
-  return Promise.resolve({
-    code: 200,
-    message: 'success',
-    data: {
-      valid: code.length === 6,
-      bonus: code.length === 6 ? 50 : undefined
-    }
-  })
+  return post<{ valid: boolean; bonus?: number }>('/auth/invitation/validate', { code })
 }

@@ -12,7 +12,11 @@ from app.auth.jwt_handler import JWTHandler
 from app.auth.password import hash_password, verify_password
 from app.auth.dependencies import get_current_user
 from app.schemas.users import (
-    UserCreate, UserLogin, UserResponse,
+    InvitationCodeValidateRequest,
+    InvitationCodeValidateResponse,
+    UserCreate,
+    UserLogin,
+    UserResponse,
 )
 from app.schemas.verification import PasswordResetRequest
 from app.services.verification.service import (
@@ -27,6 +31,18 @@ from app.common.exceptions import (
 
 router = APIRouter()
 jwt_handler = JWTHandler()
+
+
+@router.post("/invitation/validate", response_model=dict)
+async def validate_invitation_code(data: InvitationCodeValidateRequest):
+    """校验邀请码。
+
+    当前版本尚未接入邀请关系数据源，统一返回无效，避免前端使用模拟奖励误导用户。
+    """
+    return success_response(
+        data=InvitationCodeValidateResponse(valid=False).model_dump(),
+        message="邀请码功能暂未启用"
+    )
 
 
 @router.post("/register", response_model=dict)
