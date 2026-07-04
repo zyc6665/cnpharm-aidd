@@ -31,7 +31,7 @@ from app.schemas.files import (
     FileDownloadUrl,
     ArtifactFileResponse,
 )
-from app.common.responses import success_response, error_response
+from app.common.responses import paginated_response, success_response, error_response
 from app.common.exceptions import NotFoundException, ForbiddenException, ValidationException
 from app.config import settings
 from app.files.storage_path import STORAGE_PATH, ensure_storage_dir, get_file_path
@@ -282,14 +282,11 @@ async def list_files(
     result = await db.execute(query)
     files = result.scalars().all()
 
-    return success_response(
-        data={
-            "items": [FileSchema.model_validate(f).model_dump() for f in files],
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": (total + page_size - 1) // page_size
-        }
+    return paginated_response(
+        items=[FileSchema.model_validate(f).model_dump() for f in files],
+        total=total,
+        page=page,
+        page_size=page_size,
     )
 
 
@@ -322,14 +319,11 @@ async def list_artifact_files(
             artifact_sources.setdefault(normalized_file_id, (task, task.tool))
 
     if not artifact_sources:
-        return success_response(
-            data={
-                "items": [],
-                "total": 0,
-                "page": page,
-                "page_size": page_size,
-                "total_pages": 0,
-            }
+        return paginated_response(
+            items=[],
+            total=0,
+            page=page,
+            page_size=page_size,
         )
 
     query = select(FileModel).where(
@@ -377,14 +371,11 @@ async def list_artifact_files(
             ).model_dump()
         )
 
-    return success_response(
-        data={
-            "items": items,
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": (total + page_size - 1) // page_size if total else 0,
-        }
+    return paginated_response(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
     )
 
 
