@@ -38,6 +38,7 @@ backend/storage/recovery-downloads/
 /.vscode/
 
 # Local scratch files
+.claude/worktrees/
 *.log
 *.pid
 *.sqlite3
