@@ -3,6 +3,8 @@
 
 from typing import Any, Optional
 
+from app.schemas.common import PaginatedResponse
+
 
 def success_response(
     data: Any = None,
@@ -27,15 +29,13 @@ def paginated_response(
     code: int = 200,
 ) -> dict:
     """标准分页响应"""
-    total_pages = (total + page_size - 1) // page_size if total and page_size > 0 else 0
     return success_response(
-        data={
-            "items": items,
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": total_pages,
-        },
+        data=PaginatedResponse.create(
+            items=items,
+            total=total,
+            page=page,
+            page_size=page_size,
+        ).model_dump(),
         message=message,
         code=code,
     )
