@@ -333,8 +333,8 @@ const panelDescription = computed(() => {
 }
 
 .output-browser__item:hover {
-  border-color: #60a5fa;
-  background: #eef6ff;
+  border-color: @accent-color;
+  background: @bg-hover;
   transform: translateY(-1px);
 }
 
@@ -399,13 +399,13 @@ const panelDescription = computed(() => {
 }
 
 .scene-file--input {
-  background: #fff7ed;
-  border-color: #fdba74;
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.25);
 }
 
 .scene-file--output {
-  background: #ecfeff;
-  border-color: #67e8f9;
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.25);
 }
 
 .scene-file__extension {

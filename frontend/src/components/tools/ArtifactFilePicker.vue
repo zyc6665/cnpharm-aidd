@@ -914,7 +914,7 @@
 
   .artifact-step-option.is-focused {
     border-color: rgba(250, 173, 20, 0.55);
-    background: #fffdf4;
+    background: rgba(250, 173, 20, 0.12);
   }
 
   .artifact-step-option-copy {

@@ -26,9 +26,17 @@ const antdLocale = computed(() => {
 })
 
 // Ant Design 暗色主题算法
-const antdTheme = computed(() => ({
-  algorithm: appStore.theme === 'dark' ? theme.darkAlgorithm : theme.defaultAlgorithm,
-}))
+const antdTheme = computed(() => {
+  const baseToken = {
+    colorPrimary: '#3B82F6',
+    borderRadius: 6,
+    colorLink: '#3B82F6',
+  }
+  return {
+    algorithm: appStore.theme === 'dark' ? theme.darkAlgorithm : theme.defaultAlgorithm,
+    token: baseToken,
+  }
+})
 
 // 不需要侧边栏的页面：首页、认证页、错误页
 const shellLessPaths = ['/login', '/register', '/forgot-password', '/403', '/404']
@@ -39,10 +47,8 @@ const isShellLess = computed(() => {
 
 // 初始化
 onMounted(async () => {
-  // 应用持久化的主题
-  if (appStore.theme === 'light') {
-    document.documentElement.setAttribute('data-theme', 'light')
-  }
+  // 同步持久化的主题到 DOM（暗色/浅色都需要）
+  document.documentElement.setAttribute('data-theme', appStore.theme)
   await userStore.bootstrapAuthState()
 })
 </script>
