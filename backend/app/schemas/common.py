@@ -37,7 +37,7 @@ class PaginatedResponse(BaseModel, Generic[DataT]):
     total: int = Field(default=0, description="总数")
     page: int = Field(default=1, description="当前页")
     page_size: int = Field(default=20, description="每页数量")
-    pages: int = Field(default=0, description="总页数")
+    total_pages: int = Field(default=0, description="总页数")
 
     @classmethod
     def create(
@@ -47,13 +47,13 @@ class PaginatedResponse(BaseModel, Generic[DataT]):
         page: int,
         page_size: int
     ) -> "PaginatedResponse[DataT]":
-        pages = (total + page_size - 1) // page_size if page_size > 0 else 0
+        total_pages = (total + page_size - 1) // page_size if total and page_size > 0 else 0
         return cls(
             items=items,
             total=total,
             page=page,
             page_size=page_size,
-            pages=pages
+            total_pages=total_pages
         )
 
 
