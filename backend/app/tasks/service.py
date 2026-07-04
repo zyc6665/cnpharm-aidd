@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from fastapi import HTTPException
 from sqlalchemy import select, update
@@ -20,8 +19,6 @@ from app.models.users import User
 from app.schemas.tasks import TaskCreate
 from app.tasks.direct_runner import direct_task_runner as default_direct_task_runner
 from app.tasks.naming import (
-    _sanitize_task_name,
-    _build_default_task_name,
     resolve_task_display_name,
 )
 from app.tasks.state_machine import TaskStateMachine

@@ -5,12 +5,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
 from typing import Dict
 
 from sqlalchemy import select
 
-from app.common.time import utcnow
 from app.database.session import async_session_factory
 from app.models.tasks import Task, TaskLog, TaskStatus
 from app.tasks.state_machine import TaskStateMachine

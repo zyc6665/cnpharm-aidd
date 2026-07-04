@@ -22,6 +22,7 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.auth.dependencies import get_current_user, get_current_user_optional
+from app.config import settings as config_settings
 from app.database.base import Base
 from app.database.session import get_db
 from app.main import app
@@ -260,7 +261,7 @@ async def test_create_task_uses_direct_runner_when_enabled(
 ):
     """direct 模式下创建任务应直接注册后台协程，而不是发送到 Celery。"""
     runner = RecordingDirectRunner()
-    monkeypatch.setattr(tasks_api.settings, "TASK_EXECUTION_BACKEND", "direct", raising=False)
+    monkeypatch.setattr(config_settings, "TASK_EXECUTION_BACKEND", "direct", raising=False)
     monkeypatch.setattr(tasks_api, "direct_task_runner", runner, raising=False)
 
     def fail_enqueue(*args, **kwargs):
@@ -296,7 +297,7 @@ async def test_create_task_api_uses_shared_task_creation_service(
 ):
     """任务 API 应保持现有行为，后续 agent 可以复用同一任务创建服务。"""
     runner = RecordingDirectRunner()
-    monkeypatch.setattr(tasks_api.settings, "TASK_EXECUTION_BACKEND", "direct", raising=False)
+    monkeypatch.setattr(config_settings, "TASK_EXECUTION_BACKEND", "direct", raising=False)
     monkeypatch.setattr(tasks_api, "direct_task_runner", runner, raising=False)
 
     response = await api_client.post(
@@ -324,7 +325,7 @@ async def test_retry_task_uses_direct_runner_when_enabled(
 ):
     """direct 模式下重试任务应再次注册后台协程，而不是重新入 Celery。"""
     runner = RecordingDirectRunner()
-    monkeypatch.setattr(tasks_api.settings, "TASK_EXECUTION_BACKEND", "direct", raising=False)
+    monkeypatch.setattr(config_settings, "TASK_EXECUTION_BACKEND", "direct", raising=False)
     monkeypatch.setattr(tasks_api, "direct_task_runner", runner, raising=False)
 
     def fail_enqueue(*args, **kwargs):
@@ -371,7 +372,7 @@ async def test_cancel_task_cancels_registered_direct_task(
 ):
     """direct 模式下取消任务应调用 direct runner 取消当前进程内任务。"""
     runner = RecordingDirectRunner()
-    monkeypatch.setattr(tasks_api.settings, "TASK_EXECUTION_BACKEND", "direct", raising=False)
+    monkeypatch.setattr(config_settings, "TASK_EXECUTION_BACKEND", "direct", raising=False)
     monkeypatch.setattr(tasks_api, "direct_task_runner", runner, raising=False)
 
     task = Task(

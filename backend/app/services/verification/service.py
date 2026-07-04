@@ -4,7 +4,7 @@
 import random
 import string
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Optional, Tuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,7 +15,6 @@ from app.services.verification.storage import (
     VerificationStorageBase,
     DatabaseStorage,
     CacheStorage,
-    get_verification_storage
 )
 from app.services.email.sender import get_email_service
 from app.cache import get_cache

@@ -7,12 +7,11 @@
 """
 
 from abc import ABC, abstractmethod
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional, Tuple
-import json
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, delete
+from sqlalchemy import select, and_, delete
 
 from app.common.time import utcnow
 from app.config import settings, is_development
