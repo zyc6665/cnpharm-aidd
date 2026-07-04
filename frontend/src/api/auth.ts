@@ -20,18 +20,9 @@ export const register = (params: RegisterParams): Promise<ApiResponse<LoginRespo
   return post<LoginResponse>('/auth/register', params)
 }
 
-// 游客登录（临时实现，返回模拟数据）
+// 游客登录
 export const guestLogin = (): Promise<ApiResponse<GuestLoginResponse>> => {
-  // TODO: 后端实现后替换为真实API调用
-  return Promise.resolve({
-    code: 200,
-    message: 'success',
-    data: {
-      access_token: 'guest_token_' + Date.now(),
-      token_type: 'Bearer',
-      expires_in: 3600
-    }
-  })
+  return post<GuestLoginResponse>('/auth/guest')
 }
 
 // 发送邮箱验证码

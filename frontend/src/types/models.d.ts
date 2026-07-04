@@ -54,9 +54,9 @@ export interface RegisterParams {
 }
 
 export interface GuestLoginResponse {
-  access_token: string
-  token_type: string
+  session_id: string
   expires_in: number
+  limitations: Record<string, unknown>
 }
 
 export interface AuthTokens {

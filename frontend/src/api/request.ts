@@ -20,6 +20,7 @@ const request: AxiosInstance = axios.create({
 // Token 存储 key
 const TOKEN_KEY = 'cpumodel_token'
 const REFRESH_TOKEN_KEY = 'cpumodel_refresh_token'
+const GUEST_SESSION_KEY = 'cpumodel_guest_session'
 export const AUTH_CLEARED_EVENT = 'cpumodel-auth-cleared'
 
 // 获取 Token
@@ -42,10 +43,19 @@ export const setRefreshToken = (token: string): void => {
   localStorage.setItem(REFRESH_TOKEN_KEY, token)
 }
 
+export const getGuestSession = (): string | null => {
+  return localStorage.getItem(GUEST_SESSION_KEY)
+}
+
+export const setGuestSession = (sessionId: string): void => {
+  localStorage.setItem(GUEST_SESSION_KEY, sessionId)
+}
+
 // 清除 Token
 export const clearTokens = (): void => {
   localStorage.removeItem(TOKEN_KEY)
   localStorage.removeItem(REFRESH_TOKEN_KEY)
+  localStorage.removeItem(GUEST_SESSION_KEY)
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent(AUTH_CLEARED_EVENT))
   }
@@ -73,6 +83,11 @@ request.interceptors.request.use(
     const token = getToken()
     if (token && config.headers && shouldAttachAuthHeader(config.url)) {
       config.headers.Authorization = `Bearer ${token}`
+    } else {
+      const guestSession = getGuestSession()
+      if (guestSession && config.headers && shouldAttachAuthHeader(config.url)) {
+        config.headers['X-Guest-Session'] = guestSession
+      }
     }
     return config
   },

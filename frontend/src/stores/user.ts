@@ -19,23 +19,26 @@ import {
   AUTH_CLEARED_EVENT,
   setToken,
   setRefreshToken,
+  setGuestSession,
   clearTokens,
   getToken,
-  getRefreshToken
+  getRefreshToken,
+  getGuestSession
 } from '@/api/request'
 
 export const useUserStore = defineStore('user', () => {
   // State
   const token = ref<string | null>(getToken())
   const refreshToken = ref<string | null>(getRefreshToken())
+  const guestSession = ref<string | null>(getGuestSession())
   const userInfo = ref<UserInfo | null>(null)
-  const isGuest = ref(false)
+  const isGuest = ref(!!guestSession.value)
   const loading = ref(false)
-  const authReady = ref(!getToken())
+  const authReady = ref(!getToken() && !getGuestSession())
 
   // Getters
   const isLoggedIn = computed(() => !!token.value && !isGuest.value)
-  const isAuthenticated = computed(() => !!token.value)
+  const isAuthenticated = computed(() => !!token.value || !!guestSession.value)
   const user = computed(() => normalizeUserInfo(userInfo.value))
   const isAdmin = computed(() => user.value?.role === 'admin')
   const username = computed(() => user.value?.username || (isGuest.value ? '游客' : ''))
@@ -48,6 +51,7 @@ export const useUserStore = defineStore('user', () => {
   const clearLocalAuthState = () => {
     token.value = null
     refreshToken.value = null
+    guestSession.value = null
     userInfo.value = null
     isGuest.value = false
     authReady.value = true
@@ -65,8 +69,10 @@ export const useUserStore = defineStore('user', () => {
     loading.value = true
     try {
       const res = await apiLogin(params)
+      clearTokens()
       token.value = res.data.access_token
       refreshToken.value = res.data.refresh_token
+      guestSession.value = null
       userInfo.value = normalizeUserInfo(res.data.user)
       isGuest.value = false
       setToken(res.data.access_token)
@@ -98,8 +104,10 @@ export const useUserStore = defineStore('user', () => {
       const res = await apiRegister(params)
       // 注册成功后自动登录
       if (res.data.access_token) {
+        clearTokens()
         token.value = res.data.access_token
         refreshToken.value = res.data.refresh_token
+        guestSession.value = null
         userInfo.value = normalizeUserInfo(res.data.user)
         isGuest.value = false
         setToken(res.data.access_token)
@@ -117,10 +125,13 @@ export const useUserStore = defineStore('user', () => {
     loading.value = true
     try {
       const res = await apiGuestLogin()
-      token.value = res.data.access_token
+      clearTokens()
+      token.value = null
+      refreshToken.value = null
+      guestSession.value = res.data.session_id
       isGuest.value = true
       userInfo.value = null
-      setToken(res.data.access_token)
+      setGuestSession(res.data.session_id)
       return res.data
     } finally {
       loading.value = false
@@ -212,6 +223,7 @@ export const useUserStore = defineStore('user', () => {
     // State
     token,
     refreshToken,
+    guestSession,
     userInfo,
     isGuest,
     loading,
