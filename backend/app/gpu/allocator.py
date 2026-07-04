@@ -383,7 +383,13 @@ class GPUAllocator:
             stats = self.detector.get_gpu_stats(gpu_index)
             # 利用率低于10%视为空闲
             return stats.utilization_percent < 10
-        except Exception:
+        except Exception as e:
+            logger.warning(
+                "Failed to probe GPU idle state for node=%s gpu=%s: %s",
+                node_id,
+                gpu_index,
+                e,
+            )
             return False
 
     async def _get_wait_position(self, task_id: str) -> int:
