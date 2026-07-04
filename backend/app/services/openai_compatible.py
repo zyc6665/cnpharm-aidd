@@ -8,6 +8,27 @@ from app.common.secret_crypto import decrypt_secret
 from app.models.system_settings import ModelService
 
 
+def _extract_chat_completion_content(data: object) -> str:
+    """从 OpenAI-compatible 响应中提取首条消息内容。"""
+    if not isinstance(data, dict):
+        return "响应格式可用，但未返回标准 choices 内容"
+
+    choices = data.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return "响应格式可用，但未返回标准 choices 内容"
+
+    first_choice = choices[0]
+    if not isinstance(first_choice, dict):
+        return "响应格式可用，但未返回标准 choices 内容"
+
+    message = first_choice.get("message")
+    if not isinstance(message, dict):
+        return "响应格式可用，但未返回标准 choices 内容"
+
+    content = message.get("content")
+    return str(content or "")
+
+
 async def test_openai_compatible_service(
     service: ModelService,
     *,
@@ -34,10 +55,5 @@ async def test_openai_compatible_service(
     except Exception as exc:
         return False, str(exc)
 
-    content = ""
-    try:
-        content = str(data["choices"][0]["message"].get("content") or "")
-    except Exception:
-        content = "响应格式可用，但未返回标准 choices 内容"
-
+    content = _extract_chat_completion_content(data)
     return True, f"模型服务连接成功: {content}".strip()

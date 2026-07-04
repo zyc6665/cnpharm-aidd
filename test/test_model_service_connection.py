@@ -116,3 +116,15 @@ async def test_openai_compatible_connection_posts_chat_completion(monkeypatch):
     assert captured["headers"]["Authorization"] == "Bearer sk-direct"
     assert captured["json"]["model"] == "model"
     assert captured["json"]["max_tokens"] == 8
+
+
+def test_openai_compatible_response_content_fallbacks_are_explicit():
+    assert openai_compatible._extract_chat_completion_content({}) == (
+        "响应格式可用，但未返回标准 choices 内容"
+    )
+    assert openai_compatible._extract_chat_completion_content({"choices": []}) == (
+        "响应格式可用，但未返回标准 choices 内容"
+    )
+    assert openai_compatible._extract_chat_completion_content(
+        {"choices": [{"message": {"content": "pong"}}]}
+    ) == "pong"
