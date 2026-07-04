@@ -28,7 +28,7 @@ from app.schemas.tools import (
     ToolWorkbenchGroupToolResponse, ToolWorkbenchGroupPublicResponse,
     ToolContractResponse,
 )
-from app.common.responses import paginated_response, success_response, error_response
+from app.common.responses import paginated_response, success_response
 from app.common.exceptions import NotFoundException, ForbiddenException, ConflictException, ValidationException
 from app.services.tool_examples import (
     apply_tool_example_to_user,

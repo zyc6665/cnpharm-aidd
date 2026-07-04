@@ -8,7 +8,7 @@ from sqlalchemy import select, func, or_, update
 from sqlalchemy.orm import selectinload, joinedload
 from typing import Any, Optional
 
-from app.config import settings, use_direct_task_execution
+from app.config import use_direct_task_execution
 from app.database.session import get_db
 from app.models.files import File as FileModel
 from app.models.statistics import ToolStatistics
@@ -31,7 +31,7 @@ from app.auth.dependencies import get_current_user, get_admin_user
 from app.schemas.tasks import (
     TaskCreate, TaskResponse, TaskListResponse
 )
-from app.common.responses import paginated_response, success_response, error_response
+from app.common.responses import paginated_response, success_response
 from app.common.exceptions import NotFoundException, ForbiddenException, ValidationException
 
 logger = logging.getLogger(__name__)

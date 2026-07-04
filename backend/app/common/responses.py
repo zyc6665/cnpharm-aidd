@@ -2,7 +2,6 @@
 """统一响应格式"""
 
 from typing import Any, Optional
-from app.schemas.common import BaseResponse
 
 
 def success_response(

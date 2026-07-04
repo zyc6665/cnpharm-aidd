@@ -21,7 +21,7 @@ from app.services.verification.service import (
     get_verification_service,
     InvalidCodeError
 )
-from app.common.responses import success_response, error_response
+from app.common.responses import success_response
 from app.common.exceptions import (
     UnauthorizedException, ValidationException,
     ConflictException, NotFoundException

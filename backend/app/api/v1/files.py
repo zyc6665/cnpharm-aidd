@@ -31,7 +31,7 @@ from app.schemas.files import (
     FileDownloadUrl,
     ArtifactFileResponse,
 )
-from app.common.responses import paginated_response, success_response, error_response
+from app.common.responses import paginated_response, success_response
 from app.common.exceptions import NotFoundException, ForbiddenException, ValidationException
 from app.config import settings
 from app.files.storage_path import STORAGE_PATH, ensure_storage_dir, get_file_path
