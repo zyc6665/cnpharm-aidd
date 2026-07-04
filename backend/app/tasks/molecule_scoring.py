@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.files import File as FileModel, FileSourceType
 from app.models.tasks import Task, TaskInput
 from app.models.tools import Tool, ToolVersion
+from app.files.storage_path import get_file_path
 
 logger = logging.getLogger(__name__)
 
@@ -462,8 +463,6 @@ async def _store_artifact(
     content: bytes,
     relative_path: str,
 ) -> FileModel:
-    from app.api.v1.files import get_file_path
-
     file_hash = hashlib.sha256(content).hexdigest()
     content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
     if filename.endswith(".sdf"):
