@@ -19,14 +19,15 @@
           <h2 class="ws-section-title">{{ t('workspace.recentTasks') }}</h2>
           <router-link to="/tasks" class="ws-section-link">{{ t('common.more') }}</router-link>
         </div>
-        <div v-if="recentTasks.length" class="ws-task-list">
+        <a-skeleton v-if="recentTasksLoading" active :paragraph="{ rows: 3 }" />
+        <div v-else-if="recentTasks.length" class="ws-task-list">
           <div v-for="task in recentTasks" :key="task.id" class="ws-task-card" @click="$router.push(`/tasks/${task.id}`)">
-            <span class="ws-task-status" :class="`status-${task.status}`"></span>
+            <span class="ws-task-status" :class="`status-${taskStatusClass(task.status)}`"></span>
             <div class="ws-task-info">
-              <strong>{{ task.name }}</strong>
-              <span>{{ task.tool_name }}</span>
+              <strong>{{ task.name || task.tool?.name || t('tasks.unknownTool') }}</strong>
+              <span>{{ task.tool_name || task.tool?.name || task.tool_slug || task.tool_id }}</span>
             </div>
-            <span class="ws-task-time">{{ task.created_at }}</span>
+            <span class="ws-task-time">{{ formatTaskTime(task.created_at) }}</span>
           </div>
         </div>
         <div v-else class="ws-empty">
@@ -62,8 +63,11 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import dayjs from 'dayjs'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import { getTaskList } from '@/api/tasks'
+import type { Task, TaskStatus } from '@/types/models'
 import {
   PlusOutlined,
   ExperimentOutlined,
@@ -74,7 +78,8 @@ import {
 const { t } = useI18n()
 const router = useRouter()
 
-const recentTasks = ref<any[]>([])
+const recentTasks = ref<Task[]>([])
+const recentTasksLoading = ref(false)
 
 const greeting = computed(() => {
   const hour = new Date().getHours()
@@ -90,9 +95,27 @@ const today = computed(() => {
   )
 })
 
-onMounted(async () => {
-  // TODO: 加载最近任务
-})
+const taskStatusClass = (status: TaskStatus) => {
+  if (status === 'success') return 'completed'
+  if (status === 'failure') return 'failed'
+  return status
+}
+
+const formatTaskTime = (time: string) => dayjs(time).format('YYYY-MM-DD HH:mm')
+
+const loadRecentTasks = async () => {
+  recentTasksLoading.value = true
+  try {
+    const response = await getTaskList({ page: 1, page_size: 5 })
+    recentTasks.value = response.data.items
+  } catch {
+    recentTasks.value = []
+  } finally {
+    recentTasksLoading.value = false
+  }
+}
+
+onMounted(loadRecentTasks)
 </script>
 
 <style scoped lang="less">
