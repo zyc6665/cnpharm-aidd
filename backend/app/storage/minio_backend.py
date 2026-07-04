@@ -2,11 +2,14 @@
 """MinIO 存储后端"""
 
 import io
+import logging
 from typing import Optional, BinaryIO
 from datetime import timedelta
 
 from app.storage.base import StorageBackend, StorageFile
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class MinIOStorageBackend(StorageBackend):
@@ -97,19 +100,24 @@ class MinIOStorageBackend(StorageBackend):
 
     async def download(self, path: str) -> bytes:
         """下载文件"""
+        response = self.client.get_object(self.bucket, path)
         try:
-            response = self.client.get_object(self.bucket, path)
             return response.read()
         finally:
-            response.close()
-            response.release_conn()
+            self._close_response(response, path)
 
     async def delete(self, path: str) -> bool:
         """删除文件"""
         try:
             self.client.remove_object(self.bucket, path)
             return True
-        except Exception:
+        except Exception as e:
+            logger.warning(
+                "Failed to delete MinIO object %s/%s: %s",
+                self.bucket,
+                path,
+                e,
+            )
             return False
 
     async def exists(self, path: str) -> bool:
@@ -117,7 +125,13 @@ class MinIOStorageBackend(StorageBackend):
         try:
             self.client.stat_object(self.bucket, path)
             return True
-        except Exception:
+        except Exception as e:
+            logger.debug(
+                "Failed to stat MinIO object %s/%s: %s",
+                self.bucket,
+                path,
+                e,
+            )
             return False
 
     async def get_url(self, path: str, expires_in: int = 3600) -> str:
@@ -139,5 +153,33 @@ class MinIOStorageBackend(StorageBackend):
                 content_type=stat.content_type,
                 etag=stat.etag
             )
-        except Exception:
+        except Exception as e:
+            logger.debug(
+                "Failed to read MinIO object info %s/%s: %s",
+                self.bucket,
+                path,
+                e,
+            )
             return None
+
+    def _close_response(self, response, path: str) -> None:
+        """释放 MinIO 响应连接，避免清理失败掩盖下载结果。"""
+        try:
+            response.close()
+        except Exception as e:
+            logger.warning(
+                "Failed to close MinIO response for %s/%s: %s",
+                self.bucket,
+                path,
+                e,
+            )
+
+        try:
+            response.release_conn()
+        except Exception as e:
+            logger.warning(
+                "Failed to release MinIO response connection for %s/%s: %s",
+                self.bucket,
+                path,
+                e,
+            )
