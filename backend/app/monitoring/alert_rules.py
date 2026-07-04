@@ -582,9 +582,9 @@ async def check_celery_queue_length() -> int:
     Returns:
         int: 队列长度
     """
-    from app.cache.factory import get_cache
+    from app.cache.factory import get_cache_backend
 
-    cache = get_cache()
+    cache = get_cache_backend()
     try:
         # 尝试从Redis获取队列长度
         length = await cache.get("celery:queue:default:length")
