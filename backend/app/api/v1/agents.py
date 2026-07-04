@@ -17,7 +17,7 @@ from app.agents.aidd.service import (
     reconcile_waiting_agent_steps,
 )
 from app.auth.dependencies import get_current_user
-from app.common.responses import success_response
+from app.common.responses import paginated_response, success_response
 from app.database.session import get_db
 from app.models.agent import AgentRun, AgentRunStep
 from app.models.users import User
@@ -86,14 +86,11 @@ async def list_aidd_agent_runs(
     db: AsyncSession = Depends(get_db),
 ):
     runs = await list_agent_runs(db, current_user=current_user)
-    return success_response(
-        data={
-            "items": [_serialize_run(run) for run in runs],
-            "total": len(runs),
-            "page": 1,
-            "page_size": len(runs),
-            "total_pages": 1 if runs else 0,
-        }
+    return paginated_response(
+        items=[_serialize_run(run) for run in runs],
+        total=len(runs),
+        page=1,
+        page_size=len(runs),
     )
 
 
