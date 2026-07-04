@@ -2,7 +2,6 @@
 """Celery 任务定义"""
 
 import asyncio
-from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
 
 from celery import shared_task
@@ -17,49 +16,38 @@ logger = get_task_logger(__name__)
 
 # ==================== WebSocket 通知辅助函数 ====================
 
-async def notify_task_status(task_id: str, status: str, message: Optional[str] = None):
-    """通过 WebSocket 通知任务状态变更"""
+async def _notify_websocket(method_name: str, *args: Any) -> None:
+    """调用 WebSocket 管理器的通知方法，失败时不影响任务主流程。"""
     try:
         from app.websocket import ws_manager
-        await ws_manager.send_task_status(task_id, status, message)
+        await getattr(ws_manager, method_name)(*args)
     except Exception as e:
         logger.debug(f"WebSocket 通知失败（可忽略）: {e}")
+
+
+async def notify_task_status(task_id: str, status: str, message: Optional[str] = None):
+    """通过 WebSocket 通知任务状态变更"""
+    await _notify_websocket("send_task_status", task_id, status, message)
 
 
 async def notify_task_progress(task_id: str, progress: float, message: Optional[str] = None):
     """通过 WebSocket 通知任务进度"""
-    try:
-        from app.websocket import ws_manager
-        await ws_manager.send_task_progress(task_id, progress, message)
-    except Exception as e:
-        logger.debug(f"WebSocket 通知失败（可忽略）: {e}")
+    await _notify_websocket("send_task_progress", task_id, progress, message)
 
 
 async def notify_task_log(task_id: str, level: str, log_message: str):
     """通过 WebSocket 通知任务日志"""
-    try:
-        from app.websocket import ws_manager
-        await ws_manager.send_task_log(task_id, level, log_message)
-    except Exception as e:
-        logger.debug(f"WebSocket 通知失败（可忽略）: {e}")
+    await _notify_websocket("send_task_log", task_id, level, log_message)
 
 
 async def notify_task_complete(task_id: str, result: Optional[Dict[str, Any]] = None):
     """通过 WebSocket 通知任务完成"""
-    try:
-        from app.websocket import ws_manager
-        await ws_manager.send_task_complete(task_id, result)
-    except Exception as e:
-        logger.debug(f"WebSocket 通知失败（可忽略）: {e}")
+    await _notify_websocket("send_task_complete", task_id, result)
 
 
 async def notify_task_error(task_id: str, error: str):
     """通过 WebSocket 通知任务错误"""
-    try:
-        from app.websocket import ws_manager
-        await ws_manager.send_task_error(task_id, error)
-    except Exception as e:
-        logger.debug(f"WebSocket 通知失败（可忽略）: {e}")
+    await _notify_websocket("send_task_error", task_id, error)
 
 
 # ==================== 工具任务执行 ====================
