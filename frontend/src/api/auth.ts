@@ -1,4 +1,4 @@
-import { get, post, put, patch } from './request'
+import { get, post, patch } from './request'
 import type { ApiResponse } from '@/types/api'
 import { buildRefreshTokenRequestConfig } from './auth-request-policy'
 import type {
@@ -69,14 +69,6 @@ export const getCurrentUser = (): Promise<ApiResponse<UserInfo>> => {
 // 更新当前用户信息
 export const updateCurrentUser = (data: Partial<UserInfo>): Promise<ApiResponse<UserInfo>> => {
   return patch<UserInfo>('/users/me', data)
-}
-
-// 修改密码
-export const changePassword = (oldPassword: string, newPassword: string): Promise<ApiResponse<null>> => {
-  return put<null>('/users/me/password', {
-    old_password: oldPassword,
-    new_password: newPassword
-  })
 }
 
 // 忘记密码 - 发送重置邮件（已废弃，使用 sendEmailCode 替代）

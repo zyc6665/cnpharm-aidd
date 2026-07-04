@@ -1,6 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref, computed, onScopeDispose } from 'vue'
 import type { UserInfo, LoginParams, RegisterParams } from '@/types/models'
+import {
+  changePassword as apiChangePassword,
+  updateUserProfile
+} from '@/api/users'
 import { normalizeUserInfo } from '@/utils/user-normalization'
 import {
   login as apiLogin,
@@ -8,7 +12,8 @@ import {
   logout as apiLogout,
   getCurrentUser,
   guestLogin as apiGuestLogin,
-  sendEmailCode as apiSendEmailCode
+  sendEmailCode as apiSendEmailCode,
+  refreshToken as apiRefreshToken
 } from '@/api/auth'
 import {
   AUTH_CLEARED_EVENT,
@@ -167,7 +172,6 @@ export const useUserStore = defineStore('user', () => {
 
   // 更新个人资料
   const updateProfile = async (data: { username?: string; avatar_url?: string }) => {
-    const { updateUserProfile } = await import('@/api/users')
     const res = await updateUserProfile({
       avatar_url: data.avatar_url
     })
@@ -179,9 +183,11 @@ export const useUserStore = defineStore('user', () => {
   }
 
   // 修改密码
-  const changePassword = async (_oldPassword: string, _newPassword: string) => {
-    // TODO: 实现 API 调用
-    // 模拟成功
+  const changePassword = async (oldPassword: string, newPassword: string) => {
+    await apiChangePassword({
+      old_password: oldPassword,
+      new_password: newPassword
+    })
     return true
   }
 
@@ -189,7 +195,6 @@ export const useUserStore = defineStore('user', () => {
   const refreshAccessToken = async () => {
     if (!refreshToken.value) return false
     try {
-      const { refreshToken: apiRefreshToken } = await import('@/api/auth')
       const res = await apiRefreshToken(refreshToken.value)
       token.value = res.data.access_token
       refreshToken.value = res.data.refresh_token
