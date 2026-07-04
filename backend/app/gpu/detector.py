@@ -11,6 +11,8 @@ from typing import Any, Dict, List, Optional
 import logging
 import platform
 
+from app.common.time import utcnow
+
 logger = logging.getLogger(__name__)
 
 # 尝试导入NVML
@@ -44,7 +46,7 @@ class GPUStats:
     temperature_celsius: int
     power_watts: int
     fan_speed_percent: Optional[int] = None
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=utcnow)
 
 
 @dataclass
@@ -224,15 +226,15 @@ class GPUDetector:
             try:
                 cuda_ver = pynvml.nvmlSystemGetCudaDriverVersion()
                 cuda_version = f"{cuda_ver // 1000}.{(cuda_ver % 1000) // 10}"
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Failed to read CUDA driver version: %s", e)
 
             try:
                 driver_version = pynvml.nvmlSystemGetDriverVersion()
                 if isinstance(driver_version, bytes):
                     driver_version = driver_version.decode('utf-8')
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Failed to read NVIDIA driver version: %s", e)
 
         total_memory = sum(gpu.total_memory_mb for gpu in gpus)
 
