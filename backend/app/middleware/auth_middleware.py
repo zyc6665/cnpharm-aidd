@@ -433,8 +433,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             count = await self.cache.get(key)
             if count and int(count) >= self.rpm:
                 return True
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to read rate limit counter: {e}")
         return False
 
     async def _increment_counter(self, key: str) -> None:
