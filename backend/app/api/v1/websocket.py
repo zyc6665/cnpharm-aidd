@@ -167,7 +167,10 @@ async def task_websocket_endpoint(
                     })
 
             except json.JSONDecodeError:
-                pass
+                await ws_manager.send_personal(connection_id, {
+                    "type": "error",
+                    "message": "无效的 JSON 格式"
+                })
 
     except WebSocketDisconnect:
         logger.info(f"任务 WebSocket 断开: {connection_id}, 任务: {task_id}")
