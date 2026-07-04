@@ -5,16 +5,14 @@
 负责工具版本的切换、废弃、回滚等操作。
 """
 
-from datetime import datetime
 from typing import List, Optional, TYPE_CHECKING
 import logging
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.common.time import utcnow
-from app.models.tools import Tool, ToolVersion, ToolStatus
+from app.models.tools import Tool, ToolVersion
 
 if TYPE_CHECKING:
     from app.cache.base import CacheBackend

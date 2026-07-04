@@ -8,11 +8,11 @@
 4. 尝试早期清理（引用计数为0时）
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Optional, Dict, Any
 import logging
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.time import utcnow

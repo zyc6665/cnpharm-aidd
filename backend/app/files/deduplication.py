@@ -6,19 +6,16 @@
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
-from typing import Optional, TYPE_CHECKING
+from datetime import timedelta
+from typing import Optional
 import hashlib
 import logging
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.time import utcnow
 from app.models.files import File, FileAccessLog
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 

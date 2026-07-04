@@ -5,14 +5,12 @@
 提供存储服务不可用时的降级策略。
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, BinaryIO
-import asyncio
 import logging
 import os
-import shutil
 
 from app.common.time import utcnow
 

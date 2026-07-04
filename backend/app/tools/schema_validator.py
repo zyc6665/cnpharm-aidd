@@ -5,7 +5,7 @@
 负责验证工具输入参数和生成前端表单配置。
 """
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 import logging
 
 try:
