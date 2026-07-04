@@ -9,16 +9,16 @@ import {
 
 test('createProtectedObjectUrl 应使用登录令牌拉取受保护文件并返回可撤销 blob URL', async () => {
   let requestedUrl = ''
-  let requestedToken = ''
+  let requestedHeaders: Record<string, string> | undefined
   let revokedUrl = ''
 
   const blob = new Blob(['mol'])
 
   const resource = await createProtectedObjectUrl('/api/v1/files/file-1/download', {
     getToken: () => 'token-123',
-    fetchBlob: async (url, token) => {
+    fetchBlob: async (url, headers) => {
       requestedUrl = url
-      requestedToken = token
+      requestedHeaders = headers
       return blob
     },
     objectUrl: {
@@ -33,7 +33,7 @@ test('createProtectedObjectUrl 应使用登录令牌拉取受保护文件并返�
   })
 
   assert.equal(requestedUrl, '/api/v1/files/file-1/download')
-  assert.equal(requestedToken, 'token-123')
+  assert.deepEqual(requestedHeaders, { Authorization: 'Bearer token-123' })
   assert.equal(resource.url, 'blob:viewer-1')
 
   resource.revoke()
@@ -100,18 +100,37 @@ test('createProtectedObjectUrl 在缺少登录令牌时应直接失败', async (
 
 test('fetchProtectedFileText 应使用登录令牌拉取受保护文本文件', async () => {
   let requestedUrl = ''
-  let requestedToken = ''
+  let requestedHeaders: Record<string, string> | undefined
 
   const text = await fetchProtectedFileText('/api/v1/files/file-4/download', {
     getToken: () => 'token-text',
-    fetchText: async (url, token) => {
+    fetchText: async (url, headers) => {
       requestedUrl = url
-      requestedToken = token
+      requestedHeaders = headers
       return 'SMILES,score\\nCCO,0.8\\n'
     }
   })
 
   assert.equal(requestedUrl, '/api/v1/files/file-4/download')
-  assert.equal(requestedToken, 'token-text')
+  assert.deepEqual(requestedHeaders, { Authorization: 'Bearer token-text' })
   assert.equal(text, 'SMILES,score\\nCCO,0.8\\n')
+})
+
+test('fetchProtectedFileText 应在无登录令牌时使用游客会话头', async () => {
+  let requestedUrl = ''
+  let requestedHeaders: Record<string, string> | undefined
+
+  const text = await fetchProtectedFileText('/api/v1/files/file-5/download', {
+    getToken: () => null,
+    getGuestSession: () => 'guest-session-123',
+    fetchText: async (url, headers) => {
+      requestedUrl = url
+      requestedHeaders = headers
+      return 'guest file'
+    }
+  })
+
+  assert.equal(requestedUrl, '/api/v1/files/file-5/download')
+  assert.deepEqual(requestedHeaders, { 'X-Guest-Session': 'guest-session-123' })
+  assert.equal(text, 'guest file')
 })
