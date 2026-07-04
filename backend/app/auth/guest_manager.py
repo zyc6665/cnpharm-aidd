@@ -110,16 +110,22 @@ class GuestManager:
             cache: 缓存后端（可选，用于Redis缓存）
         """
         self._cache = cache
+        self._cache_warning_emitted = False
 
     @property
     def cache(self) -> Optional["CacheBackend"]:
         """获取缓存实例"""
         if self._cache is None:
             try:
-                from app.cache.factory import get_cache
-                self._cache = get_cache()
-            except Exception:
-                pass
+                from app.cache.factory import get_cache_backend
+                self._cache = get_cache_backend()
+            except Exception as e:
+                if not self._cache_warning_emitted:
+                    logger.warning(
+                        "Guest session cache is unavailable; continuing without cache: %s",
+                        e,
+                    )
+                    self._cache_warning_emitted = True
         return self._cache
 
     async def create_guest_session(
