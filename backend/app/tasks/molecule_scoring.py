@@ -414,7 +414,12 @@ def _is_molecule_generation_tool(tool_version: ToolVersion, tool: Tool | None) -
 
             capability = AIDD_TOOL_CAPABILITIES.get(tool.slug)
             return bool(capability and capability.capability == "molecule_generation")
-        except Exception:
+        except Exception as exc:
+            logger.debug(
+                "Failed to resolve AIDD capability for tool %s: %s",
+                tool.slug,
+                exc,
+            )
             return False
     return False
 

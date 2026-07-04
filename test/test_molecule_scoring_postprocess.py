@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import pytest_asyncio
@@ -228,3 +230,23 @@ async def test_non_molecule_generation_skips_scoring(
     updated = await append_molecule_scoring_artifacts(db_session, task, version, output_result)
 
     assert updated["output_file_ids"] == [sdf_file.id]
+
+
+def test_molecule_generation_capability_failure_is_observable(caplog, monkeypatch):
+    """能力表异常时应保留兜底行为，同时记录可排查上下文。"""
+    from app.tasks import molecule_scoring
+
+    def fail_import(name, *args, **kwargs):
+        if name == "app.agents.aidd.capabilities":
+            raise RuntimeError("capability unavailable")
+        return original_import(name, *args, **kwargs)
+
+    original_import = __import__
+    monkeypatch.setattr("builtins.__import__", fail_import)
+    tool_version = SimpleNamespace(config={})
+    tool = SimpleNamespace(slug="generation-tool")
+
+    with caplog.at_level(logging.DEBUG, logger="app.tasks.molecule_scoring"):
+        assert molecule_scoring._is_molecule_generation_tool(tool_version, tool) is False
+
+    assert "Failed to resolve AIDD capability for tool generation-tool" in caplog.text
