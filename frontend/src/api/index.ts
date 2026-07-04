@@ -5,4 +5,14 @@ export * from './files'
 export * from './agents'
 export * from './system'
 export * from './workflows'
-export { default as request, getToken, setToken, clearTokens } from './request'
+export {
+  default as request,
+  AUTH_CLEARED_EVENT,
+  clearTokens,
+  getGuestSession,
+  getRefreshToken,
+  getToken,
+  setGuestSession,
+  setRefreshToken,
+  setToken
+} from './request'

@@ -10,11 +10,20 @@ function readSource(relativePath: string): string {
   return readFileSync(resolve(rootDir, relativePath), 'utf8')
 }
 
-test('请求层清理 token 时应广播认证状态失效事件', () => {
-  const source = readSource('src/api/request.ts')
+test('认证存储清理时应广播认证状态失效事件', () => {
+  const source = readSource('src/utils/auth-storage.ts')
 
   assert.equal(source.includes("export const AUTH_CLEARED_EVENT = 'cpumodel-auth-cleared'"), true)
   assert.equal(source.includes("window.dispatchEvent(new CustomEvent(AUTH_CLEARED_EVENT))"), true)
+  assert.equal(source.includes("removeStorageItem(GUEST_SESSION_KEY)"), true)
+})
+
+test('请求层应通过认证存储模块暴露兼容的 token 辅助函数', () => {
+  const source = readSource('src/api/request.ts')
+
+  assert.equal(source.includes("clearAuthStorage"), true)
+  assert.equal(source.includes("setGuestSession"), true)
+  assert.equal(source.includes("getGuestSession"), true)
 })
 
 test('用户 store 应监听认证失效事件并同步清理登录态', () => {
@@ -24,7 +33,9 @@ test('用户 store 应监听认证失效事件并同步清理登录态', () => {
   assert.equal(source.includes("window.addEventListener(AUTH_CLEARED_EVENT"), true)
   assert.equal(source.includes("window.removeEventListener(AUTH_CLEARED_EVENT"), true)
   assert.equal(source.includes("const refreshToken = ref<string | null>(getRefreshToken())"), true)
-  assert.equal(source.includes('const authReady = ref(!getToken())'), true)
+  assert.equal(source.includes("const guestSession = ref<string | null>(getGuestSession())"), true)
+  assert.equal(source.includes('const authReady = ref(!getToken() && !getGuestSession())'), true)
+  assert.equal(source.includes('const isAuthenticated = computed(() => !!token.value || !!guestSession.value)'), true)
   assert.equal(source.includes('bootstrapAuthState'), true)
 })
 
