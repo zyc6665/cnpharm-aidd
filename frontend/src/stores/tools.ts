@@ -82,6 +82,7 @@ export const useToolsStore = defineStore('tools', () => {
       categories.value = res.data
       return res.data
     } catch {
+      categories.value = []
       return []
     }
   }
@@ -92,6 +93,7 @@ export const useToolsStore = defineStore('tools', () => {
       tags.value = res.data
       return res.data
     } catch {
+      tags.value = []
       return []
     }
   }
