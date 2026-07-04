@@ -31,7 +31,7 @@ from app.auth.dependencies import get_current_user, get_admin_user
 from app.schemas.tasks import (
     TaskCreate, TaskResponse, TaskListResponse
 )
-from app.common.responses import success_response, error_response
+from app.common.responses import paginated_response, success_response, error_response
 from app.common.exceptions import NotFoundException, ForbiddenException, ValidationException
 
 logger = logging.getLogger(__name__)
@@ -210,14 +210,11 @@ async def list_tasks(
             task_dict["user_email"] = task.user.email
         task_list.append(task_dict)
 
-    return success_response(
-        data={
-            "items": task_list,
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": (total + page_size - 1) // page_size
-        }
+    return paginated_response(
+        items=task_list,
+        total=total,
+        page=page,
+        page_size=page_size,
     )
 
 
@@ -498,14 +495,11 @@ async def get_task_logs(
     result = await db.execute(query)
     logs = result.scalars().all()
 
-    return success_response(
-        data={
-            "items": [_serialize_task_log(log) for log in logs],
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": (total + page_size - 1) // page_size
-        }
+    return paginated_response(
+        items=[_serialize_task_log(log) for log in logs],
+        total=total,
+        page=page,
+        page_size=page_size,
     )
 
 
