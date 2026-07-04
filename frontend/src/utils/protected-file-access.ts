@@ -17,8 +17,9 @@ interface DownloadDomApi {
 
 interface ProtectedFileAccessDependencies {
   dom?: DownloadDomApi
-  fetchBlob?: (url: string, token: string) => Promise<Blob>
-  fetchText?: (url: string, token: string) => Promise<string>
+  fetchBlob?: (url: string, headers: Record<string, string>) => Promise<Blob>
+  fetchText?: (url: string, headers: Record<string, string>) => Promise<string>
+  getGuestSession?: () => string | null
   getToken?: () => string | null
   objectUrl?: ObjectUrlApi
 }
@@ -56,11 +57,13 @@ function getStoredToken(): string | null {
   return typeof localStorage === 'undefined' ? null : localStorage.getItem('cpumodel_token')
 }
 
-async function fetchProtectedFileBlob(url: string, token: string): Promise<Blob> {
+function getStoredGuestSession(): string | null {
+  return typeof localStorage === 'undefined' ? null : localStorage.getItem('cpumodel_guest_session')
+}
+
+async function fetchProtectedFileBlob(url: string, headers: Record<string, string>): Promise<Blob> {
   const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`
-    }
+    headers
   })
 
   if (!response.ok) {
@@ -71,11 +74,9 @@ async function fetchProtectedFileBlob(url: string, token: string): Promise<Blob>
   return await response.blob()
 }
 
-async function fetchProtectedTextContent(url: string, token: string): Promise<string> {
+async function fetchProtectedTextContent(url: string, headers: Record<string, string>): Promise<string> {
   const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`
-    }
+    headers
   })
 
   if (!response.ok) {
@@ -90,15 +91,20 @@ function resolveDownloadName(file: ProtectedFileReference): string {
   return file.original_name || file.filename || 'download'
 }
 
-function resolveProtectedToken(
+function resolveProtectedAuthHeaders(
   dependencies: ProtectedFileAccessDependencies = {}
-): string {
+): Record<string, string> {
   const token = (dependencies.getToken || getStoredToken)()
-  if (!token) {
-    throw new Error('需要登录后才能访问此文件')
+  if (token) {
+    return { Authorization: `Bearer ${token}` }
   }
 
-  return token
+  const guestSession = (dependencies.getGuestSession || getStoredGuestSession)()
+  if (guestSession) {
+    return { 'X-Guest-Session': guestSession }
+  }
+
+  throw new Error('需要登录后才能访问此文件')
 }
 
 function isBrowserObjectUrl(url: string): boolean {
@@ -125,9 +131,9 @@ export async function createProtectedObjectUrl(
     }
   }
 
-  const token = resolveProtectedToken(dependencies)
+  const headers = resolveProtectedAuthHeaders(dependencies)
 
-  const blob = await (dependencies.fetchBlob || fetchProtectedFileBlob)(fileUrl, token)
+  const blob = await (dependencies.fetchBlob || fetchProtectedFileBlob)(fileUrl, headers)
   const objectUrlApi = dependencies.objectUrl || defaultObjectUrlApi
   const objectUrl = objectUrlApi.createObjectURL(blob)
 
@@ -141,8 +147,8 @@ export async function fetchProtectedFileText(
   fileUrl: string,
   dependencies: ProtectedFileAccessDependencies = {}
 ): Promise<string> {
-  const token = resolveProtectedToken(dependencies)
-  return await (dependencies.fetchText || fetchProtectedTextContent)(fileUrl, token)
+  const headers = resolveProtectedAuthHeaders(dependencies)
+  return await (dependencies.fetchText || fetchProtectedTextContent)(fileUrl, headers)
 }
 
 export async function triggerProtectedFileDownload(
