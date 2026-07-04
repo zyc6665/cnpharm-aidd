@@ -15,6 +15,13 @@ from app.common.responses import paginated_response
 from app.schemas.common import PaginatedResponse
 
 
+def test_common_package_exports_paginated_response() -> None:
+    """app.common 应导出统一分页响应 helper。"""
+    from app.common import paginated_response as exported_paginated_response
+
+    assert exported_paginated_response is paginated_response
+
+
 def test_paginated_response_builds_standard_total_pages() -> None:
     """分页响应应统一生成 total_pages 字段。"""
     response = paginated_response(
