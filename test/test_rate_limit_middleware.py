@@ -1,6 +1,7 @@
 import pytest
+from fastapi import HTTPException
 
-from app.middleware.auth_middleware import RateLimitMiddleware
+from app.middleware.auth_middleware import AuthMiddleware, RateLimitMiddleware
 
 
 class FailingCache:
@@ -48,3 +49,28 @@ async def test_rate_limit_detects_over_limit_counter():
     )
 
     assert await middleware._is_rate_limited("rate_limit:ip:127.0.0.1") is True
+
+
+@pytest.mark.asyncio
+async def test_guest_session_requires_uuid_format():
+    """游客 Session 中间件格式校验应匹配实际 UUID 生成策略。"""
+    middleware = AuthMiddleware(dummy_app)
+
+    auth_info = await middleware._verify_guest_session(
+        "123e4567-e89b-12d3-a456-426614174000"
+    )
+
+    assert auth_info.is_guest is True
+    assert auth_info.session_id == "123e4567-e89b-12d3-a456-426614174000"
+
+
+@pytest.mark.asyncio
+async def test_guest_session_rejects_long_non_uuid():
+    """长度足够但非 UUID 的游客 Session 不应通过中间件格式校验。"""
+    middleware = AuthMiddleware(dummy_app)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await middleware._verify_guest_session("x" * 36)
+
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.detail == "Invalid guest session"

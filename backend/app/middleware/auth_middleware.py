@@ -9,6 +9,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Union
 import time
+import uuid
 
 from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse
@@ -273,7 +274,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             # 这里简化处理，实际应该通过GuestManager验证
             # guest_manager需要数据库会话，在中间件中较难获取
             # 因此这里只做基本格式验证，详细验证在依赖函数中进行
-            if not session_id or len(session_id) < 32:
+            if not _is_valid_guest_session_id(session_id):
                 raise ValueError("Invalid session format")
 
             return AuthInfo(
@@ -359,6 +360,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return request.client.host
 
         return "unknown"
+
+
+def _is_valid_guest_session_id(session_id: str) -> bool:
+    """校验游客 Session ID 是否符合当前 UUID 生成格式。"""
+    try:
+        return str(uuid.UUID(session_id)) == session_id
+    except (TypeError, ValueError):
+        return False
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
