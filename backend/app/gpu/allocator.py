@@ -213,22 +213,25 @@ class GPUAllocator:
             List[Dict[str, Any]]: 可用节点列表
         """
         # 本地模式：直接检测本地GPU
-        if self.detector.is_available():
-            node_info = self.detector.get_node_info()
-            return [{
-                "id": "local",
-                "hostname": node_info.hostname,
-                "gpu_count": node_info.gpu_count,
-                "gpus": [
-                    {
-                        "index": gpu.gpu_index,
-                        "name": gpu.gpu_name,
-                        "total_memory_mb": gpu.total_memory_mb,
-                        "free_memory_mb": gpu.free_memory_mb
-                    }
-                    for gpu in node_info.gpus
-                ]
-            }]
+        try:
+            if self.detector.is_available():
+                node_info = self.detector.get_node_info()
+                return [{
+                    "id": "local",
+                    "hostname": node_info.hostname,
+                    "gpu_count": node_info.gpu_count,
+                    "gpus": [
+                        {
+                            "index": gpu.gpu_index,
+                            "name": gpu.gpu_name,
+                            "total_memory_mb": gpu.total_memory_mb,
+                            "free_memory_mb": gpu.free_memory_mb
+                        }
+                        for gpu in node_info.gpus
+                    ]
+                }]
+        except Exception as e:
+            logger.warning("Failed to detect local GPU nodes: %s", e)
 
         # 如果没有本地GPU，返回空列表
         # 生产环境中应该从数据库查询注册的GPU节点

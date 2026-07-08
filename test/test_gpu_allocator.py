@@ -46,6 +46,14 @@ class _LocalDetector:
         )
 
 
+class _FailingNodeDetector:
+    def is_available(self):
+        return True
+
+    def get_node_info(self):
+        raise RuntimeError("node probe failed")
+
+
 @pytest.mark.asyncio
 async def test_is_gpu_idle_uses_utilization_threshold():
     allocator = GPUAllocator(db=None, detector=_DetectorWithStats(9.9))
@@ -91,3 +99,19 @@ async def test_load_balance_strategy_uses_most_free_memory():
     assert result.success is True
     assert result.gpu_node_id == "local"
     assert result.gpu_index == 1
+
+
+@pytest.mark.asyncio
+async def test_allocate_handles_local_node_probe_failure(caplog):
+    allocator = GPUAllocator(db=None, detector=_FailingNodeDetector())
+
+    with caplog.at_level(logging.WARNING, logger="app.gpu.allocator"):
+        result = await allocator.allocate(
+            task_id="task-node-probe-failure",
+            memory_required_mb=4_000,
+            strategy=AllocationStrategy.LOAD_BALANCE,
+        )
+
+    assert result.success is False
+    assert result.message == "No GPU nodes available"
+    assert "Failed to detect local GPU nodes: node probe failed" in caplog.text
