@@ -393,10 +393,13 @@ class GPUAllocator:
         Returns:
             Optional[AllocationResult]: 分配结果
         """
-        # 查找低优先级运行中的任务
-        # 这里需要根据实际Task模型实现
-        # 暂时返回None，不执行抢占
-        logger.info(f"Preemption attempted for task {task_id}, not implemented")
+        # 当前还没有持久化 GPU 分配记录，无法安全抢占低优先级任务。
+        logger.debug(
+            "GPU preemption skipped for task=%s memory_required_mb=%s; "
+            "persistent allocation records are not available yet",
+            task_id,
+            memory_required_mb,
+        )
         return None
 
     async def _create_allocation(

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.gpu.allocator import AllocationStrategy, GPUAllocator
+from app.gpu.allocator import AllocationStrategy, GPUAllocator, TaskPriority
 
 
 class _DetectorWithStats:
@@ -115,3 +115,20 @@ async def test_allocate_handles_local_node_probe_failure(caplog):
     assert result.success is False
     assert result.message == "No GPU nodes available"
     assert "Failed to detect local GPU nodes: node probe failed" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_high_priority_preemption_skip_uses_debug_log(caplog):
+    allocator = GPUAllocator(db=None, detector=_LocalDetector())
+
+    with caplog.at_level(logging.DEBUG, logger="app.gpu.allocator"):
+        result = await allocator.allocate(
+            task_id="task-preempt",
+            memory_required_mb=99_999,
+            priority=TaskPriority.HIGH,
+            strategy=AllocationStrategy.LOAD_BALANCE,
+        )
+
+    assert result.success is False
+    assert result.wait_position == 1
+    assert "GPU preemption skipped for task=task-preempt" in caplog.text
