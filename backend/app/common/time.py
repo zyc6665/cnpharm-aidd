@@ -8,6 +8,11 @@ def utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
+def utcfromtimestamp(timestamp: float) -> datetime:
+    """将 Unix 时间戳转换为不带时区信息的 UTC 时间。"""
+    return datetime.fromtimestamp(timestamp, UTC).replace(tzinfo=None)
+
+
 def utcnow_iso() -> str:
     """返回当前 UTC 时间的 ISO 字符串。"""
     return utcnow().isoformat()

@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple, BinaryIO
 import logging
 import os
 
-from app.common.time import utcnow
+from app.common.time import utcfromtimestamp, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -529,7 +529,7 @@ class StorageFallbackStrategy:
 
                 file_path = os.path.join(root, file)
                 try:
-                    mtime = datetime.fromtimestamp(os.path.getmtime(file_path))
+                    mtime = utcfromtimestamp(os.path.getmtime(file_path))
                     if mtime < cutoff:
                         os.remove(file_path)
                         cleaned += 1

@@ -15,7 +15,7 @@ import logging.handlers
 import os
 import shutil
 import time
-from app.common.time import utcnow
+from app.common.time import utcfromtimestamp, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -417,7 +417,7 @@ class LogRotationManager:
                     stats[name] = {
                         "path": log_path,
                         "size_bytes": stat.st_size,
-                        "modified": datetime.fromtimestamp(stat.st_mtime).isoformat()
+                        "modified": utcfromtimestamp(stat.st_mtime).isoformat()
                     }
 
                     # 统计轮转文件
@@ -472,7 +472,7 @@ class LogRotationManager:
                 for filename in os.listdir(dir_path):
                     file_path = os.path.join(dir_path, filename)
                     if os.path.isfile(file_path):
-                        mtime = datetime.fromtimestamp(os.path.getmtime(file_path))
+                        mtime = utcfromtimestamp(os.path.getmtime(file_path))
                         if mtime < cutoff:
                             try:
                                 os.remove(file_path)
