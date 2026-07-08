@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import logging
+
 import httpx
 
 from app.common.secret_crypto import decrypt_secret
 from app.models.system_settings import ModelService
+
+logger = logging.getLogger(__name__)
 
 
 def _extract_chat_completion_content(data: object) -> str:
@@ -53,6 +57,13 @@ async def test_openai_compatible_service(
             response.raise_for_status()
             data = response.json()
     except Exception as exc:
+        logger.warning(
+            "OpenAI-compatible service test failed for service=%s model=%s base_url=%s: %s",
+            service.name,
+            service.model_name,
+            service.base_url,
+            exc,
+        )
         return False, str(exc)
 
     content = _extract_chat_completion_content(data)

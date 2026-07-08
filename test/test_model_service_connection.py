@@ -1,4 +1,5 @@
 import sys
+import logging
 from pathlib import Path
 
 import pytest
@@ -128,3 +129,45 @@ def test_openai_compatible_response_content_fallbacks_are_explicit():
     assert openai_compatible._extract_chat_completion_content(
         {"choices": [{"message": {"content": "pong"}}]}
     ) == "pong"
+
+
+@pytest.mark.asyncio
+async def test_openai_compatible_connection_failure_is_observable(monkeypatch, caplog):
+    class FailingClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def post(self, url, json, headers):
+            raise RuntimeError("connection failed")
+
+    monkeypatch.setattr(openai_compatible.httpx, "AsyncClient", FailingClient)
+
+    service = ModelService(
+        name="Default",
+        provider_type="openai_compatible",
+        base_url="https://api.example.com/v1/",
+        api_key_encrypted=None,
+        model_name="model",
+        timeout_seconds=30,
+        max_tokens=256,
+        temperature=0.3,
+    )
+
+    with caplog.at_level(logging.WARNING, logger="app.services.openai_compatible"):
+        success, message = await openai_compatible.test_openai_compatible_service(
+            service,
+            api_key="sk-secret",
+        )
+
+    assert success is False
+    assert message == "connection failed"
+    assert "OpenAI-compatible service test failed for service=Default" in caplog.text
+    assert "model=model" in caplog.text
+    assert "https://api.example.com/v1/" in caplog.text
+    assert "sk-secret" not in caplog.text
