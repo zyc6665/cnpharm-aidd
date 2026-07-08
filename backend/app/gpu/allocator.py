@@ -12,7 +12,6 @@ from typing import Any, Dict, List, Optional
 import asyncio
 import logging
 
-from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.gpu.detector import GPUDetector, get_gpu_detector
