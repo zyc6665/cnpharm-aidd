@@ -74,8 +74,46 @@ function normalizeParamsText(value: unknown): string | null {
   return entries.map(([key, entry]) => `${key}: ${JSON.stringify(entry)}`).join(', ')
 }
 
+function normalizeMissingOutputMatch(value: unknown): WorkflowRunMissingOutput['match'] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { filename_contains_any: [] }
+  }
+
+  const match = value as Record<string, unknown>
+  return {
+    extension: normalizeOptionalString(match.extension),
+    filename_contains_any: normalizeStringArray(match.filename_contains_any),
+    content_type: normalizeOptionalString(match.content_type)
+  }
+}
+
 function normalizeMissingOutputs(value: unknown): WorkflowRunMissingOutput[] {
-  return Array.isArray(value) ? (value as WorkflowRunMissingOutput[]) : []
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.flatMap((item): WorkflowRunMissingOutput[] => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      return []
+    }
+
+    const record = item as Record<string, unknown>
+    const semanticType = normalizeOptionalString(record.semantic_type)
+    const source = normalizeOptionalString(record.source)
+    if (!semanticType || !source) {
+      return []
+    }
+
+    return [
+      {
+        semantic_type: semanticType,
+        source,
+        path: normalizeOptionalString(record.path),
+        required: record.required === true,
+        match: normalizeMissingOutputMatch(record.match)
+      }
+    ]
+  })
 }
 
 export function isWorkflowRunTerminal(status: string): boolean {

@@ -71,6 +71,55 @@ test('工作流运行摘要应按执行顺序输出节点状态和完成比例',
   )
 })
 
+test('工作流运行摘要应过滤并规范化缺失输出数据', () => {
+  const summary = buildWorkflowRunSummary({
+    id: 'run-1',
+    owner_id: 'user-1',
+    name: 'Docking flow',
+    status: 'failure',
+    definition: { nodes: [], edges: [] },
+    input_files: {},
+    execution_order: ['dock'],
+    node_states: {
+      dock: {
+        status: 'failure',
+        missing_outputs: [
+          {
+            semantic_type: 'pocket_pdb',
+            source: 'artifact',
+            path: '',
+            required: true,
+            match: {
+              extension: '.pdb',
+              filename_contains_any: ['pocket', 123],
+              content_type: null
+            }
+          },
+          { semantic_type: '', source: 'artifact', required: true },
+          'bad-output'
+        ]
+      }
+    },
+    artifact_lineage: {},
+    created_at: '2026-06-17T00:00:00Z',
+    updated_at: '2026-06-17T00:00:00Z'
+  })
+
+  assert.deepEqual(summary.nodes[0]?.missingOutputs, [
+    {
+      semantic_type: 'pocket_pdb',
+      source: 'artifact',
+      path: null,
+      required: true,
+      match: {
+        extension: '.pdb',
+        filename_contains_any: ['pocket'],
+        content_type: null
+      }
+    }
+  ])
+})
+
 test('工作流运行摘要应识别终态和展示色调', () => {
   assert.equal(isWorkflowRunTerminal('success'), true)
   assert.equal(isWorkflowRunTerminal('failure'), true)
