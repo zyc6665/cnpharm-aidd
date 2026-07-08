@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import builtins
 import logging
 import sys
+import types
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -250,3 +252,38 @@ def test_molecule_generation_capability_failure_is_observable(caplog, monkeypatc
         assert molecule_scoring._is_molecule_generation_tool(tool_version, tool) is False
 
     assert "Failed to resolve AIDD capability for tool generation-tool" in caplog.text
+
+
+def test_rdkit_sa_scorer_import_failure_is_observable(caplog, monkeypatch):
+    """SA scorer 缺失时应保留降级行为并记录原因。"""
+    from app.tasks import molecule_scoring
+
+    original_import = builtins.__import__
+
+    def fail_import(name, *args, **kwargs):
+        if name == "rdkit.Contrib.SA_Score":
+            raise RuntimeError("sa scorer unavailable")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fail_import)
+
+    with caplog.at_level(logging.DEBUG, logger="app.tasks.molecule_scoring"):
+        assert molecule_scoring._rdkit_sa_score(object()) is None
+
+    assert "RDKit SA scorer unavailable: sa scorer unavailable" in caplog.text
+
+
+def test_rdkit_sa_score_failure_is_observable(caplog, monkeypatch):
+    """SA scorer 计算失败时应保留降级行为并记录原因。"""
+    from app.tasks import molecule_scoring
+
+    module = types.ModuleType("rdkit.Contrib.SA_Score")
+    module.sascorer = SimpleNamespace(
+        calculateScore=lambda _mol: (_ for _ in ()).throw(RuntimeError("score failed"))
+    )
+    monkeypatch.setitem(sys.modules, "rdkit.Contrib.SA_Score", module)
+
+    with caplog.at_level(logging.DEBUG, logger="app.tasks.molecule_scoring"):
+        assert molecule_scoring._rdkit_sa_score(object()) is None
+
+    assert "RDKit SA scoring failed: score failed" in caplog.text

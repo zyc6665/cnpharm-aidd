@@ -189,12 +189,14 @@ def extract_molecule_candidates(output_files: list[FileModel]) -> list[MoleculeC
 def _rdkit_sa_score(mol: Any) -> float | None:
     try:
         from rdkit.Contrib.SA_Score import sascorer  # type: ignore
-    except Exception:
+    except Exception as exc:
+        logger.debug("RDKit SA scorer unavailable: %s", exc)
         return None
 
     try:
         return float(sascorer.calculateScore(mol))
-    except Exception:
+    except Exception as exc:
+        logger.debug("RDKit SA scoring failed: %s", exc)
         return None
 
 
