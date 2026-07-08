@@ -10,6 +10,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 import asyncio
+import hashlib
 import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -145,6 +146,16 @@ class GPUAllocator:
                 AllocationStrategy.MEMORY_FIT
             ):
                 result = await self._try_allocate_by_memory(
+                    available_nodes, task_id, memory_required_mb
+                )
+
+            if not result and strategy == AllocationStrategy.ROUND_ROBIN:
+                result = await self._try_allocate_round_robin(
+                    available_nodes, task_id, memory_required_mb
+                )
+
+            if not result and strategy == AllocationStrategy.LOAD_BALANCE:
+                result = await self._try_allocate_by_load(
                     available_nodes, task_id, memory_required_mb
                 )
 
@@ -299,12 +310,76 @@ class GPUAllocator:
             memory_mb=memory_required_mb
         )
 
+    async def _try_allocate_round_robin(
+        self,
+        nodes: List[Dict[str, Any]],
+        task_id: str,
+        memory_required_mb: int
+    ) -> Optional[AllocationResult]:
+        """策略3: 轮询分配
+
+        当前实现使用 task_id 的确定性哈希在候选 GPU 中选择位置，避免无状态服务
+        每次都落到同一张卡，同时不引入额外持久化状态。
+        """
+        candidates = self._allocation_candidates(nodes, memory_required_mb)
+        if not candidates:
+            return None
+
+        digest = hashlib.sha256(task_id.encode("utf-8")).hexdigest()
+        candidate = candidates[int(digest, 16) % len(candidates)]
+        return await self._create_allocation(
+            task_id=task_id,
+            node_id=candidate["node_id"],
+            gpu_index=candidate["gpu_index"],
+            memory_mb=memory_required_mb
+        )
+
+    async def _try_allocate_by_load(
+        self,
+        nodes: List[Dict[str, Any]],
+        task_id: str,
+        memory_required_mb: int
+    ) -> Optional[AllocationResult]:
+        """策略4: 负载均衡
+
+        选择当前空闲显存最多的 GPU，优先把任务分配到余量最大的设备。
+        """
+        candidates = self._allocation_candidates(nodes, memory_required_mb)
+        if not candidates:
+            return None
+
+        best = max(candidates, key=lambda x: x["free_memory"])
+        return await self._create_allocation(
+            task_id=task_id,
+            node_id=best["node_id"],
+            gpu_index=best["gpu_index"],
+            memory_mb=memory_required_mb
+        )
+
+    def _allocation_candidates(
+        self,
+        nodes: List[Dict[str, Any]],
+        memory_required_mb: int
+    ) -> List[Dict[str, Any]]:
+        """提取满足显存要求的 GPU 候选。"""
+        candidates = []
+        for node in nodes:
+            for gpu in node.get("gpus", []):
+                free_memory = gpu["free_memory_mb"]
+                if free_memory >= memory_required_mb:
+                    candidates.append({
+                        "node_id": node["id"],
+                        "gpu_index": gpu["index"],
+                        "free_memory": free_memory,
+                    })
+        return candidates
+
     async def _try_preempt_low_priority(
         self,
         task_id: str,
         memory_required_mb: int
     ) -> Optional[AllocationResult]:
-        """策略3: 抢占低优先级任务
+        """策略5: 抢占低优先级任务
 
         仅限高优先级任务使用。
 

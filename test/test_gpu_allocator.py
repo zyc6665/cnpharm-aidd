@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.gpu.allocator import GPUAllocator
+from app.gpu.allocator import AllocationStrategy, GPUAllocator
 
 
 class _DetectorWithStats:
@@ -19,6 +19,31 @@ class _DetectorWithStats:
 class _FailingDetector:
     def get_gpu_stats(self, gpu_index: int):
         raise RuntimeError("probe failed")
+
+
+class _LocalDetector:
+    def is_available(self):
+        return True
+
+    def get_node_info(self):
+        return SimpleNamespace(
+            hostname="gpu-host",
+            gpu_count=2,
+            gpus=[
+                SimpleNamespace(
+                    gpu_index=0,
+                    gpu_name="GPU 0",
+                    total_memory_mb=24_000,
+                    free_memory_mb=8_000,
+                ),
+                SimpleNamespace(
+                    gpu_index=1,
+                    gpu_name="GPU 1",
+                    total_memory_mb=24_000,
+                    free_memory_mb=16_000,
+                ),
+            ],
+        )
 
 
 @pytest.mark.asyncio
@@ -36,3 +61,33 @@ async def test_is_gpu_idle_logs_probe_failure(caplog):
         assert await allocator._is_gpu_idle("node-a", 1) is False
 
     assert "Failed to probe GPU idle state for node=node-a gpu=1" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_round_robin_strategy_allocates_available_gpu():
+    allocator = GPUAllocator(db=None, detector=_LocalDetector())
+
+    result = await allocator.allocate(
+        task_id="task-round-robin",
+        memory_required_mb=4_000,
+        strategy=AllocationStrategy.ROUND_ROBIN,
+    )
+
+    assert result.success is True
+    assert result.gpu_node_id == "local"
+    assert result.gpu_index in {0, 1}
+
+
+@pytest.mark.asyncio
+async def test_load_balance_strategy_uses_most_free_memory():
+    allocator = GPUAllocator(db=None, detector=_LocalDetector())
+
+    result = await allocator.allocate(
+        task_id="task-load-balance",
+        memory_required_mb=4_000,
+        strategy=AllocationStrategy.LOAD_BALANCE,
+    )
+
+    assert result.success is True
+    assert result.gpu_node_id == "local"
+    assert result.gpu_index == 1
