@@ -46,13 +46,16 @@ export const convertSdfToPdb = (
 
 // 获取文件列表
 export const getFileList = (params?: PaginationParams): Promise<ApiResponse<PaginatedResponse<FileInfo>>> => {
-  return get<PaginatedResponse<FileInfo>>('/files', params as Record<string, unknown>)
+  return get<PaginatedResponse<FileInfo>, PaginationParams>('/files', params)
 }
 
 export const getArtifactFiles = (
   params?: PaginationParams & { search?: string }
 ): Promise<ApiResponse<PaginatedResponse<ArtifactFile>>> => {
-  return get<PaginatedResponse<ArtifactFile>>('/files/artifacts', params as Record<string, unknown>)
+  return get<PaginatedResponse<ArtifactFile>, PaginationParams & { search?: string }>(
+    '/files/artifacts',
+    params
+  )
 }
 
 // 获取文件信息

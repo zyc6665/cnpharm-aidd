@@ -60,7 +60,7 @@ export interface AdminResetUserPasswordParams {
 }
 
 export const adminGetUsers = (params?: AdminUserListParams): Promise<ApiResponse<AdminUserListResponse>> => {
-  return get<AdminUserListResponse>('/users/admin', params as Record<string, unknown>)
+  return get<AdminUserListResponse, AdminUserListParams>('/users/admin', params)
 }
 
 export const adminCreateUser = (data: AdminUserCreateParams): Promise<ApiResponse<UserInfo>> => {

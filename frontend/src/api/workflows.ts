@@ -66,7 +66,7 @@ export interface WorkflowDefinitionUpdatePayload extends Partial<WorkflowDefinit
 export const getWorkflowDefinitions = (
   params?: PaginationParams
 ): Promise<ApiResponse<PaginatedResponse<WorkflowDefinition>>> => {
-  return get<PaginatedResponse<WorkflowDefinition>>('/workflows', params as Record<string, unknown>)
+  return get<PaginatedResponse<WorkflowDefinition>, PaginationParams>('/workflows', params)
 }
 
 export const getWorkflowDefinition = (id: string): Promise<ApiResponse<WorkflowDefinition>> => {

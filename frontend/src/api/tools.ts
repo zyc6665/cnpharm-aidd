@@ -41,7 +41,7 @@ function toToolOptionSummary(tool: Tool): ToolOptionSummary {
 
 // 获取工具列表
 export const getToolList = (params?: ToolListParams): Promise<ApiResponse<PaginatedResponse<Tool>>> => {
-  return get<PaginatedResponse<Tool>>('/tools', params as Record<string, unknown>)
+  return get<PaginatedResponse<Tool>, ToolListParams>('/tools', params)
 }
 
 export const getWorkflowToolOptions = async (): Promise<ApiResponse<ToolOptionSummary[]>> => {

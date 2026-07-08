@@ -148,7 +148,11 @@ request.interceptors.response.use(
 )
 
 // 封装 GET 请求
-export const get = <T>(url: string, params?: Record<string, unknown>, config?: AxiosRequestConfig): Promise<ApiResponse<T>> => {
+export const get = <T, P extends object = Record<string, unknown>>(
+  url: string,
+  params?: P,
+  config?: AxiosRequestConfig
+): Promise<ApiResponse<T>> => {
   return request.get(url, { params, ...config })
 }
 

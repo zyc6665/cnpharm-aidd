@@ -14,7 +14,7 @@ export const createAiddAgentRun = (data: AiddAgentRunCreateParams): Promise<ApiR
 export const getAiddAgentRuns = (
   params?: PaginationParams
 ): Promise<ApiResponse<PaginatedResponse<AiddAgentRun>>> => {
-  return get<PaginatedResponse<AiddAgentRun>>('/agents/aidd/runs', params as Record<string, unknown>)
+  return get<PaginatedResponse<AiddAgentRun>, PaginationParams>('/agents/aidd/runs', params)
 }
 
 export const getAiddAgentRun = (runId: string): Promise<ApiResponse<AiddAgentRun>> => {

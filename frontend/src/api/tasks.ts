@@ -16,7 +16,7 @@ export function isTaskTerminalStatus(status: TaskStatus): boolean {
 
 // 获取任务列表
 export const getTaskList = (params?: TaskListParams): Promise<ApiResponse<PaginatedResponse<Task>>> => {
-  return get<PaginatedResponse<Task>>('/tasks', params as Record<string, unknown>)
+  return get<PaginatedResponse<Task>, TaskListParams>('/tasks', params)
 }
 
 // 创建任务
