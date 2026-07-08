@@ -6,11 +6,11 @@
 """
 
 import json
-import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, date
+from datetime import timedelta
 from typing import Any, Dict, Optional, TYPE_CHECKING
 import logging
+import uuid
 
 from sqlalchemy import select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -290,7 +290,7 @@ class GuestManager:
 
         # 重置每日计数（如果跨天）
         usage_date = session_data.usage.get("usage_date")
-        today = date.today().isoformat()
+        today = utcnow().date().isoformat()
         if usage_date != today:
             session_data.usage["tasks_today"] = 0
             session_data.usage["files_uploaded_today"] = 0
