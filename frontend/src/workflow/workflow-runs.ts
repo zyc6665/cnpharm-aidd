@@ -31,12 +31,14 @@ export interface WorkflowRunAutoSyncState {
   isSyncing: boolean
 }
 
-function asNodeState(state: WorkflowRunNodeState | unknown): WorkflowRunNodeState | null {
-  if (!state || typeof state !== 'object') {
-    return null
-  }
+type UnknownRecord = Record<string, unknown>
 
-  return state as WorkflowRunNodeState
+function isUnknownRecord(value: unknown): value is UnknownRecord {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function asNodeState(state: WorkflowRunNodeState | unknown): UnknownRecord | null {
+  return isUnknownRecord(state) ? state : null
 }
 
 function normalizeStatus(value: unknown): string {
@@ -54,19 +56,19 @@ function normalizeStringArray(value: unknown): string[] {
 }
 
 function normalizeSemanticOutputs(value: unknown): string[] {
-  if (!value || typeof value !== 'object') {
+  if (!isUnknownRecord(value)) {
     return []
   }
 
-  return Object.keys(value as Record<string, unknown>)
+  return Object.keys(value)
 }
 
 function normalizeParamsText(value: unknown): string | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+  if (!isUnknownRecord(value)) {
     return null
   }
 
-  const entries = Object.entries(value as Record<string, unknown>)
+  const entries = Object.entries(value)
   if (entries.length === 0) {
     return null
   }
@@ -75,15 +77,14 @@ function normalizeParamsText(value: unknown): string | null {
 }
 
 function normalizeMissingOutputMatch(value: unknown): WorkflowRunMissingOutput['match'] {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+  if (!isUnknownRecord(value)) {
     return { filename_contains_any: [] }
   }
 
-  const match = value as Record<string, unknown>
   return {
-    extension: normalizeOptionalString(match.extension),
-    filename_contains_any: normalizeStringArray(match.filename_contains_any),
-    content_type: normalizeOptionalString(match.content_type)
+    extension: normalizeOptionalString(value.extension),
+    filename_contains_any: normalizeStringArray(value.filename_contains_any),
+    content_type: normalizeOptionalString(value.content_type)
   }
 }
 
@@ -93,13 +94,12 @@ function normalizeMissingOutputs(value: unknown): WorkflowRunMissingOutput[] {
   }
 
   return value.flatMap((item): WorkflowRunMissingOutput[] => {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+    if (!isUnknownRecord(item)) {
       return []
     }
 
-    const record = item as Record<string, unknown>
-    const semanticType = normalizeOptionalString(record.semantic_type)
-    const source = normalizeOptionalString(record.source)
+    const semanticType = normalizeOptionalString(item.semantic_type)
+    const source = normalizeOptionalString(item.source)
     if (!semanticType || !source) {
       return []
     }
@@ -108,9 +108,9 @@ function normalizeMissingOutputs(value: unknown): WorkflowRunMissingOutput[] {
       {
         semantic_type: semanticType,
         source,
-        path: normalizeOptionalString(record.path),
-        required: record.required === true,
-        match: normalizeMissingOutputMatch(record.match)
+        path: normalizeOptionalString(item.path),
+        required: item.required === true,
+        match: normalizeMissingOutputMatch(item.match)
       }
     ]
   })

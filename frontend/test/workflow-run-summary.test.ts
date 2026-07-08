@@ -120,6 +120,12 @@ test('工作流运行摘要应过滤并规范化缺失输出数据', () => {
   ])
 })
 
+test('工作流运行摘要规范化应集中使用对象类型守卫', () => {
+  const source = readFileSync(resolve(rootDir, 'src/workflow/workflow-runs.ts'), 'utf8')
+
+  assert.equal(source.includes('as Record<string, unknown>'), false)
+})
+
 test('工作流运行摘要应识别终态和展示色调', () => {
   assert.equal(isWorkflowRunTerminal('success'), true)
   assert.equal(isWorkflowRunTerminal('failure'), true)
