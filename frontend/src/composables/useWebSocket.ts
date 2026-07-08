@@ -5,6 +5,12 @@ import type { WSMessage } from '@/types/models'
 type MessageHandler = (message: WSMessage) => void
 const DEFAULT_WS_PATH = '/api/v1/ws'
 
+function debugWebSocket(...args: unknown[]) {
+  if (import.meta.env.DEV) {
+    console.debug('[WebSocket]', ...args)
+  }
+}
+
 export function useWebSocket() {
   const userStore = useUserStore()
 
@@ -48,7 +54,7 @@ export function useWebSocket() {
       ws.value = new WebSocket(url)
 
       ws.value.onopen = () => {
-        console.log('[WebSocket] Connected')
+        debugWebSocket('Connected')
         isConnected.value = true
         reconnectAttempts.value = 0
         startPing()
@@ -81,7 +87,7 @@ export function useWebSocket() {
       }
 
       ws.value.onclose = (event) => {
-        console.log('[WebSocket] Closed:', event.code, event.reason)
+        debugWebSocket('Closed:', event.code, event.reason)
         isConnected.value = false
         stopPing()
 
@@ -144,7 +150,9 @@ export function useWebSocket() {
     reconnectAttempts.value++
     const delay = reconnectDelay * Math.pow(2, reconnectAttempts.value - 1) // 指数退避
 
-    console.log(`[WebSocket] Reconnecting in ${delay}ms (attempt ${reconnectAttempts.value}/${maxReconnectAttempts})`)
+    debugWebSocket(
+      `Reconnecting in ${delay}ms (attempt ${reconnectAttempts.value}/${maxReconnectAttempts})`
+    )
 
     reconnectTimeout = setTimeout(() => {
       reconnectTimeout = null

@@ -15,6 +15,8 @@ test('WebSocket 组合式函数应使用统一 ws 地址配置并对齐后端 ac
 
   assert.equal(source.includes('VITE_WS_URL'), true)
   assert.equal(source.includes('VITE_WS_HOST'), false)
+  assert.equal(source.includes('console.log'), false)
+  assert.equal(source.includes('import.meta.env.DEV'), true)
   assert.equal(source.includes("action: 'ping'"), true)
   assert.equal(source.includes("action: 'subscribe_task'"), true)
   assert.equal(source.includes("action: 'unsubscribe_task'"), true)
