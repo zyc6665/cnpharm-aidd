@@ -152,7 +152,7 @@ class FileDeduplicator:
             is_duplicate=True,
             file=existing,
             original_file_id=existing.id,
-            space_saved_bytes=existing.size
+            space_saved_bytes=existing.size_bytes
         )
 
     async def _find_by_hash(self, sha256: str) -> Optional[File]:
@@ -227,7 +227,7 @@ class FileDeduplicator:
         return {
             "file_id": file.id,
             "filename": file.filename,
-            "size": file.size,
+            "size": file.size_bytes,
             "reference_count": file.reference_count or 1,
             "created_at": file.created_at.isoformat() if file.created_at else None,
             "expires_at": file.expires_at.isoformat() if file.expires_at else None
@@ -303,7 +303,7 @@ class FileDeduplicator:
         total_result = await self.db.execute(
             select(
                 func.count(File.id),
-                func.sum(File.size)
+                func.coalesce(func.sum(File.size_bytes), 0)
             ).where(File.deleted_at == None)
         )
         total_count, total_size = total_result.one()
@@ -311,7 +311,7 @@ class FileDeduplicator:
         # 去重节省的空间（引用计数>1的文件）
         dedup_result = await self.db.execute(
             select(
-                func.sum(File.size * (File.reference_count - 1))
+                func.coalesce(func.sum(File.size_bytes * (File.reference_count - 1)), 0)
             ).where(
                 File.deleted_at == None,
                 File.reference_count > 1

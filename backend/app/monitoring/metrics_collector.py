@@ -169,7 +169,7 @@ class MetricsCollector:
                 result = await db.execute(
                     select(
                         func.count(File.id),
-                        func.coalesce(func.sum(File.size), 0)
+                        func.coalesce(func.sum(File.size_bytes), 0)
                     ).where(File.deleted_at == None)
                 )
                 total_count, total_size = result.one()
