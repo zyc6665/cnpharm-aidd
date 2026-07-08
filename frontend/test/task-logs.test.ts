@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { extractTaskLogs } from '../src/views/tasks/logs.ts'
+import { extractTaskLogs, normalizeTaskLogLevel } from '../src/views/tasks/logs.ts'
 
 test('extractTaskLogs 应从分页响应中提取日志列表', () => {
   const logs = extractTaskLogs({
@@ -38,4 +38,24 @@ test('extractTaskLogs 应兼容已是数组的旧数据', () => {
 
   assert.equal(logs.length, 1)
   assert.equal(logs[0]?.level, 'warning')
+})
+
+test('normalizeTaskLogLevel 应将未知日志级别回落到 info', () => {
+  assert.equal(normalizeTaskLogLevel('ERROR'), 'error')
+  assert.equal(normalizeTaskLogLevel('debug'), 'info')
+  assert.equal(normalizeTaskLogLevel(null), 'info')
+})
+
+test('extractTaskLogs 应修正接口返回的非法日志级别', () => {
+  const logs = extractTaskLogs([
+    {
+      id: 3,
+      task_id: 'task-3',
+      level: 'DEBUG' as never,
+      message: '调试日志不应污染 UI 枚举',
+      timestamp: '2026-05-27T09:20:00Z'
+    }
+  ])
+
+  assert.equal(logs[0]?.level, 'info')
 })
