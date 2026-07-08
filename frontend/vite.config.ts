@@ -7,7 +7,11 @@ export default defineConfig({
   plugins: [vue()],
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src')
+      '@': resolve(__dirname, 'src'),
+      'h264-mp4-encoder': resolve(
+        __dirname,
+        'node_modules/h264-mp4-encoder/embuild/dist/h264-mp4-encoder.web.js'
+      )
     }
   },
   css: {
