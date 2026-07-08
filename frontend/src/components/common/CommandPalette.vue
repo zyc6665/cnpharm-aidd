@@ -48,7 +48,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch, type Component } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -77,7 +77,7 @@ const inputRef = ref<HTMLInputElement | null>(null)
 interface PaletteItem {
   id: string
   label: string
-  icon: any
+  icon: Component
   action: () => void
   shortcut?: string
   group: string

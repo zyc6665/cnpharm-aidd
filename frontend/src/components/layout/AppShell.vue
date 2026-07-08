@@ -94,7 +94,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -141,7 +141,7 @@ function onSidebarLeave() {
 interface NavItem {
   key: string
   to: string
-  icon: any
+  icon: Component
   labelKey: string
   active: string[]
   badge?: string | number
