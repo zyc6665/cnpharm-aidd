@@ -84,12 +84,20 @@ class Settings(BaseSettings):
     SETTINGS_ENCRYPTION_KEY: Optional[str] = None
 
     @model_validator(mode="after")
-    def _validate_jwt_secret_key(self):
-        """非开发环境强制校验 JWT_SECRET_KEY。"""
+    def _validate_production_security(self):
+        """生产环境强制校验安全关键配置。"""
         if self.ENVIRONMENT in {"staging", "production"} and len(self.JWT_SECRET_KEY) < 32:
             raise ValueError(
                 f"JWT_SECRET_KEY must be at least 32 characters long in {self.ENVIRONMENT} environment"
             )
+
+        if self.ENVIRONMENT in {"staging", "production"} and "*" in self.CORS_ORIGINS:
+            raise ValueError(f"CORS_ORIGINS must not contain '*' in {self.ENVIRONMENT} environment")
+
+        if self.ENVIRONMENT == "production":
+            if self.DEBUG:
+                raise ValueError("DEBUG must be disabled in production environment")
+
         return self
 
     # ==================== 存储配置 ====================

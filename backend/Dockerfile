@@ -102,8 +102,10 @@ RUN pip install --upgrade pip && \
 # 复制应用代码
 COPY . .
 
-# 创建必要的目录
+# 创建非 root 用户和必要的可写目录
 RUN mkdir -p storage/uploads storage/logs && \
+    useradd --create-home --shell /usr/sbin/nologin scitool && \
+    chown -R scitool:scitool /app/storage && \
     chmod 755 /app/storage
 
 # 暴露端口
@@ -112,6 +114,8 @@ EXPOSE 8000
 # 健康检查（修正路径）
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8000/api/v1/system/health || exit 1
+
+USER scitool
 
 # 生产模式默认命令（多进程）
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
