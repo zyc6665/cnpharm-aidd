@@ -2,9 +2,12 @@
 """应用配置管理"""
 
 import os
+import ipaddress
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional, List, Literal
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from pydantic import model_validator
@@ -12,6 +15,52 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
+_DNS_LABEL_PATTERN = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?")
+_IPV4_NUMERIC_HOST_PATTERN = re.compile(
+    r"(?:0x[0-9a-f]+|0[0-7]*|[1-9][0-9]*)(?:\.(?:0x[0-9a-f]+|0[0-7]*|[1-9][0-9]*)){0,3}"
+)
+
+
+def _is_valid_deployment_cors_origin(origin: str) -> bool:
+    """验证预发布和生产环境允许的 HTTPS Origin。"""
+    if origin != origin.strip() or origin != origin.lower() or "*" in origin or "%" in origin:
+        return False
+
+    try:
+        parsed_origin = urlparse(origin)
+        port = parsed_origin.port
+    except ValueError:
+        return False
+
+    hostname = parsed_origin.hostname
+    if (
+        parsed_origin.scheme != "https"
+        or not hostname
+        or parsed_origin.username
+        or parsed_origin.password
+        or parsed_origin.path
+        or parsed_origin.params
+        or parsed_origin.query
+        or parsed_origin.fragment
+        or parsed_origin.netloc.endswith(":")
+        or port == 443
+        or (port is not None and not 1 <= port <= 65535)
+        or (port is not None and parsed_origin.netloc.rsplit(":", 1)[-1] != str(port))
+    ):
+        return False
+
+    try:
+        ip_address = ipaddress.ip_address(hostname)
+    except ValueError:
+        if _IPV4_NUMERIC_HOST_PATTERN.fullmatch(hostname):
+            return False
+        return len(hostname) <= 253 and all(
+            _DNS_LABEL_PATTERN.fullmatch(label) for label in hostname.split(".")
+        )
+
+    canonical_host = f"[{ip_address.compressed}]" if ip_address.version == 6 else ip_address.compressed
+    canonical_netloc = f"{canonical_host}:{port}" if port is not None else canonical_host
+    return parsed_origin.netloc == canonical_netloc
 
 
 def bootstrap_process_env(env_file: str = ".env") -> bool:
@@ -63,7 +112,13 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
 
     # CORS配置
-    CORS_ORIGINS: List[str] = ["*"]
+    CORS_ORIGINS: List[str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://localhost:8585",
+        "http://127.0.0.1:8585",
+    ]
 
     # ==================== 数据库配置 ====================
     # 开发环境: sqlite+aiosqlite:///./storage/scitool.db
@@ -91,8 +146,27 @@ class Settings(BaseSettings):
                 f"JWT_SECRET_KEY must be at least 32 characters long in {self.ENVIRONMENT} environment"
             )
 
-        if self.ENVIRONMENT in {"staging", "production"} and "*" in self.CORS_ORIGINS:
-            raise ValueError(f"CORS_ORIGINS must not contain '*' in {self.ENVIRONMENT} environment")
+        if self.ENVIRONMENT in {"staging", "production"}:
+            if not self.SETTINGS_ENCRYPTION_KEY:
+                raise ValueError(
+                    f"SETTINGS_ENCRYPTION_KEY must be configured in {self.ENVIRONMENT} environment"
+                )
+            if len(self.SETTINGS_ENCRYPTION_KEY) < 32:
+                raise ValueError(
+                    f"SETTINGS_ENCRYPTION_KEY must be at least 32 characters long in {self.ENVIRONMENT} environment"
+                )
+            if self.SETTINGS_ENCRYPTION_KEY == self.JWT_SECRET_KEY:
+                raise ValueError(
+                    f"SETTINGS_ENCRYPTION_KEY must differ from JWT_SECRET_KEY in {self.ENVIRONMENT} environment"
+                )
+
+        if self.ENVIRONMENT in {"staging", "production"}:
+            for origin in self.CORS_ORIGINS:
+                if not _is_valid_deployment_cors_origin(origin):
+                    raise ValueError(
+                        f"CORS_ORIGINS must contain only HTTPS origins with a valid hostname "
+                        f"in {self.ENVIRONMENT} environment"
+                    )
 
         if self.ENVIRONMENT == "production":
             if self.DEBUG:
