@@ -90,6 +90,7 @@ def validate_plan_node(state: AIDDGraphState) -> AIDDGraphState:
     plan = parse_model_plan(
         state.get("raw_plan", ""),
         available_tools=state.get("available_tools", []),
+        available_input_types=set((state.get("semantic_inputs") or {}).keys()),
     )
     return {
         "plan": plan.model_dump(),

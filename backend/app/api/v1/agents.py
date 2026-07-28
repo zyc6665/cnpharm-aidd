@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.aidd.service import (
@@ -82,15 +82,19 @@ async def create_aidd_agent_run(
 
 @router.get("/aidd/runs", response_model=dict)
 async def list_aidd_agent_runs(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     runs = await list_agent_runs(db, current_user=current_user)
+    total = len(runs)
+    start = (page - 1) * page_size
     return paginated_response(
-        items=[_serialize_run(run) for run in runs],
-        total=len(runs),
-        page=1,
-        page_size=len(runs),
+        items=[_serialize_run(run) for run in runs[start : start + page_size]],
+        total=total,
+        page=page,
+        page_size=page_size,
     )
 
 

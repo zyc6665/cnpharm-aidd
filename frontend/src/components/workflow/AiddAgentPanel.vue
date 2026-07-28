@@ -70,6 +70,14 @@
               <SyncOutlined />
               {{ t('workflow.agent.sync') }}
             </a-button>
+            <a-button
+              v-if="agentsStore.currentRun && !['success', 'failure', 'canceled'].includes(agentsStore.currentRun.status)"
+              danger
+              size="large"
+              @click="cancelRun"
+            >
+              {{ t('common.cancel') }}
+            </a-button>
           </div>
         </div>
       </a-form>
@@ -404,6 +412,15 @@
     } finally {
       syncing.value = false
     }
+  }
+
+  async function cancelRun() {
+    if (!agentsStore.currentRun) {
+      return
+    }
+
+    await agentsStore.cancelRun(agentsStore.currentRun.id)
+    agentsStore.clearPolling()
   }
 
   function viewTask(taskId: string) {

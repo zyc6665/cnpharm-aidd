@@ -334,15 +334,17 @@ class FileLifecycleManager:
             # 查询正在执行或等待中的任务
             # 这里假设TaskInput中有file_ids字段存储关联的文件ID
             result = await self.db.execute(
-                select(Task.id).where(
+                select(Task.id, TaskInput.file_ids).where(
                     Task.status.in_(["pending", "running", "queued"]),
                 ).join(
                     TaskInput, Task.id == TaskInput.task_id
-                ).where(
-                    TaskInput.value.contains(file_id)  # JSON包含检查
                 )
             )
-            return [str(task_id) for task_id in result.scalars().all()]
+            return [
+                str(task_id)
+                for task_id, file_ids in result.all()
+                if file_id in (file_ids or [])
+            ]
         except Exception as e:
             logger.warning(f"Failed to check active tasks for file {file_id}: {e}")
             return []

@@ -234,6 +234,7 @@ def parse_model_plan(
     content: str,
     *,
     available_tools: list[dict[str, Any]],
+    available_input_types: set[str] | None = None,
 ) -> AIDDGraphPlan:
     try:
         raw = json.loads(_strip_json_fence(content))
@@ -263,6 +264,31 @@ def parse_model_plan(
             raise PlanValidationError(f"计划使用了不可用工具: {step.tool_slug}")
         if tool.get("capability") != step.capability:
             raise PlanValidationError(f"工具能力不匹配: {step.tool_slug}")
+
+        bindings = tool.get("input_bindings")
+        if isinstance(bindings, list):
+            required_inputs = {
+                str(item.get("semantic_type"))
+                for item in bindings
+                if isinstance(item, dict) and item.get("required", True)
+            }
+        else:
+            required_inputs = {str(item) for item in tool.get("inputs", [])}
+        missing_inputs = required_inputs - set(step.inputs)
+        if missing_inputs:
+            raise PlanValidationError(
+                f"步骤缺少工具必需输入: {step.step_key}:{', '.join(sorted(missing_inputs))}"
+            )
+
+        if available_input_types is not None:
+            for semantic_input, source in step.inputs.items():
+                if not isinstance(source, str) or not source.startswith("agent_input"):
+                    continue
+                source_type = semantic_input
+                if source.startswith("agent_input:"):
+                    source_type = source.split(":", 1)[1] or semantic_input
+                if source_type not in available_input_types:
+                    raise PlanValidationError(f"计划引用了未上传输入: {source_type}")
 
         normalized_inputs = _normalize_input_sources(step.inputs)
         depends_on = step.depends_on or _derive_depends_on(normalized_inputs)
