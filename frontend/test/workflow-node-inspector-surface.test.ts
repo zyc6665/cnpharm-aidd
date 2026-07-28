@@ -71,9 +71,9 @@ test('workflow node inspector groups details into tabs', () => {
 
   for (const marker of [
     'inspector-detail-tabs',
-    'key=\"config\"',
-    'key=\"dependencies\"',
-    'key=\"results\"',
+    'key="config"',
+    'key="dependencies"',
+    'key="results"',
     '配置',
     '依赖',
     '结果'

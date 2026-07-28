@@ -13,10 +13,8 @@ import {
 import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@/workflow/template-types'
 import { useArtifactsStore, useUserStore, useWorkflowDefinitionsStore, useWorkflowStore } from '@/stores'
 import type {
-  ArtifactFile,
   WorkflowDefinition,
   WorkflowDefinitionNode,
-  WorkflowRun,
   WorkflowTemplate,
 } from '@/types/models'
 

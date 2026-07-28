@@ -27,7 +27,7 @@
               <template v-for="(group, gIdx) in groupedResults" :key="gIdx">
                 <div class="cp-group-label">{{ group.label }}</div>
                 <button
-                  v-for="(item, iIdx) in group.items"
+                  v-for="item in group.items"
                   :key="item.id"
                   class="cp-item"
                   :class="{ active: activeId === item.id }"
@@ -48,7 +48,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch, type Component } from 'vue'
+import { computed, nextTick, ref, type Component } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -61,12 +61,12 @@ import {
   SettingOutlined,
   BulbOutlined,
   PlusOutlined,
-  UserOutlined,
 } from '@ant-design/icons-vue'
-import { useUserStore } from '@/stores'
+import { useAppStore, useUserStore } from '@/stores'
 
 const { t } = useI18n()
 const router = useRouter()
+const appStore = useAppStore()
 const userStore = useUserStore()
 
 const visible = ref(false)
@@ -187,13 +187,7 @@ function execute(item: PaletteItem) {
 }
 
 function toggleTheme() {
-  const current = document.documentElement.getAttribute('data-theme')
-  const next = current === 'light' ? null : 'light'
-  if (next) {
-    document.documentElement.setAttribute('data-theme', next)
-  } else {
-    document.documentElement.removeAttribute('data-theme')
-  }
+  appStore.toggleTheme()
 }
 
 function onKeydown(e: KeyboardEvent) {

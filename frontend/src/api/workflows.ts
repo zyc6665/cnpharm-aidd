@@ -61,7 +61,7 @@ export interface WorkflowDefinitionPayload {
   status?: 'draft' | 'active' | 'archived'
 }
 
-export interface WorkflowDefinitionUpdatePayload extends Partial<WorkflowDefinitionPayload> {}
+export type WorkflowDefinitionUpdatePayload = Partial<WorkflowDefinitionPayload>
 
 export const getWorkflowDefinitions = (
   params?: PaginationParams

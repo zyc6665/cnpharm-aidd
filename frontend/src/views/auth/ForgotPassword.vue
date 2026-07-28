@@ -179,11 +179,8 @@
   const router = useRouter()
   const { t } = useI18n()
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const emailFormRef = ref<FormInstance>()
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const codeFormRef = ref<FormInstance>()
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const passwordFormRef = ref<FormInstance>()
   const loading = ref(false)
   const currentStep = ref(0)

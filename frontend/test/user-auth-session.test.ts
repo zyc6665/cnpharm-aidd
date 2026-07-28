@@ -26,6 +26,14 @@ test('请求层应通过认证存储模块暴露兼容的 token 辅助函数', (
   assert.equal(source.includes("getGuestSession"), true)
 })
 
+test('请求层刷新失败时应拒绝并清空等待队列', () => {
+  const source = readSource('src/api/request.ts')
+
+  assert.equal(source.includes('rejectRefreshSubscribers(error)'), true)
+  assert.equal(source.includes('refreshSubscribers = []'), true)
+  assert.equal(source.includes('isRefreshing = false'), true)
+})
+
 test('用户 store 应监听认证失效事件并同步清理登录态', () => {
   const source = readSource('src/stores/user.ts')
 

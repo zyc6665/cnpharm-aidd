@@ -6,7 +6,7 @@ import type {
   ToolContract,
   WorkflowDefinition,
 } from '@/types/models'
-import type { WorkflowArtifactSemanticType, WorkflowTaskRef } from '@/workflow/artifact-types'
+import type { WorkflowArtifactSemanticType } from '@/workflow/artifact-types'
 import {
   AIDD_WORKFLOW_TEMPLATE,
   WORKFLOW_TEMPLATES,

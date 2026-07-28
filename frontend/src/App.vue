@@ -49,6 +49,7 @@ const isShellLess = computed(() => {
 onMounted(async () => {
   // 同步持久化的主题到 DOM（暗色/浅色都需要）
   document.documentElement.setAttribute('data-theme', appStore.theme)
+  appStore.setLocale(appStore.locale)
   await userStore.bootstrapAuthState()
 })
 </script>

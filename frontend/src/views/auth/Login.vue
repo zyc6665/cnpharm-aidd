@@ -141,7 +141,6 @@
   const { t } = useI18n()
   const userStore = useUserStore()
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const formRef = ref<FormInstance>()
   const loading = ref(false)
   const guestLoading = ref(false)

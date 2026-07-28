@@ -8,7 +8,6 @@ import {
 } from './auth-request-policy'
 import { redirectToLogin } from './auth-redirect'
 import {
-  AUTH_CLEARED_EVENT,
   clearAuthStorage,
   getGuestSession,
   getRefreshToken,
@@ -44,16 +43,26 @@ export const clearTokens = (): void => {
 // 是否正在刷新 Token
 let isRefreshing = false
 // 等待刷新的请求队列
-let refreshSubscribers: ((token: string) => void)[] = []
+type RefreshSubscriber = {
+  resolve: (token: string) => void
+  reject: (error: unknown) => void
+}
+
+let refreshSubscribers: RefreshSubscriber[] = []
 
 // 订阅 Token 刷新
-const subscribeTokenRefresh = (cb: (token: string) => void) => {
-  refreshSubscribers.push(cb)
+const subscribeTokenRefresh = (subscriber: RefreshSubscriber) => {
+  refreshSubscribers.push(subscriber)
 }
 
 // 通知所有订阅者
 const onTokenRefreshed = (token: string) => {
-  refreshSubscribers.forEach(cb => cb(token))
+  refreshSubscribers.forEach(subscriber => subscriber.resolve(token))
+  refreshSubscribers = []
+}
+
+const rejectRefreshSubscribers = (error: unknown) => {
+  refreshSubscribers.forEach(subscriber => subscriber.reject(error))
   refreshSubscribers = []
 }
 
@@ -89,12 +98,15 @@ request.interceptors.response.use(
     if (error.response?.status === 401 && canRefreshToken && !originalRequest._retry) {
       if (isRefreshing) {
         // 等待 Token 刷新完成
-        return new Promise(resolve => {
-          subscribeTokenRefresh((token: string) => {
-            if (originalRequest.headers) {
-              originalRequest.headers.Authorization = `Bearer ${token}`
-            }
-            resolve(request(originalRequest))
+        return new Promise((resolve, reject) => {
+          subscribeTokenRefresh({
+            resolve: (token: string) => {
+              if (originalRequest.headers) {
+                originalRequest.headers.Authorization = `Bearer ${token}`
+              }
+              resolve(request(originalRequest))
+            },
+            reject
           })
         })
       }
@@ -123,6 +135,7 @@ request.interceptors.response.use(
         } catch {
           // 刷新失败，清除 Token 并跳转登录
           clearTokens()
+          rejectRefreshSubscribers(error)
           redirectToLogin(window.location.pathname)
           return Promise.reject(error)
         } finally {
@@ -131,7 +144,10 @@ request.interceptors.response.use(
       } else {
         // 没有 Refresh Token，跳转登录
         clearTokens()
+        rejectRefreshSubscribers(error)
+        isRefreshing = false
         redirectToLogin(window.location.pathname)
+        return Promise.reject(error)
       }
     }
 

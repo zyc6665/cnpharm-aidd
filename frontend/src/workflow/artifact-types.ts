@@ -43,8 +43,7 @@ export interface WorkflowArtifact {
   metadata?: Record<string, unknown>
 }
 
-export interface WorkflowTaskRef
-  extends Pick<
+export type WorkflowTaskRef = Pick<
     Task,
     | 'id'
     | 'name'
@@ -60,7 +59,7 @@ export interface WorkflowTaskRef
     | 'updated_at'
     | 'output_data'
     | 'output_files'
-  > {}
+  >
 
 export interface WorkflowStepRecord {
   status: WorkflowStepStatus

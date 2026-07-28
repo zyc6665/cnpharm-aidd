@@ -1,15 +1,25 @@
 <template>
   <div class="app-shell" :class="{ 'sidebar-collapsed': collapsed }">
     <!-- 侧边栏 -->
-    <aside class="shell-sidebar" @mouseenter="onSidebarEnter" @mouseleave="onSidebarLeave">
+    <aside class="shell-sidebar">
       <!-- Logo 区 -->
       <div class="sidebar-brand">
         <router-link to="/workspace" class="brand-link" :aria-label="t('nav.home')">
           <img src="@/assets/logo.svg" alt="CPUModel" class="brand-logo" />
           <span v-if="!collapsed" class="brand-text">CPUModel</span>
         </router-link>
+        <button
+          class="sidebar-collapse-btn"
+          type="button"
+          :aria-label="collapsed ? t('common.expand') : t('common.collapse')"
+          @click="toggleCollapsed"
+        >
+          <MenuFoldOutlined v-if="!collapsed" />
+          <MenuUnfoldOutlined v-else />
+        </button>
       </div>
 
+      <div class="sidebar-scroll">
       <!-- 主导航 -->
       <nav class="sidebar-nav" aria-label="主导航">
         <router-link
@@ -43,6 +53,7 @@
           <span v-if="!collapsed" class="nav-label">{{ t(item.labelKey) }}</span>
         </router-link>
       </nav>
+      </div>
 
       <!-- 底部区 -->
       <div class="sidebar-footer">
@@ -95,7 +106,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, type Component } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   HomeOutlined,
@@ -103,10 +114,10 @@ import {
   ExperimentOutlined,
   ApartmentOutlined,
   DashboardOutlined,
-  TeamOutlined,
-  ToolOutlined,
   SettingOutlined,
   BulbOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
 } from '@ant-design/icons-vue'
 import { useUserStore, useAppStore } from '@/stores'
 import ProtectedAvatar from '@/components/common/ProtectedAvatar.vue'
@@ -114,13 +125,11 @@ import CommandPalette from '@/components/common/CommandPalette.vue'
 
 const { t } = useI18n()
 const route = useRoute()
-const router = useRouter()
 const userStore = useUserStore()
 const appStore = useAppStore()
 
 // ── 侧边栏状态 ──
-const collapsed = ref(false)
-const hoverExpanded = ref(false)
+const collapsed = computed(() => appStore.isCollapsed)
 const commandPaletteRef = ref<InstanceType<typeof CommandPalette> | null>(null)
 
 const isAdmin = computed(() => userStore.isAdmin)
@@ -128,14 +137,6 @@ const isLoggedIn = computed(() => userStore.isLoggedIn)
 const currentUserId = computed(() => userStore.user?.id)
 const currentUserName = computed(() => userStore.user?.display_name ?? userStore.user?.username)
 const userAvatar = computed(() => userStore.avatar)
-
-function onSidebarEnter() {
-  if (collapsed.value) hoverExpanded.value = true
-}
-
-function onSidebarLeave() {
-  hoverExpanded.value = false
-}
 
 // ── 导航 ──
 interface NavItem {
@@ -197,9 +198,12 @@ function toggleTheme() {
   appStore.toggleTheme()
 }
 
+function toggleCollapsed() {
+  appStore.toggleCollapsed()
+}
+
 // ── 路由过渡 ──
 const transitionName = ref('slide-left')
-let lastRouteIndex = 0
 const routeOrder = ['workspace', 'tools', 'tasks', 'workflow', 'admin']
 
 watch(
@@ -267,6 +271,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   height: 48px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: @spacing-sm;
 }
 
 .brand-link {
@@ -290,6 +296,30 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   color: @text-primary;
   white-space: nowrap;
   letter-spacing: -0.02em;
+}
+
+.sidebar-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: @border-radius-md;
+  background: transparent;
+  color: @text-tertiary;
+  cursor: pointer;
+  transition: all @transition-fast;
+
+  &:hover {
+    background: @bg-hover;
+    color: @text-primary;
+  }
+}
+
+.sidebar-scroll {
+  min-height: 0;
+  overflow-y: auto;
 }
 
 // ── 导航 ──
@@ -460,8 +490,14 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
   .sidebar-brand,
   .sidebar-divider,
+  .sidebar-scroll .sidebar-nav[aria-label='管理导航'],
   .sidebar-footer {
     display: none;
+  }
+
+  .sidebar-scroll {
+    width: 100%;
+    overflow: visible;
   }
 
   .sidebar-nav {

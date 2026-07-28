@@ -63,10 +63,6 @@ function sortArtifactsByCreatedAtDesc(artifacts: ArtifactFile[]): ArtifactFile[]
   return [...artifacts].sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at))
 }
 
-function resolveLatestCreatedAt(artifacts: ArtifactFile[]): string {
-  return sortArtifactsByCreatedAtDesc(artifacts)[0]?.created_at ?? ''
-}
-
 function resolveTaskName(artifacts: ArtifactFile[]): string | undefined {
   return artifacts.find((artifact) => artifact.task_name?.trim())?.task_name?.trim()
 }

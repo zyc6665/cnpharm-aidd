@@ -142,7 +142,6 @@ function normalizeFlattenedProperty(
   parentKey?: string
 ): SchemaProperty | null {
   const originalKey = parentKey ? fieldKey : undefined
-  const normalizedKey = parentKey ? `${parentKey}.${fieldKey}` : fieldKey
   const platformManaged = !parentKey && fieldKey === 'task_id'
 
   if (platformManaged || rawProperty.hidden === true) {

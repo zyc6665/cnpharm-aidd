@@ -146,7 +146,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import {
-  RocketOutlined,
+  ApartmentOutlined,
   SyncOutlined,
   SafetyOutlined,
   SearchOutlined,
@@ -171,9 +171,6 @@ const values = [
   { key: 'composable', icon: ApartmentOutlined },
   { key: 'trusted', icon: SafetyOutlined },
 ]
-
-// Need to import ApartmentOutlined
-import { ApartmentOutlined } from '@ant-design/icons-vue'
 </script>
 
 <style scoped lang="less">

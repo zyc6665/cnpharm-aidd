@@ -8,7 +8,7 @@ import {
   WORKFLOW_ARTIFACT_SEMANTIC_TYPES,
   normalizeWorkflowSemanticType,
 } from './semantic-types.ts'
-import type { WorkflowCanvasNode, WorkflowTemplate } from './template-types.ts'
+import type { WorkflowTemplate } from './template-types.ts'
 
 export type WorkflowPreflightIssueType =
   | 'missing_tool'

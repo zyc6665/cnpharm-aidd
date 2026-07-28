@@ -480,9 +480,10 @@ onBeforeUnmount(() => {
   padding: @spacing-sm;
   border-radius: 32px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0.18) 100%),
+    linear-gradient(180deg, @bg-surface 0%, @bg-body 100%),
     linear-gradient(135deg, rgba(13, 110, 253, 0.04) 0%, rgba(46, 196, 182, 0.04) 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  border: 1px solid @border-color;
+  box-shadow: inset 0 1px 0 @border-color-hover;
 }
 
 .workflow-mode-tabs {
@@ -512,7 +513,7 @@ onBeforeUnmount(() => {
   margin-bottom: @spacing-md;
   border: 1px solid @border-color-hover;
   border-radius: @border-radius-md;
-  background: rgba(255, 255, 255, 0.86);
+  background: @bg-elevated;
   box-shadow: @shadow-sm;
 }
 
@@ -632,7 +633,7 @@ onBeforeUnmount(() => {
   padding: @spacing-xs @spacing-sm;
   border: 1px solid @accent-color-border;
   border-radius: @border-radius-sm;
-  background: rgba(255, 255, 255, 0.78);
+  background: @bg-elevated;
 }
 
 .status-summary-item span {
