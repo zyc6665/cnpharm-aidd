@@ -55,6 +55,11 @@ def build_agent_task_payload(
             continue
 
         file_ids.append(semantic_file["file_id"])
+        if executor_type == "builtin":
+            params.setdefault("builtin_inputs", {})[input_binding.semantic_type] = semantic_file[
+                "file_id"
+            ]
+            continue
         if executor_type == "ssh_job":
             field_value = f"input/{semantic_file['filename']}"
         else:

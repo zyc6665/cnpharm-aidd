@@ -270,6 +270,19 @@ def parse_model_plan(
             if dependency_key not in seen_step_keys:
                 raise PlanValidationError(f"依赖步骤不存在或顺序错误: {dependency_key}")
 
+        steps_by_key = {item.step_key: item for item in normalized_steps}
+        for source in normalized_inputs.values():
+            parsed_source = _is_step_smiles_source(source)
+            if not parsed_source:
+                continue
+            source_step_key, source_output = parsed_source
+            source_step = steps_by_key.get(source_step_key)
+            source_tool = tools_by_slug.get(source_step.tool_slug if source_step else "")
+            if source_output not in _tool_outputs(source_tool):
+                raise PlanValidationError(
+                    f"上游步骤不产生语义产物: {source_step_key}:{source_output}"
+                )
+
         normalized_steps.append(
             step.model_copy(update={"inputs": normalized_inputs, "depends_on": depends_on})
         )

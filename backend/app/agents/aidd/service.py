@@ -7,12 +7,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.common.time import utcnow
-from app.agents.aidd.builtin_tools import BuiltinToolFile, BuiltinToolOutput, run_builtin_tool
 from app.agents.aidd.capabilities import AIDD_TOOL_CAPABILITIES, ToolCapability
 from app.agents.aidd.input_classifier import classify_aidd_input_file
 from app.agents.aidd.outputs import extract_semantic_outputs
@@ -35,7 +34,9 @@ from app.models.users import User
 from app.schemas.agent import AIDDRunCreate
 from app.schemas.tasks import TaskCreate
 from app.services.semantic_types import CANONICAL_AGENT_INPUT_TYPES, normalize_semantic_type
+from app.services.aidd_builtin_tools import ensure_aidd_builtin_tool
 from app.tasks.service import create_and_schedule_tool_task
+from app.tasks.cancellation import cancel_platform_task
 
 
 TERMINAL_RUN_STATUSES = {"success", "failure", "canceled"}
@@ -187,7 +188,13 @@ async def _load_owned_file(
 async def _load_available_tool(db: AsyncSession, tool_slug: str) -> Tool:
     capability = AIDD_TOOL_CAPABILITIES.get(tool_slug)
     if capability and capability.virtual:
-        raise ValidationException(f"内置智能体能力不应加载平台工具: {tool_slug}")
+        if not settings.AIDD_SYSTEM_USER_ID:
+            raise ValidationException("AIDD_SYSTEM_USER_ID 未配置，无法执行内置智能体工具")
+        return await ensure_aidd_builtin_tool(
+            db,
+            owner_id=settings.AIDD_SYSTEM_USER_ID,
+            tool_slug=tool_slug,
+        )
 
     result = await db.execute(
         select(Tool)
@@ -493,92 +500,18 @@ async def _schedule_step(
     step.started_at = utcnow()
 
 
-async def _run_virtual_step(
-    db: AsyncSession,
-    *,
-    run: AgentRun,
-    step: AgentRunStep,
-    steps_by_key: dict[str, AgentRunStep],
-) -> bool:
-    capability = AIDD_TOOL_CAPABILITIES.get(step.tool_slug)
-    if not capability or not capability.virtual:
-        return False
-
-    semantic_files = await _resolve_semantic_files(
-        db,
-        run=run,
-        step=step,
-        steps_by_key=steps_by_key,
+async def claim_agent_step_for_dispatch(db: AsyncSession, step_id: str) -> bool:
+    """Atomically reserve a ready step for one scheduler instance."""
+    result = await db.execute(
+        update(AgentRunStep)
+        .where(
+            AgentRunStep.id == step_id,
+            AgentRunStep.status.in_(("pending", "ready")),
+        )
+        .values(status="dispatching")
     )
-    builtin_files: dict[str, BuiltinToolFile] = {}
-    input_file_ids: list[str] = []
-    for semantic_type, file_payload in semantic_files.items():
-        file_id = str(file_payload["file_id"])
-        file_record = await db.get(FileModel, file_id)
-        if not file_record:
-            raise NotFoundException("内置智能体工具输入文件不存在")
-        if not file_record.storage_path:
-            raise NotFoundException("内置智能体工具输入文件缺少存储路径")
-        builtin_files[semantic_type] = BuiltinToolFile(
-            file_id=file_record.id,
-            filename=file_record.filename,
-            path=Path(file_record.storage_path),
-            content_type=file_record.content_type,
-        )
-        input_file_ids.append(file_record.id)
-
-    result = run_builtin_tool(step.tool_slug, builtin_files)
-    semantic_outputs: dict[str, dict[str, Any]] = {}
-    output_file_ids: list[str] = []
-
-    # 1. 文件类 artifact
-    for artifact in result.artifacts:
-        output_file = await _create_agent_output_file(
-            db,
-            owner_id=run.user_id,
-            filename=artifact.filename,
-            content=artifact.content,
-            content_type=artifact.content_type,
-            source_file_id=artifact.source_file_id,
-        )
-        output_file_ids.append(output_file.id)
-        semantic_outputs[artifact.semantic_type] = {
-            "source": "output_files",
-            "file_id": output_file.id,
-            "filename": output_file.filename,
-            "url": _file_download_url(output_file.id),
-            "content_type": output_file.content_type,
-        }
-
-    # 2. 结构化数据 output（数据库查询结果等）→ 保存为 JSON 文件
-    for output in result.outputs:
-        import json as _json
-
-        content = _json.dumps(output.data, ensure_ascii=False, indent=2).encode("utf-8")
-        output_file = await _create_agent_output_file(
-            db,
-            owner_id=run.user_id,
-            filename=f"{output.semantic_type}.json",
-            content=content,
-            content_type="application/json",
-            source_file_id=None,
-        )
-        output_file_ids.append(output_file.id)
-        semantic_outputs[output.semantic_type] = {
-            "source": "output_data",
-            "file_id": output_file.id,
-            "filename": output_file.filename,
-            "url": _file_download_url(output_file.id),
-            "content_type": "application/json",
-        }
-
-    step.status = "success"
-    step.started_at = step.started_at or utcnow()
-    step.finished_at = utcnow()
-    step.input_file_ids = input_file_ids
-    step.output_file_ids = output_file_ids
-    step.semantic_outputs = semantic_outputs
-    return True
+    await db.commit()
+    return result.rowcount == 1
 
 
 async def start_ready_steps(
@@ -596,22 +529,18 @@ async def start_ready_steps(
             continue
         if not _dependencies_satisfied(step, steps_by_key):
             continue
+        if not await claim_agent_step_for_dispatch(db, step.id):
+            continue
+        await db.refresh(step)
 
         try:
-            handled_virtual = await _run_virtual_step(
+            await _schedule_step(
                 db,
+                current_user=current_user,
                 run=run,
                 step=step,
                 steps_by_key=steps_by_key,
             )
-            if not handled_virtual:
-                await _schedule_step(
-                    db,
-                    current_user=current_user,
-                    run=run,
-                    step=step,
-                    steps_by_key=steps_by_key,
-                )
         except Exception as exc:
             step.status = "failure"
             step.error_message = str(exc)
@@ -623,9 +552,6 @@ async def start_ready_steps(
 
         scheduled_count += 1
         steps_by_key[step.step_key] = step
-        if handled_virtual:
-            run.status = "pending"
-            continue
         run.status = "waiting_task"
         # Platform tasks are scheduled one wave at a time.
         break
@@ -670,10 +596,15 @@ async def cancel_agent_run(
 ) -> AgentRun:
     run = await _load_run_for_user(db, run_id=run_id, current_user=current_user)
     if run.status not in TERMINAL_RUN_STATUSES:
+        for step in run.steps:
+            if step.task_id:
+                task = await db.get(Task, step.task_id)
+                if task:
+                    await cancel_platform_task(db, task=task, current_user=current_user)
         run.status = "canceled"
         run.finished_at = utcnow()
         for step in run.steps:
-            if step.status in {"pending", "ready", "waiting_task", "running"}:
+            if step.status in {"pending", "ready", "dispatching", "waiting_task", "running"}:
                 step.status = "canceled"
                 step.finished_at = utcnow()
         await db.commit()

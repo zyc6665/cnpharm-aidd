@@ -212,40 +212,28 @@ async def load_available_tool_capabilities(db: AsyncSession) -> list[ToolCapabil
 
     capabilities: list[ToolCapability] = []
 
-    # 2. If DB has entries, resolve tools to filter out unavailable ones
-    if db_caps:
-        tool_ids = list(db_caps.keys())
-        result = await db.execute(
-            select(Tool)
-            .options(selectinload(Tool.current_version))
-            .where(Tool.id.in_(tool_ids))
+    result = await db.execute(
+        select(Tool)
+        .options(selectinload(Tool.current_version))
+        .where(Tool.status == ToolStatus.PUBLISHED.value, Tool.is_public.is_(True))
+    )
+    for tool in result.scalars().all():
+        if not _tool_is_agent_available(tool):
+            continue
+        capability = db_caps.get(tool.id) or capability_from_tool(tool)
+        if capability is None:
+            continue
+        capabilities.append(
+            ToolCapability(
+                tool_slug=tool.slug,
+                capability=capability.capability,
+                stage=capability.stage,
+                inputs=capability.inputs,
+                outputs=capability.outputs,
+                defaults=capability.defaults,
+                virtual=False,
+            )
         )
-        for tool in result.scalars().all():
-            if _tool_is_agent_available(tool) and tool.id in db_caps:
-                cap = db_caps[tool.id]
-                # Rebuild with the actual tool_slug from the Tool record
-                capabilities.append(ToolCapability(
-                    tool_slug=tool.slug,
-                    capability=cap.capability,
-                    stage=cap.stage,
-                    inputs=cap.inputs,
-                    outputs=cap.outputs,
-                    defaults=cap.defaults,
-                    virtual=False,
-                ))
-    else:
-        # 3. Fallback: load from tool configs + static registry (existing logic)
-        result = await db.execute(
-            select(Tool)
-            .options(selectinload(Tool.current_version))
-            .where(Tool.status == ToolStatus.PUBLISHED.value, Tool.is_public.is_(True))
-        )
-        for tool in result.scalars().all():
-            if not _tool_is_agent_available(tool):
-                continue
-            capability = capability_from_tool(tool)
-            if capability is not None:
-                capabilities.append(capability)
 
     # 4. Always include virtual (built-in) tools from static registry
     capabilities.extend(

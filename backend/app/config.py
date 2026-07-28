@@ -147,6 +147,7 @@ class Settings(BaseSettings):
 
     # ==================== AIDD Agent 配置 ====================
     ENABLE_DATABASE_TOOLS: bool = False
+    AIDD_SYSTEM_USER_ID: Optional[str] = None
 
     # ==================== 游客配置 ====================
     GUEST_DAILY_TASK_LIMIT: int = 5

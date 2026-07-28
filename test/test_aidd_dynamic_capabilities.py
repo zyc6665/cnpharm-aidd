@@ -298,6 +298,48 @@ class TestUpsertCapabilityFromConfig:
 class TestLoadAvailableToolCapabilities:
 
     @pytest.mark.asyncio
+    async def test_db_capability_does_not_hide_config_capability(
+        self, db_session: AsyncSession, user: User
+    ) -> None:
+        db_tool = await _create_tool(
+            db_session,
+            user,
+            slug="db-tool",
+            name="DB Tool",
+            config={
+                "type": "docker_image",
+                "agent_capability": {
+                    "enabled": True,
+                    "capability": "docking_scoring",
+                    "stage": "docking",
+                    "inputs": [{"semantic_type": "protein_pdb"}],
+                    "outputs": [{"semantic_type": "docking_report", "source": "output_files"}],
+                },
+            },
+        )
+        await upsert_capability_from_config(db_session, db_tool)
+        await _create_tool(
+            db_session,
+            user,
+            slug="config-tool",
+            name="Config Tool",
+            config={
+                "type": "docker_image",
+                "agent_capability": {
+                    "enabled": True,
+                    "capability": "property_prediction",
+                    "stage": "property",
+                    "inputs": [{"semantic_type": "smiles_csv"}],
+                    "outputs": [{"semantic_type": "property_report", "source": "output_files"}],
+                },
+            },
+        )
+
+        slugs = {cap.tool_slug for cap in await load_available_tool_capabilities(db_session)}
+
+        assert {"db-tool", "config-tool"} <= slugs
+
+    @pytest.mark.asyncio
     async def test_db_first_returns_capability_from_table(
         self, db_session: AsyncSession, user: User
     ) -> None:
@@ -337,7 +379,7 @@ class TestLoadAvailableToolCapabilities:
         # Virtual tools should always be included
         virtual_slugs = {c.tool_slug for c in caps if c.virtual}
         assert "builtin-vina-docking" in virtual_slugs
-        assert "builtin-admet-prediction" in virtual_slugs
+        assert "builtin-admet-prediction" not in virtual_slugs
 
     @pytest.mark.asyncio
     async def test_db_registered_tool_excluded_when_tool_becomes_unavailable(

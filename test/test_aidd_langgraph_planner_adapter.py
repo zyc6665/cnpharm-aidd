@@ -179,6 +179,32 @@ def test_parse_model_plan_rejects_unknown_tool():
         )
 
 
+def test_parse_model_plan_rejects_missing_upstream_semantic_output():
+    with pytest.raises(PlanValidationError, match="不产生语义产物"):
+        parse_model_plan(
+            """
+            {
+              "intent": "bad_reference",
+              "steps": [
+                {
+                  "step_key": "pocket_prediction",
+                  "capability": "pocket_prediction",
+                  "tool_slug": "lvpocket-pocket-prediction",
+                  "inputs": {"protein_pdb": "agent_input"}
+                },
+                {
+                  "step_key": "molecule_generation",
+                  "capability": "molecule_generation",
+                  "tool_slug": "gcdm-pocket-generation",
+                  "inputs": {"pocket_pdb": "step:pocket_prediction:missing_output"}
+                }
+              ]
+            }
+            """,
+            available_tools=AVAILABLE_TOOLS,
+        )
+
+
 def test_parse_model_plan_rejects_non_json():
     with pytest.raises(PlanValidationError):
         parse_model_plan("not a json plan", available_tools=AVAILABLE_TOOLS)

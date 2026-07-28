@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from app.agents.aidd.outputs import parse_sdf_smiles
+from app.agents.aidd.capabilities import PLACEHOLDER_AIDD_TOOL_SLUGS
 from app.common.exceptions import ValidationException
 
 
@@ -711,15 +712,13 @@ _BUILTIN_TOOL_REGISTRY: dict[str, str] = {
     "builtin-query-chembl": "query_chembl",
     "builtin-query-pubchem": "query_pubchem",
     "builtin-query-pdbbind": "query_pdbbind",
-    "builtin-admet-prediction": "admet_prediction",
-    "builtin-toxicity-prediction": "toxicity_prediction",
-    "builtin-synthetic-accessibility": "synthetic_accessibility",
-    "builtin-molecular-dynamics": "molecular_dynamics",
-    "builtin-interaction-analysis": "interaction_analysis",
 }
 
 
 def run_builtin_tool(tool_slug: str, files: dict[str, BuiltinToolFile]) -> BuiltinToolResult:
+    if tool_slug in PLACEHOLDER_AIDD_TOOL_SLUGS:
+        raise ValidationException(f"内置能力尚未接入真实执行引擎: {tool_slug}")
+
     handler_key = _BUILTIN_TOOL_REGISTRY.get(tool_slug)
     if handler_key is None:
         raise ValidationException(f"未知内置智能体工具: {tool_slug}")

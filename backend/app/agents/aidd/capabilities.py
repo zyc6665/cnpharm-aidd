@@ -449,6 +449,20 @@ AIDD_TOOL_CAPABILITIES: dict[str, ToolCapability] = {
 }
 
 
+PLACEHOLDER_AIDD_TOOL_SLUGS = frozenset(
+    {
+        "builtin-admet-prediction",
+        "builtin-toxicity-prediction",
+        "builtin-synthetic-accessibility",
+        "builtin-molecular-dynamics",
+        "builtin-interaction-analysis",
+    }
+)
+
+for _placeholder_slug in PLACEHOLDER_AIDD_TOOL_SLUGS:
+    AIDD_TOOL_CAPABILITIES.pop(_placeholder_slug, None)
+
+
 def get_capability(tool_slug: str) -> ToolCapability:
     return AIDD_TOOL_CAPABILITIES[tool_slug]
 

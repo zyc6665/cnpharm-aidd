@@ -8,13 +8,12 @@ from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload, joinedload
 from typing import Any, Optional
 
-from app.config import use_direct_task_execution
 from app.database.session import get_db
 from app.models.files import File as FileModel
 from app.models.users import User
 from app.models.tools import Tool, ToolVersion
 from app.models.tasks import Task, TaskLog, TaskStatus
-from app.tasks.direct_runner import direct_task_runner
+from app.tasks.cancellation import cancel_platform_task
 from app.tasks.service import (
     create_and_schedule_tool_task,
     record_tool_usage,
@@ -352,17 +351,7 @@ async def cancel_task(
     if task.status not in [TaskStatus.PENDING.value, TaskStatus.RUNNING.value]:
         raise ValidationException("任务状态不允许取消")
 
-    if use_direct_task_execution():
-        direct_task_runner.cancel_task(str(task.id))
-    elif task.celery_task_id:
-        from app.tasks.queue_manager import TaskQueueManager
-        try:
-            TaskQueueManager.revoke_task(task.celery_task_id)
-            logger.info(f"Celery task {task.celery_task_id} revoked for task {task.id}")
-        except Exception as e:
-            logger.error(f"Failed to revoke Celery task {task.celery_task_id}: {e}")
-
-    task.status = TaskStatus.CANCELED.value
+    await cancel_platform_task(db, task=task, current_user=current_user)
     await db.commit()
 
     return success_response(message="任务已取消")

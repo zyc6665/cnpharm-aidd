@@ -63,7 +63,7 @@ Run: `pytest -q test/test_aidd_builtin_task_tools.py::test_ensure_aidd_builtin_t
 
 - Define immutable metadata for each supported built-in slug and its capability contract.
 - Create idempotent service logic and an Alembic data migration to create published `Tool`/`ToolVersion` records with `type: builtin`.
-- Resolve the system owner explicitly; fail startup/configuration validation if no owner can be selected.
+- Resolve the system owner from `AIDD_SYSTEM_USER_ID`; fail configuration validation if the configured user does not exist.
 
 **Step 4: Run focused tests**
 

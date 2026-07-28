@@ -72,3 +72,22 @@ def test_remote_payload_maps_file_fields_to_download_urls() -> None:
 
     assert payload.params["protein_pdb"] == "/api/v1/files/file-protein/download"
     assert payload.file_ids == ["file-protein"]
+
+
+def test_builtin_payload_preserves_semantic_file_mapping() -> None:
+    capability = get_capability("builtin-sdf-to-pdb")
+    payload = build_agent_task_payload(
+        capability=capability,
+        executor_type="builtin",
+        semantic_files={
+            "generated_ligand": {
+                "file_id": "file-ligand",
+                "filename": "generated.sdf",
+                "download_url": "/api/v1/files/file-ligand/download",
+            }
+        },
+        step_params={},
+    )
+
+    assert payload.params["builtin_inputs"] == {"generated_ligand": "file-ligand"}
+    assert payload.file_ids == ["file-ligand"]

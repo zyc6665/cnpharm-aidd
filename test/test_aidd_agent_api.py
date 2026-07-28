@@ -699,3 +699,90 @@ async def test_sync_agent_run_endpoint_reconciles_waiting_steps(
 
     assert response.status_code == 200
     assert reconciled == [run_id]
+
+
+@pytest.mark.asyncio
+async def test_cancel_agent_run_cancels_linked_platform_task(
+    db_session: AsyncSession,
+    current_user: User,
+    aidd_tools: dict[str, Tool],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.agents.aidd.service import cancel_agent_run
+
+    tool = aidd_tools["gcdm-pocket-generation"]
+    task = Task(
+        user_id=current_user.id,
+        tool_id=tool.id,
+        tool_version_id=tool.current_version_id,
+        status=TaskStatus.PENDING.value,
+    )
+    db_session.add(task)
+    await db_session.flush()
+    run = AgentRun(
+        user_id=current_user.id,
+        message="cancel me",
+        intent="molecule_generation",
+        status="waiting_task",
+        input_type="protein_pdb",
+        requested_outputs=[],
+        plan={},
+    )
+    db_session.add(run)
+    await db_session.flush()
+    db_session.add(
+        AgentRunStep(
+            agent_run_id=run.id,
+            step_key="molecule_generation",
+            tool_slug=tool.slug,
+            task_id=task.id,
+            status="waiting_task",
+            sort_order=0,
+        )
+    )
+    await db_session.commit()
+
+    canceled_task_ids: list[str] = []
+
+    async def fake_cancel_task(db, *, task, current_user):
+        canceled_task_ids.append(task.id)
+        task.status = TaskStatus.CANCELED.value
+
+    monkeypatch.setattr("app.agents.aidd.service.cancel_platform_task", fake_cancel_task)
+
+    canceled_run = await cancel_agent_run(db_session, current_user=current_user, run_id=run.id)
+
+    assert canceled_task_ids == [task.id]
+    assert canceled_run.status == "canceled"
+
+
+@pytest.mark.asyncio
+async def test_claim_ready_agent_step_is_atomic(
+    db_session: AsyncSession,
+    current_user: User,
+) -> None:
+    from app.agents.aidd.service import claim_agent_step_for_dispatch
+
+    run = AgentRun(
+        user_id=current_user.id,
+        message="claim me",
+        intent="test",
+        status="pending",
+        input_type="protein_pdb",
+        requested_outputs=[],
+        plan={},
+    )
+    db_session.add(run)
+    await db_session.flush()
+    step = AgentRunStep(
+        agent_run_id=run.id,
+        step_key="only_step",
+        tool_slug="test-tool",
+        status="pending",
+        sort_order=0,
+    )
+    db_session.add(step)
+    await db_session.commit()
+
+    assert await claim_agent_step_for_dispatch(db_session, step.id) is True
+    assert await claim_agent_step_for_dispatch(db_session, step.id) is False

@@ -18,6 +18,7 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.agents.aidd import builtin_tools  # noqa: E402
+from app.agents.aidd.capabilities import AIDD_TOOL_CAPABILITIES  # noqa: E402
 from app.common.exceptions import ValidationException  # noqa: E402
 
 
@@ -25,6 +26,18 @@ def test_sdf_to_smiles_csv_uses_molp_compatible_header() -> None:
     content = builtin_tools._smiles_csv_content(["CCO"]).decode("utf-8")
 
     assert content == "SMILES,id\nCCO,mol_1\n"
+
+
+def test_placeholder_scientific_capabilities_are_not_executable() -> None:
+    placeholder_slugs = {
+        "builtin-admet-prediction",
+        "builtin-toxicity-prediction",
+        "builtin-synthetic-accessibility",
+        "builtin-molecular-dynamics",
+        "builtin-interaction-analysis",
+    }
+
+    assert not (placeholder_slugs & set(AIDD_TOOL_CAPABILITIES))
 
 
 def test_vina_receptor_pdbqt_conversion_uses_rigid_openbabel_option(
@@ -388,17 +401,15 @@ class TestRunBuiltinToolDispatch:
             r = builtin_tools.run_builtin_tool("builtin-query-pubchem", files)
             assert r.outputs[0].semantic_type == "database_query_result"
 
-        # admet
-        r = builtin_tools.run_builtin_tool("builtin-admet-prediction", files)
-        assert r.artifacts[0].semantic_type == "admet_report"
-
-        # toxicity
-        r = builtin_tools.run_builtin_tool("builtin-toxicity-prediction", files)
-        assert r.artifacts[0].semantic_type == "toxicity_report"
-
-        # sa
-        r = builtin_tools.run_builtin_tool("builtin-synthetic-accessibility", files)
-        assert r.artifacts[0].semantic_type == "synthetic_accessibility"
+        for slug in (
+            "builtin-admet-prediction",
+            "builtin-toxicity-prediction",
+            "builtin-synthetic-accessibility",
+            "builtin-molecular-dynamics",
+            "builtin-interaction-analysis",
+        ):
+            with pytest.raises(ValidationException, match="尚未接入真实执行引擎"):
+                builtin_tools.run_builtin_tool(slug, files)
 
     def test_unknown_tool_raises(self):
         with pytest.raises(ValidationException, match="未知内置智能体工具"):
