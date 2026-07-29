@@ -398,6 +398,7 @@ export default {
       selectInputFiles: '选择文件',
       fileAutoDetectHint: '自动识别文件类型：支持 PDB、CIF、SDF、CSV，Agent 会结合文件名、内容和研究目标判断用途。',
       generationCount: '生成数量',
+      generateDraft: '生成工作流草稿',
       run: '运行智能体',
       sync: '同步状态',
       timeline: '运行时间线',
@@ -415,6 +416,7 @@ export default {
       loginRequired: '请先登录后运行智能体',
       defaultMessage: '根据上传文件和研究目标自动编排可用工具',
       created: '智能体运行已创建',
+      draftGenerated: '工作流草稿已生成，请在手动模式中审查后保存或运行',
       deleted: '历史会话已删除',
       cascadeDeleted: '历史会话已删除，并删除 {tasks} 个任务、{artifacts} 个产物',
       status: {

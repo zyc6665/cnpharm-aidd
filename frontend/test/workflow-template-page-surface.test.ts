@@ -5,6 +5,7 @@ import { resolve } from 'node:path'
 
 const pageSource = readFileSync(resolve('src/views/workflow/index.vue'), 'utf8')
 const canvasSource = readFileSync(resolve('src/composables/useWorkflowCanvas.ts'), 'utf8')
+const persistenceSource = readFileSync(resolve('src/composables/useWorkflowPersistence.ts'), 'utf8')
 const paletteSource = readFileSync(resolve('src/components/workflow/WorkflowToolPalette.vue'), 'utf8')
 
 test('workflow page mounts template canvas and inspector in manual mode', () => {
@@ -71,6 +72,20 @@ test('workflow page exposes workflow result report integration', () => {
 })
 
 test('workflow page keeps agent mode available', () => {
-  assert.equal(pageSource.includes('<AiddAgentPanel />'), true)
+  assert.equal(pageSource.includes('AiddAgentPanel'), true)
   assert.equal(pageSource.includes("key=\"agent\""), true)
+})
+
+test('agent draft reuses persisted definition mapping and resets saved identity', () => {
+  for (const marker of [
+    'applyWorkflowDraft',
+    'mapWorkflowDefinitionToCanvasPayload',
+    'workflowStore.clearActiveWorkflowTemplate()',
+    'workflowDefinitionsStore.clearCurrentWorkflowDefinition()',
+    'workflowRunInputSelections.value = { ...draft.input_files }',
+    'producedOutputTypes',
+    'selected_tool_by_node'
+  ]) {
+    assert.equal(persistenceSource.includes(marker), true, `missing ${marker}`)
+  }
 })

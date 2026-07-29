@@ -133,3 +133,22 @@ test('Agent 面板应支持普通多文件上传并提交 input_file_ids', () =>
   assert.equal(zhSource.includes('配体 PDB'), false)
   assert.equal(zhSource.includes('SMILES CSV'), false)
 })
+
+test('Agent 面板应生成草稿并把结果交给工作流页面', () => {
+  const panelSource = readSource('src/components/workflow/AiddAgentPanel.vue')
+  const workflowSource = readSource('src/views/workflow/index.vue')
+  const zhSource = readSource('src/locales/zh-CN/index.ts')
+  const enSource = readSource('src/locales/en-US/index.ts')
+
+  assert.equal(panelSource.includes('defineEmits'), true)
+  assert.equal(panelSource.includes('prepareAgentRequest'), true)
+  assert.equal(panelSource.includes('generateWorkflowDraft'), true)
+  assert.equal(panelSource.includes('agentsStore.createWorkflowDraft'), true)
+  assert.equal(panelSource.includes("emit('draftGenerated', draft)"), true)
+  assert.equal(panelSource.includes('workflow.agent.generateDraft'), true)
+  assert.equal(workflowSource.includes('@draft-generated="handleAgentWorkflowDraft"'), true)
+  assert.equal(workflowSource.includes('applyWorkflowDraft(draft)'), true)
+  assert.equal(workflowSource.includes("activeMode.value = 'manual'"), true)
+  assert.equal(zhSource.includes('生成工作流草稿'), true)
+  assert.equal(enSource.includes('Generate Workflow Draft'), true)
+})

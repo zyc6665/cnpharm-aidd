@@ -202,7 +202,7 @@
         </a-tab-pane>
 
         <a-tab-pane key="agent" :tab="t('workflow.mode.agent')">
-          <AiddAgentPanel />
+          <AiddAgentPanel @draft-generated="handleAgentWorkflowDraft" />
         </a-tab-pane>
       </a-tabs>
     </div>
@@ -229,6 +229,7 @@ import { useWorkflowCanvas } from '@/composables/useWorkflowCanvas'
 import { useWorkflowExecution } from '@/composables/useWorkflowExecution'
 import { useWorkflowPersistence } from '@/composables/useWorkflowPersistence'
 import { buildWorkflowPreflight } from '@/workflow/preflight'
+import type { AiddWorkflowDraft } from '@/types/models'
 import {
   useArtifactsStore,
   useTasksStore,
@@ -308,6 +309,7 @@ const {
   handleSaveWorkflow,
   handleNewWorkflowTemplate,
   handleTemplateSelect,
+  applyWorkflowDraft,
   handleSaveWorkflowTemplate,
   handleDuplicateWorkflowTemplate,
   handleDeleteWorkflowTemplate,
@@ -372,6 +374,11 @@ const workflowPreflight = computed(() => {
 const workflowTemplateRunDisabled = computed(() => {
   return !workflowStore.activeWorkflowTemplateId && !workflowTemplateName.value.trim()
 })
+
+function handleAgentWorkflowDraft(draft: AiddWorkflowDraft) {
+  applyWorkflowDraft(draft)
+  activeMode.value = 'manual'
+}
 
 function handleViewTaskDetail(nodeId: string) {
   const taskId = workflowStore.taskByNode[nodeId]?.id

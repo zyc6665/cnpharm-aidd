@@ -334,6 +334,7 @@ export interface WorkflowDefinitionNode {
   tool_slug?: string
   tool_version?: ToolContractVersion | null
   semantic_inputs?: Record<string, string>
+  semantic_outputs?: string[]
   params?: Record<string, unknown>
   [key: string]: unknown
 }

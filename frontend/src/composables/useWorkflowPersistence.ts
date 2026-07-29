@@ -13,9 +13,9 @@ import {
 import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@/workflow/template-types'
 import { useArtifactsStore, useUserStore, useWorkflowDefinitionsStore, useWorkflowStore } from '@/stores'
 import type {
+  AiddWorkflowDraft,
   WorkflowDefinition,
   WorkflowDefinitionNode,
-  WorkflowTemplate,
 } from '@/types/models'
 
 type UserStore = ReturnType<typeof useUserStore>
@@ -126,10 +126,34 @@ export function useWorkflowPersistence(input: {
       const template = await workflowStore.loadWorkflowTemplate(templateId)
       workflowTemplateName.value = template.name
       selectedSavedWorkflowId.value = template.id
-      workflowStore.applyWorkflowDefinition(mapTemplateToDefinitionPayload(template))
+      workflowStore.applyWorkflowDefinition(
+        mapWorkflowDefinitionToCanvasPayload({
+          templateId: template.id,
+          name: template.name,
+          description: template.description,
+          definition: template.definition,
+        }),
+      )
     } catch {
       // 请求层会展示错误信息。
     }
+  }
+
+  function applyWorkflowDraft(draft: AiddWorkflowDraft) {
+    workflowStore.clearActiveWorkflowTemplate()
+    workflowDefinitionsStore.clearCurrentWorkflowDefinition()
+    selectedSavedWorkflowId.value = undefined
+    workflowName.value = draft.name
+    workflowTemplateName.value = draft.name
+    workflowRunInputSelections.value = { ...draft.input_files }
+    workflowStore.applyWorkflowDefinition(
+      mapWorkflowDefinitionToCanvasPayload({
+        templateId: 'aidd-workflow-draft',
+        name: draft.name,
+        description: draft.description,
+        definition: draft.definition,
+      }),
+    )
   }
 
   async function handleSaveWorkflowTemplate() {
@@ -326,6 +350,7 @@ export function useWorkflowPersistence(input: {
     handleSaveWorkflow,
     handleNewWorkflowTemplate,
     handleTemplateSelect,
+    applyWorkflowDraft,
     handleSaveWorkflowTemplate,
     handleDuplicateWorkflowTemplate,
     handleDeleteWorkflowTemplate,
@@ -344,19 +369,29 @@ export function useWorkflowPersistence(input: {
   }
 }
 
-function mapTemplateToDefinitionPayload(template: WorkflowTemplate) {
+export function mapWorkflowDefinitionToCanvasPayload(input: {
+  templateId: string
+  name: string
+  description?: string | null
+  definition: WorkflowDefinition
+}) {
+  const { templateId, name, description, definition } = input
   return {
-    template_id: template.id,
-    name: template.name,
-    description: template.description ?? undefined,
-    nodes: (template.definition.nodes ?? []).map((node) => mapTemplateNode(node)),
-    edges: (template.definition.edges ?? []).map((edge, index) => ({
+    template_id: templateId,
+    name,
+    description: description ?? undefined,
+    nodes: (definition.nodes ?? []).map((node) => mapTemplateNode(node)),
+    edges: (definition.edges ?? []).map((edge, index) => ({
       id: resolveWorkflowEdgeId(edge.id, index),
       source: edge.source,
       target: edge.target,
       artifactType: edge.source_output ?? edge.target_input,
     })),
-    selected_tool_by_node: {},
+    selected_tool_by_node: Object.fromEntries(
+      definition.nodes
+        .filter((node) => node.kind === 'tool' && node.tool_slug)
+        .map((node) => [node.id, node.tool_slug as string]),
+    ),
     artifact_bindings_by_node: {},
     status: 'draft' as const,
   }
@@ -371,8 +406,11 @@ function mapTemplateNode(node: WorkflowDefinitionNode) {
     position: resolveWorkflowNodePosition(node),
     toolSlugs: node.tool_slug ? [node.tool_slug] : [],
     recommendedToolSlug: node.tool_slug ?? undefined,
-    requiredInputTypes: Object.keys(node.semantic_inputs ?? {}),
-    producedOutputTypes: [],
+    requiredInputTypes:
+      node.kind === 'input' && node.semantic_type
+        ? [node.semantic_type]
+        : Object.keys(node.semantic_inputs ?? {}),
+    producedOutputTypes: Array.isArray(node.semantic_outputs) ? node.semantic_outputs : [],
   }
 }
 

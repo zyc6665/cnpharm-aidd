@@ -398,6 +398,7 @@ export default {
       selectInputFiles: 'Select Files',
       fileAutoDetectHint: 'File types are detected automatically. Supports PDB, CIF, SDF, and CSV inputs.',
       generationCount: 'Generation Count',
+      generateDraft: 'Generate Workflow Draft',
       run: 'Run Agent',
       sync: 'Sync Status',
       timeline: 'Run Timeline',
@@ -415,6 +416,7 @@ export default {
       loginRequired: 'Please log in before running the agent',
       defaultMessage: 'Automatically orchestrate available tools from the uploaded file and goal',
       created: 'Agent run created',
+      draftGenerated: 'Workflow draft generated. Review it in Manual Mode before saving or running.',
       deleted: 'Chat history deleted',
       cascadeDeleted: 'Chat deleted with {tasks} tasks and {artifacts} artifacts',
       status: {

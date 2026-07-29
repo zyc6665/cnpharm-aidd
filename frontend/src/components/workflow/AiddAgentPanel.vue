@@ -53,9 +53,19 @@
 
           <div class="agent-actions">
             <a-button
+              size="large"
+              :loading="draftSubmitting || agentsStore.drafting"
+              :disabled="submitting"
+              @click="generateWorkflowDraft"
+            >
+              <ApartmentOutlined />
+              {{ t('workflow.agent.generateDraft') }}
+            </a-button>
+            <a-button
               type="primary"
               size="large"
               :loading="submitting || agentsStore.loading"
+              :disabled="draftSubmitting || agentsStore.drafting"
               @click="createRun"
             >
               <PlayCircleOutlined />
@@ -208,10 +218,27 @@
   import { useI18n } from 'vue-i18n'
   import { message } from 'ant-design-vue'
   import type { UploadFile } from 'ant-design-vue'
-  import { DeleteOutlined, PlayCircleOutlined, ReloadOutlined, SyncOutlined, UploadOutlined } from '@ant-design/icons-vue'
+  import {
+    ApartmentOutlined,
+    DeleteOutlined,
+    PlayCircleOutlined,
+    ReloadOutlined,
+    SyncOutlined,
+    UploadOutlined
+  } from '@ant-design/icons-vue'
   import { uploadFile } from '@/api/files'
   import { useAgentsStore, useUserStore } from '@/stores'
-  import type { AiddAgentRun, AiddAgentRunStatus, AiddAgentStepStatus } from '@/types/models'
+  import type {
+    AiddAgentRun,
+    AiddAgentRunCreateParams,
+    AiddAgentRunStatus,
+    AiddAgentStepStatus,
+    AiddWorkflowDraft
+  } from '@/types/models'
+
+  const emit = defineEmits<{
+    draftGenerated: [draft: AiddWorkflowDraft]
+  }>()
 
   const router = useRouter()
   const { t } = useI18n()
@@ -221,6 +248,7 @@
   const runMessage = ref('')
   const agentFileUploads = ref<UploadFile[]>([])
   const submitting = ref(false)
+  const draftSubmitting = ref(false)
   const syncing = ref(false)
   const deletingRunId = ref<string | null>(null)
   const cascadeDeleteHistory = ref(false)
@@ -364,35 +392,58 @@
     }
   }
 
-  async function createRun() {
+  async function prepareAgentRequest(): Promise<AiddAgentRunCreateParams | null> {
     if (!userStore.isLoggedIn) {
       message.warning(t('workflow.agent.loginRequired'))
       router.push('/login')
-      return
+      return null
     }
 
     const selectedFiles = agentFileUploads.value.filter(item => Boolean(item.originFileObj))
     if (selectedFiles.length === 0) {
       message.warning(t('workflow.agent.uploadRequired'))
-      return
+      return null
     }
 
+    const uploadedFileIds: string[] = []
+    for (const uploadItem of selectedFiles) {
+      const uploaded = await uploadFile(uploadItem.originFileObj as File)
+      uploadedFileIds.push(uploaded.data.id.toString())
+    }
+    return {
+      message: runMessage.value.trim() || t('workflow.agent.defaultMessage'),
+      input_file_ids: uploadedFileIds
+    }
+  }
+
+  async function createRun() {
     submitting.value = true
     try {
-      const uploadedFileIds: string[] = []
-      for (const uploadItem of selectedFiles) {
-        const uploaded = await uploadFile(uploadItem.originFileObj as File)
-        uploadedFileIds.push(uploaded.data.id.toString())
+      const request = await prepareAgentRequest()
+      if (!request) {
+        return
       }
-      const run = await agentsStore.createRun({
-        message: runMessage.value.trim() || t('workflow.agent.defaultMessage'),
-        input_file_ids: uploadedFileIds
-      })
+      const run = await agentsStore.createRun(request)
 
       agentsStore.pollRunUntilTerminal(run.id)
       message.success(t('workflow.agent.created'))
     } finally {
       submitting.value = false
+    }
+  }
+
+  async function generateWorkflowDraft() {
+    draftSubmitting.value = true
+    try {
+      const request = await prepareAgentRequest()
+      if (!request) {
+        return
+      }
+      const draft = await agentsStore.createWorkflowDraft(request)
+      emit('draftGenerated', draft)
+      message.success(t('workflow.agent.draftGenerated'))
+    } finally {
+      draftSubmitting.value = false
     }
   }
 
