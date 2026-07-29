@@ -1,25 +1,6 @@
-import { computed, ref } from 'vue'
-import { defineStore } from 'pinia'
-import {
-  createWorkflowRun,
-  createWorkflowTemplate,
-  deleteWorkflowTemplate,
-  duplicateWorkflowTemplate,
-  getWorkflowRun,
-  getWorkflowRuns,
-  getWorkflowTemplate,
-  getWorkflowTemplates,
-  syncWorkflowRun,
-  updateWorkflowTemplate,
-} from '@/api/workflows'
-import type {
-  WorkflowDefinition,
-  WorkflowRun,
-  WorkflowRunCreateParams,
-  WorkflowTemplate as SavedWorkflowTemplate,
-  WorkflowTemplateCreateParams,
-  WorkflowTemplateUpdateParams,
-} from '@/types/models'
+import { computed } from 'vue'
+import { defineStore, storeToRefs } from 'pinia'
+import type { WorkflowDefinition } from '@/types/models'
 import { type WorkflowTaskRef } from '@/workflow/artifact-types'
 import type {
   WorkflowCanvasEdge,
@@ -27,15 +8,15 @@ import type {
   WorkflowTemplate as CanvasWorkflowTemplate,
 } from '@/workflow/template-types'
 import {
-  createInitialWorkflowSession,
-  nowIsoString,
   type WorkflowCanvasPosition,
   type WorkflowWorkbenchSession,
-  type WorkflowRunsPagination,
 } from './workflow-session'
 import { useWorkflowCanvasStore } from './workflow-canvas'
 import { useWorkflowFormDraftStore } from './workflow-form-draft'
 import { useWorkflowTaskBindingStore } from './workflow-task-binding'
+import { useWorkflowRunsStore } from './workflow-runs'
+import { useWorkflowSessionStore } from './workflow-session-store'
+import { useWorkflowTemplatesStore } from './workflow-templates'
 
 interface AddToolNodeInput {
   toolSlug: string
@@ -72,31 +53,35 @@ export const useWorkflowStore = defineStore('workflow', () => {
   const canvas = useWorkflowCanvasStore()
   const formDraft = useWorkflowFormDraftStore()
   const taskBinding = useWorkflowTaskBindingStore()
+  const sessionStore = useWorkflowSessionStore()
+  const templatesStore = useWorkflowTemplatesStore()
+  const runsStore = useWorkflowRunsStore()
 
-  // ── session metadata ──
-  const initialSession = createInitialWorkflowSession()
-  const sessionId = ref(initialSession.sessionId)
-  const templateId = ref(initialSession.templateId)
-  const lastUpdatedAt = ref(initialSession.lastUpdatedAt)
-  const ownerUserId = ref<string | undefined>(initialSession.ownerUserId)
-
-  // ── API state (non-persisted) ──
-  const workflowTemplates = ref<SavedWorkflowTemplate[]>([])
-  const workflowRuns = ref<WorkflowRun[]>([])
-  const workflowRunsPagination = ref<WorkflowRunsPagination>({
-    total: 0, page: 1, pageSize: 20, totalPages: 0,
-  })
-  const activeWorkflowTemplate = ref<SavedWorkflowTemplate | null>(null)
-  const activeWorkflowRun = ref<WorkflowRun | null>(null)
-  const activeWorkflowTemplateId = ref<string | null>(null)
-  const activeWorkflowRunId = ref<string | null>(null)
-  const isLoadingWorkflowTemplates = ref(false)
-  const isLoadingWorkflowRuns = ref(false)
-  const isLoadingMoreWorkflowRuns = ref(false)
-  const isSavingWorkflowTemplate = ref(false)
-  const isLoadingWorkflowRun = ref(false)
-  const isRunningWorkflowTemplate = ref(false)
-  const isSyncingWorkflowRun = ref(false)
+  const {
+    sessionId,
+    templateId,
+    lastUpdatedAt,
+    ownerUserId,
+  } = storeToRefs(sessionStore)
+  const {
+    workflowTemplates,
+    activeWorkflowTemplate,
+    activeWorkflowTemplateId,
+    isLoadingWorkflowTemplates,
+    isSavingWorkflowTemplate,
+  } = storeToRefs(templatesStore)
+  const {
+    workflowRuns,
+    workflowRunsPagination,
+    activeWorkflowRun,
+    activeWorkflowRunId,
+    isLoadingWorkflowRuns,
+    isLoadingMoreWorkflowRuns,
+    isLoadingWorkflowRun,
+    isRunningWorkflowTemplate,
+    isSyncingWorkflowRun,
+    hasMoreWorkflowRuns,
+  } = storeToRefs(runsStore)
 
   // ── session computed ──
   const session = computed<WorkflowWorkbenchSession>(() => ({
@@ -118,30 +103,20 @@ export const useWorkflowStore = defineStore('workflow', () => {
     ownerUserId: ownerUserId.value,
   }))
 
-  const hasMoreWorkflowRuns = computed(() =>
-    workflowRunsPagination.value.page < workflowRunsPagination.value.totalPages,
-  )
-
   function touchSession() {
-    lastUpdatedAt.value = nowIsoString()
+    sessionStore.touch()
   }
 
   // ── lifecycle ──
   function normalizeSessionShape() {
-    if (typeof templateId.value !== 'string' || !templateId.value) {
-      templateId.value = 'aidd-template'
-    }
+    sessionStore.normalize()
     canvas.normalizeShape()
     formDraft.normalizeShape()
     taskBinding.normalizeShape()
   }
 
   function resetSession(nextOwnerUserId?: string) {
-    const next = createInitialWorkflowSession(nextOwnerUserId)
-    sessionId.value = next.sessionId
-    templateId.value = next.templateId
-    lastUpdatedAt.value = next.lastUpdatedAt
-    ownerUserId.value = next.ownerUserId
+    sessionStore.reset(nextOwnerUserId)
     canvas.reset()
     formDraft.reset()
     taskBinding.reset()
@@ -150,22 +125,16 @@ export const useWorkflowStore = defineStore('workflow', () => {
   function syncOwnerUserId(nextOwnerUserId?: string) {
     if (ownerUserId.value !== nextOwnerUserId) {
       resetSession(nextOwnerUserId)
-      workflowRuns.value = []
-      workflowRunsPagination.value = { total: 0, page: 1, pageSize: 20, totalPages: 0 }
-      activeWorkflowTemplate.value = null
-      activeWorkflowTemplateId.value = null
-      activeWorkflowRun.value = null
-      activeWorkflowRunId.value = null
+      templatesStore.clearActiveWorkflowTemplate()
+      runsStore.clear()
     }
   }
 
   function setTemplate(nextTemplateId: string) {
-    if (templateId.value === nextTemplateId) return
-    templateId.value = nextTemplateId
+    if (!sessionStore.setTemplate(nextTemplateId)) return
     canvas.reset()
     formDraft.reset()
     taskBinding.reset()
-    touchSession()
   }
 
   // ── delegation: canvas ──
@@ -232,196 +201,79 @@ export const useWorkflowStore = defineStore('workflow', () => {
   const clearNodeTask = (nodeId: string) => { taskBinding.clearNodeTask(nodeId); touchSession() }
   const clearNodeTasks = (nodeIds: string[]) => { taskBinding.clearNodeTasks(nodeIds); touchSession() }
 
-  // ── API operations ──
-  function upsertWorkflowRun(run: WorkflowRun) {
-    workflowRuns.value = [run, ...workflowRuns.value.filter((item) => item.id !== run.id)]
+  // ── templates and runs compatibility facade ──
+  const loadWorkflowTemplates = templatesStore.loadWorkflowTemplates
+  const loadWorkflowRuns = runsStore.loadWorkflowRuns
+  const loadWorkflowTemplate = templatesStore.loadWorkflowTemplate
+
+  async function saveWorkflowTemplate(...args: Parameters<typeof templatesStore.saveWorkflowTemplate>) {
+    const template = await templatesStore.saveWorkflowTemplate(...args)
+    touchSession()
+    return template
   }
 
-  async function loadWorkflowTemplates() {
-    isLoadingWorkflowTemplates.value = true
-    try {
-      const response = await getWorkflowTemplates()
-      workflowTemplates.value = response.data.items
-      return response.data
-    } finally {
-      isLoadingWorkflowTemplates.value = false
-    }
-  }
-
-  async function loadWorkflowRuns(
-    params?: { template_id?: string; page?: number; page_size?: number },
-    options: { append?: boolean } = {},
+  async function updateSavedWorkflowTemplate(
+    ...args: Parameters<typeof templatesStore.updateSavedWorkflowTemplate>
   ) {
-    if (options?.append) {
-      isLoadingMoreWorkflowRuns.value = true
-    } else {
-      isLoadingWorkflowRuns.value = true
-    }
-    try {
-      const response = await getWorkflowRuns(params)
-      const next = response.data.items
-      workflowRuns.value = options?.append
-        ? [...workflowRuns.value, ...next.filter((item) => !workflowRuns.value.some((r) => r.id === item.id))]
-        : next
-      workflowRunsPagination.value = {
-        total: response.data.total,
-        page: response.data.page,
-        pageSize: response.data.page_size,
-        totalPages: response.data.total_pages,
-      }
-      return response.data
-    } finally {
-      if (options?.append) {
-        isLoadingMoreWorkflowRuns.value = false
-      } else {
-        isLoadingWorkflowRuns.value = false
-      }
-    }
+    const template = await templatesStore.updateSavedWorkflowTemplate(...args)
+    touchSession()
+    return template
   }
 
-  async function loadWorkflowTemplate(templateIdParam: string) {
-    const response = await getWorkflowTemplate(templateIdParam)
-    activeWorkflowTemplate.value = response.data
-    activeWorkflowTemplateId.value = response.data.id
-    return response.data
+  async function duplicateSavedWorkflowTemplate(
+    ...args: Parameters<typeof templatesStore.duplicateSavedWorkflowTemplate>
+  ) {
+    const template = await templatesStore.duplicateSavedWorkflowTemplate(...args)
+    touchSession()
+    return template
   }
 
-  async function saveWorkflowTemplate(data: WorkflowTemplateCreateParams) {
-    isSavingWorkflowTemplate.value = true
-    try {
-      const response = await createWorkflowTemplate(data)
-      activeWorkflowTemplate.value = response.data
-      activeWorkflowTemplateId.value = response.data.id
-      workflowTemplates.value = [response.data, ...workflowTemplates.value]
+  async function removeWorkflowTemplate(...args: Parameters<typeof templatesStore.removeWorkflowTemplate>) {
+    await templatesStore.removeWorkflowTemplate(...args)
+    touchSession()
+  }
+
+  async function runWorkflowTemplate(...args: Parameters<typeof runsStore.runWorkflowTemplate>) {
+    const run = await runsStore.runWorkflowTemplate(...args)
+    touchSession()
+    return run
+  }
+
+  async function loadWorkflowRun(...args: Parameters<typeof runsStore.loadWorkflowRun>) {
+    const run = await runsStore.loadWorkflowRun(...args)
+    touchSession()
+    return run
+  }
+
+  async function syncActiveWorkflowRun(...args: Parameters<typeof runsStore.syncActiveWorkflowRun>) {
+    const run = await runsStore.syncActiveWorkflowRun(...args)
+    if (run) {
       touchSession()
-      return response.data
-    } finally {
-      isSavingWorkflowTemplate.value = false
     }
-  }
-
-  async function updateSavedWorkflowTemplate(templateIdParam: string, data: WorkflowTemplateUpdateParams) {
-    isSavingWorkflowTemplate.value = true
-    try {
-      const response = await updateWorkflowTemplate(templateIdParam, data)
-      activeWorkflowTemplate.value = response.data
-      activeWorkflowTemplateId.value = response.data.id
-      workflowTemplates.value = workflowTemplates.value.map((t) =>
-        t.id === response.data.id ? response.data : t,
-      )
-      touchSession()
-      return response.data
-    } finally {
-      isSavingWorkflowTemplate.value = false
-    }
-  }
-
-  async function duplicateSavedWorkflowTemplate(templateIdParam: string, name?: string) {
-    isSavingWorkflowTemplate.value = true
-    try {
-      const response = await duplicateWorkflowTemplate(templateIdParam, { name })
-      activeWorkflowTemplate.value = response.data
-      activeWorkflowTemplateId.value = response.data.id
-      workflowTemplates.value = [response.data, ...workflowTemplates.value]
-      touchSession()
-      return response.data
-    } finally {
-      isSavingWorkflowTemplate.value = false
-    }
-  }
-
-  async function removeWorkflowTemplate(templateIdParam: string) {
-    isSavingWorkflowTemplate.value = true
-    try {
-      await deleteWorkflowTemplate(templateIdParam)
-      workflowTemplates.value = workflowTemplates.value.filter((t) => t.id !== templateIdParam)
-      if (activeWorkflowTemplateId.value === templateIdParam) {
-        activeWorkflowTemplate.value = null
-        activeWorkflowTemplateId.value = null
-      }
-      touchSession()
-    } finally {
-      isSavingWorkflowTemplate.value = false
-    }
-  }
-
-  async function runWorkflowTemplate(templateIdParam: string, input: WorkflowRunCreateParams) {
-    isRunningWorkflowTemplate.value = true
-    try {
-      const response = await createWorkflowRun(templateIdParam, input)
-      activeWorkflowRun.value = response.data
-      activeWorkflowRunId.value = response.data.id
-      upsertWorkflowRun(response.data)
-      touchSession()
-      return response.data
-    } finally {
-      isRunningWorkflowTemplate.value = false
-    }
-  }
-
-  async function loadWorkflowRun(runId: string) {
-    isLoadingWorkflowRun.value = true
-    try {
-      const response = await getWorkflowRun(runId)
-      activeWorkflowRun.value = response.data
-      activeWorkflowRunId.value = response.data.id
-      upsertWorkflowRun(response.data)
-      touchSession()
-      return response.data
-    } finally {
-      isLoadingWorkflowRun.value = false
-    }
-  }
-
-  async function syncActiveWorkflowRun(runId = activeWorkflowRunId.value) {
-    if (!runId) return null
-    isSyncingWorkflowRun.value = true
-    try {
-      const response = await syncWorkflowRun(runId)
-      activeWorkflowRun.value = response.data
-      activeWorkflowRunId.value = response.data.id
-      upsertWorkflowRun(response.data)
-      touchSession()
-      return response.data
-    } finally {
-      isSyncingWorkflowRun.value = false
-    }
+    return run
   }
 
   function setActiveWorkflowDefinition(definition: WorkflowDefinition, name = 'Untitled Workflow') {
-    activeWorkflowTemplate.value = {
-      id: activeWorkflowTemplateId.value ?? '',
-      owner_id: ownerUserId.value ?? '',
-      name,
-      status: 'draft',
-      definition,
-      is_public: false,
-      version: 1,
-      created_at: nowIsoString(),
-      updated_at: nowIsoString(),
-    }
+    templatesStore.setActiveWorkflowDefinition(definition, ownerUserId.value, name)
     touchSession()
   }
 
   function clearActiveWorkflowRun() {
-    activeWorkflowRun.value = null
-    activeWorkflowRunId.value = null
+    runsStore.clearActiveWorkflowRun()
     touchSession()
   }
 
   function clearActiveWorkflowTemplate() {
-    activeWorkflowTemplate.value = null
-    activeWorkflowTemplateId.value = null
+    templatesStore.clearActiveWorkflowTemplate()
     touchSession()
   }
 
   function selectWorkflowRun(runId: string) {
-    const run = workflowRuns.value.find((item) => item.id === runId)
-    if (!run) return false
-    activeWorkflowRun.value = run
-    activeWorkflowRunId.value = run.id
-    touchSession()
-    return true
+    const selected = runsStore.selectWorkflowRun(runId)
+    if (selected) {
+      touchSession()
+    }
+    return selected
   }
 
   // ── public API ──
