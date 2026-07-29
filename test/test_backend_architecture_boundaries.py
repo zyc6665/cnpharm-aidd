@@ -81,6 +81,27 @@ def test_public_tool_router_owns_public_and_user_routes() -> None:
     assert expected_routes <= route_keys
 
 
+def test_admin_tool_router_owns_management_routes() -> None:
+    """管理员工具路由应覆盖导入、维护、发布与标签创建入口。"""
+    from app.api.v1.tools_admin import router
+
+    route_keys = {
+        (method, route.path)
+        for route in router.routes
+        for method in getattr(route, "methods", set())
+    }
+    expected_routes = {
+        ("POST", "/import-config"),
+        ("POST", ""),
+        ("PUT", "/{tool_id}"),
+        ("DELETE", "/{tool_id}"),
+        ("POST", "/{tool_id}/publish"),
+        ("POST", "/tags"),
+    }
+
+    assert expected_routes <= route_keys
+
+
 class _UsedNames(ast.NodeVisitor):
     """收集模块中实际引用的本地名称。"""
 

@@ -981,20 +981,16 @@ async def create_tag(
 
 # 公开端点已迁入独立模块；迁移期间仅注册尚未拆分的管理和版本端点。
 from app.api.v1.tools_public import router as public_router
+from app.api.v1.tools_admin import router as admin_router
 
 _legacy_router = router
 router = APIRouter()
 router.routes.extend(public_router.routes)
+router.routes.extend(admin_router.routes)
 
 _remaining_endpoint_names = {
-    "create_tag",
-    "create_tool",
     "create_tool_version",
-    "delete_tool",
-    "import_tool_config",
     "list_tool_versions",
-    "publish_tool",
-    "update_tool",
 }
 router.routes.extend(
     route
