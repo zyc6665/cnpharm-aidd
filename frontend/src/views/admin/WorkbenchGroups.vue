@@ -125,8 +125,8 @@
           <template #renderItem="{ item }">
             <a-list-item>
               <a-space direction="vertical" size="small">
-                <strong>{{ resolveToolName(item.tool_id) }}</strong>
-                <span>{{ resolveGroupName(item.group_id) }}</span>
+                <strong>{{ item.tool_name }}</strong>
+                <span>{{ item.group_name }}</span>
                 <a-space>
                   <a-tag>{{ `#${item.sort_order}` }}</a-tag>
                   <a-tag v-if="item.is_recommended" color="gold">
@@ -351,14 +351,6 @@
     mappingForm.sort_order = mapping.sort_order
     mappingForm.is_recommended = mapping.is_recommended
     mappingForm.is_enabled = mapping.is_enabled
-  }
-
-  const resolveToolName = (toolId: string) => {
-    return tools.value.find(tool => tool.id === toolId)?.name ?? toolId
-  }
-
-  const resolveGroupName = (groupId: string) => {
-    return groups.value.find(group => group.id === groupId)?.name ?? groupId
   }
 
   onMounted(async () => {

@@ -441,6 +441,9 @@ export interface WorkbenchGroupMapping {
   id: string
   tool_id: string
   group_id: string
+  tool_name: string
+  tool_slug: string
+  group_name: string
   sort_order: number
   is_recommended: boolean
   is_enabled: boolean

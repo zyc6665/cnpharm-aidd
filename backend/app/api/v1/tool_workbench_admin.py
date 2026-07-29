@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from app.auth.dependencies import get_admin_user
 from app.common.exceptions import ConflictException, NotFoundException, ValidationException
@@ -38,7 +39,34 @@ def _serialize_group(group: ToolWorkbenchGroup) -> dict:
 
 
 def _serialize_mapping(mapping: ToolWorkbenchGroupMapping) -> dict:
-    return ToolWorkbenchGroupMappingResponse.model_validate(mapping).model_dump()
+    return ToolWorkbenchGroupMappingResponse(
+        id=mapping.id,
+        tool_id=mapping.tool_id,
+        group_id=mapping.group_id,
+        tool_name=mapping.tool.name,
+        tool_slug=mapping.tool.slug,
+        group_name=mapping.group.name,
+        sort_order=mapping.sort_order,
+        is_recommended=mapping.is_recommended,
+        is_enabled=mapping.is_enabled,
+        created_at=mapping.created_at,
+        updated_at=mapping.updated_at,
+    ).model_dump()
+
+
+async def _load_mapping_with_labels(
+    db: AsyncSession,
+    mapping_id: str,
+) -> ToolWorkbenchGroupMapping:
+    result = await db.execute(
+        select(ToolWorkbenchGroupMapping)
+        .options(
+            joinedload(ToolWorkbenchGroupMapping.tool),
+            joinedload(ToolWorkbenchGroupMapping.group),
+        )
+        .where(ToolWorkbenchGroupMapping.id == mapping_id)
+    )
+    return result.scalar_one()
 
 
 async def _commit_or_raise_conflict(db: AsyncSession, message: str) -> None:
@@ -257,6 +285,10 @@ async def list_workbench_group_mappings(
 ):
     result = await db.execute(
         select(ToolWorkbenchGroupMapping)
+        .options(
+            joinedload(ToolWorkbenchGroupMapping.tool),
+            joinedload(ToolWorkbenchGroupMapping.group),
+        )
         .join(ToolWorkbenchGroup, ToolWorkbenchGroup.id == ToolWorkbenchGroupMapping.group_id)
         .order_by(
             ToolWorkbenchGroup.sort_order.asc(),
@@ -290,7 +322,7 @@ async def create_workbench_group_mapping(
     mapping = ToolWorkbenchGroupMapping(**mapping_data.model_dump())
     db.add(mapping)
     await _commit_or_raise_conflict(db, "工具与工作台分组映射已存在")
-    await db.refresh(mapping)
+    mapping = await _load_mapping_with_labels(db, mapping.id)
     return success_response(data=_serialize_mapping(mapping), message="工作台分组映射创建成功")
 
 
@@ -339,7 +371,7 @@ async def update_workbench_group_mapping(
     for field, value in update_data.items():
         setattr(mapping, field, value)
     await _commit_or_raise_conflict(db, "工具与工作台分组映射已存在")
-    await db.refresh(mapping)
+    mapping = await _load_mapping_with_labels(db, mapping.id)
     return success_response(data=_serialize_mapping(mapping), message="工作台分组映射更新成功")
 
 

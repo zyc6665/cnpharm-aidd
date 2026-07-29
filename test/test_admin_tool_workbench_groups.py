@@ -362,6 +362,9 @@ async def test_admin_can_create_workbench_group_mapping(
     created_payload = create_response.json()
     assert created_payload["data"]["tool_id"] == tool_record.id
     assert created_payload["data"]["group_id"] == group_a.id
+    assert created_payload["data"]["tool_name"] == tool_record.name
+    assert created_payload["data"]["tool_slug"] == tool_record.slug
+    assert created_payload["data"]["group_name"] == group_a.name
     assert created_payload["data"]["sort_order"] == 5
     assert created_payload["data"]["is_recommended"] is True
     assert created_payload["data"]["is_enabled"] is True
@@ -388,6 +391,30 @@ async def existing_mapping(
     await db_session.commit()
     await db_session.refresh(mapping)
     return mapping
+
+
+@pytest.mark.asyncio
+async def test_admin_mapping_list_includes_display_labels(
+    api_client: httpx.AsyncClient,
+    tool_record: Tool,
+    existing_groups: tuple[ToolWorkbenchGroup, ToolWorkbenchGroup],
+    existing_mapping: ToolWorkbenchGroupMapping,
+):
+    """映射列表应直接返回工具与分组名称，避免前端依赖有限选项集。"""
+    group_a, _ = existing_groups
+
+    response = await api_client.get(
+        "/api/v1/admin/workbench-group-mappings",
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert len(payload) == 1
+    assert payload[0]["id"] == existing_mapping.id
+    assert payload[0]["tool_name"] == tool_record.name
+    assert payload[0]["tool_slug"] == tool_record.slug
+    assert payload[0]["group_name"] == group_a.name
 
 
 @pytest.mark.asyncio
@@ -444,6 +471,9 @@ async def test_admin_can_update_workbench_group_mapping(
     assert update_response.status_code == 200
     updated_payload = update_response.json()
     assert updated_payload["data"]["group_id"] == group_b.id
+    assert updated_payload["data"]["tool_name"] == "Workbench Tool"
+    assert updated_payload["data"]["tool_slug"] == "workbench-tool"
+    assert updated_payload["data"]["group_name"] == group_b.name
     assert updated_payload["data"]["sort_order"] == 0
     assert updated_payload["data"]["is_recommended"] is False
     assert updated_payload["data"]["is_enabled"] is False

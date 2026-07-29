@@ -162,6 +162,9 @@ class ToolWorkbenchGroupMappingResponse(TimestampMixin):
     id: str
     tool_id: str
     group_id: str
+    tool_name: str
+    tool_slug: str
+    group_name: str
     sort_order: int
     is_recommended: bool
     is_enabled: bool
