@@ -97,7 +97,7 @@ echo ""
 print_info "检查Celery Worker状态..."
 sleep 3
 if docker-compose -f docker-compose.celery.yml exec -T celery-worker \
-    celery -A app.celery_app.celery_app inspect ping &> /dev/null; then
+    celery -A app.worker.celery_app inspect ping &> /dev/null; then
     print_success "Celery Worker运行正常"
 else
     print_warning "Celery Worker可能尚未就绪，请稍后查看日志"
@@ -123,7 +123,7 @@ echo ""
 echo -e "${BLUE}Celery管理命令:${NC}"
 echo "  - 查看活跃任务:"
 echo "    docker-compose -f docker-compose.celery.yml exec celery-worker \\"
-echo "      celery -A app.celery_app.celery_app inspect active"
+echo "      celery -A app.worker.celery_app inspect active"
 echo ""
 echo -e "${BLUE}详细文档:${NC}"
 echo "  - 查看完整部署文档: cat document/CELERY_DEPLOYMENT.md"

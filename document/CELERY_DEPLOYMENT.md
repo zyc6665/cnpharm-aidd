@@ -65,7 +65,7 @@ docker-compose -f docker-compose.celery.yml exec redis \
 
 # 2. 查看Celery Worker状态
 docker-compose -f docker-compose.celery.yml exec celery-worker \
-  celery -A app.celery_app.celery_app inspect stats
+  celery -A app.worker.celery_app inspect stats
 
 # 3. 访问Flower监控面板
 # 浏览器打开: http://localhost:5555
@@ -98,23 +98,23 @@ docker-compose -f docker-compose.celery.yml exec celery-worker \
 ```bash
 # 查看活跃任务
 docker-compose -f docker-compose.celery.yml exec celery-worker \
-  celery -A app.celery_app.celery_app inspect active
+  celery -A app.worker.celery_app inspect active
 
 # 查看注册的任务列表
 docker-compose -f docker-compose.celery.yml exec celery-worker \
-  celery -A app.celery_app.celery_app inspect registered
+  celery -A app.worker.celery_app inspect registered
 
 # 查看Worker详细统计
 docker-compose -f docker-compose.celery.yml exec celery-worker \
-  celery -A app.celery_app.celery_app inspect stats
+  celery -A app.worker.celery_app inspect stats
 
 # 清空任务队列（慎用！）
 docker-compose -f docker-compose.celery.yml exec celery-worker \
-  celery -A app.celery_app.celery_app purge
+  celery -A app.worker.celery_app purge
 
 # 取消特定任务
 docker-compose -f docker-compose.celery.yml exec celery-worker \
-  celery -A app.celery_app.celery_app control revoke <task_id>
+  celery -A app.worker.celery_app control revoke <task_id>
 ```
 
 ### Redis监控命令
@@ -229,7 +229,7 @@ docker-compose -f docker-compose.celery.yml exec redis \
 
 # 4. 检查任务注册
 docker-compose -f docker-compose.celery.yml exec celery-worker \
-  celery -A app.celery_app.celery_app inspect registered
+  celery -A app.worker.celery_app inspect registered
 ```
 
 ### 问题3: GPU Worker无法启动
@@ -298,14 +298,14 @@ chmod 666 backend/storage/scitool.db
 **默认队列Worker** (docker-compose.celery.yml):
 ```yaml
 command: >
-  celery -A app.celery_app.celery_app worker
+  celery -A app.worker.celery_app worker
   --concurrency=4          # 调整并发数（建议: CPU核心数）
 ```
 
 **GPU队列Worker**:
 ```yaml
 command: >
-  celery -A app.celery_app.celery_app worker
+  celery -A app.worker.celery_app worker
   --concurrency=1          # GPU任务通常设为1
 ```
 
@@ -389,7 +389,7 @@ flower:
 
 ```yaml
 command: >
-  celery -A app.celery_app.celery_app worker
+  celery -A app.worker.celery_app worker
   --pool=gevent           # 使用协程池
   --concurrency=100       # 协程可以设置更高并发
 ```
@@ -431,10 +431,10 @@ cd backend
 pip install -r requirements.txt
 
 # 3. 本地启动Worker
-celery -A app.celery_app.celery_app worker --loglevel=debug
+celery -A app.worker.celery_app worker --loglevel=debug
 
 # 4. 本地启动Flower
-celery -A app.celery_app.celery_app flower --port=5555
+celery -A app.worker.celery_app flower --port=5555
 ```
 
 ### 测试任务执行

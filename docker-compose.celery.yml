@@ -23,7 +23,7 @@
 #
 #   7. 查看Celery任务状态:
 #      docker-compose -f docker-compose.celery.yml exec celery-worker \
-#        celery -A app.celery_app.celery_app inspect active
+#        celery -A app.worker.celery_app inspect active
 #
 # 前置条件:
 #   - cpumodel 网络已存在（由主应用创建）
@@ -94,7 +94,7 @@ services:
 
     # ========== 启动命令 ==========
     command: >
-      celery -A app.celery_app.celery_app worker
+      celery -A app.worker.celery_app worker
       --loglevel=info
       --concurrency=4
       --queues=default,high_priority,cpu_queue
@@ -146,7 +146,7 @@ services:
 
     # ========== 健康检查 ==========
     healthcheck:
-      test: ["CMD-SHELL", "celery -A app.celery_app.celery_app inspect ping || exit 1"]
+      test: ["CMD-SHELL", "celery -A app.worker.celery_app inspect ping || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -173,7 +173,7 @@ services:
 
     # ========== 启动命令 ==========
     command: >
-      celery -A app.celery_app.celery_app worker
+      celery -A app.worker.celery_app worker
       --loglevel=info
       --concurrency=1
       --queues=gpu_queue
@@ -307,19 +307,19 @@ networks:
 #
 # 1. 查看活跃任务:
 #    docker-compose -f docker-compose.celery.yml exec celery-worker \
-#      celery -A app.celery_app.celery_app inspect active
+#      celery -A app.worker.celery_app inspect active
 #
 # 2. 查看注册的任务:
 #    docker-compose -f docker-compose.celery.yml exec celery-worker \
-#      celery -A app.celery_app.celery_app inspect registered
+#      celery -A app.worker.celery_app inspect registered
 #
 # 3. 查看Worker状态:
 #    docker-compose -f docker-compose.celery.yml exec celery-worker \
-#      celery -A app.celery_app.celery_app inspect stats
+#      celery -A app.worker.celery_app inspect stats
 #
 # 4. 清空任务队列:
 #    docker-compose -f docker-compose.celery.yml exec celery-worker \
-#      celery -A app.celery_app.celery_app purge
+#      celery -A app.worker.celery_app purge
 #
 # 5. 重启Worker:
 #    docker-compose -f docker-compose.celery.yml restart celery-worker

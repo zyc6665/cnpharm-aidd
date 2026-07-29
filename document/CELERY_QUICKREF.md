@@ -51,15 +51,15 @@ docker exec -it scitool-celery-worker bash
 
 # 查看活跃任务
 docker-compose -f docker-compose.celery.yml exec celery-worker \
-  celery -A app.celery_app.celery_app inspect active
+  celery -A app.worker.celery_app inspect active
 
 # 查看注册任务
 docker-compose -f docker-compose.celery.yml exec celery-worker \
-  celery -A app.celery_app.celery_app inspect registered
+  celery -A app.worker.celery_app inspect registered
 
 # 查看Worker统计
 docker-compose -f docker-compose.celery.yml exec celery-worker \
-  celery -A app.celery_app.celery_app inspect stats
+  celery -A app.worker.celery_app inspect stats
 ```
 
 ### Redis管理
