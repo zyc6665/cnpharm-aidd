@@ -7,7 +7,7 @@ def test_production_compose_contains_required_internal_services():
     compose = yaml.safe_load(Path("docker-compose.prod.yml").read_text(encoding="utf-8"))
     services = compose["services"]
 
-    for service in ("backend", "postgres", "redis", "minio", "celery-worker", "celery-worker-low-priority"):
+    for service in ("backend", "postgres", "redis", "minio", "celery-worker", "celery-worker-gpu"):
         assert service in services
     assert "volumes" not in services["backend"]
     assert "ports" not in services["postgres"]
@@ -18,9 +18,11 @@ def test_production_compose_contains_required_internal_services():
 def test_production_workers_consume_backend_routed_queues():
     compose = yaml.safe_load(Path("docker-compose.prod.yml").read_text(encoding="utf-8"))
     worker_command = compose["services"]["celery-worker"]["command"]
+    gpu_worker_command = compose["services"]["celery-worker-gpu"]["command"]
 
-    for queue in ("tool_tasks", "maintenance", "monitoring"):
+    for queue in ("default", "tool_tasks", "high_priority", "cpu_queue", "maintenance", "monitoring"):
         assert queue in worker_command
+    assert "gpu_queue" in gpu_worker_command
 
 
 def test_ci_validates_and_builds_production_compose():
