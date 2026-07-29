@@ -38,6 +38,7 @@ from app.models.files import File as FileModel, FileSourceType
 from app.models.tasks import TaskStatus
 from app.models.tools import ToolType
 from app.tasks.executors.base import BaseExecutor
+from app.tasks.executors.docker_security import validate_docker_execution_inputs
 from app.tasks.executors.errors import GPUAllocationFailed, TaskExecutionError
 from app.tasks.state_machine import TaskStateMachine
 from app.tasks.ssh_transport import ParamikoSSHTransport
@@ -135,7 +136,8 @@ class DockerExecutor(BaseExecutor):
         gpu_required: bool
     ) -> List[str]:
         """构建Docker运行命令"""
-        self._validate_docker_execution_inputs(image, command)
+        task_params = self.task.inputs.params if self.task.inputs else None
+        validate_docker_execution_inputs(image, command, task_params)
 
         docker_cmd = [
             "docker", "run", "--rm",
@@ -173,42 +175,6 @@ class DockerExecutor(BaseExecutor):
             docker_cmd.append(params_json)
 
         return docker_cmd
-
-    def _validate_docker_execution_inputs(self, image: str, command: List[str]) -> None:
-        """验证镜像、命令与任务参数不会突破 Docker 执行边界。"""
-        allowed_images = settings.DOCKER_ALLOWED_IMAGES
-        if allowed_images and image not in allowed_images:
-            raise TaskExecutionError("Docker image is not in the configured allowlist")
-
-        if (
-            settings.ENVIRONMENT in {"staging", "production"}
-            and settings.DOCKER_REQUIRE_IMAGE_DIGEST_IN_DEPLOYMENT
-            and not _DOCKER_IMAGE_DIGEST_PATTERN.fullmatch(image)
-        ):
-            raise TaskExecutionError("Docker image must use an immutable digest in deployment")
-
-        if not isinstance(command, list) or not all(isinstance(argument, str) for argument in command):
-            raise TaskExecutionError("Docker command must be a string array")
-
-        if any(_SHELL_CONTROL_PATTERN.search(argument) for argument in command):
-            raise TaskExecutionError("Docker command contains unsafe shell control characters")
-
-        if command and Path(command[0]).name.lower() in _SHELL_EXECUTABLES:
-            raise TaskExecutionError("Docker command contains unsafe shell control executable")
-
-        task_params = self.task.inputs.params if self.task.inputs else None
-        if self._contains_shell_control(task_params):
-            raise TaskExecutionError("Task parameters contain unsafe shell control characters")
-
-    @classmethod
-    def _contains_shell_control(cls, value: Any) -> bool:
-        if isinstance(value, str):
-            return bool(_SHELL_CONTROL_PATTERN.search(value))
-        if isinstance(value, dict):
-            return any(cls._contains_shell_control(item) for item in value.values())
-        if isinstance(value, list | tuple):
-            return any(cls._contains_shell_control(item) for item in value)
-        return False
 
     async def _prepare_input_files(self) -> None:
         """准备输入文件"""
