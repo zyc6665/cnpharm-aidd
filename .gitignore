@@ -18,6 +18,7 @@ frontend/dist/
 frontend/.vite/
 
 # Local runtime data
+backend/app.db
 backend/storage/*.db
 backend/storage/*.db-*
 backend/storage/*.backup*.db
