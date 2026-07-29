@@ -78,7 +78,7 @@ def test_docker_command_rejects_shell_control_in_task_params() -> None:
 
 
 def test_docker_command_requires_digest_in_production(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("app.tasks.executor.settings.ENVIRONMENT", "production")
+    monkeypatch.setattr("app.tasks.executors.docker_security.settings.ENVIRONMENT", "production")
     executor = build_executor(image="scitool/docking:v1.0.0", command=["python", "/app/dock.py"])
 
     with pytest.raises(TaskExecutionError, match="immutable digest"):

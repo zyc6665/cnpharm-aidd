@@ -57,7 +57,7 @@ def test_task_status_usage():
 def test_executor_implementation():
     """执行器关键文件处理方法不应退化为占位实现。"""
     required_methods = {
-        "_prepare_input_files": ("app/tasks/executor.py", "shutil.copy2"),
+        "_prepare_input_files": ("app/tasks/executors/ssh_job.py", "shutil.copy2"),
         "_collect_output_files": ("app/tasks/executors/base.py", "FileModel"),
         "_process_output_files": ("app/tasks/executors/remote_api.py", "httpx.AsyncClient"),
     }

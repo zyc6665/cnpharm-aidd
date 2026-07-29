@@ -19,8 +19,8 @@ def build_executor(script_content: str) -> PythonScriptExecutor:
 def test_python_script_rejects_untrusted_content_in_production(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("app.tasks.executor.settings.ENVIRONMENT", "production")
-    monkeypatch.setattr("app.tasks.executor.settings.TRUSTED_PYTHON_SCRIPT_SHA256", [])
+    monkeypatch.setattr("app.tasks.executors.script_trust.settings.ENVIRONMENT", "production")
+    monkeypatch.setattr("app.tasks.executors.script_trust.settings.TRUSTED_PYTHON_SCRIPT_SHA256", [])
     executor = build_executor("print('untrusted')")
 
     with pytest.raises(TaskExecutionError, match="trusted SHA-256"):
@@ -31,9 +31,9 @@ def test_python_script_accepts_allowlisted_content_in_production(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     script_content = "print('trusted')"
-    monkeypatch.setattr("app.tasks.executor.settings.ENVIRONMENT", "production")
+    monkeypatch.setattr("app.tasks.executors.script_trust.settings.ENVIRONMENT", "production")
     monkeypatch.setattr(
-        "app.tasks.executor.settings.TRUSTED_PYTHON_SCRIPT_SHA256",
+        "app.tasks.executors.script_trust.settings.TRUSTED_PYTHON_SCRIPT_SHA256",
         [hashlib.sha256(script_content.encode("utf-8")).hexdigest()],
     )
     executor = build_executor(script_content)
