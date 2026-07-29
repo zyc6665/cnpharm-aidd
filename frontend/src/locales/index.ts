@@ -4,9 +4,12 @@ import enUS from './en-US'
 
 export type Locale = 'zh-CN' | 'en-US'
 
+const isBrowser = typeof window !== 'undefined' && typeof localStorage !== 'undefined'
+const savedLocale = isBrowser ? localStorage.getItem('cpumodel_locale') : null
+
 const i18n = createI18n({
   legacy: false,
-  locale: localStorage.getItem('cpumodel_locale') as Locale || 'zh-CN',
+  locale: savedLocale === 'en-US' ? savedLocale : 'zh-CN',
   fallbackLocale: 'en-US',
   messages: {
     'zh-CN': zhCN,
@@ -16,6 +19,9 @@ const i18n = createI18n({
 
 export const setLocale = (locale: Locale) => {
   i18n.global.locale.value = locale
+  if (!isBrowser) {
+    return
+  }
   localStorage.setItem('cpumodel_locale', locale)
   document.documentElement.setAttribute('lang', locale === 'zh-CN' ? 'zh' : 'en')
 }
