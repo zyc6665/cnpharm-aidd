@@ -102,6 +102,35 @@ def test_admin_tool_router_owns_management_routes() -> None:
     assert expected_routes <= route_keys
 
 
+def test_tool_version_router_owns_version_routes() -> None:
+    """工具版本路由应覆盖版本列表和版本创建入口。"""
+    from app.api.v1.tool_versions import router
+
+    route_keys = {
+        (method, route.path)
+        for route in router.routes
+        for method in getattr(route, "methods", set())
+    }
+
+    assert {
+        ("GET", "/{tool_id}/versions"),
+        ("POST", "/{tool_id}/versions"),
+    } <= route_keys
+
+
+def test_legacy_tool_router_is_composition_only() -> None:
+    """兼容工具模块只应聚合子路由，不再保留业务端点实现。"""
+    source_path = API_ROUTE_ROOT / "tools.py"
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
+    endpoint_functions = [
+        node.name
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    ]
+
+    assert endpoint_functions == []
+
+
 class _UsedNames(ast.NodeVisitor):
     """收集模块中实际引用的本地名称。"""
 

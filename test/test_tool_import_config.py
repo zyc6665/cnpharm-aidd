@@ -103,7 +103,7 @@ def test_validate_rejects_invalid_http_method() -> None:
 
 def test_tools_api_uses_backend_package_import_for_tool_config() -> None:
     """工具 API 不应通过修改 sys.path 依赖仓库根目录模块。"""
-    source = Path("backend/app/api/v1/tools.py").read_text(encoding="utf-8")
+    source = Path("backend/app/api/v1/tool_route_utils.py").read_text(encoding="utf-8")
 
     assert "sys.path.insert" not in source
     assert "from tool_import_config import" not in source
