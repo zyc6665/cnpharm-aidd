@@ -43,6 +43,7 @@ from app.tasks.executors.docker_output import parse_docker_output
 from app.tasks.executors.script_trust import validate_script_trust
 from app.tasks.executors.script_output import parse_script_output
 from app.tasks.executors.ssh_command import build_remote_exec_command
+from app.tasks.executors.ssh_paths import build_remote_paths
 from app.tasks.executors.errors import GPUAllocationFailed, TaskExecutionError
 from app.tasks.state_machine import TaskStateMachine
 from app.tasks.ssh_transport import ParamikoSSHTransport
@@ -677,6 +678,10 @@ class SSHJobExecutor(BaseExecutor):
 
     def _build_remote_paths(self) -> Dict[str, str]:
         """构建远端宿主机与运行时路径。"""
+        return build_remote_paths(self.config, str(self.task.id))
+
+    def _build_remote_paths_legacy(self) -> Dict[str, str]:
+        """兼容保留：后续迁移 SSH 主类时删除。"""
         task_id = str(self.task.id)
         host_base_dir = self.config.get("remote_base_dir", "").rstrip("/")
         if not host_base_dir:
