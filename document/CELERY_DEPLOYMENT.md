@@ -49,10 +49,10 @@ docker-compose -f docker-compose.celery.yml ps
 **预期输出**：
 ```
 NAME                        STATUS              PORTS
-scitool-redis               Up (healthy)        0.0.0.0:6379->6379/tcp
+scitool-redis               Up (healthy)        0.0.0.0:9500->6379/tcp
 scitool-celery-worker       Up (healthy)
 scitool-celery-worker-gpu   Up
-scitool-flower              Up (healthy)        0.0.0.0:5555->5555/tcp
+scitool-flower              Up (healthy)        0.0.0.0:9555->9555/tcp
 ```
 
 ### 4. 验证服务运行
@@ -68,7 +68,7 @@ docker-compose -f docker-compose.celery.yml exec celery-worker \
   celery -A app.worker.celery_app inspect stats
 
 # 3. 访问Flower监控面板
-# 浏览器打开: http://localhost:5555
+# 浏览器打开: http://localhost:9555
 # 登录账号: admin
 # 登录密码: scitool123
 ```
@@ -79,7 +79,7 @@ docker-compose -f docker-compose.celery.yml exec celery-worker \
 
 ### Flower Web监控面板
 
-**访问地址**: http://localhost:5555
+**访问地址**: http://localhost:9555
 
 **功能**：
 - ✅ 实时查看Worker状态
@@ -253,7 +253,7 @@ docker run --rm --gpus all nvidia/cuda:11.0-base nvidia-smi
 ### 问题4: Flower无法访问
 
 **症状**：
-- 浏览器无法打开 http://localhost:5555
+- 浏览器无法打开 http://localhost:9555
 
 **解决方案**：
 ```bash
@@ -261,7 +261,7 @@ docker run --rm --gpus all nvidia/cuda:11.0-base nvidia-smi
 docker ps | grep flower
 
 # 2. 检查端口占用
-netstat -nltp | grep 5555
+netstat -nltp | grep 9555
 
 # 3. 检查Flower日志
 docker-compose -f docker-compose.celery.yml logs flower
@@ -370,7 +370,7 @@ redis:
 flower:
   ports:
     # 使用内网IP限制访问
-    - "127.0.0.1:5555:5555"
+    - "127.0.0.1:9555:9555"
 ```
 
 ---
@@ -396,7 +396,7 @@ command: >
 
 ### 2. 结果过期时间
 
-**backend/app/celery_app/__init__.py**:
+**backend/app/worker/celery_app.py**:
 ```python
 celery_app.conf.update(
     result_expires=3600,  # 1小时后过期（减少Redis内存占用）
@@ -434,14 +434,14 @@ pip install -r requirements.txt
 celery -A app.worker.celery_app worker --loglevel=debug
 
 # 4. 本地启动Flower
-celery -A app.worker.celery_app flower --port=5555
+celery -A app.worker.celery_app flower --port=9555
 ```
 
 ### 测试任务执行
 
 **Python测试脚本** (test_celery.py):
 ```python
-from app.celery_app import celery_app
+from app.worker.celery_app import celery_app
 
 # 发送测试任务
 result = celery_app.send_task(
@@ -509,7 +509,7 @@ docker-compose -f docker-compose.celery.yml start redis
 - [ ] Redis容器正常运行 (`docker ps | grep redis`)
 - [ ] Celery Worker容器正常运行 (`docker ps | grep celery-worker`)
 - [ ] Redis连接测试通过 (`redis-cli ping`)
-- [ ] Flower监控面板可访问 (http://localhost:5555)
+- [ ] Flower监控面板可访问 (http://localhost:9555)
 - [ ] Worker注册任务可见 (`celery inspect registered`)
 - [ ] 测试任务执行成功
 - [ ] 日志正常输出无错误

@@ -17,8 +17,8 @@
 
 | 服务 | 地址 | 登录信息 |
 |------|------|---------|
-| **Flower监控** | http://localhost:5555 | admin / scitool123 |
-| **Redis** | localhost:6379 | 密码: scitool123 |
+| **Flower监控** | http://localhost:9555 | admin / scitool123 |
+| **Redis** | localhost:9500 | 密码: scitool123 |
 
 ---
 
@@ -130,7 +130,7 @@ docker-compose -f docker-compose.celery.yml up -d --build
 | Docker Compose | `docker-compose.celery.yml` | 服务编排配置 |
 | 环境变量 | `backend/.env` | Redis/Celery配置 |
 | 后端配置 | `backend/app/config.py` | 读取环境变量 |
-| Celery应用 | `backend/app/celery_app/__init__.py` | Celery初始化 |
+| Celery应用 | `backend/app/worker/celery_app.py` | Celery初始化 |
 
 ---
 
@@ -138,7 +138,7 @@ docker-compose -f docker-compose.celery.yml up -d --build
 
 ### Flower界面查看
 
-1. 打开 http://localhost:5555
+1. 打开 http://localhost:9555
 2. 查看 **Dashboard** - Worker状态、任务统计
 3. 查看 **Tasks** - 任务列表和详情
 4. 查看 **Workers** - Worker详细信息
