@@ -26,8 +26,9 @@ type RetryableRequestConfig = InternalAxiosRequestConfig & RequestOptions & {
   _retryCount?: number
 }
 
-const DEFAULT_TIMEOUT_MS = 30_000
-const UPLOAD_TIMEOUT_MS = 5 * 60_000
+export const DEFAULT_TIMEOUT_MS = 30_000
+export const LONG_RUNNING_TIMEOUT_MS = 0
+export const UPLOAD_TIMEOUT_MS = 5 * 60_000
 
 // 创建 axios 实例
 const request: AxiosInstance = axios.create({
@@ -160,8 +161,9 @@ request.interceptors.response.use(
     const retryCount = originalRequest?._retryCount ?? 0
     const retryLimit = originalRequest?.retry ?? 0
     const method = originalRequest?.method?.toLowerCase()
+    const isCanceledRequest = error.code === AxiosError.ERR_CANCELED || error.name === 'CanceledError'
     const retryableStatus = !error.response || (error.response.status >= 500 && error.response.status < 600)
-    if (retryCount < retryLimit && retryableStatus && (method === 'get' || method === 'head')) {
+    if (!isCanceledRequest && retryCount < retryLimit && retryableStatus && (method === 'get' || method === 'head')) {
       originalRequest._retryCount = retryCount + 1
       await new Promise(resolve => window.setTimeout(resolve, originalRequest.retryDelayMs ?? 500))
       return request(originalRequest)
@@ -170,7 +172,7 @@ request.interceptors.response.use(
     // 其他错误处理
     // 对于 logout 接口的 401 错误，不显示错误消息（因为退出登录即使失败也会清除本地数据）
     const isLogoutRequest = originalRequest.url?.includes('/auth/logout')
-    if (!originalRequest?.silent && !(error.response?.status === 401 && isLogoutRequest)) {
+    if (!isCanceledRequest && !originalRequest?.silent && !(error.response?.status === 401 && isLogoutRequest)) {
       const errorMessage = error.response?.data?.message || error.message || '请求失败'
       message.error(errorMessage)
     }

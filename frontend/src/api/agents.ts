@@ -1,4 +1,4 @@
-import { del, get, post } from './request'
+import { del, get, LONG_RUNNING_TIMEOUT_MS, post, type RequestOptions } from './request'
 import type { ApiResponse } from '@/types/api'
 import type {
   AiddAgentRun,
@@ -8,24 +8,38 @@ import type {
   PaginationParams
 } from '@/types/models'
 
-export const createAiddAgentRun = (data: AiddAgentRunCreateParams): Promise<ApiResponse<AiddAgentRun>> => {
-  return post<AiddAgentRun>('/agents/aidd/runs', data)
+export const createAiddAgentRun = (
+  data: AiddAgentRunCreateParams,
+  options?: RequestOptions
+): Promise<ApiResponse<AiddAgentRun>> => {
+  return post<AiddAgentRun>('/agents/aidd/runs', data, {
+    ...options,
+    timeout: options?.timeout ?? LONG_RUNNING_TIMEOUT_MS
+  })
 }
 
 export const createAiddWorkflowDraft = (
-  data: AiddAgentRunCreateParams
+  data: AiddAgentRunCreateParams,
+  options?: RequestOptions
 ): Promise<ApiResponse<AiddWorkflowDraft>> => {
-  return post<AiddWorkflowDraft>('/agents/aidd/workflow-drafts', data)
+  return post<AiddWorkflowDraft>('/agents/aidd/workflow-drafts', data, {
+    ...options,
+    timeout: options?.timeout ?? LONG_RUNNING_TIMEOUT_MS
+  })
 }
 
 export const getAiddAgentRuns = (
-  params?: PaginationParams
+  params?: PaginationParams,
+  options?: RequestOptions
 ): Promise<ApiResponse<PaginatedResponse<AiddAgentRun>>> => {
-  return get<PaginatedResponse<AiddAgentRun>, PaginationParams>('/agents/aidd/runs', params)
+  return get<PaginatedResponse<AiddAgentRun>, PaginationParams>('/agents/aidd/runs', params, options)
 }
 
-export const getAiddAgentRun = (runId: string): Promise<ApiResponse<AiddAgentRun>> => {
-  return get<AiddAgentRun>(`/agents/aidd/runs/${runId}`)
+export const getAiddAgentRun = (
+  runId: string,
+  options?: RequestOptions
+): Promise<ApiResponse<AiddAgentRun>> => {
+  return get<AiddAgentRun>(`/agents/aidd/runs/${runId}`, undefined, options)
 }
 
 export const cancelAiddAgentRun = (runId: string): Promise<ApiResponse<AiddAgentRun>> => {
@@ -42,6 +56,9 @@ export const deleteAiddAgentRun = (
   )
 }
 
-export const syncAiddAgentRun = (runId: string): Promise<ApiResponse<AiddAgentRun>> => {
-  return post<AiddAgentRun>(`/agents/aidd/runs/${runId}/sync`)
+export const syncAiddAgentRun = (runId: string, options?: RequestOptions): Promise<ApiResponse<AiddAgentRun>> => {
+  return post<AiddAgentRun>(`/agents/aidd/runs/${runId}/sync`, undefined, {
+    ...options,
+    timeout: options?.timeout ?? LONG_RUNNING_TIMEOUT_MS
+  })
 }

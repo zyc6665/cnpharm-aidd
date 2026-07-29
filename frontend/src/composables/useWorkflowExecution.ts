@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { onScopeDispose, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { getTaskDetail, isTaskTerminalStatus } from '@/api/tasks'
 import { getToolDetail } from '@/api/tools'
@@ -42,6 +42,33 @@ export function useWorkflowExecution(input: {
   } = input
 
   const runningWorkflow = ref(false)
+  let activePollController: AbortController | null = null
+
+  function cancelActivePolling() {
+    activePollController?.abort()
+    activePollController = null
+  }
+
+  function waitForPollInterval(signal: AbortSignal): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (signal.aborted) {
+        reject(new Error('Polling aborted'))
+        return
+      }
+
+      const timerId = window.setTimeout(resolve, 3000)
+      signal.addEventListener(
+        'abort',
+        () => {
+          window.clearTimeout(timerId)
+          reject(new Error('Polling aborted'))
+        },
+        { once: true },
+      )
+    })
+  }
+
+  onScopeDispose(cancelActivePolling)
 
   async function handleNodeTaskSubmitted() {
     await artifactsStore.fetchArtifacts({ page: 1, page_size: 100 })
@@ -182,17 +209,31 @@ export function useWorkflowExecution(input: {
   }
 
   async function pollNodeTaskUntilTerminal(nodeId: string, taskId: string) {
-    for (;;) {
-      await new Promise((resolve) => window.setTimeout(resolve, 3000))
-      const response = await getTaskDetail(taskId)
-      const taskRef = toWorkflowTaskRef(response.data)
-      workflowStore.recordNodeTask(nodeId, taskRef)
+    cancelActivePolling()
+    const pollController = new AbortController()
+    activePollController = pollController
 
-      if (isTaskTerminalStatus(response.data.status)) {
-        if (response.data.status === 'success') {
-          await artifactsStore.fetchArtifacts({ page: 1, page_size: 100 })
+    try {
+      for (;;) {
+        await waitForPollInterval(pollController.signal)
+        const response = await getTaskDetail(taskId, {
+          signal: pollController.signal,
+          retry: 1,
+          silent: true,
+        })
+        const taskRef = toWorkflowTaskRef(response.data)
+        workflowStore.recordNodeTask(nodeId, taskRef)
+
+        if (isTaskTerminalStatus(response.data.status)) {
+          if (response.data.status === 'success') {
+            await artifactsStore.fetchArtifacts({ page: 1, page_size: 100 })
+          }
+          return taskRef
         }
-        return taskRef
+      }
+    } finally {
+      if (activePollController === pollController) {
+        activePollController = null
       }
     }
   }

@@ -1,4 +1,4 @@
-import { del, get, post, put } from './request'
+import { del, get, LONG_RUNNING_TIMEOUT_MS, post, put, type RequestOptions } from './request'
 import type { ApiResponse } from '@/types/api'
 import type {
   PaginatedResponse,
@@ -98,8 +98,8 @@ export const getWorkflowRuns = (params?: {
   template_id?: string
   page?: number
   page_size?: number
-}): Promise<ApiResponse<PaginatedResponse<WorkflowRun>>> => {
-  return get<PaginatedResponse<WorkflowRun>>('/workflows/runs', params)
+}, options?: RequestOptions): Promise<ApiResponse<PaginatedResponse<WorkflowRun>>> => {
+  return get<PaginatedResponse<WorkflowRun>>('/workflows/runs', params, options)
 }
 
 export const getWorkflowTemplate = (id: string): Promise<ApiResponse<WorkflowTemplate>> => {
@@ -132,15 +132,22 @@ export const deleteWorkflowTemplate = (id: string): Promise<ApiResponse<{ id: st
 
 export const createWorkflowRun = (
   templateId: string,
-  data: WorkflowRunCreateParams
+  data: WorkflowRunCreateParams,
+  options?: RequestOptions
 ): Promise<ApiResponse<WorkflowRun>> => {
-  return post<WorkflowRun>(`/workflows/templates/${templateId}/runs`, data)
+  return post<WorkflowRun>(`/workflows/templates/${templateId}/runs`, data, {
+    ...options,
+    timeout: options?.timeout ?? LONG_RUNNING_TIMEOUT_MS
+  })
 }
 
-export const getWorkflowRun = (runId: string): Promise<ApiResponse<WorkflowRun>> => {
-  return get<WorkflowRun>(`/workflows/runs/${runId}`)
+export const getWorkflowRun = (runId: string, options?: RequestOptions): Promise<ApiResponse<WorkflowRun>> => {
+  return get<WorkflowRun>(`/workflows/runs/${runId}`, undefined, options)
 }
 
-export const syncWorkflowRun = (runId: string): Promise<ApiResponse<WorkflowRun>> => {
-  return post<WorkflowRun>(`/workflows/runs/${runId}/sync`)
+export const syncWorkflowRun = (runId: string, options?: RequestOptions): Promise<ApiResponse<WorkflowRun>> => {
+  return post<WorkflowRun>(`/workflows/runs/${runId}/sync`, undefined, {
+    ...options,
+    timeout: options?.timeout ?? LONG_RUNNING_TIMEOUT_MS
+  })
 }
