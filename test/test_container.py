@@ -78,14 +78,14 @@ def test_local_database_schema_uses_size_bytes_when_present():
 
 def test_executor_file_handling_entrypoints_are_implemented():
     """执行器关键文件处理方法不应退化为占位实现。"""
-    content = read_backend_source("app/tasks/executor.py")
     required_methods = {
-        "_prepare_input_files": "shutil.copy2",
-        "_collect_output_files": "FileModel",
-        "_process_output_files": "httpx.AsyncClient",
+        "_prepare_input_files": ("app/tasks/executor.py", "shutil.copy2"),
+        "_collect_output_files": ("app/tasks/executors/base.py", "FileModel"),
+        "_process_output_files": ("app/tasks/executors/remote_api.py", "httpx.AsyncClient"),
     }
 
-    for method_name, expected_keyword in required_methods.items():
+    for method_name, (source_path, expected_keyword) in required_methods.items():
+        content = read_backend_source(source_path)
         pattern = f"async def {method_name}"
         assert pattern in content, f"缺少执行器方法: {method_name}"
         assert expected_keyword in content

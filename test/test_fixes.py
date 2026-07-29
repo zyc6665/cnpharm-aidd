@@ -78,10 +78,12 @@ def test_local_database_schema_uses_size_bytes_when_present():
 
 def test_executor_file_handling_entrypoints_exist():
     """执行器应保留关键文件处理入口。"""
-    content = read_backend_source("app/tasks/executor.py")
+    executor_source = read_backend_source("app/tasks/executor.py")
+    base_source = read_backend_source("app/tasks/executors/base.py")
+    remote_api_source = read_backend_source("app/tasks/executors/remote_api.py")
 
-    assert "class DockerExecutor" in content
-    assert "class RemoteAPIExecutor" in content
-    assert "async def _prepare_input_files" in content
-    assert "async def _collect_output_files" in content
-    assert "async def _process_output_files" in content
+    assert "class DockerExecutor" in executor_source
+    assert "class RemoteAPIExecutor" in remote_api_source
+    assert "async def _prepare_input_files" in executor_source
+    assert "async def _collect_output_files" in base_source
+    assert "async def _process_output_files" in remote_api_source

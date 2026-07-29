@@ -55,7 +55,7 @@ _SHELL_CONTROL_PATTERN = re.compile(r"[;&|`$<>\r\n]")
 _SHELL_EXECUTABLES = {"ash", "bash", "dash", "fish", "ksh", "sh", "zsh"}
 
 
-class RemoteAPIExecutor(BaseExecutor):
+class _LegacyRemoteAPIExecutor(BaseExecutor):
     """远程API执行器"""
 
     async def execute(self) -> Dict[str, Any]:
@@ -287,6 +287,9 @@ class RemoteAPIExecutor(BaseExecutor):
             else:
                 flat[key] = str(value)
         return flat
+
+
+from app.tasks.executors.remote_api import RemoteAPIExecutor
 
 
 class DockerExecutor(BaseExecutor):

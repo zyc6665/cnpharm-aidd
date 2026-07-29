@@ -19,3 +19,10 @@ def test_base_executor_has_a_shared_module_and_legacy_import():
     from app.tasks.executors.base import BaseExecutor
 
     assert LegacyBaseExecutor is BaseExecutor
+
+
+def test_remote_api_executor_has_a_dedicated_module_and_legacy_import():
+    from app.tasks.executor import RemoteAPIExecutor as LegacyRemoteAPIExecutor
+    from app.tasks.executors.remote_api import RemoteAPIExecutor
+
+    assert LegacyRemoteAPIExecutor is RemoteAPIExecutor

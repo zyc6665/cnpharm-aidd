@@ -56,14 +56,14 @@ def test_task_status_usage():
 
 def test_executor_implementation():
     """执行器关键文件处理方法不应退化为占位实现。"""
-    content = read_backend_source("app/tasks/executor.py")
     required_methods = {
-        "_prepare_input_files": "shutil.copy2",
-        "_collect_output_files": "FileModel",
-        "_process_output_files": "httpx.AsyncClient",
+        "_prepare_input_files": ("app/tasks/executor.py", "shutil.copy2"),
+        "_collect_output_files": ("app/tasks/executors/base.py", "FileModel"),
+        "_process_output_files": ("app/tasks/executors/remote_api.py", "httpx.AsyncClient"),
     }
 
-    for method_name, expected_keyword in required_methods.items():
+    for method_name, (source_path, expected_keyword) in required_methods.items():
+        content = read_backend_source(source_path)
         pattern = rf"async def {method_name}\(.*?\):(.*?)(?=\n    async def |\n    def |\nclass |\Z)"
         match = re.search(pattern, content, re.DOTALL)
         assert match is not None, f"缺少执行器方法: {method_name}"
