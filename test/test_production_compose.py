@@ -21,3 +21,30 @@ def test_production_workers_consume_backend_routed_queues():
 
     for queue in ("tool_tasks", "maintenance", "monitoring"):
         assert queue in worker_command
+
+
+def test_ci_validates_and_builds_production_compose():
+    workflow = yaml.safe_load(Path(".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    job = workflow["jobs"]["production-compose"]
+    environment = job["env"]
+    required_variables = {
+        "POSTGRES_PASSWORD",
+        "REDIS_PASSWORD",
+        "MINIO_ROOT_USER",
+        "MINIO_ROOT_PASSWORD",
+        "JWT_SECRET_KEY",
+        "SETTINGS_ENCRYPTION_KEY",
+        "CORS_ORIGINS",
+    }
+    commands = [step.get("run", "") for step in job["steps"]]
+
+    assert required_variables <= environment.keys()
+    assert all(environment[name] for name in required_variables)
+    assert any(
+        "docker compose -f docker-compose.prod.yml config --quiet" in command
+        for command in commands
+    )
+    assert any(
+        "docker compose -f docker-compose.prod.yml build backend" in command
+        for command in commands
+    )

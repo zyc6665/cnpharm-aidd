@@ -66,3 +66,29 @@ jobs:
 
       - name: Run tests
         run: npm run test
+
+  production-compose:
+    name: Production Compose Validation
+    runs-on: ubuntu-latest
+    env:
+      POSTGRES_PASSWORD: ci-only-postgres-password
+      REDIS_PASSWORD: ci-only-redis-password
+      MINIO_ROOT_USER: ci-only-minio-user
+      MINIO_ROOT_PASSWORD: ci-only-minio-password
+      JWT_SECRET_KEY: ci-only-jwt-secret-key-with-at-least-32-characters
+      SETTINGS_ENCRYPTION_KEY: ci-only-settings-key-with-at-least-32-characters
+      CORS_ORIGINS: '["https://ci.example.invalid"]'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Show Docker Compose version
+        run: docker compose version
+
+      - name: Validate production Compose configuration
+        run: docker compose -f docker-compose.prod.yml config --quiet
+
+      - name: Build production backend image
+        run: docker compose -f docker-compose.prod.yml build backend
