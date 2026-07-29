@@ -410,11 +410,65 @@ async def test_admin_mapping_list_includes_display_labels(
 
     assert response.status_code == 200
     payload = response.json()["data"]
-    assert len(payload) == 1
-    assert payload[0]["id"] == existing_mapping.id
-    assert payload[0]["tool_name"] == tool_record.name
-    assert payload[0]["tool_slug"] == tool_record.slug
-    assert payload[0]["group_name"] == group_a.name
+    assert payload["total"] == 1
+    assert payload["page"] == 1
+    assert payload["page_size"] == 20
+    assert payload["items"][0]["id"] == existing_mapping.id
+    assert payload["items"][0]["tool_name"] == tool_record.name
+    assert payload["items"][0]["tool_slug"] == tool_record.slug
+    assert payload["items"][0]["group_name"] == group_a.name
+
+
+@pytest.mark.asyncio
+async def test_admin_mapping_list_supports_server_side_search_and_group_filter(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    tool_record: Tool,
+    existing_groups: tuple[ToolWorkbenchGroup, ToolWorkbenchGroup],
+    existing_mapping: ToolWorkbenchGroupMapping,
+):
+    """映射列表应在数据库查询中组合工具关键词与分组筛选。"""
+    _, group_b = existing_groups
+    second_tool = Tool(
+        owner_id=tool_record.owner_id,
+        name="Second Analysis Tool",
+        slug="second-analysis-tool",
+        description="second mapping search target",
+        category_id=tool_record.category_id,
+        category=tool_record.category,
+        status=ToolStatus.PUBLISHED.value,
+        is_public=True,
+    )
+    db_session.add(second_tool)
+    await db_session.flush()
+    db_session.add(
+        ToolWorkbenchGroupMapping(
+            tool_id=second_tool.id,
+            group_id=group_b.id,
+            sort_order=0,
+            is_enabled=True,
+        )
+    )
+    await db_session.commit()
+
+    response = await api_client.get(
+        "/api/v1/admin/workbench-group-mappings",
+        params={
+            "page": 1,
+            "page_size": 1,
+            "search": "second-analysis",
+            "group_id": group_b.id,
+        },
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["total"] == 1
+    assert payload["page"] == 1
+    assert payload["page_size"] == 1
+    assert payload["items"][0]["tool_id"] == second_tool.id
+    assert payload["items"][0]["group_id"] == group_b.id
 
 
 @pytest.mark.asyncio

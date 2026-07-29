@@ -145,4 +145,12 @@ test('后台工作台分组管理页面文件应存在并包含分组与映射�
   assert.equal(source.includes('item.group_name'), true)
   assert.equal(source.includes('resolveToolName'), false)
   assert.equal(source.includes('resolveGroupName'), false)
+  assert.equal(source.includes('mappingFilters.search'), true)
+  assert.equal(source.includes('mappingFilters.group_id'), true)
+  assert.equal(source.includes('mappingPaginationConfig'), true)
+  assert.equal(source.includes('fetchMappings'), true)
+
+  const apiSource = readSource('src/api/tools.ts')
+  assert.equal(apiSource.includes('AdminWorkbenchGroupMappingListParams'), true)
+  assert.equal(apiSource.includes('PaginatedResponse<WorkbenchGroupMapping>'), true)
 })

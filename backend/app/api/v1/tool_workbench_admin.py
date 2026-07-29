@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,7 +12,7 @@ from sqlalchemy.orm import joinedload
 
 from app.auth.dependencies import get_admin_user
 from app.common.exceptions import ConflictException, NotFoundException, ValidationException
-from app.common.responses import success_response
+from app.common.responses import paginated_response, success_response
 from app.database.session import get_db
 from app.models.tools import Tool, ToolWorkbenchGroup, ToolWorkbenchGroupMapping
 from app.models.users import User
@@ -280,23 +280,53 @@ async def delete_workbench_group(
 
 @mapping_router.get("", response_model=dict)
 async def list_workbench_group_mappings(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    search: Optional[str] = Query(None),
+    group_id: Optional[str] = Query(None),
     current_user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
+    query = (
         select(ToolWorkbenchGroupMapping)
         .options(
             joinedload(ToolWorkbenchGroupMapping.tool),
             joinedload(ToolWorkbenchGroupMapping.group),
         )
+        .join(Tool, Tool.id == ToolWorkbenchGroupMapping.tool_id)
         .join(ToolWorkbenchGroup, ToolWorkbenchGroup.id == ToolWorkbenchGroupMapping.group_id)
+    )
+    if search:
+        pattern = f"%{search}%"
+        query = query.where(
+            or_(
+                Tool.name.ilike(pattern),
+                Tool.slug.ilike(pattern),
+                ToolWorkbenchGroup.name.ilike(pattern),
+            )
+        )
+    if group_id:
+        query = query.where(ToolWorkbenchGroupMapping.group_id == group_id)
+
+    total = (
+        await db.execute(select(func.count()).select_from(query.subquery()))
+    ).scalar_one()
+    result = await db.execute(
+        query
         .order_by(
             ToolWorkbenchGroup.sort_order.asc(),
             ToolWorkbenchGroupMapping.sort_order.asc(),
             ToolWorkbenchGroupMapping.created_at.asc(),
         )
+        .offset((page - 1) * page_size)
+        .limit(page_size)
     )
-    return success_response(data=[_serialize_mapping(mapping) for mapping in result.scalars().all()])
+    return paginated_response(
+        items=[_serialize_mapping(mapping) for mapping in result.scalars().all()],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @mapping_router.post("", response_model=dict)

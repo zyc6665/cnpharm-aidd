@@ -185,8 +185,18 @@ export const adminDeleteWorkbenchGroup = (id: string): Promise<ApiResponse<null>
   return del<null>(`/admin/workbench-groups/${id}`)
 }
 
-export const adminGetWorkbenchGroupMappings = (): Promise<ApiResponse<WorkbenchGroupMapping[]>> => {
-  return get<WorkbenchGroupMapping[]>('/admin/workbench-group-mappings')
+export interface AdminWorkbenchGroupMappingListParams extends PaginationParams {
+  search?: string
+  group_id?: string
+}
+
+export const adminGetWorkbenchGroupMappings = (
+  params?: AdminWorkbenchGroupMappingListParams
+): Promise<ApiResponse<PaginatedResponse<WorkbenchGroupMapping>>> => {
+  return get<PaginatedResponse<WorkbenchGroupMapping>, AdminWorkbenchGroupMappingListParams>(
+    '/admin/workbench-group-mappings',
+    params
+  )
 }
 
 export const adminCreateWorkbenchGroupMapping = (data: {

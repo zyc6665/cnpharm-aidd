@@ -82,7 +82,7 @@
               :loading="toolOptionsLoading"
               @search="searchToolOptions"
             >
-              <a-select-option v-for="tool in tools" :key="tool.id" :value="tool.id">
+              <a-select-option v-for="tool in mappingToolOptions" :key="tool.id" :value="tool.id">
                 {{ tool.name }}
               </a-select-option>
             </a-select>
@@ -121,7 +121,35 @@
 
         <a-divider />
 
-        <a-list :data-source="mappings" :loading="loading">
+        <a-space class="mapping-filters" wrap>
+          <a-input
+            v-model:value="mappingFilters.search"
+            :placeholder="t('admin.searchToolPlaceholder')"
+            allow-clear
+            @pressEnter="handleMappingSearch"
+          />
+          <a-select
+            v-model:value="mappingFilters.group_id"
+            :placeholder="t('common.all')"
+            allow-clear
+          >
+            <a-select-option v-for="group in groups" :key="group.id" :value="group.id">
+              {{ group.name }}
+            </a-select-option>
+          </a-select>
+          <a-button type="primary" @click="handleMappingSearch">
+            {{ t('common.search') }}
+          </a-button>
+          <a-button @click="handleMappingReset">
+            {{ t('common.reset') }}
+          </a-button>
+        </a-space>
+
+        <a-list
+          :data-source="mappings"
+          :loading="mappingLoading"
+          :pagination="mappingPaginationConfig"
+        >
           <template #renderItem="{ item }">
             <a-list-item>
               <a-space direction="vertical" size="small">
@@ -154,7 +182,7 @@
 </template>
 
 <script setup lang="ts">
-  import { onMounted, reactive, ref } from 'vue'
+  import { computed, onMounted, reactive, ref } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { message } from 'ant-design-vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
@@ -173,6 +201,7 @@
 
   const { t } = useI18n()
   const loading = ref(false)
+  const mappingLoading = ref(false)
   const savingGroup = ref(false)
   const savingMapping = ref(false)
   const editingGroupId = ref<string | null>(null)
@@ -202,6 +231,31 @@
     is_enabled: true
   })
 
+  const mappingFilters = reactive({
+    search: '',
+    group_id: undefined as string | undefined
+  })
+
+  const mappingPagination = reactive({
+    current: 1,
+    pageSize: 10,
+    total: 0
+  })
+
+  const mappingToolOptions = computed(() => {
+    const editingMapping = mappings.value.find(mapping => mapping.id === editingMappingId.value)
+    if (!editingMapping || tools.value.some(tool => tool.id === editingMapping.tool_id)) {
+      return tools.value
+    }
+    return [
+      {
+        id: editingMapping.tool_id,
+        name: editingMapping.tool_name
+      },
+      ...tools.value
+    ]
+  })
+
   const normalizeSlug = (value: string) => {
     return value
       .trim()
@@ -212,16 +266,31 @@
       .replace(/^-|-$/g, '')
   }
 
+  const fetchMappings = async () => {
+    mappingLoading.value = true
+    try {
+      const response = await adminGetWorkbenchGroupMappings({
+        page: mappingPagination.current,
+        page_size: mappingPagination.pageSize,
+        search: mappingFilters.search.trim() || undefined,
+        group_id: mappingFilters.group_id
+      })
+      mappings.value = response.data.items
+      mappingPagination.total = response.data.total
+    } finally {
+      mappingLoading.value = false
+    }
+  }
+
   const fetchData = async () => {
     loading.value = true
     try {
-      const [groupsRes, mappingsRes] = await Promise.all([
+      const [groupsRes] = await Promise.all([
         adminGetWorkbenchGroups(),
-        adminGetWorkbenchGroupMappings(),
+        fetchMappings(),
         fetchToolOptions()
       ])
       groups.value = groupsRes.data
-      mappings.value = mappingsRes.data
     } catch {
       groups.value = []
       mappings.value = []
@@ -230,6 +299,32 @@
       loading.value = false
     }
   }
+
+  const handleMappingSearch = async () => {
+    mappingPagination.current = 1
+    await fetchMappings()
+  }
+
+  const handleMappingReset = async () => {
+    mappingFilters.search = ''
+    mappingFilters.group_id = undefined
+    mappingPagination.current = 1
+    await fetchMappings()
+  }
+
+  const handleMappingPageChange = async (page: number, pageSize: number) => {
+    mappingPagination.current = pageSize === mappingPagination.pageSize ? page : 1
+    mappingPagination.pageSize = pageSize
+    await fetchMappings()
+  }
+
+  const mappingPaginationConfig = computed(() => ({
+    current: mappingPagination.current,
+    pageSize: mappingPagination.pageSize,
+    total: mappingPagination.total,
+    showSizeChanger: true,
+    onChange: handleMappingPageChange
+  }))
 
   const resetGroupForm = () => {
     editingGroupId.value = null
@@ -321,8 +416,12 @@
         await adminCreateWorkbenchGroupMapping(payload)
       }
 
+      const createdMapping = !editingMappingId.value
       resetMappingForm()
-      await fetchData()
+      if (createdMapping) {
+        mappingPagination.current = 1
+      }
+      await fetchMappings()
       message.success(t('common.success'))
     } finally {
       savingMapping.value = false
@@ -331,7 +430,10 @@
 
   const deleteMapping = async (id: string) => {
     await adminDeleteWorkbenchGroupMapping(id)
-    await fetchData()
+    if (mappings.value.length === 1 && mappingPagination.current > 1) {
+      mappingPagination.current -= 1
+    }
+    await fetchMappings()
     message.success(t('common.success'))
   }
 
@@ -368,6 +470,15 @@
 
     @media (max-width: @screen-lg) {
       grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  .mapping-filters {
+    margin-bottom: @spacing-md;
+
+    :deep(.ant-input),
+    :deep(.ant-select) {
+      width: 180px;
     }
   }
 </style>
