@@ -23,10 +23,9 @@ import subprocess
 import tempfile
 import uuid
 import zipfile
-from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 import logging
 
 import httpx
@@ -38,6 +37,7 @@ from app.files.storage_path import get_file_path
 from app.models.files import File as FileModel, FileSourceType
 from app.models.tasks import TaskStatus
 from app.models.tools import ToolType
+from app.tasks.executors.base import BaseExecutor
 from app.tasks.executors.errors import GPUAllocationFailed, TaskExecutionError
 from app.tasks.state_machine import TaskStateMachine
 from app.tasks.ssh_transport import ParamikoSSHTransport
@@ -53,137 +53,6 @@ _DOCKER_IMAGE_DIGEST_PATTERN = re.compile(
 )
 _SHELL_CONTROL_PATTERN = re.compile(r"[;&|`$<>\r\n]")
 _SHELL_EXECUTABLES = {"ash", "bash", "dash", "fish", "ksh", "sh", "zsh"}
-
-
-class BaseExecutor(ABC):
-    """执行器基类"""
-
-    def __init__(
-        self,
-        task: "Task",
-        tool_version: "ToolVersion",
-        config: Optional[Dict[str, Any]] = None,
-    ):
-        self.task = task
-        self.tool_version = tool_version
-        self.config = config if config is not None else tool_version.config
-        self.work_dir: Optional[str] = None
-
-    @abstractmethod
-    async def execute(self) -> Dict[str, Any]:
-        """执行任务"""
-        pass
-
-    def _get_work_dir(self) -> str:
-        """获取工作目录"""
-        if not self.work_dir:
-            base_dir = os.environ.get("TASK_WORK_DIR", "/tmp/tasks")
-            self.work_dir = os.path.join(base_dir, str(self.task.id))
-            os.makedirs(self.work_dir, exist_ok=True)
-            os.makedirs(os.path.join(self.work_dir, "input"), exist_ok=True)
-            os.makedirs(os.path.join(self.work_dir, "output"), exist_ok=True)
-        return self.work_dir
-
-    def _cleanup_work_dir(self) -> None:
-        """清理工作目录"""
-        if self.work_dir and os.path.exists(self.work_dir):
-            try:
-                shutil.rmtree(self.work_dir)
-                logger.debug(f"Cleaned up work directory: {self.work_dir}")
-            except Exception as e:
-                logger.warning(f"Failed to cleanup work directory: {e}")
-
-    async def _collect_output_files(
-        self,
-        source_paths: List[str],
-        *,
-        output_root: Optional[str] = None,
-        file_meta_builder: Optional[Callable[[str, str], Optional[Dict[str, Any]]]] = None,
-        filename_builder: Optional[Callable[[str, str], str]] = None,
-        skip_names: Optional[set[str]] = None,
-    ) -> List[str]:
-        """收集并持久化输出文件。
-
-        Args:
-            source_paths: 待收集的源文件绝对路径列表。
-            output_root: 用于计算相对路径的根目录（可选）。
-            file_meta_builder: 接收 (source_path, relative_path) 返回 file_meta 的回调（可选）。
-            filename_builder: 接收 (source_path, relative_path) 返回持久化文件名的回调（可选）。
-            skip_names: 需要跳过的文件名集合（可选）。
-
-        Returns:
-            收集到的文件 ID 列表。
-        """
-        uploaded_ids: List[str] = []
-        skip_names = skip_names or set()
-
-        async for session in get_async_session():
-            try:
-                for source_path in source_paths:
-                    if not os.path.isfile(source_path):
-                        continue
-
-                    relative_path = (
-                        os.path.relpath(source_path, output_root)
-                        if output_root
-                        else os.path.basename(source_path)
-                    )
-                    basename = os.path.basename(source_path)
-
-                    if basename in skip_names or relative_path in skip_names:
-                        continue
-
-                    try:
-                        with open(source_path, "rb") as f:
-                            content = f.read()
-
-                        filename = (
-                            filename_builder(source_path, relative_path)
-                            if filename_builder
-                            else basename
-                        )
-                        content_type = mimetypes.guess_type(source_path)[0] or "application/octet-stream"
-                        file_meta = (
-                            file_meta_builder(source_path, relative_path)
-                            if file_meta_builder
-                            else None
-                        )
-
-                        file_record = FileModel(
-                            filename=filename,
-                            content_type=content_type,
-                            size_bytes=len(content),
-                            sha256=hashlib.sha256(content).hexdigest(),
-                            source_type=FileSourceType.TOOL_OUTPUT.value,
-                            owner_id=self.task.user_id,
-                            is_public=False,
-                            is_permanent=False,
-                            file_meta=file_meta,
-                        )
-                        session.add(file_record)
-                        await session.flush()
-
-                        storage_path = get_file_path(file_record.id, filename)
-                        storage_path.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(source_path, str(storage_path))
-
-                        file_record.storage_path = str(storage_path)
-                        await session.flush()
-
-                        uploaded_ids.append(file_record.id)
-                        logger.info(f"Collected output file: {relative_path} -> {file_record.id}")
-                    except Exception as e:
-                        logger.error(f"Failed to collect output file {source_path}: {e}")
-                        continue
-
-                await session.commit()
-                break
-            except Exception as e:
-                logger.error(f"Failed to collect output files: {e}")
-                await session.rollback()
-                raise TaskExecutionError(f"Failed to collect output files: {str(e)}")
-
-        return uploaded_ids
 
 
 class RemoteAPIExecutor(BaseExecutor):

@@ -7,7 +7,8 @@ from typing import Any
 from sqlalchemy import select
 
 from app.database.session import get_async_session
-from app.tasks.executor import BaseExecutor, TaskExecutionError
+from app.tasks.executors.base import BaseExecutor
+from app.tasks.executors.errors import TaskExecutionError
 
 
 class BuiltinExecutor(BaseExecutor):
