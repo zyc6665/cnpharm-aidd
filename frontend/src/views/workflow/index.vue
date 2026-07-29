@@ -190,7 +190,7 @@
               @add-edge="handleAddEdge"
               @delete-edge="handleDeleteEdge"
               @run-node="handleRunNode"
-              @rerun-downstream="handleRerunDownstream"
+              @rerun-downstream="runDownstreamFrom"
               @view-task-detail="handleViewTaskDetail"
               @task-submitted="handleNodeTaskSubmitted"
             />
@@ -337,7 +337,8 @@ const {
   runningWorkflow,
   handleNodeTaskSubmitted,
   handleRunNode,
-  handleRunReadyNodes
+  handleRunReadyNodes,
+  runDownstreamFrom
 } = useWorkflowExecution({
   workflowStore,
   tasksStore,
@@ -345,6 +346,7 @@ const {
   editableTemplate,
   readyToolNodeIds,
   resolveToolForNode,
+  resolveDownstreamNodeIds,
   formatKey
 })
 
@@ -370,21 +372,6 @@ const workflowPreflight = computed(() => {
 const workflowTemplateRunDisabled = computed(() => {
   return !workflowStore.activeWorkflowTemplateId && !workflowTemplateName.value.trim()
 })
-
-async function handleRerunDownstream(nodeId: string) {
-  const rerunNodeIds = resolveDownstreamNodeIds(nodeId).filter((candidateNodeId) => {
-    return editableTemplate.value.nodes.some((node) => node.id === candidateNodeId && node.type === 'tool')
-  })
-
-  workflowStore.clearNodeTasks(rerunNodeIds)
-  workflowStore.clearActiveWorkflowRun()
-  workflowStore.setActiveNode(nodeId)
-
-  const task = await handleRunNode(nodeId)
-  if (task?.status === 'success') {
-    await handleRunReadyNodes()
-  }
-}
 
 function handleViewTaskDetail(nodeId: string) {
   const taskId = workflowStore.taskByNode[nodeId]?.id

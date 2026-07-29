@@ -23,13 +23,17 @@ test('workflow node inspector exposes researcher-facing node actions', () => {
   }
 
   for (const marker of [
-    'handleRerunDownstream',
+    'runDownstreamFrom',
     'handleViewTaskDetail',
-    '@rerun-downstream="handleRerunDownstream"',
+    '@rerun-downstream="runDownstreamFrom"',
     '@view-task-detail="handleViewTaskDetail"'
   ]) {
     assert.equal(pageSource.includes(marker), true, `missing ${marker}`)
   }
+
+  const executionSource = readSource('src/composables/useWorkflowExecution.ts')
+  assert.equal(executionSource.includes('async function runDownstreamFrom'), true)
+  assert.equal(executionSource.includes('workflowStore.clearNodeTasks'), true)
 })
 
 test('workflow tool palette exposes multi-dimensional tool filters', () => {

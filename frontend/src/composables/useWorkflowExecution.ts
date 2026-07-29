@@ -26,6 +26,7 @@ export function useWorkflowExecution(input: {
   editableTemplate: WorkflowCanvasState['editableTemplate']
   readyToolNodeIds: WorkflowCanvasState['readyToolNodeIds']
   resolveToolForNode: WorkflowCanvasState['resolveToolForNode']
+  resolveDownstreamNodeIds: WorkflowCanvasState['resolveDownstreamNodeIds']
   formatKey: WorkflowCanvasState['formatKey']
 }) {
   const {
@@ -35,6 +36,7 @@ export function useWorkflowExecution(input: {
     editableTemplate,
     readyToolNodeIds,
     resolveToolForNode,
+    resolveDownstreamNodeIds,
     formatKey,
   } = input
 
@@ -229,10 +231,26 @@ export function useWorkflowExecution(input: {
     }
   }
 
+  async function runDownstreamFrom(nodeId: string) {
+    const rerunNodeIds = resolveDownstreamNodeIds(nodeId).filter((candidateNodeId) => {
+      return editableTemplate.value.nodes.some((node) => node.id === candidateNodeId && node.type === 'tool')
+    })
+
+    workflowStore.clearNodeTasks(rerunNodeIds)
+    workflowStore.clearActiveWorkflowRun()
+    workflowStore.setActiveNode(nodeId)
+
+    const task = await handleRunNode(nodeId)
+    if (task?.status === 'success') {
+      await handleRunReadyNodes()
+    }
+  }
+
   return {
     runningWorkflow,
     handleNodeTaskSubmitted,
     handleRunNode,
     handleRunReadyNodes,
+    runDownstreamFrom,
   }
 }
