@@ -34,8 +34,8 @@
           v-for="node in resolvedNodes"
           :key="node.id"
           :node="node"
-          :title="resolveLabel(node.titleKey)"
-          :subtitle="node.descriptionKey ? resolveLabel(node.descriptionKey) : undefined"
+          :title="resolveWorkflowLabel(node.titleKey, t, te)"
+          :subtitle="node.descriptionKey ? resolveWorkflowLabel(node.descriptionKey, t, te) : undefined"
           :status="resolvedNodeStatuses[node.id] ?? 'idle'"
           :selected="node.id === activeNodeId"
           :deletable="node.type !== 'input'"
@@ -52,6 +52,7 @@
   import { computed } from 'vue'
   import { useI18n } from 'vue-i18n'
   import type { WorkflowStepStatus } from '@/workflow/artifact-types'
+  import { resolveWorkflowLabel } from '@/workflow/i18n-utils'
   import type { WorkflowCanvasNode as WorkflowCanvasNodeModel, WorkflowTemplate } from '@/workflow/template-types'
   import WorkflowCanvasEdge from './WorkflowCanvasEdge.vue'
   import WorkflowCanvasNodeView from './WorkflowCanvasNode.vue'
@@ -75,7 +76,7 @@
     (event: 'delete-node', nodeId: string): void
   }>()
 
-  const templateName = computed(() => resolveLabel(props.template.nameKey))
+  const templateName = computed(() => resolveWorkflowLabel(props.template.nameKey, t, te))
   const resolvedNodeStatuses = computed(() => props.nodeStatuses ?? {})
   const resolvedNodes = computed(() => {
     return props.template.nodes.map(node => ({
@@ -125,20 +126,6 @@
       }]
     })
   })
-
-  function resolveLabel(key: string): string {
-    if (te(key)) {
-      return t(key)
-    }
-
-    const segments = key.split('.')
-    const lastSegment = segments[segments.length - 1] ?? key
-    return lastSegment
-      .replace(/([A-Z])/g, ' $1')
-      .replace(/[-_]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-  }
 
 </script>
 

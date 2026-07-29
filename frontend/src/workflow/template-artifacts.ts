@@ -1,6 +1,7 @@
 import type { WorkflowArtifactSemanticType, WorkflowTaskRef } from './artifact-types.ts'
 import type { WorkflowTemplate } from './template-types.ts'
 import type { ArtifactFile } from '../types/models.d.ts'
+import { formatWorkflowKey } from './i18n-utils.ts'
 
 export interface WorkflowNodeInputRequirement {
   semanticType: WorkflowArtifactSemanticType
@@ -83,19 +84,9 @@ export function suggestWorkflowEdgesForNode(input: {
       .filter(node => !existingEdgeKeys.has(`${node.id}:${semanticType}`))
       .map(node => ({
         sourceNodeId: node.id,
-        sourceNodeTitle: formatKey(node.titleKey),
+        sourceNodeTitle: formatWorkflowKey(node.titleKey),
         targetNodeId: input.nodeId,
         semanticType
       }))
   })
-}
-
-function formatKey(key: string): string {
-  const segments = key.split('.')
-  const lastSegment = segments[segments.length - 1] ?? key
-  return lastSegment
-    .replace(/([A-Z])/g, ' $1')
-    .replace(/[-_]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
 }

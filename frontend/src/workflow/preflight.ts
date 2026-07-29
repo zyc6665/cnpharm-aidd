@@ -9,6 +9,7 @@ import {
   normalizeWorkflowSemanticType,
 } from './semantic-types.ts'
 import type { WorkflowTemplate } from './template-types.ts'
+import { formatWorkflowKey } from './i18n-utils.ts'
 
 export type WorkflowPreflightIssueType =
   | 'missing_tool'
@@ -96,9 +97,9 @@ export function buildWorkflowPreflight(input: {
     const sourceOutputs = sourceNode.producedOutputTypes ?? []
     const targetInputs = targetNode.requiredInputTypes ?? []
     if (!sourceOutputs.includes(artifactType) || !targetInputs.includes(artifactType)) {
-      pushIssue(issues, issueIds, createIssue(edge.target, formatKey(targetNode.titleKey), 'invalid_semantic_edge', {
+      pushIssue(issues, issueIds, createIssue(edge.target, formatWorkflowKey(targetNode.titleKey), 'invalid_semantic_edge', {
         semanticType: artifactType,
-        sourceNodeTitle: formatKey(sourceNode.titleKey),
+        sourceNodeTitle: formatWorkflowKey(sourceNode.titleKey),
       }))
     }
   }
@@ -110,17 +111,17 @@ export function buildWorkflowPreflight(input: {
     }
     if (status === 'running') {
       runningCount += 1
-      pushIssue(issues, issueIds, createIssue(node.id, formatKey(node.titleKey), 'running'))
+      pushIssue(issues, issueIds, createIssue(node.id, formatWorkflowKey(node.titleKey), 'running'))
     }
     if (status === 'failed') {
       failedCount += 1
-      pushIssue(issues, issueIds, createIssue(node.id, formatKey(node.titleKey), 'failed'))
+      pushIssue(issues, issueIds, createIssue(node.id, formatWorkflowKey(node.titleKey), 'failed'))
     }
     if (status === 'invalidated') {
-      pushIssue(issues, issueIds, createIssue(node.id, formatKey(node.titleKey), 'invalidated'))
+      pushIssue(issues, issueIds, createIssue(node.id, formatWorkflowKey(node.titleKey), 'invalidated'))
     }
     if (status === 'needs_tool_selection') {
-      pushIssue(issues, issueIds, createIssue(node.id, formatKey(node.titleKey), 'missing_tool'))
+      pushIssue(issues, issueIds, createIssue(node.id, formatWorkflowKey(node.titleKey), 'missing_tool'))
     }
 
     const selectedToolSlug = input.selectedToolByNode?.[node.id]
@@ -128,7 +129,7 @@ export function buildWorkflowPreflight(input: {
       ?? ((node.toolSlugs?.length ?? 0) === 1 ? node.toolSlugs?.[0] : undefined)
     const selectedTool = selectedToolSlug ? input.toolsBySlug?.[selectedToolSlug] : undefined
     if (selectedToolSlug && selectedTool && hasInvalidToolContract(selectedTool.contract)) {
-      pushIssue(issues, issueIds, createIssue(node.id, formatKey(node.titleKey), 'invalid_tool_contract', {
+      pushIssue(issues, issueIds, createIssue(node.id, formatWorkflowKey(node.titleKey), 'invalid_tool_contract', {
         toolSlug: selectedToolSlug,
       }))
     }
@@ -144,7 +145,7 @@ export function buildWorkflowPreflight(input: {
       if (sourceNode.type === 'input') {
         const selectedArtifactId = input.selectedWorkflowInputFiles?.[artifactType]
         if (!selectedArtifactId) {
-          pushIssue(issues, issueIds, createIssue(node.id, formatKey(node.titleKey), 'missing_workflow_input', {
+          pushIssue(issues, issueIds, createIssue(node.id, formatWorkflowKey(node.titleKey), 'missing_workflow_input', {
             semanticType: artifactType,
           }))
           continue
@@ -152,7 +153,7 @@ export function buildWorkflowPreflight(input: {
 
         const artifact = artifactsById.get(selectedArtifactId)
         if (artifact && !hasAcceptedExtensionForSemanticType(artifact.filename, artifactType)) {
-          pushIssue(issues, issueIds, createIssue(node.id, formatKey(node.titleKey), 'invalid_file_extension', {
+          pushIssue(issues, issueIds, createIssue(node.id, formatWorkflowKey(node.titleKey), 'invalid_file_extension', {
             semanticType: artifactType,
             filename: artifact.filename,
           }))
@@ -162,15 +163,15 @@ export function buildWorkflowPreflight(input: {
 
       const upstreamTask = input.taskByNode?.[sourceNode.id]
       if (upstreamTask?.status !== 'success') {
-        pushIssue(issues, issueIds, createIssue(node.id, formatKey(node.titleKey), 'waiting_upstream', {
+        pushIssue(issues, issueIds, createIssue(node.id, formatWorkflowKey(node.titleKey), 'waiting_upstream', {
           semanticType: artifactType,
-          sourceNodeTitle: formatKey(sourceNode.titleKey),
+          sourceNodeTitle: formatWorkflowKey(sourceNode.titleKey),
         }))
       }
     }
 
     if (status === 'idle' && node.requiredInputTypes?.length && incomingEdges.length === 0) {
-      pushIssue(issues, issueIds, createIssue(node.id, formatKey(node.titleKey), 'waiting_input'))
+      pushIssue(issues, issueIds, createIssue(node.id, formatWorkflowKey(node.titleKey), 'waiting_input'))
     }
   }
 
@@ -334,14 +335,4 @@ function hasAcceptedExtensionForSemanticType(filename: string, semanticType: str
 
   const normalizedFilename = filename.toLowerCase()
   return acceptedExtensions.some((extension) => normalizedFilename.endsWith(extension.toLowerCase()))
-}
-
-function formatKey(key: string): string {
-  const segments = key.split('.')
-  const lastSegment = segments[segments.length - 1] ?? key
-  return lastSegment
-    .replace(/([A-Z])/g, ' $1')
-    .replace(/[-_]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
 }
