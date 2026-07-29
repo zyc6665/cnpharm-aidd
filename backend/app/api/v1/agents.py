@@ -11,6 +11,7 @@ from app.agents.aidd.service import (
     cancel_agent_run,
     cascade_delete_agent_run,
     create_agent_run,
+    create_workflow_draft,
     delete_agent_run,
     get_agent_run,
     list_agent_runs,
@@ -78,6 +79,16 @@ async def create_aidd_agent_run(
 ):
     run = await create_agent_run(db, current_user=current_user, run_data=run_data)
     return success_response(data=_serialize_run(run), message="智能体运行创建成功")
+
+
+@router.post("/aidd/workflow-drafts", response_model=dict)
+async def create_aidd_workflow_draft(
+    run_data: AIDDRunCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    draft = await create_workflow_draft(db, current_user=current_user, run_data=run_data)
+    return success_response(data=draft.model_dump(), message="工作流草稿生成成功")
 
 
 @router.get("/aidd/runs", response_model=dict)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -31,15 +32,29 @@ from app.models.tasks import Task, TaskStatus
 from app.models.tools import Tool, ToolStatus
 from app.models.users import User
 from app.schemas.agent import AIDDRunCreate
+from app.schemas.agent import AIDDWorkflowDraftResponse
 from app.schemas.tasks import TaskCreate
 from app.services.semantic_types import CANONICAL_AGENT_INPUT_TYPES, normalize_semantic_type
 from app.services.aidd_builtin_tools import ensure_aidd_builtin_tool
+from app.services.tool_contracts import build_tool_contract, tool_contract_to_agent_summary
+from app.agents.aidd.workflow_drafts import build_workflow_definition_from_plan
 from app.tasks.service import create_and_schedule_tool_task
 from app.tasks.cancellation import cancel_platform_task
 
 
 TERMINAL_RUN_STATUSES = {"success", "failure", "canceled"}
 SUPPORTED_AGENT_INPUT_TYPES = CANONICAL_AGENT_INPUT_TYPES
+
+
+@dataclass(frozen=True)
+class PreparedAgentPlan:
+    """Side-effect-free inputs and contracts shared by run and draft creation."""
+
+    plan: AIDDPlan
+    input_files: dict[str, FileModel]
+    input_file: FileModel
+    input_type: str
+    plan_data: dict[str, Any]
 
 
 def _normalize_agent_input_type(value: str | None) -> str | None:
@@ -326,6 +341,51 @@ async def create_agent_run(
     current_user: User,
     run_data: AIDDRunCreate,
 ) -> AgentRun:
+    prepared = await _prepare_agent_plan(
+        db,
+        current_user=current_user,
+        run_data=run_data,
+    )
+    plan = prepared.plan
+
+    run = AgentRun(
+        user_id=current_user.id,
+        message=run_data.message,
+        intent=plan.intent,
+        status="planning",
+        input_type=prepared.input_type,
+        input_file_id=prepared.input_file.id,
+        requested_outputs=plan.requested_outputs,
+        plan=prepared.plan_data,
+    )
+    db.add(run)
+    await db.flush()
+
+    for index, plan_step in enumerate(plan.steps):
+        db.add(
+            AgentRunStep(
+                agent_run_id=run.id,
+                step_key=plan_step.step_key,
+                tool_slug=plan_step.tool_slug,
+                status="pending",
+                sort_order=index,
+                depends_on_step_ids=plan_step.depends_on,
+                semantic_inputs=plan_step.inputs,
+                params=plan_step.params,
+            )
+        )
+
+    await db.commit()
+    await start_ready_steps(db, current_user=current_user, run_id=run.id)
+    return await _load_run_for_user(db, run_id=run.id, current_user=current_user)
+
+
+async def _prepare_agent_plan(
+    db: AsyncSession,
+    *,
+    current_user: User,
+    run_data: AIDDRunCreate,
+) -> PreparedAgentPlan:
     input_type = _normalize_agent_input_type(run_data.input_type)
     if input_type and input_type not in SUPPORTED_AGENT_INPUT_TYPES:
         raise ValidationException(f"Unsupported AIDD input_type: {run_data.input_type}")
@@ -360,36 +420,55 @@ async def create_agent_run(
     if classified_files:
         plan_data["classified_input_files"] = classified_files
 
-    run = AgentRun(
-        user_id=current_user.id,
-        message=run_data.message,
-        intent=plan.intent,
-        status="planning",
+    return PreparedAgentPlan(
+        plan=plan,
+        input_files=input_files,
+        input_file=input_file,
         input_type=input_type,
-        input_file_id=input_file.id,
-        requested_outputs=plan.requested_outputs,
-        plan=plan_data,
+        plan_data=plan_data,
     )
-    db.add(run)
-    await db.flush()
 
-    for index, plan_step in enumerate(plan.steps):
-        db.add(
-            AgentRunStep(
-                agent_run_id=run.id,
-                step_key=plan_step.step_key,
-                tool_slug=plan_step.tool_slug,
-                status="pending",
-                sort_order=index,
-                depends_on_step_ids=plan_step.depends_on,
-                semantic_inputs=plan_step.inputs,
-                params=plan_step.params,
-            )
+
+async def create_workflow_draft(
+    db: AsyncSession,
+    *,
+    current_user: User,
+    run_data: AIDDRunCreate,
+) -> AIDDWorkflowDraftResponse:
+    """Generate an editable workflow draft without creating a run or task."""
+    prepared = await _prepare_agent_plan(
+        db,
+        current_user=current_user,
+        run_data=run_data,
+    )
+    resolved_contracts: dict[str, dict[str, Any]] = {}
+    for step in prepared.plan.steps:
+        tool = await _load_available_tool(db, step.tool_slug)
+        capability = await load_tool_capability(db, step.tool_slug)
+        resolved_contracts[step.step_key] = tool_contract_to_agent_summary(
+            build_tool_contract(tool, capability=capability)
         )
 
-    await db.commit()
-    await start_ready_steps(db, current_user=current_user, run_id=run.id)
-    return await _load_run_for_user(db, run_id=run.id, current_user=current_user)
+    input_file_ids = {
+        semantic_type: str(file_record.id)
+        for semantic_type, file_record in prepared.input_files.items()
+    }
+    definition = build_workflow_definition_from_plan(
+        plan=prepared.plan,
+        input_files=input_file_ids,
+        step_contracts=resolved_contracts,
+    )
+    message = run_data.message.strip()
+    return AIDDWorkflowDraftResponse(
+        name=message[:160],
+        description=prepared.plan.reasoning_summary or message,
+        intent=prepared.plan.intent,
+        definition=definition,
+        input_files=input_file_ids,
+        requested_outputs=list(prepared.plan.requested_outputs),
+        reasoning_summary=prepared.plan.reasoning_summary,
+        analysis_trace=list(prepared.plan.analysis_trace),
+    )
 
 
 def _dependencies_satisfied(step: AgentRunStep, steps_by_key: dict[str, AgentRunStep]) -> bool:

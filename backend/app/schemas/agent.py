@@ -18,6 +18,19 @@ class AIDDRunCreate(BaseModel):
     params: dict[str, Any] = Field(default_factory=dict)
 
 
+class AIDDWorkflowDraftResponse(BaseModel):
+    """Editable workflow draft generated from an AIDD plan."""
+
+    name: str
+    description: Optional[str] = None
+    intent: str
+    definition: dict[str, Any]
+    input_files: dict[str, str] = Field(default_factory=dict)
+    requested_outputs: list[str] = Field(default_factory=list)
+    reasoning_summary: Optional[str] = None
+    analysis_trace: list[str] = Field(default_factory=list)
+
+
 class AIDDRunStepResponse(BaseModel):
     """AIDD agent run step response."""
 

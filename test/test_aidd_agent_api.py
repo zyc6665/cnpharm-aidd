@@ -11,6 +11,7 @@ import httpx
 import pytest
 import pytest_asyncio
 from fastapi import Header, HTTPException
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -37,6 +38,7 @@ from app.models.system_settings import ModelService  # noqa: E402
 from app.models.tasks import Task, TaskOutput, TaskStatus  # noqa: E402
 from app.models.tools import Tool, ToolStatus, ToolVersion  # noqa: E402
 from app.models.users import User, UserRole, UserStatus  # noqa: E402
+from app.models.workflows import WorkflowRun, WorkflowTemplate  # noqa: E402
 
 
 @pytest_asyncio.fixture
@@ -282,6 +284,50 @@ async def fake_affinity_plan(service, prompt):
       ]
     }
     """
+
+
+@pytest.mark.asyncio
+async def test_create_workflow_draft_does_not_create_runs_or_tasks(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    aidd_tools: dict[str, Tool],
+    protein_file: FileModel,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(
+        "app.agents.aidd.llm_client.request_structured_plan",
+        fake_structured_plan,
+    )
+
+    response = await api_client.post(
+        "/api/v1/agents/aidd/workflow-drafts",
+        headers={"Authorization": "Bearer owner-token"},
+        json={
+            "message": "上传蛋白后探索口袋并生成分子",
+            "input_file_id": protein_file.id,
+            "requested_outputs": ["generated_ligand"],
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["name"] == "上传蛋白后探索口袋并生成分子"
+    assert data["intent"] == "generate_molecules_from_protein"
+    assert data["input_files"] == {"protein_pdb": protein_file.id}
+    assert data["requested_outputs"] == ["generated_ligand"]
+    assert data["reasoning_summary"].startswith("识别到蛋白结构输入")
+    assert [node["id"] for node in data["definition"]["nodes"]] == [
+        "input-protein_pdb",
+        "pocket_prediction",
+        "molecule_generation",
+    ]
+    pocket_node = data["definition"]["nodes"][1]
+    assert pocket_node["tool_id"] == aidd_tools["lvpocket-pocket-prediction"].id
+    assert pocket_node["tool_version"]["id"]
+
+    for model in (AgentRun, AgentRunStep, Task, WorkflowTemplate, WorkflowRun):
+        count = await db_session.scalar(select(func.count()).select_from(model))
+        assert count == 0
 
 
 @pytest.mark.asyncio
