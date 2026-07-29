@@ -24,4 +24,3 @@ Git-tracked backend source.
 - `python -m flake8 backend/app --select F401`
 - Focused backend tests for modules touched by the cleanup.
 - Full `python -m pytest test/` regression suite.
-

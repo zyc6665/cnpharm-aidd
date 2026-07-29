@@ -23,4 +23,3 @@ Generated local files and development data are explicitly out of scope.
 2. Install backend development requirements in CI.
 3. Add a backend lint step using the exact focused command.
 4. Run CI contract tests and the full backend test suite.
-
