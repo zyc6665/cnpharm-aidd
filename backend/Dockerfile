@@ -33,12 +33,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # 复制依赖文件
-COPY requirements.txt .
+COPY requirements.txt requirements-dev.txt ./
 
 # 安装 Python 依赖
 # 使用 wheel 加速后续阶段的安装
 RUN pip install --upgrade pip && \
-    pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt
+    pip wheel --no-cache-dir --wheel-dir /wheels -r requirements-dev.txt
 
 # ========== 开发阶段 ==========
 FROM base AS development
@@ -56,11 +56,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # 从 builder 复制预编译的 wheels
 COPY --from=builder /wheels /wheels
-COPY requirements.txt .
+COPY requirements.txt requirements-dev.txt ./
 
 # 安装所有依赖（使用预编译的 wheels，更快）
 RUN pip install --upgrade pip && \
-    pip install --no-cache /wheels/* && \
+    pip install --no-cache --no-index --find-links=/wheels -r requirements-dev.txt && \
     rm -rf /wheels
 
 # 创建必要的目录
@@ -96,7 +96,7 @@ COPY requirements.txt .
 
 # 安装依赖（使用预编译的 wheels）
 RUN pip install --upgrade pip && \
-    pip install --no-cache /wheels/* && \
+    pip install --no-cache --no-index --find-links=/wheels -r requirements.txt && \
     rm -rf /wheels
 
 # 复制应用代码

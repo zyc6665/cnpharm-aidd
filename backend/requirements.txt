@@ -41,12 +41,8 @@ psutil==5.9.8
 # Utilities
 python-dotenv==1.0.0
 
-# Development tools
-watchfiles==0.21.0         # 文件监控和热重载
-
 # Celery 任务队列
 celery[redis]==5.3.6
-flower==2.0.1              # Celery监控面板
 
 # Redis
 redis==5.0.1
@@ -59,7 +55,3 @@ minio==7.2.3
 
 # GPU monitoring (optional)
 # pynvml==11.5.0
-
-# Testing
-pytest==7.4.4
-pytest-asyncio==0.23.3
