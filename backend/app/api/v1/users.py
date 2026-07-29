@@ -273,7 +273,7 @@ async def change_password(
 
 @router.post(
     "/admin",
-    response_model=UserResponse,
+    response_model=dict,
     status_code=status.HTTP_201_CREATED,
     summary="创建用户（管理员）"
 )
@@ -296,7 +296,11 @@ async def admin_create_user(
     await db.commit()
 
     loaded_user = await load_user_with_statistics(db, created_user.id)
-    return UserResponse.model_validate(loaded_user)
+    return success_response(
+        data=UserResponse.model_validate(loaded_user).model_dump(),
+        message="用户创建成功",
+        code=status.HTTP_201_CREATED,
+    )
 
 @router.get(
     "/admin",
@@ -461,7 +465,7 @@ async def admin_get_user(
 
 @router.patch(
     "/admin/{user_id}",
-    response_model=UserResponse,
+    response_model=dict,
     summary="更新用户信息（管理员）"
 )
 async def admin_update_user(
@@ -526,7 +530,10 @@ async def admin_update_user(
         .where(User.id == user_id)
     )
     refreshed_user = refreshed_result.scalar_one()
-    return UserResponse.model_validate(refreshed_user)
+    return success_response(
+        data=UserResponse.model_validate(refreshed_user).model_dump(),
+        message="用户更新成功",
+    )
 
 
 @router.post(
@@ -551,7 +558,10 @@ async def admin_reset_user_password(
     user.updated_at = utcnow()
     await db.commit()
 
-    return {"message": "密码重置成功"}
+    return success_response(
+        data={"message": "密码重置成功"},
+        message="密码重置成功",
+    )
 
 
 @router.delete(
@@ -590,11 +600,17 @@ async def admin_delete_user(
     if hard:
         await hard_delete_user_related_resources(db, user_id)
         await db.commit()
-        return {"message": "用户已彻底删除"}
+        return success_response(
+            data={"message": "用户已彻底删除"},
+            message="用户已彻底删除",
+        )
 
     # 软删除：统一设置为 disabled
     user.status = UserStatus.DISABLED.value
     user.updated_at = utcnow()
     await db.commit()
 
-    return {"message": "用户已删除"}
+    return success_response(
+        data={"message": "用户已删除"},
+        message="用户已删除",
+    )

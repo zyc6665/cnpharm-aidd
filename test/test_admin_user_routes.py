@@ -211,7 +211,9 @@ async def test_admin_update_user_accepts_disabled_status(
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["status"] == UserStatus.DISABLED.value
+    assert payload["code"] == 200
+    assert payload["message"] == "用户更新成功"
+    assert payload["data"]["status"] == UserStatus.DISABLED.value
 
 
 @pytest.mark.asyncio
@@ -227,6 +229,9 @@ async def test_admin_delete_user_sets_disabled_status(
     )
 
     assert response.status_code == 200
+    payload = response.json()
+    assert payload["code"] == 200
+    assert payload["data"]["message"] == "用户已删除"
 
     await db_session.refresh(normal_user)
     assert normal_user.status == UserStatus.DISABLED.value
@@ -252,9 +257,11 @@ async def test_admin_create_user_creates_hashed_password(
 
     assert response.status_code == 201
     payload = response.json()
-    assert payload["email"] == "created@example.com"
-    assert payload["role"] == UserRole.VIP.value
-    assert payload["status"] == UserStatus.PENDING.value
+    assert payload["code"] == 201
+    assert payload["message"] == "用户创建成功"
+    assert payload["data"]["email"] == "created@example.com"
+    assert payload["data"]["role"] == UserRole.VIP.value
+    assert payload["data"]["status"] == UserStatus.PENDING.value
 
     result = await db_session.execute(select(User).where(User.email == "created@example.com"))
     created_user = result.scalar_one()
@@ -275,7 +282,9 @@ async def test_admin_reset_user_password_updates_hash(
     )
 
     assert response.status_code == 200
-    assert response.json()["message"] == "密码重置成功"
+    payload = response.json()
+    assert payload["code"] == 200
+    assert payload["data"]["message"] == "密码重置成功"
 
     await db_session.refresh(normal_user)
     assert verify_password("ResetSecret123", normal_user.password_hash) is True
@@ -356,7 +365,9 @@ async def test_admin_hard_delete_user_cascades_related_records(
     )
 
     assert response.status_code == 200
-    assert response.json()["message"] == "用户已彻底删除"
+    payload = response.json()
+    assert payload["code"] == 200
+    assert payload["data"]["message"] == "用户已彻底删除"
 
     assert await db_session.get(User, normal_user.id) is None
     assert await db_session.get(UserStatistics, normal_user.id) is None
