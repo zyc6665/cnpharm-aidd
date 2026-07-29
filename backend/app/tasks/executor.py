@@ -38,6 +38,7 @@ from app.files.storage_path import get_file_path
 from app.models.files import File as FileModel, FileSourceType
 from app.models.tasks import TaskStatus
 from app.models.tools import ToolType
+from app.tasks.executors.errors import GPUAllocationFailed, TaskExecutionError
 from app.tasks.state_machine import TaskStateMachine
 from app.tasks.ssh_transport import ParamikoSSHTransport
 
@@ -52,30 +53,6 @@ _DOCKER_IMAGE_DIGEST_PATTERN = re.compile(
 )
 _SHELL_CONTROL_PATTERN = re.compile(r"[;&|`$<>\r\n]")
 _SHELL_EXECUTABLES = {"ash", "bash", "dash", "fish", "ksh", "sh", "zsh"}
-
-
-class TaskExecutionError(Exception):
-    """任务执行错误"""
-
-    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
-        self.message = message
-        self.details = details or {}
-        super().__init__(message)
-
-
-class GPUAllocationFailed(TaskExecutionError):
-    """GPU 资源分配失败，可触发重试逻辑。"""
-
-    def __init__(
-        self,
-        message: str,
-        wait_position: Optional[int] = None,
-        details: Optional[Dict[str, Any]] = None,
-    ):
-        self.wait_position = wait_position
-        merged_details = details or {}
-        merged_details.setdefault("wait_position", wait_position)
-        super().__init__(message, details=merged_details)
 
 
 class BaseExecutor(ABC):
