@@ -47,6 +47,7 @@ from app.tasks.executors.ssh_paths import build_remote_paths
 from app.tasks.executors.ssh_payload import build_params_payload
 from app.tasks.executors.ssh_result import load_result_json
 from app.tasks.executors.ssh_auth import resolve_auth_settings
+from app.tasks.executors.ssh_artifacts import prepare_output_files
 from app.tasks.executors.errors import GPUAllocationFailed, TaskExecutionError
 from app.tasks.state_machine import TaskStateMachine
 from app.tasks.ssh_transport import ParamikoSSHTransport
@@ -947,6 +948,10 @@ class SSHJobExecutor(BaseExecutor):
 
     def _prepare_output_files_for_collection(self, download_root: str, output_root: str) -> List[str]:
         """展开输出文件，并将大量单分子 SDF 目录收敛为 ZIP。"""
+        return prepare_output_files(self.config, download_root, output_root)
+
+    def _prepare_output_files_for_collection_legacy(self, download_root: str, output_root: str) -> List[str]:
+        """兼容保留：后续迁移 SSH 主类时删除。"""
         matched_files = self._expand_output_globs(download_root, output_root)
         if not matched_files:
             return []
