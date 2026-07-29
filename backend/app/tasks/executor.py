@@ -42,6 +42,7 @@ from app.tasks.executors.docker_security import validate_docker_execution_inputs
 from app.tasks.executors.docker_output import parse_docker_output
 from app.tasks.executors.script_trust import validate_script_trust
 from app.tasks.executors.script_output import parse_script_output
+from app.tasks.executors.ssh_command import build_remote_exec_command
 from app.tasks.executors.errors import GPUAllocationFailed, TaskExecutionError
 from app.tasks.state_machine import TaskStateMachine
 from app.tasks.ssh_transport import ParamikoSSHTransport
@@ -803,6 +804,10 @@ class SSHJobExecutor(BaseExecutor):
 
     def _build_remote_exec_command(self, remote_paths: Dict[str, str]) -> str:
         """构建远端执行命令。"""
+        return build_remote_exec_command(self.config, str(self.task.id), remote_paths)
+
+    def _build_remote_exec_command_legacy(self, remote_paths: Dict[str, str]) -> str:
+        """兼容保留：后续迁移 SSH 主类时删除。"""
         runner_mode = self.config.get("runner_mode", "shell")
         if runner_mode not in self.SUPPORTED_RUNNER_MODES:
             raise TaskExecutionError(f"Unsupported ssh_job runner_mode: {runner_mode}")
