@@ -93,7 +93,7 @@
   .workflow-preflight-panel {
     border: 1px solid @border-color-hover;
     border-radius: @border-radius-md;
-    background: rgba(255, 255, 255, 0.96);
+    background: @bg-surface;
     box-shadow: @shadow-sm;
     overflow: hidden;
   }
@@ -134,7 +134,7 @@
   .preflight-summary {
     padding: @spacing-md;
     border-radius: @border-radius-sm;
-    background: @bg-light-secondary;
+    background: @bg-elevated;
   }
 
   .preflight-summary strong {
@@ -208,7 +208,7 @@
 
   .preflight-actions {
     border-top: 1px solid @border-color-light;
-    background: @bg-light-secondary;
+    background: @bg-elevated;
   }
 
   @media (max-width: 960px) {
