@@ -15,6 +15,7 @@ import {
 import { resolveReadyToolNodeIds } from '@/workflow/template-runner'
 import { extractWorkflowInputRequirements } from '@/workflow/workflow-definitions'
 import { resolveWorkflowCanvasNodeStatus } from '@/workflow/template-state'
+import { resolveWorkflowLabel } from '@/workflow/i18n-utils'
 
 type WorkflowStore = ReturnType<typeof useWorkflowStore>
 type ToolsStore = ReturnType<typeof useToolsStore>
@@ -60,7 +61,7 @@ export function useWorkflowCanvas(input: {
   const templateOptions = computed(() => {
     return WORKFLOW_TEMPLATES.map((template) => ({
       value: template.id,
-      label: resolveLabel(template.nameKey),
+      label: formatKey(template.nameKey),
     }))
   })
 
@@ -218,7 +219,7 @@ export function useWorkflowCanvas(input: {
 
       return {
         nodeId: node.id,
-        nodeTitle: resolveLabel(node.titleKey),
+        nodeTitle: formatKey(node.titleKey),
         status: nodeStatuses.value[node.id] ?? 'idle',
         statusLabel: resolveNodeStatusReason(node.id),
         taskId: task?.id,
@@ -375,21 +376,7 @@ export function useWorkflowCanvas(input: {
   }
 
   function formatKey(key: string): string {
-    return resolveLabel(key)
-  }
-
-  function resolveLabel(key: string): string {
-    if (te(key)) {
-      return t(key)
-    }
-
-    const segments = key.split('.')
-    const lastSegment = segments[segments.length - 1] ?? key
-    return lastSegment
-      .replace(/([A-Z])/g, ' $1')
-      .replace(/[-_]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
+    return resolveWorkflowLabel(key, t, te)
   }
 
   function buildCurrentWorkflowDefinition(): WorkflowDefinition {
