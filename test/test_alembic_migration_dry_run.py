@@ -72,7 +72,9 @@ def test_alembic_sqlite_upgrade_and_downgrade_dry_run(tmp_path: Path) -> None:
 
 
 def test_alembic_heads_command_works_from_backend_directory() -> None:
-    result = _run_backend_alembic("heads", env=os.environ.copy())
+    env = os.environ.copy()
+    env["PYTHONWARNINGS"] = "error::DeprecationWarning"
+    result = _run_backend_alembic("heads", env=env)
     config = Config(str(PROJECT_ROOT / "alembic.ini"))
     current_head = ScriptDirectory.from_config(config).get_current_head()
 
