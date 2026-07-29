@@ -4,30 +4,37 @@
 
 Checklist item 2.3.7 originally identified hard-coded translucent white backgrounds in the
 workflow inspector and preflight panel. Those parent components now use semantic theme surfaces,
-but two backgrounds moved into inspector child components during the inspector split:
-
-- `WorkflowNodeRunPanel.vue` uses a translucent white run summary.
-- `WorkflowNodeStatusBadge.vue` uses a translucent white badge surface.
+but a directory-wide audit found the same light-only styling in older workflow panels and in
+components extracted from the inspector. The remaining debt includes neutral white or near-white
+backgrounds, borders, and an SVG label halo across the workflow component directory.
 
 ## Decision
 
-Replace both hard-coded white backgrounds with the existing `@bg-elevated` token. This token
-already maps to dark and light CSS custom properties, preserves visual separation from the parent
-surface, and avoids expanding the global theme API for two small elements.
+Use the existing runtime theme tokens according to surface hierarchy:
+
+- Top-level workflow panels use `@bg-surface` and `@border-color-hover`.
+- Nested cards, list items, tool summaries, and badges use `@bg-elevated` and `@border-color`.
+- Interactive selected and hover states keep using `@accent-color-light`.
+- The workflow edge label halo uses `@bg-surface` so it matches the canvas.
+
+These tokens already map to dark and light CSS custom properties and avoid expanding the global
+theme API.
 
 Status-specific red, amber, blue, and green colors remain unchanged. They communicate state and
 are not neutral surface backgrounds.
 
 ## Alternatives
 
-- `@bg-surface`: theme-aware, but does not distinguish nested content from the parent surface.
-- A new translucent surface token: preserves transparency, but adds unnecessary global theme
-  complexity for this narrow cleanup.
-- `@bg-elevated`: reuses the current design system and keeps the change local.
+- Replace only the two inspector descendants: leaves the same defect throughout the workflow.
+- Add translucent surface and border tokens: preserves the old appearance more closely, but adds
+  unnecessary global theme complexity.
+- Reuse the existing surface hierarchy: removes the light-only subsystem and keeps the theme API
+  unchanged.
 
 ## Verification
 
-- Extend the workflow inspector surface test to reject hard-coded translucent white backgrounds
-  across the inspector and its split child components.
-- Assert that the run summary and status badge use `@bg-elevated`.
+- Extend the inspector surface test for the split child components.
+- Add a directory-level regression test that rejects the audited neutral light-only color values
+  in every workflow Vue component.
+- Assert representative top-level and nested components use the correct semantic tokens.
 - Run focused workflow tests, the full frontend test suite, and the production frontend build.
