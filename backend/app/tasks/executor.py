@@ -58,13 +58,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_DOCKER_IMAGE_DIGEST_PATTERN = re.compile(
-    r"^[a-z0-9][a-z0-9./_-]*(?::[0-9]+)?(?:/[a-z0-9][a-z0-9._-]*)*@sha256:[0-9a-f]{64}$"
-)
-_SHELL_CONTROL_PATTERN = re.compile(r"[;&|`$<>\r\n]")
-_SHELL_EXECUTABLES = {"ash", "bash", "dash", "fish", "ksh", "sh", "zsh"}
-
-
 from app.tasks.executors.remote_api import RemoteAPIExecutor
 
 
