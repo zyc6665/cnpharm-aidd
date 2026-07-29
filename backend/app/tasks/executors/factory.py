@@ -33,7 +33,7 @@ class TaskExecutor:
                 self.config["gpu_memory_required_mb"] = int(tool.gpu_memory_mb or 4096)
 
     def _get_executor(self) -> BaseExecutor:
-        from app.tasks.executor import SSHJobExecutor
+        from app.tasks.executors.ssh_job import SSHJobExecutor
 
         executors = {
             ToolType.REMOTE_API.value: RemoteAPIExecutor,

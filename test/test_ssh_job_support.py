@@ -169,7 +169,7 @@ async def test_ssh_job_recovery_downloads_with_paramiko(monkeypatch, tmp_path) -
         return []
 
     monkeypatch.setenv("TASK_WORK_DIR", str(tmp_path))
-    monkeypatch.setattr("app.tasks.executor.ParamikoSSHTransport", FakeTransport)
+    monkeypatch.setattr("app.tasks.executors.ssh_job.ParamikoSSHTransport", FakeTransport)
     monkeypatch.setattr(
         executor,
         "_resolve_auth_settings",
