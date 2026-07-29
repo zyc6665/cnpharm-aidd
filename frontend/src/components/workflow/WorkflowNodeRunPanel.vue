@@ -6,13 +6,6 @@
       show-icon
       message="请登录后运行节点"
     />
-    <a-alert
-      v-else-if="userStore.isGuest"
-      type="warning"
-      show-icon
-      message="访客账号不能提交任务"
-    />
-
     <a-spin :spinning="selectedToolLoading || submitting">
       <div v-if="selectedTool && selectedToolSlug" class="node-run-form">
         <div class="run-tool-summary">
@@ -160,7 +153,6 @@
       submitting.value ||
       selectedToolLoading.value ||
       !userStore.isAuthenticated ||
-      userStore.isGuest ||
       !selectedTool.value ||
       !props.selectedToolSlug
     )

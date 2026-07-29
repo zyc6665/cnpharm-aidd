@@ -20,7 +20,6 @@ class File(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "files"
 
     owner_id = Column(String(36), ForeignKey("users.id"), nullable=True, index=True)
-    session_id = Column(String(36), nullable=True, index=True)  # 游客session
 
     # 文件信息
     filename = Column(String(255), nullable=False)
@@ -63,7 +62,6 @@ class FileAccessLog(Base, UUIDMixin):
 
     file_id = Column(String(36), ForeignKey("files.id"), nullable=False, index=True)
     user_id = Column(String(36), ForeignKey("users.id"), nullable=True, index=True)
-    session_id = Column(String(36), nullable=True)  # 游客session
 
     # 访问信息
     action = Column(String(50), nullable=False)  # upload, download, reference, delete

@@ -1,4 +1,4 @@
-import test from 'node:test'
+import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -19,14 +19,13 @@ test('工作台左栏应展示分组摘要与推荐工具数量', () => {
   assert.equal(source.includes('getRecommendedCount'), true)
 })
 
-test('运行面板应提供当前分组、工具摘要和主动作区', () => {
-  const source = readSource('src/components/workflow/WorkflowRunPanel.vue')
+test('节点运行面板应提供工具摘要和主动作区', () => {
+  const source = readSource('src/components/workflow/WorkflowNodeRunPanel.vue')
 
-  assert.equal(source.includes('workflow.currentGroup.label'), true)
-  assert.equal(source.includes('workflow.currentTool.label'), true)
-  assert.equal(source.includes('workflow.currentTool.runAction'), true)
-  assert.equal(source.includes('workflow.currentTool.runHint'), true)
-  assert.equal(source.includes('form-action-bar'), true)
+  assert.equal(source.includes('run-tool-summary'), true)
+  assert.equal(source.includes('node-run-actions'), true)
+  assert.equal(source.includes('submitWorkflowForm'), true)
+  assert.equal(source.includes('resetForm'), true)
 })
 
 test('产物面板应区分当前分组产物与最近产物，并展示来源信息', () => {

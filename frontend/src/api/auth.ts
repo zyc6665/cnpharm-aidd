@@ -6,8 +6,7 @@ import type {
   LoginParams,
   RegisterParams,
   LoginResponse,
-  AuthTokens,
-  GuestLoginResponse
+  AuthTokens
 } from '@/types/models'
 
 // 用户登录
@@ -18,11 +17,6 @@ export const login = (params: LoginParams): Promise<ApiResponse<LoginResponse>> 
 // 用户注册
 export const register = (params: RegisterParams): Promise<ApiResponse<LoginResponse>> => {
   return post<LoginResponse>('/auth/register', params)
-}
-
-// 游客登录
-export const guestLogin = (): Promise<ApiResponse<GuestLoginResponse>> => {
-  return post<GuestLoginResponse>('/auth/guest')
 }
 
 // 发送邮箱验证码

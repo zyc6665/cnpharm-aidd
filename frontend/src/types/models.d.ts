@@ -53,12 +53,6 @@ export interface RegisterParams {
   display_name?: string
 }
 
-export interface GuestLoginResponse {
-  session_id: string
-  expires_in: number
-  limitations: Record<string, unknown>
-}
-
 export interface AuthTokens {
   access_token: string
   refresh_token: string
@@ -783,7 +777,6 @@ export interface SystemConfig {
   storage: Record<string, unknown>
   cache: Record<string, unknown>
   jwt: Record<string, unknown>
-  guest: Record<string, unknown>
   cors_origins: string[]
   log_level: string
 }

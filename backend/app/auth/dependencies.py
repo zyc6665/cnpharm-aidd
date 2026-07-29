@@ -69,7 +69,7 @@ async def get_current_user_optional(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: AsyncSession = Depends(get_db)
 ) -> Optional[User]:
-    """获取当前用户（可选，支持游客）"""
+    """获取当前用户（可选）"""
     if not credentials:
         return None
 

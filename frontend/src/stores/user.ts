@@ -11,7 +11,6 @@ import {
   register as apiRegister,
   logout as apiLogout,
   getCurrentUser,
-  guestLogin as apiGuestLogin,
   sendEmailCode as apiSendEmailCode,
   refreshToken as apiRefreshToken
 } from '@/api/auth'
@@ -19,30 +18,26 @@ import {
   AUTH_CLEARED_EVENT,
   setToken,
   setRefreshToken,
-  setGuestSession,
   clearTokens,
   getToken,
-  getRefreshToken,
-  getGuestSession
+  getRefreshToken
 } from '@/api/request'
 
 export const useUserStore = defineStore('user', () => {
   // State
   const token = ref<string | null>(getToken())
   const refreshToken = ref<string | null>(getRefreshToken())
-  const guestSession = ref<string | null>(getGuestSession())
   const userInfo = ref<UserInfo | null>(null)
-  const isGuest = ref(!!guestSession.value)
   const loading = ref(false)
-  const authReady = ref(!getToken() && !getGuestSession())
+  const authReady = ref(!getToken())
 
   // Getters
-  const isLoggedIn = computed(() => !!token.value && !isGuest.value)
-  const isAuthenticated = computed(() => !!token.value || !!guestSession.value)
+  const isLoggedIn = computed(() => !!token.value)
+  const isAuthenticated = isLoggedIn
   const user = computed(() => normalizeUserInfo(userInfo.value))
   const isAdmin = computed(() => user.value?.role === 'admin')
-  const username = computed(() => user.value?.username || (isGuest.value ? '游客' : ''))
-  const userRole = computed(() => user.value?.role || (isGuest.value ? 'guest' : 'user'))
+  const username = computed(() => user.value?.username || '')
+  const userRole = computed(() => user.value?.role || 'user')
   const avatar = computed(() => user.value?.avatar || '')
 
   // Aliases for backwards compatibility
@@ -51,9 +46,7 @@ export const useUserStore = defineStore('user', () => {
   const clearLocalAuthState = () => {
     token.value = null
     refreshToken.value = null
-    guestSession.value = null
     userInfo.value = null
-    isGuest.value = false
     authReady.value = true
   }
 
@@ -72,9 +65,7 @@ export const useUserStore = defineStore('user', () => {
       clearTokens()
       token.value = res.data.access_token
       refreshToken.value = res.data.refresh_token
-      guestSession.value = null
       userInfo.value = normalizeUserInfo(res.data.user)
-      isGuest.value = false
       setToken(res.data.access_token)
       setRefreshToken(res.data.refresh_token)
       return res.data
@@ -85,7 +76,7 @@ export const useUserStore = defineStore('user', () => {
   }
 
   const bootstrapAuthState = async () => {
-    if (!token.value || isGuest.value) {
+    if (!token.value) {
       authReady.value = true
       return null
     }
@@ -107,31 +98,10 @@ export const useUserStore = defineStore('user', () => {
         clearTokens()
         token.value = res.data.access_token
         refreshToken.value = res.data.refresh_token
-        guestSession.value = null
         userInfo.value = normalizeUserInfo(res.data.user)
-        isGuest.value = false
         setToken(res.data.access_token)
         setRefreshToken(res.data.refresh_token)
       }
-      return res.data
-    } finally {
-      loading.value = false
-      authReady.value = true
-    }
-  }
-
-  // 游客模式登录
-  const guestLogin = async () => {
-    loading.value = true
-    try {
-      const res = await apiGuestLogin()
-      clearTokens()
-      token.value = null
-      refreshToken.value = null
-      guestSession.value = res.data.session_id
-      isGuest.value = true
-      userInfo.value = null
-      setGuestSession(res.data.session_id)
       return res.data
     } finally {
       loading.value = false
@@ -146,9 +116,7 @@ export const useUserStore = defineStore('user', () => {
 
   const logout = async () => {
     try {
-      if (!isGuest.value) {
-        await apiLogout()
-      }
+      await apiLogout()
     } catch {
       // 忽略退出登录的错误（如 401），因为无论如何都要清除本地数据
     } finally {
@@ -158,7 +126,7 @@ export const useUserStore = defineStore('user', () => {
   }
 
   const fetchUserInfo = async () => {
-    if (!token.value || isGuest.value) return null
+    if (!token.value) return null
     loading.value = true
     try {
       const res = await getCurrentUser()
@@ -223,9 +191,7 @@ export const useUserStore = defineStore('user', () => {
     // State
     token,
     refreshToken,
-    guestSession,
     userInfo,
-    isGuest,
     loading,
     authReady,
     // Getters
@@ -241,7 +207,6 @@ export const useUserStore = defineStore('user', () => {
     // Actions
     login,
     register,
-    guestLogin,
     sendEmailCode,
     logout,
     fetchUserInfo,
@@ -254,6 +219,6 @@ export const useUserStore = defineStore('user', () => {
   }
 }, {
   persist: {
-    pick: ['userInfo', 'isGuest']
+    pick: ['userInfo']
   }
 })

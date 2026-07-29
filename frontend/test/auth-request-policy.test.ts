@@ -1,4 +1,4 @@
-import test from 'node:test'
+import { test } from 'vitest'
 import assert from 'node:assert/strict'
 
 import {
@@ -10,14 +10,12 @@ import {
 test('登录接口不应附带旧的认证头', () => {
   assert.equal(shouldAttachAuthHeader('/auth/login'), false)
   assert.equal(shouldAttachAuthHeader('http://127.0.0.1:8002/api/v1/auth/register'), false)
-  assert.equal(shouldAttachAuthHeader('/auth/guest'), false)
   assert.equal(shouldAttachAuthHeader('/auth/invitation/validate'), false)
 })
 
 test('登录和刷新接口的 401 不应触发刷新令牌', () => {
   assert.equal(shouldAttemptTokenRefresh('/auth/login'), false)
   assert.equal(shouldAttemptTokenRefresh('/auth/refresh'), false)
-  assert.equal(shouldAttemptTokenRefresh('/auth/guest'), false)
   assert.equal(shouldAttemptTokenRefresh('/auth/invitation/validate'), false)
 })
 

@@ -1,7 +1,4 @@
-import {
-  getGuestSession as getStoredGuestSession,
-  getToken as getStoredToken
-} from './auth-storage.ts'
+import { getToken as getStoredToken } from './auth-storage.ts'
 
 interface ObjectUrlApi {
   createObjectURL(blob: Blob): string
@@ -24,7 +21,6 @@ interface ProtectedFileAccessDependencies {
   dom?: DownloadDomApi
   fetchBlob?: (url: string, headers: Record<string, string>) => Promise<Blob>
   fetchText?: (url: string, headers: Record<string, string>) => Promise<string>
-  getGuestSession?: () => string | null
   getToken?: () => string | null
   objectUrl?: ObjectUrlApi
 }
@@ -94,11 +90,6 @@ function resolveProtectedAuthHeaders(
   const token = (dependencies.getToken || getStoredToken)()
   if (token) {
     return { Authorization: `Bearer ${token}` }
-  }
-
-  const guestSession = (dependencies.getGuestSession || getStoredGuestSession)()
-  if (guestSession) {
-    return { 'X-Guest-Session': guestSession }
   }
 
   throw new Error('需要登录后才能访问此文件')

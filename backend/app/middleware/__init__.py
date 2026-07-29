@@ -1,8 +1,6 @@
 # backend/app/middleware/__init__.py
-"""中间件模块"""
+"""中间件模块。"""
 
-from app.middleware.auth_middleware import AuthMiddleware
+from app.middleware.rate_limit import RateLimitMiddleware
 
-__all__ = [
-    "AuthMiddleware",
-]
+__all__ = ["RateLimitMiddleware"]

@@ -1,4 +1,4 @@
-import test from 'node:test'
+import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -10,11 +10,11 @@ function readSource(relativePath: string): string {
   return readFileSync(resolve(rootDir, relativePath), 'utf8')
 }
 
-test('顶部导航应提供 CPUPDB 占位入口', () => {
-  const layoutSource = readSource('src/components/layout/DefaultLayout.vue')
+test('首页平台与页脚应提供 CPUPDB 入口', () => {
+  const homeSource = readSource('src/views/home/index.vue')
 
-  assert.equal(layoutSource.includes("const cpupdbUrl = 'https://www.cpupdb.com'"), true)
-  assert.equal(layoutSource.includes("key: 'cpupdb', labelKey: 'nav.cpupdb', href: cpupdbUrl"), true)
+  assert.equal(homeSource.includes('https://www.cpupdb.com'), true)
+  assert.equal(homeSource.includes('<nav class="footer-nav">'), true)
 })
 
 test('首页第二屏应改为 AIDD 平台功能流程', () => {
@@ -23,7 +23,6 @@ test('首页第二屏应改为 AIDD 平台功能流程', () => {
   const enLocaleSource = readSource('src/locales/en-US/index.ts')
 
   assert.equal(homeSource.includes('workflowSteps'), true)
-  assert.equal(homeSource.includes('RightOutlined'), true)
   assert.equal(homeSource.includes("'moleculeGenerationOrVirtualScreening'"), true)
   assert.equal(homeSource.includes("'molecularDockingAndAffinityPrediction'"), true)
 
@@ -61,122 +60,69 @@ test('首页第二屏应改为 AIDD 平台功能流程', () => {
   assert.equal(enLocaleSource.includes("title: 'Lead Optimization'"), true)
 })
 
-test('首页首屏应提供产品化工作台视觉预览', () => {
+test('首页首屏应提供产品工作台与分子视图预览', () => {
   const homeSource = readSource('src/views/home/index.vue')
 
-  assert.equal(homeSource.includes('hero-shell'), true)
-  assert.equal(homeSource.includes('hero-copy'), true)
+  assert.equal(homeSource.includes('hero-container'), true)
   assert.equal(homeSource.includes('hero-preview'), true)
-  assert.equal(homeSource.includes('preview-pipeline'), true)
-  assert.equal(homeSource.includes('preview-structure'), true)
-  assert.equal(homeSource.includes('preview-metrics'), true)
+  assert.equal(homeSource.includes('preview-window'), true)
+  assert.equal(homeSource.includes('preview-molecule'), true)
+  assert.equal(homeSource.includes('mol-scaffold'), true)
 })
 
-test('首页上中下三段应统一为科研工作台甲板风格', () => {
+test('首页应由首屏、价值、能力、平台与转化区组成', () => {
   const homeSource = readSource('src/views/home/index.vue')
 
-  assert.equal(homeSource.includes('hero-panel'), true)
-  assert.equal(homeSource.includes('hero-panel-shell'), true)
-  assert.equal(homeSource.includes('cta-panel'), true)
-  assert.equal(homeSource.includes('cta-panel-shell'), true)
-  assert.equal(homeSource.includes('deck-surface'), true)
-  assert.equal(homeSource.includes('btn-panel-primary'), true)
-  assert.equal(homeSource.includes('btn-panel-secondary'), true)
-  assert.equal(homeSource.includes('.hero-section,\n  .home-deck-section,\n  .cta-section'), true)
+  assert.equal(homeSource.includes('<section class="hero">'), true)
+  assert.equal(homeSource.includes('<section class="values">'), true)
+  assert.equal(homeSource.includes('<section class="capabilities">'), true)
+  assert.equal(homeSource.includes('<section class="platform">'), true)
+  assert.equal(homeSource.includes('<section class="cta">'), true)
 })
 
-test('首页首屏与平台卡应进一步收敛为更精致的工作台排版', () => {
+test('首页预览应包含工作区导航和内容卡片层级', () => {
   const homeSource = readSource('src/views/home/index.vue')
 
-  assert.equal(homeSource.includes('hero-meta'), true)
-  assert.equal(homeSource.includes('hero-meta-item'), true)
-  assert.equal(homeSource.includes('hero-preview-stack'), true)
-  assert.equal(homeSource.includes('hero-signal-bar'), true)
-  assert.equal(homeSource.includes('foundation-card-head'), true)
-  assert.equal(homeSource.includes('foundation-card-footer'), true)
-  assert.equal(homeSource.includes('foundation-card-tagline'), true)
+  assert.equal(homeSource.includes('preview-sidebar'), true)
+  assert.equal(homeSource.includes('preview-nav-item'), true)
+  assert.equal(homeSource.includes('preview-content'), true)
+  assert.equal(homeSource.includes('preview-card'), true)
 })
 
-test('首页中段总甲板应包含 PAIWSIT、CPUPDB 与 CPUModel 的统一平台层', () => {
+test('首页平台区域应链接 PAIWSIT、CPUPDB 与注册入口', () => {
   const homeSource = readSource('src/views/home/index.vue')
-  const zhLocaleSource = readSource('src/locales/zh-CN/index.ts')
-  const enLocaleSource = readSource('src/locales/en-US/index.ts')
-
-  assert.equal(homeSource.includes('home-deck-section'), true)
-  assert.equal(homeSource.includes('home-deck-shell'), true)
-  assert.equal(homeSource.includes('platform-layer'), true)
-  assert.equal(homeSource.includes("t('home.foundation.title')"), true)
-  assert.equal(homeSource.includes("t('home.foundation.paiwsit.title')"), true)
-  assert.equal(homeSource.includes('foundation-panel-paiwsit'), true)
+  assert.equal(homeSource.includes("t('home.platform.title')"), true)
   assert.equal(homeSource.includes('http://www.paiwsit.com/'), true)
-  assert.equal(homeSource.includes("t('home.foundation.platform.title')"), true)
-  assert.equal(homeSource.includes("t('home.foundation.cpupdb.title')"), true)
-  assert.equal(homeSource.includes('foundation-panel-cpupdb'), true)
-  assert.equal(homeSource.includes('foundation-panel-platform'), true)
-  assert.equal(homeSource.includes("t('home.foundation.platform.title')"), true)
-  assert.equal(homeSource.includes("t('home.foundation.cpupdb.title')"), true)
   assert.equal(homeSource.includes('https://www.cpupdb.com'), true)
-  assert.equal(homeSource.includes('https://www.cpupdb.com/help.html'), true)
-  assert.equal(homeSource.includes("t('home.features.title')"), false)
-  assert.equal(homeSource.includes('const features = {'), false)
-
-  const paiwsitIndex = homeSource.indexOf("t('home.foundation.paiwsit.title')")
-  const cpupdbIndex = homeSource.indexOf("t('home.foundation.cpupdb.title')")
-  const platformIndex = homeSource.indexOf("t('home.foundation.platform.title')")
-  assert.equal(paiwsitIndex < cpupdbIndex && cpupdbIndex < platformIndex, true)
-
-  assert.equal(zhLocaleSource.includes("foundation: {"), true)
-  assert.equal(zhLocaleSource.includes("title: '靶点发现与平台底座'"), true)
-  assert.equal(zhLocaleSource.includes("title: 'PAIWSIT'"), true)
-  assert.equal(zhLocaleSource.includes("title: 'CPUPDB'"), true)
-  assert.equal(zhLocaleSource.includes("title: 'CPUModel 工作台'"), true)
-
-  assert.equal(enLocaleSource.includes("foundation: {"), true)
-  assert.equal(enLocaleSource.includes("title: 'Target Discovery & Platform Foundation'"), true)
-  assert.equal(enLocaleSource.includes("title: 'PAIWSIT'"), true)
-  assert.equal(enLocaleSource.includes("title: 'CPUPDB'"), true)
-  assert.equal(enLocaleSource.includes("title: 'CPUModel Workbench'"), true)
+  assert.equal(homeSource.includes('to="/register"'), true)
 })
 
-test('首页平台功能区应位于统一总甲板内的流程层', () => {
+test('首页能力区应将流程步骤按连接关系呈现', () => {
   const homeSource = readSource('src/views/home/index.vue')
 
-  assert.equal(homeSource.includes('workflow-layer'), true)
-  assert.equal(homeSource.includes('workflow-shell'), true)
-  assert.equal(homeSource.includes('workflow-bridge'), true)
-  assert.equal(homeSource.includes('workflow-track'), true)
-  assert.equal(homeSource.includes('workflow-connector'), true)
-  assert.equal(homeSource.includes('workflow-step-card'), true)
-  assert.equal(homeSource.includes('workflow-step-kicker'), true)
-  assert.equal(homeSource.includes('workflow-step-glow'), true)
-  assert.equal(homeSource.includes('workflow-step-copy'), true)
+  assert.equal(homeSource.includes('capabilities-track'), true)
+  assert.equal(homeSource.includes('cap-step'), true)
+  assert.equal(homeSource.includes('cap-step-icon'), true)
+  assert.equal(homeSource.includes('cap-connector'), true)
 })
 
-test('首页统一总甲板应使用同一 observer 和 reveal 状态', () => {
+test('首页动画应支持减少动态效果偏好', () => {
   const homeSource = readSource('src/views/home/index.vue')
 
-  assert.equal(homeSource.includes('IntersectionObserver'), true)
-  assert.equal(homeSource.includes('deckRevealRef'), true)
-  assert.equal(homeSource.includes('isDeckVisible'), true)
-  assert.equal(homeSource.includes('workflowRevealRef'), false)
-  assert.equal(homeSource.includes('foundationRevealRef'), false)
-  assert.equal(homeSource.includes('section-visible'), true)
-  assert.equal(homeSource.includes('--reveal-delay'), true)
   assert.equal(homeSource.includes('prefers-reduced-motion: reduce'), true)
 })
 
-test('首页统一总甲板应复用单一宽度约束', () => {
+test('首页首屏和平台区应限制内容宽度', () => {
   const homeSource = readSource('src/views/home/index.vue')
 
-  assert.equal(homeSource.includes('.home-deck-section .container'), true)
-  assert.equal(homeSource.includes('max-width: 1480px;'), true)
+  assert.equal(homeSource.includes('max-width: 640px;'), true)
+  assert.equal(homeSource.includes('.platform-grid'), true)
 })
 
-test('首页统一总甲板应在内部串联流程层与平台层', () => {
+test('首页页脚应提供产品导航', () => {
   const homeSource = readSource('src/views/home/index.vue')
 
-  assert.equal(homeSource.includes('--deck-stack-gap'), true)
-  assert.equal(homeSource.includes('deck-bridge'), true)
-  assert.equal(homeSource.includes('deck-section-head'), true)
-  assert.equal(homeSource.includes('deck-panel-divider'), true)
+  assert.equal(homeSource.includes('footer-brand'), true)
+  assert.equal(homeSource.includes('footer-nav'), true)
+  assert.equal(homeSource.includes('to="/workflow"'), true)
 })

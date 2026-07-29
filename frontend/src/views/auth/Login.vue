@@ -48,75 +48,12 @@
             </a-button>
           </a-form-item>
 
-          <!-- 游客模式入口 -->
-          <a-form-item>
-            <a-button
-              size="large"
-              block
-              :loading="guestLoading"
-              class="guest-btn"
-              @click="handleGuestLogin"
-            >
-              <EyeOutlined />
-              {{ t('auth.guestMode') }}
-            </a-button>
-          </a-form-item>
-
           <div class="auth-footer">
             <span>{{ t('auth.noAccount') }}</span>
             <router-link to="/register">{{ t('auth.goRegister') }}</router-link>
           </div>
     </a-form>
 
-    <!-- 游客模式确认弹窗 -->
-    <a-modal
-      v-model:open="guestModalVisible"
-      :title="t('auth.guestMode')"
-      :ok-text="t('auth.continueAsGuest')"
-      :cancel-text="t('common.cancel')"
-      @ok="confirmGuestLogin"
-      @cancel="guestModalVisible = false"
-    >
-      <div class="guest-modal-content">
-        <a-alert
-          type="info"
-          show-icon
-          :message="t('auth.guestModeTitle')"
-          :description="t('auth.guestModeDesc')"
-          style="margin-bottom: 16px"
-        />
-        <div class="guest-limitations">
-          <h4>{{ t('auth.guestLimitations') }}</h4>
-          <ul>
-            <li>
-              <CloseCircleOutlined class="limitation-icon" />
-              {{ t('auth.guestLimit1') }}
-            </li>
-            <li>
-              <CloseCircleOutlined class="limitation-icon" />
-              {{ t('auth.guestLimit2') }}
-            </li>
-            <li>
-              <CloseCircleOutlined class="limitation-icon" />
-              {{ t('auth.guestLimit3') }}
-            </li>
-          </ul>
-        </div>
-        <div class="guest-benefits">
-          <h4>{{ t('auth.guestBenefits') }}</h4>
-          <ul>
-            <li>
-              <CheckCircleOutlined class="benefit-icon" />
-              {{ t('auth.guestBenefit1') }}
-            </li>
-            <li>
-              <CheckCircleOutlined class="benefit-icon" />
-              {{ t('auth.guestBenefit2') }}
-            </li>
-          </ul>
-        </div>
-      </div>
-    </a-modal>
   </AuthShell>
 </template>
 
@@ -128,10 +65,7 @@
   import type { FormInstance, Rule } from 'ant-design-vue/es/form'
   import {
     MailOutlined,
-    LockOutlined,
-    EyeOutlined,
-    CloseCircleOutlined,
-    CheckCircleOutlined
+    LockOutlined
   } from '@ant-design/icons-vue'
   import AuthShell from '@/components/auth/AuthShell.vue'
   import { useUserStore } from '@/stores'
@@ -143,8 +77,6 @@
 
   const formRef = ref<FormInstance>()
   const loading = ref(false)
-  const guestLoading = ref(false)
-  const guestModalVisible = ref(false)
 
   const formState = reactive({
     email: '',
@@ -179,25 +111,6 @@
     }
   }
 
-  // 点击游客模式按钮，弹出确认弹窗
-  const handleGuestLogin = () => {
-    guestModalVisible.value = true
-  }
-
-  // 确认以游客模式进入
-  const confirmGuestLogin = async () => {
-    guestLoading.value = true
-    guestModalVisible.value = false
-    try {
-      await userStore.guestLogin()
-      message.success(t('auth.guestLoginSuccess'))
-      router.push('/')
-    } catch {
-      // 错误已在请求层处理
-    } finally {
-      guestLoading.value = false
-    }
-  }
 </script>
 
 <style scoped lang="less">
@@ -217,20 +130,6 @@
     }
   }
 
-  .guest-btn {
-    border-style: dashed;
-    color: @text-color-light-secondary;
-
-    &:hover {
-      color: @accent-color;
-      border-color: @accent-color;
-    }
-
-    .anticon {
-      margin-right: @spacing-xs;
-    }
-  }
-
   .auth-footer {
     text-align: center;
     margin-top: @spacing-md;
@@ -243,41 +142,6 @@
       &:hover {
         color: @accent-color-hover;
       }
-    }
-  }
-
-  // 游客模式弹窗内容
-  .guest-modal-content {
-    .guest-limitations,
-    .guest-benefits {
-      h4 {
-        font-size: @font-size-sm;
-        font-weight: @font-weight-medium;
-        margin-bottom: @spacing-sm;
-        color: @text-color-light;
-      }
-
-      ul {
-        list-style: none;
-        padding: 0;
-        margin: 0 0 @spacing-md 0;
-
-        li {
-          display: flex;
-          align-items: center;
-          gap: @spacing-xs;
-          padding: @spacing-xs 0;
-          font-size: @font-size-sm;
-        }
-      }
-    }
-
-    .limitation-icon {
-      color: @error-color;
-    }
-
-    .benefit-icon {
-      color: @success-color;
     }
   }
 

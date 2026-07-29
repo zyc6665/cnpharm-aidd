@@ -78,13 +78,6 @@ class TokenResponse(BaseModel):
     user: UserResponse = Field(..., description="用户信息")
 
 
-class GuestSessionResponse(BaseModel):
-    """游客会话响应"""
-    session_id: str = Field(..., description="会话ID")
-    expires_in: int = Field(..., description="过期时间(秒)")
-    limitations: dict = Field(..., description="限制信息")
-
-
 class PasswordChange(BaseModel):
     """修改密码"""
     old_password: str = Field(..., description="旧密码")

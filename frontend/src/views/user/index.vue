@@ -10,7 +10,7 @@
                 <template #icon><UserOutlined /></template>
               </ProtectedAvatar>
               <div class="user-profile-copy">
-                <h3 class="username">{{ userStore.user?.username || t('user.guest') }}</h3>
+                <h3 class="username">{{ userStore.user?.username || '' }}</h3>
                 <p class="email">{{ userStore.user?.email || '' }}</p>
                 <a-tag :color="getRoleColor()" class="role-tag">
                   {{ getRoleName() }}
@@ -105,8 +105,7 @@ const getRoleColor = () => {
   const colors: Record<string, string> = {
     admin: 'red',
     vip: 'gold',
-    user: 'blue',
-    guest: 'default'
+    user: 'blue'
   }
   return colors[userStore.role] || 'default'
 }
@@ -115,8 +114,7 @@ const getRoleName = () => {
   const names: Record<string, string> = {
     admin: t('user.role.admin'),
     vip: t('user.role.vip'),
-    user: t('user.role.user'),
-    guest: t('user.role.guest')
+    user: t('user.role.user')
   }
   return names[userStore.role] || t('user.role.user')
 }

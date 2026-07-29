@@ -1,4 +1,4 @@
-import test from 'node:test'
+import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -89,27 +89,32 @@ test('resolveWorkflowExecutionOrder sorts ready tool nodes by graph dependencies
 
 test('workflow page exposes save, load and run-ready controls', () => {
   const source = readFileSync(resolve('src/views/workflow/index.vue'), 'utf8')
+  const execution = readFileSync(resolve('src/composables/useWorkflowExecution.ts'), 'utf8')
 
   for (const marker of [
     'handleSaveWorkflow',
     'handleLoadWorkflow',
     'handleRunReadyNodes',
-    'runWorkflowUntilBlocked',
-    'pollNodeTaskUntilTerminal',
-    'resolveReadyToolNodeIds',
-    'resolveWorkflowExecutionOrder',
-    'prepareWorkflowNodeTaskPayload',
-    'buildTaskSubmissionPayload',
-    'flattenToolInputSchema',
-    'getToolDetail',
     'workflow-definition-bar'
   ]) {
     assert.equal(source.includes(marker), true, `missing ${marker}`)
+  }
+
+  for (const marker of [
+    'runWorkflowUntilBlocked',
+    'pollNodeTaskUntilTerminal',
+    'prepareWorkflowNodeTaskPayload',
+    'buildTaskSubmissionPayload',
+    'flattenToolInputSchema',
+    'getToolDetail'
+  ]) {
+    assert.equal(execution.includes(marker), true, `missing ${marker}`)
   }
 })
 
 test('workflow page uses editable graph for canvas, save, edges, and available tools', () => {
   const source = readFileSync(resolve('src/views/workflow/index.vue'), 'utf8')
+  const canvas = readFileSync(resolve('src/composables/useWorkflowCanvas.ts'), 'utf8')
 
   for (const marker of [
     'editableTemplate',
@@ -117,11 +122,12 @@ test('workflow page uses editable graph for canvas, save, edges, and available t
     'handleAddToolNode',
     'handleDeleteNode',
     'handleAddEdge',
-    'workflowStore.canvasNodes',
-    'workflowStore.canvasEdges',
     'workflowStore.ensureCanvasFromTemplate',
     'toolsStore.fetchWorkflowTools'
   ]) {
     assert.equal(source.includes(marker), true, `missing ${marker}`)
   }
+
+  assert.equal(canvas.includes('workflowStore.canvasNodes'), true)
+  assert.equal(canvas.includes('workflowStore.canvasEdges'), true)
 })

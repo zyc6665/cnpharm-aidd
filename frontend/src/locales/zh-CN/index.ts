@@ -571,7 +571,6 @@ export default {
     registerSuccess: '注册成功',
     logoutSuccess: '退出成功',
     loginRequired: '请先登录',
-    guestCannotSubmit: '游客模式无法提交任务，请先登录',
     // 验证码
     verificationCode: '验证码',
     sendCode: '发送验证码',
@@ -604,19 +603,6 @@ export default {
     termsOfService: '服务条款',
     agreementAnd: '和',
     privacyPolicy: '隐私政策',
-    // 游客模式
-    guestMode: '游客模式',
-    guestModeTitle: '游客模式说明',
-    guestModeDesc: '您可以以游客身份浏览平台，但部分功能受限',
-    guestLimitations: '游客模式限制',
-    guestLimit1: '无法提交计算任务',
-    guestLimit2: '无法收藏工具',
-    guestLimit3: '无法查看历史任务',
-    guestBenefits: '游客模式优势',
-    guestBenefit1: '快速浏览平台功能',
-    guestBenefit2: '无需注册即可体验',
-    continueAsGuest: '继续以游客身份访问',
-    guestLoginSuccess: '已进入游客模式',
     validation: {
       usernameRequired: '请输入用户名',
       usernameLength: '用户名长度为 3-20 个字符',
@@ -756,8 +742,6 @@ export default {
     artifactSummaryFocused: '右侧已定位到来源路径',
     artifactSummaryPending: '当前路径',
     noCompatibleArtifacts: '没有匹配当前输入格式的任务产物',
-    // 游客提示
-    guestWarning: '游客模式功能受限，请登录后使用完整功能',
     // 工具详情
     free: '免费',
     introduction: '工具介绍',
@@ -940,7 +924,6 @@ export default {
     profile: '个人资料',
     settings: '账户设置',
     favorites: '我的收藏',
-    guest: '游客',
     // 个人资料
     changePassword: '修改密码',
     oldPassword: '原密码',
@@ -1013,8 +996,7 @@ export default {
     role: {
       user: '普通用户',
       vip: 'VIP 用户',
-      admin: '管理员',
-      guest: '游客'
+      admin: '管理员'
     }
   },
 
@@ -1327,7 +1309,6 @@ export default {
     toolDiscount: '工具折扣',
     subscribe: '订阅',
     // 会员计划名称
-    planGuest: '游客',
     planFree: '免费版',
     planBasic: '基础版',
     planStandard: '标准版',

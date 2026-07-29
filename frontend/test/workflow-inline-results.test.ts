@@ -1,4 +1,4 @@
-import test from 'node:test'
+import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -42,11 +42,12 @@ test('工作台轻量结果面板应复用结果可视化、输出摘要与日�
   assert.equal(source.includes('workflow.currentTool.viewTask'), true)
 })
 
-test('工作台页应维护当前结果任务上下文并响应右侧任务切换', () => {
+test('工作台页应提供节点结果标签、任务详情与产物下载入口', () => {
   const source = readSource('src/views/workflow/index.vue')
+  const inspectorSource = readSource('src/components/workflow/WorkflowNodeInspector.vue')
 
-  assert.equal(source.includes('activeResultTaskId'), true)
-  assert.equal(source.includes('activeResultToolSlug'), true)
-  assert.equal(source.includes('handleResultTaskChange'), true)
-  assert.equal(source.includes('@result-task-change'), true)
+  assert.equal(source.includes('WorkflowResultsReportPanel'), true)
+  assert.equal(inspectorSource.includes("workflow.inspector.taskResult"), true)
+  assert.equal(inspectorSource.includes("event: 'view-task-detail'"), true)
+  assert.equal(inspectorSource.includes('handleDownloadOutput'), true)
 })

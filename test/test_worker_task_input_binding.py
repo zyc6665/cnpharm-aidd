@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -27,6 +28,32 @@ from app.models.tasks import Task, TaskInput, TaskOutput, TaskStatus
 from app.models.tools import Tool, ToolStatus, ToolVersion
 from app.models.users import User, UserRole, UserStatus
 from app.worker import tasks as worker_tasks
+
+
+def test_celery_sync_tasks_run_without_a_preexisting_event_loop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Celery worker 线程不应依赖隐式创建的 asyncio event loop。"""
+
+    async def fake_execute(task_id: str, tool_version_id: str) -> dict[str, str]:
+        return {"task_id": task_id, "tool_version_id": tool_version_id}
+
+    async def fake_cleanup() -> int:
+        return 3
+
+    monkeypatch.setattr(worker_tasks, "_execute_tool_task_impl", fake_execute)
+    monkeypatch.setattr(worker_tasks, "_cleanup_expired_files_impl", fake_cleanup)
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        task_result = executor.submit(
+            worker_tasks.execute_tool_task.run,
+            "task-1",
+            "version-1",
+        ).result()
+        cleanup_result = executor.submit(worker_tasks.cleanup_expired_files.run).result()
+
+    assert task_result == {"task_id": "task-1", "tool_version_id": "version-1"}
+    assert cleanup_result == {"deleted_count": 3}
 
 
 @pytest_asyncio.fixture

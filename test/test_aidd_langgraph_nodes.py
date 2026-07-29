@@ -41,28 +41,38 @@ def test_discover_tools_filters_configured_slugs():
 
     slugs = [tool["tool_slug"] for tool in state["available_tools"]]
     assert slugs[0] == "lvpocket-pocket-prediction"
-    # 所有 virtual builtin tools 都应该被发现
+    # 仅已接入真实执行引擎的 virtual builtin tools 应该被发现。
     expected_virtual = {
         "builtin-sdf-to-smiles-csv",
         "builtin-sdf-to-pdb",
         "builtin-vina-docking",
+        "builtin-query-chembl",
+        "builtin-query-pubchem",
+        "builtin-query-pdbbind",
+    }
+    unavailable_virtual = {
         "builtin-admet-prediction",
         "builtin-toxicity-prediction",
         "builtin-synthetic-accessibility",
         "builtin-molecular-dynamics",
         "builtin-interaction-analysis",
-        "builtin-query-chembl",
-        "builtin-query-pubchem",
-        "builtin-query-pdbbind",
     }
     virtual_slugs = {tool["tool_slug"] for tool in state["available_tools"] if tool.get("virtual")}
     assert expected_virtual.issubset(virtual_slugs)
+    assert not (unavailable_virtual & virtual_slugs)
     assert state["available_tools"][1]["virtual"] is True
 
 
 def test_validate_plan_node_parses_model_output():
     state = validate_plan_node(
         {
+            "semantic_inputs": {
+                "pocket_pdb": {
+                    "source": "agent_input",
+                    "file_id": "pocket-file",
+                    "filename": "pocket.pdb",
+                }
+            },
             "available_tools": [
                 {
                     "tool_slug": "gcdm-pocket-generation",

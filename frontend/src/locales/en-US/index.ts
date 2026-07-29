@@ -571,7 +571,6 @@ export default {
     registerSuccess: 'Registration successful',
     logoutSuccess: 'Logout successful',
     loginRequired: 'Please login first',
-    guestCannotSubmit: 'Guest mode cannot submit tasks, please login first',
     // Verification code
     verificationCode: 'Verification Code',
     sendCode: 'Send Code',
@@ -604,19 +603,6 @@ export default {
     termsOfService: 'Terms of Service',
     agreementAnd: 'and',
     privacyPolicy: 'Privacy Policy',
-    // Guest mode
-    guestMode: 'Guest Mode',
-    guestModeTitle: 'Guest Mode Information',
-    guestModeDesc: 'You can browse the platform as a guest, but some features are restricted',
-    guestLimitations: 'Guest Mode Limitations',
-    guestLimit1: 'Cannot submit computing tasks',
-    guestLimit2: 'Cannot favorite tools',
-    guestLimit3: 'Cannot view task history',
-    guestBenefits: 'Guest Mode Benefits',
-    guestBenefit1: 'Quick browse platform features',
-    guestBenefit2: 'No registration required',
-    continueAsGuest: 'Continue as Guest',
-    guestLoginSuccess: 'Entered guest mode',
     validation: {
       usernameRequired: 'Please enter username',
       usernameLength: 'Username must be 3-20 characters',
@@ -756,8 +742,6 @@ export default {
     artifactSummaryFocused: 'Path Focused from Panel',
     artifactSummaryPending: 'Current Path',
     noCompatibleArtifacts: 'No task artifact matches this input format',
-    // Guest warning
-    guestWarning: 'Guest mode has limited features. Please login for full access',
     // Tool detail
     free: 'Free',
     introduction: 'Introduction',
@@ -940,7 +924,6 @@ export default {
     profile: 'Profile',
     settings: 'Account Settings',
     favorites: 'My Favorites',
-    guest: 'Guest',
     // Profile
     changePassword: 'Change Password',
     oldPassword: 'Current Password',
@@ -1013,8 +996,7 @@ export default {
     role: {
       user: 'User',
       vip: 'VIP User',
-      admin: 'Administrator',
-      guest: 'Guest'
+      admin: 'Administrator'
     }
   },
 
@@ -1329,7 +1311,6 @@ export default {
     toolDiscount: 'Tool Discount',
     subscribe: 'Subscribe',
     // Plan names
-    planGuest: 'Guest',
     planFree: 'Free',
     planBasic: 'Basic',
     planStandard: 'Standard',

@@ -22,6 +22,7 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from app.api.v1 import tasks as tasks_api
 from app.auth.dependencies import get_current_user, get_current_user_optional
+from app.config import settings as config_settings
 from app.database.base import Base
 from app.database.session import get_db
 from app.main import app
@@ -152,7 +153,7 @@ def direct_runner_stub(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
         schedule_task=lambda task_id, tool_version_id: runner.scheduled.append((task_id, tool_version_id)),
         cancel_task=lambda task_id: runner.cancelled.append(task_id) or True,
     )
-    monkeypatch.setattr(tasks_api, "use_direct_task_execution", lambda: True)
+    monkeypatch.setattr(config_settings, "TASK_EXECUTION_BACKEND", "direct", raising=False)
     monkeypatch.setattr(tasks_api, "direct_task_runner", runner, raising=False)
     return runner
 

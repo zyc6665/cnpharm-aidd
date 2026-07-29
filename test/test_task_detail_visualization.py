@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from app.auth.dependencies import get_admin_user, get_current_user
+from app.config import settings as config_settings
 from app.database.base import Base
 from app.database.session import get_db
 from app.main import app
@@ -225,6 +226,8 @@ async def test_create_task_persists_all_input_file_ids(test_client, monkeypatch)
             )()
         ),
     )
+    monkeypatch.setattr(config_settings, "TASK_EXECUTION_BACKEND", "celery", raising=False)
+    monkeypatch.setattr(config_settings, "CELERY_BROKER_URL", "redis://test", raising=False)
 
     async with session_factory() as session:
         session.add(

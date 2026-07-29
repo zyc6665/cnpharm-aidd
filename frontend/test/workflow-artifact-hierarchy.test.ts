@@ -1,4 +1,4 @@
-import test from 'node:test'
+import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -132,23 +132,14 @@ test('参数里的产物复用选择器应提供分组→工具→任务→产�
   assert.equal(modelSource.includes('task_name?: string'), true)
 })
 
-test('工作台右侧产物面板应按工具分组→工具→任务→产物统一展示并提供路径回传', () => {
-  const source = readSource('src/components/workflow/WorkflowArtifactPanel.vue')
-  const runPanelSource = readSource('src/components/workflow/WorkflowRunPanel.vue')
-  const workflowPageSource = readSource('src/views/workflow/index.vue')
+test('节点参数表单应通过共享选择器提供分组→工具→任务→产物链路', () => {
+  const source = readSource('src/components/tools/ArtifactFilePicker.vue')
+  const formSource = readSource('src/components/workflow/ToolParameterForm.vue')
 
   assert.equal(source.includes('buildWorkflowArtifactHierarchy'), true)
-  assert.equal(source.includes('artifact-tool-section'), true)
-  assert.equal(source.includes('artifact-tool-title'), true)
-  assert.equal(source.includes('artifact-task-card'), true)
-  assert.equal(source.includes('artifact-task-title'), true)
-  assert.equal(source.includes('artifact-task-short-id'), true)
-  assert.equal(source.includes('taskNode.taskName'), true)
-  assert.equal(source.includes('artifact-name'), true)
-  assert.equal(source.includes('expandedGroupIds'), true)
-  assert.equal(source.includes('expandedToolSlugs'), true)
-  assert.equal(source.includes('expandedTaskIds'), true)
-  assert.equal(source.includes('select-artifact-path'), true)
-  assert.equal(runPanelSource.includes('artifactSelectionPath'), true)
-  assert.equal(workflowPageSource.includes('@select-artifact-path'), true)
+  assert.equal(source.includes('selectedGroupId'), true)
+  assert.equal(source.includes('selectedToolSlug'), true)
+  assert.equal(source.includes('selectedTaskId'), true)
+  assert.equal(source.includes('artifact-path'), true)
+  assert.equal(formSource.includes('ArtifactFilePicker'), true)
 })

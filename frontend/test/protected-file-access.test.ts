@@ -1,4 +1,4 @@
-import test from 'node:test'
+import { test } from 'vitest'
 import assert from 'node:assert/strict'
 
 import {
@@ -116,21 +116,9 @@ test('fetchProtectedFileText 应使用登录令牌拉取受保护文本文件', 
   assert.equal(text, 'SMILES,score\\nCCO,0.8\\n')
 })
 
-test('fetchProtectedFileText 应在无登录令牌时使用游客会话头', async () => {
-  let requestedUrl = ''
-  let requestedHeaders: Record<string, string> | undefined
-
-  const text = await fetchProtectedFileText('/api/v1/files/file-5/download', {
-    getToken: () => null,
-    getGuestSession: () => 'guest-session-123',
-    fetchText: async (url, headers) => {
-      requestedUrl = url
-      requestedHeaders = headers
-      return 'guest file'
-    }
-  })
-
-  assert.equal(requestedUrl, '/api/v1/files/file-5/download')
-  assert.deepEqual(requestedHeaders, { 'X-Guest-Session': 'guest-session-123' })
-  assert.equal(text, 'guest file')
+test('fetchProtectedFileText 应在无登录令牌时拒绝访问', async () => {
+  await assert.rejects(
+    () => fetchProtectedFileText('/api/v1/files/file-5/download', { getToken: () => null }),
+    /需要登录后才能访问此文件/
+  )
 })

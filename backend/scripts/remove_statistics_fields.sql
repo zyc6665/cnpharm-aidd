@@ -45,7 +45,7 @@ CREATE INDEX ix_tools_review_status ON tools(review_status);
 -- 3. 移除files表的统计字段
 CREATE TABLE files_new AS
 SELECT
-    id, owner_id, session_id, filename, content_type,
+    id, owner_id, filename, content_type,
     size_bytes, sha256, storage_backend, storage_path,
     source_type, is_public, is_corrupted, is_permanent,
     expires_at, last_accessed_at, deleted_at,
@@ -58,7 +58,6 @@ ALTER TABLE files_new RENAME TO files;
 
 -- 重建索引
 CREATE INDEX ix_files_owner_id ON files(owner_id);
-CREATE INDEX ix_files_session_id ON files(session_id);
 CREATE INDEX ix_files_sha256 ON files(sha256);
 
 COMMIT;

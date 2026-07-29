@@ -1,8 +1,7 @@
 # backend/app/models/users.py
 """用户相关模型"""
 
-from datetime import datetime
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, Enum, Text, ForeignKey, JSON
+from sqlalchemy import Column, String, Integer
 from sqlalchemy.orm import relationship
 import enum
 
@@ -11,7 +10,6 @@ from app.database.base import Base, TimestampMixin, UUIDMixin
 
 class UserRole(str, enum.Enum):
     """用户角色"""
-    GUEST = "guest"
     USER = "user"
     VIP = "vip"
     ADMIN = "admin"
@@ -40,28 +38,7 @@ class User(Base, UUIDMixin, TimestampMixin):
     max_file_size_mb = Column(Integer, default=100)
 
     # 关系
-    sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
     tools = relationship("Tool", back_populates="owner", foreign_keys="Tool.owner_id")
     tasks = relationship("Task", back_populates="user")
     files = relationship("File", back_populates="owner")
     statistics = relationship("UserStatistics", back_populates="user", uselist=False)
-
-
-class UserSession(Base, UUIDMixin, TimestampMixin):
-    """用户会话表"""
-    __tablename__ = "user_sessions"
-
-    user_id = Column(String(36), ForeignKey("users.id"), nullable=True, index=True)
-    session_token = Column(String(255), unique=True, nullable=False, index=True)
-    is_guest = Column(Boolean, default=False)
-    expires_at = Column(DateTime, nullable=False)
-    ip_address = Column(String(50), nullable=True)
-    user_agent = Column(Text, nullable=True)
-    session_data = Column(JSON, default=dict)  # 原 metadata，避免保留字冲突
-
-    # 游客使用统计
-    tasks_today = Column(Integer, default=0)
-    last_task_date = Column(DateTime, nullable=True)
-
-    # 关系
-    user = relationship("User", back_populates="sessions")

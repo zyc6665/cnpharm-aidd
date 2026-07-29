@@ -14,7 +14,7 @@ from app.models.files import File, FileAccessLog
 from app.models.statistics import FileStatistics, ToolStatistics, UserStatistics
 from app.models.tasks import Task, TaskInput, TaskOutput, TaskLog
 from app.models.tools import Tool, ToolFavorite, ToolVersion, tool_tag_association
-from app.models.users import User, UserRole, UserSession, UserStatus
+from app.models.users import User, UserRole, UserStatus
 from app.auth.dependencies import get_current_user, get_admin_user
 from app.auth.password import hash_password, verify_password
 from app.common.responses import success_response
@@ -195,7 +195,6 @@ async def hard_delete_user_related_resources(db: AsyncSession, user_id: str) -> 
         await db.execute(delete(ToolVersion).where(ToolVersion.tool_id.in_(owned_tool_ids)))
         await db.execute(delete(Tool).where(Tool.id.in_(owned_tool_ids)))
 
-    await db.execute(delete(UserSession).where(UserSession.user_id == user_id))
     await db.execute(delete(UserStatistics).where(UserStatistics.user_id == user_id))
     await db.execute(delete(User).where(User.id == user_id))
 

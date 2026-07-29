@@ -498,11 +498,6 @@ async def get_system_config(
                 "access_token_expire_minutes": settings.ACCESS_TOKEN_EXPIRE_MINUTES,
                 "refresh_token_expire_days": settings.REFRESH_TOKEN_EXPIRE_DAYS
             },
-            "guest": {
-                "daily_task_limit": settings.GUEST_DAILY_TASK_LIMIT,
-                "max_file_size_mb": settings.GUEST_MAX_FILE_SIZE_MB,
-                "session_hours": settings.GUEST_SESSION_HOURS
-            },
             "cors_origins": settings.CORS_ORIGINS,
             "log_level": settings.LOG_LEVEL
         }

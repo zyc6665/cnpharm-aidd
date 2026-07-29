@@ -1,4 +1,4 @@
-import test from 'node:test'
+import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -22,11 +22,14 @@ test('受保护头像组件应通过 blob URL 渲染私有文件下载地址', (
 })
 
 test('用户头像入口不应直接把文件下载地址传给 a-avatar', () => {
-  const defaultLayoutSource = readSource('src/components/layout/DefaultLayout.vue')
+  const appShellSource = readSource('src/components/layout/AppShell.vue')
   const userIndexSource = readSource('src/views/user/index.vue')
   const profileSource = readSource('src/views/user/Profile.vue')
 
-  assert.equal(defaultLayoutSource.includes('ProtectedAvatar'), true)
+  assert.equal(appShellSource.includes('ProtectedAvatar'), true)
+  assert.equal(appShellSource.includes(':src="userAvatar"'), true)
+  assert.equal(appShellSource.includes(':file-id='), false)
+  assert.equal(appShellSource.includes(':user-id='), false)
   assert.equal(userIndexSource.includes('ProtectedAvatar'), true)
   assert.equal(profileSource.includes('ProtectedAvatar'), true)
 })

@@ -207,36 +207,22 @@ class MetricsCollector:
 
         try:
             from sqlalchemy import select, func
-            from app.models.users import User, UserSession
+            from app.models.users import User
 
             async with self.db_factory() as db:
-                # 活跃用户（最近1小时有会话）
+                # 活跃用户（最近1小时更新过资料或账户状态）
                 cutoff = utcnow() - timedelta(hours=1)
 
                 active_result = await db.execute(
-                    select(func.count(func.distinct(UserSession.user_id))).where(
-                        UserSession.user_id.is_not(None),
-                        UserSession.is_guest == False,
-                        UserSession.updated_at >= cutoff,
-                    )
+                    select(func.count(User.id)).where(User.updated_at >= cutoff)
                 )
                 active_users = active_result.scalar() or 0
 
-                # 游客会话（从缓存统计）
-                guest_count = 0
-                if self.cache:
-                    try:
-                        keys = await self.cache.keys("guest:*")
-                        guest_count = len(keys) if keys else 0
-                    except Exception as e:
-                        logger.warning(f"Guest session metrics collection failed: {e}")
-
             # 更新指标
-            self.metrics.set_active_users(registered=active_users, guest=guest_count)
+            self.metrics.set_active_users(active_users)
 
             return {
-                "active_registered": active_users,
-                "active_guests": guest_count
+                "active_users": active_users
             }
 
         except Exception as e:

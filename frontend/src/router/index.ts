@@ -24,19 +24,19 @@ const routes: RouteRecordRaw[] = [
     path: '/login',
     name: 'Login',
     component: () => import('@/views/auth/Login.vue'),
-    meta: { title: 'auth.login', guest: true }
+    meta: { title: 'auth.login', redirectAuthenticated: true }
   },
   {
     path: '/register',
     name: 'Register',
     component: () => import('@/views/auth/Register.vue'),
-    meta: { title: 'auth.register', guest: true }
+    meta: { title: 'auth.register', redirectAuthenticated: true }
   },
   {
     path: '/forgot-password',
     name: 'ForgotPassword',
     component: () => import('@/views/auth/ForgotPassword.vue'),
-    meta: { title: 'auth.forgotPassword', guest: true }
+    meta: { title: 'auth.forgotPassword', redirectAuthenticated: true }
   },
   // 工具相关
   {
@@ -206,8 +206,8 @@ router.beforeEach(async (to, _from, next) => {
   const translatedTitle = titleKey ? i18n.global.t(titleKey) : 'CPUModel'
   document.title = `${translatedTitle} - CPUModel`
 
-  // 访客页面（已登录用户重定向到工作台）
-  if (to.meta.guest && userStore.isLoggedIn) {
+  // 认证页面（已登录用户重定向到工作台）
+  if (to.meta.redirectAuthenticated && userStore.isLoggedIn) {
     next('/workspace')
     return
   }
@@ -247,6 +247,6 @@ declare module 'vue-router' {
     title?: string
     requiresAuth?: boolean
     requiresAdmin?: boolean
-    guest?: boolean
+    redirectAuthenticated?: boolean
   }
 }

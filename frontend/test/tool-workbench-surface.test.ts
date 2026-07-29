@@ -1,4 +1,4 @@
-import test from 'node:test'
+import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -33,11 +33,11 @@ test('工作台左栏应转为分组栏语义而不是步骤栏语义', () => {
   assert.equal(source.includes('group-rail-card'), true)
 })
 
-test('/workflow 页面应读取工作台分组而不是旧的工作流工具集合', () => {
+test('/workflow 页面应同时加载工作台分组与可用于画布的工具集合', () => {
   const source = readSource('src/views/workflow/index.vue')
 
   assert.equal(source.includes('fetchWorkbenchGroups'), true)
-  assert.equal(source.includes('fetchWorkflowTools'), false)
+  assert.equal(source.includes('fetchWorkflowTools'), true)
 })
 
 test('工作台页头标题与副标题应居中展示', () => {
@@ -77,15 +77,14 @@ test('普通工具详情页应引用共享产物文件选择器', () => {
   assert.equal(source.includes(':current-tool-slug="tool?.slug"'), true)
 })
 
-test('工作台运行区应复用共享产物选择器并移除强流程推进文案', () => {
-  const source = readSource('src/components/workflow/WorkflowRunPanel.vue')
+test('节点运行区应经由参数表单复用共享产物选择器', () => {
+  const runPanelSource = readSource('src/components/workflow/WorkflowNodeRunPanel.vue')
+  const formSource = readSource('src/components/workflow/ToolParameterForm.vue')
 
-  assert.equal(source.includes('ArtifactFilePicker'), true)
-  assert.equal(source.includes(':current-tool-id="selectedTool?.id ?? selectedToolSummary?.id"'), true)
-  assert.equal(source.includes(':current-tool-slug="selectedTool?.slug ?? selectedToolSummary?.slug"'), true)
-  assert.equal(source.includes('workflow.actions.continueNextStep'), false)
-  assert.equal(source.includes('workflow.invalidations.notice'), false)
-  assert.equal(source.includes('tool-lab-panel'), true)
+  assert.equal(runPanelSource.includes('ToolParameterForm'), true)
+  assert.equal(runPanelSource.includes(':tool-id="selectedTool?.id"'), true)
+  assert.equal(runPanelSource.includes(':tool-slug="selectedTool?.slug"'), true)
+  assert.equal(formSource.includes('ArtifactFilePicker'), true)
 })
 
 test('工作台右栏应展示我的产物而不是旧的流程工作区', () => {
@@ -125,7 +124,7 @@ test('管理后台应存在工作台分组管理路由与导航入口', () => {
 
   assert.equal(routerSource.includes("path: 'workbench-groups'"), true)
   assert.equal(routerSource.includes('AdminWorkbenchGroups'), true)
-  assert.equal(adminSource.includes("key=\"workbench-groups\""), true)
+  assert.equal(adminSource.includes("key: 'workbench-groups'"), true)
 })
 
 test('后台工作台分组管理页面文件应存在并包含分组与映射维护区', () => {

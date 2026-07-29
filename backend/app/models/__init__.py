@@ -1,6 +1,6 @@
 # backend/app/models/__init__.py
 """数据模型"""
-from app.models.users import User, UserSession
+from app.models.users import User
 from app.models.tools import (
     Tool,
     ToolCategory,
@@ -19,7 +19,7 @@ from app.models.statistics import UserStatistics, ToolStatistics, FileStatistics
 from app.models.tool_capabilities import ToolCapability
 
 __all__ = [
-    "User", "UserSession",
+    "User",
     "Tool", "ToolCategory", "ToolVersion", "Tag",
     "ToolWorkbenchGroup", "ToolWorkbenchGroupMapping",
     "Task", "TaskInput", "TaskOutput", "TaskLog",

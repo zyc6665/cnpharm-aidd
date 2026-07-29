@@ -33,7 +33,7 @@ from app.models.files import File, FileAccessLog
 from app.models.statistics import FileStatistics, ToolStatistics, UserStatistics
 from app.models.tasks import Task, TaskInput, TaskLog, TaskOutput, TaskStatus
 from app.models.tools import Tool, ToolFavorite, ToolVersion
-from app.models.users import User, UserRole, UserSession, UserStatus
+from app.models.users import User, UserRole, UserStatus
 
 
 @pytest_asyncio.fixture
@@ -289,11 +289,6 @@ async def test_admin_hard_delete_user_cascades_related_records(
     db_session: AsyncSession,
 ):
     """管理员真删除用户时应级联清理其关联数据。"""
-    session = UserSession(
-        user_id=normal_user.id,
-        session_token="member-session-token",
-        expires_at=admin_user.created_at,
-    )
     user_statistics = UserStatistics(user_id=normal_user.id, total_tasks=3)
 
     reviewed_tool = Tool(
@@ -322,7 +317,7 @@ async def test_admin_hard_delete_user_cascades_related_records(
         storage_path="/tmp/other.txt",
     )
 
-    db_session.add_all([session, user_statistics, reviewed_tool, owned_tool, owned_file, other_file])
+    db_session.add_all([user_statistics, reviewed_tool, owned_tool, owned_file, other_file])
     await db_session.flush()
 
     owned_version = ToolVersion(
@@ -364,7 +359,6 @@ async def test_admin_hard_delete_user_cascades_related_records(
     assert response.json()["message"] == "用户已彻底删除"
 
     assert await db_session.get(User, normal_user.id) is None
-    assert await db_session.get(UserSession, session.id) is None
     assert await db_session.get(UserStatistics, normal_user.id) is None
     assert await db_session.get(Tool, owned_tool.id) is None
     assert await db_session.get(ToolVersion, owned_version.id) is None

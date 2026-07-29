@@ -480,13 +480,11 @@ class FileLifecycleManager:
         file_id: str,
         user_id: Optional[str],
         action: str,
-        session_id: Optional[str] = None
     ) -> None:
         """记录文件访问日志"""
         access_log = FileAccessLog(
             file_id=file_id,
             user_id=user_id,
-            session_id=session_id,
             action=action,
             accessed_at=utcnow()
         )

@@ -194,6 +194,8 @@ class Settings(BaseSettings):
     # ==================== 缓存配置 ====================
     # 缓存后端: memory | redis
     CACHE_BACKEND: Literal["memory", "redis"] = "memory"
+    REQUEST_RATE_LIMIT_PER_MINUTE: int = 60
+    RATE_LIMIT_TRUST_PROXY_HEADERS: bool = False
 
     # Redis 配置（生产环境）
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -222,11 +224,6 @@ class Settings(BaseSettings):
     # ==================== AIDD Agent 配置 ====================
     ENABLE_DATABASE_TOOLS: bool = False
     AIDD_SYSTEM_USER_ID: Optional[str] = None
-
-    # ==================== 游客配置 ====================
-    GUEST_DAILY_TASK_LIMIT: int = 5
-    GUEST_MAX_FILE_SIZE_MB: int = 10
-    GUEST_SESSION_HOURS: int = 24
 
     # ==================== 日志配置 ====================
     LOG_LEVEL: str = "INFO"

@@ -137,7 +137,6 @@ class PrometheusMetrics:
         self.active_users = Gauge(
             f"{namespace}_active_users",
             "Number of active users",
-            ["user_type"]  # registered, guest
         )
 
         # 系统信息
@@ -282,18 +281,16 @@ class PrometheusMetrics:
         for source_type, count in file_counts.items():
             self.file_count.labels(source_type=source_type).set(count)
 
-    def set_active_users(self, registered: int, guest: int) -> None:
+    def set_active_users(self, active_users: int) -> None:
         """设置活跃用户数
 
         Args:
-            registered: 注册用户数
-            guest: 游客数
+            active_users: 活跃用户数
         """
         if not self.enabled:
             return
 
-        self.active_users.labels(user_type="registered").set(registered)
-        self.active_users.labels(user_type="guest").set(guest)
+        self.active_users.set(active_users)
 
     def generate_metrics(self) -> bytes:
         """生成Prometheus格式的指标数据

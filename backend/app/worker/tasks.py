@@ -87,11 +87,7 @@ def execute_tool_task(self, task_id: str, tool_version_id: str):
     logger.info(f"开始执行任务: {task_id}, 工具版本: {tool_version_id}")
 
     try:
-        # 在异步上下文中执行
-        loop = asyncio.get_event_loop()
-        result = loop.run_until_complete(
-            _execute_tool_task_impl(task_id, tool_version_id)
-        )
+        result = asyncio.run(_execute_tool_task_impl(task_id, tool_version_id))
         logger.info(f"任务完成: {task_id}")
         return result
 
@@ -263,8 +259,7 @@ def cleanup_expired_files():
     """
     logger.info("开始清理过期文件")
 
-    loop = asyncio.get_event_loop()
-    count = loop.run_until_complete(_cleanup_expired_files_impl())
+    count = asyncio.run(_cleanup_expired_files_impl())
 
     logger.info(f"清理完成，删除 {count} 个过期文件")
     return {"deleted_count": count}

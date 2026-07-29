@@ -2,7 +2,6 @@ const PUBLIC_AUTH_PATHS = [
   '/auth/login',
   '/auth/logout',
   '/auth/register',
-  '/auth/guest',
   '/auth/refresh',
   '/auth/reset-password',
   '/auth/invitation/validate'

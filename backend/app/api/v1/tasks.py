@@ -8,12 +8,14 @@ from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload, joinedload
 from typing import Any, Optional
 
+from app.config import use_direct_task_execution
 from app.database.session import get_db
 from app.models.files import File as FileModel
 from app.models.users import User
 from app.models.tools import Tool, ToolVersion
 from app.models.tasks import Task, TaskLog, TaskStatus
 from app.tasks.cancellation import cancel_platform_task
+from app.tasks.direct_runner import direct_task_runner
 from app.tasks.service import (
     create_and_schedule_tool_task,
     record_tool_usage,
@@ -351,7 +353,12 @@ async def cancel_task(
     if task.status not in [TaskStatus.PENDING.value, TaskStatus.RUNNING.value]:
         raise ValidationException("任务状态不允许取消")
 
-    await cancel_platform_task(db, task=task, current_user=current_user)
+    await cancel_platform_task(
+        db,
+        task=task,
+        current_user=current_user,
+        direct_runner=direct_task_runner,
+    )
     await db.commit()
 
     return success_response(message="任务已取消")

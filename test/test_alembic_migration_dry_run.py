@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -46,6 +48,15 @@ def test_alembic_sqlite_upgrade_and_downgrade_dry_run(tmp_path: Path) -> None:
     assert {"alembic_version", "users", "tools", "tasks", "files", "workflow_runs", "tool_capabilities"}.issubset(
         tables
     )
+    assert "user_sessions" not in tables
+
+    with sqlite3.connect(db_path) as conn:
+        assert "session_id" not in {
+            row[1] for row in conn.execute("PRAGMA table_info(tasks)")
+        }
+        assert "session_id" not in {
+            row[1] for row in conn.execute("PRAGMA table_info(files)")
+        }
 
     downgrade = _run_alembic("downgrade", "base", env=env)
     assert downgrade.returncode == 0, downgrade.stderr or downgrade.stdout
@@ -62,6 +73,9 @@ def test_alembic_sqlite_upgrade_and_downgrade_dry_run(tmp_path: Path) -> None:
 
 def test_alembic_heads_command_works_from_backend_directory() -> None:
     result = _run_backend_alembic("heads", env=os.environ.copy())
+    config = Config(str(PROJECT_ROOT / "alembic.ini"))
+    current_head = ScriptDirectory.from_config(config).get_current_head()
 
     assert result.returncode == 0, result.stderr or result.stdout
-    assert "20260627_01" in result.stdout
+    assert current_head is not None
+    assert current_head in result.stdout

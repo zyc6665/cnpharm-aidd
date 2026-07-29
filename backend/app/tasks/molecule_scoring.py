@@ -487,7 +487,6 @@ async def _store_artifact(
         storage_path=str(storage_path),
         source_type=FileSourceType.TOOL_OUTPUT.value,
         owner_id=task.user_id,
-        session_id=task.session_id,
         is_public=False,
         is_permanent=False,
         file_meta={

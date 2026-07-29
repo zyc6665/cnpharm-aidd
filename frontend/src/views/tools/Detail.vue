@@ -81,18 +81,6 @@
                 <h2 class="section-title">{{ t('tools.parameters') }}</h2>
               </div>
 
-              <!-- 游客警告 -->
-              <a-alert
-                v-if="userStore.isGuest"
-                type="warning"
-                show-icon
-                style="margin-bottom: 16px"
-              >
-                <template #message>
-                  {{ t('tools.guestWarning') }}
-                </template>
-              </a-alert>
-
               <ToolExamplePanel
                 v-if="example"
                 :example="example"
@@ -434,7 +422,6 @@
 
   const canSubmit = computed(() => {
     if (!userStore.isAuthenticated) return false
-    if (userStore.isGuest) return false
     if (Object.values(sdfConversionLoading).some(Boolean)) return false
     return true
   })
@@ -776,11 +763,6 @@
       return
     }
 
-    if (userStore.isGuest) {
-      message.warning(t('auth.guestCannotSubmit'))
-      return
-    }
-
     applyingExample.value = true
     try {
       const res = await applyToolExample(tool.value.id)
@@ -825,11 +807,6 @@
     if (!userStore.isLoggedIn) {
       message.warning(t('auth.loginRequired'))
       router.push('/login')
-      return
-    }
-
-    if (userStore.isGuest) {
-      message.warning(t('auth.guestCannotSubmit'))
       return
     }
 

@@ -196,8 +196,7 @@ const getRoleColor = (role: string) => {
   const colors: Record<string, string> = {
     admin: 'red',
     vip: 'gold',
-    user: 'blue',
-    guest: 'default'
+    user: 'blue'
   }
   return colors[role] || 'default'
 }

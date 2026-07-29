@@ -90,7 +90,6 @@ class FileDeduplicator:
         self,
         sha256: str,
         new_owner_id: Optional[str] = None,
-        session_id: Optional[str] = None,
         extend_retention: bool = True
     ) -> DeduplicationResult:
         """文件去重
@@ -102,7 +101,6 @@ class FileDeduplicator:
         Args:
             sha256: 文件SHA256哈希
             new_owner_id: 新所有者用户ID
-            session_id: 游客Session ID
             extend_retention: 是否延长保留时间
 
         Returns:
@@ -120,8 +118,7 @@ class FileDeduplicator:
         # 记录访问（创建用户引用）
         await self._create_user_reference(
             existing.id,
-            new_owner_id,
-            session_id
+            new_owner_id
         )
 
         # 延长文件过期时间
@@ -175,20 +172,17 @@ class FileDeduplicator:
     async def _create_user_reference(
         self,
         file_id: str,
-        user_id: Optional[str],
-        session_id: Optional[str]
+        user_id: Optional[str]
     ) -> None:
         """创建用户文件引用（通过访问日志记录）
 
         Args:
             file_id: 文件ID
             user_id: 用户ID
-            session_id: 游客Session ID
         """
         access_log = FileAccessLog(
             file_id=file_id,
             user_id=user_id,
-            session_id=session_id,
             action="reference",
             accessed_at=utcnow()
         )

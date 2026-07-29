@@ -19,6 +19,7 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.agents.aidd.service import reconcile_waiting_agent_steps, start_ready_steps  # noqa: E402
+from app.config import settings as config_settings  # noqa: E402
 from app.database.base import Base  # noqa: E402
 from app.models import agent as _agent_models  # noqa: F401,E402
 from app.models import files as _files_models  # noqa: F401,E402
@@ -349,12 +350,13 @@ async def test_legacy_agent_input_source_with_semantic_suffix_is_still_supported
 
 
 @pytest.mark.asyncio
-async def test_virtual_sdf_to_smiles_conversion_creates_csv_and_schedules_property_step(
+async def test_builtin_sdf_to_smiles_schedules_task_without_fabricating_output(
     db_session: AsyncSession,
     user: User,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(config_settings, "AIDD_SYSTEM_USER_ID", user.id, raising=False)
     gcdm = await create_tool(
         db_session,
         user,
@@ -462,21 +464,21 @@ $$$$
     result = await db_session.get(AgentRun, run.id)
     conversion_step = next(step for step in result.steps if step.step_key == "sdf_to_smiles")
     property_step = next(step for step in result.steps if step.step_key == "property_prediction")
-    csv_file = await db_session.get(FileModel, conversion_step.semantic_outputs["smiles_csv"]["file_id"])
-    assert conversion_step.status == "success"
-    assert csv_file.filename.endswith("_smiles.csv")
-    assert Path(csv_file.storage_path).read_text(encoding="utf-8").strip() == "SMILES,id\nCCO,mol_1"
-    assert property_step.status == "waiting_task"
-    assert scheduled_payloads[0].file_ids == [csv_file.id]
+    assert conversion_step.status == "waiting_task"
+    assert conversion_step.semantic_outputs in (None, {})
+    assert property_step.status == "pending"
+    assert len(scheduled_payloads) == 1
+    assert scheduled_payloads[0].file_ids == [generated_file.id]
 
 
 @pytest.mark.asyncio
-async def test_virtual_sdf_to_smiles_uses_converter_tool_when_sdf_has_no_smiles(
+async def test_builtin_sdf_to_smiles_defers_converter_execution_to_worker(
     db_session: AsyncSession,
     user: User,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(config_settings, "AIDD_SYSTEM_USER_ID", user.id, raising=False)
     gcdm = await create_tool(
         db_session,
         user,
@@ -550,15 +552,15 @@ $$$$
     )
     await db_session.commit()
 
-    converter_inputs: list[Path] = []
+    scheduled_payloads = []
 
-    def fake_converter_tool(path: Path) -> list[str]:
-        converter_inputs.append(path)
-        return ["NCCO"]
+    async def fake_create_task(*, db, current_user, task_data, direct_runner=None):
+        scheduled_payloads.append(task_data)
+        return SimpleNamespace(id="task-conversion", tool_id=task_data.tool_id)
 
     monkeypatch.setattr(
-        "app.agents.aidd.builtin_tools.convert_sdf_to_smiles_with_tool",
-        fake_converter_tool,
+        "app.agents.aidd.service.create_and_schedule_tool_task",
+        fake_create_task,
     )
 
     count = await reconcile_waiting_agent_steps(db_session, run_id=run.id)
@@ -566,18 +568,20 @@ $$$$
     assert count == 1
     refreshed_run = await db_session.get(AgentRun, run.id)
     conversion_step = next(step for step in refreshed_run.steps if step.step_key == "sdf_to_smiles")
-    csv_file = await db_session.get(FileModel, conversion_step.semantic_outputs["smiles_csv"]["file_id"])
-    assert converter_inputs == [sdf_path]
-    assert Path(csv_file.storage_path).read_text(encoding="utf-8").strip() == "SMILES,id\nNCCO,mol_1"
+    assert conversion_step.status == "waiting_task"
+    assert conversion_step.semantic_outputs in (None, {})
+    assert len(scheduled_payloads) == 1
+    assert scheduled_payloads[0].file_ids == [generated_file.id]
 
 
 @pytest.mark.asyncio
-async def test_virtual_sdf_to_pdb_conversion_creates_ligand_pdb_and_schedules_affinity_step(
+async def test_builtin_sdf_to_pdb_schedules_task_without_fabricating_output(
     db_session: AsyncSession,
     user: User,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(config_settings, "AIDD_SYSTEM_USER_ID", user.id, raising=False)
     gcdm = await create_tool(
         db_session,
         user,
@@ -678,17 +682,6 @@ $$$$
     )
     await db_session.commit()
 
-    converter_inputs: list[Path] = []
-
-    def fake_converter_tool(path: Path) -> bytes:
-        converter_inputs.append(path)
-        return b"HETATM    1  C1  LIG A   1       0.000   0.000   0.000\nEND\n"
-
-    monkeypatch.setattr(
-        "app.agents.aidd.builtin_tools.convert_sdf_to_pdb_with_tool",
-        fake_converter_tool,
-    )
-
     scheduled_payloads = []
 
     async def fake_create_task(*, db, current_user, task_data, direct_runner=None):
@@ -706,26 +699,21 @@ $$$$
     refreshed_run = await db_session.get(AgentRun, run.id)
     conversion_step = next(step for step in refreshed_run.steps if step.step_key == "sdf_to_ligand_pdb")
     affinity_step = next(step for step in refreshed_run.steps if step.step_key == "affinity_prediction")
-    ligand_file = await db_session.get(FileModel, conversion_step.semantic_outputs["ligand_pdb"]["file_id"])
-    assert converter_inputs == [sdf_path]
-    assert conversion_step.status == "success"
-    assert ligand_file.filename == "generated_ligand.pdb"
-    assert Path(ligand_file.storage_path).read_text(encoding="utf-8").startswith("HETATM")
-    assert affinity_step.status == "waiting_task"
-    assert scheduled_payloads[0].file_ids == [protein_file.id, ligand_file.id]
-    assert scheduled_payloads[0].params["input_files"] == {
-        "protein_pdb": "input/protein.pdb",
-        "ligand_pdb": "input/generated_ligand.pdb",
-    }
+    assert conversion_step.status == "waiting_task"
+    assert conversion_step.semantic_outputs in (None, {})
+    assert affinity_step.status == "pending"
+    assert len(scheduled_payloads) == 1
+    assert scheduled_payloads[0].file_ids == [generated_file.id]
 
 
 @pytest.mark.asyncio
-async def test_virtual_vina_docking_creates_docking_report(
+async def test_builtin_vina_docking_schedules_task_without_fabricating_report(
     db_session: AsyncSession,
     user: User,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(config_settings, "AIDD_SYSTEM_USER_ID", user.id, raising=False)
     protein_path = tmp_path / "protein.pdb"
     ligand_path = tmp_path / "ligand.pdb"
     protein_content = b"ATOM      1  N   ALA A   1       0.000   0.000   0.000\nEND\n"
@@ -775,20 +763,15 @@ async def test_virtual_vina_docking_creates_docking_report(
     )
     await db_session.commit()
 
-    docking_inputs: list[tuple[Path, Path]] = []
+    scheduled_payloads = []
 
-    def fake_vina(protein: Path, ligand: Path) -> dict[str, object]:
-        docking_inputs.append((protein, ligand))
-        return {
-            "vina_score": -7.4,
-            "center": {"x": 1.0, "y": 2.0, "z": 3.0},
-            "size": {"x": 22.5, "y": 22.5, "z": 22.5},
-            "stdout": "mode | affinity\n1 -7.4",
-        }
+    async def fake_create_task(*, db, current_user, task_data, direct_runner=None):
+        scheduled_payloads.append(task_data)
+        return SimpleNamespace(id="task-vina", tool_id=task_data.tool_id)
 
     monkeypatch.setattr(
-        "app.agents.aidd.builtin_tools.run_vina_docking_with_tool",
-        fake_vina,
+        "app.agents.aidd.service.create_and_schedule_tool_task",
+        fake_create_task,
     )
 
     count = await start_ready_steps(db_session, current_user=user, run_id=run.id)
@@ -796,17 +779,10 @@ async def test_virtual_vina_docking_creates_docking_report(
     assert count == 1
     refreshed_run = await db_session.get(AgentRun, run.id)
     docking_step = next(step for step in refreshed_run.steps if step.step_key == "vina_docking")
-    report_file = await db_session.get(FileModel, docking_step.semantic_outputs["docking_report"]["file_id"])
-    ranking_file = await db_session.get(FileModel, docking_step.semantic_outputs["ranking_csv"]["file_id"])
-    report_text = Path(report_file.storage_path).read_text(encoding="utf-8")
-    ranking_text = Path(ranking_file.storage_path).read_text(encoding="utf-8")
-    assert docking_inputs == [(protein_path, ligand_path)]
-    assert docking_step.status == "success"
-    assert report_file.filename == "ligand_vina_report.json"
-    assert ranking_file.filename == "ligand_vina_ranking.csv"
-    assert '"vina_score": -7.4' in report_text
-    assert "rank,ligand_id,ligand_filename,protein_filename,vina_score" in ranking_text
-    assert "1,ligand,ligand.pdb,protein.pdb,-7.4" in ranking_text
+    assert docking_step.status == "waiting_task"
+    assert docking_step.semantic_outputs in (None, {})
+    assert len(scheduled_payloads) == 1
+    assert scheduled_payloads[0].file_ids == [protein_file.id, ligand_file.id]
 
 
 @pytest.mark.asyncio

@@ -50,7 +50,6 @@ class FileReferenceManager:
         self,
         file_id: str,
         user_id: Optional[str] = None,
-        session_id: Optional[str] = None,
         reason: str = "reference"
     ) -> int:
         """增加文件引用计数
@@ -58,7 +57,6 @@ class FileReferenceManager:
         Args:
             file_id: 文件ID
             user_id: 用户ID（可选）
-            session_id: 会话ID（可选）
             reason: 引用原因
 
         Returns:
@@ -89,7 +87,6 @@ class FileReferenceManager:
         access_log = FileAccessLog(
             file_id=file_id,
             user_id=user_id,
-            session_id=session_id,
             action=f"increment_reference:{reason}",
             accessed_at=utcnow()
         )
@@ -112,7 +109,6 @@ class FileReferenceManager:
         self,
         file_id: str,
         user_id: Optional[str] = None,
-        session_id: Optional[str] = None,
         reason: str = "dereference",
         auto_cleanup: bool = False
     ) -> int:
@@ -121,7 +117,6 @@ class FileReferenceManager:
         Args:
             file_id: 文件ID
             user_id: 用户ID（可选）
-            session_id: 会话ID（可选）
             reason: 解除引用原因
             auto_cleanup: 是否在引用计数为0时自动清理
 
@@ -150,7 +145,6 @@ class FileReferenceManager:
         access_log = FileAccessLog(
             file_id=file_id,
             user_id=user_id,
-            session_id=session_id,
             action=f"decrement_reference:{reason}",
             accessed_at=utcnow()
         )

@@ -2,7 +2,7 @@
 """Pydantic Schema模块"""
 from app.schemas.users import (
     UserCreate, UserLogin, UserResponse, UserUpdate,
-    TokenResponse, GuestSessionResponse
+    TokenResponse
 )
 from app.schemas.tools import (
     ToolCreate, ToolUpdate, ToolResponse, ToolListResponse,
@@ -32,7 +32,7 @@ from app.schemas.common import (
 __all__ = [
     # Users
     "UserCreate", "UserLogin", "UserResponse", "UserUpdate",
-    "TokenResponse", "GuestSessionResponse",
+    "TokenResponse",
     # Tools
     "ToolCreate", "ToolUpdate", "ToolResponse", "ToolListResponse",
     "ToolVersionCreate", "ToolVersionResponse",

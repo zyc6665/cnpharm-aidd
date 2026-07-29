@@ -1,4 +1,4 @@
-import test from 'node:test'
+import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -10,14 +10,14 @@ test('workflow node inspector exposes node configuration sections', () => {
   const source = readFileSync(file, 'utf8')
   for (const marker of [
     'workflow-node-inspector',
-    'tool selector',
-    'required input',
-    'upstream edge',
-    'run current node',
-    'task result',
-    'no selected node'
+    "workflow.inspector.toolSelector",
+    "workflow.inspector.requiredInput",
+    "workflow.inspector.upstreamEdge",
+    "workflow.inspector.runCurrentNode",
+    "workflow.inspector.taskResult",
+    "workflow.inspector.noSelectedNode"
   ]) {
-    assert.equal(source.toLowerCase().includes(marker), true, `missing ${marker}`)
+    assert.equal(source.includes(marker), true, `missing ${marker}`)
   }
 })
 
@@ -54,7 +54,7 @@ test('workflow node inspector embeds a real node run panel', () => {
   }
 
   for (const marker of [
-    'ArtifactFilePicker',
+    'ToolParameterForm',
     'buildTaskSubmissionPayload',
     'buildToolFormInitialState',
     'getToolDetail',
@@ -74,9 +74,9 @@ test('workflow node inspector groups details into tabs', () => {
     'key="config"',
     'key="dependencies"',
     'key="results"',
-    '配置',
-    '依赖',
-    '结果'
+    "workflow.inspector.configTab",
+    "workflow.inspector.dependenciesTab",
+    "workflow.inspector.resultsTab"
   ]) {
     assert.equal(source.includes(marker), true, `missing ${marker}`)
   }
@@ -88,8 +88,8 @@ test('workflow node inspector exposes compatible edge suggestions', () => {
   for (const marker of [
     'suggestWorkflowEdgesForNode',
     'edgeSuggestions',
-    '推荐连线',
-    '添加连线',
+    "workflow.inspector.recommendedEdges",
+    "workflow.inspector.addEdge",
     'handleAddSuggestedEdge'
   ]) {
     assert.equal(source.includes(marker), true, `missing ${marker}`)

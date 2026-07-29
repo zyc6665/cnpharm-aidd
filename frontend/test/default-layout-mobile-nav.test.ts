@@ -1,4 +1,4 @@
-import test from 'node:test'
+import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -10,21 +10,21 @@ function readSource(relativePath: string): string {
   return readFileSync(resolve(rootDir, relativePath), 'utf8')
 }
 
-test('默认布局应提供移动端抽屉导航并复用同一份导航配置', () => {
-  const source = readSource('src/components/layout/DefaultLayout.vue')
+test('应用壳层应在移动端将主导航切换为固定底部导航', () => {
+  const source = readSource('src/components/layout/AppShell.vue')
 
-  assert.equal(source.includes('const navItems'), true)
-  assert.equal(source.includes('visibleNavItems'), true)
-  assert.equal(source.includes('mobile-menu-btn'), true)
-  assert.equal(source.includes('<a-drawer'), true)
-  assert.equal(source.includes('mobile-drawer-menu'), true)
-  assert.equal(source.includes('MenuOutlined'), true)
+  assert.equal(source.includes('const mainNav'), true)
+  assert.equal(source.includes('v-for="item in mainNav"'), true)
+  assert.equal(source.includes('@media (max-width: @screen-md)'), true)
+  assert.equal(source.includes('.shell-sidebar {'), true)
+  assert.equal(source.includes('top: auto;'), true)
+  assert.equal(source.includes('height: 56px;'), true)
 })
 
-test('移动端抽屉导航应在路由跳转和用户菜单跳转后自动收起', () => {
-  const source = readSource('src/components/layout/DefaultLayout.vue')
+test('移动端底部导航应保留当前路由高亮与内容区避让', () => {
+  const source = readSource('src/components/layout/AppShell.vue')
 
-  assert.equal(source.includes('mobileDrawerOpen.value = false'), true)
-  assert.equal(source.includes('@close="mobileDrawerOpen = false"'), true)
-  assert.equal(source.includes('@click="handleMobileNavClick"'), true)
+  assert.equal(source.includes(':class="{ active: isActive(item.active) }"'), true)
+  assert.equal(source.includes('.shell-content {'), true)
+  assert.equal(source.includes('padding-bottom: 64px;'), true)
 })

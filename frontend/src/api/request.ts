@@ -9,7 +9,6 @@ import {
 import { redirectToLogin } from './auth-redirect'
 import {
   clearAuthStorage,
-  getGuestSession,
   getRefreshToken,
   getToken,
   setRefreshToken,
@@ -27,12 +26,10 @@ const request: AxiosInstance = axios.create({
 
 export {
   AUTH_CLEARED_EVENT,
-  getGuestSession,
   getRefreshToken,
   getToken,
   setRefreshToken,
-  setToken,
-  setGuestSession
+  setToken
 } from '@/utils/auth-storage'
 
 // 清除认证状态
@@ -72,11 +69,6 @@ request.interceptors.request.use(
     const token = getToken()
     if (token && config.headers && shouldAttachAuthHeader(config.url)) {
       config.headers.Authorization = `Bearer ${token}`
-    } else {
-      const guestSession = getGuestSession()
-      if (guestSession && config.headers && shouldAttachAuthHeader(config.url)) {
-        config.headers['X-Guest-Session'] = guestSession
-      }
     }
     return config
   },

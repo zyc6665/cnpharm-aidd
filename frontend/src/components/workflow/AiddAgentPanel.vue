@@ -371,11 +371,6 @@
       return
     }
 
-    if (userStore.isGuest) {
-      message.warning(t('auth.guestCannotSubmit'))
-      return
-    }
-
     const selectedFiles = agentFileUploads.value.filter(item => Boolean(item.originFileObj))
     if (selectedFiles.length === 0) {
       message.warning(t('workflow.agent.uploadRequired'))

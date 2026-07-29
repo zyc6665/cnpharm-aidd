@@ -57,8 +57,8 @@ class FakeMetrics:
         self.active_users = None
         self.file_storage_metrics = None
 
-    def set_active_users(self, registered: int, guest: int) -> None:
-        self.active_users = {"registered": registered, "guest": guest}
+    def set_active_users(self, active_users: int) -> None:
+        self.active_users = active_users
 
     def set_file_storage_metrics(
         self,
@@ -74,56 +74,22 @@ class FakeMetrics:
         }
 
 
-class FailingCache:
-    async def keys(self, pattern: str):
-        raise RuntimeError(f"cache unavailable for {pattern}")
-
-
-class CapturingCache:
-    def __init__(self):
-        self.pattern = None
-
-    async def keys(self, pattern: str):
-        self.pattern = pattern
-        return ["guest:one", "guest:two"]
-
-
 def make_db_session():
     return FakeDbSession()
 
 
 @pytest.mark.asyncio
-async def test_user_metrics_logs_guest_cache_failures(caplog):
+async def test_user_metrics_counts_recently_active_registered_users():
     metrics = FakeMetrics()
     collector = MetricsCollector(
         metrics=metrics,
         db_session_factory=make_db_session,
-        cache_client=FailingCache(),
-    )
-
-    with caplog.at_level("WARNING", logger="app.monitoring.metrics_collector"):
-        result = await collector._collect_user_metrics()
-
-    assert result == {"active_registered": 3, "active_guests": 0}
-    assert metrics.active_users == {"registered": 3, "guest": 0}
-    assert any("Guest session metrics collection failed" in record.message for record in caplog.records)
-
-
-@pytest.mark.asyncio
-async def test_user_metrics_counts_current_guest_cache_prefix():
-    cache = CapturingCache()
-    metrics = FakeMetrics()
-    collector = MetricsCollector(
-        metrics=metrics,
-        db_session_factory=make_db_session,
-        cache_client=cache,
     )
 
     result = await collector._collect_user_metrics()
 
-    assert cache.pattern == "guest:*"
-    assert result == {"active_registered": 3, "active_guests": 2}
-    assert metrics.active_users == {"registered": 3, "guest": 2}
+    assert result == {"active_users": 3}
+    assert metrics.active_users == 3
 
 
 @pytest.mark.asyncio

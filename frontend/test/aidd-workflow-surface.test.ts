@@ -1,4 +1,4 @@
-import test from 'node:test'
+import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -122,34 +122,33 @@ test('流程工作台页面文件应存在', () => {
   assert.equal(existsSync(resolve(rootDir, 'src/views/workflow/index.vue')), true)
 })
 
-test('流程工作台应拆出三栏子组件文件', () => {
-  assert.equal(existsSync(resolve(rootDir, 'src/components/workflow/WorkflowStepSidebar.vue')), true)
-  assert.equal(existsSync(resolve(rootDir, 'src/components/workflow/WorkflowRunPanel.vue')), true)
-  assert.equal(existsSync(resolve(rootDir, 'src/components/workflow/WorkflowArtifactPanel.vue')), true)
+test('流程工作台应拆出画布、工具栏与节点检查器组件', () => {
+  assert.equal(existsSync(resolve(rootDir, 'src/components/workflow/WorkflowTemplateCanvas.vue')), true)
+  assert.equal(existsSync(resolve(rootDir, 'src/components/workflow/WorkflowToolPalette.vue')), true)
+  assert.equal(existsSync(resolve(rootDir, 'src/components/workflow/WorkflowNodeInspector.vue')), true)
 })
 
-test('流程工作台页面应组合侧栏、运行面板和产物面板组件', () => {
+test('流程工作台页面应组合工具栏、画布和节点检查器组件', () => {
   const source = readSource('src/views/workflow/index.vue')
 
-  assert.equal(source.includes('WorkflowStepSidebar'), true)
-  assert.equal(source.includes('WorkflowRunPanel'), true)
-  assert.equal(source.includes('WorkflowArtifactPanel'), true)
+  assert.equal(source.includes('WorkflowToolPalette'), true)
+  assert.equal(source.includes('WorkflowTemplateCanvas'), true)
+  assert.equal(source.includes('WorkflowNodeInspector'), true)
 })
 
-test('流程运行面板应复用 schema 扁平化与任务提交载荷构建工具', () => {
-  const source = readSource('src/components/workflow/WorkflowRunPanel.vue')
+test('节点运行面板应复用 schema 扁平化与任务提交载荷构建工具', () => {
+  const source = readSource('src/components/workflow/WorkflowNodeRunPanel.vue')
 
   assert.equal(source.includes('flattenToolInputSchema'), true)
   assert.equal(source.includes('buildTaskSubmissionPayload'), true)
 })
 
-test('流程运行面板应提供产物选择、提交、重置和工具跳转操作', () => {
-  const source = readSource('src/components/workflow/WorkflowRunPanel.vue')
+test('节点运行面板应提供参数表单、提交与重置操作', () => {
+  const source = readSource('src/components/workflow/WorkflowNodeRunPanel.vue')
 
-  assert.equal(source.includes('ArtifactFilePicker'), true)
+  assert.equal(source.includes('ToolParameterForm'), true)
   assert.equal(source.includes('submitWorkflowForm'), true)
-  assert.equal(source.includes('workflow.currentTool.runAction'), true)
-  assert.equal(source.includes("t('common.reset')"), true)
-  assert.equal(source.includes('openToolDetail'), true)
-  assert.equal(source.includes('openTaskDetail'), true)
+  assert.equal(source.includes('buildTaskSubmissionPayload'), true)
+  assert.equal(source.includes('resetForm'), true)
+  assert.equal(source.includes('getToolDetail'), true)
 })

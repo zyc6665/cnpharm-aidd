@@ -1,12 +1,11 @@
 # backend/app/api/v1/auth.py
 """认证API"""
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
-from app.auth.guest_manager import guest_manager
 from app.database.session import get_db
 from app.models.users import User, UserRole, UserStatus
 from app.auth.jwt_handler import JWTHandler
@@ -15,7 +14,6 @@ from app.auth.dependencies import get_current_user
 from app.schemas.users import (
     InvitationCodeValidateRequest,
     InvitationCodeValidateResponse,
-    GuestSessionResponse,
     UserCreate,
     UserLogin,
     UserResponse,
@@ -44,29 +42,6 @@ async def validate_invitation_code(data: InvitationCodeValidateRequest):
     return success_response(
         data=InvitationCodeValidateResponse(valid=False).model_dump(),
         message="邀请码功能暂未启用"
-    )
-
-
-@router.post("/guest", response_model=dict)
-async def guest_login(
-    request: Request,
-    db: AsyncSession = Depends(get_db)
-):
-    """创建游客会话。"""
-    client_ip = request.client.host if request.client else None
-    session = await guest_manager.create_guest_session(
-        db=db,
-        ip_address=client_ip,
-        user_agent=request.headers.get("user-agent")
-    )
-
-    return success_response(
-        data=GuestSessionResponse(
-            session_id=session["guest_session_id"],
-            expires_in=24 * 60 * 60,
-            limitations=session["limitations"]
-        ).model_dump(),
-        message="游客会话创建成功"
     )
 
 

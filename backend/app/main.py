@@ -9,9 +9,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings, use_direct_task_execution
+from app.cache import get_cache
 from app.database.session import init_db
 from app.api.v1 import api_router
 from app.common.exceptions import AppException
+from app.middleware import RateLimitMiddleware
 from app.tasks.direct_recovery import direct_task_recovery_loop
 from app.tasks.direct_runner import direct_task_runner
 from app.agents.aidd.background import agent_reconcile_loop
@@ -51,7 +53,15 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# 配置CORS
+# 先注册限流，再注册 CORS，确保限流响应仍带有 CORS 响应头。
+app.add_middleware(
+    RateLimitMiddleware,
+    cache_client=get_cache(),
+    requests_per_minute=settings.REQUEST_RATE_LIMIT_PER_MINUTE,
+    trust_proxy_headers=settings.RATE_LIMIT_TRUST_PROXY_HEADERS,
+)
+
+# 配置 CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,

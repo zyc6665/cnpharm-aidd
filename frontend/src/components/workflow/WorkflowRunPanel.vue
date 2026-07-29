@@ -58,17 +58,6 @@
           {{ t('auth.loginRequired') }}
         </template>
       </a-alert>
-      <a-alert
-        v-else-if="userStore.isGuest"
-        type="warning"
-        show-icon
-        style="margin-bottom: 16px"
-      >
-        <template #message>
-          {{ t('tools.guestWarning') }}
-        </template>
-      </a-alert>
-
       <a-spin :spinning="selectedToolLoading || submitting">
         <div v-if="selectedTool && selectedToolSlug && group" class="form-shell">
           <a-form ref="formRef" :model="formState" layout="vertical" @finish="handleSubmit">
@@ -299,7 +288,7 @@
       return true
     }
 
-    if (!userStore.isAuthenticated || userStore.isGuest) {
+    if (!userStore.isAuthenticated) {
       return true
     }
 

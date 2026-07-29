@@ -80,8 +80,7 @@
         <!-- 用户区 -->
         <div v-if="isLoggedIn" class="sidebar-user">
           <ProtectedAvatar
-            :file-id="userAvatar"
-            :user-id="currentUserId"
+            :src="userAvatar"
             :size="28"
             class="user-avatar"
           />
@@ -134,7 +133,6 @@ const commandPaletteRef = ref<InstanceType<typeof CommandPalette> | null>(null)
 
 const isAdmin = computed(() => userStore.isAdmin)
 const isLoggedIn = computed(() => userStore.isLoggedIn)
-const currentUserId = computed(() => userStore.user?.id)
 const currentUserName = computed(() => userStore.user?.display_name ?? userStore.user?.username)
 const userAvatar = computed(() => userStore.avatar)
 
