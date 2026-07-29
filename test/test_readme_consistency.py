@@ -9,3 +9,9 @@ def test_readme_matches_current_platform_entrypoints():
     assert "http://localhost:8000/api/v1/system/health" in readme
     assert "├── frontend/" in readme
     assert "├── test/" in readme
+    assert "├── .github/workflows/" in readme
+    assert "├── docker-compose.prod.yml" in readme
+    assert "pip install -r requirements-dev.txt" in readme
+    assert "docker compose -f docker-compose.prod.yml up -d --build" in readme
+    assert "- [ ] Docker部署配置" not in readme
+    assert "**最后更新**：2026-07-29" in readme

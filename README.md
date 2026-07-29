@@ -141,7 +141,8 @@ cpumodel_sciminer/
 │   │   ├── config.py           # 配置管理
 │   │   └── main.py             # FastAPI入口
 │   ├── storage/                # 数据存储目录
-│   ├── requirements.txt        # Python依赖
+│   ├── requirements.txt        # 生产 Python 依赖
+│   ├── requirements-dev.txt    # 开发、测试与本地监控依赖
 │   ├── .env                    # 环境配置
 │   └── .env.example            # 环境配置示例
 │
@@ -149,8 +150,10 @@ cpumodel_sciminer/
 │   ├── src/                    # 页面、组件、状态和 API 客户端
 │   └── test/                   # Vitest 前端测试
 ├── test/                       # 后端 pytest 测试
+├── .github/workflows/          # CI 工作流
 ├── docker-compose.yml          # 开发环境 Compose
 ├── docker-compose.celery.yml   # Redis、Celery 与 Flower Compose
+├── docker-compose.prod.yml     # PostgreSQL、Redis、MinIO 与多 Worker 生产 Compose
 └── README.md                   # 本文件
 ```
 
@@ -170,8 +173,8 @@ cd backend
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 
-# 3. 安装依赖
-pip install -r requirements.txt
+# 3. 安装开发依赖（包含生产依赖、pytest、flake8、watchfiles）
+pip install -r requirements-dev.txt
 
 # 4. 复制配置文件（使用默认开发配置）
 cp .env.example .env
@@ -187,37 +190,29 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 ### 生产模式
 
-修改 `.env` 文件切换到生产后端：
+生产部署使用 `docker-compose.prod.yml`，包含 PostgreSQL、Redis、MinIO、后端服务和多 Celery Worker。启动前先在 shell 或部署平台中设置必要密钥：
 
 ```env
 # 环境
 ENVIRONMENT=production
 DEBUG=false
 
-# 数据库 - PostgreSQL
-DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/scitool
-
-# 存储 - MinIO
-STORAGE_BACKEND=minio
-MINIO_ENDPOINT=minio.example.com:9000
-MINIO_ACCESS_KEY=your-access-key
-MINIO_SECRET_KEY=your-secret-key
-MINIO_BUCKET=scitool-files
-
-# 缓存 - Redis
-CACHE_BACKEND=redis
-REDIS_URL=redis://localhost:6379/0
-
-# 任务队列 - Celery
-CELERY_BROKER_URL=redis://localhost:6379/1
-CELERY_RESULT_BACKEND=redis://localhost:6379/2
+POSTGRES_PASSWORD=change-me
+REDIS_PASSWORD=change-me
+MINIO_ROOT_USER=scitool
+MINIO_ROOT_PASSWORD=change-me
+JWT_SECRET_KEY=change-me-with-at-least-32-characters
+SETTINGS_ENCRYPTION_KEY=change-me-with-at-least-32-characters
+CORS_ORIGINS=["https://your-domain.example"]
 ```
 
-启动 Celery Worker：
+启动生产服务：
 
 ```bash
-celery -A app.worker.celery_app worker --loglevel=info
+docker compose -f docker-compose.prod.yml up -d --build
 ```
+
+如需 GPU Worker，额外启用 Compose profile：`docker compose -f docker-compose.prod.yml --profile gpu up -d --build`。
 
 ---
 
@@ -367,18 +362,17 @@ from app.tasks.service import create_and_schedule_tool_task
 - [x] 存储适配层（本地/MinIO）
 - [x] 缓存适配层（内存/Redis）
 - [x] Celery任务队列配置
+- [x] Vue 3 前端工作台与管理后台
+- [x] WebSocket实时推送
+- [x] GPU资源管理与队列路由
+- [x] Docker 开发/生产部署配置
+- [x] CI 后端测试、前端测试、生产 Compose 校验
 
-### 进行中 🔄
+### 持续完善 🔄
 
-- [ ] 前端页面开发
-- [ ] WebSocket实时推送
-- [ ] GPU资源管理
-
-### 待开发 ⏳
-
-- [ ] 完整测试覆盖
-- [ ] Docker部署配置
-- [ ] 监控告警系统
+- [ ] 端到端测试覆盖
+- [ ] 生产监控告警策略
+- [ ] Agent 辅助生成工作流草稿与更完整的商业化能力闭环
 
 ---
 
@@ -395,4 +389,4 @@ from app.tasks.service import create_and_schedule_tool_task
 ---
 
 **版本**：1.0.0-MVP
-**最后更新**：2025-12-15
+**最后更新**：2026-07-29
