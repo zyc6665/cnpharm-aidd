@@ -46,6 +46,7 @@ from app.tasks.executors.ssh_command import build_remote_exec_command
 from app.tasks.executors.ssh_paths import build_remote_paths
 from app.tasks.executors.ssh_payload import build_params_payload
 from app.tasks.executors.ssh_result import load_result_json
+from app.tasks.executors.ssh_auth import resolve_auth_settings
 from app.tasks.executors.errors import GPUAllocationFailed, TaskExecutionError
 from app.tasks.state_machine import TaskStateMachine
 from app.tasks.ssh_transport import ParamikoSSHTransport
@@ -717,6 +718,10 @@ class SSHJobExecutor(BaseExecutor):
 
     def _resolve_auth_settings(self) -> Dict[str, Optional[str]]:
         """解析 SSH 认证设置。"""
+        return resolve_auth_settings(self.config)
+
+    def _resolve_auth_settings_legacy(self) -> Dict[str, Optional[str]]:
+        """兼容保留：后续迁移 SSH 主类时删除。"""
         auth_type = str(self.config.get("auth_type", "key")).lower()
         if auth_type not in {"key", "password"}:
             raise TaskExecutionError(f"Unsupported ssh_job auth_type: {auth_type}")
