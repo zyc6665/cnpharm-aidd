@@ -40,6 +40,7 @@ from app.models.tools import ToolType
 from app.tasks.executors.base import BaseExecutor
 from app.tasks.executors.docker_security import validate_docker_execution_inputs
 from app.tasks.executors.docker_output import parse_docker_output
+from app.tasks.executors.script_trust import validate_script_trust
 from app.tasks.executors.errors import GPUAllocationFailed, TaskExecutionError
 from app.tasks.state_machine import TaskStateMachine
 from app.tasks.ssh_transport import ParamikoSSHTransport
@@ -253,7 +254,7 @@ class PythonScriptExecutor(BaseExecutor):
         if not script_path and not script_content:
             raise TaskExecutionError("Missing script_path or script_content in tool config")
 
-        self._validate_script_trust(script_content, script_path)
+        validate_script_trust(script_content, script_path)
         work_dir = self._get_work_dir()
 
         try:
@@ -322,30 +323,8 @@ class PythonScriptExecutor(BaseExecutor):
         finally:
             self._cleanup_work_dir()
 
-    def _validate_script_trust(
-        self,
-        script_content: Optional[str],
-        script_path: Optional[str],
-    ) -> None:
-        """在部署环境拒绝未登记摘要的 Python 脚本。"""
-        trusted_hashes = set(settings.TRUSTED_PYTHON_SCRIPT_SHA256)
-        requires_trust = settings.ENVIRONMENT in {"staging", "production"}
-        if not requires_trust and not trusted_hashes:
-            return
-
-        if script_content is not None:
-            content = script_content.encode("utf-8")
-        elif script_path:
-            try:
-                content = Path(script_path).read_bytes()
-            except OSError as exc:
-                raise TaskExecutionError(f"Unable to read Python script: {script_path}") from exc
-        else:
-            raise TaskExecutionError("Missing Python script content")
-
-        script_digest = hashlib.sha256(content).hexdigest()
-        if script_digest not in trusted_hashes:
-            raise TaskExecutionError("Python script is not in the trusted SHA-256 allowlist")
+    def _validate_script_trust(self, script_content: Optional[str], script_path: Optional[str]) -> None:
+        validate_script_trust(script_content, script_path)
 
     def _parse_script_output(self, work_dir: str, stdout: str) -> Dict[str, Any]:
         """解析脚本输出"""
