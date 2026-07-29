@@ -55,6 +55,32 @@ def test_tool_routes_have_dedicated_modules() -> None:
     assert TOOL_ROUTE_MODULES <= existing_modules
 
 
+def test_public_tool_router_owns_public_and_user_routes() -> None:
+    """公开工具路由应覆盖既有查询、示例、契约与收藏入口。"""
+    from app.api.v1.tools_public import router
+
+    route_keys = {
+        (method, route.path)
+        for route in router.routes
+        for method in getattr(route, "methods", set())
+    }
+    expected_routes = {
+        ("GET", ""),
+        ("GET", "/workbench-groups"),
+        ("GET", "/categories"),
+        ("GET", "/tags"),
+        ("GET", "/{tool_id}/example"),
+        ("POST", "/{tool_id}/example/apply"),
+        ("GET", "/{tool_id}/contract"),
+        ("GET", "/{tool_id}/example/files/{field}/preview"),
+        ("GET", "/{tool_id}"),
+        ("POST", "/{tool_id}/favorite"),
+        ("DELETE", "/{tool_id}/favorite"),
+    }
+
+    assert expected_routes <= route_keys
+
+
 class _UsedNames(ast.NodeVisitor):
     """收集模块中实际引用的本地名称。"""
 

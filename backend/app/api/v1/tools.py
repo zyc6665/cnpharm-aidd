@@ -977,3 +977,27 @@ async def create_tag(
         data=TagResponse.model_validate(tag).model_dump(),
         message="标签创建成功"
     )
+
+
+# 公开端点已迁入独立模块；迁移期间仅注册尚未拆分的管理和版本端点。
+from app.api.v1.tools_public import router as public_router
+
+_legacy_router = router
+router = APIRouter()
+router.routes.extend(public_router.routes)
+
+_remaining_endpoint_names = {
+    "create_tag",
+    "create_tool",
+    "create_tool_version",
+    "delete_tool",
+    "import_tool_config",
+    "list_tool_versions",
+    "publish_tool",
+    "update_tool",
+}
+router.routes.extend(
+    route
+    for route in _legacy_router.routes
+    if route.endpoint.__name__ in _remaining_endpoint_names
+)
