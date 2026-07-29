@@ -39,6 +39,7 @@ from app.models.tasks import TaskStatus
 from app.models.tools import ToolType
 from app.tasks.executors.base import BaseExecutor
 from app.tasks.executors.docker_security import validate_docker_execution_inputs
+from app.tasks.executors.docker_output import parse_docker_output
 from app.tasks.executors.errors import GPUAllocationFailed, TaskExecutionError
 from app.tasks.state_machine import TaskStateMachine
 from app.tasks.ssh_transport import ParamikoSSHTransport
@@ -105,7 +106,7 @@ class DockerExecutor(BaseExecutor):
                 )
 
             # 解析输出
-            output = self._parse_docker_output(process.stdout)
+            output = parse_docker_output(process.stdout)
 
             # 收集输出文件
             output_files = await self._collect_output_files()
@@ -239,33 +240,6 @@ class DockerExecutor(BaseExecutor):
             for filename in os.listdir(output_dir)
         ]
         return await super()._collect_output_files(source_paths)
-
-    def _parse_docker_output(self, stdout: str) -> Dict[str, Any]:
-        """解析Docker输出"""
-        import json
-
-        # 尝试解析JSON输出
-        try:
-            # 查找JSON输出标记
-            if "OUTPUT_JSON:" in stdout:
-                json_start = stdout.index("OUTPUT_JSON:") + len("OUTPUT_JSON:")
-                json_str = stdout[json_start:].strip().split("\n")[0]
-                return json.loads(json_str)
-
-            # 尝试直接解析最后一行
-            lines = stdout.strip().split("\n")
-            for line in reversed(lines):
-                try:
-                    return json.loads(line)
-                except:
-                    continue
-
-            # 返回原始输出
-            return {"raw_output": stdout}
-
-        except Exception:
-            return {"raw_output": stdout}
-
 
 class PythonScriptExecutor(BaseExecutor):
     """Python脚本执行器"""

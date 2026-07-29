@@ -32,3 +32,11 @@ def test_docker_security_validation_has_a_dedicated_module():
     from app.tasks.executors.docker_security import validate_docker_execution_inputs
 
     assert callable(validate_docker_execution_inputs)
+
+
+def test_docker_output_parser_has_a_dedicated_module():
+    from app.tasks.executors.docker_output import parse_docker_output
+
+    assert callable(parse_docker_output)
+    assert parse_docker_output('log\n{"score": 1}') == {"score": 1}
+    assert parse_docker_output("OUTPUT_JSON: {\"score\": 2}\nignored") == {"score": 2}
