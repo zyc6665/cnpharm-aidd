@@ -221,6 +221,13 @@ class Settings(BaseSettings):
     WORKFLOW_RECONCILE_INTERVAL_SECONDS: int = 5
     WORKFLOW_RECONCILE_BATCH_SIZE: int = 20
 
+    # ==================== Docker 执行器配置 ====================
+    # 生产环境默认强制不可变 digest；该列表可进一步收紧为精确允许的镜像引用。
+    DOCKER_ALLOWED_IMAGES: List[str] = []
+    DOCKER_REQUIRE_IMAGE_DIGEST_IN_DEPLOYMENT: bool = True
+    # Python 脚本在预发布/生产环境必须匹配此 SHA-256 信任列表。
+    TRUSTED_PYTHON_SCRIPT_SHA256: List[str] = []
+
     # ==================== AIDD Agent 配置 ====================
     ENABLE_DATABASE_TOOLS: bool = False
     AIDD_SYSTEM_USER_ID: Optional[str] = None

@@ -167,6 +167,14 @@ class ParamikoSSHTransport:
         self.ensure_dir(posixpath.dirname(remote_path))
         sftp.put(local_path, remote_path)
 
+    def path_exists(self, remote_path: str) -> bool:
+        """检查远端路径是否存在。"""
+        try:
+            self._require_sftp().stat(remote_path)
+        except IOError:
+            return False
+        return True
+
     def upload_tree(self, local_dir: str, remote_dir: str) -> None:
         """递归上传目录。"""
         self.ensure_dir(remote_dir)

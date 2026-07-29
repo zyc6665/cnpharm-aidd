@@ -34,9 +34,75 @@ from app.schemas.files import (
 from app.common.responses import paginated_response, success_response
 from app.common.exceptions import NotFoundException, ForbiddenException, ValidationException
 from app.config import settings
-from app.files.storage_path import ensure_storage_dir, get_file_path
+from app.files.storage_path import STORAGE_PATH, ensure_storage_dir, get_file_path
 
 router = APIRouter()
+
+UPLOAD_CHUNK_SIZE = 1024 * 1024
+UPLOAD_SIGNATURE_BYTES = 16
+_ALLOWED_UPLOAD_EXTENSIONS = {
+    ".bz2", ".cif", ".csv", ".dat", ".fa", ".faa", ".fasta", ".fastq", ".fna",
+    ".fq", ".gz", ".jpeg", ".jpg", ".json", ".log", ".mol", ".mol2", ".mmcif",
+    ".out", ".pdb", ".pdbqt", ".pdf", ".png", ".sdf", ".smi", ".smiles", ".tar",
+    ".tgz", ".tsv", ".txt", ".xml", ".xyz", ".xz", ".yaml", ".yml", ".zip",
+}
+_EXPECTED_FILE_SIGNATURES = {
+    ".bz2": (b"BZh",),
+    ".gz": (b"\x1f\x8b",),
+    ".jpeg": (b"\xff\xd8\xff",),
+    ".jpg": (b"\xff\xd8\xff",),
+    ".pdf": (b"%PDF-",),
+    ".png": (b"\x89PNG\r\n\x1a\n",),
+    ".xz": (b"\xfd7zXZ\x00",),
+    ".zip": (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08"),
+}
+_EXECUTABLE_SIGNATURES = (b"\x7fELF", b"MZ", b"#!", b"\xfe\xed\xfa\xce", b"\xcf\xfa\xed\xfe")
+
+
+async def _stream_upload_to_staging(
+    file: UploadFile,
+    *,
+    max_size: int,
+) -> tuple[Path, int, str, bytes]:
+    """分块暂存上传文件，并在单次读取中计算大小与 SHA-256。"""
+    STORAGE_PATH.mkdir(parents=True, exist_ok=True)
+    descriptor, raw_path = tempfile.mkstemp(prefix=".upload-", dir=STORAGE_PATH)
+    os.close(descriptor)
+    staged_path = Path(raw_path)
+    sha256_hash = hashlib.sha256()
+    file_size = 0
+    header = bytearray()
+
+    try:
+        await file.seek(0)
+        async with aiofiles.open(staged_path, "wb") as staged_file:
+            while chunk := await file.read(UPLOAD_CHUNK_SIZE):
+                file_size += len(chunk)
+                if file_size > max_size:
+                    raise ValidationException(f"文件大小超过限制 ({settings.MAX_FILE_SIZE_MB}MB)")
+                sha256_hash.update(chunk)
+                if len(header) < UPLOAD_SIGNATURE_BYTES:
+                    header.extend(chunk[: UPLOAD_SIGNATURE_BYTES - len(header)])
+                await staged_file.write(chunk)
+        await file.seek(0)
+        return staged_path, file_size, sha256_hash.hexdigest(), bytes(header)
+    except Exception:
+        staged_path.unlink(missing_ok=True)
+        raise
+
+
+def _validate_upload_content(filename: str, header: bytes) -> None:
+    """校验上传扩展名与可识别二进制文件头。"""
+    extension = Path(filename).suffix.lower()
+    if extension not in _ALLOWED_UPLOAD_EXTENSIONS:
+        raise ValidationException(f"不支持的上传文件类型: {extension or '无扩展名'}")
+
+    if any(header.startswith(signature) for signature in _EXECUTABLE_SIGNATURES):
+        raise ValidationException("禁止上传可执行文件")
+
+    expected_signatures = _EXPECTED_FILE_SIGNATURES.get(extension)
+    if expected_signatures and not any(header.startswith(signature) for signature in expected_signatures):
+        raise ValidationException("文件内容与扩展名不匹配")
 
 async def calculate_sha256(file: UploadFile) -> str:
     """计算文件SHA256哈希"""
@@ -160,93 +226,79 @@ async def upload_file(
 ):
     """上传文件"""
     ensure_storage_dir()
-
-    # 检查文件大小
-    file_content = await file.read()
-    file_size = len(file_content)
-    await file.seek(0)
-
     max_size = settings.MAX_FILE_SIZE_MB * 1024 * 1024
-    if file_size > max_size:
-        raise ValidationException(f"文件大小超过限制 ({settings.MAX_FILE_SIZE_MB}MB)")
-
-    # 计算SHA256
-    sha256 = await calculate_sha256(file)
-
-    # 检查文件是否已存在（去重）
-    result = await db.execute(
-        select(FileModel).where(
-            FileModel.sha256 == sha256,
-            FileModel.owner_id == current_user.id
-        ).order_by(
-            case(
-                (FileModel.source_type == FileSourceType.UPLOAD.value, 0),
-                else_=1,
-            ),
-            FileModel.created_at.desc(),
-            FileModel.updated_at.desc(),
-            FileModel.id.desc(),
-        ).limit(1)
+    filename = Path(file.filename or "upload").name
+    staged_path, file_size, sha256, header = await _stream_upload_to_staging(
+        file,
+        max_size=max_size,
     )
-    existing_file = result.scalar_one_or_none()
 
-    if existing_file:
-        # 返回已存在的文件
-        return success_response(
-            data=FileUploadResponse(
-                id=existing_file.id,
-                filename=existing_file.filename,
-                size_bytes=existing_file.size_bytes,
-                content_type=existing_file.content_type,
-                sha256=existing_file.sha256
-            ).model_dump(),
-            message="文件已存在（去重）"
+    try:
+        _validate_upload_content(filename, header)
+
+        result = await db.execute(
+            select(FileModel).where(
+                FileModel.sha256 == sha256,
+                FileModel.owner_id == current_user.id
+            ).order_by(
+                case(
+                    (FileModel.source_type == FileSourceType.UPLOAD.value, 0),
+                    else_=1,
+                ),
+                FileModel.created_at.desc(),
+                FileModel.updated_at.desc(),
+                FileModel.id.desc(),
+            ).limit(1)
+        )
+        existing_file = result.scalar_one_or_none()
+
+        if existing_file:
+            return success_response(
+                data=FileUploadResponse(
+                    id=existing_file.id,
+                    filename=existing_file.filename,
+                    size_bytes=existing_file.size_bytes,
+                    content_type=existing_file.content_type,
+                    sha256=existing_file.sha256
+                ).model_dump(),
+                message="文件已存在（去重）"
+            )
+
+        expires_at = utcnow() + timedelta(hours=expires_hours) if expires_hours else None
+        file_record = FileModel(
+            filename=filename,
+            content_type=file.content_type,
+            size_bytes=file_size,
+            sha256=sha256,
+            source_type=FileSourceType.UPLOAD,
+            is_public=is_public,
+            expires_at=expires_at,
+            owner_id=current_user.id
         )
 
-    # 创建文件记录
-    expires_at = None
-    if expires_hours:
-        expires_at = utcnow() + timedelta(hours=expires_hours)
+        db.add(file_record)
+        await db.flush()
 
-    file_record = FileModel(
-        filename=file.filename,
-        content_type=file.content_type,
-        size_bytes=file_size,
-        sha256=sha256,
-        source_type=FileSourceType.UPLOAD,
-        is_public=is_public,
-        expires_at=expires_at,
-        owner_id=current_user.id
-    )
+        file_path = get_file_path(file_record.id, filename)
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(staged_path, file_path)
+        file_record.storage_path = str(file_path)
 
-    db.add(file_record)
-    await db.flush()
+        await db.commit()
+        await db.refresh(file_record)
 
-    # 保存文件到本地
-    file_path = get_file_path(file_record.id, file.filename)
-    file_path.parent.mkdir(parents=True, exist_ok=True)
-
-    async with aiofiles.open(file_path, "wb") as f:
-        await file.seek(0)
-        content = await file.read()
-        await f.write(content)
-
-    # 更新存储路径
-    file_record.storage_path = str(file_path)
-
-    await db.commit()
-    await db.refresh(file_record)
-
-    return success_response(
-        data=FileUploadResponse(
-            id=file_record.id,
-            filename=file_record.filename,
-            size_bytes=file_record.size_bytes,
-            content_type=file_record.content_type,
-            sha256=file_record.sha256
-        ).model_dump(),
-        message="上传成功"
-    )
+        return success_response(
+            data=FileUploadResponse(
+                id=file_record.id,
+                filename=file_record.filename,
+                size_bytes=file_record.size_bytes,
+                content_type=file_record.content_type,
+                sha256=file_record.sha256
+            ).model_dump(),
+            message="上传成功"
+        )
+    finally:
+        staged_path.unlink(missing_ok=True)
 
 
 @router.get("", response_model=dict)

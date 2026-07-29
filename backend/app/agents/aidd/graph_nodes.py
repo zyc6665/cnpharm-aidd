@@ -1,4 +1,8 @@
-"""LangGraph node functions for AIDD planning."""
+"""LangGraph node functions for AIDD planning only.
+
+Task creation, execution, observation, and replanning are handled by the
+agent service after this graph returns a validated plan.
+"""
 
 from __future__ import annotations
 
@@ -98,22 +102,3 @@ def validate_plan_node(state: AIDDGraphState) -> AIDDGraphState:
         "analysis_trace": plan.analysis_trace,
         "status": "planned",
     }
-
-
-def execute_step_node(state: AIDDGraphState) -> AIDDGraphState:
-    return {"status": state.get("status", "planned")}
-
-
-def observe_result_node(state: AIDDGraphState) -> AIDDGraphState:
-    return {"observations": state.get("observations", [])}
-
-
-def replan_or_finish_node(state: AIDDGraphState) -> AIDDGraphState:
-    return {"status": state.get("status", "planned")}
-
-
-def route_after_replan(state: AIDDGraphState) -> str:
-    status = state.get("status")
-    if status in {"waiting_task", "success", "failure"}:
-        return status
-    return "execute_step"

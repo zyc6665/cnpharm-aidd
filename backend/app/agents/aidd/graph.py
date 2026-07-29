@@ -1,4 +1,8 @@
-"""LangGraph orchestration entrypoints for AIDD agent planning."""
+"""LangGraph entrypoints for AIDD plan generation.
+
+This graph intentionally stops after plan validation. The AIDD service owns
+task creation, execution, result observation, and any subsequent replanning.
+"""
 
 from __future__ import annotations
 
@@ -7,11 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.aidd.graph_nodes import (
     classify_input_node,
     discover_tools_node,
-    execute_step_node,
     load_context_node,
-    observe_result_node,
     plan_steps_node,
-    replan_or_finish_node,
     validate_plan_node,
 )
 from app.agents.aidd.graph_state import AIDDGraphState
@@ -23,7 +24,8 @@ from app.services.model_services import get_default_model_service
 from app.services.semantic_types import normalize_semantic_type
 
 
-def build_aidd_graph():
+def build_aidd_planning_graph():
+    """Build the LangGraph workflow used exclusively for AIDD planning."""
     from langgraph.graph import END, START, StateGraph
 
     workflow = StateGraph(AIDDGraphState)
@@ -32,19 +34,13 @@ def build_aidd_graph():
     workflow.add_node("discover_tools", discover_tools_node)
     workflow.add_node("plan_steps", plan_steps_node)
     workflow.add_node("validate_plan", validate_plan_node)
-    workflow.add_node("execute_step", execute_step_node)
-    workflow.add_node("observe_result", observe_result_node)
-    workflow.add_node("replan_or_finish", replan_or_finish_node)
 
     workflow.add_edge(START, "load_context")
     workflow.add_edge("load_context", "classify_input")
     workflow.add_edge("classify_input", "discover_tools")
     workflow.add_edge("discover_tools", "plan_steps")
     workflow.add_edge("plan_steps", "validate_plan")
-    workflow.add_edge("validate_plan", "execute_step")
-    workflow.add_edge("execute_step", "observe_result")
-    workflow.add_edge("observe_result", "replan_or_finish")
-    workflow.add_edge("replan_or_finish", END)
+    workflow.add_edge("validate_plan", END)
     return workflow.compile()
 
 
@@ -78,7 +74,7 @@ async def build_plan_with_langgraph(
     params: dict,
 ) -> tuple[AIDDPlan, str]:
     model_service = await get_default_model_service(db)
-    graph = build_aidd_graph()
+    graph = build_aidd_planning_graph()
     semantic_input_payload = {
         normalize_semantic_type(semantic_type): {
             "source": "agent_input",

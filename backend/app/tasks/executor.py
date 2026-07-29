@@ -32,6 +32,7 @@ import logging
 import httpx
 from sqlalchemy import select
 
+from app.config import settings
 from app.database.session import get_async_session
 from app.files.storage_path import get_file_path
 from app.models.files import File as FileModel, FileSourceType
@@ -45,6 +46,12 @@ if TYPE_CHECKING:
     from app.models.tools import ToolVersion
 
 logger = logging.getLogger(__name__)
+
+_DOCKER_IMAGE_DIGEST_PATTERN = re.compile(
+    r"^[a-z0-9][a-z0-9./_-]*(?::[0-9]+)?(?:/[a-z0-9][a-z0-9._-]*)*@sha256:[0-9a-f]{64}$"
+)
+_SHELL_CONTROL_PATTERN = re.compile(r"[;&|`$<>\r\n]")
+_SHELL_EXECUTABLES = {"ash", "bash", "dash", "fish", "ksh", "sh", "zsh"}
 
 
 class TaskExecutionError(Exception):
@@ -74,10 +81,15 @@ class GPUAllocationFailed(TaskExecutionError):
 class BaseExecutor(ABC):
     """执行器基类"""
 
-    def __init__(self, task: "Task", tool_version: "ToolVersion"):
+    def __init__(
+        self,
+        task: "Task",
+        tool_version: "ToolVersion",
+        config: Optional[Dict[str, Any]] = None,
+    ):
         self.task = task
         self.tool_version = tool_version
-        self.config = tool_version.config
+        self.config = config if config is not None else tool_version.config
         self.work_dir: Optional[str] = None
 
     @abstractmethod
@@ -508,11 +520,16 @@ class DockerExecutor(BaseExecutor):
         gpu_required: bool
     ) -> List[str]:
         """构建Docker运行命令"""
+        self._validate_docker_execution_inputs(image, command)
+
         docker_cmd = [
             "docker", "run", "--rm",
             "-v", f"{work_dir}:/workspace",
             "-w", "/workspace",
             "--network", "none",  # 安全：禁用网络
+            "--security-opt", "no-new-privileges:true",
+            "--cap-drop", "ALL",
+            "--pids-limit", "256",
             "--memory", self.config.get("memory_limit", "4g"),
             "--cpus", str(self.config.get("cpu_limit", 2)),
         ]
@@ -541,6 +558,42 @@ class DockerExecutor(BaseExecutor):
             docker_cmd.append(params_json)
 
         return docker_cmd
+
+    def _validate_docker_execution_inputs(self, image: str, command: List[str]) -> None:
+        """验证镜像、命令与任务参数不会突破 Docker 执行边界。"""
+        allowed_images = settings.DOCKER_ALLOWED_IMAGES
+        if allowed_images and image not in allowed_images:
+            raise TaskExecutionError("Docker image is not in the configured allowlist")
+
+        if (
+            settings.ENVIRONMENT in {"staging", "production"}
+            and settings.DOCKER_REQUIRE_IMAGE_DIGEST_IN_DEPLOYMENT
+            and not _DOCKER_IMAGE_DIGEST_PATTERN.fullmatch(image)
+        ):
+            raise TaskExecutionError("Docker image must use an immutable digest in deployment")
+
+        if not isinstance(command, list) or not all(isinstance(argument, str) for argument in command):
+            raise TaskExecutionError("Docker command must be a string array")
+
+        if any(_SHELL_CONTROL_PATTERN.search(argument) for argument in command):
+            raise TaskExecutionError("Docker command contains unsafe shell control characters")
+
+        if command and Path(command[0]).name.lower() in _SHELL_EXECUTABLES:
+            raise TaskExecutionError("Docker command contains unsafe shell control executable")
+
+        task_params = self.task.inputs.params if self.task.inputs else None
+        if self._contains_shell_control(task_params):
+            raise TaskExecutionError("Task parameters contain unsafe shell control characters")
+
+    @classmethod
+    def _contains_shell_control(cls, value: Any) -> bool:
+        if isinstance(value, str):
+            return bool(_SHELL_CONTROL_PATTERN.search(value))
+        if isinstance(value, dict):
+            return any(cls._contains_shell_control(item) for item in value.values())
+        if isinstance(value, list | tuple):
+            return any(cls._contains_shell_control(item) for item in value)
+        return False
 
     async def _prepare_input_files(self) -> None:
         """准备输入文件"""
@@ -645,13 +698,14 @@ class PythonScriptExecutor(BaseExecutor):
         if not script_path and not script_content:
             raise TaskExecutionError("Missing script_path or script_content in tool config")
 
+        self._validate_script_trust(script_content, script_path)
         work_dir = self._get_work_dir()
 
         try:
             # 准备脚本
             if script_content:
                 script_file = os.path.join(work_dir, "script.py")
-                with open(script_file, "w") as f:
+                with open(script_file, "w", encoding="utf-8") as f:
                     f.write(script_content)
                 script_path = script_file
 
@@ -713,6 +767,31 @@ class PythonScriptExecutor(BaseExecutor):
         finally:
             self._cleanup_work_dir()
 
+    def _validate_script_trust(
+        self,
+        script_content: Optional[str],
+        script_path: Optional[str],
+    ) -> None:
+        """在部署环境拒绝未登记摘要的 Python 脚本。"""
+        trusted_hashes = set(settings.TRUSTED_PYTHON_SCRIPT_SHA256)
+        requires_trust = settings.ENVIRONMENT in {"staging", "production"}
+        if not requires_trust and not trusted_hashes:
+            return
+
+        if script_content is not None:
+            content = script_content.encode("utf-8")
+        elif script_path:
+            try:
+                content = Path(script_path).read_bytes()
+            except OSError as exc:
+                raise TaskExecutionError(f"Unable to read Python script: {script_path}") from exc
+        else:
+            raise TaskExecutionError("Missing Python script content")
+
+        script_digest = hashlib.sha256(content).hexdigest()
+        if script_digest not in trusted_hashes:
+            raise TaskExecutionError("Python script is not in the trusted SHA-256 allowlist")
+
     def _parse_script_output(self, work_dir: str, stdout: str) -> Dict[str, Any]:
         """解析脚本输出"""
         import json
@@ -753,18 +832,16 @@ class SSHJobExecutor(BaseExecutor):
         """补抓远端已完成任务的 output/result.json 与产物文件。"""
         auth_settings = self._resolve_auth_settings()
         remote_paths = self._build_remote_paths()
-        command_env = self._build_command_env(auth_settings)
-
-        if not await self._remote_result_exists(auth_settings, remote_paths, command_env):
-            return None
 
         try:
-            download_root = await self._download_remote_outputs(
-                auth_settings=auth_settings,
-                remote_paths=remote_paths,
-                required=True,
-                extra_env=command_env,
+            download_root = await asyncio.to_thread(
+                self._recover_remote_outputs_sync,
+                auth_settings,
+                remote_paths,
             )
+            if download_root is None:
+                return None
+
             result = self._load_result_json(download_root)
             output_file_ids = await self._collect_output_files(download_root)
             if output_file_ids:
@@ -922,22 +999,32 @@ class SSHJobExecutor(BaseExecutor):
         workflow_result["cleanup_error"] = cleanup_error
         return workflow_result
 
-    async def _remote_result_exists(
+    def _recover_remote_outputs_sync(
         self,
         auth_settings: Dict[str, Optional[str]],
         remote_paths: Dict[str, str],
-        extra_env: Optional[Dict[str, str]] = None,
-    ) -> bool:
-        """检查远端 output/result.json 是否存在。"""
-        check_command = "test -f {}".format(
-            shlex.quote(posixpath.join(remote_paths["host_output_dir"], "result.json"))
-        )
-        process = await self._run_local_command(
-            self._build_ssh_command(auth_settings, check_command),
+    ) -> Optional[str]:
+        """通过 Paramiko 检查并下载可恢复的远端输出。"""
+        transport = ParamikoSSHTransport(
+            host=self.config["host"],
+            port=int(self.config.get("port", 22)),
+            username=self.config["username"],
+            auth_settings=auth_settings,
+            strict_host_key_checking=self.config.get("strict_host_key_checking", True),
             timeout=60,
-            extra_env=extra_env,
         )
-        return process.returncode == 0
+        try:
+            transport.connect()
+            result_path = posixpath.join(remote_paths["host_output_dir"], "result.json")
+            if not transport.path_exists(result_path):
+                return None
+
+            download_root = os.path.join(self._get_work_dir(), "download")
+            local_output_dir = os.path.join(download_root, "output")
+            transport.download_tree(remote_paths["host_output_dir"], local_output_dir)
+            return download_root
+        finally:
+            transport.close()
 
     async def _prepare_local_task_bundle(self) -> Dict[str, str]:
         """准备本地待上传任务包。"""
@@ -1173,79 +1260,6 @@ class SSHJobExecutor(BaseExecutor):
 
         return None
 
-    def _build_command_env(self, auth_settings: Dict[str, Optional[str]]) -> Optional[Dict[str, str]]:
-        """为本地 ssh/scp 命令构造附加环境变量。"""
-        if auth_settings.get("auth_type") == "password" and auth_settings.get("password"):
-            return {"SSHPASS": auth_settings["password"] or ""}
-        return None
-
-    def _ensure_ssh_binaries(self, auth_settings: Dict[str, Optional[str]]) -> None:
-        """确保 ssh/scp 可用。"""
-        required_binaries = ["ssh", "scp"]
-        if auth_settings.get("auth_type") == "password":
-            required_binaries.append("sshpass")
-
-        for binary_name in required_binaries:
-            if shutil.which(binary_name):
-                continue
-            raise TaskExecutionError(f"Missing required binary for ssh_job: {binary_name}")
-
-    async def _ensure_remote_dirs(
-        self,
-        auth_settings: Dict[str, Optional[str]],
-        remote_paths: Dict[str, str],
-    ) -> None:
-        """创建远端任务目录。"""
-        mkdir_command = "mkdir -p {task} {input_dir} {output_dir} {work_dir}".format(
-            task=shlex.quote(remote_paths["host_task_dir"]),
-            input_dir=shlex.quote(remote_paths["host_input_dir"]),
-            output_dir=shlex.quote(remote_paths["host_output_dir"]),
-            work_dir=shlex.quote(remote_paths["host_work_dir"]),
-        )
-        process = await self._run_local_command(
-            self._build_ssh_command(auth_settings, mkdir_command),
-            timeout=min(self.config.get("timeout_sec", 3600), 60),
-            extra_env=self._build_command_env(auth_settings),
-        )
-        if process.returncode != 0:
-            raise TaskExecutionError(
-                "Failed to create remote SSH task directories",
-                details={"stderr": (process.stderr or "")[:1000]},
-            )
-
-    async def _upload_task_bundle(
-        self,
-        auth_settings: Dict[str, Optional[str]],
-        local_bundle: Dict[str, str],
-        remote_paths: Dict[str, str],
-    ) -> None:
-        """上传输入目录与 params.json。"""
-        upload_targets = [
-            (local_bundle["input_dir"], f"{self._user_at_host()}:{remote_paths['host_task_dir']}", True),
-            (local_bundle["params_path"], f"{self._user_at_host()}:{remote_paths['host_params_file']}", False),
-        ]
-
-        for source_path, target_path, recursive in upload_targets:
-            process = await self._run_local_command(
-                self._build_scp_command(
-                    auth_settings=auth_settings,
-                    source_path=source_path,
-                    target_path=target_path,
-                    recursive=recursive,
-                ),
-                timeout=min(self.config.get("timeout_sec", 3600), 300),
-                extra_env=self._build_command_env(auth_settings),
-            )
-            if process.returncode != 0:
-                raise TaskExecutionError(
-                    "Failed to upload SSH task bundle",
-                    details={
-                        "source_path": source_path,
-                        "target_path": target_path,
-                        "stderr": (process.stderr or "")[:1000],
-                    },
-                )
-
     def _build_remote_exec_command(self, remote_paths: Dict[str, str]) -> str:
         """构建远端执行命令。"""
         runner_mode = self.config.get("runner_mode", "shell")
@@ -1297,42 +1311,6 @@ class SSHJobExecutor(BaseExecutor):
                 shlex.quote(shell_script),
             ]
         )
-
-    async def _download_remote_outputs(
-        self,
-        auth_settings: Dict[str, Optional[str]],
-        remote_paths: Dict[str, str],
-        required: bool,
-        extra_env: Optional[Dict[str, str]] = None,
-    ) -> Optional[str]:
-        """下载远端 output 目录。"""
-        download_root = os.path.join(self._get_work_dir(), "download")
-        os.makedirs(download_root, exist_ok=True)
-
-        process = await self._run_local_command(
-            self._build_scp_command(
-                auth_settings=auth_settings,
-                source_path=f"{self._user_at_host()}:{remote_paths['host_output_dir']}",
-                target_path=download_root,
-                recursive=True,
-            ),
-            timeout=min(self.config.get("timeout_sec", 3600), 300),
-            extra_env=extra_env,
-        )
-
-        if process.returncode != 0:
-            if required:
-                raise TaskExecutionError(
-                    "Failed to download SSH job outputs",
-                    details={"stderr": (process.stderr or "")[:1000]},
-                )
-            logger.warning(
-                "Failed to download SSH job outputs after remote failure: %s",
-                (process.stderr or "")[:500],
-            )
-            return None
-
-        return download_root
 
     def _load_result_json(self, download_root: Optional[str]) -> Dict[str, Any]:
         """读取 output/result.json。"""
@@ -1449,136 +1427,6 @@ class SSHJobExecutor(BaseExecutor):
 
         return list(prepared_files.keys())
 
-    async def _cleanup_remote_task_dir(
-        self,
-        auth_settings: Optional[Dict[str, Optional[str]]],
-        remote_paths: Optional[Dict[str, str]],
-    ) -> None:
-        """清理远端任务目录。"""
-        if not auth_settings or not remote_paths:
-            return
-
-        cleanup_command = f"rm -rf {shlex.quote(remote_paths['host_task_dir'])}"
-        process = await self._run_local_command(
-            self._build_ssh_command(auth_settings, cleanup_command),
-            timeout=60,
-            extra_env=self._build_command_env(auth_settings),
-        )
-        if process.returncode != 0:
-            raise TaskExecutionError(
-                "Failed to cleanup remote ssh_job directory",
-                details={"stderr": (process.stderr or "")[:1000]},
-            )
-
-    async def _run_local_command(
-        self,
-        command: List[str],
-        timeout: int,
-        extra_env: Optional[Dict[str, str]] = None,
-    ) -> subprocess.CompletedProcess[str]:
-        """在线程池中执行本地命令。"""
-        logger.debug(f"Executing local SSH helper command: {' '.join(command)}")
-        return await asyncio.get_event_loop().run_in_executor(
-            None,
-            lambda: subprocess.run(
-                command,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                env={**os.environ, **(extra_env or {})},
-            ),
-        )
-
-    def _build_ssh_command(
-        self,
-        auth_settings: Dict[str, Optional[str]],
-        remote_command: str,
-    ) -> List[str]:
-        """构建 ssh 命令。"""
-        command: List[str] = []
-        if auth_settings.get("auth_type") == "password":
-            command.extend(["sshpass", "-e"])
-        command.extend(
-            [
-                "ssh",
-                *self._common_ssh_options(auth_settings),
-                "-p",
-                str(self.config.get("port", 22)),
-                self._user_at_host(),
-                remote_command,
-            ]
-        )
-        return command
-
-    def _build_scp_command(
-        self,
-        auth_settings: Dict[str, Optional[str]],
-        source_path: str,
-        target_path: str,
-        recursive: bool,
-    ) -> List[str]:
-        """构建 scp 命令。"""
-        command: List[str] = []
-        if auth_settings.get("auth_type") == "password":
-            command.extend(["sshpass", "-e"])
-        command.extend(
-            [
-                "scp",
-                *self._common_ssh_options(auth_settings),
-                "-P",
-                str(self.config.get("port", 22)),
-            ]
-        )
-        if recursive:
-            command.append("-r")
-        command.extend([source_path, target_path])
-        return command
-
-    def _common_ssh_options(self, auth_settings: Dict[str, Optional[str]]) -> List[str]:
-        """构建 ssh/scp 共用选项。"""
-        options: List[str] = []
-        if auth_settings.get("auth_type") == "password":
-            options.extend(
-                [
-                    "-o",
-                    "PreferredAuthentications=password",
-                    "-o",
-                    "PubkeyAuthentication=no",
-                ]
-            )
-        else:
-            options.extend(
-                [
-                    "-i",
-                    auth_settings["key_path"] or "",
-                    "-o",
-                    "BatchMode=yes",
-                ]
-            )
-
-        if self.config.get("strict_host_key_checking", True):
-            options.extend(["-o", "StrictHostKeyChecking=yes"])
-            if auth_settings.get("known_hosts_path"):
-                options.extend(
-                    ["-o", f"UserKnownHostsFile={auth_settings['known_hosts_path']}"]
-                )
-        else:
-            options.extend(
-                [
-                    "-o",
-                    "StrictHostKeyChecking=no",
-                    "-o",
-                    "UserKnownHostsFile=/dev/null",
-                ]
-            )
-
-        return options
-
-    def _user_at_host(self) -> str:
-        """返回 user@host。"""
-        return f"{self.config['username']}@{self.config['host']}"
-
-
 class BuiltinExecutor(BaseExecutor):
     """Execute supported AIDD built-ins through the platform task runtime."""
 
@@ -1662,10 +1510,19 @@ class TaskExecutor:
         "builtin": BuiltinExecutor,
     }
 
-    def __init__(self, task: "Task", tool_version: "ToolVersion"):
+    def __init__(
+        self,
+        task: "Task",
+        tool_version: "ToolVersion",
+        tool: Optional[Any] = None,
+    ):
         self.task = task
         self.tool_version = tool_version
-        self.config = tool_version.config
+        self.config = dict(tool_version.config or {})
+        if tool is not None:
+            self.config["gpu_required"] = bool(tool.gpu_required)
+            if tool.gpu_required:
+                self.config["gpu_memory_required_mb"] = int(tool.gpu_memory_mb or 4096)
 
     def _get_executor(self) -> BaseExecutor:
         """获取执行器实例"""
@@ -1677,7 +1534,7 @@ class TaskExecutor:
         if not executor_class:
             raise TaskExecutionError(f"Unsupported executor type: {executor_type}")
 
-        return executor_class(self.task, self.tool_version)
+        return executor_class(self.task, self.tool_version, config=self.config)
 
     async def _allocate_gpu(self) -> Optional[Dict[str, Any]]:
         """如果需要 GPU，分配 GPU 资源并回写 task 字段。

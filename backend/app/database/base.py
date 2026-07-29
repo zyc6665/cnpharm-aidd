@@ -5,7 +5,7 @@ import uuid
 from typing import Any
 
 from sqlalchemy import Column, DateTime, String
-from sqlalchemy.orm import declarative_base, declared_attr
+from sqlalchemy.orm import DeclarativeBase, declared_attr
 
 from app.common.time import utcnow
 
@@ -25,7 +25,10 @@ class CustomBase:
         return {c.name: getattr(self, c.name) for c in self.__table__.columns}
 
 
-Base = declarative_base(cls=CustomBase)
+class Base(DeclarativeBase, CustomBase):
+    """SQLAlchemy 2.0 声明基类。"""
+
+    pass
 
 
 class TimestampMixin:

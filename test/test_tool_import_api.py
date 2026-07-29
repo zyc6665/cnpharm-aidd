@@ -9,6 +9,7 @@ import httpx
 import pytest
 import pytest_asyncio
 from fastapi import Header, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -19,13 +20,16 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.auth.dependencies import get_current_user, get_current_user_optional
+from app.agents.aidd.registry import load_available_tool_capabilities
 from app.database.base import Base
 from app.database.session import get_db
 from app.main import app
 from app.models import files as _files_models  # noqa: F401
 from app.models import statistics as _statistics_models  # noqa: F401
 from app.models import tasks as _task_models  # noqa: F401
+from app.models import tool_capabilities as _tool_capability_models  # noqa: F401
 from app.models import users as _user_models  # noqa: F401
+from app.models.tool_capabilities import ToolCapability
 from app.models.tools import (
     Tool,
     ToolCategory,
@@ -237,6 +241,25 @@ def build_invalid_workflow_capability_config(version: str = "1.0.0") -> dict:
     return config
 
 
+def build_agent_capability_config(version: str = "1.0.0") -> dict:
+    """构造包含有效 AIDD 能力声明的导入配置。"""
+    config = build_remote_api_config(version=version)
+    config["tool_config"]["agent_capability"] = {
+        "enabled": True,
+        "capability": "molecule_generation",
+        "stage": "molecule_generation",
+        "inputs": [{"semantic_type": "pocket_pdb", "field": "pocket_file"}],
+        "outputs": [
+            {
+                "semantic_type": "sdf",
+                "source": "output_files",
+                "match": {"extension": ".sdf"},
+            }
+        ],
+    }
+    return config
+
+
 @pytest.mark.asyncio
 async def test_admin_can_import_tool_config_and_normalize_legacy_schema(
     api_client: httpx.AsyncClient,
@@ -290,6 +313,40 @@ async def test_import_tool_config_reuses_existing_tool_and_creates_new_version(
     assert second_payload["tool"]["id"] == first_payload["tool"]["id"]
     assert second_payload["version"]["version"] == "1.1.0"
     assert second_payload["tool"]["current_version"]["version"] == "1.1.0"
+
+
+@pytest.mark.asyncio
+async def test_import_tool_config_syncs_agent_capability(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+):
+    """带能力声明的已发布工具导入后应立即可被 AIDD 注册表发现。"""
+    response = await api_client.post(
+        "/api/v1/tools/import-config",
+        headers={"Authorization": "Bearer admin-token"},
+        json={"config": build_agent_capability_config(), "publish": True},
+    )
+
+    assert response.status_code == 200
+    tool_id = response.json()["data"]["tool"]["id"]
+
+    capability = await db_session.scalar(
+        select(ToolCapability).where(ToolCapability.tool_id == tool_id)
+    )
+    assert capability is not None
+    assert capability.capability == "molecule_generation"
+    assert capability.stage == "molecule_generation"
+    assert capability.inputs == [{"semantic_type": "pocket_pdb", "field": "pocket_file"}]
+    assert capability.outputs == [
+        {
+            "semantic_type": "sdf",
+            "source": "output_files",
+            "match": {"extension": ".sdf"},
+        }
+    ]
+
+    available_capabilities = await load_available_tool_capabilities(db_session)
+    assert any(item.tool_slug == "targetdiff-service" for item in available_capabilities)
 
 
 @pytest.mark.asyncio

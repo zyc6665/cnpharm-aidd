@@ -276,6 +276,34 @@ class TestUpsertCapabilityFromConfig:
         assert row is None
 
     @pytest.mark.asyncio
+    async def test_disables_existing_row_when_reimport_removes_agent_capability(
+        self, db_session: AsyncSession, user: User
+    ) -> None:
+        tool = await _create_tool(
+            db_session,
+            user,
+            slug="retired-capability-tool",
+            name="Retired Capability Tool",
+            config={
+                "type": "docker_image",
+                "agent_capability": {
+                    "enabled": True,
+                    "inputs": [{"semantic_type": "protein_pdb"}],
+                    "outputs": [{"semantic_type": "pocket_pdb"}],
+                },
+            },
+        )
+        registered = await upsert_capability_from_config(db_session, tool)
+        assert registered is not None
+
+        tool.current_version.config = {"type": "docker_image"}
+        await db_session.flush()
+
+        row = await upsert_capability_from_config(db_session, tool)
+        assert row is None
+        assert registered.is_enabled is False
+
+    @pytest.mark.asyncio
     async def test_returns_none_when_no_agent_capability_config(
         self, db_session: AsyncSession, user: User
     ) -> None:

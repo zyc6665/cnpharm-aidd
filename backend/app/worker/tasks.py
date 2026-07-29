@@ -135,7 +135,7 @@ async def _execute_tool_task_impl(task_id: str, tool_version_id: str) -> Dict[st
 
         try:
             # ==================== 实际的工具执行逻辑 ====================
-            from app.models.tools import ToolVersion
+            from app.models.tools import Tool, ToolVersion
             from app.models.tasks import TaskInput
             from app.tasks.executor import TaskExecutor
             from app.tasks.molecule_scoring import append_molecule_scoring_artifacts
@@ -145,6 +145,11 @@ async def _execute_tool_task_impl(task_id: str, tool_version_id: str) -> Dict[st
                 select(ToolVersion).where(ToolVersion.id == tool_version_id)
             )
             tool_version = version_result.scalar_one()
+
+            tool_result = await db.execute(select(Tool).where(Tool.id == task.tool_id))
+            tool = tool_result.scalar_one_or_none()
+            if tool is None:
+                raise ValueError(f"任务关联的工具不存在: {task.tool_id}")
 
             # 获取任务输入参数
             input_result = await db.execute(
@@ -168,7 +173,7 @@ async def _execute_tool_task_impl(task_id: str, tool_version_id: str) -> Dict[st
 
             # 创建执行器并执行
             # 使用正确的构造函数签名：TaskExecutor(task, tool_version)
-            executor = TaskExecutor(task, tool_version)
+            executor = TaskExecutor(task, tool_version, tool=tool)
 
             # 执行任务
             output_result = await executor.execute()

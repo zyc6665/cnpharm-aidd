@@ -15,7 +15,9 @@ from app.models.tools import (
     ToolWorkbenchGroup, ToolWorkbenchGroupMapping,
     ToolProviderType, ToolReviewStatus
 )
+from app.models.statistics import ToolStatistics
 from app.auth.dependencies import get_current_user, get_current_user_optional, get_admin_user
+from app.agents.aidd.registry import upsert_capability_from_config
 from app.schemas.tools import (
     ToolCreate, ToolUpdate, ToolResponse, ToolListResponse,
     ToolVersionCreate, ToolVersionResponse, TagCreate, TagResponse,
@@ -393,6 +395,7 @@ async def create_or_update_tool_from_import(
     if import_data.publish:
         tool.status = ToolStatus.PUBLISHED.value
 
+    await upsert_capability_from_config(db, tool)
     await db.commit()
     tool_response = await load_tool_for_response(db, tool.id)
 
@@ -916,7 +919,9 @@ async def favorite_tool(
     """收藏工具"""
     # 检查工具是否存在
     result = await db.execute(
-        select(Tool).where(Tool.id == tool_id)
+        select(Tool)
+        .options(selectinload(Tool.statistics))
+        .where(Tool.id == tool_id)
     )
     tool = result.scalar_one_or_none()
 
@@ -937,7 +942,9 @@ async def favorite_tool(
 
     # 添加收藏
     favorite = ToolFavorite(user_id=current_user.id, tool_id=tool_id)
-    tool.favorite_count += 1
+    if tool.statistics is None:
+        tool.statistics = ToolStatistics(tool_id=tool.id, favorite_count=0)
+    tool.statistics.favorite_count += 1
 
     db.add(favorite)
     await db.commit()
@@ -965,11 +972,13 @@ async def unfavorite_tool(
 
     # 更新工具收藏数
     result = await db.execute(
-        select(Tool).where(Tool.id == tool_id)
+        select(Tool)
+        .options(selectinload(Tool.statistics))
+        .where(Tool.id == tool_id)
     )
     tool = result.scalar_one_or_none()
-    if tool and tool.favorite_count > 0:
-        tool.favorite_count -= 1
+    if tool and tool.statistics:
+        tool.statistics.favorite_count = max(0, tool.statistics.favorite_count - 1)
 
     await db.delete(favorite)
     await db.commit()

@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_ROOT = PROJECT_ROOT / "backend"
@@ -40,6 +41,16 @@ def test_determine_queue_routes_non_gpu_ssh_job_to_cpu_queue() -> None:
     )
 
     assert queue == TaskQueue.CPU_QUEUE.value
+
+
+def test_determine_queue_uses_explicit_tool_gpu_requirement() -> None:
+    """队列路由应以 Tool.gpu_required 为准，而非版本 JSON 配置。"""
+    queue = TaskQueueManager.determine_queue(
+        {"type": "docker_image", "gpu_required": False},
+        gpu_required=True,
+    )
+
+    assert queue == TaskQueue.GPU_QUEUE.value
 
 
 def test_task_executor_returns_ssh_job_executor() -> None:
@@ -112,6 +123,68 @@ def test_ssh_job_executor_supports_password_auth(monkeypatch, tmp_path) -> None:
     assert auth_settings["auth_type"] == "password"
     assert auth_settings["password"] == "super-secret"
     assert auth_settings["key_path"] is None
+
+
+def test_ssh_job_executor_does_not_keep_sshpass_environment_helper() -> None:
+    """SSH 密码只应交给 Paramiko，不应进入子进程环境变量。"""
+    assert not hasattr(SSHJobExecutor, "_build_command_env")
+
+
+@pytest.mark.asyncio
+async def test_ssh_job_recovery_downloads_with_paramiko(monkeypatch, tmp_path) -> None:
+    """远端结果补抓应复用 Paramiko，而非启动本地 ssh/scp 子进程。"""
+    calls: list[str] = []
+
+    class FakeTransport:
+        def __init__(self, **kwargs) -> None:
+            calls.append("init")
+
+        def connect(self) -> None:
+            calls.append("connect")
+
+        def path_exists(self, remote_path: str) -> bool:
+            calls.append(f"exists:{remote_path}")
+            return True
+
+        def download_tree(self, remote_dir: str, local_dir: str) -> None:
+            calls.append(f"download:{remote_dir}")
+            output_dir = Path(local_dir)
+            output_dir.mkdir(parents=True)
+            (output_dir / "result.json").write_text('{"success": true}', encoding="utf-8")
+
+        def close(self) -> None:
+            calls.append("close")
+
+    config = {
+        "type": "ssh_job",
+        "host": "gpu-node-01.internal",
+        "username": "runner",
+        "runner_mode": "shell",
+        "remote_base_dir": "/srv/platform-jobs",
+        "entrypoint": "/opt/models/platform_run.sh",
+    }
+    executor = SSHJobExecutor(_build_task("task-recovery"), _build_tool_version(config))
+
+    async def fake_collect_output_files(download_root: str) -> list[str]:
+        return []
+
+    monkeypatch.setenv("TASK_WORK_DIR", str(tmp_path))
+    monkeypatch.setattr("app.tasks.executor.ParamikoSSHTransport", FakeTransport)
+    monkeypatch.setattr(
+        executor,
+        "_resolve_auth_settings",
+        lambda: {"auth_type": "password", "password": "secret", "key_path": None, "known_hosts_path": None},
+    )
+    monkeypatch.setattr(executor, "_collect_output_files", fake_collect_output_files)
+
+    result = await executor.recover_remote_result()
+
+    assert result is not None
+    assert result["result"] == {"success": True}
+    assert calls[0:2] == ["init", "connect"]
+    assert any(call.startswith("exists:") for call in calls)
+    assert any(call.startswith("download:") for call in calls)
+    assert calls[-1] == "close"
 
 
 def test_bootstrap_process_env_loads_secret_refs_from_dotenv(monkeypatch, tmp_path) -> None:

@@ -130,6 +130,7 @@ async def create_and_schedule_tool_task(
                 tool_config=tool_version.config,
                 user_role=current_user.role,
                 priority=task_data.priority,
+                gpu_required=tool.gpu_required,
             )
 
             celery_task = TaskQueueManager.enqueue_task(

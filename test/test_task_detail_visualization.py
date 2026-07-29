@@ -213,7 +213,7 @@ async def test_create_task_persists_all_input_file_ids(test_client, monkeypatch)
     monkeypatch.setattr(
         TaskQueueManager,
         "determine_queue",
-        classmethod(lambda cls, tool_config, user_role, priority: "default"),
+        classmethod(lambda cls, tool_config, user_role, priority, gpu_required=None: "default"),
     )
     monkeypatch.setattr(
         TaskQueueManager,

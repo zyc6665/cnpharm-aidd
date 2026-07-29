@@ -101,6 +101,18 @@ def _patch_sm_for_ewp():
 class TestGPUAllocation:
     """_allocate_gpu 单元测试。"""
 
+    def test_uses_tool_gpu_settings_over_version_config(self):
+        task = _make_task()
+        tool = SimpleNamespace(gpu_required=True, gpu_memory_mb=8192)
+        executor = TaskExecutor(
+            task,
+            SimpleNamespace(config=_make_config(gpu_required=False)),
+            tool=tool,
+        )
+
+        assert executor.config["gpu_required"] is True
+        assert executor.config["gpu_memory_required_mb"] == 8192
+
     @pytest.mark.asyncio
     async def test_skips_when_gpu_not_required(self):
         task = _make_task()

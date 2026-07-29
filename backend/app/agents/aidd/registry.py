@@ -341,15 +341,19 @@ async def upsert_capability_from_config(
     )
     fresh_tool = reload_result.scalar_one()
 
-    config = fresh_tool.current_version.config if fresh_tool.current_version is not None else {}
-    raw = config.get(AGENT_CAPABILITY_CONFIG_KEY)
-    if not isinstance(raw, dict) or raw.get("enabled") is not True:
-        return None
-
     result = await db.execute(
         select(ToolCapabilityModel).where(ToolCapabilityModel.tool_id == fresh_tool.id)
     )
     row = result.scalar_one_or_none()
+
+    config = fresh_tool.current_version.config if fresh_tool.current_version is not None else {}
+    raw = config.get(AGENT_CAPABILITY_CONFIG_KEY)
+    if not isinstance(raw, dict) or raw.get("enabled") is not True:
+        if row is not None and row.is_enabled:
+            row.is_enabled = False
+            await db.flush()
+        return None
+
     if row is None:
         row = ToolCapabilityModel(tool_id=fresh_tool.id)
         db.add(row)

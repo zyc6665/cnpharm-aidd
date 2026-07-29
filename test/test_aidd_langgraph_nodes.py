@@ -7,11 +7,10 @@ BACKEND_ROOT = PROJECT_ROOT / "backend"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.agents.aidd.graph import build_aidd_graph
+from app.agents.aidd.graph import build_aidd_planning_graph
 from app.agents.aidd.graph_nodes import (
     classify_input_node,
     discover_tools_node,
-    route_after_replan,
     validate_plan_node,
 )
 
@@ -102,14 +101,10 @@ def test_validate_plan_node_parses_model_output():
     assert state["status"] == "planned"
 
 
-def test_route_after_replan_maps_terminal_and_waiting_states():
-    assert route_after_replan({"status": "waiting_task"}) == "waiting_task"
-    assert route_after_replan({"status": "success"}) == "success"
-    assert route_after_replan({"status": "failure"}) == "failure"
-    assert route_after_replan({"status": "planned"}) == "execute_step"
-
-
-def test_build_aidd_graph_compiles_langgraph_state_graph():
-    graph = build_aidd_graph()
+def test_build_aidd_planning_graph_has_no_task_execution_nodes():
+    graph = build_aidd_planning_graph()
 
     assert hasattr(graph, "ainvoke")
+    node_names = set(graph.get_graph().nodes)
+    assert {"load_context", "classify_input", "discover_tools", "plan_steps", "validate_plan"} <= node_names
+    assert not {"execute_step", "observe_result", "replan_or_finish"} & node_names

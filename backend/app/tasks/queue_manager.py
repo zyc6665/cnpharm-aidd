@@ -48,7 +48,8 @@ class TaskQueueManager:
         cls,
         tool_config: Dict[str, Any],
         user_role: Optional[str] = None,
-        priority: Optional[str] = None
+        priority: Optional[str] = None,
+        gpu_required: Optional[bool] = None,
     ) -> str:
         """确定任务队列
 
@@ -58,6 +59,7 @@ class TaskQueueManager:
             tool_config: 工具配置
             user_role: 用户角色
             priority: 任务优先级 (high/normal/low)
+            gpu_required: Tool 模型中的 GPU 要求（优先于版本配置）
 
         Returns:
             str: 队列名称
@@ -67,7 +69,7 @@ class TaskQueueManager:
             return TaskQueue.HIGH_PRIORITY.value
 
         # 2. GPU任务
-        if tool_config.get("gpu_required", False):
+        if gpu_required if gpu_required is not None else tool_config.get("gpu_required", False):
             return TaskQueue.GPU_QUEUE.value
 
         # 3. 普通CPU任务
