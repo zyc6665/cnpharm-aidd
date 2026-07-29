@@ -65,3 +65,33 @@ test('工具执行配置应提供可复用的结构化键值和列表编辑器',
     assert.equal(stringListSource.includes(marker), true, `missing list marker ${marker}`)
   }
 })
+
+test('工具创建页应以结构化数据编辑全部执行器 map 和 list 字段', () => {
+  const source = readSource('src/views/tools/Create.vue')
+
+  for (const marker of [
+    'StructuredKeyValueEditor',
+    'StructuredStringListEditor',
+    'v-model="apiHeaderEntries"',
+    'v-model="dockerCommandItems"',
+    'v-model="dockerEnvEntries"',
+    'v-model="pythonArgumentItems"',
+    'v-model="sshEnvEntries"',
+    'v-model="sshOutputGlobItems"',
+    'recordToKeyValueEntries',
+    'keyValueEntriesToRecord',
+    'normalizeStringList',
+    'stringListForConfig'
+  ]) {
+    assert.equal(source.includes(marker), true, `missing structured field marker ${marker}`)
+  }
+
+  for (const removedMarker of [
+    'apiHeadersText',
+    'dockerEnvText',
+    'sshEnvText',
+    'sshOutputGlobsText'
+  ]) {
+    assert.equal(source.includes(removedMarker), false, `legacy JSON field remains: ${removedMarker}`)
+  }
+})

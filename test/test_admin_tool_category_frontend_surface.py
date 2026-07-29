@@ -79,3 +79,15 @@ def test_admin_tool_form_exposes_agent_capability_config():
     assert "agent_inputs" in create_source
     assert "agent_outputs" in create_source
     assert "config.agent_capability" in create_source
+
+
+def test_tool_form_uses_structured_executor_config_editors():
+    """执行器常用映射和列表不应要求管理员手写 JSON。"""
+    create_source = read_source("frontend/src/views/tools/Create.vue")
+
+    assert "StructuredKeyValueEditor" in create_source
+    assert "StructuredStringListEditor" in create_source
+    assert "apiHeadersText" not in create_source
+    assert "dockerEnvText" not in create_source
+    assert "sshEnvText" not in create_source
+    assert "sshOutputGlobsText" not in create_source

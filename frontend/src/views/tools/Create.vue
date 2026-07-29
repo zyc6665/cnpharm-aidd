@@ -193,13 +193,14 @@
               </a-form-item>
 
               <a-form-item label="请求头（可选）" name="api_headers">
-                <a-textarea
-                  v-model:value="apiHeadersText"
-                  placeholder='{"Content-Type": "application/json", "Authorization": "Bearer token"}'
-                  :rows="3"
+                <StructuredKeyValueEditor
+                  v-model="apiHeaderEntries"
+                  add-label="添加请求头"
+                  key-placeholder="请求头名称，如 Authorization"
+                  value-placeholder="请求头值"
                 />
                 <template #extra>
-                  <span class="form-extra">JSON格式的请求头，例如：{"key": "value"}</span>
+                  <span class="form-extra">每个请求头单独填写；请使用密钥引用，避免保存明文凭证。</span>
                 </template>
               </a-form-item>
             </template>
@@ -216,21 +217,24 @@
               </a-form-item>
 
               <a-form-item label="启动命令（可选）" name="docker_command">
-                <a-input
-                  v-model:value="formState.docker_command"
-                  placeholder="例如：python /app/main.py"
+                <StructuredStringListEditor
+                  v-model="dockerCommandItems"
+                  add-label="添加命令参数"
+                  empty-text="未设置时使用镜像默认命令"
+                  placeholder="一个完整命令项，如 /app/main.py"
                 />
+                <template #extra>
+                  <span class="form-extra">每行是一个命令项，包含空格的单项不会被拆分。</span>
+                </template>
               </a-form-item>
 
               <a-form-item label="环境变量（可选）" name="docker_env">
-                <a-textarea
-                  v-model:value="dockerEnvText"
-                  placeholder='{"PYTHONPATH": "/app", "MODEL_PATH": "/models"}'
-                  :rows="3"
+                <StructuredKeyValueEditor
+                  v-model="dockerEnvEntries"
+                  add-label="添加环境变量"
+                  key-placeholder="变量名，如 MODEL_PATH"
+                  value-placeholder="变量值，如 /models"
                 />
-                <template #extra>
-                  <span class="form-extra">JSON格式的环境变量，例如：{"key": "value"}</span>
-                </template>
               </a-form-item>
             </template>
 
@@ -246,10 +250,15 @@
               </a-form-item>
 
               <a-form-item label="脚本参数（可选）" name="python_args">
-                <a-input
-                  v-model:value="formState.python_args"
-                  placeholder="例如：--model-path /models --batch-size 32"
+                <StructuredStringListEditor
+                  v-model="pythonArgumentItems"
+                  add-label="添加脚本参数"
+                  empty-text="暂无额外脚本参数"
+                  placeholder="一个完整参数，如 --batch-size 或 32"
                 />
+                <template #extra>
+                  <span class="form-extra">参数按列表传递，不经过 shell 解析。</span>
+                </template>
               </a-form-item>
             </template>
 
@@ -399,24 +408,26 @@
               </a-row>
 
               <a-form-item label="环境变量（可选）" name="ssh_env">
-                <a-textarea
-                  v-model:value="sshEnvText"
-                  placeholder='{"CUDA_VISIBLE_DEVICES": "0"}'
-                  :rows="3"
+                <StructuredKeyValueEditor
+                  v-model="sshEnvEntries"
+                  add-label="添加环境变量"
+                  key-placeholder="变量名，如 CUDA_VISIBLE_DEVICES"
+                  value-placeholder="变量值"
                 />
                 <template #extra>
-                  <span class="form-extra">JSON格式的环境变量，会在远端入口脚本前注入</span>
+                  <span class="form-extra">环境变量会在远端入口脚本前注入。</span>
                 </template>
               </a-form-item>
 
               <a-form-item label="输出文件匹配规则（可选）" name="ssh_output_globs">
-                <a-textarea
-                  v-model:value="sshOutputGlobsText"
-                  placeholder='["output/result.json", "output/logs/run.log", "output/artifacts/**/*"]'
-                  :rows="3"
+                <StructuredStringListEditor
+                  v-model="sshOutputGlobItems"
+                  add-label="添加匹配规则"
+                  empty-text="暂无输出文件匹配规则"
+                  placeholder="例如 output/artifacts/**/*"
                 />
                 <template #extra>
-                  <span class="form-extra">JSON数组格式，只允许匹配 output/ 目录下的文件</span>
+                  <span class="form-extra">只允许匹配 output/ 目录下的文件。</span>
                 </template>
               </a-form-item>
 
@@ -627,9 +638,18 @@
   } from '@ant-design/icons-vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
+  import StructuredKeyValueEditor from '@/components/tools/StructuredKeyValueEditor.vue'
+  import StructuredStringListEditor from '@/components/tools/StructuredStringListEditor.vue'
   import { useToolsStore } from '@/stores'
   import { createTool, createToolVersion, updateTool, getToolDetail } from '@/api/tools'
   import type { ToolCreateParams } from '@/types/models'
+  import {
+    keyValueEntriesToRecord,
+    normalizeStringList,
+    recordToKeyValueEntries,
+    stringListForConfig,
+    type KeyValueEntry
+  } from '@/utils/tool-config-editors'
 
   const route = useRoute()
   const router = useRouter()
@@ -675,14 +695,10 @@
     // API配置
     api_endpoint: string
     api_method: 'GET' | 'POST'
-    api_headers: Record<string, string>
     // Docker配置
     docker_image: string
-    docker_command: string
-    docker_env: Record<string, string>
     // Python配置
     python_script: string
-    python_args: string
     // SSH 配置
     ssh_host: string
     ssh_port: number
@@ -696,8 +712,6 @@
     ssh_entrypoint: string
     ssh_container_name: string
     ssh_device: string
-    ssh_env: Record<string, string>
-    ssh_output_globs: string[]
     ssh_cleanup_remote: boolean
     ssh_strict_host_key_checking: boolean
     // 参数定义
@@ -734,14 +748,10 @@
     // API配置
     api_endpoint: '',
     api_method: 'POST',
-    api_headers: {},
     // Docker配置
     docker_image: '',
-    docker_command: '',
-    docker_env: {},
     // Python配置
     python_script: '',
-    python_args: '',
     // SSH配置
     ssh_host: '',
     ssh_port: 22,
@@ -755,8 +765,6 @@
     ssh_entrypoint: '',
     ssh_container_name: '',
     ssh_device: '',
-    ssh_env: {},
-    ssh_output_globs: [],
     ssh_cleanup_remote: true,
     ssh_strict_host_key_checking: true,
     // 参数定义
@@ -771,11 +779,16 @@
     agent_outputs: []
   })
 
-  // 辅助变量：用于JSON格式的文本输入
-  const apiHeadersText = ref('{}')
-  const dockerEnvText = ref('{}')
-  const sshEnvText = ref('{}')
-  const sshOutputGlobsText = ref('["output/result.json", "output/logs/run.log", "output/artifacts/**/*"]')
+  const apiHeaderEntries = ref<KeyValueEntry[]>([])
+  const dockerCommandItems = ref<string[]>([])
+  const dockerEnvEntries = ref<KeyValueEntry[]>([])
+  const pythonArgumentItems = ref<string[]>([])
+  const sshEnvEntries = ref<KeyValueEntry[]>([])
+  const sshOutputGlobItems = ref<string[]>([
+    'output/result.json',
+    'output/logs/run.log',
+    'output/artifacts/**/*'
+  ])
   const agentDefaultsText = ref('{}')
 
   const splitCommaList = (value: string): string[] => {
@@ -925,24 +938,16 @@
       formState.tool_type = 'remote_api'
       formState.api_endpoint = String(config.endpoint || '')
       formState.api_method = config.method === 'GET' ? 'GET' : 'POST'
-      apiHeadersText.value = formatJsonText(config.headers || {}, '{}')
+      apiHeaderEntries.value = recordToKeyValueEntries(config.headers)
     } else if (config.type === 'docker_image') {
       formState.tool_type = 'docker_image'
       formState.docker_image = String(config.image || '')
-      if (Array.isArray(config.command)) {
-        formState.docker_command = config.command.map(item => String(item)).join(' ')
-      } else {
-        formState.docker_command = String(config.command || '')
-      }
-      dockerEnvText.value = formatJsonText(config.env || {}, '{}')
+      dockerCommandItems.value = normalizeStringList(config.command)
+      dockerEnvEntries.value = recordToKeyValueEntries(config.env)
     } else if (config.type === 'python_script') {
       formState.tool_type = 'python_script'
       formState.python_script = String(config.script_path || config.script || '')
-      if (Array.isArray(config.args)) {
-        formState.python_args = config.args.map(item => String(item)).join(' ')
-      } else {
-        formState.python_args = String(config.args || '')
-      }
+      pythonArgumentItems.value = normalizeStringList(config.args)
     } else if (config.type === 'ssh_job') {
       formState.tool_type = 'ssh_job'
       formState.ssh_host = String(config.host || '')
@@ -959,11 +964,8 @@
       formState.ssh_device = String(config.device || '')
       formState.ssh_cleanup_remote = config.cleanup_remote !== false
       formState.ssh_strict_host_key_checking = config.strict_host_key_checking !== false
-      sshEnvText.value = formatJsonText(config.env || {}, '{}')
-      sshOutputGlobsText.value = formatJsonText(
-        Array.isArray(config.output_globs) ? config.output_globs : [],
-        '[]'
-      )
+      sshEnvEntries.value = recordToKeyValueEntries(config.env)
+      sshOutputGlobItems.value = normalizeStringList(config.output_globs)
     }
 
     formState.input_schema = formatJsonText(config.input_schema || {}, '{}')
@@ -1042,7 +1044,6 @@
 
     submitting.value = true
     try {
-      // 解析 JSON 字符串
       let apiHeaders: Record<string, string> = {}
       let dockerEnv: Record<string, string> = {}
       let sshEnv: Record<string, string> = {}
@@ -1052,21 +1053,23 @@
       let agentDefaults: Record<string, unknown> = {}
 
       try {
-        if (formState.tool_type === 'remote_api' && apiHeadersText.value.trim()) {
-          apiHeaders = JSON.parse(apiHeadersText.value)
+        if (formState.tool_type === 'remote_api') {
+          apiHeaders = keyValueEntriesToRecord(apiHeaderEntries.value)
         }
-        if (formState.tool_type === 'docker_image' && dockerEnvText.value.trim()) {
-          dockerEnv = JSON.parse(dockerEnvText.value)
+        if (formState.tool_type === 'docker_image') {
+          dockerEnv = keyValueEntriesToRecord(dockerEnvEntries.value)
         }
-        if (formState.tool_type === 'ssh_job' && sshEnvText.value.trim()) {
-          sshEnv = JSON.parse(sshEnvText.value)
+        if (formState.tool_type === 'ssh_job') {
+          sshEnv = keyValueEntriesToRecord(sshEnvEntries.value)
+          sshOutputGlobs = stringListForConfig(sshOutputGlobItems.value)
         }
-        if (formState.tool_type === 'ssh_job' && sshOutputGlobsText.value.trim()) {
-          sshOutputGlobs = JSON.parse(sshOutputGlobsText.value)
-          if (!Array.isArray(sshOutputGlobs)) {
-            throw new Error('ssh_output_globs must be an array')
-          }
-        }
+      } catch (error) {
+        message.error(error instanceof Error ? error.message : '结构化配置无效')
+        submitting.value = false
+        return
+      }
+
+      try {
         if (formState.input_schema.trim()) {
           inputSchema = JSON.parse(formState.input_schema)
         }
@@ -1079,7 +1082,7 @@
             throw new Error('agent defaults must be an object')
           }
         }
-      } catch (e) {
+      } catch {
         message.error('JSON 格式错误，请检查配置')
         submitting.value = false
         return
@@ -1157,16 +1160,18 @@
         }
       } else if (formState.tool_type === 'docker_image') {
         config.image = formState.docker_image
-        if (formState.docker_command) {
-          config.command = formState.docker_command.trim().split(/\s+/)
+        const dockerCommand = stringListForConfig(dockerCommandItems.value)
+        if (dockerCommand.length > 0) {
+          config.command = dockerCommand
         }
         if (Object.keys(dockerEnv).length > 0) {
           config.env = dockerEnv
         }
       } else if (formState.tool_type === 'python_script') {
         config.script_path = formState.python_script
-        if (formState.python_args) {
-          config.args = formState.python_args.trim().split(/\s+/)
+        const pythonArguments = stringListForConfig(pythonArgumentItems.value)
+        if (pythonArguments.length > 0) {
+          config.args = pythonArguments
         }
       } else if (formState.tool_type === 'ssh_job') {
         config.host = formState.ssh_host
