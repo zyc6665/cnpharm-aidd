@@ -176,17 +176,17 @@
   }
 
   .preflight-issue.is-error {
-    border-color: rgba(255, 77, 79, 0.22);
-    background: rgba(255, 77, 79, 0.04);
+    border-color: @error-color;
+    background: @error-color-light;
   }
 
   .preflight-issue.is-warning {
-    border-color: rgba(250, 173, 20, 0.28);
-    background: rgba(250, 173, 20, 0.06);
+    border-color: @warning-color;
+    background: @warning-color-light;
   }
 
   .preflight-issue.is-info {
-    border-color: rgba(59, 130, 246, 0.14);
+    border-color: @accent-color-border;
     background: @accent-color-light;
   }
 

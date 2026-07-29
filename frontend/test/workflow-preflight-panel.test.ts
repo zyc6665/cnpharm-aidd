@@ -41,6 +41,10 @@ test('workflow preflight panel uses semantic theme surfaces', () => {
   const source = readFileSync(resolve('src/components/workflow/WorkflowPreflightPanel.vue'), 'utf8')
 
   assert.equal(source.includes('rgba(255, 255, 255'), false)
+  assert.equal(source.includes('rgba(255, 77, 79'), false)
+  assert.equal(source.includes('rgba(250, 173, 20'), false)
   assert.equal(source.includes('@bg-surface'), true)
   assert.equal(source.includes('@bg-elevated'), true)
+  assert.equal(source.includes('@error-color-light'), true)
+  assert.equal(source.includes('@warning-color-light'), true)
 })
