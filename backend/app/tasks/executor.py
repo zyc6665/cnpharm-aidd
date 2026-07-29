@@ -361,6 +361,9 @@ class PythonScriptExecutor(BaseExecutor):
         return await super()._collect_output_files(source_paths, skip_names={"result.json"})
 
 
+from app.tasks.executors.python_script import PythonScriptExecutor
+
+
 class SSHJobExecutor(BaseExecutor):
     """SSH 作业执行器。"""
 

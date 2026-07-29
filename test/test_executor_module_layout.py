@@ -47,3 +47,10 @@ def test_docker_executor_has_a_dedicated_module_and_legacy_import():
     from app.tasks.executors.docker import DockerExecutor
 
     assert LegacyDockerExecutor is DockerExecutor
+
+
+def test_python_script_executor_has_a_dedicated_module_and_legacy_import():
+    from app.tasks.executor import PythonScriptExecutor as LegacyPythonScriptExecutor
+    from app.tasks.executors.python_script import PythonScriptExecutor
+
+    assert LegacyPythonScriptExecutor is PythonScriptExecutor
