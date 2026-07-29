@@ -3,12 +3,44 @@ import type { WorkflowArtifact, WorkflowArtifactSemanticType, WorkflowStepKey } 
 import {
   WORKFLOW_ARTIFACT_SEMANTIC_TYPES
 } from './semantic-types.ts'
-import {
-  WORKFLOW_TOOL_BINDINGS,
-  type WorkflowBoundToolSlug,
-  type WorkflowToolBindingConfig
-} from './tool-bindings.ts'
 import { normalizeWorkflowSemanticType } from './semantic-types.ts'
+
+export interface WorkflowToolFieldBinding {
+  readonly semanticType: WorkflowArtifactSemanticType
+  readonly field: string
+  readonly required?: boolean
+  readonly acceptedExtensions?: readonly string[]
+}
+
+interface WorkflowToolOutputFileMatch {
+  readonly filenameIncludesAny?: readonly string[]
+  readonly extension?: string
+  readonly contentType?: string
+}
+
+interface WorkflowToolFileOutputExtractor {
+  readonly semanticType: WorkflowArtifactSemanticType
+  readonly source: 'output_files'
+  readonly match: WorkflowToolOutputFileMatch
+}
+
+interface WorkflowToolDataOutputExtractor {
+  readonly semanticType: WorkflowArtifactSemanticType
+  readonly source: 'output_data'
+  readonly path: string
+}
+
+export type WorkflowToolOutputExtractor =
+  | WorkflowToolFileOutputExtractor
+  | WorkflowToolDataOutputExtractor
+
+export interface WorkflowToolBindingConfig {
+  readonly toolSlug: string
+  readonly stepKey: WorkflowStepKey
+  readonly acceptedInputTypes: readonly WorkflowArtifactSemanticType[]
+  readonly fieldBindings: readonly WorkflowToolFieldBinding[]
+  readonly outputExtractors: readonly WorkflowToolOutputExtractor[]
+}
 
 const STAGE_STEP_MAP: Readonly<Record<string, WorkflowStepKey>> = {
   pocket_exploration: 'pocketExploration',
@@ -166,16 +198,7 @@ export function buildWorkflowToolBindingFromContract(
 export function resolveWorkflowToolBinding(
   tool?: WorkbenchGroupTool | null
 ): WorkflowToolBindingConfig | null {
-  const contractBinding = buildWorkflowToolBindingFromContract(tool?.contract)
-  if (contractBinding) {
-    return contractBinding
-  }
-
-  if (!tool?.slug) {
-    return null
-  }
-
-  return WORKFLOW_TOOL_BINDINGS[tool.slug as WorkflowBoundToolSlug] ?? null
+  return buildWorkflowToolBindingFromContract(tool?.contract)
 }
 
 export function buildWorkflowPreflightReport(input: {

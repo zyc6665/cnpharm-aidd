@@ -1,12 +1,11 @@
 import type { ToolOptionSummary } from '@/types/models'
 import type { WorkflowStepKey } from './artifact-types.ts'
 import { AIDD_WORKFLOW_STEP_MAP } from './aidd-catalog.ts'
-import type { WorkflowBoundToolSlug } from './tool-bindings.ts'
 
 export type WorkflowToolAvailability = 'available' | 'missing'
 
 export interface WorkflowStepToolOption {
-  slug: WorkflowBoundToolSlug
+  slug: string
   availability: WorkflowToolAvailability
   isRecommended: boolean
   tool?: ToolOptionSummary
@@ -15,9 +14,9 @@ export interface WorkflowStepToolOption {
 export interface WorkflowStepToolViewModel {
   stepKey: WorkflowStepKey
   tools: WorkflowStepToolOption[]
-  availableToolSlugs: WorkflowBoundToolSlug[]
-  missingToolSlugs: WorkflowBoundToolSlug[]
-  defaultSelectedToolSlug: WorkflowBoundToolSlug | null
+  availableToolSlugs: string[]
+  missingToolSlugs: string[]
+  defaultSelectedToolSlug: string | null
 }
 
 function isWorkflowAvailableTool(tool: ToolOptionSummary): boolean {

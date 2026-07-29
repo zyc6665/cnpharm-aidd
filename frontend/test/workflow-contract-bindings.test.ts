@@ -158,12 +158,20 @@ test('应从 ToolContract 生成工作流输入绑定和输出提取规则', asy
   assert.equal(binding?.outputExtractors[0]?.source, 'output_files')
 })
 
-test('动态工作台工具应优先使用 embedded contract 而不是静态绑定表', async () => {
+test('动态工作台工具只能使用 embedded contract 生成绑定', async () => {
   const { resolveWorkflowToolBinding } = await loadModule()
   const binding = resolveWorkflowToolBinding(createTool(createContract()))
 
   assert.equal(binding?.toolSlug, 'dynamic-pocket-generator')
   assert.equal(binding?.fieldBindings[0]?.semanticType, 'pocket_pdb')
+  assert.equal(
+    resolveWorkflowToolBinding({
+      ...createTool(createContract()),
+      slug: 'legacy-tool-without-contract',
+      contract: undefined
+    }),
+    null
+  )
 })
 
 test('预检报告应展示已匹配输入和预期输出', async () => {

@@ -102,13 +102,12 @@ test('流程产物类型模块文件应存在并导出核心骨架', () => {
   assert.equal(source.includes('WorkflowStepRecord'), true)
 })
 
-test('流程工具绑定模块文件应存在并导出绑定配置', () => {
-  const source = readSource('src/workflow/tool-bindings.ts')
+test('流程工具绑定应由契约模块提供，且不存在静态 fallback 映射', () => {
+  const source = readSource('src/workflow/contract-bindings.ts')
 
-  assert.equal(source.includes('WORKFLOW_TOOL_BINDINGS'), true)
-  assert.equal(source.includes('acceptedInputTypes'), true)
-  assert.equal(source.includes('fieldBindings'), true)
-  assert.equal(source.includes('outputExtractors'), true)
+  assert.equal(existsSync(resolve(rootDir, 'src/workflow/tool-bindings.ts')), false)
+  assert.equal(source.includes('buildWorkflowToolBindingFromContract'), true)
+  assert.equal(source.includes('WORKFLOW_TOOL_BINDINGS'), false)
 })
 
 test('公共模型类型中应提供轻量工具摘要类型', () => {

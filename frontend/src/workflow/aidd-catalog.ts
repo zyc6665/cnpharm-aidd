@@ -1,5 +1,4 @@
 import type { WorkflowArtifactSemanticType, WorkflowStepKey } from './artifact-types.ts'
-import type { WorkflowBoundToolSlug } from './tool-bindings.ts'
 import { WORKFLOW_STEP_KEYS } from './artifact-types.ts'
 
 export interface WorkflowStepCatalogItem {
@@ -8,8 +7,8 @@ export interface WorkflowStepCatalogItem {
   readonly descriptionKey: string
   readonly requiredInputTypes: readonly WorkflowArtifactSemanticType[]
   readonly producedOutputTypes: readonly WorkflowArtifactSemanticType[]
-  readonly toolSlugs: readonly WorkflowBoundToolSlug[]
-  readonly recommendedToolSlug?: WorkflowBoundToolSlug
+  readonly toolSlugs: readonly string[]
+  readonly recommendedToolSlug?: string
 }
 
 export const AIDD_WORKFLOW_STEP_ORDER: readonly WorkflowStepKey[] = WORKFLOW_STEP_KEYS

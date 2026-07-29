@@ -6,11 +6,9 @@ import type {
 } from './artifact-types.ts'
 import { normalizeWorkflowSemanticType } from './semantic-types.ts'
 import {
-  WORKFLOW_TOOL_BINDINGS,
-  type WorkflowBoundToolSlug,
   type WorkflowToolBindingConfig,
   type WorkflowToolOutputExtractor
-} from './tool-bindings.ts'
+} from './contract-bindings.ts'
 
 function isNewerArtifact(candidate: WorkflowArtifact, current: WorkflowArtifact): boolean {
   const candidateTimestamp = Date.parse(candidate.createdAt)
@@ -49,25 +47,10 @@ export function selectLatestValidArtifactBySemanticType(input: {
   return latestArtifact
 }
 
-function getArtifactPreferenceRank(input: {
-  artifact: WorkflowArtifact
-  preferredArtifactNameIncludes?: readonly string[]
-}): number {
-  const preferences = input.preferredArtifactNameIncludes
-  if (!preferences?.length) {
-    return Number.POSITIVE_INFINITY
-  }
-
-  const artifactName = input.artifact.name.toLowerCase()
-  const matchedIndex = preferences.findIndex((token) => artifactName.includes(token.toLowerCase()))
-  return matchedIndex === -1 ? Number.POSITIVE_INFINITY : matchedIndex
-}
-
 function selectArtifactForFieldBinding(input: {
   artifacts: WorkflowArtifact[]
   semanticType: WorkflowArtifactSemanticType
   invalidArtifactIds?: Iterable<string>
-  preferredArtifactNameIncludes?: readonly string[]
 }): WorkflowArtifact | null {
   const invalidArtifactIds = new Set(input.invalidArtifactIds)
   const requestedSemanticType = normalizeWorkflowSemanticType(input.semanticType)
@@ -87,21 +70,7 @@ function selectArtifactForFieldBinding(input: {
       continue
     }
 
-    const candidateRank = getArtifactPreferenceRank({
-      artifact,
-      preferredArtifactNameIncludes: input.preferredArtifactNameIncludes
-    })
-    const currentRank = getArtifactPreferenceRank({
-      artifact: selectedArtifact,
-      preferredArtifactNameIncludes: input.preferredArtifactNameIncludes
-    })
-
-    if (candidateRank < currentRank) {
-      selectedArtifact = artifact
-      continue
-    }
-
-    if (candidateRank === currentRank && isNewerArtifact(artifact, selectedArtifact)) {
+    if (isNewerArtifact(artifact, selectedArtifact)) {
       selectedArtifact = artifact
     }
   }
@@ -118,10 +87,6 @@ function matchesOutputFile(input: {
   const { match } = input.extractor
 
   if (match.extension && !filename.toLowerCase().endsWith(match.extension.toLowerCase())) {
-    return false
-  }
-
-  if (match.filenameIncludes && !filename.includes(match.filenameIncludes)) {
     return false
   }
 
@@ -151,23 +116,6 @@ function readOutputDataByPath(outputData: unknown, path: string): unknown {
 
     return (currentValue as Record<string, unknown>)[segment]
   }, outputData)
-}
-
-export function extractArtifactsFromTaskResult(input: {
-  stepKey: WorkflowStepKey
-  toolSlug: WorkflowBoundToolSlug
-  task: WorkflowTaskRef
-}): WorkflowArtifact[] {
-  const binding = WORKFLOW_TOOL_BINDINGS[input.toolSlug]
-  if (!binding) {
-    return []
-  }
-
-  return extractArtifactsFromTaskResultWithBinding({
-    stepKey: input.stepKey,
-    binding,
-    task: input.task
-  })
 }
 
 export function extractArtifactsFromTaskResultWithBinding(input: {
@@ -231,27 +179,6 @@ export function extractArtifactsFromTaskResultWithBinding(input: {
   return artifacts
 }
 
-export function resolveWorkflowInputSourcesForTool(input: {
-  toolSlug: WorkflowBoundToolSlug
-  artifacts: WorkflowArtifact[]
-  invalidArtifactIds?: Iterable<string>
-}): Array<{
-  field: string
-  semanticType: WorkflowArtifactSemanticType
-  artifact: WorkflowArtifact | null
-}> {
-  const binding = WORKFLOW_TOOL_BINDINGS[input.toolSlug]
-  if (!binding) {
-    return []
-  }
-
-  return resolveWorkflowInputSourcesForBinding({
-    binding,
-    artifacts: input.artifacts,
-    invalidArtifactIds: input.invalidArtifactIds
-  })
-}
-
 export function resolveWorkflowInputSourcesForBinding(input: {
   binding: WorkflowToolBindingConfig
   artifacts: WorkflowArtifact[]
@@ -267,11 +194,7 @@ export function resolveWorkflowInputSourcesForBinding(input: {
     artifact: selectArtifactForFieldBinding({
       artifacts: input.artifacts,
       semanticType: fieldBinding.semanticType,
-      invalidArtifactIds: input.invalidArtifactIds,
-      preferredArtifactNameIncludes:
-        'preferredArtifactNameIncludes' in fieldBinding
-          ? fieldBinding.preferredArtifactNameIncludes
-          : undefined
+      invalidArtifactIds: input.invalidArtifactIds
     })
   }))
 }

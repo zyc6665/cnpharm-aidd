@@ -8,7 +8,6 @@ import {
 } from './artifact-types.ts'
 import { AIDD_WORKFLOW_STEP_MAP } from './aidd-catalog.ts'
 import { selectLatestValidArtifactBySemanticType } from './artifact-resolver.ts'
-import { WORKFLOW_TOOL_BINDINGS, type WorkflowBoundToolSlug } from './tool-bindings.ts'
 
 type WorkflowReadinessStatus = Extract<
   WorkflowStepStatus,
@@ -25,16 +24,8 @@ function getFallbackRequiredInputTypes(
 
 function getRequiredInputTypes(input: {
   stepKey: WorkflowStepKey
-  selectedToolSlug?: WorkflowBoundToolSlug | null
+  selectedToolSlug?: string | null
 }): readonly WorkflowArtifactSemanticType[] {
-  if (input.selectedToolSlug != null) {
-    const selectedBinding = WORKFLOW_TOOL_BINDINGS[input.selectedToolSlug]
-
-    if (selectedBinding?.stepKey === input.stepKey) {
-      return selectedBinding.acceptedInputTypes
-    }
-  }
-
   return getFallbackRequiredInputTypes(input.stepKey)
 }
 
@@ -56,7 +47,7 @@ function hasAllRequiredArtifacts(input: {
 export function computeStepReadinessStatus(input: {
   stepKey: WorkflowStepKey
   artifacts: WorkflowArtifact[]
-  selectedToolSlug?: WorkflowBoundToolSlug | null
+  selectedToolSlug?: string | null
   invalidArtifactIds?: Iterable<string>
 }): WorkflowReadinessStatus {
   const requiredInputTypes = getRequiredInputTypes({
@@ -74,8 +65,7 @@ export function computeStepReadinessStatus(input: {
     return 'idle'
   }
 
-  const hasValidSelectedTool =
-    input.selectedToolSlug != null && WORKFLOW_TOOL_BINDINGS[input.selectedToolSlug]?.stepKey === input.stepKey
+  const hasValidSelectedTool = input.selectedToolSlug != null
 
   return hasValidSelectedTool ? 'ready' : 'needs_tool_selection'
 }
@@ -106,8 +96,8 @@ export function invalidateCompletedDownstreamSteps(input: {
 }
 
 export function resolveToolSelectionStatusOnRestore(input: {
-  persistedToolSlug?: WorkflowBoundToolSlug | null
-  availableToolSlugs: readonly WorkflowBoundToolSlug[]
+  persistedToolSlug?: string | null
+  availableToolSlugs: readonly string[]
 }): WorkflowRestoreSelectionStatus {
   if (
     input.persistedToolSlug != null &&

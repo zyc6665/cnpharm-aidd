@@ -11,7 +11,6 @@ import type {
   WorkflowStepStatus,
   WorkflowTaskRef
 } from '../src/workflow/artifact-types.ts'
-import type { WorkflowBoundToolSlug } from '../src/workflow/tool-bindings.ts'
 
 type WorkflowReadinessStatus = Extract<
   WorkflowStepStatus,
@@ -29,7 +28,7 @@ type SelectLatestValidArtifactBySemanticType = (input: {
 type ComputeStepReadinessStatus = (input: {
   stepKey: WorkflowStepKey
   artifacts: WorkflowArtifact[]
-  selectedToolSlug?: WorkflowBoundToolSlug | null
+  selectedToolSlug?: string | null
   invalidArtifactIds?: Iterable<string>
 }) => WorkflowReadinessStatus
 
@@ -39,12 +38,12 @@ type InvalidateCompletedDownstreamSteps = (input: {
 }) => WorkflowStepStateMap
 
 type ResolveToolSelectionStatusOnRestore = (input: {
-  persistedToolSlug?: WorkflowBoundToolSlug | null
-  availableToolSlugs: readonly WorkflowBoundToolSlug[]
+  persistedToolSlug?: string | null
+  availableToolSlugs: readonly string[]
 }) => WorkflowRestoreSelectionStatus
 
 type WorkflowStepToolOption = {
-  slug: WorkflowBoundToolSlug
+  slug: string
   availability: 'available' | 'missing'
   isRecommended: boolean
   tool?: ToolOptionSummary
@@ -53,9 +52,9 @@ type WorkflowStepToolOption = {
 type WorkflowStepToolViewModel = {
   stepKey: WorkflowStepKey
   tools: WorkflowStepToolOption[]
-  availableToolSlugs: WorkflowBoundToolSlug[]
-  missingToolSlugs: WorkflowBoundToolSlug[]
-  defaultSelectedToolSlug: WorkflowBoundToolSlug | null
+  availableToolSlugs: string[]
+  missingToolSlugs: string[]
+  defaultSelectedToolSlug: string | null
 }
 
 type BuildWorkflowStepToolViewModel = (input: {
@@ -73,22 +72,6 @@ type BuildWorkflowStepRecordFromTask = (input: {
   task: WorkflowTaskRef
   previousStepRecord?: WorkflowStepRecord
 }) => WorkflowStepRecord
-
-type ExtractArtifactsFromTaskResult = (input: {
-  stepKey: WorkflowStepKey
-  toolSlug: WorkflowBoundToolSlug
-  task: WorkflowTaskRef
-}) => WorkflowArtifact[]
-
-type ResolveWorkflowInputSourcesForTool = (input: {
-  toolSlug: WorkflowBoundToolSlug
-  artifacts: WorkflowArtifact[]
-  invalidArtifactIds?: Iterable<string>
-}) => Array<{
-  field: string
-  semanticType: WorkflowArtifactSemanticType
-  artifact: WorkflowArtifact | null
-}>
 
 async function loadNamedFunction<T extends (...args: never[]) => unknown>(
   moduleRelativePath: string,
@@ -134,7 +117,7 @@ function createArtifact(input: {
 
 function createToolOption(input: {
   id: string
-  slug: WorkflowBoundToolSlug | 'unrelated-tool'
+  slug: string
   name: string
   status?: ToolOptionSummary['status']
   is_public?: boolean
@@ -451,120 +434,4 @@ test('提交任务、任务成功和任务失败时应得到对应的步骤记�
 
   assert.equal(failedStepRecord.status, 'failed')
   assert.equal(failedStepRecord.errorMessage, 'queue timeout')
-})
-
-test('任务成功后应按工具绑定规则提取标准化产物', async () => {
-  const extractArtifactsFromTaskResult =
-    await loadNamedFunction<ExtractArtifactsFromTaskResult>(
-      '../src/workflow/artifact-resolver.ts',
-      'extractArtifactsFromTaskResult'
-    )
-
-  const artifacts = extractArtifactsFromTaskResult({
-    stepKey: 'molecularDockingAndAffinityPrediction',
-    toolSlug: 'molecular-docking',
-    task: createWorkflowTaskRef({
-      id: 'task-docking-success',
-      status: 'success',
-      toolSlug: 'molecular-docking',
-      finishedAt: '2026-05-28T15:00:00Z',
-      outputFiles: [
-        {
-          id: 'pose-file-1',
-          original_name: 'candidate_pose_1.sdf',
-          filename: 'candidate_pose_1.sdf',
-          content_type: 'chemical/x-mdl-sdfile',
-          url: '/api/v1/files/pose-file-1/download'
-        }
-      ],
-      outputData: {
-        outputs: {
-          affinity_report: {
-            score: -9.3
-          }
-        }
-      }
-    })
-  })
-
-  assert.deepEqual(
-    artifacts.map((artifact) => artifact.semanticType),
-    ['docking_pose', 'affinity_report']
-  )
-  assert.equal(artifacts[0]?.fileId, 'pose-file-1')
-  assert.equal(artifacts[1]?.metadata?.value && typeof artifacts[1].metadata.value, 'object')
-})
-
-test('下游工具应解析出当前可自动带入的输入来源', async () => {
-  const resolveWorkflowInputSourcesForTool =
-    await loadNamedFunction<ResolveWorkflowInputSourcesForTool>(
-      '../src/workflow/artifact-resolver.ts',
-      'resolveWorkflowInputSourcesForTool'
-    )
-
-  const inputSources = resolveWorkflowInputSourcesForTool({
-    toolSlug: 'molecular-docking',
-    invalidArtifactIds: ['protein-old'],
-    artifacts: [
-      createArtifact({
-        id: 'protein-old',
-        semanticType: 'protein_structure',
-        stepKey: 'pocketExploration',
-        toolSlug: 'pocket-explorer',
-        createdAt: '2026-05-28T09:00:00Z'
-      }),
-      createArtifact({
-        id: 'protein-new',
-        semanticType: 'protein_structure',
-        stepKey: 'pocketExploration',
-        toolSlug: 'pocket-explorer',
-        createdAt: '2026-05-28T11:00:00Z'
-      }),
-      createArtifact({
-        id: 'ligand-1',
-        semanticType: 'generated_ligand',
-        stepKey: 'moleculeGenerationOrVirtualScreening',
-        toolSlug: 'gcdm-pocket-generation',
-        createdAt: '2026-05-28T12:00:00Z'
-      })
-    ]
-  })
-
-  assert.equal(inputSources[0]?.field, 'receptor_file')
-  assert.equal(inputSources[0]?.artifact?.id, 'protein-new')
-  assert.equal(inputSources[1]?.field, 'ligand_file')
-  assert.equal(inputSources[1]?.artifact?.id, 'ligand-1')
-})
-
-test('GCDM 应优先复用 protein_pocket_residues 而不是 pocket0 产物', async () => {
-  const resolveWorkflowInputSourcesForTool =
-    await loadNamedFunction<ResolveWorkflowInputSourcesForTool>(
-      '../src/workflow/artifact-resolver.ts',
-      'resolveWorkflowInputSourcesForTool'
-    )
-
-  const inputSources = resolveWorkflowInputSourcesForTool({
-    toolSlug: 'gcdm-pocket-generation',
-    artifacts: [
-      createArtifact({
-        id: 'pocket-grid',
-        semanticType: 'pocket_structure',
-        stepKey: 'pocketExploration',
-        toolSlug: 'pocket-explorer',
-        name: 'artifacts__lv_results__input__pocket0.pdb',
-        createdAt: '2026-05-28T12:00:00Z'
-      }),
-      createArtifact({
-        id: 'pocket-residues',
-        semanticType: 'pocket_structure',
-        stepKey: 'pocketExploration',
-        toolSlug: 'pocket-explorer',
-        name: 'artifacts__lv_results__input__protein_pocket_residues.pdb',
-        createdAt: '2026-05-28T11:00:00Z'
-      })
-    ]
-  })
-
-  assert.equal(inputSources[0]?.field, 'input_files.pocket_pdb')
-  assert.equal(inputSources[0]?.artifact?.id, 'pocket-residues')
 })
