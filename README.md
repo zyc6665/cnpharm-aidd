@@ -1,6 +1,4 @@
 # 科学计算工具管理平台
-  cd /data/zhouyc/cpumodel_sciminer/backend
-  python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/Python-3.10+-green.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-teal.svg)](https://fastapi.tiangolo.com/)
@@ -15,7 +13,7 @@
 - 🚀 **工具托管**：支持远程API、Docker镜像、Python脚本等多种工具接入方式
 - 🎯 **任务调度**：基于Celery的分布式任务队列，支持优先级和多队列
 - 💻 **GPU管理**：智能GPU资源分配，支持多节点、多卡调度
-- 👥 **游客模式**：无需注册即可体验核心功能
+- 🧬 **工作流与智能体**：契约驱动的工具编排与 AIDD 规划能力
 - 📊 **实时监控**：WebSocket实时推送任务进度
 - 💾 **文件管理**：支持本地存储和MinIO对象存储，SHA256去重
 - 🔒 **安全认证**：JWT认证，RBAC权限控制
@@ -55,7 +53,7 @@
 
 ### 当前开发约定
 
-- 当前团队协作分支：`6.16`
+- 当前团队协作分支：`v1.0-7.28`
 - 当前工作目录：`/data/zhouyc/cpumodel_sciminer`
 - 新开发工作默认直接在上述目录和分支上进行
 
@@ -147,6 +145,12 @@ cpumodel_sciminer/
 │   ├── .env                    # 环境配置
 │   └── .env.example            # 环境配置示例
 │
+├── frontend/                   # Vue 3 前端
+│   ├── src/                    # 页面、组件、状态和 API 客户端
+│   └── test/                   # Vitest 前端测试
+├── test/                       # 后端 pytest 测试
+├── docker-compose.yml          # 开发环境 Compose
+├── docker-compose.celery.yml   # Redis、Celery 与 Flower Compose
 └── README.md                   # 本文件
 ```
 
@@ -178,7 +182,8 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 访问：
 - **API文档**：http://localhost:8000/docs
-- **健康检查**：http://localhost:8000/health
+- **存活检查**：http://localhost:8000/health
+- **系统健康检查**：http://localhost:8000/api/v1/system/health
 
 ### 生产模式
 
