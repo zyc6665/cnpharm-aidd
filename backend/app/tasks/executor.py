@@ -44,6 +44,7 @@ from app.tasks.executors.script_trust import validate_script_trust
 from app.tasks.executors.script_output import parse_script_output
 from app.tasks.executors.ssh_command import build_remote_exec_command
 from app.tasks.executors.ssh_paths import build_remote_paths
+from app.tasks.executors.ssh_payload import build_params_payload
 from app.tasks.executors.errors import GPUAllocationFailed, TaskExecutionError
 from app.tasks.state_machine import TaskStateMachine
 from app.tasks.ssh_transport import ParamikoSSHTransport
@@ -639,6 +640,11 @@ class SSHJobExecutor(BaseExecutor):
 
     def _build_params_payload(self, staged_files: List[Dict[str, str]]) -> Dict[str, Any]:
         """构建统一的 params.json 内容。"""
+        raw_params = self.task.inputs.params if self.task.inputs else {}
+        return build_params_payload(str(self.task.id), raw_params, staged_files)
+
+    def _build_params_payload_legacy(self, staged_files: List[Dict[str, str]]) -> Dict[str, Any]:
+        """兼容保留：后续迁移 SSH 主类时删除。"""
         raw_params = self.task.inputs.params if self.task.inputs else {}
         raw_params = raw_params or {}
 
