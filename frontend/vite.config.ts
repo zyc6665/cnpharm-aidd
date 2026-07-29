@@ -44,9 +44,22 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          'ant-design-vue': ['ant-design-vue', '@ant-design/icons-vue'],
-          'vue-vendor': ['vue', 'vue-router', 'pinia']
+        manualChunks(id) {
+          if (id.includes('/node_modules/molstar/')) return 'molstar'
+          if (id.includes('/node_modules/echarts/')) return 'echarts'
+          if (
+            id.includes('/node_modules/ant-design-vue/') ||
+            id.includes('/node_modules/@ant-design/icons-vue/')
+          ) {
+            return 'ant-design-vue'
+          }
+          if (
+            id.includes('/node_modules/vue/') ||
+            id.includes('/node_modules/vue-router/') ||
+            id.includes('/node_modules/pinia/')
+          ) {
+            return 'vue-vendor'
+          }
         }
       }
     }
