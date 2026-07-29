@@ -15,10 +15,24 @@ import {
   setToken
 } from '@/utils/auth-storage'
 
+export interface RequestOptions extends AxiosRequestConfig {
+  silent?: boolean
+  retry?: number
+  retryDelayMs?: number
+}
+
+type RetryableRequestConfig = InternalAxiosRequestConfig & RequestOptions & {
+  _retry?: boolean
+  _retryCount?: number
+}
+
+const DEFAULT_TIMEOUT_MS = 30_000
+const UPLOAD_TIMEOUT_MS = 5 * 60_000
+
 // 创建 axios 实例
 const request: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
-  timeout: 30000,
+  timeout: DEFAULT_TIMEOUT_MS,
   headers: {
     'Content-Type': 'application/json'
   }
@@ -83,7 +97,7 @@ request.interceptors.response.use(
     return response.data
   },
   async (error: AxiosError<ApiError>) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
+    const originalRequest = error.config as RetryableRequestConfig
     const canRefreshToken = shouldAttemptTokenRefresh(originalRequest?.url)
 
     // 401 未授权，尝试刷新 Token
@@ -143,10 +157,20 @@ request.interceptors.response.use(
       }
     }
 
+    const retryCount = originalRequest?._retryCount ?? 0
+    const retryLimit = originalRequest?.retry ?? 0
+    const method = originalRequest?.method?.toLowerCase()
+    const retryableStatus = !error.response || (error.response.status >= 500 && error.response.status < 600)
+    if (retryCount < retryLimit && retryableStatus && (method === 'get' || method === 'head')) {
+      originalRequest._retryCount = retryCount + 1
+      await new Promise(resolve => window.setTimeout(resolve, originalRequest.retryDelayMs ?? 500))
+      return request(originalRequest)
+    }
+
     // 其他错误处理
     // 对于 logout 接口的 401 错误，不显示错误消息（因为退出登录即使失败也会清除本地数据）
     const isLogoutRequest = originalRequest.url?.includes('/auth/logout')
-    if (!(error.response?.status === 401 && isLogoutRequest)) {
+    if (!originalRequest?.silent && !(error.response?.status === 401 && isLogoutRequest)) {
       const errorMessage = error.response?.data?.message || error.message || '请求失败'
       message.error(errorMessage)
     }
@@ -159,37 +183,44 @@ request.interceptors.response.use(
 export const get = <T, P extends object = Record<string, unknown>>(
   url: string,
   params?: P,
-  config?: AxiosRequestConfig
+  config?: RequestOptions
 ): Promise<ApiResponse<T>> => {
   return request.get(url, { params, ...config })
 }
 
 // 封装 POST 请求
-export const post = <T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<ApiResponse<T>> => {
+export const post = <T>(url: string, data?: unknown, config?: RequestOptions): Promise<ApiResponse<T>> => {
   return request.post(url, data, config)
 }
 
 // 封装 PUT 请求
-export const put = <T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<ApiResponse<T>> => {
+export const put = <T>(url: string, data?: unknown, config?: RequestOptions): Promise<ApiResponse<T>> => {
   return request.put(url, data, config)
 }
 
 // 封装 PATCH 请求
-export const patch = <T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<ApiResponse<T>> => {
+export const patch = <T>(url: string, data?: unknown, config?: RequestOptions): Promise<ApiResponse<T>> => {
   return request.patch(url, data, config)
 }
 
 // 封装 DELETE 请求
-export const del = <T>(url: string, config?: AxiosRequestConfig): Promise<ApiResponse<T>> => {
+export const del = <T>(url: string, config?: RequestOptions): Promise<ApiResponse<T>> => {
   return request.delete(url, config)
 }
 
 // 封装文件上传
-export const upload = <T>(url: string, file: File, onProgress?: (percent: number) => void): Promise<ApiResponse<T>> => {
+export const upload = <T>(
+  url: string,
+  file: File,
+  onProgress?: (percent: number) => void,
+  config?: RequestOptions
+): Promise<ApiResponse<T>> => {
   const formData = new FormData()
   formData.append('file', file)
 
   return request.post(url, formData, {
+    ...config,
+    timeout: config?.timeout ?? UPLOAD_TIMEOUT_MS,
     headers: {
       'Content-Type': 'multipart/form-data'
     },

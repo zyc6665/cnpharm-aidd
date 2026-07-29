@@ -14,6 +14,7 @@ export const uploadFile = (
   options?: {
     is_public?: boolean
     onProgress?: (percent: number) => void
+    signal?: AbortSignal
   }
 ): Promise<ApiResponse<FileUploadResponse>> => {
   const formData = new FormData()
@@ -23,6 +24,8 @@ export const uploadFile = (
   }
 
   return post<FileUploadResponse>('/files/upload', formData, {
+    timeout: 5 * 60_000,
+    signal: options?.signal,
     headers: { 'Content-Type': 'multipart/form-data' },
     onUploadProgress: (progressEvent) => {
       if (options?.onProgress && progressEvent.total) {
