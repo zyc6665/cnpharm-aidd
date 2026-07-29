@@ -54,3 +54,10 @@ def test_python_script_executor_has_a_dedicated_module_and_legacy_import():
     from app.tasks.executors.python_script import PythonScriptExecutor
 
     assert LegacyPythonScriptExecutor is PythonScriptExecutor
+
+
+def test_executor_factory_has_a_dedicated_module_and_legacy_import():
+    from app.tasks.executor import TaskExecutor as LegacyTaskExecutor
+    from app.tasks.executors.factory import TaskExecutor
+
+    assert LegacyTaskExecutor is TaskExecutor

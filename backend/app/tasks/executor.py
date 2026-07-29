@@ -1238,3 +1238,7 @@ class TaskExecutor:
         finally:
             # GPU 释放（无论成功失败都执行）
             await self._release_gpu()
+
+
+# 保留历史导入路径，具体工厂实现已迁入 executors 子包。
+from app.tasks.executors.factory import TaskExecutor
