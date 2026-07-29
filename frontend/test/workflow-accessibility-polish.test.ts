@@ -10,6 +10,7 @@ function readSource(relativePath: string): string {
 test('workflow palette and inspector empty states should guide the next action', () => {
   const paletteSource = readSource('src/components/workflow/WorkflowToolPalette.vue')
   const inspectorSource = readSource('src/components/workflow/WorkflowNodeInspector.vue')
+  const resultSource = readSource('src/components/workflow/NodeResultPanel.vue')
   const zhSource = readSource('src/locales/zh-CN/index.ts')
   const enSource = readSource('src/locales/en-US/index.ts')
 
@@ -18,7 +19,7 @@ test('workflow palette and inspector empty states should guide the next action',
     'workflow.inspector.noOutputFiles',
     'workflow.inspector.noTaskResult'
   ]) {
-    assert.equal(paletteSource.includes(marker) || inspectorSource.includes(marker), true, `missing ${marker}`)
+    assert.equal(paletteSource.includes(marker) || inspectorSource.includes(marker) || resultSource.includes(marker), true, `missing ${marker}`)
   }
 
   for (const marker of [
@@ -32,5 +33,18 @@ test('workflow palette and inspector empty states should guide the next action',
   ]) {
     assert.equal(zhSource.includes(marker), true, `missing zh ${marker}`)
     assert.equal(enSource.includes(marker), true, `missing en ${marker}`)
+  }
+})
+
+test('workflow canvas exposes keyboard movement and graph semantics', () => {
+  const canvasSource = readSource('src/components/workflow/WorkflowTemplateCanvas.vue')
+  const nodeSource = readSource('src/components/workflow/WorkflowCanvasNode.vue')
+
+  for (const marker of ['role="img"', ':aria-label="t(\'workflow.canvas.edges\'']) {
+    assert.equal(canvasSource.includes(marker), true, `canvas missing ${marker}`)
+  }
+
+  for (const marker of [':aria-grabbed="isDragging"', 'handleKeydown', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']) {
+    assert.equal(nodeSource.includes(marker), true, `node missing ${marker}`)
   }
 })

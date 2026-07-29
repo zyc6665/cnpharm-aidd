@@ -17,7 +17,8 @@
           class="canvas-edges"
           :width="canvasSize.width"
           :height="canvasSize.height"
-          aria-hidden="true"
+          role="img"
+          :aria-label="t('workflow.canvas.edges', { count: template.edges.length })"
         >
           <WorkflowCanvasEdge
             v-for="edge in resolvedEdges"

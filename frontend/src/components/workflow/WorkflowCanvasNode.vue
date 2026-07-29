@@ -2,12 +2,15 @@
   <div
     role="button"
     tabindex="0"
+    :aria-label="`${title}. ${status}`"
+    :aria-grabbed="isDragging"
     class="workflow-canvas-node"
     :class="[`is-${node.type}`, `status-${status}`, { 'is-selected': selected }]"
     :style="{ left: `${node.position.x}px`, top: `${node.position.y}px` }"
     @click="$emit('select-node', node.id)"
     @keydown.enter.prevent="$emit('select-node', node.id)"
     @keydown.space.prevent="$emit('select-node', node.id)"
+    @keydown="handleKeydown"
     @pointerdown="handlePointerDown"
   >
     <button
@@ -28,6 +31,7 @@
 </template>
 
 <script setup lang="ts">
+  import { ref } from 'vue'
   import type { WorkflowStepStatus } from '@/workflow/artifact-types'
   import type { WorkflowCanvasNode } from '@/workflow/template-types'
   import WorkflowNodeStatusBadge from './WorkflowNodeStatusBadge.vue'
@@ -47,6 +51,24 @@
     (event: 'move-node', payload: { nodeId: string; position: { x: number; y: number } }): void
   }>()
 
+  const isDragging = ref(false)
+
+  function handleKeydown(event: KeyboardEvent) {
+    const offsetByKey: Record<string, { x: number; y: number }> = {
+      ArrowUp: { x: 0, y: -16 },
+      ArrowDown: { x: 0, y: 16 },
+      ArrowLeft: { x: -16, y: 0 },
+      ArrowRight: { x: 16, y: 0 }
+    }
+    const offset = offsetByKey[event.key]
+    if (!offset) return
+    event.preventDefault()
+    emit('move-node', {
+      nodeId: props.node.id,
+      position: { x: props.node.position.x + offset.x, y: props.node.position.y + offset.y }
+    })
+  }
+
   function handlePointerDown(event: PointerEvent) {
     if (event.button !== 0) {
       return
@@ -56,6 +78,7 @@
     const startY = event.clientY
     const startPosition = props.node.position
     let hasDragged = false
+    isDragging.value = true
 
     const handlePointerMove = (moveEvent: PointerEvent) => {
       const deltaX = moveEvent.clientX - startX
@@ -76,6 +99,7 @@
     const handlePointerUp = () => {
       window.removeEventListener('pointermove', handlePointerMove)
       window.removeEventListener('pointerup', handlePointerUp)
+      isDragging.value = false
       if (hasDragged) {
         event.preventDefault()
       }
