@@ -52,6 +52,7 @@ test('workflow graph maintenance exposes edge deletion and semantic sync', () =>
   const store = readSource('src/stores/workflow.ts')
   const canvasStore = readSource('src/stores/workflow-canvas.ts')
   const inspector = readSource('src/components/workflow/WorkflowNodeInspector.vue')
+  const edgePanel = readSource('src/components/workflow/NodeEdgePanel.vue')
 
   for (const marker of ['deleteCanvasEdge', 'syncCanvasNodeSemanticTypes']) {
     assert.equal(store.includes(marker), true, `store missing ${marker}`)
@@ -61,12 +62,10 @@ test('workflow graph maintenance exposes edge deletion and semantic sync', () =>
     assert.equal(canvasStore.includes(marker), true, `canvas store missing ${marker}`)
   }
 
-  for (const marker of [
-    'upstream-edge-list',
-    "event: 'delete-edge'",
-    'handleDeleteEdge',
-    "t('workflow.inspector.deleteEdge')"
-  ]) {
-    assert.equal(inspector.includes(marker), true, `inspector missing ${marker}`)
+  assert.equal(inspector.includes('NodeEdgePanel'), true)
+  assert.equal(inspector.includes('@delete-edge="$emit(\'delete-edge\', $event)"'), true)
+
+  for (const marker of ["event: 'delete-edge'", "t('workflow.inspector.deleteEdge')"]) {
+    assert.equal(edgePanel.includes(marker), true, `edge panel missing ${marker}`)
   }
 })

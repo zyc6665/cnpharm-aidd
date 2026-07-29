@@ -18,6 +18,6 @@ test('workflow canvas reserves stable surface height', () => {
 })
 
 test('workflow inspector stays scrollable on compact screens', () => {
-  assert.equal(inspector.includes('max-height: 720px;'), true)
-  assert.equal(inspector.includes('overflow: auto;'), true)
+  assert.equal(inspector.includes('max-height:720px;'), true)
+  assert.equal(inspector.includes('overflow:auto;'), true)
 })

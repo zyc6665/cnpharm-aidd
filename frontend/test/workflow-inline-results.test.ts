@@ -45,9 +45,11 @@ test('工作台轻量结果面板应复用结果可视化、输出摘要与日�
 test('工作台页应提供节点结果标签、任务详情与产物下载入口', () => {
   const source = readSource('src/views/workflow/index.vue')
   const inspectorSource = readSource('src/components/workflow/WorkflowNodeInspector.vue')
+  const resultPanelSource = readSource('src/components/workflow/NodeResultPanel.vue')
 
   assert.equal(source.includes('WorkflowResultsReportPanel'), true)
-  assert.equal(inspectorSource.includes("workflow.inspector.taskResult"), true)
+  assert.equal(inspectorSource.includes('NodeResultPanel'), true)
   assert.equal(inspectorSource.includes("event: 'view-task-detail'"), true)
-  assert.equal(inspectorSource.includes('handleDownloadOutput'), true)
+  assert.equal(resultPanelSource.includes("workflow.inspector.taskResult"), true)
+  assert.equal(resultPanelSource.includes('triggerProtectedFileDownload'), true)
 })
