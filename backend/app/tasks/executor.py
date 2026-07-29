@@ -41,6 +41,7 @@ from app.tasks.executors.base import BaseExecutor
 from app.tasks.executors.docker_security import validate_docker_execution_inputs
 from app.tasks.executors.docker_output import parse_docker_output
 from app.tasks.executors.script_trust import validate_script_trust
+from app.tasks.executors.script_output import parse_script_output
 from app.tasks.executors.errors import GPUAllocationFailed, TaskExecutionError
 from app.tasks.state_machine import TaskStateMachine
 from app.tasks.ssh_transport import ParamikoSSHTransport
@@ -300,7 +301,7 @@ class PythonScriptExecutor(BaseExecutor):
                 )
 
             # 解析输出
-            output = self._parse_script_output(work_dir, process.stdout)
+            output = parse_script_output(work_dir, process.stdout)
 
             # 收集输出文件
             output_files = await self._collect_output_files()
