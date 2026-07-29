@@ -243,6 +243,9 @@ class DockerExecutor(BaseExecutor):
         ]
         return await super()._collect_output_files(source_paths)
 
+from app.tasks.executors.docker import DockerExecutor
+
+
 class PythonScriptExecutor(BaseExecutor):
     """Python脚本执行器"""
 

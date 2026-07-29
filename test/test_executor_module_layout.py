@@ -40,3 +40,10 @@ def test_docker_output_parser_has_a_dedicated_module():
     assert callable(parse_docker_output)
     assert parse_docker_output('log\n{"score": 1}') == {"score": 1}
     assert parse_docker_output("OUTPUT_JSON: {\"score\": 2}\nignored") == {"score": 2}
+
+
+def test_docker_executor_has_a_dedicated_module_and_legacy_import():
+    from app.tasks.executor import DockerExecutor as LegacyDockerExecutor
+    from app.tasks.executors.docker import DockerExecutor
+
+    assert LegacyDockerExecutor is DockerExecutor
