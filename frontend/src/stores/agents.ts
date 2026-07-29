@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import {
   cancelAiddAgentRun,
   createAiddAgentRun,
+  createAiddWorkflowDraft,
   deleteAiddAgentRun,
   getAiddAgentRun,
   getAiddAgentRuns,
@@ -12,6 +13,7 @@ import type {
   AiddAgentRun,
   AiddAgentRunCreateParams,
   AiddAgentRunStatus,
+  AiddWorkflowDraft,
   PaginationParams
 } from '@/types/models'
 
@@ -25,6 +27,7 @@ export const useAgentsStore = defineStore('agents', () => {
   const runs = ref<AiddAgentRun[]>([])
   const currentRun = ref<AiddAgentRun | null>(null)
   const loading = ref(false)
+  const drafting = ref(false)
   const total = ref(0)
   let pollTimer: number | null = null
 
@@ -63,6 +66,18 @@ export const useAgentsStore = defineStore('agents', () => {
       return res.data
     } finally {
       loading.value = false
+    }
+  }
+
+  const createWorkflowDraft = async (
+    params: AiddAgentRunCreateParams
+  ): Promise<AiddWorkflowDraft> => {
+    drafting.value = true
+    try {
+      const res = await createAiddWorkflowDraft(params)
+      return res.data
+    } finally {
+      drafting.value = false
     }
   }
 
@@ -118,10 +133,12 @@ export const useAgentsStore = defineStore('agents', () => {
     runs,
     currentRun,
     loading,
+    drafting,
     total,
     fetchRuns,
     fetchRun,
     createRun,
+    createWorkflowDraft,
     syncRun,
     cancelRun,
     deleteRun,

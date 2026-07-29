@@ -3,12 +3,19 @@ import type { ApiResponse } from '@/types/api'
 import type {
   AiddAgentRun,
   AiddAgentRunCreateParams,
+  AiddWorkflowDraft,
   PaginatedResponse,
   PaginationParams
 } from '@/types/models'
 
 export const createAiddAgentRun = (data: AiddAgentRunCreateParams): Promise<ApiResponse<AiddAgentRun>> => {
   return post<AiddAgentRun>('/agents/aidd/runs', data)
+}
+
+export const createAiddWorkflowDraft = (
+  data: AiddAgentRunCreateParams
+): Promise<ApiResponse<AiddWorkflowDraft>> => {
+  return post<AiddWorkflowDraft>('/agents/aidd/workflow-drafts', data)
 }
 
 export const getAiddAgentRuns = (

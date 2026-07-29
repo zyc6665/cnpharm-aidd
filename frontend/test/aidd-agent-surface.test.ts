@@ -29,6 +29,22 @@ test('前端应存在 AIDD agent API 和 store', () => {
   assert.equal(storeIndexSource.includes('useAgentsStore'), true)
 })
 
+test('Agent API 和 store 应支持独立的工作流草稿生成状态', () => {
+  const apiSource = readSource('src/api/agents.ts')
+  const storeSource = readSource('src/stores/agents.ts')
+  const modelsSource = readSource('src/types/models.d.ts')
+
+  assert.equal(modelsSource.includes('export interface AiddWorkflowDraft'), true)
+  assert.equal(modelsSource.includes('definition: WorkflowDefinition'), true)
+  assert.equal(apiSource.includes('createAiddWorkflowDraft'), true)
+  assert.equal(apiSource.includes("'/agents/aidd/workflow-drafts'"), true)
+  assert.equal(storeSource.includes('const drafting = ref(false)'), true)
+  assert.equal(storeSource.includes('const createWorkflowDraft = async'), true)
+  assert.equal(storeSource.includes('drafting.value = true'), true)
+  assert.equal(storeSource.includes('drafting.value = false'), true)
+  assert.equal(storeSource.includes('createWorkflowDraft,'), true)
+})
+
 test('工作台应挂载 AIDD agent 入口组件', () => {
   assert.equal(existsSync(resolve(rootDir, 'src/components/workflow/AiddAgentPanel.vue')), true)
   const workflowSource = readSource('src/views/workflow/index.vue')
