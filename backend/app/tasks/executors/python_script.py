@@ -15,6 +15,13 @@ from app.tasks.executors.script_trust import validate_script_trust
 logger = logging.getLogger(__name__)
 
 
+def _configured_args(config: dict[str, Any]) -> list[str]:
+    args = config.get("args", [])
+    if not isinstance(args, list) or not all(isinstance(item, str) for item in args):
+        raise TaskExecutionError("Python script args must be a string array")
+    return args
+
+
 class PythonScriptExecutor(BaseExecutor):
     """执行经过可信校验的 Python 工具脚本。"""
 
@@ -25,6 +32,7 @@ class PythonScriptExecutor(BaseExecutor):
         if not script_path and not script_content:
             raise TaskExecutionError("Missing script_path or script_content in tool config")
         validate_script_trust(script_content, script_path)
+        configured_args = _configured_args(self.config)
         work_dir = self._get_work_dir()
         try:
             if script_content:
@@ -36,7 +44,15 @@ class PythonScriptExecutor(BaseExecutor):
                 json.dump(self.task.inputs.params if self.task.inputs else {}, params_handle)
             process = await asyncio.to_thread(
                 subprocess.run,
-                ["python", script_path, "--params-file", params_file, "--output-dir", os.path.join(work_dir, "output")],
+                [
+                    "python",
+                    script_path,
+                    *configured_args,
+                    "--params-file",
+                    params_file,
+                    "--output-dir",
+                    os.path.join(work_dir, "output"),
+                ],
                 capture_output=True,
                 text=True,
                 timeout=timeout,
