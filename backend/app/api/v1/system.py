@@ -5,7 +5,7 @@ import os
 import platform
 import psutil
 from typing import Optional, List
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel

@@ -1,12 +1,11 @@
 # backend/app/websocket/manager.py
 """WebSocket 连接管理器"""
 
-import json
 import asyncio
 from typing import Dict, Set, Optional, Any
 from datetime import datetime
 from dataclasses import dataclass, field
-from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import WebSocket
 from enum import Enum
 
 import logging

@@ -2,7 +2,6 @@
 """用户相关Schema"""
 
 from typing import Optional
-from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, EmailStr, field_validator
 from app.schemas.common import TimestampMixin
 from app.schemas.statistics import UserStatisticsResponse

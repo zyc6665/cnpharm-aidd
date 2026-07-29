@@ -1,7 +1,7 @@
 # backend/app/auth/jwt_handler.py
 """JWT Token管理"""
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Optional, Dict, Any
 import uuid
 from jose import jwt, JWTError

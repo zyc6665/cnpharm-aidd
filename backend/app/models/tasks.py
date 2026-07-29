@@ -1,7 +1,7 @@
 # backend/app/models/tasks.py
 import enum
 
-from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, Text, ForeignKey, JSON
+from sqlalchemy import Column, String, Integer, Float, DateTime, Text, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 
 from app.database.base import Base, TimestampMixin, UUIDMixin, utcnow

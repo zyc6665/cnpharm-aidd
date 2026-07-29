@@ -1,7 +1,6 @@
 # backend/app/models/verification.py
 """验证码模型"""
 
-from datetime import datetime
 from sqlalchemy import Column, String, Boolean, DateTime, Integer, Index
 import enum
 

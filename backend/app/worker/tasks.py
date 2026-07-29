@@ -272,7 +272,7 @@ def cleanup_expired_files():
 
 async def _cleanup_expired_files_impl() -> int:
     """清理过期文件实现"""
-    from sqlalchemy import select, delete
+    from sqlalchemy import select
     from app.database.session import async_session_factory
     from app.models.files import File
     from app.storage import get_storage_backend

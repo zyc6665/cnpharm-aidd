@@ -5,8 +5,6 @@ import logging
 from typing import Optional
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from email.utils import formataddr
-
 import aiosmtplib
 
 from app.config import settings

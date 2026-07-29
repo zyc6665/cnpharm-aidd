@@ -1,7 +1,6 @@
 # backend/app/config.py
 """应用配置管理"""
 
-import os
 import ipaddress
 import re
 from functools import lru_cache

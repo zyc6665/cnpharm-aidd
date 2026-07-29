@@ -1,7 +1,7 @@
 # backend/app/schemas/files.py
 """文件相关Schema"""
 
-from typing import Optional, Dict, Any
+from typing import Optional
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 from app.schemas.common import TimestampMixin

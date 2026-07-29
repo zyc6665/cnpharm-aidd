@@ -6,7 +6,7 @@ import logging
 import os
 import posixpath
 import shutil
-from typing import TYPE_CHECKING, Any, Optional
+from typing import Any, Optional
 
 from sqlalchemy import select
 
@@ -21,10 +21,6 @@ from app.tasks.executors.ssh_paths import build_remote_paths
 from app.tasks.executors.ssh_payload import build_params_payload
 from app.tasks.executors.ssh_result import load_result_json
 from app.tasks.ssh_transport import ParamikoSSHTransport
-
-if TYPE_CHECKING:
-    from app.models.tasks import Task
-    from app.models.tools import ToolVersion
 
 logger = logging.getLogger(__name__)
 

@@ -1,7 +1,6 @@
 # backend/app/models/tools.py
 """工具相关模型"""
 
-from datetime import datetime
 from sqlalchemy import Column, String, Integer, Boolean, DateTime, Text, ForeignKey, JSON, Table, UniqueConstraint
 from sqlalchemy.orm import relationship
 import enum

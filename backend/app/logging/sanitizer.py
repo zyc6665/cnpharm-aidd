@@ -7,7 +7,7 @@
 
 import logging
 import re
-from typing import Any, Dict, List, Pattern, Set, Union
+from typing import Any, Dict, List, Set
 
 
 class LogSanitizer:

@@ -5,8 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from app.agents.aidd.capabilities import AIDD_TOOL_CAPABILITIES, ToolCapability
-from app.agents.aidd.registry import load_tool_capability as _load_tool_capability_sync
+from app.agents.aidd.capabilities import AIDD_TOOL_CAPABILITIES
 
 
 # ---------------------------------------------------------------------------

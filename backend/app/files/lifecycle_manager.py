@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 import logging
 import json
 
-from sqlalchemy import select, func, and_, or_
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.time import utcnow

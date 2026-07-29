@@ -23,7 +23,6 @@ from app.schemas.tasks import TaskCreate
 from app.services.semantic_types import normalize_semantic_type
 from app.services.workflow_validation import (
     is_condition_node,
-    is_control_flow_node,
     is_loop_node,
     is_map_node,
     is_tool_node,

@@ -5,11 +5,10 @@
 处理GPU资源不足时的任务调度和用户通知。
 """
 
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
-import asyncio
 import logging
 
 from app.common.time import utcnow
