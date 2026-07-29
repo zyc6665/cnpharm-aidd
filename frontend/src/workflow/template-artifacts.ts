@@ -2,6 +2,7 @@ import type { WorkflowArtifactSemanticType, WorkflowTaskRef } from './artifact-t
 import type { WorkflowTemplate } from './template-types.ts'
 import type { ArtifactFile } from '../types/models.d.ts'
 import { formatWorkflowKey } from './i18n-utils.ts'
+import { sortArtifactsByCreatedAtDesc } from '../utils/artifact-sorting.ts'
 
 export interface WorkflowNodeInputRequirement {
   semanticType: WorkflowArtifactSemanticType
@@ -57,9 +58,7 @@ export function recommendArtifactsForNode(input: {
 }
 
 function findLatestArtifactForTask(artifacts: ArtifactFile[], taskId: string): ArtifactFile | null {
-  return artifacts
-    .filter(artifact => artifact.task_id === taskId)
-    .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at))[0] ?? null
+  return sortArtifactsByCreatedAtDesc(artifacts.filter(artifact => artifact.task_id === taskId))[0] ?? null
 }
 
 export function suggestWorkflowEdgesForNode(input: {

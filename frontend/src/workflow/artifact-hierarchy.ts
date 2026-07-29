@@ -1,5 +1,6 @@
 import { filterCompatibleArtifacts } from '../components/tools/artifact-selection.ts'
 import type { ArtifactFile, WorkbenchGroup } from '../types/models.d.ts'
+import { sortArtifactsByCreatedAtDesc } from '../utils/artifact-sorting.ts'
 
 export const UNGROUPED_ARTIFACT_GROUP_ID = 'ungrouped'
 export const UNGROUPED_ARTIFACT_GROUP_SLUG = 'ungrouped'
@@ -57,10 +58,6 @@ interface PrimaryGroupMeta {
   toolSlug: string
   toolName: string
   toolOrder: number
-}
-
-function sortArtifactsByCreatedAtDesc(artifacts: ArtifactFile[]): ArtifactFile[] {
-  return [...artifacts].sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at))
 }
 
 function resolveTaskName(artifacts: ArtifactFile[]): string | undefined {

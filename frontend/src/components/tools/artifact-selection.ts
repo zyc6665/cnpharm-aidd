@@ -1,4 +1,5 @@
 import type { ArtifactFile } from '../../types/models.d.ts'
+import { sortArtifactsByCreatedAtDesc } from '../../utils/artifact-sorting.ts'
 
 export interface ArtifactTaskOptionGroup {
   taskId: string
@@ -105,9 +106,7 @@ export function groupCompatibleArtifactsByTask(
 
   return Array.from(taskMap.entries())
     .map(([taskId, taskArtifacts]) => {
-      const sortedArtifacts = [...taskArtifacts].sort((left, right) => {
-        return Date.parse(right.created_at) - Date.parse(left.created_at)
-      })
+      const sortedArtifacts = sortArtifactsByCreatedAtDesc(taskArtifacts)
       const latestArtifact = sortedArtifacts[0]
 
       return {

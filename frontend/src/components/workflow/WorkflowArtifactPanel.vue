@@ -311,6 +311,7 @@
   import { useI18n } from 'vue-i18n'
   import { useArtifactsStore, useToolsStore, useUserStore, useWorkflowStore } from '@/stores'
   import type { ArtifactFile, WorkbenchGroup } from '@/types/models'
+  import { sortArtifactsByCreatedAtDesc } from '@/utils/artifact-sorting'
   import {
     buildWorkflowArtifactHierarchy,
     type WorkflowArtifactGroupNode,
@@ -340,11 +341,7 @@
   const expandedToolSlugs = ref<string[]>([])
   const expandedTaskIds = ref<string[]>([])
 
-  const sortedArtifacts = computed(() => {
-    return [...artifactsStore.items].sort((left, right) => {
-      return Date.parse(right.created_at) - Date.parse(left.created_at)
-    })
-  })
+  const sortedArtifacts = computed(() => sortArtifactsByCreatedAtDesc(artifactsStore.items))
 
   const currentGroupNodes = computed(() => {
     return buildWorkflowArtifactHierarchy({

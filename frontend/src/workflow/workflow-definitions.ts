@@ -1,4 +1,5 @@
 import type { ArtifactFile, WorkflowDefinition } from '../types/models'
+import { sortArtifactsByCreatedAtDesc } from '../utils/artifact-sorting'
 
 const WORKFLOW_INPUT_PREFIX = 'workflow_input:'
 
@@ -63,7 +64,5 @@ export function findLatestArtifactForSemanticType(
     return null
   }
 
-  return [...matchingArtifacts].sort((left, right) => {
-    return Date.parse(right.created_at) - Date.parse(left.created_at)
-  })[0] ?? null
+  return sortArtifactsByCreatedAtDesc(matchingArtifacts)[0] ?? null
 }

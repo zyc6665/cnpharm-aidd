@@ -11,6 +11,7 @@ import {
 } from '@/views/tools/detail-schema'
 import { toWorkflowTaskRef } from '@/workflow/task-state'
 import type { WorkflowTaskRef } from '@/workflow/artifact-types'
+import { sortArtifactsByCreatedAtDesc } from '@/utils/artifact-sorting'
 import { useArtifactsStore, useTasksStore, useWorkflowStore } from '@/stores'
 import type { useWorkflowCanvas } from './useWorkflowCanvas'
 
@@ -165,12 +166,11 @@ export function useWorkflowExecution(input: {
   }
 
   function resolveRecommendedArtifactsForNode(nodeId: string): ArtifactFile[] {
-    return editableTemplate.value.edges
+    return sortArtifactsByCreatedAtDesc(editableTemplate.value.edges
       .filter((edge) => edge.target === nodeId)
       .map((edge) => workflowStore.taskByNode[edge.source])
       .filter((task): task is WorkflowTaskRef => task?.status === 'success')
-      .flatMap((task) => artifactsStore.items.filter((artifact) => artifact.task_id === task.id))
-      .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at))
+      .flatMap((task) => artifactsStore.items.filter((artifact) => artifact.task_id === task.id)))
   }
 
   function findArtifactByUnknownId(value: unknown): ArtifactFile | null {
