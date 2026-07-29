@@ -2,9 +2,7 @@
   <div class="admin-tasks">
     <AppPageHeader :title="t('admin.tasks')">
       <template #actions>
-      <a-button @click="handleRefresh">
-        <ReloadOutlined /> {{ t('common.refresh') }}
-      </a-button>
+        <a-button @click="handleRefresh"> <ReloadOutlined /> {{ t('common.refresh') }} </a-button>
       </template>
     </AppPageHeader>
 
@@ -47,6 +45,10 @@
             :placeholder="t('common.all')"
             style="width: 180px"
             allowClear
+            show-search
+            :filter-option="false"
+            :loading="toolOptionsLoading"
+            @search="searchToolOptions"
           >
             <a-select-option v-for="tool in toolOptions" :key="tool.id" :value="tool.id">
               {{ tool.name }}
@@ -72,9 +74,7 @@
             <a-button type="primary" @click="handleSearch">
               <SearchOutlined /> {{ t('common.search') }}
             </a-button>
-            <a-button @click="handleReset">
-              <ReloadOutlined /> {{ t('common.reset') }}
-            </a-button>
+            <a-button @click="handleReset"> <ReloadOutlined /> {{ t('common.reset') }} </a-button>
           </a-space>
         </a-form-item>
       </a-form>
@@ -145,291 +145,285 @@
       </a-table>
     </a-card>
 
-    <a-drawer
-      v-model:open="showDetailDrawer"
-      :title="t('tasks.detail')"
-      width="600"
-    >
+    <a-drawer v-model:open="showDetailDrawer" :title="t('tasks.detail')" width="600">
       <SkeletonCard v-if="detailLoading" />
-        <template v-else-if="selectedTask">
-          <a-descriptions :column="1" bordered>
-            <a-descriptions-item :label="t('common.name')">
-              {{ formatTaskTitle(selectedTask) }}
-            </a-descriptions-item>
-            <a-descriptions-item label="ID">
-              {{ selectedTask.id }}
-            </a-descriptions-item>
-            <a-descriptions-item :label="t('admin.tool')">
-              {{ selectedTask.tool_name || '-' }}
-            </a-descriptions-item>
-            <a-descriptions-item :label="t('admin.user')">
-              {{ selectedTask.user_name || selectedTask.user_email || selectedTask.user_id || '-' }}
-            </a-descriptions-item>
-            <a-descriptions-item :label="t('common.status')">
-              <a-tag :color="getStatusColor(selectedTask.status)">
-                {{ t(`tasks.status.${selectedTask.status}`) }}
-              </a-tag>
-            </a-descriptions-item>
-            <a-descriptions-item :label="t('tasks.progress')">
-              <a-progress :percent="selectedTask.progress || 0" />
-            </a-descriptions-item>
-            <a-descriptions-item :label="t('tasks.createdAt')">
-              {{ formatDate(selectedTask.created_at) }}
-            </a-descriptions-item>
-            <a-descriptions-item :label="t('tasks.startedAt')">
-              {{ selectedTask.started_at ? formatDate(selectedTask.started_at) : '-' }}
-            </a-descriptions-item>
-            <a-descriptions-item :label="t('tasks.completedAt')">
-              {{ selectedTask.completed_at ? formatDate(selectedTask.completed_at) : '-' }}
-            </a-descriptions-item>
-          </a-descriptions>
+      <template v-else-if="selectedTask">
+        <a-descriptions :column="1" bordered>
+          <a-descriptions-item :label="t('common.name')">
+            {{ formatTaskTitle(selectedTask) }}
+          </a-descriptions-item>
+          <a-descriptions-item label="ID">
+            {{ selectedTask.id }}
+          </a-descriptions-item>
+          <a-descriptions-item :label="t('admin.tool')">
+            {{ selectedTask.tool_name || '-' }}
+          </a-descriptions-item>
+          <a-descriptions-item :label="t('admin.user')">
+            {{ selectedTask.user_name || selectedTask.user_email || selectedTask.user_id || '-' }}
+          </a-descriptions-item>
+          <a-descriptions-item :label="t('common.status')">
+            <a-tag :color="getStatusColor(selectedTask.status)">
+              {{ t(`tasks.status.${selectedTask.status}`) }}
+            </a-tag>
+          </a-descriptions-item>
+          <a-descriptions-item :label="t('tasks.progress')">
+            <a-progress :percent="selectedTask.progress || 0" />
+          </a-descriptions-item>
+          <a-descriptions-item :label="t('tasks.createdAt')">
+            {{ formatDate(selectedTask.created_at) }}
+          </a-descriptions-item>
+          <a-descriptions-item :label="t('tasks.startedAt')">
+            {{ selectedTask.started_at ? formatDate(selectedTask.started_at) : '-' }}
+          </a-descriptions-item>
+          <a-descriptions-item :label="t('tasks.completedAt')">
+            {{ selectedTask.completed_at ? formatDate(selectedTask.completed_at) : '-' }}
+          </a-descriptions-item>
+        </a-descriptions>
 
-          <a-divider>{{ t('tasks.inputParams') }}</a-divider>
-          <pre class="json-view">{{ JSON.stringify(selectedTask.inputs?.params ?? {}, null, 2) }}</pre>
+        <a-divider>{{ t('tasks.inputParams') }}</a-divider>
+        <pre class="json-view">{{
+          JSON.stringify(selectedTask.inputs?.params ?? {}, null, 2)
+        }}</pre>
 
-          <template v-if="selectedTask.output_data">
-            <a-divider>{{ t('tasks.result') }}</a-divider>
-            <pre class="json-view">{{ JSON.stringify(selectedTask.output_data, null, 2) }}</pre>
-          </template>
-
-          <template v-if="selectedTask.error_message">
-            <a-divider>{{ t('tasks.errorMessage') }}</a-divider>
-            <a-alert type="error" :message="selectedTask.error_message" />
-          </template>
+        <template v-if="selectedTask.output_data">
+          <a-divider>{{ t('tasks.result') }}</a-divider>
+          <pre class="json-view">{{ JSON.stringify(selectedTask.output_data, null, 2) }}</pre>
         </template>
+
+        <template v-if="selectedTask.error_message">
+          <a-divider>{{ t('tasks.errorMessage') }}</a-divider>
+          <a-alert type="error" :message="selectedTask.error_message" />
+        </template>
+      </template>
     </a-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
-import { useI18n } from 'vue-i18n'
-import {
-  DeleteOutlined,
-  EyeOutlined,
-  RedoOutlined,
-  ReloadOutlined,
-  SearchOutlined,
-  StopOutlined
-} from '@ant-design/icons-vue'
-import { message, Modal } from 'ant-design-vue'
-import dayjs from 'dayjs'
-import AppFilterBar from '@/components/common/AppFilterBar.vue'
-import AppPageHeader from '@/components/common/AppPageHeader.vue'
-import SkeletonCard from '@/components/common/SkeletonCard.vue'
-import { getTaskList, getTaskDetail, cancelTask, retryTask, deleteTask } from '@/api/tasks'
-import { getSystemStats } from '@/api/system'
-import { getToolList } from '@/api/tools'
-import type { SystemStats, Task, TaskStatus, Tool } from '@/types/models'
+  import { computed, onMounted, reactive, ref } from 'vue'
+  import { useI18n } from 'vue-i18n'
+  import {
+    DeleteOutlined,
+    EyeOutlined,
+    RedoOutlined,
+    ReloadOutlined,
+    SearchOutlined,
+    StopOutlined
+  } from '@ant-design/icons-vue'
+  import { message, Modal } from 'ant-design-vue'
+  import dayjs from 'dayjs'
+  import AppFilterBar from '@/components/common/AppFilterBar.vue'
+  import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import SkeletonCard from '@/components/common/SkeletonCard.vue'
+  import { useRemoteToolOptions } from '@/composables/useRemoteToolOptions'
+  import { getTaskList, getTaskDetail, cancelTask, retryTask, deleteTask } from '@/api/tasks'
+  import { getSystemStats } from '@/api/system'
+  import type { SystemStats, Task, TaskStatus } from '@/types/models'
 
-const { t } = useI18n()
+  const { t } = useI18n()
 
-const loading = ref(false)
-const detailLoading = ref(false)
-const showDetailDrawer = ref(false)
-const selectedTask = ref<Task | null>(null)
-const tasks = ref<Task[]>([])
-const toolOptions = ref<Tool[]>([])
-const systemStats = ref<SystemStats | null>(null)
+  const loading = ref(false)
+  const detailLoading = ref(false)
+  const showDetailDrawer = ref(false)
+  const selectedTask = ref<Task | null>(null)
+  const tasks = ref<Task[]>([])
+  const systemStats = ref<SystemStats | null>(null)
+  const { fetchToolOptions, searchToolOptions, toolOptions, toolOptionsLoading } =
+    useRemoteToolOptions()
 
-const filters = reactive({
-  keyword: '',
-  tool_id: undefined as string | undefined,
-  status: undefined as TaskStatus | undefined
-})
+  const filters = reactive({
+    keyword: '',
+    tool_id: undefined as string | undefined,
+    status: undefined as TaskStatus | undefined
+  })
 
-const pagination = reactive({
-  current: 1,
-  pageSize: 10,
-  total: 0,
-  showSizeChanger: true
-})
+  const pagination = reactive({
+    current: 1,
+    pageSize: 10,
+    total: 0,
+    showSizeChanger: true
+  })
 
-const columns = computed(() => [
-  { title: t('admin.taskInfo'), key: 'task', width: 220 },
-  { title: t('admin.tool'), dataIndex: 'tool_name', key: 'tool_name', width: 160 },
-  { title: t('admin.user'), key: 'user', width: 180 },
-  { title: t('common.status'), key: 'status', width: 120 },
-  { title: t('tasks.progress'), key: 'progress', width: 160 },
-  { title: t('tasks.createdAt'), key: 'created_at', width: 180 },
-  { title: t('common.actions'), key: 'actions', width: 160 }
-])
+  const columns = computed(() => [
+    { title: t('admin.taskInfo'), key: 'task', width: 220 },
+    { title: t('admin.tool'), dataIndex: 'tool_name', key: 'tool_name', width: 160 },
+    { title: t('admin.user'), key: 'user', width: 180 },
+    { title: t('common.status'), key: 'status', width: 120 },
+    { title: t('tasks.progress'), key: 'progress', width: 160 },
+    { title: t('tasks.createdAt'), key: 'created_at', width: 180 },
+    { title: t('common.actions'), key: 'actions', width: 160 }
+  ])
 
-const getStatusColor = (status: string) => {
-  const colors: Record<string, string> = {
-    pending: 'default',
-    running: 'processing',
-    success: 'success',
-    failure: 'error',
-    canceled: 'warning'
+  const getStatusColor = (status: string) => {
+    const colors: Record<string, string> = {
+      pending: 'default',
+      running: 'processing',
+      success: 'success',
+      failure: 'error',
+      canceled: 'warning'
+    }
+    return colors[status] || 'default'
   }
-  return colors[status] || 'default'
-}
 
-const getProgressStatus = (status: string) => {
-  if (status === 'failure') return 'exception'
-  if (status === 'success') return 'success'
-  return 'active'
-}
-
-const formatDate = (date: string) => dayjs(date).format('YYYY-MM-DD HH:mm')
-
-const formatTaskTitle = (task: Task) => {
-  if (task.tool_name) {
-    return `${task.tool_name} #${task.id.slice(0, 8)}`
+  const getProgressStatus = (status: string) => {
+    if (status === 'failure') return 'exception'
+    if (status === 'success') return 'success'
+    return 'active'
   }
-  return task.id
-}
 
-const fetchTaskStats = async () => {
-  const res = await getSystemStats()
-  systemStats.value = res.data
-}
+  const formatDate = (date: string) => dayjs(date).format('YYYY-MM-DD HH:mm')
 
-const fetchToolOptions = async () => {
-  const res = await getToolList({ page: 1, page_size: 100 })
-  toolOptions.value = res.data.items
-}
+  const formatTaskTitle = (task: Task) => {
+    if (task.tool_name) {
+      return `${task.tool_name} #${task.id.slice(0, 8)}`
+    }
+    return task.id
+  }
 
-const fetchTasks = async () => {
-  loading.value = true
-  try {
-    const res = await getTaskList({
-      page: pagination.current,
-      page_size: pagination.pageSize,
-      keyword: filters.keyword || undefined,
-      tool_id: filters.tool_id,
-      status: filters.status
+  const fetchTaskStats = async () => {
+    const res = await getSystemStats()
+    systemStats.value = res.data
+  }
+
+  const fetchTasks = async () => {
+    loading.value = true
+    try {
+      const res = await getTaskList({
+        page: pagination.current,
+        page_size: pagination.pageSize,
+        keyword: filters.keyword || undefined,
+        tool_id: filters.tool_id,
+        status: filters.status
+      })
+      tasks.value = res.data.items
+      pagination.total = res.data.total
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const handleRefresh = async () => {
+    await Promise.all([fetchTaskStats(), fetchTasks()])
+    message.success(t('common.refreshSuccess'))
+  }
+
+  const handleSearch = async () => {
+    pagination.current = 1
+    await fetchTasks()
+  }
+
+  const handleReset = async () => {
+    filters.keyword = ''
+    filters.tool_id = undefined
+    filters.status = undefined
+    pagination.current = 1
+    await fetchTasks()
+  }
+
+  const handleTableChange = async (pag: { current?: number; pageSize?: number }) => {
+    pagination.current = pag.current || 1
+    pagination.pageSize = pag.pageSize || 10
+    await fetchTasks()
+  }
+
+  const handleViewDetail = async (record: Task) => {
+    showDetailDrawer.value = true
+    selectedTask.value = { ...record }
+    detailLoading.value = true
+    try {
+      const res = await getTaskDetail(record.id)
+      selectedTask.value = {
+        ...record,
+        ...res.data,
+        user_name: record.user_name,
+        user_email: record.user_email
+      }
+    } finally {
+      detailLoading.value = false
+    }
+  }
+
+  const handleCancel = (record: Task) => {
+    Modal.confirm({
+      title: t('tasks.cancelConfirm'),
+      content: t('tasks.cancelConfirmContent'),
+      onOk: async () => {
+        await cancelTask(record.id)
+        message.success(t('tasks.cancelSuccess'))
+        await Promise.all([fetchTasks(), fetchTaskStats()])
+        if (selectedTask.value?.id === record.id) {
+          await handleViewDetail(record)
+        }
+      }
     })
-    tasks.value = res.data.items
-    pagination.total = res.data.total
-  } finally {
-    loading.value = false
   }
-}
 
-const handleRefresh = async () => {
-  await Promise.all([fetchTaskStats(), fetchTasks()])
-  message.success(t('common.refreshSuccess'))
-}
-
-const handleSearch = async () => {
-  pagination.current = 1
-  await fetchTasks()
-}
-
-const handleReset = async () => {
-  filters.keyword = ''
-  filters.tool_id = undefined
-  filters.status = undefined
-  pagination.current = 1
-  await fetchTasks()
-}
-
-const handleTableChange = async (pag: { current?: number; pageSize?: number }) => {
-  pagination.current = pag.current || 1
-  pagination.pageSize = pag.pageSize || 10
-  await fetchTasks()
-}
-
-const handleViewDetail = async (record: Task) => {
-  showDetailDrawer.value = true
-  selectedTask.value = { ...record }
-  detailLoading.value = true
-  try {
-    const res = await getTaskDetail(record.id)
-    selectedTask.value = {
-      ...record,
-      ...res.data,
-      user_name: record.user_name,
-      user_email: record.user_email
+  const handleRetry = async (record: Task) => {
+    await retryTask(record.id)
+    message.success(t('tasks.retrySuccess'))
+    await Promise.all([fetchTasks(), fetchTaskStats()])
+    if (selectedTask.value?.id === record.id) {
+      await handleViewDetail(record)
     }
-  } finally {
-    detailLoading.value = false
   }
-}
 
-const handleCancel = (record: Task) => {
-  Modal.confirm({
-    title: t('tasks.cancelConfirm'),
-    content: t('tasks.cancelConfirmContent'),
-    onOk: async () => {
-      await cancelTask(record.id)
-      message.success(t('tasks.cancelSuccess'))
-      await Promise.all([fetchTasks(), fetchTaskStats()])
-      if (selectedTask.value?.id === record.id) {
-        await handleViewDetail(record)
+  const handleDelete = (record: Task) => {
+    Modal.confirm({
+      title: t('tasks.deleteConfirm'),
+      content: t('tasks.deleteConfirmContent'),
+      okType: 'danger',
+      onOk: async () => {
+        await deleteTask(record.id)
+        message.success(t('tasks.deleteSuccess'))
+        await Promise.all([fetchTasks(), fetchTaskStats()])
+        if (selectedTask.value?.id === record.id) {
+          showDetailDrawer.value = false
+          selectedTask.value = null
+        }
       }
-    }
-  })
-}
-
-const handleRetry = async (record: Task) => {
-  await retryTask(record.id)
-  message.success(t('tasks.retrySuccess'))
-  await Promise.all([fetchTasks(), fetchTaskStats()])
-  if (selectedTask.value?.id === record.id) {
-    await handleViewDetail(record)
+    })
   }
-}
 
-const handleDelete = (record: Task) => {
-  Modal.confirm({
-    title: t('tasks.deleteConfirm'),
-    content: t('tasks.deleteConfirmContent'),
-    okType: 'danger',
-    onOk: async () => {
-      await deleteTask(record.id)
-      message.success(t('tasks.deleteSuccess'))
-      await Promise.all([fetchTasks(), fetchTaskStats()])
-      if (selectedTask.value?.id === record.id) {
-        showDetailDrawer.value = false
-        selectedTask.value = null
-      }
-    }
+  onMounted(async () => {
+    await Promise.all([fetchTaskStats(), fetchToolOptions(), fetchTasks()])
   })
-}
-
-onMounted(async () => {
-  await Promise.all([fetchTaskStats(), fetchToolOptions(), fetchTasks()])
-})
 </script>
 
 <style scoped lang="less">
-@import '@/assets/styles/variables.less';
+  @import '@/assets/styles/variables.less';
 
-.admin-tasks {
-  .stats-row {
-    margin-bottom: @spacing-lg;
-  }
+  .admin-tasks {
+    .stats-row {
+      margin-bottom: @spacing-lg;
+    }
 
-  .stat-card {
-    text-align: center;
-  }
+    .stat-card {
+      text-align: center;
+    }
 
-  .task-cell,
-  .user-cell {
-    display: flex;
-    flex-direction: column;
-  }
+    .task-cell,
+    .user-cell {
+      display: flex;
+      flex-direction: column;
+    }
 
-  .name {
-    font-weight: @font-weight-medium;
-  }
+    .name {
+      font-weight: @font-weight-medium;
+    }
 
-  .id,
-  .user-email {
-    font-size: @font-size-sm;
-    color: @text-color-light-secondary;
-  }
+    .id,
+    .user-email {
+      font-size: @font-size-sm;
+      color: @text-color-light-secondary;
+    }
 
-  .json-view {
-    background: @bg-color-light;
-    padding: @spacing-md;
-    border-radius: @border-radius-base;
-    font-size: @font-size-sm;
-    overflow: auto;
-    max-height: 240px;
+    .json-view {
+      background: @bg-color-light;
+      padding: @spacing-md;
+      border-radius: @border-radius-base;
+      font-size: @font-size-sm;
+      overflow: auto;
+      max-height: 240px;
+    }
   }
-}
 </style>

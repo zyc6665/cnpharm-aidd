@@ -137,4 +137,8 @@ test('后台工作台分组管理页面文件应存在并包含分组与映射�
   assert.equal(source.includes('mapping-form'), true)
   assert.equal(source.includes('adminDeleteWorkbenchGroup'), true)
   assert.equal(source.includes('message.warning'), true)
+  assert.equal(source.includes('useRemoteToolOptions'), true)
+  assert.equal(source.includes(':filter-option="false"'), true)
+  assert.equal(source.includes('@search="searchToolOptions"'), true)
+  assert.equal(source.includes('getToolList({ page: 1, page_size: 100 })'), false)
 })

@@ -1,6 +1,9 @@
 <template>
   <div class="admin-workbench-groups">
-    <AppPageHeader :title="t('admin.workbenchGroups')" :subtitle="t('admin.workbenchGroupsSubtitle')" />
+    <AppPageHeader
+      :title="t('admin.workbenchGroups')"
+      :subtitle="t('admin.workbenchGroupsSubtitle')"
+    />
 
     <div class="page-grid">
       <a-card class="group-form">
@@ -72,7 +75,13 @@
         <template #title>{{ t('workflow.columns.groups') }}</template>
         <a-form layout="vertical">
           <a-form-item :label="t('admin.tools')">
-            <a-select v-model:value="mappingForm.tool_id" show-search>
+            <a-select
+              v-model:value="mappingForm.tool_id"
+              show-search
+              :filter-option="false"
+              :loading="toolOptionsLoading"
+              @search="searchToolOptions"
+            >
               <a-select-option v-for="tool in tools" :key="tool.id" :value="tool.id">
                 {{ tool.name }}
               </a-select-option>
@@ -149,7 +158,8 @@
   import { useI18n } from 'vue-i18n'
   import { message } from 'ant-design-vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
-  import type { Tool, WorkbenchGroup, WorkbenchGroupMapping } from '@/types/models'
+  import { useRemoteToolOptions } from '@/composables/useRemoteToolOptions'
+  import type { WorkbenchGroup, WorkbenchGroupMapping } from '@/types/models'
   import {
     adminCreateWorkbenchGroup,
     adminCreateWorkbenchGroupMapping,
@@ -158,8 +168,7 @@
     adminGetWorkbenchGroupMappings,
     adminGetWorkbenchGroups,
     adminUpdateWorkbenchGroup,
-    adminUpdateWorkbenchGroupMapping,
-    getToolList
+    adminUpdateWorkbenchGroupMapping
   } from '@/api/tools'
 
   const { t } = useI18n()
@@ -170,7 +179,12 @@
   const editingMappingId = ref<string | null>(null)
   const groups = ref<WorkbenchGroup[]>([])
   const mappings = ref<WorkbenchGroupMapping[]>([])
-  const tools = ref<Tool[]>([])
+  const {
+    fetchToolOptions,
+    searchToolOptions,
+    toolOptions: tools,
+    toolOptionsLoading
+  } = useRemoteToolOptions()
 
   const groupForm = reactive({
     name: '',
@@ -201,14 +215,13 @@
   const fetchData = async () => {
     loading.value = true
     try {
-      const [groupsRes, mappingsRes, toolsRes] = await Promise.all([
+      const [groupsRes, mappingsRes] = await Promise.all([
         adminGetWorkbenchGroups(),
         adminGetWorkbenchGroupMappings(),
-        getToolList({ page: 1, page_size: 100 })
+        fetchToolOptions()
       ])
       groups.value = groupsRes.data
       mappings.value = mappingsRes.data
-      tools.value = toolsRes.data.items
     } catch {
       groups.value = []
       mappings.value = []
@@ -341,11 +354,11 @@
   }
 
   const resolveToolName = (toolId: string) => {
-    return tools.value.find((tool) => tool.id === toolId)?.name ?? toolId
+    return tools.value.find(tool => tool.id === toolId)?.name ?? toolId
   }
 
   const resolveGroupName = (groupId: string) => {
-    return groups.value.find((group) => group.id === groupId)?.name ?? groupId
+    return groups.value.find(group => group.id === groupId)?.name ?? groupId
   }
 
   onMounted(async () => {
