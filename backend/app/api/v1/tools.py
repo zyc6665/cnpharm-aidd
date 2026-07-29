@@ -21,8 +21,7 @@ from app.agents.aidd.registry import upsert_capability_from_config
 from app.schemas.tools import (
     ToolCreate, ToolUpdate, ToolResponse, ToolListResponse,
     ToolVersionCreate, ToolVersionResponse, TagCreate, TagResponse,
-    ToolCategoryCreate, ToolCategoryUpdate, ToolCategoryResponse,
-    ToolCategoryStatusUpdate, ToolCategoryReorderRequest, ToolImportRequest,
+    ToolCategoryResponse, ToolImportRequest,
     ToolWorkbenchGroupCreate, ToolWorkbenchGroupUpdate, ToolWorkbenchGroupResponse,
     ToolWorkbenchGroupReorderRequest, ToolWorkbenchGroupMappingCreate,
     ToolWorkbenchGroupMappingUpdate, ToolWorkbenchGroupMappingResponse,
@@ -44,7 +43,6 @@ from app.services.tool_contracts import (
 )
 
 router = APIRouter()
-admin_category_router = APIRouter(prefix="/admin/tool-categories", tags=["工具分类管理"])
 admin_workbench_group_router = APIRouter(prefix="/admin/workbench-groups", tags=["工具工作台分组管理"])
 admin_workbench_group_mapping_router = APIRouter(
     prefix="/admin/workbench-group-mappings",
@@ -1093,156 +1091,6 @@ async def create_tag(
         data=TagResponse.model_validate(tag).model_dump(),
         message="标签创建成功"
     )
-
-
-@admin_category_router.get("", response_model=dict)
-async def admin_list_tool_categories(
-    current_user: User = Depends(get_admin_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """管理员获取全部工具分类。"""
-    result = await db.execute(
-        select(ToolCategory, func.count(Tool.id).label("tool_count"))
-        .outerjoin(Tool, Tool.category_id == ToolCategory.id)
-        .group_by(ToolCategory.id)
-        .order_by(ToolCategory.sort_order.asc(), ToolCategory.created_at.asc())
-    )
-    categories = [serialize_category(category, tool_count) for category, tool_count in result.all()]
-    return success_response(data=categories)
-
-
-@admin_category_router.post("", response_model=dict)
-async def admin_create_tool_category(
-    category_data: ToolCategoryCreate,
-    current_user: User = Depends(get_admin_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """管理员创建工具分类。"""
-    existing = await db.execute(
-        select(ToolCategory).where(
-            or_(ToolCategory.name == category_data.name, ToolCategory.slug == category_data.slug)
-        )
-    )
-    if existing.scalar_one_or_none():
-        raise ConflictException("工具分类名称或标识已存在")
-
-    sort_order = category_data.sort_order
-    if "sort_order" not in category_data.model_fields_set:
-        max_sort_result = await db.execute(select(func.max(ToolCategory.sort_order)))
-        sort_order = (max_sort_result.scalar() or 0) + 1
-
-    category = ToolCategory(
-        name=category_data.name,
-        slug=category_data.slug,
-        description=category_data.description,
-        sort_order=sort_order,
-        is_enabled=category_data.is_enabled,
-    )
-    db.add(category)
-    await db.commit()
-    await db.refresh(category)
-    return success_response(data=serialize_category(category), message="工具分类创建成功")
-
-
-@admin_category_router.put("/{category_id}", response_model=dict)
-async def admin_update_tool_category(
-    category_id: str,
-    category_data: ToolCategoryUpdate,
-    current_user: User = Depends(get_admin_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """管理员更新工具分类。"""
-    result = await db.execute(select(ToolCategory).where(ToolCategory.id == category_id))
-    category = result.scalar_one_or_none()
-    if not category:
-        raise NotFoundException("工具分类不存在")
-
-    update_data = category_data.model_dump(exclude_unset=True)
-    if "name" in update_data or "slug" in update_data:
-        conflict_conditions = []
-        if "name" in update_data:
-            conflict_conditions.append(ToolCategory.name == update_data["name"])
-        if "slug" in update_data:
-            conflict_conditions.append(ToolCategory.slug == update_data["slug"])
-        conflict_result = await db.execute(
-            select(ToolCategory).where(
-                ToolCategory.id != category_id,
-                or_(*conflict_conditions)
-            )
-        )
-        if conflict_result.scalar_one_or_none():
-            raise ConflictException("工具分类名称或标识已存在")
-
-    for field, value in update_data.items():
-        setattr(category, field, value)
-
-    await db.commit()
-    await db.refresh(category)
-    return success_response(data=serialize_category(category), message="工具分类更新成功")
-
-
-@admin_category_router.patch("/{category_id}/status", response_model=dict)
-async def admin_update_tool_category_status(
-    category_id: str,
-    status_data: ToolCategoryStatusUpdate,
-    current_user: User = Depends(get_admin_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """管理员更新工具分类启用状态。"""
-    result = await db.execute(select(ToolCategory).where(ToolCategory.id == category_id))
-    category = result.scalar_one_or_none()
-    if not category:
-        raise NotFoundException("工具分类不存在")
-
-    category.is_enabled = status_data.is_enabled
-    await db.commit()
-    await db.refresh(category)
-    return success_response(data=serialize_category(category), message="工具分类状态更新成功")
-
-
-@admin_category_router.post("/reorder", response_model=dict)
-async def admin_reorder_tool_categories(
-    reorder_data: ToolCategoryReorderRequest,
-    current_user: User = Depends(get_admin_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """管理员重排工具分类。"""
-    result = await db.execute(
-        select(ToolCategory).where(ToolCategory.id.in_(reorder_data.category_ids))
-    )
-    categories = {category.id: category for category in result.scalars().all()}
-    if len(categories) != len(reorder_data.category_ids):
-        raise ValidationException("存在无效的工具分类ID")
-
-    for index, category_id in enumerate(reorder_data.category_ids):
-        categories[category_id].sort_order = index
-
-    await db.commit()
-    ordered_categories = [serialize_category(categories[category_id]) for category_id in reorder_data.category_ids]
-    return success_response(data=ordered_categories, message="工具分类排序更新成功")
-
-
-@admin_category_router.delete("/{category_id}", response_model=dict)
-async def admin_delete_tool_category(
-    category_id: str,
-    current_user: User = Depends(get_admin_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """管理员删除工具分类。"""
-    result = await db.execute(select(ToolCategory).where(ToolCategory.id == category_id))
-    category = result.scalar_one_or_none()
-    if not category:
-        raise NotFoundException("工具分类不存在")
-
-    tool_count_result = await db.execute(
-        select(func.count(Tool.id)).where(Tool.category_id == category_id)
-    )
-    if (tool_count_result.scalar() or 0) > 0:
-        raise ConflictException("分类下仍有关联工具，无法删除")
-
-    await db.delete(category)
-    await db.commit()
-    return success_response(message="工具分类删除成功")
 
 
 @admin_workbench_group_router.get("", response_model=dict)
