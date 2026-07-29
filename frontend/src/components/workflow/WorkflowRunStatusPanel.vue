@@ -101,9 +101,9 @@
   .workflow-run-status-panel {
     margin: 0 @spacing-md @spacing-lg;
     padding: @spacing-md;
-    border: 1px solid rgba(205, 217, 235, 0.9);
+    border: 1px solid @border-color-hover;
     border-radius: @border-radius-lg;
-    background: rgba(255, 255, 255, 0.9);
+    background: @bg-surface;
     box-shadow: 0 14px 28px rgb(15 23 42 / 5%);
   }
 
@@ -170,7 +170,7 @@
     align-items: start;
     padding: @spacing-xs @spacing-sm;
     border-radius: @border-radius-base;
-    background: rgba(248, 250, 252, 0.95);
+    background: @bg-elevated;
   }
 
   .run-node-main {

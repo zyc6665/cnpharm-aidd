@@ -138,7 +138,7 @@ const { t } = useI18n()
   padding: @spacing-sm;
   border: 1px solid @border-color-hover;
   border-radius: @border-radius-sm;
-  background: rgba(255, 255, 255, 0.82);
+  background: @bg-elevated;
   text-align: left;
   cursor: pointer;
 }

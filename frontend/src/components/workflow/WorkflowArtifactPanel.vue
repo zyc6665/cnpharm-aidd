@@ -557,9 +557,8 @@
   .column-card {
     .card();
     height: 100%;
-    border: 1px solid rgba(205, 217, 235, 0.9);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(245, 249, 255, 0.98) 100%);
+    border: 1px solid @border-color-hover;
+    background: @bg-surface;
     box-shadow: 0 20px 42px rgb(15 23 42 / 6%);
   }
 
@@ -651,7 +650,7 @@
     gap: @spacing-sm;
     align-items: center;
     padding: @spacing-sm @spacing-md;
-    border: 1px solid rgba(210, 220, 235, 0.92);
+    border: 1px solid @border-color;
     border-radius: @border-radius-lg;
     background: linear-gradient(180deg, @bg-elevated 0%, @accent-color-light 100%);
     box-shadow: 0 10px 24px rgb(15 23 42 / 4%);
@@ -685,9 +684,9 @@
     flex-direction: column;
     gap: @spacing-sm;
     padding: @spacing-md;
-    border: 1px solid rgba(215, 224, 238, 0.9);
+    border: 1px solid @border-color;
     border-radius: @border-radius-lg;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(247, 250, 255, 0.98) 100%);
+    background: @bg-elevated;
   }
 
   .artifact-tool-section.is-active {
@@ -731,7 +730,7 @@
     flex-direction: column;
     gap: @spacing-md;
     padding: @spacing-lg;
-    border: 1px solid rgba(215, 224, 238, 0.92);
+    border: 1px solid @border-color;
     border-radius: @border-radius-lg;
     background: linear-gradient(180deg, @bg-elevated 0%, @accent-color-light 100%);
     box-shadow: 0 14px 30px rgb(15 23 42 / 5%);
@@ -788,10 +787,10 @@
     display: inline-flex;
     align-items: center;
     padding: 2px @spacing-xs;
-    border: 1px solid rgba(205, 217, 235, 0.9);
+    border: 1px solid @border-color;
     border-radius: 999px;
     background: @accent-color-light;
-    color: #355070;
+    color: @text-secondary;
     font-family: @font-family-mono;
     white-space: nowrap;
   }
@@ -824,9 +823,9 @@
   .artifact-task-meta-item {
     min-width: 0;
     padding: @spacing-sm @spacing-md;
-    border: 1px solid rgba(228, 235, 244, 0.96);
+    border: 1px solid @border-color;
     border-radius: @border-radius-md;
-    background: rgba(248, 251, 255, 0.92);
+    background: @bg-surface;
   }
 
   .artifact-meta-label {
@@ -868,9 +867,9 @@
     flex-direction: column;
     gap: 4px;
     padding: @spacing-sm @spacing-md;
-    border: 1px solid rgba(228, 235, 244, 0.96);
+    border: 1px solid @border-color;
     border-radius: @border-radius-md;
-    background: rgba(248, 251, 255, 0.88);
+    background: @bg-surface;
   }
 
   .artifact-list {
@@ -885,7 +884,7 @@
     gap: @spacing-sm;
     align-items: start;
     padding: @spacing-sm;
-    border: 1px solid #eef2f7;
+    border: 1px solid @border-color;
     border-radius: @border-radius-md;
     background: @bg-elevated;
   }
@@ -936,10 +935,10 @@
   }
 
   .task-summary-card {
-    border: 1px solid rgba(205, 217, 235, 0.9);
+    border: 1px solid @border-color;
     border-radius: @border-radius-lg;
     padding: @spacing-md;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(244, 248, 255, 0.96) 100%);
+    background: @bg-elevated;
     box-shadow: 0 12px 24px rgb(15 23 42 / 5%);
   }
 

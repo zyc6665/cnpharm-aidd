@@ -104,3 +104,23 @@ test('workflow node inspector exposes compatible edge suggestions', () => {
     assert.equal(source.includes(marker), true, `missing ${marker}`)
   }
 })
+
+test('workflow node inspector split surfaces use semantic theme backgrounds', () => {
+  const componentSources = new Map(
+    ['WorkflowNodeInspector.vue', 'WorkflowNodeRunPanel.vue', 'WorkflowNodeStatusBadge.vue'].map(
+      file => [file, readFileSync(resolve(`src/components/workflow/${file}`), 'utf8')]
+    )
+  )
+
+  for (const [file, source] of componentSources) {
+    assert.equal(source.includes('rgba(255, 255, 255'), false, `${file} uses a light-only surface`)
+  }
+
+  for (const file of ['WorkflowNodeRunPanel.vue', 'WorkflowNodeStatusBadge.vue']) {
+    assert.equal(
+      componentSources.get(file)?.includes('background: @bg-elevated'),
+      true,
+      `${file} is missing the semantic elevated surface`
+    )
+  }
+})

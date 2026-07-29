@@ -125,7 +125,7 @@
     padding: @spacing-lg;
     border: 1px solid @border-color-hover;
     border-radius: @border-radius-md;
-    background: rgba(255, 255, 255, 0.92);
+    background: @bg-surface;
     box-shadow: @shadow-sm;
   }
 

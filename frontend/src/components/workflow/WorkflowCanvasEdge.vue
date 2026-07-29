@@ -61,7 +61,7 @@
     font-size: 11px;
     font-weight: 700;
     paint-order: stroke;
-    stroke: rgba(255, 255, 255, 0.9);
+    stroke: @bg-surface;
     stroke-width: 4px;
   }
 

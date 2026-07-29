@@ -307,9 +307,9 @@
     flex-direction: column;
     gap: @spacing-md;
     padding: @spacing-lg;
-    border: 1px solid rgba(210, 221, 236, 0.9);
+    border: 1px solid @border-color;
     border-radius: @border-radius-lg;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 251, 255, 0.98) 100%);
+    background: @bg-elevated;
     box-shadow: 0 16px 30px rgb(15 23 42 / 4%);
   }
 
@@ -398,7 +398,7 @@
 
   .workflow-result-progress {
     padding: @spacing-md;
-    border: 1px solid rgba(220, 227, 240, 0.92);
+    border: 1px solid @border-color;
     border-radius: @border-radius-md;
     background: @bg-elevated;
   }

@@ -40,7 +40,7 @@
     padding: 0 @spacing-sm;
     border-radius: 999px;
     border: 1px solid @border-color-light;
-    background: rgba(255, 255, 255, 0.92);
+    background: @bg-elevated;
     color: @text-color-light-secondary;
     font-size: @font-size-xs;
     font-weight: 700;

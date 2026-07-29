@@ -77,8 +77,8 @@
   .column-card {
     .card();
     height: 100%;
-    border: 1px solid rgba(205, 217, 235, 0.9);
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(246, 249, 255, 0.98) 100%);
+    border: 1px solid @border-color-hover;
+    background: @bg-surface;
     box-shadow: 0 18px 36px rgb(15 23 42 / 5%);
   }
 
@@ -101,7 +101,7 @@
 
   .group-card {
     width: 100%;
-    border: 1px solid rgba(214, 224, 238, 0.92);
+    border: 1px solid @border-color;
     border-radius: @border-radius-lg;
     padding: @spacing-md;
     background: linear-gradient(180deg, @bg-elevated 0%, @accent-color-light 100%);

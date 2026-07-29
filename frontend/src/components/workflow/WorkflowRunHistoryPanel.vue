@@ -75,9 +75,9 @@
   .workflow-run-history-panel {
     margin: 0 @spacing-md @spacing-lg;
     padding: @spacing-md;
-    border: 1px solid rgba(205, 217, 235, 0.9);
+    border: 1px solid @border-color-hover;
     border-radius: @border-radius-lg;
-    background: rgba(255, 255, 255, 0.88);
+    background: @bg-surface;
     box-shadow: 0 14px 28px rgb(15 23 42 / 5%);
   }
 
@@ -104,9 +104,9 @@
     gap: 4px @spacing-sm;
     align-items: center;
     padding: @spacing-sm;
-    border: 1px solid rgba(226, 232, 240, 0.95);
+    border: 1px solid @border-color;
     border-radius: @border-radius-base;
-    background: rgba(248, 250, 252, 0.95);
+    background: @bg-elevated;
     text-align: left;
     cursor: pointer;
     transition:
@@ -116,7 +116,7 @@
     &.active,
     &:hover {
       border-color: rgba(59, 130, 246, 0.4);
-      background: rgba(230, 244, 255, 0.78);
+      background: @accent-color-light;
     }
   }
 
@@ -135,7 +135,7 @@
   .run-history-empty {
     padding: @spacing-sm;
     border-radius: @border-radius-base;
-    background: rgba(248, 250, 252, 0.95);
+    background: @bg-elevated;
     color: @text-color-light-secondary;
     font-size: @font-size-sm;
   }

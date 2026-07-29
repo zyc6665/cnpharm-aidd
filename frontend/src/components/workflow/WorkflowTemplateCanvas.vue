@@ -138,9 +138,7 @@
     flex-direction: column;
     border: 1px solid @border-color-hover;
     border-radius: @border-radius-md;
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(250, 252, 255, 0.94)),
-      @bg-light-secondary;
+    background: @bg-surface;
     box-shadow: @shadow-sm;
     overflow: hidden;
   }

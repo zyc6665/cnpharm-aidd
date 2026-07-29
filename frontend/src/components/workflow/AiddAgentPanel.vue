@@ -455,11 +455,9 @@
   .agent-control-panel,
   .agent-runtime-panel {
     min-width: 0;
-    border: 1px solid rgba(205, 217, 235, 0.9);
+    border: 1px solid @border-color-hover;
     border-radius: 18px;
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(247, 250, 255, 0.98) 100%),
-      @bg-light-secondary;
+    background: @bg-surface;
     box-shadow: 0 18px 36px rgb(15 23 42 / 5%);
   }
 
@@ -646,7 +644,7 @@
   .agent-history-panel {
     margin-bottom: @spacing-lg;
     padding: @spacing-sm;
-    border: 1px solid rgba(214, 224, 238, 0.92);
+    border: 1px solid @border-color;
     border-radius: @border-radius-md;
     background: @bg-elevated;
   }
@@ -730,7 +728,7 @@
     justify-content: space-between;
     gap: @spacing-md;
     padding: @spacing-sm @spacing-md;
-    border: 1px solid rgba(214, 224, 238, 0.92);
+    border: 1px solid @border-color;
     border-radius: @border-radius-md;
     background: @bg-elevated;
   }

@@ -601,8 +601,8 @@
   .column-card {
     .card();
     height: 100%;
-    border: 1px solid rgba(205, 217, 235, 0.9);
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(246, 250, 255, 0.99) 100%);
+    border: 1px solid @border-color-hover;
+    background: @bg-surface;
     box-shadow: 0 22px 44px rgb(15 23 42 / 6%);
   }
 
@@ -656,7 +656,7 @@
     align-items: start;
     margin-bottom: @spacing-lg;
     padding: @spacing-md;
-    border: 1px solid rgba(210, 221, 236, 0.9);
+    border: 1px solid @border-color;
     border-radius: @border-radius-lg;
     background: linear-gradient(180deg, @bg-elevated 0%, @accent-color-light 100%);
     box-shadow: 0 16px 30px rgb(15 23 42 / 4%);
@@ -726,9 +726,9 @@
 
   .form-action-bar,
   .result-collapse {
-    border: 1px solid rgba(210, 221, 236, 0.9);
+    border: 1px solid @border-color;
     border-radius: @border-radius-lg;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 251, 255, 0.98) 100%);
+    background: @bg-elevated;
     box-shadow: 0 16px 30px rgb(15 23 42 / 4%);
   }
 
@@ -772,7 +772,7 @@
 
     :deep(.ant-collapse-content) {
       background: transparent;
-      border-top: 1px solid rgba(210, 221, 236, 0.9);
+      border-top: 1px solid @border-color;
     }
 
     :deep(.ant-collapse-content-box) {

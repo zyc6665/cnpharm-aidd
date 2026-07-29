@@ -124,7 +124,7 @@
     padding: @spacing-md;
     border: 1px solid @accent-color-border;
     border-radius: @border-radius-md;
-    background: rgba(255, 255, 255, 0.96);
+    background: @bg-elevated;
     box-shadow: @shadow-md;
     color: @text-color-light-primary;
     text-align: left;
@@ -160,7 +160,7 @@
     justify-content: center;
     border: 1px solid rgba(255, 77, 79, 0.26);
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.94);
+    background: @bg-surface;
     color: @error-color;
     font-size: 16px;
     font-weight: 800;
