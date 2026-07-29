@@ -9,6 +9,7 @@ function readSource(relativePath: string): string {
 
 test('workflow node inspector exposes researcher-facing node actions', () => {
   const inspectorSource = readSource('src/components/workflow/WorkflowNodeInspector.vue')
+  const resultSource = readSource('src/components/workflow/NodeResultPanel.vue')
   const pageSource = readSource('src/views/workflow/index.vue')
 
   for (const marker of [
@@ -19,7 +20,7 @@ test('workflow node inspector exposes researcher-facing node actions', () => {
     "emit('rerun-downstream'",
     "emit('view-task-detail'"
   ]) {
-    assert.equal(inspectorSource.includes(marker), true, `missing ${marker}`)
+    assert.equal((inspectorSource + resultSource).includes(marker), true, `missing ${marker}`)
   }
 
   for (const marker of [

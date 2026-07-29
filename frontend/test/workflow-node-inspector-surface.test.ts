@@ -3,17 +3,26 @@ import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
+function readInspectorSources() {
+  return [
+    'WorkflowNodeInspector.vue',
+    'NodeToolPanel.vue',
+    'NodeEdgePanel.vue',
+    'NodeResultPanel.vue'
+  ].map(file => readFileSync(resolve(`src/components/workflow/${file}`), 'utf8')).join('\n')
+}
+
 test('workflow node inspector exposes node configuration sections', () => {
   const file = resolve('src/components/workflow/WorkflowNodeInspector.vue')
   assert.equal(existsSync(file), true)
 
-  const source = readFileSync(file, 'utf8')
+  const source = readInspectorSources()
   for (const marker of [
     'workflow-node-inspector',
     "workflow.inspector.toolSelector",
     "workflow.inspector.requiredInput",
     "workflow.inspector.upstreamEdge",
-    "workflow.inspector.runCurrentNode",
+    "workflow.inspector.rerunCurrentNode",
     "workflow.inspector.taskResult",
     "workflow.inspector.noSelectedNode"
   ]) {
@@ -22,13 +31,13 @@ test('workflow node inspector exposes node configuration sections', () => {
 })
 
 test('workflow node inspector does not pass null image to ant empty', () => {
-  const source = readFileSync(resolve('src/components/workflow/WorkflowNodeInspector.vue'), 'utf8')
+  const source = readInspectorSources()
 
   assert.equal(source.includes(':image="null"'), false)
 })
 
 test('workflow node inspector uses real available tools and can add edges', () => {
-  const source = readFileSync(resolve('src/components/workflow/WorkflowNodeInspector.vue'), 'utf8')
+  const source = readInspectorSources()
 
   assert.equal(source.includes('availableTools'), true)
   assert.equal(source.includes('toolOptions'), true)
@@ -38,7 +47,7 @@ test('workflow node inspector uses real available tools and can add edges', () =
 })
 
 test('workflow node inspector embeds a real node run panel', () => {
-  const inspectorSource = readFileSync(resolve('src/components/workflow/WorkflowNodeInspector.vue'), 'utf8')
+  const inspectorSource = readInspectorSources()
   const runPanelPath = resolve('src/components/workflow/WorkflowNodeRunPanel.vue')
 
   assert.equal(existsSync(runPanelPath), true)
@@ -67,7 +76,7 @@ test('workflow node inspector embeds a real node run panel', () => {
 })
 
 test('workflow node inspector groups details into tabs', () => {
-  const source = readFileSync(resolve('src/components/workflow/WorkflowNodeInspector.vue'), 'utf8')
+  const source = readInspectorSources()
 
   for (const marker of [
     'inspector-detail-tabs',
@@ -83,14 +92,14 @@ test('workflow node inspector groups details into tabs', () => {
 })
 
 test('workflow node inspector exposes compatible edge suggestions', () => {
-  const source = readFileSync(resolve('src/components/workflow/WorkflowNodeInspector.vue'), 'utf8')
+  const source = readInspectorSources()
 
   for (const marker of [
     'suggestWorkflowEdgesForNode',
     'edgeSuggestions',
     "workflow.inspector.recommendedEdges",
     "workflow.inspector.addEdge",
-    'handleAddSuggestedEdge'
+    'addSuggestedEdge'
   ]) {
     assert.equal(source.includes(marker), true, `missing ${marker}`)
   }
