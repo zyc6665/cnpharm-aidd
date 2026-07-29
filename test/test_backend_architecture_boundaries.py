@@ -9,6 +9,12 @@ from pathlib import Path
 BACKEND_APP = Path("backend/app")
 API_COMPOSITION_ROOTS = {Path("main")}
 API_ROUTE_ROOT = BACKEND_APP / "api" / "v1"
+TOOL_ROUTE_MODULES = {
+    "tool_route_utils.py",
+    "tool_versions.py",
+    "tools_admin.py",
+    "tools_public.py",
+}
 
 
 def _python_source_files() -> list[Path]:
@@ -40,6 +46,13 @@ def test_backend_non_api_modules_do_not_import_api_routes() -> None:
                         offenders.append(f"{source_path}:{node.lineno} imports {alias.name}")
 
     assert offenders == []
+
+
+def test_tool_routes_have_dedicated_modules() -> None:
+    """工具公开、管理、版本与共享逻辑应拥有独立模块。"""
+    existing_modules = {path.name for path in API_ROUTE_ROOT.glob("*.py")}
+
+    assert TOOL_ROUTE_MODULES <= existing_modules
 
 
 class _UsedNames(ast.NodeVisitor):
