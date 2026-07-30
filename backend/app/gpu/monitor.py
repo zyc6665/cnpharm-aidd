@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 import logging
 import json
 
+from app.common.async_runtime import run_coro_sync
 from app.common.time import utcnow
 from app.gpu.detector import GPUDetector, GPUStats, get_gpu_detector
 
@@ -415,8 +416,7 @@ def create_gpu_monitoring_task(celery_app):
     @celery_app.task(name="collect_gpu_stats")
     def collect_gpu_stats_task():
         """GPU统计采集任务"""
-        import asyncio
         monitor = GPUMonitor()
-        asyncio.run(monitor.collect_gpu_stats())
+        run_coro_sync(monitor.collect_gpu_stats())
 
     return collect_gpu_stats_task

@@ -19,6 +19,8 @@ frontend/.vite/
 
 # Local runtime data
 backend/app.db
+backend/*.db
+backend/*.db-*
 backend/storage/*.db
 backend/storage/*.db-*
 backend/storage/*.backup*.db
@@ -31,6 +33,7 @@ backend/storage/recovery-downloads/
 
 # Local environment
 .env
+backend/.env
 *.local
 
 # OS / editor

@@ -150,7 +150,8 @@ class TestDictsToCsvBytes:
 
 
 class TestQueryChemblBuiltinTool:
-    def test_extracts_smiles_and_calls_query(self, tmp_path: Path, monkeypatch):
+    @pytest.mark.asyncio
+    async def test_extracts_smiles_and_calls_query(self, tmp_path: Path, monkeypatch):
         monkeypatch.setattr("app.config.settings.ENABLE_DATABASE_TOOLS", True)
 
         csv_path = tmp_path / "smiles.csv"
@@ -163,7 +164,7 @@ class TestQueryChemblBuiltinTool:
             new_callable=AsyncMock,
             return_value=mock_result,
         ):
-            result = builtin_tools._run_query_chembl_tool({
+            result = await builtin_tools._run_query_chembl_tool({
                 "smiles_csv": builtin_tools.BuiltinToolFile(
                     file_id="f1", filename="smiles.csv", path=csv_path,
                 )
@@ -174,27 +175,30 @@ class TestQueryChemblBuiltinTool:
         assert result.outputs[0].data["source"] == "chembl"
         assert len(result.artifacts) == 0
 
-    def test_disabled_flag_raises(self, tmp_path: Path, monkeypatch):
+    @pytest.mark.asyncio
+    async def test_disabled_flag_raises(self, tmp_path: Path, monkeypatch):
         monkeypatch.setattr("app.config.settings.ENABLE_DATABASE_TOOLS", False)
 
         csv_path = tmp_path / "smiles.csv"
         csv_path.write_text("SMILES,id\nCCO,mol_1\n")
 
         with pytest.raises(ValidationException, match="已禁用"):
-            builtin_tools._run_query_chembl_tool({
+            await builtin_tools._run_query_chembl_tool({
                 "smiles_csv": builtin_tools.BuiltinToolFile(
                     file_id="f1", filename="smiles.csv", path=csv_path,
                 )
             })
 
-    def test_missing_smiles_csv_raises(self, tmp_path: Path, monkeypatch):
+    @pytest.mark.asyncio
+    async def test_missing_smiles_csv_raises(self, tmp_path: Path, monkeypatch):
         monkeypatch.setattr("app.config.settings.ENABLE_DATABASE_TOOLS", True)
         with pytest.raises(ValidationException, match="需要 smiles_csv"):
-            builtin_tools._run_query_chembl_tool({})
+            await builtin_tools._run_query_chembl_tool({})
 
 
 class TestQueryPubchemBuiltinTool:
-    def test_extracts_smiles_and_calls_query(self, tmp_path: Path, monkeypatch):
+    @pytest.mark.asyncio
+    async def test_extracts_smiles_and_calls_query(self, tmp_path: Path, monkeypatch):
         monkeypatch.setattr("app.config.settings.ENABLE_DATABASE_TOOLS", True)
 
         csv_path = tmp_path / "smiles.csv"
@@ -207,7 +211,7 @@ class TestQueryPubchemBuiltinTool:
             new_callable=AsyncMock,
             return_value=mock_result,
         ):
-            result = builtin_tools._run_query_pubchem_tool({
+            result = await builtin_tools._run_query_pubchem_tool({
                 "smiles_csv": builtin_tools.BuiltinToolFile(
                     file_id="f1", filename="smiles.csv", path=csv_path,
                 )
@@ -219,7 +223,8 @@ class TestQueryPubchemBuiltinTool:
 
 
 class TestQueryPdbbindBuiltinTool:
-    def test_extracts_pdb_id_from_filename(self, tmp_path: Path, monkeypatch):
+    @pytest.mark.asyncio
+    async def test_extracts_pdb_id_from_filename(self, tmp_path: Path, monkeypatch):
         monkeypatch.setattr("app.config.settings.ENABLE_DATABASE_TOOLS", True)
 
         mock_result = {"source": "pdbbind", "record_count": 1, "records": []}
@@ -229,7 +234,7 @@ class TestQueryPdbbindBuiltinTool:
             new_callable=AsyncMock,
             return_value=mock_result,
         ):
-            result = builtin_tools._run_query_pdbbind_tool({
+            result = await builtin_tools._run_query_pdbbind_tool({
                 "protein_pdb": builtin_tools.BuiltinToolFile(
                     file_id="f1", filename="3T5G_protein.pdb",
                     path=tmp_path / "dummy.pdb",
@@ -240,7 +245,8 @@ class TestQueryPdbbindBuiltinTool:
         assert result.outputs[0].semantic_type == "database_query_result"
         assert result.outputs[0].data["source"] == "pdbbind"
 
-    def test_works_without_any_files(self, tmp_path: Path, monkeypatch):
+    @pytest.mark.asyncio
+    async def test_works_without_any_files(self, tmp_path: Path, monkeypatch):
         monkeypatch.setattr("app.config.settings.ENABLE_DATABASE_TOOLS", True)
 
         mock_result = {"source": "pdbbind", "record_count": 0, "records": []}
@@ -250,7 +256,7 @@ class TestQueryPdbbindBuiltinTool:
             new_callable=AsyncMock,
             return_value=mock_result,
         ):
-            result = builtin_tools._run_query_pdbbind_tool({})
+            result = await builtin_tools._run_query_pdbbind_tool({})
 
         assert len(result.outputs) == 1
 
@@ -372,7 +378,8 @@ class TestRunBuiltinToolDispatch:
                 f"虚拟工具 {slug} 缺少 builtin handler 注册"
             )
 
-    def test_registry_routes_to_correct_handler(self, tmp_path: Path, monkeypatch):
+    @pytest.mark.asyncio
+    async def test_registry_routes_to_correct_handler(self, tmp_path: Path, monkeypatch):
         """验证每个注册的 tool slug 都能正确分发。"""
         monkeypatch.setattr("app.config.settings.ENABLE_DATABASE_TOOLS", True)
 
@@ -390,7 +397,7 @@ class TestRunBuiltinToolDispatch:
             new_callable=AsyncMock,
             return_value=mock_result,
         ):
-            r = builtin_tools.run_builtin_tool("builtin-query-chembl", files)
+            r = await builtin_tools.run_builtin_tool("builtin-query-chembl", files)
             assert r.outputs[0].semantic_type == "database_query_result"
 
         with patch(
@@ -398,7 +405,7 @@ class TestRunBuiltinToolDispatch:
             new_callable=AsyncMock,
             return_value=mock_result,
         ):
-            r = builtin_tools.run_builtin_tool("builtin-query-pubchem", files)
+            r = await builtin_tools.run_builtin_tool("builtin-query-pubchem", files)
             assert r.outputs[0].semantic_type == "database_query_result"
 
         for slug in (
@@ -409,8 +416,38 @@ class TestRunBuiltinToolDispatch:
             "builtin-interaction-analysis",
         ):
             with pytest.raises(ValidationException, match="尚未接入真实执行引擎"):
-                builtin_tools.run_builtin_tool(slug, files)
+                await builtin_tools.run_builtin_tool(slug, files)
 
-    def test_unknown_tool_raises(self):
+    @pytest.mark.asyncio
+    async def test_unknown_tool_raises(self):
         with pytest.raises(ValidationException, match="未知内置智能体工具"):
-            builtin_tools.run_builtin_tool("builtin-unknown-tool", {})
+            await builtin_tools.run_builtin_tool("builtin-unknown-tool", {})
+
+    @pytest.mark.asyncio
+    async def test_query_tool_dispatch_runs_inside_existing_event_loop(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ):
+        """数据库查询内置工具不能在已有事件循环中嵌套 asyncio.run。"""
+        monkeypatch.setattr("app.config.settings.ENABLE_DATABASE_TOOLS", True)
+
+        csv_path = tmp_path / "smiles.csv"
+        csv_path.write_text("SMILES,id\nCCO,mol_1\n")
+        files = {
+            "smiles_csv": builtin_tools.BuiltinToolFile(
+                file_id="f1",
+                filename="smiles.csv",
+                path=csv_path,
+            )
+        }
+        mock_result = {"source": "chembl", "record_count": 0, "records": []}
+
+        with patch(
+            "app.agents.aidd.database_tools.query_chembl",
+            new_callable=AsyncMock,
+            return_value=mock_result,
+        ):
+            result = await builtin_tools.run_builtin_tool("builtin-query-chembl", files)
+
+        assert result.outputs[0].data == mock_result

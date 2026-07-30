@@ -11,8 +11,10 @@ import shlex
 import shutil
 import subprocess
 import tempfile
+import asyncio
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any, Callable
 
 from app.agents.aidd.outputs import parse_sdf_smiles
 from app.agents.aidd.capabilities import PLACEHOLDER_AIDD_TOOL_SLUGS
@@ -457,7 +459,7 @@ def _read_smiles_from_csv(csv_path: Path) -> list[str]:
     return smiles_values
 
 
-def _run_query_chembl_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResult:
+async def _run_query_chembl_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResult:
     """builtin-query-chembl: 从 SMILES CSV 提取分子，查询 ChEMBL。"""
     from app.agents.aidd.database_tools import query_chembl as _query_chembl
     from app.config import settings as _settings
@@ -470,9 +472,7 @@ def _run_query_chembl_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResu
     if not smiles_list:
         raise ValidationException("query_chembl 需要 smiles_csv 输入文件")
 
-    import asyncio as _asyncio
-
-    result = _asyncio.run(_query_chembl(smiles=smiles_list[0]))
+    result = await _query_chembl(smiles=smiles_list[0])
     return BuiltinToolResult(
         outputs=(
             BuiltinToolOutput(semantic_type="database_query_result", data=result),
@@ -480,7 +480,7 @@ def _run_query_chembl_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResu
     )
 
 
-def _run_query_pubchem_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResult:
+async def _run_query_pubchem_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResult:
     """builtin-query-pubchem: 从 SMILES CSV 提取分子，查询 PubChem。"""
     from app.agents.aidd.database_tools import query_pubchem as _query_pubchem
     from app.config import settings as _settings
@@ -493,9 +493,7 @@ def _run_query_pubchem_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolRes
     if not smiles_list:
         raise ValidationException("query_pubchem 需要 smiles_csv 输入文件")
 
-    import asyncio as _asyncio
-
-    result = _asyncio.run(_query_pubchem(smiles=smiles_list[0]))
+    result = await _query_pubchem(smiles=smiles_list[0])
     return BuiltinToolResult(
         outputs=(
             BuiltinToolOutput(semantic_type="database_query_result", data=result),
@@ -503,12 +501,10 @@ def _run_query_pubchem_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolRes
     )
 
 
-def _run_query_pdbbind_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResult:
+async def _run_query_pdbbind_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResult:
     """builtin-query-pdbbind: 从 PDB 文件名提取 PDB ID，查询 PDBbind。"""
     from app.agents.aidd.database_tools import query_pdbbind as _query_pdbbind
     from app.config import settings as _settings
-
-    import asyncio as _asyncio
 
     if not _settings.ENABLE_DATABASE_TOOLS:
         raise ValidationException("数据库查询工具已禁用")
@@ -527,11 +523,7 @@ def _run_query_pdbbind_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolRes
     if ligand_file:
         ligand_name = Path(ligand_file.filename).stem
 
-    import asyncio as _asyncio
-
-    result = _asyncio.run(
-        _query_pdbbind(protein_pdb_id=pdb_id, ligand_name=ligand_name)
-    )
+    result = await _query_pdbbind(protein_pdb_id=pdb_id, ligand_name=ligand_name)
     return BuiltinToolResult(
         outputs=(
             BuiltinToolOutput(semantic_type="database_query_result", data=result),
@@ -715,7 +707,15 @@ _BUILTIN_TOOL_REGISTRY: dict[str, str] = {
 }
 
 
-def run_builtin_tool(tool_slug: str, files: dict[str, BuiltinToolFile]) -> BuiltinToolResult:
+async def _run_sync_builtin_handler(
+    handler: Callable[[dict[str, BuiltinToolFile]], BuiltinToolResult],
+    files: dict[str, BuiltinToolFile],
+) -> BuiltinToolResult:
+    """在线程中执行同步内置工具，避免阻塞异步任务执行器。"""
+    return await asyncio.to_thread(handler, files)
+
+
+async def run_builtin_tool(tool_slug: str, files: dict[str, BuiltinToolFile]) -> BuiltinToolResult:
     if tool_slug in PLACEHOLDER_AIDD_TOOL_SLUGS:
         raise ValidationException(f"内置能力尚未接入真实执行引擎: {tool_slug}")
 
@@ -724,26 +724,26 @@ def run_builtin_tool(tool_slug: str, files: dict[str, BuiltinToolFile]) -> Built
         raise ValidationException(f"未知内置智能体工具: {tool_slug}")
 
     if handler_key == "sdf_to_smiles_csv":
-        return _run_sdf_to_smiles_csv_tool(files)
+        return await _run_sync_builtin_handler(_run_sdf_to_smiles_csv_tool, files)
     if handler_key == "sdf_to_pdb":
-        return _run_sdf_to_pdb_tool(files)
+        return await _run_sync_builtin_handler(_run_sdf_to_pdb_tool, files)
     if handler_key == "vina_docking":
-        return _run_vina_docking_tool(files)
+        return await _run_sync_builtin_handler(_run_vina_docking_tool, files)
     if handler_key == "query_chembl":
-        return _run_query_chembl_tool(files)
+        return await _run_query_chembl_tool(files)
     if handler_key == "query_pubchem":
-        return _run_query_pubchem_tool(files)
+        return await _run_query_pubchem_tool(files)
     if handler_key == "query_pdbbind":
-        return _run_query_pdbbind_tool(files)
+        return await _run_query_pdbbind_tool(files)
     if handler_key == "admet_prediction":
-        return _run_admet_prediction_tool(files)
+        return await _run_sync_builtin_handler(_run_admet_prediction_tool, files)
     if handler_key == "toxicity_prediction":
-        return _run_toxicity_prediction_tool(files)
+        return await _run_sync_builtin_handler(_run_toxicity_prediction_tool, files)
     if handler_key == "synthetic_accessibility":
-        return _run_synthetic_accessibility_tool(files)
+        return await _run_sync_builtin_handler(_run_synthetic_accessibility_tool, files)
     if handler_key == "molecular_dynamics":
-        return _run_molecular_dynamics_tool(files)
+        return await _run_sync_builtin_handler(_run_molecular_dynamics_tool, files)
     if handler_key == "interaction_analysis":
-        return _run_interaction_analysis_tool(files)
+        return await _run_sync_builtin_handler(_run_interaction_analysis_tool, files)
 
     raise ValidationException(f"未实现的内置工具处理器: {tool_slug}")

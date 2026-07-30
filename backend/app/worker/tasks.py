@@ -1,12 +1,12 @@
 # backend/app/worker/tasks.py
 """Celery 任务定义"""
 
-import asyncio
 from typing import Dict, Any, Optional
 
 from celery import shared_task
 from celery.utils.log import get_task_logger
 
+from app.common.async_runtime import run_coro_sync
 from app.common.time import utcnow
 from app.tasks.naming import _extract_file_ids_from_result
 from app.tasks.state_machine import TaskStateMachine
@@ -87,7 +87,7 @@ def execute_tool_task(self, task_id: str, tool_version_id: str):
     logger.info(f"开始执行任务: {task_id}, 工具版本: {tool_version_id}")
 
     try:
-        result = asyncio.run(_execute_tool_task_impl(task_id, tool_version_id))
+        result = run_coro_sync(_execute_tool_task_impl(task_id, tool_version_id))
         logger.info(f"任务完成: {task_id}")
         return result
 
@@ -264,7 +264,7 @@ def cleanup_expired_files():
     """
     logger.info("开始清理过期文件")
 
-    count = asyncio.run(_cleanup_expired_files_impl())
+    count = run_coro_sync(_cleanup_expired_files_impl())
 
     logger.info(f"清理完成，删除 {count} 个过期文件")
     return {"deleted_count": count}

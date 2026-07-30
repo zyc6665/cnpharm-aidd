@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 import asyncio
 import logging
 
+from app.common.async_runtime import run_coro_sync
 from app.common.time import utcnow
 from app.monitoring.prometheus_metrics import get_metrics, PrometheusMetrics
 from app.monitoring.alert_manager import get_alert_manager, AlertSeverity
@@ -302,9 +303,8 @@ def create_metrics_collection_task(celery_app):
     @celery_app.task(name="collect_system_metrics")
     def collect_system_metrics():
         """系统指标采集任务"""
-        import asyncio
         collector = MetricsCollector()
-        return asyncio.run(collector.collect_all())
+        return run_coro_sync(collector.collect_all())
 
     return collect_system_metrics
 
