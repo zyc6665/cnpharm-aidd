@@ -10,6 +10,14 @@ from alembic.config import Config
 from alembic.script import ScriptDirectory
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+LEGACY_PROJECT_RESOURCE_TABLES = (
+    "files",
+    "agent_runs",
+    "workflow_definitions",
+    "workflow_templates",
+    "workflow_runs",
+    "research_boards",
+)
 
 
 def _run_alembic(*args: str, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
@@ -69,6 +77,33 @@ def test_alembic_sqlite_upgrade_and_downgrade_dry_run(tmp_path: Path) -> None:
     assert "users" not in remaining_tables
     assert "tools" not in remaining_tables
     assert "workflow_runs" not in remaining_tables
+
+
+def test_alembic_sqlite_legacy_project_link_upgrade_is_resumable(tmp_path: Path) -> None:
+    db_path = tmp_path / "legacy_project_links.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('20260730_02')")
+        conn.execute("CREATE TABLE users (id VARCHAR(36) PRIMARY KEY)")
+        conn.execute("CREATE TABLE projects (id VARCHAR(36) PRIMARY KEY)")
+        for table_name in LEGACY_PROJECT_RESOURCE_TABLES:
+            conn.execute(f"CREATE TABLE {table_name} (id VARCHAR(36) PRIMARY KEY)")
+
+    env = os.environ.copy()
+    env["DATABASE_URL"] = f"sqlite+aiosqlite:///{db_path}"
+
+    upgrade = _run_alembic("upgrade", "head", env=env)
+    assert upgrade.returncode == 0, upgrade.stderr or upgrade.stdout
+
+    with sqlite3.connect(db_path) as conn:
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "20260730_07",
+        )
+        for table_name in LEGACY_PROJECT_RESOURCE_TABLES:
+            columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table_name})")}
+            indexes = {row[1] for row in conn.execute(f"PRAGMA index_list({table_name})")}
+            assert "project_id" in columns
+            assert f"ix_{table_name}_project_id" in indexes
 
 
 def test_alembic_heads_command_works_from_backend_directory() -> None:

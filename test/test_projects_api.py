@@ -6,6 +6,7 @@ import httpx
 import pytest
 import pytest_asyncio
 from fastapi import Header, HTTPException
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -13,6 +14,13 @@ from app.auth.dependencies import get_current_user
 from app.database.base import Base
 from app.database.session import get_db
 from app.main import app
+from app.models.conversations import (
+    Conversation,
+    ConversationBranch,
+    ConversationMessage,
+    PlanDecision,
+    PlanVersion,
+)
 from app.models.users import User, UserRole, UserStatus
 
 
@@ -27,6 +35,7 @@ async def db_session() -> AsyncSession:
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
     async with session_factory() as session:
+        await session.execute(text("PRAGMA foreign_keys=ON"))
         yield session
     await engine.dispose()
 
@@ -127,3 +136,131 @@ async def test_viewer_cannot_update_project(api_client: httpx.AsyncClient):
     )
 
     assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_owner_can_archive_project_and_default_list_hides_it(
+    api_client: httpx.AsyncClient,
+):
+    project = await _create_project(api_client)
+
+    archive_response = await api_client.post(
+        f"/api/v1/projects/{project['id']}/archive",
+        headers={"Authorization": "Bearer owner"},
+    )
+    assert archive_response.status_code == 200
+    assert archive_response.json()["data"]["status"] == "archived"
+
+    list_response = await api_client.get(
+        "/api/v1/projects",
+        headers={"Authorization": "Bearer owner"},
+    )
+    assert list_response.status_code == 200
+    assert list_response.json()["data"]["items"] == []
+
+    archived_response = await api_client.get(
+        "/api/v1/projects?include_archived=true",
+        headers={"Authorization": "Bearer owner"},
+    )
+    assert archived_response.status_code == 200
+    assert archived_response.json()["data"]["items"][0]["id"] == project["id"]
+
+
+@pytest.mark.asyncio
+async def test_owner_can_delete_project_and_non_member_cannot(
+    api_client: httpx.AsyncClient,
+):
+    project = await _create_project(api_client)
+
+    forbidden_response = await api_client.delete(
+        f"/api/v1/projects/{project['id']}",
+        headers={"Authorization": "Bearer other"},
+    )
+    assert forbidden_response.status_code == 404
+
+    delete_response = await api_client.delete(
+        f"/api/v1/projects/{project['id']}",
+        headers={"Authorization": "Bearer owner"},
+    )
+    assert delete_response.status_code == 200
+    assert delete_response.json()["data"]["id"] == project["id"]
+
+    get_response = await api_client.get(
+        f"/api/v1/projects/{project['id']}",
+        headers={"Authorization": "Bearer owner"},
+    )
+    assert get_response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_owner_can_delete_project_with_conversation_plan_dependencies(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    users: dict[str, User],
+):
+    project = await _create_project(api_client)
+    owner = users["owner"]
+
+    conversation = Conversation(
+        project_id=project["id"],
+        created_by=owner.id,
+        title="口袋研究会话",
+    )
+    db_session.add(conversation)
+    await db_session.flush()
+
+    branch = ConversationBranch(
+        conversation_id=conversation.id,
+        created_by=owner.id,
+        title="主分支",
+        is_root=True,
+    )
+    db_session.add(branch)
+    await db_session.flush()
+
+    db_session.add(
+        ConversationMessage(
+            conversation_id=conversation.id,
+            branch_id=branch.id,
+            author_id=owner.id,
+            role="user",
+            content=[{"type": "text", "text": "开始研究"}],
+            plain_text="开始研究",
+            sequence=1,
+        )
+    )
+    plan_version = PlanVersion(
+        project_id=project["id"],
+        conversation_id=conversation.id,
+        created_by=owner.id,
+        version=1,
+        content={"steps": []},
+        status="approved",
+    )
+    db_session.add(plan_version)
+    await db_session.flush()
+    db_session.add(
+        PlanDecision(
+            plan_version_id=plan_version.id,
+            reviewer_id=owner.id,
+            decision="approve",
+        )
+    )
+    await db_session.commit()
+
+    delete_response = await api_client.delete(
+        f"/api/v1/projects/{project['id']}",
+        headers={"Authorization": "Bearer owner"},
+    )
+
+    assert delete_response.status_code == 200
+    assert (
+        await db_session.execute(
+            select(Conversation).where(Conversation.project_id == project["id"])
+        )
+    ).scalar_one_or_none() is None
+    assert (
+        await db_session.execute(
+            select(PlanVersion).where(PlanVersion.project_id == project["id"])
+        )
+    ).scalar_one_or_none() is None

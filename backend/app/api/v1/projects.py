@@ -1,15 +1,33 @@
 """Research project APIs."""
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import delete as sa_delete
+from sqlalchemy import select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
 from app.common.responses import success_response
 from app.database.session import get_db
 from app.feature_flags import require_feature_flag
+from app.models.agent import AgentRun
+from app.models.artifacts import Artifact, ArtifactLineage, ArtifactVersion
+from app.models.conversations import (
+    Conversation,
+    ConversationBranch,
+    ConversationMessage,
+    PlanDecision,
+    PlanVersion,
+)
+from app.models.executions import ExecutionRecord
+from app.models.files import File
 from app.models.projects import Organization, Project, ProjectMember
 from app.models.users import User
+from app.models.workflows import (
+    ResearchBoard,
+    WorkflowDefinition,
+    WorkflowRun,
+    WorkflowTemplate,
+)
 from app.schemas.projects import ProjectCreate, ProjectMemberCreate, ProjectUpdate
 from app.services.project_access import load_project_membership, require_project_role
 
@@ -52,15 +70,19 @@ async def _get_or_create_default_organization(db: AsyncSession) -> Organization:
 
 @router.get("", response_model=dict)
 async def list_projects(
+    include_archived: bool = Query(False),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
+    query = (
         select(Project, ProjectMember)
         .join(ProjectMember, ProjectMember.project_id == Project.id)
         .where(ProjectMember.user_id == current_user.id)
         .order_by(Project.updated_at.desc())
     )
+    if not include_archived:
+        query = query.where(Project.status != "archived")
+    result = await db.execute(query)
     return success_response(
         data={
             "items": [_serialize(project, member) for project, member in result.all()]
@@ -128,6 +150,130 @@ async def update_project(
     return success_response(
         data=_serialize(project, membership), message="研究项目已更新"
     )
+
+
+@router.post("/{project_id}/archive", response_model=dict)
+async def archive_project(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    project, membership = await require_project_role(
+        db,
+        project_id=project_id,
+        user=current_user,
+        allowed_roles={"owner", "editor"},
+    )
+    project.status = "archived"
+    await db.commit()
+    await db.refresh(project)
+    return success_response(data=_serialize(project, membership), message="研究项目已归档")
+
+
+async def _delete_project_related_rows(db: AsyncSession, project_id: str) -> None:
+    plan_version_ids = list(
+        (
+            await db.execute(
+                select(PlanVersion.id).where(PlanVersion.project_id == project_id)
+            )
+        ).scalars()
+    )
+    if plan_version_ids:
+        await db.execute(
+            sa_delete(PlanDecision).where(
+                PlanDecision.plan_version_id.in_(plan_version_ids)
+            )
+        )
+    await db.execute(sa_delete(PlanVersion).where(PlanVersion.project_id == project_id))
+
+    conversation_ids = list(
+        (
+            await db.execute(
+                select(Conversation.id).where(Conversation.project_id == project_id)
+            )
+        ).scalars()
+    )
+    if conversation_ids:
+        await db.execute(
+            sa_delete(ConversationMessage).where(
+                ConversationMessage.conversation_id.in_(conversation_ids)
+            )
+        )
+        await db.execute(
+            sa_delete(ConversationBranch).where(
+                ConversationBranch.conversation_id.in_(conversation_ids)
+            )
+        )
+    await db.execute(
+        sa_delete(Conversation).where(Conversation.project_id == project_id)
+    )
+
+    artifact_ids = list(
+        (
+            await db.execute(select(Artifact.id).where(Artifact.project_id == project_id))
+        ).scalars()
+    )
+    if artifact_ids:
+        await db.execute(
+            sa_update(Artifact)
+            .where(Artifact.id.in_(artifact_ids))
+            .values(latest_version_id=None)
+        )
+        await db.execute(
+            sa_delete(ArtifactLineage).where(ArtifactLineage.project_id == project_id)
+        )
+        await db.execute(
+            sa_delete(ArtifactVersion).where(ArtifactVersion.artifact_id.in_(artifact_ids))
+        )
+        await db.execute(sa_delete(Artifact).where(Artifact.id.in_(artifact_ids)))
+
+    template_ids = list(
+        (
+            await db.execute(
+                select(WorkflowTemplate.id).where(WorkflowTemplate.project_id == project_id)
+            )
+        ).scalars()
+    )
+    if template_ids:
+        await db.execute(
+            sa_update(WorkflowRun)
+            .where(WorkflowRun.template_id.in_(template_ids))
+            .values(template_id=None)
+        )
+
+    await db.execute(sa_delete(ExecutionRecord).where(ExecutionRecord.project_id == project_id))
+    await db.execute(sa_delete(WorkflowRun).where(WorkflowRun.project_id == project_id))
+    await db.execute(sa_delete(WorkflowTemplate).where(WorkflowTemplate.project_id == project_id))
+    await db.execute(
+        sa_delete(WorkflowDefinition).where(WorkflowDefinition.project_id == project_id)
+    )
+    await db.execute(sa_delete(ResearchBoard).where(ResearchBoard.project_id == project_id))
+    await db.execute(
+        sa_update(File).where(File.project_id == project_id).values(project_id=None)
+    )
+    await db.execute(
+        sa_update(AgentRun).where(AgentRun.project_id == project_id).values(project_id=None)
+    )
+    await db.execute(sa_delete(ProjectMember).where(ProjectMember.project_id == project_id))
+
+
+@router.delete("/{project_id}", response_model=dict)
+async def delete_project(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    project, _membership = await require_project_role(
+        db,
+        project_id=project_id,
+        user=current_user,
+        allowed_roles={"owner"},
+    )
+    deleted_id = project.id
+    await _delete_project_related_rows(db, project_id=project.id)
+    await db.delete(project)
+    await db.commit()
+    return success_response(data={"id": deleted_id}, message="研究项目已删除")
 
 
 @router.post("/{project_id}/members", response_model=dict)

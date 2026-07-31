@@ -34,7 +34,11 @@
             <span>{{ t('workspace.projectCount', { count: projects.length }) }}</span>
           </div>
         </div>
-        <ProjectList :projects="recentProjects" />
+        <ProjectList
+          :projects="recentProjects"
+          @archive="handleProjectArchive"
+          @delete="handleProjectDelete"
+        />
       </section>
 
       <div class="workspace-columns">
@@ -103,8 +107,13 @@ import { computed, onMounted, ref } from 'vue'
 import dayjs from 'dayjs'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { message } from 'ant-design-vue'
 import { FileOutlined, PlusOutlined } from '@ant-design/icons-vue'
-import { listProjects } from '@/api/projects'
+import {
+  archiveProject as archiveProjectApi,
+  deleteProject as deleteProjectApi,
+  listProjects
+} from '@/api/projects'
 import {
   getWorkspaceOverview,
   type WorkspaceArtifact,
@@ -153,6 +162,30 @@ async function loadWorkspace() {
 function handleProjectCreated(project: ResearchProject) {
   projects.value = [project, ...projects.value.filter(item => item.id !== project.id)]
   void router.push(`/projects/${project.id}/research`)
+}
+
+async function handleProjectArchive(projectId: string) {
+  const previousProjects = projects.value
+  projects.value = projects.value.filter(project => project.id !== projectId)
+  try {
+    await archiveProjectApi(projectId)
+    message.success(t('workspace.project.archiveSuccess'))
+  } catch {
+    projects.value = previousProjects
+    message.error(t('workspace.project.archiveFailed'))
+  }
+}
+
+async function handleProjectDelete(projectId: string) {
+  const previousProjects = projects.value
+  projects.value = projects.value.filter(project => project.id !== projectId)
+  try {
+    await deleteProjectApi(projectId)
+    message.success(t('workspace.project.deleteSuccess'))
+  } catch {
+    projects.value = previousProjects
+    message.error(t('workspace.project.deleteFailed'))
+  }
 }
 
 const taskLabel = (status: WorkspaceAttentionTask['status']) =>

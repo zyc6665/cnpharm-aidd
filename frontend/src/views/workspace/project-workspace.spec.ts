@@ -2,12 +2,14 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '@/locales'
 import WorkspaceView from './index.vue'
-import { listProjects } from '@/api/projects'
+import { archiveProject, deleteProject, listProjects } from '@/api/projects'
 import { getWorkspaceOverview } from '@/api/workspace'
 
 vi.mock('@/api/projects', () => ({
   listProjects: vi.fn(),
-  createProject: vi.fn()
+  createProject: vi.fn(),
+  archiveProject: vi.fn(),
+  deleteProject: vi.fn()
 }))
 vi.mock('@/api/workspace', () => ({ getWorkspaceOverview: vi.fn() }))
 
@@ -78,6 +80,9 @@ const stubs = {
   AFormItem: { template: '<label><slot /></label>' },
   AInput: { template: '<input />' },
   ATextarea: { template: '<textarea />' },
+  APopconfirm: {
+    template: '<span @click="$emit(\'confirm\')"><slot /></span>'
+  },
   PlusOutlined: true,
   FolderOpenOutlined: true,
   FileOutlined: true,
@@ -99,6 +104,8 @@ describe('Project workspace', () => {
     vi.clearAllMocks()
     vi.mocked(listProjects).mockResolvedValue({ data: { items: projects } } as never)
     vi.mocked(getWorkspaceOverview).mockResolvedValue({ data: overview } as never)
+    vi.mocked(archiveProject).mockResolvedValue({ data: { ...projects[0]!, status: 'archived' } } as never)
+    vi.mocked(deleteProject).mockResolvedValue({ data: { id: projects[0]!.id } } as never)
   })
 
   it('首屏聚焦新建项目、最近项目、待处理任务和最近 Artifact', async () => {
@@ -146,5 +153,33 @@ describe('Project workspace', () => {
     expect(listProjects).toHaveBeenCalledTimes(2)
     expect(getWorkspaceOverview).toHaveBeenCalledTimes(2)
     expect(wrapper.text()).toContain('EGFR 口袋研究')
+  })
+
+  it('归档项目后无需刷新即可从最近项目列表移除', async () => {
+    const wrapper = renderWorkspace()
+    await flushPromises()
+
+    const archive = wrapper.findAll('button').find(button => button.text() === '归档')
+    expect(archive).toBeDefined()
+    await archive!.trigger('click')
+    await flushPromises()
+
+    expect(archiveProject).toHaveBeenCalledWith('project-1')
+    expect(wrapper.text()).not.toContain('EGFR 口袋研究')
+    expect(wrapper.text()).toContain('还没有研究项目')
+  })
+
+  it('删除项目后无需刷新即可从最近项目列表移除', async () => {
+    const wrapper = renderWorkspace()
+    await flushPromises()
+
+    const deleteButton = wrapper.findAll('button').find(button => button.text() === '删除')
+    expect(deleteButton).toBeDefined()
+    await deleteButton!.trigger('click')
+    await flushPromises()
+
+    expect(deleteProject).toHaveBeenCalledWith('project-1')
+    expect(wrapper.text()).not.toContain('EGFR 口袋研究')
+    expect(wrapper.text()).toContain('还没有研究项目')
   })
 })
