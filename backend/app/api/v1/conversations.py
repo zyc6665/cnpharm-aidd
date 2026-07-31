@@ -8,9 +8,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.aidd.project_service import ProjectAgentService, ProjectPlanResult
 from app.auth.dependencies import get_current_user
 from app.common.responses import success_response
 from app.database.session import get_db
+from app.execution.contracts import (
+    ExecutionHandle,
+    ExecutionRequest,
+    ExecutionState,
+    LogChunk,
+    ProducedArtifact,
+)
+from app.execution.port import ExecutionPort
 from app.models.agent import AgentRun
 from app.models.conversations import (
     AgentEvent,
@@ -25,6 +34,7 @@ from app.schemas.conversations import (
     MessageBranchCreate,
     MessageCreate,
     PlanDecisionCreate,
+    ProjectAgentRunCreate,
 )
 from app.services.conversations import (
     append_message,
@@ -36,6 +46,27 @@ from app.services.project_access import load_project_membership, require_project
 
 
 router = APIRouter()
+
+
+class UnavailableExecutionPort:
+    async def submit(self, request: ExecutionRequest) -> ExecutionHandle:
+        raise HTTPException(status_code=503, detail="项目执行适配器未配置")
+
+    async def status(self, execution_id: str) -> ExecutionState:
+        raise HTTPException(status_code=503, detail="项目执行适配器未配置")
+
+    async def logs(self, execution_id: str, cursor: str | None = None) -> LogChunk:
+        raise HTTPException(status_code=503, detail="项目执行适配器未配置")
+
+    async def cancel(self, execution_id: str) -> None:
+        raise HTTPException(status_code=503, detail="项目执行适配器未配置")
+
+    async def collect_artifacts(self, execution_id: str) -> list[ProducedArtifact]:
+        raise HTTPException(status_code=503, detail="项目执行适配器未配置")
+
+
+def get_project_agent_execution_port() -> ExecutionPort:
+    return UnavailableExecutionPort()
 
 
 def _conversation_data(item: Conversation, root_branch_id: str | None = None) -> dict:
@@ -66,6 +97,44 @@ def _message_data(item: ConversationMessage) -> dict:
     }
 
 
+def _plan_version_data(item: PlanVersion) -> dict:
+    return {
+        "id": item.id,
+        "project_id": item.project_id,
+        "conversation_id": item.conversation_id,
+        "agent_run_id": item.agent_run_id,
+        "created_by": item.created_by,
+        "version": item.version,
+        "content": item.content or {},
+        "risk_level": item.risk_level,
+        "status": item.status,
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
+def _project_plan_result_data(result: ProjectPlanResult) -> dict:
+    data = {
+        "id": result.run.id,
+        "project_id": result.run.project_id,
+        "conversation_id": (
+            result.plan_version.conversation_id if result.plan_version else None
+        ),
+        "message": result.run.message,
+        "intent": result.run.intent,
+        "status": result.run.status,
+        "input_type": result.run.input_type,
+        "requested_outputs": result.run.requested_outputs or [],
+        "plan": result.run.plan or {},
+        "created_at": result.run.created_at,
+        "updated_at": result.run.updated_at,
+        "plan_version": (
+            _plan_version_data(result.plan_version) if result.plan_version else None
+        ),
+    }
+    return data
+
+
 @router.get("/projects/{project_id}/conversations", response_model=dict)
 async def list_conversations(
     project_id: str,
@@ -74,13 +143,19 @@ async def list_conversations(
 ):
     await load_project_membership(db, project_id=project_id, user_id=current_user.id)
     items = (
-        await db.execute(
-            select(Conversation)
-            .where(Conversation.project_id == project_id)
-            .order_by(Conversation.updated_at.desc())
+        (
+            await db.execute(
+                select(Conversation)
+                .where(Conversation.project_id == project_id)
+                .order_by(Conversation.updated_at.desc())
+            )
         )
-    ).scalars().all()
-    return success_response(data={"items": [_conversation_data(item) for item in items]})
+        .scalars()
+        .all()
+    )
+    return success_response(
+        data={"items": [_conversation_data(item) for item in items]}
+    )
 
 
 @router.post("/projects/{project_id}/conversations", response_model=dict)
@@ -115,8 +190,14 @@ async def list_messages(
     if branch_id:
         query = query.where(ConversationMessage.branch_id == branch_id)
     items = (
-        await db.execute(query.order_by(ConversationMessage.created_at, ConversationMessage.id))
-    ).scalars().all()
+        (
+            await db.execute(
+                query.order_by(ConversationMessage.created_at, ConversationMessage.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
     return success_response(data={"items": [_message_data(item) for item in items]})
 
 
@@ -142,6 +223,32 @@ async def create_message(
     return success_response(data=_message_data(message), message="消息已创建")
 
 
+@router.post(
+    "/projects/{project_id}/conversations/{conversation_id}/agent-runs",
+    response_model=dict,
+)
+async def create_project_agent_run(
+    project_id: str,
+    conversation_id: str,
+    data: ProjectAgentRunCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    execution_port: ExecutionPort = Depends(get_project_agent_execution_port),
+):
+    service = ProjectAgentService(db, execution_port=execution_port)
+    result = await service.create_plan(
+        project_id=project_id,
+        conversation_id=conversation_id,
+        user=current_user,
+        goal=data.goal,
+        protein_artifact_version_id=data.protein_artifact_version_id,
+    )
+    return success_response(
+        data=_project_plan_result_data(result),
+        message="智能体计划已创建",
+    )
+
+
 @router.post("/messages/{message_id}/branch", response_model=dict)
 async def create_message_branch(
     message_id: str,
@@ -150,7 +257,9 @@ async def create_message_branch(
     db: AsyncSession = Depends(get_db),
 ):
     source = (
-        await db.execute(select(ConversationMessage).where(ConversationMessage.id == message_id))
+        await db.execute(
+            select(ConversationMessage).where(ConversationMessage.id == message_id)
+        )
     ).scalar_one_or_none()
     if source is None:
         raise HTTPException(status_code=404, detail="消息不存在")
@@ -182,17 +291,28 @@ async def list_agent_events(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    run = (await db.execute(select(AgentRun).where(AgentRun.id == run_id))).scalar_one_or_none()
+    run = (
+        await db.execute(select(AgentRun).where(AgentRun.id == run_id))
+    ).scalar_one_or_none()
     if run is None or run.project_id is None:
         raise HTTPException(status_code=404, detail="智能体运行不存在")
-    await load_project_membership(db, project_id=run.project_id, user_id=current_user.id)
+    await load_project_membership(
+        db, project_id=run.project_id, user_id=current_user.id
+    )
     events = (
-        await db.execute(
-            select(AgentEvent)
-            .where(AgentEvent.agent_run_id == run.id, AgentEvent.sequence > after_sequence)
-            .order_by(AgentEvent.sequence)
+        (
+            await db.execute(
+                select(AgentEvent)
+                .where(
+                    AgentEvent.agent_run_id == run.id,
+                    AgentEvent.sequence > after_sequence,
+                )
+                .order_by(AgentEvent.sequence)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return success_response(
         data={
             "items": [
@@ -215,8 +335,10 @@ async def _decide_plan(
     data: PlanDecisionCreate,
     current_user: User,
     db: AsyncSession,
-) -> dict:
-    plan = (await db.execute(select(PlanVersion).where(PlanVersion.id == plan_id))).scalar_one_or_none()
+) -> tuple[PlanVersion, dict]:
+    plan = (
+        await db.execute(select(PlanVersion).where(PlanVersion.id == plan_id))
+    ).scalar_one_or_none()
     if plan is None:
         raise HTTPException(status_code=404, detail="计划版本不存在")
     await require_project_role(
@@ -236,18 +358,21 @@ async def _decide_plan(
     )
     plan.status = "approved" if decision == "approve" else "rejected"
     db.add(record)
-    await db.commit()
-    return {
-        "id": plan.id,
-        "status": plan.status,
-        "decision": {
-            "id": record.id,
-            "reviewer_id": record.reviewer_id,
-            "decision": record.decision,
-            "comment": record.comment,
-            "created_at": record.created_at,
+    await db.flush()
+    return (
+        plan,
+        {
+            "id": plan.id,
+            "status": plan.status,
+            "decision": {
+                "id": record.id,
+                "reviewer_id": record.reviewer_id,
+                "decision": record.decision,
+                "comment": record.comment,
+                "created_at": record.created_at,
+            },
         },
-    }
+    )
 
 
 @router.post("/plan-versions/{plan_id}/approve", response_model=dict)
@@ -256,9 +381,25 @@ async def approve_plan(
     data: PlanDecisionCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    execution_port: ExecutionPort = Depends(get_project_agent_execution_port),
 ):
+    plan, decision_data = await _decide_plan(
+        plan_id,
+        "approve",
+        data,
+        current_user,
+        db,
+    )
+    if plan.agent_run_id:
+        handle = await ProjectAgentService(
+            db,
+            execution_port=execution_port,
+        ).submit_approved_plan(plan_version_id=plan.id, user=current_user)
+        decision_data["execution"] = handle.model_dump(mode="json")
+    else:
+        await db.commit()
     return success_response(
-        data=await _decide_plan(plan_id, "approve", data, current_user, db),
+        data=decision_data,
         message="计划已批准",
     )
 
@@ -270,7 +411,9 @@ async def reject_plan(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    _, decision_data = await _decide_plan(plan_id, "reject", data, current_user, db)
+    await db.commit()
     return success_response(
-        data=await _decide_plan(plan_id, "reject", data, current_user, db),
+        data=decision_data,
         message="计划已驳回",
     )

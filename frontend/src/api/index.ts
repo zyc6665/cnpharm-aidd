@@ -7,6 +7,7 @@ export * from './system'
 export * from './workflows'
 export * from './research-boards'
 export * from './workspace'
+export * from './artifacts'
 export {
   default as request,
   AUTH_CLEARED_EVENT,

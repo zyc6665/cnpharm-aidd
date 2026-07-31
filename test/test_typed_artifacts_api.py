@@ -27,12 +27,21 @@ class RecordingStorage:
     def __init__(self, *, fail: bool = False):
         self.fail = fail
         self.uploads: list[tuple[str, bytes]] = []
+        self.objects: dict[str, tuple[bytes, str | None]] = {}
 
-    async def upload(self, file_data: bytes, path: str, content_type: str | None = None):
+    async def upload(
+        self, file_data: bytes, path: str, content_type: str | None = None
+    ):
         if self.fail:
             raise RuntimeError("object storage unavailable")
         self.uploads.append((path, file_data))
-        return StorageFile(path=path, size=len(file_data), content_type=content_type, etag="etag")
+        self.objects[path] = (file_data, content_type)
+        return StorageFile(
+            path=path, size=len(file_data), content_type=content_type, etag="etag"
+        )
+
+    async def download(self, path: str) -> bytes:
+        return self.objects[path][0]
 
     async def delete(self, path: str) -> bool:
         return True
@@ -80,9 +89,16 @@ async def artifact_context(artifact_db: AsyncSession) -> dict[str, object]:
     )
     artifact_db.add(project)
     await artifact_db.flush()
-    artifact_db.add(ProjectMember(project_id=project.id, user_id=owner.id, role="owner"))
+    artifact_db.add(
+        ProjectMember(project_id=project.id, user_id=owner.id, role="owner")
+    )
     await artifact_db.commit()
-    return {"owner": owner, "outsider": outsider, "organization": organization, "project": project}
+    return {
+        "owner": owner,
+        "outsider": outsider,
+        "organization": organization,
+        "project": project,
+    }
 
 
 @pytest_asyncio.fixture
@@ -97,7 +113,9 @@ async def artifact_client(
     async def override_get_db():
         yield artifact_db
 
-    async def override_get_current_user(authorization: str | None = Header(default=None)) -> User:
+    async def override_get_current_user(
+        authorization: str | None = Header(default=None),
+    ) -> User:
         token = (authorization or "").removeprefix("Bearer ")
         user = artifact_context.get(token)
         if isinstance(user, User):
@@ -197,6 +215,42 @@ async def test_artifact_versions_are_immutable_and_expired_items_are_hidden(
         f"/api/v1/projects/{project.id}/artifacts",
         headers={"Authorization": "Bearer outsider"},
     )
+    assert hidden.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_artifact_version_download_uses_storage_and_project_acl(
+    artifact_client,
+    artifact_context: dict[str, object],
+):
+    client, _ = artifact_client
+    project = artifact_context["project"]
+    content = b"HEADER    DOWNLOADABLE PROTEIN\nEND\n"
+    created = await client.post(
+        f"/api/v1/projects/{project.id}/artifacts",
+        headers={"Authorization": "Bearer owner"},
+        data={
+            "artifact_type": "protein_structure",
+            "semantic_type": "protein_structure",
+        },
+        files={"file": ("protein.pdb", content, "chemical/x-pdb")},
+    )
+    artifact = created.json()["data"]
+    version = artifact["latest_version"]
+
+    downloaded = await client.get(
+        f"/api/v1/artifacts/{artifact['id']}/versions/{version['id']}/download",
+        headers={"Authorization": "Bearer owner"},
+    )
+    hidden = await client.get(
+        f"/api/v1/artifacts/{artifact['id']}/versions/{version['id']}/download",
+        headers={"Authorization": "Bearer outsider"},
+    )
+
+    assert downloaded.status_code == 200
+    assert downloaded.content == content
+    assert downloaded.headers["content-type"].startswith("chemical/x-pdb")
+    assert "protein.pdb" in downloaded.headers["content-disposition"]
     assert hidden.status_code == 404
 
 

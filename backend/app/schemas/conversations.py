@@ -23,6 +23,12 @@ class MessageBranchCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class ProjectAgentRunCreate(BaseModel):
+    goal: str = Field(min_length=1, max_length=4_000)
+    protein_artifact_version_id: str | None = None
+    model_config = ConfigDict(extra="forbid")
+
+
 class PlanDecisionCreate(BaseModel):
     comment: str | None = Field(default=None, max_length=4_000)
     model_config = ConfigDict(extra="forbid")

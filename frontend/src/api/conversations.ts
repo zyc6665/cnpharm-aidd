@@ -5,6 +5,7 @@ import type {
   ConversationMessage,
   MessageBranchResult,
   PlanDecisionResult,
+  ProjectAgentRunResult,
   ProjectConversation,
   ProjectResearchContext,
 } from '@/types/conversations'
@@ -38,6 +39,13 @@ export const createConversationMessage = (
   branchId?: string,
 ): Promise<ApiResponse<ConversationMessage>> =>
   post(`/conversations/${conversationId}/messages`, { role: 'user', content, branch_id: branchId })
+
+export const startProjectAgentRun = (
+  projectId: string,
+  conversationId: string,
+  data: { goal: string; protein_artifact_version_id?: string },
+): Promise<ApiResponse<ProjectAgentRunResult>> =>
+  post(`/projects/${projectId}/conversations/${conversationId}/agent-runs`, data)
 
 export const branchConversationMessage = (
   messageId: string,

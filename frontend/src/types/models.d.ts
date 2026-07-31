@@ -1,3 +1,5 @@
+import type { TypedArtifact } from './artifacts'
+
 // 用户相关类型
 export interface UserInfo {
   id: string  // UUID
@@ -522,6 +524,7 @@ export interface Task {
     content_type?: string
     url?: string
   }>
+  artifacts?: TypedArtifact[]
 }
 
 export interface TaskCreateParams {

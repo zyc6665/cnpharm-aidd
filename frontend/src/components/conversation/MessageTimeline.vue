@@ -15,6 +15,10 @@
           <a v-else-if="block.type === 'citation' && block.url" :href="String(block.url)" target="_blank" rel="noopener noreferrer">
             {{ block.title || '引用来源' }}
           </a>
+          <ArtifactRenderer
+            v-else-if="block.type === 'artifact_ref' && block.artifact"
+            :artifact="block.artifact"
+          />
           <span v-else-if="block.type === 'artifact_ref'" class="artifact-ref">{{ block.title || '研究产物' }}</span>
         </template>
         <button
@@ -33,6 +37,7 @@
 
 <script setup lang="ts">
 import { BranchesOutlined } from '@ant-design/icons-vue'
+import ArtifactRenderer from '@/components/artifacts/ArtifactRenderer.vue'
 import PlanApprovalCard from './PlanApprovalCard.vue'
 import type { ConversationMessage } from '@/types/conversations'
 

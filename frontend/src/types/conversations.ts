@@ -1,3 +1,5 @@
+import type { TypedArtifact } from './artifacts'
+
 export type ProjectRole = 'owner' | 'editor' | 'runner' | 'viewer'
 
 export interface ProjectResearchContext {
@@ -39,6 +41,7 @@ export interface ReferenceContentBlock {
   type: 'citation' | 'artifact_ref'
   title?: string
   artifact_id?: string
+  artifact?: TypedArtifact
   url?: string
   [key: string]: unknown
 }
@@ -77,4 +80,26 @@ export interface MessageBranchResult {
 export interface PlanDecisionResult {
   id: string
   status: 'approved' | 'rejected'
+  execution?: {
+    execution_id: string
+    state: string
+    external_id?: string | null
+  }
+}
+
+export interface ProjectAgentRunResult {
+  id: string
+  project_id: string
+  conversation_id?: string | null
+  message: string
+  intent: string
+  status: string
+  input_type?: string | null
+  requested_outputs: string[]
+  plan: Record<string, unknown>
+  plan_version?: {
+    id: string
+    status: 'pending' | 'approved' | 'rejected'
+    content: Record<string, unknown>
+  } | null
 }

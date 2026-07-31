@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -18,7 +20,11 @@ from app.database.session import get_db
 from app.models.artifacts import Artifact
 from app.models.users import User
 from app.schemas.artifacts import ArtifactMetadata
-from app.services.artifacts import create_artifact, create_artifact_version, load_artifact
+from app.services.artifacts import (
+    create_artifact,
+    create_artifact_version,
+    load_artifact,
+)
 from app.services.project_access import load_project_membership, require_project_role
 from app.storage.factory import get_storage_backend
 
@@ -34,7 +40,9 @@ async def _content(file: UploadFile) -> bytes:
     maximum = settings.MAX_FILE_SIZE_MB * 1024 * 1024
     content = await file.read(maximum + 1)
     if len(content) > maximum:
-        raise ValidationException(f"Artifact 大小超过限制 ({settings.MAX_FILE_SIZE_MB}MB)")
+        raise ValidationException(
+            f"Artifact 大小超过限制 ({settings.MAX_FILE_SIZE_MB}MB)"
+        )
     if not content:
         raise ValidationException("Artifact 内容不能为空")
     return content
@@ -79,6 +87,13 @@ def _artifact_data(artifact: Artifact, *, include_versions: bool = False) -> dic
     if include_versions:
         data["versions"] = [_version_data(version) for version in artifact.versions]
     return data
+
+
+def _content_disposition(filename: str) -> str:
+    safe_filename = filename.replace('"', "")
+    return (
+        f"attachment; filename=\"{safe_filename}\"; filename*=UTF-8''{quote(filename)}"
+    )
 
 
 @router.post("/projects/{project_id}/artifacts", response_model=dict)
@@ -126,19 +141,29 @@ async def list_artifacts(
 ):
     await load_project_membership(db, project_id=project_id, user_id=current_user.id)
     artifacts = (
-        await db.execute(
-            select(Artifact)
-            .options(selectinload(Artifact.versions), selectinload(Artifact.latest_version))
-            .where(Artifact.project_id == project_id)
-            .order_by(Artifact.updated_at.desc())
+        (
+            await db.execute(
+                select(Artifact)
+                .options(
+                    selectinload(Artifact.versions),
+                    selectinload(Artifact.latest_version),
+                )
+                .where(Artifact.project_id == project_id)
+                .order_by(Artifact.updated_at.desc())
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     now = utcnow()
     visible = [
         item
         for item in artifacts
         if item.latest_version.status == "available"
-        and (item.latest_version.expires_at is None or item.latest_version.expires_at > now)
+        and (
+            item.latest_version.expires_at is None
+            or item.latest_version.expires_at > now
+        )
     ]
     return success_response(data={"items": [_artifact_data(item) for item in visible]})
 
@@ -152,8 +177,41 @@ async def get_artifact(
     artifact = await load_artifact(db, artifact_id)
     if artifact is None:
         raise HTTPException(status_code=404, detail="Artifact 不存在")
-    await load_project_membership(db, project_id=artifact.project_id, user_id=current_user.id)
+    await load_project_membership(
+        db, project_id=artifact.project_id, user_id=current_user.id
+    )
     return success_response(data=_artifact_data(artifact, include_versions=True))
+
+
+@router.get("/artifacts/{artifact_id}/versions/{version_id}/download")
+async def download_artifact_version(
+    artifact_id: str,
+    version_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    storage=Depends(get_artifact_storage),
+):
+    artifact = await load_artifact(db, artifact_id)
+    if artifact is None:
+        raise HTTPException(status_code=404, detail="Artifact 不存在")
+    await load_project_membership(
+        db, project_id=artifact.project_id, user_id=current_user.id
+    )
+
+    version = next((item for item in artifact.versions if item.id == version_id), None)
+    if (
+        version is None
+        or version.status != "available"
+        or (version.expires_at is not None and version.expires_at <= utcnow())
+    ):
+        raise HTTPException(status_code=404, detail="Artifact 版本不存在")
+
+    content = await storage.download(version.storage_key)
+    return Response(
+        content=content,
+        media_type=version.content_type or "application/octet-stream",
+        headers={"Content-Disposition": _content_disposition(version.filename)},
+    )
 
 
 @router.post("/artifacts/{artifact_id}/versions", response_model=dict)
@@ -186,5 +244,6 @@ async def upload_artifact_version(
         expires_at=_expires_at(expires_at),
     )
     return success_response(
-        data=_artifact_data(artifact, include_versions=True), message="Artifact 新版本已保存"
+        data=_artifact_data(artifact, include_versions=True),
+        message="Artifact 新版本已保存",
     )

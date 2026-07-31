@@ -1,11 +1,14 @@
 <template>
-  <div v-if="hasOutputFiles" class="result-visualization-panel">
+  <div v-if="hasVisualizationContent" class="result-visualization-panel">
     <div class="panel-header">
       <div>
         <h4>{{ t('tasks.resultVisualization') }}</h4>
         <p>{{ panelDescription }}</p>
       </div>
-      <a-tag v-if="csvResultFile" color="cyan">
+      <a-tag v-if="typedArtifacts.length" color="purple">
+        {{ typedArtifacts.length }} Artifact
+      </a-tag>
+      <a-tag v-else-if="csvResultFile" color="cyan">
         CSV
       </a-tag>
       <a-tag v-else-if="scene.hasRenderableOutput" color="blue">
@@ -13,7 +16,15 @@
       </a-tag>
     </div>
 
-    <CsvResultViewer v-if="csvResultFile" :file="csvResultFile" />
+    <div v-if="typedArtifacts.length" class="typed-artifact-list">
+      <ArtifactRenderer
+        v-for="artifact in typedArtifacts"
+        :key="artifact.id"
+        :artifact="artifact"
+      />
+    </div>
+
+    <CsvResultViewer v-else-if="csvResultFile" :file="csvResultFile" />
 
     <template v-else-if="scene.hasRenderableOutput">
       <div v-if="scene.outputEntries.length > 1" class="output-browser">
@@ -86,7 +97,9 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type { Task } from '@/types/models'
+import type { TypedArtifact } from '@/types/artifacts'
 
+import ArtifactRenderer from '@/components/artifacts/ArtifactRenderer.vue'
 import CsvResultViewer from './CsvResultViewer.vue'
 import MoleculeViewer from './MoleculeViewer.vue'
 import {
@@ -109,6 +122,8 @@ const props = defineProps<{
 const { t } = useI18n()
 
 const hasOutputFiles = computed(() => Boolean(props.task.output_files?.length))
+const typedArtifacts = computed<TypedArtifact[]>(() => props.task.artifacts ?? [])
+const hasVisualizationContent = computed(() => typedArtifacts.value.length > 0 || hasOutputFiles.value)
 const preferredTask = computed(() => ({
   ...props.task,
   output_files: preferTopRankedSdfFiles(props.task.output_files)
@@ -224,6 +239,10 @@ watch(
 )
 
 const panelDescription = computed(() => {
+  if (typedArtifacts.value.length) {
+    return '展示结构化科研产物、谱系文件和运行报告'
+  }
+
   if (csvResultFile.value) {
     return t('tasks.csvVisualizationHint')
   }
@@ -422,6 +441,12 @@ const panelDescription = computed(() => {
 
 .partial-support-alert {
   margin-top: 4px;
+}
+
+.typed-artifact-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 @media (max-width: 768px) {

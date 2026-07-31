@@ -50,8 +50,8 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeftOutlined } from '@ant-design/icons-vue'
-import { createAiddAgentRun, cancelAiddAgentRun } from '@/api/agents'
-import { createProjectConversation } from '@/api/conversations'
+import { cancelAiddAgentRun } from '@/api/agents'
+import { createProjectConversation, startProjectAgentRun } from '@/api/conversations'
 import ConversationSidebar from '@/components/conversation/ConversationSidebar.vue'
 import MessageTimeline from '@/components/conversation/MessageTimeline.vue'
 import MessageComposer from '@/components/conversation/MessageComposer.vue'
@@ -59,7 +59,6 @@ import AgentTrace from '@/components/conversation/AgentTrace.vue'
 import ProjectInspector from '@/components/conversation/ProjectInspector.vue'
 import { useAgentEventStream } from '@/composables/useAgentEventStream'
 import { useProjectConversationStore } from '@/stores/project-conversation'
-import type { AiddAgentRunCreateParams } from '@/types/models'
 import type { ConversationMessage } from '@/types/conversations'
 
 const route = useRoute()
@@ -105,12 +104,10 @@ async function sendMessage(text: string) {
 }
 
 async function startRun(message: string) {
-  const input = {
-    message,
-    project_id: projectId.value,
-    conversation_id: store.activeConversationId,
-  } as AiddAgentRunCreateParams
-  const response = await createAiddAgentRun(input)
+  if (!store.activeConversationId) return
+  const response = await startProjectAgentRun(projectId.value, store.activeConversationId, {
+    goal: message,
+  })
   stream.connect(response.data.id)
 }
 
