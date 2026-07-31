@@ -308,6 +308,12 @@ class Settings(BaseSettings):
             for key, description in _AIDD_FEATURE_FLAG_DESCRIPTIONS.items()
         ]
 
+    def is_aidd_feature_enabled(self, key: str) -> bool:
+        """判断 AIDD 发布门禁是否开启。"""
+        if key not in _AIDD_FEATURE_FLAG_DESCRIPTIONS:
+            raise ValueError(f"Unknown AIDD feature flag: {key}")
+        return self._resolve_aidd_feature_flag(key)
+
     def _resolve_aidd_feature_flag(self, key: str) -> bool:
         configured_value = getattr(self, key)
         if configured_value is not None:

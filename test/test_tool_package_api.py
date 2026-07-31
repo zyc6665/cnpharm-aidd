@@ -94,7 +94,9 @@ async def package_client(package_db: AsyncSession, package_users: dict[str, User
     async def override_get_db():
         yield package_db
 
-    async def override_get_current_user(authorization: str | None = Header(default=None)) -> User:
+    async def override_get_current_user(
+        authorization: str | None = Header(default=None),
+    ) -> User:
         token = (authorization or "").removeprefix("Bearer ")
         if token in package_users:
             return package_users[token]
@@ -110,7 +112,9 @@ async def package_client(package_db: AsyncSession, package_users: dict[str, User
 
 
 @pytest.mark.asyncio
-async def test_admin_creates_and_reads_validated_tool_package(package_client: httpx.AsyncClient):
+async def test_admin_creates_and_reads_validated_tool_package(
+    package_client: httpx.AsyncClient,
+):
     created = await package_client.post(
         "/api/v1/tool-packages",
         headers={"Authorization": "Bearer admin"},
@@ -129,11 +133,16 @@ async def test_admin_creates_and_reads_validated_tool_package(package_client: ht
         headers={"Authorization": "Bearer admin"},
     )
     assert fetched.status_code == 200
-    assert fetched.json()["data"]["current_version"]["manifest"]["metadata"]["version"] == "1.0.0"
+    assert (
+        fetched.json()["data"]["current_version"]["manifest"]["metadata"]["version"]
+        == "1.0.0"
+    )
 
 
 @pytest.mark.asyncio
-async def test_unsigned_tool_package_cannot_be_published(package_client: httpx.AsyncClient):
+async def test_unsigned_tool_package_cannot_be_published(
+    package_client: httpx.AsyncClient,
+):
     created = await package_client.post(
         "/api/v1/tool-packages",
         headers={"Authorization": "Bearer admin"},
@@ -151,7 +160,9 @@ async def test_unsigned_tool_package_cannot_be_published(package_client: httpx.A
 
 
 @pytest.mark.asyncio
-async def test_signed_valid_tool_package_can_be_published(package_client: httpx.AsyncClient):
+async def test_signed_valid_tool_package_can_be_published(
+    package_client: httpx.AsyncClient,
+):
     created = await package_client.post(
         "/api/v1/tool-packages",
         headers={"Authorization": "Bearer admin"},
@@ -169,7 +180,9 @@ async def test_signed_valid_tool_package_can_be_published(package_client: httpx.
 
 
 @pytest.mark.asyncio
-async def test_regular_user_cannot_create_tool_package(package_client: httpx.AsyncClient):
+async def test_regular_user_cannot_create_tool_package(
+    package_client: httpx.AsyncClient,
+):
     response = await package_client.post(
         "/api/v1/tool-packages",
         headers={"Authorization": "Bearer user"},
@@ -177,3 +190,22 @@ async def test_regular_user_cannot_create_tool_package(package_client: httpx.Asy
     )
 
     assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_tool_package_api_can_be_disabled_by_release_flag(
+    package_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "TOOL_PACKAGE_V1_ENABLED", False)
+
+    response = await package_client.post(
+        "/api/v1/tool-packages",
+        headers={"Authorization": "Bearer admin"},
+        json={"manifest": _manifest()},
+    )
+
+    assert response.status_code == 404
+    assert "功能未启用" in response.json()["detail"]

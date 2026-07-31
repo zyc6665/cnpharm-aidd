@@ -20,12 +20,15 @@ from app.agents.aidd.service import (
 from app.auth.dependencies import get_current_user
 from app.common.responses import paginated_response, success_response
 from app.database.session import get_db
+from app.feature_flags import require_feature_flag
 from app.models.agent import AgentRun, AgentRunStep
 from app.models.users import User
 from app.schemas.agent import AIDDRunCreate
 
 
-router = APIRouter()
+router = APIRouter(
+    dependencies=[Depends(require_feature_flag("LEGACY_AIDD_API_ENABLED"))]
+)
 
 LEGACY_AGENT_REPLACEMENT = "/api/v1/projects/{project_id}/conversations"
 

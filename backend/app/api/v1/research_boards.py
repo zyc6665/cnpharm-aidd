@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.dependencies import get_current_user
 from app.common.responses import paginated_response, success_response
 from app.database.session import get_db
+from app.feature_flags import require_feature_flag
 from app.models.artifacts import Artifact
 from app.models.users import User
 from app.models.files import File
@@ -22,7 +23,9 @@ from app.schemas.research_boards import (
 from app.logging.audit import AuditAction, ResourceType, get_audit_logger
 from app.services.project_access import load_project_membership, require_project_role
 
-router = APIRouter()
+router = APIRouter(
+    dependencies=[Depends(require_feature_flag("PROJECT_RESEARCH_BOARD_ENABLED"))]
+)
 
 
 def audit_board_read(*, admin_id: str, board_id: str, owner_id: str) -> None:

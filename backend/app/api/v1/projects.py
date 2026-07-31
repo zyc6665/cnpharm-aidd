@@ -7,12 +7,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.dependencies import get_current_user
 from app.common.responses import success_response
 from app.database.session import get_db
+from app.feature_flags import require_feature_flag
 from app.models.projects import Organization, Project, ProjectMember
 from app.models.users import User
 from app.schemas.projects import ProjectCreate, ProjectMemberCreate, ProjectUpdate
 from app.services.project_access import load_project_membership, require_project_role
 
-router = APIRouter()
+router = APIRouter(
+    dependencies=[Depends(require_feature_flag("AIDD_PROJECT_WORKSPACE_ENABLED"))]
+)
 DEFAULT_ORGANIZATION_SLUG = "default"
 
 
@@ -34,10 +37,14 @@ def _serialize(project: Project, membership: ProjectMember) -> dict:
 
 async def _get_or_create_default_organization(db: AsyncSession) -> Organization:
     organization = (
-        await db.execute(select(Organization).where(Organization.slug == DEFAULT_ORGANIZATION_SLUG))
+        await db.execute(
+            select(Organization).where(Organization.slug == DEFAULT_ORGANIZATION_SLUG)
+        )
     ).scalar_one_or_none()
     if organization is None:
-        organization = Organization(name="Default Organization", slug=DEFAULT_ORGANIZATION_SLUG)
+        organization = Organization(
+            name="Default Organization", slug=DEFAULT_ORGANIZATION_SLUG
+        )
         db.add(organization)
         await db.flush()
     return organization
@@ -54,7 +61,11 @@ async def list_projects(
         .where(ProjectMember.user_id == current_user.id)
         .order_by(Project.updated_at.desc())
     )
-    return success_response(data={"items": [_serialize(project, member) for project, member in result.all()]})
+    return success_response(
+        data={
+            "items": [_serialize(project, member) for project, member in result.all()]
+        }
+    )
 
 
 @router.post("", response_model=dict)
@@ -71,12 +82,16 @@ async def create_project(
     )
     db.add(project)
     await db.flush()
-    membership = ProjectMember(project_id=project.id, user_id=current_user.id, role="owner")
+    membership = ProjectMember(
+        project_id=project.id, user_id=current_user.id, role="owner"
+    )
     db.add(membership)
     await db.commit()
     await db.refresh(project)
     await db.refresh(membership)
-    return success_response(data=_serialize(project, membership), message="研究项目已创建")
+    return success_response(
+        data=_serialize(project, membership), message="研究项目已创建"
+    )
 
 
 @router.get("/{project_id}", response_model=dict)
@@ -110,7 +125,9 @@ async def update_project(
         setattr(project, field, value)
     await db.commit()
     await db.refresh(project)
-    return success_response(data=_serialize(project, membership), message="研究项目已更新")
+    return success_response(
+        data=_serialize(project, membership), message="研究项目已更新"
+    )
 
 
 @router.post("/{project_id}/members", response_model=dict)
@@ -126,7 +143,9 @@ async def add_project_member(
         user=current_user,
         allowed_roles={"owner"},
     )
-    user = (await db.execute(select(User).where(User.email == data.email))).scalar_one_or_none()
+    user = (
+        await db.execute(select(User).where(User.email == data.email))
+    ).scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=404, detail="用户不存在")
     existing = (
@@ -144,6 +163,11 @@ async def add_project_member(
     await db.commit()
     await db.refresh(membership)
     return success_response(
-        data={"id": membership.id, "user_id": user.id, "email": user.email, "role": membership.role},
+        data={
+            "id": membership.id,
+            "user_id": user.id,
+            "email": user.email,
+            "role": membership.role,
+        },
         message="项目成员已添加",
     )

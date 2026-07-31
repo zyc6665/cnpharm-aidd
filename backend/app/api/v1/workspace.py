@@ -9,17 +9,20 @@ from app.auth.dependencies import get_current_user
 from app.common.responses import success_response
 from app.common.time import utcnow
 from app.database.session import get_db
+from app.feature_flags import require_feature_flag
 from app.models.files import File
 from app.models.tasks import Task
 from app.models.tools import Tool
 from app.models.users import User
 from app.models.workflows import ResearchBoard, WorkflowDefinition
 
-router = APIRouter()
-ATTENTION_STATUSES = {'pending', 'running', 'failure'}
+router = APIRouter(
+    dependencies=[Depends(require_feature_flag("AIDD_PROJECT_WORKSPACE_ENABLED"))]
+)
+ATTENTION_STATUSES = {"pending", "running", "failure"}
 
 
-@router.get('/overview', response_model=dict)
+@router.get("/overview", response_model=dict)
 async def get_workspace_overview(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -37,11 +40,11 @@ async def get_workspace_overview(
         .group_by(func.lower(Task.status))
     )
     task_status_counts = {
-        'pending': 0,
-        'running': 0,
-        'success': 0,
-        'failure': 0,
-        'canceled': 0,
+        "pending": 0,
+        "running": 0,
+        "success": 0,
+        "failure": 0,
+        "canceled": 0,
         **{str(status): count for status, count in count_result.all()},
     }
     board_result = await db.execute(
@@ -68,7 +71,7 @@ async def get_workspace_overview(
         .limit(8)
     )
     frequent_tool_result = await db.execute(
-        select(Tool.id, Tool.name, Tool.slug, func.count(Task.id).label('usage_count'))
+        select(Tool.id, Tool.name, Tool.slug, func.count(Task.id).label("usage_count"))
         .join(Task, Task.tool_id == Tool.id)
         .where(Task.user_id == current_user.id)
         .group_by(Tool.id, Tool.name, Tool.slug)
@@ -76,54 +79,58 @@ async def get_workspace_overview(
         .limit(6)
     )
     tasks = list(task_result.scalars())
-    return success_response(data={
-        'tasks': [
-            {
-                'id': task.id,
-                'name': task.name,
-                'status': (task.status or '').lower(),
-                'progress': task.progress,
-                'error_message': task.error_message,
-                'tool_id': task.tool_id,
-                'tool_name': task.tool.name if task.tool else None,
-                'tool_slug': task.tool.slug if task.tool else None,
-                'updated_at': task.updated_at,
-                'created_at': task.created_at,
-            }
-            for task in tasks
-        ],
-        'attention_task_count': sum(task_status_counts[status] for status in ATTENTION_STATUSES),
-        'task_status_counts': task_status_counts,
-        'boards': [
-            {
-                'id': board.id,
-                'name': board.name,
-                'node_count': len((board.content or {}).get('nodes', [])),
-                'updated_at': board.updated_at,
-            }
-            for board in board_result.scalars()
-        ],
-        'workflows': [
-            {
-                'id': workflow.id,
-                'name': workflow.name,
-                'status': workflow.status,
-                'updated_at': workflow.updated_at,
-            }
-            for workflow in workflow_result.scalars()
-        ],
-        'files': [
-            {
-                'id': file.id,
-                'filename': file.filename,
-                'content_type': file.content_type,
-                'size_bytes': file.size_bytes,
-                'updated_at': file.updated_at,
-            }
-            for file in file_result.scalars()
-        ],
-        'frequent_tools': [
-            {'id': tool_id, 'name': name, 'slug': slug, 'usage_count': usage_count}
-            for tool_id, name, slug, usage_count in frequent_tool_result.all()
-        ],
-    })
+    return success_response(
+        data={
+            "tasks": [
+                {
+                    "id": task.id,
+                    "name": task.name,
+                    "status": (task.status or "").lower(),
+                    "progress": task.progress,
+                    "error_message": task.error_message,
+                    "tool_id": task.tool_id,
+                    "tool_name": task.tool.name if task.tool else None,
+                    "tool_slug": task.tool.slug if task.tool else None,
+                    "updated_at": task.updated_at,
+                    "created_at": task.created_at,
+                }
+                for task in tasks
+            ],
+            "attention_task_count": sum(
+                task_status_counts[status] for status in ATTENTION_STATUSES
+            ),
+            "task_status_counts": task_status_counts,
+            "boards": [
+                {
+                    "id": board.id,
+                    "name": board.name,
+                    "node_count": len((board.content or {}).get("nodes", [])),
+                    "updated_at": board.updated_at,
+                }
+                for board in board_result.scalars()
+            ],
+            "workflows": [
+                {
+                    "id": workflow.id,
+                    "name": workflow.name,
+                    "status": workflow.status,
+                    "updated_at": workflow.updated_at,
+                }
+                for workflow in workflow_result.scalars()
+            ],
+            "files": [
+                {
+                    "id": file.id,
+                    "filename": file.filename,
+                    "content_type": file.content_type,
+                    "size_bytes": file.size_bytes,
+                    "updated_at": file.updated_at,
+                }
+                for file in file_result.scalars()
+            ],
+            "frequent_tools": [
+                {"id": tool_id, "name": name, "slug": slug, "usage_count": usage_count}
+                for tool_id, name, slug, usage_count in frequent_tool_result.all()
+            ],
+        }
+    )

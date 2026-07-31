@@ -12,6 +12,7 @@ from app.agents.aidd.project_service import ProjectAgentService, ProjectPlanResu
 from app.auth.dependencies import get_current_user
 from app.common.responses import success_response
 from app.database.session import get_db
+from app.feature_flags import require_feature_flag
 from app.execution.contracts import (
     ExecutionHandle,
     ExecutionRequest,
@@ -45,7 +46,9 @@ from app.services.conversations import (
 from app.services.project_access import load_project_membership, require_project_role
 
 
-router = APIRouter()
+router = APIRouter(
+    dependencies=[Depends(require_feature_flag("AIDD_PROJECT_CONVERSATIONS_ENABLED"))]
+)
 
 
 class UnavailableExecutionPort:

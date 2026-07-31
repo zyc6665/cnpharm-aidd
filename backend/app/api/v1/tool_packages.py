@@ -12,16 +12,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.auth.dependencies import get_admin_user
-from app.common.exceptions import ConflictException, NotFoundException, ValidationException
+from app.common.exceptions import (
+    ConflictException,
+    NotFoundException,
+    ValidationException,
+)
 from app.common.responses import success_response
 from app.database.session import get_db
+from app.feature_flags import require_feature_flag
 from app.models.tool_packages import ToolPackage, ToolPackageVersion
 from app.models.users import User
 from app.schemas.tool_packages import ToolPackageCreate
 from app.tool_packages.validator import validate_tool_package
 
 
-router = APIRouter()
+router = APIRouter(
+    dependencies=[Depends(require_feature_flag("TOOL_PACKAGE_V1_ENABLED"))]
+)
 
 
 @router.post("", response_model=dict)
@@ -33,7 +40,9 @@ async def create_tool_package(
     manifest = request.manifest
     validation = validate_tool_package(manifest)
     if not validation.is_valid:
-        raise ValidationException("；".join(validation.errors), detail=validation.errors)
+        raise ValidationException(
+            "；".join(validation.errors), detail=validation.errors
+        )
     duplicate = await db.execute(
         select(ToolPackage.id).where(ToolPackage.slug == manifest.metadata.slug)
     )
@@ -64,7 +73,9 @@ async def create_tool_package(
     await db.flush()
     package.current_version_id = version.id
     await db.commit()
-    return success_response(data=_serialize_package(await _load_package(db, package.id)))
+    return success_response(
+        data=_serialize_package(await _load_package(db, package.id))
+    )
 
 
 @router.get("/{package_id}", response_model=dict)
@@ -73,7 +84,9 @@ async def get_tool_package(
     current_user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return success_response(data=_serialize_package(await _load_package(db, package_id)))
+    return success_response(
+        data=_serialize_package(await _load_package(db, package_id))
+    )
 
 
 @router.post("/{package_id}/publish", response_model=dict)
@@ -90,7 +103,9 @@ async def publish_tool_package(
         raise ValidationException("Tool Package 当前版本缺少签名，不能发布")
     package.status = "published"
     await db.commit()
-    return success_response(data=_serialize_package(package), message="Tool Package 发布成功")
+    return success_response(
+        data=_serialize_package(package), message="Tool Package 发布成功"
+    )
 
 
 async def _load_package(db: AsyncSession, package_id: str) -> ToolPackage:
@@ -107,7 +122,9 @@ async def _load_package(db: AsyncSession, package_id: str) -> ToolPackage:
 
 
 def _manifest_digest(manifest: dict[str, Any]) -> str:
-    canonical = json.dumps(manifest, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+    canonical = json.dumps(
+        manifest, ensure_ascii=True, sort_keys=True, separators=(",", ":")
+    )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
@@ -120,18 +137,20 @@ def _serialize_package(package: ToolPackage) -> dict[str, Any]:
         "description": package.description,
         "status": package.status,
         "owner_id": package.owner_id,
-        "current_version": None
-        if version is None
-        else {
-            "id": version.id,
-            "version": version.version,
-            "manifest": version.manifest,
-            "manifest_digest": version.manifest_digest,
-            "signature": version.signature,
-            "is_signed": version.is_signed,
-            "validation_status": version.validation_status,
-            "validation_errors": list(version.validation_errors or []),
-        },
+        "current_version": (
+            None
+            if version is None
+            else {
+                "id": version.id,
+                "version": version.version,
+                "manifest": version.manifest,
+                "manifest_digest": version.manifest_digest,
+                "signature": version.signature,
+                "is_signed": version.is_signed,
+                "validation_status": version.validation_status,
+                "validation_errors": list(version.validation_errors or []),
+            }
+        ),
         "created_at": package.created_at.isoformat(),
         "updated_at": package.updated_at.isoformat(),
     }
