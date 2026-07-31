@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:sciminer:lvpocket:parameters:v1",
+  "title": "LVpocket parameters",
+  "type": "object",
+  "properties": {
+    "model_choice": {
+      "type": "string",
+      "enum": ["auto", "all_scpdb", "alpha", "beta", "alpha_beta", "alpha_and_beta"],
+      "default": "auto"
+    },
+    "device": {
+      "type": "string",
+      "enum": ["auto", "gpu", "cpu"],
+      "default": "auto"
+    }
+  },
+  "additionalProperties": false
+}

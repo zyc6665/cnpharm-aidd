@@ -1,0 +1,23 @@
+name: haiguang-dcu
+accelerator: haiguang_dcu
+executor_types:
+  - container
+  - remote_job
+image: registry.example.invalid/aidd/protein-pocket-template:1.0.0-dcu
+entrypoint:
+  - bash
+  - runner/entrypoint.sh
+resources:
+  cpu: 4
+  memory_mb: 16384
+  gpu_memory_mb: 8192
+  devices:
+    - hygon.com/dcu
+  driver: ">=6.2"
+validation_status: adapted_pending_hardware_validation
+hardware_validated: false
+inputs:
+  - protein_structure
+outputs:
+  - pocket_result
+  - run_report

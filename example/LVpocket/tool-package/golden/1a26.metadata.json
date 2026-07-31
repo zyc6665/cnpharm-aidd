@@ -1,0 +1,53 @@
+{
+  "schema_version": "1.0",
+  "pdb_id": "1A26",
+  "title": "The Catalytic Fragment of Poly(ADP-Ribose) Polymerase Complexed with Carba-NAD",
+  "source": {
+    "provider": "RCSB Protein Data Bank",
+    "url": "https://www.rcsb.org/structure/1A26",
+    "entry_doi": "10.2210/pdb1A26/pdb"
+  },
+  "license": {
+    "spdx_id": "CC0-1.0",
+    "url": "https://www.wwpdb.org/about/usage-policies"
+  },
+  "input": {
+    "path": "../../input/protein.pdb",
+    "sha256": "7813fb5d8b286aed743dfde3294b5190198ea71ba29e431eff4eb99ae36a7699",
+    "format": "pdb",
+    "chain": "A",
+    "residue_range": "662-1012"
+  },
+  "preprocessing": {
+    "derived_from": "RCSB 1A26 coordinate file",
+    "rules": [
+      "retain only chain A ATOM records in deposited order",
+      "exclude HETATM ligand and crystallographic solvent records",
+      "preserve deposited atom coordinates, occupancy, and B-factor fields",
+      "append one TER record and one END record",
+      "do not renumber atoms or residues"
+    ]
+  },
+  "acceptance": {
+    "tolerances": {
+      "pocket_count_absolute": 1,
+      "pocket_centroid_distance_angstrom": 1.5,
+      "pocket_residue_jaccard_minimum": 0.8
+    },
+    "note": "Thresholds define future reproducibility checks; no golden output is fabricated in this package."
+  },
+  "validation": {
+    "cpu": {
+      "status": "validated",
+      "evidence": "existing LVpocket runtime compatibility"
+    },
+    "nvidia": {
+      "status": "validated",
+      "evidence": "existing NVIDIA deployment; auditable run identifiers and output hashes are not embedded"
+    },
+    "dcu": {
+      "status": "adapted_pending_hardware_validation",
+      "evidence": "manifest adaptation only; no DCU hardware run is claimed"
+    }
+  }
+}

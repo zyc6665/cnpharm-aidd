@@ -26,6 +26,7 @@ from app.models.conversations import (
     PlanDecision,
     PlanVersion,
 )
+from app.models.tool_packages import ToolPackage, ToolPackageVersion
 
 __all__ = [
     "User",
@@ -42,4 +43,5 @@ __all__ = [
     "Organization", "Project", "ProjectMember",
     "AgentEvent", "Conversation", "ConversationBranch", "ConversationMessage",
     "PlanDecision", "PlanVersion",
+    "ToolPackage", "ToolPackageVersion",
 ]

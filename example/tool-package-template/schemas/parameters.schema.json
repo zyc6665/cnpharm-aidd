@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:sciminer:tool-package-template:parameters:v1",
+  "title": "Pocket analysis parameters",
+  "type": "object",
+  "properties": {
+    "confidence_threshold": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.5
+    }
+  },
+  "additionalProperties": false
+}

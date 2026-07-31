@@ -1,0 +1,12 @@
+{
+  "parameters": {
+    "confidence_threshold": 0.5
+  },
+  "inputs": {
+    "protein": {
+      "artifact_id": "018f25d8-7a37-7c2f-9c1d-0ae22736f914",
+      "semantic_type": "protein_structure",
+      "uri": "artifact://018f25d8-7a37-7c2f-9c1d-0ae22736f914"
+    }
+  }
+}

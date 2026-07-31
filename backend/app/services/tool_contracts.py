@@ -14,6 +14,9 @@ SUPPORTED_TOOL_EXECUTOR_TYPES = {"remote_api", "docker_image", "python_script", 
 def build_tool_contract(tool: Any, *, capability: Any | None = None) -> dict[str, Any]:
     """Build the stable platform-facing contract for a persisted tool."""
     current_version = getattr(tool, "current_version", None)
+    package_manifest = getattr(current_version, "manifest", None)
+    if isinstance(package_manifest, dict):
+        return _build_tool_package_contract(tool, current_version, package_manifest)
     config = getattr(current_version, "config", None)
     if not isinstance(config, dict):
         config = {}
@@ -38,6 +41,78 @@ def build_tool_contract(tool: Any, *, capability: Any | None = None) -> dict[str
             virtual=False,
         ),
         "validation": {"status": "valid", "errors": []},
+    }
+
+
+def _build_tool_package_contract(
+    package: Any,
+    current_version: Any,
+    manifest: dict[str, Any],
+) -> dict[str, Any]:
+    """Project Tool Package v1 onto the legacy stable contract shape."""
+    metadata = manifest.get("metadata") if isinstance(manifest.get("metadata"), dict) else {}
+    artifacts = manifest.get("artifacts") if isinstance(manifest.get("artifacts"), dict) else {}
+    variants = [item for item in manifest.get("variants", []) if isinstance(item, dict)]
+    inputs = [item for item in artifacts.get("inputs", []) if isinstance(item, dict)]
+    outputs = [item for item in artifacts.get("outputs", []) if isinstance(item, dict)]
+    validation_errors = list(getattr(current_version, "validation_errors", None) or [])
+    validation_status = getattr(current_version, "validation_status", None)
+    return {
+        "contract_version": TOOL_CONTRACT_VERSION,
+        "id": getattr(package, "id", None),
+        "slug": getattr(package, "slug", None) or metadata.get("slug"),
+        "name": getattr(package, "name", None) or metadata.get("name"),
+        "description": getattr(package, "description", None) or metadata.get("description"),
+        "status": getattr(package, "status", None),
+        "is_public": getattr(package, "status", None) == "published",
+        "version": {
+            "id": getattr(current_version, "id", None),
+            "version": getattr(current_version, "version", None) or metadata.get("version"),
+            "is_active": True,
+            "deprecated": False,
+        },
+        "executor": {
+            "type": "tool_package",
+            "timeout_sec": None,
+        },
+        "schema": {"input": {}, "output": {}},
+        "capability": {
+            "enabled": True,
+            "capability": metadata.get("slug"),
+            "stage": None,
+            "inputs": [
+                {
+                    "semantic_type": item.get("semantic_type"),
+                    "field": item.get("name"),
+                    "required": bool(item.get("required", True)),
+                    "accepted_extensions": [],
+                }
+                for item in inputs
+                if item.get("semantic_type")
+            ],
+            "outputs": [
+                {
+                    "semantic_type": item.get("semantic_type"),
+                    "source": "artifact",
+                    "match": {"artifact_type": item.get("artifact_type")},
+                    "path": None,
+                    "required": bool(item.get("required", True)),
+                }
+                for item in outputs
+                if item.get("semantic_type")
+            ],
+            "defaults": {},
+            "virtual": False,
+        },
+        "package": {
+            "api_version": manifest.get("api_version"),
+            "kind": manifest.get("kind"),
+        },
+        "variants": variants,
+        "validation": {
+            "status": "valid" if validation_status == "valid" and not validation_errors else "invalid",
+            "errors": validation_errors,
+        },
     }
 
 

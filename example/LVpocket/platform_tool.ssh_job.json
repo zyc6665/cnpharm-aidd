@@ -5,6 +5,8 @@
   "icon": "L",
   "category": "bioinformatics",
   "version": "0.1.2",
+  "deprecated": true,
+  "tool_package": "tool-package/tool.yaml",
   "changelog": "Switch to the LVpocket-2 TensorFlow 2 runtime with direct host IP, password authentication, docker_exec, and explicit PATH export.",
   "tool_config": {
     "type": "ssh_job",

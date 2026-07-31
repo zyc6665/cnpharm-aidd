@@ -1,0 +1,20 @@
+name: nvidia-cuda
+accelerator: nvidia_cuda
+executor_types:
+  - remote_job
+entrypoint:
+  - /workspace/LVpocket-2/platform_run.sh
+resources:
+  cpu: 8
+  memory_mb: 16384
+  gpu_memory_mb: 16384
+  devices:
+    - nvidia.com/gpu
+  driver: ">=535"
+validation_status: validated
+hardware_validated: true
+inputs:
+  - protein_structure
+outputs:
+  - pocket_result
+  - run_report

@@ -12,6 +12,7 @@ from app.api.v1 import (
     research_boards,
     system,
     tasks,
+    tool_packages,
     workspace,
     tool_categories,
     tool_workbench_admin,
@@ -28,6 +29,7 @@ api_router.include_router(auth.router, prefix="/auth", tags=["认证"])
 api_router.include_router(verification.router, prefix="/verification", tags=["验证码"])
 api_router.include_router(users.router, prefix="/users", tags=["用户"])
 api_router.include_router(tools.router, prefix="/tools", tags=["工具"])
+api_router.include_router(tool_packages.router, prefix="/tool-packages", tags=["工具包"])
 api_router.include_router(tool_categories.router)
 api_router.include_router(tool_workbench_admin.group_router)
 api_router.include_router(tool_workbench_admin.mapping_router)

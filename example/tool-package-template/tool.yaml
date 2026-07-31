@@ -1,0 +1,26 @@
+api_version: aidd.sciminer/v1
+kind: ToolPackage
+metadata:
+  slug: protein-pocket-template
+  name: Protein Pocket Tool Template
+  version: 1.0.0
+  description: Production-oriented template for a protein pocket analysis tool.
+artifacts:
+  inputs:
+    - name: protein
+      semantic_type: protein_structure
+      artifact_type: protein_structure
+      required: true
+  outputs:
+    - name: pockets
+      semantic_type: pocket_result
+      artifact_type: pocket_result
+      required: true
+    - name: report
+      semantic_type: run_report
+      artifact_type: run_report
+      required: true
+variants:
+  - file: variants/cpu.yaml
+  - file: variants/nvidia-cuda.yaml
+  - file: variants/haiguang-dcu.yaml

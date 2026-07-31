@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:sciminer:tool-package-template:outputs:v1",
+  "title": "Pocket analysis outputs",
+  "type": "object",
+  "required": ["pockets", "report"],
+  "properties": {
+    "pockets": {
+      "allOf": [
+        {"$ref": "#/$defs/artifact"},
+        {
+          "properties": {
+            "artifact_type": {"const": "pocket_result"}
+          }
+        }
+      ]
+    },
+    "report": {
+      "allOf": [
+        {"$ref": "#/$defs/artifact"},
+        {
+          "properties": {
+            "artifact_type": {"const": "run_report"}
+          }
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "required": ["artifact_type", "path", "sha256"],
+      "properties": {
+        "artifact_type": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^[^/]"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
