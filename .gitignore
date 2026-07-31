@@ -42,6 +42,7 @@ backend/.env
 /.vscode/
 
 # Local scratch files
+.impeccable/
 .claude/worktrees/
 *.log
 *.pid
