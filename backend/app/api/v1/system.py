@@ -31,8 +31,10 @@ router = APIRouter()
 
 # ==================== Schemas ====================
 
+
 class ServiceStatus(BaseModel):
     """服务状态"""
+
     name: str
     status: str  # healthy, unhealthy, unknown
     latency_ms: Optional[float] = None
@@ -41,6 +43,7 @@ class ServiceStatus(BaseModel):
 
 class HealthResponse(BaseModel):
     """健康检查响应"""
+
     status: str  # healthy, degraded, unhealthy
     version: str
     environment: str
@@ -50,6 +53,7 @@ class HealthResponse(BaseModel):
 
 class SystemInfoResponse(BaseModel):
     """系统信息响应"""
+
     # 应用信息
     app_name: str
     app_version: str
@@ -79,6 +83,7 @@ class SystemInfoResponse(BaseModel):
 
 class SystemStatsResponse(BaseModel):
     """系统统计响应"""
+
     # 数据库统计
     total_users: int
     total_tools: int
@@ -96,6 +101,7 @@ class SystemStatsResponse(BaseModel):
 
 
 # ==================== 健康检查 ====================
+
 
 @router.get("/health", response_model=HealthResponse, summary="系统健康检查")
 async def health_check(db: AsyncSession = Depends(get_db)):
@@ -139,7 +145,7 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         version=settings.APP_VERSION,
         environment=settings.ENVIRONMENT,
         timestamp=utcnow().isoformat(),
-        services=services
+        services=services,
     )
 
 
@@ -153,13 +159,11 @@ async def _check_database(db: AsyncSession) -> ServiceStatus:
             name="database",
             status="healthy",
             latency_ms=round(latency, 2),
-            message="数据库连接正常"
+            message="数据库连接正常",
         )
     except Exception as e:
         return ServiceStatus(
-            name="database",
-            status="unhealthy",
-            message=f"数据库连接失败: {str(e)}"
+            name="database", status="unhealthy", message=f"数据库连接失败: {str(e)}"
         )
 
 
@@ -168,6 +172,7 @@ async def _check_cache() -> ServiceStatus:
     start = utcnow()
     try:
         from app.cache import get_cache_backend
+
         cache = get_cache_backend()
 
         # 测试写入和读取
@@ -184,19 +189,15 @@ async def _check_cache() -> ServiceStatus:
                 name="cache",
                 status="healthy",
                 latency_ms=round(latency, 2),
-                message=f"缓存服务正常 ({settings.CACHE_BACKEND})"
+                message=f"缓存服务正常 ({settings.CACHE_BACKEND})",
             )
         else:
             return ServiceStatus(
-                name="cache",
-                status="unhealthy",
-                message="缓存读写不一致"
+                name="cache", status="unhealthy", message="缓存读写不一致"
             )
     except Exception as e:
         return ServiceStatus(
-            name="cache",
-            status="unhealthy",
-            message=f"缓存服务异常: {str(e)}"
+            name="cache", status="unhealthy", message=f"缓存服务异常: {str(e)}"
         )
 
 
@@ -204,6 +205,7 @@ async def _check_storage() -> ServiceStatus:
     """检查存储服务"""
     try:
         from app.storage import get_storage_backend
+
         storage = get_storage_backend()
 
         # 检查存储是否可用
@@ -214,26 +216,24 @@ async def _check_storage() -> ServiceStatus:
                 return ServiceStatus(
                     name="storage",
                     status="healthy",
-                    message=f"本地存储正常 ({storage_path})"
+                    message=f"本地存储正常 ({storage_path})",
                 )
             else:
                 return ServiceStatus(
                     name="storage",
                     status="unhealthy",
-                    message=f"本地存储目录不可写: {storage_path}"
+                    message=f"本地存储目录不可写: {storage_path}",
                 )
         else:
             # MinIO 检查
             return ServiceStatus(
                 name="storage",
                 status="healthy",
-                message=f"存储服务正常 ({settings.STORAGE_BACKEND})"
+                message=f"存储服务正常 ({settings.STORAGE_BACKEND})",
             )
     except Exception as e:
         return ServiceStatus(
-            name="storage",
-            status="unhealthy",
-            message=f"存储服务异常: {str(e)}"
+            name="storage", status="unhealthy", message=f"存储服务异常: {str(e)}"
         )
 
 
@@ -241,37 +241,27 @@ async def _check_celery() -> ServiceStatus:
     """检查 Celery 任务队列"""
     try:
         from app.worker.celery_app import celery_app
+
         # 简单检查 Celery 是否配置
         if celery_app.conf.broker_url:
             return ServiceStatus(
-                name="celery",
-                status="healthy",
-                message="Celery 已配置"
+                name="celery", status="healthy", message="Celery 已配置"
             )
         else:
             return ServiceStatus(
-                name="celery",
-                status="unknown",
-                message="Celery 未配置"
+                name="celery", status="unknown", message="Celery 未配置"
             )
     except Exception as e:
         return ServiceStatus(
-            name="celery",
-            status="unhealthy",
-            message=f"Celery 检查失败: {str(e)}"
+            name="celery", status="unhealthy", message=f"Celery 检查失败: {str(e)}"
         )
 
 
 # ==================== 系统信息 ====================
 
-@router.get(
-    "/info",
-    response_model=dict,
-    summary="获取系统信息"
-)
-async def get_system_info(
-    admin_user: User = Depends(get_admin_user)
-):
+
+@router.get("/info", response_model=dict, summary="获取系统信息")
+async def get_system_info(admin_user: User = Depends(get_admin_user)):
     """
     获取系统详细信息（仅管理员可访问）
 
@@ -282,7 +272,7 @@ async def get_system_info(
     """
     # 系统资源
     memory = psutil.virtual_memory()
-    disk = psutil.disk_usage('/')
+    disk = psutil.disk_usage("/")
 
     # 数据库类型
     if "sqlite" in settings.DATABASE_URL:
@@ -314,21 +304,17 @@ async def get_system_info(
             memory_percent=memory.percent,
             disk_total_gb=round(disk.total / (1024**3), 2),
             disk_free_gb=round(disk.free / (1024**3), 2),
-            disk_percent=disk.percent
+            disk_percent=disk.percent,
         ).model_dump()
     )
 
 
 # ==================== 系统统计 ====================
 
-@router.get(
-    "/stats",
-    response_model=dict,
-    summary="获取系统统计"
-)
+
+@router.get("/stats", response_model=dict, summary="获取系统统计")
 async def get_system_stats(
-    admin_user: User = Depends(get_admin_user),
-    db: AsyncSession = Depends(get_db)
+    admin_user: User = Depends(get_admin_user), db: AsyncSession = Depends(get_db)
 ):
     """
     获取系统统计数据（仅管理员可访问）
@@ -395,12 +381,13 @@ async def get_system_stats(
             running_tasks=running_tasks,
             completed_tasks=completed_tasks,
             failed_tasks=failed_tasks,
-            active_connections=active_connections
+            active_connections=active_connections,
         ).model_dump()
     )
 
 
 # ==================== 配置管理 ====================
+
 
 @router.get("/model-services", response_model=dict, summary="获取模型服务配置")
 async def list_model_service_settings(
@@ -426,7 +413,9 @@ async def create_model_service_setting(
     return success_response(data=service.model_dump(), message="模型服务已创建")
 
 
-@router.put("/model-services/{service_id}", response_model=dict, summary="更新模型服务配置")
+@router.put(
+    "/model-services/{service_id}", response_model=dict, summary="更新模型服务配置"
+)
 async def update_model_service_setting(
     service_id: str,
     service_data: ModelServiceUpdate,
@@ -437,7 +426,9 @@ async def update_model_service_setting(
     return success_response(data=service.model_dump(), message="模型服务已更新")
 
 
-@router.delete("/model-services/{service_id}", response_model=dict, summary="删除模型服务配置")
+@router.delete(
+    "/model-services/{service_id}", response_model=dict, summary="删除模型服务配置"
+)
 async def delete_model_service_setting(
     service_id: str,
     admin_user: User = Depends(get_admin_user),
@@ -447,7 +438,11 @@ async def delete_model_service_setting(
     return success_response(data={"id": service_id}, message="模型服务已删除")
 
 
-@router.post("/model-services/{service_id}/set-default", response_model=dict, summary="设置默认模型服务")
+@router.post(
+    "/model-services/{service_id}/set-default",
+    response_model=dict,
+    summary="设置默认模型服务",
+)
 async def set_default_model_service_setting(
     service_id: str,
     admin_user: User = Depends(get_admin_user),
@@ -457,7 +452,9 @@ async def set_default_model_service_setting(
     return success_response(data=service.model_dump(), message="默认模型服务已更新")
 
 
-@router.post("/model-services/{service_id}/test", response_model=dict, summary="测试模型服务连接")
+@router.post(
+    "/model-services/{service_id}/test", response_model=dict, summary="测试模型服务连接"
+)
 async def test_model_service_setting(
     service_id: str,
     admin_user: User = Depends(get_admin_user),
@@ -466,10 +463,9 @@ async def test_model_service_setting(
     result = await test_model_service(db, service_id)
     return success_response(data=result.model_dump(), message=result.message)
 
+
 @router.get("/config", summary="获取系统配置（管理员）")
-async def get_system_config(
-    admin_user: User = Depends(get_admin_user)
-):
+async def get_system_config(admin_user: User = Depends(get_admin_user)):
     """
     获取当前系统配置（仅管理员可访问）
 
@@ -483,22 +479,38 @@ async def get_system_config(
             "database": {
                 "type": "SQLite" if "sqlite" in settings.DATABASE_URL else "PostgreSQL",
                 "pool_size": settings.DB_POOL_SIZE,
-                "max_overflow": settings.DB_MAX_OVERFLOW
+                "max_overflow": settings.DB_MAX_OVERFLOW,
             },
             "storage": {
                 "backend": settings.STORAGE_BACKEND,
-                "path": settings.STORAGE_PATH if settings.STORAGE_BACKEND == "local" else None,
-                "max_file_size_mb": settings.MAX_FILE_SIZE_MB
+                "path": (
+                    settings.STORAGE_PATH
+                    if settings.STORAGE_BACKEND == "local"
+                    else None
+                ),
+                "max_file_size_mb": settings.MAX_FILE_SIZE_MB,
             },
-            "cache": {
-                "backend": settings.CACHE_BACKEND
-            },
+            "cache": {"backend": settings.CACHE_BACKEND},
             "jwt": {
                 "algorithm": settings.JWT_ALGORITHM,
                 "access_token_expire_minutes": settings.ACCESS_TOKEN_EXPIRE_MINUTES,
-                "refresh_token_expire_days": settings.REFRESH_TOKEN_EXPIRE_DAYS
+                "refresh_token_expire_days": settings.REFRESH_TOKEN_EXPIRE_DAYS,
             },
             "cors_origins": settings.CORS_ORIGINS,
-            "log_level": settings.LOG_LEVEL
+            "log_level": settings.LOG_LEVEL,
+        }
+    )
+
+
+@router.get("/feature-flags", response_model=dict, summary="获取功能开关状态（管理员）")
+async def get_feature_flags(admin_user: User = Depends(get_admin_user)):
+    """返回 AIDD 首月发布门禁开关，便于上线前审计。"""
+    flags = settings.aidd_feature_flags()
+    return success_response(
+        data={
+            "environment": settings.ENVIRONMENT,
+            "items": flags,
+            "enabled_count": sum(1 for item in flags if item["enabled"]),
+            "total": len(flags),
         }
     )

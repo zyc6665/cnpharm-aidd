@@ -65,6 +65,38 @@ class TestCorsDefaults:
         assert "二者都缺失时，加密操作会失败" in contents
 
 
+class TestAiddFeatureFlags:
+    def test_development_feature_flags_default_open_for_local_iteration(self):
+        """开发环境默认开启首月 AIDD 功能，避免本地页面不可访问。"""
+        settings = Settings(ENVIRONMENT="development")
+        flags = {item["key"]: item for item in settings.aidd_feature_flags()}
+
+        assert flags["AIDD_PROJECT_WORKSPACE_ENABLED"]["enabled"] is True
+        assert flags["AIDD_PROJECT_CONVERSATIONS_ENABLED"]["enabled"] is True
+        assert flags["TOOL_PACKAGE_V1_ENABLED"]["enabled"] is True
+        assert flags["PROJECT_RESEARCH_BOARD_ENABLED"]["enabled"] is True
+        assert flags["LEGACY_AIDD_API_ENABLED"]["enabled"] is True
+        assert {item["source"] for item in flags.values()} == {"default"}
+
+    def test_production_feature_flags_default_closed_until_release_enablement(self):
+        """生产环境默认关闭新入口，发布时必须显式打开。"""
+        settings = Settings(
+            ENVIRONMENT="production",
+            DEBUG=False,
+            CORS_ORIGINS=["https://sciminer.example.com"],
+            JWT_SECRET_KEY="j" * 32,
+            SETTINGS_ENCRYPTION_KEY="e" * 32,
+            **_production_runtime_settings("production"),
+        )
+        flags = {item["key"]: item for item in settings.aidd_feature_flags()}
+
+        assert flags["AIDD_PROJECT_WORKSPACE_ENABLED"]["enabled"] is False
+        assert flags["AIDD_PROJECT_CONVERSATIONS_ENABLED"]["enabled"] is False
+        assert flags["TOOL_PACKAGE_V1_ENABLED"]["enabled"] is False
+        assert flags["PROJECT_RESEARCH_BOARD_ENABLED"]["enabled"] is False
+        assert flags["LEGACY_AIDD_API_ENABLED"]["enabled"] is True
+
+
 class TestDeploymentCorsOrigins:
     @pytest.mark.parametrize("environment", ["staging", "production"])
     @pytest.mark.parametrize(

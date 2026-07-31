@@ -89,7 +89,9 @@ async def api_client(db_session: AsyncSession, admin_user: User):
     app.dependency_overrides[get_current_user] = override_get_current_user
 
     transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+    async with httpx.AsyncClient(
+        transport=transport, base_url="http://testserver"
+    ) as client:
         yield client
 
     app.dependency_overrides.clear()
@@ -102,6 +104,7 @@ async def api_client(db_session: AsyncSession, admin_user: User):
         ("/api/v1/system/info", {"app_name", "app_version", "environment"}),
         ("/api/v1/system/stats", {"total_users", "total_tools", "total_tasks"}),
         ("/api/v1/system/config", {"environment", "database", "storage"}),
+        ("/api/v1/system/feature-flags", {"environment", "items", "total"}),
     ],
 )
 async def test_admin_system_routes_use_standard_response_shape(
@@ -119,3 +122,34 @@ async def test_admin_system_routes_use_standard_response_shape(
     payload = response.json()
     assert payload["code"] == 200
     assert expected_keys.issubset(payload["data"].keys())
+
+
+@pytest.mark.asyncio
+async def test_feature_flags_endpoint_exposes_aidd_release_gates(
+    api_client: httpx.AsyncClient,
+):
+    """管理员应能审计首月 AIDD 发布门禁开关。"""
+    response = await api_client.get(
+        "/api/v1/system/feature-flags",
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    items = {item["key"]: item for item in payload["items"]}
+    expected_keys = {
+        "AIDD_PROJECT_WORKSPACE_ENABLED",
+        "AIDD_PROJECT_CONVERSATIONS_ENABLED",
+        "TOOL_PACKAGE_V1_ENABLED",
+        "PROJECT_RESEARCH_BOARD_ENABLED",
+        "LEGACY_AIDD_API_ENABLED",
+    }
+
+    assert set(items) == expected_keys
+    assert payload["total"] == len(expected_keys)
+    assert all(isinstance(item["enabled"], bool) for item in items.values())
+    assert all(
+        item["source"] in {"default", "configured", "environment"}
+        for item in items.values()
+    )
+    assert items["PROJECT_RESEARCH_BOARD_ENABLED"]["description"]

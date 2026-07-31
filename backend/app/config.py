@@ -1,6 +1,7 @@
 # backend/app/config.py
 """应用配置管理"""
 
+import os
 import ipaddress
 import re
 from functools import lru_cache
@@ -18,6 +19,13 @@ _DNS_LABEL_PATTERN = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
 _IPV4_NUMERIC_HOST_PATTERN = re.compile(
     r"(?:0x[0-9a-f]+|0[0-7]*|[1-9][0-9]*)(?:\.(?:0x[0-9a-f]+|0[0-7]*|[1-9][0-9]*)){0,3}"
 )
+_AIDD_FEATURE_FLAG_DESCRIPTIONS = {
+    "AIDD_PROJECT_WORKSPACE_ENABLED": "项目优先研究工作台入口",
+    "AIDD_PROJECT_CONVERSATIONS_ENABLED": "项目研究对话与 Agent 审批链路",
+    "TOOL_PACKAGE_V1_ENABLED": "Tool Package v1 导入、迁移和验证等级",
+    "PROJECT_RESEARCH_BOARD_ENABLED": "项目级整页科研白板",
+    "LEGACY_AIDD_API_ENABLED": "旧 AIDD API 兼容入口",
+}
 
 
 def _is_valid_deployment_cors_origin(origin: str) -> bool:
@@ -280,6 +288,40 @@ class Settings(BaseSettings):
     # ==================== AIDD Agent 配置 ====================
     ENABLE_DATABASE_TOOLS: bool = False
     AIDD_SYSTEM_USER_ID: Optional[str] = None
+    # 首月 AIDD 发布门禁。None 表示使用环境默认值：开发环境开启新入口，
+    # 预发布/生产默认关闭新入口，旧 API 默认保留。
+    AIDD_PROJECT_WORKSPACE_ENABLED: Optional[bool] = None
+    AIDD_PROJECT_CONVERSATIONS_ENABLED: Optional[bool] = None
+    TOOL_PACKAGE_V1_ENABLED: Optional[bool] = None
+    PROJECT_RESEARCH_BOARD_ENABLED: Optional[bool] = None
+    LEGACY_AIDD_API_ENABLED: Optional[bool] = None
+
+    def aidd_feature_flags(self) -> list[dict[str, object]]:
+        """返回首月 AIDD 发布门禁的解析状态，用于管理员审计。"""
+        return [
+            {
+                "key": key,
+                "enabled": self._resolve_aidd_feature_flag(key),
+                "source": self._feature_flag_source(key),
+                "description": description,
+            }
+            for key, description in _AIDD_FEATURE_FLAG_DESCRIPTIONS.items()
+        ]
+
+    def _resolve_aidd_feature_flag(self, key: str) -> bool:
+        configured_value = getattr(self, key)
+        if configured_value is not None:
+            return bool(configured_value)
+        if key == "LEGACY_AIDD_API_ENABLED":
+            return True
+        return self.ENVIRONMENT == "development"
+
+    def _feature_flag_source(self, key: str) -> str:
+        if key in os.environ:
+            return "environment"
+        if getattr(self, key) is not None:
+            return "configured"
+        return "default"
 
     # ==================== 日志配置 ====================
     LOG_LEVEL: str = "INFO"
