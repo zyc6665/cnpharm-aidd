@@ -8,6 +8,7 @@ from app.api.v1.research_boards import (
     create_research_board,
     create_workflow_draft,
     get_research_board,
+    list_research_boards,
     update_research_board,
 )
 from app.database.base import Base
@@ -15,6 +16,7 @@ from app.models import users as _users, workflows as _workflows  # noqa: F401
 from app.models.users import User
 from app.models.files import File
 from app.models.tools import Tool
+from app.models.workflows import ResearchBoard
 from app.schemas.research_boards import ResearchBoardCreate
 from app.schemas.research_boards import ResearchBoardUpdate
 from pydantic import ValidationError
@@ -179,3 +181,30 @@ async def test_admin_board_read_is_audited(db_session, monkeypatch):
     await get_research_board(board['data']['id'], admin, db_session)
 
     assert events == [{'admin_id': admin.id, 'board_id': board['data']['id'], 'owner_id': owner.id}]
+
+
+@pytest.mark.asyncio
+async def test_board_reads_tolerate_legacy_content_shapes(db_session):
+    owner = make_user('owner@example.com')
+    tool = Tool(owner=owner, name='Pocket tool', slug='pocket-tool', status='published', is_public=True)
+    db_session.add_all([owner, tool])
+    await db_session.flush()
+    board = ResearchBoard(
+        owner_id=owner.id,
+        name='Legacy board',
+        content=[
+            {'id': 'tool-1', 'type': 'tool', 'position': {'x': 0, 'y': 0}, 'tool_id': tool.id},
+            'broken-node',
+        ],
+    )
+    db_session.add(board)
+    await db_session.commit()
+    await db_session.refresh(board)
+
+    listed = await list_research_boards(1, 20, None, owner, db_session)
+    loaded = await get_research_board(board.id, owner, db_session)
+    draft = await create_workflow_draft(board.id, owner, db_session)
+
+    assert listed['data']['items'][0]['node_count'] == 1
+    assert loaded['data']['content']['nodes'][0]['id'] == 'tool-1'
+    assert draft['data']['definition']['selected_tool_by_node'] == {'tool-1': 'pocket-tool'}

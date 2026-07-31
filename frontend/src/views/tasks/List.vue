@@ -522,19 +522,35 @@ const fetchAgentRuns = async () => {
   }
 }
 
+const fetchTasksSafely = async () => {
+  try {
+    await fetchTasks()
+  } catch (error) {
+    console.warn('[TaskCenter] Failed to load tasks', error)
+  }
+}
+
+const fetchToolsSafely = async () => {
+  try {
+    await toolsStore.fetchTools({ page: 1, page_size: 100 })
+  } catch (error) {
+    console.warn('[TaskCenter] Failed to load tool filter options', error)
+  }
+}
+
 const handleTabChange = (_key: string) => {
   currentPage.value = 1
-  fetchTasks()
+  void fetchTasksSafely()
 }
 
 const handleSearch = () => {
   currentPage.value = 1
-  fetchTasks()
+  void fetchTasksSafely()
 }
 
 const handleToolChange = () => {
   currentPage.value = 1
-  fetchTasks()
+  void fetchTasksSafely()
 }
 
 const handleTypeTabChange = () => {
@@ -543,14 +559,18 @@ const handleTypeTabChange = () => {
 
 const handleDateChange = () => {
   currentPage.value = 1
-  fetchTasks()
+  void fetchTasksSafely()
 }
 
 const handleRefresh = async () => {
   refreshing.value = true
   try {
-    await Promise.all([fetchTasks(), fetchAgentRuns()])
-    message.success(t('common.refreshSuccess'))
+    const [taskResult] = await Promise.allSettled([fetchTasks(), fetchAgentRuns()])
+    if (taskResult.status === 'fulfilled') {
+      message.success(t('common.refreshSuccess'))
+    } else {
+      message.error(t('common.error'))
+    }
   } finally {
     refreshing.value = false
   }
@@ -595,7 +615,7 @@ const startAutoRefresh = () => {
   if (refreshTimer) return
   refreshTimer = setInterval(() => {
     if (autoRefresh.value && currentTab.value === 'running') {
-      void Promise.all([fetchTasks(), fetchAgentRuns()])
+      void Promise.allSettled([fetchTasksSafely(), fetchAgentRuns()])
     }
   }, 10000) // 每10秒刷新
 }
@@ -618,10 +638,10 @@ watch(autoRefresh, (val) => {
 
 // 生命周期
 onMounted(async () => {
-  await Promise.all([
-    fetchTasks(),
+  await Promise.allSettled([
+    fetchTasksSafely(),
     fetchAgentRuns(),
-    toolsStore.fetchTools({ page: 1, page_size: 100 })
+    fetchToolsSafely()
   ])
 
   startAutoRefresh()

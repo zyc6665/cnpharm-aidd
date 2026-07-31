@@ -33,6 +33,25 @@ router = APIRouter(
 LEGACY_AGENT_REPLACEMENT = "/api/v1/projects/{project_id}/conversations"
 
 
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _as_list(value: Any) -> list[Any]:
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str) and value:
+        return [value]
+    return []
+
+
+def _safe_sort_order(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _with_deprecation(response: dict[str, Any]) -> dict[str, Any]:
     return {
         **response,
@@ -60,12 +79,12 @@ def _serialize_step(step: AgentRunStep) -> dict[str, Any]:
         "task_id": step.task_id,
         "status": step.status,
         "sort_order": step.sort_order,
-        "depends_on_step_ids": step.depends_on_step_ids or [],
-        "semantic_inputs": step.semantic_inputs or {},
-        "semantic_outputs": step.semantic_outputs or {},
-        "params": step.params or {},
-        "input_file_ids": step.input_file_ids or [],
-        "output_file_ids": step.output_file_ids or [],
+        "depends_on_step_ids": _as_list(step.depends_on_step_ids),
+        "semantic_inputs": _as_dict(step.semantic_inputs),
+        "semantic_outputs": _as_dict(step.semantic_outputs),
+        "params": _as_dict(step.params),
+        "input_file_ids": _as_list(step.input_file_ids),
+        "output_file_ids": _as_list(step.output_file_ids),
         "error_message": step.error_message,
         "started_at": step.started_at,
         "finished_at": step.finished_at,
@@ -75,6 +94,8 @@ def _serialize_step(step: AgentRunStep) -> dict[str, Any]:
 
 
 def _serialize_run(run: AgentRun) -> dict[str, Any]:
+    plan = _as_dict(run.plan)
+    steps = list(run.steps or [])
     return {
         "id": run.id,
         "message": run.message,
@@ -82,9 +103,9 @@ def _serialize_run(run: AgentRun) -> dict[str, Any]:
         "status": run.status,
         "input_type": run.input_type,
         "input_file_id": run.input_file_id,
-        "input_files": (run.plan or {}).get("input_files") or {},
-        "requested_outputs": run.requested_outputs or [],
-        "plan": run.plan or {},
+        "input_files": _as_dict(plan.get("input_files")),
+        "requested_outputs": _as_list(run.requested_outputs),
+        "plan": plan,
         "summary": run.summary,
         "error_message": run.error_message,
         "finished_at": run.finished_at,
@@ -92,7 +113,7 @@ def _serialize_run(run: AgentRun) -> dict[str, Any]:
         "updated_at": run.updated_at,
         "steps": [
             _serialize_step(step)
-            for step in sorted(run.steps, key=lambda item: item.sort_order)
+            for step in sorted(steps, key=lambda item: _safe_sort_order(item.sort_order))
         ],
     }
 

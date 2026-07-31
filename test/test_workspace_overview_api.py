@@ -8,6 +8,7 @@ from app.database.base import Base
 from app.models.tasks import Task, TaskStatus
 from app.models.tools import Tool, ToolVersion
 from app.models.users import User
+from app.models.workflows import ResearchBoard
 
 
 @pytest_asyncio.fixture
@@ -47,3 +48,29 @@ async def test_workspace_counts_all_attention_tasks_and_isolates_owner(db_sessio
     assert len(response['data']['tasks']) == 12
     assert all(task['name'].startswith('Owner') for task in response['data']['tasks'])
     assert all(task['tool_name'] == 'Docking' for task in response['data']['tasks'])
+
+
+@pytest.mark.asyncio
+async def test_workspace_overview_tolerates_legacy_board_content_shapes(db_session):
+    owner = User(email='owner@example.com', password_hash='test', status='active')
+    db_session.add(owner)
+    await db_session.flush()
+    db_session.add_all([
+        ResearchBoard(
+            owner_id=owner.id,
+            name='Legacy list board',
+            content=[{'id': 'note-1', 'type': 'note'}],
+        ),
+        ResearchBoard(
+            owner_id=owner.id,
+            name='Legacy scalar board',
+            content='not-json-object',
+        ),
+    ])
+    await db_session.commit()
+
+    response = await get_workspace_overview(owner, db_session)
+
+    boards = {board['name']: board for board in response['data']['boards']}
+    assert boards['Legacy list board']['node_count'] == 1
+    assert boards['Legacy scalar board']['node_count'] == 0

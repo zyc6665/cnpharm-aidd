@@ -109,6 +109,8 @@ export default {
     unknownArtifactType: 'Unknown type',
     loadFailed: 'Research workspace failed to load',
     loadFailedHint: 'Latest project data is unavailable. Check your connection and retry.',
+    overviewLoadFailed: 'Tasks and artifacts are temporarily unavailable',
+    overviewLoadFailedHint: 'Projects loaded, but task and artifact overview failed. Retry when the service recovers.',
     retry: 'Retry',
     project: {
       name: 'Project name',

@@ -15,6 +15,7 @@ from app.models.tasks import Task
 from app.models.tools import Tool
 from app.models.users import User
 from app.models.workflows import ResearchBoard, WorkflowDefinition
+from app.services.research_board_content import board_node_count
 
 router = APIRouter(
     dependencies=[Depends(require_feature_flag("AIDD_PROJECT_WORKSPACE_ENABLED"))]
@@ -104,7 +105,7 @@ async def get_workspace_overview(
                 {
                     "id": board.id,
                     "name": board.name,
-                    "node_count": len((board.content or {}).get("nodes", [])),
+                    "node_count": board_node_count(board.content),
                     "updated_at": board.updated_at,
                 }
                 for board in board_result.scalars()

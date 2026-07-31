@@ -22,6 +22,11 @@ from app.schemas.research_boards import (
 )
 from app.logging.audit import AuditAction, ResourceType, get_audit_logger
 from app.services.project_access import load_project_membership, require_project_role
+from app.services.research_board_content import (
+    board_node_count,
+    board_nodes,
+    normalize_board_content,
+)
 
 router = APIRouter(
     dependencies=[Depends(require_feature_flag("PROJECT_RESEARCH_BOARD_ENABLED"))]
@@ -96,7 +101,7 @@ def _serialize(board: ResearchBoard) -> dict[str, Any]:
         "owner_id": board.owner_id,
         "name": board.name,
         "description": board.description,
-        "content": board.content or {},
+        "content": normalize_board_content(board.content),
         "version": board.version,
         "created_at": board.created_at,
         "updated_at": board.updated_at,
@@ -111,7 +116,7 @@ def _serialize_summary(board: ResearchBoard) -> dict[str, Any]:
         "name": board.name,
         "description": board.description,
         "version": board.version,
-        "node_count": len((board.content or {}).get("nodes", [])),
+        "node_count": board_node_count(board.content),
         "created_at": board.created_at,
         "updated_at": board.updated_at,
     }
@@ -280,7 +285,7 @@ async def create_workflow_draft(
         raise HTTPException(status_code=403, detail="管理员仅可查看科研白板")
     tools = [
         node
-        for node in (board.content or {}).get("nodes", [])
+        for node in board_nodes(board.content)
         if node.get("type") == "tool" and node.get("tool_id")
     ]
     tool_ids = {str(node["tool_id"]) for node in tools}

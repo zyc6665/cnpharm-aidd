@@ -25,6 +25,21 @@
       </template>
     </a-alert>
 
+    <a-alert
+      v-if="overviewLoadError && !loadError"
+      class="workspace-error"
+      type="warning"
+      show-icon
+      :message="t('workspace.overviewLoadFailed')"
+      :description="t('workspace.overviewLoadFailedHint')"
+    >
+      <template #action>
+        <a-button size="small" :loading="loading" @click="loadWorkspace">
+          {{ t('workspace.retry') }}
+        </a-button>
+      </template>
+    </a-alert>
+
     <a-skeleton v-if="loading && !hasLoaded" active :paragraph="{ rows: 10 }" />
     <template v-else-if="!loadError">
       <section class="workspace-section projects-section">
@@ -128,6 +143,7 @@ const router = useRouter()
 const loading = ref(false)
 const hasLoaded = ref(false)
 const loadError = ref(false)
+const overviewLoadError = ref(false)
 const createDialogOpen = ref(false)
 const projects = ref<ResearchProject[]>([])
 const tasks = ref<WorkspaceAttentionTask[]>([])
@@ -143,14 +159,27 @@ async function loadWorkspace() {
   if (loading.value) return
   loading.value = true
   loadError.value = false
+  overviewLoadError.value = false
   try {
-    const [projectResponse, workspaceResponse] = await Promise.all([
+    const [projectResult, workspaceResult] = await Promise.allSettled([
       listProjects(),
       getWorkspaceOverview()
     ])
-    projects.value = projectResponse.data.items
-    tasks.value = workspaceResponse.data.tasks
-    artifacts.value = workspaceResponse.data.files
+
+    if (projectResult.status === 'rejected') {
+      loadError.value = true
+      return
+    }
+
+    projects.value = projectResult.value.data.items
+    if (workspaceResult.status === 'fulfilled') {
+      tasks.value = workspaceResult.value.data.tasks
+      artifacts.value = workspaceResult.value.data.files
+    } else {
+      tasks.value = []
+      artifacts.value = []
+      overviewLoadError.value = true
+    }
     hasLoaded.value = true
   } catch {
     loadError.value = true

@@ -109,6 +109,8 @@ export default {
     unknownArtifactType: '未知类型',
     loadFailed: '研究工作台加载失败',
     loadFailedHint: '无法获取最新项目数据，请检查网络后重试。',
+    overviewLoadFailed: '任务与 Artifact 暂时不可用',
+    overviewLoadFailedHint: '项目列表已加载，任务和 Artifact 概览接口暂时失败，可稍后重试。',
     retry: '重试',
     project: {
       name: '项目名称',

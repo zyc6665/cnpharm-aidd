@@ -93,12 +93,14 @@ describe('WorkspaceView', () => {
     expect(wrapper.text()).not.toContain('使用 7 次')
   })
 
-  it('接口失败时展示可操作的重试状态', async () => {
+  it('概览接口失败时保留项目入口并展示可操作的降级提示', async () => {
     vi.mocked(getWorkspaceOverview).mockRejectedValue(new Error('network'))
     const wrapper = renderWorkspace()
     await flushPromises()
 
-    expect(wrapper.text()).toContain('研究工作台加载失败')
+    expect(wrapper.text()).toContain('任务与 Artifact 暂时不可用')
+    expect(wrapper.text()).toContain('先导优化')
+    expect(wrapper.text()).not.toContain('研究工作台加载失败')
     expect(wrapper.findAll('button').some(button => button.text() === '重试')).toBe(true)
   })
 })

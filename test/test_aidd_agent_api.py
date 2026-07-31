@@ -588,6 +588,56 @@ async def test_admin_can_list_all_agent_runs(
 
 
 @pytest.mark.asyncio
+async def test_legacy_agent_run_list_tolerates_non_object_json_fields(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    current_user: User,
+):
+    run = AgentRun(
+        user_id=current_user.id,
+        message="legacy run",
+        intent="pocket_exploration",
+        status="success",
+        input_type="protein_pdb",
+        requested_outputs="generated_ligand",
+        plan=["legacy-plan"],
+    )
+    db_session.add(run)
+    await db_session.flush()
+    db_session.add(
+        AgentRunStep(
+            agent_run_id=run.id,
+            step_key="legacy-step",
+            tool_slug="legacy-tool",
+            sort_order=0,
+            depends_on_step_ids="previous-step",
+            semantic_inputs=["bad-shape"],
+            semantic_outputs="bad-shape",
+            params="bad-shape",
+            input_file_ids="file-1",
+            output_file_ids="bad-shape",
+        )
+    )
+    await db_session.commit()
+
+    response = await api_client.get(
+        "/api/v1/agents/aidd/runs",
+        headers={"Authorization": "Bearer owner-token"},
+    )
+
+    assert response.status_code == 200
+    item = response.json()["data"]["items"][0]
+    assert item["message"] == "legacy run"
+    assert item["requested_outputs"] == ["generated_ligand"]
+    assert item["plan"] == {}
+    assert item["input_files"] == {}
+    assert item["steps"][0]["depends_on_step_ids"] == ["previous-step"]
+    assert item["steps"][0]["semantic_inputs"] == {}
+    assert item["steps"][0]["params"] == {}
+    assert item["steps"][0]["input_file_ids"] == ["file-1"]
+
+
+@pytest.mark.asyncio
 async def test_owner_can_delete_agent_run_history(
     api_client: httpx.AsyncClient,
     db_session: AsyncSession,
