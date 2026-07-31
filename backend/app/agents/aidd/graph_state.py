@@ -7,6 +7,9 @@ from typing import Any, TypedDict
 
 class AIDDGraphState(TypedDict, total=False):
     run_id: str
+    project_id: str
+    conversation_id: str
+    protein_artifact_version_id: str
     user_id: str
     message: str
     input_file_id: str

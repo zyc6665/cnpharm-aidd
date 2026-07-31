@@ -27,6 +27,34 @@ def load_context_node(state: AIDDGraphState) -> AIDDGraphState:
     return {"status": "context_loaded"}
 
 
+def build_project_lvpocket_plan_node(state: AIDDGraphState) -> AIDDGraphState:
+    """Build the production-validated first vertical without side effects."""
+    protein_version_id = state.get("protein_artifact_version_id")
+    if not protein_version_id:
+        return {"status": "input_required"}
+    return {
+        "plan": {
+            "goal": state.get("message", ""),
+            "protein_artifact_version_id": protein_version_id,
+            "intent": "pocket_detection",
+            "reasoning_summary": "使用已验证的 LVpocket NVIDIA 变体识别候选结合口袋。",
+            "requested_outputs": ["pocket_pdb", "pocket_report"],
+            "parameters": {},
+            "steps": [
+                {
+                    "step_key": "pocket_prediction",
+                    "tool_slug": "lvpocket-pocket-prediction",
+                    "inputs": {"protein_pdb": protein_version_id},
+                    "outputs": ["pocket_pdb", "pocket_report"],
+                    "parameters": {},
+                }
+            ],
+        },
+        "reasoning_summary": "使用已验证的 LVpocket NVIDIA 变体识别候选结合口袋。",
+        "status": "planned",
+    }
+
+
 def classify_input_node(state: AIDDGraphState) -> AIDDGraphState:
     if state.get("input_files"):
         semantic_inputs = state["input_files"]
@@ -61,7 +89,9 @@ def discover_tools_node(state: AIDDGraphState) -> AIDDGraphState:
             "status": "tools_discovered",
         }
 
-    configured_slugs = set(state.get("configured_tool_slugs") or AIDD_TOOL_CAPABILITIES.keys())
+    configured_slugs = set(
+        state.get("configured_tool_slugs") or AIDD_TOOL_CAPABILITIES.keys()
+    )
     available_tools = [
         _capability_to_tool_summary(tool_slug)
         for tool_slug, capability in AIDD_TOOL_CAPABILITIES.items()

@@ -27,6 +27,26 @@ from app.schemas.agent import AIDDRunCreate
 
 router = APIRouter()
 
+LEGACY_AGENT_REPLACEMENT = "/api/v1/projects/{project_id}/conversations"
+
+
+def _with_deprecation(response: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **response,
+        "meta": {
+            "deprecated": True,
+            "replacement": LEGACY_AGENT_REPLACEMENT,
+        },
+    }
+
+
+def _legacy_success_response(
+    *,
+    data: Any = None,
+    message: str = "success",
+) -> dict[str, Any]:
+    return _with_deprecation(success_response(data=data, message=message))
+
 
 def _serialize_step(step: AgentRunStep) -> dict[str, Any]:
     return {
@@ -67,31 +87,40 @@ def _serialize_run(run: AgentRun) -> dict[str, Any]:
         "finished_at": run.finished_at,
         "created_at": run.created_at,
         "updated_at": run.updated_at,
-        "steps": [_serialize_step(step) for step in sorted(run.steps, key=lambda item: item.sort_order)],
+        "steps": [
+            _serialize_step(step)
+            for step in sorted(run.steps, key=lambda item: item.sort_order)
+        ],
     }
 
 
-@router.post("/aidd/runs", response_model=dict)
+@router.post("/aidd/runs", response_model=dict, deprecated=True)
 async def create_aidd_agent_run(
     run_data: AIDDRunCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     run = await create_agent_run(db, current_user=current_user, run_data=run_data)
-    return success_response(data=_serialize_run(run), message="智能体运行创建成功")
+    return _legacy_success_response(
+        data=_serialize_run(run), message="智能体运行创建成功"
+    )
 
 
-@router.post("/aidd/workflow-drafts", response_model=dict)
+@router.post("/aidd/workflow-drafts", response_model=dict, deprecated=True)
 async def create_aidd_workflow_draft(
     run_data: AIDDRunCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    draft = await create_workflow_draft(db, current_user=current_user, run_data=run_data)
-    return success_response(data=draft.model_dump(), message="工作流草稿生成成功")
+    draft = await create_workflow_draft(
+        db, current_user=current_user, run_data=run_data
+    )
+    return _legacy_success_response(
+        data=draft.model_dump(), message="工作流草稿生成成功"
+    )
 
 
-@router.get("/aidd/runs", response_model=dict)
+@router.get("/aidd/runs", response_model=dict, deprecated=True)
 async def list_aidd_agent_runs(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -101,35 +130,39 @@ async def list_aidd_agent_runs(
     runs = await list_agent_runs(db, current_user=current_user)
     total = len(runs)
     start = (page - 1) * page_size
-    return paginated_response(
-        items=[_serialize_run(run) for run in runs[start : start + page_size]],
-        total=total,
-        page=page,
-        page_size=page_size,
+    return _with_deprecation(
+        paginated_response(
+            items=[_serialize_run(run) for run in runs[start : start + page_size]],
+            total=total,
+            page=page,
+            page_size=page_size,
+        )
     )
 
 
-@router.get("/aidd/runs/{run_id}", response_model=dict)
+@router.get("/aidd/runs/{run_id}", response_model=dict, deprecated=True)
 async def get_aidd_agent_run(
     run_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     run = await get_agent_run(db, current_user=current_user, run_id=run_id)
-    return success_response(data=_serialize_run(run))
+    return _legacy_success_response(data=_serialize_run(run))
 
 
-@router.post("/aidd/runs/{run_id}/cancel", response_model=dict)
+@router.post("/aidd/runs/{run_id}/cancel", response_model=dict, deprecated=True)
 async def cancel_aidd_agent_run(
     run_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     run = await cancel_agent_run(db, current_user=current_user, run_id=run_id)
-    return success_response(data=_serialize_run(run), message="智能体运行已取消")
+    return _legacy_success_response(
+        data=_serialize_run(run), message="智能体运行已取消"
+    )
 
 
-@router.delete("/aidd/runs/{run_id}", response_model=dict)
+@router.delete("/aidd/runs/{run_id}", response_model=dict, deprecated=True)
 async def delete_aidd_agent_run(
     run_id: str,
     cascade: bool = False,
@@ -137,14 +170,18 @@ async def delete_aidd_agent_run(
     db: AsyncSession = Depends(get_db),
 ):
     if cascade:
-        result = await cascade_delete_agent_run(db, current_user=current_user, run_id=run_id)
-        return success_response(data=result, message="智能体历史会话、任务和产物已删除")
+        result = await cascade_delete_agent_run(
+            db, current_user=current_user, run_id=run_id
+        )
+        return _legacy_success_response(
+            data=result, message="智能体历史会话、任务和产物已删除"
+        )
 
     result = await delete_agent_run(db, current_user=current_user, run_id=run_id)
-    return success_response(data=result, message="智能体历史会话已删除")
+    return _legacy_success_response(data=result, message="智能体历史会话已删除")
 
 
-@router.post("/aidd/runs/{run_id}/sync", response_model=dict)
+@router.post("/aidd/runs/{run_id}/sync", response_model=dict, deprecated=True)
 async def sync_aidd_agent_run(
     run_id: str,
     current_user: User = Depends(get_current_user),
@@ -153,4 +190,6 @@ async def sync_aidd_agent_run(
     await get_agent_run(db, current_user=current_user, run_id=run_id)
     await reconcile_waiting_agent_steps(db, run_id=run_id)
     run = await get_agent_run(db, current_user=current_user, run_id=run_id)
-    return success_response(data=_serialize_run(run), message="智能体运行已同步")
+    return _legacy_success_response(
+        data=_serialize_run(run), message="智能体运行已同步"
+    )
