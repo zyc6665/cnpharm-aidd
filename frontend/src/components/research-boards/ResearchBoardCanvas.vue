@@ -1,7 +1,7 @@
 <template>
-  <div class="board-canvas">
+  <div class="board-canvas" data-testid="board-canvas">
     <div class="board-toolbar">
-      <a-space wrap>
+      <a-space v-if="objectToolbar" wrap>
         <a-button size="small" @click="addNode('note')">便笺</a-button>
         <a-button size="small" :disabled="!files.length" @click="addNode('file')">文件</a-button>
         <a-button size="small" :disabled="!imageOptions.length" @click="addNode('image')">图片</a-button>
@@ -26,7 +26,7 @@
       @pointerdown.self="startPan"
       @wheel.ctrl.prevent="changeZoom(zoom - $event.deltaY * 0.001)"
     >
-      <div class="board-stage" :style="{ width: `${1600 * zoom}px`, height: `${1000 * zoom}px` }" @pointerdown.self="startPan">
+      <div data-testid="board-stage" class="board-stage" :style="{ width: `${1600 * zoom}px`, height: `${1000 * zoom}px` }" @pointerdown.self="startPan">
         <div class="board-surface" :style="surfaceStyle" @pointerdown.self="startPan">
           <svg class="board-edges" width="1600" height="1000" aria-label="白板节点关系">
             <g v-for="edge in resolvedEdges" :key="edge.id">
@@ -41,7 +41,7 @@
             class="board-node"
             :class="[`is-${node.type}`, { 'is-connecting': connectSourceId === node.id }]"
             :style="{ left: `${node.position.x}px`, top: `${node.position.y}px` }"
-            @click.stop="selectConnectionNode(node.id)"
+            @click.stop="selectNode(node.id)"
             @pointerdown="startDrag($event, node)"
           >
             <header>
@@ -51,9 +51,14 @@
             <a-textarea v-if="node.type === 'note'" :value="node.content" :rows="4" @pointerdown.stop @update:value="updateNode(node.id, 'content', $event)" />
             <a-select v-else-if="node.type === 'tool'" :value="node.tool_id" :options="toolOptions" show-search option-filter-prop="label" @pointerdown.stop @change="updateNode(node.id, 'tool_id', String($event))" />
             <a-select v-else-if="node.type === 'file'" :value="node.file_id" :options="fileOptions" show-search option-filter-prop="label" @pointerdown.stop @change="updateNode(node.id, 'file_id', String($event))" />
-            <template v-else>
+            <template v-else-if="node.type === 'image'">
               <a-select :value="node.file_id" :options="imageOptions" show-search option-filter-prop="label" @pointerdown.stop @change="updateNode(node.id, 'file_id', String($event))" />
               <img v-if="node.file_id" :src="`/api/v1/files/${node.file_id}/download`" alt="白板图片" />
+            </template>
+            <template v-else>
+              <slot name="artifact" :artifact-id="node.artifact_id">
+                <span class="artifact-reference">{{ artifactName(node.artifact_id) }}</span>
+              </slot>
             </template>
           </article>
         </div>
@@ -67,17 +72,22 @@ import { computed, nextTick, onMounted, ref } from 'vue'
 import { DeleteOutlined, LinkOutlined, RedoOutlined, UndoOutlined, ZoomInOutlined, ZoomOutOutlined } from '@ant-design/icons-vue'
 import { useCanvasViewport } from '@/composables/useCanvasViewport'
 
-export type BoardNodeType = 'note' | 'file' | 'image' | 'tool'
-export interface BoardNode { id: string; type: BoardNodeType; position: { x: number; y: number }; content?: string; tool_id?: string; file_id?: string }
+export type BoardNodeType = 'note' | 'file' | 'image' | 'tool' | 'artifact'
+export interface BoardNode { id: string; type: BoardNodeType; position: { x: number; y: number }; content?: string; tool_id?: string; file_id?: string; artifact_id?: string }
 export interface BoardEdge { id: string; source: string; target: string; label?: string }
 export interface BoardContent { nodes: BoardNode[]; edges: BoardEdge[]; viewport: { x: number; y: number; zoom: number } }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   modelValue: BoardContent
   files: Array<{ id: string; filename: string; content_type?: string }>
   tools: Array<{ id: string; name: string }>
+  artifacts?: Array<{ id: string; name: string }>
+  objectToolbar?: boolean
+}>(), { artifacts: () => [], objectToolbar: true })
+const emit = defineEmits<{
+  (event: 'update:modelValue', value: BoardContent): void
+  (event: 'select-node', id: string): void
 }>()
-const emit = defineEmits<{ (event: 'update:modelValue', value: BoardContent): void }>()
 const viewportRef = ref<HTMLElement>()
 const undoStack = ref<BoardContent[]>([])
 const redoStack = ref<BoardContent[]>([])
@@ -86,8 +96,9 @@ const content = computed(() => props.modelValue)
 const fileOptions = computed(() => props.files.map(file => ({ value: file.id, label: file.filename })))
 const imageOptions = computed(() => props.files.filter(file => file.content_type?.startsWith('image/')).map(file => ({ value: file.id, label: file.filename })))
 const toolOptions = computed(() => props.tools.map(tool => ({ value: tool.id, label: tool.name })))
+const artifactName = (id?: string) => props.artifacts.find(item => item.id === id)?.name || '科研产物引用'
 const { zoom, setZoom, surfaceStyle } = useCanvasViewport(props.modelValue.viewport?.zoom || 1)
-const nodeLabel = (type: BoardNodeType) => ({ note: '研究便笺', file: '文件', image: '图片', tool: '工具' })[type]
+const nodeLabel = (type: BoardNodeType) => ({ note: '研究便笺', file: '文件', image: '图片', tool: '工具', artifact: '科研产物' })[type]
 
 const resolvedEdges = computed(() => {
   const nodes = new Map(content.value.nodes.map(node => [node.id, node]))
@@ -117,13 +128,15 @@ function changeZoom(value: number) {
 function addNode(type: BoardNodeType) {
   const index = content.value.nodes.length
   const reference = type === 'tool'
-    ? { tool_id: props.tools[0]?.id }
+      ? { tool_id: props.tools[0]?.id }
+    : type === 'artifact'
+      ? { artifact_id: props.artifacts[0]?.id }
     : type === 'file'
       ? { file_id: props.files[0]?.id }
       : type === 'image'
         ? { file_id: props.files.find(file => file.content_type?.startsWith('image/'))?.id }
         : { content: '' }
-  if ((type === 'tool' && !reference.tool_id) || ((type === 'file' || type === 'image') && !reference.file_id)) return
+  if ((type === 'tool' && !reference.tool_id) || (type === 'artifact' && !reference.artifact_id) || ((type === 'file' || type === 'image') && !reference.file_id)) return
   commitNodes([...content.value.nodes, { id: `${type}-${Date.now()}`, type, position: { x: 80 + (index % 4) * 280, y: 80 + Math.floor(index / 4) * 220 }, ...reference }])
 }
 function removeNode(id: string) {
@@ -139,6 +152,10 @@ function selectConnectionNode(nodeId: string) {
   const exists = content.value.edges.some(edge => edge.source === connectSourceId.value && edge.target === nodeId)
   if (!exists) commit({ ...props.modelValue, edges: [...content.value.edges, { id: `edge-${Date.now()}`, source: connectSourceId.value, target: nodeId }] })
   connectSourceId.value = null
+}
+function selectNode(nodeId: string) {
+  emit('select-node', nodeId)
+  selectConnectionNode(nodeId)
 }
 function undo() {
   const previous = undoStack.value[undoStack.value.length - 1]
@@ -191,6 +208,7 @@ onMounted(() => {
     viewportRef.value.scrollTop = props.modelValue.viewport.y || 0
   })
 })
+defineExpose({ addNode, removeNode })
 </script>
 
 <style scoped lang="less">
@@ -212,6 +230,8 @@ onMounted(() => {
 .board-node.is-note { border-left-color: @warning-color; }
 .board-node.is-file { border-left-color: @success-color; }
 .board-node.is-image { border-left-color: @info-color; }
+.board-node.is-artifact { border-left-color: @accent-color; }
+.artifact-reference { display: block; color: @text-secondary; overflow-wrap: anywhere; }
 .board-node img { display: block; max-width: 100%; max-height: 180px; margin-top: @spacing-sm; object-fit: contain; }
 @media (max-width: 768px) { .board-toolbar { align-items: flex-start; flex-direction: column; } .board-viewport { height: 480px; } }
 </style>
