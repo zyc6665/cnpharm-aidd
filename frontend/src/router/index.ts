@@ -19,6 +19,13 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/workspace/index.vue'),
     meta: { title: 'nav.workspace', requiresAuth: true }
   },
+  {
+    path: '/projects/:projectId/research/:conversationId?',
+    name: 'ProjectResearch',
+    component: () => import('@/views/projects/Research.vue'),
+    meta: { titleLiteral: '项目研究', requiresAuth: true, focusMode: true },
+    alias: ['/projects/:projectId/conversations/:conversationId?'],
+  },
   // 认证相关
   {
     path: '/login',
@@ -209,7 +216,9 @@ router.beforeEach(async (to, _from, next) => {
 
   // 设置页面标题
   const titleKey = typeof to.meta.title === 'string' ? to.meta.title : ''
-  const translatedTitle = titleKey ? i18n.global.t(titleKey) : 'CPUModel'
+  const translatedTitle = typeof to.meta.titleLiteral === 'string'
+    ? to.meta.titleLiteral
+    : titleKey ? i18n.global.t(titleKey) : 'CPUModel'
   document.title = `${translatedTitle} - CPUModel`
 
   // 认证页面（已登录用户重定向到工作台）
@@ -251,8 +260,10 @@ export default router
 declare module 'vue-router' {
   interface RouteMeta {
     title?: string
+    titleLiteral?: string
     requiresAuth?: boolean
     requiresAdmin?: boolean
     redirectAuthenticated?: boolean
+    focusMode?: boolean
   }
 }

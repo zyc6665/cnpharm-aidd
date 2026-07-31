@@ -37,4 +37,8 @@ export interface WorkspaceOverview {
   frequent_tools: WorkspaceTool[]
 }
 
-export const getWorkspaceOverview = () => get<WorkspaceOverview>('/workspace/overview')
+export type WorkspaceAttentionTask = WorkspaceTask
+export type WorkspaceArtifact = WorkspaceOverview['files'][number]
+
+export const getWorkspaceOverview = () =>
+  get<WorkspaceOverview>('/workspace/overview', undefined, { silent: true, retry: 1 })

@@ -1,5 +1,5 @@
 <template>
-  <div class="app-shell" :class="{ 'sidebar-collapsed': collapsed }">
+  <div class="app-shell" :class="{ 'sidebar-collapsed': collapsed, 'focus-mode': route.meta.focusMode }">
     <!-- 侧边栏 -->
     <aside class="shell-sidebar">
       <!-- Logo 区 -->
@@ -446,6 +446,11 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
 .sidebar-collapsed .shell-content {
   margin-left: @sidebar-collapsed-width;
+}
+
+.focus-mode {
+  .shell-sidebar { display: none; }
+  .shell-content { margin-left: 0; }
 }
 
 // ── 路由过渡动画 ──

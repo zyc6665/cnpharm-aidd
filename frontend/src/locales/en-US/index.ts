@@ -94,6 +94,38 @@ export default {
   // Workspace
   workspace: {
     title: 'Workspace',
+    researchTitle: 'Research Projects',
+    createProject: 'New Project',
+    recentProjects: 'Recent Projects',
+    projectCount: '{count} accessible projects',
+    continueResearch: 'Continue',
+    emptyProjects: 'No research projects yet',
+    attentionTitle: 'Approvals & Failed Tasks',
+    emptyAttention: 'No pending approvals or failed tasks',
+    pendingApproval: 'Pending approval',
+    taskNeedsAttention: 'Needs attention',
+    recentArtifacts: 'Recent Artifacts',
+    emptyArtifacts: 'No artifacts yet',
+    unknownArtifactType: 'Unknown type',
+    loadFailed: 'Research workspace failed to load',
+    loadFailedHint: 'Latest project data is unavailable. Check your connection and retry.',
+    retry: 'Retry',
+    project: {
+      name: 'Project name',
+      namePlaceholder: 'For example: EGFR pocket study',
+      nameRequired: 'Enter a project name',
+      goal: 'Research goal',
+      goalPlaceholder: 'Describe the scientific question or expected result',
+      noGoal: 'No research goal set',
+      createFailed: 'Project creation failed. Please retry.',
+      status: {
+        draft: 'Draft',
+        active: 'Active',
+        completed: 'Completed',
+        archived: 'Archived',
+        frozen: 'Frozen'
+      }
+    },
     goodMorning: 'Good morning',
     goodAfternoon: 'Good afternoon',
     goodEvening: 'Good evening',

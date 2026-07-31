@@ -3,9 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '@/locales'
 import WorkspaceView from './index.vue'
 import { getWorkspaceOverview } from '@/api/workspace'
+import { listProjects } from '@/api/projects'
 
 vi.mock('@/api/workspace', () => ({ getWorkspaceOverview: vi.fn() }))
-vi.mock('@/api/tasks', () => ({ cancelTask: vi.fn(), retryTask: vi.fn() }))
+vi.mock('@/api/projects', () => ({ listProjects: vi.fn(), createProject: vi.fn() }))
 
 const overview = {
   attention_task_count: 1,
@@ -38,6 +39,7 @@ const stubs = {
   ExperimentOutlined: true,
   ApartmentOutlined: true,
   AppstoreOutlined: true,
+  AModal: true,
 }
 
 function renderWorkspace() {
@@ -51,17 +53,44 @@ function renderWorkspace() {
 }
 
 describe('WorkspaceView', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(listProjects).mockResolvedValue({
+      data: {
+        items: [{
+          id: 'project-1',
+          organization_id: 'organization-1',
+          created_by: 'user-1',
+          name: '先导优化',
+          goal: '筛选候选分子',
+          status: 'active',
+          model_policy: {},
+          data_policy: {},
+          membership: { id: 'membership-1', role: 'owner' },
+          created_at: '2026-07-30T00:00:00Z',
+          updated_at: '2026-07-30T00:00:00Z',
+        }],
+      },
+    } as never)
+  })
 
-  it('通过单一聚合接口展示任务、白板和常用工具', async () => {
-    vi.mocked(getWorkspaceOverview).mockResolvedValue({ data: overview } as never)
+  it('展示最近项目和需要用户处理的失败任务，不展示旧仪表盘区块', async () => {
+    vi.mocked(getWorkspaceOverview).mockResolvedValue({
+      data: {
+        ...overview,
+        tasks: [{ ...overview.tasks[0], status: 'failure', error_message: '执行节点不可用' }],
+      },
+    } as never)
     const wrapper = renderWorkspace()
     await flushPromises()
 
+    expect(listProjects).toHaveBeenCalledTimes(1)
     expect(getWorkspaceOverview).toHaveBeenCalledTimes(1)
     expect(wrapper.text()).toContain('分子对接任务')
     expect(wrapper.text()).toContain('先导优化')
-    expect(wrapper.text()).toContain('使用 7 次')
+    expect(wrapper.text()).toContain('执行节点不可用')
+    expect(wrapper.text()).not.toContain('常用工具')
+    expect(wrapper.text()).not.toContain('使用 7 次')
   })
 
   it('接口失败时展示可操作的重试状态', async () => {
@@ -69,7 +98,7 @@ describe('WorkspaceView', () => {
     const wrapper = renderWorkspace()
     await flushPromises()
 
-    expect(wrapper.text()).toContain('工作台数据加载失败')
+    expect(wrapper.text()).toContain('研究工作台加载失败')
     expect(wrapper.findAll('button').some(button => button.text() === '重试')).toBe(true)
   })
 })

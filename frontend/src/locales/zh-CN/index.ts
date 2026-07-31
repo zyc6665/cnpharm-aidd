@@ -94,6 +94,38 @@ export default {
   // 工作台
   workspace: {
     title: '工作台',
+    researchTitle: '研究项目',
+    createProject: '新建项目',
+    recentProjects: '最近项目',
+    projectCount: '共 {count} 个可访问项目',
+    continueResearch: '继续研究',
+    emptyProjects: '还没有研究项目',
+    attentionTitle: '待审批与失败任务',
+    emptyAttention: '暂无待审批或失败任务',
+    pendingApproval: '等待审批',
+    taskNeedsAttention: '需要处理',
+    recentArtifacts: '最近 Artifact',
+    emptyArtifacts: '暂无 Artifact',
+    unknownArtifactType: '未知类型',
+    loadFailed: '研究工作台加载失败',
+    loadFailedHint: '无法获取最新项目数据，请检查网络后重试。',
+    retry: '重试',
+    project: {
+      name: '项目名称',
+      namePlaceholder: '例如：EGFR 口袋研究',
+      nameRequired: '请输入项目名称',
+      goal: '研究目标',
+      goalPlaceholder: '描述需要验证的科学问题或预期结果',
+      noGoal: '尚未设置研究目标',
+      createFailed: '项目创建失败，请重试',
+      status: {
+        draft: '草稿',
+        active: '进行中',
+        completed: '已完成',
+        archived: '已归档',
+        frozen: '已冻结'
+      }
+    },
     goodMorning: '早上好',
     goodAfternoon: '下午好',
     goodEvening: '晚上好',
