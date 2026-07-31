@@ -21,11 +21,6 @@
       </a-col>
       <a-col :xs="12" :sm="6">
         <a-card class="stat-card" :loading="loading">
-          <a-statistic :title="t('user.role.vip')" :value="stats?.vip_users ?? 0" />
-        </a-card>
-      </a-col>
-      <a-col :xs="12" :sm="6">
-        <a-card class="stat-card" :loading="loading">
           <a-statistic :title="t('user.role.admin')" :value="stats?.admin_users ?? 0" />
         </a-card>
       </a-col>
@@ -49,7 +44,6 @@
             allowClear
           >
             <a-select-option value="admin">{{ t('user.role.admin') }}</a-select-option>
-            <a-select-option value="vip">{{ t('user.role.vip') }}</a-select-option>
             <a-select-option value="user">{{ t('user.role.user') }}</a-select-option>
           </a-select>
         </a-form-item>
@@ -300,7 +294,6 @@ const resetPasswordForm = reactive<AdminResetUserPasswordParams>({
 
 const roleOptions = computed(() => ([
   { value: 'admin', label: t('user.role.admin') },
-  { value: 'vip', label: t('user.role.vip') },
   { value: 'user', label: t('user.role.user') }
 ]))
 
@@ -357,7 +350,6 @@ const getUserInitial = (user: UserInfo) => {
 const getRoleColor = (role: string) => {
   const colors: Record<string, string> = {
     admin: 'red',
-    vip: 'gold',
     user: 'blue'
   }
   return colors[role] || 'default'

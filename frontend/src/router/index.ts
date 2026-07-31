@@ -52,6 +52,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'workflow.title' }
   },
   {
+    path: '/research-boards',
+    name: 'ResearchBoards',
+    component: () => import('@/views/research-boards/index.vue'),
+    meta: { title: 'nav.researchBoards', requiresAuth: true }
+  },
+  {
     path: '/tools/:id',
     name: 'ToolDetail',
     component: () => import('@/views/tools/Detail.vue'),

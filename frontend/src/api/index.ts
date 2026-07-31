@@ -5,6 +5,8 @@ export * from './files'
 export * from './agents'
 export * from './system'
 export * from './workflows'
+export * from './research-boards'
+export * from './workspace'
 export {
   default as request,
   AUTH_CLEARED_EVENT,

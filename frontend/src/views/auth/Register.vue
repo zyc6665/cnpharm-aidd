@@ -96,23 +96,6 @@
             </a-input-password>
           </a-form-item>
 
-          <!-- 邀请码（可选） -->
-          <a-form-item name="invitation_code" :label="t('auth.invitationCode')">
-            <a-input
-              v-model:value="formState.invitation_code"
-              size="large"
-              :placeholder="t('auth.invitationCodePlaceholder')"
-              @blur="validateInvitation"
-            >
-              <template #prefix>
-                <GiftOutlined />
-              </template>
-              <template v-if="invitationValidating" #suffix>
-                <LoadingOutlined />
-              </template>
-            </a-input>
-          </a-form-item>
-
           <!-- 服务条款 -->
           <a-form-item name="agreement">
             <a-checkbox v-model:checked="formState.agreement">
@@ -155,12 +138,9 @@
     LockOutlined,
     MailOutlined,
     SafetyOutlined,
-    GiftOutlined,
-    LoadingOutlined
   } from '@ant-design/icons-vue'
   import AuthShell from '@/components/auth/AuthShell.vue'
   import { useUserStore } from '@/stores'
-  import { validateInvitationCode } from '@/api/auth'
 
   const router = useRouter()
   const { t } = useI18n()
@@ -171,7 +151,6 @@
   const codeSending = ref(false)
   const countdown = ref(0)
   const countdownTimer = ref<NodeJS.Timeout | null>(null)
-  const invitationValidating = ref(false)
 
   // 密码强度
   const passwordStrength = ref(0)
@@ -190,7 +169,6 @@
     code: '',
     password: '',
     confirmPassword: '',
-    invitation_code: '',
     agreement: false
   })
 
@@ -270,25 +248,6 @@
       // 错误已在请求层处理
     } finally {
       codeSending.value = false
-    }
-  }
-
-  // 验证邀请码
-  const validateInvitation = async () => {
-    if (!formState.invitation_code) {
-      return
-    }
-
-    invitationValidating.value = true
-    try {
-      const res = await validateInvitationCode(formState.invitation_code)
-      if (!res.data.valid) {
-        message.warning(t('auth.invalidInvitationCode'))
-      }
-    } catch {
-      // 错误已在请求层处理
-    } finally {
-      invitationValidating.value = false
     }
   }
 

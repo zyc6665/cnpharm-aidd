@@ -8,11 +8,16 @@
       <a-space size="small">
         <a-tag>{{ t('workflow.canvas.nodes', { count: template.nodes.length }) }}</a-tag>
         <a-tag>{{ t('workflow.canvas.edges', { count: template.edges.length }) }}</a-tag>
+        <a-button size="small" title="缩小" @click="zoomOut"><ZoomOutOutlined /></a-button>
+        <span class="zoom-value">{{ Math.round(zoom * 100) }}%</span>
+        <a-button size="small" title="放大" @click="zoomIn"><ZoomInOutlined /></a-button>
+        <a-button size="small" @click="resetZoom">复位</a-button>
       </a-space>
     </div>
 
-    <div class="canvas-viewport">
-      <div class="canvas-surface" :style="{ width: `${canvasSize.width}px`, height: `${canvasSize.height}px` }">
+    <div class="canvas-viewport" @wheel.ctrl.prevent="setZoom(zoom - $event.deltaY * 0.001)">
+      <div class="canvas-stage" :style="{ width: `${canvasSize.width * zoom}px`, height: `${canvasSize.height * zoom}px` }">
+      <div class="canvas-surface" :style="{ width: `${canvasSize.width}px`, height: `${canvasSize.height}px`, ...surfaceStyle }">
         <svg
           class="canvas-edges"
           :width="canvasSize.width"
@@ -39,10 +44,12 @@
           :status="resolvedNodeStatuses[node.id] ?? 'idle'"
           :selected="node.id === activeNodeId"
           :deletable="node.type !== 'input'"
+          :scale="zoom"
           @select-node="$emit('select-node', $event)"
           @move-node="$emit('move-node', $event.nodeId, $event.position)"
           @delete-node="$emit('delete-node', $event)"
         />
+      </div>
       </div>
     </div>
   </div>
@@ -50,6 +57,8 @@
 
 <script setup lang="ts">
   import { computed } from 'vue'
+  import { ZoomInOutlined, ZoomOutOutlined } from '@ant-design/icons-vue'
+  import { useCanvasViewport } from '@/composables/useCanvasViewport'
   import { useI18n } from 'vue-i18n'
   import type { WorkflowStepStatus } from '@/workflow/artifact-types'
   import { resolveWorkflowLabel } from '@/workflow/i18n-utils'
@@ -61,6 +70,7 @@
   const NODE_HEIGHT = 112
   const CANVAS_PADDING = 64
   const { t, te } = useI18n()
+  const { zoom, zoomIn, zoomOut, resetZoom, setZoom, surfaceStyle } = useCanvasViewport()
 
   const props = defineProps<{
     template: WorkflowTemplate
@@ -182,6 +192,9 @@
     min-width: 100%;
     min-height: 560px;
   }
+
+  .canvas-stage { position: relative; min-width: 100%; min-height: 560px; }
+  .zoom-value { width: 48px; text-align: center; color: @text-secondary; font-size: @font-size-xs; }
 
   .canvas-edges {
     position: absolute;

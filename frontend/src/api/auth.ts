@@ -73,8 +73,3 @@ export const resetPassword = (
     new_password: newPassword
   })
 }
-
-// 验证邀请码
-export const validateInvitationCode = (code: string): Promise<ApiResponse<{ valid: boolean; bonus?: number }>> => {
-  return post<{ valid: boolean; bonus?: number }>('/auth/invitation/validate', { code })
-}

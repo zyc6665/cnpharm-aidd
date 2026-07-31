@@ -31,7 +31,6 @@ function buildFallbackTool(task: Task): Tool | undefined {
     updated_at: task.tool?.updated_at,
     version: task.tool?.version,
     run_count: task.tool?.run_count,
-    credits: task.tool?.credits,
   }
 }
 

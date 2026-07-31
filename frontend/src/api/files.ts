@@ -62,21 +62,21 @@ export const getArtifactFiles = (
 }
 
 // 获取文件信息
-export const getFileInfo = (id: number): Promise<ApiResponse<FileInfo>> => {
+export const getFileInfo = (id: string): Promise<ApiResponse<FileInfo>> => {
   return get<FileInfo>(`/files/${id}`)
 }
 
 // 获取文件下载 URL
-export const getFileDownloadUrl = (id: number): Promise<ApiResponse<{ url: string }>> => {
+export const getFileDownloadUrl = (id: string): Promise<ApiResponse<{ url: string }>> => {
   return get<{ url: string }>(`/files/${id}/download-url`)
 }
 
 // 删除文件
-export const deleteFile = (id: number): Promise<ApiResponse<null>> => {
+export const deleteFile = (id: string): Promise<ApiResponse<null>> => {
   return del<null>(`/files/${id}`)
 }
 
 // 批量删除文件
-export const batchDeleteFiles = (ids: number[]): Promise<ApiResponse<null>> => {
+export const batchDeleteFiles = (ids: string[]): Promise<ApiResponse<null>> => {
   return post<null>('/files/batch-delete', { ids })
 }

@@ -195,7 +195,6 @@ const getStatusColor = (status: string) => {
 const getRoleColor = (role: string) => {
   const colors: Record<string, string> = {
     admin: 'red',
-    vip: 'gold',
     user: 'blue'
   }
   return colors[role] || 'default'

@@ -435,6 +435,11 @@ watch(
 )
 
 onMounted(async () => {
+  const boardDraft = sessionStorage.getItem('research-board-workflow-draft')
+  if (boardDraft) {
+    sessionStorage.removeItem('research-board-workflow-draft')
+    handleAgentWorkflowDraft(JSON.parse(boardDraft) as AiddWorkflowDraft)
+  }
   await Promise.allSettled([
     toolsStore.fetchWorkbenchGroups(),
     toolsStore.fetchWorkflowTools()

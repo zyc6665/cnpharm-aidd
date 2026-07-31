@@ -104,7 +104,6 @@ watch(
 const getRoleColor = () => {
   const colors: Record<string, string> = {
     admin: 'red',
-    vip: 'gold',
     user: 'blue'
   }
   return colors[userStore.role] || 'default'
@@ -113,7 +112,6 @@ const getRoleColor = () => {
 const getRoleName = () => {
   const names: Record<string, string> = {
     admin: t('user.role.admin'),
-    vip: t('user.role.vip'),
     user: t('user.role.user')
   }
   return names[userStore.role] || t('user.role.user')

@@ -79,9 +79,6 @@
             <a-form-item :label="t('user.showTaskHistory')">
               <a-switch v-model:checked="privacyForm.showTaskHistory" />
             </a-form-item>
-            <a-form-item :label="t('user.showCredits')">
-              <a-switch v-model:checked="privacyForm.showCredits" />
-            </a-form-item>
             <a-form-item :wrapper-col="{ offset: 6, span: 14 }">
               <a-button type="primary" @click="handlePrivacySave" :loading="privacyLoading">
                 {{ t('common.save') }}
@@ -215,8 +212,7 @@ const notificationForm = reactive({
 // 隐私设置
 const privacyForm = reactive({
   profileVisibility: 'public',
-  showTaskHistory: true,
-  showCredits: false
+  showTaskHistory: true
 })
 
 // 安全设置

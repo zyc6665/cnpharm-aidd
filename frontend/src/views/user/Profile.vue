@@ -42,22 +42,6 @@
           </template>
         </a-form-item>
 
-        <a-form-item :label="t('user.invitationCode')">
-          <a-input-group compact>
-            <a-input
-              :value="userStore.user?.invitation_code"
-              readonly
-              style="width: calc(100% - 80px)"
-            />
-            <a-button @click="copyInviteCode">
-              <CopyOutlined />
-            </a-button>
-          </a-input-group>
-          <template #extra>
-            {{ t('user.inviteCodeTip') }}
-          </template>
-        </a-form-item>
-
         <a-form-item :label="t('user.createdAt')">
           {{ formatDate(userStore.user?.created_at) }}
         </a-form-item>
@@ -103,7 +87,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { PlusOutlined, CameraOutlined, CopyOutlined } from '@ant-design/icons-vue'
+import { PlusOutlined, CameraOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import type { UploadProps, UploadFile } from 'ant-design-vue'
 import dayjs from 'dayjs'
@@ -176,14 +160,6 @@ const handleAvatarUpload = async ({ file }: { file: File }) => {
     message.success(t('user.avatarUploaded'))
   } catch (error) {
     message.error(t('user.avatarUploadFailed'))
-  }
-}
-
-const copyInviteCode = async () => {
-  const code = userStore.user?.invitation_code
-  if (code) {
-    await navigator.clipboard.writeText(code)
-    message.success(t('common.copySuccess'))
   }
 }
 

@@ -43,6 +43,7 @@
     status: WorkflowStepStatus
     selected?: boolean
     deletable?: boolean
+    scale?: number
   }>()
 
   const emit = defineEmits<{
@@ -81,8 +82,8 @@
     isDragging.value = true
 
     const handlePointerMove = (moveEvent: PointerEvent) => {
-      const deltaX = moveEvent.clientX - startX
-      const deltaY = moveEvent.clientY - startY
+      const deltaX = (moveEvent.clientX - startX) / (props.scale || 1)
+      const deltaY = (moveEvent.clientY - startY) / (props.scale || 1)
       if (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2) {
         hasDragged = true
       }

@@ -6,11 +6,8 @@ export interface UserInfo {
   username?: string  // 用户名（兼容旧代码）
   avatar_url?: string
   avatar?: string  // 头像URL（兼容旧代码，实际使用avatar_url）
-  role: 'user' | 'vip' | 'admin'
+  role: 'user' | 'admin'
   status: 'active' | 'disabled' | 'pending'
-  credits?: number  // 积分余额
-  member_expire_at?: string  // 会员过期时间
-  invitation_code?: string  // 邀请码
   daily_task_limit?: number
   max_file_size_mb?: number
   statistics?: {
@@ -34,7 +31,6 @@ export interface AdminUserListResponse {
 export interface AdminUserStats {
   total_users: number
   active_users: number
-  vip_users: number
   admin_users: number
   new_users_today: number
   new_users_this_week: number
@@ -64,51 +60,6 @@ export interface LoginResponse {
   access_token: string
   refresh_token: string
   token_type: string
-  credits?: number  // 积分余额（兼容旧代码）
-}
-
-// 积分相关类型
-export type CreditTransactionType = 'recharge' | 'consume' | 'reward' | 'refund' | 'signup' | 'signin' | 'invite'
-
-export interface CreditTransaction {
-  id: number
-  user_id: number
-  type: CreditTransactionType
-  amount: number
-  balance: number
-  description: string
-  created_at: string
-}
-
-export interface CreditPackage {
-  id: string
-  name: string
-  credits: number
-  price: number
-  bonus?: number
-  recommended?: boolean
-}
-
-// 会员相关类型
-export type MembershipPlan = 'free' | 'basic' | 'standard' | 'premium'
-
-export interface MembershipInfo {
-  id: string
-  name: string
-  price: number
-  period: string
-  features: string[]
-  credits_monthly: number
-  discount: number
-  recommended?: boolean
-}
-
-// 签到相关类型
-export interface SignInInfo {
-  signed_days: number
-  already_signed: boolean
-  today_reward: number
-  streak_bonus: boolean
 }
 
 // 工具相关类型
@@ -151,7 +102,6 @@ export interface Tool {
   // 兼容旧代码的字段
   version?: string
   run_count?: number
-  credits?: number
 }
 
 export interface ToolOptionSummary {
@@ -680,14 +630,14 @@ export interface AiddWorkflowDraft {
 
 // 文件相关类型
 export interface FileInfo {
-  id: number
+  id: string
   filename: string
-  original_name: string
-  mime_type: string
-  size: number
-  hash?: string
-  url?: string
+  content_type?: string
+  size_bytes: number
+  source_type: string
+  is_public: boolean
   created_at: string
+  updated_at: string
   expires_at?: string
 }
 
