@@ -9,6 +9,7 @@ import {
   getAiddAgentRuns,
   syncAiddAgentRun
 } from '@/api/agents'
+import type { RequestOptions } from '@/api/request'
 import type {
   AiddAgentRun,
   AiddAgentRunCreateParams,
@@ -31,10 +32,10 @@ export const useAgentsStore = defineStore('agents', () => {
   const total = ref(0)
   let pollTimer: number | null = null
 
-  const fetchRuns = async (params?: PaginationParams) => {
+  const fetchRuns = async (params?: PaginationParams, options?: RequestOptions) => {
     loading.value = true
     try {
-      const res = await getAiddAgentRuns(params)
+      const res = await getAiddAgentRuns(params, options)
       runs.value = res.data.items
       total.value = res.data.total
       if (!currentRun.value) {

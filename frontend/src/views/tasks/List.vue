@@ -515,7 +515,11 @@ const fetchTasks = async () => {
 }
 
 const fetchAgentRuns = async () => {
-  await agentsStore.fetchRuns({ page: 1, page_size: 100 })
+  try {
+    await agentsStore.fetchRuns({ page: 1, page_size: 100 }, { silent: true, retry: 1 })
+  } catch (error) {
+    console.warn('[TaskCenter] Failed to load legacy AIDD agent runs', error)
+  }
 }
 
 const handleTabChange = (_key: string) => {

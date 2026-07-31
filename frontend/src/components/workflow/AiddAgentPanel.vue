@@ -311,7 +311,11 @@
       return
     }
 
-    await agentsStore.fetchRuns({ page: 1, page_size: 5 })
+    try {
+      await agentsStore.fetchRuns({ page: 1, page_size: 5 }, { silent: true, retry: 1 })
+    } catch (error) {
+      console.warn('[AiddAgentPanel] Failed to load legacy AIDD agent runs', error)
+    }
   }
 
   function formatStepTitle(stepKey: string) {
