@@ -28,6 +28,7 @@ from app.models.conversations import (
 )
 from app.models.tool_packages import ToolPackage, ToolPackageVersion
 from app.models.artifacts import Artifact, ArtifactLineage, ArtifactVersion
+from app.models.executions import ExecutionRecord
 
 __all__ = [
     "User",
@@ -46,4 +47,5 @@ __all__ = [
     "PlanDecision", "PlanVersion",
     "ToolPackage", "ToolPackageVersion",
     "Artifact", "ArtifactLineage", "ArtifactVersion",
+    "ExecutionRecord",
 ]
