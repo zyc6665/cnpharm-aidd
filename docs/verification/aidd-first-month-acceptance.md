@@ -53,11 +53,13 @@ PROJECT_RESEARCH_BOARD_ENABLED
 LEGACY_AIDD_API_ENABLED
 ```
 
-推荐顺序：先部署兼容代码与迁移，所有新入口保持关闭；执行 backfill dry-run 并核对；只向内部测试用户开放；完成 NVIDIA 黄金闭环；灰度普通用户；稳定一个发布周期后再评估旧入口和旧字段的移除。
+灰度用户使用 `AIDD_ROLLOUT_USER_EMAILS` 或 `AIDD_ROLLOUT_USER_IDS` 配置。全局新入口关闭时，命中白名单的内部测试账号仍可访问受保护入口；管理员审计接口会显示 `rollout.scope=allowlist` 和白名单数量。
+
+推荐顺序：先部署兼容代码与迁移，所有新入口保持关闭；执行 backfill dry-run 并核对；配置内部测试用户白名单；完成 NVIDIA 黄金闭环；再打开全局开关灰度普通用户；稳定一个发布周期后再评估旧入口和旧字段的移除。
 
 ## 回滚
 
-1. 停止扩大灰度，关闭项目工作台、会话、Tool Package v1 和项目白板入口，保留 `LEGACY_AIDD_API_ENABLED`。
+1. 停止扩大灰度，关闭项目工作台、会话、Tool Package v1 和项目白板入口，清空 `AIDD_ROLLOUT_USER_EMAILS` 与 `AIDD_ROLLOUT_USER_IDS`，保留 `LEGACY_AIDD_API_ENABLED`。
 2. 回退应用镜像至上一已知可用版本，保留 PostgreSQL、MinIO Artifact 和审计记录。
 3. 不对已产生的 Artifact、审批和项目数据做删除式回滚；先导出故障时间窗的 Agent 事件、执行请求与日志。
 4. 只有在已验证备份恢复演练的情况下才执行数据库 downgrade 或恢复。应用回滚优先于破坏性数据回滚。
@@ -80,4 +82,4 @@ git diff --check
 - 未执行 NVIDIA 真机 LVpocket 黄金样例；当前自动化使用 Fake ExecutionPort。
 - 未执行海光 DCU 真机验收。
 - 200 节点白板已有组件级固定尺寸与选择回归；仍未执行真实浏览器性能基准，也未采集任务状态小于 3 秒的环境指标。
-- 当前已具备统一运行时配置读取、管理员审计接口和核心业务路由拦截；后续仍需补齐灰度用户分组。
+- 当前已具备统一运行时配置读取、管理员审计接口、灰度用户分组和核心业务路由拦截。

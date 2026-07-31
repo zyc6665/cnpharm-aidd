@@ -1,8 +1,9 @@
 # backend/app/config.py
 """应用配置管理"""
 
-import os
 import ipaddress
+import json
+import os
 import re
 from functools import lru_cache
 from pathlib import Path
@@ -10,7 +11,7 @@ from typing import Optional, List, Literal
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
-from pydantic import model_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -295,6 +296,24 @@ class Settings(BaseSettings):
     TOOL_PACKAGE_V1_ENABLED: Optional[bool] = None
     PROJECT_RESEARCH_BOARD_ENABLED: Optional[bool] = None
     LEGACY_AIDD_API_ENABLED: Optional[bool] = None
+    # 生产/预发布灰度账号。全局新入口关闭时，仅这些内部账号可访问。
+    AIDD_ROLLOUT_USER_EMAILS: List[str] = []
+    AIDD_ROLLOUT_USER_IDS: List[str] = []
+
+    @field_validator("AIDD_ROLLOUT_USER_EMAILS", "AIDD_ROLLOUT_USER_IDS", mode="before")
+    @classmethod
+    def _parse_rollout_user_list(cls, value):
+        """兼容 JSON 数组和逗号分隔环境变量。"""
+        if value is None:
+            return []
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return []
+            if stripped.startswith("["):
+                return json.loads(stripped)
+            return [item.strip() for item in stripped.split(",") if item.strip()]
+        return value
 
     def aidd_feature_flags(self) -> list[dict[str, object]]:
         """返回首月 AIDD 发布门禁的解析状态，用于管理员审计。"""
@@ -304,6 +323,7 @@ class Settings(BaseSettings):
                 "enabled": self._resolve_aidd_feature_flag(key),
                 "source": self._feature_flag_source(key),
                 "description": description,
+                "rollout": self._feature_flag_rollout(key),
             }
             for key, description in _AIDD_FEATURE_FLAG_DESCRIPTIONS.items()
         ]
@@ -313,6 +333,20 @@ class Settings(BaseSettings):
         if key not in _AIDD_FEATURE_FLAG_DESCRIPTIONS:
             raise ValueError(f"Unknown AIDD feature flag: {key}")
         return self._resolve_aidd_feature_flag(key)
+
+    def is_aidd_feature_enabled_for_user(
+        self,
+        key: str,
+        *,
+        user_email: str | None = None,
+        user_id: str | None = None,
+    ) -> bool:
+        """判断用户是否可访问 AIDD 功能，支持生产灰度白名单。"""
+        if self.is_aidd_feature_enabled(key):
+            return True
+        if key == "LEGACY_AIDD_API_ENABLED":
+            return True
+        return self._is_rollout_user(user_email=user_email, user_id=user_id)
 
     def _resolve_aidd_feature_flag(self, key: str) -> bool:
         configured_value = getattr(self, key)
@@ -328,6 +362,47 @@ class Settings(BaseSettings):
         if getattr(self, key) is not None:
             return "configured"
         return "default"
+
+    def _feature_flag_rollout(self, key: str) -> dict[str, object]:
+        user_count = len(self._normalized_rollout_user_emails()) + len(
+            self._normalized_rollout_user_ids()
+        )
+        if self._resolve_aidd_feature_flag(key):
+            scope = "all"
+        elif key == "LEGACY_AIDD_API_ENABLED":
+            scope = "all"
+        elif user_count:
+            scope = "allowlist"
+        else:
+            scope = "closed"
+        return {"scope": scope, "user_count": user_count}
+
+    def _is_rollout_user(
+        self,
+        *,
+        user_email: str | None,
+        user_id: str | None,
+    ) -> bool:
+        email = (user_email or "").strip().lower()
+        normalized_id = (user_id or "").strip()
+        return (
+            bool(email and email in self._normalized_rollout_user_emails())
+            or bool(normalized_id and normalized_id in self._normalized_rollout_user_ids())
+        )
+
+    def _normalized_rollout_user_emails(self) -> set[str]:
+        return {
+            item.strip().lower()
+            for item in self.AIDD_ROLLOUT_USER_EMAILS
+            if item and item.strip()
+        }
+
+    def _normalized_rollout_user_ids(self) -> set[str]:
+        return {
+            item.strip()
+            for item in self.AIDD_ROLLOUT_USER_IDS
+            if item and item.strip()
+        }
 
     # ==================== 日志配置 ====================
     LOG_LEVEL: str = "INFO"

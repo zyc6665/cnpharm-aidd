@@ -96,6 +96,48 @@ class TestAiddFeatureFlags:
         assert flags["PROJECT_RESEARCH_BOARD_ENABLED"]["enabled"] is False
         assert flags["LEGACY_AIDD_API_ENABLED"]["enabled"] is True
 
+    def test_production_rollout_allowlist_enables_only_named_internal_users(self):
+        """生产灰度用户白名单应只放行命中的内部测试账号。"""
+        settings = Settings(
+            ENVIRONMENT="production",
+            DEBUG=False,
+            CORS_ORIGINS=["https://sciminer.example.com"],
+            JWT_SECRET_KEY="j" * 32,
+            SETTINGS_ENCRYPTION_KEY="e" * 32,
+            AIDD_ROLLOUT_USER_EMAILS=["internal@example.com"],
+            **_production_runtime_settings("production"),
+        )
+        flags = {item["key"]: item for item in settings.aidd_feature_flags()}
+
+        assert flags["AIDD_PROJECT_WORKSPACE_ENABLED"]["enabled"] is False
+        assert flags["AIDD_PROJECT_WORKSPACE_ENABLED"]["rollout"]["user_count"] == 1
+        assert flags["AIDD_PROJECT_WORKSPACE_ENABLED"]["rollout"]["scope"] == "allowlist"
+        assert settings.is_aidd_feature_enabled_for_user(
+            "AIDD_PROJECT_WORKSPACE_ENABLED",
+            user_email="internal@example.com",
+        ) is True
+        assert settings.is_aidd_feature_enabled_for_user(
+            "AIDD_PROJECT_WORKSPACE_ENABLED",
+            user_email="other@example.com",
+        ) is False
+
+    def test_rollout_allowlist_normalizes_email_case_and_whitespace(self):
+        """灰度邮箱白名单应规范化，避免大小写或空格导致误拒。"""
+        settings = Settings(
+            ENVIRONMENT="production",
+            DEBUG=False,
+            CORS_ORIGINS=["https://sciminer.example.com"],
+            JWT_SECRET_KEY="j" * 32,
+            SETTINGS_ENCRYPTION_KEY="e" * 32,
+            AIDD_ROLLOUT_USER_EMAILS=[" Internal@Example.com ", ""],
+            **_production_runtime_settings("production"),
+        )
+
+        assert settings.is_aidd_feature_enabled_for_user(
+            "AIDD_PROJECT_CONVERSATIONS_ENABLED",
+            user_email="internal@example.com",
+        ) is True
+
 
 class TestDeploymentCorsOrigins:
     @pytest.mark.parametrize("environment", ["staging", "production"])

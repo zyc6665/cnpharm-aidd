@@ -152,4 +152,10 @@ async def test_feature_flags_endpoint_exposes_aidd_release_gates(
         item["source"] in {"default", "configured", "environment"}
         for item in items.values()
     )
+    assert all("rollout" in item for item in items.values())
+    assert all(
+        item["rollout"]["scope"] in {"all", "allowlist", "closed"}
+        for item in items.values()
+    )
+    assert all(isinstance(item["rollout"]["user_count"], int) for item in items.values())
     assert items["PROJECT_RESEARCH_BOARD_ENABLED"]["description"]
