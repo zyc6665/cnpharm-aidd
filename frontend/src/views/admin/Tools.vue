@@ -90,6 +90,17 @@
           <template v-else-if="column.key === 'status'">
             <a-tag :color="statusColor(record.status)">{{ record.status }}</a-tag>
           </template>
+          <template v-else-if="column.key === 'validation'">
+            <a-space size="small" wrap>
+              <a-tag
+                v-for="badge in toolValidationSummary(record).badges"
+                :key="badge.label"
+                :color="badge.color"
+              >
+                {{ badge.label }}
+              </a-tag>
+            </a-space>
+          </template>
           <template v-else-if="column.key === 'stats'">
             <a-space>
               <span>{{ record.statistics?.usage_count ?? 0 }}</span>
@@ -180,6 +191,7 @@ import {
   UploadOutlined
 } from '@ant-design/icons-vue'
 import type { Category, Tool } from '@/types/models'
+import { getToolValidationSummary } from '@/utils/tool-validation'
 import {
   adminGetToolCategories,
   deleteTool,
@@ -217,6 +229,7 @@ const columns = computed(() => [
   { title: t('admin.toolName'), key: 'name' },
   { title: t('tools.category'), key: 'category', width: 180 },
   { title: t('admin.status'), key: 'status', width: 140 },
+  { title: '验证等级', key: 'validation', width: 210 },
   { title: t('admin.statistics'), key: 'stats', width: 140 },
   { title: t('common.actions'), key: 'actions', width: 180 }
 ])
@@ -230,6 +243,8 @@ const statusColor = (status: Tool['status']) => {
   }
   return mapping[status]
 }
+
+const toolValidationSummary = (tool: Tool) => getToolValidationSummary(tool.current_version?.config)
 
 const fetchCategories = async () => {
   const res = await adminGetToolCategories()

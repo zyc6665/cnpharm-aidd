@@ -259,6 +259,18 @@
                   <span class="info-label">{{ t('tools.status') }}:</span>
                   <a-tag :color="getStatusColor(tool.status)">{{ tool.status }}</a-tag>
                 </div>
+                <div class="info-item validation-info">
+                  <span class="info-label">验证等级:</span>
+                  <a-space size="small" wrap>
+                    <a-tag
+                      v-for="badge in toolValidationSummary.badges"
+                      :key="badge.label"
+                      :color="badge.color"
+                    >
+                      {{ badge.label }}
+                    </a-tag>
+                  </a-space>
+                </div>
                 <div class="info-item">
                   <span class="info-label">{{ t('common.createdAt') }}:</span>
                   <span>{{ formatDate(tool.created_at) }}</span>
@@ -338,6 +350,7 @@
   } from '@/types/models'
   import { uploadFile, convertSdfToPdb } from '@/api/files'
   import { applyToolExample, getToolExample, previewToolExampleFile } from '@/api/tools'
+  import { getToolValidationSummary } from '@/utils/tool-validation'
   import {
     buildTaskSubmissionPayload,
     flattenExampleParams,
@@ -384,6 +397,8 @@
       ? config as Record<string, unknown>
       : undefined
   })
+
+  const toolValidationSummary = computed(() => getToolValidationSummary(toolConfig.value))
 
   // 从 current_version.config 中获取 input_schema
   const inputSchema = computed<ToolSchema | undefined>(() => {
