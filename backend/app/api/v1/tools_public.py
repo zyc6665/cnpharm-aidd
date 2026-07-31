@@ -9,11 +9,17 @@ from sqlalchemy.orm import joinedload, selectinload
 
 from app.api.v1.tool_route_utils import (
     build_validated_tool_contract,
+    load_tool_packages_for_tools,
     load_tool_with_current_version,
     serialize_tool,
 )
 from app.auth.dependencies import get_current_user, get_current_user_optional
-from app.common.exceptions import ConflictException, ForbiddenException, NotFoundException, ValidationException
+from app.common.exceptions import (
+    ConflictException,
+    ForbiddenException,
+    NotFoundException,
+    ValidationException,
+)
 from app.common.responses import paginated_response, success_response
 from app.database.session import get_db
 from app.models.statistics import ToolStatistics
@@ -45,7 +51,9 @@ from app.services.tool_examples import (
 router = APIRouter()
 
 
-def _serialize_category(category: ToolCategory, tool_count: Optional[int] = None) -> dict:
+def _serialize_category(
+    category: ToolCategory, tool_count: Optional[int] = None
+) -> dict:
     payload = ToolCategoryResponse.model_validate(category).model_dump()
     if tool_count is not None:
         payload["tool_count"] = tool_count
@@ -67,7 +75,9 @@ def _serialize_workbench_tool(
             "slug": tool.slug,
             "description": tool.description,
             "category_id": tool.category_id,
-            "category": tool.tool_category.name if tool.tool_category else tool.category,
+            "category": (
+                tool.tool_category.name if tool.tool_category else tool.category
+            ),
             "icon": tool.icon,
             "icon_url": tool.icon_url,
             "status": tool.status,
@@ -87,7 +97,9 @@ async def list_tools(
     tag: Optional[str] = None,
     search: Optional[str] = None,
     status: Optional[str] = None,
-    view: Optional[Literal["public", "favorites"]] = Query(None, description="视图类型"),
+    view: Optional[Literal["public", "favorites"]] = Query(
+        None, description="视图类型"
+    ),
     current_user: Optional[User] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),
 ):
@@ -122,14 +134,31 @@ async def list_tools(
     if search:
         pattern = f"%{search}%"
         query = query.where(
-            or_(Tool.name.ilike(pattern), Tool.description.ilike(pattern), Tool.slug.ilike(pattern))
+            or_(
+                Tool.name.ilike(pattern),
+                Tool.description.ilike(pattern),
+                Tool.slug.ilike(pattern),
+            )
         )
-    total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar()
+    total = (
+        await db.execute(select(func.count()).select_from(query.subquery()))
+    ).scalar()
     result = await db.execute(
-        query.offset((page - 1) * page_size).limit(page_size).order_by(Tool.created_at.desc())
+        query.offset((page - 1) * page_size)
+        .limit(page_size)
+        .order_by(Tool.created_at.desc())
     )
+    tools = result.scalars().all()
+    package_by_slug = await load_tool_packages_for_tools(db, tools)
     return paginated_response(
-        items=[serialize_tool(tool, ToolListResponse) for tool in result.scalars().all()],
+        items=[
+            serialize_tool(
+                tool,
+                ToolListResponse,
+                tool_package=package_by_slug.get(tool.slug),
+            )
+            for tool in tools
+        ],
         total=total,
         page=page,
         page_size=page_size,
@@ -143,7 +172,10 @@ async def list_public_workbench_groups(db: AsyncSession = Depends(get_db)):
             await db.execute(
                 select(ToolWorkbenchGroup)
                 .where(ToolWorkbenchGroup.is_enabled.is_(True))
-                .order_by(ToolWorkbenchGroup.sort_order.asc(), ToolWorkbenchGroup.created_at.asc())
+                .order_by(
+                    ToolWorkbenchGroup.sort_order.asc(),
+                    ToolWorkbenchGroup.created_at.asc(),
+                )
             )
         )
         .scalars()
@@ -156,13 +188,22 @@ async def list_public_workbench_groups(db: AsyncSession = Depends(get_db)):
             await db.execute(
                 select(ToolWorkbenchGroupMapping)
                 .options(
-                    joinedload(ToolWorkbenchGroupMapping.tool).joinedload(Tool.tool_category),
-                    joinedload(ToolWorkbenchGroupMapping.tool).joinedload(Tool.current_version),
+                    joinedload(ToolWorkbenchGroupMapping.tool).joinedload(
+                        Tool.tool_category
+                    ),
+                    joinedload(ToolWorkbenchGroupMapping.tool).joinedload(
+                        Tool.current_version
+                    ),
                 )
-                .join(ToolWorkbenchGroup, ToolWorkbenchGroup.id == ToolWorkbenchGroupMapping.group_id)
+                .join(
+                    ToolWorkbenchGroup,
+                    ToolWorkbenchGroup.id == ToolWorkbenchGroupMapping.group_id,
+                )
                 .join(Tool, Tool.id == ToolWorkbenchGroupMapping.tool_id)
                 .where(
-                    ToolWorkbenchGroupMapping.group_id.in_([group.id for group in groups]),
+                    ToolWorkbenchGroupMapping.group_id.in_(
+                        [group.id for group in groups]
+                    ),
                     ToolWorkbenchGroupMapping.is_enabled.is_(True),
                     Tool.status == ToolStatus.PUBLISHED.value,
                     Tool.is_public.is_(True),
@@ -211,7 +252,10 @@ async def list_categories(db: AsyncSession = Depends(get_db)):
         select(ToolCategory, func.count(Tool.id).label("tool_count"))
         .outerjoin(
             Tool,
-            and_(Tool.category_id == ToolCategory.id, Tool.status == ToolStatus.PUBLISHED.value),
+            and_(
+                Tool.category_id == ToolCategory.id,
+                Tool.status == ToolStatus.PUBLISHED.value,
+            ),
         )
         .where(ToolCategory.is_enabled.is_(True))
         .group_by(ToolCategory.id)
@@ -225,12 +269,16 @@ async def list_categories(db: AsyncSession = Depends(get_db)):
 @router.get("/tags", response_model=dict)
 async def list_tags(db: AsyncSession = Depends(get_db)):
     tags = (await db.execute(select(Tag))).scalars().all()
-    return success_response(data=[TagResponse.model_validate(tag).model_dump() for tag in tags])
+    return success_response(
+        data=[TagResponse.model_validate(tag).model_dump() for tag in tags]
+    )
 
 
 @router.get("/{tool_id}/example", response_model=dict)
 async def get_tool_example(tool_id: str, db: AsyncSession = Depends(get_db)):
-    example = build_tool_example_response(await load_tool_with_current_version(db, tool_id))
+    example = build_tool_example_response(
+        await load_tool_with_current_version(db, tool_id)
+    )
     return success_response(data=example.model_dump() if example else None)
 
 
@@ -257,7 +305,9 @@ async def get_tool_contract(
 ):
     tool = (
         await db.execute(
-            select(Tool).options(selectinload(Tool.current_version)).where(Tool.id == tool_id)
+            select(Tool)
+            .options(selectinload(Tool.current_version))
+            .where(Tool.id == tool_id)
         )
     ).scalar_one_or_none()
     if not tool:
@@ -326,7 +376,12 @@ async def get_tool(
             )
         )
         is_favorited = favorite.scalar_one_or_none() is not None
-    payload = serialize_tool(tool, ToolResponse)
+    package_by_slug = await load_tool_packages_for_tools(db, [tool])
+    payload = serialize_tool(
+        tool,
+        ToolResponse,
+        tool_package=package_by_slug.get(tool.slug),
+    )
     payload["is_favorited"] = is_favorited
     return success_response(data=payload)
 
@@ -339,7 +394,9 @@ async def favorite_tool(
 ):
     tool = (
         await db.execute(
-            select(Tool).options(selectinload(Tool.statistics)).where(Tool.id == tool_id)
+            select(Tool)
+            .options(selectinload(Tool.statistics))
+            .where(Tool.id == tool_id)
         )
     ).scalar_one_or_none()
     if not tool:
@@ -379,7 +436,9 @@ async def unfavorite_tool(
         raise NotFoundException("未收藏该工具")
     tool = (
         await db.execute(
-            select(Tool).options(selectinload(Tool.statistics)).where(Tool.id == tool_id)
+            select(Tool)
+            .options(selectinload(Tool.statistics))
+            .where(Tool.id == tool_id)
         )
     ).scalar_one_or_none()
     if tool and tool.statistics:

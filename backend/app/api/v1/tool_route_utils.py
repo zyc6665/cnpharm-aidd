@@ -1,6 +1,7 @@
 """工具 API 路由共享辅助函数。"""
 
-from typing import Optional
+from collections.abc import Iterable
+from typing import Any, Optional
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -8,7 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.agents.aidd.registry import upsert_capability_from_config
-from app.common.exceptions import ConflictException, NotFoundException, ValidationException
+from app.common.exceptions import (
+    ConflictException,
+    NotFoundException,
+    ValidationException,
+)
 from app.models.tools import (
     Tool,
     ToolCategory,
@@ -17,6 +22,7 @@ from app.models.tools import (
     ToolStatus,
     ToolVersion,
 )
+from app.models.tool_packages import ToolPackage
 from app.models.users import User
 from app.schemas.tools import ToolImportRequest, ToolResponse, ToolVersionResponse
 from app.services.tool_contracts import (
@@ -24,19 +30,74 @@ from app.services.tool_contracts import (
     collect_tool_contract_config_validation_errors,
     collect_tool_contract_validation_errors,
 )
-from app.services.tool_import_config import ToolImportConfigError, validate_tool_import_config
+from app.services.tool_import_config import (
+    ToolImportConfigError,
+    validate_tool_import_config,
+)
 
 
-def serialize_tool(tool: Tool, schema_class=ToolResponse) -> dict:
+def serialize_tool(
+    tool: Tool,
+    schema_class=ToolResponse,
+    *,
+    tool_package: ToolPackage | None = None,
+) -> dict:
     tool_data = schema_class.model_validate(tool).model_dump()
     tool_data["category_id"] = tool.category_id
-    tool_data["category"] = tool.tool_category.name if tool.tool_category else tool.category
+    tool_data["category"] = (
+        tool.tool_category.name if tool.tool_category else tool.category
+    )
+    if tool_package is not None and tool_data.get("current_version"):
+        version_data = tool_data["current_version"]
+        config = dict(version_data.get("config") or {})
+        config["tool_package"] = _serialize_tool_package_summary(tool_package)
+        version_data["config"] = config
     return tool_data
+
+
+async def load_tool_packages_for_tools(
+    db: AsyncSession,
+    tools: Iterable[Tool],
+) -> dict[str, ToolPackage]:
+    """按旧工具 slug 读取当前 Tool Package 摘要，供列表/详情响应复用。"""
+    slugs = sorted({tool.slug for tool in tools if tool.slug})
+    if not slugs:
+        return {}
+    packages = (
+        (
+            await db.execute(
+                select(ToolPackage)
+                .options(selectinload(ToolPackage.current_version))
+                .where(ToolPackage.slug.in_(slugs))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return {package.slug: package for package in packages}
+
+
+def _serialize_tool_package_summary(package: ToolPackage) -> dict[str, Any]:
+    version = package.current_version
+    return {
+        "id": package.id,
+        "slug": package.slug,
+        "name": package.name,
+        "status": package.status,
+        "current_version_id": package.current_version_id,
+        "version": version.version if version else None,
+        "version_id": version.id if version else None,
+        "validation_status": version.validation_status if version else None,
+        "validation_errors": list(version.validation_errors or []) if version else [],
+        "manifest": version.manifest if version else None,
+    }
 
 
 async def load_tool_with_current_version(db: AsyncSession, tool_id: str) -> Tool:
     result = await db.execute(
-        select(Tool).options(selectinload(Tool.current_version)).where(Tool.id == tool_id)
+        select(Tool)
+        .options(selectinload(Tool.current_version))
+        .where(Tool.id == tool_id)
     )
     tool = result.scalar_one_or_none()
     if not tool:
@@ -80,7 +141,9 @@ async def commit_or_raise_conflict(db: AsyncSession, message: str) -> None:
         raise ConflictException(message) from exc
 
 
-async def require_active_tool_category(db: AsyncSession, category_id: str) -> ToolCategory:
+async def require_active_tool_category(
+    db: AsyncSession, category_id: str
+) -> ToolCategory:
     if not category_id:
         raise ValidationException("工具分类不能为空")
     result = await db.execute(
