@@ -26,7 +26,14 @@
       @pointerdown.self="startPan"
       @wheel.ctrl.prevent="changeZoom(zoom - $event.deltaY * 0.001)"
     >
-      <div data-testid="board-stage" class="board-stage" :style="{ width: `${1600 * zoom}px`, height: `${1000 * zoom}px` }" @pointerdown.self="startPan">
+      <div
+        data-testid="board-stage"
+        class="board-stage"
+        :data-node-count="content.nodes.length"
+        :aria-label="`科研白板画布，当前 ${content.nodes.length} 个节点`"
+        :style="{ width: `${1600 * zoom}px`, height: `${1000 * zoom}px` }"
+        @pointerdown.self="startPan"
+      >
         <div class="board-surface" :style="surfaceStyle" @pointerdown.self="startPan">
           <svg class="board-edges" width="1600" height="1000" aria-label="白板节点关系">
             <g v-for="edge in resolvedEdges" :key="edge.id">

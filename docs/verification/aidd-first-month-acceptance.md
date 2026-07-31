@@ -15,6 +15,7 @@
 | LVpocket NVIDIA 变体选择、审批门禁与 ExecutionPort 提交 | Fake 执行已验 | `pytest test/test_project_agent_lifecycle.py test/test_aidd_vertical_slice.py -q` |
 | Artifact 类型、版本、谱系与受保护下载 | 自动化已验 | `pytest test/test_typed_artifacts_api.py test/test_artifact_lineage.py -q` |
 | 项目 Artifact 引用到整页科研白板 | 自动化已验 | `pytest test/test_project_research_boards_api.py test/test_aidd_vertical_slice.py -q` |
+| 200 节点白板固定尺寸与节点选择 | 组件级已验 | `cd frontend && npm test -- src/components/__tests__/ResearchBoardCanvas.spec.ts --run` |
 | 离线运行时依赖与生产 Compose 契约 | 静态已验 | `pytest test/test_aidd_production_compose.py -q` |
 | 首次 SSE 事件延迟 | 自动化已验 | `pytest test/performance/test_agent_event_latency.py -q` |
 
@@ -78,5 +79,5 @@ git diff --check
 - 未配置 Playwright 与 `test:e2e`，因此未执行真实浏览器登录、上传、刷新及断线恢复测试；不要在验收阶段临时引入该依赖。
 - 未执行 NVIDIA 真机 LVpocket 黄金样例；当前自动化使用 Fake ExecutionPort。
 - 未执行海光 DCU 真机验收。
-- 未对 200 节点白板做浏览器性能基准，也未采集任务状态小于 3 秒的环境指标。
+- 200 节点白板已有组件级固定尺寸与选择回归；仍未执行真实浏览器性能基准，也未采集任务状态小于 3 秒的环境指标。
 - 当前已具备统一运行时配置读取、管理员审计接口和核心业务路由拦截；后续仍需补齐灰度用户分组。

@@ -9,6 +9,17 @@ const emptyContent = (): BoardContent => ({
   viewport: { x: 0, y: 0, zoom: 1 },
 })
 
+const largeBoardContent = (): BoardContent => ({
+  nodes: Array.from({ length: 200 }, (_, index) => ({
+    id: `note-${index}`,
+    type: 'note',
+    position: { x: (index % 10) * 120, y: Math.floor(index / 10) * 80 },
+    content: `假设 ${index}`,
+  })),
+  edges: [],
+  viewport: { x: 0, y: 0, zoom: 1 },
+})
+
 const stubs = {
   AButton: { template: '<button v-bind="$attrs"><slot /></button>' },
   ASpace: { template: '<div><slot /></div>' },
@@ -55,5 +66,21 @@ describe('ResearchBoardCanvas', () => {
     expect(viewport.zoom.value).toBe(1.6)
     viewport.setZoom(0)
     expect(viewport.zoom.value).toBe(0.5)
+  })
+
+  it('200 节点白板保持固定画布尺寸并暴露节点规模', async () => {
+    const wrapper = mount(ResearchBoardCanvas, {
+      props: { modelValue: largeBoardContent(), files: [], tools: [] },
+      global: { stubs },
+    })
+
+    const stage = wrapper.get('[data-testid="board-stage"]')
+    expect(stage.attributes('style')).toContain('width: 1600px')
+    expect(stage.attributes('style')).toContain('height: 1000px')
+    expect(stage.attributes('data-node-count')).toBe('200')
+    expect(stage.attributes('aria-label')).toBe('科研白板画布，当前 200 个节点')
+
+    await wrapper.findAll('.board-node')[199]?.trigger('click')
+    expect(wrapper.emitted('select-node')?.[0]).toEqual(['note-199'])
   })
 })
