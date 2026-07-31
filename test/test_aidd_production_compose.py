@@ -70,6 +70,29 @@ def test_aidd_development_compose_provides_local_stateful_services() -> None:
     assert backend_environment["TASK_EXECUTION_BACKEND"] == "celery"
 
 
+def test_offline_deployment_guide_covers_domestic_gpu_and_dcu_boundaries() -> None:
+    """离线部署文档必须说明信创、NVIDIA 和海光 DCU 的上线边界。"""
+    guide = (ROOT_DIR / "docs/guides/aidd-offline-deployment.md").read_text(
+        encoding="utf-8"
+    )
+
+    required_terms = [
+        "麒麟",
+        "UOS",
+        "海光 x86_64",
+        "NVIDIA GPU",
+        "海光 DCU",
+        "adapted_pending_hardware_validation",
+        "docker-compose.prod.yml",
+        "MinIO",
+        "PostgreSQL",
+        "Redis",
+    ]
+
+    for term in required_terms:
+        assert term in guide
+
+
 def test_production_settings_reject_local_runtime_backends() -> None:
     """生产配置不得退回 SQLite、本地文件存储、内存缓存或直连执行。"""
     base_kwargs = {
