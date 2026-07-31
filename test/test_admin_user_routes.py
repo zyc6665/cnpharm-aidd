@@ -249,7 +249,7 @@ async def test_admin_create_user_creates_hashed_password(
             "email": "created@example.com",
             "display_name": "Created User",
             "password": "CreatedSecret123",
-            "role": UserRole.VIP.value,
+            "role": UserRole.USER.value,
             "status": UserStatus.PENDING.value,
         },
         headers={"Authorization": "Bearer admin-token"},
@@ -260,7 +260,7 @@ async def test_admin_create_user_creates_hashed_password(
     assert payload["code"] == 201
     assert payload["message"] == "用户创建成功"
     assert payload["data"]["email"] == "created@example.com"
-    assert payload["data"]["role"] == UserRole.VIP.value
+    assert payload["data"]["role"] == UserRole.USER.value
     assert payload["data"]["status"] == UserStatus.PENDING.value
 
     result = await db_session.execute(select(User).where(User.email == "created@example.com"))

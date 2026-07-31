@@ -11,6 +11,7 @@ class AgentRun(Base, UUIDMixin, TimestampMixin):
 
     __tablename__ = "agent_runs"
 
+    project_id = Column(String(36), ForeignKey("projects.id"), nullable=True, index=True)
     user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     message = Column(Text, nullable=False)
     intent = Column(String(100), nullable=False, index=True)

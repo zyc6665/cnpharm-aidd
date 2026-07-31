@@ -12,7 +12,6 @@ class UserStatisticsResponse(BaseModel):
     total_tasks: int = Field(default=0, description="总任务数")
     total_success_tasks: int = Field(default=0, description="成功任务数")
     total_failed_tasks: int = Field(default=0, description="失败任务数")
-    total_credits_used: float = Field(default=0.0, description="总消耗积分")
     last_task_at: Optional[datetime] = Field(None, description="最后任务时间")
     last_updated_at: datetime = Field(..., description="最后更新时间")
 

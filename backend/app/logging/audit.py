@@ -85,6 +85,7 @@ class ResourceType(str, Enum):
     CONFIG = "config"
     SESSION = "session"
     SYSTEM = "system"
+    RESEARCH_BOARD = "research_board"
 
 
 @dataclass

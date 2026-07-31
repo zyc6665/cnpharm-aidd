@@ -15,6 +15,7 @@ from app.models.statistics import FileStatistics, ToolStatistics, UserStatistics
 from app.models.tasks import Task, TaskInput, TaskOutput, TaskLog
 from app.models.tools import Tool, ToolFavorite, ToolVersion, tool_tag_association
 from app.models.users import User, UserRole, UserStatus
+from app.models.workflows import ResearchBoard, WorkflowDefinition, WorkflowRun, WorkflowTemplate
 from app.auth.dependencies import get_current_user, get_admin_user
 from app.auth.password import hash_password, verify_password
 from app.common.responses import success_response
@@ -43,9 +44,8 @@ class AdminUserUpdate(BaseModel):
     """管理员更新用户信息"""
     email: Optional[str] = None
     phone: Optional[str] = None
-    role: Optional[str] = Field(None, description="角色: user, vip, admin")
+    role: Optional[str] = Field(None, description="角色: user, admin")
     status: Optional[str] = Field(None, description="状态: active, disabled, pending")
-    credit_balance: Optional[int] = Field(None, ge=0, description="积分余额")
 
 
 class AdminUserCreate(BaseModel):
@@ -53,7 +53,7 @@ class AdminUserCreate(BaseModel):
     email: str = Field(..., description="邮箱")
     display_name: Optional[str] = Field(None, description="显示名称")
     password: str = Field(..., min_length=6, max_length=50, description="初始密码")
-    role: str = Field(default=UserRole.USER.value, description="角色: user, vip, admin")
+    role: str = Field(default=UserRole.USER.value, description="角色: user, admin")
     status: str = Field(default=UserStatus.ACTIVE.value, description="状态: active, disabled, pending")
 
 
@@ -74,7 +74,6 @@ class UserStatsResponse(BaseModel):
     """用户统计响应"""
     total_users: int
     active_users: int
-    vip_users: int
     admin_users: int
     new_users_today: int
     new_users_this_week: int
@@ -187,6 +186,10 @@ async def hard_delete_user_related_resources(db: AsyncSession, user_id: str) -> 
         await db.execute(delete(File).where(File.id.in_(owned_file_ids)))
 
     await db.execute(delete(ToolFavorite).where(ToolFavorite.user_id == user_id))
+    await db.execute(delete(WorkflowRun).where(WorkflowRun.owner_id == user_id))
+    await db.execute(delete(WorkflowTemplate).where(WorkflowTemplate.owner_id == user_id))
+    await db.execute(delete(WorkflowDefinition).where(WorkflowDefinition.user_id == user_id))
+    await db.execute(delete(ResearchBoard).where(ResearchBoard.owner_id == user_id))
 
     if owned_tool_ids:
         await db.execute(delete(ToolFavorite).where(ToolFavorite.tool_id.in_(owned_tool_ids)))
@@ -400,12 +403,6 @@ async def admin_get_user_stats(
     )
     active_users = active_result.scalar()
 
-    # VIP 用户数
-    vip_result = await db.execute(
-        select(func.count(User.id)).where(User.role == UserRole.VIP.value)
-    )
-    vip_users = vip_result.scalar()
-
     # 管理员数
     admin_result = await db.execute(
         select(func.count(User.id)).where(User.role == UserRole.ADMIN.value)
@@ -428,7 +425,6 @@ async def admin_get_user_stats(
         data=UserStatsResponse(
             total_users=total_users,
             active_users=active_users,
-            vip_users=vip_users,
             admin_users=admin_users,
             new_users_today=new_users_today,
             new_users_this_week=new_users_this_week,
@@ -482,7 +478,6 @@ async def admin_update_user(
     - phone: 手机号
     - role: 角色
     - status: 状态
-    - credit_balance: 积分余额
     """
     result = await db.execute(
         select(User)

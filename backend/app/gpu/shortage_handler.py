@@ -27,7 +27,7 @@ class ShortageAction(str, Enum):
 
 class QueuePriority(str, Enum):
     """队列优先级"""
-    VIP = "vip"
+    CRITICAL = "critical"
     HIGH = "high"
     NORMAL = "normal"
     LOW = "low"
@@ -79,7 +79,7 @@ class GPUShortageHandler:
 
     # 队列优先级权重
     PRIORITY_WEIGHTS = {
-        QueuePriority.VIP: 4,
+        QueuePriority.CRITICAL: 4,
         QueuePriority.HIGH: 3,
         QueuePriority.NORMAL: 2,
         QueuePriority.LOW: 1

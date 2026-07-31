@@ -11,7 +11,6 @@ from app.database.base import Base, TimestampMixin, UUIDMixin
 class UserRole(str, enum.Enum):
     """用户角色"""
     USER = "user"
-    VIP = "vip"
     ADMIN = "admin"
 
 

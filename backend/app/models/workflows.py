@@ -11,6 +11,7 @@ class WorkflowDefinition(Base, UUIDMixin, TimestampMixin):
 
     __tablename__ = "workflow_definitions"
 
+    project_id = Column(String(36), ForeignKey("projects.id"), nullable=True, index=True)
     user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     name = Column(String(120), nullable=False, index=True)
     description = Column(Text, nullable=True)
@@ -29,6 +30,7 @@ class WorkflowTemplate(Base, UUIDMixin, TimestampMixin):
 
     __tablename__ = "workflow_templates"
 
+    project_id = Column(String(36), ForeignKey("projects.id"), nullable=True, index=True)
     owner_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     name = Column(String(160), nullable=False)
     description = Column(Text, nullable=True)
@@ -51,6 +53,7 @@ class WorkflowRun(Base, UUIDMixin, TimestampMixin):
 
     __tablename__ = "workflow_runs"
 
+    project_id = Column(String(36), ForeignKey("projects.id"), nullable=True, index=True)
     owner_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     template_id = Column(String(36), ForeignKey("workflow_templates.id"), nullable=True, index=True)
     name = Column(String(160), nullable=False)
@@ -66,3 +69,18 @@ class WorkflowRun(Base, UUIDMixin, TimestampMixin):
 
     owner = relationship("User")
     template = relationship("WorkflowTemplate", back_populates="runs")
+
+
+class ResearchBoard(Base, UUIDMixin, TimestampMixin):
+    """私有科研白板，保存非执行性的探索内容。"""
+
+    __tablename__ = "research_boards"
+
+    project_id = Column(String(36), ForeignKey("projects.id"), nullable=True, index=True)
+    owner_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String(160), nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    content = Column(JSON, nullable=False, default=dict)
+    version = Column(Integer, nullable=False, default=1)
+
+    owner = relationship("User")

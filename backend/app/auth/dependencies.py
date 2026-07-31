@@ -104,15 +104,3 @@ async def get_admin_user(
             detail="需要管理员权限"
         )
     return current_user
-
-
-async def get_vip_or_admin_user(
-    current_user: User = Depends(get_current_user)
-) -> User:
-    """获取VIP或管理员用户"""
-    if current_user.role not in [UserRole.VIP.value, UserRole.ADMIN.value]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="需要VIP或管理员权限"
-        )
-    return current_user

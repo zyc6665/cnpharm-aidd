@@ -19,6 +19,7 @@ class File(Base, UUIDMixin, TimestampMixin):
     """文件表"""
     __tablename__ = "files"
 
+    project_id = Column(String(36), ForeignKey("projects.id"), nullable=True, index=True)
     owner_id = Column(String(36), ForeignKey("users.id"), nullable=True, index=True)
 
     # 文件信息

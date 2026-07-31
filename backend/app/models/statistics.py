@@ -15,7 +15,6 @@ class UserStatistics(Base):
     total_tasks = Column(Integer, default=0, nullable=False)
     total_success_tasks = Column(Integer, default=0, nullable=False)
     total_failed_tasks = Column(Integer, default=0, nullable=False)
-    total_credits_used = Column(Float, default=0.0, nullable=False)
     last_task_at = Column(DateTime, nullable=True)
     last_updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
 

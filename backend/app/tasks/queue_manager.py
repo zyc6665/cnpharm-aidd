@@ -40,8 +40,8 @@ class TaskQueueManager:
         TaskQueue.DEFAULT.value: 1
     }
 
-    # VIP/管理员角色列表
-    VIP_ROLES = {"vip", "admin", "super_admin"}
+    # 管理员可以使用高优先级队列。
+    PRIVILEGED_ROLES = {"admin"}
 
     @classmethod
     def determine_queue(
@@ -64,8 +64,8 @@ class TaskQueueManager:
         Returns:
             str: 队列名称
         """
-        # 1. 高优先级任务或VIP用户
-        if priority == "high" or (user_role and user_role.lower() in cls.VIP_ROLES):
+        # 1. 高优先级任务或管理员
+        if priority == "high" or (user_role and user_role.lower() in cls.PRIVILEGED_ROLES):
             return TaskQueue.HIGH_PRIORITY.value
 
         # 2. GPU任务
