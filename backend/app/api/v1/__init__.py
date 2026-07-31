@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from app.api.v1 import (
     agent_stream,
     agents,
+    artifacts,
     auth,
     conversations,
     files,
@@ -30,6 +31,7 @@ api_router.include_router(verification.router, prefix="/verification", tags=["�
 api_router.include_router(users.router, prefix="/users", tags=["用户"])
 api_router.include_router(tools.router, prefix="/tools", tags=["工具"])
 api_router.include_router(tool_packages.router, prefix="/tool-packages", tags=["工具包"])
+api_router.include_router(artifacts.router, tags=["科研产物"])
 api_router.include_router(tool_categories.router)
 api_router.include_router(tool_workbench_admin.group_router)
 api_router.include_router(tool_workbench_admin.mapping_router)

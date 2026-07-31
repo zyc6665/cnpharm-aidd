@@ -1,0 +1,117 @@
+"""Artifact lineage integrity tests."""
+
+from __future__ import annotations
+
+import pytest
+from fastapi import HTTPException
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
+
+from app.database.base import Base
+from app.models.projects import Organization, Project, ProjectMember
+from app.models.users import User, UserRole, UserStatus
+from app.storage.base import StorageFile
+
+
+class MemoryStorage:
+    async def upload(self, file_data: bytes, path: str, content_type: str | None = None):
+        return StorageFile(path=path, size=len(file_data), content_type=content_type)
+
+    async def delete(self, path: str) -> bool:
+        return True
+
+
+@pytest.mark.asyncio
+async def test_lineage_accepts_same_project_and_rejects_cross_project_reference():
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    factory = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    async with factory() as db:
+        from app.services.artifacts import create_artifact, link_artifact_lineage
+
+        user = User(
+            email="lineage@example.com",
+            password_hash="hashed",
+            role=UserRole.USER.value,
+            status=UserStatus.ACTIVE.value,
+        )
+        organization = Organization(name="Lineage Lab", slug="lineage-lab")
+        db.add_all([user, organization])
+        await db.flush()
+        projects = [
+            Project(
+                organization_id=organization.id,
+                created_by=user.id,
+                name=f"Project {index}",
+                status="active",
+            )
+            for index in (1, 2)
+        ]
+        db.add_all(projects)
+        await db.flush()
+        db.add_all(
+            [ProjectMember(project_id=project.id, user_id=user.id, role="owner") for project in projects]
+        )
+        await db.commit()
+
+        storage = MemoryStorage()
+        source = await create_artifact(
+            db,
+            storage=storage,
+            project=projects[0],
+            user=user,
+            filename="protein.pdb",
+            content=b"protein",
+            content_type="chemical/x-pdb",
+            artifact_type="protein_structure",
+            semantic_type="protein_structure",
+        )
+        output = await create_artifact(
+            db,
+            storage=storage,
+            project=projects[0],
+            user=user,
+            filename="pockets.json",
+            content=b"{}",
+            content_type="application/json",
+            artifact_type="pocket_result",
+            semantic_type="pocket_result",
+        )
+        foreign = await create_artifact(
+            db,
+            storage=storage,
+            project=projects[1],
+            user=user,
+            filename="foreign.json",
+            content=b'{"foreign":true}',
+            content_type="application/json",
+            artifact_type="pocket_result",
+            semantic_type="pocket_result",
+        )
+
+        edge = await link_artifact_lineage(
+            db,
+            project_id=projects[0].id,
+            input_version_id=source.latest_version.id,
+            output_version_id=output.latest_version.id,
+            user_id=user.id,
+        )
+        assert edge.project_id == projects[0].id
+
+        with pytest.raises(HTTPException) as exc_info:
+            await link_artifact_lineage(
+                db,
+                project_id=projects[0].id,
+                input_version_id=source.latest_version.id,
+                output_version_id=foreign.latest_version.id,
+                user_id=user.id,
+            )
+        assert exc_info.value.status_code == 403
+
+    await engine.dispose()

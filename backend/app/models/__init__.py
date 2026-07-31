@@ -27,6 +27,7 @@ from app.models.conversations import (
     PlanVersion,
 )
 from app.models.tool_packages import ToolPackage, ToolPackageVersion
+from app.models.artifacts import Artifact, ArtifactLineage, ArtifactVersion
 
 __all__ = [
     "User",
@@ -44,4 +45,5 @@ __all__ = [
     "AgentEvent", "Conversation", "ConversationBranch", "ConversationMessage",
     "PlanDecision", "PlanVersion",
     "ToolPackage", "ToolPackageVersion",
+    "Artifact", "ArtifactLineage", "ArtifactVersion",
 ]
