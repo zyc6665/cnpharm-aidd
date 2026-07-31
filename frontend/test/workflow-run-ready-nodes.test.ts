@@ -122,7 +122,7 @@ test('workflow page uses editable graph for canvas, save, edges, and available t
     'handleAddToolNode',
     'handleDeleteNode',
     'handleAddEdge',
-    'workflowStore.ensureCanvasFromTemplate',
+    '@add-edge="handleAddEdge"',
     'toolsStore.fetchWorkflowTools'
   ]) {
     assert.equal(source.includes(marker), true, `missing ${marker}`)
@@ -130,4 +130,5 @@ test('workflow page uses editable graph for canvas, save, edges, and available t
 
   assert.equal(canvas.includes('workflowStore.canvasNodes'), true)
   assert.equal(canvas.includes('workflowStore.canvasEdges'), true)
+  assert.equal(canvas.includes('workflowStore.hasCanvasOverride'), true)
 })

@@ -11,6 +11,19 @@
     >
       {{ label }}
     </text>
+    <g
+      class="edge-delete-control"
+      :data-edge-delete="edgeId"
+      role="button"
+      tabindex="0"
+      :aria-label="`删除连线 ${edgeId}`"
+      @click.stop="$emit('delete-edge')"
+      @keydown.enter.prevent="$emit('delete-edge')"
+      @keydown.space.prevent="$emit('delete-edge')"
+    >
+      <circle :cx="deletePosition.x" :cy="deletePosition.y" r="9" />
+      <text :x="deletePosition.x" :y="deletePosition.y + 4" text-anchor="middle">×</text>
+    </g>
   </g>
 </template>
 
@@ -18,10 +31,15 @@
   import { computed } from 'vue'
 
   const props = defineProps<{
+    edgeId: string
     source: { x: number; y: number }
     target: { x: number; y: number }
     label?: string
     active?: boolean
+  }>()
+
+  defineEmits<{
+    (event: 'delete-edge'): void
   }>()
 
   const pathDefinition = computed(() => {
@@ -36,14 +54,17 @@
     x: (props.source.x + props.target.x) / 2,
     y: (props.source.y + props.target.y) / 2 - 10
   }))
+
+  const deletePosition = computed(() => ({
+    x: (props.source.x + props.target.x) / 2,
+    y: (props.source.y + props.target.y) / 2 + 14
+  }))
 </script>
 
 <style scoped lang="less">
   @import '@/assets/styles/variables.less';
 
-  .workflow-canvas-edge {
-    pointer-events: none;
-  }
+  .workflow-canvas-edge { pointer-events: none; }
 
   .edge-path {
     fill: none;
@@ -67,5 +88,34 @@
 
   .is-active .edge-path {
     stroke: @accent-color;
+  }
+
+  .edge-delete-control {
+    cursor: pointer;
+    pointer-events: auto;
+  }
+
+  .edge-delete-control circle {
+    fill: @bg-surface;
+    stroke: rgba(255, 77, 79, 0.35);
+    stroke-width: 1.5;
+  }
+
+  .edge-delete-control text {
+    fill: @error-color;
+    font-size: 13px;
+    font-weight: 800;
+    pointer-events: none;
+  }
+
+  .edge-delete-control:hover circle,
+  .edge-delete-control:focus-visible circle {
+    fill: @error-color;
+    outline: none;
+  }
+
+  .edge-delete-control:hover text,
+  .edge-delete-control:focus-visible text {
+    fill: #fff;
   }
 </style>

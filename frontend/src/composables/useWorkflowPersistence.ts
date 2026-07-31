@@ -46,17 +46,19 @@ export function useWorkflowPersistence(input: {
     buildCurrentWorkflowDefinition,
   } = input
 
-  const workflowName = ref('AIDD workflow')
-  const workflowTemplateName = ref('AIDD workflow')
+  const workflowName = ref('未命名流程')
+  const workflowTemplateName = ref('未命名流程')
   const selectedSavedWorkflowId = ref<string | undefined>()
   const workflowRunInputSelections = ref<Record<string, string | undefined>>({})
   const workflowRunAutoSyncTimer = ref<number | null>(null)
 
   const savedWorkflowOptions = computed(() => {
-    return workflowDefinitionsStore.workflowDefinitions.map((workflow) => ({
-      value: workflow.id,
-      label: workflow.name,
-    }))
+    return workflowDefinitionsStore.workflowDefinitions
+      .filter((workflow) => workflow.status !== 'archived')
+      .map((workflow) => ({
+        value: workflow.id,
+        label: workflow.name,
+      }))
   })
 
   const workflowTemplateOptions = computed(() => {
@@ -86,16 +88,7 @@ export function useWorkflowPersistence(input: {
   })
 
   async function handleSaveWorkflow() {
-    const name = workflowName.value.trim() || 'AIDD workflow'
-    const payload: WorkflowDefinitionPayload = {
-      name,
-      template_id: editableTemplate.value.id,
-      nodes: workflowStore.exportWorkflowNodes(editableTemplate.value.nodes),
-      edges: workflowStore.exportWorkflowEdges(editableTemplate.value.edges),
-      selected_tool_by_node: workflowStore.selectedToolByNode,
-      artifact_bindings_by_node: workflowStore.artifactBindingsByNode,
-      status: 'draft',
-    }
+    const payload = buildWorkflowDefinitionPayload()
 
     try {
       const saved = await workflowDefinitionsStore.saveWorkflowDefinition(
@@ -104,7 +97,64 @@ export function useWorkflowPersistence(input: {
       )
       selectedSavedWorkflowId.value = saved.id
       workflowName.value = saved.name
-      message.success('工作流已保存')
+      message.success('流程已保存')
+    } catch {
+      // 请求层会展示错误信息。
+    }
+  }
+
+  function handleNewWorkflow() {
+    workflowStore.resetSession(userStore.user?.id)
+    workflowStore.clearActiveWorkflowRun()
+    workflowDefinitionsStore.clearCurrentWorkflowDefinition()
+    selectedSavedWorkflowId.value = undefined
+    workflowName.value = '未命名流程'
+    workflowRunInputSelections.value = {}
+  }
+
+  async function handleDuplicateWorkflow() {
+    const selectedWorkflow = resolveSelectedWorkflowDefinition()
+    if (!selectedWorkflowIdExists()) {
+      return
+    }
+
+    const name = `${workflowName.value.trim() || selectedWorkflow?.name || '未命名流程'} 副本`
+    try {
+      const saved = await workflowDefinitionsStore.saveWorkflowDefinition({
+        ...buildWorkflowDefinitionPayload(name),
+        status: 'draft',
+      })
+      selectedSavedWorkflowId.value = saved.id
+      workflowName.value = saved.name
+      message.success('流程已复制')
+    } catch {
+      // 请求层会展示错误信息。
+    }
+  }
+
+  async function handleArchiveWorkflow() {
+    if (!selectedWorkflowIdExists()) {
+      return
+    }
+
+    try {
+      await workflowDefinitionsStore.archiveWorkflowDefinition(selectedSavedWorkflowId.value!)
+      handleNewWorkflow()
+      message.success('流程已归档')
+    } catch {
+      // 请求层会展示错误信息。
+    }
+  }
+
+  async function handleDeleteWorkflow() {
+    if (!selectedWorkflowIdExists()) {
+      return
+    }
+
+    try {
+      await workflowDefinitionsStore.removeWorkflowDefinition(selectedSavedWorkflowId.value!)
+      handleNewWorkflow()
+      message.success('流程已删除')
     } catch {
       // 请求层会展示错误信息。
     }
@@ -170,7 +220,7 @@ export function useWorkflowPersistence(input: {
         : await workflowStore.saveWorkflowTemplate(payload)
       workflowTemplateName.value = template.name
       selectedSavedWorkflowId.value = template.id
-      message.success('工作流模板已保存')
+      message.success('流程已保存')
     } catch {
       // 请求层会展示错误信息。
     }
@@ -189,7 +239,7 @@ export function useWorkflowPersistence(input: {
       )
       workflowTemplateName.value = duplicated.name
       selectedSavedWorkflowId.value = duplicated.id
-      message.success('工作流模板已复制')
+      message.success('流程已复制')
     } catch {
       // 请求层会展示错误信息。
     }
@@ -205,7 +255,7 @@ export function useWorkflowPersistence(input: {
       await workflowStore.removeWorkflowTemplate(templateId)
       workflowTemplateName.value = 'AIDD workflow'
       selectedSavedWorkflowId.value = undefined
-      message.success('工作流模板已删除')
+      message.success('流程已删除')
     } catch {
       // 请求层会展示错误信息。
     }
@@ -331,10 +381,32 @@ export function useWorkflowPersistence(input: {
       const workflow = await workflowDefinitionsStore.loadWorkflowDefinition(selectedSavedWorkflowId.value)
       workflowStore.applyWorkflowDefinition(workflow)
       workflowName.value = workflow.name
-      message.success('工作流已加载')
+      message.success('流程已加载')
     } catch {
       // 请求层会展示错误信息。
     }
+  }
+
+  function buildWorkflowDefinitionPayload(nameOverride?: string): WorkflowDefinitionPayload {
+    return {
+      name: nameOverride ?? (workflowName.value.trim() || '未命名流程'),
+      template_id: editableTemplate.value.id,
+      nodes: workflowStore.exportWorkflowNodes(editableTemplate.value.nodes),
+      edges: workflowStore.exportWorkflowEdges(editableTemplate.value.edges),
+      selected_tool_by_node: workflowStore.selectedToolByNode,
+      artifact_bindings_by_node: workflowStore.artifactBindingsByNode,
+      status: 'draft',
+    }
+  }
+
+  function selectedWorkflowIdExists(): boolean {
+    return typeof selectedSavedWorkflowId.value === 'string' && Boolean(selectedSavedWorkflowId.value)
+  }
+
+  function resolveSelectedWorkflowDefinition() {
+    return workflowDefinitionsStore.workflowDefinitions.find(
+      (workflow) => workflow.id === selectedSavedWorkflowId.value,
+    )
   }
 
   return {
@@ -348,6 +420,10 @@ export function useWorkflowPersistence(input: {
     selectedWorkflowInputFiles,
     artifactOptionsBySemanticType,
     handleSaveWorkflow,
+    handleNewWorkflow,
+    handleDuplicateWorkflow,
+    handleArchiveWorkflow,
+    handleDeleteWorkflow,
     handleNewWorkflowTemplate,
     handleTemplateSelect,
     applyWorkflowDraft,

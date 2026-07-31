@@ -1,7 +1,10 @@
 import { computed } from 'vue'
 import { defineStore, storeToRefs } from 'pinia'
 import type { WorkflowDefinition } from '@/types/models'
-import { type WorkflowTaskRef } from '@/workflow/artifact-types'
+import {
+  type WorkflowArtifactSemanticType,
+  type WorkflowTaskRef,
+} from '@/workflow/artifact-types'
 import type {
   WorkflowCanvasEdge,
   WorkflowCanvasNode,
@@ -23,6 +26,8 @@ interface AddToolNodeInput {
   toolName?: string
   toolDescription?: string
   position?: WorkflowCanvasPosition
+  requiredInputTypes?: WorkflowArtifactSemanticType[]
+  producedOutputTypes?: WorkflowArtifactSemanticType[]
 }
 
 type WorkflowDefinitionLike = {
@@ -82,23 +87,43 @@ export const useWorkflowStore = defineStore('workflow', () => {
     isSyncingWorkflowRun,
     hasMoreWorkflowRuns,
   } = storeToRefs(runsStore)
+  const {
+    activeNodeId,
+    activeGroupId,
+    nodePositionById,
+    canvasNodes,
+    canvasEdges,
+    hasCanvasOverride,
+  } = storeToRefs(canvas)
+  const {
+    selectedToolByGroup,
+    selectedToolByNode,
+    toolFormDrafts,
+    nodeFormDrafts,
+  } = storeToRefs(formDraft)
+  const {
+    taskByTool,
+    taskByNode,
+    artifactBindingsByNode,
+  } = storeToRefs(taskBinding)
 
   // ── session computed ──
   const session = computed<WorkflowWorkbenchSession>(() => ({
     sessionId: sessionId.value,
     templateId: templateId.value,
-    activeNodeId: canvas.activeNodeId,
-    activeGroupId: canvas.activeGroupId,
-    selectedToolByGroup: formDraft.selectedToolByGroup,
-    selectedToolByNode: formDraft.selectedToolByNode,
-    toolFormDrafts: formDraft.toolFormDrafts,
-    nodeFormDrafts: formDraft.nodeFormDrafts,
-    taskByTool: taskBinding.taskByTool,
-    taskByNode: taskBinding.taskByNode,
-    artifactBindingsByNode: taskBinding.artifactBindingsByNode,
-    nodePositionById: canvas.nodePositionById,
-    canvasNodes: canvas.canvasNodes,
-    canvasEdges: canvas.canvasEdges,
+    activeNodeId: activeNodeId.value,
+    activeGroupId: activeGroupId.value,
+    selectedToolByGroup: selectedToolByGroup.value,
+    selectedToolByNode: selectedToolByNode.value,
+    toolFormDrafts: toolFormDrafts.value,
+    nodeFormDrafts: nodeFormDrafts.value,
+    taskByTool: taskByTool.value,
+    taskByNode: taskByNode.value,
+    artifactBindingsByNode: artifactBindingsByNode.value,
+    nodePositionById: nodePositionById.value,
+    canvasNodes: canvasNodes.value,
+    canvasEdges: canvasEdges.value,
+    hasCanvasOverride: hasCanvasOverride.value,
     lastUpdatedAt: lastUpdatedAt.value,
     ownerUserId: ownerUserId.value,
   }))
@@ -157,6 +182,8 @@ export const useWorkflowStore = defineStore('workflow', () => {
       toolName: input.toolName,
       toolDescription: input.toolDescription,
       position: input.position,
+      requiredInputTypes: input.requiredInputTypes,
+      producedOutputTypes: input.producedOutputTypes,
     })
     formDraft.selectNodeTool(nodeId, input.toolSlug)
     touchSession()
@@ -165,7 +192,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
 
   function deleteCanvasNode(nodeId: string) {
     // Check existence first (preserves old guard: input nodes cannot be deleted)
-    const exists = (canvas.canvasNodes as WorkflowCanvasNode[]).some(
+    const exists = canvasNodes.value.some(
       (n) => n.id === nodeId && n.type !== 'input',
     )
     if (!exists) return
@@ -180,8 +207,8 @@ export const useWorkflowStore = defineStore('workflow', () => {
   function applyWorkflowDefinition(workflow: WorkflowDefinitionLike) {
     templateId.value = workflow.template_id
     formDraft.selectedToolByNode = workflow.selected_tool_by_node ?? {}
+    taskBinding.reset()
     taskBinding.artifactBindingsByNode = workflow.artifact_bindings_by_node ?? {}
-    taskBinding.reset() // clears tasks only
     canvas.applyDefinition(workflow)
     touchSession()
   }
@@ -284,20 +311,21 @@ export const useWorkflowStore = defineStore('workflow', () => {
     lastUpdatedAt,
     ownerUserId,
     // canvas (re-export sub-store refs for backward compat)
-    activeNodeId: canvas.activeNodeId,
-    activeGroupId: canvas.activeGroupId,
-    nodePositionById: canvas.nodePositionById,
-    canvasNodes: canvas.canvasNodes,
-    canvasEdges: canvas.canvasEdges,
+    activeNodeId,
+    activeGroupId,
+    nodePositionById,
+    canvasNodes,
+    canvasEdges,
+    hasCanvasOverride,
     // form drafts (re-export sub-store refs)
-    selectedToolByGroup: formDraft.selectedToolByGroup,
-    selectedToolByNode: formDraft.selectedToolByNode,
-    toolFormDrafts: formDraft.toolFormDrafts,
-    nodeFormDrafts: formDraft.nodeFormDrafts,
+    selectedToolByGroup,
+    selectedToolByNode,
+    toolFormDrafts,
+    nodeFormDrafts,
     // task bindings (re-export sub-store refs)
-    taskByTool: taskBinding.taskByTool,
-    taskByNode: taskBinding.taskByNode,
-    artifactBindingsByNode: taskBinding.artifactBindingsByNode,
+    taskByTool,
+    taskByNode,
+    artifactBindingsByNode,
     // API state
     workflowTemplates,
     workflowRuns,

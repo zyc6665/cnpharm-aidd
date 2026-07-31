@@ -49,7 +49,9 @@
         :key="tool.slug"
         type="button"
         class="sidebar-tool-item"
+        draggable="true"
         @click="emit('add-tool', tool.slug)"
+        @dragstart="handleToolDragStart($event, tool.slug)"
       >
         <span class="sidebar-tool-name">{{ tool.name || tool.slug }}</span>
         <span v-if="tool.description" class="sidebar-tool-desc">{{ tool.description }}</span>
@@ -90,6 +92,16 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+
+function handleToolDragStart(event: DragEvent, toolSlug: string) {
+  if (!event.dataTransfer) {
+    return
+  }
+
+  event.dataTransfer.effectAllowed = 'copy'
+  event.dataTransfer.setData('application/x-workflow-tool', toolSlug)
+  event.dataTransfer.setData('text/plain', toolSlug)
+}
 </script>
 
 <style scoped lang="less">

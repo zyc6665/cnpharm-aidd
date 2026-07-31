@@ -22,6 +22,9 @@
               @change="selectedSavedWorkflowId = $event"
             />
             <a-space size="small" wrap>
+              <a-button @click="handleNewWorkflow">
+                {{ t('workflow.definition.new') }}
+              </a-button>
               <a-button type="primary" :loading="workflowDefinitionsStore.saving" @click="handleSaveWorkflow">
                 保存
               </a-button>
@@ -33,6 +36,41 @@
                 加载
               </a-button>
               <a-button
+                :disabled="!selectedSavedWorkflowId"
+                :loading="workflowDefinitionsStore.saving"
+                @click="handleDuplicateWorkflow"
+              >
+                {{ t('workflow.definition.duplicate') }}
+              </a-button>
+              <a-popconfirm
+                :title="t('workflow.definition.archiveConfirm')"
+                :ok-text="t('workflow.definition.archive')"
+                :cancel-text="t('common.cancel')"
+                @confirm="handleArchiveWorkflow"
+              >
+                <a-button
+                  :disabled="!selectedSavedWorkflowId"
+                  :loading="workflowDefinitionsStore.loading"
+                >
+                  {{ t('workflow.definition.archive') }}
+                </a-button>
+              </a-popconfirm>
+              <a-popconfirm
+                :title="t('workflow.templates.deleteConfirm')"
+                :ok-text="t('common.delete')"
+                :cancel-text="t('common.cancel')"
+                ok-type="danger"
+                @confirm="handleDeleteWorkflow"
+              >
+                <a-button
+                  danger
+                  :disabled="!selectedSavedWorkflowId"
+                  :loading="workflowDefinitionsStore.loading"
+                >
+                  {{ t('workflow.definition.delete') }}
+                </a-button>
+              </a-popconfirm>
+              <a-button
                 :disabled="readyToolNodeIds.length === 0"
                 :loading="runningWorkflow"
                 @click="handleRunReadyNodes"
@@ -41,23 +79,6 @@
               </a-button>
             </a-space>
           </div>
-
-          <WorkflowTemplateToolbar
-            :name="workflowTemplateName"
-            :selected-template-id="workflowStore.activeWorkflowTemplateId"
-            :template-options="workflowTemplateOptions"
-            :loading="workflowStore.isLoadingWorkflowTemplates"
-            :saving="workflowStore.isSavingWorkflowTemplate"
-            :running="workflowStore.isRunningWorkflowTemplate"
-            :run-disabled="workflowTemplateRunDisabled"
-            @update:name="workflowTemplateName = $event"
-            @select-template="handleTemplateSelect"
-            @new="handleNewWorkflowTemplate"
-            @save="handleSaveWorkflowTemplate"
-            @duplicate="handleDuplicateWorkflowTemplate"
-            @delete="handleDeleteWorkflowTemplate"
-            @run="handleRunWorkflowTemplate"
-          />
 
           <WorkflowRunInputPanel
             :requirements="workflowInputRequirements"
@@ -99,16 +120,6 @@
 
           <div class="workflow-template-layout">
             <aside class="template-step-rail">
-              <div class="template-selector">
-                <span class="rail-kicker">{{ t('workflow.definition.templateLabel') }}</span>
-                <a-select
-                  :value="workflowStore.templateId"
-                  class="template-select"
-                  :options="templateOptions"
-                  @change="handleTemplateChange"
-                />
-              </div>
-
               <div class="workflow-status-summary">
                 <div class="status-summary-item is-ready">
                   <span>可运行</span>
@@ -174,7 +185,10 @@
               :node-positions="workflowStore.nodePositionById"
               @select-node="workflowStore.setActiveNode"
               @move-node="workflowStore.moveNode"
+              @add-tool-node="handleAddToolNode"
               @delete-node="handleDeleteNode"
+              @delete-edge="handleDeleteEdge"
+              @add-edge="handleAddEdge"
             />
 
             <WorkflowNodeInspector
@@ -223,7 +237,6 @@ import WorkflowRunHistoryPanel from '@/components/workflow/WorkflowRunHistoryPan
 import WorkflowRunInputPanel from '@/components/workflow/WorkflowRunInputPanel.vue'
 import WorkflowRunStatusPanel from '@/components/workflow/WorkflowRunStatusPanel.vue'
 import WorkflowTemplateCanvas from '@/components/workflow/WorkflowTemplateCanvas.vue'
-import WorkflowTemplateToolbar from '@/components/workflow/WorkflowTemplateToolbar.vue'
 import WorkflowToolPalette from '@/components/workflow/WorkflowToolPalette.vue'
 import { useWorkflowCanvas } from '@/composables/useWorkflowCanvas'
 import { useWorkflowExecution } from '@/composables/useWorkflowExecution'
@@ -260,11 +273,9 @@ const {
   sidebarInputFilter,
   sidebarOutputFilter,
   sidebarExecutorFilter,
-  activeTemplate,
   editableTemplate,
   activeNode,
   selectedToolByActiveNode,
-  templateOptions,
   availableWorkflowTools,
   sidebarStageOptions,
   sidebarInputOptions,
@@ -280,7 +291,6 @@ const {
   completedNodeCount,
   failedNodeCount,
   workflowReportRows,
-  handleTemplateChange,
   resolveNodeStatusReason,
   handleNodeToolSelect,
   handleAddToolNode,
@@ -299,21 +309,17 @@ const {
 
 const {
   workflowName,
-  workflowTemplateName,
   selectedSavedWorkflowId,
   workflowRunInputSelections,
   savedWorkflowOptions,
-  workflowTemplateOptions,
   selectedWorkflowInputFiles,
   artifactOptionsBySemanticType,
   handleSaveWorkflow,
-  handleNewWorkflowTemplate,
-  handleTemplateSelect,
+  handleNewWorkflow,
+  handleDuplicateWorkflow,
+  handleArchiveWorkflow,
+  handleDeleteWorkflow,
   applyWorkflowDraft,
-  handleSaveWorkflowTemplate,
-  handleDuplicateWorkflowTemplate,
-  handleDeleteWorkflowTemplate,
-  handleRunWorkflowTemplate,
   handleRefreshWorkflowRuns,
   handleLoadMoreWorkflowRuns,
   handleWorkflowRunSelect,
@@ -322,7 +328,6 @@ const {
   handleWorkflowInputSelect,
   scheduleWorkflowRunAutoSync,
   clearWorkflowRunAutoSync,
-  restoreActiveWorkflowTemplate,
   restoreActiveWorkflowRun,
   handleLoadWorkflow
 } = useWorkflowPersistence({
@@ -371,10 +376,6 @@ const workflowPreflight = computed(() => {
   })
 })
 
-const workflowTemplateRunDisabled = computed(() => {
-  return !workflowStore.activeWorkflowTemplateId && !workflowTemplateName.value.trim()
-})
-
 function handleAgentWorkflowDraft(draft: AiddWorkflowDraft) {
   applyWorkflowDraft(draft)
   activeMode.value = 'manual'
@@ -388,17 +389,6 @@ function handleViewTaskDetail(nodeId: string) {
 
   router.push(`/tasks/${taskId}`)
 }
-
-watch(
-  activeTemplate,
-  (template) => {
-    workflowStore.ensureCanvasFromTemplate(template)
-    if (!editableTemplate.value.nodes.some(node => node.id === workflowStore.activeNodeId)) {
-      workflowStore.setActiveNode(editableTemplate.value.nodes[0]?.id ?? null)
-    }
-  },
-  { immediate: true }
-)
 
 watch(
   () => [userStore.authReady, userStore.isLoggedIn, userStore.user?.id] as const,
@@ -420,7 +410,6 @@ watch(
     await Promise.allSettled([
       artifactsStore.fetchArtifacts({ page: 1, page_size: 100 }),
       workflowDefinitionsStore.fetchWorkflowDefinitions({ page: 1, page_size: 100 }),
-      workflowStore.loadWorkflowTemplates(),
       workflowStore.loadWorkflowRuns({ page: 1, page_size: 20 })
     ])
   },
@@ -446,10 +435,7 @@ onMounted(async () => {
   ])
 })
 
-onMounted(async () => {
-  await restoreActiveWorkflowTemplate()
-  await restoreActiveWorkflowRun()
-})
+onMounted(async () => { await restoreActiveWorkflowRun() })
 
 onBeforeUnmount(() => {
   clearWorkflowRunAutoSync()

@@ -27,6 +27,7 @@ export const useWorkflowCanvasStore = defineStore('workflow-canvas', () => {
   const nodePositionById = ref<Record<string, WorkflowCanvasPosition>>({})
   const canvasNodes = ref<WorkflowCanvasNode[]>([])
   const canvasEdges = ref<WorkflowCanvasEdge[]>([])
+  const hasCanvasOverride = ref(false)
 
   function normalizeShape() {
     if (activeNodeId.value !== null && typeof activeNodeId.value !== 'string') {
@@ -38,6 +39,9 @@ export const useWorkflowCanvasStore = defineStore('workflow-canvas', () => {
     nodePositionById.value = normalizeRecord<WorkflowCanvasPosition>(nodePositionById.value)
     canvasNodes.value = Array.isArray(canvasNodes.value) ? canvasNodes.value : []
     canvasEdges.value = Array.isArray(canvasEdges.value) ? canvasEdges.value : []
+    if (typeof hasCanvasOverride.value !== 'boolean') {
+      hasCanvasOverride.value = canvasNodes.value.length > 0 || canvasEdges.value.length > 0
+    }
   }
 
   function reset() {
@@ -46,6 +50,7 @@ export const useWorkflowCanvasStore = defineStore('workflow-canvas', () => {
     nodePositionById.value = {}
     canvasNodes.value = []
     canvasEdges.value = []
+    hasCanvasOverride.value = false
   }
 
   function setActiveNode(nodeId: string | null) {
@@ -57,13 +62,17 @@ export const useWorkflowCanvasStore = defineStore('workflow-canvas', () => {
   }
 
   function moveNode(nodeId: string, position: WorkflowCanvasPosition) {
+    const nextPosition = {
+      x: Math.max(0, Math.round(position.x)),
+      y: Math.max(0, Math.round(position.y)),
+    }
     nodePositionById.value = {
       ...nodePositionById.value,
-      [nodeId]: {
-        x: Math.max(0, Math.round(position.x)),
-        y: Math.max(0, Math.round(position.y)),
-      },
+      [nodeId]: nextPosition,
     }
+    canvasNodes.value = canvasNodes.value.map((node) => (
+      node.id === nodeId ? { ...node, position: nextPosition } : node
+    ))
   }
 
   function setNodePositions(positions: Record<string, WorkflowCanvasPosition>) {
@@ -79,39 +88,22 @@ export const useWorkflowCanvasStore = defineStore('workflow-canvas', () => {
   }
 
   function ensureCanvasFromTemplate(template: CanvasWorkflowTemplate) {
-    if (canvasNodes.value.length > 0) return
+    if (hasCanvasOverride.value) return
 
     canvasNodes.value = template.nodes.map((node) => ({
       ...node,
       position: nodePositionById.value[node.id] ?? node.position,
     }))
     canvasEdges.value = template.edges.map((edge) => ({ ...edge }))
+    hasCanvasOverride.value = true
     syncNodeSemanticTypes()
   }
 
   function syncNodeSemanticTypes() {
-    type ArtifactType = NonNullable<WorkflowCanvasEdge['artifactType']>
-    const requiredByNode = new Map<string, Set<ArtifactType>>()
-    const producedByNode = new Map<string, Set<ArtifactType>>()
-
-    for (const edge of canvasEdges.value) {
-      if (!edge.artifactType) continue
-      if (!requiredByNode.has(edge.target)) requiredByNode.set(edge.target, new Set())
-      if (!producedByNode.has(edge.source)) producedByNode.set(edge.source, new Set())
-      requiredByNode.get(edge.target)?.add(edge.artifactType)
-      producedByNode.get(edge.source)?.add(edge.artifactType)
-    }
-
-    canvasNodes.value = canvasNodes.value.map((node) => {
-      const requiredInputTypes = Array.from(requiredByNode.get(node.id) ?? [])
-      const producedOutputTypes = Array.from(
-        new Set<ArtifactType>([
-          ...((node.producedOutputTypes ?? []) as ArtifactType[]),
-          ...Array.from(producedByNode.get(node.id) ?? []),
-        ]),
-      )
-      return { ...node, requiredInputTypes, producedOutputTypes }
-    })
+    const nodeIds = new Set(canvasNodes.value.map((node) => node.id))
+    canvasEdges.value = canvasEdges.value.filter((edge) => (
+      nodeIds.has(edge.source) && nodeIds.has(edge.target)
+    ))
   }
 
   function addNode(input: {
@@ -120,6 +112,8 @@ export const useWorkflowCanvasStore = defineStore('workflow-canvas', () => {
     toolName?: string
     toolDescription?: string
     position?: WorkflowCanvasPosition
+    requiredInputTypes?: WorkflowArtifactSemanticType[]
+    producedOutputTypes?: WorkflowArtifactSemanticType[]
   }): WorkflowCanvasNode {
     const position = input.position ?? {
       x: 320 + canvasNodes.value.length * 32,
@@ -133,12 +127,13 @@ export const useWorkflowCanvasStore = defineStore('workflow-canvas', () => {
       titleKey: input.toolName || input.toolSlug,
       descriptionKey: input.toolDescription,
       position,
-      requiredInputTypes: [],
-      producedOutputTypes: [],
+      requiredInputTypes: input.requiredInputTypes ?? [],
+      producedOutputTypes: input.producedOutputTypes ?? [],
     }
     canvasNodes.value = [...canvasNodes.value, node]
     nodePositionById.value = { ...nodePositionById.value, [input.id]: position }
     activeNodeId.value = input.id
+    hasCanvasOverride.value = true
     return node
   }
 
@@ -150,6 +145,7 @@ export const useWorkflowCanvasStore = defineStore('workflow-canvas', () => {
     canvasEdges.value = canvasEdges.value.filter(
       (edge) => edge.source !== nodeId && edge.target !== nodeId,
     )
+    syncNodeSemanticTypes()
 
     const nextPos = { ...nodePositionById.value }
     delete nextPos[nodeId]
@@ -195,7 +191,7 @@ export const useWorkflowCanvasStore = defineStore('workflow-canvas', () => {
   }
 
   function exportNodes(nodes: WorkflowCanvasNode[]) {
-    const source = canvasNodes.value.length ? canvasNodes.value : nodes
+    const source = hasCanvasOverride.value ? canvasNodes.value : nodes
     return source.map((node) => ({
       ...node,
       position: nodePositionById.value[node.id] ?? node.position,
@@ -203,7 +199,7 @@ export const useWorkflowCanvasStore = defineStore('workflow-canvas', () => {
   }
 
   function exportEdges(edges: WorkflowCanvasEdge[]) {
-    return canvasNodes.value.length ? canvasEdges.value : edges
+    return hasCanvasOverride.value ? canvasEdges.value : edges
   }
 
   function applyDefinition(workflow: {
@@ -228,6 +224,7 @@ export const useWorkflowCanvasStore = defineStore('workflow-canvas', () => {
         edge.artifactType ?? edge.source_output ?? edge.target_input,
       ),
     }))
+    hasCanvasOverride.value = true
     syncNodeSemanticTypes()
     activeNodeId.value = workflow.nodes[0]?.id ?? null
 
@@ -246,6 +243,7 @@ export const useWorkflowCanvasStore = defineStore('workflow-canvas', () => {
     nodePositionById: nodePositionById.value,
     canvasNodes: canvasNodes.value,
     canvasEdges: canvasEdges.value,
+    hasCanvasOverride: hasCanvasOverride.value,
   }))
 
   return {
@@ -254,6 +252,7 @@ export const useWorkflowCanvasStore = defineStore('workflow-canvas', () => {
     nodePositionById,
     canvasNodes,
     canvasEdges,
+    hasCanvasOverride,
     snapshot,
     normalizeShape,
     reset,
@@ -273,6 +272,13 @@ export const useWorkflowCanvasStore = defineStore('workflow-canvas', () => {
   }
 }, {
   persist: {
-    pick: ['activeNodeId', 'activeGroupId', 'nodePositionById', 'canvasNodes', 'canvasEdges'],
+    pick: [
+      'activeNodeId',
+      'activeGroupId',
+      'nodePositionById',
+      'canvasNodes',
+      'canvasEdges',
+      'hasCanvasOverride',
+    ],
   },
 })

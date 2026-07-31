@@ -18,7 +18,7 @@ export const useWorkflowSessionStore = defineStore('workflow-session', () => {
 
   function normalize() {
     if (typeof templateId.value !== 'string' || !templateId.value) {
-      templateId.value = 'aidd-template'
+      templateId.value = 'free-canvas'
     }
   }
 

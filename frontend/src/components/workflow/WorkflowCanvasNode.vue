@@ -14,6 +14,23 @@
     @pointerdown="handlePointerDown"
   >
     <button
+      v-if="node.type !== 'input'"
+      type="button"
+      class="node-port node-port-input"
+      :data-node-port="`${node.id}-input`"
+      aria-label="连接到此节点"
+      @pointerup.stop="$emit('finish-connect', node.id)"
+      @pointerdown.stop
+    />
+    <button
+      v-if="node.type !== 'result'"
+      type="button"
+      class="node-port node-port-output"
+      :data-node-port="`${node.id}-output`"
+      aria-label="从此节点连接"
+      @pointerdown.stop="$emit('start-connect', node.id)"
+    />
+    <button
       v-if="deletable"
       type="button"
       class="node-delete-button"
@@ -49,6 +66,8 @@
   const emit = defineEmits<{
     (event: 'select-node', nodeId: string): void
     (event: 'delete-node', nodeId: string): void
+    (event: 'start-connect', nodeId: string): void
+    (event: 'finish-connect', nodeId: string): void
     (event: 'move-node', payload: { nodeId: string; position: { x: number; y: number } }): void
   }>()
 
@@ -174,6 +193,35 @@
     background: @error-color;
     color: #fff;
     outline: none;
+  }
+
+  .node-port {
+    position: absolute;
+    top: 50%;
+    width: 14px;
+    height: 14px;
+    padding: 0;
+    border: 2px solid @accent-color;
+    border-radius: 50%;
+    background: @bg-surface;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+    cursor: crosshair;
+    transform: translateY(-50%);
+    z-index: 2;
+  }
+
+  .node-port:hover,
+  .node-port:focus-visible {
+    background: @accent-color;
+    outline: none;
+  }
+
+  .node-port-input {
+    left: -8px;
+  }
+
+  .node-port-output {
+    right: -8px;
   }
 
   .workflow-canvas-node.is-selected {

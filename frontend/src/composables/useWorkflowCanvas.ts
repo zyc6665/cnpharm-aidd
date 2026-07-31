@@ -6,9 +6,13 @@ import type {
   ToolContract,
   WorkflowDefinition,
 } from '@/types/models'
-import type { WorkflowArtifactSemanticType } from '@/workflow/artifact-types'
 import {
-  AIDD_WORKFLOW_TEMPLATE,
+  WORKFLOW_ARTIFACT_SEMANTIC_TYPES,
+  type WorkflowArtifactSemanticType,
+} from '@/workflow/artifact-types'
+import { normalizeWorkflowSemanticType } from '@/workflow/semantic-types'
+import {
+  FREE_WORKFLOW_TEMPLATE,
   WORKFLOW_TEMPLATES,
   getWorkflowTemplateById,
 } from '@/workflow/templates'
@@ -36,13 +40,13 @@ export function useWorkflowCanvas(input: {
   const sidebarExecutorFilter = ref<string>()
 
   const activeTemplate = computed(() => {
-    return getWorkflowTemplateById(workflowStore.templateId) ?? AIDD_WORKFLOW_TEMPLATE
+    return getWorkflowTemplateById(workflowStore.templateId) ?? FREE_WORKFLOW_TEMPLATE
   })
 
   const editableTemplate = computed(() => ({
     ...activeTemplate.value,
-    nodes: workflowStore.canvasNodes.length ? workflowStore.canvasNodes : activeTemplate.value.nodes,
-    edges: workflowStore.canvasNodes.length ? workflowStore.canvasEdges : activeTemplate.value.edges,
+    nodes: workflowStore.hasCanvasOverride ? workflowStore.canvasNodes : activeTemplate.value.nodes,
+    edges: workflowStore.hasCanvasOverride ? workflowStore.canvasEdges : activeTemplate.value.edges,
   }))
 
   const activeNode = computed(() => {
@@ -76,8 +80,8 @@ export function useWorkflowCanvas(input: {
         contract?: ToolContract | null
         executorType?: string
         stage?: string
-        inputSemanticTypes: string[]
-        outputSemanticTypes: string[]
+        inputSemanticTypes: WorkflowArtifactSemanticType[]
+        outputSemanticTypes: WorkflowArtifactSemanticType[]
       }
     >()
 
@@ -91,8 +95,12 @@ export function useWorkflowCanvas(input: {
           contract: tool.contract,
           executorType: tool.contract?.executor.type,
           stage: tool.contract?.capability.stage ?? tool.contract?.capability.capability ?? undefined,
-          inputSemanticTypes: tool.contract?.capability.inputs.map((item) => item.semantic_type) ?? [],
-          outputSemanticTypes: tool.contract?.capability.outputs.map((item) => item.semantic_type) ?? [],
+          inputSemanticTypes: resolveWorkflowSemanticTypes(
+            tool.contract?.capability.inputs.map((item) => item.semantic_type) ?? [],
+          ),
+          outputSemanticTypes: resolveWorkflowSemanticTypes(
+            tool.contract?.capability.outputs.map((item) => item.semantic_type) ?? [],
+          ),
         })
       }
     }
@@ -107,8 +115,12 @@ export function useWorkflowCanvas(input: {
           contract: tool.contract,
           executorType: tool.contract?.executor.type,
           stage: tool.contract?.capability.stage ?? tool.contract?.capability.capability ?? undefined,
-          inputSemanticTypes: tool.contract?.capability.inputs.map((item) => item.semantic_type) ?? [],
-          outputSemanticTypes: tool.contract?.capability.outputs.map((item) => item.semantic_type) ?? [],
+          inputSemanticTypes: resolveWorkflowSemanticTypes(
+            tool.contract?.capability.inputs.map((item) => item.semantic_type) ?? [],
+          ),
+          outputSemanticTypes: resolveWorkflowSemanticTypes(
+            tool.contract?.capability.outputs.map((item) => item.semantic_type) ?? [],
+          ),
         })
       }
     }
@@ -157,8 +169,10 @@ export function useWorkflowCanvas(input: {
         .filter(Boolean)
         .some((value) => value!.toLowerCase().includes(keyword))
       const matchesStage = !sidebarStageFilter.value || tool.stage === sidebarStageFilter.value
-      const matchesInput = !sidebarInputFilter.value || tool.inputSemanticTypes.includes(sidebarInputFilter.value)
-      const matchesOutput = !sidebarOutputFilter.value || tool.outputSemanticTypes.includes(sidebarOutputFilter.value)
+      const matchesInput = !sidebarInputFilter.value
+        || tool.inputSemanticTypes.includes(sidebarInputFilter.value as WorkflowArtifactSemanticType)
+      const matchesOutput = !sidebarOutputFilter.value
+        || tool.outputSemanticTypes.includes(sidebarOutputFilter.value as WorkflowArtifactSemanticType)
       const matchesExecutor = !sidebarExecutorFilter.value || tool.executorType === sidebarExecutorFilter.value
 
       return matchesKeyword && matchesStage && matchesInput && matchesOutput && matchesExecutor
@@ -279,16 +293,19 @@ export function useWorkflowCanvas(input: {
     workflowStore.selectNodeTool(nodeId, toolSlug)
   }
 
-  function handleAddToolNode(toolSlug: string) {
+  function handleAddToolNode(input: string | { toolSlug: string; position?: { x: number; y: number } }) {
+    const toolSlug = typeof input === 'string' ? input : input.toolSlug
     const tool = resolveAvailableTool(toolSlug)
     workflowStore.addToolNode({
       toolSlug,
       toolName: tool?.name ?? toolSlug,
       toolDescription: tool?.description,
-      position: {
+      requiredInputTypes: tool?.inputSemanticTypes ?? [],
+      producedOutputTypes: tool?.outputSemanticTypes ?? [],
+      position: typeof input === 'string' ? {
         x: 320 + editableTemplate.value.nodes.length * 36,
         y: 120 + editableTemplate.value.nodes.length * 24,
-      },
+      } : input.position,
     })
   }
 
@@ -299,7 +316,7 @@ export function useWorkflowCanvas(input: {
   function handleAddEdge(input: {
     source: string
     target: string
-    artifactType: WorkflowArtifactSemanticType
+    artifactType?: WorkflowArtifactSemanticType
   }) {
     workflowStore.addCanvasEdge(input)
   }
@@ -377,6 +394,17 @@ export function useWorkflowCanvas(input: {
 
   function formatKey(key: string): string {
     return resolveWorkflowLabel(key, t, te)
+  }
+
+  function resolveWorkflowSemanticTypes(values: string[]): WorkflowArtifactSemanticType[] {
+    const seen = new Set<WorkflowArtifactSemanticType>()
+    for (const value of values) {
+      const normalized = normalizeWorkflowSemanticType(value)
+      if (WORKFLOW_ARTIFACT_SEMANTIC_TYPES.includes(normalized as WorkflowArtifactSemanticType)) {
+        seen.add(normalized as WorkflowArtifactSemanticType)
+      }
+    }
+    return [...seen]
   }
 
   function buildCurrentWorkflowDefinition(): WorkflowDefinition {

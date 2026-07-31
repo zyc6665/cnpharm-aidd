@@ -1,5 +1,14 @@
 import type { WorkflowCanvasEdge, WorkflowCanvasNode, WorkflowTemplate } from './template-types'
 
+export const FREE_WORKFLOW_TEMPLATE: WorkflowTemplate = {
+  id: 'free-canvas',
+  kind: 'free',
+  nameKey: 'workflow.canvas.freeFlowName',
+  descriptionKey: 'workflow.canvas.freeFlowDescription',
+  nodes: [],
+  edges: []
+}
+
 const WORKFLOW_NODE_LIBRARY = {
   inputProtein: {
     id: 'input-protein',

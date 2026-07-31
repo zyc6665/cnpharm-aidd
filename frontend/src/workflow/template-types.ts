@@ -1,6 +1,6 @@
 import type { WorkflowArtifactSemanticType, WorkflowStepKey } from './artifact-types'
 
-export type WorkflowTemplateKind = 'aidd' | 'docking' | 'pocket' | 'screening'
+export type WorkflowTemplateKind = 'free' | 'aidd' | 'docking' | 'pocket' | 'screening'
 export type WorkflowCanvasNodeType = 'input' | 'tool' | 'artifact' | 'result'
 
 export interface WorkflowTemplate {

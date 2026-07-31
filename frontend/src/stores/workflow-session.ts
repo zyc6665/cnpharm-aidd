@@ -24,6 +24,7 @@ export interface WorkflowWorkbenchSession {
   nodePositionById: Record<string, WorkflowCanvasPosition>
   canvasNodes: WorkflowCanvasNode[]
   canvasEdges: WorkflowCanvasEdge[]
+  hasCanvasOverride: boolean
   lastUpdatedAt: string
   ownerUserId?: string
 }
@@ -50,7 +51,7 @@ export function nowIsoString(): string {
 export function createInitialWorkflowSession(ownerUserId?: string): WorkflowWorkbenchSession {
   return {
     sessionId: createWorkflowSessionId(),
-    templateId: 'aidd-template',
+    templateId: 'free-canvas',
     activeNodeId: null,
     activeGroupId: null,
     selectedToolByGroup: {},
@@ -63,6 +64,7 @@ export function createInitialWorkflowSession(ownerUserId?: string): WorkflowWork
     nodePositionById: {},
     canvasNodes: [],
     canvasEdges: [],
+    hasCanvasOverride: true,
     lastUpdatedAt: nowIsoString(),
     ownerUserId,
   }

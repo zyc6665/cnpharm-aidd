@@ -18,7 +18,7 @@ test('工作台页面拆分后的 composable 与组件应存在', () => {
     'src/stores/workflow-session-store.ts',
     'src/stores/workflow-templates.ts',
     'src/stores/workflow-runs.ts',
-    'src/components/workflow/WorkflowTemplateToolbar.vue',
+    'src/components/workflow/WorkflowTemplateCanvas.vue',
     'src/components/workflow/WorkflowRunInputPanel.vue',
     'src/components/workflow/WorkflowToolPalette.vue',
     'src/stores/workflow-session.ts'
@@ -35,7 +35,8 @@ test('工作台页面应通过 composable 和子组件组装，而不是继续�
   assert.equal(pageSource.includes('useWorkflowCanvas'), true)
   assert.equal(pageSource.includes('useWorkflowPersistence'), true)
   assert.equal(pageSource.includes('useWorkflowExecution'), true)
-  assert.equal(pageSource.includes('WorkflowTemplateToolbar'), true)
+  assert.equal(pageSource.includes('WorkflowTemplateCanvas'), true)
+  assert.equal(pageSource.includes('WorkflowTemplateToolbar'), false)
   assert.equal(pageSource.includes('WorkflowRunInputPanel'), true)
   assert.equal(pageSource.includes('WorkflowToolPalette'), true)
 })

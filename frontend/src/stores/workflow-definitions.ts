@@ -78,6 +78,16 @@ export const useWorkflowDefinitionsStore = defineStore('workflow-definitions', (
     }
   }
 
+  async function archiveWorkflowDefinition(id: string) {
+    const res = await updateWorkflowDefinition(id, { status: 'archived' })
+    workflowDefinitions.value = workflowDefinitions.value.filter(item => item.id !== id)
+    total.value = Math.max(total.value - 1, 0)
+    if (currentWorkflowDefinition.value?.id === id) {
+      currentWorkflowDefinition.value = null
+    }
+    return res.data
+  }
+
   function clearCurrentWorkflowDefinition() {
     currentWorkflowDefinition.value = null
   }
@@ -92,6 +102,7 @@ export const useWorkflowDefinitionsStore = defineStore('workflow-definitions', (
     loadWorkflowDefinition,
     saveWorkflowDefinition,
     removeWorkflowDefinition,
+    archiveWorkflowDefinition,
     clearCurrentWorkflowDefinition
   }
 })

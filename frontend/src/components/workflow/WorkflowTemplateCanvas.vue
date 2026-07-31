@@ -15,9 +15,15 @@
       </a-space>
     </div>
 
-    <div class="canvas-viewport" @wheel.ctrl.prevent="setZoom(zoom - $event.deltaY * 0.001)">
+    <div
+      class="canvas-viewport"
+      @pointerup="cancelConnect"
+      @wheel.ctrl.prevent="setZoom(zoom - $event.deltaY * 0.001)"
+      @dragover.prevent="handleToolDragOver"
+      @drop.prevent="handleToolDrop"
+    >
       <div class="canvas-stage" :style="{ width: `${canvasSize.width * zoom}px`, height: `${canvasSize.height * zoom}px` }">
-      <div class="canvas-surface" :style="{ width: `${canvasSize.width}px`, height: `${canvasSize.height}px`, ...surfaceStyle }">
+      <div ref="surfaceRef" class="canvas-surface" :style="{ width: `${canvasSize.width}px`, height: `${canvasSize.height}px`, ...surfaceStyle }">
         <svg
           class="canvas-edges"
           :width="canvasSize.width"
@@ -30,8 +36,10 @@
             :key="edge.id"
             :source="edge.source"
             :target="edge.target"
+            :edge-id="edge.id"
             :label="edge.label"
             :active="edge.active"
+            @delete-edge="$emit('delete-edge', edge.id)"
           />
         </svg>
 
@@ -48,6 +56,8 @@
           @select-node="$emit('select-node', $event)"
           @move-node="$emit('move-node', $event.nodeId, $event.position)"
           @delete-node="$emit('delete-node', $event)"
+          @start-connect="handleStartConnect"
+          @finish-connect="handleFinishConnect"
         />
       </div>
       </div>
@@ -56,11 +66,11 @@
 </template>
 
 <script setup lang="ts">
-  import { computed } from 'vue'
+  import { computed, ref } from 'vue'
   import { ZoomInOutlined, ZoomOutOutlined } from '@ant-design/icons-vue'
   import { useCanvasViewport } from '@/composables/useCanvasViewport'
   import { useI18n } from 'vue-i18n'
-  import type { WorkflowStepStatus } from '@/workflow/artifact-types'
+  import type { WorkflowArtifactSemanticType, WorkflowStepStatus } from '@/workflow/artifact-types'
   import { resolveWorkflowLabel } from '@/workflow/i18n-utils'
   import type { WorkflowCanvasNode as WorkflowCanvasNodeModel, WorkflowTemplate } from '@/workflow/template-types'
   import WorkflowCanvasEdge from './WorkflowCanvasEdge.vue'
@@ -82,9 +92,14 @@
   const emit = defineEmits<{
     (event: 'select-node', nodeId: string): void
     (event: 'move-node', nodeId: string, position: { x: number; y: number }): void
-    (event: 'add-tool-node', toolSlug: string): void
+    (event: 'add-tool-node', input: { toolSlug: string; position: { x: number; y: number } }): void
     (event: 'delete-node', nodeId: string): void
+    (event: 'delete-edge', edgeId: string): void
+    (event: 'add-edge', input: { source: string; target: string; artifactType?: WorkflowArtifactSemanticType }): void
   }>()
+
+  const connectingSourceNodeId = ref<string | null>(null)
+  const surfaceRef = ref<HTMLElement | null>(null)
 
   const templateName = computed(() => resolveWorkflowLabel(props.template.nameKey, t, te))
   const resolvedNodeStatuses = computed(() => props.nodeStatuses ?? {})
@@ -136,6 +151,71 @@
       }]
     })
   })
+
+  function handleStartConnect(nodeId: string) {
+    connectingSourceNodeId.value = nodeId
+  }
+
+  function handleFinishConnect(targetNodeId: string) {
+    const sourceNodeId = connectingSourceNodeId.value
+    connectingSourceNodeId.value = null
+    if (!sourceNodeId || sourceNodeId === targetNodeId) {
+      return
+    }
+
+    const sourceNode = nodeById.value[sourceNodeId]
+    const targetNode = nodeById.value[targetNodeId]
+    if (!sourceNode || !targetNode) {
+      return
+    }
+
+    emit('add-edge', {
+      source: sourceNodeId,
+      target: targetNodeId,
+      artifactType: resolveCompatibleArtifactType(sourceNode, targetNode),
+    })
+  }
+
+  function cancelConnect() {
+    connectingSourceNodeId.value = null
+  }
+
+  function handleToolDragOver(event: DragEvent) {
+    if (!event.dataTransfer) {
+      return
+    }
+
+    event.dataTransfer.dropEffect = 'copy'
+  }
+
+  function handleToolDrop(event: DragEvent) {
+    const toolSlug = event.dataTransfer?.getData('application/x-workflow-tool')
+      || event.dataTransfer?.getData('text/plain')
+    const surface = surfaceRef.value
+    if (!toolSlug || !surface) {
+      return
+    }
+
+    const rect = surface.getBoundingClientRect()
+    emit('add-tool-node', {
+      toolSlug,
+      position: {
+        x: Math.max(0, Math.round((event.clientX - rect.left) / zoom.value)),
+        y: Math.max(0, Math.round((event.clientY - rect.top) / zoom.value)),
+      },
+    })
+  }
+
+  function resolveCompatibleArtifactType(
+    sourceNode: WorkflowCanvasNodeModel,
+    targetNode: WorkflowCanvasNodeModel,
+  ): WorkflowArtifactSemanticType | undefined {
+    const sourceOutputs = sourceNode.producedOutputTypes ?? []
+    const targetInputs = targetNode.requiredInputTypes ?? []
+    return targetInputs.find((semanticType) => sourceOutputs.includes(semanticType))
+      ?? sourceOutputs[0]
+      ?? targetInputs[0]
+  }
 
 </script>
 
