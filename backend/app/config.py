@@ -22,7 +22,12 @@ _IPV4_NUMERIC_HOST_PATTERN = re.compile(
 
 def _is_valid_deployment_cors_origin(origin: str) -> bool:
     """验证预发布和生产环境允许的 HTTPS Origin。"""
-    if origin != origin.strip() or origin != origin.lower() or "*" in origin or "%" in origin:
+    if (
+        origin != origin.strip()
+        or origin != origin.lower()
+        or "*" in origin
+        or "%" in origin
+    ):
         return False
 
     try:
@@ -57,8 +62,14 @@ def _is_valid_deployment_cors_origin(origin: str) -> bool:
             _DNS_LABEL_PATTERN.fullmatch(label) for label in hostname.split(".")
         )
 
-    canonical_host = f"[{ip_address.compressed}]" if ip_address.version == 6 else ip_address.compressed
-    canonical_netloc = f"{canonical_host}:{port}" if port is not None else canonical_host
+    canonical_host = (
+        f"[{ip_address.compressed}]"
+        if ip_address.version == 6
+        else ip_address.compressed
+    )
+    canonical_netloc = (
+        f"{canonical_host}:{port}" if port is not None else canonical_host
+    )
     return parsed_origin.netloc == canonical_netloc
 
 
@@ -83,7 +94,7 @@ def resolve_database_url(database_url: str) -> str:
     for prefix in prefixes:
         if not database_url.startswith(prefix):
             continue
-        relative_part = database_url[len(prefix):]
+        relative_part = database_url[len(prefix) :]
         absolute_path = (BACKEND_ROOT / relative_part).resolve()
         base_prefix = prefix.split("./", 1)[0]
         return f"{base_prefix}{absolute_path}"
@@ -140,7 +151,10 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _validate_production_security(self):
         """生产环境强制校验安全关键配置。"""
-        if self.ENVIRONMENT in {"staging", "production"} and len(self.JWT_SECRET_KEY) < 32:
+        if (
+            self.ENVIRONMENT in {"staging", "production"}
+            and len(self.JWT_SECRET_KEY) < 32
+        ):
             raise ValueError(
                 f"JWT_SECRET_KEY must be at least 32 characters long in {self.ENVIRONMENT} environment"
             )
@@ -170,6 +184,42 @@ class Settings(BaseSettings):
         if self.ENVIRONMENT == "production":
             if self.DEBUG:
                 raise ValueError("DEBUG must be disabled in production environment")
+            if not self.DATABASE_URL.startswith("postgresql"):
+                raise ValueError(
+                    "DATABASE_URL must use PostgreSQL in production environment"
+                )
+            if self.STORAGE_BACKEND != "minio":
+                raise ValueError(
+                    "STORAGE_BACKEND must be minio in production environment"
+                )
+            if (
+                not self.MINIO_ENDPOINT
+                or not self.MINIO_ACCESS_KEY
+                or not self.MINIO_SECRET_KEY
+            ):
+                raise ValueError(
+                    "MinIO endpoint and credentials must be configured in production environment"
+                )
+            if self.CACHE_BACKEND != "redis":
+                raise ValueError(
+                    "CACHE_BACKEND must be redis in production environment"
+                )
+            if not self.REDIS_PASSWORD:
+                raise ValueError(
+                    "REDIS_PASSWORD must be configured in production environment"
+                )
+            if not self.CELERY_BROKER_URL:
+                raise ValueError(
+                    "CELERY_BROKER_URL must be configured in production environment"
+                )
+            if not self.CELERY_RESULT_BACKEND:
+                raise ValueError(
+                    "CELERY_RESULT_BACKEND must be configured in production environment"
+                )
+            if self.TASK_EXECUTION_BACKEND != "celery":
+                raise ValueError(
+                    "TASK_EXECUTION_BACKEND must be celery in production environment"
+                )
 
         return self
 
@@ -214,8 +264,8 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: Optional[str] = None
     CELERY_RESULT_BACKEND: Optional[str] = None
     CELERY_TIMEZONE: str = "Asia/Shanghai"
-    CELERY_TASK_SOFT_TIME_LIMIT: int = 3600   # 1小时软超时
-    CELERY_TASK_TIME_LIMIT: int = 7200        # 2小时硬超时
+    CELERY_TASK_SOFT_TIME_LIMIT: int = 3600  # 1小时软超时
+    CELERY_TASK_TIME_LIMIT: int = 7200  # 2小时硬超时
     TASK_EXECUTION_BACKEND: Literal["celery", "direct"] = "celery"
     WORKFLOW_RECONCILE_INTERVAL_SECONDS: int = 5
     WORKFLOW_RECONCILE_BATCH_SIZE: int = 20
@@ -268,6 +318,7 @@ settings = get_settings()
 
 
 # ==================== 环境检测辅助函数 ====================
+
 
 def is_development() -> bool:
     """是否为开发环境"""

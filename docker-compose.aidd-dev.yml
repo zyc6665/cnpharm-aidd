@@ -1,0 +1,103 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-scitool}
+      POSTGRES_USER: ${POSTGRES_USER:-scitool}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-scitool-dev-password}
+    ports:
+      - "${POSTGRES_PORT:-9543}:5432"
+    volumes:
+      - aidd_dev_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis-dev-password}
+    ports:
+      - "${REDIS_PORT:-9579}:6379"
+    volumes:
+      - aidd_dev_redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD:-redis-dev-password} ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:RELEASE.2024-06-13T22-53-53Z
+    restart: unless-stopped
+    command: server /data --address ":9000" --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio-dev-user}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio-dev-password}
+    ports:
+      - "${MINIO_PORT:-9500}:9000"
+      - "${MINIO_CONSOLE_PORT:-9502}:9001"
+    volumes:
+      - aidd_dev_minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      target: development
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    environment: &aidd_dev_environment
+      ENVIRONMENT: development
+      DEBUG: "true"
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-scitool}:${POSTGRES_PASSWORD:-scitool-dev-password}@postgres:5432/${POSTGRES_DB:-scitool}
+      CACHE_BACKEND: redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis-dev-password}
+      STORAGE_BACKEND: minio
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minio-dev-user}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minio-dev-password}
+      MINIO_BUCKET: ${MINIO_BUCKET:-scitool-files}
+      MINIO_SECURE: "false"
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-redis-dev-password}@redis:6379/1
+      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-redis-dev-password}@redis:6379/2
+      TASK_EXECUTION_BACKEND: celery
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-jwt-secret-key-change-me-32chars}
+      SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:-dev-settings-encryption-key-32char}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8585}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      minio: { condition: service_healthy }
+    command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./backend:/app
+
+  celery-worker:
+    build:
+      context: ./backend
+      target: development
+    restart: unless-stopped
+    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=${CELERY_WORKER_CONCURRENCY:-2} --queues=default,tool_tasks,high_priority,cpu_queue,maintenance,monitoring
+    environment: *aidd_dev_environment
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      minio: { condition: service_healthy }
+    volumes:
+      - ./backend:/app
+
+volumes:
+  aidd_dev_postgres_data:
+  aidd_dev_redis_data:
+  aidd_dev_minio_data:

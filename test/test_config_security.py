@@ -18,6 +18,25 @@ LOCAL_DEVELOPMENT_CORS_ORIGINS = [
 ]
 
 
+def _production_runtime_settings(environment: str) -> dict[str, object]:
+    """为只测试安全规则的用例补齐生产运行依赖。"""
+    if environment != "production":
+        return {}
+    return {
+        "DATABASE_URL": "postgresql+asyncpg://scitool:secret@postgres:5432/scitool",
+        "STORAGE_BACKEND": "minio",
+        "MINIO_ENDPOINT": "minio:9000",
+        "MINIO_ACCESS_KEY": "minio-user",
+        "MINIO_SECRET_KEY": "minio-password",
+        "CACHE_BACKEND": "redis",
+        "REDIS_HOST": "redis",
+        "REDIS_PASSWORD": "redis-password",
+        "CELERY_BROKER_URL": "redis://:redis-password@redis:6379/1",
+        "CELERY_RESULT_BACKEND": "redis://:redis-password@redis:6379/2",
+        "TASK_EXECUTION_BACKEND": "celery",
+    }
+
+
 class TestCorsDefaults:
     def test_development_default_cors_origins_are_restricted_to_local_frontends(self):
         """开发环境默认 CORS 仅允许本地前端地址。"""
@@ -30,8 +49,13 @@ class TestCorsDefaults:
         example = Path(__file__).resolve().parents[1] / "backend" / ".env.example"
         contents = example.read_text(encoding="utf-8")
 
-        cors_line = next(line for line in contents.splitlines() if line.startswith("CORS_ORIGINS="))
-        assert json.loads(cors_line.removeprefix("CORS_ORIGINS=")) == LOCAL_DEVELOPMENT_CORS_ORIGINS
+        cors_line = next(
+            line for line in contents.splitlines() if line.startswith("CORS_ORIGINS=")
+        )
+        assert (
+            json.loads(cors_line.removeprefix("CORS_ORIGINS="))
+            == LOCAL_DEVELOPMENT_CORS_ORIGINS
+        )
         assert "*" not in json.loads(cors_line.removeprefix("CORS_ORIGINS="))
         assert "SETTINGS_ENCRYPTION_KEY=" in contents
         assert "生产/预发布环境" in contents
@@ -66,9 +90,13 @@ class TestDeploymentCorsOrigins:
             "https://0x7f.1",
         ],
     )
-    def test_deployment_environment_rejects_invalid_cors_origin(self, environment, origin):
+    def test_deployment_environment_rejects_invalid_cors_origin(
+        self, environment, origin
+    ):
         """预发布和生产环境仅接受带有效主机名的 HTTPS Origin。"""
-        with pytest.raises(ValueError, match="CORS_ORIGINS must contain only HTTPS origins"):
+        with pytest.raises(
+            ValueError, match="CORS_ORIGINS must contain only HTTPS origins"
+        ):
             Settings(
                 ENVIRONMENT=environment,
                 DEBUG=False,
@@ -89,7 +117,9 @@ class TestDeploymentCorsOrigins:
             "https://sciminer.example.com:65535",
         ],
     )
-    def test_deployment_environment_accepts_valid_https_cors_origin(self, environment, origin):
+    def test_deployment_environment_accepts_valid_https_cors_origin(
+        self, environment, origin
+    ):
         """预发布和生产环境接受受控 HTTPS Origin。"""
         settings = Settings(
             ENVIRONMENT=environment,
@@ -97,13 +127,18 @@ class TestDeploymentCorsOrigins:
             CORS_ORIGINS=[origin],
             JWT_SECRET_KEY="j" * 32,
             SETTINGS_ENCRYPTION_KEY="e" * 32,
+            **_production_runtime_settings(environment),
         )
         assert settings.CORS_ORIGINS == [origin]
 
     @pytest.mark.parametrize("environment", ["staging", "production"])
-    def test_deployment_environment_rejects_mixed_valid_and_invalid_cors_origins(self, environment):
+    def test_deployment_environment_rejects_mixed_valid_and_invalid_cors_origins(
+        self, environment
+    ):
         """部署环境的 Origin 列表不能夹带不安全来源。"""
-        with pytest.raises(ValueError, match="CORS_ORIGINS must contain only HTTPS origins"):
+        with pytest.raises(
+            ValueError, match="CORS_ORIGINS must contain only HTTPS origins"
+        ):
             Settings(
                 ENVIRONMENT=environment,
                 DEBUG=False,
@@ -122,9 +157,13 @@ class TestDeploymentCorsOrigins:
             "https://sciminer.example.com:08443",
         ],
     )
-    def test_deployment_environment_rejects_noncanonical_cors_origin(self, environment, origin):
+    def test_deployment_environment_rejects_noncanonical_cors_origin(
+        self, environment, origin
+    ):
         """部署环境拒绝会与浏览器 Origin 精确匹配不一致的来源。"""
-        with pytest.raises(ValueError, match="CORS_ORIGINS must contain only HTTPS origins"):
+        with pytest.raises(
+            ValueError, match="CORS_ORIGINS must contain only HTTPS origins"
+        ):
             Settings(
                 ENVIRONMENT=environment,
                 DEBUG=False,
@@ -134,7 +173,9 @@ class TestDeploymentCorsOrigins:
             )
 
     @pytest.mark.parametrize("environment", ["staging", "production"])
-    def test_deployment_environment_accepts_canonical_custom_https_port(self, environment):
+    def test_deployment_environment_accepts_canonical_custom_https_port(
+        self, environment
+    ):
         """部署环境接受规范化的非默认 HTTPS 端口。"""
         origin = "https://sciminer.example.com:8443"
         settings = Settings(
@@ -143,11 +184,14 @@ class TestDeploymentCorsOrigins:
             CORS_ORIGINS=[origin],
             JWT_SECRET_KEY="j" * 32,
             SETTINGS_ENCRYPTION_KEY="e" * 32,
+            **_production_runtime_settings(environment),
         )
         assert settings.CORS_ORIGINS == [origin]
 
     @pytest.mark.parametrize("environment", ["staging", "production"])
-    def test_deployment_environment_accepts_canonical_ipv6_with_custom_https_port(self, environment):
+    def test_deployment_environment_accepts_canonical_ipv6_with_custom_https_port(
+        self, environment
+    ):
         """部署环境接受压缩格式的 IPv6 HTTPS Origin。"""
         origin = "https://[2001:db8::1]:8443"
         settings = Settings(
@@ -156,6 +200,7 @@ class TestDeploymentCorsOrigins:
             CORS_ORIGINS=[origin],
             JWT_SECRET_KEY="j" * 32,
             SETTINGS_ENCRYPTION_KEY="e" * 32,
+            **_production_runtime_settings(environment),
         )
         assert settings.CORS_ORIGINS == [origin]
 
@@ -174,12 +219,16 @@ class TestJWTSecretKey:
 
     def test_staging_rejects_short_jwt_secret(self):
         """预发布环境拒绝长度不足的 JWT_SECRET_KEY。"""
-        with pytest.raises(ValueError, match="JWT_SECRET_KEY must be at least 32 characters"):
+        with pytest.raises(
+            ValueError, match="JWT_SECRET_KEY must be at least 32 characters"
+        ):
             Settings(ENVIRONMENT="staging", JWT_SECRET_KEY="short")
 
     def test_production_rejects_short_jwt_secret(self):
         """生产环境拒绝长度不足的 JWT_SECRET_KEY。"""
-        with pytest.raises(ValueError, match="JWT_SECRET_KEY must be at least 32 characters"):
+        with pytest.raises(
+            ValueError, match="JWT_SECRET_KEY must be at least 32 characters"
+        ):
             Settings(ENVIRONMENT="production", JWT_SECRET_KEY="short")
 
     def test_staging_accepts_long_jwt_secret(self):
@@ -202,6 +251,7 @@ class TestJWTSecretKey:
             CORS_ORIGINS=["https://sciminer.example.com"],
             JWT_SECRET_KEY=long_key,
             SETTINGS_ENCRYPTION_KEY="e" * 32,
+            **_production_runtime_settings("production"),
         )
         assert settings.JWT_SECRET_KEY == long_key
 
@@ -218,7 +268,9 @@ class TestJWTSecretKey:
 
     def test_production_rejects_wildcard_cors_with_credentials(self):
         """生产环境拒绝通配 CORS。"""
-        with pytest.raises(ValueError, match="CORS_ORIGINS must contain only HTTPS origins"):
+        with pytest.raises(
+            ValueError, match="CORS_ORIGINS must contain only HTTPS origins"
+        ):
             Settings(
                 ENVIRONMENT="production",
                 DEBUG=False,
@@ -229,7 +281,9 @@ class TestJWTSecretKey:
 
     def test_staging_rejects_wildcard_cors_with_credentials(self):
         """预发布环境拒绝通配 CORS。"""
-        with pytest.raises(ValueError, match="CORS_ORIGINS must contain only HTTPS origins"):
+        with pytest.raises(
+            ValueError, match="CORS_ORIGINS must contain only HTTPS origins"
+        ):
             Settings(
                 ENVIRONMENT="staging",
                 CORS_ORIGINS=["*"],
@@ -240,9 +294,13 @@ class TestJWTSecretKey:
 
 class TestSettingsEncryptionKey:
     @pytest.mark.parametrize("environment", ["staging", "production"])
-    def test_deployment_environment_rejects_missing_settings_encryption_key(self, environment):
+    def test_deployment_environment_rejects_missing_settings_encryption_key(
+        self, environment
+    ):
         """预发布和生产环境必须设置独立的配置加密密钥。"""
-        with pytest.raises(ValueError, match="SETTINGS_ENCRYPTION_KEY must be configured"):
+        with pytest.raises(
+            ValueError, match="SETTINGS_ENCRYPTION_KEY must be configured"
+        ):
             Settings(
                 ENVIRONMENT=environment,
                 DEBUG=False,
@@ -252,9 +310,13 @@ class TestSettingsEncryptionKey:
             )
 
     @pytest.mark.parametrize("environment", ["staging", "production"])
-    def test_deployment_environment_rejects_empty_settings_encryption_key(self, environment):
+    def test_deployment_environment_rejects_empty_settings_encryption_key(
+        self, environment
+    ):
         """预发布和生产环境拒绝空字符串配置加密密钥。"""
-        with pytest.raises(ValueError, match="SETTINGS_ENCRYPTION_KEY must be configured"):
+        with pytest.raises(
+            ValueError, match="SETTINGS_ENCRYPTION_KEY must be configured"
+        ):
             Settings(
                 ENVIRONMENT=environment,
                 DEBUG=False,
@@ -264,9 +326,13 @@ class TestSettingsEncryptionKey:
             )
 
     @pytest.mark.parametrize("environment", ["staging", "production"])
-    def test_deployment_environment_rejects_short_settings_encryption_key(self, environment):
+    def test_deployment_environment_rejects_short_settings_encryption_key(
+        self, environment
+    ):
         """预发布和生产环境拒绝过短的配置加密密钥。"""
-        with pytest.raises(ValueError, match="SETTINGS_ENCRYPTION_KEY must be at least 32 characters"):
+        with pytest.raises(
+            ValueError, match="SETTINGS_ENCRYPTION_KEY must be at least 32 characters"
+        ):
             Settings(
                 ENVIRONMENT=environment,
                 DEBUG=False,
@@ -281,7 +347,9 @@ class TestSettingsEncryptionKey:
     ):
         """预发布和生产环境禁止复用 JWT 密钥作为配置加密密钥。"""
         shared_key = "s" * 32
-        with pytest.raises(ValueError, match="SETTINGS_ENCRYPTION_KEY must differ from JWT_SECRET_KEY"):
+        with pytest.raises(
+            ValueError, match="SETTINGS_ENCRYPTION_KEY must differ from JWT_SECRET_KEY"
+        ):
             Settings(
                 ENVIRONMENT=environment,
                 DEBUG=False,
@@ -291,7 +359,9 @@ class TestSettingsEncryptionKey:
             )
 
     @pytest.mark.parametrize("environment", ["staging", "production"])
-    def test_deployment_environment_accepts_distinct_valid_settings_encryption_key(self, environment):
+    def test_deployment_environment_accepts_distinct_valid_settings_encryption_key(
+        self, environment
+    ):
         """预发布和生产环境接受独立且足够长的配置加密密钥。"""
         settings = Settings(
             ENVIRONMENT=environment,
@@ -299,6 +369,7 @@ class TestSettingsEncryptionKey:
             CORS_ORIGINS=["https://sciminer.example.com"],
             JWT_SECRET_KEY="j" * 32,
             SETTINGS_ENCRYPTION_KEY="e" * 32,
+            **_production_runtime_settings(environment),
         )
         assert settings.SETTINGS_ENCRYPTION_KEY == "e" * 32
 
