@@ -1,0 +1,91 @@
+api_version: aidd.sciminer/tool-package.v2
+kind: ToolPackage
+metadata:
+  slug: standard-pocket-adapter-template
+  name: Standard Pocket Adapter Template
+  version: 0.1.0
+  description: Template for adapting legacy pocket models to fixed platform Artifact contracts.
+artifacts:
+  inputs:
+    - name: protein
+      type: protein_structure@1
+      required: true
+  outputs:
+    - name: pocket
+      type: binding_pocket@1
+      cardinality: one
+      required: true
+    - name: report
+      type: run_report@1
+      cardinality: one
+      required: false
+parameters_schema:
+  type: object
+  properties:
+    model_choice:
+      type: string
+      default: auto
+      description: Optional model selector passed through to the legacy model wrapper.
+    pocket_radius_angstrom:
+      type: number
+      default: 10.0
+      minimum: 0
+      description: Adapter-side residue expansion radius when deriving residue-level pockets.
+  additionalProperties: false
+adapter:
+  input:
+    - input: protein
+      method: mount_primary_structure_file
+  output:
+    - output: pocket
+      method: convert_legacy_pocket_outputs_to_binding_pocket_v1
+      validator_profile: binding_pocket_v1_core
+    - output: report
+      method: collect_adapter_report_json
+      validator_profile: run_report_v1_core
+exposure:
+  agent: true
+  workflow: true
+  direct_run: true
+variants:
+  - name: cpu
+    accelerator: cpu
+    executor_types:
+      - remote_job
+    entrypoint:
+      - runner/entrypoint.sh
+    resources:
+      cpu: 4
+      memory_mb: 8192
+    validation_status: unvalidated
+    hardware_validated: false
+  - name: nvidia-cuda
+    accelerator: nvidia_cuda
+    executor_types:
+      - remote_job
+    entrypoint:
+      - runner/entrypoint.sh
+    resources:
+      cpu: 8
+      memory_mb: 16384
+      gpu_memory_mb: 16384
+      devices:
+        - nvidia.com/gpu
+      driver: ">=535"
+    validation_status: unvalidated
+    hardware_validated: false
+  - name: haiguang-dcu
+    accelerator: haiguang_dcu
+    executor_types:
+      - remote_job
+    entrypoint:
+      - runner/entrypoint.sh
+    resources:
+      cpu: 8
+      memory_mb: 16384
+      gpu_memory_mb: 16384
+      devices:
+        - hygon.com/dcu
+      driver: ">=6.2"
+    validation_status: adapted_pending_hardware_validation
+    hardware_validated: false

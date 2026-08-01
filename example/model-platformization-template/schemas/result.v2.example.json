@@ -1,0 +1,62 @@
+{
+  "result_version": "aidd.sciminer/result.v2",
+  "artifacts": {
+    "pocket": {
+      "name": "example_binding_pocket",
+      "type": "binding_pocket@1",
+      "files": {
+        "residue_pocket_pdb": {
+          "path": "artifacts/pocket/residue_pocket.pdb",
+          "sha256": "edf5978f0a951f9404ae9fcecc35057833c442a847f316f26e395923232c9818",
+          "content_type": "chemical/x-pdb"
+        },
+        "atom_pocket_pdb": {
+          "path": "artifacts/pocket/atom_pocket.pdb",
+          "sha256": "3bd136f4abb1590219136cdef0940ca720b5fef410c663e30cd7c9d93bb8947e",
+          "content_type": "chemical/x-pdb"
+        },
+        "pocket_metadata_json": {
+          "path": "artifacts/pocket/pocket_metadata.json",
+          "sha256": "4e330e80af3edb3c94502ab49f55211726d2f698d4bce85600863e79b8c0436c",
+          "content_type": "application/json"
+        }
+      },
+      "metadata": {
+        "center": [11.832, 13.224, 9.338],
+        "bbox": {
+          "min": [11.104, 13.207, 9.245],
+          "max": [12.56, 13.241, 9.43]
+        },
+        "residue_ids": ["A:10"],
+        "atom_ids": [1, 2],
+        "source_protein_ref": "input:protein"
+      }
+    },
+    "report": {
+      "name": "example_adapter_report",
+      "type": "run_report@1",
+      "files": {
+        "report_json": {
+          "path": "reports/report.json",
+          "sha256": "330b43ee4f138e20f0324500a8ea06471794a10ae6000ecad7d2b2fd89c9e5e4",
+          "content_type": "application/json"
+        }
+      },
+      "metadata": {
+        "source_task_id": "example-task"
+      }
+    }
+  },
+  "relations": [
+    {
+      "from": "pocket",
+      "to": "report",
+      "type": "validated_by"
+    },
+    {
+      "from": "report",
+      "to": "pocket",
+      "type": "describes"
+    }
+  ]
+}

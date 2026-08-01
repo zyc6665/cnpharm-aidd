@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:sciminer:standard-pocket-adapter-template:parameters:v2",
+  "title": "Standard pocket adapter template parameters",
+  "type": "object",
+  "properties": {
+    "model_choice": {
+      "type": "string",
+      "default": "auto",
+      "description": "Optional model selector passed through to the legacy model wrapper."
+    },
+    "pocket_radius_angstrom": {
+      "type": "number",
+      "default": 10.0,
+      "minimum": 0,
+      "description": "Residue expansion radius used when deriving a residue-level pocket."
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,38 @@
+{
+  "request_version": "aidd.sciminer/request.v1",
+  "task": {
+    "id": "example-task",
+    "tool_slug": "standard-pocket-adapter-template",
+    "tool_version": "0.1.0"
+  },
+  "inputs": {
+    "protein": {
+      "artifact_version_id": "example-protein-version",
+      "type": "protein_structure@1",
+      "files": {
+        "structure_file": {
+          "path": "input/protein.pdb",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "content_type": "chemical/x-pdb"
+        }
+      },
+      "metadata": {
+        "chain_ids": ["A"],
+        "residue_count": 1,
+        "atom_count": 2,
+        "structure_format": "pdb",
+        "source_filename": "protein.pdb"
+      }
+    }
+  },
+  "parameters": {
+    "model_choice": "auto",
+    "pocket_radius_angstrom": 10.0
+  },
+  "execution": {
+    "variant": "cpu",
+    "accelerator": "cpu",
+    "work_dir": ".",
+    "output_dir": "output"
+  }
+}
