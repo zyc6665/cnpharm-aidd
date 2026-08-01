@@ -195,11 +195,13 @@ export interface ToolCapabilityOutputMatch {
   extension?: string | null
   filename_contains_any?: string[]
   content_type?: string | null
+  type?: string | null
+  name?: string | null
 }
 
 export interface ToolCapabilityOutput {
   semantic_type: string
-  source: 'output_files' | 'output_data'
+  source: 'output_files' | 'output_data' | 'artifact'
   match?: ToolCapabilityOutputMatch | null
   path?: string | null
   required?: boolean
@@ -235,6 +237,19 @@ export interface ToolContract {
     output: ToolSchema
   }
   capability: ToolContractCapability
+  artifacts?: {
+    inputs?: Array<{
+      name: string
+      type: string
+      required?: boolean
+    }>
+    outputs?: Array<{
+      name: string
+      type: string
+      cardinality?: 'one' | 'many'
+      required?: boolean
+    }>
+  }
   validation: ToolContractValidation
 }
 

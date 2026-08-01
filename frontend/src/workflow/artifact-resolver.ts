@@ -104,6 +104,80 @@ function matchesOutputFile(input: {
   return true
 }
 
+interface StandardArtifactsSummary {
+  artifact_version_ids_by_ref: Record<string, string>
+  file_ids_by_artifact_ref: Record<string, string[]>
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function readStandardArtifacts(outputData: unknown): StandardArtifactsSummary | null {
+  if (!isObject(outputData)) {
+    return null
+  }
+
+  const candidate = isObject(outputData.standard_artifacts)
+    ? outputData.standard_artifacts
+    : isObject(outputData.result) && isObject(outputData.result.standard_artifacts)
+      ? outputData.result.standard_artifacts
+      : null
+
+  if (!candidate) {
+    return null
+  }
+
+  const rawVersionIds = candidate.artifact_version_ids_by_ref
+  const rawFileIds = candidate.file_ids_by_artifact_ref
+  if (!isObject(rawVersionIds) || !isObject(rawFileIds)) {
+    return null
+  }
+
+  const artifactVersionIds: Record<string, string> = {}
+  for (const [key, value] of Object.entries(rawVersionIds)) {
+    if (typeof value === 'string' && value) {
+      artifactVersionIds[key] = value
+    }
+  }
+
+  const fileIds: Record<string, string[]> = {}
+  for (const [key, value] of Object.entries(rawFileIds)) {
+    if (Array.isArray(value)) {
+      fileIds[key] = value.filter(
+        (item): item is string => typeof item === 'string' && item.length > 0
+      )
+    }
+  }
+
+  return {
+    artifact_version_ids_by_ref: artifactVersionIds,
+    file_ids_by_artifact_ref: fileIds
+  }
+}
+
+function resolveStandardArtifactKey(
+  extractor: Extract<WorkflowToolOutputExtractor, { source: 'artifact' }>,
+  standardArtifacts: StandardArtifactsSummary
+): string | null {
+  if (
+    extractor.artifactName &&
+    standardArtifacts.artifact_version_ids_by_ref[extractor.artifactName]
+  ) {
+    return extractor.artifactName
+  }
+
+  const keys = Object.keys(standardArtifacts.artifact_version_ids_by_ref)
+  return keys.length === 1 ? keys[0] ?? null : null
+}
+
+function findOutputFileById(
+  task: WorkflowTaskRef,
+  fileId: string
+): NonNullable<WorkflowTaskRef['output_files']>[number] | null {
+  return (task.output_files ?? []).find((file) => String(file.id) === fileId) ?? null
+}
+
 function readOutputDataByPath(outputData: unknown, path: string): unknown {
   if (!outputData || typeof outputData !== 'object') {
     return undefined
@@ -151,6 +225,43 @@ export function extractArtifactsFromTaskResultWithBinding(input: {
           }
         })
       }
+
+      continue
+    }
+
+    if (extractor.source === 'artifact') {
+      const standardArtifacts = readStandardArtifacts(input.task.output_data)
+      if (!standardArtifacts) {
+        continue
+      }
+
+      const artifactKey = resolveStandardArtifactKey(extractor, standardArtifacts)
+      if (!artifactKey) {
+        continue
+      }
+
+      const artifactVersionId = standardArtifacts.artifact_version_ids_by_ref[artifactKey]
+      const fileIds = standardArtifacts.file_ids_by_artifact_ref[artifactKey] ?? []
+      const primaryFile = fileIds[0] ? findOutputFileById(input.task, fileIds[0]) : null
+
+      artifacts.push({
+        id: `${input.task.id}:${extractor.semanticType}:${artifactVersionId}`,
+        semanticType: extractor.semanticType,
+        name: primaryFile?.original_name ?? primaryFile?.filename ?? artifactKey,
+        stepKey: input.stepKey,
+        toolSlug: input.binding.toolSlug,
+        taskId: input.task.id,
+        fileId: primaryFile?.id ?? fileIds[0],
+        url: primaryFile?.url,
+        contentType: primaryFile?.content_type,
+        createdAt,
+        metadata: {
+          source: 'standard_artifacts',
+          artifactName: artifactKey,
+          artifactVersionId,
+          fileIds
+        }
+      })
 
       continue
     }

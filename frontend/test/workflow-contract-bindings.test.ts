@@ -42,7 +42,7 @@ function createContract(): ToolContract {
           input_files: {
             type: 'object',
             properties: {
-              pocket_pdb: { type: 'string', format: 'uri' }
+              pocket: { type: 'string', format: 'uri' }
             }
           }
         }
@@ -60,20 +60,18 @@ function createContract(): ToolContract {
       stage: 'molecule_generation',
       inputs: [
         {
-          semantic_type: 'pocket_pdb',
-          field: 'input_files.pocket_pdb',
+          semantic_type: 'binding_pocket@1',
+          field: 'input_files.pocket',
           required: true,
           accepted_extensions: ['.pdb']
         }
       ],
       outputs: [
         {
-          semantic_type: 'generated_ligand',
-          source: 'output_files',
+          semantic_type: 'ligand_structure@1',
+          source: 'artifact',
           match: {
-            extension: '.sdf',
-            filename_contains_any: ['generated'],
-            content_type: 'chemical/x-mdl-sdfile'
+            type: 'ligand_structure@1'
           },
           required: true
         }
@@ -86,6 +84,17 @@ function createContract(): ToolContract {
     validation: {
       status: 'valid',
       errors: []
+    },
+    artifacts: {
+      inputs: [{ name: 'pocket', type: 'binding_pocket@1', required: true }],
+      outputs: [
+        {
+          name: 'generated_ligands',
+          type: 'ligand_structure@1',
+          cardinality: 'many',
+          required: true
+        }
+      ]
     }
   }
 }
@@ -107,7 +116,7 @@ function createTool(contract: ToolContract): WorkbenchGroupTool {
 function createArtifact(input: Partial<WorkflowArtifact> = {}): WorkflowArtifact {
   return {
     id: input.id ?? 'artifact-pocket',
-    semanticType: input.semanticType ?? 'pocket_pdb',
+    semanticType: input.semanticType ?? 'binding_pocket@1',
     name: input.name ?? 'protein_pocket_residues.pdb',
     stepKey: input.stepKey ?? 'pocketExploration',
     toolSlug: input.toolSlug ?? 'lvpocket-pocket-prediction',
@@ -133,7 +142,16 @@ function createTask(): WorkflowTaskRef {
         url: '/api/v1/files/file-generated/download'
       }
     ],
-    output_data: {},
+    output_data: {
+      standard_artifacts: {
+        artifact_version_ids_by_ref: {
+          generated_ligands: 'artifact-version-generated'
+        },
+        file_ids_by_artifact_ref: {
+          generated_ligands: ['file-generated']
+        }
+      }
+    },
     finished_at: '2026-06-17T11:00:00Z',
     created_at: '2026-06-17T10:00:00Z'
   }
@@ -145,17 +163,17 @@ test('应从 ToolContract 生成工作流输入绑定和输出提取规则', asy
 
   assert.equal(binding?.toolSlug, 'dynamic-pocket-generator')
   assert.equal(binding?.stepKey, 'moleculeGenerationOrVirtualScreening')
-  assert.deepEqual(binding?.acceptedInputTypes, ['pocket_pdb'])
+  assert.deepEqual(binding?.acceptedInputTypes, ['binding_pocket@1'])
   assert.deepEqual(binding?.fieldBindings, [
     {
-      semanticType: 'pocket_pdb',
-      field: 'input_files.pocket_pdb',
+      semanticType: 'binding_pocket@1',
+      field: 'input_files.pocket',
       required: true,
       acceptedExtensions: ['.pdb']
     }
   ])
-  assert.equal(binding?.outputExtractors[0]?.semanticType, 'generated_ligand')
-  assert.equal(binding?.outputExtractors[0]?.source, 'output_files')
+  assert.equal(binding?.outputExtractors[0]?.semanticType, 'ligand_structure@1')
+  assert.equal(binding?.outputExtractors[0]?.source, 'artifact')
 })
 
 test('动态工作台工具只能使用 embedded contract 生成绑定', async () => {
@@ -163,7 +181,7 @@ test('动态工作台工具只能使用 embedded contract 生成绑定', async (
   const binding = resolveWorkflowToolBinding(createTool(createContract()))
 
   assert.equal(binding?.toolSlug, 'dynamic-pocket-generator')
-  assert.equal(binding?.fieldBindings[0]?.semanticType, 'pocket_pdb')
+  assert.equal(binding?.fieldBindings[0]?.semanticType, 'binding_pocket@1')
   assert.equal(
     resolveWorkflowToolBinding({
       ...createTool(createContract()),
@@ -186,9 +204,9 @@ test('预检报告应展示已匹配输入和预期输出', async () => {
   })
 
   assert.equal(report.ready, true)
-  assert.equal(report.inputs[0]?.field, 'input_files.pocket_pdb')
+  assert.equal(report.inputs[0]?.field, 'input_files.pocket')
   assert.equal(report.inputs[0]?.artifact?.id, 'artifact-pocket')
-  assert.deepEqual(report.expectedOutputs, ['generated_ligand'])
+  assert.deepEqual(report.expectedOutputs, ['ligand_structure@1'])
 })
 
 test('动态 contract 输出提取器应能从任务结果生成语义产物', async () => {
@@ -205,6 +223,7 @@ test('动态 contract 输出提取器应能从任务结果生成语义产物', a
   })
 
   assert.equal(artifacts.length, 1)
-  assert.equal(artifacts[0]?.semanticType, 'generated_ligand')
+  assert.equal(artifacts[0]?.semanticType, 'ligand_structure@1')
   assert.equal(artifacts[0]?.fileId, 'file-generated')
+  assert.equal(artifacts[0]?.metadata?.source, 'standard_artifacts')
 })

@@ -24,6 +24,16 @@ interface WorkflowToolFileOutputExtractor {
   readonly match: WorkflowToolOutputFileMatch
 }
 
+interface WorkflowToolArtifactOutputExtractor {
+  readonly semanticType: WorkflowArtifactSemanticType
+  readonly source: 'artifact'
+  readonly artifactName?: string
+  readonly match: {
+    readonly type?: string
+    readonly name?: string
+  }
+}
+
 interface WorkflowToolDataOutputExtractor {
   readonly semanticType: WorkflowArtifactSemanticType
   readonly source: 'output_data'
@@ -32,6 +42,7 @@ interface WorkflowToolDataOutputExtractor {
 
 export type WorkflowToolOutputExtractor =
   | WorkflowToolFileOutputExtractor
+  | WorkflowToolArtifactOutputExtractor
   | WorkflowToolDataOutputExtractor
 
 export interface WorkflowToolBindingConfig {
@@ -167,6 +178,23 @@ export function buildWorkflowToolBindingFromContract(
           semanticType,
           source: 'output_data' as const,
           path: output.path || semanticType
+        }
+      }
+
+      if (output.source === 'artifact') {
+        const artifactSlot = contract.artifacts?.outputs?.find(
+          (slot) => slot.type === output.semantic_type
+        )
+        const artifactName = output.match?.name ?? artifactSlot?.name
+
+        return {
+          semanticType,
+          source: 'artifact' as const,
+          artifactName: artifactName ?? undefined,
+          match: {
+            type: output.match?.type ?? output.semantic_type,
+            name: artifactName ?? undefined
+          }
         }
       }
 

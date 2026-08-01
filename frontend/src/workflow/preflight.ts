@@ -53,6 +53,11 @@ interface WorkflowPreflightTool {
 }
 
 const WORKFLOW_INPUT_ACCEPTED_EXTENSIONS: Record<WorkflowArtifactSemanticType, readonly string[]> = {
+  'protein_structure@1': ['.pdb', '.cif'],
+  'binding_pocket@1': ['.pdb', '.cif'],
+  'ligand_structure@1': ['.sdf', '.mol2', '.pdb'],
+  'molecule_table@1': ['.csv', '.smi', '.txt', '.tsv', '.json'],
+  'run_report@1': ['.json', '.csv', '.txt', '.md'],
   protein_pdb: ['.pdb', '.cif'],
   pocket_pdb: ['.pdb', '.cif'],
   generated_ligand: ['.sdf', '.mol2', '.pdb'],
