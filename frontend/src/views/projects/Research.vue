@@ -151,7 +151,7 @@ onMounted(reload)
 .back-link { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 5px; color: @text-secondary; }.back-link:hover { background: @bg-hover; color: @text-primary; }
 .connection-state { display: flex; align-items: center; gap: 6px; font-size: 12px; color: @text-tertiary; }.connection-state::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: @text-tertiary; }.connection-state.online::before { background: @success-color; }
 .research-layout { min-height: 0; display: grid; grid-template-columns: 220px minmax(480px, 1fr) 260px; }
-.conversation-main { position: relative; min-width: 0; min-height: 0; }.conversation-scroll { height: 100%; overflow-y: auto; }
+.conversation-main { position: relative; min-width: 0; min-height: 0; }.conversation-scroll { box-sizing: border-box; height: 100%; padding-bottom: 150px; overflow-y: auto; }
 .center-state { width: min(720px, calc(100% - 40px)); margin: 70px auto; }.error-state { display: grid; justify-items: start; gap: 10px; }.error-state span { color: @text-secondary; }
 @media (max-width: 1180px) { .research-layout { grid-template-columns: 200px minmax(420px, 1fr); }.research-layout > :last-child { display: none; } }
 @media (max-width: @screen-md) { .research-page { min-height: 100dvh; height: 100dvh; }.research-layout { grid-template-columns: 1fr; }.research-layout > :first-child { display: none; } }

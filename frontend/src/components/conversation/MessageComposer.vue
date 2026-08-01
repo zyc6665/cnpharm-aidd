@@ -44,8 +44,8 @@ function cancelEdit() {
 </script>
 
 <style scoped lang="less">
-.composer-shell { position: absolute; left: 0; right: 0; bottom: 0; padding: 16px 24px 22px; background: linear-gradient(to bottom, transparent, @bg-body 22%); }
-.composer { width: min(780px, 100%); margin: 0 auto; border: 1px solid @border-color; border-radius: 8px; background: @bg-surface; box-shadow: @shadow-md; overflow: hidden; }
+.composer-shell { position: absolute; left: 0; right: 0; bottom: 0; padding: 16px 24px 22px; background: linear-gradient(to bottom, transparent, @bg-body 22%); pointer-events: none; }
+.composer { width: min(780px, 100%); margin: 0 auto; border: 1px solid @border-color; border-radius: 8px; background: @bg-surface; box-shadow: @shadow-md; overflow: hidden; pointer-events: auto; }
 textarea { display: block; width: 100%; min-height: 68px; resize: none; padding: 13px 14px 8px; border: 0; outline: 0; background: transparent; color: @text-primary; font: inherit; line-height: 1.5; }
 .composer-actions { display: flex; justify-content: flex-end; gap: 5px; padding: 6px 8px 8px; }
 .composer-actions button { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 5px; background: transparent; color: @text-secondary; cursor: pointer; }

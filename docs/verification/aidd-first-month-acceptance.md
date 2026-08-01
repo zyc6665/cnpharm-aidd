@@ -18,7 +18,7 @@
 | 200 节点白板固定尺寸与节点选择 | 组件级已验 | `cd frontend && npm test -- src/components/__tests__/ResearchBoardCanvas.spec.ts --run` |
 | 离线运行时依赖与生产 Compose 契约 | 静态已验 | `pytest test/test_aidd_production_compose.py -q` |
 | 首次 SSE 事件延迟 | 自动化已验 | `pytest test/performance/test_agent_event_latency.py -q` |
-| 浏览器 E2E 验收脚手架 | 配置已验，运行环境待补 | `cd frontend && npm test -- --run test/aidd-e2e-contract.test.ts`; `cd frontend && npx playwright test --list` |
+| 浏览器 E2E 验收 | 自动化已验 | `cd frontend && npm run test:e2e:deps`; `cd frontend && npm run test:e2e -- --project=chromium --reporter=list --workers=1` |
 
 “Fake 执行已验”仅证明平台契约：签名且有效的 LVpocket 包选择 `nvidia-cuda` 变体，审批后经 ExecutionPort 提交，并可产生可引用 Artifact。它不替代 NVIDIA 实机黄金样例和科学结果复核。
 
@@ -71,6 +71,8 @@ LEGACY_AIDD_API_ENABLED
 ```bash
 pytest -q test
 cd frontend && npm test -- --run
+cd frontend && npm run test:e2e:deps
+cd frontend && npm run test:e2e -- --project=chromium --reporter=list --workers=1
 cd frontend && npm run build
 cd backend && alembic heads
 cd backend && alembic current
@@ -79,8 +81,8 @@ git diff --check
 
 ## 尚未执行或待补项
 
-- 已配置 Playwright、`test:e2e`、AIDD 纵向流程和 200 节点白板浏览器规格；当前容器实际执行 `cd frontend && npm run test:e2e` 时被浏览器系统依赖阻断，Chromium 启动缺少 `libnspr4.so`，因此真实浏览器登录、上传、刷新及断线恢复测试仍未通过。
+- Playwright 依赖入口已补齐：`cd frontend && npm run test:e2e:deps` 会安装 Chromium 及系统依赖；2026-08-01 已验证原始 `libnspr4.so` 阻断消失，AIDD 纵向流程和 200 节点白板浏览器规格通过。
 - 未执行 NVIDIA 真机 LVpocket 黄金样例；当前自动化使用 Fake ExecutionPort。
 - 未执行海光 DCU 真机验收。
-- 200 节点白板已有组件级固定尺寸与选择回归，并已有 Playwright 性能规格；仍未在具备完整 Chromium 系统依赖的环境执行真实浏览器性能基准，也未采集任务状态小于 3 秒的环境指标。
+- 200 节点白板已有组件级固定尺寸、选择回归和 Playwright 浏览器规格；仍需在目标预发布硬件采集任务状态小于 3 秒的环境指标。
 - 当前已具备统一运行时配置读取、管理员审计接口、灰度用户分组和核心业务路由拦截。

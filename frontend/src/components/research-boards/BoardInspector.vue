@@ -10,7 +10,7 @@
       <a-textarea :value="description" :rows="3" :maxlength="2000" @update:value="emit('update:description', String($event))" />
     </label>
     <section class="selection">
-      <span>当前对象</span>
+      <span>当前选中</span>
       <template v-if="selectedNode">
         <strong>{{ nodeTypeLabel }}</strong>
         <small>{{ selectedNode.id }}</small>

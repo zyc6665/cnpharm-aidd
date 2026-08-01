@@ -235,7 +235,9 @@ test('创建项目到审批 LVpocket 再加入科研白板，刷新后恢复', a
 
   await page.goto(`/projects/${projectId}/research/${conversationId}`)
   await expect(page.getByText('E2E 口袋研究')).toBeVisible()
-  await expect(page.getByText('创建会话')).toBeVisible()
+  await expect(
+    page.getByTestId('conversation-sidebar').getByRole('button', { name: /创建会话/ }),
+  ).toBeVisible()
   await expect(page.getByText('上传黄金蛋白并识别口袋')).toBeVisible()
   await expect(page.getByText('审批 LVpocket')).toBeVisible()
 
@@ -248,8 +250,8 @@ test('创建项目到审批 LVpocket 再加入科研白板，刷新后恢复', a
   await page.goto(`/projects/${projectId}/boards/${boardId}`)
   await expect(page.getByTestId('research-board-page')).toBeVisible()
   await expect(page.getByText('Pocket 证据白板')).toBeVisible()
-  await expect(page.getByText('lvpocket-result.json')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'lvpocket-result.json' })).toBeVisible()
 
   await page.reload()
-  await expect(page.getByText('lvpocket-result.json')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'lvpocket-result.json' })).toBeVisible()
 })

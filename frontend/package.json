@@ -8,6 +8,7 @@
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:e2e:deps": "bash ./scripts/install-playwright-deps.sh",
     "test:e2e": "playwright test",
     "test:watch": "vitest"
   },

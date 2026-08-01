@@ -69,6 +69,29 @@ jobs:
       - name: Run tests
         run: npm run test
 
+  frontend-e2e:
+    name: Frontend E2E
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser and system dependencies
+        run: npm run test:e2e:deps
+
+      - name: Run Playwright E2E
+        run: npm run test:e2e -- --project=chromium --reporter=list --workers=1
+
   production-compose:
     name: Production Compose Validation
     runs-on: ubuntu-latest

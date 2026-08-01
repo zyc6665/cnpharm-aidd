@@ -47,6 +47,7 @@
             :key="node.id"
             class="board-node"
             :class="[`is-${node.type}`, { 'is-connecting': connectSourceId === node.id }]"
+            :data-testid="`board-node-${node.id}`"
             :style="{ left: `${node.position.x}px`, top: `${node.position.y}px` }"
             @click.stop="selectNode(node.id)"
             @pointerdown="startDrag($event, node)"
