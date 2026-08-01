@@ -52,6 +52,37 @@ def _contract(
     }
 
 
+def _standard_contract(
+    *,
+    tool_id: str,
+    slug: str,
+    version_id: str,
+    inputs: list[dict],
+    outputs: list[dict],
+) -> dict:
+    return {
+        "id": tool_id,
+        "slug": slug,
+        "tool_slug": slug,
+        "tool_version": {
+            "id": version_id,
+            "version": "1.0.0",
+            "is_active": True,
+            "deprecated": False,
+        },
+        "artifact_inputs": inputs,
+        "artifact_outputs": outputs,
+        "input_bindings": [
+            {"semantic_type": item["type"], "field": item["name"], "required": item.get("required", True)}
+            for item in inputs
+        ],
+        "output_rules": [
+            {"semantic_type": item["type"], "source": "artifact", "required": item.get("required", True)}
+            for item in outputs
+        ],
+    }
+
+
 def test_build_workflow_definition_from_plan_preserves_executable_contract() -> None:
     plan = _plan(
         AIDDPlanStep(
@@ -151,6 +182,69 @@ def test_build_workflow_definition_from_plan_preserves_executable_contract() -> 
             "target_input": "pocket_pdb",
         },
     ]
+
+
+def test_build_workflow_definition_from_plan_preserves_standard_artifact_slots() -> None:
+    plan = _plan(
+        AIDDPlanStep(
+            step_key="pocket_prediction",
+            tool_slug="standard-pocket-tool",
+            depends_on=[],
+            inputs={"protein": "agent_input:protein_structure@1"},
+        ),
+        AIDDPlanStep(
+            step_key="molecule_generation",
+            tool_slug="standard-generation-tool",
+            depends_on=["pocket_prediction"],
+            inputs={"pocket": "step:pocket_prediction:pocket"},
+        ),
+    )
+
+    definition = build_workflow_definition_from_plan(
+        plan=plan,
+        input_files={"protein_structure@1": "artifact-version-protein"},
+        step_contracts={
+            "pocket_prediction": _standard_contract(
+                tool_id="tool-pocket",
+                slug="standard-pocket-tool",
+                version_id="version-pocket",
+                inputs=[{"name": "protein", "type": "protein_structure@1", "required": True}],
+                outputs=[
+                    {
+                        "name": "pocket",
+                        "type": "binding_pocket@1",
+                        "cardinality": "one",
+                        "required": True,
+                    }
+                ],
+            ),
+            "molecule_generation": _standard_contract(
+                tool_id="tool-generation",
+                slug="standard-generation-tool",
+                version_id="version-generation",
+                inputs=[{"name": "pocket", "type": "binding_pocket@1", "required": True}],
+                outputs=[
+                    {
+                        "name": "ligands",
+                        "type": "ligand_structure@1",
+                        "cardinality": "many",
+                        "required": True,
+                    }
+                ],
+            ),
+        },
+    )
+
+    pocket_node = next(node for node in definition["nodes"] if node["id"] == "pocket_prediction")
+    generation_node = next(node for node in definition["nodes"] if node["id"] == "molecule_generation")
+
+    assert pocket_node["artifact_input_slots"] == [
+        {"name": "protein", "type": "protein_structure@1", "required": True}
+    ]
+    assert pocket_node["artifact_inputs"] == {"protein": "workflow_input:protein_structure@1"}
+    assert pocket_node["artifact_outputs"][0]["name"] == "pocket"
+    assert generation_node["artifact_inputs"] == {"pocket": "node:pocket_prediction:pocket"}
+    assert generation_node["artifact_outputs"][0]["type"] == "ligand_structure@1"
 
 
 def test_build_workflow_definition_from_plan_rejects_unknown_input_source() -> None:

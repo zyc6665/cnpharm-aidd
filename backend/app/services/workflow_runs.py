@@ -17,10 +17,15 @@ from app.models.workflows import WorkflowRun
 from app.schemas.workflows import WorkflowRunCreate
 from app.services.workflow_artifacts import (
     annotate_semantic_output_files,
+    describe_missing_required_standard_artifacts,
     describe_missing_required_outputs,
+    extract_standard_artifacts,
+    format_missing_required_standard_artifacts_error,
     format_missing_required_outputs_error,
     load_task_output_files,
+    required_standard_artifacts_present,
     required_outputs_present,
+    standard_artifact_file_ids,
 )
 from app.services.workflow_scheduler import (
     initial_node_states,
@@ -255,6 +260,7 @@ async def sync_workflow_run(
             task_output_files=output_files,
             output_data=output_data,
         )
+        standard_artifacts = extract_standard_artifacts(output_data)
         if not required_outputs_present(capability=capability, semantic_outputs=semantic_outputs):
             missing_outputs = describe_missing_required_outputs(
                 capability=capability,
@@ -270,18 +276,49 @@ async def sync_workflow_run(
             run.finished_at = utcnow()
             continue
 
+        declared_artifact_outputs = list(state.get("artifact_outputs") or [])
+        if not required_standard_artifacts_present(
+            declared_outputs=declared_artifact_outputs,
+            standard_artifacts=standard_artifacts,
+        ):
+            missing_artifacts = describe_missing_required_standard_artifacts(
+                declared_outputs=declared_artifact_outputs,
+                standard_artifacts=standard_artifacts,
+            )
+            state["status"] = "failure"
+            state["missing_outputs"] = missing_artifacts
+            state["error_message"] = format_missing_required_standard_artifacts_error(
+                missing_artifacts
+            )
+            state["finished_at"] = utcnow_iso()
+            node_states[node_id] = state
+            run.status = "failure"
+            run.error_message = state["error_message"]
+            run.finished_at = utcnow()
+            continue
+
         state["status"] = "success"
         state["semantic_outputs"] = semantic_outputs
+        state["standard_artifacts"] = standard_artifacts
         state["missing_outputs"] = []
         await annotate_semantic_output_files(db, semantic_outputs=semantic_outputs)
-        state["output_file_ids"] = [
+        output_file_ids = [
             str(value["file_id"])
             for value in semantic_outputs.values()
             if value.get("source") == "output_files" and value.get("file_id")
         ]
+        for declaration in declared_artifact_outputs:
+            if not isinstance(declaration, dict) or not declaration.get("name"):
+                continue
+            output_file_ids.extend(
+                standard_artifact_file_ids(standard_artifacts, str(declaration["name"]))
+            )
+        state["output_file_ids"] = list(dict.fromkeys(output_file_ids))
         state["finished_at"] = utcnow_iso()
         node_states[node_id] = state
-        artifact_lineage[node_id] = semantic_outputs
+        artifact_lineage[node_id] = dict(semantic_outputs)
+        if standard_artifacts:
+            artifact_lineage[node_id]["standard_artifacts"] = standard_artifacts
 
     run.node_states = node_states
     run.artifact_lineage = artifact_lineage

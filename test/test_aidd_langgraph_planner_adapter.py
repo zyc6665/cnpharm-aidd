@@ -108,6 +108,82 @@ def test_parse_model_plan_accepts_valid_json_plan():
     assert plan.steps[1].depends_on == ["pocket_prediction"]
 
 
+def test_parse_model_plan_accepts_standard_artifact_slots():
+    standard_tools = [
+        {
+            "tool_slug": "standard-pocket-tool",
+            "capability": "standard-pocket-tool",
+            "artifact_inputs": [
+                {"name": "protein", "type": "protein_structure@1", "required": True}
+            ],
+            "artifact_outputs": [
+                {
+                    "name": "pocket",
+                    "type": "binding_pocket@1",
+                    "cardinality": "one",
+                    "required": True,
+                }
+            ],
+            "inputs": ["protein_structure@1"],
+            "outputs": ["binding_pocket@1"],
+        }
+    ]
+
+    plan = parse_model_plan(
+        """
+        {
+          "intent": "standard_pocket_prediction",
+          "steps": [
+            {
+              "step_key": "pocket_prediction",
+              "capability": "standard-pocket-tool",
+              "tool_slug": "standard-pocket-tool",
+              "inputs": {"protein": "agent_input:protein_structure@1"},
+              "params": {}
+            }
+          ]
+        }
+        """,
+        available_tools=standard_tools,
+        available_input_types={"protein_structure@1"},
+    )
+
+    assert plan.steps[0].inputs == {"protein": "agent_input"}
+
+
+def test_parse_model_plan_rejects_missing_standard_artifact_input_type():
+    with pytest.raises(PlanValidationError, match="未上传输入"):
+        parse_model_plan(
+            """
+            {
+              "intent": "standard_pocket_prediction",
+              "steps": [
+                {
+                  "step_key": "pocket_prediction",
+                  "capability": "standard-pocket-tool",
+                  "tool_slug": "standard-pocket-tool",
+                  "inputs": {"protein": "agent_input:protein_structure@1"},
+                  "params": {}
+                }
+              ]
+            }
+            """,
+            available_tools=[
+                {
+                    "tool_slug": "standard-pocket-tool",
+                    "capability": "standard-pocket-tool",
+                    "artifact_inputs": [
+                        {"name": "protein", "type": "protein_structure@1", "required": True}
+                    ],
+                    "artifact_outputs": [
+                        {"name": "pocket", "type": "binding_pocket@1", "required": True}
+                    ],
+                }
+            ],
+            available_input_types=set(),
+        )
+
+
 def test_parse_model_plan_repairs_generated_ligand_smiles_csv_reference():
     plan = parse_model_plan(
         """

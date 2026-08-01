@@ -109,10 +109,14 @@ class WorkflowRunNodeState(BaseModel):
     tool_version_id: str | None = None
     tool_version: dict[str, Any] | None = None
     semantic_inputs: dict[str, Any] = Field(default_factory=dict)
+    artifact_inputs: dict[str, Any] = Field(default_factory=dict)
+    artifact_input_slots: list[dict[str, Any]] = Field(default_factory=list)
+    artifact_outputs: list[dict[str, Any]] = Field(default_factory=list)
     params: dict[str, Any] = Field(default_factory=dict)
     input_file_ids: list[str] = Field(default_factory=list)
     output_file_ids: list[str] = Field(default_factory=list)
     semantic_outputs: dict[str, Any] = Field(default_factory=dict)
+    standard_artifacts: dict[str, Any] = Field(default_factory=dict)
     missing_outputs: list[WorkflowRunMissingOutput] = Field(default_factory=list)
     task_id: str | None = None
     error_message: str | None = None

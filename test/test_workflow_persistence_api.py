@@ -165,6 +165,72 @@ async def generation_tool(db_session: AsyncSession, owner: User) -> Tool:
     return tool
 
 
+def standard_tool_manifest(
+    *,
+    slug: str,
+    inputs: list[dict],
+    outputs: list[dict],
+) -> dict:
+    return {
+        "api_version": "aidd.sciminer/tool-package.v2",
+        "kind": "ToolPackage",
+        "metadata": {
+            "slug": slug,
+            "name": slug.replace("-", " ").title(),
+            "version": "1.0.0",
+        },
+        "artifacts": {"inputs": inputs, "outputs": outputs},
+        "parameters_schema": {"type": "object"},
+        "exposure": {"agent": True, "workflow": True, "direct_run": True},
+        "variants": [
+            {
+                "name": "cpu",
+                "accelerator": "cpu",
+                "executor_types": ["cli"],
+                "entrypoint": ["/app/runner/entrypoint.sh"],
+            }
+        ],
+    }
+
+
+async def create_standard_tool(
+    db_session: AsyncSession,
+    owner: User,
+    *,
+    slug: str,
+    inputs: list[dict],
+    outputs: list[dict],
+) -> Tool:
+    tool = Tool(
+        owner_id=owner.id,
+        name=slug.replace("-", " ").title(),
+        slug=slug,
+        status=ToolStatus.PUBLISHED.value,
+        is_public=True,
+    )
+    db_session.add(tool)
+    await db_session.flush()
+    version = ToolVersion(
+        tool_id=tool.id,
+        version="1.0.0",
+        config={
+            "type": "ssh_job",
+            "tool_package_manifest": standard_tool_manifest(
+                slug=slug,
+                inputs=inputs,
+                outputs=outputs,
+            ),
+        },
+        is_active=True,
+    )
+    db_session.add(version)
+    await db_session.flush()
+    tool.current_version_id = version.id
+    await db_session.commit()
+    await db_session.refresh(tool)
+    return tool
+
+
 @pytest_asyncio.fixture
 async def protein_file(db_session: AsyncSession, owner: User) -> FileModel:
     file_record = FileModel(
@@ -266,6 +332,71 @@ def semantic_only_generation_definition(pocket_tool: Tool, generation_tool: Tool
             },
         ],
         "edges": [],
+    }
+
+
+def standard_artifact_generation_definition(pocket_tool: Tool, generation_tool: Tool) -> dict:
+    return {
+        "nodes": [
+            {
+                "id": "protein_input",
+                "kind": "input",
+                "standard_type": "protein_structure@1",
+            },
+            {
+                "id": "pocket_prediction",
+                "kind": "tool",
+                "tool_id": pocket_tool.id,
+                "tool_slug": pocket_tool.slug,
+                "tool_version": {
+                    "id": pocket_tool.current_version_id,
+                    "version": "1.0.0",
+                },
+                "artifact_input_slots": [
+                    {"name": "protein", "type": "protein_structure@1", "required": True}
+                ],
+                "artifact_inputs": {"protein": "workflow_input:protein_structure@1"},
+                "artifact_outputs": [
+                    {"name": "pocket", "type": "binding_pocket@1", "required": True}
+                ],
+            },
+            {
+                "id": "molecule_generation",
+                "kind": "tool",
+                "tool_id": generation_tool.id,
+                "tool_slug": generation_tool.slug,
+                "tool_version": {
+                    "id": generation_tool.current_version_id,
+                    "version": "1.0.0",
+                },
+                "artifact_input_slots": [
+                    {"name": "pocket", "type": "binding_pocket@1", "required": True}
+                ],
+                "artifact_inputs": {"pocket": "node:pocket_prediction:pocket"},
+                "artifact_outputs": [
+                    {
+                        "name": "ligands",
+                        "type": "ligand_structure@1",
+                        "cardinality": "many",
+                        "required": True,
+                    }
+                ],
+            },
+        ],
+        "edges": [
+            {
+                "source": "protein_input",
+                "target": "pocket_prediction",
+                "source_output": "protein_structure@1",
+                "target_input": "protein",
+            },
+            {
+                "source": "pocket_prediction",
+                "target": "molecule_generation",
+                "source_output": "pocket",
+                "target_input": "pocket",
+            },
+        ],
     }
 
 
@@ -617,6 +748,112 @@ async def test_sync_workflow_run_extracts_outputs_and_schedules_downstream(
     assert second_state["status"] == "waiting_task"
     assert second_state["task_id"]
     assert second_state["input_file_ids"] == [pocket_output.id]
+
+
+@pytest.mark.asyncio
+async def test_sync_workflow_run_schedules_downstream_standard_artifact_slots(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    protein_file: FileModel,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.services.workflows.create_and_schedule_tool_task",
+        create_fake_scheduled_task,
+    )
+    pocket_tool = await create_standard_tool(
+        db_session,
+        owner,
+        slug="standard-pocket-tool",
+        inputs=[{"name": "protein", "type": "protein_structure@1", "required": True}],
+        outputs=[{"name": "pocket", "type": "binding_pocket@1", "required": True}],
+    )
+    generation_tool = await create_standard_tool(
+        db_session,
+        owner,
+        slug="standard-generation-tool",
+        inputs=[{"name": "pocket", "type": "binding_pocket@1", "required": True}],
+        outputs=[
+            {
+                "name": "ligands",
+                "type": "ligand_structure@1",
+                "cardinality": "many",
+                "required": True,
+            }
+        ],
+    )
+    create_response = await api_client.post(
+        "/api/v1/workflows/templates",
+        headers={"Authorization": "Bearer owner-token"},
+        json={
+            "name": "Standard Artifact Flow",
+            "definition": standard_artifact_generation_definition(pocket_tool, generation_tool),
+        },
+    )
+    template_id = create_response.json()["data"]["id"]
+    run_response = await api_client.post(
+        f"/api/v1/workflows/templates/{template_id}/runs",
+        headers={"Authorization": "Bearer owner-token"},
+        json={"input_files": {"protein_structure@1": protein_file.id}},
+    )
+    run = run_response.json()["data"]
+    first_state = run["node_states"]["pocket_prediction"]
+    assert first_state["input_file_ids"] == [protein_file.id]
+
+    output_files = []
+    for filename, content in [
+        ("residue_pocket.pdb", b"residue"),
+        ("atom_pocket.pdb", b"atom"),
+        ("pocket_metadata.json", b"{}"),
+    ]:
+        file_record = FileModel(
+            owner_id=owner.id,
+            filename=filename,
+            content_type="application/json" if filename.endswith(".json") else "chemical/x-pdb",
+            size_bytes=len(content),
+            sha256=hashlib.sha256(content).hexdigest(),
+            source_type=FileSourceType.TOOL_OUTPUT.value,
+            storage_path=f"/tmp/{filename}",
+            is_public=False,
+        )
+        db_session.add(file_record)
+        await db_session.flush()
+        output_files.append(file_record)
+
+    task = await db_session.get(Task, first_state["task_id"])
+    task.status = TaskStatus.SUCCESS.value
+    standard_artifacts = {
+        "artifact_version_ids_by_ref": {"pocket": "artifact-version-pocket"},
+        "file_ids_by_artifact_ref": {
+            "pocket": [file_record.id for file_record in output_files]
+        },
+    }
+    db_session.add(
+        TaskOutput(
+            task_id=task.id,
+            result={"standard_artifacts": standard_artifacts},
+            file_ids=[file_record.id for file_record in output_files],
+        )
+    )
+    await db_session.commit()
+
+    sync_response = await api_client.post(
+        f"/api/v1/workflows/runs/{run['id']}/sync",
+        headers={"Authorization": "Bearer owner-token"},
+    )
+
+    assert sync_response.status_code == 200
+    synced = sync_response.json()["data"]
+    source_state = synced["node_states"]["pocket_prediction"]
+    downstream_state = synced["node_states"]["molecule_generation"]
+    assert synced["status"] == "waiting_task"
+    assert source_state["status"] == "success"
+    assert source_state["standard_artifacts"] == standard_artifacts
+    assert downstream_state["status"] == "waiting_task"
+    assert downstream_state["input_file_ids"] == [
+        file_record.id for file_record in output_files
+    ]
 
 
 @pytest.mark.asyncio

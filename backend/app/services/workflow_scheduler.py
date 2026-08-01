@@ -21,6 +21,7 @@ from app.models.users import User
 from app.models.workflows import WorkflowRun
 from app.schemas.tasks import TaskCreate
 from app.services.semantic_types import normalize_semantic_type
+from app.services.workflow_artifacts import standard_artifact_file_ids
 from app.services.workflow_validation import (
     is_condition_node,
     is_loop_node,
@@ -156,6 +157,9 @@ def initial_node_states(definition: dict[str, Any], execution_order: list[str]) 
             "tool_version_id": (indexed_nodes[current_node_id].get("tool_version") or {}).get("id"),
             "tool_version": indexed_nodes[current_node_id].get("tool_version"),
             "semantic_inputs": dict(indexed_nodes[current_node_id].get("semantic_inputs") or {}),
+            "artifact_inputs": dict(indexed_nodes[current_node_id].get("artifact_inputs") or {}),
+            "artifact_input_slots": list(indexed_nodes[current_node_id].get("artifact_input_slots") or []),
+            "artifact_outputs": list(indexed_nodes[current_node_id].get("artifact_outputs") or []),
             "params": dict(indexed_nodes[current_node_id].get("params") or {}),
         }
         for current_node_id in execution_order
@@ -287,14 +291,76 @@ async def resolve_node_input_files(
             raise ValidationException(f"Unsupported workflow input source: {source}")
 
         file_id = str(file_id)
-        file_record = await db.get(FileModel, file_id)
-        if not file_record:
-            raise NotFoundException(f"Workflow input file not found: {semantic_type}")
-        if file_id not in seen_file_ids:
-            seen_file_ids.add(file_id)
-            file_ids.append(file_id)
+        await _append_existing_file_id(
+            db,
+            file_ids=file_ids,
+            seen_file_ids=seen_file_ids,
+            file_id=file_id,
+            label=str(semantic_type),
+        )
+
+    for slot_name, source in (node.get("artifact_inputs") or {}).items():
+        if not isinstance(source, str):
+            raise ValidationException(f"Unsupported workflow artifact input source: {source}")
+
+        if source.startswith("workflow_input:"):
+            artifact_key = source.split(":", 1)[1] or str(slot_name)
+            file_id = (run.input_files or {}).get(artifact_key)
+            if not file_id:
+                raise ValidationException(f"Workflow run is missing required input: {artifact_key}")
+            await _append_existing_file_id(
+                db,
+                file_ids=file_ids,
+                seen_file_ids=seen_file_ids,
+                file_id=str(file_id),
+                label=str(slot_name),
+            )
+            continue
+
+        if source.startswith("node:"):
+            parts = source.split(":", 2)
+            if len(parts) != 3:
+                raise ValidationException(f"Invalid workflow artifact input source: {source}")
+            source_node_id = parts[1]
+            source_output_name = parts[2]
+            source_state = node_states.get(source_node_id) or {}
+            if source_state.get("status") != "success":
+                return None
+            artifact_file_ids = standard_artifact_file_ids(
+                source_state.get("standard_artifacts") or {},
+                source_output_name,
+            )
+            if not artifact_file_ids:
+                return None
+            for file_id in artifact_file_ids:
+                await _append_existing_file_id(
+                    db,
+                    file_ids=file_ids,
+                    seen_file_ids=seen_file_ids,
+                    file_id=file_id,
+                    label=str(slot_name),
+                )
+            continue
+
+        raise ValidationException(f"Unsupported workflow artifact input source: {source}")
 
     return file_ids
+
+
+async def _append_existing_file_id(
+    db: AsyncSession,
+    *,
+    file_ids: list[str],
+    seen_file_ids: set[str],
+    file_id: str,
+    label: str,
+) -> None:
+    file_record = await db.get(FileModel, file_id)
+    if not file_record:
+        raise NotFoundException(f"Workflow input file not found: {label}")
+    if file_id not in seen_file_ids:
+        seen_file_ids.add(file_id)
+        file_ids.append(file_id)
 
 
 async def schedule_workflow_node(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.artifact_standards.registry import is_standard_artifact_ref
 from app.common.exceptions import ValidationException
 from app.services.semantic_types import normalize_semantic_type
 
@@ -83,6 +84,22 @@ def semantic_node_dependency_ids(
     return dependencies
 
 
+def artifact_node_dependency_ids(
+    node: dict[str, Any],
+    *,
+    node_id_set: set[str],
+) -> set[str]:
+    dependencies: set[str] = set()
+    for source in (node.get("artifact_inputs") or {}).values():
+        if not isinstance(source, str) or not source.startswith("node:"):
+            continue
+        parts = source.split(":", 2)
+        if len(parts) != 3 or parts[1] not in node_id_set:
+            raise ValidationException(f"Workflow artifact input references unknown node: {source}")
+        dependencies.add(parts[1])
+    return dependencies
+
+
 def workflow_dependency_map(definition: dict[str, Any]) -> dict[str, set[str]]:
     nodes = workflow_nodes(definition)
     node_ids = [node_id(node) for node in nodes]
@@ -110,6 +127,9 @@ def workflow_dependency_map(definition: dict[str, Any]) -> dict[str, set[str]]:
         target = node_id(node)
         dependencies[target].update(
             semantic_node_dependency_ids(node, node_id_set=node_id_set)
+        )
+        dependencies[target].update(
+            artifact_node_dependency_ids(node, node_id_set=node_id_set)
         )
 
     return dependencies
@@ -141,6 +161,9 @@ def validate_workflow_definition(definition: dict[str, Any]) -> list[str]:
         raise ValidationException("Workflow definition contains a cycle")
 
     indexed_nodes = {node_id(node): node for node in nodes}
+    for node in nodes:
+        validate_artifact_slots(node, indexed_nodes)
+
     executable_node_order: list[str] = []
     for current_node_id in ordered:
         current_node = indexed_nodes[current_node_id]
@@ -153,6 +176,78 @@ def validate_workflow_definition(definition: dict[str, Any]) -> list[str]:
             elif is_loop_node(current_node):
                 validate_loop_node(current_node)
     return executable_node_order
+
+
+def validate_artifact_slots(
+    node: dict[str, Any],
+    indexed_nodes: dict[str, dict[str, Any]],
+) -> None:
+    input_slots = _artifact_slots_by_name(node.get("artifact_input_slots"))
+    if not input_slots:
+        return
+    artifact_inputs = node.get("artifact_inputs") or {}
+    if not isinstance(artifact_inputs, dict):
+        raise ValidationException(f"Workflow node {node_id(node)} artifact_inputs must be a dict")
+
+    for slot_name, slot in input_slots.items():
+        if slot.get("required", True) and slot_name not in artifact_inputs:
+            raise ValidationException(
+                f"Workflow node {node_id(node)} missing required artifact input: {slot_name}"
+            )
+
+    for slot_name, source in artifact_inputs.items():
+        slot = input_slots.get(str(slot_name))
+        if slot is None:
+            raise ValidationException(
+                f"Workflow node {node_id(node)} references unknown artifact input: {slot_name}"
+            )
+        if not isinstance(source, str):
+            raise ValidationException(f"Unsupported workflow artifact input source: {source}")
+        expected_type = str(slot.get("type") or "")
+        if source.startswith("workflow_input:"):
+            source_type = _normalize_type_identifier(source.split(":", 1)[1])
+            if source_type != expected_type:
+                raise ValidationException(
+                    f"Workflow node {node_id(node)} artifact input type mismatch: "
+                    f"{slot_name} expects {expected_type}, got {source_type}"
+                )
+            continue
+        if source.startswith("node:"):
+            parts = source.split(":", 2)
+            if len(parts) != 3:
+                raise ValidationException(f"Invalid workflow artifact input source: {source}")
+            source_node = indexed_nodes.get(parts[1])
+            if source_node is None:
+                raise ValidationException(f"Workflow artifact input references unknown node: {source}")
+            output_slots = _artifact_slots_by_name(source_node.get("artifact_outputs"))
+            output_slot = output_slots.get(parts[2])
+            if output_slot is None:
+                raise ValidationException(
+                    f"Workflow artifact input references unknown artifact output: {source}"
+                )
+            source_type = str(output_slot.get("type") or "")
+            if source_type != expected_type:
+                raise ValidationException(
+                    f"Workflow node {node_id(node)} artifact input type mismatch: "
+                    f"{slot_name} expects {expected_type}, got {source_type}"
+                )
+            continue
+        raise ValidationException(f"Unsupported workflow artifact input source: {source}")
+
+
+def _artifact_slots_by_name(value: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(value, list):
+        return {}
+    return {
+        str(item["name"]): dict(item)
+        for item in value
+        if isinstance(item, dict) and item.get("name")
+    }
+
+
+def _normalize_type_identifier(value: str) -> str:
+    raw = str(value)
+    return raw if is_standard_artifact_ref(raw) else normalize_semantic_type(raw)
 
 
 def validate_condition_node(node: dict[str, Any]) -> None:
@@ -233,4 +328,10 @@ def required_workflow_inputs(definition: dict[str, Any]) -> set[str]:
             semantic_type = source.split(":", 1)[1]
             if semantic_type:
                 required_inputs.add(normalize_semantic_type(semantic_type))
+        for source in (node.get("artifact_inputs") or {}).values():
+            if not isinstance(source, str) or not source.startswith("workflow_input:"):
+                continue
+            artifact_type = source.split(":", 1)[1]
+            if artifact_type:
+                required_inputs.add(_normalize_type_identifier(artifact_type))
     return required_inputs

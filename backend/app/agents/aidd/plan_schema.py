@@ -114,7 +114,46 @@ def _normalize_input_sources(inputs: dict[str, str]) -> dict[str, str]:
 def _tool_outputs(tool: dict[str, Any] | None) -> set[str]:
     if not tool:
         return set()
+    artifact_outputs = tool.get("artifact_outputs")
+    if isinstance(artifact_outputs, list) and artifact_outputs:
+        outputs: set[str] = set()
+        for item in artifact_outputs:
+            if not isinstance(item, dict):
+                continue
+            if item.get("name"):
+                outputs.add(str(item["name"]))
+            if item.get("type"):
+                outputs.add(str(item["type"]))
+        return outputs
     return {str(output) for output in tool.get("outputs", [])}
+
+
+def _tool_required_inputs(tool: dict[str, Any]) -> set[str]:
+    artifact_inputs = tool.get("artifact_inputs")
+    if isinstance(artifact_inputs, list) and artifact_inputs:
+        return {
+            str(item.get("name"))
+            for item in artifact_inputs
+            if isinstance(item, dict) and item.get("name") and item.get("required", True)
+        }
+
+    bindings = tool.get("input_bindings")
+    if isinstance(bindings, list):
+        return {
+            str(item.get("semantic_type"))
+            for item in bindings
+            if isinstance(item, dict) and item.get("required", True)
+        }
+    return {str(item) for item in tool.get("inputs", [])}
+
+
+def _tool_input_type(tool: dict[str, Any], input_name: str) -> str:
+    artifact_inputs = tool.get("artifact_inputs")
+    if isinstance(artifact_inputs, list):
+        for item in artifact_inputs:
+            if isinstance(item, dict) and item.get("name") == input_name and item.get("type"):
+                return str(item["type"])
+    return input_name
 
 
 def _tool_slug(tool: dict[str, Any]) -> str:
@@ -265,15 +304,7 @@ def parse_model_plan(
         if tool.get("capability") != step.capability:
             raise PlanValidationError(f"工具能力不匹配: {step.tool_slug}")
 
-        bindings = tool.get("input_bindings")
-        if isinstance(bindings, list):
-            required_inputs = {
-                str(item.get("semantic_type"))
-                for item in bindings
-                if isinstance(item, dict) and item.get("required", True)
-            }
-        else:
-            required_inputs = {str(item) for item in tool.get("inputs", [])}
+        required_inputs = _tool_required_inputs(tool)
         missing_inputs = required_inputs - set(step.inputs)
         if missing_inputs:
             raise PlanValidationError(
@@ -284,9 +315,9 @@ def parse_model_plan(
             for semantic_input, source in step.inputs.items():
                 if not isinstance(source, str) or not source.startswith("agent_input"):
                     continue
-                source_type = semantic_input
+                source_type = _tool_input_type(tool, semantic_input)
                 if source.startswith("agent_input:"):
-                    source_type = source.split(":", 1)[1] or semantic_input
+                    source_type = source.split(":", 1)[1] or source_type
                 if source_type not in available_input_types:
                     raise PlanValidationError(f"计划引用了未上传输入: {source_type}")
 

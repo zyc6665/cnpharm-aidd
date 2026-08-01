@@ -6,6 +6,7 @@ from typing import Any
 
 from app.agents.aidd.planner import AIDDPlan
 from app.common.exceptions import ValidationException
+from app.artifact_standards.registry import is_standard_artifact_ref
 from app.services.semantic_types import normalize_semantic_type
 from app.services.workflow_validation import validate_workflow_definition
 
@@ -25,7 +26,7 @@ def build_workflow_definition_from_plan(
 ) -> dict[str, list[dict[str, Any]]]:
     """Build a runnable workflow definition without persisting workflow state."""
     normalized_input_files = {
-        normalize_semantic_type(semantic_type): str(file_id)
+        _normalize_type_identifier(semantic_type): str(file_id)
         for semantic_type, file_id in input_files.items()
         if file_id
     }
@@ -37,21 +38,32 @@ def build_workflow_definition_from_plan(
     input_types: set[str] = set()
     edges: list[dict[str, Any]] = []
 
+    artifact_inputs_by_step: dict[str, dict[str, str]] = {}
+
     for step in plan.steps:
+        contract = step_contracts.get(step.step_key) or {}
+        artifact_input_slots = _contract_artifact_input_slots(contract)
+        artifact_slot_types = {str(item["name"]): str(item["type"]) for item in artifact_input_slots}
         semantic_inputs: dict[str, str] = {}
+        artifact_inputs: dict[str, str] = {}
         for semantic_input, raw_source in step.inputs.items():
-            target_type = normalize_semantic_type(semantic_input)
+            is_artifact_slot = semantic_input in artifact_slot_types
+            target_type = semantic_input if is_artifact_slot else normalize_semantic_type(semantic_input)
             source = str(raw_source)
             if source == "agent_input" or source.startswith("agent_input:"):
-                source_type = target_type
+                source_type = artifact_slot_types.get(semantic_input, target_type)
                 if source.startswith("agent_input:"):
-                    source_type = normalize_semantic_type(source.split(":", 1)[1] or target_type)
+                    source_type = _normalize_type_identifier(source.split(":", 1)[1] or source_type)
                 if source_type not in normalized_input_files:
                     raise ValidationException(
                         f"AIDD workflow draft is missing input file: {source_type}"
                     )
                 input_types.add(source_type)
-                semantic_inputs[target_type] = f"workflow_input:{source_type}"
+                source_ref = f"workflow_input:{source_type}"
+                if is_artifact_slot:
+                    artifact_inputs[target_type] = source_ref
+                else:
+                    semantic_inputs[target_type] = source_ref
                 edges.append(
                     _edge(
                         source=f"input-{source_type}",
@@ -68,8 +80,13 @@ def build_workflow_definition_from_plan(
                     raise ValidationException(
                         f"Invalid AIDD workflow draft step input source: {source}"
                     )
-                source_step, source_output = parts[1], normalize_semantic_type(parts[2])
-                semantic_inputs[target_type] = f"node:{source_step}:{source_output}"
+                source_step = parts[1]
+                source_output = parts[2] if is_artifact_slot else normalize_semantic_type(parts[2])
+                source_ref = f"node:{source_step}:{source_output}"
+                if is_artifact_slot:
+                    artifact_inputs[target_type] = source_ref
+                else:
+                    semantic_inputs[target_type] = source_ref
                 edges.append(
                     _edge(
                         source=source_step,
@@ -84,6 +101,7 @@ def build_workflow_definition_from_plan(
                 f"Unsupported AIDD workflow draft input source: {source}"
             )
         semantic_inputs_by_step[step.step_key] = semantic_inputs
+        artifact_inputs_by_step[step.step_key] = artifact_inputs
 
     depths = _step_depths(plan)
     rows_by_depth: dict[int, int] = {}
@@ -106,26 +124,62 @@ def build_workflow_definition_from_plan(
         depth = depths[step.step_key]
         row = rows_by_depth.get(depth, 0)
         rows_by_depth[depth] = row + 1
-        nodes.append(
-            {
-                "id": step.step_key,
-                "kind": "tool",
-                "tool_id": str(contract["id"]),
-                "tool_slug": step.tool_slug,
-                "tool_version": dict(contract["tool_version"]),
-                "semantic_inputs": semantic_inputs_by_step[step.step_key],
-                "semantic_outputs": _contract_output_types(contract),
-                "params": dict(step.params or {}),
-                "position": {
-                    "x": _TOOL_X + (depth - 1) * _COLUMN_GAP,
-                    "y": _ROW_Y + row * _ROW_GAP,
-                },
-            }
-        )
+        node = {
+            "id": step.step_key,
+            "kind": "tool",
+            "tool_id": str(contract["id"]),
+            "tool_slug": step.tool_slug,
+            "tool_version": dict(contract["tool_version"]),
+            "semantic_inputs": semantic_inputs_by_step[step.step_key],
+            "semantic_outputs": _contract_output_types(contract),
+            "params": dict(step.params or {}),
+            "position": {
+                "x": _TOOL_X + (depth - 1) * _COLUMN_GAP,
+                "y": _ROW_Y + row * _ROW_GAP,
+            },
+        }
+        artifact_input_slots = _contract_artifact_input_slots(contract)
+        artifact_outputs = _contract_artifact_output_slots(contract)
+        if artifact_input_slots:
+            node["artifact_input_slots"] = artifact_input_slots
+            node["artifact_inputs"] = artifact_inputs_by_step[step.step_key]
+        if artifact_outputs:
+            node["artifact_outputs"] = artifact_outputs
+        nodes.append(node)
 
     definition = {"nodes": nodes, "edges": edges}
     validate_workflow_definition(definition)
     return definition
+
+
+def _normalize_type_identifier(value: str) -> str:
+    raw = str(value)
+    return raw if is_standard_artifact_ref(raw) else normalize_semantic_type(raw)
+
+
+def _contract_artifact_input_slots(contract: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {
+            "name": str(item["name"]),
+            "type": str(item["type"]),
+            "required": bool(item.get("required", True)),
+        }
+        for item in contract.get("artifact_inputs", [])
+        if isinstance(item, dict) and item.get("name") and item.get("type")
+    ]
+
+
+def _contract_artifact_output_slots(contract: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {
+            "name": str(item["name"]),
+            "type": str(item["type"]),
+            "cardinality": str(item.get("cardinality") or "one"),
+            "required": bool(item.get("required", True)),
+        }
+        for item in contract.get("artifact_outputs", [])
+        if isinstance(item, dict) and item.get("name") and item.get("type")
+    ]
 
 
 def _step_depths(plan: AIDDPlan) -> dict[str, int]:
