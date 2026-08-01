@@ -29,8 +29,12 @@ export const useAgentsStore = defineStore('agents', () => {
   const currentRun = ref<AiddAgentRun | null>(null)
   const loading = ref(false)
   const drafting = ref(false)
+  const pollError = ref<string | null>(null)
+  const pollingSuspended = ref(false)
   const total = ref(0)
   let pollTimer: number | null = null
+  let pollInFlight = false
+  let pollFailureCount = 0
 
   const fetchRuns = async (params?: PaginationParams, options?: RequestOptions) => {
     loading.value = true
@@ -82,13 +86,20 @@ export const useAgentsStore = defineStore('agents', () => {
     }
   }
 
-  const syncRun = async (runId: string) => {
-    const res = await syncAiddAgentRun(runId)
+  const markPollingHealthy = () => {
+    pollFailureCount = 0
+    pollError.value = null
+    pollingSuspended.value = false
+  }
+
+  const syncRun = async (runId: string, options?: RequestOptions) => {
+    const res = await syncAiddAgentRun(runId, options)
     currentRun.value = res.data
     const index = runs.value.findIndex(run => run.id === runId)
     if (index !== -1) {
       runs.value[index] = res.data
     }
+    markPollingHealthy()
     return res.data
   }
 
@@ -113,19 +124,44 @@ export const useAgentsStore = defineStore('agents', () => {
     return res.data
   }
 
-  const clearPolling = () => {
+  const stopPollingTimer = () => {
     if (pollTimer !== null) {
       window.clearInterval(pollTimer)
       pollTimer = null
     }
   }
 
+  const clearPolling = () => {
+    stopPollingTimer()
+    pollInFlight = false
+    markPollingHealthy()
+  }
+
+  const recordPollingFailure = (error: unknown) => {
+    pollFailureCount += 1
+    pollError.value = error instanceof Error ? error.message : 'Agent run status sync failed'
+    if (pollFailureCount >= 3) {
+      pollingSuspended.value = true
+      stopPollingTimer()
+    }
+  }
+
   const pollRunUntilTerminal = (runId: string, intervalMs = 5000) => {
     clearPolling()
     pollTimer = window.setInterval(async () => {
-      const run = await syncRun(runId)
-      if (isTerminalRunStatus(run.status)) {
-        clearPolling()
+      if (pollInFlight) {
+        return
+      }
+      pollInFlight = true
+      try {
+        const run = await syncRun(runId, { silent: true, retry: 1 })
+        if (isTerminalRunStatus(run.status)) {
+          clearPolling()
+        }
+      } catch (error) {
+        recordPollingFailure(error)
+      } finally {
+        pollInFlight = false
       }
     }, intervalMs)
   }
@@ -135,6 +171,8 @@ export const useAgentsStore = defineStore('agents', () => {
     currentRun,
     loading,
     drafting,
+    pollError,
+    pollingSuspended,
     total,
     fetchRuns,
     fetchRun,

@@ -94,6 +94,21 @@
     </div>
 
     <div class="agent-runtime-panel">
+      <a-alert
+        v-if="agentsStore.pollError"
+        class="agent-poll-alert"
+        type="warning"
+        show-icon
+        :message="t('workflow.agent.pollFailed')"
+        :description="agentsStore.pollingSuspended ? t('workflow.agent.pollSuspendedHint') : t('workflow.agent.pollRetryingHint')"
+      >
+        <template #action>
+          <a-button size="small" :loading="syncing" @click="syncRun">
+            {{ t('workflow.agent.sync') }}
+          </a-button>
+        </template>
+      </a-alert>
+
       <div class="runtime-header">
         <div>
           <span class="agent-kicker">{{ t('workflow.agent.timeline') }}</span>
@@ -459,6 +474,8 @@
     syncing.value = true
     try {
       await agentsStore.syncRun(agentsStore.currentRun.id)
+    } catch {
+      message.error(t('workflow.agent.syncFailed'))
     } finally {
       syncing.value = false
     }
@@ -518,6 +535,10 @@
 
   .agent-control-panel {
     padding: @spacing-lg;
+  }
+
+  .agent-poll-alert {
+    margin: @spacing-lg @spacing-lg 0;
   }
 
   .agent-runtime-panel {

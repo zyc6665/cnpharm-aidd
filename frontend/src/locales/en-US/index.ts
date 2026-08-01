@@ -467,6 +467,10 @@ export default {
       draftGenerated: 'Workflow draft generated. Review it in Manual Mode before saving or running.',
       deleted: 'Chat history deleted',
       cascadeDeleted: 'Chat deleted with {tasks} tasks and {artifacts} artifacts',
+      pollFailed: 'Run status sync failed',
+      pollRetryingHint: 'The platform will keep retrying automatically. If the status stays stale, sync manually.',
+      pollSuspendedHint: 'Automatic refresh paused after repeated sync failures. Check the network or backend, then sync manually.',
+      syncFailed: 'Failed to sync status. Try again later.',
       status: {
         pending: 'Pending',
         planning: 'Planning',

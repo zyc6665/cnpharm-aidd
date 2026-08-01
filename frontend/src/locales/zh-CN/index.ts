@@ -466,6 +466,10 @@ export default {
       draftGenerated: '工作流草稿已生成，请在手动模式中审查后保存或运行',
       deleted: '历史会话已删除',
       cascadeDeleted: '历史会话已删除，并删除 {tasks} 个任务、{artifacts} 个产物',
+      pollFailed: '运行状态同步失败',
+      pollRetryingHint: '平台会继续自动重试；如果状态长时间不更新，可以点击同步状态手动刷新。',
+      pollSuspendedHint: '连续同步失败，已暂停自动刷新，避免重复请求。请确认网络或后端服务恢复后手动同步。',
+      syncFailed: '同步状态失败，请稍后重试',
       status: {
         pending: '等待中',
         planning: '规划中',
