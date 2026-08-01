@@ -27,7 +27,7 @@ from app.models.conversations import (
     PlanVersion,
 )
 from app.models.tool_packages import ToolPackage, ToolPackageVersion
-from app.models.artifacts import Artifact, ArtifactLineage, ArtifactVersion
+from app.models.artifacts import Artifact, ArtifactLineage, ArtifactVersion, ArtifactVersionFile
 from app.models.executions import ExecutionRecord
 
 __all__ = [
@@ -46,6 +46,6 @@ __all__ = [
     "AgentEvent", "Conversation", "ConversationBranch", "ConversationMessage",
     "PlanDecision", "PlanVersion",
     "ToolPackage", "ToolPackageVersion",
-    "Artifact", "ArtifactLineage", "ArtifactVersion",
+    "Artifact", "ArtifactLineage", "ArtifactVersion", "ArtifactVersionFile",
     "ExecutionRecord",
 ]

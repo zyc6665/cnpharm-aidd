@@ -1,0 +1,19 @@
+type: ligand_structure
+version: 1
+file_roles:
+  - role: structure_file
+    required: true
+    primary: true
+    allowed_formats: [sdf]
+    content_types: [chemical/x-mdl-sdfile, application/octet-stream]
+    recommended_name: ligand.sdf
+  - role: metadata_json
+    required: false
+    allowed_formats: [json]
+    content_types: [application/json]
+    recommended_name: metadata.json
+metadata_schema:
+  required:
+    - ligand_id
+validators:
+  - ligand_structure_v1_core

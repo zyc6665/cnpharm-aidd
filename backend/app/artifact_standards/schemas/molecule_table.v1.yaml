@@ -1,0 +1,20 @@
+type: molecule_table
+version: 1
+file_roles:
+  - role: table_file
+    required: true
+    primary: true
+    allowed_formats: [csv, json]
+    content_types: [text/csv, application/json, application/octet-stream]
+    recommended_name: molecules.csv
+  - role: metadata_json
+    required: true
+    allowed_formats: [json]
+    content_types: [application/json]
+    recommended_name: metadata.json
+metadata_schema:
+  required:
+    - molecule_id_field
+    - source_task_id
+validators:
+  - molecule_table_v1_core

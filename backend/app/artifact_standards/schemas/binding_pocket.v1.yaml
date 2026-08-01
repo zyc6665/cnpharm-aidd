@@ -1,0 +1,28 @@
+type: binding_pocket
+version: 1
+file_roles:
+  - role: residue_pocket_pdb
+    required: true
+    primary: true
+    allowed_formats: [pdb]
+    content_types: [chemical/x-pdb, application/octet-stream]
+    recommended_name: residue_pocket.pdb
+  - role: atom_pocket_pdb
+    required: true
+    allowed_formats: [pdb]
+    content_types: [chemical/x-pdb, application/octet-stream]
+    recommended_name: atom_pocket.pdb
+  - role: pocket_metadata_json
+    required: true
+    allowed_formats: [json]
+    content_types: [application/json]
+    recommended_name: metadata.json
+metadata_schema:
+  required:
+    - center
+    - bbox
+    - residue_ids
+    - atom_ids
+    - source_protein_ref
+validators:
+  - binding_pocket_v1_core

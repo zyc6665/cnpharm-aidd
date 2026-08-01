@@ -1,0 +1,19 @@
+type: run_report
+version: 1
+file_roles:
+  - role: report_json
+    required: true
+    primary: true
+    allowed_formats: [json]
+    content_types: [application/json]
+    recommended_name: report.json
+  - role: report_markdown
+    required: false
+    allowed_formats: [md]
+    content_types: [text/markdown, text/plain]
+    recommended_name: report.md
+metadata_schema:
+  required:
+    - source_task_id
+validators:
+  - run_report_v1_core

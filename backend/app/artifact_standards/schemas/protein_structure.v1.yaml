@@ -1,0 +1,23 @@
+type: protein_structure
+version: 1
+file_roles:
+  - role: structure_file
+    required: true
+    primary: true
+    allowed_formats: [pdb]
+    content_types: [chemical/x-pdb, application/octet-stream]
+    recommended_name: structure.pdb
+  - role: metadata_json
+    required: true
+    allowed_formats: [json]
+    content_types: [application/json]
+    recommended_name: metadata.json
+metadata_schema:
+  required:
+    - chain_ids
+    - residue_count
+    - atom_count
+    - structure_format
+    - source_filename
+validators:
+  - protein_structure_v1_core

@@ -8,14 +8,19 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
-from app.tool_packages.schemas import ToolPackageManifest
+from app.tool_packages.schemas import (
+    AnyToolPackageManifest,
+    TOOL_PACKAGE_V2_API_VERSION,
+    ToolPackageManifest,
+    ToolPackageV2Manifest,
+)
 
 
 class ToolPackageLoadError(ValueError):
     """Raised when package files cannot be loaded into a manifest."""
 
 
-def load_tool_package(package_dir: str | Path) -> ToolPackageManifest:
+def load_tool_package(package_dir: str | Path) -> AnyToolPackageManifest:
     root = Path(package_dir).resolve()
     manifest_path = root / "tool.yaml"
     if not manifest_path.is_file():
@@ -23,10 +28,15 @@ def load_tool_package(package_dir: str | Path) -> ToolPackageManifest:
 
     raw = _read_yaml_object(manifest_path)
     raw["variants"] = [_load_variant(root, item) for item in raw.get("variants", [])]
+    manifest_model = (
+        ToolPackageV2Manifest
+        if raw.get("api_version") == TOOL_PACKAGE_V2_API_VERSION
+        else ToolPackageManifest
+    )
     try:
-        return ToolPackageManifest.model_validate(raw)
+        return manifest_model.model_validate(raw)
     except ValidationError as exc:
-        raise ToolPackageLoadError(f"tool.yaml 不符合 Tool Package v1：{exc}") from exc
+        raise ToolPackageLoadError(f"tool.yaml 不符合 Tool Package 契约：{exc}") from exc
 
 
 def _load_variant(root: Path, item: Any) -> Any:
@@ -56,4 +66,3 @@ def _read_yaml_object(path: Path) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ToolPackageLoadError(f"{path.name} 顶层必须是对象")
     return value
-

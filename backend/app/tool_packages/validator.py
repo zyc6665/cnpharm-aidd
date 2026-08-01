@@ -1,4 +1,4 @@
-"""Cross-file and platform policy validation for Tool Package v1."""
+"""Cross-file and platform policy validation for Tool Packages."""
 
 from __future__ import annotations
 
@@ -8,8 +8,15 @@ from collections.abc import Sequence
 
 from pydantic import BaseModel, Field
 
+from app.artifact_standards.registry import is_standard_artifact_ref
 from app.tool_packages.loader import ToolPackageLoadError, load_tool_package
-from app.tool_packages.schemas import Accelerator, ToolPackageManifest, ValidationStatus
+from app.tool_packages.schemas import (
+    Accelerator,
+    AnyToolPackageManifest,
+    ToolPackageManifest,
+    ToolPackageV2Manifest,
+    ValidationStatus,
+)
 
 
 class ToolPackageValidationResult(BaseModel):
@@ -17,7 +24,13 @@ class ToolPackageValidationResult(BaseModel):
     errors: list[str] = Field(default_factory=list)
 
 
-def validate_tool_package(manifest: ToolPackageManifest) -> ToolPackageValidationResult:
+def validate_tool_package(manifest: AnyToolPackageManifest) -> ToolPackageValidationResult:
+    if isinstance(manifest, ToolPackageV2Manifest):
+        return _validate_tool_package_v2(manifest)
+    return _validate_tool_package_v1(manifest)
+
+
+def _validate_tool_package_v1(manifest: ToolPackageManifest) -> ToolPackageValidationResult:
     errors: list[str] = []
     declared_inputs = {item.artifact_type for item in manifest.artifacts.inputs}
     declared_outputs = {item.artifact_type for item in manifest.artifacts.outputs}
@@ -42,6 +55,59 @@ def validate_tool_package(manifest: ToolPackageManifest) -> ToolPackageValidatio
         elif output_contract != expected_outputs:
             errors.append("所有运行变体必须提供一致的输出契约")
 
+        if variant.accelerator == Accelerator.NVIDIA_CUDA:
+            if not variant.resources.devices:
+                errors.append(f"NVIDIA 变体 {variant.name} 必须声明 resources.devices")
+            if not variant.resources.driver:
+                errors.append(f"NVIDIA 变体 {variant.name} 必须声明 resources.driver")
+
+        if (
+            variant.accelerator == Accelerator.HAIGUANG_DCU
+            and not variant.hardware_validated
+            and variant.validation_status
+            != ValidationStatus.ADAPTED_PENDING_HARDWARE_VALIDATION
+        ):
+            errors.append(
+                f"DCU 变体 {variant.name} 未真机验证时必须使用 "
+                "adapted_pending_hardware_validation"
+            )
+
+    return ToolPackageValidationResult(is_valid=not errors, errors=_dedupe(errors))
+
+
+def _validate_tool_package_v2(manifest: ToolPackageV2Manifest) -> ToolPackageValidationResult:
+    errors: list[str] = []
+    declared_inputs = {item.name for item in manifest.artifacts.inputs}
+    declared_outputs = {item.name for item in manifest.artifacts.outputs}
+
+    if not manifest.artifacts.inputs:
+        errors.append("artifacts.inputs 必须声明至少一个标准输入")
+    if not manifest.artifacts.outputs:
+        errors.append("artifacts.outputs 必须声明至少一个标准输出")
+
+    for item in [*manifest.artifacts.inputs, *manifest.artifacts.outputs]:
+        if not is_standard_artifact_ref(item.type):
+            errors.append(f"standard artifact type is unknown: {item.type}")
+
+    parameter_schema = manifest.parameters_schema or {}
+    if parameter_schema:
+        if parameter_schema.get("type") != "object":
+            errors.append("parameters_schema.type must be object")
+        required = parameter_schema.get("required", [])
+        if isinstance(required, list) and "device" in required:
+            errors.append(
+                "parameters_schema.device belongs in variant execution context, "
+                "not required business parameters"
+            )
+
+    for adapter_input in manifest.adapter.input:
+        if adapter_input.input not in declared_inputs:
+            errors.append(f"adapter.input references unknown input: {adapter_input.input}")
+    for adapter_output in manifest.adapter.output:
+        if adapter_output.output not in declared_outputs:
+            errors.append(f"adapter.output references unknown output: {adapter_output.output}")
+
+    for variant in manifest.variants:
         if variant.accelerator == Accelerator.NVIDIA_CUDA:
             if not variant.resources.devices:
                 errors.append(f"NVIDIA 变体 {variant.name} 必须声明 resources.devices")

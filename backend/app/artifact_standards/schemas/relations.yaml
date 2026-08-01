@@ -1,0 +1,13 @@
+relations:
+  - type: derived_from
+    description: Output artifact was generated from an input or intermediate artifact.
+  - type: contains
+    description: Collection or table artifact contains child artifacts.
+  - type: describes
+    description: Report or metadata artifact describes another artifact.
+  - type: ranked_by
+    description: Artifact ordering or score is provided by a score or molecule table.
+  - type: validated_by
+    description: Artifact has been checked by a validation report.
+  - type: visualized_by
+    description: Artifact has an associated visualization artifact.
