@@ -12,6 +12,24 @@ export interface WorkflowToolFieldBinding {
   readonly acceptedExtensions?: readonly string[]
 }
 
+export interface ArtifactInputSlot {
+  readonly name: string
+  readonly type: WorkflowArtifactSemanticType
+  readonly required: boolean
+}
+
+export interface ArtifactOutputSlot {
+  readonly name: string
+  readonly type: WorkflowArtifactSemanticType
+  readonly cardinality: 'one' | 'many'
+  readonly required: boolean
+}
+
+export interface ToolArtifactSlots {
+  readonly inputs: readonly ArtifactInputSlot[]
+  readonly outputs: readonly ArtifactOutputSlot[]
+}
+
 interface WorkflowToolOutputFileMatch {
   readonly filenameIncludesAny?: readonly string[]
   readonly extension?: string
@@ -93,6 +111,45 @@ function toWorkflowSemanticType(value: string): WorkflowArtifactSemanticType | n
 function resolveStepKey(contract: ToolContract): WorkflowStepKey {
   const stage = contract.capability.stage ?? contract.capability.capability ?? ''
   return STAGE_STEP_MAP[stage] ?? 'moleculeGenerationOrVirtualScreening'
+}
+
+export function deriveArtifactSlotsFromToolContract(
+  contract?: ToolContract | null
+): ToolArtifactSlots {
+  const artifactInputs = contract?.artifacts?.inputs ?? []
+  const artifactOutputs = contract?.artifacts?.outputs ?? []
+
+  return {
+    inputs: artifactInputs
+      .map((slot) => {
+        const type = toWorkflowSemanticType(slot.type)
+        if (!type || !slot.name) {
+          return null
+        }
+
+        return {
+          name: slot.name,
+          type,
+          required: slot.required ?? true
+        }
+      })
+      .filter((slot): slot is ArtifactInputSlot => slot !== null),
+    outputs: artifactOutputs
+      .map((slot) => {
+        const type = toWorkflowSemanticType(slot.type)
+        if (!type || !slot.name) {
+          return null
+        }
+
+        return {
+          name: slot.name,
+          type,
+          cardinality: slot.cardinality ?? 'one',
+          required: slot.required ?? true
+        }
+      })
+      .filter((slot): slot is ArtifactOutputSlot => slot !== null)
+  }
 }
 
 function isNewerArtifact(candidate: WorkflowArtifact, current: WorkflowArtifact): boolean {

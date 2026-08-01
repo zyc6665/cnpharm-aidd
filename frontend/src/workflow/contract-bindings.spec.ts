@@ -1,0 +1,101 @@
+import { describe, expect, it } from 'vitest'
+import type { ToolContract } from '@/types/models'
+import {
+  buildWorkflowToolBindingFromContract,
+  deriveArtifactSlotsFromToolContract,
+} from './contract-bindings'
+
+function makeToolContract(overrides: Partial<ToolContract> = {}): ToolContract {
+  return {
+    contract_version: '1.0',
+    id: 'tool-1',
+    slug: 'lvpocket-pocket-prediction',
+    name: 'LVpocket',
+    description: null,
+    status: 'published',
+    is_public: true,
+    version: { id: 'version-1', version: '1.0.0', is_active: true, deprecated: false },
+    executor: { type: 'tool_package', timeout_sec: null },
+    schema: {
+      input: { type: 'object', properties: {} },
+      output: { type: 'object', properties: {} },
+    },
+    capability: {
+      enabled: true,
+      capability: 'lvpocket-pocket-prediction',
+      stage: 'lvpocket-pocket-prediction',
+      inputs: [
+        {
+          semantic_type: 'protein_structure@1',
+          field: 'protein',
+          required: true,
+          accepted_extensions: [],
+        },
+      ],
+      outputs: [
+        {
+          semantic_type: 'binding_pocket@1',
+          source: 'artifact',
+          match: { type: 'binding_pocket@1', name: 'pocket' },
+          path: null,
+          required: true,
+        },
+      ],
+      defaults: {},
+      virtual: false,
+    },
+    artifacts: {
+      inputs: [{ name: 'protein', type: 'protein_structure@1', required: true }],
+      outputs: [
+        {
+          name: 'pocket',
+          type: 'binding_pocket@1',
+          cardinality: 'one',
+          required: true,
+        },
+      ],
+    },
+    validation: { status: 'valid', errors: [] },
+    ...overrides,
+  }
+}
+
+describe('contract artifact slots', () => {
+  it('derives named standard artifact slots from Tool Package v2 contracts', () => {
+    const slots = deriveArtifactSlotsFromToolContract(makeToolContract())
+
+    expect(slots.inputs).toEqual([
+      {
+        name: 'protein',
+        type: 'protein_structure@1',
+        required: true,
+      },
+    ])
+    expect(slots.outputs).toEqual([
+      {
+        name: 'pocket',
+        type: 'binding_pocket@1',
+        cardinality: 'one',
+        required: true,
+      },
+    ])
+  })
+
+  it('keeps legacy capability bindings available for existing workflow paths', () => {
+    const binding = buildWorkflowToolBindingFromContract(makeToolContract())
+
+    expect(binding?.fieldBindings).toEqual([
+      {
+        semanticType: 'protein_structure@1',
+        field: 'protein',
+        required: true,
+        acceptedExtensions: [],
+      },
+    ])
+    expect(binding?.outputExtractors[0]).toMatchObject({
+      semanticType: 'binding_pocket@1',
+      source: 'artifact',
+      artifactName: 'pocket',
+    })
+  })
+})
