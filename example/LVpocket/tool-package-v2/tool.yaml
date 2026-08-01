@@ -1,0 +1,92 @@
+api_version: aidd.sciminer/tool-package.v2
+kind: ToolPackage
+metadata:
+  slug: lvpocket-standard-pocket
+  name: LVpocket Standard Pocket Adapter
+  version: 1.0.0
+  description: Adapt LVpocket pocket prediction outputs to the platform binding_pocket@1 contract.
+artifacts:
+  inputs:
+    - name: protein
+      type: protein_structure@1
+      required: true
+  outputs:
+    - name: pocket
+      type: binding_pocket@1
+      cardinality: one
+      required: true
+    - name: report
+      type: run_report@1
+      cardinality: one
+      required: false
+parameters_schema:
+  type: object
+  properties:
+    model_choice:
+      type: string
+      enum:
+        - auto
+        - all_scpdb
+        - alpha
+        - beta
+        - alpha_beta
+        - alpha_and_beta
+      default: auto
+  additionalProperties: false
+adapter:
+  input:
+    - input: protein
+      method: mount_primary_structure_file
+  output:
+    - output: pocket
+      method: convert_lvpocket_voxel_output_to_binding_pocket_v1
+      validator_profile: binding_pocket_v1_core
+    - output: report
+      method: collect_adapter_report_json
+      validator_profile: run_report_v1_core
+exposure:
+  agent: true
+  workflow: true
+  direct_run: true
+variants:
+  - name: cpu
+    accelerator: cpu
+    executor_types:
+      - remote_job
+    entrypoint:
+      - runner/entrypoint.sh
+    resources:
+      cpu: 8
+      memory_mb: 16384
+    validation_status: validated
+    hardware_validated: true
+  - name: nvidia-cuda
+    accelerator: nvidia_cuda
+    executor_types:
+      - remote_job
+    entrypoint:
+      - runner/entrypoint.sh
+    resources:
+      cpu: 8
+      memory_mb: 16384
+      gpu_memory_mb: 16384
+      devices:
+        - nvidia.com/gpu
+      driver: ">=535"
+    validation_status: validated
+    hardware_validated: true
+  - name: haiguang-dcu
+    accelerator: haiguang_dcu
+    executor_types:
+      - remote_job
+    entrypoint:
+      - runner/entrypoint.sh
+    resources:
+      cpu: 8
+      memory_mb: 16384
+      gpu_memory_mb: 16384
+      devices:
+        - hygon.com/dcu
+      driver: ">=6.2"
+    validation_status: adapted_pending_hardware_validation
+    hardware_validated: false
