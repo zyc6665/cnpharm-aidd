@@ -24,11 +24,22 @@ export function extractWorkflowInputRequirements(definition: WorkflowDefinition)
   const semanticTypes = new Set<string>()
 
   for (const node of definition.nodes ?? []) {
-    if (!node.semantic_inputs || typeof node.semantic_inputs !== 'object') {
+    const semanticInputs = node.semantic_inputs
+    if (semanticInputs && typeof semanticInputs === 'object') {
+      for (const source of Object.values(semanticInputs)) {
+        const semanticType = extractWorkflowInputSemanticType(source)
+        if (semanticType) {
+          semanticTypes.add(semanticType)
+        }
+      }
+    }
+
+    const artifactInputs = node.artifact_inputs
+    if (!artifactInputs || typeof artifactInputs !== 'object') {
       continue
     }
 
-    for (const source of Object.values(node.semantic_inputs)) {
+    for (const source of Object.values(artifactInputs)) {
       const semanticType = extractWorkflowInputSemanticType(source)
       if (semanticType) {
         semanticTypes.add(semanticType)
