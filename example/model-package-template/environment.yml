@@ -1,0 +1,9 @@
+name: example-model-package
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pandas
+  - pip
+  - pip:
+      - pyyaml

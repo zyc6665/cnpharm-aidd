@@ -1,0 +1,24 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Runtime artifacts
+output/
+work/
+logs/
+*.log
+*.pid
+*.pkl
+
+# Large model/runtime payloads kept outside Git
+weights/*
+!weights/WEIGHTS.md
+wheelhouse/*.whl
+
+# Machine-specific deployment files
+deployment.local.*
+platform_tool.ssh_job.json
+*.local.json
+*.secret.json

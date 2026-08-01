@@ -1,0 +1,8 @@
+{
+  "task_id": "task-001",
+  "task_name": "example_model_prediction",
+  "params": {},
+  "input_files": {
+    "molecules_csv": "molecules.csv"
+  }
+}

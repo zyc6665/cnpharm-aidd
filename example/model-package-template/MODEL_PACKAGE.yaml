@@ -1,0 +1,31 @@
+schema_version: sciminer.model-package.v1
+slug: example-model-package-template
+name: Example Model Package Template
+version: 0.1.0
+entrypoint: platform_run.sh
+runtime:
+  python: "3.10"
+  environment_file: environment.yml
+  requirements_file: requirements.txt
+model_code:
+  source_dir: original_model
+  wrapper_package: src/model_runtime_template
+  legacy_entrypoint: original_model/inference.py::predict(input_csv, output_dir)
+weights:
+  directory: weights
+  required_files:
+    - model.weights
+standard_contract:
+  inputs:
+    - name: molecules
+      type: molecule_table@1
+  outputs:
+    - name: properties
+      type: molecule_table@1
+    - name: report
+      type: run_report@1
+excluded_from_git:
+  - weights/*
+  - wheelhouse/*.whl
+  - deployment.local.*
+  - platform_tool.ssh_job.json

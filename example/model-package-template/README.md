@@ -1,0 +1,26 @@
+# Model Package Template
+
+This is a reusable model-side package template for SciMiner model deployment work.
+
+Use it when you receive raw model code and weights and need to organize them before creating a
+Tool Package v2. The template keeps the raw model implementation behind a small runtime wrapper
+so Codex or Claude can adapt inputs and outputs without changing platform code.
+
+## What This Template Provides
+
+- A fixed model-side layout.
+- A thin `platform_run.sh` entrypoint.
+- A testable runtime wrapper under `src/model_runtime_template/`.
+- Example request and output files.
+- Agent instructions for future model cleanup tasks.
+- Git ignore rules that keep weights and machine-specific files out of source control.
+
+## Quick Check
+
+```bash
+pytest example/model-package-template/tests/test_model_package_runtime_contract.py \
+  test/test_model_package_template.py -q
+```
+
+This checks the package structure and output wrapping logic only. It does not validate any real
+scientific model.

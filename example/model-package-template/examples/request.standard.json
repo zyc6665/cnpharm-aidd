@@ -1,0 +1,32 @@
+{
+  "request_version": "aidd.sciminer/request.v1",
+  "task": {
+    "id": "task-001",
+    "tool_slug": "example-model-package-template",
+    "tool_version": "0.1.0"
+  },
+  "inputs": {
+    "molecules": {
+      "artifact_version_id": "example-input-version",
+      "type": "molecule_table@1",
+      "files": {
+        "table_file": {
+          "path": "input/molecules.csv",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "content_type": "text/csv"
+        }
+      },
+      "metadata": {
+        "molecule_id_field": "molecule_id",
+        "source_task_id": "example-input"
+      }
+    }
+  },
+  "parameters": {},
+  "execution": {
+    "variant": "cpu",
+    "accelerator": "cpu",
+    "work_dir": ".",
+    "output_dir": "output"
+  }
+}
