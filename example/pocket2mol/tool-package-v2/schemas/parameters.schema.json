@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:sciminer:pocket2mol-standard-generation:parameters:v2",
+  "title": "Pocket2Mol standard adapter parameters",
+  "type": "object",
+  "properties": {
+    "num_samples": {"type": "integer", "default": 100, "minimum": 1},
+    "beam_size": {"type": "integer", "default": 300, "minimum": 1},
+    "max_steps": {"type": "integer", "default": 50, "minimum": 1},
+    "seed": {"type": "integer", "default": 2020, "minimum": 0}
+  },
+  "additionalProperties": false
+}

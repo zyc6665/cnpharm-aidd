@@ -1,0 +1,83 @@
+api_version: aidd.sciminer/tool-package.v2
+kind: ToolPackage
+metadata:
+  slug: pocket2mol-standard-generation
+  name: Pocket2Mol Standard Ligand Generator
+  version: 1.0.0
+  description: Adapt Pocket2Mol ligand generation to standard molecule table and ligand artifacts.
+artifacts:
+  inputs:
+    - name: pocket
+      type: binding_pocket@1
+      required: true
+  outputs:
+    - name: molecules
+      type: molecule_table@1
+      cardinality: one
+      required: true
+    - name: ligands
+      type: ligand_structure@1
+      cardinality: many
+      required: true
+parameters_schema:
+  type: object
+  properties:
+    num_samples:
+      type: integer
+      default: 100
+      minimum: 1
+    beam_size:
+      type: integer
+      default: 300
+      minimum: 1
+    max_steps:
+      type: integer
+      default: 50
+      minimum: 1
+    seed:
+      type: integer
+      default: 2020
+      minimum: 0
+  additionalProperties: false
+adapter:
+  input:
+    - input: pocket
+      method: mount_binding_pocket_primary_pdb_and_metadata
+  output:
+    - output: molecules
+      method: collect_generated_molecule_table
+      validator_profile: molecule_table_v1_core
+    - output: ligands
+      method: split_generated_ligands_to_ligand_structure_v1
+      validator_profile: ligand_structure_v1_core
+exposure:
+  agent: true
+  workflow: true
+  direct_run: true
+variants:
+  - name: nvidia-cuda
+    accelerator: nvidia_cuda
+    executor_types:
+      - remote_job
+    entrypoint:
+      - runner/entrypoint.sh
+    resources:
+      cpu: 8
+      memory_mb: 24576
+      gpu_memory_mb: 24576
+      devices:
+        - nvidia.com/gpu
+      driver: ">=535"
+    validation_status: validated
+    hardware_validated: true
+  - name: cpu
+    accelerator: cpu
+    executor_types:
+      - remote_job
+    entrypoint:
+      - runner/entrypoint.sh
+    resources:
+      cpu: 8
+      memory_mb: 24576
+    validation_status: unvalidated
+    hardware_validated: false
