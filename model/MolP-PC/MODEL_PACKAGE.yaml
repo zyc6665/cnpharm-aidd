@@ -1,0 +1,38 @@
+schema_version: sciminer.model-package.v1
+slug: molp-pc-property-prediction
+name: MolP-PC Property Prediction
+version: 0.1.0
+entrypoint: platform_run.sh
+runtime:
+  python: "3.8"
+  environment_file: admet.yml
+  requirements_file: requirements.txt
+model_code:
+  source_dir: predict
+  wrapper_package: src/molp_pc_runtime
+  legacy_entrypoint: predict/test.py::predict(path, name)
+weights:
+  directory: predict/model
+  required_files:
+    - Absorption.pth
+    - Distribution.pth
+    - Ecotoxicity.pth
+    - Excretion.pth
+    - LD50.pth
+    - Metabolism.pth
+    - Tox21.pth
+    - Toxicology.pth
+standard_contract:
+  inputs:
+    - name: molecules
+      type: molecule_table@1
+  outputs:
+    - name: properties
+      type: molecule_table@1
+    - name: report
+      type: run_report@1
+excluded_from_git:
+  - predict/model/*.pth
+  - wheelhouse/*.whl
+  - platform_tool.ssh_job.json
+  - predict/cb_data_fine.csv

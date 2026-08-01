@@ -1,0 +1,24 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Runtime artifacts
+output/
+work/
+logs/
+*.log
+*.pid
+*.pkl
+cb_data_result.csv
+!examples/sample_output/cb_data_result.csv
+
+# Large model/runtime payloads kept outside Git
+predict/model/*.pth
+wheelhouse/*.whl
+predict/cb_data_fine.csv
+
+# Machine-specific deployment files
+platform_tool.ssh_job.json
+CLEANUP_REMOVED_PATH.txt
