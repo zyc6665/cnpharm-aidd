@@ -15,9 +15,13 @@
 - Standardized package entry: `platform_run.sh`
 - Runtime wrapper package: `src/molp_pc_runtime`
 - Weight directory: `predict/model/`
+- Runtime Env: Python 3.8 / CUDA 11.3, container-first with conda-pack fallback
 
 `platform_run.sh` is intentionally thin. It parses task arguments, sets `PYTHONPATH`, and
 delegates to `python -m molp_pc_runtime.cli`.
+
+Executors choose a declared Runtime Env from `MODEL_PACKAGE.yaml`; they should not install
+dependencies at task runtime or depend on a host-local conda path.
 
 ## Required Inputs
 
@@ -49,7 +53,7 @@ They do not prove scientific correctness or hardware compatibility. Real deploym
 record:
 
 - exact model weights and SHA-256 checksums
-- runtime environment or image digest
+- Runtime Env type, image digest or conda-pack SHA-256
 - input sample hash
 - output `result.json` and artifact hashes
 - CPU/GPU hardware and driver details

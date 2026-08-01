@@ -11,9 +11,17 @@ so Codex or Claude can adapt inputs and outputs without changing platform code.
 - A fixed model-side layout.
 - A thin `platform_run.sh` entrypoint.
 - A testable runtime wrapper under `src/model_runtime_template/`.
+- Runtime Env metadata for container-first execution and conda-pack fallback.
 - Example request and output files.
 - Agent instructions for future model cleanup tasks.
 - Git ignore rules that keep weights and machine-specific files out of source control.
+
+## Runtime Policy
+
+The template treats the model runtime as a versioned artifact. `MODEL_PACKAGE.yaml` declares the
+preferred container image by digest and a conda-pack fallback for executors that cannot run
+containers. Executors mount inputs, outputs, work directories, and weights; they do not install
+dependencies during task execution.
 
 ## Quick Check
 

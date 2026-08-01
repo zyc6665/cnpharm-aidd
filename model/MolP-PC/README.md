@@ -40,8 +40,11 @@ invokes `predict/test.py::predict(path, name)`, and writes `output/result.json` 
 
 ## Runtime
 
-Prepare Python 3.8 with the dependencies from `admet.yml`, place model weights in
-`predict/model/`, then run:
+Production deployment treats the Python environment as a versioned Runtime Env artifact, not as a
+host-local conda path. `MODEL_PACKAGE.yaml` declares Python 3.8, CUDA 11.3, a preferred container
+image by digest, and a conda-pack fallback for executors that cannot run containers.
+
+After the selected Runtime Env is active and model weights are mounted in `predict/model/`, run:
 
 ```bash
 bash platform_run.sh \
@@ -53,7 +56,9 @@ bash platform_run.sh \
   --device cpu
 ```
 
-Use `MOLP_PC_PYTHON=/path/to/python` when the runtime environment is not the shell default.
+Use `MOLP_PC_PYTHON=/path/to/python` only for local debugging when the runtime environment is not
+the shell default. Production executors should select the declared Runtime Env and must not install
+dependencies during task execution.
 
 ## Git Policy
 

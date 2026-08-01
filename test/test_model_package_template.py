@@ -55,9 +55,16 @@ def test_model_package_template_metadata_declares_model_side_contract():
     import yaml
 
     metadata = yaml.safe_load((TEMPLATE_ROOT / "MODEL_PACKAGE.yaml").read_text(encoding="utf-8"))
+    runtime = metadata["runtime"]
 
     assert metadata["schema_version"] == "sciminer.model-package.v1"
     assert metadata["entrypoint"] == "platform_run.sh"
+    assert runtime["python"] == "3.10"
+    assert runtime["artifacts"]["primary"]["kind"] == "container"
+    assert runtime["artifacts"]["fallback"]["kind"] == "conda_pack"
+    assert set(runtime["executor_support"]) == {"ssh_docker_exec", "slurm", "k8s_job"}
+    assert "digest" in runtime["selection_policy"]
+    assert runtime["cache_policy"]["mutable_host_paths_forbidden"] is True
     assert metadata["model_code"]["source_dir"] == "original_model"
     assert metadata["model_code"]["wrapper_package"] == "src/model_runtime_template"
     assert metadata["standard_contract"]["inputs"] == [
@@ -128,13 +135,21 @@ def test_model_package_template_prompt_tells_agents_not_to_change_platform():
         encoding="utf-8"
     )
     guide = (TEMPLATE_ROOT / "MODEL_PACKAGE_GUIDE.md").read_text(encoding="utf-8")
+    runtime_doc = (PROJECT_ROOT / "docs/guides/model-runtime-packaging.md").read_text(
+        encoding="utf-8"
+    )
 
-    combined = f"{prompt}\n{guide}"
+    combined = f"{prompt}\n{guide}\n{runtime_doc}"
     assert "平台契约固定" in combined
     assert "不要修改平台后端或前端" in combined
     assert "MODEL_PACKAGE.yaml" in combined
     assert "platform_run.sh" in combined
     assert "result.v2" in combined
+    assert "Runtime Env" in combined
+    assert "container" in combined
+    assert "conda-pack" in combined
+    assert "镜像 digest" in combined
+    assert "Executor 不安装依赖" in combined
 
 
 def test_model_package_template_has_no_secrets_or_host_paths():

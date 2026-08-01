@@ -12,6 +12,16 @@ runtime wrapper。平台契约固定，模型代码负责适配标准输入和�
 - `examples/`：最小输入输出样例，供合同测试和人工 smoke test 使用。
 - `tests/`：不依赖 torch/dgl 的模型包结构与结果收敛测试。
 
+## Runtime Env
+
+MolP-PC 当前按 Python 3.8、CUDA 11.3 依赖栈整理。生产部署时不要依赖某台机器上的
+conda 环境路径，而是按 `MODEL_PACKAGE.yaml.runtime` 选择 Runtime Env：
+
+- 首选 container：`runtime.artifacts.primary` 记录镜像名称和镜像 digest。
+- fallback：`runtime.artifacts.fallback` 记录 conda-pack 的 URI 和 SHA-256，供无容器 Slurm 等场景使用。
+- Executor 不安装依赖，只把输入、输出、工作目录和 `predict/model/*.pth` 权重挂载给 `platform_run.sh`。
+- 缓存 key 必须包含模型版本、Runtime Env 摘要和权重 manifest 摘要，避免旧环境误跑新模型。
+
 ## 接入规则
 
 1. 原始模型入口保持在 `predict/test.py::predict(path, name)`。
@@ -30,7 +40,7 @@ runtime wrapper。平台契约固定，模型代码负责适配标准输入和�
 pytest model/MolP-PC/tests/test_runtime_contract.py -q
 ```
 
-真实模型 smoke test 需要先准备 Python 3.8 环境和 `predict/model/*.pth` 权重，然后运行：
+真实模型 smoke test 需要先准备已验证的 Runtime Env 和 `predict/model/*.pth` 权重，然后运行：
 
 ```bash
 bash model/MolP-PC/platform_run.sh \
@@ -42,4 +52,5 @@ bash model/MolP-PC/platform_run.sh \
   --device cpu
 ```
 
-如果没有完整依赖和权重，只运行合同测试，不声明模型科学结果已验证。
+如果只是本地调试，可以用 `MOLP_PC_PYTHON` 指向临时解释器；这不属于生产部署契约。
+如果没有完整依赖、权重、Runtime Env 摘要和硬件记录，只运行合同测试，不声明模型科学结果已验证。

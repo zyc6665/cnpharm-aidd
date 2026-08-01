@@ -24,11 +24,12 @@
 1. 阅读原始模型 README、入口脚本、参数、依赖、权重加载路径和输出文件。
 2. 把原始代码放入 `original_model/` 或项目已约定的源码目录。
 3. 把真实权重放入 `weights/`，但不要提交权重文件。
-4. 在 `MODEL_PACKAGE.yaml` 中声明模型入口和标准输入输出契约。
-5. 在 runtime wrapper 中实现输入解析、原始模型调用和 `result.v2` 输出收敛。
-6. 保持 `platform_run.sh` 为薄入口，只调用 `python -m <runtime_package>.cli`。
-7. 写轻量测试，不依赖 GPU、torch、dgl 或真实权重即可验证包装逻辑。
-8. 扫描并移除账号、主机、私有地址、宿主机绝对路径、密钥和大文件。
+4. 在 `MODEL_PACKAGE.yaml` 中声明模型入口、标准输入输出契约和 Runtime Env。
+5. Runtime Env 必须包含首选 container 镜像 digest、conda-pack/venv-pack fallback、执行器支持和缓存策略。
+6. 在 runtime wrapper 中实现输入解析、原始模型调用和 `result.v2` 输出收敛。
+7. 保持 `platform_run.sh` 为薄入口，只调用 `python -m <runtime_package>.cli`。
+8. 写轻量测试，不依赖 GPU、torch、dgl 或真实权重即可验证包装逻辑。
+9. 扫描并移除账号、主机、私有地址、宿主机绝对路径、密钥和大文件。
 
 ## 禁止事项
 
@@ -36,6 +37,7 @@
 - 禁止在模型包中提交真实凭据、私有部署地址、账号或宿主机绝对路径。
 - 禁止提交权重、wheelhouse、缓存、运行输出或大型训练数据。
 - 禁止把运行设备作为必填业务参数；设备属于部署 variant 执行上下文。
+- 禁止要求 Executor 在任务执行时安装依赖或激活某个宿主机私有环境。
 - 禁止只写 README 不写可测试 runtime wrapper。
 
 ## 推荐收口

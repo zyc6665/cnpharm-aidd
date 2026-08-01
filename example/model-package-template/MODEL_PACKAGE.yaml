@@ -7,6 +7,34 @@ runtime:
   python: "3.10"
   environment_file: environment.yml
   requirements_file: requirements.txt
+  executor_support:
+    - ssh_docker_exec
+    - slurm
+    - k8s_job
+  selection_policy: "prefer container image by immutable digest; fallback to conda_pack only when the executor cannot run containers"
+  artifacts:
+    primary:
+      kind: container
+      image: registry.example/sciminer/example-model-runtime:0.1.0
+      image_digest: sha256:<fill-in-image-digest>
+      includes:
+        - python
+        - dependencies
+        - runtime_wrapper
+    fallback:
+      kind: conda_pack
+      uri: artifacts://model-envs/example-model-package-template/0.1.0/conda-env.tar.gz
+      sha256: <fill-in-conda-pack-sha256>
+      includes:
+        - python
+        - dependencies
+  cache_policy:
+    key_fields:
+      - slug
+      - version
+      - runtime.artifacts.selected.digest_or_sha256
+      - weights.manifest_sha256
+    mutable_host_paths_forbidden: true
 model_code:
   source_dir: original_model
   wrapper_package: src/model_runtime_template

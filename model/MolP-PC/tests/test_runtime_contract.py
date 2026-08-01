@@ -50,9 +50,17 @@ def test_model_package_metadata_uses_platform_standard_contracts():
     import yaml
 
     metadata = yaml.safe_load((PACKAGE_ROOT / "MODEL_PACKAGE.yaml").read_text(encoding="utf-8"))
+    runtime = metadata["runtime"]
 
     assert metadata["slug"] == "molp-pc-property-prediction"
     assert metadata["entrypoint"] == "platform_run.sh"
+    assert runtime["python"] == "3.8"
+    assert runtime["cuda"] == "11.3"
+    assert runtime["artifacts"]["primary"]["kind"] == "container"
+    assert runtime["artifacts"]["fallback"]["kind"] == "conda_pack"
+    assert set(runtime["executor_support"]) == {"ssh_docker_exec", "slurm", "k8s_job"}
+    assert "digest" in runtime["selection_policy"]
+    assert runtime["cache_policy"]["mutable_host_paths_forbidden"] is True
     assert metadata["standard_contract"]["inputs"] == [
         {"name": "molecules", "type": "molecule_table@1"}
     ]
