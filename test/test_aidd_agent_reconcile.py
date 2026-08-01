@@ -1097,3 +1097,129 @@ async def test_failed_step_replans_downstream_to_uploaded_fallback_input(
     assert generation_step.status == "waiting_task"
     assert generation_step.task_id == "task-generation-fallback"
     assert scheduled_payloads[0].file_ids == [pocket_file.id]
+
+
+@pytest.mark.asyncio
+async def test_v2_standard_artifact_output_marks_agent_step_success(
+    db_session: AsyncSession,
+    user: User,
+) -> None:
+    tool = Tool(
+        owner_id=user.id,
+        name="Standard Pocket Tool",
+        slug="standard-pocket-tool",
+        status=ToolStatus.PUBLISHED.value,
+        is_public=True,
+    )
+    db_session.add(tool)
+    await db_session.flush()
+    version = ToolVersion(
+        tool_id=tool.id,
+        version="1.0.0",
+        config={
+            "type": "python_script",
+            "tool_package_manifest": {
+                "api_version": "aidd.sciminer/tool-package.v2",
+                "kind": "ToolPackage",
+                "metadata": {
+                    "slug": "standard-pocket-tool",
+                    "name": "Standard Pocket Tool",
+                    "version": "1.0.0",
+                },
+                "artifacts": {
+                    "inputs": [
+                        {"name": "protein", "type": "protein_structure@1", "required": True}
+                    ],
+                    "outputs": [
+                        {
+                            "name": "pocket",
+                            "type": "binding_pocket@1",
+                            "cardinality": "one",
+                            "required": True,
+                        }
+                    ],
+                },
+                "parameters_schema": {"type": "object"},
+                "exposure": {"agent": True, "workflow": True, "direct_run": True},
+                "variants": [
+                    {
+                        "name": "cpu",
+                        "accelerator": "cpu",
+                        "executor_types": ["cli"],
+                        "entrypoint": ["/app/runner/entrypoint.sh"],
+                    }
+                ],
+            },
+        },
+        is_active=True,
+    )
+    db_session.add(version)
+    await db_session.flush()
+    tool.current_version_id = version.id
+
+    output_file = file_record(
+        owner=user,
+        filename="pocket_residues.pdb",
+        content=b"pocket",
+        storage_path="/tmp/pocket_residues.pdb",
+        source_type=FileSourceType.TOOL_OUTPUT.value,
+    )
+    db_session.add(output_file)
+    await db_session.flush()
+
+    task = Task(
+        user_id=user.id,
+        tool_id=tool.id,
+        tool_version_id=version.id,
+        status=TaskStatus.SUCCESS.value,
+    )
+    db_session.add(task)
+    await db_session.flush()
+    db_session.add(
+        TaskOutput(
+            task_id=task.id,
+            result={
+                "standard_artifacts": {
+                    "artifact_version_ids_by_ref": {"pocket": "artifact-version-pocket"},
+                    "file_ids_by_artifact_ref": {"pocket": [output_file.id]},
+                }
+            },
+            file_ids=[output_file.id],
+            output_type="file",
+        )
+    )
+
+    run = AgentRun(
+        user_id=user.id,
+        message="预测标准口袋",
+        intent="standard_pocket_prediction",
+        status="waiting_task",
+        input_type="protein_structure@1",
+        requested_outputs=["binding_pocket@1"],
+        plan={},
+    )
+    db_session.add(run)
+    await db_session.flush()
+    db_session.add(
+        AgentRunStep(
+            agent_run_id=run.id,
+            step_key="pocket_prediction",
+            tool_slug="standard-pocket-tool",
+            tool_id=tool.id,
+            task_id=task.id,
+            status="waiting_task",
+            sort_order=0,
+            semantic_inputs={"protein_structure@1": "agent_input"},
+            params={},
+        )
+    )
+    await db_session.commit()
+
+    count = await reconcile_waiting_agent_steps(db_session, run_id=run.id)
+
+    refreshed_run = await db_session.get(AgentRun, run.id)
+    step = next(item for item in refreshed_run.steps if item.step_key == "pocket_prediction")
+    assert count == 1
+    assert refreshed_run.status == "success"
+    assert step.status == "success"
+    assert step.output_file_ids == [output_file.id]

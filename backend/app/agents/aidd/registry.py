@@ -153,6 +153,7 @@ def capability_from_tool_package_config(tool_slug: str, config: dict[str, Any]) 
             item.type,
             "artifact",
             match=OutputMatch(content_type=item.type),
+            path=item.name,
             required=item.required,
         )
         for item in manifest.artifacts.outputs

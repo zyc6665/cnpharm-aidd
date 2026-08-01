@@ -38,6 +38,13 @@ from app.artifact_standards.types import normalize_platform_artifact_type
 from app.services.semantic_types import CANONICAL_AGENT_INPUT_TYPES, normalize_semantic_type
 from app.services.aidd_builtin_tools import ensure_aidd_builtin_tool
 from app.services.tool_contracts import build_tool_contract, tool_contract_to_agent_summary
+from app.services.workflow_artifacts import (
+    describe_missing_required_standard_artifacts,
+    extract_standard_artifacts,
+    format_missing_required_standard_artifacts_error,
+    required_standard_artifacts_present,
+    standard_artifact_file_ids,
+)
 from app.agents.aidd.workflow_drafts import build_workflow_definition_from_plan
 from app.tasks.service import create_and_schedule_tool_task
 from app.tasks.cancellation import cancel_platform_task
@@ -844,7 +851,7 @@ def _required_outputs_present(
     return all(
         output.semantic_type in semantic_outputs
         for output in capability.outputs
-        if output.required
+        if output.required and output.source != "artifact"
     )
 
 
@@ -880,7 +887,21 @@ def _missing_required_output_descriptions(
     return [
         _format_output_rule(output)
         for output in capability.outputs
-        if output.required and output.semantic_type not in semantic_outputs
+        if output.required
+        and output.source != "artifact"
+        and output.semantic_type not in semantic_outputs
+    ]
+
+
+def _declared_artifact_outputs(capability: ToolCapability) -> list[dict[str, Any]]:
+    return [
+        {
+            "name": output.path or output.semantic_type,
+            "type": output.semantic_type,
+            "required": output.required,
+        }
+        for output in capability.outputs
+        if output.source == "artifact"
     ]
 
 
@@ -935,7 +956,14 @@ async def _try_replan_failed_step_with_uploaded_inputs(
                 continue
 
             _, dependency_key, _dependency_semantic_type = source.split(":", 2)
-            if dependency_key != failed_step.step_key or semantic_type not in uploaded_inputs:
+            normalized_semantic_type = _normalize_agent_input_type(semantic_type) or semantic_type
+            if (
+                dependency_key != failed_step.step_key
+                or (
+                    semantic_type not in uploaded_inputs
+                    and normalized_semantic_type not in uploaded_inputs
+                )
+            ):
                 rewritten_inputs[semantic_type] = source
                 continue
 
@@ -1033,6 +1061,7 @@ async def reconcile_waiting_agent_steps(
             task_output_files=output_files,
             output_data=output_data,
         )
+        standard_artifacts = extract_standard_artifacts(output_data)
 
         if not _required_outputs_present(capability=capability, semantic_outputs=semantic_outputs):
             error_message = _missing_required_outputs_message(
@@ -1055,13 +1084,43 @@ async def reconcile_waiting_agent_steps(
             run.finished_at = utcnow()
             continue
 
+        declared_artifact_outputs = _declared_artifact_outputs(capability)
+        if not required_standard_artifacts_present(
+            declared_outputs=declared_artifact_outputs,
+            standard_artifacts=standard_artifacts,
+        ):
+            missing_artifacts = describe_missing_required_standard_artifacts(
+                declared_outputs=declared_artifact_outputs,
+                standard_artifacts=standard_artifacts,
+            )
+            error_message = format_missing_required_standard_artifacts_error(missing_artifacts)
+            if await _try_replan_failed_step_with_uploaded_inputs(
+                db,
+                run=run,
+                failed_step=step,
+                error_message=error_message,
+            ):
+                continue
+            step.status = "failure"
+            step.error_message = error_message
+            step.finished_at = utcnow()
+            run.status = "failure"
+            run.error_message = step.error_message
+            run.finished_at = utcnow()
+            continue
+
         step.status = "success"
         step.semantic_outputs = semantic_outputs
-        step.output_file_ids = [
+        output_file_ids = [
             str(value["file_id"])
             for value in semantic_outputs.values()
             if value.get("source") == "output_files" and value.get("file_id")
         ]
+        for declaration in declared_artifact_outputs:
+            output_file_ids.extend(
+                standard_artifact_file_ids(standard_artifacts, str(declaration["name"]))
+            )
+        step.output_file_ids = list(dict.fromkeys(output_file_ids))
         step.finished_at = utcnow()
 
         await db.commit()

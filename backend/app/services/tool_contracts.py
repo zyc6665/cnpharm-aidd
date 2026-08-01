@@ -404,7 +404,7 @@ def _capability_from_v2_manifest(
                 "semantic_type": item.get("type"),
                 "source": "artifact",
                 "match": {"type": item.get("type")},
-                "path": None,
+                "path": item.get("name"),
                 "required": bool(item.get("required", True)),
             }
             for item in outputs

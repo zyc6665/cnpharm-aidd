@@ -16,7 +16,7 @@ BACKEND_ROOT = PROJECT_ROOT / "backend"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.agents.aidd.registry import load_available_tool_summaries  # noqa: E402
+from app.agents.aidd.registry import load_available_tool_summaries, load_tool_capability  # noqa: E402
 from app.database.base import Base  # noqa: E402
 from app.models import tools as _tools_models  # noqa: F401,E402
 from app.models import users as _users_models  # noqa: F401,E402
@@ -221,6 +221,20 @@ async def test_v2_tool_package_contract_is_discovered_without_agent_capability(
     ]
     assert summary["artifact_outputs"][0]["name"] == "pocket"
     assert summary["exposure"]["agent"] is True
+
+
+@pytest.mark.asyncio
+async def test_v2_tool_package_capability_preserves_artifact_output_name(
+    db_session: AsyncSession,
+    user: User,
+) -> None:
+    await create_tool_with_v2_package_config(db_session, user, slug="standard-pocket-tool")
+
+    capability = await load_tool_capability(db_session, "standard-pocket-tool")
+
+    assert capability.outputs[0].source == "artifact"
+    assert capability.outputs[0].semantic_type == "binding_pocket@1"
+    assert capability.outputs[0].path == "pocket"
 
 
 @pytest.mark.asyncio
