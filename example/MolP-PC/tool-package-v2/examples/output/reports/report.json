@@ -1,0 +1,9 @@
+{
+  "tool": "MolP-PC",
+  "adapter": "tool-package-v2",
+  "status": "example",
+  "source_task_id": "example-task",
+  "input_rows": 2,
+  "predicted_rows": 2,
+  "property_column_count": 55
+}

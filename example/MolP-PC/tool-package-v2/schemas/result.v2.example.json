@@ -1,0 +1,50 @@
+{
+  "result_version": "aidd.sciminer/result.v2",
+  "artifacts": {
+    "properties": {
+      "name": "molp_pc_admet_predictions",
+      "type": "molecule_table@1",
+      "files": {
+        "table_file": {
+          "path": "artifacts/properties/molp_pc_predictions.csv",
+          "sha256": "0aeb9666b905dc5aa0d246ee717dd743b77df109b1e53f3b4136df6d64099ece",
+          "content_type": "text/csv"
+        },
+        "metadata_json": {
+          "path": "artifacts/properties/metadata.json",
+          "sha256": "3ad00c0f8401d3464549f7006cc9496c26af17bb4ba98452f849339d32c60968",
+          "content_type": "application/json"
+        }
+      },
+      "metadata": {
+        "molecule_id_field": "SMILES",
+        "source_task_id": "example-task",
+        "source_input_ref": "input:molecules",
+        "row_count": 2,
+        "property_column_count": 55,
+        "model_name": "MolP-PC"
+      }
+    },
+    "report": {
+      "name": "molp_pc_adapter_report",
+      "type": "run_report@1",
+      "files": {
+        "report_json": {
+          "path": "reports/report.json",
+          "sha256": "49cb0a5cadaa92e20f3abf39cf98aed7500c94db1faca0a62bd2b47d0af557a1",
+          "content_type": "application/json"
+        }
+      },
+      "metadata": {
+        "source_task_id": "example-task"
+      }
+    }
+  },
+  "relations": [
+    {
+      "from": "report",
+      "to": "properties",
+      "type": "describes"
+    }
+  ]
+}

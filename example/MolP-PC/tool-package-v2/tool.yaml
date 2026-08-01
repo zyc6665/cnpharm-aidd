@@ -1,0 +1,90 @@
+api_version: aidd.sciminer/tool-package.v2
+kind: ToolPackage
+metadata:
+  slug: molp-pc-property-prediction
+  name: MolP-PC Property Prediction
+  version: 0.1.0
+  description: Adapt MolP-PC ADMET prediction CSV outputs to standard molecule_table@1 artifacts.
+artifacts:
+  inputs:
+    - name: molecules
+      type: molecule_table@1
+      required: true
+  outputs:
+    - name: properties
+      type: molecule_table@1
+      cardinality: one
+      required: true
+    - name: report
+      type: run_report@1
+      cardinality: one
+      required: false
+parameters_schema:
+  type: object
+  properties:
+    task_groups:
+      type: array
+      items:
+        type: string
+        enum:
+          - Absorption
+          - Distribution
+          - Excretion
+          - Metabolism
+          - Toxicology
+          - Tox21
+          - Ecotoxicity
+          - LD50
+      default:
+        - Absorption
+        - Distribution
+        - Excretion
+        - Metabolism
+        - Toxicology
+        - Tox21
+        - Ecotoxicity
+        - LD50
+      description: Requested ADMET task groups. Current legacy runtime emits all configured groups.
+  additionalProperties: false
+adapter:
+  input:
+    - input: molecules
+      method: mount_molecule_table_with_smiles_column
+  output:
+    - output: properties
+      method: collect_molp_pc_predictions_as_molecule_table_v1
+      validator_profile: molecule_table_v1_core
+    - output: report
+      method: collect_adapter_report_json
+      validator_profile: run_report_v1_core
+exposure:
+  agent: true
+  workflow: true
+  direct_run: true
+variants:
+  - name: cpu
+    accelerator: cpu
+    executor_types:
+      - remote_job
+    entrypoint:
+      - runner/entrypoint.sh
+    resources:
+      cpu: 8
+      memory_mb: 16384
+    validation_status: unvalidated
+    hardware_validated: false
+  - name: nvidia-cuda
+    accelerator: nvidia_cuda
+    executor_types:
+      - remote_job
+    entrypoint:
+      - runner/entrypoint.sh
+    resources:
+      cpu: 8
+      memory_mb: 24576
+      gpu_memory_mb: 16384
+      devices:
+        - nvidia.com/gpu
+      driver: ">=535"
+    validation_status: unvalidated
+    hardware_validated: false

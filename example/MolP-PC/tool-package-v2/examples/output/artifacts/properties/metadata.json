@@ -1,0 +1,18 @@
+{
+  "molecule_id_field": "SMILES",
+  "source_task_id": "example-task",
+  "source_input_ref": "input:molecules",
+  "row_count": 2,
+  "property_column_count": 55,
+  "model_name": "MolP-PC",
+  "property_groups": [
+    "Absorption",
+    "Distribution",
+    "Excretion",
+    "Metabolism",
+    "Toxicology",
+    "Tox21",
+    "Ecotoxicity",
+    "LD50"
+  ]
+}
