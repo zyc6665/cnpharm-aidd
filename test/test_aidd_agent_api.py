@@ -313,11 +313,11 @@ async def test_create_workflow_draft_does_not_create_runs_or_tasks(
     data = response.json()["data"]
     assert data["name"] == "上传蛋白后探索口袋并生成分子"
     assert data["intent"] == "generate_molecules_from_protein"
-    assert data["input_files"] == {"protein_pdb": protein_file.id}
+    assert data["input_files"] == {"protein_structure@1": protein_file.id}
     assert data["requested_outputs"] == ["generated_ligand"]
     assert data["reasoning_summary"].startswith("识别到蛋白结构输入")
     assert [node["id"] for node in data["definition"]["nodes"]] == [
-        "input-protein_pdb",
+        "input-protein_structure@1",
         "pocket_prediction",
         "molecule_generation",
     ]
@@ -427,8 +427,8 @@ async def test_create_agent_run_accepts_multiple_semantic_input_files(
     assert response.status_code == 200
     data = response.json()["data"]
     assert data["input_files"] == {
-        "protein_pdb": protein_file.id,
-        "ligand_pdb": ligand_file.id,
+        "protein_structure@1": protein_file.id,
+        "ligand_structure@1": ligand_file.id,
     }
     assert data["steps"][0]["tool_slug"] == "msign-affinity-prediction"
     assert data["steps"][0]["input_file_ids"] == [protein_file.id, ligand_file.id]
@@ -482,8 +482,8 @@ async def test_create_agent_run_classifies_uploaded_file_ids_without_semantic_la
     data = response.json()["data"]
     assert data["input_file_id"] == protein_file.id
     assert data["input_files"] == {
-        "protein_pdb": protein_file.id,
-        "ligand_pdb": ligand_file.id,
+        "protein_structure@1": protein_file.id,
+        "ligand_structure@1": ligand_file.id,
     }
     assert data["plan"]["input_files"] == data["input_files"]
     assert data["steps"][0]["input_file_ids"] == [protein_file.id, ligand_file.id]

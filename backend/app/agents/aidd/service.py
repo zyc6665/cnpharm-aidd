@@ -273,9 +273,14 @@ async def _load_agent_input_files(
             file_id=run_data.input_file_id,
             current_user=current_user,
         )
-        primary_type = _normalize_agent_input_type(run_data.input_type) or infer_aidd_input_type(
+        inferred_type = infer_aidd_input_type(
             message=run_data.message,
             filename=_input_filename(primary_file),
+        )
+        primary_type = (
+            _normalize_agent_input_type(run_data.input_type)
+            or _normalize_agent_input_type(inferred_type)
+            or inferred_type
         )
         requested_input_files.setdefault(primary_type, run_data.input_file_id)
         if run_data.input_file_id not in input_file_ids:
@@ -334,16 +339,19 @@ async def _load_agent_input_files(
         )
         primary_file = semantic_files[primary_semantic_type]
     else:
+        fallback_type = infer_aidd_input_type(
+            message=run_data.message,
+            filename=_input_filename(primary_file),
+        )
         primary_semantic_type = next(
             (
                 semantic_type
                 for semantic_type, file_record in semantic_files.items()
                 if file_record.id == primary_file.id
             ),
-            _normalize_agent_input_type(run_data.input_type) or infer_aidd_input_type(
-                message=run_data.message,
-                filename=_input_filename(primary_file),
-            ),
+            _normalize_agent_input_type(run_data.input_type)
+            or _normalize_agent_input_type(fallback_type)
+            or fallback_type,
         )
 
     return semantic_files, primary_file, str(primary_semantic_type), classified_files

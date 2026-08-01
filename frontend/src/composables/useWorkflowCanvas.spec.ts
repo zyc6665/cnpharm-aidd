@@ -64,7 +64,7 @@ describe('useWorkflowCanvas', () => {
 
     const nodes = canvas.workflowStore.canvasNodes
     expect(nodes).toHaveLength(1)
-    expect(nodes[0]?.requiredInputTypes).toEqual(['protein_pdb'])
-    expect(nodes[0]?.producedOutputTypes).toEqual(['pocket_pdb'])
+    expect(nodes[0]?.requiredInputTypes).toEqual(['protein_structure@1'])
+    expect(nodes[0]?.producedOutputTypes).toEqual(['binding_pocket@1'])
   })
 })

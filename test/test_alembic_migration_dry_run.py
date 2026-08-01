@@ -97,7 +97,7 @@ def test_alembic_sqlite_legacy_project_link_upgrade_is_resumable(tmp_path: Path)
 
     with sqlite3.connect(db_path) as conn:
         assert conn.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "20260730_07",
+            "20260801_01",
         )
         for table_name in LEGACY_PROJECT_RESOURCE_TABLES:
             columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table_name})")}

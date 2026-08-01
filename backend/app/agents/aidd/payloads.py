@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.agents.aidd.capabilities import ToolCapability
+from app.artifact_standards.types import normalize_platform_artifact_type
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,20 @@ def _runtime_file_field(executor_type: str, field: str) -> str:
     return field
 
 
+def _semantic_file_for_binding(
+    semantic_files: dict[str, dict[str, str]],
+    semantic_type: str,
+) -> dict[str, str] | None:
+    direct = semantic_files.get(semantic_type)
+    if direct:
+        return direct
+
+    platform_type = normalize_platform_artifact_type(semantic_type)
+    if platform_type != semantic_type:
+        return semantic_files.get(platform_type)
+    return None
+
+
 def build_agent_task_payload(
     *,
     capability: ToolCapability,
@@ -46,7 +61,7 @@ def build_agent_task_payload(
         assign_dotted(params, key, value)
 
     for input_binding in capability.inputs:
-        semantic_file = semantic_files.get(input_binding.semantic_type)
+        semantic_file = _semantic_file_for_binding(semantic_files, input_binding.semantic_type)
         if not semantic_file:
             if input_binding.required:
                 raise ValueError(
