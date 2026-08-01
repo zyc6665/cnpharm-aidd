@@ -148,10 +148,11 @@ async def create_aidd_workflow_draft(
 async def list_aidd_agent_runs(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    project_only: bool = Query(False),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    runs = await list_agent_runs(db, current_user=current_user)
+    runs = await list_agent_runs(db, current_user=current_user, project_only=project_only)
     total = len(runs)
     start = (page - 1) * page_size
     return _with_deprecation(

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import {
+  type AiddAgentRunListParams,
   cancelAiddAgentRun,
   createAiddAgentRun,
   createAiddWorkflowDraft,
@@ -14,8 +15,7 @@ import type {
   AiddAgentRun,
   AiddAgentRunCreateParams,
   AiddAgentRunStatus,
-  AiddWorkflowDraft,
-  PaginationParams
+  AiddWorkflowDraft
 } from '@/types/models'
 
 const TERMINAL_AGENT_STATUSES: readonly AiddAgentRunStatus[] = ['success', 'failure', 'canceled']
@@ -36,7 +36,7 @@ export const useAgentsStore = defineStore('agents', () => {
   let pollInFlight = false
   let pollFailureCount = 0
 
-  const fetchRuns = async (params?: PaginationParams, options?: RequestOptions) => {
+  const fetchRuns = async (params?: AiddAgentRunListParams, options?: RequestOptions) => {
     loading.value = true
     try {
       const res = await getAiddAgentRuns(params, options)

@@ -8,6 +8,10 @@ import type {
   PaginationParams
 } from '@/types/models'
 
+export interface AiddAgentRunListParams extends PaginationParams {
+  project_only?: boolean
+}
+
 export const createAiddAgentRun = (
   data: AiddAgentRunCreateParams,
   options?: RequestOptions
@@ -29,10 +33,14 @@ export const createAiddWorkflowDraft = (
 }
 
 export const getAiddAgentRuns = (
-  params?: PaginationParams,
+  params?: AiddAgentRunListParams,
   options?: RequestOptions
 ): Promise<ApiResponse<PaginatedResponse<AiddAgentRun>>> => {
-  return get<PaginatedResponse<AiddAgentRun>, PaginationParams>('/agents/aidd/runs', params, options)
+  return get<PaginatedResponse<AiddAgentRun>, AiddAgentRunListParams>(
+    '/agents/aidd/runs',
+    params,
+    options
+  )
 }
 
 export const getAiddAgentRun = (
@@ -56,7 +64,10 @@ export const deleteAiddAgentRun = (
   )
 }
 
-export const syncAiddAgentRun = (runId: string, options?: RequestOptions): Promise<ApiResponse<AiddAgentRun>> => {
+export const syncAiddAgentRun = (
+  runId: string,
+  options?: RequestOptions
+): Promise<ApiResponse<AiddAgentRun>> => {
   return post<AiddAgentRun>(`/agents/aidd/runs/${runId}/sync`, undefined, {
     ...options,
     timeout: options?.timeout ?? LONG_RUNNING_TIMEOUT_MS

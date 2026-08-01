@@ -9,9 +9,10 @@ from app.auth.dependencies import get_current_user
 from app.common.responses import success_response
 from app.database.session import get_db
 from app.feature_flags import require_feature_flag
-from app.models.agent import AgentRun
+from app.models.agent import AgentRun, AgentRunStep
 from app.models.artifacts import Artifact, ArtifactLineage, ArtifactVersion
 from app.models.conversations import (
+    AgentEvent,
     Conversation,
     ConversationBranch,
     ConversationMessage,
@@ -171,6 +172,22 @@ async def archive_project(
 
 
 async def _delete_project_related_rows(db: AsyncSession, project_id: str) -> None:
+    agent_run_ids = list(
+        (
+            await db.execute(
+                select(AgentRun.id).where(AgentRun.project_id == project_id)
+            )
+        ).scalars()
+    )
+    if agent_run_ids:
+        await db.execute(
+            sa_delete(AgentEvent).where(AgentEvent.agent_run_id.in_(agent_run_ids))
+        )
+        await db.execute(
+            sa_delete(AgentRunStep).where(AgentRunStep.agent_run_id.in_(agent_run_ids))
+        )
+        await db.execute(sa_delete(AgentRun).where(AgentRun.id.in_(agent_run_ids)))
+
     plan_version_ids = list(
         (
             await db.execute(
@@ -250,9 +267,6 @@ async def _delete_project_related_rows(db: AsyncSession, project_id: str) -> Non
     await db.execute(sa_delete(ResearchBoard).where(ResearchBoard.project_id == project_id))
     await db.execute(
         sa_update(File).where(File.project_id == project_id).values(project_id=None)
-    )
-    await db.execute(
-        sa_update(AgentRun).where(AgentRun.project_id == project_id).values(project_id=None)
     )
     await db.execute(sa_delete(ProjectMember).where(ProjectMember.project_id == project_id))
 

@@ -679,6 +679,7 @@ async def list_agent_runs(
     db: AsyncSession,
     *,
     current_user: User,
+    project_only: bool = False,
 ) -> list[AgentRun]:
     query = (
         select(AgentRun)
@@ -687,6 +688,8 @@ async def list_agent_runs(
     )
     if current_user.role != "admin":
         query = query.where(AgentRun.user_id == current_user.id)
+    if project_only:
+        query = query.where(AgentRun.project_id.is_not(None))
     result = await db.execute(query)
     return list(result.scalars().all())
 

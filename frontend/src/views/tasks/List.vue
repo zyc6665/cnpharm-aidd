@@ -35,7 +35,12 @@
               <span class="tab-label">
                 <HistoryOutlined />
                 {{ t('tasks.historyTasks') }}
-                <a-badge v-if="historyCount > 0" :count="historyCount" :overflow-count="999" class="tab-badge" />
+                <a-badge
+                  v-if="historyCount > 0"
+                  :count="historyCount"
+                  :overflow-count="999"
+                  class="tab-badge"
+                />
               </span>
             </template>
           </a-tab-pane>
@@ -92,7 +97,10 @@
       </div>
 
       <!-- 实时监控面板（运行中标签页显示） -->
-      <div v-if="currentTab === 'running' && runningTasks.length > 0 && shouldRenderStandaloneSection" class="monitor-panel">
+      <div
+        v-if="currentTab === 'running' && runningTasks.length > 0 && shouldRenderStandaloneSection"
+        class="monitor-panel"
+      >
         <div class="monitor-header">
           <h3>
             <DashboardOutlined />
@@ -112,7 +120,9 @@
             @click="goToDetail(task.id)"
           >
             <div class="monitor-card-header">
-              <span class="tool-name">{{ task.name || task.tool?.name || t('tasks.unknownTool') }}</span>
+              <span class="tool-name">{{
+                task.name || task.tool?.name || t('tasks.unknownTool')
+              }}</span>
               <a-tag :color="getStatusColor(task.status)">
                 {{ getStatusText(task.status) }}
               </a-tag>
@@ -134,143 +144,150 @@
 
       <!-- 任务列表 -->
       <SkeletonList v-if="loading" :count="5" />
-        <div v-else-if="hasDisplayItems" class="tasks-list">
-          <section
-            v-if="shouldRenderAgentSection && displayAgentRuns.length > 0"
-            class="task-section agent-task-section"
-          >
-            <div v-if="taskTypeTab === 'all'" class="task-section__header">
-              <span>{{ t('tasks.agentTasks') }}</span>
-              <span>{{ displayAgentRuns.length }}</span>
-            </div>
-            <AgentRunTaskCard
-              v-for="run in displayAgentRuns"
-              :key="run.id"
-              :run="run"
-              @view-task="goToDetail"
-            />
-          </section>
+      <div v-else-if="hasDisplayItems" class="tasks-list">
+        <section
+          v-if="shouldRenderAgentSection && displayAgentRuns.length > 0"
+          class="task-section agent-task-section"
+        >
+          <div v-if="taskTypeTab === 'all'" class="task-section__header">
+            <span>{{ t('tasks.agentTasks') }}</span>
+            <span>{{ displayAgentRuns.length }}</span>
+          </div>
+          <AgentRunTaskCard
+            v-for="run in displayAgentRuns"
+            :key="run.id"
+            :run="run"
+            @view-task="goToDetail"
+          />
+        </section>
 
-          <section
-            v-if="shouldRenderStandaloneSection && displayTasks.length > 0"
-            class="task-section standalone-task-section"
+        <section
+          v-if="shouldRenderStandaloneSection && displayTasks.length > 0"
+          class="task-section standalone-task-section"
+        >
+          <div v-if="taskTypeTab === 'all'" class="task-section__header">
+            <span>{{ t('tasks.standaloneToolTasks') }}</span>
+            <span>{{ displayTasks.length }}</span>
+          </div>
+          <div
+            v-for="task in displayTasks"
+            :key="task.id"
+            class="task-card"
+            :class="{ 'is-running': task.status === 'running' }"
+            role="button"
+            tabindex="0"
+            :aria-label="`${task.name || task.tool?.name || t('tasks.unknownTool')} ${getStatusText(task.status)}`"
+            @click="goToDetail(task.id)"
+            @keydown.enter="goToDetail(task.id)"
+            @keydown.space.prevent="goToDetail(task.id)"
           >
-            <div v-if="taskTypeTab === 'all'" class="task-section__header">
-              <span>{{ t('tasks.standaloneToolTasks') }}</span>
-              <span>{{ displayTasks.length }}</span>
-            </div>
-            <div
-              v-for="task in displayTasks"
-              :key="task.id"
-              class="task-card"
-              :class="{ 'is-running': task.status === 'running' }"
-              role="button"
-              tabindex="0"
-              :aria-label="`${task.name || task.tool?.name || t('tasks.unknownTool')} ${getStatusText(task.status)}`"
-              @click="goToDetail(task.id)"
-              @keydown.enter="goToDetail(task.id)"
-              @keydown.space.prevent="goToDetail(task.id)"
-            >
-              <div class="task-main">
-                <div class="task-info">
-                  <div class="task-header">
-                    <div class="tool-icon">
-                      <span v-if="task.tool?.icon">{{ task.tool.icon }}</span>
-                      <ToolOutlined v-else />
-                    </div>
-                    <div class="task-meta">
-                      <h3 class="task-title">{{ task.name || task.tool?.name || t('tasks.unknownTool') }}</h3>
-                      <span class="task-id">
-                        <template v-if="task.name && task.tool?.name">{{ task.tool.name }} · </template>
-                        ID: {{ task.id.slice(0, 8) }}...
-                      </span>
-                    </div>
+            <div class="task-main">
+              <div class="task-info">
+                <div class="task-header">
+                  <div class="tool-icon">
+                    <span v-if="task.tool?.icon">{{ task.tool.icon }}</span>
+                    <ToolOutlined v-else />
                   </div>
-                  <div class="task-details">
-                    <div class="detail-item">
-                      <CalendarOutlined />
-                      {{ formatTime(task.created_at) }}
-                    </div>
-                    <div v-if="task.started_at" class="detail-item">
-                      <PlayCircleOutlined />
-                      {{ formatTime(task.started_at) }}
-                    </div>
-                    <div v-if="task.completed_at" class="detail-item">
-                      <CheckCircleOutlined />
-                      {{ formatTime(task.completed_at) }}
-                    </div>
+                  <div class="task-meta">
+                    <h3 class="task-title">
+                      {{ task.name || task.tool?.name || t('tasks.unknownTool') }}
+                    </h3>
+                    <span class="task-id">
+                      <template v-if="task.name && task.tool?.name"
+                        >{{ task.tool.name }} ·
+                      </template>
+                      ID: {{ task.id.slice(0, 8) }}...
+                    </span>
                   </div>
                 </div>
-
-                <div class="task-status-section">
-                  <a-tag :color="getStatusColor(task.status)" class="status-tag">
-                    <template #icon>
-                      <LoadingOutlined v-if="task.status === 'running'" spin />
-                      <ClockCircleOutlined v-else-if="task.status === 'pending'" />
-                      <CheckCircleOutlined v-else-if="task.status === 'success'" />
-                      <CloseCircleOutlined v-else-if="task.status === 'failure'" />
-                      <StopOutlined v-else-if="task.status === 'canceled'" />
-                    </template>
-                    {{ getStatusText(task.status) }}
-                  </a-tag>
-
-                  <div v-if="task.status === 'running'" class="progress-section">
-                    <a-progress
-                      type="circle"
-                      :percent="task.progress"
-                      :width="60"
-                      :stroke-color="getProgressColor(task.status)"
-                    />
+                <div class="task-details">
+                  <div class="detail-item">
+                    <CalendarOutlined />
+                    {{ formatTime(task.created_at) }}
                   </div>
-
+                  <div v-if="task.started_at" class="detail-item">
+                    <PlayCircleOutlined />
+                    {{ formatTime(task.started_at) }}
+                  </div>
+                  <div v-if="task.completed_at" class="detail-item">
+                    <CheckCircleOutlined />
+                    {{ formatTime(task.completed_at) }}
+                  </div>
                 </div>
               </div>
 
-              <div class="task-actions" @click.stop>
-                <a-space class="task-action-space" wrap>
-                  <a-tooltip :title="t('tasks.viewDetail')">
-                    <a-button type="link" @click="goToDetail(task.id)">
-                      <EyeOutlined />
-                    </a-button>
-                  </a-tooltip>
-                  <a-tooltip v-if="task.status === 'running' || task.status === 'pending'" :title="t('tasks.cancel')">
-                    <a-popconfirm
-                      :title="t('tasks.cancelConfirm')"
-                      @confirm="handleCancel(task.id)"
-                    >
-                      <a-button type="link" danger>
-                        <StopOutlined />
-                      </a-button>
-                    </a-popconfirm>
-                  </a-tooltip>
-                  <a-tooltip v-if="task.status === 'failure'" :title="t('tasks.retry')">
-                    <a-button type="link" @click="handleRetry(task.id)">
-                      <RedoOutlined />
-                    </a-button>
-                  </a-tooltip>
-                  <a-tooltip v-if="task.status === 'success' || task.status === 'failure' || task.status === 'canceled'" :title="t('tasks.delete')">
-                    <a-popconfirm
-                      :title="t('tasks.deleteConfirm')"
-                      @confirm="handleDelete(task.id)"
-                    >
-                      <a-button type="link" danger>
-                        <DeleteOutlined />
-                      </a-button>
-                    </a-popconfirm>
-                  </a-tooltip>
-                </a-space>
+              <div class="task-status-section">
+                <a-tag :color="getStatusColor(task.status)" class="status-tag">
+                  <template #icon>
+                    <LoadingOutlined v-if="task.status === 'running'" spin />
+                    <ClockCircleOutlined v-else-if="task.status === 'pending'" />
+                    <CheckCircleOutlined v-else-if="task.status === 'success'" />
+                    <CloseCircleOutlined v-else-if="task.status === 'failure'" />
+                    <StopOutlined v-else-if="task.status === 'canceled'" />
+                  </template>
+                  {{ getStatusText(task.status) }}
+                </a-tag>
+
+                <div v-if="task.status === 'running'" class="progress-section">
+                  <a-progress
+                    type="circle"
+                    :percent="task.progress"
+                    :width="60"
+                    :stroke-color="getProgressColor(task.status)"
+                  />
+                </div>
               </div>
             </div>
-          </section>
-        </div>
 
-        <a-empty v-else :description="emptyText">
-          <template #extra>
-            <a-button type="primary" @click="goToTools">
-              {{ t('tasks.goToTools') }}
-            </a-button>
-          </template>
-        </a-empty>
+            <div class="task-actions" @click.stop>
+              <a-space class="task-action-space" wrap>
+                <a-tooltip :title="t('tasks.viewDetail')">
+                  <a-button type="link" @click="goToDetail(task.id)">
+                    <EyeOutlined />
+                  </a-button>
+                </a-tooltip>
+                <a-tooltip
+                  v-if="task.status === 'running' || task.status === 'pending'"
+                  :title="t('tasks.cancel')"
+                >
+                  <a-popconfirm :title="t('tasks.cancelConfirm')" @confirm="handleCancel(task.id)">
+                    <a-button type="link" danger>
+                      <StopOutlined />
+                    </a-button>
+                  </a-popconfirm>
+                </a-tooltip>
+                <a-tooltip v-if="task.status === 'failure'" :title="t('tasks.retry')">
+                  <a-button type="link" @click="handleRetry(task.id)">
+                    <RedoOutlined />
+                  </a-button>
+                </a-tooltip>
+                <a-tooltip
+                  v-if="
+                    task.status === 'success' ||
+                    task.status === 'failure' ||
+                    task.status === 'canceled'
+                  "
+                  :title="t('tasks.delete')"
+                >
+                  <a-popconfirm :title="t('tasks.deleteConfirm')" @confirm="handleDelete(task.id)">
+                    <a-button type="link" danger>
+                      <DeleteOutlined />
+                    </a-button>
+                  </a-popconfirm>
+                </a-tooltip>
+              </a-space>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <a-empty v-else :description="emptyText">
+        <template #extra>
+          <a-button type="primary" @click="goToTools">
+            {{ t('tasks.goToTools') }}
+          </a-button>
+        </template>
+      </a-empty>
 
       <!-- 分页 -->
       <div v-if="currentTotal > pageSize" class="pagination">
@@ -291,670 +308,700 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
-import { useI18n } from 'vue-i18n'
-import AppFilterBar from '@/components/common/AppFilterBar.vue'
-import AppPageHeader from '@/components/common/AppPageHeader.vue'
-import SkeletonList from '@/components/common/SkeletonList.vue'
-import {
-  UnorderedListOutlined,
-  SyncOutlined,
-  LoadingOutlined,
-  HistoryOutlined,
-  ReloadOutlined,
-  DashboardOutlined,
-  ClockCircleOutlined,
-  ToolOutlined,
-  CalendarOutlined,
-  PlayCircleOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  StopOutlined,
-  EyeOutlined,
-  RedoOutlined,
-  DeleteOutlined
-} from '@ant-design/icons-vue'
-import { message } from 'ant-design-vue'
-import type { Dayjs } from 'dayjs'
-import dayjs from 'dayjs'
-import { useAgentsStore, useTasksStore, useToolsStore } from '@/stores'
-import type { Task, TaskStatus } from '@/types/models'
-import AgentRunTaskCard from './AgentRunTaskCard.vue'
-import {
-  collectAgentTaskIds,
-  filterAgentRunsForTaskCenter,
-  filterStandaloneTasks,
-  getTaskCenterPaginationTotal,
-  paginateAgentRunsForTaskCenter,
-  paginateStandaloneTasksForTaskCenter,
-  shouldShowAgentSection,
-  shouldShowStandaloneSection,
-  type TaskContentTypeTab
-} from './agent-task-grouping'
+  import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+  import { useRouter } from 'vue-router'
+  import { useI18n } from 'vue-i18n'
+  import AppFilterBar from '@/components/common/AppFilterBar.vue'
+  import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import SkeletonList from '@/components/common/SkeletonList.vue'
+  import {
+    UnorderedListOutlined,
+    SyncOutlined,
+    LoadingOutlined,
+    HistoryOutlined,
+    ReloadOutlined,
+    DashboardOutlined,
+    ClockCircleOutlined,
+    ToolOutlined,
+    CalendarOutlined,
+    PlayCircleOutlined,
+    CheckCircleOutlined,
+    CloseCircleOutlined,
+    StopOutlined,
+    EyeOutlined,
+    RedoOutlined,
+    DeleteOutlined
+  } from '@ant-design/icons-vue'
+  import { message } from 'ant-design-vue'
+  import type { Dayjs } from 'dayjs'
+  import dayjs from 'dayjs'
+  import { useAgentsStore, useTasksStore, useToolsStore } from '@/stores'
+  import type { Task, TaskStatus } from '@/types/models'
+  import AgentRunTaskCard from './AgentRunTaskCard.vue'
+  import {
+    collectAgentTaskIds,
+    filterAgentRunsForTaskCenter,
+    filterStandaloneTasks,
+    getTaskCenterPaginationTotal,
+    paginateAgentRunsForTaskCenter,
+    paginateStandaloneTasksForTaskCenter,
+    shouldShowAgentSection,
+    shouldShowStandaloneSection,
+    type TaskContentTypeTab
+  } from './agent-task-grouping'
 
-type TabKey = 'all' | 'running' | 'history'
+  type TabKey = 'all' | 'running' | 'history'
 
-const router = useRouter()
-const { t } = useI18n()
-const tasksStore = useTasksStore()
-const toolsStore = useToolsStore()
-const agentsStore = useAgentsStore()
+  const router = useRouter()
+  const { t } = useI18n()
+  const tasksStore = useTasksStore()
+  const toolsStore = useToolsStore()
+  const agentsStore = useAgentsStore()
 
-// 状态
-const currentTab = ref<TabKey>('all')
-const taskTypeTab = ref<TaskContentTypeTab>('all')
-const searchKeyword = ref('')
-const selectedTool = ref<string | undefined>()
-const dateRange = ref<[Dayjs, Dayjs] | null>(null)
-const currentPage = ref(1)
-const pageSize = ref(10)
-const refreshing = ref(false)
-const autoRefresh = ref(true)
+  // 状态
+  const currentTab = ref<TabKey>('all')
+  const taskTypeTab = ref<TaskContentTypeTab>('all')
+  const searchKeyword = ref('')
+  const selectedTool = ref<string | undefined>()
+  const dateRange = ref<[Dayjs, Dayjs] | null>(null)
+  const currentPage = ref(1)
+  const pageSize = ref(10)
+  const refreshing = ref(false)
+  const autoRefresh = ref(true)
 
-// 计算属性
-const loading = computed(() => tasksStore.loading || agentsStore.loading)
-const tasks = computed(() => tasksStore.tasks)
-const total = computed(() => tasksStore.total)
-const agentRuns = computed(() => agentsStore.runs)
-const agentTaskIds = computed(() => collectAgentTaskIds(agentRuns.value))
-const standaloneTasks = computed(() => filterStandaloneTasks(tasks.value, agentTaskIds.value))
+  // 计算属性
+  const loading = computed(() => tasksStore.loading || agentsStore.loading)
+  const tasks = computed(() => tasksStore.tasks)
+  const total = computed(() => tasksStore.total)
+  const agentRuns = computed(() => agentsStore.runs)
+  const agentTaskIds = computed(() => collectAgentTaskIds(agentRuns.value))
+  const standaloneTasks = computed(() => filterStandaloneTasks(tasks.value, agentTaskIds.value))
 
-const filteredStandaloneTasks = computed<Task[]>(() => {
-  let filtered = standaloneTasks.value
+  const filteredStandaloneTasks = computed<Task[]>(() => {
+    let filtered = standaloneTasks.value
 
-  if (currentTab.value === 'running') {
-    filtered = filtered.filter(t => t.status === 'running' || t.status === 'pending')
-  } else if (currentTab.value === 'history') {
-    filtered = filtered.filter(t => ['success', 'failure', 'canceled'].includes(t.status))
-  }
+    if (currentTab.value === 'running') {
+      filtered = filtered.filter(t => t.status === 'running' || t.status === 'pending')
+    } else if (currentTab.value === 'history') {
+      filtered = filtered.filter(t => ['success', 'failure', 'canceled'].includes(t.status))
+    }
 
-  if (searchKeyword.value) {
-    const keyword = searchKeyword.value.toLowerCase()
-    filtered = filtered.filter(t =>
-      t.name?.toLowerCase().includes(keyword) ||
-      t.tool?.name?.toLowerCase().includes(keyword) ||
-      t.tool_name?.toLowerCase().includes(keyword) ||
-      t.id.toLowerCase().includes(keyword)
-    )
-  }
+    if (searchKeyword.value) {
+      const keyword = searchKeyword.value.toLowerCase()
+      filtered = filtered.filter(
+        t =>
+          t.name?.toLowerCase().includes(keyword) ||
+          t.tool?.name?.toLowerCase().includes(keyword) ||
+          t.tool_name?.toLowerCase().includes(keyword) ||
+          t.id.toLowerCase().includes(keyword)
+      )
+    }
 
-  return filtered
-})
-
-const filteredAgentRuns = computed(() => filterAgentRunsForTaskCenter(agentRuns.value, {
-  tab: currentTab.value,
-  keyword: searchKeyword.value,
-  toolId: selectedTool.value
-}))
-
-const displayAgentRuns = computed(() => paginateAgentRunsForTaskCenter(filteredAgentRuns.value, {
-  taskTypeTab: taskTypeTab.value,
-  currentPage: currentPage.value,
-  pageSize: pageSize.value
-}))
-
-const runningTasks = computed(() =>
-  displayTasks.value.filter(t => t.status === 'running' || t.status === 'pending')
-)
-const runningCount = computed(() => (
-  filteredStandaloneTasks.value.filter(t => t.status === 'running' || t.status === 'pending').length +
-  filterAgentRunsForTaskCenter(agentRuns.value, { tab: 'running', keyword: searchKeyword.value, toolId: selectedTool.value }).length
-))
-
-const historyTasks = computed(() =>
-  displayTasks.value.filter(t => ['success', 'failure', 'canceled'].includes(t.status))
-)
-const historyCount = computed(() => (
-  filteredStandaloneTasks.value.filter(t => ['success', 'failure', 'canceled'].includes(t.status)).length +
-  filterAgentRunsForTaskCenter(agentRuns.value, { tab: 'history', keyword: searchKeyword.value, toolId: selectedTool.value }).length
-))
-
-const displayTasks = computed(() => {
-  return paginateStandaloneTasksForTaskCenter(filteredStandaloneTasks.value, {
-    taskTypeTab: taskTypeTab.value,
-    currentPage: currentPage.value,
-    pageSize: pageSize.value
+    return filtered
   })
-})
 
-const shouldRenderAgentSection = computed(() => shouldShowAgentSection(taskTypeTab.value))
-const shouldRenderStandaloneSection = computed(() => shouldShowStandaloneSection(taskTypeTab.value))
-const visibleAgentRunCount = computed(() => shouldRenderAgentSection.value ? displayAgentRuns.value.length : 0)
-const visibleStandaloneTaskCount = computed(() => shouldRenderStandaloneSection.value ? displayTasks.value.length : 0)
+  const filteredAgentRuns = computed(() =>
+    filterAgentRunsForTaskCenter(agentRuns.value, {
+      tab: currentTab.value,
+      keyword: searchKeyword.value,
+      toolId: selectedTool.value
+    })
+  )
 
-const hasDisplayItems = computed(() => visibleStandaloneTaskCount.value > 0 || visibleAgentRunCount.value > 0)
-const currentTotal = computed(() => getTaskCenterPaginationTotal({
-  taskTypeTab: taskTypeTab.value,
-  visibleStandaloneTaskTotal: filteredStandaloneTasks.value.length,
-  filteredAgentRunTotal: filteredAgentRuns.value.length
-}))
+  const displayAgentRuns = computed(() =>
+    paginateAgentRunsForTaskCenter(filteredAgentRuns.value, {
+      taskTypeTab: taskTypeTab.value,
+      currentPage: currentPage.value,
+      pageSize: pageSize.value
+    })
+  )
 
-const toolOptions = computed(() => toolsStore.tools || [])
-const taskTypeOptions = computed(() => [
-  { label: t('tasks.allTaskTypes'), value: 'all' },
-  { label: t('tasks.agentTasks'), value: 'agent' },
-  { label: t('tasks.standaloneToolTasks'), value: 'standalone' }
-])
+  const runningTasks = computed(() =>
+    displayTasks.value.filter(t => t.status === 'running' || t.status === 'pending')
+  )
+  const runningCount = computed(
+    () =>
+      filteredStandaloneTasks.value.filter(t => t.status === 'running' || t.status === 'pending')
+        .length +
+      filterAgentRunsForTaskCenter(agentRuns.value, {
+        tab: 'running',
+        keyword: searchKeyword.value,
+        toolId: selectedTool.value
+      }).length
+  )
 
-const emptyText = computed(() => {
-  switch (currentTab.value) {
-    case 'running':
-      return t('tasks.noRunningTasks')
-    case 'history':
-      return t('tasks.noHistoryTasks')
-    default:
-      return t('tasks.noTasks')
-  }
-})
+  const historyTasks = computed(() =>
+    displayTasks.value.filter(t => ['success', 'failure', 'canceled'].includes(t.status))
+  )
+  const historyCount = computed(
+    () =>
+      filteredStandaloneTasks.value.filter(t =>
+        ['success', 'failure', 'canceled'].includes(t.status)
+      ).length +
+      filterAgentRunsForTaskCenter(agentRuns.value, {
+        tab: 'history',
+        keyword: searchKeyword.value,
+        toolId: selectedTool.value
+      }).length
+  )
 
-// 方法
-const getStatusColor = (status: TaskStatus) => {
-  const colors: Record<TaskStatus, string> = {
-    pending: 'orange',
-    running: 'processing',
-    success: 'success',
-    failure: 'error',
-    canceled: 'default'
-  }
-  return colors[status]
-}
+  const displayTasks = computed(() => {
+    return paginateStandaloneTasksForTaskCenter(filteredStandaloneTasks.value, {
+      taskTypeTab: taskTypeTab.value,
+      currentPage: currentPage.value,
+      pageSize: pageSize.value
+    })
+  })
 
-const getStatusText = (status: TaskStatus) => {
-  const texts: Record<TaskStatus, string> = {
-    pending: t('tasks.statusPending'),
-    running: t('tasks.statusRunning'),
-    success: t('tasks.statusSuccess'),
-    failure: t('tasks.statusFailure'),
-    canceled: t('tasks.statusCanceled')
-  }
-  return texts[status]
-}
+  const shouldRenderAgentSection = computed(() => shouldShowAgentSection(taskTypeTab.value))
+  const shouldRenderStandaloneSection = computed(() =>
+    shouldShowStandaloneSection(taskTypeTab.value)
+  )
+  const visibleAgentRunCount = computed(() =>
+    shouldRenderAgentSection.value ? displayAgentRuns.value.length : 0
+  )
+  const visibleStandaloneTaskCount = computed(() =>
+    shouldRenderStandaloneSection.value ? displayTasks.value.length : 0
+  )
 
-const getProgressStatus = (status: TaskStatus) => {
-  if (status === 'running') return 'active'
-  if (status === 'failure') return 'exception'
-  if (status === 'success') return 'success'
-  return 'normal'
-}
+  const hasDisplayItems = computed(
+    () => visibleStandaloneTaskCount.value > 0 || visibleAgentRunCount.value > 0
+  )
+  const currentTotal = computed(() =>
+    getTaskCenterPaginationTotal({
+      taskTypeTab: taskTypeTab.value,
+      visibleStandaloneTaskTotal: filteredStandaloneTasks.value.length,
+      filteredAgentRunTotal: filteredAgentRuns.value.length
+    })
+  )
 
-const getProgressColor = (status: TaskStatus) => {
-  if (status === 'running') return '#1890ff'
-  if (status === 'failure') return '#ff4d4f'
-  return '#52c41a'
-}
-
-const formatTime = (time: string) => {
-  return dayjs(time).format('YYYY-MM-DD HH:mm:ss')
-}
-
-const formatDuration = (startTime?: string) => {
-  if (!startTime) return '--'
-  const start = dayjs(startTime)
-  const now = dayjs()
-  const diff = now.diff(start, 'second')
-
-  if (diff < 60) return `${diff}s`
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ${diff % 60}s`
-  return `${Math.floor(diff / 3600)}h ${Math.floor((diff % 3600) / 60)}m`
-}
-
-const fetchTasks = async () => {
-  const params: Record<string, unknown> = {
-  }
-
-  if (selectedTool.value) {
-    params.tool_id = selectedTool.value
-  }
-
-  if (searchKeyword.value.trim()) {
-    params.keyword = searchKeyword.value.trim()
-  }
-
-  await tasksStore.fetchAllTasks(params)
-}
-
-const fetchAgentRuns = async () => {
-  try {
-    await agentsStore.fetchRuns({ page: 1, page_size: 100 }, { silent: true, retry: 1 })
-  } catch (error) {
-    console.warn('[TaskCenter] Failed to load legacy AIDD agent runs', error)
-  }
-}
-
-const fetchTasksSafely = async () => {
-  try {
-    await fetchTasks()
-  } catch (error) {
-    console.warn('[TaskCenter] Failed to load tasks', error)
-  }
-}
-
-const fetchToolsSafely = async () => {
-  try {
-    await toolsStore.fetchTools({ page: 1, page_size: 100 })
-  } catch (error) {
-    console.warn('[TaskCenter] Failed to load tool filter options', error)
-  }
-}
-
-const handleTabChange = (_key: string) => {
-  currentPage.value = 1
-  void fetchTasksSafely()
-}
-
-const handleSearch = () => {
-  currentPage.value = 1
-  void fetchTasksSafely()
-}
-
-const handleToolChange = () => {
-  currentPage.value = 1
-  void fetchTasksSafely()
-}
-
-const handleTypeTabChange = () => {
-  currentPage.value = 1
-}
-
-const handleDateChange = () => {
-  currentPage.value = 1
-  void fetchTasksSafely()
-}
-
-const handleRefresh = async () => {
-  refreshing.value = true
-  try {
-    const [taskResult] = await Promise.allSettled([fetchTasks(), fetchAgentRuns()])
-    if (taskResult.status === 'fulfilled') {
-      message.success(t('common.refreshSuccess'))
-    } else {
-      message.error(t('common.error'))
-    }
-  } finally {
-    refreshing.value = false
-  }
-}
-
-const handlePageChange = (page: number) => {
-  currentPage.value = page
-}
-
-const handlePageSizeChange = (_current: number, size: number) => {
-  pageSize.value = size
-  currentPage.value = 1
-}
-
-const handleCancel = async (id: string) => {
-  await tasksStore.cancelTask(id)
-  message.success(t('tasks.cancelSuccess'))
-}
-
-const handleRetry = async (id: string) => {
-  await tasksStore.retryTask(id)
-  message.success(t('tasks.retrySuccess'))
-}
-
-const handleDelete = async (id: string) => {
-  await tasksStore.deleteTask(id)
-  message.success(t('tasks.deleteSuccess'))
-}
-
-const goToDetail = (id: string) => {
-  router.push(`/tasks/${id}`)
-}
-
-const goToTools = () => {
-  router.push('/tools')
-}
-
-// 自动刷新定时器
-let refreshTimer: ReturnType<typeof setInterval> | null = null
-
-const startAutoRefresh = () => {
-  if (refreshTimer) return
-  refreshTimer = setInterval(() => {
-    if (autoRefresh.value && currentTab.value === 'running') {
-      void Promise.allSettled([fetchTasksSafely(), fetchAgentRuns()])
-    }
-  }, 10000) // 每10秒刷新
-}
-
-const stopAutoRefresh = () => {
-  if (refreshTimer) {
-    clearInterval(refreshTimer)
-    refreshTimer = null
-  }
-}
-
-// 监听自动刷新开关
-watch(autoRefresh, (val) => {
-  if (val) {
-    startAutoRefresh()
-  } else {
-    stopAutoRefresh()
-  }
-})
-
-// 生命周期
-onMounted(async () => {
-  await Promise.allSettled([
-    fetchTasksSafely(),
-    fetchAgentRuns(),
-    fetchToolsSafely()
+  const toolOptions = computed(() => toolsStore.tools || [])
+  const taskTypeOptions = computed(() => [
+    { label: t('tasks.allTaskTypes'), value: 'all' },
+    { label: t('tasks.agentTasks'), value: 'agent' },
+    { label: t('tasks.standaloneToolTasks'), value: 'standalone' }
   ])
 
-  startAutoRefresh()
-})
+  const emptyText = computed(() => {
+    switch (currentTab.value) {
+      case 'running':
+        return t('tasks.noRunningTasks')
+      case 'history':
+        return t('tasks.noHistoryTasks')
+      default:
+        return t('tasks.noTasks')
+    }
+  })
 
-onUnmounted(() => {
-  stopAutoRefresh()
-})
+  // 方法
+  const getStatusColor = (status: TaskStatus) => {
+    const colors: Record<TaskStatus, string> = {
+      pending: 'orange',
+      running: 'processing',
+      success: 'success',
+      failure: 'error',
+      canceled: 'default'
+    }
+    return colors[status]
+  }
+
+  const getStatusText = (status: TaskStatus) => {
+    const texts: Record<TaskStatus, string> = {
+      pending: t('tasks.statusPending'),
+      running: t('tasks.statusRunning'),
+      success: t('tasks.statusSuccess'),
+      failure: t('tasks.statusFailure'),
+      canceled: t('tasks.statusCanceled')
+    }
+    return texts[status]
+  }
+
+  const getProgressStatus = (status: TaskStatus) => {
+    if (status === 'running') return 'active'
+    if (status === 'failure') return 'exception'
+    if (status === 'success') return 'success'
+    return 'normal'
+  }
+
+  const getProgressColor = (status: TaskStatus) => {
+    if (status === 'running') return '#1890ff'
+    if (status === 'failure') return '#ff4d4f'
+    return '#52c41a'
+  }
+
+  const formatTime = (time: string) => {
+    return dayjs(time).format('YYYY-MM-DD HH:mm:ss')
+  }
+
+  const formatDuration = (startTime?: string) => {
+    if (!startTime) return '--'
+    const start = dayjs(startTime)
+    const now = dayjs()
+    const diff = now.diff(start, 'second')
+
+    if (diff < 60) return `${diff}s`
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ${diff % 60}s`
+    return `${Math.floor(diff / 3600)}h ${Math.floor((diff % 3600) / 60)}m`
+  }
+
+  const fetchTasks = async () => {
+    const params: Record<string, unknown> = {}
+
+    if (selectedTool.value) {
+      params.tool_id = selectedTool.value
+    }
+
+    if (searchKeyword.value.trim()) {
+      params.keyword = searchKeyword.value.trim()
+    }
+
+    await tasksStore.fetchAllTasks(params)
+  }
+
+  const fetchAgentRuns = async () => {
+    try {
+      await agentsStore.fetchRuns(
+        { page: 1, page_size: 100, project_only: true },
+        { silent: true, retry: 1 }
+      )
+    } catch (error) {
+      console.warn('[TaskCenter] Failed to load legacy AIDD agent runs', error)
+    }
+  }
+
+  const fetchTasksSafely = async () => {
+    try {
+      await fetchTasks()
+    } catch (error) {
+      console.warn('[TaskCenter] Failed to load tasks', error)
+    }
+  }
+
+  const fetchToolsSafely = async () => {
+    try {
+      await toolsStore.fetchTools({ page: 1, page_size: 100 })
+    } catch (error) {
+      console.warn('[TaskCenter] Failed to load tool filter options', error)
+    }
+  }
+
+  const handleTabChange = (_key: string) => {
+    currentPage.value = 1
+    void fetchTasksSafely()
+  }
+
+  const handleSearch = () => {
+    currentPage.value = 1
+    void fetchTasksSafely()
+  }
+
+  const handleToolChange = () => {
+    currentPage.value = 1
+    void fetchTasksSafely()
+  }
+
+  const handleTypeTabChange = () => {
+    currentPage.value = 1
+  }
+
+  const handleDateChange = () => {
+    currentPage.value = 1
+    void fetchTasksSafely()
+  }
+
+  const handleRefresh = async () => {
+    refreshing.value = true
+    try {
+      const [taskResult] = await Promise.allSettled([fetchTasks(), fetchAgentRuns()])
+      if (taskResult.status === 'fulfilled') {
+        message.success(t('common.refreshSuccess'))
+      } else {
+        message.error(t('common.error'))
+      }
+    } finally {
+      refreshing.value = false
+    }
+  }
+
+  const handlePageChange = (page: number) => {
+    currentPage.value = page
+  }
+
+  const handlePageSizeChange = (_current: number, size: number) => {
+    pageSize.value = size
+    currentPage.value = 1
+  }
+
+  const handleCancel = async (id: string) => {
+    await tasksStore.cancelTask(id)
+    message.success(t('tasks.cancelSuccess'))
+  }
+
+  const handleRetry = async (id: string) => {
+    await tasksStore.retryTask(id)
+    message.success(t('tasks.retrySuccess'))
+  }
+
+  const handleDelete = async (id: string) => {
+    await tasksStore.deleteTask(id)
+    message.success(t('tasks.deleteSuccess'))
+  }
+
+  const goToDetail = (id: string) => {
+    router.push(`/tasks/${id}`)
+  }
+
+  const goToTools = () => {
+    router.push('/tools')
+  }
+
+  // 自动刷新定时器
+  let refreshTimer: ReturnType<typeof setInterval> | null = null
+
+  const startAutoRefresh = () => {
+    if (refreshTimer) return
+    refreshTimer = setInterval(() => {
+      if (autoRefresh.value && currentTab.value === 'running') {
+        void Promise.allSettled([fetchTasksSafely(), fetchAgentRuns()])
+      }
+    }, 10000) // 每10秒刷新
+  }
+
+  const stopAutoRefresh = () => {
+    if (refreshTimer) {
+      clearInterval(refreshTimer)
+      refreshTimer = null
+    }
+  }
+
+  // 监听自动刷新开关
+  watch(autoRefresh, val => {
+    if (val) {
+      startAutoRefresh()
+    } else {
+      stopAutoRefresh()
+    }
+  })
+
+  // 生命周期
+  onMounted(async () => {
+    await Promise.allSettled([fetchTasksSafely(), fetchAgentRuns(), fetchToolsSafely()])
+
+    startAutoRefresh()
+  })
+
+  onUnmounted(() => {
+    stopAutoRefresh()
+  })
 </script>
 
 <style scoped lang="less">
-@import '@/assets/styles/variables.less';
+  @import '@/assets/styles/variables.less';
 
-.tasks-page {
-  padding: @spacing-xl 0;
-  min-height: calc(100vh - @header-height - @footer-height);
-}
-
-// 视图切换标签
-.view-tabs {
-  margin-bottom: @spacing-lg;
-
-  :deep(.ant-tabs-nav) {
-    margin-bottom: 0;
-
-    &::before {
-      border-bottom: none;
-    }
+  .tasks-page {
+    padding: @spacing-xl 0;
+    min-height: calc(100vh - @header-height - @footer-height);
   }
 
-  .tab-label {
-    display: flex;
-    align-items: center;
-    gap: @spacing-xs;
-
-    .anticon {
-      font-size: 16px;
-    }
-  }
-
-  .tab-badge {
-    margin-left: @spacing-xs;
-
-    :deep(.ant-badge-count) {
-      background: @accent-color;
-      font-size: 10px;
-      height: 16px;
-      min-width: 16px;
-      line-height: 16px;
-    }
-
-    &.running :deep(.ant-badge-count) {
-      background: @primary-color;
-      animation: pulse 1.5s infinite;
-    }
-  }
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
-}
-
-.task-type-tabs {
-  display: flex;
-  justify-content: flex-start;
-  margin: -@spacing-sm 0 @spacing-lg;
-
-  :deep(.ant-segmented) {
-    background: @bg-hover;
-    padding: 3px;
-  }
-}
-
-// 实时监控面板
-.monitor-panel {
-  .card();
-  margin-bottom: @spacing-xl;
-  background: linear-gradient(135deg, @accent-color-light 0%, @bg-elevated 100%);
-
-  .monitor-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+  // 视图切换标签
+  .view-tabs {
     margin-bottom: @spacing-lg;
 
-    h3 {
-      display: flex;
-      align-items: center;
-      gap: @spacing-sm;
-      margin: 0;
-      font-size: @font-size-lg;
-      color: @primary-color;
-    }
-  }
+    :deep(.ant-tabs-nav) {
+      margin-bottom: 0;
 
-  .monitor-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-    gap: @spacing-md;
-  }
-
-  .monitor-card {
-    background: @bg-elevated;
-    border-radius: @border-radius-md;
-    padding: @spacing-md;
-    cursor: pointer;
-    transition: all @transition-duration;
-    border: 1px solid @border-color-light;
-
-    &:hover {
-      transform: translateY(-2px);
-      box-shadow: @shadow-md;
-    }
-
-    .monitor-card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: @spacing-sm;
-
-      .tool-name {
-        font-weight: @font-weight-medium;
-        .text-ellipsis();
-        max-width: 150px;
+      &::before {
+        border-bottom: none;
       }
     }
 
-    .monitor-card-body {
-      .task-time {
-        display: flex;
-        align-items: center;
-        gap: @spacing-xs;
-        color: @text-color-light-tertiary;
-        font-size: @font-size-sm;
-        margin-top: @spacing-xs;
-      }
-    }
-  }
-}
-
-// 任务列表
-.tasks-list {
-  display: flex;
-  flex-direction: column;
-  gap: @spacing-lg;
-}
-
-.task-section {
-  display: flex;
-  flex-direction: column;
-  gap: @spacing-md;
-}
-
-.task-section__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  color: @text-color-light-secondary;
-  font-size: @font-size-sm;
-  font-weight: @font-weight-semibold;
-  letter-spacing: 0;
-  padding: 0 @spacing-xs;
-}
-
-.task-card {
-  .card();
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  cursor: pointer;
-
-  &:hover,
-  &:focus-visible {
-    transform: translateX(4px);
-  }
-
-  &:focus-visible {
-    outline: 3px solid @accent-color-border;
-    outline-offset: 3px;
-  }
-
-  &.is-running {
-    border-left: 3px solid @accent-color;
-    background: linear-gradient(90deg, @accent-color-light 0%, @bg-elevated 10%);
-  }
-
-  .task-main {
-    display: flex;
-    align-items: center;
-    gap: @spacing-xl;
-    flex: 1;
-  }
-
-  .task-info {
-    flex: 1;
-  }
-
-  .task-header {
-    display: flex;
-    align-items: center;
-    gap: @spacing-md;
-    margin-bottom: @spacing-sm;
-  }
-
-  .tool-icon {
-    width: 40px;
-    height: 40px;
-    border-radius: @border-radius-md;
-    background: @accent-color-light;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 20px;
-    color: @accent-color;
-  }
-
-  .task-meta {
-    min-width: 0;
-
-    .task-title {
-      font-size: @font-size-md;
-      font-weight: @font-weight-semibold;
-      margin: 0 0 @spacing-xs 0;
-      word-break: break-word;
-    }
-
-    .task-id {
-      color: @text-color-light-tertiary;
-      font-size: @font-size-sm;
-      font-family: monospace;
-    }
-  }
-
-  .task-details {
-    display: flex;
-    flex-wrap: wrap;
-    gap: @spacing-lg;
-    color: @text-color-light-secondary;
-    font-size: @font-size-sm;
-
-    .detail-item {
+    .tab-label {
       display: flex;
       align-items: center;
       gap: @spacing-xs;
-    }
-  }
 
-  .task-status-section {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: @spacing-sm;
-    min-width: 120px;
-
-    .status-tag {
-      font-size: @font-size-sm;
+      .anticon {
+        font-size: 16px;
+      }
     }
 
-  }
+    .tab-badge {
+      margin-left: @spacing-xs;
 
-  .task-actions {
-    border-left: 1px solid @border-color-light;
-    padding-left: @spacing-md;
-    margin-left: @spacing-md;
+      :deep(.ant-badge-count) {
+        background: @accent-color;
+        font-size: 10px;
+        height: 16px;
+        min-width: 16px;
+        line-height: 16px;
+      }
 
-    .task-action-space {
-      justify-content: flex-end;
-    }
-  }
-}
-
-.pagination {
-  display: flex;
-  justify-content: center;
-  margin-top: @spacing-xl;
-}
-
-// 响应式
-@media (max-width: @breakpoint-md) {
-  .task-card {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: @spacing-md;
-
-    .task-main {
-      flex-direction: column;
-      align-items: flex-start;
-      width: 100%;
-    }
-
-    .task-status-section {
-      flex-direction: row;
-      width: 100%;
-      justify-content: flex-start;
-    }
-
-    .task-actions {
-      border-left: none;
-      border-top: 1px solid @border-color-light;
-      padding-left: 0;
-      padding-top: @spacing-md;
-      margin-left: 0;
-      width: 100%;
-
-      .task-action-space {
-        justify-content: flex-start;
+      &.running :deep(.ant-badge-count) {
+        background: @primary-color;
+        animation: pulse 1.5s infinite;
       }
     }
   }
 
-  .monitor-cards {
-    grid-template-columns: 1fr !important;
+  @keyframes pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.6;
+    }
   }
-}
+
+  .task-type-tabs {
+    display: flex;
+    justify-content: flex-start;
+    margin: -@spacing-sm 0 @spacing-lg;
+
+    :deep(.ant-segmented) {
+      background: @bg-hover;
+      padding: 3px;
+    }
+  }
+
+  // 实时监控面板
+  .monitor-panel {
+    .card();
+    margin-bottom: @spacing-xl;
+    background: linear-gradient(135deg, @accent-color-light 0%, @bg-elevated 100%);
+
+    .monitor-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: @spacing-lg;
+
+      h3 {
+        display: flex;
+        align-items: center;
+        gap: @spacing-sm;
+        margin: 0;
+        font-size: @font-size-lg;
+        color: @primary-color;
+      }
+    }
+
+    .monitor-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: @spacing-md;
+    }
+
+    .monitor-card {
+      background: @bg-elevated;
+      border-radius: @border-radius-md;
+      padding: @spacing-md;
+      cursor: pointer;
+      transition: all @transition-duration;
+      border: 1px solid @border-color-light;
+
+      &:hover {
+        transform: translateY(-2px);
+        box-shadow: @shadow-md;
+      }
+
+      .monitor-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: @spacing-sm;
+
+        .tool-name {
+          font-weight: @font-weight-medium;
+          .text-ellipsis();
+          max-width: 150px;
+        }
+      }
+
+      .monitor-card-body {
+        .task-time {
+          display: flex;
+          align-items: center;
+          gap: @spacing-xs;
+          color: @text-color-light-tertiary;
+          font-size: @font-size-sm;
+          margin-top: @spacing-xs;
+        }
+      }
+    }
+  }
+
+  // 任务列表
+  .tasks-list {
+    display: flex;
+    flex-direction: column;
+    gap: @spacing-lg;
+  }
+
+  .task-section {
+    display: flex;
+    flex-direction: column;
+    gap: @spacing-md;
+  }
+
+  .task-section__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: @text-color-light-secondary;
+    font-size: @font-size-sm;
+    font-weight: @font-weight-semibold;
+    letter-spacing: 0;
+    padding: 0 @spacing-xs;
+  }
+
+  .task-card {
+    .card();
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+
+    &:hover,
+    &:focus-visible {
+      transform: translateX(4px);
+    }
+
+    &:focus-visible {
+      outline: 3px solid @accent-color-border;
+      outline-offset: 3px;
+    }
+
+    &.is-running {
+      border-left: 3px solid @accent-color;
+      background: linear-gradient(90deg, @accent-color-light 0%, @bg-elevated 10%);
+    }
+
+    .task-main {
+      display: flex;
+      align-items: center;
+      gap: @spacing-xl;
+      flex: 1;
+    }
+
+    .task-info {
+      flex: 1;
+    }
+
+    .task-header {
+      display: flex;
+      align-items: center;
+      gap: @spacing-md;
+      margin-bottom: @spacing-sm;
+    }
+
+    .tool-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: @border-radius-md;
+      background: @accent-color-light;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      color: @accent-color;
+    }
+
+    .task-meta {
+      min-width: 0;
+
+      .task-title {
+        font-size: @font-size-md;
+        font-weight: @font-weight-semibold;
+        margin: 0 0 @spacing-xs 0;
+        word-break: break-word;
+      }
+
+      .task-id {
+        color: @text-color-light-tertiary;
+        font-size: @font-size-sm;
+        font-family: monospace;
+      }
+    }
+
+    .task-details {
+      display: flex;
+      flex-wrap: wrap;
+      gap: @spacing-lg;
+      color: @text-color-light-secondary;
+      font-size: @font-size-sm;
+
+      .detail-item {
+        display: flex;
+        align-items: center;
+        gap: @spacing-xs;
+      }
+    }
+
+    .task-status-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: @spacing-sm;
+      min-width: 120px;
+
+      .status-tag {
+        font-size: @font-size-sm;
+      }
+    }
+
+    .task-actions {
+      border-left: 1px solid @border-color-light;
+      padding-left: @spacing-md;
+      margin-left: @spacing-md;
+
+      .task-action-space {
+        justify-content: flex-end;
+      }
+    }
+  }
+
+  .pagination {
+    display: flex;
+    justify-content: center;
+    margin-top: @spacing-xl;
+  }
+
+  // 响应式
+  @media (max-width: @breakpoint-md) {
+    .task-card {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: @spacing-md;
+
+      .task-main {
+        flex-direction: column;
+        align-items: flex-start;
+        width: 100%;
+      }
+
+      .task-status-section {
+        flex-direction: row;
+        width: 100%;
+        justify-content: flex-start;
+      }
+
+      .task-actions {
+        border-left: none;
+        border-top: 1px solid @border-color-light;
+        padding-left: 0;
+        padding-top: @spacing-md;
+        margin-left: 0;
+        width: 100%;
+
+        .task-action-space {
+          justify-content: flex-start;
+        }
+      }
+    }
+
+    .monitor-cards {
+      grid-template-columns: 1fr !important;
+    }
+  }
 </style>

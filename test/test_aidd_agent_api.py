@@ -638,6 +638,46 @@ async def test_legacy_agent_run_list_tolerates_non_object_json_fields(
 
 
 @pytest.mark.asyncio
+async def test_agent_run_list_can_filter_to_project_scoped_runs(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    current_user: User,
+):
+    orphan_run = AgentRun(
+        user_id=current_user.id,
+        project_id=None,
+        message="orphan run",
+        intent="pocket_exploration",
+        status="success",
+        input_type="protein_pdb",
+        requested_outputs=["generated_ligand"],
+        plan={},
+    )
+    project_run = AgentRun(
+        user_id=current_user.id,
+        project_id="project-1",
+        message="project run",
+        intent="pocket_exploration",
+        status="success",
+        input_type="protein_pdb",
+        requested_outputs=["generated_ligand"],
+        plan={},
+    )
+    db_session.add_all([orphan_run, project_run])
+    await db_session.commit()
+
+    response = await api_client.get(
+        "/api/v1/agents/aidd/runs",
+        params={"project_only": "true"},
+        headers={"Authorization": "Bearer owner-token"},
+    )
+
+    assert response.status_code == 200
+    items = response.json()["data"]["items"]
+    assert [item["message"] for item in items] == ["project run"]
+
+
+@pytest.mark.asyncio
 async def test_owner_can_delete_agent_run_history(
     api_client: httpx.AsyncClient,
     db_session: AsyncSession,

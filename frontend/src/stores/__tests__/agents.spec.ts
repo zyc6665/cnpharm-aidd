@@ -1,7 +1,7 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useAgentsStore } from '@/stores/agents'
-import { syncAiddAgentRun } from '@/api/agents'
+import { getAiddAgentRuns, syncAiddAgentRun } from '@/api/agents'
 import type { AiddAgentRun, AiddAgentRunStatus } from '@/types/models'
 
 vi.mock('@/api/agents', () => ({
@@ -39,6 +39,7 @@ describe('useAgentsStore polling', () => {
     vi.useFakeTimers()
     setActivePinia(createPinia())
     vi.mocked(syncAiddAgentRun).mockReset()
+    vi.mocked(getAiddAgentRuns).mockReset()
   })
 
   afterEach(() => {
@@ -80,5 +81,27 @@ describe('useAgentsStore polling', () => {
 
     await vi.advanceTimersByTimeAsync(30)
     expect(syncAiddAgentRun).toHaveBeenCalledTimes(1)
+  })
+
+  it('获取任务中心会话时可传递项目型会话过滤参数', async () => {
+    const store = useAgentsStore()
+    vi.mocked(getAiddAgentRuns).mockResolvedValue({
+      code: 200,
+      message: 'ok',
+      data: {
+        items: [makeRun('success')],
+        total: 1,
+        page: 1,
+        page_size: 100,
+        total_pages: 1
+      }
+    })
+
+    await store.fetchRuns({ page: 1, page_size: 100, project_only: true })
+
+    expect(getAiddAgentRuns).toHaveBeenCalledWith(
+      { page: 1, page_size: 100, project_only: true },
+      undefined
+    )
   })
 })

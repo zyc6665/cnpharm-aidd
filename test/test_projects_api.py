@@ -14,7 +14,9 @@ from app.auth.dependencies import get_current_user
 from app.database.base import Base
 from app.database.session import get_db
 from app.main import app
+from app.models.agent import AgentRun, AgentRunStep
 from app.models.conversations import (
+    AgentEvent,
     Conversation,
     ConversationBranch,
     ConversationMessage,
@@ -262,5 +264,63 @@ async def test_owner_can_delete_project_with_conversation_plan_dependencies(
     assert (
         await db_session.execute(
             select(PlanVersion).where(PlanVersion.project_id == project["id"])
+        )
+    ).scalar_one_or_none() is None
+
+
+@pytest.mark.asyncio
+async def test_owner_delete_project_removes_project_agent_runs(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    users: dict[str, User],
+):
+    project = await _create_project(api_client)
+    owner = users["owner"]
+
+    run = AgentRun(
+        project_id=project["id"],
+        user_id=owner.id,
+        message="project agent run",
+        intent="pocket_exploration",
+        status="success",
+        input_type="protein_pdb",
+        requested_outputs=["binding_pocket@1"],
+        plan={},
+    )
+    db_session.add(run)
+    await db_session.flush()
+    step = AgentRunStep(
+        agent_run_id=run.id,
+        step_key="pocket_prediction",
+        tool_slug="lvpocket",
+        status="success",
+        sort_order=0,
+    )
+    db_session.add(step)
+    db_session.add(
+        AgentEvent(
+            agent_run_id=run.id,
+            sequence=1,
+            event_type="run.completed",
+            payload={},
+        )
+    )
+    await db_session.commit()
+
+    response = await api_client.delete(
+        f"/api/v1/projects/{project['id']}",
+        headers={"Authorization": "Bearer owner"},
+    )
+
+    assert response.status_code == 200
+    assert await db_session.get(AgentRun, run.id) is None
+    assert (
+        await db_session.execute(
+            select(AgentRunStep).where(AgentRunStep.agent_run_id == run.id)
+        )
+    ).scalar_one_or_none() is None
+    assert (
+        await db_session.execute(
+            select(AgentEvent).where(AgentEvent.agent_run_id == run.id)
         )
     ).scalar_one_or_none() is None
