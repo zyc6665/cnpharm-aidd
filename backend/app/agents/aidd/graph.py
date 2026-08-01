@@ -20,6 +20,7 @@ from app.agents.aidd.planner import AIDDPlan, AIDDPlanStep
 from app.agents.aidd.registry import load_available_tool_summaries
 from app.common.exceptions import ValidationException
 from app.models.files import File as FileModel
+from app.artifact_standards.types import normalize_platform_artifact_type
 from app.services.model_services import get_default_model_service
 from app.services.semantic_types import normalize_semantic_type
 
@@ -76,7 +77,7 @@ async def build_plan_with_langgraph(
     model_service = await get_default_model_service(db)
     graph = build_aidd_planning_graph()
     semantic_input_payload = {
-        normalize_semantic_type(semantic_type): {
+        normalize_platform_artifact_type(normalize_semantic_type(semantic_type)): {
             "source": "agent_input",
             "file_id": file_record.id,
             "filename": file_record.filename,
@@ -89,8 +90,15 @@ async def build_plan_with_langgraph(
         "input_file_id": input_file.id,
         "input_filename": input_file.filename,
         "input_files": semantic_input_payload,
-        "input_type": normalize_semantic_type(input_type) if input_type else input_type,
-        "requested_outputs": [normalize_semantic_type(output) for output in requested_outputs],
+        "input_type": (
+            normalize_platform_artifact_type(normalize_semantic_type(input_type))
+            if input_type
+            else input_type
+        ),
+        "requested_outputs": [
+            normalize_platform_artifact_type(normalize_semantic_type(output))
+            for output in requested_outputs
+        ],
         "params": params,
         "configured_tools": await load_available_tool_summaries(db),
         "model_service": model_service,

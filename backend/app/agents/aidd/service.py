@@ -34,6 +34,7 @@ from app.models.users import User
 from app.schemas.agent import AIDDRunCreate
 from app.schemas.agent import AIDDWorkflowDraftResponse
 from app.schemas.tasks import TaskCreate
+from app.artifact_standards.types import normalize_platform_artifact_type
 from app.services.semantic_types import CANONICAL_AGENT_INPUT_TYPES, normalize_semantic_type
 from app.services.aidd_builtin_tools import ensure_aidd_builtin_tool
 from app.services.tool_contracts import build_tool_contract, tool_contract_to_agent_summary
@@ -43,7 +44,10 @@ from app.tasks.cancellation import cancel_platform_task
 
 
 TERMINAL_RUN_STATUSES = {"success", "failure", "canceled"}
-SUPPORTED_AGENT_INPUT_TYPES = CANONICAL_AGENT_INPUT_TYPES
+SUPPORTED_AGENT_INPUT_TYPES = CANONICAL_AGENT_INPUT_TYPES | frozenset(
+    normalize_platform_artifact_type(input_type)
+    for input_type in CANONICAL_AGENT_INPUT_TYPES
+)
 
 
 @dataclass(frozen=True)
@@ -60,13 +64,13 @@ class PreparedAgentPlan:
 def _normalize_agent_input_type(value: str | None) -> str | None:
     if not value:
         return value
-    return normalize_semantic_type(value)
+    return normalize_platform_artifact_type(normalize_semantic_type(value))
 
 
 def _normalize_semantic_file_map(input_files: dict[str, str]) -> dict[str, str]:
     normalized: dict[str, str] = {}
     for semantic_type, file_id in input_files.items():
-        canonical_type = normalize_semantic_type(str(semantic_type))
+        canonical_type = _normalize_agent_input_type(str(semantic_type)) or str(semantic_type)
         if canonical_type in normalized and normalized[canonical_type] != file_id:
             raise ValidationException(
                 f"Duplicate AIDD input semantic type after normalization: {canonical_type}"
@@ -105,7 +109,7 @@ def _run_input_files(run: AgentRun) -> dict[str, str]:
             if isinstance(semantic_type, str) and file_id
         })
     if run.input_file_id and run.input_type:
-        return {str(normalize_semantic_type(run.input_type)): str(run.input_file_id)}
+        return {str(_normalize_agent_input_type(run.input_type)): str(run.input_file_id)}
     return {}
 
 
@@ -303,10 +307,13 @@ async def _load_agent_input_files(
             message=run_data.message,
             used_semantic_types=used_semantic_types,
         )
-        semantic_files.setdefault(classified.semantic_type, file_record)
-        used_semantic_types.add(classified.semantic_type)
+        classified_semantic_type = (
+            _normalize_agent_input_type(classified.semantic_type) or classified.semantic_type
+        )
+        semantic_files.setdefault(classified_semantic_type, file_record)
+        used_semantic_types.add(classified_semantic_type)
         classified_files[file_record.id] = {
-            "semantic_type": classified.semantic_type,
+            "semantic_type": classified_semantic_type,
             "confidence": classified.confidence,
             "reason": classified.reason,
         }
@@ -495,7 +502,10 @@ async def _resolve_semantic_files(
         ):
             semantic_key = semantic_type
             if isinstance(source, str) and source.startswith("agent_input:"):
-                semantic_key = normalize_semantic_type(source.split(":", 1)[1] or semantic_type)
+                semantic_key = (
+                    _normalize_agent_input_type(source.split(":", 1)[1] or semantic_type)
+                    or semantic_type
+                )
             file_id = run_input_files.get(semantic_key) or run.input_file_id
             if not file_id:
                 raise ValidationException("智能体运行缺少输入文件")

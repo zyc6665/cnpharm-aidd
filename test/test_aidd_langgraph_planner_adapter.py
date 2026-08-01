@@ -151,6 +151,64 @@ def test_parse_model_plan_accepts_standard_artifact_slots():
     assert plan.steps[0].inputs == {"protein": "agent_input"}
 
 
+def test_parse_model_plan_normalizes_legacy_keys_against_standard_tool_contracts():
+    plan = parse_model_plan(
+        """
+        {
+          "intent": "generate_molecules_from_protein",
+          "steps": [
+            {
+              "step_key": "pocket_prediction",
+              "capability": "pocket_prediction",
+              "tool_slug": "lvpocket-pocket-prediction",
+              "inputs": {"protein_pdb": "agent_input:protein_pdb"},
+              "params": {}
+            },
+            {
+              "step_key": "molecule_generation",
+              "capability": "molecule_generation",
+              "tool_slug": "gcdm-pocket-generation",
+              "inputs": {"pocket_pdb": "step:pocket_prediction:pocket_pdb"},
+              "params": {}
+            }
+          ]
+        }
+        """,
+        available_tools=[
+            {
+                "tool_slug": "lvpocket-pocket-prediction",
+                "capability": "pocket_prediction",
+                "input_bindings": [
+                    {
+                        "semantic_type": "protein_structure@1",
+                        "field": "protein_pdb",
+                        "required": True,
+                    }
+                ],
+                "outputs": ["binding_pocket@1"],
+            },
+            {
+                "tool_slug": "gcdm-pocket-generation",
+                "capability": "molecule_generation",
+                "input_bindings": [
+                    {
+                        "semantic_type": "binding_pocket@1",
+                        "field": "input_files.pocket_pdb",
+                        "required": True,
+                    }
+                ],
+                "outputs": ["ligand_structure@1"],
+            },
+        ],
+        available_input_types={"protein_structure@1"},
+    )
+
+    assert plan.steps[0].inputs == {"protein_structure@1": "agent_input"}
+    assert plan.steps[1].inputs == {
+        "binding_pocket@1": "step:pocket_prediction:binding_pocket@1"
+    }
+
+
 def test_parse_model_plan_rejects_missing_standard_artifact_input_type():
     with pytest.raises(PlanValidationError, match="未上传输入"):
         parse_model_plan(

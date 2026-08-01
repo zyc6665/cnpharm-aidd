@@ -8,6 +8,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.artifact_standards.types import normalize_platform_artifact_type
+
 
 class PlanValidationError(ValueError):
     """Raised when an LLM plan is not executable by the platform."""
@@ -111,6 +113,16 @@ def _normalize_input_sources(inputs: dict[str, str]) -> dict[str, str]:
     return normalized
 
 
+def _normalize_plan_artifact_type(value: str) -> str:
+    return normalize_platform_artifact_type(str(value))
+
+
+def _with_normalized_aliases(values: set[str]) -> set[str]:
+    aliases = set(values)
+    aliases.update(_normalize_plan_artifact_type(value) for value in values)
+    return aliases
+
+
 def _tool_outputs(tool: dict[str, Any] | None) -> set[str]:
     if not tool:
         return set()
@@ -124,8 +136,8 @@ def _tool_outputs(tool: dict[str, Any] | None) -> set[str]:
                 outputs.add(str(item["name"]))
             if item.get("type"):
                 outputs.add(str(item["type"]))
-        return outputs
-    return {str(output) for output in tool.get("outputs", [])}
+        return _with_normalized_aliases(outputs)
+    return _with_normalized_aliases({str(output) for output in tool.get("outputs", [])})
 
 
 def _tool_required_inputs(tool: dict[str, Any]) -> set[str]:
@@ -154,6 +166,72 @@ def _tool_input_type(tool: dict[str, Any], input_name: str) -> str:
             if isinstance(item, dict) and item.get("name") == input_name and item.get("type"):
                 return str(item["type"])
     return input_name
+
+
+def _tool_input_aliases(tool: dict[str, Any]) -> dict[str, str]:
+    aliases: dict[str, str] = {}
+    for required_input in _tool_required_inputs(tool):
+        aliases[required_input] = required_input
+        aliases[_normalize_plan_artifact_type(required_input)] = required_input
+
+    artifact_inputs = tool.get("artifact_inputs")
+    if isinstance(artifact_inputs, list):
+        for item in artifact_inputs:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name") or "")
+            if not name:
+                continue
+            aliases[name] = name
+            if item.get("type"):
+                artifact_type = str(item["type"])
+                aliases[artifact_type] = name
+                aliases[_normalize_plan_artifact_type(artifact_type)] = name
+
+    bindings = tool.get("input_bindings")
+    if isinstance(bindings, list):
+        for item in bindings:
+            if not isinstance(item, dict):
+                continue
+            semantic_type = str(item.get("semantic_type") or "")
+            if not semantic_type:
+                continue
+            target = aliases.get(semantic_type) or _normalize_plan_artifact_type(semantic_type)
+            aliases[semantic_type] = target
+            aliases[_normalize_plan_artifact_type(semantic_type)] = target
+            field = str(item.get("field") or "")
+            if field:
+                aliases[field] = target
+                aliases[field.rsplit(".", 1)[-1]] = target
+
+    return aliases
+
+
+def _normalize_tool_input_keys(inputs: dict[str, str], tool: dict[str, Any]) -> dict[str, str]:
+    aliases = _tool_input_aliases(tool)
+    normalized: dict[str, str] = {}
+    for semantic_input, source in inputs.items():
+        target = aliases.get(semantic_input)
+        if target is None:
+            target = aliases.get(_normalize_plan_artifact_type(semantic_input), semantic_input)
+        normalized[target] = source
+    return normalized
+
+
+def _normalize_step_source_output(source: str, source_tool: dict[str, Any] | None) -> str:
+    parsed_source = _is_step_smiles_source(source)
+    if not parsed_source:
+        return source
+    source_step_key, source_output = parsed_source
+    if not source_tool:
+        return source
+    outputs = _tool_outputs(source_tool)
+    if source_output in outputs:
+        return source
+    normalized_output = _normalize_plan_artifact_type(source_output)
+    if normalized_output in outputs:
+        return f"step:{source_step_key}:{normalized_output}"
+    return source
 
 
 def _tool_slug(tool: dict[str, Any]) -> str:
@@ -304,30 +382,53 @@ def parse_model_plan(
         if tool.get("capability") != step.capability:
             raise PlanValidationError(f"工具能力不匹配: {step.tool_slug}")
 
+        step_inputs = _normalize_tool_input_keys(step.inputs, tool)
         required_inputs = _tool_required_inputs(tool)
-        missing_inputs = required_inputs - set(step.inputs)
+        missing_inputs = required_inputs - set(step_inputs)
         if missing_inputs:
             raise PlanValidationError(
                 f"步骤缺少工具必需输入: {step.step_key}:{', '.join(sorted(missing_inputs))}"
             )
 
+        normalized_available_input_types = (
+            {
+                _normalize_plan_artifact_type(input_type)
+                for input_type in available_input_types
+            }
+            if available_input_types is not None
+            else None
+        )
         if available_input_types is not None:
-            for semantic_input, source in step.inputs.items():
+            for semantic_input, source in step_inputs.items():
                 if not isinstance(source, str) or not source.startswith("agent_input"):
                     continue
                 source_type = _tool_input_type(tool, semantic_input)
                 if source.startswith("agent_input:"):
                     source_type = source.split(":", 1)[1] or source_type
-                if source_type not in available_input_types:
+                if _normalize_plan_artifact_type(source_type) not in normalized_available_input_types:
                     raise PlanValidationError(f"计划引用了未上传输入: {source_type}")
 
-        normalized_inputs = _normalize_input_sources(step.inputs)
+        steps_by_key = {item.step_key: item for item in normalized_steps}
+        source_normalized_inputs: dict[str, str] = {}
+        for semantic_input, source in step_inputs.items():
+            source_tool = None
+            if isinstance(source, str):
+                parsed_source = _is_step_smiles_source(source)
+                if parsed_source:
+                    source_step = steps_by_key.get(parsed_source[0])
+                    source_tool = tools_by_slug.get(source_step.tool_slug if source_step else "")
+            source_normalized_inputs[semantic_input] = (
+                _normalize_step_source_output(source, source_tool)
+                if isinstance(source, str)
+                else source
+            )
+
+        normalized_inputs = _normalize_input_sources(source_normalized_inputs)
         depends_on = step.depends_on or _derive_depends_on(normalized_inputs)
         for dependency_key in depends_on:
             if dependency_key not in seen_step_keys:
                 raise PlanValidationError(f"依赖步骤不存在或顺序错误: {dependency_key}")
 
-        steps_by_key = {item.step_key: item for item in normalized_steps}
         for source in normalized_inputs.values():
             parsed_source = _is_step_smiles_source(source)
             if not parsed_source:
@@ -335,7 +436,7 @@ def parse_model_plan(
             source_step_key, source_output = parsed_source
             source_step = steps_by_key.get(source_step_key)
             source_tool = tools_by_slug.get(source_step.tool_slug if source_step else "")
-            if source_output not in _tool_outputs(source_tool):
+            if _normalize_plan_artifact_type(source_output) not in _tool_outputs(source_tool):
                 raise PlanValidationError(
                     f"上游步骤不产生语义产物: {source_step_key}:{source_output}"
                 )
