@@ -22,7 +22,7 @@ def _build_tool_version(config=None):
 
 @pytest.mark.asyncio
 async def test_docker_executor_collect_uses_base_method():
-    """DockerExecutor._collect_output_files should scan output dir and delegate to base."""
+    """DockerExecutor._collect_output_files should pass relative path callbacks."""
     with tempfile.TemporaryDirectory() as tmpdir:
         work_dir = os.path.join(tmpdir, "work")
         output_dir = os.path.join(work_dir, "output")
@@ -34,10 +34,12 @@ async def test_docker_executor_collect_uses_base_method():
         executor.work_dir = work_dir
 
         called_with = None
+        called_kwargs = None
 
         async def fake_collect(self, source_paths, **kwargs):
-            nonlocal called_with
+            nonlocal called_with, called_kwargs
             called_with = source_paths
+            called_kwargs = kwargs
             return ["file-1"]
 
         with patch.object(BaseExecutor, "_collect_output_files", fake_collect):
@@ -45,6 +47,10 @@ async def test_docker_executor_collect_uses_base_method():
 
         assert result == ["file-1"]
         assert called_with is not None
+        assert called_kwargs.get("output_root") == output_dir
+        assert "filename_builder" in called_kwargs
+        assert "file_meta_builder" in called_kwargs
+        assert called_kwargs.get("skip_names") == {"result.json"}
         assert any(p.endswith("a.txt") for p in called_with)
 
 

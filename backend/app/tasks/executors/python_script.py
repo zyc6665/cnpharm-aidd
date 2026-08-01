@@ -85,7 +85,15 @@ class PythonScriptExecutor(BaseExecutor):
         output_dir = os.path.join(self._get_work_dir(), "output")
         if not os.path.exists(output_dir):
             return []
+        source_paths = [
+            os.path.join(root, filename)
+            for root, _dirs, filenames in os.walk(output_dir)
+            for filename in filenames
+        ]
         return await super()._collect_output_files(
-            [os.path.join(output_dir, filename) for filename in os.listdir(output_dir)],
+            source_paths,
+            output_root=output_dir,
+            filename_builder=lambda _source, relative: relative.replace(os.sep, "__"),
+            file_meta_builder=lambda _source, relative: {"relative_path": relative},
             skip_names={"result.json"},
         )

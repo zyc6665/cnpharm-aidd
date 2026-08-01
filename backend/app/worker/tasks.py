@@ -67,6 +67,31 @@ def prepare_task_output(output_result: Dict[str, Any]) -> Dict[str, Any]:
         "output_type": "visualization" if file_ids else "json",
     }
 
+
+async def _persist_standard_artifacts_if_present(db, task, tool_version, output_result):
+    """Delegate standard result persistence to the Artifact service."""
+    from app.services.standard_artifacts import create_artifact_versions_from_collected_result
+
+    return await create_artifact_versions_from_collected_result(
+        db,
+        task=task,
+        tool_version_config=tool_version.config,
+        output_result=output_result,
+        output_file_ids=_extract_output_file_ids(output_result),
+    )
+
+
+def _attach_standard_artifact_summary(
+    output_result: Dict[str, Any],
+    persistence_result,
+) -> Dict[str, Any]:
+    from app.services.standard_artifacts import standard_artifact_result_summary
+
+    result = dict(output_result)
+    result["standard_artifacts"] = standard_artifact_result_summary(persistence_result)
+    return result
+
+
 @shared_task(
     bind=True,
     name="app.worker.tasks.execute_tool_task",
@@ -194,6 +219,17 @@ async def _execute_tool_task_impl(task_id: str, tool_version_id: str) -> Dict[st
 
             # 创建输出记录
             prepared_output = prepare_task_output(output_result)
+            standard_persistence = await _persist_standard_artifacts_if_present(
+                db,
+                task,
+                tool_version,
+                output_result,
+            )
+            if standard_persistence is not None:
+                prepared_output["result"] = _attach_standard_artifact_summary(
+                    prepared_output["result"],
+                    standard_persistence,
+                )
             output = TaskOutput(
                 task_id=task_id,
                 result=prepared_output["result"],

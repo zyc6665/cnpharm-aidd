@@ -48,7 +48,7 @@ class DockerExecutor(BaseExecutor):
                     f"Docker execution failed with code {process.returncode}",
                     details={"stderr": (process.stderr or "")[:1000], "stdout": (process.stdout or "")[:1000]},
                 )
-            output = parse_docker_output(process.stdout)
+            output = self._load_output_result(process.stdout)
             output_files = await self._collect_output_files()
             if output_files:
                 output["output_file_ids"] = output_files
@@ -105,4 +105,22 @@ class DockerExecutor(BaseExecutor):
         output_dir = os.path.join(self._get_work_dir(), "output")
         if not os.path.exists(output_dir):
             return []
-        return await super()._collect_output_files([os.path.join(output_dir, name) for name in os.listdir(output_dir)])
+        source_paths = [
+            os.path.join(root, filename)
+            for root, _dirs, filenames in os.walk(output_dir)
+            for filename in filenames
+        ]
+        return await super()._collect_output_files(
+            source_paths,
+            output_root=output_dir,
+            filename_builder=lambda _source, relative: relative.replace(os.sep, "__"),
+            file_meta_builder=lambda _source, relative: {"relative_path": relative},
+            skip_names={"result.json"},
+        )
+
+    def _load_output_result(self, stdout: str) -> dict[str, Any]:
+        result_path = os.path.join(self._get_work_dir(), "output", "result.json")
+        if os.path.exists(result_path):
+            with open(result_path, "r", encoding="utf-8") as result_file:
+                return json.load(result_file)
+        return parse_docker_output(stdout)
