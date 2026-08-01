@@ -2,22 +2,27 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useArtifactsStore, useToolsStore, useWorkflowStore } from '@/stores'
 import type { WorkflowReportRow } from '@/workflow/report'
-import type {
-  ToolContract,
-  WorkflowDefinition,
-} from '@/types/models'
+import type { ToolContract, WorkflowDefinition } from '@/types/models'
 import {
   WORKFLOW_ARTIFACT_SEMANTIC_TYPES,
-  type WorkflowArtifactSemanticType,
+  type WorkflowArtifactSemanticType
 } from '@/workflow/artifact-types'
 import { normalizeWorkflowSemanticType } from '@/workflow/semantic-types'
 import {
   FREE_WORKFLOW_TEMPLATE,
   WORKFLOW_TEMPLATES,
-  getWorkflowTemplateById,
+  getWorkflowTemplateById
 } from '@/workflow/templates'
 import { resolveReadyToolNodeIds } from '@/workflow/template-runner'
-import { extractWorkflowInputRequirements } from '@/workflow/workflow-definitions'
+import {
+  extractWorkflowInputRequirementDetails,
+  extractWorkflowInputRequirements
+} from '@/workflow/workflow-definitions'
+import {
+  deriveArtifactSlotsFromToolContract,
+  type ArtifactInputSlot,
+  type ArtifactOutputSlot
+} from '@/workflow/contract-bindings'
 import { resolveWorkflowCanvasNodeStatus } from '@/workflow/template-state'
 import { resolveWorkflowLabel } from '@/workflow/i18n-utils'
 
@@ -46,11 +51,13 @@ export function useWorkflowCanvas(input: {
   const editableTemplate = computed(() => ({
     ...activeTemplate.value,
     nodes: workflowStore.hasCanvasOverride ? workflowStore.canvasNodes : activeTemplate.value.nodes,
-    edges: workflowStore.hasCanvasOverride ? workflowStore.canvasEdges : activeTemplate.value.edges,
+    edges: workflowStore.hasCanvasOverride ? workflowStore.canvasEdges : activeTemplate.value.edges
   }))
 
   const activeNode = computed(() => {
-    const requestedNode = editableTemplate.value.nodes.find((node) => node.id === workflowStore.activeNodeId)
+    const requestedNode = editableTemplate.value.nodes.find(
+      node => node.id === workflowStore.activeNodeId
+    )
     return requestedNode ?? editableTemplate.value.nodes[0] ?? null
   })
 
@@ -63,9 +70,9 @@ export function useWorkflowCanvas(input: {
   })
 
   const templateOptions = computed(() => {
-    return WORKFLOW_TEMPLATES.map((template) => ({
+    return WORKFLOW_TEMPLATES.map(template => ({
       value: template.id,
-      label: formatKey(template.nameKey),
+      label: formatKey(template.nameKey)
     }))
   })
 
@@ -82,11 +89,14 @@ export function useWorkflowCanvas(input: {
         stage?: string
         inputSemanticTypes: WorkflowArtifactSemanticType[]
         outputSemanticTypes: WorkflowArtifactSemanticType[]
+        inputArtifactSlots: ArtifactInputSlot[]
+        outputArtifactSlots: ArtifactOutputSlot[]
       }
     >()
 
     for (const group of toolsStore.workbenchGroups) {
       for (const tool of group.tools) {
+        const artifactSlots = deriveArtifactSlotsFromToolContract(tool.contract)
         toolsBySlug.set(tool.slug, {
           id: tool.id,
           slug: tool.slug,
@@ -94,19 +104,27 @@ export function useWorkflowCanvas(input: {
           description: tool.description,
           contract: tool.contract,
           executorType: tool.contract?.executor.type,
-          stage: tool.contract?.capability.stage ?? tool.contract?.capability.capability ?? undefined,
-          inputSemanticTypes: resolveWorkflowSemanticTypes(
-            tool.contract?.capability.inputs.map((item) => item.semantic_type) ?? [],
-          ),
-          outputSemanticTypes: resolveWorkflowSemanticTypes(
-            tool.contract?.capability.outputs.map((item) => item.semantic_type) ?? [],
-          ),
+          stage:
+            tool.contract?.capability.stage ?? tool.contract?.capability.capability ?? undefined,
+          inputSemanticTypes: artifactSlots.inputs.length
+            ? artifactSlots.inputs.map(slot => slot.type)
+            : resolveWorkflowSemanticTypes(
+                tool.contract?.capability.inputs.map(item => item.semantic_type) ?? []
+              ),
+          outputSemanticTypes: artifactSlots.outputs.length
+            ? artifactSlots.outputs.map(slot => slot.type)
+            : resolveWorkflowSemanticTypes(
+                tool.contract?.capability.outputs.map(item => item.semantic_type) ?? []
+              ),
+          inputArtifactSlots: [...artifactSlots.inputs],
+          outputArtifactSlots: [...artifactSlots.outputs]
         })
       }
     }
 
     for (const tool of toolsStore.workflowToolOptions) {
       if (!toolsBySlug.has(tool.slug)) {
+        const artifactSlots = deriveArtifactSlotsFromToolContract(tool.contract)
         toolsBySlug.set(tool.slug, {
           id: tool.id,
           slug: tool.slug,
@@ -114,13 +132,20 @@ export function useWorkflowCanvas(input: {
           description: tool.description,
           contract: tool.contract,
           executorType: tool.contract?.executor.type,
-          stage: tool.contract?.capability.stage ?? tool.contract?.capability.capability ?? undefined,
-          inputSemanticTypes: resolveWorkflowSemanticTypes(
-            tool.contract?.capability.inputs.map((item) => item.semantic_type) ?? [],
-          ),
-          outputSemanticTypes: resolveWorkflowSemanticTypes(
-            tool.contract?.capability.outputs.map((item) => item.semantic_type) ?? [],
-          ),
+          stage:
+            tool.contract?.capability.stage ?? tool.contract?.capability.capability ?? undefined,
+          inputSemanticTypes: artifactSlots.inputs.length
+            ? artifactSlots.inputs.map(slot => slot.type)
+            : resolveWorkflowSemanticTypes(
+                tool.contract?.capability.inputs.map(item => item.semantic_type) ?? []
+              ),
+          outputSemanticTypes: artifactSlots.outputs.length
+            ? artifactSlots.outputs.map(slot => slot.type)
+            : resolveWorkflowSemanticTypes(
+                tool.contract?.capability.outputs.map(item => item.semantic_type) ?? []
+              ),
+          inputArtifactSlots: [...artifactSlots.inputs],
+          outputArtifactSlots: [...artifactSlots.outputs]
         })
       }
     }
@@ -129,106 +154,121 @@ export function useWorkflowCanvas(input: {
   })
 
   const sidebarStageOptions = computed(() => {
-    return Array.from(new Set(availableWorkflowTools.value.map((tool) => tool.stage).filter(Boolean))).map((stage) => ({
+    return Array.from(
+      new Set(availableWorkflowTools.value.map(tool => tool.stage).filter(Boolean))
+    ).map(stage => ({
       value: stage!,
-      label: stage!,
+      label: stage!
     }))
   })
 
   const sidebarInputOptions = computed(() => {
     return Array.from(
-      new Set(availableWorkflowTools.value.flatMap((tool) => tool.inputSemanticTypes).filter(Boolean)),
-    ).map((semanticType) => ({
+      new Set(availableWorkflowTools.value.flatMap(tool => tool.inputSemanticTypes).filter(Boolean))
+    ).map(semanticType => ({
       value: semanticType,
-      label: semanticType,
+      label: semanticType
     }))
   })
 
   const sidebarOutputOptions = computed(() => {
     return Array.from(
-      new Set(availableWorkflowTools.value.flatMap((tool) => tool.outputSemanticTypes).filter(Boolean)),
-    ).map((semanticType) => ({
+      new Set(
+        availableWorkflowTools.value.flatMap(tool => tool.outputSemanticTypes).filter(Boolean)
+      )
+    ).map(semanticType => ({
       value: semanticType,
-      label: semanticType,
+      label: semanticType
     }))
   })
 
   const sidebarExecutorOptions = computed(() => {
     return Array.from(
-      new Set(availableWorkflowTools.value.map((tool) => tool.executorType).filter(Boolean)),
-    ).map((executorType) => ({
+      new Set(availableWorkflowTools.value.map(tool => tool.executorType).filter(Boolean))
+    ).map(executorType => ({
       value: executorType!,
-      label: executorType!,
+      label: executorType!
     }))
   })
 
   const filteredSidebarToolOptions = computed(() => {
     const keyword = sidebarToolSearchKeyword.value.trim().toLowerCase()
-    return availableWorkflowTools.value.filter((tool) => {
-      const matchesKeyword = !keyword || [tool.name, tool.slug, tool.description]
-        .filter(Boolean)
-        .some((value) => value!.toLowerCase().includes(keyword))
+    return availableWorkflowTools.value.filter(tool => {
+      const matchesKeyword =
+        !keyword ||
+        [tool.name, tool.slug, tool.description]
+          .filter(Boolean)
+          .some(value => value!.toLowerCase().includes(keyword))
       const matchesStage = !sidebarStageFilter.value || tool.stage === sidebarStageFilter.value
-      const matchesInput = !sidebarInputFilter.value
-        || tool.inputSemanticTypes.includes(sidebarInputFilter.value as WorkflowArtifactSemanticType)
-      const matchesOutput = !sidebarOutputFilter.value
-        || tool.outputSemanticTypes.includes(sidebarOutputFilter.value as WorkflowArtifactSemanticType)
-      const matchesExecutor = !sidebarExecutorFilter.value || tool.executorType === sidebarExecutorFilter.value
+      const matchesInput =
+        !sidebarInputFilter.value ||
+        tool.inputSemanticTypes.includes(sidebarInputFilter.value as WorkflowArtifactSemanticType)
+      const matchesOutput =
+        !sidebarOutputFilter.value ||
+        tool.outputSemanticTypes.includes(sidebarOutputFilter.value as WorkflowArtifactSemanticType)
+      const matchesExecutor =
+        !sidebarExecutorFilter.value || tool.executorType === sidebarExecutorFilter.value
 
       return matchesKeyword && matchesStage && matchesInput && matchesOutput && matchesExecutor
     })
   })
 
-  const currentWorkflowDefinition = computed<WorkflowDefinition>(() => buildCurrentWorkflowDefinition())
+  const currentWorkflowDefinition = computed<WorkflowDefinition>(() =>
+    buildCurrentWorkflowDefinition()
+  )
 
   const workflowInputRequirements = computed(() => {
     return extractWorkflowInputRequirements(currentWorkflowDefinition.value)
   })
 
+  const workflowInputRequirementDetails = computed(() => {
+    return extractWorkflowInputRequirementDetails(currentWorkflowDefinition.value)
+  })
+
   const nodeStatuses = computed(() => {
-    return editableTemplate.value.nodes.reduce<Record<string, ReturnType<typeof resolveWorkflowCanvasNodeStatus>>>(
-      (statuses, node) => {
-        statuses[node.id] = resolveWorkflowCanvasNodeStatus({
-          node,
-          selectedToolSlug: resolveSelectedToolSlug(node.id),
-          hasRequiredInputs: hasRequiredInputs(node.id),
-          task: workflowStore.taskByNode[node.id] ?? null,
-        })
-        return statuses
-      },
-      {},
-    )
+    return editableTemplate.value.nodes.reduce<
+      Record<string, ReturnType<typeof resolveWorkflowCanvasNodeStatus>>
+    >((statuses, node) => {
+      statuses[node.id] = resolveWorkflowCanvasNodeStatus({
+        node,
+        selectedToolSlug: resolveSelectedToolSlug(node.id),
+        hasRequiredInputs: hasRequiredInputs(node.id),
+        task: workflowStore.taskByNode[node.id] ?? null
+      })
+      return statuses
+    }, {})
   })
 
   const readyToolNodeIds = computed(() => {
     return resolveReadyToolNodeIds({
       template: editableTemplate.value,
-      nodeStatuses: nodeStatuses.value,
+      nodeStatuses: nodeStatuses.value
     })
   })
 
   const readyNodeCount = computed(() => readyToolNodeIds.value.length)
   const blockedNodeCount = computed(() => {
-    return editableTemplate.value.nodes.filter((node) => (
-      node.type === 'tool'
-      && ['idle', 'needs_tool_selection'].includes(nodeStatuses.value[node.id] ?? 'idle')
-    )).length
+    return editableTemplate.value.nodes.filter(
+      node =>
+        node.type === 'tool' &&
+        ['idle', 'needs_tool_selection'].includes(nodeStatuses.value[node.id] ?? 'idle')
+    ).length
   })
   const runningNodeCount = computed(() => countNodesByStatus('running'))
   const completedNodeCount = computed(() => countNodesByStatus('completed'))
   const failedNodeCount = computed(() => countNodesByStatus('failed'))
 
   const workflowReportRows = computed<WorkflowReportRow[]>(() => {
-    return editableTemplate.value.nodes.map((node) => {
+    return editableTemplate.value.nodes.map(node => {
       const task = workflowStore.taskByNode[node.id]
       const artifacts = task
         ? artifactsStore.items
-          .filter((artifact) => artifact.task_id === task.id)
-          .map((artifact) => ({
-            id: artifact.id,
-            filename: artifact.filename,
-            url: artifact.download_url,
-          }))
+            .filter(artifact => artifact.task_id === task.id)
+            .map(artifact => ({
+              id: artifact.id,
+              filename: artifact.filename,
+              url: artifact.download_url
+            }))
         : []
 
       return {
@@ -238,7 +278,7 @@ export function useWorkflowCanvas(input: {
         statusLabel: resolveNodeStatusReason(node.id),
         taskId: task?.id,
         taskStatus: task?.status,
-        artifacts,
+        artifacts
       }
     })
   })
@@ -252,11 +292,12 @@ export function useWorkflowCanvas(input: {
   }
 
   function countNodesByStatus(status: ReturnType<typeof resolveWorkflowCanvasNodeStatus>) {
-    return editableTemplate.value.nodes.filter((node) => nodeStatuses.value[node.id] === status).length
+    return editableTemplate.value.nodes.filter(node => nodeStatuses.value[node.id] === status)
+      .length
   }
 
   function resolveNodeStatusReason(nodeId: string): string {
-    const node = editableTemplate.value.nodes.find((item) => item.id === nodeId)
+    const node = editableTemplate.value.nodes.find(item => item.id === nodeId)
     const status = nodeStatuses.value[nodeId] ?? 'idle'
     if (!node) {
       return ''
@@ -293,7 +334,9 @@ export function useWorkflowCanvas(input: {
     workflowStore.selectNodeTool(nodeId, toolSlug)
   }
 
-  function handleAddToolNode(input: string | { toolSlug: string; position?: { x: number; y: number } }) {
+  function handleAddToolNode(
+    input: string | { toolSlug: string; position?: { x: number; y: number } }
+  ) {
     const toolSlug = typeof input === 'string' ? input : input.toolSlug
     const tool = resolveAvailableTool(toolSlug)
     workflowStore.addToolNode({
@@ -302,10 +345,15 @@ export function useWorkflowCanvas(input: {
       toolDescription: tool?.description,
       requiredInputTypes: tool?.inputSemanticTypes ?? [],
       producedOutputTypes: tool?.outputSemanticTypes ?? [],
-      position: typeof input === 'string' ? {
-        x: 320 + editableTemplate.value.nodes.length * 36,
-        y: 120 + editableTemplate.value.nodes.length * 24,
-      } : input.position,
+      inputArtifactSlots: tool?.inputArtifactSlots ?? [],
+      outputArtifactSlots: tool?.outputArtifactSlots ?? [],
+      position:
+        typeof input === 'string'
+          ? {
+              x: 320 + editableTemplate.value.nodes.length * 36,
+              y: 120 + editableTemplate.value.nodes.length * 24
+            }
+          : input.position
     })
   }
 
@@ -326,28 +374,34 @@ export function useWorkflowCanvas(input: {
   }
 
   function hasRequiredInputs(nodeId: string): boolean {
-    const node = editableTemplate.value.nodes.find((item) => item.id === nodeId)
+    const node = editableTemplate.value.nodes.find(item => item.id === nodeId)
     if (!node?.requiredInputTypes?.length) {
       return true
     }
 
-    return node.requiredInputTypes.every((inputType) => {
-      return editableTemplate.value.edges.some((edge) => {
+    return node.requiredInputTypes.every(inputType => {
+      return editableTemplate.value.edges.some(edge => {
         const upstreamTask = workflowStore.taskByNode[edge.source]
-        return edge.target === nodeId && edge.artifactType === inputType && upstreamTask?.status === 'success'
+        return (
+          edge.target === nodeId &&
+          edge.artifactType === inputType &&
+          upstreamTask?.status === 'success'
+        )
       })
     })
   }
 
   function resolveSelectedToolSlug(nodeId: string): string | null {
-    const node = editableTemplate.value.nodes.find((item) => item.id === nodeId)
+    const node = editableTemplate.value.nodes.find(item => item.id === nodeId)
     if (!node) {
       return null
     }
 
-    return workflowStore.selectedToolByNode[nodeId]
-      ?? node.recommendedToolSlug
-      ?? ((node.toolSlugs?.length ?? 0) === 1 ? node.toolSlugs?.[0] ?? null : null)
+    return (
+      workflowStore.selectedToolByNode[nodeId] ??
+      node.recommendedToolSlug ??
+      ((node.toolSlugs?.length ?? 0) === 1 ? (node.toolSlugs?.[0] ?? null) : null)
+    )
   }
 
   function resolveToolForNode(nodeId: string) {
@@ -356,18 +410,19 @@ export function useWorkflowCanvas(input: {
       return null
     }
 
-    const workbenchTool = toolsStore.workbenchGroups
-      .flatMap((group) => group.tools)
-      .find((tool) => tool.slug === selectedToolSlug) ?? null
+    const workbenchTool =
+      toolsStore.workbenchGroups
+        .flatMap(group => group.tools)
+        .find(tool => tool.slug === selectedToolSlug) ?? null
     if (workbenchTool) {
       return workbenchTool
     }
 
-    return toolsStore.workflowToolOptions.find((tool) => tool.slug === selectedToolSlug) ?? null
+    return toolsStore.workflowToolOptions.find(tool => tool.slug === selectedToolSlug) ?? null
   }
 
   function resolveAvailableTool(toolSlug: string) {
-    return availableWorkflowTools.value.find((tool) => tool.slug === toolSlug) ?? null
+    return availableWorkflowTools.value.find(tool => tool.slug === toolSlug) ?? null
   }
 
   function resolveDownstreamNodeIds(nodeId: string): string[] {
@@ -408,25 +463,29 @@ export function useWorkflowCanvas(input: {
   }
 
   function buildCurrentWorkflowDefinition(): WorkflowDefinition {
-    const nodes = editableTemplate.value.nodes.map((node) => ({
+    const nodes = editableTemplate.value.nodes.map(node => ({
       id: node.id,
       kind: node.type === 'input' ? 'input' : 'tool',
       type: node.type,
       semantic_type: node.requiredInputTypes?.[0] ?? node.recommendedToolSlug ?? node.id,
-      tool_slug: node.type === 'tool'
-        ? resolveSelectedToolSlug(node.id) ?? node.recommendedToolSlug ?? undefined
-        : undefined,
+      tool_slug:
+        node.type === 'tool'
+          ? (resolveSelectedToolSlug(node.id) ?? node.recommendedToolSlug ?? undefined)
+          : undefined,
       semantic_inputs: buildSemanticInputsForNode(node.id),
+      artifact_input_slots: node.inputArtifactSlots ?? [],
+      artifact_inputs: buildArtifactInputsForNode(node.id),
+      artifact_outputs: node.outputArtifactSlots ?? [],
       params: workflowStore.nodeFormDrafts[node.id] ?? {},
-      position: node.position,
+      position: node.position
     }))
 
-    const edges = editableTemplate.value.edges.map((edge) => ({
+    const edges = editableTemplate.value.edges.map(edge => ({
       id: edge.id,
       source: edge.source,
       target: edge.target,
       source_output: edge.artifactType,
-      target_input: edge.artifactType,
+      target_input: edge.artifactType
     }))
 
     return { nodes, edges }
@@ -434,23 +493,24 @@ export function useWorkflowCanvas(input: {
 
   function buildSemanticInputsForNode(nodeId: string) {
     const semanticInputs: Record<string, string> = {}
-    const node = editableTemplate.value.nodes.find((item) => item.id === nodeId)
+    const node = editableTemplate.value.nodes.find(item => item.id === nodeId)
     if (!node) {
       return semanticInputs
     }
 
-    const incomingEdges = editableTemplate.value.edges.filter((edge) => edge.target === nodeId)
+    const incomingEdges = editableTemplate.value.edges.filter(edge => edge.target === nodeId)
     for (const edge of incomingEdges) {
       if (!edge.artifactType) {
         continue
       }
-      const sourceNode = editableTemplate.value.nodes.find((item) => item.id === edge.source)
+      const sourceNode = editableTemplate.value.nodes.find(item => item.id === edge.source)
       if (!sourceNode) {
         continue
       }
-      semanticInputs[edge.artifactType] = sourceNode.type === 'input'
-        ? `workflow_input:${edge.artifactType}`
-        : `node:${edge.source}:${edge.artifactType}`
+      semanticInputs[edge.artifactType] =
+        sourceNode.type === 'input'
+          ? `workflow_input:${edge.artifactType}`
+          : `node:${edge.source}:${edge.artifactType}`
     }
 
     for (const inputType of node.requiredInputTypes ?? []) {
@@ -460,6 +520,36 @@ export function useWorkflowCanvas(input: {
     }
 
     return semanticInputs
+  }
+
+  function buildArtifactInputsForNode(nodeId: string) {
+    const artifactInputs: Record<string, string> = {}
+    const node = editableTemplate.value.nodes.find(item => item.id === nodeId)
+    if (!node?.inputArtifactSlots?.length) {
+      return artifactInputs
+    }
+
+    const incomingEdges = editableTemplate.value.edges.filter(edge => edge.target === nodeId)
+    for (const slot of node.inputArtifactSlots) {
+      const edge = incomingEdges.find(item => item.artifactType === slot.type)
+      if (!edge?.artifactType) {
+        artifactInputs[slot.name] = `workflow_input:${slot.type}`
+        continue
+      }
+
+      const sourceNode = editableTemplate.value.nodes.find(item => item.id === edge.source)
+      if (!sourceNode || sourceNode.type === 'input') {
+        artifactInputs[slot.name] = `workflow_input:${slot.type}`
+        continue
+      }
+
+      const sourceSlot = sourceNode.outputArtifactSlots?.find(
+        item => item.type === edge.artifactType
+      )
+      artifactInputs[slot.name] = `node:${edge.source}:${sourceSlot?.name ?? edge.artifactType}`
+    }
+
+    return artifactInputs
   }
 
   return {
@@ -481,6 +571,7 @@ export function useWorkflowCanvas(input: {
     filteredSidebarToolOptions,
     currentWorkflowDefinition,
     workflowInputRequirements,
+    workflowInputRequirementDetails,
     nodeStatuses,
     readyToolNodeIds,
     readyNodeCount,
@@ -502,6 +593,6 @@ export function useWorkflowCanvas(input: {
     resolveAvailableTool,
     resolveDownstreamNodeIds,
     formatKey,
-    buildCurrentWorkflowDefinition,
+    buildCurrentWorkflowDefinition
   }
 }

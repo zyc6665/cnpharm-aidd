@@ -18,10 +18,10 @@ function mountCanvasHarness() {
       const artifactsStore = useArtifactsStore()
       Object.assign(exposed, useWorkflowCanvas({ workflowStore, toolsStore, artifactsStore }), {
         workflowStore,
-        toolsStore,
+        toolsStore
       })
       return () => null
-    },
+    }
   })
 
   mount(Harness, { global: { plugins: [createPinia(), i18n] } })
@@ -46,18 +46,37 @@ describe('useWorkflowCanvas', () => {
             is_recommended: true,
             sort_order: 1,
             contract: {
+              contract_version: '1.0',
+              slug: 'pocket-explorer',
+              name: 'Pocket Explorer',
+              status: 'published',
               executor: { type: 'ssh' },
+              schema: {
+                input: { type: 'object', properties: {} },
+                output: { type: 'object', properties: {} }
+              },
               capability: {
                 enabled: true,
                 inputs: [{ semantic_type: 'protein_structure', field: 'protein' }],
                 outputs: [{ semantic_type: 'pocket_structure', source: 'output_files' }],
-                defaults: {},
+                defaults: {}
               },
-              validation: { status: 'valid', errors: [] },
-            },
-          },
-        ],
-      },
+              artifacts: {
+                inputs: [{ name: 'protein', type: 'protein_structure@1', required: true }],
+                outputs: [
+                  {
+                    name: 'pocket',
+                    type: 'binding_pocket@1',
+                    cardinality: 'one',
+                    required: true
+                  }
+                ]
+              },
+              validation: { status: 'valid', errors: [] }
+            }
+          }
+        ]
+      }
     ] as never
 
     canvas.handleAddToolNode('pocket-explorer')
@@ -66,5 +85,21 @@ describe('useWorkflowCanvas', () => {
     expect(nodes).toHaveLength(1)
     expect(nodes[0]?.requiredInputTypes).toEqual(['protein_structure@1'])
     expect(nodes[0]?.producedOutputTypes).toEqual(['binding_pocket@1'])
+    expect(nodes[0]?.inputArtifactSlots).toEqual([
+      { name: 'protein', type: 'protein_structure@1', required: true }
+    ])
+    expect(nodes[0]?.outputArtifactSlots).toEqual([
+      { name: 'pocket', type: 'binding_pocket@1', cardinality: 'one', required: true }
+    ])
+
+    expect(canvas.buildCurrentWorkflowDefinition().nodes[0]).toMatchObject({
+      artifact_input_slots: [{ name: 'protein', type: 'protein_structure@1', required: true }],
+      artifact_inputs: {
+        protein: 'workflow_input:protein_structure@1'
+      },
+      artifact_outputs: [
+        { name: 'pocket', type: 'binding_pocket@1', cardinality: 'one', required: true }
+      ]
+    })
   })
 })

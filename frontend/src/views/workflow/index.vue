@@ -1,7 +1,11 @@
 <template>
   <div class="workflow-page">
     <div class="workflow-shell workflow-deck">
-      <AppPageHeader :title="t('workflow.title')" :subtitle="t('workflow.subtitle')" align="center" />
+      <AppPageHeader
+        :title="t('workflow.title')"
+        :subtitle="t('workflow.subtitle')"
+        align="center"
+      />
 
       <a-tabs v-model:activeKey="activeMode" class="workflow-mode-tabs">
         <a-tab-pane key="manual" :tab="t('workflow.mode.manual')">
@@ -25,7 +29,11 @@
               <a-button @click="handleNewWorkflow">
                 {{ t('workflow.definition.new') }}
               </a-button>
-              <a-button type="primary" :loading="workflowDefinitionsStore.saving" @click="handleSaveWorkflow">
+              <a-button
+                type="primary"
+                :loading="workflowDefinitionsStore.saving"
+                @click="handleSaveWorkflow"
+              >
                 保存
               </a-button>
               <a-button
@@ -82,6 +90,7 @@
 
           <WorkflowRunInputPanel
             :requirements="workflowInputRequirements"
+            :artifact-requirements="workflowInputRequirementDetails"
             :selections="workflowRunInputSelections"
             :options-by-semantic-type="artifactOptionsBySemanticType"
             :loading="artifactsStore.loading"
@@ -199,7 +208,7 @@
               :available-tools="availableWorkflowTools"
               :status="activeNode ? nodeStatuses[activeNode.id] : 'idle'"
               :selected-tool-slug="activeNode ? selectedToolByActiveNode : null"
-              :task="activeNode ? workflowStore.taskByNode[activeNode.id] ?? null : null"
+              :task="activeNode ? (workflowStore.taskByNode[activeNode.id] ?? null) : null"
               @select-tool="handleNodeToolSelect"
               @add-edge="handleAddEdge"
               @delete-edge="handleDeleteEdge"
@@ -224,452 +233,450 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
-import AppPageHeader from '@/components/common/AppPageHeader.vue'
-import AiddAgentPanel from '@/components/workflow/AiddAgentPanel.vue'
-import WorkflowNodeInspector from '@/components/workflow/WorkflowNodeInspector.vue'
-import WorkflowNodeStatusBadge from '@/components/workflow/WorkflowNodeStatusBadge.vue'
-import WorkflowPreflightPanel from '@/components/workflow/WorkflowPreflightPanel.vue'
-import WorkflowResultsReportPanel from '@/components/workflow/WorkflowResultsReportPanel.vue'
-import WorkflowRunHistoryPanel from '@/components/workflow/WorkflowRunHistoryPanel.vue'
-import WorkflowRunInputPanel from '@/components/workflow/WorkflowRunInputPanel.vue'
-import WorkflowRunStatusPanel from '@/components/workflow/WorkflowRunStatusPanel.vue'
-import WorkflowTemplateCanvas from '@/components/workflow/WorkflowTemplateCanvas.vue'
-import WorkflowToolPalette from '@/components/workflow/WorkflowToolPalette.vue'
-import { useWorkflowCanvas } from '@/composables/useWorkflowCanvas'
-import { useWorkflowExecution } from '@/composables/useWorkflowExecution'
-import { useWorkflowPersistence } from '@/composables/useWorkflowPersistence'
-import { buildWorkflowPreflight } from '@/workflow/preflight'
-import type { AiddWorkflowDraft } from '@/types/models'
-import {
-  useArtifactsStore,
-  useTasksStore,
-  useToolsStore,
-  useUserStore,
-  useWorkflowDefinitionsStore,
-  useWorkflowStore
-} from '@/stores'
+  import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+  import { useI18n } from 'vue-i18n'
+  import { useRouter } from 'vue-router'
+  import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import AiddAgentPanel from '@/components/workflow/AiddAgentPanel.vue'
+  import WorkflowNodeInspector from '@/components/workflow/WorkflowNodeInspector.vue'
+  import WorkflowNodeStatusBadge from '@/components/workflow/WorkflowNodeStatusBadge.vue'
+  import WorkflowPreflightPanel from '@/components/workflow/WorkflowPreflightPanel.vue'
+  import WorkflowResultsReportPanel from '@/components/workflow/WorkflowResultsReportPanel.vue'
+  import WorkflowRunHistoryPanel from '@/components/workflow/WorkflowRunHistoryPanel.vue'
+  import WorkflowRunInputPanel from '@/components/workflow/WorkflowRunInputPanel.vue'
+  import WorkflowRunStatusPanel from '@/components/workflow/WorkflowRunStatusPanel.vue'
+  import WorkflowTemplateCanvas from '@/components/workflow/WorkflowTemplateCanvas.vue'
+  import WorkflowToolPalette from '@/components/workflow/WorkflowToolPalette.vue'
+  import { useWorkflowCanvas } from '@/composables/useWorkflowCanvas'
+  import { useWorkflowExecution } from '@/composables/useWorkflowExecution'
+  import { useWorkflowPersistence } from '@/composables/useWorkflowPersistence'
+  import { buildWorkflowPreflight } from '@/workflow/preflight'
+  import type { AiddWorkflowDraft } from '@/types/models'
+  import {
+    useArtifactsStore,
+    useTasksStore,
+    useToolsStore,
+    useUserStore,
+    useWorkflowDefinitionsStore,
+    useWorkflowStore
+  } from '@/stores'
 
-type WorkflowMode = 'manual' | 'agent'
+  type WorkflowMode = 'manual' | 'agent'
 
-const { t } = useI18n()
-const router = useRouter()
-const artifactsStore = useArtifactsStore()
-const tasksStore = useTasksStore()
-const toolsStore = useToolsStore()
-const userStore = useUserStore()
-const workflowStore = useWorkflowStore()
-const workflowDefinitionsStore = useWorkflowDefinitionsStore()
+  const { t } = useI18n()
+  const router = useRouter()
+  const artifactsStore = useArtifactsStore()
+  const tasksStore = useTasksStore()
+  const toolsStore = useToolsStore()
+  const userStore = useUserStore()
+  const workflowStore = useWorkflowStore()
+  const workflowDefinitionsStore = useWorkflowDefinitionsStore()
 
-workflowStore.normalizeSessionShape()
+  workflowStore.normalizeSessionShape()
 
-const activeMode = ref<WorkflowMode>('manual')
+  const activeMode = ref<WorkflowMode>('manual')
 
-const {
-  sidebarToolSearchKeyword,
-  sidebarStageFilter,
-  sidebarInputFilter,
-  sidebarOutputFilter,
-  sidebarExecutorFilter,
-  editableTemplate,
-  activeNode,
-  selectedToolByActiveNode,
-  availableWorkflowTools,
-  sidebarStageOptions,
-  sidebarInputOptions,
-  sidebarOutputOptions,
-  sidebarExecutorOptions,
-  filteredSidebarToolOptions,
-  workflowInputRequirements,
-  nodeStatuses,
-  readyToolNodeIds,
-  readyNodeCount,
-  blockedNodeCount,
-  runningNodeCount,
-  completedNodeCount,
-  failedNodeCount,
-  workflowReportRows,
-  resolveNodeStatusReason,
-  handleNodeToolSelect,
-  handleAddToolNode,
-  handleDeleteNode,
-  handleAddEdge,
-  handleDeleteEdge,
-  resolveToolForNode,
-  resolveDownstreamNodeIds,
-  formatKey,
-  buildCurrentWorkflowDefinition
-} = useWorkflowCanvas({
-  workflowStore,
-  toolsStore,
-  artifactsStore
-})
+  const {
+    sidebarToolSearchKeyword,
+    sidebarStageFilter,
+    sidebarInputFilter,
+    sidebarOutputFilter,
+    sidebarExecutorFilter,
+    editableTemplate,
+    activeNode,
+    selectedToolByActiveNode,
+    availableWorkflowTools,
+    sidebarStageOptions,
+    sidebarInputOptions,
+    sidebarOutputOptions,
+    sidebarExecutorOptions,
+    filteredSidebarToolOptions,
+    workflowInputRequirements,
+    workflowInputRequirementDetails,
+    nodeStatuses,
+    readyToolNodeIds,
+    readyNodeCount,
+    blockedNodeCount,
+    runningNodeCount,
+    completedNodeCount,
+    failedNodeCount,
+    workflowReportRows,
+    resolveNodeStatusReason,
+    handleNodeToolSelect,
+    handleAddToolNode,
+    handleDeleteNode,
+    handleAddEdge,
+    handleDeleteEdge,
+    resolveToolForNode,
+    resolveDownstreamNodeIds,
+    formatKey,
+    buildCurrentWorkflowDefinition
+  } = useWorkflowCanvas({
+    workflowStore,
+    toolsStore,
+    artifactsStore
+  })
 
-const {
-  workflowName,
-  selectedSavedWorkflowId,
-  workflowRunInputSelections,
-  savedWorkflowOptions,
-  selectedWorkflowInputFiles,
-  artifactOptionsBySemanticType,
-  handleSaveWorkflow,
-  handleNewWorkflow,
-  handleDuplicateWorkflow,
-  handleArchiveWorkflow,
-  handleDeleteWorkflow,
-  applyWorkflowDraft,
-  handleRefreshWorkflowRuns,
-  handleLoadMoreWorkflowRuns,
-  handleWorkflowRunSelect,
-  handleSyncWorkflowRun,
-  autofillWorkflowInputSelections,
-  handleWorkflowInputSelect,
-  scheduleWorkflowRunAutoSync,
-  clearWorkflowRunAutoSync,
-  restoreActiveWorkflowRun,
-  handleLoadWorkflow
-} = useWorkflowPersistence({
-  userStore,
-  artifactsStore,
-  workflowStore,
-  workflowDefinitionsStore,
-  editableTemplate,
-  workflowInputRequirements,
-  buildCurrentWorkflowDefinition
-})
+  const {
+    workflowName,
+    selectedSavedWorkflowId,
+    workflowRunInputSelections,
+    savedWorkflowOptions,
+    selectedWorkflowInputFiles,
+    artifactOptionsBySemanticType,
+    handleSaveWorkflow,
+    handleNewWorkflow,
+    handleDuplicateWorkflow,
+    handleArchiveWorkflow,
+    handleDeleteWorkflow,
+    applyWorkflowDraft,
+    handleRefreshWorkflowRuns,
+    handleLoadMoreWorkflowRuns,
+    handleWorkflowRunSelect,
+    handleSyncWorkflowRun,
+    autofillWorkflowInputSelections,
+    handleWorkflowInputSelect,
+    scheduleWorkflowRunAutoSync,
+    clearWorkflowRunAutoSync,
+    restoreActiveWorkflowRun,
+    handleLoadWorkflow
+  } = useWorkflowPersistence({
+    userStore,
+    artifactsStore,
+    workflowStore,
+    workflowDefinitionsStore,
+    editableTemplate,
+    workflowInputRequirements,
+    buildCurrentWorkflowDefinition
+  })
 
-const {
-  runningWorkflow,
-  handleNodeTaskSubmitted,
-  handleRunNode,
-  handleRunReadyNodes,
-  runDownstreamFrom
-} = useWorkflowExecution({
-  workflowStore,
-  tasksStore,
-  artifactsStore,
-  editableTemplate,
-  readyToolNodeIds,
-  resolveToolForNode,
-  resolveDownstreamNodeIds,
-  formatKey
-})
+  const {
+    runningWorkflow,
+    handleNodeTaskSubmitted,
+    handleRunNode,
+    handleRunReadyNodes,
+    runDownstreamFrom
+  } = useWorkflowExecution({
+    workflowStore,
+    tasksStore,
+    artifactsStore,
+    editableTemplate,
+    readyToolNodeIds,
+    resolveToolForNode,
+    resolveDownstreamNodeIds,
+    formatKey
+  })
 
-const workflowPreflight = computed(() => {
-  return buildWorkflowPreflight({
-    template: editableTemplate.value,
-    nodeStatuses: nodeStatuses.value,
-    readyNodeIds: readyToolNodeIds.value,
-    selectedWorkflowInputFiles: selectedWorkflowInputFiles.value,
-    artifacts: artifactsStore.items,
-    taskByNode: workflowStore.taskByNode,
-    selectedToolByNode: workflowStore.selectedToolByNode,
-    toolsBySlug: availableWorkflowTools.value.reduce<Record<string, (typeof availableWorkflowTools.value)[number]>>(
-      (accumulator, tool) => {
+  const workflowPreflight = computed(() => {
+    return buildWorkflowPreflight({
+      template: editableTemplate.value,
+      nodeStatuses: nodeStatuses.value,
+      readyNodeIds: readyToolNodeIds.value,
+      selectedWorkflowInputFiles: selectedWorkflowInputFiles.value,
+      artifacts: artifactsStore.items,
+      taskByNode: workflowStore.taskByNode,
+      selectedToolByNode: workflowStore.selectedToolByNode,
+      toolsBySlug: availableWorkflowTools.value.reduce<
+        Record<string, (typeof availableWorkflowTools.value)[number]>
+      >((accumulator, tool) => {
         accumulator[tool.slug] = tool
         return accumulator
-      },
-      {}
-    )
+      }, {})
+    })
   })
-})
 
-function handleAgentWorkflowDraft(draft: AiddWorkflowDraft) {
-  applyWorkflowDraft(draft)
-  activeMode.value = 'manual'
-}
-
-function handleViewTaskDetail(nodeId: string) {
-  const taskId = workflowStore.taskByNode[nodeId]?.id
-  if (!taskId) {
-    return
+  function handleAgentWorkflowDraft(draft: AiddWorkflowDraft) {
+    applyWorkflowDraft(draft)
+    activeMode.value = 'manual'
   }
 
-  router.push(`/tasks/${taskId}`)
-}
-
-watch(
-  () => [userStore.authReady, userStore.isLoggedIn, userStore.user?.id] as const,
-  async ([authReady, isLoggedIn, userId]) => {
-    if (!authReady) {
+  function handleViewTaskDetail(nodeId: string) {
+    const taskId = workflowStore.taskByNode[nodeId]?.id
+    if (!taskId) {
       return
     }
 
-    workflowStore.syncOwnerUserId(isLoggedIn ? userId ?? undefined : undefined)
+    router.push(`/tasks/${taskId}`)
+  }
 
-    if (!isLoggedIn) {
-      artifactsStore.resetArtifacts()
-      workflowDefinitionsStore.clearCurrentWorkflowDefinition()
-      selectedSavedWorkflowId.value = undefined
-      clearWorkflowRunAutoSync()
-      return
+  watch(
+    () => [userStore.authReady, userStore.isLoggedIn, userStore.user?.id] as const,
+    async ([authReady, isLoggedIn, userId]) => {
+      if (!authReady) {
+        return
+      }
+
+      workflowStore.syncOwnerUserId(isLoggedIn ? (userId ?? undefined) : undefined)
+
+      if (!isLoggedIn) {
+        artifactsStore.resetArtifacts()
+        workflowDefinitionsStore.clearCurrentWorkflowDefinition()
+        selectedSavedWorkflowId.value = undefined
+        clearWorkflowRunAutoSync()
+        return
+      }
+
+      await Promise.allSettled([
+        artifactsStore.fetchArtifacts({ page: 1, page_size: 100 }),
+        workflowDefinitionsStore.fetchWorkflowDefinitions({ page: 1, page_size: 100 }),
+        workflowStore.loadWorkflowRuns({ page: 1, page_size: 20 })
+      ])
+    },
+    { immediate: true }
+  )
+
+  watch(
+    () => workflowStore.activeWorkflowRunId,
+    async () => {
+      await scheduleWorkflowRunAutoSync()
     }
+  )
 
-    await Promise.allSettled([
-      artifactsStore.fetchArtifacts({ page: 1, page_size: 100 }),
-      workflowDefinitionsStore.fetchWorkflowDefinitions({ page: 1, page_size: 100 }),
-      workflowStore.loadWorkflowRuns({ page: 1, page_size: 20 })
-    ])
-  },
-  { immediate: true }
-)
+  onMounted(async () => {
+    const boardDraft = sessionStorage.getItem('research-board-workflow-draft')
+    if (boardDraft) {
+      sessionStorage.removeItem('research-board-workflow-draft')
+      handleAgentWorkflowDraft(JSON.parse(boardDraft) as AiddWorkflowDraft)
+    }
+    await Promise.allSettled([toolsStore.fetchWorkbenchGroups(), toolsStore.fetchWorkflowTools()])
+  })
 
-watch(
-  () => workflowStore.activeWorkflowRunId,
-  async () => {
-    await scheduleWorkflowRunAutoSync()
-  }
-)
+  onMounted(async () => {
+    await restoreActiveWorkflowRun()
+  })
 
-onMounted(async () => {
-  const boardDraft = sessionStorage.getItem('research-board-workflow-draft')
-  if (boardDraft) {
-    sessionStorage.removeItem('research-board-workflow-draft')
-    handleAgentWorkflowDraft(JSON.parse(boardDraft) as AiddWorkflowDraft)
-  }
-  await Promise.allSettled([
-    toolsStore.fetchWorkbenchGroups(),
-    toolsStore.fetchWorkflowTools()
-  ])
-})
-
-onMounted(async () => { await restoreActiveWorkflowRun() })
-
-onBeforeUnmount(() => {
-  clearWorkflowRunAutoSync()
-})
+  onBeforeUnmount(() => {
+    clearWorkflowRunAutoSync()
+  })
 </script>
 
 <style scoped lang="less">
-@import '@/assets/styles/variables.less';
+  @import '@/assets/styles/variables.less';
 
-.workflow-page {
-  min-height: calc(100vh - @header-height - @footer-height);
-  padding: @spacing-xl 0 @spacing-xxl;
-  background:
-    radial-gradient(circle at top, rgba(13, 110, 253, 0.08) 0%, rgba(255, 255, 255, 0) 32%),
-    linear-gradient(180deg, rgba(59, 130, 246, 0.04) 0%, rgba(255, 255, 255, 0) 260px),
-    @bg-light;
-}
-
-.workflow-shell {
-  width: min(100%, calc(100vw - 32px));
-  max-width: none;
-  margin: 0 auto;
-}
-
-.workflow-deck {
-  position: relative;
-  padding: @spacing-sm;
-  border-radius: 32px;
-  background:
-    linear-gradient(180deg, @bg-surface 0%, @bg-body 100%),
-    linear-gradient(135deg, rgba(13, 110, 253, 0.04) 0%, rgba(46, 196, 182, 0.04) 100%);
-  border: 1px solid @border-color;
-  box-shadow: inset 0 1px 0 @border-color-hover;
-}
-
-.workflow-mode-tabs {
-  :deep(.ant-tabs-nav) {
-    margin: 0 0 @spacing-lg;
-    padding: 0 @spacing-md;
+  .workflow-page {
+    min-height: calc(100vh - @header-height - @footer-height);
+    padding: @spacing-xl 0 @spacing-xxl;
+    background:
+      radial-gradient(circle at top, rgba(13, 110, 253, 0.08) 0%, rgba(255, 255, 255, 0) 32%),
+      linear-gradient(180deg, rgba(59, 130, 246, 0.04) 0%, rgba(255, 255, 255, 0) 260px), @bg-light;
   }
 
-  :deep(.ant-tabs-tab) {
-    padding: @spacing-sm @spacing-md;
-    color: @text-color-light-secondary;
-    font-weight: 600;
-    letter-spacing: 0;
+  .workflow-shell {
+    width: min(100%, calc(100vw - 32px));
+    max-width: none;
+    margin: 0 auto;
   }
 
-  :deep(.ant-tabs-tab-active .ant-tabs-tab-btn) {
-    color: @primary-color;
-    font-weight: 700;
-  }
-}
-
-.workflow-definition-bar {
-  display: flex;
-  align-items: center;
-  gap: @spacing-sm;
-  padding: @spacing-md;
-  margin-bottom: @spacing-md;
-  border: 1px solid @border-color-hover;
-  border-radius: @border-radius-md;
-  background: @bg-elevated;
-  box-shadow: @shadow-sm;
-}
-
-.workflow-name-input {
-  width: min(280px, 100%);
-}
-
-.workflow-load-select {
-  width: min(320px, 100%);
-}
-
-.workflow-preflight-region {
-  margin-bottom: @spacing-md;
-}
-
-.workflow-template-layout {
-  display: grid;
-  grid-template-columns: minmax(220px, 260px) minmax(0, 1fr) minmax(300px, 360px);
-  gap: @spacing-md;
-  align-items: start;
-}
-
-.workflow-results-region {
-  margin-top: @spacing-md;
-}
-
-.template-step-rail {
-  min-width: 0;
-  max-height: 720px;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid @border-color-hover;
-  border-radius: @border-radius-md;
-  background: @bg-light-secondary;
-  box-shadow: @shadow-sm;
-  overflow: hidden;
-}
-
-.template-selector {
-  padding: @spacing-md;
-  border-bottom: 1px solid @border-color-light;
-}
-
-.rail-kicker {
-  display: block;
-  margin-bottom: @spacing-xs;
-  color: @text-color-light-tertiary;
-  font-size: @font-size-xs;
-  font-weight: 800;
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-
-.template-select {
-  width: 100%;
-}
-
-.template-node-list {
-  display: grid;
-  gap: @spacing-xs;
-  padding: @spacing-sm;
-  max-height: 260px;
-  overflow: auto;
-}
-
-.template-node-item {
-  width: 100%;
-  display: grid;
-  gap: @spacing-xs;
-  padding: @spacing-sm;
-  border: 1px solid transparent;
-  border-radius: @border-radius-sm;
-  background: transparent;
-  color: @text-color-light-primary;
-  text-align: left;
-  cursor: pointer;
-}
-
-.template-node-item:hover,
-.template-node-item.is-active {
-  border-color: rgba(59, 130, 246, 0.16);
-  background: @primary-color-light;
-}
-
-.node-item-title {
-  min-width: 0;
-  font-size: @font-size-sm;
-  font-weight: 700;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.node-item-reason {
-  min-width: 0;
-  color: @text-color-light-secondary;
-  font-size: @font-size-xs;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.workflow-status-summary {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: @spacing-xs;
-  padding: @spacing-sm;
-  border-bottom: 1px solid @border-color-light;
-}
-
-.status-summary-item {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: @spacing-xs;
-  padding: @spacing-xs @spacing-sm;
-  border: 1px solid @accent-color-border;
-  border-radius: @border-radius-sm;
-  background: @bg-elevated;
-}
-
-.status-summary-item span {
-  color: @text-color-light-secondary;
-  font-size: @font-size-xs;
-}
-
-.status-summary-item strong {
-  color: @text-color-light-primary;
-  font-size: @font-size-md;
-}
-
-.status-summary-item.is-ready strong {
-  color: @success-color;
-}
-
-.status-summary-item.is-blocked strong {
-  color: @warning-color;
-}
-
-.status-summary-item.is-running strong {
-  color: @primary-color;
-}
-
-.status-summary-item.is-failed strong {
-  color: @error-color;
-}
-
-@media (max-width: @screen-xl) {
-  .workflow-template-layout {
-    grid-template-columns: 220px minmax(0, 1fr);
+  .workflow-deck {
+    position: relative;
+    padding: @spacing-sm;
+    border-radius: 32px;
+    background:
+      linear-gradient(180deg, @bg-surface 0%, @bg-body 100%),
+      linear-gradient(135deg, rgba(13, 110, 253, 0.04) 0%, rgba(46, 196, 182, 0.04) 100%);
+    border: 1px solid @border-color;
+    box-shadow: inset 0 1px 0 @border-color-hover;
   }
 
-  .workflow-node-inspector {
-    grid-column: 1 / -1;
-  }
-}
+  .workflow-mode-tabs {
+    :deep(.ant-tabs-nav) {
+      margin: 0 0 @spacing-lg;
+      padding: 0 @spacing-md;
+    }
 
-@media (max-width: @screen-md) {
+    :deep(.ant-tabs-tab) {
+      padding: @spacing-sm @spacing-md;
+      color: @text-color-light-secondary;
+      font-weight: 600;
+      letter-spacing: 0;
+    }
+
+    :deep(.ant-tabs-tab-active .ant-tabs-tab-btn) {
+      color: @primary-color;
+      font-weight: 700;
+    }
+  }
+
   .workflow-definition-bar {
-    align-items: stretch;
-    flex-direction: column;
+    display: flex;
+    align-items: center;
+    gap: @spacing-sm;
+    padding: @spacing-md;
+    margin-bottom: @spacing-md;
+    border: 1px solid @border-color-hover;
+    border-radius: @border-radius-md;
+    background: @bg-elevated;
+    box-shadow: @shadow-sm;
   }
 
-  .workflow-name-input,
+  .workflow-name-input {
+    width: min(280px, 100%);
+  }
+
   .workflow-load-select {
+    width: min(320px, 100%);
+  }
+
+  .workflow-preflight-region {
+    margin-bottom: @spacing-md;
+  }
+
+  .workflow-template-layout {
+    display: grid;
+    grid-template-columns: minmax(220px, 260px) minmax(0, 1fr) minmax(300px, 360px);
+    gap: @spacing-md;
+    align-items: start;
+  }
+
+  .workflow-results-region {
+    margin-top: @spacing-md;
+  }
+
+  .template-step-rail {
+    min-width: 0;
+    max-height: 720px;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid @border-color-hover;
+    border-radius: @border-radius-md;
+    background: @bg-light-secondary;
+    box-shadow: @shadow-sm;
+    overflow: hidden;
+  }
+
+  .template-selector {
+    padding: @spacing-md;
+    border-bottom: 1px solid @border-color-light;
+  }
+
+  .rail-kicker {
+    display: block;
+    margin-bottom: @spacing-xs;
+    color: @text-color-light-tertiary;
+    font-size: @font-size-xs;
+    font-weight: 800;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .template-select {
     width: 100%;
   }
 
-  .workflow-template-layout {
-    grid-template-columns: 1fr;
+  .template-node-list {
+    display: grid;
+    gap: @spacing-xs;
+    padding: @spacing-sm;
+    max-height: 260px;
+    overflow: auto;
   }
-}
+
+  .template-node-item {
+    width: 100%;
+    display: grid;
+    gap: @spacing-xs;
+    padding: @spacing-sm;
+    border: 1px solid transparent;
+    border-radius: @border-radius-sm;
+    background: transparent;
+    color: @text-color-light-primary;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .template-node-item:hover,
+  .template-node-item.is-active {
+    border-color: rgba(59, 130, 246, 0.16);
+    background: @primary-color-light;
+  }
+
+  .node-item-title {
+    min-width: 0;
+    font-size: @font-size-sm;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .node-item-reason {
+    min-width: 0;
+    color: @text-color-light-secondary;
+    font-size: @font-size-xs;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .workflow-status-summary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: @spacing-xs;
+    padding: @spacing-sm;
+    border-bottom: 1px solid @border-color-light;
+  }
+
+  .status-summary-item {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: @spacing-xs;
+    padding: @spacing-xs @spacing-sm;
+    border: 1px solid @accent-color-border;
+    border-radius: @border-radius-sm;
+    background: @bg-elevated;
+  }
+
+  .status-summary-item span {
+    color: @text-color-light-secondary;
+    font-size: @font-size-xs;
+  }
+
+  .status-summary-item strong {
+    color: @text-color-light-primary;
+    font-size: @font-size-md;
+  }
+
+  .status-summary-item.is-ready strong {
+    color: @success-color;
+  }
+
+  .status-summary-item.is-blocked strong {
+    color: @warning-color;
+  }
+
+  .status-summary-item.is-running strong {
+    color: @primary-color;
+  }
+
+  .status-summary-item.is-failed strong {
+    color: @error-color;
+  }
+
+  @media (max-width: @screen-xl) {
+    .workflow-template-layout {
+      grid-template-columns: 220px minmax(0, 1fr);
+    }
+
+    .workflow-node-inspector {
+      grid-column: 1 / -1;
+    }
+  }
+
+  @media (max-width: @screen-md) {
+    .workflow-definition-bar {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .workflow-name-input,
+    .workflow-load-select {
+      width: 100%;
+    }
+
+    .workflow-template-layout {
+      grid-template-columns: 1fr;
+    }
+  }
 </style>

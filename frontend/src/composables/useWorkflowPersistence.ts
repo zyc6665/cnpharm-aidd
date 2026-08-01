@@ -3,20 +3,25 @@ import { message } from 'ant-design-vue'
 import type { WorkflowDefinitionPayload } from '@/api/workflows'
 import {
   buildWorkflowInputFileMap,
-  findLatestArtifactForSemanticType,
+  findLatestArtifactForSemanticType
 } from '@/workflow/workflow-definitions'
 import { shouldAutoSyncWorkflowRun } from '@/workflow/workflow-runs'
 import {
   validateWorkflowDefinition,
-  validateWorkflowExecutionOrder,
+  validateWorkflowExecutionOrder
 } from '@/workflow/template-runner'
+import {
+  WORKFLOW_ARTIFACT_SEMANTIC_TYPES,
+  type WorkflowArtifactSemanticType
+} from '@/workflow/artifact-types'
 import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@/workflow/template-types'
-import { useArtifactsStore, useUserStore, useWorkflowDefinitionsStore, useWorkflowStore } from '@/stores'
-import type {
-  AiddWorkflowDraft,
-  WorkflowDefinition,
-  WorkflowDefinitionNode,
-} from '@/types/models'
+import {
+  useArtifactsStore,
+  useUserStore,
+  useWorkflowDefinitionsStore,
+  useWorkflowStore
+} from '@/stores'
+import type { AiddWorkflowDraft, WorkflowDefinition, WorkflowDefinitionNode } from '@/types/models'
 
 type UserStore = ReturnType<typeof useUserStore>
 type ArtifactsStore = ReturnType<typeof useArtifactsStore>
@@ -43,7 +48,7 @@ export function useWorkflowPersistence(input: {
     workflowDefinitionsStore,
     editableTemplate,
     workflowInputRequirements,
-    buildCurrentWorkflowDefinition,
+    buildCurrentWorkflowDefinition
   } = input
 
   const workflowName = ref('未命名流程')
@@ -54,37 +59,39 @@ export function useWorkflowPersistence(input: {
 
   const savedWorkflowOptions = computed(() => {
     return workflowDefinitionsStore.workflowDefinitions
-      .filter((workflow) => workflow.status !== 'archived')
-      .map((workflow) => ({
+      .filter(workflow => workflow.status !== 'archived')
+      .map(workflow => ({
         value: workflow.id,
-        label: workflow.name,
+        label: workflow.name
       }))
   })
 
   const workflowTemplateOptions = computed(() => {
-    return workflowStore.workflowTemplates.map((template) => ({
+    return workflowStore.workflowTemplates.map(template => ({
       value: template.id,
-      label: template.name,
+      label: template.name
     }))
   })
 
   const selectedWorkflowInputFiles = computed(() => {
-    return buildWorkflowInputFileMap(workflowInputRequirements.value, workflowRunInputSelections.value)
+    return buildWorkflowInputFileMap(
+      workflowInputRequirements.value,
+      workflowRunInputSelections.value
+    )
   })
 
   const artifactOptionsBySemanticType = computed(() => {
-    return workflowInputRequirements.value.reduce<Record<string, Array<{ value: string; label: string }>>>(
-      (accumulator, semanticType) => {
-        accumulator[semanticType] = artifactsStore.items
-          .filter((artifact) => artifact.semantic_type === semanticType)
-          .map((artifact) => ({
-            value: artifact.id,
-            label: `${artifact.filename} · ${artifact.tool_name}`,
-          }))
-        return accumulator
-      },
-      {},
-    )
+    return workflowInputRequirements.value.reduce<
+      Record<string, Array<{ value: string; label: string }>>
+    >((accumulator, semanticType) => {
+      accumulator[semanticType] = artifactsStore.items
+        .filter(artifact => artifact.semantic_type === semanticType)
+        .map(artifact => ({
+          value: artifact.id,
+          label: `${artifact.filename} · ${artifact.tool_name}`
+        }))
+      return accumulator
+    }, {})
   })
 
   async function handleSaveWorkflow() {
@@ -93,7 +100,7 @@ export function useWorkflowPersistence(input: {
     try {
       const saved = await workflowDefinitionsStore.saveWorkflowDefinition(
         payload,
-        selectedSavedWorkflowId.value ?? workflowDefinitionsStore.currentWorkflowDefinition?.id,
+        selectedSavedWorkflowId.value ?? workflowDefinitionsStore.currentWorkflowDefinition?.id
       )
       selectedSavedWorkflowId.value = saved.id
       workflowName.value = saved.name
@@ -122,7 +129,7 @@ export function useWorkflowPersistence(input: {
     try {
       const saved = await workflowDefinitionsStore.saveWorkflowDefinition({
         ...buildWorkflowDefinitionPayload(name),
-        status: 'draft',
+        status: 'draft'
       })
       selectedSavedWorkflowId.value = saved.id
       workflowName.value = saved.name
@@ -181,8 +188,8 @@ export function useWorkflowPersistence(input: {
           templateId: template.id,
           name: template.name,
           description: template.description,
-          definition: template.definition,
-        }),
+          definition: template.definition
+        })
       )
     } catch {
       // 请求层会展示错误信息。
@@ -201,8 +208,8 @@ export function useWorkflowPersistence(input: {
         templateId: 'aidd-workflow-draft',
         name: draft.name,
         description: draft.description,
-        definition: draft.definition,
-      }),
+        definition: draft.definition
+      })
     )
   }
 
@@ -211,12 +218,15 @@ export function useWorkflowPersistence(input: {
       name: workflowTemplateName.value.trim() || 'AIDD workflow',
       description: workflowStore.activeWorkflowTemplate?.description ?? '',
       definition: buildCurrentWorkflowDefinition(),
-      is_public: workflowStore.activeWorkflowTemplate?.is_public ?? false,
+      is_public: workflowStore.activeWorkflowTemplate?.is_public ?? false
     }
 
     try {
       const template = workflowStore.activeWorkflowTemplateId
-        ? await workflowStore.updateSavedWorkflowTemplate(workflowStore.activeWorkflowTemplateId, payload)
+        ? await workflowStore.updateSavedWorkflowTemplate(
+            workflowStore.activeWorkflowTemplateId,
+            payload
+          )
         : await workflowStore.saveWorkflowTemplate(payload)
       workflowTemplateName.value = template.name
       selectedSavedWorkflowId.value = template.id
@@ -235,7 +245,7 @@ export function useWorkflowPersistence(input: {
     try {
       const duplicated = await workflowStore.duplicateSavedWorkflowTemplate(
         templateId,
-        `${workflowTemplateName.value || 'AIDD workflow'} Copy`,
+        `${workflowTemplateName.value || 'AIDD workflow'} Copy`
       )
       workflowTemplateName.value = duplicated.name
       selectedSavedWorkflowId.value = duplicated.id
@@ -276,7 +286,7 @@ export function useWorkflowPersistence(input: {
       const template = await workflowStore.saveWorkflowTemplate({
         name: workflowTemplateName.value.trim() || 'AIDD workflow',
         definition,
-        is_public: false,
+        is_public: false
       })
       activeTemplateId = template.id
       selectedSavedWorkflowId.value = template.id
@@ -284,7 +294,7 @@ export function useWorkflowPersistence(input: {
 
     const run = await workflowStore.runWorkflowTemplate(activeTemplateId!, {
       name: workflowTemplateName.value.trim() || 'AIDD workflow',
-      input_files: selectedWorkflowInputFiles.value,
+      input_files: selectedWorkflowInputFiles.value
     })
     await workflowStore.loadWorkflowRuns({ template_id: activeTemplateId!, page: 1, page_size: 20 })
     await workflowStore.loadWorkflowRun(run.id)
@@ -304,9 +314,9 @@ export function useWorkflowPersistence(input: {
       {
         template_id: templateId,
         page: workflowStore.workflowRunsPagination.page + 1,
-        page_size: workflowStore.workflowRunsPagination.pageSize,
+        page_size: workflowStore.workflowRunsPagination.pageSize
       },
-      { append: true },
+      { append: true }
     )
   }
 
@@ -331,18 +341,20 @@ export function useWorkflowPersistence(input: {
   function handleWorkflowInputSelect(semanticType: string, artifactId: string | undefined) {
     workflowRunInputSelections.value = {
       ...workflowRunInputSelections.value,
-      [semanticType]: artifactId,
+      [semanticType]: artifactId
     }
   }
 
   async function scheduleWorkflowRunAutoSync() {
     clearWorkflowRunAutoSync()
     const run = workflowStore.activeWorkflowRun
-    if (!shouldAutoSyncWorkflowRun(run, {
-      isLoggedIn: userStore.isLoggedIn,
-      isLoading: workflowStore.isLoadingWorkflowRun,
-      isSyncing: workflowStore.isSyncingWorkflowRun,
-    })) {
+    if (
+      !shouldAutoSyncWorkflowRun(run, {
+        isLoggedIn: userStore.isLoggedIn,
+        isLoading: workflowStore.isLoadingWorkflowRun,
+        isSyncing: workflowStore.isSyncingWorkflowRun
+      })
+    ) {
       return
     }
 
@@ -378,7 +390,9 @@ export function useWorkflowPersistence(input: {
     }
 
     try {
-      const workflow = await workflowDefinitionsStore.loadWorkflowDefinition(selectedSavedWorkflowId.value)
+      const workflow = await workflowDefinitionsStore.loadWorkflowDefinition(
+        selectedSavedWorkflowId.value
+      )
       workflowStore.applyWorkflowDefinition(workflow)
       workflowName.value = workflow.name
       message.success('流程已加载')
@@ -395,17 +409,19 @@ export function useWorkflowPersistence(input: {
       edges: workflowStore.exportWorkflowEdges(editableTemplate.value.edges),
       selected_tool_by_node: workflowStore.selectedToolByNode,
       artifact_bindings_by_node: workflowStore.artifactBindingsByNode,
-      status: 'draft',
+      status: 'draft'
     }
   }
 
   function selectedWorkflowIdExists(): boolean {
-    return typeof selectedSavedWorkflowId.value === 'string' && Boolean(selectedSavedWorkflowId.value)
+    return (
+      typeof selectedSavedWorkflowId.value === 'string' && Boolean(selectedSavedWorkflowId.value)
+    )
   }
 
   function resolveSelectedWorkflowDefinition() {
     return workflowDefinitionsStore.workflowDefinitions.find(
-      (workflow) => workflow.id === selectedSavedWorkflowId.value,
+      workflow => workflow.id === selectedSavedWorkflowId.value
     )
   }
 
@@ -441,7 +457,7 @@ export function useWorkflowPersistence(input: {
     clearWorkflowRunAutoSync,
     restoreActiveWorkflowTemplate,
     restoreActiveWorkflowRun,
-    handleLoadWorkflow,
+    handleLoadWorkflow
   }
 }
 
@@ -456,24 +472,31 @@ export function mapWorkflowDefinitionToCanvasPayload(input: {
     template_id: templateId,
     name,
     description: description ?? undefined,
-    nodes: (definition.nodes ?? []).map((node) => mapTemplateNode(node)),
+    nodes: (definition.nodes ?? []).map(node => mapTemplateNode(node)),
     edges: (definition.edges ?? []).map((edge, index) => ({
       id: resolveWorkflowEdgeId(edge.id, index),
       source: edge.source,
       target: edge.target,
-      artifactType: edge.source_output ?? edge.target_input,
+      artifactType: edge.source_output ?? edge.target_input
     })),
     selected_tool_by_node: Object.fromEntries(
       definition.nodes
-        .filter((node) => node.kind === 'tool' && node.tool_slug)
-        .map((node) => [node.id, node.tool_slug as string]),
+        .filter(node => node.kind === 'tool' && node.tool_slug)
+        .map(node => [node.id, node.tool_slug as string])
     ),
     artifact_bindings_by_node: {},
-    status: 'draft' as const,
+    status: 'draft' as const
   }
 }
 
 function mapTemplateNode(node: WorkflowDefinitionNode) {
+  const inputArtifactSlots = Array.isArray(node.artifact_input_slots)
+    ? node.artifact_input_slots
+    : []
+  const outputArtifactSlots = Array.isArray(node.artifact_outputs) ? node.artifact_outputs : []
+  const inputSlotTypes = resolveArtifactSlotTypes(inputArtifactSlots)
+  const outputSlotTypes = resolveArtifactSlotTypes(outputArtifactSlots)
+
   return {
     id: node.id,
     type: node.kind === 'input' ? 'input' : 'tool',
@@ -485,9 +508,36 @@ function mapTemplateNode(node: WorkflowDefinitionNode) {
     requiredInputTypes:
       node.kind === 'input' && node.semantic_type
         ? [node.semantic_type]
-        : Object.keys(node.semantic_inputs ?? {}),
-    producedOutputTypes: Array.isArray(node.semantic_outputs) ? node.semantic_outputs : [],
+        : inputSlotTypes.length
+          ? inputSlotTypes
+          : Object.keys(node.semantic_inputs ?? {}),
+    producedOutputTypes: outputSlotTypes.length
+      ? outputSlotTypes
+      : Array.isArray(node.semantic_outputs)
+        ? node.semantic_outputs
+        : [],
+    inputArtifactSlots,
+    outputArtifactSlots
   }
+}
+
+function resolveArtifactSlotTypes(slots: unknown[]): WorkflowArtifactSemanticType[] {
+  const types = new Set<WorkflowArtifactSemanticType>()
+
+  for (const slot of slots) {
+    if (!slot || typeof slot !== 'object' || !('type' in slot)) {
+      continue
+    }
+    const type = (slot as { type?: unknown }).type
+    if (
+      typeof type === 'string' &&
+      WORKFLOW_ARTIFACT_SEMANTIC_TYPES.includes(type as WorkflowArtifactSemanticType)
+    ) {
+      types.add(type as WorkflowArtifactSemanticType)
+    }
+  }
+
+  return [...types]
 }
 
 function resolveWorkflowNodePosition(node: WorkflowDefinitionNode) {
@@ -502,7 +552,7 @@ function resolveWorkflowNodePosition(node: WorkflowDefinitionNode) {
   ) {
     return {
       x: position.x,
-      y: position.y,
+      y: position.y
     }
   }
 
