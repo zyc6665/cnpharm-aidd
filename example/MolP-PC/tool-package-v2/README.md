@@ -27,6 +27,12 @@ Artifact 契约。
 1. 从平台标准 request 的 `inputs.molecules.files.table_file` 找到 SMILES CSV。
 2. 模型运行结束后调用 `runner/platform_adapter.py`，把 `cb_data_result.csv` 包装为 result.v2。
 
+## Runtime Env
+
+`tool.yaml.runtime` 声明 MolP-PC 的运行环境产物：Python 3.8、CUDA 11.3、首选 container
+镜像 digest、conda-pack fallback、权重 manifest SHA-256 和缓存 key。Executor 不安装依赖，
+也不依赖宿主机私有 conda 路径；部署时只选择 manifest 中已验证的 Runtime Env。
+
 ## 为什么使用 molecule_table@1
 
 MolP-PC 的输入和输出本质都是分子表。输入表至少包含 `SMILES`，输出表是在同一分子 ID 上追加

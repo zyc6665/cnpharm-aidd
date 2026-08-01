@@ -1,4 +1,4 @@
-# Tool Package v1 编写指南
+# Tool Package 编写指南
 
 Tool Package 是平台工具扩展的稳定边界。一个包应描述科学语义、运行变体和
 Artifact 契约，而不是携带集群地址、凭据或宿主机目录。
@@ -23,6 +23,18 @@ Artifact 契约，而不是携带集群地址、凭据或宿主机目录。
 
 NVIDIA 变体必须声明设备和驱动要求。没有海光 DCU 真机时只能使用
 `adapted_pending_hardware_validation`，不得将代码适配等同于硬件验证。
+
+## Tool Package v2 Runtime Env
+
+新模型工具优先使用 `aidd.sciminer/tool-package.v2`。v2 manifest 必须声明 `runtime`：
+
+- `runtime.artifacts.primary`：首选 container，必须包含镜像名称和镜像 digest。
+- `runtime.artifacts.fallback`：无容器执行器使用的 conda-pack 或 venv-pack，必须包含 URI 和 SHA-256。
+- `runtime.weights`：权重 manifest URI 和 SHA-256。
+- `runtime.cache_policy`：缓存 key 必须包含运行环境 digest 和权重 manifest SHA。
+
+Executor 不安装依赖，不运行 `pip install` 或 `conda install`，也不依赖宿主机私有 conda 路径。
+平台只根据 manifest 选择已验证 Runtime Env，并把标准输入、输出目录、工作目录和权重挂载给 runner。
 
 ## AI 辅助打包
 

@@ -8,6 +8,8 @@
   `molecule_table@1`、`ligand_structure@1`、`run_report@1`。
 - 不要重新引入 `semantic_inputs`、`semantic_outputs` 或旧版语义映射作为新工具主路径。
 - 不要写入凭据、私有地址、宿主机绝对路径或真实生产样例数据。
+- `tool.yaml.runtime` 必须声明 Runtime Env、镜像 digest、fallback SHA、权重 manifest 和缓存 key。
+- Executor 不安装依赖，不依赖宿主机私有 conda 路径。
 - 硬件没真机验证前，不要把对应 variant 标记为 `validated`。
 
 完成适配时至少提供：

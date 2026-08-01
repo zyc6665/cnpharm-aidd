@@ -53,6 +53,89 @@ def _manifest() -> dict:
     }
 
 
+def _v2_manifest() -> dict:
+    return {
+        "api_version": "aidd.sciminer/tool-package.v2",
+        "kind": "ToolPackage",
+        "metadata": {
+            "slug": "molp-pc-runtime-test",
+            "name": "MolP-PC Runtime Test",
+            "version": "1.0.0",
+        },
+        "artifacts": {
+            "inputs": [
+                {"name": "molecules", "type": "molecule_table@1", "required": True}
+            ],
+            "outputs": [
+                {
+                    "name": "properties",
+                    "type": "molecule_table@1",
+                    "cardinality": "one",
+                    "required": True,
+                }
+            ],
+        },
+        "parameters_schema": {"type": "object", "properties": {}},
+        "adapter": {
+            "input": [{"input": "molecules", "method": "mount_molecule_table"}],
+            "output": [
+                {
+                    "output": "properties",
+                    "method": "collect_prediction_table",
+                    "validator_profile": "molecule_table_v1_core",
+                }
+            ],
+        },
+        "exposure": {"agent": True, "workflow": True, "direct_run": True},
+        "runtime": {
+            "python": "3.8",
+            "cuda": "11.3",
+            "executor_support": ["ssh_docker_exec", "slurm", "k8s_job"],
+            "selection_policy": (
+                "prefer container image by immutable digest; fallback to conda_pack"
+            ),
+            "artifacts": {
+                "primary": {
+                    "kind": "container",
+                    "image": "registry.example/sciminer/molp-pc-runtime:1.0.0",
+                    "image_digest": f"sha256:{'d' * 64}",
+                    "includes": ["python", "cuda_runtime", "dependencies"],
+                },
+                "fallback": {
+                    "kind": "conda_pack",
+                    "uri": "artifacts://model-envs/molp-pc/1.0.0/env.tar.gz",
+                    "sha256": "e" * 64,
+                    "includes": ["python", "dependencies"],
+                },
+            },
+            "weights": {
+                "manifest_uri": "artifacts://model-weights/molp-pc/1.0.0/weights.json",
+                "manifest_sha256": "f" * 64,
+            },
+            "cache_policy": {
+                "key_fields": [
+                    "metadata.slug",
+                    "metadata.version",
+                    "runtime.artifacts.selected.digest_or_sha256",
+                    "runtime.weights.manifest_sha256",
+                ],
+                "mutable_host_paths_forbidden": True,
+            },
+        },
+        "variants": [
+            {
+                "name": "cpu",
+                "accelerator": "cpu",
+                "executor_types": ["remote_job"],
+                "entrypoint": ["runner/entrypoint.sh"],
+                "resources": {"cpu": 2, "memory_mb": 4096},
+                "validation_status": "unvalidated",
+                "hardware_validated": False,
+            }
+        ],
+    }
+
+
 @pytest_asyncio.fixture
 async def package_db() -> AsyncSession:
     engine = create_async_engine(
@@ -137,6 +220,25 @@ async def test_admin_creates_and_reads_validated_tool_package(
         fetched.json()["data"]["current_version"]["manifest"]["metadata"]["version"]
         == "1.0.0"
     )
+
+
+@pytest.mark.asyncio
+async def test_admin_creates_v2_tool_package_with_runtime_metadata(
+    package_client: httpx.AsyncClient,
+):
+    created = await package_client.post(
+        "/api/v1/tool-packages",
+        headers={"Authorization": "Bearer admin"},
+        json={"manifest": _v2_manifest()},
+    )
+
+    assert created.status_code == 200
+    data = created.json()["data"]
+    manifest = data["current_version"]["manifest"]
+    assert data["slug"] == "molp-pc-runtime-test"
+    assert manifest["api_version"] == "aidd.sciminer/tool-package.v2"
+    assert manifest["runtime"]["artifacts"]["primary"]["image_digest"] == f"sha256:{'d' * 64}"
+    assert manifest["runtime"]["weights"]["manifest_sha256"] == "f" * 64
 
 
 @pytest.mark.asyncio

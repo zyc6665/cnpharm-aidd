@@ -62,6 +62,41 @@ def _v2_manifest() -> dict:
             ],
         },
         "exposure": {"agent": True, "workflow": True, "direct_run": True},
+        "runtime": {
+            "python": "3.10",
+            "cuda": "11.8",
+            "executor_support": ["ssh_docker_exec", "slurm", "k8s_job"],
+            "selection_policy": (
+                "prefer container image by immutable digest; fallback to conda_pack"
+            ),
+            "artifacts": {
+                "primary": {
+                    "kind": "container",
+                    "image": "registry.example/sciminer/lvpocket-runtime:1.0.0",
+                    "image_digest": f"sha256:{'a' * 64}",
+                    "includes": ["python", "cuda_runtime", "dependencies"],
+                },
+                "fallback": {
+                    "kind": "conda_pack",
+                    "uri": "artifacts://model-envs/lvpocket-standard/1.0.0/env.tar.gz",
+                    "sha256": "b" * 64,
+                    "includes": ["python", "dependencies"],
+                },
+            },
+            "weights": {
+                "manifest_uri": "artifacts://model-weights/lvpocket-standard/1.0.0/weights.json",
+                "manifest_sha256": "c" * 64,
+            },
+            "cache_policy": {
+                "key_fields": [
+                    "metadata.slug",
+                    "metadata.version",
+                    "runtime.artifacts.selected.digest_or_sha256",
+                    "runtime.weights.manifest_sha256",
+                ],
+                "mutable_host_paths_forbidden": True,
+            },
+        },
         "variants": [
             {
                 "name": "cuda",
@@ -87,7 +122,49 @@ def test_v2_manifest_accepts_standard_artifact_refs_and_cardinality():
 
     assert manifest.artifacts.inputs[0].type == "protein_structure@1"
     assert manifest.artifacts.outputs[0].cardinality == "one"
+    assert manifest.runtime.artifacts.primary.image_digest == f"sha256:{'a' * 64}"
     assert result.is_valid is True
+
+
+def test_v2_manifest_requires_runtime_env_metadata():
+    raw = _v2_manifest()
+    raw.pop("runtime")
+
+    with pytest.raises(ValidationError):
+        ToolPackageV2Manifest.model_validate(raw)
+
+
+def test_v2_validator_rejects_runtime_without_immutable_image_digest():
+    raw = _v2_manifest()
+    raw["runtime"]["artifacts"]["primary"]["image_digest"] = ""
+    manifest = ToolPackageV2Manifest.model_validate(raw)
+
+    result = validate_tool_package(manifest)
+
+    assert result.is_valid is False
+    assert any("image_digest" in error and "sha256" in error for error in result.errors)
+
+
+def test_v2_validator_rejects_runtime_without_fallback_sha256():
+    raw = _v2_manifest()
+    raw["runtime"]["artifacts"]["fallback"]["sha256"] = ""
+    manifest = ToolPackageV2Manifest.model_validate(raw)
+
+    result = validate_tool_package(manifest)
+
+    assert result.is_valid is False
+    assert any("fallback" in error and "sha256" in error for error in result.errors)
+
+
+def test_v2_validator_rejects_runtime_without_weight_manifest_sha256():
+    raw = _v2_manifest()
+    raw["runtime"]["weights"]["manifest_sha256"] = ""
+    manifest = ToolPackageV2Manifest.model_validate(raw)
+
+    result = validate_tool_package(manifest)
+
+    assert result.is_valid is False
+    assert any("weights" in error and "sha256" in error for error in result.errors)
 
 
 def test_v2_manifest_rejects_legacy_semantic_artifact_fields():

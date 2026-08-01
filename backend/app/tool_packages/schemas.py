@@ -155,6 +155,52 @@ class ExposureDeclaration(BaseModel):
     direct_run: bool = True
 
 
+class RuntimeArtifactManifest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["container", "conda_pack", "venv_pack"]
+    image: str | None = Field(default=None, min_length=1, max_length=500)
+    image_digest: str | None = Field(default=None, max_length=80)
+    uri: str | None = Field(default=None, min_length=1, max_length=500)
+    sha256: str | None = Field(default=None, max_length=64)
+    includes: list[str] = Field(default_factory=list)
+
+
+class RuntimeArtifactsManifest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    primary: RuntimeArtifactManifest
+    fallback: RuntimeArtifactManifest
+
+
+class RuntimeWeightsManifest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    manifest_uri: str = Field(min_length=1, max_length=500)
+    manifest_sha256: str = Field(max_length=64)
+
+
+class RuntimeCachePolicyManifest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    key_fields: list[str] = Field(min_length=1)
+    mutable_host_paths_forbidden: bool = True
+
+
+class RuntimeEnvManifest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    python: str = Field(min_length=1, max_length=32)
+    cuda: str | None = Field(default=None, min_length=1, max_length=32)
+    executor_support: list[Literal["ssh_docker_exec", "slurm", "k8s_job"]] = Field(
+        min_length=1
+    )
+    selection_policy: str = Field(min_length=1, max_length=500)
+    artifacts: RuntimeArtifactsManifest
+    weights: RuntimeWeightsManifest
+    cache_policy: RuntimeCachePolicyManifest
+
+
 class ToolPackageManifest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -175,6 +221,7 @@ class ToolPackageV2Manifest(BaseModel):
     parameters_schema: dict[str, Any] = Field(default_factory=dict)
     adapter: AdapterDeclaration = Field(default_factory=AdapterDeclaration)
     exposure: ExposureDeclaration = Field(default_factory=ExposureDeclaration)
+    runtime: RuntimeEnvManifest
     variants: list[ToolVariantManifestV2] = Field(min_length=1)
 
 

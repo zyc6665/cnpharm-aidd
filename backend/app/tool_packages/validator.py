@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from collections.abc import Sequence
 
@@ -17,6 +18,10 @@ from app.tool_packages.schemas import (
     ToolPackageV2Manifest,
     ValidationStatus,
 )
+
+
+_IMAGE_DIGEST_RE = re.compile(r"^sha256:[a-f0-9]{64}$")
+_SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
 
 
 class ToolPackageValidationResult(BaseModel):
@@ -107,6 +112,8 @@ def _validate_tool_package_v2(manifest: ToolPackageV2Manifest) -> ToolPackageVal
         if adapter_output.output not in declared_outputs:
             errors.append(f"adapter.output references unknown output: {adapter_output.output}")
 
+    _validate_runtime_env(manifest, errors)
+
     for variant in manifest.variants:
         if variant.accelerator == Accelerator.NVIDIA_CUDA:
             if not variant.resources.devices:
@@ -126,6 +133,43 @@ def _validate_tool_package_v2(manifest: ToolPackageV2Manifest) -> ToolPackageVal
             )
 
     return ToolPackageValidationResult(is_valid=not errors, errors=_dedupe(errors))
+
+
+def _validate_runtime_env(manifest: ToolPackageV2Manifest, errors: list[str]) -> None:
+    runtime = manifest.runtime
+    primary = runtime.artifacts.primary
+    fallback = runtime.artifacts.fallback
+
+    if primary.kind != "container":
+        errors.append("runtime.artifacts.primary.kind must be container")
+    if not primary.image:
+        errors.append("runtime.artifacts.primary.image is required")
+    if not primary.image_digest or not _IMAGE_DIGEST_RE.fullmatch(primary.image_digest):
+        errors.append("runtime.artifacts.primary.image_digest must be sha256:<64 hex>")
+
+    if fallback.kind not in {"conda_pack", "venv_pack"}:
+        errors.append("runtime.artifacts.fallback.kind must be conda_pack or venv_pack")
+    if not fallback.uri:
+        errors.append("runtime.artifacts.fallback.uri is required")
+    if not fallback.sha256 or not _SHA256_RE.fullmatch(fallback.sha256):
+        errors.append("runtime.artifacts.fallback.sha256 must be 64 hex")
+
+    weights = runtime.weights
+    if not weights.manifest_uri:
+        errors.append("runtime.weights.manifest_uri is required")
+    if not weights.manifest_sha256 or not _SHA256_RE.fullmatch(weights.manifest_sha256):
+        errors.append("runtime.weights.manifest_sha256 must be 64 hex")
+
+    cache_policy = runtime.cache_policy
+    if not cache_policy.mutable_host_paths_forbidden:
+        errors.append("runtime.cache_policy.mutable_host_paths_forbidden must be true")
+    required_cache_keys = {
+        "runtime.artifacts.selected.digest_or_sha256",
+        "runtime.weights.manifest_sha256",
+    }
+    missing_cache_keys = required_cache_keys - set(cache_policy.key_fields)
+    for key in sorted(missing_cache_keys):
+        errors.append(f"runtime.cache_policy.key_fields must include {key}")
 
 
 def _dedupe(errors: list[str]) -> list[str]:

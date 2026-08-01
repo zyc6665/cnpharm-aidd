@@ -30,9 +30,11 @@
 3. 在 adapter 中实现输入转换：把平台 request 里的标准 Artifact 文件挂载或复制到旧模型需要的位置。
 4. 执行旧模型原始入口，不改变平台 request/result 格式。
 5. 在 adapter 中实现输出转换：把旧模型输出转为 `binding_pocket@1` 的三个标准文件角色。
-6. 更新 `schemas/result.v2.example.json` 和 `examples/output/result.json` 的路径、哈希与 metadata。
-7. 补充包内契约测试，覆盖至少一个成功输出和一个缺失必需文件的失败路径。
-8. 运行验证命令，失败时修 adapter 或测试，不要放宽平台契约。
+6. 更新 `tool.yaml.runtime`：Runtime Env 必须包含镜像 digest、conda-pack/venv-pack fallback、
+   权重 manifest SHA-256 和缓存 key；Executor 不安装依赖。
+7. 更新 `schemas/result.v2.example.json` 和 `examples/output/result.json` 的路径、哈希与 metadata。
+8. 补充包内契约测试，覆盖至少一个成功输出和一个缺失必需文件的失败路径。
+9. 运行验证命令，失败时修 adapter 或测试，不要放宽平台契约。
 
 ## LVpocket 特别要求
 
@@ -47,3 +49,4 @@
 - 禁止把运行设备作为必填业务参数；设备属于 variant 执行上下文。
 - 禁止声明未验证硬件为 `validated`。
 - 禁止提交凭据、私有地址、宿主机绝对路径或无法复现的本地文件引用。
+- 禁止把宿主机 conda 路径当成 Runtime Env；必须在 manifest 中声明可校验的运行环境产物。

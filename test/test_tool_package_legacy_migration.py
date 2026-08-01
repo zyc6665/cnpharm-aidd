@@ -50,6 +50,34 @@ def test_v2_validator_rejects_legacy_alias_even_when_migration_exists() -> None:
                 "inputs": [{"name": "protein", "type": "protein_pdb"}],
                 "outputs": [{"name": "pocket", "type": "pocket_result"}],
             },
+            "runtime": {
+                "python": "3.10",
+                "executor_support": ["ssh_docker_exec"],
+                "selection_policy": "prefer container image by immutable digest",
+                "artifacts": {
+                    "primary": {
+                        "kind": "container",
+                        "image": "registry.example/sciminer/legacy-alias:1.0.0",
+                        "image_digest": f"sha256:{'a' * 64}",
+                    },
+                    "fallback": {
+                        "kind": "conda_pack",
+                        "uri": "artifacts://model-envs/legacy-alias/1.0.0/env.tar.gz",
+                        "sha256": "b" * 64,
+                    },
+                },
+                "weights": {
+                    "manifest_uri": "artifacts://model-weights/legacy-alias/1.0.0/weights.json",
+                    "manifest_sha256": "c" * 64,
+                },
+                "cache_policy": {
+                    "key_fields": [
+                        "runtime.artifacts.selected.digest_or_sha256",
+                        "runtime.weights.manifest_sha256",
+                    ],
+                    "mutable_host_paths_forbidden": True,
+                },
+            },
             "variants": [
                 {
                     "name": "cpu",

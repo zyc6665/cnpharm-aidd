@@ -90,6 +90,9 @@ def test_platformization_template_prompt_keeps_platform_contract_fixed():
     assert "binding_pocket@1" in combined
     assert "residue_pocket_pdb" in combined
     assert "atom_pocket_pdb" in combined
+    assert "Runtime Env" in combined
+    assert "镜像 digest" in combined
+    assert "Executor 不安装依赖" in combined
 
 
 def test_platformization_template_does_not_embed_secrets_or_host_paths():

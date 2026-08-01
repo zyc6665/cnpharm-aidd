@@ -54,6 +54,41 @@ exposure:
   agent: true
   workflow: true
   direct_run: true
+runtime:
+  python: "3.10"
+  cuda: "11.8"
+  executor_support:
+    - ssh_docker_exec
+    - slurm
+    - k8s_job
+  selection_policy: "prefer container image by immutable digest; fallback to conda_pack only when the executor cannot run containers"
+  artifacts:
+    primary:
+      kind: container
+      image: registry.example/sciminer/pocket2mol-runtime:1.0.0
+      image_digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      includes:
+        - python
+        - cuda_runtime
+        - dependencies
+        - runtime_wrapper
+    fallback:
+      kind: conda_pack
+      uri: artifacts://model-envs/pocket2mol-standard-generation/1.0.0/conda-env.tar.gz
+      sha256: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      includes:
+        - python
+        - dependencies
+  weights:
+    manifest_uri: artifacts://model-weights/pocket2mol-standard-generation/1.0.0/weights.json
+    manifest_sha256: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  cache_policy:
+    key_fields:
+      - metadata.slug
+      - metadata.version
+      - runtime.artifacts.selected.digest_or_sha256
+      - runtime.weights.manifest_sha256
+    mutable_host_paths_forbidden: true
 variants:
   - name: nvidia-cuda
     accelerator: nvidia_cuda
