@@ -30,6 +30,7 @@ from app.services.tool_contracts import (
     tool_contract_to_agent_summary,
 )
 from app.services.semantic_types import normalize_semantic_type
+from app.tool_packages.schemas import ToolPackageV2Manifest
 
 
 AGENT_CAPABILITY_CONFIG_KEY = "agent_capability"
@@ -133,9 +134,50 @@ def capability_from_config(tool_slug: str, config: dict[str, Any]) -> ToolCapabi
     )
 
 
+def capability_from_tool_package_config(tool_slug: str, config: dict[str, Any]) -> ToolCapability | None:
+    """Build a ToolCapability from a Tool Package v2 standard Artifact contract."""
+    manifest = _tool_package_v2_manifest_from_config(config)
+    if manifest is None or manifest.exposure.agent is not True:
+        return None
+
+    inputs = tuple(
+        CapabilityInput(
+            item.type,
+            item.name,
+            required=item.required,
+        )
+        for item in manifest.artifacts.inputs
+    )
+    outputs = tuple(
+        CapabilityOutput(
+            item.type,
+            "artifact",
+            match=OutputMatch(content_type=item.type),
+            required=item.required,
+        )
+        for item in manifest.artifacts.outputs
+    )
+    if not inputs or not outputs:
+        return None
+
+    return ToolCapability(
+        tool_slug=tool_slug,
+        capability=manifest.metadata.slug,
+        stage=manifest.metadata.slug,
+        inputs=inputs,
+        outputs=outputs,
+        defaults={},
+        virtual=False,
+    )
+
+
 def capability_from_tool(tool: Tool) -> ToolCapability | None:
     """Resolve a platform tool capability from current version config or legacy static registry."""
     config = tool.current_version.config if tool.current_version is not None else {}
+    package_capability = capability_from_tool_package_config(tool.slug, config or {})
+    if package_capability is not None:
+        return package_capability
+
     dynamic_capability = capability_from_config(tool.slug, config or {})
     if dynamic_capability is not None:
         return dynamic_capability
@@ -179,6 +221,20 @@ def _tool_is_agent_available(tool: Tool) -> bool:
     )
 
 
+def _tool_package_v2_manifest_from_config(config: dict[str, Any]) -> ToolPackageV2Manifest | None:
+    if not isinstance(config, dict):
+        return None
+    manifest_data = config.get("tool_package_manifest")
+    tool_package_config = config.get("tool_package")
+    if not isinstance(manifest_data, dict) and isinstance(tool_package_config, dict):
+        manifest_data = tool_package_config.get("manifest")
+    if not isinstance(manifest_data, dict):
+        return None
+    if manifest_data.get("api_version") != "aidd.sciminer/tool-package.v2":
+        return None
+    return ToolPackageV2Manifest.model_validate(manifest_data)
+
+
 # ---------------------------------------------------------------------------
 # DB-first capability loading (primary path)
 # ---------------------------------------------------------------------------
@@ -220,7 +276,11 @@ async def load_available_tool_capabilities(db: AsyncSession) -> list[ToolCapabil
     for tool in result.scalars().all():
         if not _tool_is_agent_available(tool):
             continue
-        capability = db_caps.get(tool.id) or capability_from_tool(tool)
+        package_capability = capability_from_tool_package_config(
+            tool.slug,
+            tool.current_version.config if tool.current_version is not None else {},
+        )
+        capability = package_capability or db_caps.get(tool.id) or capability_from_tool(tool)
         if capability is None:
             continue
         capabilities.append(
@@ -289,6 +349,16 @@ async def load_tool_capability(db: AsyncSession, tool_slug: str) -> ToolCapabili
     tool = tool_result.scalar_one_or_none()
 
     if tool:
+        if not _tool_is_agent_available(tool):
+            raise ValidationException(f"智能体工具不可用: {tool_slug}")
+
+        package_capability = capability_from_tool_package_config(
+            tool.slug,
+            tool.current_version.config if tool.current_version is not None else {},
+        )
+        if package_capability is not None:
+            return package_capability
+
         db_result = await db.execute(
             select(TCM).where(
                 TCM.tool_id == tool.id,
@@ -311,8 +381,6 @@ async def load_tool_capability(db: AsyncSession, tool_slug: str) -> ToolCapabili
     # 3. Fallback: config-based + static registry
     if not tool:
         raise ValidationException(f"智能体工具未配置: {tool_slug}")
-    if not _tool_is_agent_available(tool):
-        raise ValidationException(f"智能体工具不可用: {tool_slug}")
 
     capability = capability_from_tool(tool)
     if capability is None:

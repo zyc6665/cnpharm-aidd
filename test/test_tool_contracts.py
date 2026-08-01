@@ -14,6 +14,49 @@ from app.agents.aidd.registry import capability_to_tool_summary
 from app.services.tool_contracts import build_tool_contract, collect_tool_contract_validation_errors
 
 
+def _v2_manifest(*, agent_exposure: bool = True) -> dict:
+    return {
+        "api_version": "aidd.sciminer/tool-package.v2",
+        "kind": "ToolPackage",
+        "metadata": {
+            "slug": "lvpocket-standard",
+            "name": "LVpocket Standard",
+            "version": "1.0.0",
+            "description": "Standard pocket adapter",
+        },
+        "artifacts": {
+            "inputs": [{"name": "protein", "type": "protein_structure@1", "required": True}],
+            "outputs": [
+                {
+                    "name": "pocket",
+                    "type": "binding_pocket@1",
+                    "cardinality": "one",
+                    "required": True,
+                },
+                {
+                    "name": "report",
+                    "type": "run_report@1",
+                    "cardinality": "one",
+                    "required": False,
+                },
+            ],
+        },
+        "parameters_schema": {
+            "type": "object",
+            "properties": {"threshold": {"type": "number"}},
+        },
+        "exposure": {"agent": agent_exposure, "workflow": True, "direct_run": True},
+        "variants": [
+            {
+                "name": "cpu",
+                "accelerator": "cpu",
+                "executor_types": ["cli"],
+                "entrypoint": ["/app/runner/entrypoint.sh"],
+            }
+        ],
+    }
+
+
 def test_build_tool_contract_normalizes_identity_executor_schema_and_capability():
     tool = SimpleNamespace(
         id="tool-1",
@@ -116,6 +159,46 @@ def test_tool_contract_normalizes_legacy_semantic_aliases():
 
     assert contract["capability"]["inputs"][0]["semantic_type"] == "protein_pdb"
     assert contract["capability"]["outputs"][0]["semantic_type"] == "pocket_pdb"
+
+
+def test_tool_package_v2_contract_exposes_standard_artifact_slots_without_mappings():
+    tool = SimpleNamespace(
+        id="tool-v2",
+        slug="lvpocket-standard",
+        name="LVpocket Standard",
+        description="Standard pocket adapter",
+        status="published",
+        is_public=True,
+        current_version=SimpleNamespace(
+            id="version-v2",
+            version="1.0.0",
+            is_active=True,
+            deprecated=False,
+            config={"type": "python_script", "tool_package_manifest": _v2_manifest()},
+        ),
+    )
+
+    contract = build_tool_contract(tool)
+
+    assert contract["artifacts"]["inputs"] == [
+        {"name": "protein", "type": "protein_structure@1", "required": True}
+    ]
+    assert contract["artifacts"]["outputs"][0] == {
+        "name": "pocket",
+        "type": "binding_pocket@1",
+        "cardinality": "one",
+        "required": True,
+    }
+    assert contract["exposure"] == {"agent": True, "workflow": True, "direct_run": True}
+    assert contract["schema"]["input"]["properties"]["threshold"]["type"] == "number"
+    assert contract["capability"]["inputs"][0] == {
+        "semantic_type": "protein_structure@1",
+        "field": "protein",
+        "required": True,
+        "accepted_extensions": [],
+    }
+    assert contract["capability"]["outputs"][0]["semantic_type"] == "binding_pocket@1"
+    assert contract["capability"]["outputs"][0]["source"] == "artifact"
 
 
 def test_planner_available_tools_use_contract_slug_as_source_of_truth():

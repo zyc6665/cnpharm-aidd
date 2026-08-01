@@ -14,7 +14,7 @@ SUPPORTED_TOOL_EXECUTOR_TYPES = {"remote_api", "docker_image", "python_script", 
 def build_tool_contract(tool: Any, *, capability: Any | None = None) -> dict[str, Any]:
     """Build the stable platform-facing contract for a persisted tool."""
     current_version = getattr(tool, "current_version", None)
-    package_manifest = getattr(current_version, "manifest", None)
+    package_manifest = _package_manifest_from_version(current_version)
     if isinstance(package_manifest, dict):
         return _build_tool_package_contract(tool, current_version, package_manifest)
     config = getattr(current_version, "config", None)
@@ -49,7 +49,10 @@ def _build_tool_package_contract(
     current_version: Any,
     manifest: dict[str, Any],
 ) -> dict[str, Any]:
-    """Project Tool Package v1 onto the legacy stable contract shape."""
+    """Project a Tool Package manifest onto the stable contract shape."""
+    if manifest.get("api_version") == "aidd.sciminer/tool-package.v2":
+        return _build_tool_package_v2_contract(package, current_version, manifest)
+
     metadata = manifest.get("metadata") if isinstance(manifest.get("metadata"), dict) else {}
     artifacts = manifest.get("artifacts") if isinstance(manifest.get("artifacts"), dict) else {}
     variants = [item for item in manifest.get("variants", []) if isinstance(item, dict)]
@@ -116,6 +119,56 @@ def _build_tool_package_contract(
     }
 
 
+def _build_tool_package_v2_contract(
+    package: Any,
+    current_version: Any,
+    manifest: dict[str, Any],
+) -> dict[str, Any]:
+    metadata = manifest.get("metadata") if isinstance(manifest.get("metadata"), dict) else {}
+    artifacts = manifest.get("artifacts") if isinstance(manifest.get("artifacts"), dict) else {}
+    variants = [item for item in manifest.get("variants", []) if isinstance(item, dict)]
+    inputs = [item for item in artifacts.get("inputs", []) if isinstance(item, dict)]
+    outputs = [item for item in artifacts.get("outputs", []) if isinstance(item, dict)]
+    exposure = _exposure_contract(manifest.get("exposure"))
+    validation_errors = list(getattr(current_version, "validation_errors", None) or [])
+    validation_status = getattr(current_version, "validation_status", None)
+    return {
+        "contract_version": TOOL_CONTRACT_VERSION,
+        "id": getattr(package, "id", None),
+        "slug": getattr(package, "slug", None) or metadata.get("slug"),
+        "name": getattr(package, "name", None) or metadata.get("name"),
+        "description": getattr(package, "description", None) or metadata.get("description"),
+        "status": getattr(package, "status", None),
+        "is_public": _is_public_package_or_tool(package),
+        "version": {
+            "id": getattr(current_version, "id", None),
+            "version": getattr(current_version, "version", None) or metadata.get("version"),
+            "is_active": getattr(current_version, "is_active", True),
+            "deprecated": getattr(current_version, "deprecated", False),
+        },
+        "executor": {
+            "type": "tool_package",
+            "timeout_sec": None,
+        },
+        "schema": {"input": _schema_object(manifest.get("parameters_schema")), "output": {}},
+        "artifacts": {
+            "inputs": [_artifact_input_slot(item) for item in inputs],
+            "outputs": [_artifact_output_slot(item) for item in outputs],
+        },
+        "exposure": exposure,
+        "capability": _capability_from_v2_manifest(metadata, inputs, outputs, exposure),
+        "package": {
+            "api_version": manifest.get("api_version"),
+            "kind": manifest.get("kind"),
+        },
+        "variants": variants,
+        "validation": {
+            "status": "valid" if _version_valid(validation_status, validation_errors) else "invalid",
+            "errors": validation_errors,
+        },
+    }
+
+
 def build_virtual_tool_contract(capability: Any) -> dict[str, Any]:
     """Build a contract for an Agent-only virtual tool."""
     slug = getattr(capability, "tool_slug", None)
@@ -143,6 +196,7 @@ def tool_contract_to_agent_summary(contract: dict[str, Any]) -> dict[str, Any]:
     """Convert a ToolContract into the current planner-facing Agent summary."""
     capability = contract.get("capability") if isinstance(contract.get("capability"), dict) else {}
     tool_version = contract.get("version") if isinstance(contract.get("version"), dict) else None
+    artifacts = contract.get("artifacts") if isinstance(contract.get("artifacts"), dict) else {}
     slug = str(contract.get("slug") or "")
     return {
         "id": contract.get("id"),
@@ -167,6 +221,10 @@ def tool_contract_to_agent_summary(contract: dict[str, Any]) -> dict[str, Any]:
         ],
         "defaults": dict(capability.get("defaults") or {}),
         "virtual": bool(capability.get("virtual")),
+        "artifacts": artifacts,
+        "artifact_inputs": list(artifacts.get("inputs") or []),
+        "artifact_outputs": list(artifacts.get("outputs") or []),
+        "exposure": dict(contract.get("exposure") or {}),
         "executor": contract.get("executor") or {},
         "validation": contract.get("validation") or {},
     }
@@ -279,6 +337,96 @@ def _executor_contract(tool: Any, config: dict[str, Any]) -> dict[str, Any]:
 
 def _schema_object(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
+
+
+def _package_manifest_from_version(current_version: Any | None) -> dict[str, Any] | None:
+    manifest = getattr(current_version, "manifest", None)
+    if isinstance(manifest, dict):
+        return manifest
+    config = getattr(current_version, "config", None)
+    if not isinstance(config, dict):
+        return None
+    manifest = config.get("tool_package_manifest")
+    tool_package_config = config.get("tool_package")
+    if not isinstance(manifest, dict) and isinstance(tool_package_config, dict):
+        manifest = tool_package_config.get("manifest")
+    return manifest if isinstance(manifest, dict) else None
+
+
+def _artifact_input_slot(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "name": item.get("name"),
+        "type": item.get("type"),
+        "required": bool(item.get("required", True)),
+    }
+
+
+def _artifact_output_slot(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "name": item.get("name"),
+        "type": item.get("type"),
+        "cardinality": item.get("cardinality") or "one",
+        "required": bool(item.get("required", True)),
+    }
+
+
+def _exposure_contract(value: Any) -> dict[str, bool]:
+    raw = value if isinstance(value, dict) else {}
+    return {
+        "agent": bool(raw.get("agent", True)),
+        "workflow": bool(raw.get("workflow", True)),
+        "direct_run": bool(raw.get("direct_run", True)),
+    }
+
+
+def _capability_from_v2_manifest(
+    metadata: dict[str, Any],
+    inputs: list[dict[str, Any]],
+    outputs: list[dict[str, Any]],
+    exposure: dict[str, bool],
+) -> dict[str, Any]:
+    return {
+        "enabled": bool(exposure.get("agent", True)),
+        "capability": metadata.get("slug"),
+        "stage": metadata.get("slug"),
+        "inputs": [
+            {
+                "semantic_type": item.get("type"),
+                "field": item.get("name"),
+                "required": bool(item.get("required", True)),
+                "accepted_extensions": [],
+            }
+            for item in inputs
+            if item.get("type") and item.get("name")
+        ],
+        "outputs": [
+            {
+                "semantic_type": item.get("type"),
+                "source": "artifact",
+                "match": {"artifact_type": item.get("type")},
+                "path": None,
+                "required": bool(item.get("required", True)),
+            }
+            for item in outputs
+            if item.get("type")
+        ],
+        "defaults": {},
+        "virtual": False,
+    }
+
+
+def _is_public_package_or_tool(package: Any) -> bool | None:
+    is_public = getattr(package, "is_public", None)
+    if is_public is not None:
+        return is_public
+    status = getattr(package, "status", None)
+    if status is None:
+        return None
+    return status == "published"
+
+
+def _version_valid(validation_status: Any, validation_errors: list[Any]) -> bool:
+    return validation_status in {None, "valid"} and not validation_errors
 
 
 def _capability_contract(

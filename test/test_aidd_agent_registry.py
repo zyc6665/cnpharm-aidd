@@ -24,6 +24,39 @@ from app.models.tools import Tool, ToolStatus, ToolVersion  # noqa: E402
 from app.models.users import User, UserRole, UserStatus  # noqa: E402
 
 
+def _v2_manifest(*, agent_exposure: bool = True) -> dict:
+    return {
+        "api_version": "aidd.sciminer/tool-package.v2",
+        "kind": "ToolPackage",
+        "metadata": {
+            "slug": "standard-pocket-tool",
+            "name": "Standard Pocket Tool",
+            "version": "1.0.0",
+        },
+        "artifacts": {
+            "inputs": [{"name": "protein", "type": "protein_structure@1", "required": True}],
+            "outputs": [
+                {
+                    "name": "pocket",
+                    "type": "binding_pocket@1",
+                    "cardinality": "one",
+                    "required": True,
+                }
+            ],
+        },
+        "parameters_schema": {"type": "object"},
+        "exposure": {"agent": agent_exposure, "workflow": True, "direct_run": True},
+        "variants": [
+            {
+                "name": "cpu",
+                "accelerator": "cpu",
+                "executor_types": ["cli"],
+                "entrypoint": ["/app/runner/entrypoint.sh"],
+            }
+        ],
+    }
+
+
 @pytest_asyncio.fixture
 async def db_session() -> AsyncSession:
     engine = create_async_engine(
@@ -119,6 +152,40 @@ async def create_tool_with_agent_config(
     return tool
 
 
+async def create_tool_with_v2_package_config(
+    db_session: AsyncSession,
+    owner: User,
+    *,
+    slug: str,
+    agent_exposure: bool = True,
+) -> Tool:
+    tool = Tool(
+        owner_id=owner.id,
+        name=slug,
+        slug=slug,
+        status=ToolStatus.PUBLISHED.value,
+        is_public=True,
+    )
+    db_session.add(tool)
+    await db_session.flush()
+
+    manifest = _v2_manifest(agent_exposure=agent_exposure)
+    manifest["metadata"]["slug"] = slug
+    version = ToolVersion(
+        tool_id=tool.id,
+        version="1.0.0",
+        config={"type": "python_script", "tool_package_manifest": manifest},
+        is_active=True,
+        deprecated=False,
+    )
+    db_session.add(version)
+    await db_session.flush()
+    tool.current_version_id = version.id
+    await db_session.commit()
+    await db_session.refresh(tool)
+    return tool
+
+
 @pytest.mark.asyncio
 async def test_dynamic_agent_capability_is_discovered_from_tool_config(
     db_session: AsyncSession,
@@ -134,6 +201,44 @@ async def test_dynamic_agent_capability_is_discovered_from_tool_config(
     assert dynamic["outputs"] == ["property_report"]
     assert dynamic["defaults"] == {"device": "cpu"}
     assert dynamic["virtual"] is False
+
+
+@pytest.mark.asyncio
+async def test_v2_tool_package_contract_is_discovered_without_agent_capability(
+    db_session: AsyncSession,
+    user: User,
+) -> None:
+    await create_tool_with_v2_package_config(db_session, user, slug="standard-pocket-tool")
+
+    summaries = await load_available_tool_summaries(db_session)
+    summary = next(item for item in summaries if item["tool_slug"] == "standard-pocket-tool")
+
+    assert summary["capability"] == "standard-pocket-tool"
+    assert summary["inputs"] == ["protein_structure@1"]
+    assert summary["outputs"] == ["binding_pocket@1"]
+    assert summary["artifact_inputs"] == [
+        {"name": "protein", "type": "protein_structure@1", "required": True}
+    ]
+    assert summary["artifact_outputs"][0]["name"] == "pocket"
+    assert summary["exposure"]["agent"] is True
+
+
+@pytest.mark.asyncio
+async def test_v2_tool_package_can_hide_from_agent_while_remaining_direct_runnable(
+    db_session: AsyncSession,
+    user: User,
+) -> None:
+    await create_tool_with_v2_package_config(
+        db_session,
+        user,
+        slug="direct-only-standard-tool",
+        agent_exposure=False,
+    )
+
+    summaries = await load_available_tool_summaries(db_session)
+    tool_slugs = {item["tool_slug"] for item in summaries}
+
+    assert "direct-only-standard-tool" not in tool_slugs
 
 
 @pytest.mark.asyncio
