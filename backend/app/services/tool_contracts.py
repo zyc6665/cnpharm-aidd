@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.services.semantic_types import normalize_semantic_type
+from app.artifact_standards.types import normalize_platform_artifact_type
 
 
 TOOL_CONTRACT_VERSION = "1.0"
@@ -403,7 +403,7 @@ def _capability_from_v2_manifest(
             {
                 "semantic_type": item.get("type"),
                 "source": "artifact",
-                "match": {"artifact_type": item.get("type")},
+                "match": {"type": item.get("type")},
                 "path": None,
                 "required": bool(item.get("required", True)),
             }
@@ -530,7 +530,7 @@ def _output_match_contract(match: Any | None) -> dict[str, Any] | None:
 def _semantic_type(value: Any) -> str | None:
     if value is None:
         return None
-    return normalize_semantic_type(str(value))
+    return normalize_platform_artifact_type(str(value))
 
 
 def _dedupe_errors(errors: list[str]) -> list[str]:

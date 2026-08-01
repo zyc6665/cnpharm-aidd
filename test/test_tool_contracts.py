@@ -110,8 +110,8 @@ def test_build_tool_contract_normalizes_identity_executor_schema_and_capability(
     assert contract["schema"]["input"]["required"] == ["pocket_pdb"]
     assert contract["schema"]["output"]["properties"]["success"]["type"] == "boolean"
     assert contract["capability"]["enabled"] is True
-    assert contract["capability"]["inputs"][0]["semantic_type"] == "pocket_pdb"
-    assert contract["capability"]["outputs"][0]["semantic_type"] == "generated_ligand"
+    assert contract["capability"]["inputs"][0]["semantic_type"] == "binding_pocket@1"
+    assert contract["capability"]["outputs"][0]["semantic_type"] == "ligand_structure@1"
 
 
 def test_agent_tool_summary_keeps_legacy_tool_slug_but_exposes_contract_slug():
@@ -120,8 +120,8 @@ def test_agent_tool_summary_keeps_legacy_tool_slug_but_exposes_contract_slug():
     assert summary["slug"] == "gcdm-pocket-generation"
     assert summary["tool_slug"] == "gcdm-pocket-generation"
     assert summary["capability"] == "molecule_generation"
-    assert summary["inputs"] == ["pocket_pdb"]
-    assert summary["outputs"] == ["generated_ligand", "smiles_csv"]
+    assert summary["inputs"] == ["binding_pocket@1"]
+    assert summary["outputs"] == ["ligand_structure@1", "molecule_table@1"]
 
 
 def test_tool_contract_normalizes_legacy_semantic_aliases():
@@ -157,8 +157,8 @@ def test_tool_contract_normalizes_legacy_semantic_aliases():
 
     contract = build_tool_contract(tool)
 
-    assert contract["capability"]["inputs"][0]["semantic_type"] == "protein_pdb"
-    assert contract["capability"]["outputs"][0]["semantic_type"] == "pocket_pdb"
+    assert contract["capability"]["inputs"][0]["semantic_type"] == "protein_structure@1"
+    assert contract["capability"]["outputs"][0]["semantic_type"] == "binding_pocket@1"
 
 
 def test_tool_package_v2_contract_exposes_standard_artifact_slots_without_mappings():
@@ -199,6 +199,7 @@ def test_tool_package_v2_contract_exposes_standard_artifact_slots_without_mappin
     }
     assert contract["capability"]["outputs"][0]["semantic_type"] == "binding_pocket@1"
     assert contract["capability"]["outputs"][0]["source"] == "artifact"
+    assert contract["capability"]["outputs"][0]["match"] == {"type": "binding_pocket@1"}
 
 
 def test_planner_available_tools_use_contract_slug_as_source_of_truth():

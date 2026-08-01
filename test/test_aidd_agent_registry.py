@@ -197,8 +197,8 @@ async def test_dynamic_agent_capability_is_discovered_from_tool_config(
     dynamic = next(item for item in summaries if item["tool_slug"] == "dynamic-admet")
 
     assert dynamic["capability"] == "property_prediction"
-    assert dynamic["inputs"] == ["smiles_csv"]
-    assert dynamic["outputs"] == ["property_report"]
+    assert dynamic["inputs"] == ["molecule_table@1"]
+    assert dynamic["outputs"] == ["run_report@1"]
     assert dynamic["defaults"] == {"device": "cpu"}
     assert dynamic["virtual"] is False
 
