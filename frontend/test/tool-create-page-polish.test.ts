@@ -95,3 +95,20 @@ test('工具创建页应以结构化数据编辑全部执行器 map 和 list 字
     assert.equal(source.includes(removedMarker), false, `legacy JSON field remains: ${removedMarker}`)
   }
 })
+
+test('工具创建页应突出 Tool Package v2 主路径并标记旧语义映射为兼容项', () => {
+  const source = readSource('src/views/tools/Create.vue')
+
+  for (const marker of [
+    'tool-package-primary-path',
+    'Tool Package v2',
+    '平台标准 Artifact 输入/输出槽',
+    '旧版 Agent 语义映射（兼容）',
+    '输入语义映射（兼容）',
+    '输出语义映射（兼容）',
+    'binding_pocket@1',
+    'ligand_structure@1'
+  ]) {
+    assert.equal(source.includes(marker), true, `missing unified contract marker ${marker}`)
+  }
+})

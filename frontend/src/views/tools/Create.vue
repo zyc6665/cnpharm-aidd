@@ -165,6 +165,14 @@
             <!-- 工具类型 -->
             <a-divider orientation="left">工具类型</a-divider>
 
+            <a-alert
+              class="tool-package-primary-path"
+              type="info"
+              show-icon
+              message="新工具主路径：Tool Package v2"
+              description="模型部署时通过 adapter 把原始输入输出转换为平台标准 Artifact 输入/输出槽；下方旧版 ToolVersion.config 表单仅用于兼容已有工具。"
+            />
+
             <a-form-item label="工具类型" name="tool_type">
               <a-radio-group v-model:value="formState.tool_type">
                 <a-radio value="remote_api">远程API</a-radio>
@@ -485,7 +493,7 @@
             </a-form-item>
 
             <!-- Agent 编排能力 -->
-            <a-divider orientation="left">Agent 编排能力</a-divider>
+            <a-divider orientation="left">旧版 Agent 语义映射（兼容）</a-divider>
 
             <a-form-item label="Agent 可用" name="agent_capability_enabled">
               <a-switch
@@ -494,7 +502,7 @@
               />
               <span class="switch-label">{{ formState.agent_capability_enabled ? '开启' : '关闭' }}</span>
               <template #extra>
-                <span class="form-extra">开启后，此工具会进入 AIDD Agent 动态工具注册表。</span>
+                <span class="form-extra">仅兼容旧工具；新工具应通过 Tool Package v2 声明标准 Artifact 输入/输出槽。</span>
               </template>
             </a-form-item>
 
@@ -525,7 +533,7 @@
 
               <div class="agent-capability-block">
                 <div class="agent-capability-header">
-                  <span>输入语义映射</span>
+                  <span>输入语义映射（兼容）</span>
                   <a-button size="small" @click="addAgentInput">
                     <PlusOutlined />
                     添加输入
@@ -538,7 +546,7 @@
                   class="agent-capability-row"
                 >
                   <a-col :span="7">
-                    <a-input v-model:value="input.semantic_type" placeholder="semantic_type，如 pocket_pdb" />
+                    <a-input v-model:value="input.semantic_type" placeholder="semantic_type，如 binding_pocket@1" />
                   </a-col>
                   <a-col :span="7">
                     <a-input v-model:value="input.field" placeholder="工具字段，如 protein_pdb" />
@@ -556,7 +564,7 @@
 
               <div class="agent-capability-block">
                 <div class="agent-capability-header">
-                  <span>输出语义映射</span>
+                  <span>输出语义映射（兼容）</span>
                   <a-button size="small" @click="addAgentOutput">
                     <PlusOutlined />
                     添加输出
@@ -569,7 +577,7 @@
                   class="agent-capability-row"
                 >
                   <a-col :span="5">
-                    <a-input v-model:value="output.semantic_type" placeholder="semantic_type，如 generated_ligand" />
+                    <a-input v-model:value="output.semantic_type" placeholder="semantic_type，如 ligand_structure@1" />
                   </a-col>
                   <a-col :span="4">
                     <a-select v-model:value="output.source">
@@ -1310,6 +1318,10 @@
   .form-extra {
     color: @text-color-light-tertiary;
     font-size: @font-size-sm;
+  }
+
+  .tool-package-primary-path {
+    margin-bottom: @spacing-lg;
   }
 
   .switch-label {
