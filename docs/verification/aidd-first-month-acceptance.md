@@ -81,7 +81,7 @@ git diff --check
 
 ## 尚未执行或待补项
 
-- Playwright 依赖入口已补齐：`cd frontend && npm run test:e2e:deps` 会安装 Chromium 及系统依赖；2026-08-01 已验证原始 `libnspr4.so` 阻断消失，AIDD 纵向流程和 200 节点白板浏览器规格通过。
+- Playwright 依赖入口已补齐：`cd frontend && npm run test:e2e:deps` 会安装 Chromium 及系统依赖；`cd frontend && npm run test:e2e` 会先 dry-run 检查运行时依赖，缺失时自动补齐后再启动浏览器测试。2026-08-01 已验证原始 `libnspr4.so` 阻断消失，AIDD 纵向流程和 200 节点白板浏览器规格通过。
 - 未执行 NVIDIA 真机 LVpocket 黄金样例；当前自动化使用 Fake ExecutionPort。
 - 未执行海光 DCU 真机验收。
 - 200 节点白板已有组件级固定尺寸、选择回归和 Playwright 浏览器规格；仍需在目标预发布硬件采集任务状态小于 3 秒的环境指标。

@@ -11,7 +11,17 @@ def test_frontend_exposes_playwright_dependency_install_script():
     assert install_script.exists()
 
     script = install_script.read_text(encoding="utf-8")
-    assert "playwright install --with-deps chromium" in script
+    assert "playwright install-deps \"${browser}\" --dry-run" in script
+    assert "npx playwright install \"${browser}\"" in script
+    assert "--ensure-runtime" in script
+    assert "libnspr4" in script
+    assert "libnss3" in script
+
+
+def test_frontend_e2e_command_self_heals_runtime_dependencies():
+    package_json = Path("frontend/package.json").read_text(encoding="utf-8")
+
+    assert "install-playwright-deps.sh --ensure-runtime && playwright test" in package_json
 
 
 def test_ci_installs_playwright_system_dependencies_before_e2e():

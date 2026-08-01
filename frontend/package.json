@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:e2e:deps": "bash ./scripts/install-playwright-deps.sh",
-    "test:e2e": "playwright test",
+    "test:e2e": "bash ./scripts/install-playwright-deps.sh --ensure-runtime && playwright test",
     "test:watch": "vitest"
   },
   "dependencies": {

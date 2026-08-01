@@ -15,7 +15,10 @@ test('frontend exposes a Playwright AIDD e2e test surface', () => {
   const researchFlowSpec = resolve(rootDir, 'e2e/aidd-research-flow.spec.ts')
   const boardPerformanceSpec = resolve(rootDir, 'e2e/research-board-performance.spec.ts')
 
-  assert.equal(packageJson.scripts['test:e2e'], 'playwright test')
+  assert.equal(
+    packageJson.scripts['test:e2e'],
+    'bash ./scripts/install-playwright-deps.sh --ensure-runtime && playwright test',
+  )
   assert.equal(packageJson.devDependencies['@playwright/test'].startsWith('^'), true)
   assert.equal(existsSync(playwrightConfig), true)
   assert.equal(existsSync(researchFlowSpec), true)
