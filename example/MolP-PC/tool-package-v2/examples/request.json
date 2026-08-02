@@ -3,7 +3,7 @@
   "task": {
     "id": "example-task",
     "tool_slug": "molp-pc-property-prediction",
-    "tool_version": "0.1.0"
+    "tool_version": "0.1.1"
   },
   "inputs": {
     "molecules": {

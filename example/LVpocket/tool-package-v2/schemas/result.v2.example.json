@@ -2,7 +2,7 @@
   "result_version": "aidd.sciminer/result.v2",
   "artifacts": {
     "pocket": {
-      "name": "example_binding_pocket",
+      "name": "example_lvpocket_binding_pocket",
       "type": "binding_pocket@1",
       "files": {
         "residue_pocket_pdb": {
@@ -17,28 +17,45 @@
         },
         "pocket_metadata_json": {
           "path": "artifacts/pocket/pocket_metadata.json",
-          "sha256": "4e330e80af3edb3c94502ab49f55211726d2f698d4bce85600863e79b8c0436c",
+          "sha256": "4a6c4a67f160f847d78decb016df518884c0356974c80d50546d0487d935a18c",
           "content_type": "application/json"
         }
       },
       "metadata": {
-        "center": [11.832, 13.224, 9.338],
+        "center": [
+          11.832,
+          13.224,
+          9.338
+        ],
         "bbox": {
-          "min": [11.104, 13.207, 9.245],
-          "max": [12.56, 13.241, 9.43]
+          "min": [
+            11.104,
+            13.207,
+            9.245
+          ],
+          "max": [
+            12.56,
+            13.241,
+            9.43
+          ]
         },
-        "residue_ids": ["A:10"],
-        "atom_ids": [1, 2],
+        "residue_ids": [
+          "A:10"
+        ],
+        "atom_ids": [
+          1,
+          2
+        ],
         "source_protein_ref": "input:protein"
       }
     },
     "report": {
-      "name": "example_lvpocket_report",
+      "name": "example_lvpocket_adapter_report",
       "type": "run_report@1",
       "files": {
         "report_json": {
           "path": "reports/report.json",
-          "sha256": "e4280052b6213e18324e5385f70eea426752b4d060aaba1a546723a75f5cc02c",
+          "sha256": "df47e71af8b4a948dc8e2c6c529ed7bc7395d5b64074ff3a804e945a56a0f3c3",
           "content_type": "application/json"
         }
       },

@@ -89,7 +89,7 @@ variants:
     executor_types:
       - remote_job
     entrypoint:
-      - runner/entrypoint.sh
+      - runner/platform_run_v2.sh
     resources:
       cpu: 8
       memory_mb: 16384
@@ -100,7 +100,7 @@ variants:
     executor_types:
       - remote_job
     entrypoint:
-      - runner/entrypoint.sh
+      - runner/platform_run_v2.sh
     resources:
       cpu: 8
       memory_mb: 16384
@@ -108,14 +108,14 @@ variants:
       devices:
         - nvidia.com/gpu
       driver: ">=535"
-    validation_status: validated
-    hardware_validated: true
+    validation_status: unvalidated
+    hardware_validated: false
   - name: haiguang-dcu
     accelerator: haiguang_dcu
     executor_types:
       - remote_job
     entrypoint:
-      - runner/entrypoint.sh
+      - runner/platform_run_v2.sh
     resources:
       cpu: 8
       memory_mb: 16384

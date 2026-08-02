@@ -1,1 +1,27 @@
-{"center":[11.832,13.224,9.338],"bbox":{"min":[11.104,13.207,9.245],"max":[12.56,13.241,9.43]},"residue_ids":["A:10"],"atom_ids":[1,2],"source_protein_ref":"input:protein"}
+{
+  "center": [
+    11.832,
+    13.224,
+    9.338
+  ],
+  "bbox": {
+    "min": [
+      11.104,
+      13.207,
+      9.245
+    ],
+    "max": [
+      12.56,
+      13.241,
+      9.43
+    ]
+  },
+  "residue_ids": [
+    "A:10"
+  ],
+  "atom_ids": [
+    1,
+    2
+  ],
+  "source_protein_ref": "input:protein"
+}

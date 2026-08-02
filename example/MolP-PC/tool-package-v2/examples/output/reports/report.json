@@ -1,9 +1,8 @@
 {
-  "tool": "MolP-PC",
-  "adapter": "tool-package-v2",
-  "status": "example",
+  "tool": "molp-pc-property-prediction",
+  "adapter": "molp_pc_runtime",
+  "status": "succeeded",
   "source_task_id": "example-task",
-  "input_rows": 2,
   "predicted_rows": 2,
   "property_column_count": 55
 }

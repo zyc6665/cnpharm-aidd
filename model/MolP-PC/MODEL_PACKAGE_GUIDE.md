@@ -37,7 +37,7 @@ conda 环境路径，而是按 `MODEL_PACKAGE.yaml.runtime` 选择 Runtime Env�
 从仓库根目录运行轻量合同测试：
 
 ```bash
-pytest model/MolP-PC/tests/test_runtime_contract.py -q
+pytest model/MolP-PC/tests/test_molp_pc_runtime_contract.py -q
 ```
 
 真实模型 smoke test 需要先准备已验证的 Runtime Env 和 `predict/model/*.pth` 权重，然后运行：

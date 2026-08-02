@@ -1,0 +1,63 @@
+schema_version: sciminer.model-package.v1
+slug: msign-affinity-prediction
+name: MSIGN Protein-Ligand Affinity Runtime
+version: 0.1.1
+entrypoint: platform_run.sh
+runtime:
+  python: "3.9"
+  cuda: "11.3"
+  executor_support:
+    - ssh_docker_exec
+    - slurm
+    - k8s_job
+  selection_policy: "prefer container image by immutable digest; fallback to conda_pack only when the executor cannot run containers"
+  artifacts:
+    primary:
+      kind: container
+      image: registry.example/sciminer/msign-runtime:0.1.1
+      image_digest: sha256:<to-be-built-image-digest>
+      includes:
+        - python
+        - cuda_runtime
+        - dependencies
+        - runtime_wrapper
+    fallback:
+      kind: conda_pack
+      uri: artifacts://model-envs/msign-affinity-prediction/0.1.1/conda-env.tar.gz
+      sha256: <to-be-built-conda-pack-sha256>
+      includes:
+        - python
+        - dependencies
+  cache_policy:
+    key_fields:
+      - slug
+      - version
+      - runtime.artifacts.selected.digest_or_sha256
+      - weights.manifest_sha256
+    mutable_host_paths_forbidden: true
+model_code:
+  source_dir: original_model
+  wrapper_package: src/msign_runtime
+  legacy_entrypoint_env: MSIGN_LEGACY_ENTRYPOINT
+weights:
+  directory: weights
+  required_files:
+    - full_finetune_model.pt
+    - pretrain_general_model.pt
+standard_contract:
+  inputs:
+    - name: protein
+      type: protein_structure@1
+    - name: ligand
+      type: ligand_structure@1
+  outputs:
+    - name: affinity
+      type: molecule_table@1
+    - name: report
+      type: run_report@1
+excluded_from_git:
+  - weights/*
+  - original_model/*
+  - wheelhouse/*.whl
+  - deployment.local.*
+  - platform_tool.ssh_job.json

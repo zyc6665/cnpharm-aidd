@@ -31,8 +31,15 @@ def test_lvpocket_v2_manifest_declares_standard_binding_pocket_contract():
     assert manifest.artifacts.outputs[0].name == "pocket"
     assert manifest.artifacts.outputs[0].type == "binding_pocket@1"
     for variant in manifest.variants:
+        assert variant.entrypoint == ["runner/platform_run_v2.sh"]
         entrypoint = PACKAGE_ROOT / variant.entrypoint[0]
         assert entrypoint.is_file()
+    variants = {variant.name: variant for variant in manifest.variants}
+    assert variants["cpu"].validation_status == "validated"
+    assert variants["cpu"].hardware_validated is True
+    assert variants["nvidia-cuda"].hardware_validated is False
+    assert variants["haiguang-dcu"].hardware_validated is False
+    assert not (PACKAGE_ROOT / "runner" / "platform_adapter.py").exists()
 
 
 def test_lvpocket_v2_golden_result_validates_required_binding_pocket_roles():

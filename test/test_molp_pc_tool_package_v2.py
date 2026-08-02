@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import importlib.util
-import json
 import re
 import sys
 from pathlib import Path
@@ -33,20 +31,10 @@ REQUIRED_FILES = {
     "examples/output/artifacts/properties/metadata.json",
     "examples/output/reports/report.json",
     "runner/entrypoint.sh",
-    "runner/platform_adapter.py",
+    "runner/platform_run_v2.sh",
     "schemas/parameters.schema.json",
     "schemas/result.v2.example.json",
-    "tests/test_contract.py",
 }
-
-
-def _load_adapter():
-    path = PACKAGE_ROOT / "runner" / "platform_adapter.py"
-    spec = importlib.util.spec_from_file_location("molp_pc_platform_adapter", path)
-    assert spec and spec.loader
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 def test_molp_pc_v2_package_contains_platformization_files():
@@ -61,6 +49,9 @@ def test_molp_pc_v2_manifest_uses_standard_molecule_table_contract():
 
     assert isinstance(manifest, ToolPackageV2Manifest)
     assert result.is_valid is True, result.errors
+    assert manifest.metadata.version == "0.1.1"
+    assert "/0.1.1/" in manifest.runtime.artifacts.fallback.uri
+    assert "/0.1.1/" in manifest.runtime.weights.manifest_uri
     assert [(item.name, item.type) for item in manifest.artifacts.inputs] == [
         ("molecules", "molecule_table@1")
     ]
@@ -70,7 +61,13 @@ def test_molp_pc_v2_manifest_uses_standard_molecule_table_contract():
     ]
     assert "device" not in set(manifest.parameters_schema.get("required", []))
     for variant in manifest.variants:
+        assert variant.entrypoint == ["runner/platform_run_v2.sh"]
         assert (PACKAGE_ROOT / variant.entrypoint[0]).is_file()
+    variants = {variant.name: variant for variant in manifest.variants}
+    assert variants["cpu"].validation_status == "validated"
+    assert variants["cpu"].hardware_validated is True
+    assert variants["nvidia-cuda"].hardware_validated is False
+    assert not (PACKAGE_ROOT / "runner" / "platform_adapter.py").exists()
 
 
 def test_molp_pc_v2_golden_result_validates_prediction_table_roles():
@@ -91,46 +88,6 @@ def test_molp_pc_v2_golden_result_validates_prediction_table_roles():
     assert set(properties.files) == {"table_file", "metadata_json"}
     assert properties.metadata["molecule_id_field"] == "SMILES"
     assert properties.metadata["source_task_id"] == "example-task"
-
-
-def test_molp_pc_adapter_wraps_legacy_prediction_csv_as_result_v2(tmp_path: Path):
-    raw_dir = tmp_path / "legacy-output"
-    output_dir = tmp_path / "output"
-    raw_dir.mkdir()
-    (raw_dir / "cb_data_result.csv").write_text("SMILES,F20\nCCO,0.9\n", encoding="utf-8")
-
-    result = _load_adapter().adapt_legacy_outputs(
-        request={
-            "task": {
-                "id": "task-001",
-                "tool_slug": "molp-pc-property-prediction",
-                "tool_version": "1.0.0",
-            },
-            "inputs": {
-                "molecules": {
-                    "artifact_version_id": "input-version",
-                    "type": "molecule_table@1",
-                    "files": {
-                        "table_file": {
-                            "path": "input/molecules/smiles.csv",
-                            "sha256": "a" * 64,
-                            "content_type": "text/csv",
-                        }
-                    },
-                    "metadata": {"molecule_id_field": "SMILES"},
-                }
-            },
-        },
-        raw_output_dir=raw_dir,
-        output_dir=output_dir,
-    )
-
-    assert result["result_version"] == "aidd.sciminer/result.v2"
-    assert result["artifacts"]["properties"]["type"] == "molecule_table@1"
-    assert set(result["artifacts"]["properties"]["files"]) == {"table_file", "metadata_json"}
-    assert (output_dir / "artifacts/properties/molp_pc_predictions.csv").is_file()
-    assert (output_dir / "artifacts/properties/metadata.json").is_file()
-    assert result["artifacts"]["properties"]["metadata"]["molecule_id_field"] == "SMILES"
 
 
 def test_molp_pc_v2_package_does_not_embed_deployment_secrets_or_host_paths():

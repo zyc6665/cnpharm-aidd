@@ -1,0 +1,61 @@
+{
+  "result_version": "aidd.sciminer/result.v2",
+  "artifacts": {
+    "affinity": {
+      "name": "example-task_msign_affinity",
+      "type": "molecule_table@1",
+      "files": {
+        "table_file": {
+          "path": "artifacts/affinity/msign_affinity.csv",
+          "sha256": "52105019efcec4d9e43ac0bf3b9808d8bab5dff525668587cbd6c69b2199fe6d",
+          "content_type": "text/csv"
+        },
+        "metadata_json": {
+          "path": "artifacts/affinity/metadata.json",
+          "sha256": "7cce7246f30601a0f3fa402daea3210771d17fb77a6afda7ee430c5502ab8c8c",
+          "content_type": "application/json"
+        }
+      },
+      "metadata": {
+        "molecule_id_field": "complex_id",
+        "source_task_id": "example-task",
+        "source_input_refs": [
+          "input:protein",
+          "input:ligand"
+        ],
+        "row_count": 1,
+        "property_columns": [
+          "predicted_affinity",
+          "predicted_ligand_to_pocket",
+          "predicted_pocket_to_ligand",
+          "scale",
+          "model_name",
+          "distance_angstrom",
+          "device"
+        ],
+        "model_name": "full_finetune"
+      }
+    },
+    "report": {
+      "name": "example-task_msign_adapter_report",
+      "type": "run_report@1",
+      "files": {
+        "report_json": {
+          "path": "reports/report.json",
+          "sha256": "520ec7cd9b8608857bf89faeac360489fabd10f870be25c0dc289f3e4d871fde",
+          "content_type": "application/json"
+        }
+      },
+      "metadata": {
+        "source_task_id": "example-task"
+      }
+    }
+  },
+  "relations": [
+    {
+      "from": "report",
+      "to": "affinity",
+      "type": "describes"
+    }
+  ]
+}

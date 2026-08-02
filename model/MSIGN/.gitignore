@@ -1,0 +1,7 @@
+weights/*
+original_model/*
+wheelhouse/*.whl
+deployment.local.*
+platform_tool.ssh_job.json
+__pycache__/
+.pytest_cache/

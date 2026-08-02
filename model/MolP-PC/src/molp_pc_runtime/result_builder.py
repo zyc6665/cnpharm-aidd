@@ -11,6 +11,10 @@ from .io import file_ref, write_json
 
 
 LEGACY_PREDICTION_FILENAME = "cb_data_result.csv"
+LEGACY_PREDICTION_CANDIDATES = (
+    LEGACY_PREDICTION_FILENAME,
+    f"artifacts/{LEGACY_PREDICTION_FILENAME}",
+)
 STANDARD_PREDICTION_FILENAME = "molp_pc_predictions.csv"
 
 
@@ -30,7 +34,7 @@ def write_standard_result(
     properties_dir.mkdir(parents=True, exist_ok=True)
     report_dir.mkdir(parents=True, exist_ok=True)
 
-    source_csv = raw_output_dir / LEGACY_PREDICTION_FILENAME
+    source_csv = _first_existing(raw_output_dir, LEGACY_PREDICTION_CANDIDATES)
     summary = inspect_prediction_table(source_csv)
     target_csv = properties_dir / STANDARD_PREDICTION_FILENAME
     shutil.copyfile(source_csv, target_csv)
@@ -95,3 +99,12 @@ def write_standard_result(
     }
     write_json(output_dir / "result.json", result)
     return result
+
+
+def _first_existing(base_dir: Path, candidates: tuple[str, ...]) -> Path:
+    for candidate in candidates:
+        path = base_dir / candidate
+        if path.is_file():
+            return path
+    searched = ", ".join(candidates)
+    raise FileNotFoundError(f"Missing MolP-PC prediction CSV; searched: {searched}")

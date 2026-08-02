@@ -53,6 +53,7 @@ def test_model_package_metadata_uses_platform_standard_contracts():
     runtime = metadata["runtime"]
 
     assert metadata["slug"] == "molp-pc-property-prediction"
+    assert metadata["version"] == "0.1.1"
     assert metadata["entrypoint"] == "platform_run.sh"
     assert runtime["python"] == "3.8"
     assert runtime["cuda"] == "11.3"
@@ -102,7 +103,7 @@ def test_result_builder_wraps_legacy_output_as_standard_result_v2(tmp_path: Path
             "task": {
                 "id": "task-001",
                 "tool_slug": "molp-pc-property-prediction",
-                "tool_version": "0.1.0",
+                "tool_version": "0.1.1",
             },
             "inputs": {
                 "molecules": {
@@ -121,6 +122,33 @@ def test_result_builder_wraps_legacy_output_as_standard_result_v2(tmp_path: Path
     assert (output_dir / "artifacts/properties/metadata.json").is_file()
     assert (output_dir / "reports/report.json").is_file()
     assert json.loads((output_dir / "result.json").read_text(encoding="utf-8")) == result
+
+
+def test_result_builder_accepts_legacy_artifacts_prediction_csv(tmp_path: Path):
+    result_builder = importlib.import_module("molp_pc_runtime.result_builder")
+
+    raw_output_dir = tmp_path / "raw"
+    output_dir = tmp_path / "output"
+    artifact_dir = raw_output_dir / "artifacts"
+    artifact_dir.mkdir(parents=True)
+    (artifact_dir / "cb_data_result.csv").write_text(
+        "SMILES,F20\nCCO,0.9\n",
+        encoding="utf-8",
+    )
+
+    result = result_builder.write_standard_result(
+        request={
+            "task": {
+                "id": "task-001",
+                "tool_slug": "molp-pc-property-prediction",
+                "tool_version": "0.1.1",
+            }
+        },
+        raw_output_dir=raw_output_dir,
+        output_dir=output_dir,
+    )
+
+    assert result["artifacts"]["properties"]["metadata"]["row_count"] == 1
 
 
 def test_platform_run_delegates_to_runtime_cli_without_embedded_python():

@@ -22,10 +22,11 @@ Artifact 契约。
 `molecule_table@1`，不再让 Agent 或 workflow 处理 `smiles_csv`、`prediction_file` 这类
 模型私有字段。
 
-部署真实模型时可以保留旧 `predict/test.py::predict(path, name)`，但需要在 runner 中做两步：
+部署真实模型时可以保留旧 `predict/test.py::predict(path, name)`，但适配逻辑属于
+`model/MolP-PC/src/molp_pc_runtime`，不是平台 Tool Package：
 
 1. 从平台标准 request 的 `inputs.molecules.files.table_file` 找到 SMILES CSV。
-2. 模型运行结束后调用 `runner/platform_adapter.py`，把 `cb_data_result.csv` 包装为 result.v2。
+2. 模型运行结束后由 `molp_pc_runtime.result_builder` 把 `cb_data_result.csv` 包装为 result.v2。
 
 ## Runtime Env
 
@@ -45,7 +46,7 @@ ADMET 属性列。因此两侧统一为 `molecule_table@1`，比新增 `smiles_c
 
 ```bash
 pytest test/test_molp_pc_tool_package_v2.py \
-  example/MolP-PC/tool-package-v2/tests/test_contract.py -q
+  model/MolP-PC/tests/test_molp_pc_runtime_contract.py -q
 ```
 
 从 `backend/` 运行平台 manifest 校验：

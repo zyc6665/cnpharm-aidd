@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "Run LVpocket, then emit output/result.json using the binding_pocket@1 adapter contract."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec "${SCRIPT_DIR}/platform_run_v2.sh" "$@"

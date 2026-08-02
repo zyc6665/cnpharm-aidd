@@ -1,1 +1,10 @@
-{"tool":"LVpocket","adapter":"tool-package-v2","status":"example"}
+{
+  "tool": "lvpocket-standard-pocket",
+  "adapter": "lvpocket_runtime",
+  "status": "succeeded",
+  "source_task_id": "example",
+  "model_choice": null,
+  "distance_cutoff_angstrom": null,
+  "residue_count": null,
+  "atom_count": null
+}

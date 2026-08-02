@@ -1,0 +1,49 @@
+{
+  "request_version": "aidd.sciminer/request.v1",
+  "task": {
+    "id": "example-task",
+    "tool_slug": "msign-affinity-prediction",
+    "tool_version": "0.1.1"
+  },
+  "inputs": {
+    "protein": {
+      "artifact_version_id": "example-protein-version",
+      "type": "protein_structure@1",
+      "files": {
+        "structure_file": {
+          "path": "input/protein/protein.pdb",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "content_type": "chemical/x-pdb"
+        }
+      },
+      "metadata": {
+        "chain_ids": ["A"]
+      }
+    },
+    "ligand": {
+      "artifact_version_id": "example-ligand-version",
+      "type": "ligand_structure@1",
+      "files": {
+        "structure_file": {
+          "path": "input/ligand/ligand.sdf",
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "content_type": "chemical/x-mdl-sdfile"
+        }
+      },
+      "metadata": {
+        "ligand_id": "molecule_1"
+      }
+    }
+  },
+  "parameters": {
+    "complex_id": "molecule_1",
+    "distance": 5.0,
+    "model_variant": "full_finetune"
+  },
+  "execution": {
+    "variant": "cpu",
+    "accelerator": "cpu",
+    "work_dir": ".",
+    "output_dir": "output"
+  }
+}

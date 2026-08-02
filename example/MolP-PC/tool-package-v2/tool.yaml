@@ -3,7 +3,7 @@ kind: ToolPackage
 metadata:
   slug: molp-pc-property-prediction
   name: MolP-PC Property Prediction
-  version: 0.1.0
+  version: 0.1.1
   description: Adapt MolP-PC ADMET prediction CSV outputs to standard molecule_table@1 artifacts.
 artifacts:
   inputs:
@@ -72,7 +72,7 @@ runtime:
   artifacts:
     primary:
       kind: container
-      image: registry.example/sciminer/molp-pc-runtime:0.1.0
+      image: registry.example/sciminer/molp-pc-runtime:0.1.1
       image_digest: "sha256:4444444444444444444444444444444444444444444444444444444444444444"
       includes:
         - python
@@ -81,13 +81,13 @@ runtime:
         - runtime_wrapper
     fallback:
       kind: conda_pack
-      uri: artifacts://model-envs/molp-pc-property-prediction/0.1.0/conda-env.tar.gz
+      uri: artifacts://model-envs/molp-pc-property-prediction/0.1.1/conda-env.tar.gz
       sha256: "5555555555555555555555555555555555555555555555555555555555555555"
       includes:
         - python
         - dependencies
   weights:
-    manifest_uri: artifacts://model-weights/molp-pc-property-prediction/0.1.0/weights.json
+    manifest_uri: artifacts://model-weights/molp-pc-property-prediction/0.1.1/weights.json
     manifest_sha256: "6666666666666666666666666666666666666666666666666666666666666666"
   cache_policy:
     key_fields:
@@ -102,18 +102,18 @@ variants:
     executor_types:
       - remote_job
     entrypoint:
-      - runner/entrypoint.sh
+      - runner/platform_run_v2.sh
     resources:
       cpu: 8
       memory_mb: 16384
-    validation_status: unvalidated
-    hardware_validated: false
+    validation_status: validated
+    hardware_validated: true
   - name: nvidia-cuda
     accelerator: nvidia_cuda
     executor_types:
       - remote_job
     entrypoint:
-      - runner/entrypoint.sh
+      - runner/platform_run_v2.sh
     resources:
       cpu: 8
       memory_mb: 24576

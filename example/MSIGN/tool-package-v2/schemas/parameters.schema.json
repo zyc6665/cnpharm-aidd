@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "properties": {
+    "complex_id": {
+      "type": "string"
+    },
+    "distance": {
+      "type": "number",
+      "default": 5.0,
+      "minimum": 0.1,
+      "maximum": 20.0
+    },
+    "model_variant": {
+      "type": "string",
+      "enum": ["full_finetune", "pretrain_general"],
+      "default": "full_finetune"
+    }
+  },
+  "additionalProperties": false
+}

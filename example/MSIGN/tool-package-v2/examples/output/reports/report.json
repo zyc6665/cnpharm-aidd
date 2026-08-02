@@ -1,0 +1,9 @@
+{
+  "tool": "msign-affinity-prediction",
+  "adapter": "msign_runtime",
+  "status": "succeeded",
+  "source_task_id": "example-task",
+  "complex_id": "molecule_1",
+  "model_name": "full_finetune",
+  "distance_angstrom": 5.0
+}

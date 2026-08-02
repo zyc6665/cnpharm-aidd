@@ -1,7 +1,7 @@
 schema_version: sciminer.model-package.v1
 slug: molp-pc-property-prediction
 name: MolP-PC Property Prediction
-version: 0.1.0
+version: 0.1.1
 entrypoint: platform_run.sh
 runtime:
   python: "3.8"
@@ -16,7 +16,7 @@ runtime:
   artifacts:
     primary:
       kind: container
-      image: registry.example/sciminer/molp-pc-runtime:0.1.0
+      image: registry.example/sciminer/molp-pc-runtime:0.1.1
       image_digest: sha256:<to-be-built-image-digest>
       includes:
         - python
@@ -25,7 +25,7 @@ runtime:
         - runtime_wrapper
     fallback:
       kind: conda_pack
-      uri: artifacts://model-envs/molp-pc-property-prediction/0.1.0/conda-env.tar.gz
+      uri: artifacts://model-envs/molp-pc-property-prediction/0.1.1/conda-env.tar.gz
       sha256: <to-be-built-conda-pack-sha256>
       includes:
         - python

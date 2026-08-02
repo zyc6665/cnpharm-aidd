@@ -1,0 +1,19 @@
+{
+  "molecule_id_field": "complex_id",
+  "source_task_id": "example-task",
+  "source_input_refs": [
+    "input:protein",
+    "input:ligand"
+  ],
+  "row_count": 1,
+  "property_columns": [
+    "predicted_affinity",
+    "predicted_ligand_to_pocket",
+    "predicted_pocket_to_ligand",
+    "scale",
+    "model_name",
+    "distance_angstrom",
+    "device"
+  ],
+  "model_name": "full_finetune"
+}

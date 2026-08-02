@@ -2,4 +2,4 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-python3 "${SCRIPT_DIR}/platform_adapter.py" "$@"
+exec "${SCRIPT_DIR}/platform_run_v2.sh" "$@"

@@ -1,0 +1,2 @@
+complex_id,predicted_affinity,predicted_ligand_to_pocket,predicted_pocket_to_ligand,scale,model_name,distance_angstrom,device
+molecule_1,-8.1,-7.9,-8.3,pK,full_finetune,5.0,cpu

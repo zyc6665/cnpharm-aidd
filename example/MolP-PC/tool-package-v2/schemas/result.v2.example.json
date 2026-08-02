@@ -2,7 +2,7 @@
   "result_version": "aidd.sciminer/result.v2",
   "artifacts": {
     "properties": {
-      "name": "molp_pc_admet_predictions",
+      "name": "example-task_molp_pc_admet_predictions",
       "type": "molecule_table@1",
       "files": {
         "table_file": {
@@ -12,7 +12,7 @@
         },
         "metadata_json": {
           "path": "artifacts/properties/metadata.json",
-          "sha256": "3ad00c0f8401d3464549f7006cc9496c26af17bb4ba98452f849339d32c60968",
+          "sha256": "78e7012d055a02d3b7fc8d4756072be4e6dd108390dde10a2866882a9880a4ca",
           "content_type": "application/json"
         }
       },
@@ -22,16 +22,73 @@
         "source_input_ref": "input:molecules",
         "row_count": 2,
         "property_column_count": 55,
+        "property_columns": [
+          "F20",
+          "F30",
+          "HIA",
+          "PAMPA_NCATS",
+          "Pgp-inhibitor",
+          "Pgp-substrate",
+          "Caco2",
+          "MDCK Permeability",
+          "Lipophilicity_AstraZeneca",
+          "Solubility_AqSolDB",
+          "BBB",
+          "Fu",
+          "PPB",
+          "VD",
+          "T0.5",
+          "CL",
+          "CYP1A2 inhibitor",
+          "CYP1A2 substrate",
+          "CYP2C19 inhibitor",
+          "CYP2C19 substrate",
+          "CYP2C9 inhibitor",
+          "CYP2C9 substrate",
+          "CYP2D6 inhibitor",
+          "CYP2D6 substrate",
+          "CYP3A4 inhibitor",
+          "CYP3A4 substrate",
+          "AMES",
+          "Carcinogenicity",
+          "ClinTox",
+          "DILI",
+          "Eye Corrosion",
+          "Eye Irritation",
+          "FDAMDD",
+          "H-HT-2",
+          "hERG",
+          "Respiratory",
+          "ROA",
+          "Skin Sensitization",
+          "NR-AhR",
+          "NR-AR-LBD",
+          "NR-AR",
+          "NR-Aromatase",
+          "NR-ER-LBD",
+          "NR-ER",
+          "NR-PPAR-gamma",
+          "SR-ARE",
+          "SR-ATAD5",
+          "SR-HSE",
+          "SR-MMP",
+          "SR-p53",
+          "BCF",
+          "IGC50",
+          "LC50",
+          "LC50DM",
+          "LD50_zhu"
+        ],
         "model_name": "MolP-PC"
       }
     },
     "report": {
-      "name": "molp_pc_adapter_report",
+      "name": "example-task_molp_pc_adapter_report",
       "type": "run_report@1",
       "files": {
         "report_json": {
           "path": "reports/report.json",
-          "sha256": "49cb0a5cadaa92e20f3abf39cf98aed7500c94db1faca0a62bd2b47d0af557a1",
+          "sha256": "143c6786204be01d33e7c117260da0af6a11322f5f6bc85480f9d724e69b20f9",
           "content_type": "application/json"
         }
       },
