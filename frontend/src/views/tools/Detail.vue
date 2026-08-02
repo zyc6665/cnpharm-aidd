@@ -96,6 +96,54 @@
                     :placeholder="t('tasks.namePlaceholder')"
                   />
                 </a-form-item>
+                <div v-if="standardInputSlots.length" class="standard-artifact-inputs">
+                  <div class="standard-artifact-inputs__header">
+                    <span>标准 Artifact 输入</span>
+                    <a-tag color="blue">Tool Package v2</a-tag>
+                  </div>
+                  <a-alert
+                    v-if="!currentProjectId"
+                    type="warning"
+                    show-icon
+                    message="标准 Artifact 输入需要项目上下文，请从项目内进入工具或在 URL 带 project_id。"
+                  />
+                  <a-alert
+                    v-else-if="!standardArtifactsLoading && standardProjectArtifacts.length === 0"
+                    type="info"
+                    show-icon
+                    message="当前项目暂无可绑定的标准 Artifact。"
+                  />
+                  <a-form-item
+                    v-for="slot in standardInputSlots"
+                    :key="slot.name"
+                    :label="slot.name"
+                    :required="slot.required"
+                    :extra="`标准类型：${slot.type}`"
+                  >
+                    <a-select
+                      :value="selectedStandardArtifacts[slot.name]?.latest_version.id"
+                      :disabled="!currentProjectId"
+                      :loading="standardArtifactsLoading"
+                      allow-clear
+                      show-search
+                      option-filter-prop="label"
+                      placeholder="选择项目中的兼容 ArtifactVersion"
+                      @change="handleStandardArtifactSelection(slot.name, $event)"
+                    >
+                      <a-select-option
+                        v-for="artifact in compatibleStandardArtifacts(slot)"
+                        :key="artifact.latest_version.id"
+                        :value="artifact.latest_version.id"
+                        :label="formatStandardArtifactLabel(artifact)"
+                      >
+                        <div class="standard-artifact-option">
+                          <span>{{ artifact.name || artifact.latest_version.filename }}</span>
+                          <small>{{ artifact.semantic_type }} · v{{ artifact.latest_version.version }}</small>
+                        </div>
+                      </a-select-option>
+                    </a-select>
+                  </a-form-item>
+                </div>
                 <template v-for="(prop, key) in flattenedSchema?.properties" :key="key">
                   <a-form-item
                     :name="key"
@@ -348,7 +396,9 @@
     ToolExampleFilePreview,
     ToolSchema
   } from '@/types/models'
+  import type { TypedArtifact } from '@/types/artifacts'
   import { uploadFile, convertSdfToPdb } from '@/api/files'
+  import { getProjectArtifacts } from '@/api/artifacts'
   import { applyToolExample, getToolExample, previewToolExampleFile } from '@/api/tools'
   import { getToolValidationSummary } from '@/utils/tool-validation'
   import {
@@ -363,6 +413,14 @@
     renderMarkdownToHtml,
     type ToolDocumentationLabels
   } from './tool-documentation'
+  import {
+    buildStandardInputBindings,
+    buildStandardTaskRequestExtras,
+    filterCompatibleProjectArtifacts,
+    resolveToolPackageParameterSchema,
+    resolveToolStandardInputSlots,
+    type StandardArtifactInputSlot
+  } from './standard-artifact-inputs'
 
   const route = useRoute()
   const router = useRouter()
@@ -380,6 +438,9 @@
   const formState = reactive<Record<string, unknown>>({})
   const fileList = reactive<Record<string, UploadFile[]>>({})
   const selectedArtifacts = reactive<Record<string, ArtifactFile | undefined>>({})
+  const standardProjectArtifacts = ref<TypedArtifact[]>([])
+  const standardArtifactsLoading = ref(false)
+  const selectedStandardArtifacts = reactive<Record<string, TypedArtifact | undefined>>({})
   const example = ref<ToolExample | null>(null)
   const applyingExample = ref(false)
   const previewOpen = ref(false)
@@ -399,9 +460,20 @@
   })
 
   const toolValidationSummary = computed(() => getToolValidationSummary(toolConfig.value))
+  const standardInputSlots = computed(() => resolveToolStandardInputSlots(tool.value))
+  const standardParameterSchema = computed(() => resolveToolPackageParameterSchema(tool.value))
+  const currentProjectId = computed(() => {
+    const raw = route.query.project_id ?? route.query.projectId ?? route.params.projectId
+    const value = Array.isArray(raw) ? raw[0] : raw
+    return typeof value === 'string' && value.trim() ? value.trim() : undefined
+  })
 
-  // 从 current_version.config 中获取 input_schema
+  // v2 工具优先使用 Tool Package 参数 schema；标准文件输入由 artifacts.inputs 单独绑定
   const inputSchema = computed<ToolSchema | undefined>(() => {
+    if (standardParameterSchema.value) {
+      return standardParameterSchema.value
+    }
+
     const config = toolConfig.value
     if (config && typeof config === 'object' && 'input_schema' in config) {
       return config.input_schema as ToolSchema
@@ -434,10 +506,25 @@
   const flattenedSchema = computed<ToolSchema | undefined>(() => {
     return flattenToolInputSchema(inputSchema.value)
   })
+  const selectedStandardArtifactRecord = computed<Record<string, TypedArtifact | undefined>>(() => {
+    return Object.fromEntries(
+      standardInputSlots.value.map(slot => [slot.name, selectedStandardArtifacts[slot.name]])
+    )
+  })
+  const standardInputBindings = computed(() => {
+    return buildStandardInputBindings(selectedStandardArtifactRecord.value)
+  })
+  const missingRequiredStandardSlots = computed(() => {
+    return standardInputSlots.value.filter(
+      slot => slot.required && !standardInputBindings.value[slot.name]
+    )
+  })
 
   const canSubmit = computed(() => {
     if (!userStore.isAuthenticated) return false
     if (Object.values(sdfConversionLoading).some(Boolean)) return false
+    if (standardInputSlots.value.length && !currentProjectId.value) return false
+    if (missingRequiredStandardSlots.value.length > 0) return false
     return true
   })
   const detailSubtitle = computed(() => {
@@ -510,6 +597,41 @@
     return colors[status] || 'default'
   }
 
+  const loadStandardProjectArtifacts = async () => {
+    if (!currentProjectId.value || !standardInputSlots.value.length) {
+      standardProjectArtifacts.value = []
+      return
+    }
+
+    standardArtifactsLoading.value = true
+    try {
+      const res = await getProjectArtifacts(currentProjectId.value)
+      standardProjectArtifacts.value = res.data.items
+    } catch {
+      standardProjectArtifacts.value = []
+    } finally {
+      standardArtifactsLoading.value = false
+    }
+  }
+
+  const compatibleStandardArtifacts = (slot: StandardArtifactInputSlot) => {
+    return filterCompatibleProjectArtifacts(slot, standardProjectArtifacts.value)
+  }
+
+  const formatStandardArtifactLabel = (artifact: TypedArtifact): string => {
+    const filename = artifact.latest_version.filename || artifact.name
+    return `${artifact.name || filename} · ${artifact.semantic_type} · v${artifact.latest_version.version}`
+  }
+
+  const handleStandardArtifactSelection = (slotName: string, versionId: unknown) => {
+    const selectedVersionId = typeof versionId === 'string' ? versionId : undefined
+    selectedStandardArtifacts[slotName] = selectedVersionId
+      ? standardProjectArtifacts.value.find(
+          artifact => artifact.latest_version.id === selectedVersionId
+        )
+      : undefined
+  }
+
   const getFieldRules = (key: string, prop: SchemaProperty): Rule[] => {
     const rules: Rule[] = []
     const schema = flattenedSchema.value
@@ -566,6 +688,9 @@
     })
     Object.keys(selectedArtifacts).forEach(key => {
       selectedArtifacts[key] = undefined
+    })
+    Object.keys(selectedStandardArtifacts).forEach(key => {
+      selectedStandardArtifacts[key] = undefined
     })
     Object.keys(exampleFiles).forEach(key => {
       exampleFiles[key] = undefined
@@ -832,6 +957,14 @@
         message.error(t('common.noData'))
         return
       }
+      if (standardInputSlots.value.length && !currentProjectId.value) {
+        message.error('标准 Artifact 输入需要项目上下文，请从项目内进入工具。')
+        return
+      }
+      if (missingRequiredStandardSlots.value.length) {
+        message.error(`请选择标准 Artifact 输入：${missingRequiredStandardSlots.value.map(slot => slot.name).join(', ')}`)
+        return
+      }
 
       const uploadedFiles: Record<string, UploadedToolFile | undefined> = {}
       for (const [key, file] of Object.entries(exampleFiles)) {
@@ -896,7 +1029,11 @@
         name: taskName.value.trim() || undefined,
         tool_id: tool.value!.id,
         params: payload.params,
-        file_ids: payload.fileIds.length > 0 ? payload.fileIds : undefined
+        file_ids: payload.fileIds.length > 0 ? payload.fileIds : undefined,
+        ...buildStandardTaskRequestExtras({
+          projectId: currentProjectId.value,
+          inputBindings: standardInputBindings.value
+        })
       })
 
       message.success(t('tasks.created'))
@@ -932,6 +1069,10 @@
             }
           }
         }
+        for (const slot of standardInputSlots.value) {
+          selectedStandardArtifacts[slot.name] = undefined
+        }
+        await loadStandardProjectArtifacts()
         await fetchExample(id)
       } finally {
         loading.value = false
@@ -1086,6 +1227,43 @@
 
     .tool-form-actions {
       margin-bottom: 0;
+    }
+  }
+
+  .standard-artifact-inputs {
+    margin-bottom: @spacing-lg;
+    padding: @spacing-md;
+    border: 1px solid @accent-color-border;
+    border-radius: @border-radius-base;
+    background: @accent-color-light;
+
+    :deep(.ant-alert) {
+      margin-bottom: @spacing-md;
+    }
+
+    :deep(.ant-form-item:last-child) {
+      margin-bottom: 0;
+    }
+  }
+
+  .standard-artifact-inputs__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: @spacing-sm;
+    margin-bottom: @spacing-md;
+    font-weight: @font-weight-semibold;
+    color: @text-primary;
+  }
+
+  .standard-artifact-option {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+
+    small {
+      color: @text-color-light-tertiary;
+      font-size: @font-size-sm;
     }
   }
 

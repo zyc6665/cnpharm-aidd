@@ -19,8 +19,12 @@ test('长任务同步接口应显式使用长超时并允许传入取消信号',
   assert.equal(agentApiSource.includes('type RequestOptions'), true)
   assert.equal(workflowApiSource.includes('timeout: options?.timeout ?? LONG_RUNNING_TIMEOUT_MS'), true)
   assert.equal(agentApiSource.includes('timeout: options?.timeout ?? LONG_RUNNING_TIMEOUT_MS'), true)
-  assert.equal(workflowApiSource.includes('syncWorkflowRun = (runId: string, options?: RequestOptions)'), true)
-  assert.equal(agentApiSource.includes('syncAiddAgentRun = (runId: string, options?: RequestOptions)'), true)
+  const workflowSyncSignature =
+    /syncWorkflowRun\s*=\s*\(\s*runId:\s*string,\s*options\?:\s*RequestOptions\s*\)/
+  const agentSyncSignature =
+    /syncAiddAgentRun\s*=\s*\(\s*runId:\s*string,\s*options\?:\s*RequestOptions\s*\)/
+  assert.equal(workflowSyncSignature.test(workflowApiSource), true)
+  assert.equal(agentSyncSignature.test(agentApiSource), true)
 })
 
 test('任务轮询接口应支持 AbortController 取消和一次网络重试', () => {

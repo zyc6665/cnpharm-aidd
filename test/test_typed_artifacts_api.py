@@ -219,6 +219,56 @@ async def test_artifact_versions_are_immutable_and_expired_items_are_hidden(
 
 
 @pytest.mark.asyncio
+async def test_standard_artifact_metadata_is_returned_in_project_list(
+    artifact_client,
+    artifact_db: AsyncSession,
+    artifact_context: dict[str, object],
+):
+    from app.models.artifacts import Artifact, ArtifactVersion
+
+    client, _ = artifact_client
+    project = artifact_context["project"]
+    owner = artifact_context["owner"]
+    artifact = Artifact(
+        project_id=project.id,
+        created_by=owner.id,
+        artifact_type="protein_structure",
+        semantic_type="protein_structure@1",
+        standard_type="protein_structure",
+        standard_version=1,
+        name="target.pdb",
+    )
+    artifact_db.add(artifact)
+    await artifact_db.flush()
+    version = ArtifactVersion(
+        artifact_id=artifact.id,
+        created_by=owner.id,
+        version=1,
+        filename="target.pdb",
+        content_type="chemical/x-pdb",
+        size_bytes=12,
+        sha256="a" * 64,
+        storage_key="standard/target.pdb",
+        status="available",
+    )
+    artifact_db.add(version)
+    await artifact_db.flush()
+    artifact.latest_version_id = version.id
+    artifact.latest_version = version
+    await artifact_db.commit()
+
+    listed = await client.get(
+        f"/api/v1/projects/{project.id}/artifacts",
+        headers={"Authorization": "Bearer owner"},
+    )
+
+    assert listed.status_code == 200
+    item = listed.json()["data"]["items"][0]
+    assert item["standard_type"] == "protein_structure"
+    assert item["standard_version"] == 1
+
+
+@pytest.mark.asyncio
 async def test_artifact_version_download_uses_storage_and_project_acl(
     artifact_client,
     artifact_context: dict[str, object],

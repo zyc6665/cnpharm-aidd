@@ -17,6 +17,8 @@ export interface TypedArtifact {
   project_id: string
   artifact_type: ArtifactType | (string & {})
   semantic_type: string
+  standard_type?: string | null
+  standard_version?: number | null
   name: string
   description?: string | null
   latest_version: ArtifactVersion

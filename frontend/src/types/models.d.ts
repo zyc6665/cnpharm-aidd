@@ -99,6 +99,7 @@ export interface Tool {
   timeout_sec?: number
   owner_id?: string
   is_favorited?: boolean  // 额外字段，由API返回
+  contract?: ToolContract
   created_at: string
   updated_at?: string
   // 兼容旧代码的字段

@@ -77,6 +77,8 @@ def _artifact_data(artifact: Artifact, *, include_versions: bool = False) -> dic
         "project_id": artifact.project_id,
         "artifact_type": artifact.artifact_type,
         "semantic_type": artifact.semantic_type,
+        "standard_type": artifact.standard_type,
+        "standard_version": artifact.standard_version,
         "name": artifact.name,
         "description": artifact.description,
         "latest_version": _version_data(artifact.latest_version),
