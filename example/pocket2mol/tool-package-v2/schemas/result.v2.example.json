@@ -50,7 +50,21 @@
           "ligand_id": "ligand_002"
         }
       }
-    ]
+    ],
+    "report": {
+      "name": "example_pocket2mol_adapter_report",
+      "type": "run_report@1",
+      "files": {
+        "report_json": {
+          "path": "reports/report.json",
+          "sha256": "809931375b036e2849a627ae9ce9731e65478950d9ae093ef9978b6c3a53c7d4",
+          "content_type": "application/json"
+        }
+      },
+      "metadata": {
+        "source_task_id": "example"
+      }
+    }
   },
   "relations": [
     {
@@ -62,6 +76,11 @@
       "from": "molecules",
       "to": "ligands[1]",
       "type": "contains"
+    },
+    {
+      "from": "report",
+      "to": "molecules",
+      "type": "describes"
     }
   ]
 }

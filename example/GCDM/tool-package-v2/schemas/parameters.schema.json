@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:sciminer:gcdm-pocket-generation:parameters:v2",
+  "title": "GCDM pocket-conditioned generation parameters",
+  "type": "object",
+  "properties": {
+    "n_samples": {
+      "type": "integer",
+      "default": 8,
+      "minimum": 1,
+      "maximum": 256
+    },
+    "timesteps": {
+      "type": "integer",
+      "default": 100,
+      "minimum": 1
+    },
+    "resamplings": {
+      "type": "integer",
+      "default": 1,
+      "minimum": 1
+    },
+    "jump_length": {
+      "type": "integer",
+      "default": 1,
+      "minimum": 1
+    },
+    "num_nodes_lig": {
+      "anyOf": [
+        {"type": "integer", "minimum": 1},
+        {"type": "null"}
+      ],
+      "default": null
+    },
+    "sanitize": {"type": "boolean", "default": true},
+    "relax": {"type": "boolean", "default": false},
+    "all_frags": {"type": "boolean", "default": false},
+    "device": {
+      "type": "string",
+      "enum": ["auto", "cpu", "cuda"],
+      "default": "auto"
+    }
+  },
+  "additionalProperties": false
+}

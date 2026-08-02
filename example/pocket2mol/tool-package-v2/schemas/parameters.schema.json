@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:sciminer:pocket2mol-standard-generation:parameters:v2",
+  "$id": "urn:sciminer:pocket2mol-pocket-ligand-generation:parameters:v2",
   "title": "Pocket2Mol standard adapter parameters",
   "type": "object",
   "properties": {

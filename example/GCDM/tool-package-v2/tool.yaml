@@ -1,0 +1,153 @@
+api_version: aidd.sciminer/tool-package.v2
+kind: ToolPackage
+metadata:
+  slug: gcdm-pocket-generation
+  name: GCDM Pocket-Conditioned Molecule Generation
+  version: 0.1.2
+  description: Adapt GCDM pocket-conditioned molecule generation to standard molecule and ligand artifacts.
+artifacts:
+  inputs:
+    - name: pocket
+      type: binding_pocket@1
+      required: true
+  outputs:
+    - name: molecules
+      type: molecule_table@1
+      cardinality: one
+      required: true
+    - name: ligands
+      type: ligand_structure@1
+      cardinality: many
+      required: true
+    - name: report
+      type: run_report@1
+      cardinality: one
+      required: false
+parameters_schema:
+  type: object
+  properties:
+    n_samples:
+      type: integer
+      default: 8
+      minimum: 1
+      maximum: 256
+      description: Number of molecules to sample from the legacy model.
+    timesteps:
+      type: integer
+      default: 100
+      minimum: 1
+      description: Sampling timesteps passed through to the legacy model.
+    resamplings:
+      type: integer
+      default: 1
+      minimum: 1
+      description: Legacy resampling count.
+    jump_length:
+      type: integer
+      default: 1
+      minimum: 1
+      description: Legacy jump length parameter.
+    num_nodes_lig:
+      anyOf:
+        - type: integer
+          minimum: 1
+        - type: "null"
+      default: null
+      description: Optional ligand node count override.
+    sanitize:
+      type: boolean
+      default: true
+    relax:
+      type: boolean
+      default: false
+    all_frags:
+      type: boolean
+      default: false
+    device:
+      type: string
+      enum:
+        - auto
+        - cpu
+        - cuda
+      default: auto
+  additionalProperties: false
+adapter:
+  input:
+    - input: pocket
+      method: mount_binding_pocket_pdb
+  output:
+    - output: molecules
+      method: collect_generated_molecule_table
+      validator_profile: molecule_table_v1_core
+    - output: ligands
+      method: split_generated_sdf_to_ligand_structure_v1
+      validator_profile: ligand_structure_v1_core
+    - output: report
+      method: collect_adapter_report_json
+      validator_profile: run_report_v1_core
+exposure:
+  agent: true
+  workflow: true
+  direct_run: true
+runtime:
+  python: "3.10"
+  cuda: "11.8"
+  executor_support:
+    - ssh_docker_exec
+    - slurm
+    - k8s_job
+  selection_policy: "prefer container image by immutable digest; fallback to conda_pack only when the executor cannot run containers"
+  artifacts:
+    primary:
+      kind: container
+      image: registry.example/sciminer/gcdm-runtime:0.1.2
+      image_digest: "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      includes:
+        - python
+        - cuda_runtime
+        - dependencies
+        - runtime_wrapper
+    fallback:
+      kind: conda_pack
+      uri: artifacts://model-envs/gcdm-pocket-generation/0.1.2/conda-env.tar.gz
+      sha256: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      includes:
+        - python
+        - dependencies
+  weights:
+    manifest_uri: artifacts://model-weights/gcdm-pocket-generation/0.1.2/weights.json
+    manifest_sha256: "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  cache_policy:
+    key_fields:
+      - metadata.slug
+      - metadata.version
+      - runtime.artifacts.selected.digest_or_sha256
+      - runtime.weights.manifest_sha256
+    mutable_host_paths_forbidden: true
+variants:
+  - name: nvidia-cuda
+    accelerator: nvidia_cuda
+    executor_types:
+      - remote_job
+    entrypoint:
+      - runner/platform_run_v2.sh
+    resources:
+      cpu: 8
+      memory_mb: 24576
+      gpu_memory_mb: 24576
+      devices:
+        - nvidia.com/gpu
+      driver: ">=535"
+    validation_status: unvalidated
+    hardware_validated: false
+  - name: cpu
+    accelerator: cpu
+    executor_types:
+      - remote_job
+    entrypoint:
+      - runner/platform_run_v2.sh
+    resources:
+      cpu: 8
+      memory_mb: 24576
+    validation_status: unvalidated
+    hardware_validated: false

@@ -1,9 +1,9 @@
 api_version: aidd.sciminer/tool-package.v2
 kind: ToolPackage
 metadata:
-  slug: pocket2mol-standard-generation
-  name: Pocket2Mol Standard Ligand Generator
-  version: 1.0.0
+  slug: pocket2mol-pocket-ligand-generation
+  name: Pocket2Mol Pocket Ligand Generation
+  version: 0.1.2
   description: Adapt Pocket2Mol ligand generation to standard molecule table and ligand artifacts.
 artifacts:
   inputs:
@@ -19,6 +19,10 @@ artifacts:
       type: ligand_structure@1
       cardinality: many
       required: true
+    - name: report
+      type: run_report@1
+      cardinality: one
+      required: false
 parameters_schema:
   type: object
   properties:
@@ -50,6 +54,9 @@ adapter:
     - output: ligands
       method: split_generated_ligands_to_ligand_structure_v1
       validator_profile: ligand_structure_v1_core
+    - output: report
+      method: collect_adapter_report_json
+      validator_profile: run_report_v1_core
 exposure:
   agent: true
   workflow: true
@@ -65,7 +72,7 @@ runtime:
   artifacts:
     primary:
       kind: container
-      image: registry.example/sciminer/pocket2mol-runtime:1.0.0
+      image: registry.example/sciminer/pocket2mol-runtime:0.1.2
       image_digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       includes:
         - python
@@ -74,13 +81,13 @@ runtime:
         - runtime_wrapper
     fallback:
       kind: conda_pack
-      uri: artifacts://model-envs/pocket2mol-standard-generation/1.0.0/conda-env.tar.gz
+      uri: artifacts://model-envs/pocket2mol-pocket-ligand-generation/0.1.2/conda-env.tar.gz
       sha256: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
       includes:
         - python
         - dependencies
   weights:
-    manifest_uri: artifacts://model-weights/pocket2mol-standard-generation/1.0.0/weights.json
+    manifest_uri: artifacts://model-weights/pocket2mol-pocket-ligand-generation/0.1.2/weights.json
     manifest_sha256: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
   cache_policy:
     key_fields:
@@ -95,7 +102,7 @@ variants:
     executor_types:
       - remote_job
     entrypoint:
-      - runner/entrypoint.sh
+      - runner/platform_run_v2.sh
     resources:
       cpu: 8
       memory_mb: 24576
@@ -103,14 +110,14 @@ variants:
       devices:
         - nvidia.com/gpu
       driver: ">=535"
-    validation_status: validated
-    hardware_validated: true
+    validation_status: unvalidated
+    hardware_validated: false
   - name: cpu
     accelerator: cpu
     executor_types:
       - remote_job
     entrypoint:
-      - runner/entrypoint.sh
+      - runner/platform_run_v2.sh
     resources:
       cpu: 8
       memory_mb: 24576
