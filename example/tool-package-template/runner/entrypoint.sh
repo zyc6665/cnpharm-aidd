@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-request_path="${TOOL_REQUEST_PATH:-request.json}"
-output_dir="${TOOL_OUTPUT_DIR:-output}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BUNDLE_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+MODEL_PACKAGE_ROOT="${MODEL_PACKAGE_ROOT:-${BUNDLE_ROOT}/model}"
+MODEL_ENTRYPOINT="${MODEL_ENTRYPOINT:-${MODEL_PACKAGE_ROOT}/platform_run.sh}"
 
-mkdir -p "${output_dir}"
-python -m runner.tool_impl "${request_path}" "${output_dir}"
-python -m runner.result_parser "${output_dir}/result.json" "${output_dir}"
+if [[ ! -x "${MODEL_ENTRYPOINT}" ]]; then
+  echo "Model package entrypoint is not executable: ${MODEL_ENTRYPOINT}" >&2
+  exit 2
+fi
+
+exec "${MODEL_ENTRYPOINT}" "$@"

@@ -1,12 +1,35 @@
 {
-  "parameters": {
-    "confidence_threshold": 0.5
+  "request_version": "aidd.sciminer/request.v1",
+  "task": {
+    "id": "example-task",
+    "tool_slug": "protein-pocket-template",
+    "tool_version": "2.0.0"
   },
   "inputs": {
     "protein": {
-      "artifact_id": "018f25d8-7a37-7c2f-9c1d-0ae22736f914",
-      "semantic_type": "protein_structure",
-      "uri": "artifact://018f25d8-7a37-7c2f-9c1d-0ae22736f914"
+      "artifact_version_id": "example-protein-version",
+      "type": "protein_structure@1",
+      "files": {
+        "structure_file": {
+          "path": "input/protein.pdb",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "content_type": "chemical/x-pdb"
+        }
+      },
+      "metadata": {
+        "chain_ids": ["A"],
+        "structure_format": "pdb",
+        "source_filename": "protein.pdb"
+      }
     }
+  },
+  "parameters": {
+    "confidence_threshold": 0.5
+  },
+  "execution": {
+    "variant": "cpu",
+    "accelerator": "cpu",
+    "work_dir": ".",
+    "output_dir": "output"
   }
 }

@@ -32,10 +32,9 @@ REQUIRED_FILES = {
     "examples/output/artifacts/pocket/pocket_metadata.json",
     "examples/output/reports/report.json",
     "runner/entrypoint.sh",
-    "runner/platform_adapter.py",
     "schemas/parameters.schema.json",
     "schemas/result.v2.example.json",
-    "tests/test_contract.py",
+    "tests/test_model_platformization_contract.py",
 }
 
 
@@ -93,6 +92,21 @@ def test_platformization_template_prompt_keeps_platform_contract_fixed():
     assert "Runtime Env" in combined
     assert "镜像 digest" in combined
     assert "Executor 不安装依赖" in combined
+
+
+def test_platformization_template_keeps_adapter_on_model_side():
+    prompt = (TEMPLATE_ROOT / "MODEL_PLATFORMIZATION_PROMPT.md").read_text(encoding="utf-8")
+    readme = (TEMPLATE_ROOT / "README.md").read_text(encoding="utf-8")
+    entrypoint = (TEMPLATE_ROOT / "runner" / "entrypoint.sh").read_text(encoding="utf-8")
+
+    assert not (TEMPLATE_ROOT / "runner" / "platform_adapter.py").exists()
+    assert "runner/platform_adapter.py" not in prompt
+    assert "runner/platform_adapter.py" not in readme
+    assert "model/<Model>/src/<runtime>" in prompt
+    assert "model/<Model>/src/<runtime>" in readme
+    assert "MODEL_PACKAGE_ROOT" in entrypoint
+    assert "platform_run.sh" in entrypoint
+    assert "python3 \"${SCRIPT_DIR}/platform_adapter.py\"" not in entrypoint
 
 
 def test_platformization_template_does_not_embed_secrets_or_host_paths():

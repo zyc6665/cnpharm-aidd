@@ -1,11 +1,13 @@
 # Prompt for Codex or Claude Model Platformization
 
-你正在把一个旧模型代码库整理成 SciMiner 平台 Tool Package v2。请严格按以下规则执行。
+你正在把一个旧模型代码库整理成 SciMiner 模型侧规范包，并为它配套一个
+Tool Package v2 声明。请严格按以下规则执行。
 
 ## 目标
 
 平台契约固定，模型代码适配平台。不要修改平台后端或前端，不要为单个模型新增平台字段。
-你只能修改复制出的模型部署包、runner、adapter、schema、测试和说明文档。
+适配逻辑必须放在模型侧 `model/<Model>/src/<runtime>`，并由
+`model/<Model>/platform_run.sh` 暴露统一入口。Tool Package runner 只能委托这个入口。
 
 ## 必须保持的标准契约
 
@@ -25,16 +27,17 @@
 
 ## 工作步骤
 
-1. 先阅读当前目录的 `tool.yaml`、`README.md`、`runner/platform_adapter.py` 和测试。
+1. 先阅读模型侧规范包模板 `example/model-package-template`、当前目录的 `tool.yaml`、`README.md` 和测试。
 2. 阅读旧模型入口脚本，找出它实际需要的输入文件、参数、工作目录和输出文件。
-3. 在 adapter 中实现输入转换：把平台 request 里的标准 Artifact 文件挂载或复制到旧模型需要的位置。
-4. 执行旧模型原始入口，不改变平台 request/result 格式。
-5. 在 adapter 中实现输出转换：把旧模型输出转为 `binding_pocket@1` 的三个标准文件角色。
-6. 更新 `tool.yaml.runtime`：Runtime Env 必须包含镜像 digest、conda-pack/venv-pack fallback、
+3. 在 `model/<Model>/src/<runtime>` 中实现输入转换：把平台 request 里的标准 Artifact 文件挂载或复制到旧模型需要的位置。
+4. 通过 `model/<Model>/platform_run.sh` 执行旧模型原始入口，不改变平台 request/result 格式。
+5. 在模型侧 runtime 中实现输出转换：把旧模型输出转为 `binding_pocket@1` 的三个标准文件角色。
+6. 保持 Tool Package `runner/entrypoint.sh` 极薄，只委托模型侧 `platform_run.sh`，不要放模型私有逻辑。
+7. 更新 `tool.yaml.runtime`：Runtime Env 必须包含镜像 digest、conda-pack/venv-pack fallback、
    权重 manifest SHA-256 和缓存 key；Executor 不安装依赖。
-7. 更新 `schemas/result.v2.example.json` 和 `examples/output/result.json` 的路径、哈希与 metadata。
-8. 补充包内契约测试，覆盖至少一个成功输出和一个缺失必需文件的失败路径。
-9. 运行验证命令，失败时修 adapter 或测试，不要放宽平台契约。
+8. 更新 `schemas/result.v2.example.json` 和 `examples/output/result.json` 的路径、哈希与 metadata。
+9. 补充模型包契约测试，覆盖至少一个成功输出和一个缺失必需文件的失败路径。
+10. 运行验证命令，失败时修模型侧 runtime 或测试，不要放宽平台契约。
 
 ## LVpocket 特别要求
 
@@ -46,6 +49,7 @@
 
 - 禁止新增 `pocket_pdb`、`pocket_result` 等新主路径类型。
 - 禁止让 Agent 或 workflow 填写模型私有语义映射。
+- 禁止把模型 adapter 或旧模型推理代码放进 Tool Package runner。
 - 禁止把运行设备作为必填业务参数；设备属于 variant 执行上下文。
 - 禁止声明未验证硬件为 `validated`。
 - 禁止提交凭据、私有地址、宿主机绝对路径或无法复现的本地文件引用。

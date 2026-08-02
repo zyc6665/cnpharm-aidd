@@ -9,6 +9,7 @@ from pathlib import Path
 from jsonschema import Draft202012Validator
 
 from app.tool_packages.loader import load_tool_package
+from app.tool_packages.schemas import ToolPackageV2Manifest
 from app.tool_packages.validator import validate_tool_package
 
 
@@ -17,14 +18,11 @@ TEMPLATE_ROOT = REPOSITORY_ROOT / "example" / "tool-package-template"
 REQUIRED_FILES = {
     "tool.yaml",
     "schemas/parameters.schema.json",
-    "schemas/inputs.schema.json",
-    "schemas/outputs.schema.json",
     "variants/cpu.yaml",
     "variants/nvidia-cuda.yaml",
     "variants/haiguang-dcu.yaml",
     "runner/entrypoint.sh",
-    "runner/result_parser.py",
-    "tests/test_contract.py",
+    "tests/test_tool_package_v2_contract.py",
     "AGENTS.md",
 }
 
@@ -35,31 +33,42 @@ def test_template_contains_required_authoring_files():
     assert missing == []
 
 
+def test_template_does_not_keep_legacy_v1_authoring_files():
+    stale = [
+        "schemas/inputs.schema.json",
+        "schemas/outputs.schema.json",
+        "runner/tool_impl.py",
+        "runner/result_parser.py",
+    ]
+
+    assert [path for path in stale if (TEMPLATE_ROOT / path).exists()] == []
+
+
 def test_template_loads_with_the_production_validator():
     package = load_tool_package(TEMPLATE_ROOT)
     result = validate_tool_package(package)
 
+    assert isinstance(package, ToolPackageV2Manifest)
     assert result.is_valid is True, result.errors
+    assert [(item.name, item.type) for item in package.artifacts.inputs] == [
+        ("protein", "protein_structure@1")
+    ]
+    assert [(item.name, item.type, item.cardinality) for item in package.artifacts.outputs] == [
+        ("pocket", "binding_pocket@1", "one"),
+        ("report", "run_report@1", "one"),
+    ]
 
 
-def test_template_example_request_matches_parameter_and_input_schemas():
-    request = {
-        "parameters": {"confidence_threshold": 0.5},
-        "inputs": {
-            "protein": {
-                "artifact_id": "018f25d8-7a37-7c2f-9c1d-0ae22736f914",
-                "semantic_type": "protein_structure",
-                "uri": "artifact://018f25d8-7a37-7c2f-9c1d-0ae22736f914",
-            }
-        },
-    }
+def test_template_example_request_matches_parameter_schema():
+    request = json.loads((TEMPLATE_ROOT / "examples" / "request.json").read_text(encoding="utf-8"))
 
-    for key in ("parameters", "inputs"):
-        schema = json.loads(
-            (TEMPLATE_ROOT / "schemas" / f"{key}.schema.json").read_text(encoding="utf-8")
-        )
-        Draft202012Validator.check_schema(schema)
-        Draft202012Validator(schema).validate(request[key])
+    schema = json.loads(
+        (TEMPLATE_ROOT / "schemas" / "parameters.schema.json").read_text(encoding="utf-8")
+    )
+    Draft202012Validator.check_schema(schema)
+    Draft202012Validator(schema).validate(request["parameters"])
+    assert request["request_version"] == "aidd.sciminer/request.v1"
+    assert request["inputs"]["protein"]["type"] == "protein_structure@1"
 
 
 def test_variants_share_outputs_and_report_hardware_truthfully():
@@ -67,10 +76,11 @@ def test_variants_share_outputs_and_report_hardware_truthfully():
     variants = {variant.accelerator.value: variant for variant in package.variants}
 
     assert set(variants) == {"cpu", "nvidia_cuda", "haiguang_dcu"}
-    assert {tuple(variant.outputs) for variant in variants.values()} == {
-        ("pocket_result", "run_report")
+    assert {tuple(variant.entrypoint) for variant in variants.values()} == {
+        ("runner/entrypoint.sh",)
     }
-    assert variants["nvidia_cuda"].validation_status.value == "validated"
+    assert variants["cpu"].validation_status.value == "unvalidated"
+    assert variants["nvidia_cuda"].validation_status.value == "unvalidated"
     assert variants["nvidia_cuda"].resources.devices
     assert variants["nvidia_cuda"].resources.driver
     assert (

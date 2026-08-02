@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:sciminer:tool-package-template:parameters:v1",
+  "$id": "urn:sciminer:tool-package-template:parameters:v2",
   "title": "Pocket analysis parameters",
   "type": "object",
   "properties": {

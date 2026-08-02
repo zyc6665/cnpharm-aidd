@@ -1,11 +1,8 @@
 name: nvidia-cuda
 accelerator: nvidia_cuda
 executor_types:
-  - container
   - remote_job
-image: registry.example.invalid/aidd/protein-pocket-template:1.0.0-cuda
 entrypoint:
-  - bash
   - runner/entrypoint.sh
 resources:
   cpu: 4
@@ -14,10 +11,5 @@ resources:
   devices:
     - nvidia.com/gpu
   driver: ">=535"
-validation_status: validated
-hardware_validated: true
-inputs:
-  - protein_structure
-outputs:
-  - pocket_result
-  - run_report
+validation_status: unvalidated
+hardware_validated: false

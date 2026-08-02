@@ -1,25 +1,84 @@
-api_version: aidd.sciminer/v1
+api_version: aidd.sciminer/tool-package.v2
 kind: ToolPackage
 metadata:
   slug: protein-pocket-template
-  name: Protein Pocket Tool Template
-  version: 1.0.0
-  description: Production-oriented template for a protein pocket analysis tool.
+  name: Protein Pocket Tool Package Template
+  version: 2.0.0
+  description: Template for declaring a standard protein pocket model package on SciMiner.
 artifacts:
   inputs:
     - name: protein
-      semantic_type: protein_structure
-      artifact_type: protein_structure
+      type: protein_structure@1
       required: true
   outputs:
-    - name: pockets
-      semantic_type: pocket_result
-      artifact_type: pocket_result
+    - name: pocket
+      type: binding_pocket@1
+      cardinality: one
       required: true
     - name: report
-      semantic_type: run_report
-      artifact_type: run_report
-      required: true
+      type: run_report@1
+      cardinality: one
+      required: false
+parameters_schema:
+  type: object
+  properties:
+    confidence_threshold:
+      type: number
+      minimum: 0
+      maximum: 1
+      default: 0.5
+      description: Minimum model confidence for reporting a candidate pocket.
+  additionalProperties: false
+adapter:
+  input:
+    - input: protein
+      method: mount_primary_structure_file
+  output:
+    - output: pocket
+      method: collect_model_runtime_binding_pocket_v1
+      validator_profile: binding_pocket_v1_core
+    - output: report
+      method: collect_model_runtime_report_v1
+      validator_profile: run_report_v1_core
+exposure:
+  agent: true
+  workflow: true
+  direct_run: true
+runtime:
+  python: "3.10"
+  cuda: "11.8"
+  executor_support:
+    - ssh_docker_exec
+    - slurm
+    - k8s_job
+  selection_policy: "prefer container image by immutable digest; fallback to conda_pack only when the executor cannot run containers"
+  artifacts:
+    primary:
+      kind: container
+      image: registry.example/sciminer/protein-pocket-template-runtime:2.0.0
+      image_digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      includes:
+        - python
+        - cuda_runtime
+        - dependencies
+        - runtime_wrapper
+    fallback:
+      kind: conda_pack
+      uri: artifacts://model-envs/protein-pocket-template/2.0.0/conda-env.tar.gz
+      sha256: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      includes:
+        - python
+        - dependencies
+  weights:
+    manifest_uri: artifacts://model-weights/protein-pocket-template/2.0.0/weights.json
+    manifest_sha256: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  cache_policy:
+    key_fields:
+      - metadata.slug
+      - metadata.version
+      - runtime.artifacts.selected.digest_or_sha256
+      - runtime.weights.manifest_sha256
+    mutable_host_paths_forbidden: true
 variants:
   - file: variants/cpu.yaml
   - file: variants/nvidia-cuda.yaml
