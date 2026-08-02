@@ -27,9 +27,11 @@ from app.database.base import Base
 from app.database.session import get_db
 from app.main import app
 from app.models import files as _files_models  # noqa: F401
+from app.models import projects as _project_models  # noqa: F401
 from app.models import statistics as _statistics_models  # noqa: F401
 from app.models import tasks as _task_models  # noqa: F401
 from app.models import users as _user_models  # noqa: F401
+from app.models.projects import Organization, Project, ProjectMember
 from app.models.tasks import Task, TaskInput, TaskStatus
 from app.models.tools import Tool, ToolStatus, ToolVersion
 from app.models.users import User, UserRole, UserStatus
@@ -144,6 +146,27 @@ async def published_tool(db_session: AsyncSession, admin_user: User) -> Tool:
     return tool
 
 
+@pytest_asyncio.fixture
+async def task_project(db_session: AsyncSession, admin_user: User) -> Project:
+    """创建当前用户可访问的研究项目。"""
+    organization = Organization(name="Task Center Lab", slug="task-center-lab")
+    db_session.add(organization)
+    await db_session.flush()
+
+    project = Project(
+        organization_id=organization.id,
+        created_by=admin_user.id,
+        name="Task Center Project",
+        status="active",
+    )
+    db_session.add(project)
+    await db_session.flush()
+    db_session.add(ProjectMember(project_id=project.id, user_id=admin_user.id, role="owner"))
+    await db_session.commit()
+    await db_session.refresh(project)
+    return project
+
+
 @pytest.fixture
 def direct_runner_stub(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     """将任务创建固定为 direct 模式，并屏蔽实际调度。"""
@@ -211,6 +234,85 @@ async def test_create_task_without_name_generates_default_name(
     task = await db_session.get(Task, payload["id"])
     assert task is not None
     assert task.name == payload["name"]
+
+
+@pytest.mark.asyncio
+async def test_create_task_with_project_id_persists_project_context(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    published_tool: Tool,
+    task_project: Project,
+    direct_runner_stub: SimpleNamespace,
+):
+    """直接任务中心传入 project_id 时应写入 Task.extra_data，供标准 Artifact 持久化使用。"""
+    response = await api_client.post(
+        "/api/v1/tasks",
+        headers={"Authorization": "Bearer admin-token"},
+        json={
+            "tool_id": published_tool.id,
+            "project_id": task_project.id,
+            "params": {"foo": "bar"},
+            "priority": "normal",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["project_id"] == task_project.id
+
+    task = await db_session.get(Task, payload["id"])
+    assert task is not None
+    assert task.extra_data["project_id"] == task_project.id
+
+    detail_response = await api_client.get(
+        f"/api/v1/tasks/{task.id}",
+        headers={"Authorization": "Bearer admin-token"},
+    )
+    assert detail_response.status_code == 200
+    assert detail_response.json()["data"]["project_id"] == task_project.id
+
+    list_response = await api_client.get(
+        "/api/v1/tasks",
+        headers={"Authorization": "Bearer admin-token"},
+    )
+    assert list_response.status_code == 200
+    matched = [
+        item for item in list_response.json()["data"]["items"] if item["id"] == task.id
+    ]
+    assert matched[0]["project_id"] == task_project.id
+
+
+@pytest.mark.asyncio
+async def test_create_task_rejects_project_id_without_membership(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    published_tool: Tool,
+    direct_runner_stub: SimpleNamespace,
+):
+    """用户不是项目成员时，不能把任务挂到该项目下。"""
+    organization = Organization(name="Other Lab", slug="other-lab")
+    db_session.add(organization)
+    await db_session.flush()
+    project = Project(
+        organization_id=organization.id,
+        created_by="other-user",
+        name="Other Project",
+        status="active",
+    )
+    db_session.add(project)
+    await db_session.commit()
+
+    response = await api_client.post(
+        "/api/v1/tasks",
+        headers={"Authorization": "Bearer admin-token"},
+        json={
+            "tool_id": published_tool.id,
+            "project_id": project.id,
+            "params": {"foo": "bar"},
+        },
+    )
+
+    assert response.status_code == 404
 
 
 @pytest.mark.asyncio

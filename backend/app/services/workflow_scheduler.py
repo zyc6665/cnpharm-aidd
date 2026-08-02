@@ -428,6 +428,7 @@ async def schedule_workflow_node(
         current_user=current_user,
         task_data=TaskCreate(
             name=f"Workflow {run.name} - {node_id}",
+            project_id=run.project_id,
             tool_id=tool.id,
             tool_version_id=tool.current_version_id,
             params=node_params,
@@ -672,6 +673,7 @@ async def schedule_map_node(
             current_user=current_user,
             task_data=TaskCreate(
                 name=f"Workflow {run.name} - {sub_node_id}",
+                project_id=run.project_id,
                 tool_id=tool.id,
                 tool_version_id=tool.current_version_id,
                 params=node_params,
@@ -866,6 +868,7 @@ async def schedule_loop_node(
             current_user=current_user,
             task_data=TaskCreate(
                 name=f"Workflow {run.name} - {sub_node_id}",
+                project_id=run.project_id,
                 tool_id=tool.id,
                 tool_version_id=tool.current_version_id,
                 params=node_params,

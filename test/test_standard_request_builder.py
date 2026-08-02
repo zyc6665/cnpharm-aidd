@@ -50,6 +50,34 @@ from app.models.users import UserRole, UserStatus
 from app.tool_packages.schemas import ToolPackageV2Manifest
 
 
+def minimal_runtime_manifest(slug: str) -> dict:
+    return {
+        "python": "3.10",
+        "executor_support": ["ssh_docker_exec"],
+        "selection_policy": "test runtime fixture",
+        "artifacts": {
+            "primary": {
+                "kind": "container",
+                "image": f"registry.example/sciminer/{slug}:1.0.0",
+                "image_digest": "sha256:test",
+            },
+            "fallback": {
+                "kind": "conda_pack",
+                "uri": f"artifacts://model-envs/{slug}/1.0.0/conda-env.tar.gz",
+                "sha256": "test",
+            },
+        },
+        "weights": {
+            "manifest_uri": f"artifacts://model-weights/{slug}/1.0.0/weights.json",
+            "manifest_sha256": "test",
+        },
+        "cache_policy": {
+            "key_fields": ["metadata.slug", "metadata.version"],
+            "mutable_host_paths_forbidden": True,
+        },
+    }
+
+
 @pytest_asyncio.fixture
 async def request_builder_db() -> AsyncSession:
     engine = create_async_engine(
@@ -66,12 +94,13 @@ async def request_builder_db() -> AsyncSession:
 
 
 def _manifest(*, inputs: list[dict] | None = None) -> ToolPackageV2Manifest:
+    slug = "standard-request-tool"
     return ToolPackageV2Manifest.model_validate(
         {
             "api_version": "aidd.sciminer/tool-package.v2",
             "kind": "ToolPackage",
             "metadata": {
-                "slug": "standard-request-tool",
+                "slug": slug,
                 "name": "Standard Request Tool",
                 "version": "1.0.0",
             },
@@ -81,6 +110,7 @@ def _manifest(*, inputs: list[dict] | None = None) -> ToolPackageV2Manifest:
                 "outputs": [{"name": "report", "type": "run_report@1"}],
             },
             "parameters_schema": {"type": "object"},
+            "runtime": minimal_runtime_manifest(slug),
             "variants": [
                 {
                     "name": "cpu",

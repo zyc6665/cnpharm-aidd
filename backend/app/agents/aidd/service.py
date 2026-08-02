@@ -589,6 +589,7 @@ async def _schedule_step(
         current_user=current_user,
         task_data=TaskCreate(
             name=f"AIDD {run.intent} - {step.step_key}",
+            project_id=run.project_id,
             tool_id=tool.id,
             params=payload.params,
             file_ids=payload.file_ids,

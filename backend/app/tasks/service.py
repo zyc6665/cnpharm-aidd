@@ -17,6 +17,7 @@ from app.models.tasks import Task, TaskInput, TaskStatus
 from app.models.tools import Tool, ToolVersion
 from app.models.users import User
 from app.schemas.tasks import TaskCreate
+from app.services.project_access import load_project_membership
 from app.tasks.direct_runner import direct_task_runner as default_direct_task_runner
 from app.tasks.naming import (
     resolve_task_display_name,
@@ -80,6 +81,15 @@ async def create_and_schedule_tool_task(
             raise ValidationException("工具没有可用版本")
         version_id = tool.current_version_id
 
+    extra_data: dict[str, str] = {}
+    if task_data.project_id:
+        await load_project_membership(
+            db,
+            project_id=task_data.project_id,
+            user_id=current_user.id,
+        )
+        extra_data["project_id"] = task_data.project_id
+
     task = Task(
         user_id=current_user.id,
         tool_id=task_data.tool_id,
@@ -87,6 +97,7 @@ async def create_and_schedule_tool_task(
         status=TaskStatus.PENDING.value,
         priority=task_data.priority,
         progress=0.0,
+        extra_data=extra_data,
     )
 
     db.add(task)

@@ -68,11 +68,12 @@ async def worker_standard_db_factory():
 
 
 def _v2_manifest() -> dict:
+    slug = "worker-standard-tool"
     return {
         "api_version": "aidd.sciminer/tool-package.v2",
         "kind": "ToolPackage",
         "metadata": {
-            "slug": "worker-standard-tool",
+            "slug": slug,
             "name": "Worker Standard Tool",
             "version": "1.0.0",
         },
@@ -84,6 +85,31 @@ def _v2_manifest() -> dict:
             ],
         },
         "parameters_schema": {"type": "object"},
+        "runtime": {
+            "python": "3.10",
+            "executor_support": ["ssh_docker_exec"],
+            "selection_policy": "test runtime fixture",
+            "artifacts": {
+                "primary": {
+                    "kind": "container",
+                    "image": f"registry.example/sciminer/{slug}:1.0.0",
+                    "image_digest": "sha256:test",
+                },
+                "fallback": {
+                    "kind": "conda_pack",
+                    "uri": f"artifacts://model-envs/{slug}/1.0.0/conda-env.tar.gz",
+                    "sha256": "test",
+                },
+            },
+            "weights": {
+                "manifest_uri": f"artifacts://model-weights/{slug}/1.0.0/weights.json",
+                "manifest_sha256": "test",
+            },
+            "cache_policy": {
+                "key_fields": ["metadata.slug", "metadata.version"],
+                "mutable_host_paths_forbidden": True,
+            },
+        },
         "variants": [
             {
                 "name": "cpu",

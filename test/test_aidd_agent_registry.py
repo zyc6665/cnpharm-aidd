@@ -24,12 +24,41 @@ from app.models.tools import Tool, ToolStatus, ToolVersion  # noqa: E402
 from app.models.users import User, UserRole, UserStatus  # noqa: E402
 
 
+def minimal_runtime_manifest(slug: str) -> dict:
+    return {
+        "python": "3.10",
+        "executor_support": ["ssh_docker_exec"],
+        "selection_policy": "test runtime fixture",
+        "artifacts": {
+            "primary": {
+                "kind": "container",
+                "image": f"registry.example/sciminer/{slug}:1.0.0",
+                "image_digest": "sha256:test",
+            },
+            "fallback": {
+                "kind": "conda_pack",
+                "uri": f"artifacts://model-envs/{slug}/1.0.0/conda-env.tar.gz",
+                "sha256": "test",
+            },
+        },
+        "weights": {
+            "manifest_uri": f"artifacts://model-weights/{slug}/1.0.0/weights.json",
+            "manifest_sha256": "test",
+        },
+        "cache_policy": {
+            "key_fields": ["metadata.slug", "metadata.version"],
+            "mutable_host_paths_forbidden": True,
+        },
+    }
+
+
 def _v2_manifest(*, agent_exposure: bool = True) -> dict:
+    slug = "standard-pocket-tool"
     return {
         "api_version": "aidd.sciminer/tool-package.v2",
         "kind": "ToolPackage",
         "metadata": {
-            "slug": "standard-pocket-tool",
+            "slug": slug,
             "name": "Standard Pocket Tool",
             "version": "1.0.0",
         },
@@ -46,6 +75,7 @@ def _v2_manifest(*, agent_exposure: bool = True) -> dict:
         },
         "parameters_schema": {"type": "object"},
         "exposure": {"agent": agent_exposure, "workflow": True, "direct_run": True},
+        "runtime": minimal_runtime_manifest(slug),
         "variants": [
             {
                 "name": "cpu",
@@ -171,6 +201,7 @@ async def create_tool_with_v2_package_config(
 
     manifest = _v2_manifest(agent_exposure=agent_exposure)
     manifest["metadata"]["slug"] = slug
+    manifest["runtime"] = minimal_runtime_manifest(slug)
     version = ToolVersion(
         tool_id=tool.id,
         version="1.0.0",

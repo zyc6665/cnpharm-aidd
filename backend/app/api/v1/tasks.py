@@ -53,6 +53,12 @@ def _extract_primary_output_data(result: Any) -> Any:
     return result
 
 
+def _task_project_id(task: Task) -> Optional[str]:
+    data = task.extra_data if isinstance(task.extra_data, dict) else {}
+    project_id = data.get("project_id")
+    return str(project_id) if project_id else None
+
+
 def _serialize_task_log(log: TaskLog) -> dict[str, Any]:
     return {
         "id": log.id,
@@ -202,6 +208,7 @@ async def list_tasks(
             created_at=task.created_at,
             task_id=task.id,
         )
+        task_dict["project_id"] = _task_project_id(task)
         task_dict["user_id"] = task.user_id
         if task.user:
             task_dict["user_name"] = task.user.display_name or task.user.email.split("@")[0]
@@ -257,6 +264,7 @@ async def get_task(
             created_at=task.created_at,
             task_id=task.id,
         ),
+        "project_id": _task_project_id(task),
         "user_id": task.user_id,
         "tool_id": task.tool_id,
         "tool_version_id": task.tool_version_id,
@@ -310,6 +318,7 @@ async def create_task(
         data={
             "id": task.id,
             "name": task.name,
+            "project_id": _task_project_id(task),
             "user_id": task.user_id,
             "tool_id": task.tool_id,
             "tool_version_id": task.tool_version_id,

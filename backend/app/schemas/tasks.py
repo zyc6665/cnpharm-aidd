@@ -23,6 +23,7 @@ class TaskOutputSchema(BaseModel):
 class TaskCreate(BaseModel):
     """创建任务"""
     name: Optional[str] = Field(None, description="任务名称")
+    project_id: Optional[str] = Field(None, min_length=1, max_length=36, description="关联研究项目ID")
     tool_id: str = Field(..., description="工具ID")
     tool_version_id: Optional[str] = Field(None, description="工具版本ID(可选，默认使用当前版本)")
     params: Dict[str, Any] = Field(default_factory=dict, description="参数")
@@ -34,6 +35,7 @@ class TaskResponse(TimestampMixin):
     """任务响应"""
     id: str
     name: Optional[str] = None
+    project_id: Optional[str] = Field(None, min_length=1, max_length=36)
     user_id: Optional[str]
     tool_id: str
     tool_version_id: str
@@ -60,6 +62,7 @@ class TaskListResponse(BaseModel):
     """任务列表响应"""
     id: str
     name: Optional[str] = None
+    project_id: Optional[str] = Field(None, min_length=1, max_length=36)
     tool_id: str
     tool_name: Optional[str] = None
     tool_slug: Optional[str] = None
