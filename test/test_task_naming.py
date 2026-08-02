@@ -32,6 +32,7 @@ from app.models import statistics as _statistics_models  # noqa: F401
 from app.models import tasks as _task_models  # noqa: F401
 from app.models import users as _user_models  # noqa: F401
 from app.models.projects import Organization, Project, ProjectMember
+from app.models.artifacts import Artifact, ArtifactVersion
 from app.models.tasks import Task, TaskInput, TaskStatus
 from app.models.tools import Tool, ToolStatus, ToolVersion
 from app.models.users import User, UserRole, UserStatus
@@ -280,6 +281,187 @@ async def test_create_task_with_project_id_persists_project_context(
         item for item in list_response.json()["data"]["items"] if item["id"] == task.id
     ]
     assert matched[0]["project_id"] == task_project.id
+
+
+async def _seed_standard_artifact_version(
+    db_session: AsyncSession,
+    *,
+    project_id: str,
+    user_id: str,
+    standard_type: str = "protein_structure",
+    standard_version: int = 1,
+    status: str = "available",
+) -> ArtifactVersion:
+    artifact = Artifact(
+        project_id=project_id,
+        created_by=user_id,
+        artifact_type=standard_type,
+        semantic_type=standard_type,
+        standard_type=standard_type,
+        standard_version=standard_version,
+        name=f"{standard_type}@{standard_version}",
+    )
+    db_session.add(artifact)
+    await db_session.flush()
+    version = ArtifactVersion(
+        artifact_id=artifact.id,
+        created_by=user_id,
+        version=1,
+        filename="artifact.json",
+        content_type="application/json",
+        size_bytes=2,
+        sha256="0" * 64,
+        storage_key="test/artifact.json",
+        status=status,
+        validation_status="passed",
+        validation_errors=[],
+        manifest_json={"type": f"{standard_type}@{standard_version}"},
+        summary_json={},
+        metrics_json={},
+    )
+    db_session.add(version)
+    await db_session.commit()
+    await db_session.refresh(version)
+    return version
+
+
+@pytest.mark.asyncio
+async def test_create_task_with_input_bindings_persists_standard_artifact_context(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    published_tool: Tool,
+    task_project: Project,
+    admin_user: User,
+    direct_runner_stub: SimpleNamespace,
+):
+    """直接任务中心应保存标准 ArtifactVersion 输入绑定，供 v2 executor 构造 request.v1。"""
+    artifact_version = await _seed_standard_artifact_version(
+        db_session,
+        project_id=task_project.id,
+        user_id=admin_user.id,
+    )
+
+    response = await api_client.post(
+        "/api/v1/tasks",
+        headers={"Authorization": "Bearer admin-token"},
+        json={
+            "tool_id": published_tool.id,
+            "project_id": task_project.id,
+            "params": {"threshold": 0.5},
+            "input_bindings": {"protein": artifact_version.id},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["project_id"] == task_project.id
+    assert payload["input_bindings"] == {"protein": artifact_version.id}
+
+    task = await db_session.get(Task, payload["id"])
+    assert task is not None
+    assert task.extra_data["project_id"] == task_project.id
+    assert task.extra_data["input_bindings"] == {"protein": artifact_version.id}
+
+    detail_response = await api_client.get(
+        f"/api/v1/tasks/{task.id}",
+        headers={"Authorization": "Bearer admin-token"},
+    )
+    assert detail_response.status_code == 200
+    detail = detail_response.json()["data"]
+    assert detail["input_bindings"] == {"protein": artifact_version.id}
+    assert detail["inputs"]["input_bindings"] == {"protein": artifact_version.id}
+
+
+@pytest.mark.asyncio
+async def test_create_task_rejects_input_bindings_without_project_id(
+    api_client: httpx.AsyncClient,
+    published_tool: Tool,
+    direct_runner_stub: SimpleNamespace,
+):
+    """标准 ArtifactVersion 绑定必须带 project_id，避免跨项目权限绕过。"""
+    response = await api_client.post(
+        "/api/v1/tasks",
+        headers={"Authorization": "Bearer admin-token"},
+        json={
+            "tool_id": published_tool.id,
+            "params": {},
+            "input_bindings": {"protein": "version-1"},
+        },
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_task_rejects_input_binding_from_another_project(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    published_tool: Tool,
+    task_project: Project,
+    admin_user: User,
+    direct_runner_stub: SimpleNamespace,
+):
+    """输入绑定的 ArtifactVersion 必须属于任务 project_id。"""
+    organization = Organization(name="Binding Other Lab", slug="binding-other-lab")
+    db_session.add(organization)
+    await db_session.flush()
+    other_project = Project(
+        organization_id=organization.id,
+        created_by=admin_user.id,
+        name="Other Binding Project",
+        status="active",
+    )
+    db_session.add(other_project)
+    await db_session.flush()
+    artifact_version = await _seed_standard_artifact_version(
+        db_session,
+        project_id=other_project.id,
+        user_id=admin_user.id,
+    )
+
+    response = await api_client.post(
+        "/api/v1/tasks",
+        headers={"Authorization": "Bearer admin-token"},
+        json={
+            "tool_id": published_tool.id,
+            "project_id": task_project.id,
+            "params": {},
+            "input_bindings": {"protein": artifact_version.id},
+        },
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_task_rejects_unavailable_input_binding(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    published_tool: Tool,
+    task_project: Project,
+    admin_user: User,
+    direct_runner_stub: SimpleNamespace,
+):
+    """不可用的 ArtifactVersion 不能作为标准输入绑定。"""
+    artifact_version = await _seed_standard_artifact_version(
+        db_session,
+        project_id=task_project.id,
+        user_id=admin_user.id,
+        status="deleted",
+    )
+
+    response = await api_client.post(
+        "/api/v1/tasks",
+        headers={"Authorization": "Bearer admin-token"},
+        json={
+            "tool_id": published_tool.id,
+            "project_id": task_project.id,
+            "params": {},
+            "input_bindings": {"protein": artifact_version.id},
+        },
+    )
+
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio

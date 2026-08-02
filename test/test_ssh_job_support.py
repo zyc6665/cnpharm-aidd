@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -29,6 +30,56 @@ def _build_task(task_id: str = "task-123") -> SimpleNamespace:
 
 def _build_tool_version(config: dict) -> SimpleNamespace:
     return SimpleNamespace(config=config)
+
+
+def _v2_manifest() -> dict:
+    return {
+        "api_version": "aidd.sciminer/tool-package.v2",
+        "kind": "ToolPackage",
+        "metadata": {
+            "slug": "standard-ssh-tool",
+            "name": "Standard SSH Tool",
+            "version": "1.0.0",
+        },
+        "artifacts": {
+            "inputs": [{"name": "protein", "type": "protein_structure@1", "required": True}],
+            "outputs": [{"name": "report", "type": "run_report@1"}],
+        },
+        "parameters_schema": {"type": "object"},
+        "runtime": {
+            "python": "3.10",
+            "executor_support": ["ssh_docker_exec"],
+            "selection_policy": "test runtime",
+            "artifacts": {
+                "primary": {
+                    "kind": "container",
+                    "image": "registry.example/sciminer/standard-ssh-tool:1.0.0",
+                    "image_digest": "sha256:test",
+                },
+                "fallback": {
+                    "kind": "conda_pack",
+                    "uri": "artifacts://model-envs/standard-ssh-tool/1.0.0/conda-env.tar.gz",
+                    "sha256": "test",
+                },
+            },
+            "weights": {
+                "manifest_uri": "artifacts://model-weights/standard-ssh-tool/1.0.0/weights.json",
+                "manifest_sha256": "test",
+            },
+            "cache_policy": {
+                "key_fields": ["metadata.slug", "metadata.version"],
+                "mutable_host_paths_forbidden": True,
+            },
+        },
+        "variants": [
+            {
+                "name": "cpu",
+                "accelerator": "cpu",
+                "executor_types": ["remote_job"],
+                "entrypoint": ["runner/entrypoint.sh"],
+            }
+        ],
+    }
 
 
 def test_determine_queue_routes_non_gpu_ssh_job_to_cpu_queue() -> None:
@@ -97,6 +148,88 @@ def test_ssh_job_executor_builds_container_runtime_paths_and_command() -> None:
     assert "docker exec targetdiff-prod bash -lc" in command
     assert "--output-dir /workspace/platform-jobs/task-123/output" in command
     assert "export CUDA_VISIBLE_DEVICES=0" in command
+
+
+@pytest.mark.asyncio
+async def test_ssh_job_executor_writes_standard_request_from_input_bindings(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    """v2 Tool Package + input_bindings 时，SSH params.json 应是标准 request.v1。"""
+    task = _build_task("task-standard")
+    task.extra_data = {"input_bindings": {"protein": "artifact-version-1"}}
+    task.inputs = SimpleNamespace(params={"threshold": 0.5}, file_ids=["legacy-file-id"])
+    config = {
+        "type": "ssh_job",
+        "host": "gpu-node-01.internal",
+        "username": "runner",
+        "runner_mode": "shell",
+        "remote_base_dir": "/srv/platform-jobs",
+        "entrypoint": "/opt/models/platform_run.sh",
+        "tool_package_manifest": _v2_manifest(),
+        "variant": "cpu",
+        "accelerator": "cpu",
+    }
+    executor = SSHJobExecutor(task, _build_tool_version(config))
+    called: dict[str, object] = {}
+
+    async def fake_get_async_session():
+        yield object()
+
+    class FakeStandardRequest:
+        def model_dump(self, mode: str = "json") -> dict:
+            return {
+                "request_version": "aidd.sciminer/request.v1",
+                "task": {
+                    "id": "task-standard",
+                    "tool_slug": "standard-ssh-tool",
+                    "tool_version": "1.0.0",
+                },
+                "inputs": {"protein": {"artifact_version_id": "artifact-version-1"}},
+                "parameters": {"threshold": 0.5},
+                "execution": {"variant": "cpu", "accelerator": "cpu"},
+            }
+
+    async def fake_build_standard_execution_request(
+        db,
+        *,
+        task,
+        tool_package_manifest,
+        input_bindings,
+        parameters,
+        work_dir,
+        execution_context,
+    ):
+        called["db"] = db
+        called["input_bindings"] = dict(input_bindings)
+        called["parameters"] = dict(parameters)
+        called["work_dir"] = Path(work_dir)
+        called["variant"] = execution_context.variant
+        called["accelerator"] = execution_context.accelerator
+        called["slug"] = tool_package_manifest.metadata.slug
+        return FakeStandardRequest()
+
+    async def fail_legacy_file_staging(_input_dir: str):
+        raise AssertionError("legacy file_id staging should not run for standard input_bindings")
+
+    monkeypatch.setenv("TASK_WORK_DIR", str(tmp_path))
+    monkeypatch.setattr("app.tasks.executors.ssh_job.get_async_session", fake_get_async_session)
+    monkeypatch.setattr(
+        "app.tasks.executors.ssh_job.build_standard_execution_request",
+        fake_build_standard_execution_request,
+    )
+    monkeypatch.setattr(executor, "_prepare_input_files", fail_legacy_file_staging)
+
+    bundle = await executor._prepare_local_task_bundle()
+    payload = json.loads(Path(bundle["params_path"]).read_text(encoding="utf-8"))
+
+    assert payload["request_version"] == "aidd.sciminer/request.v1"
+    assert payload["inputs"]["protein"]["artifact_version_id"] == "artifact-version-1"
+    assert payload["parameters"] == {"threshold": 0.5}
+    assert called["input_bindings"] == {"protein": "artifact-version-1"}
+    assert called["parameters"] == {"threshold": 0.5}
+    assert called["variant"] == "cpu"
+    assert called["accelerator"] == "cpu"
 
 
 def test_ssh_job_executor_supports_password_auth(monkeypatch, tmp_path) -> None:

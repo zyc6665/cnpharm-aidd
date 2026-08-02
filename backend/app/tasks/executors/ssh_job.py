@@ -6,11 +6,18 @@ import logging
 import os
 import posixpath
 import shutil
+from pathlib import Path
 from typing import Any, Optional
 
+from pydantic import ValidationError
 from sqlalchemy import select
 
 from app.database.session import get_async_session
+from app.execution.request_builder import (
+    StandardExecutionBuildContext,
+    StandardRequestBuilderError,
+    build_standard_execution_request,
+)
 from app.models.files import File as FileModel
 from app.tasks.executors.base import BaseExecutor
 from app.tasks.executors.errors import TaskExecutionError
@@ -21,6 +28,7 @@ from app.tasks.executors.ssh_paths import build_remote_paths
 from app.tasks.executors.ssh_payload import build_params_payload
 from app.tasks.executors.ssh_result import load_result_json
 from app.tasks.ssh_transport import ParamikoSSHTransport
+from app.tool_packages.schemas import ToolPackageV2Manifest
 
 logger = logging.getLogger(__name__)
 
@@ -222,7 +230,7 @@ class SSHJobExecutor(BaseExecutor):
         os.makedirs(download_root, exist_ok=True)
         with open(params_path, "w", encoding="utf-8") as params_file:
             json.dump(
-                self._build_params_payload(await self._prepare_input_files(input_dir)),
+                await self._prepare_params_payload(work_dir, input_dir),
                 params_file,
                 ensure_ascii=False,
                 indent=2,
@@ -233,6 +241,21 @@ class SSHJobExecutor(BaseExecutor):
             "params_path": params_path,
             "download_root": download_root,
         }
+
+    async def _prepare_params_payload(self, work_dir: str, input_dir: str) -> dict[str, Any]:
+        input_bindings = self._standard_input_bindings()
+        if input_bindings:
+            manifest = self._tool_package_v2_manifest()
+            if manifest is None:
+                raise TaskExecutionError(
+                    "Task input_bindings require a Tool Package v2 manifest in tool config"
+                )
+            return await self._build_standard_request_payload(
+                manifest=manifest,
+                input_bindings=input_bindings,
+                work_dir=Path(work_dir),
+            )
+        return self._build_params_payload(await self._prepare_input_files(input_dir))
 
     async def _prepare_input_files(self, input_dir: str) -> list[dict[str, str]]:
         inputs = self.task.inputs
@@ -273,6 +296,86 @@ class SSHJobExecutor(BaseExecutor):
     def _build_params_payload(self, staged_files: list[dict[str, str]]) -> dict[str, Any]:
         raw_params = self.task.inputs.params if self.task.inputs else {}
         return build_params_payload(str(self.task.id), raw_params, staged_files)
+
+    async def _build_standard_request_payload(
+        self,
+        *,
+        manifest: ToolPackageV2Manifest,
+        input_bindings: dict[str, str],
+        work_dir: Path,
+    ) -> dict[str, Any]:
+        try:
+            async for session in get_async_session():
+                request = await build_standard_execution_request(
+                    session,
+                    task=self.task,
+                    tool_package_manifest=manifest,
+                    input_bindings=input_bindings,
+                    parameters=self._task_parameters(),
+                    work_dir=work_dir,
+                    execution_context=self._standard_execution_context(manifest),
+                )
+                return request.model_dump(mode="json")
+        except StandardRequestBuilderError as exc:
+            raise TaskExecutionError(f"Failed to build standard request.v1: {exc}") from exc
+        raise TaskExecutionError("Failed to open database session for standard request.v1")
+
+    def _standard_input_bindings(self) -> dict[str, str]:
+        data = getattr(self.task, "extra_data", None)
+        if not isinstance(data, dict):
+            return {}
+        bindings = data.get("input_bindings")
+        if not isinstance(bindings, dict):
+            return {}
+        return {
+            str(input_name): str(version_id)
+            for input_name, version_id in bindings.items()
+            if input_name and version_id
+        }
+
+    def _task_parameters(self) -> dict[str, Any]:
+        raw_params = self.task.inputs.params if self.task.inputs else {}
+        if not isinstance(raw_params, dict):
+            return {}
+        if "params" in raw_params or "input_files" in raw_params:
+            nested = raw_params.get("params")
+            return dict(nested) if isinstance(nested, dict) else {}
+        return dict(raw_params)
+
+    def _tool_package_v2_manifest(self) -> ToolPackageV2Manifest | None:
+        manifest_data = self.config.get("tool_package_manifest")
+        tool_package_config = self.config.get("tool_package")
+        if not isinstance(manifest_data, dict) and isinstance(tool_package_config, dict):
+            manifest_data = tool_package_config.get("manifest")
+        if not isinstance(manifest_data, dict):
+            return None
+        if manifest_data.get("api_version") != "aidd.sciminer/tool-package.v2":
+            return None
+        try:
+            return ToolPackageV2Manifest.model_validate(manifest_data)
+        except ValidationError as exc:
+            raise TaskExecutionError(f"Invalid Tool Package v2 manifest: {exc}") from exc
+
+    def _standard_execution_context(
+        self,
+        manifest: ToolPackageV2Manifest,
+    ) -> StandardExecutionBuildContext:
+        variant_name = str(
+            self.config.get("variant")
+            or self.config.get("variant_name")
+            or (manifest.variants[0].name if manifest.variants else "cpu")
+        )
+        variant = next(
+            (item for item in manifest.variants if item.name == variant_name),
+            manifest.variants[0] if manifest.variants else None,
+        )
+        accelerator = self.config.get("accelerator")
+        if accelerator is None and variant is not None:
+            accelerator = variant.accelerator.value
+        return StandardExecutionBuildContext(
+            variant=variant_name,
+            accelerator=str(accelerator or "cpu"),
+        )
 
     def _build_remote_paths(self) -> dict[str, str]:
         return build_remote_paths(self.config, str(self.task.id))

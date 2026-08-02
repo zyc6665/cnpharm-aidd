@@ -12,6 +12,7 @@ from sqlalchemy.orm import joinedload, selectinload
 from app.config import use_direct_task_execution
 from app.common.exceptions import NotFoundException, ValidationException
 from app.database.base import utcnow
+from app.models.artifacts import Artifact, ArtifactVersion
 from app.models.statistics import ToolStatistics
 from app.models.tasks import Task, TaskInput, TaskStatus
 from app.models.tools import Tool, ToolVersion
@@ -54,6 +55,55 @@ async def record_tool_usage(db: AsyncSession, tool_id: str) -> None:
     await db.flush()
 
 
+async def _validate_standard_input_bindings(
+    db: AsyncSession,
+    *,
+    project_id: str | None,
+    input_bindings: dict[str, str],
+) -> dict[str, str]:
+    """Validate task standard ArtifactVersion bindings and return a normalized mapping."""
+    normalized = {
+        str(input_name): str(version_id)
+        for input_name, version_id in (input_bindings or {}).items()
+        if str(input_name).strip() and str(version_id).strip()
+    }
+    if not normalized:
+        return {}
+    if not project_id:
+        raise ValidationException("标准 ArtifactVersion 输入绑定必须提供 project_id")
+
+    version_ids = set(normalized.values())
+    result = await db.execute(
+        select(ArtifactVersion.id, Artifact.project_id)
+        .join(Artifact, Artifact.id == ArtifactVersion.artifact_id)
+        .where(
+            ArtifactVersion.id.in_(version_ids),
+            ArtifactVersion.status == "available",
+        )
+    )
+    projects_by_version = {
+        str(version_id): str(owner_project_id)
+        for version_id, owner_project_id in result.all()
+    }
+    missing = sorted(version_ids - set(projects_by_version))
+    if missing:
+        raise ValidationException(
+            "输入绑定引用的 ArtifactVersion 不存在",
+            detail={"missing_artifact_version_ids": missing},
+        )
+    mismatched = sorted(
+        version_id
+        for version_id, owner_project_id in projects_by_version.items()
+        if owner_project_id != project_id
+    )
+    if mismatched:
+        raise ValidationException(
+            "输入绑定的 ArtifactVersion 必须属于任务关联项目",
+            detail={"mismatched_artifact_version_ids": mismatched},
+        )
+    return normalized
+
+
 async def create_and_schedule_tool_task(
     *,
     db: AsyncSession,
@@ -81,7 +131,7 @@ async def create_and_schedule_tool_task(
             raise ValidationException("工具没有可用版本")
         version_id = tool.current_version_id
 
-    extra_data: dict[str, str] = {}
+    extra_data: dict[str, object] = {}
     if task_data.project_id:
         await load_project_membership(
             db,
@@ -89,6 +139,13 @@ async def create_and_schedule_tool_task(
             user_id=current_user.id,
         )
         extra_data["project_id"] = task_data.project_id
+    input_bindings = await _validate_standard_input_bindings(
+        db,
+        project_id=task_data.project_id,
+        input_bindings=task_data.input_bindings,
+    )
+    if input_bindings:
+        extra_data["input_bindings"] = input_bindings
 
     task = Task(
         user_id=current_user.id,

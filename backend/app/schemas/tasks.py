@@ -11,6 +11,10 @@ class TaskInputSchema(BaseModel):
     """任务输入Schema"""
     params: Dict[str, Any] = Field(default_factory=dict, description="参数")
     file_ids: List[str] = Field(default_factory=list, description="文件ID列表")
+    input_bindings: Dict[str, str] = Field(
+        default_factory=dict,
+        description="标准 ArtifactVersion 输入绑定，按 Tool Package v2 input name 索引",
+    )
 
 
 class TaskOutputSchema(BaseModel):
@@ -28,6 +32,10 @@ class TaskCreate(BaseModel):
     tool_version_id: Optional[str] = Field(None, description="工具版本ID(可选，默认使用当前版本)")
     params: Dict[str, Any] = Field(default_factory=dict, description="参数")
     file_ids: List[str] = Field(default_factory=list, description="输入文件ID列表")
+    input_bindings: Dict[str, str] = Field(
+        default_factory=dict,
+        description="标准 ArtifactVersion 输入绑定，按 Tool Package v2 input name 索引",
+    )
     priority: str = Field(default="normal", description="优先级")
 
 
@@ -52,6 +60,7 @@ class TaskResponse(TimestampMixin):
     tool_name: Optional[str] = None
     tool_slug: Optional[str] = None
     # 输入输出
+    input_bindings: Dict[str, str] = Field(default_factory=dict)
     inputs: Optional[TaskInputSchema] = None
     outputs: Optional[TaskOutputSchema] = None
 

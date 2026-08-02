@@ -487,6 +487,7 @@ export type TaskStatus = 'pending' | 'running' | 'success' | 'failure' | 'cancel
 export interface TaskInput {
   params: Record<string, unknown>
   file_ids: string[]
+  input_bindings?: Record<string, string>
 }
 
 export interface TaskOutput {
@@ -517,6 +518,8 @@ export interface Task {
   execution_time_sec?: number
   retry_count?: number
   priority?: string
+  project_id?: string | null
+  input_bindings?: Record<string, string>
   created_at: string
   updated_at?: string
   // 兼容旧代码的字段
@@ -544,10 +547,12 @@ export interface Task {
 
 export interface TaskCreateParams {
   name?: string
+  project_id?: string
   tool_id: string
   tool_version_id?: string
   params: Record<string, unknown>
   file_ids?: string[]
+  input_bindings?: Record<string, string>
   priority?: 'low' | 'normal' | 'high'
 }
 
