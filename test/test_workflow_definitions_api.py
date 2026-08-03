@@ -21,7 +21,8 @@ from app.api.v1.workflows import (  # noqa: E402
     update_workflow_definition,
 )
 from app.database.base import Base  # noqa: E402
-from app.models import users as _users, workflows as _workflows  # noqa: F401,E402
+from app.models import projects as _projects, users as _users, workflows as _workflows  # noqa: F401,E402
+from app.models.projects import Organization, Project, ProjectMember  # noqa: E402
 from app.models.users import User  # noqa: E402
 from app.schemas.workflows import WorkflowDefinitionCreate, WorkflowDefinitionUpdate  # noqa: E402
 
@@ -62,6 +63,22 @@ def _payload(name: str = "AIDD workflow") -> WorkflowDefinitionCreate:
         selected_tool_by_node={"tool-pocket": "pocket-explorer"},
         artifact_bindings_by_node={"tool-pocket": {"protein": "file-1"}},
     )
+
+
+async def _create_project(db_session, owner: User, name: str = "EGFR research") -> Project:
+    organization = Organization(name=f"{name} org", slug=name.lower().replace(" ", "-"))
+    project = Project(
+        organization=organization,
+        created_by=owner.id,
+        name=name,
+        goal="Find ligandable pockets",
+        status="active",
+    )
+    db_session.add_all([organization, project])
+    await db_session.flush()
+    db_session.add(ProjectMember(project_id=project.id, user_id=owner.id, role="owner"))
+    await db_session.commit()
+    return project
 
 
 @pytest.mark.asyncio
@@ -112,3 +129,61 @@ async def test_workflow_definition_access_is_limited_to_owner(db_session):
     with pytest.raises(HTTPException) as exc:
         await get_workflow_definition(created["data"]["id"], other, db_session)
     assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_workflow_definitions_can_be_scoped_to_project(db_session):
+    owner = _user("owner@example.com")
+    db_session.add(owner)
+    await db_session.flush()
+    project = await _create_project(db_session, owner)
+
+    project_payload = _payload("Project draft").model_copy(
+        update={"project_id": project.id}
+    )
+    created = await create_workflow_definition(project_payload, owner, db_session)
+    assert created["data"]["project_id"] == project.id
+
+    global_created = await create_workflow_definition(
+        _payload("Global workflow"), owner, db_session
+    )
+    assert global_created["data"]["project_id"] is None
+
+    listed = await list_workflow_definitions(
+        page=1,
+        page_size=20,
+        project_id=project.id,
+        current_user=owner,
+        db=db_session,
+    )
+
+    assert listed["data"]["total"] == 1
+    assert listed["data"]["items"][0]["name"] == "Project draft"
+    assert listed["data"]["items"][0]["project_id"] == project.id
+
+
+@pytest.mark.asyncio
+async def test_project_workflow_definition_requires_membership(db_session):
+    owner = _user("owner@example.com")
+    outsider = _user("outsider@example.com")
+    db_session.add_all([owner, outsider])
+    await db_session.flush()
+    project = await _create_project(db_session, owner)
+
+    payload = _payload("Unauthorized draft").model_copy(
+        update={"project_id": project.id}
+    )
+
+    with pytest.raises(HTTPException) as create_exc:
+        await create_workflow_definition(payload, outsider, db_session)
+    assert create_exc.value.status_code == 404
+
+    with pytest.raises(HTTPException) as list_exc:
+        await list_workflow_definitions(
+            page=1,
+            page_size=20,
+            project_id=project.id,
+            current_user=outsider,
+            db=db_session,
+        )
+    assert list_exc.value.status_code == 404

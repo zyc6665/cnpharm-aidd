@@ -14,6 +14,12 @@ WorkflowDefinitionStatus = Literal["draft", "active", "archived"]
 class WorkflowDefinitionBase(BaseModel):
     """工作流定义基础字段。"""
 
+    project_id: Optional[str] = Field(
+        None,
+        min_length=1,
+        max_length=36,
+        description="关联研究项目 ID",
+    )
     name: str = Field(..., min_length=1, max_length=120, description="流程名称")
     description: Optional[str] = Field(None, description="流程描述")
     template_id: str = Field(..., min_length=1, max_length=120, description="模板 ID")
@@ -34,6 +40,7 @@ class WorkflowDefinitionCreate(WorkflowDefinitionBase):
 class WorkflowDefinitionUpdate(BaseModel):
     """更新工作流定义。"""
 
+    project_id: Optional[str] = Field(None, min_length=1, max_length=36)
     name: Optional[str] = Field(None, min_length=1, max_length=120)
     description: Optional[str] = None
     template_id: Optional[str] = Field(None, min_length=1, max_length=120)

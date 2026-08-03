@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
@@ -22,6 +22,7 @@ from app.schemas.workflows import (
     WorkflowTemplateDuplicate,
     WorkflowTemplateUpdate,
 )
+from app.services.project_access import load_project_membership
 from app.services.workflows import create_workflow_run, sync_workflow_run
 from app.services.workflow_runs import get_workflow_run, list_workflow_runs
 from app.services.workflow_templates import (
@@ -90,18 +91,47 @@ async def _get_owned_workflow(
     workflow = result.scalar_one_or_none()
     if not workflow:
         raise HTTPException(status_code=404, detail="工作流不存在")
+    if workflow.project_id:
+        await load_project_membership(
+            db,
+            project_id=workflow.project_id,
+            user_id=current_user.id,
+        )
     return workflow
+
+
+async def _validate_workflow_project_access(
+    db: AsyncSession,
+    *,
+    project_id: str | None,
+    current_user: User,
+) -> None:
+    if not project_id:
+        return
+    await load_project_membership(
+        db,
+        project_id=project_id,
+        user_id=current_user.id,
+    )
 
 
 @router.get("", response_model=dict)
 async def list_workflow_definitions(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    project_id: Annotated[str | None, Query(min_length=1, max_length=36)] = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """获取当前用户保存的工作流定义。"""
+    await _validate_workflow_project_access(
+        db,
+        project_id=project_id,
+        current_user=current_user,
+    )
     base_query = select(WorkflowDefinition).where(WorkflowDefinition.user_id == current_user.id)
+    if project_id:
+        base_query = base_query.where(WorkflowDefinition.project_id == project_id)
     total_result = await db.execute(
         select(func.count()).select_from(base_query.subquery())
     )
@@ -130,6 +160,11 @@ async def create_workflow_definition(
     db: AsyncSession = Depends(get_db),
 ):
     """保存新的工作流定义。"""
+    await _validate_workflow_project_access(
+        db,
+        project_id=workflow_data.project_id,
+        current_user=current_user,
+    )
     workflow = WorkflowDefinition(
         user_id=current_user.id,
         **workflow_data.model_dump(),
@@ -313,6 +348,12 @@ async def update_workflow_definition(
     """更新当前用户的工作流定义。"""
     workflow = await _get_owned_workflow(workflow_id, current_user, db)
     updates = workflow_data.model_dump(exclude_unset=True)
+    if "project_id" in updates:
+        await _validate_workflow_project_access(
+            db,
+            project_id=updates["project_id"],
+            current_user=current_user,
+        )
 
     for field, value in updates.items():
         setattr(workflow, field, value)
