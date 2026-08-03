@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -26,10 +27,15 @@ from app.config import settings as config_settings
 from app.database.base import Base
 from app.database.session import get_db
 from app.main import app
+from app.models import artifacts as _artifacts_models  # noqa: F401
 from app.models import files as _files_models  # noqa: F401
+from app.models import projects as _project_models  # noqa: F401
 from app.models import statistics as _statistics_models  # noqa: F401
 from app.models import tasks as _task_models  # noqa: F401
 from app.models import users as _user_models  # noqa: F401
+from app.models.artifacts import ArtifactVersion
+from app.models.files import File, FileSourceType
+from app.models.projects import Organization, Project
 from app.models.tasks import TaskLog, TaskOutput
 from app.models.statistics import ToolStatistics
 from app.models.tasks import Task, TaskInput, TaskStatus
@@ -55,6 +61,56 @@ class RecordingDirectRunner:
     def cancel_task(self, task_id: str) -> bool:
         self.cancelled.append(task_id)
         return True
+
+
+def _direct_recovery_v2_manifest() -> dict:
+    return {
+        "api_version": "aidd.sciminer/tool-package.v2",
+        "kind": "ToolPackage",
+        "metadata": {
+            "slug": "recover-standard-pocket",
+            "name": "Recover Standard Pocket",
+            "version": "1.0.0",
+        },
+        "artifacts": {
+            "inputs": [{"name": "protein", "type": "protein_structure@1"}],
+            "outputs": [{"name": "pocket", "type": "binding_pocket@1"}],
+        },
+        "parameters_schema": {"type": "object"},
+        "runtime": {
+            "python": "3.10",
+            "executor_support": ["ssh_docker_exec"],
+            "selection_policy": "test runtime fixture",
+            "artifacts": {
+                "primary": {
+                    "kind": "container",
+                    "image": "registry.example/sciminer/recover-standard-pocket:1.0.0",
+                    "image_digest": "sha256:test",
+                },
+                "fallback": {
+                    "kind": "conda_pack",
+                    "uri": "artifacts://model-envs/recover-standard-pocket/1.0.0/env.tar.gz",
+                    "sha256": "test",
+                },
+            },
+            "weights": {
+                "manifest_uri": "artifacts://model-weights/recover-standard-pocket/1.0.0/weights.json",
+                "manifest_sha256": "test",
+            },
+            "cache_policy": {
+                "key_fields": ["metadata.slug", "metadata.version"],
+                "mutable_host_paths_forbidden": True,
+            },
+        },
+        "variants": [
+            {
+                "name": "cpu",
+                "accelerator": "cpu",
+                "executor_types": ["cli"],
+                "entrypoint": ["/app/platform_run.sh"],
+            }
+        ],
+    }
 
 
 def test_use_direct_task_execution_falls_back_when_celery_not_configured(
@@ -512,6 +568,134 @@ async def test_reconcile_orphaned_direct_tasks_recovers_remote_success_result(
     log_result = await db_session.execute(select(TaskLog).where(TaskLog.task_id == task.id))
     logs = log_result.scalars().all()
     assert any(log.message == "从远端 output 目录自动补回任务结果" for log in logs)
+
+
+@pytest.mark.asyncio
+async def test_reconcile_orphaned_direct_tasks_persists_standard_artifacts(
+    db_session: AsyncSession,
+    admin_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """direct recovery 补回标准 result.v2 时也应创建标准 ArtifactVersion。"""
+    organization = Organization(name="Recovery Lab", slug="recovery-lab")
+    db_session.add(organization)
+    await db_session.flush()
+    project = Project(
+        organization_id=organization.id,
+        created_by=admin_user.id,
+        name="Recovered standard output",
+        status="active",
+    )
+    db_session.add(project)
+    await db_session.flush()
+    tool = Tool(
+        owner_id=admin_user.id,
+        name="Recover Standard Tool",
+        slug="recover-standard-tool",
+        description="Recoverable standard ssh_job tool",
+        category="generation",
+        status=ToolStatus.PUBLISHED.value,
+        is_public=True,
+    )
+    db_session.add(tool)
+    await db_session.flush()
+
+    version = ToolVersion(
+        tool_id=tool.id,
+        version="1.0.0",
+        config={
+            "type": "ssh_job",
+            "host": "10.202.2.228",
+            "username": "zhouyc",
+            "auth_type": "password",
+            "password_ref": "ssh_4090_zhouyc",
+            "runner_mode": "docker_exec",
+            "remote_base_dir": "/srv/platform-jobs",
+            "entrypoint": "/app/platform_run.sh",
+            "container_name": "kaiwu",
+            "tool_package_manifest": _direct_recovery_v2_manifest(),
+        },
+        is_active=True,
+    )
+    db_session.add(version)
+    await db_session.flush()
+
+    task = Task(
+        user_id=admin_user.id,
+        tool_id=tool.id,
+        tool_version_id=version.id,
+        status=TaskStatus.RUNNING.value,
+        priority="normal",
+        progress=0.0,
+        progress_message="任务开始执行",
+        extra_data={"project_id": project.id},
+    )
+    db_session.add(task)
+    await db_session.flush()
+    db_session.add(TaskInput(task_id=task.id, params={}, file_ids=[]))
+
+    files_by_role = {
+        "residue_pocket_pdb": ("artifacts/pocket/residue.pdb", b"residue"),
+        "atom_pocket_pdb": ("artifacts/pocket/atom.pdb", b"atom"),
+        "pocket_metadata_json": ("artifacts/pocket/metadata.json", b"{}"),
+    }
+    output_file_ids: list[str] = []
+    result_files: dict[str, dict[str, str]] = {}
+    for role, (relative_path, content) in files_by_role.items():
+        storage_path = tmp_path / relative_path
+        storage_path.parent.mkdir(parents=True, exist_ok=True)
+        storage_path.write_bytes(content)
+        digest = hashlib.sha256(content).hexdigest()
+        file_record = File(
+            project_id=project.id,
+            owner_id=admin_user.id,
+            filename=relative_path.replace("/", "__"),
+            content_type="application/json" if relative_path.endswith(".json") else "chemical/x-pdb",
+            size_bytes=len(content),
+            sha256=digest,
+            storage_path=str(storage_path),
+            source_type=FileSourceType.TOOL_OUTPUT.value,
+            file_meta={"relative_path": relative_path},
+        )
+        db_session.add(file_record)
+        await db_session.flush()
+        output_file_ids.append(str(file_record.id))
+        result_files[role] = {"path": relative_path, "sha256": digest}
+    await db_session.commit()
+
+    async def fake_recover(self) -> dict:
+        return {
+            "success": True,
+            "result": {
+                "result_version": "aidd.sciminer/result.v2",
+                "artifacts": {
+                    "pocket": {
+                        "name": "Recovered pocket",
+                        "type": "binding_pocket@1",
+                        "files": result_files,
+                    }
+                },
+                "relations": [],
+            },
+            "output_file_ids": output_file_ids,
+            "stdout": "",
+            "stderr": "",
+        }
+
+    monkeypatch.setattr(SSHJobExecutor, "recover_remote_result", fake_recover)
+
+    recovered = await reconcile_orphaned_direct_tasks(db_session)
+
+    task_output = (
+        await db_session.execute(select(TaskOutput).where(TaskOutput.task_id == task.id))
+    ).scalar_one()
+    artifact_versions = (await db_session.execute(select(ArtifactVersion))).scalars().all()
+
+    assert recovered == 1
+    assert task_output.result["standard_artifacts"]["artifact_version_ids_by_ref"]["pocket"]
+    assert len(artifact_versions) == 1
+    assert artifact_versions[0].manifest_json["type"] == "binding_pocket@1"
 
 
 @pytest.mark.asyncio

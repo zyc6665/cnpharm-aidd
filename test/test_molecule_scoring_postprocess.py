@@ -209,6 +209,63 @@ async def test_molecule_generation_appends_scoring_artifacts(
 
 
 @pytest.mark.asyncio
+async def test_molecule_generation_scoring_keeps_standard_result_v2_schema_clean(
+    db_session: AsyncSession,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """标准 result.v2 不应被平台评分后处理写入内部字段。"""
+    from app.tasks import molecule_scoring
+
+    task, version = await create_tool_and_task(
+        db_session,
+        config={
+            "type": "ssh_job",
+            "agent_capability": {
+                "enabled": True,
+                "capability": "molecule_generation",
+            },
+        },
+    )
+    sdf_file = await create_output_file(
+        db_session,
+        tmp_path,
+        filename="artifacts__generated_molecules.sdf",
+        relative_path="artifacts/generated_molecules.sdf",
+        content=SDF_RECORDS[0].encode("utf-8"),
+    )
+
+    monkeypatch.setattr(
+        molecule_scoring,
+        "score_molecule_descriptors",
+        lambda candidate: molecule_scoring.DescriptorScores(smiles="CCO", qed=0.8, sa=2.5),
+    )
+    monkeypatch.setattr(molecule_scoring, "score_molecule_vina", lambda *_args, **_kwargs: None)
+
+    output_result = {
+        "success": True,
+        "result": {
+            "result_version": "aidd.sciminer/result.v2",
+            "artifacts": {},
+            "relations": [],
+        },
+        "output_file_ids": [sdf_file.id],
+    }
+
+    updated = await molecule_scoring.append_molecule_scoring_artifacts(
+        db_session,
+        task,
+        version,
+        output_result,
+    )
+
+    assert len(updated["output_file_ids"]) == 3
+    assert "molecule_scoring" in updated
+    assert "output_file_ids" not in updated["result"]
+    assert "molecule_scoring" not in updated["result"]
+
+
+@pytest.mark.asyncio
 async def test_non_molecule_generation_skips_scoring(
     db_session: AsyncSession,
     tmp_path: Path,

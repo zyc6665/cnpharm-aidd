@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -130,3 +131,21 @@ def test_platform_run_delegates_to_runtime_cli_without_embedded_adapter_code():
     assert "cat >" not in script
     assert "/home/" not in script
     assert "/data/" not in script
+
+
+def test_platform_run_accepts_model_root_from_tool_package_runner():
+    result = subprocess.run(
+        [
+            "bash",
+            str(PACKAGE_ROOT / "platform_run.sh"),
+            "--model-root",
+            str(PACKAGE_ROOT),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert "Missing required arguments" in result.stderr
+    assert "Unknown argument" not in result.stderr

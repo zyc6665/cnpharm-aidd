@@ -51,8 +51,7 @@ class SSHJobExecutor(BaseExecutor):
 
             result = self._load_result_json(download_root)
             output_file_ids = await self._collect_output_files(download_root)
-            if output_file_ids:
-                result["output_file_ids"] = output_file_ids
+            result = self._attach_output_file_ids(result, output_file_ids)
             return {
                 "success": True,
                 "result": result,
@@ -88,8 +87,7 @@ class SSHJobExecutor(BaseExecutor):
                 }
             )
             output_file_ids = await self._collect_output_files(download_root)
-            if output_file_ids:
-                result["output_file_ids"] = output_file_ids
+            result = self._attach_output_file_ids(result, output_file_ids)
 
             cleanup_error = remote_result.get("cleanup_error")
             if cleanup_error:
@@ -125,6 +123,17 @@ class SSHJobExecutor(BaseExecutor):
             raise TaskExecutionError(f"SSH job execution error: {exc}") from exc
         finally:
             self._cleanup_work_dir()
+
+    @staticmethod
+    def _attach_output_file_ids(result: dict[str, Any], output_file_ids: list[str]) -> dict[str, Any]:
+        """Attach platform file IDs to legacy results without polluting result.v2."""
+        if not output_file_ids:
+            return result
+        if result.get("result_version") == "aidd.sciminer/result.v2":
+            return result
+        enriched = dict(result)
+        enriched["output_file_ids"] = output_file_ids
+        return enriched
 
     def _run_remote_workflow_sync(
         self,

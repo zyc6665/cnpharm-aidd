@@ -9,7 +9,8 @@ so Codex or Claude can adapt inputs and outputs without changing platform code.
 ## What This Template Provides
 
 - A fixed model-side layout.
-- A thin `platform_run.sh` entrypoint.
+- A thin model-side `platform_run.sh` adapter entrypoint that accepts runner-level arguments such
+  as `--model-root` and delegates to the runtime CLI.
 - A testable runtime wrapper under `src/model_runtime_template/`.
 - Runtime Env metadata for container-first execution and conda-pack fallback.
 - Example request and output files.
@@ -20,8 +21,9 @@ so Codex or Claude can adapt inputs and outputs without changing platform code.
 
 The template treats the model runtime as a versioned artifact. `MODEL_PACKAGE.yaml` declares the
 preferred container image by digest and a conda-pack fallback for executors that cannot run
-containers. Executors mount inputs, outputs, work directories, and weights; they do not install
-dependencies during task execution.
+containers. Executors mount inputs, outputs, work directories, and weights, then call the
+model-side `platform_run.sh` adapter entrypoint; they do not install dependencies during task
+execution.
 
 ## Quick Check
 

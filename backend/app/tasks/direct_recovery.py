@@ -17,6 +17,10 @@ from app.database.base import utcnow
 from app.database.session import async_session_factory
 from app.models.tasks import Task, TaskLog, TaskOutput, TaskStatus
 from app.models.tools import ToolType
+from app.services.standard_artifacts import (
+    attach_standard_artifact_summary,
+    persist_standard_artifacts_from_task_output,
+)
 from app.services.workflow_reconciliation import reconcile_waiting_workflow_runs
 from app.tasks.executor import SSHJobExecutor, TaskExecutionError
 from app.tasks.molecule_scoring import append_molecule_scoring_artifacts
@@ -94,6 +98,18 @@ async def reconcile_orphaned_direct_tasks(db: AsyncSession) -> int:
             )
 
         prepared_output = prepare_task_output(output_result)
+        standard_persistence = await persist_standard_artifacts_from_task_output(
+            db,
+            task=task,
+            tool_version_config=tool_version.config,
+            output_result=output_result,
+            output_file_ids=prepared_output["file_ids"],
+        )
+        if standard_persistence is not None:
+            prepared_output["result"] = attach_standard_artifact_summary(
+                prepared_output["result"],
+                standard_persistence,
+            )
         task_output = task.outputs or TaskOutput(task_id=task.id)
         task_output.result = prepared_output["result"]
         task_output.file_ids = prepared_output["file_ids"]

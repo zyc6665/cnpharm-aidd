@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -128,6 +129,48 @@ def test_cli_builds_legacy_params_from_standard_binding_pocket_request(tmp_path:
     assert legacy_params["input_files"]["protein_pdb"] == "pocket/atom_pocket_pdb.pdb"
 
 
+def test_cli_prefers_residue_level_pocket_when_both_standard_files_exist(tmp_path: Path):
+    cli = importlib.import_module("pocket2mol_runtime.cli")
+
+    input_dir = tmp_path / "input"
+    pocket_dir = input_dir / "pocket"
+    pocket_dir.mkdir(parents=True)
+    (pocket_dir / "atom_pocket_pdb.pdb").write_text("HETATM\nEND\n", encoding="utf-8")
+    (pocket_dir / "residue_pocket_pdb.pdb").write_text("ATOM\nEND\n", encoding="utf-8")
+
+    request = {
+        "request_version": "aidd.sciminer/request.v1",
+        "task": {
+            "id": "task-001",
+            "tool_slug": "pocket2mol-pocket-ligand-generation",
+            "tool_version": "0.1.2",
+        },
+        "inputs": {
+            "pocket": {
+                "artifact_version_id": "version-1",
+                "type": "binding_pocket@1",
+                "files": {
+                    "atom_pocket_pdb": {
+                        "path": "input/pocket/atom_pocket_pdb.pdb",
+                        "sha256": "0" * 64,
+                    },
+                    "residue_pocket_pdb": {
+                        "path": "input/pocket/residue_pocket_pdb.pdb",
+                        "sha256": "1" * 64,
+                    },
+                },
+                "metadata": {},
+            }
+        },
+        "parameters": {"num_samples": 1},
+        "execution": {"variant": "cpu", "accelerator": "cpu"},
+    }
+
+    legacy_params = cli.build_legacy_payload(request, input_dir=input_dir)
+
+    assert legacy_params["input_files"]["protein_pdb"] == "pocket/residue_pocket_pdb.pdb"
+
+
 def test_platform_run_delegates_to_runtime_cli_without_embedded_adapter_code():
     script = (PACKAGE_ROOT / "platform_run.sh").read_text(encoding="utf-8")
 
@@ -135,3 +178,21 @@ def test_platform_run_delegates_to_runtime_cli_without_embedded_adapter_code():
     assert "cat >" not in script
     assert "/home/" not in script
     assert "/data/" not in script
+
+
+def test_platform_run_accepts_model_root_from_tool_package_runner():
+    result = subprocess.run(
+        [
+            "bash",
+            str(PACKAGE_ROOT / "platform_run.sh"),
+            "--model-root",
+            str(PACKAGE_ROOT),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert "Missing required arguments" in result.stderr
+    assert "Unknown argument" not in result.stderr

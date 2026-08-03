@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -114,6 +115,24 @@ def test_model_package_template_platform_run_is_thin_cli_delegate():
     assert "/home/" not in script
     assert "/data/" not in script
     assert "/workspace/" not in script
+
+
+def test_model_package_template_platform_run_accepts_model_root_argument():
+    result = subprocess.run(
+        [
+            "bash",
+            str(TEMPLATE_ROOT / "platform_run.sh"),
+            "--model-root",
+            str(TEMPLATE_ROOT),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert "Missing required arguments" in result.stderr
+    assert "Unknown argument" not in result.stderr
 
 
 def test_model_package_template_ignores_large_and_machine_specific_artifacts():

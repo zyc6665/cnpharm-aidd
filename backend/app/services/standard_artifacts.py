@@ -101,6 +101,34 @@ def standard_artifact_result_summary(
     }
 
 
+async def persist_standard_artifacts_from_task_output(
+    db: AsyncSession,
+    *,
+    task: Task,
+    tool_version_config: dict[str, Any],
+    output_result: dict[str, Any],
+    output_file_ids: list[str],
+) -> StandardArtifactPersistenceResult | None:
+    """Persist standard result.v2 outputs collected for a task, if present."""
+    return await create_artifact_versions_from_collected_result(
+        db,
+        task=task,
+        tool_version_config=tool_version_config,
+        output_result=output_result,
+        output_file_ids=output_file_ids,
+    )
+
+
+def attach_standard_artifact_summary(
+    output_result: dict[str, Any],
+    persistence_result: StandardArtifactPersistenceResult,
+) -> dict[str, Any]:
+    """Attach persisted standard ArtifactVersion IDs without mutating the original result."""
+    result = dict(output_result)
+    result["standard_artifacts"] = standard_artifact_result_summary(persistence_result)
+    return result
+
+
 async def create_artifact_versions_from_parsed_result(
     db: AsyncSession,
     *,

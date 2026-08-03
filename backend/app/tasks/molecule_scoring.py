@@ -433,7 +433,11 @@ def _output_ids(output_result: dict[str, Any]) -> list[str]:
         ids.extend(str(file_id) for file_id in direct_ids if file_id)
 
     nested = output_result.get("result")
-    if isinstance(nested, dict) and isinstance(nested.get("output_file_ids"), list):
+    if (
+        isinstance(nested, dict)
+        and not _is_standard_result_v2(nested)
+        and isinstance(nested.get("output_file_ids"), list)
+    ):
         ids.extend(str(file_id) for file_id in nested["output_file_ids"] if file_id)
 
     deduped: list[str] = []
@@ -457,8 +461,12 @@ def _merge_output_ids(output_result: dict[str, Any], file_ids: list[str]) -> Non
 
     output_result["output_file_ids"] = deduped
     nested = output_result.get("result")
-    if isinstance(nested, dict):
+    if isinstance(nested, dict) and not _is_standard_result_v2(nested):
         nested["output_file_ids"] = deduped
+
+
+def _is_standard_result_v2(result: dict[str, Any]) -> bool:
+    return result.get("result_version") == "aidd.sciminer/result.v2"
 
 
 async def _store_artifact(
@@ -558,7 +566,7 @@ async def append_molecule_scoring_artifacts(
     _merge_output_ids(output_result, [str(score_csv.id), str(top_sdf.id)])
     summary = _summary(scores, receptor_path)
     nested = output_result.get("result")
-    if isinstance(nested, dict):
+    if isinstance(nested, dict) and not _is_standard_result_v2(nested):
         nested["molecule_scoring"] = summary
     else:
         output_result["molecule_scoring"] = summary

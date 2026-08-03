@@ -27,7 +27,8 @@
 4. 在 `MODEL_PACKAGE.yaml` 中声明模型入口、标准输入输出契约和 Runtime Env。
 5. Runtime Env 必须包含首选 container 镜像 digest、conda-pack/venv-pack fallback、执行器支持和缓存策略。
 6. 在 runtime wrapper 中实现输入解析、原始模型调用和 `result.v2` 输出收敛。
-7. 保持 `platform_run.sh` 为薄入口，只调用 `python -m <runtime_package>.cli`。
+7. 保持 `platform_run.sh` 为模型侧标准适配薄入口，必须接受 `--model-root` 等通用参数，
+   只调用 `python -m <runtime_package>.cli`，不要把旧模型原始脚本当成该入口。
 8. 写轻量测试，不依赖 GPU、torch、dgl 或真实权重即可验证包装逻辑。
 9. 扫描并移除账号、主机、私有地址、宿主机绝对路径、密钥和大文件。
 

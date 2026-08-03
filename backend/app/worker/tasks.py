@@ -70,9 +70,9 @@ def prepare_task_output(output_result: Dict[str, Any]) -> Dict[str, Any]:
 
 async def _persist_standard_artifacts_if_present(db, task, tool_version, output_result):
     """Delegate standard result persistence to the Artifact service."""
-    from app.services.standard_artifacts import create_artifact_versions_from_collected_result
+    from app.services.standard_artifacts import persist_standard_artifacts_from_task_output
 
-    return await create_artifact_versions_from_collected_result(
+    return await persist_standard_artifacts_from_task_output(
         db,
         task=task,
         tool_version_config=tool_version.config,
@@ -85,11 +85,9 @@ def _attach_standard_artifact_summary(
     output_result: Dict[str, Any],
     persistence_result,
 ) -> Dict[str, Any]:
-    from app.services.standard_artifacts import standard_artifact_result_summary
+    from app.services.standard_artifacts import attach_standard_artifact_summary
 
-    result = dict(output_result)
-    result["standard_artifacts"] = standard_artifact_result_summary(persistence_result)
-    return result
+    return attach_standard_artifact_summary(output_result, persistence_result)
 
 
 @shared_task(

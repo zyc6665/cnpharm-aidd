@@ -263,6 +263,26 @@ def test_ssh_job_executor_does_not_keep_sshpass_environment_helper() -> None:
     assert not hasattr(SSHJobExecutor, "_build_command_env")
 
 
+def test_ssh_job_executor_keeps_standard_result_v2_schema_clean() -> None:
+    """平台内部 output_file_ids 不应写进标准 result.v2 本体。"""
+    standard_result = {
+        "result_version": "aidd.sciminer/result.v2",
+        "artifacts": {},
+        "relations": [],
+    }
+    legacy_result = {"success": True}
+
+    assert (
+        SSHJobExecutor._attach_output_file_ids(standard_result, ["file-1"])
+        is standard_result
+    )
+    assert "output_file_ids" not in standard_result
+    assert SSHJobExecutor._attach_output_file_ids(legacy_result, ["file-1"]) == {
+        "success": True,
+        "output_file_ids": ["file-1"],
+    }
+
+
 @pytest.mark.asyncio
 async def test_ssh_job_recovery_downloads_with_paramiko(monkeypatch, tmp_path) -> None:
     """远端结果补抓应复用 Paramiko，而非启动本地 ssh/scp 子进程。"""

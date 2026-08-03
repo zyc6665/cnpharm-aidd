@@ -114,7 +114,7 @@ def _standard_pocket_file(payload: dict[str, Any], *, input_dir: Path) -> Path:
         .get("pocket", {})
         .get("files", {})
     )
-    for role in ("atom_pocket_pdb", "residue_pocket_pdb"):
+    for role in ("residue_pocket_pdb", "atom_pocket_pdb"):
         ref = files.get(role, {}) if isinstance(files, dict) else {}
         if isinstance(ref, dict) and ref.get("path"):
             return resolve_task_file(str(ref["path"]), input_dir=input_dir)
