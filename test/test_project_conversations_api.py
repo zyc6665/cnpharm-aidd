@@ -469,6 +469,8 @@ async def test_project_conversation_can_start_agent_run_and_approval_submits_exe
     assert task.project_id == project["id"]
     assert task.tool_version_id == tool_version.id
     assert task.extra_data["input_bindings"] == {"protein": protein.id}
+    assert task.extra_data["agent_run_id"] == started_data["id"]
+    assert task.extra_data["plan_version_id"] == started_data["plan_version"]["id"]
     assert conversation_direct_runner.scheduled == [(task.id, tool_version.id)]
     events = (
         (

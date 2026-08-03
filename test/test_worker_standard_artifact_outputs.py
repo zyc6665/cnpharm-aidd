@@ -21,6 +21,8 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from app.database.base import Base
 from app.models import (  # noqa: F401
+    AgentEvent,
+    AgentRun,
     Artifact,
     ArtifactLineage,
     ArtifactVersion,
@@ -37,6 +39,8 @@ from app.models import (  # noqa: F401
 )
 from app.models.artifacts import ArtifactVersion as ArtifactVersionModel
 from app.models.artifacts import ArtifactVersionFile as ArtifactVersionFileModel
+from app.models.agent import AgentRun as AgentRunModel
+from app.models.conversations import AgentEvent as AgentEventModel
 from app.models.files import File as FileModel
 from app.models.files import FileSourceType
 from app.models.projects import Organization as OrganizationModel
@@ -357,3 +361,69 @@ async def test_worker_keeps_legacy_outputs_when_no_v2_manifest(
     assert task_output.file_ids == [file_id]
     assert "standard_artifacts" not in task_output.result
     assert artifact_count == 0
+
+
+@pytest.mark.asyncio
+async def test_worker_publishes_agent_events_for_agent_task_progress(
+    worker_standard_db_factory,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    await _disable_notifications(monkeypatch)
+    monkeypatch.setattr("app.database.session.async_session_factory", worker_standard_db_factory)
+
+    async with worker_standard_db_factory() as db:
+        task, version = await _seed_task(db, tool_config={"type": "python_script"})
+        run = AgentRunModel(
+            project_id=task.extra_data["project_id"],
+            user_id=task.user_id,
+            message="Find pockets",
+            intent="pocket_detection",
+            status="queued",
+            input_type="protein_structure",
+        )
+        db.add(run)
+        await db.flush()
+        task.extra_data = {
+            **(task.extra_data or {}),
+            "agent_run_id": run.id,
+            "plan_version_id": "plan-1",
+        }
+        task_id = task.id
+        version_id = version.id
+        run_id = run.id
+        await db.commit()
+
+    async def fake_execute(self):
+        await self.progress_callback(15.0, "远端模型进程已启动")
+        await self.progress_callback(55.0, "远端运行中：sampling")
+        return {"success": True, "result": {"ok": True}, "output_file_ids": []}
+
+    monkeypatch.setattr("app.tasks.executor.TaskExecutor.execute", fake_execute)
+
+    await worker_tasks._execute_tool_task_impl(str(task_id), str(version_id))
+
+    async with worker_standard_db_factory() as db:
+        run_record = await db.get(AgentRunModel, run_id)
+        events = (
+            (
+                await db.execute(
+                    select(AgentEventModel)
+                    .where(AgentEventModel.agent_run_id == run_id)
+                    .order_by(AgentEventModel.sequence)
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    assert run_record.status == "success"
+    assert [event.event_type for event in events] == [
+        "execution_started",
+        "execution_progress",
+        "execution_progress",
+        "execution_completed",
+    ]
+    assert [event.payload["task_id"] for event in events] == [task_id] * 4
+    assert events[1].payload["progress"] == 15.0
+    assert events[1].payload["message"] == "远端模型进程已启动"
+    assert events[-1].payload["status"] == "success"

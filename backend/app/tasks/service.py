@@ -110,6 +110,7 @@ async def create_and_schedule_tool_task(
     current_user: User,
     task_data: TaskCreate,
     direct_runner=default_direct_task_runner,
+    extra_data: dict[str, object] | None = None,
 ) -> Task:
     """Create a normal platform task and schedule it through the configured backend."""
     result = await db.execute(
@@ -131,7 +132,7 @@ async def create_and_schedule_tool_task(
             raise ValidationException("工具没有可用版本")
         version_id = tool.current_version_id
 
-    extra_data: dict[str, object] = {}
+    extra_data = dict(extra_data or {})
     if task_data.project_id:
         await load_project_membership(
             db,

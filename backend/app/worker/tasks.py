@@ -127,6 +127,10 @@ async def _execute_tool_task_impl(task_id: str, tool_version_id: str) -> Dict[st
     这里是实际执行工具的逻辑，同时通过 WebSocket 推送实时进度
     """
     from sqlalchemy import select
+    from app.agents.aidd.task_events import (
+        append_task_agent_event,
+        notify_task_agent_event,
+    )
     from app.database.session import async_session_factory
     from app.models.tasks import Task, TaskStatus, TaskOutput, TaskLog
 
@@ -150,7 +154,19 @@ async def _execute_tool_task_impl(task_id: str, tool_version_id: str) -> Dict[st
             message="任务开始执行"
         )
         db.add(log)
+        agent_run_id = await append_task_agent_event(
+            db,
+            task=task,
+            event_type="execution_started",
+            payload={
+                "status": "running",
+                "progress": task.progress,
+                "message": "任务开始执行",
+            },
+            run_status="running",
+        )
         await db.commit()
+        await notify_task_agent_event(agent_run_id)
 
         # WebSocket 通知：任务开始
         await notify_task_status(task_id, TaskStatus.RUNNING.value, "任务开始执行")
@@ -196,7 +212,19 @@ async def _execute_tool_task_impl(task_id: str, tool_version_id: str) -> Dict[st
                         log_data={"progress": progress, "source": "executor"},
                     )
                 )
+                agent_run_id = await append_task_agent_event(
+                    db,
+                    task=task,
+                    event_type="execution_progress",
+                    payload={
+                        "status": "running",
+                        "progress": progress,
+                        "message": message,
+                    },
+                    run_status="running",
+                )
                 await db.commit()
+                await notify_task_agent_event(agent_run_id)
 
                 # WebSocket 通知：进度更新
                 await notify_task_progress(task_id, progress, message)
@@ -266,7 +294,24 @@ async def _execute_tool_task_impl(task_id: str, tool_version_id: str) -> Dict[st
                 message="任务执行成功"
             )
             db.add(log)
+            completion_payload: dict[str, Any] = {
+                "status": "success",
+                "progress": task.progress,
+                "message": "任务执行成功",
+            }
+            if isinstance(prepared_output["result"], dict):
+                standard_artifacts = prepared_output["result"].get("standard_artifacts")
+                if isinstance(standard_artifacts, dict):
+                    completion_payload["standard_artifacts"] = standard_artifacts
+            agent_run_id = await append_task_agent_event(
+                db,
+                task=task,
+                event_type="execution_completed",
+                payload=completion_payload,
+                run_status="success",
+            )
             await db.commit()
+            await notify_task_agent_event(agent_run_id)
 
             # WebSocket 通知：任务完成
             await notify_task_log(task_id, "INFO", "任务执行成功")
@@ -290,7 +335,21 @@ async def _execute_tool_task_impl(task_id: str, tool_version_id: str) -> Dict[st
                 message=f"任务执行失败: {str(e)}"
             )
             db.add(log)
+            agent_run_id = await append_task_agent_event(
+                db,
+                task=task,
+                event_type="execution_failed",
+                payload={
+                    "status": "failure",
+                    "progress": task.progress,
+                    "message": f"任务失败: {str(e)}",
+                    "error": str(e),
+                },
+                run_status="failure",
+                error_message=str(e),
+            )
             await db.commit()
+            await notify_task_agent_event(agent_run_id)
 
             # WebSocket 通知：任务失败
             await notify_task_log(task_id, "ERROR", f"任务执行失败: {str(e)}")

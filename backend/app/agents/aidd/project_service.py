@@ -359,6 +359,11 @@ class ProjectAgentService:
                 input_bindings={input_name: protein.id},
             ),
             direct_runner=self._direct_runner,
+            extra_data={
+                "agent_run_id": run.id,
+                "plan_version_id": plan.id,
+                "conversation_id": plan.conversation_id,
+            },
         )
         await self._events.append(
             run_id=run.id,
