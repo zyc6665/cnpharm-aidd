@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from types import SimpleNamespace
 
 import pytest
 import pytest_asyncio
@@ -11,27 +12,20 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 from app.api.v1.research_boards import create_research_board
+from app.config import settings as config_settings
 from app.database.base import Base
-from app.execution.contracts import ExecutionHandle, ExecutionState
 from app.models.artifacts import Artifact, ArtifactVersion
-from app.models.conversations import AgentEvent, Conversation, PlanDecision
+from app.models.conversations import (
+    AgentEvent,
+    Conversation,
+    ConversationBranch,
+    PlanDecision,
+)
 from app.models.projects import Organization, Project, ProjectMember
-from app.models.tool_packages import ToolPackage, ToolPackageVersion
+from app.models.tasks import Task
+from app.models.tools import Tool, ToolStatus, ToolVersion
 from app.models.users import User, UserRole, UserStatus
 from app.schemas.research_boards import ResearchBoardCreate
-
-
-class FakeExecutionPort:
-    """Records an execution request without using SSH or accelerator hardware."""
-
-    def __init__(self) -> None:
-        self.requests = []
-
-    async def submit(self, request):
-        self.requests.append(request)
-        return ExecutionHandle(
-            execution_id="fake-lvpocket-1", state=ExecutionState.QUEUED
-        )
 
 
 @pytest_asyncio.fixture
@@ -51,9 +45,70 @@ async def vertical_db() -> AsyncSession:
     await engine.dispose()
 
 
+def _lvpocket_tool_package_manifest() -> dict:
+    return {
+        "api_version": "aidd.sciminer/tool-package.v2",
+        "kind": "ToolPackage",
+        "metadata": {
+            "slug": "lvpocket-pocket-prediction",
+            "name": "LVpocket",
+            "version": "1.0.0",
+        },
+        "artifacts": {
+            "inputs": [{"name": "protein", "type": "protein_structure@1", "required": True}],
+            "outputs": [{"name": "pocket", "type": "binding_pocket@1", "required": True}],
+        },
+        "runtime": {
+            "python": "3.10",
+            "executor_support": ["ssh_docker_exec"],
+            "selection_policy": "test runtime fixture",
+            "artifacts": {
+                "primary": {
+                    "kind": "container",
+                    "image": "registry.example/sciminer/lvpocket:1.0.0",
+                    "image_digest": "sha256:test",
+                },
+                "fallback": {
+                    "kind": "conda_pack",
+                    "uri": "artifacts://model-envs/lvpocket/1.0.0/conda-env.tar.gz",
+                    "sha256": "test",
+                },
+            },
+            "weights": {
+                "manifest_uri": "artifacts://model-weights/lvpocket/1.0.0/weights.json",
+                "manifest_sha256": "test",
+            },
+            "cache_policy": {
+                "key_fields": ["metadata.slug", "metadata.version"],
+                "mutable_host_paths_forbidden": True,
+            },
+        },
+        "variants": [
+            {
+                "name": "nvidia-cuda",
+                "accelerator": "nvidia_cuda",
+                "executor_types": ["remote_job"],
+                "entrypoint": ["runner/platform_run_v2.sh"],
+            }
+        ],
+    }
+
+
+@pytest.fixture
+def vertical_direct_runner(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
+    runner = SimpleNamespace(
+        scheduled=[],
+        schedule_task=lambda task_id, tool_version_id: runner.scheduled.append(
+            (task_id, tool_version_id)
+        ),
+    )
+    monkeypatch.setattr(config_settings, "TASK_EXECUTION_BACKEND", "direct", raising=False)
+    return runner
+
+
 async def _seed_project_context(
     db: AsyncSession,
-) -> tuple[User, Project, Conversation, ArtifactVersion]:
+) -> tuple[User, Project, Conversation, ArtifactVersion, ToolVersion]:
     user = User(
         email="vertical-owner@example.com",
         password_hash="hashed-password",
@@ -83,11 +138,21 @@ async def _seed_project_context(
         project_id=project.id,
         created_by=user.id,
         artifact_type="protein_structure",
-        semantic_type="protein_pdb",
+        semantic_type="protein_structure",
+        standard_type="protein_structure",
+        standard_version=1,
         name="target.pdb",
     )
     db.add_all([conversation, protein])
     await db.flush()
+    db.add(
+        ConversationBranch(
+            conversation_id=conversation.id,
+            created_by=user.id,
+            title="主分支",
+            is_root=True,
+        )
+    )
     protein_version = ArtifactVersion(
         artifact_id=protein.id,
         created_by=user.id,
@@ -98,50 +163,47 @@ async def _seed_project_context(
         sha256=hashlib.sha256(b"protein").hexdigest(),
         storage_key="projects/vertical/target.pdb",
         status="available",
+        validation_status="passed",
+        manifest_json={"type": "protein_structure@1"},
     )
-    package = ToolPackage(
+    tool = Tool(
         owner_id=user.id,
-        slug="lvpocket-pocket-prediction",
         name="LVpocket",
-        status="published",
+        slug="lvpocket-pocket-prediction",
+        status=ToolStatus.PUBLISHED.value,
+        is_public=True,
+        gpu_required=True,
     )
-    db.add_all([protein_version, package])
+    db.add_all([protein_version, tool])
     await db.flush()
-    package_version = ToolPackageVersion(
-        package_id=package.id,
+    tool_version = ToolVersion(
+        tool_id=tool.id,
         version="1.0.0",
-        manifest={
-            "variants": [
-                {
-                    "name": "nvidia-cuda",
-                    "executor_types": ["remote_job"],
-                    "resources": {"devices": ["nvidia.com/gpu"]},
-                }
-            ]
+        config={
+            "type": "ssh_job",
+            "tool_package_manifest": _lvpocket_tool_package_manifest(),
         },
-        manifest_digest="c" * 64,
-        is_signed=True,
-        validation_status="valid",
+        is_active=True,
     )
-    db.add(package_version)
+    db.add(tool_version)
     await db.flush()
     protein.latest_version_id = protein_version.id
-    package.current_version_id = package_version.id
+    tool.current_version_id = tool_version.id
     await db.commit()
-    return user, project, conversation, protein_version
+    return user, project, conversation, protein_version, tool_version
 
 
 @pytest.mark.asyncio
 async def test_approved_lvpocket_result_can_be_referenced_from_its_project_board(
     vertical_db: AsyncSession,
+    vertical_direct_runner: SimpleNamespace,
 ):
     from app.agents.aidd.project_service import ProjectAgentService
 
-    user, project, conversation, protein_version = await _seed_project_context(
+    user, project, conversation, protein_version, tool_version = await _seed_project_context(
         vertical_db
     )
-    port = FakeExecutionPort()
-    service = ProjectAgentService(vertical_db, execution_port=port)
+    service = ProjectAgentService(vertical_db, direct_runner=vertical_direct_runner)
 
     created = await service.create_plan(
         project_id=project.id,
@@ -161,12 +223,15 @@ async def test_approved_lvpocket_result_can_be_referenced_from_its_project_board
     )
     await vertical_db.commit()
 
-    handle = await service.submit_approved_plan(
+    submission = await service.submit_approved_plan(
         plan_version_id=created.plan_version.id,
         user=user,
     )
-    assert handle.execution_id == "fake-lvpocket-1"
-    assert port.requests[0].variant == "nvidia-cuda"
+    task = await vertical_db.get(Task, submission.task.id)
+    assert task is not None
+    assert task.tool_version_id == tool_version.id
+    assert task.extra_data["input_bindings"] == {"protein": protein_version.id}
+    assert vertical_direct_runner.scheduled == [(task.id, tool_version.id)]
 
     pocket = Artifact(
         project_id=project.id,

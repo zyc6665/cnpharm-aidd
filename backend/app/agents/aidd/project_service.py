@@ -9,19 +9,23 @@ from typing import Any
 from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.agents.aidd.event_publisher import AgentEventPublisher
 from app.agents.aidd.graph_nodes import build_project_lvpocket_plan_node
 from app.common.time import utcnow
-from app.execution.contracts import ExecutionHandle, ExecutionInput, ExecutionRequest
-from app.execution.port import ExecutionPort
 from app.models.agent import AgentRun
 from app.models.artifacts import Artifact, ArtifactVersion
 from app.models.conversations import Conversation, PlanDecision, PlanVersion
-from app.models.tool_packages import ToolPackage, ToolPackageVersion
+from app.models.tasks import Task
+from app.models.tools import Tool, ToolStatus, ToolVersion
 from app.models.users import User
+from app.schemas.tasks import TaskCreate
 from app.services.conversations import append_message
 from app.services.project_access import load_project_membership, require_project_role
+from app.tasks.direct_runner import direct_task_runner as default_direct_task_runner
+from app.tasks.service import create_and_schedule_tool_task
+from app.tool_packages.schemas import ToolPackageV2Manifest
 
 
 LVPOCKET_SLUG = "lvpocket-pocket-prediction"
@@ -33,6 +37,20 @@ class ProjectPlanResult:
     plan_version: PlanVersion | None
 
 
+@dataclass(frozen=True)
+class ProjectTaskSubmission:
+    task: Task
+    tool_slug: str
+
+    def as_execution_payload(self) -> dict[str, Any]:
+        return {
+            "execution_id": self.task.id,
+            "task_id": self.task.id,
+            "state": "queued",
+            "tool_slug": self.tool_slug,
+        }
+
+
 class ProjectAgentService:
     """Own state transitions that prompts and graph nodes must not perform."""
 
@@ -40,11 +58,13 @@ class ProjectAgentService:
         self,
         db: AsyncSession,
         *,
-        execution_port: ExecutionPort,
+        schedule_task_fn=create_and_schedule_tool_task,
+        direct_runner=None,
         event_publisher: AgentEventPublisher | None = None,
     ) -> None:
         self._db = db
-        self._execution_port = execution_port
+        self._schedule_task_fn = schedule_task_fn
+        self._direct_runner = direct_runner or default_direct_task_runner
         self._events = event_publisher or AgentEventPublisher(db)
 
     async def _commit_and_notify(self, run_id: str) -> None:
@@ -248,91 +268,119 @@ class ProjectAgentService:
             raise HTTPException(status_code=409, detail="计划已提交或不可执行")
         return plan, run
 
-    async def _load_lvpocket_package_version(
+    async def _load_lvpocket_tool_version(
         self,
-    ) -> tuple[ToolPackageVersion, dict[str, Any]]:
-        row = (
-            await self._db.execute(
-                select(ToolPackageVersion, ToolPackage)
-                .join(ToolPackage, ToolPackage.id == ToolPackageVersion.package_id)
-                .where(
-                    ToolPackage.slug == LVPOCKET_SLUG,
-                    ToolPackage.current_version_id == ToolPackageVersion.id,
-                    ToolPackage.status == "published",
-                    ToolPackageVersion.is_signed.is_(True),
-                    ToolPackageVersion.validation_status == "valid",
-                )
+    ) -> tuple[Tool, ToolVersion, ToolPackageV2Manifest]:
+        tool = await self._db.scalar(
+            select(Tool)
+            .options(selectinload(Tool.current_version))
+            .where(
+                Tool.slug == LVPOCKET_SLUG,
+                Tool.status == ToolStatus.PUBLISHED.value,
+                Tool.is_public.is_(True),
             )
-        ).one_or_none()
-        if row is None:
-            raise HTTPException(status_code=409, detail="LVpocket 生产工具包不可用")
-        version, _package = row
-        variants = (version.manifest or {}).get("variants") or []
-        variant = next(
-            (
-                item
-                for item in variants
-                if item.get("name") in {"nvidia-cuda", "nvidia_cuda"}
-            ),
-            None,
         )
-        if variant is None:
-            raise HTTPException(
-                status_code=409, detail="LVpocket NVIDIA 运行变体不可用"
-            )
-        return version, variant
+        if (
+            tool is None
+            or tool.current_version is None
+            or tool.current_version.is_active is not True
+            or tool.current_version.deprecated is True
+        ):
+            raise HTTPException(status_code=409, detail="LVpocket 标准任务版本不可用")
+
+        manifest = self._tool_package_v2_manifest_from_config(
+            tool.current_version.config if isinstance(tool.current_version.config, dict) else {}
+        )
+        if manifest is None or manifest.exposure.agent is not True:
+            raise HTTPException(status_code=409, detail="LVpocket 标准任务版本不可用")
+        return tool, tool.current_version, manifest
+
+    @staticmethod
+    def _tool_package_v2_manifest_from_config(
+        config: dict[str, Any],
+    ) -> ToolPackageV2Manifest | None:
+        manifest_data = config.get("tool_package_manifest")
+        tool_package_config = config.get("tool_package")
+        if not isinstance(manifest_data, dict) and isinstance(tool_package_config, dict):
+            manifest_data = tool_package_config.get("manifest")
+        if (
+            not isinstance(manifest_data, dict)
+            or manifest_data.get("api_version") != "aidd.sciminer/tool-package.v2"
+        ):
+            return None
+        try:
+            return ToolPackageV2Manifest.model_validate(manifest_data)
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _required_input_name(
+        manifest: ToolPackageV2Manifest,
+        *,
+        standard_ref: str,
+    ) -> str:
+        for item in manifest.artifacts.inputs:
+            if item.type == standard_ref and item.required is True:
+                return item.name
+        raise HTTPException(
+            status_code=409,
+            detail=f"LVpocket 标准输入 {standard_ref} 不可用",
+        )
 
     async def submit_approved_plan(
         self,
         *,
         plan_version_id: str,
         user: User,
-    ) -> ExecutionHandle:
+    ) -> ProjectTaskSubmission:
         plan, run = await self._load_executable_plan(
             plan_version_id=plan_version_id,
             user=user,
         )
-        package_version, variant = await self._load_lvpocket_package_version()
+        tool, tool_version, manifest = await self._load_lvpocket_tool_version()
         protein_version_id = str(plan.content.get("protein_artifact_version_id") or "")
         protein = await self._load_protein_version(
             project_id=plan.project_id,
             version_id=protein_version_id,
         )
-        request = ExecutionRequest(
-            idempotency_key=f"project-plan:{plan.id}",
-            project_id=plan.project_id,
-            requested_by=user.id,
-            tool_package_version_id=package_version.id,
-            variant=str(variant["name"]),
-            executor_type=str((variant.get("executor_types") or ["remote_job"])[0]),
-            parameters=dict(plan.content.get("parameters") or {}),
-            inputs=[
-                ExecutionInput(
-                    artifact_version_id=protein.id,
-                    name="protein_pdb",
-                    uri=protein.storage_key,
-                    sha256=protein.sha256,
-                )
-            ],
-            resources=dict(variant.get("resources") or {}),
+        input_name = self._required_input_name(
+            manifest,
+            standard_ref="protein_structure@1",
         )
-        handle = await self._execution_port.submit(request)
+        task = await self._schedule_task_fn(
+            db=self._db,
+            current_user=user,
+            task_data=TaskCreate(
+                name=f"AIDD LVpocket - Plan {plan.version}",
+                project_id=plan.project_id,
+                tool_id=tool.id,
+                tool_version_id=tool_version.id,
+                params=dict(plan.content.get("parameters") or {}),
+                input_bindings={input_name: protein.id},
+            ),
+            direct_runner=self._direct_runner,
+        )
         await self._events.append(
             run_id=run.id,
             event_type="execution_submitted",
-            payload={"plan_version_id": plan.id, "tool_slug": LVPOCKET_SLUG},
+            payload={
+                "plan_version_id": plan.id,
+                "tool_slug": LVPOCKET_SLUG,
+                "task_id": task.id,
+            },
         )
         run.status = "queued"
         await self._events.append(
             run_id=run.id,
             event_type="execution_queued",
             payload={
-                "execution_id": handle.execution_id,
-                "state": handle.state.value,
+                "execution_id": task.id,
+                "task_id": task.id,
+                "state": "queued",
             },
         )
         await self._commit_and_notify(run.id)
-        return handle
+        return ProjectTaskSubmission(task=task, tool_slug=LVPOCKET_SLUG)
 
     async def complete_run(
         self,

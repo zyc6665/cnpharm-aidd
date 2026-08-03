@@ -75,6 +75,12 @@ class Task(Base, UUIDMixin, TimestampMixin):
             data.pop("celery_task_id", None)
         self.extra_data = data
 
+    @property
+    def project_id(self):
+        """兼容响应序列化，从 extra_data 中读取研究项目 ID。"""
+        data = self.extra_data or {}
+        return data.get("project_id")
+
     # 关系
     user = relationship("User", back_populates="tasks")
     tool = relationship("Tool", back_populates="tasks")

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from types import SimpleNamespace
 
 import pytest
 import pytest_asyncio
@@ -12,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 from app.database.base import Base
-from app.execution.contracts import ExecutionHandle, ExecutionState
+from app.config import settings as config_settings
 from app.models.agent import AgentRun
 from app.models.artifacts import Artifact, ArtifactVersion
 from app.models.conversations import (
@@ -23,7 +24,8 @@ from app.models.conversations import (
     PlanVersion,
 )
 from app.models.projects import Organization, Project, ProjectMember
-from app.models.tool_packages import ToolPackage, ToolPackageVersion
+from app.models.tasks import Task
+from app.models.tools import Tool, ToolStatus, ToolVersion
 from app.models.users import User, UserRole, UserStatus
 
 
@@ -42,6 +44,67 @@ async def project_agent_db() -> AsyncSession:
     async with session_factory() as session:
         yield session
     await engine.dispose()
+
+
+def _lvpocket_tool_package_manifest() -> dict:
+    return {
+        "api_version": "aidd.sciminer/tool-package.v2",
+        "kind": "ToolPackage",
+        "metadata": {
+            "slug": "lvpocket-pocket-prediction",
+            "name": "LVpocket",
+            "version": "1.0.0",
+        },
+        "artifacts": {
+            "inputs": [{"name": "protein", "type": "protein_structure@1", "required": True}],
+            "outputs": [{"name": "pocket", "type": "binding_pocket@1", "required": True}],
+        },
+        "runtime": {
+            "python": "3.10",
+            "executor_support": ["ssh_docker_exec"],
+            "selection_policy": "test runtime fixture",
+            "artifacts": {
+                "primary": {
+                    "kind": "container",
+                    "image": "registry.example/sciminer/lvpocket:1.0.0",
+                    "image_digest": "sha256:test",
+                },
+                "fallback": {
+                    "kind": "conda_pack",
+                    "uri": "artifacts://model-envs/lvpocket/1.0.0/conda-env.tar.gz",
+                    "sha256": "test",
+                },
+            },
+            "weights": {
+                "manifest_uri": "artifacts://model-weights/lvpocket/1.0.0/weights.json",
+                "manifest_sha256": "test",
+            },
+            "cache_policy": {
+                "key_fields": ["metadata.slug", "metadata.version"],
+                "mutable_host_paths_forbidden": True,
+            },
+        },
+        "variants": [
+            {
+                "name": "nvidia-cuda",
+                "accelerator": "nvidia_cuda",
+                "executor_types": ["remote_job"],
+                "entrypoint": ["runner/platform_run_v2.sh"],
+            }
+        ],
+    }
+
+
+@pytest.fixture
+def project_direct_runner(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
+    runner = SimpleNamespace(
+        scheduled=[],
+        schedule_task=lambda task_id, tool_version_id: runner.scheduled.append(
+            (task_id, tool_version_id)
+        ),
+    )
+    monkeypatch.setattr(config_settings, "TASK_EXECUTION_BACKEND", "direct", raising=False)
+    return runner
 
 
 @pytest_asyncio.fixture
@@ -90,7 +153,9 @@ async def project_context(project_agent_db: AsyncSession) -> dict:
         project_id=project.id,
         created_by=user.id,
         artifact_type="protein_structure",
-        semantic_type="protein_pdb",
+        semantic_type="protein_structure",
+        standard_type="protein_structure",
+        standard_version=1,
         name="protein.pdb",
     )
     project_agent_db.add(artifact)
@@ -105,36 +170,33 @@ async def project_context(project_agent_db: AsyncSession) -> dict:
         sha256=hashlib.sha256(b"protein").hexdigest(),
         storage_key="projects/pocket-study/protein.pdb",
         status="available",
+        validation_status="passed",
+        manifest_json={"type": "protein_structure@1"},
     )
     project_agent_db.add(protein)
 
-    package = ToolPackage(
+    tool = Tool(
         owner_id=user.id,
-        slug="lvpocket-pocket-prediction",
         name="LVpocket",
-        status="published",
+        slug="lvpocket-pocket-prediction",
+        status=ToolStatus.PUBLISHED.value,
+        is_public=True,
+        gpu_required=True,
     )
-    project_agent_db.add(package)
+    project_agent_db.add(tool)
     await project_agent_db.flush()
-    package_version = ToolPackageVersion(
-        package_id=package.id,
+    tool_version = ToolVersion(
+        tool_id=tool.id,
         version="1.0.0",
-        manifest={
-            "variants": [
-                {
-                    "name": "nvidia-cuda",
-                    "executor_types": ["remote_job"],
-                    "resources": {"devices": ["nvidia.com/gpu"]},
-                }
-            ]
+        config={
+            "type": "ssh_job",
+            "tool_package_manifest": _lvpocket_tool_package_manifest(),
         },
-        manifest_digest="a" * 64,
-        is_signed=True,
-        validation_status="valid",
+        is_active=True,
     )
-    project_agent_db.add(package_version)
+    project_agent_db.add(tool_version)
     await project_agent_db.flush()
-    package.current_version_id = package_version.id
+    tool.current_version_id = tool_version.id
     artifact.latest_version_id = protein.id
     await project_agent_db.commit()
     return {
@@ -142,17 +204,8 @@ async def project_context(project_agent_db: AsyncSession) -> dict:
         "project": project,
         "conversation": conversation,
         "protein": protein,
-        "package_version": package_version,
+        "tool_version": tool_version,
     }
-
-
-class RecordingExecutionPort:
-    def __init__(self) -> None:
-        self.requests = []
-
-    async def submit(self, request):
-        self.requests.append(request)
-        return ExecutionHandle(execution_id="execution-1", state=ExecutionState.QUEUED)
 
 
 def test_legacy_agent_response_keeps_contract_and_adds_deprecation_metadata():
@@ -173,11 +226,11 @@ def test_legacy_agent_response_keeps_contract_and_adds_deprecation_metadata():
 async def test_missing_protein_publishes_input_required_without_execution(
     project_agent_db: AsyncSession,
     project_context: dict,
+    project_direct_runner: SimpleNamespace,
 ):
     from app.agents.aidd.project_service import ProjectAgentService
 
-    port = RecordingExecutionPort()
-    service = ProjectAgentService(project_agent_db, execution_port=port)
+    service = ProjectAgentService(project_agent_db, direct_runner=project_direct_runner)
     result = await service.create_plan(
         project_id=project_context["project"].id,
         conversation_id=project_context["conversation"].id,
@@ -188,7 +241,7 @@ async def test_missing_protein_publishes_input_required_without_execution(
 
     assert result.plan_version is None
     assert result.run.status == "input_required"
-    assert port.requests == []
+    assert project_direct_runner.scheduled == []
     events = (
         (
             await project_agent_db.execute(
@@ -207,11 +260,11 @@ async def test_missing_protein_publishes_input_required_without_execution(
 async def test_plan_is_immutable_and_approval_is_required_before_lvpocket_submission(
     project_agent_db: AsyncSession,
     project_context: dict,
+    project_direct_runner: SimpleNamespace,
 ):
     from app.agents.aidd.project_service import ProjectAgentService
 
-    port = RecordingExecutionPort()
-    service = ProjectAgentService(project_agent_db, execution_port=port)
+    service = ProjectAgentService(project_agent_db, direct_runner=project_direct_runner)
     created = await service.create_plan(
         project_id=project_context["project"].id,
         conversation_id=project_context["conversation"].id,
@@ -225,9 +278,9 @@ async def test_plan_is_immutable_and_approval_is_required_before_lvpocket_submis
         await service.submit_approved_plan(
             plan_version_id=created.plan_version.id,
             user=project_context["user"],
-        )
+    )
     assert exc_info.value.status_code == 409
-    assert port.requests == []
+    assert project_direct_runner.scheduled == []
 
     created.plan_version.status = "approved"
     project_agent_db.add(
@@ -238,17 +291,22 @@ async def test_plan_is_immutable_and_approval_is_required_before_lvpocket_submis
         )
     )
     await project_agent_db.commit()
-    handle = await service.submit_approved_plan(
+    submission = await service.submit_approved_plan(
         plan_version_id=created.plan_version.id,
         user=project_context["user"],
     )
 
-    assert handle.execution_id == "execution-1"
-    assert len(port.requests) == 1
-    request = port.requests[0]
-    assert request.tool_package_version_id == project_context["package_version"].id
-    assert request.inputs[0].artifact_version_id == project_context["protein"].id
-    assert request.variant == "nvidia-cuda"
+    assert submission.as_execution_payload()["task_id"] == submission.task.id
+    task = await project_agent_db.get(Task, submission.task.id)
+    assert task is not None
+    assert task.project_id == project_context["project"].id
+    assert task.tool_version_id == project_context["tool_version"].id
+    assert task.extra_data["input_bindings"] == {
+        "protein": project_context["protein"].id
+    }
+    assert project_direct_runner.scheduled == [
+        (task.id, project_context["tool_version"].id)
+    ]
     await project_agent_db.refresh(created.plan_version)
     assert created.plan_version.content == original_content
     events = (
@@ -269,6 +327,8 @@ async def test_plan_is_immutable_and_approval_is_required_before_lvpocket_submis
         "execution_queued",
     ]
     assert [event.sequence for event in events] == [1, 2, 3, 4]
+    assert events[-2].payload["task_id"] == task.id
+    assert events[-1].payload["task_id"] == task.id
 
 
 @pytest.mark.asyncio
@@ -278,9 +338,7 @@ async def test_completion_publishes_artifact_analysis_and_goal_edit_branches_pla
 ):
     from app.agents.aidd.project_service import ProjectAgentService
 
-    service = ProjectAgentService(
-        project_agent_db, execution_port=RecordingExecutionPort()
-    )
+    service = ProjectAgentService(project_agent_db)
     created = await service.create_plan(
         project_id=project_context["project"].id,
         conversation_id=project_context["conversation"].id,

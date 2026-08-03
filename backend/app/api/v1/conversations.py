@@ -14,14 +14,6 @@ from app.auth.dependencies import get_current_user
 from app.common.responses import success_response
 from app.database.session import get_db
 from app.feature_flags import require_feature_flag
-from app.execution.contracts import (
-    ExecutionHandle,
-    ExecutionRequest,
-    ExecutionState,
-    LogChunk,
-    ProducedArtifact,
-)
-from app.execution.port import ExecutionPort
 from app.models.agent import AgentRun
 from app.models.conversations import (
     AgentEvent,
@@ -50,27 +42,6 @@ from app.services.project_access import load_project_membership, require_project
 router = APIRouter(
     dependencies=[Depends(require_feature_flag("AIDD_PROJECT_CONVERSATIONS_ENABLED"))]
 )
-
-
-class UnavailableExecutionPort:
-    async def submit(self, request: ExecutionRequest) -> ExecutionHandle:
-        raise HTTPException(status_code=503, detail="项目执行适配器未配置")
-
-    async def status(self, execution_id: str) -> ExecutionState:
-        raise HTTPException(status_code=503, detail="项目执行适配器未配置")
-
-    async def logs(self, execution_id: str, cursor: str | None = None) -> LogChunk:
-        raise HTTPException(status_code=503, detail="项目执行适配器未配置")
-
-    async def cancel(self, execution_id: str) -> None:
-        raise HTTPException(status_code=503, detail="项目执行适配器未配置")
-
-    async def collect_artifacts(self, execution_id: str) -> list[ProducedArtifact]:
-        raise HTTPException(status_code=503, detail="项目执行适配器未配置")
-
-
-def get_project_agent_execution_port() -> ExecutionPort:
-    return UnavailableExecutionPort()
 
 
 def _conversation_data(item: Conversation, root_branch_id: str | None = None) -> dict:
@@ -237,9 +208,8 @@ async def create_project_agent_run(
     data: ProjectAgentRunCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    execution_port: ExecutionPort = Depends(get_project_agent_execution_port),
 ):
-    service = ProjectAgentService(db, execution_port=execution_port)
+    service = ProjectAgentService(db)
     result = await service.create_plan(
         project_id=project_id,
         conversation_id=conversation_id,
@@ -420,7 +390,6 @@ async def approve_plan(
     data: PlanDecisionCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    execution_port: ExecutionPort = Depends(get_project_agent_execution_port),
 ):
     plan, decision_data = await _decide_plan(
         plan_id,
@@ -430,11 +399,11 @@ async def approve_plan(
         db,
     )
     if plan.agent_run_id:
-        handle = await ProjectAgentService(
-            db,
-            execution_port=execution_port,
-        ).submit_approved_plan(plan_version_id=plan.id, user=current_user)
-        decision_data["execution"] = handle.model_dump(mode="json")
+        submission = await ProjectAgentService(db).submit_approved_plan(
+            plan_version_id=plan.id,
+            user=current_user,
+        )
+        decision_data["execution"] = submission.as_execution_payload()
     else:
         await db.commit()
     return success_response(

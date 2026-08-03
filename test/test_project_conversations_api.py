@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -12,12 +13,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 from app.auth.dependencies import get_current_user
+from app.config import settings as config_settings
 from app.database.base import Base
 from app.database.session import get_db
-from app.execution.contracts import ExecutionHandle, ExecutionState
 from app.main import app
 from app.models.artifacts import Artifact, ArtifactVersion
-from app.models.tool_packages import ToolPackage, ToolPackageVersion
+from app.models.tasks import Task
+from app.models.tools import Tool, ToolStatus, ToolVersion
 from app.models.users import User, UserRole, UserStatus
 
 
@@ -55,30 +57,32 @@ async def conversation_users(conversation_db: AsyncSession) -> dict[str, User]:
     return users
 
 
-class RecordingExecutionPort:
-    def __init__(self) -> None:
-        self.requests = []
+@pytest.fixture
+def conversation_direct_runner(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
+    from app.agents.aidd import project_service as project_service_module
 
-    async def submit(self, request):
-        self.requests.append(request)
-        return ExecutionHandle(
-            execution_id="execution-project-1", state=ExecutionState.QUEUED
-        )
-
-
-@pytest_asyncio.fixture
-async def conversation_execution_port() -> RecordingExecutionPort:
-    return RecordingExecutionPort()
+    runner = SimpleNamespace(
+        scheduled=[],
+        schedule_task=lambda task_id, tool_version_id: runner.scheduled.append(
+            (task_id, tool_version_id)
+        ),
+    )
+    monkeypatch.setattr(config_settings, "TASK_EXECUTION_BACKEND", "direct", raising=False)
+    monkeypatch.setattr(
+        project_service_module,
+        "default_direct_task_runner",
+        runner,
+        raising=False,
+    )
+    return runner
 
 
 @pytest_asyncio.fixture
 async def conversation_client(
     conversation_db: AsyncSession,
     conversation_users: dict[str, User],
-    conversation_execution_port: RecordingExecutionPort,
+    conversation_direct_runner: SimpleNamespace,
 ):
-    from app.api.v1.conversations import get_project_agent_execution_port
-
     async def override_get_db():
         yield conversation_db
 
@@ -92,9 +96,6 @@ async def conversation_client(
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_current_user] = override_get_current_user
-    app.dependency_overrides[get_project_agent_execution_port] = (
-        lambda: conversation_execution_port
-    )
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
         base_url="http://testserver",
@@ -124,37 +125,78 @@ async def _add_member(
     assert response.status_code == 200
 
 
-async def _seed_lvpocket_package(
-    db: AsyncSession,
-    owner: User,
-) -> ToolPackageVersion:
-    package = ToolPackage(
-        owner_id=owner.id,
-        slug="lvpocket-pocket-prediction",
-        name="LVpocket",
-        status="published",
-    )
-    db.add(package)
-    await db.flush()
-    version = ToolPackageVersion(
-        package_id=package.id,
-        version="1.0.0",
-        manifest={
-            "variants": [
-                {
-                    "name": "nvidia-cuda",
-                    "executor_types": ["remote_job"],
-                    "resources": {"devices": ["nvidia.com/gpu"], "driver": ">=535"},
-                }
-            ]
+def _lvpocket_tool_package_manifest() -> dict:
+    return {
+        "api_version": "aidd.sciminer/tool-package.v2",
+        "kind": "ToolPackage",
+        "metadata": {
+            "slug": "lvpocket-pocket-prediction",
+            "name": "LVpocket",
+            "version": "1.0.0",
         },
-        manifest_digest="b" * 64,
-        is_signed=True,
-        validation_status="valid",
+        "artifacts": {
+            "inputs": [{"name": "protein", "type": "protein_structure@1", "required": True}],
+            "outputs": [{"name": "pocket", "type": "binding_pocket@1", "required": True}],
+        },
+        "runtime": {
+            "python": "3.10",
+            "executor_support": ["ssh_docker_exec"],
+            "selection_policy": "test runtime fixture",
+            "artifacts": {
+                "primary": {
+                    "kind": "container",
+                    "image": "registry.example/sciminer/lvpocket:1.0.0",
+                    "image_digest": "sha256:test",
+                },
+                "fallback": {
+                    "kind": "conda_pack",
+                    "uri": "artifacts://model-envs/lvpocket/1.0.0/conda-env.tar.gz",
+                    "sha256": "test",
+                },
+            },
+            "weights": {
+                "manifest_uri": "artifacts://model-weights/lvpocket/1.0.0/weights.json",
+                "manifest_sha256": "test",
+            },
+            "cache_policy": {
+                "key_fields": ["metadata.slug", "metadata.version"],
+                "mutable_host_paths_forbidden": True,
+            },
+        },
+        "variants": [
+            {
+                "name": "nvidia-cuda",
+                "accelerator": "nvidia_cuda",
+                "executor_types": ["remote_job"],
+                "entrypoint": ["runner/platform_run_v2.sh"],
+            }
+        ],
+    }
+
+
+async def _seed_lvpocket_tool(db: AsyncSession, owner: User) -> ToolVersion:
+    tool = Tool(
+        owner_id=owner.id,
+        name="LVpocket",
+        slug="lvpocket-pocket-prediction",
+        status=ToolStatus.PUBLISHED.value,
+        is_public=True,
+        gpu_required=True,
+    )
+    db.add(tool)
+    await db.flush()
+    version = ToolVersion(
+        tool_id=tool.id,
+        version="1.0.0",
+        config={
+            "type": "ssh_job",
+            "tool_package_manifest": _lvpocket_tool_package_manifest(),
+        },
+        is_active=True,
     )
     db.add(version)
     await db.flush()
-    package.current_version_id = version.id
+    tool.current_version_id = version.id
     await db.commit()
     return version
 
@@ -168,7 +210,9 @@ async def _seed_protein_artifact(
         project_id=project_id,
         created_by=owner.id,
         artifact_type="protein_structure",
-        semantic_type="protein_pdb",
+        semantic_type="protein_structure",
+        standard_type="protein_structure",
+        standard_version=1,
         name="target.pdb",
     )
     db.add(artifact)
@@ -183,6 +227,8 @@ async def _seed_protein_artifact(
         sha256=hashlib.sha256(b"protein").hexdigest(),
         storage_key="projects/pocket-study/target.pdb",
         status="available",
+        validation_status="passed",
+        manifest_json={"type": "protein_structure@1"},
     )
     db.add(version)
     await db.flush()
@@ -333,13 +379,13 @@ async def test_project_conversation_can_start_agent_run_and_approval_submits_exe
     conversation_client: httpx.AsyncClient,
     conversation_db: AsyncSession,
     conversation_users: dict[str, User],
-    conversation_execution_port: RecordingExecutionPort,
+    conversation_direct_runner: SimpleNamespace,
 ):
     from app.models.conversations import AgentEvent
     from sqlalchemy import select
 
     project = await _create_project(conversation_client)
-    await _seed_lvpocket_package(conversation_db, conversation_users["owner"])
+    tool_version = await _seed_lvpocket_tool(conversation_db, conversation_users["owner"])
     protein = await _seed_protein_artifact(
         conversation_db,
         conversation_users["owner"],
@@ -403,7 +449,10 @@ async def test_project_conversation_can_start_agent_run_and_approval_submits_exe
     )
 
     assert approved.status_code == 200
-    assert approved.json()["data"]["execution"]["execution_id"] == "execution-project-1"
+    execution = approved.json()["data"]["execution"]
+    assert execution["state"] == "queued"
+    assert execution["tool_slug"] == "lvpocket-pocket-prediction"
+    assert execution["execution_id"] == execution["task_id"]
     refreshed_messages = await conversation_client.get(
         f"/api/v1/conversations/{conversation['id']}/messages",
         headers={"Authorization": "Bearer owner"},
@@ -415,10 +464,12 @@ async def test_project_conversation_can_start_agent_run_and_approval_submits_exe
         if block["type"] == "approval_ref"
     )
     assert refreshed_approval["status"] == "approved"
-    assert len(conversation_execution_port.requests) == 1
-    request = conversation_execution_port.requests[0]
-    assert request.project_id == project["id"]
-    assert request.inputs[0].artifact_version_id == protein.id
+    task = await conversation_db.get(Task, execution["task_id"])
+    assert task is not None
+    assert task.project_id == project["id"]
+    assert task.tool_version_id == tool_version.id
+    assert task.extra_data["input_bindings"] == {"protein": protein.id}
+    assert conversation_direct_runner.scheduled == [(task.id, tool_version.id)]
     events = (
         (
             await conversation_db.execute(
@@ -436,3 +487,5 @@ async def test_project_conversation_can_start_agent_run_and_approval_submits_exe
         "execution_submitted",
         "execution_queued",
     ]
+    assert events[-2].payload["task_id"] == task.id
+    assert events[-1].payload["task_id"] == task.id
