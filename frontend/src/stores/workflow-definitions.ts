@@ -7,6 +7,7 @@ import {
   getWorkflowDefinitions,
   updateWorkflowDefinition,
   type WorkflowDefinition,
+  type WorkflowDefinitionListParams,
   type WorkflowDefinitionPayload,
   type WorkflowDefinitionUpdatePayload
 } from '@/api/workflows'
@@ -18,7 +19,7 @@ export const useWorkflowDefinitionsStore = defineStore('workflow-definitions', (
   const saving = ref(false)
   const total = ref(0)
 
-  async function fetchWorkflowDefinitions(params?: { page?: number; page_size?: number }) {
+  async function fetchWorkflowDefinitions(params?: WorkflowDefinitionListParams) {
     loading.value = true
     try {
       const res = await getWorkflowDefinitions(params)

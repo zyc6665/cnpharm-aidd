@@ -82,7 +82,35 @@ const stubs = {
     template: '<span class="popconfirm" @click="$emit(\'confirm\')"><slot /></span>',
   },
   AEmpty: true,
-  AiddAgentPanel: true,
+  AiddAgentPanel: {
+    emits: ['draftGenerated'],
+    template: `
+      <button
+        class="emit-agent-draft"
+        type="button"
+        @click="$emit('draftGenerated', {
+          name: 'Agent Draft',
+          description: 'Generated from agent',
+          intent: 'pocket',
+          definition: {
+            nodes: [{
+              id: 'pocket_prediction',
+              kind: 'tool',
+              tool_slug: 'lvpocket',
+              artifact_input_slots: [{ name: 'protein', type: 'protein_structure@1', required: true }],
+              artifact_outputs: [{ name: 'pocket', type: 'binding_pocket@1', required: true }]
+            }],
+            edges: []
+          },
+          input_files: { 'protein_structure@1': 'artifact-version-1' },
+          requested_outputs: ['binding_pocket@1'],
+          analysis_trace: []
+        }, 'project-1')"
+      >
+        生成测试草稿
+      </button>
+    `,
+  },
   WorkflowNodeInspector: true,
   WorkflowNodeStatusBadge: true,
   WorkflowPreflightPanel: true,
@@ -245,5 +273,22 @@ describe('free workflow workbench', () => {
     await wrapper.findAll('button').find(button => button.text() === '删除')!.trigger('click')
     await flushPromises()
     expect(deleteWorkflowDefinition).toHaveBeenCalledWith('flow-active')
+  })
+
+  it('Agent 草稿生成后保存为项目工作流草稿并导入画布', async () => {
+    const wrapper = renderWorkflow()
+    await flushPromises()
+
+    await wrapper.find('.emit-agent-draft').trigger('click')
+    await flushPromises()
+
+    expect(createWorkflowDefinition).toHaveBeenLastCalledWith(expect.objectContaining({
+      name: 'Agent Draft',
+      description: 'Generated from agent',
+      project_id: 'project-1',
+      template_id: 'aidd-workflow-draft',
+      selected_tool_by_node: { pocket_prediction: 'lvpocket' },
+      status: 'draft',
+    }))
   })
 })

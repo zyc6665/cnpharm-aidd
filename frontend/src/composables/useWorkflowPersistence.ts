@@ -213,6 +213,35 @@ export function useWorkflowPersistence(input: {
     )
   }
 
+  async function saveWorkflowDraft(draft: AiddWorkflowDraft, projectId: string) {
+    const canvasPayload = mapWorkflowDefinitionToCanvasPayload({
+      templateId: 'aidd-workflow-draft',
+      name: draft.name,
+      description: draft.description,
+      definition: draft.definition
+    })
+
+    const saved = await workflowDefinitionsStore.saveWorkflowDefinition({
+      project_id: projectId,
+      name: draft.name,
+      description: draft.description ?? null,
+      template_id: canvasPayload.template_id,
+      nodes: canvasPayload.nodes,
+      edges: canvasPayload.edges,
+      selected_tool_by_node: canvasPayload.selected_tool_by_node,
+      artifact_bindings_by_node: canvasPayload.artifact_bindings_by_node,
+      status: 'draft'
+    })
+
+    selectedSavedWorkflowId.value = saved.id
+    workflowName.value = saved.name
+    workflowTemplateName.value = saved.name
+    workflowRunInputSelections.value = { ...draft.input_files }
+    workflowStore.applyWorkflowDefinition(saved)
+    message.success('工作流草稿已保存')
+    return saved
+  }
+
   async function handleSaveWorkflowTemplate() {
     const payload = {
       name: workflowTemplateName.value.trim() || 'AIDD workflow',
@@ -443,6 +472,7 @@ export function useWorkflowPersistence(input: {
     handleNewWorkflowTemplate,
     handleTemplateSelect,
     applyWorkflowDraft,
+    saveWorkflowDraft,
     handleSaveWorkflowTemplate,
     handleDuplicateWorkflowTemplate,
     handleDeleteWorkflowTemplate,

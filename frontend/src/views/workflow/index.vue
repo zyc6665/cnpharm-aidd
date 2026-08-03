@@ -330,6 +330,7 @@
     handleArchiveWorkflow,
     handleDeleteWorkflow,
     applyWorkflowDraft,
+    saveWorkflowDraft,
     handleRefreshWorkflowRuns,
     handleLoadMoreWorkflowRuns,
     handleWorkflowRunSelect,
@@ -385,8 +386,12 @@
     })
   })
 
-  function handleAgentWorkflowDraft(draft: AiddWorkflowDraft) {
-    applyWorkflowDraft(draft)
+  async function handleAgentWorkflowDraft(draft: AiddWorkflowDraft, projectId?: string) {
+    if (projectId) {
+      await saveWorkflowDraft(draft, projectId)
+    } else {
+      applyWorkflowDraft(draft)
+    }
     activeMode.value = 'manual'
   }
 

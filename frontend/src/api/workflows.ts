@@ -37,6 +37,7 @@ export interface WorkflowDefinitionEdge {
 
 export interface WorkflowDefinition {
   id: string
+  project_id?: string | null
   user_id: string
   name: string
   description?: string | null
@@ -51,6 +52,7 @@ export interface WorkflowDefinition {
 }
 
 export interface WorkflowDefinitionPayload {
+  project_id?: string | null
   name: string
   description?: string | null
   template_id: string
@@ -63,10 +65,17 @@ export interface WorkflowDefinitionPayload {
 
 export type WorkflowDefinitionUpdatePayload = Partial<WorkflowDefinitionPayload>
 
+export interface WorkflowDefinitionListParams extends PaginationParams {
+  project_id?: string
+}
+
 export const getWorkflowDefinitions = (
-  params?: PaginationParams
+  params?: WorkflowDefinitionListParams
 ): Promise<ApiResponse<PaginatedResponse<WorkflowDefinition>>> => {
-  return get<PaginatedResponse<WorkflowDefinition>, PaginationParams>('/workflows', params)
+  return get<PaginatedResponse<WorkflowDefinition>, WorkflowDefinitionListParams>(
+    '/workflows',
+    params
+  )
 }
 
 export const getWorkflowDefinition = (id: string): Promise<ApiResponse<WorkflowDefinition>> => {

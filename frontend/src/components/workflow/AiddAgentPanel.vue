@@ -10,21 +10,24 @@
         <a-tag color="blue">{{ t('workflow.agent.autoRouting') }}</a-tag>
       </div>
 
-      <div class="capability-strip">
-        <span
-          v-for="item in capabilityOptions"
-          :key="item.key"
-          class="capability-chip"
-        >
-          <span class="capability-dot" />
-          <span class="capability-copy">
-            <strong>{{ item.title }}</strong>
-            <small>{{ item.description }}</small>
-          </span>
-        </span>
-      </div>
+      <a-alert
+        class="agent-project-alert"
+        type="info"
+        show-icon
+        :message="t('workflow.agent.projectRequired')"
+        :description="t('workflow.agent.projectRequiredDescription')"
+      />
 
       <a-form class="agent-form" layout="vertical">
+        <a-form-item :label="t('workflow.agent.projectLabel')">
+          <a-select
+            v-model:value="selectedProjectId"
+            :loading="loadingProjects"
+            :options="projectOptions"
+            :placeholder="t('workflow.agent.projectPlaceholder')"
+          />
+        </a-form-item>
+
         <a-form-item :label="t('workflow.agent.messageLabel')">
           <a-textarea
             v-model:value="runMessage"
@@ -53,40 +56,13 @@
 
           <div class="agent-actions">
             <a-button
+              type="primary"
               size="large"
-              :loading="draftSubmitting || agentsStore.drafting"
-              :disabled="submitting"
+              :loading="draftSubmitting"
               @click="generateWorkflowDraft"
             >
               <ApartmentOutlined />
               {{ t('workflow.agent.generateDraft') }}
-            </a-button>
-            <a-button
-              type="primary"
-              size="large"
-              :loading="submitting || agentsStore.loading"
-              :disabled="draftSubmitting || agentsStore.drafting"
-              @click="createRun"
-            >
-              <PlayCircleOutlined />
-              {{ t('workflow.agent.run') }}
-            </a-button>
-            <a-button
-              v-if="agentsStore.currentRun"
-              size="large"
-              :loading="syncing"
-              @click="syncRun"
-            >
-              <SyncOutlined />
-              {{ t('workflow.agent.sync') }}
-            </a-button>
-            <a-button
-              v-if="agentsStore.currentRun && !['success', 'failure', 'canceled'].includes(agentsStore.currentRun.status)"
-              danger
-              size="large"
-              @click="cancelRun"
-            >
-              {{ t('common.cancel') }}
             </a-button>
           </div>
         </div>
@@ -94,179 +70,67 @@
     </div>
 
     <div class="agent-runtime-panel">
-      <a-alert
-        v-if="agentsStore.pollError"
-        class="agent-poll-alert"
-        type="warning"
-        show-icon
-        :message="t('workflow.agent.pollFailed')"
-        :description="agentsStore.pollingSuspended ? t('workflow.agent.pollSuspendedHint') : t('workflow.agent.pollRetryingHint')"
-      >
-        <template #action>
-          <a-button size="small" :loading="syncing" @click="syncRun">
-            {{ t('workflow.agent.sync') }}
-          </a-button>
-        </template>
-      </a-alert>
-
       <div class="runtime-header">
         <div>
-          <span class="agent-kicker">{{ t('workflow.agent.timeline') }}</span>
-          <h3>{{ currentRunTitle }}</h3>
+          <span class="agent-kicker">{{ t('workflow.agent.draftWorkspace') }}</span>
+          <h3>{{ t('workflow.agent.draftOnlyTitle') }}</h3>
         </div>
-        <a-tag v-if="agentsStore.currentRun" :color="runStatusColor(agentsStore.currentRun.status)">
-          {{ t(`workflow.agent.status.${agentsStore.currentRun.status}`) }}
-        </a-tag>
       </div>
 
-      <div v-if="agentsStore.currentRun" class="run-meta">
-        <span>{{ t('workflow.agent.autoRouting') }}</span>
-        <span>{{ agentsStore.currentRun.steps.length }} steps</span>
-        <span>{{ agentsStore.currentRun.intent }}</span>
-      </div>
+      <p class="draft-only-description">
+        {{ t('workflow.agent.draftOnlyDescription') }}
+      </p>
 
-      <div v-if="analysisTrace.length > 0" class="agent-analysis-panel">
-        <span class="agent-kicker">{{ t('workflow.agent.analysis') }}</span>
-        <ol class="agent-analysis-list">
-          <li v-for="(item, index) in analysisTrace" :key="index">
-            {{ item }}
-          </li>
-        </ol>
-      </div>
-
-      <div class="agent-history-panel">
-        <div class="history-head">
-          <span class="agent-kicker">{{ t('workflow.agent.history') }}</span>
-          <a-button type="link" size="small" :loading="agentsStore.loading" @click="loadRecentRuns">
-            <ReloadOutlined />
-            {{ t('common.refresh') }}
-          </a-button>
-        </div>
-        <a-checkbox v-model:checked="cascadeDeleteHistory" class="cascade-delete-checkbox">
-          {{ t('workflow.agent.cascadeDeleteHistory') }}
-        </a-checkbox>
-        <a-empty
-          v-if="historyRuns.length === 0"
-          class="history-empty"
-          :description="t('workflow.agent.noHistory')"
-        />
-        <div v-else class="history-list">
-          <div
-            v-for="run in historyRuns"
-            :key="run.id"
-            class="history-item"
-            :class="{ 'is-active': run.id === agentsStore.currentRun?.id }"
-          >
-            <button
-              type="button"
-              class="history-select-button"
-              @click="selectHistoryRun(run.id)"
-            >
-              <span class="history-message">{{ run.message }}</span>
-              <span class="history-meta">
-                <a-tag :color="runStatusColor(run.status)">
-                  {{ t(`workflow.agent.status.${run.status}`) }}
-                </a-tag>
-                <span>{{ formatRunTime(run.created_at) }}</span>
-              </span>
-            </button>
-            <a-popconfirm
-              :title="cascadeDeleteHistory ? t('workflow.agent.cascadeDeleteHistoryConfirm') : t('workflow.agent.deleteHistoryConfirm')"
-              @confirm="deleteHistoryRun(run.id)"
-            >
-              <a-button
-                type="text"
-                size="small"
-                danger
-                :loading="deletingRunId === run.id"
-                :aria-label="t('workflow.agent.deleteHistory')"
-                @click.stop
-              >
-                <DeleteOutlined />
-              </a-button>
-            </a-popconfirm>
-          </div>
-        </div>
+      <div class="capability-strip">
+        <span v-for="item in capabilityOptions" :key="item.key" class="capability-chip">
+          <span class="capability-dot" />
+          <span class="capability-copy">
+            <strong>{{ item.title }}</strong>
+            <small>{{ item.description }}</small>
+          </span>
+        </span>
       </div>
 
       <a-empty
-        v-if="!agentsStore.currentRun"
+        v-if="projectOptions.length === 0 && !loadingProjects"
         class="agent-empty"
-        :description="t('workflow.agent.empty')"
+        :description="t('workflow.agent.noProjects')"
       />
-      <a-timeline v-else class="agent-timeline">
-        <a-timeline-item
-          v-for="step in orderedSteps"
-          :key="step.id"
-          :color="stepStatusColor(step.status)"
-        >
-          <div class="step-card">
-            <div class="step-main">
-              <span class="step-index">#{{ String(step.sort_order + 1).padStart(2, '0') }}</span>
-              <strong>{{ formatStepTitle(step.step_key) }}</strong>
-              <span class="step-meta">{{ formatToolSlug(step.tool_slug) }}</span>
-              <p v-if="step.error_message" class="step-error">{{ step.error_message }}</p>
-            </div>
-            <div class="step-actions">
-              <a-tag :color="stepStatusColor(step.status)">
-                {{ t(`workflow.agent.stepStatus.${step.status}`) }}
-              </a-tag>
-              <a-button
-                v-if="step.task_id"
-                type="link"
-                size="small"
-                @click="viewTask(step.task_id)"
-              >
-                {{ t('workflow.agent.viewTask') }}
-              </a-button>
-            </div>
-          </div>
-        </a-timeline-item>
-      </a-timeline>
+      <a-tag v-else-if="selectedProjectName" color="green">
+        {{ t('workflow.agent.selectedProject', { name: selectedProjectName }) }}
+      </a-tag>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+  import { computed, onMounted, ref, watch } from 'vue'
   import { useRouter } from 'vue-router'
   import { useI18n } from 'vue-i18n'
   import { message } from 'ant-design-vue'
   import type { UploadFile } from 'ant-design-vue'
-  import {
-    ApartmentOutlined,
-    DeleteOutlined,
-    PlayCircleOutlined,
-    ReloadOutlined,
-    SyncOutlined,
-    UploadOutlined
-  } from '@ant-design/icons-vue'
+  import { ApartmentOutlined, UploadOutlined } from '@ant-design/icons-vue'
+  import { createAiddWorkflowDraft } from '@/api/agents'
   import { uploadFile } from '@/api/files'
-  import { useAgentsStore, useUserStore } from '@/stores'
-  import type {
-    AiddAgentRun,
-    AiddAgentRunCreateParams,
-    AiddAgentRunStatus,
-    AiddAgentStepStatus,
-    AiddWorkflowDraft
-  } from '@/types/models'
+  import { listProjects } from '@/api/projects'
+  import { useUserStore } from '@/stores'
+  import type { AiddAgentRunCreateParams, AiddWorkflowDraft } from '@/types/models'
+  import type { ResearchProject } from '@/types/projects'
 
   const emit = defineEmits<{
-    draftGenerated: [draft: AiddWorkflowDraft]
+    draftGenerated: [draft: AiddWorkflowDraft, projectId: string]
   }>()
 
   const router = useRouter()
   const { t } = useI18n()
-  const agentsStore = useAgentsStore()
   const userStore = useUserStore()
 
   const runMessage = ref('')
   const agentFileUploads = ref<UploadFile[]>([])
-  const submitting = ref(false)
+  const projects = ref<ResearchProject[]>([])
+  const selectedProjectId = ref<string | undefined>()
+  const loadingProjects = ref(false)
   const draftSubmitting = ref(false)
-  const syncing = ref(false)
-  const deletingRunId = ref<string | null>(null)
-  const cascadeDeleteHistory = ref(false)
 
   const capabilityOptions = computed(() => {
     return [
@@ -293,121 +157,40 @@
     ]
   })
 
-  const orderedSteps = computed(() => {
-    return [...(agentsStore.currentRun?.steps ?? [])].sort((left, right) => left.sort_order - right.sort_order)
+  const projectOptions = computed(() => {
+    return projects.value
+      .filter(project => project.status !== 'archived')
+      .map(project => ({
+        value: project.id,
+        label: project.name
+      }))
   })
 
-  const historyRuns = computed<AiddAgentRun[]>(() => {
-    return agentsStore.runs
-  })
-
-  const currentRunTitle = computed(() => {
-    return agentsStore.currentRun?.summary || agentsStore.currentRun?.message || t('workflow.agent.noRun')
-  })
-
-  const analysisTrace = computed(() => {
-    const trace = agentsStore.currentRun?.plan?.analysis_trace
-    if (Array.isArray(trace)) {
-      return trace
-        .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-        .map(item => item.trim())
-    }
-
-    const summary = agentsStore.currentRun?.plan?.reasoning_summary
-    return typeof summary === 'string' && summary.trim() ? [summary.trim()] : []
+  const selectedProjectName = computed(() => {
+    return projects.value.find(project => project.id === selectedProjectId.value)?.name
   })
 
   function beforeUpload() {
     return false
   }
 
-  async function loadRecentRuns() {
+  async function loadProjects() {
     if (!userStore.isLoggedIn) {
+      projects.value = []
+      selectedProjectId.value = undefined
       return
     }
 
+    loadingProjects.value = true
     try {
-      await agentsStore.fetchRuns({ page: 1, page_size: 5 }, { silent: true, retry: 1 })
-    } catch (error) {
-      console.warn('[AiddAgentPanel] Failed to load legacy AIDD agent runs', error)
-    }
-  }
-
-  function formatStepTitle(stepKey: string) {
-    const labels: Record<string, string> = {
-      pocket_prediction: t('workflow.steps.pocketExploration.title'),
-      molecule_generation: t('workflow.steps.moleculeGenerationOrVirtualScreening.title'),
-      property_prediction: t('workflow.steps.propertyPrediction.title'),
-      affinity_prediction: t('workflow.steps.molecularDockingAndAffinityPrediction.title')
-    }
-
-    return labels[stepKey] ?? stepKey
-  }
-
-  function formatToolSlug(toolSlug: string) {
-    return toolSlug.replace(/-/g, ' ').toUpperCase()
-  }
-
-  function runStatusColor(status: AiddAgentRunStatus) {
-    const colors: Record<AiddAgentRunStatus, string> = {
-      pending: 'default',
-      planning: 'processing',
-      running: 'processing',
-      waiting_task: 'processing',
-      success: 'success',
-      failure: 'error',
-      canceled: 'warning'
-    }
-
-    return colors[status]
-  }
-
-  function stepStatusColor(status: AiddAgentStepStatus) {
-    const colors: Record<AiddAgentStepStatus, string> = {
-      pending: 'gray',
-      ready: 'blue',
-      running: 'blue',
-      waiting_task: 'blue',
-      success: 'green',
-      failure: 'red',
-      skipped: 'gray',
-      canceled: 'orange'
-    }
-
-    return colors[status]
-  }
-
-  function formatRunTime(value?: string | null) {
-    if (!value) {
-      return '-'
-    }
-    const date = new Date(value)
-    if (Number.isNaN(date.getTime())) {
-      return value
-    }
-    return date.toLocaleString()
-  }
-
-  async function selectHistoryRun(runId: string) {
-    await agentsStore.fetchRun(runId)
-  }
-
-  async function deleteHistoryRun(runId: string) {
-    deletingRunId.value = runId
-    try {
-      const result = await agentsStore.deleteRun(runId, cascadeDeleteHistory.value)
-      if (cascadeDeleteHistory.value) {
-        message.success(
-          t('workflow.agent.cascadeDeleted', {
-            tasks: result.deleted_tasks,
-            artifacts: result.deleted_artifacts
-          })
-        )
-      } else {
-        message.success(t('workflow.agent.deleted'))
+      const response = await listProjects()
+      projects.value = response.data.items
+      const firstProject = projectOptions.value[0]
+      if (!selectedProjectId.value && firstProject) {
+        selectedProjectId.value = firstProject.value
       }
     } finally {
-      deletingRunId.value = null
+      loadingProjects.value = false
     }
   }
 
@@ -415,6 +198,11 @@
     if (!userStore.isLoggedIn) {
       message.warning(t('workflow.agent.loginRequired'))
       router.push('/login')
+      return null
+    }
+
+    if (!selectedProjectId.value) {
+      message.warning(t('workflow.agent.projectRequiredWarning'))
       return null
     }
 
@@ -429,25 +217,10 @@
       const uploaded = await uploadFile(uploadItem.originFileObj as File)
       uploadedFileIds.push(uploaded.data.id.toString())
     }
+
     return {
       message: runMessage.value.trim() || t('workflow.agent.defaultMessage'),
       input_file_ids: uploadedFileIds
-    }
-  }
-
-  async function createRun() {
-    submitting.value = true
-    try {
-      const request = await prepareAgentRequest()
-      if (!request) {
-        return
-      }
-      const run = await agentsStore.createRun(request)
-
-      agentsStore.pollRunUntilTerminal(run.id)
-      message.success(t('workflow.agent.created'))
-    } finally {
-      submitting.value = false
     }
   }
 
@@ -455,58 +228,27 @@
     draftSubmitting.value = true
     try {
       const request = await prepareAgentRequest()
-      if (!request) {
+      if (!request || !selectedProjectId.value) {
         return
       }
-      const draft = await agentsStore.createWorkflowDraft(request)
-      emit('draftGenerated', draft)
+
+      const response = await createAiddWorkflowDraft(request)
+      emit('draftGenerated', response.data, selectedProjectId.value)
       message.success(t('workflow.agent.draftGenerated'))
     } finally {
       draftSubmitting.value = false
     }
   }
 
-  async function syncRun() {
-    if (!agentsStore.currentRun) {
-      return
-    }
-
-    syncing.value = true
-    try {
-      await agentsStore.syncRun(agentsStore.currentRun.id)
-    } catch {
-      message.error(t('workflow.agent.syncFailed'))
-    } finally {
-      syncing.value = false
-    }
-  }
-
-  async function cancelRun() {
-    if (!agentsStore.currentRun) {
-      return
-    }
-
-    await agentsStore.cancelRun(agentsStore.currentRun.id)
-    agentsStore.clearPolling()
-  }
-
-  function viewTask(taskId: string) {
-    router.push('/tasks/' + taskId)
-  }
-
   watch(
     () => [userStore.isLoggedIn, userStore.user?.id] as const,
     () => {
-      void loadRecentRuns()
+      void loadProjects()
     }
   )
 
   onMounted(() => {
-    void loadRecentRuns()
-  })
-
-  onBeforeUnmount(() => {
-    agentsStore.clearPolling()
+    void loadProjects()
   })
 </script>
 
@@ -515,30 +257,22 @@
 
   .aidd-agent-panel {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(360px, 0.8fr);
+    grid-template-columns: minmax(0, 1fr) minmax(340px, 0.7fr);
     gap: @spacing-lg;
     margin-bottom: 0;
-
-    @media (max-width: @screen-lg) {
-      grid-template-columns: minmax(0, 1fr);
-    }
   }
 
   .agent-control-panel,
   .agent-runtime-panel {
     min-width: 0;
     border: 1px solid @border-color-hover;
-    border-radius: 18px;
-    background: @bg-surface;
-    box-shadow: 0 18px 36px rgb(15 23 42 / 5%);
+    border-radius: @border-radius-lg;
+    background: @bg-elevated;
+    box-shadow: @shadow-sm;
   }
 
   .agent-control-panel {
-    padding: @spacing-lg;
-  }
-
-  .agent-poll-alert {
-    margin: @spacing-lg @spacing-lg 0;
+    padding: @spacing-xl;
   }
 
   .agent-runtime-panel {
@@ -546,15 +280,9 @@
   }
 
   .agent-panel-head,
-  .runtime-header,
-  .step-card,
-  .step-actions {
+  .runtime-header {
     display: flex;
     align-items: flex-start;
-  }
-
-  .agent-panel-head,
-  .runtime-header {
     justify-content: space-between;
     gap: @spacing-md;
     margin-bottom: @spacing-md;
@@ -562,287 +290,114 @@
 
   .agent-panel-head h2,
   .runtime-header h3 {
-    margin: 4px 0;
+    margin: 0;
     color: @text-color-light-primary;
-    font-weight: 700;
-    letter-spacing: 0;
+    font-weight: 800;
   }
 
-  .agent-panel-head p {
-    margin: 0;
+  .agent-panel-head p,
+  .draft-only-description {
+    margin: @spacing-xs 0 0;
     color: @text-color-light-secondary;
     line-height: 1.7;
   }
 
   .agent-kicker {
+    display: block;
+    margin-bottom: @spacing-xs;
     color: @primary-color;
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 0;
-  }
-
-  .capability-strip {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: @spacing-sm;
-    margin-bottom: @spacing-lg;
-
-    @media (max-width: @screen-md) {
-      grid-template-columns: minmax(0, 1fr);
-    }
-  }
-
-  .capability-chip {
-    display: flex;
-    align-items: flex-start;
-    gap: @spacing-sm;
-    min-width: 0;
-    padding: @spacing-sm;
-    border: 1px solid @accent-color-border;
-    border-radius: @border-radius-md;
-    background: @accent-color-light;
-    color: @text-color-light-primary;
-    font-size: @font-size-sm;
-  }
-
-  .capability-dot {
-    flex: none;
-    width: 8px;
-    height: 8px;
-    margin-top: 7px;
-    border-radius: @border-radius-round;
-    background: @primary-color;
-  }
-
-  .capability-copy {
-    min-width: 0;
-
-    strong,
-    small {
-      display: block;
-      overflow-wrap: anywhere;
-    }
-
-    strong {
-      color: @text-color-light-primary;
-      font-weight: @font-weight-semibold;
-    }
-
-    small {
-      margin-top: 2px;
-      color: @text-color-light-secondary;
-      line-height: @line-height-base;
-    }
-  }
-
-  .step-index {
-    color: @primary-color;
-    font-family: @font-family-mono;
     font-size: @font-size-xs;
-    font-weight: @font-weight-semibold;
+    font-weight: 800;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .agent-project-alert {
+    margin-bottom: @spacing-md;
   }
 
   .agent-form {
-    min-width: 0;
+    margin-top: @spacing-lg;
   }
 
   .agent-submit-row {
     display: flex;
-    justify-content: space-between;
-    gap: @spacing-md;
     align-items: flex-end;
-    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: @spacing-lg;
   }
 
   .agent-file-field {
-    min-width: 260px;
-    margin-bottom: 0;
     flex: 1;
+    margin-bottom: 0;
   }
 
   .agent-file-hint {
     margin: @spacing-xs 0 0;
-    color: @text-color-light-secondary;
-    font-size: @font-size-xs;
-    line-height: @line-height-base;
+    color: @text-color-light-tertiary;
+    font-size: @font-size-sm;
   }
 
   .agent-actions {
     display: flex;
-    flex-wrap: wrap;
     gap: @spacing-sm;
+    margin-bottom: @spacing-sm;
   }
 
-  .run-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: @spacing-xs;
-    margin-bottom: @spacing-lg;
-
-    span {
-      padding: 4px 8px;
-      border-radius: @border-radius-sm;
-      background: @bg-hover;
-      color: @text-secondary;
-      font-size: @font-size-xs;
-    }
-  }
-
-  .agent-analysis-panel {
-    margin: -@spacing-xs 0 @spacing-lg;
-    padding: @spacing-sm @spacing-md;
-    border-left: 3px solid @primary-color;
-    border-radius: @border-radius-sm;
-    background: linear-gradient(90deg, rgba(59, 130, 246, 0.07), rgba(59, 130, 246, 0.02));
-  }
-
-  .agent-analysis-list {
+  .capability-strip {
     display: grid;
-    gap: 6px;
-    margin: 6px 0 0;
-    padding-left: 18px;
-    color: @text-color-light-primary;
-    line-height: @line-height-base;
+    gap: @spacing-sm;
+    margin: @spacing-lg 0;
+  }
 
-    li {
-      overflow-wrap: anywhere;
-    }
+  .capability-chip {
+    display: flex;
+    gap: @spacing-sm;
+    padding: @spacing-sm @spacing-md;
+    border: 1px solid @border-color-light;
+    border-radius: @border-radius-md;
+    background: @bg-light-secondary;
+  }
+
+  .capability-dot {
+    width: 8px;
+    height: 8px;
+    margin-top: 7px;
+    border-radius: 50%;
+    background: @primary-color;
+  }
+
+  .capability-copy {
+    display: grid;
+    gap: 2px;
+  }
+
+  .capability-copy strong {
+    color: @text-color-light-primary;
+  }
+
+  .capability-copy small {
+    color: @text-color-light-secondary;
+    line-height: 1.5;
   }
 
   .agent-empty {
-    padding: @spacing-xl 0;
+    margin-top: @spacing-lg;
   }
 
-  .agent-timeline {
-    margin-top: @spacing-md;
-  }
-
-  .agent-history-panel {
-    margin-bottom: @spacing-lg;
-    padding: @spacing-sm;
-    border: 1px solid @border-color;
-    border-radius: @border-radius-md;
-    background: @bg-elevated;
-  }
-
-  .history-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: @spacing-sm;
-    margin-bottom: @spacing-sm;
-  }
-
-  .history-empty {
-    padding: @spacing-md 0;
-  }
-
-  .cascade-delete-checkbox {
-    margin-bottom: @spacing-sm;
-    color: @text-color-light-secondary;
-    font-size: @font-size-xs;
-  }
-
-  .history-list {
-    display: grid;
-    gap: @spacing-xs;
-    max-height: 260px;
-    overflow: auto;
-  }
-
-  .history-item {
-    display: flex;
-    align-items: center;
-    gap: @spacing-xs;
-    width: 100%;
-    border: 1px solid transparent;
-    border-radius: @border-radius-sm;
-    background: @bg-hover;
-    color: @text-color-light-primary;
-    transition: border-color @transition-fast, background @transition-fast;
-
-    &:hover,
-    &.is-active {
-      border-color: rgba(59, 130, 246, 0.25);
-      background: rgba(59, 130, 246, 0.05);
+  @media (max-width: 1080px) {
+    .aidd-agent-panel {
+      grid-template-columns: 1fr;
     }
-  }
 
-  .history-select-button {
-    display: grid;
-    gap: @spacing-xs;
-    min-width: 0;
-    flex: 1;
-    padding: @spacing-sm;
-    border: 0;
-    background: transparent;
-    color: inherit;
-    text-align: left;
-    cursor: pointer;
-  }
-
-  .history-message {
-    display: -webkit-box;
-    overflow: hidden;
-    color: @text-color-light-primary;
-    font-weight: @font-weight-semibold;
-    line-height: @line-height-base;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-  }
-
-  .history-meta {
-    display: flex;
-    align-items: center;
-    gap: @spacing-xs;
-    flex-wrap: wrap;
-    color: @text-color-light-secondary;
-    font-size: @font-size-xs;
-  }
-
-  .step-card {
-    justify-content: space-between;
-    gap: @spacing-md;
-    padding: @spacing-sm @spacing-md;
-    border: 1px solid @border-color;
-    border-radius: @border-radius-md;
-    background: @bg-elevated;
-  }
-
-  .step-main {
-    min-width: 0;
-
-    strong,
-    span {
-      display: block;
+    .agent-submit-row {
+      align-items: stretch;
+      flex-direction: column;
     }
-  }
 
-  .step-meta {
-    color: @text-color-light-secondary;
-    font-size: 12px;
-  }
-
-  .step-actions {
-    flex-shrink: 0;
-    gap: @spacing-xs;
-  }
-
-  .step-error {
-    margin: 4px 0 0;
-    color: @error-color;
-    font-size: 12px;
-  }
-
-  @media (max-width: @screen-sm) {
-    .agent-submit-row,
     .agent-actions,
     .agent-actions :deep(.ant-btn) {
       width: 100%;
-    }
-
-    .semantic-file-grid {
-      grid-template-columns: 1fr;
     }
   }
 </style>
