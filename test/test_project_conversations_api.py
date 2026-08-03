@@ -366,6 +366,35 @@ async def test_project_conversation_can_start_agent_run_and_approval_submits_exe
     assert started_data["status"] == "awaiting_approval"
     assert started_data["plan_version"]["status"] == "pending"
     assert started_data["plan_version"]["content"]["goal"] == "Find pockets in chain A"
+    messages = await conversation_client.get(
+        f"/api/v1/conversations/{conversation['id']}/messages",
+        headers={"Authorization": "Bearer owner"},
+    )
+    assert messages.status_code == 200
+    assistant_messages = [
+        item
+        for item in messages.json()["data"]["items"]
+        if item["role"] == "assistant"
+    ]
+    assert len(assistant_messages) == 1
+    approval_blocks = [
+        block
+        for block in assistant_messages[0]["content"]
+        if block["type"] == "approval_ref"
+    ]
+    assert approval_blocks == [
+        {
+            "type": "approval_ref",
+            "plan_id": started_data["plan_version"]["id"],
+            "run_id": started_data["id"],
+            "tool": "LVpocket",
+            "parameters": {},
+            "resources": {"accelerator": "NVIDIA GPU", "gpu_count": 1},
+            "estimated_duration_seconds": 180,
+            "network_access": False,
+            "status": "pending",
+        }
+    ]
 
     approved = await conversation_client.post(
         f"/api/v1/plan-versions/{started_data['plan_version']['id']}/approve",
@@ -375,6 +404,17 @@ async def test_project_conversation_can_start_agent_run_and_approval_submits_exe
 
     assert approved.status_code == 200
     assert approved.json()["data"]["execution"]["execution_id"] == "execution-project-1"
+    refreshed_messages = await conversation_client.get(
+        f"/api/v1/conversations/{conversation['id']}/messages",
+        headers={"Authorization": "Bearer owner"},
+    )
+    refreshed_approval = next(
+        block
+        for item in refreshed_messages.json()["data"]["items"]
+        for block in item["content"]
+        if block["type"] == "approval_ref"
+    )
+    assert refreshed_approval["status"] == "approved"
     assert len(conversation_execution_port.requests) == 1
     request = conversation_execution_port.requests[0]
     assert request.project_id == project["id"]

@@ -20,6 +20,7 @@ from app.models.artifacts import Artifact, ArtifactVersion
 from app.models.conversations import Conversation, PlanDecision, PlanVersion
 from app.models.tool_packages import ToolPackage, ToolPackageVersion
 from app.models.users import User
+from app.services.conversations import append_message
 from app.services.project_access import load_project_membership, require_project_role
 
 
@@ -103,6 +104,30 @@ class ProjectAgentService:
         )
         return (current or 0) + 1
 
+    @staticmethod
+    def _approval_message_content(
+        *,
+        plan: PlanVersion,
+        run: AgentRun,
+    ) -> list[dict[str, Any]]:
+        return [
+            {
+                "type": "text",
+                "text": "已生成 LVpocket 口袋识别执行计划，请审批后启动任务。",
+            },
+            {
+                "type": "approval_ref",
+                "plan_id": plan.id,
+                "run_id": run.id,
+                "tool": "LVpocket",
+                "parameters": dict((plan.content or {}).get("parameters") or {}),
+                "resources": {"accelerator": "NVIDIA GPU", "gpu_count": 1},
+                "estimated_duration_seconds": 180,
+                "network_access": False,
+                "status": "pending",
+            },
+        ]
+
     async def create_plan(
         self,
         *,
@@ -112,7 +137,7 @@ class ProjectAgentService:
         goal: str,
         protein_artifact_version_id: str | None,
     ) -> ProjectPlanResult:
-        await self._load_conversation(
+        conversation = await self._load_conversation(
             project_id=project_id,
             conversation_id=conversation_id,
             user_id=user.id,
@@ -178,6 +203,13 @@ class ProjectAgentService:
             run_id=run.id,
             event_type="approval_required",
             payload={"plan_version_id": plan.id, "risk_level": plan.risk_level},
+        )
+        await append_message(
+            self._db,
+            conversation=conversation,
+            user=user,
+            role="assistant",
+            content=self._approval_message_content(plan=plan, run=run),
         )
         await self._commit_and_notify(run.id)
         return ProjectPlanResult(run=run, plan_version=plan)

@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.agents.aidd.project_service import ProjectAgentService, ProjectPlanResult
 from app.auth.dependencies import get_current_user
@@ -361,6 +362,7 @@ async def _decide_plan(
     )
     plan.status = "approved" if decision == "approve" else "rejected"
     db.add(record)
+    await _sync_approval_message_status(db, plan=plan)
     await db.flush()
     return (
         plan,
@@ -376,6 +378,40 @@ async def _decide_plan(
             },
         },
     )
+
+
+async def _sync_approval_message_status(
+    db: AsyncSession,
+    *,
+    plan: PlanVersion,
+) -> None:
+    if not plan.conversation_id:
+        return
+    messages = (
+        (
+            await db.execute(
+                select(ConversationMessage).where(
+                    ConversationMessage.conversation_id == plan.conversation_id
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for message in messages:
+        content = list(message.content or [])
+        changed = False
+        for block in content:
+            if (
+                isinstance(block, dict)
+                and block.get("type") == "approval_ref"
+                and block.get("plan_id") == plan.id
+            ):
+                block["status"] = plan.status
+                changed = True
+        if changed:
+            message.content = content
+            flag_modified(message, "content")
 
 
 @router.post("/plan-versions/{plan_id}/approve", response_model=dict)

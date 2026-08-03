@@ -5,6 +5,7 @@ import ResearchView from './Research.vue'
 import {
   approvePlanVersion,
   branchConversationMessage,
+  createConversationMessage,
   getConversationMessages,
   getProjectConversations,
   getProjectResearchContext,
@@ -12,6 +13,7 @@ import {
   startProjectAgentRun,
 } from '@/api/conversations'
 import { cancelAiddAgentRun } from '@/api/agents'
+import { getProjectArtifacts } from '@/api/artifacts'
 import { useProjectConversationStore } from '@/stores/project-conversation'
 
 const push = vi.fn()
@@ -34,6 +36,7 @@ vi.mock('@/api/conversations', () => ({
   startProjectAgentRun: vi.fn(),
 }))
 vi.mock('@/api/agents', () => ({ cancelAiddAgentRun: vi.fn() }))
+vi.mock('@/api/artifacts', () => ({ getProjectArtifacts: vi.fn() }))
 vi.mock('@/composables/useAgentEventStream', () => ({
   useAgentEventStream: () => ({
     connect: vi.fn(),
@@ -91,6 +94,42 @@ describe('ResearchView', () => {
         }],
       },
     } as never)
+    vi.mocked(getProjectArtifacts).mockResolvedValue({
+      data: {
+        items: [{
+          id: 'artifact-1',
+          project_id: 'project-1',
+          artifact_type: 'protein_structure',
+          semantic_type: 'protein_pdb',
+          standard_type: 'protein_structure',
+          standard_version: 1,
+          name: 'target.pdb',
+          latest_version: {
+            id: 'protein-version-1',
+            version: 1,
+            filename: 'target.pdb',
+            content_type: 'chemical/x-pdb',
+            size_bytes: 128,
+            sha256: 'a'.repeat(64),
+            status: 'available',
+            created_at: '2026-08-03T00:00:00Z',
+          },
+          created_at: '2026-08-03T00:00:00Z',
+          updated_at: '2026-08-03T00:00:00Z',
+        }],
+      },
+    } as never)
+    vi.mocked(createConversationMessage).mockResolvedValue({
+      data: {
+        id: 'message-user',
+        conversation_id: 'conversation-1',
+        branch_id: 'branch-1',
+        role: 'user',
+        content: [{ type: 'text', text: '寻找 target.pdb 的可成药口袋' }],
+        plain_text: '寻找 target.pdb 的可成药口袋',
+        sequence: 2,
+      },
+    } as never)
     vi.mocked(cancelAiddAgentRun).mockResolvedValue({ data: { id: 'run-1' } } as never)
     vi.mocked(startProjectAgentRun).mockResolvedValue({ data: { id: 'run-new' } } as never)
     vi.mocked(branchConversationMessage).mockResolvedValue({
@@ -117,6 +156,29 @@ describe('ResearchView', () => {
     expect(wrapper.text()).toContain('约 3 分钟')
     expect(wrapper.text()).toContain('不访问网络')
     expect(wrapper.get('[data-testid="approve-plan"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('发送研究目标时传递选中的蛋白 ArtifactVersion', async () => {
+    vi.mocked(getProjectResearchContext).mockResolvedValue({
+      data: { id: 'project-1', name: '口袋研究', goal: '识别可成药口袋', membership: { role: 'runner' } },
+    } as never)
+    vi.mocked(getConversationMessages).mockResolvedValue({
+      data: { items: [] },
+    } as never)
+    const wrapper = renderResearch()
+    await flushPromises()
+
+    expect(getProjectArtifacts).toHaveBeenCalledWith('project-1')
+    expect(wrapper.text()).toContain('target.pdb')
+
+    await wrapper.get('textarea').setValue('寻找 target.pdb 的可成药口袋')
+    await wrapper.get('textarea').trigger('keydown.enter')
+    await flushPromises()
+
+    expect(startProjectAgentRun).toHaveBeenCalledWith('project-1', 'conversation-1', {
+      goal: '寻找 target.pdb 的可成药口袋',
+      protein_artifact_version_id: 'protein-version-1',
+    })
   })
 
   it('提供停止、重新生成、编辑并分支和失败重试操作', async () => {

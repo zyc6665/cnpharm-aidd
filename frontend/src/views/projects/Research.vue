@@ -35,6 +35,8 @@
           :disabled="sending"
           :editing="Boolean(branchSource)"
           :initial-text="branchSource?.plain_text"
+          v-model:protein-artifact-version-id="selectedProteinArtifactVersionId"
+          :protein-artifact-options="proteinArtifactOptions"
           @submit="sendMessage"
           @stop="stopRun"
           @regenerate="regenerateRun"
@@ -51,6 +53,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeftOutlined } from '@ant-design/icons-vue'
 import { cancelAiddAgentRun } from '@/api/agents'
+import { getProjectArtifacts } from '@/api/artifacts'
 import { createProjectConversation, startProjectAgentRun } from '@/api/conversations'
 import ConversationSidebar from '@/components/conversation/ConversationSidebar.vue'
 import MessageTimeline from '@/components/conversation/MessageTimeline.vue'
@@ -59,6 +62,7 @@ import AgentTrace from '@/components/conversation/AgentTrace.vue'
 import ProjectInspector from '@/components/conversation/ProjectInspector.vue'
 import { useAgentEventStream } from '@/composables/useAgentEventStream'
 import { useProjectConversationStore } from '@/stores/project-conversation'
+import type { TypedArtifact } from '@/types/artifacts'
 import type { ConversationMessage } from '@/types/conversations'
 
 const route = useRoute()
@@ -67,13 +71,51 @@ const store = useProjectConversationStore()
 const stream = useAgentEventStream()
 const sending = ref(false)
 const branchSource = ref<ConversationMessage | null>(null)
+const proteinArtifacts = ref<TypedArtifact[]>([])
+const selectedProteinArtifactVersionId = ref<string | undefined>()
 const projectId = computed(() => String(route.params.projectId || ''))
 const activeConversation = computed(() => store.conversations.find(item => item.id === store.activeConversationId))
 const runFailed = computed(() => store.events.some(event => event.event_type.includes('fail')))
 const latestUserMessage = computed(() => [...store.messages].reverse().find(message => message.role === 'user'))
+const proteinArtifactOptions = computed(() => proteinArtifacts.value.map(artifact => ({
+  value: artifact.latest_version.id,
+  label: `${artifact.latest_version.filename || artifact.name} · v${artifact.latest_version.version}`,
+})))
 
 async function reload() {
-  await store.loadProject(projectId.value, String(route.params.conversationId || ''))
+  await Promise.all([
+    store.loadProject(projectId.value, String(route.params.conversationId || '')),
+    loadProteinArtifacts(),
+  ])
+}
+
+function isProteinArtifact(artifact: TypedArtifact): boolean {
+  const semanticType = artifact.semantic_type
+  const standardType = artifact.standard_type
+  return (
+    semanticType === 'protein_pdb' ||
+    semanticType === 'protein_structure' ||
+    semanticType === 'protein_structure@1' ||
+    standardType === 'protein_structure'
+  )
+}
+
+async function loadProteinArtifacts() {
+  if (!projectId.value) {
+    proteinArtifacts.value = []
+    selectedProteinArtifactVersionId.value = undefined
+    return
+  }
+
+  const response = await getProjectArtifacts(projectId.value)
+  proteinArtifacts.value = response.data.items.filter(isProteinArtifact)
+  const optionValues = new Set(proteinArtifactOptions.value.map(option => option.value))
+  if (
+    !selectedProteinArtifactVersionId.value ||
+    !optionValues.has(selectedProteinArtifactVersionId.value)
+  ) {
+    selectedProteinArtifactVersionId.value = proteinArtifactOptions.value[0]?.value
+  }
 }
 
 async function selectConversation(conversationId: string) {
@@ -107,6 +149,7 @@ async function startRun(message: string) {
   if (!store.activeConversationId) return
   const response = await startProjectAgentRun(projectId.value, store.activeConversationId, {
     goal: message,
+    protein_artifact_version_id: selectedProteinArtifactVersionId.value,
   })
   stream.connect(response.data.id)
 }

@@ -15,7 +15,13 @@ from app.database.base import Base
 from app.execution.contracts import ExecutionHandle, ExecutionState
 from app.models.agent import AgentRun
 from app.models.artifacts import Artifact, ArtifactVersion
-from app.models.conversations import AgentEvent, Conversation, PlanDecision, PlanVersion
+from app.models.conversations import (
+    AgentEvent,
+    Conversation,
+    ConversationBranch,
+    PlanDecision,
+    PlanVersion,
+)
 from app.models.projects import Organization, Project, ProjectMember
 from app.models.tool_packages import ToolPackage, ToolPackageVersion
 from app.models.users import User, UserRole, UserStatus
@@ -71,6 +77,14 @@ async def project_context(project_agent_db: AsyncSession) -> dict:
     )
     project_agent_db.add(conversation)
     await project_agent_db.flush()
+    project_agent_db.add(
+        ConversationBranch(
+            conversation_id=conversation.id,
+            created_by=user.id,
+            title="主分支",
+            is_root=True,
+        )
+    )
 
     artifact = Artifact(
         project_id=project.id,
