@@ -92,4 +92,31 @@ describe('AgentTrace', () => {
     expect(wrapper.text()).toContain('70%')
     expect(wrapper.find('[data-testid="retry-run"]').exists()).toBe(true)
   })
+
+  it('完成事件展示标准产物下载入口', async () => {
+    const wrapper = renderTrace([
+      baseEvent({
+        sequence: 1,
+        event_type: 'execution_completed',
+        payload: {
+          task_id: 'task-1234567890abcdef',
+          status: 'success',
+          progress: 100,
+          message: '任务执行成功',
+          standard_artifacts: {
+            artifact_ids_by_ref: { pocket: 'artifact-pocket' },
+            artifact_version_ids_by_ref: { pocket: 'version-pocket' }
+          }
+        }
+      })
+    ])
+
+    await wrapper.get('.trace-toggle').trigger('click')
+
+    const link = wrapper.get('[data-testid="agent-artifact-link"]')
+    expect(link.text()).toContain('pocket')
+    expect(link.attributes('href')).toBe(
+      '/api/v1/artifacts/artifact-pocket/versions/version-pocket/download'
+    )
+  })
 })

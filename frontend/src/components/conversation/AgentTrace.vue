@@ -29,6 +29,17 @@
             </span>
             <span class="progress-value">{{ view.progress }}%</span>
           </span>
+          <span v-if="view.artifacts.length" class="artifact-links">
+            <a
+              v-for="artifact in view.artifacts"
+              :key="artifact.ref"
+              data-testid="agent-artifact-link"
+              :href="artifact.href"
+              @click.prevent="downloadArtifact(artifact)"
+            >
+              {{ artifact.ref }}
+            </a>
+          </span>
         </span>
       </li>
     </ol>
@@ -42,7 +53,15 @@
 <script setup lang="ts">
   import { computed, ref } from 'vue'
   import { RightOutlined, WarningOutlined } from '@ant-design/icons-vue'
+  import { message } from 'ant-design-vue'
+  import { buildArtifactVersionDownloadUrl } from '@/api/artifacts'
   import type { AgentEvent } from '@/types/conversations'
+  import { triggerProtectedFileDownload } from '@/utils/protected-file-access'
+
+  interface TraceArtifactLink {
+    ref: string
+    href: string
+  }
 
   const props = defineProps<{ events: AgentEvent[]; showRetry?: boolean }>()
   defineEmits<{ retry: [] }>()
@@ -58,6 +77,7 @@
         statusLabel,
         statusClass: statusClass(status),
         taskId: eventTaskId(event),
+        artifacts: standardArtifactLinks(event),
         failed: isFailure(event, status)
       }
     })
@@ -92,6 +112,15 @@
   const payloadString = (event: AgentEvent, key: string) => {
     const value = event.payload[key]
     return typeof value === 'string' && value.trim() ? value : null
+  }
+
+  const stringRecord = (value: unknown) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).filter(
+        (entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].trim() !== ''
+      )
+    )
   }
 
   const statusKind = (event: AgentEvent) => {
@@ -134,6 +163,46 @@
     const taskId = payloadString(event, 'task_id')
     if (!taskId) return null
     return taskId.length > 8 ? taskId.slice(0, 8) : taskId
+  }
+
+  const standardArtifactLinks = (event: AgentEvent): TraceArtifactLink[] => {
+    const standardArtifacts = event.payload.standard_artifacts
+    if (
+      !standardArtifacts ||
+      typeof standardArtifacts !== 'object' ||
+      Array.isArray(standardArtifacts)
+    ) {
+      return []
+    }
+
+    const artifactIds = stringRecord(
+      (standardArtifacts as Record<string, unknown>).artifact_ids_by_ref
+    )
+    const versionIds = stringRecord(
+      (standardArtifacts as Record<string, unknown>).artifact_version_ids_by_ref
+    )
+
+    return Object.entries(versionIds).flatMap(([ref, versionId]) => {
+      const artifactId = artifactIds[ref]
+      if (!artifactId) return []
+      return [
+        {
+          ref,
+          href: buildArtifactVersionDownloadUrl(artifactId, versionId)
+        }
+      ]
+    })
+  }
+
+  async function downloadArtifact(artifact: TraceArtifactLink) {
+    try {
+      await triggerProtectedFileDownload({
+        url: artifact.href,
+        filename: `${artifact.ref}.artifact`
+      })
+    } catch (cause) {
+      message.error(cause instanceof Error ? cause.message : String(cause))
+    }
   }
 
   const isFailure = (event: AgentEvent, knownStatus = statusKind(event)) => {
@@ -270,6 +339,23 @@
     flex: 0 0 auto;
     text-align: right;
     color: @text-tertiary;
+  }
+  .artifact-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .artifact-links a {
+    padding: 2px 7px;
+    border: 1px solid @border-color;
+    border-radius: 4px;
+    background: @bg-hover;
+    color: @accent-color;
+    font-size: 11px;
+  }
+  .artifact-links a:hover {
+    border-color: @accent-color-border;
+    color: @accent-color-hover;
   }
   .failure-state {
     display: flex;

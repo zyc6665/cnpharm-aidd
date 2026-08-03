@@ -37,6 +37,7 @@ class StandardArtifactPersistenceError(ValueError):
 
 @dataclass(frozen=True)
 class StandardArtifactPersistenceResult:
+    artifact_ids_by_ref: dict[str, str] = field(default_factory=dict)
     artifact_version_ids_by_ref: dict[str, str] = field(default_factory=dict)
     file_ids_by_artifact_ref: dict[str, list[str]] = field(default_factory=dict)
 
@@ -96,6 +97,7 @@ def standard_artifact_result_summary(
 ) -> dict[str, Any]:
     """Serialize standard persistence metadata into legacy TaskOutput.result."""
     return {
+        "artifact_ids_by_ref": dict(persistence_result.artifact_ids_by_ref),
         "artifact_version_ids_by_ref": dict(persistence_result.artifact_version_ids_by_ref),
         "file_ids_by_artifact_ref": dict(persistence_result.file_ids_by_artifact_ref),
     }
@@ -143,9 +145,10 @@ async def create_artifact_versions_from_parsed_result(
         raise StandardArtifactPersistenceError("Task user_id is required for standard artifacts")
 
     refs: dict[str, str] = {}
+    artifact_ids_by_ref: dict[str, str] = {}
     file_ids_by_ref: dict[str, list[str]] = {}
     for artifact in parsed_result.artifacts:
-        ref_key, version_id, file_ids = await _persist_artifact(
+        ref_key, artifact_id, version_id, file_ids = await _persist_artifact(
             db,
             task=task,
             project_id=project_id,
@@ -153,6 +156,7 @@ async def create_artifact_versions_from_parsed_result(
             artifact=artifact,
             file_record_resolver=file_record_resolver,
         )
+        artifact_ids_by_ref[ref_key] = artifact_id
         refs[ref_key] = version_id
         file_ids_by_ref[ref_key] = file_ids
 
@@ -180,6 +184,7 @@ async def create_artifact_versions_from_parsed_result(
 
     await db.flush()
     return StandardArtifactPersistenceResult(
+        artifact_ids_by_ref=artifact_ids_by_ref,
         artifact_version_ids_by_ref=refs,
         file_ids_by_artifact_ref=file_ids_by_ref,
     )
@@ -311,7 +316,7 @@ async def _persist_artifact(
     user_id: str,
     artifact: ParsedStandardArtifact,
     file_record_resolver: FileRecordResolver | None,
-) -> tuple[str, str, list[str]]:
+) -> tuple[str, str, str, list[str]]:
     try:
         standard_ref = parse_standard_ref(artifact.type)
     except StandardArtifactRegistryError as exc:
@@ -400,7 +405,12 @@ async def _persist_artifact(
     artifact_record.latest_version_id = version.id
     artifact_record.latest_version = version
     await db.flush()
-    return _artifact_ref_key(artifact), version.id, [file.id for file in file_records]
+    return (
+        _artifact_ref_key(artifact),
+        artifact_record.id,
+        version.id,
+        [file.id for file in file_records],
+    )
 
 
 async def _resolve_file_record(

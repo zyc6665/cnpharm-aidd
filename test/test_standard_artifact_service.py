@@ -45,6 +45,7 @@ from app.models.users import UserRole, UserStatus
 from app.services.standard_artifacts import (
     StandardArtifactPersistenceError,
     create_artifact_versions_from_parsed_result,
+    standard_artifact_result_summary,
 )
 
 
@@ -239,6 +240,8 @@ async def test_service_persists_binding_pocket_with_file_roles(
     ).scalar_one()
     lineage_count = await standard_db.scalar(select(func.count(ArtifactLineage.id)))
 
+    assert result.artifact_ids_by_ref["pocket"] == loaded.artifact_id
+    assert standard_artifact_result_summary(result)["artifact_ids_by_ref"]["pocket"] == loaded.artifact_id
     assert loaded.validation_status == "passed"
     assert loaded.manifest_json["type"] == "binding_pocket@1"
     assert {file.role for file in loaded.files} == {
