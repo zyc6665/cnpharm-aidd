@@ -99,6 +99,7 @@ export default {
     recentProjects: '最近项目',
     projectCount: '共 {count} 个可访问项目',
     continueResearch: '继续研究',
+    openProject: '项目总览',
     emptyProjects: '还没有研究项目',
     attentionTitle: '待审批与失败任务',
     emptyAttention: '暂无待审批或失败任务',

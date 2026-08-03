@@ -15,6 +15,7 @@ from app.database.base import Base
 from app.database.session import get_db
 from app.main import app
 from app.models.agent import AgentRun, AgentRunStep
+from app.models.artifacts import Artifact, ArtifactVersion
 from app.models.conversations import (
     AgentEvent,
     Conversation,
@@ -23,7 +24,10 @@ from app.models.conversations import (
     PlanDecision,
     PlanVersion,
 )
+from app.models.tasks import Task, TaskStatus
+from app.models.tools import Tool, ToolVersion
 from app.models.users import User, UserRole, UserStatus
+from app.models.workflows import ResearchBoard, WorkflowDefinition
 
 
 @pytest_asyncio.fixture
@@ -107,6 +111,100 @@ async def test_project_owner_can_create_and_read_project(api_client: httpx.Async
     assert response.status_code == 200
     assert response.json()["data"]["name"] == "Pocket study"
     assert response.json()["data"]["membership"]["role"] == "owner"
+
+
+@pytest.mark.asyncio
+async def test_project_overview_returns_project_scoped_resources(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    users: dict[str, User],
+):
+    project = await _create_project(api_client)
+    owner = users["owner"]
+    tool = Tool(owner_id=owner.id, name="LVpocket", slug="lvpocket", status="published")
+    db_session.add(tool)
+    await db_session.flush()
+    version = ToolVersion(tool_id=tool.id, version="1.0", config={})
+    db_session.add(version)
+    await db_session.flush()
+    db_session.add(
+        Task(
+            user_id=owner.id,
+            tool_id=tool.id,
+            tool_version_id=version.id,
+            name="项目口袋识别",
+            status=TaskStatus.RUNNING.value,
+            progress=35,
+            extra_data={"project_id": project["id"]},
+        )
+    )
+    artifact = Artifact(
+        project_id=project["id"],
+        created_by=owner.id,
+        artifact_type="binding_pocket",
+        semantic_type="binding_pocket",
+        standard_type="binding_pocket",
+        standard_version=1,
+        name="EGFR pocket",
+    )
+    db_session.add(artifact)
+    await db_session.flush()
+    artifact_version = ArtifactVersion(
+        artifact_id=artifact.id,
+        created_by=owner.id,
+        version=1,
+        filename="egfr-pocket.pdb",
+        content_type="chemical/x-pdb",
+        size_bytes=2048,
+        sha256="a" * 64,
+        storage_key="artifacts/egfr-pocket.pdb",
+        status="available",
+    )
+    db_session.add(artifact_version)
+    await db_session.flush()
+    artifact.latest_version_id = artifact_version.id
+    db_session.add_all(
+        [
+            WorkflowDefinition(
+                project_id=project["id"],
+                user_id=owner.id,
+                name="口袋到分子生成",
+                template_id="project-workflow",
+                nodes=[],
+                edges=[],
+                selected_tool_by_node={},
+                artifact_bindings_by_node={},
+                status="draft",
+            ),
+            ResearchBoard(
+                project_id=project["id"],
+                owner_id=owner.id,
+                name="口袋分析白板",
+                content={"nodes": [{"id": "note-1", "type": "note"}]},
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    response = await api_client.get(
+        f"/api/v1/projects/{project['id']}/overview",
+        headers={"Authorization": "Bearer owner"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["project"]["id"] == project["id"]
+    assert data["counts"] == {
+        "artifacts": 1,
+        "tasks": 1,
+        "workflows": 1,
+        "boards": 1,
+    }
+    assert data["tasks"][0]["name"] == "项目口袋识别"
+    assert data["tasks"][0]["status"] == "running"
+    assert data["artifacts"][0]["latest_version"]["id"] == artifact_version.id
+    assert data["workflows"][0]["name"] == "口袋到分子生成"
+    assert data["boards"][0]["node_count"] == 1
 
 
 @pytest.mark.asyncio

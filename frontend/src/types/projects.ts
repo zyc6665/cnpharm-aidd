@@ -1,3 +1,6 @@
+import type { TypedArtifact } from './artifacts'
+import type { TaskStatus } from './models'
+
 export type ProjectStatus = 'draft' | 'active' | 'completed' | 'archived' | 'frozen'
 export type ProjectRole = 'owner' | 'editor' | 'runner' | 'viewer'
 
@@ -25,3 +28,52 @@ export interface ProjectCreateInput {
   goal?: string
 }
 
+export interface ProjectOverviewCounts {
+  artifacts: number
+  tasks: number
+  workflows: number
+  boards: number
+}
+
+export interface ProjectOverviewTask {
+  id: string
+  name?: string | null
+  status: TaskStatus
+  progress: number
+  progress_message?: string | null
+  error_message?: string | null
+  tool_id: string
+  tool_name?: string | null
+  tool_slug?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ProjectOverviewWorkflow {
+  id: string
+  project_id?: string | null
+  name: string
+  description?: string | null
+  status: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ProjectOverviewBoard {
+  id: string
+  project_id?: string | null
+  name: string
+  description?: string | null
+  node_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface ProjectOverview {
+  project: ResearchProject
+  counts: ProjectOverviewCounts
+  artifacts: TypedArtifact[]
+  tasks: ProjectOverviewTask[]
+  workflows: ProjectOverviewWorkflow[]
+  boards: ProjectOverviewBoard[]
+}

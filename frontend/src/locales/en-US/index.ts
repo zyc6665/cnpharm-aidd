@@ -99,6 +99,7 @@ export default {
     recentProjects: 'Recent Projects',
     projectCount: '{count} accessible projects',
     continueResearch: 'Continue',
+    openProject: 'Overview',
     emptyProjects: 'No research projects yet',
     attentionTitle: 'Approvals & Failed Tasks',
     emptyAttention: 'No pending approvals or failed tasks',

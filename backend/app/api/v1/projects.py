@@ -2,11 +2,13 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import select, update as sa_update
+from sqlalchemy import func, or_, select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.auth.dependencies import get_current_user
 from app.common.responses import success_response
+from app.common.time import utcnow
 from app.database.session import get_db
 from app.feature_flags import require_feature_flag
 from app.models.agent import AgentRun, AgentRunStep
@@ -22,6 +24,7 @@ from app.models.conversations import (
 from app.models.executions import ExecutionRecord
 from app.models.files import File
 from app.models.projects import Organization, Project, ProjectMember
+from app.models.tasks import Task
 from app.models.users import User
 from app.models.workflows import (
     ResearchBoard,
@@ -31,6 +34,7 @@ from app.models.workflows import (
 )
 from app.schemas.projects import ProjectCreate, ProjectMemberCreate, ProjectUpdate
 from app.services.project_access import load_project_membership, require_project_role
+from app.services.research_board_content import board_node_count
 
 router = APIRouter(
     dependencies=[Depends(require_feature_flag("AIDD_PROJECT_WORKSPACE_ENABLED"))]
@@ -51,6 +55,76 @@ def _serialize(project: Project, membership: ProjectMember) -> dict:
         "membership": {"id": membership.id, "role": membership.role},
         "created_at": project.created_at,
         "updated_at": project.updated_at,
+    }
+
+
+def _serialize_artifact_version(version: ArtifactVersion) -> dict:
+    return {
+        "id": version.id,
+        "version": version.version,
+        "filename": version.filename,
+        "content_type": version.content_type,
+        "size_bytes": version.size_bytes,
+        "sha256": version.sha256,
+        "status": version.status,
+        "expires_at": version.expires_at,
+        "created_at": version.created_at,
+    }
+
+
+def _serialize_artifact(artifact: Artifact) -> dict:
+    return {
+        "id": artifact.id,
+        "project_id": artifact.project_id,
+        "artifact_type": artifact.artifact_type,
+        "semantic_type": artifact.semantic_type,
+        "standard_type": artifact.standard_type,
+        "standard_version": artifact.standard_version,
+        "name": artifact.name,
+        "description": artifact.description,
+        "latest_version": _serialize_artifact_version(artifact.latest_version),
+        "created_at": artifact.created_at,
+        "updated_at": artifact.updated_at,
+    }
+
+
+def _serialize_project_task(task: Task) -> dict:
+    return {
+        "id": task.id,
+        "name": task.name,
+        "status": (task.status or "").lower(),
+        "progress": task.progress,
+        "progress_message": task.progress_message,
+        "error_message": task.error_message,
+        "tool_id": task.tool_id,
+        "tool_name": task.tool.name if task.tool else None,
+        "tool_slug": task.tool.slug if task.tool else None,
+        "created_at": task.created_at,
+        "updated_at": task.updated_at,
+    }
+
+
+def _serialize_workflow_definition(workflow: WorkflowDefinition) -> dict:
+    return {
+        "id": workflow.id,
+        "project_id": workflow.project_id,
+        "name": workflow.name,
+        "description": workflow.description,
+        "status": workflow.status,
+        "updated_at": workflow.updated_at,
+        "created_at": workflow.created_at,
+    }
+
+
+def _serialize_board_summary(board: ResearchBoard) -> dict:
+    return {
+        "id": board.id,
+        "project_id": board.project_id,
+        "name": board.name,
+        "description": board.description,
+        "node_count": board_node_count(board.content),
+        "updated_at": board.updated_at,
+        "created_at": board.created_at,
     }
 
 
@@ -129,6 +203,88 @@ async def get_project(
         user_id=current_user.id,
     )
     return success_response(data=_serialize(project, membership))
+
+
+@router.get("/{project_id}/overview", response_model=dict)
+async def get_project_overview(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    project, membership = await load_project_membership(
+        db,
+        project_id=project_id,
+        user_id=current_user.id,
+    )
+    task_filter = Task.extra_data["project_id"].as_string() == project_id
+    artifact_filter = (
+        Artifact.project_id == project_id,
+        ArtifactVersion.status == "available",
+        or_(ArtifactVersion.expires_at.is_(None), ArtifactVersion.expires_at > utcnow()),
+    )
+
+    task_result = await db.execute(
+        select(Task)
+        .options(selectinload(Task.tool))
+        .where(task_filter)
+        .order_by(Task.updated_at.desc())
+        .limit(8)
+    )
+    artifact_result = await db.execute(
+        select(Artifact)
+        .options(selectinload(Artifact.latest_version))
+        .join(ArtifactVersion, ArtifactVersion.id == Artifact.latest_version_id)
+        .where(*artifact_filter)
+        .order_by(Artifact.updated_at.desc())
+        .limit(8)
+    )
+    workflow_result = await db.execute(
+        select(WorkflowDefinition)
+        .where(WorkflowDefinition.project_id == project_id)
+        .order_by(WorkflowDefinition.updated_at.desc())
+        .limit(8)
+    )
+    board_result = await db.execute(
+        select(ResearchBoard)
+        .where(ResearchBoard.project_id == project_id)
+        .order_by(ResearchBoard.updated_at.desc())
+        .limit(8)
+    )
+    task_count = await db.scalar(select(func.count(Task.id)).where(task_filter))
+    artifact_count = await db.scalar(
+        select(func.count(Artifact.id))
+        .join(ArtifactVersion, ArtifactVersion.id == Artifact.latest_version_id)
+        .where(*artifact_filter)
+    )
+    workflow_count = await db.scalar(
+        select(func.count(WorkflowDefinition.id)).where(
+            WorkflowDefinition.project_id == project_id
+        )
+    )
+    board_count = await db.scalar(
+        select(func.count(ResearchBoard.id)).where(ResearchBoard.project_id == project_id)
+    )
+
+    return success_response(
+        data={
+            "project": _serialize(project, membership),
+            "counts": {
+                "artifacts": artifact_count or 0,
+                "tasks": task_count or 0,
+                "workflows": workflow_count or 0,
+                "boards": board_count or 0,
+            },
+            "tasks": [_serialize_project_task(task) for task in task_result.scalars()],
+            "artifacts": [
+                _serialize_artifact(artifact) for artifact in artifact_result.scalars()
+            ],
+            "workflows": [
+                _serialize_workflow_definition(workflow)
+                for workflow in workflow_result.scalars()
+            ],
+            "boards": [_serialize_board_summary(board) for board in board_result.scalars()],
+        }
+    )
 
 
 @router.patch("/{project_id}", response_model=dict)

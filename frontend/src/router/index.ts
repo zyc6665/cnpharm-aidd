@@ -20,6 +20,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'nav.workspace', requiresAuth: true }
   },
   {
+    path: '/projects/:projectId',
+    name: 'ProjectOverview',
+    component: () => import('@/views/projects/Overview.vue'),
+    meta: { titleLiteral: '项目总览', requiresAuth: true }
+  },
+  {
     path: '/projects/:projectId/research/:conversationId?',
     name: 'ProjectResearch',
     component: () => import('@/views/projects/Research.vue'),

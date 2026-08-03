@@ -3,7 +3,7 @@
     <router-link
       v-for="project in projects"
       :key="project.id"
-      :to="`/projects/${project.id}/research`"
+      :to="`/projects/${project.id}`"
       class="project-row"
     >
       <div class="project-main">
@@ -16,7 +16,7 @@
         </span>
         <time :datetime="project.updated_at">{{ formatUpdatedAt(project.updated_at) }}</time>
         <span class="project-actions">
-          <span class="continue-action">{{ t('workspace.continueResearch') }}</span>
+          <span class="continue-action">{{ t('workspace.openProject') }}</span>
           <a-button
             v-if="canArchive(project)"
             type="link"

@@ -221,7 +221,7 @@ async function loadWorkspace() {
 
 function handleProjectCreated(project: ResearchProject) {
   projects.value = [project, ...projects.value.filter(item => item.id !== project.id)]
-  void router.push(`/projects/${project.id}/research`)
+  void router.push(`/projects/${project.id}`)
 }
 
 async function handleProjectArchive(projectId: string) {
