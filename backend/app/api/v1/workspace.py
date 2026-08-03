@@ -10,7 +10,9 @@ from app.common.responses import success_response
 from app.common.time import utcnow
 from app.database.session import get_db
 from app.feature_flags import require_feature_flag
+from app.models.artifacts import Artifact, ArtifactVersion
 from app.models.files import File
+from app.models.projects import ProjectMember
 from app.models.tasks import Task
 from app.models.tools import Tool
 from app.models.users import User
@@ -21,6 +23,36 @@ router = APIRouter(
     dependencies=[Depends(require_feature_flag("AIDD_PROJECT_WORKSPACE_ENABLED"))]
 )
 ATTENTION_STATUSES = {"pending", "running", "failure"}
+
+
+def _artifact_version_data(version: ArtifactVersion) -> dict:
+    return {
+        "id": version.id,
+        "version": version.version,
+        "filename": version.filename,
+        "content_type": version.content_type,
+        "size_bytes": version.size_bytes,
+        "sha256": version.sha256,
+        "status": version.status,
+        "expires_at": version.expires_at,
+        "created_at": version.created_at,
+    }
+
+
+def _artifact_data(artifact: Artifact) -> dict:
+    return {
+        "id": artifact.id,
+        "project_id": artifact.project_id,
+        "artifact_type": artifact.artifact_type,
+        "semantic_type": artifact.semantic_type,
+        "standard_type": artifact.standard_type,
+        "standard_version": artifact.standard_version,
+        "name": artifact.name,
+        "description": artifact.description,
+        "latest_version": _artifact_version_data(artifact.latest_version),
+        "created_at": artifact.created_at,
+        "updated_at": artifact.updated_at,
+    }
 
 
 @router.get("/overview", response_model=dict)
@@ -71,6 +103,19 @@ async def get_workspace_overview(
         .order_by(File.updated_at.desc())
         .limit(8)
     )
+    artifact_result = await db.execute(
+        select(Artifact)
+        .options(selectinload(Artifact.latest_version))
+        .join(ProjectMember, ProjectMember.project_id == Artifact.project_id)
+        .join(ArtifactVersion, ArtifactVersion.id == Artifact.latest_version_id)
+        .where(
+            ProjectMember.user_id == current_user.id,
+            ArtifactVersion.status == "available",
+            or_(ArtifactVersion.expires_at.is_(None), ArtifactVersion.expires_at > utcnow()),
+        )
+        .order_by(Artifact.updated_at.desc())
+        .limit(8)
+    )
     frequent_tool_result = await db.execute(
         select(Tool.id, Tool.name, Tool.slug, func.count(Task.id).label("usage_count"))
         .join(Task, Task.tool_id == Tool.id)
@@ -119,6 +164,7 @@ async def get_workspace_overview(
                 }
                 for workflow in workflow_result.scalars()
             ],
+            "artifacts": [_artifact_data(artifact) for artifact in artifact_result.scalars()],
             "files": [
                 {
                     "id": file.id,

@@ -5,6 +5,8 @@ from sqlalchemy.pool import StaticPool
 
 from app.api.v1.workspace import get_workspace_overview
 from app.database.base import Base
+from app.models.artifacts import Artifact, ArtifactVersion
+from app.models.projects import Organization, Project, ProjectMember
 from app.models.tasks import Task, TaskStatus
 from app.models.tools import Tool, ToolVersion
 from app.models.users import User
@@ -74,3 +76,84 @@ async def test_workspace_overview_tolerates_legacy_board_content_shapes(db_sessi
     boards = {board['name']: board for board in response['data']['boards']}
     assert boards['Legacy list board']['node_count'] == 1
     assert boards['Legacy scalar board']['node_count'] == 0
+
+
+@pytest.mark.asyncio
+async def test_workspace_overview_returns_recent_typed_artifacts_for_member_projects(db_session):
+    owner = User(email='owner@example.com', password_hash='test', status='active')
+    other = User(email='other@example.com', password_hash='test', status='active')
+    organization = Organization(name='Workspace Lab', slug='workspace-lab')
+    db_session.add_all([owner, other, organization])
+    await db_session.flush()
+    project = Project(
+        organization_id=organization.id,
+        created_by=owner.id,
+        name='EGFR Project',
+        status='active',
+    )
+    foreign_project = Project(
+        organization_id=organization.id,
+        created_by=other.id,
+        name='Foreign Project',
+        status='active',
+    )
+    db_session.add_all([project, foreign_project])
+    await db_session.flush()
+    db_session.add(ProjectMember(project_id=project.id, user_id=owner.id, role='owner'))
+    artifact = Artifact(
+        project_id=project.id,
+        created_by=owner.id,
+        artifact_type='binding_pocket',
+        semantic_type='binding_pocket',
+        standard_type='binding_pocket',
+        standard_version=1,
+        name='egfr-pocket',
+    )
+    expired = Artifact(
+        project_id=foreign_project.id,
+        created_by=other.id,
+        artifact_type='binding_pocket',
+        semantic_type='binding_pocket',
+        standard_type='binding_pocket',
+        standard_version=1,
+        name='foreign-pocket',
+    )
+    db_session.add_all([artifact, expired])
+    await db_session.flush()
+    version = ArtifactVersion(
+        artifact_id=artifact.id,
+        created_by=owner.id,
+        version=1,
+        filename='egfr-pocket.pdb',
+        content_type='chemical/x-pdb',
+        size_bytes=2048,
+        sha256='a' * 64,
+        storage_key='artifacts/egfr-pocket.pdb',
+        status='available',
+    )
+    foreign_version = ArtifactVersion(
+        artifact_id=expired.id,
+        created_by=other.id,
+        version=1,
+        filename='foreign-pocket.pdb',
+        content_type='chemical/x-pdb',
+        size_bytes=1024,
+        sha256='b' * 64,
+        storage_key='artifacts/foreign-pocket.pdb',
+        status='available',
+    )
+    db_session.add_all([version, foreign_version])
+    await db_session.flush()
+    artifact.latest_version_id = version.id
+    expired.latest_version_id = foreign_version.id
+    await db_session.commit()
+
+    response = await get_workspace_overview(owner, db_session)
+
+    artifacts = response['data']['artifacts']
+    assert [item['name'] for item in artifacts] == ['egfr-pocket']
+    assert artifacts[0]['artifact_type'] == 'binding_pocket'
+    assert artifacts[0]['standard_type'] == 'binding_pocket'
+    assert artifacts[0]['standard_version'] == 1
+    assert artifacts[0]['latest_version']['id'] == version.id
+    assert artifacts[0]['latest_version']['filename'] == 'egfr-pocket.pdb'

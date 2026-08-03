@@ -55,15 +55,29 @@ const overview = {
   ],
   boards: [],
   workflows: [],
-  files: [
+  artifacts: [
     {
       id: 'artifact-1',
-      filename: 'egfr-pocket.pdb',
-      content_type: 'chemical/x-pdb',
-      size_bytes: 2048,
+      project_id: 'project-1',
+      artifact_type: 'binding_pocket',
+      semantic_type: 'binding_pocket',
+      standard_type: 'binding_pocket',
+      standard_version: 1,
+      name: 'EGFR 口袋',
+      latest_version: {
+        id: 'artifact-version-1',
+        version: 1,
+        filename: 'egfr-pocket.pdb',
+        content_type: 'chemical/x-pdb',
+        size_bytes: 2048,
+        sha256: 'a'.repeat(64),
+        status: 'available',
+        created_at: '2026-07-31T08:20:00Z'
+      },
       updated_at: '2026-07-31T08:20:00Z'
     }
   ],
+  files: [],
   frequent_tools: [{ id: 'tool-1', name: '不应显示的常用工具', slug: 'legacy', usage_count: 8 }]
 }
 
@@ -104,7 +118,9 @@ describe('Project workspace', () => {
     vi.clearAllMocks()
     vi.mocked(listProjects).mockResolvedValue({ data: { items: projects } } as never)
     vi.mocked(getWorkspaceOverview).mockResolvedValue({ data: overview } as never)
-    vi.mocked(archiveProject).mockResolvedValue({ data: { ...projects[0]!, status: 'archived' } } as never)
+    vi.mocked(archiveProject).mockResolvedValue({
+      data: { ...projects[0]!, status: 'archived' }
+    } as never)
     vi.mocked(deleteProject).mockResolvedValue({ data: { id: projects[0]!.id } } as never)
   })
 
@@ -119,7 +135,11 @@ describe('Project workspace', () => {
     expect(wrapper.text()).toContain('LVpocket 执行审批')
     expect(wrapper.text()).toContain('远程执行节点不可用')
     expect(wrapper.text()).toContain('最近 Artifact')
-    expect(wrapper.text()).toContain('egfr-pocket.pdb')
+    expect(wrapper.text()).toContain('EGFR 口袋')
+    expect(wrapper.text()).toContain('binding_pocket@1')
+    expect(wrapper.find('.artifact-row').attributes('href')).toBe(
+      '/api/v1/artifacts/artifact-1/versions/artifact-version-1/download'
+    )
     expect(wrapper.text()).not.toContain('任务状态概览')
     expect(wrapper.text()).not.toContain('常用工具')
     expect(wrapper.text()).not.toContain('不应显示的常用工具')
@@ -128,7 +148,7 @@ describe('Project workspace', () => {
   it('无研究记录时提供明确的项目、任务和 Artifact 空状态', async () => {
     vi.mocked(listProjects).mockResolvedValue({ data: { items: [] } } as never)
     vi.mocked(getWorkspaceOverview).mockResolvedValue({
-      data: { ...overview, attention_task_count: 0, tasks: [], files: [] }
+      data: { ...overview, attention_task_count: 0, tasks: [], artifacts: [], files: [] }
     } as never)
 
     const wrapper = renderWorkspace()

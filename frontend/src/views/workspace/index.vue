@@ -94,15 +94,15 @@
             <a
               v-for="artifact in recentArtifacts"
               :key="artifact.id"
-              :href="`/api/v1/files/${artifact.id}/download`"
+              :href="artifact.downloadUrl"
               class="artifact-row"
             >
               <FileOutlined />
               <div>
-                <strong>{{ artifact.filename }}</strong>
-                <span>{{ artifact.content_type || t('workspace.unknownArtifactType') }}</span>
+                <strong>{{ artifact.name }}</strong>
+                <span>{{ artifact.typeLabel }}</span>
               </div>
-              <small>{{ formatSize(artifact.size_bytes) }}</small>
+              <small>{{ formatSize(artifact.sizeBytes) }}</small>
             </a>
           </div>
           <a-empty v-else :description="t('workspace.emptyArtifacts')" />
@@ -132,8 +132,10 @@ import {
 import {
   getWorkspaceOverview,
   type WorkspaceArtifact,
-  type WorkspaceAttentionTask
+  type WorkspaceAttentionTask,
+  type WorkspaceLegacyFile
 } from '@/api/workspace'
+import { buildArtifactVersionDownloadUrl } from '@/api/artifacts'
 import ProjectCreateDialog from '@/components/projects/ProjectCreateDialog.vue'
 import ProjectList from '@/components/projects/ProjectList.vue'
 import type { ResearchProject } from '@/types/projects'
@@ -148,12 +150,39 @@ const createDialogOpen = ref(false)
 const projects = ref<ResearchProject[]>([])
 const tasks = ref<WorkspaceAttentionTask[]>([])
 const artifacts = ref<WorkspaceArtifact[]>([])
+const legacyFiles = ref<WorkspaceLegacyFile[]>([])
+
+interface RecentArtifact {
+  id: string
+  name: string
+  typeLabel: string
+  sizeBytes: number
+  downloadUrl: string
+}
 
 const recentProjects = computed(() => projects.value.slice(0, 8))
 const attentionTasks = computed(() =>
   tasks.value.filter(task => task.status === 'pending' || task.status === 'failure').slice(0, 6)
 )
-const recentArtifacts = computed(() => artifacts.value.slice(0, 6))
+const recentArtifacts = computed<RecentArtifact[]>(() => {
+  const standardArtifacts = artifacts.value.map(artifact => ({
+    id: artifact.id,
+    name: artifact.name,
+    typeLabel: artifact.standard_type
+      ? `${artifact.standard_type}@${artifact.standard_version ?? 1}`
+      : artifact.semantic_type || artifact.artifact_type || t('workspace.unknownArtifactType'),
+    sizeBytes: artifact.latest_version.size_bytes,
+    downloadUrl: buildArtifactVersionDownloadUrl(artifact.id, artifact.latest_version.id)
+  }))
+  if (standardArtifacts.length) return standardArtifacts.slice(0, 6)
+  return legacyFiles.value.slice(0, 6).map(file => ({
+    id: file.id,
+    name: file.filename,
+    typeLabel: file.content_type || t('workspace.unknownArtifactType'),
+    sizeBytes: file.size_bytes,
+    downloadUrl: `/api/v1/files/${file.id}/download`
+  }))
+})
 
 async function loadWorkspace() {
   if (loading.value) return
@@ -174,10 +203,12 @@ async function loadWorkspace() {
     projects.value = projectResult.value.data.items
     if (workspaceResult.status === 'fulfilled') {
       tasks.value = workspaceResult.value.data.tasks
-      artifacts.value = workspaceResult.value.data.files
+      artifacts.value = workspaceResult.value.data.artifacts ?? []
+      legacyFiles.value = workspaceResult.value.data.files
     } else {
       tasks.value = []
       artifacts.value = []
+      legacyFiles.value = []
       overviewLoadError.value = true
     }
     hasLoaded.value = true
