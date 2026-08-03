@@ -6,6 +6,7 @@ import mimetypes
 import os
 import shutil
 from abc import ABC, abstractmethod
+from collections.abc import Awaitable
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
 from app.database.session import get_async_session
@@ -28,11 +29,13 @@ class BaseExecutor(ABC):
         task: "Task",
         tool_version: "ToolVersion",
         config: Optional[dict[str, Any]] = None,
+        progress_callback: Optional[Callable[[float, str], Awaitable[None]]] = None,
     ):
         self.task = task
         self.tool_version = tool_version
         self.config = config if config is not None else tool_version.config
         self.work_dir: Optional[str] = None
+        self.progress_callback = progress_callback
 
     @abstractmethod
     async def execute(self) -> dict[str, Any]:

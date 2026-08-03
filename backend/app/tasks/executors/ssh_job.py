@@ -5,7 +5,9 @@ import json
 import logging
 import os
 import posixpath
+import queue
 import shutil
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Optional
 
@@ -68,6 +70,16 @@ class SSHJobExecutor(BaseExecutor):
         local_bundle = await self._prepare_local_task_bundle()
         remote_paths = self._build_remote_paths()
         auth_settings = self._resolve_auth_settings()
+        progress_events: queue.Queue[tuple[float, str] | None] = queue.Queue()
+        progress_pump_task: asyncio.Task[None] | None = None
+
+        if self.progress_callback is not None:
+            progress_pump_task = asyncio.create_task(self._pump_progress_events(progress_events))
+
+        def progress_sink(progress: float, message: str) -> None:
+            if self.progress_callback is None:
+                return
+            progress_events.put((progress, message))
 
         try:
             remote_result = await asyncio.to_thread(
@@ -76,7 +88,12 @@ class SSHJobExecutor(BaseExecutor):
                 remote_paths,
                 auth_settings,
                 timeout,
+                progress_sink if self.progress_callback is not None else None,
             )
+            if progress_pump_task is not None:
+                progress_events.put(None)
+                await progress_pump_task
+                progress_pump_task = None
             download_root = remote_result.get("download_root")
             result = (
                 self._load_result_json(download_root)
@@ -122,7 +139,31 @@ class SSHJobExecutor(BaseExecutor):
         except Exception as exc:
             raise TaskExecutionError(f"SSH job execution error: {exc}") from exc
         finally:
+            if progress_pump_task is not None:
+                progress_events.put(None)
+                await progress_pump_task
             self._cleanup_work_dir()
+
+    async def _pump_progress_events(
+        self,
+        progress_events: queue.Queue[tuple[float, str] | None],
+    ) -> None:
+        """串行转发同步 SSH 线程产生的进度事件。"""
+        while True:
+            item = await asyncio.to_thread(progress_events.get)
+            if item is None:
+                return
+            progress, message = item
+            await self._emit_progress(progress, message)
+
+    async def _emit_progress(self, progress: float, message: str) -> None:
+        """更新任务进度；进度上报失败不应中断远端任务。"""
+        if self.progress_callback is None:
+            return
+        try:
+            await self.progress_callback(progress, message)
+        except Exception as exc:
+            logger.warning("Failed to publish SSH job progress: %s", exc)
 
     @staticmethod
     def _attach_output_file_ids(result: dict[str, Any], output_file_ids: list[str]) -> dict[str, Any]:
@@ -141,6 +182,7 @@ class SSHJobExecutor(BaseExecutor):
         remote_paths: dict[str, str],
         auth_settings: dict[str, Optional[str]],
         timeout: int,
+        progress_sink: Callable[[float, str], None] | None = None,
     ) -> dict[str, Any]:
         """在线程中执行完整的 SSH/SFTP 工作流。"""
         transport = self._create_transport(auth_settings, min(timeout, 60))
@@ -157,10 +199,24 @@ class SSHJobExecutor(BaseExecutor):
                 transport.ensure_dir(remote_dir)
             transport.upload_tree(local_bundle["input_dir"], remote_paths["host_input_dir"])
             transport.upload_file(local_bundle["params_path"], remote_paths["host_params_file"])
+            if progress_sink is not None:
+                progress_sink(12.0, "远端任务目录已准备，正在启动模型")
+
+            def publish_remote_log(line: str) -> None:
+                if progress_sink is None:
+                    return
+                message = line if line.startswith("远端") else f"远端运行中：{line}"
+                progress_sink(35.0, message)
+
             command_result = transport.run_command(
                 self._build_remote_exec_command(remote_paths),
                 timeout=timeout,
+                progress_callback=publish_remote_log if progress_sink is not None else None,
+                progress_log_paths=self._remote_progress_log_paths(remote_paths),
+                progress_poll_interval=float(self.config.get("progress_poll_interval_sec", 10.0)),
             )
+            if progress_sink is not None:
+                progress_sink(80.0, "远端模型执行结束，正在下载输出")
             download_root: Optional[str] = None
             try:
                 transport.download_tree(
@@ -168,6 +224,8 @@ class SSHJobExecutor(BaseExecutor):
                     os.path.join(local_bundle["download_root"], "output"),
                 )
                 download_root = local_bundle["download_root"]
+                if progress_sink is not None:
+                    progress_sink(90.0, "远端输出已下载，正在收集产物")
             except Exception as exc:
                 if command_result.exit_status == 0:
                     raise TaskExecutionError(
@@ -195,6 +253,15 @@ class SSHJobExecutor(BaseExecutor):
             raise TaskExecutionError("SSH job execution produced no workflow result")
         workflow_result["cleanup_error"] = cleanup_error
         return workflow_result
+
+    @staticmethod
+    def _remote_progress_log_paths(remote_paths: dict[str, str]) -> list[str]:
+        """返回可被 SFTP 增量读取的宿主机侧日志路径。"""
+        return [
+            posixpath.join(remote_paths["host_output_dir"], "logs", "run.log"),
+            posixpath.join(remote_paths["host_work_dir"], "legacy-output", "logs", "run.log"),
+            posixpath.join(remote_paths["host_work_dir"], "legacy-work", "logs", "run.log"),
+        ]
 
     def _recover_remote_outputs_sync(
         self,

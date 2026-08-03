@@ -287,6 +287,9 @@ async def test_worker_persists_standard_result_v2_as_artifact_versions(
     result = await worker_tasks._execute_tool_task_impl(str(task_id), str(version_id))
 
     async with worker_standard_db_factory() as db:
+        task_record = (
+            await db.execute(select(TaskModel).where(TaskModel.id == task_id))
+        ).scalar_one()
         task_output = (
             await db.execute(select(TaskOutputModel).where(TaskOutputModel.task_id == task_id))
         ).scalar_one()
@@ -303,6 +306,8 @@ async def test_worker_persists_standard_result_v2_as_artifact_versions(
         ).scalar_one()
 
     assert result["result"]["result_version"] == "aidd.sciminer/result.v2"
+    assert task_record.progress == 100.0
+    assert task_record.progress_message == "任务执行成功"
     assert task_output.file_ids == file_ids
     assert artifact_count == 1
     assert version_record.manifest_json["type"] == "binding_pocket@1"

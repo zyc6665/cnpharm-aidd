@@ -7,6 +7,8 @@ from dataclasses import dataclass
 import os
 import posixpath
 import stat
+import time
+from collections.abc import Callable, Iterable
 from typing import Any, Dict, Optional
 
 try:
@@ -200,18 +202,87 @@ class ParamikoSSHTransport:
                 os.makedirs(os.path.dirname(local_path), exist_ok=True)
                 sftp.get(remote_path, local_path)
 
-    def run_command(self, command: str, timeout: Optional[int] = None) -> SSHCommandResult:
+    def run_command(
+        self,
+        command: str,
+        timeout: Optional[int] = None,
+        *,
+        progress_callback: Callable[[str], None] | None = None,
+        progress_log_paths: Iterable[str] | None = None,
+        progress_poll_interval: float = 10.0,
+    ) -> SSHCommandResult:
         """执行远端命令并返回结果。"""
         client = self._require_client()
         _, stdout, stderr = client.exec_command(command, timeout=timeout or self.timeout)
+        channel = stdout.channel
+        stdout_chunks: list[bytes] = []
+        stderr_chunks: list[bytes] = []
+        log_offsets = {path: 0 for path in (progress_log_paths or [])}
+        last_heartbeat = 0.0
+
+        while not channel.exit_status_ready():
+            if channel.recv_ready():
+                stdout_chunks.append(channel.recv(65536))
+            if channel.recv_stderr_ready():
+                stderr_chunks.append(channel.recv_stderr(65536))
+
+            if progress_callback:
+                emitted_log = False
+                for line in self._read_remote_progress_lines(log_offsets):
+                    progress_callback(line)
+                    emitted_log = True
+                now = time.monotonic()
+                heartbeat_interval = max(progress_poll_interval, 15.0)
+                if not emitted_log and now - last_heartbeat >= heartbeat_interval:
+                    progress_callback("远端任务仍在运行，等待模型输出...")
+                    last_heartbeat = now
+
+            time.sleep(max(progress_poll_interval, 0.1))
+
+        if progress_callback:
+            for line in self._read_remote_progress_lines(log_offsets):
+                progress_callback(line)
+
         exit_status = stdout.channel.recv_exit_status()
-        stdout_text = stdout.read().decode("utf-8", errors="replace")
-        stderr_text = stderr.read().decode("utf-8", errors="replace")
+        stdout_chunks.append(stdout.read())
+        stderr_chunks.append(stderr.read())
+        stdout_text = b"".join(stdout_chunks).decode("utf-8", errors="replace")
+        stderr_text = b"".join(stderr_chunks).decode("utf-8", errors="replace")
         return SSHCommandResult(
             exit_status=exit_status,
             stdout=stdout_text,
             stderr=stderr_text,
         )
+
+    def _read_remote_progress_lines(self, log_offsets: dict[str, int]) -> list[str]:
+        """读取远端日志新增行。缺失日志不视为错误。"""
+        if not log_offsets:
+            return []
+        sftp = self._require_sftp()
+        lines: list[str] = []
+        for remote_path, offset in list(log_offsets.items()):
+            try:
+                size = int(sftp.stat(remote_path).st_size)
+            except IOError:
+                continue
+            if size <= offset:
+                continue
+            try:
+                with sftp.open(remote_path, "rb") as handle:
+                    handle.seek(offset)
+                    chunk = handle.read(size - offset)
+                log_offsets[remote_path] = size
+            except IOError:
+                continue
+            if isinstance(chunk, str):
+                text = chunk
+            else:
+                text = bytes(chunk).decode("utf-8", errors="replace")
+            for raw_line in text.replace("\r", "\n").splitlines():
+                line = raw_line.strip()
+                if line:
+                    lines.append(line[:500])
+        return lines
 
     def remove_tree(self, remote_dir: str) -> None:
         """递归删除远端目录。"""

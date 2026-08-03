@@ -188,6 +188,14 @@ async def _execute_tool_task_impl(task_id: str, tool_version_id: str) -> Dict[st
             async def progress_callback(progress: float, message: str):
                 """进度更新回调"""
                 TaskStateMachine.update_progress(task, progress, message)
+                db.add(
+                    TaskLog(
+                        task_id=task_id,
+                        level="INFO",
+                        message=message,
+                        log_data={"progress": progress, "source": "executor"},
+                    )
+                )
                 await db.commit()
 
                 # WebSocket 通知：进度更新
@@ -196,7 +204,12 @@ async def _execute_tool_task_impl(task_id: str, tool_version_id: str) -> Dict[st
 
             # 创建执行器并执行
             # 使用正确的构造函数签名：TaskExecutor(task, tool_version)
-            executor = TaskExecutor(task, tool_version, tool=tool)
+            executor = TaskExecutor(
+                task,
+                tool_version,
+                tool=tool,
+                progress_callback=progress_callback,
+            )
 
             # 执行任务
             output_result = await executor.execute()
@@ -245,7 +258,6 @@ async def _execute_tool_task_impl(task_id: str, tool_version_id: str) -> Dict[st
             task.execution_time_sec = int(
                 (task.finished_at - task.started_at).total_seconds()
             )
-            task.progress = 1.0
 
             # 添加完成日志
             log = TaskLog(

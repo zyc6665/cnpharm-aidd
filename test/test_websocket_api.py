@@ -4,6 +4,7 @@ import pytest
 from fastapi import WebSocketDisconnect
 
 from app.api.v1 import websocket as websocket_api
+from app.websocket.manager import WebSocketManager
 
 
 class FakeWebSocket:
@@ -53,6 +54,32 @@ async def test_task_websocket_reports_invalid_json(monkeypatch):
         ("connection-1", {"type": "error", "message": "无效的 JSON 格式"})
     ]
     assert manager.disconnected == ["connection-1"]
+
+
+@pytest.mark.asyncio
+async def test_task_progress_websocket_normalizes_percent_values(monkeypatch):
+    """任务进度 WebSocket 应兼容状态机的 0-100 百分比。"""
+    manager = WebSocketManager()
+    sent_messages = []
+
+    async def fake_broadcast(task_id, message):
+        sent_messages.append((task_id, message))
+
+    monkeypatch.setattr(manager, "broadcast_to_task", fake_broadcast)
+
+    await manager.send_task_progress("task-1", 35.0, "远端运行中")
+
+    assert sent_messages == [
+        (
+            "task-1",
+            {
+                "type": "task_progress",
+                "progress": 0.35,
+                "progress_percent": 35,
+                "message": "远端运行中",
+            },
+        )
+    ]
 
 
 @pytest.mark.asyncio

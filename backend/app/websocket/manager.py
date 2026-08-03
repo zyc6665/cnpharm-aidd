@@ -266,13 +266,15 @@ class WebSocketManager:
 
         Args:
             task_id: 任务 ID
-            progress: 进度 (0.0 - 1.0)
+            progress: 进度，兼容 0.0-1.0 比例与 0-100 百分比
             message: 进度消息
         """
+        progress_percent = progress * 100 if progress <= 1.0 else progress
+        progress_percent = min(max(progress_percent, 0.0), 100.0)
         await self.broadcast_to_task(task_id, {
             "type": MessageType.TASK_PROGRESS.value,
-            "progress": progress,
-            "progress_percent": int(progress * 100),
+            "progress": progress_percent / 100,
+            "progress_percent": int(round(progress_percent)),
             "message": message
         })
 

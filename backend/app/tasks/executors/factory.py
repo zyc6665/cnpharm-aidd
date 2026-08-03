@@ -23,9 +23,16 @@ logger = logging.getLogger(__name__)
 class TaskExecutor:
     """按工具类型选择执行器并管理 GPU 生命周期。"""
 
-    def __init__(self, task: "Task", tool_version: "ToolVersion", tool: Optional[Any] = None):
+    def __init__(
+        self,
+        task: "Task",
+        tool_version: "ToolVersion",
+        tool: Optional[Any] = None,
+        progress_callback: Optional[Callable[[float, str], Awaitable[None]]] = None,
+    ):
         self.task = task
         self.tool_version = tool_version
+        self.progress_callback = progress_callback
         self.config = dict(tool_version.config or {})
         if tool is not None:
             self.config["gpu_required"] = bool(tool.gpu_required)
@@ -52,7 +59,12 @@ class TaskExecutor:
         executor_class = executors.get(executor_type)
         if not executor_class:
             raise TaskExecutionError(f"Unsupported executor type: {executor_type}")
-        return executor_class(self.task, self.tool_version, config=self.config)
+        return executor_class(
+            self.task,
+            self.tool_version,
+            config=self.config,
+            progress_callback=self.progress_callback,
+        )
 
     async def _allocate_gpu(self) -> Optional[dict[str, Any]]:
         if not self.config.get("gpu_required", False):

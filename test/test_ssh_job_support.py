@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import json
 import sys
+from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -16,6 +17,7 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.tasks.executor import SSHJobExecutor, TaskExecutor
+from app.tasks.ssh_transport import ParamikoSSHTransport
 from app.tasks.queue_manager import TaskQueue, TaskQueueManager
 from app.config import bootstrap_process_env
 
@@ -281,6 +283,128 @@ def test_ssh_job_executor_keeps_standard_result_v2_schema_clean() -> None:
         "success": True,
         "output_file_ids": ["file-1"],
     }
+
+
+def test_ssh_transport_streams_remote_log_progress(monkeypatch) -> None:
+    """远端命令运行时应能读取新增 run.log 行用于任务中心进度。"""
+
+    class FakeChannel:
+        def __init__(self) -> None:
+            self.polls = 0
+
+        def exit_status_ready(self) -> bool:
+            self.polls += 1
+            return self.polls > 1
+
+        def recv_ready(self) -> bool:
+            return False
+
+        def recv_stderr_ready(self) -> bool:
+            return False
+
+        def recv_exit_status(self) -> int:
+            return 0
+
+    class FakeStream:
+        def __init__(self, content: bytes = b"") -> None:
+            self.channel = FakeChannel()
+            self._content = content
+
+        def read(self) -> bytes:
+            return self._content
+
+    class FakeClient:
+        def exec_command(self, command: str, timeout: int):
+            stdout = FakeStream(b"stdout")
+            stderr = FakeStream()
+            stderr.channel = stdout.channel
+            return None, stdout, stderr
+
+    class FakeSFTP:
+        def stat(self, remote_path: str):
+            return SimpleNamespace(st_size=len(b"[INFO] Loading data\n"))
+
+        def open(self, remote_path: str, mode: str = "r"):
+            return BytesIO(b"[INFO] Loading data\n")
+
+    events: list[str] = []
+    transport = ParamikoSSHTransport(
+        host="host",
+        port=22,
+        username="user",
+        auth_settings={"auth_type": "password", "password": "secret"},
+        strict_host_key_checking=False,
+        timeout=10,
+    )
+    transport.client = FakeClient()
+    transport.sftp = FakeSFTP()
+    result = transport.run_command(
+        "echo run",
+        timeout=10,
+        progress_callback=events.append,
+        progress_log_paths=["/remote/output/logs/run.log"],
+        progress_poll_interval=0,
+    )
+
+    assert result.exit_status == 0
+    assert result.stdout == "stdout"
+    assert events == ["[INFO] Loading data"]
+
+
+@pytest.mark.asyncio
+async def test_ssh_job_executor_reports_remote_progress_events(monkeypatch, tmp_path) -> None:
+    """ssh_job 执行期间应把远端阶段和日志事件推给任务进度回调。"""
+    events: list[tuple[float, str]] = []
+
+    async def record_progress(progress: float, message: str) -> None:
+        events.append((progress, message))
+
+    config = {
+        "type": "ssh_job",
+        "host": "gpu-node-01.internal",
+        "username": "runner",
+        "runner_mode": "shell",
+        "remote_base_dir": "/srv/platform-jobs",
+        "entrypoint": "/opt/models/platform_run.sh",
+    }
+    executor = SSHJobExecutor(
+        _build_task("task-progress"),
+        _build_tool_version(config),
+        progress_callback=record_progress,
+    )
+
+    async def fake_collect_output_files(download_root: str) -> list[str]:
+        return []
+
+    def fake_run_remote_workflow_sync(
+        local_bundle,
+        remote_paths,
+        auth_settings,
+        timeout,
+        progress_sink,
+    ):
+        progress_sink(15.0, "远端模型进程已启动")
+        progress_sink(35.0, "远端运行中：Start sampling")
+        return {
+            "exit_status": 0,
+            "stdout": "",
+            "stderr": "",
+            "download_root": str(tmp_path),
+            "cleanup_error": None,
+        }
+
+    monkeypatch.setenv("TASK_WORK_DIR", str(tmp_path))
+    monkeypatch.setattr(executor, "_resolve_auth_settings", lambda: {})
+    monkeypatch.setattr(executor, "_run_remote_workflow_sync", fake_run_remote_workflow_sync)
+    monkeypatch.setattr(executor, "_collect_output_files", fake_collect_output_files)
+    monkeypatch.setattr(executor, "_load_result_json", lambda _download_root: {"success": True})
+
+    await executor.execute()
+
+    assert events == [
+        (15.0, "远端模型进程已启动"),
+        (35.0, "远端运行中：Start sampling"),
+    ]
 
 
 @pytest.mark.asyncio
