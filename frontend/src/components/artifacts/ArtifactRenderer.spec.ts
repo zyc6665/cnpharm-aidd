@@ -8,7 +8,7 @@ import type { ConversationMessage } from '@/types/conversations'
 import type { Task } from '@/types/models'
 
 vi.mock('vue-i18n', () => ({
-  useI18n: () => ({ t: (key: string) => key }),
+  useI18n: () => ({ t: (key: string) => key })
 }))
 
 const version = {
@@ -19,7 +19,7 @@ const version = {
   size_bytes: 2048,
   sha256: 'a'.repeat(64),
   status: 'available',
-  created_at: '2026-07-30T00:00:00Z',
+  created_at: '2026-07-30T00:00:00Z'
 }
 
 function artifact(overrides: Partial<TypedArtifact>): TypedArtifact {
@@ -33,18 +33,21 @@ function artifact(overrides: Partial<TypedArtifact>): TypedArtifact {
     latest_version: version,
     created_at: '2026-07-30T00:00:00Z',
     updated_at: '2026-07-30T00:00:00Z',
-    ...overrides,
+    ...overrides
   }
 }
 
 const stubs = {
-  AAlert: { template: '<div class="a-alert"><slot />{{ message }}{{ description }}</div>', props: ['message', 'description'] },
+  AAlert: {
+    template: '<div class="a-alert"><slot />{{ message }}{{ description }}</div>',
+    props: ['message', 'description']
+  },
   AButton: { template: '<button><slot /></button>' },
   ADescriptions: { template: '<dl><slot /></dl>' },
   ADescriptionsItem: { template: '<div><slot /></div>' },
   AEmpty: true,
   ATag: { template: '<span><slot /></span>' },
-  BranchesOutlined: true,
+  BranchesOutlined: true
 }
 
 describe('ArtifactRenderer', () => {
@@ -52,20 +55,34 @@ describe('ArtifactRenderer', () => {
     ['protein_structure', 'protein-structure-artifact'],
     ['pocket_result', 'pocket-result-artifact'],
     ['file', 'file-artifact'],
-    ['run_report', 'run-report-artifact'],
+    ['run_report', 'run-report-artifact']
   ])('selects the registered renderer for %s artifacts', (artifactType, testId) => {
     const wrapper = mount(ArtifactRenderer, {
       props: { artifact: artifact({ artifact_type: artifactType }) },
-      global: { stubs },
+      global: { stubs }
     })
 
     expect(wrapper.find(`[data-testid="${testId}"]`).exists()).toBe(true)
   })
 
+  it.each([
+    ['binding_pocket', 'pocket-result-artifact'],
+    ['ligand_structure', 'pocket-result-artifact'],
+    ['molecule_table', 'file-artifact']
+  ])('renders standard %s artifacts without falling back', (artifactType, testId) => {
+    const wrapper = mount(ArtifactRenderer, {
+      props: { artifact: artifact({ artifact_type: artifactType }) },
+      global: { stubs }
+    })
+
+    expect(wrapper.find(`[data-testid="${testId}"]`).exists()).toBe(true)
+    expect(wrapper.find('[data-testid="artifact-fallback"]').exists()).toBe(false)
+  })
+
   it('uses a stable fallback for unknown artifact types', () => {
     const wrapper = mount(ArtifactRenderer, {
       props: { artifact: artifact({ artifact_type: 'unknown_result' }) },
-      global: { stubs },
+      global: { stubs }
     })
 
     expect(wrapper.get('[data-testid="artifact-fallback"]').text()).toContain('unknown_result')
@@ -77,10 +94,10 @@ describe('ArtifactRenderer', () => {
       props: {
         artifact: {
           ...artifact({ artifact_type: 'file' }),
-          object_storage_url: 'https://minio.internal/private-bucket/target.pdb',
-        } as TypedArtifact,
+          object_storage_url: 'https://minio.internal/private-bucket/target.pdb'
+        } as TypedArtifact
       },
-      global: { stubs },
+      global: { stubs }
     })
 
     const link = wrapper.get('[data-testid="artifact-download-link"]')
@@ -96,17 +113,19 @@ describe('ArtifactRenderer', () => {
       role: 'assistant',
       plain_text: '产物已生成',
       sequence: 1,
-      content: [{
-        type: 'artifact_ref',
-        title: '口袋结果',
-        artifact_id: 'artifact-1',
-        artifact: artifact({ artifact_type: 'pocket_result', semantic_type: 'pocket_result' }),
-      }],
+      content: [
+        {
+          type: 'artifact_ref',
+          title: '口袋结果',
+          artifact_id: 'artifact-1',
+          artifact: artifact({ artifact_type: 'pocket_result', semantic_type: 'pocket_result' })
+        }
+      ]
     } as ConversationMessage
 
     const wrapper = mount(MessageTimeline, {
       props: { messages: [message], canRun: true },
-      global: { stubs },
+      global: { stubs }
     })
 
     expect(wrapper.find('[data-testid="pocket-result-artifact"]').exists()).toBe(true)
@@ -120,12 +139,12 @@ describe('ArtifactRenderer', () => {
       progress: 100,
       created_at: '2026-07-30T00:00:00Z',
       artifacts: [artifact({ artifact_type: 'run_report', name: '运行报告' })],
-      output_files: [],
+      output_files: []
     } as unknown as Task
 
     const wrapper = mount(ResultVisualizationPanel, {
       props: { task },
-      global: { stubs },
+      global: { stubs }
     })
 
     expect(wrapper.find('[data-testid="run-report-artifact"]').exists()).toBe(true)

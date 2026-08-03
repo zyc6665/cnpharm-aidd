@@ -1,4 +1,11 @@
-export type ArtifactType = 'protein_structure' | 'pocket_result' | 'file' | 'run_report'
+export type ArtifactType =
+  | 'protein_structure'
+  | 'binding_pocket'
+  | 'pocket_result'
+  | 'ligand_structure'
+  | 'molecule_table'
+  | 'file'
+  | 'run_report'
 
 export interface ArtifactVersion {
   id: string
