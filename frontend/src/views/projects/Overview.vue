@@ -62,7 +62,7 @@
         <section class="overview-section">
           <div class="section-heading">
             <h2>最近任务</h2>
-            <router-link to="/tasks">全部任务</router-link>
+            <router-link :to="projectTasksPath">全部任务</router-link>
           </div>
           <div v-if="overview.tasks.length" class="resource-list">
             <router-link
@@ -133,6 +133,7 @@
 
   const route = useRoute()
   const projectId = computed(() => String(route.params.projectId || ''))
+  const projectTasksPath = computed(() => `/tasks?project_id=${encodeURIComponent(projectId.value)}`)
   const overview = ref<ProjectOverview | null>(null)
   const loading = ref(false)
   const loadError = ref(false)

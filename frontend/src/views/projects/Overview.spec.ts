@@ -127,6 +127,10 @@ describe('ProjectOverview', () => {
     const workflowEntry = wrapper
       .findAll('a')
       .find(link => link.text().includes('打开工作流'))
+    const taskListEntry = wrapper
+      .findAll('a')
+      .find(link => link.text().includes('全部任务'))
+    expect(taskListEntry?.attributes('href')).toBe('/tasks?project_id=project-1')
     expect(workflowEntry?.attributes('href')).toBe('/workflow?project_id=project-1')
     expect(wrapper.find('[data-testid="open-research"]').attributes('href')).toBe(
       '/projects/project-1/research'

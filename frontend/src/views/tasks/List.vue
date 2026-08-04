@@ -309,7 +309,7 @@
 
 <script setup lang="ts">
   import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-  import { useRouter } from 'vue-router'
+  import { useRoute, useRouter } from 'vue-router'
   import { useI18n } from 'vue-i18n'
   import AppFilterBar from '@/components/common/AppFilterBar.vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
@@ -336,6 +336,7 @@
   import type { Dayjs } from 'dayjs'
   import dayjs from 'dayjs'
   import { useAgentsStore, useTasksStore, useToolsStore } from '@/stores'
+  import type { TaskListParams } from '@/api/tasks'
   import type { Task, TaskStatus } from '@/types/models'
   import AgentRunTaskCard from './AgentRunTaskCard.vue'
   import {
@@ -352,6 +353,7 @@
 
   type TabKey = 'all' | 'running' | 'history'
 
+  const route = useRoute()
   const router = useRouter()
   const { t } = useI18n()
   const tasksStore = useTasksStore()
@@ -368,6 +370,10 @@
   const pageSize = ref(10)
   const refreshing = ref(false)
   const autoRefresh = ref(true)
+  const projectId = computed(() => {
+    const value = route.query.project_id
+    return typeof value === 'string' && value.trim() ? value : undefined
+  })
 
   // 计算属性
   const loading = computed(() => tasksStore.loading || agentsStore.loading)
@@ -545,7 +551,11 @@
   }
 
   const fetchTasks = async () => {
-    const params: Record<string, unknown> = {}
+    const params: Pick<TaskListParams, 'tool_id' | 'keyword' | 'project_id'> = {}
+
+    if (projectId.value) {
+      params.project_id = projectId.value
+    }
 
     if (selectedTool.value) {
       params.tool_id = selectedTool.value
@@ -559,6 +569,11 @@
   }
 
   const fetchAgentRuns = async () => {
+    if (projectId.value) {
+      agentsStore.$patch({ runs: [], total: 0, currentRun: null })
+      return
+    }
+
     try {
       await agentsStore.fetchRuns(
         { page: 1, page_size: 100, project_only: true },
@@ -681,6 +696,11 @@
     } else {
       stopAutoRefresh()
     }
+  })
+
+  watch(projectId, () => {
+    currentPage.value = 1
+    void Promise.allSettled([fetchTasksSafely(), fetchAgentRuns()])
   })
 
   // 生命周期

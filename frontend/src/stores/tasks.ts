@@ -1,7 +1,15 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { Task, TaskStatus, TaskCreateParams } from '@/types/models'
-import { getTaskList, getTaskDetail, createTask as apiCreateTask, cancelTask as apiCancelTask, retryTask as apiRetryTask, deleteTask as apiDeleteTask } from '@/api/tasks'
+import {
+  getTaskList,
+  getTaskDetail,
+  createTask as apiCreateTask,
+  cancelTask as apiCancelTask,
+  retryTask as apiRetryTask,
+  deleteTask as apiDeleteTask,
+  type TaskListParams
+} from '@/api/tasks'
 import { normalizeTaskSummaries, normalizeTaskSummary } from '@/utils/task-normalization'
 
 const FULL_TASK_PAGE_SIZE = 100
@@ -14,7 +22,7 @@ export const useTasksStore = defineStore('tasks', () => {
   const total = ref(0)
 
   // Actions
-  const fetchTasks = async (params?: { status?: TaskStatus; tool_id?: string; keyword?: string; page?: number; page_size?: number }) => {
+  const fetchTasks = async (params?: TaskListParams) => {
     loading.value = true
     try {
       const res = await getTaskList(params)
@@ -26,7 +34,7 @@ export const useTasksStore = defineStore('tasks', () => {
     }
   }
 
-  const fetchAllTasks = async (params?: { tool_id?: string; keyword?: string }) => {
+  const fetchAllTasks = async (params?: Pick<TaskListParams, 'tool_id' | 'keyword' | 'project_id'>) => {
     loading.value = true
     try {
       const firstPage = await getTaskList({

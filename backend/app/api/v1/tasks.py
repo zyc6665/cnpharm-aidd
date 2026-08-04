@@ -31,9 +31,11 @@ from app.schemas.tasks import (
 )
 from app.common.responses import paginated_response, success_response
 from app.common.exceptions import NotFoundException, ForbiddenException, ValidationException
+from app.services.project_access import load_project_membership, require_project_role
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+TASK_OPERATION_PROJECT_ROLES = {"owner", "editor", "runner"}
 
 
 def _normalize_task_status(status: Optional[str]) -> Optional[str]:
@@ -146,6 +148,49 @@ async def _record_tool_usage(db: AsyncSession, tool_id: str) -> None:
     await record_tool_usage(db, tool_id)
 
 
+def _is_admin(user: User) -> bool:
+    return user.role == "admin"
+
+
+async def _ensure_task_read_access(
+    db: AsyncSession,
+    *,
+    task: Task,
+    current_user: User,
+) -> None:
+    if _is_admin(current_user) or task.user_id == current_user.id:
+        return
+    project_id = _task_project_id(task)
+    if project_id:
+        await load_project_membership(
+            db,
+            project_id=project_id,
+            user_id=current_user.id,
+        )
+        return
+    raise ForbiddenException("无权访问此任务")
+
+
+async def _ensure_task_operation_access(
+    db: AsyncSession,
+    *,
+    task: Task,
+    current_user: User,
+) -> None:
+    if _is_admin(current_user) or task.user_id == current_user.id:
+        return
+    project_id = _task_project_id(task)
+    if project_id:
+        await require_project_role(
+            db,
+            project_id=project_id,
+            user=current_user,
+            allowed_roles=TASK_OPERATION_PROJECT_ROLES,
+        )
+        return
+    raise ForbiddenException("无权操作此任务")
+
+
 @router.get("", response_model=dict)
 async def list_tasks(
     page: int = Query(1, ge=1),
@@ -153,6 +198,7 @@ async def list_tasks(
     status: Optional[str] = None,
     tool_id: Optional[str] = None,
     keyword: Optional[str] = None,
+    project_id: Optional[str] = Query(None, min_length=1, max_length=36),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -163,9 +209,17 @@ async def list_tasks(
         joinedload(Task.user)
     )
 
-    # 普通用户只能看自己的任务
-    is_admin = current_user.role == "admin"
-    if not is_admin:
+    # 普通用户默认只能看自己的任务；项目上下文下按项目成员权限查看。
+    is_admin = _is_admin(current_user)
+    if project_id:
+        if not is_admin:
+            await load_project_membership(
+                db,
+                project_id=project_id,
+                user_id=current_user.id,
+            )
+        query = query.where(Task.extra_data["project_id"].as_string() == project_id)
+    elif not is_admin:
         query = query.where(Task.user_id == current_user.id)
 
     # 状态过滤
@@ -258,10 +312,7 @@ async def get_task(
     if not task:
         raise NotFoundException("任务不存在")
 
-    # 权限检查
-    is_admin = current_user.role == "admin"
-    if not is_admin and task.user_id != current_user.id:
-        raise ForbiddenException("无权访问此任务")
+    await _ensure_task_read_access(db, task=task, current_user=current_user)
 
     input_file_ids = task.inputs.file_ids if task.inputs and task.inputs.file_ids else []
     output_file_ids = []
@@ -369,10 +420,7 @@ async def cancel_task(
     if not task:
         raise NotFoundException("任务不存在")
 
-    # 权限检查
-    is_admin = current_user.role == "admin"
-    if not is_admin and task.user_id != current_user.id:
-        raise ForbiddenException("无权操作此任务")
+    await _ensure_task_operation_access(db, task=task, current_user=current_user)
 
     # 只能取消等待中或运行中的任务
     if task.status not in [TaskStatus.PENDING.value, TaskStatus.RUNNING.value]:
@@ -404,10 +452,7 @@ async def retry_task(
     if not task:
         raise NotFoundException("任务不存在")
 
-    # 权限检查
-    is_admin = current_user.role == "admin"
-    if not is_admin and task.user_id != current_user.id:
-        raise ForbiddenException("无权操作此任务")
+    await _ensure_task_operation_access(db, task=task, current_user=current_user)
 
     # 只能重试失败或取消的任务
     if task.status not in [TaskStatus.FAILURE.value, TaskStatus.CANCELED.value]:
@@ -491,9 +536,7 @@ async def get_task_logs(
     if not task:
         raise NotFoundException("任务不存在")
 
-    is_admin = current_user.role == "admin"
-    if not is_admin and task.user_id != current_user.id:
-        raise ForbiddenException("无权访问此任务")
+    await _ensure_task_read_access(db, task=task, current_user=current_user)
 
     # 查询日志
     query = select(TaskLog).where(TaskLog.task_id == task_id)
