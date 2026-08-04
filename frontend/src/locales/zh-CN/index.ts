@@ -112,6 +112,8 @@ export default {
     loadFailedHint: '无法获取最新项目数据，请检查网络后重试。',
     overviewLoadFailed: '任务与 Artifact 暂时不可用',
     overviewLoadFailedHint: '项目列表已加载，任务和 Artifact 概览接口暂时失败，可稍后重试。',
+    schemaMigrationLoadFailed: '数据库迁移未完成',
+    schemaMigrationLoadFailedHint: '当前数据库结构落后于后端代码，请先执行 Alembic 迁移后再刷新工作台。',
     retry: '重试',
     project: {
       name: '项目名称',

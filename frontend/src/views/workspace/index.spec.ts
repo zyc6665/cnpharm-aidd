@@ -4,9 +4,11 @@ import i18n from '@/locales'
 import WorkspaceView from './index.vue'
 import { getWorkspaceOverview } from '@/api/workspace'
 import { listProjects } from '@/api/projects'
+import { getSystemHealth } from '@/api/system'
 
 vi.mock('@/api/workspace', () => ({ getWorkspaceOverview: vi.fn() }))
 vi.mock('@/api/projects', () => ({ listProjects: vi.fn(), createProject: vi.fn() }))
+vi.mock('@/api/system', () => ({ getSystemHealth: vi.fn() }))
 
 const overview = {
   attention_task_count: 1,
@@ -31,7 +33,7 @@ const overview = {
 const stubs = {
   RouterLink: { template: '<a><slot /></a>' },
   AButton: { template: '<button><slot /></button>' },
-  AAlert: { template: '<div>{{ $attrs.message }}<slot /><slot name="action" /></div>' },
+  AAlert: { template: '<div>{{ $attrs.message }}{{ $attrs.description }}<slot /><slot name="action" /></div>' },
   ASkeleton: true,
   AEmpty: true,
   AProgress: true,
@@ -55,6 +57,15 @@ function renderWorkspace() {
 describe('WorkspaceView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(getSystemHealth).mockResolvedValue({
+      data: {
+        status: 'healthy',
+        version: '1.0.0',
+        environment: 'test',
+        timestamp: '2026-08-04T00:00:00Z',
+        services: [],
+      },
+    } as never)
     vi.mocked(listProjects).mockResolvedValue({
       data: {
         items: [{
@@ -102,5 +113,30 @@ describe('WorkspaceView', () => {
     expect(wrapper.text()).toContain('先导优化')
     expect(wrapper.text()).not.toContain('研究工作台加载失败')
     expect(wrapper.findAll('button').some(button => button.text() === '重试')).toBe(true)
+  })
+
+  it('概览失败且 schema 健康检查异常时展示数据库迁移提示', async () => {
+    vi.mocked(getWorkspaceOverview).mockRejectedValue(new Error('schema mismatch'))
+    vi.mocked(getSystemHealth).mockResolvedValue({
+      data: {
+        status: 'unhealthy',
+        version: '1.0.0',
+        environment: 'test',
+        timestamp: '2026-08-04T00:00:00Z',
+        services: [{
+          name: 'database_schema',
+          status: 'unhealthy',
+          message: 'Alembic revision mismatch: current=20260801_01, head=20260804_02',
+        }],
+      },
+    } as never)
+
+    const wrapper = renderWorkspace()
+    await flushPromises()
+
+    expect(getSystemHealth).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('数据库迁移未完成')
+    expect(wrapper.text()).toContain('当前数据库结构落后于后端代码')
+    expect(wrapper.text()).toContain('先导优化')
   })
 })

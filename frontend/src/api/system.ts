@@ -1,4 +1,4 @@
-import { del, get, post, put } from './request'
+import { del, get, post, put, type RequestOptions } from './request'
 import type { ApiResponse } from '@/types/api'
 import type {
   ModelService,
@@ -13,8 +13,8 @@ import type {
 } from '@/types/models'
 
 // 系统健康检查
-export const getSystemHealth = (): Promise<ApiResponse<SystemHealth>> => {
-  return get<SystemHealth>('/system/health')
+export const getSystemHealth = (config?: RequestOptions): Promise<ApiResponse<SystemHealth>> => {
+  return get<SystemHealth>('/system/health', undefined, config)
 }
 
 // 获取系统信息

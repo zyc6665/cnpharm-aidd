@@ -40,6 +40,21 @@
       </template>
     </a-alert>
 
+    <a-alert
+      v-if="schemaMigrationLoadError && !loadError"
+      class="workspace-error"
+      type="error"
+      show-icon
+      :message="t('workspace.schemaMigrationLoadFailed')"
+      :description="t('workspace.schemaMigrationLoadFailedHint')"
+    >
+      <template #action>
+        <a-button size="small" :loading="loading" @click="loadWorkspace">
+          {{ t('workspace.retry') }}
+        </a-button>
+      </template>
+    </a-alert>
+
     <a-skeleton v-if="loading && !hasLoaded" active :paragraph="{ rows: 10 }" />
     <template v-else-if="!loadError">
       <section class="workspace-section projects-section">
@@ -136,6 +151,7 @@ import {
   type WorkspaceLegacyFile
 } from '@/api/workspace'
 import { buildArtifactVersionDownloadUrl } from '@/api/artifacts'
+import { getSystemHealth } from '@/api/system'
 import ProjectCreateDialog from '@/components/projects/ProjectCreateDialog.vue'
 import ProjectList from '@/components/projects/ProjectList.vue'
 import type { ResearchProject } from '@/types/projects'
@@ -146,6 +162,7 @@ const loading = ref(false)
 const hasLoaded = ref(false)
 const loadError = ref(false)
 const overviewLoadError = ref(false)
+const schemaMigrationLoadError = ref(false)
 const createDialogOpen = ref(false)
 const projects = ref<ResearchProject[]>([])
 const tasks = ref<WorkspaceAttentionTask[]>([])
@@ -189,6 +206,7 @@ async function loadWorkspace() {
   loading.value = true
   loadError.value = false
   overviewLoadError.value = false
+  schemaMigrationLoadError.value = false
   try {
     const [projectResult, workspaceResult] = await Promise.allSettled([
       listProjects(),
@@ -209,13 +227,25 @@ async function loadWorkspace() {
       tasks.value = []
       artifacts.value = []
       legacyFiles.value = []
-      overviewLoadError.value = true
+      schemaMigrationLoadError.value = await hasDatabaseSchemaHealthIssue()
+      overviewLoadError.value = !schemaMigrationLoadError.value
     }
     hasLoaded.value = true
   } catch {
     loadError.value = true
   } finally {
     loading.value = false
+  }
+}
+
+async function hasDatabaseSchemaHealthIssue() {
+  try {
+    const health = await getSystemHealth({ silent: true, retry: 0 })
+    return health.data.services.some(
+      service => service.name === 'database_schema' && service.status !== 'healthy'
+    )
+  } catch {
+    return false
   }
 }
 

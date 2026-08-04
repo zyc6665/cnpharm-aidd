@@ -112,6 +112,8 @@ export default {
     loadFailedHint: 'Latest project data is unavailable. Check your connection and retry.',
     overviewLoadFailed: 'Tasks and artifacts are temporarily unavailable',
     overviewLoadFailedHint: 'Projects loaded, but task and artifact overview failed. Retry when the service recovers.',
+    schemaMigrationLoadFailed: 'Database migration is incomplete',
+    schemaMigrationLoadFailedHint: 'The current database schema is behind the backend code. Run Alembic migrations before refreshing the workspace.',
     retry: 'Retry',
     project: {
       name: 'Project name',

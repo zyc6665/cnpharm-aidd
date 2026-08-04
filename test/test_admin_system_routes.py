@@ -159,3 +159,20 @@ async def test_feature_flags_endpoint_exposes_aidd_release_gates(
     )
     assert all(isinstance(item["rollout"]["user_count"], int) for item in items.values())
     assert items["PROJECT_RESEARCH_BOARD_ENABLED"]["description"]
+
+
+@pytest.mark.asyncio
+async def test_system_health_reports_database_schema_revision(
+    api_client: httpx.AsyncClient,
+):
+    """系统健康检查应暴露 Alembic schema 状态，避免迁移漏跑变成泛化 500。"""
+    response = await api_client.get("/api/v1/system/health")
+
+    assert response.status_code == 200
+    payload = response.json()
+    services = {item["name"]: item for item in payload["services"]}
+
+    assert "database_schema" in services
+    assert services["database_schema"]["status"] == "unhealthy"
+    assert "Alembic" in services["database_schema"]["message"]
+    assert payload["status"] == "unhealthy"

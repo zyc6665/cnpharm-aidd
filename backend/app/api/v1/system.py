@@ -4,11 +4,14 @@
 import os
 import platform
 import psutil
+from pathlib import Path
 from typing import Optional, List
 from fastapi import APIRouter, Depends
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 
 from app.common.time import utcnow
 from app.database.session import get_db
@@ -27,6 +30,7 @@ from app.services.model_services import (
 )
 
 router = APIRouter()
+PROJECT_ROOT = Path(__file__).resolve().parents[4]
 
 
 # ==================== Schemas ====================
@@ -121,6 +125,11 @@ async def health_check(db: AsyncSession = Depends(get_db)):
     if db_status.status != "healthy":
         overall_status = "unhealthy"
 
+    schema_status = await _check_database_schema(db)
+    services.append(schema_status)
+    if schema_status.status != "healthy":
+        overall_status = "unhealthy"
+
     # 2. 检查缓存
     cache_status = await _check_cache()
     services.append(cache_status)
@@ -164,6 +173,43 @@ async def _check_database(db: AsyncSession) -> ServiceStatus:
     except Exception as e:
         return ServiceStatus(
             name="database", status="unhealthy", message=f"数据库连接失败: {str(e)}"
+        )
+
+
+async def _check_database_schema(db: AsyncSession) -> ServiceStatus:
+    """检查数据库 Alembic 版本是否与代码迁移头一致。"""
+    try:
+        config = Config(str(PROJECT_ROOT / "alembic.ini"))
+        script = ScriptDirectory.from_config(config)
+        expected_heads = set(script.get_heads())
+        if not expected_heads:
+            return ServiceStatus(
+                name="database_schema",
+                status="unhealthy",
+                message="Alembic 未找到迁移 head",
+            )
+
+        result = await db.execute(text("SELECT version_num FROM alembic_version"))
+        current_revisions = {str(row[0]) for row in result.all() if row[0]}
+        if current_revisions == expected_heads:
+            return ServiceStatus(
+                name="database_schema",
+                status="healthy",
+                message=f"Alembic schema 已是最新版本 ({', '.join(sorted(current_revisions))})",
+            )
+
+        current = ", ".join(sorted(current_revisions)) or "missing"
+        expected = ", ".join(sorted(expected_heads))
+        return ServiceStatus(
+            name="database_schema",
+            status="unhealthy",
+            message=f"Alembic schema 版本不一致: current={current}, head={expected}",
+        )
+    except Exception as e:
+        return ServiceStatus(
+            name="database_schema",
+            status="unhealthy",
+            message=f"Alembic schema 检查失败: {str(e)}",
         )
 
 
