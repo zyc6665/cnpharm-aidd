@@ -44,21 +44,21 @@ export function useWorkflowCanvas(input: {
   const sidebarOutputFilter = ref<string>()
   const sidebarExecutorFilter = ref<string>()
 
-  const activeTemplate = computed(() => {
+  const activeCanvasPreset = computed(() => {
     return getWorkflowCanvasPresetById(workflowStore.templateId) ?? FREE_WORKFLOW_CANVAS_PRESET
   })
 
-  const editableTemplate = computed(() => ({
-    ...activeTemplate.value,
-    nodes: workflowStore.hasCanvasOverride ? workflowStore.canvasNodes : activeTemplate.value.nodes,
-    edges: workflowStore.hasCanvasOverride ? workflowStore.canvasEdges : activeTemplate.value.edges
+  const editableCanvasPreset = computed(() => ({
+    ...activeCanvasPreset.value,
+    nodes: workflowStore.hasCanvasOverride ? workflowStore.canvasNodes : activeCanvasPreset.value.nodes,
+    edges: workflowStore.hasCanvasOverride ? workflowStore.canvasEdges : activeCanvasPreset.value.edges
   }))
 
   const activeNode = computed(() => {
-    const requestedNode = editableTemplate.value.nodes.find(
+    const requestedNode = editableCanvasPreset.value.nodes.find(
       node => node.id === workflowStore.activeNodeId
     )
-    return requestedNode ?? editableTemplate.value.nodes[0] ?? null
+    return requestedNode ?? editableCanvasPreset.value.nodes[0] ?? null
   })
 
   const selectedToolByActiveNode = computed(() => {
@@ -69,7 +69,7 @@ export function useWorkflowCanvas(input: {
     return resolveSelectedToolSlug(activeNode.value.id)
   })
 
-  const templateOptions = computed(() => {
+  const canvasPresetOptions = computed(() => {
     return WORKFLOW_CANVAS_PRESETS.map(preset => ({
       value: preset.id,
       label: formatKey(preset.nameKey)
@@ -226,7 +226,7 @@ export function useWorkflowCanvas(input: {
   })
 
   const nodeStatuses = computed(() => {
-    return editableTemplate.value.nodes.reduce<
+    return editableCanvasPreset.value.nodes.reduce<
       Record<string, ReturnType<typeof resolveWorkflowCanvasNodeStatus>>
     >((statuses, node) => {
       statuses[node.id] = resolveWorkflowCanvasNodeStatus({
@@ -241,14 +241,14 @@ export function useWorkflowCanvas(input: {
 
   const readyToolNodeIds = computed(() => {
     return resolveReadyToolNodeIds({
-      template: editableTemplate.value,
+      template: editableCanvasPreset.value,
       nodeStatuses: nodeStatuses.value
     })
   })
 
   const readyNodeCount = computed(() => readyToolNodeIds.value.length)
   const blockedNodeCount = computed(() => {
-    return editableTemplate.value.nodes.filter(
+    return editableCanvasPreset.value.nodes.filter(
       node =>
         node.type === 'tool' &&
         ['idle', 'needs_tool_selection'].includes(nodeStatuses.value[node.id] ?? 'idle')
@@ -259,7 +259,7 @@ export function useWorkflowCanvas(input: {
   const failedNodeCount = computed(() => countNodesByStatus('failed'))
 
   const workflowReportRows = computed<WorkflowReportRow[]>(() => {
-    return editableTemplate.value.nodes.map(node => {
+    return editableCanvasPreset.value.nodes.map(node => {
       const task = workflowStore.taskByNode[node.id]
       const artifacts = task
         ? artifactsStore.items
@@ -283,7 +283,7 @@ export function useWorkflowCanvas(input: {
     })
   })
 
-  function handleTemplateChange(templateId: unknown) {
+  function handleCanvasPresetChange(templateId: unknown) {
     if (typeof templateId !== 'string') {
       return
     }
@@ -292,12 +292,12 @@ export function useWorkflowCanvas(input: {
   }
 
   function countNodesByStatus(status: ReturnType<typeof resolveWorkflowCanvasNodeStatus>) {
-    return editableTemplate.value.nodes.filter(node => nodeStatuses.value[node.id] === status)
+    return editableCanvasPreset.value.nodes.filter(node => nodeStatuses.value[node.id] === status)
       .length
   }
 
   function resolveNodeStatusReason(nodeId: string): string {
-    const node = editableTemplate.value.nodes.find(item => item.id === nodeId)
+    const node = editableCanvasPreset.value.nodes.find(item => item.id === nodeId)
     const status = nodeStatuses.value[nodeId] ?? 'idle'
     if (!node) {
       return ''
@@ -350,8 +350,8 @@ export function useWorkflowCanvas(input: {
       position:
         typeof input === 'string'
           ? {
-              x: 320 + editableTemplate.value.nodes.length * 36,
-              y: 120 + editableTemplate.value.nodes.length * 24
+              x: 320 + editableCanvasPreset.value.nodes.length * 36,
+              y: 120 + editableCanvasPreset.value.nodes.length * 24
             }
           : input.position
     })
@@ -374,13 +374,13 @@ export function useWorkflowCanvas(input: {
   }
 
   function hasRequiredInputs(nodeId: string): boolean {
-    const node = editableTemplate.value.nodes.find(item => item.id === nodeId)
+    const node = editableCanvasPreset.value.nodes.find(item => item.id === nodeId)
     if (!node?.requiredInputTypes?.length) {
       return true
     }
 
     return node.requiredInputTypes.every(inputType => {
-      return editableTemplate.value.edges.some(edge => {
+      return editableCanvasPreset.value.edges.some(edge => {
         const upstreamTask = workflowStore.taskByNode[edge.source]
         return (
           edge.target === nodeId &&
@@ -392,7 +392,7 @@ export function useWorkflowCanvas(input: {
   }
 
   function resolveSelectedToolSlug(nodeId: string): string | null {
-    const node = editableTemplate.value.nodes.find(item => item.id === nodeId)
+    const node = editableCanvasPreset.value.nodes.find(item => item.id === nodeId)
     if (!node) {
       return null
     }
@@ -437,7 +437,7 @@ export function useWorkflowCanvas(input: {
 
       visited.add(currentNodeId)
 
-      for (const edge of editableTemplate.value.edges) {
+      for (const edge of editableCanvasPreset.value.edges) {
         if (edge.source === currentNodeId && !visited.has(edge.target)) {
           queue.push(edge.target)
         }
@@ -463,7 +463,7 @@ export function useWorkflowCanvas(input: {
   }
 
   function buildCurrentWorkflowDefinition(): WorkflowDefinition {
-    const nodes = editableTemplate.value.nodes.map(node => ({
+    const nodes = editableCanvasPreset.value.nodes.map(node => ({
       id: node.id,
       kind: node.type === 'input' ? 'input' : 'tool',
       type: node.type,
@@ -480,7 +480,7 @@ export function useWorkflowCanvas(input: {
       position: node.position
     }))
 
-    const edges = editableTemplate.value.edges.map(edge => ({
+    const edges = editableCanvasPreset.value.edges.map(edge => ({
       id: edge.id,
       source: edge.source,
       target: edge.target,
@@ -493,17 +493,17 @@ export function useWorkflowCanvas(input: {
 
   function buildSemanticInputsForNode(nodeId: string) {
     const semanticInputs: Record<string, string> = {}
-    const node = editableTemplate.value.nodes.find(item => item.id === nodeId)
+    const node = editableCanvasPreset.value.nodes.find(item => item.id === nodeId)
     if (!node) {
       return semanticInputs
     }
 
-    const incomingEdges = editableTemplate.value.edges.filter(edge => edge.target === nodeId)
+    const incomingEdges = editableCanvasPreset.value.edges.filter(edge => edge.target === nodeId)
     for (const edge of incomingEdges) {
       if (!edge.artifactType) {
         continue
       }
-      const sourceNode = editableTemplate.value.nodes.find(item => item.id === edge.source)
+      const sourceNode = editableCanvasPreset.value.nodes.find(item => item.id === edge.source)
       if (!sourceNode) {
         continue
       }
@@ -524,12 +524,12 @@ export function useWorkflowCanvas(input: {
 
   function buildArtifactInputsForNode(nodeId: string) {
     const artifactInputs: Record<string, string> = {}
-    const node = editableTemplate.value.nodes.find(item => item.id === nodeId)
+    const node = editableCanvasPreset.value.nodes.find(item => item.id === nodeId)
     if (!node?.inputArtifactSlots?.length) {
       return artifactInputs
     }
 
-    const incomingEdges = editableTemplate.value.edges.filter(edge => edge.target === nodeId)
+    const incomingEdges = editableCanvasPreset.value.edges.filter(edge => edge.target === nodeId)
     for (const slot of node.inputArtifactSlots) {
       const edge = incomingEdges.find(item => item.artifactType === slot.type)
       if (!edge?.artifactType) {
@@ -537,7 +537,7 @@ export function useWorkflowCanvas(input: {
         continue
       }
 
-      const sourceNode = editableTemplate.value.nodes.find(item => item.id === edge.source)
+      const sourceNode = editableCanvasPreset.value.nodes.find(item => item.id === edge.source)
       if (!sourceNode || sourceNode.type === 'input') {
         artifactInputs[slot.name] = `workflow_input:${slot.type}`
         continue
@@ -558,11 +558,11 @@ export function useWorkflowCanvas(input: {
     sidebarInputFilter,
     sidebarOutputFilter,
     sidebarExecutorFilter,
-    activeTemplate,
-    editableTemplate,
+    activeCanvasPreset,
+    editableCanvasPreset,
     activeNode,
     selectedToolByActiveNode,
-    templateOptions,
+    canvasPresetOptions,
     availableWorkflowTools,
     sidebarStageOptions,
     sidebarInputOptions,
@@ -580,7 +580,7 @@ export function useWorkflowCanvas(input: {
     completedNodeCount,
     failedNodeCount,
     workflowReportRows,
-    handleTemplateChange,
+    handleCanvasPresetChange,
     resolveNodeStatusReason,
     handleNodeToolSelect,
     handleAddToolNode,

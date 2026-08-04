@@ -280,7 +280,7 @@ export default {
       delete: 'Delete',
       templateLabel: 'Flow mode'
     },
-    templates: {
+    canvasPresets: {
       kicker: 'Flow Arrangement',
       unsaved: 'Unsaved workbench arrangement',
       namePlaceholder: 'Flow name',

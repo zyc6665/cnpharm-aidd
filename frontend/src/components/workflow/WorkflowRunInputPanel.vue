@@ -1,9 +1,9 @@
 <template>
   <div v-if="displayRequirements.length > 0" class="workflow-run-input-panel">
     <div class="run-input-header">
-      <span>{{ t('workflow.templates.requiredInputs') }}</span>
+      <span>{{ t('workflow.canvasPresets.requiredInputs') }}</span>
       <a-button size="small" :disabled="autoFillDisabled" @click="emit('auto-fill')">
-        {{ t('workflow.templates.autoFillInputs') }}
+        {{ t('workflow.canvasPresets.autoFillInputs') }}
       </a-button>
     </div>
     <div class="run-input-grid">
@@ -16,7 +16,7 @@
         <a-select
           :value="selections[requirement.key]"
           :options="resolveOptions(requirement.semanticType)"
-          :placeholder="t('workflow.templates.selectInputArtifact')"
+          :placeholder="t('workflow.canvasPresets.selectInputArtifact')"
           :loading="loading"
           allow-clear
           show-search

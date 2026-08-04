@@ -69,7 +69,7 @@ describe('useWorkflowPersistence API', () => {
         removeWorkflowDefinition: vi.fn(),
         loadWorkflowDefinition: vi.fn()
       },
-      editableTemplate: computed(() => ({
+      editableCanvasPreset: computed(() => ({
         id: 'free-canvas',
         nodes: [],
         edges: []

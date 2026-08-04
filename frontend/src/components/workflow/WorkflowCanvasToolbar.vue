@@ -1,40 +1,40 @@
 <template>
-  <div class="workflow-template-toolbar">
+  <div class="workflow-canvas-toolbar">
     <a-input
       :value="name"
       class="workflow-name-input"
-      :placeholder="t('workflow.templates.namePlaceholder')"
+      :placeholder="t('workflow.canvasPresets.namePlaceholder')"
       @update:value="emit('update:name', $event)"
     />
     <a-select
       class="workflow-load-select"
-      :value="selectedTemplateId"
-      :placeholder="t('workflow.templates.loadPlaceholder')"
-      :options="templateOptions"
+      :value="selectedCanvasPresetId"
+      :placeholder="t('workflow.canvasPresets.loadPlaceholder')"
+      :options="canvasPresetOptions"
       :loading="loading"
       allow-clear
-      @change="emit('select-template', $event)"
+      @change="emit('select-preset', $event)"
     />
     <a-space size="small" wrap>
       <a-button @click="emit('new')">
-        {{ t('workflow.templates.new') }}
+        {{ t('workflow.canvasPresets.new') }}
       </a-button>
       <a-button
         type="primary"
         :loading="saving"
         @click="emit('save')"
       >
-        {{ t('workflow.templates.save') }}
+        {{ t('workflow.canvasPresets.save') }}
       </a-button>
       <a-button
-        :disabled="!selectedTemplateId"
+        :disabled="!selectedCanvasPresetId"
         :loading="saving"
         @click="emit('duplicate')"
       >
-        {{ t('workflow.templates.duplicate') }}
+        {{ t('workflow.canvasPresets.duplicate') }}
       </a-button>
       <a-popconfirm
-        :title="t('workflow.templates.deleteConfirm')"
+        :title="t('workflow.canvasPresets.deleteConfirm')"
         :ok-text="t('common.delete')"
         :cancel-text="t('common.cancel')"
         placement="bottomRight"
@@ -42,10 +42,10 @@
       >
         <a-button
           danger
-          :disabled="!selectedTemplateId"
+          :disabled="!selectedCanvasPresetId"
           :loading="saving"
         >
-          {{ t('workflow.templates.delete') }}
+          {{ t('workflow.canvasPresets.delete') }}
         </a-button>
       </a-popconfirm>
       <a-button
@@ -53,7 +53,7 @@
         :loading="running"
         @click="emit('run')"
       >
-        {{ t('workflow.templates.run') }}
+        {{ t('workflow.canvasPresets.run') }}
       </a-button>
     </a-space>
   </div>
@@ -64,8 +64,8 @@ import { useI18n } from 'vue-i18n'
 
 defineProps<{
   name: string
-  selectedTemplateId?: string | null
-  templateOptions: Array<{ value: string; label: string }>
+  selectedCanvasPresetId?: string | null
+  canvasPresetOptions: Array<{ value: string; label: string }>
   loading?: boolean
   saving?: boolean
   running?: boolean
@@ -74,7 +74,7 @@ defineProps<{
 
 const emit = defineEmits<{
   'update:name': [value: string]
-  'select-template': [value: string | undefined]
+  'select-preset': [value: string | undefined]
   new: []
   save: []
   duplicate: []
@@ -88,7 +88,7 @@ const { t } = useI18n()
 <style scoped lang="less">
 @import '@/assets/styles/variables.less';
 
-.workflow-template-toolbar {
+.workflow-canvas-toolbar {
   display: flex;
   align-items: center;
   gap: @spacing-sm;
@@ -109,7 +109,7 @@ const { t } = useI18n()
 }
 
 @media (max-width: @screen-md) {
-  .workflow-template-toolbar {
+  .workflow-canvas-toolbar {
     align-items: stretch;
     flex-direction: column;
   }

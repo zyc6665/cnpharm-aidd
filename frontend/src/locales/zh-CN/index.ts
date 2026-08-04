@@ -279,7 +279,7 @@ export default {
       delete: '删除',
       templateLabel: '流程模式'
     },
-    templates: {
+    canvasPresets: {
       kicker: '流程编排',
       unsaved: '未保存的工作台编排',
       namePlaceholder: '输入流程名称',

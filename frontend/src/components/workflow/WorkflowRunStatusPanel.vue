@@ -2,7 +2,7 @@
   <div class="workflow-run-status-panel">
     <div class="run-status-header">
       <div class="run-status-title">
-        <span>{{ t('workflow.templates.runStatus') }}</span>
+        <span>{{ t('workflow.canvasPresets.runStatus') }}</span>
         <strong>{{ run.name }}</strong>
       </div>
       <div class="run-status-actions">
@@ -15,7 +15,7 @@
           @click="$emit('sync')"
         >
           <template #icon><SyncOutlined /></template>
-          {{ t('workflow.templates.syncRun') }}
+          {{ t('workflow.canvasPresets.syncRun') }}
         </a-button>
       </div>
     </div>
@@ -24,7 +24,7 @@
       <a-progress :percent="summary.percent" :status="progressStatus" />
       <span>
         {{
-          t('workflow.templates.nodeProgress', {
+          t('workflow.canvasPresets.nodeProgress', {
             completed: summary.completed,
             total: summary.total
           })
@@ -40,18 +40,18 @@
         <div class="run-node-main">
           <strong>{{ node.toolSlug || node.id }}</strong>
           <span v-if="node.toolVersionId" class="run-node-meta">
-            {{ t('workflow.templates.toolVersion', { id: node.toolVersionId }) }}
+            {{ t('workflow.canvasPresets.toolVersion', { id: node.toolVersionId }) }}
           </span>
-          <span v-if="node.taskId">{{ t('workflow.templates.taskId', { id: node.taskId }) }}</span>
+          <span v-if="node.taskId">{{ t('workflow.canvasPresets.taskId', { id: node.taskId }) }}</span>
           <span v-if="node.inputFileIds.length" class="run-node-meta">
-            {{ t('workflow.templates.inputFileIds', { ids: node.inputFileIds.join(', ') }) }}
+            {{ t('workflow.canvasPresets.inputFileIds', { ids: node.inputFileIds.join(', ') }) }}
           </span>
           <span v-if="node.outputSemanticTypes.length" class="run-node-meta">
-            {{ t('workflow.templates.outputSemanticTypes', { types: node.outputSemanticTypes.join(', ') }) }}
+            {{ t('workflow.canvasPresets.outputSemanticTypes', { types: node.outputSemanticTypes.join(', ') }) }}
           </span>
           <span v-if="node.paramsText" class="run-node-meta">{{ node.paramsText }}</span>
           <span v-if="node.missingOutputs.length" class="run-node-error">
-            {{ t('workflow.templates.missingSemanticOutputs', { types: node.missingOutputs.map(item => item.semantic_type).join(', ') }) }}
+            {{ t('workflow.canvasPresets.missingSemanticOutputs', { types: node.missingOutputs.map(item => item.semantic_type).join(', ') }) }}
           </span>
           <span v-if="node.errorMessage" class="run-node-error">{{ node.errorMessage }}</span>
         </div>

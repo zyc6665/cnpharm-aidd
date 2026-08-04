@@ -117,8 +117,8 @@ const stubs = {
   WorkflowRunHistoryPanel: true,
   WorkflowRunInputPanel: true,
   WorkflowRunStatusPanel: true,
-  WorkflowTemplateCanvas: true,
-  WorkflowTemplateToolbar: true,
+  WorkflowCanvasBoard: true,
+  WorkflowCanvasToolbar: true,
   WorkflowToolPalette: true,
 }
 

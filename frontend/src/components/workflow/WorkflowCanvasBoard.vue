@@ -1,13 +1,13 @@
 <template>
-  <div class="workflow-template-canvas">
+  <div class="workflow-canvas-board">
     <div class="canvas-toolbar">
       <div>
         <span class="canvas-kicker">{{ t('workflow.canvas.title') }}</span>
-        <h3>{{ templateName }}</h3>
+        <h3>{{ presetName }}</h3>
       </div>
       <a-space size="small">
-        <a-tag>{{ t('workflow.canvas.nodes', { count: template.nodes.length }) }}</a-tag>
-        <a-tag>{{ t('workflow.canvas.edges', { count: template.edges.length }) }}</a-tag>
+        <a-tag>{{ t('workflow.canvas.nodes', { count: preset.nodes.length }) }}</a-tag>
+        <a-tag>{{ t('workflow.canvas.edges', { count: preset.edges.length }) }}</a-tag>
         <a-button size="small" title="缩小" @click="zoomOut"><ZoomOutOutlined /></a-button>
         <span class="zoom-value">{{ Math.round(zoom * 100) }}%</span>
         <a-button size="small" title="放大" @click="zoomIn"><ZoomInOutlined /></a-button>
@@ -29,7 +29,7 @@
           :width="canvasSize.width"
           :height="canvasSize.height"
           role="img"
-          :aria-label="t('workflow.canvas.edges', { count: template.edges.length })"
+          :aria-label="t('workflow.canvas.edges', { count: preset.edges.length })"
         >
           <WorkflowCanvasEdge
             v-for="edge in resolvedEdges"
@@ -83,7 +83,7 @@
   const { zoom, zoomIn, zoomOut, resetZoom, setZoom, surfaceStyle } = useCanvasViewport()
 
   const props = defineProps<{
-    template: WorkflowCanvasPreset
+    preset: WorkflowCanvasPreset
     activeNodeId?: string | null
     nodeStatuses?: Record<string, WorkflowStepStatus>
     nodePositions?: Record<string, { x: number; y: number }>
@@ -101,10 +101,10 @@
   const connectingSourceNodeId = ref<string | null>(null)
   const surfaceRef = ref<HTMLElement | null>(null)
 
-  const templateName = computed(() => resolveWorkflowLabel(props.template.nameKey, t, te))
+  const presetName = computed(() => resolveWorkflowLabel(props.preset.nameKey, t, te))
   const resolvedNodeStatuses = computed(() => props.nodeStatuses ?? {})
   const resolvedNodes = computed(() => {
-    return props.template.nodes.map(node => ({
+    return props.preset.nodes.map(node => ({
       ...node,
       position: props.nodePositions?.[node.id] ?? node.position
     }))
@@ -128,7 +128,7 @@
   })
 
   const resolvedEdges = computed(() => {
-    return props.template.edges.flatMap(edge => {
+    return props.preset.edges.flatMap(edge => {
       const sourceNode = nodeById.value[edge.source]
       const targetNode = nodeById.value[edge.target]
 
@@ -222,7 +222,7 @@
 <style scoped lang="less">
   @import '@/assets/styles/variables.less';
 
-  .workflow-template-canvas {
+  .workflow-canvas-board {
     min-width: 0;
     display: flex;
     flex-direction: column;

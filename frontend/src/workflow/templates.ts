@@ -184,8 +184,8 @@ function createCanvasPreset(input: {
 export const AIDD_WORKFLOW_CANVAS_PRESET: WorkflowCanvasPreset = createCanvasPreset({
   id: 'aidd-template',
   kind: 'aidd',
-  nameKey: 'workflow.templates.presets.fullPipeline.name',
-  descriptionKey: 'workflow.templates.presets.fullPipeline.description',
+  nameKey: 'workflow.canvasPresets.presets.fullPipeline.name',
+  descriptionKey: 'workflow.canvasPresets.presets.fullPipeline.description',
   nodeKeys: [
     'inputProtein',
     'pocketExploration',
@@ -210,8 +210,8 @@ export const AIDD_WORKFLOW_CANVAS_PRESET: WorkflowCanvasPreset = createCanvasPre
 export const PROTEIN_TO_POCKET_CANVAS_PRESET: WorkflowCanvasPreset = createCanvasPreset({
   id: 'protein-pocket-template',
   kind: 'pocket',
-  nameKey: 'workflow.templates.presets.proteinToPocket.name',
-  descriptionKey: 'workflow.templates.presets.proteinToPocket.description',
+  nameKey: 'workflow.canvasPresets.presets.proteinToPocket.name',
+  descriptionKey: 'workflow.canvasPresets.presets.proteinToPocket.description',
   nodeKeys: ['inputProtein', 'pocketExploration', 'resultPocket'],
   edges: [
     createEdge('edge-input-pocket-stage', 'input-protein', 'tool-pocket-exploration', 'protein_pdb'),
@@ -222,8 +222,8 @@ export const PROTEIN_TO_POCKET_CANVAS_PRESET: WorkflowCanvasPreset = createCanva
 export const POCKET_TO_GENERATION_CANVAS_PRESET: WorkflowCanvasPreset = createCanvasPreset({
   id: 'pocket-generation-template',
   kind: 'screening',
-  nameKey: 'workflow.templates.presets.pocketToGeneration.name',
-  descriptionKey: 'workflow.templates.presets.pocketToGeneration.description',
+  nameKey: 'workflow.canvasPresets.presets.pocketToGeneration.name',
+  descriptionKey: 'workflow.canvasPresets.presets.pocketToGeneration.description',
   nodeKeys: ['inputPocket', 'moleculeGeneration', 'resultGeneratedLigand'],
   edges: [
     createEdge('edge-input-pocket-generation', 'input-pocket', 'tool-molecule-generation', 'pocket_pdb'),
@@ -234,8 +234,8 @@ export const POCKET_TO_GENERATION_CANVAS_PRESET: WorkflowCanvasPreset = createCa
 export const PROTEIN_LIGAND_TO_DOCKING_CANVAS_PRESET: WorkflowCanvasPreset = createCanvasPreset({
   id: 'protein-ligand-docking-template',
   kind: 'docking',
-  nameKey: 'workflow.templates.presets.proteinLigandToDocking.name',
-  descriptionKey: 'workflow.templates.presets.proteinLigandToDocking.description',
+  nameKey: 'workflow.canvasPresets.presets.proteinLigandToDocking.name',
+  descriptionKey: 'workflow.canvasPresets.presets.proteinLigandToDocking.description',
   nodeKeys: ['inputProtein', 'inputGeneratedLigand', 'docking', 'resultDocking'],
   edges: [
     createEdge('edge-protein-docking-stage', 'input-protein', 'tool-docking', 'protein_pdb'),
@@ -247,8 +247,8 @@ export const PROTEIN_LIGAND_TO_DOCKING_CANVAS_PRESET: WorkflowCanvasPreset = cre
 export const GENERATION_TO_PROPERTY_CANVAS_PRESET: WorkflowCanvasPreset = createCanvasPreset({
   id: 'generation-property-template',
   kind: 'screening',
-  nameKey: 'workflow.templates.presets.generationToProperty.name',
-  descriptionKey: 'workflow.templates.presets.generationToProperty.description',
+  nameKey: 'workflow.canvasPresets.presets.generationToProperty.name',
+  descriptionKey: 'workflow.canvasPresets.presets.generationToProperty.description',
   nodeKeys: ['inputGeneratedLigand', 'propertyPrediction', 'resultProperty'],
   edges: [
     createEdge('edge-ligand-property-stage', 'input-generated-ligand', 'tool-property-prediction', 'generated_ligand'),

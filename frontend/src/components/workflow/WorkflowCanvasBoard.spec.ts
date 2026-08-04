@@ -1,10 +1,10 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import i18n from '@/locales'
-import WorkflowTemplateCanvas from './WorkflowTemplateCanvas.vue'
+import WorkflowCanvasBoard from './WorkflowCanvasBoard.vue'
 import type { WorkflowCanvasPreset } from '@/workflow/template-types'
 
-const template: WorkflowCanvasPreset = {
+const canvasPreset: WorkflowCanvasPreset = {
   id: 'free-canvas',
   kind: 'free',
   nameKey: 'workflow.canvas.freeFlowName',
@@ -27,10 +27,10 @@ const template: WorkflowCanvasPreset = {
   edges: [],
 }
 
-describe('WorkflowTemplateCanvas', () => {
+describe('WorkflowCanvasBoard', () => {
   it('拖动节点端口到目标节点时应发出语义连线事件', async () => {
-    const wrapper = mount(WorkflowTemplateCanvas, {
-      props: { template },
+    const wrapper = mount(WorkflowCanvasBoard, {
+      props: { preset: canvasPreset },
       global: {
         plugins: [i18n],
         stubs: {
@@ -59,10 +59,10 @@ describe('WorkflowTemplateCanvas', () => {
   })
 
   it('点击连线删除控件时应发出删除连线事件', async () => {
-    const wrapper = mount(WorkflowTemplateCanvas, {
+    const wrapper = mount(WorkflowCanvasBoard, {
       props: {
-        template: {
-          ...template,
+        preset: {
+          ...canvasPreset,
           edges: [{ id: 'edge-source-target', source: 'source', target: 'target', artifactType: 'pocket_pdb' }],
         },
       },
@@ -88,8 +88,8 @@ describe('WorkflowTemplateCanvas', () => {
 
 
   it('工具拖放到画布时应按落点创建节点', async () => {
-    const wrapper = mount(WorkflowTemplateCanvas, {
-      props: { template: { ...template, nodes: [], edges: [] } },
+    const wrapper = mount(WorkflowCanvasBoard, {
+      props: { preset: { ...canvasPreset, nodes: [], edges: [] } },
       global: {
         plugins: [i18n],
         stubs: {

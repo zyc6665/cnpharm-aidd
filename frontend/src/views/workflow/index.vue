@@ -65,7 +65,7 @@
                 </a-button>
               </a-popconfirm>
               <a-popconfirm
-                :title="t('workflow.templates.deleteConfirm')"
+                :title="t('workflow.canvasPresets.deleteConfirm')"
                 :ok-text="t('common.delete')"
                 :cancel-text="t('common.cancel')"
                 ok-type="danger"
@@ -128,8 +128,8 @@
             />
           </section>
 
-          <div class="workflow-template-layout">
-            <aside class="template-step-rail">
+          <div class="workflow-canvas-layout">
+            <aside class="workflow-step-rail">
               <div class="workflow-status-summary">
                 <div class="status-summary-item is-ready">
                   <span>可运行</span>
@@ -153,12 +153,12 @@
                 </div>
               </div>
 
-              <div class="template-node-list">
+              <div class="canvas-node-list">
                 <button
-                  v-for="node in editableTemplate.nodes"
+                  v-for="node in editableCanvasPreset.nodes"
                   :key="node.id"
                   type="button"
-                  class="template-node-item"
+                  class="canvas-node-item"
                   :class="{ 'is-active': node.id === activeNode?.id }"
                   @click="workflowStore.setActiveNode(node.id)"
                 >
@@ -188,8 +188,8 @@
               />
             </aside>
 
-            <WorkflowTemplateCanvas
-              :template="editableTemplate"
+            <WorkflowCanvasBoard
+              :preset="editableCanvasPreset"
               :active-node-id="activeNode?.id ?? null"
               :node-statuses="nodeStatuses"
               :node-positions="workflowStore.nodePositionById"
@@ -203,7 +203,7 @@
 
             <WorkflowNodeInspector
               :node="activeNode"
-              :template="editableTemplate"
+              :template="editableCanvasPreset"
               :artifacts="artifactsStore.items"
               :task-by-node="workflowStore.taskByNode"
               :available-tools="availableWorkflowTools"
@@ -244,7 +244,7 @@
   import WorkflowRunHistoryPanel from '@/components/workflow/WorkflowRunHistoryPanel.vue'
   import WorkflowRunInputPanel from '@/components/workflow/WorkflowRunInputPanel.vue'
   import WorkflowRunStatusPanel from '@/components/workflow/WorkflowRunStatusPanel.vue'
-  import WorkflowTemplateCanvas from '@/components/workflow/WorkflowTemplateCanvas.vue'
+  import WorkflowCanvasBoard from '@/components/workflow/WorkflowCanvasBoard.vue'
   import WorkflowToolPalette from '@/components/workflow/WorkflowToolPalette.vue'
   import { useWorkflowCanvas } from '@/composables/useWorkflowCanvas'
   import { useWorkflowPersistence } from '@/composables/useWorkflowPersistence'
@@ -283,7 +283,7 @@
     sidebarInputFilter,
     sidebarOutputFilter,
     sidebarExecutorFilter,
-    editableTemplate,
+    editableCanvasPreset,
     activeNode,
     selectedToolByActiveNode,
     availableWorkflowTools,
@@ -347,7 +347,7 @@
     artifactsStore,
     workflowStore,
     workflowDefinitionsStore,
-    editableTemplate,
+    editableCanvasPreset,
     projectId: routeProjectId,
     workflowInputRequirements,
     buildCurrentWorkflowDefinition
@@ -355,7 +355,7 @@
 
   const workflowPreflight = computed(() => {
     return buildWorkflowPreflight({
-      template: editableTemplate.value,
+      template: editableCanvasPreset.value,
       nodeStatuses: nodeStatuses.value,
       readyNodeIds: readyToolNodeIds.value,
       selectedWorkflowInputFiles: selectedWorkflowInputFiles.value,
@@ -520,7 +520,7 @@
     margin-bottom: @spacing-md;
   }
 
-  .workflow-template-layout {
+  .workflow-canvas-layout {
     display: grid;
     grid-template-columns: minmax(220px, 260px) minmax(0, 1fr) minmax(300px, 360px);
     gap: @spacing-md;
@@ -531,7 +531,7 @@
     margin-top: @spacing-md;
   }
 
-  .template-step-rail {
+  .workflow-step-rail {
     min-width: 0;
     max-height: 720px;
     display: flex;
@@ -543,7 +543,7 @@
     overflow: hidden;
   }
 
-  .template-selector {
+  .canvas-preset-selector {
     padding: @spacing-md;
     border-bottom: 1px solid @border-color-light;
   }
@@ -558,11 +558,11 @@
     text-transform: uppercase;
   }
 
-  .template-select {
+  .canvas-preset-select {
     width: 100%;
   }
 
-  .template-node-list {
+  .canvas-node-list {
     display: grid;
     gap: @spacing-xs;
     padding: @spacing-sm;
@@ -570,7 +570,7 @@
     overflow: auto;
   }
 
-  .template-node-item {
+  .canvas-node-item {
     width: 100%;
     display: grid;
     gap: @spacing-xs;
@@ -583,8 +583,8 @@
     cursor: pointer;
   }
 
-  .template-node-item:hover,
-  .template-node-item.is-active {
+  .canvas-node-item:hover,
+  .canvas-node-item.is-active {
     border-color: rgba(59, 130, 246, 0.16);
     background: @primary-color-light;
   }
@@ -654,7 +654,7 @@
   }
 
   @media (max-width: @screen-xl) {
-    .workflow-template-layout {
+    .workflow-canvas-layout {
       grid-template-columns: 220px minmax(0, 1fr);
     }
 
@@ -674,7 +674,7 @@
       width: 100%;
     }
 
-    .workflow-template-layout {
+    .workflow-canvas-layout {
       grid-template-columns: 1fr;
     }
   }

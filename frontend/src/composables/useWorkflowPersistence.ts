@@ -33,7 +33,7 @@ export function useWorkflowPersistence(input: {
   artifactsStore: ArtifactsStore
   workflowStore: WorkflowStore
   workflowDefinitionsStore: WorkflowDefinitionsStore
-  editableTemplate: ComputedRef<{
+  editableCanvasPreset: ComputedRef<{
     id: string
     nodes: WorkflowCanvasNode[]
     edges: WorkflowCanvasEdge[]
@@ -47,7 +47,7 @@ export function useWorkflowPersistence(input: {
     artifactsStore,
     workflowStore,
     workflowDefinitionsStore,
-    editableTemplate,
+    editableCanvasPreset,
     projectId,
     workflowInputRequirements,
     buildCurrentWorkflowDefinition
@@ -337,9 +337,9 @@ export function useWorkflowPersistence(input: {
     return {
       ...(projectId?.value ? { project_id: projectId.value } : {}),
       name: nameOverride ?? (workflowName.value.trim() || '未命名流程'),
-      template_id: editableTemplate.value.id,
-      nodes: workflowStore.exportWorkflowNodes(editableTemplate.value.nodes),
-      edges: workflowStore.exportWorkflowEdges(editableTemplate.value.edges),
+      template_id: editableCanvasPreset.value.id,
+      nodes: workflowStore.exportWorkflowNodes(editableCanvasPreset.value.nodes),
+      edges: workflowStore.exportWorkflowEdges(editableCanvasPreset.value.edges),
       selected_tool_by_node: workflowStore.selectedToolByNode,
       artifact_bindings_by_node: workflowStore.artifactBindingsByNode,
       status: 'draft'

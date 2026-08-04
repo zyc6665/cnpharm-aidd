@@ -1,10 +1,10 @@
 <template>
   <div class="workflow-run-history-panel">
     <div class="run-history-header">
-      <span>{{ t('workflow.templates.runHistory') }}</span>
+      <span>{{ t('workflow.canvasPresets.runHistory') }}</span>
       <a-button size="small" :loading="loading" @click="emit('refresh')">
         <template #icon><ReloadOutlined /></template>
-        {{ t('workflow.templates.refreshRuns') }}
+        {{ t('workflow.canvasPresets.refreshRuns') }}
       </a-button>
     </div>
 
@@ -27,13 +27,13 @@
 
     <div v-if="runs.length > 0" class="run-history-footer">
       <a-button v-if="hasMore" size="small" :loading="loadingMore" @click="emit('loadMore')">
-        {{ t('workflow.templates.loadMoreRuns') }}
+        {{ t('workflow.canvasPresets.loadMoreRuns') }}
       </a-button>
-      <span v-else>{{ t('workflow.templates.allRunsLoaded') }}</span>
+      <span v-else>{{ t('workflow.canvasPresets.allRunsLoaded') }}</span>
     </div>
 
     <div v-else class="run-history-empty">
-      {{ t('workflow.templates.emptyRunHistory') }}
+      {{ t('workflow.canvasPresets.emptyRunHistory') }}
     </div>
   </div>
 </template>
