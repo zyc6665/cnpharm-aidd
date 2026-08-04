@@ -12,7 +12,7 @@ from app.models.agent import AgentRun
 from app.models.files import File
 from app.models.projects import Organization, Project, ProjectMember
 from app.models.users import User
-from app.models.workflows import ResearchBoard, WorkflowDefinition, WorkflowRun, WorkflowTemplate
+from app.models.workflows import ResearchBoard, WorkflowDefinition, WorkflowRun
 
 
 DEFAULT_ORGANIZATION_SLUG = "default"
@@ -31,7 +31,6 @@ RESOURCE_OWNERS: tuple[tuple[type[Any], Any], ...] = (
     (File, File.owner_id),
     (AgentRun, AgentRun.user_id),
     (WorkflowDefinition, WorkflowDefinition.user_id),
-    (WorkflowTemplate, WorkflowTemplate.owner_id),
     (WorkflowRun, WorkflowRun.owner_id),
     (ResearchBoard, ResearchBoard.owner_id),
 )

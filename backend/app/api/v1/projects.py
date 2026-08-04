@@ -30,7 +30,6 @@ from app.models.workflows import (
     ResearchBoard,
     WorkflowDefinition,
     WorkflowRun,
-    WorkflowTemplate,
 )
 from app.schemas.projects import ProjectCreate, ProjectMemberCreate, ProjectUpdate
 from app.services.project_access import load_project_membership, require_project_role
@@ -400,23 +399,8 @@ async def _delete_project_related_rows(db: AsyncSession, project_id: str) -> Non
         )
         await db.execute(sa_delete(Artifact).where(Artifact.id.in_(artifact_ids)))
 
-    template_ids = list(
-        (
-            await db.execute(
-                select(WorkflowTemplate.id).where(WorkflowTemplate.project_id == project_id)
-            )
-        ).scalars()
-    )
-    if template_ids:
-        await db.execute(
-            sa_update(WorkflowRun)
-            .where(WorkflowRun.template_id.in_(template_ids))
-            .values(template_id=None)
-        )
-
     await db.execute(sa_delete(ExecutionRecord).where(ExecutionRecord.project_id == project_id))
     await db.execute(sa_delete(WorkflowRun).where(WorkflowRun.project_id == project_id))
-    await db.execute(sa_delete(WorkflowTemplate).where(WorkflowTemplate.project_id == project_id))
     await db.execute(
         sa_delete(WorkflowDefinition).where(WorkflowDefinition.project_id == project_id)
     )

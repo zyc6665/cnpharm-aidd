@@ -34,10 +34,11 @@ from app.models import tasks as _task_models  # noqa: F401,E402
 from app.models import tools as _tools_models  # noqa: F401,E402
 from app.models import users as _users_models  # noqa: F401,E402
 from app.models.files import File as FileModel, FileSourceType  # noqa: E402
+from app.models.projects import Organization, Project, ProjectMember  # noqa: E402
 from app.models.tasks import Task, TaskInput, TaskOutput, TaskStatus  # noqa: E402
 from app.models.tools import Tool, ToolStatus, ToolVersion  # noqa: E402
 from app.models.users import User, UserRole, UserStatus  # noqa: E402
-from app.models.workflows import WorkflowRun  # noqa: E402
+from app.models.workflows import WorkflowDefinition, WorkflowRun  # noqa: E402
 
 
 def minimal_runtime_manifest(slug: str) -> dict:
@@ -484,69 +485,153 @@ async def create_fake_scheduled_task(*, db, current_user, task_data, direct_runn
     return task
 
 
-@pytest.mark.asyncio
-async def test_workflow_template_crud_and_duplicate(
+async def create_project_for_user(db_session: AsyncSession, owner: User) -> Project:
+    organization = Organization(name="Workflow org", slug="workflow-org")
+    project = Project(
+        organization=organization,
+        created_by=owner.id,
+        name="Project workflow",
+        goal="Run project scoped workflows",
+        status="active",
+    )
+    db_session.add_all([organization, project])
+    await db_session.flush()
+    db_session.add(ProjectMember(project_id=project.id, user_id=owner.id, role="owner"))
+    await db_session.commit()
+    await db_session.refresh(project)
+    return project
+
+
+async def create_workflow_definition_for_run(
     api_client: httpx.AsyncClient,
-    pocket_tool: Tool,
-) -> None:
+    *,
+    name: str,
+    definition: dict,
+    project_id: str | None = None,
+) -> dict:
+    payload = {
+        "name": name,
+        "project_id": project_id,
+        "template_id": "free-canvas",
+        "nodes": definition.get("nodes", []),
+        "edges": definition.get("edges", []),
+        "selected_tool_by_node": {},
+        "artifact_bindings_by_node": {},
+    }
     response = await api_client.post(
-        "/api/v1/workflows/templates",
+        "/api/v1/workflows",
         headers={"Authorization": "Bearer owner-token"},
-        json={
-            "name": "Protein to Pocket",
-            "description": "Predict pockets from a protein PDB.",
-            "definition": template_definition(pocket_tool),
-        },
+        json=payload,
     )
-
     assert response.status_code == 200
-    created = response.json()["data"]
-    assert created["name"] == "Protein to Pocket"
-    assert created["definition"]["nodes"][1]["tool_version"]["version"] == "1.0.0"
+    return response.json()["data"]
 
-    list_response = await api_client.get(
-        "/api/v1/workflows/templates",
-        headers={"Authorization": "Bearer owner-token"},
-    )
-    assert list_response.status_code == 200
-    assert list_response.json()["data"]["total"] == 1
 
-    duplicate_response = await api_client.post(
-        f"/api/v1/workflows/templates/{created['id']}/duplicate",
-        headers={"Authorization": "Bearer owner-token"},
-        json={"name": "Protein to Pocket Copy"},
+async def create_workflow_run_for_definition(
+    api_client: httpx.AsyncClient,
+    *,
+    name: str,
+    definition: dict,
+    input_files: dict[str, str],
+) -> tuple[dict, httpx.Response]:
+    workflow = await create_workflow_definition_for_run(
+        api_client,
+        name=name,
+        definition=definition,
     )
-    assert duplicate_response.status_code == 200
-    duplicated = duplicate_response.json()["data"]
-    assert duplicated["id"] != created["id"]
-    assert duplicated["definition"] == created["definition"]
-
-    delete_response = await api_client.delete(
-        f"/api/v1/workflows/templates/{created['id']}",
+    run_response = await api_client.post(
+        f"/api/v1/workflows/{workflow['id']}/runs",
         headers={"Authorization": "Bearer owner-token"},
+        json={"input_files": input_files},
     )
-    assert delete_response.status_code == 200
-    assert delete_response.json()["data"]["id"] == created["id"]
+    return workflow, run_response
 
 
 @pytest.mark.asyncio
-async def test_workflow_template_access_is_owner_scoped(
+async def test_create_workflow_definition_run_inherits_project_and_schedules_nodes(
     api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
     pocket_tool: Tool,
+    protein_file: FileModel,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    create_response = await api_client.post(
-        "/api/v1/workflows/templates",
-        headers={"Authorization": "Bearer owner-token"},
-        json={"name": "Private Flow", "definition": template_definition(pocket_tool)},
+    monkeypatch.setattr(
+        "app.services.workflows.create_and_schedule_tool_task",
+        create_fake_scheduled_task,
     )
-    template_id = create_response.json()["data"]["id"]
+    project = await create_project_for_user(db_session, owner)
+    workflow = await create_workflow_definition_for_run(
+        api_client,
+        name="Project Protein to Pocket",
+        project_id=project.id,
+        definition=template_definition(pocket_tool),
+    )
 
-    forbidden_response = await api_client.get(
-        f"/api/v1/workflows/templates/{template_id}",
+    run_response = await api_client.post(
+        f"/api/v1/workflows/{workflow['id']}/runs",
+        headers={"Authorization": "Bearer owner-token"},
+        json={"input_files": {"protein_pdb": protein_file.id}},
+    )
+
+    assert run_response.status_code == 200
+    run = run_response.json()["data"]
+    assert run["workflow_definition_id"] == workflow["id"]
+    assert run["project_id"] == project.id
+    assert "template_id" not in run
+    node_state = run["node_states"]["pocket_prediction"]
+    assert node_state["status"] == "waiting_task"
+    assert node_state["task_id"]
+    params = node_state["params"]
+    assert params["workflow_definition_id"] == workflow["id"]
+    assert "workflow_template_id" not in params
+    task = await db_session.get(Task, node_state["task_id"])
+    assert task.extra_data["project_id"] == project.id
+
+
+@pytest.mark.asyncio
+async def test_project_workflow_run_requires_membership(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    pocket_tool: Tool,
+    protein_file: FileModel,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.services.workflows.create_and_schedule_tool_task",
+        create_fake_scheduled_task,
+    )
+    project = await create_project_for_user(db_session, owner)
+    workflow = await create_workflow_definition_for_run(
+        api_client,
+        name="Private project flow",
+        project_id=project.id,
+        definition=template_definition(pocket_tool),
+    )
+
+    create_response = await api_client.post(
+        f"/api/v1/workflows/{workflow['id']}/runs",
+        headers={"Authorization": "Bearer other-token"},
+        json={"input_files": {"protein_pdb": protein_file.id}},
+    )
+    list_response = await api_client.get(
+        f"/api/v1/workflows/runs?project_id={project.id}",
         headers={"Authorization": "Bearer other-token"},
     )
 
-    assert forbidden_response.status_code == 403
+    assert create_response.status_code == 404
+    assert list_response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_workflow_template_routes_are_removed(api_client: httpx.AsyncClient) -> None:
+    response = await api_client.get(
+        "/api/v1/workflows/templates",
+        headers={"Authorization": "Bearer owner-token"},
+    )
+
+    assert response.status_code == 404
 
 
 @pytest.mark.asyncio
@@ -560,15 +645,14 @@ async def test_create_workflow_run_preflights_required_inputs(
         "app.services.workflows.create_and_schedule_tool_task",
         create_fake_scheduled_task,
     )
-    create_response = await api_client.post(
-        "/api/v1/workflows/templates",
-        headers={"Authorization": "Bearer owner-token"},
-        json={"name": "Protein to Pocket", "definition": template_definition(pocket_tool)},
+    workflow = await create_workflow_definition_for_run(
+        api_client,
+        name="Protein to Pocket",
+        definition=template_definition(pocket_tool),
     )
-    template_id = create_response.json()["data"]["id"]
 
     missing_response = await api_client.post(
-        f"/api/v1/workflows/templates/{template_id}/runs",
+        f"/api/v1/workflows/{workflow['id']}/runs",
         headers={"Authorization": "Bearer owner-token"},
         json={"input_files": {}},
     )
@@ -576,13 +660,13 @@ async def test_create_workflow_run_preflights_required_inputs(
     assert "protein_pdb" in missing_response.json()["message"]
 
     run_response = await api_client.post(
-        f"/api/v1/workflows/templates/{template_id}/runs",
+        f"/api/v1/workflows/{workflow['id']}/runs",
         headers={"Authorization": "Bearer owner-token"},
         json={"input_files": {"protein_pdb": protein_file.id}},
     )
     assert run_response.status_code == 200
     run = run_response.json()["data"]
-    assert run["template_id"] == template_id
+    assert run["workflow_definition_id"] == workflow["id"]
     assert run["status"] == "waiting_task"
     assert run["input_files"] == {"protein_pdb": protein_file.id}
     assert run["execution_order"] == ["pocket_prediction"]
@@ -593,7 +677,7 @@ async def test_create_workflow_run_preflights_required_inputs(
     assert params["workflow_node_id"] == "pocket_prediction"
     assert params["workflow_node_type"] == "tool"
     assert params["workflow_run_id"] == run["id"]
-    assert params["workflow_template_id"] == template_id
+    assert params["workflow_definition_id"] == workflow["id"]
     assert run["node_states"]["pocket_prediction"]["task_id"]
     assert run["node_states"]["pocket_prediction"]["input_file_ids"] == [protein_file.id]
     assert run["definition"]["nodes"][1]["tool_version"]["version"] == "1.0.0"
@@ -610,14 +694,13 @@ async def test_get_workflow_run_restores_owner_run_state(
         "app.services.workflows.create_and_schedule_tool_task",
         create_fake_scheduled_task,
     )
-    create_response = await api_client.post(
-        "/api/v1/workflows/templates",
-        headers={"Authorization": "Bearer owner-token"},
-        json={"name": "Protein to Pocket", "definition": template_definition(pocket_tool)},
+    workflow = await create_workflow_definition_for_run(
+        api_client,
+        name="Protein to Pocket",
+        definition=template_definition(pocket_tool),
     )
-    template_id = create_response.json()["data"]["id"]
     run_response = await api_client.post(
-        f"/api/v1/workflows/templates/{template_id}/runs",
+        f"/api/v1/workflows/{workflow['id']}/runs",
         headers={"Authorization": "Bearer owner-token"},
         json={"input_files": {"protein_pdb": protein_file.id}},
     )
@@ -641,7 +724,7 @@ async def test_get_workflow_run_restores_owner_run_state(
 
 
 @pytest.mark.asyncio
-async def test_list_workflow_runs_is_owner_scoped_and_filterable_by_template(
+async def test_list_workflow_runs_is_owner_scoped_and_filterable_by_workflow_definition(
     api_client: httpx.AsyncClient,
     db_session: AsyncSession,
     owner: User,
@@ -654,31 +737,41 @@ async def test_list_workflow_runs_is_owner_scoped_and_filterable_by_template(
         "app.services.workflows.create_and_schedule_tool_task",
         create_fake_scheduled_task,
     )
-    first_template_response = await api_client.post(
-        "/api/v1/workflows/templates",
-        headers={"Authorization": "Bearer owner-token"},
-        json={"name": "Protein to Pocket A", "definition": template_definition(pocket_tool)},
+    first_workflow = await create_workflow_definition_for_run(
+        api_client,
+        name="Protein to Pocket A",
+        definition=template_definition(pocket_tool),
     )
-    second_template_response = await api_client.post(
-        "/api/v1/workflows/templates",
-        headers={"Authorization": "Bearer owner-token"},
-        json={"name": "Protein to Pocket B", "definition": template_definition(pocket_tool)},
+    second_workflow = await create_workflow_definition_for_run(
+        api_client,
+        name="Protein to Pocket B",
+        definition=template_definition(pocket_tool),
     )
-    first_template_id = first_template_response.json()["data"]["id"]
-    second_template_id = second_template_response.json()["data"]["id"]
 
     first_run_response = await api_client.post(
-        f"/api/v1/workflows/templates/{first_template_id}/runs",
+        f"/api/v1/workflows/{first_workflow['id']}/runs",
         headers={"Authorization": "Bearer owner-token"},
         json={"input_files": {"protein_pdb": protein_file.id}},
     )
     second_run_response = await api_client.post(
-        f"/api/v1/workflows/templates/{second_template_id}/runs",
+        f"/api/v1/workflows/{second_workflow['id']}/runs",
         headers={"Authorization": "Bearer owner-token"},
         json={"input_files": {"protein_pdb": protein_file.id}},
     )
+    other_workflow = WorkflowDefinition(
+        user_id=other_user.id,
+        name="Other user's workflow",
+        template_id="free-canvas",
+        nodes=template_definition(pocket_tool)["nodes"],
+        edges=template_definition(pocket_tool)["edges"],
+        selected_tool_by_node={},
+        artifact_bindings_by_node={},
+    )
+    db_session.add(other_workflow)
+    await db_session.flush()
     other_run = WorkflowRun(
         owner_id=other_user.id,
+        workflow_definition_id=other_workflow.id,
         name="Other user's run",
         status="pending",
         definition=template_definition(pocket_tool),
@@ -695,7 +788,7 @@ async def test_list_workflow_runs_is_owner_scoped_and_filterable_by_template(
         headers={"Authorization": "Bearer owner-token"},
     )
     filter_response = await api_client.get(
-        f"/api/v1/workflows/runs?template_id={first_template_id}",
+        f"/api/v1/workflows/runs?workflow_definition_id={first_workflow['id']}",
         headers={"Authorization": "Bearer owner-token"},
     )
 
@@ -711,7 +804,7 @@ async def test_list_workflow_runs_is_owner_scoped_and_filterable_by_template(
     assert filter_response.status_code == 200
     filtered = filter_response.json()["data"]
     assert filtered["total"] == 1
-    assert filtered["items"][0]["template_id"] == first_template_id
+    assert filtered["items"][0]["workflow_definition_id"] == first_workflow["id"]
 
 
 @pytest.mark.asyncio
@@ -728,19 +821,11 @@ async def test_sync_workflow_run_extracts_outputs_and_schedules_downstream(
         "app.services.workflows.create_and_schedule_tool_task",
         create_fake_scheduled_task,
     )
-    create_response = await api_client.post(
-        "/api/v1/workflows/templates",
-        headers={"Authorization": "Bearer owner-token"},
-        json={
-            "name": "Protein to Generation",
-            "definition": linear_generation_definition(pocket_tool, generation_tool),
-        },
-    )
-    template_id = create_response.json()["data"]["id"]
-    run_response = await api_client.post(
-        f"/api/v1/workflows/templates/{template_id}/runs",
-        headers={"Authorization": "Bearer owner-token"},
-        json={"input_files": {"protein_pdb": protein_file.id}},
+    _, run_response = await create_workflow_run_for_definition(
+        api_client,
+        name="Protein to Generation",
+        definition=linear_generation_definition(pocket_tool, generation_tool),
+        input_files={"protein_pdb": protein_file.id},
     )
     run = run_response.json()["data"]
     first_task_id = run["node_states"]["pocket_prediction"]["task_id"]
@@ -813,19 +898,11 @@ async def test_sync_workflow_run_schedules_downstream_standard_artifact_slots(
             }
         ],
     )
-    create_response = await api_client.post(
-        "/api/v1/workflows/templates",
-        headers={"Authorization": "Bearer owner-token"},
-        json={
-            "name": "Standard Artifact Flow",
-            "definition": standard_artifact_generation_definition(pocket_tool, generation_tool),
-        },
-    )
-    template_id = create_response.json()["data"]["id"]
-    run_response = await api_client.post(
-        f"/api/v1/workflows/templates/{template_id}/runs",
-        headers={"Authorization": "Bearer owner-token"},
-        json={"input_files": {"protein_structure@1": protein_file.id}},
+    _, run_response = await create_workflow_run_for_definition(
+        api_client,
+        name="Standard Artifact Flow",
+        definition=standard_artifact_generation_definition(pocket_tool, generation_tool),
+        input_files={"protein_structure@1": protein_file.id},
     )
     run = run_response.json()["data"]
     first_state = run["node_states"]["pocket_prediction"]
@@ -900,19 +977,11 @@ async def test_workflow_reconciliation_service_advances_waiting_runs(
         "app.services.workflows.create_and_schedule_tool_task",
         create_fake_scheduled_task,
     )
-    create_response = await api_client.post(
-        "/api/v1/workflows/templates",
-        headers={"Authorization": "Bearer owner-token"},
-        json={
-            "name": "Protein to Generation",
-            "definition": linear_generation_definition(pocket_tool, generation_tool),
-        },
-    )
-    template_id = create_response.json()["data"]["id"]
-    run_response = await api_client.post(
-        f"/api/v1/workflows/templates/{template_id}/runs",
-        headers={"Authorization": "Bearer owner-token"},
-        json={"input_files": {"protein_pdb": protein_file.id}},
+    _, run_response = await create_workflow_run_for_definition(
+        api_client,
+        name="Protein to Generation",
+        definition=linear_generation_definition(pocket_tool, generation_tool),
+        input_files={"protein_pdb": protein_file.id},
     )
     run = run_response.json()["data"]
     first_task_id = run["node_states"]["pocket_prediction"]["task_id"]
@@ -966,19 +1035,11 @@ async def test_sync_workflow_run_does_not_duplicate_pending_node_task_when_task_
         "app.services.workflows.create_and_schedule_tool_task",
         create_fake_scheduled_task,
     )
-    create_response = await api_client.post(
-        "/api/v1/workflows/templates",
-        headers={"Authorization": "Bearer owner-token"},
-        json={
-            "name": "Protein to Generation",
-            "definition": linear_generation_definition(pocket_tool, generation_tool),
-        },
-    )
-    template_id = create_response.json()["data"]["id"]
-    run_response = await api_client.post(
-        f"/api/v1/workflows/templates/{template_id}/runs",
-        headers={"Authorization": "Bearer owner-token"},
-        json={"input_files": {"protein_pdb": protein_file.id}},
+    _, run_response = await create_workflow_run_for_definition(
+        api_client,
+        name="Protein to Generation",
+        definition=linear_generation_definition(pocket_tool, generation_tool),
+        input_files={"protein_pdb": protein_file.id},
     )
     run = run_response.json()["data"]
     first_task_id = run["node_states"]["pocket_prediction"]["task_id"]
@@ -1045,19 +1106,11 @@ async def test_sync_workflow_run_failure_stops_downstream_scheduling(
         "app.services.workflows.create_and_schedule_tool_task",
         create_fake_scheduled_task,
     )
-    create_response = await api_client.post(
-        "/api/v1/workflows/templates",
-        headers={"Authorization": "Bearer owner-token"},
-        json={
-            "name": "Failure Stops Downstream",
-            "definition": linear_generation_definition(pocket_tool, generation_tool),
-        },
-    )
-    template_id = create_response.json()["data"]["id"]
-    run_response = await api_client.post(
-        f"/api/v1/workflows/templates/{template_id}/runs",
-        headers={"Authorization": "Bearer owner-token"},
-        json={"input_files": {"protein_pdb": protein_file.id}},
+    _, run_response = await create_workflow_run_for_definition(
+        api_client,
+        name="Failure Stops Downstream",
+        definition=linear_generation_definition(pocket_tool, generation_tool),
+        input_files={"protein_pdb": protein_file.id},
     )
     run = run_response.json()["data"]
     first_task_id = run["node_states"]["pocket_prediction"]["task_id"]
@@ -1085,7 +1138,7 @@ async def test_sync_workflow_run_failure_stops_downstream_scheduling(
 
 
 @pytest.mark.asyncio
-async def test_workflow_template_rejects_cycles(
+async def test_workflow_definition_run_rejects_cycles(
     api_client: httpx.AsyncClient,
     pocket_tool: Tool,
 ) -> None:
@@ -1105,10 +1158,15 @@ async def test_workflow_template_rejects_cycles(
         ]
     )
 
+    workflow = await create_workflow_definition_for_run(
+        api_client,
+        name="Cyclic Flow",
+        definition=definition,
+    )
     response = await api_client.post(
-        "/api/v1/workflows/templates",
+        f"/api/v1/workflows/{workflow['id']}/runs",
         headers={"Authorization": "Bearer owner-token"},
-        json={"name": "Cyclic Flow", "definition": definition},
+        json={"input_files": {}},
     )
 
     assert response.status_code == 422
@@ -1116,7 +1174,7 @@ async def test_workflow_template_rejects_cycles(
 
 
 @pytest.mark.asyncio
-async def test_workflow_template_accepts_tool_slug_only_nodes(
+async def test_workflow_definition_run_accepts_tool_slug_only_nodes(
     api_client: httpx.AsyncClient,
     pocket_tool: Tool,
     protein_file: FileModel,
@@ -1126,19 +1184,11 @@ async def test_workflow_template_accepts_tool_slug_only_nodes(
         "app.services.workflows.create_and_schedule_tool_task",
         create_fake_scheduled_task,
     )
-    create_response = await api_client.post(
-        "/api/v1/workflows/templates",
-        headers={"Authorization": "Bearer owner-token"},
-        json={"name": "Slug Only Flow", "definition": slug_only_tool_definition(pocket_tool)},
-    )
-
-    assert create_response.status_code == 200
-    template_id = create_response.json()["data"]["id"]
-
-    run_response = await api_client.post(
-        f"/api/v1/workflows/templates/{template_id}/runs",
-        headers={"Authorization": "Bearer owner-token"},
-        json={"input_files": {"protein_pdb": protein_file.id}},
+    _, run_response = await create_workflow_run_for_definition(
+        api_client,
+        name="Slug Only Flow",
+        definition=slug_only_tool_definition(pocket_tool),
+        input_files={"protein_pdb": protein_file.id},
     )
 
     assert run_response.status_code == 200
@@ -1162,21 +1212,11 @@ async def test_workflow_execution_order_uses_semantic_input_dependencies(
         "app.services.workflows.create_and_schedule_tool_task",
         create_fake_scheduled_task,
     )
-    create_response = await api_client.post(
-        "/api/v1/workflows/templates",
-        headers={"Authorization": "Bearer owner-token"},
-        json={
-            "name": "Semantic Dependency Flow",
-            "definition": semantic_only_generation_definition(pocket_tool, generation_tool),
-        },
-    )
-    assert create_response.status_code == 200
-    template_id = create_response.json()["data"]["id"]
-
-    run_response = await api_client.post(
-        f"/api/v1/workflows/templates/{template_id}/runs",
-        headers={"Authorization": "Bearer owner-token"},
-        json={"input_files": {"protein_pdb": protein_file.id}},
+    _, run_response = await create_workflow_run_for_definition(
+        api_client,
+        name="Semantic Dependency Flow",
+        definition=semantic_only_generation_definition(pocket_tool, generation_tool),
+        input_files={"protein_pdb": protein_file.id},
     )
 
     assert run_response.status_code == 200
@@ -1187,32 +1227,34 @@ async def test_workflow_execution_order_uses_semantic_input_dependencies(
 
 
 @pytest.mark.asyncio
-async def test_workflow_template_rejects_semantic_input_cycles(
+async def test_workflow_definition_run_rejects_semantic_input_cycles(
     api_client: httpx.AsyncClient,
 ) -> None:
-    response = await api_client.post(
-        "/api/v1/workflows/templates",
-        headers={"Authorization": "Bearer owner-token"},
-        json={
-            "name": "Semantic Cycle Flow",
-            "definition": {
-                "nodes": [
-                    {
-                        "id": "a",
-                        "kind": "tool",
-                        "tool_slug": "tool-a",
-                        "semantic_inputs": {"result": "node:b:result"},
-                    },
-                    {
-                        "id": "b",
-                        "kind": "tool",
-                        "tool_slug": "tool-b",
-                        "semantic_inputs": {"result": "node:a:result"},
-                    },
-                ],
-                "edges": [],
-            },
+    workflow = await create_workflow_definition_for_run(
+        api_client,
+        name="Semantic Cycle Flow",
+        definition={
+            "nodes": [
+                {
+                    "id": "a",
+                    "kind": "tool",
+                    "tool_slug": "tool-a",
+                    "semantic_inputs": {"result": "node:b:result"},
+                },
+                {
+                    "id": "b",
+                    "kind": "tool",
+                    "tool_slug": "tool-b",
+                    "semantic_inputs": {"result": "node:a:result"},
+                },
+            ],
+            "edges": [],
         },
+    )
+    response = await api_client.post(
+        f"/api/v1/workflows/{workflow['id']}/runs",
+        headers={"Authorization": "Bearer owner-token"},
+        json={"input_files": {}},
     )
 
     assert response.status_code == 422
@@ -1232,16 +1274,11 @@ async def test_sync_workflow_run_records_missing_required_output_details(
         "app.services.workflows.create_and_schedule_tool_task",
         create_fake_scheduled_task,
     )
-    create_response = await api_client.post(
-        "/api/v1/workflows/templates",
-        headers={"Authorization": "Bearer owner-token"},
-        json={"name": "Protein to Pocket", "definition": template_definition(pocket_tool)},
-    )
-    template_id = create_response.json()["data"]["id"]
-    run_response = await api_client.post(
-        f"/api/v1/workflows/templates/{template_id}/runs",
-        headers={"Authorization": "Bearer owner-token"},
-        json={"input_files": {"protein_pdb": protein_file.id}},
+    _, run_response = await create_workflow_run_for_definition(
+        api_client,
+        name="Protein to Pocket",
+        definition=template_definition(pocket_tool),
+        input_files={"protein_pdb": protein_file.id},
     )
     run = run_response.json()["data"]
     task_id = run["node_states"]["pocket_prediction"]["task_id"]

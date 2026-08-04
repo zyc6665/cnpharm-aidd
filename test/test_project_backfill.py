@@ -14,7 +14,7 @@ from app.models.agent import AgentRun
 from app.models.files import File
 from app.models.projects import Project, ProjectMember
 from app.models.users import User, UserRole, UserStatus
-from app.models.workflows import ResearchBoard, WorkflowDefinition, WorkflowRun, WorkflowTemplate
+from app.models.workflows import ResearchBoard, WorkflowDefinition, WorkflowRun
 
 
 @pytest.mark.asyncio
@@ -40,6 +40,12 @@ async def test_backfill_legacy_resources_is_idempotent_and_preserves_history():
         await db.flush()
 
         original_created_at = datetime(2025, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
+        workflow_definition = WorkflowDefinition(
+            user_id=user.id,
+            name="Legacy definition",
+            template_id="legacy-pocket",
+            created_at=original_created_at,
+        )
         resources = [
             File(
                 owner_id=user.id,
@@ -56,19 +62,10 @@ async def test_backfill_legacy_resources_is_idempotent_and_preserves_history():
                 input_type="protein_structure",
                 created_at=original_created_at,
             ),
-            WorkflowDefinition(
-                user_id=user.id,
-                name="Legacy definition",
-                template_id="legacy-pocket",
-                created_at=original_created_at,
-            ),
-            WorkflowTemplate(
-                owner_id=user.id,
-                name="Legacy template",
-                created_at=original_created_at,
-            ),
+            workflow_definition,
             WorkflowRun(
                 owner_id=user.id,
+                workflow_definition=workflow_definition,
                 name="Legacy run",
                 created_at=original_created_at,
             ),
@@ -93,7 +90,7 @@ async def test_backfill_legacy_resources_is_idempotent_and_preserves_history():
         assert len(memberships) == 1
         assert memberships[0].role == "owner"
         assert first.projects_created == 1
-        assert first.resources_linked == 6
+        assert first.resources_linked == 5
         assert second.projects_created == 0
         assert second.resources_linked == 0
 

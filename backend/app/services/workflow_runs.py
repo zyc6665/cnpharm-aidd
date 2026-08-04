@@ -13,8 +13,9 @@ from app.agents.aidd.registry import load_tool_capability
 from app.common.exceptions import ForbiddenException, NotFoundException, ValidationException
 from app.models.tasks import Task, TaskStatus
 from app.models.users import User
-from app.models.workflows import WorkflowRun
+from app.models.workflows import WorkflowDefinition, WorkflowRun
 from app.schemas.workflows import WorkflowRunCreate
+from app.services.project_access import load_project_membership
 from app.services.workflow_artifacts import (
     annotate_semantic_output_files,
     describe_missing_required_standard_artifacts,
@@ -37,7 +38,6 @@ from app.services.workflow_scheduler import (
     utcnow_iso,
     validate_input_files,
 )
-from app.services.workflow_templates import load_template_for_user
 from app.services.workflow_validation import (
     is_loop_node,
     is_map_node,
@@ -84,20 +84,59 @@ async def load_run_for_user(
         raise NotFoundException("Workflow run not found")
     if run.owner_id != current_user.id and current_user.role != "admin":
         raise ForbiddenException("No permission to access workflow run")
+    if run.project_id:
+        await load_project_membership(
+            db,
+            project_id=run.project_id,
+            user_id=current_user.id,
+        )
     return run
+
+
+async def load_definition_for_run(
+    db: AsyncSession,
+    *,
+    workflow_definition_id: str,
+    current_user: User,
+) -> WorkflowDefinition:
+    result = await db.execute(
+        select(WorkflowDefinition).where(
+            WorkflowDefinition.id == workflow_definition_id,
+            WorkflowDefinition.user_id == current_user.id,
+        )
+    )
+    workflow = result.scalar_one_or_none()
+    if not workflow:
+        raise NotFoundException("Workflow definition not found")
+    if workflow.project_id:
+        await load_project_membership(
+            db,
+            project_id=workflow.project_id,
+            user_id=current_user.id,
+        )
+    return workflow
 
 
 async def list_workflow_runs(
     db: AsyncSession,
     *,
     current_user: User,
-    template_id: str | None = None,
+    workflow_definition_id: str | None = None,
+    project_id: str | None = None,
     page: int = 1,
     page_size: int = 20,
 ) -> tuple[list[WorkflowRun], int]:
+    if project_id:
+        await load_project_membership(
+            db,
+            project_id=project_id,
+            user_id=current_user.id,
+        )
     query = select(WorkflowRun).where(WorkflowRun.owner_id == current_user.id)
-    if template_id:
-        query = query.where(WorkflowRun.template_id == template_id)
+    if workflow_definition_id:
+        query = query.where(WorkflowRun.workflow_definition_id == workflow_definition_id)
+    if project_id:
+        query = query.where(WorkflowRun.project_id == project_id)
 
     count_result = await db.execute(select(func.count()).select_from(query.subquery()))
     total = count_result.scalar() or 0
@@ -123,12 +162,21 @@ async def create_workflow_run(
     db: AsyncSession,
     *,
     current_user: User,
-    template_id: str,
+    workflow_definition_id: str,
     data: WorkflowRunCreate,
     schedule_task_fn,
 ) -> WorkflowRun:
-    template = await load_template_for_user(db, template_id=template_id, current_user=current_user)
-    definition = dict(template.definition or {})
+    workflow = await load_definition_for_run(
+        db,
+        workflow_definition_id=workflow_definition_id,
+        current_user=current_user,
+    )
+    definition = {
+        "nodes": [dict(node) for node in (workflow.nodes or [])],
+        "edges": [dict(edge) for edge in (workflow.edges or [])],
+        "selected_tool_by_node": dict(workflow.selected_tool_by_node or {}),
+        "artifact_bindings_by_node": dict(workflow.artifact_bindings_by_node or {}),
+    }
     execution_order = validate_workflow_definition(definition)
     materialized_definition = await materialize_workflow_run_definition(
         db,
@@ -147,8 +195,9 @@ async def create_workflow_run(
 
     run = WorkflowRun(
         owner_id=current_user.id,
-        template_id=template.id,
-        name=data.name or template.name,
+        workflow_definition_id=workflow.id,
+        project_id=workflow.project_id,
+        name=data.name or workflow.name,
         status="pending",
         definition=materialized_definition,
         input_files=input_files,

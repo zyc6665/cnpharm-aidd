@@ -38,7 +38,7 @@ from app.models.system_settings import ModelService  # noqa: E402
 from app.models.tasks import Task, TaskOutput, TaskStatus  # noqa: E402
 from app.models.tools import Tool, ToolStatus, ToolVersion  # noqa: E402
 from app.models.users import User, UserRole, UserStatus  # noqa: E402
-from app.models.workflows import WorkflowRun, WorkflowTemplate  # noqa: E402
+from app.models.workflows import WorkflowRun  # noqa: E402
 
 
 @pytest_asyncio.fixture
@@ -325,7 +325,7 @@ async def test_create_workflow_draft_does_not_create_runs_or_tasks(
     assert pocket_node["tool_id"] == aidd_tools["lvpocket-pocket-prediction"].id
     assert pocket_node["tool_version"]["id"]
 
-    for model in (AgentRun, AgentRunStep, Task, WorkflowTemplate, WorkflowRun):
+    for model in (AgentRun, AgentRunStep, Task, WorkflowRun):
         count = await db_session.scalar(select(func.count()).select_from(model))
         assert count == 0
 

@@ -1,6 +1,6 @@
 """Workflow persistence models."""
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import relationship
 
 from app.database.base import Base, TimestampMixin, UUIDMixin
@@ -25,37 +25,19 @@ class WorkflowDefinition(Base, UUIDMixin, TimestampMixin):
     user = relationship("User")
 
 
-class WorkflowTemplate(Base, UUIDMixin, TimestampMixin):
-    """Reusable workflow definition owned by a user."""
-
-    __tablename__ = "workflow_templates"
-
-    project_id = Column(String(36), ForeignKey("projects.id"), nullable=True, index=True)
-    owner_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
-    name = Column(String(160), nullable=False)
-    description = Column(Text, nullable=True)
-    status = Column(String(32), nullable=False, default="draft", index=True)
-    definition = Column(JSON, nullable=False, default=dict)
-    is_public = Column(Boolean, nullable=False, default=False, index=True)
-    version = Column(Integer, nullable=False, default=1)
-
-    owner = relationship("User")
-    runs = relationship(
-        "WorkflowRun",
-        back_populates="template",
-        cascade="all, delete-orphan",
-        order_by="WorkflowRun.created_at.desc()",
-    )
-
-
 class WorkflowRun(Base, UUIDMixin, TimestampMixin):
-    """One execution instance created from a workflow template."""
+    """One execution instance created from a workflow definition."""
 
     __tablename__ = "workflow_runs"
 
     project_id = Column(String(36), ForeignKey("projects.id"), nullable=True, index=True)
     owner_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
-    template_id = Column(String(36), ForeignKey("workflow_templates.id"), nullable=True, index=True)
+    workflow_definition_id = Column(
+        String(36),
+        ForeignKey("workflow_definitions.id"),
+        nullable=False,
+        index=True,
+    )
     name = Column(String(160), nullable=False)
     status = Column(String(32), nullable=False, default="pending", index=True)
     definition = Column(JSON, nullable=False, default=dict)
@@ -68,7 +50,7 @@ class WorkflowRun(Base, UUIDMixin, TimestampMixin):
     finished_at = Column(DateTime, nullable=True)
 
     owner = relationship("User")
-    template = relationship("WorkflowTemplate", back_populates="runs")
+    workflow_definition = relationship("WorkflowDefinition")
 
 
 class ResearchBoard(Base, UUIDMixin, TimestampMixin):

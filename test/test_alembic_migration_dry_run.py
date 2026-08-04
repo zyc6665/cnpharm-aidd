@@ -14,7 +14,6 @@ LEGACY_PROJECT_RESOURCE_TABLES = (
     "files",
     "agent_runs",
     "workflow_definitions",
-    "workflow_templates",
     "workflow_runs",
     "research_boards",
 )
@@ -56,6 +55,7 @@ def test_alembic_sqlite_upgrade_and_downgrade_dry_run(tmp_path: Path) -> None:
     assert {"alembic_version", "users", "tools", "tasks", "files", "workflow_runs", "tool_capabilities"}.issubset(
         tables
     )
+    assert "workflow_templates" not in tables
     assert "user_sessions" not in tables
 
     with sqlite3.connect(db_path) as conn:
@@ -65,6 +65,12 @@ def test_alembic_sqlite_upgrade_and_downgrade_dry_run(tmp_path: Path) -> None:
         assert "session_id" not in {
             row[1] for row in conn.execute("PRAGMA table_info(files)")
         }
+        workflow_run_columns = {
+            row[1]: row for row in conn.execute("PRAGMA table_info(workflow_runs)")
+        }
+        assert "workflow_definition_id" in workflow_run_columns
+        assert workflow_run_columns["workflow_definition_id"][3] == 1
+        assert "template_id" not in workflow_run_columns
 
     downgrade = _run_alembic("downgrade", "base", env=env)
     assert downgrade.returncode == 0, downgrade.stderr or downgrade.stdout
@@ -86,6 +92,7 @@ def test_alembic_sqlite_legacy_project_link_upgrade_is_resumable(tmp_path: Path)
         conn.execute("INSERT INTO alembic_version (version_num) VALUES ('20260730_02')")
         conn.execute("CREATE TABLE users (id VARCHAR(36) PRIMARY KEY)")
         conn.execute("CREATE TABLE projects (id VARCHAR(36) PRIMARY KEY)")
+        conn.execute("CREATE TABLE workflow_templates (id VARCHAR(36) PRIMARY KEY)")
         for table_name in LEGACY_PROJECT_RESOURCE_TABLES:
             conn.execute(f"CREATE TABLE {table_name} (id VARCHAR(36) PRIMARY KEY)")
 
@@ -97,13 +104,21 @@ def test_alembic_sqlite_legacy_project_link_upgrade_is_resumable(tmp_path: Path)
 
     with sqlite3.connect(db_path) as conn:
         assert conn.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "20260801_01",
+            "20260804_01",
         )
+        tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert "workflow_templates" not in tables
         for table_name in LEGACY_PROJECT_RESOURCE_TABLES:
             columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table_name})")}
             indexes = {row[1] for row in conn.execute(f"PRAGMA index_list({table_name})")}
             assert "project_id" in columns
             assert f"ix_{table_name}_project_id" in indexes
+        workflow_run_columns = {
+            row[1]: row for row in conn.execute("PRAGMA table_info(workflow_runs)")
+        }
+        assert "workflow_definition_id" in workflow_run_columns
+        assert workflow_run_columns["workflow_definition_id"][3] == 1
+        assert "template_id" not in workflow_run_columns
 
 
 def test_alembic_heads_command_works_from_backend_directory() -> None:

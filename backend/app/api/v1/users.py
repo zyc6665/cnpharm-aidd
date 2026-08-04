@@ -15,7 +15,7 @@ from app.models.statistics import FileStatistics, ToolStatistics, UserStatistics
 from app.models.tasks import Task, TaskInput, TaskOutput, TaskLog
 from app.models.tools import Tool, ToolFavorite, ToolVersion, tool_tag_association
 from app.models.users import User, UserRole, UserStatus
-from app.models.workflows import ResearchBoard, WorkflowDefinition, WorkflowRun, WorkflowTemplate
+from app.models.workflows import ResearchBoard, WorkflowDefinition, WorkflowRun
 from app.auth.dependencies import get_current_user, get_admin_user
 from app.auth.password import hash_password, verify_password
 from app.common.responses import success_response
@@ -187,7 +187,6 @@ async def hard_delete_user_related_resources(db: AsyncSession, user_id: str) -> 
 
     await db.execute(delete(ToolFavorite).where(ToolFavorite.user_id == user_id))
     await db.execute(delete(WorkflowRun).where(WorkflowRun.owner_id == user_id))
-    await db.execute(delete(WorkflowTemplate).where(WorkflowTemplate.owner_id == user_id))
     await db.execute(delete(WorkflowDefinition).where(WorkflowDefinition.user_id == user_id))
     await db.execute(delete(ResearchBoard).where(ResearchBoard.owner_id == user_id))
 

@@ -12,7 +12,7 @@ from app.models.tools import (
 from app.models.tasks import Task, TaskInput, TaskOutput, TaskLog
 from app.models.files import File
 from app.models.agent import AgentRun, AgentRunStep
-from app.models.workflows import ResearchBoard, WorkflowDefinition, WorkflowRun, WorkflowTemplate
+from app.models.workflows import ResearchBoard, WorkflowDefinition, WorkflowRun
 from app.models.system_settings import ModelService
 from app.models.verification import VerificationCode, VerificationDailyCount, VerificationPurpose
 from app.models.statistics import UserStatistics, ToolStatistics, FileStatistics
@@ -37,7 +37,7 @@ __all__ = [
     "Task", "TaskInput", "TaskOutput", "TaskLog",
     "File",
     "AgentRun", "AgentRunStep",
-    "ResearchBoard", "WorkflowDefinition", "WorkflowRun", "WorkflowTemplate",
+    "ResearchBoard", "WorkflowDefinition", "WorkflowRun",
     "ModelService",
     "VerificationCode", "VerificationDailyCount", "VerificationPurpose",
     "UserStatistics", "ToolStatistics", "FileStatistics",

@@ -4,7 +4,6 @@ This module only contains cross-cutting orchestration functions that need to
 wire together multiple workflow sub-services. Concrete CRUD and validation
 helpers live in:
 
-- app.services.workflow_templates
 - app.services.workflow_runs
 - app.services.workflow_validation
 - app.services.workflow_scheduler
@@ -44,13 +43,13 @@ async def create_workflow_run(
     db: AsyncSession,
     *,
     current_user: User,
-    template_id: str,
+    workflow_definition_id: str,
     data: WorkflowRunCreate,
 ) -> WorkflowRun:
     return await _create_workflow_run(
         db,
         current_user=current_user,
-        template_id=template_id,
+        workflow_definition_id=workflow_definition_id,
         data=data,
         schedule_task_fn=create_and_schedule_tool_task,
     )

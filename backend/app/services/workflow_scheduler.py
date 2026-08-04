@@ -393,7 +393,7 @@ async def schedule_workflow_node(
         **dict(node.get("params") or {}),
         "workflow_run_id": str(run.id),
         "workflow_node_id": str(node_id),
-        "workflow_template_id": str(run.template_id or ""),
+        "workflow_definition_id": str(run.workflow_definition_id),
         "workflow_node_type": str(node.get("kind") or node.get("type") or "tool"),
     }
     existing_task = await find_existing_workflow_node_task(
@@ -644,7 +644,7 @@ async def schedule_map_node(
             **dict(node.get("params") or {}),
             "workflow_run_id": str(run.id),
             "workflow_node_id": str(sub_node_id),
-            "workflow_template_id": str(run.template_id or ""),
+            "workflow_definition_id": str(run.workflow_definition_id),
             "workflow_node_type": "map",
             "map_item": items[i],
             "map_index": i,
@@ -842,7 +842,7 @@ async def schedule_loop_node(
             **dict(body_node.get("params") or {}),
             "workflow_run_id": str(run.id),
             "workflow_node_id": str(sub_node_id),
-            "workflow_template_id": str(run.template_id or ""),
+            "workflow_definition_id": str(run.workflow_definition_id),
             "workflow_node_type": "loop_body",
             "loop_iteration": iteration,
         }
