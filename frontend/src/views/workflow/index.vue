@@ -82,7 +82,7 @@
               <a-button
                 :disabled="workflowStore.isRunningWorkflowDefinition"
                 :loading="workflowStore.isRunningWorkflowDefinition"
-                @click="handleRunWorkflowTemplate"
+                @click="handleRunWorkflowDefinition"
               >
                 运行工作流
               </a-button>
@@ -123,7 +123,7 @@
             <WorkflowPreflightPanel
               :preflight="workflowPreflight"
               :running="workflowStore.isRunningWorkflowDefinition"
-              @run-ready-nodes="handleRunWorkflowTemplate"
+              @run-ready-nodes="handleRunWorkflowDefinition"
               @select-node="workflowStore.setActiveNode"
             />
           </section>
@@ -213,7 +213,7 @@
               @select-tool="handleNodeToolSelect"
               @add-edge="handleAddEdge"
               @delete-edge="handleDeleteEdge"
-              @run-node="handleRunWorkflowTemplate"
+              @run-node="handleRunWorkflowDefinition"
               @view-task-detail="handleViewTaskDetail"
             />
           </div>
@@ -333,7 +333,7 @@
     saveWorkflowDraft,
     handleRefreshWorkflowRuns,
     handleLoadMoreWorkflowRuns,
-    handleRunWorkflowTemplate,
+    handleRunWorkflowDefinition,
     handleWorkflowRunSelect,
     handleSyncWorkflowRun,
     autofillWorkflowInputSelections,

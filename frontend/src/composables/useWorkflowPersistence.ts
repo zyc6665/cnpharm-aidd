@@ -54,7 +54,6 @@ export function useWorkflowPersistence(input: {
   } = input
 
   const workflowName = ref('未命名流程')
-  const workflowTemplateName = ref('未命名流程')
   const selectedSavedWorkflowId = ref<string | undefined>()
   const workflowRunInputSelections = ref<Record<string, string | undefined>>({})
   const workflowRunAutoSyncTimer = ref<number | null>(null)
@@ -66,13 +65,6 @@ export function useWorkflowPersistence(input: {
         value: workflow.id,
         label: workflow.name
       }))
-  })
-
-  const workflowTemplateOptions = computed(() => {
-    return workflowStore.workflowTemplates.map(template => ({
-      value: template.id,
-      label: template.name
-    }))
   })
 
   const selectedWorkflowInputFiles = computed(() => {
@@ -169,41 +161,10 @@ export function useWorkflowPersistence(input: {
     }
   }
 
-  function handleNewWorkflowTemplate() {
-    workflowStore.clearActiveWorkflowTemplate()
-    workflowTemplateName.value = ''
-    selectedSavedWorkflowId.value = undefined
-  }
-
-  async function handleTemplateSelect(templateId: string | undefined) {
-    if (!templateId) {
-      workflowStore.clearActiveWorkflowTemplate()
-      return
-    }
-
-    try {
-      const template = await workflowStore.loadWorkflowTemplate(templateId)
-      workflowTemplateName.value = template.name
-      selectedSavedWorkflowId.value = template.id
-      workflowStore.applyWorkflowDefinition(
-        mapWorkflowDefinitionToCanvasPayload({
-          templateId: template.id,
-          name: template.name,
-          description: template.description,
-          definition: template.definition
-        })
-      )
-    } catch {
-      // 请求层会展示错误信息。
-    }
-  }
-
   function applyWorkflowDraft(draft: AiddWorkflowDraft) {
-    workflowStore.clearActiveWorkflowTemplate()
     workflowDefinitionsStore.clearCurrentWorkflowDefinition()
     selectedSavedWorkflowId.value = undefined
     workflowName.value = draft.name
-    workflowTemplateName.value = draft.name
     workflowRunInputSelections.value = { ...draft.input_files }
     workflowStore.applyWorkflowDefinition(
       mapWorkflowDefinitionToCanvasPayload({
@@ -237,72 +198,13 @@ export function useWorkflowPersistence(input: {
 
     selectedSavedWorkflowId.value = saved.id
     workflowName.value = saved.name
-    workflowTemplateName.value = saved.name
     workflowRunInputSelections.value = { ...draft.input_files }
     workflowStore.applyWorkflowDefinition(saved)
     message.success('工作流草稿已保存')
     return saved
   }
 
-  async function handleSaveWorkflowTemplate() {
-    const payload = {
-      name: workflowTemplateName.value.trim() || 'AIDD workflow',
-      description: workflowStore.activeWorkflowTemplate?.description ?? '',
-      definition: buildCurrentWorkflowDefinition(),
-      is_public: workflowStore.activeWorkflowTemplate?.is_public ?? false
-    }
-
-    try {
-      const template = workflowStore.activeWorkflowTemplateId
-        ? await workflowStore.updateSavedWorkflowTemplate(
-            workflowStore.activeWorkflowTemplateId,
-            payload
-          )
-        : await workflowStore.saveWorkflowTemplate(payload)
-      workflowTemplateName.value = template.name
-      selectedSavedWorkflowId.value = template.id
-      message.success('流程已保存')
-    } catch {
-      // 请求层会展示错误信息。
-    }
-  }
-
-  async function handleDuplicateWorkflowTemplate() {
-    const templateId = workflowStore.activeWorkflowTemplateId
-    if (!templateId) {
-      return
-    }
-
-    try {
-      const duplicated = await workflowStore.duplicateSavedWorkflowTemplate(
-        templateId,
-        `${workflowTemplateName.value || 'AIDD workflow'} Copy`
-      )
-      workflowTemplateName.value = duplicated.name
-      selectedSavedWorkflowId.value = duplicated.id
-      message.success('流程已复制')
-    } catch {
-      // 请求层会展示错误信息。
-    }
-  }
-
-  async function handleDeleteWorkflowTemplate() {
-    const templateId = workflowStore.activeWorkflowTemplateId
-    if (!templateId) {
-      return
-    }
-
-    try {
-      await workflowStore.removeWorkflowTemplate(templateId)
-      workflowTemplateName.value = 'AIDD workflow'
-      selectedSavedWorkflowId.value = undefined
-      message.success('流程已删除')
-    } catch {
-      // 请求层会展示错误信息。
-    }
-  }
-
-  async function handleRunWorkflowTemplate() {
+  async function handleRunWorkflowDefinition() {
     const definition = buildCurrentWorkflowDefinition()
     const validationResult = validateWorkflowDefinition(definition)
     const executionValidationResult = validateWorkflowExecutionOrder(definition)
@@ -312,7 +214,7 @@ export function useWorkflowPersistence(input: {
     }
 
     const saved = await workflowDefinitionsStore.saveWorkflowDefinition(
-      buildWorkflowDefinitionPayload(workflowTemplateName.value.trim() || 'AIDD workflow'),
+      buildWorkflowDefinitionPayload(workflowName.value.trim() || '未命名流程'),
       selectedSavedWorkflowId.value ?? workflowDefinitionsStore.currentWorkflowDefinition?.id
     )
     selectedSavedWorkflowId.value = saved.id
@@ -407,13 +309,6 @@ export function useWorkflowPersistence(input: {
     }
   }
 
-  async function restoreActiveWorkflowTemplate() {
-    if (!userStore.authReady || !userStore.isLoggedIn || !workflowStore.activeWorkflowTemplateId) {
-      return
-    }
-    await handleTemplateSelect(workflowStore.activeWorkflowTemplateId)
-  }
-
   async function restoreActiveWorkflowRun() {
     if (!userStore.authReady || !userStore.isLoggedIn || !workflowStore.activeWorkflowRunId) {
       return
@@ -465,12 +360,10 @@ export function useWorkflowPersistence(input: {
 
   return {
     workflowName,
-    workflowTemplateName,
     selectedSavedWorkflowId,
     workflowRunInputSelections,
     workflowRunAutoSyncTimer,
     savedWorkflowOptions,
-    workflowTemplateOptions,
     selectedWorkflowInputFiles,
     artifactOptionsBySemanticType,
     handleSaveWorkflow,
@@ -478,14 +371,9 @@ export function useWorkflowPersistence(input: {
     handleDuplicateWorkflow,
     handleArchiveWorkflow,
     handleDeleteWorkflow,
-    handleNewWorkflowTemplate,
-    handleTemplateSelect,
     applyWorkflowDraft,
     saveWorkflowDraft,
-    handleSaveWorkflowTemplate,
-    handleDuplicateWorkflowTemplate,
-    handleDeleteWorkflowTemplate,
-    handleRunWorkflowTemplate,
+    handleRunWorkflowDefinition,
     handleRefreshWorkflowRuns,
     handleLoadMoreWorkflowRuns,
     handleWorkflowRunSelect,
@@ -494,7 +382,6 @@ export function useWorkflowPersistence(input: {
     handleWorkflowInputSelect,
     scheduleWorkflowRunAutoSync,
     clearWorkflowRunAutoSync,
-    restoreActiveWorkflowTemplate,
     restoreActiveWorkflowRun,
     handleLoadWorkflow
   }

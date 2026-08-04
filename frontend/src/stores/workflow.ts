@@ -1,6 +1,5 @@
 import { computed } from 'vue'
 import { defineStore, storeToRefs } from 'pinia'
-import type { WorkflowDefinition } from '@/types/models'
 import { type WorkflowArtifactSemanticType, type WorkflowTaskRef } from '@/workflow/artifact-types'
 import type {
   WorkflowCanvasEdge,
@@ -14,7 +13,6 @@ import { useWorkflowFormDraftStore } from './workflow-form-draft'
 import { useWorkflowTaskBindingStore } from './workflow-task-binding'
 import { useWorkflowRunsStore } from './workflow-runs'
 import { useWorkflowSessionStore } from './workflow-session-store'
-import { useWorkflowTemplatesStore } from './workflow-templates'
 
 interface AddToolNodeInput {
   toolSlug: string
@@ -58,17 +56,9 @@ export const useWorkflowStore = defineStore(
     const formDraft = useWorkflowFormDraftStore()
     const taskBinding = useWorkflowTaskBindingStore()
     const sessionStore = useWorkflowSessionStore()
-    const templatesStore = useWorkflowTemplatesStore()
     const runsStore = useWorkflowRunsStore()
 
     const { sessionId, templateId, lastUpdatedAt, ownerUserId } = storeToRefs(sessionStore)
-    const {
-      workflowTemplates,
-      activeWorkflowTemplate,
-      activeWorkflowTemplateId,
-      isLoadingWorkflowTemplates,
-      isSavingWorkflowTemplate
-    } = storeToRefs(templatesStore)
     const {
       workflowRuns,
       workflowRunsPagination,
@@ -77,7 +67,7 @@ export const useWorkflowStore = defineStore(
       isLoadingWorkflowRuns,
       isLoadingMoreWorkflowRuns,
       isLoadingWorkflowRun,
-      isRunningWorkflowTemplate,
+      isRunningWorkflowDefinition,
       isSyncingWorkflowRun,
       hasMoreWorkflowRuns
     } = storeToRefs(runsStore)
@@ -136,7 +126,6 @@ export const useWorkflowStore = defineStore(
     function syncOwnerUserId(nextOwnerUserId?: string) {
       if (ownerUserId.value !== nextOwnerUserId) {
         resetSession(nextOwnerUserId)
-        templatesStore.clearActiveWorkflowTemplate()
         runsStore.clear()
       }
     }
@@ -269,41 +258,8 @@ export const useWorkflowStore = defineStore(
       touchSession()
     }
 
-    // ── templates and runs compatibility facade ──
-    const loadWorkflowTemplates = templatesStore.loadWorkflowTemplates
+    // ── workflow runs ──
     const loadWorkflowRuns = runsStore.loadWorkflowRuns
-    const loadWorkflowTemplate = templatesStore.loadWorkflowTemplate
-
-    async function saveWorkflowTemplate(
-      ...args: Parameters<typeof templatesStore.saveWorkflowTemplate>
-    ) {
-      const template = await templatesStore.saveWorkflowTemplate(...args)
-      touchSession()
-      return template
-    }
-
-    async function updateSavedWorkflowTemplate(
-      ...args: Parameters<typeof templatesStore.updateSavedWorkflowTemplate>
-    ) {
-      const template = await templatesStore.updateSavedWorkflowTemplate(...args)
-      touchSession()
-      return template
-    }
-
-    async function duplicateSavedWorkflowTemplate(
-      ...args: Parameters<typeof templatesStore.duplicateSavedWorkflowTemplate>
-    ) {
-      const template = await templatesStore.duplicateSavedWorkflowTemplate(...args)
-      touchSession()
-      return template
-    }
-
-    async function removeWorkflowTemplate(
-      ...args: Parameters<typeof templatesStore.removeWorkflowTemplate>
-    ) {
-      await templatesStore.removeWorkflowTemplate(...args)
-      touchSession()
-    }
 
     async function runWorkflowDefinition(
       ...args: Parameters<typeof runsStore.runWorkflowDefinition>
@@ -312,8 +268,6 @@ export const useWorkflowStore = defineStore(
       touchSession()
       return run
     }
-
-    const runWorkflowTemplate = runWorkflowDefinition
 
     async function loadWorkflowRun(...args: Parameters<typeof runsStore.loadWorkflowRun>) {
       const run = await runsStore.loadWorkflowRun(...args)
@@ -331,21 +285,8 @@ export const useWorkflowStore = defineStore(
       return run
     }
 
-    function setActiveWorkflowDefinition(
-      definition: WorkflowDefinition,
-      name = 'Untitled Workflow'
-    ) {
-      templatesStore.setActiveWorkflowDefinition(definition, ownerUserId.value, name)
-      touchSession()
-    }
-
     function clearActiveWorkflowRun() {
       runsStore.clearActiveWorkflowRun()
-      touchSession()
-    }
-
-    function clearActiveWorkflowTemplate() {
-      templatesStore.clearActiveWorkflowTemplate()
       touchSession()
     }
 
@@ -381,20 +322,14 @@ export const useWorkflowStore = defineStore(
       taskByNode,
       artifactBindingsByNode,
       // API state
-      workflowTemplates,
       workflowRuns,
       workflowRunsPagination,
-      activeWorkflowTemplate,
       activeWorkflowRun,
-      activeWorkflowTemplateId,
       activeWorkflowRunId,
-      isLoadingWorkflowTemplates,
       isLoadingWorkflowRuns,
       isLoadingMoreWorkflowRuns,
-      isSavingWorkflowTemplate,
       isLoadingWorkflowRun,
-      isRunningWorkflowTemplate,
-      isRunningWorkflowDefinition: isRunningWorkflowTemplate,
+      isRunningWorkflowDefinition,
       isSyncingWorkflowRun,
       // computed
       session,
@@ -432,21 +367,12 @@ export const useWorkflowStore = defineStore(
       clearNodeTask,
       clearNodeTasks,
       // API
-      loadWorkflowTemplates,
       loadWorkflowRuns,
-      loadWorkflowTemplate,
-      saveWorkflowTemplate,
-      updateSavedWorkflowTemplate,
-      duplicateSavedWorkflowTemplate,
-      removeWorkflowTemplate,
       runWorkflowDefinition,
-      runWorkflowTemplate,
       loadWorkflowRun,
       syncActiveWorkflowRun,
       clearActiveWorkflowRun,
-      clearActiveWorkflowTemplate,
-      selectWorkflowRun,
-      setActiveWorkflowDefinition
+      selectWorkflowRun
     }
   },
   {
@@ -456,7 +382,6 @@ export const useWorkflowStore = defineStore(
         'templateId',
         'lastUpdatedAt',
         'ownerUserId',
-        'activeWorkflowTemplateId',
         'activeWorkflowRunId'
       ]
     }

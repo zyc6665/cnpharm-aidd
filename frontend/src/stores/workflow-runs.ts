@@ -78,8 +78,6 @@ export const useWorkflowRunsStore = defineStore('workflow-runs', () => {
     }
   }
 
-  const runWorkflowTemplate = runWorkflowDefinition
-
   async function loadWorkflowRun(runId: string) {
     isLoadingWorkflowRun.value = true
     try {
@@ -139,12 +137,10 @@ export const useWorkflowRunsStore = defineStore('workflow-runs', () => {
     isLoadingMoreWorkflowRuns,
     isLoadingWorkflowRun,
     isRunningWorkflowDefinition,
-    isRunningWorkflowTemplate: isRunningWorkflowDefinition,
     isSyncingWorkflowRun,
     hasMoreWorkflowRuns,
     loadWorkflowRuns,
     runWorkflowDefinition,
-    runWorkflowTemplate,
     loadWorkflowRun,
     syncActiveWorkflowRun,
     clearActiveWorkflowRun,
