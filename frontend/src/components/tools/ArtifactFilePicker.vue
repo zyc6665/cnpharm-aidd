@@ -1,8 +1,8 @@
 <template>
   <div class="artifact-file-picker">
     <a-radio-group
-      v-if="allowArtifacts"
-      :value="sourceMode"
+      v-if="allowArtifacts && allowUploads"
+      :value="activeSourceMode"
       size="small"
       class="source-switch"
       @update:value="handleSourceModeChange"
@@ -11,7 +11,7 @@
       <a-radio-button value="artifact">{{ t('tools.fileSourceArtifact') }}</a-radio-button>
     </a-radio-group>
 
-    <div v-if="sourceMode === 'upload' || !allowArtifacts" class="source-panel">
+    <div v-if="activeSourceMode === 'upload' && allowUploads" class="source-panel">
       <a-upload
         :file-list="uploadList"
         :accept="accept"
@@ -26,7 +26,7 @@
       </a-upload>
     </div>
 
-    <div v-else class="source-panel artifact-panel">
+    <div v-else-if="allowArtifacts" class="source-panel artifact-panel">
       <div class="artifact-toolbar">
         <span class="artifact-toolbar-label">{{ t('tools.selectCompatibleArtifact') }}</span>
         <a-button type="link" size="small" :loading="artifactsStore.loading" @click="refreshArtifacts">
@@ -198,6 +198,7 @@
       selectedArtifact?: ArtifactFile | null
       accept?: string
       allowArtifacts?: boolean
+      allowUploads?: boolean
       currentToolId?: string | null
       currentToolSlug?: string | null
       preferredGroupId?: string | null
@@ -208,6 +209,7 @@
       selectedArtifact: null,
       accept: undefined,
       allowArtifacts: true,
+      allowUploads: true,
       currentToolId: null,
       currentToolSlug: null,
       preferredGroupId: null,
@@ -225,6 +227,17 @@
   const artifactsStore = useArtifactsStore()
   const toolsStore = useToolsStore()
   const sourceMode = ref<'upload' | 'artifact'>('upload')
+  const activeSourceMode = computed<'upload' | 'artifact'>(() => {
+    if (!props.allowUploads && props.allowArtifacts) {
+      return 'artifact'
+    }
+
+    if (!props.allowArtifacts && props.allowUploads) {
+      return 'upload'
+    }
+
+    return sourceMode.value
+  })
   const activeStep = ref<ArtifactStep>('group')
   const selectedGroupId = ref<string>()
   const selectedToolSlug = ref<string>()
@@ -419,6 +432,11 @@
       return
     }
 
+    if (!props.allowUploads) {
+      sourceMode.value = 'artifact'
+      return
+    }
+
     if (props.selectedArtifact) {
       sourceMode.value = 'artifact'
       return
@@ -468,6 +486,10 @@
   }
 
   function handleSourceModeChange(value: 'upload' | 'artifact') {
+    if (value === 'upload' && !props.allowUploads) {
+      return
+    }
+
     sourceMode.value = value
     if (value === 'upload') {
       emit('update:selectedArtifact', null)
@@ -479,6 +501,11 @@
   }
 
   function handleUploadListChange(files: UploadFile[]) {
+    if (!props.allowUploads) {
+      emit('update:uploadList', [])
+      return
+    }
+
     emit('update:uploadList', files)
     if (files.length > 0) {
       emit('update:selectedArtifact', null)
@@ -693,7 +720,7 @@
   }
 
   watch(
-    () => [props.selectedArtifact, props.allowArtifacts] as const,
+    () => [props.selectedArtifact, props.allowArtifacts, props.allowUploads] as const,
     () => {
       syncSourceMode()
     },
@@ -704,6 +731,7 @@
     () => [
       props.selectedArtifact?.id,
       props.allowArtifacts,
+      props.allowUploads,
       props.accept,
       props.currentToolSlug,
       props.preferredGroupId,

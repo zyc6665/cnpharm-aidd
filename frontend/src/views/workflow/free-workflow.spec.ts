@@ -6,17 +6,22 @@ import WorkflowView from './index.vue'
 import { useWorkflowDefinitionsStore } from '@/stores'
 import {
   createWorkflowDefinition,
+  createWorkflowRun,
   deleteWorkflowDefinition,
   getWorkflowDefinitions,
+  getWorkflowRun,
+  getWorkflowRuns,
   updateWorkflowDefinition,
 } from '@/api/workflows'
 
 const push = vi.fn()
+let routeQuery: Record<string, string | undefined> = {}
 
 vi.mock('vue-router', async importOriginal => {
   const actual = await importOriginal<typeof import('vue-router')>()
   return {
     ...actual,
+    useRoute: () => ({ query: routeQuery }),
     useRouter: () => ({ push }),
   }
 })
@@ -131,6 +136,7 @@ function renderWorkflow() {
 describe('free workflow workbench', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    routeQuery = {}
     localStorage.clear()
     sessionStorage.clear()
     vi.mocked(getWorkflowDefinitions).mockResolvedValue({
@@ -169,6 +175,43 @@ describe('free workflow workbench', () => {
       },
     } as never)
     vi.mocked(deleteWorkflowDefinition).mockResolvedValue({ data: null } as never)
+    vi.mocked(getWorkflowRuns).mockResolvedValue({
+      data: { items: [], total: 0, page: 1, page_size: 20, total_pages: 0 },
+    } as never)
+    vi.mocked(getWorkflowRun).mockResolvedValue({
+      data: {
+        id: 'run-1',
+        owner_id: 'user-1',
+        workflow_definition_id: 'flow-1',
+        project_id: 'project-1',
+        name: '未命名流程',
+        status: 'pending',
+        definition: { nodes: [], edges: [] },
+        input_files: {},
+        execution_order: [],
+        node_states: {},
+        artifact_lineage: {},
+        created_at: '2026-07-31T00:00:00Z',
+        updated_at: '2026-07-31T00:00:00Z',
+      },
+    } as never)
+    vi.mocked(createWorkflowRun).mockResolvedValue({
+      data: {
+        id: 'run-1',
+        owner_id: 'user-1',
+        workflow_definition_id: 'flow-1',
+        project_id: 'project-1',
+        name: '未命名流程',
+        status: 'pending',
+        definition: { nodes: [], edges: [] },
+        input_files: {},
+        execution_order: [],
+        node_states: {},
+        artifact_lineage: {},
+        created_at: '2026-07-31T00:00:00Z',
+        updated_at: '2026-07-31T00:00:00Z',
+      },
+    } as never)
   })
 
   it('默认展示流程语言，并移除固定模板选择入口', async () => {
@@ -199,6 +242,50 @@ describe('free workflow workbench', () => {
       selected_tool_by_node: {},
       artifact_bindings_by_node: {},
       status: 'draft',
+    }))
+  })
+
+  it('项目模式保存和运行都使用项目作用域的 WorkflowDefinition', async () => {
+    routeQuery = { project_id: 'project-1' }
+    vi.mocked(createWorkflowDefinition).mockResolvedValue({
+      data: {
+        id: 'flow-1',
+        project_id: 'project-1',
+        user_id: 'user-1',
+        name: '未命名流程',
+        description: null,
+        template_id: 'free-canvas',
+        nodes: [],
+        edges: [],
+        selected_tool_by_node: {},
+        artifact_bindings_by_node: {},
+        status: 'draft',
+        created_at: '2026-07-31T00:00:00Z',
+        updated_at: '2026-07-31T00:00:00Z',
+      },
+    } as never)
+
+    const wrapper = renderWorkflow()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('项目工作流')
+
+    await wrapper.findAll('button').find(button => button.text() === '保存')!.trigger('click')
+    await flushPromises()
+    expect(createWorkflowDefinition).toHaveBeenCalledWith(expect.objectContaining({
+      project_id: 'project-1',
+      template_id: 'free-canvas',
+    }))
+
+    await wrapper.findAll('button').find(button => button.text() === '运行工作流')!.trigger('click')
+    await flushPromises()
+    expect(createWorkflowRun).toHaveBeenCalledWith('flow-1', expect.objectContaining({
+      name: '未命名流程',
+      input_files: {},
+    }))
+    expect(getWorkflowRuns).toHaveBeenLastCalledWith(expect.objectContaining({
+      project_id: 'project-1',
+      workflow_definition_id: 'flow-1',
     }))
   })
 

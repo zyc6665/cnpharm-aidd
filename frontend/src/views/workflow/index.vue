@@ -25,6 +25,7 @@
               :options="savedWorkflowOptions"
               @change="selectedSavedWorkflowId = $event"
             />
+            <a-tag v-if="routeProjectId" color="blue">项目工作流</a-tag>
             <a-space size="small" wrap>
               <a-button @click="handleNewWorkflow">
                 {{ t('workflow.definition.new') }}
@@ -79,11 +80,11 @@
                 </a-button>
               </a-popconfirm>
               <a-button
-                :disabled="readyToolNodeIds.length === 0"
-                :loading="runningWorkflow"
-                @click="handleRunReadyNodes"
+                :disabled="workflowStore.isRunningWorkflowDefinition"
+                :loading="workflowStore.isRunningWorkflowDefinition"
+                @click="handleRunWorkflowTemplate"
               >
-                运行可执行节点
+                运行工作流
               </a-button>
             </a-space>
           </div>
@@ -121,8 +122,8 @@
           <section class="workflow-preflight-region">
             <WorkflowPreflightPanel
               :preflight="workflowPreflight"
-              :running="runningWorkflow"
-              @run-ready-nodes="handleRunReadyNodes"
+              :running="workflowStore.isRunningWorkflowDefinition"
+              @run-ready-nodes="handleRunWorkflowTemplate"
               @select-node="workflowStore.setActiveNode"
             />
           </section>
@@ -212,10 +213,8 @@
               @select-tool="handleNodeToolSelect"
               @add-edge="handleAddEdge"
               @delete-edge="handleDeleteEdge"
-              @run-node="handleRunNode"
-              @rerun-downstream="runDownstreamFrom"
+              @run-node="handleRunWorkflowTemplate"
               @view-task-detail="handleViewTaskDetail"
-              @task-submitted="handleNodeTaskSubmitted"
             />
           </div>
 
@@ -235,7 +234,7 @@
 <script setup lang="ts">
   import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
   import { useI18n } from 'vue-i18n'
-  import { useRouter } from 'vue-router'
+  import { useRoute, useRouter } from 'vue-router'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import AiddAgentPanel from '@/components/workflow/AiddAgentPanel.vue'
   import WorkflowNodeInspector from '@/components/workflow/WorkflowNodeInspector.vue'
@@ -248,13 +247,11 @@
   import WorkflowTemplateCanvas from '@/components/workflow/WorkflowTemplateCanvas.vue'
   import WorkflowToolPalette from '@/components/workflow/WorkflowToolPalette.vue'
   import { useWorkflowCanvas } from '@/composables/useWorkflowCanvas'
-  import { useWorkflowExecution } from '@/composables/useWorkflowExecution'
   import { useWorkflowPersistence } from '@/composables/useWorkflowPersistence'
   import { buildWorkflowPreflight } from '@/workflow/preflight'
   import type { AiddWorkflowDraft } from '@/types/models'
   import {
     useArtifactsStore,
-    useTasksStore,
     useToolsStore,
     useUserStore,
     useWorkflowDefinitionsStore,
@@ -264,9 +261,9 @@
   type WorkflowMode = 'manual' | 'agent'
 
   const { t } = useI18n()
+  const route = useRoute()
   const router = useRouter()
   const artifactsStore = useArtifactsStore()
-  const tasksStore = useTasksStore()
   const toolsStore = useToolsStore()
   const userStore = useUserStore()
   const workflowStore = useWorkflowStore()
@@ -275,6 +272,10 @@
   workflowStore.normalizeSessionShape()
 
   const activeMode = ref<WorkflowMode>('manual')
+  const routeProjectId = computed(() => {
+    const rawProjectId = route.query.project_id
+    return typeof rawProjectId === 'string' && rawProjectId.trim() ? rawProjectId : undefined
+  })
 
   const {
     sidebarToolSearchKeyword,
@@ -308,7 +309,6 @@
     handleAddEdge,
     handleDeleteEdge,
     resolveToolForNode,
-    resolveDownstreamNodeIds,
     formatKey,
     buildCurrentWorkflowDefinition
   } = useWorkflowCanvas({
@@ -333,6 +333,7 @@
     saveWorkflowDraft,
     handleRefreshWorkflowRuns,
     handleLoadMoreWorkflowRuns,
+    handleRunWorkflowTemplate,
     handleWorkflowRunSelect,
     handleSyncWorkflowRun,
     autofillWorkflowInputSelections,
@@ -347,25 +348,9 @@
     workflowStore,
     workflowDefinitionsStore,
     editableTemplate,
+    projectId: routeProjectId,
     workflowInputRequirements,
     buildCurrentWorkflowDefinition
-  })
-
-  const {
-    runningWorkflow,
-    handleNodeTaskSubmitted,
-    handleRunNode,
-    handleRunReadyNodes,
-    runDownstreamFrom
-  } = useWorkflowExecution({
-    workflowStore,
-    tasksStore,
-    artifactsStore,
-    editableTemplate,
-    readyToolNodeIds,
-    resolveToolForNode,
-    resolveDownstreamNodeIds,
-    formatKey
   })
 
   const workflowPreflight = computed(() => {
@@ -387,8 +372,9 @@
   })
 
   async function handleAgentWorkflowDraft(draft: AiddWorkflowDraft, projectId?: string) {
-    if (projectId) {
-      await saveWorkflowDraft(draft, projectId)
+    const targetProjectId = projectId ?? routeProjectId.value
+    if (targetProjectId) {
+      await saveWorkflowDraft(draft, targetProjectId)
     } else {
       applyWorkflowDraft(draft)
     }
@@ -405,8 +391,8 @@
   }
 
   watch(
-    () => [userStore.authReady, userStore.isLoggedIn, userStore.user?.id] as const,
-    async ([authReady, isLoggedIn, userId]) => {
+    () => [userStore.authReady, userStore.isLoggedIn, userStore.user?.id, routeProjectId.value] as const,
+    async ([authReady, isLoggedIn, userId, projectId]) => {
       if (!authReady) {
         return
       }
@@ -423,8 +409,16 @@
 
       await Promise.allSettled([
         artifactsStore.fetchArtifacts({ page: 1, page_size: 100 }),
-        workflowDefinitionsStore.fetchWorkflowDefinitions({ page: 1, page_size: 100 }),
-        workflowStore.loadWorkflowRuns({ page: 1, page_size: 20 })
+        workflowDefinitionsStore.fetchWorkflowDefinitions({
+          page: 1,
+          page_size: 100,
+          ...(projectId ? { project_id: projectId } : {})
+        }),
+        workflowStore.loadWorkflowRuns({
+          page: 1,
+          page_size: 20,
+          ...(projectId ? { project_id: projectId } : {})
+        })
       ])
     },
     { immediate: true }

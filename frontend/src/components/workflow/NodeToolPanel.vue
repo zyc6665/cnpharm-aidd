@@ -13,13 +13,12 @@
   </section>
 
   <section v-if="node.type === 'tool'" class="inspector-section">
-    <div class="section-title">{{ t('workflow.inspector.nodeExecution') }}</div>
+    <div class="section-title">{{ t('workflow.inspector.nodeParameters') }}</div>
     <WorkflowNodeRunPanel
       :node-id="node.id"
       :selected-tool-slug="selectedToolSlug"
       :available-tools="availableTools"
       :recommended-artifacts="recommendedArtifacts"
-      @task-submitted="$emit('task-submitted', $event)"
     />
   </section>
 </template>
@@ -38,7 +37,7 @@ const props = defineProps<{
   availableTools?: WorkflowAvailableTool[]
   recommendedArtifacts: WorkflowNodeArtifactRecommendation[]
 }>()
-const emit = defineEmits<{ (event: 'select-tool', toolSlug: string): void; (event: 'task-submitted', taskId: string): void }>()
+const emit = defineEmits<{ (event: 'select-tool', toolSlug: string): void }>()
 const { t } = useI18n()
 const toolOptions = computed(() => (props.availableTools?.length ? props.availableTools : (props.node.toolSlugs ?? []).map(slug => ({ slug, name: slug }))).map(tool => ({ value: tool.slug, label: tool.name || tool.slug })))
 function selectTool(value: unknown) { if (typeof value === 'string') emit('select-tool', value) }

@@ -38,6 +38,7 @@ export function useWorkflowPersistence(input: {
     nodes: WorkflowCanvasNode[]
     edges: WorkflowCanvasEdge[]
   }>
+  projectId?: ComputedRef<string | undefined>
   workflowInputRequirements: ComputedRef<string[]>
   buildCurrentWorkflowDefinition: () => WorkflowDefinition
 }) {
@@ -47,6 +48,7 @@ export function useWorkflowPersistence(input: {
     workflowStore,
     workflowDefinitionsStore,
     editableTemplate,
+    projectId,
     workflowInputRequirements,
     buildCurrentWorkflowDefinition
   } = input
@@ -321,6 +323,7 @@ export function useWorkflowPersistence(input: {
       input_files: selectedWorkflowInputFiles.value
     })
     await workflowStore.loadWorkflowRuns({
+      ...(projectId?.value ? { project_id: projectId.value } : {}),
       workflow_definition_id: saved.id,
       page: 1,
       page_size: 20
@@ -331,6 +334,7 @@ export function useWorkflowPersistence(input: {
   async function handleRefreshWorkflowRuns() {
     const workflowDefinitionId = selectedSavedWorkflowId.value ?? undefined
     await workflowStore.loadWorkflowRuns({
+      ...(projectId?.value ? { project_id: projectId.value } : {}),
       workflow_definition_id: workflowDefinitionId,
       page: 1,
       page_size: 20
@@ -344,6 +348,7 @@ export function useWorkflowPersistence(input: {
     }
     await workflowStore.loadWorkflowRuns(
       {
+        ...(projectId?.value ? { project_id: projectId.value } : {}),
         workflow_definition_id: workflowDefinitionId,
         page: workflowStore.workflowRunsPagination.page + 1,
         page_size: workflowStore.workflowRunsPagination.pageSize
@@ -435,6 +440,7 @@ export function useWorkflowPersistence(input: {
 
   function buildWorkflowDefinitionPayload(nameOverride?: string): WorkflowDefinitionPayload {
     return {
+      ...(projectId?.value ? { project_id: projectId.value } : {}),
       name: nameOverride ?? (workflowName.value.trim() || '未命名流程'),
       template_id: editableTemplate.value.id,
       nodes: workflowStore.exportWorkflowNodes(editableTemplate.value.nodes),

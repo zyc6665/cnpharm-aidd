@@ -61,6 +61,7 @@
         :selected-artifact="selectedArtifacts[String(key)] ?? null"
         :accept="prop.accept"
         :allow-artifacts="allowArtifacts"
+        :allow-uploads="allowUploads"
         :current-tool-id="toolId"
         :current-tool-slug="toolSlug"
         :preferred-group-id="preferredGroupId"
@@ -87,6 +88,7 @@ const props = defineProps<{
   fileList: Record<string, UploadFile[]>
   selectedArtifacts: Record<string, ArtifactFile | undefined>
   allowArtifacts?: boolean
+  allowUploads?: boolean
   toolId?: string
   toolSlug?: string
   preferredGroupId?: string
