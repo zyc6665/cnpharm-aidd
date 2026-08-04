@@ -163,6 +163,35 @@ async def test_workflow_definitions_can_be_scoped_to_project(db_session):
 
 
 @pytest.mark.asyncio
+async def test_project_members_can_read_project_workflow_definitions(db_session):
+    owner = _user("owner@example.com")
+    member = _user("member@example.com")
+    db_session.add_all([owner, member])
+    await db_session.flush()
+    project = await _create_project(db_session, owner)
+    db_session.add(ProjectMember(project_id=project.id, user_id=member.id, role="editor"))
+    await db_session.commit()
+
+    project_payload = _payload("Shared project draft").model_copy(
+        update={"project_id": project.id}
+    )
+    created = await create_workflow_definition(project_payload, owner, db_session)
+
+    listed = await list_workflow_definitions(
+        page=1,
+        page_size=20,
+        project_id=project.id,
+        current_user=member,
+        db=db_session,
+    )
+    loaded = await get_workflow_definition(created["data"]["id"], member, db_session)
+
+    assert listed["data"]["total"] == 1
+    assert listed["data"]["items"][0]["id"] == created["data"]["id"]
+    assert loaded["data"]["name"] == "Shared project draft"
+
+
+@pytest.mark.asyncio
 async def test_project_workflow_definition_requires_membership(db_session):
     owner = _user("owner@example.com")
     outsider = _user("outsider@example.com")

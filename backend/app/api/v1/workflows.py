@@ -75,6 +75,29 @@ async def _get_owned_workflow(
     return workflow
 
 
+async def _get_accessible_workflow(
+    workflow_id: str,
+    current_user: User,
+    db: AsyncSession,
+) -> WorkflowDefinition:
+    result = await db.execute(
+        select(WorkflowDefinition).where(WorkflowDefinition.id == workflow_id)
+    )
+    workflow = result.scalar_one_or_none()
+    if not workflow:
+        raise HTTPException(status_code=404, detail="工作流不存在")
+    if workflow.project_id:
+        await load_project_membership(
+            db,
+            project_id=workflow.project_id,
+            user_id=current_user.id,
+        )
+        return workflow
+    if workflow.user_id != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=404, detail="工作流不存在")
+    return workflow
+
+
 async def _validate_workflow_project_access(
     db: AsyncSession,
     *,
@@ -104,9 +127,10 @@ async def list_workflow_definitions(
         project_id=project_id,
         current_user=current_user,
     )
-    base_query = select(WorkflowDefinition).where(WorkflowDefinition.user_id == current_user.id)
     if project_id:
-        base_query = base_query.where(WorkflowDefinition.project_id == project_id)
+        base_query = select(WorkflowDefinition).where(WorkflowDefinition.project_id == project_id)
+    else:
+        base_query = select(WorkflowDefinition).where(WorkflowDefinition.user_id == current_user.id)
     total_result = await db.execute(
         select(func.count()).select_from(base_query.subquery())
     )
@@ -227,7 +251,7 @@ async def get_workflow_definition(
     db: AsyncSession = Depends(get_db),
 ):
     """获取单个工作流定义。"""
-    workflow = await _get_owned_workflow(workflow_id, current_user, db)
+    workflow = await _get_accessible_workflow(workflow_id, current_user, db)
     return success_response(data=_serialize_workflow(workflow))
 
 

@@ -49,6 +49,10 @@ from app.services.workflow_validation import (
 )
 
 
+def _is_admin(user: User) -> bool:
+    return user.role == "admin"
+
+
 async def materialize_workflow_run_definition(
     db: AsyncSession,
     *,
@@ -82,14 +86,16 @@ async def load_run_for_user(
     run = result.scalar_one_or_none()
     if not run:
         raise NotFoundException("Workflow run not found")
-    if run.owner_id != current_user.id and current_user.role != "admin":
-        raise ForbiddenException("No permission to access workflow run")
     if run.project_id:
-        await load_project_membership(
-            db,
-            project_id=run.project_id,
-            user_id=current_user.id,
-        )
+        if not _is_admin(current_user):
+            await load_project_membership(
+                db,
+                project_id=run.project_id,
+                user_id=current_user.id,
+            )
+        return run
+    if run.owner_id != current_user.id and not _is_admin(current_user):
+        raise ForbiddenException("No permission to access workflow run")
     return run
 
 
@@ -100,20 +106,21 @@ async def load_definition_for_run(
     current_user: User,
 ) -> WorkflowDefinition:
     result = await db.execute(
-        select(WorkflowDefinition).where(
-            WorkflowDefinition.id == workflow_definition_id,
-            WorkflowDefinition.user_id == current_user.id,
-        )
+        select(WorkflowDefinition).where(WorkflowDefinition.id == workflow_definition_id)
     )
     workflow = result.scalar_one_or_none()
     if not workflow:
         raise NotFoundException("Workflow definition not found")
     if workflow.project_id:
-        await load_project_membership(
-            db,
-            project_id=workflow.project_id,
-            user_id=current_user.id,
-        )
+        if not _is_admin(current_user):
+            await load_project_membership(
+                db,
+                project_id=workflow.project_id,
+                user_id=current_user.id,
+            )
+        return workflow
+    if workflow.user_id != current_user.id and not _is_admin(current_user):
+        raise NotFoundException("Workflow definition not found")
     return workflow
 
 
@@ -126,17 +133,25 @@ async def list_workflow_runs(
     page: int = 1,
     page_size: int = 20,
 ) -> tuple[list[WorkflowRun], int]:
-    if project_id:
-        await load_project_membership(
+    if workflow_definition_id and not project_id:
+        workflow = await load_definition_for_run(
             db,
-            project_id=project_id,
-            user_id=current_user.id,
+            workflow_definition_id=workflow_definition_id,
+            current_user=current_user,
         )
-    query = select(WorkflowRun).where(WorkflowRun.owner_id == current_user.id)
+        project_id = workflow.project_id
+    if project_id:
+        if not _is_admin(current_user):
+            await load_project_membership(
+                db,
+                project_id=project_id,
+                user_id=current_user.id,
+            )
+        query = select(WorkflowRun).where(WorkflowRun.project_id == project_id)
+    else:
+        query = select(WorkflowRun).where(WorkflowRun.owner_id == current_user.id)
     if workflow_definition_id:
         query = query.where(WorkflowRun.workflow_definition_id == workflow_definition_id)
-    if project_id:
-        query = query.where(WorkflowRun.project_id == project_id)
 
     count_result = await db.execute(select(func.count()).select_from(query.subquery()))
     total = count_result.scalar() or 0

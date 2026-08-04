@@ -279,6 +279,28 @@ async def protein_file(db_session: AsyncSession, owner: User) -> FileModel:
     return file_record
 
 
+async def create_protein_file_for_user(
+    db_session: AsyncSession,
+    user: User,
+    *,
+    filename: str = "protein.pdb",
+) -> FileModel:
+    file_record = FileModel(
+        owner_id=user.id,
+        filename=filename,
+        content_type="chemical/x-pdb",
+        size_bytes=128,
+        sha256=hashlib.sha256(f"{user.id}:{filename}".encode()).hexdigest(),
+        source_type=FileSourceType.UPLOAD.value,
+        storage_path=f"/tmp/{filename}",
+        is_public=False,
+    )
+    db_session.add(file_record)
+    await db_session.commit()
+    await db_session.refresh(file_record)
+    return file_record
+
+
 def template_definition(tool: Tool) -> dict:
     return {
         "nodes": [
@@ -622,6 +644,100 @@ async def test_project_workflow_run_requires_membership(
 
     assert create_response.status_code == 404
     assert list_response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_project_member_can_run_shared_project_workflow_definition(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    other_user: User,
+    pocket_tool: Tool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.services.workflows.create_and_schedule_tool_task",
+        create_fake_scheduled_task,
+    )
+    project = await create_project_for_user(db_session, owner)
+    db_session.add(ProjectMember(project_id=project.id, user_id=other_user.id, role="editor"))
+    await db_session.commit()
+    member_file = await create_protein_file_for_user(
+        db_session,
+        other_user,
+        filename="member-protein.pdb",
+    )
+    workflow = await create_workflow_definition_for_run(
+        api_client,
+        name="Shared project flow",
+        project_id=project.id,
+        definition=template_definition(pocket_tool),
+    )
+
+    run_response = await api_client.post(
+        f"/api/v1/workflows/{workflow['id']}/runs",
+        headers={"Authorization": "Bearer other-token"},
+        json={"input_files": {"protein_pdb": member_file.id}},
+    )
+    list_response = await api_client.get(
+        f"/api/v1/workflows/runs?project_id={project.id}",
+        headers={"Authorization": "Bearer other-token"},
+    )
+
+    assert run_response.status_code == 200
+    run = run_response.json()["data"]
+    assert run["owner_id"] == other_user.id
+    assert run["project_id"] == project.id
+    assert run["workflow_definition_id"] == workflow["id"]
+    assert list_response.status_code == 200
+    listed = list_response.json()["data"]
+    assert listed["total"] == 1
+    assert listed["items"][0]["id"] == run["id"]
+
+
+@pytest.mark.asyncio
+async def test_project_member_can_restore_project_workflow_run_created_by_owner(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    other_user: User,
+    pocket_tool: Tool,
+    protein_file: FileModel,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.services.workflows.create_and_schedule_tool_task",
+        create_fake_scheduled_task,
+    )
+    project = await create_project_for_user(db_session, owner)
+    db_session.add(ProjectMember(project_id=project.id, user_id=other_user.id, role="viewer"))
+    await db_session.commit()
+    workflow = await create_workflow_definition_for_run(
+        api_client,
+        name="Owner project flow",
+        project_id=project.id,
+        definition=template_definition(pocket_tool),
+    )
+    run_response = await api_client.post(
+        f"/api/v1/workflows/{workflow['id']}/runs",
+        headers={"Authorization": "Bearer owner-token"},
+        json={"input_files": {"protein_pdb": protein_file.id}},
+    )
+    run = run_response.json()["data"]
+
+    restore_response = await api_client.get(
+        f"/api/v1/workflows/runs/{run['id']}",
+        headers={"Authorization": "Bearer other-token"},
+    )
+    list_response = await api_client.get(
+        f"/api/v1/workflows/runs?project_id={project.id}",
+        headers={"Authorization": "Bearer other-token"},
+    )
+
+    assert restore_response.status_code == 200
+    assert restore_response.json()["data"]["id"] == run["id"]
+    assert list_response.status_code == 200
+    assert list_response.json()["data"]["items"][0]["id"] == run["id"]
 
 
 @pytest.mark.asyncio
