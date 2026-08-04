@@ -169,7 +169,7 @@ async def test_project_overview_returns_project_scoped_resources(
                 project_id=project["id"],
                 user_id=owner.id,
                 name="口袋到分子生成",
-                template_id="project-workflow",
+                canvas_preset_id="project-workflow",
                 nodes=[],
                 edges=[],
                 selected_tool_by_node={},

@@ -148,7 +148,7 @@ describe('free workflow workbench', () => {
         user_id: 'user-1',
         name: '未命名流程',
         description: null,
-        template_id: 'free-canvas',
+        canvas_preset_id: 'free-canvas',
         nodes: [],
         edges: [],
         selected_tool_by_node: {},
@@ -164,7 +164,7 @@ describe('free workflow workbench', () => {
         user_id: 'user-1',
         name: '未命名流程',
         description: null,
-        template_id: 'free-canvas',
+        canvas_preset_id: 'free-canvas',
         nodes: [],
         edges: [],
         selected_tool_by_node: {},
@@ -236,7 +236,7 @@ describe('free workflow workbench', () => {
 
     expect(createWorkflowDefinition).toHaveBeenCalledWith(expect.objectContaining({
       name: '未命名流程',
-      template_id: 'free-canvas',
+      canvas_preset_id: 'free-canvas',
       nodes: [],
       edges: [],
       selected_tool_by_node: {},
@@ -254,7 +254,7 @@ describe('free workflow workbench', () => {
         user_id: 'user-1',
         name: '未命名流程',
         description: null,
-        template_id: 'free-canvas',
+        canvas_preset_id: 'free-canvas',
         nodes: [],
         edges: [],
         selected_tool_by_node: {},
@@ -274,7 +274,7 @@ describe('free workflow workbench', () => {
     await flushPromises()
     expect(createWorkflowDefinition).toHaveBeenCalledWith(expect.objectContaining({
       project_id: 'project-1',
-      template_id: 'free-canvas',
+      canvas_preset_id: 'free-canvas',
     }))
 
     await wrapper.findAll('button').find(button => button.text() === '运行工作流')!.trigger('click')
@@ -298,7 +298,7 @@ describe('free workflow workbench', () => {
             user_id: 'user-1',
             name: '生产流程',
             description: null,
-            template_id: 'free-canvas',
+            canvas_preset_id: 'free-canvas',
             nodes: [],
             edges: [],
             selected_tool_by_node: {},
@@ -312,7 +312,7 @@ describe('free workflow workbench', () => {
             user_id: 'user-1',
             name: '归档流程',
             description: null,
-            template_id: 'free-canvas',
+            canvas_preset_id: 'free-canvas',
             nodes: [],
             edges: [],
             selected_tool_by_node: {},
@@ -343,7 +343,7 @@ describe('free workflow workbench', () => {
     await flushPromises()
     expect(createWorkflowDefinition).toHaveBeenLastCalledWith(expect.objectContaining({
       name: '未命名流程 副本',
-      template_id: 'free-canvas',
+      canvas_preset_id: 'free-canvas',
     }))
 
     await wrapper.findAll('button').find(button => button.text() === '归档')!.trigger('click')
@@ -367,7 +367,7 @@ describe('free workflow workbench', () => {
       name: 'Agent Draft',
       description: 'Generated from agent',
       project_id: 'project-1',
-      template_id: 'aidd-workflow-draft',
+      canvas_preset_id: 'aidd-workflow-draft',
       selected_tool_by_node: { pocket_prediction: 'lvpocket' },
       status: 'draft',
     }))

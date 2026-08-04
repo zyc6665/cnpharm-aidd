@@ -38,7 +38,7 @@ export interface WorkflowDefinition {
   user_id: string
   name: string
   description?: string | null
-  template_id: string
+  canvas_preset_id: string
   nodes: WorkflowDefinitionNode[]
   edges: WorkflowDefinitionEdge[]
   selected_tool_by_node: Record<string, string>
@@ -52,7 +52,7 @@ export interface WorkflowDefinitionPayload {
   project_id?: string | null
   name: string
   description?: string | null
-  template_id: string
+  canvas_preset_id: string
   nodes: WorkflowDefinitionNode[]
   edges: WorkflowDefinitionEdge[]
   selected_tool_by_node: Record<string, string>

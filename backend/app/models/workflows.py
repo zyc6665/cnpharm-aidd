@@ -15,7 +15,7 @@ class WorkflowDefinition(Base, UUIDMixin, TimestampMixin):
     user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     name = Column(String(120), nullable=False, index=True)
     description = Column(Text, nullable=True)
-    template_id = Column(String(120), nullable=False, index=True)
+    canvas_preset_id = Column(String(120), nullable=False, index=True)
     nodes = Column(JSON, nullable=False, default=list)
     edges = Column(JSON, nullable=False, default=list)
     selected_tool_by_node = Column(JSON, nullable=False, default=dict)

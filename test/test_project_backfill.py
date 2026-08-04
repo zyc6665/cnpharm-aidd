@@ -43,7 +43,7 @@ async def test_backfill_legacy_resources_is_idempotent_and_preserves_history():
         workflow_definition = WorkflowDefinition(
             user_id=user.id,
             name="Legacy definition",
-            template_id="legacy-pocket",
+            canvas_preset_id="legacy-pocket",
             created_at=original_created_at,
         )
         resources = [

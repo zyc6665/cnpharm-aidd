@@ -19,7 +19,7 @@ describe('useWorkflowCanvasStore', () => {
   it('新流程会话应默认使用自由空白画布', () => {
     const session = createInitialWorkflowSession()
 
-    expect(session.templateId).toBe('free-canvas')
+    expect(session.canvasPresetId).toBe('free-canvas')
     expect(session.canvasNodes).toEqual([])
     expect(session.canvasEdges).toEqual([])
     expect(session.hasCanvasOverride).toBe(true)

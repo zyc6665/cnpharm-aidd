@@ -71,6 +71,11 @@ def test_alembic_sqlite_upgrade_and_downgrade_dry_run(tmp_path: Path) -> None:
         assert "workflow_definition_id" in workflow_run_columns
         assert workflow_run_columns["workflow_definition_id"][3] == 1
         assert "template_id" not in workflow_run_columns
+        workflow_definition_columns = {
+            row[1]: row for row in conn.execute("PRAGMA table_info(workflow_definitions)")
+        }
+        assert "canvas_preset_id" in workflow_definition_columns
+        assert "template_id" not in workflow_definition_columns
 
     downgrade = _run_alembic("downgrade", "base", env=env)
     assert downgrade.returncode == 0, downgrade.stderr or downgrade.stdout
@@ -104,7 +109,7 @@ def test_alembic_sqlite_legacy_project_link_upgrade_is_resumable(tmp_path: Path)
 
     with sqlite3.connect(db_path) as conn:
         assert conn.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "20260804_01",
+            "20260804_02",
         )
         tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         assert "workflow_templates" not in tables
@@ -119,6 +124,11 @@ def test_alembic_sqlite_legacy_project_link_upgrade_is_resumable(tmp_path: Path)
         assert "workflow_definition_id" in workflow_run_columns
         assert workflow_run_columns["workflow_definition_id"][3] == 1
         assert "template_id" not in workflow_run_columns
+        workflow_definition_columns = {
+            row[1]: row for row in conn.execute("PRAGMA table_info(workflow_definitions)")
+        }
+        assert "canvas_preset_id" in workflow_definition_columns
+        assert "template_id" not in workflow_definition_columns
 
 
 def test_alembic_heads_command_works_from_backend_directory() -> None:

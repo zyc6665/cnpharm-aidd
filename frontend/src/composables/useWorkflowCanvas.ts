@@ -45,7 +45,7 @@ export function useWorkflowCanvas(input: {
   const sidebarExecutorFilter = ref<string>()
 
   const activeCanvasPreset = computed(() => {
-    return getWorkflowCanvasPresetById(workflowStore.templateId) ?? FREE_WORKFLOW_CANVAS_PRESET
+    return getWorkflowCanvasPresetById(workflowStore.canvasPresetId) ?? FREE_WORKFLOW_CANVAS_PRESET
   })
 
   const editableCanvasPreset = computed(() => ({
@@ -283,12 +283,12 @@ export function useWorkflowCanvas(input: {
     })
   })
 
-  function handleCanvasPresetChange(templateId: unknown) {
-    if (typeof templateId !== 'string') {
+  function handleCanvasPresetChange(canvasPresetId: unknown) {
+    if (typeof canvasPresetId !== 'string') {
       return
     }
 
-    workflowStore.setTemplate(templateId)
+    workflowStore.setCanvasPreset(canvasPresetId)
   }
 
   function countNodesByStatus(status: ReturnType<typeof resolveWorkflowCanvasNodeStatus>) {

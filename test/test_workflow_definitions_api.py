@@ -57,7 +57,7 @@ def _user(email: str) -> User:
 def _payload(name: str = "AIDD workflow") -> WorkflowDefinitionCreate:
     return WorkflowDefinitionCreate(
         name=name,
-        template_id="aidd-template",
+        canvas_preset_id="aidd-template",
         nodes=[{"id": "input-protein", "position": {"x": 96, "y": 120}}],
         edges=[{"id": "edge-1", "source": "input-protein", "target": "tool-pocket"}],
         selected_tool_by_node={"tool-pocket": "pocket-explorer"},

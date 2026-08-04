@@ -512,7 +512,7 @@ async def create_workflow_definition_for_run(
     payload = {
         "name": name,
         "project_id": project_id,
-        "template_id": "free-canvas",
+        "canvas_preset_id": "free-canvas",
         "nodes": definition.get("nodes", []),
         "edges": definition.get("edges", []),
         "selected_tool_by_node": {},
@@ -578,7 +578,7 @@ async def test_create_workflow_definition_run_inherits_project_and_schedules_nod
     run = run_response.json()["data"]
     assert run["workflow_definition_id"] == workflow["id"]
     assert run["project_id"] == project.id
-    assert "template_id" not in run
+    assert "canvas_preset_id" not in run
     node_state = run["node_states"]["pocket_prediction"]
     assert node_state["status"] == "waiting_task"
     assert node_state["task_id"]
@@ -761,7 +761,7 @@ async def test_list_workflow_runs_is_owner_scoped_and_filterable_by_workflow_def
     other_workflow = WorkflowDefinition(
         user_id=other_user.id,
         name="Other user's workflow",
-        template_id="free-canvas",
+        canvas_preset_id="free-canvas",
         nodes=template_definition(pocket_tool)["nodes"],
         edges=template_definition(pocket_tool)["edges"],
         selected_tool_by_node={},

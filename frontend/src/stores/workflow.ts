@@ -26,7 +26,7 @@ interface AddToolNodeInput {
 }
 
 type WorkflowDefinitionLike = {
-  template_id: string
+  canvas_preset_id: string
   nodes: Array<{
     id: string
     kind?: 'input' | 'tool' | string
@@ -58,7 +58,7 @@ export const useWorkflowStore = defineStore(
     const sessionStore = useWorkflowSessionStore()
     const runsStore = useWorkflowRunsStore()
 
-    const { sessionId, templateId, lastUpdatedAt, ownerUserId } = storeToRefs(sessionStore)
+    const { sessionId, canvasPresetId, lastUpdatedAt, ownerUserId } = storeToRefs(sessionStore)
     const {
       workflowRuns,
       workflowRunsPagination,
@@ -86,7 +86,7 @@ export const useWorkflowStore = defineStore(
     // ── session computed ──
     const session = computed<WorkflowWorkbenchSession>(() => ({
       sessionId: sessionId.value,
-      templateId: templateId.value,
+      canvasPresetId: canvasPresetId.value,
       activeNodeId: activeNodeId.value,
       activeGroupId: activeGroupId.value,
       selectedToolByGroup: selectedToolByGroup.value,
@@ -130,8 +130,8 @@ export const useWorkflowStore = defineStore(
       }
     }
 
-    function setTemplate(nextTemplateId: string) {
-      if (!sessionStore.setTemplate(nextTemplateId)) return
+    function setCanvasPreset(nextCanvasPresetId: string) {
+      if (!sessionStore.setCanvasPreset(nextCanvasPresetId)) return
       canvas.reset()
       formDraft.reset()
       taskBinding.reset()
@@ -202,7 +202,7 @@ export const useWorkflowStore = defineStore(
     }
 
     function applyWorkflowDefinition(workflow: WorkflowDefinitionLike) {
-      templateId.value = workflow.template_id
+      canvasPresetId.value = workflow.canvas_preset_id
       formDraft.selectedToolByNode = workflow.selected_tool_by_node ?? {}
       taskBinding.reset()
       taskBinding.artifactBindingsByNode = workflow.artifact_bindings_by_node ?? {}
@@ -302,7 +302,7 @@ export const useWorkflowStore = defineStore(
     return {
       // session
       sessionId,
-      templateId,
+      canvasPresetId,
       lastUpdatedAt,
       ownerUserId,
       // canvas (re-export sub-store refs for backward compat)
@@ -338,7 +338,7 @@ export const useWorkflowStore = defineStore(
       resetSession,
       normalizeSessionShape,
       syncOwnerUserId,
-      setTemplate,
+      setCanvasPreset,
       // canvas delegation
       setActiveNode,
       setActiveGroup,
@@ -379,7 +379,7 @@ export const useWorkflowStore = defineStore(
     persist: {
       pick: [
         'sessionId',
-        'templateId',
+        'canvasPresetId',
         'lastUpdatedAt',
         'ownerUserId',
         'activeWorkflowRunId'

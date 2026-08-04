@@ -22,7 +22,7 @@ class WorkflowDefinitionBase(BaseModel):
     )
     name: str = Field(..., min_length=1, max_length=120, description="流程名称")
     description: Optional[str] = Field(None, description="流程描述")
-    template_id: str = Field(..., min_length=1, max_length=120, description="模板 ID")
+    canvas_preset_id: str = Field(..., min_length=1, max_length=120, description="画布预设 ID")
     nodes: list[dict[str, Any]] = Field(default_factory=list, description="节点定义")
     edges: list[dict[str, Any]] = Field(default_factory=list, description="连线定义")
     selected_tool_by_node: dict[str, str] = Field(default_factory=dict, description="节点工具选择")
@@ -43,7 +43,7 @@ class WorkflowDefinitionUpdate(BaseModel):
     project_id: Optional[str] = Field(None, min_length=1, max_length=36)
     name: Optional[str] = Field(None, min_length=1, max_length=120)
     description: Optional[str] = None
-    template_id: Optional[str] = Field(None, min_length=1, max_length=120)
+    canvas_preset_id: Optional[str] = Field(None, min_length=1, max_length=120)
     nodes: Optional[list[dict[str, Any]]] = None
     edges: Optional[list[dict[str, Any]]] = None
     selected_tool_by_node: Optional[dict[str, str]] = None

@@ -11,7 +11,7 @@ export interface WorkflowCanvasPosition {
 
 export interface WorkflowWorkbenchSession {
   sessionId: string
-  templateId: string
+  canvasPresetId: string
   activeNodeId: string | null
   activeGroupId: string | null
   selectedToolByGroup: Record<string, string>
@@ -51,7 +51,7 @@ export function nowIsoString(): string {
 export function createInitialWorkflowSession(ownerUserId?: string): WorkflowWorkbenchSession {
   return {
     sessionId: createWorkflowSessionId(),
-    templateId: 'free-canvas',
+    canvasPresetId: 'free-canvas',
     activeNodeId: null,
     activeGroupId: null,
     selectedToolByGroup: {},

@@ -168,7 +168,7 @@ export function useWorkflowPersistence(input: {
     workflowRunInputSelections.value = { ...draft.input_files }
     workflowStore.applyWorkflowDefinition(
       mapWorkflowDefinitionToCanvasPayload({
-        templateId: 'aidd-workflow-draft',
+        canvasPresetId: 'aidd-workflow-draft',
         name: draft.name,
         description: draft.description,
         definition: draft.definition
@@ -178,7 +178,7 @@ export function useWorkflowPersistence(input: {
 
   async function saveWorkflowDraft(draft: AiddWorkflowDraft, projectId: string) {
     const canvasPayload = mapWorkflowDefinitionToCanvasPayload({
-      templateId: 'aidd-workflow-draft',
+      canvasPresetId: 'aidd-workflow-draft',
       name: draft.name,
       description: draft.description,
       definition: draft.definition
@@ -188,7 +188,7 @@ export function useWorkflowPersistence(input: {
       project_id: projectId,
       name: draft.name,
       description: draft.description ?? null,
-      template_id: canvasPayload.template_id,
+      canvas_preset_id: canvasPayload.canvas_preset_id,
       nodes: canvasPayload.nodes,
       edges: canvasPayload.edges,
       selected_tool_by_node: canvasPayload.selected_tool_by_node,
@@ -337,7 +337,7 @@ export function useWorkflowPersistence(input: {
     return {
       ...(projectId?.value ? { project_id: projectId.value } : {}),
       name: nameOverride ?? (workflowName.value.trim() || '未命名流程'),
-      template_id: editableCanvasPreset.value.id,
+      canvas_preset_id: editableCanvasPreset.value.id,
       nodes: workflowStore.exportWorkflowNodes(editableCanvasPreset.value.nodes),
       edges: workflowStore.exportWorkflowEdges(editableCanvasPreset.value.edges),
       selected_tool_by_node: workflowStore.selectedToolByNode,
@@ -388,17 +388,17 @@ export function useWorkflowPersistence(input: {
 }
 
 export function mapWorkflowDefinitionToCanvasPayload(input: {
-  templateId: string
+  canvasPresetId: string
   name: string
   description?: string | null
   definition: WorkflowDefinition
 }) {
-  const { templateId, name, description, definition } = input
+  const { canvasPresetId, name, description, definition } = input
   return {
-    template_id: templateId,
+    canvas_preset_id: canvasPresetId,
     name,
     description: description ?? undefined,
-    nodes: (definition.nodes ?? []).map(node => mapTemplateNode(node)),
+    nodes: (definition.nodes ?? []).map(node => mapCanvasDefinitionNode(node)),
     edges: (definition.edges ?? []).map((edge, index) => ({
       id: resolveWorkflowEdgeId(edge.id, index),
       source: edge.source,
@@ -415,7 +415,7 @@ export function mapWorkflowDefinitionToCanvasPayload(input: {
   }
 }
 
-function mapTemplateNode(node: WorkflowDefinitionNode) {
+function mapCanvasDefinitionNode(node: WorkflowDefinitionNode) {
   const inputArtifactSlots = Array.isArray(node.artifact_input_slots)
     ? node.artifact_input_slots
     : []

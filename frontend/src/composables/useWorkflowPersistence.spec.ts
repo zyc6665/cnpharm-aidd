@@ -5,7 +5,7 @@ import { mapWorkflowDefinitionToCanvasPayload, useWorkflowPersistence } from './
 describe('mapWorkflowDefinitionToCanvasPayload', () => {
   it('restores canvas semantic types from standard artifact slots', () => {
     const payload = mapWorkflowDefinitionToCanvasPayload({
-      templateId: 'agent-draft',
+      canvasPresetId: 'agent-draft',
       name: 'Agent Draft',
       definition: {
         nodes: [

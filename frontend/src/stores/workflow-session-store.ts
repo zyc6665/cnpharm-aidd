@@ -8,7 +8,7 @@ import {
 export const useWorkflowSessionStore = defineStore('workflow-session', () => {
   const initialSession = createInitialWorkflowSession()
   const sessionId = ref(initialSession.sessionId)
-  const templateId = ref(initialSession.templateId)
+  const canvasPresetId = ref(initialSession.canvasPresetId)
   const lastUpdatedAt = ref(initialSession.lastUpdatedAt)
   const ownerUserId = ref<string | undefined>(initialSession.ownerUserId)
 
@@ -17,41 +17,41 @@ export const useWorkflowSessionStore = defineStore('workflow-session', () => {
   }
 
   function normalize() {
-    if (typeof templateId.value !== 'string' || !templateId.value) {
-      templateId.value = 'free-canvas'
+    if (typeof canvasPresetId.value !== 'string' || !canvasPresetId.value) {
+      canvasPresetId.value = 'free-canvas'
     }
   }
 
   function reset(nextOwnerUserId?: string) {
     const next = createInitialWorkflowSession(nextOwnerUserId)
     sessionId.value = next.sessionId
-    templateId.value = next.templateId
+    canvasPresetId.value = next.canvasPresetId
     lastUpdatedAt.value = next.lastUpdatedAt
     ownerUserId.value = next.ownerUserId
   }
 
-  function setTemplate(nextTemplateId: string) {
-    if (templateId.value === nextTemplateId) {
+  function setCanvasPreset(nextCanvasPresetId: string) {
+    if (canvasPresetId.value === nextCanvasPresetId) {
       return false
     }
 
-    templateId.value = nextTemplateId
+    canvasPresetId.value = nextCanvasPresetId
     touch()
     return true
   }
 
   return {
     sessionId,
-    templateId,
+    canvasPresetId,
     lastUpdatedAt,
     ownerUserId,
     touch,
     normalize,
     reset,
-    setTemplate,
+    setCanvasPreset,
   }
 }, {
   persist: {
-    pick: ['sessionId', 'templateId', 'lastUpdatedAt', 'ownerUserId'],
+    pick: ['sessionId', 'canvasPresetId', 'lastUpdatedAt', 'ownerUserId'],
   },
 })
