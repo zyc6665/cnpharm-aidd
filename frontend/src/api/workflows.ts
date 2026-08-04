@@ -133,3 +133,21 @@ export const syncWorkflowRun = (runId: string, options?: RequestOptions): Promis
     timeout: options?.timeout ?? LONG_RUNNING_TIMEOUT_MS
   })
 }
+
+export const cancelWorkflowRun = (
+  runId: string,
+  options?: RequestOptions
+): Promise<ApiResponse<WorkflowRun>> => {
+  return post<WorkflowRun>(`/workflows/runs/${runId}/cancel`, undefined, options)
+}
+
+export const retryWorkflowRunNode = (
+  runId: string,
+  nodeId: string,
+  options?: RequestOptions
+): Promise<ApiResponse<WorkflowRun>> => {
+  return post<WorkflowRun>(`/workflows/runs/${runId}/nodes/${nodeId}/retry`, undefined, {
+    ...options,
+    timeout: options?.timeout ?? LONG_RUNNING_TIMEOUT_MS
+  })
+}

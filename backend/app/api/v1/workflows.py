@@ -20,7 +20,12 @@ from app.schemas.workflows import (
     WorkflowRunCreate,
 )
 from app.services.project_access import load_project_membership, require_project_role
-from app.services.workflows import create_workflow_run, sync_workflow_run
+from app.services.workflows import (
+    cancel_workflow_run,
+    create_workflow_run,
+    retry_workflow_run_node,
+    sync_workflow_run,
+)
 from app.services.workflow_runs import get_workflow_run, list_workflow_runs
 
 
@@ -243,6 +248,36 @@ async def sync_run(
         run_id=run_id,
     )
     return success_response(data=_serialize_run(run), message="工作流运行已同步")
+
+
+@router.post("/runs/{run_id}/cancel", response_model=dict)
+async def cancel_run(
+    run_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    run = await cancel_workflow_run(
+        db,
+        current_user=current_user,
+        run_id=run_id,
+    )
+    return success_response(data=_serialize_run(run), message="工作流运行已取消")
+
+
+@router.post("/runs/{run_id}/nodes/{node_id}/retry", response_model=dict)
+async def retry_run_node(
+    run_id: str,
+    node_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    run = await retry_workflow_run_node(
+        db,
+        current_user=current_user,
+        run_id=run_id,
+        node_id=node_id,
+    )
+    return success_response(data=_serialize_run(run), message="工作流节点已重试")
 
 
 @router.post("/{workflow_id}/runs", response_model=dict)

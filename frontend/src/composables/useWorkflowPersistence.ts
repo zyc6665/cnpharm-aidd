@@ -1,5 +1,6 @@
 import { computed, ref, type ComputedRef } from 'vue'
 import { message } from 'ant-design-vue'
+import { useRouter } from 'vue-router'
 import type { WorkflowDefinitionPayload } from '@/api/workflows'
 import {
   buildWorkflowInputFileMap,
@@ -57,6 +58,7 @@ export function useWorkflowPersistence(input: {
   const selectedSavedWorkflowId = ref<string | undefined>()
   const workflowRunInputSelections = ref<Record<string, string | undefined>>({})
   const workflowRunAutoSyncTimer = ref<number | null>(null)
+  const router = useRouter()
 
   const savedWorkflowOptions = computed(() => {
     return workflowDefinitionsStore.workflowDefinitions
@@ -268,6 +270,26 @@ export function useWorkflowPersistence(input: {
     await workflowStore.syncActiveWorkflowRun()
   }
 
+  async function handleCancelWorkflowRun() {
+    await workflowStore.cancelActiveWorkflowRun()
+    clearWorkflowRunAutoSync()
+    message.success('工作流运行已取消')
+  }
+
+  async function handleRetryWorkflowRunNode(nodeId: string) {
+    const runId = workflowStore.activeWorkflowRunId
+    if (!runId) {
+      return
+    }
+    await workflowStore.retryWorkflowRunNode(runId, nodeId)
+    await scheduleWorkflowRunAutoSync()
+    message.success('工作流节点已重试')
+  }
+
+  function handleWorkflowRunDetail(runId: string) {
+    router.push({ name: 'WorkflowRunDetail', params: { runId } })
+  }
+
   async function autofillWorkflowInputSelections() {
     const nextSelections: Record<string, string | undefined> = {}
     for (const semanticType of workflowInputRequirements.value) {
@@ -378,6 +400,9 @@ export function useWorkflowPersistence(input: {
     handleLoadMoreWorkflowRuns,
     handleWorkflowRunSelect,
     handleSyncWorkflowRun,
+    handleCancelWorkflowRun,
+    handleRetryWorkflowRunNode,
+    handleWorkflowRunDetail,
     autofillWorkflowInputSelections,
     handleWorkflowInputSelect,
     scheduleWorkflowRunAutoSync,

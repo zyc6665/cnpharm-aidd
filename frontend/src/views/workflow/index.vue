@@ -108,6 +108,7 @@
             :has-more="workflowStore.hasMoreWorkflowRuns"
             :loading-more="workflowStore.isLoadingMoreWorkflowRuns"
             @select="handleWorkflowRunSelect"
+            @view-detail="handleWorkflowRunDetail"
             @refresh="handleRefreshWorkflowRuns"
             @load-more="handleLoadMoreWorkflowRuns"
           />
@@ -116,7 +117,11 @@
             v-if="workflowStore.activeWorkflowRun"
             :run="workflowStore.activeWorkflowRun"
             :syncing="workflowStore.isSyncingWorkflowRun || workflowStore.isLoadingWorkflowRun"
+            :canceling="workflowStore.isCancelingWorkflowRun"
+            :retrying-node-id="workflowStore.retryingWorkflowRunNodeId"
             @sync="handleSyncWorkflowRun"
+            @cancel="handleCancelWorkflowRun"
+            @retry-node="handleRetryWorkflowRunNode"
           />
 
           <section class="workflow-preflight-region">
@@ -336,6 +341,9 @@
     handleRunWorkflowDefinition,
     handleWorkflowRunSelect,
     handleSyncWorkflowRun,
+    handleCancelWorkflowRun,
+    handleRetryWorkflowRunNode,
+    handleWorkflowRunDetail,
     autofillWorkflowInputSelections,
     handleWorkflowInputSelect,
     scheduleWorkflowRunAutoSync,

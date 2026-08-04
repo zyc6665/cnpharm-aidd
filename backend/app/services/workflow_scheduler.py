@@ -1133,8 +1133,6 @@ async def find_existing_workflow_node_task(
                 TaskStatus.PENDING.value,
                 TaskStatus.RUNNING.value,
                 TaskStatus.SUCCESS.value,
-                TaskStatus.FAILURE.value,
-                TaskStatus.CANCELED.value,
             }
         ):
             return task

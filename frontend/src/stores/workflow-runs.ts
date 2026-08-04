@@ -2,9 +2,11 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import {
   type WorkflowRunListParams,
+  cancelWorkflowRun,
   createWorkflowRun,
   getWorkflowRun,
   getWorkflowRuns,
+  retryWorkflowRunNode as retryWorkflowRunNodeRequest,
   syncWorkflowRun,
 } from '@/api/workflows'
 import type { WorkflowRun, WorkflowRunCreateParams } from '@/types/models'
@@ -25,6 +27,8 @@ export const useWorkflowRunsStore = defineStore('workflow-runs', () => {
   const isLoadingWorkflowRun = ref(false)
   const isRunningWorkflowDefinition = ref(false)
   const isSyncingWorkflowRun = ref(false)
+  const isCancelingWorkflowRun = ref(false)
+  const retryingWorkflowRunNodeId = ref<string | null>(null)
 
   const hasMoreWorkflowRuns = computed(() => (
     workflowRunsPagination.value.page < workflowRunsPagination.value.totalPages
@@ -107,6 +111,35 @@ export const useWorkflowRunsStore = defineStore('workflow-runs', () => {
     }
   }
 
+  async function cancelActiveWorkflowRun(runId = activeWorkflowRunId.value) {
+    if (!runId) {
+      return null
+    }
+    isCancelingWorkflowRun.value = true
+    try {
+      const response = await cancelWorkflowRun(runId)
+      activeWorkflowRun.value = response.data
+      activeWorkflowRunId.value = response.data.id
+      upsertWorkflowRun(response.data)
+      return response.data
+    } finally {
+      isCancelingWorkflowRun.value = false
+    }
+  }
+
+  async function retryWorkflowRunNode(runId: string, nodeId: string) {
+    retryingWorkflowRunNodeId.value = nodeId
+    try {
+      const response = await retryWorkflowRunNodeRequest(runId, nodeId)
+      activeWorkflowRun.value = response.data
+      activeWorkflowRunId.value = response.data.id
+      upsertWorkflowRun(response.data)
+      return response.data
+    } finally {
+      retryingWorkflowRunNodeId.value = null
+    }
+  }
+
   function clearActiveWorkflowRun() {
     activeWorkflowRun.value = null
     activeWorkflowRunId.value = null
@@ -138,11 +171,15 @@ export const useWorkflowRunsStore = defineStore('workflow-runs', () => {
     isLoadingWorkflowRun,
     isRunningWorkflowDefinition,
     isSyncingWorkflowRun,
+    isCancelingWorkflowRun,
+    retryingWorkflowRunNodeId,
     hasMoreWorkflowRuns,
     loadWorkflowRuns,
     runWorkflowDefinition,
     loadWorkflowRun,
     syncActiveWorkflowRun,
+    cancelActiveWorkflowRun,
+    retryWorkflowRunNode,
     clearActiveWorkflowRun,
     clear,
     selectWorkflowRun,

@@ -15,7 +15,8 @@ from app.models.tasks import Task, TaskStatus
 from app.models.users import User
 from app.models.workflows import WorkflowDefinition, WorkflowRun
 from app.schemas.workflows import WorkflowRunCreate
-from app.services.project_access import load_project_membership
+from app.services.project_access import load_project_membership, require_project_role
+from app.tasks.cancellation import cancel_platform_task
 from app.services.workflow_artifacts import (
     annotate_semantic_output_files,
     describe_missing_required_standard_artifacts,
@@ -51,6 +52,69 @@ from app.services.workflow_validation import (
 
 def _is_admin(user: User) -> bool:
     return user.role == "admin"
+
+
+WORKFLOW_RUN_OPERATION_PROJECT_ROLES = {"owner", "editor", "runner"}
+WORKFLOW_RUN_TERMINAL_STATUSES = {"success", "failure", "canceled"}
+WORKFLOW_RUN_ACTIVE_NODE_STATUSES = {"pending", "ready", "running", "waiting_task"}
+
+
+def _is_active_workflow_node_status(status: Any) -> bool:
+    return str(status or "").lower() in WORKFLOW_RUN_ACTIVE_NODE_STATUSES
+
+
+def _mark_active_workflow_state_canceled(
+    state: dict[str, Any],
+    *,
+    finished_at: str,
+) -> list[str]:
+    task_ids: list[str] = []
+
+    if _is_active_workflow_node_status(state.get("status")):
+        task_id = state.get("task_id")
+        if task_id:
+            task_ids.append(str(task_id))
+        state["status"] = "canceled"
+        state["finished_at"] = finished_at
+
+    for nested_key in ("sub_tasks", "loop_body_states"):
+        nested_states = {
+            key: dict(value)
+            for key, value in (state.get(nested_key) or {}).items()
+            if isinstance(value, dict)
+        }
+        if not nested_states:
+            continue
+        for nested_id, nested_state in nested_states.items():
+            if _is_active_workflow_node_status(nested_state.get("status")):
+                task_id = nested_state.get("task_id")
+                if task_id:
+                    task_ids.append(str(task_id))
+                nested_state["status"] = "canceled"
+                nested_state["finished_at"] = finished_at
+            nested_states[nested_id] = nested_state
+        state[nested_key] = nested_states
+
+    return task_ids
+
+
+async def _ensure_run_operation_access(
+    db: AsyncSession,
+    *,
+    run: WorkflowRun,
+    current_user: User,
+) -> None:
+    if _is_admin(current_user) or run.owner_id == current_user.id:
+        return
+    if run.project_id:
+        await require_project_role(
+            db,
+            project_id=run.project_id,
+            user=current_user,
+            allowed_roles=WORKFLOW_RUN_OPERATION_PROJECT_ROLES,
+        )
+        return
+    raise ForbiddenException("No permission to operate workflow run")
 
 
 async def materialize_workflow_run_definition(
@@ -398,3 +462,85 @@ async def sync_workflow_run(
         await db.commit()
         await db.refresh(run)
     return run
+
+
+async def cancel_workflow_run(
+    db: AsyncSession,
+    *,
+    current_user: User,
+    run_id: str,
+) -> WorkflowRun:
+    run = await load_run_for_user(db, run_id=run_id, current_user=current_user)
+    await _ensure_run_operation_access(db, run=run, current_user=current_user)
+
+    if run.status == "canceled":
+        return run
+    if run.status in WORKFLOW_RUN_TERMINAL_STATUSES:
+        raise ValidationException(f"Cannot cancel terminal workflow run: {run.status}")
+
+    node_states = dict(run.node_states or {})
+    finished_at = utcnow_iso()
+    task_ids: list[str] = []
+
+    for node_id, raw_state in node_states.items():
+        state = dict(raw_state or {})
+        task_ids.extend(_mark_active_workflow_state_canceled(state, finished_at=finished_at))
+        node_states[node_id] = state
+
+    if task_ids:
+        result = await db.execute(select(Task).where(Task.id.in_(task_ids)))
+        for task in result.scalars().all():
+            await cancel_platform_task(db, task=task, current_user=current_user)
+
+    run.status = "canceled"
+    run.node_states = node_states
+    run.finished_at = utcnow()
+    run.error_message = None
+    await db.commit()
+    await db.refresh(run)
+    return run
+
+
+async def retry_workflow_run_node(
+    db: AsyncSession,
+    *,
+    current_user: User,
+    run_id: str,
+    node_id: str,
+    schedule_task_fn,
+) -> WorkflowRun:
+    run = await load_run_for_user(db, run_id=run_id, current_user=current_user)
+    await _ensure_run_operation_access(db, run=run, current_user=current_user)
+    if run.status == "canceled":
+        raise ValidationException("Cannot retry a canceled workflow run")
+
+    definition = dict(run.definition or {})
+    indexed_nodes = nodes_by_id(definition)
+    if node_id not in indexed_nodes:
+        raise NotFoundException("Workflow node not found")
+
+    node_states = dict(run.node_states or {})
+    current_state = dict(node_states.get(node_id) or {})
+    if current_state.get("status") != "failure":
+        raise ValidationException("Only failed workflow nodes can be retried")
+
+    initial_states = initial_node_states(definition, list(run.execution_order or []))
+    retry_state = dict(initial_states.get(node_id) or {"status": "pending"})
+    node_states[node_id] = retry_state
+
+    artifact_lineage = dict(run.artifact_lineage or {})
+    artifact_lineage.pop(node_id, None)
+
+    run.status = "pending"
+    run.error_message = None
+    run.finished_at = None
+    run.node_states = node_states
+    run.artifact_lineage = artifact_lineage
+
+    await start_ready_workflow_nodes(
+        db,
+        current_user=current_user,
+        run=run,
+        schedule_task_fn=schedule_task_fn,
+    )
+    return await load_run_for_user(db, run_id=run_id, current_user=current_user)

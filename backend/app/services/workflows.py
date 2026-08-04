@@ -19,7 +19,9 @@ from app.schemas.workflows import WorkflowRunCreate
 from app.tasks.service import create_and_schedule_tool_task
 
 from app.services.workflow_runs import (
+    cancel_workflow_run as _cancel_workflow_run,
     create_workflow_run as _create_workflow_run,
+    retry_workflow_run_node as _retry_workflow_run_node,
     sync_workflow_run as _sync_workflow_run,
 )
 from app.services.workflow_scheduler import start_ready_workflow_nodes as _start_ready_workflow_nodes
@@ -69,8 +71,39 @@ async def sync_workflow_run(
     )
 
 
+async def cancel_workflow_run(
+    db: AsyncSession,
+    *,
+    current_user: User,
+    run_id: str,
+) -> WorkflowRun:
+    return await _cancel_workflow_run(
+        db,
+        current_user=current_user,
+        run_id=run_id,
+    )
+
+
+async def retry_workflow_run_node(
+    db: AsyncSession,
+    *,
+    current_user: User,
+    run_id: str,
+    node_id: str,
+) -> WorkflowRun:
+    return await _retry_workflow_run_node(
+        db,
+        current_user=current_user,
+        run_id=run_id,
+        node_id=node_id,
+        schedule_task_fn=create_and_schedule_tool_task,
+    )
+
+
 __all__ = [
+    "cancel_workflow_run",
     "create_workflow_run",
+    "retry_workflow_run_node",
     "start_ready_workflow_nodes",
     "sync_workflow_run",
 ]

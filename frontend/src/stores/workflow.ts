@@ -69,6 +69,8 @@ export const useWorkflowStore = defineStore(
       isLoadingWorkflowRun,
       isRunningWorkflowDefinition,
       isSyncingWorkflowRun,
+      isCancelingWorkflowRun,
+      retryingWorkflowRunNodeId,
       hasMoreWorkflowRuns
     } = storeToRefs(runsStore)
     const {
@@ -285,6 +287,24 @@ export const useWorkflowStore = defineStore(
       return run
     }
 
+    async function cancelActiveWorkflowRun(
+      ...args: Parameters<typeof runsStore.cancelActiveWorkflowRun>
+    ) {
+      const run = await runsStore.cancelActiveWorkflowRun(...args)
+      if (run) {
+        touchSession()
+      }
+      return run
+    }
+
+    async function retryWorkflowRunNode(
+      ...args: Parameters<typeof runsStore.retryWorkflowRunNode>
+    ) {
+      const run = await runsStore.retryWorkflowRunNode(...args)
+      touchSession()
+      return run
+    }
+
     function clearActiveWorkflowRun() {
       runsStore.clearActiveWorkflowRun()
       touchSession()
@@ -331,6 +351,8 @@ export const useWorkflowStore = defineStore(
       isLoadingWorkflowRun,
       isRunningWorkflowDefinition,
       isSyncingWorkflowRun,
+      isCancelingWorkflowRun,
+      retryingWorkflowRunNodeId,
       // computed
       session,
       hasMoreWorkflowRuns,
@@ -371,6 +393,8 @@ export const useWorkflowStore = defineStore(
       runWorkflowDefinition,
       loadWorkflowRun,
       syncActiveWorkflowRun,
+      cancelActiveWorkflowRun,
+      retryWorkflowRunNode,
       clearActiveWorkflowRun,
       selectWorkflowRun
     }

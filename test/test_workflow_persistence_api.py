@@ -741,6 +741,94 @@ async def test_project_member_can_restore_project_workflow_run_created_by_owner(
 
 
 @pytest.mark.asyncio
+async def test_project_workflow_run_operations_require_runner_or_write_role(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    other_user: User,
+    pocket_tool: Tool,
+    protein_file: FileModel,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.services.workflows.create_and_schedule_tool_task",
+        create_fake_scheduled_task,
+    )
+    project = await create_project_for_user(db_session, owner)
+    membership = ProjectMember(project_id=project.id, user_id=other_user.id, role="viewer")
+    db_session.add(membership)
+    await db_session.commit()
+    workflow = await create_workflow_definition_for_run(
+        api_client,
+        name="Project operation flow",
+        project_id=project.id,
+        definition=template_definition(pocket_tool),
+    )
+
+    cancel_run_response = await api_client.post(
+        f"/api/v1/workflows/{workflow['id']}/runs",
+        headers={"Authorization": "Bearer owner-token"},
+        json={"input_files": {"protein_pdb": protein_file.id}},
+    )
+    cancel_run = cancel_run_response.json()["data"]
+    cancel_task_id = cancel_run["node_states"]["pocket_prediction"]["task_id"]
+
+    viewer_cancel_response = await api_client.post(
+        f"/api/v1/workflows/runs/{cancel_run['id']}/cancel",
+        headers={"Authorization": "Bearer other-token"},
+    )
+    membership.role = "runner"
+    await db_session.commit()
+    runner_cancel_response = await api_client.post(
+        f"/api/v1/workflows/runs/{cancel_run['id']}/cancel",
+        headers={"Authorization": "Bearer other-token"},
+    )
+
+    canceled_task = await db_session.get(Task, cancel_task_id)
+    assert viewer_cancel_response.status_code == 403
+    assert runner_cancel_response.status_code == 200
+    assert runner_cancel_response.json()["data"]["status"] == "canceled"
+    assert canceled_task is not None
+    assert canceled_task.status == TaskStatus.CANCELED.value
+
+    retry_run_response = await api_client.post(
+        f"/api/v1/workflows/{workflow['id']}/runs",
+        headers={"Authorization": "Bearer owner-token"},
+        json={"input_files": {"protein_pdb": protein_file.id}},
+    )
+    retry_run = retry_run_response.json()["data"]
+    failed_task_id = retry_run["node_states"]["pocket_prediction"]["task_id"]
+    failed_task = await db_session.get(Task, failed_task_id)
+    assert failed_task is not None
+    failed_task.status = TaskStatus.FAILURE.value
+    failed_task.error_message = "temporary failure"
+    await db_session.commit()
+    sync_response = await api_client.post(
+        f"/api/v1/workflows/runs/{retry_run['id']}/sync",
+        headers={"Authorization": "Bearer owner-token"},
+    )
+    assert sync_response.status_code == 200
+    membership.role = "viewer"
+    await db_session.commit()
+    viewer_retry_response = await api_client.post(
+        f"/api/v1/workflows/runs/{retry_run['id']}/nodes/pocket_prediction/retry",
+        headers={"Authorization": "Bearer other-token"},
+    )
+    membership.role = "runner"
+    await db_session.commit()
+    runner_retry_response = await api_client.post(
+        f"/api/v1/workflows/runs/{retry_run['id']}/nodes/pocket_prediction/retry",
+        headers={"Authorization": "Bearer other-token"},
+    )
+
+    assert viewer_retry_response.status_code == 403
+    assert runner_retry_response.status_code == 200
+    retry_state = runner_retry_response.json()["data"]["node_states"]["pocket_prediction"]
+    assert retry_state["status"] == "waiting_task"
+    assert retry_state["task_id"] != failed_task_id
+
+
+@pytest.mark.asyncio
 async def test_workflow_template_routes_are_removed(api_client: httpx.AsyncClient) -> None:
     response = await api_client.get(
         "/api/v1/workflows/templates",
@@ -1251,6 +1339,97 @@ async def test_sync_workflow_run_failure_stops_downstream_scheduling(
 
     task_count_result = await db_session.execute(select(func.count()).select_from(Task))
     assert task_count_result.scalar_one() == 1
+
+
+@pytest.mark.asyncio
+async def test_cancel_workflow_run_cancels_active_node_tasks(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    pocket_tool: Tool,
+    protein_file: FileModel,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.services.workflows.create_and_schedule_tool_task",
+        create_fake_scheduled_task,
+    )
+    _, run_response = await create_workflow_run_for_definition(
+        api_client,
+        name="Cancelable workflow",
+        definition=template_definition(pocket_tool),
+        input_files={"protein_pdb": protein_file.id},
+    )
+    run = run_response.json()["data"]
+    task_id = run["node_states"]["pocket_prediction"]["task_id"]
+
+    cancel_response = await api_client.post(
+        f"/api/v1/workflows/runs/{run['id']}/cancel",
+        headers={"Authorization": "Bearer owner-token"},
+    )
+
+    assert cancel_response.status_code == 200
+    canceled = cancel_response.json()["data"]
+    assert canceled["status"] == "canceled"
+    assert canceled["node_states"]["pocket_prediction"]["status"] == "canceled"
+    assert canceled["node_states"]["pocket_prediction"]["task_id"] == task_id
+    task = await db_session.get(Task, task_id)
+    assert task is not None
+    assert task.status == TaskStatus.CANCELED.value
+
+
+@pytest.mark.asyncio
+async def test_retry_failed_workflow_node_reschedules_only_that_node(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    pocket_tool: Tool,
+    generation_tool: Tool,
+    protein_file: FileModel,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.services.workflows.create_and_schedule_tool_task",
+        create_fake_scheduled_task,
+    )
+    _, run_response = await create_workflow_run_for_definition(
+        api_client,
+        name="Retry Failed Node",
+        definition=linear_generation_definition(pocket_tool, generation_tool),
+        input_files={"protein_pdb": protein_file.id},
+    )
+    run = run_response.json()["data"]
+    first_task_id = run["node_states"]["pocket_prediction"]["task_id"]
+    first_task = await db_session.get(Task, first_task_id)
+    assert first_task is not None
+    first_task.status = TaskStatus.FAILURE.value
+    first_task.error_message = "temporary failure"
+    await db_session.commit()
+
+    sync_response = await api_client.post(
+        f"/api/v1/workflows/runs/{run['id']}/sync",
+        headers={"Authorization": "Bearer owner-token"},
+    )
+    assert sync_response.status_code == 200
+    failed_run = sync_response.json()["data"]
+    assert failed_run["status"] == "failure"
+
+    retry_response = await api_client.post(
+        f"/api/v1/workflows/runs/{run['id']}/nodes/pocket_prediction/retry",
+        headers={"Authorization": "Bearer owner-token"},
+    )
+
+    assert retry_response.status_code == 200
+    retried = retry_response.json()["data"]
+    retried_state = retried["node_states"]["pocket_prediction"]
+    downstream_state = retried["node_states"]["molecule_generation"]
+    assert retried["status"] == "waiting_task"
+    assert retried["error_message"] is None
+    assert retried_state["status"] == "waiting_task"
+    assert retried_state["task_id"] != first_task_id
+    assert "error_message" not in retried_state
+    assert downstream_state["status"] == "pending"
+    assert downstream_state.get("task_id") is None
+    task_count_result = await db_session.execute(select(func.count()).select_from(Task))
+    assert task_count_result.scalar_one() == 2
 
 
 @pytest.mark.asyncio

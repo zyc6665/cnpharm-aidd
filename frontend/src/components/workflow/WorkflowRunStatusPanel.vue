@@ -12,10 +12,21 @@
           size="small"
           :loading="syncing"
           :disabled="syncing || isTerminal"
-          @click="$emit('sync')"
+          @click="emit('sync')"
         >
           <template #icon><SyncOutlined /></template>
           {{ t('workflow.canvasPresets.syncRun') }}
+        </a-button>
+        <a-button
+          class="cancel-workflow-run"
+          size="small"
+          danger
+          :loading="canceling"
+          :disabled="canceling || isTerminal"
+          @click="emit('cancel')"
+        >
+          <template #icon><StopOutlined /></template>
+          {{ t('workflow.canvasPresets.cancelRun') }}
         </a-button>
       </div>
     </div>
@@ -55,6 +66,18 @@
           </span>
           <span v-if="node.errorMessage" class="run-node-error">{{ node.errorMessage }}</span>
         </div>
+        <a-button
+          v-if="node.status === 'failure'"
+          class="retry-workflow-node"
+          size="small"
+          type="link"
+          :loading="retryingNodeId === node.id"
+          :disabled="Boolean(retryingNodeId)"
+          @click="emit('retryNode', node.id)"
+        >
+          <template #icon><RedoOutlined /></template>
+          {{ t('workflow.canvasPresets.retryNode') }}
+        </a-button>
       </div>
     </div>
   </div>
@@ -63,7 +86,7 @@
 <script setup lang="ts">
   import { computed } from 'vue'
   import { useI18n } from 'vue-i18n'
-  import { SyncOutlined } from '@ant-design/icons-vue'
+  import { RedoOutlined, StopOutlined, SyncOutlined } from '@ant-design/icons-vue'
   import type { WorkflowRun } from '@/types/models'
   import {
     buildWorkflowRunSummary,
@@ -74,10 +97,14 @@
   const props = defineProps<{
     run: WorkflowRun
     syncing?: boolean
+    canceling?: boolean
+    retryingNodeId?: string | null
   }>()
 
-  defineEmits<{
+  const emit = defineEmits<{
     sync: []
+    cancel: []
+    retryNode: [nodeId: string]
   }>()
 
   const { t } = useI18n()
@@ -165,12 +192,17 @@
   .run-node-row {
     min-width: 0;
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr) auto;
     gap: @spacing-sm;
     align-items: start;
     padding: @spacing-xs @spacing-sm;
     border-radius: @border-radius-base;
     background: @bg-elevated;
+  }
+
+  .retry-workflow-node {
+    align-self: center;
+    padding-inline: 0;
   }
 
   .run-node-main {

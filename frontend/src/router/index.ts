@@ -65,6 +65,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'workflow.title' }
   },
   {
+    path: '/workflow/runs/:runId',
+    name: 'WorkflowRunDetail',
+    component: () => import('@/views/workflow/RunDetail.vue'),
+    meta: { titleLiteral: '工作流运行详情', requiresAuth: true }
+  },
+  {
     path: '/research-boards',
     name: 'ResearchBoards',
     component: () => import('@/views/research-boards/List.vue'),

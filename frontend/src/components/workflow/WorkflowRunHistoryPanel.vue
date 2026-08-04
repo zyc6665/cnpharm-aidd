@@ -9,20 +9,31 @@
     </div>
 
     <div v-if="runs.length > 0" class="run-history-list">
-      <button
+      <div
         v-for="run in runs"
         :key="run.id"
         class="run-history-item"
         :class="{ active: run.id === activeRunId }"
-        type="button"
+        role="button"
+        tabindex="0"
         @click="emit('select', run.id)"
+        @keydown.enter.prevent="emit('select', run.id)"
+        @keydown.space.prevent="emit('select', run.id)"
       >
         <span class="run-history-name">{{ run.name }}</span>
         <a-tag :color="getWorkflowRunStatusTone(run.status)">
           {{ t(`workflow.runStatus.${run.status}`) }}
         </a-tag>
         <span class="run-history-time">{{ formatRunTime(run.created_at) }}</span>
-      </button>
+        <a-button
+          class="view-workflow-run-detail"
+          size="small"
+          type="link"
+          @click.stop="emit('viewDetail', run.id)"
+        >
+          {{ t('workflow.canvasPresets.viewRunDetail') }}
+        </a-button>
+      </div>
     </div>
 
     <div v-if="runs.length > 0" class="run-history-footer">
@@ -54,6 +65,7 @@
 
   const emit = defineEmits<{
     select: [runId: string]
+    viewDetail: [runId: string]
     refresh: []
     loadMore: []
   }>()
@@ -127,9 +139,14 @@
   }
 
   .run-history-time {
-    grid-column: 1 / -1;
     color: @text-color-light-secondary;
     font-size: @font-size-sm;
+  }
+
+  .view-workflow-run-detail {
+    grid-column: 1 / -1;
+    justify-self: start;
+    padding-inline: 0;
   }
 
   .run-history-empty {
