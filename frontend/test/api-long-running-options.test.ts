@@ -27,7 +27,7 @@ test('长任务同步接口应显式使用长超时并允许传入取消信号',
   assert.equal(agentSyncSignature.test(agentApiSource), true)
 })
 
-test('任务轮询接口应支持 AbortController 取消和一次网络重试', () => {
+test('任务详情接口保留取消信号和请求层一次网络重试', () => {
   const requestSource = readSource('src/api/request.ts')
   const tasksApiSource = readSource('src/api/tasks.ts')
   const workflowExecutionSource = readSource('src/composables/useWorkflowExecution.ts')
@@ -35,9 +35,7 @@ test('任务轮询接口应支持 AbortController 取消和一次网络重试', 
   assert.equal(requestSource.includes('isCanceledRequest'), true)
   assert.equal(requestSource.includes('!isCanceledRequest && retryCount < retryLimit'), true)
   assert.equal(tasksApiSource.includes('getTaskDetail = (id: string, options?: RequestOptions)'), true)
-  assert.equal(workflowExecutionSource.includes('AbortController'), true)
-  assert.equal(workflowExecutionSource.includes('onScopeDispose'), true)
-  assert.equal(workflowExecutionSource.includes('signal: pollController.signal'), true)
-  assert.equal(workflowExecutionSource.includes('retry: 1'), true)
-  assert.equal(workflowExecutionSource.includes('cancelActivePolling'), true)
+  assert.equal(workflowExecutionSource.includes('per-node Task scheduling logic'), true)
+  assert.equal(workflowExecutionSource.includes('AbortController'), false)
+  assert.equal(workflowExecutionSource.includes('cancelActivePolling'), false)
 })

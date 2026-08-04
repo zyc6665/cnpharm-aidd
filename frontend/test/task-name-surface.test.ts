@@ -26,13 +26,13 @@ test('普通工具详情页应提供任务名称输入并在创建任务时传�
   assert.equal(source.includes('name: taskName.value.trim() || undefined'), true)
 })
 
-test('工作台运行面板应提供任务名称输入并在创建任务时传递 name', () => {
+test('工作台已下线单任务运行面板，不再在面板内创建任务名称', () => {
   const source = readSource('src/components/workflow/WorkflowRunPanel.vue')
 
-  assert.equal(source.includes("t('tasks.name')"), true)
-  assert.equal(source.includes("t('tasks.namePlaceholder')"), true)
-  assert.equal(source.includes('const taskName = ref('), true)
-  assert.equal(source.includes('name: taskName.value.trim() || undefined'), true)
+  assert.equal(source.includes('workflow-run-panel'), true)
+  assert.equal(source.includes("t('tasks.name')"), false)
+  assert.equal(source.includes('const taskName = ref('), false)
+  assert.equal(source.includes('name: taskName.value.trim() || undefined'), false)
 })
 
 test('任务列表和详情页应优先展示任务名而不是只展示工具名或任务 ID', () => {

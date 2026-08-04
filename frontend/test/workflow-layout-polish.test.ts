@@ -13,28 +13,27 @@ test('workflow node inspector exposes researcher-facing node actions', () => {
   const pageSource = readSource('src/views/workflow/index.vue')
 
   for (const marker of [
-    'workflow.inspector.rerunCurrentNode',
-    'workflow.inspector.rerunDownstream',
+    'workflow.inspector.runWorkflow',
     'workflow.inspector.viewTaskDetail',
     'workflow.inspector.outputFiles',
-    "emit('rerun-downstream'",
+    "event: 'run-node'",
     "emit('view-task-detail'"
   ]) {
     assert.equal((inspectorSource + resultSource).includes(marker), true, `missing ${marker}`)
   }
 
   for (const marker of [
-    'runDownstreamFrom',
+    'handleRunWorkflowDefinition',
     'handleViewTaskDetail',
-    '@rerun-downstream="runDownstreamFrom"',
+    '@run-node="handleRunWorkflowDefinition"',
     '@view-task-detail="handleViewTaskDetail"'
   ]) {
     assert.equal(pageSource.includes(marker), true, `missing ${marker}`)
   }
 
   const executionSource = readSource('src/composables/useWorkflowExecution.ts')
-  assert.equal(executionSource.includes('async function runDownstreamFrom'), true)
-  assert.equal(executionSource.includes('workflowStore.clearNodeTasks'), true)
+  assert.equal(executionSource.includes('per-node Task scheduling logic'), true)
+  assert.equal(executionSource.includes('async function runDownstreamFrom'), false)
 })
 
 test('workflow tool palette exposes multi-dimensional tool filters', () => {

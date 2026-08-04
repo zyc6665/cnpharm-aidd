@@ -12,7 +12,7 @@ test('workflow session stores node position overrides for canvas persistence', (
 
   assert.equal(source.includes('canvasNodes'), true)
   assert.equal(source.includes('canvasEdges'), true)
-  assert.equal(source.includes('ensureCanvasFromTemplate'), true)
+  assert.equal(source.includes('ensureCanvasFromPreset'), true)
   assert.equal(source.includes('addToolNode'), true)
   assert.equal(source.includes('deleteCanvasNode'), true)
   assert.equal(source.includes('addCanvasEdge'), true)
@@ -34,7 +34,7 @@ test('workflow page normalizes persisted workflow session before rendering recor
 })
 
 test('template canvas renders resolved node positions and emits move-node', () => {
-  const canvas = readSource('src/components/workflow/WorkflowTemplateCanvas.vue')
+  const canvas = readSource('src/components/workflow/WorkflowCanvasBoard.vue')
   const node = readSource('src/components/workflow/WorkflowCanvasNode.vue')
 
   assert.equal(canvas.includes('nodePositions'), true)

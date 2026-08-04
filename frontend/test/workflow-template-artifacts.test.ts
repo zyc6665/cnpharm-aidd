@@ -5,7 +5,7 @@ import {
   recommendArtifactsForNode,
   resolveNodeInputRequirements
 } from '../src/workflow/template-artifacts.ts'
-import { AIDD_WORKFLOW_TEMPLATE } from '../src/workflow/templates.ts'
+import { AIDD_WORKFLOW_CANVAS_PRESET } from '../src/workflow/templates.ts'
 import type { WorkflowTaskRef } from '../src/workflow/artifact-types.ts'
 import type { ArtifactFile } from '../src/types/models.d.ts'
 
@@ -49,7 +49,7 @@ function createArtifact(input: {
 
 test('node input requirements follow incoming semantic edges', () => {
   const requirements = resolveNodeInputRequirements({
-    template: AIDD_WORKFLOW_TEMPLATE,
+    template: AIDD_WORKFLOW_CANVAS_PRESET,
     nodeId: 'tool-docking'
   })
 
@@ -61,7 +61,7 @@ test('node input requirements follow incoming semantic edges', () => {
 
 test('artifact recommendation prefers latest upstream task artifact', () => {
   const recommendations = recommendArtifactsForNode({
-    template: AIDD_WORKFLOW_TEMPLATE,
+    template: AIDD_WORKFLOW_CANVAS_PRESET,
     nodeId: 'tool-molecule-generation',
     artifacts: [
       createArtifact({
@@ -85,7 +85,7 @@ test('artifact recommendation prefers latest upstream task artifact', () => {
 
 test('artifact recommendation marks missing input when upstream task is unavailable', () => {
   const recommendations = recommendArtifactsForNode({
-    template: AIDD_WORKFLOW_TEMPLATE,
+    template: AIDD_WORKFLOW_CANVAS_PRESET,
     nodeId: 'tool-molecule-generation',
     artifacts: [],
     taskByNode: {}

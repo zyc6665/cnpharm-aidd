@@ -30,7 +30,7 @@ test('workflow page integrates preflight summary before the canvas', () => {
     'workflowPreflight',
     'buildWorkflowPreflight',
     'workflow-preflight-region',
-    '@run-ready-nodes="handleRunReadyNodes"',
+    '@run-ready-nodes="handleRunWorkflowDefinition"',
     '@select-node="workflowStore.setActiveNode"'
   ]) {
     assert.equal(source.includes(marker), true, `missing ${marker}`)

@@ -4,9 +4,9 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import { resolveReadyToolNodeIds, resolveWorkflowExecutionOrder } from '../src/workflow/template-runner.ts'
-import type { WorkflowTemplate } from '../src/workflow/template-types.ts'
+import type { WorkflowCanvasPreset } from '../src/workflow/template-types.ts'
 
-const template: WorkflowTemplate = {
+const template: WorkflowCanvasPreset = {
   id: 'aidd-template',
   kind: 'aidd',
   nameKey: 'workflow.template',
@@ -45,7 +45,7 @@ test('resolveReadyToolNodeIds returns only tool nodes currently marked ready', (
 })
 
 test('resolveWorkflowExecutionOrder sorts ready tool nodes by graph dependencies', () => {
-  const dependentTemplate: WorkflowTemplate = {
+  const dependentTemplate: WorkflowCanvasPreset = {
     ...template,
     nodes: [
       { id: 'input', type: 'input', titleKey: 'input', position: { x: 0, y: 0 } },
@@ -89,27 +89,19 @@ test('resolveWorkflowExecutionOrder sorts ready tool nodes by graph dependencies
 
 test('workflow page exposes save, load and run-ready controls', () => {
   const source = readFileSync(resolve('src/views/workflow/index.vue'), 'utf8')
-  const execution = readFileSync(resolve('src/composables/useWorkflowExecution.ts'), 'utf8')
+  const runsStore = readFileSync(resolve('src/stores/workflow-runs.ts'), 'utf8')
 
   for (const marker of [
     'handleSaveWorkflow',
     'handleLoadWorkflow',
-    'handleRunReadyNodes',
+    'handleRunWorkflowDefinition',
     'workflow-definition-bar'
   ]) {
     assert.equal(source.includes(marker), true, `missing ${marker}`)
   }
 
-  for (const marker of [
-    'runWorkflowUntilBlocked',
-    'pollNodeTaskUntilTerminal',
-    'prepareWorkflowNodeTaskPayload',
-    'buildTaskSubmissionPayload',
-    'flattenToolInputSchema',
-    'getToolDetail'
-  ]) {
-    assert.equal(execution.includes(marker), true, `missing ${marker}`)
-  }
+  assert.equal(runsStore.includes('runWorkflowDefinition'), true)
+  assert.equal(runsStore.includes('createWorkflowRun'), true)
 })
 
 test('workflow page uses editable graph for canvas, save, edges, and available tools', () => {
@@ -117,7 +109,7 @@ test('workflow page uses editable graph for canvas, save, edges, and available t
   const canvas = readFileSync(resolve('src/composables/useWorkflowCanvas.ts'), 'utf8')
 
   for (const marker of [
-    'editableTemplate',
+    'editableCanvasPreset',
     'availableWorkflowTools',
     'handleAddToolNode',
     'handleDeleteNode',

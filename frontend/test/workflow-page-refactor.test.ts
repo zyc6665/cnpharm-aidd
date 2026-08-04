@@ -16,9 +16,8 @@ test('工作台页面拆分后的 composable 与组件应存在', () => {
     'src/composables/useWorkflowPersistence.ts',
     'src/composables/useWorkflowExecution.ts',
     'src/stores/workflow-session-store.ts',
-    'src/stores/workflow-templates.ts',
     'src/stores/workflow-runs.ts',
-    'src/components/workflow/WorkflowTemplateCanvas.vue',
+    'src/components/workflow/WorkflowCanvasBoard.vue',
     'src/components/workflow/WorkflowRunInputPanel.vue',
     'src/components/workflow/WorkflowToolPalette.vue',
     'src/stores/workflow-session.ts'
@@ -34,9 +33,9 @@ test('工作台页面应通过 composable 和子组件组装，而不是继续�
 
   assert.equal(pageSource.includes('useWorkflowCanvas'), true)
   assert.equal(pageSource.includes('useWorkflowPersistence'), true)
-  assert.equal(pageSource.includes('useWorkflowExecution'), true)
-  assert.equal(pageSource.includes('WorkflowTemplateCanvas'), true)
-  assert.equal(pageSource.includes('WorkflowTemplateToolbar'), false)
+  assert.equal(pageSource.includes('useWorkflowExecution'), false)
+  assert.equal(pageSource.includes('WorkflowCanvasBoard'), true)
+  assert.equal(pageSource.includes('WorkflowCanvasToolbar'), false)
   assert.equal(pageSource.includes('WorkflowRunInputPanel'), true)
   assert.equal(pageSource.includes('WorkflowToolPalette'), true)
 })
@@ -51,17 +50,17 @@ test('workflow store 应将 session helper 抽离到独立模块', () => {
 
   assert.equal(storeSource.includes("from './workflow-session'"), true)
   assert.equal(storeSource.includes("from './workflow-session-store'"), true)
-  assert.equal(storeSource.includes("from './workflow-templates'"), true)
+  assert.equal(storeSource.includes("from './workflow-templates'"), false)
   assert.equal(storeSource.includes("from './workflow-runs'"), true)
 })
 
 test('workflow facade store 应保持跨域协调，不再实现模板和运行 API 细节', () => {
   const storeSource = readSource('src/stores/workflow.ts')
 
-  assert.equal(storeSource.includes('getWorkflowTemplates('), false)
+  assert.equal(storeSource.includes('getWorkflowDefinitions('), false)
   assert.equal(storeSource.includes('getWorkflowRuns('), false)
   assert.equal(storeSource.includes('createWorkflowRun('), false)
-  assert.equal(storeSource.includes('createWorkflowTemplate('), false)
+  assert.equal(storeSource.includes('createWorkflowDefinition('), false)
 })
 
 test('工作流持久化 composable 不应使用 any[] 描述画布节点和边', () => {

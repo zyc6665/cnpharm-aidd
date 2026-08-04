@@ -122,7 +122,7 @@ test('流程工作台页面文件应存在', () => {
 })
 
 test('流程工作台应拆出画布、工具栏与节点检查器组件', () => {
-  assert.equal(existsSync(resolve(rootDir, 'src/components/workflow/WorkflowTemplateCanvas.vue')), true)
+  assert.equal(existsSync(resolve(rootDir, 'src/components/workflow/WorkflowCanvasBoard.vue')), true)
   assert.equal(existsSync(resolve(rootDir, 'src/components/workflow/WorkflowToolPalette.vue')), true)
   assert.equal(existsSync(resolve(rootDir, 'src/components/workflow/WorkflowNodeInspector.vue')), true)
 })
@@ -131,23 +131,23 @@ test('流程工作台页面应组合工具栏、画布和节点检查器组件',
   const source = readSource('src/views/workflow/index.vue')
 
   assert.equal(source.includes('WorkflowToolPalette'), true)
-  assert.equal(source.includes('WorkflowTemplateCanvas'), true)
+  assert.equal(source.includes('WorkflowCanvasBoard'), true)
   assert.equal(source.includes('WorkflowNodeInspector'), true)
 })
 
-test('节点运行面板应复用 schema 扁平化与任务提交载荷构建工具', () => {
+test('节点参数面板应复用 schema 扁平化并避免单节点任务提交载荷', () => {
   const source = readSource('src/components/workflow/WorkflowNodeRunPanel.vue')
 
   assert.equal(source.includes('flattenToolInputSchema'), true)
-  assert.equal(source.includes('buildTaskSubmissionPayload'), true)
+  assert.equal(source.includes('buildTaskSubmissionPayload'), false)
 })
 
-test('节点运行面板应提供参数表单、提交与重置操作', () => {
+test('节点参数面板应提供参数表单与重置操作', () => {
   const source = readSource('src/components/workflow/WorkflowNodeRunPanel.vue')
 
   assert.equal(source.includes('ToolParameterForm'), true)
-  assert.equal(source.includes('submitWorkflowForm'), true)
-  assert.equal(source.includes('buildTaskSubmissionPayload'), true)
+  assert.equal(source.includes('submitWorkflowForm'), false)
+  assert.equal(source.includes('buildTaskSubmissionPayload'), false)
   assert.equal(source.includes('resetForm'), true)
   assert.equal(source.includes('getToolDetail'), true)
 })

@@ -9,25 +9,27 @@ const resultPanel = readFileSync(resolve('src/components/workflow/NodeResultPane
 const store = readFileSync(resolve('src/stores/workflow.ts'), 'utf8')
 const execution = readFileSync(resolve('src/composables/useWorkflowExecution.ts'), 'utf8')
 
-test('workflow page binds run-node to the execution composable', () => {
-  for (const marker of ['useTasksStore', 'useWorkflowExecution', 'handleRunNode', '@run-node="handleRunNode"']) {
+test('workflow page routes run-node through WorkflowRun creation', () => {
+  for (const marker of ['handleRunWorkflowDefinition', '@run-node="handleRunWorkflowDefinition"']) {
     assert.equal(workflowPage.includes(marker), true, `missing ${marker}`)
   }
 
   for (const marker of [
-    'tasksStore.createTask',
-    'workflowStore.recordNodeTask',
-    'resolveToolForNode',
+    'useTasksStore',
+    'useWorkflowExecution',
     'handleRunNode'
   ]) {
-    assert.equal(execution.includes(marker), true, `missing ${marker}`)
+    assert.equal(workflowPage.includes(marker), false, `page should not include ${marker}`)
   }
+
+  assert.equal(execution.includes('per-node Task scheduling logic'), true)
+  assert.equal(execution.includes('tasksStore.createTask'), false)
 })
 
 test('node inspector emits tool selection and run events', () => {
   assert.equal(inspector.includes("event: 'select-tool'"), true)
   assert.equal(inspector.includes("event: 'run-node'"), true)
-  assert.equal(resultPanel.includes("t('workflow.inspector.rerunCurrentNode')"), true)
+  assert.equal(resultPanel.includes("t('workflow.inspector.runWorkflow')"), true)
 })
 
 test('workflow store can record node tasks', () => {

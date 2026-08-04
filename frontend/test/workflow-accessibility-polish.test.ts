@@ -29,7 +29,7 @@ test('workflow palette and inspector empty states should guide the next action',
     'filterOutput',
     'filterExecutor',
     'viewTaskDetail',
-    'rerunDownstream'
+    'runWorkflow'
   ]) {
     assert.equal(zhSource.includes(marker), true, `missing zh ${marker}`)
     assert.equal(enSource.includes(marker), true, `missing en ${marker}`)
@@ -37,7 +37,7 @@ test('workflow palette and inspector empty states should guide the next action',
 })
 
 test('workflow canvas exposes keyboard movement and graph semantics', () => {
-  const canvasSource = readSource('src/components/workflow/WorkflowTemplateCanvas.vue')
+  const canvasSource = readSource('src/components/workflow/WorkflowCanvasBoard.vue')
   const nodeSource = readSource('src/components/workflow/WorkflowCanvasNode.vue')
 
   for (const marker of ['role="img"', ':aria-label="t(\'workflow.canvas.edges\'']) {

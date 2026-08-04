@@ -22,7 +22,7 @@ test('workflow node inspector exposes node configuration sections', () => {
     "workflow.inspector.toolSelector",
     "workflow.inspector.requiredInput",
     "workflow.inspector.upstreamEdge",
-    "workflow.inspector.rerunCurrentNode",
+    "workflow.inspector.runWorkflow",
     "workflow.inspector.taskResult",
     "workflow.inspector.noSelectedNode"
   ]) {
@@ -56,22 +56,28 @@ test('workflow node inspector embeds a real node run panel', () => {
   for (const marker of [
     'WorkflowNodeRunPanel',
     'selected-tool-slug',
-    'node-id',
-    'task-submitted'
+    'node-id'
   ]) {
     assert.equal(inspectorSource.includes(marker), true, `inspector missing ${marker}`)
   }
 
   for (const marker of [
     'ToolParameterForm',
-    'buildTaskSubmissionPayload',
     'buildToolFormInitialState',
     'getToolDetail',
+    'flattenToolInputSchema',
+    ':allow-uploads="false"'
+  ]) {
+    assert.equal(runPanelSource.includes(marker), true, `run panel missing ${marker}`)
+  }
+
+  for (const marker of [
+    'buildTaskSubmissionPayload',
     'uploadFile',
     'recordNodeTask',
     'pollTaskUntilTerminal'
   ]) {
-    assert.equal(runPanelSource.includes(marker), true, `run panel missing ${marker}`)
+    assert.equal(runPanelSource.includes(marker), false, `run panel should not include ${marker}`)
   }
 })
 

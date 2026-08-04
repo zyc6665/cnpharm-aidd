@@ -9,7 +9,7 @@ function readSource(relativePath: string): string {
 
 test('workflow template canvas components exist', () => {
   for (const file of [
-    'src/components/workflow/WorkflowTemplateCanvas.vue',
+    'src/components/workflow/WorkflowCanvasBoard.vue',
     'src/components/workflow/WorkflowCanvasNode.vue',
     'src/components/workflow/WorkflowCanvasEdge.vue',
     'src/components/workflow/WorkflowNodeStatusBadge.vue'
@@ -19,12 +19,12 @@ test('workflow template canvas components exist', () => {
 })
 
 test('workflow template canvas exposes graph interaction surface', () => {
-  const canvas = readSource('src/components/workflow/WorkflowTemplateCanvas.vue')
+  const canvas = readSource('src/components/workflow/WorkflowCanvasBoard.vue')
   const node = readSource('src/components/workflow/WorkflowCanvasNode.vue')
   const edge = readSource('src/components/workflow/WorkflowCanvasEdge.vue')
   const badge = readSource('src/components/workflow/WorkflowNodeStatusBadge.vue')
 
-  assert.equal(canvas.includes('workflow-template-canvas'), true)
+  assert.equal(canvas.includes('workflow-canvas-board'), true)
   assert.equal(canvas.includes('WorkflowCanvasNode'), true)
   assert.equal(canvas.includes('WorkflowCanvasEdge'), true)
   assert.equal(canvas.includes('select-node'), true)
@@ -35,7 +35,7 @@ test('workflow template canvas exposes graph interaction surface', () => {
 })
 
 test('workflow template canvas stays focused on the graph surface', () => {
-  const canvas = readSource('src/components/workflow/WorkflowTemplateCanvas.vue')
+  const canvas = readSource('src/components/workflow/WorkflowCanvasBoard.vue')
 
   assert.equal(canvas.includes('canvas-viewport'), true)
   assert.equal(canvas.includes('canvas-surface'), true)

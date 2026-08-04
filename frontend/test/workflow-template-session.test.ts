@@ -7,7 +7,7 @@ const source = readFileSync(resolve('src/stores/workflow.ts'), 'utf8')
 
 test('workflow store includes template canvas session fields', () => {
   for (const field of [
-    'templateId',
+    'canvasPresetId',
     'activeNodeId',
     'selectedToolByNode',
     'nodeFormDrafts',
@@ -20,7 +20,7 @@ test('workflow store includes template canvas session fields', () => {
 
 test('workflow store exposes template canvas actions', () => {
   for (const action of [
-    'setTemplate',
+    'setCanvasPreset',
     'setActiveNode',
     'selectNodeTool',
     'setNodeFormDraft',

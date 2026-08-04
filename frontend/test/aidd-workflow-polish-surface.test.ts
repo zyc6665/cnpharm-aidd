@@ -19,12 +19,12 @@ test('工作台左栏应展示分组摘要与推荐工具数量', () => {
   assert.equal(source.includes('getRecommendedCount'), true)
 })
 
-test('节点运行面板应提供工具摘要和主动作区', () => {
+test('节点参数面板应提供工具摘要和重置动作区', () => {
   const source = readSource('src/components/workflow/WorkflowNodeRunPanel.vue')
 
   assert.equal(source.includes('run-tool-summary'), true)
   assert.equal(source.includes('node-run-actions'), true)
-  assert.equal(source.includes('submitWorkflowForm'), true)
+  assert.equal(source.includes('submitWorkflowForm'), false)
   assert.equal(source.includes('resetForm'), true)
 })
 

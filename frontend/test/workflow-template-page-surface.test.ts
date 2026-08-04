@@ -10,18 +10,18 @@ const paletteSource = readFileSync(resolve('src/components/workflow/WorkflowTool
 
 test('workflow page mounts template canvas and inspector in manual mode', () => {
   for (const marker of [
-    'WorkflowTemplateCanvas',
+    'WorkflowCanvasBoard',
     'WorkflowNodeInspector',
     'useWorkflowCanvas',
-    'workflow-template-layout',
-    'template-step-rail'
+    'workflow-canvas-layout',
+    'workflow-step-rail'
   ]) {
     assert.equal(pageSource.includes(marker), true, `missing ${marker}`)
   }
 
   for (const marker of [
-    'WORKFLOW_TEMPLATES',
-    'getWorkflowTemplateById',
+    'WORKFLOW_CANVAS_PRESETS',
+    'getWorkflowCanvasPresetById',
     'buildCurrentWorkflowDefinition',
     'resolveNodeStatusReason'
   ]) {
@@ -38,9 +38,9 @@ test('workflow page exposes a sidebar tool library and run summary', () => {
     'completedNodeCount',
     'failedNodeCount',
     'WorkflowToolPalette',
-    '运行可执行节点',
-    '保存',
-    '加载'
+    'handleRunWorkflowDefinition',
+    'WorkflowPreflightPanel',
+    'workflow-definition-bar'
   ]) {
     assert.equal(pageSource.includes(marker), true, `missing ${marker}`)
   }
@@ -80,7 +80,6 @@ test('agent draft reuses persisted definition mapping and resets saved identity'
   for (const marker of [
     'applyWorkflowDraft',
     'mapWorkflowDefinitionToCanvasPayload',
-    'workflowStore.clearActiveWorkflowTemplate()',
     'workflowDefinitionsStore.clearCurrentWorkflowDefinition()',
     'workflowRunInputSelections.value = { ...draft.input_files }',
     'producedOutputTypes',

@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const workflowPage = readFileSync(resolve('src/views/workflow/index.vue'), 'utf8')
-const canvas = readFileSync(resolve('src/components/workflow/WorkflowTemplateCanvas.vue'), 'utf8')
+const canvas = readFileSync(resolve('src/components/workflow/WorkflowCanvasBoard.vue'), 'utf8')
 const inspector = readFileSync(resolve('src/components/workflow/WorkflowNodeInspector.vue'), 'utf8')
 
 test('workflow template layout keeps desktop three-column structure', () => {

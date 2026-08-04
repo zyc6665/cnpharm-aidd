@@ -2,9 +2,9 @@ import { test } from 'vitest'
 import assert from 'node:assert/strict'
 
 import { buildWorkflowPreflight } from '../src/workflow/preflight.ts'
-import type { WorkflowTemplate } from '../src/workflow/template-types.ts'
+import type { WorkflowCanvasPreset } from '../src/workflow/template-types.ts'
 
-const template: WorkflowTemplate = {
+const template: WorkflowCanvasPreset = {
   id: 'aidd-template',
   kind: 'aidd',
   nameKey: 'workflow.template',

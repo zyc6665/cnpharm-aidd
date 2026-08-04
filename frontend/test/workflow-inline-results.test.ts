@@ -10,12 +10,15 @@ function readSource(relativePath: string): string {
   return readFileSync(resolve(rootDir, relativePath), 'utf8')
 }
 
-test('工作台中栏应挂载轻量结果面板并保留查看完整详情入口', () => {
+test('工作台不再使用旧运行面板承载轻量结果', () => {
   const source = readSource('src/components/workflow/WorkflowRunPanel.vue')
+  const resultPanelSource = readSource('src/components/workflow/NodeResultPanel.vue')
+  const pageSource = readSource('src/views/workflow/index.vue')
 
-  assert.equal(source.includes('WorkflowTaskResultPanel'), true)
-  assert.equal(source.includes('resultTaskId'), true)
-  assert.equal(source.includes('resultTaskSummary'), true)
+  assert.equal(source.includes('workflow-run-panel'), true)
+  assert.equal(source.includes('WorkflowTaskResultPanel'), false)
+  assert.equal(resultPanelSource.includes('view-task-detail'), true)
+  assert.equal(pageSource.includes('WorkflowResultsReportPanel'), true)
 })
 
 test('任务详情页应复用共享输出摘要和日志预览组件', () => {
