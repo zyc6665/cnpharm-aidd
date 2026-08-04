@@ -2,9 +2,9 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import i18n from '@/locales'
 import WorkflowTemplateCanvas from './WorkflowTemplateCanvas.vue'
-import type { WorkflowTemplate } from '@/workflow/template-types'
+import type { WorkflowCanvasPreset } from '@/workflow/template-types'
 
-const template: WorkflowTemplate = {
+const template: WorkflowCanvasPreset = {
   id: 'free-canvas',
   kind: 'free',
   nameKey: 'workflow.canvas.freeFlowName',

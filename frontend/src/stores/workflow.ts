@@ -4,7 +4,7 @@ import { type WorkflowArtifactSemanticType, type WorkflowTaskRef } from '@/workf
 import type {
   WorkflowCanvasEdge,
   WorkflowCanvasNode,
-  WorkflowTemplate as CanvasWorkflowTemplate
+  WorkflowCanvasPreset as CanvasWorkflowPreset
 } from '@/workflow/template-types'
 import { type ArtifactInputSlot, type ArtifactOutputSlot } from '@/workflow/contract-bindings'
 import { type WorkflowCanvasPosition, type WorkflowWorkbenchSession } from './workflow-session'
@@ -154,8 +154,8 @@ export const useWorkflowStore = defineStore(
       canvas.setNodePositions(p)
       touchSession()
     }
-    const ensureCanvasFromTemplate = (t: CanvasWorkflowTemplate) => {
-      canvas.ensureCanvasFromTemplate(t)
+    const ensureCanvasFromPreset = (preset: CanvasWorkflowPreset) => {
+      canvas.ensureCanvasFromPreset(preset)
       touchSession()
     }
     const syncCanvasNodeSemanticTypes = () => canvas.syncNodeSemanticTypes()
@@ -344,7 +344,7 @@ export const useWorkflowStore = defineStore(
       setActiveGroup,
       moveNode,
       setNodePositions,
-      ensureCanvasFromTemplate,
+      ensureCanvasFromPreset,
       syncCanvasNodeSemanticTypes,
       addToolNode,
       deleteCanvasNode,

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useWorkflowCanvasStore } from '@/stores/workflow-canvas'
 import { createInitialWorkflowSession } from '@/stores/workflow-session'
-import { FREE_WORKFLOW_TEMPLATE } from '@/workflow/templates'
+import { FREE_WORKFLOW_CANVAS_PRESET } from '@/workflow/templates'
 
 describe('useWorkflowCanvasStore', () => {
   beforeEach(() => {
@@ -23,8 +23,8 @@ describe('useWorkflowCanvasStore', () => {
     expect(session.canvasNodes).toEqual([])
     expect(session.canvasEdges).toEqual([])
     expect(session.hasCanvasOverride).toBe(true)
-    expect(FREE_WORKFLOW_TEMPLATE.nodes).toEqual([])
-    expect(FREE_WORKFLOW_TEMPLATE.edges).toEqual([])
+    expect(FREE_WORKFLOW_CANVAS_PRESET.nodes).toEqual([])
+    expect(FREE_WORKFLOW_CANVAS_PRESET.edges).toEqual([])
   })
 
   it('addNode 应添加节点并设为 active', () => {

@@ -1,5 +1,5 @@
 import type { WorkflowArtifactSemanticType, WorkflowTaskRef } from './artifact-types.ts'
-import type { WorkflowTemplate } from './template-types.ts'
+import type { WorkflowCanvasPreset } from './template-types.ts'
 import type { ArtifactFile } from '../types/models.d.ts'
 import { formatWorkflowKey } from './i18n-utils.ts'
 import { sortArtifactsByCreatedAtDesc } from '../utils/artifact-sorting.ts'
@@ -22,7 +22,7 @@ export interface WorkflowEdgeSuggestion {
 }
 
 export function resolveNodeInputRequirements(input: {
-  template: WorkflowTemplate
+  template: WorkflowCanvasPreset
   nodeId: string
 }): WorkflowNodeInputRequirement[] {
   return input.template.edges
@@ -35,7 +35,7 @@ export function resolveNodeInputRequirements(input: {
 }
 
 export function recommendArtifactsForNode(input: {
-  template: WorkflowTemplate
+  template: WorkflowCanvasPreset
   nodeId: string
   artifacts: ArtifactFile[]
   taskByNode: Record<string, WorkflowTaskRef>
@@ -62,7 +62,7 @@ function findLatestArtifactForTask(artifacts: ArtifactFile[], taskId: string): A
 }
 
 export function suggestWorkflowEdgesForNode(input: {
-  template: WorkflowTemplate
+  template: WorkflowCanvasPreset
   nodeId: string
 }): WorkflowEdgeSuggestion[] {
   const targetNode = input.template.nodes.find(node => node.id === input.nodeId)

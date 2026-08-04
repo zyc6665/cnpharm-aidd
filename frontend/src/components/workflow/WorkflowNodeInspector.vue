@@ -16,14 +16,14 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ArtifactFile } from '@/types/models'
 import type { WorkflowArtifactSemanticType, WorkflowStepStatus, WorkflowTaskRef } from '@/workflow/artifact-types'
-import type { WorkflowCanvasNode, WorkflowTemplate } from '@/workflow/template-types'
+import type { WorkflowCanvasNode, WorkflowCanvasPreset } from '@/workflow/template-types'
 import { recommendArtifactsForNode } from '@/workflow/template-artifacts'
 import NodeEdgePanel from './NodeEdgePanel.vue'
 import NodeResultPanel from './NodeResultPanel.vue'
 import NodeToolPanel from './NodeToolPanel.vue'
 import WorkflowNodeStatusBadge from './WorkflowNodeStatusBadge.vue'
 interface WorkflowAvailableTool { id?: string; slug: string; name: string; description?: string }
-const props = defineProps<{ node: WorkflowCanvasNode | null; template?: WorkflowTemplate | null; artifacts?: ArtifactFile[]; taskByNode?: Record<string, WorkflowTaskRef>; availableTools?: WorkflowAvailableTool[]; status?: WorkflowStepStatus; selectedToolSlug?: string | null; task?: WorkflowTaskRef | null }>()
+const props = defineProps<{ node: WorkflowCanvasNode | null; template?: WorkflowCanvasPreset | null; artifacts?: ArtifactFile[]; taskByNode?: Record<string, WorkflowTaskRef>; availableTools?: WorkflowAvailableTool[]; status?: WorkflowStepStatus; selectedToolSlug?: string | null; task?: WorkflowTaskRef | null }>()
 defineEmits<{ (event: 'select-tool', nodeId: string, toolSlug: string): void; (event: 'add-edge', input: { source: string; target: string; artifactType: WorkflowArtifactSemanticType }): void; (event: 'delete-edge', edgeId: string): void; (event: 'run-node', nodeId: string): void; (event: 'view-task-detail', nodeId: string): void }>()
 const { t, te } = useI18n(); const currentStatus = computed<WorkflowStepStatus>(() => props.status ?? 'idle')
 const inputRecommendations = computed(() => props.node && props.template ? recommendArtifactsForNode({ template: props.template, nodeId: props.node.id, artifacts: props.artifacts ?? [], taskByNode: props.taskByNode ?? {} }) : [])

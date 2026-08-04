@@ -1,6 +1,6 @@
-import type { WorkflowCanvasEdge, WorkflowCanvasNode, WorkflowTemplate } from './template-types'
+import type { WorkflowCanvasEdge, WorkflowCanvasNode, WorkflowCanvasPreset } from './template-types'
 
-export const FREE_WORKFLOW_TEMPLATE: WorkflowTemplate = {
+export const FREE_WORKFLOW_CANVAS_PRESET: WorkflowCanvasPreset = {
   id: 'free-canvas',
   kind: 'free',
   nameKey: 'workflow.canvas.freeFlowName',
@@ -163,14 +163,14 @@ function createEdge(
   return { id, source, target, artifactType }
 }
 
-function createTemplate(input: {
+function createCanvasPreset(input: {
   id: string
-  kind: WorkflowTemplate['kind']
+  kind: WorkflowCanvasPreset['kind']
   nameKey: string
   descriptionKey: string
   nodeKeys: Array<keyof typeof WORKFLOW_NODE_LIBRARY>
   edges: WorkflowCanvasEdge[]
-}): WorkflowTemplate {
+}): WorkflowCanvasPreset {
   return {
     id: input.id,
     kind: input.kind,
@@ -181,7 +181,7 @@ function createTemplate(input: {
   }
 }
 
-export const AIDD_WORKFLOW_TEMPLATE: WorkflowTemplate = createTemplate({
+export const AIDD_WORKFLOW_CANVAS_PRESET: WorkflowCanvasPreset = createCanvasPreset({
   id: 'aidd-template',
   kind: 'aidd',
   nameKey: 'workflow.templates.presets.fullPipeline.name',
@@ -207,7 +207,7 @@ export const AIDD_WORKFLOW_TEMPLATE: WorkflowTemplate = createTemplate({
   ]
 })
 
-export const PROTEIN_TO_POCKET_TEMPLATE: WorkflowTemplate = createTemplate({
+export const PROTEIN_TO_POCKET_CANVAS_PRESET: WorkflowCanvasPreset = createCanvasPreset({
   id: 'protein-pocket-template',
   kind: 'pocket',
   nameKey: 'workflow.templates.presets.proteinToPocket.name',
@@ -219,7 +219,7 @@ export const PROTEIN_TO_POCKET_TEMPLATE: WorkflowTemplate = createTemplate({
   ]
 })
 
-export const POCKET_TO_GENERATION_TEMPLATE: WorkflowTemplate = createTemplate({
+export const POCKET_TO_GENERATION_CANVAS_PRESET: WorkflowCanvasPreset = createCanvasPreset({
   id: 'pocket-generation-template',
   kind: 'screening',
   nameKey: 'workflow.templates.presets.pocketToGeneration.name',
@@ -231,7 +231,7 @@ export const POCKET_TO_GENERATION_TEMPLATE: WorkflowTemplate = createTemplate({
   ]
 })
 
-export const PROTEIN_LIGAND_TO_DOCKING_TEMPLATE: WorkflowTemplate = createTemplate({
+export const PROTEIN_LIGAND_TO_DOCKING_CANVAS_PRESET: WorkflowCanvasPreset = createCanvasPreset({
   id: 'protein-ligand-docking-template',
   kind: 'docking',
   nameKey: 'workflow.templates.presets.proteinLigandToDocking.name',
@@ -244,7 +244,7 @@ export const PROTEIN_LIGAND_TO_DOCKING_TEMPLATE: WorkflowTemplate = createTempla
   ]
 })
 
-export const GENERATION_TO_PROPERTY_TEMPLATE: WorkflowTemplate = createTemplate({
+export const GENERATION_TO_PROPERTY_CANVAS_PRESET: WorkflowCanvasPreset = createCanvasPreset({
   id: 'generation-property-template',
   kind: 'screening',
   nameKey: 'workflow.templates.presets.generationToProperty.name',
@@ -256,14 +256,14 @@ export const GENERATION_TO_PROPERTY_TEMPLATE: WorkflowTemplate = createTemplate(
   ]
 })
 
-export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
-  AIDD_WORKFLOW_TEMPLATE,
-  PROTEIN_TO_POCKET_TEMPLATE,
-  POCKET_TO_GENERATION_TEMPLATE,
-  PROTEIN_LIGAND_TO_DOCKING_TEMPLATE,
-  GENERATION_TO_PROPERTY_TEMPLATE
+export const WORKFLOW_CANVAS_PRESETS: readonly WorkflowCanvasPreset[] = [
+  AIDD_WORKFLOW_CANVAS_PRESET,
+  PROTEIN_TO_POCKET_CANVAS_PRESET,
+  POCKET_TO_GENERATION_CANVAS_PRESET,
+  PROTEIN_LIGAND_TO_DOCKING_CANVAS_PRESET,
+  GENERATION_TO_PROPERTY_CANVAS_PRESET
 ]
 
-export function getWorkflowTemplateById(templateId: string): WorkflowTemplate | null {
-  return WORKFLOW_TEMPLATES.find((template) => template.id === templateId) ?? null
+export function getWorkflowCanvasPresetById(presetId: string): WorkflowCanvasPreset | null {
+  return WORKFLOW_CANVAS_PRESETS.find((preset) => preset.id === presetId) ?? null
 }

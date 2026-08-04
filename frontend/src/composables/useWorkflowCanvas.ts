@@ -9,9 +9,9 @@ import {
 } from '@/workflow/artifact-types'
 import { normalizeWorkflowSemanticType } from '@/workflow/semantic-types'
 import {
-  FREE_WORKFLOW_TEMPLATE,
-  WORKFLOW_TEMPLATES,
-  getWorkflowTemplateById
+  FREE_WORKFLOW_CANVAS_PRESET,
+  WORKFLOW_CANVAS_PRESETS,
+  getWorkflowCanvasPresetById
 } from '@/workflow/templates'
 import { resolveReadyToolNodeIds } from '@/workflow/template-runner'
 import {
@@ -45,7 +45,7 @@ export function useWorkflowCanvas(input: {
   const sidebarExecutorFilter = ref<string>()
 
   const activeTemplate = computed(() => {
-    return getWorkflowTemplateById(workflowStore.templateId) ?? FREE_WORKFLOW_TEMPLATE
+    return getWorkflowCanvasPresetById(workflowStore.templateId) ?? FREE_WORKFLOW_CANVAS_PRESET
   })
 
   const editableTemplate = computed(() => ({
@@ -70,9 +70,9 @@ export function useWorkflowCanvas(input: {
   })
 
   const templateOptions = computed(() => {
-    return WORKFLOW_TEMPLATES.map(template => ({
-      value: template.id,
-      label: formatKey(template.nameKey)
+    return WORKFLOW_CANVAS_PRESETS.map(preset => ({
+      value: preset.id,
+      label: formatKey(preset.nameKey)
     }))
   })
 

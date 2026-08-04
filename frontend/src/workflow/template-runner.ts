@@ -1,6 +1,6 @@
 import type { WorkflowDefinition, WorkflowDefinitionNode } from '../types/models'
 import type { WorkflowStepStatus } from './artifact-types.ts'
-import type { WorkflowTemplate } from './template-types.ts'
+import type { WorkflowCanvasPreset } from './template-types.ts'
 
 export class WorkflowExecutionOrderError extends Error {
   constructor(message: string) {
@@ -119,7 +119,7 @@ function resolveDefinitionExecutionOrder(definition: WorkflowDefinition): string
 }
 
 export function resolveReadyToolNodeIds(input: {
-  template: WorkflowTemplate
+  template: WorkflowCanvasPreset
   nodeStatuses: Record<string, WorkflowStepStatus>
 }): string[] {
   return input.template.nodes
@@ -148,12 +148,12 @@ export function getReadyWorkflowToolNodeIds(
 }
 
 export function resolveWorkflowExecutionOrder(input: {
-  template: WorkflowTemplate
+  template: WorkflowCanvasPreset
   candidateNodeIds: string[]
 }): string[]
 export function resolveWorkflowExecutionOrder(input: WorkflowDefinition): string[]
 export function resolveWorkflowExecutionOrder(input: {
-  template: WorkflowTemplate
+  template: WorkflowCanvasPreset
   candidateNodeIds: string[]
 } | WorkflowDefinition): string[] {
   if (isWorkflowDefinition(input)) {

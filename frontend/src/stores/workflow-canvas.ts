@@ -8,7 +8,7 @@ import type { ArtifactInputSlot, ArtifactOutputSlot } from '@/workflow/contract-
 import type {
   WorkflowCanvasEdge,
   WorkflowCanvasNode,
-  WorkflowTemplate as CanvasWorkflowTemplate
+  WorkflowCanvasPreset as CanvasWorkflowPreset
 } from '@/workflow/template-types'
 import { normalizeRecord, type WorkflowCanvasPosition } from './workflow-session'
 
@@ -90,14 +90,14 @@ export const useWorkflowCanvasStore = defineStore(
       }, {})
     }
 
-    function ensureCanvasFromTemplate(template: CanvasWorkflowTemplate) {
+    function ensureCanvasFromPreset(preset: CanvasWorkflowPreset) {
       if (hasCanvasOverride.value) return
 
-      canvasNodes.value = template.nodes.map(node => ({
+      canvasNodes.value = preset.nodes.map(node => ({
         ...node,
         position: nodePositionById.value[node.id] ?? node.position
       }))
-      canvasEdges.value = template.edges.map(edge => ({ ...edge }))
+      canvasEdges.value = preset.edges.map(edge => ({ ...edge }))
       hasCanvasOverride.value = true
       syncNodeSemanticTypes()
     }
@@ -265,7 +265,7 @@ export const useWorkflowCanvasStore = defineStore(
       setActiveGroup,
       moveNode,
       setNodePositions,
-      ensureCanvasFromTemplate,
+      ensureCanvasFromPreset,
       syncNodeSemanticTypes,
       addNode,
       deleteNode,

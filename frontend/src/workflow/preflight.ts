@@ -8,7 +8,7 @@ import {
   WORKFLOW_ARTIFACT_SEMANTIC_TYPES,
   normalizeWorkflowSemanticType,
 } from './semantic-types.ts'
-import type { WorkflowTemplate } from './template-types.ts'
+import type { WorkflowCanvasPreset } from './template-types.ts'
 import { formatWorkflowKey } from './i18n-utils.ts'
 
 export type WorkflowPreflightIssueType =
@@ -72,7 +72,7 @@ const WORKFLOW_INPUT_ACCEPTED_EXTENSIONS: Record<WorkflowArtifactSemanticType, r
 }
 
 export function buildWorkflowPreflight(input: {
-  template: WorkflowTemplate
+  template: WorkflowCanvasPreset
   nodeStatuses: Record<string, WorkflowStepStatus>
   readyNodeIds: string[]
   selectedWorkflowInputFiles?: Record<string, string>

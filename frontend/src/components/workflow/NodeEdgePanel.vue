@@ -89,11 +89,11 @@
     suggestWorkflowEdgesForNode,
     type WorkflowEdgeSuggestion
   } from '@/workflow/template-artifacts'
-  import type { WorkflowCanvasNode, WorkflowTemplate } from '@/workflow/template-types'
+  import type { WorkflowCanvasNode, WorkflowCanvasPreset } from '@/workflow/template-types'
   import type { ArtifactFile } from '@/types/models'
   const props = defineProps<{
     node: WorkflowCanvasNode
-    template?: WorkflowTemplate | null
+    template?: WorkflowCanvasPreset | null
     artifacts?: ArtifactFile[]
     taskByNode?: Record<string, WorkflowTaskRef>
   }>()

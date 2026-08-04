@@ -72,7 +72,7 @@
   import { useI18n } from 'vue-i18n'
   import type { WorkflowArtifactSemanticType, WorkflowStepStatus } from '@/workflow/artifact-types'
   import { resolveWorkflowLabel } from '@/workflow/i18n-utils'
-  import type { WorkflowCanvasNode as WorkflowCanvasNodeModel, WorkflowTemplate } from '@/workflow/template-types'
+  import type { WorkflowCanvasNode as WorkflowCanvasNodeModel, WorkflowCanvasPreset } from '@/workflow/template-types'
   import WorkflowCanvasEdge from './WorkflowCanvasEdge.vue'
   import WorkflowCanvasNodeView from './WorkflowCanvasNode.vue'
 
@@ -83,7 +83,7 @@
   const { zoom, zoomIn, zoomOut, resetZoom, setZoom, surfaceStyle } = useCanvasViewport()
 
   const props = defineProps<{
-    template: WorkflowTemplate
+    template: WorkflowCanvasPreset
     activeNodeId?: string | null
     nodeStatuses?: Record<string, WorkflowStepStatus>
     nodePositions?: Record<string, { x: number; y: number }>
