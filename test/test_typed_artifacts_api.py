@@ -269,6 +269,150 @@ async def test_standard_artifact_metadata_is_returned_in_project_list(
 
 
 @pytest.mark.asyncio
+async def test_project_artifact_lineage_graph_includes_versions_tasks_and_workflow_nodes(
+    artifact_client,
+    artifact_db: AsyncSession,
+    artifact_context: dict[str, object],
+):
+    from app.models.artifacts import Artifact, ArtifactLineage, ArtifactVersion
+    from app.models.tasks import Task, TaskInput, TaskStatus
+    from app.models.tools import Tool, ToolStatus, ToolVersion
+
+    client, _ = artifact_client
+    project = artifact_context["project"]
+    owner = artifact_context["owner"]
+    tool = Tool(
+        owner_id=owner.id,
+        name="LVpocket",
+        slug="lvpocket-pocket-prediction",
+        status=ToolStatus.PUBLISHED.value,
+        is_public=True,
+    )
+    artifact_db.add(tool)
+    await artifact_db.flush()
+    tool_version = ToolVersion(tool_id=tool.id, version="1.0.0", config={"type": "ssh_job"})
+    artifact_db.add(tool_version)
+    await artifact_db.flush()
+    tool.current_version_id = tool_version.id
+    task = Task(
+        user_id=owner.id,
+        tool_id=tool.id,
+        tool_version_id=tool_version.id,
+        name="Workflow Pocket Node",
+        status=TaskStatus.SUCCESS.value,
+        extra_data={"project_id": project.id},
+    )
+    artifact_db.add(task)
+    await artifact_db.flush()
+    artifact_db.add(
+        TaskInput(
+            task_id=task.id,
+            params={
+                "workflow_run_id": "run-1",
+                "workflow_definition_id": "workflow-1",
+                "workflow_node_id": "pocket_prediction",
+                "workflow_node_type": "tool",
+            },
+            file_ids=[],
+        )
+    )
+    source = Artifact(
+        project_id=project.id,
+        created_by=owner.id,
+        artifact_type="protein_structure",
+        semantic_type="protein_structure@1",
+        standard_type="protein_structure",
+        standard_version=1,
+        name="protein.pdb",
+    )
+    output = Artifact(
+        project_id=project.id,
+        created_by=owner.id,
+        artifact_type="binding_pocket",
+        semantic_type="binding_pocket@1",
+        standard_type="binding_pocket",
+        standard_version=1,
+        name="pocket.pdb",
+        source_task_id=task.id,
+    )
+    artifact_db.add_all([source, output])
+    await artifact_db.flush()
+    source_version = ArtifactVersion(
+        artifact_id=source.id,
+        created_by=owner.id,
+        version=1,
+        filename="protein.pdb",
+        content_type="chemical/x-pdb",
+        size_bytes=12,
+        sha256="a" * 64,
+        storage_key="standard/protein.pdb",
+        status="available",
+    )
+    output_version = ArtifactVersion(
+        artifact_id=output.id,
+        created_by=owner.id,
+        version=1,
+        filename="pocket.pdb",
+        content_type="chemical/x-pdb",
+        size_bytes=16,
+        sha256="b" * 64,
+        storage_key="standard/pocket.pdb",
+        status="available",
+    )
+    artifact_db.add_all([source_version, output_version])
+    await artifact_db.flush()
+    source.latest_version_id = source_version.id
+    output.latest_version_id = output_version.id
+    artifact_db.add(
+        ArtifactLineage(
+            project_id=project.id,
+            input_version_id=source_version.id,
+            output_version_id=output_version.id,
+            created_by=owner.id,
+            relation_type="derived_from",
+        )
+    )
+    await artifact_db.commit()
+
+    graph_response = await client.get(
+        f"/api/v1/projects/{project.id}/artifact-lineage",
+        headers={"Authorization": "Bearer owner"},
+    )
+    hidden_response = await client.get(
+        f"/api/v1/projects/{project.id}/artifact-lineage",
+        headers={"Authorization": "Bearer outsider"},
+    )
+
+    assert graph_response.status_code == 200
+    graph = graph_response.json()["data"]
+    nodes_by_id = {node["id"]: node for node in graph["nodes"]}
+    edge_keys = {
+        (edge["source"], edge["target"], edge["kind"])
+        for edge in graph["edges"]
+    }
+    assert nodes_by_id[f"artifact:{output.id}"]["standard_type"] == "binding_pocket"
+    assert nodes_by_id[f"version:{output_version.id}"]["filename"] == "pocket.pdb"
+    assert nodes_by_id[f"task:{task.id}"]["tool_slug"] == tool.slug
+    assert nodes_by_id["workflow-node:run-1:pocket_prediction"]["workflow_node_id"] == (
+        "pocket_prediction"
+    )
+    assert (
+        f"version:{source_version.id}",
+        f"version:{output_version.id}",
+        "derived_from",
+    ) in edge_keys
+    assert (f"task:{task.id}", f"version:{output_version.id}", "produced_by") in edge_keys
+    assert (
+        "workflow-node:run-1:pocket_prediction",
+        f"task:{task.id}",
+        "runs_task",
+    ) in edge_keys
+    assert graph["summary"]["artifacts"] == 2
+    assert graph["summary"]["lineage_edges"] == 1
+    assert hidden_response.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_artifact_version_download_uses_storage_and_project_acl(
     artifact_client,
     artifact_context: dict[str, object],

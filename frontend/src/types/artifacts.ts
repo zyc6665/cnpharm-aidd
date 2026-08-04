@@ -40,6 +40,76 @@ export interface ArtifactListResponse {
   items: TypedArtifact[]
 }
 
+export type ArtifactLineageGraphNodeKind =
+  | 'artifact'
+  | 'version'
+  | 'task'
+  | 'workflow_node'
+
+export type ArtifactLineageGraphEdgeKind =
+  | 'has_version'
+  | 'derived_from'
+  | 'produced_by'
+  | 'runs_task'
+  | (string & {})
+
+export interface ArtifactLineageGraphNode {
+  id: string
+  kind: ArtifactLineageGraphNodeKind
+  label: string
+  artifact_id?: string | null
+  version_id?: string | null
+  task_id?: string | null
+  workflow_run_id?: string | null
+  workflow_definition_id?: string | null
+  workflow_node_id?: string | null
+  name?: string | null
+  artifact_type?: string | null
+  semantic_type?: string | null
+  standard_type?: string | null
+  standard_version?: number | null
+  source_task_id?: string | null
+  latest_version_id?: string | null
+  version?: number | null
+  filename?: string | null
+  content_type?: string | null
+  size_bytes?: number | null
+  status?: string | null
+  tool_id?: string | null
+  tool_name?: string | null
+  tool_slug?: string | null
+  created_at?: string | null
+  updated_at?: string | null
+  [key: string]: unknown
+}
+
+export interface ArtifactLineageGraphEdge {
+  id: string
+  kind: ArtifactLineageGraphEdgeKind
+  source: string
+  target: string
+  relation_type?: string | null
+  lineage_id?: string | null
+  project_id?: string | null
+  created_at?: string | null
+  [key: string]: unknown
+}
+
+export interface ArtifactLineageGraphSummary {
+  artifacts: number
+  versions: number
+  tasks: number
+  workflow_nodes: number
+  lineage_edges: number
+}
+
+export interface ArtifactLineageGraph {
+  project_id: string
+  nodes: ArtifactLineageGraphNode[]
+  edges: ArtifactLineageGraphEdge[]
+  summary: ArtifactLineageGraphSummary
+}
+
 export interface ArtifactUploadInput {
   file: File
   artifact_type: ArtifactType | string

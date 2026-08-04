@@ -1,6 +1,11 @@
 import { get, post } from './request'
 import type { ApiResponse } from '@/types/api'
-import type { ArtifactListResponse, ArtifactUploadInput, TypedArtifact } from '@/types/artifacts'
+import type {
+  ArtifactLineageGraph,
+  ArtifactListResponse,
+  ArtifactUploadInput,
+  TypedArtifact
+} from '@/types/artifacts'
 
 export const getProjectArtifacts = (
   projectId: string
@@ -10,6 +15,12 @@ export const getProjectArtifacts = (
 
 export const getArtifact = (artifactId: string): Promise<ApiResponse<TypedArtifact>> => {
   return get<TypedArtifact>(`/artifacts/${artifactId}`)
+}
+
+export const getProjectArtifactLineage = (
+  projectId: string
+): Promise<ApiResponse<ArtifactLineageGraph>> => {
+  return get<ArtifactLineageGraph>(`/projects/${projectId}/artifact-lineage`)
 }
 
 export const uploadProjectArtifact = (

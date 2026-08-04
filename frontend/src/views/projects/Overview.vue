@@ -41,6 +41,7 @@
         <section class="overview-section">
           <div class="section-heading">
             <h2>最近 Artifact</h2>
+            <router-link :to="`/projects/${projectId}/lineage`">Artifact 谱系</router-link>
           </div>
           <div v-if="overview.artifacts.length" class="resource-list">
             <a
