@@ -19,7 +19,7 @@ from app.schemas.workflows import (
     WorkflowDefinitionUpdate,
     WorkflowRunCreate,
 )
-from app.services.project_access import load_project_membership
+from app.services.project_access import load_project_membership, require_project_role
 from app.services.workflows import create_workflow_run, sync_workflow_run
 from app.services.workflow_runs import get_workflow_run, list_workflow_runs
 
@@ -52,26 +52,27 @@ def _serialize_run(run: WorkflowRun) -> dict[str, Any]:
     }
 
 
-async def _get_owned_workflow(
+async def _get_writable_workflow(
     workflow_id: str,
     current_user: User,
     db: AsyncSession,
 ) -> WorkflowDefinition:
     result = await db.execute(
-        select(WorkflowDefinition).where(
-            WorkflowDefinition.id == workflow_id,
-            WorkflowDefinition.user_id == current_user.id,
-        )
+        select(WorkflowDefinition).where(WorkflowDefinition.id == workflow_id)
     )
     workflow = result.scalar_one_or_none()
     if not workflow:
         raise HTTPException(status_code=404, detail="工作流不存在")
     if workflow.project_id:
-        await load_project_membership(
+        await require_project_role(
             db,
             project_id=workflow.project_id,
-            user_id=current_user.id,
+            user=current_user,
+            allowed_roles={"owner", "editor"},
         )
+        return workflow
+    if workflow.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="工作流不存在")
     return workflow
 
 
@@ -110,6 +111,22 @@ async def _validate_workflow_project_access(
         db,
         project_id=project_id,
         user_id=current_user.id,
+    )
+
+
+async def _validate_workflow_project_write_access(
+    db: AsyncSession,
+    *,
+    project_id: str | None,
+    current_user: User,
+) -> None:
+    if not project_id:
+        return
+    await require_project_role(
+        db,
+        project_id=project_id,
+        user=current_user,
+        allowed_roles={"owner", "editor"},
     )
 
 
@@ -159,7 +176,7 @@ async def create_workflow_definition(
     db: AsyncSession = Depends(get_db),
 ):
     """保存新的工作流定义。"""
-    await _validate_workflow_project_access(
+    await _validate_workflow_project_write_access(
         db,
         project_id=workflow_data.project_id,
         current_user=current_user,
@@ -263,10 +280,10 @@ async def update_workflow_definition(
     db: AsyncSession = Depends(get_db),
 ):
     """更新当前用户的工作流定义。"""
-    workflow = await _get_owned_workflow(workflow_id, current_user, db)
+    workflow = await _get_writable_workflow(workflow_id, current_user, db)
     updates = workflow_data.model_dump(exclude_unset=True)
     if "project_id" in updates:
-        await _validate_workflow_project_access(
+        await _validate_workflow_project_write_access(
             db,
             project_id=updates["project_id"],
             current_user=current_user,
@@ -288,7 +305,7 @@ async def delete_workflow_definition(
     db: AsyncSession = Depends(get_db),
 ):
     """删除当前用户的工作流定义。"""
-    workflow = await _get_owned_workflow(workflow_id, current_user, db)
+    workflow = await _get_writable_workflow(workflow_id, current_user, db)
     await db.delete(workflow)
     await db.commit()
 

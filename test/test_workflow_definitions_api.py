@@ -192,6 +192,78 @@ async def test_project_members_can_read_project_workflow_definitions(db_session)
 
 
 @pytest.mark.asyncio
+async def test_project_editors_can_write_project_workflow_definitions(db_session):
+    owner = _user("owner@example.com")
+    editor = _user("editor@example.com")
+    viewer = _user("viewer@example.com")
+    runner = _user("runner@example.com")
+    db_session.add_all([owner, editor, viewer, runner])
+    await db_session.flush()
+    project = await _create_project(db_session, owner)
+    db_session.add_all(
+        [
+            ProjectMember(project_id=project.id, user_id=editor.id, role="editor"),
+            ProjectMember(project_id=project.id, user_id=viewer.id, role="viewer"),
+            ProjectMember(project_id=project.id, user_id=runner.id, role="runner"),
+        ]
+    )
+    await db_session.commit()
+
+    payload = _payload("Editor project draft").model_copy(
+        update={"project_id": project.id}
+    )
+    owner_created = await create_workflow_definition(
+        _payload("Owner project draft").model_copy(update={"project_id": project.id}),
+        owner,
+        db_session,
+    )
+    created = await create_workflow_definition(payload, editor, db_session)
+
+    editor_updated_owner_draft = await update_workflow_definition(
+        owner_created["data"]["id"],
+        WorkflowDefinitionUpdate(name="Editor updated owner canvas"),
+        editor,
+        db_session,
+    )
+    updated = await update_workflow_definition(
+        created["data"]["id"],
+        WorkflowDefinitionUpdate(name="Editor saved canvas"),
+        editor,
+        db_session,
+    )
+    viewer_loaded = await get_workflow_definition(
+        created["data"]["id"], viewer, db_session
+    )
+
+    assert created["data"]["project_id"] == project.id
+    assert editor_updated_owner_draft["data"]["name"] == "Editor updated owner canvas"
+    assert updated["data"]["name"] == "Editor saved canvas"
+    assert viewer_loaded["data"]["name"] == "Editor saved canvas"
+
+    with pytest.raises(HTTPException) as viewer_update_exc:
+        await update_workflow_definition(
+            created["data"]["id"],
+            WorkflowDefinitionUpdate(name="Viewer edit"),
+            viewer,
+            db_session,
+        )
+    assert viewer_update_exc.value.status_code == 403
+
+    with pytest.raises(HTTPException) as runner_create_exc:
+        await create_workflow_definition(
+            payload.model_copy(update={"name": "Runner draft"}),
+            runner,
+            db_session,
+        )
+    assert runner_create_exc.value.status_code == 403
+
+    deleted = await delete_workflow_definition(
+        created["data"]["id"], editor, db_session
+    )
+    assert deleted["message"] == "工作流已删除"
+
+
+@pytest.mark.asyncio
 async def test_project_workflow_definition_requires_membership(db_session):
     owner = _user("owner@example.com")
     outsider = _user("outsider@example.com")
