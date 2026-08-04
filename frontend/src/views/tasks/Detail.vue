@@ -34,7 +34,7 @@
                     {{ t('tasks.retry') }}
                   </a-button>
                   <a-button
-                    v-if="['success', 'failure', 'canceled'].includes(taskStatus)"
+                    v-if="canDeleteTask"
                     danger
                     @click="handleDelete"
                   >
@@ -88,6 +88,9 @@
                 '100%': '#87d068',
               }"
             />
+            <div v-if="task.progress_message" class="progress-info">
+              {{ task.progress_message }}
+            </div>
           </div>
 
           <!-- 主体内容 -->
@@ -292,7 +295,7 @@ import {
 } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
 import dayjs from 'dayjs'
-import { useTasksStore } from '@/stores'
+import { useTasksStore, useUserStore } from '@/stores'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { getTaskLogs } from '@/api/tasks'
 import type { WSMessage, TaskStatus, TaskLog, Task } from '@/types/models'
@@ -308,6 +311,7 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const tasksStore = useTasksStore()
+const userStore = useUserStore()
 
 const taskId = computed(() => route.params.id as string)
 
@@ -332,6 +336,9 @@ const loading = computed(() => tasksStore.loading)
 const task = computed(() => tasksStore.currentTask)
 const taskStatus = computed<TaskStatus>(() => normalizeTaskStatus(task.value?.status))
 const detailTitle = computed(() => task.value?.name || task.value?.tool?.name || t('tasks.taskDetail'))
+const canDeleteTask = computed(() =>
+  userStore.isAdmin && ['success', 'failure', 'canceled'].includes(taskStatus.value)
+)
 const detailSubtitle = computed(() => {
   if (!task.value) {
     return t('tasks.detail')
