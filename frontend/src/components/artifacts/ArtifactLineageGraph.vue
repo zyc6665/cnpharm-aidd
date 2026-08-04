@@ -28,6 +28,30 @@
           <small v-if="node.workflow_node_id">workflow node: {{ node.workflow_node_id }}</small>
           <small v-if="node.tool_slug">{{ node.tool_slug }}</small>
           <a-tag v-if="node.status" :color="statusColor(node.status)">{{ node.status }}</a-tag>
+          <div v-if="hasNodeActions(node)" class="node-actions">
+            <a
+              v-if="canDownloadVersion(node)"
+              data-testid="artifact-version-download"
+              :href="versionDownloadUrl(node)"
+              @click.prevent="downloadVersion(node)"
+            >
+              下载版本
+            </a>
+            <router-link
+              v-if="node.task_id"
+              data-testid="lineage-task-link"
+              :to="taskPath(node.task_id)"
+            >
+              查看任务
+            </router-link>
+            <router-link
+              v-if="node.workflow_run_id"
+              data-testid="lineage-workflow-run-link"
+              :to="workflowRunPath(node.workflow_run_id)"
+            >
+              查看运行
+            </router-link>
+          </div>
         </article>
       </section>
     </div>
@@ -53,6 +77,8 @@
 
 <script setup lang="ts">
   import { computed } from 'vue'
+  import { message } from 'ant-design-vue'
+  import { buildArtifactVersionDownloadUrl } from '@/api/artifacts'
   import type {
     ArtifactLineageGraph,
     ArtifactLineageGraphEdge,
@@ -60,6 +86,7 @@
     ArtifactLineageGraphNode,
     ArtifactLineageGraphNodeKind
   } from '@/types/artifacts'
+  import { triggerProtectedFileDownload } from '@/utils/protected-file-access'
 
   const props = defineProps<{
     graph: ArtifactLineageGraph
@@ -126,6 +153,40 @@
     if (kind === 'produced_by') return 'green'
     if (kind === 'runs_task') return 'blue'
     return 'default'
+  }
+
+  function canDownloadVersion(node: ArtifactLineageGraphNode): boolean {
+    return node.kind === 'version' && Boolean(node.artifact_id && node.version_id)
+  }
+
+  function versionDownloadUrl(node: ArtifactLineageGraphNode): string {
+    if (!node.artifact_id || !node.version_id) return '#'
+    return buildArtifactVersionDownloadUrl(node.artifact_id, node.version_id)
+  }
+
+  function taskPath(taskId: string): string {
+    return `/tasks/${taskId}`
+  }
+
+  function workflowRunPath(runId: string): string {
+    return `/workflow/runs/${runId}`
+  }
+
+  function hasNodeActions(node: ArtifactLineageGraphNode): boolean {
+    return canDownloadVersion(node) || Boolean(node.task_id || node.workflow_run_id)
+  }
+
+  async function downloadVersion(node: ArtifactLineageGraphNode) {
+    if (!canDownloadVersion(node)) return
+
+    try {
+      await triggerProtectedFileDownload({
+        url: versionDownloadUrl(node),
+        filename: node.filename || `${node.version_id}.artifact`
+      })
+    } catch (cause) {
+      message.error(cause instanceof Error ? cause.message : String(cause))
+    }
   }
 </script>
 
@@ -218,6 +279,19 @@
   .node-kind {
     font-weight: @font-weight-bold;
     text-transform: uppercase;
+  }
+
+  .node-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: @spacing-sm;
+    padding-top: 2px;
+    font-size: @font-size-xs;
+  }
+
+  .node-actions a {
+    color: @accent-color;
+    font-weight: @font-weight-medium;
   }
 
   .lineage-edges {
