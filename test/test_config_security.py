@@ -67,7 +67,7 @@ class TestCorsDefaults:
 
 class TestAiddFeatureFlags:
     def test_development_feature_flags_default_open_for_local_iteration(self):
-        """开发环境默认开启首月 AIDD 功能，避免本地页面不可访问。"""
+        """开发环境默认开启新项目入口，但旧 AIDD API 默认关闭。"""
         settings = Settings(ENVIRONMENT="development")
         flags = {item["key"]: item for item in settings.aidd_feature_flags()}
 
@@ -75,7 +75,8 @@ class TestAiddFeatureFlags:
         assert flags["AIDD_PROJECT_CONVERSATIONS_ENABLED"]["enabled"] is True
         assert flags["TOOL_PACKAGE_V1_ENABLED"]["enabled"] is True
         assert flags["PROJECT_RESEARCH_BOARD_ENABLED"]["enabled"] is True
-        assert flags["LEGACY_AIDD_API_ENABLED"]["enabled"] is True
+        assert flags["LEGACY_AIDD_API_ENABLED"]["enabled"] is False
+        assert flags["LEGACY_AIDD_API_ENABLED"]["rollout"]["scope"] == "closed"
         assert {item["source"] for item in flags.values()} == {"default"}
 
     def test_production_feature_flags_default_closed_until_release_enablement(self):
@@ -94,7 +95,8 @@ class TestAiddFeatureFlags:
         assert flags["AIDD_PROJECT_CONVERSATIONS_ENABLED"]["enabled"] is False
         assert flags["TOOL_PACKAGE_V1_ENABLED"]["enabled"] is False
         assert flags["PROJECT_RESEARCH_BOARD_ENABLED"]["enabled"] is False
-        assert flags["LEGACY_AIDD_API_ENABLED"]["enabled"] is True
+        assert flags["LEGACY_AIDD_API_ENABLED"]["enabled"] is False
+        assert flags["LEGACY_AIDD_API_ENABLED"]["rollout"]["scope"] == "closed"
 
     def test_production_rollout_allowlist_enables_only_named_internal_users(self):
         """生产灰度用户白名单应只放行命中的内部测试账号。"""
@@ -120,6 +122,26 @@ class TestAiddFeatureFlags:
             "AIDD_PROJECT_WORKSPACE_ENABLED",
             user_email="other@example.com",
         ) is False
+        assert settings.is_aidd_feature_enabled_for_user(
+            "LEGACY_AIDD_API_ENABLED",
+            user_email="internal@example.com",
+        ) is False
+
+    def test_legacy_aidd_api_flag_cannot_reopen_removed_api(self):
+        """旧 AIDD API 已下线，显式配置也不应让审计状态重新变为开启。"""
+        settings = Settings(
+            ENVIRONMENT="production",
+            DEBUG=False,
+            CORS_ORIGINS=["https://sciminer.example.com"],
+            JWT_SECRET_KEY="j" * 32,
+            SETTINGS_ENCRYPTION_KEY="e" * 32,
+            LEGACY_AIDD_API_ENABLED=True,
+            **_production_runtime_settings("production"),
+        )
+        flags = {item["key"]: item for item in settings.aidd_feature_flags()}
+
+        assert flags["LEGACY_AIDD_API_ENABLED"]["enabled"] is False
+        assert flags["LEGACY_AIDD_API_ENABLED"]["rollout"]["scope"] == "closed"
 
     def test_rollout_allowlist_normalizes_email_case_and_whitespace(self):
         """灰度邮箱白名单应规范化，避免大小写或空格导致误拒。"""

@@ -25,7 +25,7 @@ _AIDD_FEATURE_FLAG_DESCRIPTIONS = {
     "AIDD_PROJECT_CONVERSATIONS_ENABLED": "项目研究对话与 Agent 审批链路",
     "TOOL_PACKAGE_V1_ENABLED": "Tool Package v1 导入、迁移和验证等级",
     "PROJECT_RESEARCH_BOARD_ENABLED": "项目级整页科研白板",
-    "LEGACY_AIDD_API_ENABLED": "旧 AIDD API 兼容入口",
+    "LEGACY_AIDD_API_ENABLED": "旧 AIDD API 已下线",
 }
 
 
@@ -290,7 +290,7 @@ class Settings(BaseSettings):
     ENABLE_DATABASE_TOOLS: bool = False
     AIDD_SYSTEM_USER_ID: Optional[str] = None
     # 首月 AIDD 发布门禁。None 表示使用环境默认值：开发环境开启新入口，
-    # 预发布/生产默认关闭新入口，旧 API 默认保留。
+    # 预发布/生产默认关闭新入口；旧 AIDD API 默认关闭。
     AIDD_PROJECT_WORKSPACE_ENABLED: Optional[bool] = None
     AIDD_PROJECT_CONVERSATIONS_ENABLED: Optional[bool] = None
     TOOL_PACKAGE_V1_ENABLED: Optional[bool] = None
@@ -345,15 +345,15 @@ class Settings(BaseSettings):
         if self.is_aidd_feature_enabled(key):
             return True
         if key == "LEGACY_AIDD_API_ENABLED":
-            return True
+            return False
         return self._is_rollout_user(user_email=user_email, user_id=user_id)
 
     def _resolve_aidd_feature_flag(self, key: str) -> bool:
+        if key == "LEGACY_AIDD_API_ENABLED":
+            return False
         configured_value = getattr(self, key)
         if configured_value is not None:
             return bool(configured_value)
-        if key == "LEGACY_AIDD_API_ENABLED":
-            return True
         return self.ENVIRONMENT == "development"
 
     def _feature_flag_source(self, key: str) -> str:
@@ -370,7 +370,7 @@ class Settings(BaseSettings):
         if self._resolve_aidd_feature_flag(key):
             scope = "all"
         elif key == "LEGACY_AIDD_API_ENABLED":
-            scope = "all"
+            scope = "closed"
         elif user_count:
             scope = "allowlist"
         else:

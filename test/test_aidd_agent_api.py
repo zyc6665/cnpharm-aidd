@@ -1,11 +1,10 @@
-"""AIDD agent API tests."""
+"""AIDD legacy API shutdown tests and internal service guards."""
 
 from __future__ import annotations
 
-import hashlib
 import sys
 from pathlib import Path
-from types import SimpleNamespace
+from typing import Any
 
 import httpx
 import pytest
@@ -33,12 +32,12 @@ from app.models import tasks as _task_models  # noqa: F401,E402
 from app.models import tools as _tools_models  # noqa: F401,E402
 from app.models import users as _users_models  # noqa: F401,E402
 from app.models.agent import AgentRun, AgentRunStep  # noqa: E402
-from app.models.files import File as FileModel, FileSourceType  # noqa: E402
-from app.models.system_settings import ModelService  # noqa: E402
-from app.models.tasks import Task, TaskOutput, TaskStatus  # noqa: E402
+from app.models.tasks import Task, TaskStatus  # noqa: E402
 from app.models.tools import Tool, ToolStatus, ToolVersion  # noqa: E402
 from app.models.users import User, UserRole, UserStatus  # noqa: E402
-from app.models.workflows import WorkflowRun  # noqa: E402
+
+
+LEGACY_REPLACEMENT = "/api/v1/projects/{project_id}/conversations"
 
 
 @pytest_asyncio.fixture
@@ -84,26 +83,7 @@ async def current_user(db_session: AsyncSession) -> User:
 
 
 @pytest_asyncio.fixture
-async def other_user(db_session: AsyncSession) -> User:
-    return await create_user(db_session, email="other@example.com")
-
-
-@pytest_asyncio.fixture
-async def admin_user(db_session: AsyncSession) -> User:
-    user = await create_user(db_session, email="admin@example.com")
-    user.role = UserRole.ADMIN.value
-    await db_session.commit()
-    await db_session.refresh(user)
-    return user
-
-
-@pytest_asyncio.fixture
-async def api_client(
-    db_session: AsyncSession,
-    current_user: User,
-    other_user: User,
-    admin_user: User,
-):
+async def api_client(db_session: AsyncSession, current_user: User):
     async def override_get_db():
         yield db_session
 
@@ -112,10 +92,6 @@ async def api_client(
     ) -> User:
         if authorization == "Bearer owner-token":
             return current_user
-        if authorization == "Bearer other-token":
-            return other_user
-        if authorization == "Bearer admin-token":
-            return admin_user
         raise HTTPException(status_code=401, detail="未提供认证凭证")
 
     app.dependency_overrides[get_db] = override_get_db
@@ -148,7 +124,7 @@ async def create_tool(
     version = ToolVersion(
         tool_id=tool.id,
         version="1.0.0",
-        config={"type": "ssh_job", "input_schema": {"type": "object", "properties": {}}},
+        config={"type": "ssh_job"},
         is_active=True,
     )
     db_session.add(version)
@@ -159,694 +135,82 @@ async def create_tool(
     return tool
 
 
-@pytest_asyncio.fixture
-async def aidd_tools(db_session: AsyncSession, current_user: User) -> dict[str, Tool]:
-    db_session.add(
-        ModelService(
-            name="Default Planner",
-            provider_type="openai_compatible",
-            base_url="https://api.example.com/v1",
-            api_key_encrypted=None,
-            model_name="planner",
-            is_default=True,
-            is_enabled=True,
-        )
-    )
-    lvpocket = await create_tool(
-        db_session,
-        current_user,
-        slug="lvpocket-pocket-prediction",
-        name="LVpocket Pocket Prediction",
-    )
-    gcdm = await create_tool(
-        db_session,
-        current_user,
-        slug="gcdm-pocket-generation",
-        name="STD-Diff",
-    )
-    msign = await create_tool(
-        db_session,
-        current_user,
-        slug="msign-affinity-prediction",
-        name="MSIGN",
-    )
-    return {lvpocket.slug: lvpocket, gcdm.slug: gcdm, msign.slug: msign}
-
-
-async def fake_structured_plan(service, prompt):
-    return """
-    {
-      "intent": "generate_molecules_from_protein",
-      "reasoning_summary": "识别到蛋白结构输入，先选择口袋预测能力，再把预测口袋用于分子生成。",
-      "analysis_trace": [
-        "输入判断：识别为蛋白结构文件。",
-        "工具发现：发现口袋预测和分子生成两个可用能力。",
-        "工具编排：先运行口袋预测，再把口袋产物交给分子生成。"
-      ],
-      "reasoning_content": "raw hidden chain should not be persisted",
-      "steps": [
-        {
-          "step_key": "pocket_prediction",
-          "capability": "pocket_prediction",
-          "tool_slug": "lvpocket-pocket-prediction",
-          "inputs": {"protein_pdb": "agent_input"},
-          "params": {}
-        },
-        {
-          "step_key": "molecule_generation",
-          "capability": "molecule_generation",
-          "tool_slug": "gcdm-pocket-generation",
-          "inputs": {"pocket_pdb": "step:pocket_prediction:pocket_pdb"},
-          "params": {}
-        }
-      ]
+def _legacy_run_payload() -> dict[str, Any]:
+    return {
+        "message": "旧智能体入口应返回迁移提示",
+        "input_file_id": "00000000-0000-0000-0000-000000000000",
+        "requested_outputs": ["generated_ligand"],
     }
-    """
 
 
-@pytest_asyncio.fixture
-async def protein_file(db_session: AsyncSession, current_user: User) -> FileModel:
-    file_record = FileModel(
-        owner_id=current_user.id,
-        filename="protein.pdb",
-        content_type="chemical/x-pdb",
-        size_bytes=128,
-        sha256=hashlib.sha256(b"protein").hexdigest(),
-        source_type=FileSourceType.UPLOAD.value,
-        storage_path="/tmp/protein.pdb",
-        is_public=False,
-    )
-    db_session.add(file_record)
-    await db_session.commit()
-    await db_session.refresh(file_record)
-    return file_record
-
-
-@pytest_asyncio.fixture
-async def ligand_file(db_session: AsyncSession, current_user: User) -> FileModel:
-    file_record = FileModel(
-        owner_id=current_user.id,
-        filename="ligand.pdb",
-        content_type="chemical/x-pdb",
-        size_bytes=96,
-        sha256=hashlib.sha256(b"ligand").hexdigest(),
-        source_type=FileSourceType.UPLOAD.value,
-        storage_path="/tmp/ligand.pdb",
-        is_public=False,
-    )
-    db_session.add(file_record)
-    await db_session.commit()
-    await db_session.refresh(file_record)
-    return file_record
-
-
-async def fake_affinity_plan(service, prompt):
-    return """
-    {
-      "intent": "predict_affinity_from_uploaded_complex",
-      "reasoning_summary": "识别到蛋白和配体输入，直接运行亲和力预测。",
-      "analysis_trace": [
-        "输入判断：识别为蛋白结构和配体结构文件。",
-        "工具发现：发现亲和力预测能力。",
-        "工具编排：把两个上传文件绑定到同一步骤。"
-      ],
-      "steps": [
-        {
-          "step_key": "affinity_prediction",
-          "capability": "affinity_prediction",
-          "tool_slug": "msign-affinity-prediction",
-          "inputs": {
-            "protein_pdb": "agent_input:protein_pdb",
-            "ligand_pdb": "agent_input:ligand_pdb"
-          },
-          "params": {"device": "cpu"}
-        }
-      ]
-    }
-    """
-
-
+@pytest.mark.parametrize(
+    ("method", "path", "kwargs"),
+    [
+        ("post", "/api/v1/agents/aidd/workflow-drafts", {"json": _legacy_run_payload()}),
+        ("post", "/api/v1/agents/aidd/runs", {"json": _legacy_run_payload()}),
+        ("get", "/api/v1/agents/aidd/runs", {}),
+        ("get", "/api/v1/agents/aidd/runs/run-1", {}),
+        ("post", "/api/v1/agents/aidd/runs/run-1/cancel", {}),
+        ("delete", "/api/v1/agents/aidd/runs/run-1", {}),
+        ("post", "/api/v1/agents/aidd/runs/run-1/sync", {}),
+    ],
+)
 @pytest.mark.asyncio
-async def test_create_workflow_draft_does_not_create_runs_or_tasks(
+async def test_legacy_aidd_api_endpoints_return_gone(
     api_client: httpx.AsyncClient,
-    db_session: AsyncSession,
-    aidd_tools: dict[str, Tool],
-    protein_file: FileModel,
-    monkeypatch: pytest.MonkeyPatch,
+    method: str,
+    path: str,
+    kwargs: dict[str, Any],
 ):
-    monkeypatch.setattr(
-        "app.agents.aidd.llm_client.request_structured_plan",
-        fake_structured_plan,
-    )
-
-    response = await api_client.post(
-        "/api/v1/agents/aidd/workflow-drafts",
+    response = await getattr(api_client, method)(
+        path,
         headers={"Authorization": "Bearer owner-token"},
-        json={
-            "message": "上传蛋白后探索口袋并生成分子",
-            "input_file_id": protein_file.id,
-            "requested_outputs": ["generated_ligand"],
-        },
+        **kwargs,
     )
 
-    assert response.status_code == 200
-    data = response.json()["data"]
-    assert data["name"] == "上传蛋白后探索口袋并生成分子"
-    assert data["intent"] == "generate_molecules_from_protein"
-    assert data["input_files"] == {"protein_structure@1": protein_file.id}
-    assert data["requested_outputs"] == ["generated_ligand"]
-    assert data["reasoning_summary"].startswith("识别到蛋白结构输入")
-    assert [node["id"] for node in data["definition"]["nodes"]] == [
-        "input-protein_structure@1",
-        "pocket_prediction",
-        "molecule_generation",
-    ]
-    pocket_node = data["definition"]["nodes"][1]
-    assert pocket_node["tool_id"] == aidd_tools["lvpocket-pocket-prediction"].id
-    assert pocket_node["tool_version"]["id"]
-
-    for model in (AgentRun, AgentRunStep, Task, WorkflowRun):
-        count = await db_session.scalar(select(func.count()).select_from(model))
-        assert count == 0
-
-
-@pytest.mark.asyncio
-async def test_create_agent_run_from_protein_creates_run_and_first_step(
-    api_client: httpx.AsyncClient,
-    aidd_tools: dict[str, Tool],
-    protein_file: FileModel,
-    monkeypatch: pytest.MonkeyPatch,
-):
-    async def fake_create_task(*, db, current_user, task_data, direct_runner=None):
-        return SimpleNamespace(
-            id="task-pocket",
-            tool_id=task_data.tool_id,
-            tool_version_id=None,
-            status="PENDING",
-            progress=0,
-        )
-
-    monkeypatch.setattr(
-        "app.agents.aidd.service.create_and_schedule_tool_task",
-        fake_create_task,
-    )
-    monkeypatch.setattr(
-        "app.agents.aidd.llm_client.request_structured_plan",
-        fake_structured_plan,
-    )
-
-    response = await api_client.post(
-        "/api/v1/agents/aidd/runs",
-        headers={"Authorization": "Bearer owner-token"},
-        json={
-            "message": "上传蛋白后探索口袋并生成分子",
-            "input_file_id": protein_file.id,
-            "requested_outputs": ["generated_ligand"],
-            "params": {"generation_count": 8},
-        },
-    )
-
-    assert response.status_code == 200
-    data = response.json()["data"]
-    assert data["intent"] == "generate_molecules_from_protein"
-    assert data["status"] == "waiting_task"
-    assert data["plan"]["reasoning_summary"] == "识别到蛋白结构输入，先选择口袋预测能力，再把预测口袋用于分子生成。"
-    assert data["plan"]["analysis_trace"] == [
-        "输入判断：识别为蛋白结构文件。",
-        "工具发现：发现口袋预测和分子生成两个可用能力。",
-        "工具编排：先运行口袋预测，再把口袋产物交给分子生成。",
-    ]
-    assert "reasoning_content" not in data["plan"]
-    assert data["steps"][0]["tool_slug"] == "lvpocket-pocket-prediction"
-    assert data["steps"][0]["task_id"] == "task-pocket"
-
-
-@pytest.mark.asyncio
-async def test_create_agent_run_accepts_multiple_semantic_input_files(
-    api_client: httpx.AsyncClient,
-    aidd_tools: dict[str, Tool],
-    protein_file: FileModel,
-    ligand_file: FileModel,
-    monkeypatch: pytest.MonkeyPatch,
-):
-    created_payloads = []
-
-    async def fake_create_task(*, db, current_user, task_data, direct_runner=None):
-        created_payloads.append(task_data)
-        return SimpleNamespace(
-            id="task-affinity",
-            tool_id=task_data.tool_id,
-            tool_version_id=None,
-            status="PENDING",
-            progress=0,
-        )
-
-    monkeypatch.setattr(
-        "app.agents.aidd.service.create_and_schedule_tool_task",
-        fake_create_task,
-    )
-    monkeypatch.setattr(
-        "app.agents.aidd.llm_client.request_structured_plan",
-        fake_affinity_plan,
-    )
-
-    response = await api_client.post(
-        "/api/v1/agents/aidd/runs",
-        headers={"Authorization": "Bearer owner-token"},
-        json={
-            "message": "上传蛋白和配体预测亲和力",
-            "input_file_id": protein_file.id,
-            "input_files": {
-                "protein_pdb": protein_file.id,
-                "ligand_pdb": ligand_file.id,
-            },
-            "requested_outputs": ["affinity_report"],
-        },
-    )
-
-    assert response.status_code == 200
-    data = response.json()["data"]
-    assert data["input_files"] == {
-        "protein_structure@1": protein_file.id,
-        "ligand_structure@1": ligand_file.id,
-    }
-    assert data["steps"][0]["tool_slug"] == "msign-affinity-prediction"
-    assert data["steps"][0]["input_file_ids"] == [protein_file.id, ligand_file.id]
-    assert created_payloads[0].file_ids == [protein_file.id, ligand_file.id]
-    assert created_payloads[0].params["input_files"] == {
-        "protein_pdb": "input/protein.pdb",
-        "ligand_pdb": "input/ligand.pdb",
+    assert response.status_code == 410
+    assert response.json()["detail"] == {
+        "message": "旧 AIDD API 已下线，请使用项目会话 Agent Run 接口",
+        "replacement": LEGACY_REPLACEMENT,
     }
 
 
 @pytest.mark.asyncio
-async def test_create_agent_run_classifies_uploaded_file_ids_without_semantic_labels(
+async def test_legacy_aidd_api_gone_does_not_create_agent_runs(
     api_client: httpx.AsyncClient,
-    aidd_tools: dict[str, Tool],
-    protein_file: FileModel,
-    ligand_file: FileModel,
-    monkeypatch: pytest.MonkeyPatch,
-):
-    created_payloads = []
-
-    async def fake_create_task(*, db, current_user, task_data, direct_runner=None):
-        created_payloads.append(task_data)
-        return SimpleNamespace(
-            id="task-affinity-auto",
-            tool_id=task_data.tool_id,
-            tool_version_id=None,
-            status="PENDING",
-            progress=0,
-        )
-
-    monkeypatch.setattr(
-        "app.agents.aidd.service.create_and_schedule_tool_task",
-        fake_create_task,
-    )
-    monkeypatch.setattr(
-        "app.agents.aidd.llm_client.request_structured_plan",
-        fake_affinity_plan,
-    )
-
-    response = await api_client.post(
-        "/api/v1/agents/aidd/runs",
-        headers={"Authorization": "Bearer owner-token"},
-        json={
-            "message": "上传这两个文件，预测蛋白和配体的亲和力",
-            "input_file_ids": [protein_file.id, ligand_file.id],
-            "requested_outputs": ["affinity_report"],
-        },
-    )
-
-    assert response.status_code == 200
-    data = response.json()["data"]
-    assert data["input_file_id"] == protein_file.id
-    assert data["input_files"] == {
-        "protein_structure@1": protein_file.id,
-        "ligand_structure@1": ligand_file.id,
-    }
-    assert data["plan"]["input_files"] == data["input_files"]
-    assert data["steps"][0]["input_file_ids"] == [protein_file.id, ligand_file.id]
-    assert created_payloads[0].file_ids == [protein_file.id, ligand_file.id]
-
-
-@pytest.mark.asyncio
-async def test_other_user_cannot_read_agent_run(
-    api_client: httpx.AsyncClient,
-    aidd_tools: dict[str, Tool],
-    protein_file: FileModel,
-    monkeypatch: pytest.MonkeyPatch,
-):
-    async def fake_create_task(*, db, current_user, task_data, direct_runner=None):
-        return SimpleNamespace(id="task-pocket", tool_id=task_data.tool_id)
-
-    monkeypatch.setattr(
-        "app.agents.aidd.service.create_and_schedule_tool_task",
-        fake_create_task,
-    )
-    monkeypatch.setattr(
-        "app.agents.aidd.llm_client.request_structured_plan",
-        fake_structured_plan,
-    )
-
-    create_response = await api_client.post(
-        "/api/v1/agents/aidd/runs",
-        headers={"Authorization": "Bearer owner-token"},
-        json={
-            "message": "上传蛋白后探索口袋并生成分子",
-            "input_file_id": protein_file.id,
-        },
-    )
-    run_id = create_response.json()["data"]["id"]
-
-    response = await api_client.get(
-        f"/api/v1/agents/aidd/runs/{run_id}",
-        headers={"Authorization": "Bearer other-token"},
-    )
-
-    assert response.status_code == 403
-
-
-@pytest.mark.asyncio
-async def test_unsupported_input_type_is_rejected(
-    api_client: httpx.AsyncClient,
-    protein_file: FileModel,
+    db_session: AsyncSession,
 ):
     response = await api_client.post(
         "/api/v1/agents/aidd/runs",
         headers={"Authorization": "Bearer owner-token"},
-        json={
-            "message": "做一下分析",
-            "input_file_id": protein_file.id,
-            "input_type": "ligand_sdf",
-        },
+        json=_legacy_run_payload(),
     )
 
-    assert response.status_code == 422
+    assert response.status_code == 410
+    assert await db_session.scalar(select(func.count()).select_from(AgentRun)) == 0
 
 
 @pytest.mark.asyncio
-async def test_admin_can_list_all_agent_runs(
-    api_client: httpx.AsyncClient,
-    db_session: AsyncSession,
-    current_user: User,
-    other_user: User,
-):
-    db_session.add_all(
-        [
-            AgentRun(
-                user_id=current_user.id,
-                message="owner run",
-                intent="pocket_exploration",
-                status="success",
-                input_type="protein_pdb",
-                requested_outputs=["generated_ligand"],
-                plan={},
-            ),
-            AgentRun(
-                user_id=other_user.id,
-                message="other run",
-                intent="molecule_generation",
-                status="success",
-                input_type="pocket_pdb",
-                requested_outputs=["generated_ligand"],
-                plan={},
-            ),
-        ]
-    )
-    await db_session.commit()
+async def test_legacy_aidd_api_still_requires_authentication(api_client: httpx.AsyncClient):
+    response = await api_client.get("/api/v1/agents/aidd/runs")
 
-    response = await api_client.get(
-        "/api/v1/agents/aidd/runs",
-        headers={"Authorization": "Bearer admin-token"},
-    )
-
-    assert response.status_code == 200
-    data = response.json()["data"]
-    assert data["total"] == 2
-    assert {item["message"] for item in data["items"]} == {"owner run", "other run"}
-
-
-@pytest.mark.asyncio
-async def test_legacy_agent_run_list_tolerates_non_object_json_fields(
-    api_client: httpx.AsyncClient,
-    db_session: AsyncSession,
-    current_user: User,
-):
-    run = AgentRun(
-        user_id=current_user.id,
-        message="legacy run",
-        intent="pocket_exploration",
-        status="success",
-        input_type="protein_pdb",
-        requested_outputs="generated_ligand",
-        plan=["legacy-plan"],
-    )
-    db_session.add(run)
-    await db_session.flush()
-    db_session.add(
-        AgentRunStep(
-            agent_run_id=run.id,
-            step_key="legacy-step",
-            tool_slug="legacy-tool",
-            sort_order=0,
-            depends_on_step_ids="previous-step",
-            semantic_inputs=["bad-shape"],
-            semantic_outputs="bad-shape",
-            params="bad-shape",
-            input_file_ids="file-1",
-            output_file_ids="bad-shape",
-        )
-    )
-    await db_session.commit()
-
-    response = await api_client.get(
-        "/api/v1/agents/aidd/runs",
-        headers={"Authorization": "Bearer owner-token"},
-    )
-
-    assert response.status_code == 200
-    item = response.json()["data"]["items"][0]
-    assert item["message"] == "legacy run"
-    assert item["requested_outputs"] == ["generated_ligand"]
-    assert item["plan"] == {}
-    assert item["input_files"] == {}
-    assert item["steps"][0]["depends_on_step_ids"] == ["previous-step"]
-    assert item["steps"][0]["semantic_inputs"] == {}
-    assert item["steps"][0]["params"] == {}
-    assert item["steps"][0]["input_file_ids"] == ["file-1"]
-
-
-@pytest.mark.asyncio
-async def test_agent_run_list_can_filter_to_project_scoped_runs(
-    api_client: httpx.AsyncClient,
-    db_session: AsyncSession,
-    current_user: User,
-):
-    orphan_run = AgentRun(
-        user_id=current_user.id,
-        project_id=None,
-        message="orphan run",
-        intent="pocket_exploration",
-        status="success",
-        input_type="protein_pdb",
-        requested_outputs=["generated_ligand"],
-        plan={},
-    )
-    project_run = AgentRun(
-        user_id=current_user.id,
-        project_id="project-1",
-        message="project run",
-        intent="pocket_exploration",
-        status="success",
-        input_type="protein_pdb",
-        requested_outputs=["generated_ligand"],
-        plan={},
-    )
-    db_session.add_all([orphan_run, project_run])
-    await db_session.commit()
-
-    response = await api_client.get(
-        "/api/v1/agents/aidd/runs",
-        params={"project_only": "true"},
-        headers={"Authorization": "Bearer owner-token"},
-    )
-
-    assert response.status_code == 200
-    items = response.json()["data"]["items"]
-    assert [item["message"] for item in items] == ["project run"]
-
-
-@pytest.mark.asyncio
-async def test_owner_can_delete_agent_run_history(
-    api_client: httpx.AsyncClient,
-    db_session: AsyncSession,
-    current_user: User,
-):
-    run = AgentRun(
-        user_id=current_user.id,
-        message="delete me",
-        intent="pocket_exploration",
-        status="success",
-        input_type="protein_pdb",
-        requested_outputs=["generated_ligand"],
-        plan={},
-    )
-    db_session.add(run)
-    await db_session.commit()
-    await db_session.refresh(run)
-
-    response = await api_client.delete(
-        f"/api/v1/agents/aidd/runs/{run.id}",
-        headers={"Authorization": "Bearer owner-token"},
-    )
-
-    assert response.status_code == 200
-    assert response.json()["data"]["id"] == run.id
-    assert await db_session.get(AgentRun, run.id) is None
-
-
-@pytest.mark.asyncio
-async def test_owner_can_cascade_delete_agent_run_tasks_and_artifacts(
-    api_client: httpx.AsyncClient,
-    db_session: AsyncSession,
-    current_user: User,
-    aidd_tools: dict[str, Tool],
-    protein_file: FileModel,
-):
-    output_file = FileModel(
-        owner_id=current_user.id,
-        filename="generated.sdf",
-        content_type="chemical/x-mdl-sdfile",
-        size_bytes=256,
-        sha256=hashlib.sha256(b"generated").hexdigest(),
-        source_type=FileSourceType.TOOL_OUTPUT.value,
-        storage_path="/tmp/generated.sdf",
-        is_public=False,
-    )
-    db_session.add(output_file)
-    await db_session.flush()
-
-    tool = aidd_tools["gcdm-pocket-generation"]
-    task = Task(
-        user_id=current_user.id,
-        tool_id=tool.id,
-        tool_version_id=tool.current_version_id,
-        status=TaskStatus.SUCCESS.value,
-    )
-    db_session.add(task)
-    await db_session.flush()
-
-    db_session.add(
-        TaskOutput(
-            task_id=task.id,
-            result={"files": [output_file.id]},
-            file_ids=[output_file.id],
-            output_type="file",
-        )
-    )
-
-    run = AgentRun(
-        user_id=current_user.id,
-        message="cascade delete me",
-        intent="molecule_generation",
-        status="success",
-        input_type="protein_pdb",
-        input_file_id=protein_file.id,
-        requested_outputs=["generated_ligand"],
-        plan={},
-    )
-    db_session.add(run)
-    await db_session.flush()
-
-    db_session.add(
-        AgentRunStep(
-            agent_run_id=run.id,
-            step_key="molecule_generation",
-            tool_slug="gcdm-pocket-generation",
-            task_id=task.id,
-            status="success",
-            sort_order=0,
-            output_file_ids=[output_file.id],
-        )
-    )
-    await db_session.commit()
-
-    response = await api_client.delete(
-        f"/api/v1/agents/aidd/runs/{run.id}",
-        params={"cascade": "true"},
-        headers={"Authorization": "Bearer owner-token"},
-    )
-
-    assert response.status_code == 200
-    data = response.json()["data"]
-    assert data["id"] == run.id
-    assert data["deleted_tasks"] == 1
-    assert data["deleted_artifacts"] == 1
-    assert await db_session.get(AgentRun, run.id) is None
-    assert await db_session.get(Task, task.id) is None
-    assert await db_session.get(FileModel, output_file.id) is None
-    assert await db_session.get(FileModel, protein_file.id) is not None
-
-
-@pytest.mark.asyncio
-async def test_sync_agent_run_endpoint_reconciles_waiting_steps(
-    api_client: httpx.AsyncClient,
-    aidd_tools: dict[str, Tool],
-    protein_file: FileModel,
-    monkeypatch: pytest.MonkeyPatch,
-):
-    async def fake_create_task(*, db, current_user, task_data, direct_runner=None):
-        return SimpleNamespace(id="task-pocket", tool_id=task_data.tool_id)
-
-    reconciled: list[str | None] = []
-
-    async def fake_reconcile(db, *, run_id=None):
-        reconciled.append(run_id)
-        return 1
-
-    monkeypatch.setattr(
-        "app.agents.aidd.service.create_and_schedule_tool_task",
-        fake_create_task,
-    )
-    monkeypatch.setattr(
-        "app.agents.aidd.llm_client.request_structured_plan",
-        fake_structured_plan,
-    )
-    monkeypatch.setattr(
-        "app.api.v1.agents.reconcile_waiting_agent_steps",
-        fake_reconcile,
-    )
-
-    create_response = await api_client.post(
-        "/api/v1/agents/aidd/runs",
-        headers={"Authorization": "Bearer owner-token"},
-        json={
-            "message": "上传蛋白后探索口袋并生成分子",
-            "input_file_id": protein_file.id,
-        },
-    )
-    run_id = create_response.json()["data"]["id"]
-
-    response = await api_client.post(
-        f"/api/v1/agents/aidd/runs/{run_id}/sync",
-        headers={"Authorization": "Bearer owner-token"},
-    )
-
-    assert response.status_code == 200
-    assert reconciled == [run_id]
+    assert response.status_code == 401
 
 
 @pytest.mark.asyncio
 async def test_cancel_agent_run_cancels_linked_platform_task(
     db_session: AsyncSession,
     current_user: User,
-    aidd_tools: dict[str, Tool],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from app.agents.aidd.service import cancel_agent_run
 
-    tool = aidd_tools["gcdm-pocket-generation"]
+    tool = await create_tool(
+        db_session,
+        current_user,
+        slug="gcdm-pocket-generation",
+        name="STD-Diff",
+    )
     task = Task(
         user_id=current_user.id,
         tool_id=tool.id,

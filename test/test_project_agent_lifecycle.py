@@ -208,16 +208,11 @@ async def project_context(project_agent_db: AsyncSession) -> dict:
     }
 
 
-def test_legacy_agent_response_keeps_contract_and_adds_deprecation_metadata():
-    from app.api.v1.agents import _legacy_success_response
+def test_legacy_agent_shutdown_detail_points_to_project_conversations():
+    from app.api.v1.agents import LEGACY_AGENT_GONE_DETAIL
 
-    response = _legacy_success_response(data={"id": "run-1"}, message="created")
-
-    assert response["code"] == 200
-    assert response["message"] == "created"
-    assert response["data"] == {"id": "run-1"}
-    assert response["meta"] == {
-        "deprecated": True,
+    assert LEGACY_AGENT_GONE_DETAIL == {
+        "message": "旧 AIDD API 已下线，请使用项目会话 Agent Run 接口",
         "replacement": "/api/v1/projects/{project_id}/conversations",
     }
 
