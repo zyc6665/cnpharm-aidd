@@ -14,7 +14,7 @@ from app.auth.dependencies import get_current_user
 from app.common.responses import success_response
 from app.database.session import get_db
 from app.feature_flags import require_feature_flag
-from app.models.agent import AgentRun
+from app.models.agent import AgentRun, AgentRunStep
 from app.models.conversations import (
     AgentEvent,
     Conversation,
@@ -85,6 +85,51 @@ def _plan_version_data(item: PlanVersion) -> dict:
         "status": item.status,
         "created_at": item.created_at,
         "updated_at": item.updated_at,
+    }
+
+
+def _agent_run_step_data(item: AgentRunStep) -> dict:
+    return {
+        "id": item.id,
+        "step_key": item.step_key,
+        "tool_slug": item.tool_slug,
+        "tool_id": item.tool_id,
+        "task_id": item.task_id,
+        "status": item.status,
+        "sort_order": item.sort_order,
+        "depends_on_step_ids": item.depends_on_step_ids or [],
+        "semantic_inputs": item.semantic_inputs or {},
+        "semantic_outputs": item.semantic_outputs or {},
+        "params": item.params or {},
+        "input_file_ids": item.input_file_ids or [],
+        "output_file_ids": item.output_file_ids or [],
+        "error_message": item.error_message,
+        "started_at": item.started_at,
+        "finished_at": item.finished_at,
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
+def _agent_run_data(item: AgentRun) -> dict:
+    steps = sorted(item.steps or [], key=lambda step: step.sort_order or 0)
+    return {
+        "id": item.id,
+        "project_id": item.project_id,
+        "user_id": item.user_id,
+        "message": item.message,
+        "intent": item.intent,
+        "status": item.status,
+        "input_type": item.input_type,
+        "input_file_id": item.input_file_id,
+        "requested_outputs": item.requested_outputs or [],
+        "plan": item.plan or {},
+        "summary": item.summary,
+        "error_message": item.error_message,
+        "finished_at": item.finished_at,
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+        "steps": [_agent_run_step_data(step) for step in steps],
     }
 
 
@@ -221,6 +266,58 @@ async def create_project_agent_run(
         data=_project_plan_result_data(result),
         message="智能体计划已创建",
     )
+
+
+@router.get("/projects/{project_id}/agent-runs", response_model=dict)
+async def list_project_agent_runs(
+    project_id: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    service = ProjectAgentService(db)
+    runs = await service.list_project_runs(project_id=project_id, user=current_user)
+    total = len(runs)
+    start = (page - 1) * page_size
+    return success_response(
+        data={
+            "items": [_agent_run_data(run) for run in runs[start : start + page_size]],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }
+    )
+
+
+@router.get("/projects/{project_id}/agent-runs/{run_id}", response_model=dict)
+async def get_project_agent_run(
+    project_id: str,
+    run_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    run = await ProjectAgentService(db).get_project_run(
+        project_id=project_id,
+        run_id=run_id,
+        user=current_user,
+    )
+    return success_response(data=_agent_run_data(run))
+
+
+@router.post("/projects/{project_id}/agent-runs/{run_id}/cancel", response_model=dict)
+async def cancel_project_agent_run(
+    project_id: str,
+    run_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    run = await ProjectAgentService(db).cancel_project_run(
+        project_id=project_id,
+        run_id=run_id,
+        user=current_user,
+    )
+    return success_response(data=_agent_run_data(run), message="智能体运行已取消")
 
 
 @router.post("/messages/{message_id}/branch", response_model=dict)

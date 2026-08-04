@@ -224,7 +224,7 @@
         </a-tab-pane>
 
         <a-tab-pane key="agent" :tab="t('workflow.mode.agent')">
-          <AiddAgentPanel @draft-generated="handleAgentWorkflowDraft" />
+          <AiddAgentPanel />
         </a-tab-pane>
       </a-tabs>
     </div>

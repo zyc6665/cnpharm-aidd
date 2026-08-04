@@ -39,30 +39,16 @@
         </a-form-item>
 
         <div class="agent-submit-row">
-          <a-form-item class="agent-file-field" :label="t('workflow.agent.inputFiles')">
-            <a-upload
-              v-model:file-list="agentFileUploads"
-              accept=".pdb,.ent,.cif,.sdf,.csv"
-              :before-upload="beforeUpload"
-              :multiple="true"
-            >
-              <a-button>
-                <UploadOutlined />
-                {{ t('workflow.agent.selectInputFiles') }}
-              </a-button>
-            </a-upload>
-            <p class="agent-file-hint">{{ t('workflow.agent.fileAutoDetectHint') }}</p>
-          </a-form-item>
-
+          <p class="agent-file-hint">{{ t('workflow.agent.projectRunHint') }}</p>
           <div class="agent-actions">
             <a-button
               type="primary"
               size="large"
-              :loading="draftSubmitting"
-              @click="generateWorkflowDraft"
+              :loading="submitting"
+              @click="openProjectAgent"
             >
               <ApartmentOutlined />
-              {{ t('workflow.agent.generateDraft') }}
+              {{ t('workflow.agent.openProjectAgent') }}
             </a-button>
           </div>
         </div>
@@ -73,12 +59,12 @@
       <div class="runtime-header">
         <div>
           <span class="agent-kicker">{{ t('workflow.agent.draftWorkspace') }}</span>
-          <h3>{{ t('workflow.agent.draftOnlyTitle') }}</h3>
+          <h3>{{ t('workflow.agent.projectAgentTitle') }}</h3>
         </div>
       </div>
 
       <p class="draft-only-description">
-        {{ t('workflow.agent.draftOnlyDescription') }}
+        {{ t('workflow.agent.projectAgentDescription') }}
       </p>
 
       <div class="capability-strip">
@@ -108,29 +94,21 @@
   import { useRouter } from 'vue-router'
   import { useI18n } from 'vue-i18n'
   import { message } from 'ant-design-vue'
-  import type { UploadFile } from 'ant-design-vue'
-  import { ApartmentOutlined, UploadOutlined } from '@ant-design/icons-vue'
-  import { createAiddWorkflowDraft } from '@/api/agents'
-  import { uploadFile } from '@/api/files'
+  import { ApartmentOutlined } from '@ant-design/icons-vue'
+  import { createProjectConversation, startProjectAgentRun } from '@/api/conversations'
   import { listProjects } from '@/api/projects'
   import { useUserStore } from '@/stores'
-  import type { AiddAgentRunCreateParams, AiddWorkflowDraft } from '@/types/models'
   import type { ResearchProject } from '@/types/projects'
-
-  const emit = defineEmits<{
-    draftGenerated: [draft: AiddWorkflowDraft, projectId: string]
-  }>()
 
   const router = useRouter()
   const { t } = useI18n()
   const userStore = useUserStore()
 
   const runMessage = ref('')
-  const agentFileUploads = ref<UploadFile[]>([])
   const projects = ref<ResearchProject[]>([])
   const selectedProjectId = ref<string | undefined>()
   const loadingProjects = ref(false)
-  const draftSubmitting = ref(false)
+  const submitting = ref(false)
 
   const capabilityOptions = computed(() => {
     return [
@@ -170,10 +148,6 @@
     return projects.value.find(project => project.id === selectedProjectId.value)?.name
   })
 
-  function beforeUpload() {
-    return false
-  }
-
   async function loadProjects() {
     if (!userStore.isLoggedIn) {
       projects.value = []
@@ -194,49 +168,35 @@
     }
   }
 
-  async function prepareAgentRequest(): Promise<AiddAgentRunCreateParams | null> {
+  function buildAgentGoal(): string {
+    return runMessage.value.trim() || t('workflow.agent.defaultMessage')
+  }
+
+  async function openProjectAgent() {
     if (!userStore.isLoggedIn) {
       message.warning(t('workflow.agent.loginRequired'))
       router.push('/login')
-      return null
+      return
     }
 
     if (!selectedProjectId.value) {
       message.warning(t('workflow.agent.projectRequiredWarning'))
-      return null
+      return
     }
 
-    const selectedFiles = agentFileUploads.value.filter(item => Boolean(item.originFileObj))
-    if (selectedFiles.length === 0) {
-      message.warning(t('workflow.agent.uploadRequired'))
-      return null
-    }
-
-    const uploadedFileIds: string[] = []
-    for (const uploadItem of selectedFiles) {
-      const uploaded = await uploadFile(uploadItem.originFileObj as File)
-      uploadedFileIds.push(uploaded.data.id.toString())
-    }
-
-    return {
-      message: runMessage.value.trim() || t('workflow.agent.defaultMessage'),
-      input_file_ids: uploadedFileIds
-    }
-  }
-
-  async function generateWorkflowDraft() {
-    draftSubmitting.value = true
+    submitting.value = true
     try {
-      const request = await prepareAgentRequest()
-      if (!request || !selectedProjectId.value) {
-        return
-      }
-
-      const response = await createAiddWorkflowDraft(request)
-      emit('draftGenerated', response.data, selectedProjectId.value)
-      message.success(t('workflow.agent.draftGenerated'))
+      const projectId = selectedProjectId.value
+      const goal = buildAgentGoal()
+      const conversation = await createProjectConversation(projectId, goal.slice(0, 80))
+      await startProjectAgentRun(projectId, conversation.data.id, { goal })
+      await router.push({
+        name: 'ProjectResearch',
+        params: { projectId, conversationId: conversation.data.id }
+      })
+      message.success(t('workflow.agent.projectAgentOpened'))
     } finally {
-      draftSubmitting.value = false
+      submitting.value = false
     }
   }
 
@@ -325,11 +285,6 @@
     align-items: flex-end;
     justify-content: space-between;
     gap: @spacing-lg;
-  }
-
-  .agent-file-field {
-    flex: 1;
-    margin-bottom: 0;
   }
 
   .agent-file-hint {

@@ -103,3 +103,55 @@ export interface ProjectAgentRunResult {
     content: Record<string, unknown>
   } | null
 }
+
+export interface ProjectAgentRunStep {
+  id: string
+  step_key: string
+  tool_slug: string
+  tool_id?: string | null
+  task_id?: string | null
+  status: string
+  sort_order: number
+  depends_on_step_ids: string[]
+  semantic_inputs: Record<string, unknown>
+  semantic_outputs: Record<string, unknown>
+  params: Record<string, unknown>
+  input_file_ids: string[]
+  output_file_ids: string[]
+  error_message?: string | null
+  started_at?: string | null
+  finished_at?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+export interface ProjectAgentRun {
+  id: string
+  project_id: string
+  user_id: string
+  message: string
+  intent: string
+  status: string
+  input_type?: string | null
+  input_file_id?: string | null
+  requested_outputs: string[]
+  plan: Record<string, unknown>
+  summary?: string | null
+  error_message?: string | null
+  finished_at?: string | null
+  created_at?: string
+  updated_at?: string
+  steps: ProjectAgentRunStep[]
+}
+
+export interface ProjectAgentRunListParams {
+  page?: number
+  page_size?: number
+}
+
+export interface ProjectAgentRunListResult {
+  items: ProjectAgentRun[]
+  total: number
+  page: number
+  page_size: number
+}

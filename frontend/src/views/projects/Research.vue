@@ -52,9 +52,12 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeftOutlined } from '@ant-design/icons-vue'
-import { cancelAiddAgentRun } from '@/api/agents'
 import { getProjectArtifacts } from '@/api/artifacts'
-import { createProjectConversation, startProjectAgentRun } from '@/api/conversations'
+import {
+  cancelProjectAgentRun,
+  createProjectConversation,
+  startProjectAgentRun,
+} from '@/api/conversations'
 import ConversationSidebar from '@/components/conversation/ConversationSidebar.vue'
 import MessageTimeline from '@/components/conversation/MessageTimeline.vue'
 import MessageComposer from '@/components/conversation/MessageComposer.vue'
@@ -156,7 +159,7 @@ async function startRun(message: string) {
 
 async function stopRun() {
   if (!store.activeRunId) return
-  await cancelAiddAgentRun(store.activeRunId)
+  await cancelProjectAgentRun(projectId.value, store.activeRunId)
   stream.disconnect()
 }
 

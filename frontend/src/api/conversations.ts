@@ -5,6 +5,9 @@ import type {
   ConversationMessage,
   MessageBranchResult,
   PlanDecisionResult,
+  ProjectAgentRun,
+  ProjectAgentRunListParams,
+  ProjectAgentRunListResult,
   ProjectAgentRunResult,
   ProjectConversation,
   ProjectResearchContext,
@@ -24,21 +27,30 @@ export const getProjectConversations = (
 export const createProjectConversation = (
   projectId: string,
   title: string,
-): Promise<ApiResponse<ProjectConversation>> => post(`/projects/${projectId}/conversations`, { title })
+): Promise<ApiResponse<ProjectConversation>> =>
+  post(`/projects/${projectId}/conversations`, { title })
 
 export const getConversationMessages = (
   conversationId: string,
   branchId?: string,
   options?: RequestOptions,
 ): Promise<ApiResponse<{ items: ConversationMessage[] }>> =>
-  get(`/conversations/${conversationId}/messages`, branchId ? { branch_id: branchId } : undefined, options)
+  get(
+    `/conversations/${conversationId}/messages`,
+    branchId ? { branch_id: branchId } : undefined,
+    options,
+  )
 
 export const createConversationMessage = (
   conversationId: string,
   content: ConversationContentBlock[],
   branchId?: string,
 ): Promise<ApiResponse<ConversationMessage>> =>
-  post(`/conversations/${conversationId}/messages`, { role: 'user', content, branch_id: branchId })
+  post(`/conversations/${conversationId}/messages`, {
+    role: 'user',
+    content,
+    branch_id: branchId,
+  })
 
 export const startProjectAgentRun = (
   projectId: string,
@@ -46,6 +58,26 @@ export const startProjectAgentRun = (
   data: { goal: string; protein_artifact_version_id?: string },
 ): Promise<ApiResponse<ProjectAgentRunResult>> =>
   post(`/projects/${projectId}/conversations/${conversationId}/agent-runs`, data)
+
+export const getProjectAgentRuns = (
+  projectId: string,
+  params?: ProjectAgentRunListParams,
+  options?: RequestOptions,
+): Promise<ApiResponse<ProjectAgentRunListResult>> =>
+  get(`/projects/${projectId}/agent-runs`, params, options)
+
+export const getProjectAgentRun = (
+  projectId: string,
+  runId: string,
+  options?: RequestOptions,
+): Promise<ApiResponse<ProjectAgentRun>> =>
+  get(`/projects/${projectId}/agent-runs/${runId}`, undefined, options)
+
+export const cancelProjectAgentRun = (
+  projectId: string,
+  runId: string,
+): Promise<ApiResponse<ProjectAgentRun>> =>
+  post(`/projects/${projectId}/agent-runs/${runId}/cancel`)
 
 export const branchConversationMessage = (
   messageId: string,

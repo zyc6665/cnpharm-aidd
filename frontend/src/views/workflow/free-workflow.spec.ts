@@ -82,31 +82,12 @@ const stubs = {
   },
   AEmpty: true,
   AiddAgentPanel: {
-    emits: ['draftGenerated'],
     template: `
       <button
-        class="emit-agent-draft"
+        class="open-project-agent"
         type="button"
-        @click="$emit('draftGenerated', {
-          name: 'Agent Draft',
-          description: 'Generated from agent',
-          intent: 'pocket',
-          definition: {
-            nodes: [{
-              id: 'pocket_prediction',
-              kind: 'tool',
-              tool_slug: 'lvpocket',
-              artifact_input_slots: [{ name: 'protein', type: 'protein_structure@1', required: true }],
-              artifact_outputs: [{ name: 'pocket', type: 'binding_pocket@1', required: true }]
-            }],
-            edges: []
-          },
-          input_files: { 'protein_structure@1': 'artifact-version-1' },
-          requested_outputs: ['binding_pocket@1'],
-          analysis_trace: []
-        }, 'project-1')"
       >
-        生成测试草稿
+        进入项目智能体
       </button>
     `,
   },
@@ -356,20 +337,14 @@ describe('free workflow workbench', () => {
     expect(deleteWorkflowDefinition).toHaveBeenCalledWith('flow-active')
   })
 
-  it('Agent 草稿生成后保存为项目工作流草稿并导入画布', async () => {
+  it('Agent 模式只挂载项目智能体入口，不再导入旧草稿', async () => {
     const wrapper = renderWorkflow()
     await flushPromises()
 
-    await wrapper.find('.emit-agent-draft').trigger('click')
+    const callsBefore = vi.mocked(createWorkflowDefinition).mock.calls.length
+    await wrapper.find('.open-project-agent').trigger('click')
     await flushPromises()
 
-    expect(createWorkflowDefinition).toHaveBeenLastCalledWith(expect.objectContaining({
-      name: 'Agent Draft',
-      description: 'Generated from agent',
-      project_id: 'project-1',
-      canvas_preset_id: 'aidd-workflow-draft',
-      selected_tool_by_node: { pocket_prediction: 'lvpocket' },
-      status: 'draft',
-    }))
+    expect(vi.mocked(createWorkflowDefinition).mock.calls.length).toBe(callsBefore)
   })
 })

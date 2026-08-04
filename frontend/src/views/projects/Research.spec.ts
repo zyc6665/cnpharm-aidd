@@ -10,9 +10,9 @@ import {
   getProjectConversations,
   getProjectResearchContext,
   rejectPlanVersion,
+  cancelProjectAgentRun,
   startProjectAgentRun,
 } from '@/api/conversations'
-import { cancelAiddAgentRun } from '@/api/agents'
 import { getProjectArtifacts } from '@/api/artifacts'
 import { useProjectConversationStore } from '@/stores/project-conversation'
 
@@ -33,9 +33,9 @@ vi.mock('@/api/conversations', () => ({
   getProjectConversations: vi.fn(),
   getProjectResearchContext: vi.fn(),
   rejectPlanVersion: vi.fn(),
+  cancelProjectAgentRun: vi.fn(),
   startProjectAgentRun: vi.fn(),
 }))
-vi.mock('@/api/agents', () => ({ cancelAiddAgentRun: vi.fn() }))
 vi.mock('@/api/artifacts', () => ({ getProjectArtifacts: vi.fn() }))
 vi.mock('@/composables/useAgentEventStream', () => ({
   useAgentEventStream: () => ({
@@ -130,7 +130,7 @@ describe('ResearchView', () => {
         sequence: 2,
       },
     } as never)
-    vi.mocked(cancelAiddAgentRun).mockResolvedValue({ data: { id: 'run-1' } } as never)
+    vi.mocked(cancelProjectAgentRun).mockResolvedValue({ data: { id: 'run-1' } } as never)
     vi.mocked(startProjectAgentRun).mockResolvedValue({ data: { id: 'run-new' } } as never)
     vi.mocked(branchConversationMessage).mockResolvedValue({
       data: {
@@ -210,7 +210,7 @@ describe('ResearchView', () => {
     await wrapper.get('textarea').trigger('keydown.enter')
     await wrapper.get('[data-testid="retry-run"]').trigger('click')
 
-    expect(cancelAiddAgentRun).toHaveBeenCalled()
+    expect(cancelProjectAgentRun).toHaveBeenCalledWith('project-1', 'run-1')
     expect(startProjectAgentRun).toHaveBeenCalledTimes(3)
     expect(branchConversationMessage).toHaveBeenCalledWith('message-1', expect.any(Object))
     expect(wrapper.text()).toContain('失败后可重试')

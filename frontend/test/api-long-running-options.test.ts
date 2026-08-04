@@ -12,19 +12,13 @@ function readSource(path: string) {
 test('长任务同步接口应显式使用长超时并允许传入取消信号', () => {
   const requestSource = readSource('src/api/request.ts')
   const workflowApiSource = readSource('src/api/workflows.ts')
-  const agentApiSource = readSource('src/api/agents.ts')
 
   assert.equal(requestSource.includes('export const LONG_RUNNING_TIMEOUT_MS = 0'), true)
   assert.equal(workflowApiSource.includes('type RequestOptions'), true)
-  assert.equal(agentApiSource.includes('type RequestOptions'), true)
   assert.equal(workflowApiSource.includes('timeout: options?.timeout ?? LONG_RUNNING_TIMEOUT_MS'), true)
-  assert.equal(agentApiSource.includes('timeout: options?.timeout ?? LONG_RUNNING_TIMEOUT_MS'), true)
   const workflowSyncSignature =
     /syncWorkflowRun\s*=\s*\(\s*runId:\s*string,\s*options\?:\s*RequestOptions\s*\)/
-  const agentSyncSignature =
-    /syncAiddAgentRun\s*=\s*\(\s*runId:\s*string,\s*options\?:\s*RequestOptions\s*\)/
   assert.equal(workflowSyncSignature.test(workflowApiSource), true)
-  assert.equal(agentSyncSignature.test(agentApiSource), true)
 })
 
 test('任务详情接口保留取消信号和请求层一次网络重试', () => {

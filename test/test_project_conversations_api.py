@@ -63,9 +63,11 @@ def conversation_direct_runner(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespa
 
     runner = SimpleNamespace(
         scheduled=[],
+        cancelled=[],
         schedule_task=lambda task_id, tool_version_id: runner.scheduled.append(
             (task_id, tool_version_id)
         ),
+        cancel_task=lambda task_id: runner.cancelled.append(task_id),
     )
     monkeypatch.setattr(config_settings, "TASK_EXECUTION_BACKEND", "direct", raising=False)
     monkeypatch.setattr(
@@ -491,3 +493,107 @@ async def test_project_conversation_can_start_agent_run_and_approval_submits_exe
     ]
     assert events[-2].payload["task_id"] == task.id
     assert events[-1].payload["task_id"] == task.id
+
+
+@pytest.mark.asyncio
+async def test_project_agent_runs_list_detail_and_cancel_use_project_scope(
+    conversation_client: httpx.AsyncClient,
+    conversation_db: AsyncSession,
+    conversation_users: dict[str, User],
+    conversation_direct_runner: SimpleNamespace,
+):
+    from app.models.agent import AgentRun, AgentRunStep
+    from app.models.conversations import AgentEvent
+    from app.models.tasks import TaskStatus
+    from sqlalchemy import select
+
+    project = await _create_project(conversation_client)
+    await _add_member(conversation_client, project["id"], "runner", "runner")
+    await _add_member(conversation_client, project["id"], "editor", "editor")
+    tool_version = await _seed_lvpocket_tool(conversation_db, conversation_users["owner"])
+    task = Task(
+        user_id=conversation_users["owner"].id,
+        tool_id=tool_version.tool_id,
+        tool_version_id=tool_version.id,
+        name="AIDD LVpocket",
+        status=TaskStatus.RUNNING.value,
+        progress=25,
+        extra_data={"project_id": project["id"]},
+    )
+    conversation_db.add(task)
+    await conversation_db.flush()
+    run = AgentRun(
+        project_id=project["id"],
+        user_id=conversation_users["owner"].id,
+        message="Find pockets",
+        intent="pocket_detection",
+        status="running",
+        input_type="protein_structure",
+        requested_outputs=["binding_pocket"],
+        plan={"goal": "Find pockets"},
+    )
+    conversation_db.add(run)
+    await conversation_db.flush()
+    step = AgentRunStep(
+        agent_run_id=run.id,
+        step_key="pocket",
+        tool_slug="lvpocket-pocket-prediction",
+        tool_id=tool_version.tool_id,
+        task_id=task.id,
+        status="running",
+        sort_order=1,
+    )
+    conversation_db.add(step)
+    await conversation_db.commit()
+
+    listed = await conversation_client.get(
+        f"/api/v1/projects/{project['id']}/agent-runs",
+        headers={"Authorization": "Bearer owner"},
+    )
+    assert listed.status_code == 200
+    listed_items = listed.json()["data"]["items"]
+    assert [item["id"] for item in listed_items] == [run.id]
+    assert listed_items[0]["project_id"] == project["id"]
+    assert listed_items[0]["steps"][0]["task_id"] == task.id
+
+    detail = await conversation_client.get(
+        f"/api/v1/projects/{project['id']}/agent-runs/{run.id}",
+        headers={"Authorization": "Bearer editor"},
+    )
+    assert detail.status_code == 200
+    assert detail.json()["data"]["id"] == run.id
+
+    hidden = await conversation_client.get(
+        f"/api/v1/projects/{project['id']}/agent-runs",
+        headers={"Authorization": "Bearer outsider"},
+    )
+    assert hidden.status_code == 404
+
+    forbidden = await conversation_client.post(
+        f"/api/v1/projects/{project['id']}/agent-runs/{run.id}/cancel",
+        headers={"Authorization": "Bearer editor"},
+    )
+    assert forbidden.status_code == 403
+
+    canceled = await conversation_client.post(
+        f"/api/v1/projects/{project['id']}/agent-runs/{run.id}/cancel",
+        headers={"Authorization": "Bearer runner"},
+    )
+    assert canceled.status_code == 200
+    assert canceled.json()["data"]["status"] == "canceled"
+    assert canceled.json()["data"]["steps"][0]["status"] == "canceled"
+    assert conversation_direct_runner.cancelled == [task.id]
+    await conversation_db.refresh(task)
+    assert task.status == TaskStatus.CANCELED.value
+    events = (
+        (
+            await conversation_db.execute(
+                select(AgentEvent)
+                .where(AgentEvent.agent_run_id == run.id)
+                .order_by(AgentEvent.sequence)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert events[-1].event_type == "run_canceled"

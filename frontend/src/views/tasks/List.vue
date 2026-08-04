@@ -87,18 +87,9 @@
         </a-button>
       </AppFilterBar>
 
-      <div class="task-type-tabs">
-        <a-segmented
-          v-model:value="taskTypeTab"
-          :options="taskTypeOptions"
-          size="large"
-          @change="handleTypeTabChange"
-        />
-      </div>
-
       <!-- 实时监控面板（运行中标签页显示） -->
       <div
-        v-if="currentTab === 'running' && runningTasks.length > 0 && shouldRenderStandaloneSection"
+        v-if="currentTab === 'running' && runningTasks.length > 0"
         class="monitor-panel"
       >
         <div class="monitor-header">
@@ -145,30 +136,7 @@
       <!-- 任务列表 -->
       <SkeletonList v-if="loading" :count="5" />
       <div v-else-if="hasDisplayItems" class="tasks-list">
-        <section
-          v-if="shouldRenderAgentSection && displayAgentRuns.length > 0"
-          class="task-section agent-task-section"
-        >
-          <div v-if="taskTypeTab === 'all'" class="task-section__header">
-            <span>{{ t('tasks.agentTasks') }}</span>
-            <span>{{ displayAgentRuns.length }}</span>
-          </div>
-          <AgentRunTaskCard
-            v-for="run in displayAgentRuns"
-            :key="run.id"
-            :run="run"
-            @view-task="goToDetail"
-          />
-        </section>
-
-        <section
-          v-if="shouldRenderStandaloneSection && displayTasks.length > 0"
-          class="task-section standalone-task-section"
-        >
-          <div v-if="taskTypeTab === 'all'" class="task-section__header">
-            <span>{{ t('tasks.standaloneToolTasks') }}</span>
-            <span>{{ displayTasks.length }}</span>
-          </div>
+        <section v-if="displayTasks.length > 0" class="task-section standalone-task-section">
           <div
             v-for="task in displayTasks"
             :key="task.id"
@@ -335,21 +303,9 @@
   import { message } from 'ant-design-vue'
   import type { Dayjs } from 'dayjs'
   import dayjs from 'dayjs'
-  import { useAgentsStore, useTasksStore, useToolsStore } from '@/stores'
+  import { useTasksStore, useToolsStore } from '@/stores'
   import type { TaskListParams } from '@/api/tasks'
   import type { Task, TaskStatus } from '@/types/models'
-  import AgentRunTaskCard from './AgentRunTaskCard.vue'
-  import {
-    collectAgentTaskIds,
-    filterAgentRunsForTaskCenter,
-    filterStandaloneTasks,
-    getTaskCenterPaginationTotal,
-    paginateAgentRunsForTaskCenter,
-    paginateStandaloneTasksForTaskCenter,
-    shouldShowAgentSection,
-    shouldShowStandaloneSection,
-    type TaskContentTypeTab
-  } from './agent-task-grouping'
 
   type TabKey = 'all' | 'running' | 'history'
 
@@ -358,11 +314,9 @@
   const { t } = useI18n()
   const tasksStore = useTasksStore()
   const toolsStore = useToolsStore()
-  const agentsStore = useAgentsStore()
 
   // 状态
   const currentTab = ref<TabKey>('all')
-  const taskTypeTab = ref<TaskContentTypeTab>('all')
   const searchKeyword = ref('')
   const selectedTool = ref<string | undefined>()
   const dateRange = ref<[Dayjs, Dayjs] | null>(null)
@@ -376,15 +330,12 @@
   })
 
   // 计算属性
-  const loading = computed(() => tasksStore.loading || agentsStore.loading)
+  const loading = computed(() => tasksStore.loading)
   const tasks = computed(() => tasksStore.tasks)
   const total = computed(() => tasksStore.total)
-  const agentRuns = computed(() => agentsStore.runs)
-  const agentTaskIds = computed(() => collectAgentTaskIds(agentRuns.value))
-  const standaloneTasks = computed(() => filterStandaloneTasks(tasks.value, agentTaskIds.value))
 
   const filteredStandaloneTasks = computed<Task[]>(() => {
-    let filtered = standaloneTasks.value
+    let filtered = tasks.value
 
     if (currentTab.value === 'running') {
       filtered = filtered.filter(t => t.status === 'running' || t.status === 'pending')
@@ -406,34 +357,13 @@
     return filtered
   })
 
-  const filteredAgentRuns = computed(() =>
-    filterAgentRunsForTaskCenter(agentRuns.value, {
-      tab: currentTab.value,
-      keyword: searchKeyword.value,
-      toolId: selectedTool.value
-    })
-  )
-
-  const displayAgentRuns = computed(() =>
-    paginateAgentRunsForTaskCenter(filteredAgentRuns.value, {
-      taskTypeTab: taskTypeTab.value,
-      currentPage: currentPage.value,
-      pageSize: pageSize.value
-    })
-  )
-
   const runningTasks = computed(() =>
     displayTasks.value.filter(t => t.status === 'running' || t.status === 'pending')
   )
   const runningCount = computed(
     () =>
       filteredStandaloneTasks.value.filter(t => t.status === 'running' || t.status === 'pending')
-        .length +
-      filterAgentRunsForTaskCenter(agentRuns.value, {
-        tab: 'running',
-        keyword: searchKeyword.value,
-        toolId: selectedTool.value
-      }).length
+        .length
   )
 
   const historyTasks = computed(() =>
@@ -441,52 +371,19 @@
   )
   const historyCount = computed(
     () =>
-      filteredStandaloneTasks.value.filter(t =>
-        ['success', 'failure', 'canceled'].includes(t.status)
-      ).length +
-      filterAgentRunsForTaskCenter(agentRuns.value, {
-        tab: 'history',
-        keyword: searchKeyword.value,
-        toolId: selectedTool.value
-      }).length
+      filteredStandaloneTasks.value.filter(t => ['success', 'failure', 'canceled'].includes(t.status))
+        .length
   )
 
   const displayTasks = computed(() => {
-    return paginateStandaloneTasksForTaskCenter(filteredStandaloneTasks.value, {
-      taskTypeTab: taskTypeTab.value,
-      currentPage: currentPage.value,
-      pageSize: pageSize.value
-    })
+    const start = (currentPage.value - 1) * pageSize.value
+    return filteredStandaloneTasks.value.slice(start, start + pageSize.value)
   })
 
-  const shouldRenderAgentSection = computed(() => shouldShowAgentSection(taskTypeTab.value))
-  const shouldRenderStandaloneSection = computed(() =>
-    shouldShowStandaloneSection(taskTypeTab.value)
-  )
-  const visibleAgentRunCount = computed(() =>
-    shouldRenderAgentSection.value ? displayAgentRuns.value.length : 0
-  )
-  const visibleStandaloneTaskCount = computed(() =>
-    shouldRenderStandaloneSection.value ? displayTasks.value.length : 0
-  )
-
-  const hasDisplayItems = computed(
-    () => visibleStandaloneTaskCount.value > 0 || visibleAgentRunCount.value > 0
-  )
-  const currentTotal = computed(() =>
-    getTaskCenterPaginationTotal({
-      taskTypeTab: taskTypeTab.value,
-      visibleStandaloneTaskTotal: filteredStandaloneTasks.value.length,
-      filteredAgentRunTotal: filteredAgentRuns.value.length
-    })
-  )
+  const hasDisplayItems = computed(() => displayTasks.value.length > 0)
+  const currentTotal = computed(() => filteredStandaloneTasks.value.length)
 
   const toolOptions = computed(() => toolsStore.tools || [])
-  const taskTypeOptions = computed(() => [
-    { label: t('tasks.allTaskTypes'), value: 'all' },
-    { label: t('tasks.agentTasks'), value: 'agent' },
-    { label: t('tasks.standaloneToolTasks'), value: 'standalone' }
-  ])
 
   const emptyText = computed(() => {
     switch (currentTab.value) {
@@ -568,22 +465,6 @@
     await tasksStore.fetchAllTasks(params)
   }
 
-  const fetchAgentRuns = async () => {
-    if (projectId.value) {
-      agentsStore.$patch({ runs: [], total: 0, currentRun: null })
-      return
-    }
-
-    try {
-      await agentsStore.fetchRuns(
-        { page: 1, page_size: 100, project_only: true },
-        { silent: true, retry: 1 }
-      )
-    } catch (error) {
-      console.warn('[TaskCenter] Failed to load legacy AIDD agent runs', error)
-    }
-  }
-
   const fetchTasksSafely = async () => {
     try {
       await fetchTasks()
@@ -615,10 +496,6 @@
     void fetchTasksSafely()
   }
 
-  const handleTypeTabChange = () => {
-    currentPage.value = 1
-  }
-
   const handleDateChange = () => {
     currentPage.value = 1
     void fetchTasksSafely()
@@ -627,7 +504,7 @@
   const handleRefresh = async () => {
     refreshing.value = true
     try {
-      const [taskResult] = await Promise.allSettled([fetchTasks(), fetchAgentRuns()])
+      const [taskResult] = await Promise.allSettled([fetchTasks()])
       if (taskResult.status === 'fulfilled') {
         message.success(t('common.refreshSuccess'))
       } else {
@@ -677,7 +554,7 @@
     if (refreshTimer) return
     refreshTimer = setInterval(() => {
       if (autoRefresh.value && currentTab.value === 'running') {
-        void Promise.allSettled([fetchTasksSafely(), fetchAgentRuns()])
+        void fetchTasksSafely()
       }
     }, 10000) // 每10秒刷新
   }
@@ -700,12 +577,12 @@
 
   watch(projectId, () => {
     currentPage.value = 1
-    void Promise.allSettled([fetchTasksSafely(), fetchAgentRuns()])
+    void fetchTasksSafely()
   })
 
   // 生命周期
   onMounted(async () => {
-    await Promise.allSettled([fetchTasksSafely(), fetchAgentRuns(), fetchToolsSafely()])
+    await Promise.allSettled([fetchTasksSafely(), fetchToolsSafely()])
 
     startAutoRefresh()
   })
@@ -770,17 +647,6 @@
     }
     50% {
       opacity: 0.6;
-    }
-  }
-
-  .task-type-tabs {
-    display: flex;
-    justify-content: flex-start;
-    margin: -@spacing-sm 0 @spacing-lg;
-
-    :deep(.ant-segmented) {
-      background: @bg-hover;
-      padding: 3px;
     }
   }
 
@@ -862,17 +728,6 @@
     display: flex;
     flex-direction: column;
     gap: @spacing-md;
-  }
-
-  .task-section__header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    color: @text-color-light-secondary;
-    font-size: @font-size-sm;
-    font-weight: @font-weight-semibold;
-    letter-spacing: 0;
-    padding: 0 @spacing-xs;
   }
 
   .task-card {

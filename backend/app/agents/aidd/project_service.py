@@ -23,12 +23,16 @@ from app.models.users import User
 from app.schemas.tasks import TaskCreate
 from app.services.conversations import append_message
 from app.services.project_access import load_project_membership, require_project_role
+from app.tasks.cancellation import cancel_platform_task
 from app.tasks.direct_runner import direct_task_runner as default_direct_task_runner
 from app.tasks.service import create_and_schedule_tool_task
 from app.tool_packages.schemas import ToolPackageV2Manifest
 
 
 LVPOCKET_SLUG = "lvpocket-pocket-prediction"
+PROJECT_AGENT_RUN_OPERATION_ROLES = {"owner", "runner"}
+TERMINAL_RUN_STATUSES = {"success", "failure", "canceled"}
+ACTIVE_STEP_STATUSES = {"pending", "ready", "dispatching", "waiting_task", "running"}
 
 
 @dataclass(frozen=True)
@@ -70,6 +74,112 @@ class ProjectAgentService:
     async def _commit_and_notify(self, run_id: str) -> None:
         await self._db.commit()
         await self._events.notify(run_id)
+
+    async def _load_project_run_for_member(
+        self,
+        *,
+        project_id: str,
+        run_id: str,
+        user_id: str,
+    ) -> AgentRun:
+        await load_project_membership(
+            self._db,
+            project_id=project_id,
+            user_id=user_id,
+        )
+        run = await self._db.scalar(
+            select(AgentRun)
+            .options(selectinload(AgentRun.steps))
+            .where(AgentRun.id == run_id, AgentRun.project_id == project_id)
+        )
+        if run is None:
+            raise HTTPException(status_code=404, detail="智能体运行不存在")
+        return run
+
+    async def list_project_runs(
+        self,
+        *,
+        project_id: str,
+        user: User,
+    ) -> list[AgentRun]:
+        await load_project_membership(
+            self._db,
+            project_id=project_id,
+            user_id=user.id,
+        )
+        runs = await self._db.scalars(
+            select(AgentRun)
+            .options(selectinload(AgentRun.steps))
+            .where(AgentRun.project_id == project_id)
+            .order_by(AgentRun.created_at.desc())
+        )
+        return list(runs.all())
+
+    async def get_project_run(
+        self,
+        *,
+        project_id: str,
+        run_id: str,
+        user: User,
+    ) -> AgentRun:
+        return await self._load_project_run_for_member(
+            project_id=project_id,
+            run_id=run_id,
+            user_id=user.id,
+        )
+
+    async def cancel_project_run(
+        self,
+        *,
+        project_id: str,
+        run_id: str,
+        user: User,
+    ) -> AgentRun:
+        await require_project_role(
+            self._db,
+            project_id=project_id,
+            user=user,
+            allowed_roles=PROJECT_AGENT_RUN_OPERATION_ROLES,
+        )
+        run = await self._db.scalar(
+            select(AgentRun)
+            .options(selectinload(AgentRun.steps))
+            .where(AgentRun.id == run_id, AgentRun.project_id == project_id)
+            .with_for_update()
+        )
+        if run is None:
+            raise HTTPException(status_code=404, detail="智能体运行不存在")
+        if run.status in TERMINAL_RUN_STATUSES:
+            return run
+
+        for step in run.steps:
+            if not step.task_id:
+                continue
+            task = await self._db.get(Task, step.task_id)
+            if task:
+                await cancel_platform_task(
+                    self._db,
+                    task=task,
+                    current_user=user,
+                    direct_runner=self._direct_runner,
+                )
+        run.status = "canceled"
+        run.finished_at = utcnow()
+        for step in run.steps:
+            if step.status in ACTIVE_STEP_STATUSES:
+                step.status = "canceled"
+                step.finished_at = utcnow()
+        await self._events.append(
+            run_id=run.id,
+            event_type="run_canceled",
+            payload={"run_id": run.id, "project_id": project_id},
+        )
+        await self._commit_and_notify(run.id)
+        return await self._load_project_run_for_member(
+            project_id=project_id,
+            run_id=run.id,
+            user_id=user.id,
+        )
 
     async def _load_conversation(
         self,
