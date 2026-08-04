@@ -321,23 +321,11 @@ export interface WorkflowDefinition {
   [key: string]: unknown
 }
 
-export interface WorkflowTemplate {
-  id: string
-  owner_id: string
-  name: string
-  description?: string | null
-  status: 'draft' | 'published' | string
-  definition: WorkflowDefinition
-  is_public: boolean
-  version: number
-  created_at: string
-  updated_at: string
-}
-
 export interface WorkflowRun {
   id: string
   owner_id: string
-  template_id?: string | null
+  workflow_definition_id: string
+  project_id?: string | null
   name: string
   status: 'pending' | 'running' | 'waiting_task' | 'success' | 'failure' | 'canceled' | string
   definition: WorkflowDefinition
@@ -382,21 +370,6 @@ export interface WorkflowRunNodeState {
   error_message?: string | null
   started_at?: string | null
   finished_at?: string | null
-}
-
-export interface WorkflowTemplateCreateParams {
-  name: string
-  description?: string | null
-  definition: WorkflowDefinition
-  is_public?: boolean
-}
-
-export interface WorkflowTemplateUpdateParams {
-  name?: string
-  description?: string | null
-  definition?: WorkflowDefinition
-  is_public?: boolean
-  status?: string
 }
 
 export interface WorkflowRunCreateParams {

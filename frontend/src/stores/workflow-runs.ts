@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import {
+  type WorkflowRunListParams,
   createWorkflowRun,
   getWorkflowRun,
   getWorkflowRuns,
@@ -22,7 +23,7 @@ export const useWorkflowRunsStore = defineStore('workflow-runs', () => {
   const isLoadingWorkflowRuns = ref(false)
   const isLoadingMoreWorkflowRuns = ref(false)
   const isLoadingWorkflowRun = ref(false)
-  const isRunningWorkflowTemplate = ref(false)
+  const isRunningWorkflowDefinition = ref(false)
   const isSyncingWorkflowRun = ref(false)
 
   const hasMoreWorkflowRuns = computed(() => (
@@ -34,7 +35,7 @@ export const useWorkflowRunsStore = defineStore('workflow-runs', () => {
   }
 
   async function loadWorkflowRuns(
-    params?: { template_id?: string; page?: number; page_size?: number },
+    params?: WorkflowRunListParams,
     options: { append?: boolean } = {},
   ) {
     if (options.append) {
@@ -64,18 +65,20 @@ export const useWorkflowRunsStore = defineStore('workflow-runs', () => {
     }
   }
 
-  async function runWorkflowTemplate(templateId: string, input: WorkflowRunCreateParams) {
-    isRunningWorkflowTemplate.value = true
+  async function runWorkflowDefinition(workflowDefinitionId: string, input: WorkflowRunCreateParams) {
+    isRunningWorkflowDefinition.value = true
     try {
-      const response = await createWorkflowRun(templateId, input)
+      const response = await createWorkflowRun(workflowDefinitionId, input)
       activeWorkflowRun.value = response.data
       activeWorkflowRunId.value = response.data.id
       upsertWorkflowRun(response.data)
       return response.data
     } finally {
-      isRunningWorkflowTemplate.value = false
+      isRunningWorkflowDefinition.value = false
     }
   }
+
+  const runWorkflowTemplate = runWorkflowDefinition
 
   async function loadWorkflowRun(runId: string) {
     isLoadingWorkflowRun.value = true
@@ -135,10 +138,12 @@ export const useWorkflowRunsStore = defineStore('workflow-runs', () => {
     isLoadingWorkflowRuns,
     isLoadingMoreWorkflowRuns,
     isLoadingWorkflowRun,
-    isRunningWorkflowTemplate,
+    isRunningWorkflowDefinition,
+    isRunningWorkflowTemplate: isRunningWorkflowDefinition,
     isSyncingWorkflowRun,
     hasMoreWorkflowRuns,
     loadWorkflowRuns,
+    runWorkflowDefinition,
     runWorkflowTemplate,
     loadWorkflowRun,
     syncActiveWorkflowRun,

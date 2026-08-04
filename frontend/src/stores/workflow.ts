@@ -305,11 +305,15 @@ export const useWorkflowStore = defineStore(
       touchSession()
     }
 
-    async function runWorkflowTemplate(...args: Parameters<typeof runsStore.runWorkflowTemplate>) {
-      const run = await runsStore.runWorkflowTemplate(...args)
+    async function runWorkflowDefinition(
+      ...args: Parameters<typeof runsStore.runWorkflowDefinition>
+    ) {
+      const run = await runsStore.runWorkflowDefinition(...args)
       touchSession()
       return run
     }
+
+    const runWorkflowTemplate = runWorkflowDefinition
 
     async function loadWorkflowRun(...args: Parameters<typeof runsStore.loadWorkflowRun>) {
       const run = await runsStore.loadWorkflowRun(...args)
@@ -390,6 +394,7 @@ export const useWorkflowStore = defineStore(
       isSavingWorkflowTemplate,
       isLoadingWorkflowRun,
       isRunningWorkflowTemplate,
+      isRunningWorkflowDefinition: isRunningWorkflowTemplate,
       isSyncingWorkflowRun,
       // computed
       session,
@@ -434,6 +439,7 @@ export const useWorkflowStore = defineStore(
       updateSavedWorkflowTemplate,
       duplicateSavedWorkflowTemplate,
       removeWorkflowTemplate,
+      runWorkflowDefinition,
       runWorkflowTemplate,
       loadWorkflowRun,
       syncActiveWorkflowRun,

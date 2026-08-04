@@ -309,39 +309,42 @@ export function useWorkflowPersistence(input: {
       return
     }
 
-    const templateId = workflowStore.activeWorkflowTemplateId
-    let activeTemplateId = templateId
-    if (!activeTemplateId) {
-      const template = await workflowStore.saveWorkflowTemplate({
-        name: workflowTemplateName.value.trim() || 'AIDD workflow',
-        definition,
-        is_public: false
-      })
-      activeTemplateId = template.id
-      selectedSavedWorkflowId.value = template.id
-    }
+    const saved = await workflowDefinitionsStore.saveWorkflowDefinition(
+      buildWorkflowDefinitionPayload(workflowTemplateName.value.trim() || 'AIDD workflow'),
+      selectedSavedWorkflowId.value ?? workflowDefinitionsStore.currentWorkflowDefinition?.id
+    )
+    selectedSavedWorkflowId.value = saved.id
+    workflowName.value = saved.name
 
-    const run = await workflowStore.runWorkflowTemplate(activeTemplateId!, {
-      name: workflowTemplateName.value.trim() || 'AIDD workflow',
+    const run = await workflowStore.runWorkflowDefinition(saved.id, {
+      name: saved.name,
       input_files: selectedWorkflowInputFiles.value
     })
-    await workflowStore.loadWorkflowRuns({ template_id: activeTemplateId!, page: 1, page_size: 20 })
+    await workflowStore.loadWorkflowRuns({
+      workflow_definition_id: saved.id,
+      page: 1,
+      page_size: 20
+    })
     await workflowStore.loadWorkflowRun(run.id)
   }
 
   async function handleRefreshWorkflowRuns() {
-    const templateId = workflowStore.activeWorkflowTemplateId ?? undefined
-    await workflowStore.loadWorkflowRuns({ template_id: templateId, page: 1, page_size: 20 })
+    const workflowDefinitionId = selectedSavedWorkflowId.value ?? undefined
+    await workflowStore.loadWorkflowRuns({
+      workflow_definition_id: workflowDefinitionId,
+      page: 1,
+      page_size: 20
+    })
   }
 
   async function handleLoadMoreWorkflowRuns() {
-    const templateId = workflowStore.activeWorkflowTemplateId ?? undefined
+    const workflowDefinitionId = selectedSavedWorkflowId.value ?? undefined
     if (!workflowStore.hasMoreWorkflowRuns) {
       return
     }
     await workflowStore.loadWorkflowRuns(
       {
-        template_id: templateId,
+        workflow_definition_id: workflowDefinitionId,
         page: workflowStore.workflowRunsPagination.page + 1,
         page_size: workflowStore.workflowRunsPagination.pageSize
       },

@@ -24,19 +24,13 @@ vi.mock('vue-router', async importOriginal => {
 vi.mock('@/api/workflows', () => ({
   createWorkflowDefinition: vi.fn(),
   createWorkflowRun: vi.fn(),
-  createWorkflowTemplate: vi.fn(),
   deleteWorkflowDefinition: vi.fn(),
-  deleteWorkflowTemplate: vi.fn(),
-  duplicateWorkflowTemplate: vi.fn(),
   getWorkflowDefinition: vi.fn(),
   getWorkflowDefinitions: vi.fn(),
   getWorkflowRun: vi.fn(),
   getWorkflowRuns: vi.fn(),
-  getWorkflowTemplate: vi.fn(),
-  getWorkflowTemplates: vi.fn(),
   syncWorkflowRun: vi.fn(),
   updateWorkflowDefinition: vi.fn(),
-  updateWorkflowTemplate: vi.fn(),
 }))
 
 const stubs = {

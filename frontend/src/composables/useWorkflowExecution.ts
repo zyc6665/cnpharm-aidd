@@ -119,7 +119,7 @@ export function useWorkflowExecution(input: {
       required: [],
     }
     const workflowParams = {
-      workflow_template_id: editableTemplate.value.id,
+      workflow_definition_id: editableTemplate.value.id,
       workflow_node_id: nodeId,
       workflow_node_type: editableTemplate.value.nodes.find((node) => node.id === nodeId)?.type,
     }
