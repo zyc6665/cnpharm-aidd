@@ -12,8 +12,8 @@ import {
   FREE_WORKFLOW_CANVAS_PRESET,
   WORKFLOW_CANVAS_PRESETS,
   getWorkflowCanvasPresetById
-} from '@/workflow/templates'
-import { resolveReadyToolNodeIds } from '@/workflow/template-runner'
+} from '@/workflow/canvas-presets'
+import { resolveReadyToolNodeIds } from '@/workflow/canvas-runner'
 import {
   extractWorkflowInputRequirementDetails,
   extractWorkflowInputRequirements
@@ -23,7 +23,7 @@ import {
   type ArtifactInputSlot,
   type ArtifactOutputSlot
 } from '@/workflow/contract-bindings'
-import { resolveWorkflowCanvasNodeStatus } from '@/workflow/template-state'
+import { resolveWorkflowCanvasNodeStatus } from '@/workflow/canvas-state'
 import { resolveWorkflowLabel } from '@/workflow/i18n-utils'
 
 type WorkflowStore = ReturnType<typeof useWorkflowStore>

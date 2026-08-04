@@ -1,5 +1,5 @@
 import type { WorkflowArtifactSemanticType, WorkflowTaskRef } from './artifact-types.ts'
-import type { WorkflowCanvasPreset } from './template-types.ts'
+import type { WorkflowCanvasPreset } from './canvas-types.ts'
 import type { ArtifactFile } from '../types/models.d.ts'
 import { formatWorkflowKey } from './i18n-utils.ts'
 import { sortArtifactsByCreatedAtDesc } from '../utils/artifact-sorting.ts'

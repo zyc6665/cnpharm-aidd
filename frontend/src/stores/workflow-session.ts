@@ -2,7 +2,7 @@ import type { WorkflowTaskRef } from '@/workflow/artifact-types'
 import type {
   WorkflowCanvasEdge,
   WorkflowCanvasNode,
-} from '@/workflow/template-types'
+} from '@/workflow/canvas-types'
 
 export interface WorkflowCanvasPosition {
   x: number

@@ -1,4 +1,4 @@
-import type { WorkflowCanvasEdge, WorkflowCanvasNode, WorkflowCanvasPreset } from './template-types'
+import type { WorkflowCanvasEdge, WorkflowCanvasNode, WorkflowCanvasPreset } from './canvas-types'
 
 export const FREE_WORKFLOW_CANVAS_PRESET: WorkflowCanvasPreset = {
   id: 'free-canvas',

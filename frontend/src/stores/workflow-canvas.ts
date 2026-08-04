@@ -9,7 +9,7 @@ import type {
   WorkflowCanvasEdge,
   WorkflowCanvasNode,
   WorkflowCanvasPreset as CanvasWorkflowPreset
-} from '@/workflow/template-types'
+} from '@/workflow/canvas-types'
 import { normalizeRecord, type WorkflowCanvasPosition } from './workflow-session'
 
 function resolveCanvasEdgeArtifactType(value: unknown): WorkflowCanvasEdge['artifactType'] {

@@ -5,7 +5,7 @@ import type {
   WorkflowCanvasEdge,
   WorkflowCanvasNode,
   WorkflowCanvasPreset as CanvasWorkflowPreset
-} from '@/workflow/template-types'
+} from '@/workflow/canvas-types'
 import { type ArtifactInputSlot, type ArtifactOutputSlot } from '@/workflow/contract-bindings'
 import { type WorkflowCanvasPosition, type WorkflowWorkbenchSession } from './workflow-session'
 import { useWorkflowCanvasStore } from './workflow-canvas'

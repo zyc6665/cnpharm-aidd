@@ -1,6 +1,6 @@
 import type { WorkflowDefinition, WorkflowDefinitionNode } from '../types/models'
 import type { WorkflowStepStatus } from './artifact-types.ts'
-import type { WorkflowCanvasPreset } from './template-types.ts'
+import type { WorkflowCanvasPreset } from './canvas-types.ts'
 
 export class WorkflowExecutionOrderError extends Error {
   constructor(message: string) {

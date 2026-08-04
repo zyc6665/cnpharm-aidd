@@ -1,8 +1,8 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
 
-import { resolveWorkflowCanvasNodeStatus } from '../src/workflow/template-state.ts'
-import type { WorkflowCanvasNode } from '../src/workflow/template-types.ts'
+import { resolveWorkflowCanvasNodeStatus } from '../src/workflow/canvas-state.ts'
+import type { WorkflowCanvasNode } from '../src/workflow/canvas-types.ts'
 
 const toolNode: WorkflowCanvasNode = {
   id: 'tool-node',

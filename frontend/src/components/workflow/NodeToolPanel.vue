@@ -26,8 +26,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { WorkflowCanvasNode } from '@/workflow/template-types'
-import type { WorkflowNodeArtifactRecommendation } from '@/workflow/template-artifacts'
+import type { WorkflowCanvasNode } from '@/workflow/canvas-types'
+import type { WorkflowNodeArtifactRecommendation } from '@/workflow/canvas-artifacts'
 import WorkflowNodeRunPanel from './WorkflowNodeRunPanel.vue'
 
 interface WorkflowAvailableTool { id?: string; slug: string; name: string; description?: string }

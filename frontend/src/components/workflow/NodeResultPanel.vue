@@ -20,7 +20,7 @@ import { message } from 'ant-design-vue'
 import { useI18n } from 'vue-i18n'
 import type { ArtifactFile } from '@/types/models'
 import type { WorkflowTaskRef } from '@/workflow/artifact-types'
-import type { WorkflowCanvasNode } from '@/workflow/template-types'
+import type { WorkflowCanvasNode } from '@/workflow/canvas-types'
 import { triggerProtectedFileDownload } from '@/utils/protected-file-access'
 const props = defineProps<{ node: WorkflowCanvasNode; task?: WorkflowTaskRef | null; artifacts?: ArtifactFile[]; selectedToolSlug?: string | null }>()
 defineEmits<{ (event: 'run-node', nodeId: string): void; (event: 'view-task-detail', nodeId: string): void }>()

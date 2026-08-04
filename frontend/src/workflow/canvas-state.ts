@@ -1,5 +1,5 @@
 import type { WorkflowStepStatus, WorkflowTaskRef } from './artifact-types.ts'
-import type { WorkflowCanvasNode } from './template-types.ts'
+import type { WorkflowCanvasNode } from './canvas-types.ts'
 import { mapTaskStatusToWorkflowStepStatus } from './task-state.ts'
 
 export function resolveWorkflowCanvasNodeStatus(input: {

@@ -72,7 +72,7 @@
   import { useI18n } from 'vue-i18n'
   import type { WorkflowArtifactSemanticType, WorkflowStepStatus } from '@/workflow/artifact-types'
   import { resolveWorkflowLabel } from '@/workflow/i18n-utils'
-  import type { WorkflowCanvasNode as WorkflowCanvasNodeModel, WorkflowCanvasPreset } from '@/workflow/template-types'
+  import type { WorkflowCanvasNode as WorkflowCanvasNodeModel, WorkflowCanvasPreset } from '@/workflow/canvas-types'
   import WorkflowCanvasEdge from './WorkflowCanvasEdge.vue'
   import WorkflowCanvasNodeView from './WorkflowCanvasNode.vue'
 

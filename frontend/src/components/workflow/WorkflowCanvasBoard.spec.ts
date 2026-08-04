@@ -2,7 +2,7 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import i18n from '@/locales'
 import WorkflowCanvasBoard from './WorkflowCanvasBoard.vue'
-import type { WorkflowCanvasPreset } from '@/workflow/template-types'
+import type { WorkflowCanvasPreset } from '@/workflow/canvas-types'
 
 const canvasPreset: WorkflowCanvasPreset = {
   id: 'free-canvas',

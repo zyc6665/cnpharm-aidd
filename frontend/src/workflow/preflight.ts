@@ -8,7 +8,7 @@ import {
   WORKFLOW_ARTIFACT_SEMANTIC_TYPES,
   normalizeWorkflowSemanticType,
 } from './semantic-types.ts'
-import type { WorkflowCanvasPreset } from './template-types.ts'
+import type { WorkflowCanvasPreset } from './canvas-types.ts'
 import { formatWorkflowKey } from './i18n-utils.ts'
 
 export type WorkflowPreflightIssueType =

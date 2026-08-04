@@ -15,8 +15,20 @@ function readSrcFile(pathFromWorkflowDir: string): string {
 
 describe('workflow canvas preset naming', () => {
   it('uses canvas preset names instead of the removed workflow template domain', () => {
-    const typeSource = readWorkflowFile('template-types.ts')
-    const presetSource = readWorkflowFile('templates.ts')
+    const workflowFiles = readdirSync(workflowDir)
+    const typeSource = readWorkflowFile('canvas-types.ts')
+    const presetSource = readWorkflowFile('canvas-presets.ts')
+
+    expect(workflowFiles).toContain('canvas-types.ts')
+    expect(workflowFiles).toContain('canvas-presets.ts')
+    expect(workflowFiles).toContain('canvas-artifacts.ts')
+    expect(workflowFiles).toContain('canvas-runner.ts')
+    expect(workflowFiles).toContain('canvas-state.ts')
+    expect(workflowFiles).not.toContain('template-types.ts')
+    expect(workflowFiles).not.toContain('templates.ts')
+    expect(workflowFiles).not.toContain('template-artifacts.ts')
+    expect(workflowFiles).not.toContain('template-runner.ts')
+    expect(workflowFiles).not.toContain('template-state.ts')
 
     expect(typeSource).toContain('export type WorkflowCanvasPresetKind')
     expect(typeSource).toContain('export interface WorkflowCanvasPreset')

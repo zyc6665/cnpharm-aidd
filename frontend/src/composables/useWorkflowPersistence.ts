@@ -9,12 +9,12 @@ import { shouldAutoSyncWorkflowRun } from '@/workflow/workflow-runs'
 import {
   validateWorkflowDefinition,
   validateWorkflowExecutionOrder
-} from '@/workflow/template-runner'
+} from '@/workflow/canvas-runner'
 import {
   WORKFLOW_ARTIFACT_SEMANTIC_TYPES,
   type WorkflowArtifactSemanticType
 } from '@/workflow/artifact-types'
-import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@/workflow/template-types'
+import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@/workflow/canvas-types'
 import {
   useArtifactsStore,
   useUserStore,

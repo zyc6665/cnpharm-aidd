@@ -3,8 +3,8 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-import { resolveReadyToolNodeIds, resolveWorkflowExecutionOrder } from '../src/workflow/template-runner.ts'
-import type { WorkflowCanvasPreset } from '../src/workflow/template-types.ts'
+import { resolveReadyToolNodeIds, resolveWorkflowExecutionOrder } from '../src/workflow/canvas-runner.ts'
+import type { WorkflowCanvasPreset } from '../src/workflow/canvas-types.ts'
 
 const template: WorkflowCanvasPreset = {
   id: 'aidd-template',

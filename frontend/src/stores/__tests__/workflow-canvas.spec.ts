@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useWorkflowCanvasStore } from '@/stores/workflow-canvas'
 import { createInitialWorkflowSession } from '@/stores/workflow-session'
-import { FREE_WORKFLOW_CANVAS_PRESET } from '@/workflow/templates'
+import { FREE_WORKFLOW_CANVAS_PRESET } from '@/workflow/canvas-presets'
 
 describe('useWorkflowCanvasStore', () => {
   beforeEach(() => {

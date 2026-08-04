@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-const source = readFileSync(resolve('src/workflow/template-types.ts'), 'utf8')
+const source = readFileSync(resolve('src/workflow/canvas-types.ts'), 'utf8')
 
 test('workflow template model exposes graph primitives', () => {
   assert.equal(source.includes('WorkflowCanvasPreset'), true)

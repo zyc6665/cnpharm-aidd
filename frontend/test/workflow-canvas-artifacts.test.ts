@@ -4,8 +4,8 @@ import assert from 'node:assert/strict'
 import {
   recommendArtifactsForNode,
   resolveNodeInputRequirements
-} from '../src/workflow/template-artifacts.ts'
-import { AIDD_WORKFLOW_CANVAS_PRESET } from '../src/workflow/templates.ts'
+} from '../src/workflow/canvas-artifacts.ts'
+import { AIDD_WORKFLOW_CANVAS_PRESET } from '../src/workflow/canvas-presets.ts'
 import type { WorkflowTaskRef } from '../src/workflow/artifact-types.ts'
 import type { ArtifactFile } from '../src/types/models.d.ts'
 

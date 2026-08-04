@@ -62,7 +62,7 @@
     buildToolFormInitialState,
     flattenToolInputSchema
   } from '@/views/tools/detail-schema'
-  import type { WorkflowNodeArtifactRecommendation } from '@/workflow/template-artifacts'
+  import type { WorkflowNodeArtifactRecommendation } from '@/workflow/canvas-artifacts'
 
   interface WorkflowAvailableTool {
     id?: string

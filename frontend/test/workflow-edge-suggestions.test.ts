@@ -1,8 +1,8 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
 
-import { suggestWorkflowEdgesForNode } from '../src/workflow/template-artifacts.ts'
-import type { WorkflowCanvasPreset } from '../src/workflow/template-types.ts'
+import { suggestWorkflowEdgesForNode } from '../src/workflow/canvas-artifacts.ts'
+import type { WorkflowCanvasPreset } from '../src/workflow/canvas-types.ts'
 
 const template: WorkflowCanvasPreset = {
   id: 'aidd-template',

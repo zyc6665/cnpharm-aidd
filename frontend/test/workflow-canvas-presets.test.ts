@@ -9,7 +9,7 @@ import {
   PROTEIN_TO_POCKET_CANVAS_PRESET,
   WORKFLOW_CANVAS_PRESETS,
   getWorkflowCanvasPresetById
-} from '../src/workflow/templates.ts'
+} from '../src/workflow/canvas-presets.ts'
 
 test('AIDD workflow template defines a connected node graph', () => {
   assert.equal(AIDD_WORKFLOW_CANVAS_PRESET.id, 'aidd-template')

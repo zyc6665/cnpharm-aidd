@@ -50,7 +50,7 @@
 <script setup lang="ts">
   import { ref } from 'vue'
   import type { WorkflowStepStatus } from '@/workflow/artifact-types'
-  import type { WorkflowCanvasNode } from '@/workflow/template-types'
+  import type { WorkflowCanvasNode } from '@/workflow/canvas-types'
   import WorkflowNodeStatusBadge from './WorkflowNodeStatusBadge.vue'
 
   const props = defineProps<{
