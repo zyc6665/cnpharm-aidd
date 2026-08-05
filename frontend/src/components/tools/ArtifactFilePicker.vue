@@ -177,9 +177,15 @@
 <script setup lang="ts">
   import { computed, onMounted, ref, watch } from 'vue'
   import { useI18n } from 'vue-i18n'
-  import dayjs from 'dayjs'
   import type { UploadFile } from 'ant-design-vue'
   import { UploadOutlined } from '@ant-design/icons-vue'
+  import {
+    findArtifactPickerLocation,
+    formatArtifactPickerArtifactMeta,
+    formatArtifactPickerTaskMeta,
+    resolveArtifactPickerPreferredGroupId,
+    resolveArtifactPickerPreferredToolSlug
+  } from '@/domain/tools'
   import { useArtifactsStore, useToolsStore } from '@/stores'
   import type { ArtifactFile } from '@/types/models'
   import {
@@ -583,50 +589,27 @@
   }
 
   function formatArtifactMeta(artifact: ArtifactFile): string {
-    return `${artifact.tool_name} · ${dayjs(artifact.created_at).format('YYYY-MM-DD HH:mm')}`
+    return formatArtifactPickerArtifactMeta(artifact)
   }
 
   function formatTaskMeta(taskNode: WorkflowArtifactTaskNode): string {
-    return `${selectedToolNode.value?.toolName ?? '-'} · ${dayjs(taskNode.latestCreatedAt).format('YYYY-MM-DD HH:mm')}`
+    return formatArtifactPickerTaskMeta(taskNode, selectedToolNode.value?.toolName)
   }
 
   function findArtifactLocation(artifactId: string) {
-    for (const groupNode of artifactGroupNodes.value) {
-      for (const toolNode of groupNode.tools) {
-        for (const taskNode of toolNode.tasks) {
-          if (taskNode.artifacts.some((artifact) => artifact.id === artifactId)) {
-            return {
-              groupId: groupNode.groupId,
-              toolSlug: toolNode.toolSlug,
-              taskId: taskNode.taskId
-            }
-          }
-        }
-      }
-    }
-
-    return null
+    return findArtifactPickerLocation(artifactGroupNodes.value, artifactId)
   }
 
   function resolvePreferredGroupId(): string | undefined {
-    if (props.preferredGroupId && artifactGroupNodes.value.some((group) => group.groupId === props.preferredGroupId)) {
-      return props.preferredGroupId
-    }
-
-    return artifactGroupNodes.value[0]?.groupId
+    return resolveArtifactPickerPreferredGroupId(artifactGroupNodes.value, props.preferredGroupId)
   }
 
   function resolvePreferredToolSlug(groupNode: WorkflowArtifactGroupNode | null): string | undefined {
-    if (!groupNode) {
-      return undefined
-    }
-
-    const preferredToolSlug = props.preferredToolSlug ?? props.currentToolSlug
-    if (preferredToolSlug && groupNode.tools.some((tool) => tool.toolSlug === preferredToolSlug)) {
-      return preferredToolSlug
-    }
-
-    return undefined
+    return resolveArtifactPickerPreferredToolSlug(
+      groupNode,
+      props.preferredToolSlug,
+      props.currentToolSlug
+    )
   }
 
   function syncSelectionPath() {
