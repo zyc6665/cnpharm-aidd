@@ -325,6 +325,14 @@ import {
 } from '@ant-design/icons-vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import {
+  formatAdminDateTime,
+  getModelServiceTestStatusColor,
+  getSystemHealthServiceLabel,
+  getSystemHealthStatusColor,
+  getSystemHealthStatusText,
+  sortSystemHealthServices
+} from '@/domain/admin'
+import {
   createModelService,
   deleteModelService,
   getModelServices,
@@ -385,21 +393,7 @@ const formattedConfig = computed(() => {
 })
 
 const healthServices = computed(() => {
-  const order = [
-    'database',
-    'database_schema',
-    'cache',
-    'storage',
-    'celery',
-    'tool_package_runtime'
-  ]
-  return [...(systemHealth.value?.services ?? [])].sort((left, right) => {
-    const leftIndex = order.indexOf(left.name)
-    const rightIndex = order.indexOf(right.name)
-    const normalizedLeftIndex = leftIndex === -1 ? order.length : leftIndex
-    const normalizedRightIndex = rightIndex === -1 ? order.length : rightIndex
-    return normalizedLeftIndex - normalizedRightIndex
-  })
+  return sortSystemHealthServices(systemHealth.value?.services)
 })
 
 const modelServiceRules = computed(() => ({
@@ -563,53 +557,11 @@ const handleDeleteModelService = async (record: ModelService) => {
   }
 }
 
-const testStatusColor = (status?: string | null) => {
-  if (status === 'success') {
-    return 'green'
-  }
-  if (status === 'failure') {
-    return 'red'
-  }
-  return 'default'
-}
-
-const healthStatusColor = (status?: string | null) => {
-  if (status === 'healthy') return 'green'
-  if (status === 'degraded' || status === 'unknown') return 'orange'
-  if (status === 'unhealthy') return 'red'
-  return 'default'
-}
-
-const healthStatusText = (status?: string | null) => {
-  if (status === 'healthy') return '正常'
-  if (status === 'degraded') return '降级'
-  if (status === 'unhealthy') return '异常'
-  if (status === 'unknown') return '未知'
-  return '-'
-}
-
-const healthServiceLabel = (name: string) => {
-  const labels: Record<string, string> = {
-    database: '数据库连接',
-    database_schema: '数据库 Schema',
-    cache: '缓存',
-    storage: '存储',
-    celery: '任务队列',
-    tool_package_runtime: 'Tool Package Runtime'
-  }
-  return labels[name] ?? name
-}
-
-const formatDateTime = (value?: string | null) => {
-  if (!value) {
-    return '-'
-  }
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-  return date.toLocaleString()
-}
+const testStatusColor = getModelServiceTestStatusColor
+const healthStatusColor = getSystemHealthStatusColor
+const healthStatusText = getSystemHealthStatusText
+const healthServiceLabel = getSystemHealthServiceLabel
+const formatDateTime = formatAdminDateTime
 
 onMounted(() => {
   void Promise.all([fetchSystemData(), fetchModelServices()])
