@@ -1,4 +1,4 @@
-import type { SchemaProperty, SchemaValueType, ToolSchema } from '../../types/models'
+import type { SchemaProperty, SchemaValueType, ToolSchema } from '@/types/models'
 
 type UiFieldType = Extract<
   SchemaValueType,

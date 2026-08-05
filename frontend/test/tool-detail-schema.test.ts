@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import {
   buildTaskSubmissionPayload,
   flattenToolInputSchema
-} from '../src/views/tools/detail-schema.ts'
+} from '../src/domain/tools/detail-schema.ts'
 
 const gcdmSchema = {
   type: 'object',

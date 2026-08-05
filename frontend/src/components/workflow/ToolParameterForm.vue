@@ -78,7 +78,7 @@
 import type { Rule } from 'ant-design-vue/es/form'
 import ArtifactFilePicker from '@/components/tools/ArtifactFilePicker.vue'
 import type { ArtifactFile, SchemaProperty, ToolSchema } from '@/types/models'
-import { isFileSchemaProperty } from '@/views/tools/detail-schema'
+import { isFileSchemaProperty } from '@/domain/tools'
 import type { UploadFile } from 'ant-design-vue'
 import type { WorkflowArtifactSelectionPath } from '@/workflow/artifact-hierarchy'
 

@@ -407,7 +407,7 @@
     flattenToolInputSchema,
     isFileSchemaProperty,
     type UploadedToolFile
-  } from './detail-schema'
+  } from '@/domain/tools'
   import {
     buildFallbackToolDocumentation,
     renderMarkdownToHtml,
