@@ -223,6 +223,39 @@ async def test_admin_creates_and_reads_validated_tool_package(
 
 
 @pytest.mark.asyncio
+async def test_admin_lists_tool_packages(package_client: httpx.AsyncClient):
+    first_manifest = _manifest()
+    second_manifest = _manifest()
+    second_manifest["metadata"] = {
+        "slug": "gcdm-standard",
+        "name": "GCDM Standard",
+        "version": "1.0.0",
+    }
+
+    for manifest in (first_manifest, second_manifest):
+        response = await package_client.post(
+            "/api/v1/tool-packages",
+            headers={"Authorization": "Bearer admin"},
+            json={"manifest": manifest},
+        )
+        assert response.status_code == 200
+
+    response = await package_client.get(
+        "/api/v1/tool-packages",
+        headers={"Authorization": "Bearer admin"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert [item["slug"] for item in payload["items"]] == [
+        "gcdm-standard",
+        "lvpocket",
+    ]
+    assert payload["total"] == 2
+    assert payload["items"][0]["current_version"]["validation_status"] == "valid"
+
+
+@pytest.mark.asyncio
 async def test_admin_creates_v2_tool_package_with_runtime_metadata(
     package_client: httpx.AsyncClient,
 ):

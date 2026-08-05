@@ -191,6 +191,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'admin.tools' }
       },
       {
+        path: 'tool-packages',
+        name: 'AdminToolPackages',
+        component: () => import('@/views/admin/ToolPackages.vue'),
+        meta: { title: 'admin.toolPackages' }
+      },
+      {
         path: 'tool-categories',
         name: 'AdminToolCategories',
         component: () => import('@/views/admin/ToolCategories.vue'),

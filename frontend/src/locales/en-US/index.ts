@@ -1148,6 +1148,8 @@ export default {
     importToolConfigRequired: 'Please paste the platform_tool.json content first',
     importToolConfigInvalid: 'platform_tool.json is not valid JSON',
     toolsSubtitle: 'Maintain the tool catalog and category assignment in one place',
+    toolPackages: 'Tool Package',
+    toolPackagesSubtitle: 'Use standard Artifacts and model-side adapters as the default deployment path',
     workbenchGroups: 'Workbench Groups',
     workbenchGroupsSubtitle: 'Manage tool workbench groups, recommendations, and mappings in one place',
     toolCategories: 'Category Management',

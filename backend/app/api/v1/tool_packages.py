@@ -6,8 +6,8 @@ import hashlib
 import json
 from typing import Any
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -17,7 +17,7 @@ from app.common.exceptions import (
     NotFoundException,
     ValidationException,
 )
-from app.common.responses import success_response
+from app.common.responses import paginated_response, success_response
 from app.database.session import get_db
 from app.feature_flags import require_feature_flag
 from app.models.tool_packages import ToolPackage, ToolPackageVersion
@@ -75,6 +75,30 @@ async def create_tool_package(
     await db.commit()
     return success_response(
         data=_serialize_package(await _load_package(db, package.id))
+    )
+
+
+@router.get("", response_model=dict)
+async def list_tool_packages(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    base_query = select(ToolPackage)
+    total = await db.scalar(select(func.count()).select_from(base_query.subquery()))
+    result = await db.execute(
+        base_query
+        .options(selectinload(ToolPackage.current_version))
+        .order_by(ToolPackage.created_at.desc(), ToolPackage.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    return paginated_response(
+        items=[_serialize_package(package) for package in result.scalars().all()],
+        total=total or 0,
+        page=page,
+        page_size=page_size,
     )
 
 

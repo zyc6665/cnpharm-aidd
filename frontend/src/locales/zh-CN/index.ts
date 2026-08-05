@@ -1145,6 +1145,8 @@ export default {
     importToolConfigRequired: '请先粘贴 platform_tool.json 内容',
     importToolConfigInvalid: 'platform_tool.json 不是有效的 JSON',
     toolsSubtitle: '统一维护工具目录与分类归属',
+    toolPackages: 'Tool Package',
+    toolPackagesSubtitle: '以标准 Artifact 与模型侧 adapter 作为新模型部署主路径',
     workbenchGroups: '工作台分组',
     workbenchGroupsSubtitle: '维护工具工作台分组、推荐顺序与映射关系',
     toolCategories: '分类管理',
