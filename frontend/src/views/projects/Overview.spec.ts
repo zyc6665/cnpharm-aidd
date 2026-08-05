@@ -93,6 +93,7 @@ function renderOverview() {
   return mount(ProjectOverview, {
     global: {
       stubs: {
+        ProjectWorkspaceNav: true,
         RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
         AButton: { template: '<button><slot /></button>' },
         AAlert: { template: '<div role="alert">{{ $attrs.message }}<slot /></div>' },
@@ -131,7 +132,7 @@ describe('ProjectOverview', () => {
       .findAll('a')
       .find(link => link.text().includes('全部任务'))
     expect(taskListEntry?.attributes('href')).toBe('/tasks?project_id=project-1')
-    expect(workflowEntry?.attributes('href')).toBe('/workflow?project_id=project-1')
+    expect(workflowEntry?.attributes('href')).toBe('/projects/project-1/workflow')
     expect(wrapper.find('[data-testid="open-research"]').attributes('href')).toBe(
       '/projects/project-1/research'
     )

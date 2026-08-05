@@ -1,5 +1,6 @@
 <template>
   <div class="board-list-page">
+    <ProjectWorkspaceNav v-if="projectId" :project-id="projectId" />
     <AppPageHeader title="科研白板" subtitle="项目假设、证据和科研产物">
       <template #actions><a-button type="primary" @click="createOpen = true"><PlusOutlined /> 新建白板</a-button></template>
     </AppPageHeader>
@@ -36,6 +37,7 @@ import dayjs from 'dayjs'
 import { message } from 'ant-design-vue'
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons-vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
+import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
 import {
   createResearchBoard,
   deleteResearchBoard,

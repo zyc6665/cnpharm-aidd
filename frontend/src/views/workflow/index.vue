@@ -1,6 +1,7 @@
 <template>
   <div class="workflow-page">
     <div class="workflow-shell workflow-deck">
+      <ProjectWorkspaceNav v-if="routeProjectId" :project-id="routeProjectId" />
       <AppPageHeader
         :title="t('workflow.title')"
         :subtitle="t('workflow.subtitle')"
@@ -241,6 +242,7 @@
   import { useI18n } from 'vue-i18n'
   import { useRoute, useRouter } from 'vue-router'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import AiddAgentPanel from '@/components/workflow/AiddAgentPanel.vue'
   import WorkflowNodeInspector from '@/components/workflow/WorkflowNodeInspector.vue'
   import WorkflowNodeStatusBadge from '@/components/workflow/WorkflowNodeStatusBadge.vue'
@@ -278,6 +280,10 @@
 
   const activeMode = ref<WorkflowMode>('manual')
   const routeProjectId = computed(() => {
+    const rawProjectParam = route.params?.projectId
+    if (typeof rawProjectParam === 'string' && rawProjectParam.trim()) {
+      return rawProjectParam
+    }
     const rawProjectId = route.query.project_id
     return typeof rawProjectId === 'string' && rawProjectId.trim() ? rawProjectId : undefined
   })

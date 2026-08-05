@@ -1,6 +1,7 @@
 <template>
   <main class="project-overview-page">
     <router-link to="/workspace" class="back-link">返回工作台</router-link>
+    <ProjectWorkspaceNav :project-id="projectId" />
 
     <a-alert
       v-if="loadError"
@@ -87,13 +88,13 @@
         <section class="overview-section">
           <div class="section-heading">
             <h2>项目工作流</h2>
-            <router-link :to="`/workflow?project_id=${projectId}`">打开工作流</router-link>
+            <router-link :to="`/projects/${projectId}/workflow`">打开工作流</router-link>
           </div>
           <div v-if="overview.workflows.length" class="resource-list">
             <router-link
               v-for="workflow in overview.workflows"
               :key="workflow.id"
-              :to="`/workflow?project_id=${projectId}`"
+              :to="`/projects/${projectId}/workflow`"
               class="resource-row"
             >
               <strong>{{ workflow.name }}</strong>
@@ -132,6 +133,7 @@
   import dayjs from 'dayjs'
   import { getProjectOverview } from '@/api/projects'
   import { buildArtifactVersionDownloadUrl } from '@/api/artifacts'
+  import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import type { ProjectOverview } from '@/types/projects'
   import type { TypedArtifact } from '@/types/artifacts'
 

@@ -1,6 +1,7 @@
 <template>
   <main class="project-settings-page">
     <router-link :to="`/projects/${projectId}`" class="back-link">返回项目总览</router-link>
+    <ProjectWorkspaceNav :project-id="projectId" />
 
     <AppPageHeader
       title="项目设置"
@@ -99,6 +100,7 @@
   import { useRoute } from 'vue-router'
   import { message } from 'ant-design-vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import {
     addProjectMember,
     getProjectOverview,

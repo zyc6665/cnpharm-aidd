@@ -1,6 +1,7 @@
 <template>
   <main class="project-lineage-page">
     <router-link :to="`/projects/${projectId}`" class="back-link">返回项目总览</router-link>
+    <ProjectWorkspaceNav :project-id="projectId" />
 
     <AppPageHeader
       title="Artifact 谱系"
@@ -32,6 +33,7 @@
   import { getProjectArtifactLineage } from '@/api/artifacts'
   import ArtifactLineageGraph from '@/components/artifacts/ArtifactLineageGraph.vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import type { ArtifactLineageGraph as ArtifactLineageGraphData } from '@/types/artifacts'
 
   const route = useRoute()

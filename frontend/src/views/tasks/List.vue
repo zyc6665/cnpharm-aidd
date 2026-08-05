@@ -2,6 +2,7 @@
   <div class="tasks-page">
     <div class="container">
       <AppPageHeader :title="t('tasks.title')" :subtitle="t('tasks.subtitle')" />
+      <ProjectWorkspaceNav v-if="projectId" :project-id="projectId" />
 
       <!-- 三标签页切换 -->
       <div class="view-tabs">
@@ -295,6 +296,7 @@
   import { useI18n } from 'vue-i18n'
   import AppFilterBar from '@/components/common/AppFilterBar.vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import SkeletonList from '@/components/common/SkeletonList.vue'
   import {
     UnorderedListOutlined,

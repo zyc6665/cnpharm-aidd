@@ -92,10 +92,11 @@
 
   function goBackToWorkflow() {
     const projectId = workflowStore.activeWorkflowRun?.project_id
-    router.push({
-      name: 'Workflow',
-      query: projectId ? { project_id: projectId } : undefined
-    })
+    if (projectId) {
+      router.push({ name: 'ProjectWorkflow', params: { projectId } })
+      return
+    }
+    router.push({ name: 'Workflow' })
   }
 
   onMounted(() => {

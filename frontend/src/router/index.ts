@@ -38,6 +38,12 @@ const routes: RouteRecordRaw[] = [
     meta: { titleLiteral: '项目设置', requiresAuth: true }
   },
   {
+    path: '/projects/:projectId/workflow',
+    name: 'ProjectWorkflow',
+    component: () => import('@/views/workflow/index.vue'),
+    meta: { titleLiteral: '项目工作流', requiresAuth: true }
+  },
+  {
     path: '/projects/:projectId/research/:conversationId?',
     name: 'ProjectResearch',
     component: () => import('@/views/projects/Research.vue'),
