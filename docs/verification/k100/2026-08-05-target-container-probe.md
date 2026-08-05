@@ -67,6 +67,14 @@ Traceback (most recent call last):
 ImportError: librocm_smi64.so.2: cannot open shared object file: No such file or directory
 ```
 
+The missing library does exist in the container filesystem:
+
+```text
+/opt/dtk-26.04/.hyhal/rocm_smi/lib/librocm_smi64.so
+/opt/dtk-26.04/.hyhal/rocm_smi/lib/librocm_smi64.so.2
+/opt/dtk-26.04/.hyhal/rocm_smi/lib/librocm_smi64.so.2.8
+```
+
 ## Interpretation
 
 - Compiled Python extensions for the commercial container must target
@@ -79,6 +87,9 @@ ImportError: librocm_smi64.so.2: cannot open shared object file: No such file or
   is missing from the dynamic linker path or the container filesystem.
 - The base Python runtime can import `numpy`, `pandas`, and `scipy`; `torch` is
   not yet usable until the ROCm/DTK runtime library issue is resolved.
+- `librocm_smi64.so.2` is present under `/opt/dtk-26.04/.hyhal/rocm_smi/lib`, so
+  the most likely next hypothesis is a missing `LD_LIBRARY_PATH` or linker cache
+  entry rather than a missing runtime package.
 - `scikit-learn`, `dgl`, and `rdkit` are not currently importable. MolP-PC needs
   `scikit-learn`; other models may need `dgl` or chemistry packages.
 - Existing cp38/cp310 binary wheels from the 4090 environment cannot be reused as
@@ -87,11 +98,12 @@ ImportError: librocm_smi64.so.2: cannot open shared object file: No such file or
 
 ## Next Actions
 
-1. Check whether `librocm_smi64.so.2` exists in the container and is missing only
-   from `LD_LIBRARY_PATH`, or whether the image is missing the required runtime
-   package entirely.
-2. Probe exact installed package metadata without importing `torch`.
-3. Decide whether to run MolP-PC legacy cp38 environment as a temporary internal
+1. Retry `torch` import with `/opt/dtk-26.04/.hyhal/rocm_smi/lib` prepended to
+   `LD_LIBRARY_PATH`.
+2. If another DTK/ROCm library fails next, collect the missing library name and
+   locate it with `find / -name '<library>'`.
+3. Probe exact installed package metadata without importing `torch`.
+4. Decide whether to run MolP-PC legacy cp38 environment as a temporary internal
    compatibility probe.
-4. Build MolP-PC binary delivery against this ABI in a trusted builder based on
+5. Build MolP-PC binary delivery against this ABI in a trusted builder based on
    `2.7.1-ubuntu22.04-dtk26.04-py3.11`.
