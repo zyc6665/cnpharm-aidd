@@ -1,5 +1,6 @@
 export * from './agent-capability'
 export * from './detail-display'
+export * from './detail-file-inputs'
 export * from './detail-schema'
 export * from './listing'
 export * from './standard-artifact-inputs'

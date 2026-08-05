@@ -407,6 +407,9 @@
     formatToolMetricCount as formatNumber,
     flattenExampleParams,
     flattenToolInputSchema,
+    getSdfConversionStatusText,
+    getToolFileAccept,
+    getToolRequestErrorMessage,
     getToolStatusColor as getStatusColor,
     isFileSchemaProperty,
     type UploadedToolFile
@@ -423,6 +426,7 @@
     formatStandardArtifactLabel,
     resolveToolPackageParameterSchema,
     resolveToolStandardInputSlots,
+    shouldShowSdfToPdbConverter,
     type StandardArtifactInputSlot
   } from '@/domain/tools'
 
@@ -679,25 +683,8 @@
     form?.clearValidate?.([key])
   }
 
-  const getSchemaAccept = (prop: SchemaProperty): string | undefined => {
-    const uiAccept = (prop as SchemaProperty & { 'ui:accept'?: unknown })['ui:accept']
-    return typeof uiAccept === 'string' ? uiAccept : prop.accept
-  }
-
   const getFileAccept = (key: string, prop: SchemaProperty): string | undefined => {
-    const accept = getSchemaAccept(prop)
-    if (!showSdfToPdbConverter(key)) {
-      return accept
-    }
-
-    const tokens = new Set(
-      (accept || '.pdb')
-        .split(',')
-        .map(item => item.trim())
-        .filter(Boolean)
-    )
-    tokens.add('.sdf')
-    return Array.from(tokens).join(',')
+    return getToolFileAccept({ key, property: prop, toolSlug: tool.value?.slug })
   }
 
   const handleFileListChange = (key: string, files: UploadFile[]) => {
@@ -764,30 +751,15 @@
   }
 
   const showSdfToPdbConverter = (key: string) => {
-    return tool.value?.slug === 'msign-affinity-prediction' && (key === 'ligand_pdb' || key.endsWith('.ligand_pdb'))
+    return shouldShowSdfToPdbConverter(tool.value?.slug, key)
   }
 
   const sdfConversionStatusText = (key: string) => {
-    if (sdfConversionErrors[key]) {
-      return sdfConversionErrors[key]
-    }
-    if (sdfConversionLoading[key]) {
-      return '正在转换 SDF，请稍候...'
-    }
-    if (convertedFiles[key]) {
-      return `转换成功，已生成 ${convertedFiles[key]?.filename}`
-    }
-    return ''
-  }
-
-  const getRequestErrorMessage = (error: unknown): string => {
-    const responseMessage = (error as { response?: { data?: { message?: unknown } } })?.response?.data?.message
-    if (typeof responseMessage === 'string' && responseMessage.trim()) {
-      return responseMessage
-    }
-
-    const message = (error as { message?: unknown })?.message
-    return typeof message === 'string' && message.trim() ? message : 'SDF 转 PDB 失败，请检查文件格式或后端转换服务'
+    return getSdfConversionStatusText({
+      error: sdfConversionErrors[key],
+      loading: sdfConversionLoading[key],
+      convertedFilename: convertedFiles[key]?.filename
+    })
   }
 
   const handleSdfToPdbConversion = async (key: string, file: File) => {
@@ -813,7 +785,7 @@
       convertedFiles[key] = undefined
       fileList[key] = []
       formState[key] = undefined
-      sdfConversionErrors[key] = getRequestErrorMessage(error)
+      sdfConversionErrors[key] = getToolRequestErrorMessage(error)
     } finally {
       sdfConversionLoading[key] = false
     }

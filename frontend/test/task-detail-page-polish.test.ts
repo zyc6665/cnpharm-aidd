@@ -40,11 +40,13 @@ test('任务详情页不应展示运行时长或总时长文案', () => {
 
 test('MSIGN 工具页应为 ligand_pdb 提供上传 SDF 转 PDB 辅助入口', () => {
   const source = readSource('src/views/tools/Detail.vue')
+  const domainSource = readSource('src/domain/tools/detail-file-inputs.ts')
   const filesApiSource = readSource('src/api/files.ts')
 
   assert.equal(source.includes('showSdfToPdbConverter'), true)
-  assert.equal(source.includes("tool.value?.slug === 'msign-affinity-prediction'"), true)
-  assert.equal(source.includes("key === 'ligand_pdb' || key.endsWith('.ligand_pdb')"), true)
+  assert.equal(source.includes('shouldShowSdfToPdbConverter'), true)
+  assert.equal(domainSource.includes("toolSlug === SDF_TO_PDB_TOOL_SLUG"), true)
+  assert.equal(domainSource.includes("key === 'ligand_pdb' || key.endsWith('.ligand_pdb')"), true)
   assert.equal(source.includes('handleSdfToPdbConversion'), true)
   assert.equal(source.includes('getFileAccept(String(key), prop)'), true)
   assert.equal(filesApiSource.includes('convertSdfToPdb'), true)
@@ -52,8 +54,10 @@ test('MSIGN 工具页应为 ligand_pdb 提供上传 SDF 转 PDB 辅助入口', (
 
 test('SDF 转 PDB 后应同步文件显示和表单校验字段', () => {
   const source = readSource('src/views/tools/Detail.vue')
+  const domainSource = readSource('src/domain/tools/detail-file-inputs.ts')
 
-  assert.equal(source.includes("tokens.add('.sdf')"), true)
+  assert.equal(source.includes('getToolFileAccept'), true)
+  assert.equal(domainSource.includes("tokens.add('.sdf')"), true)
   assert.equal(source.includes("filename.toLowerCase().endsWith('.sdf')"), true)
   assert.equal(source.includes('void handleSdfToPdbConversion(key, rawFile)'), true)
   assert.equal(source.includes('createConvertedUploadFile'), true)
@@ -62,6 +66,6 @@ test('SDF 转 PDB 后应同步文件显示和表单校验字段', () => {
   assert.equal(source.includes('sdfConversionLoading[key] ||'), true)
   assert.equal(source.includes('clearFieldValidation(key)'), true)
   assert.equal(source.includes('sdfConversionStatusText'), true)
-  assert.equal(source.includes('getRequestErrorMessage'), true)
-  assert.equal(source.includes('SDF 转 PDB 失败，请检查文件格式或后端转换服务'), true)
+  assert.equal(source.includes('getToolRequestErrorMessage'), true)
+  assert.equal(domainSource.includes('SDF 转 PDB 失败，请检查文件格式或后端转换服务'), true)
 })
