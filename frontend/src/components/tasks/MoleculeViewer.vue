@@ -27,7 +27,7 @@ import type { Viewer as MolstarViewer } from 'molstar/lib/apps/viewer/app'
 import { PluginCommands } from 'molstar/lib/mol-plugin/commands'
 import { Asset } from 'molstar/lib/mol-util/assets'
 
-import type { VisualizationScene } from './result-visualization'
+import type { VisualizationScene } from '@/domain/tasks'
 import { createProtectedObjectUrl } from '@/utils/protected-file-access'
 
 const props = defineProps<{

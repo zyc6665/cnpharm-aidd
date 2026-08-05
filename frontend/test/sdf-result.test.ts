@@ -1,8 +1,8 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
 
-import type { VisualizationSceneEntry } from '../src/components/tasks/result-visualization.ts'
-import { expandSdfOutputEntries, splitSdfRecords } from '../src/components/tasks/sdf-result.ts'
+import type { VisualizationSceneEntry } from '../src/domain/tasks/result-visualization.ts'
+import { expandSdfOutputEntries, splitSdfRecords } from '../src/domain/tasks/sdf-result.ts'
 
 test('splitSdfRecords 应识别多分子 SDF 中的每个记录', () => {
   const text = [

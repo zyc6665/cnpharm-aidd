@@ -7,12 +7,12 @@ import { fileURLToPath } from 'node:url'
 import {
   buildFocusedVisualizationScene,
   buildVisualizationScene
-} from '../src/components/tasks/result-visualization.ts'
+} from '../src/domain/tasks/result-visualization.ts'
 import {
   detectSdfScoreRankingFile,
   preferTopRankedSdfFiles,
   rankSdfEntriesByScore
-} from '../src/components/tasks/sdf-ranking.ts'
+} from '../src/domain/tasks/sdf-ranking.ts'
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -23,7 +23,7 @@ function readSource(relativePath: string): string {
 test('任务结果可视化组件与规则模块应存在', () => {
   assert.equal(existsSync(resolve(rootDir, 'src/components/tasks/ResultVisualizationPanel.vue')), true)
   assert.equal(existsSync(resolve(rootDir, 'src/components/tasks/MoleculeViewer.vue')), true)
-  assert.equal(existsSync(resolve(rootDir, 'src/components/tasks/result-visualization.ts')), true)
+  assert.equal(existsSync(resolve(rootDir, 'src/domain/tasks/result-visualization.ts')), true)
 })
 
 test('任务详情页应接入结果可视化面板', () => {
@@ -31,11 +31,11 @@ test('任务详情页应接入结果可视化面板', () => {
   const panelSource = readSource('src/components/tasks/ResultVisualizationPanel.vue')
 
   assert.equal(detailSource.includes('ResultVisualizationPanel'), true)
-  assert.equal(panelSource.includes('result-visualization'), true)
+  assert.equal(panelSource.includes('buildVisualizationScene'), true)
 })
 
 test('结果可视化规则应覆盖首批结构与小分子格式', () => {
-  const rulesSource = readSource('src/components/tasks/result-visualization.ts')
+  const rulesSource = readSource('src/domain/tasks/result-visualization.ts')
 
   assert.equal(rulesSource.includes('.pdb'), true)
   assert.equal(rulesSource.includes('.cif'), true)

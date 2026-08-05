@@ -15,7 +15,7 @@ import {
   createVisualizationScene,
   detectVisualizationFormat,
   type VisualizationSceneEntry,
-} from '@/components/tasks/result-visualization'
+} from '@/domain/tasks'
 import type { TypedArtifact } from '@/types/artifacts'
 
 const props = defineProps<{

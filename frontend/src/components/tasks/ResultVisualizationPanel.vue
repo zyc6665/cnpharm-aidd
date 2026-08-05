@@ -105,15 +105,13 @@ import MoleculeViewer from './MoleculeViewer.vue'
 import {
   buildFocusedVisualizationScene,
   buildVisualizationScene,
-  createVisualizationScene
-} from './result-visualization'
-import { detectCsvResultFile } from '@/domain/tasks'
-import { expandSdfOutputEntries } from './sdf-result'
-import {
+  createVisualizationScene,
+  detectCsvResultFile,
   detectSdfScoreRankingFile,
+  expandSdfOutputEntries,
   preferTopRankedSdfFiles,
   rankSdfEntriesByScoreFile
-} from './sdf-ranking'
+} from '@/domain/tasks'
 
 const props = defineProps<{
   task: Task
