@@ -420,7 +420,7 @@
     resolveToolPackageParameterSchema,
     resolveToolStandardInputSlots,
     type StandardArtifactInputSlot
-  } from './standard-artifact-inputs'
+  } from '@/domain/tools'
 
   const route = useRoute()
   const router = useRouter()
