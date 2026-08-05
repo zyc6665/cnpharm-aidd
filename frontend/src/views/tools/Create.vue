@@ -648,6 +648,15 @@
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
   import StructuredKeyValueEditor from '@/components/tools/StructuredKeyValueEditor.vue'
   import StructuredStringListEditor from '@/components/tools/StructuredStringListEditor.vue'
+  import {
+    buildAgentCapabilityConfig,
+    createAgentCapabilityInputForm,
+    createAgentCapabilityOutputForm,
+    isAgentCapabilityFormComplete,
+    parseAgentCapabilityForm,
+    type AgentCapabilityInputForm,
+    type AgentCapabilityOutputForm
+  } from '@/domain/tools'
   import { useToolsStore } from '@/stores'
   import { createTool, createToolVersion, updateTool, getToolDetail } from '@/api/tools'
   import type { ToolCreateParams } from '@/types/models'
@@ -675,21 +684,6 @@
   // 判断是编辑还是创建
   const isEdit = computed(() => route.name === 'AdminToolEdit' || route.name === 'ToolEdit')
   const toolId = computed(() => route.params.id as string)
-
-  interface AgentCapabilityInputForm {
-    semantic_type: string
-    field: string
-    accepted_extensions: string
-  }
-
-  interface AgentCapabilityOutputForm {
-    semantic_type: string
-    source: 'output_files' | 'output_data'
-    path: string
-    match_extension: string
-    filename_contains_any: string
-    required: boolean
-  }
 
   // 扩展的表单状态接口
   interface ExtendedFormState extends ToolCreateParams {
@@ -799,34 +793,8 @@
   ])
   const agentDefaultsText = ref('{}')
 
-  const splitCommaList = (value: string): string[] => {
-    return value
-      .split(',')
-      .map(item => item.trim())
-      .filter(Boolean)
-  }
-
-  const joinStringList = (value: unknown): string => {
-    return Array.isArray(value) ? value.map(item => String(item)).join(',') : ''
-  }
-
-  const createAgentInput = (): AgentCapabilityInputForm => ({
-    semantic_type: '',
-    field: '',
-    accepted_extensions: ''
-  })
-
-  const createAgentOutput = (): AgentCapabilityOutputForm => ({
-    semantic_type: '',
-    source: 'output_files',
-    path: '',
-    match_extension: '',
-    filename_contains_any: '',
-    required: true
-  })
-
   const addAgentInput = () => {
-    formState.agent_inputs.push(createAgentInput())
+    formState.agent_inputs.push(createAgentCapabilityInputForm())
   }
 
   const removeAgentInput = (index: number) => {
@@ -834,7 +802,7 @@
   }
 
   const addAgentOutput = () => {
-    formState.agent_outputs.push(createAgentOutput())
+    formState.agent_outputs.push(createAgentCapabilityOutputForm())
   }
 
   const removeAgentOutput = (index: number) => {
@@ -898,41 +866,13 @@
   }
 
   const parseAgentCapabilityIntoForm = (config: Record<string, unknown>) => {
-    const rawCapability = config.agent_capability
-    if (!isRecord(rawCapability)) {
-      formState.agent_capability_enabled = false
-      formState.agent_inputs = []
-      formState.agent_outputs = []
-      agentDefaultsText.value = '{}'
-      return
-    }
-
-    formState.agent_capability_enabled = rawCapability.enabled === true
-    formState.agent_capability = String(rawCapability.capability || 'molecule_generation')
-    formState.agent_stage = String(rawCapability.stage || rawCapability.capability || 'molecule_generation')
-    agentDefaultsText.value = formatJsonText(rawCapability.defaults || {}, '{}')
-
-    formState.agent_inputs = Array.isArray(rawCapability.inputs)
-      ? rawCapability.inputs.filter(isRecord).map(item => ({
-        semantic_type: String(item.semantic_type || ''),
-        field: String(item.field || item.semantic_type || ''),
-        accepted_extensions: joinStringList(item.accepted_extensions)
-      }))
-      : []
-
-    formState.agent_outputs = Array.isArray(rawCapability.outputs)
-      ? rawCapability.outputs.filter(isRecord).map(item => {
-        const match = isRecord(item.match) ? item.match : {}
-        return {
-          semantic_type: String(item.semantic_type || ''),
-          source: item.source === 'output_data' ? 'output_data' : 'output_files',
-          path: String(item.path || ''),
-          match_extension: String(match.extension || ''),
-          filename_contains_any: joinStringList(match.filename_contains_any),
-          required: item.required !== false
-        }
-      })
-      : []
+    const parsedCapability = parseAgentCapabilityForm(config)
+    formState.agent_capability_enabled = parsedCapability.enabled
+    formState.agent_capability = parsedCapability.capability
+    formState.agent_stage = parsedCapability.stage
+    formState.agent_inputs = parsedCapability.inputs
+    formState.agent_outputs = parsedCapability.outputs
+    agentDefaultsText.value = parsedCapability.defaultsText
   }
 
   const parseToolConfigIntoForm = (config?: Record<string, unknown>) => {
@@ -1097,9 +1037,13 @@
       }
 
       if (formState.agent_capability_enabled) {
-        const validInputCount = formState.agent_inputs.filter(input => input.semantic_type.trim()).length
-        const validOutputCount = formState.agent_outputs.filter(output => output.semantic_type.trim()).length
-        if (!formState.agent_capability.trim() || validInputCount === 0 || validOutputCount === 0) {
+        if (!isAgentCapabilityFormComplete({
+          enabled: formState.agent_capability_enabled,
+          capability: formState.agent_capability,
+          stage: formState.agent_stage,
+          inputs: formState.agent_inputs,
+          outputs: formState.agent_outputs
+        })) {
           message.error('Agent 编排能力需要填写能力、至少一个输入和至少一个输出')
           submitting.value = false
           return
@@ -1119,40 +1063,18 @@
         config.documentation_markdown = formState.documentation_markdown.trim()
       }
 
-      if (formState.agent_capability_enabled) {
-        config.agent_capability = {
-          enabled: true,
-          capability: formState.agent_capability.trim(),
-          stage: formState.agent_stage.trim() || formState.agent_capability.trim(),
-          inputs: formState.agent_inputs
-            .filter(input => input.semantic_type.trim())
-            .map(input => ({
-              semantic_type: input.semantic_type.trim(),
-              field: input.field.trim() || input.semantic_type.trim(),
-              accepted_extensions: splitCommaList(input.accepted_extensions)
-            })),
+      const agentCapabilityConfig = buildAgentCapabilityConfig(
+        {
+          enabled: formState.agent_capability_enabled,
+          capability: formState.agent_capability,
+          stage: formState.agent_stage,
+          inputs: formState.agent_inputs,
           outputs: formState.agent_outputs
-            .filter(output => output.semantic_type.trim())
-            .map(output => {
-              const match: Record<string, unknown> = {}
-              if (output.match_extension.trim()) {
-                match.extension = output.match_extension.trim()
-              }
-              const filenameContainsAny = splitCommaList(output.filename_contains_any)
-              if (filenameContainsAny.length > 0) {
-                match.filename_contains_any = filenameContainsAny
-              }
-
-              return {
-                semantic_type: output.semantic_type.trim(),
-                source: output.source,
-                path: output.path.trim() || undefined,
-                required: output.required,
-                match: Object.keys(match).length > 0 ? match : undefined
-              }
-            }),
-          defaults: agentDefaults
-        }
+        },
+        agentDefaults
+      )
+      if (agentCapabilityConfig) {
+        config.agent_capability = agentCapabilityConfig
       }
 
       if (formState.gpu_memory_mb !== undefined) {
