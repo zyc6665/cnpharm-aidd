@@ -171,6 +171,12 @@
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import SkeletonList from '@/components/common/SkeletonList.vue'
   import {
+    buildToolListParams,
+    formatToolCount,
+    getToolSortLabelKey,
+    getToolViewLabelKey
+  } from '@/domain/tools'
+  import {
     ToolOutlined,
     PlayCircleOutlined,
     HeartOutlined,
@@ -205,54 +211,23 @@
   const categories = computed(() => toolsStore.categories)
   const tags = computed(() => toolsStore.tags)
 
-  const sortLabel = computed(() => {
-    const labels: Record<string, string> = {
-      popular: t('tools.sortPopular'),
-      newest: t('tools.sortNewest'),
-      name: t('tools.sortName')
-    }
-    return labels[sortBy.value] || t('tools.sortPopular')
-  })
-  const currentViewLabel = computed(() => {
-    return currentView.value === 'favorites' ? t('tools.favorites') : t('tools.publicTools')
-  })
+  const sortLabel = computed(() => t(getToolSortLabelKey(sortBy.value)))
+  const currentViewLabel = computed(() => t(getToolViewLabelKey(currentView.value)))
 
-  const formatNumber = (num: number) => {
-    // 处理 undefined/null 的情况
-    if (num == null || num === undefined) {
-      return '0'
-    }
-    if (num >= 10000) {
-      return (num / 10000).toFixed(1) + 'w'
-    }
-    if (num >= 1000) {
-      return (num / 1000).toFixed(1) + 'k'
-    }
-    return num.toString()
-  }
+  const formatNumber = formatToolCount
 
   const fetchData = async () => {
-    if (currentView.value === 'favorites') {
-      await toolsStore.fetchTools({
-        view: 'favorites',
-        search: searchKeyword.value || undefined,
-        category: selectedCategory.value,
-        tag: selectedTag.value,
-        page: currentPage.value,
-        page_size: pageSize.value,
-        sort_by: sortBy.value
+    await toolsStore.fetchTools(
+      buildToolListParams({
+        view: currentView.value,
+        searchKeyword: searchKeyword.value,
+        selectedCategory: selectedCategory.value,
+        selectedTag: selectedTag.value,
+        currentPage: currentPage.value,
+        pageSize: pageSize.value,
+        sortBy: sortBy.value
       })
-    } else {
-      await toolsStore.fetchTools({
-        view: 'public',
-        search: searchKeyword.value || undefined,
-        category: selectedCategory.value,
-        tag: selectedTag.value,
-        page: currentPage.value,
-        page_size: pageSize.value,
-        sort_by: sortBy.value
-      })
-    }
+    )
   }
 
   const handleViewChange = () => {
