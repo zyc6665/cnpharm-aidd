@@ -652,8 +652,11 @@
     buildAgentCapabilityConfig,
     createAgentCapabilityInputForm,
     createAgentCapabilityOutputForm,
+    formatToolConfigJsonText,
     isAgentCapabilityFormComplete,
+    isToolConfigRecord,
     parseAgentCapabilityForm,
+    serializeToolConfigForComparison,
     type AgentCapabilityInputForm,
     type AgentCapabilityOutputForm
   } from '@/domain/tools'
@@ -824,47 +827,6 @@
     }
   }
 
-  const formatJsonText = (value: unknown, fallback: string) => {
-    if (value == null) {
-      return fallback
-    }
-
-    try {
-      return JSON.stringify(value, null, 2)
-    } catch {
-      return fallback
-    }
-  }
-
-  const isRecord = (value: unknown): value is Record<string, unknown> => {
-    return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
-  }
-
-  const normalizeForComparison = (value: unknown): unknown => {
-    if (Array.isArray(value)) {
-      return value.map(item => normalizeForComparison(item))
-    }
-
-    if (value && typeof value === 'object') {
-      return Object.keys(value as Record<string, unknown>)
-        .sort()
-        .reduce<Record<string, unknown>>((acc, key) => {
-          acc[key] = normalizeForComparison((value as Record<string, unknown>)[key])
-          return acc
-        }, {})
-    }
-
-    return value
-  }
-
-  const serializeForComparison = (value: unknown) => {
-    try {
-      return JSON.stringify(normalizeForComparison(value))
-    } catch {
-      return ''
-    }
-  }
-
   const parseAgentCapabilityIntoForm = (config: Record<string, unknown>) => {
     const parsedCapability = parseAgentCapabilityForm(config)
     formState.agent_capability_enabled = parsedCapability.enabled
@@ -916,8 +878,8 @@
       sshOutputGlobItems.value = normalizeStringList(config.output_globs)
     }
 
-    formState.input_schema = formatJsonText(config.input_schema || {}, '{}')
-    formState.output_schema = formatJsonText(config.output_schema || {}, '{}')
+    formState.input_schema = formatToolConfigJsonText(config.input_schema || {}, '{}')
+    formState.output_schema = formatToolConfigJsonText(config.output_schema || {}, '{}')
     formState.documentation_markdown =
       typeof config.documentation_markdown === 'string'
         ? config.documentation_markdown
@@ -971,7 +933,7 @@
       originalVersion.value = tool.current_version?.version || ''
       originalChangelog.value = tool.current_version?.changelog || ''
       originalNotes.value = tool.current_version?.notes || ''
-      originalConfigSnapshot.value = serializeForComparison(tool.current_version?.config || {})
+      originalConfigSnapshot.value = serializeToolConfigForComparison(tool.current_version?.config || {})
 
       parseToolConfigIntoForm(tool.current_version?.config as Record<string, unknown> | undefined)
     } catch {
@@ -1026,7 +988,7 @@
         }
         if (formState.agent_capability_enabled && agentDefaultsText.value.trim()) {
           agentDefaults = JSON.parse(agentDefaultsText.value)
-          if (!isRecord(agentDefaults)) {
+          if (!isToolConfigRecord(agentDefaults)) {
             throw new Error('agent defaults must be an object')
           }
         }
@@ -1158,7 +1120,7 @@
         formState.version !== originalVersion.value ||
         formState.changelog !== originalChangelog.value ||
         formState.notes !== originalNotes.value ||
-        serializeForComparison(config) !== originalConfigSnapshot.value
+        serializeToolConfigForComparison(config) !== originalConfigSnapshot.value
       )
 
       if (versionConfigChanged && formState.version === originalVersion.value) {
