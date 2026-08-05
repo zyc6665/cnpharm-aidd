@@ -6,6 +6,7 @@ import {
   buildWorkflowInputFileMap,
   findLatestArtifactForSemanticType
 } from '@/workflow/workflow-definitions'
+import { buildWorkflowRunListParams } from '@/workflow/project-context'
 import { shouldAutoSyncWorkflowRun } from '@/workflow/workflow-runs'
 import {
   validateWorkflowDefinition,
@@ -226,23 +227,27 @@ export function useWorkflowPersistence(input: {
       name: saved.name,
       input_files: selectedWorkflowInputFiles.value
     })
-    await workflowStore.loadWorkflowRuns({
-      ...(projectId?.value ? { project_id: projectId.value } : {}),
-      workflow_definition_id: saved.id,
-      page: 1,
-      page_size: 20
-    })
+    await workflowStore.loadWorkflowRuns(
+      buildWorkflowRunListParams({
+        projectId: projectId?.value,
+        workflowDefinitionId: saved.id,
+        page: 1,
+        pageSize: 20
+      })
+    )
     await workflowStore.loadWorkflowRun(run.id)
   }
 
   async function handleRefreshWorkflowRuns() {
     const workflowDefinitionId = selectedSavedWorkflowId.value ?? undefined
-    await workflowStore.loadWorkflowRuns({
-      ...(projectId?.value ? { project_id: projectId.value } : {}),
-      workflow_definition_id: workflowDefinitionId,
-      page: 1,
-      page_size: 20
-    })
+    await workflowStore.loadWorkflowRuns(
+      buildWorkflowRunListParams({
+        projectId: projectId?.value,
+        workflowDefinitionId,
+        page: 1,
+        pageSize: 20
+      })
+    )
   }
 
   async function handleLoadMoreWorkflowRuns() {
@@ -251,12 +256,12 @@ export function useWorkflowPersistence(input: {
       return
     }
     await workflowStore.loadWorkflowRuns(
-      {
-        ...(projectId?.value ? { project_id: projectId.value } : {}),
-        workflow_definition_id: workflowDefinitionId,
+      buildWorkflowRunListParams({
+        projectId: projectId?.value,
+        workflowDefinitionId,
         page: workflowStore.workflowRunsPagination.page + 1,
-        page_size: workflowStore.workflowRunsPagination.pageSize
-      },
+        pageSize: workflowStore.workflowRunsPagination.pageSize
+      }),
       { append: true }
     )
   }

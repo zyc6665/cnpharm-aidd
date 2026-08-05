@@ -255,6 +255,11 @@
   import WorkflowToolPalette from '@/components/workflow/WorkflowToolPalette.vue'
   import { useWorkflowCanvas } from '@/composables/useWorkflowCanvas'
   import { useWorkflowPersistence } from '@/composables/useWorkflowPersistence'
+  import {
+    buildWorkflowDefinitionListParams,
+    buildWorkflowRunListParams,
+    resolveWorkflowRouteProjectId
+  } from '@/workflow/project-context'
   import { buildWorkflowPreflight } from '@/workflow/preflight'
   import type { AiddWorkflowDraft } from '@/types/models'
   import {
@@ -279,14 +284,12 @@
   workflowStore.normalizeSessionShape()
 
   const activeMode = ref<WorkflowMode>('manual')
-  const routeProjectId = computed(() => {
-    const rawProjectParam = route.params?.projectId
-    if (typeof rawProjectParam === 'string' && rawProjectParam.trim()) {
-      return rawProjectParam
-    }
-    const rawProjectId = route.query.project_id
-    return typeof rawProjectId === 'string' && rawProjectId.trim() ? rawProjectId : undefined
-  })
+  const routeProjectId = computed(() =>
+    resolveWorkflowRouteProjectId({
+      paramsProjectId: route.params?.projectId,
+      queryProjectId: route.query.project_id
+    })
+  )
 
   const {
     sidebarToolSearchKeyword,
@@ -423,16 +426,12 @@
 
       await Promise.allSettled([
         artifactsStore.fetchArtifacts({ page: 1, page_size: 100 }),
-        workflowDefinitionsStore.fetchWorkflowDefinitions({
-          page: 1,
-          page_size: 100,
-          ...(projectId ? { project_id: projectId } : {})
-        }),
-        workflowStore.loadWorkflowRuns({
-          page: 1,
-          page_size: 20,
-          ...(projectId ? { project_id: projectId } : {})
-        })
+        workflowDefinitionsStore.fetchWorkflowDefinitions(
+          buildWorkflowDefinitionListParams(projectId)
+        ),
+        workflowStore.loadWorkflowRuns(
+          buildWorkflowRunListParams({ projectId, page: 1, pageSize: 20 })
+        )
       ])
     },
     { immediate: true }
