@@ -15,28 +15,28 @@
 <script setup lang="ts">
   import { computed } from 'vue'
   import { useRoute } from 'vue-router'
+  import {
+    buildProjectWorkspaceNavItems,
+    isProjectWorkspaceNavItemActive,
+    type ProjectWorkspaceNavItem
+  } from '@/domain/projects'
 
   const props = defineProps<{ projectId: string }>()
   const route = useRoute()
 
-  const encodedProjectId = computed(() => encodeURIComponent(props.projectId))
   const currentPath = computed(() => route.path ?? '')
-  const taskPath = computed(() => `/tasks?project_id=${encodedProjectId.value}`)
-  const navItems = computed(() => [
-    { key: 'overview', label: '项目总览', to: `/projects/${props.projectId}` },
-    { key: 'research', label: '智能体研究', to: `/projects/${props.projectId}/research` },
-    { key: 'boards', label: '科研白板', to: `/projects/${props.projectId}/boards` },
-    { key: 'workflow', label: 'Workflow', to: `/projects/${props.projectId}/workflow` },
-    { key: 'tasks', label: '任务中心', to: taskPath.value },
-    { key: 'lineage', label: 'Artifact 谱系', to: `/projects/${props.projectId}/lineage` },
-    { key: 'settings', label: '项目设置', to: `/projects/${props.projectId}/settings` }
-  ])
+  const queryProjectId = computed(() => {
+    const value = route.query?.project_id
+    return typeof value === 'string' ? value : undefined
+  })
+  const navItems = computed(() => buildProjectWorkspaceNavItems(props.projectId))
 
-  function isActive(item: { key: string; to: string }) {
-    if (item.key === 'tasks') {
-      return currentPath.value === '/tasks' && route.query?.project_id === props.projectId
-    }
-    return currentPath.value === item.to || currentPath.value.startsWith(`${item.to}/`)
+  function isActive(item: ProjectWorkspaceNavItem) {
+    return isProjectWorkspaceNavItemActive(item, {
+      currentPath: currentPath.value,
+      currentProjectId: props.projectId,
+      queryProjectId: queryProjectId.value
+    })
   }
 </script>
 

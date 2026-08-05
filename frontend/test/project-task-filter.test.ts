@@ -15,6 +15,7 @@ test('task center supports project-scoped task filtering from project overview',
   const storeSource = readSource('src/stores/tasks.ts')
   const taskPageSource = readSource('src/views/tasks/List.vue')
   const projectOverviewSource = readSource('src/views/projects/Overview.vue')
+  const projectNavigationSource = readSource('src/domain/projects/navigation.ts')
 
   assert.equal(apiSource.includes('project_id?: string'), true)
   assert.equal(storeSource.includes("'tool_id' | 'keyword' | 'project_id'"), true)
@@ -26,5 +27,6 @@ test('task center supports project-scoped task filtering from project overview',
   assert.equal(taskPageSource.includes('useAgentsStore'), false)
   assert.equal(taskPageSource.includes('AgentRunTaskCard'), false)
   assert.equal(taskPageSource.includes('agent-task-grouping'), false)
-  assert.equal(projectOverviewSource.includes('/tasks?project_id='), true)
+  assert.equal(projectOverviewSource.includes('buildProjectTaskPath(projectId.value)'), true)
+  assert.equal(projectNavigationSource.includes('/tasks?project_id='), true)
 })

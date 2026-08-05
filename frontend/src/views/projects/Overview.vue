@@ -88,13 +88,13 @@
         <section class="overview-section">
           <div class="section-heading">
             <h2>项目工作流</h2>
-            <router-link :to="`/projects/${projectId}/workflow`">打开工作流</router-link>
+            <router-link :to="projectWorkflowPath">打开工作流</router-link>
           </div>
           <div v-if="overview.workflows.length" class="resource-list">
             <router-link
               v-for="workflow in overview.workflows"
               :key="workflow.id"
-              :to="`/projects/${projectId}/workflow`"
+              :to="projectWorkflowPath"
               class="resource-row"
             >
               <strong>{{ workflow.name }}</strong>
@@ -130,26 +130,29 @@
 <script setup lang="ts">
   import { computed, onMounted, ref } from 'vue'
   import { useRoute } from 'vue-router'
-  import dayjs from 'dayjs'
   import { getProjectOverview } from '@/api/projects'
   import { buildArtifactVersionDownloadUrl } from '@/api/artifacts'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
+  import {
+    buildProjectTaskPath,
+    buildProjectWorkflowPath,
+    formatProjectResourceSize,
+    formatProjectResourceTime,
+    getProjectArtifactTypeLabel,
+    getProjectOverviewStatCards
+  } from '@/domain/projects'
   import type { ProjectOverview } from '@/types/projects'
   import type { TypedArtifact } from '@/types/artifacts'
 
   const route = useRoute()
   const projectId = computed(() => String(route.params.projectId || ''))
-  const projectTasksPath = computed(() => `/tasks?project_id=${encodeURIComponent(projectId.value)}`)
+  const projectTasksPath = computed(() => buildProjectTaskPath(projectId.value))
+  const projectWorkflowPath = computed(() => buildProjectWorkflowPath(projectId.value))
   const overview = ref<ProjectOverview | null>(null)
   const loading = ref(false)
   const loadError = ref(false)
 
-  const statCards = computed(() => [
-    { label: 'Artifact', value: overview.value?.counts.artifacts ?? 0 },
-    { label: '任务', value: overview.value?.counts.tasks ?? 0 },
-    { label: '工作流', value: overview.value?.counts.workflows ?? 0 },
-    { label: '白板', value: overview.value?.counts.boards ?? 0 }
-  ])
+  const statCards = computed(() => getProjectOverviewStatCards(overview.value?.counts))
 
   async function load() {
     if (!projectId.value) return
@@ -166,15 +169,9 @@
 
   const artifactDownloadUrl = (artifact: TypedArtifact) =>
     buildArtifactVersionDownloadUrl(artifact.id, artifact.latest_version.id)
-  const artifactTypeLabel = (artifact: TypedArtifact) =>
-    artifact.standard_type
-      ? `${artifact.standard_type}@${artifact.standard_version ?? 1}`
-      : artifact.semantic_type || artifact.artifact_type
-  const formatTime = (value: string) => dayjs(value).format('YYYY-MM-DD HH:mm')
-  const formatSize = (bytes: number) =>
-    bytes < 1024 * 1024
-      ? `${Math.max(1, Math.round(bytes / 1024))} KB`
-      : `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  const artifactTypeLabel = getProjectArtifactTypeLabel
+  const formatTime = formatProjectResourceTime
+  const formatSize = formatProjectResourceSize
 
   onMounted(() => {
     void load()
