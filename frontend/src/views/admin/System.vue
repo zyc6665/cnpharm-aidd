@@ -325,11 +325,15 @@ import {
 } from '@ant-design/icons-vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import {
+  createDefaultModelServiceForm,
+  createModelServiceEditForm,
   formatAdminDateTime,
   getModelServiceTestStatusColor,
   getSystemHealthServiceLabel,
   getSystemHealthStatusColor,
   getSystemHealthStatusText,
+  normalizeModelServicePayload,
+  normalizeModelServiceUpdatePayload,
   sortSystemHealthServices
 } from '@/domain/admin'
 import {
@@ -347,7 +351,6 @@ import {
 import type {
   ModelService,
   ModelServiceCreateParams,
-  ModelServiceUpdateParams,
   SystemConfig,
   SystemHealth,
   SystemInfo,
@@ -372,19 +375,6 @@ const defaultingServiceId = ref<string | null>(null)
 const deletingServiceId = ref<string | null>(null)
 const editingModelService = ref<ModelService | null>(null)
 const modelServiceFormRef = ref<FormInstance>()
-
-const createDefaultModelServiceForm = (): ModelServiceCreateParams => ({
-  name: '',
-  provider_type: 'openai_compatible',
-  base_url: '',
-  api_key: '',
-  model_name: '',
-  is_default: false,
-  is_enabled: true,
-  timeout_seconds: 60,
-  max_tokens: 2048,
-  temperature: 0.2
-})
 
 const modelServiceForm = reactive<ModelServiceCreateParams>(createDefaultModelServiceForm())
 
@@ -458,18 +448,7 @@ const openCreateModelService = () => {
 
 const openEditModelService = (record: ModelService) => {
   editingModelService.value = record
-  Object.assign(modelServiceForm, {
-    name: record.name,
-    provider_type: record.provider_type,
-    base_url: record.base_url,
-    api_key: '',
-    model_name: record.model_name,
-    is_default: record.is_default,
-    is_enabled: record.is_enabled,
-    timeout_seconds: record.timeout_seconds,
-    max_tokens: record.max_tokens,
-    temperature: record.temperature
-  })
+  Object.assign(modelServiceForm, createModelServiceEditForm(record))
   modelServiceDrawerOpen.value = true
 }
 
@@ -477,19 +456,6 @@ const closeModelServiceDrawer = () => {
   modelServiceDrawerOpen.value = false
   resetModelServiceForm()
 }
-
-const normalizeModelServicePayload = (): ModelServiceCreateParams => ({
-  name: modelServiceForm.name.trim(),
-  provider_type: modelServiceForm.provider_type,
-  base_url: modelServiceForm.base_url.trim().replace(/\/+$/, ''),
-  api_key: modelServiceForm.api_key?.trim() || undefined,
-  model_name: modelServiceForm.model_name.trim(),
-  is_default: modelServiceForm.is_default,
-  is_enabled: modelServiceForm.is_enabled,
-  timeout_seconds: modelServiceForm.timeout_seconds,
-  max_tokens: modelServiceForm.max_tokens,
-  temperature: modelServiceForm.temperature
-})
 
 const submitModelService = async () => {
   try {
@@ -500,15 +466,14 @@ const submitModelService = async () => {
 
   savingModelService.value = true
   try {
-    const payload = normalizeModelServicePayload()
     if (editingModelService.value) {
-      const updatePayload: ModelServiceUpdateParams = { ...payload }
-      if (!payload.api_key) {
-        delete updatePayload.api_key
-      }
-      await updateModelService(editingModelService.value.id, updatePayload)
+      await updateModelService(
+        editingModelService.value.id,
+        normalizeModelServiceUpdatePayload(modelServiceForm)
+      )
       message.success(t('admin.modelServiceUpdated'))
     } else {
+      const payload = normalizeModelServicePayload(modelServiceForm)
       await createModelService(payload)
       message.success(t('admin.modelServiceCreated'))
     }

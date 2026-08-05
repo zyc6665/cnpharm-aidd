@@ -14,6 +14,7 @@ test('管理员系统页应提供模型服务配置界面', () => {
   assert.equal(existsSync(resolve(rootDir, 'src/views/admin/System.vue')), true)
 
   const systemApi = readSource('src/api/system.ts')
+  const domain = readSource('src/domain/admin/model-services.ts')
   const types = readSource('src/types/models.d.ts')
   const page = readSource('src/views/admin/System.vue')
 
@@ -28,7 +29,10 @@ test('管理员系统页应提供模型服务配置界面', () => {
   assert.equal(page.includes('model-services'), true)
   assert.equal(page.includes('modelServiceForm'), true)
   assert.equal(page.includes('has_api_key'), true)
+  assert.equal(page.includes("from '@/domain/admin'"), true)
   assert.equal(page.includes('testModelService'), true)
   assert.equal(page.includes('setDefaultModelService'), true)
   assert.equal(page.includes('api_key_encrypted'), false)
+  assert.equal(domain.includes('createDefaultModelServiceForm'), true)
+  assert.equal(domain.includes('normalizeModelServiceUpdatePayload'), true)
 })
