@@ -83,8 +83,7 @@
   import type { Task, TaskLog, TaskStatus } from '@/types/models'
   import type { WorkflowTaskRef } from '@/workflow/artifact-types'
   import { normalizeTaskSummary } from '@/utils/task-normalization'
-  import { extractTaskLogs } from '@/views/tasks/logs'
-  import { normalizeTaskStatus } from '@/domain/tasks'
+  import { extractTaskLogs, normalizeTaskStatus } from '@/domain/tasks'
 
   const props = defineProps<{
     taskId?: string | null

@@ -1,4 +1,5 @@
 import type { TaskLog, TaskStatus, WSMessage } from '@/types/models'
+import { normalizeTaskLogLevel } from './logs'
 import { isHistoryTask, normalizeTaskStatus } from './status'
 
 export interface TaskWebSocketProgressContext {
@@ -102,13 +103,4 @@ function resolveTaskProgressPercent(message: WSMessage): number {
   }
 
   return Math.round((message.progress ?? 0) * 100)
-}
-
-function normalizeTaskLogLevel(level?: string): TaskLog['level'] {
-  const normalized = level?.toLowerCase()
-  if (normalized === 'warning' || normalized === 'error') {
-    return normalized
-  }
-
-  return 'info'
 }

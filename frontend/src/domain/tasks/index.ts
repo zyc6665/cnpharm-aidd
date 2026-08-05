@@ -1,4 +1,5 @@
 export * from './detail'
+export * from './logs'
 export * from './listing'
 export * from './navigation'
 export * from './permissions'

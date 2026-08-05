@@ -1,7 +1,7 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
 
-import { extractTaskLogs, normalizeTaskLogLevel } from '../src/views/tasks/logs.ts'
+import { extractTaskLogs, normalizeTaskLogLevel } from '../src/domain/tasks/logs.ts'
 
 test('extractTaskLogs 应从分页响应中提取日志列表', () => {
   const logs = extractTaskLogs({

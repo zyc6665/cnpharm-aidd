@@ -313,9 +313,9 @@ import {
   normalizeTaskStatus,
   resolveTaskWebSocketLog,
   resolveTaskWebSocketProgressUpdate,
-  shouldRefreshTaskAfterWebSocketMessage
+  shouldRefreshTaskAfterWebSocketMessage,
+  extractTaskLogs
 } from '@/domain/tasks'
-import { extractTaskLogs } from './logs'
 
 const route = useRoute()
 const router = useRouter()
