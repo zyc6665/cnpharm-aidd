@@ -403,8 +403,11 @@
   import { getToolValidationSummary } from '@/utils/tool-validation'
   import {
     buildTaskSubmissionPayload,
+    formatToolDate as formatDate,
+    formatToolMetricCount as formatNumber,
     flattenExampleParams,
     flattenToolInputSchema,
+    getToolStatusColor as getStatusColor,
     isFileSchemaProperty,
     type UploadedToolFile
   } from '@/domain/tools'
@@ -417,6 +420,7 @@
     buildStandardInputBindings,
     buildStandardTaskRequestExtras,
     filterCompatibleProjectArtifacts,
+    formatStandardArtifactLabel,
     resolveToolPackageParameterSchema,
     resolveToolStandardInputSlots,
     type StandardArtifactInputSlot
@@ -569,34 +573,6 @@
   })
   const documentationHtml = computed(() => renderMarkdownToHtml(documentationMarkdown.value))
 
-  const formatNumber = (num?: number | null) => {
-    // 处理 undefined/null 的情况
-    if (num == null || num === undefined) {
-      return '0'
-    }
-    if (num >= 10000) {
-      return (num / 10000).toFixed(1) + 'w'
-    }
-    if (num >= 1000) {
-      return (num / 1000).toFixed(1) + 'k'
-    }
-    return num.toString()
-  }
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString()
-  }
-
-  const getStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      draft: 'default',
-      published: 'success',
-      disabled: 'warning',
-      deprecated: 'error'
-    }
-    return colors[status] || 'default'
-  }
-
   const loadStandardProjectArtifacts = async () => {
     if (!currentProjectId.value || !standardInputSlots.value.length) {
       standardProjectArtifacts.value = []
@@ -616,11 +592,6 @@
 
   const compatibleStandardArtifacts = (slot: StandardArtifactInputSlot) => {
     return filterCompatibleProjectArtifacts(slot, standardProjectArtifacts.value)
-  }
-
-  const formatStandardArtifactLabel = (artifact: TypedArtifact): string => {
-    const filename = artifact.latest_version.filename || artifact.name
-    return `${artifact.name || filename} · ${artifact.semantic_type} · v${artifact.latest_version.version}`
   }
 
   const handleStandardArtifactSelection = (slotName: string, versionId: unknown) => {
