@@ -42,6 +42,31 @@ gcc (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0
 ldd (Ubuntu GLIBC 2.35-0ubuntu3.8) 2.35
 ```
 
+## Dependency Import Probe
+
+Additional package-version probing failed while importing `torch`:
+
+```text
+python 3.11.9 (main, Apr  5 2026, 19:32:29) [GCC 11.4.0]
+numpy 1.25.0
+pandas 2.3.3
+scipy 1.15.3
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "<string>", line 1, in <listcomp>
+  File "/usr/local/lib/python3.11/importlib/__init__.py", line 126, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1147, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 690, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 940, in exec_module
+  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
+  File "/usr/local/lib/python3.11/site-packages/torch/__init__.py", line 410, in <module>
+    from torch._C import *  # noqa: F403
+ImportError: librocm_smi64.so.2: cannot open shared object file: No such file or directory
+```
+
 ## Interpretation
 
 - Compiled Python extensions for the commercial container must target
@@ -49,8 +74,11 @@ ldd (Ubuntu GLIBC 2.35-0ubuntu3.8) 2.35
   `.cpython-311-x86_64-linux-gnu.so`.
 - The container uses Ubuntu 22.04 userland with glibc 2.35 and GCC 11.4.0, running
   on a Kylin kernel.
-- The base Python runtime already has `numpy`, `pandas`, `scipy`, `torch`, and
-  `onnxruntime` importable.
+- The first probe used `importlib.util.find_spec`, so `torch FOUND` only means a
+  package path exists. A real import currently fails because `librocm_smi64.so.2`
+  is missing from the dynamic linker path or the container filesystem.
+- The base Python runtime can import `numpy`, `pandas`, and `scipy`; `torch` is
+  not yet usable until the ROCm/DTK runtime library issue is resolved.
 - `scikit-learn`, `dgl`, and `rdkit` are not currently importable. MolP-PC needs
   `scikit-learn`; other models may need `dgl` or chemistry packages.
 - Existing cp38/cp310 binary wheels from the 4090 environment cannot be reused as
@@ -59,9 +87,11 @@ ldd (Ubuntu GLIBC 2.35-0ubuntu3.8) 2.35
 
 ## Next Actions
 
-1. Probe exact package versions inside `model_test`, especially `torch` and
-   `onnxruntime`.
-2. Decide whether to run MolP-PC legacy cp38 environment as a temporary internal
+1. Check whether `librocm_smi64.so.2` exists in the container and is missing only
+   from `LD_LIBRARY_PATH`, or whether the image is missing the required runtime
+   package entirely.
+2. Probe exact installed package metadata without importing `torch`.
+3. Decide whether to run MolP-PC legacy cp38 environment as a temporary internal
    compatibility probe.
-3. Build MolP-PC binary delivery against this ABI in a trusted builder based on
+4. Build MolP-PC binary delivery against this ABI in a trusted builder based on
    `2.7.1-ubuntu22.04-dtk26.04-py3.11`.
