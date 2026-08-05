@@ -323,10 +323,27 @@
   import { useTasksStore, useToolsStore, useUserStore } from '@/stores'
   import type { TaskListParams } from '@/api/tasks'
   import { getProjectOverview } from '@/api/projects'
+  import {
+    canCancelTask as canCancelTaskForActor,
+    canDeleteTask as canDeleteTaskForActor,
+    canRetryTask as canRetryTaskForActor,
+    filterTasksByKeyword,
+    filterTasksForTab,
+    getTaskArtifactLineagePath,
+    getTaskProgressColor,
+    getTaskProgressStatus,
+    getTaskProjectContextLabel,
+    getTaskStatusColor,
+    isHistoryTask,
+    isRunningTask,
+    paginateTasks,
+    type TaskActor,
+    type TaskListTab
+  } from '@/domain/tasks'
   import type { Task, TaskStatus } from '@/types/models'
   import type { ProjectRole, ResearchProject } from '@/types/projects'
 
-  type TabKey = 'all' | 'running' | 'history'
+  type TabKey = TaskListTab
 
   const route = useRoute()
   const router = useRouter()
@@ -352,6 +369,12 @@
   const projectMembershipRole = computed<ProjectRole | undefined>(
     () => project.value?.membership.role
   )
+  const taskActor = computed<TaskActor>(() => ({
+    isAdmin: userStore.isAdmin,
+    userId: userStore.user?.id,
+    currentProjectId: projectId.value,
+    projectRole: projectMembershipRole.value
+  }))
 
   // 计算属性
   const loading = computed(() => tasksStore.loading)
@@ -359,50 +382,23 @@
   const total = computed(() => tasksStore.total)
 
   const filteredStandaloneTasks = computed<Task[]>(() => {
-    let filtered = tasks.value
-
-    if (currentTab.value === 'running') {
-      filtered = filtered.filter(t => t.status === 'running' || t.status === 'pending')
-    } else if (currentTab.value === 'history') {
-      filtered = filtered.filter(t => ['success', 'failure', 'canceled'].includes(t.status))
-    }
-
-    if (searchKeyword.value) {
-      const keyword = searchKeyword.value.toLowerCase()
-      filtered = filtered.filter(
-        t =>
-          t.name?.toLowerCase().includes(keyword) ||
-          t.tool?.name?.toLowerCase().includes(keyword) ||
-          t.tool_name?.toLowerCase().includes(keyword) ||
-          t.id.toLowerCase().includes(keyword)
-      )
-    }
-
-    return filtered
+    const filteredByTab = filterTasksForTab(tasks.value, currentTab.value)
+    return filterTasksByKeyword(filteredByTab, searchKeyword.value)
   })
 
-  const runningTasks = computed(() =>
-    displayTasks.value.filter(t => t.status === 'running' || t.status === 'pending')
-  )
+  const runningTasks = computed(() => displayTasks.value.filter(isRunningTask))
   const runningCount = computed(
-    () =>
-      filteredStandaloneTasks.value.filter(t => t.status === 'running' || t.status === 'pending')
-        .length
+    () => filteredStandaloneTasks.value.filter(isRunningTask).length
   )
 
-  const historyTasks = computed(() =>
-    displayTasks.value.filter(t => ['success', 'failure', 'canceled'].includes(t.status))
-  )
+  const historyTasks = computed(() => displayTasks.value.filter(isHistoryTask))
   const historyCount = computed(
-    () =>
-      filteredStandaloneTasks.value.filter(t => ['success', 'failure', 'canceled'].includes(t.status))
-        .length
+    () => filteredStandaloneTasks.value.filter(isHistoryTask).length
   )
 
-  const displayTasks = computed(() => {
-    const start = (currentPage.value - 1) * pageSize.value
-    return filteredStandaloneTasks.value.slice(start, start + pageSize.value)
-  })
+  const displayTasks = computed(() =>
+    paginateTasks(filteredStandaloneTasks.value, currentPage.value, pageSize.value)
+  )
 
   const hasDisplayItems = computed(() => displayTasks.value.length > 0)
   const currentTotal = computed(() => filteredStandaloneTasks.value.length)
@@ -421,16 +417,7 @@
   })
 
   // 方法
-  const getStatusColor = (status: TaskStatus) => {
-    const colors: Record<TaskStatus, string> = {
-      pending: 'orange',
-      running: 'processing',
-      success: 'success',
-      failure: 'error',
-      canceled: 'default'
-    }
-    return colors[status]
-  }
+  const getStatusColor = getTaskStatusColor
 
   const getStatusText = (status: TaskStatus) => {
     const texts: Record<TaskStatus, string> = {
@@ -443,18 +430,8 @@
     return texts[status]
   }
 
-  const getProgressStatus = (status: TaskStatus) => {
-    if (status === 'running') return 'active'
-    if (status === 'failure') return 'exception'
-    if (status === 'success') return 'success'
-    return 'normal'
-  }
-
-  const getProgressColor = (status: TaskStatus) => {
-    if (status === 'running') return '#1890ff'
-    if (status === 'failure') return '#ff4d4f'
-    return '#52c41a'
-  }
+  const getProgressStatus = getTaskProgressStatus
+  const getProgressColor = getTaskProgressColor
 
   const formatTime = (time: string) => {
     return dayjs(time).format('YYYY-MM-DD HH:mm:ss')
@@ -520,35 +497,17 @@
     }
   }
 
-  const canOperateProjectTask = (task: Task) => {
-    if (!task.project_id || task.project_id !== projectId.value) return false
-    return ['owner', 'editor', 'runner'].includes(projectMembershipRole.value ?? '')
-  }
+  const canCancelTask = (task: Task) => canCancelTaskForActor(task, taskActor.value)
+  const canRetryTask = (task: Task) => canRetryTaskForActor(task, taskActor.value)
+  const canDeleteTask = (task: Task) => canDeleteTaskForActor(task, taskActor.value)
 
-  const canOperateTask = (task: Task) => {
-    if (userStore.isAdmin) return true
-    if (task.user_id && task.user_id === userStore.user?.id) return true
-    return canOperateProjectTask(task)
-  }
+  const projectContextLabel = (task: Task) =>
+    getTaskProjectContextLabel(task, {
+      currentProjectId: projectId.value,
+      currentProjectName: project.value?.name
+    })
 
-  const canCancelTask = (task: Task) =>
-    ['running', 'pending'].includes(task.status) && canOperateTask(task)
-
-  const canRetryTask = (task: Task) =>
-    ['failure', 'canceled'].includes(task.status) && canOperateTask(task)
-
-  const canDeleteTask = (task: Task) =>
-    userStore.isAdmin && ['success', 'failure', 'canceled'].includes(task.status)
-
-  const projectContextLabel = (task: Task) => {
-    if (task.project_id === projectId.value && project.value?.name) {
-      return `项目：${project.value.name}`
-    }
-    return `项目：${task.project_id?.slice(0, 8) ?? '-'}`
-  }
-
-  const artifactLineagePath = (task: Task) =>
-    task.project_id ? `/projects/${task.project_id}/lineage` : '/workspace'
+  const artifactLineagePath = getTaskArtifactLineagePath
 
   const handleTabChange = (_key: string) => {
     currentPage.value = 1

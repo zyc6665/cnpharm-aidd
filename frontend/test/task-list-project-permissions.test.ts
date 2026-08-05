@@ -12,13 +12,18 @@ function readSource(relativePath: string): string {
 
 test('任务列表应按用户和项目角色隐藏不可用操作，并展示项目上下文', () => {
   const source = readSource('src/views/tasks/List.vue')
+  const navigationSource = readSource('src/domain/tasks/navigation.ts')
 
   assert.equal(source.includes('useUserStore'), true)
+  assert.equal(source.includes("from '@/domain/tasks'"), true)
+  assert.equal(source.includes('taskActor'), true)
   assert.equal(source.includes('projectMembershipRole'), true)
-  assert.equal(source.includes('canOperateTask(task)'), true)
+  assert.equal(source.includes('canCancelTaskForActor(task, taskActor.value)'), true)
+  assert.equal(source.includes('canRetryTaskForActor(task, taskActor.value)'), true)
+  assert.equal(source.includes('canDeleteTaskForActor(task, taskActor.value)'), true)
   assert.equal(source.includes('canDeleteTask(task)'), true)
   assert.equal(source.includes('task.progress_message'), true)
-  assert.equal(source.includes('projectContextLabel(task)'), true)
-  assert.equal(source.includes('artifactLineagePath(task)'), true)
-  assert.equal(source.includes('/lineage'), true)
+  assert.equal(source.includes('getTaskProjectContextLabel(task'), true)
+  assert.equal(source.includes('getTaskArtifactLineagePath'), true)
+  assert.equal(navigationSource.includes('/lineage'), true)
 })
