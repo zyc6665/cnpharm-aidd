@@ -14,6 +14,7 @@ test('Tool Package 管理页应提供详情与校验台', () => {
   const source = readSource('src/views/admin/ToolPackages.vue')
 
   assert.equal(source.includes('getToolPackage'), true)
+  assert.equal(source.includes("from '@/domain/tool-packages'"), true)
   assert.equal(source.includes('detailDrawerOpen'), true)
   assert.equal(source.includes('openDetail'), true)
   assert.equal(source.includes('formattedSelectedManifest'), true)

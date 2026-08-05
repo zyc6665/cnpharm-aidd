@@ -197,6 +197,15 @@
     listToolPackages,
     publishToolPackage
   } from '@/api/tool-packages'
+  import {
+    formatToolPackageManifest,
+    getToolPackageArtifactSlots,
+    getToolPackageContractSummary,
+    getToolPackagePublishReadiness,
+    getToolPackageValidationColor,
+    getToolPackageValidationErrors,
+    getToolPackageVariantSummary
+  } from '@/domain/tool-packages'
   import type { ToolPackage } from '@/types/tool-packages'
 
   const { t } = useI18n()
@@ -228,29 +237,15 @@
     showSizeChanger: true
   }))
 
-  const selectedManifest = computed(() => selectedPackage.value?.current_version?.manifest ?? {})
   const formattedSelectedManifest = computed(() =>
-    JSON.stringify(selectedManifest.value, null, 2)
+    formatToolPackageManifest(selectedPackage.value)
   )
-  const validationErrors = computed(
-    () => selectedPackage.value?.current_version?.validation_errors ?? []
-  )
-  const artifactInputs = computed(() => artifactSlots('inputs'))
-  const artifactOutputs = computed(() => artifactSlots('outputs'))
-  const publishReadinessType = computed(() => {
-    if (selectedPackage.value?.status === 'published') return 'success'
-    if (!selectedPackage.value?.current_version?.is_signed) return 'warning'
-    if (selectedPackage.value?.current_version?.validation_status !== 'valid') return 'error'
-    return 'info'
-  })
-  const publishReadinessMessage = computed(() => {
-    const version = selectedPackage.value?.current_version
-    if (!version) return '当前 Package 没有版本，不能发布'
-    if (selectedPackage.value?.status === 'published') return '已发布，可被平台运行时选择'
-    if (version.validation_status !== 'valid') return '当前版本未通过契约校验，不能发布'
-    if (!version.is_signed || !version.signature) return '当前版本缺少签名，发布前必须补签名'
-    return '当前版本已签名且校验通过，可以发布'
-  })
+  const validationErrors = computed(() => getToolPackageValidationErrors(selectedPackage.value))
+  const artifactInputs = computed(() => getToolPackageArtifactSlots(selectedPackage.value, 'inputs'))
+  const artifactOutputs = computed(() => getToolPackageArtifactSlots(selectedPackage.value, 'outputs'))
+  const publishReadiness = computed(() => getToolPackagePublishReadiness(selectedPackage.value))
+  const publishReadinessType = computed(() => publishReadiness.value.type)
+  const publishReadinessMessage = computed(() => publishReadiness.value.message)
 
   async function loadPackages() {
     loading.value = true
@@ -334,43 +329,9 @@
     }
   }
 
-  function validationColor(status?: string): string {
-    if (status === 'valid') return 'green'
-    if (status === 'invalid') return 'red'
-    return 'default'
-  }
-
-  function contractSummary(item: ToolPackage): string {
-    const artifacts = asRecord(item.current_version?.manifest.artifacts)
-    const inputs = Array.isArray(artifacts?.inputs) ? artifacts.inputs.length : 0
-    const outputs = Array.isArray(artifacts?.outputs) ? artifacts.outputs.length : 0
-    return `${inputs} 输入 / ${outputs} 输出`
-  }
-
-  function variantSummary(item: ToolPackage): string {
-    const variants = item.current_version?.manifest.variants
-    if (!Array.isArray(variants)) return '无 variants'
-    return variants
-      .map(variant => asRecord(variant)?.accelerator)
-      .filter(Boolean)
-      .join(' · ') || `${variants.length} variants`
-  }
-
-  function asRecord(value: unknown): Record<string, unknown> | null {
-    return value && typeof value === 'object' && !Array.isArray(value)
-      ? value as Record<string, unknown>
-      : null
-  }
-
-  function artifactSlots(kind: 'inputs' | 'outputs'): Record<string, unknown>[] {
-    const artifacts = asRecord(selectedManifest.value.artifacts)
-    const slots = artifacts?.[kind]
-    return Array.isArray(slots)
-      ? slots
-          .map(slot => asRecord(slot))
-          .filter((slot): slot is Record<string, unknown> => Boolean(slot))
-      : []
-  }
+  const validationColor = getToolPackageValidationColor
+  const contractSummary = getToolPackageContractSummary
+  const variantSummary = getToolPackageVariantSummary
 
   onMounted(() => {
     void loadPackages()
