@@ -652,6 +652,7 @@
     buildAgentCapabilityConfig,
     createAgentCapabilityInputForm,
     createAgentCapabilityOutputForm,
+    buildToolVersionConfig,
     formatToolConfigJsonText,
     isAgentCapabilityFormComplete,
     isToolConfigRecord,
@@ -1012,19 +1013,6 @@
         }
       }
 
-      // 构建 config 对象
-      const config: Record<string, unknown> = {
-        type: formState.tool_type,
-        timeout_sec: formState.timeout_sec,
-        gpu_required: formState.gpu_required,
-        input_schema: inputSchema,
-        output_schema: outputSchema
-      }
-
-      if (formState.documentation_markdown.trim()) {
-        config.documentation_markdown = formState.documentation_markdown.trim()
-      }
-
       const agentCapabilityConfig = buildAgentCapabilityConfig(
         {
           enabled: formState.agent_capability_enabled,
@@ -1035,71 +1023,40 @@
         },
         agentDefaults
       )
-      if (agentCapabilityConfig) {
-        config.agent_capability = agentCapabilityConfig
-      }
-
-      if (formState.gpu_memory_mb !== undefined) {
-        config.gpu_memory_mb = formState.gpu_memory_mb
-      }
-
-      // 根据工具类型添加特定配置
-      if (formState.tool_type === 'remote_api') {
-        config.endpoint = formState.api_endpoint
-        config.method = formState.api_method
-        if (Object.keys(apiHeaders).length > 0) {
-          config.headers = apiHeaders
-        }
-      } else if (formState.tool_type === 'docker_image') {
-        config.image = formState.docker_image
-        const dockerCommand = stringListForConfig(dockerCommandItems.value)
-        if (dockerCommand.length > 0) {
-          config.command = dockerCommand
-        }
-        if (Object.keys(dockerEnv).length > 0) {
-          config.env = dockerEnv
-        }
-      } else if (formState.tool_type === 'python_script') {
-        config.script_path = formState.python_script
-        const pythonArguments = stringListForConfig(pythonArgumentItems.value)
-        if (pythonArguments.length > 0) {
-          config.args = pythonArguments
-        }
-      } else if (formState.tool_type === 'ssh_job') {
-        config.host = formState.ssh_host
-        config.port = formState.ssh_port
-        config.username = formState.ssh_username
-        config.auth_type = formState.ssh_auth_type
-        if (formState.ssh_auth_type === 'password') {
-          config.password_ref = formState.ssh_password_ref
-        } else {
-          config.auth_ref = formState.ssh_auth_ref
-        }
-        config.runner_mode = formState.ssh_runner_mode
-        config.remote_base_dir = formState.ssh_remote_base_dir
-        config.entrypoint = formState.ssh_entrypoint
-        config.cleanup_remote = formState.ssh_cleanup_remote
-        config.strict_host_key_checking = formState.ssh_strict_host_key_checking
-
-        if (formState.ssh_runner_mode === 'docker_exec') {
-          config.container_name = formState.ssh_container_name
-          if (formState.ssh_container_base_dir) {
-            config.container_base_dir = formState.ssh_container_base_dir
-          }
-        }
-
-        if (formState.ssh_device) {
-          config.device = formState.ssh_device
-        }
-
-        if (Object.keys(sshEnv).length > 0) {
-          config.env = sshEnv
-        }
-
-        if (sshOutputGlobs.length > 0) {
-          config.output_globs = sshOutputGlobs
-        }
-      }
+      const config = buildToolVersionConfig({
+        toolType: formState.tool_type,
+        timeoutSec: formState.timeout_sec ?? 3600,
+        gpuRequired: formState.gpu_required ?? false,
+        gpuMemoryMb: formState.gpu_memory_mb,
+        inputSchema,
+        outputSchema,
+        documentationMarkdown: formState.documentation_markdown,
+        agentCapabilityConfig,
+        apiEndpoint: formState.api_endpoint,
+        apiMethod: formState.api_method,
+        apiHeaders,
+        dockerImage: formState.docker_image,
+        dockerCommand: stringListForConfig(dockerCommandItems.value),
+        dockerEnv,
+        pythonScript: formState.python_script,
+        pythonArguments: stringListForConfig(pythonArgumentItems.value),
+        sshHost: formState.ssh_host,
+        sshPort: formState.ssh_port,
+        sshUsername: formState.ssh_username,
+        sshAuthType: formState.ssh_auth_type,
+        sshAuthRef: formState.ssh_auth_ref,
+        sshPasswordRef: formState.ssh_password_ref,
+        sshRunnerMode: formState.ssh_runner_mode,
+        sshRemoteBaseDir: formState.ssh_remote_base_dir,
+        sshContainerBaseDir: formState.ssh_container_base_dir,
+        sshEntrypoint: formState.ssh_entrypoint,
+        sshContainerName: formState.ssh_container_name,
+        sshDevice: formState.ssh_device,
+        sshCleanupRemote: formState.ssh_cleanup_remote,
+        sshStrictHostKeyChecking: formState.ssh_strict_host_key_checking,
+        sshEnv,
+        sshOutputGlobs
+      })
 
       // 构建提交数据
       const data: ToolCreateParams & { initial_version?: unknown } = {
