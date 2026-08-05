@@ -4,6 +4,14 @@ export type TaskProgressStatus = 'normal' | 'active' | 'exception' | 'success'
 
 const runningStatuses: TaskStatus[] = ['pending', 'running']
 const historyStatuses: TaskStatus[] = ['success', 'failure', 'canceled']
+const taskStatusSet = new Set<TaskStatus>(['pending', 'running', 'success', 'failure', 'canceled'])
+
+export function normalizeTaskStatus(status?: string): TaskStatus {
+  const normalizedStatus = status?.toLowerCase()
+  return taskStatusSet.has(normalizedStatus as TaskStatus)
+    ? (normalizedStatus as TaskStatus)
+    : 'pending'
+}
 
 export function getTaskStatusColor(status: TaskStatus): string {
   const colors: Record<TaskStatus, string> = {

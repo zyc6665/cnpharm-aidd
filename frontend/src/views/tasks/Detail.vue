@@ -294,7 +294,6 @@ import {
   HistoryOutlined
 } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
-import dayjs from 'dayjs'
 import { useTasksStore, useUserStore } from '@/stores'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { getTaskLogs } from '@/api/tasks'
@@ -304,7 +303,18 @@ import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
 import ResultVisualizationPanel from '@/components/tasks/ResultVisualizationPanel.vue'
 import TaskLogPreview from '@/components/tasks/TaskLogPreview.vue'
 import TaskOutputSummary from '@/components/tasks/TaskOutputSummary.vue'
-import { normalizeTaskStatus } from '@/components/tasks/result-visualization'
+import {
+  canDeleteTask as canDeleteTaskForActor,
+  formatTaskDetailTime,
+  formatTaskFileSize,
+  getTaskCompletedTitleKey,
+  getTaskStatusColor,
+  isTaskWebSocketMessageForTask,
+  normalizeTaskStatus,
+  resolveTaskWebSocketLog,
+  resolveTaskWebSocketProgressUpdate,
+  shouldRefreshTaskAfterWebSocketMessage
+} from '@/domain/tasks'
 import { extractTaskLogs } from './logs'
 
 const route = useRoute()
@@ -323,21 +333,20 @@ const relatedTasks = ref<Task[]>([])
 // WebSocket
 const { connect, disconnect, onMessage } = useWebSocket()
 
-const normalizeLogLevel = (level?: string): 'info' | 'warning' | 'error' => {
-  const normalized = level?.toLowerCase()
-  if (normalized === 'warning' || normalized === 'error') {
-    return normalized
-  }
-  return 'info'
-}
-
 // 计算属性
 const loading = computed(() => tasksStore.loading)
 const task = computed(() => tasksStore.currentTask)
 const taskStatus = computed<TaskStatus>(() => normalizeTaskStatus(task.value?.status))
-const detailTitle = computed(() => task.value?.name || task.value?.tool?.name || t('tasks.taskDetail'))
+const detailTitle = computed(() =>
+  task.value?.name || task.value?.tool?.name || t('tasks.taskDetail')
+)
 const canDeleteTask = computed(() =>
-  userStore.isAdmin && ['success', 'failure', 'canceled'].includes(taskStatus.value)
+  task.value
+    ? canDeleteTaskForActor(
+        { ...task.value, status: taskStatus.value },
+        { isAdmin: userStore.isAdmin }
+      )
+    : false
 )
 const detailSubtitle = computed(() => {
   if (!task.value) {
@@ -348,16 +357,7 @@ const detailSubtitle = computed(() => {
 })
 
 // 方法
-const getStatusColor = (status: TaskStatus) => {
-  const colors: Record<TaskStatus, string> = {
-    pending: 'orange',
-    running: 'processing',
-    success: 'success',
-    failure: 'error',
-    canceled: 'default'
-  }
-  return colors[status]
-}
+const getStatusColor = getTaskStatusColor
 
 const getStatusText = (status: TaskStatus) => {
   const texts: Record<TaskStatus, string> = {
@@ -371,28 +371,11 @@ const getStatusText = (status: TaskStatus) => {
 }
 
 const getCompletedTitle = (status: TaskStatus) => {
-  const titles: Record<string, string> = {
-    success: t('tasks.completed'),
-    failure: t('tasks.failed'),
-    canceled: t('tasks.canceled')
-  }
-  return titles[status] || t('tasks.completed')
+  return t(getTaskCompletedTitleKey(status))
 }
 
-const formatTime = (time: string) => {
-  return dayjs(time).format('YYYY-MM-DD HH:mm:ss')
-}
-
-const formatFileSize = (bytes?: number) => {
-  if (!bytes || bytes === 0) {
-    return '0 B'
-  }
-
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`
-}
+const formatTime = formatTaskDetailTime
+const formatFileSize = formatTaskFileSize
 
 const copyTaskId = async () => {
   if (task.value) {
@@ -466,44 +449,30 @@ const goBack = () => {
 
 // WebSocket 消息处理
 const handleWSMessage = (msg: WSMessage) => {
-  if (msg.task_id !== taskId.value) return
+  if (!isTaskWebSocketMessageForTask(msg, taskId.value)) return
 
-  if (msg.type === 'task_progress') {
-    const nextStatus = msg.status ? normalizeTaskStatus(msg.status) : undefined
-    const progress = typeof msg.progress_percent === 'number'
-      ? msg.progress_percent
-      : Math.round((msg.progress ?? 0) * 100)
-    tasksStore.updateTaskProgress(msg.task_id!, progress, nextStatus)
-  } else if (msg.type === 'task_log' && msg.log) {
-    logs.value.push({
-      id: Date.now(),
-      task_id: msg.task_id!,
-      level: normalizeLogLevel(msg.level),
-      message: msg.log,
-      timestamp: new Date().toISOString()
-    })
-  } else if (msg.type === 'task_status' && msg.status) {
-    const nextStatus = normalizeTaskStatus(msg.status)
-    tasksStore.updateTaskProgress(taskId.value, task.value?.progress ?? 0, nextStatus)
-    if (['success', 'failure', 'canceled'].includes(nextStatus)) {
-      void fetchTaskDetail()
-      void fetchLogs()
-    }
-  } else if (msg.type === 'task_complete') {
-    tasksStore.updateTaskProgress(taskId.value, 100, 'success')
-    void fetchTaskDetail()
-    void fetchLogs()
-  } else if (msg.type === 'task_error') {
-    tasksStore.updateTaskProgress(taskId.value, task.value?.progress ?? 0, 'failure')
-    if (msg.error) {
-      logs.value.push({
-        id: Date.now(),
-        task_id: msg.task_id!,
-        level: 'error',
-        message: msg.error,
-        timestamp: new Date().toISOString()
-      })
-    }
+  const progressUpdate = resolveTaskWebSocketProgressUpdate(msg, {
+    taskId: taskId.value,
+    currentProgress: task.value?.progress ?? 0
+  })
+  if (progressUpdate) {
+    tasksStore.updateTaskProgress(
+      progressUpdate.taskId,
+      progressUpdate.progress,
+      progressUpdate.status
+    )
+  }
+
+  const logEntry = resolveTaskWebSocketLog(msg, {
+    taskId: taskId.value,
+    id: Date.now(),
+    timestamp: new Date().toISOString()
+  })
+  if (logEntry) {
+    logs.value.push(logEntry)
+  }
+
+  if (shouldRefreshTaskAfterWebSocketMessage(msg)) {
     void fetchTaskDetail()
     void fetchLogs()
   }

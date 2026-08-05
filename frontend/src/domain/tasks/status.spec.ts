@@ -6,7 +6,8 @@ import {
   getTaskProgressStatus,
   getTaskStatusColor,
   isHistoryTask,
-  isRunningTask
+  isRunningTask,
+  normalizeTaskStatus
 } from './status'
 
 function task(status: Task['status']): Task {
@@ -47,4 +48,11 @@ test('运行中和历史任务分类保持互斥', () => {
   assert.equal(isHistoryTask(task('failure')), true)
   assert.equal(isHistoryTask(task('canceled')), true)
   assert.equal(isHistoryTask(task('running')), false)
+})
+
+test('任务状态归一化接受大小写并对未知状态回退到 pending', () => {
+  assert.equal(normalizeTaskStatus('RUNNING'), 'running')
+  assert.equal(normalizeTaskStatus('success'), 'success')
+  assert.equal(normalizeTaskStatus('unknown'), 'pending')
+  assert.equal(normalizeTaskStatus(undefined), 'pending')
 })

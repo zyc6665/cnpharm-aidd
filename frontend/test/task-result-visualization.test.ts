@@ -28,9 +28,10 @@ test('任务结果可视化组件与规则模块应存在', () => {
 
 test('任务详情页应接入结果可视化面板', () => {
   const detailSource = readSource('src/views/tasks/Detail.vue')
+  const panelSource = readSource('src/components/tasks/ResultVisualizationPanel.vue')
 
   assert.equal(detailSource.includes('ResultVisualizationPanel'), true)
-  assert.equal(detailSource.includes('result-visualization'), true)
+  assert.equal(panelSource.includes('result-visualization'), true)
 })
 
 test('结果可视化规则应覆盖首批结构与小分子格式', () => {

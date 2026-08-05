@@ -1,4 +1,6 @@
+export * from './detail'
 export * from './listing'
 export * from './navigation'
 export * from './permissions'
 export * from './status'
+export * from './websocket'

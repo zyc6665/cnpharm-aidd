@@ -1,4 +1,4 @@
-import type { Task, TaskStatus } from '../../types/models'
+import type { Task } from '../../types/models'
 import type { BuiltInTrajectoryFormat } from 'molstar/lib/mol-plugin-state/formats/trajectory'
 
 type SupportedVisualizationFormat = Extract<
@@ -42,8 +42,6 @@ export interface VisualizationScene {
   selectedOutputKey: string | null
 }
 
-const STATUS_SET = new Set<TaskStatus>(['pending', 'running', 'success', 'failure', 'canceled'])
-
 const FORMAT_BY_EXTENSION: Record<string, SupportedVisualizationFormat> = {
   '.pdb': 'pdb',
   '.cif': 'mmcif',
@@ -55,10 +53,6 @@ const FORMAT_BY_EXTENSION: Record<string, SupportedVisualizationFormat> = {
 
 const SMALL_MOLECULE_EXTENSIONS = new Set(['.sdf', '.mol2'])
 const STRUCTURE_EXTENSIONS = new Set(['.pdb', '.cif', '.mmcif', '.pdbqt'])
-
-function isTaskStatus(value?: string): value is TaskStatus {
-  return value !== undefined && STATUS_SET.has(value as TaskStatus)
-}
 
 function getFileLabel(file: TaskFileReference): string {
   return file.original_name || file.filename || String(file.id || 'unnamed-file')
@@ -195,11 +189,6 @@ export function createVisualizationScene(
     hasRenderableOutput: true,
     selectedOutputKey: focused.selectedOutputKey
   }
-}
-
-export function normalizeTaskStatus(status?: string): TaskStatus {
-  const normalizedStatus = status?.toLowerCase()
-  return isTaskStatus(normalizedStatus) ? normalizedStatus : 'pending'
 }
 
 export function detectVisualizationFormat(
