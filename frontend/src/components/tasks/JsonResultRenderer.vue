@@ -72,7 +72,7 @@
   import {
     buildJsonResultEntries,
     type JsonResultEntry
-  } from './json-result-renderer'
+  } from '@/domain/tasks'
 
   const props = withDefaults(defineProps<{
     value: unknown

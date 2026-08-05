@@ -8,7 +8,7 @@ import {
   buildJsonResultEntries,
   formatJsonResultLabel,
   formatJsonResultValue
-} from '../src/components/tasks/json-result-renderer.ts'
+} from '../src/domain/tasks/json-result-renderer.ts'
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 

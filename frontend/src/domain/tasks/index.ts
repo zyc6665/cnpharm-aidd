@@ -1,5 +1,6 @@
 export * from './csv-result'
 export * from './detail'
+export * from './json-result-renderer'
 export * from './logs'
 export * from './listing'
 export * from './molp-pc-export'
