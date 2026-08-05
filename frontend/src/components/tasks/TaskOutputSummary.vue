@@ -57,17 +57,14 @@
   import {
     buildMolpPcCsv,
     canExportMolpPcCsv,
+    formatTaskFileSize,
+    getTaskOutputDataEntries,
+    getTaskOutputFiles,
+    hasTaskOutputSummaryContent,
     selectMolpPcCsvSourceFile
   } from '@/domain/tasks'
 
-  interface TaskOutputFile {
-    id?: string | number
-    original_name?: string
-    filename?: string
-    size?: number
-    content_type?: string
-    url?: string
-  }
+  type TaskOutputFile = NonNullable<Task['output_files']>[number]
 
   const props = withDefaults(defineProps<{
     task: Task
@@ -80,37 +77,22 @@
   const exportingMolpPcCsv = ref(false)
 
   const outputDataEntries = computed<[string, unknown][]>(() => {
-    const outputData = props.task.output_data
-
-    if (!outputData || typeof outputData !== 'object' || Array.isArray(outputData)) {
-      return []
-    }
-
-    return Object.entries(outputData as Record<string, unknown>)
+    return getTaskOutputDataEntries(props.task.output_data)
   })
 
   const outputData = computed(() => props.task.output_data)
 
   const outputFiles = computed<TaskOutputFile[]>(() => {
-    return props.task.output_files ?? []
+    return getTaskOutputFiles(props.task)
   })
 
   const canShowMolpPcCsvExport = computed(() => canExportMolpPcCsv(outputFiles.value))
 
   const hasContent = computed(() => {
-    return outputDataEntries.value.length > 0 || outputFiles.value.length > 0
+    return hasTaskOutputSummaryContent(props.task.output_data, outputFiles.value)
   })
 
-  function formatFileSize(bytes?: number) {
-    if (!bytes || bytes === 0) {
-      return '0 B'
-    }
-
-    const k = 1024
-    const sizes = ['B', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`
-  }
+  const formatFileSize = formatTaskFileSize
 
   async function downloadFile(file: TaskOutputFile) {
     try {
