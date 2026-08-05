@@ -75,7 +75,6 @@
   import { computed, onBeforeUnmount, ref, watch } from 'vue'
   import { useRouter } from 'vue-router'
   import { useI18n } from 'vue-i18n'
-  import dayjs from 'dayjs'
   import { getTaskDetail, getTaskLogs, isTaskTerminalStatus } from '@/api/tasks'
   import ResultVisualizationPanel from '@/components/tasks/ResultVisualizationPanel.vue'
   import TaskLogPreview from '@/components/tasks/TaskLogPreview.vue'
@@ -83,7 +82,13 @@
   import type { Task, TaskLog, TaskStatus } from '@/types/models'
   import type { WorkflowTaskRef } from '@/workflow/artifact-types'
   import { normalizeTaskSummary } from '@/utils/task-normalization'
-  import { extractTaskLogs, normalizeTaskStatus } from '@/domain/tasks'
+  import {
+    extractTaskLogs,
+    formatTaskDetailTime,
+    formatTaskRunningDuration,
+    getTaskStatusColor,
+    normalizeTaskStatus
+  } from '@/domain/tasks'
 
   const props = defineProps<{
     taskId?: string | null
@@ -136,15 +141,7 @@
   const isFailure = computed(() => ['failure', 'canceled'].includes(taskStatus.value))
 
   const statusColor = computed(() => {
-    const colors: Record<TaskStatus, string> = {
-      pending: 'orange',
-      running: 'processing',
-      success: 'success',
-      failure: 'error',
-      canceled: 'default'
-    }
-
-    return colors[taskStatus.value]
+    return getTaskStatusColor(taskStatus.value)
   })
 
   const statusText = computed(() => {
@@ -180,21 +177,11 @@
   })
 
   function formatTime(time: string) {
-    return dayjs(time).format('YYYY-MM-DD HH:mm:ss')
+    return formatTaskDetailTime(time)
   }
 
   function formatDuration(startTime: string) {
-    const start = dayjs(startTime)
-    const now = dayjs()
-    const diff = now.diff(start, 'second')
-
-    if (diff < 60) {
-      return `${diff}s`
-    }
-    if (diff < 3600) {
-      return `${Math.floor(diff / 60)}m ${diff % 60}s`
-    }
-    return `${Math.floor(diff / 3600)}h ${Math.floor((diff % 3600) / 60)}m`
+    return formatTaskRunningDuration(startTime)
   }
 
   async function fetchTaskResultDetail(taskId: string) {

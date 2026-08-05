@@ -13,6 +13,22 @@ export function formatTaskDetailTime(time: string): string {
   return dayjs(time).format('YYYY-MM-DD HH:mm:ss')
 }
 
+export function formatTaskRunningDuration(startTime: string, nowTime?: string | Date): string {
+  const start = dayjs(startTime)
+  const now = nowTime ? dayjs(nowTime) : dayjs()
+  const diff = now.diff(start, 'second')
+
+  if (diff < 60) {
+    return `${diff}s`
+  }
+
+  if (diff < 3600) {
+    return `${Math.floor(diff / 60)}m ${diff % 60}s`
+  }
+
+  return `${Math.floor(diff / 3600)}h ${Math.floor((diff % 3600) / 60)}m`
+}
+
 export function formatTaskFileSize(bytes?: number): string {
   if (!bytes || bytes === 0) {
     return '0 B'
