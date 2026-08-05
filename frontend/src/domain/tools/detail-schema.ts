@@ -268,6 +268,25 @@ export function flattenExampleParams(
   return values
 }
 
+export function resolveExampleFileFormKey(
+  flattenedSchema: ToolSchema | undefined,
+  field: string
+): string {
+  const properties = flattenedSchema?.properties
+  if (!properties) {
+    return field
+  }
+
+  if (Object.prototype.hasOwnProperty.call(properties, field)) {
+    return field
+  }
+
+  const nestedMatch = Object.entries(properties).find(([, prop]) => {
+    return isFileSchemaProperty(prop) && prop._originalKey === field
+  })
+  return nestedMatch?.[0] ?? field
+}
+
 export function buildTaskSubmissionPayload(
   options: BuildTaskSubmissionPayloadOptions
 ): BuildTaskSubmissionPayloadResult {

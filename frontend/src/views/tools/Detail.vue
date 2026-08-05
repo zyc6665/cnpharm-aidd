@@ -412,6 +412,7 @@
     getToolRequestErrorMessage,
     getToolStatusColor as getStatusColor,
     isFileSchemaProperty,
+    resolveExampleFileFormKey,
     type UploadedToolFile
   } from '@/domain/tools'
   import {
@@ -819,22 +820,6 @@
     })
   }
 
-  const resolveExampleFileFormKey = (field: string): string => {
-    const properties = flattenedSchema.value?.properties
-    if (!properties) {
-      return field
-    }
-
-    if (Object.prototype.hasOwnProperty.call(properties, field)) {
-      return field
-    }
-
-    const nestedMatch = Object.entries(properties).find(([, prop]) => {
-      return isFileSchemaProperty(prop) && prop._originalKey === field
-    })
-    return nestedMatch?.[0] ?? field
-  }
-
   const handleUseExample = async () => {
     if (!tool.value || !example.value) {
       return
@@ -852,7 +837,7 @@
       applyExampleParams(res.data.params)
 
       Object.entries(res.data.files).forEach(([field, file]) => {
-        const formKey = resolveExampleFileFormKey(field)
+        const formKey = resolveExampleFileFormKey(flattenedSchema.value, field)
         exampleFiles[formKey] = file
         fileList[formKey] = []
         selectedArtifacts[formKey] = undefined

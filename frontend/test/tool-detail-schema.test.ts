@@ -3,7 +3,8 @@ import assert from 'node:assert/strict'
 
 import {
   buildTaskSubmissionPayload,
-  flattenToolInputSchema
+  flattenToolInputSchema,
+  resolveExampleFileFormKey
 } from '../src/domain/tools/detail-schema.ts'
 
 const gcdmSchema = {
@@ -198,4 +199,16 @@ test('字符串数组联合类型肽序列字段应归一化为多行文本输�
   assert.notEqual(flattened, undefined)
   assert.equal(flattened?.properties.sequences?.type, 'string')
   assert.equal(flattened?.properties.sequences?.format, 'textarea')
+})
+
+test('示例文件字段应映射到扁平化后的嵌套文件表单字段', () => {
+  const flattened = flattenToolInputSchema(gcdmSchema as never)
+
+  assert.equal(
+    resolveExampleFileFormKey(flattened, 'input_files.pocket_pdb'),
+    'input_files.pocket_pdb'
+  )
+  assert.equal(resolveExampleFileFormKey(flattened, 'pocket_pdb'), 'input_files.pocket_pdb')
+  assert.equal(resolveExampleFileFormKey(flattened, 'missing_file'), 'missing_file')
+  assert.equal(resolveExampleFileFormKey(undefined, 'pocket_pdb'), 'pocket_pdb')
 })
