@@ -23,8 +23,13 @@
 <script setup lang="ts">
   import { computed } from 'vue'
   import { useI18n } from 'vue-i18n'
-  import dayjs from 'dayjs'
   import type { TaskLog } from '@/types/models'
+  import {
+    formatTaskLogPreviewTime,
+    getHiddenTaskLogCount,
+    getTaskLogPreviewColor,
+    getVisibleTaskLogs,
+  } from '@/domain/tasks'
 
   const props = withDefaults(defineProps<{
     logs: TaskLog[]
@@ -38,32 +43,19 @@
   const { t } = useI18n()
 
   const visibleLogs = computed(() => {
-    if (!props.maxItems || props.maxItems <= 0) {
-      return props.logs
-    }
-
-    return props.logs.slice(0, props.maxItems)
+    return getVisibleTaskLogs(props.logs, props.maxItems)
   })
 
   const hiddenCount = computed(() => {
-    if (!props.maxItems || props.maxItems <= 0) {
-      return 0
-    }
-
-    return Math.max(props.logs.length - props.maxItems, 0)
+    return getHiddenTaskLogCount(props.logs, props.maxItems)
   })
 
   function formatLogTime(time: string) {
-    return dayjs(time).format('HH:mm:ss.SSS')
+    return formatTaskLogPreviewTime(time)
   }
 
   function getLogColor(level: string) {
-    const colors: Record<string, string> = {
-      info: 'blue',
-      warning: 'orange',
-      error: 'red'
-    }
-    return colors[level] || 'default'
+    return getTaskLogPreviewColor(level)
   }
 </script>
 
