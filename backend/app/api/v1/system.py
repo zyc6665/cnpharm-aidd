@@ -7,7 +7,7 @@ import psutil
 from pathlib import Path
 from typing import Optional, List
 from fastapi import APIRouter, Depends
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from alembic.config import Config
@@ -19,6 +19,7 @@ from app.config import settings, use_async_tasks
 from app.auth.dependencies import get_admin_user
 from app.common.responses import success_response
 from app.models.users import User
+from app.models.tool_packages import ToolPackage, ToolPackageVersion
 from app.schemas.system_settings import ModelServiceCreate, ModelServiceUpdate
 from app.services.model_services import (
     create_model_service,
@@ -142,7 +143,13 @@ async def health_check(db: AsyncSession = Depends(get_db)):
     if storage_status.status != "healthy" and overall_status == "healthy":
         overall_status = "degraded"
 
-    # 4. 检查任务队列（如果启用）
+    # 4. 检查 Tool Package 运行时可用性
+    tool_package_status = await _check_tool_package_runtime(db)
+    services.append(tool_package_status)
+    if tool_package_status.status != "healthy" and overall_status == "healthy":
+        overall_status = "degraded"
+
+    # 5. 检查任务队列（如果启用）
     if use_async_tasks():
         celery_status = await _check_celery()
         services.append(celery_status)
@@ -300,6 +307,64 @@ async def _check_celery() -> ServiceStatus:
     except Exception as e:
         return ServiceStatus(
             name="celery", status="unhealthy", message=f"Celery 检查失败: {str(e)}"
+        )
+
+
+async def _check_tool_package_runtime(db: AsyncSession) -> ServiceStatus:
+    """检查 Tool Package 新模型部署路径是否可读且发布版本可执行。"""
+    try:
+        if not settings.is_aidd_feature_enabled("TOOL_PACKAGE_V1_ENABLED"):
+            return ServiceStatus(
+                name="tool_package_runtime",
+                status="unknown",
+                message="Tool Package 功能未启用",
+            )
+
+        total_packages = await db.scalar(select(func.count(ToolPackage.id))) or 0
+        published_packages = (
+            await db.scalar(
+                select(func.count(ToolPackage.id)).where(ToolPackage.status == "published")
+            )
+            or 0
+        )
+        ready_packages = (
+            await db.scalar(
+                select(func.count(ToolPackage.id))
+                .join(
+                    ToolPackageVersion,
+                    ToolPackage.current_version_id == ToolPackageVersion.id,
+                )
+                .where(
+                    ToolPackage.status == "published",
+                    ToolPackageVersion.validation_status == "valid",
+                    ToolPackageVersion.is_signed.is_(True),
+                )
+            )
+            or 0
+        )
+        blocked_packages = published_packages - ready_packages
+        if blocked_packages > 0:
+            return ServiceStatus(
+                name="tool_package_runtime",
+                status="unhealthy",
+                message=(
+                    "Tool Package runtime 存在未就绪发布版本: "
+                    f"ready={ready_packages}, blocked={blocked_packages}, total={total_packages}"
+                ),
+            )
+        return ServiceStatus(
+            name="tool_package_runtime",
+            status="healthy",
+            message=(
+                "Tool Package runtime 可用: "
+                f"ready={ready_packages}, published={published_packages}, total={total_packages}"
+            ),
+        )
+    except Exception as e:
+        return ServiceStatus(
+            name="tool_package_runtime",
+            status="unknown",
+            message=f"Tool Package runtime 检查不可用: {str(e)}",
         )
 
 

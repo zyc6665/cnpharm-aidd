@@ -59,6 +59,38 @@
             </a-card>
           </a-col>
         </a-row>
+
+        <a-card class="health-card" title="运行健康" :loading="loading">
+          <div v-if="systemHealth" class="health-panel">
+            <div class="health-overall">
+              <a-tag :color="healthStatusColor(systemHealth.status)">
+                {{ healthStatusText(systemHealth.status) }}
+              </a-tag>
+              <span>{{ systemHealth.environment }} · v{{ systemHealth.version }}</span>
+              <time :datetime="systemHealth.timestamp">
+                {{ formatDateTime(systemHealth.timestamp) }}
+              </time>
+            </div>
+
+            <div class="health-services">
+              <article
+                v-for="service in healthServices"
+                :key="service.name"
+                class="health-service"
+              >
+                <div class="health-service-head">
+                  <strong>{{ healthServiceLabel(service.name) }}</strong>
+                  <a-tag :color="healthStatusColor(service.status)">
+                    {{ healthStatusText(service.status) }}
+                  </a-tag>
+                </div>
+                <p>{{ service.message || '-' }}</p>
+                <small v-if="service.latency_ms != null">{{ service.latency_ms }} ms</small>
+              </article>
+            </div>
+          </div>
+          <a-empty v-else description="暂无健康检查数据" />
+        </a-card>
       </a-tab-pane>
 
       <a-tab-pane key="model-services" :tab="t('admin.modelServices')">
@@ -297,6 +329,7 @@ import {
   deleteModelService,
   getModelServices,
   getSystemConfig,
+  getSystemHealth,
   getSystemInfo,
   getSystemStats,
   setDefaultModelService,
@@ -308,6 +341,7 @@ import type {
   ModelServiceCreateParams,
   ModelServiceUpdateParams,
   SystemConfig,
+  SystemHealth,
   SystemInfo,
   SystemStats
 } from '@/types/models'
@@ -319,6 +353,7 @@ const loading = ref(false)
 const systemInfo = ref<SystemInfo | null>(null)
 const systemStats = ref<SystemStats | null>(null)
 const systemConfig = ref<SystemConfig | null>(null)
+const systemHealth = ref<SystemHealth | null>(null)
 
 const modelServices = ref<ModelService[]>([])
 const modelServicesLoading = ref(false)
@@ -349,6 +384,24 @@ const formattedConfig = computed(() => {
   return JSON.stringify(systemConfig.value ?? {}, null, 2)
 })
 
+const healthServices = computed(() => {
+  const order = [
+    'database',
+    'database_schema',
+    'cache',
+    'storage',
+    'celery',
+    'tool_package_runtime'
+  ]
+  return [...(systemHealth.value?.services ?? [])].sort((left, right) => {
+    const leftIndex = order.indexOf(left.name)
+    const rightIndex = order.indexOf(right.name)
+    const normalizedLeftIndex = leftIndex === -1 ? order.length : leftIndex
+    const normalizedRightIndex = rightIndex === -1 ? order.length : rightIndex
+    return normalizedLeftIndex - normalizedRightIndex
+  })
+})
+
 const modelServiceRules = computed(() => ({
   name: [{ required: true, message: `${t('common.name')}${t('common.required')}` }],
   base_url: [{ required: true, message: `${t('admin.baseUrl')}${t('common.required')}` }],
@@ -368,14 +421,16 @@ const modelServiceColumns = computed(() => [
 const fetchSystemData = async () => {
   loading.value = true
   try {
-    const [infoRes, statsRes, configRes] = await Promise.all([
+    const [infoRes, statsRes, configRes, healthRes] = await Promise.all([
       getSystemInfo(),
       getSystemStats(),
-      getSystemConfig()
+      getSystemConfig(),
+      getSystemHealth()
     ])
     systemInfo.value = infoRes.data
     systemStats.value = statsRes.data
     systemConfig.value = configRes.data
+    systemHealth.value = healthRes.data
   } finally {
     loading.value = false
   }
@@ -518,6 +573,33 @@ const testStatusColor = (status?: string | null) => {
   return 'default'
 }
 
+const healthStatusColor = (status?: string | null) => {
+  if (status === 'healthy') return 'green'
+  if (status === 'degraded' || status === 'unknown') return 'orange'
+  if (status === 'unhealthy') return 'red'
+  return 'default'
+}
+
+const healthStatusText = (status?: string | null) => {
+  if (status === 'healthy') return '正常'
+  if (status === 'degraded') return '降级'
+  if (status === 'unhealthy') return '异常'
+  if (status === 'unknown') return '未知'
+  return '-'
+}
+
+const healthServiceLabel = (name: string) => {
+  const labels: Record<string, string> = {
+    database: '数据库连接',
+    database_schema: '数据库 Schema',
+    cache: '缓存',
+    storage: '存储',
+    celery: '任务队列',
+    tool_package_runtime: 'Tool Package Runtime'
+  }
+  return labels[name] ?? name
+}
+
 const formatDateTime = (value?: string | null) => {
   if (!value) {
     return '-'
@@ -549,6 +631,61 @@ onMounted(() => {
     border: 1px solid @border-color-light;
     border-radius: @border-radius-md;
     padding: @spacing-lg;
+  }
+
+  .health-card {
+    margin-top: @spacing-md;
+  }
+
+  .health-panel {
+    display: grid;
+    gap: @spacing-md;
+  }
+
+  .health-overall {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: @spacing-sm;
+    color: @text-color-light-secondary;
+    font-size: @font-size-sm;
+  }
+
+  .health-services {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: @spacing-sm;
+  }
+
+  .health-service {
+    min-width: 0;
+    padding: @spacing-md;
+    border: 1px solid @border-color-light;
+    border-radius: @border-radius-md;
+    background: @bg-light-secondary;
+
+    p {
+      min-height: 40px;
+      margin: @spacing-xs 0;
+      color: @text-color-light-secondary;
+      line-height: @line-height-base;
+      word-break: break-word;
+    }
+
+    small {
+      color: @text-color-light-tertiary;
+    }
+  }
+
+  .health-service-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: @spacing-sm;
+
+    strong {
+      color: @text-color-light-primary;
+    }
   }
 
   .model-services-toolbar {

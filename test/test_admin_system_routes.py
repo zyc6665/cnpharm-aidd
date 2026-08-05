@@ -176,3 +176,19 @@ async def test_system_health_reports_database_schema_revision(
     assert services["database_schema"]["status"] == "unhealthy"
     assert "Alembic" in services["database_schema"]["message"]
     assert payload["status"] == "unhealthy"
+
+
+@pytest.mark.asyncio
+async def test_system_health_reports_tool_package_runtime_readiness(
+    api_client: httpx.AsyncClient,
+):
+    """系统健康检查应暴露 Tool Package 运行时可用性，方便排查模型部署链路。"""
+    response = await api_client.get("/api/v1/system/health")
+
+    assert response.status_code == 200
+    payload = response.json()
+    services = {item["name"]: item for item in payload["services"]}
+
+    assert "tool_package_runtime" in services
+    assert services["tool_package_runtime"]["status"] in {"healthy", "unknown"}
+    assert "Tool Package" in services["tool_package_runtime"]["message"]
