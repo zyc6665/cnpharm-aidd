@@ -134,7 +134,6 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import dayjs from 'dayjs'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
@@ -154,6 +153,16 @@ import { buildArtifactVersionDownloadUrl } from '@/api/artifacts'
 import { getSystemHealth } from '@/api/system'
 import ProjectCreateDialog from '@/components/projects/ProjectCreateDialog.vue'
 import ProjectList from '@/components/projects/ProjectList.vue'
+import {
+  buildRecentWorkspaceArtifactRows,
+  formatWorkspaceFileSize,
+  formatWorkspaceTime,
+  getRecentWorkspaceProjects,
+  getWorkspaceAttentionTasks,
+  getWorkspaceTaskLabelKey,
+  hasWorkspaceSchemaMigrationHealthIssue,
+  type RecentWorkspaceArtifactRow
+} from '@/domain/workspace'
 import type { ResearchProject } from '@/types/projects'
 
 const { t } = useI18n()
@@ -169,37 +178,16 @@ const tasks = ref<WorkspaceAttentionTask[]>([])
 const artifacts = ref<WorkspaceArtifact[]>([])
 const legacyFiles = ref<WorkspaceLegacyFile[]>([])
 
-interface RecentArtifact {
-  id: string
-  name: string
-  typeLabel: string
-  sizeBytes: number
-  downloadUrl: string
-}
-
-const recentProjects = computed(() => projects.value.slice(0, 8))
-const attentionTasks = computed(() =>
-  tasks.value.filter(task => task.status === 'pending' || task.status === 'failure').slice(0, 6)
+const recentProjects = computed(() => getRecentWorkspaceProjects(projects.value))
+const attentionTasks = computed(() => getWorkspaceAttentionTasks(tasks.value))
+const recentArtifacts = computed<RecentWorkspaceArtifactRow[]>(() =>
+  buildRecentWorkspaceArtifactRows({
+    artifacts: artifacts.value,
+    legacyFiles: legacyFiles.value,
+    unknownArtifactTypeLabel: t('workspace.unknownArtifactType'),
+    buildArtifactDownloadUrl: buildArtifactVersionDownloadUrl
+  })
 )
-const recentArtifacts = computed<RecentArtifact[]>(() => {
-  const standardArtifacts = artifacts.value.map(artifact => ({
-    id: artifact.id,
-    name: artifact.name,
-    typeLabel: artifact.standard_type
-      ? `${artifact.standard_type}@${artifact.standard_version ?? 1}`
-      : artifact.semantic_type || artifact.artifact_type || t('workspace.unknownArtifactType'),
-    sizeBytes: artifact.latest_version.size_bytes,
-    downloadUrl: buildArtifactVersionDownloadUrl(artifact.id, artifact.latest_version.id)
-  }))
-  if (standardArtifacts.length) return standardArtifacts.slice(0, 6)
-  return legacyFiles.value.slice(0, 6).map(file => ({
-    id: file.id,
-    name: file.filename,
-    typeLabel: file.content_type || t('workspace.unknownArtifactType'),
-    sizeBytes: file.size_bytes,
-    downloadUrl: `/api/v1/files/${file.id}/download`
-  }))
-})
 
 async function loadWorkspace() {
   if (loading.value) return
@@ -241,9 +229,7 @@ async function loadWorkspace() {
 async function hasDatabaseSchemaHealthIssue() {
   try {
     const health = await getSystemHealth({ silent: true, retry: 0 })
-    return health.data.services.some(
-      service => service.name === 'database_schema' && service.status !== 'healthy'
-    )
+    return hasWorkspaceSchemaMigrationHealthIssue(health.data.services)
   } catch {
     return false
   }
@@ -279,12 +265,9 @@ async function handleProjectDelete(projectId: string) {
 }
 
 const taskLabel = (status: WorkspaceAttentionTask['status']) =>
-  status === 'pending' ? t('workspace.pendingApproval') : t('workspace.taskNeedsAttention')
-const formatTime = (value: string) => dayjs(value).format('MM-DD HH:mm')
-const formatSize = (bytes: number) =>
-  bytes < 1024 * 1024
-    ? `${Math.max(1, Math.round(bytes / 1024))} KB`
-    : `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  t(getWorkspaceTaskLabelKey(status))
+const formatTime = formatWorkspaceTime
+const formatSize = formatWorkspaceFileSize
 
 onMounted(() => { void loadWorkspace() })
 </script>
