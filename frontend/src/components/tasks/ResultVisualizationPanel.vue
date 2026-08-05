@@ -107,7 +107,7 @@ import {
   buildVisualizationScene,
   createVisualizationScene
 } from './result-visualization'
-import { detectCsvResultFile } from './csv-result'
+import { detectCsvResultFile } from '@/domain/tasks'
 import { expandSdfOutputEntries } from './sdf-result'
 import {
   detectSdfScoreRankingFile,

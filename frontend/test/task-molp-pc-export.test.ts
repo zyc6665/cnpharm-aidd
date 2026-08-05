@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 import {
   buildMolpPcCsv,
   selectMolpPcCsvSourceFile
-} from '../src/components/tasks/molp-pc-export.ts'
+} from '../src/domain/tasks/molp-pc-export.ts'
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -16,7 +16,7 @@ function readSource(relativePath: string): string {
 }
 
 test('MolP-Pc CSV 导出模块应存在', () => {
-  assert.equal(existsSync(resolve(rootDir, 'src/components/tasks/molp-pc-export.ts')), true)
+  assert.equal(existsSync(resolve(rootDir, 'src/domain/tasks/molp-pc-export.ts')), true)
 })
 
 test('selectMolpPcCsvSourceFile 应优先选择 QED ranked metadata CSV', () => {

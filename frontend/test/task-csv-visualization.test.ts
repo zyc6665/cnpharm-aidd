@@ -8,7 +8,7 @@ import {
   detectCsvResultFile,
   detectSmilesColumn,
   parseCsvPreview
-} from '../src/components/tasks/csv-result.ts'
+} from '../src/domain/tasks/csv-result.ts'
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -17,7 +17,7 @@ function readSource(relativePath: string): string {
 }
 
 test('CSV 结果规则模块与结果表格组件应存在', () => {
-  assert.equal(existsSync(resolve(rootDir, 'src/components/tasks/csv-result.ts')), true)
+  assert.equal(existsSync(resolve(rootDir, 'src/domain/tasks/csv-result.ts')), true)
   assert.equal(existsSync(resolve(rootDir, 'src/components/tasks/CsvResultViewer.vue')), true)
   assert.equal(existsSync(resolve(rootDir, 'src/components/tasks/Smiles2DCell.vue')), true)
 })

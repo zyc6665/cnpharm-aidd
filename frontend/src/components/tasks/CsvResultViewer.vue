@@ -55,7 +55,7 @@ import type { Task } from '@/types/models'
 import { fetchProtectedFileText } from '@/utils/protected-file-access'
 
 import Smiles2DCell from './Smiles2DCell.vue'
-import { parseCsvPreview, type CsvPreview } from './csv-result'
+import { parseCsvPreview, type CsvPreview } from '@/domain/tasks'
 
 const props = defineProps<{
   file: NonNullable<Task['output_files']>[number]
