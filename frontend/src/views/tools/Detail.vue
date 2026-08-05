@@ -412,7 +412,7 @@
     buildFallbackToolDocumentation,
     renderMarkdownToHtml,
     type ToolDocumentationLabels
-  } from './tool-documentation'
+  } from '@/domain/tools'
   import {
     buildStandardInputBindings,
     buildStandardTaskRequestExtras,

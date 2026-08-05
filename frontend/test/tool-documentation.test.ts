@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import {
   buildFallbackToolDocumentation,
   renderMarkdownToHtml
-} from '../src/views/tools/tool-documentation.ts'
+} from '../src/domain/tools/tool-documentation.ts'
 
 test('Markdown 渲染应转义原始 HTML 并支持常用格式', () => {
   const html = renderMarkdownToHtml(`# Tool Guide

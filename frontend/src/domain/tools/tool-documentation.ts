@@ -1,4 +1,4 @@
-import type { SchemaProperty, ToolSchema } from '../../types/models'
+import type { SchemaProperty, ToolSchema } from '@/types/models'
 
 export interface ToolDocumentationLabels {
   title: string
