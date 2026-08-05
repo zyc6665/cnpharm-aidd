@@ -39,3 +39,9 @@ class ProjectMemberCreate(BaseModel):
     role: Literal["editor", "runner", "viewer"]
 
     model_config = ConfigDict(extra="forbid")
+
+
+class ProjectMemberUpdate(BaseModel):
+    role: Literal["editor", "runner", "viewer"]
+
+    model_config = ConfigDict(extra="forbid")

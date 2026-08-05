@@ -31,7 +31,12 @@ from app.models.workflows import (
     WorkflowDefinition,
     WorkflowRun,
 )
-from app.schemas.projects import ProjectCreate, ProjectMemberCreate, ProjectUpdate
+from app.schemas.projects import (
+    ProjectCreate,
+    ProjectMemberCreate,
+    ProjectMemberUpdate,
+    ProjectUpdate,
+)
 from app.services.project_access import load_project_membership, require_project_role
 from app.services.research_board_content import board_node_count
 
@@ -54,6 +59,20 @@ def _serialize(project: Project, membership: ProjectMember) -> dict:
         "membership": {"id": membership.id, "role": membership.role},
         "created_at": project.created_at,
         "updated_at": project.updated_at,
+    }
+
+
+def _serialize_member(membership: ProjectMember) -> dict:
+    user = membership.user
+    return {
+        "id": membership.id,
+        "project_id": membership.project_id,
+        "user_id": membership.user_id,
+        "email": user.email if user else None,
+        "display_name": user.display_name if user else None,
+        "role": membership.role,
+        "created_at": membership.created_at,
+        "updated_at": membership.updated_at,
     }
 
 
@@ -430,6 +449,34 @@ async def delete_project(
     return success_response(data={"id": deleted_id}, message="研究项目已删除")
 
 
+@router.get("/{project_id}/members", response_model=dict)
+async def list_project_members(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await load_project_membership(
+        db,
+        project_id=project_id,
+        user_id=current_user.id,
+    )
+    members = (
+        (
+            await db.execute(
+                select(ProjectMember)
+                .options(selectinload(ProjectMember.user))
+                .where(ProjectMember.project_id == project_id)
+                .order_by(ProjectMember.created_at.asc(), ProjectMember.id.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return success_response(
+        data={"items": [_serialize_member(member) for member in members]}
+    )
+
+
 @router.post("/{project_id}/members", response_model=dict)
 async def add_project_member(
     project_id: str,
@@ -462,12 +509,95 @@ async def add_project_member(
     db.add(membership)
     await db.commit()
     await db.refresh(membership)
+    await db.refresh(user)
+    membership.user = user
     return success_response(
-        data={
-            "id": membership.id,
-            "user_id": user.id,
-            "email": user.email,
-            "role": membership.role,
-        },
+        data=_serialize_member(membership),
         message="项目成员已添加",
     )
+
+
+async def _load_project_member_or_404(
+    db: AsyncSession,
+    *,
+    project_id: str,
+    membership_id: str,
+) -> ProjectMember:
+    membership = (
+        await db.execute(
+            select(ProjectMember)
+            .options(selectinload(ProjectMember.user))
+            .where(
+                ProjectMember.project_id == project_id,
+                ProjectMember.id == membership_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if membership is None:
+        raise HTTPException(status_code=404, detail="项目成员不存在")
+    return membership
+
+
+async def _project_owner_count(db: AsyncSession, project_id: str) -> int:
+    return (
+        await db.scalar(
+            select(func.count(ProjectMember.id)).where(
+                ProjectMember.project_id == project_id,
+                ProjectMember.role == "owner",
+            )
+        )
+        or 0
+    )
+
+
+@router.patch("/{project_id}/members/{membership_id}", response_model=dict)
+async def update_project_member(
+    project_id: str,
+    membership_id: str,
+    data: ProjectMemberUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await require_project_role(
+        db,
+        project_id=project_id,
+        user=current_user,
+        allowed_roles={"owner"},
+    )
+    membership = await _load_project_member_or_404(
+        db,
+        project_id=project_id,
+        membership_id=membership_id,
+    )
+    if membership.role == "owner" and data.role != "owner":
+        raise HTTPException(status_code=400, detail="不能修改项目 owner 角色")
+    membership.role = data.role
+    await db.commit()
+    await db.refresh(membership)
+    return success_response(data=_serialize_member(membership), message="项目成员已更新")
+
+
+@router.delete("/{project_id}/members/{membership_id}", response_model=dict)
+async def remove_project_member(
+    project_id: str,
+    membership_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await require_project_role(
+        db,
+        project_id=project_id,
+        user=current_user,
+        allowed_roles={"owner"},
+    )
+    membership = await _load_project_member_or_404(
+        db,
+        project_id=project_id,
+        membership_id=membership_id,
+    )
+    if membership.role == "owner" and await _project_owner_count(db, project_id) <= 1:
+        raise HTTPException(status_code=400, detail="不能移除项目最后一个 owner")
+    removed_id = membership.id
+    await db.delete(membership)
+    await db.commit()
+    return success_response(data={"id": removed_id}, message="项目成员已移除")

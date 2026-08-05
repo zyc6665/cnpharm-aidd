@@ -27,6 +27,9 @@
           <router-link :to="`/projects/${projectId}/boards`">
             <a-button>科研白板</a-button>
           </router-link>
+          <router-link :to="`/projects/${projectId}/settings`">
+            <a-button>项目设置</a-button>
+          </router-link>
         </div>
       </header>
 

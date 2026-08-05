@@ -239,6 +239,57 @@ async def test_viewer_cannot_update_project(api_client: httpx.AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_owner_can_manage_project_members(api_client: httpx.AsyncClient):
+    project = await _create_project(api_client)
+    add_response = await api_client.post(
+        f"/api/v1/projects/{project['id']}/members",
+        headers={"Authorization": "Bearer owner"},
+        json={"email": "other@example.com", "role": "viewer"},
+    )
+    assert add_response.status_code == 200
+    member_id = add_response.json()["data"]["id"]
+
+    list_response = await api_client.get(
+        f"/api/v1/projects/{project['id']}/members",
+        headers={"Authorization": "Bearer owner"},
+    )
+    assert list_response.status_code == 200
+    members = list_response.json()["data"]["items"]
+    assert [(item["email"], item["role"]) for item in members] == [
+        ("owner@example.com", "owner"),
+        ("other@example.com", "viewer"),
+    ]
+
+    update_response = await api_client.patch(
+        f"/api/v1/projects/{project['id']}/members/{member_id}",
+        headers={"Authorization": "Bearer owner"},
+        json={"role": "runner"},
+    )
+    assert update_response.status_code == 200
+    assert update_response.json()["data"]["role"] == "runner"
+
+    forbidden_response = await api_client.delete(
+        f"/api/v1/projects/{project['id']}/members/{member_id}",
+        headers={"Authorization": "Bearer other"},
+    )
+    assert forbidden_response.status_code == 403
+
+    delete_response = await api_client.delete(
+        f"/api/v1/projects/{project['id']}/members/{member_id}",
+        headers={"Authorization": "Bearer owner"},
+    )
+    assert delete_response.status_code == 200
+    assert delete_response.json()["data"]["id"] == member_id
+
+    owner_membership_id = project["membership"]["id"]
+    remove_owner_response = await api_client.delete(
+        f"/api/v1/projects/{project['id']}/members/{owner_membership_id}",
+        headers={"Authorization": "Bearer owner"},
+    )
+    assert remove_owner_response.status_code == 400
+
+
+@pytest.mark.asyncio
 async def test_owner_can_archive_project_and_default_list_hides_it(
     api_client: httpx.AsyncClient,
 ):

@@ -32,6 +32,12 @@ const routes: RouteRecordRaw[] = [
     meta: { titleLiteral: 'Artifact 谱系', requiresAuth: true }
   },
   {
+    path: '/projects/:projectId/settings',
+    name: 'ProjectSettings',
+    component: () => import('@/views/projects/Settings.vue'),
+    meta: { titleLiteral: '项目设置', requiresAuth: true }
+  },
+  {
     path: '/projects/:projectId/research/:conversationId?',
     name: 'ProjectResearch',
     component: () => import('@/views/projects/Research.vue'),

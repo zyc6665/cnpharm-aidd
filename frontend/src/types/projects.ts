@@ -9,6 +9,15 @@ export interface ProjectMembership {
   role: ProjectRole
 }
 
+export interface ProjectMember extends ProjectMembership {
+  project_id: string
+  user_id: string
+  email: string
+  display_name?: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface ResearchProject {
   id: string
   organization_id: string
@@ -26,6 +35,15 @@ export interface ResearchProject {
 export interface ProjectCreateInput {
   name: string
   goal?: string
+}
+
+export interface ProjectMemberCreateInput {
+  email: string
+  role: Exclude<ProjectRole, 'owner'>
+}
+
+export interface ProjectMemberUpdateInput {
+  role: Exclude<ProjectRole, 'owner'>
 }
 
 export interface ProjectOverviewCounts {
