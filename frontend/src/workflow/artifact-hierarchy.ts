@@ -1,4 +1,4 @@
-import { filterCompatibleArtifacts } from '../components/tools/artifact-selection.ts'
+import { filterCompatibleArtifacts } from '../domain/tools/artifact-selection.ts'
 import type { ArtifactFile, WorkbenchGroup } from '../types/models.d.ts'
 import { sortArtifactsByCreatedAtDesc } from '../utils/artifact-sorting.ts'
 

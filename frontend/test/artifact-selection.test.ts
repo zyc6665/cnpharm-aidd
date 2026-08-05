@@ -20,7 +20,7 @@ function artifact(overrides: Partial<ArtifactFile>): ArtifactFile {
 }
 
 test('groupCompatibleArtifactsByTask 应按 accept 过滤产物并排除日志与中间文件', async () => {
-  const { groupCompatibleArtifactsByTask } = await import('../src/components/tools/artifact-selection.ts')
+  const { groupCompatibleArtifactsByTask } = await import('../src/domain/tools/artifact-selection.ts')
 
   const groups = groupCompatibleArtifactsByTask(
     [
@@ -38,7 +38,7 @@ test('groupCompatibleArtifactsByTask 应按 accept 过滤产物并排除日志�
 })
 
 test('groupCompatibleArtifactsByTask 应在未指定 accept 时仍隐藏噪音文件', async () => {
-  const { groupCompatibleArtifactsByTask } = await import('../src/components/tools/artifact-selection.ts')
+  const { groupCompatibleArtifactsByTask } = await import('../src/domain/tools/artifact-selection.ts')
 
   const groups = groupCompatibleArtifactsByTask([
     artifact({ id: 'result-file', filename: 'output/result.json', content_type: 'application/json' }),
@@ -49,7 +49,7 @@ test('groupCompatibleArtifactsByTask 应在未指定 accept 时仍隐藏噪音�
 })
 
 test('groupCompatibleArtifactsByTask 应只展示当前工具产生的任务', async () => {
-  const { groupCompatibleArtifactsByTask } = await import('../src/components/tools/artifact-selection.ts')
+  const { groupCompatibleArtifactsByTask } = await import('../src/domain/tools/artifact-selection.ts')
 
   const groups = groupCompatibleArtifactsByTask(
     [
