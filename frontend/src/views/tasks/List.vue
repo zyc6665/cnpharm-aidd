@@ -128,6 +128,9 @@
                 <ClockCircleOutlined />
                 {{ formatDuration(task.started_at) }}
               </div>
+              <div v-if="task.progress_message" class="progress-message">
+                {{ task.progress_message }}
+              </div>
             </div>
           </div>
         </div>
@@ -181,6 +184,21 @@
                     <CheckCircleOutlined />
                     {{ formatTime(task.completed_at) }}
                   </div>
+                  <div v-if="task.project_id" class="detail-item project-detail">
+                    <ProjectOutlined />
+                    <span>{{ projectContextLabel(task) }}</span>
+                    <router-link
+                      :to="artifactLineagePath(task)"
+                      class="lineage-link"
+                      @click.stop
+                    >
+                      Artifact 谱系
+                    </router-link>
+                  </div>
+                  <div v-if="task.progress_message" class="detail-item progress-detail">
+                    <SyncOutlined />
+                    {{ task.progress_message }}
+                  </div>
                 </div>
               </div>
 
@@ -215,7 +233,7 @@
                   </a-button>
                 </a-tooltip>
                 <a-tooltip
-                  v-if="task.status === 'running' || task.status === 'pending'"
+                  v-if="canCancelTask(task)"
                   :title="t('tasks.cancel')"
                 >
                   <a-popconfirm :title="t('tasks.cancelConfirm')" @confirm="handleCancel(task.id)">
@@ -224,17 +242,13 @@
                     </a-button>
                   </a-popconfirm>
                 </a-tooltip>
-                <a-tooltip v-if="task.status === 'failure'" :title="t('tasks.retry')">
+                <a-tooltip v-if="canRetryTask(task)" :title="t('tasks.retry')">
                   <a-button type="link" @click="handleRetry(task.id)">
                     <RedoOutlined />
                   </a-button>
                 </a-tooltip>
                 <a-tooltip
-                  v-if="
-                    task.status === 'success' ||
-                    task.status === 'failure' ||
-                    task.status === 'canceled'
-                  "
+                  v-if="canDeleteTask(task)"
                   :title="t('tasks.delete')"
                 >
                   <a-popconfirm :title="t('tasks.deleteConfirm')" @confirm="handleDelete(task.id)">
@@ -298,14 +312,17 @@
     StopOutlined,
     EyeOutlined,
     RedoOutlined,
-    DeleteOutlined
+    DeleteOutlined,
+    ProjectOutlined
   } from '@ant-design/icons-vue'
   import { message } from 'ant-design-vue'
   import type { Dayjs } from 'dayjs'
   import dayjs from 'dayjs'
-  import { useTasksStore, useToolsStore } from '@/stores'
+  import { useTasksStore, useToolsStore, useUserStore } from '@/stores'
   import type { TaskListParams } from '@/api/tasks'
+  import { getProjectOverview } from '@/api/projects'
   import type { Task, TaskStatus } from '@/types/models'
+  import type { ProjectRole, ResearchProject } from '@/types/projects'
 
   type TabKey = 'all' | 'running' | 'history'
 
@@ -314,6 +331,7 @@
   const { t } = useI18n()
   const tasksStore = useTasksStore()
   const toolsStore = useToolsStore()
+  const userStore = useUserStore()
 
   // 状态
   const currentTab = ref<TabKey>('all')
@@ -324,10 +342,14 @@
   const pageSize = ref(10)
   const refreshing = ref(false)
   const autoRefresh = ref(true)
+  const project = ref<ResearchProject | null>(null)
   const projectId = computed(() => {
     const value = route.query.project_id
     return typeof value === 'string' && value.trim() ? value : undefined
   })
+  const projectMembershipRole = computed<ProjectRole | undefined>(
+    () => project.value?.membership.role
+  )
 
   // 计算属性
   const loading = computed(() => tasksStore.loading)
@@ -481,6 +503,51 @@
     }
   }
 
+  const fetchProjectContextSafely = async () => {
+    if (!projectId.value) {
+      project.value = null
+      return
+    }
+
+    try {
+      const response = await getProjectOverview(projectId.value)
+      project.value = response.data.project
+    } catch (error) {
+      project.value = null
+      console.warn('[TaskCenter] Failed to load project context', error)
+    }
+  }
+
+  const canOperateProjectTask = (task: Task) => {
+    if (!task.project_id || task.project_id !== projectId.value) return false
+    return ['owner', 'editor', 'runner'].includes(projectMembershipRole.value ?? '')
+  }
+
+  const canOperateTask = (task: Task) => {
+    if (userStore.isAdmin) return true
+    if (task.user_id && task.user_id === userStore.user?.id) return true
+    return canOperateProjectTask(task)
+  }
+
+  const canCancelTask = (task: Task) =>
+    ['running', 'pending'].includes(task.status) && canOperateTask(task)
+
+  const canRetryTask = (task: Task) =>
+    ['failure', 'canceled'].includes(task.status) && canOperateTask(task)
+
+  const canDeleteTask = (task: Task) =>
+    userStore.isAdmin && ['success', 'failure', 'canceled'].includes(task.status)
+
+  const projectContextLabel = (task: Task) => {
+    if (task.project_id === projectId.value && project.value?.name) {
+      return `项目：${project.value.name}`
+    }
+    return `项目：${task.project_id?.slice(0, 8) ?? '-'}`
+  }
+
+  const artifactLineagePath = (task: Task) =>
+    task.project_id ? `/projects/${task.project_id}/lineage` : '/workspace'
+
   const handleTabChange = (_key: string) => {
     currentPage.value = 1
     void fetchTasksSafely()
@@ -578,11 +645,12 @@
   watch(projectId, () => {
     currentPage.value = 1
     void fetchTasksSafely()
+    void fetchProjectContextSafely()
   })
 
   // 生命周期
   onMounted(async () => {
-    await Promise.allSettled([fetchTasksSafely(), fetchToolsSafely()])
+    await Promise.allSettled([fetchTasksSafely(), fetchToolsSafely(), fetchProjectContextSafely()])
 
     startAutoRefresh()
   })
@@ -713,6 +781,14 @@
           font-size: @font-size-sm;
           margin-top: @spacing-xs;
         }
+
+        .progress-message {
+          margin-top: @spacing-xs;
+          color: @text-color-light-secondary;
+          font-size: @font-size-xs;
+          line-height: @line-height-base;
+          word-break: break-word;
+        }
       }
     }
   }
@@ -810,6 +886,17 @@
         display: flex;
         align-items: center;
         gap: @spacing-xs;
+      }
+
+      .project-detail,
+      .progress-detail {
+        min-width: 0;
+        flex-wrap: wrap;
+      }
+
+      .lineage-link {
+        color: @accent-color;
+        font-weight: @font-weight-medium;
       }
     }
 
