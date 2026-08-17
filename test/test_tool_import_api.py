@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import hashlib
 from pathlib import Path
 
 import httpx
@@ -29,7 +30,9 @@ from app.models import statistics as _statistics_models  # noqa: F401
 from app.models import tasks as _task_models  # noqa: F401
 from app.models import tool_capabilities as _tool_capability_models  # noqa: F401
 from app.models import users as _user_models  # noqa: F401
+from app.models.files import File as FileModel
 from app.models.tool_capabilities import ToolCapability
+from app.models.tasks import Task
 from app.models.tools import (
     Tool,
     ToolCategory,
@@ -39,6 +42,9 @@ from app.models.tools import (
     ToolVersion,
 )
 from app.models.users import User, UserRole, UserStatus
+from app.remote_tools.client import RemoteToolDiscoveryResult
+from app.remote_tools.diagnostics import RemoteToolStageDiagnostic
+from app.remote_tools.schemas import RemoteToolExamplesResponse, RemoteToolManifest
 
 
 @pytest_asyncio.fixture
@@ -183,6 +189,145 @@ def build_remote_api_config(version: str = "1.0.0") -> dict:
     }
 
 
+def build_remote_tool_manifest(version: str = "1.0.0") -> dict:
+    """构造 remote-tool.v1 manifest。"""
+    return {
+        "api_version": "aidd.sciminer/remote-tool.v1",
+        "kind": "RemoteTool",
+        "metadata": {
+            "slug": "lvpocket-api",
+            "name": "LVpocket API",
+            "version": version,
+            "description": "Pocket prediction service",
+        },
+        "artifacts": {
+            "inputs": [
+                {"name": "protein", "type": "protein_structure@1", "required": True}
+            ],
+            "outputs": [
+                {
+                    "name": "pocket",
+                    "type": "binding_pocket@1",
+                    "cardinality": "one",
+                    "required": True,
+                }
+            ],
+        },
+        "parameters_schema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": False,
+        },
+        "endpoints": {
+            "invoke": "/invoke",
+            "status": "/runs/{remote_run_id}",
+            "logs": "/runs/{remote_run_id}/logs",
+            "cancel": "/runs/{remote_run_id}/cancel",
+            "artifacts": "/runs/{remote_run_id}/artifacts",
+            "examples": "/examples",
+            "health": "/health",
+        },
+        "capabilities": {"async": True, "logs": True, "cancel": True, "progress": True},
+    }
+
+
+def successful_remote_discovery(version: str = "1.0.0") -> RemoteToolDiscoveryResult:
+    return RemoteToolDiscoveryResult(
+        manifest=RemoteToolManifest.model_validate(build_remote_tool_manifest(version=version)),
+        health={"status": "healthy"},
+        examples=RemoteToolExamplesResponse.model_validate({"examples": []}),
+        stages=[
+            RemoteToolStageDiagnostic(
+                name="fetch_manifest",
+                status="success",
+                message="Loaded",
+            ),
+            RemoteToolStageDiagnostic(
+                name="validate_manifest",
+                status="success",
+                message="Manifest is valid",
+            ),
+            RemoteToolStageDiagnostic(
+                name="health_check",
+                status="success",
+                message="Loaded",
+            ),
+            RemoteToolStageDiagnostic(
+                name="fetch_examples",
+                status="success",
+                message="Loaded",
+            ),
+        ],
+    )
+
+
+def successful_remote_discovery_with_smoke_example(version: str = "1.0.0") -> RemoteToolDiscoveryResult:
+    result = successful_remote_discovery(version=version)
+    result.examples = RemoteToolExamplesResponse.model_validate(
+        {
+            "examples": [
+                {
+                    "name": "default",
+                    "smoke": True,
+                    "parameters": {"threshold": 0.5},
+                    "input_artifacts": {},
+                }
+            ]
+        }
+    )
+    return result
+
+
+def successful_remote_discovery_with_smoke_files(version: str = "1.0.0") -> RemoteToolDiscoveryResult:
+    structure_content = "ATOM\n"
+    metadata_content = '{"chain_ids":["A"]}'
+    result = successful_remote_discovery(version=version)
+    result.examples = RemoteToolExamplesResponse.model_validate(
+        {
+            "examples": [
+                {
+                    "name": "default-with-files",
+                    "smoke": True,
+                    "parameters": {"threshold": 0.5},
+                    "input_artifacts": {
+                        "protein": {
+                            "type": "protein_structure@1",
+                            "metadata": {"chain_ids": ["A"]},
+                            "files": {
+                                "structure_file": {
+                                    "filename": "protein.pdb",
+                                    "content_type": "chemical/x-pdb",
+                                    "encoding": "text",
+                                    "content": structure_content,
+                                    "sha256": hashlib.sha256(
+                                        structure_content.encode("utf-8")
+                                    ).hexdigest(),
+                                },
+                                "metadata_json": {
+                                    "filename": "metadata.json",
+                                    "content_type": "application/json",
+                                    "encoding": "text",
+                                    "content": metadata_content,
+                                    "sha256": hashlib.sha256(
+                                        metadata_content.encode("utf-8")
+                                    ).hexdigest(),
+                                },
+                            },
+                        }
+                    },
+                }
+            ]
+        }
+    )
+    return result
+
+
+def successful_remote_discovery_with_bad_smoke_file(version: str = "1.0.0") -> RemoteToolDiscoveryResult:
+    result = successful_remote_discovery_with_smoke_files(version=version)
+    result.examples.examples[0].input_artifacts["protein"].files["structure_file"].sha256 = "0" * 64
+    return result
+
+
 def build_ssh_job_config(version: str = "1.0.0") -> dict:
     """构造 ssh_job 导入配置。"""
     return {
@@ -286,6 +431,380 @@ async def test_admin_can_import_tool_config_and_normalize_legacy_schema(
     assert payload["version"]["config"]["timeout_sec"] == 120
     assert payload["version"]["config"]["input_schema"]["required"] == ["task_id"]
     assert "output_schema" in payload["version"]["config"]
+
+
+@pytest.mark.asyncio
+async def test_admin_can_register_remote_tool_from_service_manifest(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    enabled_category: ToolCategory,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """管理员只提供服务根 URL 即可注册 remote-tool.v1 草稿。"""
+
+    class FakeDiscoveryClient:
+        def __init__(self, base_url: str, **_kwargs):
+            assert base_url == "https://model.example.com"
+
+        async def discover(self) -> RemoteToolDiscoveryResult:
+            return successful_remote_discovery()
+
+    monkeypatch.setattr(
+        "app.api.v1.tools_admin.RemoteToolDiscoveryClient",
+        FakeDiscoveryClient,
+    )
+
+    response = await api_client.post(
+        "/api/v1/tools/register-remote",
+        headers={"Authorization": "Bearer admin-token"},
+        json={
+            "base_url": "https://model.example.com",
+            "category_id": enabled_category.id,
+            "run_smoke_test": False,
+            "publish_on_success": False,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["created_new_tool"] is True
+    assert payload["tool"]["slug"] == "lvpocket-api"
+    assert payload["tool"]["category_id"] == enabled_category.id
+    assert payload["tool"]["status"] == "draft"
+    assert payload["version"]["version"] == "1.0.0"
+    assert payload["smoke_test_task_id"] is None
+    assert payload["stages"][-1]["name"] == "persist_draft"
+    assert payload["stages"][-1]["status"] == "success"
+
+    tool = await db_session.scalar(select(Tool).where(Tool.slug == "lvpocket-api"))
+    assert tool is not None
+    version = await db_session.scalar(
+        select(ToolVersion).where(ToolVersion.tool_id == tool.id)
+    )
+    assert version is not None
+    assert version.config["type"] == "remote_api"
+    assert version.config["mode"] == "remote_tool_v1"
+    assert version.config["base_url"] == "https://model.example.com"
+    assert version.config["tool_slug"] == "lvpocket-api"
+    assert len(version.config["manifest_sha256"]) == 64
+    assert version.config["manifest"]["metadata"]["slug"] == "lvpocket-api"
+
+
+@pytest.mark.asyncio
+async def test_register_remote_tool_rejects_published_version_overwrite(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    admin_user: User,
+    enabled_category: ToolCategory,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """已发布的 slug + version 不能被自注册静默覆盖。"""
+    tool = Tool(
+        owner_id=admin_user.id,
+        name="LVpocket API",
+        slug="lvpocket-api",
+        description="Published version",
+        category_id=enabled_category.id,
+        category=enabled_category.name,
+        status=ToolStatus.PUBLISHED.value,
+        is_public=True,
+        provider_type=ToolProviderType.PLATFORM.value,
+        review_status=ToolReviewStatus.NOT_REQUIRED.value,
+    )
+    db_session.add(tool)
+    await db_session.flush()
+    version = ToolVersion(
+        tool_id=tool.id,
+        version="1.0.0",
+        config={"type": "remote_api", "mode": "remote_tool_v1"},
+        is_active=True,
+    )
+    db_session.add(version)
+    await db_session.flush()
+    tool.current_version_id = version.id
+    await db_session.commit()
+
+    class FakeDiscoveryClient:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        async def discover(self) -> RemoteToolDiscoveryResult:
+            return successful_remote_discovery(version="1.0.0")
+
+    monkeypatch.setattr(
+        "app.api.v1.tools_admin.RemoteToolDiscoveryClient",
+        FakeDiscoveryClient,
+    )
+
+    response = await api_client.post(
+        "/api/v1/tools/register-remote",
+        headers={"Authorization": "Bearer admin-token"},
+        json={
+            "base_url": "https://model.example.com",
+            "category_id": enabled_category.id,
+            "run_smoke_test": False,
+            "publish_on_success": False,
+        },
+    )
+
+    assert response.status_code == 409
+    assert "已发布版本不能覆盖" in response.json()["message"]
+
+
+@pytest.mark.asyncio
+async def test_register_remote_tool_schedules_smoke_test_when_requested(
+    api_client: httpx.AsyncClient,
+    enabled_category: ToolCategory,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """注册时请求 smoke test 应创建平台任务并返回任务 ID。"""
+    scheduled: list[dict] = []
+
+    class FakeDiscoveryClient:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        async def discover(self) -> RemoteToolDiscoveryResult:
+            return successful_remote_discovery_with_smoke_example()
+
+    async def fake_create_and_schedule_tool_task(**kwargs):
+        task_data = kwargs["task_data"]
+        scheduled.append({
+            "params": task_data.params,
+            "extra_data": kwargs.get("extra_data"),
+        })
+        return Task(id="smoke-task-id")
+
+    monkeypatch.setattr(
+        "app.api.v1.tools_admin.RemoteToolDiscoveryClient",
+        FakeDiscoveryClient,
+    )
+    monkeypatch.setattr(
+        "app.api.v1.tool_route_utils.create_and_schedule_tool_task",
+        fake_create_and_schedule_tool_task,
+    )
+
+    response = await api_client.post(
+        "/api/v1/tools/register-remote",
+        headers={"Authorization": "Bearer admin-token"},
+        json={
+            "base_url": "https://model.example.com",
+            "category_id": enabled_category.id,
+            "run_smoke_test": True,
+            "publish_on_success": True,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["smoke_test_task_id"] == "smoke-task-id"
+    assert payload["stages"][-1]["name"] == "create_smoke_test"
+    assert payload["stages"][-1]["status"] == "success"
+    assert scheduled[0]["params"] == {"threshold": 0.5}
+    assert scheduled[0]["extra_data"]["smoke_test"] is True
+    assert scheduled[0]["extra_data"]["publish_on_success"] is True
+
+
+@pytest.mark.asyncio
+async def test_register_remote_tool_materializes_smoke_example_files(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    enabled_category: ToolCategory,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    """远端 examples 返回的样例文件会落到平台文件表并传入 smoke 任务。"""
+    scheduled: list[dict] = []
+
+    class FakeDiscoveryClient:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        async def discover(self) -> RemoteToolDiscoveryResult:
+            return successful_remote_discovery_with_smoke_files()
+
+    async def fake_create_and_schedule_tool_task(**kwargs):
+        task_data = kwargs["task_data"]
+        scheduled.append({
+            "file_ids": list(task_data.file_ids),
+            "extra_data": kwargs.get("extra_data"),
+        })
+        return Task(id="smoke-task-id")
+
+    def fake_get_file_path(file_id: str, filename: str):
+        return tmp_path / f"{file_id}_{filename}"
+
+    monkeypatch.setattr(
+        "app.api.v1.tools_admin.RemoteToolDiscoveryClient",
+        FakeDiscoveryClient,
+    )
+    monkeypatch.setattr(
+        "app.api.v1.tool_route_utils.create_and_schedule_tool_task",
+        fake_create_and_schedule_tool_task,
+    )
+    monkeypatch.setattr("app.api.v1.tool_route_utils.get_file_path", fake_get_file_path)
+
+    response = await api_client.post(
+        "/api/v1/tools/register-remote",
+        headers={"Authorization": "Bearer admin-token"},
+        json={
+            "base_url": "https://model.example.com",
+            "category_id": enabled_category.id,
+            "run_smoke_test": True,
+            "publish_on_success": False,
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(scheduled[0]["file_ids"]) == 2
+    example_inputs = scheduled[0]["extra_data"]["remote_example_inputs"]
+    role_file_id = example_inputs["protein"]["files"]["structure_file"]
+    file_record = await db_session.get(FileModel, role_file_id)
+    assert file_record is not None
+    assert file_record.filename == "protein.pdb"
+    assert Path(file_record.storage_path).read_text(encoding="utf-8") == "ATOM\n"
+    assert role_file_id in scheduled[0]["file_ids"]
+
+
+@pytest.mark.asyncio
+async def test_register_remote_tool_keeps_draft_when_smoke_example_is_bad(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    enabled_category: ToolCategory,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """smoke test 创建失败不应丢掉已注册草稿。"""
+
+    class FakeDiscoveryClient:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        async def discover(self) -> RemoteToolDiscoveryResult:
+            return successful_remote_discovery_with_bad_smoke_file()
+
+    monkeypatch.setattr(
+        "app.api.v1.tools_admin.RemoteToolDiscoveryClient",
+        FakeDiscoveryClient,
+    )
+
+    response = await api_client.post(
+        "/api/v1/tools/register-remote",
+        headers={"Authorization": "Bearer admin-token"},
+        json={
+            "base_url": "https://model.example.com",
+            "category_id": enabled_category.id,
+            "run_smoke_test": True,
+            "publish_on_success": False,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["tool"]["status"] == "draft"
+    assert payload["smoke_test_task_id"] is None
+    assert payload["stages"][-1]["name"] == "create_smoke_test"
+    assert payload["stages"][-1]["status"] == "failure"
+    tool = await db_session.scalar(select(Tool).where(Tool.slug == "lvpocket-api"))
+    assert tool is not None
+
+
+@pytest.mark.asyncio
+async def test_publish_remote_tool_requires_successful_smoke_test(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    admin_user: User,
+    enabled_category: ToolCategory,
+):
+    """remote_tool_v1 当前版本发布前必须有成功且匹配 manifest 的 smoke test。"""
+    tool = Tool(
+        owner_id=admin_user.id,
+        name="LVpocket API",
+        slug="lvpocket-api",
+        description="Remote tool",
+        category_id=enabled_category.id,
+        category=enabled_category.name,
+        status=ToolStatus.DRAFT.value,
+        is_public=True,
+        provider_type=ToolProviderType.PLATFORM.value,
+        review_status=ToolReviewStatus.NOT_REQUIRED.value,
+    )
+    db_session.add(tool)
+    await db_session.flush()
+    version = ToolVersion(
+        tool_id=tool.id,
+        version="1.0.0",
+        config={
+            "type": "remote_api",
+            "mode": "remote_tool_v1",
+            "manifest_sha256": "a" * 64,
+            "manifest": build_remote_tool_manifest(),
+        },
+        is_active=True,
+    )
+    db_session.add(version)
+    await db_session.flush()
+    tool.current_version_id = version.id
+    await db_session.commit()
+
+    response = await api_client.post(
+        f"/api/v1/tools/{tool.id}/publish",
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 422
+    assert "smoke test" in response.json()["message"]
+
+
+@pytest.mark.asyncio
+async def test_publish_remote_tool_accepts_matching_successful_smoke_test(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    admin_user: User,
+    enabled_category: ToolCategory,
+):
+    """remote_tool_v1 成功 smoke test 摘要与当前 manifest 匹配时可以发布。"""
+    manifest_hash = "a" * 64
+    tool = Tool(
+        owner_id=admin_user.id,
+        name="LVpocket API",
+        slug="lvpocket-api-success",
+        description="Remote tool",
+        category_id=enabled_category.id,
+        category=enabled_category.name,
+        status=ToolStatus.DRAFT.value,
+        is_public=True,
+        provider_type=ToolProviderType.PLATFORM.value,
+        review_status=ToolReviewStatus.NOT_REQUIRED.value,
+    )
+    db_session.add(tool)
+    await db_session.flush()
+    version = ToolVersion(
+        tool_id=tool.id,
+        version="1.0.0",
+        config={
+            "type": "remote_api",
+            "mode": "remote_tool_v1",
+            "manifest_sha256": manifest_hash,
+            "manifest": build_remote_tool_manifest(),
+            "last_smoke_test": {
+                "status": "success",
+                "task_id": "smoke-task-id",
+                "manifest_sha256": manifest_hash,
+            },
+        },
+        is_active=True,
+    )
+    db_session.add(version)
+    await db_session.flush()
+    tool.current_version_id = version.id
+    await db_session.commit()
+
+    response = await api_client.post(
+        f"/api/v1/tools/{tool.id}/publish",
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 200
 
 
 @pytest.mark.asyncio

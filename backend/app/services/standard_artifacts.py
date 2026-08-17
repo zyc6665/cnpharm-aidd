@@ -61,19 +61,9 @@ async def create_artifact_versions_from_collected_result(
     if result_payload is None:
         return None
 
-    manifest = _tool_package_v2_manifest_from_config(tool_version_config)
-    if manifest is None:
+    declared_outputs = _declared_outputs_from_config(tool_version_config)
+    if not declared_outputs:
         return None
-
-    declared_outputs = [
-        DeclaredArtifactOutput(
-            name=item.name,
-            type=item.type,
-            cardinality=item.cardinality,
-            required=item.required,
-        )
-        for item in manifest.artifacts.outputs
-    ]
     parsed_result, file_records_by_path = await _parse_collected_standard_result(
         db,
         result_payload=result_payload,
@@ -199,6 +189,39 @@ def _standard_result_payload(output_result: dict[str, Any]) -> dict[str, Any] | 
     if output_result.get("result_version") == "aidd.sciminer/result.v2":
         return output_result
     return None
+
+
+def _declared_outputs_from_config(config: dict[str, Any]) -> list[DeclaredArtifactOutput]:
+    manifest = _tool_package_v2_manifest_from_config(config)
+    if manifest is not None:
+        return [
+            DeclaredArtifactOutput(
+                name=item.name,
+                type=item.type,
+                cardinality=item.cardinality,
+                required=item.required,
+            )
+            for item in manifest.artifacts.outputs
+        ]
+
+    if not isinstance(config, dict):
+        return []
+    if config.get("type") != "remote_api" or config.get("mode") != "remote_tool_v1":
+        return []
+    artifacts = config.get("artifacts")
+    raw_outputs = artifacts.get("outputs") if isinstance(artifacts, dict) else None
+    if not isinstance(raw_outputs, list):
+        return []
+    return [
+        DeclaredArtifactOutput(
+            name=str(item.get("name")),
+            type=str(item.get("type")),
+            cardinality=str(item.get("cardinality") or "one"),
+            required=item.get("required") is not False,
+        )
+        for item in raw_outputs
+        if isinstance(item, dict)
+    ]
 
 
 def _tool_package_v2_manifest_from_config(config: dict[str, Any]) -> ToolPackageV2Manifest | None:

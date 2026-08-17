@@ -34,6 +34,10 @@ from app.schemas.files import (
 from app.common.responses import paginated_response, success_response
 from app.common.exceptions import NotFoundException, ForbiddenException, ValidationException
 from app.config import settings
+from app.files.remote_access_tokens import (
+    RemoteFileAccessTokenError,
+    validate_remote_file_access_token,
+)
 from app.files.storage_path import STORAGE_PATH, ensure_storage_dir, get_file_path
 
 router = APIRouter()
@@ -535,6 +539,7 @@ async def get_file_info(
 @router.get("/{file_id}/download")
 async def download_file(
     file_id: str,
+    token: Optional[str] = Query(default=None),
     current_user: Optional[User] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
@@ -549,8 +554,15 @@ async def download_file(
     if not file:
         raise NotFoundException("文件不存在")
 
+    remote_token_claims = None
+    if token:
+        try:
+            remote_token_claims = validate_remote_file_access_token(token, file_id=file_id)
+        except RemoteFileAccessTokenError as exc:
+            raise ForbiddenException(str(exc)) from exc
+
     # 权限检查：公开文件允许匿名访问
-    if not file.is_public:
+    if not file.is_public and remote_token_claims is None:
         if not current_user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,

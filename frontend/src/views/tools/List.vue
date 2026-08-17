@@ -221,6 +221,7 @@
       buildToolListParams({
         view: currentView.value,
         searchKeyword: searchKeyword.value,
+        // category: selectedCategory.value is normalized by buildToolListParams.
         selectedCategory: selectedCategory.value,
         selectedTag: selectedTag.value,
         currentPage: currentPage.value,

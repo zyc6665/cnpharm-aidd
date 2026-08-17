@@ -68,6 +68,53 @@ def prepare_task_output(output_result: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+async def _record_remote_tool_smoke_success_if_needed(
+    db,
+    *,
+    task,
+    tool,
+    tool_version,
+    output_result: Dict[str, Any],
+) -> None:
+    """Record successful remote-tool.v1 smoke tests on the active version config."""
+    extra_data = dict(task.extra_data or {})
+    if extra_data.get("smoke_test") is not True:
+        return
+    if extra_data.get("smoke_test_type") != "remote_tool_v1":
+        return
+
+    config = dict(tool_version.config or {})
+    if config.get("type") != "remote_api" or config.get("mode") != "remote_tool_v1":
+        return
+
+    manifest_sha256 = str(extra_data.get("manifest_sha256") or "")
+    current_manifest_sha256 = str(config.get("manifest_sha256") or "")
+    smoke_status = "success" if manifest_sha256 == current_manifest_sha256 else "stale"
+    smoke_summary: dict[str, Any] = {
+        "status": smoke_status,
+        "task_id": str(task.id),
+        "manifest_sha256": manifest_sha256,
+        "example_name": extra_data.get("example_name"),
+        "finished_at": task.finished_at.isoformat() if task.finished_at else None,
+    }
+    if isinstance(output_result, dict) and output_result.get("remote_run_id"):
+        smoke_summary["remote_run_id"] = output_result["remote_run_id"]
+
+    should_publish = bool(
+        extra_data.get("publish_on_success")
+        or config.get("pending_publish_on_smoke_success")
+    )
+    if smoke_status == "success" and should_publish:
+        from app.models.tools import ToolStatus
+
+        tool.status = ToolStatus.PUBLISHED.value
+        config.pop("pending_publish_on_smoke_success", None)
+        smoke_summary["auto_published"] = True
+
+    config["last_smoke_test"] = smoke_summary
+    tool_version.config = config
+
+
 async def _persist_standard_artifacts_if_present(db, task, tool_version, output_result):
     """Delegate standard result persistence to the Artifact service."""
     from app.services.standard_artifacts import persist_standard_artifacts_from_task_output
@@ -294,6 +341,13 @@ async def _execute_tool_task_impl(task_id: str, tool_version_id: str) -> Dict[st
                 message="任务执行成功"
             )
             db.add(log)
+            await _record_remote_tool_smoke_success_if_needed(
+                db,
+                task=task,
+                tool=tool,
+                tool_version=tool_version,
+                output_result=output_result,
+            )
             completion_payload: dict[str, Any] = {
                 "status": "success",
                 "progress": task.progress,

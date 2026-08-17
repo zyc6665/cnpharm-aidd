@@ -8,6 +8,7 @@ from sqlalchemy.orm import joinedload, selectinload
 from app.api.v1.tool_route_utils import (
     build_validated_tool_contract,
     commit_or_raise_conflict,
+    create_or_update_remote_tool_from_discovery,
     create_or_update_tool_from_import,
     load_tool_for_response,
     load_tool_with_current_version,
@@ -20,7 +21,15 @@ from app.common.responses import success_response
 from app.database.session import get_db
 from app.models.tools import Tag, Tool, ToolProviderType, ToolReviewStatus, ToolStatus, ToolVersion
 from app.models.users import User
-from app.schemas.tools import TagCreate, TagResponse, ToolCreate, ToolImportRequest, ToolUpdate
+from app.remote_tools.client import RemoteToolDiscoveryClient
+from app.schemas.tools import (
+    RemoteToolRegisterRequest,
+    TagCreate,
+    TagResponse,
+    ToolCreate,
+    ToolImportRequest,
+    ToolUpdate,
+)
 
 router = APIRouter()
 
@@ -33,6 +42,22 @@ async def import_tool_config(
 ):
     result = await create_or_update_tool_from_import(db, current_user, import_data)
     return success_response(data=result, message="工具配置导入成功")
+
+
+@router.post("/register-remote", response_model=dict)
+async def register_remote_tool(
+    register_data: RemoteToolRegisterRequest,
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    discovery = await RemoteToolDiscoveryClient(register_data.base_url).discover()
+    result = await create_or_update_remote_tool_from_discovery(
+        db,
+        current_user,
+        register_data,
+        discovery,
+    )
+    return success_response(data=result, message="远程模型服务注册成功")
 
 
 @router.post("", response_model=dict)

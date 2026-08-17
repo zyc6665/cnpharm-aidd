@@ -553,7 +553,7 @@ The platform downloads every output file into its own storage backend, validates
 
 1. Add a helper to schedule smoke test tasks from remote examples.
 2. Mark smoke test tasks with `extra_data.smoke_test = true`, `tool_version_id`, `manifest_sha256`, and `publish_on_success` intent.
-3. Convert remote example input artifacts into platform files and ArtifactVersion bindings for the smoke test.
+3. Convert remote example input artifacts into platform files and pass role-to-file bindings through `remote_example_inputs` for the smoke test, without requiring a project-scoped ArtifactVersion.
 4. After a smoke test succeeds, write `ToolVersion.config.last_smoke_test` with task ID, remote run ID, tested time, example name, manifest hash, and output summary.
 5. If publish-on-success is pending, call the same validation logic used by manual publish.
 6. Change manual publish validation to require matching successful smoke test for `mode: "remote_tool_v1"`.
@@ -666,4 +666,3 @@ git commit -m "feat: add remote API self registration"
 ```
 
 Before committing in this workspace, inspect `git status --short` and avoid staging unrelated deleted docs, `func_detail/`, `model/`, or other pre-existing changes.
-

@@ -129,6 +129,7 @@ class Settings(BaseSettings):
 
     # API配置
     API_V1_PREFIX: str = "/api/v1"
+    PUBLIC_API_BASE_URL: str = "http://localhost:8000"
 
     # CORS配置
     CORS_ORIGINS: List[str] = [

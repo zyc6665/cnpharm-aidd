@@ -262,6 +262,18 @@ class ToolImportRequest(BaseModel):
     publish: bool = Field(default=False, description="导入后是否直接发布")
 
 
+class RemoteToolRegisterRequest(BaseModel):
+    """注册 remote-tool.v1 远程模型服务。"""
+    base_url: str = Field(..., min_length=1, description="远程模型服务根 URL")
+    category_id: str = Field(..., min_length=1, description="工具分类ID")
+    run_smoke_test: bool = Field(default=True, description="注册后是否创建 smoke test 任务")
+    publish_on_success: bool = Field(default=False, description="smoke test 成功后是否自动发布")
+    icon: Optional[str] = Field(None, max_length=100, description="图标")
+    icon_url: Optional[str] = Field(None, max_length=500, description="图标URL")
+    is_public: bool = Field(default=True, description="是否公开")
+    timeout_sec: int = Field(default=600, ge=60, le=MAX_TOOL_TIMEOUT_SEC, description="超时时间(秒)")
+
+
 class ToolExampleFileResponse(BaseModel):
     """工具示例文件响应。"""
     field: str

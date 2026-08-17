@@ -26,6 +26,33 @@ export interface ToolImportConfigResult {
   version: ToolVersion
 }
 
+export interface RemoteToolRegisterParams {
+  base_url: string
+  category_id: string
+  run_smoke_test?: boolean
+  publish_on_success?: boolean
+  icon?: string
+  icon_url?: string
+  is_public?: boolean
+  timeout_sec?: number
+}
+
+export interface RemoteToolStageDiagnostic {
+  name: string
+  status: 'success' | 'failure' | 'warning'
+  message: string
+  detail?: Record<string, unknown> | null
+}
+
+export interface RemoteToolRegisterResult {
+  created_new_tool: boolean
+  tool: Tool
+  version: ToolVersion
+  manifest_sha256: string
+  stages: RemoteToolStageDiagnostic[]
+  smoke_test_task_id?: string | null
+}
+
 function toToolOptionSummary(tool: Tool): ToolOptionSummary {
   return {
     id: tool.id,
@@ -89,6 +116,13 @@ export const createTool = (data: ToolCreateParams): Promise<ApiResponse<Tool>> =
 // 导入工具配置（管理员）
 export const importToolConfig = (data: ToolImportConfigParams): Promise<ApiResponse<ToolImportConfigResult>> => {
   return post<ToolImportConfigResult>('/tools/import-config', data)
+}
+
+// 注册 remote-tool.v1 自描述服务（管理员）
+export const registerRemoteTool = (
+  data: RemoteToolRegisterParams
+): Promise<ApiResponse<RemoteToolRegisterResult>> => {
+  return post<RemoteToolRegisterResult>('/tools/register-remote', data)
 }
 
 // 更新工具（管理员）
