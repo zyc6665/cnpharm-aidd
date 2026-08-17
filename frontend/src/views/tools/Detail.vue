@@ -329,6 +329,39 @@
                 </div>
               </div>
             </div>
+
+            <div v-if="isRemoteToolV1" class="remote-tool-info card">
+              <h3 class="sidebar-title">
+                <InfoCircleOutlined />
+                远程 API
+              </h3>
+              <div class="remote-tool-info-list">
+                <div class="remote-tool-info-item">
+                  <span class="remote-tool-info-label">协议:</span>
+                  <a-tag color="blue">remote_tool_v1</a-tag>
+                </div>
+                <div v-if="remoteToolBaseUrl" class="remote-tool-info-item">
+                  <span class="remote-tool-info-label">服务:</span>
+                  <span class="remote-tool-info-value">{{ remoteToolBaseUrl }}</span>
+                </div>
+                <div v-if="remoteToolManifestHash" class="remote-tool-info-item">
+                  <span class="remote-tool-info-label">manifest_sha256:</span>
+                  <code class="remote-tool-manifest-hash">{{ remoteToolManifestHash }}</code>
+                </div>
+                <div class="remote-tool-info-item">
+                  <span class="remote-tool-info-label">smoke test:</span>
+                  <a-tag :color="remoteToolSmokeStatusColor(remoteToolSmokeStatus)">
+                    {{ remoteToolSmokeStatusText(remoteToolSmokeStatus) }}
+                  </a-tag>
+                </div>
+                <div v-if="remoteToolSmokeTaskId" class="remote-tool-info-item">
+                  <span class="remote-tool-info-label">任务:</span>
+                  <router-link :to="`/tasks/${remoteToolSmokeTaskId}`">
+                    查看 smoke test 任务
+                  </router-link>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         </div>
@@ -510,6 +543,49 @@
     }
     return undefined
   })
+  const isRemoteToolV1 = computed(() => {
+    return toolConfig.value?.type === 'remote_api' && toolConfig.value?.mode === 'remote_tool_v1'
+  })
+  const remoteToolBaseUrl = computed(() => {
+    const value = toolConfig.value?.base_url
+    return typeof value === 'string' ? value : ''
+  })
+  const remoteToolManifestHash = computed(() => {
+    const value = toolConfig.value?.manifest_sha256
+    return typeof value === 'string' ? value : ''
+  })
+  const remoteToolLastSmokeTest = computed<Record<string, unknown> | undefined>(() => {
+    const value = toolConfig.value?.last_smoke_test
+    return value && typeof value === 'object' ? value as Record<string, unknown> : undefined
+  })
+  const remoteToolSmokeStatus = computed(() => {
+    const status = remoteToolLastSmokeTest.value?.status
+    return typeof status === 'string' ? status : 'not_run'
+  })
+  const remoteToolSmokeTaskId = computed(() => {
+    const taskId = remoteToolLastSmokeTest.value?.task_id
+    return typeof taskId === 'string' ? taskId : ''
+  })
+
+  const remoteToolSmokeStatusColor = (status: string) => {
+    if (status === 'success') {
+      return 'green'
+    }
+    if (status === 'failure') {
+      return 'red'
+    }
+    return 'orange'
+  }
+
+  const remoteToolSmokeStatusText = (status: string) => {
+    if (status === 'success') {
+      return '已通过'
+    }
+    if (status === 'failure') {
+      return '失败'
+    }
+    return '未完成'
+  }
 
   // 扁平化并归一化 schema，隐藏平台内部字段并兼容 input_files / integer / nullable
   const flattenedSchema = computed<ToolSchema | undefined>(() => {
@@ -1407,6 +1483,37 @@
       color: @text-color-light-tertiary;
       min-width: 70px;
     }
+  }
+
+  .remote-tool-info-list {
+    display: flex;
+    flex-direction: column;
+    gap: @spacing-sm;
+  }
+
+  .remote-tool-info-item {
+    display: flex;
+    align-items: flex-start;
+    gap: @spacing-sm;
+    font-size: @font-size-sm;
+  }
+
+  .remote-tool-info-label {
+    min-width: 96px;
+    color: @text-color-light-tertiary;
+  }
+
+  .remote-tool-info-value,
+  .remote-tool-manifest-hash {
+    flex: 1;
+    min-width: 0;
+    word-break: break-all;
+  }
+
+  .remote-tool-manifest-hash {
+    color: @text-color-light-secondary;
+    font-family: monospace;
+    font-size: 12px;
   }
 
   :deep(.ant-btn-primary) {
