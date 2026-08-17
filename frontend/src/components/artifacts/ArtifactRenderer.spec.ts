@@ -11,6 +11,11 @@ vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (key: string) => key })
 }))
 
+vi.mock('@/components/tasks/MoleculeViewer.vue', () => ({
+  __esModule: true,
+  default: { name: 'MoleculeViewer', template: '<div data-testid="molecule-viewer" />' }
+}))
+
 const version = {
   id: 'version-1',
   version: 1,
@@ -67,7 +72,7 @@ describe('ArtifactRenderer', () => {
 
   it.each([
     ['binding_pocket', 'pocket-result-artifact'],
-    ['ligand_structure', 'pocket-result-artifact'],
+    ['ligand_structure', 'ligand-structure-artifact'],
     ['molecule_table', 'file-artifact']
   ])('renders standard %s artifacts without falling back', (artifactType, testId) => {
     const wrapper = mount(ArtifactRenderer, {
@@ -87,6 +92,27 @@ describe('ArtifactRenderer', () => {
 
     expect(wrapper.get('[data-testid="artifact-fallback"]').text()).toContain('unknown_result')
     expect(wrapper.text()).toContain('暂不支持')
+  })
+
+  it('renders ligand structures with the shared structure preview for renderable files', () => {
+    const wrapper = mount(ArtifactRenderer, {
+      props: {
+        artifact: artifact({
+          artifact_type: 'ligand_structure',
+          semantic_type: 'ligand_structure',
+          name: 'ligand.sdf',
+          latest_version: {
+            ...version,
+            filename: 'ligand.sdf',
+            content_type: 'chemical/x-mdl-sdfile'
+          }
+        })
+      },
+      global: { stubs }
+    })
+
+    expect(wrapper.find('[data-testid="ligand-structure-artifact"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="structure-artifact-preview"]').exists()).toBe(true)
   })
 
   it('builds file links through the protected artifact API instead of object storage URLs', () => {

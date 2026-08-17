@@ -14,6 +14,7 @@
   import { computed, type Component } from 'vue'
   import type { ArtifactType, TypedArtifact } from '@/types/artifacts'
   import FileArtifact from './FileArtifact.vue'
+  import LigandStructureArtifact from './LigandStructureArtifact.vue'
   import PocketResultArtifact from './PocketResultArtifact.vue'
   import ProteinStructureArtifact from './ProteinStructureArtifact.vue'
   import RunReportArtifact from './RunReportArtifact.vue'
@@ -26,7 +27,7 @@
     protein_structure: ProteinStructureArtifact,
     binding_pocket: PocketResultArtifact,
     pocket_result: PocketResultArtifact,
-    ligand_structure: PocketResultArtifact,
+    ligand_structure: LigandStructureArtifact,
     molecule_table: FileArtifact,
     file: FileArtifact,
     run_report: RunReportArtifact
