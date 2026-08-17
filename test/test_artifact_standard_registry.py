@@ -50,6 +50,21 @@ def test_binding_pocket_requires_standard_file_roles():
     assert primary_roles == {"residue_pocket_pdb"}
 
 
+def test_ligand_structure_keeps_primary_file_and_adds_optional_2d_3d_roles():
+    spec = get_standard_artifact_spec("ligand_structure@1")
+
+    roles = {role.role: role for role in spec.file_roles}
+    required_roles = {role.role for role in spec.file_roles if role.required}
+    primary_roles = {role.role for role in spec.file_roles if role.primary}
+
+    assert required_roles == {"structure_file"}
+    assert primary_roles == {"structure_file"}
+    assert roles["structure_2d_sdf"].required is False
+    assert roles["structure_3d_sdf"].required is False
+    assert roles["structure_2d_sdf"].recommended_name == "ligand.2d.sdf"
+    assert roles["structure_3d_sdf"].recommended_name == "ligand.3d.sdf"
+
+
 def test_relation_registry_allows_only_controlled_relation_types():
     relation_specs = load_relation_specs()
 

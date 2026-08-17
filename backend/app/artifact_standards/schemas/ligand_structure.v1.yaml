@@ -7,6 +7,16 @@ file_roles:
     allowed_formats: [sdf]
     content_types: [chemical/x-mdl-sdfile, application/octet-stream]
     recommended_name: ligand.sdf
+  - role: structure_2d_sdf
+    required: false
+    allowed_formats: [sdf]
+    content_types: [chemical/x-mdl-sdfile, application/octet-stream]
+    recommended_name: ligand.2d.sdf
+  - role: structure_3d_sdf
+    required: false
+    allowed_formats: [sdf]
+    content_types: [chemical/x-mdl-sdfile, application/octet-stream]
+    recommended_name: ligand.3d.sdf
   - role: metadata_json
     required: false
     allowed_formats: [json]

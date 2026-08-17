@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import ArtifactRenderer from './ArtifactRenderer.vue'
 import MessageTimeline from '@/components/conversation/MessageTimeline.vue'
@@ -13,7 +13,11 @@ vi.mock('vue-i18n', () => ({
 
 vi.mock('@/components/tasks/MoleculeViewer.vue', () => ({
   __esModule: true,
-  default: { name: 'MoleculeViewer', template: '<div data-testid="molecule-viewer" />' }
+  default: {
+    name: 'MoleculeViewer',
+    props: ['scene'],
+    template: '<div data-testid="molecule-viewer">{{ scene.entries[0].url }}</div>'
+  }
 }))
 
 const version = {
@@ -94,7 +98,7 @@ describe('ArtifactRenderer', () => {
     expect(wrapper.text()).toContain('暂不支持')
   })
 
-  it('renders ligand structures with the shared structure preview for renderable files', () => {
+  it('renders ligand structures with the shared structure preview for renderable files', async () => {
     const wrapper = mount(ArtifactRenderer, {
       props: {
         artifact: artifact({
@@ -110,9 +114,63 @@ describe('ArtifactRenderer', () => {
       },
       global: { stubs }
     })
+    await flushPromises()
 
     expect(wrapper.find('[data-testid="ligand-structure-artifact"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="structure-artifact-preview"]').exists()).toBe(true)
+  })
+
+  it('prefers the ligand 3D role file when a ligand artifact exposes multiple role files', async () => {
+    const twoDDownloadUrl =
+      '/api/v1/artifacts/artifact-1/versions/version-1/files/structure_2d_sdf/download'
+    const threeDDownloadUrl =
+      '/api/v1/artifacts/artifact-1/versions/version-1/files/structure_3d_sdf/download'
+    const wrapper = mount(ArtifactRenderer, {
+      props: {
+        artifact: artifact({
+          artifact_type: 'ligand_structure',
+          semantic_type: 'ligand_structure@1',
+          name: 'aspirin',
+          latest_version: {
+            ...version,
+            filename: 'ligand.sdf',
+            content_type: 'chemical/x-mdl-sdfile',
+            files: [
+              {
+                id: 'version-file-2d',
+                role: 'structure_2d_sdf',
+                file_id: 'file-2d',
+                is_primary: false,
+                sort_order: 1,
+                filename: 'ligand.2d.sdf',
+                content_type: 'chemical/x-mdl-sdfile',
+                size_bytes: 512,
+                sha256: 'b'.repeat(64),
+                download_url: twoDDownloadUrl
+              },
+              {
+                id: 'version-file-3d',
+                role: 'structure_3d_sdf',
+                file_id: 'file-3d',
+                is_primary: false,
+                sort_order: 2,
+                filename: 'ligand.3d.sdf',
+                content_type: 'chemical/x-mdl-sdfile',
+                size_bytes: 1024,
+                sha256: 'c'.repeat(64),
+                download_url: threeDDownloadUrl
+              }
+            ]
+          }
+        })
+      },
+      global: { stubs }
+    })
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="molecule-viewer"]').text()).toContain(
+      '/files/structure_3d_sdf/download'
+    )
   })
 
   it('builds file links through the protected artifact API instead of object storage URLs', () => {

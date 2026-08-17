@@ -7,7 +7,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
-from sqlalchemy import select
+from sqlalchemy import inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -17,7 +17,12 @@ from app.common.responses import success_response
 from app.common.time import utcnow
 from app.config import settings
 from app.database.session import get_db
-from app.models.artifacts import Artifact, ArtifactLineage
+from app.models.artifacts import (
+    Artifact,
+    ArtifactLineage,
+    ArtifactVersion,
+    ArtifactVersionFile,
+)
 from app.models.tasks import Task
 from app.models.users import User
 from app.schemas.artifacts import ArtifactMetadata
@@ -58,7 +63,41 @@ def _expires_at(value: str | None):
         raise ValidationException("expires_at 必须是 ISO-8601 时间") from exc
 
 
-def _version_data(version) -> dict:
+def _version_file_data(
+    *, artifact_id: str, version_id: str, file_link: ArtifactVersionFile
+) -> dict:
+    file_record = file_link.file
+    return {
+        "id": file_link.id,
+        "role": file_link.role,
+        "file_id": file_link.file_id,
+        "is_primary": file_link.is_primary,
+        "sort_order": file_link.sort_order,
+        "filename": file_record.filename if file_record else None,
+        "content_type": file_record.content_type if file_record else None,
+        "size_bytes": file_record.size_bytes if file_record else None,
+        "sha256": file_record.sha256 if file_record else None,
+        "download_url": (
+            f"/api/v1/artifacts/{artifact_id}/versions/{version_id}"
+            f"/files/{quote(file_link.role, safe='')}/download"
+        ),
+    }
+
+
+def _version_files_data(*, artifact_id: str, version) -> list[dict]:
+    if "files" in inspect(version).unloaded:
+        return []
+    return [
+        _version_file_data(
+            artifact_id=artifact_id,
+            version_id=version.id,
+            file_link=file_link,
+        )
+        for file_link in version.files
+    ]
+
+
+def _version_data(version, *, artifact_id: str | None = None) -> dict:
     return {
         "id": version.id,
         "version": version.version,
@@ -69,6 +108,9 @@ def _version_data(version) -> dict:
         "status": version.status,
         "expires_at": version.expires_at,
         "created_at": version.created_at,
+        "files": _version_files_data(artifact_id=artifact_id, version=version)
+        if artifact_id
+        else [],
     }
 
 
@@ -82,13 +124,15 @@ def _artifact_data(artifact: Artifact, *, include_versions: bool = False) -> dic
         "standard_version": artifact.standard_version,
         "name": artifact.name,
         "description": artifact.description,
-        "latest_version": _version_data(artifact.latest_version),
+        "latest_version": _version_data(artifact.latest_version, artifact_id=artifact.id),
         "deduplicated": bool(getattr(artifact, "deduplicated", False)),
         "created_at": artifact.created_at,
         "updated_at": artifact.updated_at,
     }
     if include_versions:
-        data["versions"] = [_version_data(version) for version in artifact.versions]
+        data["versions"] = [
+            _version_data(version, artifact_id=artifact.id) for version in artifact.versions
+        ]
     return data
 
 
@@ -285,8 +329,12 @@ async def get_project_artifact_lineage(
             await db.execute(
                 select(Artifact)
                 .options(
-                    selectinload(Artifact.versions),
-                    selectinload(Artifact.latest_version),
+                    selectinload(Artifact.versions)
+                    .selectinload(ArtifactVersion.files)
+                    .selectinload(ArtifactVersionFile.file),
+                    selectinload(Artifact.latest_version)
+                    .selectinload(ArtifactVersion.files)
+                    .selectinload(ArtifactVersionFile.file),
                 )
                 .where(Artifact.project_id == project_id)
                 .order_by(Artifact.updated_at.desc(), Artifact.id.desc())
@@ -387,8 +435,12 @@ async def list_artifacts(
             await db.execute(
                 select(Artifact)
                 .options(
-                    selectinload(Artifact.versions),
-                    selectinload(Artifact.latest_version),
+                    selectinload(Artifact.versions)
+                    .selectinload(ArtifactVersion.files)
+                    .selectinload(ArtifactVersionFile.file),
+                    selectinload(Artifact.latest_version)
+                    .selectinload(ArtifactVersion.files)
+                    .selectinload(ArtifactVersionFile.file),
                 )
                 .where(Artifact.project_id == project_id)
                 .order_by(Artifact.updated_at.desc())
@@ -453,6 +505,42 @@ async def download_artifact_version(
         content=content,
         media_type=version.content_type or "application/octet-stream",
         headers={"Content-Disposition": _content_disposition(version.filename)},
+    )
+
+
+@router.get("/artifacts/{artifact_id}/versions/{version_id}/files/{role}/download")
+async def download_artifact_version_file(
+    artifact_id: str,
+    version_id: str,
+    role: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    storage=Depends(get_artifact_storage),
+):
+    artifact = await load_artifact(db, artifact_id)
+    if artifact is None:
+        raise HTTPException(status_code=404, detail="Artifact 不存在")
+    await load_project_membership(
+        db, project_id=artifact.project_id, user_id=current_user.id
+    )
+
+    version = next((item for item in artifact.versions if item.id == version_id), None)
+    if (
+        version is None
+        or version.status != "available"
+        or (version.expires_at is not None and version.expires_at <= utcnow())
+    ):
+        raise HTTPException(status_code=404, detail="Artifact 版本不存在")
+
+    file_link = next((item for item in version.files if item.role == role), None)
+    if file_link is None or file_link.file is None:
+        raise HTTPException(status_code=404, detail="Artifact 角色文件不存在")
+    file_record = file_link.file
+    content = await storage.download(file_record.storage_path)
+    return Response(
+        content=content,
+        media_type=file_record.content_type or "application/octet-stream",
+        headers={"Content-Disposition": _content_disposition(file_record.filename)},
     )
 
 

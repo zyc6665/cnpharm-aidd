@@ -18,6 +18,7 @@ const props = withDefaults(
   defineProps<{
     artifact: TypedArtifact
     role?: VisualizationSceneEntry['role']
+    preferredFileRoles?: string[]
   }>(),
   {
     role: 'structure'
@@ -26,11 +27,30 @@ const props = withDefaults(
 
 const MoleculeViewer = defineAsyncComponent(() => import('@/components/tasks/MoleculeViewer.vue'))
 
+const selectedRoleFile = computed(() => {
+  const files = props.artifact.latest_version.files ?? []
+  if (!files.length) {
+    return null
+  }
+
+  for (const role of props.preferredFileRoles ?? []) {
+    const match = files.find(file => file.role === role && file.download_url)
+    if (match) {
+      return match
+    }
+  }
+
+  return files.find(file => file.is_primary && file.download_url) || files[0]
+})
+
 const fileRef = computed(() => ({
-  id: props.artifact.latest_version.id,
-  filename: props.artifact.latest_version.filename,
-  content_type: props.artifact.latest_version.content_type || undefined,
-  url: buildArtifactVersionDownloadUrl(props.artifact.id, props.artifact.latest_version.id),
+  id: selectedRoleFile.value?.file_id || props.artifact.latest_version.id,
+  filename: selectedRoleFile.value?.filename || props.artifact.latest_version.filename,
+  content_type:
+    selectedRoleFile.value?.content_type || props.artifact.latest_version.content_type || undefined,
+  url:
+    selectedRoleFile.value?.download_url ||
+    buildArtifactVersionDownloadUrl(props.artifact.id, props.artifact.latest_version.id),
 }))
 
 const scene = computed(() => {

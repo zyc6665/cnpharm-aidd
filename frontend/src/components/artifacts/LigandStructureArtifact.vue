@@ -1,7 +1,11 @@
 <template>
   <section class="ligand-artifact" data-testid="ligand-structure-artifact">
     <FileArtifact :artifact="artifact" />
-    <StructureArtifactPreview :artifact="artifact" role="ligand" />
+    <StructureArtifactPreview
+      :artifact="artifact"
+      role="ligand"
+      :preferred-file-roles="previewFileRoles"
+    />
   </section>
 </template>
 
@@ -13,6 +17,8 @@ import type { TypedArtifact } from '@/types/artifacts'
 defineProps<{
   artifact: TypedArtifact
 }>()
+
+const previewFileRoles = ['structure_3d_sdf', 'structure_file', 'structure_2d_sdf']
 </script>
 
 <style scoped lang="less">

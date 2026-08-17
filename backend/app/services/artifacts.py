@@ -12,7 +12,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.common.time import utcnow
-from app.models.artifacts import Artifact, ArtifactLineage, ArtifactVersion
+from app.models.artifacts import (
+    Artifact,
+    ArtifactLineage,
+    ArtifactVersion,
+    ArtifactVersionFile,
+)
 from app.models.projects import Project
 from app.models.users import User
 from app.storage.base import StorageBackend
@@ -187,7 +192,14 @@ async def load_artifact(db: AsyncSession, artifact_id: str) -> Artifact | None:
     return (
         await db.execute(
             select(Artifact)
-            .options(selectinload(Artifact.versions), selectinload(Artifact.latest_version))
+            .options(
+                selectinload(Artifact.versions)
+                .selectinload(ArtifactVersion.files)
+                .selectinload(ArtifactVersionFile.file),
+                selectinload(Artifact.latest_version)
+                .selectinload(ArtifactVersion.files)
+                .selectinload(ArtifactVersionFile.file),
+            )
             .where(Artifact.id == artifact_id)
         )
     ).scalar_one_or_none()

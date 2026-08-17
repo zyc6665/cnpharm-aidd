@@ -7,6 +7,19 @@ export type ArtifactType =
   | 'file'
   | 'run_report'
 
+export interface ArtifactVersionFile {
+  id: string
+  role: string
+  file_id: string
+  is_primary: boolean
+  sort_order: number
+  filename?: string | null
+  content_type?: string | null
+  size_bytes?: number | null
+  sha256?: string | null
+  download_url: string
+}
+
 export interface ArtifactVersion {
   id: string
   version: number
@@ -17,6 +30,7 @@ export interface ArtifactVersion {
   status: string
   expires_at?: string | null
   created_at: string
+  files?: ArtifactVersionFile[]
 }
 
 export interface TypedArtifact {

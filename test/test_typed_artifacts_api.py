@@ -269,6 +269,138 @@ async def test_standard_artifact_metadata_is_returned_in_project_list(
 
 
 @pytest.mark.asyncio
+async def test_standard_artifact_detail_exposes_role_files_and_downloads_each_role(
+    artifact_client,
+    artifact_db: AsyncSession,
+    artifact_context: dict[str, object],
+):
+    from app.models.artifacts import Artifact, ArtifactVersion, ArtifactVersionFile
+    from app.models.files import File as FileModel, FileSourceType
+
+    client, storage = artifact_client
+    project = artifact_context["project"]
+    owner = artifact_context["owner"]
+    artifact = Artifact(
+        project_id=project.id,
+        created_by=owner.id,
+        artifact_type="ligand_structure",
+        semantic_type="ligand_structure@1",
+        standard_type="ligand_structure",
+        standard_version=1,
+        name="aspirin",
+    )
+    artifact_db.add(artifact)
+    await artifact_db.flush()
+    structure_content = b"primary 3d sdf"
+    two_d_content = b"2d sdf"
+    three_d_content = b"3d sdf"
+    storage.objects.update(
+        {
+            "standard/ligand.sdf": (structure_content, "chemical/x-mdl-sdfile"),
+            "standard/ligand.2d.sdf": (two_d_content, "chemical/x-mdl-sdfile"),
+            "standard/ligand.3d.sdf": (three_d_content, "chemical/x-mdl-sdfile"),
+        }
+    )
+    version = ArtifactVersion(
+        artifact_id=artifact.id,
+        created_by=owner.id,
+        version=1,
+        filename="ligand.sdf",
+        content_type="chemical/x-mdl-sdfile",
+        size_bytes=len(structure_content),
+        sha256=hashlib.sha256(structure_content).hexdigest(),
+        storage_key="standard/ligand.sdf",
+        status="available",
+    )
+    artifact_db.add(version)
+    await artifact_db.flush()
+    role_files = [
+        (
+            "structure_file",
+            True,
+            FileModel(
+                project_id=project.id,
+                owner_id=owner.id,
+                filename="ligand.sdf",
+                content_type="chemical/x-mdl-sdfile",
+                size_bytes=len(structure_content),
+                sha256=hashlib.sha256(structure_content).hexdigest(),
+                storage_path="standard/ligand.sdf",
+                source_type=FileSourceType.TOOL_OUTPUT.value,
+            ),
+        ),
+        (
+            "structure_2d_sdf",
+            False,
+            FileModel(
+                project_id=project.id,
+                owner_id=owner.id,
+                filename="ligand.2d.sdf",
+                content_type="chemical/x-mdl-sdfile",
+                size_bytes=len(two_d_content),
+                sha256=hashlib.sha256(two_d_content).hexdigest(),
+                storage_path="standard/ligand.2d.sdf",
+                source_type=FileSourceType.TOOL_OUTPUT.value,
+            ),
+        ),
+        (
+            "structure_3d_sdf",
+            False,
+            FileModel(
+                project_id=project.id,
+                owner_id=owner.id,
+                filename="ligand.3d.sdf",
+                content_type="chemical/x-mdl-sdfile",
+                size_bytes=len(three_d_content),
+                sha256=hashlib.sha256(three_d_content).hexdigest(),
+                storage_path="standard/ligand.3d.sdf",
+                source_type=FileSourceType.TOOL_OUTPUT.value,
+            ),
+        ),
+    ]
+    for sort_order, (role, is_primary, file_record) in enumerate(role_files):
+        artifact_db.add(file_record)
+        await artifact_db.flush()
+        artifact_db.add(
+            ArtifactVersionFile(
+                artifact_version_id=version.id,
+                role=role,
+                file_id=file_record.id,
+                is_primary=is_primary,
+                sort_order=sort_order,
+            )
+        )
+    artifact.latest_version_id = version.id
+    artifact.latest_version = version
+    await artifact_db.commit()
+
+    detail = await client.get(
+        f"/api/v1/artifacts/{artifact.id}", headers={"Authorization": "Bearer owner"}
+    )
+
+    assert detail.status_code == 200
+    latest_files = detail.json()["data"]["latest_version"]["files"]
+    assert [item["role"] for item in latest_files] == [
+        "structure_file",
+        "structure_2d_sdf",
+        "structure_3d_sdf",
+    ]
+    three_d = next(item for item in latest_files if item["role"] == "structure_3d_sdf")
+    assert three_d["is_primary"] is False
+    assert three_d["download_url"] == (
+        f"/api/v1/artifacts/{artifact.id}/versions/{version.id}/files/structure_3d_sdf/download"
+    )
+
+    downloaded = await client.get(
+        three_d["download_url"], headers={"Authorization": "Bearer owner"}
+    )
+
+    assert downloaded.status_code == 200
+    assert downloaded.content == three_d_content
+    assert "ligand.3d.sdf" in downloaded.headers["content-disposition"]
+
+
+@pytest.mark.asyncio
 async def test_project_artifact_lineage_graph_includes_versions_tasks_and_workflow_nodes(
     artifact_client,
     artifact_db: AsyncSession,
