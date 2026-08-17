@@ -68,15 +68,17 @@ def prepare_task_output(output_result: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-async def _record_remote_tool_smoke_success_if_needed(
+async def _record_remote_tool_smoke_result_if_needed(
     db,
     *,
     task,
     tool,
     tool_version,
-    output_result: Dict[str, Any],
+    status: str,
+    output_result: Dict[str, Any] | None = None,
+    error_message: str | None = None,
 ) -> None:
-    """Record successful remote-tool.v1 smoke tests on the active version config."""
+    """Record remote-tool.v1 smoke test outcomes on the active version config."""
     extra_data = dict(task.extra_data or {})
     if extra_data.get("smoke_test") is not True:
         return
@@ -89,7 +91,9 @@ async def _record_remote_tool_smoke_success_if_needed(
 
     manifest_sha256 = str(extra_data.get("manifest_sha256") or "")
     current_manifest_sha256 = str(config.get("manifest_sha256") or "")
-    smoke_status = "success" if manifest_sha256 == current_manifest_sha256 else "stale"
+    smoke_status = status
+    if status == "success" and manifest_sha256 != current_manifest_sha256:
+        smoke_status = "stale"
     smoke_summary: dict[str, Any] = {
         "status": smoke_status,
         "task_id": str(task.id),
@@ -97,6 +101,8 @@ async def _record_remote_tool_smoke_success_if_needed(
         "example_name": extra_data.get("example_name"),
         "finished_at": task.finished_at.isoformat() if task.finished_at else None,
     }
+    if error_message:
+        smoke_summary["error"] = error_message
     if isinstance(output_result, dict) and output_result.get("remote_run_id"):
         smoke_summary["remote_run_id"] = output_result["remote_run_id"]
 
@@ -113,6 +119,25 @@ async def _record_remote_tool_smoke_success_if_needed(
 
     config["last_smoke_test"] = smoke_summary
     tool_version.config = config
+
+
+async def _record_remote_tool_smoke_success_if_needed(
+    db,
+    *,
+    task,
+    tool,
+    tool_version,
+    output_result: Dict[str, Any],
+) -> None:
+    """Record successful remote-tool.v1 smoke tests on the active version config."""
+    await _record_remote_tool_smoke_result_if_needed(
+        db,
+        task=task,
+        tool=tool,
+        tool_version=tool_version,
+        status="success",
+        output_result=output_result,
+    )
 
 
 async def _persist_standard_artifacts_if_present(db, task, tool_version, output_result):
@@ -389,6 +414,14 @@ async def _execute_tool_task_impl(task_id: str, tool_version_id: str) -> Dict[st
                 message=f"任务执行失败: {str(e)}"
             )
             db.add(log)
+            await _record_remote_tool_smoke_result_if_needed(
+                db,
+                task=task,
+                tool=tool,
+                tool_version=tool_version,
+                status="failure",
+                error_message=str(e),
+            )
             agent_run_id = await append_task_agent_event(
                 db,
                 task=task,

@@ -508,6 +508,63 @@ async def test_worker_records_remote_tool_smoke_success_and_auto_publishes(
 
 
 @pytest.mark.asyncio
+async def test_worker_records_remote_tool_smoke_failure(
+    worker_standard_db_factory,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    await _disable_notifications(monkeypatch)
+    monkeypatch.setattr("app.database.session.async_session_factory", worker_standard_db_factory)
+    manifest_hash = "c" * 64
+
+    async with worker_standard_db_factory() as db:
+        task, version = await _seed_task(
+            db,
+            tool_config={
+                "type": "remote_api",
+                "mode": "remote_tool_v1",
+                "manifest_sha256": manifest_hash,
+                "pending_publish_on_smoke_success": True,
+            },
+        )
+        task.extra_data = {
+            **(task.extra_data or {}),
+            "smoke_test": True,
+            "smoke_test_type": "remote_tool_v1",
+            "publish_on_success": True,
+            "manifest_sha256": manifest_hash,
+            "tool_version_id": str(version.id),
+            "example_name": "smoke-default",
+        }
+        db.add(task)
+        await db.commit()
+        task_id = task.id
+        version_id = version.id
+        tool_id = task.tool_id
+
+    async def fake_execute(self):
+        raise RuntimeError("remote run failed")
+
+    monkeypatch.setattr("app.tasks.executor.TaskExecutor.execute", fake_execute)
+
+    with pytest.raises(RuntimeError, match="remote run failed"):
+        await worker_tasks._execute_tool_task_impl(str(task_id), str(version_id))
+
+    async with worker_standard_db_factory() as db:
+        refreshed_version = (
+            await db.execute(select(ToolVersionModel).where(ToolVersionModel.id == version_id))
+        ).scalar_one()
+        refreshed_tool = (
+            await db.execute(select(ToolModel).where(ToolModel.id == tool_id))
+        ).scalar_one()
+
+    assert refreshed_version.config["last_smoke_test"]["status"] == "failure"
+    assert refreshed_version.config["last_smoke_test"]["manifest_sha256"] == manifest_hash
+    assert refreshed_version.config["last_smoke_test"]["task_id"] == task_id
+    assert refreshed_version.config["last_smoke_test"]["error"] == "remote run failed"
+    assert refreshed_tool.status == ToolStatus.PUBLISHED.value
+
+
+@pytest.mark.asyncio
 async def test_worker_publishes_agent_events_for_agent_task_progress(
     worker_standard_db_factory,
     monkeypatch: pytest.MonkeyPatch,

@@ -606,6 +606,59 @@ async def test_register_remote_tool_schedules_smoke_test_when_requested(
 
 
 @pytest.mark.asyncio
+async def test_register_remote_tool_records_scheduled_smoke_test(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    enabled_category: ToolCategory,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """创建 smoke 任务后应立即在版本配置中记录可追踪任务。"""
+
+    class FakeDiscoveryClient:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        async def discover(self) -> RemoteToolDiscoveryResult:
+            return successful_remote_discovery_with_smoke_example()
+
+    async def fake_create_and_schedule_tool_task(**_kwargs):
+        return Task(id="smoke-task-id")
+
+    monkeypatch.setattr(
+        "app.api.v1.tools_admin.RemoteToolDiscoveryClient",
+        FakeDiscoveryClient,
+    )
+    monkeypatch.setattr(
+        "app.api.v1.tool_route_utils.create_and_schedule_tool_task",
+        fake_create_and_schedule_tool_task,
+    )
+
+    response = await api_client.post(
+        "/api/v1/tools/register-remote",
+        headers={"Authorization": "Bearer admin-token"},
+        json={
+            "base_url": "https://model.example.com",
+            "category_id": enabled_category.id,
+            "run_smoke_test": True,
+            "publish_on_success": False,
+        },
+    )
+
+    assert response.status_code == 200
+    tool = await db_session.scalar(select(Tool).where(Tool.slug == "lvpocket-api"))
+    assert tool is not None
+    version = await db_session.get(ToolVersion, tool.current_version_id)
+    assert version is not None
+    assert version.config["last_smoke_test"]["status"] == "scheduled"
+    assert version.config["last_smoke_test"]["task_id"] == "smoke-task-id"
+    assert (
+        version.config["last_smoke_test"]["manifest_sha256"]
+        == response.json()["data"]["manifest_sha256"]
+    )
+    assert version.config["last_smoke_test"]["example_name"] == "default"
+
+
+@pytest.mark.asyncio
 async def test_register_remote_tool_materializes_smoke_example_files(
     api_client: httpx.AsyncClient,
     db_session: AsyncSession,

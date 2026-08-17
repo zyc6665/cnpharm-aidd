@@ -20,6 +20,7 @@ from app.common.exceptions import (
     NotFoundException,
     ValidationException,
 )
+from app.common.time import utcnow
 from app.files.storage_path import get_file_path
 from app.models.files import File as FileModel, FileSourceType
 from app.models.tools import (
@@ -478,6 +479,16 @@ async def _schedule_remote_smoke_test(
             detail={"task_id": str(task.id), "example_name": smoke_example.name},
         )
     )
+    config = dict(tool_version.config or {})
+    config["last_smoke_test"] = {
+        "status": "scheduled",
+        "task_id": str(task.id),
+        "manifest_sha256": manifest_sha256,
+        "example_name": smoke_example.name,
+        "scheduled_at": utcnow().isoformat(),
+    }
+    tool_version.config = config
+    await db.commit()
     return str(task.id)
 
 
