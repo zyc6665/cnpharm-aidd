@@ -303,6 +303,43 @@
                     </a-form-item>
                   </a-col>
                 </a-row>
+
+                <div v-if="remoteRegisterResult" class="remote-register-result">
+                  <div class="remote-register-result-header">
+                    <div>
+                      <div class="remote-register-result-title">远程 API 注册结果</div>
+                      <div class="remote-register-result-subtitle">
+                        manifest_sha256: <code>{{ remoteRegisterResult.manifest_sha256 }}</code>
+                      </div>
+                    </div>
+                    <a-space>
+                      <router-link :to="`/tools/${remoteRegisterResult.tool.id}`">
+                        查看工具详情
+                      </router-link>
+                      <router-link
+                        v-if="remoteRegisterResult.smoke_test_task_id"
+                        :to="`/tasks/${remoteRegisterResult.smoke_test_task_id}`"
+                      >
+                        查看 smoke test 任务
+                      </router-link>
+                    </a-space>
+                  </div>
+
+                  <div class="remote-register-stage-title">注册诊断</div>
+                  <div class="remote-register-stage-list">
+                    <div
+                      v-for="stage in remoteRegisterResult.stages"
+                      :key="stage.name"
+                      class="remote-register-stage"
+                    >
+                      <a-tag :color="remoteStageStatusColor(stage.status)">
+                        {{ remoteStageStatusText(stage.status) }}
+                      </a-tag>
+                      <span class="remote-register-stage-name">{{ stage.name }}</span>
+                      <span class="remote-register-stage-message">{{ stage.message }}</span>
+                    </div>
+                  </div>
+                </div>
               </template>
 
               <template v-else>
@@ -792,6 +829,8 @@
     createToolVersion,
     getToolDetail,
     registerRemoteTool,
+    type RemoteToolRegisterResult,
+    type RemoteToolStageDiagnostic,
     updateTool
   } from '@/api/tools'
   import type { ToolCreateParams } from '@/types/models'
@@ -811,6 +850,7 @@
   const formRef = ref<FormInstance>()
   const loading = ref(false)
   const submitting = ref(false)
+  const remoteRegisterResult = ref<RemoteToolRegisterResult | null>(null)
   const originalVersion = ref('')
   const originalChangelog = ref('')
   const originalNotes = ref('')
@@ -1054,8 +1094,29 @@
     ]
   }
 
+  const remoteStageStatusColor = (status: RemoteToolStageDiagnostic['status']) => {
+    if (status === 'success') {
+      return 'green'
+    }
+    if (status === 'warning') {
+      return 'orange'
+    }
+    return 'red'
+  }
+
+  const remoteStageStatusText = (status: RemoteToolStageDiagnostic['status']) => {
+    if (status === 'success') {
+      return '成功'
+    }
+    if (status === 'warning') {
+      return '警告'
+    }
+    return '失败'
+  }
+
   const handleRemoteSelfRegisterSubmit = async () => {
     submitting.value = true
+    remoteRegisterResult.value = null
     try {
       const response = await registerRemoteTool({
         base_url: formState.remote_base_url.trim(),
@@ -1069,12 +1130,12 @@
         is_public: formState.is_public,
         timeout_sec: formState.timeout_sec
       })
+      remoteRegisterResult.value = response.data
       message.success(
         response.data.smoke_test_task_id
-          ? '远程工具已注册，smoke test 已创建'
+          ? '远程工具已注册，smoke test 已创建，请查看下方任务入口'
           : '远程工具已注册为草稿'
       )
-      router.push(`/tools/${response.data.tool.id}`)
     } catch {
       // 错误已在请求层处理
     } finally {
@@ -1350,6 +1411,56 @@
     margin-bottom: @spacing-lg;
   }
 
+  .remote-register-result {
+    margin: @spacing-lg 0;
+    padding: @spacing-md;
+    border: 1px solid @border-color-light;
+    border-radius: @border-radius-base;
+    background: @bg-color-light;
+  }
+
+  .remote-register-result-header {
+    display: flex;
+    justify-content: space-between;
+    gap: @spacing-md;
+    align-items: flex-start;
+    margin-bottom: @spacing-md;
+  }
+
+  .remote-register-result-title,
+  .remote-register-stage-title {
+    color: @text-color-light-primary;
+    font-weight: @font-weight-semibold;
+  }
+
+  .remote-register-result-subtitle {
+    margin-top: @spacing-xs;
+    color: @text-color-light-tertiary;
+    font-size: @font-size-sm;
+    word-break: break-all;
+  }
+
+  .remote-register-stage-list {
+    margin-top: @spacing-sm;
+  }
+
+  .remote-register-stage {
+    display: flex;
+    gap: @spacing-sm;
+    align-items: center;
+    padding: @spacing-xs 0;
+  }
+
+  .remote-register-stage-name {
+    min-width: 140px;
+    color: @text-color-light-primary;
+    font-weight: @font-weight-medium;
+  }
+
+  .remote-register-stage-message {
+    color: @text-color-light-secondary;
+  }
+
   .switch-label {
     margin-left: @spacing-sm;
     color: @text-color-light-secondary;
@@ -1399,6 +1510,12 @@
   }
 
   @media (max-width: @screen-md) {
+    .remote-register-result-header,
+    .remote-register-stage {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
     :deep(.tool-form .ant-col-8),
     :deep(.tool-form .ant-col-12),
     :deep(.tool-form .ant-col-16) {

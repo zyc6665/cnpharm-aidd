@@ -124,3 +124,21 @@ test('工具创建页应突出 Tool Package v2 主路径并标记旧语义映射
   assert.equal(toolConfigDomain.includes('formatToolConfigJsonText'), true)
   assert.equal(versionConfigDomain.includes('sshRunnerMode'), true)
 })
+
+test('远程 API 自注册成功后应展示诊断阶段并提供 smoke 任务入口', () => {
+  const source = readSource('src/views/tools/Create.vue')
+
+  for (const marker of [
+    'remote-register-result',
+    'remoteRegisterResult',
+    'remoteStageStatusColor',
+    '注册诊断',
+    'smoke test 任务',
+    '`/tasks/${remoteRegisterResult.smoke_test_task_id}`',
+    '查看工具详情'
+  ]) {
+    assert.equal(source.includes(marker), true, `missing remote registration marker ${marker}`)
+  }
+
+  assert.equal(source.includes('router.push(`/tools/${response.data.tool.id}`)'), false)
+})
