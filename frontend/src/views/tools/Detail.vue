@@ -360,6 +360,10 @@
                     查看 smoke test 任务
                   </router-link>
                 </div>
+                <div v-if="remoteToolSmokeError" class="remote-tool-info-item">
+                  <span class="remote-tool-info-label">失败原因:</span>
+                  <span class="remote-tool-info-value">{{ remoteToolSmokeError }}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -566,6 +570,10 @@
     const taskId = remoteToolLastSmokeTest.value?.task_id
     return typeof taskId === 'string' ? taskId : ''
   })
+  const remoteToolSmokeError = computed(() => {
+    const error = remoteToolLastSmokeTest.value?.error
+    return typeof error === 'string' ? error : ''
+  })
 
   const remoteToolSmokeStatusColor = (status: string) => {
     if (status === 'success') {
@@ -573,6 +581,12 @@
     }
     if (status === 'failure') {
       return 'red'
+    }
+    if (status === 'scheduled') {
+      return 'blue'
+    }
+    if (status === 'stale') {
+      return 'orange'
     }
     return 'orange'
   }
@@ -583,6 +597,12 @@
     }
     if (status === 'failure') {
       return '失败'
+    }
+    if (status === 'scheduled') {
+      return '已排队'
+    }
+    if (status === 'stale') {
+      return 'Manifest 已变更'
     }
     return '未完成'
   }

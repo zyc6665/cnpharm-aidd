@@ -20,8 +20,14 @@ test('工具详情页应展示 remote-tool.v1 自注册运行状态', () => {
     'manifest_sha256',
     'last_smoke_test',
     'remoteToolSmokeTaskId',
+    'remoteToolSmokeError',
     '`/tasks/${remoteToolSmokeTaskId}`',
     'remoteToolSmokeStatusColor',
+    "status === 'scheduled'",
+    "status === 'stale'",
+    '已排队',
+    'Manifest 已变更',
+    '失败原因',
     'smoke test'
   ]) {
     assert.equal(source.includes(marker), true, `missing remote detail marker ${marker}`)
