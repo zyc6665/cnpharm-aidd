@@ -13,11 +13,36 @@ file_roles:
     content_types: [application/json]
     recommended_name: metadata.json
 metadata_schema:
+  type: object
   required:
     - chain_ids
     - residue_count
     - atom_count
     - structure_format
     - source_filename
+  properties:
+    chain_ids:
+      type: array
+      items:
+        type: string
+    residue_count:
+      type: integer
+    atom_count:
+      type: integer
+    structure_format:
+      type: string
+      enum: [pdb, cif]
+    source_filename:
+      type: string
+    source_database:
+      type: string
+      enum: [rcsb, manual, tool_output]
+    source_id:
+      type: string
+    fetched_at:
+      type: string
+      format: date-time
+    source_url:
+      type: string
 validators:
   - protein_structure_v1_core

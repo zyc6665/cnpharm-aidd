@@ -50,6 +50,16 @@ def test_binding_pocket_requires_standard_file_roles():
     assert primary_roles == {"residue_pocket_pdb"}
 
 
+def test_protein_structure_metadata_schema_declares_external_database_fields():
+    spec = get_standard_artifact_spec("protein_structure@1")
+    properties = spec.metadata_schema["properties"]
+
+    assert "chain_ids" in spec.metadata_schema["required"]
+    assert properties["source_database"]["enum"] == ["rcsb", "manual", "tool_output"]
+    assert properties["source_id"]["type"] == "string"
+    assert properties["fetched_at"]["format"] == "date-time"
+
+
 def test_ligand_structure_keeps_primary_file_and_adds_optional_2d_3d_roles():
     spec = get_standard_artifact_spec("ligand_structure@1")
 
@@ -63,6 +73,21 @@ def test_ligand_structure_keeps_primary_file_and_adds_optional_2d_3d_roles():
     assert roles["structure_3d_sdf"].required is False
     assert roles["structure_2d_sdf"].recommended_name == "ligand.2d.sdf"
     assert roles["structure_3d_sdf"].recommended_name == "ligand.3d.sdf"
+
+
+def test_ligand_structure_metadata_schema_declares_external_database_fields():
+    spec = get_standard_artifact_spec("ligand_structure@1")
+    properties = spec.metadata_schema["properties"]
+
+    assert spec.metadata_schema["required"] == ["ligand_id"]
+    assert properties["source_database"]["enum"] == ["pubchem", "manual", "tool_output"]
+    assert properties["structure_3d_source"]["enum"] == [
+        "pubchem_3d",
+        "rdkit_generated_3d",
+        "2d_only",
+    ]
+    assert properties["canonical_smiles"]["type"] == "string"
+    assert properties["hydrogens_added"]["type"] == "boolean"
 
 
 def test_relation_registry_allows_only_controlled_relation_types():

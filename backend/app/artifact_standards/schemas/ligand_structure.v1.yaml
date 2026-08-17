@@ -23,7 +23,40 @@ file_roles:
     content_types: [application/json]
     recommended_name: metadata.json
 metadata_schema:
+  type: object
   required:
     - ligand_id
+  properties:
+    ligand_id:
+      type: string
+    source_database:
+      type: string
+      enum: [pubchem, manual, tool_output]
+    source_id:
+      type: string
+    pubchem_cid:
+      type: string
+    canonical_smiles:
+      type: string
+    isomeric_smiles:
+      type: string
+    iupac_name:
+      type: string
+    molecular_formula:
+      type: string
+    molecular_weight:
+      type: string
+    structure_3d_source:
+      type: string
+      enum: [pubchem_3d, rdkit_generated_3d, 2d_only]
+    hydrogens_added:
+      type: boolean
+    stereochemistry_undefined:
+      type: boolean
+    fetched_at:
+      type: string
+      format: date-time
+    source_url:
+      type: string
 validators:
   - ligand_structure_v1_core

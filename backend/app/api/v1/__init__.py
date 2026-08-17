@@ -8,6 +8,7 @@ from app.api.v1 import (
     artifacts,
     auth,
     conversations,
+    external_databases,
     files,
     projects,
     research_boards,
@@ -39,6 +40,7 @@ api_router.include_router(tasks.router, prefix="/tasks", tags=["任务"])
 api_router.include_router(files.router, prefix="/files", tags=["文件"])
 api_router.include_router(projects.router, prefix="/projects", tags=["研究项目"])
 api_router.include_router(conversations.router, tags=["项目会话"])
+api_router.include_router(external_databases.router, tags=["外部数据库"])
 api_router.include_router(agent_stream.router, tags=["智能体事件"])
 api_router.include_router(system.router, prefix="/system", tags=["系统"])
 api_router.include_router(websocket.router, tags=["WebSocket"])
