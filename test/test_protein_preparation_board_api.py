@@ -298,3 +298,110 @@ async def test_sync_protein_preparation_adds_prepared_artifact_node(
         node.get("artifact_id") == prepared_artifact.id
         for node in board.content["nodes"]
     )
+
+
+@pytest.mark.asyncio
+async def test_sync_protein_preparation_reuses_existing_prepared_artifact_node(
+    db_session: AsyncSession,
+) -> None:
+    owner, system_user, board, _artifact, _version, _file_record = await _seed_board_with_protein_artifact(
+        db_session
+    )
+    tool = Tool(
+        owner_id=system_user.id,
+        name="Protein Preparation",
+        slug="builtin-protein-preparation-sync-idempotency-test",
+        status=ToolStatus.PUBLISHED.value,
+        provider_type=ToolProviderType.PLATFORM.value,
+        review_status=ToolReviewStatus.NOT_REQUIRED.value,
+    )
+    db_session.add(tool)
+    await db_session.flush()
+    tool_version = ToolVersion(
+        tool_id=tool.id,
+        version="1.0.0",
+        config={"type": "builtin", "builtin_slug": "builtin-protein-preparation"},
+        is_active=True,
+    )
+    db_session.add(tool_version)
+    await db_session.flush()
+    tool.current_version_id = tool_version.id
+    task = Task(
+        id="task-prep-sync-idempotent",
+        user_id=owner.id,
+        tool_id=tool.id,
+        tool_version_id=tool_version.id,
+        status=TaskStatus.SUCCESS.value,
+        extra_data={"project_id": board.project_id},
+    )
+    prepared_artifact = Artifact(
+        project_id=board.project_id,
+        created_by=owner.id,
+        artifact_type="protein_structure",
+        semantic_type="protein_structure@1",
+        standard_type="protein_structure",
+        standard_version=1,
+        name="Prepared 1ABC",
+        source_task_id=task.id,
+    )
+    db_session.add_all([task, prepared_artifact])
+    await db_session.flush()
+    db_session.add(
+        TaskOutput(
+            task_id=task.id,
+            result={
+                "standard_artifacts": {
+                    "artifact_ids_by_ref": {"prepared_protein": prepared_artifact.id},
+                }
+            },
+            file_ids=["file-prepared"],
+        )
+    )
+    board.content = {
+        "nodes": [
+            *board.content["nodes"],
+            {
+                "id": "protein-preparation:task-prep-sync-idempotent",
+                "type": "tool",
+                "position": {"x": 320, "y": 0},
+                "tool_id": tool.id,
+                "task_id": task.id,
+                "status": "pending",
+            },
+            {
+                "id": f"artifact:{prepared_artifact.id}",
+                "type": "artifact",
+                "position": {"x": 640, "y": 160},
+                "artifact_id": prepared_artifact.id,
+            },
+        ],
+        "edges": [
+            {
+                "id": f"protein-preparation:{task.id}->artifact:{prepared_artifact.id}",
+                "source": f"protein-preparation:{task.id}",
+                "target": f"artifact:{prepared_artifact.id}",
+                "label": "prepared protein",
+            }
+        ],
+        "viewport": {"x": 0, "y": 0, "zoom": 1},
+    }
+    await db_session.commit()
+
+    response = await protein_preparation.sync_protein_preparation(
+        board.id,
+        task.id,
+        owner,
+        db_session,
+    )
+
+    data = response["data"]
+    assert data["artifact_node"]["position"] == {"x": 640, "y": 160}
+
+    await db_session.refresh(board)
+    prepared_nodes = [
+        node
+        for node in board.content["nodes"]
+        if node.get("artifact_id") == prepared_artifact.id
+    ]
+    assert len(prepared_nodes) == 1
+    assert prepared_nodes[0]["position"] == {"x": 640, "y": 160}

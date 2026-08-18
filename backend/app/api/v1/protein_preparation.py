@@ -257,6 +257,24 @@ async def _prepared_artifact_id(db: AsyncSession, *, task_id: str) -> str | None
 
 
 def _prepared_artifact_node(content: dict[str, Any], *, output_artifact_id: str) -> dict[str, Any]:
+    existing_node = next(
+        (
+            node
+            for node in content.get("nodes", [])
+            if isinstance(node, dict)
+            and (
+                node.get("id") == f"artifact:{output_artifact_id}"
+                or node.get("artifact_id") == output_artifact_id
+            )
+        ),
+        None,
+    )
+    if existing_node is not None:
+        return {
+            **existing_node,
+            "type": "artifact",
+            "artifact_id": output_artifact_id,
+        }
     return {
         "id": f"artifact:{output_artifact_id}",
         "type": "artifact",
@@ -285,4 +303,3 @@ def _prepared_artifact_edge(source_node_id: str, target_node_id: str) -> dict[st
         "target": target_node_id,
         "label": "prepared protein",
     }
-
