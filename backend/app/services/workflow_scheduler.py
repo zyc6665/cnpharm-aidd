@@ -347,6 +347,111 @@ async def resolve_node_input_files(
     return file_ids
 
 
+async def resolve_builtin_input_file_map(
+    db: AsyncSession,
+    *,
+    run: WorkflowRun,
+    node: dict[str, Any],
+    node_states: dict[str, Any],
+) -> dict[str, str]:
+    builtin_inputs: dict[str, str] = {}
+
+    for semantic_type, source in (node.get("semantic_inputs") or {}).items():
+        file_id = _resolved_semantic_source_file_id(
+            run=run,
+            node_states=node_states,
+            semantic_type=str(semantic_type),
+            source=source,
+        )
+        if file_id:
+            await _require_existing_file_id(db, file_id=str(file_id), label=str(semantic_type))
+            builtin_inputs[normalize_semantic_type(str(semantic_type))] = str(file_id)
+
+    slot_types = _artifact_input_slot_types(node)
+    for slot_name, source in (node.get("artifact_inputs") or {}).items():
+        file_id = _resolved_artifact_source_file_id(
+            run=run,
+            node_states=node_states,
+            slot_name=str(slot_name),
+            source=source,
+        )
+        if file_id:
+            slot_type = slot_types.get(str(slot_name)) or _artifact_source_key(str(source))
+            await _require_existing_file_id(db, file_id=str(file_id), label=str(slot_name))
+            builtin_inputs[str(slot_type)] = str(file_id)
+
+    return builtin_inputs
+
+
+def _artifact_input_slot_types(node: dict[str, Any]) -> dict[str, str]:
+    slot_types: dict[str, str] = {}
+    for slot in node.get("artifact_input_slots") or []:
+        if not isinstance(slot, dict):
+            continue
+        name = slot.get("name")
+        standard_type = slot.get("type")
+        if name and standard_type:
+            slot_types[str(name)] = str(standard_type)
+    return slot_types
+
+
+def _resolved_semantic_source_file_id(
+    *,
+    run: WorkflowRun,
+    node_states: dict[str, Any],
+    semantic_type: str,
+    source: Any,
+) -> str | None:
+    if not isinstance(source, str):
+        raise ValidationException(f"Unsupported workflow input source: {source}")
+    if source.startswith("workflow_input:"):
+        semantic_key = normalize_semantic_type(source.split(":", 1)[1] or semantic_type)
+        return (run.input_files or {}).get(semantic_key)
+    if source.startswith("node:"):
+        parts = source.split(":", 2)
+        if len(parts) != 3:
+            raise ValidationException(f"Invalid workflow node input source: {source}")
+        source_state = node_states.get(parts[1]) or {}
+        source_semantic_type = normalize_semantic_type(parts[2])
+        source_output = (source_state.get("semantic_outputs") or {}).get(source_semantic_type)
+        return source_output.get("file_id") if isinstance(source_output, dict) else None
+    raise ValidationException(f"Unsupported workflow input source: {source}")
+
+
+def _resolved_artifact_source_file_id(
+    *,
+    run: WorkflowRun,
+    node_states: dict[str, Any],
+    slot_name: str,
+    source: Any,
+) -> str | None:
+    if not isinstance(source, str):
+        raise ValidationException(f"Unsupported workflow artifact input source: {source}")
+    if source.startswith("workflow_input:"):
+        artifact_key = source.split(":", 1)[1] or slot_name
+        return (run.input_files or {}).get(artifact_key)
+    if source.startswith("node:"):
+        parts = source.split(":", 2)
+        if len(parts) != 3:
+            raise ValidationException(f"Invalid workflow artifact input source: {source}")
+        source_state = node_states.get(parts[1]) or {}
+        artifact_file_ids = standard_artifact_file_ids(
+            source_state.get("standard_artifacts") or {},
+            parts[2],
+        )
+        return artifact_file_ids[0] if artifact_file_ids else None
+    raise ValidationException(f"Unsupported workflow artifact input source: {source}")
+
+
+def _artifact_source_key(source: str) -> str:
+    if source.startswith("workflow_input:"):
+        return source.split(":", 1)[1]
+    if source.startswith("node:"):
+        parts = source.split(":", 2)
+        return parts[2] if len(parts) == 3 else source
+    return source
+
+
 async def _append_existing_file_id(
     db: AsyncSession,
     *,
@@ -361,6 +466,12 @@ async def _append_existing_file_id(
     if file_id not in seen_file_ids:
         seen_file_ids.add(file_id)
         file_ids.append(file_id)
+
+
+async def _require_existing_file_id(db: AsyncSession, *, file_id: str, label: str) -> None:
+    file_record = await db.get(FileModel, file_id)
+    if not file_record:
+        raise NotFoundException(f"Workflow input file not found: {label}")
 
 
 async def schedule_workflow_node(
@@ -396,6 +507,16 @@ async def schedule_workflow_node(
         "workflow_definition_id": str(run.workflow_definition_id),
         "workflow_node_type": str(node.get("kind") or node.get("type") or "tool"),
     }
+    tool_config = tool.current_version.config if tool.current_version and tool.current_version.config else {}
+    if isinstance(tool_config, dict) and tool_config.get("type") == "builtin":
+        builtin_inputs = await resolve_builtin_input_file_map(
+            db,
+            run=run,
+            node=node,
+            node_states=node_states,
+        )
+        if builtin_inputs:
+            node_params["builtin_inputs"] = builtin_inputs
     existing_task = await find_existing_workflow_node_task(
         db,
         current_user=current_user,

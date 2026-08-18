@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import pytest_asyncio
@@ -25,9 +27,13 @@ from app.models import system_settings as _system_settings  # noqa: F401,E402
 from app.models import tasks as _task_models  # noqa: F401,E402
 from app.models import tools as _tools_models  # noqa: F401,E402
 from app.models import users as _users_models  # noqa: F401,E402
+from app.models.files import File as FileModel, FileSourceType  # noqa: E402
 from app.models.tools import Tool, ToolProviderType, ToolStatus, ToolVersion  # noqa: E402
 from app.models.users import User, UserRole, UserStatus  # noqa: E402
-from app.services.workflow_scheduler import load_available_workflow_tool  # noqa: E402
+from app.services.workflow_scheduler import (  # noqa: E402
+    load_available_workflow_tool,
+    schedule_workflow_node,
+)
 
 
 @pytest_asyncio.fixture
@@ -68,6 +74,7 @@ async def _create_tool(
     slug: str,
     provider_type: str,
     executor_type: str,
+    config: dict | None = None,
     is_public: bool = False,
     is_active: bool = True,
     deprecated: bool = False,
@@ -85,7 +92,7 @@ async def _create_tool(
     version = ToolVersion(
         tool_id=tool.id,
         version="1.0.0",
-        config={"type": executor_type},
+        config=config or {"type": executor_type},
         is_active=is_active,
         deprecated=deprecated,
     )
@@ -148,3 +155,172 @@ async def test_deprecated_platform_builtin_is_unavailable_to_workflow(
 
     with pytest.raises(ValidationException, match="Workflow tool has no active version"):
         await load_available_workflow_tool(db_session, node={"tool_id": tool.id})
+
+
+@pytest.mark.asyncio
+async def test_builtin_workflow_node_receives_standard_artifact_inputs(
+    db_session: AsyncSession,
+    owner: User,
+) -> None:
+    protein_file = FileModel(
+        owner_id=owner.id,
+        filename="protein.pdb",
+        content_type="chemical/x-pdb",
+        size_bytes=7,
+        sha256=hashlib.sha256(b"protein").hexdigest(),
+        source_type=FileSourceType.UPLOAD.value,
+        storage_path="/tmp/protein.pdb",
+        is_public=False,
+    )
+    db_session.add(protein_file)
+    await db_session.flush()
+    tool = await _create_tool(
+        db_session,
+        owner,
+        slug="builtin-protein-preparation",
+        provider_type=ToolProviderType.PLATFORM.value,
+        executor_type="builtin",
+        config={
+            "type": "builtin",
+            "builtin_slug": "builtin-protein-preparation",
+            "artifacts": {
+                "inputs": [
+                    {"name": "protein", "type": "protein_structure@1", "required": True}
+                ],
+                "outputs": [
+                    {"name": "prepared_protein", "type": "protein_structure@1", "required": True}
+                ],
+            },
+        },
+    )
+    run = SimpleNamespace(
+        id="run-1",
+        name="Protein Preparation Run",
+        workflow_definition_id="workflow-1",
+        project_id=None,
+        input_files={"protein_structure@1": protein_file.id},
+    )
+    node = {
+        "id": "protein_preparation",
+        "kind": "tool",
+        "tool_id": tool.id,
+        "tool_slug": tool.slug,
+        "artifact_input_slots": [
+            {"name": "protein", "type": "protein_structure@1", "required": True}
+        ],
+        "artifact_inputs": {"protein": "workflow_input:protein_structure@1"},
+        "params": {"options": {"ph": 7.4}},
+    }
+    scheduled: list[dict] = []
+
+    async def fake_schedule_task(**kwargs):
+        task_data = kwargs["task_data"]
+        scheduled.append({"params": task_data.params, "file_ids": task_data.file_ids})
+        return SimpleNamespace(id="task-1")
+
+    node_states = {"protein_preparation": {"status": "pending"}}
+
+    created = await schedule_workflow_node(
+        db_session,
+        current_user=owner,
+        run=run,
+        node_id="protein_preparation",
+        node=node,
+        node_states=node_states,
+        schedule_task_fn=fake_schedule_task,
+    )
+
+    assert created is True
+    assert scheduled[0]["file_ids"] == [protein_file.id]
+    assert scheduled[0]["params"]["builtin_inputs"] == {
+        "protein_structure@1": protein_file.id
+    }
+    assert node_states["protein_preparation"]["params"]["builtin_inputs"] == {
+        "protein_structure@1": protein_file.id
+    }
+
+
+@pytest.mark.asyncio
+async def test_builtin_workflow_node_receives_upstream_standard_artifact_input(
+    db_session: AsyncSession,
+    owner: User,
+) -> None:
+    prepared_file = FileModel(
+        owner_id=owner.id,
+        filename="prepared.pdb",
+        content_type="chemical/x-pdb",
+        size_bytes=8,
+        sha256=hashlib.sha256(b"prepared").hexdigest(),
+        source_type=FileSourceType.TOOL_OUTPUT.value,
+        storage_path="/tmp/prepared.pdb",
+        is_public=False,
+    )
+    db_session.add(prepared_file)
+    await db_session.flush()
+    tool = await _create_tool(
+        db_session,
+        owner,
+        slug="builtin-vina-docking",
+        provider_type=ToolProviderType.PLATFORM.value,
+        executor_type="builtin",
+        config={
+            "type": "builtin",
+            "builtin_slug": "builtin-vina-docking",
+            "artifacts": {
+                "inputs": [
+                    {"name": "protein", "type": "protein_structure@1", "required": True}
+                ],
+                "outputs": [],
+            },
+        },
+    )
+    run = SimpleNamespace(
+        id="run-1",
+        name="Docking Run",
+        workflow_definition_id="workflow-1",
+        project_id=None,
+        input_files={},
+    )
+    node = {
+        "id": "docking",
+        "kind": "tool",
+        "tool_id": tool.id,
+        "tool_slug": tool.slug,
+        "artifact_input_slots": [
+            {"name": "protein", "type": "protein_structure@1", "required": True}
+        ],
+        "artifact_inputs": {"protein": "node:protein_preparation:prepared_protein"},
+    }
+    node_states = {
+        "docking": {"status": "pending"},
+        "protein_preparation": {
+            "status": "success",
+            "standard_artifacts": {
+                "file_ids_by_artifact_ref": {
+                    "prepared_protein": [prepared_file.id],
+                }
+            },
+        },
+    }
+    scheduled: list[dict] = []
+
+    async def fake_schedule_task(**kwargs):
+        task_data = kwargs["task_data"]
+        scheduled.append({"params": task_data.params, "file_ids": task_data.file_ids})
+        return SimpleNamespace(id="task-docking")
+
+    created = await schedule_workflow_node(
+        db_session,
+        current_user=owner,
+        run=run,
+        node_id="docking",
+        node=node,
+        node_states=node_states,
+        schedule_task_fn=fake_schedule_task,
+    )
+
+    assert created is True
+    assert scheduled[0]["file_ids"] == [prepared_file.id]
+    assert scheduled[0]["params"]["builtin_inputs"] == {
+        "protein_structure@1": prepared_file.id
+    }
