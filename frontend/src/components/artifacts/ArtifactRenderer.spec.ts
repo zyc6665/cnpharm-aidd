@@ -173,6 +173,124 @@ describe('ArtifactRenderer', () => {
     )
   })
 
+  it('prefers the prepared PDB role file when rendering prepared protein structures', async () => {
+    const rawDownloadUrl =
+      '/api/v1/artifacts/artifact-1/versions/version-1/files/raw_structure_file/download'
+    const preparedDownloadUrl =
+      '/api/v1/artifacts/artifact-1/versions/version-1/files/prepared_pdb/download'
+    const wrapper = mount(ArtifactRenderer, {
+      props: {
+        artifact: artifact({
+          artifact_type: 'protein_structure',
+          semantic_type: 'protein_structure@1',
+          name: 'prepared receptor',
+          latest_version: {
+            ...version,
+            filename: 'raw.pdb',
+            content_type: 'chemical/x-pdb',
+            files: [
+              {
+                id: 'version-file-raw',
+                role: 'raw_structure_file',
+                file_id: 'file-raw',
+                is_primary: true,
+                sort_order: 1,
+                filename: 'raw.pdb',
+                content_type: 'chemical/x-pdb',
+                size_bytes: 512,
+                sha256: 'b'.repeat(64),
+                download_url: rawDownloadUrl
+              },
+              {
+                id: 'version-file-prepared',
+                role: 'prepared_pdb',
+                file_id: 'file-prepared',
+                is_primary: false,
+                sort_order: 2,
+                filename: 'prepared.pdb',
+                content_type: 'chemical/x-pdb',
+                size_bytes: 1024,
+                sha256: 'c'.repeat(64),
+                download_url: preparedDownloadUrl
+              }
+            ]
+          }
+        })
+      },
+      global: { stubs }
+    })
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="molecule-viewer"]').text()).toContain(
+      '/files/prepared_pdb/download'
+    )
+  })
+
+  it('exposes prepared protein role files as protected download links', () => {
+    const wrapper = mount(ArtifactRenderer, {
+      props: {
+        artifact: artifact({
+          artifact_type: 'protein_structure',
+          semantic_type: 'protein_structure@1',
+          latest_version: {
+            ...version,
+            filename: 'prepared.manifest.json',
+            content_type: 'application/json',
+            files: [
+              {
+                id: 'version-file-prepared',
+                role: 'prepared_pdb',
+                file_id: 'file-prepared',
+                is_primary: true,
+                sort_order: 1,
+                filename: 'prepared.pdb',
+                content_type: 'chemical/x-pdb',
+                size_bytes: 1024,
+                sha256: 'b'.repeat(64),
+                download_url:
+                  '/api/v1/artifacts/artifact-1/versions/version-1/files/prepared_pdb/download'
+              },
+              {
+                id: 'version-file-pdbqt',
+                role: 'receptor_pdbqt',
+                file_id: 'file-pdbqt',
+                is_primary: false,
+                sort_order: 2,
+                filename: 'receptor.pdbqt',
+                content_type: 'chemical/x-pdbqt',
+                size_bytes: 2048,
+                sha256: 'c'.repeat(64),
+                download_url:
+                  '/api/v1/artifacts/artifact-1/versions/version-1/files/receptor_pdbqt/download'
+              },
+              {
+                id: 'version-file-report',
+                role: 'preparation_report_json',
+                file_id: 'file-report',
+                is_primary: false,
+                sort_order: 3,
+                filename: 'preparation_report.json',
+                content_type: 'application/json',
+                size_bytes: 512,
+                sha256: 'd'.repeat(64),
+                download_url:
+                  '/api/v1/artifacts/artifact-1/versions/version-1/files/preparation_report_json/download'
+              }
+            ]
+          }
+        })
+      },
+      global: { stubs }
+    })
+
+    const pdbqt = wrapper.get('[data-testid="artifact-role-download-link:receptor_pdbqt"]')
+    const report = wrapper.get('[data-testid="artifact-role-download-link:preparation_report_json"]')
+    expect(pdbqt.attributes('href')).toContain('/files/receptor_pdbqt/download')
+    expect(report.attributes('href')).toContain('/files/preparation_report_json/download')
+    expect(wrapper.text()).toContain('receptor.pdbqt')
+    expect(wrapper.text()).toContain('preparation_report.json')
+  })
+
   it('builds file links through the protected artifact API instead of object storage URLs', () => {
     const wrapper = mount(ArtifactRenderer, {
       props: {

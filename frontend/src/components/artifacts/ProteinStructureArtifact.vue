@@ -1,7 +1,11 @@
 <template>
   <section class="structure-artifact" data-testid="protein-structure-artifact">
     <FileArtifact :artifact="artifact" />
-    <StructureArtifactPreview :artifact="artifact" role="receptor" />
+    <StructureArtifactPreview
+      :artifact="artifact"
+      role="receptor"
+      :preferred-file-roles="['prepared_pdb', 'structure_file', 'raw_structure_file']"
+    />
   </section>
 </template>
 

@@ -24,6 +24,21 @@
     >
       下载文件
     </a>
+
+    <div v-if="roleFiles.length" class="artifact-card__role-files">
+      <span class="artifact-card__role-title">角色文件</span>
+      <a
+        v-for="file in roleFiles"
+        :key="file.id"
+        class="artifact-card__role-download"
+        :data-testid="`artifact-role-download-link:${file.role}`"
+        :href="file.download_url"
+        @click.prevent="downloadRoleFile(file)"
+      >
+        <span>{{ file.role }}</span>
+        <span>{{ file.filename || file.role }}</span>
+      </a>
+    </div>
   </section>
 </template>
 
@@ -31,7 +46,7 @@
 import { computed } from 'vue'
 import { message } from 'ant-design-vue'
 import { buildArtifactVersionDownloadUrl } from '@/api/artifacts'
-import type { TypedArtifact } from '@/types/artifacts'
+import type { ArtifactVersionFile, TypedArtifact } from '@/types/artifacts'
 import { triggerProtectedFileDownload } from '@/utils/protected-file-access'
 
 const props = defineProps<{
@@ -40,6 +55,11 @@ const props = defineProps<{
 
 const version = computed(() => props.artifact.latest_version)
 const downloadUrl = computed(() => buildArtifactVersionDownloadUrl(props.artifact.id, version.value.id))
+const roleFiles = computed(() =>
+  [...(version.value.files ?? [])]
+    .filter(file => Boolean(file.download_url))
+    .sort((left, right) => left.sort_order - right.sort_order)
+)
 const extensionLabel = computed(() => {
   const match = version.value.filename.match(/\.([a-z0-9]+)$/i)
   return match?.[1]?.toUpperCase() || 'FILE'
@@ -60,6 +80,17 @@ async function download() {
     await triggerProtectedFileDownload({
       url: downloadUrl.value,
       filename: version.value.filename,
+    })
+  } catch (cause) {
+    message.error(cause instanceof Error ? cause.message : String(cause))
+  }
+}
+
+async function downloadRoleFile(file: ArtifactVersionFile) {
+  try {
+    await triggerProtectedFileDownload({
+      url: file.download_url,
+      filename: file.filename || file.role,
     })
   } catch (cause) {
     message.error(cause instanceof Error ? cause.message : String(cause))
@@ -111,5 +142,32 @@ async function download() {
   width: fit-content;
   color: @accent-color;
   font-weight: @font-weight-medium;
+}
+
+.artifact-card__role-files {
+  display: flex;
+  flex-direction: column;
+  gap: @spacing-xs;
+  padding-top: @spacing-sm;
+  border-top: 1px solid @border-color;
+}
+
+.artifact-card__role-title {
+  color: @text-tertiary;
+  font-size: @font-size-xs;
+}
+
+.artifact-card__role-download {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: @spacing-sm;
+  color: @accent-color;
+  font-size: @font-size-sm;
+}
+
+.artifact-card__role-download span:last-child {
+  color: @text-secondary;
+  overflow-wrap: anywhere;
 }
 </style>
