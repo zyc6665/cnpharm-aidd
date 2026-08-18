@@ -12,6 +12,31 @@ file_roles:
     allowed_formats: [json]
     content_types: [application/json]
     recommended_name: metadata.json
+  - role: raw_structure_file
+    required: false
+    allowed_formats: [pdb, cif]
+    content_types: [chemical/x-pdb, chemical/x-cif, application/octet-stream]
+    recommended_name: raw_structure.pdb
+  - role: prepared_pdb
+    required: false
+    allowed_formats: [pdb]
+    content_types: [chemical/x-pdb, application/octet-stream]
+    recommended_name: prepared.pdb
+  - role: prepared_pqr
+    required: false
+    allowed_formats: [pqr]
+    content_types: [chemical/x-pqr, text/plain, application/octet-stream]
+    recommended_name: prepared.pqr
+  - role: receptor_pdbqt
+    required: false
+    allowed_formats: [pdbqt]
+    content_types: [chemical/x-pdbqt, application/octet-stream]
+    recommended_name: receptor.pdbqt
+  - role: preparation_report_json
+    required: false
+    allowed_formats: [json]
+    content_types: [application/json]
+    recommended_name: preparation_report.json
 metadata_schema:
   type: object
   required:
@@ -43,6 +68,25 @@ metadata_schema:
       type: string
       format: date-time
     source_url:
+      type: string
+    preparation_status:
+      type: string
+      enum: [raw, prepared, failed]
+    preparation_profile:
+      type: string
+    ph:
+      type: number
+    remove_water:
+      type: boolean
+    keep_metals:
+      type: boolean
+    keep_cofactors:
+      type: boolean
+    remove_non_target_ligands:
+      type: boolean
+    preparation_engine:
+      type: string
+    source_artifact_version_id:
       type: string
 validators:
   - protein_structure_v1_core

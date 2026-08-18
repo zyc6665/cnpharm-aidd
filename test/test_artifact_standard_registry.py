@@ -60,6 +60,33 @@ def test_protein_structure_metadata_schema_declares_external_database_fields():
     assert properties["fetched_at"]["format"] == "date-time"
 
 
+def test_protein_structure_declares_preparation_file_roles():
+    spec = get_standard_artifact_spec("protein_structure@1")
+    roles = {role.role: role for role in spec.file_roles}
+
+    assert roles["structure_file"].primary is True
+    assert roles["prepared_pdb"].required is False
+    assert "pdb" in roles["prepared_pdb"].allowed_formats
+    assert roles["receptor_pdbqt"].required is False
+    assert "pdbqt" in roles["receptor_pdbqt"].allowed_formats
+    assert roles["preparation_report_json"].required is False
+
+
+def test_protein_structure_metadata_schema_declares_preparation_fields():
+    spec = get_standard_artifact_spec("protein_structure@1")
+    properties = spec.metadata_schema["properties"]
+
+    assert properties["preparation_status"]["enum"] == ["raw", "prepared", "failed"]
+    assert properties["preparation_profile"]["type"] == "string"
+    assert properties["ph"]["type"] == "number"
+    assert properties["remove_water"]["type"] == "boolean"
+    assert properties["keep_metals"]["type"] == "boolean"
+    assert properties["keep_cofactors"]["type"] == "boolean"
+    assert properties["remove_non_target_ligands"]["type"] == "boolean"
+    assert properties["preparation_engine"]["type"] == "string"
+    assert properties["source_artifact_version_id"]["type"] == "string"
+
+
 def test_ligand_structure_keeps_primary_file_and_adds_optional_2d_3d_roles():
     spec = get_standard_artifact_spec("ligand_structure@1")
 
