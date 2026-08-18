@@ -20,6 +20,7 @@ from app.agents.aidd.capabilities import (  # noqa: E402
 def test_first_wave_capabilities_are_registered() -> None:
     assert get_capability("lvpocket-pocket-prediction").capability == "pocket_prediction"
     assert get_capability("gcdm-pocket-generation").capability == "molecule_generation"
+    assert get_capability("builtin-protein-preparation").capability == "protein_preparation"
     assert get_capability("builtin-sdf-to-smiles-csv").capability == "format_conversion"
     assert get_capability("builtin-sdf-to-pdb").capability == "format_conversion"
     assert get_capability("builtin-vina-docking").capability == "docking_scoring"
@@ -36,6 +37,12 @@ def test_capabilities_advertise_semantic_inputs_and_outputs() -> None:
     assert [item.semantic_type for item in generation.inputs] == ["pocket_pdb"]
     assert [item.semantic_type for item in generation.outputs] == ["generated_ligand", "smiles_csv"]
     assert generation.outputs[1].required is False
+
+    preparation = get_capability("builtin-protein-preparation")
+    assert preparation.virtual is True
+    assert preparation.stage == "protein_preparation"
+    assert [item.semantic_type for item in preparation.inputs] == ["protein_pdb"]
+    assert [item.semantic_type for item in preparation.outputs] == ["protein_pdb"]
 
     conversion = get_capability("builtin-sdf-to-smiles-csv")
     assert conversion.virtual is True

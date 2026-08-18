@@ -17,7 +17,7 @@ def _capability_config(tool_slug: str) -> dict:
     if not capability or not capability.virtual:
         raise ValidationException(f"不支持的 AIDD 内置工具: {tool_slug}")
 
-    return {
+    config = {
         "type": "builtin",
         "builtin_slug": tool_slug,
         "timeout_sec": 600,
@@ -55,6 +55,16 @@ def _capability_config(tool_slug: str) -> dict:
             "defaults": dict(capability.defaults),
         },
     }
+    if tool_slug == "builtin-protein-preparation":
+        config["artifacts"] = {
+            "inputs": [
+                {"name": "protein", "type": "protein_structure@1", "required": True},
+            ],
+            "outputs": [
+                {"name": "prepared_protein", "type": "protein_structure@1", "required": True},
+            ],
+        }
+    return config
 
 
 async def ensure_aidd_builtin_tool(

@@ -443,6 +443,13 @@ def _run_vina_docking_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResu
     )
 
 
+def _run_protein_preparation_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResult:
+    protein_file = files.get("protein_structure@1") or files.get("protein") or files.get("protein_pdb")
+    if not protein_file:
+        raise ValidationException("蛋白制备缺少 protein_structure@1 输入")
+    raise ValidationException("蛋白制备执行器尚未实现")
+
+
 # ======================================================================
 # 数据库查询工具（从 CSV / PDB 输入提取参数，调用 database_tools）
 # ======================================================================
@@ -702,6 +709,7 @@ _BUILTIN_TOOL_REGISTRY: dict[str, str] = {
     "builtin-sdf-to-smiles-csv": "sdf_to_smiles_csv",
     "builtin-sdf-to-pdb": "sdf_to_pdb",
     "builtin-vina-docking": "vina_docking",
+    "builtin-protein-preparation": "protein_preparation",
     "builtin-query-chembl": "query_chembl",
     "builtin-query-pubchem": "query_pubchem",
     "builtin-query-pdbbind": "query_pdbbind",
@@ -730,6 +738,8 @@ async def run_builtin_tool(tool_slug: str, files: dict[str, BuiltinToolFile]) ->
         return await _run_sync_builtin_handler(_run_sdf_to_pdb_tool, files)
     if handler_key == "vina_docking":
         return await _run_sync_builtin_handler(_run_vina_docking_tool, files)
+    if handler_key == "protein_preparation":
+        return await _run_sync_builtin_handler(_run_protein_preparation_tool, files)
     if handler_key == "query_chembl":
         return await _run_query_chembl_tool(files)
     if handler_key == "query_pubchem":

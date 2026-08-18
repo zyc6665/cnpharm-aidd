@@ -122,6 +122,30 @@ AIDD_TOOL_CAPABILITIES: dict[str, ToolCapability] = {
         ),
         virtual=True,
     ),
+    "builtin-protein-preparation": ToolCapability(
+        tool_slug="builtin-protein-preparation",
+        capability="protein_preparation",
+        stage="protein_preparation",
+        inputs=(
+            CapabilityInput(
+                "protein_pdb",
+                "protein_pdb",
+                accepted_extensions=(".pdb", ".cif"),
+            ),
+        ),
+        outputs=(
+            CapabilityOutput(
+                "protein_pdb",
+                "output_files",
+                OutputMatch(
+                    extension=".pdb",
+                    filename_contains_any=("prepared", "protein"),
+                    content_type="chemical/x-pdb",
+                ),
+            ),
+        ),
+        virtual=True,
+    ),
     "builtin-sdf-to-pdb": ToolCapability(
         tool_slug="builtin-sdf-to-pdb",
         capability="format_conversion",

@@ -40,6 +40,33 @@ def test_placeholder_scientific_capabilities_are_not_executable() -> None:
     assert not (placeholder_slugs & set(AIDD_TOOL_CAPABILITIES))
 
 
+@pytest.mark.asyncio
+async def test_run_builtin_tool_routes_protein_preparation(monkeypatch, tmp_path: Path) -> None:
+    source = tmp_path / "protein.pdb"
+    source.write_text("ATOM      1  N   ALA A   1       0.000   0.000   0.000\nEND\n")
+    called: dict[str, object] = {}
+
+    def fake_handler(files):
+        called["files"] = files
+        return builtin_tools.BuiltinToolResult()
+
+    monkeypatch.setattr(builtin_tools, "_run_protein_preparation_tool", fake_handler)
+
+    await builtin_tools.run_builtin_tool(
+        "builtin-protein-preparation",
+        {
+            "protein_structure@1": builtin_tools.BuiltinToolFile(
+                file_id="protein-file",
+                filename="protein.pdb",
+                path=source,
+                content_type="chemical/x-pdb",
+            )
+        },
+    )
+
+    assert "protein_structure@1" in called["files"]
+
+
 def test_vina_receptor_pdbqt_conversion_uses_rigid_openbabel_option(
     tmp_path: Path,
     monkeypatch,

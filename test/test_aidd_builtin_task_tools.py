@@ -86,3 +86,27 @@ async def test_ensure_aidd_builtin_tool_is_idempotent(
     )
 
     assert second.id == first.id
+
+
+@pytest.mark.asyncio
+async def test_ensure_protein_preparation_builtin_declares_standard_artifacts(
+    db_session: AsyncSession,
+    system_user: User,
+) -> None:
+    from app.services.aidd_builtin_tools import ensure_aidd_builtin_tool
+
+    tool = await ensure_aidd_builtin_tool(
+        db_session,
+        owner_id=system_user.id,
+        tool_slug='builtin-protein-preparation',
+    )
+
+    config = tool.current_version.config
+    assert config['type'] == 'builtin'
+    assert config['builtin_slug'] == 'builtin-protein-preparation'
+    assert config['artifacts']['inputs'] == [
+        {'name': 'protein', 'type': 'protein_structure@1', 'required': True}
+    ]
+    assert config['artifacts']['outputs'] == [
+        {'name': 'prepared_protein', 'type': 'protein_structure@1', 'required': True}
+    ]
