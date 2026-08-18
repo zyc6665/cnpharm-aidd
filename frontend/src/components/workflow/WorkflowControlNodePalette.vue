@@ -20,7 +20,7 @@
 <script setup lang="ts">
 import type { WorkflowCanvasNodeType } from '@/workflow/canvas-types'
 
-type ControlNodeType = Extract<WorkflowCanvasNodeType, 'condition' | 'map' | 'loop'>
+type ControlNodeType = Extract<WorkflowCanvasNodeType, 'condition' | 'map'>
 
 const emit = defineEmits<{
   'add-control-node': [type: ControlNodeType]
@@ -29,7 +29,6 @@ const emit = defineEmits<{
 const controlNodes: Array<{ type: ControlNodeType; label: string; description: string }> = [
   { type: 'condition', label: '条件分支', description: '按分数或字段选择路径' },
   { type: 'map', label: '批量处理', description: '并行处理候选集合' },
-  { type: 'loop', label: '循环优化', description: '迭代生成与筛选' },
 ]
 </script>
 

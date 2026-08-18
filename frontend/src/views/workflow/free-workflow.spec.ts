@@ -243,6 +243,15 @@ describe('free workflow workbench', () => {
     }))
   })
 
+  it('流程控制面板只展示可立即执行的控制节点', async () => {
+    const wrapper = renderWorkflow()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="add-condition-node"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="add-map-node"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="add-loop-node"]').exists()).toBe(false)
+  })
+
   it('项目模式保存和运行都使用项目作用域的 WorkflowDefinition', async () => {
     routeQuery = { project_id: 'project-1' }
     vi.mocked(createWorkflowDefinition).mockResolvedValue({
