@@ -440,9 +440,32 @@ export function mapWorkflowDefinitionToCanvasPayload(input: {
         .filter(node => node.kind === 'tool' && node.tool_slug)
         .map(node => [node.id, node.tool_slug as string])
     ),
-    artifact_bindings_by_node: {},
+    artifact_bindings_by_node: normalizeArtifactBindings(definition.artifact_bindings_by_node),
     status: 'draft' as const
   }
+}
+
+function normalizeArtifactBindings(value: unknown): Record<string, Record<string, string>> {
+  if (!value || typeof value !== 'object') {
+    return {}
+  }
+
+  const bindings: Record<string, Record<string, string>> = {}
+  for (const [nodeId, rawSlots] of Object.entries(value)) {
+    if (!rawSlots || typeof rawSlots !== 'object') {
+      continue
+    }
+    const slotBindings: Record<string, string> = {}
+    for (const [slotName, rawBinding] of Object.entries(rawSlots)) {
+      if (typeof rawBinding === 'string' && rawBinding.trim()) {
+        slotBindings[slotName] = rawBinding
+      }
+    }
+    if (Object.keys(slotBindings).length > 0) {
+      bindings[nodeId] = slotBindings
+    }
+  }
+  return bindings
 }
 
 function mapCanvasDefinitionNode(node: WorkflowDefinitionNode) {

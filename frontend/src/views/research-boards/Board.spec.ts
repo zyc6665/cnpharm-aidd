@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import BoardView from './Board.vue'
 import BoardList from './List.vue'
 import { getProjectArtifacts } from '@/api/artifacts'
+import { getExternalDatabaseSources, importExternalDatabaseArtifact } from '@/api/external-databases'
 import { getResearchBoard, getResearchBoards } from '@/api/research-boards'
 
 const push = vi.fn()
@@ -33,6 +34,11 @@ vi.mock('@/api/artifacts', () => ({
   buildArtifactVersionDownloadUrl: (artifactId: string, versionId: string) =>
     `/api/v1/artifacts/${artifactId}/versions/${versionId}/download`,
   getProjectArtifacts: vi.fn(),
+}))
+
+vi.mock('@/api/external-databases', () => ({
+  getExternalDatabaseSources: vi.fn(),
+  importExternalDatabaseArtifact: vi.fn(),
 }))
 
 vi.mock('@/stores', () => ({
@@ -88,6 +94,7 @@ const stubs = {
   ASkeleton: true,
   APopconfirm: { template: '<div><slot /></div>' },
   ATag: { template: '<span><slot /></span>' },
+  DatabaseOutlined: true,
   DeleteOutlined: true,
   ExpandOutlined: true,
   FullscreenExitOutlined: true,
@@ -127,6 +134,53 @@ describe('project research board page', () => {
         }],
       },
     } as never)
+    vi.mocked(getExternalDatabaseSources).mockResolvedValue({
+      data: {
+        sources: [
+          {
+            id: 'pubchem',
+            name: 'PubChem',
+            entity_types: ['ligand'],
+            identifier_label: 'CID',
+          },
+          {
+            id: 'rcsb',
+            name: 'RCSB PDB',
+            entity_types: ['protein'],
+            identifier_label: 'PDB ID',
+          },
+        ],
+      },
+    } as never)
+    vi.mocked(importExternalDatabaseArtifact).mockResolvedValue({
+      data: {
+        artifact: {
+          id: 'artifact-2',
+          project_id: 'project-1',
+          artifact_type: 'ligand_structure',
+          semantic_type: 'ligand_structure@1',
+          name: 'PubChem CID 2244',
+          latest_version: {
+            id: 'version-2',
+            version: 1,
+            filename: 'pubchem-2244.sdf',
+            content_type: 'chemical/x-mdl-sdfile',
+            size_bytes: 1024,
+            sha256: 'b'.repeat(64),
+            status: 'available',
+            created_at: '2026-07-30T00:00:00Z',
+          },
+          created_at: '2026-07-30T00:00:00Z',
+          updated_at: '2026-07-30T00:00:00Z',
+        },
+        board_node: {
+          id: 'artifact:artifact-2',
+          type: 'artifact',
+          position: { x: 80, y: 80 },
+          artifact_id: 'artifact-2',
+        },
+      },
+    } as never)
     vi.mocked(getResearchBoards).mockResolvedValue({
       data: { items: [{ ...board, node_count: 200 }], total: 1, page: 1, page_size: 100 },
     } as never)
@@ -139,6 +193,7 @@ describe('project research board page', () => {
     expect(wrapper.find('[data-testid="research-board-page"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="board-canvas"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="board-object-palette"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="external-database-panel"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="board-inspector"]').exists()).toBe(true)
     expect(wrapper.find('.ant-drawer').exists()).toBe(false)
     expect(wrapper.find('.ant-modal').exists()).toBe(false)
@@ -149,8 +204,46 @@ describe('project research board page', () => {
     await wrapper.get('[data-testid="toggle-focus-mode"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('[data-testid="board-object-palette"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="external-database-panel"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="board-inspector"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="research-board-page"]').classes()).toContain('is-focused')
+  })
+
+  it('imports an external database artifact into the board canvas and refreshes board state', async () => {
+    const refreshedBoard = {
+      ...board,
+      content: {
+        ...board.content,
+        nodes: [
+          ...board.content.nodes,
+          {
+            id: 'artifact:artifact-2',
+            type: 'artifact',
+            position: { x: 80, y: 80 },
+            artifact_id: 'artifact-2',
+          },
+        ],
+      },
+      version: 2,
+    }
+    vi.mocked(getResearchBoard)
+      .mockResolvedValueOnce({ data: board } as never)
+      .mockResolvedValueOnce({ data: refreshedBoard } as never)
+
+    const wrapper = mount(BoardView, { global: { stubs } })
+    await flushPromises()
+
+    await wrapper.get('[data-testid="external-database-identifier"]').setValue('2244')
+    await wrapper.get('[data-testid="external-database-import"]').trigger('submit')
+    await flushPromises()
+
+    expect(importExternalDatabaseArtifact).toHaveBeenCalledWith('project-1', expect.objectContaining({
+      source: 'pubchem',
+      entity_type: 'ligand',
+      identifier: '2244',
+      board_id: 'board-1',
+    }))
+    expect(wrapper.find('[data-testid="board-node-artifact:artifact-2"]').exists()).toBe(true)
   })
 
   it('opens a project board from the compatibility list using the project route', async () => {

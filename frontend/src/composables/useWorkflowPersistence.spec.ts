@@ -28,6 +28,34 @@ describe('mapWorkflowDefinitionToCanvasPayload', () => {
     expect(payload.nodes[0]?.requiredInputTypes).toEqual(['protein_structure@1'])
     expect(payload.nodes[0]?.producedOutputTypes).toEqual(['binding_pocket@1'])
   })
+
+  it('preserves artifact bindings from research board workflow drafts', () => {
+    const payload = mapWorkflowDefinitionToCanvasPayload({
+      canvasPresetId: 'research-board-draft',
+      name: 'Board Draft',
+      definition: {
+        nodes: [
+          {
+            id: 'tool-pocket',
+            kind: 'tool',
+            tool_slug: 'pocket-tool',
+            artifact_input_slots: [
+              { name: 'protein', type: 'protein_structure@1', required: true }
+            ],
+            artifact_inputs: { protein: 'workflow_input:protein_structure@1' }
+          }
+        ],
+        edges: [],
+        artifact_bindings_by_node: {
+          'tool-pocket': { protein: 'artifact-version-1' }
+        }
+      }
+    })
+
+    expect(payload.artifact_bindings_by_node).toEqual({
+      'tool-pocket': { protein: 'artifact-version-1' }
+    })
+  })
 })
 
 describe('useWorkflowPersistence API', () => {

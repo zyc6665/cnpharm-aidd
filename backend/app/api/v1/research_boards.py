@@ -5,12 +5,13 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.auth.dependencies import get_current_user
 from app.common.responses import paginated_response, success_response
 from app.database.session import get_db
 from app.feature_flags import require_feature_flag
-from app.models.artifacts import Artifact
+from app.models.artifacts import Artifact, ArtifactVersion, ArtifactVersionFile
 from app.models.users import User
 from app.models.files import File
 from app.models.tools import Tool, ToolStatus
@@ -157,6 +158,105 @@ async def _require_board_write_access(
         raise HTTPException(status_code=403, detail="管理员仅可查看科研白板")
 
 
+def _artifact_standard_ref(artifact: Artifact) -> str | None:
+    if artifact.standard_type and artifact.standard_version:
+        return f"{artifact.standard_type}@{artifact.standard_version}"
+    semantic_type = str(artifact.semantic_type or "").strip()
+    return semantic_type or None
+
+
+def _artifact_primary_file_id(artifact: Artifact) -> str | None:
+    latest_version = artifact.latest_version
+    if latest_version is None:
+        return None
+    version_files = list(latest_version.files or [])
+    if not version_files:
+        return None
+    primary_link = next((item for item in version_files if item.is_primary), None)
+    return str((primary_link or version_files[0]).file_id)
+
+
+def _tool_version_summary(tool: Tool) -> dict[str, Any] | None:
+    current_version = tool.current_version
+    if current_version is None:
+        return None
+    return {
+        "id": str(current_version.id),
+        "version": current_version.version,
+        "is_active": bool(current_version.is_active),
+        "deprecated": bool(current_version.deprecated),
+    }
+
+
+def _tool_artifacts_config(tool: Tool) -> dict[str, Any]:
+    current_version = tool.current_version
+    config = current_version.config if current_version is not None else None
+    if not isinstance(config, dict):
+        return {}
+
+    manifest = config.get("tool_package_manifest")
+    if not isinstance(manifest, dict):
+        tool_package = config.get("tool_package")
+        if isinstance(tool_package, dict):
+            manifest = tool_package.get("manifest")
+    if isinstance(manifest, dict) and isinstance(manifest.get("artifacts"), dict):
+        return manifest["artifacts"]
+
+    artifacts = config.get("artifacts")
+    return artifacts if isinstance(artifacts, dict) else {}
+
+
+def _normalize_artifact_input_slot(item: Any) -> dict[str, Any] | None:
+    if not isinstance(item, dict):
+        return None
+    name = str(item.get("name") or item.get("field") or "").strip()
+    artifact_type = str(
+        item.get("type") or item.get("semantic_type") or item.get("artifact_type") or ""
+    ).strip()
+    if not name or not artifact_type:
+        return None
+    return {
+        "name": name,
+        "type": artifact_type,
+        "required": bool(item.get("required", True)),
+    }
+
+
+def _normalize_artifact_output_slot(item: Any) -> dict[str, Any] | None:
+    if not isinstance(item, dict):
+        return None
+    name = str(item.get("name") or item.get("field") or item.get("path") or "").strip()
+    artifact_type = str(
+        item.get("type") or item.get("semantic_type") or item.get("artifact_type") or ""
+    ).strip()
+    if not name or not artifact_type:
+        return None
+    return {
+        "name": name,
+        "type": artifact_type,
+        "cardinality": str(item.get("cardinality") or "one"),
+        "required": bool(item.get("required", True)),
+    }
+
+
+def _tool_artifact_input_slots(tool: Tool) -> list[dict[str, Any]]:
+    artifacts = _tool_artifacts_config(tool)
+    return [
+        slot
+        for slot in (_normalize_artifact_input_slot(item) for item in artifacts.get("inputs", []))
+        if slot is not None
+    ]
+
+
+def _tool_artifact_output_slots(tool: Tool) -> list[dict[str, Any]]:
+    artifacts = _tool_artifacts_config(tool)
+    return [
+        slot
+        for slot in (_normalize_artifact_output_slot(item) for item in artifacts.get("outputs", []))
+        if slot is not None
+    ]
+
+
 @router.get("", response_model=dict)
 async def list_research_boards(
     page: int = Query(1, ge=1),
@@ -283,42 +383,167 @@ async def create_workflow_draft(
         )
     elif board.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="管理员仅可查看科研白板")
-    tools = [
+    content_nodes = board_nodes(board.content)
+    tool_nodes = [
         node
-        for node in board_nodes(board.content)
+        for node in content_nodes
         if node.get("type") == "tool" and node.get("tool_id")
     ]
-    tool_ids = {str(node["tool_id"]) for node in tools}
-    result = await db.execute(
-        select(Tool).where(
-            Tool.id.in_(tool_ids),
-            Tool.status == ToolStatus.PUBLISHED.value,
-            or_(Tool.owner_id == current_user.id, Tool.is_public.is_(True)),
+    artifact_nodes = [
+        node
+        for node in content_nodes
+        if node.get("type") == "artifact" and node.get("artifact_id")
+    ]
+
+    tool_ids = {str(node["tool_id"]) for node in tool_nodes}
+    tools_by_id: dict[str, Tool] = {}
+    if tool_ids:
+        result = await db.execute(
+            select(Tool)
+            .options(selectinload(Tool.current_version))
+            .where(
+                Tool.id.in_(tool_ids),
+                Tool.status == ToolStatus.PUBLISHED.value,
+                or_(Tool.owner_id == current_user.id, Tool.is_public.is_(True)),
+            )
         )
-    )
-    tools_by_id = {tool.id: tool for tool in result.scalars()}
+        tools_by_id = {tool.id: tool for tool in result.scalars()}
     if len(tools_by_id) != len(tool_ids):
         raise HTTPException(status_code=400, detail="白板中的工具已不存在或不可用")
-    nodes = [
-        {
-            "id": str(node["id"]),
+
+    artifact_ids = {str(node["artifact_id"]) for node in artifact_nodes}
+    artifacts_by_id: dict[str, Artifact] = {}
+    if artifact_ids:
+        artifact_query = (
+            select(Artifact)
+            .options(
+                selectinload(Artifact.latest_version)
+                .selectinload(ArtifactVersion.files)
+                .selectinload(ArtifactVersionFile.file)
+            )
+            .where(Artifact.id.in_(artifact_ids))
+        )
+        if board.project_id:
+            artifact_query = artifact_query.where(Artifact.project_id == board.project_id)
+        else:
+            artifact_query = artifact_query.where(Artifact.created_by == current_user.id)
+        artifact_result = await db.execute(artifact_query)
+        artifacts_by_id = {artifact.id: artifact for artifact in artifact_result.scalars()}
+    if len(artifacts_by_id) != len(artifact_ids):
+        raise HTTPException(status_code=400, detail="白板中的 Artifact 已不存在或不可用")
+
+    nodes: list[dict[str, Any]] = []
+    edges: list[dict[str, Any]] = []
+    selected_tool_by_node: dict[str, str] = {}
+    artifact_bindings_by_node: dict[str, dict[str, str]] = {}
+    artifact_sources_by_type: dict[str, dict[str, str]] = {}
+    input_files: dict[str, str] = {}
+
+    for node in content_nodes:
+        if node.get("type") != "artifact" or not node.get("artifact_id"):
+            continue
+        artifact = artifacts_by_id[str(node["artifact_id"])]
+        semantic_type = _artifact_standard_ref(artifact)
+        if not semantic_type:
+            continue
+        latest_version_id = (
+            str(artifact.latest_version.id)
+            if artifact.latest_version is not None
+            else str(artifact.latest_version_id or "")
+        )
+        file_id = _artifact_primary_file_id(artifact)
+        artifact_sources_by_type.setdefault(
+            semantic_type,
+            {
+                "node_id": str(node.get("id") or ""),
+                "artifact_version_id": latest_version_id,
+                "file_id": file_id or "",
+            },
+        )
+        if file_id:
+            input_files.setdefault(semantic_type, file_id)
+
+    for node in content_nodes:
+        node_id = str(node.get("id") or "")
+        if node.get("type") == "artifact" and node.get("artifact_id"):
+            artifact = artifacts_by_id[str(node["artifact_id"])]
+            semantic_type = _artifact_standard_ref(artifact)
+            if not semantic_type:
+                continue
+            latest_version_id = (
+                str(artifact.latest_version.id)
+                if artifact.latest_version is not None
+                else str(artifact.latest_version_id or "")
+            )
+            nodes.append(
+                {
+                    "id": node_id,
+                    "kind": "input",
+                    "type": "artifact",
+                    "semantic_type": semantic_type,
+                    "titleKey": artifact.name,
+                    "position": node.get("position", {}),
+                    "artifact_id": str(artifact.id),
+                    "artifact_version_id": latest_version_id or None,
+                }
+            )
+            continue
+
+        if node.get("type") != "tool" or not node.get("tool_id"):
+            continue
+
+        tool = tools_by_id[str(node["tool_id"])]
+        input_slots = _tool_artifact_input_slots(tool)
+        output_slots = _tool_artifact_output_slots(tool)
+        artifact_inputs: dict[str, str] = {}
+        tool_bindings: dict[str, str] = {}
+
+        for slot in input_slots:
+            source = artifact_sources_by_type.get(str(slot["type"]))
+            if not source:
+                continue
+            artifact_inputs[str(slot["name"])] = f"workflow_input:{slot['type']}"
+            if source.get("artifact_version_id"):
+                tool_bindings[str(slot["name"])] = source["artifact_version_id"]
+            edges.append(
+                {
+                    "id": f"{source['node_id']}->{node_id}:{slot['type']}",
+                    "source": source["node_id"],
+                    "target": node_id,
+                    "source_output": str(slot["type"]),
+                    "target_input": str(slot["name"]),
+                }
+            )
+
+        tool_node = {
+            "id": node_id,
+            "kind": "tool",
             "type": "tool",
             "tool_id": str(node["tool_id"]),
-            "toolSlugs": [tools_by_id[str(node["tool_id"])].slug],
-            "recommendedToolSlug": tools_by_id[str(node["tool_id"])].slug,
-            "titleKey": tools_by_id[str(node["tool_id"])].name,
+            "tool_slug": tool.slug,
+            "toolSlugs": [tool.slug],
+            "recommendedToolSlug": tool.slug,
+            "titleKey": tool.name,
             "position": node.get("position", {}),
         }
-        for node in tools
-    ]
-    selected_tool_by_node = {
-        str(node["id"]): tools_by_id[str(node["tool_id"])].slug for node in tools
-    }
+        tool_version = _tool_version_summary(tool)
+        if tool_version:
+            tool_node["tool_version"] = tool_version
+        if input_slots:
+            tool_node["artifact_input_slots"] = input_slots
+            tool_node["artifact_inputs"] = artifact_inputs
+        if output_slots:
+            tool_node["artifact_outputs"] = output_slots
+        nodes.append(tool_node)
+        selected_tool_by_node[node_id] = tool.slug
+        if tool_bindings:
+            artifact_bindings_by_node[node_id] = tool_bindings
+
     definition = {
         "nodes": nodes,
-        "edges": [],
+        "edges": edges,
         "selected_tool_by_node": selected_tool_by_node,
-        "artifact_bindings_by_node": {},
+        "artifact_bindings_by_node": artifact_bindings_by_node,
     }
     return success_response(
         data={
@@ -326,7 +551,7 @@ async def create_workflow_draft(
             "description": board.description,
             "intent": "research_board_conversion",
             "definition": definition,
-            "input_files": {},
+            "input_files": input_files,
             "requested_outputs": [],
             "analysis_trace": [],
             "nodes": nodes,

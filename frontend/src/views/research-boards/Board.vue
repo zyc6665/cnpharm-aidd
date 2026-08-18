@@ -64,6 +64,13 @@
             </template>
           </ResearchBoardCanvas>
         </main>
+        <ExternalDatabaseImportPanel
+          v-if="!focused && projectId"
+          :sources="externalSources"
+          :disabled="saving || loading"
+          :loading="importingExternal"
+          @import="importExternalDatabase"
+        />
         <BoardInspector
           v-if="!focused"
           v-model:name="form.name"
@@ -85,11 +92,18 @@ import { ExpandOutlined, FullscreenExitOutlined, SaveOutlined } from '@ant-desig
 import { getProjectArtifacts } from '@/api/artifacts'
 import BoardInspector from '@/components/research-boards/BoardInspector.vue'
 import BoardObjectPalette from '@/components/research-boards/BoardObjectPalette.vue'
+import ExternalDatabaseImportPanel from '@/components/research-boards/ExternalDatabaseImportPanel.vue'
 import ArtifactRenderer from '@/components/artifacts/ArtifactRenderer.vue'
 import ResearchBoardCanvas, {
   type BoardContent,
   type BoardNodeType,
 } from '@/components/research-boards/ResearchBoardCanvas.vue'
+import {
+  getExternalDatabaseSources,
+  importExternalDatabaseArtifact,
+  type ExternalDatabaseEntityType,
+  type ExternalDatabaseSource,
+} from '@/api/external-databases'
 import {
   createBoardWorkflowDraft,
   getResearchBoard,
@@ -107,6 +121,7 @@ const toolsStore = useToolsStore()
 const board = ref<ResearchBoard | null>(null)
 const files = ref<FileInfo[]>([])
 const artifacts = ref<TypedArtifact[]>([])
+const externalSources = ref<ExternalDatabaseSource[]>([])
 const content = ref<BoardContent>({ nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } })
 const form = reactive({ name: '', description: '' })
 const canvasRef = ref<InstanceType<typeof ResearchBoardCanvas> | null>(null)
@@ -114,6 +129,7 @@ const selectedNodeId = ref<string | null>(null)
 const loading = ref(false)
 const loadError = ref(false)
 const saving = ref(false)
+const importingExternal = ref(false)
 const hydrating = ref(false)
 const focused = ref(false)
 const saveState = ref<'saved' | 'dirty' | 'saving' | 'error'>('saved')
@@ -135,15 +151,20 @@ async function load() {
     const artifactRequest = projectId.value
       ? getProjectArtifacts(projectId.value)
       : Promise.resolve({ data: { items: [] } })
-    const [boardResponse, fileResponse, artifactResponse] = await Promise.all([
+    const sourceRequest = projectId.value
+      ? getExternalDatabaseSources()
+      : Promise.resolve({ data: { sources: [] } })
+    const [boardResponse, fileResponse, artifactResponse, sourceResponse] = await Promise.all([
       getResearchBoard(boardId.value),
       getFileList({ page: 1, page_size: 100 }),
       artifactRequest,
+      sourceRequest,
       toolsStore.fetchWorkflowTools(),
     ])
     board.value = boardResponse.data
     files.value = fileResponse.data.items
     artifacts.value = artifactResponse.data.items
+    externalSources.value = sourceResponse.data.sources
     content.value = structuredClone(boardResponse.data.content) as unknown as BoardContent
     Object.assign(form, {
       name: boardResponse.data.name,
@@ -208,6 +229,34 @@ function artifactLabel(id?: string) {
 
 function artifactById(id: string) {
   return artifacts.value.find(item => item.id === id) || null
+}
+
+function nextExternalArtifactPosition() {
+  const index = content.value.nodes.length
+  return {
+    x: 80 + (index % 4) * 280,
+    y: 80 + Math.floor(index / 4) * 220,
+  }
+}
+
+async function importExternalDatabase(input: {
+  source: string
+  entity_type: ExternalDatabaseEntityType
+  identifier: string
+}) {
+  if (!projectId.value || !board.value) return
+  importingExternal.value = true
+  try {
+    await importExternalDatabaseArtifact(projectId.value, {
+      ...input,
+      board_id: board.value.id,
+      position: nextExternalArtifactPosition(),
+    })
+    await load()
+    message.success('外部数据库记录已导入到白板')
+  } finally {
+    importingExternal.value = false
+  }
 }
 
 async function generateDraft() {
