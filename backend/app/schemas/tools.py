@@ -203,6 +203,7 @@ class ToolContractResponse(BaseModel):
     is_public: Optional[bool] = None
     version: Optional[Dict[str, Any]] = None
     executor: Dict[str, Any] = Field(default_factory=dict)
+    resource_profile: Dict[str, Any] = Field(default_factory=dict)
     schema_: Dict[str, Any] = Field(default_factory=dict, alias="schema")
     capability: Dict[str, Any] = Field(default_factory=dict)
     validation: Dict[str, Any] = Field(default_factory=dict)

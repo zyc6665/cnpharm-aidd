@@ -1,0 +1,65 @@
+api_version: aidd.sciminer/tool-template.v1
+kind: ToolTemplate
+metadata:
+  template_key: rdkit-conformer
+  slug: rdkit-conformer
+  name: RDKit Conformer Generator
+  version: 1.0.0
+  description: Generate 3D ligand conformers from molecule tables or ligand structures.
+  family: drug_discovery
+executor_types: [python_script, docker_image, ssh_job, remote_api]
+input_schema:
+  type: object
+  properties:
+    num_conformers: { type: integer, minimum: 1, default: 20 }
+    forcefield: { type: string, enum: [uff, mmff], default: mmff }
+  required: [num_conformers]
+output_schema:
+  type: object
+  properties:
+    result_version: { const: aidd.sciminer/result.v2 }
+    artifacts: { type: array }
+    summary: { type: object }
+agent_capability:
+  enabled: true
+  capability: conformer_generation
+  stage: ligand_preparation
+  inputs:
+    - semantic_type: molecule_table@1
+      field: molecules
+      accepted_extensions: [.csv, .smi, .txt]
+  outputs:
+    - semantic_type: ligand_structure@1
+      source: output_files
+      match: { extension: .sdf, filename_contains_any: [conformer, ligand] }
+    - semantic_type: run_report@1
+      source: output_files
+      match: { extension: .json, filename_contains_any: [report] }
+      required: false
+  defaults:
+    num_conformers: 20
+    forcefield: mmff
+resource_profile:
+  tier: medium
+  cpu: 4
+  memory_gb: 8
+  gpu_required: false
+  gpu_memory_gb: 0
+  expected_minutes: 10
+  timeout_minutes: 60
+  scheduler_hint: local
+sample_inputs:
+  - name: smoke
+    params: { num_conformers: 3, forcefield: mmff }
+    artifacts: { molecules: examples/smiles.csv }
+smoke_test:
+  name: rdkit-conformer-smoke
+  params: { num_conformers: 3, forcefield: mmff }
+  input_artifacts: { molecules: examples/smiles.csv }
+  expected_result_version: aidd.sciminer/result.v2
+  expected_outputs:
+    - semantic_type: ligand_structure@1
+      role: structure_3d_sdf
+    - semantic_type: run_report@1
+      role: report_json
+      required: false

@@ -1,0 +1,73 @@
+api_version: aidd.sciminer/tool-template.v1
+kind: ToolTemplate
+metadata:
+  template_key: smina-docking
+  slug: smina-docking
+  name: Smina Docking
+  version: 1.0.0
+  description: Dock prepared ligands with Smina-compatible scoring and minimization options.
+  family: drug_discovery
+executor_types: [docker_image, ssh_job, remote_api]
+input_schema:
+  type: object
+  properties:
+    box_center: { type: array, minItems: 3, maxItems: 3, items: { type: number } }
+    box_size: { type: array, minItems: 3, maxItems: 3, items: { type: number } }
+    exhaustiveness: { type: integer, minimum: 1, default: 8 }
+  required: [box_center, box_size]
+output_schema:
+  type: object
+  properties:
+    result_version: { const: aidd.sciminer/result.v2 }
+    artifacts: { type: array }
+    summary: { type: object }
+agent_capability:
+  enabled: true
+  capability: molecular_docking
+  stage: docking_scoring
+  inputs:
+    - semantic_type: protein_structure@1
+      field: protein
+      accepted_extensions: [.pdb, .pdbqt]
+    - semantic_type: ligand_structure@1
+      field: ligand
+      accepted_extensions: [.sdf, .mol2, .pdbqt]
+  outputs:
+    - semantic_type: ligand_structure@1
+      source: output_files
+      match: { filename_contains_any: [pose, docking, smina] }
+    - semantic_type: run_report@1
+      source: output_files
+      match: { extension: .json, filename_contains_any: [docking, report] }
+    - semantic_type: molecule_table@1
+      source: output_files
+      match: { extension: .csv, filename_contains_any: [ranking, scores] }
+      required: false
+  defaults:
+    exhaustiveness: 8
+resource_profile:
+  tier: medium
+  cpu: 8
+  memory_gb: 16
+  gpu_required: false
+  gpu_memory_gb: 0
+  expected_minutes: 30
+  timeout_minutes: 180
+  scheduler_hint: ssh
+sample_inputs:
+  - name: smoke
+    params: { box_center: [0, 0, 0], box_size: [16, 16, 16], exhaustiveness: 1 }
+    artifacts: { protein: examples/receptor.pdb, ligand: examples/ligand.sdf }
+smoke_test:
+  name: smina-docking-smoke
+  params: { box_center: [0, 0, 0], box_size: [16, 16, 16], exhaustiveness: 1 }
+  input_artifacts: { protein: examples/receptor.pdb, ligand: examples/ligand.sdf }
+  expected_result_version: aidd.sciminer/result.v2
+  expected_outputs:
+    - semantic_type: ligand_structure@1
+      role: structure_file
+    - semantic_type: run_report@1
+      role: report_json
+    - semantic_type: molecule_table@1
+      role: table_file
+      required: false

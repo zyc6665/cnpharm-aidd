@@ -31,6 +31,7 @@ def build_tool_contract(tool: Any, *, capability: Any | None = None) -> dict[str
         "is_public": getattr(tool, "is_public", None),
         "version": _version_contract(current_version),
         "executor": _executor_contract(tool, config),
+        "resource_profile": _resource_profile_contract(config.get("resource_profile")),
         "schema": {
             "input": _schema_object(config.get("input_schema")),
             "output": _schema_object(config.get("output_schema")),
@@ -78,6 +79,7 @@ def _build_tool_package_contract(
             "type": "tool_package",
             "timeout_sec": None,
         },
+        "resource_profile": {},
         "schema": {"input": {}, "output": {}},
         "capability": {
             "enabled": True,
@@ -150,6 +152,7 @@ def _build_tool_package_v2_contract(
             "type": "tool_package",
             "timeout_sec": None,
         },
+        "resource_profile": {},
         "schema": {"input": _schema_object(manifest.get("parameters_schema")), "output": {}},
         "artifacts": {
             "inputs": [_artifact_input_slot(item) for item in inputs],
@@ -182,6 +185,7 @@ def build_virtual_tool_contract(capability: Any) -> dict[str, Any]:
         "is_public": True,
         "version": None,
         "executor": {"type": "builtin", "timeout_sec": None},
+        "resource_profile": {},
         "schema": {"input": {}, "output": {}},
         "capability": _capability_contract(
             raw_capability=None,
@@ -226,6 +230,7 @@ def tool_contract_to_agent_summary(contract: dict[str, Any]) -> dict[str, Any]:
         "artifact_outputs": list(artifacts.get("outputs") or []),
         "exposure": dict(contract.get("exposure") or {}),
         "executor": contract.get("executor") or {},
+        "resource_profile": dict(contract.get("resource_profile") or {}),
         "validation": contract.get("validation") or {},
     }
 
@@ -333,6 +338,10 @@ def _executor_contract(tool: Any, config: dict[str, Any]) -> dict[str, Any]:
         "type": str(config.get("type") or ""),
         "timeout_sec": config.get("timeout_sec", getattr(tool, "timeout_sec", None)),
     }
+
+
+def _resource_profile_contract(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, dict) else {}
 
 
 def _schema_object(value: Any) -> dict[str, Any]:

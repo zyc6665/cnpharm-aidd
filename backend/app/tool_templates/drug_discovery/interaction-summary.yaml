@@ -1,0 +1,59 @@
+api_version: aidd.sciminer/tool-template.v1
+kind: ToolTemplate
+metadata:
+  template_key: interaction-summary
+  slug: interaction-summary
+  name: Protein Ligand Interaction Summary
+  version: 1.0.0
+  description: Summarize protein-ligand contacts, hydrogen bonds, hydrophobic interactions, and pose warnings.
+  family: drug_discovery
+executor_types: [docker_image, ssh_job, remote_api]
+input_schema:
+  type: object
+  properties:
+    distance_cutoff_angstrom: { type: number, default: 4.0 }
+  required: [distance_cutoff_angstrom]
+output_schema:
+  type: object
+  properties:
+    result_version: { const: aidd.sciminer/result.v2 }
+    artifacts: { type: array }
+    summary: { type: object }
+agent_capability:
+  enabled: true
+  capability: interaction_analysis
+  stage: postprocessing
+  inputs:
+    - semantic_type: protein_structure@1
+      field: protein
+      accepted_extensions: [.pdb, .cif]
+    - semantic_type: ligand_structure@1
+      field: ligand
+      accepted_extensions: [.sdf, .mol2, .pdb]
+  outputs:
+    - semantic_type: run_report@1
+      source: output_files
+      match: { extension: .json, filename_contains_any: [interaction, report] }
+  defaults:
+    distance_cutoff_angstrom: 4.0
+resource_profile:
+  tier: light
+  cpu: 4
+  memory_gb: 8
+  gpu_required: false
+  gpu_memory_gb: 0
+  expected_minutes: 5
+  timeout_minutes: 45
+  scheduler_hint: local
+sample_inputs:
+  - name: smoke
+    params: { distance_cutoff_angstrom: 4.0 }
+    artifacts: { protein: examples/receptor.pdb, ligand: examples/docked_ligand.sdf }
+smoke_test:
+  name: interaction-summary-smoke
+  params: { distance_cutoff_angstrom: 4.0 }
+  input_artifacts: { protein: examples/receptor.pdb, ligand: examples/docked_ligand.sdf }
+  expected_result_version: aidd.sciminer/result.v2
+  expected_outputs:
+    - semantic_type: run_report@1
+      role: report_json

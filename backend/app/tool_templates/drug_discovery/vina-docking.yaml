@@ -1,0 +1,77 @@
+api_version: aidd.sciminer/tool-template.v1
+kind: ToolTemplate
+metadata:
+  template_key: vina-docking
+  slug: vina-docking
+  name: AutoDock Vina Docking
+  version: 1.0.0
+  description: Dock prepared ligands against a prepared receptor using AutoDock Vina.
+  family: drug_discovery
+executor_types: [docker_image, ssh_job, remote_api]
+input_schema:
+  type: object
+  properties:
+    center_x: { type: number }
+    center_y: { type: number }
+    center_z: { type: number }
+    size_x: { type: number, default: 20 }
+    size_y: { type: number, default: 20 }
+    size_z: { type: number, default: 20 }
+    exhaustiveness: { type: integer, minimum: 1, default: 8 }
+  required: [center_x, center_y, center_z, size_x, size_y, size_z]
+output_schema:
+  type: object
+  properties:
+    result_version: { const: aidd.sciminer/result.v2 }
+    artifacts: { type: array }
+    summary: { type: object }
+agent_capability:
+  enabled: true
+  capability: molecular_docking
+  stage: docking_scoring
+  inputs:
+    - semantic_type: protein_structure@1
+      field: protein
+      accepted_extensions: [.pdb, .pdbqt]
+    - semantic_type: ligand_structure@1
+      field: ligand
+      accepted_extensions: [.sdf, .mol2, .pdbqt]
+  outputs:
+    - semantic_type: ligand_structure@1
+      source: output_files
+      match: { filename_contains_any: [pose, docking] }
+    - semantic_type: run_report@1
+      source: output_files
+      match: { extension: .json, filename_contains_any: [docking, report] }
+    - semantic_type: molecule_table@1
+      source: output_files
+      match: { extension: .csv, filename_contains_any: [ranking, scores] }
+      required: false
+  defaults:
+    exhaustiveness: 8
+resource_profile:
+  tier: medium
+  cpu: 8
+  memory_gb: 16
+  gpu_required: false
+  gpu_memory_gb: 0
+  expected_minutes: 30
+  timeout_minutes: 180
+  scheduler_hint: ssh
+sample_inputs:
+  - name: smoke
+    params: { center_x: 0, center_y: 0, center_z: 0, size_x: 16, size_y: 16, size_z: 16, exhaustiveness: 1 }
+    artifacts: { protein: examples/receptor.pdb, ligand: examples/ligand.sdf }
+smoke_test:
+  name: vina-docking-smoke
+  params: { center_x: 0, center_y: 0, center_z: 0, size_x: 16, size_y: 16, size_z: 16, exhaustiveness: 1 }
+  input_artifacts: { protein: examples/receptor.pdb, ligand: examples/ligand.sdf }
+  expected_result_version: aidd.sciminer/result.v2
+  expected_outputs:
+    - semantic_type: ligand_structure@1
+      role: structure_file
+    - semantic_type: run_report@1
+      role: report_json
+    - semantic_type: molecule_table@1
+      role: table_file
+      required: false

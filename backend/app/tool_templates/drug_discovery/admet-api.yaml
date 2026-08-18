@@ -1,0 +1,64 @@
+api_version: aidd.sciminer/tool-template.v1
+kind: ToolTemplate
+metadata:
+  template_key: admet-api
+  slug: admet-api
+  name: ADMET Prediction API
+  version: 1.0.0
+  description: Standard wrapper for an internal or external ADMET prediction service.
+  family: drug_discovery
+executor_types: [remote_api, docker_image, ssh_job]
+input_schema:
+  type: object
+  properties:
+    smiles_column: { type: string, default: smiles }
+    endpoints: { type: array, items: { type: string }, default: [absorption, distribution, metabolism, excretion] }
+  required: [smiles_column]
+output_schema:
+  type: object
+  properties:
+    result_version: { const: aidd.sciminer/result.v2 }
+    artifacts: { type: array }
+    summary: { type: object }
+agent_capability:
+  enabled: true
+  capability: admet_prediction
+  stage: admet_prediction
+  inputs:
+    - semantic_type: molecule_table@1
+      field: molecules
+      accepted_extensions: [.csv, .smi, .txt]
+  outputs:
+    - semantic_type: run_report@1
+      source: output_files
+      match: { extension: .json, filename_contains_any: [admet, report] }
+    - semantic_type: molecule_table@1
+      source: output_files
+      match: { extension: .csv, filename_contains_any: [admet] }
+      required: false
+  defaults:
+    smiles_column: smiles
+resource_profile:
+  tier: light
+  cpu: 2
+  memory_gb: 4
+  gpu_required: false
+  gpu_memory_gb: 0
+  expected_minutes: 5
+  timeout_minutes: 60
+  scheduler_hint: api
+sample_inputs:
+  - name: smoke
+    params: { smiles_column: smiles }
+    artifacts: { molecules: examples/smiles.csv }
+smoke_test:
+  name: admet-api-smoke
+  params: { smiles_column: smiles }
+  input_artifacts: { molecules: examples/smiles.csv }
+  expected_result_version: aidd.sciminer/result.v2
+  expected_outputs:
+    - semantic_type: run_report@1
+      role: report_json
+    - semantic_type: molecule_table@1
+      role: table_file
+      required: false

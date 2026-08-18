@@ -1,0 +1,71 @@
+api_version: aidd.sciminer/tool-template.v1
+kind: ToolTemplate
+metadata:
+  template_key: docking-rescore
+  slug: docking-rescore
+  name: Docking Rescore And Ranking
+  version: 1.0.0
+  description: Merge docking scores with molecular properties to produce a ranked hit table.
+  family: drug_discovery
+executor_types: [python_script, docker_image, ssh_job, remote_api]
+input_schema:
+  type: object
+  properties:
+    vina_weight: { type: number, default: 0.6 }
+    qed_weight: { type: number, default: 0.2 }
+    sa_weight: { type: number, default: 0.2 }
+  required: [vina_weight, qed_weight, sa_weight]
+output_schema:
+  type: object
+  properties:
+    result_version: { const: aidd.sciminer/result.v2 }
+    artifacts: { type: array }
+    summary: { type: object }
+agent_capability:
+  enabled: true
+  capability: docking_rescore
+  stage: postprocessing
+  inputs:
+    - semantic_type: molecule_table@1
+      field: ranking
+      accepted_extensions: [.csv, .tsv]
+    - semantic_type: run_report@1
+      field: docking_report
+      required: false
+      accepted_extensions: [.json]
+  outputs:
+    - semantic_type: molecule_table@1
+      source: output_files
+      match: { extension: .csv, filename_contains_any: [ranking, rescore] }
+    - semantic_type: run_report@1
+      source: output_files
+      match: { extension: .json, filename_contains_any: [rescore, report] }
+      required: false
+  defaults:
+    vina_weight: 0.6
+    qed_weight: 0.2
+    sa_weight: 0.2
+resource_profile:
+  tier: light
+  cpu: 2
+  memory_gb: 4
+  gpu_required: false
+  gpu_memory_gb: 0
+  expected_minutes: 3
+  timeout_minutes: 30
+  scheduler_hint: local
+sample_inputs:
+  - name: smoke
+    params: { vina_weight: 0.6, qed_weight: 0.2, sa_weight: 0.2 }
+    artifacts: { ranking: examples/docking_scores.csv }
+smoke_test:
+  name: docking-rescore-smoke
+  params: { vina_weight: 0.6, qed_weight: 0.2, sa_weight: 0.2 }
+  input_artifacts: { ranking: examples/docking_scores.csv }
+  expected_result_version: aidd.sciminer/result.v2
+  expected_outputs:
+    - semantic_type: molecule_table@1
+      role: table_file
+    - semantic_type: run_report@1
+      role: report_json
+      required: false
