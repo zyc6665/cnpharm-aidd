@@ -53,6 +53,28 @@ export interface RemoteToolRegisterResult {
   smoke_test_task_id?: string | null
 }
 
+export interface ToolTemplateSummary {
+  template_key: string
+  slug: string
+  name: string
+  version: string
+  description: string
+  family: string
+  executor_types: Array<'remote_api' | 'docker_image' | 'python_script' | 'ssh_job'>
+  capability: string
+  stage: string
+  inputs: Array<Record<string, unknown>>
+  outputs: Array<Record<string, unknown>>
+  resource_profile: Record<string, unknown>
+}
+
+export interface ToolTemplateDraftParams {
+  executor_type: 'remote_api' | 'docker_image' | 'python_script' | 'ssh_job'
+  executor_config: Record<string, unknown>
+  category_id?: string
+  publish?: boolean
+}
+
 function toToolOptionSummary(tool: Tool): ToolOptionSummary {
   return {
     id: tool.id,
@@ -123,6 +145,17 @@ export const registerRemoteTool = (
   data: RemoteToolRegisterParams
 ): Promise<ApiResponse<RemoteToolRegisterResult>> => {
   return post<RemoteToolRegisterResult>('/tools/register-remote', data)
+}
+
+export const listToolTemplates = (): Promise<ApiResponse<ToolTemplateSummary[]>> => {
+  return get<ToolTemplateSummary[]>('/tool-templates')
+}
+
+export const createToolDraftFromTemplate = (
+  templateKey: string,
+  data: ToolTemplateDraftParams
+): Promise<ApiResponse<ToolImportConfigResult>> => {
+  return post<ToolImportConfigResult>(`/tool-templates/${templateKey}/draft`, data)
 }
 
 // 更新工具（管理员）

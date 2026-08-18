@@ -20,6 +20,61 @@
             layout="vertical"
             @finish="handleSubmit"
           >
+            <template v-if="!isEdit">
+              <a-divider orientation="left">药物研发工具模板</a-divider>
+
+              <div class="drug-template-panel">
+                <a-alert
+                  type="info"
+                  show-icon
+                  message="从标准模板创建工具草稿"
+                  description="模板会固定药物研发能力、标准输入输出、resource_profile 和 smoke test；Docker、SSH、API 等部署参数仍按下方执行器配置填写。"
+                />
+                <a-row :gutter="16" class="drug-template-row">
+                  <a-col :span="14">
+                    <a-form-item label="药物研发工具模板">
+                      <a-select
+                        v-model:value="selectedToolTemplateKey"
+                        placeholder="选择 ADMET、构象生成、Vina、MD 等模板"
+                        allow-clear
+                        @change="handleToolTemplateChange"
+                      >
+                        <a-select-option
+                          v-for="template in toolTemplates"
+                          :key="template.template_key"
+                          :value="template.template_key"
+                        >
+                          {{ template.name }} · {{ template.capability }}
+                        </a-select-option>
+                      </a-select>
+                    </a-form-item>
+                  </a-col>
+                  <a-col :span="10">
+                    <a-form-item label="资源画像">
+                      <div class="drug-template-resource">
+                        {{ selectedToolTemplateResourceText || '选择模板后显示资源需求' }}
+                      </div>
+                    </a-form-item>
+                  </a-col>
+                </a-row>
+                <a-space>
+                  <a-button
+                    type="primary"
+                    html-type="button"
+                    :disabled="!selectedToolTemplateKey"
+                    :loading="creatingTemplateDraft"
+                    @click="handleCreateTemplateDraft"
+                  >
+                    <PlusOutlined />
+                    从模板创建草稿
+                  </a-button>
+                  <span class="form-extra">
+                    创建草稿会直接复用下方当前执行器配置，不会发布工具。
+                  </span>
+                </a-space>
+              </div>
+            </template>
+
             <template v-if="!isRemoteSelfRegister">
               <!-- 基本信息 -->
               <a-divider orientation="left">{{ t('tools.basicInfo') }}</a-divider>
@@ -826,11 +881,14 @@
   import { useToolsStore } from '@/stores'
   import {
     createTool,
+    createToolDraftFromTemplate,
     createToolVersion,
     getToolDetail,
+    listToolTemplates,
     registerRemoteTool,
     type RemoteToolRegisterResult,
     type RemoteToolStageDiagnostic,
+    type ToolTemplateSummary,
     updateTool
   } from '@/api/tools'
   import type { ToolCreateParams } from '@/types/models'
@@ -851,6 +909,9 @@
   const loading = ref(false)
   const submitting = ref(false)
   const remoteRegisterResult = ref<RemoteToolRegisterResult | null>(null)
+  const toolTemplates = ref<ToolTemplateSummary[]>([])
+  const selectedToolTemplateKey = ref<string>()
+  const creatingTemplateDraft = ref(false)
   const originalVersion = ref('')
   const originalChangelog = ref('')
   const originalNotes = ref('')
@@ -982,6 +1043,24 @@
   ])
   const agentDefaultsText = ref('{}')
 
+  const selectedToolTemplate = computed(() =>
+    toolTemplates.value.find(template => template.template_key === selectedToolTemplateKey.value)
+  )
+
+  const selectedToolTemplateResourceText = computed(() => {
+    const resource_profile = selectedToolTemplate.value?.resource_profile
+    if (!resource_profile) {
+      return ''
+    }
+    const tier = String(resource_profile.tier || 'unknown')
+    const cpu = String(resource_profile.cpu || '-')
+    const memory = String(resource_profile.memory_gb || '-')
+    const expected = String(resource_profile.expected_minutes || '-')
+    const timeout = String(resource_profile.timeout_minutes || '-')
+    const gpu = resource_profile.gpu_required ? `GPU ${resource_profile.gpu_memory_gb || '-'}GB` : 'CPU'
+    return `${tier} · ${gpu} · CPU ${cpu} · MEM ${memory}GB · ${expected}/${timeout} min`
+  })
+
   const addAgentInput = () => {
     formState.agent_inputs.push(createAgentCapabilityInputForm())
   }
@@ -996,6 +1075,162 @@
 
   const removeAgentOutput = (index: number) => {
     formState.agent_outputs.splice(index, 1)
+  }
+
+  const loadToolTemplates = async () => {
+    if (isEdit.value) {
+      return
+    }
+    try {
+      const response = await listToolTemplates()
+      toolTemplates.value = response.data
+    } catch {
+      toolTemplates.value = []
+    }
+  }
+
+  const handleToolTemplateChange = () => {
+    const template = selectedToolTemplate.value
+    if (!template) {
+      return
+    }
+    const preferredExecutor = template.executor_types.find(isSupportedToolType)
+    if (preferredExecutor && !template.executor_types.includes(formState.tool_type)) {
+      formState.tool_type = preferredExecutor
+    }
+    if (formState.tool_type === 'remote_api') {
+      formState.remote_api_registration_mode = 'manual'
+    }
+    formState.name = template.name
+    formState.slug = template.slug
+    formState.description = template.description
+    formState.version = template.version
+    formState.agent_capability_enabled = true
+    formState.agent_capability = template.capability
+    formState.agent_stage = template.stage
+    formState.agent_inputs = template.inputs.map(templateInputToForm)
+    formState.agent_outputs = template.outputs.map(templateOutputToForm)
+    agentDefaultsText.value = '{}'
+
+    const resourceProfile = template.resource_profile
+    formState.gpu_required = resourceProfile.gpu_required === true
+    formState.gpu_memory_mb = numberFromTemplate(resourceProfile.gpu_memory_gb, 0) * 1024
+    formState.timeout_sec = Math.min(
+      86400,
+      Math.max(60, numberFromTemplate(resourceProfile.timeout_minutes, 60) * 60)
+    )
+  }
+
+  const handleCreateTemplateDraft = async () => {
+    if (!selectedToolTemplateKey.value) {
+      message.error('请选择药物研发工具模板')
+      return
+    }
+    try {
+      await formRef.value?.validate()
+    } catch {
+      return
+    }
+
+    creatingTemplateDraft.value = true
+    try {
+      const draftResponse = await createToolDraftFromTemplate(selectedToolTemplateKey.value, {
+        category_id: formState.category_id,
+        executor_type: formState.tool_type,
+        executor_config: buildTemplateExecutorConfig(),
+        publish: false
+      })
+      message.success('工具模板草稿创建成功')
+      const createdToolId = draftResponse.data.tool.id
+      router.push(`/tools/${createdToolId}`)
+    } catch {
+      // 错误已在请求层处理
+    } finally {
+      creatingTemplateDraft.value = false
+    }
+  }
+
+  const buildTemplateExecutorConfig = (): Record<string, unknown> => {
+    if (formState.tool_type === 'remote_api') {
+      return {
+        endpoint: formState.api_endpoint,
+        method: formState.api_method,
+        headers: keyValueEntriesToRecord(apiHeaderEntries.value)
+      }
+    }
+    if (formState.tool_type === 'docker_image') {
+      return {
+        image: formState.docker_image,
+        command: stringListForConfig(dockerCommandItems.value),
+        env: keyValueEntriesToRecord(dockerEnvEntries.value)
+      }
+    }
+    if (formState.tool_type === 'python_script') {
+      return {
+        script_path: formState.python_script,
+        args: stringListForConfig(pythonArgumentItems.value)
+      }
+    }
+
+    const config: Record<string, unknown> = {
+      host: formState.ssh_host,
+      port: formState.ssh_port,
+      username: formState.ssh_username,
+      auth_type: formState.ssh_auth_type,
+      runner_mode: formState.ssh_runner_mode,
+      remote_base_dir: formState.ssh_remote_base_dir,
+      entrypoint: formState.ssh_entrypoint,
+      cleanup_remote: formState.ssh_cleanup_remote,
+      strict_host_key_checking: formState.ssh_strict_host_key_checking,
+      env: keyValueEntriesToRecord(sshEnvEntries.value),
+      output_globs: stringListForConfig(sshOutputGlobItems.value)
+    }
+    if (formState.ssh_auth_type === 'password') {
+      config.password_ref = formState.ssh_password_ref
+    } else {
+      config.auth_ref = formState.ssh_auth_ref
+    }
+    if (formState.ssh_runner_mode === 'docker_exec') {
+      config.container_name = formState.ssh_container_name
+      if (formState.ssh_container_base_dir) {
+        config.container_base_dir = formState.ssh_container_base_dir
+      }
+    }
+    if (formState.ssh_device) {
+      config.device = formState.ssh_device
+    }
+    return config
+  }
+
+  const isSupportedToolType = (value: string): value is ExtendedFormState['tool_type'] => {
+    return ['remote_api', 'docker_image', 'python_script', 'ssh_job'].includes(value)
+  }
+
+  const templateInputToForm = (input: Record<string, unknown>): AgentCapabilityInputForm => ({
+    semantic_type: String(input.semantic_type || ''),
+    field: String(input.field || input.semantic_type || ''),
+    accepted_extensions: Array.isArray(input.accepted_extensions)
+      ? input.accepted_extensions.map(item => String(item)).join(',')
+      : ''
+  })
+
+  const templateOutputToForm = (output: Record<string, unknown>): AgentCapabilityOutputForm => {
+    const match = isToolConfigRecord(output.match) ? output.match : {}
+    return {
+      semantic_type: String(output.semantic_type || ''),
+      source: output.source === 'output_data' ? 'output_data' : 'output_files',
+      path: String(output.path || ''),
+      match_extension: String(match.extension || ''),
+      filename_contains_any: Array.isArray(match.filename_contains_any)
+        ? match.filename_contains_any.map(item => String(item)).join(',')
+        : '',
+      required: output.required !== false
+    }
+  }
+
+  const numberFromTemplate = (value: unknown, fallback: number): number => {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : fallback
   }
 
   const handleAgentCapabilityToggle = (checked: boolean | string | number) => {
@@ -1379,7 +1614,8 @@
     // 加载分类和标签
     await Promise.all([
       toolsStore.fetchCategories(),
-      toolsStore.fetchTags()
+      toolsStore.fetchTags(),
+      loadToolTemplates()
     ])
 
     // 编辑模式加载工具详情
@@ -1409,6 +1645,27 @@
 
   .tool-package-primary-path {
     margin-bottom: @spacing-lg;
+  }
+
+  .drug-template-panel {
+    display: grid;
+    gap: @spacing-md;
+    margin-bottom: @spacing-lg;
+    padding: @spacing-md;
+    border: 1px solid @border-color-light;
+    border-radius: @border-radius-base;
+    background: @bg-color-light;
+  }
+
+  .drug-template-row {
+    margin-top: @spacing-xs;
+  }
+
+  .drug-template-resource {
+    min-height: 32px;
+    padding: 5px 0;
+    color: @text-color-light-secondary;
+    font-size: @font-size-sm;
   }
 
   .remote-register-result {

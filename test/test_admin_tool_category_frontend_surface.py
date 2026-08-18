@@ -91,3 +91,20 @@ def test_tool_form_uses_structured_executor_config_editors():
     assert "dockerEnvText" not in create_source
     assert "sshEnvText" not in create_source
     assert "sshOutputGlobsText" not in create_source
+
+
+def test_admin_tool_form_exposes_drug_discovery_template_draft_flow():
+    """工具创建页应能从药物研发模板创建工具草稿。"""
+    create_source = read_source("frontend/src/views/tools/Create.vue")
+    api_source = read_source("frontend/src/api/tools.ts")
+
+    assert "listToolTemplates" in api_source
+    assert "createToolDraftFromTemplate" in api_source
+    assert "/tool-templates" in api_source
+
+    assert "药物研发工具模板" in create_source
+    assert "selectedToolTemplateKey" in create_source
+    assert "toolTemplates" in create_source
+    assert "handleCreateTemplateDraft" in create_source
+    assert "createToolDraftFromTemplate" in create_source
+    assert "resource_profile" in create_source
