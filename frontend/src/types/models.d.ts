@@ -233,6 +233,7 @@ export interface ToolContract {
   is_public?: boolean | null
   version?: ToolContractVersion | null
   executor: ToolContractExecutor
+  resource_profile?: Record<string, unknown>
   schema: {
     input: ToolSchema
     output: ToolSchema

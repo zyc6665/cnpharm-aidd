@@ -87,7 +87,9 @@ export function useWorkflowCanvas(input: {
         description?: string
         contract?: ToolContract | null
         executorType?: string
+        capability?: string
         stage?: string
+        resourceProfile?: Record<string, unknown>
         inputSemanticTypes: WorkflowArtifactSemanticType[]
         outputSemanticTypes: WorkflowArtifactSemanticType[]
         inputArtifactSlots: ArtifactInputSlot[]
@@ -105,8 +107,10 @@ export function useWorkflowCanvas(input: {
           description: tool.description,
           contract: tool.contract,
           executorType: tool.contract?.executor.type,
+          capability: tool.contract?.capability.capability ?? undefined,
           stage:
             tool.contract?.capability.stage ?? tool.contract?.capability.capability ?? undefined,
+          resourceProfile: tool.contract?.resource_profile,
           inputSemanticTypes: artifactSlots.inputs.length
             ? artifactSlots.inputs.map(slot => slot.type)
             : resolveWorkflowSemanticTypes(
@@ -133,8 +137,10 @@ export function useWorkflowCanvas(input: {
           description: tool.description,
           contract: tool.contract,
           executorType: tool.contract?.executor.type,
+          capability: tool.contract?.capability.capability ?? undefined,
           stage:
             tool.contract?.capability.stage ?? tool.contract?.capability.capability ?? undefined,
+          resourceProfile: tool.contract?.resource_profile,
           inputSemanticTypes: artifactSlots.inputs.length
             ? artifactSlots.inputs.map(slot => slot.type)
             : resolveWorkflowSemanticTypes(

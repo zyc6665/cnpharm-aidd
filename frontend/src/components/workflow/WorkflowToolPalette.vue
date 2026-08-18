@@ -44,19 +44,28 @@
       </div>
     </div>
     <div class="sidebar-tool-list">
-      <button
-        v-for="tool in tools"
-        :key="tool.slug"
-        type="button"
-        class="sidebar-tool-item"
-        draggable="true"
-        @click="emit('add-tool', tool.slug)"
-        @dragstart="handleToolDragStart($event, tool.slug)"
-      >
-        <span class="sidebar-tool-name">{{ tool.name || tool.slug }}</span>
-        <span v-if="tool.description" class="sidebar-tool-desc">{{ tool.description }}</span>
-        <span class="sidebar-tool-action">{{ t('workflow.palette.addNode') }}</span>
-      </button>
+      <section v-for="group in toolGroups" :key="group.key" class="sidebar-tool-group">
+        <div class="sidebar-tool-group-title">{{ group.label }}</div>
+        <button
+          v-for="tool in group.tools"
+          :key="tool.slug"
+          type="button"
+          class="sidebar-tool-item"
+          draggable="true"
+          @click="emit('add-tool', tool.slug)"
+          @dragstart="handleToolDragStart($event, tool.slug)"
+        >
+          <span class="sidebar-tool-name">{{ tool.name || tool.slug }}</span>
+          <span v-if="tool.description" class="sidebar-tool-desc">{{ tool.description }}</span>
+          <span class="sidebar-tool-meta">
+            <span v-if="tool.executorType">{{ tool.executorType }}</span>
+            <span v-if="resourceProfileLabel(tool.resourceProfile)">
+              {{ resourceProfileLabel(tool.resourceProfile) }}
+            </span>
+          </span>
+          <span class="sidebar-tool-action">{{ t('workflow.palette.addNode') }}</span>
+        </button>
+      </section>
       <a-empty
         v-if="tools.length === 0"
         class="sidebar-tool-empty"
@@ -67,9 +76,20 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-defineProps<{
+interface PaletteTool {
+  slug: string
+  name: string
+  description?: string
+  capability?: string
+  stage?: string
+  executorType?: string
+  resourceProfile?: Record<string, unknown>
+}
+
+const props = defineProps<{
   searchKeyword: string
   stageFilter?: string
   inputFilter?: string
@@ -79,7 +99,7 @@ defineProps<{
   inputOptions: Array<{ value: string; label: string }>
   outputOptions: Array<{ value: string; label: string }>
   executorOptions: Array<{ value: string; label: string }>
-  tools: Array<{ slug: string; name: string; description?: string }>
+  tools: PaletteTool[]
 }>()
 
 const emit = defineEmits<{
@@ -92,6 +112,47 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+
+const toolGroups = computed(() => {
+  const groups = new Map<string, PaletteTool[]>()
+  for (const tool of props.tools) {
+    const key = tool.capability || tool.stage || 'other_tools'
+    if (!groups.has(key)) {
+      groups.set(key, [])
+    }
+    groups.get(key)!.push(tool)
+  }
+  return Array.from(groups.entries()).map(([key, tools]) => ({
+    key,
+    label: key,
+    tools,
+  }))
+})
+
+function resourceProfileLabel(resourceProfile?: Record<string, unknown>): string {
+  if (!resourceProfile) {
+    return ''
+  }
+  const segments = [String(resourceProfile.tier || '')].filter(Boolean)
+  if (hasResourceValue(resourceProfile.cpu)) {
+    segments.push(`CPU ${resourceProfile.cpu}`)
+  }
+  if (hasResourceValue(resourceProfile.memory_gb)) {
+    segments.push(`MEM ${resourceProfile.memory_gb}GB`)
+  }
+  if (resourceProfile.gpu_required) {
+    segments.push(
+      hasResourceValue(resourceProfile.gpu_memory_gb)
+        ? `GPU ${resourceProfile.gpu_memory_gb}GB`
+        : 'GPU'
+    )
+  }
+  return segments.join(' · ')
+}
+
+function hasResourceValue(value: unknown): boolean {
+  return value !== undefined && value !== null && value !== ''
+}
 
 function handleToolDragStart(event: DragEvent, toolSlug: string) {
   if (!event.dataTransfer) {
@@ -143,6 +204,22 @@ function handleToolDragStart(event: DragEvent, toolSlug: string) {
   overflow: auto;
 }
 
+.sidebar-tool-group {
+  display: grid;
+  gap: @spacing-xs;
+}
+
+.sidebar-tool-group + .sidebar-tool-group {
+  margin-top: @spacing-sm;
+}
+
+.sidebar-tool-group-title {
+  color: @text-color-light-tertiary;
+  font-size: @font-size-xs;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
 .sidebar-tool-item {
   min-width: 0;
   display: grid;
@@ -179,6 +256,24 @@ function handleToolDragStart(event: DragEvent, toolSlug: string) {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.sidebar-tool-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  color: @text-color-light-tertiary;
+  font-size: @font-size-xs;
+}
+
+.sidebar-tool-meta span {
+  max-width: 100%;
+  padding: 1px 5px;
+  border-radius: @border-radius-sm;
+  background: @bg-hover;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sidebar-tool-action {
