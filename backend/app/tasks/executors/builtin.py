@@ -67,7 +67,11 @@ class BuiltinExecutor(BaseExecutor):
             artifact_paths,
             output_root=str(output_dir),
         )
-        output_data = {output.semantic_type: output.data for output in result.outputs}
+        output_data = (
+            result.standard_result
+            if result.standard_result is not None
+            else {output.semantic_type: output.data for output in result.outputs}
+        )
         return {
             "success": True,
             "result": output_data,

@@ -50,6 +50,7 @@ class BuiltinToolOutput:
 class BuiltinToolResult:
     artifacts: tuple[BuiltinToolArtifact, ...] = ()
     outputs: tuple[BuiltinToolOutput, ...] = ()
+    standard_result: dict[str, Any] | None = None
 
 
 def _smiles_csv_content(smiles_values: list[str]) -> bytes:

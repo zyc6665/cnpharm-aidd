@@ -206,7 +206,10 @@ def _declared_outputs_from_config(config: dict[str, Any]) -> list[DeclaredArtifa
 
     if not isinstance(config, dict):
         return []
-    if config.get("type") != "remote_api" or config.get("mode") != "remote_tool_v1":
+    config_type = config.get("type")
+    if config_type == "remote_api" and config.get("mode") != "remote_tool_v1":
+        return []
+    if config_type not in {"remote_api", "builtin"}:
         return []
     artifacts = config.get("artifacts")
     raw_outputs = artifacts.get("outputs") if isinstance(artifacts, dict) else None
