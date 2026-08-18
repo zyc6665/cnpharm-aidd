@@ -25,7 +25,6 @@ from app.logging.audit import AuditAction, ResourceType, get_audit_logger
 from app.services.project_access import load_project_membership, require_project_role
 from app.services.research_board_content import (
     board_node_count,
-    board_nodes,
     normalize_board_content,
 )
 
