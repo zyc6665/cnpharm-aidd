@@ -30,8 +30,9 @@ async def test_builtin_executor_returns_standard_result_v2(tmp_path, monkeypatch
         },
     }
 
-    async def fake_run_builtin_tool(_slug, files):
+    async def fake_run_builtin_tool(_slug, files, *, params=None):
         assert files["protein_structure@1"].path == input_path
+        assert params == {"builtin_inputs": {"protein_structure@1": "file-protein"}}
         return BuiltinToolResult(
             standard_result=standard_result,
             artifacts=(
@@ -91,4 +92,3 @@ async def test_builtin_executor_returns_standard_result_v2(tmp_path, monkeypatch
     assert result["success"] is True
     assert result["result"] == standard_result
     assert result["output_file_ids"] == ["file-prepared"]
-

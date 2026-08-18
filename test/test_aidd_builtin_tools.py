@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import json
 import sys
@@ -46,8 +47,9 @@ async def test_run_builtin_tool_routes_protein_preparation(monkeypatch, tmp_path
     source.write_text("ATOM      1  N   ALA A   1       0.000   0.000   0.000\nEND\n")
     called: dict[str, object] = {}
 
-    def fake_handler(files):
+    def fake_handler(files, params=None):
         called["files"] = files
+        called["params"] = params
         return builtin_tools.BuiltinToolResult()
 
     monkeypatch.setattr(builtin_tools, "_run_protein_preparation_tool", fake_handler)
@@ -62,9 +64,82 @@ async def test_run_builtin_tool_routes_protein_preparation(monkeypatch, tmp_path
                 content_type="chemical/x-pdb",
             )
         },
+        params={"options": {"ph": 7.0}},
     )
 
     assert "protein_structure@1" in called["files"]
+    assert called["params"] == {"options": {"ph": 7.0}}
+
+
+def test_builtin_protein_preparation_emits_standard_result_v2(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    protein = tmp_path / "protein.pdb"
+    protein.write_text(
+        "ATOM      1  N   ALA A   1       0.000   0.000   0.000\n"
+        "HETATM    2  O   HOH A 101       1.000   1.000   1.000\n"
+        "END\n",
+        encoding="utf-8",
+    )
+
+    def fake_convert(prepared_pdb: Path, receptor_pdbqt: Path, *, rigid: bool):
+        assert rigid is True
+        assert "HOH" not in prepared_pdb.read_text(encoding="utf-8")
+        receptor_pdbqt.write_text("REMARK receptor pdbqt\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "app.protein_preparation.engine.convert_prepared_pdb_to_pdbqt",
+        fake_convert,
+    )
+
+    result = builtin_tools._run_protein_preparation_tool(
+        {
+            "protein_structure@1": builtin_tools.BuiltinToolFile(
+                file_id="file-protein",
+                filename="protein.pdb",
+                path=protein,
+                content_type="chemical/x-pdb",
+            )
+        },
+        params={
+            "preparation_profile": "docking_v1",
+            "options": {
+                "ph": 7.4,
+                "remove_water": True,
+                "output_formats": ["prepared_pdb", "receptor_pdbqt"],
+            },
+            "advanced_options": {"chain_selection": ["A"]},
+        },
+    )
+
+    assert result.standard_result is not None
+    assert result.standard_result["result_version"] == "aidd.sciminer/result.v2"
+    prepared = result.standard_result["artifacts"]["prepared_protein"]
+    assert prepared["type"] == "protein_structure@1"
+    assert prepared["metadata"]["preparation_status"] == "prepared"
+    assert prepared["metadata"]["preparation_profile"] == "docking_v1"
+    assert prepared["metadata"]["ph"] == 7.4
+    assert set(prepared["files"]) == {
+        "structure_file",
+        "metadata_json",
+        "prepared_pdb",
+        "receptor_pdbqt",
+        "preparation_report_json",
+    }
+    artifacts_by_filename = {artifact.filename: artifact for artifact in result.artifacts}
+    assert set(artifacts_by_filename) == {
+        "prepared.pdb",
+        "receptor.pdbqt",
+        "preparation_report.json",
+    }
+    assert b"HOH" not in artifacts_by_filename["prepared.pdb"].content
+    assert prepared["files"]["prepared_pdb"]["sha256"] == hashlib.sha256(
+        artifacts_by_filename["prepared.pdb"].content
+    ).hexdigest()
+    assert prepared["files"]["preparation_report_json"]["sha256"] == hashlib.sha256(
+        artifacts_by_filename["preparation_report.json"].content
+    ).hexdigest()
 
 
 def test_vina_receptor_pdbqt_conversion_uses_rigid_openbabel_option(

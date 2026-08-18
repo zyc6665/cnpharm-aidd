@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import json
 import os
@@ -443,11 +444,181 @@ def _run_vina_docking_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResu
     )
 
 
-def _run_protein_preparation_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResult:
+def _run_protein_preparation_tool(
+    files: dict[str, BuiltinToolFile],
+    params: dict[str, Any] | None = None,
+) -> BuiltinToolResult:
+    from app.protein_preparation.engine import ProteinPreparationError, prepare_protein
+    from app.schemas.protein_preparation import ProteinPreparationOptions
+
     protein_file = files.get("protein_structure@1") or files.get("protein") or files.get("protein_pdb")
     if not protein_file:
         raise ValidationException("蛋白制备缺少 protein_structure@1 输入")
-    raise ValidationException("蛋白制备执行器尚未实现")
+    if not protein_file.path.exists() or not protein_file.path.is_file():
+        raise ValidationException("蛋白制备输入文件已被删除")
+
+    params = params if isinstance(params, dict) else {}
+    option_payload = params.get("options")
+    if not isinstance(option_payload, dict):
+        option_keys = {
+            "ph",
+            "remove_water",
+            "keep_metals",
+            "keep_cofactors",
+            "remove_non_target_ligands",
+            "output_formats",
+        }
+        option_payload = {key: params[key] for key in option_keys if key in params}
+    options = ProteinPreparationOptions.model_validate(option_payload)
+    if "prepared_pdb" not in options.output_formats:
+        options = options.model_copy(
+            update={"output_formats": ["prepared_pdb", *options.output_formats]}
+        )
+    advanced_options = params.get("advanced_options") if isinstance(params.get("advanced_options"), dict) else {}
+    preparation_profile = str(params.get("preparation_profile") or "docking_v1")
+
+    with tempfile.TemporaryDirectory(prefix="aidd-protein-prep-") as tmp_dir:
+        try:
+            preparation = prepare_protein(
+                protein_file.path,
+                options,
+                advanced_options=advanced_options,
+                output_dir=Path(tmp_dir),
+            )
+        except ProteinPreparationError as exc:
+            raise ValidationException(str(exc)) from exc
+
+        prepared_file = preparation.files.get("prepared_pdb")
+        if not prepared_file:
+            raise ValidationException("蛋白制备未生成 prepared_pdb 输出")
+        prepared_content = prepared_file.path.read_bytes()
+        metadata = _protein_preparation_metadata(
+            prepared_content.decode("utf-8", errors="ignore"),
+            source_file=protein_file,
+            options=options,
+            preparation_profile=preparation_profile,
+        )
+        report = dict(preparation.report)
+        report.update(
+            {
+                "preparation_profile": preparation_profile,
+                "source_file_id": protein_file.file_id,
+                "source_filename": protein_file.filename,
+                "metadata": metadata,
+                "warnings": list(preparation.warnings),
+            }
+        )
+        report_content = json.dumps(report, ensure_ascii=False, indent=2).encode("utf-8")
+
+        artifacts = [
+            BuiltinToolArtifact(
+                semantic_type="prepared_pdb",
+                filename="prepared.pdb",
+                content=prepared_content,
+                content_type="chemical/x-pdb",
+                source_file_id=protein_file.file_id,
+            ),
+            BuiltinToolArtifact(
+                semantic_type="preparation_report_json",
+                filename="preparation_report.json",
+                content=report_content,
+                content_type="application/json",
+                source_file_id=protein_file.file_id,
+            ),
+        ]
+        output_files: dict[str, dict[str, str]] = {
+            "structure_file": _standard_output_file_ref(
+                "prepared.pdb", prepared_content, "chemical/x-pdb"
+            ),
+            "prepared_pdb": _standard_output_file_ref(
+                "prepared.pdb", prepared_content, "chemical/x-pdb"
+            ),
+            "metadata_json": _standard_output_file_ref(
+                "preparation_report.json", report_content, "application/json"
+            ),
+            "preparation_report_json": _standard_output_file_ref(
+                "preparation_report.json", report_content, "application/json"
+            ),
+        }
+
+        receptor_file = preparation.files.get("receptor_pdbqt")
+        if receptor_file:
+            receptor_content = receptor_file.path.read_bytes()
+            artifacts.append(
+                BuiltinToolArtifact(
+                    semantic_type="receptor_pdbqt",
+                    filename="receptor.pdbqt",
+                    content=receptor_content,
+                    content_type="chemical/x-pdbqt",
+                    source_file_id=protein_file.file_id,
+                )
+            )
+            output_files["receptor_pdbqt"] = _standard_output_file_ref(
+                "receptor.pdbqt", receptor_content, "chemical/x-pdbqt"
+            )
+
+    return BuiltinToolResult(
+        artifacts=tuple(artifacts),
+        standard_result={
+            "result_version": "aidd.sciminer/result.v2",
+            "artifacts": {
+                "prepared_protein": {
+                    "type": "protein_structure@1",
+                    "name": f"Prepared {Path(protein_file.filename).stem}",
+                    "files": output_files,
+                    "metadata": metadata,
+                    "summary": {
+                        "source_file_id": protein_file.file_id,
+                        "source_filename": protein_file.filename,
+                        "preparation_profile": preparation_profile,
+                    },
+                }
+            },
+            "summary": {"prepared_protein": "prepared_protein"},
+        },
+    )
+
+
+def _standard_output_file_ref(path: str, content: bytes, content_type: str) -> dict[str, str]:
+    return {
+        "path": path,
+        "sha256": hashlib.sha256(content).hexdigest(),
+        "content_type": content_type,
+    }
+
+
+def _protein_preparation_metadata(
+    prepared_pdb: str,
+    *,
+    source_file: BuiltinToolFile,
+    options: Any,
+    preparation_profile: str,
+) -> dict[str, Any]:
+    atoms = [line for line in prepared_pdb.splitlines() if line.startswith(("ATOM", "HETATM"))]
+    chain_ids = sorted({line[21].strip() for line in atoms if len(line) > 21 and line[21].strip()})
+    residues = {
+        (
+            line[21].strip() if len(line) > 21 else "",
+            line[22:26].strip() if len(line) >= 26 else "",
+            line[17:20].strip() if len(line) >= 20 else "",
+        )
+        for line in atoms
+    }
+    return {
+        "chain_ids": chain_ids,
+        "residue_count": len(residues),
+        "atom_count": len(atoms),
+        "structure_format": "pdb",
+        "source_filename": source_file.filename,
+        "preparation_status": "prepared",
+        "preparation_profile": preparation_profile,
+        "ph": options.ph,
+        "remove_water": options.remove_water,
+        "keep_metals": options.keep_metals,
+        "keep_cofactors": options.keep_cofactors,
+        "remove_non_target_ligands": options.remove_non_target_ligands,
+        "preparation_engine": "sciminer-local-v1",
+    }
 
 
 # ======================================================================
@@ -724,7 +895,11 @@ async def _run_sync_builtin_handler(
     return await asyncio.to_thread(handler, files)
 
 
-async def run_builtin_tool(tool_slug: str, files: dict[str, BuiltinToolFile]) -> BuiltinToolResult:
+async def run_builtin_tool(
+    tool_slug: str,
+    files: dict[str, BuiltinToolFile],
+    params: dict[str, Any] | None = None,
+) -> BuiltinToolResult:
     if tool_slug in PLACEHOLDER_AIDD_TOOL_SLUGS:
         raise ValidationException(f"内置能力尚未接入真实执行引擎: {tool_slug}")
 
@@ -739,7 +914,7 @@ async def run_builtin_tool(tool_slug: str, files: dict[str, BuiltinToolFile]) ->
     if handler_key == "vina_docking":
         return await _run_sync_builtin_handler(_run_vina_docking_tool, files)
     if handler_key == "protein_preparation":
-        return await _run_sync_builtin_handler(_run_protein_preparation_tool, files)
+        return await asyncio.to_thread(_run_protein_preparation_tool, files, params)
     if handler_key == "query_chembl":
         return await _run_query_chembl_tool(files)
     if handler_key == "query_pubchem":

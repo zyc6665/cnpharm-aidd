@@ -55,7 +55,7 @@ class BuiltinExecutor(BaseExecutor):
                 content_type=file_record.content_type,
             )
 
-        result = await run_builtin_tool(builtin_slug, builtin_files)
+        result = await run_builtin_tool(builtin_slug, builtin_files, params=params)
         output_dir = Path(self._get_work_dir()) / "output"
         artifact_paths: list[str] = []
         for artifact in result.artifacts:
