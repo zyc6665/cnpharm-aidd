@@ -201,6 +201,161 @@ async def test_board_workflow_draft_preserves_artifact_nodes_as_workflow_inputs(
 
 
 @pytest.mark.asyncio
+async def test_board_workflow_draft_prefers_explicit_process_edges(db_session):
+    owner = make_user('owner@example.com')
+    prep_tool = Tool(
+        owner=owner,
+        name='Protein Preparation',
+        slug='builtin-protein-preparation',
+        status='published',
+        is_public=True,
+    )
+    docking_tool = Tool(
+        owner=owner,
+        name='Docking',
+        slug='builtin-vina-docking',
+        status='published',
+        is_public=True,
+    )
+    db_session.add_all([owner, prep_tool, docking_tool])
+    await db_session.flush()
+    prep_version = ToolVersion(
+        tool_id=prep_tool.id,
+        version='1.0.0',
+        config={
+            'type': 'builtin',
+            'builtin_slug': 'builtin-protein-preparation',
+            'artifacts': {
+                'inputs': [
+                    {'name': 'protein', 'type': 'protein_structure@1', 'required': True}
+                ],
+                'outputs': [
+                    {'name': 'prepared_protein', 'type': 'protein_structure@1', 'required': True}
+                ],
+            },
+        },
+    )
+    docking_version = ToolVersion(
+        tool_id=docking_tool.id,
+        version='1.0.0',
+        config={
+            'type': 'builtin',
+            'builtin_slug': 'builtin-vina-docking',
+            'artifacts': {
+                'inputs': [
+                    {'name': 'protein', 'type': 'protein_structure@1', 'required': True}
+                ],
+                'outputs': [
+                    {'name': 'docking_report', 'type': 'run_report@1', 'required': False}
+                ],
+            },
+        },
+    )
+    db_session.add_all([prep_version, docking_version])
+    await db_session.flush()
+    prep_tool.current_version_id = prep_version.id
+    docking_tool.current_version_id = docking_version.id
+
+    artifact = Artifact(
+        project_id='project-1',
+        created_by=owner.id,
+        artifact_type='protein_structure',
+        semantic_type='protein_structure@1',
+        standard_type='protein_structure',
+        standard_version=1,
+        name='Raw 1ABC',
+    )
+    db_session.add(artifact)
+    await db_session.flush()
+    version = ArtifactVersion(
+        artifact_id=artifact.id,
+        created_by=owner.id,
+        version=1,
+        filename='1ABC.pdb',
+        content_type='chemical/x-pdb',
+        size_bytes=24,
+        sha256='a' * 64,
+        storage_key='standard/1ABC.pdb',
+        status='available',
+    )
+    file_record = FileModel(
+        project_id='project-1',
+        owner_id=owner.id,
+        filename='1ABC.pdb',
+        content_type='chemical/x-pdb',
+        size_bytes=24,
+        sha256='a' * 64,
+        storage_path='standard/1ABC.pdb',
+    )
+    db_session.add_all([version, file_record])
+    await db_session.flush()
+    db_session.add(
+        ArtifactVersionFile(
+            artifact_version_id=version.id,
+            role='structure_file',
+            file_id=file_record.id,
+            is_primary=True,
+            sort_order=0,
+        )
+    )
+    artifact.latest_version_id = version.id
+    await db_session.commit()
+
+    board = await create_research_board(
+        ResearchBoardCreate(
+            name='Explicit preparation flow',
+            content={
+                'nodes': [
+                    {
+                        'id': 'artifact-raw',
+                        'type': 'artifact',
+                        'position': {'x': 0, 'y': 0},
+                        'artifact_id': artifact.id,
+                    },
+                    {
+                        'id': 'tool-prep',
+                        'type': 'tool',
+                        'position': {'x': 320, 'y': 0},
+                        'tool_id': prep_tool.id,
+                    },
+                    {
+                        'id': 'tool-docking',
+                        'type': 'tool',
+                        'position': {'x': 640, 'y': 0},
+                        'tool_id': docking_tool.id,
+                    },
+                ],
+                'edges': [
+                    {'id': 'edge-raw-prep', 'source': 'artifact-raw', 'target': 'tool-prep'},
+                    {'id': 'edge-prep-docking', 'source': 'tool-prep', 'target': 'tool-docking'},
+                ],
+                'viewport': {'x': 0, 'y': 0, 'zoom': 1},
+            },
+        ),
+        owner,
+        db_session,
+    )
+
+    draft = await create_workflow_draft(board['data']['id'], owner, db_session)
+
+    definition = draft['data']['definition']
+    nodes_by_id = {node['id']: node for node in definition['nodes']}
+    assert nodes_by_id['tool-prep']['artifact_inputs'] == {
+        'protein': 'workflow_input:protein_structure@1'
+    }
+    assert nodes_by_id['tool-docking']['artifact_inputs'] == {
+        'protein': 'node:tool-prep:prepared_protein'
+    }
+    assert {
+        (edge['source'], edge['target'], edge['source_output'], edge['target_input'])
+        for edge in definition['edges']
+    } == {
+        ('artifact-raw', 'tool-prep', 'protein_structure@1', 'protein'),
+        ('tool-prep', 'tool-docking', 'prepared_protein', 'protein'),
+    }
+
+
+@pytest.mark.asyncio
 async def test_board_is_private_except_for_admin_read_access(db_session):
     owner = make_user('owner@example.com')
     other = make_user('other@example.com')

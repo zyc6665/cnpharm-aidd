@@ -257,6 +257,93 @@ def _tool_artifact_output_slots(tool: Tool) -> list[dict[str, Any]]:
     ]
 
 
+def _board_edges_by_target(content_edges: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    edges_by_target: dict[str, list[dict[str, Any]]] = {}
+    for edge in content_edges:
+        target = str(edge.get("target") or "")
+        if target:
+            edges_by_target.setdefault(target, []).append(edge)
+    return edges_by_target
+
+
+def _explicit_artifact_input_binding(
+    *,
+    node_id: str,
+    slot: dict[str, Any],
+    incoming_edges: list[dict[str, Any]],
+    content_nodes_by_id: dict[str, dict[str, Any]],
+    tools_by_id: dict[str, Tool],
+    artifact_sources_by_node: dict[str, dict[str, str]],
+) -> dict[str, Any] | None:
+    slot_name = str(slot["name"])
+    slot_type = str(slot["type"])
+    for edge in incoming_edges:
+        target_input = edge.get("target_input")
+        if target_input and str(target_input) != slot_name:
+            continue
+        source_node_id = str(edge.get("source") or "")
+        artifact_source = artifact_sources_by_node.get(source_node_id)
+        if artifact_source and artifact_source.get("semantic_type") == slot_type:
+            return {
+                "artifact_input": f"workflow_input:{slot_type}",
+                "artifact_version_id": artifact_source.get("artifact_version_id") or "",
+                "edge": {
+                    "id": f"{source_node_id}->{node_id}:{slot_type}",
+                    "source": source_node_id,
+                    "target": node_id,
+                    "source_output": slot_type,
+                    "target_input": slot_name,
+                },
+            }
+
+        source_node = content_nodes_by_id.get(source_node_id)
+        if not source_node or source_node.get("type") != "tool" or not source_node.get("tool_id"):
+            continue
+        source_tool = tools_by_id.get(str(source_node["tool_id"]))
+        if not source_tool:
+            continue
+        output_slot = _matching_output_slot(
+            _tool_artifact_output_slots(source_tool),
+            slot_type=slot_type,
+            source_output=edge.get("source_output"),
+        )
+        if output_slot:
+            source_output = str(output_slot["name"])
+            return {
+                "artifact_input": f"node:{source_node_id}:{source_output}",
+                "artifact_version_id": "",
+                "edge": {
+                    "id": f"{source_node_id}->{node_id}:{source_output}",
+                    "source": source_node_id,
+                    "target": node_id,
+                    "source_output": source_output,
+                    "target_input": slot_name,
+                },
+            }
+    return None
+
+
+def _matching_output_slot(
+    output_slots: list[dict[str, Any]],
+    *,
+    slot_type: str,
+    source_output: Any,
+) -> dict[str, Any] | None:
+    if source_output:
+        explicit_name = str(source_output)
+        explicit = next(
+            (
+                item
+                for item in output_slots
+                if str(item.get("name")) == explicit_name and str(item.get("type")) == slot_type
+            ),
+            None,
+        )
+        if explicit:
+            return explicit
+    return next((item for item in output_slots if str(item.get("type")) == slot_type), None)
+
+
 @router.get("", response_model=dict)
 async def list_research_boards(
     page: int = Query(1, ge=1),
@@ -383,7 +470,13 @@ async def create_workflow_draft(
         )
     elif board.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="管理员仅可查看科研白板")
-    content_nodes = board_nodes(board.content)
+    normalized_content = normalize_board_content(board.content)
+    content_nodes = normalized_content["nodes"]
+    content_edges = normalized_content["edges"]
+    content_nodes_by_id = {
+        str(node.get("id")): node for node in content_nodes if str(node.get("id") or "")
+    }
+    board_edges_by_target = _board_edges_by_target(content_edges)
     tool_nodes = [
         node
         for node in content_nodes
@@ -437,6 +530,7 @@ async def create_workflow_draft(
     selected_tool_by_node: dict[str, str] = {}
     artifact_bindings_by_node: dict[str, dict[str, str]] = {}
     artifact_sources_by_type: dict[str, dict[str, str]] = {}
+    artifact_sources_by_node: dict[str, dict[str, str]] = {}
     input_files: dict[str, str] = {}
 
     for node in content_nodes:
@@ -452,14 +546,14 @@ async def create_workflow_draft(
             else str(artifact.latest_version_id or "")
         )
         file_id = _artifact_primary_file_id(artifact)
-        artifact_sources_by_type.setdefault(
-            semantic_type,
-            {
-                "node_id": str(node.get("id") or ""),
-                "artifact_version_id": latest_version_id,
-                "file_id": file_id or "",
-            },
-        )
+        source = {
+            "node_id": str(node.get("id") or ""),
+            "semantic_type": semantic_type,
+            "artifact_version_id": latest_version_id,
+            "file_id": file_id or "",
+        }
+        artifact_sources_by_node[source["node_id"]] = source
+        artifact_sources_by_type.setdefault(semantic_type, source)
         if file_id:
             input_files.setdefault(semantic_type, file_id)
 
@@ -499,6 +593,21 @@ async def create_workflow_draft(
         tool_bindings: dict[str, str] = {}
 
         for slot in input_slots:
+            binding = _explicit_artifact_input_binding(
+                node_id=node_id,
+                slot=slot,
+                incoming_edges=board_edges_by_target.get(node_id, []),
+                content_nodes_by_id=content_nodes_by_id,
+                tools_by_id=tools_by_id,
+                artifact_sources_by_node=artifact_sources_by_node,
+            )
+            if binding:
+                artifact_inputs[str(slot["name"])] = binding["artifact_input"]
+                if binding.get("artifact_version_id"):
+                    tool_bindings[str(slot["name"])] = binding["artifact_version_id"]
+                edges.append(binding["edge"])
+                continue
+
             source = artifact_sources_by_type.get(str(slot["type"]))
             if not source:
                 continue
