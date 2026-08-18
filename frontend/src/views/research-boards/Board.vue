@@ -55,6 +55,23 @@
             :object-toolbar="false"
             @select-node="selectedNodeId = $event"
           >
+            <template #tool="{ node }">
+              <div v-if="isProteinPreparationNode(node)" class="protein-preparation-node-actions">
+                <span class="protein-preparation-node-status">
+                  {{ proteinPreparationStatusLabel(node.status) }}
+                </span>
+                <button
+                  type="button"
+                  class="protein-preparation-sync"
+                  data-testid="sync-protein-preparation-action"
+                  :disabled="syncingProteinPreparationTaskId === node.task_id"
+                  @pointerdown.stop
+                  @click.stop="syncProteinPreparationNode(node)"
+                >
+                  {{ syncingProteinPreparationTaskId === node.task_id ? '同步中...' : '同步制备结果' }}
+                </button>
+              </div>
+            </template>
             <template #artifact="{ artifactId, nodeId }">
               <BoardArtifactNodeContent
                 v-if="artifactById(String(artifactId || ''))"
@@ -106,11 +123,13 @@ import BoardObjectPalette from '@/components/research-boards/BoardObjectPalette.
 import ExternalDatabaseImportPanel from '@/components/research-boards/ExternalDatabaseImportPanel.vue'
 import ProteinPreparationPanel from '@/components/research-boards/ProteinPreparationPanel.vue'
 import ResearchBoardCanvas, {
+  type BoardNode,
   type BoardContent,
   type BoardNodeType,
 } from '@/components/research-boards/ResearchBoardCanvas.vue'
 import {
   startProteinPreparation,
+  syncProteinPreparation,
   type ProteinPreparationOptions,
 } from '@/api/protein-preparation'
 import {
@@ -146,6 +165,7 @@ const loadError = ref(false)
 const saving = ref(false)
 const importingExternal = ref(false)
 const preparingProtein = ref(false)
+const syncingProteinPreparationTaskId = ref<string | null>(null)
 const hydrating = ref(false)
 const focused = ref(false)
 const saveState = ref<'saved' | 'dirty' | 'saving' | 'error'>('saved')
@@ -312,6 +332,34 @@ async function prepareProtein(options: ProteinPreparationOptions) {
   }
 }
 
+function isProteinPreparationNode(node: BoardNode) {
+  return Boolean(node.task_id) && node.id.startsWith('protein-preparation:')
+}
+
+function proteinPreparationStatusLabel(status?: string) {
+  return ({
+    pending: '待制备',
+    running: '制备中',
+    success: '已完成',
+    failure: '制备失败',
+    canceled: '已取消',
+  } as Record<string, string>)[String(status || '')] || '制备节点'
+}
+
+async function syncProteinPreparationNode(node: BoardNode) {
+  if (!board.value || !node.task_id || syncingProteinPreparationTaskId.value) return
+  syncingProteinPreparationTaskId.value = node.task_id
+  try {
+    await syncProteinPreparation(board.value.id, node.task_id)
+    await load()
+    message.success('蛋白制备结果已同步')
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '蛋白制备结果同步失败')
+  } finally {
+    syncingProteinPreparationTaskId.value = null
+  }
+}
+
 async function generateDraft() {
   if (!board.value) return
   await saveBoard(true)
@@ -360,6 +408,10 @@ onBeforeUnmount(() => {
 .canvas-region :deep(.board-canvas) { height: 100%; border-radius: 0; }
 .canvas-region :deep(.board-viewport) { height: calc(100% - 49px); }
 .artifact-placeholder { color: @text-secondary; }
+.protein-preparation-node-actions { display: grid; gap: @spacing-xs; }
+.protein-preparation-node-status { color: @text-secondary; font-size: @font-size-xs; }
+.protein-preparation-sync { width: 100%; padding: 5px @spacing-sm; border: 1px solid @primary-color; border-radius: @border-radius-sm; background: @bg-surface; color: @primary-color; font-size: @font-size-xs; cursor: pointer; }
+.protein-preparation-sync:disabled { opacity: 0.55; cursor: not-allowed; }
 .is-focused .canvas-region { padding: 0; }
 @media (max-width: 900px) { .board-inspector { display: none; } .editor-actions > :first-child { display: none; } }
 </style>

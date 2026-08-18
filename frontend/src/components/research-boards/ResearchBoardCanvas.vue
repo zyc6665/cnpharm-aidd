@@ -57,7 +57,10 @@
               <button type="button" title="删除节点" @pointerdown.stop @click.stop="removeNode(node.id)"><DeleteOutlined /></button>
             </header>
             <a-textarea v-if="node.type === 'note'" :value="node.content" :rows="4" @pointerdown.stop @update:value="updateNode(node.id, 'content', $event)" />
-            <a-select v-else-if="node.type === 'tool'" :value="node.tool_id" :options="toolOptions" show-search option-filter-prop="label" @pointerdown.stop @change="updateNode(node.id, 'tool_id', String($event))" />
+            <template v-else-if="node.type === 'tool'">
+              <a-select :value="node.tool_id" :options="toolOptions" show-search option-filter-prop="label" @pointerdown.stop @change="updateNode(node.id, 'tool_id', String($event))" />
+              <slot name="tool" :node="node" />
+            </template>
             <a-select v-else-if="node.type === 'file'" :value="node.file_id" :options="fileOptions" show-search option-filter-prop="label" @pointerdown.stop @change="updateNode(node.id, 'file_id', String($event))" />
             <template v-else-if="node.type === 'image'">
               <a-select :value="node.file_id" :options="imageOptions" show-search option-filter-prop="label" @pointerdown.stop @change="updateNode(node.id, 'file_id', String($event))" />

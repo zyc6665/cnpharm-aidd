@@ -5,7 +5,7 @@ import BoardList from './List.vue'
 import { getProjectArtifacts } from '@/api/artifacts'
 import { getExternalDatabaseSources, importExternalDatabaseArtifact } from '@/api/external-databases'
 import { getResearchBoard, getResearchBoards } from '@/api/research-boards'
-import { startProteinPreparation } from '@/api/protein-preparation'
+import { startProteinPreparation, syncProteinPreparation } from '@/api/protein-preparation'
 
 const push = vi.fn()
 
@@ -317,6 +317,61 @@ describe('project research board page', () => {
         output_formats: ['prepared_pdb', 'receptor_pdbqt'],
       }),
     }))
+  })
+
+  it('syncs a finished protein preparation node back into the board', async () => {
+    vi.mocked(getResearchBoard).mockResolvedValue({
+      data: {
+        ...board,
+        content: {
+          nodes: [
+            {
+              id: 'protein-preparation:task-prep-1',
+              type: 'tool',
+              position: { x: 320, y: 0 },
+              tool_id: 'tool-prep',
+              task_id: 'task-prep-1',
+              status: 'success',
+            },
+          ],
+          edges: [],
+          viewport: { x: 0, y: 0, zoom: 1 },
+        },
+      },
+    } as never)
+    vi.mocked(syncProteinPreparation).mockResolvedValue({
+      data: {
+        preparation_node: {
+          id: 'protein-preparation:task-prep-1',
+          type: 'tool',
+          position: { x: 320, y: 0 },
+          tool_id: 'tool-prep',
+          task_id: 'task-prep-1',
+          status: 'success',
+        },
+        artifact_node: {
+          id: 'artifact:prepared-protein-1',
+          type: 'artifact',
+          position: { x: 640, y: 0 },
+          artifact_id: 'prepared-protein-1',
+        },
+        edge: {
+          id: 'protein-preparation:task-prep-1->artifact:prepared-protein-1',
+          source: 'protein-preparation:task-prep-1',
+          target: 'artifact:prepared-protein-1',
+        },
+      },
+    } as never)
+
+    const wrapper = mount(BoardView, { global: { stubs } })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="sync-protein-preparation-action"]').exists()).toBe(true)
+    await wrapper.get('[data-testid="sync-protein-preparation-action"]').trigger('click')
+    await flushPromises()
+
+    expect(syncProteinPreparation).toHaveBeenCalledWith('board-1', 'task-prep-1')
+    expect(getResearchBoard).toHaveBeenCalledTimes(2)
   })
 
   it('opens a project board from the compatibility list using the project route', async () => {
