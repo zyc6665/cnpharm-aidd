@@ -5,6 +5,7 @@ import BoardList from './List.vue'
 import { getProjectArtifacts } from '@/api/artifacts'
 import { getExternalDatabaseSources, importExternalDatabaseArtifact } from '@/api/external-databases'
 import { getResearchBoard, getResearchBoards } from '@/api/research-boards'
+import { startProteinPreparation } from '@/api/protein-preparation'
 
 const push = vi.fn()
 
@@ -39,6 +40,11 @@ vi.mock('@/api/artifacts', () => ({
 vi.mock('@/api/external-databases', () => ({
   getExternalDatabaseSources: vi.fn(),
   importExternalDatabaseArtifact: vi.fn(),
+}))
+
+vi.mock('@/api/protein-preparation', () => ({
+  startProteinPreparation: vi.fn(),
+  syncProteinPreparation: vi.fn(),
 }))
 
 vi.mock('@/stores', () => ({
@@ -102,6 +108,7 @@ const stubs = {
   PlusOutlined: true,
   RedoOutlined: true,
   SaveOutlined: true,
+  ThunderboltOutlined: true,
   UndoOutlined: true,
   ZoomInOutlined: true,
   ZoomOutOutlined: true,
@@ -244,6 +251,72 @@ describe('project research board page', () => {
       board_id: 'board-1',
     }))
     expect(wrapper.find('[data-testid="board-node-artifact:artifact-2"]').exists()).toBe(true)
+  })
+
+  it('starts protein preparation from a protein artifact node', async () => {
+    vi.mocked(getProjectArtifacts).mockResolvedValue({
+      data: {
+        items: [{
+          id: 'artifact-1',
+          project_id: 'project-1',
+          artifact_type: 'protein_structure',
+          semantic_type: 'protein_structure@1',
+          standard_type: 'protein_structure',
+          standard_version: 1,
+          name: 'RCSB 1ABC',
+          latest_version: {
+            id: 'version-1',
+            version: 1,
+            filename: '1ABC.pdb',
+            content_type: 'chemical/x-pdb',
+            size_bytes: 512,
+            sha256: 'a'.repeat(64),
+            status: 'available',
+            created_at: '2026-07-30T00:00:00Z',
+          },
+          created_at: '2026-07-30T00:00:00Z',
+          updated_at: '2026-07-30T00:00:00Z',
+        }],
+      },
+    } as never)
+    vi.mocked(startProteinPreparation).mockResolvedValue({
+      data: {
+        task_id: 'task-prep-1',
+        preparation_node: {
+          id: 'protein-preparation:task-prep-1',
+          type: 'tool',
+          position: { x: 320, y: 0 },
+          tool_id: 'tool-prep',
+          task_id: 'task-prep-1',
+          status: 'pending',
+        },
+        edge: {
+          id: 'artifact-1->protein-preparation:task-prep-1',
+          source: 'artifact-1',
+          target: 'protein-preparation:task-prep-1',
+        },
+      },
+    } as never)
+
+    const wrapper = mount(BoardView, { global: { stubs } })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="prepare-protein-action"]').exists()).toBe(true)
+    await wrapper.get('[data-testid="prepare-protein-action"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="protein-preparation-submit"]').trigger('submit')
+    await flushPromises()
+
+    expect(startProteinPreparation).toHaveBeenCalledWith('board-1', expect.objectContaining({
+      artifact_id: 'artifact-1',
+      source_node_id: 'artifact-1',
+      preparation_profile: 'docking_v1',
+      options: expect.objectContaining({
+        ph: 7.4,
+        remove_water: true,
+        output_formats: ['prepared_pdb', 'receptor_pdbqt'],
+      }),
+    }))
   })
 
   it('opens a project board from the compatibility list using the project route', async () => {

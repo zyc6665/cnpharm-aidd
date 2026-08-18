@@ -55,15 +55,25 @@
             :object-toolbar="false"
             @select-node="selectedNodeId = $event"
           >
-            <template #artifact="{ artifactId }">
-              <ArtifactRenderer
+            <template #artifact="{ artifactId, nodeId }">
+              <BoardArtifactNodeContent
                 v-if="artifactById(String(artifactId || ''))"
                 :artifact="artifactById(String(artifactId || ''))!"
+                :node-id="String(nodeId || '')"
+                :disabled="preparingProtein"
+                @prepare-protein="openProteinPreparation"
               />
               <span v-else class="artifact-placeholder">{{ artifactLabel(artifactId) }}</span>
             </template>
           </ResearchBoardCanvas>
         </main>
+        <ProteinPreparationPanel
+          v-if="!focused && proteinPreparationTarget"
+          :artifact-name="proteinPreparationTarget.artifact.name"
+          :disabled="saving || loading"
+          :loading="preparingProtein"
+          @submit="prepareProtein"
+        />
         <ExternalDatabaseImportPanel
           v-if="!focused && projectId"
           :sources="externalSources"
@@ -91,13 +101,18 @@ import { message } from 'ant-design-vue'
 import { ExpandOutlined, FullscreenExitOutlined, SaveOutlined } from '@ant-design/icons-vue'
 import { getProjectArtifacts } from '@/api/artifacts'
 import BoardInspector from '@/components/research-boards/BoardInspector.vue'
+import BoardArtifactNodeContent from '@/components/research-boards/BoardArtifactNodeContent.vue'
 import BoardObjectPalette from '@/components/research-boards/BoardObjectPalette.vue'
 import ExternalDatabaseImportPanel from '@/components/research-boards/ExternalDatabaseImportPanel.vue'
-import ArtifactRenderer from '@/components/artifacts/ArtifactRenderer.vue'
+import ProteinPreparationPanel from '@/components/research-boards/ProteinPreparationPanel.vue'
 import ResearchBoardCanvas, {
   type BoardContent,
   type BoardNodeType,
 } from '@/components/research-boards/ResearchBoardCanvas.vue'
+import {
+  startProteinPreparation,
+  type ProteinPreparationOptions,
+} from '@/api/protein-preparation'
 import {
   getExternalDatabaseSources,
   importExternalDatabaseArtifact,
@@ -130,9 +145,11 @@ const loading = ref(false)
 const loadError = ref(false)
 const saving = ref(false)
 const importingExternal = ref(false)
+const preparingProtein = ref(false)
 const hydrating = ref(false)
 const focused = ref(false)
 const saveState = ref<'saved' | 'dirty' | 'saving' | 'error'>('saved')
+const proteinPreparationTarget = ref<{ artifact: TypedArtifact; nodeId: string } | null>(null)
 let autoSaveTimer: ReturnType<typeof setTimeout> | undefined
 
 const projectId = computed(() => typeof route.params.projectId === 'string' ? route.params.projectId : null)
@@ -231,6 +248,12 @@ function artifactById(id: string) {
   return artifacts.value.find(item => item.id === id) || null
 }
 
+function openProteinPreparation(input: { artifactId: string; nodeId: string }) {
+  const artifact = artifactById(input.artifactId)
+  if (!artifact) return
+  proteinPreparationTarget.value = { artifact, nodeId: input.nodeId }
+}
+
 function nextExternalArtifactPosition() {
   const index = content.value.nodes.length
   return {
@@ -256,6 +279,36 @@ async function importExternalDatabase(input: {
     message.success('外部数据库记录已导入到白板')
   } finally {
     importingExternal.value = false
+  }
+}
+
+function nextProteinPreparationPosition(nodeId: string) {
+  const source = content.value.nodes.find(node => node.id === nodeId)
+  if (!source) return nextExternalArtifactPosition()
+  return {
+    x: source.position.x + 320,
+    y: source.position.y,
+  }
+}
+
+async function prepareProtein(options: ProteinPreparationOptions) {
+  if (!board.value || !proteinPreparationTarget.value) return
+  preparingProtein.value = true
+  try {
+    const target = proteinPreparationTarget.value
+    await startProteinPreparation(board.value.id, {
+      artifact_id: target.artifact.id,
+      source_node_id: target.nodeId,
+      position: nextProteinPreparationPosition(target.nodeId),
+      preparation_profile: 'docking_v1',
+      options,
+      advanced_options: {},
+    })
+    proteinPreparationTarget.value = null
+    await load()
+    message.success('蛋白制备节点已创建')
+  } finally {
+    preparingProtein.value = false
   }
 }
 

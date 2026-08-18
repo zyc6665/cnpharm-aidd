@@ -64,7 +64,7 @@
               <img v-if="node.file_id" :src="`/api/v1/files/${node.file_id}/download`" alt="白板图片" />
             </template>
             <template v-else>
-              <slot name="artifact" :artifact-id="node.artifact_id">
+              <slot name="artifact" :artifact-id="node.artifact_id" :node-id="node.id">
                 <span class="artifact-reference">{{ artifactName(node.artifact_id) }}</span>
               </slot>
             </template>
@@ -77,11 +77,29 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
-import { DeleteOutlined, LinkOutlined, RedoOutlined, UndoOutlined, ZoomInOutlined, ZoomOutOutlined } from '@ant-design/icons-vue'
+import {
+  DeleteOutlined,
+  LinkOutlined,
+  RedoOutlined,
+  UndoOutlined,
+  ZoomInOutlined,
+  ZoomOutOutlined,
+} from '@ant-design/icons-vue'
 import { useCanvasViewport } from '@/composables/useCanvasViewport'
 
 export type BoardNodeType = 'note' | 'file' | 'image' | 'tool' | 'artifact'
-export interface BoardNode { id: string; type: BoardNodeType; position: { x: number; y: number }; content?: string; tool_id?: string; file_id?: string; artifact_id?: string }
+export interface BoardNode {
+  id: string
+  type: BoardNodeType
+  position: { x: number; y: number }
+  content?: string
+  tool_id?: string
+  file_id?: string
+  artifact_id?: string
+  task_id?: string
+  status?: string
+  output_artifact_id?: string
+}
 export interface BoardEdge { id: string; source: string; target: string; label?: string }
 export interface BoardContent { nodes: BoardNode[]; edges: BoardEdge[]; viewport: { x: number; y: number; zoom: number } }
 
