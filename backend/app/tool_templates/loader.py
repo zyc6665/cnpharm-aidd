@@ -64,6 +64,8 @@ def build_tool_import_config_from_template(
     if not isinstance(executor_config, dict):
         raise ToolTemplateLoadError("executor_config must be an object")
 
+    timeout_sec = int(template.resource_profile.timeout_minutes * 60)
+    gpu_memory_mb = int(template.resource_profile.gpu_memory_gb * 1024)
     tool_config = {
         **executor_config,
         "type": executor_type,
@@ -76,7 +78,6 @@ def build_tool_import_config_from_template(
         "smoke_test": template.smoke_test.model_dump(mode="json"),
         "sample_inputs": [sample.model_dump(mode="json") for sample in template.sample_inputs],
     }
-    timeout_sec = int(template.resource_profile.timeout_minutes * 60)
     tool_config.setdefault("timeout_sec", timeout_sec)
 
     return {
@@ -84,6 +85,9 @@ def build_tool_import_config_from_template(
         "slug": template.metadata.slug,
         "version": template.metadata.version,
         "description": template.metadata.description,
+        "gpu_required": template.resource_profile.gpu_required,
+        "gpu_memory_mb": gpu_memory_mb,
+        "timeout_sec": timeout_sec,
         "tool_config": tool_config,
     }
 

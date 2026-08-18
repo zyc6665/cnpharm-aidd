@@ -84,6 +84,26 @@ def test_template_generates_existing_tool_import_config_for_docker_executor():
     ) == []
 
 
+def test_heavy_template_projects_resource_profile_to_existing_tool_fields():
+    template = load_tool_template("md-gromacs-ssh")
+
+    config = build_tool_import_config_from_template(
+        template,
+        executor_type="ssh_job",
+        executor_config={
+            "host": "gpu-node-01",
+            "username": "runner",
+            "auth_ref": "secret/md-key",
+            "remote_base_dir": "/srv/sciminer/jobs",
+            "entrypoint": "/opt/sciminer/run-md.sh",
+        },
+    )
+
+    assert config["gpu_required"] is True
+    assert config["gpu_memory_mb"] == 16384
+    assert config["timeout_sec"] == 86400
+
+
 def test_resource_profile_is_exposed_on_tool_contract():
     template = load_tool_template("vina-docking")
     config = build_tool_import_config_from_template(

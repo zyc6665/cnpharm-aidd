@@ -434,6 +434,82 @@ async def test_admin_can_import_tool_config_and_normalize_legacy_schema(
 
 
 @pytest.mark.asyncio
+async def test_admin_can_list_drug_discovery_tool_templates(
+    api_client: httpx.AsyncClient,
+):
+    """管理员可以浏览药物研发工具模板。"""
+    response = await api_client.get(
+        "/api/v1/tool-templates",
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    template_by_key = {item["template_key"]: item for item in payload}
+    assert "vina-docking" in template_by_key
+    assert template_by_key["vina-docking"]["capability"] == "molecular_docking"
+    assert template_by_key["vina-docking"]["resource_profile"]["tier"] == "medium"
+    assert "docker_image" in template_by_key["vina-docking"]["executor_types"]
+
+
+@pytest.mark.asyncio
+async def test_admin_can_create_tool_draft_from_drug_discovery_template(
+    api_client: httpx.AsyncClient,
+    enabled_category: ToolCategory,
+):
+    """管理员可以从模板和执行器配置创建现有 Tool 草稿。"""
+    response = await api_client.post(
+        "/api/v1/tool-templates/vina-docking/draft",
+        headers={"Authorization": "Bearer admin-token"},
+        json={
+            "category_id": enabled_category.id,
+            "executor_type": "docker_image",
+            "executor_config": {
+                "image": "ghcr.io/sciminer/vina:latest",
+                "command": ["/app/run"],
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["created_new_tool"] is True
+    assert payload["tool"]["slug"] == "vina-docking"
+    assert payload["tool"]["status"] == "draft"
+    assert payload["tool"]["category_id"] == enabled_category.id
+    config = payload["version"]["config"]
+    assert config["type"] == "docker_image"
+    assert config["image"] == "ghcr.io/sciminer/vina:latest"
+    assert config["tool_family"] == "drug_discovery"
+    assert config["resource_profile"]["tier"] == "medium"
+    assert config["output_schema"]["properties"]["result_version"]["const"] == (
+        "aidd.sciminer/result.v2"
+    )
+
+
+@pytest.mark.asyncio
+async def test_regular_user_cannot_create_tool_draft_from_template(
+    api_client: httpx.AsyncClient,
+    enabled_category: ToolCategory,
+):
+    """普通用户不能从模板创建工具草稿。"""
+    response = await api_client.post(
+        "/api/v1/tool-templates/vina-docking/draft",
+        headers={"Authorization": "Bearer user-token"},
+        json={
+            "category_id": enabled_category.id,
+            "executor_type": "docker_image",
+            "executor_config": {
+                "image": "ghcr.io/sciminer/vina:latest",
+                "command": ["/app/run"],
+            },
+        },
+    )
+
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_admin_can_register_remote_tool_from_service_manifest(
     api_client: httpx.AsyncClient,
     db_session: AsyncSession,
