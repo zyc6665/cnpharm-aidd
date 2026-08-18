@@ -56,6 +56,32 @@ describe('mapWorkflowDefinitionToCanvasPayload', () => {
       'tool-pocket': { protein: 'artifact-version-1' }
     })
   })
+
+  it('restores workflow control nodes without converting them to tools', () => {
+    const payload = mapWorkflowDefinitionToCanvasPayload({
+      canvasPresetId: 'control-flow-draft',
+      name: 'Control Flow Draft',
+      definition: {
+        nodes: [
+          {
+            id: 'condition-score-gate',
+            kind: 'condition',
+            type: 'condition',
+            expression: { op: '<=', left: 'node:docking:score', right: -8 },
+            position: { x: 240, y: 120 },
+          },
+        ],
+        edges: [],
+      },
+    })
+
+    expect(payload.nodes[0]).toMatchObject({
+      id: 'condition-score-gate',
+      type: 'condition',
+      expression: { op: '<=', left: 'node:docking:score', right: -8 },
+      position: { x: 240, y: 120 },
+    })
+  })
 })
 
 describe('useWorkflowPersistence API', () => {

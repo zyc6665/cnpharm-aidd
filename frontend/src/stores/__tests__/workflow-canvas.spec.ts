@@ -53,6 +53,28 @@ describe('useWorkflowCanvasStore', () => {
     expect(node.producedOutputTypes).toEqual(['pocket_pdb'])
   })
 
+  it('addControlNode 应添加条件节点并保留表达式配置', () => {
+    const store = useWorkflowCanvasStore()
+
+    const node = store.addControlNode({
+      id: 'condition-score-gate',
+      type: 'condition',
+      titleKey: 'Score gate',
+      position: { x: 240, y: 120 },
+      expression: { op: '<=', left: 'node:docking:score', right: -8 },
+    })
+
+    expect(node).toMatchObject({
+      id: 'condition-score-gate',
+      type: 'condition',
+      expression: { op: '<=', left: 'node:docking:score', right: -8 },
+      position: { x: 240, y: 120 },
+    })
+    expect(store.canvasNodes).toHaveLength(1)
+    expect(store.activeNodeId).toBe('condition-score-gate')
+    expect(store.nodePositionById['condition-score-gate']).toEqual({ x: 240, y: 120 })
+  })
+
   it('moveNode 应同步节点本体位置，保证保存和运行定义使用最新坐标', () => {
     const store = useWorkflowCanvasStore()
     store.addNode({ id: 'n1', toolSlug: 'x' })

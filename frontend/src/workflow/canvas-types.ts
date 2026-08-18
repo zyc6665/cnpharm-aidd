@@ -2,7 +2,13 @@ import type { WorkflowArtifactSemanticType, WorkflowStepKey } from './artifact-t
 import type { ArtifactInputSlot, ArtifactOutputSlot } from './contract-bindings'
 
 export type WorkflowCanvasPresetKind = 'free' | 'aidd' | 'docking' | 'pocket' | 'screening'
-export type WorkflowCanvasNodeType = 'input' | 'tool' | 'artifact' | 'result'
+export type WorkflowCanvasNodeType = 'input' | 'tool' | 'artifact' | 'result' | 'condition' | 'map' | 'loop'
+
+export interface WorkflowConditionExpression {
+  op: '==' | '!=' | '>' | '<' | '>=' | '<=' | 'in' | 'contains'
+  left: unknown
+  right: unknown
+}
 
 export interface WorkflowCanvasPreset {
   id: string
@@ -26,6 +32,12 @@ export interface WorkflowCanvasNode {
   producedOutputTypes?: WorkflowArtifactSemanticType[]
   inputArtifactSlots?: ArtifactInputSlot[]
   outputArtifactSlots?: ArtifactOutputSlot[]
+  expression?: WorkflowConditionExpression
+  over?: string
+  max_parallelism?: number
+  body?: WorkflowCanvasNode[]
+  max_iterations?: number
+  convergence_condition?: WorkflowConditionExpression
 }
 
 export interface WorkflowCanvasEdge {

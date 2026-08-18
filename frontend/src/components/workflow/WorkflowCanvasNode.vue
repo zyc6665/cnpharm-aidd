@@ -268,6 +268,12 @@
     border-left: 4px solid @accent-color;
   }
 
+  .is-condition,
+  .is-map,
+  .is-loop {
+    border-left: 4px solid @warning-color;
+  }
+
   .is-result {
     border-left: 4px solid @success-color;
   }

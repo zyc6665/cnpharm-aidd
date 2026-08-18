@@ -8,6 +8,7 @@ import type { ArtifactInputSlot, ArtifactOutputSlot } from '@/workflow/contract-
 import type {
   WorkflowCanvasEdge,
   WorkflowCanvasNode,
+  WorkflowCanvasNodeType,
   WorkflowCanvasPreset as CanvasWorkflowPreset
 } from '@/workflow/canvas-types'
 import { normalizeRecord, type WorkflowCanvasPosition } from './workflow-session'
@@ -144,6 +145,43 @@ export const useWorkflowCanvasStore = defineStore(
       return node
     }
 
+    function addControlNode(input: {
+      id: string
+      type: Extract<WorkflowCanvasNodeType, 'condition' | 'map' | 'loop'>
+      titleKey: string
+      descriptionKey?: string
+      position?: WorkflowCanvasPosition
+      expression?: WorkflowCanvasNode['expression']
+      over?: string
+      max_parallelism?: number
+      body?: WorkflowCanvasNode[]
+      max_iterations?: number
+      convergence_condition?: WorkflowCanvasNode['convergence_condition']
+    }): WorkflowCanvasNode {
+      const position = input.position ?? {
+        x: 320 + canvasNodes.value.length * 32,
+        y: 120 + canvasNodes.value.length * 24
+      }
+      const node: WorkflowCanvasNode = {
+        id: input.id,
+        type: input.type,
+        titleKey: input.titleKey,
+        descriptionKey: input.descriptionKey,
+        position,
+        expression: input.expression,
+        over: input.over,
+        max_parallelism: input.max_parallelism,
+        body: input.body,
+        max_iterations: input.max_iterations,
+        convergence_condition: input.convergence_condition
+      }
+      canvasNodes.value = [...canvasNodes.value, node]
+      nodePositionById.value = { ...nodePositionById.value, [input.id]: position }
+      activeNodeId.value = input.id
+      hasCanvasOverride.value = true
+      return node
+    }
+
     function deleteNode(nodeId: string) {
       const node = canvasNodes.value.find(item => item.id === nodeId)
       if (!node || node.type === 'input') return
@@ -268,6 +306,7 @@ export const useWorkflowCanvasStore = defineStore(
       ensureCanvasFromPreset,
       syncNodeSemanticTypes,
       addNode,
+      addControlNode,
       deleteNode,
       addEdge,
       deleteEdge,

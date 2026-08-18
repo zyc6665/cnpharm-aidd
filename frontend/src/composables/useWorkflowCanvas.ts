@@ -13,6 +13,7 @@ import {
   WORKFLOW_CANVAS_PRESETS,
   getWorkflowCanvasPresetById
 } from '@/workflow/canvas-presets'
+import type { WorkflowCanvasNodeType } from '@/workflow/canvas-types'
 import { resolveReadyToolNodeIds } from '@/workflow/canvas-runner'
 import {
   extractWorkflowInputRequirementDetails,
@@ -357,6 +358,16 @@ export function useWorkflowCanvas(input: {
     })
   }
 
+  function handleAddControlNode(type: Extract<WorkflowCanvasNodeType, 'condition' | 'map' | 'loop'>) {
+    workflowStore.addControlNode({
+      type,
+      position: {
+        x: 320 + editableCanvasPreset.value.nodes.length * 36,
+        y: 120 + editableCanvasPreset.value.nodes.length * 24
+      }
+    })
+  }
+
   function handleDeleteNode(nodeId: string) {
     workflowStore.deleteCanvasNode(nodeId)
   }
@@ -463,7 +474,66 @@ export function useWorkflowCanvas(input: {
   }
 
   function buildCurrentWorkflowDefinition(): WorkflowDefinition {
-    const nodes = editableCanvasPreset.value.nodes.map(node => ({
+    const nodes = editableCanvasPreset.value.nodes.map(node => buildWorkflowDefinitionNode(node))
+
+    const edges = editableCanvasPreset.value.edges.map(edge => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      source_output: edge.artifactType,
+      target_input: edge.artifactType
+    }))
+
+    return { nodes, edges }
+  }
+
+  function buildWorkflowDefinitionNode(node: (typeof editableCanvasPreset.value.nodes)[number]) {
+    if (node.type === 'condition') {
+      return {
+        id: node.id,
+        kind: 'condition',
+        type: node.type,
+        expression: node.expression,
+        position: node.position
+      }
+    }
+
+    if (node.type === 'map') {
+      return {
+        id: node.id,
+        kind: 'map',
+        type: node.type,
+        over: node.over,
+        max_parallelism: node.max_parallelism,
+        position: node.position
+      }
+    }
+
+    if (node.type === 'loop') {
+      return {
+        id: node.id,
+        kind: 'loop',
+        type: node.type,
+        body: (node.body ?? []).map(loopNode => ({
+          id: loopNode.id,
+          kind: loopNode.type === 'input' ? 'input' : 'tool',
+          type: loopNode.type,
+          tool_slug: loopNode.recommendedToolSlug ?? loopNode.toolSlugs?.[0],
+          semantic_type: loopNode.requiredInputTypes?.[0] ?? loopNode.recommendedToolSlug ?? loopNode.id,
+          semantic_inputs: {},
+          artifact_input_slots: loopNode.inputArtifactSlots ?? [],
+          artifact_inputs: {},
+          artifact_outputs: loopNode.outputArtifactSlots ?? [],
+          params: {},
+          position: loopNode.position
+        })),
+        max_iterations: node.max_iterations,
+        convergence_condition: node.convergence_condition,
+        position: node.position
+      }
+    }
+
+    return {
       id: node.id,
       kind: node.type === 'input' ? 'input' : 'tool',
       type: node.type,
@@ -478,17 +548,7 @@ export function useWorkflowCanvas(input: {
       artifact_outputs: node.outputArtifactSlots ?? [],
       params: workflowStore.nodeFormDrafts[node.id] ?? {},
       position: node.position
-    }))
-
-    const edges = editableCanvasPreset.value.edges.map(edge => ({
-      id: edge.id,
-      source: edge.source,
-      target: edge.target,
-      source_output: edge.artifactType,
-      target_input: edge.artifactType
-    }))
-
-    return { nodes, edges }
+    }
   }
 
   function buildSemanticInputsForNode(nodeId: string) {
@@ -584,6 +644,7 @@ export function useWorkflowCanvas(input: {
     resolveNodeStatusReason,
     handleNodeToolSelect,
     handleAddToolNode,
+    handleAddControlNode,
     handleDeleteNode,
     handleAddEdge,
     handleDeleteEdge,

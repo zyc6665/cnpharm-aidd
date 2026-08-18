@@ -16,7 +16,11 @@ import {
   WORKFLOW_ARTIFACT_SEMANTIC_TYPES,
   type WorkflowArtifactSemanticType
 } from '@/workflow/artifact-types'
-import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@/workflow/canvas-types'
+import type {
+  WorkflowCanvasEdge,
+  WorkflowCanvasNode,
+  WorkflowConditionExpression
+} from '@/workflow/canvas-types'
 import {
   useArtifactsStore,
   useUserStore,
@@ -192,7 +196,7 @@ export function useWorkflowPersistence(input: {
       name: draft.name,
       description: draft.description ?? null,
       canvas_preset_id: canvasPayload.canvas_preset_id,
-      nodes: canvasPayload.nodes,
+      nodes: canvasPayload.nodes as unknown as WorkflowDefinitionPayload['nodes'],
       edges: canvasPayload.edges,
       selected_tool_by_node: canvasPayload.selected_tool_by_node,
       artifact_bindings_by_node: canvasPayload.artifact_bindings_by_node,
@@ -361,12 +365,16 @@ export function useWorkflowPersistence(input: {
   }
 
   function buildWorkflowDefinitionPayload(nameOverride?: string): WorkflowDefinitionPayload {
+    const definition = buildCurrentWorkflowDefinition()
     return {
       ...(projectId?.value ? { project_id: projectId.value } : {}),
       name: nameOverride ?? (workflowName.value.trim() || '未命名流程'),
       canvas_preset_id: editableCanvasPreset.value.id,
-      nodes: workflowStore.exportWorkflowNodes(editableCanvasPreset.value.nodes),
-      edges: workflowStore.exportWorkflowEdges(editableCanvasPreset.value.edges),
+      nodes: definition.nodes,
+      edges: definition.edges.map((edge, index) => ({
+        id: resolveWorkflowEdgeId(edge.id, index),
+        ...edge,
+      })),
       selected_tool_by_node: workflowStore.selectedToolByNode,
       artifact_bindings_by_node: workflowStore.artifactBindingsByNode,
       status: 'draft'
@@ -468,7 +476,26 @@ function normalizeArtifactBindings(value: unknown): Record<string, Record<string
   return bindings
 }
 
-function mapCanvasDefinitionNode(node: WorkflowDefinitionNode) {
+function mapCanvasDefinitionNode(node: WorkflowDefinitionNode): WorkflowCanvasNode {
+  const nodeKind = String(node.kind ?? node.type ?? '')
+  if (['condition', 'map', 'loop'].includes(nodeKind)) {
+    return {
+      id: node.id,
+      type: nodeKind as WorkflowCanvasNode['type'],
+      titleKey: stringValue(node.titleKey) ?? controlNodeTitle(nodeKind),
+      descriptionKey: stringValue(node.descriptionKey),
+      position: resolveWorkflowNodePosition(node),
+      expression: conditionExpressionValue(node.expression),
+      over: stringValue(node.over),
+      max_parallelism: numberValue(node.max_parallelism),
+      body: Array.isArray(node.body)
+        ? node.body.map(item => mapCanvasDefinitionNode(item as WorkflowDefinitionNode))
+        : undefined,
+      max_iterations: numberValue(node.max_iterations),
+      convergence_condition: conditionExpressionValue(node.convergence_condition),
+    }
+  }
+
   const inputArtifactSlots = Array.isArray(node.artifact_input_slots)
     ? node.artifact_input_slots
     : []
@@ -486,18 +513,44 @@ function mapCanvasDefinitionNode(node: WorkflowDefinitionNode) {
     recommendedToolSlug: node.tool_slug ?? undefined,
     requiredInputTypes:
       node.kind === 'input' && node.semantic_type
-        ? [node.semantic_type]
+        ? [node.semantic_type as WorkflowArtifactSemanticType]
         : inputSlotTypes.length
           ? inputSlotTypes
-          : Object.keys(node.semantic_inputs ?? {}),
+          : Object.keys(node.semantic_inputs ?? {}) as WorkflowArtifactSemanticType[],
     producedOutputTypes: outputSlotTypes.length
       ? outputSlotTypes
       : Array.isArray(node.semantic_outputs)
-        ? node.semantic_outputs
+        ? node.semantic_outputs as WorkflowArtifactSemanticType[]
         : [],
     inputArtifactSlots,
     outputArtifactSlots
   }
+}
+
+function controlNodeTitle(nodeKind: string): string {
+  return ({
+    condition: '条件分支',
+    map: '批量处理',
+    loop: '循环优化',
+  } as Record<string, string>)[nodeKind] ?? nodeKind
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value : undefined
+}
+
+function numberValue(value: unknown): number | undefined {
+  return typeof value === 'number' ? value : undefined
+}
+
+function conditionExpressionValue(value: unknown): WorkflowConditionExpression | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined
+  }
+  const expression = value as Partial<WorkflowConditionExpression>
+  return typeof expression.op === 'string' && 'left' in expression && 'right' in expression
+    ? expression as WorkflowConditionExpression
+    : undefined
 }
 
 function resolveArtifactSlotTypes(slots: unknown[]): WorkflowArtifactSemanticType[] {

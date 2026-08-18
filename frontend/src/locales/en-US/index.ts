@@ -364,7 +364,10 @@ export default {
       input: 'Input',
       tool: 'Tool',
       result: 'Result',
-      artifact: 'Artifact'
+      artifact: 'Artifact',
+      condition: 'Condition',
+      map: 'Map',
+      loop: 'Loop'
     },
     canvas: {
       title: 'Flow Canvas',

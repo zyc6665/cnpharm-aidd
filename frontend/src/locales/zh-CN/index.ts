@@ -363,7 +363,10 @@ export default {
       input: '输入',
       tool: '工具',
       result: '结果',
-      artifact: '产物'
+      artifact: '产物',
+      condition: '条件',
+      map: '批量',
+      loop: '循环'
     },
     canvas: {
       title: '流程画布',

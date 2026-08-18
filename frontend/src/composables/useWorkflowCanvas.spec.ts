@@ -102,4 +102,71 @@ describe('useWorkflowCanvas', () => {
       ]
     })
   })
+
+  it('应将条件、批量和循环节点序列化为后端控制流定义', () => {
+    const canvas = mountCanvasHarness()
+    canvas.workflowStore.$patch({
+      hasCanvasOverride: true,
+      canvasNodes: [
+        {
+          id: 'condition-score-gate',
+          type: 'condition',
+          titleKey: 'Score gate',
+          position: { x: 240, y: 120 },
+          expression: { op: '<=', left: 'node:docking:score', right: -8 },
+        },
+        {
+          id: 'map-admet',
+          type: 'map',
+          titleKey: 'Batch ADMET',
+          position: { x: 480, y: 120 },
+          over: 'workflow_input:smiles_csv',
+          max_parallelism: 4,
+        },
+        {
+          id: 'loop-optimize',
+          type: 'loop',
+          titleKey: 'Lead optimize loop',
+          position: { x: 720, y: 120 },
+          max_iterations: 6,
+          convergence_condition: { op: '<=', left: 'node:docking:score', right: -9 },
+          body: [
+            {
+              id: 'loop-body-generate',
+              type: 'tool',
+              titleKey: 'Generate',
+              position: { x: 0, y: 0 },
+              toolSlugs: ['gcdm-pocket-generation'],
+              recommendedToolSlug: 'gcdm-pocket-generation',
+            },
+          ],
+        },
+      ],
+      canvasEdges: [],
+    })
+
+    expect(canvas.buildCurrentWorkflowDefinition().nodes).toEqual([
+      expect.objectContaining({
+        id: 'condition-score-gate',
+        kind: 'condition',
+        type: 'condition',
+        expression: { op: '<=', left: 'node:docking:score', right: -8 },
+      }),
+      expect.objectContaining({
+        id: 'map-admet',
+        kind: 'map',
+        type: 'map',
+        over: 'workflow_input:smiles_csv',
+        max_parallelism: 4,
+      }),
+      expect.objectContaining({
+        id: 'loop-optimize',
+        kind: 'loop',
+        type: 'loop',
+        max_iterations: 6,
+        convergence_condition: { op: '<=', left: 'node:docking:score', right: -9 },
+        body: [expect.objectContaining({ id: 'loop-body-generate', kind: 'tool' })],
+      }),
+    ])
+  })
 })

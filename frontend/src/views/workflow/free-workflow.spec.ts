@@ -226,6 +226,23 @@ describe('free workflow workbench', () => {
     }))
   })
 
+  it('可以从页面添加条件分支节点并保存为控制流定义', async () => {
+    const wrapper = renderWorkflow()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="add-condition-node"]').trigger('click')
+    await wrapper.findAll('button').find(button => button.text() === '保存')!.trigger('click')
+    await flushPromises()
+
+    expect(createWorkflowDefinition).toHaveBeenCalledWith(expect.objectContaining({
+      nodes: [expect.objectContaining({
+        kind: 'condition',
+        type: 'condition',
+        expression: { op: '==', left: true, right: true },
+      })],
+    }))
+  })
+
   it('项目模式保存和运行都使用项目作用域的 WorkflowDefinition', async () => {
     routeQuery = { project_id: 'project-1' }
     vi.mocked(createWorkflowDefinition).mockResolvedValue({

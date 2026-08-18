@@ -14,6 +14,7 @@ export interface WorkflowCanvasPosition {
 
 export interface WorkflowDefinitionNode {
   id: string
+  kind?: string
   type?: string
   titleKey?: string
   descriptionKey?: string
@@ -22,6 +23,7 @@ export interface WorkflowDefinitionNode {
   recommendedToolSlug?: string
   requiredInputTypes?: string[]
   producedOutputTypes?: string[]
+  [key: string]: unknown
 }
 
 export interface WorkflowDefinitionEdge {
@@ -29,7 +31,10 @@ export interface WorkflowDefinitionEdge {
   source: string
   target: string
   artifactType?: string
+  source_output?: string
+  target_input?: string
   labelKey?: string
+  [key: string]: unknown
 }
 
 export interface WorkflowDefinition {

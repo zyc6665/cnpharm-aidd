@@ -174,6 +174,8 @@
                 </button>
               </div>
 
+              <WorkflowControlNodePalette @add-control-node="handleAddControlNode" />
+
               <WorkflowToolPalette
                 :search-keyword="sidebarToolSearchKeyword"
                 :stage-options="sidebarStageOptions"
@@ -252,6 +254,7 @@
   import WorkflowRunInputPanel from '@/components/workflow/WorkflowRunInputPanel.vue'
   import WorkflowRunStatusPanel from '@/components/workflow/WorkflowRunStatusPanel.vue'
   import WorkflowCanvasBoard from '@/components/workflow/WorkflowCanvasBoard.vue'
+  import WorkflowControlNodePalette from '@/components/workflow/WorkflowControlNodePalette.vue'
   import WorkflowToolPalette from '@/components/workflow/WorkflowToolPalette.vue'
   import { useWorkflowCanvas } from '@/composables/useWorkflowCanvas'
   import { useWorkflowPersistence } from '@/composables/useWorkflowPersistence'
@@ -319,6 +322,7 @@
     resolveNodeStatusReason,
     handleNodeToolSelect,
     handleAddToolNode,
+    handleAddControlNode,
     handleDeleteNode,
     handleAddEdge,
     handleDeleteEdge,

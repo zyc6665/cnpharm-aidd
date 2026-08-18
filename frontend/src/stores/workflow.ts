@@ -4,6 +4,7 @@ import { type WorkflowArtifactSemanticType, type WorkflowTaskRef } from '@/workf
 import type {
   WorkflowCanvasEdge,
   WorkflowCanvasNode,
+  WorkflowCanvasNodeType,
   WorkflowCanvasPreset as CanvasWorkflowPreset
 } from '@/workflow/canvas-types'
 import { type ArtifactInputSlot, type ArtifactOutputSlot } from '@/workflow/contract-bindings'
@@ -23,6 +24,11 @@ interface AddToolNodeInput {
   producedOutputTypes?: WorkflowArtifactSemanticType[]
   inputArtifactSlots?: ArtifactInputSlot[]
   outputArtifactSlots?: ArtifactOutputSlot[]
+}
+
+interface AddControlNodeInput {
+  type: Extract<WorkflowCanvasNodeType, 'condition' | 'map' | 'loop'>
+  position?: WorkflowCanvasPosition
 }
 
 type WorkflowDefinitionLike = {
@@ -189,6 +195,44 @@ export const useWorkflowStore = defineStore(
       formDraft.selectNodeTool(nodeId, input.toolSlug)
       touchSession()
       return node
+    }
+
+    function addControlNode(input: AddControlNodeInput): WorkflowCanvasNode {
+      const nodeId = `${input.type}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+      const defaults = controlNodeDefaults(input.type)
+      const node = canvas.addControlNode({
+        id: nodeId,
+        type: input.type,
+        position: input.position,
+        ...defaults
+      })
+      touchSession()
+      return node
+    }
+
+    function controlNodeDefaults(type: AddControlNodeInput['type']) {
+      if (type === 'condition') {
+        return {
+          titleKey: '条件分支',
+          descriptionKey: '根据上游分数或字段选择 true / false 分支',
+          expression: { op: '==' as const, left: true, right: true }
+        }
+      }
+      if (type === 'map') {
+        return {
+          titleKey: '批量处理',
+          descriptionKey: '对候选分子集合进行并行子任务处理',
+          over: 'workflow_input:smiles_csv',
+          max_parallelism: 4
+        }
+      }
+      return {
+        titleKey: '循环优化',
+        descriptionKey: '重复运行内部工具直到达到收敛条件或迭代上限',
+        body: [],
+        max_iterations: 5,
+        convergence_condition: { op: '==' as const, left: true, right: true }
+      }
     }
 
     function deleteCanvasNode(nodeId: string) {
@@ -369,6 +413,7 @@ export const useWorkflowStore = defineStore(
       ensureCanvasFromPreset,
       syncCanvasNodeSemanticTypes,
       addToolNode,
+      addControlNode,
       deleteCanvasNode,
       addCanvasEdge,
       deleteCanvasEdge,
