@@ -24,6 +24,9 @@ class BoardNode(BaseModel):
     file_id: str | None = Field(default=None, min_length=1, max_length=36)
     tool_id: str | None = Field(default=None, min_length=1, max_length=36)
     artifact_id: str | None = Field(default=None, min_length=1, max_length=36)
+    task_id: str | None = Field(default=None, min_length=1, max_length=36)
+    status: Literal["pending", "running", "success", "failure", "canceled"] | None = None
+    output_artifact_id: str | None = Field(default=None, min_length=1, max_length=36)
 
     @model_validator(mode="after")
     def validate_reference(self):
