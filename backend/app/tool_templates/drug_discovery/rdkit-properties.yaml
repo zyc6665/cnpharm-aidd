@@ -39,6 +39,13 @@ agent_capability:
   defaults:
     smiles_column: smiles
     include_pains: true
+implementation:
+  source: open_source
+  provider: RDKit
+  runtime: rdkit
+  project_url: https://www.rdkit.org/
+  recommended_executor: docker_image
+  notes: Use RDKit descriptors and filters in a pinned container image.
 resource_profile:
   tier: light
   cpu: 2

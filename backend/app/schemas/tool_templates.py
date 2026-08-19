@@ -21,6 +21,7 @@ class ToolTemplateSummaryResponse(BaseModel):
     stage: str
     inputs: list[dict[str, Any]] = Field(default_factory=list)
     outputs: list[dict[str, Any]] = Field(default_factory=list)
+    implementation: dict[str, Any] = Field(default_factory=dict)
     resource_profile: dict[str, Any] = Field(default_factory=dict)
 
 

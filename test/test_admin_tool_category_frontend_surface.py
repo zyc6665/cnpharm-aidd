@@ -108,3 +108,5 @@ def test_admin_tool_form_exposes_drug_discovery_template_draft_flow():
     assert "handleCreateTemplateDraft" in create_source
     assert "createToolDraftFromTemplate" in create_source
     assert "resource_profile" in create_source
+    assert "推荐实现" in create_source
+    assert "implementation.project_url" in create_source

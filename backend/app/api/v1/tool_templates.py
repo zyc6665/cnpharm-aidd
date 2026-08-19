@@ -84,6 +84,7 @@ def _template_summary(template: DrugDiscoveryToolTemplate) -> dict:
         stage=template.agent_capability.stage,
         inputs=[item.model_dump(mode="json") for item in template.agent_capability.inputs],
         outputs=[item.model_dump(mode="json") for item in template.agent_capability.outputs],
+        implementation=template.implementation.model_dump(mode="json"),
         resource_profile=template.resource_profile.model_dump(mode="json"),
     )
     return payload.model_dump()

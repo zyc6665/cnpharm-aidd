@@ -65,6 +65,14 @@ export interface ToolTemplateSummary {
   stage: string
   inputs: Array<Record<string, unknown>>
   outputs: Array<Record<string, unknown>>
+  implementation: {
+    source: 'open_source' | 'internal_service'
+    provider: string
+    runtime: string
+    project_url?: string | null
+    recommended_executor: 'remote_api' | 'docker_image' | 'python_script' | 'ssh_job'
+    notes?: string | null
+  }
   resource_profile: Record<string, unknown>
 }
 

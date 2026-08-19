@@ -49,6 +49,13 @@ agent_capability:
       required: false
   defaults:
     exhaustiveness: 8
+implementation:
+  source: open_source
+  provider: AutoDock Vina
+  runtime: autodock_vina
+  project_url: https://github.com/ccsb-scripps/AutoDock-Vina
+  recommended_executor: docker_image
+  notes: Run vina against prepared receptor and ligand inputs.
 resource_profile:
   tier: medium
   cpu: 8

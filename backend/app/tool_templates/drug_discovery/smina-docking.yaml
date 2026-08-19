@@ -45,6 +45,13 @@ agent_capability:
       required: false
   defaults:
     exhaustiveness: 8
+implementation:
+  source: open_source
+  provider: Smina
+  runtime: smina
+  project_url: https://github.com/mwojcikowski/smina
+  recommended_executor: docker_image
+  notes: Run smina for scoring and optional local minimization.
 resource_profile:
   tier: medium
   cpu: 8

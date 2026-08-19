@@ -57,6 +57,16 @@ def test_bundled_drug_discovery_templates_are_valid_and_smoke_testable():
         assert template.smoke_test.expected_outputs
 
 
+def test_templates_declare_one_recommended_implementation():
+    template = load_tool_template("vina-docking")
+
+    assert template.implementation.source == "open_source"
+    assert template.implementation.provider == "AutoDock Vina"
+    assert template.implementation.runtime == "autodock_vina"
+    assert template.implementation.recommended_executor == "docker_image"
+    assert template.implementation.project_url.startswith("https://")
+
+
 def test_template_generates_existing_tool_import_config_for_docker_executor():
     template = load_tool_template("vina-docking")
 
@@ -74,6 +84,7 @@ def test_template_generates_existing_tool_import_config_for_docker_executor():
     assert tool_config["template_key"] == "vina-docking"
     assert tool_config["tool_family"] == "drug_discovery"
     assert tool_config["agent_capability"]["capability"] == "molecular_docking"
+    assert tool_config["implementation"]["runtime"] == "autodock_vina"
     assert tool_config["resource_profile"]["tier"] == "medium"
     assert tool_config["output_schema"]["properties"]["result_version"]["const"] == (
         "aidd.sciminer/result.v2"

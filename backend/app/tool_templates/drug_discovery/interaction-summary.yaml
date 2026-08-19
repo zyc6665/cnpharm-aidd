@@ -36,6 +36,13 @@ agent_capability:
       match: { extension: .json, filename_contains_any: [interaction, report] }
   defaults:
     distance_cutoff_angstrom: 4.0
+implementation:
+  source: open_source
+  provider: ProLIF
+  runtime: prolif
+  project_url: https://github.com/chemosim-lab/ProLIF
+  recommended_executor: docker_image
+  notes: Generate protein-ligand interaction fingerprints and a standard report.
 resource_profile:
   tier: light
   cpu: 4

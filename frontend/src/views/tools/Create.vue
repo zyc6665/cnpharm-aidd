@@ -57,6 +57,24 @@
                     </a-form-item>
                   </a-col>
                 </a-row>
+                <div v-if="selectedToolTemplate" class="drug-template-implementation">
+                  <strong>推荐实现：{{ selectedToolTemplate.implementation.provider }}</strong>
+                  <span>
+                    {{ selectedToolTemplate.implementation.runtime }}
+                    · 推荐执行器 {{ selectedToolTemplate.implementation.recommended_executor }}
+                  </span>
+                  <a
+                    v-if="selectedToolTemplate.implementation.project_url"
+                    :href="selectedToolTemplate.implementation.project_url"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    查看项目
+                  </a>
+                  <span v-if="selectedToolTemplate.implementation.notes">
+                    {{ selectedToolTemplate.implementation.notes }}
+                  </span>
+                </div>
                 <a-space>
                   <a-button
                     type="primary"
@@ -1666,6 +1684,27 @@
     padding: 5px 0;
     color: @text-color-light-secondary;
     font-size: @font-size-sm;
+  }
+
+  .drug-template-implementation {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: @spacing-xs @spacing-sm;
+    padding: @spacing-sm;
+    border: 1px solid @border-color-light;
+    border-radius: @border-radius-sm;
+    background: @bg-surface;
+    color: @text-color-light-secondary;
+    font-size: @font-size-sm;
+  }
+
+  .drug-template-implementation strong {
+    color: @text-color-light-primary;
+  }
+
+  .drug-template-implementation a {
+    color: @primary-color;
   }
 
   .remote-register-result {

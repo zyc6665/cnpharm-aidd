@@ -38,6 +38,12 @@ agent_capability:
       required: false
   defaults:
     smiles_column: smiles
+implementation:
+  source: internal_service
+  provider: Internal Toxicity Service
+  runtime: toxicity_api
+  recommended_executor: remote_api
+  notes: Register the platform-owned asynchronous toxicity service endpoint.
 resource_profile:
   tier: light
   cpu: 2

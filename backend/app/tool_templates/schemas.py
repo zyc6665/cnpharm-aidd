@@ -92,6 +92,24 @@ class ToolTemplateAgentCapability(BaseModel):
     defaults: dict[str, Any] = Field(default_factory=dict)
 
 
+class ToolTemplateImplementation(BaseModel):
+    """Recommended open-source or internal implementation for a template."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source: Literal["open_source", "internal_service"]
+    provider: str = Field(min_length=1, max_length=160)
+    runtime: str = Field(min_length=1, max_length=100)
+    project_url: str | None = Field(default=None, max_length=500)
+    recommended_executor: Literal[
+        "remote_api",
+        "docker_image",
+        "python_script",
+        "ssh_job",
+    ]
+    notes: str | None = Field(default=None, max_length=500)
+
+
 class ToolTemplateResourceProfile(BaseModel):
     """Resource declaration used by UI hints and queue selection."""
 
@@ -169,6 +187,7 @@ class DrugDiscoveryToolTemplate(BaseModel):
     input_schema: dict[str, Any]
     output_schema: dict[str, Any]
     agent_capability: ToolTemplateAgentCapability
+    implementation: ToolTemplateImplementation
     resource_profile: ToolTemplateResourceProfile
     sample_inputs: list[ToolTemplateSampleInput] = Field(min_length=1)
     smoke_test: ToolTemplateSmokeTest

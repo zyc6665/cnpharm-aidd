@@ -72,6 +72,7 @@ def build_tool_import_config_from_template(
         "input_schema": template.input_schema,
         "output_schema": template.output_schema,
         "agent_capability": template.agent_capability.model_dump(mode="json"),
+        "implementation": template.implementation.model_dump(mode="json"),
         "resource_profile": template.resource_profile.model_dump(mode="json"),
         "template_key": template.metadata.template_key,
         "tool_family": template.metadata.family,

@@ -45,6 +45,13 @@ agent_capability:
     vina_weight: 0.6
     qed_weight: 0.2
     sa_weight: 0.2
+implementation:
+  source: open_source
+  provider: RDKit
+  runtime: rdkit_rescore
+  project_url: https://www.rdkit.org/
+  recommended_executor: python_script
+  notes: Combine docking scores with RDKit QED and synthetic accessibility values.
 resource_profile:
   tier: light
   cpu: 2

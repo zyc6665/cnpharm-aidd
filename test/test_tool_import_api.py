@@ -450,6 +450,8 @@ async def test_admin_can_list_drug_discovery_tool_templates(
     assert template_by_key["vina-docking"]["capability"] == "molecular_docking"
     assert template_by_key["vina-docking"]["resource_profile"]["tier"] == "medium"
     assert "docker_image" in template_by_key["vina-docking"]["executor_types"]
+    assert template_by_key["vina-docking"]["implementation"]["provider"] == "AutoDock Vina"
+    assert template_by_key["vina-docking"]["implementation"]["recommended_executor"] == "docker_image"
 
 
 @pytest.mark.asyncio

@@ -40,6 +40,13 @@ agent_capability:
   defaults:
     simulation_ns: 1
     temperature_k: 300
+implementation:
+  source: open_source
+  provider: GROMACS
+  runtime: gromacs
+  project_url: https://www.gromacs.org/
+  recommended_executor: ssh_job
+  notes: Submit long-running simulations to a dedicated heavy-compute worker or remote cluster.
 resource_profile:
   tier: heavy
   cpu: 16
