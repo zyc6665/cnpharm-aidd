@@ -113,6 +113,35 @@ class TestGPUAllocation:
         assert executor.config["gpu_required"] is True
         assert executor.config["gpu_memory_required_mb"] == 8192
 
+    def test_uses_task_resource_snapshot_over_mutated_tool_settings(self):
+        task = _make_task(
+            extra_data={
+                "resource_snapshot": {
+                    "executor_type": "docker_image",
+                    "gpu_required": True,
+                    "gpu_memory_mb": 16384,
+                    "timeout_sec": 3600,
+                    "resource_profile": {"tier": "heavy"},
+                }
+            }
+        )
+        tool = SimpleNamespace(gpu_required=False, gpu_memory_mb=0)
+        executor = TaskExecutor(
+            task,
+            SimpleNamespace(
+                config=_make_config(
+                    gpu_required=False,
+                    gpu_memory_required_mb=1024,
+                    timeout_sec=30,
+                )
+            ),
+            tool=tool,
+        )
+
+        assert executor.config["gpu_required"] is True
+        assert executor.config["gpu_memory_required_mb"] == 16384
+        assert executor.config["timeout_sec"] == 3600
+
     @pytest.mark.asyncio
     async def test_skips_when_gpu_not_required(self):
         task = _make_task()

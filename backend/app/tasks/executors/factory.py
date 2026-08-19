@@ -34,10 +34,25 @@ class TaskExecutor:
         self.tool_version = tool_version
         self.progress_callback = progress_callback
         self.config = dict(tool_version.config or {})
+        resource_snapshot = (
+            task.extra_data.get("resource_snapshot")
+            if isinstance(getattr(task, "extra_data", None), dict)
+            else None
+        )
+        if isinstance(resource_snapshot, dict):
+            if "gpu_required" in resource_snapshot:
+                self.config["gpu_required"] = bool(resource_snapshot["gpu_required"])
+            if "gpu_memory_mb" in resource_snapshot:
+                self.config["gpu_memory_required_mb"] = int(
+                    resource_snapshot["gpu_memory_mb"] or 0
+                )
+            if resource_snapshot.get("timeout_sec"):
+                self.config["timeout_sec"] = int(resource_snapshot["timeout_sec"])
         if tool is not None:
-            self.config["gpu_required"] = bool(tool.gpu_required)
-            if tool.gpu_required:
-                self.config["gpu_memory_required_mb"] = int(tool.gpu_memory_mb or 4096)
+            if not isinstance(resource_snapshot, dict):
+                self.config["gpu_required"] = bool(tool.gpu_required)
+                if tool.gpu_required:
+                    self.config["gpu_memory_required_mb"] = int(tool.gpu_memory_mb or 4096)
 
     def _get_executor(self) -> BaseExecutor:
         from app.tasks.executors.ssh_job import SSHJobExecutor
