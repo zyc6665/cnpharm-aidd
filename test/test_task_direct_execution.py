@@ -336,12 +336,23 @@ async def test_create_task_uses_direct_runner_when_enabled(
     )
 
     assert response.status_code == 200
-    task_id = response.json()["data"]["id"]
+    response_data = response.json()["data"]
+    task_id = response_data["id"]
     assert runner.scheduled == [(task_id, published_tool.current_version_id)]
+    assert response_data["resource_snapshot"] == {
+        "executor_type": "ssh_job",
+        "gpu_required": False,
+        "gpu_memory_mb": 0,
+        "timeout_sec": 600,
+        "resource_profile": {},
+    }
+    assert response_data["dispatch"] == {"mode": "direct", "queue": None}
 
     task = await db_session.get(Task, task_id)
     assert task is not None
     assert task.celery_task_id is None
+    assert task.extra_data["resource_snapshot"]["executor_type"] == "ssh_job"
+    assert task.extra_data["dispatch"] == {"mode": "direct", "queue": None}
 
 
 @pytest.mark.asyncio

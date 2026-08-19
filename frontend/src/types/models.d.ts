@@ -471,6 +471,20 @@ export interface TaskOutput {
   output_type: string
 }
 
+export interface TaskResourceSnapshot {
+  executor_type?: string | null
+  gpu_required: boolean
+  gpu_memory_mb: number
+  timeout_sec: number
+  resource_profile: Record<string, unknown>
+}
+
+export interface TaskDispatchInfo {
+  mode: 'direct' | 'celery' | string
+  queue?: string | null
+  queue_priority?: number
+}
+
 export interface Task {
   id: string
   name?: string
@@ -495,6 +509,8 @@ export interface Task {
   priority?: string
   project_id?: string | null
   input_bindings?: Record<string, string>
+  resource_snapshot?: TaskResourceSnapshot | null
+  dispatch?: TaskDispatchInfo | null
   created_at: string
   updated_at?: string
   // 兼容旧代码的字段

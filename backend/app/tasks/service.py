@@ -23,6 +23,7 @@ from app.tasks.direct_runner import direct_task_runner as default_direct_task_ru
 from app.tasks.naming import (
     resolve_task_display_name,
 )
+from app.tasks.resource_profile import build_task_resource_snapshot
 from app.tasks.state_machine import TaskStateMachine
 
 
@@ -132,7 +133,19 @@ async def create_and_schedule_tool_task(
             raise ValidationException("工具没有可用版本")
         version_id = tool.current_version_id
 
+    version_result = await db.execute(
+        select(ToolVersion).where(ToolVersion.id == version_id)
+    )
+    tool_version = version_result.scalar_one_or_none()
+    if not tool_version:
+        raise ValidationException("工具版本不存在")
+
     extra_data = dict(extra_data or {})
+    extra_data["resource_snapshot"] = build_task_resource_snapshot(
+        tool_version.config,
+        gpu_required=tool.gpu_required,
+        gpu_memory_mb=tool.gpu_memory_mb,
+    )
     if task_data.project_id:
         await load_project_membership(
             db,
@@ -186,14 +199,14 @@ async def create_and_schedule_tool_task(
                 task_id=str(task.id),
                 tool_version_id=str(version_id),
             )
+            task.extra_data = {
+                **(task.extra_data or {}),
+                "dispatch": {"mode": "direct", "queue": None},
+            }
+            await db.commit()
             logger.info("Task %s scheduled in direct mode", task.id)
         else:
             from app.tasks.queue_manager import TaskQueueManager
-
-            version_result = await db.execute(
-                select(ToolVersion).where(ToolVersion.id == version_id)
-            )
-            tool_version = version_result.scalar_one()
 
             queue = TaskQueueManager.determine_queue(
                 tool_config=tool_version.config,
@@ -209,6 +222,14 @@ async def create_and_schedule_tool_task(
             )
 
             task.celery_task_id = celery_task.id
+            task.extra_data = {
+                **(task.extra_data or {}),
+                "dispatch": {
+                    "mode": "celery",
+                    "queue": queue,
+                    "queue_priority": TaskQueueManager.get_queue_priority(queue),
+                },
+            }
             await db.commit()
 
             logger.info("Task %s enqueued to %s", task.id, queue)
