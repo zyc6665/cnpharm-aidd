@@ -390,6 +390,7 @@ export default {
       completedCount: '完成 {count}',
       failedCount: '失败 {count}',
       summaryTitle: '流程运行建议',
+      resourceTitle: '资源需求',
       noIssues: '当前没有阻塞问题，可以继续运行可执行节点。',
       viewNode: '查看节点',
       runReadyNodes: '运行可执行节点',

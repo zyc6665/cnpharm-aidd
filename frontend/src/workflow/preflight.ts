@@ -35,6 +35,25 @@ export interface WorkflowPreflightIssue {
   detail: string
 }
 
+export type WorkflowPreflightResourceScalar = string | number | boolean
+
+export interface WorkflowPreflightResourceSummary {
+  id: string
+  nodeId: string
+  nodeTitle: string
+  toolSlug: string
+  toolName: string
+  executorType?: string
+  tier?: string
+  cpu?: WorkflowPreflightResourceScalar
+  memoryGb?: WorkflowPreflightResourceScalar
+  gpuRequired?: boolean
+  gpuMemoryGb?: WorkflowPreflightResourceScalar
+  expectedMinutes?: WorkflowPreflightResourceScalar
+  timeoutMinutes?: WorkflowPreflightResourceScalar
+  label: string
+}
+
 export interface WorkflowPreflightSummary {
   canRun: boolean
   runnableCount: number
@@ -43,6 +62,7 @@ export interface WorkflowPreflightSummary {
   runningCount: number
   failedCount: number
   issues: WorkflowPreflightIssue[]
+  resourceSummaries: WorkflowPreflightResourceSummary[]
   primaryMessage: string
 }
 
@@ -86,6 +106,7 @@ export function buildWorkflowPreflight(input: {
   const artifactsById = new Map((input.artifacts ?? []).map((artifact) => [artifact.id, artifact]))
   const nodeById = new Map(input.template.nodes.map((node) => [node.id, node]))
   const issues: WorkflowPreflightIssue[] = []
+  const resourceSummaries: WorkflowPreflightResourceSummary[] = []
   const issueIds = new Set<string>()
   let completedCount = 0
   let runningCount = 0
@@ -137,6 +158,17 @@ export function buildWorkflowPreflight(input: {
       pushIssue(issues, issueIds, createIssue(node.id, formatWorkflowKey(node.titleKey), 'invalid_tool_contract', {
         toolSlug: selectedToolSlug,
       }))
+    }
+    if (selectedToolSlug && selectedTool) {
+      const resourceSummary = buildResourceSummary({
+        nodeId: node.id,
+        nodeTitle: formatWorkflowKey(node.titleKey),
+        toolSlug: selectedToolSlug,
+        tool: selectedTool,
+      })
+      if (resourceSummary) {
+        resourceSummaries.push(resourceSummary)
+      }
     }
 
     const incomingEdges = input.template.edges.filter((edge) => edge.target === node.id && edge.artifactType)
@@ -191,6 +223,7 @@ export function buildWorkflowPreflight(input: {
     runningCount,
     failedCount,
     issues,
+    resourceSummaries,
     primaryMessage: resolvePrimaryMessage({
       runnableCount,
       issues,
@@ -317,6 +350,106 @@ function createIssue(
     title: text.title,
     detail: text.detail,
   }
+}
+
+function buildResourceSummary(input: {
+  nodeId: string
+  nodeTitle: string
+  toolSlug: string
+  tool: WorkflowPreflightTool
+}): WorkflowPreflightResourceSummary | null {
+  const contract = input.tool.contract
+  const resourceProfile = contract?.resource_profile
+  if (!resourceProfile || Object.keys(resourceProfile).length === 0) {
+    return null
+  }
+
+  const label = formatResourceProfileLabel(resourceProfile)
+  if (!label) {
+    return null
+  }
+
+  return {
+    id: `${input.nodeId}-${input.toolSlug}-resources`,
+    nodeId: input.nodeId,
+    nodeTitle: input.nodeTitle,
+    toolSlug: input.toolSlug,
+    toolName: input.tool.name ?? contract?.name ?? input.toolSlug,
+    executorType: contract?.executor.type,
+    tier: readResourceText(resourceProfile.tier),
+    cpu: readResourceScalar(resourceProfile.cpu),
+    memoryGb: readResourceScalar(resourceProfile.memory_gb),
+    gpuRequired: readResourceBoolean(resourceProfile.gpu_required),
+    gpuMemoryGb: readResourceScalar(resourceProfile.gpu_memory_gb),
+    expectedMinutes: readResourceScalar(resourceProfile.expected_minutes),
+    timeoutMinutes: readResourceScalar(resourceProfile.timeout_minutes),
+    label,
+  }
+}
+
+function formatResourceProfileLabel(resourceProfile: Record<string, unknown>): string {
+  const segments: string[] = []
+  const tier = readResourceText(resourceProfile.tier)
+  const cpu = readResourceScalar(resourceProfile.cpu)
+  const memoryGb = readResourceScalar(resourceProfile.memory_gb)
+  const gpuRequired = readResourceBoolean(resourceProfile.gpu_required)
+  const gpuMemoryGb = readResourceScalar(resourceProfile.gpu_memory_gb)
+  const expectedMinutes = readResourceScalar(resourceProfile.expected_minutes)
+  const timeoutMinutes = readResourceScalar(resourceProfile.timeout_minutes)
+
+  if (tier) {
+    segments.push(tier)
+  }
+  if (cpu !== undefined) {
+    segments.push(`CPU ${cpu}`)
+  }
+  if (memoryGb !== undefined) {
+    segments.push(`MEM ${memoryGb}GB`)
+  }
+  if (gpuRequired) {
+    segments.push(gpuMemoryGb !== undefined ? `GPU ${gpuMemoryGb}GB` : 'GPU')
+  }
+  if (expectedMinutes !== undefined) {
+    segments.push(`ETA ${expectedMinutes}m`)
+  }
+  if (timeoutMinutes !== undefined) {
+    segments.push(`Timeout ${timeoutMinutes}m`)
+  }
+
+  return segments.join(' · ')
+}
+
+function readResourceText(value: unknown): string | undefined {
+  const scalar = readResourceScalar(value)
+  return scalar === undefined ? undefined : String(scalar)
+}
+
+function readResourceScalar(value: unknown): WorkflowPreflightResourceScalar | undefined {
+  if (value === undefined || value === null || value === '') {
+    return undefined
+  }
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return value
+  }
+  return String(value)
+}
+
+function readResourceBoolean(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') {
+    return value
+  }
+  if (typeof value === 'number') {
+    return value > 0
+  }
+  if (typeof value === 'string') {
+    if (value.toLowerCase() === 'true') {
+      return true
+    }
+    if (value.toLowerCase() === 'false') {
+      return false
+    }
+  }
+  return undefined
 }
 
 function hasInvalidToolContract(contract?: ToolContract | null) {

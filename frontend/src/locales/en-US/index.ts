@@ -391,6 +391,7 @@ export default {
       completedCount: 'Completed {count}',
       failedCount: 'Failed {count}',
       summaryTitle: 'Execution Guidance',
+      resourceTitle: 'Resource Needs',
       noIssues: 'There is no blocking issue right now. You can continue with ready nodes.',
       viewNode: 'View Node',
       runReadyNodes: 'Run Ready Nodes',

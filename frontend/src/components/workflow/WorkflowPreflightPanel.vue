@@ -14,9 +14,29 @@
     </div>
 
     <div class="preflight-body">
-      <div class="preflight-summary">
-        <strong>{{ t('workflow.preflight.summaryTitle') }}</strong>
-        <p>{{ summaryHint }}</p>
+      <div class="preflight-overview">
+        <div class="preflight-summary">
+          <strong>{{ t('workflow.preflight.summaryTitle') }}</strong>
+          <p>{{ summaryHint }}</p>
+        </div>
+
+        <div v-if="resourceSummaries.length" class="preflight-resources">
+          <strong>{{ t('workflow.preflight.resourceTitle') }}</strong>
+          <div
+            v-for="resource in resourceSummaries"
+            :key="resource.id"
+            class="preflight-resource"
+          >
+            <div class="resource-copy">
+              <span class="resource-node">{{ resource.nodeTitle }}</span>
+              <strong>{{ resource.toolName }}</strong>
+              <p>{{ resource.label }}</p>
+            </div>
+            <a-tag v-if="resource.executorType" color="blue">
+              {{ resource.executorType }}
+            </a-tag>
+          </div>
+        </div>
       </div>
 
       <div class="preflight-issues">
@@ -85,6 +105,8 @@
     }
     return t('workflow.preflight.hintEmpty')
   })
+
+  const resourceSummaries = computed(() => props.preflight.resourceSummaries)
 </script>
 
 <style scoped lang="less">
@@ -131,19 +153,59 @@
     padding: @spacing-lg;
   }
 
-  .preflight-summary {
+  .preflight-overview {
+    display: grid;
+    gap: @spacing-sm;
+    align-content: start;
+  }
+
+  .preflight-summary,
+  .preflight-resources {
     padding: @spacing-md;
     border-radius: @border-radius-sm;
     background: @bg-elevated;
   }
 
-  .preflight-summary strong {
+  .preflight-summary strong,
+  .preflight-resources > strong {
     color: @text-color-light-primary;
     font-size: @font-size-md;
   }
 
+  .preflight-resources {
+    display: grid;
+    gap: @spacing-sm;
+  }
+
+  .preflight-resource {
+    min-width: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: @spacing-sm;
+    padding-top: @spacing-sm;
+    border-top: 1px solid @border-color-light;
+  }
+
+  .resource-copy {
+    min-width: 0;
+  }
+
+  .resource-node {
+    display: block;
+    color: @text-color-light-tertiary;
+    font-size: @font-size-xs;
+    font-weight: 700;
+  }
+
+  .resource-copy strong {
+    color: @text-color-light-primary;
+    font-size: @font-size-sm;
+  }
+
   .preflight-summary p,
   .preflight-action-hint,
+  .resource-copy p,
   .issue-copy p {
     margin: 4px 0 0;
     color: @text-color-light-secondary;
