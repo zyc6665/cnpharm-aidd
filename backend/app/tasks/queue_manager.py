@@ -19,6 +19,7 @@ class TaskQueue(str, Enum):
     """任务队列枚举"""
     HIGH_PRIORITY = "high_priority"
     GPU_QUEUE = "gpu_queue"
+    HEAVY_COMPUTE_QUEUE = "heavy_compute"
     CPU_QUEUE = "cpu_queue"
     DEFAULT = "default"
 
@@ -36,6 +37,7 @@ class TaskQueueManager:
     QUEUE_PRIORITY: Dict[str, int] = {
         TaskQueue.HIGH_PRIORITY.value: 9,
         TaskQueue.GPU_QUEUE.value: 5,
+        TaskQueue.HEAVY_COMPUTE_QUEUE.value: 4,
         TaskQueue.CPU_QUEUE.value: 3,
         TaskQueue.DEFAULT.value: 1
     }
@@ -72,11 +74,18 @@ class TaskQueueManager:
         if gpu_required if gpu_required is not None else tool_config.get("gpu_required", False):
             return TaskQueue.GPU_QUEUE.value
 
-        # 3. 普通CPU任务
+        # 3. 重型CPU任务进入独立队列，供专用 worker 或未来集群适配器消费。
+        resource_profile = tool_config.get("resource_profile")
+        if isinstance(resource_profile, dict):
+            tier = str(resource_profile.get("tier") or "").strip().lower()
+            if tier == "heavy":
+                return TaskQueue.HEAVY_COMPUTE_QUEUE.value
+
+        # 4. 普通CPU任务
         if tool_config.get("type") in ["docker_image", "python_script", "ssh_job"]:
             return TaskQueue.CPU_QUEUE.value
 
-        # 4. 默认队列（API调用等）
+        # 5. 默认队列（API调用等）
         return TaskQueue.DEFAULT.value
 
     @classmethod
@@ -313,6 +322,7 @@ class TaskQueueManager:
         avg_execution_time = {
             TaskQueue.HIGH_PRIORITY.value: 60,
             TaskQueue.GPU_QUEUE.value: 300,
+            TaskQueue.HEAVY_COMPUTE_QUEUE.value: 900,
             TaskQueue.CPU_QUEUE.value: 120,
             TaskQueue.DEFAULT.value: 30
         }.get(queue, 60)

@@ -82,7 +82,7 @@ services:
   celery-worker:
     image: scitool-backend:${APP_VERSION:-latest}
     restart: unless-stopped
-    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=${CELERY_WORKER_CONCURRENCY:-4} --queues=default,tool_tasks,high_priority,cpu_queue,maintenance,monitoring
+    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=${CELERY_WORKER_CONCURRENCY:-4} --queues=default,tool_tasks,high_priority,cpu_queue,heavy_compute,maintenance,monitoring
     environment: *app_environment
     depends_on:
       postgres: { condition: service_healthy }

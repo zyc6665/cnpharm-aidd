@@ -97,7 +97,7 @@ services:
       celery -A app.worker.celery_app worker
       --loglevel=info
       --concurrency=4
-      --queues=default,high_priority,cpu_queue
+      --queues=default,high_priority,cpu_queue,heavy_compute
       --hostname=worker@scitool
       --max-tasks-per-child=50
 

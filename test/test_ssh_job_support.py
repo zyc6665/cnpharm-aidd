@@ -106,6 +106,23 @@ def test_determine_queue_uses_explicit_tool_gpu_requirement() -> None:
     assert queue == TaskQueue.GPU_QUEUE.value
 
 
+def test_determine_queue_routes_heavy_cpu_tools_to_heavy_compute_queue() -> None:
+    queue = TaskQueueManager.determine_queue(
+        {
+            "type": "ssh_job",
+            "gpu_required": False,
+            "resource_profile": {
+                "tier": "heavy",
+                "cpu": 16,
+                "memory_gb": 64,
+                "expected_minutes": 240,
+            },
+        }
+    )
+
+    assert queue == TaskQueue.HEAVY_COMPUTE_QUEUE.value
+
+
 def test_task_executor_returns_ssh_job_executor() -> None:
     """执行器工厂应识别 ssh_job。"""
     executor = TaskExecutor(

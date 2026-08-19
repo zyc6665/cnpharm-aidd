@@ -20,7 +20,15 @@ def test_production_workers_consume_backend_routed_queues():
     worker_command = compose["services"]["celery-worker"]["command"]
     gpu_worker_command = compose["services"]["celery-worker-gpu"]["command"]
 
-    for queue in ("default", "tool_tasks", "high_priority", "cpu_queue", "maintenance", "monitoring"):
+    for queue in (
+        "default",
+        "tool_tasks",
+        "high_priority",
+        "cpu_queue",
+        "heavy_compute",
+        "maintenance",
+        "monitoring",
+    ):
         assert queue in worker_command
     assert "gpu_queue" in gpu_worker_command
 

@@ -192,7 +192,7 @@ services:
     command: >
       watchfiles
       --filter python
-      'celery -A app.worker.celery_app worker --loglevel=info --concurrency=4 --queues=default,high_priority,cpu_queue --hostname=worker@scitool'
+      'celery -A app.worker.celery_app worker --loglevel=info --concurrency=4 --queues=default,high_priority,cpu_queue,heavy_compute --hostname=worker@scitool'
       /app/app
 
     # ========== 环境变量 ==========

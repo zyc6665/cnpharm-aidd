@@ -88,7 +88,7 @@ services:
       context: ./backend
       target: development
     restart: unless-stopped
-    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=${CELERY_WORKER_CONCURRENCY:-2} --queues=default,tool_tasks,high_priority,cpu_queue,maintenance,monitoring
+    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=${CELERY_WORKER_CONCURRENCY:-2} --queues=default,tool_tasks,high_priority,cpu_queue,heavy_compute,maintenance,monitoring
     environment: *aidd_dev_environment
     depends_on:
       postgres: { condition: service_healthy }
