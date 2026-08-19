@@ -88,7 +88,21 @@ services:
       context: ./backend
       target: development
     restart: unless-stopped
-    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=${CELERY_WORKER_CONCURRENCY:-2} --queues=default,tool_tasks,high_priority,cpu_queue,heavy_compute,maintenance,monitoring
+    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=${CELERY_WORKER_CONCURRENCY:-2} --queues=default,tool_tasks,high_priority,cpu_queue,maintenance,monitoring
+    environment: *aidd_dev_environment
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      minio: { condition: service_healthy }
+    volumes:
+      - ./backend:/app
+
+  celery-worker-heavy:
+    build:
+      context: ./backend
+      target: development
+    restart: unless-stopped
+    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=${CELERY_HEAVY_WORKER_CONCURRENCY:-1} --queues=heavy_compute
     environment: *aidd_dev_environment
     depends_on:
       postgres: { condition: service_healthy }

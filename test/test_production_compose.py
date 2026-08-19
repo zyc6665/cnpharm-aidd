@@ -7,7 +7,15 @@ def test_production_compose_contains_required_internal_services():
     compose = yaml.safe_load(Path("docker-compose.prod.yml").read_text(encoding="utf-8"))
     services = compose["services"]
 
-    for service in ("backend", "postgres", "redis", "minio", "celery-worker", "celery-worker-gpu"):
+    for service in (
+        "backend",
+        "postgres",
+        "redis",
+        "minio",
+        "celery-worker",
+        "celery-worker-heavy",
+        "celery-worker-gpu",
+    ):
         assert service in services
     assert "volumes" not in services["backend"]
     assert "ports" not in services["postgres"]
@@ -18,18 +26,13 @@ def test_production_compose_contains_required_internal_services():
 def test_production_workers_consume_backend_routed_queues():
     compose = yaml.safe_load(Path("docker-compose.prod.yml").read_text(encoding="utf-8"))
     worker_command = compose["services"]["celery-worker"]["command"]
+    heavy_worker_command = compose["services"]["celery-worker-heavy"]["command"]
     gpu_worker_command = compose["services"]["celery-worker-gpu"]["command"]
 
-    for queue in (
-        "default",
-        "tool_tasks",
-        "high_priority",
-        "cpu_queue",
-        "heavy_compute",
-        "maintenance",
-        "monitoring",
-    ):
+    for queue in ("default", "tool_tasks", "high_priority", "cpu_queue", "maintenance", "monitoring"):
         assert queue in worker_command
+    assert "heavy_compute" not in worker_command
+    assert "--queues=heavy_compute" in heavy_worker_command
     assert "gpu_queue" in gpu_worker_command
 
 

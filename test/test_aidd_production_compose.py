@@ -40,7 +40,7 @@ def test_production_compose_uses_postgres_redis_and_minio_with_health_gates() ->
         == services["minio"]["environment"]["MINIO_ROOT_PASSWORD"]
     )
 
-    for service_name in ("backend", "celery-worker", "celery-worker-gpu"):
+    for service_name in ("backend", "celery-worker", "celery-worker-heavy", "celery-worker-gpu"):
         dependencies = services[service_name]["depends_on"]
         for dependency in ("postgres", "redis", "minio"):
             assert dependencies[dependency]["condition"] == "service_healthy"
@@ -60,7 +60,14 @@ def test_aidd_development_compose_provides_local_stateful_services() -> None:
     compose = _load_compose("docker-compose.aidd-dev.yml")
     services = compose["services"]
 
-    for service_name in ("postgres", "redis", "minio", "backend", "celery-worker"):
+    for service_name in (
+        "postgres",
+        "redis",
+        "minio",
+        "backend",
+        "celery-worker",
+        "celery-worker-heavy",
+    ):
         assert service_name in services
 
     backend_environment = services["backend"]["environment"]

@@ -97,7 +97,7 @@ services:
       celery -A app.worker.celery_app worker
       --loglevel=info
       --concurrency=4
-      --queues=default,high_priority,cpu_queue,heavy_compute
+      --queues=default,high_priority,cpu_queue
       --hostname=worker@scitool
       --max-tasks-per-child=50
 
@@ -160,6 +160,47 @@ services:
         max-file: "3"
 
     # ========== 网络 ==========
+    networks:
+      - cpumodel
+
+  # ==========================================================================
+  # Celery Worker - 重型计算队列 (可独立扩容)
+  # ==========================================================================
+  celery-worker-heavy:
+    image: scitool-backend:latest
+    container_name: scitool-celery-worker-heavy
+    restart: unless-stopped
+
+    command: >
+      celery -A app.worker.celery_app worker
+      --loglevel=info
+      --concurrency=1
+      --queues=heavy_compute
+      --hostname=heavy-worker@scitool
+      --max-tasks-per-child=10
+
+    environment:
+      DATABASE_URL: sqlite+aiosqlite:////app/storage/scitool.db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 0
+      REDIS_PASSWORD: scitool123
+      CELERY_BROKER_URL: redis://:scitool123@redis:6379/1
+      CELERY_RESULT_BACKEND: redis://:scitool123@redis:6379/2
+      LOG_LEVEL: INFO
+      PYTHONUNBUFFERED: 1
+      SSH_PASSWORD_REF_SSH_4090_ZHOUYC: ${SSH_PASSWORD_REF_SSH_4090_ZHOUYC:-}
+
+    volumes:
+      - ./backend/storage:/app/storage
+      - ./backend/storage/uploads:/app/storage/uploads
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./backend/app:/app/app
+
+    depends_on:
+      redis:
+        condition: service_healthy
+
     networks:
       - cpumodel
 
