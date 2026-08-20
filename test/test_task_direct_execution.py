@@ -35,7 +35,7 @@ from app.models import tasks as _task_models  # noqa: F401
 from app.models import users as _user_models  # noqa: F401
 from app.models.artifacts import ArtifactVersion
 from app.models.files import File, FileSourceType
-from app.models.projects import Organization, Project
+from app.models.projects import Organization, Project, ProjectMember
 from app.models.tasks import TaskLog, TaskOutput
 from app.models.statistics import ToolStatistics
 from app.models.tasks import Task, TaskInput, TaskStatus
@@ -380,6 +380,80 @@ async def test_create_task_api_uses_shared_task_creation_service(
     assert response.status_code == 200
     task_id = response.json()["data"]["id"]
     assert runner.scheduled == [(task_id, published_tool.current_version_id)]
+
+
+@pytest.mark.asyncio
+async def test_standard_artifact_task_without_project_uses_default_project(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    admin_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """会产生标准产物的直接任务未传 project_id 时应自动落到用户默认项目。"""
+    runner = RecordingDirectRunner()
+    monkeypatch.setattr(config_settings, "TASK_EXECUTION_BACKEND", "direct", raising=False)
+    monkeypatch.setattr(tasks_api, "direct_task_runner", runner, raising=False)
+
+    tool = Tool(
+        owner_id=admin_user.id,
+        name="Fetch PDB Structure",
+        slug="builtin-fetch-pdb",
+        status=ToolStatus.PUBLISHED.value,
+        is_public=True,
+    )
+    db_session.add(tool)
+    await db_session.flush()
+    version = ToolVersion(
+        tool_id=tool.id,
+        version="1.0.0",
+        config={
+            "type": "builtin",
+            "builtin_slug": "builtin-fetch-pdb",
+            "artifacts": {
+                "outputs": [
+                    {"name": "protein", "type": "protein_structure@1", "required": True}
+                ]
+            },
+        },
+        is_active=True,
+    )
+    db_session.add(version)
+    await db_session.flush()
+    tool.current_version_id = version.id
+    await db_session.commit()
+
+    response = await api_client.post(
+        "/api/v1/tasks",
+        headers={"Authorization": "Bearer admin-token"},
+        json={
+            "tool_id": tool.id,
+            "params": {"pdb_id": "1a2b"},
+        },
+    )
+
+    assert response.status_code == 200
+    task_id = response.json()["data"]["id"]
+    project_id = response.json()["data"]["project_id"]
+    assert project_id
+    assert runner.scheduled == [(task_id, version.id)]
+
+    task = await db_session.get(Task, task_id)
+    assert task is not None
+    assert task.extra_data["project_id"] == project_id
+
+    project = await db_session.get(Project, project_id)
+    assert project is not None
+    assert project.created_by == admin_user.id
+    assert (project.data_policy or {}).get("migration_default") is True
+
+    membership_result = await db_session.execute(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project_id,
+            ProjectMember.user_id == admin_user.id,
+            ProjectMember.role == "owner",
+        )
+    )
+    assert membership_result.scalar_one_or_none() is not None
 
 
 @pytest.mark.asyncio

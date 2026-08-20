@@ -1,10 +1,10 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import WorkflowNodeRunPanel from './WorkflowNodeRunPanel.vue'
 import { getToolDetail } from '@/api/tools'
 import { uploadFile } from '@/api/files'
-import { createTask } from '@/api/tasks'
+import { createTask, getTaskDetail } from '@/api/tasks'
 import { useWorkflowStore } from '@/stores'
 import i18n from '@/locales'
 
@@ -17,7 +17,9 @@ vi.mock('@/api/files', () => ({
 }))
 
 vi.mock('@/api/tasks', () => ({
-  createTask: vi.fn()
+  createTask: vi.fn(),
+  getTaskDetail: vi.fn(),
+  isTaskTerminalStatus: (status: string) => ['success', 'failure', 'canceled'].includes(status)
 }))
 
 const stubs = {
@@ -138,6 +140,11 @@ describe('WorkflowNodeRunPanel', () => {
     vi.mocked(getToolDetail).mockReset()
     vi.mocked(uploadFile).mockReset()
     vi.mocked(createTask).mockReset()
+    vi.mocked(getTaskDetail).mockReset()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('工具列表异步补齐 id 后应加载真实工具并显示节点参数表单', async () => {
@@ -283,6 +290,131 @@ describe('WorkflowNodeRunPanel', () => {
       project_id: 'project-1',
       params: { builtin_inputs: { 'protein_structure@1': 'file-protein' } },
       file_ids: ['file-protein']
+    })
+  })
+
+  it('独立运行创建后应轮询任务终态并更新当前节点状态', async () => {
+    vi.useFakeTimers()
+    mockFetchPdbToolDetail()
+    vi.mocked(createTask).mockResolvedValue({
+      code: 200,
+      message: 'ok',
+      data: {
+        id: 'task-fetch-pdb',
+        name: 'Fetch PDB Structure',
+        tool_id: 'tool-fetch-pdb',
+        tool_slug: 'builtin-fetch-pdb',
+        status: 'pending',
+        progress: 0,
+        created_at: '2026-08-20T00:00:00Z'
+      }
+    } as never)
+    vi.mocked(getTaskDetail).mockResolvedValue({
+      code: 200,
+      message: 'ok',
+      data: {
+        id: 'task-fetch-pdb',
+        name: 'Fetch PDB Structure',
+        tool_id: 'tool-fetch-pdb',
+        tool_slug: 'builtin-fetch-pdb',
+        status: 'failure',
+        progress: 0,
+        progress_message: '任务失败',
+        error_message: 'Task extra_data.project_id is required for standard artifacts',
+        created_at: '2026-08-20T00:00:00Z',
+        updated_at: '2026-08-20T00:00:02Z'
+      }
+    } as never)
+
+    const workflowStore = useWorkflowStore()
+    workflowStore.setNodeFormDraft('fetch-pdb-node', { pdb_id: '1ABC' })
+
+    const wrapper = mount(WorkflowNodeRunPanel, {
+      props: {
+        nodeId: 'fetch-pdb-node',
+        selectedToolSlug: 'builtin-fetch-pdb',
+        availableTools: [
+          {
+            id: 'tool-fetch-pdb',
+            slug: 'builtin-fetch-pdb',
+            name: 'Fetch PDB Structure'
+          }
+        ],
+        recommendedArtifacts: []
+      },
+      global: { plugins: [i18n], stubs }
+    })
+
+    await flushPromises()
+    await wrapper.find('[data-testid="run-current-node"]').trigger('click')
+    await flushPromises()
+    expect(workflowStore.taskByNode['fetch-pdb-node']).toMatchObject({ status: 'pending' })
+
+    await vi.advanceTimersByTimeAsync(2000)
+    await flushPromises()
+
+    expect(getTaskDetail).toHaveBeenCalledWith('task-fetch-pdb')
+    expect(workflowStore.taskByNode['fetch-pdb-node']).toMatchObject({
+      status: 'failure',
+      error_message: 'Task extra_data.project_id is required for standard artifacts'
+    })
+  })
+
+  it('挂载时应恢复轮询已绑定但未终止的节点任务', async () => {
+    vi.useFakeTimers()
+    mockFetchPdbToolDetail()
+    vi.mocked(getTaskDetail).mockResolvedValue({
+      code: 200,
+      message: 'ok',
+      data: {
+        id: 'task-existing-fetch-pdb',
+        name: 'Fetch PDB Structure',
+        tool_id: 'tool-fetch-pdb',
+        tool_slug: 'builtin-fetch-pdb',
+        status: 'failure',
+        progress: 0,
+        progress_message: '任务失败',
+        error_message: 'Task extra_data.project_id is required for standard artifacts',
+        created_at: '2026-08-20T00:00:00Z',
+        updated_at: '2026-08-20T00:00:02Z'
+      }
+    } as never)
+
+    const workflowStore = useWorkflowStore()
+    workflowStore.recordNodeTask('fetch-pdb-node', {
+      id: 'task-existing-fetch-pdb',
+      name: 'Fetch PDB Structure',
+      tool_id: 'tool-fetch-pdb',
+      tool_slug: 'builtin-fetch-pdb',
+      status: 'running',
+      progress: 0,
+      created_at: '2026-08-20T00:00:00Z'
+    })
+
+    mount(WorkflowNodeRunPanel, {
+      props: {
+        nodeId: 'fetch-pdb-node',
+        selectedToolSlug: 'builtin-fetch-pdb',
+        availableTools: [
+          {
+            id: 'tool-fetch-pdb',
+            slug: 'builtin-fetch-pdb',
+            name: 'Fetch PDB Structure'
+          }
+        ],
+        recommendedArtifacts: []
+      },
+      global: { plugins: [i18n], stubs }
+    })
+
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(2000)
+    await flushPromises()
+
+    expect(getTaskDetail).toHaveBeenCalledWith('task-existing-fetch-pdb')
+    expect(workflowStore.taskByNode['fetch-pdb-node']).toMatchObject({
+      status: 'failure',
+      error_message: 'Task extra_data.project_id is required for standard artifacts'
     })
   })
 })

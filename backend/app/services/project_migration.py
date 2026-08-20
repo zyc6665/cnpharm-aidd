@@ -76,6 +76,31 @@ async def _default_organization(db: AsyncSession) -> Organization:
     return organization
 
 
+async def ensure_migration_project_for_owner(db: AsyncSession, user: User) -> Project:
+    """Return the stable default project used for legacy or context-free resources."""
+
+    owner_id = str(user.id)
+    existing_projects = await _migration_project_by_owner(db, {owner_id})
+    existing = existing_projects.get(owner_id)
+    if existing is not None:
+        return existing
+
+    organization = await _default_organization(db)
+    project = Project(
+        organization_id=organization.id,
+        created_by=owner_id,
+        name="默认项目",
+        goal="承接未显式选择项目时创建的科研资源",
+        status="active",
+        data_policy={MIGRATION_POLICY_KEY: True},
+    )
+    db.add(project)
+    await db.flush()
+    db.add(ProjectMember(project_id=project.id, user_id=owner_id, role="owner"))
+    await db.flush()
+    return project
+
+
 async def backfill_legacy_projects(
     db: AsyncSession,
     *,

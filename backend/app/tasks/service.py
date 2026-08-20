@@ -19,6 +19,7 @@ from app.models.tools import Tool, ToolVersion
 from app.models.users import User
 from app.schemas.tasks import TaskCreate
 from app.services.project_access import load_project_membership
+from app.services.project_migration import ensure_migration_project_for_owner
 from app.tasks.direct_runner import direct_task_runner as default_direct_task_runner
 from app.tasks.naming import (
     resolve_task_display_name,
@@ -28,6 +29,37 @@ from app.tasks.state_machine import TaskStateMachine
 
 
 logger = logging.getLogger(__name__)
+
+
+def _is_standard_artifact_ref(value: object) -> bool:
+    return isinstance(value, str) and "@" in value and bool(value.split("@", 1)[0])
+
+
+def _tool_config_emits_standard_artifacts(config: object) -> bool:
+    if not isinstance(config, dict):
+        return False
+
+    artifacts = config.get("artifacts")
+    if isinstance(artifacts, dict):
+        outputs = artifacts.get("outputs")
+        if isinstance(outputs, list):
+            for output in outputs:
+                if isinstance(output, dict) and _is_standard_artifact_ref(output.get("type")):
+                    return True
+
+    capability = config.get("agent_capability")
+    if isinstance(capability, dict):
+        outputs = capability.get("outputs")
+        if isinstance(outputs, list):
+            for output in outputs:
+                if not isinstance(output, dict):
+                    continue
+                if output.get("source") == "artifact":
+                    return True
+                if _is_standard_artifact_ref(output.get("semantic_type")):
+                    return True
+
+    return False
 
 
 async def record_tool_usage(db: AsyncSession, tool_id: str) -> None:
@@ -146,16 +178,21 @@ async def create_and_schedule_tool_task(
         gpu_required=tool.gpu_required,
         gpu_memory_mb=tool.gpu_memory_mb,
     )
-    if task_data.project_id:
+    project_id = task_data.project_id
+    if project_id:
         await load_project_membership(
             db,
-            project_id=task_data.project_id,
+            project_id=project_id,
             user_id=current_user.id,
         )
-        extra_data["project_id"] = task_data.project_id
+        extra_data["project_id"] = project_id
+    elif _tool_config_emits_standard_artifacts(tool_version.config):
+        project = await ensure_migration_project_for_owner(db, current_user)
+        project_id = str(project.id)
+        extra_data["project_id"] = project_id
     input_bindings = await _validate_standard_input_bindings(
         db,
-        project_id=task_data.project_id,
+        project_id=project_id,
         input_bindings=task_data.input_bindings,
     )
     if input_bindings:

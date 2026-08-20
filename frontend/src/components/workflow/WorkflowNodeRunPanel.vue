@@ -59,15 +59,15 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, reactive, ref, watch } from 'vue'
+  import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
   import { useI18n } from 'vue-i18n'
   import type { FormInstance } from 'ant-design-vue/es/form'
   import type { UploadFile } from 'ant-design-vue'
   import ToolParameterForm from '@/components/workflow/ToolParameterForm.vue'
   import { uploadFile } from '@/api/files'
-  import { createTask } from '@/api/tasks'
+  import { createTask, getTaskDetail, isTaskTerminalStatus } from '@/api/tasks'
   import { getToolDetail } from '@/api/tools'
-  import { useUserStore, useWorkflowStore } from '@/stores'
+  import { useArtifactsStore, useUserStore, useWorkflowStore } from '@/stores'
   import type { ArtifactFile, Tool, ToolSchema } from '@/types/models'
   import {
     buildTaskSubmissionPayload,
@@ -89,6 +89,8 @@
     required?: boolean
   }
 
+  const STANDALONE_TASK_POLL_INTERVAL_MS = 2000
+
   const props = defineProps<{
     nodeId: string
     projectId?: string | null
@@ -100,6 +102,7 @@
   const { t } = useI18n()
   const userStore = useUserStore()
   const workflowStore = useWorkflowStore()
+  const artifactsStore = useArtifactsStore()
 
   const formRef = ref<FormInstance>()
   const selectedTool = ref<Tool | null>(null)
@@ -110,6 +113,8 @@
   const autoBoundArtifacts = ref<ArtifactFile[]>([])
   const submitting = ref(false)
   let detailRequestToken = 0
+  let standaloneTaskPollTimer: number | null = null
+  let standaloneTaskPollTaskId: string | null = null
 
   const selectedToolSummary = computed(() => {
     if (!props.selectedToolSlug) {
@@ -118,6 +123,8 @@
 
     return props.availableTools?.find(tool => tool.slug === props.selectedToolSlug) ?? null
   })
+
+  const currentNodeTask = computed(() => workflowStore.taskByNode[props.nodeId] ?? null)
 
   const contractArtifactInputs = computed<ContractArtifactInput[]>(() =>
     selectedTool.value?.contract?.artifacts?.inputs ?? []
@@ -325,6 +332,51 @@
     }
   }
 
+  function stopStandaloneTaskPolling() {
+    if (standaloneTaskPollTimer !== null) {
+      window.clearTimeout(standaloneTaskPollTimer)
+      standaloneTaskPollTimer = null
+    }
+    standaloneTaskPollTaskId = null
+  }
+
+  function refreshTaskBindings(task: Awaited<ReturnType<typeof getTaskDetail>>['data']) {
+    workflowStore.recordNodeTask(props.nodeId, task)
+    if (props.selectedToolSlug) {
+      workflowStore.recordTask(props.selectedToolSlug, task)
+    }
+  }
+
+  function startStandaloneTaskPolling(taskId: string) {
+    if (standaloneTaskPollTaskId === taskId && standaloneTaskPollTimer !== null) {
+      return
+    }
+
+    stopStandaloneTaskPolling()
+    standaloneTaskPollTaskId = taskId
+
+    const poll = async () => {
+      try {
+        const response = await getTaskDetail(taskId)
+        refreshTaskBindings(response.data)
+
+        if (isTaskTerminalStatus(response.data.status)) {
+          stopStandaloneTaskPolling()
+          if (response.data.status === 'success') {
+            void artifactsStore.fetchArtifacts({ page: 1, page_size: 100 })
+          }
+          return
+        }
+      } catch {
+        // 下次轮询继续尝试，避免瞬时网络错误让节点状态永远停住。
+      }
+
+      standaloneTaskPollTimer = window.setTimeout(poll, STANDALONE_TASK_POLL_INTERVAL_MS)
+    }
+
+    standaloneTaskPollTimer = window.setTimeout(poll, STANDALONE_TASK_POLL_INTERVAL_MS)
+  }
+
   async function runCurrentNode() {
     if (!selectedTool.value || !props.selectedToolSlug) {
       return
@@ -350,6 +402,7 @@
 
       workflowStore.recordNodeTask(props.nodeId, response.data)
       workflowStore.recordTask(props.selectedToolSlug, response.data)
+      startStandaloneTaskPolling(response.data.id)
     } finally {
       submitting.value = false
     }
@@ -404,6 +457,29 @@
     },
     { deep: true }
   )
+
+  watch(
+    () => [currentNodeTask.value?.id ?? null, currentNodeTask.value?.status ?? null] as const,
+    ([taskId, status]) => {
+      if (!taskId || !status) {
+        return
+      }
+
+      if (isTaskTerminalStatus(status)) {
+        if (standaloneTaskPollTaskId === taskId) {
+          stopStandaloneTaskPolling()
+        }
+        return
+      }
+
+      startStandaloneTaskPolling(taskId)
+    },
+    { immediate: true }
+  )
+
+  onBeforeUnmount(() => {
+    stopStandaloneTaskPolling()
+  })
 </script>
 
 <style scoped lang="less">
