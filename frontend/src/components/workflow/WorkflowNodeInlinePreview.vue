@@ -31,10 +31,14 @@
           <a-button
             class="inline-preview-expand-button"
             size="small"
+            shape="circle"
+            title="放大查看"
+            aria-label="放大查看"
+            data-placement="top-left"
             @click.stop="previewOpen = true"
             @pointerdown.stop
           >
-            放大查看
+            <FullscreenOutlined />
           </a-button>
         </div>
         <a-modal
@@ -74,6 +78,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { FullscreenOutlined } from '@ant-design/icons-vue'
 import ResultVisualizationPanel from '@/components/tasks/ResultVisualizationPanel.vue'
 import { normalizeTaskStatus } from '@/domain/tasks'
 import type { ArtifactFile, Task } from '@/types/models'
@@ -180,14 +185,23 @@ const visualizationTask = computed(() => ({
 .inline-preview-expand-button {
   position: absolute;
   top: @spacing-xs;
-  right: @spacing-xs;
-  z-index: 2;
+  left: @spacing-xs;
+  z-index: 20;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
   border-color: rgba(59, 130, 246, 0.28);
-  background: rgba(9, 9, 11, 0.72);
+  background: rgba(9, 9, 11, 0.82);
   color: @text-color-light-primary;
   font-size: @font-size-xs;
   font-weight: 800;
   backdrop-filter: blur(8px);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
+  pointer-events: auto;
 }
 
 .inline-preview-expand-button:hover,

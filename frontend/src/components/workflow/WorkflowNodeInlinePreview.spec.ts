@@ -73,6 +73,9 @@ describe('WorkflowNodeInlinePreview', () => {
     expect(visualizations).toHaveLength(1)
     expect(visualizations[0]?.attributes('data-variant')).toBe('compact')
     expect(visualizations[0]?.attributes('data-native-fullscreen')).toBe('false')
+    expect(wrapper.find('.inline-preview-expand-button').attributes('aria-label')).toBe('放大查看')
+    expect(wrapper.find('.inline-preview-expand-button').attributes('data-placement')).toBe('top-left')
+    expect(wrapper.find('.inline-preview-expand-button').text()).toBe('')
 
     await wrapper.find('.inline-preview-expand-button').trigger('click')
 
