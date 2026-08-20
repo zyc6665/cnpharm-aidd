@@ -165,6 +165,8 @@
               :active-node-id="activeNode?.id ?? null"
               :node-statuses="nodeStatuses"
               :node-positions="workflowStore.nodePositionById"
+              :task-by-node="workflowStore.taskByNode"
+              :artifacts="artifactsStore.items"
               @select-node="workflowStore.setActiveNode"
               @move-node="workflowStore.moveNode"
               @add-tool-node="handleAddToolNode"

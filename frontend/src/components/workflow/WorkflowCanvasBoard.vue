@@ -59,7 +59,15 @@
           @run-node="$emit('run-node', $event)"
           @start-connect="handleStartConnect"
           @finish-connect="handleFinishConnect"
-        />
+        >
+          <template #preview>
+            <WorkflowNodeInlinePreview
+              :selected="node.id === activeNodeId"
+              :task="taskByNode?.[node.id] ?? null"
+              :artifacts="artifacts ?? []"
+            />
+          </template>
+        </WorkflowCanvasPanelNode>
       </div>
       </div>
     </div>
@@ -71,11 +79,13 @@
   import { ZoomInOutlined, ZoomOutOutlined } from '@ant-design/icons-vue'
   import { useCanvasViewport } from '@/composables/useCanvasViewport'
   import { useI18n } from 'vue-i18n'
-  import type { WorkflowArtifactSemanticType, WorkflowStepStatus } from '@/workflow/artifact-types'
+  import type { ArtifactFile } from '@/types/models'
+  import type { WorkflowArtifactSemanticType, WorkflowStepStatus, WorkflowTaskRef } from '@/workflow/artifact-types'
   import { resolveWorkflowLabel } from '@/workflow/i18n-utils'
   import type { WorkflowCanvasNode as WorkflowCanvasNodeModel, WorkflowCanvasPreset } from '@/workflow/canvas-types'
   import WorkflowCanvasEdge from './WorkflowCanvasEdge.vue'
   import WorkflowCanvasPanelNode from './WorkflowCanvasPanelNode.vue'
+  import WorkflowNodeInlinePreview from './WorkflowNodeInlinePreview.vue'
 
   const NODE_WIDTH = 380
   const NODE_HEIGHT = 280
@@ -88,6 +98,8 @@
     activeNodeId?: string | null
     nodeStatuses?: Record<string, WorkflowStepStatus>
     nodePositions?: Record<string, { x: number; y: number }>
+    taskByNode?: Record<string, WorkflowTaskRef>
+    artifacts?: ArtifactFile[]
   }>()
 
   const emit = defineEmits<{
