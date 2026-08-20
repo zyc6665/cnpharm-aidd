@@ -1,5 +1,5 @@
 <template>
-  <div class="workflow-canvas-board">
+  <div class="workflow-canvas-board" :style="boardViewportStyle">
     <div class="canvas-toolbar">
       <div>
         <span class="canvas-kicker">{{ t('workflow.canvas.title') }}</span>
@@ -92,6 +92,13 @@
   const CANVAS_PADDING = 96
   const { t, te } = useI18n()
   const { zoom, zoomIn, zoomOut, resetZoom, setZoom, surfaceStyle } = useCanvasViewport()
+  const boardViewportStyle = {
+    flex: '1 1 auto',
+    width: '100%',
+    maxWidth: '100%',
+    minWidth: '0',
+    height: '100%'
+  }
 
   const props = defineProps<{
     preset: WorkflowCanvasPreset

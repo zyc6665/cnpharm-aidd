@@ -126,4 +126,35 @@ describe('WorkflowCanvasBoard', () => {
     expect(wrapper.emitted('add-tool-node')?.[0]).toEqual([{ toolSlug: 'pocket-explorer', position: { x: 160, y: 120 } }])
   })
 
+  it('画布视口尺寸不应跟随远端节点坐标扩展', () => {
+    const wrapper = mount(WorkflowCanvasBoard, {
+      props: {
+        preset: {
+          ...canvasPreset,
+          nodes: [
+            { ...canvasPreset.nodes[0]!, position: { x: 40, y: 80 } },
+            { ...canvasPreset.nodes[1]!, position: { x: 6000, y: 4000 } },
+          ],
+        },
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          AButton: {
+            emits: ['click'],
+            template: '<button @click="$emit(\'click\')"><slot /></button>',
+          },
+          ASpace: { template: '<div><slot /></div>' },
+          ATag: { template: '<span><slot /></span>' },
+          ZoomInOutlined: true,
+          ZoomOutOutlined: true,
+        },
+      },
+    })
+
+    expect(wrapper.find('.canvas-stage').attributes('style')).toContain('width: 6476px')
+    expect(wrapper.find('.workflow-canvas-board').attributes('style')).toContain('width: 100%')
+    expect(wrapper.find('.workflow-canvas-board').attributes('style')).toContain('flex: 1 1 auto')
+  })
+
 })
