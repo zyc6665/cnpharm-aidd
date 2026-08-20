@@ -43,7 +43,7 @@
           />
         </svg>
 
-        <WorkflowCanvasNodeView
+        <WorkflowCanvasPanelNode
           v-for="node in resolvedNodes"
           :key="node.id"
           :node="node"
@@ -56,6 +56,7 @@
           @select-node="$emit('select-node', $event)"
           @move-node="$emit('move-node', $event.nodeId, $event.position)"
           @delete-node="$emit('delete-node', $event)"
+          @run-node="$emit('run-node', $event)"
           @start-connect="handleStartConnect"
           @finish-connect="handleFinishConnect"
         />
@@ -74,11 +75,11 @@
   import { resolveWorkflowLabel } from '@/workflow/i18n-utils'
   import type { WorkflowCanvasNode as WorkflowCanvasNodeModel, WorkflowCanvasPreset } from '@/workflow/canvas-types'
   import WorkflowCanvasEdge from './WorkflowCanvasEdge.vue'
-  import WorkflowCanvasNodeView from './WorkflowCanvasNode.vue'
+  import WorkflowCanvasPanelNode from './WorkflowCanvasPanelNode.vue'
 
-  const NODE_WIDTH = 188
-  const NODE_HEIGHT = 112
-  const CANVAS_PADDING = 64
+  const NODE_WIDTH = 380
+  const NODE_HEIGHT = 280
+  const CANVAS_PADDING = 96
   const { t, te } = useI18n()
   const { zoom, zoomIn, zoomOut, resetZoom, setZoom, surfaceStyle } = useCanvasViewport()
 
@@ -94,6 +95,7 @@
     (event: 'move-node', nodeId: string, position: { x: number; y: number }): void
     (event: 'add-tool-node', input: { toolSlug: string; position: { x: number; y: number } }): void
     (event: 'delete-node', nodeId: string): void
+    (event: 'run-node', nodeId: string): void
     (event: 'delete-edge', edgeId: string): void
     (event: 'add-edge', input: { source: string; target: string; artifactType?: WorkflowArtifactSemanticType }): void
   }>()
