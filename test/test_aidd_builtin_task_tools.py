@@ -135,3 +135,55 @@ async def test_ensure_rdkit_properties_builtin_declares_standard_artifacts(
         {'name': 'properties', 'type': 'molecule_table@1', 'required': True},
         {'name': 'report', 'type': 'run_report@1', 'required': False},
     ]
+
+
+@pytest.mark.asyncio
+async def test_ensure_fetch_pdb_builtin_declares_workflow_contract(
+    db_session: AsyncSession,
+    system_user: User,
+) -> None:
+    from app.services.aidd_builtin_tools import ensure_aidd_builtin_tool
+
+    tool = await ensure_aidd_builtin_tool(
+        db_session,
+        owner_id=system_user.id,
+        tool_slug='builtin-fetch-pdb',
+    )
+
+    config = tool.current_version.config
+    assert config['type'] == 'builtin'
+    assert config['builtin_slug'] == 'builtin-fetch-pdb'
+    assert config['input_schema']['required'] == ['pdb_id']
+    assert config['input_schema']['properties']['pdb_id']['title'] == 'PDB ID'
+    assert config['artifacts']['inputs'] == []
+    assert config['artifacts']['outputs'] == [
+        {'name': 'protein', 'type': 'protein_structure@1', 'required': True},
+        {'name': 'report', 'type': 'run_report@1', 'required': False},
+    ]
+    assert config['resource_profile']['tier'] == 'light'
+
+
+@pytest.mark.asyncio
+async def test_ensure_fetch_ligand_builtin_declares_workflow_contract(
+    db_session: AsyncSession,
+    system_user: User,
+) -> None:
+    from app.services.aidd_builtin_tools import ensure_aidd_builtin_tool
+
+    tool = await ensure_aidd_builtin_tool(
+        db_session,
+        owner_id=system_user.id,
+        tool_slug='builtin-fetch-ligand',
+    )
+
+    config = tool.current_version.config
+    assert config['type'] == 'builtin'
+    assert config['builtin_slug'] == 'builtin-fetch-ligand'
+    assert config['input_schema']['required'] == ['pubchem_cid']
+    assert config['input_schema']['properties']['pubchem_cid']['title'] == 'PubChem CID'
+    assert config['artifacts']['inputs'] == []
+    assert config['artifacts']['outputs'] == [
+        {'name': 'ligand', 'type': 'ligand_structure@1', 'required': True},
+        {'name': 'report', 'type': 'run_report@1', 'required': False},
+    ]
+    assert config['resource_profile']['tier'] == 'light'

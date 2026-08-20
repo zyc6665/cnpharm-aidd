@@ -19,6 +19,7 @@ from typing import Any, Callable
 
 from app.agents.aidd.outputs import parse_sdf_smiles
 from app.agents.aidd.capabilities import PLACEHOLDER_AIDD_TOOL_SLUGS
+from app.common.time import utcnow
 from app.common.exceptions import ValidationException
 
 
@@ -587,6 +588,157 @@ def _standard_output_file_ref(path: str, content: bytes, content_type: str) -> d
     }
 
 
+# ======================================================================
+# 外部数据库 fetch（RCSB PDB / PubChem → 标准 Artifact）
+# ======================================================================
+
+
+def _external_database_providers() -> dict[str, Any]:
+    from app.external_databases.providers import default_external_database_providers
+
+    return default_external_database_providers()
+
+
+async def _run_fetch_pdb_tool(
+    _files: dict[str, BuiltinToolFile],
+    params: dict[str, Any] | None = None,
+) -> BuiltinToolResult:
+    params = params if isinstance(params, dict) else {}
+    pdb_id = str(params.get("pdb_id") or params.get("identifier") or "").strip()
+    if not pdb_id:
+        raise ValidationException("fetch_pdb 需要 pdb_id 参数")
+    provider = _external_database_providers().get("rcsb")
+    if provider is None:
+        raise ValidationException("RCSB PDB fetch provider 未配置")
+    payload = await provider.fetch_protein(pdb_id)
+    return _external_payload_to_builtin_result(
+        payload,
+        output_name="protein",
+        report_filename="fetch_pdb_report.json",
+        report_title="Fetch PDB report",
+    )
+
+
+async def _run_fetch_ligand_tool(
+    _files: dict[str, BuiltinToolFile],
+    params: dict[str, Any] | None = None,
+) -> BuiltinToolResult:
+    params = params if isinstance(params, dict) else {}
+    pubchem_cid = str(
+        params.get("pubchem_cid") or params.get("cid") or params.get("identifier") or ""
+    ).strip()
+    if not pubchem_cid:
+        raise ValidationException("fetch_ligand 需要 pubchem_cid 参数")
+    provider = _external_database_providers().get("pubchem")
+    if provider is None:
+        raise ValidationException("PubChem fetch provider 未配置")
+    payload = await provider.fetch_ligand(pubchem_cid)
+    return _external_payload_to_builtin_result(
+        payload,
+        output_name="ligand",
+        report_filename="fetch_ligand_report.json",
+        report_title="Fetch ligand report",
+    )
+
+
+def _external_payload_to_builtin_result(
+    payload: Any,
+    *,
+    output_name: str,
+    report_filename: str,
+    report_title: str,
+) -> BuiltinToolResult:
+    metadata = dict(payload.metadata or {})
+    metadata.setdefault("fetched_at", utcnow().isoformat())
+    files_by_role = {artifact_file.role: artifact_file for artifact_file in payload.files}
+    if "metadata_json" not in files_by_role:
+        from app.external_databases.providers import ExternalArtifactFile
+
+        metadata_content = json.dumps(
+            metadata,
+            ensure_ascii=False,
+            sort_keys=True,
+            indent=2,
+        ).encode("utf-8")
+        files_by_role["metadata_json"] = ExternalArtifactFile(
+            role="metadata_json",
+            filename="metadata.json",
+            content=metadata_content,
+            content_type="application/json",
+        )
+
+    report = {
+        "status": "succeeded",
+        "output_name": output_name,
+        "artifact_type": payload.standard_ref,
+        "source_database": metadata.get("source_database"),
+        "source_id": metadata.get("source_id"),
+        "fetched_at": metadata.get("fetched_at"),
+    }
+    report_content = json.dumps(report, ensure_ascii=False, indent=2).encode("utf-8")
+
+    artifacts = [
+        BuiltinToolArtifact(
+            semantic_type=str(payload.standard_ref),
+            filename=artifact_file.filename,
+            content=artifact_file.content,
+            content_type=artifact_file.content_type,
+        )
+        for artifact_file in files_by_role.values()
+    ]
+    artifacts.append(
+        BuiltinToolArtifact(
+            semantic_type="run_report",
+            filename=report_filename,
+            content=report_content,
+            content_type="application/json",
+        )
+    )
+
+    output_files = {
+        role: _standard_output_file_ref(
+            artifact_file.filename,
+            artifact_file.content,
+            artifact_file.content_type,
+        )
+        for role, artifact_file in files_by_role.items()
+    }
+    return BuiltinToolResult(
+        artifacts=tuple(artifacts),
+        standard_result={
+            "result_version": "aidd.sciminer/result.v2",
+            "artifacts": {
+                output_name: {
+                    "type": payload.standard_ref,
+                    "name": payload.name,
+                    "files": output_files,
+                    "metadata": metadata,
+                    "summary": {
+                        "source_database": metadata.get("source_database"),
+                        "source_id": metadata.get("source_id"),
+                    },
+                },
+                "report": {
+                    "type": "run_report@1",
+                    "name": report_title,
+                    "files": {
+                        "report_json": _standard_output_file_ref(
+                            report_filename,
+                            report_content,
+                            "application/json",
+                        )
+                    },
+                    "metadata": {
+                        "source_task_id": str(metadata.get("source_id") or output_name),
+                    },
+                },
+            },
+            "relations": [{"from": "report", "to": output_name, "type": "describes"}],
+            "summary": {"fetched_artifact": output_name},
+        },
+    )
+
+
 def _protein_preparation_metadata(
     prepared_pdb: str,
     *,
@@ -1140,6 +1292,8 @@ def _dicts_to_csv_bytes(records: list[dict[str, Any]]) -> bytes:
 _BUILTIN_TOOL_REGISTRY: dict[str, str] = {
     "builtin-sdf-to-smiles-csv": "sdf_to_smiles_csv",
     "builtin-sdf-to-pdb": "sdf_to_pdb",
+    "builtin-fetch-pdb": "fetch_pdb",
+    "builtin-fetch-ligand": "fetch_ligand",
     "builtin-vina-docking": "vina_docking",
     "builtin-protein-preparation": "protein_preparation",
     "builtin-rdkit-properties": "rdkit_properties",
@@ -1173,6 +1327,10 @@ async def run_builtin_tool(
         return await _run_sync_builtin_handler(_run_sdf_to_smiles_csv_tool, files)
     if handler_key == "sdf_to_pdb":
         return await _run_sync_builtin_handler(_run_sdf_to_pdb_tool, files)
+    if handler_key == "fetch_pdb":
+        return await _run_fetch_pdb_tool(files, params)
+    if handler_key == "fetch_ligand":
+        return await _run_fetch_ligand_tool(files, params)
     if handler_key == "vina_docking":
         return await _run_sync_builtin_handler(_run_vina_docking_tool, files)
     if handler_key == "protein_preparation":

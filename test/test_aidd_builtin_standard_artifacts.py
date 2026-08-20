@@ -92,3 +92,59 @@ async def test_builtin_executor_returns_standard_result_v2(tmp_path, monkeypatch
     assert result["success"] is True
     assert result["result"] == standard_result
     assert result["output_file_ids"] == ["file-prepared"]
+
+
+@pytest.mark.asyncio
+async def test_builtin_executor_allows_parameter_only_tools(tmp_path, monkeypatch):
+    standard_result = {
+        "result_version": "aidd.sciminer/result.v2",
+        "artifacts": {
+            "protein": {
+                "type": "protein_structure@1",
+                "name": "1ABC",
+                "files": {
+                    "structure_file": {"path": "1ABC.pdb", "sha256": "0" * 64},
+                },
+            }
+        },
+    }
+
+    async def fake_run_builtin_tool(_slug, files, *, params=None):
+        assert _slug == "builtin-fetch-pdb"
+        assert files == {}
+        assert params == {"pdb_id": "1abc"}
+        return BuiltinToolResult(
+            standard_result=standard_result,
+            artifacts=(
+                BuiltinToolArtifact(
+                    semantic_type="protein_structure@1",
+                    filename="1ABC.pdb",
+                    content=b"HEADER\nEND\n",
+                    content_type="chemical/x-pdb",
+                ),
+            ),
+        )
+
+    monkeypatch.setenv("TASK_WORK_DIR", str(tmp_path / "tasks"))
+    monkeypatch.setattr("app.agents.aidd.builtin_tools.run_builtin_tool", fake_run_builtin_tool)
+
+    task = SimpleNamespace(
+        id="task-fetch",
+        user_id="user-1",
+        inputs=SimpleNamespace(params={"pdb_id": "1abc"}),
+    )
+    tool_version = SimpleNamespace(config={"type": "builtin", "builtin_slug": "builtin-fetch-pdb"})
+    executor = BuiltinExecutor(task, tool_version)
+
+    async def fake_collect_output_files(source_paths, *, output_root):
+        assert [Path(path).name for path in source_paths] == ["1ABC.pdb"]
+        assert Path(output_root).name == "output"
+        return ["file-1abc"]
+
+    executor._collect_output_files = fake_collect_output_files
+
+    result = await executor.execute()
+
+    assert result["success"] is True
+    assert result["result"] == standard_result
+    assert result["output_file_ids"] == ["file-1abc"]

@@ -23,6 +23,8 @@ def test_first_wave_capabilities_are_registered() -> None:
     assert get_capability("builtin-protein-preparation").capability == "protein_preparation"
     assert get_capability("builtin-sdf-to-smiles-csv").capability == "format_conversion"
     assert get_capability("builtin-sdf-to-pdb").capability == "format_conversion"
+    assert get_capability("builtin-fetch-pdb").capability == "external_database_fetch"
+    assert get_capability("builtin-fetch-ligand").capability == "external_database_fetch"
     assert get_capability("builtin-vina-docking").capability == "docking_scoring"
     assert get_capability("builtin-rdkit-properties").capability == "property_prediction"
     assert get_capability("molp-pc-property-prediction").capability == "property_prediction"
@@ -55,6 +57,18 @@ def test_capabilities_advertise_semantic_inputs_and_outputs() -> None:
     assert [item.semantic_type for item in ligand_conversion.inputs] == ["generated_ligand"]
     assert [item.semantic_type for item in ligand_conversion.outputs] == ["ligand_pdb"]
 
+    fetch_pdb = get_capability("builtin-fetch-pdb")
+    assert fetch_pdb.virtual is True
+    assert fetch_pdb.stage == "data_acquisition"
+    assert fetch_pdb.inputs == ()
+    assert [item.semantic_type for item in fetch_pdb.outputs] == ["protein_structure@1"]
+
+    fetch_ligand = get_capability("builtin-fetch-ligand")
+    assert fetch_ligand.virtual is True
+    assert fetch_ligand.stage == "data_acquisition"
+    assert fetch_ligand.inputs == ()
+    assert [item.semantic_type for item in fetch_ligand.outputs] == ["ligand_structure@1"]
+
     vina = get_capability("builtin-vina-docking")
     assert vina.virtual is True
     assert [item.semantic_type for item in vina.inputs] == ["protein_pdb", "ligand_pdb"]
@@ -73,6 +87,12 @@ def test_capability_lookup_by_output() -> None:
 
     ligand_capabilities = get_capabilities_by_output("ligand_pdb")
     assert [item.tool_slug for item in ligand_capabilities] == ["builtin-sdf-to-pdb"]
+
+    protein_artifact_capabilities = get_capabilities_by_output("protein_structure@1")
+    assert [item.tool_slug for item in protein_artifact_capabilities] == ["builtin-fetch-pdb"]
+
+    ligand_artifact_capabilities = get_capabilities_by_output("ligand_structure@1")
+    assert [item.tool_slug for item in ligand_artifact_capabilities] == ["builtin-fetch-ligand"]
 
     docking_capabilities = get_capabilities_by_output("docking_report")
     assert [item.tool_slug for item in docking_capabilities] == ["builtin-vina-docking"]

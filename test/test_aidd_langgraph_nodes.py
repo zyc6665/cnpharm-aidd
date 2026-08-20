@@ -44,6 +44,8 @@ def test_discover_tools_filters_configured_slugs():
     expected_virtual = {
         "builtin-sdf-to-smiles-csv",
         "builtin-sdf-to-pdb",
+        "builtin-fetch-pdb",
+        "builtin-fetch-ligand",
         "builtin-vina-docking",
         "builtin-rdkit-properties",
         "builtin-query-chembl",

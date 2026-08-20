@@ -33,15 +33,18 @@ class BuiltinExecutor(BaseExecutor):
 
         params = task_input.params if task_input else {}
         semantic_file_ids = params.get("builtin_inputs") if isinstance(params, dict) else None
-        if not isinstance(semantic_file_ids, dict) or not semantic_file_ids:
-            raise TaskExecutionError("Builtin task requires semantic builtin_inputs")
+        if semantic_file_ids is None:
+            semantic_file_ids = {}
+        elif not isinstance(semantic_file_ids, dict):
+            raise TaskExecutionError("Builtin task builtin_inputs must be a mapping")
 
         input_ids = [str(file_id) for file_id in semantic_file_ids.values() if file_id]
         files_by_id: dict[str, FileModel] = {}
-        async for session in get_async_session():
-            result = await session.execute(select(FileModel).where(FileModel.id.in_(input_ids)))
-            files_by_id = {str(file.id): file for file in result.scalars().all()}
-            break
+        if input_ids:
+            async for session in get_async_session():
+                result = await session.execute(select(FileModel).where(FileModel.id.in_(input_ids)))
+                files_by_id = {str(file.id): file for file in result.scalars().all()}
+                break
 
         builtin_files: dict[str, BuiltinToolFile] = {}
         for semantic_type, file_id in semantic_file_ids.items():

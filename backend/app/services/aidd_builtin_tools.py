@@ -81,6 +81,62 @@ def _capability_config(tool_slug: str) -> dict:
                 {"name": "report", "type": "run_report@1", "required": False},
             ],
         }
+    if tool_slug == "builtin-fetch-pdb":
+        config["timeout_sec"] = 120
+        config["resource_profile"] = {
+            "tier": "light",
+            "cpu": 1,
+            "memory_mb": 512,
+            "gpu": False,
+        }
+        config["input_schema"] = {
+            "type": "object",
+            "properties": {
+                "pdb_id": {
+                    "type": "string",
+                    "title": "PDB ID",
+                    "description": "RCSB PDB entry ID, e.g. 1ABC",
+                    "minLength": 4,
+                    "maxLength": 12,
+                }
+            },
+            "required": ["pdb_id"],
+        }
+        config["artifacts"] = {
+            "inputs": [],
+            "outputs": [
+                {"name": "protein", "type": "protein_structure@1", "required": True},
+                {"name": "report", "type": "run_report@1", "required": False},
+            ],
+        }
+    if tool_slug == "builtin-fetch-ligand":
+        config["timeout_sec"] = 120
+        config["resource_profile"] = {
+            "tier": "light",
+            "cpu": 1,
+            "memory_mb": 512,
+            "gpu": False,
+        }
+        config["input_schema"] = {
+            "type": "object",
+            "properties": {
+                "pubchem_cid": {
+                    "type": "string",
+                    "title": "PubChem CID",
+                    "description": "PubChem compound CID, e.g. 2244",
+                    "minLength": 1,
+                    "maxLength": 32,
+                }
+            },
+            "required": ["pubchem_cid"],
+        }
+        config["artifacts"] = {
+            "inputs": [],
+            "outputs": [
+                {"name": "ligand", "type": "ligand_structure@1", "required": True},
+                {"name": "report", "type": "run_report@1", "required": False},
+            ],
+        }
     return config
 
 

@@ -28,7 +28,7 @@ class OutputMatch:
 @dataclass(frozen=True)
 class CapabilityOutput:
     semantic_type: SemanticType
-    source: Literal["output_files", "output_data"]
+    source: Literal["output_files", "output_data", "artifact"]
     match: OutputMatch | None = None
     path: str | None = None
     required: bool = True
@@ -168,6 +168,38 @@ AIDD_TOOL_CAPABILITIES: dict[str, ToolCapability] = {
                 ),
             ),
         ),
+        virtual=True,
+    ),
+    "builtin-fetch-pdb": ToolCapability(
+        tool_slug="builtin-fetch-pdb",
+        capability="external_database_fetch",
+        stage="data_acquisition",
+        inputs=(),
+        outputs=(
+            CapabilityOutput(
+                "protein_structure@1",
+                "artifact",
+                OutputMatch(content_type="protein_structure@1"),
+                path="protein",
+            ),
+        ),
+        defaults={"source": "rcsb"},
+        virtual=True,
+    ),
+    "builtin-fetch-ligand": ToolCapability(
+        tool_slug="builtin-fetch-ligand",
+        capability="external_database_fetch",
+        stage="data_acquisition",
+        inputs=(),
+        outputs=(
+            CapabilityOutput(
+                "ligand_structure@1",
+                "artifact",
+                OutputMatch(content_type="ligand_structure@1"),
+                path="ligand",
+            ),
+        ),
+        defaults={"source": "pubchem"},
         virtual=True,
     ),
     "builtin-vina-docking": ToolCapability(

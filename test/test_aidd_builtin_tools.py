@@ -23,6 +23,7 @@ from app.agents.aidd.capabilities import AIDD_TOOL_CAPABILITIES  # noqa: E402
 from app.common.exceptions import ValidationException  # noqa: E402
 from app.execution.result_parser import parse_standard_result  # noqa: E402
 from app.execution.standard_contracts import DeclaredArtifactOutput  # noqa: E402
+from app.external_databases.providers import ExternalArtifactFile, ExternalArtifactPayload  # noqa: E402
 
 
 def test_sdf_to_smiles_csv_uses_molp_compatible_header() -> None:
@@ -148,6 +149,157 @@ async def test_run_builtin_tool_routes_rdkit_properties(monkeypatch, tmp_path: P
 
     assert "smiles_csv" in called["files"]
     assert called["params"] == {"smiles_field": "SMILES"}
+
+
+@pytest.mark.asyncio
+async def test_fetch_pdb_builtin_emits_protein_structure_standard_result(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    class FakeRCSBProvider:
+        async def fetch_protein(self, identifier: str):
+            assert identifier == "1abc"
+            return ExternalArtifactPayload(
+                artifact_type="protein_structure",
+                standard_ref="protein_structure@1",
+                name="1ABC",
+                description="Imported from RCSB PDB",
+                metadata={
+                    "chain_ids": ["A"],
+                    "residue_count": 1,
+                    "atom_count": 1,
+                    "structure_format": "pdb",
+                    "source_filename": "1ABC.pdb",
+                    "source_database": "rcsb",
+                    "source_id": "1ABC",
+                },
+                files=[
+                    ExternalArtifactFile(
+                        role="structure_file",
+                        filename="1ABC.pdb",
+                        content=b"HEADER    TEST PDB\nEND\n",
+                        content_type="chemical/x-pdb",
+                    )
+                ],
+            )
+
+    monkeypatch.setattr(
+        builtin_tools,
+        "_external_database_providers",
+        lambda: {"rcsb": FakeRCSBProvider()},
+    )
+
+    result = await builtin_tools._run_fetch_pdb_tool({}, {"pdb_id": "1abc"})
+
+    assert result.standard_result is not None
+    protein = result.standard_result["artifacts"]["protein"]
+    assert protein["type"] == "protein_structure@1"
+    assert protein["metadata"]["source_database"] == "rcsb"
+    assert set(protein["files"]) == {"structure_file", "metadata_json"}
+    artifacts = {artifact.filename: artifact for artifact in result.artifacts}
+    assert {"1ABC.pdb", "metadata.json", "fetch_pdb_report.json"}.issubset(artifacts)
+
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    for artifact in result.artifacts:
+        (output_dir / artifact.filename).write_bytes(artifact.content)
+    (output_dir / "result.json").write_text(
+        json.dumps(result.standard_result, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    parsed = parse_standard_result(
+        result_path=output_dir / "result.json",
+        output_dir=output_dir,
+        declared_outputs=[
+            DeclaredArtifactOutput(name="protein", type="protein_structure@1"),
+            DeclaredArtifactOutput(name="report", type="run_report@1", required=False),
+        ],
+    )
+    assert [artifact.output_name for artifact in parsed.artifacts] == ["protein", "report"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_ligand_builtin_emits_ligand_structure_standard_result(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    class FakePubChemProvider:
+        async def fetch_ligand(self, identifier: str):
+            assert identifier == "2244"
+            return ExternalArtifactPayload(
+                artifact_type="ligand_structure",
+                standard_ref="ligand_structure@1",
+                name="Aspirin",
+                description="Imported from PubChem",
+                metadata={
+                    "ligand_id": "pubchem:2244",
+                    "source_database": "pubchem",
+                    "source_id": "2244",
+                    "pubchem_cid": "2244",
+                    "canonical_smiles": "CC(=O)OC1=CC=CC=C1C(=O)O",
+                    "structure_3d_source": "pubchem_3d",
+                    "hydrogens_added": False,
+                },
+                files=[
+                    ExternalArtifactFile(
+                        role="structure_file",
+                        filename="pubchem-2244.sdf",
+                        content=b"primary sdf",
+                        content_type="chemical/x-mdl-sdfile",
+                    ),
+                    ExternalArtifactFile(
+                        role="structure_2d_sdf",
+                        filename="pubchem-2244.2d.sdf",
+                        content=b"2d sdf",
+                        content_type="chemical/x-mdl-sdfile",
+                    ),
+                    ExternalArtifactFile(
+                        role="structure_3d_sdf",
+                        filename="pubchem-2244.3d.sdf",
+                        content=b"3d sdf",
+                        content_type="chemical/x-mdl-sdfile",
+                    ),
+                ],
+            )
+
+    monkeypatch.setattr(
+        builtin_tools,
+        "_external_database_providers",
+        lambda: {"pubchem": FakePubChemProvider()},
+    )
+
+    result = await builtin_tools._run_fetch_ligand_tool({}, {"pubchem_cid": "2244"})
+
+    assert result.standard_result is not None
+    ligand = result.standard_result["artifacts"]["ligand"]
+    assert ligand["type"] == "ligand_structure@1"
+    assert ligand["metadata"]["source_database"] == "pubchem"
+    assert set(ligand["files"]) == {
+        "structure_file",
+        "structure_2d_sdf",
+        "structure_3d_sdf",
+        "metadata_json",
+    }
+    artifacts = {artifact.filename: artifact for artifact in result.artifacts}
+    assert {"pubchem-2244.sdf", "metadata.json", "fetch_ligand_report.json"}.issubset(artifacts)
+
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    for artifact in result.artifacts:
+        (output_dir / artifact.filename).write_bytes(artifact.content)
+    (output_dir / "result.json").write_text(
+        json.dumps(result.standard_result, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    parsed = parse_standard_result(
+        result_path=output_dir / "result.json",
+        output_dir=output_dir,
+        declared_outputs=[
+            DeclaredArtifactOutput(name="ligand", type="ligand_structure@1"),
+            DeclaredArtifactOutput(name="report", type="run_report@1", required=False),
+        ],
+    )
+    assert [artifact.output_name for artifact in parsed.artifacts] == ["ligand", "report"]
 
 
 @pytest.mark.asyncio
