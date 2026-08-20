@@ -93,4 +93,39 @@ describe('WorkflowToolPalette', () => {
     expect(wrapper.text()).toContain('CPU 8')
     expect(wrapper.text()).toContain('MEM 16GB')
   })
+
+  it('默认使用任务快捷筛选并折叠高级筛选', async () => {
+    const wrapper = mountPalette([
+      { slug: 'builtin-fetch-pdb', name: 'Fetch PDB', capability: 'external_database_fetch' },
+      { slug: 'vina-docking', name: 'AutoDock Vina', capability: 'molecular_docking' },
+    ])
+
+    expect(wrapper.find('.sidebar-tool-quick-filters').exists()).toBe(true)
+    expect(wrapper.find('.sidebar-tool-quick-filter.is-active').text()).toContain('全部')
+    expect(wrapper.find('.sidebar-tool-filter-card').exists()).toBe(false)
+
+    await wrapper.find('.sidebar-tool-advanced-toggle').trigger('click')
+
+    expect(wrapper.find('.sidebar-tool-filter-card').exists()).toBe(true)
+  })
+
+  it('任务快捷筛选按用户场景过滤工具', async () => {
+    const wrapper = mountPalette([
+      { slug: 'builtin-fetch-pdb', name: 'Fetch PDB', capability: 'external_database_fetch' },
+      { slug: 'rdkit-properties', name: 'RDKit Properties', capability: 'property_prediction' },
+      { slug: 'vina-docking', name: 'AutoDock Vina', capability: 'molecular_docking' },
+    ])
+
+    const dockingFilter = wrapper
+      .findAll('.sidebar-tool-quick-filter')
+      .find(button => button.text().includes('对接模拟'))
+
+    expect(dockingFilter).toBeTruthy()
+    await dockingFilter!.trigger('click')
+
+    expect(wrapper.find('.sidebar-tool-summary').text()).toContain('1 个工具可用')
+    expect(wrapper.text()).toContain('AutoDock Vina')
+    expect(wrapper.text()).not.toContain('Fetch PDB')
+    expect(wrapper.text()).not.toContain('RDKit Properties')
+  })
 })

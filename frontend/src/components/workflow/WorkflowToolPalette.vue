@@ -4,7 +4,7 @@
       <div class="sidebar-tool-library-title">
         <span class="rail-kicker">{{ t('workflow.palette.title') }}</span>
         <span class="sidebar-tool-summary">
-          {{ t('workflow.palette.toolsAvailable', { count: tools.length }) }}
+          {{ t('workflow.palette.toolsAvailable', { count: displayedTools.length }) }}
         </span>
       </div>
       <a-input-search
@@ -14,7 +14,37 @@
         allow-clear
         @update:value="emit('update:searchKeyword', $event)"
       />
-      <div class="sidebar-tool-filter-card">
+      <div class="sidebar-tool-quick-filter-panel">
+        <div class="sidebar-tool-filter-heading">
+          <span>{{ t('workflow.palette.quickFilterTitle') }}</span>
+          <button
+            type="button"
+            class="sidebar-tool-advanced-toggle"
+            :aria-expanded="showAdvancedFilters"
+            @click="showAdvancedFilters = !showAdvancedFilters"
+          >
+            {{
+              showAdvancedFilters
+                ? t('workflow.palette.hideAdvanced')
+                : t('workflow.palette.showAdvanced')
+            }}
+          </button>
+        </div>
+        <div class="sidebar-tool-quick-filters">
+          <button
+            v-for="filter in quickFilterOptions"
+            :key="filter.key"
+            type="button"
+            class="sidebar-tool-quick-filter"
+            :class="{ 'is-active': selectedTaskFilter === filter.key }"
+            @click="selectedTaskFilter = filter.key"
+          >
+            <span>{{ filter.label }}</span>
+            <strong>{{ filter.count }}</strong>
+          </button>
+        </div>
+      </div>
+      <div v-if="showAdvancedFilters" class="sidebar-tool-filter-card">
         <span class="sidebar-tool-filter-label">{{ t('workflow.palette.filterTitle') }}</span>
         <div class="sidebar-tool-filters">
           <a-select
@@ -87,7 +117,7 @@
         </div>
       </section>
       <a-empty
-        v-if="tools.length === 0"
+        v-if="displayedTools.length === 0"
         class="sidebar-tool-empty"
         :description="t('workflow.palette.empty')"
       />
@@ -96,7 +126,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 interface PaletteTool {
@@ -133,6 +163,24 @@ const emit = defineEmits<{
 
 const { t, te } = useI18n()
 
+type TaskFilterKey =
+  | 'all'
+  | 'data_acquisition'
+  | 'structure_preparation'
+  | 'ligand_processing'
+  | 'property_prediction'
+  | 'docking_simulation'
+  | 'molecular_dynamics'
+  | 'result_analysis'
+
+interface TaskFilterDefinition {
+  key: TaskFilterKey
+  capabilityKeys: string[]
+}
+
+const showAdvancedFilters = ref(false)
+const selectedTaskFilter = ref<TaskFilterKey>('all')
+
 const GROUP_ORDER = [
   'external_database_fetch',
   'protein_preparation',
@@ -150,9 +198,46 @@ const GROUP_ORDER = [
   'other_tools',
 ]
 
+const TASK_FILTERS: TaskFilterDefinition[] = [
+  { key: 'all', capabilityKeys: [] },
+  {
+    key: 'data_acquisition',
+    capabilityKeys: ['external_database_fetch', 'protein_fetch', 'ligand_fetch'],
+  },
+  { key: 'structure_preparation', capabilityKeys: ['protein_preparation'] },
+  {
+    key: 'ligand_processing',
+    capabilityKeys: [
+      'ligand_preparation',
+      'ligand_format_conversion',
+      'conformer_generation',
+      'synthetic_accessibility',
+    ],
+  },
+  {
+    key: 'property_prediction',
+    capabilityKeys: ['property_prediction', 'admet_prediction', 'toxicity_prediction'],
+  },
+  { key: 'docking_simulation', capabilityKeys: ['molecular_docking', 'docking_rescore'] },
+  { key: 'molecular_dynamics', capabilityKeys: ['molecular_dynamics'] },
+  { key: 'result_analysis', capabilityKeys: ['interaction_analysis'] },
+]
+
+const displayedTools = computed(() => {
+  return props.tools.filter(tool => matchesTaskFilter(tool, selectedTaskFilter.value))
+})
+
+const quickFilterOptions = computed(() => {
+  return TASK_FILTERS.map(filter => ({
+    key: filter.key,
+    label: t(`workflow.palette.quickFilters.${filter.key}`),
+    count: props.tools.filter(tool => matchesTaskFilter(tool, filter.key)).length,
+  }))
+})
+
 const toolGroups = computed(() => {
   const groups = new Map<string, PaletteTool[]>()
-  for (const tool of props.tools) {
+  for (const tool of displayedTools.value) {
     const key = tool.capability || tool.stage || 'other_tools'
     if (!groups.has(key)) {
       groups.set(key, [])
@@ -199,6 +284,22 @@ function humanizeKey(key: string): string {
 
 function displayToolName(tool: PaletteTool): string {
   return tool.name || tool.slug
+}
+
+function matchesTaskFilter(tool: PaletteTool, filterKey: TaskFilterKey): boolean {
+  if (filterKey === 'all') {
+    return true
+  }
+  const filter = TASK_FILTERS.find(item => item.key === filterKey)
+  if (!filter) {
+    return true
+  }
+  const toolKeys = new Set(
+    [tool.capability, tool.stage]
+      .filter(Boolean)
+      .map(value => value!.toLowerCase())
+  )
+  return filter.capabilityKeys.some(key => toolKeys.has(key))
 }
 
 function resourceProfileLabel(resourceProfile?: Record<string, unknown>): string {
@@ -297,6 +398,103 @@ function handleToolDragStart(event: DragEvent, toolSlug: string) {
   border: 1px solid @border-color-light;
   border-radius: @border-radius-md;
   background: rgba(255, 255, 255, 0.025);
+}
+
+.sidebar-tool-quick-filter-panel {
+  display: grid;
+  gap: @spacing-xs;
+  padding: @spacing-xs;
+  border: 1px solid @accent-color-border;
+  border-radius: @border-radius-md;
+  background:
+    linear-gradient(180deg, rgba(59, 130, 246, 0.06), rgba(34, 197, 94, 0.025)),
+    rgba(255, 255, 255, 0.02);
+}
+
+.sidebar-tool-filter-heading {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: @spacing-xs;
+  color: @text-color-light-tertiary;
+  font-size: @font-size-xs;
+  font-weight: 800;
+}
+
+.sidebar-tool-advanced-toggle {
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: @primary-color;
+  font-size: @font-size-xs;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.sidebar-tool-advanced-toggle:hover,
+.sidebar-tool-advanced-toggle:focus-visible {
+  color: @accent-color-hover;
+  outline: none;
+}
+
+.sidebar-tool-quick-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: @spacing-xs;
+}
+
+.sidebar-tool-quick-filter {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 5px 7px;
+  border: 1px solid @border-color-light;
+  border-radius: 999px;
+  background: @bg-elevated;
+  color: @text-color-light-secondary;
+  font-size: @font-size-xs;
+  font-weight: 800;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: border-color @transition-fast, background @transition-fast, color @transition-fast;
+}
+
+.sidebar-tool-quick-filter span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-tool-quick-filter strong {
+  min-width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: @bg-hover;
+  color: @text-color-light-tertiary;
+  font-size: 10px;
+}
+
+.sidebar-tool-quick-filter:hover,
+.sidebar-tool-quick-filter:focus-visible,
+.sidebar-tool-quick-filter.is-active {
+  border-color: rgba(59, 130, 246, 0.42);
+  background: @primary-color-light;
+  color: @primary-color;
+  outline: none;
+}
+
+.sidebar-tool-quick-filter.is-active strong {
+  background: rgba(59, 130, 246, 0.18);
+  color: @primary-color;
 }
 
 .sidebar-tool-filter-label {

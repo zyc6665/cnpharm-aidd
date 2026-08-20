@@ -377,7 +377,10 @@ export default {
     palette: {
       title: '工具库',
       toolsAvailable: '{count} 个工具可用',
-      searchPlaceholder: '搜索工具',
+      searchPlaceholder: '搜索 PDB、配体、对接、ADMET...',
+      quickFilterTitle: '常用场景',
+      showAdvanced: '高级筛选',
+      hideAdvanced: '收起高级',
       filterTitle: '筛选条件',
       filterStage: '按阶段筛选',
       filterInput: '按输入语义筛选',
@@ -385,6 +388,16 @@ export default {
       filterExecutor: '按执行器筛选',
       addNode: '添加节点',
       dragOrClick: '拖拽或点击添加',
+      quickFilters: {
+        all: '全部',
+        data_acquisition: '数据获取',
+        structure_preparation: '结构准备',
+        ligand_processing: '分子处理',
+        property_prediction: '性质预测',
+        docking_simulation: '对接模拟',
+        molecular_dynamics: '动力学',
+        result_analysis: '结果分析'
+      },
       categories: {
         external_database_fetch: '外部数据库',
         protein_fetch: '蛋白获取',

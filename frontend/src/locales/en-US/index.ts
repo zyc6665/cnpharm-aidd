@@ -378,7 +378,10 @@ export default {
     palette: {
       title: 'Tool Library',
       toolsAvailable: '{count} tools available',
-      searchPlaceholder: 'Search tools',
+      searchPlaceholder: 'Search PDB, ligand, docking, ADMET...',
+      quickFilterTitle: 'Common Tasks',
+      showAdvanced: 'Advanced Filters',
+      hideAdvanced: 'Hide Advanced',
       filterTitle: 'Filters',
       filterStage: 'Filter by stage',
       filterInput: 'Filter by input semantic',
@@ -386,6 +389,16 @@ export default {
       filterExecutor: 'Filter by executor',
       addNode: 'Add node',
       dragOrClick: 'Drag or click to add',
+      quickFilters: {
+        all: 'All',
+        data_acquisition: 'Data Fetch',
+        structure_preparation: 'Structure Prep',
+        ligand_processing: 'Molecule Prep',
+        property_prediction: 'Property Prediction',
+        docking_simulation: 'Docking',
+        molecular_dynamics: 'MD',
+        result_analysis: 'Result Analysis'
+      },
       categories: {
         external_database_fetch: 'External Databases',
         protein_fetch: 'Protein Fetch',
