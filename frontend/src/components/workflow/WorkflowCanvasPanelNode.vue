@@ -239,6 +239,7 @@ function handlePointerDown(event: PointerEvent) {
 }
 
 .panel-node-title-group h3 {
+  max-width: 100%;
   margin: 0;
   color: @text-color-light-primary;
   font-size: @font-size-md;

@@ -36,4 +36,36 @@ describe('WorkflowWorkbenchShell', () => {
     expect(wrapper.find('[data-testid="results-center"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('Docking Flow')
   })
+
+  it('keeps the canvas visible when both sidebars are collapsed', async () => {
+    const wrapper = mount(WorkflowWorkbenchShell, {
+      props: {
+        workflowName: 'Docking Flow',
+        readyCount: 1,
+        runningCount: 0,
+        completedCount: 0,
+        failedCount: 0,
+        leftWidth: 320,
+        rightWidth: 380,
+        leftCollapsed: true,
+        rightCollapsed: true,
+      },
+      slots: {
+        canvas: '<div data-testid="canvas-region">canvas</div>',
+      },
+      global: {
+        stubs: {
+          AButton: { template: '<button><slot /></button>' },
+          ATag: { template: '<span><slot /></span>' },
+          ASpace: { template: '<div><slot /></div>' },
+        },
+      },
+    })
+
+    const sidebars = wrapper.findAll('.resizable-workbench-sidebar')
+
+    expect(wrapper.find('[data-testid="canvas-region"]').exists()).toBe(true)
+    expect(sidebars).toHaveLength(2)
+    expect(sidebars.every(sidebar => sidebar.attributes('style')?.includes('width: 56px'))).toBe(true)
+  })
 })

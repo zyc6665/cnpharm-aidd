@@ -29,6 +29,7 @@ describe('WorkflowCanvasPanelNode', () => {
     expect(wrapper.classes()).toContain('workflow-canvas-panel-node')
     expect(wrapper.text()).toContain('Fetch PDB')
     expect(wrapper.find('[data-testid="node-preview"]').exists()).toBe(true)
+    expect(wrapper.find('.panel-node-title-group h3').exists()).toBe(true)
 
     await wrapper.find('[data-testid="run-node-button"]').trigger('click')
     expect(wrapper.emitted('run-node')).toEqual([['fetch-pdb-node']])

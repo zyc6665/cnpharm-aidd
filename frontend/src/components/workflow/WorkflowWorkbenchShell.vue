@@ -82,7 +82,7 @@ defineEmits<{
 
 .workflow-workbench {
   height: calc(100vh - @header-height);
-  min-height: 680px;
+  min-height: 720px;
   display: flex;
   flex-direction: column;
   border: 1px solid @border-color-light;
@@ -100,6 +100,7 @@ defineEmits<{
   min-width: 0;
   min-height: 0;
   flex: 1;
+  display: flex;
   background: @bg-light;
   overflow: hidden;
 }

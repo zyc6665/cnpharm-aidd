@@ -238,6 +238,8 @@
 
   .workflow-canvas-board {
     min-width: 0;
+    min-height: 560px;
+    height: 100%;
     display: flex;
     flex-direction: column;
     border: 1px solid @border-color-hover;
@@ -273,7 +275,8 @@
   }
 
   .canvas-viewport {
-    min-height: 560px;
+    min-height: 0;
+    flex: 1;
     overflow: auto;
     background-image:
       linear-gradient(rgba(59, 130, 246, 0.06) 1px, transparent 1px),
@@ -284,10 +287,10 @@
   .canvas-surface {
     position: relative;
     min-width: 100%;
-    min-height: 560px;
+    min-height: 100%;
   }
 
-  .canvas-stage { position: relative; min-width: 100%; min-height: 560px; }
+  .canvas-stage { position: relative; min-width: 100%; min-height: 100%; }
   .zoom-value { width: 48px; text-align: center; color: @text-secondary; font-size: @font-size-xs; }
 
   .canvas-edges {
