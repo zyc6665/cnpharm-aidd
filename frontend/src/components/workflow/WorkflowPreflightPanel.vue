@@ -1,27 +1,50 @@
 <template>
   <section class="workflow-preflight-panel">
-    <div class="preflight-header">
-      <div>
+    <div class="preflight-hero">
+      <div class="preflight-title-block">
         <span class="preflight-kicker">{{ t('workflow.preflight.title') }}</span>
         <h3>{{ preflight.primaryMessage }}</h3>
+        <p>{{ summaryHint }}</p>
       </div>
-      <a-space size="small" wrap>
-        <a-tag color="green">{{ t('workflow.preflight.readyCount', { count: preflight.runnableCount }) }}</a-tag>
-        <a-tag color="orange">{{ t('workflow.preflight.blockedCount', { count: preflight.blockedCount }) }}</a-tag>
-        <a-tag color="blue">{{ t('workflow.preflight.completedCount', { count: preflight.completedCount }) }}</a-tag>
-        <a-tag v-if="preflight.failedCount" color="red">{{ t('workflow.preflight.failedCount', { count: preflight.failedCount }) }}</a-tag>
-      </a-space>
+      <a-button
+        class="preflight-hero-action"
+        type="primary"
+        :disabled="!preflight.canRun"
+        :loading="running"
+        @click="$emit('run-ready-nodes')"
+      >
+        {{ t('workflow.preflight.runReadyNodes') }}
+      </a-button>
     </div>
 
-    <div class="preflight-body">
-      <div class="preflight-overview">
-        <div class="preflight-summary">
-          <strong>{{ t('workflow.preflight.summaryTitle') }}</strong>
-          <p>{{ summaryHint }}</p>
-        </div>
+    <div class="preflight-metrics" aria-label="workflow preflight metrics">
+      <div
+        v-for="metric in preflightMetrics"
+        :key="metric.id"
+        class="preflight-metric"
+        :class="`is-${metric.tone}`"
+      >
+        <strong>{{ metric.value }}</strong>
+        <span>{{ metric.label }}</span>
+      </div>
+    </div>
 
-        <div v-if="resourceSummaries.length" class="preflight-resources">
+    <div class="preflight-content">
+      <section class="preflight-section preflight-guidance">
+        <div class="preflight-section-header">
+          <strong>{{ t('workflow.preflight.summaryTitle') }}</strong>
+        </div>
+        <p>{{ summaryHint }}</p>
+      </section>
+
+      <section class="preflight-section">
+        <div class="preflight-section-header">
           <strong>{{ t('workflow.preflight.resourceTitle') }}</strong>
+          <a-tag v-if="resourceSummaries.length" color="blue">
+            {{ resourceSummaries.length }}
+          </a-tag>
+        </div>
+        <div v-if="resourceSummaries.length" class="preflight-resource-list">
           <div
             v-for="resource in resourceSummaries"
             :key="resource.id"
@@ -37,39 +60,42 @@
             </a-tag>
           </div>
         </div>
-      </div>
+        <div v-else class="preflight-empty is-muted">
+          {{ t('workflow.preflight.resourceEmpty') }}
+        </div>
+      </section>
 
-      <div class="preflight-issues">
-        <div v-if="preflight.issues.length === 0" class="preflight-empty">
-          {{ t('workflow.preflight.noIssues') }}
+      <section class="preflight-section">
+        <div class="preflight-section-header">
+          <strong>{{ t('workflow.preflight.issueTitle') }}</strong>
+          <a-tag v-if="preflight.issues.length" color="orange">
+            {{ preflight.issues.length }}
+          </a-tag>
         </div>
-        <div
-          v-for="issue in preflight.issues"
-          :key="issue.id"
-          class="preflight-issue"
-          :class="`is-${issue.severity}`"
-        >
-          <div class="issue-copy">
-            <span class="issue-node">{{ issue.nodeTitle }}</span>
-            <strong>{{ issue.title }}</strong>
-            <p>{{ issue.detail }}</p>
+        <div class="preflight-issues">
+          <div v-if="preflight.issues.length === 0" class="preflight-empty">
+            {{ t('workflow.preflight.noIssues') }}
           </div>
-          <a-button size="small" @click="$emit('select-node', issue.nodeId)">
-            {{ t('workflow.preflight.viewNode') }}
-          </a-button>
+          <div
+            v-for="issue in preflight.issues"
+            :key="issue.id"
+            class="preflight-issue"
+            :class="`is-${issue.severity}`"
+          >
+            <div class="issue-copy">
+              <span class="issue-node">{{ issue.nodeTitle }}</span>
+              <strong>{{ issue.title }}</strong>
+              <p>{{ issue.detail }}</p>
+            </div>
+            <a-button size="small" @click="$emit('select-node', issue.nodeId)">
+              {{ t('workflow.preflight.viewNode') }}
+            </a-button>
+          </div>
         </div>
-      </div>
+      </section>
     </div>
 
-    <div class="preflight-actions">
-      <a-button
-        type="primary"
-        :disabled="!preflight.canRun"
-        :loading="running"
-        @click="$emit('run-ready-nodes')"
-      >
-        {{ t('workflow.preflight.runReadyNodes') }}
-      </a-button>
+    <div class="preflight-footer">
       <span class="preflight-action-hint">
         {{ t('workflow.preflight.runHint') }}
       </span>
@@ -107,6 +133,33 @@
   })
 
   const resourceSummaries = computed(() => props.preflight.resourceSummaries)
+
+  const preflightMetrics = computed(() => [
+    {
+      id: 'ready',
+      value: props.preflight.runnableCount,
+      label: t('workflow.preflight.metricReady'),
+      tone: 'ready',
+    },
+    {
+      id: 'blocked',
+      value: props.preflight.blockedCount,
+      label: t('workflow.preflight.metricBlocked'),
+      tone: 'blocked',
+    },
+    {
+      id: 'completed',
+      value: props.preflight.completedCount,
+      label: t('workflow.preflight.metricCompleted'),
+      tone: 'completed',
+    },
+    {
+      id: 'failed',
+      value: props.preflight.failedCount,
+      label: t('workflow.preflight.metricFailed'),
+      tone: 'failed',
+    },
+  ])
 </script>
 
 <style scoped lang="less">
@@ -120,17 +173,16 @@
     overflow: hidden;
   }
 
-  .preflight-header,
-  .preflight-actions {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+  .preflight-hero {
+    display: grid;
     gap: @spacing-md;
     padding: @spacing-md @spacing-lg;
+    border-bottom: 1px solid @border-color-light;
+    background: linear-gradient(135deg, @accent-color-light, transparent 72%);
   }
 
-  .preflight-header {
-    border-bottom: 1px solid @border-color-light;
+  .preflight-title-block {
+    min-width: 0;
   }
 
   .preflight-kicker {
@@ -139,42 +191,113 @@
     font-weight: 800;
   }
 
-  .preflight-header h3 {
+  .preflight-title-block h3 {
     margin: 2px 0 0;
     color: @text-color-light-primary;
     font-size: @font-size-lg;
     font-weight: 800;
+    line-height: @line-height-tight;
   }
 
-  .preflight-body {
-    display: grid;
-    grid-template-columns: minmax(220px, 0.32fr) minmax(0, 1fr);
-    gap: @spacing-md;
-    padding: @spacing-lg;
+  .preflight-title-block p {
+    margin: @spacing-xs 0 0;
+    color: @text-color-light-secondary;
+    font-size: @font-size-sm;
+    line-height: @line-height-base;
   }
 
-  .preflight-overview {
+  .preflight-hero-action {
+    width: 100%;
+  }
+
+  .preflight-metrics {
     display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
     gap: @spacing-sm;
-    align-content: start;
+    padding: @spacing-md @spacing-lg;
+    border-bottom: 1px solid @border-color-light;
   }
 
-  .preflight-summary,
-  .preflight-resources {
-    padding: @spacing-md;
+  .preflight-metric {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+    padding: @spacing-sm;
+    border: 1px solid @border-color-light;
     border-radius: @border-radius-sm;
     background: @bg-elevated;
   }
 
-  .preflight-summary strong,
-  .preflight-resources > strong {
+  .preflight-metric strong {
     color: @text-color-light-primary;
-    font-size: @font-size-md;
+    font-size: @font-size-xl;
+    font-weight: 800;
+    line-height: @line-height-tight;
   }
 
-  .preflight-resources {
+  .preflight-metric span {
+    color: @text-color-light-tertiary;
+    font-size: @font-size-xs;
+    font-weight: 700;
+  }
+
+  .preflight-metric.is-ready strong {
+    color: @success-color;
+  }
+
+  .preflight-metric.is-blocked strong {
+    color: @warning-color;
+  }
+
+  .preflight-metric.is-completed strong {
+    color: @accent-color;
+  }
+
+  .preflight-metric.is-failed strong {
+    color: @error-color;
+  }
+
+  .preflight-content {
     display: grid;
+    gap: @spacing-md;
+    padding: @spacing-md @spacing-lg;
+  }
+
+  .preflight-section {
+    border: 1px solid @border-color-light;
+    border-radius: @border-radius-sm;
+    background: @bg-elevated;
+    overflow: hidden;
+  }
+
+  .preflight-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     gap: @spacing-sm;
+    min-height: 40px;
+    padding: @spacing-sm @spacing-md;
+    border-bottom: 1px solid @border-color-light;
+    background: @bg-hover;
+  }
+
+  .preflight-section-header strong {
+    color: @text-color-light-primary;
+    font-size: @font-size-sm;
+    font-weight: 800;
+  }
+
+  .preflight-guidance p {
+    margin: 0;
+    padding: @spacing-md;
+    color: @text-color-light-secondary;
+    font-size: @font-size-sm;
+    line-height: @line-height-base;
+  }
+
+  .preflight-resource-list,
+  .preflight-issues {
+    display: grid;
   }
 
   .preflight-resource {
@@ -183,7 +306,11 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: @spacing-sm;
-    padding-top: @spacing-sm;
+    padding: @spacing-md;
+  }
+
+  .preflight-resource + .preflight-resource,
+  .preflight-issue + .preflight-issue {
     border-top: 1px solid @border-color-light;
   }
 
@@ -198,37 +325,29 @@
     font-weight: 700;
   }
 
-  .resource-copy strong {
+  .resource-copy strong,
+  .issue-copy strong {
     color: @text-color-light-primary;
     font-size: @font-size-sm;
+    font-weight: 800;
   }
 
-  .preflight-summary p,
   .preflight-action-hint,
   .resource-copy p,
   .issue-copy p {
     margin: 4px 0 0;
     color: @text-color-light-secondary;
-    font-size: @font-size-md;
-    line-height: 1.5;
-  }
-
-  .preflight-issues {
-    display: grid;
-    gap: @spacing-sm;
+    font-size: @font-size-sm;
+    line-height: @line-height-base;
   }
 
   .preflight-empty,
   .preflight-issue {
-    min-height: 68px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: @spacing-md;
     padding: @spacing-md;
-    border: 1px solid @border-color-light;
-    border-radius: @border-radius-sm;
-    background: @bg-elevated;
   }
 
   .preflight-empty {
@@ -237,18 +356,19 @@
     font-weight: 700;
   }
 
+  .preflight-empty.is-muted {
+    color: @text-color-light-tertiary;
+  }
+
   .preflight-issue.is-error {
-    border-color: @error-color;
     background: @error-color-light;
   }
 
   .preflight-issue.is-warning {
-    border-color: @warning-color;
     background: @warning-color-light;
   }
 
   .preflight-issue.is-info {
-    border-color: @accent-color-border;
     background: @accent-color-light;
   }
 
@@ -263,23 +383,20 @@
     font-weight: 700;
   }
 
-  .issue-copy strong {
-    color: @text-color-light-primary;
-    font-size: @font-size-sm;
+  .preflight-footer {
+    padding: 0 @spacing-lg @spacing-md;
   }
 
-  .preflight-actions {
+  .preflight-action-hint {
+    display: block;
+    padding: @spacing-sm @spacing-md;
     border-top: 1px solid @border-color-light;
-    background: @bg-elevated;
+    color: @text-color-light-tertiary;
+    font-size: @font-size-xs;
   }
 
   @media (max-width: 960px) {
-    .preflight-body {
-      grid-template-columns: 1fr;
-    }
-
-    .preflight-header,
-    .preflight-actions,
+    .preflight-resource,
     .preflight-issue {
       align-items: flex-start;
       flex-direction: column;
