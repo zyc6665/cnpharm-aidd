@@ -16,7 +16,7 @@ describe('WorkflowNodeInlinePreview', () => {
     expect(wrapper.text()).toContain('40%')
   })
 
-  it('lazy-renders visualization only for selected successful nodes', () => {
+  it('renders compact visualization for successful nodes even when they are not selected', () => {
     const wrapper = mount(WorkflowNodeInlinePreview, {
       props: {
         selected: false,
@@ -31,13 +31,20 @@ describe('WorkflowNodeInlinePreview', () => {
       global: {
         stubs: {
           AEmpty: true,
-          ResultVisualizationPanel: { template: '<div data-testid="visualization" />' },
+          AProgress: true,
+          AButton: true,
+          AModal: true,
+          ResultVisualizationPanel: {
+            props: ['variant', 'allowNativeFullscreen'],
+            template: '<div data-testid="visualization" :data-variant="variant" :data-native-fullscreen="String(allowNativeFullscreen)" />',
+          },
         },
       },
     })
 
-    expect(wrapper.find('[data-testid="visualization"]').exists()).toBe(false)
-    expect(wrapper.text()).toContain('ligand.sdf')
+    expect(wrapper.find('[data-testid="visualization"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="visualization"]').attributes('data-variant')).toBe('compact')
+    expect(wrapper.find('[data-testid="visualization"]').attributes('data-native-fullscreen')).toBe('false')
   })
 
   it('uses a compact in-node visualization and opens full preview outside the canvas node', async () => {

@@ -17,60 +17,45 @@
     </div>
 
     <div v-else-if="hasOutputs" class="inline-preview-success">
-      <template v-if="selected">
-        <div
-          class="inline-preview-visualization-shell"
+      <div
+        class="inline-preview-visualization-shell"
+        @pointerdown.stop
+        @wheel.stop
+      >
+        <ResultVisualizationPanel
+          :task="visualizationTask"
+          variant="compact"
+          :allow-native-fullscreen="false"
+        />
+        <a-button
+          class="inline-preview-expand-button"
+          size="small"
+          shape="circle"
+          title="放大查看"
+          aria-label="放大查看"
+          data-placement="top-left"
+          data-appearance="light"
+          @click.stop="previewOpen = true"
           @pointerdown.stop
-          @wheel.stop
         >
-          <ResultVisualizationPanel
-            :task="visualizationTask"
-            variant="compact"
-            :allow-native-fullscreen="false"
-          />
-          <a-button
-            class="inline-preview-expand-button"
-            size="small"
-            shape="circle"
-            title="放大查看"
-            aria-label="放大查看"
-            data-placement="top-left"
-            data-appearance="light"
-            @click.stop="previewOpen = true"
-            @pointerdown.stop
-          >
-            <FullscreenOutlined />
-          </a-button>
-        </div>
-        <a-modal
-          v-model:open="previewOpen"
-          class="workflow-node-preview-modal"
-          wrap-class-name="workflow-node-preview-modal-wrap"
-          title="结果预览"
-          :footer="null"
-          :width="'min(1120px, 92vw)'"
-          :destroy-on-close="true"
-        >
-          <ResultVisualizationPanel
-            :task="visualizationTask"
-            variant="full"
-            :allow-native-fullscreen="false"
-          />
-        </a-modal>
-      </template>
-      <div v-else class="inline-preview-output-list">
-        <span class="inline-preview-output-title">输出产物</span>
-        <span
-          v-for="file in visibleOutputFiles"
-          :key="String(file.id ?? file.filename ?? file.url)"
-          class="inline-preview-output-chip"
-        >
-          {{ file.filename || file.original_name || file.relative_path || 'output' }}
-        </span>
-        <span v-if="hiddenOutputCount > 0" class="inline-preview-output-chip">
-          +{{ hiddenOutputCount }}
-        </span>
+          <FullscreenOutlined />
+        </a-button>
       </div>
+      <a-modal
+        v-model:open="previewOpen"
+        class="workflow-node-preview-modal"
+        wrap-class-name="workflow-node-preview-modal-wrap"
+        title="结果预览"
+        :footer="null"
+        :width="'min(1120px, 92vw)'"
+        :destroy-on-close="true"
+      >
+        <ResultVisualizationPanel
+          :task="visualizationTask"
+          variant="full"
+          :allow-native-fullscreen="false"
+        />
+      </a-modal>
     </div>
 
     <a-empty v-else class="inline-preview-empty" description="任务已完成，暂无可预览产物" />
@@ -107,8 +92,6 @@ const isFailure = computed(() => ['failure', 'canceled'].includes(taskStatus.val
 const progress = computed(() => Math.max(0, Math.min(100, Number(props.task?.progress ?? 0))))
 const outputFiles = computed(() => props.task?.output_files ?? [])
 const hasOutputs = computed(() => outputFiles.value.length > 0 || (props.task?.artifacts?.length ?? 0) > 0)
-const visibleOutputFiles = computed(() => outputFiles.value.slice(0, 3))
-const hiddenOutputCount = computed(() => Math.max(0, outputFiles.value.length - visibleOutputFiles.value.length))
 const visualizationTask = computed(() => ({
   ...props.task!,
   artifacts: props.task?.artifacts ?? [],

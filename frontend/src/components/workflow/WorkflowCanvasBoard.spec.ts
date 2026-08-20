@@ -157,4 +157,51 @@ describe('WorkflowCanvasBoard', () => {
     expect(wrapper.find('.workflow-canvas-board').attributes('style')).toContain('flex: 1 1 auto')
   })
 
+  it('同一画布上的多个成功节点应同时渲染紧凑可视化', () => {
+    const wrapper = mount(WorkflowCanvasBoard, {
+      props: {
+        preset: canvasPreset,
+        activeNodeId: 'source',
+        taskByNode: {
+          source: {
+            id: 'task-source',
+            status: 'success',
+            progress: 100,
+            output_files: [{ id: 'source-file', filename: 'pocket.pdb', url: '/source-file' }],
+          } as never,
+          target: {
+            id: 'task-target',
+            status: 'success',
+            progress: 100,
+            output_files: [{ id: 'target-file', filename: 'ligand.sdf', url: '/target-file' }],
+          } as never,
+        },
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          AButton: {
+            emits: ['click'],
+            template: '<button @click="$emit(\'click\', $event)"><slot /></button>',
+          },
+          AEmpty: true,
+          AModal: true,
+          AProgress: true,
+          ASpace: { template: '<div><slot /></div>' },
+          ATag: { template: '<span><slot /></span>' },
+          ResultVisualizationPanel: {
+            props: ['variant'],
+            template: '<div data-testid="visualization" :data-variant="variant" />',
+          },
+          ZoomInOutlined: true,
+          ZoomOutOutlined: true,
+        },
+      },
+    })
+
+    const visualizations = wrapper.findAll('[data-testid="visualization"]')
+    expect(visualizations).toHaveLength(2)
+    expect(visualizations.every(item => item.attributes('data-variant') === 'compact')).toBe(true)
+  })
+
 })
