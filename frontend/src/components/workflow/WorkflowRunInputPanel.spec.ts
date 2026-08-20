@@ -60,4 +60,26 @@ describe('WorkflowRunInputPanel', () => {
 
     expect(wrapper.emitted('select')?.[0]).toEqual(['protein_structure@1', 'artifact-1'])
   })
+
+  it('shows an explicit empty state when the workflow has no global run inputs', () => {
+    const wrapper = mount(WorkflowRunInputPanel, {
+      props: {
+        requirements: [],
+        artifactRequirements: [],
+        selections: {},
+        optionsBySemanticType: {}
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          AButton: true,
+          ASelect: true,
+          AEmpty: { props: ['description'], template: '<div class="empty-state">{{ description }}</div>' }
+        }
+      }
+    })
+
+    expect(wrapper.find('.workflow-run-input-panel').exists()).toBe(true)
+    expect(wrapper.text()).toContain('当前工作流没有全局运行输入')
+  })
 })

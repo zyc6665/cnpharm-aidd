@@ -304,6 +304,7 @@ export default {
       deleted: 'Flow deleted',
       runCreated: 'Workflow run created: {id}',
       requiredInputs: 'Run Inputs',
+      emptyRunInputs: 'This workflow has no global run inputs. Configure tools and parameters from the selected node, or run an individual node directly.',
       runHistory: 'Run History',
       emptyRunHistory: 'No workflow runs yet',
       refreshRuns: 'Refresh Runs',

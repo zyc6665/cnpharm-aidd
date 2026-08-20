@@ -1,12 +1,22 @@
 <template>
-  <div v-if="displayRequirements.length > 0" class="workflow-run-input-panel">
+  <div class="workflow-run-input-panel">
     <div class="run-input-header">
       <span>{{ t('workflow.canvasPresets.requiredInputs') }}</span>
-      <a-button size="small" :disabled="autoFillDisabled" @click="emit('auto-fill')">
+      <a-button
+        v-if="displayRequirements.length > 0"
+        size="small"
+        :disabled="autoFillDisabled"
+        @click="emit('auto-fill')"
+      >
         {{ t('workflow.canvasPresets.autoFillInputs') }}
       </a-button>
     </div>
-    <div class="run-input-grid">
+    <a-empty
+      v-if="displayRequirements.length === 0"
+      class="run-input-empty"
+      :description="t('workflow.canvasPresets.emptyRunInputs')"
+    />
+    <div v-else class="run-input-grid">
       <label
         v-for="requirement in displayRequirements"
         :key="requirement.key"
@@ -90,6 +100,10 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: @spacing-sm;
+  }
+
+  .run-input-empty {
+    padding: @spacing-lg @spacing-sm;
   }
 
   .run-input-field {

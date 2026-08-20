@@ -303,6 +303,7 @@ export default {
       deleted: '流程已删除',
       runCreated: '工作流运行已创建：{id}',
       requiredInputs: '运行输入',
+      emptyRunInputs: '当前工作流没有全局运行输入。请在节点结果的配置页选择工具、填写参数，或直接运行单个节点。',
       runHistory: '运行历史',
       emptyRunHistory: '暂无工作流运行记录',
       refreshRuns: '刷新运行',
