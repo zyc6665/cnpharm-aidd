@@ -1,33 +1,41 @@
 <template>
   <div class="workflow-page">
-    <div class="workflow-shell workflow-deck">
+    <div class="workflow-shell">
       <ProjectWorkspaceNav v-if="routeProjectId" :project-id="routeProjectId" />
-      <AppPageHeader
-        :title="t('workflow.title')"
-        :subtitle="t('workflow.subtitle')"
-        align="center"
-      />
 
       <a-tabs v-model:activeKey="activeMode" class="workflow-mode-tabs">
         <a-tab-pane key="manual" :tab="t('workflow.mode.manual')">
-          <div class="workflow-definition-bar">
-            <a-input
-              :value="workflowName"
-              class="workflow-name-input"
-              :placeholder="t('workflow.definition.namePlaceholder')"
-              @update:value="workflowName = $event"
-            />
-            <a-select
-              :value="selectedSavedWorkflowId"
-              class="workflow-load-select"
-              allow-clear
-              :placeholder="t('workflow.definition.loadPlaceholder')"
-              :loading="workflowDefinitionsStore.loading"
-              :options="savedWorkflowOptions"
-              @change="selectedSavedWorkflowId = $event"
-            />
-            <a-tag v-if="routeProjectId" color="blue">项目工作流</a-tag>
-            <a-space size="small" wrap>
+          <WorkflowWorkbenchShell
+            :workflow-name="workflowName"
+            :ready-count="readyNodeCount"
+            :running-count="runningNodeCount"
+            :completed-count="completedNodeCount"
+            :failed-count="failedNodeCount"
+            :left-width="leftWorkbenchWidth"
+            :right-width="rightWorkbenchWidth"
+            :left-collapsed="leftWorkbenchCollapsed"
+            :right-collapsed="rightWorkbenchCollapsed"
+            @update:left-width="setLeftWorkbenchWidth"
+            @update:right-width="setRightWorkbenchWidth"
+            @update:left-collapsed="leftWorkbenchCollapsed = $event"
+            @update:right-collapsed="rightWorkbenchCollapsed = $event"
+          >
+            <template #actions>
+              <a-input
+                :value="workflowName"
+                class="workflow-name-input"
+                :placeholder="t('workflow.definition.namePlaceholder')"
+                @update:value="workflowName = $event"
+              />
+              <a-select
+                :value="selectedSavedWorkflowId"
+                class="workflow-load-select"
+                allow-clear
+                :placeholder="t('workflow.definition.loadPlaceholder')"
+                :loading="workflowDefinitionsStore.loading"
+                :options="savedWorkflowOptions"
+                @change="selectedSavedWorkflowId = $event"
+              />
               <a-button @click="handleNewWorkflow">
                 {{ t('workflow.definition.new') }}
               </a-button>
@@ -80,6 +88,7 @@
                   {{ t('workflow.definition.delete') }}
                 </a-button>
               </a-popconfirm>
+              <a-tag v-if="routeProjectId" color="blue">项目工作流</a-tag>
               <a-button
                 :disabled="workflowStore.isRunningWorkflowDefinition"
                 :loading="workflowStore.isRunningWorkflowDefinition"
@@ -87,55 +96,9 @@
               >
                 运行工作流
               </a-button>
-            </a-space>
-          </div>
+            </template>
 
-          <WorkflowRunInputPanel
-            :requirements="workflowInputRequirements"
-            :artifact-requirements="workflowInputRequirementDetails"
-            :selections="workflowRunInputSelections"
-            :options-by-semantic-type="artifactOptionsBySemanticType"
-            :loading="artifactsStore.loading"
-            :auto-fill-disabled="artifactsStore.loading || artifactsStore.items.length === 0"
-            @auto-fill="autofillWorkflowInputSelections"
-            @select="handleWorkflowInputSelect"
-          />
-
-          <WorkflowRunHistoryPanel
-            v-if="userStore.isLoggedIn"
-            :runs="workflowStore.workflowRuns"
-            :active-run-id="workflowStore.activeWorkflowRunId"
-            :loading="workflowStore.isLoadingWorkflowRuns"
-            :has-more="workflowStore.hasMoreWorkflowRuns"
-            :loading-more="workflowStore.isLoadingMoreWorkflowRuns"
-            @select="handleWorkflowRunSelect"
-            @view-detail="handleWorkflowRunDetail"
-            @refresh="handleRefreshWorkflowRuns"
-            @load-more="handleLoadMoreWorkflowRuns"
-          />
-
-          <WorkflowRunStatusPanel
-            v-if="workflowStore.activeWorkflowRun"
-            :run="workflowStore.activeWorkflowRun"
-            :syncing="workflowStore.isSyncingWorkflowRun || workflowStore.isLoadingWorkflowRun"
-            :canceling="workflowStore.isCancelingWorkflowRun"
-            :retrying-node-id="workflowStore.retryingWorkflowRunNodeId"
-            @sync="handleSyncWorkflowRun"
-            @cancel="handleCancelWorkflowRun"
-            @retry-node="handleRetryWorkflowRunNode"
-          />
-
-          <section class="workflow-preflight-region">
-            <WorkflowPreflightPanel
-              :preflight="workflowPreflight"
-              :running="workflowStore.isRunningWorkflowDefinition"
-              @run-ready-nodes="handleRunWorkflowDefinition"
-              @select-node="workflowStore.setActiveNode"
-            />
-          </section>
-
-          <div class="workflow-canvas-layout">
-            <aside class="workflow-step-rail">
+            <template #left>
               <div class="workflow-status-summary">
                 <div class="status-summary-item is-ready">
                   <span>可运行</span>
@@ -194,8 +157,9 @@
                 @update:executor-filter="sidebarExecutorFilter = $event"
                 @add-tool="handleAddToolNode"
               />
-            </aside>
+            </template>
 
+            <template #canvas>
             <WorkflowCanvasBoard
               :preset="editableCanvasPreset"
               :active-node-id="activeNode?.id ?? null"
@@ -208,7 +172,10 @@
               @delete-edge="handleDeleteEdge"
               @add-edge="handleAddEdge"
             />
+            </template>
 
+            <template #right>
+              <div class="workflow-results-sidebar-sections">
             <WorkflowNodeInspector
               :node="activeNode"
               :project-id="routeProjectId"
@@ -225,11 +192,53 @@
               @run-node="handleRunWorkflowDefinition"
               @view-task-detail="handleViewTaskDetail"
             />
-          </div>
 
-          <section class="workflow-results-region">
+                <WorkflowRunInputPanel
+                  :requirements="workflowInputRequirements"
+                  :artifact-requirements="workflowInputRequirementDetails"
+                  :selections="workflowRunInputSelections"
+                  :options-by-semantic-type="artifactOptionsBySemanticType"
+                  :loading="artifactsStore.loading"
+                  :auto-fill-disabled="artifactsStore.loading || artifactsStore.items.length === 0"
+                  @auto-fill="autofillWorkflowInputSelections"
+                  @select="handleWorkflowInputSelect"
+                />
+
+                <WorkflowPreflightPanel
+                  :preflight="workflowPreflight"
+                  :running="workflowStore.isRunningWorkflowDefinition"
+                  @run-ready-nodes="handleRunWorkflowDefinition"
+                  @select-node="workflowStore.setActiveNode"
+                />
+
+                <WorkflowRunStatusPanel
+                  v-if="workflowStore.activeWorkflowRun"
+                  :run="workflowStore.activeWorkflowRun"
+                  :syncing="workflowStore.isSyncingWorkflowRun || workflowStore.isLoadingWorkflowRun"
+                  :canceling="workflowStore.isCancelingWorkflowRun"
+                  :retrying-node-id="workflowStore.retryingWorkflowRunNodeId"
+                  @sync="handleSyncWorkflowRun"
+                  @cancel="handleCancelWorkflowRun"
+                  @retry-node="handleRetryWorkflowRunNode"
+                />
+
+                <WorkflowRunHistoryPanel
+                  v-if="userStore.isLoggedIn"
+                  :runs="workflowStore.workflowRuns"
+                  :active-run-id="workflowStore.activeWorkflowRunId"
+                  :loading="workflowStore.isLoadingWorkflowRuns"
+                  :has-more="workflowStore.hasMoreWorkflowRuns"
+                  :loading-more="workflowStore.isLoadingMoreWorkflowRuns"
+                  @select="handleWorkflowRunSelect"
+                  @view-detail="handleWorkflowRunDetail"
+                  @refresh="handleRefreshWorkflowRuns"
+                  @load-more="handleLoadMoreWorkflowRuns"
+                />
+
             <WorkflowResultsReportPanel :workflow-name="workflowName" :rows="workflowReportRows" />
-          </section>
+              </div>
+            </template>
+          </WorkflowWorkbenchShell>
         </a-tab-pane>
 
         <a-tab-pane key="agent" :tab="t('workflow.mode.agent')">
@@ -244,7 +253,6 @@
   import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { useRoute, useRouter } from 'vue-router'
-  import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import AiddAgentPanel from '@/components/workflow/AiddAgentPanel.vue'
   import WorkflowNodeInspector from '@/components/workflow/WorkflowNodeInspector.vue'
@@ -257,8 +265,10 @@
   import WorkflowCanvasBoard from '@/components/workflow/WorkflowCanvasBoard.vue'
   import WorkflowControlNodePalette from '@/components/workflow/WorkflowControlNodePalette.vue'
   import WorkflowToolPalette from '@/components/workflow/WorkflowToolPalette.vue'
+  import WorkflowWorkbenchShell from '@/components/workflow/WorkflowWorkbenchShell.vue'
   import { useWorkflowCanvas } from '@/composables/useWorkflowCanvas'
   import { useWorkflowPersistence } from '@/composables/useWorkflowPersistence'
+  import { useWorkflowWorkbenchLayout } from '@/composables/useWorkflowWorkbenchLayout'
   import {
     buildWorkflowDefinitionListParams,
     buildWorkflowRunListParams,
@@ -334,6 +344,18 @@
     workflowStore,
     toolsStore,
     artifactsStore
+  })
+
+  const {
+    leftWidth: leftWorkbenchWidth,
+    rightWidth: rightWorkbenchWidth,
+    leftCollapsed: leftWorkbenchCollapsed,
+    rightCollapsed: rightWorkbenchCollapsed,
+    setLeftWidth: setLeftWorkbenchWidth,
+    setRightWidth: setRightWorkbenchWidth,
+  } = useWorkflowWorkbenchLayout({
+    left: { defaultWidth: 320, minWidth: 280, maxWidth: 480 },
+    right: { defaultWidth: 380, minWidth: 320, maxWidth: 560 },
   })
 
   const {
@@ -471,15 +493,13 @@
   @import '@/assets/styles/variables.less';
 
   .workflow-page {
-    min-height: calc(100vh - @header-height - @footer-height);
-    padding: @spacing-xl 0 @spacing-xxl;
-    background:
-      radial-gradient(circle at top, rgba(13, 110, 253, 0.08) 0%, rgba(255, 255, 255, 0) 32%),
-      linear-gradient(180deg, rgba(59, 130, 246, 0.04) 0%, rgba(255, 255, 255, 0) 260px), @bg-light;
+    min-height: calc(100vh - @header-height);
+    padding: 0;
+    background: @bg-light;
   }
 
   .workflow-shell {
-    width: min(100%, calc(100vw - 32px));
+    width: 100%;
     max-width: none;
     margin: 0 auto;
   }
@@ -496,9 +516,19 @@
   }
 
   .workflow-mode-tabs {
+    min-height: calc(100vh - @header-height);
+
     :deep(.ant-tabs-nav) {
-      margin: 0 0 @spacing-lg;
+      margin: 0;
       padding: 0 @spacing-md;
+      background: @bg-surface;
+      border-bottom: 1px solid @border-color-light;
+    }
+
+    :deep(.ant-tabs-content-holder),
+    :deep(.ant-tabs-content),
+    :deep(.ant-tabs-tabpane) {
+      min-height: 0;
     }
 
     :deep(.ant-tabs-tab) {
@@ -547,6 +577,38 @@
 
   .workflow-results-region {
     margin-top: @spacing-md;
+  }
+
+  .workflow-results-sidebar-sections {
+    min-height: 0;
+    display: grid;
+    gap: @spacing-md;
+    padding: @spacing-sm;
+  }
+
+  .workflow-results-sidebar-sections :deep(.workflow-node-inspector) {
+    max-height: none;
+    border-radius: @border-radius-sm;
+  }
+
+  .workflow-results-sidebar-sections :deep(.workflow-results-report-panel) {
+    margin-top: 0;
+  }
+
+  .workflow-results-sidebar-sections :deep(.workflow-column) {
+    min-width: 0;
+  }
+
+  .workflow-workbench :deep(.workflow-canvas-board) {
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .workflow-workbench :deep(.canvas-viewport) {
+    flex: 1;
+    min-height: 0;
   }
 
   .workflow-step-rail {

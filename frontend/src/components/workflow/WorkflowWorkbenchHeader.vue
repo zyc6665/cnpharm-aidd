@@ -70,6 +70,14 @@ defineProps<{
   min-width: 0;
 }
 
+.workflow-workbench-header__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: @spacing-xs;
+  flex-wrap: wrap;
+}
+
 @media (max-width: @screen-md) {
   .workflow-workbench-header {
     grid-template-columns: 1fr;
