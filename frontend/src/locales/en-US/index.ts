@@ -390,14 +390,7 @@ export default {
       addNode: 'Add node',
       dragOrClick: 'Drag or click to add',
       quickFilters: {
-        all: 'All',
-        data_acquisition: 'Data Fetch',
-        structure_preparation: 'Structure Prep',
-        ligand_processing: 'Molecule Prep',
-        property_prediction: 'Property Prediction',
-        docking_simulation: 'Docking',
-        molecular_dynamics: 'MD',
-        result_analysis: 'Result Analysis'
+        all: 'All'
       },
       categories: {
         external_database_fetch: 'External Databases',

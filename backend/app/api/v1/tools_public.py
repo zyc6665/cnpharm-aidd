@@ -68,6 +68,7 @@ def _serialize_workbench_tool(
     sort_order: int,
 ) -> dict:
     contract = build_validated_tool_contract(tool) if tool.current_version else None
+    tags = sorted(tool.tags, key=lambda tag: (tag.sort_order, tag.name))
     return ToolWorkbenchGroupToolResponse.model_validate(
         {
             "id": tool.id,
@@ -84,6 +85,7 @@ def _serialize_workbench_tool(
             "is_public": tool.is_public,
             "is_recommended": is_recommended,
             "sort_order": sort_order,
+            "tags": [TagResponse.model_validate(tag).model_dump() for tag in tags],
             "contract": contract,
         }
     ).model_dump()
@@ -193,6 +195,9 @@ async def list_public_workbench_groups(db: AsyncSession = Depends(get_db)):
                     ),
                     joinedload(ToolWorkbenchGroupMapping.tool).joinedload(
                         Tool.current_version
+                    ),
+                    joinedload(ToolWorkbenchGroupMapping.tool).selectinload(
+                        Tool.tags
                     ),
                 )
                 .join(

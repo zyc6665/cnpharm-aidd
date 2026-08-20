@@ -389,14 +389,7 @@ export default {
       addNode: '添加节点',
       dragOrClick: '拖拽或点击添加',
       quickFilters: {
-        all: '全部',
-        data_acquisition: '数据获取',
-        structure_preparation: '结构准备',
-        ligand_processing: '分子处理',
-        property_prediction: '性质预测',
-        docking_simulation: '对接模拟',
-        molecular_dynamics: '动力学',
-        result_analysis: '结果分析'
+        all: '全部'
       },
       categories: {
         external_database_fetch: '外部数据库',

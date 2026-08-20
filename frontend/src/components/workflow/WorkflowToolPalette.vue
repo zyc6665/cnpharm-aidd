@@ -36,8 +36,8 @@
             :key="filter.key"
             type="button"
             class="sidebar-tool-quick-filter"
-            :class="{ 'is-active': selectedTaskFilter === filter.key }"
-            @click="selectedTaskFilter = filter.key"
+            :class="{ 'is-active': selectedQuickFilter === filter.key }"
+            @click="selectedQuickFilter = filter.key"
           >
             <span>{{ filter.label }}</span>
             <strong>{{ filter.count }}</strong>
@@ -133,10 +133,19 @@ interface PaletteTool {
   slug: string
   name: string
   description?: string
+  category_id?: string
+  category?: string
+  tags?: PaletteToolTag[]
   capability?: string
   stage?: string
   executorType?: string
   resourceProfile?: Record<string, unknown>
+}
+
+interface PaletteToolTag {
+  id?: string
+  name: string
+  color?: string
 }
 
 const props = defineProps<{
@@ -163,23 +172,18 @@ const emit = defineEmits<{
 
 const { t, te } = useI18n()
 
-type TaskFilterKey =
-  | 'all'
-  | 'data_acquisition'
-  | 'structure_preparation'
-  | 'ligand_processing'
-  | 'property_prediction'
-  | 'docking_simulation'
-  | 'molecular_dynamics'
-  | 'result_analysis'
+type QuickFilterKind = 'all' | 'category' | 'tag'
 
-interface TaskFilterDefinition {
-  key: TaskFilterKey
-  capabilityKeys: string[]
+interface QuickFilterOption {
+  key: string
+  kind: QuickFilterKind
+  id?: string
+  label: string
+  count: number
 }
 
 const showAdvancedFilters = ref(false)
-const selectedTaskFilter = ref<TaskFilterKey>('all')
+const selectedQuickFilter = ref('all')
 
 const GROUP_ORDER = [
   'external_database_fetch',
@@ -198,47 +202,28 @@ const GROUP_ORDER = [
   'other_tools',
 ]
 
-const TASK_FILTERS: TaskFilterDefinition[] = [
-  { key: 'all', capabilityKeys: [] },
-  {
-    key: 'data_acquisition',
-    capabilityKeys: ['external_database_fetch', 'protein_fetch', 'ligand_fetch'],
-  },
-  { key: 'structure_preparation', capabilityKeys: ['protein_preparation'] },
-  {
-    key: 'ligand_processing',
-    capabilityKeys: [
-      'ligand_preparation',
-      'ligand_format_conversion',
-      'conformer_generation',
-      'synthetic_accessibility',
-    ],
-  },
-  {
-    key: 'property_prediction',
-    capabilityKeys: ['property_prediction', 'admet_prediction', 'toxicity_prediction'],
-  },
-  { key: 'docking_simulation', capabilityKeys: ['molecular_docking', 'docking_rescore'] },
-  { key: 'molecular_dynamics', capabilityKeys: ['molecular_dynamics'] },
-  { key: 'result_analysis', capabilityKeys: ['interaction_analysis'] },
-]
-
 const displayedTools = computed(() => {
-  return props.tools.filter(tool => matchesTaskFilter(tool, selectedTaskFilter.value))
+  return props.tools.filter(tool => matchesQuickFilter(tool, selectedQuickFilter.value))
 })
 
 const quickFilterOptions = computed(() => {
-  return TASK_FILTERS.map(filter => ({
-    key: filter.key,
-    label: t(`workflow.palette.quickFilters.${filter.key}`),
-    count: props.tools.filter(tool => matchesTaskFilter(tool, filter.key)).length,
-  }))
+  const filters: QuickFilterOption[] = [
+    {
+      key: 'all',
+      kind: 'all',
+      label: t('workflow.palette.quickFilters.all'),
+      count: props.tools.length,
+    },
+  ]
+  filters.push(...buildCategoryFilters(props.tools))
+  filters.push(...buildTagFilters(props.tools))
+  return filters
 })
 
 const toolGroups = computed(() => {
   const groups = new Map<string, PaletteTool[]>()
   for (const tool of displayedTools.value) {
-    const key = tool.capability || tool.stage || 'other_tools'
+    const key = groupKeyForTool(tool)
     if (!groups.has(key)) {
       groups.set(key, [])
     }
@@ -270,6 +255,9 @@ function compareToolGroups(
 }
 
 function formatGroupLabel(key: string): string {
+  if (key.startsWith('category:')) {
+    return key.slice('category:'.length)
+  }
   const labelKey = `workflow.palette.categories.${key}`
   return te(labelKey) ? t(labelKey) : humanizeKey(key)
 }
@@ -286,20 +274,96 @@ function displayToolName(tool: PaletteTool): string {
   return tool.name || tool.slug
 }
 
-function matchesTaskFilter(tool: PaletteTool, filterKey: TaskFilterKey): boolean {
+function buildCategoryFilters(tools: PaletteTool[]): QuickFilterOption[] {
+  const filters = new Map<string, QuickFilterOption>()
+  for (const tool of tools) {
+    const categoryLabel = normalizedText(tool.category)
+    if (!categoryLabel) {
+      continue
+    }
+    const categoryId = normalizedText(tool.category_id) || categoryLabel
+    const key = `category:${categoryId}`
+    const existing = filters.get(key)
+    if (existing) {
+      existing.count += 1
+    } else {
+      filters.set(key, {
+        key,
+        kind: 'category',
+        id: categoryId,
+        label: categoryLabel,
+        count: 1,
+      })
+    }
+  }
+  return [...filters.values()].sort(compareQuickFilters)
+}
+
+function buildTagFilters(tools: PaletteTool[]): QuickFilterOption[] {
+  const filters = new Map<string, QuickFilterOption>()
+  for (const tool of tools) {
+    for (const tag of tool.tags ?? []) {
+      const tagLabel = normalizedText(tag.name)
+      if (!tagLabel) {
+        continue
+      }
+      const tagId = normalizedText(tag.id) || tagLabel
+      const key = `tag:${tagId}`
+      const existing = filters.get(key)
+      if (existing) {
+        existing.count += 1
+      } else {
+        filters.set(key, {
+          key,
+          kind: 'tag',
+          id: tagId,
+          label: tagLabel,
+          count: 1,
+        })
+      }
+    }
+  }
+  return [...filters.values()].sort(compareQuickFilters)
+}
+
+function compareQuickFilters(first: QuickFilterOption, second: QuickFilterOption): number {
+  if (first.count !== second.count) {
+    return second.count - first.count
+  }
+  return first.label.localeCompare(second.label)
+}
+
+function matchesQuickFilter(tool: PaletteTool, filterKey: string): boolean {
   if (filterKey === 'all') {
     return true
   }
-  const filter = TASK_FILTERS.find(item => item.key === filterKey)
-  if (!filter) {
+  const [kind, id] = filterKey.split(':', 2)
+  if (!id) {
     return true
   }
-  const toolKeys = new Set(
-    [tool.capability, tool.stage]
-      .filter(Boolean)
-      .map(value => value!.toLowerCase())
-  )
-  return filter.capabilityKeys.some(key => toolKeys.has(key))
+  if (kind === 'category') {
+    return [tool.category_id, tool.category]
+      .map(value => normalizedText(value))
+      .includes(id)
+  }
+  if (kind === 'tag') {
+    return (tool.tags ?? []).some(tag => {
+      return [tag.id, tag.name].map(value => normalizedText(value)).includes(id)
+    })
+  }
+  return true
+}
+
+function groupKeyForTool(tool: PaletteTool): string {
+  const category = normalizedText(tool.category)
+  if (category) {
+    return `category:${category}`
+  }
+  return tool.capability || tool.stage || 'other_tools'
+}
+
+function normalizedText(value?: string): string {
+  return (value ?? '').trim()
 }
 
 function resourceProfileLabel(resourceProfile?: Record<string, unknown>): string {

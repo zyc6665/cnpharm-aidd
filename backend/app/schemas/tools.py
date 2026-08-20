@@ -186,6 +186,7 @@ class ToolWorkbenchGroupToolResponse(BaseModel):
     is_public: bool
     is_recommended: bool = False
     sort_order: int = 0
+    tags: List[TagResponse] = Field(default_factory=list)
     contract: Optional[Dict[str, Any]] = None
 
 

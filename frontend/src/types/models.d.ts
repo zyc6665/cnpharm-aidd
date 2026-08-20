@@ -112,6 +112,9 @@ export interface ToolOptionSummary {
   slug: Tool['slug']
   name: Tool['name']
   description?: Tool['description']
+  category_id?: Tool['category_id']
+  category?: Tool['category']
+  tags?: Tag[]
   icon?: Tool['icon']
   icon_url?: Tool['icon_url']
   status: Tool['status']
@@ -273,6 +276,7 @@ export interface WorkbenchGroupTool {
   description?: string
   category_id?: string
   category?: string
+  tags?: Tag[]
   icon?: string
   icon_url?: string
   status: Tool['status']

@@ -73,6 +73,9 @@ describe('getWorkflowToolOptions', () => {
             description: 'Download a protein structure from RCSB PDB',
             icon: 'DatabaseOutlined',
             icon_url: undefined,
+            category_id: 'cat-data',
+            category: '数据获取',
+            tags: [{ id: 'tag-built-in', name: '平台内置', color: '#1890ff', sort_order: 0 }],
             status: 'published',
             is_public: true,
             contract
@@ -88,6 +91,9 @@ describe('getWorkflowToolOptions', () => {
 
     expect(response.data[0]).toMatchObject({
       slug: 'builtin-fetch-pdb',
+      category_id: 'cat-data',
+      category: '数据获取',
+      tags: [{ id: 'tag-built-in', name: '平台内置' }],
       contract
     })
   })

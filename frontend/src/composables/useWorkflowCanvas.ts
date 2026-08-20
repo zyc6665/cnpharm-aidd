@@ -85,6 +85,9 @@ export function useWorkflowCanvas(input: {
         slug: string
         name: string
         description?: string
+        category_id?: string
+        category?: string
+        tags?: Array<{ id?: string; name: string; color?: string }>
         contract?: ToolContract | null
         executorType?: string
         capability?: string
@@ -105,6 +108,9 @@ export function useWorkflowCanvas(input: {
           slug: tool.slug,
           name: tool.name,
           description: tool.description,
+          category_id: tool.category_id,
+          category: tool.category,
+          tags: tool.tags ?? [],
           contract: tool.contract,
           executorType: tool.contract?.executor.type,
           capability: tool.contract?.capability.capability ?? undefined,
@@ -135,6 +141,9 @@ export function useWorkflowCanvas(input: {
           slug: tool.slug,
           name: tool.name,
           description: tool.description,
+          category_id: tool.category_id,
+          category: tool.category,
+          tags: tool.tags ?? [],
           contract: tool.contract,
           executorType: tool.contract?.executor.type,
           capability: tool.contract?.capability.capability ?? undefined,

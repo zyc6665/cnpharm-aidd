@@ -7,6 +7,9 @@ interface PaletteToolFixture {
   slug: string
   name: string
   description?: string
+  category_id?: string
+  category?: string
+  tags?: Array<{ id: string; name: string; color?: string }>
   capability?: string
   stage?: string
   executorType?: string
@@ -94,14 +97,16 @@ describe('WorkflowToolPalette', () => {
     expect(wrapper.text()).toContain('MEM 16GB')
   })
 
-  it('默认使用任务快捷筛选并折叠高级筛选', async () => {
+  it('默认使用动态快捷筛选并折叠高级筛选', async () => {
     const wrapper = mountPalette([
-      { slug: 'builtin-fetch-pdb', name: 'Fetch PDB', capability: 'external_database_fetch' },
-      { slug: 'vina-docking', name: 'AutoDock Vina', capability: 'molecular_docking' },
+      { slug: 'builtin-fetch-pdb', name: 'Fetch PDB', category_id: 'cat-data', category: '数据获取' },
+      { slug: 'vina-docking', name: 'AutoDock Vina', category_id: 'cat-docking', category: '对接模拟' },
     ])
 
     expect(wrapper.find('.sidebar-tool-quick-filters').exists()).toBe(true)
     expect(wrapper.find('.sidebar-tool-quick-filter.is-active').text()).toContain('全部')
+    expect(wrapper.find('.sidebar-tool-quick-filters').text()).toContain('数据获取')
+    expect(wrapper.find('.sidebar-tool-quick-filters').text()).toContain('对接模拟')
     expect(wrapper.find('.sidebar-tool-filter-card').exists()).toBe(false)
 
     await wrapper.find('.sidebar-tool-advanced-toggle').trigger('click')
@@ -109,11 +114,11 @@ describe('WorkflowToolPalette', () => {
     expect(wrapper.find('.sidebar-tool-filter-card').exists()).toBe(true)
   })
 
-  it('任务快捷筛选按用户场景过滤工具', async () => {
+  it('动态快捷筛选按管理员分类过滤工具', async () => {
     const wrapper = mountPalette([
-      { slug: 'builtin-fetch-pdb', name: 'Fetch PDB', capability: 'external_database_fetch' },
-      { slug: 'rdkit-properties', name: 'RDKit Properties', capability: 'property_prediction' },
-      { slug: 'vina-docking', name: 'AutoDock Vina', capability: 'molecular_docking' },
+      { slug: 'builtin-fetch-pdb', name: 'Fetch PDB', category_id: 'cat-data', category: '数据获取' },
+      { slug: 'rdkit-properties', name: 'RDKit Properties', category_id: 'cat-property', category: '性质预测' },
+      { slug: 'vina-docking', name: 'AutoDock Vina', category_id: 'cat-docking', category: '对接模拟' },
     ])
 
     const dockingFilter = wrapper
@@ -126,6 +131,36 @@ describe('WorkflowToolPalette', () => {
     expect(wrapper.find('.sidebar-tool-summary').text()).toContain('1 个工具可用')
     expect(wrapper.text()).toContain('AutoDock Vina')
     expect(wrapper.text()).not.toContain('Fetch PDB')
+    expect(wrapper.text()).not.toContain('RDKit Properties')
+  })
+
+  it('动态快捷筛选按管理员标签过滤工具', async () => {
+    const wrapper = mountPalette([
+      {
+        slug: 'vina-docking',
+        name: 'AutoDock Vina',
+        category_id: 'cat-docking',
+        category: '对接模拟',
+        tags: [{ id: 'tag-gpu', name: 'GPU', color: '#22c55e' }],
+      },
+      {
+        slug: 'rdkit-properties',
+        name: 'RDKit Properties',
+        category_id: 'cat-property',
+        category: '性质预测',
+        tags: [{ id: 'tag-built-in', name: '平台内置', color: '#1890ff' }],
+      },
+    ])
+
+    const gpuFilter = wrapper
+      .findAll('.sidebar-tool-quick-filter')
+      .find(button => button.text().includes('GPU'))
+
+    expect(gpuFilter).toBeTruthy()
+    await gpuFilter!.trigger('click')
+
+    expect(wrapper.find('.sidebar-tool-summary').text()).toContain('1 个工具可用')
+    expect(wrapper.text()).toContain('AutoDock Vina')
     expect(wrapper.text()).not.toContain('RDKit Properties')
   })
 })
