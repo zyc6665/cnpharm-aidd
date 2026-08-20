@@ -1,0 +1,62 @@
+{
+  "result_version": "aidd.sciminer/result.v2",
+  "artifacts": {
+    "properties": {
+      "name": "example-task_rdkit_properties",
+      "type": "molecule_table@1",
+      "files": {
+        "table_file": {
+          "path": "artifacts/properties/rdkit_properties.csv",
+          "sha256": "80e45facb0220143cad8513e5a5645ac5e91eb2ab8964acb5519856aabe5ac9f",
+          "content_type": "text/csv"
+        },
+        "metadata_json": {
+          "path": "artifacts/properties/metadata.json",
+          "sha256": "be9d1d8e44eddbae9fe9d768327f29a7871164b7e7af1a818590f653779e2f91",
+          "content_type": "application/json"
+        }
+      },
+      "metadata": {
+        "molecule_id_field": "molecule_id",
+        "source_task_id": "example-task",
+        "row_count": 2,
+        "valid_molecule_count": 2,
+        "invalid_molecule_count": 0,
+        "property_columns": [
+          "molecular_weight",
+          "logp",
+          "tpsa",
+          "hbd",
+          "hba",
+          "rotatable_bonds",
+          "heavy_atoms",
+          "qed",
+          "lipinski_violations"
+        ],
+        "backend_name": "RDKit",
+        "backend_version": "2023.09.1"
+      }
+    },
+    "report": {
+      "name": "example-task_rdkit_properties_report",
+      "type": "run_report@1",
+      "files": {
+        "report_json": {
+          "path": "reports/report.json",
+          "sha256": "1d44e4a732e376953fe515143b4875c77ad16d6cfe48edff59da9da0b1172256",
+          "content_type": "application/json"
+        }
+      },
+      "metadata": {
+        "source_task_id": "example-task"
+      }
+    }
+  },
+  "relations": [
+    {
+      "from": "report",
+      "to": "properties",
+      "type": "describes"
+    }
+  ]
+}

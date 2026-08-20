@@ -1,0 +1,43 @@
+schema_version: sciminer.model-package.v1
+name: RDKit Molecular Properties
+slug: rdkit-molecular-properties
+version: 0.1.0
+entrypoint: platform_run.sh
+runtime:
+  python: "3.10"
+  executor_support:
+    - ssh_docker_exec
+    - slurm
+    - k8s_job
+  selection_policy: "prefer container image by immutable digest; fallback to conda_pack only when the executor cannot run containers"
+  artifacts:
+    primary:
+      kind: container
+      image: registry.example/sciminer/rdkit-properties-runtime:0.1.0
+      image_digest: sha256:7777777777777777777777777777777777777777777777777777777777777777
+    fallback:
+      kind: conda_pack
+      uri: artifacts://model-envs/rdkit-molecular-properties/0.1.0/conda-env.tar.gz
+      sha256: "8888888888888888888888888888888888888888888888888888888888888888"
+  weights:
+    manifest_uri: artifacts://model-weights/rdkit-molecular-properties/0.1.0/no-weights.json
+    manifest_sha256: "9999999999999999999999999999999999999999999999999999999999999999"
+  cache_policy:
+    key_fields:
+      - metadata.slug
+      - metadata.version
+      - runtime.artifacts.selected.digest_or_sha256
+      - runtime.weights.manifest_sha256
+    mutable_host_paths_forbidden: true
+model_code:
+  source_dir: src
+  wrapper_package: src/rdkit_properties_runtime
+standard_contract:
+  inputs:
+    - name: molecules
+      type: molecule_table@1
+  outputs:
+    - name: properties
+      type: molecule_table@1
+    - name: report
+      type: run_report@1

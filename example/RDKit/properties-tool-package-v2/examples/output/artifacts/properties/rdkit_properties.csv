@@ -1,0 +1,3 @@
+molecule_id,SMILES,molecular_weight,logp,tpsa,hbd,hba,rotatable_bonds,heavy_atoms,qed,lipinski_violations,rdkit_status
+ethanol,CCO,46.0690,-0.0014,20.2300,1,1,0,3,0.4068,0,ok
+benzene,c1ccccc1,78.1140,1.6866,0.0000,0,0,0,6,0.4426,0,ok

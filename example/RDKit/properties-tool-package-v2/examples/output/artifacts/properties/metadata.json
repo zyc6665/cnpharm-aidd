@@ -1,0 +1,20 @@
+{
+  "molecule_id_field": "molecule_id",
+  "source_task_id": "example-task",
+  "row_count": 2,
+  "valid_molecule_count": 2,
+  "invalid_molecule_count": 0,
+  "property_columns": [
+    "molecular_weight",
+    "logp",
+    "tpsa",
+    "hbd",
+    "hba",
+    "rotatable_bonds",
+    "heavy_atoms",
+    "qed",
+    "lipinski_violations"
+  ],
+  "backend_name": "RDKit",
+  "backend_version": "2023.09.1"
+}
