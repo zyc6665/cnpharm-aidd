@@ -376,12 +376,33 @@ export default {
     },
     palette: {
       title: '工具库',
+      toolsAvailable: '{count} 个工具可用',
       searchPlaceholder: '搜索工具',
+      filterTitle: '筛选条件',
       filterStage: '按阶段筛选',
       filterInput: '按输入语义筛选',
       filterOutput: '按输出语义筛选',
       filterExecutor: '按执行器筛选',
       addNode: '添加节点',
+      dragOrClick: '拖拽或点击添加',
+      categories: {
+        external_database_fetch: '外部数据库',
+        protein_fetch: '蛋白获取',
+        ligand_fetch: '配体获取',
+        protein_preparation: '蛋白处理',
+        ligand_preparation: '配体处理',
+        ligand_format_conversion: '格式转换',
+        conformer_generation: '构象生成',
+        property_prediction: '分子性质',
+        admet_prediction: 'ADMET 预测',
+        toxicity_prediction: '毒性预测',
+        synthetic_accessibility: '合成可及性',
+        molecular_docking: '分子对接',
+        docking_rescore: '打分重排',
+        molecular_dynamics: '分子动力学',
+        interaction_analysis: '相互作用分析',
+        other_tools: '其他工具'
+      },
       empty: '暂无匹配工具，请调整筛选条件或搜索关键词'
     },
     preflight: {

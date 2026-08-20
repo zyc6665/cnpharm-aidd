@@ -78,10 +78,16 @@ describe('WorkflowToolPalette', () => {
       },
     ])
 
+    expect(wrapper.find('.sidebar-tool-summary').text()).toContain('2 个工具可用')
     expect(wrapper.findAll('.sidebar-tool-group-title').map(item => item.text())).toEqual([
-      'molecular_docking',
-      'property_prediction',
+      '分子性质',
+      '分子对接',
     ])
+    expect(wrapper.findAll('.sidebar-tool-group-count').map(item => item.text())).toEqual([
+      '1',
+      '1',
+    ])
+    expect(wrapper.find('.sidebar-tool-grid').exists()).toBe(true)
     expect(wrapper.text()).toContain('docker_image')
     expect(wrapper.text()).toContain('medium')
     expect(wrapper.text()).toContain('CPU 8')

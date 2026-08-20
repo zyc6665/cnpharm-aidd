@@ -377,12 +377,33 @@ export default {
     },
     palette: {
       title: 'Tool Library',
+      toolsAvailable: '{count} tools available',
       searchPlaceholder: 'Search tools',
+      filterTitle: 'Filters',
       filterStage: 'Filter by stage',
       filterInput: 'Filter by input semantic',
       filterOutput: 'Filter by output semantic',
       filterExecutor: 'Filter by executor',
       addNode: 'Add node',
+      dragOrClick: 'Drag or click to add',
+      categories: {
+        external_database_fetch: 'External Databases',
+        protein_fetch: 'Protein Fetch',
+        ligand_fetch: 'Ligand Fetch',
+        protein_preparation: 'Protein Preparation',
+        ligand_preparation: 'Ligand Preparation',
+        ligand_format_conversion: 'Format Conversion',
+        conformer_generation: 'Conformer Generation',
+        property_prediction: 'Molecular Properties',
+        admet_prediction: 'ADMET Prediction',
+        toxicity_prediction: 'Toxicity Prediction',
+        synthetic_accessibility: 'Synthetic Accessibility',
+        molecular_docking: 'Molecular Docking',
+        docking_rescore: 'Docking Rescore',
+        molecular_dynamics: 'Molecular Dynamics',
+        interaction_analysis: 'Interaction Analysis',
+        other_tools: 'Other Tools'
+      },
       empty: 'No matching tool. Adjust filters or search keywords.'
     },
     preflight: {
