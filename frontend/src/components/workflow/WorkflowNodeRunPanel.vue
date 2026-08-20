@@ -200,12 +200,11 @@
   }
 
   watch(
-    () => props.selectedToolSlug,
-    async () => {
+    () => [props.selectedToolSlug, selectedToolSummary.value?.id ?? null] as const,
+    async ([selectedToolSlug, toolId]) => {
       const requestToken = ++detailRequestToken
-      const toolId = selectedToolSummary.value?.id
 
-      if (!toolId) {
+      if (!selectedToolSlug || !toolId) {
         selectedTool.value = null
         selectedToolLoading.value = false
         replaceFormState({})
