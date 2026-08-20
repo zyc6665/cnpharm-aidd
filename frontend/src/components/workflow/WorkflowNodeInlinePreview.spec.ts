@@ -39,4 +39,47 @@ describe('WorkflowNodeInlinePreview', () => {
     expect(wrapper.find('[data-testid="visualization"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('ligand.sdf')
   })
+
+  it('uses a compact in-node visualization and opens full preview outside the canvas node', async () => {
+    const wrapper = mount(WorkflowNodeInlinePreview, {
+      props: {
+        selected: true,
+        task: {
+          id: 'task-1',
+          status: 'success',
+          progress: 100,
+          output_files: [{ id: 'f1', filename: 'ligand.sdf', url: '/f1' }],
+        } as never,
+        artifacts: [],
+      },
+      global: {
+        stubs: {
+          AEmpty: true,
+          AProgress: true,
+          AButton: { template: '<button @click="$emit(\'click\', $event)"><slot /></button>' },
+          AModal: {
+            props: ['open'],
+            template: '<div v-if="open" data-testid="preview-modal"><slot /></div>',
+          },
+          ResultVisualizationPanel: {
+            props: ['task', 'variant', 'allowNativeFullscreen'],
+            template: '<div data-testid="visualization" :data-variant="variant" :data-native-fullscreen="String(allowNativeFullscreen)" />',
+          },
+        },
+      },
+    })
+
+    const visualizations = wrapper.findAll('[data-testid="visualization"]')
+    expect(visualizations).toHaveLength(1)
+    expect(visualizations[0]?.attributes('data-variant')).toBe('compact')
+    expect(visualizations[0]?.attributes('data-native-fullscreen')).toBe('false')
+
+    await wrapper.find('.inline-preview-expand-button').trigger('click')
+
+    expect(wrapper.find('[data-testid="preview-modal"]').exists()).toBe(true)
+    const expandedVisualizations = wrapper.findAll('[data-testid="visualization"]')
+    expect(expandedVisualizations).toHaveLength(2)
+    expect(expandedVisualizations[1]?.attributes('data-variant')).toBe('full')
+    expect(expandedVisualizations[1]?.attributes('data-native-fullscreen')).toBe('false')
+  })
 })

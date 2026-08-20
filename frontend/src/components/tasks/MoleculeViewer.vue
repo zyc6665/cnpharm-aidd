@@ -1,5 +1,5 @@
 <template>
-  <div class="molecule-viewer">
+  <div class="molecule-viewer" :class="`molecule-viewer--${variant}`">
     <div ref="containerRef" class="viewer-canvas" :class="{ 'viewer-canvas--hidden': Boolean(error) }" />
 
     <div v-if="loading" class="viewer-overlay">
@@ -30,9 +30,14 @@ import { Asset } from 'molstar/lib/mol-util/assets'
 import type { VisualizationScene } from '@/domain/tasks'
 import { createProtectedObjectUrl } from '@/utils/protected-file-access'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   scene: VisualizationScene
-}>()
+  variant?: 'compact' | 'full'
+  allowNativeFullscreen?: boolean
+}>(), {
+  variant: 'full',
+  allowNativeFullscreen: true,
+})
 
 const { t } = useI18n()
 
@@ -51,7 +56,7 @@ function cleanupEntryUrls() {
 }
 
 function syncFullscreenLayout() {
-  if (!viewer) {
+  if (!viewer || !props.allowNativeFullscreen) {
     return
   }
 
@@ -109,7 +114,7 @@ async function ensureViewer() {
     collapseRightPanel: true,
     viewportShowControls: false,
     viewportShowExpand: false,
-    viewportShowToggleFullscreen: true,
+    viewportShowToggleFullscreen: props.allowNativeFullscreen,
     viewportShowSettings: false,
     viewportShowSelectionMode: false,
     viewportShowAnimation: false,
@@ -215,6 +220,18 @@ onUnmounted(() => {
   background:
     radial-gradient(circle at top left, rgba(87, 181, 231, 0.22), transparent 38%),
     linear-gradient(145deg, #07111f, #10233f 58%, #17345f);
+}
+
+.molecule-viewer--compact {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  border-radius: 8px;
+}
+
+.molecule-viewer--full {
+  min-height: 520px;
+  height: 520px;
 }
 
 .viewer-canvas {

@@ -179,8 +179,8 @@ function handlePointerDown(event: PointerEvent) {
 
 .workflow-canvas-panel-node {
   position: absolute;
-  width: 380px;
-  height: 280px;
+  width: 420px;
+  height: 340px;
   display: flex;
   flex-direction: column;
   border: 1px solid @accent-color-border;
@@ -313,7 +313,7 @@ function handlePointerDown(event: PointerEvent) {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: @spacing-sm;
-  padding: @spacing-md;
+  padding: @spacing-sm @spacing-md @spacing-md;
 }
 
 .panel-node-summary,

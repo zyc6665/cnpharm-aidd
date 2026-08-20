@@ -87,8 +87,8 @@
   import WorkflowCanvasPanelNode from './WorkflowCanvasPanelNode.vue'
   import WorkflowNodeInlinePreview from './WorkflowNodeInlinePreview.vue'
 
-  const NODE_WIDTH = 380
-  const NODE_HEIGHT = 280
+  const NODE_WIDTH = 420
+  const NODE_HEIGHT = 340
   const CANVAS_PADDING = 96
   const { t, te } = useI18n()
   const { zoom, zoomIn, zoomOut, resetZoom, setZoom, surfaceStyle } = useCanvasViewport()

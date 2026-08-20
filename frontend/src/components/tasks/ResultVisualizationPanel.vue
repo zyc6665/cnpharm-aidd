@@ -1,6 +1,10 @@
 <template>
-  <div v-if="hasVisualizationContent" class="result-visualization-panel">
-    <div class="panel-header">
+  <div
+    v-if="hasVisualizationContent"
+    class="result-visualization-panel"
+    :class="`result-visualization-panel--${variant}`"
+  >
+    <div v-if="!isCompact" class="panel-header">
       <div>
         <h4>{{ t('tasks.resultVisualization') }}</h4>
         <p>{{ panelDescription }}</p>
@@ -27,7 +31,7 @@
     <CsvResultViewer v-else-if="csvResultFile" :file="csvResultFile" />
 
     <template v-else-if="scene.hasRenderableOutput">
-      <div v-if="scene.outputEntries.length > 1" class="output-browser">
+      <div v-if="!isCompact && scene.outputEntries.length > 1" class="output-browser">
         <div class="output-browser__header">
           <div>
             <h5>{{ t('tasks.visualizationResultList') }}</h5>
@@ -58,7 +62,11 @@
         </div>
       </div>
 
-      <MoleculeViewer :scene="focusedScene" />
+      <MoleculeViewer
+        :scene="focusedScene"
+        :variant="variant"
+        :allow-native-fullscreen="allowNativeFullscreen"
+      />
     </template>
 
     <a-alert
@@ -69,7 +77,7 @@
       :description="t('tasks.visualizationUnsupportedDesc')"
     />
 
-    <div v-if="!csvResultFile && scene.hasRenderableOutput" class="scene-files">
+    <div v-if="!isCompact && !csvResultFile && scene.hasRenderableOutput" class="scene-files">
       <div
         v-for="entry in focusedScene.entries"
         :key="entry.key"
@@ -83,6 +91,7 @@
 
     <a-alert
       v-if="!csvResultFile && scene.unsupportedOutputFiles.length"
+      v-show="!isCompact"
       class="partial-support-alert"
       type="info"
       show-icon
@@ -113,11 +122,17 @@ import {
   rankSdfEntriesByScoreFile
 } from '@/domain/tasks'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   task: Task
-}>()
+  variant?: 'compact' | 'full'
+  allowNativeFullscreen?: boolean
+}>(), {
+  variant: 'full',
+  allowNativeFullscreen: true,
+})
 
 const { t } = useI18n()
+const isCompact = computed(() => props.variant === 'compact')
 
 const hasOutputFiles = computed(() => Boolean(props.task.output_files?.length))
 const typedArtifacts = computed<TypedArtifact[]>(() => props.task.artifacts ?? [])
@@ -270,6 +285,24 @@ const panelDescription = computed(() => {
   flex-direction: column;
   gap: 16px;
   margin-bottom: 20px;
+}
+
+.result-visualization-panel--compact {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  gap: 0;
+  margin-bottom: 0;
+}
+
+.result-visualization-panel--full {
+  min-height: 0;
+}
+
+.result-visualization-panel--compact .typed-artifact-list {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .panel-header {

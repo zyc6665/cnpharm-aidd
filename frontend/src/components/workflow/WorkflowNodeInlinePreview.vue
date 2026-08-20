@@ -17,7 +17,42 @@
     </div>
 
     <div v-else-if="hasOutputs" class="inline-preview-success">
-      <ResultVisualizationPanel v-if="selected" :task="visualizationTask" />
+      <template v-if="selected">
+        <div
+          class="inline-preview-visualization-shell"
+          @pointerdown.stop
+          @wheel.stop
+        >
+          <ResultVisualizationPanel
+            :task="visualizationTask"
+            variant="compact"
+            :allow-native-fullscreen="false"
+          />
+          <a-button
+            class="inline-preview-expand-button"
+            size="small"
+            @click.stop="previewOpen = true"
+            @pointerdown.stop
+          >
+            放大查看
+          </a-button>
+        </div>
+        <a-modal
+          v-model:open="previewOpen"
+          class="workflow-node-preview-modal"
+          wrap-class-name="workflow-node-preview-modal-wrap"
+          title="结果预览"
+          :footer="null"
+          :width="'min(1120px, 92vw)'"
+          :destroy-on-close="true"
+        >
+          <ResultVisualizationPanel
+            :task="visualizationTask"
+            variant="full"
+            :allow-native-fullscreen="false"
+          />
+        </a-modal>
+      </template>
       <div v-else class="inline-preview-output-list">
         <span class="inline-preview-output-title">输出产物</span>
         <span
@@ -38,7 +73,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import ResultVisualizationPanel from '@/components/tasks/ResultVisualizationPanel.vue'
 import { normalizeTaskStatus } from '@/domain/tasks'
 import type { ArtifactFile, Task } from '@/types/models'
@@ -48,6 +83,17 @@ const props = defineProps<{
   task?: Task | null
   artifacts?: ArtifactFile[]
 }>()
+
+const previewOpen = ref(false)
+
+watch(
+  () => props.selected,
+  (selected) => {
+    if (!selected) {
+      previewOpen.value = false
+    }
+  }
+)
 
 const taskStatus = computed(() => normalizeTaskStatus(props.task?.status))
 const isRunning = computed(() => ['pending', 'running'].includes(taskStatus.value))
@@ -123,13 +169,43 @@ const visualizationTask = computed(() => ({
   overflow: auto;
 }
 
+.inline-preview-visualization-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.inline-preview-expand-button {
+  position: absolute;
+  top: @spacing-xs;
+  right: @spacing-xs;
+  z-index: 2;
+  border-color: rgba(59, 130, 246, 0.28);
+  background: rgba(9, 9, 11, 0.72);
+  color: @text-color-light-primary;
+  font-size: @font-size-xs;
+  font-weight: 800;
+  backdrop-filter: blur(8px);
+}
+
+.inline-preview-expand-button:hover,
+.inline-preview-expand-button:focus-visible {
+  border-color: @accent-color;
+  color: @accent-color-hover;
+}
+
 .inline-preview-success :deep(.result-visualization-panel) {
   height: 100%;
   min-height: 0;
-  padding: @spacing-sm;
   border: 0;
   border-radius: 0;
   box-shadow: none;
+}
+
+.inline-preview-success :deep(.result-visualization-panel--compact) {
+  padding: 0;
 }
 
 .inline-preview-output-title {

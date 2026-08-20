@@ -152,7 +152,7 @@ describe('WorkflowCanvasBoard', () => {
       },
     })
 
-    expect(wrapper.find('.canvas-stage').attributes('style')).toContain('width: 6476px')
+    expect(wrapper.find('.canvas-stage').attributes('style')).toContain('width: 6516px')
     expect(wrapper.find('.workflow-canvas-board').attributes('style')).toContain('width: 100%')
     expect(wrapper.find('.workflow-canvas-board').attributes('style')).toContain('flex: 1 1 auto')
   })
