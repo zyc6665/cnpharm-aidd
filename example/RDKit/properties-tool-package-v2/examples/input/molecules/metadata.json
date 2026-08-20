@@ -1,6 +1,0 @@
-{
-  "molecule_id_field": "molecule_id",
-  "source_task_id": "example-input",
-  "source_filename": "smiles.csv",
-  "row_count": 2
-}

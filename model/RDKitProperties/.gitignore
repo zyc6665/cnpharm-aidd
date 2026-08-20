@@ -1,8 +1,0 @@
-output/
-work/
-__pycache__/
-*.pyc
-*.egg-info/
-.pytest_cache/
-deployment.local.*
-platform_tool.ssh_job.json
