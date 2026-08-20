@@ -64,13 +64,12 @@
   import type { FormInstance } from 'ant-design-vue/es/form'
   import type { UploadFile } from 'ant-design-vue'
   import ToolParameterForm from '@/components/workflow/ToolParameterForm.vue'
-  import { uploadFile } from '@/api/files'
-  import { createTask, getTaskDetail, isTaskTerminalStatus } from '@/api/tasks'
+  import { isTaskTerminalStatus } from '@/api/tasks'
   import { getToolDetail } from '@/api/tools'
-  import { useArtifactsStore, useUserStore, useWorkflowStore } from '@/stores'
+  import { useUserStore, useWorkflowStore } from '@/stores'
+  import { useStandaloneNodeRun } from '@/composables/useStandaloneNodeRun'
   import type { ArtifactFile, Tool, ToolSchema } from '@/types/models'
   import {
-    buildTaskSubmissionPayload,
     buildToolFormInitialState,
     flattenToolInputSchema
   } from '@/domain/tools'
@@ -89,8 +88,6 @@
     required?: boolean
   }
 
-  const STANDALONE_TASK_POLL_INTERVAL_MS = 2000
-
   const props = defineProps<{
     nodeId: string
     projectId?: string | null
@@ -102,7 +99,15 @@
   const { t } = useI18n()
   const userStore = useUserStore()
   const workflowStore = useWorkflowStore()
-  const artifactsStore = useArtifactsStore()
+  const {
+    submitting,
+    run: runStandaloneNode,
+    startPolling: startStandaloneTaskPolling,
+    stopPolling: stopStandaloneTaskPolling
+  } = useStandaloneNodeRun({
+    nodeId: computed(() => props.nodeId),
+    projectId: computed(() => props.projectId)
+  })
 
   const formRef = ref<FormInstance>()
   const selectedTool = ref<Tool | null>(null)
@@ -111,10 +116,7 @@
   const fileList = reactive<Record<string, UploadFile[]>>({})
   const selectedArtifacts = reactive<Record<string, ArtifactFile | undefined>>({})
   const autoBoundArtifacts = ref<ArtifactFile[]>([])
-  const submitting = ref(false)
   let detailRequestToken = 0
-  let standaloneTaskPollTimer: number | null = null
-  let standaloneTaskPollTaskId: string | null = null
 
   const selectedToolSummary = computed(() => {
     if (!props.selectedToolSlug) {
@@ -270,142 +272,21 @@
     }
   }
 
-  async function resolveUploadedFiles() {
-    const uploadedFiles: Record<string, { fileId: string; filename: string; downloadUrl: string } | undefined> = {}
-
-    for (const [key, artifact] of Object.entries(selectedArtifacts)) {
-      if (!artifact) {
-        continue
-      }
-
-      uploadedFiles[key] = {
-        fileId: artifact.id,
-        filename: artifact.filename,
-        downloadUrl: artifact.download_url
-      }
-    }
-
-    for (const [key, files] of Object.entries(fileList)) {
-      const file = files[0]?.originFileObj as File | undefined
-      if (!file) {
-        continue
-      }
-
-      const response = await uploadFile(file)
-      const fileId = String(response.data.id)
-      uploadedFiles[key] = {
-        fileId,
-        filename: response.data.filename,
-        downloadUrl: response.data.url ?? `/api/v1/files/${fileId}/download`
-      }
-    }
-
-    return uploadedFiles
-  }
-
-  function withBuiltinInputs(
-    params: Record<string, unknown>,
-    uploadedFiles: Record<string, { fileId: string; filename: string; downloadUrl: string } | undefined>
-  ) {
-    if (executorType.value !== 'builtin' || contractArtifactInputs.value.length === 0) {
-      return params
-    }
-
-    const builtinInputs: Record<string, string> = {}
-    const nextParams = { ...params }
-    for (const input of contractArtifactInputs.value) {
-      delete nextParams[input.name]
-
-      const uploadedFile = uploadedFiles[input.name]
-      if (uploadedFile?.fileId) {
-        builtinInputs[input.type] = uploadedFile.fileId
-      }
-    }
-
-    if (Object.keys(builtinInputs).length === 0) {
-      return params
-    }
-
-    return {
-      ...nextParams,
-      builtin_inputs: builtinInputs
-    }
-  }
-
-  function stopStandaloneTaskPolling() {
-    if (standaloneTaskPollTimer !== null) {
-      window.clearTimeout(standaloneTaskPollTimer)
-      standaloneTaskPollTimer = null
-    }
-    standaloneTaskPollTaskId = null
-  }
-
-  function refreshTaskBindings(task: Awaited<ReturnType<typeof getTaskDetail>>['data']) {
-    workflowStore.recordNodeTask(props.nodeId, task)
-    if (props.selectedToolSlug) {
-      workflowStore.recordTask(props.selectedToolSlug, task)
-    }
-  }
-
-  function startStandaloneTaskPolling(taskId: string) {
-    if (standaloneTaskPollTaskId === taskId && standaloneTaskPollTimer !== null) {
-      return
-    }
-
-    stopStandaloneTaskPolling()
-    standaloneTaskPollTaskId = taskId
-
-    const poll = async () => {
-      try {
-        const response = await getTaskDetail(taskId)
-        refreshTaskBindings(response.data)
-
-        if (isTaskTerminalStatus(response.data.status)) {
-          stopStandaloneTaskPolling()
-          if (response.data.status === 'success') {
-            void artifactsStore.fetchArtifacts({ page: 1, page_size: 100 })
-          }
-          return
-        }
-      } catch {
-        // 下次轮询继续尝试，避免瞬时网络错误让节点状态永远停住。
-      }
-
-      standaloneTaskPollTimer = window.setTimeout(poll, STANDALONE_TASK_POLL_INTERVAL_MS)
-    }
-
-    standaloneTaskPollTimer = window.setTimeout(poll, STANDALONE_TASK_POLL_INTERVAL_MS)
-  }
-
   async function runCurrentNode() {
     if (!selectedTool.value || !props.selectedToolSlug) {
       return
     }
 
-    submitting.value = true
-    try {
-      const uploadedFiles = await resolveUploadedFiles()
-      const payload = buildTaskSubmissionPayload({
-        flattenedSchema: flattenedSchema.value,
-        formState,
-        uploadedFiles,
-        executorType: executorType.value
-      })
-      const params = withBuiltinInputs(payload.params, uploadedFiles)
-      const response = await createTask({
-        name: `${selectedTool.value.name} · ${props.nodeId}`,
-        tool_id: selectedTool.value.id,
-        project_id: props.projectId?.trim() || undefined,
-        params,
-        file_ids: payload.fileIds.length > 0 ? payload.fileIds : undefined
-      })
-
-      workflowStore.recordNodeTask(props.nodeId, response.data)
-      workflowStore.recordTask(props.selectedToolSlug, response.data)
-      startStandaloneTaskPolling(response.data.id)
-    } finally {
-      submitting.value = false
-    }
+    await runStandaloneNode({
+      tool: selectedTool.value,
+      selectedToolSlug: props.selectedToolSlug,
+      flattenedSchema: flattenedSchema.value,
+      formState,
+      fileList,
+      selectedArtifacts,
+      executorType: executorType.value,
+      contractArtifactInputs: contractArtifactInputs.value
+    })
   }
 
   function resetForm() {
@@ -459,20 +340,18 @@
   )
 
   watch(
-    () => [currentNodeTask.value?.id ?? null, currentNodeTask.value?.status ?? null] as const,
-    ([taskId, status]) => {
+    () => [currentNodeTask.value?.id ?? null, currentNodeTask.value?.status ?? null, props.selectedToolSlug ?? null] as const,
+    ([taskId, status, selectedToolSlug]) => {
       if (!taskId || !status) {
         return
       }
 
       if (isTaskTerminalStatus(status)) {
-        if (standaloneTaskPollTaskId === taskId) {
-          stopStandaloneTaskPolling()
-        }
+        stopStandaloneTaskPolling()
         return
       }
 
-      startStandaloneTaskPolling(taskId)
+      startStandaloneTaskPolling(taskId, selectedToolSlug ?? undefined)
     },
     { immediate: true }
   )
