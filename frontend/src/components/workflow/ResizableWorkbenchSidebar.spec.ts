@@ -25,7 +25,8 @@ describe('ResizableWorkbenchSidebar', () => {
     window.dispatchEvent(new PointerEvent('pointermove', { clientX: 380 }))
     window.dispatchEvent(new PointerEvent('pointerup'))
 
-    expect(wrapper.emitted('update:width')?.at(-1)).toEqual([380])
+    const widthEvents = wrapper.emitted('update:width') ?? []
+    expect(widthEvents[widthEvents.length - 1]).toEqual([380])
   })
 
   it('uses collapsed width and emits collapsed toggle', async () => {
