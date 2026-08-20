@@ -269,6 +269,7 @@
   import WorkflowToolPalette from '@/components/workflow/WorkflowToolPalette.vue'
   import WorkflowWorkbenchShell from '@/components/workflow/WorkflowWorkbenchShell.vue'
   import { useWorkflowCanvas } from '@/composables/useWorkflowCanvas'
+  import { useWorkflowNodeTaskPolling } from '@/composables/useWorkflowNodeTaskPolling'
   import { useWorkflowPersistence } from '@/composables/useWorkflowPersistence'
   import { useWorkflowWorkbenchLayout } from '@/composables/useWorkflowWorkbenchLayout'
   import {
@@ -415,6 +416,12 @@
         return accumulator
       }, {})
     })
+  })
+
+  useWorkflowNodeTaskPolling({
+    taskByNode: computed(() => workflowStore.taskByNode),
+    recordNodeTask: workflowStore.recordNodeTask,
+    refreshArtifacts: () => artifactsStore.fetchArtifacts({ page: 1, page_size: 100 })
   })
 
   async function handleAgentWorkflowDraft(draft: AiddWorkflowDraft, projectId?: string) {
