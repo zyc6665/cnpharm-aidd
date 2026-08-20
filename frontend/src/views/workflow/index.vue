@@ -177,24 +177,27 @@
             </template>
 
             <template #right>
-              <div class="workflow-results-sidebar-sections">
-            <WorkflowNodeInspector
-              :node="activeNode"
-              :project-id="routeProjectId"
-              :template="editableCanvasPreset"
-              :artifacts="artifactsStore.items"
-              :task-by-node="workflowStore.taskByNode"
-              :available-tools="availableWorkflowTools"
-              :status="activeNode ? nodeStatuses[activeNode.id] : 'idle'"
-              :selected-tool-slug="activeNode ? selectedToolByActiveNode : null"
-              :task="activeNode ? (workflowStore.taskByNode[activeNode.id] ?? null) : null"
-              @select-tool="handleNodeToolSelect"
-              @add-edge="handleAddEdge"
-              @delete-edge="handleDeleteEdge"
-              @run-node="handleRunWorkflowDefinition"
-              @view-task-detail="handleViewTaskDetail"
-            />
+              <WorkflowResultsSidebar>
+                <template #node>
+                  <WorkflowNodeInspector
+                    :node="activeNode"
+                    :project-id="routeProjectId"
+                    :template="editableCanvasPreset"
+                    :artifacts="artifactsStore.items"
+                    :task-by-node="workflowStore.taskByNode"
+                    :available-tools="availableWorkflowTools"
+                    :status="activeNode ? nodeStatuses[activeNode.id] : 'idle'"
+                    :selected-tool-slug="activeNode ? selectedToolByActiveNode : null"
+                    :task="activeNode ? (workflowStore.taskByNode[activeNode.id] ?? null) : null"
+                    @select-tool="handleNodeToolSelect"
+                    @add-edge="handleAddEdge"
+                    @delete-edge="handleDeleteEdge"
+                    @run-node="handleRunWorkflowDefinition"
+                    @view-task-detail="handleViewTaskDetail"
+                  />
+                </template>
 
+                <template #inputs>
                 <WorkflowRunInputPanel
                   :requirements="workflowInputRequirements"
                   :artifact-requirements="workflowInputRequirementDetails"
@@ -205,14 +208,18 @@
                   @auto-fill="autofillWorkflowInputSelections"
                   @select="handleWorkflowInputSelect"
                 />
+                </template>
 
+                <template #preflight>
                 <WorkflowPreflightPanel
                   :preflight="workflowPreflight"
                   :running="workflowStore.isRunningWorkflowDefinition"
                   @run-ready-nodes="handleRunWorkflowDefinition"
                   @select-node="workflowStore.setActiveNode"
                 />
+                </template>
 
+                <template #report>
                 <WorkflowRunStatusPanel
                   v-if="workflowStore.activeWorkflowRun"
                   :run="workflowStore.activeWorkflowRun"
@@ -224,6 +231,14 @@
                   @retry-node="handleRetryWorkflowRunNode"
                 />
 
+                  <WorkflowResultsReportPanel :workflow-name="workflowName" :rows="workflowReportRows" />
+                </template>
+
+                <template #artifacts>
+                  <WorkflowArtifactPanel :selected-tool-slug="activeNode ? selectedToolByActiveNode : null" />
+                </template>
+
+                <template #history>
                 <WorkflowRunHistoryPanel
                   v-if="userStore.isLoggedIn"
                   :runs="workflowStore.workflowRuns"
@@ -236,9 +251,8 @@
                   @refresh="handleRefreshWorkflowRuns"
                   @load-more="handleLoadMoreWorkflowRuns"
                 />
-
-            <WorkflowResultsReportPanel :workflow-name="workflowName" :rows="workflowReportRows" />
-              </div>
+                </template>
+              </WorkflowResultsSidebar>
             </template>
           </WorkflowWorkbenchShell>
         </a-tab-pane>
@@ -257,6 +271,7 @@
   import { useRoute, useRouter } from 'vue-router'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import AiddAgentPanel from '@/components/workflow/AiddAgentPanel.vue'
+  import WorkflowArtifactPanel from '@/components/workflow/WorkflowArtifactPanel.vue'
   import WorkflowNodeInspector from '@/components/workflow/WorkflowNodeInspector.vue'
   import WorkflowNodeStatusBadge from '@/components/workflow/WorkflowNodeStatusBadge.vue'
   import WorkflowPreflightPanel from '@/components/workflow/WorkflowPreflightPanel.vue'
@@ -267,6 +282,7 @@
   import WorkflowCanvasBoard from '@/components/workflow/WorkflowCanvasBoard.vue'
   import WorkflowControlNodePalette from '@/components/workflow/WorkflowControlNodePalette.vue'
   import WorkflowToolPalette from '@/components/workflow/WorkflowToolPalette.vue'
+  import WorkflowResultsSidebar from '@/components/workflow/WorkflowResultsSidebar.vue'
   import WorkflowWorkbenchShell from '@/components/workflow/WorkflowWorkbenchShell.vue'
   import { useWorkflowCanvas } from '@/composables/useWorkflowCanvas'
   import { useWorkflowNodeTaskPolling } from '@/composables/useWorkflowNodeTaskPolling'
@@ -588,23 +604,25 @@
     margin-top: @spacing-md;
   }
 
-  .workflow-results-sidebar-sections {
-    min-height: 0;
-    display: grid;
-    gap: @spacing-md;
-    padding: @spacing-sm;
+  .workflow-workbench :deep(.workflow-results-sidebar) {
+    height: 100%;
   }
 
-  .workflow-results-sidebar-sections :deep(.workflow-node-inspector) {
+  .workflow-workbench :deep(.workflow-node-inspector) {
     max-height: none;
     border-radius: @border-radius-sm;
   }
 
-  .workflow-results-sidebar-sections :deep(.workflow-results-report-panel) {
+  .workflow-workbench :deep(.workflow-results-report-panel) {
     margin-top: 0;
   }
 
-  .workflow-results-sidebar-sections :deep(.workflow-column) {
+  .workflow-workbench :deep(.workflow-run-history-panel),
+  .workflow-workbench :deep(.workflow-run-input-panel) {
+    margin: 0;
+  }
+
+  .workflow-workbench :deep(.workflow-column) {
     min-width: 0;
   }
 
