@@ -622,6 +622,267 @@ def _protein_preparation_metadata(
 
 
 # ======================================================================
+# RDKit properties（平台内置传统 CADD 描述符）
+# ======================================================================
+
+
+_RDKIT_PROPERTY_COLUMNS = [
+    "molecular_weight",
+    "logp",
+    "tpsa",
+    "hbd",
+    "hba",
+    "rotatable_bonds",
+    "heavy_atoms",
+    "qed",
+    "lipinski_violations",
+]
+
+
+class _RDKitDescriptorBackend:
+    def __init__(self) -> None:
+        try:
+            from rdkit import Chem, rdBase
+            from rdkit.Chem import Crippen, Descriptors, QED, rdMolDescriptors
+        except ImportError as exc:  # pragma: no cover - depends on runtime image
+            raise ValidationException("RDKit 未安装，无法执行内置 RDKit 分子属性计算") from exc
+        self._chem = Chem
+        self._crippen = Crippen
+        self._descriptors = Descriptors
+        self._qed = QED
+        self._rd_mol_descriptors = rdMolDescriptors
+        self.name = "RDKit"
+        self.version = rdBase.rdkitVersion
+
+    def molecule_from_smiles(self, smiles: str):
+        return self._chem.MolFromSmiles(smiles)
+
+    def descriptors(self, molecule) -> dict[str, float | int]:
+        values: dict[str, float | int] = {
+            "molecular_weight": float(self._descriptors.MolWt(molecule)),
+            "logp": float(self._crippen.MolLogP(molecule)),
+            "tpsa": float(self._rd_mol_descriptors.CalcTPSA(molecule)),
+            "hbd": int(self._rd_mol_descriptors.CalcNumHBD(molecule)),
+            "hba": int(self._rd_mol_descriptors.CalcNumHBA(molecule)),
+            "rotatable_bonds": int(self._rd_mol_descriptors.CalcNumRotatableBonds(molecule)),
+            "heavy_atoms": int(molecule.GetNumHeavyAtoms()),
+            "qed": float(self._qed.qed(molecule)),
+        }
+        values["lipinski_violations"] = _lipinski_violations(values)
+        return values
+
+
+def _rdkit_descriptor_backend() -> _RDKitDescriptorBackend:
+    return _RDKitDescriptorBackend()
+
+
+def _run_rdkit_properties_tool(
+    files: dict[str, BuiltinToolFile],
+    params: dict[str, Any] | None = None,
+) -> BuiltinToolResult:
+    source_file = (
+        files.get("smiles_csv")
+        or files.get("molecule_table@1")
+        or files.get("molecules")
+    )
+    if not source_file:
+        raise ValidationException("RDKit properties 缺少 smiles_csv 或 molecule_table@1 输入")
+    if not source_file.path.exists() or not source_file.path.is_file():
+        raise ValidationException("RDKit properties 输入文件已被删除")
+
+    params = params if isinstance(params, dict) else {}
+    smiles_field = str(params.get("smiles_field") or "SMILES")
+    molecule_id_field = str(params.get("molecule_id_field") or "")
+    table_content, metadata = _rdkit_properties_csv_content(
+        source_file.path,
+        smiles_field=smiles_field,
+        molecule_id_field=molecule_id_field,
+        backend=_rdkit_descriptor_backend(),
+    )
+    metadata.update(
+        {
+            "source_file_id": source_file.file_id,
+            "source_filename": source_file.filename,
+            "source_task_id": str(params.get("task_id") or source_file.file_id),
+        }
+    )
+    metadata_content = json.dumps(metadata, ensure_ascii=False, indent=2).encode("utf-8")
+    report = {
+        "tool": "builtin-rdkit-properties",
+        "status": "succeeded",
+        "source_file_id": source_file.file_id,
+        "source_filename": source_file.filename,
+        "row_count": metadata["row_count"],
+        "valid_molecule_count": metadata["valid_molecule_count"],
+        "invalid_molecule_count": metadata["invalid_molecule_count"],
+        "backend_name": metadata["backend_name"],
+        "backend_version": metadata["backend_version"],
+    }
+    report_content = json.dumps(report, ensure_ascii=False, indent=2).encode("utf-8")
+
+    table_filename = "rdkit_properties.csv"
+    metadata_filename = "rdkit_properties_metadata.json"
+    report_filename = "rdkit_properties_report.json"
+    return BuiltinToolResult(
+        artifacts=(
+            BuiltinToolArtifact(
+                semantic_type="property_report",
+                filename=table_filename,
+                content=table_content,
+                content_type="text/csv",
+                source_file_id=source_file.file_id,
+            ),
+            BuiltinToolArtifact(
+                semantic_type="property_metadata_json",
+                filename=metadata_filename,
+                content=metadata_content,
+                content_type="application/json",
+                source_file_id=source_file.file_id,
+            ),
+            BuiltinToolArtifact(
+                semantic_type="run_report",
+                filename=report_filename,
+                content=report_content,
+                content_type="application/json",
+                source_file_id=source_file.file_id,
+            ),
+        ),
+        standard_result={
+            "result_version": "aidd.sciminer/result.v2",
+            "artifacts": {
+                "properties": {
+                    "type": "molecule_table@1",
+                    "name": "RDKit molecular properties",
+                    "files": {
+                        "table_file": _standard_output_file_ref(
+                            table_filename,
+                            table_content,
+                            "text/csv",
+                        ),
+                        "metadata_json": _standard_output_file_ref(
+                            metadata_filename,
+                            metadata_content,
+                            "application/json",
+                        ),
+                    },
+                    "metadata": metadata,
+                },
+                "report": {
+                    "type": "run_report@1",
+                    "name": "RDKit properties report",
+                    "files": {
+                        "report_json": _standard_output_file_ref(
+                            report_filename,
+                            report_content,
+                            "application/json",
+                        )
+                    },
+                    "metadata": {"source_task_id": metadata["source_task_id"]},
+                },
+            },
+            "relations": [{"from": "report", "to": "properties", "type": "describes"}],
+            "summary": {
+                "property_table": "properties",
+                "row_count": metadata["row_count"],
+                "valid_molecule_count": metadata["valid_molecule_count"],
+                "invalid_molecule_count": metadata["invalid_molecule_count"],
+            },
+        },
+    )
+
+
+def _rdkit_properties_csv_content(
+    csv_path: Path,
+    *,
+    smiles_field: str,
+    molecule_id_field: str,
+    backend: Any,
+) -> tuple[bytes, dict[str, Any]]:
+    text = csv_path.read_text(encoding="utf-8")
+    reader = csv.DictReader(io.StringIO(text))
+    if reader.fieldnames is None:
+        raise ValidationException("RDKit properties 输入 CSV 缺少表头")
+    fieldnames = list(reader.fieldnames)
+    smiles_column = _resolve_csv_column(fieldnames, smiles_field, fallback="smiles")
+    if smiles_column is None:
+        raise ValidationException("RDKit properties 输入 CSV 缺少 SMILES 列")
+    molecule_id_column = _resolve_molecule_id_column(fieldnames, molecule_id_field)
+    output_fieldnames = [
+        *fieldnames,
+        *[column for column in _RDKIT_PROPERTY_COLUMNS if column not in fieldnames],
+        "rdkit_status",
+    ]
+    rows = list(reader)
+    valid_count = 0
+    invalid_count = 0
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=output_fieldnames, lineterminator="\n")
+    writer.writeheader()
+    for row in rows:
+        output_row = dict(row)
+        smiles = str(row.get(smiles_column) or "").strip()
+        molecule = backend.molecule_from_smiles(smiles) if smiles else None
+        if molecule is None:
+            invalid_count += 1
+            for column in _RDKIT_PROPERTY_COLUMNS:
+                output_row[column] = ""
+            output_row["rdkit_status"] = "invalid_smiles"
+            writer.writerow(output_row)
+            continue
+        descriptors = backend.descriptors(molecule)
+        valid_count += 1
+        for column in _RDKIT_PROPERTY_COLUMNS:
+            output_row[column] = _format_rdkit_property(descriptors[column])
+        output_row["rdkit_status"] = "ok"
+        writer.writerow(output_row)
+
+    metadata = {
+        "molecule_id_field": molecule_id_column,
+        "smiles_field": smiles_column,
+        "row_count": len(rows),
+        "valid_molecule_count": valid_count,
+        "invalid_molecule_count": invalid_count,
+        "property_columns": list(_RDKIT_PROPERTY_COLUMNS),
+        "backend_name": str(backend.name),
+        "backend_version": str(backend.version),
+    }
+    return output.getvalue().encode("utf-8"), metadata
+
+
+def _resolve_csv_column(fieldnames: list[str], preferred: str, *, fallback: str) -> str | None:
+    if preferred and preferred in fieldnames:
+        return preferred
+    lowered = {field.lower(): field for field in fieldnames}
+    return lowered.get(preferred.lower()) or lowered.get(fallback.lower())
+
+
+def _resolve_molecule_id_column(fieldnames: list[str], preferred: str) -> str:
+    if preferred and preferred in fieldnames:
+        return preferred
+    lowered = {field.lower(): field for field in fieldnames}
+    for candidate in ("molecule_id", "id", "name", "smiles"):
+        if candidate in lowered:
+            return lowered[candidate]
+    return fieldnames[0]
+
+
+def _format_rdkit_property(value: float | int) -> str:
+    if isinstance(value, int):
+        return str(value)
+    return f"{value:.4f}"
+
+
+def _lipinski_violations(values: dict[str, float | int]) -> int:
+    checks = (
+        values["molecular_weight"] > 500,
+        values["logp"] > 5,
+        values["hbd"] > 5,
+        values["hba"] > 10,
+    )
+    return sum(1 for failed in checks if failed)
+
+
+# ======================================================================
 # 数据库查询工具（从 CSV / PDB 输入提取参数，调用 database_tools）
 # ======================================================================
 
@@ -881,6 +1142,7 @@ _BUILTIN_TOOL_REGISTRY: dict[str, str] = {
     "builtin-sdf-to-pdb": "sdf_to_pdb",
     "builtin-vina-docking": "vina_docking",
     "builtin-protein-preparation": "protein_preparation",
+    "builtin-rdkit-properties": "rdkit_properties",
     "builtin-query-chembl": "query_chembl",
     "builtin-query-pubchem": "query_pubchem",
     "builtin-query-pdbbind": "query_pdbbind",
@@ -915,6 +1177,8 @@ async def run_builtin_tool(
         return await _run_sync_builtin_handler(_run_vina_docking_tool, files)
     if handler_key == "protein_preparation":
         return await asyncio.to_thread(_run_protein_preparation_tool, files, params)
+    if handler_key == "rdkit_properties":
+        return await asyncio.to_thread(_run_rdkit_properties_tool, files, params)
     if handler_key == "query_chembl":
         return await _run_query_chembl_tool(files)
     if handler_key == "query_pubchem":

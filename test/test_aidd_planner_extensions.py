@@ -62,6 +62,7 @@ class TestMoleculeLevelPlanning:
         )
         step_keys = [step.step_key for step in plan.steps]
         assert "property_prediction" in step_keys
+        assert plan.steps[0].tool_slug == "molp-pc-property-prediction"
 
 
 class TestProteinComplexPlanning:

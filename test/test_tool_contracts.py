@@ -11,7 +11,11 @@ if str(BACKEND_ROOT) not in sys.path:
 from app.agents.aidd.capabilities import AIDD_TOOL_CAPABILITIES
 from app.agents.aidd.plan_schema import parse_model_plan
 from app.agents.aidd.registry import capability_to_tool_summary
-from app.services.tool_contracts import build_tool_contract, collect_tool_contract_validation_errors
+from app.services.tool_contracts import (
+    build_tool_contract,
+    collect_tool_contract_validation_errors,
+    tool_contract_to_agent_summary,
+)
 
 
 def _v2_manifest(*, agent_exposure: bool = True) -> dict:
@@ -200,6 +204,78 @@ def test_tool_package_v2_contract_exposes_standard_artifact_slots_without_mappin
     assert contract["capability"]["outputs"][0]["semantic_type"] == "binding_pocket@1"
     assert contract["capability"]["outputs"][0]["source"] == "artifact"
     assert contract["capability"]["outputs"][0]["match"] == {"type": "binding_pocket@1"}
+
+
+def test_builtin_tool_contract_exposes_configured_standard_artifact_slots():
+    tool = SimpleNamespace(
+        id="tool-rdkit",
+        slug="builtin-rdkit-properties",
+        name="AIDD Rdkit Properties",
+        description="Platform built-in RDKit descriptors",
+        status="published",
+        is_public=False,
+        current_version=SimpleNamespace(
+            id="version-rdkit",
+            version="1.0.0",
+            is_active=True,
+            deprecated=False,
+            config={
+                "type": "builtin",
+                "builtin_slug": "builtin-rdkit-properties",
+                "timeout_sec": 120,
+                "resource_profile": {
+                    "tier": "light",
+                    "cpu": 2,
+                    "memory_mb": 2048,
+                    "gpu": False,
+                },
+                "agent_capability": {
+                    "enabled": True,
+                    "stage": "property_prediction",
+                    "capability": "property_prediction",
+                    "inputs": [
+                        {"semantic_type": "smiles_csv", "field": "smiles_csv", "required": True},
+                    ],
+                    "outputs": [
+                        {
+                            "semantic_type": "property_report",
+                            "source": "output_files",
+                            "required": True,
+                        }
+                    ],
+                    "defaults": {"smiles_field": "SMILES"},
+                },
+                "artifacts": {
+                    "inputs": [
+                        {"name": "molecules", "type": "molecule_table@1", "required": True},
+                    ],
+                    "outputs": [
+                        {"name": "properties", "type": "molecule_table@1", "required": True},
+                        {"name": "report", "type": "run_report@1", "required": False},
+                    ],
+                },
+            },
+        ),
+    )
+
+    contract = build_tool_contract(tool)
+    summary = tool_contract_to_agent_summary(contract)
+
+    assert contract["artifacts"]["inputs"] == [
+        {"name": "molecules", "type": "molecule_table@1", "required": True}
+    ]
+    assert contract["artifacts"]["outputs"] == [
+        {"name": "properties", "type": "molecule_table@1", "cardinality": "one", "required": True},
+        {"name": "report", "type": "run_report@1", "cardinality": "one", "required": False},
+    ]
+    assert summary["artifact_inputs"] == contract["artifacts"]["inputs"]
+    assert summary["artifact_outputs"] == contract["artifacts"]["outputs"]
+    assert summary["resource_profile"] == {
+        "tier": "light",
+        "cpu": 2,
+        "memory_mb": 2048,
+        "gpu": False,
+    }
 
 
 def test_planner_available_tools_use_contract_slug_as_source_of_truth():

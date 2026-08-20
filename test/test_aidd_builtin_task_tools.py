@@ -110,3 +110,28 @@ async def test_ensure_protein_preparation_builtin_declares_standard_artifacts(
     assert config['artifacts']['outputs'] == [
         {'name': 'prepared_protein', 'type': 'protein_structure@1', 'required': True}
     ]
+
+
+@pytest.mark.asyncio
+async def test_ensure_rdkit_properties_builtin_declares_standard_artifacts(
+    db_session: AsyncSession,
+    system_user: User,
+) -> None:
+    from app.services.aidd_builtin_tools import ensure_aidd_builtin_tool
+
+    tool = await ensure_aidd_builtin_tool(
+        db_session,
+        owner_id=system_user.id,
+        tool_slug='builtin-rdkit-properties',
+    )
+
+    config = tool.current_version.config
+    assert config['type'] == 'builtin'
+    assert config['builtin_slug'] == 'builtin-rdkit-properties'
+    assert config['artifacts']['inputs'] == [
+        {'name': 'molecules', 'type': 'molecule_table@1', 'required': True}
+    ]
+    assert config['artifacts']['outputs'] == [
+        {'name': 'properties', 'type': 'molecule_table@1', 'required': True},
+        {'name': 'report', 'type': 'run_report@1', 'required': False},
+    ]

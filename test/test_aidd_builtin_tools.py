@@ -21,6 +21,8 @@ if str(BACKEND_ROOT) not in sys.path:
 from app.agents.aidd import builtin_tools  # noqa: E402
 from app.agents.aidd.capabilities import AIDD_TOOL_CAPABILITIES  # noqa: E402
 from app.common.exceptions import ValidationException  # noqa: E402
+from app.execution.result_parser import parse_standard_result  # noqa: E402
+from app.execution.standard_contracts import DeclaredArtifactOutput  # noqa: E402
 
 
 def test_sdf_to_smiles_csv_uses_molp_compatible_header() -> None:
@@ -39,6 +41,113 @@ def test_placeholder_scientific_capabilities_are_not_executable() -> None:
     }
 
     assert not (placeholder_slugs & set(AIDD_TOOL_CAPABILITIES))
+
+
+def test_rdkit_properties_builtin_emits_property_table_and_standard_result(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    class FakeBackend:
+        name = "FakeRDKit"
+        version = "0.0-test"
+
+        def molecule_from_smiles(self, smiles: str):
+            if smiles == "invalid":
+                return None
+            return {"smiles": smiles}
+
+        def descriptors(self, molecule):
+            smiles = molecule["smiles"]
+            return {
+                "molecular_weight": float(len(smiles) * 10),
+                "logp": 1.5,
+                "tpsa": 20.0,
+                "hbd": 1,
+                "hba": 2,
+                "rotatable_bonds": 3,
+                "heavy_atoms": len(smiles),
+                "qed": 0.7,
+                "lipinski_violations": 0,
+            }
+
+    monkeypatch.setattr(builtin_tools, "_rdkit_descriptor_backend", lambda: FakeBackend())
+    csv_path = tmp_path / "molecules.csv"
+    csv_path.write_text(
+        "molecule_id,SMILES\nethanol,CCO\nbad,invalid\n",
+        encoding="utf-8",
+    )
+
+    result = builtin_tools._run_rdkit_properties_tool(
+        {
+            "smiles_csv": builtin_tools.BuiltinToolFile(
+                file_id="file-smiles",
+                filename="molecules.csv",
+                path=csv_path,
+                content_type="text/csv",
+            )
+        }
+    )
+
+    artifacts = {artifact.filename: artifact for artifact in result.artifacts}
+    assert "rdkit_properties.csv" in artifacts
+    rows = list(csv.DictReader(io.StringIO(artifacts["rdkit_properties.csv"].content.decode("utf-8"))))
+    assert rows[0]["molecular_weight"] == "30.0000"
+    assert rows[0]["rdkit_status"] == "ok"
+    assert rows[1]["rdkit_status"] == "invalid_smiles"
+    assert result.standard_result is not None
+    assert result.standard_result["result_version"] == "aidd.sciminer/result.v2"
+    properties = result.standard_result["artifacts"]["properties"]
+    assert properties["type"] == "molecule_table@1"
+    assert properties["metadata"]["valid_molecule_count"] == 1
+    assert properties["metadata"]["invalid_molecule_count"] == 1
+
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    for artifact in result.artifacts:
+        (output_dir / artifact.filename).write_bytes(artifact.content)
+    (output_dir / "result.json").write_text(
+        json.dumps(result.standard_result, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    parsed = parse_standard_result(
+        result_path=output_dir / "result.json",
+        output_dir=output_dir,
+        declared_outputs=[
+            DeclaredArtifactOutput(name="properties", type="molecule_table@1"),
+            DeclaredArtifactOutput(name="report", type="run_report@1", required=False),
+        ],
+    )
+    assert [artifact.output_name for artifact in parsed.artifacts] == ["properties", "report"]
+
+
+@pytest.mark.asyncio
+async def test_run_builtin_tool_routes_rdkit_properties(monkeypatch, tmp_path: Path) -> None:
+    csv_path = tmp_path / "molecules.csv"
+    csv_path.write_text("SMILES,id\nCCO,mol_1\n", encoding="utf-8")
+    called: dict[str, object] = {}
+
+    def fake_handler(files, params=None):
+        called["files"] = files
+        called["params"] = params
+        return builtin_tools.BuiltinToolResult()
+
+    monkeypatch.setattr(builtin_tools, "_run_rdkit_properties_tool", fake_handler)
+
+    await builtin_tools.run_builtin_tool(
+        "builtin-rdkit-properties",
+        {
+            "smiles_csv": builtin_tools.BuiltinToolFile(
+                file_id="file-smiles",
+                filename="molecules.csv",
+                path=csv_path,
+                content_type="text/csv",
+            )
+        },
+        params={"smiles_field": "SMILES"},
+    )
+
+    assert "smiles_csv" in called["files"]
+    assert called["params"] == {"smiles_field": "SMILES"}
 
 
 @pytest.mark.asyncio

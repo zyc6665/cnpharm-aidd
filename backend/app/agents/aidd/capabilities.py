@@ -228,6 +228,31 @@ AIDD_TOOL_CAPABILITIES: dict[str, ToolCapability] = {
         ),
         defaults={"device": "cpu"},
     ),
+    "builtin-rdkit-properties": ToolCapability(
+        tool_slug="builtin-rdkit-properties",
+        capability="property_prediction",
+        stage="property_prediction",
+        inputs=(
+            CapabilityInput(
+                "smiles_csv",
+                "smiles_csv",
+                accepted_extensions=(".csv",),
+            ),
+        ),
+        outputs=(
+            CapabilityOutput(
+                "property_report",
+                "output_files",
+                OutputMatch(
+                    extension=".csv",
+                    filename_contains_any=("rdkit", "properties"),
+                    content_type="text/csv",
+                ),
+            ),
+        ),
+        defaults={"smiles_field": "SMILES", "device": "cpu"},
+        virtual=True,
+    ),
     "msign-affinity-prediction": ToolCapability(
         tool_slug="msign-affinity-prediction",
         capability="affinity_prediction",

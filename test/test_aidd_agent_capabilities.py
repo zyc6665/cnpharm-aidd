@@ -24,6 +24,7 @@ def test_first_wave_capabilities_are_registered() -> None:
     assert get_capability("builtin-sdf-to-smiles-csv").capability == "format_conversion"
     assert get_capability("builtin-sdf-to-pdb").capability == "format_conversion"
     assert get_capability("builtin-vina-docking").capability == "docking_scoring"
+    assert get_capability("builtin-rdkit-properties").capability == "property_prediction"
     assert get_capability("molp-pc-property-prediction").capability == "property_prediction"
     assert get_capability("msign-affinity-prediction").capability == "affinity_prediction"
 
@@ -59,6 +60,12 @@ def test_capabilities_advertise_semantic_inputs_and_outputs() -> None:
     assert [item.semantic_type for item in vina.inputs] == ["protein_pdb", "ligand_pdb"]
     assert [item.semantic_type for item in vina.outputs] == ["docking_report", "ranking_csv"]
 
+    rdkit = get_capability("builtin-rdkit-properties")
+    assert rdkit.virtual is True
+    assert rdkit.stage == "property_prediction"
+    assert [item.semantic_type for item in rdkit.inputs] == ["smiles_csv"]
+    assert [item.semantic_type for item in rdkit.outputs] == ["property_report"]
+
 
 def test_capability_lookup_by_output() -> None:
     capabilities = get_capabilities_by_output("generated_ligand")
@@ -72,3 +79,9 @@ def test_capability_lookup_by_output() -> None:
 
     ranking_capabilities = get_capabilities_by_output("ranking_csv")
     assert [item.tool_slug for item in ranking_capabilities] == ["builtin-vina-docking"]
+
+    property_capabilities = get_capabilities_by_output("property_report")
+    assert [item.tool_slug for item in property_capabilities] == [
+        "molp-pc-property-prediction",
+        "builtin-rdkit-properties",
+    ]

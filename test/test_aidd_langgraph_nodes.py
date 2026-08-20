@@ -45,6 +45,7 @@ def test_discover_tools_filters_configured_slugs():
         "builtin-sdf-to-smiles-csv",
         "builtin-sdf-to-pdb",
         "builtin-vina-docking",
+        "builtin-rdkit-properties",
         "builtin-query-chembl",
         "builtin-query-pubchem",
         "builtin-query-pdbbind",

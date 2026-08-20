@@ -36,6 +36,7 @@ def build_tool_contract(tool: Any, *, capability: Any | None = None) -> dict[str
             "input": _schema_object(config.get("input_schema")),
             "output": _schema_object(config.get("output_schema")),
         },
+        "artifacts": _artifacts_contract(config.get("artifacts")),
         "capability": _capability_contract(
             raw_capability=config.get("agent_capability"),
             capability=capability,
@@ -346,6 +347,16 @@ def _resource_profile_contract(value: Any) -> dict[str, Any]:
 
 def _schema_object(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
+
+
+def _artifacts_contract(value: Any) -> dict[str, Any]:
+    artifacts = value if isinstance(value, dict) else {}
+    inputs = [item for item in artifacts.get("inputs", []) if isinstance(item, dict)]
+    outputs = [item for item in artifacts.get("outputs", []) if isinstance(item, dict)]
+    return {
+        "inputs": [_artifact_input_slot(item) for item in inputs],
+        "outputs": [_artifact_output_slot(item) for item in outputs],
+    }
 
 
 def _package_manifest_from_version(current_version: Any | None) -> dict[str, Any] | None:

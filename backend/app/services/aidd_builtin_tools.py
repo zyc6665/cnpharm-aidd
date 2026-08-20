@@ -64,6 +64,23 @@ def _capability_config(tool_slug: str) -> dict:
                 {"name": "prepared_protein", "type": "protein_structure@1", "required": True},
             ],
         }
+    if tool_slug == "builtin-rdkit-properties":
+        config["timeout_sec"] = 120
+        config["resource_profile"] = {
+            "tier": "light",
+            "cpu": 2,
+            "memory_mb": 2048,
+            "gpu": False,
+        }
+        config["artifacts"] = {
+            "inputs": [
+                {"name": "molecules", "type": "molecule_table@1", "required": True},
+            ],
+            "outputs": [
+                {"name": "properties", "type": "molecule_table@1", "required": True},
+                {"name": "report", "type": "run_report@1", "required": False},
+            ],
+        }
     return config
 
 

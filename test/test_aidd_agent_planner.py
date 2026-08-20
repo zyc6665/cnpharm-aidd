@@ -59,6 +59,7 @@ def test_property_prediction_can_be_appended_when_requested() -> None:
     ]
     assert plan.steps[2].tool_slug == "builtin-sdf-to-smiles-csv"
     assert plan.steps[2].inputs == {"generated_ligand": "step:molecule_generation:generated_ligand"}
+    assert plan.steps[3].tool_slug == "molp-pc-property-prediction"
     assert plan.steps[3].depends_on == ["sdf_to_smiles"]
     assert plan.steps[3].inputs == {"smiles_csv": "step:sdf_to_smiles:smiles_csv"}
 
