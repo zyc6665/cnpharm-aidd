@@ -1,4 +1,5 @@
 import { getToken as getStoredToken } from './auth-storage.ts'
+import request, { type RequestOptions } from '@/api/request'
 
 interface ObjectUrlApi {
   createObjectURL(blob: Blob): string
@@ -36,6 +37,8 @@ interface ProtectedObjectUrlResource {
   revoke: () => void
 }
 
+const API_PREFIX = '/api/v1'
+
 const defaultObjectUrlApi: ObjectUrlApi = {
   createObjectURL(blob) {
     return URL.createObjectURL(blob)
@@ -54,30 +57,39 @@ const defaultDownloadDomApi: DownloadDomApi = {
   }
 }
 
-async function fetchProtectedFileBlob(url: string, headers: Record<string, string>): Promise<Blob> {
-  const response = await fetch(url, {
-    headers
-  })
-
-  if (!response.ok) {
-    const detail = await response.text()
-    throw new Error(detail || `文件访问失败 (${response.status})`)
+function normalizeProtectedRequestUrl(url: string): string {
+  try {
+    const parsedUrl = new URL(url, typeof window === 'undefined' ? 'http://localhost' : window.location.origin)
+    if (parsedUrl.pathname.startsWith(API_PREFIX)) {
+      return `${parsedUrl.pathname.slice(API_PREFIX.length) || '/'}${parsedUrl.search}${parsedUrl.hash}`
+    }
+  } catch {
+    if (url.startsWith(API_PREFIX)) {
+      return url.slice(API_PREFIX.length) || '/'
+    }
   }
 
-  return await response.blob()
+  return url
+}
+
+async function fetchProtectedFileBlob(url: string, headers: Record<string, string>): Promise<Blob> {
+  const config: RequestOptions = {
+    headers,
+    responseType: 'blob',
+    silent: true,
+  }
+
+  return await request.get(normalizeProtectedRequestUrl(url), config) as unknown as Blob
 }
 
 async function fetchProtectedTextContent(url: string, headers: Record<string, string>): Promise<string> {
-  const response = await fetch(url, {
-    headers
-  })
-
-  if (!response.ok) {
-    const detail = await response.text()
-    throw new Error(detail || `文件访问失败 (${response.status})`)
+  const config: RequestOptions = {
+    headers,
+    responseType: 'text',
+    silent: true,
   }
 
-  return await response.text()
+  return await request.get(normalizeProtectedRequestUrl(url), config) as unknown as string
 }
 
 function resolveDownloadName(file: ProtectedFileReference): string {
