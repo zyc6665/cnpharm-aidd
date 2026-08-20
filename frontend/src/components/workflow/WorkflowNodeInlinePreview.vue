@@ -35,6 +35,7 @@
             title="放大查看"
             aria-label="放大查看"
             data-placement="top-left"
+            data-appearance="light"
             @click.stop="previewOpen = true"
             @pointerdown.stop
           >
@@ -194,20 +195,21 @@ const visualizationTask = computed(() => ({
   align-items: center;
   justify-content: center;
   padding: 0;
-  border-color: rgba(59, 130, 246, 0.28);
-  background: rgba(9, 9, 11, 0.82);
-  color: @text-color-light-primary;
+  border-color: rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.94);
+  color: #1d4ed8;
   font-size: @font-size-xs;
   font-weight: 800;
   backdrop-filter: blur(8px);
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.18);
   pointer-events: auto;
 }
 
 .inline-preview-expand-button:hover,
 .inline-preview-expand-button:focus-visible {
   border-color: @accent-color;
-  color: @accent-color-hover;
+  background: #fff;
+  color: @accent-color-active;
 }
 
 .inline-preview-success :deep(.result-visualization-panel) {
