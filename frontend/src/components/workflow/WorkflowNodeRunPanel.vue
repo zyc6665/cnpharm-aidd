@@ -68,12 +68,14 @@
   import { getToolDetail } from '@/api/tools'
   import { useUserStore, useWorkflowStore } from '@/stores'
   import { useStandaloneNodeRun } from '@/composables/useStandaloneNodeRun'
-  import type { ArtifactFile, Tool, ToolSchema } from '@/types/models'
+  import type { ArtifactFile, SchemaProperty, Tool, ToolSchema } from '@/types/models'
   import {
     buildToolFormInitialState,
-    flattenToolInputSchema
+    flattenToolInputSchema,
+    isFileSchemaProperty
   } from '@/domain/tools'
   import type { WorkflowNodeArtifactRecommendation } from '@/workflow/canvas-artifacts'
+  import { normalizeWorkflowSemanticType } from '@/workflow/semantic-types'
 
   interface WorkflowAvailableTool {
     id?: string
@@ -115,7 +117,7 @@
   const formState = reactive<Record<string, unknown>>({})
   const fileList = reactive<Record<string, UploadFile[]>>({})
   const selectedArtifacts = reactive<Record<string, ArtifactFile | undefined>>({})
-  const autoBoundArtifacts = ref<ArtifactFile[]>([])
+  const autoBoundArtifactByField = reactive<Record<string, ArtifactFile | undefined>>({})
   let detailRequestToken = 0
 
   const selectedToolSummary = computed(() => {
@@ -170,6 +172,27 @@
     }
   })
 
+  const fileFieldKeys = computed(() =>
+    Object.entries(flattenedSchema.value.properties)
+      .filter(([, prop]) => isFileSchemaProperty(prop))
+      .map(([key]) => key)
+  )
+
+  const recommendedArtifactSignature = computed(() =>
+    (props.recommendedArtifacts ?? [])
+      .map(recommendation => [
+        recommendation.edgeId,
+        recommendation.sourceNodeId,
+        recommendation.semanticType,
+        recommendation.artifact?.id ?? ''
+      ].join(':'))
+      .join('|')
+  )
+
+  const autoBoundArtifacts = computed(() =>
+    Object.values(autoBoundArtifactByField).filter((artifact): artifact is ArtifactFile => Boolean(artifact))
+  )
+
   function replaceFormState(nextState: Record<string, unknown>) {
     for (const key of Object.keys(formState)) {
       delete formState[key]
@@ -195,30 +218,122 @@
       delete selectedArtifacts[key]
     }
 
+    for (const key of Object.keys(autoBoundArtifactByField)) {
+      delete autoBoundArtifactByField[key]
+    }
+
     for (const key of nextKeys) {
       selectedArtifacts[key] = undefined
     }
   }
 
+  function normalizeSemanticToken(value?: string | null): string {
+    return String(normalizeWorkflowSemanticType(String(value ?? '').trim())).trim().toLowerCase()
+  }
+
+  function normalizeFieldToken(value?: string | null): string {
+    return String(value ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  }
+
+  function fieldLooksCompatibleWithSemantic(fieldKey: string, prop: SchemaProperty, semanticType: string) {
+    const targetSemanticType = normalizeSemanticToken(semanticType)
+    const directCandidates = [fieldKey, prop._originalKey]
+      .filter((candidate): candidate is string => Boolean(candidate))
+
+    if (directCandidates.some(candidate => normalizeSemanticToken(candidate) === targetSemanticType)) {
+      return true
+    }
+
+    const fieldText = [fieldKey, prop._originalKey, prop.title, prop.description]
+      .map(value => normalizeFieldToken(value))
+      .filter(Boolean)
+      .join(' ')
+
+    if (!fieldText) {
+      return false
+    }
+
+    if (targetSemanticType === 'protein_structure@1') {
+      return /\b(protein|receptor)\b/.test(fieldText)
+    }
+
+    if (targetSemanticType === 'binding_pocket@1') {
+      return /\b(pocket|binding)\b/.test(fieldText)
+    }
+
+    if (targetSemanticType === 'ligand_structure@1') {
+      return /\b(ligand|sdf|mol2?|smiles)\b/.test(fieldText)
+    }
+
+    if (targetSemanticType === 'molecule_table@1') {
+      return /\b(molecule|table|csv|smiles)\b/.test(fieldText)
+    }
+
+    if (targetSemanticType === 'run_report@1') {
+      return /\b(report|metadata|json)\b/.test(fieldText)
+    }
+
+    return fieldText.includes(normalizeFieldToken(targetSemanticType))
+  }
+
+  function pickRecommendedArtifactForField(
+    fileFieldKey: string,
+    usedArtifactIds: Set<string>
+  ): ArtifactFile | null {
+    const recommendations = (props.recommendedArtifacts ?? [])
+      .filter(recommendation => recommendation.artifact && !usedArtifactIds.has(recommendation.artifact.id))
+
+    if (recommendations.length === 0) {
+      return null
+    }
+
+    const prop = flattenedSchema.value.properties[fileFieldKey]
+    if (!prop) {
+      return null
+    }
+
+    const matchedRecommendation = recommendations.find(recommendation =>
+      fieldLooksCompatibleWithSemantic(fileFieldKey, prop, recommendation.semanticType)
+    )
+
+    if (matchedRecommendation?.artifact) {
+      return matchedRecommendation.artifact
+    }
+
+    return recommendations.length === 1 ? recommendations[0]?.artifact ?? null : null
+  }
+
   function applyRecommendedArtifacts(fileFieldKeys: string[]) {
-    autoBoundArtifacts.value = []
-    const availableArtifacts = (props.recommendedArtifacts ?? [])
-      .map(recommendation => recommendation.artifact)
-      .filter((artifact): artifact is ArtifactFile => Boolean(artifact))
-
-    if (!availableArtifacts.length || !fileFieldKeys.length) {
+    if (!fileFieldKeys.length) {
       return
     }
 
-    const firstFileKey = fileFieldKeys[0]!
-    if (formState[firstFileKey] || selectedArtifacts[firstFileKey]) {
-      return
-    }
+    const usedArtifactIds = new Set(
+      Object.values(selectedArtifacts)
+        .filter((artifact): artifact is ArtifactFile => Boolean(artifact))
+        .map(artifact => artifact.id)
+    )
 
-    const artifact = availableArtifacts[0]!
-    selectedArtifacts[firstFileKey] = artifact
-    formState[firstFileKey] = artifact.id
-    autoBoundArtifacts.value = [artifact]
+    for (const fileFieldKey of fileFieldKeys) {
+      if (selectedArtifacts[fileFieldKey] || fileList[fileFieldKey]?.length) {
+        continue
+      }
+
+      const artifact = pickRecommendedArtifactForField(fileFieldKey, usedArtifactIds)
+      if (!artifact) {
+        continue
+      }
+
+      selectedArtifacts[fileFieldKey] = artifact
+      formState[fileFieldKey] = artifact.id
+      autoBoundArtifactByField[fileFieldKey] = artifact
+      usedArtifactIds.add(artifact.id)
+    }
   }
 
   function applyInitialFormState(resetDraft = false) {
@@ -237,11 +352,13 @@
   function handleFileListChange(key: string, files: UploadFile[]) {
     fileList[key] = files
     selectedArtifacts[key] = undefined
+    autoBoundArtifactByField[key] = undefined
     formState[key] = files[0]?.uid ?? files[0]?.name
   }
 
   function handleArtifactSelection(key: string, artifact: ArtifactFile | null) {
     selectedArtifacts[key] = artifact ?? undefined
+    autoBoundArtifactByField[key] = undefined
     formState[key] = artifact?.id
     if (artifact) {
       fileList[key] = []
@@ -329,6 +446,11 @@
     () => [props.nodeId, props.selectedToolSlug, flattenedSchema.value] as const,
     () => applyInitialFormState(),
     { immediate: true }
+  )
+
+  watch(
+    () => [props.nodeId, props.selectedToolSlug, recommendedArtifactSignature.value, fileFieldKeys.value.join('|')] as const,
+    () => applyRecommendedArtifacts(fileFieldKeys.value)
   )
 
   watch(

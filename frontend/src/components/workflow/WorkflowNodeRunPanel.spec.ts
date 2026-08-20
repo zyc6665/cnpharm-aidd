@@ -134,6 +134,60 @@ function mockProteinPreparationToolDetail() {
   } as never)
 }
 
+function mockLvpocketToolDetail() {
+  vi.mocked(getToolDetail).mockResolvedValue({
+    code: 200,
+    message: 'ok',
+    data: {
+      id: 'tool-lvpocket',
+      slug: 'lvpocket-pocket-prediction',
+      name: 'LVpocket Pocket Prediction',
+      description: 'Predict protein binding pockets from a PDB structure',
+      status: 'published',
+      is_public: true,
+      tags: [],
+      usage_count: 0,
+      view_count: 0,
+      favorite_count: 0,
+      gpu_required: true,
+      created_at: '2026-08-20T00:00:00Z',
+      current_version: {
+        id: 'version-lvpocket',
+        tool_id: 'tool-lvpocket',
+        version: '1.0.0',
+        config: {
+          type: 'ssh_job',
+          input_schema: {
+            type: 'object',
+            properties: {
+              protein_pdb: {
+                type: 'string',
+                format: 'file',
+                title: 'Protein PDB',
+                'ui:accept': '.pdb'
+              },
+              model_choice: {
+                type: 'string',
+                default: 'auto',
+                enum: ['auto', 'all_scpdb']
+              },
+              device: {
+                type: 'string',
+                default: 'auto',
+                enum: ['auto', 'gpu', 'cpu']
+              }
+            },
+            required: ['protein_pdb']
+          }
+        },
+        is_active: true,
+        deprecated: false,
+        created_at: '2026-08-20T00:00:00Z'
+      }
+    }
+  } as never)
+}
+
 describe('WorkflowNodeRunPanel', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -290,6 +344,81 @@ describe('WorkflowNodeRunPanel', () => {
       project_id: 'project-1',
       params: { builtin_inputs: { 'protein_structure@1': 'file-protein' } },
       file_ids: ['file-protein']
+    })
+  })
+
+  it('上游推荐产物异步到达后，SSH 节点独立运行应自动绑定到文件入参', async () => {
+    mockLvpocketToolDetail()
+    vi.mocked(createTask).mockResolvedValue({
+      code: 200,
+      message: 'ok',
+      data: {
+        id: 'task-lvpocket',
+        name: 'LVpocket Pocket Prediction',
+        tool_id: 'tool-lvpocket',
+        tool_slug: 'lvpocket-pocket-prediction',
+        status: 'pending',
+        progress: 0,
+        created_at: '2026-08-20T00:00:00Z'
+      }
+    } as never)
+
+    const wrapper = mount(WorkflowNodeRunPanel, {
+      props: {
+        nodeId: 'lvpocket-node',
+        projectId: 'project-1',
+        selectedToolSlug: 'lvpocket-pocket-prediction',
+        availableTools: [
+          {
+            id: 'tool-lvpocket',
+            slug: 'lvpocket-pocket-prediction',
+            name: 'LVpocket Pocket Prediction'
+          }
+        ],
+        recommendedArtifacts: []
+      },
+      global: { plugins: [i18n], stubs }
+    })
+
+    await flushPromises()
+
+    await wrapper.setProps({
+      recommendedArtifacts: [
+        {
+          edgeId: 'edge-fetch-pdb-to-lvpocket',
+          sourceNodeId: 'fetch-pdb-node',
+          semanticType: 'protein_structure@1',
+          artifact: {
+            id: 'file-pdb',
+            filename: '1A2B.pdb',
+            content_type: 'chemical/x-pdb',
+            size_bytes: 1024,
+            source_type: 'artifact',
+            download_url: '/api/v1/files/file-pdb/download',
+            task_id: 'task-fetch-pdb',
+            tool_id: 'tool-fetch-pdb',
+            tool_name: 'Fetch PDB Structure',
+            tool_slug: 'builtin-fetch-pdb',
+            semantic_type: 'protein_structure@1',
+            created_at: '2026-08-20T00:01:00Z'
+          }
+        }
+      ]
+    })
+    await flushPromises()
+
+    await wrapper.find('[data-testid="run-current-node"]').trigger('click')
+    await flushPromises()
+
+    expect(createTask).toHaveBeenCalledWith({
+      name: 'LVpocket Pocket Prediction · lvpocket-node',
+      tool_id: 'tool-lvpocket',
+      project_id: 'project-1',
+      params: {
+        input_files: { protein_pdb: 'input/1A2B.pdb' },
+        params: { model_choice: 'auto', device: 'auto' }
+      },
+      file_ids: ['file-pdb']
     })
   })
 

@@ -2,6 +2,7 @@ import type { WorkflowArtifactSemanticType, WorkflowTaskRef } from './artifact-t
 import type { WorkflowCanvasPreset } from './canvas-types.ts'
 import type { ArtifactFile } from '../types/models.d.ts'
 import { formatWorkflowKey } from './i18n-utils.ts'
+import { normalizeWorkflowSemanticType } from './semantic-types.ts'
 import { sortArtifactsByCreatedAtDesc } from '../utils/artifact-sorting.ts'
 
 export interface WorkflowNodeInputRequirement {
@@ -52,13 +53,43 @@ export function recommendArtifactsForNode(input: {
 
     return {
       ...requirement,
-      artifact: findLatestArtifactForTask(input.artifacts, sourceTask.id)
+      artifact: findLatestArtifactForTask(input.artifacts, sourceTask.id, requirement.semanticType)
     }
   })
 }
 
-function findLatestArtifactForTask(artifacts: ArtifactFile[], taskId: string): ArtifactFile | null {
-  return sortArtifactsByCreatedAtDesc(artifacts.filter(artifact => artifact.task_id === taskId))[0] ?? null
+function normalizeSemanticType(value?: string | null): string {
+  const normalized = normalizeWorkflowSemanticType(String(value ?? '').trim())
+  return String(normalized).trim().toLowerCase()
+}
+
+function isArtifactSemanticMatch(artifact: ArtifactFile, semanticType: WorkflowArtifactSemanticType): boolean {
+  const artifactSemanticType = normalizeSemanticType(artifact.semantic_type)
+  if (!artifactSemanticType) {
+    return false
+  }
+
+  return artifactSemanticType === normalizeSemanticType(semanticType)
+}
+
+function findLatestArtifactForTask(
+  artifacts: ArtifactFile[],
+  taskId: string,
+  semanticType: WorkflowArtifactSemanticType
+): ArtifactFile | null {
+  const taskArtifacts = artifacts.filter(artifact => artifact.task_id === taskId)
+  const semanticMatches = taskArtifacts.filter(artifact => isArtifactSemanticMatch(artifact, semanticType))
+
+  if (semanticMatches.length > 0) {
+    return sortArtifactsByCreatedAtDesc(semanticMatches)[0] ?? null
+  }
+
+  const hasTypedArtifacts = taskArtifacts.some(artifact => Boolean(artifact.semantic_type?.trim()))
+  if (hasTypedArtifacts) {
+    return null
+  }
+
+  return sortArtifactsByCreatedAtDesc(taskArtifacts)[0] ?? null
 }
 
 export function suggestWorkflowEdgesForNode(input: {
