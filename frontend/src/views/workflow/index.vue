@@ -211,6 +211,7 @@
 
             <WorkflowNodeInspector
               :node="activeNode"
+              :project-id="routeProjectId"
               :template="editableCanvasPreset"
               :artifacts="artifactsStore.items"
               :task-by-node="workflowStore.taskByNode"

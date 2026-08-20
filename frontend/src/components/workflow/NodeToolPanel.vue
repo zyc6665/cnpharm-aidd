@@ -16,6 +16,7 @@
     <div class="section-title">{{ t('workflow.inspector.nodeParameters') }}</div>
     <WorkflowNodeRunPanel
       :node-id="node.id"
+      :project-id="projectId"
       :selected-tool-slug="selectedToolSlug"
       :available-tools="availableTools"
       :recommended-artifacts="recommendedArtifacts"
@@ -33,6 +34,7 @@ import WorkflowNodeRunPanel from './WorkflowNodeRunPanel.vue'
 interface WorkflowAvailableTool { id?: string; slug: string; name: string; description?: string }
 const props = defineProps<{
   node: WorkflowCanvasNode
+  projectId?: string | null
   selectedToolSlug?: string | null
   availableTools?: WorkflowAvailableTool[]
   recommendedArtifacts: WorkflowNodeArtifactRecommendation[]

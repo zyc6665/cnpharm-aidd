@@ -21,7 +21,7 @@
             :file-list="fileList"
             :selected-artifacts="selectedArtifacts"
             :allow-artifacts="userStore.isLoggedIn"
-            :allow-uploads="false"
+            :allow-uploads="true"
             :tool-id="selectedTool?.id"
             :tool-slug="selectedTool?.slug"
             :preferred-tool-slug="selectedTool?.slug"
@@ -36,6 +36,15 @@
           </div>
 
           <div class="node-run-actions">
+            <a-button
+              type="primary"
+              data-testid="run-current-node"
+              :loading="submitting"
+              :disabled="!selectedTool || !selectedToolSlug"
+              @click="runCurrentNode"
+            >
+              运行当前节点
+            </a-button>
             <a-button @click="resetForm">Reset</a-button>
           </div>
         </a-form>
@@ -55,10 +64,13 @@
   import type { FormInstance } from 'ant-design-vue/es/form'
   import type { UploadFile } from 'ant-design-vue'
   import ToolParameterForm from '@/components/workflow/ToolParameterForm.vue'
+  import { uploadFile } from '@/api/files'
+  import { createTask } from '@/api/tasks'
   import { getToolDetail } from '@/api/tools'
   import { useUserStore, useWorkflowStore } from '@/stores'
   import type { ArtifactFile, Tool, ToolSchema } from '@/types/models'
   import {
+    buildTaskSubmissionPayload,
     buildToolFormInitialState,
     flattenToolInputSchema
   } from '@/domain/tools'
@@ -71,8 +83,15 @@
     description?: string
   }
 
+  interface ContractArtifactInput {
+    name: string
+    type: string
+    required?: boolean
+  }
+
   const props = defineProps<{
     nodeId: string
+    projectId?: string | null
     selectedToolSlug?: string | null
     availableTools?: WorkflowAvailableTool[]
     recommendedArtifacts?: WorkflowNodeArtifactRecommendation[]
@@ -89,6 +108,7 @@
   const fileList = reactive<Record<string, UploadFile[]>>({})
   const selectedArtifacts = reactive<Record<string, ArtifactFile | undefined>>({})
   const autoBoundArtifacts = ref<ArtifactFile[]>([])
+  const submitting = ref(false)
   let detailRequestToken = 0
 
   const selectedToolSummary = computed(() => {
@@ -99,11 +119,37 @@
     return props.availableTools?.find(tool => tool.slug === props.selectedToolSlug) ?? null
   })
 
+  const contractArtifactInputs = computed<ContractArtifactInput[]>(() =>
+    selectedTool.value?.contract?.artifacts?.inputs ?? []
+  )
+
   const inputSchema = computed<ToolSchema | undefined>(() => {
     const config = selectedTool.value?.current_version?.config
     if (config && typeof config === 'object' && 'input_schema' in config) {
-      return config.input_schema as ToolSchema
+      const schema = config.input_schema as ToolSchema
+      if (schema?.properties && Object.keys(schema.properties).length > 0) {
+        return schema
+      }
     }
+
+    if (contractArtifactInputs.value.length > 0) {
+      return buildArtifactInputSchema(contractArtifactInputs.value)
+    }
+
+    return undefined
+  })
+
+  const executorType = computed(() => {
+    const contractExecutorType = selectedTool.value?.contract?.executor?.type
+    if (contractExecutorType) {
+      return contractExecutorType
+    }
+
+    const config = selectedTool.value?.current_version?.config
+    if (config && typeof config === 'object' && 'type' in config) {
+      return String(config.type)
+    }
+
     return undefined
   })
 
@@ -190,6 +236,122 @@
     formState[key] = artifact?.id
     if (artifact) {
       fileList[key] = []
+    }
+  }
+
+  function buildArtifactInputSchema(artifactInputs: ContractArtifactInput[]): ToolSchema {
+    const properties: ToolSchema['properties'] = {}
+    const required: string[] = []
+
+    for (const input of artifactInputs) {
+      properties[input.name] = {
+        type: 'file',
+        title: input.name,
+        description: `标准产物类型：${input.type}`,
+        format: 'file'
+      }
+
+      if (input.required) {
+        required.push(input.name)
+      }
+    }
+
+    return {
+      type: 'object',
+      properties,
+      required
+    }
+  }
+
+  async function resolveUploadedFiles() {
+    const uploadedFiles: Record<string, { fileId: string; filename: string; downloadUrl: string } | undefined> = {}
+
+    for (const [key, artifact] of Object.entries(selectedArtifacts)) {
+      if (!artifact) {
+        continue
+      }
+
+      uploadedFiles[key] = {
+        fileId: artifact.id,
+        filename: artifact.filename,
+        downloadUrl: artifact.download_url
+      }
+    }
+
+    for (const [key, files] of Object.entries(fileList)) {
+      const file = files[0]?.originFileObj as File | undefined
+      if (!file) {
+        continue
+      }
+
+      const response = await uploadFile(file)
+      const fileId = String(response.data.id)
+      uploadedFiles[key] = {
+        fileId,
+        filename: response.data.filename,
+        downloadUrl: response.data.url ?? `/api/v1/files/${fileId}/download`
+      }
+    }
+
+    return uploadedFiles
+  }
+
+  function withBuiltinInputs(
+    params: Record<string, unknown>,
+    uploadedFiles: Record<string, { fileId: string; filename: string; downloadUrl: string } | undefined>
+  ) {
+    if (executorType.value !== 'builtin' || contractArtifactInputs.value.length === 0) {
+      return params
+    }
+
+    const builtinInputs: Record<string, string> = {}
+    const nextParams = { ...params }
+    for (const input of contractArtifactInputs.value) {
+      delete nextParams[input.name]
+
+      const uploadedFile = uploadedFiles[input.name]
+      if (uploadedFile?.fileId) {
+        builtinInputs[input.type] = uploadedFile.fileId
+      }
+    }
+
+    if (Object.keys(builtinInputs).length === 0) {
+      return params
+    }
+
+    return {
+      ...nextParams,
+      builtin_inputs: builtinInputs
+    }
+  }
+
+  async function runCurrentNode() {
+    if (!selectedTool.value || !props.selectedToolSlug) {
+      return
+    }
+
+    submitting.value = true
+    try {
+      const uploadedFiles = await resolveUploadedFiles()
+      const payload = buildTaskSubmissionPayload({
+        flattenedSchema: flattenedSchema.value,
+        formState,
+        uploadedFiles,
+        executorType: executorType.value
+      })
+      const params = withBuiltinInputs(payload.params, uploadedFiles)
+      const response = await createTask({
+        name: `${selectedTool.value.name} · ${props.nodeId}`,
+        tool_id: selectedTool.value.id,
+        project_id: props.projectId?.trim() || undefined,
+        params,
+        file_ids: payload.fileIds.length > 0 ? payload.fileIds : undefined
+      })
+
+      workflowStore.recordNodeTask(props.nodeId, response.data)
+      workflowStore.recordTask(props.selectedToolSlug, response.data)
+    } finally {
+      submitting.value = false
     }
   }
 
