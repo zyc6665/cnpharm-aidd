@@ -29,6 +29,7 @@ from app.models.tools import (
     Tool,
     ToolCategory,
     ToolStatus,
+    ToolVersion,
     ToolWorkbenchGroup,
     ToolWorkbenchGroupMapping,
 )
@@ -141,6 +142,27 @@ async def create_tool(
     return tool
 
 
+async def attach_tool_version(
+    db_session: AsyncSession,
+    tool: Tool,
+    config: dict,
+) -> ToolVersion:
+    """为公开工具附加当前版本。"""
+    version = ToolVersion(
+        tool_id=tool.id,
+        version="1.0.0",
+        changelog="Initial version",
+        config=config,
+        is_active=True,
+    )
+    db_session.add(version)
+    await db_session.flush()
+    tool.current_version_id = version.id
+    await db_session.commit()
+    await db_session.refresh(tool)
+    return version
+
+
 @pytest.mark.asyncio
 async def test_public_workbench_groups_returns_enabled_groups(
     api_client: httpx.AsyncClient,
@@ -177,6 +199,72 @@ async def test_public_workbench_groups_returns_enabled_groups(
     payload = response.json()
     assert [group["slug"] for group in payload["data"]] == ["pocket", "docking"]
     assert payload["data"][0]["name"] == "Pocket"
+
+
+@pytest.mark.asyncio
+async def test_public_tool_list_includes_valid_workflow_contract(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    owner_user: User,
+    tool_category: ToolCategory,
+):
+    """公开工具列表应返回前端单节点运行预检所需契约。"""
+    tool = await create_tool(
+        db_session,
+        owner_user,
+        tool_category,
+        name="Fetch PDB Structure",
+        slug="builtin-fetch-pdb",
+    )
+    await attach_tool_version(
+        db_session,
+        tool,
+        {
+            "type": "builtin",
+            "builtin_slug": "builtin-fetch-pdb",
+            "timeout_sec": 120,
+            "input_schema": {
+                "type": "object",
+                "properties": {"pdb_id": {"type": "string"}},
+                "required": ["pdb_id"],
+            },
+            "agent_capability": {
+                "enabled": True,
+                "stage": "data_acquisition",
+                "capability": "external_database_fetch",
+                "inputs": [],
+                "outputs": [
+                    {
+                        "semantic_type": "protein_structure@1",
+                        "source": "artifact",
+                        "path": "protein",
+                        "required": True,
+                    }
+                ],
+                "defaults": {},
+            },
+            "artifacts": {
+                "inputs": [],
+                "outputs": [
+                    {"name": "protein", "type": "protein_structure@1", "required": True},
+                    {"name": "report", "type": "run_report@1", "required": False},
+                ],
+            },
+        },
+    )
+
+    response = await api_client.get("/api/v1/tools", params={"view": "public"})
+
+    assert response.status_code == 200
+    item = response.json()["data"]["items"][0]
+    assert item["slug"] == "builtin-fetch-pdb"
+    assert item["contract"]["validation"] == {"status": "valid", "errors": []}
+    assert item["contract"]["artifacts"]["outputs"][0] == {
+        "name": "protein",
+        "type": "protein_structure@1",
+        "cardinality": "one",
+        "required": True,
+    }
 
 
 @pytest.mark.asyncio

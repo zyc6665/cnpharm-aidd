@@ -92,7 +92,8 @@ function toToolOptionSummary(tool: Tool): ToolOptionSummary {
     icon: tool.icon,
     icon_url: tool.icon_url,
     status: tool.status,
-    is_public: tool.is_public
+    is_public: tool.is_public,
+    contract: tool.contract ?? null
   }
 }
 

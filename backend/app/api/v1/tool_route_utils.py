@@ -66,6 +66,9 @@ def serialize_tool(
     tool_data["category"] = (
         tool.tool_category.name if tool.tool_category else tool.category
     )
+    tool_data["contract"] = (
+        build_validated_tool_contract(tool) if tool.current_version else None
+    )
     if tool_package is not None and tool_data.get("current_version"):
         version_data = tool_data["current_version"]
         config = dict(version_data.get("config") or {})
@@ -131,7 +134,9 @@ def build_validated_tool_contract(tool: Tool) -> dict:
     current_version = tool.current_version
     config = current_version.config if current_version is not None else None
     if current_version is not None and isinstance(config, dict):
-        if _is_remote_tool_v1_config(config):
+        if config.get("type") == "builtin":
+            pass
+        elif _is_remote_tool_v1_config(config):
             errors.extend(_remote_tool_publish_errors(config))
         else:
             validation_payload = {

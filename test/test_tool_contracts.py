@@ -16,6 +16,7 @@ from app.services.tool_contracts import (
     collect_tool_contract_validation_errors,
     tool_contract_to_agent_summary,
 )
+from app.api.v1.tool_route_utils import build_validated_tool_contract
 
 
 def _v2_manifest(*, agent_exposure: bool = True) -> dict:
@@ -276,6 +277,62 @@ def test_builtin_tool_contract_exposes_configured_standard_artifact_slots():
         "memory_mb": 2048,
         "gpu": False,
     }
+
+
+def test_parameter_only_builtin_fetch_contract_is_valid_and_executable():
+    tool = SimpleNamespace(
+        id="tool-fetch-pdb",
+        slug="builtin-fetch-pdb",
+        name="Fetch PDB Structure",
+        description="Download a protein structure from RCSB PDB",
+        status="published",
+        is_public=True,
+        current_version=SimpleNamespace(
+            id="version-fetch-pdb",
+            version="1.0.0",
+            is_active=True,
+            deprecated=False,
+            config={
+                "type": "builtin",
+                "builtin_slug": "builtin-fetch-pdb",
+                "timeout_sec": 120,
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"pdb_id": {"type": "string"}},
+                    "required": ["pdb_id"],
+                },
+                "agent_capability": {
+                    "enabled": True,
+                    "stage": "data_acquisition",
+                    "capability": "external_database_fetch",
+                    "inputs": [],
+                    "outputs": [
+                        {
+                            "semantic_type": "protein_structure@1",
+                            "source": "artifact",
+                            "path": "protein",
+                            "required": True,
+                        }
+                    ],
+                    "defaults": {},
+                },
+                "artifacts": {
+                    "inputs": [],
+                    "outputs": [
+                        {"name": "protein", "type": "protein_structure@1", "required": True},
+                        {"name": "report", "type": "run_report@1", "required": False},
+                    ],
+                },
+            },
+        ),
+    )
+
+    assert collect_tool_contract_validation_errors(tool) == []
+    contract = build_validated_tool_contract(tool)
+
+    assert contract["validation"] == {"status": "valid", "errors": []}
+    assert contract["capability"]["inputs"] == []
+    assert contract["capability"]["outputs"][0]["source"] == "artifact"
 
 
 def test_planner_available_tools_use_contract_slug_as_source_of_truth():

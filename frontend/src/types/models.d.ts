@@ -99,7 +99,7 @@ export interface Tool {
   timeout_sec?: number
   owner_id?: string
   is_favorited?: boolean  // 额外字段，由API返回
-  contract?: ToolContract
+  contract?: ToolContract | null
   created_at: string
   updated_at?: string
   // 兼容旧代码的字段
@@ -116,7 +116,7 @@ export interface ToolOptionSummary {
   icon_url?: Tool['icon_url']
   status: Tool['status']
   is_public?: Tool['is_public']
-  contract?: ToolContract
+  contract?: ToolContract | null
 }
 
 export interface ToolSchema {
@@ -279,7 +279,7 @@ export interface WorkbenchGroupTool {
   is_public?: boolean
   is_recommended: boolean
   sort_order: number
-  contract?: ToolContract
+  contract?: ToolContract | null
 }
 
 export interface WorkbenchGroup {

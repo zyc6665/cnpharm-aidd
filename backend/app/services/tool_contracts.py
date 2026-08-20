@@ -274,7 +274,7 @@ def collect_tool_contract_config_validation_errors(
         errors.append("agent_capability.stage is required when agent_capability.enabled=true")
 
     inputs = raw_capability.get("inputs")
-    if not isinstance(inputs, list) or not inputs:
+    if not isinstance(inputs, list) or (not inputs and not _allows_parameter_only_capability(config)):
         errors.append("agent_capability.inputs must include at least one item")
     else:
         for index, item in enumerate(inputs):
@@ -298,9 +298,9 @@ def collect_tool_contract_config_validation_errors(
                 errors.append(f"agent_capability.outputs[{index}].semantic_type is required")
 
             source = str(item.get("source") or "output_files").strip()
-            if source not in {"output_files", "output_data"}:
+            if source not in {"output_files", "output_data", "artifact"}:
                 errors.append(
-                    f"agent_capability.outputs[{index}].source must be output_files or output_data"
+                    f"agent_capability.outputs[{index}].source must be output_files, output_data or artifact"
                 )
             if source == "output_data" and not str(item.get("path") or "").strip():
                 errors.append(
@@ -308,6 +308,15 @@ def collect_tool_contract_config_validation_errors(
                 )
 
     return _dedupe_errors(errors)
+
+
+def _allows_parameter_only_capability(config: dict[str, Any]) -> bool:
+    """Allow data acquisition tools that consume only schema parameters, not artifacts."""
+    input_schema = config.get("input_schema")
+    if not isinstance(input_schema, dict):
+        return False
+    properties = input_schema.get("properties")
+    return isinstance(properties, dict) and bool(properties)
 
 
 def collect_tool_contract_validation_errors(tool: Any) -> list[str]:

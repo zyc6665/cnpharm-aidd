@@ -205,6 +205,7 @@ class ToolContractResponse(BaseModel):
     executor: Dict[str, Any] = Field(default_factory=dict)
     resource_profile: Dict[str, Any] = Field(default_factory=dict)
     schema_: Dict[str, Any] = Field(default_factory=dict, alias="schema")
+    artifacts: Dict[str, Any] = Field(default_factory=dict)
     capability: Dict[str, Any] = Field(default_factory=dict)
     validation: Dict[str, Any] = Field(default_factory=dict)
 
@@ -330,6 +331,7 @@ class ToolResponse(TimestampMixin):
     timeout_sec: int = 600
     tags: List[TagResponse] = Field(default_factory=list)
     current_version: Optional[ToolVersionResponse] = None
+    contract: Optional[Dict[str, Any]] = None
     statistics: Optional[ToolStatisticsResponse] = None
 
     model_config = ConfigDict(from_attributes=True)
@@ -352,6 +354,7 @@ class ToolListResponse(BaseModel):
     gpu_required: bool = False
     tags: List[TagResponse] = Field(default_factory=list)
     current_version: Optional[ToolVersionResponse] = None
+    contract: Optional[Dict[str, Any]] = None
     statistics: Optional[ToolStatisticsResponse] = None
     created_at: datetime
 
