@@ -72,6 +72,7 @@ def build_tool_import_config_from_template(
         "input_schema": template.input_schema,
         "output_schema": template.output_schema,
         "agent_capability": template.agent_capability.model_dump(mode="json"),
+        "artifacts": _artifact_contract(template),
         "implementation": template.implementation.model_dump(mode="json"),
         "resource_profile": template.resource_profile.model_dump(mode="json"),
         "template_key": template.metadata.template_key,
@@ -91,6 +92,16 @@ def build_tool_import_config_from_template(
         "timeout_sec": timeout_sec,
         "tool_config": tool_config,
     }
+
+
+def _artifact_contract(template: DrugDiscoveryToolTemplate) -> dict[str, Any]:
+    contract = template.artifacts.model_dump(mode="json", exclude_none=True)
+    for input_slot in contract.get("inputs", []):
+        if not input_slot.get("role_preferences"):
+            input_slot.pop("role_preferences", None)
+        if not input_slot.get("required_roles"):
+            input_slot.pop("required_roles", None)
+    return contract
 
 
 def _read_template_file(path: Path) -> DrugDiscoveryToolTemplate:

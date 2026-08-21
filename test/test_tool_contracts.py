@@ -279,6 +279,60 @@ def test_builtin_tool_contract_exposes_configured_standard_artifact_slots():
     }
 
 
+def test_lvpocket_legacy_contract_infers_role_aware_protein_slot():
+    tool = SimpleNamespace(
+        id="tool-lvpocket",
+        slug="lvpocket-pocket-prediction",
+        name="LVpocket",
+        description="Legacy LVpocket ssh_job tool",
+        status="published",
+        is_public=True,
+        current_version=SimpleNamespace(
+            id="version-lvpocket",
+            version="1.0.0",
+            is_active=True,
+            deprecated=False,
+            config={
+                "type": "ssh_job",
+                "timeout_sec": 3600,
+                "agent_capability": {
+                    "enabled": True,
+                    "stage": "pocket_exploration",
+                    "capability": "pocket_prediction",
+                    "inputs": [
+                        {
+                            "semantic_type": "protein_pdb",
+                            "field": "protein_pdb",
+                            "required": True,
+                        }
+                    ],
+                    "outputs": [
+                        {
+                            "semantic_type": "pocket_pdb",
+                            "source": "output_files",
+                            "required": True,
+                        }
+                    ],
+                    "defaults": {},
+                },
+            },
+        ),
+    )
+
+    contract = build_tool_contract(tool)
+
+    assert contract["artifacts"]["inputs"] == [
+        {
+            "name": "protein",
+            "type": "protein_structure@1",
+            "required": True,
+            "role_preferences": ["prepared_pdb", "structure_file"],
+            "readiness_policy": "prefer_prepared_warn_raw",
+            "suggested_preparation_tool": "builtin-protein-preparation",
+        }
+    ]
+
+
 def test_parameter_only_builtin_fetch_contract_is_valid_and_executable():
     tool = SimpleNamespace(
         id="tool-fetch-pdb",

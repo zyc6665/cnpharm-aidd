@@ -58,10 +58,42 @@ def _capability_config(tool_slug: str) -> dict:
     if tool_slug == "builtin-protein-preparation":
         config["artifacts"] = {
             "inputs": [
-                {"name": "protein", "type": "protein_structure@1", "required": True},
+                {
+                    "name": "protein",
+                    "type": "protein_structure@1",
+                    "required": True,
+                    "role_preferences": ["structure_file", "raw_structure_file"],
+                    "readiness_policy": "allow_raw",
+                },
             ],
             "outputs": [
                 {"name": "prepared_protein", "type": "protein_structure@1", "required": True},
+            ],
+        }
+    if tool_slug == "builtin-vina-docking":
+        config["artifacts"] = {
+            "inputs": [
+                {
+                    "name": "protein",
+                    "type": "protein_structure@1",
+                    "required": True,
+                    "role_preferences": ["receptor_pdbqt", "prepared_pdb"],
+                    "required_roles": ["receptor_pdbqt"],
+                    "readiness_policy": "require_receptor",
+                    "suggested_preparation_tool": "builtin-protein-preparation",
+                },
+                {
+                    "name": "ligand",
+                    "type": "ligand_structure@1",
+                    "required": True,
+                    "role_preferences": ["structure_3d_sdf", "structure_file"],
+                    "readiness_policy": "prefer_3d_ligand",
+                    "suggested_preparation_tool": "builtin-rdkit-conformer",
+                },
+            ],
+            "outputs": [
+                {"name": "report", "type": "run_report@1", "required": True},
+                {"name": "ranking", "type": "molecule_table@1", "required": True},
             ],
         }
     if tool_slug == "builtin-rdkit-properties":

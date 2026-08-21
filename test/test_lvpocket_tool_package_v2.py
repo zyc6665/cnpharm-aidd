@@ -28,6 +28,9 @@ def test_lvpocket_v2_manifest_declares_standard_binding_pocket_contract():
     assert isinstance(manifest, ToolPackageV2Manifest)
     assert result.is_valid is True, result.errors
     assert manifest.artifacts.inputs[0].type == "protein_structure@1"
+    assert manifest.artifacts.inputs[0].role_preferences == ["prepared_pdb", "structure_file"]
+    assert manifest.artifacts.inputs[0].readiness_policy == "prefer_prepared_warn_raw"
+    assert manifest.artifacts.inputs[0].suggested_preparation_tool == "builtin-protein-preparation"
     assert manifest.artifacts.outputs[0].name == "pocket"
     assert manifest.artifacts.outputs[0].type == "binding_pocket@1"
     for variant in manifest.variants:

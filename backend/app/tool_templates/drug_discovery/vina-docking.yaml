@@ -49,6 +49,31 @@ agent_capability:
       required: false
   defaults:
     exhaustiveness: 8
+artifacts:
+  inputs:
+    - name: protein
+      type: protein_structure@1
+      required: true
+      role_preferences: [receptor_pdbqt, prepared_pdb]
+      required_roles: [receptor_pdbqt]
+      readiness_policy: require_receptor
+      suggested_preparation_tool: builtin-protein-preparation
+    - name: ligand
+      type: ligand_structure@1
+      required: true
+      role_preferences: [structure_3d_sdf, structure_file]
+      readiness_policy: prefer_3d_ligand
+      suggested_preparation_tool: builtin-rdkit-conformer
+  outputs:
+    - name: pose
+      type: ligand_structure@1
+      required: true
+    - name: report
+      type: run_report@1
+      required: true
+    - name: ranking
+      type: molecule_table@1
+      required: false
 implementation:
   source: open_source
   provider: AutoDock Vina

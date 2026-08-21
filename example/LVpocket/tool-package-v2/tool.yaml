@@ -10,6 +10,11 @@ artifacts:
     - name: protein
       type: protein_structure@1
       required: true
+      role_preferences:
+        - prepared_pdb
+        - structure_file
+      readiness_policy: prefer_prepared_warn_raw
+      suggested_preparation_tool: builtin-protein-preparation
   outputs:
     - name: pocket
       type: binding_pocket@1

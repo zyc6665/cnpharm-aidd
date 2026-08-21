@@ -39,6 +39,20 @@ agent_capability:
   defaults:
     ph: 7.4
     output_format: sdf
+artifacts:
+  inputs:
+    - name: ligand
+      type: ligand_structure@1
+      required: true
+      role_preferences: [structure_3d_sdf, structure_file, structure_2d_sdf]
+      readiness_policy: allow_raw
+  outputs:
+    - name: ligand
+      type: ligand_structure@1
+      required: true
+    - name: report
+      type: run_report@1
+      required: false
 implementation:
   source: open_source
   provider: RDKit and Open Babel

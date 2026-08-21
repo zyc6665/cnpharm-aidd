@@ -105,10 +105,51 @@ async def test_ensure_protein_preparation_builtin_declares_standard_artifacts(
     assert config['type'] == 'builtin'
     assert config['builtin_slug'] == 'builtin-protein-preparation'
     assert config['artifacts']['inputs'] == [
-        {'name': 'protein', 'type': 'protein_structure@1', 'required': True}
+        {
+            'name': 'protein',
+            'type': 'protein_structure@1',
+            'required': True,
+            'role_preferences': ['structure_file', 'raw_structure_file'],
+            'readiness_policy': 'allow_raw',
+        }
     ]
     assert config['artifacts']['outputs'] == [
         {'name': 'prepared_protein', 'type': 'protein_structure@1', 'required': True}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_ensure_vina_builtin_declares_docking_ready_artifact_inputs(
+    db_session: AsyncSession,
+    system_user: User,
+) -> None:
+    from app.services.aidd_builtin_tools import ensure_aidd_builtin_tool
+
+    tool = await ensure_aidd_builtin_tool(
+        db_session,
+        owner_id=system_user.id,
+        tool_slug='builtin-vina-docking',
+    )
+
+    config = tool.current_version.config
+    assert config['artifacts']['inputs'] == [
+        {
+            'name': 'protein',
+            'type': 'protein_structure@1',
+            'required': True,
+            'role_preferences': ['receptor_pdbqt', 'prepared_pdb'],
+            'required_roles': ['receptor_pdbqt'],
+            'readiness_policy': 'require_receptor',
+            'suggested_preparation_tool': 'builtin-protein-preparation',
+        },
+        {
+            'name': 'ligand',
+            'type': 'ligand_structure@1',
+            'required': True,
+            'role_preferences': ['structure_3d_sdf', 'structure_file'],
+            'readiness_policy': 'prefer_3d_ligand',
+            'suggested_preparation_tool': 'builtin-rdkit-conformer',
+        },
     ]
 
 

@@ -95,6 +95,57 @@ def test_template_generates_existing_tool_import_config_for_docker_executor():
     ) == []
 
 
+def test_docking_template_exports_role_aware_artifact_inputs():
+    template = load_tool_template("vina-docking")
+
+    config = build_tool_import_config_from_template(
+        template,
+        executor_type="docker_image",
+        executor_config={"image": "ghcr.io/sciminer/vina:latest", "command": ["/app/run"]},
+    )
+    inputs = config["tool_config"]["artifacts"]["inputs"]
+
+    assert inputs == [
+        {
+            "name": "protein",
+            "type": "protein_structure@1",
+            "required": True,
+            "role_preferences": ["receptor_pdbqt", "prepared_pdb"],
+            "required_roles": ["receptor_pdbqt"],
+            "readiness_policy": "require_receptor",
+            "suggested_preparation_tool": "builtin-protein-preparation",
+        },
+        {
+            "name": "ligand",
+            "type": "ligand_structure@1",
+            "required": True,
+            "role_preferences": ["structure_3d_sdf", "structure_file"],
+            "readiness_policy": "prefer_3d_ligand",
+            "suggested_preparation_tool": "builtin-rdkit-conformer",
+        },
+    ]
+
+
+def test_ligand_preparation_template_exports_3d_ligand_input_policy():
+    template = load_tool_template("ligand-preparation")
+
+    config = build_tool_import_config_from_template(
+        template,
+        executor_type="docker_image",
+        executor_config={"image": "ghcr.io/sciminer/ligand-prep:latest", "command": ["/app/run"]},
+    )
+
+    assert config["tool_config"]["artifacts"]["inputs"] == [
+        {
+            "name": "ligand",
+            "type": "ligand_structure@1",
+            "required": True,
+            "role_preferences": ["structure_3d_sdf", "structure_file", "structure_2d_sdf"],
+            "readiness_policy": "allow_raw",
+        }
+    ]
+
+
 def test_heavy_template_projects_resource_profile_to_existing_tool_fields():
     template = load_tool_template("md-gromacs-ssh")
 

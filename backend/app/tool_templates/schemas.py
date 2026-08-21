@@ -92,6 +92,54 @@ class ToolTemplateAgentCapability(BaseModel):
     defaults: dict[str, Any] = Field(default_factory=dict)
 
 
+class ToolTemplateArtifactInput(BaseModel):
+    """Standard Artifact input slot emitted by a tool template."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=100)
+    type: str = Field(min_length=1, max_length=100)
+    required: bool = True
+    role_preferences: list[str] = Field(default_factory=list)
+    required_roles: list[str] = Field(default_factory=list)
+    readiness_policy: str | None = Field(default=None, max_length=100)
+    suggested_preparation_tool: str | None = Field(default=None, max_length=100)
+
+    @field_validator("type")
+    @classmethod
+    def _validate_type(cls, value: str) -> str:
+        if not is_supported_platform_artifact_type(value):
+            raise ValueError(f"Unknown platform artifact type: {value}")
+        return normalize_platform_artifact_type(value)
+
+
+class ToolTemplateArtifactOutput(BaseModel):
+    """Standard Artifact output slot emitted by a tool template."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=100)
+    type: str = Field(min_length=1, max_length=100)
+    cardinality: Literal["one", "many"] = "one"
+    required: bool = True
+
+    @field_validator("type")
+    @classmethod
+    def _validate_type(cls, value: str) -> str:
+        if not is_supported_platform_artifact_type(value):
+            raise ValueError(f"Unknown platform artifact type: {value}")
+        return normalize_platform_artifact_type(value)
+
+
+class ToolTemplateArtifactContract(BaseModel):
+    """Standard Artifact slots exposed to workflow and direct-run surfaces."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    inputs: list[ToolTemplateArtifactInput] = Field(default_factory=list)
+    outputs: list[ToolTemplateArtifactOutput] = Field(default_factory=list)
+
+
 class ToolTemplateImplementation(BaseModel):
     """Recommended open-source or internal implementation for a template."""
 
@@ -187,6 +235,7 @@ class DrugDiscoveryToolTemplate(BaseModel):
     input_schema: dict[str, Any]
     output_schema: dict[str, Any]
     agent_capability: ToolTemplateAgentCapability
+    artifacts: ToolTemplateArtifactContract = Field(default_factory=ToolTemplateArtifactContract)
     implementation: ToolTemplateImplementation
     resource_profile: ToolTemplateResourceProfile
     sample_inputs: list[ToolTemplateSampleInput] = Field(min_length=1)

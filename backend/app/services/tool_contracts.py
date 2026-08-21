@@ -20,6 +20,7 @@ def build_tool_contract(tool: Any, *, capability: Any | None = None) -> dict[str
     config = getattr(current_version, "config", None)
     if not isinstance(config, dict):
         config = {}
+    artifacts = _artifacts_contract_for_tool(tool, config)
 
     return {
         "contract_version": TOOL_CONTRACT_VERSION,
@@ -36,7 +37,7 @@ def build_tool_contract(tool: Any, *, capability: Any | None = None) -> dict[str
             "input": _schema_object(config.get("input_schema")),
             "output": _schema_object(config.get("output_schema")),
         },
-        "artifacts": _artifacts_contract(config.get("artifacts")),
+        "artifacts": artifacts,
         "capability": _capability_contract(
             raw_capability=config.get("agent_capability"),
             capability=capability,
@@ -366,6 +367,30 @@ def _artifacts_contract(value: Any) -> dict[str, Any]:
         "inputs": [_artifact_input_slot(item) for item in inputs],
         "outputs": [_artifact_output_slot(item) for item in outputs],
     }
+
+
+def _artifacts_contract_for_tool(tool: Any, config: dict[str, Any]) -> dict[str, Any]:
+    contract = _artifacts_contract(config.get("artifacts"))
+    slug = str(getattr(tool, "slug", None) or config.get("builtin_slug") or "")
+    if slug != "lvpocket-pocket-prediction":
+        return contract
+
+    if not contract["inputs"]:
+        contract["inputs"] = [
+            {
+                "name": "protein",
+                "type": "protein_structure@1",
+                "required": True,
+                "role_preferences": ["prepared_pdb", "structure_file"],
+                "readiness_policy": "prefer_prepared_warn_raw",
+                "suggested_preparation_tool": "builtin-protein-preparation",
+            }
+        ]
+    if not contract["outputs"]:
+        contract["outputs"] = [
+            {"name": "pocket", "type": "binding_pocket@1", "cardinality": "one", "required": True}
+        ]
+    return contract
 
 
 def _package_manifest_from_version(current_version: Any | None) -> dict[str, Any] | None:
