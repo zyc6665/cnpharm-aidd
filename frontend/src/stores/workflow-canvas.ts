@@ -1,9 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import {
-  WORKFLOW_ARTIFACT_SEMANTIC_TYPES,
-  type WorkflowArtifactSemanticType
-} from '@/workflow/artifact-types'
+import { type WorkflowArtifactSemanticType } from '@/workflow/artifact-types'
+import { isWorkflowSemanticType, normalizeWorkflowSemanticType } from '@/workflow/semantic-types'
 import type { ArtifactInputSlot, ArtifactOutputSlot } from '@/workflow/contract-bindings'
 import type {
   WorkflowCanvasEdge,
@@ -14,11 +12,9 @@ import type {
 import { normalizeRecord, type WorkflowCanvasPosition } from './workflow-session'
 
 function resolveCanvasEdgeArtifactType(value: unknown): WorkflowCanvasEdge['artifactType'] {
-  if (
-    typeof value === 'string' &&
-    WORKFLOW_ARTIFACT_SEMANTIC_TYPES.includes(value as WorkflowArtifactSemanticType)
-  ) {
-    return value as WorkflowArtifactSemanticType
+  if (typeof value === 'string') {
+    const semanticType = normalizeWorkflowSemanticType(value)
+    return isWorkflowSemanticType(semanticType) ? semanticType : undefined
   }
   return undefined
 }

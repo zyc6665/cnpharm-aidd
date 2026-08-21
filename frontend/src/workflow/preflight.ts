@@ -9,10 +9,7 @@ import type {
   WorkflowStepStatus,
   WorkflowTaskRef,
 } from './artifact-types.ts'
-import {
-  WORKFLOW_ARTIFACT_SEMANTIC_TYPES,
-  normalizeWorkflowSemanticType,
-} from './semantic-types.ts'
+import { normalizeWorkflowSemanticType } from './semantic-types.ts'
 import type { WorkflowCanvasPreset } from './canvas-types.ts'
 import { formatWorkflowKey } from './i18n-utils.ts'
 
@@ -80,7 +77,7 @@ interface WorkflowPreflightTool {
   contract?: ToolContract | null
 }
 
-const WORKFLOW_INPUT_ACCEPTED_EXTENSIONS: Record<WorkflowArtifactSemanticType, readonly string[]> = {
+const WORKFLOW_INPUT_ACCEPTED_EXTENSIONS: Partial<Record<WorkflowArtifactSemanticType, readonly string[]>> = {
   'protein_structure@1': ['.pdb', '.cif'],
   'binding_pocket@1': ['.pdb', '.cif'],
   'ligand_structure@1': ['.sdf', '.mol2', '.pdb'],
@@ -615,11 +612,7 @@ function hasInvalidToolContract(contract?: ToolContract | null) {
 
 function hasAcceptedExtensionForSemanticType(filename: string, semanticType: string): boolean {
   const normalizedType = normalizeWorkflowSemanticType(semanticType)
-  if (!(WORKFLOW_ARTIFACT_SEMANTIC_TYPES as readonly string[]).includes(normalizedType)) {
-    return true
-  }
-
-  const acceptedExtensions = WORKFLOW_INPUT_ACCEPTED_EXTENSIONS[normalizedType as WorkflowArtifactSemanticType]
+  const acceptedExtensions = WORKFLOW_INPUT_ACCEPTED_EXTENSIONS[normalizedType]
   if (!acceptedExtensions || acceptedExtensions.length === 0) {
     return true
   }

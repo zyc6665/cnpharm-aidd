@@ -17,7 +17,7 @@ export const WORKFLOW_ARTIFACT_SEMANTIC_TYPES = [
   'optimized_lead'
 ] as const
 
-export type WorkflowArtifactSemanticType = (typeof WORKFLOW_ARTIFACT_SEMANTIC_TYPES)[number]
+export type WorkflowArtifactSemanticType = string
 
 export const WORKFLOW_ARTIFACT_SEMANTIC_ALIASES = {
   protein_pdb: 'protein_structure@1',
@@ -30,8 +30,23 @@ export const WORKFLOW_ARTIFACT_SEMANTIC_ALIASES = {
   ranking_csv: 'molecule_table@1'
 } as const satisfies Readonly<Record<string, WorkflowArtifactSemanticType>>
 
-export function normalizeWorkflowSemanticType(value: string): WorkflowArtifactSemanticType | string {
+const STANDARD_ARTIFACT_REF_PATTERN = /^[a-z][a-z0-9_]*@\d+$/
+
+export function normalizeWorkflowSemanticType(value: string): WorkflowArtifactSemanticType {
+  const normalized = String(value ?? '').trim()
   return WORKFLOW_ARTIFACT_SEMANTIC_ALIASES[
-    value as keyof typeof WORKFLOW_ARTIFACT_SEMANTIC_ALIASES
-  ] ?? value
+    normalized as keyof typeof WORKFLOW_ARTIFACT_SEMANTIC_ALIASES
+  ] ?? normalized
+}
+
+export function isStandardArtifactRef(value: string): value is WorkflowArtifactSemanticType {
+  return STANDARD_ARTIFACT_REF_PATTERN.test(value)
+}
+
+export function isWorkflowSemanticType(value: string): value is WorkflowArtifactSemanticType {
+  const normalized = normalizeWorkflowSemanticType(value)
+  return Boolean(normalized) && (
+    (WORKFLOW_ARTIFACT_SEMANTIC_TYPES as readonly string[]).includes(normalized) ||
+    isStandardArtifactRef(normalized)
+  )
 }

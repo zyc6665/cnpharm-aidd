@@ -3,11 +3,8 @@ import { useI18n } from 'vue-i18n'
 import { useArtifactsStore, useToolsStore, useWorkflowStore } from '@/stores'
 import type { WorkflowReportRow } from '@/workflow/report'
 import type { ToolContract, WorkflowDefinition } from '@/types/models'
-import {
-  WORKFLOW_ARTIFACT_SEMANTIC_TYPES,
-  type WorkflowArtifactSemanticType
-} from '@/workflow/artifact-types'
-import { normalizeWorkflowSemanticType } from '@/workflow/semantic-types'
+import { type WorkflowArtifactSemanticType } from '@/workflow/artifact-types'
+import { isWorkflowSemanticType, normalizeWorkflowSemanticType } from '@/workflow/semantic-types'
 import {
   FREE_WORKFLOW_CANVAS_PRESET,
   WORKFLOW_CANVAS_PRESETS,
@@ -481,8 +478,8 @@ export function useWorkflowCanvas(input: {
     const seen = new Set<WorkflowArtifactSemanticType>()
     for (const value of values) {
       const normalized = normalizeWorkflowSemanticType(value)
-      if (WORKFLOW_ARTIFACT_SEMANTIC_TYPES.includes(normalized as WorkflowArtifactSemanticType)) {
-        seen.add(normalized as WorkflowArtifactSemanticType)
+      if (isWorkflowSemanticType(normalized)) {
+        seen.add(normalized)
       }
     }
     return [...seen]

@@ -128,6 +128,39 @@ describe('standard artifact tool inputs', () => {
     ])
   })
 
+  it('keeps newly declared standard artifact refs from embedded Tool Package v2 manifests', () => {
+    const tool = makeTool({
+      current_version: {
+        id: 'tool-version-1',
+        tool_id: 'tool-1',
+        version: '1.0.0',
+        is_active: true,
+        deprecated: false,
+        config: {
+          tool_package: {
+            manifest: {
+              api_version: 'aidd.sciminer/tool-package.v2',
+              artifacts: {
+                inputs: [
+                  { name: 'map', type: 'cryoem_map@1', required: true },
+                  { name: 'invalid', type: 'unknown_type', required: true },
+                ],
+              },
+            },
+          },
+        },
+      },
+    })
+
+    expect(resolveToolStandardInputSlots(tool)).toEqual([
+      {
+        name: 'map',
+        type: 'cryoem_map@1',
+        required: true,
+      },
+    ])
+  })
+
   it('keeps only compatible available project artifacts for a standard slot', () => {
     const slot = {
       name: 'protein',

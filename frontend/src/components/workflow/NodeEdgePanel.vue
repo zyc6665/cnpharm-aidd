@@ -84,6 +84,7 @@
     type WorkflowArtifactSemanticType,
     type WorkflowTaskRef
   } from '@/workflow/artifact-types'
+  import { isWorkflowSemanticType, normalizeWorkflowSemanticType } from '@/workflow/semantic-types'
   import {
     recommendArtifactsForNode,
     suggestWorkflowEdgesForNode,
@@ -119,7 +120,7 @@
     (props.template?.edges ?? []).filter(edge => edge.target === props.node.id)
   )
   const artifactTypeOptions = computed(() =>
-    WORKFLOW_ARTIFACT_SEMANTIC_TYPES.map(value => ({ value, label: value }))
+    collectArtifactTypeOptions().map(value => ({ value, label: value }))
   )
   const recommendations = computed(() =>
     props.template
@@ -156,6 +157,36 @@
       target: suggestion.targetNodeId,
       artifactType: suggestion.semanticType
     })
+  }
+  function collectArtifactTypeOptions(): WorkflowArtifactSemanticType[] {
+    const semanticTypes = new Set<WorkflowArtifactSemanticType>()
+    const add = (value?: string | null) => {
+      if (!value) return
+      const semanticType = normalizeWorkflowSemanticType(value)
+      if (isWorkflowSemanticType(semanticType)) {
+        semanticTypes.add(semanticType)
+      }
+    }
+
+    for (const value of props.node.requiredInputTypes ?? []) add(value)
+    for (const value of props.node.producedOutputTypes ?? []) add(value)
+    for (const slot of props.node.inputArtifactSlots ?? []) add(slot.type)
+    for (const slot of props.node.outputArtifactSlots ?? []) add(slot.type)
+
+    const selectedSourceNode = (props.template?.nodes ?? []).find(item => item.id === sourceNodeId.value)
+    for (const value of selectedSourceNode?.producedOutputTypes ?? []) add(value)
+    for (const slot of selectedSourceNode?.outputArtifactSlots ?? []) add(slot.type)
+
+    for (const edge of props.template?.edges ?? []) add(edge.artifactType)
+    for (const node of props.template?.nodes ?? []) {
+      for (const value of node.requiredInputTypes ?? []) add(value)
+      for (const value of node.producedOutputTypes ?? []) add(value)
+      for (const slot of node.inputArtifactSlots ?? []) add(slot.type)
+      for (const slot of node.outputArtifactSlots ?? []) add(slot.type)
+    }
+    for (const value of WORKFLOW_ARTIFACT_SEMANTIC_TYPES) add(value)
+
+    return [...semanticTypes]
   }
   function label(key: string) {
     if (te(key)) return t(key)

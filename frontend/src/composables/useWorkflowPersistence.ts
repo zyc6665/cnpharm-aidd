@@ -12,10 +12,8 @@ import {
   validateWorkflowDefinition,
   validateWorkflowExecutionOrder
 } from '@/workflow/canvas-runner'
-import {
-  WORKFLOW_ARTIFACT_SEMANTIC_TYPES,
-  type WorkflowArtifactSemanticType
-} from '@/workflow/artifact-types'
+import { type WorkflowArtifactSemanticType } from '@/workflow/artifact-types'
+import { isWorkflowSemanticType, normalizeWorkflowSemanticType } from '@/workflow/semantic-types'
 import type {
   WorkflowCanvasEdge,
   WorkflowCanvasNode,
@@ -561,11 +559,11 @@ function resolveArtifactSlotTypes(slots: unknown[]): WorkflowArtifactSemanticTyp
       continue
     }
     const type = (slot as { type?: unknown }).type
-    if (
-      typeof type === 'string' &&
-      WORKFLOW_ARTIFACT_SEMANTIC_TYPES.includes(type as WorkflowArtifactSemanticType)
-    ) {
-      types.add(type as WorkflowArtifactSemanticType)
+    if (typeof type === 'string') {
+      const semanticType = normalizeWorkflowSemanticType(type)
+      if (isWorkflowSemanticType(semanticType)) {
+        types.add(semanticType)
+      }
     }
   }
 

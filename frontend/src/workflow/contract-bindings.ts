@@ -1,9 +1,6 @@
 import type { ToolContract, WorkbenchGroupTool } from '@/types/models'
 import type { WorkflowArtifact, WorkflowArtifactSemanticType, WorkflowStepKey } from './artifact-types.ts'
-import {
-  WORKFLOW_ARTIFACT_SEMANTIC_TYPES
-} from './semantic-types.ts'
-import { normalizeWorkflowSemanticType } from './semantic-types.ts'
+import { isWorkflowSemanticType, normalizeWorkflowSemanticType } from './semantic-types.ts'
 
 export interface WorkflowToolFieldBinding {
   readonly semanticType: WorkflowArtifactSemanticType
@@ -101,10 +98,6 @@ export interface WorkflowPreflightReport {
   ready: boolean
   inputs: WorkflowPreflightInputReport[]
   expectedOutputs: WorkflowArtifactSemanticType[]
-}
-
-function isWorkflowSemanticType(value: string): value is WorkflowArtifactSemanticType {
-  return (WORKFLOW_ARTIFACT_SEMANTIC_TYPES as readonly string[]).includes(value)
 }
 
 function toWorkflowSemanticType(value: string): WorkflowArtifactSemanticType | null {

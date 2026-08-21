@@ -112,6 +112,41 @@ describe('contract artifact slots', () => {
     })
   })
 
+  it('keeps standard artifact refs that are not precompiled into the frontend catalog', () => {
+    const contract = makeToolContract({
+      artifacts: {
+        inputs: [{ name: 'map', type: 'cryoem_map@1', required: true }],
+        outputs: [
+          {
+            name: 'fit_report',
+            type: 'model_fit_report@1',
+            cardinality: 'one',
+            required: true,
+          },
+        ],
+      },
+      capability: {
+        ...makeToolContract().capability,
+        inputs: [{ semantic_type: 'cryoem_map@1', field: 'map', required: true }],
+        outputs: [{ semantic_type: 'model_fit_report@1', source: 'artifact', match: { name: 'fit_report' } }],
+      },
+    })
+
+    const slots = deriveArtifactSlotsFromToolContract(contract)
+    const binding = buildWorkflowToolBindingFromContract(contract)
+
+    expect(slots.inputs).toEqual([{ name: 'map', type: 'cryoem_map@1', required: true }])
+    expect(slots.outputs).toEqual([
+      { name: 'fit_report', type: 'model_fit_report@1', cardinality: 'one', required: true },
+    ])
+    expect(binding?.acceptedInputTypes).toEqual(['cryoem_map@1'])
+    expect(binding?.outputExtractors[0]).toMatchObject({
+      semanticType: 'model_fit_report@1',
+      source: 'artifact',
+      artifactName: 'fit_report',
+    })
+  })
+
   it('keeps legacy capability bindings available for existing workflow paths', () => {
     const binding = buildWorkflowToolBindingFromContract(makeToolContract())
 

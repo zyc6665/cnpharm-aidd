@@ -103,6 +103,57 @@ describe('useWorkflowCanvas', () => {
     })
   })
 
+  it('新增标准产物类型的模型不需要前端硬编码也能生成工作流节点契约', () => {
+    const canvas = mountCanvasHarness()
+    canvas.toolsStore.workbenchGroups = [
+      {
+        id: 'cryoem',
+        name: 'CryoEM',
+        slug: 'cryoem',
+        sort_order: 1,
+        tools: [
+          {
+            id: 'tool-cryo-fit',
+            name: 'CryoEM Fit',
+            slug: 'cryoem-fit',
+            status: 'published',
+            is_recommended: true,
+            sort_order: 1,
+            contract: {
+              contract_version: '1.0',
+              slug: 'cryoem-fit',
+              name: 'CryoEM Fit',
+              status: 'published',
+              executor: { type: 'remote_api' },
+              schema: { input: { type: 'object', properties: {} }, output: { type: 'object', properties: {} } },
+              capability: { enabled: true, inputs: [], outputs: [], defaults: {} },
+              artifacts: {
+                inputs: [{ name: 'map', type: 'cryoem_map@1', required: true }],
+                outputs: [
+                  { name: 'fit_report', type: 'model_fit_report@1', cardinality: 'one', required: true }
+                ]
+              },
+              validation: { status: 'valid', errors: [] }
+            }
+          }
+        ]
+      }
+    ] as never
+
+    canvas.handleAddToolNode('cryoem-fit')
+
+    const node = canvas.workflowStore.canvasNodes[0]
+    expect(node?.requiredInputTypes).toEqual(['cryoem_map@1'])
+    expect(node?.producedOutputTypes).toEqual(['model_fit_report@1'])
+    expect(canvas.buildCurrentWorkflowDefinition().nodes[0]).toMatchObject({
+      artifact_input_slots: [{ name: 'map', type: 'cryoem_map@1', required: true }],
+      artifact_inputs: { map: 'workflow_input:cryoem_map@1' },
+      artifact_outputs: [
+        { name: 'fit_report', type: 'model_fit_report@1', cardinality: 'one', required: true }
+      ]
+    })
+  })
+
   it('应将条件、批量和循环节点序列化为后端控制流定义', () => {
     const canvas = mountCanvasHarness()
     canvas.workflowStore.$patch({

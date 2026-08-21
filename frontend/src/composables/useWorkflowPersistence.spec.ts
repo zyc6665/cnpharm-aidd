@@ -29,6 +29,39 @@ describe('mapWorkflowDefinitionToCanvasPayload', () => {
     expect(payload.nodes[0]?.producedOutputTypes).toEqual(['binding_pocket@1'])
   })
 
+  it('restores canvas semantic types from newly declared standard artifact refs', () => {
+    const payload = mapWorkflowDefinitionToCanvasPayload({
+      canvasPresetId: 'agent-draft',
+      name: 'Agent Draft',
+      definition: {
+        nodes: [
+          {
+            id: 'cryoem-fit',
+            kind: 'tool',
+            tool_slug: 'cryoem-fit',
+            artifact_input_slots: [{ name: 'map', type: 'cryoem_map@1', required: true }],
+            artifact_outputs: [
+              { name: 'fit_report', type: 'model_fit_report@1', cardinality: 'one', required: true }
+            ]
+          }
+        ],
+        edges: [
+          {
+            id: 'edge-map-fit',
+            source: 'fetch-map',
+            target: 'cryoem-fit',
+            source_output: 'cryoem_map@1',
+            target_input: 'cryoem_map@1'
+          }
+        ]
+      }
+    })
+
+    expect(payload.nodes[0]?.requiredInputTypes).toEqual(['cryoem_map@1'])
+    expect(payload.nodes[0]?.producedOutputTypes).toEqual(['model_fit_report@1'])
+    expect(payload.edges[0]?.artifactType).toBe('cryoem_map@1')
+  })
+
   it('preserves artifact bindings from research board workflow drafts', () => {
     const payload = mapWorkflowDefinitionToCanvasPayload({
       canvasPresetId: 'research-board-draft',

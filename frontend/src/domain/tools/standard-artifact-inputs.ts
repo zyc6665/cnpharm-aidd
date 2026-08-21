@@ -5,7 +5,7 @@ import {
   type ArtifactInputSlot,
 } from '@/workflow/contract-bindings'
 import {
-  WORKFLOW_ARTIFACT_SEMANTIC_TYPES,
+  isWorkflowSemanticType,
   normalizeWorkflowSemanticType,
 } from '@/workflow/semantic-types'
 
@@ -17,17 +17,13 @@ function isRecord(value: unknown): value is UnknownRecord {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
-function isKnownStandardType(value: string): value is StandardArtifactInputSlot['type'] {
-  return (WORKFLOW_ARTIFACT_SEMANTIC_TYPES as readonly string[]).includes(value)
-}
-
 function normalizeStandardType(value: unknown): StandardArtifactInputSlot['type'] | null {
   if (typeof value !== 'string' || !value.trim()) {
     return null
   }
 
   const normalized = normalizeWorkflowSemanticType(value.trim())
-  return isKnownStandardType(normalized) ? normalized : null
+  return isWorkflowSemanticType(normalized) ? normalized : null
 }
 
 function resolveToolContract(tool?: Tool | null): ToolContract | null {
