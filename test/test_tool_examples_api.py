@@ -206,6 +206,150 @@ async def test_get_tool_example_returns_default_example_with_files(
 
 
 @pytest.mark.asyncio
+async def test_get_tool_example_falls_back_to_schema_default_for_builtin_fetch_pdb(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+):
+    """仅声明 schema 的内置查询工具也应在详情页暴露可一键填入的示例。"""
+    tool = await create_tool_with_config(
+        db_session,
+        {
+            "type": "builtin",
+            "builtin_slug": "builtin-fetch-pdb",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "pdb_id": {
+                        "type": "string",
+                        "title": "PDB ID",
+                        "description": "RCSB PDB entry ID, e.g. 1ABC",
+                    }
+                },
+                "required": ["pdb_id"],
+            },
+            "output_schema": {"type": "object", "properties": {}},
+        },
+        slug="builtin-fetch-pdb",
+    )
+
+    response = await api_client.get(f"/api/v1/tools/{tool.id}/example")
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["name"] == "默认示例"
+    assert payload["params"] == {"pdb_id": "1A2B"}
+    assert payload["input_files"] == []
+
+
+@pytest.mark.asyncio
+async def test_tool_example_infers_file_input_from_schema_and_applies_it(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    tmp_path: Path,
+):
+    """文件输入工具没有显式 examples 时，应从 schema/default 与本地示例文件生成可应用示例。"""
+    input_dir = tmp_path / "input"
+    input_dir.mkdir()
+    (input_dir / "protein.pdb").write_text("ATOM      1  N   GLY A   1\n", encoding="utf-8")
+    tool = await create_tool_with_config(
+        db_session,
+        {
+            "type": "ssh_job",
+            "example_base_dir": str(tmp_path),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "protein_pdb": {
+                        "type": "string",
+                        "format": "file",
+                        "title": "Protein PDB",
+                        "ui:accept": ".pdb",
+                    },
+                    "model_choice": {
+                        "type": "string",
+                        "default": "auto",
+                    },
+                    "device": {
+                        "type": "string",
+                        "default": "auto",
+                    },
+                },
+                "required": ["protein_pdb"],
+            },
+            "output_schema": {"type": "object", "properties": {}},
+        },
+        slug="lvpocket-pocket-prediction",
+    )
+
+    response = await api_client.get(f"/api/v1/tools/{tool.id}/example")
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["params"] == {"model_choice": "auto", "device": "auto"}
+    assert payload["input_files"][0]["field"] == "protein_pdb"
+    assert payload["input_files"][0]["path"] == "input/protein.pdb"
+    assert payload["input_files"][0]["exists"] is True
+
+    apply_response = await api_client.post(
+        f"/api/v1/tools/{tool.id}/example/apply",
+        headers={"Authorization": "Bearer user-token"},
+    )
+
+    assert apply_response.status_code == 200
+    apply_payload = apply_response.json()["data"]
+    assert apply_payload["params"] == {"model_choice": "auto", "device": "auto"}
+    assert apply_payload["files"]["protein_pdb"]["filename"] == "protein.pdb"
+
+
+@pytest.mark.asyncio
+async def test_tool_package_v2_example_uses_parameter_schema_before_legacy_schema(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+):
+    """Tool Package v2 详情页示例应贴合 parameters_schema，而不是旧 input_schema。"""
+    tool = await create_tool_with_config(
+        db_session,
+        {
+            "type": "ssh_job",
+            "example_params": {"smiles_csv": "input/smiles.csv", "device": "cpu"},
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "smiles_csv": {"type": "string", "format": "file", "ui:accept": ".csv"},
+                    "device": {"type": "string", "default": "cpu"},
+                },
+            },
+            "tool_package_manifest": {
+                "api_version": "aidd.sciminer/tool-package.v2",
+                "metadata": {"slug": "molp-pc-property-prediction", "version": "0.1.1"},
+                "artifacts": {
+                    "inputs": [{"name": "molecules", "type": "molecule_table@1", "required": True}],
+                    "outputs": [],
+                },
+                "parameters_schema": {
+                    "type": "object",
+                    "properties": {
+                        "task_groups": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "default": ["Absorption", "Toxicology"],
+                        }
+                    },
+                },
+            },
+        },
+        slug="molp-pc-property-prediction",
+    )
+
+    response = await api_client.get(f"/api/v1/tools/{tool.id}/example")
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["params"] == {"task_groups": ["Absorption", "Toxicology"]}
+    assert payload["input_files"] == []
+
+
+@pytest.mark.asyncio
 async def test_tool_example_apply_registers_example_file_for_user(
     api_client: httpx.AsyncClient,
     db_session: AsyncSession,
