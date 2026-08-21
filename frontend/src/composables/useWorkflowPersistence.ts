@@ -1,6 +1,7 @@
 import { computed, ref, type ComputedRef } from 'vue'
 import { message } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
+import { getTaskDetail } from '@/api/tasks'
 import type { WorkflowDefinitionPayload } from '@/api/workflows'
 import {
   buildWorkflowInputFileMap,
@@ -12,7 +13,7 @@ import {
   validateWorkflowDefinition,
   validateWorkflowExecutionOrder
 } from '@/workflow/canvas-runner'
-import { type WorkflowArtifactSemanticType } from '@/workflow/artifact-types'
+import { type WorkflowArtifactSemanticType, type WorkflowTaskRef } from '@/workflow/artifact-types'
 import { isWorkflowSemanticType, normalizeWorkflowSemanticType } from '@/workflow/semantic-types'
 import type {
   WorkflowCanvasEdge,
@@ -25,7 +26,7 @@ import {
   useWorkflowDefinitionsStore,
   useWorkflowStore
 } from '@/stores'
-import type { AiddWorkflowDraft, WorkflowDefinition, WorkflowDefinitionNode } from '@/types/models'
+import type { AiddWorkflowDraft, WorkflowDefinition, WorkflowDefinitionNode, WorkflowRun } from '@/types/models'
 
 type UserStore = ReturnType<typeof useUserStore>
 type ArtifactsStore = ReturnType<typeof useArtifactsStore>
@@ -269,7 +270,8 @@ export function useWorkflowPersistence(input: {
   }
 
   async function handleWorkflowRunSelect(runId: string) {
-    await workflowStore.loadWorkflowRun(runId)
+    const run = await workflowStore.loadWorkflowRun(runId)
+    await restoreNodeTasksFromWorkflowRun(run)
     await scheduleWorkflowRunAutoSync()
   }
 
@@ -342,7 +344,8 @@ export function useWorkflowPersistence(input: {
     if (!userStore.authReady || !userStore.isLoggedIn || !workflowStore.activeWorkflowRunId) {
       return
     }
-    await workflowStore.loadWorkflowRun(workflowStore.activeWorkflowRunId)
+    const run = await workflowStore.loadWorkflowRun(workflowStore.activeWorkflowRunId)
+    await restoreNodeTasksFromWorkflowRun(run)
   }
 
   async function handleLoadWorkflow() {
@@ -356,9 +359,69 @@ export function useWorkflowPersistence(input: {
       )
       workflowStore.applyWorkflowDefinition(workflow)
       workflowName.value = workflow.name
+      await tryRestoreLatestWorkflowRunForDefinition(workflow.id)
       message.success('流程已加载')
     } catch {
       // 请求层会展示错误信息。
+    }
+  }
+
+  async function tryRestoreLatestWorkflowRunForDefinition(workflowDefinitionId: string) {
+    try {
+      await restoreLatestWorkflowRunForDefinition(workflowDefinitionId)
+    } catch {
+      // 流程定义已经加载，历史运行恢复失败不应让画布重新变空。
+    }
+  }
+
+  async function restoreLatestWorkflowRunForDefinition(workflowDefinitionId: string) {
+    workflowStore.clearActiveWorkflowRun()
+
+    const runPage = await workflowStore.loadWorkflowRuns(
+      buildWorkflowRunListParams({
+        projectId: projectId?.value,
+        workflowDefinitionId,
+        page: 1,
+        pageSize: 20
+      })
+    )
+    const latestRun = Array.isArray(runPage?.items) ? runPage.items[0] : undefined
+    if (!latestRun?.id) {
+      return
+    }
+
+    const run = await workflowStore.loadWorkflowRun(latestRun.id)
+    await restoreNodeTasksFromWorkflowRun(run)
+    await scheduleWorkflowRunAutoSync()
+  }
+
+  async function restoreNodeTasksFromWorkflowRun(run: WorkflowRun) {
+    const taskRequests = Object.entries(run.node_states ?? {})
+      .map(([nodeId, state]) => ({ nodeId, taskId: state?.task_id }))
+      .filter((entry): entry is { nodeId: string; taskId: string } => Boolean(entry.taskId))
+
+    const uniqueTaskIds = Array.from(new Set(taskRequests.map((entry) => entry.taskId)))
+
+    const taskResults = await Promise.allSettled(
+      uniqueTaskIds.map(async (taskId) => {
+        const response = await getTaskDetail(taskId, { silent: true })
+        return { taskId, task: response.data }
+      })
+    )
+
+    const taskById = new Map<string, WorkflowTaskRef>()
+
+    for (const result of taskResults) {
+      if (result.status === 'fulfilled') {
+        taskById.set(result.value.taskId, result.value.task)
+      }
+    }
+
+    for (const { nodeId, taskId } of taskRequests) {
+      const task = taskById.get(taskId)
+      if (task) {
+        workflowStore.recordNodeTask(nodeId, task)
+      }
     }
   }
 
