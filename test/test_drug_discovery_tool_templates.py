@@ -144,6 +144,13 @@ def test_ligand_preparation_template_exports_3d_ligand_input_policy():
             "readiness_policy": "allow_raw",
         }
     ]
+    assert config["tool_config"]["artifacts"]["outputs"][0] == {
+        "name": "ligand",
+        "type": "ligand_structure@1",
+        "cardinality": "one",
+        "required": True,
+        "provided_roles": ["structure_3d_sdf", "structure_file"],
+    }
 
 
 def test_heavy_template_projects_resource_profile_to_existing_tool_fields():

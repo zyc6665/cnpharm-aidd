@@ -74,6 +74,15 @@ def test_remote_tool_manifest_accepts_minimum_valid_contract():
     assert manifest.artifacts.outputs[0].type == "binding_pocket@1"
 
 
+def test_remote_tool_manifest_preserves_output_provided_roles():
+    payload = valid_remote_tool_manifest()
+    payload["artifacts"]["outputs"][0]["provided_roles"] = ["prepared_pdb", "receptor_pdbqt"]
+
+    manifest = RemoteToolManifest.model_validate(payload)
+
+    assert manifest.artifacts.outputs[0].provided_roles == ["prepared_pdb", "receptor_pdbqt"]
+
+
 def test_remote_tool_manifest_requires_logs_endpoint():
     payload = valid_remote_tool_manifest()
     del payload["endpoints"]["logs"]

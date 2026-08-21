@@ -50,9 +50,11 @@ artifacts:
     - name: ligand
       type: ligand_structure@1
       required: true
+      provided_roles: [structure_3d_sdf, structure_file]
     - name: report
       type: run_report@1
       required: false
+      provided_roles: [report_json]
 implementation:
   source: open_source
   provider: RDKit and Open Babel

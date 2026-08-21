@@ -425,12 +425,16 @@ def _artifact_input_slot(item: dict[str, Any]) -> dict[str, Any]:
 
 
 def _artifact_output_slot(item: dict[str, Any]) -> dict[str, Any]:
-    return {
+    slot = {
         "name": item.get("name"),
         "type": item.get("type"),
         "cardinality": item.get("cardinality") or "one",
         "required": bool(item.get("required", True)),
     }
+    provided_roles = _string_list(item.get("provided_roles"))
+    if provided_roles:
+        slot["provided_roles"] = provided_roles
+    return slot
 
 
 def _exposure_contract(value: Any) -> dict[str, bool]:

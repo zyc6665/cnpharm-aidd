@@ -1062,7 +1062,7 @@ async def test_import_tool_config_rejects_invalid_enabled_agent_capability(
     )
 
     assert response.status_code == 422
-    assert "agent_capability.inputs" in response.json()["message"]
+    assert "agent_capability.outputs" in response.json()["message"]
 
 
 @pytest.mark.asyncio

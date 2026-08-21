@@ -61,6 +61,7 @@ class RemoteToolArtifactOutput(BaseModel):
     type: str = Field(min_length=1, max_length=100)
     cardinality: Literal["one", "many"] = "one"
     required: bool = True
+    provided_roles: list[str] | None = Field(default=None)
 
     @field_validator("type")
     @classmethod

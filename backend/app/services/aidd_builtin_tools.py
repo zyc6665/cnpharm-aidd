@@ -67,7 +67,12 @@ def _capability_config(tool_slug: str) -> dict:
                 },
             ],
             "outputs": [
-                {"name": "prepared_protein", "type": "protein_structure@1", "required": True},
+                {
+                    "name": "prepared_protein",
+                    "type": "protein_structure@1",
+                    "required": True,
+                    "provided_roles": ["prepared_pdb", "receptor_pdbqt", "preparation_report_json"],
+                },
             ],
         }
     if tool_slug in {"builtin-sdf-to-smiles-csv", "builtin-sdf-to-pdb"}:

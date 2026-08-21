@@ -174,7 +174,12 @@ async def test_ensure_protein_preparation_builtin_declares_standard_artifacts(
         }
     ]
     assert config['artifacts']['outputs'] == [
-        {'name': 'prepared_protein', 'type': 'protein_structure@1', 'required': True}
+        {
+            'name': 'prepared_protein',
+            'type': 'protein_structure@1',
+            'required': True,
+            'provided_roles': ['prepared_pdb', 'receptor_pdbqt', 'preparation_report_json'],
+        }
     ]
 
 

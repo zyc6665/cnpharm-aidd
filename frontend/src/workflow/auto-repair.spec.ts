@@ -24,6 +24,23 @@ const ligandConformerTool = {
   ],
 }
 
+const remoteProteinPreparationTool = {
+  slug: 'remote-protein-prep-api',
+  name: 'Remote Protein Preparation API',
+  inputSemanticTypes: ['protein_structure@1'],
+  outputSemanticTypes: ['protein_structure@1'],
+  inputArtifactSlots: [{ name: 'protein', type: 'protein_structure@1', required: true }],
+  outputArtifactSlots: [
+    {
+      name: 'receptor',
+      type: 'protein_structure@1',
+      cardinality: 'one' as const,
+      required: true,
+      providedRoles: ['prepared_pdb', 'receptor_pdbqt'],
+    },
+  ],
+}
+
 describe('buildWorkflowAutoRepairPlan', () => {
   it('为需要 receptor_pdbqt 的蛋白输入规划蛋白准备节点并重连原始边', () => {
     const template: WorkflowCanvasPreset = {
@@ -190,5 +207,54 @@ describe('buildWorkflowAutoRepairPlan', () => {
     const plan = buildWorkflowAutoRepairPlan({ template, tools: [proteinPreparationTool] })
 
     expect(plan.actions).toEqual([])
+  })
+
+  it('优先选择声明可提供 required roles 的非内置准备工具', () => {
+    const template: WorkflowCanvasPreset = {
+      id: 'free',
+      kind: 'free',
+      nameKey: 'Free',
+      nodes: [
+        {
+          id: 'fetch-pdb',
+          type: 'tool',
+          titleKey: 'Fetch PDB',
+          position: { x: 0, y: 0 },
+          producedOutputTypes: ['protein_structure@1'],
+        },
+        {
+          id: 'dock',
+          type: 'tool',
+          titleKey: 'Dock',
+          position: { x: 420, y: 0 },
+          requiredInputTypes: ['protein_structure@1'],
+          inputArtifactSlots: [
+            {
+              name: 'receptor',
+              type: 'protein_structure@1',
+              required: true,
+              readinessPolicy: 'require_receptor',
+              requiredRoles: ['receptor_pdbqt'],
+            },
+          ],
+        },
+      ],
+      edges: [
+        { id: 'edge-fetch-dock', source: 'fetch-pdb', target: 'dock', artifactType: 'protein_structure@1' },
+      ],
+    }
+
+    const plan = buildWorkflowAutoRepairPlan({ template, tools: [remoteProteinPreparationTool] })
+
+    expect(plan.actions).toEqual([
+      expect.objectContaining({
+        sourceEdgeId: 'edge-fetch-dock',
+        sourceNodeId: 'fetch-pdb',
+        targetNodeId: 'dock',
+        inputSlotName: 'receptor',
+        toolSlug: 'remote-protein-prep-api',
+        artifactType: 'protein_structure@1',
+      }),
+    ])
   })
 })

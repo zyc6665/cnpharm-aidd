@@ -126,6 +126,15 @@ def test_v2_manifest_accepts_standard_artifact_refs_and_cardinality():
     assert result.is_valid is True
 
 
+def test_v2_manifest_preserves_artifact_output_provided_roles():
+    raw = _v2_manifest()
+    raw["artifacts"]["outputs"][0]["provided_roles"] = ["atom_pocket_pdb", "pocket_scores_json"]
+
+    manifest = ToolPackageV2Manifest.model_validate(raw)
+
+    assert manifest.artifacts.outputs[0].provided_roles == ["atom_pocket_pdb", "pocket_scores_json"]
+
+
 def test_v2_manifest_requires_runtime_env_metadata():
     raw = _v2_manifest()
     raw.pop("runtime")

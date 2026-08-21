@@ -122,6 +122,7 @@ class ToolTemplateArtifactOutput(BaseModel):
     type: str = Field(min_length=1, max_length=100)
     cardinality: Literal["one", "many"] = "one"
     required: bool = True
+    provided_roles: list[str] = Field(default_factory=list)
 
     @field_validator("type")
     @classmethod

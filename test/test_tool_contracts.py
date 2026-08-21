@@ -279,6 +279,56 @@ def test_builtin_tool_contract_exposes_configured_standard_artifact_slots():
     }
 
 
+def test_tool_contract_preserves_artifact_output_provided_roles():
+    tool = SimpleNamespace(
+        id="tool-prep",
+        slug="remote-protein-prep-api",
+        name="Remote Protein Prep",
+        description="Role-aware preparation adapter",
+        status="published",
+        is_public=True,
+        current_version=SimpleNamespace(
+            id="version-prep",
+            version="1.0.0",
+            is_active=True,
+            deprecated=False,
+            config={
+                "type": "remote_api",
+                "endpoint": "https://prep.example.com/invoke",
+                "input_schema": {"type": "object", "properties": {}},
+                "output_schema": {"type": "object", "properties": {}},
+                "artifacts": {
+                    "inputs": [
+                        {"name": "protein", "type": "protein_structure@1", "required": True},
+                    ],
+                    "outputs": [
+                        {
+                            "name": "prepared_protein",
+                            "type": "protein_structure@1",
+                            "required": True,
+                            "provided_roles": ["prepared_pdb", "receptor_pdbqt"],
+                        },
+                    ],
+                },
+            },
+        ),
+    )
+
+    contract = build_tool_contract(tool)
+    summary = tool_contract_to_agent_summary(contract)
+
+    assert contract["artifacts"]["outputs"] == [
+        {
+            "name": "prepared_protein",
+            "type": "protein_structure@1",
+            "cardinality": "one",
+            "required": True,
+            "provided_roles": ["prepared_pdb", "receptor_pdbqt"],
+        }
+    ]
+    assert summary["artifact_outputs"] == contract["artifacts"]["outputs"]
+
+
 def test_lvpocket_legacy_contract_infers_role_aware_protein_slot():
     tool = SimpleNamespace(
         id="tool-lvpocket",

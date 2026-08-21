@@ -101,6 +101,9 @@ def _artifact_contract(template: DrugDiscoveryToolTemplate) -> dict[str, Any]:
             input_slot.pop("role_preferences", None)
         if not input_slot.get("required_roles"):
             input_slot.pop("required_roles", None)
+    for output_slot in contract.get("outputs", []):
+        if not output_slot.get("provided_roles"):
+            output_slot.pop("provided_roles", None)
     return contract
 
 

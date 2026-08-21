@@ -112,6 +112,35 @@ describe('contract artifact slots', () => {
     })
   })
 
+  it('preserves provided roles on artifact outputs for workflow auto repair', () => {
+    const contract = makeToolContract({
+      artifacts: {
+        inputs: [],
+        outputs: [
+          {
+            name: 'prepared_protein',
+            type: 'protein_structure@1',
+            cardinality: 'one',
+            required: true,
+            provided_roles: ['prepared_pdb', 'receptor_pdbqt'],
+          },
+        ],
+      },
+    })
+
+    const slots = deriveArtifactSlotsFromToolContract(contract)
+
+    expect(slots.outputs).toEqual([
+      {
+        name: 'prepared_protein',
+        type: 'protein_structure@1',
+        cardinality: 'one',
+        required: true,
+        providedRoles: ['prepared_pdb', 'receptor_pdbqt'],
+      },
+    ])
+  })
+
   it('keeps standard artifact refs that are not precompiled into the frontend catalog', () => {
     const contract = makeToolContract({
       artifacts: {

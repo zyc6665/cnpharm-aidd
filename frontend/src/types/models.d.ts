@@ -257,6 +257,7 @@ export interface ToolContract {
       type: string
       cardinality?: 'one' | 'many'
       required?: boolean
+      provided_roles?: string[]
     }>
   }
   validation: ToolContractValidation

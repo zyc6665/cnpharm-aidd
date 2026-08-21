@@ -24,6 +24,7 @@ export interface ArtifactOutputSlot {
   readonly type: WorkflowArtifactSemanticType
   readonly cardinality: 'one' | 'many'
   readonly required: boolean
+  readonly providedRoles?: readonly string[]
 }
 
 export interface ToolArtifactSlots {
@@ -154,12 +155,14 @@ export function deriveArtifactSlotsFromToolContract(
           return null
         }
 
-        return {
+        const outputSlot: ArtifactOutputSlot = {
           name: slot.name,
           type,
           cardinality: slot.cardinality ?? 'one',
           required: slot.required ?? true
         }
+        const providedRoles = toStringList(slot.provided_roles)
+        return providedRoles.length > 0 ? { ...outputSlot, providedRoles } : outputSlot
       })
       .filter((slot): slot is ArtifactOutputSlot => slot !== null)
   }

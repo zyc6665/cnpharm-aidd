@@ -46,13 +46,12 @@ export function buildWorkflowAutoRepairPlan(input: {
 
     for (const slot of targetNode.inputArtifactSlots ?? []) {
       const artifactType = normalizeArtifactType(slot.type)
-      const toolSlug = repairToolSlugForSlot(slot)
-      if (!artifactType || !toolSlug) {
+      if (!artifactType) {
         continue
       }
 
-      const repairTool = toolBySlug.get(toolSlug)
-      if (!repairTool || !toolCanRepairArtifact(repairTool, artifactType)) {
+      const toolSlug = resolveRepairToolSlugForSlot(slot, input.tools)
+      if (!toolSlug) {
         continue
       }
 
@@ -94,11 +93,31 @@ function normalizeArtifactType(value?: string | null): WorkflowArtifactSemanticT
   return normalized ? normalized : null
 }
 
-function repairToolSlugForSlot(slot: ArtifactInputSlot): string | null {
-  if (slot.suggestedPreparationTool) {
-    return slot.suggestedPreparationTool
+function resolveRepairToolSlugForSlot(
+  slot: ArtifactInputSlot,
+  tools: readonly WorkflowAutoRepairTool[],
+): string | null {
+  const suggestedToolSlug = String(slot.suggestedPreparationTool ?? '').trim()
+  const suggestedTool = suggestedToolSlug ? tools.find(tool => tool.slug === suggestedToolSlug) : undefined
+  if (suggestedTool && toolCanRepairSlot(suggestedTool, slot, { requireProvidedRoles: false })) {
+    return suggestedTool.slug
   }
 
+  const roleAwareTool = tools.find(tool => toolCanRepairSlot(tool, slot, { requireProvidedRoles: true }))
+  if (roleAwareTool) {
+    return roleAwareTool.slug
+  }
+
+  const fallbackToolSlug = fallbackRepairToolSlugForSlot(slot)
+  const fallbackTool = fallbackToolSlug ? tools.find(tool => tool.slug === fallbackToolSlug) : undefined
+  if (fallbackTool && toolCanRepairSlot(fallbackTool, slot, { requireProvidedRoles: false })) {
+    return fallbackTool.slug
+  }
+
+  return null
+}
+
+function fallbackRepairToolSlugForSlot(slot: ArtifactInputSlot): string | null {
   const artifactType = normalizeArtifactType(slot.type)
   const policy = String(slot.readinessPolicy ?? '')
   const requiredRoles = new Set(slot.requiredRoles ?? [])
@@ -126,11 +145,16 @@ function repairToolSlugForSlot(slot: ArtifactInputSlot): string | null {
   return null
 }
 
-function toolCanRepairArtifact(
+function toolCanRepairSlot(
   tool: WorkflowAutoRepairTool,
-  artifactType: WorkflowArtifactSemanticType,
+  slot: ArtifactInputSlot,
+  options: { requireProvidedRoles: boolean },
 ): boolean {
-  return toolAcceptsArtifact(tool, artifactType) && toolProducesArtifact(tool, artifactType)
+  const artifactType = normalizeArtifactType(slot.type)
+  if (!artifactType || !toolAcceptsArtifact(tool, artifactType)) {
+    return false
+  }
+  return toolProducesArtifactForSlot(tool, artifactType, desiredRolesForSlot(slot), options)
 }
 
 function toolAcceptsArtifact(
@@ -143,14 +167,54 @@ function toolAcceptsArtifact(
   ].map(normalizeWorkflowSemanticType).includes(artifactType)
 }
 
-function toolProducesArtifact(
+function toolProducesArtifactForSlot(
   tool: WorkflowAutoRepairTool,
   artifactType: WorkflowArtifactSemanticType,
+  desiredRoles: readonly string[],
+  options: { requireProvidedRoles: boolean },
 ): boolean {
-  return [
-    ...(tool.outputArtifactSlots ?? []).map(slot => slot.type),
-    ...(tool.outputSemanticTypes ?? []),
-  ].map(normalizeWorkflowSemanticType).includes(artifactType)
+  for (const slot of tool.outputArtifactSlots ?? []) {
+    if (normalizeWorkflowSemanticType(slot.type) !== artifactType) {
+      continue
+    }
+    if (outputSlotSatisfiesRoles(slot, desiredRoles, options)) {
+      return true
+    }
+  }
+
+  return !options.requireProvidedRoles && (tool.outputSemanticTypes ?? [])
+    .map(normalizeWorkflowSemanticType)
+    .includes(artifactType)
+}
+
+function outputSlotSatisfiesRoles(
+  outputSlot: ArtifactOutputSlot,
+  desiredRoles: readonly string[],
+  options: { requireProvidedRoles: boolean },
+): boolean {
+  if (desiredRoles.length === 0) {
+    return !options.requireProvidedRoles
+  }
+  const providedRoles = new Set(outputSlot.providedRoles ?? [])
+  if (providedRoles.size === 0) {
+    return !options.requireProvidedRoles
+  }
+  return desiredRoles.every(role => providedRoles.has(role))
+}
+
+function desiredRolesForSlot(slot: ArtifactInputSlot): readonly string[] {
+  const roles = new Set(slot.requiredRoles ?? [])
+  const policy = String(slot.readinessPolicy ?? '')
+
+  if (policy === 'require_receptor') {
+    roles.add('receptor_pdbqt')
+  } else if (policy === 'require_prepared' || policy === 'prefer_prepared_warn_raw') {
+    roles.add('prepared_pdb')
+  } else if (policy === 'prefer_3d_ligand') {
+    roles.add('structure_3d_sdf')
+  }
+
+  return [...roles]
 }
 
 function hasExistingRepairPath(
