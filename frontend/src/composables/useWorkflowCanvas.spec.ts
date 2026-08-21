@@ -220,4 +220,96 @@ describe('useWorkflowCanvas', () => {
       }),
     ])
   })
+
+  it('应一键插入准备节点并把原始连线重连到准备节点', () => {
+    const canvas = mountCanvasHarness()
+    canvas.toolsStore.workbenchGroups = [
+      {
+        id: 'aidd',
+        name: 'AIDD',
+        slug: 'aidd',
+        sort_order: 1,
+        tools: [
+          {
+            id: 'tool-prepare',
+            name: 'Protein Preparation',
+            slug: 'builtin-protein-preparation',
+            status: 'published',
+            is_recommended: true,
+            sort_order: 1,
+            contract: {
+              contract_version: '1.0',
+              slug: 'builtin-protein-preparation',
+              name: 'Protein Preparation',
+              status: 'published',
+              executor: { type: 'builtin' },
+              schema: { input: { type: 'object', properties: {} }, output: { type: 'object', properties: {} } },
+              capability: { enabled: true, inputs: [], outputs: [], defaults: {} },
+              artifacts: {
+                inputs: [{ name: 'protein', type: 'protein_structure@1', required: true }],
+                outputs: [{ name: 'prepared_protein', type: 'protein_structure@1', cardinality: 'one', required: true }],
+              },
+              validation: { status: 'valid', errors: [] },
+            },
+          },
+        ],
+      },
+    ] as never
+    canvas.workflowStore.$patch({
+      hasCanvasOverride: true,
+      canvasNodes: [
+        {
+          id: 'fetch-pdb',
+          type: 'tool',
+          titleKey: 'Fetch PDB',
+          position: { x: 0, y: 0 },
+          producedOutputTypes: ['protein_structure@1'],
+        },
+        {
+          id: 'dock',
+          type: 'tool',
+          titleKey: 'Dock',
+          position: { x: 420, y: 0 },
+          requiredInputTypes: ['protein_structure@1'],
+          inputArtifactSlots: [
+            {
+              name: 'receptor',
+              type: 'protein_structure@1',
+              required: true,
+              readinessPolicy: 'require_receptor',
+              suggestedPreparationTool: 'builtin-protein-preparation',
+            },
+          ],
+        },
+      ],
+      canvasEdges: [
+        { id: 'edge-fetch-dock', source: 'fetch-pdb', target: 'dock', artifactType: 'protein_structure@1' },
+      ],
+    })
+
+    expect(canvas.workflowRepairableCount.value).toBe(1)
+
+    canvas.handleApplyWorkflowAutoRepair()
+
+    const repairNode = canvas.workflowStore.canvasNodes.find(
+      node => node.recommendedToolSlug === 'builtin-protein-preparation'
+    )
+    expect(repairNode).toBeDefined()
+    expect(canvas.workflowStore.canvasEdges).not.toContainEqual(expect.objectContaining({ id: 'edge-fetch-dock' }))
+    expect(canvas.workflowStore.canvasEdges).toContainEqual(expect.objectContaining({
+      source: 'fetch-pdb',
+      target: repairNode?.id,
+      artifactType: 'protein_structure@1',
+    }))
+    expect(canvas.workflowStore.canvasEdges).toContainEqual(expect.objectContaining({
+      source: repairNode?.id,
+      target: 'dock',
+      artifactType: 'protein_structure@1',
+    }))
+    expect(canvas.buildCurrentWorkflowDefinition().nodes.find(node => node.id === 'dock')).toMatchObject({
+      artifact_inputs: {
+        receptor: `node:${repairNode?.id}:prepared_protein`,
+      },
+    })
+  })
 })

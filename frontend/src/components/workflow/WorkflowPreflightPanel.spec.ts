@@ -20,13 +20,17 @@ describe('WorkflowPreflightPanel', () => {
   const mountPanel = (preflight = basePreflight) => mount(WorkflowPreflightPanel, {
     props: {
       preflight,
+      repairableCount: 0,
     },
     global: {
       plugins: [i18n],
       stubs: {
         ASpace: { template: '<div><slot /></div>' },
         ATag: { template: '<span><slot /></span>' },
-        AButton: { template: '<button><slot /></button>' },
+        AButton: {
+          emits: ['click'],
+          template: '<button v-bind="$attrs" @click="$emit(\'click\')"><slot /></button>',
+        },
       },
     },
   })
@@ -87,5 +91,33 @@ describe('WorkflowPreflightPanel', () => {
     expect(wrapper.text()).toContain('AutoDock Vina')
     expect(wrapper.text()).toContain('docker_image')
     expect(wrapper.text()).toContain('medium · CPU 8 · MEM 16GB · ETA 30m')
+  })
+
+  it('存在可自动修复项时应展示一键补齐动作', async () => {
+    const wrapper = mountPanel({
+      ...basePreflight,
+      canRun: false,
+      runnableCount: 0,
+      blockedCount: 1,
+      primaryMessage: '存在标准产物需要准备或转换',
+      issues: [
+        {
+          id: 'dock-needs-preparation-receptor',
+          nodeId: 'dock',
+          nodeTitle: 'Dock',
+          type: 'needs_preparation',
+          severity: 'warning',
+          title: '需要先准备输入产物',
+          detail: '缺少 receptor_pdbqt。建议运行 builtin-protein-preparation。',
+        },
+      ],
+    })
+
+    await wrapper.setProps({ repairableCount: 1 })
+    expect(wrapper.text()).toContain('一键补齐准备节点')
+
+    await wrapper.find('[data-testid="apply-workflow-auto-repair"]').trigger('click')
+
+    expect(wrapper.emitted('apply-auto-repair')).toHaveLength(1)
   })
 })

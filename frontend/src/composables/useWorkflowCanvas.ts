@@ -21,6 +21,7 @@ import {
   type ArtifactInputSlot,
   type ArtifactOutputSlot
 } from '@/workflow/contract-bindings'
+import { buildWorkflowAutoRepairPlan } from '@/workflow/auto-repair'
 import { resolveWorkflowCanvasNodeStatus } from '@/workflow/canvas-state'
 import { resolveWorkflowLabel } from '@/workflow/i18n-utils'
 
@@ -296,6 +297,13 @@ export function useWorkflowCanvas(input: {
     })
   })
 
+  const workflowRepairPlan = computed(() => buildWorkflowAutoRepairPlan({
+    template: editableCanvasPreset.value,
+    tools: availableWorkflowTools.value
+  }))
+
+  const workflowRepairableCount = computed(() => workflowRepairPlan.value.repairableCount)
+
   function handleCanvasPresetChange(canvasPresetId: unknown) {
     if (typeof canvasPresetId !== 'string') {
       return
@@ -352,7 +360,7 @@ export function useWorkflowCanvas(input: {
   ) {
     const toolSlug = typeof input === 'string' ? input : input.toolSlug
     const tool = resolveAvailableTool(toolSlug)
-    workflowStore.addToolNode({
+    return workflowStore.addToolNode({
       toolSlug,
       toolName: tool?.name ?? toolSlug,
       toolDescription: tool?.description,
@@ -368,6 +376,40 @@ export function useWorkflowCanvas(input: {
             }
           : input.position
     })
+  }
+
+  function handleApplyWorkflowAutoRepair(): number {
+    const actions = workflowRepairPlan.value.actions
+    let appliedCount = 0
+
+    for (const action of actions) {
+      const tool = resolveAvailableTool(action.toolSlug)
+      if (!tool) {
+        continue
+      }
+      const repairNode = handleAddToolNode({
+        toolSlug: action.toolSlug,
+        position: action.position
+      })
+      if (!repairNode) {
+        continue
+      }
+
+      workflowStore.deleteCanvasEdge(action.sourceEdgeId)
+      workflowStore.addCanvasEdge({
+        source: action.sourceNodeId,
+        target: repairNode.id,
+        artifactType: action.artifactType
+      })
+      workflowStore.addCanvasEdge({
+        source: repairNode.id,
+        target: action.targetNodeId,
+        artifactType: action.artifactType
+      })
+      appliedCount += 1
+    }
+
+    return appliedCount
   }
 
   function handleAddControlNode(type: Extract<WorkflowCanvasNodeType, 'condition' | 'map' | 'loop'>) {
@@ -652,10 +694,13 @@ export function useWorkflowCanvas(input: {
     completedNodeCount,
     failedNodeCount,
     workflowReportRows,
+    workflowRepairPlan,
+    workflowRepairableCount,
     handleCanvasPresetChange,
     resolveNodeStatusReason,
     handleNodeToolSelect,
     handleAddToolNode,
+    handleApplyWorkflowAutoRepair,
     handleAddControlNode,
     handleDeleteNode,
     handleAddEdge,

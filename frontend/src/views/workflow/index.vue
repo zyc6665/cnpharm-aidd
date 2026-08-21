@@ -214,7 +214,9 @@
                 <WorkflowPreflightPanel
                   :preflight="workflowPreflight"
                   :running="workflowStore.isRunningWorkflowDefinition"
+                  :repairable-count="workflowRepairableCount"
                   @run-ready-nodes="handleRunWorkflowDefinition"
+                  @apply-auto-repair="handleApplyWorkflowAutoRepair"
                   @select-node="workflowStore.setActiveNode"
                 />
                 </template>
@@ -349,9 +351,11 @@
     completedNodeCount,
     failedNodeCount,
     workflowReportRows,
+    workflowRepairableCount,
     resolveNodeStatusReason,
     handleNodeToolSelect,
     handleAddToolNode,
+    handleApplyWorkflowAutoRepair,
     handleAddControlNode,
     handleDeleteNode,
     handleAddEdge,

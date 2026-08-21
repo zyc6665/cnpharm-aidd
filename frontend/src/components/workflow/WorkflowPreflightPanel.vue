@@ -15,6 +15,15 @@
       >
         {{ t('workflow.preflight.runReadyNodes') }}
       </a-button>
+      <a-button
+        v-if="repairableCount > 0"
+        class="preflight-hero-action"
+        data-testid="apply-workflow-auto-repair"
+        :disabled="running"
+        @click="$emit('apply-auto-repair')"
+      >
+        一键补齐准备节点
+      </a-button>
     </div>
 
     <div class="preflight-metrics" aria-label="workflow preflight metrics">
@@ -108,14 +117,19 @@
   import { useI18n } from 'vue-i18n'
   import type { WorkflowPreflightSummary } from '@/workflow/preflight'
 
-  const props = defineProps<{
+  const props = withDefaults(defineProps<{
     preflight: WorkflowPreflightSummary
     running?: boolean
-  }>()
+    repairableCount?: number
+  }>(), {
+    running: false,
+    repairableCount: 0,
+  })
 
   defineEmits<{
     (event: 'run-ready-nodes'): void
     (event: 'select-node', nodeId: string): void
+    (event: 'apply-auto-repair'): void
   }>()
   const { t } = useI18n()
 
