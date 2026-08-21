@@ -4,10 +4,7 @@
 import os
 import hashlib
 import aiofiles
-import io
 import re
-import shutil
-import subprocess
 import tempfile
 import uuid
 from pathlib import Path
@@ -34,6 +31,7 @@ from app.schemas.files import (
 )
 from app.common.responses import paginated_response, success_response
 from app.common.exceptions import NotFoundException, ForbiddenException, ValidationException
+from app.chemistry.conversion import convert_sdf_to_pdb_with_toolkit as _convert_sdf_to_pdb_with_toolkit
 from app.config import settings
 from app.files.remote_access_tokens import (
     RemoteFileAccessTokenError,
@@ -173,100 +171,6 @@ def _safe_converted_pdb_filename(filename: str | None) -> str:
     stem = Path(raw_name).stem or "ligand"
     safe_stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", stem).strip("._") or "ligand"
     return f"{safe_stem}.pdb"
-
-
-def _normalize_pdb_block(pdb_text: str) -> str:
-    """标准化 toolkit 生成的 PDB 文本。"""
-    normalized = pdb_text.replace("\r\n", "\n").replace("\r", "\n").strip()
-    if not normalized:
-        raise ValidationException("SDF 转 PDB 结果为空")
-    if "HETATM" not in normalized and "ATOM" not in normalized:
-        raise ValidationException("SDF 转 PDB 结果缺少原子记录")
-    if not normalized.endswith("END"):
-        normalized = f"{normalized}\nEND"
-    return f"{normalized}\n"
-
-
-def _first_sdf_record_bytes(sdf_content: bytes) -> bytes:
-    """提取第一条 SDF 记录，并保留 SDF 必需的三行 header。"""
-    first_record = sdf_content.replace(b"\r\n", b"\n").replace(b"\r", b"\n").split(b"$$$$", 1)[0]
-    if not first_record.strip():
-        raise ValidationException("SDF 文件为空")
-
-    lines = first_record.split(b"\n")
-    counts_index = next((index for index, line in enumerate(lines) if b"V2000" in line or b"V3000" in line), None)
-    if counts_index is None:
-        return first_record.rstrip() + b"\n$$$$\n"
-
-    header_lines = lines[:counts_index]
-    body_lines = lines[counts_index:]
-    if len(header_lines) > 3:
-        header_lines = header_lines[-3:]
-    elif len(header_lines) < 3:
-        header_lines = ([b""] * (3 - len(header_lines))) + header_lines
-
-    return b"\n".join(header_lines + body_lines).rstrip() + b"\n$$$$\n"
-
-
-def _convert_sdf_to_pdb_with_rdkit(sdf_content: bytes) -> str | None:
-    """优先用 RDKit 转换第一条有效 SDF 分子；未安装 RDKit 时返回 None。"""
-    try:
-        from rdkit import Chem
-    except ImportError:
-        return None
-
-    normalized_sdf = _first_sdf_record_bytes(sdf_content)
-    supplier = Chem.ForwardSDMolSupplier(
-        io.BytesIO(normalized_sdf),
-        sanitize=False,
-        removeHs=False,
-        strictParsing=False,
-    )
-    for mol in supplier:
-        if mol is None or mol.GetNumAtoms() == 0:
-            continue
-        return _normalize_pdb_block(Chem.MolToPDBBlock(mol))
-
-    raise ValidationException("RDKit 无法从 SDF 中读取有效分子")
-
-
-def _convert_sdf_to_pdb_with_openbabel(sdf_content: bytes) -> str | None:
-    """使用 OpenBabel 命令行转换第一条 SDF 分子；未安装 obabel 时返回 None。"""
-    obabel = shutil.which("obabel")
-    if not obabel:
-        return None
-
-    with tempfile.TemporaryDirectory(prefix="sdf-to-pdb-") as tmp_dir:
-        input_path = Path(tmp_dir) / "ligand.sdf"
-        output_path = Path(tmp_dir) / "ligand.pdb"
-        input_path.write_bytes(_first_sdf_record_bytes(sdf_content))
-
-        result = subprocess.run(
-            [obabel, "-isdf", str(input_path), "-opdb", "-O", str(output_path)],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        if result.returncode != 0:
-            detail = (result.stderr or result.stdout or "OpenBabel 转换失败").strip()
-            raise ValidationException(f"OpenBabel 转换失败: {detail}")
-        if not output_path.exists():
-            raise ValidationException("OpenBabel 未生成 PDB 文件")
-        return _normalize_pdb_block(output_path.read_text(encoding="utf-8", errors="replace"))
-
-
-def _convert_sdf_to_pdb_with_toolkit(sdf_content: bytes) -> tuple[str, str]:
-    """使用 RDKit 或 OpenBabel 将 SDF 第一条有效分子转换为 PDB。"""
-    rdkit_pdb = _convert_sdf_to_pdb_with_rdkit(sdf_content)
-    if rdkit_pdb is not None:
-        return rdkit_pdb, "rdkit"
-
-    openbabel_pdb = _convert_sdf_to_pdb_with_openbabel(sdf_content)
-    if openbabel_pdb is not None:
-        return openbabel_pdb, "openbabel"
-
-    raise ValidationException("后端未安装 RDKit 或 OpenBabel，无法进行可靠的 SDF 到 PDB 转换")
 
 
 @router.post("/upload", response_model=dict)

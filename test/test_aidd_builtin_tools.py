@@ -32,6 +32,105 @@ def test_sdf_to_smiles_csv_uses_molp_compatible_header() -> None:
     assert content == "SMILES,id\nCCO,mol_1\n"
 
 
+def test_builtin_sdf_conversion_normalizes_missing_header_line() -> None:
+    sdf_content = b"""RDKit          3D
+
+  3  2  0  0  0  0            999 V2000
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.2000    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.1000    0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0
+  1  3  1  0
+M  END
+$$$$
+"""
+
+    normalized = builtin_tools._first_sdf_record_bytes(sdf_content)
+    lines = normalized.splitlines()
+    counts_index = next(index for index, line in enumerate(lines) if b"V2000" in line)
+
+    assert counts_index == 3
+    assert normalized.endswith(b"$$$$\n")
+
+
+def test_convert_sdf_to_smiles_rejects_openbabel_title_only_output(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    sdf_path = tmp_path / "ligand.sdf"
+    sdf_path.write_text("mock sdf", encoding="utf-8")
+    monkeypatch.setattr(
+        builtin_tools.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="\tRDKit          3D\n", stderr=""),
+    )
+
+    with pytest.raises(ValidationException, match="未返回任何 SMILES"):
+        builtin_tools.convert_sdf_to_smiles_with_tool(sdf_path)
+
+
+def test_sdf_to_smiles_csv_builtin_emits_standard_molecule_table(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    sdf_path = tmp_path / "ligand.sdf"
+    sdf_path.write_text("mock sdf", encoding="utf-8")
+    monkeypatch.setattr(builtin_tools, "parse_sdf_smiles", lambda _text: ["CCO"])
+
+    result = builtin_tools._run_sdf_to_smiles_csv_tool(
+        {
+            "ligand_structure@1": builtin_tools.BuiltinToolFile(
+                file_id="ligand-file",
+                filename="ligand.sdf",
+                path=sdf_path,
+                content_type="chemical/x-mdl-sdfile",
+            )
+        }
+    )
+
+    artifacts = {artifact.filename: artifact for artifact in result.artifacts}
+    assert "ligand_smiles.csv" in artifacts
+    assert "ligand_smiles_metadata.json" in artifacts
+    assert artifacts["ligand_smiles.csv"].content.decode("utf-8") == "SMILES,id\nCCO,mol_1\n"
+    assert result.standard_result is not None
+    molecules = result.standard_result["artifacts"]["molecules"]
+    assert molecules["type"] == "molecule_table@1"
+    assert set(molecules["files"]) == {"table_file", "metadata_json"}
+    assert molecules["metadata"]["molecule_id_field"] == "id"
+
+
+def test_sdf_to_pdb_builtin_emits_standard_ligand_structure(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    sdf_path = tmp_path / "ligand.sdf"
+    sdf_path.write_text("mock sdf", encoding="utf-8")
+    monkeypatch.setattr(
+        builtin_tools,
+        "convert_sdf_to_pdb_with_tool",
+        lambda _path: b"HETATM    1  C   LIG A   1       0.000   0.000   0.000\nEND\n",
+    )
+
+    result = builtin_tools._run_sdf_to_pdb_tool(
+        {
+            "ligand_structure@1": builtin_tools.BuiltinToolFile(
+                file_id="ligand-file",
+                filename="ligand.sdf",
+                path=sdf_path,
+                content_type="chemical/x-mdl-sdfile",
+            )
+        }
+    )
+
+    artifacts = {artifact.filename: artifact for artifact in result.artifacts}
+    assert "ligand_ligand.pdb" in artifacts
+    assert result.standard_result is not None
+    ligand = result.standard_result["artifacts"]["ligand"]
+    assert ligand["type"] == "ligand_structure@1"
+    assert set(ligand["files"]) == {"structure_file"}
+    assert ligand["metadata"]["ligand_id"] == "ligand"
+
+
 def test_placeholder_scientific_capabilities_are_not_executable() -> None:
     placeholder_slugs = {
         "builtin-admet-prediction",

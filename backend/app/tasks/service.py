@@ -321,6 +321,7 @@ async def create_and_schedule_tool_task(
         tool_version.config,
         gpu_required=tool.gpu_required,
         gpu_memory_mb=tool.gpu_memory_mb,
+        params=task_data.params,
     )
     project_id = task_data.project_id
     if project_id:
@@ -407,7 +408,7 @@ async def create_and_schedule_tool_task(
                 tool_config=tool_version.config,
                 user_role=current_user.role,
                 priority=task_data.priority,
-                gpu_required=tool.gpu_required,
+                gpu_required=bool(extra_data["resource_snapshot"].get("gpu_required")),
             )
 
             celery_task = TaskQueueManager.enqueue_task(

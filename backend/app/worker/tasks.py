@@ -153,6 +153,19 @@ async def _persist_standard_artifacts_if_present(db, task, tool_version, output_
     )
 
 
+async def _append_legacy_standard_result_if_needed(db, task, tool_version, output_result):
+    """Add result.v2 metadata for supported legacy executors before persistence."""
+    from app.tasks.legacy_standardization import append_legacy_standard_result
+
+    return await append_legacy_standard_result(
+        db,
+        task=task,
+        tool_version_config=tool_version.config,
+        output_result=output_result,
+        output_file_ids=_extract_output_file_ids(output_result),
+    )
+
+
 def _attach_standard_artifact_summary(
     output_result: Dict[str, Any],
     persistence_result,
@@ -327,6 +340,12 @@ async def _execute_tool_task_impl(task_id: str, tool_version_id: str) -> Dict[st
                     task_id,
                     scoring_exc,
                 )
+            output_result = await _append_legacy_standard_result_if_needed(
+                db,
+                task,
+                tool_version,
+                output_result,
+            )
 
             # 创建输出记录
             prepared_output = prepare_task_output(output_result)

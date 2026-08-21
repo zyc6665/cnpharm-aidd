@@ -409,6 +409,178 @@ async def test_builtin_workflow_node_receives_upstream_standard_artifact_input(
 
 
 @pytest.mark.asyncio
+async def test_workflow_node_receives_upstream_standard_artifact_binding(
+    db_session: AsyncSession,
+    owner: User,
+) -> None:
+    pocket_file = FileModel(
+        owner_id=owner.id,
+        filename="pocket.json",
+        content_type="application/json",
+        size_bytes=2,
+        sha256=hashlib.sha256(b"{}").hexdigest(),
+        source_type=FileSourceType.TOOL_OUTPUT.value,
+        storage_path="/tmp/pocket.json",
+        is_public=False,
+    )
+    db_session.add(pocket_file)
+    await db_session.flush()
+    tool = await _create_tool(
+        db_session,
+        owner,
+        slug="tool-package-pocket-generation",
+        provider_type=ToolProviderType.USER.value,
+        executor_type="ssh_job",
+        is_public=True,
+        config={
+            "type": "ssh_job",
+            "tool_package_manifest": {"api_version": "aidd.sciminer/tool-package.v2"},
+        },
+    )
+    run = SimpleNamespace(
+        id="run-1",
+        name="Generation Run",
+        workflow_definition_id="workflow-1",
+        project_id="project-1",
+        input_files={},
+    )
+    node = {
+        "id": "molecule_generation",
+        "kind": "tool",
+        "tool_id": tool.id,
+        "tool_slug": tool.slug,
+        "artifact_input_slots": [
+            {"name": "pocket", "type": "binding_pocket@1", "required": True}
+        ],
+        "artifact_inputs": {"pocket": "node:pocket_prediction:pocket"},
+    }
+    node_states = {
+        "molecule_generation": {"status": "pending"},
+        "pocket_prediction": {
+            "status": "success",
+            "standard_artifacts": {
+                "artifact_version_ids_by_ref": {"pocket": "artifact-version-pocket"},
+                "file_ids_by_artifact_ref": {"pocket": [pocket_file.id]},
+            },
+        },
+    }
+    scheduled: list[dict] = []
+
+    async def fake_schedule_task(**kwargs):
+        task_data = kwargs["task_data"]
+        scheduled.append(
+            {
+                "file_ids": task_data.file_ids,
+                "input_bindings": task_data.input_bindings,
+            }
+        )
+        return SimpleNamespace(id="task-generation")
+
+    created = await schedule_workflow_node(
+        db_session,
+        current_user=owner,
+        run=run,
+        node_id="molecule_generation",
+        node=node,
+        node_states=node_states,
+        schedule_task_fn=fake_schedule_task,
+    )
+
+    assert created is True
+    assert scheduled[0]["file_ids"] == [pocket_file.id]
+    assert scheduled[0]["input_bindings"] == {"pocket": "artifact-version-pocket"}
+    assert node_states["molecule_generation"]["input_bindings"] == {
+        "pocket": "artifact-version-pocket"
+    }
+
+
+@pytest.mark.asyncio
+async def test_workflow_node_binds_first_cardinality_many_standard_artifact(
+    db_session: AsyncSession,
+    owner: User,
+) -> None:
+    ligand_file = FileModel(
+        owner_id=owner.id,
+        filename="generated.sdf",
+        content_type="chemical/x-mdl-sdfile",
+        size_bytes=8,
+        sha256=hashlib.sha256(b"ligand").hexdigest(),
+        source_type=FileSourceType.TOOL_OUTPUT.value,
+        storage_path="/tmp/generated.sdf",
+        is_public=False,
+    )
+    db_session.add(ligand_file)
+    await db_session.flush()
+    tool = await _create_tool(
+        db_session,
+        owner,
+        slug="tool-package-affinity",
+        provider_type=ToolProviderType.USER.value,
+        executor_type="ssh_job",
+        is_public=True,
+        config={
+            "type": "ssh_job",
+            "tool_package_manifest": {"api_version": "aidd.sciminer/tool-package.v2"},
+        },
+    )
+    run = SimpleNamespace(
+        id="run-affinity",
+        name="Affinity Run",
+        workflow_definition_id="workflow-1",
+        project_id="project-1",
+        input_files={},
+    )
+    node = {
+        "id": "affinity_prediction",
+        "kind": "tool",
+        "tool_id": tool.id,
+        "tool_slug": tool.slug,
+        "artifact_input_slots": [
+            {"name": "ligand", "type": "ligand_structure@1", "required": True}
+        ],
+        "artifact_inputs": {"ligand": "node:molecule_generation:ligands"},
+    }
+    node_states = {
+        "affinity_prediction": {"status": "pending"},
+        "molecule_generation": {
+            "status": "success",
+            "standard_artifacts": {
+                "artifact_version_ids_by_ref": {"ligands[0]": "artifact-version-ligand-0"},
+                "file_ids_by_artifact_ref": {"ligands[0]": [ligand_file.id]},
+            },
+        },
+    }
+    scheduled: list[dict] = []
+
+    async def fake_schedule_task(**kwargs):
+        task_data = kwargs["task_data"]
+        scheduled.append(
+            {
+                "file_ids": task_data.file_ids,
+                "input_bindings": task_data.input_bindings,
+            }
+        )
+        return SimpleNamespace(id="task-affinity")
+
+    created = await schedule_workflow_node(
+        db_session,
+        current_user=owner,
+        run=run,
+        node_id="affinity_prediction",
+        node=node,
+        node_states=node_states,
+        schedule_task_fn=fake_schedule_task,
+    )
+
+    assert created is True
+    assert scheduled[0]["file_ids"] == [ligand_file.id]
+    assert scheduled[0]["input_bindings"] == {"ligand": "artifact-version-ligand-0"}
+    assert node_states["affinity_prediction"]["input_bindings"] == {
+        "ligand": "artifact-version-ligand-0"
+    }
+
+
+@pytest.mark.asyncio
 async def test_role_aware_artifact_input_blocks_raw_protein_when_prepared_required(
     db_session: AsyncSession,
     owner: User,
@@ -538,7 +710,16 @@ async def test_role_aware_artifact_input_schedules_selected_prepared_role_only(
         provider_type=ToolProviderType.USER.value,
         executor_type="ssh_job",
         is_public=True,
-        config={"type": "ssh_job"},
+        config={
+            "type": "ssh_job",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "protein_pdb": {"type": "string", "format": "file"},
+                    "device": {"type": "string"},
+                },
+            },
+        },
     )
     run = SimpleNamespace(
         id="run-prepared",
@@ -578,7 +759,13 @@ async def test_role_aware_artifact_input_schedules_selected_prepared_role_only(
 
     async def fake_schedule_task(**kwargs):
         task_data = kwargs["task_data"]
-        scheduled.append({"file_ids": task_data.file_ids, "params": task_data.params})
+        scheduled.append(
+            {
+                "file_ids": task_data.file_ids,
+                "params": task_data.params,
+                "input_bindings": task_data.input_bindings,
+            }
+        )
         return SimpleNamespace(id="task-prepared")
 
     created = await schedule_workflow_node(
@@ -593,7 +780,12 @@ async def test_role_aware_artifact_input_schedules_selected_prepared_role_only(
 
     assert created is True
     assert scheduled[0]["file_ids"] == [prepared_file.id]
+    assert scheduled[0]["input_bindings"] == {}
+    assert scheduled[0]["params"]["input_files"] == {
+        "protein_pdb": "input/prepared.pdb"
+    }
     assert node_states["prepared_required"]["input_file_ids"] == [prepared_file.id]
+    assert node_states["prepared_required"]["input_bindings"] == {}
     assert node_states["prepared_required"]["binding_decisions"]["protein"]["status"] == "ready"
     assert node_states["prepared_required"]["binding_decisions"]["protein"]["selected_role"] == (
         "prepared_pdb"

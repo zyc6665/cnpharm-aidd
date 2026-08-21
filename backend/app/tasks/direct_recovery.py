@@ -23,7 +23,9 @@ from app.services.standard_artifacts import (
 )
 from app.services.workflow_reconciliation import reconcile_waiting_workflow_runs
 from app.tasks.executor import SSHJobExecutor, TaskExecutionError
+from app.tasks.legacy_standardization import append_legacy_standard_result
 from app.tasks.molecule_scoring import append_molecule_scoring_artifacts
+from app.tasks.direct_runner import direct_task_runner
 from app.tasks.service import create_and_schedule_tool_task
 from app.tasks.state_machine import TaskStateMachine
 from app.worker.tasks import prepare_task_output
@@ -72,6 +74,8 @@ async def reconcile_orphaned_direct_tasks(db: AsyncSession) -> int:
         config = tool_version.config if tool_version else {}
         if not isinstance(config, dict) or config.get("type") != ToolType.SSH_JOB.value:
             continue
+        if task.status == TaskStatus.RUNNING.value and direct_task_runner.is_task_active(str(task.id)):
+            continue
 
         executor = SSHJobExecutor(task, tool_version)
         try:
@@ -96,6 +100,13 @@ async def reconcile_orphaned_direct_tasks(db: AsyncSession) -> int:
                 task.id,
                 exc,
             )
+        output_result = await append_legacy_standard_result(
+            db,
+            task=task,
+            tool_version_config=tool_version.config,
+            output_result=output_result,
+            output_file_ids=prepare_task_output(output_result)["file_ids"],
+        )
 
         prepared_output = prepare_task_output(output_result)
         standard_persistence = await persist_standard_artifacts_from_task_output(

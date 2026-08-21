@@ -19,6 +19,12 @@ from typing import Any, Callable
 
 from app.agents.aidd.outputs import parse_sdf_smiles
 from app.agents.aidd.capabilities import PLACEHOLDER_AIDD_TOOL_SLUGS
+from app.chemistry.conversion import (
+    canonicalize_smiles,
+    convert_sdf_to_pdb_with_toolkit,
+    first_sdf_record_bytes as _first_sdf_record_bytes,
+    normalize_pdb_block,
+)
 from app.common.time import utcnow
 from app.common.exceptions import ValidationException
 
@@ -107,19 +113,24 @@ def _vina_ranking_csv_content(report: dict[str, object]) -> bytes:
 
 
 def convert_sdf_to_smiles_with_tool(source_path: Path) -> list[str]:
-    command_template = os.environ.get("AIDD_SDF_TO_SMILES_COMMAND")
-    if command_template:
-        command = command_template.format(input=str(source_path))
-        argv = shlex.split(command)
-    else:
-        argv = ["obabel", "-isdf", str(source_path), "-osmi"]
+    with tempfile.TemporaryDirectory(prefix="aidd-sdf-smiles-") as tmp_dir:
+        normalized_path = Path(tmp_dir) / "ligand.sdf"
+        normalized_path.write_bytes(_first_sdf_record_bytes(source_path.read_bytes()))
 
-    try:
-        result = subprocess.run(argv, capture_output=True, text=True, check=False)
-    except FileNotFoundError as exc:
-        raise ValidationException(
-            "SDF 转 SMILES 工具不可用，请安装 obabel 或配置 AIDD_SDF_TO_SMILES_COMMAND"
-        ) from exc
+        command_template = os.environ.get("AIDD_SDF_TO_SMILES_COMMAND")
+        if command_template:
+            command = command_template.format(input=str(normalized_path))
+            argv = shlex.split(command)
+        else:
+            argv = ["obabel", "-isdf", str(normalized_path), "-osmi"]
+
+        try:
+            result = subprocess.run(argv, capture_output=True, text=True, check=False)
+        except FileNotFoundError as exc:
+            raise ValidationException(
+                "SDF 转 SMILES 工具不可用，请安装 obabel 或配置 AIDD_SDF_TO_SMILES_COMMAND"
+            ) from exc
+
     if result.returncode != 0:
         stderr = (result.stderr or result.stdout or "").strip()
         raise ValidationException(
@@ -133,8 +144,9 @@ def convert_sdf_to_smiles_with_tool(source_path: Path) -> list[str]:
         if not stripped:
             continue
         token = stripped.split()[0]
-        if token and token.upper() != "SMILES":
-            smiles_values.append(token)
+        canonical_smiles = canonicalize_smiles(token)
+        if canonical_smiles:
+            smiles_values.append(canonical_smiles)
 
     if not smiles_values:
         raise ValidationException("SDF 转 SMILES 工具未返回任何 SMILES")
@@ -143,18 +155,23 @@ def convert_sdf_to_smiles_with_tool(source_path: Path) -> list[str]:
 
 def convert_sdf_to_pdb_with_tool(source_path: Path) -> bytes:
     command_template = os.environ.get("AIDD_SDF_TO_PDB_COMMAND")
-    if command_template:
-        command = command_template.format(input=str(source_path))
-        argv = shlex.split(command)
-    else:
-        argv = ["obabel", "-isdf", str(source_path), "-opdb"]
+    if not command_template:
+        pdb_text, _converter = convert_sdf_to_pdb_with_toolkit(source_path.read_bytes())
+        return pdb_text.encode("utf-8")
 
-    try:
-        result = subprocess.run(argv, capture_output=True, check=False)
-    except FileNotFoundError as exc:
-        raise ValidationException(
-            "SDF 转 PDB 工具不可用，请安装 obabel 或配置 AIDD_SDF_TO_PDB_COMMAND"
-        ) from exc
+    with tempfile.TemporaryDirectory(prefix="aidd-sdf-pdb-") as tmp_dir:
+        normalized_path = Path(tmp_dir) / "ligand.sdf"
+        normalized_path.write_bytes(_first_sdf_record_bytes(source_path.read_bytes()))
+        command = command_template.format(input=str(normalized_path))
+        argv = shlex.split(command)
+
+        try:
+            result = subprocess.run(argv, capture_output=True, check=False)
+        except FileNotFoundError as exc:
+            raise ValidationException(
+                "SDF 转 PDB 工具不可用，请安装 obabel 或配置 AIDD_SDF_TO_PDB_COMMAND"
+            ) from exc
+
     if result.returncode != 0:
         stderr = (result.stderr or result.stdout or b"").decode("utf-8", errors="ignore").strip()
         raise ValidationException(
@@ -162,10 +179,11 @@ def convert_sdf_to_pdb_with_tool(source_path: Path) -> bytes:
             + (f" ({stderr})" if stderr else "")
         )
 
-    pdb_content = result.stdout or b""
-    if not pdb_content.strip():
+    raw_pdb_content = result.stdout or b""
+    if not raw_pdb_content.strip():
         raise ValidationException("SDF 转 PDB 工具未返回任何 PDB 内容")
-    return pdb_content
+    pdb_text = raw_pdb_content.decode("utf-8", errors="replace")
+    return normalize_pdb_block(pdb_text).encode("utf-8")
 
 
 def _pdb_coordinates(path: Path) -> list[tuple[float, float, float]]:
@@ -362,9 +380,9 @@ def run_vina_docking_with_tool(protein_path: Path, ligand_path: Path) -> dict[st
 
 
 def _run_sdf_to_smiles_csv_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResult:
-    source_file = files.get("generated_ligand")
+    source_file = _sdf_ligand_input_file(files)
     if not source_file:
-        raise ValidationException("SDF 转 SMILES 缺少 generated_ligand 输入")
+        raise ValidationException("SDF 转 SMILES 缺少 generated_ligand 或 ligand_structure@1 输入")
     if not source_file.path.exists() or not source_file.path.is_file():
         raise ValidationException("SDF 转 SMILES 输入文件已被删除")
 
@@ -374,37 +392,114 @@ def _run_sdf_to_smiles_csv_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToo
     if not smiles_values:
         raise ValidationException("无法从 SDF 文件提取 SMILES 字段")
 
+    table_filename = f"{Path(source_file.filename).stem}_smiles.csv"
+    metadata_filename = f"{Path(source_file.filename).stem}_smiles_metadata.json"
+    table_content = _smiles_csv_content(smiles_values)
+    metadata = {
+        "molecule_id_field": "id",
+        "source_task_id": source_file.file_id,
+        "source_file_id": source_file.file_id,
+        "source_filename": source_file.filename,
+        "row_count": len(smiles_values),
+        "smiles_field": "SMILES",
+    }
+    metadata_content = json.dumps(metadata, ensure_ascii=False, indent=2).encode("utf-8")
+
     return BuiltinToolResult(
         artifacts=(
             BuiltinToolArtifact(
                 semantic_type="smiles_csv",
-                filename=f"{Path(source_file.filename).stem}_smiles.csv",
-                content=_smiles_csv_content(smiles_values),
+                filename=table_filename,
+                content=table_content,
                 content_type="text/csv",
                 source_file_id=source_file.file_id,
             ),
-        )
+            BuiltinToolArtifact(
+                semantic_type="smiles_metadata_json",
+                filename=metadata_filename,
+                content=metadata_content,
+                content_type="application/json",
+                source_file_id=source_file.file_id,
+            ),
+        ),
+        standard_result={
+            "result_version": "aidd.sciminer/result.v2",
+            "artifacts": {
+                "molecules": {
+                    "type": "molecule_table@1",
+                    "name": f"{Path(source_file.filename).stem} SMILES table",
+                    "files": {
+                        "table_file": _standard_output_file_ref(
+                            table_filename,
+                            table_content,
+                            "text/csv",
+                        ),
+                        "metadata_json": _standard_output_file_ref(
+                            metadata_filename,
+                            metadata_content,
+                            "application/json",
+                        ),
+                    },
+                    "metadata": metadata,
+                }
+            },
+            "summary": {"row_count": len(smiles_values), "smiles_field": "SMILES"},
+        },
+    )
+
+
+def _sdf_ligand_input_file(files: dict[str, BuiltinToolFile]) -> BuiltinToolFile | None:
+    return (
+        files.get("generated_ligand")
+        or files.get("ligand_structure@1")
+        or files.get("ligand")
+        or files.get("structure_file")
     )
 
 
 def _run_sdf_to_pdb_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResult:
-    source_file = files.get("generated_ligand")
+    source_file = _sdf_ligand_input_file(files)
     if not source_file:
-        raise ValidationException("SDF 转 PDB 缺少 generated_ligand 输入")
+        raise ValidationException("SDF 转 PDB 缺少 generated_ligand 或 ligand_structure@1 输入")
     if not source_file.path.exists() or not source_file.path.is_file():
         raise ValidationException("SDF 转 PDB 输入文件已被删除")
 
     pdb_content = convert_sdf_to_pdb_with_tool(source_file.path)
+    ligand_id = Path(source_file.filename).stem
+    pdb_filename = f"{ligand_id}_ligand.pdb"
     return BuiltinToolResult(
         artifacts=(
             BuiltinToolArtifact(
                 semantic_type="ligand_pdb",
-                filename=f"{Path(source_file.filename).stem}_ligand.pdb",
+                filename=pdb_filename,
                 content=pdb_content,
                 content_type="chemical/x-pdb",
                 source_file_id=source_file.file_id,
             ),
-        )
+        ),
+        standard_result={
+            "result_version": "aidd.sciminer/result.v2",
+            "artifacts": {
+                "ligand": {
+                    "type": "ligand_structure@1",
+                    "name": f"{ligand_id} ligand PDB",
+                    "files": {
+                        "structure_file": _standard_output_file_ref(
+                            pdb_filename,
+                            pdb_content,
+                            "chemical/x-pdb",
+                        )
+                    },
+                    "metadata": {
+                        "ligand_id": ligand_id,
+                        "source_file_id": source_file.file_id,
+                        "source_filename": source_file.filename,
+                        "structure_format": "pdb",
+                    },
+                }
+            },
+            "summary": {"ligand": "ligand"},
+        },
     )
 
 

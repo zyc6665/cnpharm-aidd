@@ -183,6 +183,12 @@ async def create_artifact_versions_from_parsed_result(
 def _standard_result_payload(output_result: dict[str, Any]) -> dict[str, Any] | None:
     if not isinstance(output_result, dict):
         return None
+    standard_result = output_result.get("standard_result")
+    if (
+        isinstance(standard_result, dict)
+        and standard_result.get("result_version") == "aidd.sciminer/result.v2"
+    ):
+        return standard_result
     nested = output_result.get("result")
     if isinstance(nested, dict) and nested.get("result_version") == "aidd.sciminer/result.v2":
         return nested
@@ -209,7 +215,7 @@ def _declared_outputs_from_config(config: dict[str, Any]) -> list[DeclaredArtifa
     config_type = config.get("type")
     if config_type == "remote_api" and config.get("mode") != "remote_tool_v1":
         return []
-    if config_type not in {"remote_api", "builtin"}:
+    if config_type not in {"remote_api", "builtin", "ssh_job"}:
         return []
     artifacts = config.get("artifacts")
     raw_outputs = artifacts.get("outputs") if isinstance(artifacts, dict) else None

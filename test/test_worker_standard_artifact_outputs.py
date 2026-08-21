@@ -181,6 +181,7 @@ async def _seed_output_file(
     tmp_path: Path,
     relative_path: str,
     content: bytes,
+    content_type: str | None = None,
 ) -> FileModel:
     storage_path = tmp_path / "collected" / relative_path
     storage_path.parent.mkdir(parents=True, exist_ok=True)
@@ -190,7 +191,8 @@ async def _seed_output_file(
         project_id=task.extra_data["project_id"],
         owner_id=task.user_id,
         filename=relative_path.replace("/", "__"),
-        content_type="application/json" if relative_path.endswith(".json") else "chemical/x-pdb",
+        content_type=content_type
+        or ("application/json" if relative_path.endswith(".json") else "chemical/x-pdb"),
         size_bytes=len(content),
         sha256=digest,
         storage_path=str(storage_path),
@@ -200,6 +202,45 @@ async def _seed_output_file(
     db.add(file_record)
     await db.flush()
     return file_record
+
+
+def _molecule_table_manifest(
+    *,
+    slug: str,
+    output_name: str,
+) -> dict:
+    return {
+        "api_version": "aidd.sciminer/tool-package.v2",
+        "kind": "ToolPackage",
+        "metadata": {"slug": slug, "name": slug, "version": "1.0.0"},
+        "artifacts": {
+            "inputs": [{"name": "molecules", "type": "molecule_table@1"}],
+            "outputs": [
+                {"name": output_name, "type": "molecule_table@1", "cardinality": "one"},
+                {"name": "report", "type": "run_report@1", "required": False},
+            ],
+        },
+        "parameters_schema": {"type": "object"},
+        "runtime": {
+            "python": "3.10",
+            "executor_support": ["ssh_docker_exec"],
+            "selection_policy": "test runtime fixture",
+            "artifacts": {
+                "primary": {"kind": "container", "image": "example/image", "image_digest": "sha256:test"},
+                "fallback": {"kind": "conda_pack", "uri": "artifacts://env", "sha256": "test"},
+            },
+            "weights": {"manifest_uri": "artifacts://weights", "manifest_sha256": "test"},
+            "cache_policy": {"key_fields": ["metadata.slug"], "mutable_host_paths_forbidden": True},
+        },
+        "variants": [
+            {
+                "name": "cpu",
+                "accelerator": "cpu",
+                "executor_types": ["cli"],
+                "entrypoint": ["/app/run.sh"],
+            }
+        ],
+    }
 
 
 async def _disable_notifications(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -408,6 +449,265 @@ async def test_worker_persists_remote_tool_v1_standard_outputs(
 
     assert artifact_count == 1
     assert task_output.result["standard_artifacts"]["artifact_version_ids_by_ref"]["pocket"]
+
+
+@pytest.mark.asyncio
+async def test_worker_standardizes_legacy_lvpocket_outputs(
+    worker_standard_db_factory,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    await _disable_notifications(monkeypatch)
+    monkeypatch.setattr("app.database.session.async_session_factory", worker_standard_db_factory)
+
+    async with worker_standard_db_factory() as db:
+        task, version = await _seed_task(
+            db,
+            tool_config={
+                "type": "ssh_job",
+                "artifacts": {
+                    "outputs": [
+                        {"name": "pocket", "type": "binding_pocket@1", "cardinality": "one"},
+                    ]
+                },
+            },
+        )
+        residue = await _seed_output_file(
+            db,
+            task=task,
+            tmp_path=tmp_path,
+            relative_path="artifacts/lv_results/input/protein_pocket_residues.pdb",
+            content=b"residue",
+        )
+        atom = await _seed_output_file(
+            db,
+            task=task,
+            tmp_path=tmp_path,
+            relative_path="artifacts/lv_results/input/pocket0.pdb",
+            content=b"atom",
+        )
+        metadata = await _seed_output_file(
+            db,
+            task=task,
+            tmp_path=tmp_path,
+            relative_path="artifacts/prediction.json",
+            content=b"{}",
+        )
+        file_ids = [residue.id, atom.id, metadata.id]
+        task_id = task.id
+        version_id = version.id
+        await db.commit()
+
+    async def fake_execute(self):
+        return {
+            "success": True,
+            "result": {
+                "success": True,
+                "message": "LVpocket pocket prediction completed",
+                "outputs": {
+                    "pocket_count": 1,
+                    "pockets": [
+                        {"id": "pocket0", "pdb": "artifacts/lv_results/input/pocket0.pdb"}
+                    ],
+                    "protein_pocket_residues": {
+                        "path": "artifacts/lv_results/input/protein_pocket_residues.pdb",
+                        "residue_count": 32,
+                        "atom_count": 259,
+                    },
+                },
+                "artifacts": [
+                    {"name": "prediction.json", "path": "artifacts/prediction.json"},
+                ],
+            },
+            "output_file_ids": file_ids,
+        }
+
+    monkeypatch.setattr("app.tasks.executor.TaskExecutor.execute", fake_execute)
+
+    await worker_tasks._execute_tool_task_impl(str(task_id), str(version_id))
+
+    async with worker_standard_db_factory() as db:
+        task_output = (
+            await db.execute(select(TaskOutputModel).where(TaskOutputModel.task_id == task_id))
+        ).scalar_one()
+        artifact_count = await db.scalar(select(func.count(ArtifactVersionModel.id)))
+        artifact_version_id = task_output.result["standard_artifacts"][
+            "artifact_version_ids_by_ref"
+        ]["pocket"]
+        version_record = (
+            await db.execute(
+                select(ArtifactVersionModel)
+                .options(selectinload(ArtifactVersionModel.files))
+                .where(ArtifactVersionModel.id == artifact_version_id)
+            )
+        ).scalar_one()
+
+    assert artifact_count == 1
+    assert version_record.manifest_json["type"] == "binding_pocket@1"
+    assert {file.role for file in version_record.files} == {
+        "residue_pocket_pdb",
+        "atom_pocket_pdb",
+        "pocket_metadata_json",
+    }
+
+
+@pytest.mark.asyncio
+async def test_worker_standardizes_legacy_molp_pc_outputs(
+    worker_standard_db_factory,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    await _disable_notifications(monkeypatch)
+    monkeypatch.setattr("app.database.session.async_session_factory", worker_standard_db_factory)
+
+    async with worker_standard_db_factory() as db:
+        task, version = await _seed_task(
+            db,
+            tool_config={
+                "type": "ssh_job",
+                "tool_package_manifest": _molecule_table_manifest(
+                    slug="molp-pc-property-prediction",
+                    output_name="properties",
+                ),
+            },
+        )
+        prediction = await _seed_output_file(
+            db,
+            task=task,
+            tmp_path=tmp_path,
+            relative_path="artifacts/cb_data_result.csv",
+            content=b"SMILES,F20\nCCO,0.9\n",
+            content_type="text/csv",
+        )
+        file_ids = [prediction.id]
+        task_id = task.id
+        version_id = version.id
+        await db.commit()
+
+    async def fake_execute(self):
+        return {
+            "success": True,
+            "result": {
+                "success": True,
+                "message": "MolP-PC property prediction completed",
+                "outputs": {
+                    "task_id": str(task_id),
+                    "input_rows": 1,
+                    "predicted_rows": 1,
+                    "prediction_file": "artifacts/cb_data_result.csv",
+                    "device": "cpu",
+                },
+                "artifacts": [
+                    {"name": "cb_data_result.csv", "path": "artifacts/cb_data_result.csv"},
+                ],
+            },
+            "output_file_ids": file_ids,
+        }
+
+    monkeypatch.setattr("app.tasks.executor.TaskExecutor.execute", fake_execute)
+
+    await worker_tasks._execute_tool_task_impl(str(task_id), str(version_id))
+
+    async with worker_standard_db_factory() as db:
+        task_output = (
+            await db.execute(select(TaskOutputModel).where(TaskOutputModel.task_id == task_id))
+        ).scalar_one()
+        artifact_version_id = task_output.result["standard_artifacts"][
+            "artifact_version_ids_by_ref"
+        ]["properties"]
+        version_record = (
+            await db.execute(
+                select(ArtifactVersionModel)
+                .options(selectinload(ArtifactVersionModel.files))
+                .where(ArtifactVersionModel.id == artifact_version_id)
+            )
+        ).scalar_one()
+
+    assert version_record.manifest_json["type"] == "molecule_table@1"
+    assert {file.role for file in version_record.files} == {"table_file", "metadata_json"}
+    assert len(task_output.file_ids) == 2
+
+
+@pytest.mark.asyncio
+async def test_worker_standardizes_legacy_msign_outputs(
+    worker_standard_db_factory,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    await _disable_notifications(monkeypatch)
+    monkeypatch.setattr("app.database.session.async_session_factory", worker_standard_db_factory)
+
+    async with worker_standard_db_factory() as db:
+        task, version = await _seed_task(
+            db,
+            tool_config={
+                "type": "ssh_job",
+                "tool_package_manifest": _molecule_table_manifest(
+                    slug="msign-affinity-prediction",
+                    output_name="affinity",
+                ),
+            },
+        )
+        prediction_file = await _seed_output_file(
+            db,
+            task=task,
+            tmp_path=tmp_path,
+            relative_path="artifacts/prediction.json",
+            content=b"{}",
+            content_type="application/json",
+        )
+        file_ids = [prediction_file.id]
+        task_id = task.id
+        version_id = version.id
+        await db.commit()
+
+    async def fake_execute(self):
+        return {
+            "success": True,
+            "result": {
+                "success": True,
+                "message": "MSIGN affinity prediction completed",
+                "outputs": {
+                    "complex_id": "1A2B_generated_001",
+                    "prediction": {
+                        "predicted_affinity": 8.19,
+                        "predicted_ligand_to_pocket": 11.15,
+                        "predicted_pocket_to_ligand": 5.22,
+                        "scale": "pKa/pKi-like binding affinity score",
+                    },
+                    "model_name": "full_finetune_model.pt",
+                    "distance_angstrom": 5.0,
+                    "device": "cpu",
+                },
+                "artifacts": [
+                    {"name": "prediction.json", "path": "artifacts/prediction.json"},
+                ],
+            },
+            "output_file_ids": file_ids,
+        }
+
+    monkeypatch.setattr("app.tasks.executor.TaskExecutor.execute", fake_execute)
+
+    await worker_tasks._execute_tool_task_impl(str(task_id), str(version_id))
+
+    async with worker_standard_db_factory() as db:
+        task_output = (
+            await db.execute(select(TaskOutputModel).where(TaskOutputModel.task_id == task_id))
+        ).scalar_one()
+        artifact_version_id = task_output.result["standard_artifacts"][
+            "artifact_version_ids_by_ref"
+        ]["affinity"]
+        version_record = (
+            await db.execute(
+                select(ArtifactVersionModel)
+                .options(selectinload(ArtifactVersionModel.files))
+                .where(ArtifactVersionModel.id == artifact_version_id)
+            )
+        ).scalar_one()
+
+    assert version_record.manifest_json["type"] == "molecule_table@1"
+    assert {file.role for file in version_record.files} == {"table_file", "metadata_json"}
+    assert len(task_output.file_ids) == 3
 
 
 @pytest.mark.asyncio

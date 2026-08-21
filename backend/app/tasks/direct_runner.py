@@ -37,6 +37,11 @@ class DirectTaskRunner:
         background_task.add_done_callback(lambda _: self._tasks.pop(task_id, None))
         return background_task
 
+    def is_task_active(self, task_id: str) -> bool:
+        """Return whether this process still owns a running direct task."""
+        background_task = self._tasks.get(task_id)
+        return bool(background_task and not background_task.done())
+
     def cancel_task(self, task_id: str) -> bool:
         """取消已注册的后台任务。"""
         background_task = self._tasks.get(task_id)

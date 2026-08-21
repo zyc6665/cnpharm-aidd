@@ -25,7 +25,6 @@ from app.services.workflow_artifacts import (
     format_missing_required_standard_artifacts_error,
     format_missing_required_outputs_error,
     load_task_output_files,
-    required_standard_artifacts_present,
     required_outputs_present,
     standard_artifact_file_ids,
 )
@@ -389,7 +388,19 @@ async def sync_workflow_run(
             output_data=output_data,
         )
         standard_artifacts = extract_standard_artifacts(output_data)
-        if not required_outputs_present(capability=capability, semantic_outputs=semantic_outputs):
+        declared_artifact_outputs = list(state.get("artifact_outputs") or [])
+        missing_artifacts = describe_missing_required_standard_artifacts(
+            declared_outputs=declared_artifact_outputs,
+            standard_artifacts=standard_artifacts,
+        )
+        standard_artifacts_satisfy_required = (
+            _has_required_declared_standard_outputs(declared_artifact_outputs)
+            and not missing_artifacts
+        )
+        if (
+            not required_outputs_present(capability=capability, semantic_outputs=semantic_outputs)
+            and not standard_artifacts_satisfy_required
+        ):
             missing_outputs = describe_missing_required_outputs(
                 capability=capability,
                 semantic_outputs=semantic_outputs,
@@ -404,15 +415,7 @@ async def sync_workflow_run(
             run.finished_at = utcnow()
             continue
 
-        declared_artifact_outputs = list(state.get("artifact_outputs") or [])
-        if not required_standard_artifacts_present(
-            declared_outputs=declared_artifact_outputs,
-            standard_artifacts=standard_artifacts,
-        ):
-            missing_artifacts = describe_missing_required_standard_artifacts(
-                declared_outputs=declared_artifact_outputs,
-                standard_artifacts=standard_artifacts,
-            )
+        if missing_artifacts:
             state["status"] = "failure"
             state["missing_outputs"] = missing_artifacts
             state["error_message"] = format_missing_required_standard_artifacts_error(
@@ -462,6 +465,15 @@ async def sync_workflow_run(
         await db.commit()
         await db.refresh(run)
     return run
+
+
+def _has_required_declared_standard_outputs(declared_outputs: list[dict[str, Any]]) -> bool:
+    return any(
+        isinstance(declaration, dict)
+        and bool(declaration.get("name"))
+        and declaration.get("required", True) is not False
+        for declaration in declared_outputs
+    )
 
 
 async def cancel_workflow_run(

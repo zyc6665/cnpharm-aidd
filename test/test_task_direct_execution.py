@@ -356,6 +356,40 @@ async def test_create_task_uses_direct_runner_when_enabled(
 
 
 @pytest.mark.asyncio
+async def test_create_task_cpu_device_overrides_tool_gpu_requirement(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    published_tool: Tool,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """显式 CPU 运行的工具任务不应因为工具默认 GPU 标记而申请 GPU。"""
+    runner = RecordingDirectRunner()
+    monkeypatch.setattr(config_settings, "TASK_EXECUTION_BACKEND", "direct", raising=False)
+    monkeypatch.setattr(tasks_api, "direct_task_runner", runner, raising=False)
+    published_tool.gpu_required = True
+    published_tool.gpu_memory_mb = 24576
+    await db_session.commit()
+
+    response = await api_client.post(
+        "/api/v1/tasks",
+        headers={"Authorization": "Bearer admin-token"},
+        json={
+            "tool_id": published_tool.id,
+            "params": {"device": "cpu", "timesteps": 1},
+            "priority": "normal",
+        },
+    )
+
+    assert response.status_code == 200
+    response_data = response.json()["data"]
+    assert response_data["resource_snapshot"]["gpu_required"] is False
+    assert response_data["resource_snapshot"]["gpu_memory_mb"] == 0
+
+    task = await db_session.get(Task, response_data["id"])
+    assert task.extra_data["resource_snapshot"]["gpu_required"] is False
+
+
+@pytest.mark.asyncio
 async def test_create_task_api_uses_shared_task_creation_service(
     api_client: httpx.AsyncClient,
     db_session: AsyncSession,
@@ -562,6 +596,64 @@ async def test_direct_runner_shutdown_does_not_mark_task_canceled(
     await runner.shutdown()
 
     assert canceled_task_ids == []
+
+
+@pytest.mark.asyncio
+async def test_reconcile_orphaned_direct_tasks_skips_active_direct_runner_task(
+    db_session: AsyncSession,
+    admin_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """当前进程仍在执行的 direct 任务不应被恢复循环重复补回。"""
+    tool = Tool(
+        owner_id=admin_user.id,
+        name="Active Direct SSH Tool",
+        slug="active-direct-ssh-tool",
+        description="Active ssh_job tool",
+        category="generation",
+        status=ToolStatus.PUBLISHED.value,
+        is_public=True,
+    )
+    db_session.add(tool)
+    await db_session.flush()
+    version = ToolVersion(
+        tool_id=tool.id,
+        version="1.0.0",
+        config={"type": "ssh_job"},
+        is_active=True,
+    )
+    db_session.add(version)
+    await db_session.flush()
+    task = Task(
+        user_id=admin_user.id,
+        tool_id=tool.id,
+        tool_version_id=version.id,
+        status=TaskStatus.RUNNING.value,
+        priority="normal",
+        progress=35.0,
+        progress_message="远端运行中",
+    )
+    db_session.add(task)
+    await db_session.flush()
+    db_session.add(TaskInput(task_id=task.id, params={}, file_ids=[]))
+    await db_session.commit()
+
+    async def fail_recover(self) -> dict:
+        raise AssertionError("active direct task should not be recovered")
+
+    monkeypatch.setattr(SSHJobExecutor, "recover_remote_result", fail_recover)
+    monkeypatch.setattr(
+        "app.tasks.direct_recovery.direct_task_runner",
+        SimpleNamespace(is_task_active=lambda task_id: task_id == task.id),
+    )
+
+    recovered = await reconcile_orphaned_direct_tasks(db_session)
+
+    task_output = (
+        await db_session.execute(select(TaskOutput).where(TaskOutput.task_id == task.id))
+    ).scalar_one_or_none()
+    assert recovered == 0
+    assert task_output is None
 
 
 @pytest.mark.asyncio

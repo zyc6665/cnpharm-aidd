@@ -89,6 +89,66 @@ async def test_ensure_aidd_builtin_tool_is_idempotent(
 
 
 @pytest.mark.asyncio
+async def test_ensure_sdf_to_smiles_builtin_declares_standard_artifacts(
+    db_session: AsyncSession,
+    system_user: User,
+) -> None:
+    from app.services.aidd_builtin_tools import ensure_aidd_builtin_tool
+
+    tool = await ensure_aidd_builtin_tool(
+        db_session,
+        owner_id=system_user.id,
+        tool_slug='builtin-sdf-to-smiles-csv',
+    )
+
+    config = tool.current_version.config
+    assert config['type'] == 'builtin'
+    assert config['builtin_slug'] == 'builtin-sdf-to-smiles-csv'
+    assert config['artifacts']['inputs'] == [
+        {
+            'name': 'ligand',
+            'type': 'ligand_structure@1',
+            'required': True,
+            'role_preferences': ['structure_3d_sdf', 'structure_file', 'structure_2d_sdf'],
+            'readiness_policy': 'prefer_3d_ligand',
+        }
+    ]
+    assert config['artifacts']['outputs'] == [
+        {'name': 'molecules', 'type': 'molecule_table@1', 'required': True}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_ensure_sdf_to_pdb_builtin_declares_standard_artifacts(
+    db_session: AsyncSession,
+    system_user: User,
+) -> None:
+    from app.services.aidd_builtin_tools import ensure_aidd_builtin_tool
+
+    tool = await ensure_aidd_builtin_tool(
+        db_session,
+        owner_id=system_user.id,
+        tool_slug='builtin-sdf-to-pdb',
+    )
+
+    config = tool.current_version.config
+    assert config['type'] == 'builtin'
+    assert config['builtin_slug'] == 'builtin-sdf-to-pdb'
+    assert config['artifacts']['inputs'] == [
+        {
+            'name': 'ligand',
+            'type': 'ligand_structure@1',
+            'required': True,
+            'role_preferences': ['structure_3d_sdf', 'structure_file', 'structure_2d_sdf'],
+            'readiness_policy': 'prefer_3d_ligand',
+        }
+    ]
+    assert config['artifacts']['outputs'] == [
+        {'name': 'ligand', 'type': 'ligand_structure@1', 'required': True}
+    ]
+
+
+@pytest.mark.asyncio
 async def test_ensure_protein_preparation_builtin_declares_standard_artifacts(
     db_session: AsyncSession,
     system_user: User,

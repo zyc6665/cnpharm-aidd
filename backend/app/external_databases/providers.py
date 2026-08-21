@@ -136,11 +136,13 @@ class PubChemProvider:
 
 class RCSBProvider:
     files_url = "https://files.rcsb.org/download"
+    max_attempts = 3
 
     async def fetch_protein(self, identifier: str) -> ExternalArtifactPayload:
         pdb_id = _normalize_identifier(identifier).upper()
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            response = await client.get(f"{self.files_url}/{pdb_id}.pdb")
+        timeout = httpx.Timeout(60.0, connect=10.0, read=60.0, write=10.0, pool=10.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await self._fetch_pdb_file(client, pdb_id)
         if response.status_code >= 400:
             raise ExternalDatabaseProviderError(f"RCSB PDB entry not found: {pdb_id}")
         content = response.content
@@ -172,6 +174,15 @@ class RCSBProvider:
 
     async def fetch_ligand(self, identifier: str) -> ExternalArtifactPayload:
         raise ExternalDatabaseProviderError("RCSB only supports protein imports")
+
+    async def _fetch_pdb_file(self, client: httpx.AsyncClient, pdb_id: str) -> httpx.Response:
+        last_timeout: httpx.TimeoutException | None = None
+        for _attempt in range(self.max_attempts):
+            try:
+                return await client.get(f"{self.files_url}/{pdb_id}.pdb")
+            except httpx.TimeoutException as exc:
+                last_timeout = exc
+        raise ExternalDatabaseProviderError(f"RCSB PDB fetch timed out: {pdb_id}") from last_timeout
 
 
 def default_external_database_providers() -> dict[str, ExternalDatabaseProvider]:

@@ -1168,6 +1168,85 @@ async def test_sync_workflow_run_schedules_downstream_standard_artifact_slots(
 
 
 @pytest.mark.asyncio
+async def test_sync_workflow_run_standard_artifact_satisfies_legacy_semantic_gate(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    pocket_tool: Tool,
+    generation_tool: Tool,
+    protein_file: FileModel,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.services.workflows.create_and_schedule_tool_task",
+        create_fake_scheduled_task,
+    )
+    _, run_response = await create_workflow_run_for_definition(
+        api_client,
+        name="Legacy LVpocket With Standard Artifacts",
+        definition=standard_artifact_generation_definition(pocket_tool, generation_tool),
+        input_files={"protein_structure@1": protein_file.id},
+    )
+    run = run_response.json()["data"]
+    first_state = run["node_states"]["pocket_prediction"]
+
+    output_files = []
+    for filename, content in [
+        ("residue_region.pdb", b"residue"),
+        ("atom_region.pdb", b"atom"),
+        ("metadata.json", b"{}"),
+    ]:
+        file_record = FileModel(
+            owner_id=owner.id,
+            filename=filename,
+            content_type="application/json" if filename.endswith(".json") else "chemical/x-pdb",
+            size_bytes=len(content),
+            sha256=hashlib.sha256(content).hexdigest(),
+            source_type=FileSourceType.TOOL_OUTPUT.value,
+            storage_path=f"/tmp/{filename}",
+            is_public=False,
+        )
+        db_session.add(file_record)
+        await db_session.flush()
+        output_files.append(file_record)
+
+    standard_artifacts = {
+        "artifact_version_ids_by_ref": {"pocket": "artifact-version-pocket"},
+        "file_ids_by_artifact_ref": {
+            "pocket": [file_record.id for file_record in output_files]
+        },
+    }
+    task = await db_session.get(Task, first_state["task_id"])
+    task.status = TaskStatus.SUCCESS.value
+    db_session.add(
+        TaskOutput(
+            task_id=task.id,
+            result={"standard_artifacts": standard_artifacts},
+            file_ids=[file_record.id for file_record in output_files],
+        )
+    )
+    await db_session.commit()
+
+    sync_response = await api_client.post(
+        f"/api/v1/workflows/runs/{run['id']}/sync",
+        headers={"Authorization": "Bearer owner-token"},
+    )
+
+    assert sync_response.status_code == 200
+    synced = sync_response.json()["data"]
+    source_state = synced["node_states"]["pocket_prediction"]
+    downstream_state = synced["node_states"]["molecule_generation"]
+    assert synced["status"] == "waiting_task"
+    assert source_state["status"] == "success"
+    assert source_state["semantic_outputs"] == {}
+    assert source_state["standard_artifacts"] == standard_artifacts
+    assert downstream_state["status"] == "waiting_task"
+    assert downstream_state["input_file_ids"] == [
+        file_record.id for file_record in output_files
+    ]
+
+
+@pytest.mark.asyncio
 async def test_workflow_reconciliation_service_advances_waiting_runs(
     api_client: httpx.AsyncClient,
     db_session: AsyncSession,

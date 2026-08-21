@@ -70,6 +70,32 @@ def _capability_config(tool_slug: str) -> dict:
                 {"name": "prepared_protein", "type": "protein_structure@1", "required": True},
             ],
         }
+    if tool_slug in {"builtin-sdf-to-smiles-csv", "builtin-sdf-to-pdb"}:
+        config["timeout_sec"] = 120
+        config["resource_profile"] = {
+            "tier": "light",
+            "cpu": 1,
+            "memory_mb": 512,
+            "gpu": False,
+        }
+        config["artifacts"] = {
+            "inputs": [
+                {
+                    "name": "ligand",
+                    "type": "ligand_structure@1",
+                    "required": True,
+                    "role_preferences": ["structure_3d_sdf", "structure_file", "structure_2d_sdf"],
+                    "readiness_policy": "prefer_3d_ligand",
+                },
+            ],
+            "outputs": [
+                (
+                    {"name": "molecules", "type": "molecule_table@1", "required": True}
+                    if tool_slug == "builtin-sdf-to-smiles-csv"
+                    else {"name": "ligand", "type": "ligand_structure@1", "required": True}
+                )
+            ],
+        }
     if tool_slug == "builtin-vina-docking":
         config["artifacts"] = {
             "inputs": [

@@ -17,6 +17,7 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.tasks.executor import SSHJobExecutor, TaskExecutor
+from app.tasks.executors.ssh_payload import build_params_payload
 from app.tasks.ssh_transport import ParamikoSSHTransport
 from app.tasks.queue_manager import TaskQueue, TaskQueueManager
 from app.config import bootstrap_process_env
@@ -84,6 +85,37 @@ def _v2_manifest() -> dict:
     }
 
 
+def _v2_affinity_manifest() -> dict:
+    manifest = _v2_manifest()
+    manifest["metadata"] = {
+        "slug": "msign-affinity-prediction",
+        "name": "MSIGN Affinity",
+        "version": "1.0.0",
+    }
+    manifest["artifacts"] = {
+        "inputs": [
+            {"name": "protein", "type": "protein_structure@1", "required": True},
+            {"name": "ligand", "type": "ligand_structure@1", "required": True},
+        ],
+        "outputs": [{"name": "affinity", "type": "molecule_table@1"}],
+    }
+    return manifest
+
+
+def _v2_admet_manifest() -> dict:
+    manifest = _v2_manifest()
+    manifest["metadata"] = {
+        "slug": "molp-pc-property-prediction",
+        "name": "MolP-PC Property Prediction",
+        "version": "1.0.0",
+    }
+    manifest["artifacts"] = {
+        "inputs": [{"name": "molecules", "type": "molecule_table@1", "required": True}],
+        "outputs": [{"name": "properties", "type": "molecule_table@1"}],
+    }
+    return manifest
+
+
 def test_determine_queue_routes_non_gpu_ssh_job_to_cpu_queue() -> None:
     """ssh_job 默认应进入 CPU 队列，而不是 API 默认队列。"""
     queue = TaskQueueManager.determine_queue(
@@ -141,6 +173,22 @@ def test_task_executor_returns_ssh_job_executor() -> None:
     )._get_executor()
 
     assert isinstance(executor, SSHJobExecutor)
+
+
+def test_build_params_payload_preserves_flat_params_with_input_files() -> None:
+    payload = build_params_payload(
+        "task-1",
+        {
+            "model_choice": "auto",
+            "device": "cpu",
+            "input_files": {"protein_pdb": "input/protein.pdb"},
+        },
+        [],
+    )
+
+    assert payload["input_files"] == {"protein_pdb": "input/protein.pdb"}
+    assert payload["params"] == {"model_choice": "auto", "device": "cpu"}
+    assert "model_choice" not in payload
 
 
 def test_ssh_job_executor_builds_container_runtime_paths_and_command() -> None:
@@ -249,6 +297,181 @@ async def test_ssh_job_executor_writes_standard_request_from_input_bindings(
     assert called["parameters"] == {"threshold": 0.5}
     assert called["variant"] == "cpu"
     assert called["accelerator"] == "cpu"
+
+
+@pytest.mark.asyncio
+async def test_ssh_job_executor_projects_standard_inputs_to_legacy_file_fields(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    """标准 SSH 任务应同时给旧模型脚本提供 input_files 兼容字段。"""
+    task = _build_task("task-affinity")
+    task.extra_data = {
+        "input_bindings": {
+            "protein": "protein-version-1",
+            "ligand": "ligand-version-1",
+        }
+    }
+    task.inputs = SimpleNamespace(
+        params={"complex_id": "1A2B_generated_001", "distance": 5.0},
+        file_ids=[],
+    )
+    config = {
+        "type": "ssh_job",
+        "host": "gpu-node-01.internal",
+        "username": "runner",
+        "runner_mode": "shell",
+        "remote_base_dir": "/srv/platform-jobs",
+        "entrypoint": "/opt/models/platform_run.sh",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "protein_pdb": {"type": "string", "format": "file"},
+                "ligand_pdb": {"type": "string", "format": "file"},
+                "distance": {"type": "number"},
+            },
+        },
+        "tool_package_manifest": _v2_affinity_manifest(),
+        "variant": "cpu",
+        "accelerator": "cpu",
+    }
+    executor = SSHJobExecutor(task, _build_tool_version(config))
+
+    async def fake_get_async_session():
+        yield object()
+
+    class FakeStandardRequest:
+        def model_dump(self, mode: str = "json") -> dict:
+            return {
+                "request_version": "aidd.sciminer/request.v1",
+                "task": {
+                    "id": "task-affinity",
+                    "tool_slug": "msign-affinity-prediction",
+                    "tool_version": "1.0.0",
+                },
+                "inputs": {
+                    "protein": {
+                        "artifact_version_id": "protein-version-1",
+                        "type": "protein_structure@1",
+                        "files": {
+                            "structure_file": {
+                                "path": "input/protein/structure_file.pdb",
+                                "sha256": "a" * 64,
+                            }
+                        },
+                    },
+                    "ligand": {
+                        "artifact_version_id": "ligand-version-1",
+                        "type": "ligand_structure@1",
+                        "files": {
+                            "structure_file": {
+                                "path": "input/ligand/structure_file.sdf",
+                                "sha256": "b" * 64,
+                            }
+                        },
+                    },
+                },
+                "parameters": {"complex_id": "1A2B_generated_001", "distance": 5.0},
+                "execution": {"variant": "cpu", "accelerator": "cpu"},
+            }
+
+    async def fake_build_standard_execution_request(*args, **kwargs):
+        return FakeStandardRequest()
+
+    monkeypatch.setenv("TASK_WORK_DIR", str(tmp_path))
+    monkeypatch.setattr("app.tasks.executors.ssh_job.get_async_session", fake_get_async_session)
+    monkeypatch.setattr(
+        "app.tasks.executors.ssh_job.build_standard_execution_request",
+        fake_build_standard_execution_request,
+    )
+
+    bundle = await executor._prepare_local_task_bundle()
+    payload = json.loads(Path(bundle["params_path"]).read_text(encoding="utf-8"))
+
+    assert payload["request_version"] == "aidd.sciminer/request.v1"
+    assert payload["params"] == {"complex_id": "1A2B_generated_001", "distance": 5.0}
+    assert payload["input_files"] == {
+        "protein_pdb": "input/protein/structure_file.pdb",
+        "ligand_pdb": "input/ligand/structure_file.sdf",
+    }
+
+
+@pytest.mark.asyncio
+async def test_ssh_job_executor_projects_molecule_table_to_smiles_csv(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    """molecule_table@1 标准输入应能桥接到 MolP-PC 的 smiles_csv。"""
+    task = _build_task("task-admet")
+    task.extra_data = {"input_bindings": {"molecules": "molecule-table-version-1"}}
+    task.inputs = SimpleNamespace(params={"task_groups": ["Absorption"]}, file_ids=[])
+    config = {
+        "type": "ssh_job",
+        "host": "gpu-node-01.internal",
+        "username": "runner",
+        "runner_mode": "shell",
+        "remote_base_dir": "/srv/platform-jobs",
+        "entrypoint": "/opt/models/platform_run.sh",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "smiles_csv": {"type": "string", "format": "file"},
+                "device": {"type": "string"},
+            },
+        },
+        "tool_package_manifest": _v2_admet_manifest(),
+        "variant": "cpu",
+        "accelerator": "cpu",
+    }
+    executor = SSHJobExecutor(task, _build_tool_version(config))
+
+    async def fake_get_async_session():
+        yield object()
+
+    class FakeStandardRequest:
+        def model_dump(self, mode: str = "json") -> dict:
+            return {
+                "request_version": "aidd.sciminer/request.v1",
+                "task": {
+                    "id": "task-admet",
+                    "tool_slug": "molp-pc-property-prediction",
+                    "tool_version": "1.0.0",
+                },
+                "inputs": {
+                    "molecules": {
+                        "artifact_version_id": "molecule-table-version-1",
+                        "type": "molecule_table@1",
+                        "files": {
+                            "table_file": {
+                                "path": "input/molecules/table_file.csv",
+                                "sha256": "c" * 64,
+                            },
+                            "metadata_json": {
+                                "path": "input/molecules/metadata_json.json",
+                                "sha256": "d" * 64,
+                            },
+                        },
+                    }
+                },
+                "parameters": {"task_groups": ["Absorption"]},
+                "execution": {"variant": "cpu", "accelerator": "cpu"},
+            }
+
+    async def fake_build_standard_execution_request(*args, **kwargs):
+        return FakeStandardRequest()
+
+    monkeypatch.setenv("TASK_WORK_DIR", str(tmp_path))
+    monkeypatch.setattr("app.tasks.executors.ssh_job.get_async_session", fake_get_async_session)
+    monkeypatch.setattr(
+        "app.tasks.executors.ssh_job.build_standard_execution_request",
+        fake_build_standard_execution_request,
+    )
+
+    bundle = await executor._prepare_local_task_bundle()
+    payload = json.loads(Path(bundle["params_path"]).read_text(encoding="utf-8"))
+
+    assert payload["params"] == {"task_groups": ["Absorption"]}
+    assert payload["input_files"] == {"smiles_csv": "input/molecules/table_file.csv"}
 
 
 def test_ssh_job_executor_supports_password_auth(monkeypatch, tmp_path) -> None:

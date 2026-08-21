@@ -259,6 +259,8 @@ async def resolve_node_input_files(
     node: dict[str, Any],
     node_states: dict[str, Any],
     binding_decisions: dict[str, dict[str, Any]] | None = None,
+    input_bindings: dict[str, str] | None = None,
+    legacy_file_bindings: dict[str, str] | None = None,
 ) -> list[str] | None:
     file_ids: list[str] = []
     seen_file_ids: set[str] = set()
@@ -319,6 +321,7 @@ async def resolve_node_input_files(
                 file_id=str(file_id),
                 label=str(slot_name),
             )
+            _record_legacy_file_binding(legacy_file_bindings, str(slot_name), str(file_id))
             continue
 
         if source.startswith("node:"):
@@ -330,12 +333,12 @@ async def resolve_node_input_files(
             source_state = node_states.get(source_node_id) or {}
             if source_state.get("status") != "success":
                 return None
+            source_artifacts = source_state.get("standard_artifacts") or {}
+            version_id = _standard_artifact_version_id(source_artifacts, source_output_name)
+            if version_id:
+                _record_input_binding(input_bindings, str(slot_name), str(version_id))
             slot = artifact_slots.get(str(slot_name))
             if slot and _slot_needs_binding_resolution(slot):
-                version_id = _standard_artifact_version_id(
-                    source_state.get("standard_artifacts") or {},
-                    source_output_name,
-                )
                 if not version_id:
                     _record_binding_decision(
                         binding_decisions,
@@ -371,13 +374,19 @@ async def resolve_node_input_files(
                     file_id=decision.selected_file_id,
                     label=str(slot_name),
                 )
+                _record_legacy_file_binding(
+                    legacy_file_bindings,
+                    str(slot_name),
+                    decision.selected_file_id,
+                )
                 continue
             artifact_file_ids = standard_artifact_file_ids(
-                source_state.get("standard_artifacts") or {},
+                source_artifacts,
                 source_output_name,
             )
             if not artifact_file_ids:
                 return None
+            _record_legacy_file_binding(legacy_file_bindings, str(slot_name), artifact_file_ids[0])
             for file_id in artifact_file_ids:
                 await _append_existing_file_id(
                     db,
@@ -477,6 +486,22 @@ def _standard_artifact_version_id(summary: dict[str, Any], output_name: str) -> 
         for item in raw_version_id:
             if item:
                 return str(item)
+    indexed_ref = next(
+        (
+            ref
+            for ref in sorted(version_ids_by_ref)
+            if isinstance(ref, str) and ref.startswith(f"{output_name}[")
+        ),
+        None,
+    )
+    if indexed_ref:
+        indexed_version_id = version_ids_by_ref.get(indexed_ref)
+        if isinstance(indexed_version_id, str) and indexed_version_id:
+            return indexed_version_id
+        if isinstance(indexed_version_id, list):
+            for item in indexed_version_id:
+                if item:
+                    return str(item)
     return None
 
 
@@ -488,6 +513,102 @@ def _record_binding_decision(
     if decisions is None:
         return
     decisions[slot_name] = asdict(decision)
+
+
+def _record_input_binding(
+    input_bindings: dict[str, str] | None,
+    slot_name: str,
+    version_id: str,
+) -> None:
+    if input_bindings is None:
+        return
+    input_bindings[slot_name] = version_id
+
+
+def _record_legacy_file_binding(
+    legacy_file_bindings: dict[str, str] | None,
+    slot_name: str,
+    file_id: str,
+) -> None:
+    if legacy_file_bindings is None:
+        return
+    legacy_file_bindings[slot_name] = file_id
+
+
+def _tool_accepts_standard_input_bindings(config: Any) -> bool:
+    if not isinstance(config, dict):
+        return False
+
+    manifest = config.get("tool_package_manifest")
+    tool_package = config.get("tool_package")
+    if not isinstance(manifest, dict) and isinstance(tool_package, dict):
+        manifest = tool_package.get("manifest")
+    if isinstance(manifest, dict) and manifest.get("api_version") == "aidd.sciminer/tool-package.v2":
+        return True
+
+    if str(config.get("type") or "") != "remote_api":
+        return False
+    artifacts = config.get("artifacts")
+    inputs = artifacts.get("inputs") if isinstance(artifacts, dict) else None
+    return any(isinstance(item, dict) for item in inputs or [])
+
+
+async def _project_legacy_ssh_input_files(
+    db: AsyncSession,
+    *,
+    tool_config: Any,
+    node: dict[str, Any],
+    legacy_file_bindings: dict[str, str],
+    params: dict[str, Any],
+) -> None:
+    if not legacy_file_bindings or not isinstance(tool_config, dict):
+        return
+    if str(tool_config.get("type") or "") != "ssh_job":
+        return
+
+    artifact_slots = _artifact_input_slots_by_name(node)
+    input_files = params.get("input_files") if isinstance(params.get("input_files"), dict) else {}
+    next_input_files = dict(input_files)
+    for slot_name, file_id in legacy_file_bindings.items():
+        slot = artifact_slots.get(slot_name) or {"name": slot_name}
+        file_field = _legacy_file_field_for_slot(tool_config, slot)
+        if not file_field:
+            continue
+        file_record = await db.get(FileModel, file_id)
+        if not file_record:
+            continue
+        next_input_files[file_field] = f"input/{Path(str(file_record.filename)).name}"
+    if next_input_files:
+        params["input_files"] = next_input_files
+
+
+def _legacy_file_field_for_slot(config: dict[str, Any], input_slot: dict[str, Any]) -> str | None:
+    input_schema = config.get("input_schema") if isinstance(config.get("input_schema"), dict) else {}
+    properties = input_schema.get("properties") if isinstance(input_schema.get("properties"), dict) else {}
+    file_fields = [
+        str(name)
+        for name, schema in properties.items()
+        if isinstance(schema, dict) and (schema.get("format") == "file" or schema.get("type") == "file")
+    ]
+    if not file_fields:
+        return None
+
+    slot_name = str(input_slot.get("name") or "")
+    if slot_name in file_fields:
+        return slot_name
+    if len(file_fields) == 1:
+        return file_fields[0]
+
+    standard_type = str(input_slot.get("type") or "")
+    if standard_type == "protein_structure@1":
+        match = next((field for field in file_fields if "protein" in field or "receptor" in field), None)
+        if match:
+            return match
+    if standard_type == "ligand_structure@1":
+        match = next((field for field in file_fields if "ligand" in field), None)
+        if match:
+            return match
+    return file_fields[0]
 
 
 def _has_blocking_binding_decision(decisions: dict[str, dict[str, Any]]) -> bool:
@@ -601,12 +722,16 @@ async def schedule_workflow_node(
         return False
 
     binding_decisions: dict[str, dict[str, Any]] = {}
+    input_bindings: dict[str, str] = {}
+    legacy_file_bindings: dict[str, str] = {}
     input_file_ids = await resolve_node_input_files(
         db,
         run=run,
         node=node,
         node_states=node_states,
         binding_decisions=binding_decisions,
+        input_bindings=input_bindings,
+        legacy_file_bindings=legacy_file_bindings,
     )
     if binding_decisions:
         state["binding_decisions"] = binding_decisions
@@ -633,6 +758,17 @@ async def schedule_workflow_node(
         "workflow_node_type": str(node.get("kind") or node.get("type") or "tool"),
     }
     tool_config = tool.current_version.config if tool.current_version and tool.current_version.config else {}
+    task_input_bindings = (
+        dict(input_bindings) if _tool_accepts_standard_input_bindings(tool_config) else {}
+    )
+    if not task_input_bindings:
+        await _project_legacy_ssh_input_files(
+            db,
+            tool_config=tool_config,
+            node=node,
+            legacy_file_bindings=legacy_file_bindings,
+            params=node_params,
+        )
     if isinstance(tool_config, dict) and tool_config.get("type") == "builtin":
         builtin_inputs = await resolve_builtin_input_file_map(
             db,
@@ -663,6 +799,7 @@ async def schedule_workflow_node(
                 },
                 "task_id": existing_task.id,
                 "input_file_ids": input_file_ids,
+                "input_bindings": task_input_bindings,
                 "params": node_params,
                 "started_at": state.get("started_at") or utcnow_iso(),
             }
@@ -680,6 +817,7 @@ async def schedule_workflow_node(
             tool_version_id=tool.current_version_id,
             params=node_params,
             file_ids=input_file_ids,
+            input_bindings=task_input_bindings,
         ),
     )
 
@@ -696,6 +834,7 @@ async def schedule_workflow_node(
             },
             "task_id": task.id,
             "input_file_ids": input_file_ids,
+            "input_bindings": task_input_bindings,
             "params": node_params,
             "started_at": utcnow_iso(),
         }

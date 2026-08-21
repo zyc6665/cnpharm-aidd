@@ -326,11 +326,12 @@ class SSHJobExecutor(BaseExecutor):
                 raise TaskExecutionError(
                     "Task input_bindings require a Tool Package v2 manifest in tool config"
                 )
-            return await self._build_standard_request_payload(
+            payload = await self._build_standard_request_payload(
                 manifest=manifest,
                 input_bindings=input_bindings,
                 work_dir=Path(work_dir),
             )
+            return self._append_legacy_standard_compat_payload(payload, manifest)
         return self._build_params_payload(await self._prepare_input_files(input_dir))
 
     async def _prepare_input_files(self, input_dir: str) -> list[dict[str, str]]:
@@ -415,8 +416,132 @@ class SSHJobExecutor(BaseExecutor):
             return {}
         if "params" in raw_params or "input_files" in raw_params:
             nested = raw_params.get("params")
-            return dict(nested) if isinstance(nested, dict) else {}
+            if isinstance(nested, dict):
+                return dict(nested)
+            return {
+                key: value
+                for key, value in raw_params.items()
+                if key not in {"params", "input_files"}
+            }
         return dict(raw_params)
+
+    def _append_legacy_standard_compat_payload(
+        self,
+        payload: dict[str, Any],
+        manifest: ToolPackageV2Manifest,
+    ) -> dict[str, Any]:
+        """Expose v2 standard inputs through legacy params/input_files for old SSH runners."""
+        enriched = dict(payload)
+        parameters = self._task_parameters()
+        if parameters and not isinstance(enriched.get("params"), dict):
+            enriched["params"] = parameters
+
+        projected_input_files = self._project_standard_inputs_to_legacy_fields(payload, manifest)
+        if projected_input_files:
+            existing = enriched.get("input_files") if isinstance(enriched.get("input_files"), dict) else {}
+            enriched["input_files"] = {**projected_input_files, **existing}
+        return enriched
+
+    def _project_standard_inputs_to_legacy_fields(
+        self,
+        payload: dict[str, Any],
+        manifest: ToolPackageV2Manifest,
+    ) -> dict[str, str]:
+        inputs = payload.get("inputs")
+        if not isinstance(inputs, dict):
+            return {}
+        file_fields = self._legacy_file_fields()
+        if not file_fields:
+            return {}
+
+        projected: dict[str, str] = {}
+        used_fields: set[str] = set()
+        for declaration in manifest.artifacts.inputs:
+            standard_input = inputs.get(declaration.name)
+            if not isinstance(standard_input, dict):
+                continue
+            file_field = self._legacy_file_field_for_standard_input(
+                input_name=declaration.name,
+                standard_type=declaration.type,
+                file_fields=file_fields,
+                used_fields=used_fields,
+            )
+            if not file_field:
+                continue
+            path = self._standard_input_file_path(standard_input, declaration.type)
+            if not path:
+                continue
+            projected[file_field] = path
+            used_fields.add(file_field)
+        return projected
+
+    def _legacy_file_fields(self) -> list[str]:
+        input_schema = self.config.get("input_schema") if isinstance(self.config.get("input_schema"), dict) else {}
+        properties = input_schema.get("properties") if isinstance(input_schema.get("properties"), dict) else {}
+        return [
+            str(name)
+            for name, schema in properties.items()
+            if isinstance(schema, dict) and (schema.get("format") == "file" or schema.get("type") == "file")
+        ]
+
+    def _legacy_file_field_for_standard_input(
+        self,
+        *,
+        input_name: str,
+        standard_type: str,
+        file_fields: list[str],
+        used_fields: set[str],
+    ) -> str | None:
+        unused_fields = [field for field in file_fields if field not in used_fields]
+        if input_name in unused_fields:
+            return input_name
+        if not unused_fields:
+            return None
+        if len(unused_fields) == 1:
+            return unused_fields[0]
+
+        standard_type = str(standard_type or "")
+        if standard_type == "protein_structure@1":
+            return self._first_matching_field(unused_fields, ("protein", "receptor"))
+        if standard_type == "ligand_structure@1":
+            return self._first_matching_field(unused_fields, ("ligand",))
+        if standard_type == "molecule_table@1":
+            return self._first_matching_field(unused_fields, ("smiles", "molecule", "csv"))
+        if standard_type == "binding_pocket@1":
+            return self._first_matching_field(unused_fields, ("pocket",))
+        return unused_fields[0]
+
+    @staticmethod
+    def _first_matching_field(fields: list[str], tokens: tuple[str, ...]) -> str | None:
+        lowered = [(field, field.lower()) for field in fields]
+        for token in tokens:
+            match = next((field for field, lower in lowered if token in lower), None)
+            if match:
+                return match
+        return None
+
+    def _standard_input_file_path(self, standard_input: dict[str, Any], standard_type: str) -> str | None:
+        files = standard_input.get("files")
+        if not isinstance(files, dict):
+            return None
+        for role in self._preferred_standard_file_roles(standard_type):
+            file_ref = files.get(role)
+            if isinstance(file_ref, dict) and file_ref.get("path"):
+                return str(file_ref["path"])
+        for file_ref in files.values():
+            if isinstance(file_ref, dict) and file_ref.get("path"):
+                return str(file_ref["path"])
+        return None
+
+    @staticmethod
+    def _preferred_standard_file_roles(standard_type: str) -> tuple[str, ...]:
+        return {
+            "protein_structure@1": ("prepared_pdb", "structure_file", "raw_structure_file"),
+            "ligand_structure@1": ("structure_3d_sdf", "structure_file", "structure_2d_sdf"),
+            "molecule_table@1": ("table_file",),
+            "binding_pocket@1": ("residue_pocket_pdb", "atom_pocket_pdb"),
+            "run_report@1": ("report_json", "report_markdown"),
+        }.get(str(standard_type or ""), ())
 
     def _tool_package_v2_manifest(self) -> ToolPackageV2Manifest | None:
         manifest_data = self.config.get("tool_package_manifest")
