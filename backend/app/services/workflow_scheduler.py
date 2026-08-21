@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
@@ -20,6 +21,7 @@ from app.models.tools import Tool, ToolProviderType, ToolStatus
 from app.models.users import User
 from app.models.workflows import WorkflowRun
 from app.schemas.tasks import TaskCreate
+from app.services.artifact_binding_resolver import ArtifactBindingDecision, resolve_artifact_binding
 from app.services.semantic_types import normalize_semantic_type
 from app.services.workflow_artifacts import standard_artifact_file_ids
 from app.services.workflow_validation import (
@@ -256,6 +258,7 @@ async def resolve_node_input_files(
     run: WorkflowRun,
     node: dict[str, Any],
     node_states: dict[str, Any],
+    binding_decisions: dict[str, dict[str, Any]] | None = None,
 ) -> list[str] | None:
     file_ids: list[str] = []
     seen_file_ids: set[str] = set()
@@ -299,6 +302,7 @@ async def resolve_node_input_files(
             label=str(semantic_type),
         )
 
+    artifact_slots = _artifact_input_slots_by_name(node)
     for slot_name, source in (node.get("artifact_inputs") or {}).items():
         if not isinstance(source, str):
             raise ValidationException(f"Unsupported workflow artifact input source: {source}")
@@ -326,6 +330,48 @@ async def resolve_node_input_files(
             source_state = node_states.get(source_node_id) or {}
             if source_state.get("status") != "success":
                 return None
+            slot = artifact_slots.get(str(slot_name))
+            if slot and _slot_needs_binding_resolution(slot):
+                version_id = _standard_artifact_version_id(
+                    source_state.get("standard_artifacts") or {},
+                    source_output_name,
+                )
+                if not version_id:
+                    _record_binding_decision(
+                        binding_decisions,
+                        str(slot_name),
+                        ArtifactBindingDecision(
+                            status="invalid",
+                            input_name=str(slot_name),
+                            standard_type=str(slot.get("type") or ""),
+                            reason=f"Standard artifact version is missing for {source_output_name}.",
+                        ),
+                    )
+                    if binding_decisions is None:
+                        return None
+                    continue
+                decision = await resolve_artifact_binding(
+                    db,
+                    input_slot=slot,
+                    candidate_artifact_version_id=str(version_id),
+                )
+                _record_binding_decision(binding_decisions, str(slot_name), decision)
+                if decision.status != "ready":
+                    if binding_decisions is None:
+                        return None
+                    continue
+                if not decision.selected_file_id:
+                    raise ValidationException(
+                        f"Artifact binding did not select a file: slot={slot_name}"
+                    )
+                await _append_existing_file_id(
+                    db,
+                    file_ids=file_ids,
+                    seen_file_ids=seen_file_ids,
+                    file_id=decision.selected_file_id,
+                    label=str(slot_name),
+                )
+                continue
             artifact_file_ids = standard_artifact_file_ids(
                 source_state.get("standard_artifacts") or {},
                 source_output_name,
@@ -353,6 +399,7 @@ async def resolve_builtin_input_file_map(
     run: WorkflowRun,
     node: dict[str, Any],
     node_states: dict[str, Any],
+    binding_decisions: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, str]:
     builtin_inputs: dict[str, str] = {}
 
@@ -369,12 +416,15 @@ async def resolve_builtin_input_file_map(
 
     slot_types = _artifact_input_slot_types(node)
     for slot_name, source in (node.get("artifact_inputs") or {}).items():
-        file_id = _resolved_artifact_source_file_id(
-            run=run,
-            node_states=node_states,
-            slot_name=str(slot_name),
-            source=source,
-        )
+        decision = (binding_decisions or {}).get(str(slot_name))
+        file_id = decision.get("selected_file_id") if isinstance(decision, dict) else None
+        if not file_id:
+            file_id = _resolved_artifact_source_file_id(
+                run=run,
+                node_states=node_states,
+                slot_name=str(slot_name),
+                source=source,
+            )
         if file_id:
             slot_type = slot_types.get(str(slot_name)) or _artifact_source_key(str(source))
             await _require_existing_file_id(db, file_id=str(file_id), label=str(slot_name))
@@ -393,6 +443,66 @@ def _artifact_input_slot_types(node: dict[str, Any]) -> dict[str, str]:
         if name and standard_type:
             slot_types[str(name)] = str(standard_type)
     return slot_types
+
+
+def _artifact_input_slots_by_name(node: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    slots: dict[str, dict[str, Any]] = {}
+    for slot in node.get("artifact_input_slots") or []:
+        if not isinstance(slot, dict) or not slot.get("name"):
+            continue
+        slots[str(slot["name"])] = dict(slot)
+    return slots
+
+
+def _slot_needs_binding_resolution(slot: dict[str, Any]) -> bool:
+    return any(
+        key in slot and slot.get(key) not in (None, "", [])
+        for key in (
+            "role_preferences",
+            "required_roles",
+            "readiness_policy",
+            "suggested_preparation_tool",
+        )
+    )
+
+
+def _standard_artifact_version_id(summary: dict[str, Any], output_name: str) -> str | None:
+    version_ids_by_ref = summary.get("artifact_version_ids_by_ref")
+    if not isinstance(version_ids_by_ref, dict):
+        return None
+    raw_version_id = version_ids_by_ref.get(output_name)
+    if isinstance(raw_version_id, str) and raw_version_id:
+        return raw_version_id
+    if isinstance(raw_version_id, list):
+        for item in raw_version_id:
+            if item:
+                return str(item)
+    return None
+
+
+def _record_binding_decision(
+    decisions: dict[str, dict[str, Any]] | None,
+    slot_name: str,
+    decision: ArtifactBindingDecision,
+) -> None:
+    if decisions is None:
+        return
+    decisions[slot_name] = asdict(decision)
+
+
+def _has_blocking_binding_decision(decisions: dict[str, dict[str, Any]]) -> bool:
+    return any(
+        isinstance(decision, dict) and decision.get("status") not in {None, "ready"}
+        for decision in decisions.values()
+    )
+
+
+def _first_blocking_binding_reason(decisions: dict[str, dict[str, Any]]) -> str | None:
+    for decision in decisions.values():
+        if not isinstance(decision, dict) or decision.get("status") == "ready":
+            continue
+        return str(decision.get("reason") or decision.get("status") or "Artifact binding blocked")
+    return None
 
 
 def _resolved_semantic_source_file_id(
@@ -490,12 +600,27 @@ async def schedule_workflow_node(
         node_states[node_id] = state
         return False
 
+    binding_decisions: dict[str, dict[str, Any]] = {}
     input_file_ids = await resolve_node_input_files(
         db,
         run=run,
         node=node,
         node_states=node_states,
+        binding_decisions=binding_decisions,
     )
+    if binding_decisions:
+        state["binding_decisions"] = binding_decisions
+        node_states[node_id] = state
+    if _has_blocking_binding_decision(binding_decisions):
+        state.update(
+            {
+                "status": "blocked",
+                "blocked_reason": _first_blocking_binding_reason(binding_decisions),
+                "finished_at": utcnow_iso(),
+            }
+        )
+        node_states[node_id] = state
+        return False
     if input_file_ids is None:
         return False
 
@@ -514,6 +639,7 @@ async def schedule_workflow_node(
             run=run,
             node=node,
             node_states=node_states,
+            binding_decisions=binding_decisions,
         )
         if builtin_inputs:
             node_params["builtin_inputs"] = builtin_inputs

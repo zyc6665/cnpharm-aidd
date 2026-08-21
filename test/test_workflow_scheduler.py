@@ -21,6 +21,7 @@ if str(BACKEND_ROOT) not in sys.path:
 from app.common.exceptions import ValidationException  # noqa: E402
 from app.database.base import Base  # noqa: E402
 from app.models import agent as _agent_models  # noqa: F401,E402
+from app.models import artifacts as _artifact_models  # noqa: F401,E402
 from app.models import files as _files_models  # noqa: F401,E402
 from app.models import statistics as _statistics_models  # noqa: F401,E402
 from app.models import system_settings as _system_settings  # noqa: F401,E402
@@ -28,6 +29,9 @@ from app.models import tasks as _task_models  # noqa: F401,E402
 from app.models import tools as _tools_models  # noqa: F401,E402
 from app.models import users as _users_models  # noqa: F401,E402
 from app.models.files import File as FileModel, FileSourceType  # noqa: E402
+from app.models.artifacts import Artifact as ArtifactModel  # noqa: E402
+from app.models.artifacts import ArtifactVersion as ArtifactVersionModel  # noqa: E402
+from app.models.artifacts import ArtifactVersionFile as ArtifactVersionFileModel  # noqa: E402
 from app.models.tools import Tool, ToolProviderType, ToolStatus, ToolVersion  # noqa: E402
 from app.models.users import User, UserRole, UserStatus  # noqa: E402
 from app.services.workflow_scheduler import (  # noqa: E402
@@ -101,6 +105,84 @@ async def _create_tool(
     tool.current_version_id = version.id
     await db_session.commit()
     return tool
+
+
+async def _create_protein_artifact_version(
+    db_session: AsyncSession,
+    owner: User,
+    *,
+    name: str,
+    roles: dict[str, FileModel],
+    preparation_status: str,
+) -> ArtifactVersionModel:
+    artifact = ArtifactModel(
+        project_id="project-1",
+        created_by=owner.id,
+        artifact_type="protein_structure",
+        semantic_type="protein_structure",
+        standard_type="protein_structure",
+        standard_version=1,
+        name=name,
+    )
+    db_session.add(artifact)
+    await db_session.flush()
+    version = ArtifactVersionModel(
+        artifact_id=artifact.id,
+        created_by=owner.id,
+        version=1,
+        filename=f"{name}.manifest.json",
+        content_type="application/json",
+        size_bytes=2,
+        sha256=hashlib.sha256(name.encode()).hexdigest(),
+        storage_key=f"legacy/{name}.manifest.json",
+        validation_status="passed",
+        validation_errors=[],
+        manifest_json={
+            "type": "protein_structure@1",
+            "metadata": {"preparation_status": preparation_status},
+        },
+        summary_json={},
+        metrics_json={},
+    )
+    db_session.add(version)
+    await db_session.flush()
+    for index, (role, file_record) in enumerate(roles.items()):
+        db_session.add(
+            ArtifactVersionFileModel(
+                artifact_version_id=version.id,
+                role=role,
+                file_id=file_record.id,
+                is_primary=index == 0,
+                sort_order=index,
+            )
+        )
+    artifact.latest_version_id = version.id
+    await db_session.commit()
+    return version
+
+
+async def _create_workflow_file(
+    db_session: AsyncSession,
+    owner: User,
+    *,
+    filename: str,
+    content: bytes,
+    content_type: str = "chemical/x-pdb",
+) -> FileModel:
+    file_record = FileModel(
+        owner_id=owner.id,
+        project_id="project-1",
+        filename=filename,
+        content_type=content_type,
+        size_bytes=len(content),
+        sha256=hashlib.sha256(content).hexdigest(),
+        source_type=FileSourceType.TOOL_OUTPUT.value,
+        storage_path=f"/tmp/{filename}",
+        is_public=False,
+    )
+    db_session.add(file_record)
+    await db_session.flush()
+    return file_record
 
 
 @pytest.mark.asyncio
@@ -324,3 +406,195 @@ async def test_builtin_workflow_node_receives_upstream_standard_artifact_input(
     assert scheduled[0]["params"]["builtin_inputs"] == {
         "protein_structure@1": prepared_file.id
     }
+
+
+@pytest.mark.asyncio
+async def test_role_aware_artifact_input_blocks_raw_protein_when_prepared_required(
+    db_session: AsyncSession,
+    owner: User,
+) -> None:
+    raw_file = await _create_workflow_file(
+        db_session,
+        owner,
+        filename="raw.pdb",
+        content=b"ATOM raw\n",
+    )
+    raw_version = await _create_protein_artifact_version(
+        db_session,
+        owner,
+        name="raw-protein",
+        roles={"structure_file": raw_file},
+        preparation_status="raw",
+    )
+    tool = await _create_tool(
+        db_session,
+        owner,
+        slug="prepared-only-tool",
+        provider_type=ToolProviderType.USER.value,
+        executor_type="ssh_job",
+        is_public=True,
+        config={
+            "type": "ssh_job",
+            "artifacts": {
+                "inputs": [
+                    {
+                        "name": "protein",
+                        "type": "protein_structure@1",
+                        "required": True,
+                        "readiness_policy": "require_prepared",
+                    }
+                ],
+                "outputs": [],
+            },
+        },
+    )
+    run = SimpleNamespace(
+        id="run-raw",
+        name="Raw Binding Run",
+        workflow_definition_id="workflow-1",
+        project_id="project-1",
+        input_files={},
+    )
+    node = {
+        "id": "prepared_required",
+        "kind": "tool",
+        "tool_id": tool.id,
+        "tool_slug": tool.slug,
+        "artifact_input_slots": [
+            {
+                "name": "protein",
+                "type": "protein_structure@1",
+                "required": True,
+                "readiness_policy": "require_prepared",
+            }
+        ],
+        "artifact_inputs": {"protein": "node:fetch_pdb:protein"},
+    }
+    node_states = {
+        "prepared_required": {"status": "pending"},
+        "fetch_pdb": {
+            "status": "success",
+            "standard_artifacts": {
+                "artifact_version_ids_by_ref": {"protein": raw_version.id},
+                "file_ids_by_artifact_ref": {"protein": [raw_file.id]},
+            },
+        },
+    }
+    scheduled: list[dict] = []
+
+    async def fake_schedule_task(**kwargs):
+        scheduled.append(kwargs)
+        return SimpleNamespace(id="task-should-not-create")
+
+    created = await schedule_workflow_node(
+        db_session,
+        current_user=owner,
+        run=run,
+        node_id="prepared_required",
+        node=node,
+        node_states=node_states,
+        schedule_task_fn=fake_schedule_task,
+    )
+
+    assert created is False
+    assert scheduled == []
+    assert node_states["prepared_required"]["status"] == "blocked"
+    assert node_states["prepared_required"]["binding_decisions"]["protein"]["status"] == (
+        "needs_preparation"
+    )
+    assert node_states["prepared_required"]["binding_decisions"]["protein"][
+        "suggested_tool_slug"
+    ] == "builtin-protein-preparation"
+
+
+@pytest.mark.asyncio
+async def test_role_aware_artifact_input_schedules_selected_prepared_role_only(
+    db_session: AsyncSession,
+    owner: User,
+) -> None:
+    raw_file = await _create_workflow_file(
+        db_session,
+        owner,
+        filename="raw.pdb",
+        content=b"ATOM raw\n",
+    )
+    prepared_file = await _create_workflow_file(
+        db_session,
+        owner,
+        filename="prepared.pdb",
+        content=b"ATOM prepared\n",
+    )
+    prepared_version = await _create_protein_artifact_version(
+        db_session,
+        owner,
+        name="prepared-protein",
+        roles={"structure_file": raw_file, "prepared_pdb": prepared_file},
+        preparation_status="prepared",
+    )
+    tool = await _create_tool(
+        db_session,
+        owner,
+        slug="prepared-role-tool",
+        provider_type=ToolProviderType.USER.value,
+        executor_type="ssh_job",
+        is_public=True,
+        config={"type": "ssh_job"},
+    )
+    run = SimpleNamespace(
+        id="run-prepared",
+        name="Prepared Binding Run",
+        workflow_definition_id="workflow-1",
+        project_id="project-1",
+        input_files={},
+    )
+    node = {
+        "id": "prepared_required",
+        "kind": "tool",
+        "tool_id": tool.id,
+        "tool_slug": tool.slug,
+        "artifact_input_slots": [
+            {
+                "name": "protein",
+                "type": "protein_structure@1",
+                "required": True,
+                "readiness_policy": "require_prepared",
+            }
+        ],
+        "artifact_inputs": {"protein": "node:protein_preparation:prepared_protein"},
+    }
+    node_states = {
+        "prepared_required": {"status": "pending"},
+        "protein_preparation": {
+            "status": "success",
+            "standard_artifacts": {
+                "artifact_version_ids_by_ref": {"prepared_protein": prepared_version.id},
+                "file_ids_by_artifact_ref": {
+                    "prepared_protein": [raw_file.id, prepared_file.id],
+                },
+            },
+        },
+    }
+    scheduled: list[dict] = []
+
+    async def fake_schedule_task(**kwargs):
+        task_data = kwargs["task_data"]
+        scheduled.append({"file_ids": task_data.file_ids, "params": task_data.params})
+        return SimpleNamespace(id="task-prepared")
+
+    created = await schedule_workflow_node(
+        db_session,
+        current_user=owner,
+        run=run,
+        node_id="prepared_required",
+        node=node,
+        node_states=node_states,
+        schedule_task_fn=fake_schedule_task,
+    )
+
+    assert created is True
+    assert scheduled[0]["file_ids"] == [prepared_file.id]
+    assert node_states["prepared_required"]["input_file_ids"] == [prepared_file.id]
+    assert node_states["prepared_required"]["binding_decisions"]["protein"]["status"] == "ready"
+    assert node_states["prepared_required"]["binding_decisions"]["protein"]["selected_role"] == (
+        "prepared_pdb"
+    )
