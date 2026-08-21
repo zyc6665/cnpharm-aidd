@@ -118,6 +118,59 @@ describe('useWorkflowCanvasStore', () => {
     expect(store.canvasNodes).toHaveLength(1)
   })
 
+  it('normalizeShape 应为旧持久化节点补齐可渲染标题', () => {
+    const store = useWorkflowCanvasStore()
+    store.$patch({
+      canvasNodes: [
+        {
+          id: 'legacy-fetch-pdb',
+          type: 'tool',
+          tool_slug: 'builtin-fetch-pdb',
+          position: { x: 0, y: 0 },
+        },
+      ] as never,
+      hasCanvasOverride: true,
+    })
+
+    store.normalizeShape()
+
+    expect(store.canvasNodes[0]).toMatchObject({
+      id: 'legacy-fetch-pdb',
+      type: 'tool',
+      titleKey: 'builtin-fetch-pdb',
+      descriptionKey: 'builtin-fetch-pdb',
+      recommendedToolSlug: 'builtin-fetch-pdb',
+      toolSlugs: ['builtin-fetch-pdb'],
+    })
+  })
+
+  it('applyDefinition 应将后端工作流节点映射成可渲染画布节点', () => {
+    const store = useWorkflowCanvasStore()
+
+    store.applyDefinition({
+      nodes: [
+        {
+          id: 'fetch-pdb',
+          kind: 'tool',
+          tool_slug: 'builtin-fetch-pdb',
+          semantic_type: 'protein_structure@1',
+          position: { x: 12, y: 24 },
+        },
+      ],
+      edges: [],
+    })
+
+    expect(store.canvasNodes[0]).toMatchObject({
+      id: 'fetch-pdb',
+      type: 'tool',
+      titleKey: 'builtin-fetch-pdb',
+      descriptionKey: 'protein_structure@1',
+      recommendedToolSlug: 'builtin-fetch-pdb',
+      toolSlugs: ['builtin-fetch-pdb'],
+      position: { x: 12, y: 24 },
+    })
+  })
+
   it('addEdge 应在有效 source/target 间创建连线', () => {
     const store = useWorkflowCanvasStore()
     store.addNode({ id: 'src', toolSlug: 'a' })

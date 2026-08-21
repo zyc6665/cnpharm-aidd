@@ -11,6 +11,108 @@ import type {
 } from '@/workflow/canvas-types'
 import { normalizeRecord, type WorkflowCanvasPosition } from './workflow-session'
 
+const WORKFLOW_CANVAS_NODE_TYPES = new Set<WorkflowCanvasNodeType>([
+  'input',
+  'tool',
+  'artifact',
+  'result',
+  'condition',
+  'map',
+  'loop'
+])
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+function stringArrayValue(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : []
+}
+
+function positionValue(value: unknown, fallback: WorkflowCanvasPosition): WorkflowCanvasPosition {
+  if (
+    value &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    typeof (value as { x?: unknown }).x === 'number' &&
+    typeof (value as { y?: unknown }).y === 'number'
+  ) {
+    return {
+      x: Math.max(0, Math.round((value as { x: number }).x)),
+      y: Math.max(0, Math.round((value as { y: number }).y))
+    }
+  }
+  return fallback
+}
+
+function resolveNodeType(node: Record<string, unknown>): WorkflowCanvasNodeType {
+  const explicitType = stringValue(node.type)
+  if (explicitType && WORKFLOW_CANVAS_NODE_TYPES.has(explicitType as WorkflowCanvasNodeType)) {
+    return explicitType as WorkflowCanvasNodeType
+  }
+
+  const kind = stringValue(node.kind)
+  if (kind && WORKFLOW_CANVAS_NODE_TYPES.has(kind as WorkflowCanvasNodeType)) {
+    return kind as WorkflowCanvasNodeType
+  }
+
+  return kind === 'input' ? 'input' : 'tool'
+}
+
+function normalizeCanvasNode(
+  value: unknown,
+  fallbackPosition: WorkflowCanvasPosition
+): WorkflowCanvasNode | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null
+  }
+
+  const node = value as Record<string, unknown>
+  const id = stringValue(node.id)
+  if (!id) {
+    return null
+  }
+
+  const type = resolveNodeType(node)
+  const recommendedToolSlug = stringValue(node.recommendedToolSlug) ?? stringValue(node.tool_slug)
+  const toolSlugs = stringArrayValue(node.toolSlugs)
+  const normalizedToolSlugs = Array.from(
+    new Set([...(recommendedToolSlug ? [recommendedToolSlug] : []), ...toolSlugs])
+  )
+  const semanticType = stringValue(node.semantic_type)
+  const titleKey =
+    stringValue(node.titleKey) ??
+    recommendedToolSlug ??
+    semanticType ??
+    id
+  const descriptionKey =
+    stringValue(node.descriptionKey) ??
+    semanticType ??
+    recommendedToolSlug ??
+    titleKey
+
+  return {
+    ...(node as Partial<WorkflowCanvasNode>),
+    id,
+    type,
+    titleKey,
+    descriptionKey,
+    position: positionValue(node.position, fallbackPosition),
+    ...(normalizedToolSlugs.length ? { toolSlugs: normalizedToolSlugs } : {}),
+    ...(recommendedToolSlug ? { recommendedToolSlug } : {}),
+    requiredInputTypes: stringArrayValue(node.requiredInputTypes),
+    producedOutputTypes: stringArrayValue(node.producedOutputTypes),
+    inputArtifactSlots: Array.isArray(node.inputArtifactSlots)
+      ? node.inputArtifactSlots as ArtifactInputSlot[]
+      : [],
+    outputArtifactSlots: Array.isArray(node.outputArtifactSlots)
+      ? node.outputArtifactSlots as ArtifactOutputSlot[]
+      : []
+  }
+}
+
 function resolveCanvasEdgeArtifactType(value: unknown): WorkflowCanvasEdge['artifactType'] {
   if (typeof value === 'string') {
     const semanticType = normalizeWorkflowSemanticType(value)
@@ -37,7 +139,11 @@ export const useWorkflowCanvasStore = defineStore(
         activeGroupId.value = null
       }
       nodePositionById.value = normalizeRecord<WorkflowCanvasPosition>(nodePositionById.value)
-      canvasNodes.value = Array.isArray(canvasNodes.value) ? canvasNodes.value : []
+      canvasNodes.value = Array.isArray(canvasNodes.value)
+        ? canvasNodes.value
+            .map(node => normalizeCanvasNode(node, nodePositionById.value[node.id] ?? { x: 0, y: 0 }))
+            .filter((node): node is WorkflowCanvasNode => node !== null)
+        : []
       canvasEdges.value = Array.isArray(canvasEdges.value) ? canvasEdges.value : []
       if (typeof hasCanvasOverride.value !== 'boolean') {
         hasCanvasOverride.value = canvasNodes.value.length > 0 || canvasEdges.value.length > 0
@@ -254,7 +360,9 @@ export const useWorkflowCanvasStore = defineStore(
         target_input?: unknown
       }>
     }) {
-      canvasNodes.value = workflow.nodes.map(node => node as unknown as WorkflowCanvasNode)
+      canvasNodes.value = workflow.nodes
+        .map(node => normalizeCanvasNode(node, node.position ?? { x: 0, y: 0 }))
+        .filter((node): node is WorkflowCanvasNode => node !== null)
       canvasEdges.value = workflow.edges.map((edge, index) => ({
         id: edge.id ?? `edge-${index}`,
         source: edge.source,
