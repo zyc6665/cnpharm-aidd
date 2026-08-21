@@ -73,6 +73,12 @@ def _task_input_bindings(task: Task) -> dict[str, str]:
     }
 
 
+def _task_binding_decisions(task: Task) -> dict[str, Any]:
+    data = task.extra_data if isinstance(task.extra_data, dict) else {}
+    decisions = data.get("binding_decisions")
+    return decisions if isinstance(decisions, dict) else {}
+
+
 def _serialize_task_log(log: TaskLog) -> dict[str, Any]:
     return {
         "id": log.id,
@@ -276,6 +282,7 @@ async def list_tasks(
         )
         task_dict["project_id"] = _task_project_id(task)
         task_dict["input_bindings"] = _task_input_bindings(task)
+        task_dict["binding_decisions"] = _task_binding_decisions(task)
         task_dict["user_id"] = task.user_id
         if task.user:
             task_dict["user_name"] = task.user.display_name or task.user.email.split("@")[0]
@@ -330,6 +337,7 @@ async def get_task(
         ),
         "project_id": _task_project_id(task),
         "input_bindings": _task_input_bindings(task),
+        "binding_decisions": _task_binding_decisions(task),
         "user_id": task.user_id,
         "tool_id": task.tool_id,
         "tool_version_id": task.tool_version_id,
@@ -388,6 +396,7 @@ async def create_task(
             "name": task.name,
             "project_id": _task_project_id(task),
             "input_bindings": _task_input_bindings(task),
+            "binding_decisions": _task_binding_decisions(task),
             "user_id": task.user_id,
             "tool_id": task.tool_id,
             "tool_version_id": task.tool_version_id,

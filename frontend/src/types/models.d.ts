@@ -375,6 +375,8 @@ export interface WorkflowRunNodeState {
   output_file_ids?: string[]
   semantic_outputs?: Record<string, unknown>
   missing_outputs?: WorkflowRunMissingOutput[]
+  binding_decisions?: Record<string, ArtifactBindingDecision>
+  blocked_reason?: string | null
   task_id?: string | null
   error_message?: string | null
   started_at?: string | null
@@ -493,6 +495,17 @@ export interface TaskDispatchInfo {
   queue_priority?: number
 }
 
+export interface ArtifactBindingDecision {
+  status: 'ready' | 'needs_preparation' | 'needs_conversion' | 'invalid' | string
+  input_name?: string | null
+  standard_type?: string | null
+  selected_role?: string | null
+  selected_file_id?: string | null
+  artifact_version_id?: string | null
+  reason?: string | null
+  suggested_tool_slug?: string | null
+}
+
 export interface Task {
   id: string
   name?: string
@@ -517,6 +530,7 @@ export interface Task {
   priority?: string
   project_id?: string | null
   input_bindings?: Record<string, string>
+  binding_decisions?: Record<string, ArtifactBindingDecision>
   resource_snapshot?: TaskResourceSnapshot | null
   dispatch?: TaskDispatchInfo | null
   created_at: string

@@ -59,6 +59,7 @@ export type WorkflowTaskRef = Pick<
     | 'updated_at'
     | 'output_data'
     | 'output_files'
+    | 'binding_decisions'
   >
 
 export interface WorkflowStepRecord {

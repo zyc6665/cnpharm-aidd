@@ -1,4 +1,9 @@
-import type { ArtifactFile, ToolContract } from '@/types/models'
+import type {
+  ArtifactBindingDecision,
+  ArtifactFile,
+  ToolContract,
+  WorkflowRunNodeState,
+} from '@/types/models'
 import type {
   WorkflowArtifactSemanticType,
   WorkflowStepStatus,
@@ -19,6 +24,9 @@ export type WorkflowPreflightIssueType =
   | 'invalid_file_extension'
   | 'invalid_semantic_edge'
   | 'invalid_tool_contract'
+  | 'needs_preparation'
+  | 'needs_conversion'
+  | 'invalid_artifact_binding'
   | 'running'
   | 'failed'
   | 'invalidated'
@@ -98,6 +106,7 @@ export function buildWorkflowPreflight(input: {
   selectedWorkflowInputFiles?: Record<string, string>
   artifacts?: ArtifactFile[]
   taskByNode?: Record<string, WorkflowTaskRef | null | undefined>
+  workflowRunNodeStates?: Record<string, WorkflowRunNodeState | null | undefined>
   selectedToolByNode?: Record<string, string>
   toolsBySlug?: Record<string, WorkflowPreflightTool>
 }): WorkflowPreflightSummary {
@@ -148,6 +157,15 @@ export function buildWorkflowPreflight(input: {
     }
     if (status === 'needs_tool_selection') {
       pushIssue(issues, issueIds, createIssue(node.id, formatWorkflowKey(node.titleKey), 'missing_tool'))
+    }
+
+    for (const issue of createBindingDecisionIssues({
+      nodeId: node.id,
+      nodeTitle: formatWorkflowKey(node.titleKey),
+      task: input.taskByNode?.[node.id] ?? null,
+      nodeState: input.workflowRunNodeStates?.[node.id] ?? null,
+    })) {
+      pushIssue(issues, issueIds, issue)
     }
 
     const selectedToolSlug = input.selectedToolByNode?.[node.id]
@@ -251,6 +269,14 @@ function resolvePrimaryMessage(input: {
     return '存在无效连线，请先修复节点依赖'
   }
 
+  if (input.issues.some((issue) => issue.type === 'needs_preparation' || issue.type === 'needs_conversion')) {
+    return '存在标准产物需要准备或转换'
+  }
+
+  if (input.issues.some((issue) => issue.type === 'invalid_artifact_binding')) {
+    return '存在不可用的标准产物绑定'
+  }
+
   return '当前没有可运行节点'
 }
 
@@ -323,6 +349,21 @@ function createIssue(
       title: '工具契约不可执行',
       detail: `当前节点绑定的工具 ${toolSlug} 缺少有效工作流契约或已被禁用。`
     },
+    needs_preparation: {
+      severity: 'warning',
+      title: '需要先准备输入产物',
+      detail: '该节点输入产物尚未满足工具要求，请先运行对应准备工具。'
+    },
+    needs_conversion: {
+      severity: 'warning',
+      title: '需要先转换输入产物',
+      detail: '该节点输入产物需要先转换为工具可消费的格式。'
+    },
+    invalid_artifact_binding: {
+      severity: 'error',
+      title: '标准产物绑定无效',
+      detail: '该节点的标准产物绑定不可用，请重新选择输入或检查上游输出。'
+    },
     running: {
       severity: 'info',
       title: '节点正在运行',
@@ -350,6 +391,118 @@ function createIssue(
     title: text.title,
     detail: text.detail,
   }
+}
+
+function createBindingDecisionIssues(input: {
+  nodeId: string
+  nodeTitle: string
+  task?: WorkflowTaskRef | null
+  nodeState?: WorkflowRunNodeState | null
+}): WorkflowPreflightIssue[] {
+  const decisions = {
+    ...normalizeBindingDecisions(input.task?.binding_decisions),
+    ...normalizeBindingDecisions(input.nodeState?.binding_decisions),
+  }
+  const issues = Object.entries(decisions).flatMap(([inputName, decision]) => {
+    const issue = createBindingDecisionIssue(input.nodeId, input.nodeTitle, inputName, decision)
+    return issue ? [issue] : []
+  })
+
+  if (issues.length === 0 && input.nodeState?.blocked_reason) {
+    issues.push({
+      id: `${input.nodeId}-invalid_artifact_binding-blocked`,
+      nodeId: input.nodeId,
+      nodeTitle: input.nodeTitle,
+      type: 'invalid_artifact_binding',
+      severity: 'error',
+      title: '标准产物绑定无效',
+      detail: input.nodeState.blocked_reason,
+    })
+  }
+
+  return issues
+}
+
+function normalizeBindingDecisions(
+  decisions?: Record<string, ArtifactBindingDecision> | null,
+): Record<string, ArtifactBindingDecision> {
+  if (!decisions || typeof decisions !== 'object') {
+    return {}
+  }
+  return decisions
+}
+
+function createBindingDecisionIssue(
+  nodeId: string,
+  nodeTitle: string,
+  inputName: string,
+  decision: ArtifactBindingDecision,
+): WorkflowPreflightIssue | null {
+  const type = bindingIssueType(decision.status)
+  if (!type) {
+    return null
+  }
+
+  const text = bindingIssueText(type)
+  const reason = normalizeDecisionText(decision.reason)
+  const suggestedTool = normalizeDecisionText(decision.suggested_tool_slug)
+  const fallbackDetail = bindingFallbackDetail(type, decision.standard_type, inputName)
+  const suggestion = suggestedTool ? `建议运行 ${suggestedTool}。` : ''
+
+  return {
+    id: `${nodeId}-${type}-${inputName || decision.input_name || 'artifact'}`,
+    nodeId,
+    nodeTitle,
+    type,
+    severity: text.severity,
+    title: text.title,
+    detail: `${reason || fallbackDetail}${suggestion}`,
+  }
+}
+
+function bindingIssueType(status: string): WorkflowPreflightIssueType | null {
+  if (status === 'needs_preparation') {
+    return 'needs_preparation'
+  }
+  if (status === 'needs_conversion') {
+    return 'needs_conversion'
+  }
+  if (status === 'invalid') {
+    return 'invalid_artifact_binding'
+  }
+  return null
+}
+
+function bindingIssueText(type: WorkflowPreflightIssueType): {
+  severity: WorkflowPreflightSeverity
+  title: string
+} {
+  if (type === 'needs_preparation') {
+    return { severity: 'warning', title: '需要先准备输入产物' }
+  }
+  if (type === 'needs_conversion') {
+    return { severity: 'warning', title: '需要先转换输入产物' }
+  }
+  return { severity: 'error', title: '标准产物绑定无效' }
+}
+
+function bindingFallbackDetail(
+  type: WorkflowPreflightIssueType,
+  standardType?: string | null,
+  inputName?: string,
+): string {
+  const target = standardType || inputName || '输入产物'
+  if (type === 'needs_preparation') {
+    return `${target} 需要先完成准备处理。`
+  }
+  if (type === 'needs_conversion') {
+    return `${target} 需要先完成格式转换。`
+  }
+  return `${target} 绑定不可用。`
+}
+
+function normalizeDecisionText(value?: string | null): string {
+  return String(value ?? '').trim()
 }
 
 function buildResourceSummary(input: {

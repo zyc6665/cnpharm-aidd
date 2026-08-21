@@ -33,7 +33,8 @@ export function toWorkflowTaskRef(task: Task | WorkflowTaskRef): WorkflowTaskRef
     created_at: task.created_at,
     updated_at: task.updated_at,
     output_data: task.output_data,
-    output_files: task.output_files
+    output_files: task.output_files,
+    binding_decisions: task.binding_decisions
   }
 }
 

@@ -512,6 +512,8 @@ async def test_create_task_with_input_binding_projects_selected_role_for_legacy_
     )
 
     assert response.status_code == 200
+    response_data = response.json()["data"]
+    assert response_data["binding_decisions"]["protein"]["selected_role"] == "prepared_pdb"
     task = await db_session.get(Task, response.json()["data"]["id"])
     assert task is not None
     await db_session.refresh(task, ["inputs"])

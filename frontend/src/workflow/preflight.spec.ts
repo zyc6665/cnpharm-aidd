@@ -89,4 +89,56 @@ describe('buildWorkflowPreflight', () => {
       }),
     ])
   })
+
+  it('将工作流节点的 Artifact Binding 决策转换为预检处理提示', () => {
+    const template: WorkflowCanvasPreset = {
+      id: 'free',
+      kind: 'free',
+      nameKey: 'Free Workflow',
+      nodes: [
+        {
+          id: 'predict-pocket',
+          type: 'tool',
+          titleKey: 'Predict Pocket',
+          position: { x: 120, y: 80 },
+          recommendedToolSlug: 'lvpocket-pocket-prediction',
+        },
+      ],
+      edges: [],
+    }
+
+    const preflight = buildWorkflowPreflight({
+      template,
+      nodeStatuses: { 'predict-pocket': 'idle' },
+      readyNodeIds: [],
+      workflowRunNodeStates: {
+        'predict-pocket': {
+          status: 'blocked',
+          blocked_reason: '需要先运行蛋白准备工具生成 prepared_pdb。',
+          binding_decisions: {
+            protein: {
+              status: 'needs_preparation',
+              input_name: 'protein',
+              standard_type: 'protein_structure@1',
+              reason: '当前蛋白缺少 prepared_pdb。',
+              suggested_tool_slug: 'builtin-protein-preparation',
+            },
+          },
+        },
+      },
+    })
+
+    expect(preflight.canRun).toBe(false)
+    expect(preflight.primaryMessage).toBe('存在标准产物需要准备或转换')
+    expect(preflight.issues).toEqual([
+      expect.objectContaining({
+        id: 'predict-pocket-needs_preparation-protein',
+        type: 'needs_preparation',
+        severity: 'warning',
+        nodeTitle: 'Predict Pocket',
+        title: '需要先准备输入产物',
+        detail: '当前蛋白缺少 prepared_pdb。建议运行 builtin-protein-preparation。',
+      }),
+    ])
+  })
 })

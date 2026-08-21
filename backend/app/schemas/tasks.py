@@ -61,6 +61,7 @@ class TaskResponse(TimestampMixin):
     tool_slug: Optional[str] = None
     # 输入输出
     input_bindings: Dict[str, str] = Field(default_factory=dict)
+    binding_decisions: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
     inputs: Optional[TaskInputSchema] = None
     outputs: Optional[TaskOutputSchema] = None
 

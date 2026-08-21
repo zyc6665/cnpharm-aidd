@@ -424,6 +424,7 @@
       selectedWorkflowInputFiles: selectedWorkflowInputFiles.value,
       artifacts: artifactsStore.items,
       taskByNode: workflowStore.taskByNode,
+      workflowRunNodeStates: workflowStore.activeWorkflowRun?.node_states,
       selectedToolByNode: workflowStore.selectedToolByNode,
       toolsBySlug: availableWorkflowTools.value.reduce<
         Record<string, (typeof availableWorkflowTools.value)[number]>
