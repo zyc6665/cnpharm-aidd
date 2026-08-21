@@ -1,5 +1,5 @@
 <template>
-  <template v-for="(prop, key) in schema.properties" :key="key">
+  <template v-for="(prop, key) in visibleProperties" :key="key">
     <a-form-item
       :name="key"
       :label="prop.title"
@@ -75,6 +75,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { Rule } from 'ant-design-vue/es/form'
 import ArtifactFilePicker from '@/components/tools/ArtifactFilePicker.vue'
 import type { ArtifactFile, SchemaProperty, ToolSchema } from '@/types/models'
@@ -94,6 +95,7 @@ const props = defineProps<{
   preferredGroupId?: string
   preferredToolSlug?: string
   externalSelectionPath?: WorkflowArtifactSelectionPath | null
+  hiddenFieldKeys?: string[]
 }>()
 
 const emit = defineEmits<{
@@ -104,6 +106,13 @@ const emit = defineEmits<{
 function isFileField(prop: SchemaProperty): boolean {
   return isFileSchemaProperty(prop) || prop.type === 'file' || prop.format === 'uri' || prop.format === 'file'
 }
+
+const visibleProperties = computed(() => {
+  const hidden = new Set(props.hiddenFieldKeys ?? [])
+  return Object.fromEntries(
+    Object.entries(props.schema.properties).filter(([key]) => !hidden.has(key))
+  )
+})
 
 function fieldRules(key: string, prop: SchemaProperty): Rule[] {
   const rules: Rule[] = []

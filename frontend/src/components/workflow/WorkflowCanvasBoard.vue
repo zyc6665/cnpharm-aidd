@@ -167,11 +167,31 @@
           x: targetNode.position.x,
           y: targetNode.position.y + NODE_HEIGHT / 2
         },
-        label: edge.artifactType,
+        label: resolveEdgeLabel(edge.artifactType, sourceNode, targetNode),
         active: sourceNode.id === props.activeNodeId || targetNode.id === props.activeNodeId
       }]
     })
   })
+
+  function resolveEdgeLabel(
+    artifactType: WorkflowArtifactSemanticType | undefined,
+    sourceNode: WorkflowCanvasNodeModel,
+    targetNode: WorkflowCanvasNodeModel,
+  ) {
+    if (!artifactType) {
+      return undefined
+    }
+
+    const outputSlot = sourceNode.outputArtifactSlots?.find(slot => slot.type === artifactType)
+    const inputSlot = targetNode.inputArtifactSlots?.find(slot => slot.type === artifactType)
+    if (outputSlot?.name && inputSlot?.name) {
+      return `${outputSlot.name} -> ${inputSlot.name} · ${artifactType}`
+    }
+    if (inputSlot?.name) {
+      return `${inputSlot.name} · ${artifactType}`
+    }
+    return artifactType
+  }
 
   function handleStartConnect(nodeId: string) {
     connectingSourceNodeId.value = nodeId

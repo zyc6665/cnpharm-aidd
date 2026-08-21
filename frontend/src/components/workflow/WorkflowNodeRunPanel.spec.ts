@@ -31,9 +31,9 @@ const stubs = {
   ATag: { template: '<span><slot /></span>' },
   ToolParameterForm: {
     name: 'ToolParameterForm',
-    props: ['schema', 'formState', 'fileList', 'allowUploads'],
+    props: ['schema', 'formState', 'fileList', 'allowUploads', 'hiddenFieldKeys'],
     emits: ['update:selectedArtifact'],
-    template: '<div class="tool-parameter-form" :data-allow-uploads="String(allowUploads)" :data-schema-fields="Object.keys(schema.properties).join(\',\')" />'
+    template: '<div class="tool-parameter-form" :data-allow-uploads="String(allowUploads)" :data-schema-fields="Object.keys(schema.properties).join(\',\')" :data-hidden-fields="(hiddenFieldKeys || []).join(\',\')" />'
   }
 }
 
@@ -491,6 +491,10 @@ describe('WorkflowNodeRunPanel', () => {
       ]
     })
     await flushPromises()
+
+    expect(wrapper.text()).toContain('已自动绑定上游产物')
+    expect(wrapper.text()).toContain('Fetch PDB Structure')
+    expect(wrapper.find('.tool-parameter-form').attributes('data-hidden-fields')).toBe('protein_pdb')
 
     await wrapper.find('[data-testid="run-current-node"]').trigger('click')
     await flushPromises()

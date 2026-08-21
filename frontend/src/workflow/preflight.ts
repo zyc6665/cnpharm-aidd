@@ -327,7 +327,7 @@ function createIssue(
     waiting_upstream: {
       severity: 'warning',
       title: '等待上游产物',
-      detail: `依赖 ${sourceNodeTitle} 输出的 ${semanticType} 结果，当前还没有成功产出。`
+      detail: `先运行 ${sourceNodeTitle}，成功后 ${semanticType} 会自动绑定到当前节点。`
     },
     waiting_input: {
       severity: 'warning',

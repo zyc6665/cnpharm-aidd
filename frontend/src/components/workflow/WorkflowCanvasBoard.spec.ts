@@ -86,6 +86,44 @@ describe('WorkflowCanvasBoard', () => {
     expect(wrapper.emitted('delete-edge')?.[0]).toEqual(['edge-source-target'])
   })
 
+  it('标准产物连线应显示输出槽到输入槽的自动绑定关系', () => {
+    const wrapper = mount(WorkflowCanvasBoard, {
+      props: {
+        preset: {
+          ...canvasPreset,
+          nodes: [
+            {
+              ...canvasPreset.nodes[0]!,
+              outputArtifactSlots: [{ name: 'protein', type: 'protein_structure@1', cardinality: 'one', required: true }],
+              producedOutputTypes: ['protein_structure@1'],
+            },
+            {
+              ...canvasPreset.nodes[1]!,
+              inputArtifactSlots: [{ name: 'protein', type: 'protein_structure@1', required: true }],
+              requiredInputTypes: ['protein_structure@1'],
+            },
+          ],
+          edges: [{ id: 'edge-source-target', source: 'source', target: 'target', artifactType: 'protein_structure@1' }],
+        },
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          AButton: {
+            emits: ['click'],
+            template: '<button @click="$emit(\'click\')"><slot /></button>',
+          },
+          ASpace: { template: '<div><slot /></div>' },
+          ATag: { template: '<span><slot /></span>' },
+          ZoomInOutlined: true,
+          ZoomOutOutlined: true,
+        },
+      },
+    })
+
+    expect(wrapper.text()).toContain('protein -> protein · protein_structure@1')
+  })
+
 
   it('工具拖放到画布时应按落点创建节点', async () => {
     const wrapper = mount(WorkflowCanvasBoard, {

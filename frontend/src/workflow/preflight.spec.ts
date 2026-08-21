@@ -141,4 +141,49 @@ describe('buildWorkflowPreflight', () => {
       }),
     ])
   })
+
+  it('等待上游产物时应提示用户先运行上游而不是手动绑定文件', () => {
+    const template: WorkflowCanvasPreset = {
+      id: 'free',
+      kind: 'free',
+      nameKey: 'Free Workflow',
+      nodes: [
+        {
+          id: 'fetch-pdb',
+          type: 'tool',
+          titleKey: 'Fetch PDB',
+          position: { x: 0, y: 0 },
+          producedOutputTypes: ['protein_structure@1'],
+        },
+        {
+          id: 'predict-pocket',
+          type: 'tool',
+          titleKey: 'Predict Pocket',
+          position: { x: 320, y: 0 },
+          requiredInputTypes: ['protein_structure@1'],
+        },
+      ],
+      edges: [
+        {
+          id: 'edge-fetch-pdb-to-pocket',
+          source: 'fetch-pdb',
+          target: 'predict-pocket',
+          artifactType: 'protein_structure@1',
+        },
+      ],
+    }
+
+    const preflight = buildWorkflowPreflight({
+      template,
+      nodeStatuses: { 'fetch-pdb': 'idle', 'predict-pocket': 'idle' },
+      readyNodeIds: ['fetch-pdb'],
+      taskByNode: {},
+    })
+
+    expect(preflight.issues).toContainEqual(expect.objectContaining({
+      type: 'waiting_upstream',
+      title: '等待上游产物',
+      detail: '先运行 Fetch PDB，成功后 protein_structure@1 会自动绑定到当前节点。',
+    }))
+  })
 })

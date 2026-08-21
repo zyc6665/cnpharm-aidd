@@ -20,6 +20,7 @@
             :form-state="formState"
             :file-list="fileList"
             :selected-artifacts="selectedArtifacts"
+            :hidden-field-keys="autoBoundFieldKeys"
             :allow-artifacts="userStore.isLoggedIn"
             :allow-uploads="true"
             :tool-id="selectedTool?.id"
@@ -29,10 +30,19 @@
             @update:selected-artifact="handleArtifactSelection"
           />
 
-          <div v-if="autoBoundArtifacts.length" class="auto-bound-artifacts">
-            <a-tag v-for="artifact in autoBoundArtifacts" :key="artifact.id" color="blue">
-              {{ artifact.filename }}
-            </a-tag>
+          <div v-if="autoBoundArtifactCards.length" class="auto-bound-artifacts">
+            <span class="auto-bound-title">已自动绑定上游产物</span>
+            <div
+              v-for="card in autoBoundArtifactCards"
+              :key="card.key"
+              class="auto-bound-artifact-card"
+            >
+              <div>
+                <strong>{{ card.fieldTitle }}</strong>
+                <p>{{ card.sourceLabel }}</p>
+              </div>
+              <a-tag color="blue">{{ card.filename }}</a-tag>
+            </div>
           </div>
 
           <div class="node-run-actions">
@@ -193,8 +203,17 @@
       .join('|')
   )
 
-  const autoBoundArtifacts = computed(() =>
-    Object.values(autoBoundArtifactByField).filter((artifact): artifact is ArtifactFile => Boolean(artifact))
+  const autoBoundFieldKeys = computed(() => Object.keys(autoBoundArtifactByField))
+
+  const autoBoundArtifactCards = computed(() =>
+    Object.entries(autoBoundArtifactByField)
+      .filter((entry): entry is [string, ArtifactFile] => Boolean(entry[1]))
+      .map(([fieldKey, artifact]) => ({
+        key: `${fieldKey}-${artifact.id}`,
+        fieldTitle: flattenedSchema.value.properties[fieldKey]?.title ?? fieldKey,
+        sourceLabel: `${artifact.tool_name || artifact.tool_slug || '上游节点'} · ${artifact.semantic_type || 'artifact'}`,
+        filename: artifact.filename,
+      }))
   )
 
   function replaceFormState(nextState: Record<string, unknown>) {
@@ -534,10 +553,39 @@
   }
 
   .auto-bound-artifacts {
+    display: grid;
+    gap: @spacing-sm;
+    margin-bottom: @spacing-md;
+  }
+
+  .auto-bound-title {
+    color: @text-color-light-secondary;
+    font-size: @font-size-xs;
+    font-weight: @font-weight-semibold;
+  }
+
+  .auto-bound-artifact-card {
     display: flex;
-    flex-wrap: wrap;
-    gap: @spacing-xs;
-    margin-bottom: @spacing-sm;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: @spacing-sm;
+    padding: @spacing-sm @spacing-md;
+    border: 1px solid #bfdbfe;
+    border-radius: @border-radius-base;
+    background: #eff6ff;
+
+    strong {
+      display: block;
+      color: @text-color-light;
+      font-size: @font-size-sm;
+    }
+
+    p {
+      margin: 2px 0 0;
+      color: @text-color-light-secondary;
+      font-size: @font-size-xs;
+      line-height: 1.4;
+    }
   }
 
   .node-run-actions {
