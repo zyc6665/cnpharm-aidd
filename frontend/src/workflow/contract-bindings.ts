@@ -16,6 +16,10 @@ export interface ArtifactInputSlot {
   readonly name: string
   readonly type: WorkflowArtifactSemanticType
   readonly required: boolean
+  readonly rolePreferences?: readonly string[]
+  readonly requiredRoles?: readonly string[]
+  readonly readinessPolicy?: string | null
+  readonly suggestedPreparationTool?: string | null
 }
 
 export interface ArtifactOutputSlot {
@@ -127,11 +131,27 @@ export function deriveArtifactSlotsFromToolContract(
           return null
         }
 
-        return {
+        const inputSlot: ArtifactInputSlot = {
           name: slot.name,
           type,
           required: slot.required ?? true
         }
+        const hasRoleAwareMetadata =
+          'role_preferences' in slot ||
+          'required_roles' in slot ||
+          'readiness_policy' in slot ||
+          'suggested_preparation_tool' in slot
+        if (hasRoleAwareMetadata) {
+          return {
+            ...inputSlot,
+            rolePreferences: toStringList(slot.role_preferences),
+            requiredRoles: 'required_roles' in slot ? toStringList(slot.required_roles) : undefined,
+            readinessPolicy: slot.readiness_policy ?? null,
+            suggestedPreparationTool: slot.suggested_preparation_tool ?? null
+          }
+        }
+
+        return inputSlot
       })
       .filter((slot): slot is ArtifactInputSlot => slot !== null),
     outputs: artifactOutputs
@@ -150,6 +170,13 @@ export function deriveArtifactSlotsFromToolContract(
       })
       .filter((slot): slot is ArtifactOutputSlot => slot !== null)
   }
+}
+
+function toStringList(value: unknown): readonly string[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  return value.map(item => String(item)).filter(Boolean)
 }
 
 function isNewerArtifact(candidate: WorkflowArtifact, current: WorkflowArtifact): boolean {

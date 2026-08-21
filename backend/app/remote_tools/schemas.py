@@ -39,6 +39,10 @@ class RemoteToolArtifactInput(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     type: str = Field(min_length=1, max_length=100)
     required: bool = True
+    role_preferences: list[str] = Field(default_factory=list)
+    required_roles: list[str] = Field(default_factory=list)
+    readiness_policy: str | None = Field(default=None, max_length=100)
+    suggested_preparation_tool: str | None = Field(default=None, max_length=100)
 
     @field_validator("type")
     @classmethod
@@ -195,4 +199,3 @@ class RemoteToolManifest(BaseModel):
             except Exception as exc:
                 raise ValueError(f"parameters_schema must be valid JSON Schema Draft-07: {exc}") from exc
         return value
-

@@ -55,6 +55,10 @@ class ArtifactInputV2(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     type: str = Field(min_length=1, max_length=100)
     required: bool = True
+    role_preferences: list[str] = Field(default_factory=list)
+    required_roles: list[str] = Field(default_factory=list)
+    readiness_policy: str | None = Field(default=None, max_length=100)
+    suggested_preparation_tool: str | None = Field(default=None, max_length=100)
 
 
 class ArtifactOutputV2(BaseModel):

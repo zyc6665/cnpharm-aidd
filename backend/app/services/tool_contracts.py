@@ -383,11 +383,20 @@ def _package_manifest_from_version(current_version: Any | None) -> dict[str, Any
 
 
 def _artifact_input_slot(item: dict[str, Any]) -> dict[str, Any]:
-    return {
+    slot = {
         "name": item.get("name"),
         "type": item.get("type"),
         "required": bool(item.get("required", True)),
     }
+    if "role_preferences" in item:
+        slot["role_preferences"] = _string_list(item.get("role_preferences"))
+    if "required_roles" in item:
+        slot["required_roles"] = _string_list(item.get("required_roles"))
+    if item.get("readiness_policy"):
+        slot["readiness_policy"] = str(item.get("readiness_policy"))
+    if item.get("suggested_preparation_tool"):
+        slot["suggested_preparation_tool"] = str(item.get("suggested_preparation_tool"))
+    return slot
 
 
 def _artifact_output_slot(item: dict[str, Any]) -> dict[str, Any]:
@@ -406,6 +415,12 @@ def _exposure_contract(value: Any) -> dict[str, bool]:
         "workflow": bool(raw.get("workflow", True)),
         "direct_run": bool(raw.get("direct_run", True)),
     }
+
+
+def _string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if str(item)]
 
 
 def _capability_from_v2_manifest(

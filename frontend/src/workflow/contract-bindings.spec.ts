@@ -81,6 +81,37 @@ describe('contract artifact slots', () => {
     ])
   })
 
+  it('preserves role-aware input requirements from artifact contracts', () => {
+    const contract = makeToolContract({
+      artifacts: {
+        inputs: [
+          {
+            name: 'protein',
+            type: 'protein_structure@1',
+            required: true,
+            role_preferences: ['prepared_pdb', 'structure_file'],
+            required_roles: [],
+            readiness_policy: 'prefer_prepared_warn_raw',
+            suggested_preparation_tool: 'builtin-protein-preparation',
+          },
+        ],
+        outputs: [],
+      },
+    })
+
+    const slots = deriveArtifactSlotsFromToolContract(contract)
+
+    expect(slots.inputs[0]).toEqual({
+      name: 'protein',
+      type: 'protein_structure@1',
+      required: true,
+      rolePreferences: ['prepared_pdb', 'structure_file'],
+      requiredRoles: [],
+      readinessPolicy: 'prefer_prepared_warn_raw',
+      suggestedPreparationTool: 'builtin-protein-preparation',
+    })
+  })
+
   it('keeps legacy capability bindings available for existing workflow paths', () => {
     const binding = buildWorkflowToolBindingFromContract(makeToolContract())
 
