@@ -24,10 +24,12 @@ from app.database.base import Base
 from app.database.session import get_db
 from app.main import app
 from app.models import files as _files_models  # noqa: F401
+from app.models import artifacts as _artifact_models  # noqa: F401
 from app.models import statistics as _statistics_models  # noqa: F401
 from app.models import tasks as _task_models  # noqa: F401
 from app.models import users as _user_models  # noqa: F401
 from app.models.files import File as FileModel, FileSourceType
+from app.models.artifacts import Artifact, ArtifactVersion, ArtifactVersionFile
 from app.models.tasks import Task, TaskOutput, TaskStatus
 from app.models.tools import Tool, ToolCategory, ToolStatus, ToolVersion
 from app.models.users import User, UserRole, UserStatus
@@ -379,6 +381,89 @@ async def test_artifacts_api_returns_task_and_tool_summary_fields(
     assert item["tool_name"] == "Pocket Generator"
     assert item["tool_slug"] == "pocket-generator"
     assert item["download_url"] == f"/api/v1/files/{artifact_file.id}/download"
+
+
+@pytest.mark.asyncio
+async def test_artifacts_api_returns_standard_artifact_version_metadata(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    current_user: User,
+    tool_category: ToolCategory,
+):
+    """标准产物文件应带回 ArtifactVersion 和 role，供工作流独立运行提交 input_bindings。"""
+    tool, version = await create_tool_with_version(
+        db_session,
+        current_user,
+        tool_category,
+        name="Protein Prep",
+        slug="protein-prep",
+    )
+    prepared_file = await create_file_record(
+        db_session,
+        current_user,
+        filename="prepared.pdb",
+        source_type=FileSourceType.TOOL_OUTPUT,
+    )
+    task = await create_task_with_output(
+        db_session,
+        current_user,
+        tool,
+        version,
+        output_file_ids=[prepared_file.id],
+    )
+    artifact = Artifact(
+        project_id="project-1",
+        created_by=current_user.id,
+        artifact_type="protein_structure",
+        semantic_type="protein_structure",
+        standard_type="protein_structure",
+        standard_version=1,
+        name="prepared protein",
+        source_task_id=task.id,
+    )
+    db_session.add(artifact)
+    await db_session.flush()
+    artifact_version = ArtifactVersion(
+        artifact_id=artifact.id,
+        created_by=current_user.id,
+        version=1,
+        filename="prepared.pdb",
+        content_type="chemical/x-pdb",
+        size_bytes=prepared_file.size_bytes,
+        sha256=prepared_file.sha256,
+        storage_key=prepared_file.storage_path,
+        status="available",
+        validation_status="passed",
+        validation_errors=[],
+        manifest_json={"type": "protein_structure@1"},
+        summary_json={},
+        metrics_json={},
+    )
+    db_session.add(artifact_version)
+    await db_session.flush()
+    db_session.add(
+        ArtifactVersionFile(
+            artifact_version_id=artifact_version.id,
+            role="prepared_pdb",
+            file_id=prepared_file.id,
+            is_primary=True,
+            sort_order=0,
+        )
+    )
+    artifact.latest_version_id = artifact_version.id
+    await db_session.commit()
+
+    response = await api_client.get(
+        "/api/v1/files/artifacts",
+        headers={"Authorization": "Bearer owner-token"},
+    )
+
+    assert response.status_code == 200
+    item = response.json()["data"]["items"][0]
+    assert item["artifact_id"] == artifact.id
+    assert item["artifact_version_id"] == artifact_version.id
+    assert item["standard_artifact_role"] == "prepared_pdb"
+    assert item["semantic_type"] == "protein_structure@1"
 
 
 @pytest.mark.asyncio

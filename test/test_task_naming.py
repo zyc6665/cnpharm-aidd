@@ -31,6 +31,8 @@ from app.models import projects as _project_models  # noqa: F401
 from app.models import statistics as _statistics_models  # noqa: F401
 from app.models import tasks as _task_models  # noqa: F401
 from app.models import users as _user_models  # noqa: F401
+from app.models.artifacts import ArtifactVersionFile
+from app.models.files import File as FileModel, FileSourceType
 from app.models.projects import Organization, Project, ProjectMember
 from app.models.artifacts import Artifact, ArtifactVersion
 from app.models.tasks import Task, TaskInput, TaskStatus
@@ -325,6 +327,88 @@ async def _seed_standard_artifact_version(
     return version
 
 
+async def _seed_prepared_protein_artifact_version(
+    db_session: AsyncSession,
+    *,
+    project_id: str,
+    user_id: str,
+) -> tuple[ArtifactVersion, FileModel, FileModel]:
+    raw_file = FileModel(
+        project_id=project_id,
+        owner_id=user_id,
+        filename="raw.pdb",
+        content_type="chemical/x-pdb",
+        size_bytes=3,
+        sha256="1" * 64,
+        storage_path="/tmp/raw.pdb",
+        source_type=FileSourceType.TOOL_OUTPUT.value,
+    )
+    prepared_file = FileModel(
+        project_id=project_id,
+        owner_id=user_id,
+        filename="prepared.pdb",
+        content_type="chemical/x-pdb",
+        size_bytes=8,
+        sha256="2" * 64,
+        storage_path="/tmp/prepared.pdb",
+        source_type=FileSourceType.TOOL_OUTPUT.value,
+    )
+    db_session.add_all([raw_file, prepared_file])
+    await db_session.flush()
+    artifact = Artifact(
+        project_id=project_id,
+        created_by=user_id,
+        artifact_type="protein_structure",
+        semantic_type="protein_structure",
+        standard_type="protein_structure",
+        standard_version=1,
+        name="prepared protein",
+    )
+    db_session.add(artifact)
+    await db_session.flush()
+    version = ArtifactVersion(
+        artifact_id=artifact.id,
+        created_by=user_id,
+        version=1,
+        filename="prepared.manifest.json",
+        content_type="application/json",
+        size_bytes=2,
+        sha256="0" * 64,
+        storage_key="test/prepared.manifest.json",
+        status="available",
+        validation_status="passed",
+        validation_errors=[],
+        manifest_json={"type": "protein_structure@1", "metadata": {"preparation_status": "prepared"}},
+        summary_json={},
+        metrics_json={},
+    )
+    db_session.add(version)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            ArtifactVersionFile(
+                artifact_version_id=version.id,
+                role="structure_file",
+                file_id=raw_file.id,
+                is_primary=True,
+                sort_order=0,
+            ),
+            ArtifactVersionFile(
+                artifact_version_id=version.id,
+                role="prepared_pdb",
+                file_id=prepared_file.id,
+                sort_order=1,
+            ),
+        ]
+    )
+    artifact.latest_version_id = version.id
+    await db_session.commit()
+    await db_session.refresh(version)
+    await db_session.refresh(raw_file)
+    await db_session.refresh(prepared_file)
+    return version, raw_file, prepared_file
+
+
 @pytest.mark.asyncio
 async def test_create_task_with_input_bindings_persists_standard_artifact_context(
     api_client: httpx.AsyncClient,
@@ -370,6 +454,73 @@ async def test_create_task_with_input_bindings_persists_standard_artifact_contex
     detail = detail_response.json()["data"]
     assert detail["input_bindings"] == {"protein": artifact_version.id}
     assert detail["inputs"]["input_bindings"] == {"protein": artifact_version.id}
+
+
+@pytest.mark.asyncio
+async def test_create_task_with_input_binding_projects_selected_role_for_legacy_tool(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    task_project: Project,
+    admin_user: User,
+    direct_runner_stub: SimpleNamespace,
+):
+    """legacy ssh_job 独立运行也应由后端按 ArtifactVersion role 选择输入文件。"""
+    artifact_version, raw_file, prepared_file = await _seed_prepared_protein_artifact_version(
+        db_session,
+        project_id=task_project.id,
+        user_id=admin_user.id,
+    )
+    tool = Tool(
+        owner_id=admin_user.id,
+        name="LVpocket",
+        slug="lvpocket-pocket-prediction",
+        status=ToolStatus.PUBLISHED.value,
+        is_public=True,
+    )
+    db_session.add(tool)
+    await db_session.flush()
+    version = ToolVersion(
+        tool_id=tool.id,
+        version="1.0.0",
+        is_active=True,
+        config={
+            "type": "ssh_job",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "protein_pdb": {"type": "string", "format": "file", "title": "Protein PDB"},
+                    "model_choice": {"type": "string", "default": "auto"},
+                },
+                "required": ["protein_pdb"],
+            },
+        },
+    )
+    db_session.add(version)
+    await db_session.flush()
+    tool.current_version_id = version.id
+    await db_session.commit()
+
+    response = await api_client.post(
+        "/api/v1/tasks",
+        headers={"Authorization": "Bearer admin-token"},
+        json={
+            "tool_id": tool.id,
+            "project_id": task_project.id,
+            "params": {"params": {"model_choice": "auto"}},
+            "input_bindings": {"protein": artifact_version.id},
+        },
+    )
+
+    assert response.status_code == 200
+    task = await db_session.get(Task, response.json()["data"]["id"])
+    assert task is not None
+    await db_session.refresh(task, ["inputs"])
+    assert task.extra_data["input_bindings"] == {"protein": artifact_version.id}
+    assert task.extra_data["binding_decisions"]["protein"]["selected_role"] == "prepared_pdb"
+    assert task.inputs.file_ids == [prepared_file.id]
+    assert raw_file.id not in task.inputs.file_ids
+    assert task.inputs.params["input_files"] == {"protein_pdb": "input/prepared.pdb"}
+    assert task.inputs.params["params"] == {"model_choice": "auto"}
 
 
 @pytest.mark.asyncio

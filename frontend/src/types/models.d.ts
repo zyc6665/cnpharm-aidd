@@ -613,6 +613,10 @@ export interface ArtifactFile {
   tool_id: string
   tool_name: string
   tool_slug: string
+  artifact_id?: string | null
+  artifact_version_id?: string | null
+  standard_artifact_role?: string | null
+  standard_artifact_output?: string | null
   semantic_type?: string | null
   semantic_source?: string | null
   created_at: string

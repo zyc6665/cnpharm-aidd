@@ -88,6 +88,10 @@
     name: string
     type: string
     required?: boolean
+    role_preferences?: string[]
+    required_roles?: string[]
+    readiness_policy?: string | null
+    suggested_preparation_tool?: string | null
   }
 
   const props = defineProps<{

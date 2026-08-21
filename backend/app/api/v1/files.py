@@ -22,6 +22,7 @@ from datetime import timedelta
 from app.common.time import utcnow
 from app.database.session import get_db
 from app.models.users import User
+from app.models.artifacts import Artifact, ArtifactVersion, ArtifactVersionFile
 from app.models.files import File as FileModel, FileSourceType
 from app.models.tasks import Task
 from app.auth.dependencies import get_current_user, get_current_user_optional
@@ -61,6 +62,54 @@ _EXPECTED_FILE_SIGNATURES = {
     ".zip": (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08"),
 }
 _EXECUTABLE_SIGNATURES = (b"\x7fELF", b"MZ", b"#!", b"\xfe\xed\xfa\xce", b"\xcf\xfa\xed\xfe")
+
+
+async def _standard_artifact_metadata_by_file_id(
+    db: AsyncSession,
+    file_ids: list[str],
+) -> dict[str, dict[str, str]]:
+    if not file_ids:
+        return {}
+
+    result = await db.execute(
+        select(
+            ArtifactVersionFile.file_id,
+            ArtifactVersionFile.role,
+            ArtifactVersion.id,
+            ArtifactVersion.manifest_json,
+            Artifact.id,
+            Artifact.standard_type,
+            Artifact.standard_version,
+            Artifact.semantic_type,
+        )
+        .join(ArtifactVersion, ArtifactVersion.id == ArtifactVersionFile.artifact_version_id)
+        .join(Artifact, Artifact.id == ArtifactVersion.artifact_id)
+        .where(ArtifactVersionFile.file_id.in_(file_ids))
+    )
+
+    metadata: dict[str, dict[str, str]] = {}
+    for (
+        file_id,
+        role,
+        artifact_version_id,
+        manifest_json,
+        artifact_id,
+        standard_type,
+        standard_version,
+        semantic_type,
+    ) in result.all():
+        manifest = manifest_json if isinstance(manifest_json, dict) else {}
+        standard_ref = manifest.get("type")
+        if not standard_ref and standard_type and standard_version:
+            standard_ref = f"{standard_type}@{standard_version}"
+        metadata[str(file_id)] = {
+            "artifact_id": str(artifact_id),
+            "artifact_version_id": str(artifact_version_id),
+            "standard_artifact_role": str(role),
+            "standard_artifact_output": str(manifest.get("output_name") or ""),
+            "semantic_type": str(standard_ref or semantic_type or ""),
+        }
+    return metadata
 
 
 async def _stream_upload_to_staging(
@@ -403,6 +452,10 @@ async def list_artifact_files(
     query = query.offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(query)
     files = list(result.scalars().all())
+    standard_metadata_by_file_id = await _standard_artifact_metadata_by_file_id(
+        db,
+        [file_record.id for file_record in files],
+    )
 
     items = []
     for file_record in files:
@@ -410,6 +463,7 @@ async def list_artifact_files(
         if not source:
             continue
         task, tool = source
+        standard_metadata = standard_metadata_by_file_id.get(file_record.id, {})
         items.append(
             ArtifactFileResponse(
                 id=file_record.id,
@@ -425,6 +479,11 @@ async def list_artifact_files(
                 tool_id=tool.id,
                 tool_name=tool.name,
                 tool_slug=tool.slug,
+                artifact_id=standard_metadata.get("artifact_id"),
+                artifact_version_id=standard_metadata.get("artifact_version_id"),
+                standard_artifact_role=standard_metadata.get("standard_artifact_role"),
+                standard_artifact_output=standard_metadata.get("standard_artifact_output"),
+                semantic_type=standard_metadata.get("semantic_type"),
             ).model_dump()
         )
 

@@ -5,6 +5,7 @@ import { createTask, getTaskDetail, isTaskTerminalStatus } from '@/api/tasks'
 import { useArtifactsStore, useWorkflowStore } from '@/stores'
 import { buildTaskSubmissionPayload } from '@/domain/tools'
 import type { ArtifactFile, ToolSchema } from '@/types/models'
+import { normalizeWorkflowSemanticType } from '@/workflow/semantic-types'
 
 interface StandaloneRunTool {
   id: string
@@ -15,12 +16,22 @@ interface ContractArtifactInput {
   name: string
   type: string
   required?: boolean
+  role_preferences?: string[]
+  required_roles?: string[]
+  readiness_policy?: string | null
+  suggested_preparation_tool?: string | null
 }
 
 interface UploadedFileRef {
   fileId: string
   filename: string
   downloadUrl: string
+}
+
+interface StandardInputBindingProjection {
+  inputBindings: Record<string, string>
+  boundArtifactIds: Set<string>
+  boundFieldKeys: Set<string>
 }
 
 type MaybeRef<T> = T | Ref<T>
@@ -54,11 +65,80 @@ export function useStandaloneNodeRun(input: {
     return unref(input.projectId)?.trim() || undefined
   }
 
-  async function resolveUploadedFiles(options: StandaloneNodeRunOptions) {
+  function normalizeArtifactType(value?: string | null) {
+    return String(normalizeWorkflowSemanticType(String(value ?? '').trim())).trim().toLowerCase()
+  }
+
+  function artifactMatchesContractInput(
+    fieldKey: string,
+    artifact: ArtifactFile,
+    contractInput: ContractArtifactInput,
+  ) {
+    if (fieldKey === contractInput.name) {
+      return true
+    }
+
+    const artifactType = normalizeArtifactType(artifact.semantic_type)
+    const inputType = normalizeArtifactType(contractInput.type)
+    return Boolean(artifactType && inputType && artifactType === inputType)
+  }
+
+  function buildStandardInputBindings(
+    options: StandaloneNodeRunOptions,
+  ): StandardInputBindingProjection {
+    const inputBindings: Record<string, string> = {}
+    const boundArtifactIds = new Set<string>()
+    const boundFieldKeys = new Set<string>()
+
+    for (const contractInput of options.contractArtifactInputs) {
+      const matchedEntry = Object.entries(options.selectedArtifacts).find(([fieldKey, artifact]) => {
+        return Boolean(
+          artifact?.artifact_version_id &&
+          !boundArtifactIds.has(artifact.id) &&
+          artifactMatchesContractInput(fieldKey, artifact, contractInput),
+        )
+      })
+
+      const [fieldKey, artifact] = matchedEntry ?? []
+      if (!fieldKey || !artifact?.artifact_version_id) {
+        continue
+      }
+
+      inputBindings[contractInput.name] = artifact.artifact_version_id
+      boundArtifactIds.add(artifact.id)
+      boundFieldKeys.add(fieldKey)
+    }
+
+    return { inputBindings, boundArtifactIds, boundFieldKeys }
+  }
+
+  function omitBoundArtifactFormValues(
+    formState: Record<string, unknown>,
+    boundFieldKeys: Set<string>,
+  ) {
+    if (boundFieldKeys.size === 0) {
+      return formState
+    }
+
+    const nextState = { ...formState }
+    for (const key of boundFieldKeys) {
+      delete nextState[key]
+    }
+    return nextState
+  }
+
+  async function resolveUploadedFiles(
+    options: StandaloneNodeRunOptions,
+    skipArtifactIds: Set<string> = new Set(),
+  ) {
     const uploadedFiles: Record<string, UploadedFileRef | undefined> = {}
 
     for (const [key, artifact] of Object.entries(options.selectedArtifacts)) {
       if (!artifact) {
+        continue
+      }
+
+      if (skipArtifactIds.has(artifact.id)) {
         continue
       }
 
@@ -168,10 +248,12 @@ export function useStandaloneNodeRun(input: {
   async function run(options: StandaloneNodeRunOptions) {
     submitting.value = true
     try {
-      const uploadedFiles = await resolveUploadedFiles(options)
+      const bindingProjection = buildStandardInputBindings(options)
+      const uploadedFiles = await resolveUploadedFiles(options, bindingProjection.boundArtifactIds)
+      const formState = omitBoundArtifactFormValues(options.formState, bindingProjection.boundFieldKeys)
       const payload = buildTaskSubmissionPayload({
         flattenedSchema: options.flattenedSchema,
-        formState: options.formState,
+        formState,
         uploadedFiles,
         executorType: options.executorType,
       })
@@ -182,6 +264,9 @@ export function useStandaloneNodeRun(input: {
         project_id: currentProjectId(),
         params,
         file_ids: payload.fileIds.length > 0 ? payload.fileIds : undefined,
+        input_bindings: Object.keys(bindingProjection.inputBindings).length > 0
+          ? bindingProjection.inputBindings
+          : undefined,
       })
 
       workflowStore.recordNodeTask(currentNodeId(), response.data)

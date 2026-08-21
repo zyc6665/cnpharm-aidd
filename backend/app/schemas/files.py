@@ -50,5 +50,10 @@ class ArtifactFileResponse(TimestampMixin):
     tool_id: str
     tool_name: str
     tool_slug: str
+    artifact_id: Optional[str] = None
+    artifact_version_id: Optional[str] = None
+    standard_artifact_role: Optional[str] = None
+    standard_artifact_output: Optional[str] = None
+    semantic_type: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
