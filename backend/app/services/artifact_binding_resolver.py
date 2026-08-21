@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Literal
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
 from app.artifact_standards.types import normalize_platform_artifact_type
+from app.models.artifacts import ArtifactVersion, ArtifactVersionFile
 
 
 ArtifactBindingStatus = Literal["ready", "needs_preparation", "needs_conversion", "invalid"]
@@ -98,6 +103,41 @@ def resolve_artifact_binding_policy(
         role_files=role_files,
         role_preferences=_list_string_values(input_slot.get("role_preferences")),
     )
+
+
+async def resolve_artifact_binding(
+    db: AsyncSession,
+    *,
+    input_slot: Mapping[str, Any],
+    candidate_artifact_version_id: str,
+) -> ArtifactBindingDecision:
+    """Resolve one tool input against a persisted ArtifactVersion."""
+    result = await db.execute(
+        select(ArtifactVersion)
+        .where(ArtifactVersion.id == candidate_artifact_version_id)
+        .options(
+            selectinload(ArtifactVersion.artifact),
+            selectinload(ArtifactVersion.files).selectinload(ArtifactVersionFile.file),
+        )
+    )
+    version = result.scalar_one_or_none()
+    input_name = _input_name(input_slot)
+    expected_type = _input_type(input_slot) or ""
+    if version is None:
+        return ArtifactBindingDecision(
+            status="invalid",
+            input_name=input_name,
+            standard_type=expected_type,
+            reason=f"ArtifactVersion {candidate_artifact_version_id} was not found.",
+        )
+
+    decision = resolve_artifact_binding_policy(
+        input_slot=input_slot,
+        artifact_type=_artifact_version_type(version),
+        available_roles={file.role: file.file_id for file in version.files if file.role},
+        metadata=_artifact_version_metadata(version),
+    )
+    return replace(decision, artifact_version_id=version.id)
 
 
 def _resolve_require_prepared(
@@ -290,3 +330,30 @@ def _list_string_values(value: Any) -> list[str]:
     if isinstance(value, Iterable):
         return [str(item) for item in value if str(item)]
     return []
+
+
+def _artifact_version_type(version: ArtifactVersion) -> str:
+    manifest = version.manifest_json if isinstance(version.manifest_json, Mapping) else {}
+    manifest_type = manifest.get("type") or manifest.get("standard_type")
+    if manifest_type:
+        return normalize_platform_artifact_type(str(manifest_type))
+
+    artifact = version.artifact
+    if artifact is not None:
+        standard_type = getattr(artifact, "standard_type", None)
+        standard_version = getattr(artifact, "standard_version", None)
+        if standard_type and standard_version:
+            return normalize_platform_artifact_type(f"{standard_type}@{standard_version}")
+        artifact_type = getattr(artifact, "artifact_type", None) or getattr(artifact, "semantic_type", None)
+        if artifact_type:
+            return normalize_platform_artifact_type(str(artifact_type))
+
+    return ""
+
+
+def _artifact_version_metadata(version: ArtifactVersion) -> Mapping[str, Any]:
+    manifest = version.manifest_json if isinstance(version.manifest_json, Mapping) else {}
+    metadata = manifest.get("metadata")
+    if isinstance(metadata, Mapping):
+        return metadata
+    return {}
