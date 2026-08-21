@@ -738,7 +738,7 @@
 
   .artifact-task-header {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     gap: @spacing-md;
     align-items: start;
   }
@@ -800,7 +800,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: @spacing-xs;
-    justify-content: flex-end;
+    justify-content: flex-start;
   }
 
   .artifact-action-button {
