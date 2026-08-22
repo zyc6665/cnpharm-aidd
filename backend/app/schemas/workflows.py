@@ -30,6 +30,10 @@ class WorkflowDefinitionBase(BaseModel):
         default_factory=dict,
         description="节点产物绑定",
     )
+    task_bindings_by_node: dict[str, str] = Field(
+        default_factory=dict,
+        description="节点最近任务绑定",
+    )
     status: WorkflowDefinitionStatus = Field(default="draft", description="状态")
 
 
@@ -48,6 +52,7 @@ class WorkflowDefinitionUpdate(BaseModel):
     edges: Optional[list[dict[str, Any]]] = None
     selected_tool_by_node: Optional[dict[str, str]] = None
     artifact_bindings_by_node: Optional[dict[str, dict[str, str]]] = None
+    task_bindings_by_node: Optional[dict[str, str]] = None
     status: Optional[WorkflowDefinitionStatus] = None
 
 

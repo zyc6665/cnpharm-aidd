@@ -20,6 +20,7 @@ class WorkflowDefinition(Base, UUIDMixin, TimestampMixin):
     edges = Column(JSON, nullable=False, default=list)
     selected_tool_by_node = Column(JSON, nullable=False, default=dict)
     artifact_bindings_by_node = Column(JSON, nullable=False, default=dict)
+    task_bindings_by_node = Column(JSON, nullable=False, default=dict)
     status = Column(String(20), nullable=False, default="draft", index=True)
 
     user = relationship("User")

@@ -328,6 +328,7 @@ export interface WorkflowDefinitionEdge {
 export interface WorkflowDefinition {
   nodes: WorkflowDefinitionNode[]
   edges: WorkflowDefinitionEdge[]
+  task_bindings_by_node?: Record<string, string>
   [key: string]: unknown
 }
 

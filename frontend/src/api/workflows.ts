@@ -48,6 +48,7 @@ export interface WorkflowDefinition {
   edges: WorkflowDefinitionEdge[]
   selected_tool_by_node: Record<string, string>
   artifact_bindings_by_node: Record<string, Record<string, string>>
+  task_bindings_by_node?: Record<string, string>
   status: 'draft' | 'active' | 'archived'
   created_at: string
   updated_at: string
@@ -62,6 +63,7 @@ export interface WorkflowDefinitionPayload {
   edges: WorkflowDefinitionEdge[]
   selected_tool_by_node: Record<string, string>
   artifact_bindings_by_node: Record<string, Record<string, string>>
+  task_bindings_by_node?: Record<string, string>
   status?: 'draft' | 'active' | 'archived'
 }
 

@@ -41,6 +41,7 @@ async def test_workflow_definitions_table_is_registered():
 
     assert "workflow_definitions" in table_names
     assert "canvas_preset_id" in workflow_columns
+    assert "task_bindings_by_node" in workflow_columns
     assert "template_id" not in workflow_columns
 
 
@@ -52,11 +53,13 @@ def test_workflow_definition_create_schema_accepts_graph_payload():
         edges=[{"id": "edge-1", "source": "input-protein", "target": "tool-pocket"}],
         selected_tool_by_node={"tool-pocket": "pocket-explorer"},
         artifact_bindings_by_node={"tool-pocket": {"protein": "file-1"}},
+        task_bindings_by_node={"tool-pocket": "task-1"},
     )
 
     assert payload.name == "AIDD draft"
     assert payload.status == "draft"
     assert payload.nodes[0]["id"] == "input-protein"
+    assert payload.task_bindings_by_node == {"tool-pocket": "task-1"}
 
 
 def test_workflow_definition_update_schema_allows_partial_patch():

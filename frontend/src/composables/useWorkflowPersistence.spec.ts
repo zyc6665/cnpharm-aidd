@@ -150,6 +150,7 @@ describe('useWorkflowPersistence API', () => {
     workflow?: Record<string, unknown>
     runPage?: Record<string, unknown>
     run?: Record<string, unknown>
+    taskByNode?: Record<string, Record<string, unknown>>
     projectId?: string
   } = {}) {
     const applyWorkflowDefinition = vi.fn()
@@ -162,6 +163,27 @@ describe('useWorkflowPersistence API', () => {
     })
     const recordNodeTask = vi.fn()
     const clearActiveWorkflowRun = vi.fn()
+    const saveWorkflowDefinition = vi.fn(async (payload: Record<string, unknown>) => ({
+      id: 'workflow-1',
+      name: String(payload.name ?? 'Saved Workflow'),
+      canvas_preset_id: payload.canvas_preset_id,
+      nodes: payload.nodes,
+      edges: payload.edges,
+      selected_tool_by_node: payload.selected_tool_by_node,
+      artifact_bindings_by_node: payload.artifact_bindings_by_node,
+      task_bindings_by_node: payload.task_bindings_by_node,
+      status: payload.status ?? 'draft',
+    }))
+    const loadWorkflowDefinition = vi.fn().mockResolvedValue(options.workflow ?? {
+      id: 'workflow-1',
+      name: 'Saved Workflow',
+      canvas_preset_id: 'free-canvas',
+      nodes: [{ id: 'fetch-pdb', kind: 'tool', tool_slug: 'builtin-fetch-pdb' }],
+      edges: [],
+      selected_tool_by_node: { 'fetch-pdb': 'builtin-fetch-pdb' },
+      artifact_bindings_by_node: {},
+      status: 'draft',
+    })
 
     const persistence = useWorkflowPersistence({
       userStore: {
@@ -176,6 +198,7 @@ describe('useWorkflowPersistence API', () => {
       workflowStore: {
         selectedToolByNode: {},
         artifactBindingsByNode: {},
+        taskByNode: options.taskByNode ?? {},
         hasMoreWorkflowRuns: false,
         workflowRunsPagination: { page: 1, pageSize: 20 },
         isLoadingWorkflowRun: false,
@@ -197,19 +220,10 @@ describe('useWorkflowPersistence API', () => {
         workflowDefinitions: [],
         currentWorkflowDefinition: null,
         clearCurrentWorkflowDefinition: vi.fn(),
-        saveWorkflowDefinition: vi.fn(),
+        saveWorkflowDefinition,
         archiveWorkflowDefinition: vi.fn(),
         removeWorkflowDefinition: vi.fn(),
-        loadWorkflowDefinition: vi.fn().mockResolvedValue(options.workflow ?? {
-          id: 'workflow-1',
-          name: 'Saved Workflow',
-          canvas_preset_id: 'free-canvas',
-          nodes: [{ id: 'fetch-pdb', kind: 'tool', tool_slug: 'builtin-fetch-pdb' }],
-          edges: [],
-          selected_tool_by_node: { 'fetch-pdb': 'builtin-fetch-pdb' },
-          artifact_bindings_by_node: {},
-          status: 'draft',
-        }),
+        loadWorkflowDefinition,
       },
       editableCanvasPreset: computed(() => ({
         id: 'free-canvas',
@@ -228,8 +242,99 @@ describe('useWorkflowPersistence API', () => {
       loadWorkflowRuns,
       loadWorkflowRun,
       recordNodeTask,
+      saveWorkflowDefinition,
     }
   }
+
+  it('保存工作流时应持久化节点任务快照', async () => {
+    const { persistence, saveWorkflowDefinition } = createPersistenceHarness({
+      taskByNode: {
+        'fetch-pdb': {
+          id: 'task-fetch-pdb',
+          status: 'success',
+        },
+        'empty-task': {
+          status: 'success',
+        },
+      },
+    })
+
+    await persistence.handleSaveWorkflow()
+
+    expect(saveWorkflowDefinition).toHaveBeenCalledWith(expect.objectContaining({
+      task_bindings_by_node: {
+        'fetch-pdb': 'task-fetch-pdb',
+      },
+    }), undefined)
+  })
+
+  it('加载没有历史运行的已保存工作流时应从定义任务快照恢复节点任务', async () => {
+    vi.mocked(getTaskDetail).mockResolvedValue(buildTaskResponse('task-fetch-pdb'))
+    const { persistence, loadWorkflowRun, recordNodeTask } = createPersistenceHarness({
+      workflow: {
+        id: 'workflow-1',
+        name: 'Saved Workflow',
+        canvas_preset_id: 'free-canvas',
+        nodes: [{ id: 'fetch-pdb', kind: 'tool', tool_slug: 'builtin-fetch-pdb' }],
+        edges: [],
+        selected_tool_by_node: { 'fetch-pdb': 'builtin-fetch-pdb' },
+        artifact_bindings_by_node: {},
+        task_bindings_by_node: { 'fetch-pdb': 'task-fetch-pdb' },
+        status: 'draft',
+      },
+      runPage: { items: [] },
+    })
+
+    persistence.selectedSavedWorkflowId.value = 'workflow-1'
+
+    await persistence.handleLoadWorkflow()
+
+    expect(loadWorkflowRun).not.toHaveBeenCalled()
+    expect(getTaskDetail).toHaveBeenCalledWith('task-fetch-pdb', { silent: true })
+    expect(recordNodeTask).toHaveBeenCalledWith('fetch-pdb', expect.objectContaining({
+      id: 'task-fetch-pdb',
+      status: 'success',
+    }))
+  })
+
+  it('加载旧版已保存工作流时应保留当前会话中同节点的任务绑定', async () => {
+    vi.mocked(getTaskDetail).mockResolvedValue(buildTaskResponse('task-fetch-pdb'))
+    const { persistence, recordNodeTask } = createPersistenceHarness({
+      taskByNode: {
+        'fetch-pdb': {
+          id: 'task-fetch-pdb',
+          status: 'success',
+        },
+        'other-node': {
+          id: 'task-other',
+          status: 'success',
+        },
+      },
+      workflow: {
+        id: 'workflow-1',
+        name: 'Legacy Saved Workflow',
+        canvas_preset_id: 'free-canvas',
+        nodes: [{ id: 'fetch-pdb', kind: 'tool', tool_slug: 'builtin-fetch-pdb' }],
+        edges: [],
+        selected_tool_by_node: { 'fetch-pdb': 'builtin-fetch-pdb' },
+        artifact_bindings_by_node: {},
+        status: 'draft',
+      },
+      runPage: { items: [] },
+    })
+
+    persistence.selectedSavedWorkflowId.value = 'workflow-1'
+
+    await persistence.handleLoadWorkflow()
+
+    expect(getTaskDetail).toHaveBeenCalledTimes(1)
+    expect(getTaskDetail).toHaveBeenCalledWith('task-fetch-pdb', { silent: true })
+    expect(recordNodeTask).toHaveBeenCalledWith('fetch-pdb', expect.objectContaining({
+      id: 'task-fetch-pdb',
+      status: 'success',
+    }))
+    expect(recordNodeTask).not.toHaveBeenCalledWith('other-node', expect.anything())
+  })
 
   it('加载已保存工作流时应恢复最新运行的节点任务', async () => {
     vi.mocked(getTaskDetail).mockResolvedValue(buildTaskResponse('task-fetch-pdb'))

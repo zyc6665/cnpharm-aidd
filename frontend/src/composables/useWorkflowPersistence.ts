@@ -199,6 +199,7 @@ export function useWorkflowPersistence(input: {
       edges: canvasPayload.edges,
       selected_tool_by_node: canvasPayload.selected_tool_by_node,
       artifact_bindings_by_node: canvasPayload.artifact_bindings_by_node,
+      task_bindings_by_node: {},
       status: 'draft'
     })
 
@@ -354,11 +355,16 @@ export function useWorkflowPersistence(input: {
     }
 
     try {
+      const sessionTaskBindings = buildNodeTaskSnapshot(workflowStore.taskByNode)
       const workflow = await workflowDefinitionsStore.loadWorkflowDefinition(
         selectedSavedWorkflowId.value
       )
       workflowStore.applyWorkflowDefinition(workflow)
       workflowName.value = workflow.name
+      const restoredFromDefinition = await restoreNodeTasksFromWorkflowDefinition(workflow)
+      if (restoredFromDefinition === 0) {
+        await restoreNodeTasksFromTaskBindings(sessionTaskBindings, workflow)
+      }
       await tryRestoreLatestWorkflowRunForDefinition(workflow.id)
       message.success('流程已加载')
     } catch {
@@ -400,6 +406,30 @@ export function useWorkflowPersistence(input: {
       .map(([nodeId, state]) => ({ nodeId, taskId: state?.task_id }))
       .filter((entry): entry is { nodeId: string; taskId: string } => Boolean(entry.taskId))
 
+    return await restoreNodeTasks(taskRequests)
+  }
+
+  async function restoreNodeTasksFromWorkflowDefinition(workflow: WorkflowDefinitionPayload | WorkflowDefinition) {
+    return await restoreNodeTasksFromTaskBindings(workflow.task_bindings_by_node, workflow)
+  }
+
+  async function restoreNodeTasksFromTaskBindings(
+    taskBindings: unknown,
+    workflow: WorkflowDefinitionPayload | WorkflowDefinition,
+  ) {
+    const nodeIds = new Set((workflow.nodes ?? []).map(node => String(node.id)))
+    const taskRequests = Object.entries(normalizeTaskBindings(taskBindings))
+      .filter(([nodeId]) => nodeIds.has(nodeId))
+      .map(([nodeId, taskId]) => ({ nodeId, taskId }))
+
+    return await restoreNodeTasks(taskRequests)
+  }
+
+  async function restoreNodeTasks(taskRequests: Array<{ nodeId: string; taskId: string }>) {
+    if (taskRequests.length === 0) {
+      return 0
+    }
+
     const uniqueTaskIds = Array.from(new Set(taskRequests.map((entry) => entry.taskId)))
 
     const taskResults = await Promise.allSettled(
@@ -417,12 +447,15 @@ export function useWorkflowPersistence(input: {
       }
     }
 
+    let restoredCount = 0
     for (const { nodeId, taskId } of taskRequests) {
       const task = taskById.get(taskId)
       if (task) {
         workflowStore.recordNodeTask(nodeId, task)
+        restoredCount += 1
       }
     }
+    return restoredCount
   }
 
   function buildWorkflowDefinitionPayload(nameOverride?: string): WorkflowDefinitionPayload {
@@ -438,6 +471,7 @@ export function useWorkflowPersistence(input: {
       })),
       selected_tool_by_node: workflowStore.selectedToolByNode,
       artifact_bindings_by_node: workflowStore.artifactBindingsByNode,
+      task_bindings_by_node: buildNodeTaskSnapshot(workflowStore.taskByNode),
       status: 'draft'
     }
   }
@@ -510,8 +544,33 @@ export function mapWorkflowDefinitionToCanvasPayload(input: {
         .map(node => [node.id, node.tool_slug as string])
     ),
     artifact_bindings_by_node: normalizeArtifactBindings(definition.artifact_bindings_by_node),
+    task_bindings_by_node: normalizeTaskBindings(definition.task_bindings_by_node),
     status: 'draft' as const
   }
+}
+
+function buildNodeTaskSnapshot(taskByNode: Record<string, WorkflowTaskRef | undefined>): Record<string, string> {
+  const snapshot: Record<string, string> = {}
+  for (const [nodeId, task] of Object.entries(taskByNode ?? {})) {
+    if (typeof task?.id === 'string' && task.id.trim()) {
+      snapshot[nodeId] = task.id
+    }
+  }
+  return snapshot
+}
+
+function normalizeTaskBindings(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object') {
+    return {}
+  }
+
+  const bindings: Record<string, string> = {}
+  for (const [nodeId, rawTaskId] of Object.entries(value)) {
+    if (typeof rawTaskId === 'string' && rawTaskId.trim()) {
+      bindings[nodeId] = rawTaskId
+    }
+  }
+  return bindings
 }
 
 function normalizeArtifactBindings(value: unknown): Record<string, Record<string, string>> {

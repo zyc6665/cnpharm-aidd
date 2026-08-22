@@ -48,6 +48,9 @@ TOOLS = (
 
 def upgrade() -> None:
     bind = op.get_bind()
+    if not _has_seed_target_tables(bind):
+        return
+
     owner_id = _resolve_owner_id(bind)
     if not owner_id:
         return
@@ -61,6 +64,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     bind = op.get_bind()
+    if not _has_seed_target_tables(bind):
+        return
+
     slugs = [item["slug"] for item in TOOLS]
     tool_ids = [
         row[0]
@@ -91,6 +97,16 @@ def downgrade() -> None:
         ),
         {"slug": GROUP["slug"]},
     )
+
+
+def _has_seed_target_tables(bind) -> bool:
+    tables = set(sa.inspect(bind).get_table_names())
+    return {
+        "tools",
+        "tool_versions",
+        "tool_workbench_groups",
+        "tool_workbench_group_mappings",
+    }.issubset(tables)
 
 
 def _resolve_owner_id(bind) -> str | None:

@@ -41,6 +41,13 @@ def _run_backend_alembic(*args: str, env: dict[str, str]) -> subprocess.Complete
     )
 
 
+def _current_alembic_head() -> str:
+    config = Config(str(PROJECT_ROOT / "alembic.ini"))
+    current_head = ScriptDirectory.from_config(config).get_current_head()
+    assert current_head is not None
+    return current_head
+
+
 def test_alembic_sqlite_upgrade_and_downgrade_dry_run(tmp_path: Path) -> None:
     db_path = tmp_path / "alembic_dry_run.db"
     env = os.environ.copy()
@@ -75,6 +82,7 @@ def test_alembic_sqlite_upgrade_and_downgrade_dry_run(tmp_path: Path) -> None:
             row[1]: row for row in conn.execute("PRAGMA table_info(workflow_definitions)")
         }
         assert "canvas_preset_id" in workflow_definition_columns
+        assert "task_bindings_by_node" in workflow_definition_columns
         assert "template_id" not in workflow_definition_columns
 
     downgrade = _run_alembic("downgrade", "base", env=env)
@@ -95,7 +103,18 @@ def test_alembic_sqlite_legacy_project_link_upgrade_is_resumable(tmp_path: Path)
     with sqlite3.connect(db_path) as conn:
         conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
         conn.execute("INSERT INTO alembic_version (version_num) VALUES ('20260730_02')")
-        conn.execute("CREATE TABLE users (id VARCHAR(36) PRIMARY KEY)")
+        conn.execute(
+            "CREATE TABLE users ("
+            "id VARCHAR(36) PRIMARY KEY, "
+            "role VARCHAR(20), "
+            "status VARCHAR(20), "
+            "created_at DATETIME"
+            ")"
+        )
+        conn.execute(
+            "INSERT INTO users (id, role, status, created_at) "
+            "VALUES ('legacy-user-1', 'admin', 'active', '2026-08-01 00:00:00')"
+        )
         conn.execute("CREATE TABLE projects (id VARCHAR(36) PRIMARY KEY)")
         conn.execute("CREATE TABLE workflow_templates (id VARCHAR(36) PRIMARY KEY)")
         for table_name in LEGACY_PROJECT_RESOURCE_TABLES:
@@ -109,7 +128,7 @@ def test_alembic_sqlite_legacy_project_link_upgrade_is_resumable(tmp_path: Path)
 
     with sqlite3.connect(db_path) as conn:
         assert conn.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "20260804_02",
+            _current_alembic_head(),
         )
         tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         assert "workflow_templates" not in tables
@@ -128,6 +147,7 @@ def test_alembic_sqlite_legacy_project_link_upgrade_is_resumable(tmp_path: Path)
             row[1]: row for row in conn.execute("PRAGMA table_info(workflow_definitions)")
         }
         assert "canvas_preset_id" in workflow_definition_columns
+        assert "task_bindings_by_node" in workflow_definition_columns
         assert "template_id" not in workflow_definition_columns
 
 
@@ -135,9 +155,7 @@ def test_alembic_heads_command_works_from_backend_directory() -> None:
     env = os.environ.copy()
     env["PYTHONWARNINGS"] = "error::DeprecationWarning"
     result = _run_backend_alembic("heads", env=env)
-    config = Config(str(PROJECT_ROOT / "alembic.ini"))
-    current_head = ScriptDirectory.from_config(config).get_current_head()
+    current_head = _current_alembic_head()
 
     assert result.returncode == 0, result.stderr or result.stdout
-    assert current_head is not None
     assert current_head in result.stdout

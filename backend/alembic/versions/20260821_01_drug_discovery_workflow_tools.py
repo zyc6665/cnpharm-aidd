@@ -367,6 +367,9 @@ variants:
 
 def upgrade() -> None:
     bind = op.get_bind()
+    if not _has_seed_target_tables(bind):
+        return
+
     now = datetime.utcnow()
 
     group_ids = {group["slug"]: _ensure_workbench_group(bind, now, group) for group in GROUPS}
@@ -398,6 +401,8 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     bind = op.get_bind()
+    if not _has_seed_target_tables(bind):
+        return
 
     for mapping in MAPPINGS:
         group_id = _group_id(bind, str(mapping["group_slug"]))
@@ -427,6 +432,18 @@ def downgrade() -> None:
             ),
             {"slug": group["slug"]},
         )
+
+
+def _has_seed_target_tables(bind) -> bool:
+    tables = set(sa.inspect(bind).get_table_names())
+    return {
+        "tools",
+        "tool_versions",
+        "tool_workbench_groups",
+        "tool_workbench_group_mappings",
+        "tool_packages",
+        "tool_package_versions",
+    }.issubset(tables)
 
 
 def _ensure_workbench_group(bind, now: datetime, group: dict[str, Any]) -> str:

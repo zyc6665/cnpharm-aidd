@@ -62,6 +62,7 @@ def _payload(name: str = "AIDD workflow") -> WorkflowDefinitionCreate:
         edges=[{"id": "edge-1", "source": "input-protein", "target": "tool-pocket"}],
         selected_tool_by_node={"tool-pocket": "pocket-explorer"},
         artifact_bindings_by_node={"tool-pocket": {"protein": "file-1"}},
+        task_bindings_by_node={"tool-pocket": "task-pocket-1"},
     )
 
 
@@ -96,15 +97,21 @@ async def test_create_list_update_and_delete_workflow_definition(db_session):
 
     loaded = await get_workflow_definition(created_id, user, db_session)
     assert loaded["data"]["selected_tool_by_node"]["tool-pocket"] == "pocket-explorer"
+    assert loaded["data"]["task_bindings_by_node"] == {"tool-pocket": "task-pocket-1"}
 
     updated = await update_workflow_definition(
         created_id,
-        WorkflowDefinitionUpdate(name="Saved canvas", nodes=[{"id": "tool-pocket"}]),
+        WorkflowDefinitionUpdate(
+            name="Saved canvas",
+            nodes=[{"id": "tool-pocket"}],
+            task_bindings_by_node={"tool-pocket": "task-pocket-2"},
+        ),
         user,
         db_session,
     )
     assert updated["data"]["name"] == "Saved canvas"
     assert updated["data"]["nodes"][0]["id"] == "tool-pocket"
+    assert updated["data"]["task_bindings_by_node"] == {"tool-pocket": "task-pocket-2"}
 
     deleted = await delete_workflow_definition(created_id, user, db_session)
     assert deleted["message"] == "工作流已删除"
