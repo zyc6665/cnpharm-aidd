@@ -3,6 +3,7 @@ import { message } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
 import { getTaskDetail } from '@/api/tasks'
 import type { WorkflowDefinitionPayload } from '@/api/workflows'
+import { deriveArtifactSlotsFromToolContract } from '@/workflow/contract-bindings'
 import {
   buildWorkflowInputFileMap,
   findLatestArtifactForSemanticType
@@ -26,12 +27,13 @@ import {
   useWorkflowDefinitionsStore,
   useWorkflowStore
 } from '@/stores'
-import type { AiddWorkflowDraft, WorkflowDefinition, WorkflowDefinitionNode, WorkflowRun } from '@/types/models'
+import type { AiddWorkflowDraft, ToolContract, WorkflowDefinition, WorkflowDefinitionNode, WorkflowRun } from '@/types/models'
 
 type UserStore = ReturnType<typeof useUserStore>
 type ArtifactsStore = ReturnType<typeof useArtifactsStore>
 type WorkflowStore = ReturnType<typeof useWorkflowStore>
 type WorkflowDefinitionsStore = ReturnType<typeof useWorkflowDefinitionsStore>
+type WorkflowToolContractLookup = Record<string, { contract?: ToolContract | null } | undefined>
 
 export function useWorkflowPersistence(input: {
   userStore: UserStore
@@ -45,6 +47,7 @@ export function useWorkflowPersistence(input: {
   }>
   projectId?: ComputedRef<string | undefined>
   workflowInputRequirements: ComputedRef<string[]>
+  workflowToolsBySlug?: ComputedRef<WorkflowToolContractLookup>
   buildCurrentWorkflowDefinition: () => WorkflowDefinition
 }) {
   const {
@@ -55,6 +58,7 @@ export function useWorkflowPersistence(input: {
     editableCanvasPreset,
     projectId,
     workflowInputRequirements,
+    workflowToolsBySlug,
     buildCurrentWorkflowDefinition
   } = input
 
@@ -177,7 +181,8 @@ export function useWorkflowPersistence(input: {
         canvasPresetId: 'aidd-workflow-draft',
         name: draft.name,
         description: draft.description,
-        definition: draft.definition
+        definition: draft.definition,
+        toolsBySlug: workflowToolsBySlug?.value,
       })
     )
   }
@@ -187,7 +192,8 @@ export function useWorkflowPersistence(input: {
       canvasPresetId: 'aidd-workflow-draft',
       name: draft.name,
       description: draft.description,
-      definition: draft.definition
+      definition: draft.definition,
+      toolsBySlug: workflowToolsBySlug?.value,
     })
 
     const saved = await workflowDefinitionsStore.saveWorkflowDefinition({
@@ -206,7 +212,15 @@ export function useWorkflowPersistence(input: {
     selectedSavedWorkflowId.value = saved.id
     workflowName.value = saved.name
     workflowRunInputSelections.value = { ...draft.input_files }
-    workflowStore.applyWorkflowDefinition(saved)
+    workflowStore.applyWorkflowDefinition(
+      mapWorkflowDefinitionToCanvasPayload({
+        canvasPresetId: saved.canvas_preset_id,
+        name: saved.name,
+        description: saved.description,
+        definition: saved as unknown as WorkflowDefinition,
+        toolsBySlug: workflowToolsBySlug?.value,
+      })
+    )
     message.success('工作流草稿已保存')
     return saved
   }
@@ -359,7 +373,15 @@ export function useWorkflowPersistence(input: {
       const workflow = await workflowDefinitionsStore.loadWorkflowDefinition(
         selectedSavedWorkflowId.value
       )
-      workflowStore.applyWorkflowDefinition(workflow)
+      workflowStore.applyWorkflowDefinition(
+        mapWorkflowDefinitionToCanvasPayload({
+          canvasPresetId: workflow.canvas_preset_id,
+          name: workflow.name,
+          description: workflow.description,
+          definition: workflow as unknown as WorkflowDefinition,
+          toolsBySlug: workflowToolsBySlug?.value,
+        })
+      )
       workflowName.value = workflow.name
       const restoredFromDefinition = await restoreNodeTasksFromWorkflowDefinition(workflow)
       if (restoredFromDefinition === 0) {
@@ -525,13 +547,14 @@ export function mapWorkflowDefinitionToCanvasPayload(input: {
   name: string
   description?: string | null
   definition: WorkflowDefinition
+  toolsBySlug?: WorkflowToolContractLookup
 }) {
-  const { canvasPresetId, name, description, definition } = input
+  const { canvasPresetId, name, description, definition, toolsBySlug } = input
   return {
     canvas_preset_id: canvasPresetId,
     name,
     description: description ?? undefined,
-    nodes: (definition.nodes ?? []).map(node => mapCanvasDefinitionNode(node)),
+    nodes: (definition.nodes ?? []).map(node => mapCanvasDefinitionNode(node, toolsBySlug)),
     edges: (definition.edges ?? []).map((edge, index) => ({
       id: resolveWorkflowEdgeId(edge.id, index),
       source: edge.source,
@@ -596,7 +619,28 @@ function normalizeArtifactBindings(value: unknown): Record<string, Record<string
   return bindings
 }
 
-function mapCanvasDefinitionNode(node: WorkflowDefinitionNode): WorkflowCanvasNode {
+function deriveWorkflowNodeArtifactSlots(
+  node: WorkflowDefinitionNode,
+  toolsBySlug?: WorkflowToolContractLookup,
+) {
+  const savedInputs = Array.isArray(node.artifact_input_slots) ? node.artifact_input_slots : []
+  const savedOutputs = Array.isArray(node.artifact_outputs) ? node.artifact_outputs : []
+  if (!node.tool_slug) {
+    return { inputs: savedInputs, outputs: savedOutputs }
+  }
+
+  const contract = toolsBySlug?.[node.tool_slug]?.contract
+  const contractSlots = deriveArtifactSlotsFromToolContract(contract)
+  return {
+    inputs: savedInputs.length > 0 ? savedInputs : [...contractSlots.inputs],
+    outputs: savedOutputs.length > 0 ? savedOutputs : [...contractSlots.outputs],
+  }
+}
+
+function mapCanvasDefinitionNode(
+  node: WorkflowDefinitionNode,
+  toolsBySlug?: WorkflowToolContractLookup,
+): WorkflowCanvasNode {
   const nodeKind = String(node.kind ?? node.type ?? '')
   if (['condition', 'map', 'loop'].includes(nodeKind)) {
     return {
@@ -609,17 +653,16 @@ function mapCanvasDefinitionNode(node: WorkflowDefinitionNode): WorkflowCanvasNo
       over: stringValue(node.over),
       max_parallelism: numberValue(node.max_parallelism),
       body: Array.isArray(node.body)
-        ? node.body.map(item => mapCanvasDefinitionNode(item as WorkflowDefinitionNode))
+        ? node.body.map(item => mapCanvasDefinitionNode(item as WorkflowDefinitionNode, toolsBySlug))
         : undefined,
       max_iterations: numberValue(node.max_iterations),
       convergence_condition: conditionExpressionValue(node.convergence_condition),
     }
   }
 
-  const inputArtifactSlots = Array.isArray(node.artifact_input_slots)
-    ? node.artifact_input_slots
-    : []
-  const outputArtifactSlots = Array.isArray(node.artifact_outputs) ? node.artifact_outputs : []
+  const hydratedSlots = deriveWorkflowNodeArtifactSlots(node, toolsBySlug)
+  const inputArtifactSlots = hydratedSlots.inputs
+  const outputArtifactSlots = hydratedSlots.outputs
   const inputSlotTypes = resolveArtifactSlotTypes(inputArtifactSlots)
   const outputSlotTypes = resolveArtifactSlotTypes(outputArtifactSlots)
 

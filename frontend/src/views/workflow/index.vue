@@ -371,6 +371,13 @@
     artifactsStore
   })
 
+  const workflowToolsBySlug = computed(() => availableWorkflowTools.value.reduce<
+    Record<string, (typeof availableWorkflowTools.value)[number]>
+  >((accumulator, tool) => {
+    accumulator[tool.slug] = tool
+    return accumulator
+  }, {}))
+
   const {
     leftWidth: leftWorkbenchWidth,
     rightWidth: rightWorkbenchWidth,
@@ -419,6 +426,7 @@
     editableCanvasPreset,
     projectId: routeProjectId,
     workflowInputRequirements,
+    workflowToolsBySlug,
     buildCurrentWorkflowDefinition
   })
 
@@ -432,12 +440,7 @@
       taskByNode: workflowStore.taskByNode,
       workflowRunNodeStates: workflowStore.activeWorkflowRun?.node_states,
       selectedToolByNode: workflowStore.selectedToolByNode,
-      toolsBySlug: availableWorkflowTools.value.reduce<
-        Record<string, (typeof availableWorkflowTools.value)[number]>
-      >((accumulator, tool) => {
-        accumulator[tool.slug] = tool
-        return accumulator
-      }, {})
+      toolsBySlug: workflowToolsBySlug.value
     })
   })
 

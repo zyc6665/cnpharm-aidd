@@ -419,6 +419,69 @@ def test_lvpocket_legacy_contract_infers_role_aware_protein_slot():
     ]
 
 
+def test_lvpocket_legacy_artifact_only_contract_is_workflow_executable():
+    tool = SimpleNamespace(
+        id="tool-lvpocket",
+        slug="lvpocket-pocket-prediction",
+        name="LVpocket",
+        description="Legacy LVpocket ssh_job tool with artifact-only workflow metadata",
+        status="published",
+        is_public=True,
+        current_version=SimpleNamespace(
+            id="version-lvpocket",
+            version="1.0.0",
+            is_active=True,
+            deprecated=False,
+            config={
+                "type": "ssh_job",
+                "timeout_sec": 3600,
+                "artifacts": {
+                    "inputs": [
+                        {
+                            "name": "protein",
+                            "type": "protein_structure@1",
+                            "required": True,
+                            "role_preferences": ["prepared_pdb", "structure_file"],
+                        }
+                    ],
+                    "outputs": [
+                        {"name": "pocket", "type": "binding_pocket@1", "required": True}
+                    ],
+                },
+            },
+        ),
+    )
+
+    contract = build_tool_contract(tool)
+    errors = collect_tool_contract_validation_errors(tool)
+
+    assert errors == []
+    assert contract["capability"] == {
+        "enabled": True,
+        "capability": "pocket_prediction",
+        "stage": "pocket_exploration",
+        "inputs": [
+            {
+                "semantic_type": "protein_structure@1",
+                "field": "protein",
+                "required": True,
+                "accepted_extensions": [],
+            }
+        ],
+        "outputs": [
+            {
+                "semantic_type": "binding_pocket@1",
+                "source": "artifact",
+                "match": {"type": "binding_pocket@1"},
+                "path": "pocket",
+                "required": True,
+            }
+        ],
+        "defaults": {},
+        "virtual": False,
+    }
+
+
 def test_parameter_only_builtin_fetch_contract_is_valid_and_executable():
     tool = SimpleNamespace(
         id="tool-fetch-pdb",

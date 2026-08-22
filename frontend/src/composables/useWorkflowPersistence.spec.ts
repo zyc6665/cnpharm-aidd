@@ -1,6 +1,7 @@
 import { computed } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getTaskDetail } from '@/api/tasks'
+import type { ToolContract } from '@/types/models'
 import { mapWorkflowDefinitionToCanvasPayload, useWorkflowPersistence } from './useWorkflowPersistence'
 
 vi.mock('@/api/tasks', () => ({
@@ -8,6 +9,34 @@ vi.mock('@/api/tasks', () => ({
 }))
 
 describe('mapWorkflowDefinitionToCanvasPayload', () => {
+  function makeToolContract(): ToolContract {
+    return {
+      contract_version: '1.0',
+      slug: 'lvpocket-pocket-prediction',
+      name: 'LVpocket Pocket Prediction',
+      status: 'published',
+      executor: { type: 'ssh_job', timeout_sec: 3600 },
+      schema: {
+        input: { type: 'object', properties: {} },
+        output: { type: 'object', properties: {} },
+      },
+      artifacts: {
+        inputs: [{ name: 'protein', type: 'protein_structure@1', required: true }],
+        outputs: [{ name: 'pocket', type: 'binding_pocket@1', cardinality: 'one', required: true }],
+      },
+      capability: {
+        enabled: true,
+        capability: 'pocket_prediction',
+        stage: 'pocket_exploration',
+        inputs: [],
+        outputs: [],
+        defaults: {},
+        virtual: false,
+      },
+      validation: { status: 'valid', errors: [] },
+    }
+  }
+
   it('restores canvas semantic types from standard artifact slots', () => {
     const payload = mapWorkflowDefinitionToCanvasPayload({
       canvasPresetId: 'agent-draft',
@@ -65,6 +94,112 @@ describe('mapWorkflowDefinitionToCanvasPayload', () => {
     expect(payload.nodes[0]?.requiredInputTypes).toEqual(['cryoem_map@1'])
     expect(payload.nodes[0]?.producedOutputTypes).toEqual(['model_fit_report@1'])
     expect(payload.edges[0]?.artifactType).toBe('cryoem_map@1')
+  })
+
+  it('hydrates stale saved tool nodes from current tool contracts', () => {
+    const payload = mapWorkflowDefinitionToCanvasPayload({
+      canvasPresetId: 'free-canvas',
+      name: 'Saved Test Workflow',
+      toolsBySlug: {
+        'builtin-fetch-pdb': {
+          contract: {
+            ...makeToolContract(),
+            slug: 'builtin-fetch-pdb',
+            name: 'Fetch PDB Structure',
+            artifacts: {
+              inputs: [],
+              outputs: [
+                { name: 'protein', type: 'protein_structure@1', cardinality: 'one', required: true },
+              ],
+            },
+          },
+        },
+        'lvpocket-pocket-prediction': {
+          contract: makeToolContract(),
+        },
+      },
+      definition: {
+        nodes: [
+          {
+            id: 'fetch-pdb-node',
+            kind: 'tool',
+            tool_slug: 'builtin-fetch-pdb',
+            artifact_input_slots: [],
+            artifact_outputs: [],
+          },
+          {
+            id: 'lvpocket-node',
+            kind: 'tool',
+            tool_slug: 'lvpocket-pocket-prediction',
+            semantic_inputs: {
+              'protein_structure@1': 'node:fetch-pdb-node:protein_structure@1',
+            },
+            artifact_input_slots: [],
+            artifact_outputs: [],
+          },
+        ],
+        edges: [
+          {
+            id: 'edge-fetch-to-pocket',
+            source: 'fetch-pdb-node',
+            target: 'lvpocket-node',
+            source_output: 'protein_structure@1',
+            target_input: 'protein_structure@1',
+          },
+        ],
+      },
+    })
+
+    expect(payload.nodes[0]).toMatchObject({
+      producedOutputTypes: ['protein_structure@1'],
+      outputArtifactSlots: [
+        { name: 'protein', type: 'protein_structure@1', cardinality: 'one', required: true },
+      ],
+    })
+    expect(payload.nodes[1]).toMatchObject({
+      requiredInputTypes: ['protein_structure@1'],
+      producedOutputTypes: ['binding_pocket@1'],
+      inputArtifactSlots: [{ name: 'protein', type: 'protein_structure@1', required: true }],
+      outputArtifactSlots: [
+        { name: 'pocket', type: 'binding_pocket@1', cardinality: 'one', required: true },
+      ],
+    })
+    expect(payload.edges[0]?.artifactType).toBe('protein_structure@1')
+  })
+
+  it('fills only missing artifact slot directions from current tool contracts', () => {
+    const payload = mapWorkflowDefinitionToCanvasPayload({
+      canvasPresetId: 'free-canvas',
+      name: 'Partially Stale Workflow',
+      toolsBySlug: {
+        'lvpocket-pocket-prediction': {
+          contract: makeToolContract(),
+        },
+      },
+      definition: {
+        nodes: [
+          {
+            id: 'lvpocket-node',
+            kind: 'tool',
+            tool_slug: 'lvpocket-pocket-prediction',
+            artifact_input_slots: [
+              { name: 'protein', type: 'protein_structure@1', required: true },
+            ],
+            artifact_outputs: [],
+          },
+        ],
+        edges: [],
+      },
+    })
+
+    expect(payload.nodes[0]).toMatchObject({
+      requiredInputTypes: ['protein_structure@1'],
+      producedOutputTypes: ['binding_pocket@1'],
+      inputArtifactSlots: [{ name: 'protein', type: 'protein_structure@1', required: true }],
+      outputArtifactSlots: [
+        { name: 'pocket', type: 'binding_pocket@1', cardinality: 'one', required: true },
+      ],
+    })
   })
 
   it('preserves artifact bindings from research board workflow drafts', () => {
@@ -367,7 +502,15 @@ describe('useWorkflowPersistence API', () => {
 
     await persistence.handleLoadWorkflow()
 
-    expect(applyWorkflowDefinition).toHaveBeenCalledWith(expect.objectContaining({ id: 'workflow-1' }))
+    expect(applyWorkflowDefinition).toHaveBeenCalledWith(expect.objectContaining({
+      canvas_preset_id: 'free-canvas',
+      name: 'Saved Workflow',
+      nodes: [expect.objectContaining({
+        id: 'fetch-pdb',
+        type: 'tool',
+        recommendedToolSlug: 'builtin-fetch-pdb',
+      })],
+    }))
     expect(loadWorkflowRuns).toHaveBeenCalledWith(expect.objectContaining({
       project_id: 'project-1',
       workflow_definition_id: 'workflow-1',
@@ -415,7 +558,11 @@ describe('useWorkflowPersistence API', () => {
 
     await persistence.handleLoadWorkflow()
 
-    expect(applyWorkflowDefinition).toHaveBeenCalledWith(expect.objectContaining({ id: 'workflow-1' }))
+    expect(applyWorkflowDefinition).toHaveBeenCalledWith(expect.objectContaining({
+      canvas_preset_id: 'free-canvas',
+      name: 'Saved Workflow',
+      nodes: [expect.objectContaining({ id: 'fetch-pdb', type: 'tool' })],
+    }))
   })
 
   it('exposes definition run handlers without the legacy workflow template facade', () => {

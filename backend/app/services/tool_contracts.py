@@ -40,8 +40,10 @@ def build_tool_contract(tool: Any, *, capability: Any | None = None) -> dict[str
         },
         "artifacts": artifacts,
         "capability": _capability_contract(
+            tool_slug=str(getattr(tool, "slug", None) or ""),
             raw_capability=config.get("agent_capability"),
             capability=capability,
+            artifacts=artifacts,
             virtual=False,
         ),
         "validation": {"status": "valid", "errors": []},
@@ -191,8 +193,10 @@ def build_virtual_tool_contract(capability: Any) -> dict[str, Any]:
         "resource_profile": {},
         "schema": {"input": {}, "output": {}},
         "capability": _capability_contract(
+            tool_slug=str(slug or ""),
             raw_capability=None,
             capability=capability,
+            artifacts={"inputs": [], "outputs": []},
             virtual=True,
         ),
         "validation": {"status": "valid", "errors": []},
@@ -535,14 +539,19 @@ def _version_valid(validation_status: Any, validation_errors: list[Any]) -> bool
 
 def _capability_contract(
     *,
+    tool_slug: str,
     raw_capability: Any,
     capability: Any | None,
+    artifacts: dict[str, Any],
     virtual: bool,
 ) -> dict[str, Any]:
     if capability is not None:
         return _capability_object_contract(capability, virtual=virtual)
 
     if not isinstance(raw_capability, dict) or raw_capability.get("enabled") is not True:
+        artifact_capability = _capability_from_artifact_contract(tool_slug, artifacts)
+        if artifact_capability is not None:
+            return artifact_capability
         return {
             "enabled": False,
             "capability": None,
@@ -570,6 +579,52 @@ def _capability_contract(
         "defaults": dict(raw_capability.get("defaults") or {}),
         "virtual": virtual,
     }
+
+
+def _capability_from_artifact_contract(
+    tool_slug: str,
+    artifacts: dict[str, Any],
+) -> dict[str, Any] | None:
+    inputs = [item for item in artifacts.get("inputs", []) if isinstance(item, dict)]
+    outputs = [item for item in artifacts.get("outputs", []) if isinstance(item, dict)]
+    if not outputs:
+        return None
+
+    capability_name, stage = _artifact_only_capability_identity(tool_slug)
+    return {
+        "enabled": True,
+        "capability": capability_name,
+        "stage": stage,
+        "inputs": [
+            {
+                "semantic_type": item.get("type"),
+                "field": item.get("name") or item.get("type"),
+                "required": bool(item.get("required", True)),
+                "accepted_extensions": [],
+            }
+            for item in inputs
+            if item.get("type")
+        ],
+        "outputs": [
+            {
+                "semantic_type": item.get("type"),
+                "source": "artifact",
+                "match": {"type": item.get("type")},
+                "path": item.get("name"),
+                "required": bool(item.get("required", True)),
+            }
+            for item in outputs
+            if item.get("type")
+        ],
+        "defaults": {},
+        "virtual": False,
+    }
+
+
+def _artifact_only_capability_identity(tool_slug: str) -> tuple[str, str]:
+    if tool_slug == "lvpocket-pocket-prediction":
+        return "pocket_prediction", "pocket_exploration"
+    return tool_slug or "artifact_workflow_tool", tool_slug or "artifact_workflow"
 
 
 def _capability_object_contract(capability: Any, *, virtual: bool) -> dict[str, Any]:
