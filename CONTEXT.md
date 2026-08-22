@@ -22,3 +22,21 @@
 
 **Artifact Binding**
 : The decision that satisfies an Artifact Slot from an uploaded file, an existing ArtifactVersion, a workflow input, or an upstream node output.
+
+**Tool Contract**
+: The platform-normalized description of a tool's identity, parameters, Standard Artifact inputs and outputs, resource needs, and allowed run surfaces.
+
+**Tool Template**
+: A reusable contract pattern for one class of scientific capability, such as protein preparation, molecular docking, ADMET prediction, or MD simulation.
+
+**Resource Profile**
+: A normalized estimate of the compute resources, runtime, timeout, and scheduling class required by a tool run.
+
+**Executor Adapter**
+: The Adapter that submits, observes, cancels, and collects a task run on one execution environment, such as Docker, SSH, K8s, Slurm, or Remote API.
+
+**Workflow Input**
+: A user-provided value or Artifact Binding promoted to the workflow level because a node requires it and no upstream node supplies it.
+
+**Artifact Renderer**
+: The viewer responsible for displaying one Standard Artifact type consistently across task details, Artifact details, workflow nodes, and result panels.
