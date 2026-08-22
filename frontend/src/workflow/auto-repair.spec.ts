@@ -253,7 +253,11 @@ describe('buildWorkflowAutoRepairPlan', () => {
         targetNodeId: 'dock',
         inputSlotName: 'receptor',
         toolSlug: 'remote-protein-prep-api',
+        toolName: 'Remote Protein Preparation API',
         artifactType: 'protein_structure@1',
+        requiredRoles: ['receptor_pdbqt'],
+        roleLabels: ['受体 PDBQT (receptor_pdbqt)'],
+        reason: 'Dock 的 receptor 需要受体 PDBQT (receptor_pdbqt)，可通过 Remote Protein Preparation API 自动补齐。',
       }),
     ])
   })

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -112,6 +112,26 @@ def get_standard_artifact_spec(ref: str) -> StandardArtifactSpec:
     if ref not in specs:
         raise StandardArtifactRegistryError(f"Unknown standard artifact type: {ref}")
     return specs[ref]
+
+
+def list_standard_artifact_roles(ref: str) -> set[str]:
+    """Return controlled file roles for a standard Artifact reference."""
+    return {role.role for role in get_standard_artifact_spec(ref).file_roles}
+
+
+def validate_standard_artifact_roles(ref: str, roles: Iterable[str]) -> list[str]:
+    """Normalize and validate file roles against the standard Artifact registry."""
+    normalized_roles = list(dict.fromkeys(str(role).strip() for role in roles if str(role).strip()))
+    if not normalized_roles:
+        return []
+
+    allowed_roles = list_standard_artifact_roles(ref)
+    unknown_roles = [role for role in normalized_roles if role not in allowed_roles]
+    if unknown_roles:
+        raise StandardArtifactRegistryError(
+            f"Unknown file role(s) for {ref}: {', '.join(unknown_roles)}"
+        )
+    return normalized_roles
 
 
 @lru_cache(maxsize=1)

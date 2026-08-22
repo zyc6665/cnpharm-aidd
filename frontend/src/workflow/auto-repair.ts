@@ -1,6 +1,7 @@
 import type { WorkflowArtifactSemanticType } from './artifact-types'
 import type { ArtifactInputSlot, ArtifactOutputSlot } from './contract-bindings'
 import type { WorkflowCanvasEdge, WorkflowCanvasNode, WorkflowCanvasPreset } from './canvas-types'
+import { formatArtifactRole, formatArtifactRoleList } from './artifact-role-registry'
 import { normalizeWorkflowSemanticType } from './semantic-types'
 
 export interface WorkflowAutoRepairTool {
@@ -18,9 +19,13 @@ export interface WorkflowAutoRepairAction {
   sourceEdgeId: string
   sourceNodeId: string
   targetNodeId: string
+  targetNodeTitle: string
   inputSlotName: string
   artifactType: WorkflowArtifactSemanticType
   toolSlug: string
+  toolName: string
+  requiredRoles: readonly string[]
+  roleLabels: readonly string[]
   reason: string
   position: { x: number; y: number }
 }
@@ -54,6 +59,10 @@ export function buildWorkflowAutoRepairPlan(input: {
       if (!toolSlug) {
         continue
       }
+      const repairTool = toolBySlug.get(toolSlug)
+      if (!repairTool) {
+        continue
+      }
 
       if (hasExistingRepairPath(input.template, targetNode.id, artifactType, toolSlug)) {
         continue
@@ -70,16 +79,23 @@ export function buildWorkflowAutoRepairPlan(input: {
         continue
       }
       plannedKeys.add(actionKey)
+      const requiredRoles = desiredRolesForSlot(slot)
+      const targetNodeTitle = String(targetNode.titleKey || targetNode.id)
+      const toolName = repairTool.name || toolSlug
 
       actions.push({
         id: `repair-${actionKey}`,
         sourceEdgeId: sourceEdge.id,
         sourceNodeId: sourceEdge.source,
         targetNodeId: targetNode.id,
+        targetNodeTitle,
         inputSlotName: slot.name,
         artifactType,
         toolSlug,
-        reason: repairReasonForSlot(slot),
+        toolName,
+        requiredRoles,
+        roleLabels: requiredRoles.map(formatArtifactRole),
+        reason: repairReasonForSlot({ slot, targetNodeTitle, toolName, requiredRoles }),
         position: repairNodePosition({ sourceNode, targetNode }),
       })
     }
@@ -263,13 +279,14 @@ function repairNodePosition(input: {
   }
 }
 
-function repairReasonForSlot(slot: ArtifactInputSlot): string {
-  const policy = String(slot.readinessPolicy ?? '')
-  if (policy === 'prefer_3d_ligand') {
-    return '需要先生成 3D 配体构象'
+function repairReasonForSlot(input: {
+  slot: ArtifactInputSlot
+  targetNodeTitle: string
+  toolName: string
+  requiredRoles: readonly string[]
+}): string {
+  if (input.requiredRoles.length > 0) {
+    return `${input.targetNodeTitle} 的 ${input.slot.name} 需要${formatArtifactRoleList(input.requiredRoles)}，可通过 ${input.toolName} 自动补齐。`
   }
-  if (policy === 'require_receptor') {
-    return '需要先生成 receptor_pdbqt'
-  }
-  return '需要先准备或转换输入产物'
+  return `${input.targetNodeTitle} 的 ${input.slot.name} 需要先准备或转换输入产物，可通过 ${input.toolName} 自动补齐。`
 }

@@ -304,6 +304,11 @@ export function useWorkflowCanvas(input: {
 
   const workflowRepairableCount = computed(() => workflowRepairPlan.value.repairableCount)
 
+  const workflowRepairActions = computed(() => workflowRepairPlan.value.actions.map(action => ({
+    ...action,
+    targetNodeTitle: formatKey(action.targetNodeTitle)
+  })))
+
   function handleCanvasPresetChange(canvasPresetId: unknown) {
     if (typeof canvasPresetId !== 'string') {
       return
@@ -695,6 +700,7 @@ export function useWorkflowCanvas(input: {
     failedNodeCount,
     workflowReportRows,
     workflowRepairPlan,
+    workflowRepairActions,
     workflowRepairableCount,
     handleCanvasPresetChange,
     resolveNodeStatusReason,

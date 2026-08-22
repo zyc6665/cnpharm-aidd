@@ -76,11 +76,31 @@ def test_remote_tool_manifest_accepts_minimum_valid_contract():
 
 def test_remote_tool_manifest_preserves_output_provided_roles():
     payload = valid_remote_tool_manifest()
-    payload["artifacts"]["outputs"][0]["provided_roles"] = ["prepared_pdb", "receptor_pdbqt"]
+    payload["artifacts"]["outputs"][0]["provided_roles"] = ["residue_pocket_pdb", "atom_pocket_pdb"]
 
     manifest = RemoteToolManifest.model_validate(payload)
 
-    assert manifest.artifacts.outputs[0].provided_roles == ["prepared_pdb", "receptor_pdbqt"]
+    assert manifest.artifacts.outputs[0].provided_roles == ["residue_pocket_pdb", "atom_pocket_pdb"]
+
+
+def test_remote_tool_manifest_rejects_output_roles_from_another_artifact_type():
+    payload = valid_remote_tool_manifest()
+    payload["artifacts"]["outputs"][0]["provided_roles"] = ["receptor_pdbqt"]
+
+    with pytest.raises(ValidationError) as exc_info:
+        RemoteToolManifest.model_validate(payload)
+
+    assert "Unknown file role" in str(exc_info.value)
+
+
+def test_remote_tool_manifest_rejects_input_roles_from_another_artifact_type():
+    payload = valid_remote_tool_manifest()
+    payload["artifacts"]["inputs"][0]["required_roles"] = ["structure_3d_sdf"]
+
+    with pytest.raises(ValidationError) as exc_info:
+        RemoteToolManifest.model_validate(payload)
+
+    assert "Unknown file role" in str(exc_info.value)
 
 
 def test_remote_tool_manifest_requires_logs_endpoint():

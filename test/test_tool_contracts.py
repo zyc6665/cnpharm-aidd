@@ -329,6 +329,42 @@ def test_tool_contract_preserves_artifact_output_provided_roles():
     assert summary["artifact_outputs"] == contract["artifacts"]["outputs"]
 
 
+def test_tool_contract_validation_rejects_artifact_roles_from_another_type():
+    errors = collect_tool_contract_validation_errors(
+        SimpleNamespace(
+            slug="bad-role-tool",
+            current_version=SimpleNamespace(
+                is_active=True,
+                config={
+                    "type": "remote_api",
+                    "endpoint": "https://example.com/invoke",
+                    "input_schema": {"type": "object", "properties": {"task_id": {"type": "string"}}},
+                    "output_schema": {"type": "object", "properties": {}},
+                    "artifacts": {
+                        "inputs": [
+                            {
+                                "name": "protein",
+                                "type": "protein_structure@1",
+                                "role_preferences": ["structure_file", "structure_3d_sdf"],
+                            }
+                        ],
+                        "outputs": [
+                            {
+                                "name": "pocket",
+                                "type": "binding_pocket@1",
+                                "provided_roles": ["receptor_pdbqt"],
+                            }
+                        ],
+                    },
+                },
+            ),
+        )
+    )
+
+    assert any("artifacts.inputs[0].role_preferences" in error for error in errors)
+    assert any("artifacts.outputs[0].provided_roles" in error for error in errors)
+
+
 def test_lvpocket_legacy_contract_infers_role_aware_protein_slot():
     tool = SimpleNamespace(
         id="tool-lvpocket",

@@ -7,6 +7,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.artifact_standards.registry import validate_standard_artifact_roles
+
 
 TOOL_PACKAGE_API_VERSION = "aidd.sciminer/v1"
 TOOL_PACKAGE_V2_API_VERSION = "aidd.sciminer/tool-package.v2"
@@ -60,6 +62,12 @@ class ArtifactInputV2(BaseModel):
     readiness_policy: str | None = Field(default=None, max_length=100)
     suggested_preparation_tool: str | None = Field(default=None, max_length=100)
 
+    @model_validator(mode="after")
+    def validate_file_roles(self) -> "ArtifactInputV2":
+        self.role_preferences = validate_standard_artifact_roles(self.type, self.role_preferences)
+        self.required_roles = validate_standard_artifact_roles(self.type, self.required_roles)
+        return self
+
 
 class ArtifactOutputV2(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -69,6 +77,11 @@ class ArtifactOutputV2(BaseModel):
     cardinality: Literal["one", "many"] = "one"
     required: bool = True
     provided_roles: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_file_roles(self) -> "ArtifactOutputV2":
+        self.provided_roles = validate_standard_artifact_roles(self.type, self.provided_roles)
+        return self
 
 
 class ArtifactContractV2(BaseModel):

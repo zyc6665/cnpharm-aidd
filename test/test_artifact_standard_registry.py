@@ -17,9 +17,11 @@ from app.artifact_standards.registry import (
     StandardArtifactRegistryError,
     get_standard_artifact_spec,
     is_standard_artifact_ref,
+    list_standard_artifact_roles,
     load_relation_specs,
     load_standard_artifact_specs,
     parse_standard_ref,
+    validate_standard_artifact_roles,
     validate_relation_type,
 )
 
@@ -145,3 +147,18 @@ def test_standard_ref_parser_rejects_unknowns_and_legacy_aliases():
         parse_standard_ref("pocket_pdb")
     with pytest.raises(StandardArtifactRegistryError, match="Unknown standard artifact type"):
         get_standard_artifact_spec("binding_pocket@2")
+
+
+def test_standard_role_registry_validates_roles_per_artifact_type():
+    assert list_standard_artifact_roles("protein_structure@1") >= {
+        "structure_file",
+        "prepared_pdb",
+        "receptor_pdbqt",
+    }
+    assert validate_standard_artifact_roles(
+        "protein_structure@1",
+        ["prepared_pdb", "receptor_pdbqt", "prepared_pdb"],
+    ) == ["prepared_pdb", "receptor_pdbqt"]
+
+    with pytest.raises(StandardArtifactRegistryError, match="Unknown file role"):
+        validate_standard_artifact_roles("binding_pocket@1", ["receptor_pdbqt"])

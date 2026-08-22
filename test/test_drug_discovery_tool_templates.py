@@ -153,6 +153,14 @@ def test_ligand_preparation_template_exports_3d_ligand_input_policy():
     }
 
 
+def test_template_rejects_output_roles_from_another_artifact_type():
+    raw = load_tool_template("ligand-preparation").model_dump(mode="json")
+    raw["artifacts"]["outputs"][0]["provided_roles"] = ["receptor_pdbqt"]
+
+    with pytest.raises(ValidationError, match="Unknown file role"):
+        DrugDiscoveryToolTemplate.model_validate(raw)
+
+
 def test_heavy_template_projects_resource_profile_to_existing_tool_fields():
     template = load_tool_template("md-gromacs-ssh")
 

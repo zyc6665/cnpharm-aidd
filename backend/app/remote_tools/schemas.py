@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.artifact_standards.registry import is_standard_artifact_ref
+from app.artifact_standards.registry import is_standard_artifact_ref, validate_standard_artifact_roles
 
 try:
     from jsonschema import Draft7Validator
@@ -51,6 +51,12 @@ class RemoteToolArtifactInput(BaseModel):
             raise ValueError(f"Unknown standard artifact type: {value}")
         return value
 
+    @model_validator(mode="after")
+    def _validate_file_roles(self) -> "RemoteToolArtifactInput":
+        self.role_preferences = validate_standard_artifact_roles(self.type, self.role_preferences)
+        self.required_roles = validate_standard_artifact_roles(self.type, self.required_roles)
+        return self
+
 
 class RemoteToolArtifactOutput(BaseModel):
     """Declared standard Artifact output slot."""
@@ -69,6 +75,12 @@ class RemoteToolArtifactOutput(BaseModel):
         if not is_standard_artifact_ref(value):
             raise ValueError(f"Unknown standard artifact type: {value}")
         return value
+
+    @model_validator(mode="after")
+    def _validate_file_roles(self) -> "RemoteToolArtifactOutput":
+        if self.provided_roles is not None:
+            self.provided_roles = validate_standard_artifact_roles(self.type, self.provided_roles)
+        return self
 
 
 class RemoteToolArtifactContract(BaseModel):

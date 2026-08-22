@@ -46,6 +46,39 @@
         <p>{{ summaryHint }}</p>
       </section>
 
+      <section
+        v-if="repairActions.length > 0"
+        class="preflight-section preflight-auto-repair"
+        data-testid="workflow-auto-repair-explanations"
+      >
+        <div class="preflight-section-header">
+          <strong>可自动补齐</strong>
+          <a-tag color="blue">{{ repairActions.length }}</a-tag>
+        </div>
+        <div class="auto-repair-list">
+          <div
+            v-for="action in repairActions"
+            :key="action.id"
+            class="auto-repair-item"
+          >
+            <div class="auto-repair-copy">
+              <span class="auto-repair-node">{{ action.targetNodeTitle }}</span>
+              <strong>{{ action.toolName }}</strong>
+              <p>{{ action.reason }}</p>
+            </div>
+            <div v-if="action.roleLabels.length" class="auto-repair-roles">
+              <a-tag
+                v-for="roleLabel in action.roleLabels"
+                :key="roleLabel"
+                color="geekblue"
+              >
+                {{ roleLabel }}
+              </a-tag>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="preflight-section">
         <div class="preflight-section-header">
           <strong>{{ t('workflow.preflight.resourceTitle') }}</strong>
@@ -115,15 +148,18 @@
 <script setup lang="ts">
   import { computed } from 'vue'
   import { useI18n } from 'vue-i18n'
+  import type { WorkflowAutoRepairAction } from '@/workflow/auto-repair'
   import type { WorkflowPreflightSummary } from '@/workflow/preflight'
 
   const props = withDefaults(defineProps<{
     preflight: WorkflowPreflightSummary
     running?: boolean
     repairableCount?: number
+    repairActions?: readonly WorkflowAutoRepairAction[]
   }>(), {
     running: false,
     repairableCount: 0,
+    repairActions: () => [],
   })
 
   defineEmits<{
@@ -147,6 +183,7 @@
   })
 
   const resourceSummaries = computed(() => props.preflight.resourceSummaries)
+  const repairActions = computed(() => props.repairActions)
 
   const preflightMetrics = computed(() => [
     {
@@ -312,6 +349,52 @@
   .preflight-resource-list,
   .preflight-issues {
     display: grid;
+  }
+
+  .auto-repair-list {
+    display: grid;
+  }
+
+  .auto-repair-item {
+    display: grid;
+    gap: @spacing-sm;
+    padding: @spacing-md;
+    border-left: 3px solid @accent-color;
+    background: @accent-color-light;
+  }
+
+  .auto-repair-item + .auto-repair-item {
+    border-top: 1px solid @border-color-light;
+  }
+
+  .auto-repair-copy {
+    min-width: 0;
+  }
+
+  .auto-repair-node {
+    display: block;
+    color: @text-color-light-tertiary;
+    font-size: @font-size-xs;
+    font-weight: 700;
+  }
+
+  .auto-repair-copy strong {
+    color: @text-color-light-primary;
+    font-size: @font-size-sm;
+    font-weight: 800;
+  }
+
+  .auto-repair-copy p {
+    margin: 4px 0 0;
+    color: @text-color-light-secondary;
+    font-size: @font-size-sm;
+    line-height: @line-height-base;
+  }
+
+  .auto-repair-roles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: @spacing-xs;
   }
 
   .preflight-resource {

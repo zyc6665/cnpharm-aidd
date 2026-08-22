@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.artifact_standards.registry import StandardArtifactRegistryError, validate_standard_artifact_roles
 from app.artifact_standards.types import normalize_platform_artifact_type
 
 
@@ -260,6 +261,8 @@ def collect_tool_contract_config_validation_errors(
     if current_version_active is not True:
         errors.append("current_version.is_active must be true")
 
+    _collect_artifact_role_validation_errors(config, errors)
+
     raw_capability = config.get("agent_capability")
     if raw_capability is None:
         return errors
@@ -309,6 +312,34 @@ def collect_tool_contract_config_validation_errors(
                 )
 
     return _dedupe_errors(errors)
+
+
+def _collect_artifact_role_validation_errors(config: dict[str, Any], errors: list[str]) -> None:
+    artifacts = config.get("artifacts")
+    if not isinstance(artifacts, dict):
+        return
+
+    for direction, role_fields in (
+        ("inputs", ("role_preferences", "required_roles")),
+        ("outputs", ("provided_roles",)),
+    ):
+        slots = artifacts.get(direction)
+        if not isinstance(slots, list):
+            continue
+        for index, slot in enumerate(slots):
+            if not isinstance(slot, dict):
+                continue
+            artifact_type = str(slot.get("type") or "").strip()
+            if not artifact_type:
+                continue
+            for role_field in role_fields:
+                roles = slot.get(role_field)
+                if not roles:
+                    continue
+                try:
+                    validate_standard_artifact_roles(artifact_type, roles)
+                except StandardArtifactRegistryError as exc:
+                    errors.append(f"artifacts.{direction}[{index}].{role_field}: {exc}")
 
 
 def _allows_parameter_only_capability(config: dict[str, Any]) -> bool:

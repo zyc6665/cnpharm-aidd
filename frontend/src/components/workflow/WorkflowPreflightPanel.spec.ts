@@ -120,4 +120,42 @@ describe('WorkflowPreflightPanel', () => {
 
     expect(wrapper.emitted('apply-auto-repair')).toHaveLength(1)
   })
+
+  it('展示自动补齐解释，说明缺失 role 和将使用的工具', async () => {
+    const wrapper = mountPanel({
+      ...basePreflight,
+      canRun: false,
+      runnableCount: 0,
+      blockedCount: 1,
+      primaryMessage: '存在标准产物需要准备或转换',
+      issues: [],
+    })
+
+    await wrapper.setProps({
+      repairableCount: 1,
+      repairActions: [
+        {
+          id: 'repair-dock-receptor',
+          sourceEdgeId: 'edge-fetch-dock',
+          sourceNodeId: 'fetch-pdb',
+          targetNodeId: 'dock',
+          targetNodeTitle: 'Dock',
+          inputSlotName: 'receptor',
+          artifactType: 'protein_structure@1',
+          toolSlug: 'remote-protein-prep-api',
+          toolName: 'Remote Protein Preparation API',
+          requiredRoles: ['receptor_pdbqt'],
+          roleLabels: ['受体 PDBQT (receptor_pdbqt)'],
+          reason: 'Dock 的 receptor 需要受体 PDBQT (receptor_pdbqt)，可通过 Remote Protein Preparation API 自动补齐。',
+          position: { x: 200, y: 96 },
+        },
+      ],
+    })
+
+    expect(wrapper.find('[data-testid="workflow-auto-repair-explanations"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('可自动补齐')
+    expect(wrapper.text()).toContain('Dock')
+    expect(wrapper.text()).toContain('受体 PDBQT (receptor_pdbqt)')
+    expect(wrapper.text()).toContain('Remote Protein Preparation API')
+  })
 })

@@ -10,6 +10,7 @@ from app.artifact_standards.types import (
     is_supported_platform_artifact_type,
     normalize_platform_artifact_type,
 )
+from app.artifact_standards.registry import validate_standard_artifact_roles
 
 try:
     from jsonschema import Draft7Validator
@@ -112,6 +113,12 @@ class ToolTemplateArtifactInput(BaseModel):
             raise ValueError(f"Unknown platform artifact type: {value}")
         return normalize_platform_artifact_type(value)
 
+    @model_validator(mode="after")
+    def _validate_file_roles(self) -> "ToolTemplateArtifactInput":
+        self.role_preferences = validate_standard_artifact_roles(self.type, self.role_preferences)
+        self.required_roles = validate_standard_artifact_roles(self.type, self.required_roles)
+        return self
+
 
 class ToolTemplateArtifactOutput(BaseModel):
     """Standard Artifact output slot emitted by a tool template."""
@@ -130,6 +137,11 @@ class ToolTemplateArtifactOutput(BaseModel):
         if not is_supported_platform_artifact_type(value):
             raise ValueError(f"Unknown platform artifact type: {value}")
         return normalize_platform_artifact_type(value)
+
+    @model_validator(mode="after")
+    def _validate_file_roles(self) -> "ToolTemplateArtifactOutput":
+        self.provided_roles = validate_standard_artifact_roles(self.type, self.provided_roles)
+        return self
 
 
 class ToolTemplateArtifactContract(BaseModel):
