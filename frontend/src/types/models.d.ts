@@ -568,6 +568,7 @@ export interface TaskCreateParams {
   params: Record<string, unknown>
   file_ids?: string[]
   input_bindings?: Record<string, string>
+  standard_input_uploads?: Record<string, string>
   priority?: 'low' | 'normal' | 'high'
 }
 

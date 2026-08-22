@@ -15,6 +15,10 @@ class TaskInputSchema(BaseModel):
         default_factory=dict,
         description="标准 ArtifactVersion 输入绑定，按 Tool Package v2 input name 索引",
     )
+    standard_input_uploads: Dict[str, str] = Field(
+        default_factory=dict,
+        description="标准 Artifact 输入槽的直接上传文件绑定，按 input name 索引",
+    )
 
 
 class TaskOutputSchema(BaseModel):
@@ -35,6 +39,10 @@ class TaskCreate(BaseModel):
     input_bindings: Dict[str, str] = Field(
         default_factory=dict,
         description="标准 ArtifactVersion 输入绑定，按 Tool Package v2 input name 索引",
+    )
+    standard_input_uploads: Dict[str, str] = Field(
+        default_factory=dict,
+        description="标准 Artifact 输入槽的直接上传文件绑定，按 input name 索引",
     )
     priority: str = Field(default="normal", description="优先级")
 
