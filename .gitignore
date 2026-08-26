@@ -5,6 +5,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.hypothesis/
 
 # Virtual environments
 .venv/
@@ -16,8 +17,16 @@ node_modules/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/coverage/
+frontend/test-results/
+frontend/playwright-report/
+frontend/.cache/
 
 # Local runtime data
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
 backend/app.db
 backend/*.db
 backend/*.db-*
@@ -44,8 +53,16 @@ backend/.env
 # Local scratch files
 .impeccable/
 .claude/worktrees/
+tmp/
+temp/
 *.log
 *.pid
-*.sqlite3
 .coverage
 htmlcov/
+
+# Generated model bundles and binary reports
+model/kaiwu-venv-model-bundles/
+model/**/*.tar.zst
+model/**/*.zip
+model/**/*.7z
+*.docx
