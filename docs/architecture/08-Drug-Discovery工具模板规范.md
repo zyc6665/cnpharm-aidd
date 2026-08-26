@@ -90,7 +90,7 @@ executor:
   type: builtin
 ```
 
-工作流行为：输出可直接连接蛋白处理、口袋预测或结构查看；如果下游要求 `prepared_pdb` 或 `receptor_pdbqt`，Binding Resolver 应提示插入蛋白处理节点。
+工作流行为：输出可直接连接蛋白处理、口袋预测或结构查看；如果下游要求 `prepared_pdb` 或 `receptor_pdbqt`，Run Preparation 应基于 Artifact Binding 决策提示插入蛋白处理节点。
 
 ### 4.2 Fetch PubChem Ligand
 

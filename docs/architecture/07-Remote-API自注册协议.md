@@ -331,10 +331,17 @@ manifest 中允许端点自定义路径，但必须是同服务相对路径。
 第一版不做认证，但仍要求：
 
 - 服务部署在平台可控网络。
+- 只有管理员或具备工具发布权限的用户可以注册 Remote API URL。
+- 注册 URL 必须通过协议白名单和 host allowlist 校验。
+- 禁止访问 loopback、link-local、metadata service、私有保留地址以外的未授权网段。
+- 禁止跟随跨 host 重定向，避免 DNS rebinding 和 SSRF。
+- manifest、examples、result manifest 和结果文件下载必须有大小限制和超时限制。
 - manifest 不包含明文密钥。
 - endpoints 必须是相对路径。
 - 文件 URL 必须可由平台 worker 访问。
 - 平台不信任远端结果，必须校验 schema 和 checksum。
+- 结果文件入库前必须重新计算 sha256，并与远端 manifest 对比。
+- 远端服务只能提供数据文件，不能要求平台执行远端返回的命令。
 
 后续版本可增加：
 

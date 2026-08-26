@@ -159,15 +159,28 @@ resource_profile:
 - `docker_image`
 - `ssh_job`
 - `remote_api`
-- `tool_package`
 - `k8s_job`
 - `slurm_job`
 
 说明：
 
 - executor 只声明执行方式。实际 credentials、project_id、task_id 由平台运行时注入。
-- `tool_package` 表示工具以标准包交付；真正运行时仍可落到 Docker、SSH、K8s、Slurm 或 Remote API。
+- 工具是否以 Tool Package 交付不属于 executor 类型，应由 `package_format` 或 Tool Package manifest 来源表达。
 - `k8s_job` 和 `slurm_job` 是重计算生产化执行器，第一阶段可以先由 `ssh_job` 过渡，但契约层应保留标准类型。
+
+### 4.8 `package_format`
+
+可选字段，用于说明工具交付格式：
+
+```yaml
+package_format: tool_package_v2
+```
+
+说明：
+
+- `package_format` 描述工具如何交付。
+- `executor.type` 描述工具如何运行。
+- 从 Tool Package v2 导入的工具也必须落到具体 executor，例如 `docker_image`、`ssh_job`、`k8s_job`、`slurm_job` 或 `remote_api`。
 
 ## 5. 与 Tool Package v2 的关系
 
@@ -256,7 +269,7 @@ Tool Contract v2
 
 1. 优先使用 `artifacts` 生成标准槽位。
 2. 没有 `agent_capability` 时，可从 artifacts 派生 workflow capability。
-3. legacy 文件字段通过 Binding Resolver 投影。
+3. legacy 文件字段通过 Run Preparation Module 投影。
 4. 新工具禁止只写 legacy `agent_capability`。
 
 ## 11. 示例：蛋白处理工具

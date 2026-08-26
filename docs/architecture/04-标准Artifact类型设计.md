@@ -354,7 +354,7 @@ available ──► deprecated
 
 1. 上游 `artifacts.outputs[].type` 匹配下游 `artifacts.inputs[].type`。
 2. 如果下游声明 `required_roles`，上游 ArtifactVersion 必须具备这些 role。
-3. 如果下游声明 `role_preferences`，Binding Resolver 优先选择这些 role。
+3. 如果下游声明 `role_preferences`，Run Preparation 内部的 Artifact Binding 决策优先选择这些 role。
 4. 如果 role 不满足但有 `suggested_preparation_tool`，预检提示插入处理节点。
 5. 如果无上游且必填，则提升为工作流输入。
 
@@ -378,7 +378,7 @@ available ──► deprecated
 - 是否影响工作流自动绑定。
 - 是否需要迁移已有 Artifact。
 - 是否需要新增渲染器。
-- 是否需要新增 Binding Resolver 规则。
+- 是否需要新增 Run Preparation 或 Artifact Binding 决策规则。
 - 是否需要新增外部数据库导入规则。
 
 ## 12. 禁止事项
@@ -388,3 +388,7 @@ available ──► deprecated
 - 禁止把多个不同语义结果塞进一个 generic file。
 - 禁止在工具参数 schema 中重复声明标准 Artifact 文件输入。
 - 禁止跨项目建立 Artifact 谱系。
+
+## 13. 关联文档
+
+标准类型、角色和元数据定义见本文；跨工具编排、边界状态机、Run Preparation 预检和新工具扩展规则见 [标准 Artifact 驱动边界设计](./13-标准Artifact驱动边界设计.md)。

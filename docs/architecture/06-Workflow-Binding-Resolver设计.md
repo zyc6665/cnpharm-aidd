@@ -1,29 +1,34 @@
-# Workflow Binding Resolver 设计
+# Run Preparation 与 Binding Resolver 设计
 
 ## 1. 背景
 
 当前工具详情页、节点独立运行、工作流全流程运行都在处理输入来源、文件、ArtifactVersion、项目上下文和 legacy 参数投影。逻辑分散后会导致同一工具在不同入口表现不一致。
 
-Binding Resolver 的目标是把“如何满足工具输入”收敛为一个深模块。
+Run Preparation Module 的目标是把“如何准备一次工具运行”收敛为一个深模块。Binding Resolver 是 Run Preparation 内部的 Artifact slot/source/role 决策子能力，不再直接承担 Run Context、上传 staging、legacy 参数投影或 TaskCreate 构造。
 
 ## 2. 模块定位
 
-Binding Resolver 不是 UI 组件，也不是执行器。它是运行准备模块。
+Run Preparation Module 不是 UI 组件，也不是执行器。它是工具运行前的权威准备模块。
 
 ```text
 Tool Contract + Run Context + Input Sources
         │
         ▼
-Binding Resolver
+Run Preparation Module
+        │
+        ├─ Artifact Binding Resolver: slot/source/role decision
+        ├─ Run Context resolver: project/default workspace/file-only
+        ├─ Standard upload staging
+        └─ Legacy input projection
         │
         ▼
-TaskCreate payload / Workflow node readiness / Binding decisions
+PreparedRun / ReadinessReport / Binding decisions
 ```
 
 ## 3. 输入模型
 
 ```ts
-interface ResolveBindingInput {
+interface RunPreparationInput {
   toolContract: ToolContract
   runContext: RunContext
   parameterValues: Record<string, unknown>
@@ -47,12 +52,20 @@ interface ResolveBindingInput {
 ## 4. 输出模型
 
 ```ts
-interface ResolveBindingResult {
+interface PreparedRun {
   ready: boolean
   params: Record<string, unknown>
   fileIds: string[]
   inputBindings: Record<string, string>
   standardInputUploads: Record<string, string>
+  bindingDecisions: Record<string, BindingDecision>
+  runContextDecision: RunContextDecision
+  outputProjectId?: string
+  executionInputs: ExecutionInputManifest
+}
+
+interface ReadinessReport {
+  ready: boolean
   bindingDecisions: Record<string, BindingDecision>
   missingInputs: MissingInput[]
   preparationSuggestions: PreparationSuggestion[]
@@ -76,7 +89,7 @@ interface BindingDecision {
 }
 ```
 
-## 6. 解析优先级
+## 6. Artifact Binding 解析优先级
 
 对每个 `artifacts.inputs[]` slot：
 
@@ -130,7 +143,7 @@ ArtifactVersion 绑定时：
 
 部分旧工具仍然需要 `input_files` 或某个 file 字段。
 
-Resolver 应将标准绑定投影为 legacy 输入：
+Run Preparation Module 应将标准绑定投影为 legacy 输入：
 
 ```text
 ArtifactVersion / uploaded file
@@ -143,22 +156,21 @@ selected file id
         └─ params.builtin_inputs[type] for builtin
 ```
 
-这个投影应位于 Resolver 或后端任务准备模块，不应散落在 UI 和 workflow scheduler。
+这个投影应位于 Run Preparation Module，不应散落在 UI 和 workflow scheduler。
 
 ## 10. 前后端职责
 
-### 10.1 前端 Resolver
+### 10.1 前端 Readiness Preview
 
 用途：
 
 - 表单必填状态。
 - 预检展示。
-- 构造 TaskCreate payload。
 - 给用户解释缺失项。
 
-前端 Resolver 可以预测，但不是最终权威。
+前端 Readiness Preview 可以预测，但不是最终权威，也不能构造最终 Task 内部字段。它应尽量复用后端返回的 ReadinessReport；离线预览只能用于展示。
 
-### 10.2 后端 Resolver
+### 10.2 后端 Run Preparation
 
 用途：
 
@@ -169,7 +181,7 @@ selected file id
 - legacy 参数投影。
 - 输出 project 归属确定。
 
-后端 Resolver 是最终权威。
+后端 Run Preparation 是最终权威。Artifact Binding Resolver 是其中的纯决策子能力。
 
 ## 11. 工作流集成
 
@@ -181,18 +193,19 @@ WorkflowRun node ready?
   ├─ 上游节点是否成功
   ├─ 上游标准 ArtifactVersion 是否存在
   ├─ 必填 workflow input 是否已提供
-  └─ Binding Resolver 是否 ready
+  └─ Run Preparation 是否 ready
 ```
 
 节点 ready 后创建 Task：
 
 ```text
-TaskCreate
- ├─ project_id
- ├─ params
- ├─ file_ids
- ├─ input_bindings
- └─ standard_input_uploads
+RunPreparationInput
+        │
+        ▼
+PreparedRun
+        │
+        ▼
+Task Command Module
 ```
 
 ## 12. 预检消息设计
@@ -210,8 +223,8 @@ TaskCreate
 
 ## 13. 失败处理
 
-- Resolver 返回 missing 时，前端禁止运行并给出补救动作。
-- Resolver 返回 needs_preparation 时，可允许用户强行运行或建议插入处理节点，取决于 readiness_policy。
+- Run Preparation 返回 missing 时，前端禁止运行并给出补救动作。
+- Run Preparation 返回 needs_preparation 时，可允许用户强行运行或建议插入处理节点，取决于 readiness_policy。
 - 后端校验失败时，应把 binding_decisions 写入错误 detail。
 - 工作流节点失败时，应保存到 node state，加载后继续展示。
 
@@ -228,16 +241,18 @@ TaskCreate
 
 ## 15. 迁移步骤
 
-1. 前端新增标准 Run Context 和 Binding Resolver domain 模块。
-2. 后端新增标准 task input preparation 模块。
-3. 工具详情页改用 Resolver。
-4. 节点独立运行改用 Resolver。
-5. 工作流调度改用 Resolver。
-6. 删除重复的 slot/file/input 投影逻辑。
+1. 前端新增 Run Preparation Preview domain 模块，只负责展示预检。
+2. 后端新增 Run Preparation Module，作为运行准备权威入口。
+3. Artifact Binding Resolver 保留为 Run Preparation 内部纯决策能力。
+4. 工具详情页改用 Run Preparation。
+5. 节点独立运行改用 Run Preparation。
+6. 工作流调度改用 Run Preparation。
+7. 删除重复的 slot/file/input 投影逻辑。
 
 ## 16. 禁止事项
 
 - 禁止在组件中硬编码某个工具的 Artifact 映射。
 - 禁止 workflow scheduler 直接猜参数字段。
 - 禁止前端通过字符串拼接生成文件运行路径。
-- 禁止后端执行器绕过 Resolver 直接读取项目 Artifact。
+- 禁止前端构造最终 Task 内部字段。
+- 禁止后端执行器绕过 Run Preparation 直接读取项目 Artifact。

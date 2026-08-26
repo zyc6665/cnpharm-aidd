@@ -26,7 +26,7 @@ Executor Adapter Interface
 
 职责分离：
 
-- Binding Resolver 负责准备输入绑定。
+- Run Preparation Module 负责准备输入绑定。
 - Request Builder 负责生成标准运行请求。
 - Executor Adapter 负责和执行环境交互。
 - Artifact Persistence 负责把输出变成标准 Artifact。
