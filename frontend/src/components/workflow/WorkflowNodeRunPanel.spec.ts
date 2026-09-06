@@ -401,7 +401,7 @@ describe('WorkflowNodeRunPanel', () => {
     })
   })
 
-  it('内置 artifact 输入节点独立运行时应提交标准 builtin_inputs 映射', async () => {
+  it('内置 artifact 输入节点独立运行时应提交标准上传绑定，由后端投影 builtin_inputs', async () => {
     mockProteinPreparationToolDetail()
     vi.mocked(createTask).mockResolvedValue({
       code: 200,
@@ -447,13 +447,16 @@ describe('WorkflowNodeRunPanel', () => {
     await wrapper.find('[data-testid="run-current-node"]').trigger('click')
     await flushPromises()
 
-    expect(createTask).toHaveBeenCalledWith({
+    const expectedPayload = {
       name: 'Protein Preparation · protein-preparation-node',
       tool_id: 'tool-protein-preparation',
       project_id: 'project-1',
-      params: { builtin_inputs: { 'protein_structure@1': 'file-protein' } },
-      file_ids: ['file-protein']
-    })
+      params: {},
+      file_ids: undefined,
+      standard_input_uploads: { protein: 'file-protein' }
+    }
+    expect(prepareTaskRun).toHaveBeenCalledWith(expectedPayload)
+    expect(createTask).toHaveBeenCalledWith(expectedPayload)
   })
 
   it('上游推荐产物异步到达后，SSH 节点独立运行应自动绑定到文件入参', async () => {

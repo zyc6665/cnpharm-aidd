@@ -3,7 +3,7 @@ import type { UploadFile } from 'ant-design-vue'
 import { uploadFile } from '@/api/files'
 import { createTask, getTaskDetail, isTaskTerminalStatus, prepareTaskRun } from '@/api/tasks'
 import { useArtifactsStore, useWorkflowStore } from '@/stores'
-import { buildTaskSubmissionPayload } from '@/domain/tools'
+import { buildStandardRunTaskExtras, buildTaskSubmissionPayload } from '@/domain/tools'
 import type { ArtifactFile, TaskCreateParams, TaskRunPreparationPreview, ToolSchema } from '@/types/models'
 import { normalizeWorkflowSemanticType } from '@/workflow/semantic-types'
 
@@ -31,6 +31,11 @@ interface UploadedFileRef {
 interface StandardInputBindingProjection {
   inputBindings: Record<string, string>
   boundArtifactIds: Set<string>
+  boundFieldKeys: Set<string>
+}
+
+interface StandardInputUploadProjection {
+  standardInputUploads: Record<string, string>
   boundFieldKeys: Set<string>
 }
 
@@ -128,6 +133,46 @@ export function useStandaloneNodeRun(input: {
     return nextState
   }
 
+  function omitBoundUploadedFiles(
+    uploadedFiles: Record<string, UploadedFileRef | undefined>,
+    boundFieldKeys: Set<string>,
+  ) {
+    if (boundFieldKeys.size === 0) {
+      return uploadedFiles
+    }
+
+    const nextFiles = { ...uploadedFiles }
+    for (const key of boundFieldKeys) {
+      delete nextFiles[key]
+    }
+    return nextFiles
+  }
+
+  function buildStandardInputUploads(
+    options: StandaloneNodeRunOptions,
+    uploadedFiles: Record<string, UploadedFileRef | undefined>,
+    inputBindings: Record<string, string>,
+  ): StandardInputUploadProjection {
+    const standardInputUploads: Record<string, string> = {}
+    const boundFieldKeys = new Set<string>()
+
+    for (const contractInput of options.contractArtifactInputs) {
+      if (inputBindings[contractInput.name]) {
+        continue
+      }
+
+      const uploadedFile = uploadedFiles[contractInput.name]
+      if (!uploadedFile?.fileId) {
+        continue
+      }
+
+      standardInputUploads[contractInput.name] = uploadedFile.fileId
+      boundFieldKeys.add(contractInput.name)
+    }
+
+    return { standardInputUploads, boundFieldKeys }
+  }
+
   async function resolveUploadedFiles(
     options: StandaloneNodeRunOptions,
     skipArtifactIds: Set<string> = new Set(),
@@ -166,36 +211,6 @@ export function useStandaloneNodeRun(input: {
     }
 
     return uploadedFiles
-  }
-
-  function withBuiltinInputs(
-    params: Record<string, unknown>,
-    uploadedFiles: Record<string, UploadedFileRef | undefined>,
-    options: StandaloneNodeRunOptions,
-  ) {
-    if (options.executorType !== 'builtin' || options.contractArtifactInputs.length === 0) {
-      return params
-    }
-
-    const builtinInputs: Record<string, string> = {}
-    const nextParams = { ...params }
-    for (const contractInput of options.contractArtifactInputs) {
-      delete nextParams[contractInput.name]
-
-      const uploadedFile = uploadedFiles[contractInput.name]
-      if (uploadedFile?.fileId) {
-        builtinInputs[contractInput.type] = uploadedFile.fileId
-      }
-    }
-
-    if (Object.keys(builtinInputs).length === 0) {
-      return params
-    }
-
-    return {
-      ...nextParams,
-      builtin_inputs: builtinInputs,
-    }
   }
 
   function refreshTaskBindings(
@@ -251,23 +266,32 @@ export function useStandaloneNodeRun(input: {
     try {
       const bindingProjection = buildStandardInputBindings(options)
       const uploadedFiles = await resolveUploadedFiles(options, bindingProjection.boundArtifactIds)
-      const formState = omitBoundArtifactFormValues(options.formState, bindingProjection.boundFieldKeys)
+      const uploadProjection = buildStandardInputUploads(
+        options,
+        uploadedFiles,
+        bindingProjection.inputBindings,
+      )
+      const boundFieldKeys = new Set([
+        ...bindingProjection.boundFieldKeys,
+        ...uploadProjection.boundFieldKeys,
+      ])
+      const formState = omitBoundArtifactFormValues(options.formState, boundFieldKeys)
       const payload = buildTaskSubmissionPayload({
         flattenedSchema: options.flattenedSchema,
         formState,
-        uploadedFiles,
+        uploadedFiles: omitBoundUploadedFiles(uploadedFiles, uploadProjection.boundFieldKeys),
         executorType: options.executorType,
       })
-      const params = withBuiltinInputs(payload.params, uploadedFiles, options)
       const taskPayload: TaskCreateParams = {
         name: `${options.tool.name} · ${currentNodeId()}`,
         tool_id: options.tool.id,
-        project_id: currentProjectId(),
-        params,
+        params: payload.params,
         file_ids: payload.fileIds.length > 0 ? payload.fileIds : undefined,
-        input_bindings: Object.keys(bindingProjection.inputBindings).length > 0
-          ? bindingProjection.inputBindings
-          : undefined,
+        ...buildStandardRunTaskExtras({
+          projectId: currentProjectId(),
+          inputBindings: bindingProjection.inputBindings,
+          standardInputUploads: uploadProjection.standardInputUploads,
+        }),
       }
 
       preparationPreview.value = (await prepareTaskRun(taskPayload)).data
