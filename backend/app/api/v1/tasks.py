@@ -18,6 +18,7 @@ from app.tasks.cancellation import cancel_platform_task
 from app.tasks.direct_runner import direct_task_runner
 from app.tasks.service import (
     create_and_schedule_tool_task,
+    prepare_tool_task_preview,
     record_tool_usage,
 )
 from app.tasks.naming import (
@@ -295,6 +296,21 @@ async def list_tasks(
         page=page,
         page_size=page_size,
     )
+
+
+@router.post("/prepare-preview", response_model=dict)
+async def prepare_task_preview(
+    task_data: TaskCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """预览任务输入准备和标准 Artifact readiness，不创建任务。"""
+    preview = await prepare_tool_task_preview(
+        db=db,
+        current_user=current_user,
+        task_data=task_data,
+    )
+    return success_response(data=preview)
 
 
 @router.get("/{task_id}", response_model=dict)

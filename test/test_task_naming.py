@@ -11,6 +11,7 @@ import httpx
 import pytest
 import pytest_asyncio
 from fastapi import Header, HTTPException
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -35,6 +36,7 @@ from app.models.artifacts import ArtifactVersionFile
 from app.models.files import File as FileModel, FileSourceType
 from app.models.projects import Organization, Project, ProjectMember
 from app.models.artifacts import Artifact, ArtifactVersion
+from app.models.statistics import ToolStatistics
 from app.models.tasks import Task, TaskInput, TaskStatus
 from app.models.tools import Tool, ToolStatus, ToolVersion
 from app.models.users import User, UserRole, UserStatus
@@ -409,6 +411,103 @@ async def _seed_prepared_protein_artifact_version(
     return version, raw_file, prepared_file
 
 
+async def _seed_raw_protein_artifact_version(
+    db_session: AsyncSession,
+    *,
+    project_id: str,
+    user_id: str,
+) -> tuple[ArtifactVersion, FileModel]:
+    raw_file = FileModel(
+        project_id=project_id,
+        owner_id=user_id,
+        filename="raw-preview.pdb",
+        content_type="chemical/x-pdb",
+        size_bytes=3,
+        sha256="3" * 64,
+        storage_path="/tmp/raw-preview.pdb",
+        source_type=FileSourceType.TOOL_OUTPUT.value,
+    )
+    db_session.add(raw_file)
+    await db_session.flush()
+    artifact = Artifact(
+        project_id=project_id,
+        created_by=user_id,
+        artifact_type="protein_structure",
+        semantic_type="protein_structure",
+        standard_type="protein_structure",
+        standard_version=1,
+        name="raw protein",
+    )
+    db_session.add(artifact)
+    await db_session.flush()
+    version = ArtifactVersion(
+        artifact_id=artifact.id,
+        created_by=user_id,
+        version=1,
+        filename="raw.manifest.json",
+        content_type="application/json",
+        size_bytes=2,
+        sha256="4" * 64,
+        storage_key="test/raw.manifest.json",
+        status="available",
+        validation_status="passed",
+        validation_errors=[],
+        manifest_json={
+            "type": "protein_structure@1",
+            "metadata": {"preparation_status": "raw"},
+        },
+        summary_json={},
+        metrics_json={},
+    )
+    db_session.add(version)
+    await db_session.flush()
+    db_session.add(
+        ArtifactVersionFile(
+            artifact_version_id=version.id,
+            role="structure_file",
+            file_id=raw_file.id,
+            is_primary=True,
+            sort_order=0,
+        )
+    )
+    artifact.latest_version_id = version.id
+    await db_session.commit()
+    await db_session.refresh(version)
+    await db_session.refresh(raw_file)
+    return version, raw_file
+
+
+async def _seed_tool_with_current_version(
+    db_session: AsyncSession,
+    *,
+    owner_id: str,
+    name: str,
+    slug: str,
+    config: dict,
+) -> Tool:
+    tool = Tool(
+        owner_id=owner_id,
+        name=name,
+        slug=slug,
+        status=ToolStatus.PUBLISHED.value,
+        is_public=True,
+    )
+    db_session.add(tool)
+    await db_session.flush()
+    version = ToolVersion(
+        tool_id=tool.id,
+        version="1.0.0",
+        is_active=True,
+        config=config,
+    )
+    db_session.add(version)
+    await db_session.flush()
+    tool.current_version_id = version.id
+    await db_session.commit()
+    await db_session.refresh(tool)
+    return tool
+
+
 @pytest.mark.asyncio
 async def test_create_task_with_input_bindings_persists_standard_artifact_context(
     api_client: httpx.AsyncClient,
@@ -457,6 +556,132 @@ async def test_create_task_with_input_bindings_persists_standard_artifact_contex
 
 
 @pytest.mark.asyncio
+async def test_prepare_task_preview_reports_blocked_binding_without_creating_task(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    task_project: Project,
+    admin_user: User,
+    direct_runner_stub: SimpleNamespace,
+):
+    """运行准备预览应返回 readiness 决策，但不能创建或调度任务。"""
+    raw_version, _raw_file = await _seed_raw_protein_artifact_version(
+        db_session,
+        project_id=task_project.id,
+        user_id=admin_user.id,
+    )
+    tool = await _seed_tool_with_current_version(
+        db_session,
+        owner_id=admin_user.id,
+        name="Prepared Only",
+        slug="prepared-only-preview",
+        config={
+            "type": "ssh_job",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "protein_pdb": {"type": "string", "format": "file"},
+                },
+            },
+            "artifacts": {
+                "inputs": [
+                    {
+                        "name": "protein",
+                        "type": "protein_structure@1",
+                        "required": True,
+                        "readiness_policy": "require_prepared",
+                    }
+                ],
+                "outputs": [],
+            },
+        },
+    )
+
+    response = await api_client.post(
+        "/api/v1/tasks/prepare-preview",
+        headers={"Authorization": "Bearer admin-token"},
+        json={
+            "tool_id": tool.id,
+            "project_id": task_project.id,
+            "input_bindings": {"protein": raw_version.id},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["ready"] is False
+    assert payload["project_id"] == task_project.id
+    assert payload["requested_input_bindings"] == {"protein": raw_version.id}
+    assert payload["input_bindings"] == {}
+    assert payload["file_ids"] == []
+    assert payload["binding_decisions"]["protein"]["status"] == "needs_preparation"
+    assert payload["blocked_reason"] == "Protein input requires a prepared PDB role."
+    assert await db_session.scalar(select(func.count(Task.id))) == 0
+    assert await db_session.scalar(select(func.count(ToolStatistics.tool_id))) == 0
+    assert direct_runner_stub.scheduled == []
+
+
+@pytest.mark.asyncio
+async def test_prepare_task_preview_projects_ready_binding_without_creating_task(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    task_project: Project,
+    admin_user: User,
+    direct_runner_stub: SimpleNamespace,
+):
+    """运行准备预览 ready 时应给 legacy 工具投影文件参数，但不创建任务。"""
+    artifact_version, raw_file, prepared_file = await _seed_prepared_protein_artifact_version(
+        db_session,
+        project_id=task_project.id,
+        user_id=admin_user.id,
+    )
+    tool = await _seed_tool_with_current_version(
+        db_session,
+        owner_id=admin_user.id,
+        name="LVpocket Preview",
+        slug="lvpocket-pocket-prediction",
+        config={
+            "type": "ssh_job",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "protein_pdb": {"type": "string", "format": "file"},
+                    "model_choice": {"type": "string", "default": "auto"},
+                },
+                "required": ["protein_pdb"],
+            },
+        },
+    )
+
+    response = await api_client.post(
+        "/api/v1/tasks/prepare-preview",
+        headers={"Authorization": "Bearer admin-token"},
+        json={
+            "tool_id": tool.id,
+            "project_id": task_project.id,
+            "params": {"params": {"model_choice": "auto"}},
+            "input_bindings": {"protein": artifact_version.id},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["ready"] is True
+    assert payload["project_id"] == task_project.id
+    assert payload["requested_input_bindings"] == {"protein": artifact_version.id}
+    assert payload["input_bindings"] == {}
+    assert payload["file_ids"] == [prepared_file.id]
+    assert raw_file.id not in payload["file_ids"]
+    assert payload["params"]["input_files"] == {"protein_pdb": "input/prepared.pdb"}
+    assert payload["params"]["params"] == {"model_choice": "auto"}
+    assert payload["binding_decisions"]["protein"]["status"] == "ready"
+    assert payload["binding_decisions"]["protein"]["selected_role"] == "prepared_pdb"
+    assert payload["blocked_reason"] is None
+    assert await db_session.scalar(select(func.count(Task.id))) == 0
+    assert await db_session.scalar(select(func.count(ToolStatistics.tool_id))) == 0
+    assert direct_runner_stub.scheduled == []
+
+
+@pytest.mark.asyncio
 async def test_create_task_with_input_binding_projects_selected_role_for_legacy_tool(
     api_client: httpx.AsyncClient,
     db_session: AsyncSession,
@@ -470,19 +695,11 @@ async def test_create_task_with_input_binding_projects_selected_role_for_legacy_
         project_id=task_project.id,
         user_id=admin_user.id,
     )
-    tool = Tool(
+    tool = await _seed_tool_with_current_version(
+        db_session,
         owner_id=admin_user.id,
         name="LVpocket",
         slug="lvpocket-pocket-prediction",
-        status=ToolStatus.PUBLISHED.value,
-        is_public=True,
-    )
-    db_session.add(tool)
-    await db_session.flush()
-    version = ToolVersion(
-        tool_id=tool.id,
-        version="1.0.0",
-        is_active=True,
         config={
             "type": "ssh_job",
             "input_schema": {
@@ -495,10 +712,6 @@ async def test_create_task_with_input_binding_projects_selected_role_for_legacy_
             },
         },
     )
-    db_session.add(version)
-    await db_session.flush()
-    tool.current_version_id = version.id
-    await db_session.commit()
 
     response = await api_client.post(
         "/api/v1/tasks",

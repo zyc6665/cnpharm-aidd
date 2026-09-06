@@ -20,7 +20,7 @@ from app.models.users import User
 from app.schemas.tasks import TaskCreate
 from app.services.project_access import load_project_membership
 from app.services.project_migration import ensure_migration_project_for_owner
-from app.services.run_preparation import RunContext, RunPreparationInput, prepare_run
+from app.services.run_preparation import PreparedRun, RunContext, RunPreparationInput, prepare_run
 from app.tasks.direct_runner import direct_task_runner as default_direct_task_runner
 from app.tasks.naming import (
     resolve_task_display_name,
@@ -89,15 +89,18 @@ async def record_tool_usage(db: AsyncSession, tool_id: str) -> None:
     await db.flush()
 
 
-async def create_and_schedule_tool_task(
-    *,
+def _normalize_requested_input_bindings(values: dict[str, str] | None) -> dict[str, str]:
+    return {
+        str(input_name): str(version_id)
+        for input_name, version_id in (values or {}).items()
+        if str(input_name).strip() and str(version_id).strip()
+    }
+
+
+async def _load_tool_and_version(
     db: AsyncSession,
-    current_user: User,
     task_data: TaskCreate,
-    direct_runner=default_direct_task_runner,
-    extra_data: dict[str, object] | None = None,
-) -> Task:
-    """Create a normal platform task and schedule it through the configured backend."""
+) -> tuple[Tool, ToolVersion, str]:
     result = await db.execute(
         select(Tool)
         .options(
@@ -124,8 +127,21 @@ async def create_and_schedule_tool_task(
     if not tool_version:
         raise ValidationException("工具版本不存在")
 
-    extra_data = dict(extra_data or {})
-    extra_data["resource_snapshot"] = build_task_resource_snapshot(
+    return tool, tool_version, str(version_id)
+
+
+async def _prepare_tool_task_run(
+    *,
+    db: AsyncSession,
+    current_user: User,
+    task_data: TaskCreate,
+    extra_data: dict[str, object] | None = None,
+    assign_default_project: bool,
+) -> tuple[Tool, ToolVersion, str, PreparedRun, dict[str, object]]:
+    tool, tool_version, version_id = await _load_tool_and_version(db, task_data)
+
+    task_extra_data = dict(extra_data or {})
+    task_extra_data["resource_snapshot"] = build_task_resource_snapshot(
         tool_version.config,
         gpu_required=tool.gpu_required,
         gpu_memory_mb=tool.gpu_memory_mb,
@@ -138,11 +154,11 @@ async def create_and_schedule_tool_task(
             project_id=project_id,
             user_id=current_user.id,
         )
-        extra_data["project_id"] = project_id
-    elif _tool_config_emits_standard_artifacts(tool_version.config):
+        task_extra_data["project_id"] = project_id
+    elif assign_default_project and _tool_config_emits_standard_artifacts(tool_version.config):
         project = await ensure_migration_project_for_owner(db, current_user)
         project_id = str(project.id)
-        extra_data["project_id"] = project_id
+        task_extra_data["project_id"] = project_id
 
     prepared = await prepare_run(
         db,
@@ -160,16 +176,63 @@ async def create_and_schedule_tool_task(
             standard_input_uploads=task_data.standard_input_uploads,
         ),
     )
+    return tool, tool_version, version_id, prepared, task_extra_data
+
+
+async def prepare_tool_task_preview(
+    *,
+    db: AsyncSession,
+    current_user: User,
+    task_data: TaskCreate,
+) -> dict[str, object]:
+    """Prepare task inputs and readiness decisions without creating a task."""
+    tool, _tool_version, version_id, prepared, extra_data = await _prepare_tool_task_run(
+        db=db,
+        current_user=current_user,
+        task_data=task_data,
+        assign_default_project=False,
+    )
+
+    return {
+        "ready": prepared.ready,
+        "project_id": prepared.project_id,
+        "tool_id": str(tool.id),
+        "tool_version_id": version_id,
+        "params": prepared.params,
+        "file_ids": prepared.file_ids,
+        "input_bindings": prepared.input_bindings,
+        "requested_input_bindings": _normalize_requested_input_bindings(
+            task_data.input_bindings,
+        ),
+        "standard_input_uploads": prepared.standard_input_uploads,
+        "binding_decisions": prepared.binding_decisions,
+        "blocked_reason": prepared.blocked_reason,
+        "resource_snapshot": extra_data.get("resource_snapshot"),
+    }
+
+
+async def create_and_schedule_tool_task(
+    *,
+    db: AsyncSession,
+    current_user: User,
+    task_data: TaskCreate,
+    direct_runner=default_direct_task_runner,
+    extra_data: dict[str, object] | None = None,
+) -> Task:
+    """Create a normal platform task and schedule it through the configured backend."""
+    tool, tool_version, version_id, prepared, extra_data = await _prepare_tool_task_run(
+        db=db,
+        current_user=current_user,
+        task_data=task_data,
+        extra_data=extra_data,
+        assign_default_project=True,
+    )
     if not prepared.ready:
         raise ValidationException(
             "标准 Artifact 输入尚未满足工具要求",
             detail={"binding_decisions": prepared.binding_decisions},
         )
-    requested_input_bindings = {
-        str(input_name): str(version_id)
-        for input_name, version_id in (task_data.input_bindings or {}).items()
-        if str(input_name).strip() and str(version_id).strip()
-    }
+    requested_input_bindings = _normalize_requested_input_bindings(task_data.input_bindings)
     if requested_input_bindings:
         extra_data["input_bindings"] = requested_input_bindings
     if prepared.standard_input_uploads:

@@ -28,6 +28,8 @@
 - 已删除 `workflow_scheduler.py` 中不再使用的 workflow input / Artifact 绑定解析 helper，绑定解析和投影逻辑集中在 `run_preparation.py`。
 - 已恢复任务 API 对原始 `input_bindings` 的展示/追踪持久化，同时让 SSH/Remote executor 只在工具声明支持标准 Artifact 输入时消费这些绑定，避免 legacy 执行路径误走标准 request。
 - 已通过当前聚合验证：后端相关回归 `180 passed`，前端运行面板/预检/绑定测试 `15 passed`，`git diff --check` 无输出。
+- 2026-09-06：新增 `POST /api/v1/tasks/prepare-preview` 后端预览接口，复用 `prepare_run()` 返回 ready/blocked、绑定决策、legacy 文件投影和资源快照，但不创建任务、不调度任务、不记录工具使用次数。
+- 已补任务 API 预览回归：raw protein + `require_prepared` 返回 blocked；prepared protein + legacy LVpocket 返回 projected `params.input_files`，两种场景均确认 `Task` 未落库且 direct runner 未调度。
 
 ## Task 1: 建立 RunPreparation 回归测试基线
 
