@@ -32,6 +32,7 @@
 - 已补任务 API 预览回归：raw protein + `require_prepared` 返回 blocked；prepared protein + legacy LVpocket 返回 projected `params.input_files`，两种场景均确认 `Task` 未落库且 direct runner 未调度。
 - 已新增前端 `prepareTaskRun()` API 客户端和 `TaskRunPreparationPreview` 类型，前端后续可直接消费后端权威 Run Preparation 预览结果。
 - 已将 standalone workflow node 运行入口接入 `prepareTaskRun()`：后端预览 ready 后才创建任务；blocked 时展示后端返回的准备失败原因，避免前端继续提交必失败任务。
+- 已在 `useTasksStore` 增加 `prepareTaskRun()` 薄封装，供工具详情页等入口复用同一预览 API，且不改变任务列表状态。
 
 ## Task 1: 建立 RunPreparation 回归测试基线
 

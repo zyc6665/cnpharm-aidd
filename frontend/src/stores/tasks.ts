@@ -1,10 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { Task, TaskStatus, TaskCreateParams } from '@/types/models'
+import type { Task, TaskStatus, TaskCreateParams, TaskRunPreparationPreview } from '@/types/models'
 import {
   getTaskList,
   getTaskDetail,
   createTask as apiCreateTask,
+  prepareTaskRun as apiPrepareTaskRun,
   cancelTask as apiCancelTask,
   retryTask as apiRetryTask,
   deleteTask as apiDeleteTask,
@@ -91,6 +92,16 @@ export const useTasksStore = defineStore('tasks', () => {
     }
   }
 
+  const prepareTaskRun = async (params: TaskCreateParams): Promise<TaskRunPreparationPreview> => {
+    loading.value = true
+    try {
+      const res = await apiPrepareTaskRun(params)
+      return res.data
+    } finally {
+      loading.value = false
+    }
+  }
+
   const cancelTask = async (id: string) => {
     try {
       const res = await apiCancelTask(id)
@@ -170,6 +181,7 @@ export const useTasksStore = defineStore('tasks', () => {
     fetchAllTasks,
     fetchTaskDetail,
     createTask,
+    prepareTaskRun,
     cancelTask,
     retryTask,
     deleteTask,
