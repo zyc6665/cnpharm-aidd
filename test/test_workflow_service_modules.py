@@ -8,6 +8,7 @@ def test_workflow_service_modules_exist():
         "workflow_runs.py",
         "workflow_scheduler.py",
         "workflow_artifacts.py",
+        "run_preparation.py",
     ]
 
     for name in expected:

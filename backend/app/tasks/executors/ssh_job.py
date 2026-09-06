@@ -319,13 +319,9 @@ class SSHJobExecutor(BaseExecutor):
         }
 
     async def _prepare_params_payload(self, work_dir: str, input_dir: str) -> dict[str, Any]:
-        input_bindings = self._standard_input_bindings()
+        manifest = self._tool_package_v2_manifest()
+        input_bindings = self._standard_input_bindings() if manifest is not None else {}
         if input_bindings:
-            manifest = self._tool_package_v2_manifest()
-            if manifest is None:
-                raise TaskExecutionError(
-                    "Task input_bindings require a Tool Package v2 manifest in tool config"
-                )
             payload = await self._build_standard_request_payload(
                 manifest=manifest,
                 input_bindings=input_bindings,

@@ -36,6 +36,8 @@ from app.models.tools import Tool, ToolProviderType, ToolStatus, ToolVersion  # 
 from app.models.users import User, UserRole, UserStatus  # noqa: E402
 from app.services.workflow_scheduler import (  # noqa: E402
     load_available_workflow_tool,
+    schedule_loop_node,
+    schedule_map_node,
     schedule_workflow_node,
 )
 
@@ -141,6 +143,58 @@ async def _create_protein_artifact_version(
             "type": "protein_structure@1",
             "metadata": {"preparation_status": preparation_status},
         },
+        summary_json={},
+        metrics_json={},
+    )
+    db_session.add(version)
+    await db_session.flush()
+    for index, (role, file_record) in enumerate(roles.items()):
+        db_session.add(
+            ArtifactVersionFileModel(
+                artifact_version_id=version.id,
+                role=role,
+                file_id=file_record.id,
+                is_primary=index == 0,
+                sort_order=index,
+            )
+        )
+    artifact.latest_version_id = version.id
+    await db_session.commit()
+    return version
+
+
+async def _create_artifact_version(
+    db_session: AsyncSession,
+    owner: User,
+    *,
+    name: str,
+    type_ref: str,
+    roles: dict[str, FileModel],
+) -> ArtifactVersionModel:
+    standard_type, version_text = type_ref.split("@", 1)
+    artifact = ArtifactModel(
+        project_id="project-1",
+        created_by=owner.id,
+        artifact_type=standard_type,
+        semantic_type=standard_type,
+        standard_type=standard_type,
+        standard_version=int(version_text),
+        name=name,
+    )
+    db_session.add(artifact)
+    await db_session.flush()
+    version = ArtifactVersionModel(
+        artifact_id=artifact.id,
+        created_by=owner.id,
+        version=1,
+        filename=f"{name}.manifest.json",
+        content_type="application/json",
+        size_bytes=2,
+        sha256=hashlib.sha256(name.encode()).hexdigest(),
+        storage_key=f"legacy/{name}.manifest.json",
+        validation_status="passed",
+        validation_errors=[],
+        manifest_json={"type": type_ref, "metadata": {}},
         summary_json={},
         metrics_json={},
     )
@@ -425,6 +479,13 @@ async def test_workflow_node_receives_upstream_standard_artifact_binding(
     )
     db_session.add(pocket_file)
     await db_session.flush()
+    pocket_version = await _create_artifact_version(
+        db_session,
+        owner,
+        name="pocket",
+        type_ref="binding_pocket@1",
+        roles={"pocket_metadata_json": pocket_file},
+    )
     tool = await _create_tool(
         db_session,
         owner,
@@ -459,7 +520,7 @@ async def test_workflow_node_receives_upstream_standard_artifact_binding(
         "pocket_prediction": {
             "status": "success",
             "standard_artifacts": {
-                "artifact_version_ids_by_ref": {"pocket": "artifact-version-pocket"},
+                "artifact_version_ids_by_ref": {"pocket": pocket_version.id},
                 "file_ids_by_artifact_ref": {"pocket": [pocket_file.id]},
             },
         },
@@ -488,9 +549,9 @@ async def test_workflow_node_receives_upstream_standard_artifact_binding(
 
     assert created is True
     assert scheduled[0]["file_ids"] == [pocket_file.id]
-    assert scheduled[0]["input_bindings"] == {"pocket": "artifact-version-pocket"}
+    assert scheduled[0]["input_bindings"] == {"pocket": pocket_version.id}
     assert node_states["molecule_generation"]["input_bindings"] == {
-        "pocket": "artifact-version-pocket"
+        "pocket": pocket_version.id
     }
 
 
@@ -511,6 +572,13 @@ async def test_workflow_node_binds_first_cardinality_many_standard_artifact(
     )
     db_session.add(ligand_file)
     await db_session.flush()
+    ligand_version = await _create_artifact_version(
+        db_session,
+        owner,
+        name="generated-ligand",
+        type_ref="ligand_structure@1",
+        roles={"structure_file": ligand_file},
+    )
     tool = await _create_tool(
         db_session,
         owner,
@@ -545,7 +613,7 @@ async def test_workflow_node_binds_first_cardinality_many_standard_artifact(
         "molecule_generation": {
             "status": "success",
             "standard_artifacts": {
-                "artifact_version_ids_by_ref": {"ligands[0]": "artifact-version-ligand-0"},
+                "artifact_version_ids_by_ref": {"ligands[0]": ligand_version.id},
                 "file_ids_by_artifact_ref": {"ligands[0]": [ligand_file.id]},
             },
         },
@@ -574,10 +642,197 @@ async def test_workflow_node_binds_first_cardinality_many_standard_artifact(
 
     assert created is True
     assert scheduled[0]["file_ids"] == [ligand_file.id]
-    assert scheduled[0]["input_bindings"] == {"ligand": "artifact-version-ligand-0"}
+    assert scheduled[0]["input_bindings"] == {"ligand": ligand_version.id}
     assert node_states["affinity_prediction"]["input_bindings"] == {
-        "ligand": "artifact-version-ligand-0"
+        "ligand": ligand_version.id
     }
+
+
+@pytest.mark.asyncio
+async def test_map_node_passes_standard_artifact_bindings_to_each_subtask(
+    db_session: AsyncSession,
+    owner: User,
+) -> None:
+    pocket_file = await _create_workflow_file(
+        db_session,
+        owner,
+        filename="pocket.json",
+        content=b"{}",
+        content_type="application/json",
+    )
+    pocket_version = await _create_artifact_version(
+        db_session,
+        owner,
+        name="binding-pocket",
+        type_ref="binding_pocket@1",
+        roles={"pocket_metadata_json": pocket_file},
+    )
+    tool = await _create_tool(
+        db_session,
+        owner,
+        slug="tool-package-map-scoring",
+        provider_type=ToolProviderType.USER.value,
+        executor_type="ssh_job",
+        is_public=True,
+        config={
+            "type": "ssh_job",
+            "tool_package_manifest": {"api_version": "aidd.sciminer/tool-package.v2"},
+        },
+    )
+    run = SimpleNamespace(
+        id="run-map",
+        name="Map Run",
+        workflow_definition_id="workflow-1",
+        project_id="project-1",
+        input_files={"items": ["ligand-a", "ligand-b"]},
+    )
+    node = {
+        "id": "map_score",
+        "kind": "map",
+        "over": "workflow_input:items",
+        "max_parallelism": 5,
+        "tool_id": tool.id,
+        "tool_slug": tool.slug,
+        "artifact_input_slots": [
+            {"name": "pocket", "type": "binding_pocket@1", "required": True}
+        ],
+        "artifact_inputs": {"pocket": "node:pocket_detection:pocket"},
+    }
+    node_states = {
+        "map_score": {"status": "pending"},
+        "pocket_detection": {
+            "status": "success",
+            "standard_artifacts": {
+                "artifact_version_ids_by_ref": {"pocket": pocket_version.id},
+                "file_ids_by_artifact_ref": {"pocket": [pocket_file.id]},
+            },
+        },
+    }
+    scheduled: list[dict] = []
+
+    async def fake_schedule_task(**kwargs):
+        task_data = kwargs["task_data"]
+        scheduled.append(
+            {
+                "file_ids": task_data.file_ids,
+                "input_bindings": task_data.input_bindings,
+                "params": task_data.params,
+            }
+        )
+        return SimpleNamespace(id=f"task-{len(scheduled)}")
+
+    created = await schedule_map_node(
+        db_session,
+        current_user=owner,
+        run=run,
+        node_id="map_score",
+        node=node,
+        node_states=node_states,
+        schedule_task_fn=fake_schedule_task,
+    )
+
+    assert created is True
+    assert len(scheduled) == 2
+    assert scheduled[0]["file_ids"] == [pocket_file.id]
+    assert scheduled[0]["input_bindings"] == {"pocket": pocket_version.id}
+    assert scheduled[1]["input_bindings"] == {"pocket": pocket_version.id}
+    assert scheduled[0]["params"]["workflow_node_id"] == "map_score[0]"
+    assert scheduled[1]["params"]["workflow_node_id"] == "map_score[1]"
+
+
+@pytest.mark.asyncio
+async def test_loop_node_passes_standard_artifact_bindings_to_body_tasks(
+    db_session: AsyncSession,
+    owner: User,
+) -> None:
+    pocket_file = await _create_workflow_file(
+        db_session,
+        owner,
+        filename="loop-pocket.json",
+        content=b"{}",
+        content_type="application/json",
+    )
+    pocket_version = await _create_artifact_version(
+        db_session,
+        owner,
+        name="loop-binding-pocket",
+        type_ref="binding_pocket@1",
+        roles={"pocket_metadata_json": pocket_file},
+    )
+    tool = await _create_tool(
+        db_session,
+        owner,
+        slug="tool-package-loop-scoring",
+        provider_type=ToolProviderType.USER.value,
+        executor_type="ssh_job",
+        is_public=True,
+        config={
+            "type": "ssh_job",
+            "tool_package_manifest": {"api_version": "aidd.sciminer/tool-package.v2"},
+        },
+    )
+    run = SimpleNamespace(
+        id="run-loop",
+        name="Loop Run",
+        workflow_definition_id="workflow-1",
+        project_id="project-1",
+        input_files={},
+    )
+    node = {
+        "id": "loop_score",
+        "kind": "loop",
+        "max_iterations": 3,
+        "artifact_input_slots": [
+            {"name": "pocket", "type": "binding_pocket@1", "required": True}
+        ],
+        "artifact_inputs": {"pocket": "node:pocket_detection:pocket"},
+        "body": [
+            {
+                "id": "score",
+                "kind": "tool",
+                "tool_id": tool.id,
+                "tool_slug": tool.slug,
+            }
+        ],
+    }
+    node_states = {
+        "loop_score": {"status": "pending"},
+        "pocket_detection": {
+            "status": "success",
+            "standard_artifacts": {
+                "artifact_version_ids_by_ref": {"pocket": pocket_version.id},
+                "file_ids_by_artifact_ref": {"pocket": [pocket_file.id]},
+            },
+        },
+    }
+    scheduled: list[dict] = []
+
+    async def fake_schedule_task(**kwargs):
+        task_data = kwargs["task_data"]
+        scheduled.append(
+            {
+                "file_ids": task_data.file_ids,
+                "input_bindings": task_data.input_bindings,
+                "params": task_data.params,
+            }
+        )
+        return SimpleNamespace(id="task-loop-score")
+
+    created = await schedule_loop_node(
+        db_session,
+        current_user=owner,
+        run=run,
+        node_id="loop_score",
+        node=node,
+        node_states=node_states,
+        schedule_task_fn=fake_schedule_task,
+    )
+
+    assert created is True
+    assert scheduled[0]["file_ids"] == [pocket_file.id]
+    assert scheduled[0]["input_bindings"] == {"pocket": pocket_version.id}
+    assert scheduled[0]["params"]["workflow_node_id"] == "loop_score/score[1]"
+    assert node_states["loop_score"]["input_bindings"] == {"pocket": pocket_version.id}
 
 
 @pytest.mark.asyncio

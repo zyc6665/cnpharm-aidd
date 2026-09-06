@@ -1,5 +1,7 @@
 # Tool Contract v2 规范
 
+> 修订日期：2026-09-05。科学 profile 为 V1.1 拟议扩展；V1 使用模型卡与结果附件交付，本次未修改 builder、validator 或运行时 API。
+
 ## 1. 目标
 
 Tool Contract v2 是平台对工具能力的统一理解方式。它要让工具可以同时被工具详情页、工作流、智能体、任务执行器和管理后台使用，而不需要为每个入口单独适配。
@@ -13,6 +15,7 @@ Tool Contract v2 是平台对工具能力的统一理解方式。它要让工具
 5. 执行方式通过 executor 和 runtime 声明。
 6. 资源需求通过 resource profile 声明。
 7. 新工具不应使用 legacy `agent_capability` 作为主契约。
+8. 含预测、生成、打分或筛选语义的工具按版本提供模型卡或算法说明、证据范围和结果语义；结构化扩展见 4.9，不给现有契约无条件增加必填项。
 
 ## 3. 规范结构
 
@@ -182,6 +185,20 @@ package_format: tool_package_v2
 - `executor.type` 描述工具如何运行。
 - 从 Tool Package v2 导入的工具也必须落到具体 executor，例如 `docker_image`、`ssh_job`、`k8s_job`、`slurm_job` 或 `remote_api`。
 
+### 4.9 `scientific_profile`
+
+`scientific_profile` 是 V1.1 拟议扩展，schema/validator 尚需实施验证，不应直接当作当前 manifest 可接受字段。V1 模型卡和科学附件按交付清单管理。启用扩展并声明 scientific-result.v1 的新工具版本必须提供本节字段；旧 Tool Contract v2 没有该字段仍按原契约读取，科学状态显示 unknown。
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| `profile_version` | 是 | `scientific-result.v1`，声明消费哪个语义版本 |
+| `model_card_ref` | 是 | 不可变模型卡/算法说明版本和 checksum，按项目/工具发布权限读取 |
+| `verification_refs` | 是 | 按环境、endpoint、版本列出的验证记录；可为空并注明未验证 |
+| `applicability_policy_ref` | 是 | 适用域方法与版本或 unknown；非科学工具可填 not_applicable 及原因 |
+| `result_semantics` | 是 | endpoint、单位、方向、score definition 的版本引用 |
+
+E0-E4 是基于 verification_refs 和当前环境/用途计算的展示标签，不接受远端 manifest 自报为可信证据。Contract 校验不能升级科学等级；真实 smoke 只能支持对应环境的 E2。预测模型未提供适用域时显示 unknown，不能以 not_applicable 隐藏局限。模型卡规则见 [科学验证发布门禁](./17-模型卡与科学验证发布门禁规范.md)。
+
 ## 5. 与 Tool Package v2 的关系
 
 Tool Package v2 是模型/工具交付格式，Tool Contract v2 是平台归一化后的运行契约。
@@ -238,6 +255,7 @@ Tool Contract v2
 - resource_profile。
 - examples。
 - validation status。
+- 启用科学扩展时，提供模型卡、验证范围、endpoint 语义和适用域策略摘要；缺失时说明 unknown。
 
 智能体不得依赖工具私有 runtime 配置进行计划。
 

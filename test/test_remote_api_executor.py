@@ -475,6 +475,23 @@ async def test_remote_tool_invoke_payload_includes_signed_artifact_input_urls(
 
 
 @pytest.mark.asyncio
+async def test_remote_tool_ignores_display_input_bindings_without_artifact_inputs():
+    task = build_task()
+    task.extra_data = {
+        "project_id": "project-1",
+        "input_bindings": {"protein": "artifact-version-1"},
+    }
+    executor = RemoteAPIExecutor(
+        task,
+        build_tool_version(
+            remote_tool_config(httpx.MockTransport(lambda request: httpx.Response(200)))
+        ),
+    )
+
+    assert await executor._remote_tool_inputs() == {}
+
+
+@pytest.mark.asyncio
 async def test_remote_tool_invoke_payload_uses_materialized_smoke_example_inputs(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,

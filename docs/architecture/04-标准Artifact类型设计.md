@@ -1,5 +1,7 @@
 # 标准 Artifact 类型设计
 
+> 修订日期：2026-09-05。科学结果语义和实验类型为设计要求；本次未更改 registry、存量 Artifact 或数据库。新增 profile/类型发布须完成兼容与验收。
+
 ## 1. 设计目标
 
 标准 Artifact 是平台的数据主线。它用于把“文件”提升为平台可理解、可校验、可复用、可视化和可编排的科研资产。
@@ -214,9 +216,13 @@ ArtifactVersionFile
 - molecule_id_field。
 - source_task_id。
 
+科学语义扩展（V1 附件、V1.1 profile）：standardization_profile、deduplication_key、column_schema、verification_refs。证据等级由验证范围派生，不由工具自报。
+
 设计说明：
 
 - ADMET、毒性、合成可及性和打分重排可复用该类型。
+- 声明 scientific-result.v1 的新候选表按 molecule/state 标识有效结构，失败行保留 source_row_id；构象/pose 和多 endpoint 明细使用复合键，不能限制为“一分子只能一行”。
+- 科学 profile 的预测和评分列携带 endpoint、单位、方向、模型版本、适用域与证据引用，见《药研数据与科学结果规范》。未声明 profile 的历史数据保留原校验，未知信息阻止需该信息的科学比较，不影响原契约的读取/下载。
 - 如果后续需要区分“候选表”和“评分表”，优先通过 metadata 和 column schema 表达，必要时再升版本或新增类型。
 
 ### 4.5 `run_report@1`
@@ -246,6 +252,8 @@ ArtifactVersionFile
 
 ## 5. 建议新增类型
 
+以下类型及其 renderer 是待实现设计，不表示已在运行时 registry 注册。V1/V1.1 优先复用 molecule_table/run_report 和语义附件；新类型的 schema、roles、validator、样例、renderer 与转换规则验收后，工具才可声明对应输出。
+
 ### 5.1 `docking_pose@1`
 
 用途：表示对接后复合物或配体 pose。
@@ -270,6 +278,8 @@ ArtifactVersionFile
 | --- | --- | --- |
 | `score_table` | true | CSV/JSON 排名表 |
 | `metadata_json` | true | scoring 函数、box、输入来源 |
+
+`metadata_json` 至少包含 `score_definition`：工具及版本、原始单位、分数方向、归一化方法、作用候选集合和可比性范围。不同工具、不同 scoring function 或不同 preparation profile 的对接分数默认不可直接比较。
 
 ### 5.3 `md_trajectory@1`
 
@@ -296,11 +306,31 @@ ArtifactVersionFile
 | `summary_json` | true | 指标摘要 |
 | `metadata_json` | true | 模型版本、阈值、输入来源 |
 
+分子预测行和 endpoint 列定义遵循 [科学结果规范](./16-药研数据与科学结果规范.md) 第 4 节。保留失败行、null、标签和不确定性状态；不能把多模型不同 endpoint 压成一列“ADMET 分数”。V1 基础 ADMET 使用 molecule_table@1，不要求本候选类型提前注册。
+
 ### 5.5 `toxicity_report@1`
 
 用途：表示毒性预测结果。
 
 建议角色同 `admet_report@1`，但 metadata 应包含 endpoint、species、assay family 等字段。
+
+### 5.6 `assay_result@1`
+
+用途：表示与研发决策关联的受控实验结果摘要。该类型用于回写和复盘，不承载完整 ELN/LIMS 原始记录。
+
+建议角色：
+
+| role | required | 说明 |
+| --- | --- | --- |
+| `measurement_table` | true | 分子级实验测量表，CSV 或 JSON |
+| `metadata_json` | true | assay、单位、来源、导入规则和数据摘要 |
+| `import_report_json` | true | 行级校验、拒绝记录和对齐结果 |
+
+metadata 包含源文件摘要、导入时间、协议/映射版本和各列定义。每行关联 molecule/state、CompoundBatch、endpoint、单位、protocol、重复组、测量时间及 qualifier；精确/单侧值使用 measured_value，区间使用 lower/upper，未检出允许 null 并记录检出限。具体必填和未知状态规则以科学结果规范第 6 节为准，混合 assay 表不能仅在表级记录一个 endpoint/单位。
+
+### 5.7 `model_evaluation_report@1`
+
+用途：保存模型基准或项目外部验证的不可变报告。建议角色为 `report_json`、`metadata_json`，可选 `report_markdown`；包含模型/数据/拆分摘要、endpoint、协议、基线、指标、分母、阈值和审核记录。首期复用 run_report@1，不能仅新增名称而绕过 registry 发布。
 
 ## 6. Artifact 生命周期
 
@@ -370,9 +400,13 @@ available ──► deprecated
 
 渲染器只依赖 Artifact 类型和文件角色，不依赖具体工具 slug。
 
+候选 assay_result 的拟议渲染为实验表格与导入报告；model_evaluation_report 拟议复用 Report Renderer。尚未登记时通过已支持的 report/table 展示，不据此声称新 renderer 已实现。
+
 ## 11. 版本治理
 
 新增或升级标准类型时必须回答：
+
+scientific-result.v1 的渐进采用按科学结果规范第 8.1 节执行：不向当前 @1 类型追加无条件必填字段，不推定历史科学信息，补齐时生成新版本。强制语义变化应注册新 profile 或主版本，保留旧版本可读。
 
 - 是否能兼容旧工具。
 - 是否影响工作流自动绑定。
@@ -380,6 +414,7 @@ available ──► deprecated
 - 是否需要新增渲染器。
 - 是否需要新增 Run Preparation 或 Artifact Binding 决策规则。
 - 是否需要新增外部数据库导入规则。
+- 是否需要新增科学结果语义、模型证据或实验回写规则。
 
 ## 12. 禁止事项
 
@@ -388,7 +423,10 @@ available ──► deprecated
 - 禁止把多个不同语义结果塞进一个 generic file。
 - 禁止在工具参数 schema 中重复声明标准 Artifact 文件输入。
 - 禁止跨项目建立 Artifact 谱系。
+- 禁止把预测、对接评分和实验实测写入同一无语义数值列。
 
 ## 13. 关联文档
 
 标准类型、角色和元数据定义见本文；跨工具编排、边界状态机、Run Preparation 预检和新工具扩展规则见 [标准 Artifact 驱动边界设计](./13-标准Artifact驱动边界设计.md)。
+
+科学字段、评分可比性和实验结果回写见 [药研数据与科学结果规范](./16-药研数据与科学结果规范.md)；模型证据和发布门禁见 [模型卡与科学验证发布门禁规范](./17-模型卡与科学验证发布门禁规范.md)。

@@ -91,3 +91,39 @@
 
 **Plan Version**
 : An immutable agent-generated plan snapshot that can be approved or rejected before becoming a WorkflowDefinition or Task.
+
+**Scientific Result Profile**
+: A versioned semantic contract for prediction, scoring, measurement, endpoint, unit, applicability, and evidence metadata attached to scientific Artifacts.
+_Avoid_: Generic score column, untyped result metadata
+
+**Model Card**
+: An immutable scientific explanation for a ToolVersion or model version, covering intended use, limitations, evaluation evidence, applicability, and interpretation boundaries.
+_Avoid_: Marketing description, run log
+
+**Verification Record**
+: A dated evidence record that ties a ToolVersion or model version to a specific environment, endpoint, dataset, metric, and reviewer conclusion.
+_Avoid_: Self-reported badge, smoke-test-only proof
+
+**Candidate Set**
+: An immutable collection of molecules or molecule states selected for review from a generated, screened, or ranked ArtifactVersion.
+_Avoid_: Ad hoc shortlist, mutable table filter
+
+**Candidate Decision**
+: A review snapshot that records why specific candidates were selected, excluded, or held for review under a fixed rule set and evidence context.
+_Avoid_: Comment-only selection, overwritten shortlist
+
+**Compound Batch**
+: A physical or externally tracked preparation batch linked back to one molecule state when experimental measurements are summarized in the platform.
+_Avoid_: Molecule identity, inventory record
+
+**Assay Result**
+: A controlled experimental result summary imported for decision review, including endpoint, unit, protocol, qualifier, and source reference.
+_Avoid_: Raw ELN record, instrument file
+
+**Prediction Measurement Link**
+: A validated pairing between one prediction or score and one experimental measurement that is comparable under molecule identity, endpoint, unit, and protocol rules.
+_Avoid_: Row-number match, implicit error metric
+
+**Design Cycle**
+: A project-level DMTA review round that groups candidate decisions, compound batches, assay summaries, prediction-measurement comparisons, and next-round inputs.
+_Avoid_: Workflow run, automatic retraining loop

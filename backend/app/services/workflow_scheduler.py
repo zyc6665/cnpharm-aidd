@@ -5,7 +5,6 @@ from __future__ import annotations
 import csv
 import io
 import json
-from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
@@ -21,9 +20,8 @@ from app.models.tools import Tool, ToolProviderType, ToolStatus
 from app.models.users import User
 from app.models.workflows import WorkflowRun
 from app.schemas.tasks import TaskCreate
-from app.services.artifact_binding_resolver import ArtifactBindingDecision, resolve_artifact_binding
+from app.services.run_preparation import prepare_workflow_node_run
 from app.services.semantic_types import normalize_semantic_type
-from app.services.workflow_artifacts import standard_artifact_file_ids
 from app.services.workflow_validation import (
     is_condition_node,
     is_loop_node,
@@ -156,11 +154,15 @@ def initial_node_states(definition: dict[str, Any], execution_order: list[str]) 
             "status": "pending",
             "tool_slug": indexed_nodes[current_node_id].get("tool_slug"),
             "tool_id": indexed_nodes[current_node_id].get("tool_id"),
-            "tool_version_id": (indexed_nodes[current_node_id].get("tool_version") or {}).get("id"),
+            "tool_version_id": (
+                indexed_nodes[current_node_id].get("tool_version") or {}
+            ).get("id"),
             "tool_version": indexed_nodes[current_node_id].get("tool_version"),
             "semantic_inputs": dict(indexed_nodes[current_node_id].get("semantic_inputs") or {}),
             "artifact_inputs": dict(indexed_nodes[current_node_id].get("artifact_inputs") or {}),
-            "artifact_input_slots": list(indexed_nodes[current_node_id].get("artifact_input_slots") or []),
+            "artifact_input_slots": list(
+                indexed_nodes[current_node_id].get("artifact_input_slots") or []
+            ),
             "artifact_outputs": list(indexed_nodes[current_node_id].get("artifact_outputs") or []),
             "params": dict(indexed_nodes[current_node_id].get("params") or {}),
         }
@@ -252,459 +254,6 @@ def _is_private_platform_builtin(tool: Tool) -> bool:
     )
 
 
-async def resolve_node_input_files(
-    db: AsyncSession,
-    *,
-    run: WorkflowRun,
-    node: dict[str, Any],
-    node_states: dict[str, Any],
-    binding_decisions: dict[str, dict[str, Any]] | None = None,
-    input_bindings: dict[str, str] | None = None,
-    legacy_file_bindings: dict[str, str] | None = None,
-) -> list[str] | None:
-    file_ids: list[str] = []
-    seen_file_ids: set[str] = set()
-
-    for semantic_type, source in (node.get("semantic_inputs") or {}).items():
-        if not isinstance(source, str):
-            raise ValidationException(f"Unsupported workflow input source: {source}")
-
-        if source.startswith("workflow_input:"):
-            semantic_key = normalize_semantic_type(source.split(":", 1)[1] or str(semantic_type))
-            file_id = (run.input_files or {}).get(semantic_key)
-            if not file_id:
-                raise ValidationException(f"Workflow run is missing required input: {semantic_key}")
-        elif source.startswith("node:"):
-            parts = source.split(":", 2)
-            if len(parts) != 3:
-                raise ValidationException(f"Invalid workflow node input source: {source}")
-            source_node_id = parts[1]
-            source_semantic_type = normalize_semantic_type(parts[2])
-            source_state = node_states.get(source_node_id) or {}
-            if source_state.get("status") != "success":
-                return None
-            source_output = (source_state.get("semantic_outputs") or {}).get(source_semantic_type)
-            if not source_output:
-                return None
-            file_id = source_output.get("file_id")
-            if not file_id:
-                raise ValidationException(
-                    "Workflow node output is not file-backed: "
-                    f"node={source_node_id}, semantic_type={source_semantic_type}"
-                )
-        else:
-            raise ValidationException(f"Unsupported workflow input source: {source}")
-
-        file_id = str(file_id)
-        await _append_existing_file_id(
-            db,
-            file_ids=file_ids,
-            seen_file_ids=seen_file_ids,
-            file_id=file_id,
-            label=str(semantic_type),
-        )
-
-    artifact_slots = _artifact_input_slots_by_name(node)
-    for slot_name, source in (node.get("artifact_inputs") or {}).items():
-        if not isinstance(source, str):
-            raise ValidationException(f"Unsupported workflow artifact input source: {source}")
-
-        if source.startswith("workflow_input:"):
-            artifact_key = source.split(":", 1)[1] or str(slot_name)
-            file_id = (run.input_files or {}).get(artifact_key)
-            if not file_id:
-                raise ValidationException(f"Workflow run is missing required input: {artifact_key}")
-            await _append_existing_file_id(
-                db,
-                file_ids=file_ids,
-                seen_file_ids=seen_file_ids,
-                file_id=str(file_id),
-                label=str(slot_name),
-            )
-            _record_legacy_file_binding(legacy_file_bindings, str(slot_name), str(file_id))
-            continue
-
-        if source.startswith("node:"):
-            parts = source.split(":", 2)
-            if len(parts) != 3:
-                raise ValidationException(f"Invalid workflow artifact input source: {source}")
-            source_node_id = parts[1]
-            source_output_name = parts[2]
-            source_state = node_states.get(source_node_id) or {}
-            if source_state.get("status") != "success":
-                return None
-            source_artifacts = source_state.get("standard_artifacts") or {}
-            version_id = _standard_artifact_version_id(source_artifacts, source_output_name)
-            if version_id:
-                _record_input_binding(input_bindings, str(slot_name), str(version_id))
-            slot = artifact_slots.get(str(slot_name))
-            if slot and _slot_needs_binding_resolution(slot):
-                if not version_id:
-                    _record_binding_decision(
-                        binding_decisions,
-                        str(slot_name),
-                        ArtifactBindingDecision(
-                            status="invalid",
-                            input_name=str(slot_name),
-                            standard_type=str(slot.get("type") or ""),
-                            reason=f"Standard artifact version is missing for {source_output_name}.",
-                        ),
-                    )
-                    if binding_decisions is None:
-                        return None
-                    continue
-                decision = await resolve_artifact_binding(
-                    db,
-                    input_slot=slot,
-                    candidate_artifact_version_id=str(version_id),
-                )
-                _record_binding_decision(binding_decisions, str(slot_name), decision)
-                if decision.status != "ready":
-                    if binding_decisions is None:
-                        return None
-                    continue
-                if not decision.selected_file_id:
-                    raise ValidationException(
-                        f"Artifact binding did not select a file: slot={slot_name}"
-                    )
-                await _append_existing_file_id(
-                    db,
-                    file_ids=file_ids,
-                    seen_file_ids=seen_file_ids,
-                    file_id=decision.selected_file_id,
-                    label=str(slot_name),
-                )
-                _record_legacy_file_binding(
-                    legacy_file_bindings,
-                    str(slot_name),
-                    decision.selected_file_id,
-                )
-                continue
-            artifact_file_ids = standard_artifact_file_ids(
-                source_artifacts,
-                source_output_name,
-            )
-            if not artifact_file_ids:
-                return None
-            _record_legacy_file_binding(legacy_file_bindings, str(slot_name), artifact_file_ids[0])
-            for file_id in artifact_file_ids:
-                await _append_existing_file_id(
-                    db,
-                    file_ids=file_ids,
-                    seen_file_ids=seen_file_ids,
-                    file_id=file_id,
-                    label=str(slot_name),
-                )
-            continue
-
-        raise ValidationException(f"Unsupported workflow artifact input source: {source}")
-
-    return file_ids
-
-
-async def resolve_builtin_input_file_map(
-    db: AsyncSession,
-    *,
-    run: WorkflowRun,
-    node: dict[str, Any],
-    node_states: dict[str, Any],
-    binding_decisions: dict[str, dict[str, Any]] | None = None,
-) -> dict[str, str]:
-    builtin_inputs: dict[str, str] = {}
-
-    for semantic_type, source in (node.get("semantic_inputs") or {}).items():
-        file_id = _resolved_semantic_source_file_id(
-            run=run,
-            node_states=node_states,
-            semantic_type=str(semantic_type),
-            source=source,
-        )
-        if file_id:
-            await _require_existing_file_id(db, file_id=str(file_id), label=str(semantic_type))
-            builtin_inputs[normalize_semantic_type(str(semantic_type))] = str(file_id)
-
-    slot_types = _artifact_input_slot_types(node)
-    for slot_name, source in (node.get("artifact_inputs") or {}).items():
-        decision = (binding_decisions or {}).get(str(slot_name))
-        file_id = decision.get("selected_file_id") if isinstance(decision, dict) else None
-        if not file_id:
-            file_id = _resolved_artifact_source_file_id(
-                run=run,
-                node_states=node_states,
-                slot_name=str(slot_name),
-                source=source,
-            )
-        if file_id:
-            slot_type = slot_types.get(str(slot_name)) or _artifact_source_key(str(source))
-            await _require_existing_file_id(db, file_id=str(file_id), label=str(slot_name))
-            builtin_inputs[str(slot_type)] = str(file_id)
-
-    return builtin_inputs
-
-
-def _artifact_input_slot_types(node: dict[str, Any]) -> dict[str, str]:
-    slot_types: dict[str, str] = {}
-    for slot in node.get("artifact_input_slots") or []:
-        if not isinstance(slot, dict):
-            continue
-        name = slot.get("name")
-        standard_type = slot.get("type")
-        if name and standard_type:
-            slot_types[str(name)] = str(standard_type)
-    return slot_types
-
-
-def _artifact_input_slots_by_name(node: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    slots: dict[str, dict[str, Any]] = {}
-    for slot in node.get("artifact_input_slots") or []:
-        if not isinstance(slot, dict) or not slot.get("name"):
-            continue
-        slots[str(slot["name"])] = dict(slot)
-    return slots
-
-
-def _slot_needs_binding_resolution(slot: dict[str, Any]) -> bool:
-    return any(
-        key in slot and slot.get(key) not in (None, "", [])
-        for key in (
-            "role_preferences",
-            "required_roles",
-            "readiness_policy",
-            "suggested_preparation_tool",
-        )
-    )
-
-
-def _standard_artifact_version_id(summary: dict[str, Any], output_name: str) -> str | None:
-    version_ids_by_ref = summary.get("artifact_version_ids_by_ref")
-    if not isinstance(version_ids_by_ref, dict):
-        return None
-    raw_version_id = version_ids_by_ref.get(output_name)
-    if isinstance(raw_version_id, str) and raw_version_id:
-        return raw_version_id
-    if isinstance(raw_version_id, list):
-        for item in raw_version_id:
-            if item:
-                return str(item)
-    indexed_ref = next(
-        (
-            ref
-            for ref in sorted(version_ids_by_ref)
-            if isinstance(ref, str) and ref.startswith(f"{output_name}[")
-        ),
-        None,
-    )
-    if indexed_ref:
-        indexed_version_id = version_ids_by_ref.get(indexed_ref)
-        if isinstance(indexed_version_id, str) and indexed_version_id:
-            return indexed_version_id
-        if isinstance(indexed_version_id, list):
-            for item in indexed_version_id:
-                if item:
-                    return str(item)
-    return None
-
-
-def _record_binding_decision(
-    decisions: dict[str, dict[str, Any]] | None,
-    slot_name: str,
-    decision: ArtifactBindingDecision,
-) -> None:
-    if decisions is None:
-        return
-    decisions[slot_name] = asdict(decision)
-
-
-def _record_input_binding(
-    input_bindings: dict[str, str] | None,
-    slot_name: str,
-    version_id: str,
-) -> None:
-    if input_bindings is None:
-        return
-    input_bindings[slot_name] = version_id
-
-
-def _record_legacy_file_binding(
-    legacy_file_bindings: dict[str, str] | None,
-    slot_name: str,
-    file_id: str,
-) -> None:
-    if legacy_file_bindings is None:
-        return
-    legacy_file_bindings[slot_name] = file_id
-
-
-def _tool_accepts_standard_input_bindings(config: Any) -> bool:
-    if not isinstance(config, dict):
-        return False
-
-    manifest = config.get("tool_package_manifest")
-    tool_package = config.get("tool_package")
-    if not isinstance(manifest, dict) and isinstance(tool_package, dict):
-        manifest = tool_package.get("manifest")
-    if isinstance(manifest, dict) and manifest.get("api_version") == "aidd.sciminer/tool-package.v2":
-        return True
-
-    if str(config.get("type") or "") != "remote_api":
-        return False
-    artifacts = config.get("artifacts")
-    inputs = artifacts.get("inputs") if isinstance(artifacts, dict) else None
-    return any(isinstance(item, dict) for item in inputs or [])
-
-
-async def _project_legacy_ssh_input_files(
-    db: AsyncSession,
-    *,
-    tool_config: Any,
-    node: dict[str, Any],
-    legacy_file_bindings: dict[str, str],
-    params: dict[str, Any],
-) -> None:
-    if not legacy_file_bindings or not isinstance(tool_config, dict):
-        return
-    if str(tool_config.get("type") or "") != "ssh_job":
-        return
-
-    artifact_slots = _artifact_input_slots_by_name(node)
-    input_files = params.get("input_files") if isinstance(params.get("input_files"), dict) else {}
-    next_input_files = dict(input_files)
-    for slot_name, file_id in legacy_file_bindings.items():
-        slot = artifact_slots.get(slot_name) or {"name": slot_name}
-        file_field = _legacy_file_field_for_slot(tool_config, slot)
-        if not file_field:
-            continue
-        file_record = await db.get(FileModel, file_id)
-        if not file_record:
-            continue
-        next_input_files[file_field] = f"input/{Path(str(file_record.filename)).name}"
-    if next_input_files:
-        params["input_files"] = next_input_files
-
-
-def _legacy_file_field_for_slot(config: dict[str, Any], input_slot: dict[str, Any]) -> str | None:
-    input_schema = config.get("input_schema") if isinstance(config.get("input_schema"), dict) else {}
-    properties = input_schema.get("properties") if isinstance(input_schema.get("properties"), dict) else {}
-    file_fields = [
-        str(name)
-        for name, schema in properties.items()
-        if isinstance(schema, dict) and (schema.get("format") == "file" or schema.get("type") == "file")
-    ]
-    if not file_fields:
-        return None
-
-    slot_name = str(input_slot.get("name") or "")
-    if slot_name in file_fields:
-        return slot_name
-    if len(file_fields) == 1:
-        return file_fields[0]
-
-    standard_type = str(input_slot.get("type") or "")
-    if standard_type == "protein_structure@1":
-        match = next((field for field in file_fields if "protein" in field or "receptor" in field), None)
-        if match:
-            return match
-    if standard_type == "ligand_structure@1":
-        match = next((field for field in file_fields if "ligand" in field), None)
-        if match:
-            return match
-    return file_fields[0]
-
-
-def _has_blocking_binding_decision(decisions: dict[str, dict[str, Any]]) -> bool:
-    return any(
-        isinstance(decision, dict) and decision.get("status") not in {None, "ready"}
-        for decision in decisions.values()
-    )
-
-
-def _first_blocking_binding_reason(decisions: dict[str, dict[str, Any]]) -> str | None:
-    for decision in decisions.values():
-        if not isinstance(decision, dict) or decision.get("status") == "ready":
-            continue
-        return str(decision.get("reason") or decision.get("status") or "Artifact binding blocked")
-    return None
-
-
-def _resolved_semantic_source_file_id(
-    *,
-    run: WorkflowRun,
-    node_states: dict[str, Any],
-    semantic_type: str,
-    source: Any,
-) -> str | None:
-    if not isinstance(source, str):
-        raise ValidationException(f"Unsupported workflow input source: {source}")
-    if source.startswith("workflow_input:"):
-        semantic_key = normalize_semantic_type(source.split(":", 1)[1] or semantic_type)
-        return (run.input_files or {}).get(semantic_key)
-    if source.startswith("node:"):
-        parts = source.split(":", 2)
-        if len(parts) != 3:
-            raise ValidationException(f"Invalid workflow node input source: {source}")
-        source_state = node_states.get(parts[1]) or {}
-        source_semantic_type = normalize_semantic_type(parts[2])
-        source_output = (source_state.get("semantic_outputs") or {}).get(source_semantic_type)
-        return source_output.get("file_id") if isinstance(source_output, dict) else None
-    raise ValidationException(f"Unsupported workflow input source: {source}")
-
-
-def _resolved_artifact_source_file_id(
-    *,
-    run: WorkflowRun,
-    node_states: dict[str, Any],
-    slot_name: str,
-    source: Any,
-) -> str | None:
-    if not isinstance(source, str):
-        raise ValidationException(f"Unsupported workflow artifact input source: {source}")
-    if source.startswith("workflow_input:"):
-        artifact_key = source.split(":", 1)[1] or slot_name
-        return (run.input_files or {}).get(artifact_key)
-    if source.startswith("node:"):
-        parts = source.split(":", 2)
-        if len(parts) != 3:
-            raise ValidationException(f"Invalid workflow artifact input source: {source}")
-        source_state = node_states.get(parts[1]) or {}
-        artifact_file_ids = standard_artifact_file_ids(
-            source_state.get("standard_artifacts") or {},
-            parts[2],
-        )
-        return artifact_file_ids[0] if artifact_file_ids else None
-    raise ValidationException(f"Unsupported workflow artifact input source: {source}")
-
-
-def _artifact_source_key(source: str) -> str:
-    if source.startswith("workflow_input:"):
-        return source.split(":", 1)[1]
-    if source.startswith("node:"):
-        parts = source.split(":", 2)
-        return parts[2] if len(parts) == 3 else source
-    return source
-
-
-async def _append_existing_file_id(
-    db: AsyncSession,
-    *,
-    file_ids: list[str],
-    seen_file_ids: set[str],
-    file_id: str,
-    label: str,
-) -> None:
-    file_record = await db.get(FileModel, file_id)
-    if not file_record:
-        raise NotFoundException(f"Workflow input file not found: {label}")
-    if file_id not in seen_file_ids:
-        seen_file_ids.add(file_id)
-        file_ids.append(file_id)
-
-
-async def _require_existing_file_id(db: AsyncSession, *, file_id: str, label: str) -> None:
-    file_record = await db.get(FileModel, file_id)
-    if not file_record:
-        raise NotFoundException(f"Workflow input file not found: {label}")
-
-
 async def schedule_workflow_node(
     db: AsyncSession,
     *,
@@ -721,34 +270,6 @@ async def schedule_workflow_node(
         node_states[node_id] = state
         return False
 
-    binding_decisions: dict[str, dict[str, Any]] = {}
-    input_bindings: dict[str, str] = {}
-    legacy_file_bindings: dict[str, str] = {}
-    input_file_ids = await resolve_node_input_files(
-        db,
-        run=run,
-        node=node,
-        node_states=node_states,
-        binding_decisions=binding_decisions,
-        input_bindings=input_bindings,
-        legacy_file_bindings=legacy_file_bindings,
-    )
-    if binding_decisions:
-        state["binding_decisions"] = binding_decisions
-        node_states[node_id] = state
-    if _has_blocking_binding_decision(binding_decisions):
-        state.update(
-            {
-                "status": "blocked",
-                "blocked_reason": _first_blocking_binding_reason(binding_decisions),
-                "finished_at": utcnow_iso(),
-            }
-        )
-        node_states[node_id] = state
-        return False
-    if input_file_ids is None:
-        return False
-
     tool = await load_available_workflow_tool(db, node=node)
     node_params = {
         **dict(node.get("params") or {}),
@@ -757,28 +278,35 @@ async def schedule_workflow_node(
         "workflow_definition_id": str(run.workflow_definition_id),
         "workflow_node_type": str(node.get("kind") or node.get("type") or "tool"),
     }
-    tool_config = tool.current_version.config if tool.current_version and tool.current_version.config else {}
-    task_input_bindings = (
-        dict(input_bindings) if _tool_accepts_standard_input_bindings(tool_config) else {}
+    prepared = await prepare_workflow_node_run(
+        db,
+        run=run,
+        node_id=node_id,
+        node=node,
+        node_states=node_states,
+        tool=tool,
+        current_user=current_user,
+        params=node_params,
     )
-    if not task_input_bindings:
-        await _project_legacy_ssh_input_files(
-            db,
-            tool_config=tool_config,
-            node=node,
-            legacy_file_bindings=legacy_file_bindings,
-            params=node_params,
+    if prepared is None:
+        return False
+    if prepared.binding_decisions:
+        state["binding_decisions"] = prepared.binding_decisions
+        node_states[node_id] = state
+    if not prepared.ready:
+        state.update(
+            {
+                "status": "blocked",
+                "blocked_reason": prepared.blocked_reason,
+                "finished_at": utcnow_iso(),
+            }
         )
-    if isinstance(tool_config, dict) and tool_config.get("type") == "builtin":
-        builtin_inputs = await resolve_builtin_input_file_map(
-            db,
-            run=run,
-            node=node,
-            node_states=node_states,
-            binding_decisions=binding_decisions,
-        )
-        if builtin_inputs:
-            node_params["builtin_inputs"] = builtin_inputs
+        node_states[node_id] = state
+        return False
+
+    input_file_ids = prepared.file_ids
+    task_input_bindings = prepared.input_bindings
+    node_params = prepared.params
     existing_task = await find_existing_workflow_node_task(
         db,
         current_user=current_user,
@@ -818,6 +346,7 @@ async def schedule_workflow_node(
             params=node_params,
             file_ids=input_file_ids,
             input_bindings=task_input_bindings,
+            standard_input_uploads=prepared.standard_input_uploads,
         ),
     )
 
@@ -1000,14 +529,44 @@ async def schedule_map_node(
     items: list[dict[str, Any]] = state["map_items"]
 
     tool = await load_available_workflow_tool(db, node=node)
-    input_file_ids = await resolve_node_input_files(
+    base_params = {
+        **dict(node.get("params") or {}),
+        "workflow_run_id": str(run.id),
+        "workflow_node_id": str(node_id),
+        "workflow_definition_id": str(run.workflow_definition_id),
+        "workflow_node_type": "map",
+    }
+    prepared = await prepare_workflow_node_run(
         db,
         run=run,
+        node_id=node_id,
         node=node,
         node_states=node_states,
+        tool=tool,
+        current_user=current_user,
+        params=base_params,
     )
-    if input_file_ids is None:
+    if prepared is None:
         return False
+    if prepared.binding_decisions:
+        state["binding_decisions"] = prepared.binding_decisions
+    if not prepared.ready:
+        state.update(
+            {
+                "status": "blocked",
+                "blocked_reason": prepared.blocked_reason,
+                "finished_at": utcnow_iso(),
+            }
+        )
+        node_states[node_id] = state
+        return False
+
+    input_file_ids = prepared.file_ids
+    task_input_bindings = prepared.input_bindings
+    standard_input_uploads = prepared.standard_input_uploads
+    prepared_base_params = prepared.params
+    state["input_file_ids"] = input_file_ids
+    state["input_bindings"] = task_input_bindings
 
     # Count currently running / waiting sub-tasks
     running_count = sum(
@@ -1027,10 +586,8 @@ async def schedule_map_node(
             continue
 
         node_params = {
-            **dict(node.get("params") or {}),
-            "workflow_run_id": str(run.id),
+            **prepared_base_params,
             "workflow_node_id": str(sub_node_id),
-            "workflow_definition_id": str(run.workflow_definition_id),
             "workflow_node_type": "map",
             "map_item": items[i],
             "map_index": i,
@@ -1064,6 +621,8 @@ async def schedule_map_node(
                 tool_version_id=tool.current_version_id,
                 params=node_params,
                 file_ids=list(input_file_ids),
+                input_bindings=task_input_bindings,
+                standard_input_uploads=standard_input_uploads,
             ),
         )
 
@@ -1203,16 +762,6 @@ async def schedule_loop_node(
 
     iteration = state["loop_iteration"]
 
-    # 为当前迭代创建 body 节点任务
-    input_file_ids = await resolve_node_input_files(
-        db,
-        run=run,
-        node=node,
-        node_states=node_states,
-    )
-    if input_file_ids is None:
-        return False
-
     scheduled = False
     for i, body_node in enumerate(body):
         body_node_id = body_node.get("id")
@@ -1232,6 +781,40 @@ async def schedule_loop_node(
             "workflow_node_type": "loop_body",
             "loop_iteration": iteration,
         }
+
+        preparation_node = {
+            **body_node,
+            "semantic_inputs": dict(node.get("semantic_inputs") or {}),
+            "artifact_inputs": dict(node.get("artifact_inputs") or {}),
+            "artifact_input_slots": list(node.get("artifact_input_slots") or []),
+        }
+        prepared = await prepare_workflow_node_run(
+            db,
+            run=run,
+            node_id=sub_node_id,
+            node=preparation_node,
+            node_states=node_states,
+            tool=tool,
+            current_user=current_user,
+            params=node_params,
+        )
+        if prepared is None:
+            return False
+        if prepared.binding_decisions:
+            state["binding_decisions"] = prepared.binding_decisions
+        if not prepared.ready:
+            state.update(
+                {
+                    "status": "blocked",
+                    "blocked_reason": prepared.blocked_reason,
+                    "finished_at": utcnow_iso(),
+                }
+            )
+            node_states[node_id] = state
+            return False
+        state["input_file_ids"] = prepared.file_ids
+        state["input_bindings"] = prepared.input_bindings
+        node_params = prepared.params
 
         existing_task = await find_existing_workflow_node_task(
             db,
@@ -1258,7 +841,9 @@ async def schedule_loop_node(
                 tool_id=tool.id,
                 tool_version_id=tool.current_version_id,
                 params=node_params,
-                file_ids=list(input_file_ids),
+                file_ids=list(prepared.file_ids),
+                input_bindings=prepared.input_bindings,
+                standard_input_uploads=prepared.standard_input_uploads,
             ),
         )
 

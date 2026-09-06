@@ -137,7 +137,7 @@ class RemoteAPIExecutor(BaseExecutor):
         if example_inputs:
             return await self._remote_example_inputs(example_inputs)
         bindings = self._standard_input_bindings()
-        if bindings:
+        if bindings and self._remote_artifact_input_declarations():
             return await self._remote_standard_artifact_inputs(bindings)
         if self.task.inputs and self.task.inputs.file_ids:
             return await self._remote_legacy_file_inputs(self.task.inputs.file_ids)
@@ -217,10 +217,7 @@ class RemoteAPIExecutor(BaseExecutor):
         raw_inputs = artifacts.get("inputs") if isinstance(artifacts, dict) else None
         if not isinstance(raw_inputs, list):
             return []
-        declarations = [item for item in raw_inputs if isinstance(item, dict)]
-        if not declarations and self._standard_input_bindings():
-            raise TaskExecutionError("Remote tool manifest declares no Artifact inputs")
-        return declarations
+        return [item for item in raw_inputs if isinstance(item, dict)]
 
     async def _load_artifact_version(self, session, version_id: str) -> ArtifactVersion:
         result = await session.execute(

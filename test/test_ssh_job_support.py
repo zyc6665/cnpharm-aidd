@@ -300,6 +300,35 @@ async def test_ssh_job_executor_writes_standard_request_from_input_bindings(
 
 
 @pytest.mark.asyncio
+async def test_legacy_ssh_job_ignores_display_input_bindings(tmp_path) -> None:
+    """legacy ssh_job 应使用已投影的 input_files，而不是误走标准 request.v1。"""
+    task = _build_task("task-legacy-bindings")
+    task.extra_data = {"input_bindings": {"protein": "protein-version-1"}}
+    task.inputs = SimpleNamespace(
+        params={
+            "input_files": {"protein_pdb": "input/prepared.pdb"},
+            "params": {"model_choice": "auto"},
+        },
+        file_ids=[],
+    )
+    config = {
+        "type": "ssh_job",
+        "host": "gpu-node-01.internal",
+        "username": "runner",
+        "runner_mode": "shell",
+        "remote_base_dir": "/srv/platform-jobs",
+        "entrypoint": "/opt/models/platform_run.sh",
+    }
+    executor = SSHJobExecutor(task, _build_tool_version(config))
+
+    payload = await executor._prepare_params_payload(str(tmp_path), str(tmp_path / "input"))
+
+    assert "request_version" not in payload
+    assert payload["input_files"] == {"protein_pdb": "input/prepared.pdb"}
+    assert payload["params"] == {"model_choice": "auto"}
+
+
+@pytest.mark.asyncio
 async def test_ssh_job_executor_projects_standard_inputs_to_legacy_file_fields(
     monkeypatch,
     tmp_path,
