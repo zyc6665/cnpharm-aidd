@@ -1,6 +1,14 @@
 import { get, post, del, type RequestOptions } from './request'
 import type { ApiResponse } from '@/types/api'
-import type { Task, TaskCreateParams, TaskLog, TaskStatus, PaginatedResponse, PaginationParams } from '@/types/models'
+import type {
+  Task,
+  TaskCreateParams,
+  TaskLog,
+  TaskRunPreparationPreview,
+  TaskStatus,
+  PaginatedResponse,
+  PaginationParams
+} from '@/types/models'
 
 export interface TaskListParams extends PaginationParams {
   status?: TaskStatus
@@ -26,6 +34,11 @@ export const getTaskList = (
 // 创建任务
 export const createTask = (data: TaskCreateParams): Promise<ApiResponse<Task>> => {
   return post<Task>('/tasks', data)
+}
+
+// 预览任务运行准备，不创建任务
+export const prepareTaskRun = (data: TaskCreateParams): Promise<ApiResponse<TaskRunPreparationPreview>> => {
+  return post<TaskRunPreparationPreview>('/tasks/prepare-preview', data)
 }
 
 // 获取任务详情

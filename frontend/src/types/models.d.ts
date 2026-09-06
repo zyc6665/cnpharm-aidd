@@ -572,6 +572,21 @@ export interface TaskCreateParams {
   priority?: 'low' | 'normal' | 'high'
 }
 
+export interface TaskRunPreparationPreview {
+  ready: boolean
+  project_id?: string | null
+  tool_id: string
+  tool_version_id: string
+  params: Record<string, unknown>
+  file_ids: string[]
+  input_bindings: Record<string, string>
+  requested_input_bindings: Record<string, string>
+  standard_input_uploads: Record<string, string>
+  binding_decisions: Record<string, ArtifactBindingDecision>
+  blocked_reason?: string | null
+  resource_snapshot?: TaskResourceSnapshot | null
+}
+
 export interface ToolPreparedSubmissionPayload {
   params: Record<string, unknown>
   file_ids?: string[]

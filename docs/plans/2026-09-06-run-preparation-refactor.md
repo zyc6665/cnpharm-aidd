@@ -30,6 +30,7 @@
 - 已通过当前聚合验证：后端相关回归 `180 passed`，前端运行面板/预检/绑定测试 `15 passed`，`git diff --check` 无输出。
 - 2026-09-06：新增 `POST /api/v1/tasks/prepare-preview` 后端预览接口，复用 `prepare_run()` 返回 ready/blocked、绑定决策、legacy 文件投影和资源快照，但不创建任务、不调度任务、不记录工具使用次数。
 - 已补任务 API 预览回归：raw protein + `require_prepared` 返回 blocked；prepared protein + legacy LVpocket 返回 projected `params.input_files`，两种场景均确认 `Task` 未落库且 direct runner 未调度。
+- 已新增前端 `prepareTaskRun()` API 客户端和 `TaskRunPreparationPreview` 类型，前端后续可直接消费后端权威 Run Preparation 预览结果。
 
 ## Task 1: 建立 RunPreparation 回归测试基线
 
