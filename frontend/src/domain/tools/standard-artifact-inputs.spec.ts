@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import type { TypedArtifact } from '@/types/artifacts'
 import type { Tool, ToolContract } from '@/types/models'
 import {
-  buildStandardTaskRequestExtras,
   buildStandardInputBindings,
   filterCompatibleProjectArtifacts,
   resolveToolPackageParameterSchema,
@@ -246,24 +245,5 @@ describe('standard artifact tool inputs', () => {
         threshold: { type: 'number', title: 'Threshold', default: 0.5 },
       },
     })
-  })
-
-  it('adds project context and input bindings only when standard bindings are present', () => {
-    expect(
-      buildStandardTaskRequestExtras({
-        projectId: 'project-1',
-        inputBindings: { protein: 'version-1' },
-      })
-    ).toEqual({
-      project_id: 'project-1',
-      input_bindings: { protein: 'version-1' },
-    })
-
-    expect(
-      buildStandardTaskRequestExtras({
-        projectId: 'project-1',
-        inputBindings: {},
-      })
-    ).toEqual({})
   })
 })

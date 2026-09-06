@@ -460,7 +460,7 @@
   } from '@/domain/tools'
   import {
     buildStandardInputBindings,
-    buildStandardTaskRequestExtras,
+    buildStandardRunTaskExtras,
     filterCompatibleProjectArtifacts,
     formatStandardArtifactLabel,
     resolveToolPackageParameterSchema,
@@ -1054,9 +1054,10 @@
         tool_id: tool.value!.id,
         params: payload.params,
         file_ids: payload.fileIds.length > 0 ? payload.fileIds : undefined,
-        ...buildStandardTaskRequestExtras({
+        ...buildStandardRunTaskExtras({
           projectId: currentProjectId.value,
-          inputBindings: standardInputBindings.value
+          inputBindings: standardInputBindings.value,
+          standardInputUploads: {}
         })
       }
 

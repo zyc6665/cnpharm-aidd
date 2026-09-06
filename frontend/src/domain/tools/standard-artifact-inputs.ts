@@ -1,5 +1,5 @@
 import type { TypedArtifact } from '@/types/artifacts'
-import type { TaskCreateParams, Tool, ToolContract, ToolSchema } from '@/types/models'
+import type { Tool, ToolContract, ToolSchema } from '@/types/models'
 import {
   deriveArtifactSlotsFromToolContract,
   type ArtifactInputSlot,
@@ -151,23 +151,4 @@ export function buildStandardInputBindings(
   }
 
   return bindings
-}
-
-export function buildStandardTaskRequestExtras(input: {
-  projectId?: string | null
-  inputBindings: Record<string, string>
-}): Pick<TaskCreateParams, 'project_id' | 'input_bindings'> {
-  const inputBindings = Object.fromEntries(
-    Object.entries(input.inputBindings).filter(([, versionId]) => Boolean(versionId))
-  )
-
-  if (!Object.keys(inputBindings).length) {
-    return {}
-  }
-
-  const projectId = input.projectId?.trim()
-  return {
-    ...(projectId ? { project_id: projectId } : {}),
-    input_bindings: inputBindings,
-  }
 }
