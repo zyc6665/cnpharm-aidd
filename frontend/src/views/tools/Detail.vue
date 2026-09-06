@@ -452,6 +452,7 @@
     resolveExampleFileFormKey,
     type UploadedToolFile
   } from '@/domain/tools'
+  import { taskRunPreparationBlockedMessage } from '@/domain/tasks'
   import {
     buildFallbackToolDocumentation,
     renderMarkdownToHtml,
@@ -1048,8 +1049,7 @@
         executorType: executorType.value
       })
 
-      // 创建任务
-      const task = await tasksStore.createTask({
+      const taskPayload = {
         name: taskName.value.trim() || undefined,
         tool_id: tool.value!.id,
         params: payload.params,
@@ -1058,7 +1058,17 @@
           projectId: currentProjectId.value,
           inputBindings: standardInputBindings.value
         })
-      })
+      }
+
+      const preparationPreview = await tasksStore.prepareTaskRun(taskPayload)
+      const blockedMessage = taskRunPreparationBlockedMessage(preparationPreview)
+      if (blockedMessage) {
+        message.error(blockedMessage)
+        return
+      }
+
+      // 创建任务
+      const task = await tasksStore.createTask(taskPayload)
 
       message.success(t('tasks.created'))
       router.push(`/tasks/${task.id}`)

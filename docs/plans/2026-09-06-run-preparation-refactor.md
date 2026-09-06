@@ -34,6 +34,7 @@
 - 已将 standalone workflow node 运行入口接入 `prepareTaskRun()`：后端预览 ready 后才创建任务；blocked 时展示后端返回的准备失败原因，避免前端继续提交必失败任务。
 - 已在 `useTasksStore` 增加 `prepareTaskRun()` 薄封装，供工具详情页等入口复用同一预览 API，且不改变任务列表状态。
 - 已抽出前端 Run Preparation blocked 文案 helper，统一节点面板和后续工具详情页对后端预览失败原因的展示口径。
+- 已将工具详情页运行入口接入 `tasksStore.prepareTaskRun()`，预览 blocked 时展示后端原因并停止创建任务，ready 时沿用原 `createTask()` 流程。
 
 ## Task 1: 建立 RunPreparation 回归测试基线
 
