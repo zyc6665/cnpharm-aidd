@@ -91,6 +91,7 @@
     flattenToolInputSchema,
     isFileSchemaProperty
   } from '@/domain/tools'
+  import { taskRunPreparationBlockedMessage } from '@/domain/tasks'
   import type { WorkflowNodeArtifactRecommendation } from '@/workflow/canvas-artifacts'
   import { normalizeWorkflowSemanticType } from '@/workflow/semantic-types'
 
@@ -225,14 +226,7 @@
   )
 
   const preparationBlockedReason = computed(() => {
-    const preview = preparationPreview.value
-    if (!preview || preview.ready) {
-      return ''
-    }
-
-    const decisionReason = Object.values(preview.binding_decisions ?? {})
-      .find(decision => decision.reason)?.reason
-    return preview.blocked_reason || decisionReason || '标准产物输入尚未满足工具要求'
+    return taskRunPreparationBlockedMessage(preparationPreview.value)
   })
 
   function replaceFormState(nextState: Record<string, unknown>) {
