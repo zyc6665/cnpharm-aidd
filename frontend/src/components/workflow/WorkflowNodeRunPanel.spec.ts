@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import WorkflowNodeRunPanel from './WorkflowNodeRunPanel.vue'
 import { getToolDetail } from '@/api/tools'
 import { uploadFile } from '@/api/files'
-import { createTask, getTaskDetail } from '@/api/tasks'
+import { createTask, getTaskDetail, prepareTaskRun } from '@/api/tasks'
 import { useWorkflowStore } from '@/stores'
 import i18n from '@/locales'
 
@@ -19,11 +19,33 @@ vi.mock('@/api/files', () => ({
 vi.mock('@/api/tasks', () => ({
   createTask: vi.fn(),
   getTaskDetail: vi.fn(),
+  prepareTaskRun: vi.fn(),
   isTaskTerminalStatus: (status: string) => ['success', 'failure', 'canceled'].includes(status)
 }))
 
+function mockReadyPreparationPreview() {
+  vi.mocked(prepareTaskRun).mockResolvedValue({
+    code: 200,
+    message: 'ok',
+    data: {
+      ready: true,
+      project_id: 'project-1',
+      tool_id: 'tool-ready',
+      tool_version_id: 'version-ready',
+      params: {},
+      file_ids: [],
+      input_bindings: {},
+      requested_input_bindings: {},
+      standard_input_uploads: {},
+      binding_decisions: {},
+      blocked_reason: null,
+      resource_snapshot: null
+    }
+  } as never)
+}
+
 const stubs = {
-  AAlert: { template: '<div class="alert"><slot /></div>' },
+  AAlert: { props: ['message'], template: '<div class="alert"><slot />{{ message }}</div>' },
   ASpin: { template: '<div class="spin"><slot /></div>' },
   AEmpty: { props: ['description'], template: '<div class="empty">{{ description }}</div>' },
   AForm: { template: '<form><slot /></form>' },
@@ -280,6 +302,8 @@ describe('WorkflowNodeRunPanel', () => {
     vi.mocked(uploadFile).mockReset()
     vi.mocked(createTask).mockReset()
     vi.mocked(getTaskDetail).mockReset()
+    vi.mocked(prepareTaskRun).mockReset()
+    mockReadyPreparationPreview()
   })
 
   afterEach(() => {
@@ -579,6 +603,79 @@ describe('WorkflowNodeRunPanel', () => {
       file_ids: undefined,
       input_bindings: { protein: 'artifact-version-prepared' }
     })
+  })
+
+  it('后端运行准备预览 blocked 时应展示原因且不创建任务', async () => {
+    mockRoleAwareLvpocketToolDetail()
+    vi.mocked(prepareTaskRun).mockResolvedValueOnce({
+      code: 200,
+      message: 'ok',
+      data: {
+        ready: false,
+        project_id: 'project-1',
+        tool_id: 'tool-lvpocket',
+        tool_version_id: 'version-lvpocket',
+        params: {},
+        file_ids: [],
+        input_bindings: {},
+        requested_input_bindings: { protein: 'artifact-version-raw' },
+        standard_input_uploads: {},
+        binding_decisions: {
+          protein: {
+            status: 'needs_preparation',
+            reason: 'Protein input requires a prepared PDB role.'
+          }
+        },
+        blocked_reason: 'Protein input requires a prepared PDB role.',
+        resource_snapshot: null
+      }
+    } as never)
+
+    const wrapper = mount(WorkflowNodeRunPanel, {
+      props: {
+        nodeId: 'lvpocket-node',
+        projectId: 'project-1',
+        selectedToolSlug: 'lvpocket-pocket-prediction',
+        availableTools: [
+          {
+            id: 'tool-lvpocket',
+            slug: 'lvpocket-pocket-prediction',
+            name: 'LVpocket Pocket Prediction'
+          }
+        ],
+        recommendedArtifacts: [
+          {
+            edgeId: 'edge-fetch-pdb-to-lvpocket',
+            sourceNodeId: 'fetch-pdb-node',
+            semanticType: 'protein_structure@1',
+            artifact: {
+              id: 'file-raw',
+              filename: 'raw.pdb',
+              content_type: 'chemical/x-pdb',
+              size_bytes: 1024,
+              source_type: 'artifact',
+              download_url: '/api/v1/files/file-raw/download',
+              task_id: 'task-fetch-pdb',
+              tool_id: 'tool-fetch-pdb',
+              tool_name: 'Fetch PDB Structure',
+              tool_slug: 'builtin-fetch-pdb',
+              semantic_type: 'protein_structure@1',
+              artifact_version_id: 'artifact-version-raw',
+              standard_artifact_role: 'structure_file',
+              created_at: '2026-08-20T00:01:00Z'
+            }
+          }
+        ]
+      },
+      global: { plugins: [i18n], stubs }
+    })
+
+    await flushPromises()
+    await wrapper.find('[data-testid="run-current-node"]').trigger('click')
+    await flushPromises()
+
+    expect(createTask).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Protein input requires a prepared PDB role.')
   })
 
   it('独立运行创建后应轮询任务终态并更新当前节点状态', async () => {

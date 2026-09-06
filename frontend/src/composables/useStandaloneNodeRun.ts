@@ -1,10 +1,10 @@
 import { ref, unref, type Ref } from 'vue'
 import type { UploadFile } from 'ant-design-vue'
 import { uploadFile } from '@/api/files'
-import { createTask, getTaskDetail, isTaskTerminalStatus } from '@/api/tasks'
+import { createTask, getTaskDetail, isTaskTerminalStatus, prepareTaskRun } from '@/api/tasks'
 import { useArtifactsStore, useWorkflowStore } from '@/stores'
 import { buildTaskSubmissionPayload } from '@/domain/tools'
-import type { ArtifactFile, ToolSchema } from '@/types/models'
+import type { ArtifactFile, TaskCreateParams, TaskRunPreparationPreview, ToolSchema } from '@/types/models'
 import { normalizeWorkflowSemanticType } from '@/workflow/semantic-types'
 
 interface StandaloneRunTool {
@@ -54,6 +54,7 @@ export function useStandaloneNodeRun(input: {
   const workflowStore = useWorkflowStore()
   const artifactsStore = useArtifactsStore()
   const submitting = ref(false)
+  const preparationPreview = ref<TaskRunPreparationPreview | null>(null)
   let pollTimer: number | null = null
   let pollTaskId: string | null = null
 
@@ -258,7 +259,7 @@ export function useStandaloneNodeRun(input: {
         executorType: options.executorType,
       })
       const params = withBuiltinInputs(payload.params, uploadedFiles, options)
-      const response = await createTask({
+      const taskPayload: TaskCreateParams = {
         name: `${options.tool.name} · ${currentNodeId()}`,
         tool_id: options.tool.id,
         project_id: currentProjectId(),
@@ -267,7 +268,14 @@ export function useStandaloneNodeRun(input: {
         input_bindings: Object.keys(bindingProjection.inputBindings).length > 0
           ? bindingProjection.inputBindings
           : undefined,
-      })
+      }
+
+      preparationPreview.value = (await prepareTaskRun(taskPayload)).data
+      if (!preparationPreview.value.ready) {
+        return undefined
+      }
+
+      const response = await createTask(taskPayload)
 
       workflowStore.recordNodeTask(currentNodeId(), response.data)
       workflowStore.recordTask(options.selectedToolSlug, response.data)
@@ -280,6 +288,7 @@ export function useStandaloneNodeRun(input: {
 
   return {
     submitting,
+    preparationPreview,
     run,
     startPolling,
     stopPolling,

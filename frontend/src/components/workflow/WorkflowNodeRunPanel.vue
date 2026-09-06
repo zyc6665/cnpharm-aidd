@@ -45,6 +45,13 @@
             </div>
           </div>
 
+          <a-alert
+            v-if="preparationBlockedReason"
+            type="warning"
+            show-icon
+            :message="preparationBlockedReason"
+          />
+
           <div class="node-run-actions">
             <a-button
               type="primary"
@@ -117,6 +124,7 @@
   const workflowStore = useWorkflowStore()
   const {
     submitting,
+    preparationPreview,
     run: runStandaloneNode,
     startPolling: startStandaloneTaskPolling,
     stopPolling: stopStandaloneTaskPolling
@@ -215,6 +223,17 @@
         filename: artifact.filename,
       }))
   )
+
+  const preparationBlockedReason = computed(() => {
+    const preview = preparationPreview.value
+    if (!preview || preview.ready) {
+      return ''
+    }
+
+    const decisionReason = Object.values(preview.binding_decisions ?? {})
+      .find(decision => decision.reason)?.reason
+    return preview.blocked_reason || decisionReason || '标准产物输入尚未满足工具要求'
+  })
 
   function replaceFormState(nextState: Record<string, unknown>) {
     for (const key of Object.keys(formState)) {
