@@ -364,6 +364,97 @@ async def test_worker_persists_standard_result_v2_as_artifact_versions(
 
 
 @pytest.mark.asyncio
+async def test_worker_rejects_invalid_standard_result_without_persisting_artifacts(
+    worker_standard_db_factory,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    await _disable_notifications(monkeypatch)
+    monkeypatch.setattr("app.database.session.async_session_factory", worker_standard_db_factory)
+
+    async with worker_standard_db_factory() as db:
+        task, version = await _seed_task(
+            db,
+            tool_config={"type": "python_script", "tool_package_manifest": _v2_manifest()},
+        )
+        residue = await _seed_output_file(
+            db,
+            task=task,
+            tmp_path=tmp_path,
+            relative_path="artifacts/pocket/residue.pdb",
+            content=b"residue",
+        )
+        atom = await _seed_output_file(
+            db,
+            task=task,
+            tmp_path=tmp_path,
+            relative_path="artifacts/pocket/atom.pdb",
+            content=b"atom",
+        )
+        metadata = await _seed_output_file(
+            db,
+            task=task,
+            tmp_path=tmp_path,
+            relative_path="artifacts/pocket/metadata.json",
+            content=b"{}",
+        )
+        file_ids = [residue.id, atom.id, metadata.id]
+        task_id = task.id
+        version_id = version.id
+        await db.commit()
+
+    async def fake_execute(self):
+        return {
+            "success": True,
+            "result": {
+                "result_version": "aidd.sciminer/result.v2",
+                "artifacts": {
+                    "pocket": {
+                        "name": "Top pocket",
+                        "type": "binding_pocket@1",
+                        "files": {
+                            "residue_pocket_pdb": {
+                                "path": "artifacts/pocket/residue.pdb",
+                                "sha256": residue.sha256,
+                            },
+                            "atom_pocket_pdb": {
+                                "path": "artifacts/pocket/atom.pdb",
+                                "sha256": atom.sha256,
+                            },
+                            "pocket_metadata_json": {
+                                "path": "artifacts/pocket/metadata.json",
+                                "sha256": metadata.sha256,
+                            },
+                        },
+                    }
+                },
+                "relations": [{"from": "missing", "to": "pocket", "type": "describes"}],
+            },
+            "output_file_ids": file_ids,
+        }
+
+    monkeypatch.setattr("app.tasks.executor.TaskExecutor.execute", fake_execute)
+
+    with pytest.raises(Exception, match="Relation references unknown artifact"):
+        await worker_tasks._execute_tool_task_impl(str(task_id), str(version_id))
+
+    async with worker_standard_db_factory() as db:
+        task_record = (
+            await db.execute(select(TaskModel).where(TaskModel.id == task_id))
+        ).scalar_one()
+        task_output = (
+            await db.execute(select(TaskOutputModel).where(TaskOutputModel.task_id == task_id))
+        ).scalar_one_or_none()
+        artifact_count = await db.scalar(select(func.count(ArtifactVersionModel.id)))
+
+    assert task_record.status == TaskStatus.FAILURE.value
+    assert task_record.error_message is not None
+    assert "Relation references unknown artifact" in task_record.error_message
+    assert task_output is None
+    assert artifact_count == 0
+
+
+@pytest.mark.asyncio
 async def test_worker_persists_remote_tool_v1_standard_outputs(
     worker_standard_db_factory,
     monkeypatch: pytest.MonkeyPatch,

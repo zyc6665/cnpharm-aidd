@@ -418,6 +418,22 @@ async def _execute_tool_task_impl(task_id: str, tool_version_id: str) -> Dict[st
             return output_result
 
         except Exception as e:
+            # 清掉本轮未提交的输出/标准 Artifact 写入，避免失败任务留下下游产物。
+            await db.rollback()
+            task_result = await db.execute(select(Task).where(Task.id == task_id))
+            task = task_result.scalar_one_or_none()
+            if task is None:
+                raise ValueError(f"任务不存在: {task_id}") from e
+
+            version_result = await db.execute(
+                select(ToolVersion).where(ToolVersion.id == tool_version_id)
+            )
+            tool_version = version_result.scalar_one_or_none()
+            tool = None
+            if tool_version is not None:
+                tool_result = await db.execute(select(Tool).where(Tool.id == task.tool_id))
+                tool = tool_result.scalar_one_or_none()
+
             # 更新失败状态
             TaskStateMachine.complete(
                 task,
@@ -433,14 +449,15 @@ async def _execute_tool_task_impl(task_id: str, tool_version_id: str) -> Dict[st
                 message=f"任务执行失败: {str(e)}"
             )
             db.add(log)
-            await _record_remote_tool_smoke_result_if_needed(
-                db,
-                task=task,
-                tool=tool,
-                tool_version=tool_version,
-                status="failure",
-                error_message=str(e),
-            )
+            if tool is not None and tool_version is not None:
+                await _record_remote_tool_smoke_result_if_needed(
+                    db,
+                    task=task,
+                    tool=tool,
+                    tool_version=tool_version,
+                    status="failure",
+                    error_message=str(e),
+                )
             agent_run_id = await append_task_agent_event(
                 db,
                 task=task,

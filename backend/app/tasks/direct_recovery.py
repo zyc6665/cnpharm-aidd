@@ -18,6 +18,7 @@ from app.database.session import async_session_factory
 from app.models.tasks import Task, TaskLog, TaskOutput, TaskStatus
 from app.models.tools import ToolType
 from app.services.standard_artifacts import (
+    StandardArtifactPersistenceError,
     attach_standard_artifact_summary,
     persist_standard_artifacts_from_task_output,
 )
@@ -87,6 +88,9 @@ async def reconcile_orphaned_direct_tasks(db: AsyncSession) -> int:
         if not output_result:
             continue
 
+        task_id = str(task.id)
+        is_workflow_task = _is_workflow_node_task(task)
+
         try:
             output_result = await append_molecule_scoring_artifacts(
                 db,
@@ -100,22 +104,45 @@ async def reconcile_orphaned_direct_tasks(db: AsyncSession) -> int:
                 task.id,
                 exc,
             )
-        output_result = await append_legacy_standard_result(
-            db,
-            task=task,
-            tool_version_config=tool_version.config,
-            output_result=output_result,
-            output_file_ids=prepare_task_output(output_result)["file_ids"],
-        )
+        try:
+            output_result = await append_legacy_standard_result(
+                db,
+                task=task,
+                tool_version_config=tool_version.config,
+                output_result=output_result,
+                output_file_ids=prepare_task_output(output_result)["file_ids"],
+            )
 
-        prepared_output = prepare_task_output(output_result)
-        standard_persistence = await persist_standard_artifacts_from_task_output(
-            db,
-            task=task,
-            tool_version_config=tool_version.config,
-            output_result=output_result,
-            output_file_ids=prepared_output["file_ids"],
-        )
+            prepared_output = prepare_task_output(output_result)
+            standard_persistence = await persist_standard_artifacts_from_task_output(
+                db,
+                task=task,
+                tool_version_config=tool_version.config,
+                output_result=output_result,
+                output_file_ids=prepared_output["file_ids"],
+            )
+        except StandardArtifactPersistenceError as exc:
+            await db.rollback()
+            recovered_task = await db.get(Task, task_id)
+            if recovered_task is None:
+                continue
+            TaskStateMachine.complete(
+                recovered_task,
+                success=False,
+                error_message=str(exc),
+                progress_message=RECOVERED_FAILURE_MESSAGE,
+            )
+            db.add(
+                TaskLog(
+                    task_id=task_id,
+                    level="ERROR",
+                    message=f"标准 result.v2 不合规，远端结果补回失败: {exc}",
+                )
+            )
+            await db.commit()
+            recovered_count += 1
+            recovered_workflow_task = recovered_workflow_task or is_workflow_task
+            continue
         if standard_persistence is not None:
             prepared_output["result"] = attach_standard_artifact_summary(
                 prepared_output["result"],
@@ -170,7 +197,7 @@ async def reconcile_orphaned_direct_tasks(db: AsyncSession) -> int:
         )
         await db.commit()
         recovered_count += 1
-        recovered_workflow_task = recovered_workflow_task or _is_workflow_node_task(task)
+        recovered_workflow_task = recovered_workflow_task or is_workflow_task
 
     if recovered_workflow_task:
         try:
