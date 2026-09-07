@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { get, post } from './request'
-import { getTaskList, prepareTaskRun } from './tasks'
+import { getTaskCounts, getTaskList, prepareTaskRun } from './tasks'
 
 vi.mock('./request', () => ({
   get: vi.fn(),
@@ -35,6 +35,34 @@ describe('getTaskList', () => {
         created_to: '2026-09-07T23:59:59.999Z',
         workflow_run_id: 'workflow-run-1',
         workflow_node_id: 'protein_preparation'
+      },
+      undefined
+    )
+    expect(result).toEqual(response)
+  })
+})
+
+describe('getTaskCounts', () => {
+  it('调用任务系统视图计数接口并透传筛选参数', async () => {
+    const response = {
+      code: 200,
+      message: 'ok',
+      data: { all: 5, running: 2, history: 3, needs_attention: 1, recent_results: 1 }
+    }
+    vi.mocked(get).mockResolvedValueOnce(response as never)
+
+    const result = await getTaskCounts({
+      project_id: 'project-1',
+      keyword: 'invalid SDF',
+      created_from: '2026-09-01T00:00:00.000Z',
+    })
+
+    expect(get).toHaveBeenCalledWith(
+      '/tasks/counts',
+      {
+        project_id: 'project-1',
+        keyword: 'invalid SDF',
+        created_from: '2026-09-01T00:00:00.000Z',
       },
       undefined
     )

@@ -2,6 +2,7 @@ import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import type { Task } from '@/types/models'
 import {
+  buildTaskCountQueryParams,
   buildTaskListQueryParams,
   filterTasksByKeyword,
   filterTasksForTab,
@@ -70,6 +71,24 @@ test('任务列表请求参数包含服务端分页和筛选条件', () => {
       keyword: 'failed pdb',
       created_from: '2026-09-01T00:00:00.000Z',
       created_to: '2026-09-07T23:59:59.999Z',
+    }
+  )
+})
+
+test('任务视图计数请求参数复用筛选条件但不携带分页和视图', () => {
+  assert.deepEqual(
+    buildTaskCountQueryParams({
+      tab: 'running',
+      page: 3,
+      pageSize: 50,
+      projectId: 'project-1',
+      toolId: 'tool-1',
+      keyword: '  failed pdb  ',
+    }),
+    {
+      project_id: 'project-1',
+      tool_id: 'tool-1',
+      keyword: 'failed pdb',
     }
   )
 })

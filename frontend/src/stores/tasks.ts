@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import type { Task, TaskStatus, TaskCreateParams, TaskRunPreparationPreview } from '@/types/models'
 import {
   getTaskList,
+  getTaskCounts,
   getTaskDetail,
   createTask as apiCreateTask,
   prepareTaskRun as apiPrepareTaskRun,
@@ -11,9 +12,17 @@ import {
   deleteTask as apiDeleteTask,
   type TaskListParams
 } from '@/api/tasks'
+import type { TaskCountQueryParams, TaskViewCounts } from '@/domain/tasks/listing'
 import { normalizeTaskSummaries, normalizeTaskSummary } from '@/utils/task-normalization'
 
 const FULL_TASK_PAGE_SIZE = 100
+const EMPTY_TASK_VIEW_COUNTS: TaskViewCounts = {
+  all: 0,
+  running: 0,
+  history: 0,
+  needs_attention: 0,
+  recent_results: 0,
+}
 
 export const useTasksStore = defineStore('tasks', () => {
   // State
@@ -21,6 +30,7 @@ export const useTasksStore = defineStore('tasks', () => {
   const currentTask = ref<Task | null>(null)
   const loading = ref(false)
   const total = ref(0)
+  const viewCounts = ref<TaskViewCounts>({ ...EMPTY_TASK_VIEW_COUNTS })
 
   // Actions
   const fetchTasks = async (params?: TaskListParams) => {
@@ -71,6 +81,12 @@ export const useTasksStore = defineStore('tasks', () => {
     } finally {
       loading.value = false
     }
+  }
+
+  const fetchTaskCounts = async (params?: TaskCountQueryParams) => {
+    const res = await getTaskCounts(params)
+    viewCounts.value = { ...EMPTY_TASK_VIEW_COUNTS, ...res.data }
+    return viewCounts.value
   }
 
   const fetchTaskDetail = async (id: string) => {
@@ -181,9 +197,11 @@ export const useTasksStore = defineStore('tasks', () => {
     currentTask,
     loading,
     total,
+    viewCounts,
     // Actions
     fetchTasks,
     fetchAllTasks,
+    fetchTaskCounts,
     fetchTaskDetail,
     createTask,
     prepareTaskRun,

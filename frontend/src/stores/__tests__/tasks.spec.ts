@@ -1,11 +1,12 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { prepareTaskRun as apiPrepareTaskRun } from '@/api/tasks'
+import { getTaskCounts as apiGetTaskCounts, prepareTaskRun as apiPrepareTaskRun } from '@/api/tasks'
 import { useTasksStore } from '../tasks'
 
 vi.mock('@/api/tasks', () => ({
   getTaskList: vi.fn(),
   getTaskDetail: vi.fn(),
+  getTaskCounts: vi.fn(),
   createTask: vi.fn(),
   cancelTask: vi.fn(),
   retryTask: vi.fn(),
@@ -17,6 +18,40 @@ describe('useTasksStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.mocked(apiPrepareTaskRun).mockReset()
+    vi.mocked(apiGetTaskCounts).mockReset()
+  })
+
+  it('loads task system view counts without replacing current task page', async () => {
+    vi.mocked(apiGetTaskCounts).mockResolvedValue({
+      code: 200,
+      message: 'ok',
+      data: { all: 5, running: 2, history: 3, needs_attention: 1, recent_results: 1 },
+    } as never)
+
+    const store = useTasksStore()
+    store.tasks = [{
+      id: 'task-existing',
+      tool_id: 'tool-existing',
+      status: 'success',
+      progress: 100,
+      created_at: '2026-08-20T00:00:00Z',
+    }]
+
+    const counts = await store.fetchTaskCounts({ project_id: 'project-1', keyword: 'invalid SDF' })
+
+    expect(apiGetTaskCounts).toHaveBeenCalledWith({
+      project_id: 'project-1',
+      keyword: 'invalid SDF',
+    })
+    expect(counts).toEqual({ all: 5, running: 2, history: 3, needs_attention: 1, recent_results: 1 })
+    expect(store.viewCounts).toEqual({
+      all: 5,
+      running: 2,
+      history: 3,
+      needs_attention: 1,
+      recent_results: 1,
+    })
+    expect(store.tasks).toHaveLength(1)
   })
 
   it('previews task run preparation without mutating task list state', async () => {

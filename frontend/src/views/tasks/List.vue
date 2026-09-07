@@ -324,6 +324,7 @@
   import type { TaskListParams } from '@/api/tasks'
   import { getProjectOverview } from '@/api/projects'
   import {
+    buildTaskCountQueryParams,
     buildTaskListQueryParams,
     canCancelTask as canCancelTaskForActor,
     canDeleteTask as canDeleteTaskForActor,
@@ -377,11 +378,12 @@
   const loading = computed(() => tasksStore.loading)
   const tasks = computed(() => tasksStore.tasks)
   const total = computed(() => tasksStore.total)
+  const taskViewCounts = computed(() => tasksStore.viewCounts)
 
   const runningTasks = computed(() => displayTasks.value.filter(isRunningTask))
-  const allCount = computed(() => currentTab.value === 'all' ? total.value : 0)
-  const runningCount = computed(() => currentTab.value === 'running' ? total.value : 0)
-  const historyCount = computed(() => currentTab.value === 'history' ? total.value : 0)
+  const allCount = computed(() => taskViewCounts.value.all)
+  const runningCount = computed(() => taskViewCounts.value.running)
+  const historyCount = computed(() => taskViewCounts.value.history)
 
   const displayTasks = computed<Task[]>(() => tasks.value)
 
@@ -434,7 +436,16 @@
   }
 
   const fetchTasks = async () => {
-    const params: TaskListParams = buildTaskListQueryParams({
+    const params: TaskListParams = buildTaskListQueryParams(buildTaskQueryInput())
+
+    await tasksStore.fetchTasks(params)
+  }
+
+  const fetchTaskCounts = async () => {
+    await tasksStore.fetchTaskCounts(buildTaskCountQueryParams(buildTaskQueryInput()))
+  }
+
+  const buildTaskQueryInput = () => ({
       tab: currentTab.value,
       page: currentPage.value,
       pageSize: pageSize.value,
@@ -443,10 +454,7 @@
       keyword: searchKeyword.value,
       createdFrom: dateRange.value?.[0].startOf('day').toISOString(),
       createdTo: dateRange.value?.[1].endOf('day').toISOString(),
-    })
-
-    await tasksStore.fetchTasks(params)
-  }
+  })
 
   const fetchTasksSafely = async () => {
     try {
@@ -454,6 +462,18 @@
     } catch (error) {
       console.warn('[TaskCenter] Failed to load tasks', error)
     }
+  }
+
+  const fetchTaskCountsSafely = async () => {
+    try {
+      await fetchTaskCounts()
+    } catch (error) {
+      console.warn('[TaskCenter] Failed to load task counts', error)
+    }
+  }
+
+  const fetchTasksAndCountsSafely = async () => {
+    await Promise.allSettled([fetchTasksSafely(), fetchTaskCountsSafely()])
   }
 
   const fetchToolsSafely = async () => {
@@ -493,28 +513,28 @@
 
   const handleTabChange = (_key: string) => {
     currentPage.value = 1
-    void fetchTasksSafely()
+    void fetchTasksAndCountsSafely()
   }
 
   const handleSearch = () => {
     currentPage.value = 1
-    void fetchTasksSafely()
+    void fetchTasksAndCountsSafely()
   }
 
   const handleToolChange = () => {
     currentPage.value = 1
-    void fetchTasksSafely()
+    void fetchTasksAndCountsSafely()
   }
 
   const handleDateChange = () => {
     currentPage.value = 1
-    void fetchTasksSafely()
+    void fetchTasksAndCountsSafely()
   }
 
   const handleRefresh = async () => {
     refreshing.value = true
     try {
-      const [taskResult] = await Promise.allSettled([fetchTasks()])
+      const [taskResult] = await Promise.allSettled([fetchTasks(), fetchTaskCounts()])
       if (taskResult.status === 'fulfilled') {
         message.success(t('common.refreshSuccess'))
       } else {
@@ -539,19 +559,19 @@
   const handleCancel = async (id: string) => {
     await tasksStore.cancelTask(id)
     message.success(t('tasks.cancelSuccess'))
-    await fetchTasksSafely()
+    await fetchTasksAndCountsSafely()
   }
 
   const handleRetry = async (id: string) => {
     await tasksStore.retryTask(id)
     message.success(t('tasks.retrySuccess'))
-    await fetchTasksSafely()
+    await fetchTasksAndCountsSafely()
   }
 
   const handleDelete = async (id: string) => {
     await tasksStore.deleteTask(id)
     message.success(t('tasks.deleteSuccess'))
-    await fetchTasksSafely()
+    await fetchTasksAndCountsSafely()
   }
 
   const goToDetail = (id: string) => {
@@ -569,7 +589,7 @@
     if (refreshTimer) return
     refreshTimer = setInterval(() => {
       if (autoRefresh.value && currentTab.value === 'running') {
-        void fetchTasksSafely()
+        void fetchTasksAndCountsSafely()
       }
     }, 10000) // 每10秒刷新
   }
@@ -592,13 +612,17 @@
 
   watch(projectId, () => {
     currentPage.value = 1
-    void fetchTasksSafely()
+    void fetchTasksAndCountsSafely()
     void fetchProjectContextSafely()
   })
 
   // 生命周期
   onMounted(async () => {
-    await Promise.allSettled([fetchTasksSafely(), fetchToolsSafely(), fetchProjectContextSafely()])
+    await Promise.allSettled([
+      fetchTasksAndCountsSafely(),
+      fetchToolsSafely(),
+      fetchProjectContextSafely()
+    ])
 
     startAutoRefresh()
   })

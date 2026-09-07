@@ -1,6 +1,6 @@
 import { get, post, del, type RequestOptions } from './request'
 import type { ApiResponse } from '@/types/api'
-import type { TaskSystemView } from '@/domain/tasks/listing'
+import type { TaskCountQueryParams, TaskSystemView, TaskViewCounts } from '@/domain/tasks/listing'
 import type {
   Task,
   TaskCreateParams,
@@ -36,6 +36,13 @@ export const getTaskList = (
   options?: RequestOptions
 ): Promise<ApiResponse<PaginatedResponse<Task>>> => {
   return get<PaginatedResponse<Task>, TaskListParams>('/tasks', params, options)
+}
+
+export const getTaskCounts = (
+  params?: TaskCountQueryParams,
+  options?: RequestOptions
+): Promise<ApiResponse<TaskViewCounts>> => {
+  return get<TaskViewCounts, TaskCountQueryParams>('/tasks/counts', params, options)
 }
 
 // 创建任务

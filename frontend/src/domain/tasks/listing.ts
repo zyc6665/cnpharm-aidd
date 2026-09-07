@@ -26,6 +26,16 @@ export interface TaskListQueryParams {
   created_to?: string
 }
 
+export interface TaskCountQueryParams {
+  project_id?: string
+  tool_id?: string
+  keyword?: string
+  created_from?: string
+  created_to?: string
+}
+
+export type TaskViewCounts = Record<TaskSystemView, number>
+
 export function taskSystemViewForTab(tab: TaskListTab): TaskSystemView {
   return tab
 }
@@ -36,6 +46,26 @@ export function buildTaskListQueryParams(input: TaskListQueryInput): TaskListQue
     page: Math.max(input.page, 1),
     page_size: Math.max(input.pageSize, 1),
   }
+
+  const projectId = input.projectId?.trim()
+  if (projectId) params.project_id = projectId
+
+  const toolId = input.toolId?.trim()
+  if (toolId) params.tool_id = toolId
+
+  const keyword = input.keyword?.trim()
+  if (keyword) params.keyword = keyword
+
+  if (input.tab === 'history') {
+    if (input.createdFrom) params.created_from = input.createdFrom
+    if (input.createdTo) params.created_to = input.createdTo
+  }
+
+  return params
+}
+
+export function buildTaskCountQueryParams(input: TaskListQueryInput): TaskCountQueryParams {
+  const params: TaskCountQueryParams = {}
 
   const projectId = input.projectId?.trim()
   if (projectId) params.project_id = projectId
