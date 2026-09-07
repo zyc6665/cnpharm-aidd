@@ -317,6 +317,7 @@ export default {
       syncRun: 'Sync Run',
       cancelRun: 'Cancel Run',
       retryNode: 'Retry Node',
+      viewNodeTasks: 'View Node Tasks',
       runSynced: 'Workflow run status synced',
       restoreRunFailed: 'The latest workflow run is no longer available',
       emptyRunDetail: 'Workflow run detail is unavailable',

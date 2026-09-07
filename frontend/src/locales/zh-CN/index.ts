@@ -316,6 +316,7 @@ export default {
       syncRun: '同步运行',
       cancelRun: '取消运行',
       retryNode: '重试节点',
+      viewNodeTasks: '查看该节点任务',
       runSynced: '工作流运行状态已同步',
       restoreRunFailed: '最近一次工作流运行已不可访问',
       emptyRunDetail: '未找到工作流运行详情',

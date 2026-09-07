@@ -16,7 +16,7 @@ const stubs = {
   SyncOutlined: true,
   RouterLink: {
     props: ['to'],
-    template: '<a class="task-detail-link" :href="to"><slot /></a>',
+    template: '<a :href="to"><slot /></a>',
   },
 }
 
@@ -60,5 +60,15 @@ describe('WorkflowRunStatusPanel', () => {
     expect(taskLink.exists()).toBe(true)
     expect(taskLink.attributes('href')).toBe('/tasks/task-failed-pocket')
     expect(taskLink.text()).toContain('task-failed-pocket')
+  })
+
+  it('为运行节点提供按 workflow/node 过滤的任务列表入口', () => {
+    const wrapper = mountPanel()
+
+    const listLink = wrapper.find('.node-task-list-link')
+    expect(listLink.exists()).toBe(true)
+    expect(listLink.attributes('href')).toBe(
+      '/tasks?workflow_run_id=run-1&workflow_definition_id=workflow-1&workflow_node_id=predict-pocket'
+    )
   })
 })

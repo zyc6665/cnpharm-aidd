@@ -60,6 +60,12 @@
           >
             {{ t('workflow.canvasPresets.taskId', { id: node.taskId }) }}
           </router-link>
+          <router-link
+            class="run-node-meta node-task-list-link"
+            :to="nodeTaskListPath(node.id)"
+          >
+            {{ t('workflow.canvasPresets.viewNodeTasks') }}
+          </router-link>
           <span v-if="node.inputFileIds.length" class="run-node-meta">
             {{ t('workflow.canvasPresets.inputFileIds', { ids: node.inputFileIds.join(', ') }) }}
           </span>
@@ -126,6 +132,15 @@
     }
     return 'active'
   })
+
+  function nodeTaskListPath(nodeId: string): string {
+    const params = new URLSearchParams({
+      workflow_run_id: props.run.id,
+      workflow_definition_id: props.run.workflow_definition_id,
+      workflow_node_id: nodeId,
+    })
+    return `/tasks?${params.toString()}`
+  }
 </script>
 
 <style scoped lang="less">
