@@ -13,6 +13,9 @@ export interface TaskListQueryInput {
   keyword?: string
   createdFrom?: string
   createdTo?: string
+  workflowRunId?: string
+  workflowDefinitionId?: string
+  workflowNodeId?: string
 }
 
 export interface TaskListQueryParams {
@@ -24,6 +27,9 @@ export interface TaskListQueryParams {
   keyword?: string
   created_from?: string
   created_to?: string
+  workflow_run_id?: string
+  workflow_definition_id?: string
+  workflow_node_id?: string
 }
 
 export interface TaskCountQueryParams {
@@ -32,6 +38,9 @@ export interface TaskCountQueryParams {
   keyword?: string
   created_from?: string
   created_to?: string
+  workflow_run_id?: string
+  workflow_definition_id?: string
+  workflow_node_id?: string
 }
 
 export type TaskViewCounts = Record<TaskSystemView, number>
@@ -56,6 +65,15 @@ export function buildTaskListQueryParams(input: TaskListQueryInput): TaskListQue
   const keyword = input.keyword?.trim()
   if (keyword) params.keyword = keyword
 
+  const workflowRunId = input.workflowRunId?.trim()
+  if (workflowRunId) params.workflow_run_id = workflowRunId
+
+  const workflowDefinitionId = input.workflowDefinitionId?.trim()
+  if (workflowDefinitionId) params.workflow_definition_id = workflowDefinitionId
+
+  const workflowNodeId = input.workflowNodeId?.trim()
+  if (workflowNodeId) params.workflow_node_id = workflowNodeId
+
   if (input.tab === 'history') {
     if (input.createdFrom) params.created_from = input.createdFrom
     if (input.createdTo) params.created_to = input.createdTo
@@ -75,6 +93,15 @@ export function buildTaskCountQueryParams(input: TaskListQueryInput): TaskCountQ
 
   const keyword = input.keyword?.trim()
   if (keyword) params.keyword = keyword
+
+  const workflowRunId = input.workflowRunId?.trim()
+  if (workflowRunId) params.workflow_run_id = workflowRunId
+
+  const workflowDefinitionId = input.workflowDefinitionId?.trim()
+  if (workflowDefinitionId) params.workflow_definition_id = workflowDefinitionId
+
+  const workflowNodeId = input.workflowNodeId?.trim()
+  if (workflowNodeId) params.workflow_node_id = workflowNodeId
 
   if (input.tab === 'history') {
     if (input.createdFrom) params.created_from = input.createdFrom

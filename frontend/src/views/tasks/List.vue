@@ -374,10 +374,10 @@
   const refreshing = ref(false)
   const autoRefresh = ref(true)
   const project = ref<ResearchProject | null>(null)
-  const projectId = computed(() => {
-    const value = route.query.project_id
-    return typeof value === 'string' && value.trim() ? value : undefined
-  })
+  const projectId = computed(() => stringQueryParam(route.query.project_id))
+  const workflowRunId = computed(() => stringQueryParam(route.query.workflow_run_id))
+  const workflowDefinitionId = computed(() => stringQueryParam(route.query.workflow_definition_id))
+  const workflowNodeId = computed(() => stringQueryParam(route.query.workflow_node_id))
   const projectMembershipRole = computed<ProjectRole | undefined>(
     () => project.value?.membership.role
   )
@@ -463,14 +463,17 @@
   }
 
   const buildTaskQueryInput = () => ({
-      tab: currentTab.value,
-      page: currentPage.value,
-      pageSize: pageSize.value,
-      projectId: projectId.value,
-      toolId: selectedTool.value,
-      keyword: searchKeyword.value,
-      createdFrom: dateRange.value?.[0].startOf('day').toISOString(),
-      createdTo: dateRange.value?.[1].endOf('day').toISOString(),
+    tab: currentTab.value,
+    page: currentPage.value,
+    pageSize: pageSize.value,
+    projectId: projectId.value,
+    toolId: selectedTool.value,
+    keyword: searchKeyword.value,
+    createdFrom: dateRange.value?.[0].startOf('day').toISOString(),
+    createdTo: dateRange.value?.[1].endOf('day').toISOString(),
+    workflowRunId: workflowRunId.value,
+    workflowDefinitionId: workflowDefinitionId.value,
+    workflowNodeId: workflowNodeId.value,
   })
 
   const fetchTasksSafely = async () => {
@@ -627,11 +630,15 @@
     }
   })
 
-  watch(projectId, () => {
+  watch([projectId, workflowRunId, workflowDefinitionId, workflowNodeId], () => {
     currentPage.value = 1
     void fetchTasksAndCountsSafely()
     void fetchProjectContextSafely()
   })
+
+  function stringQueryParam(value: unknown): string | undefined {
+    return typeof value === 'string' && value.trim() ? value : undefined
+  }
 
   // 生命周期
   onMounted(async () => {

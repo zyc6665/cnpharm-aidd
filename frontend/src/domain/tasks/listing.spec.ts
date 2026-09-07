@@ -66,6 +66,9 @@ test('任务列表请求参数包含服务端分页和筛选条件', () => {
       keyword: '  failed pdb  ',
       createdFrom: '2026-09-01T00:00:00.000Z',
       createdTo: '2026-09-07T23:59:59.999Z',
+      workflowRunId: 'workflow-run-1',
+      workflowDefinitionId: 'workflow-definition-1',
+      workflowNodeId: 'protein_preparation',
     }),
     {
       view: 'history',
@@ -76,6 +79,9 @@ test('任务列表请求参数包含服务端分页和筛选条件', () => {
       keyword: 'failed pdb',
       created_from: '2026-09-01T00:00:00.000Z',
       created_to: '2026-09-07T23:59:59.999Z',
+      workflow_run_id: 'workflow-run-1',
+      workflow_definition_id: 'workflow-definition-1',
+      workflow_node_id: 'protein_preparation',
     }
   )
 })
@@ -89,11 +95,17 @@ test('任务视图计数请求参数复用筛选条件但不携带分页和视�
       projectId: 'project-1',
       toolId: 'tool-1',
       keyword: '  failed pdb  ',
+      workflowRunId: 'workflow-run-1',
+      workflowDefinitionId: 'workflow-definition-1',
+      workflowNodeId: 'protein_preparation',
     }),
     {
       project_id: 'project-1',
       tool_id: 'tool-1',
       keyword: 'failed pdb',
+      workflow_run_id: 'workflow-run-1',
+      workflow_definition_id: 'workflow-definition-1',
+      workflow_node_id: 'protein_preparation',
     }
   )
 })
