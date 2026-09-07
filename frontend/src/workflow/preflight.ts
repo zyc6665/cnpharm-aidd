@@ -102,6 +102,7 @@ export function buildWorkflowPreflight(input: {
   readyNodeIds: string[]
   selectedWorkflowInputFiles?: Record<string, string>
   artifacts?: ArtifactFile[]
+  artifactBindingsByNode?: Record<string, Record<string, string>>
   taskByNode?: Record<string, WorkflowTaskRef | null | undefined>
   workflowRunNodeStates?: Record<string, WorkflowRunNodeState | null | undefined>
   selectedToolByNode?: Record<string, string>
@@ -110,6 +111,7 @@ export function buildWorkflowPreflight(input: {
   const toolNodes = input.template.nodes.filter((node) => node.type === 'tool')
   const readyNodeIds = new Set(input.readyNodeIds)
   const artifactsById = new Map((input.artifacts ?? []).map((artifact) => [artifact.id, artifact]))
+  const artifactsByBindingId = buildArtifactBindingLookup(input.artifacts ?? [])
   const nodeById = new Map(input.template.nodes.map((node) => [node.id, node]))
   const issues: WorkflowPreflightIssue[] = []
   const resourceSummaries: WorkflowPreflightResourceSummary[] = []
@@ -161,6 +163,15 @@ export function buildWorkflowPreflight(input: {
       nodeTitle: formatWorkflowKey(node.titleKey),
       task: input.taskByNode?.[node.id] ?? null,
       nodeState: input.workflowRunNodeStates?.[node.id] ?? null,
+    })) {
+      pushIssue(issues, issueIds, issue)
+    }
+
+    for (const issue of createSavedArtifactBindingIssues({
+      node,
+      nodeTitle: formatWorkflowKey(node.titleKey),
+      bindings: input.artifactBindingsByNode?.[node.id],
+      artifactsByBindingId,
     })) {
       pushIssue(issues, issueIds, issue)
     }
@@ -243,6 +254,88 @@ export function buildWorkflowPreflight(input: {
       runnableCount,
       issues,
     }),
+  }
+}
+
+function buildArtifactBindingLookup(artifacts: ArtifactFile[]): Map<string, ArtifactFile> {
+  const lookup = new Map<string, ArtifactFile>()
+  for (const artifact of artifacts) {
+    indexArtifactBindingId(lookup, artifact.id, artifact)
+    indexArtifactBindingId(lookup, artifact.artifact_id, artifact)
+    indexArtifactBindingId(lookup, artifact.artifact_version_id, artifact)
+  }
+  return lookup
+}
+
+function indexArtifactBindingId(
+  lookup: Map<string, ArtifactFile>,
+  value: string | null | undefined,
+  artifact: ArtifactFile,
+) {
+  const id = normalizeDecisionText(value)
+  if (id) {
+    lookup.set(id, artifact)
+  }
+}
+
+function createSavedArtifactBindingIssues(input: {
+  node: WorkflowCanvasPreset['nodes'][number]
+  nodeTitle: string
+  bindings?: Record<string, string>
+  artifactsByBindingId: Map<string, ArtifactFile>
+}): WorkflowPreflightIssue[] {
+  if (!input.bindings || !input.node.inputArtifactSlots?.length) {
+    return []
+  }
+
+  const slotsByName = new Map(input.node.inputArtifactSlots.map(slot => [slot.name, slot]))
+  const issues: WorkflowPreflightIssue[] = []
+  for (const [slotName, rawArtifactId] of Object.entries(input.bindings)) {
+    const artifactId = normalizeDecisionText(rawArtifactId)
+    const slot = slotsByName.get(slotName)
+    if (!artifactId || !slot) {
+      continue
+    }
+
+    const artifact = input.artifactsByBindingId.get(artifactId)
+    if (!artifact) {
+      issues.push(
+        createSavedArtifactBindingIssue(input.node.id, input.nodeTitle, slotName, artifactId, 'missing')
+      )
+      continue
+    }
+
+    const expectedType = normalizeWorkflowSemanticType(slot.type)
+    const rawArtifactType = normalizeDecisionText(artifact.semantic_type)
+    const artifactType = rawArtifactType ? normalizeWorkflowSemanticType(rawArtifactType) : ''
+    if (expectedType && artifactType && expectedType !== artifactType) {
+      issues.push(
+        createSavedArtifactBindingIssue(input.node.id, input.nodeTitle, slotName, artifactId, 'mismatch')
+      )
+    }
+  }
+  return issues
+}
+
+function createSavedArtifactBindingIssue(
+  nodeId: string,
+  nodeTitle: string,
+  slotName: string,
+  artifactId: string,
+  reason: 'missing' | 'mismatch',
+): WorkflowPreflightIssue {
+  const detail = reason === 'missing'
+    ? `已保存的 ${slotName} 绑定 ${artifactId} 不在当前可用产物列表中，请重新选择输入。`
+    : `已保存的 ${slotName} 绑定 ${artifactId} 与当前输入要求不匹配，请重新选择输入。`
+
+  return {
+    id: `${nodeId}-invalid_artifact_binding-${slotName}`,
+    nodeId,
+    nodeTitle,
+    type: 'invalid_artifact_binding',
+    severity: 'error',
+    title: '标准产物绑定无效',
+    detail,
   }
 }
 

@@ -32,9 +32,10 @@
 - 2026-09-07：任务取消审计进入共用取消入口；独立任务、工作流节点任务和 Agent 关联任务调用 `cancel_platform_task` 成功后统一记录 `TASK_CANCEL` 事件。
 - 2026-09-07：文件/Artifact 下载拒绝审计补齐；普通文件越权、令牌无效、未登录和过期拒绝记录 `FILE_DOWNLOAD/DENIED`，Artifact 下载跨项目拒绝在不改变 404 响应的前提下记录内部审计。
 - 2026-09-07：基础 ADMET 占位输出防误用；内置 virtual ADMET 未配置真实 endpoint 时，输出显式 `prediction_status=unconfigured`、endpoint/model/unit/applicability 为 unknown、evidence 为 `engineering_smoke_only`，避免把 RDKit 或占位结果冒充真实 ADMET 预测。
+- 2026-09-07：Workflow Hydration 预检状态补齐；加载保存工作流后，节点级 Artifact 绑定会进入预检校验，陈旧或语义不匹配的绑定显示为 `invalid_artifact_binding`，避免用户运行时才发现标准产物不可用。
 
 ## 下一步候选
 
-1. Workflow Hydration 继续检查：保存加载后恢复 Artifact 绑定和预检状态的边界场景。
+1. Workflow Hydration 继续检查：保存加载后恢复节点任务和最新 workflow run 的更多边界场景。
 2. 基础 ADMET 真实 endpoint 接入：登记 endpoint、模型版本、单位/标签、模型卡和证据附件后替换占位链路。
 3. 任务中心分页继续服务端化：后续可移除标签内的前端二次分页，直接使用 `/tasks` total。

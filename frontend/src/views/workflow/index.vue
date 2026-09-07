@@ -437,6 +437,7 @@
       readyNodeIds: readyToolNodeIds.value,
       selectedWorkflowInputFiles: selectedWorkflowInputFiles.value,
       artifacts: artifactsStore.items,
+      artifactBindingsByNode: workflowStore.artifactBindingsByNode,
       taskByNode: workflowStore.taskByNode,
       workflowRunNodeStates: workflowStore.activeWorkflowRun?.node_states,
       selectedToolByNode: workflowStore.selectedToolByNode,

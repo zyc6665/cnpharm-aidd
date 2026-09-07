@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ToolContract } from '@/types/models'
+import type { ArtifactFile, ToolContract } from '@/types/models'
 import type { WorkflowCanvasPreset } from './canvas-types'
 import { buildWorkflowPreflight } from './preflight'
 
@@ -36,6 +36,23 @@ function makeToolContract(overrides: Partial<ToolContract> = {}): ToolContract {
       virtual: false,
     },
     validation: { status: 'valid', errors: [] },
+    ...overrides,
+  }
+}
+
+function artifact(overrides: Partial<ArtifactFile>): ArtifactFile {
+  return {
+    id: 'artifact-file-1',
+    filename: 'protein.pdb',
+    size_bytes: 1024,
+    source_type: 'artifact',
+    download_url: '/api/v1/files/artifact-file-1/download',
+    task_id: 'task-1',
+    tool_id: 'tool-1',
+    tool_name: 'Fetch PDB',
+    tool_slug: 'builtin-fetch-pdb',
+    semantic_type: 'protein_structure@1',
+    created_at: '2026-09-07T00:00:00Z',
     ...overrides,
   }
 }
@@ -140,6 +157,59 @@ describe('buildWorkflowPreflight', () => {
         detail: '当前蛋白缺少 prepared_pdb。建议运行 builtin-protein-preparation。',
       }),
     ])
+  })
+
+  it('将已保存但不可用的节点 Artifact 绑定转换为预检提示', () => {
+    const template: WorkflowCanvasPreset = {
+      id: 'free',
+      kind: 'free',
+      nameKey: 'Free Workflow',
+      nodes: [
+        {
+          id: 'predict-pocket',
+          type: 'tool',
+          titleKey: 'Predict Pocket',
+          position: { x: 120, y: 80 },
+          inputArtifactSlots: [
+            { name: 'protein', type: 'protein_structure@1', required: true },
+          ],
+        },
+        {
+          id: 'dock-pocket',
+          type: 'tool',
+          titleKey: 'Dock Pocket',
+          position: { x: 360, y: 80 },
+          inputArtifactSlots: [
+            { name: 'pocket', type: 'binding_pocket@1', required: true },
+          ],
+        },
+      ],
+      edges: [],
+    }
+
+    const preflight = buildWorkflowPreflight({
+      template,
+      nodeStatuses: { 'predict-pocket': 'idle', 'dock-pocket': 'idle' },
+      readyNodeIds: [],
+      artifacts: [artifact({ artifact_version_id: 'artifact-version-protein' })],
+      artifactBindingsByNode: {
+        'predict-pocket': { protein: 'artifact-version-protein' },
+        'dock-pocket': { pocket: 'artifact-version-missing' },
+      },
+    })
+
+    expect(preflight.primaryMessage).toBe('存在不可用的标准产物绑定')
+    expect(preflight.issues).toContainEqual(expect.objectContaining({
+      id: 'dock-pocket-invalid_artifact_binding-pocket',
+      nodeId: 'dock-pocket',
+      type: 'invalid_artifact_binding',
+      severity: 'error',
+      detail: '已保存的 pocket 绑定 artifact-version-missing 不在当前可用产物列表中，请重新选择输入。',
+    }))
+    expect(preflight.issues).not.toContainEqual(expect.objectContaining({
+      nodeId: 'predict-pocket',
+      type: 'invalid_artifact_binding',
+    }))
   })
 
   it('等待上游产物时应提示用户先运行上游而不是手动绑定文件', () => {
