@@ -11,6 +11,7 @@ import httpx
 import pytest
 import pytest_asyncio
 from fastapi import Header, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -354,6 +355,62 @@ async def test_project_task_list_supports_created_time_range_filter(
 
     assert response.status_code == 200
     assert [item["id"] for item in response.json()["data"]["items"]] == [recent_task.id]
+
+
+@pytest.mark.asyncio
+async def test_project_task_list_supports_workflow_node_filters(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    users: dict[str, User],
+    published_tool: Tool,
+) -> None:
+    project = await _create_project_with_members(db_session, users)
+    matching_task = await _create_task(
+        db_session,
+        user=users["owner"],
+        tool=published_tool,
+        project_id=project.id,
+        name="Workflow matching task",
+        status=TaskStatus.RUNNING.value,
+    )
+    other_task = await _create_task(
+        db_session,
+        user=users["owner"],
+        tool=published_tool,
+        project_id=project.id,
+        name="Workflow other task",
+        status=TaskStatus.RUNNING.value,
+    )
+    matching_input = (
+        await db_session.execute(select(TaskInput).where(TaskInput.task_id == matching_task.id))
+    ).scalar_one()
+    other_input = (
+        await db_session.execute(select(TaskInput).where(TaskInput.task_id == other_task.id))
+    ).scalar_one()
+    matching_input.params = {
+        "workflow_run_id": "workflow-run-1",
+        "workflow_definition_id": "workflow-def-1",
+        "workflow_node_id": "protein_preparation",
+    }
+    other_input.params = {
+        "workflow_run_id": "workflow-run-1",
+        "workflow_definition_id": "workflow-def-1",
+        "workflow_node_id": "lvpocket",
+    }
+    await db_session.commit()
+
+    response = await api_client.get(
+        "/api/v1/tasks",
+        headers={"Authorization": "Bearer viewer"},
+        params={
+            "project_id": project.id,
+            "workflow_run_id": "workflow-run-1",
+            "workflow_node_id": "protein_preparation",
+        },
+    )
+
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()["data"]["items"]] == [matching_task.id]
 
 
 @pytest.mark.asyncio

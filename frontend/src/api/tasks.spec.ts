@@ -21,7 +21,9 @@ describe('getTaskList', () => {
       view: 'needs_attention',
       project_id: 'project-1',
       created_from: '2026-09-01T00:00:00.000Z',
-      created_to: '2026-09-07T23:59:59.999Z'
+      created_to: '2026-09-07T23:59:59.999Z',
+      workflow_run_id: 'workflow-run-1',
+      workflow_node_id: 'protein_preparation'
     })
 
     expect(get).toHaveBeenCalledWith(
@@ -30,7 +32,9 @@ describe('getTaskList', () => {
         view: 'needs_attention',
         project_id: 'project-1',
         created_from: '2026-09-01T00:00:00.000Z',
-        created_to: '2026-09-07T23:59:59.999Z'
+        created_to: '2026-09-07T23:59:59.999Z',
+        workflow_run_id: 'workflow-run-1',
+        workflow_node_id: 'protein_preparation'
       },
       undefined
     )

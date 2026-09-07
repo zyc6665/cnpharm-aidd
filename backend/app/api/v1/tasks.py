@@ -214,6 +214,9 @@ async def list_tasks(
     project_id: Optional[str] = Query(None, min_length=1, max_length=36),
     created_from: Optional[datetime] = Query(None, description="创建时间起点"),
     created_to: Optional[datetime] = Query(None, description="创建时间终点"),
+    workflow_run_id: Optional[str] = Query(None, description="工作流运行 ID"),
+    workflow_definition_id: Optional[str] = Query(None, description="工作流定义 ID"),
+    workflow_node_id: Optional[str] = Query(None, description="工作流节点 ID"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -231,6 +234,9 @@ async def list_tasks(
             project_id=project_id,
             created_from=created_from,
             created_to=created_to,
+            workflow_run_id=workflow_run_id,
+            workflow_definition_id=workflow_definition_id,
+            workflow_node_id=workflow_node_id,
         ),
     )
 

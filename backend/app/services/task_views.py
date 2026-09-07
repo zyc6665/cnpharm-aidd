@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.common.exceptions import ValidationException
-from app.models.tasks import Task, TaskStatus
+from app.models.tasks import Task, TaskInput, TaskStatus
 from app.models.tools import Tool
 from app.models.users import User
 from app.services.project_access import load_project_membership
@@ -41,6 +41,9 @@ class TaskQueryInput:
     project_id: str | None = None
     created_from: datetime | None = None
     created_to: datetime | None = None
+    workflow_run_id: str | None = None
+    workflow_definition_id: str | None = None
+    workflow_node_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -84,6 +87,22 @@ async def query_task_page(db: AsyncSession, query: TaskQueryInput) -> TaskQueryP
         statement = statement.where(Task.created_at >= _naive_utc(query.created_from))
     if query.created_to:
         statement = statement.where(Task.created_at <= _naive_utc(query.created_to))
+
+    if query.workflow_run_id or query.workflow_definition_id or query.workflow_node_id:
+        statement = statement.join(TaskInput, TaskInput.task_id == Task.id)
+        if query.workflow_run_id:
+            statement = statement.where(
+                TaskInput.params["workflow_run_id"].as_string() == query.workflow_run_id
+            )
+        if query.workflow_definition_id:
+            statement = statement.where(
+                TaskInput.params["workflow_definition_id"].as_string()
+                == query.workflow_definition_id
+            )
+        if query.workflow_node_id:
+            statement = statement.where(
+                TaskInput.params["workflow_node_id"].as_string() == query.workflow_node_id
+            )
 
     if query.keyword:
         search_pattern = f"%{query.keyword}%"
