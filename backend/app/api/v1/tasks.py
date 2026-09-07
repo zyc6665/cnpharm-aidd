@@ -34,7 +34,7 @@ from app.schemas.tasks import (
 from app.common.responses import paginated_response, success_response
 from app.common.exceptions import NotFoundException, ForbiddenException, ValidationException
 from app.services.project_access import load_project_membership, require_project_role
-from app.services.task_views import TaskQueryInput, query_task_page
+from app.services.task_views import TaskQueryInput, query_task_page, query_task_view_counts
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -269,6 +269,38 @@ async def list_tasks(
         page=page,
         page_size=page_size,
     )
+
+
+@router.get("/counts", response_model=dict)
+async def get_task_counts(
+    tool_id: Optional[str] = None,
+    keyword: Optional[str] = None,
+    project_id: Optional[str] = Query(None, min_length=1, max_length=36),
+    created_from: Optional[datetime] = Query(None, description="创建时间起点"),
+    created_to: Optional[datetime] = Query(None, description="创建时间终点"),
+    workflow_run_id: Optional[str] = Query(None, description="工作流运行 ID"),
+    workflow_definition_id: Optional[str] = Query(None, description="工作流定义 ID"),
+    workflow_node_id: Optional[str] = Query(None, description="工作流节点 ID"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """获取任务系统视图计数。"""
+    counts = await query_task_view_counts(
+        db,
+        TaskQueryInput(
+            current_user=current_user,
+            tool_id=tool_id,
+            keyword=keyword,
+            project_id=project_id,
+            created_from=created_from,
+            created_to=created_to,
+            workflow_run_id=workflow_run_id,
+            workflow_definition_id=workflow_definition_id,
+            workflow_node_id=workflow_node_id,
+        ),
+    )
+
+    return success_response(counts.__dict__)
 
 
 @router.post("/prepare-preview", response_model=dict)

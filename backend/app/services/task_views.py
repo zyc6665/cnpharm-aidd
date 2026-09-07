@@ -54,12 +54,72 @@ class TaskQueryPage:
     total: int
 
 
+@dataclass(frozen=True)
+class TaskViewCounts:
+    """任务系统视图计数。"""
+
+    all: int
+    running: int
+    history: int
+    needs_attention: int
+    recent_results: int
+
+
 async def query_task_page(db: AsyncSession, query: TaskQueryInput) -> TaskQueryPage:
     """按系统视图和基础筛选查询当前用户可见任务。"""
-    statement = select(Task).options(
-        selectinload(Task.tool),
-        joinedload(Task.user),
+    statement = await _build_task_statement(
+        db,
+        query,
+        include_view_filters=True,
+        include_load_options=True,
     )
+
+    total = await _count_tasks(db, statement)
+    page_size = max(query.page_size, 1)
+    offset = (max(query.page, 1) - 1) * page_size
+    result = await db.execute(
+        statement.order_by(Task.created_at.desc()).offset(offset).limit(page_size)
+    )
+    return TaskQueryPage(tasks=list(result.scalars().all()), total=total)
+
+
+async def query_task_view_counts(db: AsyncSession, query: TaskQueryInput) -> TaskViewCounts:
+    """按同一权限和筛选条件返回各系统视图计数。"""
+    statement = await _build_task_statement(
+        db,
+        query,
+        include_view_filters=False,
+        include_load_options=False,
+    )
+    status_subquery = statement.with_only_columns(Task.status.label("status")).subquery()
+    result = await db.execute(
+        select(status_subquery.c.status, func.count())
+        .select_from(status_subquery)
+        .group_by(status_subquery.c.status)
+    )
+    counts_by_status = {str(status): int(count) for status, count in result.all()}
+    return TaskViewCounts(
+        all=sum(counts_by_status.values()),
+        running=_sum_status_counts(counts_by_status, _VIEW_STATUSES["running"]),
+        history=_sum_status_counts(counts_by_status, _VIEW_STATUSES["history"]),
+        needs_attention=_sum_status_counts(counts_by_status, _VIEW_STATUSES["needs_attention"]),
+        recent_results=_sum_status_counts(counts_by_status, _VIEW_STATUSES["recent_results"]),
+    )
+
+
+async def _build_task_statement(
+    db: AsyncSession,
+    query: TaskQueryInput,
+    *,
+    include_view_filters: bool,
+    include_load_options: bool,
+):
+    statement = select(Task)
+    if include_load_options:
+        statement = statement.options(
+            selectinload(Task.tool),
+            joinedload(Task.user),
+        )
 
     is_admin = query.current_user.role == "admin"
     if query.project_id:
@@ -73,12 +133,13 @@ async def query_task_page(db: AsyncSession, query: TaskQueryInput) -> TaskQueryP
     elif not is_admin:
         statement = statement.where(Task.user_id == query.current_user.id)
 
-    view_statuses = _statuses_for_view(query.view)
-    if view_statuses:
-        statement = statement.where(Task.status.in_(view_statuses))
+    if include_view_filters:
+        view_statuses = _statuses_for_view(query.view)
+        if view_statuses:
+            statement = statement.where(Task.status.in_(view_statuses))
 
-    if query.status:
-        statement = statement.where(Task.status == query.status.upper())
+        if query.status:
+            statement = statement.where(Task.status == query.status.upper())
 
     if query.tool_id:
         statement = statement.where(Task.tool_id == query.tool_id)
@@ -123,13 +184,11 @@ async def query_task_page(db: AsyncSession, query: TaskQueryInput) -> TaskQueryP
             )
         )
 
-    total = await _count_tasks(db, statement)
-    page_size = max(query.page_size, 1)
-    offset = (max(query.page, 1) - 1) * page_size
-    result = await db.execute(
-        statement.order_by(Task.created_at.desc()).offset(offset).limit(page_size)
-    )
-    return TaskQueryPage(tasks=list(result.scalars().all()), total=total)
+    return statement
+
+
+def _sum_status_counts(counts_by_status: dict[str, int], statuses: tuple[str, ...]) -> int:
+    return sum(counts_by_status.get(status, 0) for status in statuses)
 
 
 def _statuses_for_view(view: str | None) -> tuple[str, ...]:

@@ -316,6 +316,86 @@ async def test_project_task_list_supports_system_view_filters(
 
 
 @pytest.mark.asyncio
+async def test_project_task_counts_support_system_views_and_keyword_filter(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    users: dict[str, User],
+    published_tool: Tool,
+) -> None:
+    project = await _create_project_with_members(db_session, users)
+    await _create_task(
+        db_session,
+        user=users["owner"],
+        tool=published_tool,
+        project_id=project.id,
+        name="Pending project task",
+        status=TaskStatus.PENDING.value,
+    )
+    await _create_task(
+        db_session,
+        user=users["owner"],
+        tool=published_tool,
+        project_id=project.id,
+        name="Running project task",
+        status=TaskStatus.RUNNING.value,
+    )
+    await _create_task(
+        db_session,
+        user=users["owner"],
+        tool=published_tool,
+        project_id=project.id,
+        name="Successful project task",
+        status=TaskStatus.SUCCESS.value,
+    )
+    failed_task = await _create_task(
+        db_session,
+        user=users["owner"],
+        tool=published_tool,
+        project_id=project.id,
+        name="Failed ligand prep",
+        status=TaskStatus.FAILURE.value,
+    )
+    failed_task.error_message = "Ligand conversion failed: invalid SDF block"
+    await _create_task(
+        db_session,
+        user=users["owner"],
+        tool=published_tool,
+        project_id=project.id,
+        name="Canceled project task",
+        status=TaskStatus.CANCELED.value,
+    )
+    await db_session.commit()
+
+    all_counts_response = await api_client.get(
+        "/api/v1/tasks/counts",
+        headers={"Authorization": "Bearer viewer"},
+        params={"project_id": project.id},
+    )
+    filtered_counts_response = await api_client.get(
+        "/api/v1/tasks/counts",
+        headers={"Authorization": "Bearer viewer"},
+        params={"project_id": project.id, "keyword": "invalid SDF"},
+    )
+
+    assert all_counts_response.status_code == 200
+    assert all_counts_response.json()["data"] == {
+        "all": 5,
+        "running": 2,
+        "history": 3,
+        "needs_attention": 1,
+        "recent_results": 1,
+    }
+    assert filtered_counts_response.status_code == 200
+    assert filtered_counts_response.json()["data"] == {
+        "all": 1,
+        "running": 0,
+        "history": 1,
+        "needs_attention": 1,
+        "recent_results": 0,
+    }
+
+
+@pytest.mark.asyncio
 async def test_project_task_list_supports_created_time_range_filter(
     api_client: httpx.AsyncClient,
     db_session: AsyncSession,
