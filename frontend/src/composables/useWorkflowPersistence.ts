@@ -550,26 +550,52 @@ export function mapWorkflowDefinitionToCanvasPayload(input: {
   toolsBySlug?: WorkflowToolContractLookup
 }) {
   const { canvasPresetId, name, description, definition, toolsBySlug } = input
+  const nodes = definition.nodes ?? []
+  const selectedToolByNode = normalizeSelectedToolByNode(definition.selected_tool_by_node)
   return {
     canvas_preset_id: canvasPresetId,
     name,
     description: description ?? undefined,
-    nodes: (definition.nodes ?? []).map(node => mapCanvasDefinitionNode(node, toolsBySlug)),
+    nodes: nodes.map(node => mapCanvasDefinitionNode(
+      node,
+      toolsBySlug,
+      resolveWorkflowNodeToolSlug(node, selectedToolByNode)
+    )),
     edges: (definition.edges ?? []).map((edge, index) => ({
       id: resolveWorkflowEdgeId(edge.id, index),
       source: edge.source,
       target: edge.target,
       artifactType: edge.source_output ?? edge.target_input
     })),
-    selected_tool_by_node: Object.fromEntries(
-      definition.nodes
-        .filter(node => node.kind === 'tool' && node.tool_slug)
-        .map(node => [node.id, node.tool_slug as string])
-    ),
+    selected_tool_by_node: buildSelectedToolByNode(nodes, selectedToolByNode),
     artifact_bindings_by_node: normalizeArtifactBindings(definition.artifact_bindings_by_node),
     task_bindings_by_node: normalizeTaskBindings(definition.task_bindings_by_node),
     status: 'draft' as const
   }
+}
+
+function buildSelectedToolByNode(
+  nodes: WorkflowDefinitionNode[],
+  selectedToolByNode: Record<string, string>,
+): Record<string, string> {
+  const result: Record<string, string> = {}
+  for (const node of nodes) {
+    const toolSlug = resolveWorkflowNodeToolSlug(node, selectedToolByNode)
+    if (toolSlug) {
+      result[node.id] = toolSlug
+    }
+  }
+  return result
+}
+
+function resolveWorkflowNodeToolSlug(
+  node: WorkflowDefinitionNode,
+  selectedToolByNode: Record<string, string>,
+): string | undefined {
+  return selectedToolByNode[node.id]
+    ?? stringValue(node.tool_slug)
+    ?? stringValue(node.recommendedToolSlug)
+    ?? stringArrayValue(node.toolSlugs)[0]
 }
 
 function buildNodeTaskSnapshot(taskByNode: Record<string, WorkflowTaskRef | undefined>): Record<string, string> {
@@ -619,17 +645,33 @@ function normalizeArtifactBindings(value: unknown): Record<string, Record<string
   return bindings
 }
 
+function normalizeSelectedToolByNode(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object') {
+    return {}
+  }
+
+  const selected: Record<string, string> = {}
+  for (const [nodeId, rawToolSlug] of Object.entries(value)) {
+    if (typeof rawToolSlug === 'string' && rawToolSlug.trim()) {
+      selected[nodeId] = rawToolSlug
+    }
+  }
+  return selected
+}
+
 function deriveWorkflowNodeArtifactSlots(
   node: WorkflowDefinitionNode,
   toolsBySlug?: WorkflowToolContractLookup,
+  selectedToolSlug?: string,
 ) {
   const savedInputs = Array.isArray(node.artifact_input_slots) ? node.artifact_input_slots : []
   const savedOutputs = Array.isArray(node.artifact_outputs) ? node.artifact_outputs : []
-  if (!node.tool_slug) {
+  const toolSlug = selectedToolSlug ?? stringValue(node.tool_slug)
+  if (!toolSlug) {
     return { inputs: savedInputs, outputs: savedOutputs }
   }
 
-  const contract = toolsBySlug?.[node.tool_slug]?.contract
+  const contract = toolsBySlug?.[toolSlug]?.contract
   const contractSlots = deriveArtifactSlotsFromToolContract(contract)
   return {
     inputs: savedInputs.length > 0 ? savedInputs : [...contractSlots.inputs],
@@ -640,6 +682,7 @@ function deriveWorkflowNodeArtifactSlots(
 function mapCanvasDefinitionNode(
   node: WorkflowDefinitionNode,
   toolsBySlug?: WorkflowToolContractLookup,
+  selectedToolSlug?: string,
 ): WorkflowCanvasNode {
   const nodeKind = String(node.kind ?? node.type ?? '')
   if (['condition', 'map', 'loop'].includes(nodeKind)) {
@@ -660,7 +703,11 @@ function mapCanvasDefinitionNode(
     }
   }
 
-  const hydratedSlots = deriveWorkflowNodeArtifactSlots(node, toolsBySlug)
+  const toolSlug = selectedToolSlug ?? stringValue(node.tool_slug)
+  const toolSlugs = toolSlug
+    ? Array.from(new Set([toolSlug, ...stringArrayValue(node.toolSlugs)]))
+    : stringArrayValue(node.toolSlugs)
+  const hydratedSlots = deriveWorkflowNodeArtifactSlots(node, toolsBySlug, toolSlug)
   const inputArtifactSlots = hydratedSlots.inputs
   const outputArtifactSlots = hydratedSlots.outputs
   const inputSlotTypes = resolveArtifactSlotTypes(inputArtifactSlots)
@@ -669,11 +716,11 @@ function mapCanvasDefinitionNode(
   return {
     id: node.id,
     type: node.kind === 'input' ? 'input' : 'tool',
-    titleKey: node.tool_slug || node.semantic_type || node.id,
-    descriptionKey: node.tool_slug || node.semantic_type || node.id,
+    titleKey: toolSlug || node.semantic_type || node.id,
+    descriptionKey: toolSlug || node.semantic_type || node.id,
     position: resolveWorkflowNodePosition(node),
-    toolSlugs: node.tool_slug ? [node.tool_slug] : [],
-    recommendedToolSlug: node.tool_slug ?? undefined,
+    toolSlugs,
+    recommendedToolSlug: toolSlug,
     requiredInputTypes:
       node.kind === 'input' && node.semantic_type
         ? [node.semantic_type as WorkflowArtifactSemanticType]
@@ -700,6 +747,12 @@ function controlNodeTitle(nodeKind: string): string {
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value : undefined
+}
+
+function stringArrayValue(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
+    : []
 }
 
 function numberValue(value: unknown): number | undefined {

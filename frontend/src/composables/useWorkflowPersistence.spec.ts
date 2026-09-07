@@ -167,6 +167,46 @@ describe('mapWorkflowDefinitionToCanvasPayload', () => {
     expect(payload.edges[0]?.artifactType).toBe('protein_structure@1')
   })
 
+  it('hydrates saved canvas tool selections from recommended tool metadata', () => {
+    const payload = mapWorkflowDefinitionToCanvasPayload({
+      canvasPresetId: 'free-canvas',
+      name: 'Saved Canvas Workflow',
+      toolsBySlug: {
+        'lvpocket-pocket-prediction': {
+          contract: makeToolContract(),
+        },
+      },
+      definition: {
+        nodes: [
+          {
+            id: 'lvpocket-node',
+            type: 'tool',
+            recommendedToolSlug: 'lvpocket-pocket-prediction',
+            toolSlugs: ['lvpocket-pocket-prediction'],
+            position: { x: 120, y: 80 },
+          },
+        ],
+        edges: [],
+        selected_tool_by_node: { 'lvpocket-node': 'lvpocket-pocket-prediction' },
+      },
+    })
+
+    expect(payload.selected_tool_by_node).toEqual({
+      'lvpocket-node': 'lvpocket-pocket-prediction',
+    })
+    expect(payload.nodes[0]).toMatchObject({
+      id: 'lvpocket-node',
+      type: 'tool',
+      titleKey: 'lvpocket-pocket-prediction',
+      recommendedToolSlug: 'lvpocket-pocket-prediction',
+      toolSlugs: ['lvpocket-pocket-prediction'],
+      inputArtifactSlots: [{ name: 'protein', type: 'protein_structure@1', required: true }],
+      outputArtifactSlots: [
+        { name: 'pocket', type: 'binding_pocket@1', cardinality: 'one', required: true },
+      ],
+    })
+  })
+
   it('fills only missing artifact slot directions from current tool contracts', () => {
     const payload = mapWorkflowDefinitionToCanvasPayload({
       canvasPresetId: 'free-canvas',
