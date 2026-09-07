@@ -414,6 +414,44 @@ async def test_project_task_list_supports_workflow_node_filters(
 
 
 @pytest.mark.asyncio
+async def test_project_task_list_keyword_search_matches_error_message(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    users: dict[str, User],
+    published_tool: Tool,
+) -> None:
+    project = await _create_project_with_members(db_session, users)
+    matching_task = await _create_task(
+        db_session,
+        user=users["owner"],
+        tool=published_tool,
+        project_id=project.id,
+        name="Failed ligand prep",
+        status=TaskStatus.FAILURE.value,
+    )
+    other_task = await _create_task(
+        db_session,
+        user=users["owner"],
+        tool=published_tool,
+        project_id=project.id,
+        name="Failed pocket prep",
+        status=TaskStatus.FAILURE.value,
+    )
+    matching_task.error_message = "Ligand conversion failed: invalid SDF block"
+    other_task.error_message = "Pocket prediction failed: no cavities detected"
+    await db_session.commit()
+
+    response = await api_client.get(
+        "/api/v1/tasks",
+        headers={"Authorization": "Bearer viewer"},
+        params={"project_id": project.id, "keyword": "invalid SDF"},
+    )
+
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()["data"]["items"]] == [matching_task.id]
+
+
+@pytest.mark.asyncio
 async def test_project_task_operations_require_write_or_runner_role(
     api_client: httpx.AsyncClient,
     db_session: AsyncSession,

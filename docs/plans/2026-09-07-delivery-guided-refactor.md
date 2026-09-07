@@ -26,6 +26,7 @@
 - 2026-09-07：任务中心前端开始携带后端系统视图参数；标签页仍保留本地兜底过滤，但请求已按 `all/running/history` 缩小后端结果集。
 - 2026-09-07：任务列表补齐创建时间范围筛选；后端 Task View 查询支持 `created_from/created_to`，前端历史任务日期控件开始透传时间窗口。
 - 2026-09-07：任务列表补齐 workflow/node 定位筛选；后端可按 `workflow_run_id`、`workflow_definition_id`、`workflow_node_id` 从 `TaskInput.params` 定位节点任务。
+- 2026-09-07：任务列表关键词搜索补齐失败原因字段，可按 `error_message` / `progress_message` 定位需要关注的失败任务。
 
 ## 下一步候选
 

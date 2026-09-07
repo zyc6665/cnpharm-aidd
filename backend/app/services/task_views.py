@@ -113,6 +113,8 @@ async def query_task_page(db: AsyncSession, query: TaskQueryInput) -> TaskQueryP
                 or_(
                     Task.id.ilike(search_pattern),
                     Task.name.ilike(search_pattern),
+                    Task.error_message.ilike(search_pattern),
+                    Task.progress_message.ilike(search_pattern),
                     Tool.name.ilike(search_pattern),
                     Tool.slug.ilike(search_pattern),
                     User.email.ilike(search_pattern),
