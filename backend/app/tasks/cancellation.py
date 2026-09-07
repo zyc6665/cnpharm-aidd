@@ -5,6 +5,7 @@ from __future__ import annotations
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import use_direct_task_execution
+from app.logging.audit import AuditAction, AuditResult, get_audit_logger
 from app.models.tasks import Task, TaskStatus
 from app.models.tools import ToolVersion
 from app.models.users import User
@@ -34,7 +35,21 @@ async def cancel_platform_task(
         TaskQueueManager.revoke_task(task.celery_task_id)
 
     TaskStateMachine.cancel(task)
+    _audit_task_cancel(task=task, current_user=current_user)
     return True
+
+
+def _audit_task_cancel(*, task: Task, current_user: User) -> None:
+    extra_data = task.extra_data if isinstance(task.extra_data, dict) else {}
+    get_audit_logger().log_task_operation(
+        user_id=str(current_user.id),
+        action=AuditAction.TASK_CANCEL,
+        task_id=str(task.id),
+        tool_id=str(task.tool_id),
+        result=AuditResult.SUCCESS,
+        project_id=extra_data.get("project_id"),
+        tool_version_id=task.tool_version_id,
+    )
 
 
 async def _cancel_remote_tool_if_needed(db: AsyncSession | None, *, task: Task) -> None:

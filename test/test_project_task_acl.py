@@ -459,6 +459,14 @@ async def test_project_task_operations_require_write_or_runner_role(
     published_tool: Tool,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from app.logging.audit import AuditAction, AuditResult
+
+    audit_events: list[dict[str, object]] = []
+
+    class AuditRecorder:
+        def log_task_operation(self, **kwargs):
+            audit_events.append(kwargs)
+
     runner = SimpleNamespace(
         scheduled=[],
         cancelled=[],
@@ -467,6 +475,11 @@ async def test_project_task_operations_require_write_or_runner_role(
     )
     monkeypatch.setattr(config_settings, "TASK_EXECUTION_BACKEND", "direct", raising=False)
     monkeypatch.setattr(tasks_api, "direct_task_runner", runner, raising=False)
+    monkeypatch.setattr(
+        "app.tasks.cancellation.get_audit_logger",
+        lambda: AuditRecorder(),
+        raising=False,
+    )
     project = await _create_project_with_members(db_session, users)
     running_task = await _create_task(
         db_session,
@@ -505,6 +518,17 @@ async def test_project_task_operations_require_write_or_runner_role(
     assert viewer_cancel_response.status_code == 403
     assert runner_cancel_response.status_code == 200
     assert runner.cancelled == [running_task.id]
+    assert audit_events == [
+        {
+            "action": AuditAction.TASK_CANCEL,
+            "user_id": users["runner"].id,
+            "task_id": running_task.id,
+            "result": AuditResult.SUCCESS,
+            "project_id": project.id,
+            "tool_id": published_tool.id,
+            "tool_version_id": published_tool.current_version_id,
+        }
+    ]
     assert viewer_retry_response.status_code == 403
     assert editor_retry_response.status_code == 200
     assert runner.scheduled == [(failed_task.id, published_tool.current_version_id)]
