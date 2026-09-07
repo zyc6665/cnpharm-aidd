@@ -295,7 +295,10 @@ export function useWorkflowPersistence(input: {
   }
 
   async function handleCancelWorkflowRun() {
-    await workflowStore.cancelActiveWorkflowRun()
+    const run = await workflowStore.cancelActiveWorkflowRun()
+    if (run) {
+      await restoreNodeTasksFromWorkflowRun(run)
+    }
     clearWorkflowRunAutoSync()
     message.success('工作流运行已取消')
   }

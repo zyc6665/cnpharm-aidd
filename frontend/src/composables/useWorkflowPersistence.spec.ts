@@ -302,7 +302,7 @@ describe('useWorkflowPersistence API', () => {
     vi.mocked(getTaskDetail).mockReset()
   })
 
-  function buildTaskResponse(taskId: string) {
+  function buildTaskResponse(taskId: string, overrides: Record<string, unknown> = {}) {
     return {
       code: 200,
       message: 'ok',
@@ -317,6 +317,7 @@ describe('useWorkflowPersistence API', () => {
         updated_at: '2026-08-21T00:01:00Z',
         output_data: { ok: true },
         output_files: [],
+        ...overrides,
       },
     } as never
   }
@@ -325,6 +326,7 @@ describe('useWorkflowPersistence API', () => {
     workflow?: Record<string, unknown>
     runPage?: Record<string, unknown>
     run?: Record<string, unknown>
+    cancelRun?: Record<string, unknown>
     retryRun?: Record<string, unknown>
     taskByNode?: Record<string, Record<string, unknown>>
     projectId?: string
@@ -342,6 +344,12 @@ describe('useWorkflowPersistence API', () => {
       id: 'run-1',
       workflow_definition_id: 'workflow-1',
       status: 'running',
+      node_states: {},
+    })
+    const cancelActiveWorkflowRun = vi.fn().mockResolvedValue(options.cancelRun ?? {
+      id: 'run-1',
+      workflow_definition_id: 'workflow-1',
+      status: 'canceled',
       node_states: {},
     })
     const recordNodeTask = vi.fn()
@@ -395,6 +403,7 @@ describe('useWorkflowPersistence API', () => {
         loadWorkflowRuns,
         loadWorkflowRun,
         syncActiveWorkflowRun: vi.fn(),
+        cancelActiveWorkflowRun,
         retryWorkflowRunNode,
         exportWorkflowNodes: vi.fn(() => []),
         exportWorkflowEdges: vi.fn(() => []),
@@ -428,6 +437,7 @@ describe('useWorkflowPersistence API', () => {
       recordNodeTask,
       saveWorkflowDefinition,
       retryWorkflowRunNode,
+      cancelActiveWorkflowRun,
     }
   }
 
@@ -626,6 +636,40 @@ describe('useWorkflowPersistence API', () => {
     expect(getTaskDetail).toHaveBeenCalledWith('task-retry-pocket', { silent: true })
     expect(recordNodeTask).toHaveBeenCalledWith('predict-pocket', expect.objectContaining({
       id: 'task-retry-pocket',
+    }))
+    expect(persistence.workflowRunInputSelections.value).toEqual({
+      'protein_structure@1': 'artifact-version-protein',
+    })
+  })
+
+  it('取消工作流运行后应恢复取消后的节点任务详情', async () => {
+    vi.mocked(getTaskDetail).mockResolvedValue(buildTaskResponse('task-canceled-pocket', {
+      status: 'canceled',
+      progress: 20,
+    }))
+    const { persistence, cancelActiveWorkflowRun, recordNodeTask } = createPersistenceHarness({
+      activeWorkflowRunId: 'run-1',
+      cancelRun: {
+        id: 'run-1',
+        workflow_definition_id: 'workflow-1',
+        status: 'canceled',
+        input_files: { 'protein_structure@1': 'artifact-version-protein' },
+        node_states: {
+          'predict-pocket': {
+            status: 'canceled',
+            task_id: 'task-canceled-pocket',
+          },
+        },
+      },
+    })
+
+    await persistence.handleCancelWorkflowRun()
+
+    expect(cancelActiveWorkflowRun).toHaveBeenCalled()
+    expect(getTaskDetail).toHaveBeenCalledWith('task-canceled-pocket', { silent: true })
+    expect(recordNodeTask).toHaveBeenCalledWith('predict-pocket', expect.objectContaining({
+      id: 'task-canceled-pocket',
+      status: 'canceled',
     }))
     expect(persistence.workflowRunInputSelections.value).toEqual({
       'protein_structure@1': 'artifact-version-protein',
