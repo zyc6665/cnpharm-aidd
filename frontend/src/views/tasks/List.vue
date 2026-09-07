@@ -12,7 +12,7 @@
               <span class="tab-label">
                 <UnorderedListOutlined />
                 {{ t('tasks.allTasks') }}
-                <a-badge v-if="total > 0" :count="total" :overflow-count="999" class="tab-badge" />
+                <a-badge v-if="allCount > 0" :count="allCount" :overflow-count="999" class="tab-badge" />
               </span>
             </template>
           </a-tab-pane>
@@ -324,20 +324,16 @@
   import type { TaskListParams } from '@/api/tasks'
   import { getProjectOverview } from '@/api/projects'
   import {
+    buildTaskListQueryParams,
     canCancelTask as canCancelTaskForActor,
     canDeleteTask as canDeleteTaskForActor,
     canRetryTask as canRetryTaskForActor,
-    filterTasksByKeyword,
-    filterTasksForTab,
     getTaskArtifactLineagePath,
     getTaskProgressColor,
     getTaskProgressStatus,
     getTaskProjectContextLabel,
     getTaskStatusColor,
-    isHistoryTask,
     isRunningTask,
-    paginateTasks,
-    taskSystemViewForTab,
     type TaskActor,
     type TaskListTab
   } from '@/domain/tasks'
@@ -382,27 +378,15 @@
   const tasks = computed(() => tasksStore.tasks)
   const total = computed(() => tasksStore.total)
 
-  const filteredStandaloneTasks = computed<Task[]>(() => {
-    const filteredByTab = filterTasksForTab(tasks.value, currentTab.value)
-    return filterTasksByKeyword(filteredByTab, searchKeyword.value)
-  })
-
   const runningTasks = computed(() => displayTasks.value.filter(isRunningTask))
-  const runningCount = computed(
-    () => filteredStandaloneTasks.value.filter(isRunningTask).length
-  )
+  const allCount = computed(() => currentTab.value === 'all' ? total.value : 0)
+  const runningCount = computed(() => currentTab.value === 'running' ? total.value : 0)
+  const historyCount = computed(() => currentTab.value === 'history' ? total.value : 0)
 
-  const historyTasks = computed(() => displayTasks.value.filter(isHistoryTask))
-  const historyCount = computed(
-    () => filteredStandaloneTasks.value.filter(isHistoryTask).length
-  )
-
-  const displayTasks = computed(() =>
-    paginateTasks(filteredStandaloneTasks.value, currentPage.value, pageSize.value)
-  )
+  const displayTasks = computed<Task[]>(() => tasks.value)
 
   const hasDisplayItems = computed(() => displayTasks.value.length > 0)
-  const currentTotal = computed(() => filteredStandaloneTasks.value.length)
+  const currentTotal = computed(() => total.value)
 
   const toolOptions = computed(() => toolsStore.tools || [])
 
@@ -450,31 +434,18 @@
   }
 
   const fetchTasks = async () => {
-    const params: Pick<
-      TaskListParams,
-      'view' | 'tool_id' | 'keyword' | 'project_id' | 'created_from' | 'created_to'
-    > = {
-      view: taskSystemViewForTab(currentTab.value)
-    }
+    const params: TaskListParams = buildTaskListQueryParams({
+      tab: currentTab.value,
+      page: currentPage.value,
+      pageSize: pageSize.value,
+      projectId: projectId.value,
+      toolId: selectedTool.value,
+      keyword: searchKeyword.value,
+      createdFrom: dateRange.value?.[0].startOf('day').toISOString(),
+      createdTo: dateRange.value?.[1].endOf('day').toISOString(),
+    })
 
-    if (projectId.value) {
-      params.project_id = projectId.value
-    }
-
-    if (selectedTool.value) {
-      params.tool_id = selectedTool.value
-    }
-
-    if (searchKeyword.value.trim()) {
-      params.keyword = searchKeyword.value.trim()
-    }
-
-    if (currentTab.value === 'history' && dateRange.value) {
-      params.created_from = dateRange.value[0].startOf('day').toISOString()
-      params.created_to = dateRange.value[1].endOf('day').toISOString()
-    }
-
-    await tasksStore.fetchAllTasks(params)
+    await tasksStore.fetchTasks(params)
   }
 
   const fetchTasksSafely = async () => {
@@ -556,26 +527,31 @@
 
   const handlePageChange = (page: number) => {
     currentPage.value = page
+    void fetchTasksSafely()
   }
 
   const handlePageSizeChange = (_current: number, size: number) => {
     pageSize.value = size
     currentPage.value = 1
+    void fetchTasksSafely()
   }
 
   const handleCancel = async (id: string) => {
     await tasksStore.cancelTask(id)
     message.success(t('tasks.cancelSuccess'))
+    await fetchTasksSafely()
   }
 
   const handleRetry = async (id: string) => {
     await tasksStore.retryTask(id)
     message.success(t('tasks.retrySuccess'))
+    await fetchTasksSafely()
   }
 
   const handleDelete = async (id: string) => {
     await tasksStore.deleteTask(id)
     message.success(t('tasks.deleteSuccess'))
+    await fetchTasksSafely()
   }
 
   const goToDetail = (id: string) => {

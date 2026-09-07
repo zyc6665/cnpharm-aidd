@@ -2,6 +2,7 @@ import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import type { Task } from '@/types/models'
 import {
+  buildTaskListQueryParams,
   filterTasksByKeyword,
   filterTasksForTab,
   paginateTasks,
@@ -46,6 +47,31 @@ test('任务列表标签页映射到后端系统视图', () => {
   assert.equal(taskSystemViewForTab('all'), 'all')
   assert.equal(taskSystemViewForTab('running'), 'running')
   assert.equal(taskSystemViewForTab('history'), 'history')
+})
+
+test('任务列表请求参数包含服务端分页和筛选条件', () => {
+  assert.deepEqual(
+    buildTaskListQueryParams({
+      tab: 'history',
+      page: 2,
+      pageSize: 20,
+      projectId: 'project-1',
+      toolId: 'tool-1',
+      keyword: '  failed pdb  ',
+      createdFrom: '2026-09-01T00:00:00.000Z',
+      createdTo: '2026-09-07T23:59:59.999Z',
+    }),
+    {
+      view: 'history',
+      page: 2,
+      page_size: 20,
+      project_id: 'project-1',
+      tool_id: 'tool-1',
+      keyword: 'failed pdb',
+      created_from: '2026-09-01T00:00:00.000Z',
+      created_to: '2026-09-07T23:59:59.999Z',
+    }
+  )
 })
 
 test('任务列表关键字过滤覆盖名称、工具名和任务 ID', () => {
