@@ -325,8 +325,10 @@ describe('useWorkflowPersistence API', () => {
     workflow?: Record<string, unknown>
     runPage?: Record<string, unknown>
     run?: Record<string, unknown>
+    retryRun?: Record<string, unknown>
     taskByNode?: Record<string, Record<string, unknown>>
     projectId?: string
+    activeWorkflowRunId?: string | null
   } = {}) {
     const applyWorkflowDefinition = vi.fn()
     const loadWorkflowRuns = vi.fn().mockResolvedValue(options.runPage ?? { items: [] })
@@ -334,6 +336,12 @@ describe('useWorkflowPersistence API', () => {
       id: 'run-1',
       workflow_definition_id: 'workflow-1',
       status: 'success',
+      node_states: {},
+    })
+    const retryWorkflowRunNode = vi.fn().mockResolvedValue(options.retryRun ?? {
+      id: 'run-1',
+      workflow_definition_id: 'workflow-1',
+      status: 'running',
       node_states: {},
     })
     const recordNodeTask = vi.fn()
@@ -379,7 +387,7 @@ describe('useWorkflowPersistence API', () => {
         isLoadingWorkflowRun: false,
         isSyncingWorkflowRun: false,
         activeWorkflowRun: null,
-        activeWorkflowRunId: null,
+        activeWorkflowRunId: options.activeWorkflowRunId ?? null,
         resetSession: vi.fn(),
         clearActiveWorkflowRun,
         applyWorkflowDefinition,
@@ -387,6 +395,7 @@ describe('useWorkflowPersistence API', () => {
         loadWorkflowRuns,
         loadWorkflowRun,
         syncActiveWorkflowRun: vi.fn(),
+        retryWorkflowRunNode,
         exportWorkflowNodes: vi.fn(() => []),
         exportWorkflowEdges: vi.fn(() => []),
         recordNodeTask,
@@ -418,6 +427,7 @@ describe('useWorkflowPersistence API', () => {
       loadWorkflowRun,
       recordNodeTask,
       saveWorkflowDefinition,
+      retryWorkflowRunNode,
     }
   }
 
@@ -590,6 +600,36 @@ describe('useWorkflowPersistence API', () => {
     expect(getTaskDetail).toHaveBeenCalledTimes(1)
     expect(recordNodeTask).toHaveBeenCalledWith('node-a', expect.objectContaining({ id: 'task-shared' }))
     expect(recordNodeTask).toHaveBeenCalledWith('node-b', expect.objectContaining({ id: 'task-shared' }))
+  })
+
+  it('重试工作流节点后应恢复新节点任务详情', async () => {
+    vi.mocked(getTaskDetail).mockResolvedValue(buildTaskResponse('task-retry-pocket'))
+    const { persistence, retryWorkflowRunNode, recordNodeTask } = createPersistenceHarness({
+      activeWorkflowRunId: 'run-1',
+      retryRun: {
+        id: 'run-1',
+        workflow_definition_id: 'workflow-1',
+        status: 'running',
+        input_files: { 'protein_structure@1': 'artifact-version-protein' },
+        node_states: {
+          'predict-pocket': {
+            status: 'running',
+            task_id: 'task-retry-pocket',
+          },
+        },
+      },
+    })
+
+    await persistence.handleRetryWorkflowRunNode('predict-pocket')
+
+    expect(retryWorkflowRunNode).toHaveBeenCalledWith('run-1', 'predict-pocket')
+    expect(getTaskDetail).toHaveBeenCalledWith('task-retry-pocket', { silent: true })
+    expect(recordNodeTask).toHaveBeenCalledWith('predict-pocket', expect.objectContaining({
+      id: 'task-retry-pocket',
+    }))
+    expect(persistence.workflowRunInputSelections.value).toEqual({
+      'protein_structure@1': 'artifact-version-protein',
+    })
   })
 
   it('历史运行恢复失败时仍应保留已加载的工作流定义', async () => {

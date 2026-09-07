@@ -305,7 +305,10 @@ export function useWorkflowPersistence(input: {
     if (!runId) {
       return
     }
-    await workflowStore.retryWorkflowRunNode(runId, nodeId)
+    const run = await workflowStore.retryWorkflowRunNode(runId, nodeId)
+    if (run) {
+      await restoreNodeTasksFromWorkflowRun(run)
+    }
     await scheduleWorkflowRunAutoSync()
     message.success('工作流节点已重试')
   }
