@@ -1,12 +1,32 @@
 import { describe, expect, it, vi } from 'vitest'
-import { post } from './request'
-import { prepareTaskRun } from './tasks'
+import { get, post } from './request'
+import { getTaskList, prepareTaskRun } from './tasks'
 
 vi.mock('./request', () => ({
   get: vi.fn(),
   post: vi.fn(),
   del: vi.fn()
 }))
+
+describe('getTaskList', () => {
+  it('透传系统任务视图筛选参数', async () => {
+    const response = {
+      code: 200,
+      message: 'ok',
+      data: { items: [], total: 0, page: 1, page_size: 20 }
+    }
+    vi.mocked(get).mockResolvedValueOnce(response as never)
+
+    const result = await getTaskList({ view: 'needs_attention', project_id: 'project-1' })
+
+    expect(get).toHaveBeenCalledWith(
+      '/tasks',
+      { view: 'needs_attention', project_id: 'project-1' },
+      undefined
+    )
+    expect(result).toEqual(response)
+  })
+})
 
 describe('prepareTaskRun', () => {
   it('调用后端运行准备预览接口并透传任务创建 payload', async () => {

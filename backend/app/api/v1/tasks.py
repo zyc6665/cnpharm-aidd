@@ -4,8 +4,8 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_
-from sqlalchemy.orm import selectinload, joinedload
+from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 from typing import Any, Optional
 
 from app.config import use_direct_task_execution
@@ -33,6 +33,7 @@ from app.schemas.tasks import (
 from app.common.responses import paginated_response, success_response
 from app.common.exceptions import NotFoundException, ForbiddenException, ValidationException
 from app.services.project_access import load_project_membership, require_project_role
+from app.services.task_views import TaskQueryInput, query_task_page
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -202,6 +203,10 @@ async def _ensure_task_operation_access(
 async def list_tasks(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    view: Optional[str] = Query(
+        None,
+        description="系统任务视图: all/running/history/needs_attention/recent_results",
+    ),
     status: Optional[str] = None,
     tool_id: Optional[str] = None,
     keyword: Optional[str] = None,
@@ -210,66 +215,23 @@ async def list_tasks(
     db: AsyncSession = Depends(get_db)
 ):
     """获取任务列表"""
-    normalized_status = status.upper() if status else None
-    query = select(Task).options(
-        selectinload(Task.tool),
-        joinedload(Task.user)
+    page_result = await query_task_page(
+        db,
+        TaskQueryInput(
+            current_user=current_user,
+            page=page,
+            page_size=page_size,
+            view=view,
+            status=status,
+            tool_id=tool_id,
+            keyword=keyword,
+            project_id=project_id,
+        ),
     )
-
-    # 普通用户默认只能看自己的任务；项目上下文下按项目成员权限查看。
-    is_admin = _is_admin(current_user)
-    if project_id:
-        if not is_admin:
-            await load_project_membership(
-                db,
-                project_id=project_id,
-                user_id=current_user.id,
-            )
-        query = query.where(Task.extra_data["project_id"].as_string() == project_id)
-    elif not is_admin:
-        query = query.where(Task.user_id == current_user.id)
-
-    # 状态过滤
-    if normalized_status:
-        query = query.where(Task.status == normalized_status)
-
-    # 工具过滤
-    if tool_id:
-        query = query.where(Task.tool_id == tool_id)
-
-    # 关键词过滤
-    if keyword:
-        search_pattern = f"%{keyword}%"
-        query = query.join(Tool, Task.tool_id == Tool.id, isouter=True).join(
-            User,
-            Task.user_id == User.id,
-            isouter=True
-        ).where(
-            or_(
-                Task.id.ilike(search_pattern),
-                Task.name.ilike(search_pattern),
-                Tool.name.ilike(search_pattern),
-                Tool.slug.ilike(search_pattern),
-                User.email.ilike(search_pattern),
-                User.display_name.ilike(search_pattern)
-            )
-        )
-
-    # 计算总数
-    count_query = select(func.count()).select_from(query.subquery())
-    total_result = await db.execute(count_query)
-    total = total_result.scalar()
-
-    # 分页
-    query = query.offset((page - 1) * page_size).limit(page_size)
-    query = query.order_by(Task.created_at.desc())
-
-    result = await db.execute(query)
-    tasks = result.scalars().all()
 
     # 构建响应
     task_list = []
-    for task in tasks:
+    for task in page_result.tasks:
         task_dict = TaskListResponse.model_validate(task).model_dump()
         task_dict["status"] = _normalize_task_status(task.status)
         if task.tool:
@@ -292,7 +254,7 @@ async def list_tasks(
 
     return paginated_response(
         items=task_list,
-        total=total,
+        total=page_result.total,
         page=page,
         page_size=page_size,
     )

@@ -234,6 +234,85 @@ async def test_project_task_list_detail_and_logs_use_project_membership(
 
 
 @pytest.mark.asyncio
+async def test_project_task_list_supports_system_view_filters(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    users: dict[str, User],
+    published_tool: Tool,
+) -> None:
+    project = await _create_project_with_members(db_session, users)
+    pending_task = await _create_task(
+        db_session,
+        user=users["owner"],
+        tool=published_tool,
+        project_id=project.id,
+        name="Pending project task",
+        status=TaskStatus.PENDING.value,
+    )
+    running_task = await _create_task(
+        db_session,
+        user=users["owner"],
+        tool=published_tool,
+        project_id=project.id,
+        name="Running project task",
+        status=TaskStatus.RUNNING.value,
+    )
+    success_task = await _create_task(
+        db_session,
+        user=users["owner"],
+        tool=published_tool,
+        project_id=project.id,
+        name="Successful project task",
+        status=TaskStatus.SUCCESS.value,
+    )
+    failed_task = await _create_task(
+        db_session,
+        user=users["owner"],
+        tool=published_tool,
+        project_id=project.id,
+        name="Failed project task",
+        status=TaskStatus.FAILURE.value,
+    )
+    canceled_task = await _create_task(
+        db_session,
+        user=users["owner"],
+        tool=published_tool,
+        project_id=project.id,
+        name="Canceled project task",
+        status=TaskStatus.CANCELED.value,
+    )
+
+    running_response = await api_client.get(
+        "/api/v1/tasks",
+        headers={"Authorization": "Bearer viewer"},
+        params={"project_id": project.id, "view": "running"},
+    )
+    history_response = await api_client.get(
+        "/api/v1/tasks",
+        headers={"Authorization": "Bearer viewer"},
+        params={"project_id": project.id, "view": "history"},
+    )
+    needs_attention_response = await api_client.get(
+        "/api/v1/tasks",
+        headers={"Authorization": "Bearer viewer"},
+        params={"project_id": project.id, "view": "needs_attention"},
+    )
+
+    assert running_response.status_code == 200
+    assert {
+        item["id"] for item in running_response.json()["data"]["items"]
+    } == {pending_task.id, running_task.id}
+    assert history_response.status_code == 200
+    assert {
+        item["id"] for item in history_response.json()["data"]["items"]
+    } == {success_task.id, failed_task.id, canceled_task.id}
+    assert needs_attention_response.status_code == 200
+    assert [
+        item["id"] for item in needs_attention_response.json()["data"]["items"]
+    ] == [failed_task.id]
+
+
+@pytest.mark.asyncio
 async def test_project_task_operations_require_write_or_runner_role(
     api_client: httpx.AsyncClient,
     db_session: AsyncSession,

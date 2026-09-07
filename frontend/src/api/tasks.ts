@@ -10,7 +10,10 @@ import type {
   PaginationParams
 } from '@/types/models'
 
+export type TaskSystemView = 'all' | 'running' | 'history' | 'needs_attention' | 'recent_results'
+
 export interface TaskListParams extends PaginationParams {
+  view?: TaskSystemView
   status?: TaskStatus
   tool_id?: string
   keyword?: string
