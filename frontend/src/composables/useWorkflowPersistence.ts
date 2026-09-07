@@ -424,6 +424,8 @@ export function useWorkflowPersistence(input: {
   }
 
   async function restoreNodeTasksFromWorkflowRun(run: WorkflowRun) {
+    workflowRunInputSelections.value = normalizeWorkflowInputSelections(run.input_files)
+
     const taskRequests = Object.entries(run.node_states ?? {})
       .map(([nodeId, state]) => ({ nodeId, taskId: state?.task_id }))
       .filter((entry): entry is { nodeId: string; taskId: string } => Boolean(entry.taskId))
@@ -620,6 +622,20 @@ function normalizeTaskBindings(value: unknown): Record<string, string> {
     }
   }
   return bindings
+}
+
+function normalizeWorkflowInputSelections(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object') {
+    return {}
+  }
+
+  const selections: Record<string, string> = {}
+  for (const [semanticType, rawFileId] of Object.entries(value)) {
+    if (typeof rawFileId === 'string' && rawFileId.trim()) {
+      selections[semanticType] = rawFileId
+    }
+  }
+  return selections
 }
 
 function normalizeArtifactBindings(value: unknown): Record<string, Record<string, string>> {

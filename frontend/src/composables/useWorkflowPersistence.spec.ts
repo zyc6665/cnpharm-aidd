@@ -528,6 +528,7 @@ describe('useWorkflowPersistence API', () => {
           id: 'run-1',
           workflow_definition_id: 'workflow-1',
           status: 'success',
+          input_files: { 'protein_structure@1': 'artifact-version-protein' },
           node_states: {
             'fetch-pdb': {
               status: 'success',
@@ -562,6 +563,9 @@ describe('useWorkflowPersistence API', () => {
       id: 'task-fetch-pdb',
       status: 'success',
     }))
+    expect(persistence.workflowRunInputSelections.value).toEqual({
+      'protein_structure@1': 'artifact-version-protein',
+    })
   })
 
   it('恢复运行任务时应将同一个任务详情回填到所有关联节点', async () => {

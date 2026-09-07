@@ -34,9 +34,10 @@
 - 2026-09-07：基础 ADMET 占位输出防误用；内置 virtual ADMET 未配置真实 endpoint 时，输出显式 `prediction_status=unconfigured`、endpoint/model/unit/applicability 为 unknown、evidence 为 `engineering_smoke_only`，避免把 RDKit 或占位结果冒充真实 ADMET 预测。
 - 2026-09-07：Workflow Hydration 预检状态补齐；加载保存工作流后，节点级 Artifact 绑定会进入预检校验，陈旧或语义不匹配的绑定显示为 `invalid_artifact_binding`，避免用户运行时才发现标准产物不可用。
 - 2026-09-07：任务中心分页继续服务端化；列表页开始按当前标签、筛选、关键词和页码调用 `/tasks`，展示区直接消费后端页结果，不再对已取回数据做本地二次分页。
+- 2026-09-07：Workflow Run 恢复输入选择；加载保存工作流并恢复最新运行时，同步回填 `input_files` 到工作流输入选择，避免节点任务已恢复但预检仍误报缺少 workflow input。
 
 ## 下一步候选
 
-1. Workflow Hydration 继续检查：保存加载后恢复节点任务和最新 workflow run 的更多边界场景。
+1. Workflow Hydration 继续检查：保存加载后恢复失败运行、取消运行和局部节点重试的边界场景。
 2. 基础 ADMET 真实 endpoint 接入：登记 endpoint、模型版本、单位/标签、模型卡和证据附件后替换占位链路。
 3. 任务中心计数继续收口：如需跨标签精确徽标，可追加轻量聚合接口，避免重新拉全量任务。
