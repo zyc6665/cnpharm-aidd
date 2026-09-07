@@ -743,6 +743,14 @@ class TestAdmetPredictionBuiltinTool:
         rows = list(reader)
         assert len(rows) == 2
         assert rows[0]["smiles"] == "CCO"
+        assert rows[0]["prediction_status"] == "unconfigured"
+        assert rows[0]["endpoint_ref"] == "unknown"
+        assert rows[0]["unit_or_label"] == "unknown"
+        assert rows[0]["model_version"] == "unknown"
+        assert rows[0]["evidence_level"] == "engineering_smoke_only"
+        assert rows[0]["applicability_domain_status"] == "unknown"
+        assert rows[0]["value"] == ""
+        assert "configure a real ADMET endpoint" in rows[0]["note"]
 
 
 class TestToxicityPredictionBuiltinTool:

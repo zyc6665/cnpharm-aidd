@@ -1234,7 +1234,14 @@ def _run_admet_prediction_tool(files: dict[str, BuiltinToolFile]) -> BuiltinTool
     for smiles in smiles_list:
         records.append({
             "smiles": smiles,
-            "note": "ADMET prediction via builtin tool (configure external ADMET service for real predictions)",
+            "prediction_status": "unconfigured",
+            "endpoint_ref": "unknown",
+            "unit_or_label": "unknown",
+            "model_version": "unknown",
+            "evidence_level": "engineering_smoke_only",
+            "applicability_domain_status": "unknown",
+            "value": "",
+            "note": "No real ADMET endpoint is configured; configure a real ADMET endpoint before scientific use.",
         })
 
     return BuiltinToolResult(
