@@ -17,6 +17,8 @@ export interface TaskListParams extends PaginationParams {
   tool_id?: string
   keyword?: string
   project_id?: string
+  created_from?: string
+  created_to?: string
 }
 
 export const TERMINAL_TASK_STATUSES: readonly TaskStatus[] = ['success', 'failure', 'canceled']

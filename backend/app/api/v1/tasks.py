@@ -2,6 +2,7 @@
 """任务管理API"""
 
 import logging
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -211,6 +212,8 @@ async def list_tasks(
     tool_id: Optional[str] = None,
     keyword: Optional[str] = None,
     project_id: Optional[str] = Query(None, min_length=1, max_length=36),
+    created_from: Optional[datetime] = Query(None, description="创建时间起点"),
+    created_to: Optional[datetime] = Query(None, description="创建时间终点"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -226,6 +229,8 @@ async def list_tasks(
             tool_id=tool_id,
             keyword=keyword,
             project_id=project_id,
+            created_from=created_from,
+            created_to=created_to,
         ),
     )
 

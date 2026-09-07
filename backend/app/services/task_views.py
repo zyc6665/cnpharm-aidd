@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Literal
 
 from sqlalchemy import func, or_, select
@@ -38,6 +39,8 @@ class TaskQueryInput:
     tool_id: str | None = None
     keyword: str | None = None
     project_id: str | None = None
+    created_from: datetime | None = None
+    created_to: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -77,6 +80,11 @@ async def query_task_page(db: AsyncSession, query: TaskQueryInput) -> TaskQueryP
     if query.tool_id:
         statement = statement.where(Task.tool_id == query.tool_id)
 
+    if query.created_from:
+        statement = statement.where(Task.created_at >= _naive_utc(query.created_from))
+    if query.created_to:
+        statement = statement.where(Task.created_at <= _naive_utc(query.created_to))
+
     if query.keyword:
         search_pattern = f"%{query.keyword}%"
         statement = (
@@ -115,3 +123,9 @@ def _statuses_for_view(view: str | None) -> tuple[str, ...]:
 async def _count_tasks(db: AsyncSession, statement) -> int:
     result = await db.execute(select(func.count()).select_from(statement.subquery()))
     return int(result.scalar() or 0)
+
+
+def _naive_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(timezone.utc).replace(tzinfo=None)

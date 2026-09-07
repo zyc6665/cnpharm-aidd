@@ -450,7 +450,10 @@
   }
 
   const fetchTasks = async () => {
-    const params: Pick<TaskListParams, 'view' | 'tool_id' | 'keyword' | 'project_id'> = {
+    const params: Pick<
+      TaskListParams,
+      'view' | 'tool_id' | 'keyword' | 'project_id' | 'created_from' | 'created_to'
+    > = {
       view: taskSystemViewForTab(currentTab.value)
     }
 
@@ -464,6 +467,11 @@
 
     if (searchKeyword.value.trim()) {
       params.keyword = searchKeyword.value.trim()
+    }
+
+    if (currentTab.value === 'history' && dateRange.value) {
+      params.created_from = dateRange.value[0].startOf('day').toISOString()
+      params.created_to = dateRange.value[1].endOf('day').toISOString()
     }
 
     await tasksStore.fetchAllTasks(params)

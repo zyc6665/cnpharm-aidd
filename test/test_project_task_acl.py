@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -21,6 +22,7 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from app.api.v1 import tasks as tasks_api  # noqa: E402
 from app.auth.dependencies import get_current_user  # noqa: E402
+from app.common.time import utcnow  # noqa: E402
 from app.config import settings as config_settings  # noqa: E402
 from app.database.base import Base  # noqa: E402
 from app.database.session import get_db  # noqa: E402
@@ -310,6 +312,48 @@ async def test_project_task_list_supports_system_view_filters(
     assert [
         item["id"] for item in needs_attention_response.json()["data"]["items"]
     ] == [failed_task.id]
+
+
+@pytest.mark.asyncio
+async def test_project_task_list_supports_created_time_range_filter(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    users: dict[str, User],
+    published_tool: Tool,
+) -> None:
+    project = await _create_project_with_members(db_session, users)
+    old_task = await _create_task(
+        db_session,
+        user=users["owner"],
+        tool=published_tool,
+        project_id=project.id,
+        name="Old failed project task",
+        status=TaskStatus.FAILURE.value,
+    )
+    recent_task = await _create_task(
+        db_session,
+        user=users["owner"],
+        tool=published_tool,
+        project_id=project.id,
+        name="Recent failed project task",
+        status=TaskStatus.FAILURE.value,
+    )
+    old_task.created_at = utcnow() - timedelta(days=5)
+    recent_task.created_at = utcnow() - timedelta(hours=2)
+    await db_session.commit()
+
+    response = await api_client.get(
+        "/api/v1/tasks",
+        headers={"Authorization": "Bearer viewer"},
+        params={
+            "project_id": project.id,
+            "view": "history",
+            "created_from": (utcnow() - timedelta(days=1)).isoformat(),
+        },
+    )
+
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()["data"]["items"]] == [recent_task.id]
 
 
 @pytest.mark.asyncio

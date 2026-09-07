@@ -17,11 +17,21 @@ describe('getTaskList', () => {
     }
     vi.mocked(get).mockResolvedValueOnce(response as never)
 
-    const result = await getTaskList({ view: 'needs_attention', project_id: 'project-1' })
+    const result = await getTaskList({
+      view: 'needs_attention',
+      project_id: 'project-1',
+      created_from: '2026-09-01T00:00:00.000Z',
+      created_to: '2026-09-07T23:59:59.999Z'
+    })
 
     expect(get).toHaveBeenCalledWith(
       '/tasks',
-      { view: 'needs_attention', project_id: 'project-1' },
+      {
+        view: 'needs_attention',
+        project_id: 'project-1',
+        created_from: '2026-09-01T00:00:00.000Z',
+        created_to: '2026-09-07T23:59:59.999Z'
+      },
       undefined
     )
     expect(result).toEqual(response)

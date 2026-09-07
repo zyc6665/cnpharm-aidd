@@ -24,6 +24,7 @@
 - 2026-09-07：完成 Artifact / File 下载审计最小闭环；普通文件下载、ArtifactVersion 主文件下载和 role 文件下载在权限与存储读取通过后记录 `FILE_DOWNLOAD` 审计事件。
 - signed URL 下载测试改为内存审计 recorder，避免测试运行时写入真实审计日志污染工作区。
 - 2026-09-07：任务中心前端开始携带后端系统视图参数；标签页仍保留本地兜底过滤，但请求已按 `all/running/history` 缩小后端结果集。
+- 2026-09-07：任务列表补齐创建时间范围筛选；后端 Task View 查询支持 `created_from/created_to`，前端历史任务日期控件开始透传时间窗口。
 
 ## 下一步候选
 
