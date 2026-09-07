@@ -4,6 +4,7 @@ import type { Task } from '@/types/models'
 import {
   buildTaskCountQueryParams,
   buildTaskListQueryParams,
+  buildTaskWorkflowScopeParts,
   filterTasksByKeyword,
   filterTasksForTab,
   paginateTasks,
@@ -61,6 +62,23 @@ test('任务列表从 URL view 参数恢复标签页', () => {
   assert.equal(taskListTabFromQueryParam(['history']), 'history')
   assert.equal(taskListTabFromQueryParam('recent_results'), 'all')
   assert.equal(taskListTabFromQueryParam(' ', 'running'), 'running')
+})
+
+test('任务列表生成 workflow/node 筛选上下文摘要', () => {
+  assert.deepEqual(
+    buildTaskWorkflowScopeParts({
+      workflowRunId: ' run-1 ',
+      workflowDefinitionId: 'workflow-1',
+      workflowNodeId: ' predict-pocket ',
+    }),
+    [
+      { key: 'run', value: 'run-1' },
+      { key: 'definition', value: 'workflow-1' },
+      { key: 'node', value: 'predict-pocket' },
+    ]
+  )
+
+  assert.deepEqual(buildTaskWorkflowScopeParts({ workflowRunId: '   ' }), [])
 })
 
 test('任务列表请求参数包含服务端分页和筛选条件', () => {

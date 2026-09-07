@@ -44,6 +44,12 @@ export interface TaskCountQueryParams {
 }
 
 export type TaskViewCounts = Record<TaskSystemView, number>
+export type TaskWorkflowScopeKey = 'run' | 'definition' | 'node'
+
+export interface TaskWorkflowScopePart {
+  key: TaskWorkflowScopeKey
+  value: string
+}
 
 export function taskSystemViewForTab(tab: TaskListTab): TaskSystemView {
   return tab
@@ -63,6 +69,26 @@ export function taskListTabFromQueryParam(
     default:
       return fallback
   }
+}
+
+export function buildTaskWorkflowScopeParts(input: {
+  workflowRunId?: string
+  workflowDefinitionId?: string
+  workflowNodeId?: string
+}): TaskWorkflowScopePart[] {
+  return [
+    taskWorkflowScopePart('run', input.workflowRunId),
+    taskWorkflowScopePart('definition', input.workflowDefinitionId),
+    taskWorkflowScopePart('node', input.workflowNodeId),
+  ].filter((part): part is TaskWorkflowScopePart => Boolean(part))
+}
+
+function taskWorkflowScopePart(
+  key: TaskWorkflowScopeKey,
+  value: string | undefined
+): TaskWorkflowScopePart | null {
+  const normalizedValue = value?.trim()
+  return normalizedValue ? { key, value: normalizedValue } : null
 }
 
 export function buildTaskListQueryParams(input: TaskListQueryInput): TaskListQueryParams {

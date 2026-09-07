@@ -929,6 +929,12 @@ export default {
     filterByTool: 'Filter by tool',
     startDate: 'Start Date',
     endDate: 'End Date',
+    workflowScope: {
+      active: 'Filtered by workflow context: {scope}',
+      run: 'Run {id}',
+      definition: 'Workflow {id}',
+      node: 'Node {id}'
+    },
     // Monitor
     realTimeMonitor: 'Real-time Monitor',
     autoRefreshOn: 'Auto Refresh',

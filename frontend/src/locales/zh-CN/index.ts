@@ -928,6 +928,12 @@ export default {
     filterByTool: '按工具筛选',
     startDate: '开始日期',
     endDate: '结束日期',
+    workflowScope: {
+      active: '已按工作流上下文过滤：{scope}',
+      run: '运行 {id}',
+      definition: '流程 {id}',
+      node: '节点 {id}'
+    },
     // 监控
     realTimeMonitor: '实时监控',
     autoRefreshOn: '自动刷新',

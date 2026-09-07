@@ -3,6 +3,13 @@
     <div class="container">
       <AppPageHeader :title="t('tasks.title')" :subtitle="t('tasks.subtitle')" />
       <ProjectWorkspaceNav v-if="projectId" :project-id="projectId" />
+      <a-alert
+        v-if="workflowScopeText"
+        class="task-scope-alert"
+        type="info"
+        show-icon
+        :message="workflowScopeText"
+      />
 
       <!-- 三标签页切换 -->
       <div class="view-tabs">
@@ -340,6 +347,7 @@
   import {
     buildTaskCountQueryParams,
     buildTaskListQueryParams,
+    buildTaskWorkflowScopeParts,
     canCancelTask as canCancelTaskForActor,
     canDeleteTask as canDeleteTaskForActor,
     canRetryTask as canRetryTaskForActor,
@@ -380,6 +388,11 @@
   const workflowRunId = computed(() => stringQueryParam(route.query.workflow_run_id))
   const workflowDefinitionId = computed(() => stringQueryParam(route.query.workflow_definition_id))
   const workflowNodeId = computed(() => stringQueryParam(route.query.workflow_node_id))
+  const workflowScopeParts = computed(() => buildTaskWorkflowScopeParts({
+    workflowRunId: workflowRunId.value,
+    workflowDefinitionId: workflowDefinitionId.value,
+    workflowNodeId: workflowNodeId.value,
+  }))
   const projectMembershipRole = computed<ProjectRole | undefined>(
     () => project.value?.membership.role
   )
@@ -420,6 +433,16 @@
       default:
         return t('tasks.noTasks')
     }
+  })
+
+  const workflowScopeText = computed(() => {
+    if (workflowScopeParts.value.length === 0) {
+      return ''
+    }
+    const scope = workflowScopeParts.value
+      .map(part => t(`tasks.workflowScope.${part.key}`, { id: part.value }))
+      .join(' · ')
+    return t('tasks.workflowScope.active', { scope })
   })
 
   // 方法
@@ -665,6 +688,10 @@
   .tasks-page {
     padding: @spacing-xl 0;
     min-height: calc(100vh - @header-height - @footer-height);
+  }
+
+  .task-scope-alert {
+    margin-bottom: @spacing-md;
   }
 
   // 视图切换标签
