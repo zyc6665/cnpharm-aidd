@@ -908,6 +908,7 @@ export default {
     // Tabs
     allTasks: 'All Tasks',
     runningTasks: 'Running',
+    attentionTasks: 'Needs Attention',
     historyTasks: 'History',
     // Status
     status: {
@@ -1020,6 +1021,7 @@ export default {
     // Empty states
     noTasks: 'No tasks',
     noRunningTasks: 'No running tasks',
+    noAttentionTasks: 'No failed tasks need attention',
     noHistoryTasks: 'No history tasks'
   },
 

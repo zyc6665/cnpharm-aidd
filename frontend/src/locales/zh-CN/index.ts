@@ -907,6 +907,7 @@ export default {
     // 标签页
     allTasks: '全部任务',
     runningTasks: '运行中',
+    attentionTasks: '需要关注',
     historyTasks: '历史任务',
     // 状态
     status: {
@@ -1019,6 +1020,7 @@ export default {
     // 空状态
     noTasks: '暂无任务',
     noRunningTasks: '当前没有运行中的任务',
+    noAttentionTasks: '当前没有需要关注的失败任务',
     noHistoryTasks: '暂无历史任务'
   },
 

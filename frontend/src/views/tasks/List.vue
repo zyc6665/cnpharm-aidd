@@ -31,6 +31,20 @@
               </span>
             </template>
           </a-tab-pane>
+          <a-tab-pane key="needs_attention">
+            <template #tab>
+              <span class="tab-label">
+                <CloseCircleOutlined />
+                {{ t('tasks.attentionTasks') }}
+                <a-badge
+                  v-if="attentionCount > 0"
+                  :count="attentionCount"
+                  :overflow-count="99"
+                  class="tab-badge attention"
+                />
+              </span>
+            </template>
+          </a-tab-pane>
           <a-tab-pane key="history">
             <template #tab>
               <span class="tab-label">
@@ -383,6 +397,7 @@
   const runningTasks = computed(() => displayTasks.value.filter(isRunningTask))
   const allCount = computed(() => taskViewCounts.value.all)
   const runningCount = computed(() => taskViewCounts.value.running)
+  const attentionCount = computed(() => taskViewCounts.value.needs_attention)
   const historyCount = computed(() => taskViewCounts.value.history)
 
   const displayTasks = computed<Task[]>(() => tasks.value)
@@ -396,6 +411,8 @@
     switch (currentTab.value) {
       case 'running':
         return t('tasks.noRunningTasks')
+      case 'needs_attention':
+        return t('tasks.noAttentionTasks')
       case 'history':
         return t('tasks.noHistoryTasks')
       default:
@@ -676,6 +693,10 @@
       &.running :deep(.ant-badge-count) {
         background: @primary-color;
         animation: pulse 1.5s infinite;
+      }
+
+      &.attention :deep(.ant-badge-count) {
+        background: @error-color;
       }
     }
   }

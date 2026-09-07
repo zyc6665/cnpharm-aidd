@@ -1,7 +1,7 @@
 import type { Task } from '@/types/models'
 import { isHistoryTask, isRunningTask } from './status'
 
-export type TaskListTab = 'all' | 'running' | 'history'
+export type TaskListTab = 'all' | 'running' | 'history' | 'needs_attention'
 export type TaskSystemView = 'all' | 'running' | 'history' | 'needs_attention' | 'recent_results'
 
 export interface TaskListQueryInput {
@@ -87,6 +87,7 @@ export function buildTaskCountQueryParams(input: TaskListQueryInput): TaskCountQ
 export function filterTasksForTab(tasks: Task[], tab: TaskListTab): Task[] {
   if (tab === 'running') return tasks.filter(isRunningTask)
   if (tab === 'history') return tasks.filter(isHistoryTask)
+  if (tab === 'needs_attention') return tasks.filter(task => task.status === 'failure')
   return tasks
 }
 
