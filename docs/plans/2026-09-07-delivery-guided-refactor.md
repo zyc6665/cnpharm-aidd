@@ -44,6 +44,7 @@
 - 2026-09-07：任务中心接入 workflow/node URL 定位参数；列表和系统视图计数都会透传 `workflow_run_id`、`workflow_definition_id`、`workflow_node_id`，支持从工作流上下文打开关联任务列表。
 - 2026-09-07：Workflow Run 节点任务列表入口补齐；运行状态面板可从节点跳转任务中心并携带 workflow/run/node 过滤参数，方便查看同一节点的历史和失败任务。
 - 2026-09-07：任务中心 URL 视图恢复补齐；`/tasks?view=needs_attention` 可直接打开需要关注标签，失败节点入口自动带入该视图，减少失败定位跳转后的手动切换。
+- 2026-09-07：Workflow Run 手动同步恢复补齐；用户点击同步最新运行状态后，同步回填 `input_files` 和新节点 `task_id` 详情，避免预检和节点卡片停留在旧任务状态。
 
 ## 下一步候选
 

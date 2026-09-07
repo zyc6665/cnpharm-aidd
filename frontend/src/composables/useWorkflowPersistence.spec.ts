@@ -326,6 +326,7 @@ describe('useWorkflowPersistence API', () => {
     workflow?: Record<string, unknown>
     runPage?: Record<string, unknown>
     run?: Record<string, unknown>
+    syncRun?: Record<string, unknown>
     cancelRun?: Record<string, unknown>
     retryRun?: Record<string, unknown>
     taskByNode?: Record<string, Record<string, unknown>>
@@ -344,6 +345,12 @@ describe('useWorkflowPersistence API', () => {
       id: 'run-1',
       workflow_definition_id: 'workflow-1',
       status: 'running',
+      node_states: {},
+    })
+    const syncActiveWorkflowRun = vi.fn().mockResolvedValue(options.syncRun ?? {
+      id: 'run-1',
+      workflow_definition_id: 'workflow-1',
+      status: 'success',
       node_states: {},
     })
     const cancelActiveWorkflowRun = vi.fn().mockResolvedValue(options.cancelRun ?? {
@@ -402,7 +409,7 @@ describe('useWorkflowPersistence API', () => {
         runWorkflowDefinition: vi.fn(),
         loadWorkflowRuns,
         loadWorkflowRun,
-        syncActiveWorkflowRun: vi.fn(),
+        syncActiveWorkflowRun,
         cancelActiveWorkflowRun,
         retryWorkflowRunNode,
         exportWorkflowNodes: vi.fn(() => []),
@@ -436,6 +443,7 @@ describe('useWorkflowPersistence API', () => {
       loadWorkflowRun,
       recordNodeTask,
       saveWorkflowDefinition,
+      syncActiveWorkflowRun,
       retryWorkflowRunNode,
       cancelActiveWorkflowRun,
     }
@@ -636,6 +644,35 @@ describe('useWorkflowPersistence API', () => {
     expect(getTaskDetail).toHaveBeenCalledWith('task-retry-pocket', { silent: true })
     expect(recordNodeTask).toHaveBeenCalledWith('predict-pocket', expect.objectContaining({
       id: 'task-retry-pocket',
+    }))
+    expect(persistence.workflowRunInputSelections.value).toEqual({
+      'protein_structure@1': 'artifact-version-protein',
+    })
+  })
+
+  it('同步工作流运行后应恢复最新节点任务详情', async () => {
+    vi.mocked(getTaskDetail).mockResolvedValue(buildTaskResponse('task-synced-pocket'))
+    const { persistence, syncActiveWorkflowRun, recordNodeTask } = createPersistenceHarness({
+      syncRun: {
+        id: 'run-1',
+        workflow_definition_id: 'workflow-1',
+        status: 'success',
+        input_files: { 'protein_structure@1': 'artifact-version-protein' },
+        node_states: {
+          'predict-pocket': {
+            status: 'success',
+            task_id: 'task-synced-pocket',
+          },
+        },
+      },
+    })
+
+    await persistence.handleSyncWorkflowRun()
+
+    expect(syncActiveWorkflowRun).toHaveBeenCalled()
+    expect(getTaskDetail).toHaveBeenCalledWith('task-synced-pocket', { silent: true })
+    expect(recordNodeTask).toHaveBeenCalledWith('predict-pocket', expect.objectContaining({
+      id: 'task-synced-pocket',
     }))
     expect(persistence.workflowRunInputSelections.value).toEqual({
       'protein_structure@1': 'artifact-version-protein',

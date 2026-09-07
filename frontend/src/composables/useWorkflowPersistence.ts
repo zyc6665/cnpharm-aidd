@@ -291,7 +291,10 @@ export function useWorkflowPersistence(input: {
   }
 
   async function handleSyncWorkflowRun() {
-    await workflowStore.syncActiveWorkflowRun()
+    const run = await workflowStore.syncActiveWorkflowRun()
+    if (run) {
+      await restoreNodeTasksFromWorkflowRun(run)
+    }
   }
 
   async function handleCancelWorkflowRun() {
