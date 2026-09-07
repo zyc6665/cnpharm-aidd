@@ -33,6 +33,7 @@ from app.common.responses import paginated_response, success_response
 from app.common.exceptions import NotFoundException, ForbiddenException, ValidationException
 from app.chemistry.conversion import convert_sdf_to_pdb_with_toolkit as _convert_sdf_to_pdb_with_toolkit
 from app.config import settings
+from app.logging.audit import AuditAction, AuditResult, get_audit_logger
 from app.files.remote_access_tokens import (
     RemoteFileAccessTokenError,
     validate_remote_file_access_token,
@@ -60,6 +61,25 @@ _EXPECTED_FILE_SIGNATURES = {
     ".zip": (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08"),
 }
 _EXECUTABLE_SIGNATURES = (b"\x7fELF", b"MZ", b"#!", b"\xfe\xed\xfa\xce", b"\xcf\xfa\xed\xfe")
+
+
+def _audit_file_download(
+    *,
+    file: FileModel,
+    current_user: Optional[User],
+    remote_token_claims: Optional[dict],
+) -> None:
+    actor_id = current_user.id if current_user else "remote-token"
+    get_audit_logger().log_file_operation(
+        user_id=actor_id,
+        action=AuditAction.FILE_DOWNLOAD,
+        file_id=file.id,
+        file_name=file.filename,
+        result=AuditResult.SUCCESS,
+        file_size=file.size_bytes,
+        project_id=file.project_id,
+        remote_token=remote_token_claims is not None,
+    )
 
 
 async def _standard_artifact_metadata_by_file_id(
@@ -554,6 +574,11 @@ async def download_file(
     file.statistics.download_count += 1
     file.statistics.last_downloaded_at = utcnow()
     await db.commit()
+    _audit_file_download(
+        file=file,
+        current_user=current_user,
+        remote_token_claims=remote_token_claims,
+    )
 
     return FileResponse(
         path=str(file_path),

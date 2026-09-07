@@ -21,10 +21,12 @@
 - 2026-09-07：完成任务工作台系统视图查询第一步，新增 `Task View` 查询模块，将 `/api/v1/tasks` 的权限、项目、关键词、状态和系统视图筛选收敛到后端查询入口。
 - 已支持 `view=all|running|history|needs_attention|recent_results`；`running` 包含 pending/running，`history` 包含 success/failure/canceled，`needs_attention` 聚焦 failure。
 - 前端任务 API 类型已补 `TaskSystemView`，页面暂不改交互，避免过度设计。
+- 2026-09-07：完成 Artifact / File 下载审计最小闭环；普通文件下载、ArtifactVersion 主文件下载和 role 文件下载在权限与存储读取通过后记录 `FILE_DOWNLOAD` 审计事件。
+- signed URL 下载测试改为内存审计 recorder，避免测试运行时写入真实审计日志污染工作区。
 
 ## 下一步候选
 
 1. Result Manifest 校验与 TaskOutput 持久化收口：确保输出不合规时不给下游生成标准 Artifact。
 2. Workflow Hydration 恢复检查：保存加载后恢复节点任务、Artifact 绑定和预检状态。
-3. Artifact 下载审计最小闭环：文件下载和越权拒绝路径写入可检索审计事件。
-4. 基础 ADMET 交付链路盘点：确认真实 endpoint、模型版本、单位和模型卡附件是否齐全。
+3. 基础 ADMET 交付链路盘点：确认真实 endpoint、模型版本、单位和模型卡附件是否齐全。
+4. 任务中心前端逐步使用后端系统视图：减少 5000 条任务场景下的前端全量拉取压力。

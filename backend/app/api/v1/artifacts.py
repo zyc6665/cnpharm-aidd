@@ -17,6 +17,7 @@ from app.common.responses import success_response
 from app.common.time import utcnow
 from app.config import settings
 from app.database.session import get_db
+from app.logging.audit import AuditAction, AuditResult, get_audit_logger
 from app.models.artifacts import (
     Artifact,
     ArtifactLineage,
@@ -134,6 +135,30 @@ def _artifact_data(artifact: Artifact, *, include_versions: bool = False) -> dic
             _version_data(version, artifact_id=artifact.id) for version in artifact.versions
         ]
     return data
+
+
+def _audit_artifact_download(
+    *,
+    current_user: User,
+    artifact: Artifact,
+    version: ArtifactVersion,
+    file_id: str,
+    file_name: str,
+    file_size: int | None,
+    role: str,
+) -> None:
+    get_audit_logger().log_file_operation(
+        user_id=current_user.id,
+        action=AuditAction.FILE_DOWNLOAD,
+        file_id=file_id,
+        file_name=file_name,
+        result=AuditResult.SUCCESS,
+        file_size=file_size,
+        project_id=artifact.project_id,
+        artifact_id=artifact.id,
+        artifact_version_id=version.id,
+        role=role,
+    )
 
 
 def _add_graph_node(nodes: dict[str, dict], node: dict) -> None:
@@ -501,6 +526,15 @@ async def download_artifact_version(
         raise HTTPException(status_code=404, detail="Artifact 版本不存在")
 
     content = await storage.download(version.storage_key)
+    _audit_artifact_download(
+        current_user=current_user,
+        artifact=artifact,
+        version=version,
+        file_id=version.id,
+        file_name=version.filename,
+        file_size=version.size_bytes,
+        role="primary",
+    )
     return Response(
         content=content,
         media_type=version.content_type or "application/octet-stream",
@@ -537,6 +571,15 @@ async def download_artifact_version_file(
         raise HTTPException(status_code=404, detail="Artifact 角色文件不存在")
     file_record = file_link.file
     content = await storage.download(file_record.storage_path)
+    _audit_artifact_download(
+        current_user=current_user,
+        artifact=artifact,
+        version=version,
+        file_id=file_record.id,
+        file_name=file_record.filename,
+        file_size=file_record.size_bytes,
+        role=file_link.role,
+    )
     return Response(
         content=content,
         media_type=file_record.content_type or "application/octet-stream",

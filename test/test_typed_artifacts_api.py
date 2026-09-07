@@ -548,9 +548,25 @@ async def test_project_artifact_lineage_graph_includes_versions_tasks_and_workfl
 async def test_artifact_version_download_uses_storage_and_project_acl(
     artifact_client,
     artifact_context: dict[str, object],
+    monkeypatch: pytest.MonkeyPatch,
 ):
+    from app.api.v1 import artifacts as artifacts_api
+    from app.logging.audit import AuditAction, AuditResult
+
     client, _ = artifact_client
     project = artifact_context["project"]
+    audit_events: list[dict[str, object]] = []
+
+    class AuditRecorder:
+        def log_file_operation(self, **kwargs):
+            audit_events.append(kwargs)
+
+    monkeypatch.setattr(
+        artifacts_api,
+        "get_audit_logger",
+        lambda: AuditRecorder(),
+        raising=False,
+    )
     content = b"HEADER    DOWNLOADABLE PROTEIN\nEND\n"
     created = await client.post(
         f"/api/v1/projects/{project.id}/artifacts",
@@ -577,6 +593,20 @@ async def test_artifact_version_download_uses_storage_and_project_acl(
     assert downloaded.content == content
     assert downloaded.headers["content-type"].startswith("chemical/x-pdb")
     assert "protein.pdb" in downloaded.headers["content-disposition"]
+    assert audit_events == [
+        {
+            "user_id": artifact_context["owner"].id,
+            "action": AuditAction.FILE_DOWNLOAD,
+            "file_id": version["id"],
+            "file_name": "protein.pdb",
+            "result": AuditResult.SUCCESS,
+            "file_size": len(content),
+            "project_id": project.id,
+            "artifact_id": artifact["id"],
+            "artifact_version_id": version["id"],
+            "role": "primary",
+        }
+    ]
     assert hidden.status_code == 404
 
 
