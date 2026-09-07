@@ -62,7 +62,7 @@
           </router-link>
           <router-link
             class="run-node-meta node-task-list-link"
-            :to="nodeTaskListPath(node.id)"
+            :to="nodeTaskListPath(node.id, node.status)"
           >
             {{ t('workflow.canvasPresets.viewNodeTasks') }}
           </router-link>
@@ -133,12 +133,15 @@
     return 'active'
   })
 
-  function nodeTaskListPath(nodeId: string): string {
+  function nodeTaskListPath(nodeId: string, nodeStatus: string): string {
     const params = new URLSearchParams({
       workflow_run_id: props.run.id,
       workflow_definition_id: props.run.workflow_definition_id,
       workflow_node_id: nodeId,
     })
+    if (nodeStatus === 'failure') {
+      params.set('view', 'needs_attention')
+    }
     return `/tasks?${params.toString()}`
   }
 </script>

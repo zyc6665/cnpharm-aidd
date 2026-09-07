@@ -68,7 +68,7 @@ describe('WorkflowRunStatusPanel', () => {
     const listLink = wrapper.find('.node-task-list-link')
     expect(listLink.exists()).toBe(true)
     expect(listLink.attributes('href')).toBe(
-      '/tasks?workflow_run_id=run-1&workflow_definition_id=workflow-1&workflow_node_id=predict-pocket'
+      '/tasks?workflow_run_id=run-1&workflow_definition_id=workflow-1&workflow_node_id=predict-pocket&view=needs_attention'
     )
   })
 })

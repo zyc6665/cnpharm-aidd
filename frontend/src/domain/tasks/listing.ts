@@ -49,6 +49,22 @@ export function taskSystemViewForTab(tab: TaskListTab): TaskSystemView {
   return tab
 }
 
+export function taskListTabFromQueryParam(
+  value: unknown,
+  fallback: TaskListTab = 'all'
+): TaskListTab {
+  const rawValue = Array.isArray(value) ? value[0] : value
+  switch (rawValue) {
+    case 'all':
+    case 'running':
+    case 'history':
+    case 'needs_attention':
+      return rawValue
+    default:
+      return fallback
+  }
+}
+
 export function buildTaskListQueryParams(input: TaskListQueryInput): TaskListQueryParams {
   const params: TaskListQueryParams = {
     view: taskSystemViewForTab(input.tab),

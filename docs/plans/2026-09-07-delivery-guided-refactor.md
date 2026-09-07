@@ -43,9 +43,10 @@
 - 2026-09-07：任务中心新增需要关注快捷视图；前端标签页直接映射后端 `needs_attention` 系统视图，失败任务可从任务中心独立入口快速定位。
 - 2026-09-07：任务中心接入 workflow/node URL 定位参数；列表和系统视图计数都会透传 `workflow_run_id`、`workflow_definition_id`、`workflow_node_id`，支持从工作流上下文打开关联任务列表。
 - 2026-09-07：Workflow Run 节点任务列表入口补齐；运行状态面板可从节点跳转任务中心并携带 workflow/run/node 过滤参数，方便查看同一节点的历史和失败任务。
+- 2026-09-07：任务中心 URL 视图恢复补齐；`/tasks?view=needs_attention` 可直接打开需要关注标签，失败节点入口自动带入该视图，减少失败定位跳转后的手动切换。
 
 ## 下一步候选
 
 1. Workflow Hydration 继续检查：保存加载后恢复失败运行的预检提示和历史状态展示边界场景。
 2. 基础 ADMET 真实 endpoint 接入：登记 endpoint、模型版本、单位/标签、模型卡和证据附件后替换占位链路。
-3. 任务中心失败定位增强：可继续为任务列表增加从 URL 自动切换 `needs_attention` 的便捷入口。
+3. 任务中心失败定位增强：可继续在列表页展示 workflow/run/node 过滤上下文，避免用户进入任务中心后失去来源感。

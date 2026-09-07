@@ -7,6 +7,7 @@ import {
   filterTasksByKeyword,
   filterTasksForTab,
   paginateTasks,
+  taskListTabFromQueryParam,
   taskSystemViewForTab,
 } from './listing'
 
@@ -53,6 +54,13 @@ test('任务列表标签页映射到后端系统视图', () => {
   assert.equal(taskSystemViewForTab('running'), 'running')
   assert.equal(taskSystemViewForTab('history'), 'history')
   assert.equal(taskSystemViewForTab('needs_attention'), 'needs_attention')
+})
+
+test('任务列表从 URL view 参数恢复标签页', () => {
+  assert.equal(taskListTabFromQueryParam('needs_attention'), 'needs_attention')
+  assert.equal(taskListTabFromQueryParam(['history']), 'history')
+  assert.equal(taskListTabFromQueryParam('recent_results'), 'all')
+  assert.equal(taskListTabFromQueryParam(' ', 'running'), 'running')
 })
 
 test('任务列表请求参数包含服务端分页和筛选条件', () => {

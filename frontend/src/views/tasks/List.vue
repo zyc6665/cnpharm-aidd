@@ -349,6 +349,7 @@
     getTaskProjectContextLabel,
     getTaskStatusColor,
     isRunningTask,
+    taskListTabFromQueryParam,
     type TaskActor,
     type TaskListTab
   } from '@/domain/tasks'
@@ -365,7 +366,8 @@
   const userStore = useUserStore()
 
   // 状态
-  const currentTab = ref<TabKey>('all')
+  const routeTab = computed<TabKey>(() => taskListTabFromQueryParam(route.query.view))
+  const currentTab = ref<TabKey>(routeTab.value)
   const searchKeyword = ref('')
   const selectedTool = ref<string | undefined>()
   const dateRange = ref<[Dayjs, Dayjs] | null>(null)
@@ -630,7 +632,8 @@
     }
   })
 
-  watch([projectId, workflowRunId, workflowDefinitionId, workflowNodeId], () => {
+  watch([routeTab, projectId, workflowRunId, workflowDefinitionId, workflowNodeId], ([tab]) => {
+    currentTab.value = tab
     currentPage.value = 1
     void fetchTasksAndCountsSafely()
     void fetchProjectContextSafely()
