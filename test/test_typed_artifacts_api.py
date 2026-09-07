@@ -605,6 +605,19 @@ async def test_artifact_version_download_uses_storage_and_project_acl(
             "artifact_id": artifact["id"],
             "artifact_version_id": version["id"],
             "role": "primary",
+        },
+        {
+            "user_id": artifact_context["outsider"].id,
+            "action": AuditAction.FILE_DOWNLOAD,
+            "file_id": version["id"],
+            "file_name": "protein.pdb",
+            "result": AuditResult.DENIED,
+            "file_size": len(content),
+            "project_id": project.id,
+            "artifact_id": artifact["id"],
+            "artifact_version_id": version["id"],
+            "role": "primary",
+            "reason": "project_access_denied",
         }
     ]
     assert hidden.status_code == 404

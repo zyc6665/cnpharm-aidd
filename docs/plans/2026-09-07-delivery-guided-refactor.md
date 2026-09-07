@@ -30,10 +30,10 @@
 - 2026-09-07：Result Manifest 失败收口；worker 与 direct recovery 在标准 Artifact 持久化失败时先回滚未提交产物，再把任务标记为失败，避免无效 `result.v2` 进入下游 ArtifactVersion。
 - 2026-09-07：Workflow Hydration 补齐保存节点工具选择恢复；加载旧 canvas 节点时可从 `selected_tool_by_node`、`recommendedToolSlug` 或 `toolSlugs` 恢复工具选择，并用当前 Tool Contract 回填 Artifact slots。
 - 2026-09-07：任务取消审计进入共用取消入口；独立任务、工作流节点任务和 Agent 关联任务调用 `cancel_platform_task` 成功后统一记录 `TASK_CANCEL` 事件。
+- 2026-09-07：文件/Artifact 下载拒绝审计补齐；普通文件越权、令牌无效、未登录和过期拒绝记录 `FILE_DOWNLOAD/DENIED`，Artifact 下载跨项目拒绝在不改变 404 响应的前提下记录内部审计。
 
 ## 下一步候选
 
 1. Workflow Hydration 继续检查：保存加载后恢复 Artifact 绑定和预检状态的边界场景。
 2. 基础 ADMET 交付链路盘点：确认真实 endpoint、模型版本、单位和模型卡附件是否齐全。
-3. 文件/Artifact 下载拒绝审计：补齐越权和过期拒绝事件，不泄露资源存在性。
-4. 任务中心分页继续服务端化：后续可移除标签内的前端二次分页，直接使用 `/tasks` total。
+3. 任务中心分页继续服务端化：后续可移除标签内的前端二次分页，直接使用 `/tasks` total。

@@ -82,6 +82,27 @@ def _audit_file_download(
     )
 
 
+def _audit_file_download_denied(
+    *,
+    file: FileModel,
+    current_user: Optional[User],
+    remote_token: bool,
+    reason: str,
+) -> None:
+    actor_id = current_user.id if current_user else "anonymous"
+    get_audit_logger().log_file_operation(
+        user_id=actor_id,
+        action=AuditAction.FILE_DOWNLOAD,
+        file_id=file.id,
+        file_name=file.filename,
+        result=AuditResult.DENIED,
+        file_size=file.size_bytes,
+        project_id=file.project_id,
+        remote_token=remote_token,
+        reason=reason,
+    )
+
+
 async def _standard_artifact_metadata_by_file_id(
     db: AsyncSession,
     file_ids: list[str],
@@ -542,20 +563,44 @@ async def download_file(
         try:
             remote_token_claims = validate_remote_file_access_token(token, file_id=file_id)
         except RemoteFileAccessTokenError as exc:
+            _audit_file_download_denied(
+                file=file,
+                current_user=current_user,
+                remote_token=True,
+                reason="invalid_remote_token",
+            )
             raise ForbiddenException(str(exc)) from exc
 
     # 权限检查：公开文件允许匿名访问
     if not file.is_public and remote_token_claims is None:
         if not current_user:
+            _audit_file_download_denied(
+                file=file,
+                current_user=None,
+                remote_token=False,
+                reason="authentication_required",
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="需要登录才能访问此文件"
             )
         if file.owner_id != current_user.id and current_user.role != "admin":
+            _audit_file_download_denied(
+                file=file,
+                current_user=current_user,
+                remote_token=False,
+                reason="forbidden",
+            )
             raise ForbiddenException("无权下载此文件")
 
     # 检查是否过期
     if file.expires_at and file.expires_at < utcnow():
+        _audit_file_download_denied(
+            file=file,
+            current_user=current_user,
+            remote_token=remote_token_claims is not None,
+            reason="expired",
+        )
         raise NotFoundException("文件已过期")
 
     # 检查文件是否存在

@@ -146,18 +146,25 @@ def _audit_artifact_download(
     file_name: str,
     file_size: int | None,
     role: str,
+    result: AuditResult = AuditResult.SUCCESS,
+    reason: str | None = None,
 ) -> None:
+    extra: dict[str, str | None] = {
+        "project_id": artifact.project_id,
+        "artifact_id": artifact.id,
+        "artifact_version_id": version.id,
+        "role": role,
+    }
+    if reason:
+        extra["reason"] = reason
     get_audit_logger().log_file_operation(
         user_id=current_user.id,
         action=AuditAction.FILE_DOWNLOAD,
         file_id=file_id,
         file_name=file_name,
-        result=AuditResult.SUCCESS,
+        result=result,
         file_size=file_size,
-        project_id=artifact.project_id,
-        artifact_id=artifact.id,
-        artifact_version_id=version.id,
-        role=role,
+        **extra,
     )
 
 
@@ -513,11 +520,25 @@ async def download_artifact_version(
     artifact = await load_artifact(db, artifact_id)
     if artifact is None:
         raise HTTPException(status_code=404, detail="Artifact 不存在")
-    await load_project_membership(
-        db, project_id=artifact.project_id, user_id=current_user.id
-    )
-
     version = next((item for item in artifact.versions if item.id == version_id), None)
+    try:
+        await load_project_membership(
+            db, project_id=artifact.project_id, user_id=current_user.id
+        )
+    except HTTPException:
+        if version is not None:
+            _audit_artifact_download(
+                current_user=current_user,
+                artifact=artifact,
+                version=version,
+                file_id=version.id,
+                file_name=version.filename,
+                file_size=version.size_bytes,
+                role="primary",
+                result=AuditResult.DENIED,
+                reason="project_access_denied",
+            )
+        raise
     if (
         version is None
         or version.status != "available"
@@ -554,11 +575,27 @@ async def download_artifact_version_file(
     artifact = await load_artifact(db, artifact_id)
     if artifact is None:
         raise HTTPException(status_code=404, detail="Artifact 不存在")
-    await load_project_membership(
-        db, project_id=artifact.project_id, user_id=current_user.id
-    )
-
     version = next((item for item in artifact.versions if item.id == version_id), None)
+    file_link = next((item for item in version.files if item.role == role), None) if version else None
+    try:
+        await load_project_membership(
+            db, project_id=artifact.project_id, user_id=current_user.id
+        )
+    except HTTPException:
+        if version is not None:
+            denied_file = file_link.file if file_link and file_link.file else None
+            _audit_artifact_download(
+                current_user=current_user,
+                artifact=artifact,
+                version=version,
+                file_id=denied_file.id if denied_file else version.id,
+                file_name=denied_file.filename if denied_file else version.filename,
+                file_size=denied_file.size_bytes if denied_file else version.size_bytes,
+                role=role,
+                result=AuditResult.DENIED,
+                reason="project_access_denied",
+            )
+        raise
     if (
         version is None
         or version.status != "available"
@@ -566,7 +603,6 @@ async def download_artifact_version_file(
     ):
         raise HTTPException(status_code=404, detail="Artifact 版本不存在")
 
-    file_link = next((item for item in version.files if item.role == role), None)
     if file_link is None or file_link.file is None:
         raise HTTPException(status_code=404, detail="Artifact 角色文件不存在")
     file_record = file_link.file
