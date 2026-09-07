@@ -53,7 +53,13 @@
           <span v-if="node.toolVersionId" class="run-node-meta">
             {{ t('workflow.canvasPresets.toolVersion', { id: node.toolVersionId }) }}
           </span>
-          <span v-if="node.taskId">{{ t('workflow.canvasPresets.taskId', { id: node.taskId }) }}</span>
+          <router-link
+            v-if="node.taskId"
+            class="run-node-meta task-detail-link"
+            :to="`/tasks/${node.taskId}`"
+          >
+            {{ t('workflow.canvasPresets.taskId', { id: node.taskId }) }}
+          </router-link>
           <span v-if="node.inputFileIds.length" class="run-node-meta">
             {{ t('workflow.canvasPresets.inputFileIds', { ids: node.inputFileIds.join(', ') }) }}
           </span>
@@ -216,7 +222,8 @@
       overflow-wrap: anywhere;
     }
 
-    span {
+    span,
+    a {
       color: @text-color-light-secondary;
       font-size: @font-size-sm;
     }
