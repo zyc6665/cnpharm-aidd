@@ -1,7 +1,12 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import type { Task } from '@/types/models'
-import { filterTasksByKeyword, filterTasksForTab, paginateTasks } from './listing'
+import {
+  filterTasksByKeyword,
+  filterTasksForTab,
+  paginateTasks,
+  taskSystemViewForTab,
+} from './listing'
 
 function task(id: string, status: Task['status'], overrides: Partial<Task> = {}): Task {
   return {
@@ -35,6 +40,12 @@ test('任务列表按标签页过滤运行中和历史任务', () => {
     filterTasksForTab(tasks, 'all').map(item => item.id),
     tasks.map(item => item.id)
   )
+})
+
+test('任务列表标签页映射到后端系统视图', () => {
+  assert.equal(taskSystemViewForTab('all'), 'all')
+  assert.equal(taskSystemViewForTab('running'), 'running')
+  assert.equal(taskSystemViewForTab('history'), 'history')
 })
 
 test('任务列表关键字过滤覆盖名称、工具名和任务 ID', () => {

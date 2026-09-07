@@ -35,7 +35,7 @@ export const useTasksStore = defineStore('tasks', () => {
     }
   }
 
-  const fetchAllTasks = async (params?: Pick<TaskListParams, 'tool_id' | 'keyword' | 'project_id'>) => {
+  const fetchAllTasks = async (params?: Pick<TaskListParams, 'view' | 'tool_id' | 'keyword' | 'project_id'>) => {
     loading.value = true
     try {
       const firstPage = await getTaskList({

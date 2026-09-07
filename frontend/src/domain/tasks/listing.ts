@@ -2,6 +2,11 @@ import type { Task } from '@/types/models'
 import { isHistoryTask, isRunningTask } from './status'
 
 export type TaskListTab = 'all' | 'running' | 'history'
+export type TaskSystemView = 'all' | 'running' | 'history' | 'needs_attention' | 'recent_results'
+
+export function taskSystemViewForTab(tab: TaskListTab): TaskSystemView {
+  return tab
+}
 
 export function filterTasksForTab(tasks: Task[], tab: TaskListTab): Task[] {
   if (tab === 'running') return tasks.filter(isRunningTask)

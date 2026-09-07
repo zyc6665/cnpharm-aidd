@@ -1,5 +1,6 @@
 import { get, post, del, type RequestOptions } from './request'
 import type { ApiResponse } from '@/types/api'
+import type { TaskSystemView } from '@/domain/tasks/listing'
 import type {
   Task,
   TaskCreateParams,
@@ -9,8 +10,6 @@ import type {
   PaginatedResponse,
   PaginationParams
 } from '@/types/models'
-
-export type TaskSystemView = 'all' | 'running' | 'history' | 'needs_attention' | 'recent_results'
 
 export interface TaskListParams extends PaginationParams {
   view?: TaskSystemView

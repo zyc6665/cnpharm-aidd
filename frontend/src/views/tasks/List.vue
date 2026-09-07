@@ -337,6 +337,7 @@
     isHistoryTask,
     isRunningTask,
     paginateTasks,
+    taskSystemViewForTab,
     type TaskActor,
     type TaskListTab
   } from '@/domain/tasks'
@@ -449,7 +450,9 @@
   }
 
   const fetchTasks = async () => {
-    const params: Pick<TaskListParams, 'tool_id' | 'keyword' | 'project_id'> = {}
+    const params: Pick<TaskListParams, 'view' | 'tool_id' | 'keyword' | 'project_id'> = {
+      view: taskSystemViewForTab(currentTab.value)
+    }
 
     if (projectId.value) {
       params.project_id = projectId.value
