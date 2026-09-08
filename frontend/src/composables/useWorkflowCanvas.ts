@@ -594,7 +594,7 @@ export function useWorkflowCanvas(input: {
 
     return {
       id: node.id,
-      kind: node.type === 'input' ? 'input' : 'tool',
+      kind: node.type === 'input' ? 'input' : node.type === 'tool' ? 'tool' : node.type,
       type: node.type,
       semantic_type: node.requiredInputTypes?.[0] ?? node.recommendedToolSlug ?? node.id,
       tool_slug:

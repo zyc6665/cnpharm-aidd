@@ -51,9 +51,10 @@
 - 2026-09-08：MolP-PC 独立运行标准产物补齐；legacy direct/worker 输出标准化时同步生成 `molecule_table@1` 与 `run_report@1`，并建立 report 描述 properties 的 lineage，满足基础 ADMET 表格加科学说明附件的最小验收口径。
 - 2026-09-08：AT-003 前端预设入口补齐；工作流画布新增 `PubChem -> Ligand Preparation -> SDF to SMILES -> RDKit Properties -> MolP-PC Basic ADMET` 预设，复用现有工具 slug 和标准 Artifact 类型，不新增运行器特判。
 - 2026-09-08：AT-003 预设保存绑定补齐；小分子链路节点开始携带 `artifact_input_slots` / `artifact_outputs`，保存 WorkflowDefinition 时可生成 `node:<upstream>:<slot>` 形式的标准 Artifact 绑定。
+- 2026-09-08：AT-003 后端定义验收补齐；后端 Workflow validation 可接收小分子链路标准 Artifact 绑定并按 `Fetch PubChem -> Ligand Preparation -> SDF to SMILES -> RDKit -> MolP-PC` 顺序生成可调度节点，结果节点不再被前端序列化为可执行工具。
 
 ## 下一步候选
 
-1. AT-003 工作流链路后端验收：确认后端 validation/scheduler 接收 `PubChem -> Ligand Preparation -> SDF to SMILES -> RDKit -> MolP-PC ADMET` 的标准 Artifact 绑定并按依赖顺序调度。
+1. AT-003 工作流运行调度验收：确认 scheduler 在上游节点成功后把 `properties` ArtifactVersion 绑定给 MolP-PC 的 `molecules` 输入。
 2. 基础 ADMET MolP-PC 附件下载验收：检查 `run_report@1` 和 metadata 中的模型卡/验证记录引用是否能在任务详情或 Artifact 详情中被用户定位。
 3. 任务中心失败定位增强：可继续检查失败任务详情页是否直接暴露错误原因、stderr/stdout 和标准产物缺失提示。

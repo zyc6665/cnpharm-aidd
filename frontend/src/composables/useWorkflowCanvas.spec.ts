@@ -259,6 +259,8 @@ describe('useWorkflowCanvas', () => {
         { name: 'report', type: 'run_report@1', cardinality: 'one', required: true },
       ],
     })
+    expect(nodesById.get('result-admet')).toMatchObject({ kind: 'result', type: 'result' })
+    expect(nodesById.get('result-admet')?.tool_slug).toBeUndefined()
   })
 
   it('应一键插入准备节点并把原始连线重连到准备节点', () => {
