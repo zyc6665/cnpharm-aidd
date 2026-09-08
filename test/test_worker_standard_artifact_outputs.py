@@ -53,6 +53,7 @@ from app.models.tasks import TaskStatus
 from app.models.tools import Tool as ToolModel
 from app.models.tools import ToolStatus
 from app.models.tools import ToolVersion as ToolVersionModel
+from app.tasks.executors.errors import TaskExecutionError
 from app.models.users import User as UserModel
 from app.models.users import UserRole, UserStatus
 from app.worker import tasks as worker_tasks
@@ -488,6 +489,48 @@ async def test_worker_rejects_invalid_standard_result_without_persisting_artifac
     assert "Relation references unknown artifact" in task_record.error_message
     assert task_output is None
     assert artifact_count == 0
+
+
+@pytest.mark.asyncio
+async def test_worker_persists_task_execution_failure_diagnostics(
+    worker_standard_db_factory,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    await _disable_notifications(monkeypatch)
+    monkeypatch.setattr("app.database.session.async_session_factory", worker_standard_db_factory)
+
+    async with worker_standard_db_factory() as db:
+        task, version = await _seed_task(db, tool_config={"type": "python_script"})
+        task_id = task.id
+        version_id = version.id
+
+    async def fake_execute(self):
+        raise TaskExecutionError(
+            "Python script failed with code 2",
+            details={"stdout": "loading model", "stderr": "missing weights"},
+        )
+
+    monkeypatch.setattr("app.tasks.executor.TaskExecutor.execute", fake_execute)
+
+    with pytest.raises(TaskExecutionError, match="Python script failed"):
+        await worker_tasks._execute_tool_task_impl(str(task_id), str(version_id))
+
+    async with worker_standard_db_factory() as db:
+        task_record = (
+            await db.execute(select(TaskModel).where(TaskModel.id == task_id))
+        ).scalar_one()
+        task_output = (
+            await db.execute(select(TaskOutputModel).where(TaskOutputModel.task_id == task_id))
+        ).scalar_one()
+
+    assert task_record.status == TaskStatus.FAILURE.value
+    assert task_output.result == {
+        "success": False,
+        "error": "Python script failed with code 2",
+        "details": {"stdout": "loading model", "stderr": "missing weights"},
+        "stdout": "loading model",
+        "stderr": "missing weights",
+    }
 
 
 @pytest.mark.asyncio

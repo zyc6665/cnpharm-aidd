@@ -1,6 +1,7 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import {
+  buildTaskFailureDiagnostics,
   formatTaskDetailTime,
   formatTaskFileSize,
   formatTaskRunningDuration,
@@ -40,4 +41,34 @@ test('任务完成标题 key 由终态决定，非终态回退 completed', () =>
   assert.equal(getTaskCompletedTitleKey('failure'), 'tasks.failed')
   assert.equal(getTaskCompletedTitleKey('canceled'), 'tasks.canceled')
   assert.equal(getTaskCompletedTitleKey('running'), 'tasks.completed')
+})
+
+test('任务失败诊断提取 stderr、stdout 和标准产物缺失提示', () => {
+  const diagnostics = buildTaskFailureDiagnostics({
+    error_message: 'Workflow node missing required standard artifacts: report (run_report@1)',
+    outputs: {
+      result: {
+        success: false,
+        details: {
+          stdout: 'loading model',
+          stderr: 'Missing required output artifact: report'
+        }
+      },
+      file_ids: [],
+      output_type: 'json'
+    },
+    output_data: null
+  })
+
+  assert.equal(
+    diagnostics.errorMessage,
+    'Workflow node missing required standard artifacts: report (run_report@1)'
+  )
+  assert.equal(diagnostics.stdout, 'loading model')
+  assert.equal(diagnostics.stderr, 'Missing required output artifact: report')
+  assert.equal(
+    diagnostics.standardArtifactMessage,
+    'Workflow node missing required standard artifacts: report (run_report@1)'
+  )
+  assert.equal(diagnostics.hasDetails, true)
 })

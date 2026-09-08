@@ -55,9 +55,10 @@
 - 2026-09-08：AT-003 scheduler 绑定验收补齐；当 RDKit Properties 节点成功产出 `properties` ArtifactVersion 后，MolP-PC 节点调度会把该版本作为 `molecules` 标准输入绑定，并保留关联文件列表。
 - 2026-09-08：MolP-PC 科学附件定位补齐；任务输出详情开始从完整 `outputs.result.standard_result` 提取模型卡、验证记录和证据等级引用，用户可在基础 ADMET 结果区直接定位交付附件说明。
 - 2026-09-08：AT-003 本地 direct smoke 说明补齐；沉淀 `PubChem -> Ligand Preparation -> SDF to SMILES -> RDKit -> MolP-PC` 最小联调步骤、通过标准、失败排查和自动化回归命令。
+- 2026-09-08：任务失败定位增强；执行器失败时保留 `TaskExecutionError.details` 到任务输出，任务详情页直接展示 stderr/stdout，并对标准产物缺失或 Result Manifest 问题给出醒目提示。
 
 ## 下一步候选
 
-1. 任务中心失败定位增强：可继续检查失败任务详情页是否直接暴露错误原因、stderr/stdout 和标准产物缺失提示。
-2. Artifact 详情交付元数据展示：如后续需要从产物库直接复核，可考虑在 ArtifactVersion 详情接口显式透出 `manifest_json.metadata`。
-3. AT-003 端到端真实运行记录：在具备 MolP-PC runtime 和 PubChem 网络的环境中记录一次真实 smoke task ID、输入哈希和输出 ArtifactVersion。
+1. Artifact 详情交付元数据展示：如后续需要从产物库直接复核，可考虑在 ArtifactVersion 详情接口显式透出 `manifest_json.metadata`。
+2. AT-003 端到端真实运行记录：在具备 MolP-PC runtime 和 PubChem 网络的环境中记录一次真实 smoke task ID、输入哈希和输出 ArtifactVersion。
+3. 任务失败诊断后端 API 收敛：后续可把失败诊断结构化为稳定字段，减少前端从通用输出 JSON 中提取。

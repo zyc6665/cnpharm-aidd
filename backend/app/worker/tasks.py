@@ -8,6 +8,7 @@ from celery.utils.log import get_task_logger
 
 from app.common.async_runtime import run_coro_sync
 from app.common.time import utcnow
+from app.tasks.executors.errors import TaskExecutionError
 from app.tasks.naming import _extract_file_ids_from_result
 from app.tasks.state_machine import TaskStateMachine
 
@@ -66,6 +67,37 @@ def prepare_task_output(output_result: Dict[str, Any]) -> Dict[str, Any]:
         "file_ids": file_ids,
         "output_type": "visualization" if file_ids else "json",
     }
+
+
+def _json_safe_detail(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return {str(key): _json_safe_detail(child) for key, child in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe_detail(item) for item in value]
+    return str(value)
+
+
+def _task_execution_failure_result(exc: Exception) -> Dict[str, Any] | None:
+    """保留执行器返回的失败诊断，供任务详情页定位 stderr/stdout。"""
+    if not isinstance(exc, TaskExecutionError) or not exc.details:
+        return None
+
+    details = _json_safe_detail(exc.details)
+    if not isinstance(details, dict) or not details:
+        return None
+
+    result: Dict[str, Any] = {
+        "success": False,
+        "error": str(exc),
+        "details": details,
+    }
+    for key in ("stdout", "stderr"):
+        value = details.get(key)
+        if isinstance(value, str) and value.strip():
+            result[key] = value
+    return result
 
 
 async def _record_remote_tool_smoke_result_if_needed(
@@ -449,6 +481,25 @@ async def _execute_tool_task_impl(task_id: str, tool_version_id: str) -> Dict[st
                 message=f"任务执行失败: {str(e)}"
             )
             db.add(log)
+            failure_result = _task_execution_failure_result(e)
+            if failure_result is not None:
+                existing_output = (
+                    await db.execute(select(TaskOutput).where(TaskOutput.task_id == task_id))
+                ).scalar_one_or_none()
+                failure_file_ids = _extract_output_file_ids(failure_result)
+                if existing_output is None:
+                    db.add(
+                        TaskOutput(
+                            task_id=task_id,
+                            result=failure_result,
+                            file_ids=failure_file_ids,
+                            output_type="json",
+                        )
+                    )
+                else:
+                    existing_output.result = failure_result
+                    existing_output.file_ids = failure_file_ids
+                    existing_output.output_type = "json"
             if tool is not None and tool_version is not None:
                 await _record_remote_tool_smoke_result_if_needed(
                     db,

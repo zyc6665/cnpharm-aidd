@@ -168,16 +168,41 @@
               </div>
 
               <!-- 错误信息 -->
-              <div v-if="taskStatus === 'failure' && task.error_message" class="info-card error">
+              <div v-if="taskStatus === 'failure' && failureDiagnostics.hasDetails" class="info-card error">
                 <h3 class="card-title">
                   <CloseCircleOutlined />
                   {{ t('tasks.errorMessage') }}
                 </h3>
                 <a-alert
+                  v-if="failureDiagnostics.errorMessage"
                   type="error"
                   show-icon
-                  :message="task.error_message"
+                  :message="failureDiagnostics.errorMessage"
                 />
+
+                <div
+                  v-if="failureDiagnostics.standardArtifactMessage || failureDiagnostics.stderr || failureDiagnostics.stdout"
+                  class="task-failure-diagnostics"
+                  data-testid="task-failure-diagnostics"
+                >
+                  <a-alert
+                    v-if="failureDiagnostics.standardArtifactMessage"
+                    type="warning"
+                    show-icon
+                    :message="t('tasks.standardArtifactsMissing')"
+                    :description="failureDiagnostics.standardArtifactMessage"
+                  />
+
+                  <div v-if="failureDiagnostics.stderr" class="failure-stream">
+                    <h4>{{ t('tasks.failureStderr') }}</h4>
+                    <pre data-testid="task-stderr">{{ failureDiagnostics.stderr }}</pre>
+                  </div>
+
+                  <div v-if="failureDiagnostics.stdout" class="failure-stream">
+                    <h4>{{ t('tasks.failureStdout') }}</h4>
+                    <pre data-testid="task-stdout">{{ failureDiagnostics.stdout }}</pre>
+                  </div>
+                </div>
               </div>
 
               <!-- 运行日志 -->
@@ -307,6 +332,7 @@ import {
   canDeleteTask as canDeleteTaskForActor,
   formatTaskDetailTime,
   formatTaskFileSize,
+  buildTaskFailureDiagnostics,
   getTaskCompletedTitleKey,
   getTaskStatusColor,
   isTaskWebSocketMessageForTask,
@@ -355,6 +381,7 @@ const detailSubtitle = computed(() => {
 
   return `${getStatusText(taskStatus.value)} · ${formatTime(task.value.created_at)}`
 })
+const failureDiagnostics = computed(() => buildTaskFailureDiagnostics(task.value))
 
 // 方法
 const getStatusColor = getTaskStatusColor
@@ -681,6 +708,37 @@ onUnmounted(() => {
     .anticon {
       color: @primary-color;
     }
+  }
+}
+
+.task-failure-diagnostics {
+  display: flex;
+  flex-direction: column;
+  gap: @spacing-md;
+  margin-top: @spacing-md;
+}
+
+.failure-stream {
+  display: flex;
+  flex-direction: column;
+  gap: @spacing-xs;
+
+  h4 {
+    margin: 0;
+    color: @text-color-light-secondary;
+    font-size: @font-size-sm;
+    font-weight: @font-weight-semibold;
+  }
+
+  pre {
+    margin: 0;
+    padding: @spacing-sm;
+    overflow-x: auto;
+    border-radius: @border-radius-sm;
+    background: #1e1e1e;
+    color: #f8f8f2;
+    font-size: @font-size-sm;
+    white-space: pre-wrap;
   }
 }
 
