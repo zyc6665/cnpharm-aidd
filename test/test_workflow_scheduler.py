@@ -556,6 +556,108 @@ async def test_workflow_node_receives_upstream_standard_artifact_binding(
 
 
 @pytest.mark.asyncio
+async def test_at003_molp_pc_node_receives_rdkit_properties_artifact_binding(
+    db_session: AsyncSession,
+    owner: User,
+) -> None:
+    table_file = await _create_workflow_file(
+        db_session,
+        owner,
+        filename="rdkit_properties.csv",
+        content=b"SMILES,MW\nCCO,46\n",
+        content_type="text/csv",
+    )
+    metadata_file = await _create_workflow_file(
+        db_session,
+        owner,
+        filename="rdkit_properties_metadata.json",
+        content=b"{}",
+        content_type="application/json",
+    )
+    properties_version = await _create_artifact_version(
+        db_session,
+        owner,
+        name="rdkit-properties",
+        type_ref="molecule_table@1",
+        roles={"table_file": table_file, "metadata_json": metadata_file},
+    )
+    tool = await _create_tool(
+        db_session,
+        owner,
+        slug="molp-pc-property-prediction",
+        provider_type=ToolProviderType.USER.value,
+        executor_type="ssh_job",
+        is_public=True,
+        config={
+            "type": "ssh_job",
+            "tool_package_manifest": {
+                "api_version": "aidd.sciminer/tool-package.v2",
+                "metadata": {"slug": "molp-pc-property-prediction"},
+            },
+        },
+    )
+    run = SimpleNamespace(
+        id="run-at003",
+        name="AT-003 ADMET Run",
+        workflow_definition_id="workflow-at003",
+        project_id="project-1",
+        input_files={},
+    )
+    node = {
+        "id": "molp_pc_admet",
+        "kind": "tool",
+        "tool_id": tool.id,
+        "tool_slug": tool.slug,
+        "artifact_input_slots": [
+            {"name": "molecules", "type": "molecule_table@1", "required": True}
+        ],
+        "artifact_inputs": {"molecules": "node:rdkit_properties:properties"},
+    }
+    node_states = {
+        "molp_pc_admet": {"status": "pending"},
+        "rdkit_properties": {
+            "status": "success",
+            "standard_artifacts": {
+                "artifact_version_ids_by_ref": {"properties": properties_version.id},
+                "file_ids_by_artifact_ref": {
+                    "properties": [table_file.id, metadata_file.id],
+                },
+            },
+        },
+    }
+    scheduled: list[dict] = []
+
+    async def fake_schedule_task(**kwargs):
+        task_data = kwargs["task_data"]
+        scheduled.append(
+            {
+                "file_ids": task_data.file_ids,
+                "input_bindings": task_data.input_bindings,
+                "params": task_data.params,
+            }
+        )
+        return SimpleNamespace(id="task-molp-pc")
+
+    created = await schedule_workflow_node(
+        db_session,
+        current_user=owner,
+        run=run,
+        node_id="molp_pc_admet",
+        node=node,
+        node_states=node_states,
+        schedule_task_fn=fake_schedule_task,
+    )
+
+    assert created is True
+    assert scheduled[0]["file_ids"] == [table_file.id, metadata_file.id]
+    assert scheduled[0]["input_bindings"] == {"molecules": properties_version.id}
+    assert scheduled[0]["params"]["workflow_node_type"] == "tool"
+    assert node_states["molp_pc_admet"]["input_bindings"] == {
+        "molecules": properties_version.id
+    }
+
+
+@pytest.mark.asyncio
 async def test_workflow_node_binds_first_cardinality_many_standard_artifact(
     db_session: AsyncSession,
     owner: User,
