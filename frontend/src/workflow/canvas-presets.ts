@@ -50,7 +50,11 @@ const WORKFLOW_NODE_LIBRARY = {
     titleKey: 'workflow.nodes.fetchPubChem.title',
     descriptionKey: 'workflow.nodes.fetchPubChem.description',
     position: { x: 40, y: 360 },
-    producedOutputTypes: ['ligand_structure@1']
+    producedOutputTypes: ['ligand_structure@1'],
+    outputArtifactSlots: [
+      { name: 'ligand', type: 'ligand_structure@1', cardinality: 'one', required: true },
+      { name: 'report', type: 'run_report@1', cardinality: 'one', required: false }
+    ]
   },
   ligandPreparation: {
     id: 'tool-ligand-preparation',
@@ -61,7 +65,14 @@ const WORKFLOW_NODE_LIBRARY = {
     descriptionKey: 'workflow.nodes.ligandPreparation.description',
     position: { x: 300, y: 360 },
     requiredInputTypes: ['ligand_structure@1'],
-    producedOutputTypes: ['ligand_structure@1']
+    producedOutputTypes: ['ligand_structure@1'],
+    inputArtifactSlots: [
+      { name: 'ligand', type: 'ligand_structure@1', required: true }
+    ],
+    outputArtifactSlots: [
+      { name: 'ligand', type: 'ligand_structure@1', cardinality: 'one', required: true },
+      { name: 'report', type: 'run_report@1', cardinality: 'one', required: false }
+    ]
   },
   sdfToSmiles: {
     id: 'tool-sdf-to-smiles',
@@ -72,7 +83,13 @@ const WORKFLOW_NODE_LIBRARY = {
     descriptionKey: 'workflow.nodes.sdfToSmiles.description',
     position: { x: 560, y: 360 },
     requiredInputTypes: ['ligand_structure@1'],
-    producedOutputTypes: ['molecule_table@1']
+    producedOutputTypes: ['molecule_table@1'],
+    inputArtifactSlots: [
+      { name: 'ligand', type: 'ligand_structure@1', required: true }
+    ],
+    outputArtifactSlots: [
+      { name: 'molecules', type: 'molecule_table@1', cardinality: 'one', required: true }
+    ]
   },
   rdkitProperties: {
     id: 'tool-rdkit-properties',
@@ -83,7 +100,14 @@ const WORKFLOW_NODE_LIBRARY = {
     descriptionKey: 'workflow.nodes.rdkitProperties.description',
     position: { x: 820, y: 360 },
     requiredInputTypes: ['molecule_table@1'],
-    producedOutputTypes: ['molecule_table@1', 'run_report@1']
+    producedOutputTypes: ['molecule_table@1', 'run_report@1'],
+    inputArtifactSlots: [
+      { name: 'molecules', type: 'molecule_table@1', required: true }
+    ],
+    outputArtifactSlots: [
+      { name: 'properties', type: 'molecule_table@1', cardinality: 'one', required: true },
+      { name: 'report', type: 'run_report@1', cardinality: 'one', required: false }
+    ]
   },
   molpPcAdmet: {
     id: 'tool-molp-pc-admet',
@@ -94,7 +118,14 @@ const WORKFLOW_NODE_LIBRARY = {
     descriptionKey: 'workflow.nodes.molpPcAdmet.description',
     position: { x: 1080, y: 360 },
     requiredInputTypes: ['molecule_table@1'],
-    producedOutputTypes: ['molecule_table@1', 'run_report@1']
+    producedOutputTypes: ['molecule_table@1', 'run_report@1'],
+    inputArtifactSlots: [
+      { name: 'molecules', type: 'molecule_table@1', required: true }
+    ],
+    outputArtifactSlots: [
+      { name: 'properties', type: 'molecule_table@1', cardinality: 'one', required: true },
+      { name: 'report', type: 'run_report@1', cardinality: 'one', required: true }
+    ]
   },
   pocketExploration: {
     id: 'tool-pocket-exploration',

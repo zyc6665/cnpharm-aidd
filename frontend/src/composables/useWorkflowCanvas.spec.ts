@@ -221,6 +221,46 @@ describe('useWorkflowCanvas', () => {
     ])
   })
 
+  it('AT-003 预设保存时应保留标准 Artifact slot 绑定', () => {
+    const canvas = mountCanvasHarness()
+    canvas.workflowStore.setCanvasPreset('pubchem-admet-template')
+
+    const definition = canvas.buildCurrentWorkflowDefinition()
+    const nodesById = new Map(definition.nodes.map(node => [node.id, node]))
+
+    expect(nodesById.get('tool-fetch-pubchem')).toMatchObject({
+      tool_slug: 'builtin-fetch-ligand',
+      artifact_outputs: [
+        { name: 'ligand', type: 'ligand_structure@1', cardinality: 'one', required: true },
+        { name: 'report', type: 'run_report@1', cardinality: 'one', required: false },
+      ],
+    })
+    expect(nodesById.get('tool-sdf-to-smiles')).toMatchObject({
+      tool_slug: 'builtin-sdf-to-smiles-csv',
+      artifact_input_slots: [{ name: 'ligand', type: 'ligand_structure@1', required: true }],
+      artifact_inputs: { ligand: 'node:tool-ligand-preparation:ligand' },
+      artifact_outputs: [
+        { name: 'molecules', type: 'molecule_table@1', cardinality: 'one', required: true },
+      ],
+    })
+    expect(nodesById.get('tool-rdkit-properties')).toMatchObject({
+      tool_slug: 'builtin-rdkit-properties',
+      artifact_inputs: { molecules: 'node:tool-sdf-to-smiles:molecules' },
+      artifact_outputs: [
+        { name: 'properties', type: 'molecule_table@1', cardinality: 'one', required: true },
+        { name: 'report', type: 'run_report@1', cardinality: 'one', required: false },
+      ],
+    })
+    expect(nodesById.get('tool-molp-pc-admet')).toMatchObject({
+      tool_slug: 'molp-pc-property-prediction',
+      artifact_inputs: { molecules: 'node:tool-rdkit-properties:properties' },
+      artifact_outputs: [
+        { name: 'properties', type: 'molecule_table@1', cardinality: 'one', required: true },
+        { name: 'report', type: 'run_report@1', cardinality: 'one', required: true },
+      ],
+    })
+  })
+
   it('应一键插入准备节点并把原始连线重连到准备节点', () => {
     const canvas = mountCanvasHarness()
     canvas.toolsStore.workbenchGroups = [
