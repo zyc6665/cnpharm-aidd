@@ -60,9 +60,10 @@
 - 2026-09-08：任务失败诊断 API 收敛；任务详情接口新增结构化 `failure_diagnostics` 字段，前端优先消费该字段并保留旧输出 JSON 提取作为兼容兜底。
 - 2026-09-08：V1 交付验收索引补齐；新增一页 P0 验收入口，收敛主链路、地基模块、自动化命令、AT-003 smoke 说明和当前限制，便于客户验收前快速巡检。
 - 2026-09-08：Artifact 元数据列表筛选补齐；项目 Artifact 列表接口支持按 `manifest_json.metadata.model_version` 和 `manifest_json.metadata.evidence_level` 筛选，前端 API 可直接透传交付元数据筛选参数。
+- 2026-09-08：交付验收命令分层补齐；V1 验收索引将命令集拆成 smoke 检查、P0 回归和发布前门禁，便于小步重构后快速验证，交付前再跑完整覆盖。
 
 ## 下一步候选
 
 1. AT-003 端到端真实运行记录：在具备 MolP-PC runtime 和 PubChem 网络的环境中记录一次真实 smoke task ID、输入哈希和输出 ArtifactVersion。
-2. 交付验收索引命令分层：如完整命令耗时过长，可把 smoke、回归、发布前全量检查拆成三个等级。
-3. Artifact 元数据筛选扩展：如产物库规模继续增大，再评估模型族、endpoint 或适用域状态聚合筛选。
+2. Artifact 元数据筛选扩展：如产物库规模继续增大，再评估模型族、endpoint 或适用域状态聚合筛选。
+3. AT-003 direct smoke 自动化脚本：如手工步骤仍耗时，可基于现有 API 封装最小 smoke runner，但不在未验证运行环境前预设复杂编排。
