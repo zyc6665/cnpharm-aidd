@@ -165,6 +165,18 @@ def build_record_markdown(task: dict[str, Any], artifacts: list[dict[str, Any]])
     )
 
 
+def task_id_from_workflow_run(run: dict[str, Any], workflow_node_id: str) -> str:
+    """Return the platform task id bound to a workflow node state."""
+    node_states = _as_dict(run.get("node_states"))
+    node_state = _as_dict(node_states.get(workflow_node_id))
+    task_id = str(node_state.get("task_id") or "").strip()
+    if not task_id:
+        raise ValueError(
+            f"workflow node {workflow_node_id} in run {run.get('id') or 'N/A'} 缺少 task_id"
+        )
+    return task_id
+
+
 def collect_record(base_url: str, token: str, task_id: str) -> str:
     task = _unwrap_data(_api_get(base_url, f"/api/v1/tasks/{task_id}", token=token))
     task_data = _as_dict(task)
@@ -184,15 +196,42 @@ def collect_record(base_url: str, token: str, task_id: str) -> str:
     return build_record_markdown(task_data, artifacts)
 
 
+def collect_record_from_workflow_node(
+    base_url: str,
+    token: str,
+    *,
+    workflow_run_id: str,
+    workflow_node_id: str,
+) -> str:
+    run = _unwrap_data(
+        _api_get(base_url, f"/api/v1/workflows/runs/{workflow_run_id}", token=token)
+    )
+    task_id = task_id_from_workflow_run(_as_dict(run), workflow_node_id)
+    return collect_record(base_url, token, task_id)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Collect AT-003 MolP-PC platform smoke evidence.")
     parser.add_argument("--base-url", required=True, help="Platform base URL, for example http://127.0.0.1:8000")
     parser.add_argument("--token", required=True, help="Bearer token for the platform API")
-    parser.add_argument("--task-id", required=True, help="MolP-PC platform task id")
+    parser.add_argument("--task-id", help="MolP-PC platform task id")
+    parser.add_argument("--workflow-run-id", help="WorkflowRun id that contains the MolP-PC node")
+    parser.add_argument("--workflow-node-id", help="Workflow node id for the MolP-PC task")
     parser.add_argument("--output", help="Optional markdown output path")
     args = parser.parse_args(argv)
 
-    record = collect_record(args.base_url, args.token, args.task_id)
+    if args.task_id:
+        record = collect_record(args.base_url, args.token, args.task_id)
+    elif args.workflow_run_id and args.workflow_node_id:
+        record = collect_record_from_workflow_node(
+            args.base_url,
+            args.token,
+            workflow_run_id=args.workflow_run_id,
+            workflow_node_id=args.workflow_node_id,
+        )
+    else:
+        parser.error("需要提供 --task-id，或同时提供 --workflow-run-id 与 --workflow-node-id")
+
     if args.output:
         Path(args.output).write_text(record + "\n", encoding="utf-8")
     else:

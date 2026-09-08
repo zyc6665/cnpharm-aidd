@@ -98,4 +98,15 @@ python "backend/scripts/collect_at003_platform_evidence.py" \
   --output "docs/verification/at003-platform-run-YYYY-MM-DD.md"
 ```
 
-脚本只调用平台 `/api/v1/tasks/{task_id}` 和 `/api/v1/projects/{project_id}/artifacts`，不得替代或绕过平台任务执行。
+如果只拿到工作流运行 ID，可从 MolP-PC 节点状态解析任务 ID：
+
+```bash
+python "backend/scripts/collect_at003_platform_evidence.py" \
+  --base-url "http://127.0.0.1:8000" \
+  --token "<platform bearer token>" \
+  --workflow-run-id "<workflow run id>" \
+  --workflow-node-id "molp_pc_admet" \
+  --output "docs/verification/at003-platform-run-YYYY-MM-DD.md"
+```
+
+脚本只调用平台 `/api/v1/workflows/runs/{run_id}`、`/api/v1/tasks/{task_id}` 和 `/api/v1/projects/{project_id}/artifacts`，不得替代或绕过平台任务执行。

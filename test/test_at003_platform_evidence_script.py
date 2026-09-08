@@ -87,3 +87,25 @@ def test_at003_evidence_rejects_non_platform_molp_pc_task() -> None:
             {"id": "task-1", "tool_slug": "builtin-admet-prediction"},
             [],
         )
+
+
+def test_at003_evidence_resolves_task_id_from_workflow_node_state() -> None:
+    module = _load_script_module()
+    run = {
+        "id": "workflow-run-1",
+        "node_states": {
+            "fetch_pubchem": {"status": "success", "task_id": "task-fetch"},
+            "molp_pc_admet": {"status": "success", "task_id": "task-molp-pc"},
+        },
+    }
+
+    assert module.task_id_from_workflow_run(run, "molp_pc_admet") == "task-molp-pc"
+
+
+def test_at003_evidence_requires_workflow_node_task_id() -> None:
+    module = _load_script_module()
+    with pytest.raises(ValueError, match="workflow node"):
+        module.task_id_from_workflow_run(
+            {"id": "workflow-run-1", "node_states": {"molp_pc_admet": {}}},
+            "molp_pc_admet",
+        )

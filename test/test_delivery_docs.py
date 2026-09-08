@@ -60,6 +60,8 @@ def test_at003_platform_smoke_documents_api_evidence_script() -> None:
     assert "backend/scripts/collect_at003_platform_evidence.py" in platform_text
     assert "--base-url" in platform_text
     assert "--task-id" in platform_text
+    assert "--workflow-run-id" in platform_text
+    assert "--workflow-node-id" in platform_text
     assert "--token" in platform_text
     assert "不得记录 `model/MolP-PC/platform_run.sh`" in script_text
     assert "subprocess" not in script_text
