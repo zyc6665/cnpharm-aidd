@@ -359,6 +359,85 @@ async def test_project_artifacts_can_filter_by_delivery_metadata(
 
 
 @pytest.mark.asyncio
+async def test_project_artifacts_can_filter_by_type_and_source(
+    artifact_client,
+    artifact_db: AsyncSession,
+    artifact_context: dict[str, object],
+):
+    from app.models.artifacts import Artifact, ArtifactVersion
+
+    client, _ = artifact_client
+    project = artifact_context["project"]
+    owner = artifact_context["owner"]
+    matching = Artifact(
+        project_id=project.id,
+        created_by=owner.id,
+        artifact_type="molecule_table",
+        semantic_type="molecule_table@1",
+        standard_type="molecule_table",
+        standard_version=1,
+        name="rdkit-properties",
+        source_task_id="task-rdkit",
+    )
+    other = Artifact(
+        project_id=project.id,
+        created_by=owner.id,
+        artifact_type="run_report",
+        semantic_type="run_report@1",
+        standard_type="run_report",
+        standard_version=1,
+        name="molp-pc-report",
+        source_task_id="task-molp-pc",
+    )
+    artifact_db.add_all([matching, other])
+    await artifact_db.flush()
+    matching_version = ArtifactVersion(
+        artifact_id=matching.id,
+        created_by=owner.id,
+        version=1,
+        filename="rdkit.csv",
+        content_type="text/csv",
+        size_bytes=12,
+        sha256="e" * 64,
+        storage_key="standard/rdkit.csv",
+        status="available",
+    )
+    other_version = ArtifactVersion(
+        artifact_id=other.id,
+        created_by=owner.id,
+        version=1,
+        filename="report.json",
+        content_type="application/json",
+        size_bytes=12,
+        sha256="f" * 64,
+        storage_key="standard/report.json",
+        status="available",
+    )
+    artifact_db.add_all([matching_version, other_version])
+    await artifact_db.flush()
+    matching.latest_version_id = matching_version.id
+    matching.latest_version = matching_version
+    other.latest_version_id = other_version.id
+    other.latest_version = other_version
+    await artifact_db.commit()
+
+    listed = await client.get(
+        f"/api/v1/projects/{project.id}/artifacts",
+        headers={"Authorization": "Bearer owner"},
+        params={
+            "artifact_type": "molecule_table",
+            "standard_type": "molecule_table",
+            "source_task_id": "task-rdkit",
+        },
+    )
+
+    assert listed.status_code == 200
+    assert [item["name"] for item in listed.json()["data"]["items"]] == [
+        "rdkit-properties"
+    ]
+
+
+@pytest.mark.asyncio
 async def test_standard_artifact_detail_exposes_role_files_and_downloads_each_role(
     artifact_client,
     artifact_db: AsyncSession,

@@ -485,12 +485,25 @@ async def upload_artifact(
 @router.get("/projects/{project_id}/artifacts", response_model=dict)
 async def list_artifacts(
     project_id: str,
+    artifact_type: str | None = None,
+    semantic_type: str | None = None,
+    standard_type: str | None = None,
+    source_task_id: str | None = None,
     metadata_model_version: str | None = None,
     metadata_evidence_level: str | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     await load_project_membership(db, project_id=project_id, user_id=current_user.id)
+    filters = [Artifact.project_id == project_id]
+    if artifact_type:
+        filters.append(Artifact.artifact_type == artifact_type)
+    if semantic_type:
+        filters.append(Artifact.semantic_type == semantic_type)
+    if standard_type:
+        filters.append(Artifact.standard_type == standard_type)
+    if source_task_id:
+        filters.append(Artifact.source_task_id == source_task_id)
     artifacts = (
         (
             await db.execute(
@@ -503,7 +516,7 @@ async def list_artifacts(
                     .selectinload(ArtifactVersion.files)
                     .selectinload(ArtifactVersionFile.file),
                 )
-                .where(Artifact.project_id == project_id)
+                .where(*filters)
                 .order_by(Artifact.updated_at.desc())
             )
         )

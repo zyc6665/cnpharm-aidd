@@ -27,4 +27,25 @@ describe('getProjectArtifacts', () => {
     })
     expect(result).toEqual(response)
   })
+
+  it('透传 Artifact 类型和来源筛选参数', async () => {
+    const response = {
+      code: 200,
+      message: 'ok',
+      data: { items: [] },
+    }
+    vi.mocked(get).mockResolvedValueOnce(response as never)
+
+    await getProjectArtifacts('project-1', {
+      artifact_type: 'molecule_table',
+      standard_type: 'molecule_table',
+      source_task_id: 'task-rdkit',
+    })
+
+    expect(get).toHaveBeenCalledWith('/projects/project-1/artifacts', {
+      artifact_type: 'molecule_table',
+      standard_type: 'molecule_table',
+      source_task_id: 'task-rdkit',
+    })
+  })
 })

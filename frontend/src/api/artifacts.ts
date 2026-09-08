@@ -8,6 +8,10 @@ import type {
 } from '@/types/artifacts'
 
 export interface ProjectArtifactListParams {
+  artifact_type?: string
+  semantic_type?: string
+  standard_type?: string
+  source_task_id?: string
   metadata_model_version?: string
   metadata_evidence_level?: string
 }
