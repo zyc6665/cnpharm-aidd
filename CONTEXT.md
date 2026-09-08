@@ -96,6 +96,14 @@
 : A versioned semantic contract for prediction, scoring, measurement, endpoint, unit, applicability, and evidence metadata attached to scientific Artifacts.
 _Avoid_: Generic score column, untyped result metadata
 
+**Basic ADMET Prediction**
+: The V1 molecule-level ADMET prediction capability with a fixed delivery tool, model identity, endpoint or runtime identity, units or labels, evidence, and explicit failure or unknown states.
+_Avoid_: RDKit descriptor summary, generic property report
+
+**MolP-PC**
+: The selected V1 delivery tool family for Basic ADMET Prediction and ADMET-related molecular property prediction.
+_Avoid_: Placeholder ADMET, unconfigured builtin ADMET
+
 **Model Card**
 : An immutable scientific explanation for a ToolVersion or model version, covering intended use, limitations, evaluation evidence, applicability, and interpretation boundaries.
 _Avoid_: Marketing description, run log

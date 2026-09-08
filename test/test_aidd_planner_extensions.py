@@ -29,6 +29,8 @@ class TestMoleculeLevelPlanning:
         step_keys = [step.step_key for step in plan.steps]
         assert "admet_prediction" in step_keys
         assert step_keys.index("admet_prediction") >= 0
+        admet_step = next(step for step in plan.steps if step.step_key == "admet_prediction")
+        assert admet_step.tool_slug == "molp-pc-property-prediction"
 
     def test_smiles_csv_toxicity_and_sa_plan(self):
         plan = build_aidd_plan(
@@ -52,6 +54,8 @@ class TestMoleculeLevelPlanning:
         assert "sdf_to_smiles" in step_keys
         assert "admet_prediction" in step_keys
         assert step_keys.index("admet_prediction") > step_keys.index("sdf_to_smiles")
+        admet_step = next(step for step in plan.steps if step.step_key == "admet_prediction")
+        assert admet_step.tool_slug == "molp-pc-property-prediction"
 
     def test_smiles_csv_property_still_works(self):
         plan = build_aidd_plan(
@@ -326,7 +330,7 @@ class TestToolSlugResolution:
         assert _resolve_tool_slug("affinity_prediction") == "msign-affinity-prediction"
 
     def test_virtual_tool_resolved_from_static_registry(self):
-        assert _resolve_tool_slug("admet_prediction") == "builtin-admet-prediction"
+        assert _resolve_tool_slug("admet_prediction") == "molp-pc-property-prediction"
         assert _resolve_tool_slug("toxicity_prediction") == "builtin-toxicity-prediction"
         assert _resolve_tool_slug("synthetic_accessibility") == "builtin-synthetic-accessibility"
         assert _resolve_tool_slug("molecular_dynamics") == "builtin-molecular-dynamics"

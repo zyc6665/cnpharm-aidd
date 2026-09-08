@@ -46,9 +46,10 @@
 - 2026-09-07：任务中心 URL 视图恢复补齐；`/tasks?view=needs_attention` 可直接打开需要关注标签，失败节点入口自动带入该视图，减少失败定位跳转后的手动切换。
 - 2026-09-07：Workflow Run 手动同步恢复补齐；用户点击同步最新运行状态后，同步回填 `input_files` 和新节点 `task_id` 详情，避免预检和节点卡片停留在旧任务状态。
 - 2026-09-07：任务中心 workflow 过滤上下文提示补齐；列表页在 URL 携带 run/definition/node 定位参数时展示当前过滤范围，避免从工作流跳转后失去来源感。
+- 2026-09-08：基础 ADMET 工具口径修正；确认 MolP-PC 是 V1 基础 ADMET 交付工具族，planner 的 `admet_prediction` intent 开始优先路由到 `molp-pc-property-prediction`，内置 builtin ADMET 保留为未配置占位防误用。
 
 ## 下一步候选
 
 1. Workflow Hydration 继续检查：保存加载后恢复失败运行的预检提示和历史状态展示边界场景。
-2. 基础 ADMET 真实 endpoint 接入：登记 endpoint、模型版本、单位/标签、模型卡和证据附件后替换占位链路。
+2. 基础 ADMET MolP-PC 交付收口：补齐模型版本、runtime/endpoint 标识、单位/标签、模型卡和证据附件，并验证独立运行与 AT-003 工作流链路。
 3. 任务中心失败定位增强：可继续检查失败任务详情页是否直接暴露错误原因、stderr/stdout 和标准产物缺失提示。

@@ -46,7 +46,7 @@ _CAPABILITY_FALLBACK_SLUG: dict[str, str] = {
     "affinity_prediction": "msign-affinity-prediction",
     "property_prediction": "molp-pc-property-prediction",
     "docking_scoring": "builtin-vina-docking",
-    "admet_prediction": "builtin-admet-prediction",
+    "admet_prediction": "molp-pc-property-prediction",
     "toxicity_prediction": "builtin-toxicity-prediction",
     "synthetic_accessibility": "builtin-synthetic-accessibility",
     "molecular_dynamics": "builtin-molecular-dynamics",
@@ -70,20 +70,18 @@ def _resolve_tool_slug(capability: str, *, available_slugs: frozenset[str] | Non
     """Return the best available tool slug for a capability.
 
     Checks (in order):
-    1. Static registry for a matching virtual tool
-    2. Fallback table
-    3. If *available_slugs* is provided, check each fallback against it
+    1. Fallback table for platform-approved delivery tools
+    2. Static registry for a matching tool
+    3. If *available_slugs* is provided, check matching static capabilities
     """
-    # Check static registry first (virtual tools are always available)
+    fallback = _CAPABILITY_FALLBACK_SLUG.get(capability, "")
+    if fallback and (available_slugs is None or fallback in available_slugs):
+        return fallback
+
     for slug, cap in AIDD_TOOL_CAPABILITIES.items():
         if cap.capability == capability:
             if available_slugs is None or slug in available_slugs:
                 return slug
-
-    # Use fallback table
-    fallback = _CAPABILITY_FALLBACK_SLUG.get(capability, "")
-    if fallback and (available_slugs is None or fallback in available_slugs):
-        return fallback
 
     # If not found in static and available_slugs provided, try to match any
     # available slug whose static capability matches
