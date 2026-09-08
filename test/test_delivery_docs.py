@@ -9,6 +9,7 @@ DEPLOYMENT_GUIDE = PROJECT_ROOT / "docs/delivery/03-企业交付部署运维说�
 PLATFORM_SMOKE = PROJECT_ROOT / "docs/verification/at003-platform-tool-smoke.md"
 LOCAL_RUNTIME_NOTE = PROJECT_ROOT / "docs/verification/at003-direct-smoke.md"
 PLATFORM_RECORD_TEMPLATE = PROJECT_ROOT / "docs/verification/templates/at003-platform-tool-run-record.md"
+PLATFORM_EVIDENCE_SCRIPT = PROJECT_ROOT / "backend/scripts/collect_at003_platform_evidence.py"
 
 
 def test_at003_acceptance_uses_platform_tool_invocation_as_primary_path() -> None:
@@ -50,3 +51,15 @@ def test_at003_platform_run_record_template_tracks_required_evidence() -> None:
         assert term in template_text
 
     assert "不得记录 `model/MolP-PC/platform_run.sh`" in template_text
+
+
+def test_at003_platform_smoke_documents_api_evidence_script() -> None:
+    platform_text = PLATFORM_SMOKE.read_text(encoding="utf-8")
+    script_text = PLATFORM_EVIDENCE_SCRIPT.read_text(encoding="utf-8")
+
+    assert "backend/scripts/collect_at003_platform_evidence.py" in platform_text
+    assert "--base-url" in platform_text
+    assert "--task-id" in platform_text
+    assert "--token" in platform_text
+    assert "不得记录 `model/MolP-PC/platform_run.sh`" in script_text
+    assert "subprocess" not in script_text

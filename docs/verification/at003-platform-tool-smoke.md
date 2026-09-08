@@ -85,3 +85,17 @@ npm --prefix "frontend" test -- \
   "src/domain/tasks/output-summary.spec.ts" \
   "src/components/tasks/TaskOutputSummary.spec.ts"
 ```
+
+## 平台 API 取证
+
+MolP-PC 平台任务完成后，可用以下脚本从平台 API 拉取任务、ToolVersion、输入/输出哈希和 ArtifactVersion 证据，并生成 Markdown 记录：
+
+```bash
+python "backend/scripts/collect_at003_platform_evidence.py" \
+  --base-url "http://127.0.0.1:8000" \
+  --token "<platform bearer token>" \
+  --task-id "<molp-pc platform task id>" \
+  --output "docs/verification/at003-platform-run-YYYY-MM-DD.md"
+```
+
+脚本只调用平台 `/api/v1/tasks/{task_id}` 和 `/api/v1/projects/{project_id}/artifacts`，不得替代或绕过平台任务执行。

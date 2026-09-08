@@ -481,7 +481,10 @@ async def create_task(
     )
     task_result = await db.execute(
         select(Task)
-        .options(selectinload(Task.tool).selectinload(Tool.current_version))
+        .options(
+            selectinload(Task.tool).selectinload(Tool.current_version),
+            selectinload(Task.tool).selectinload(Tool.statistics),
+        )
         .where(Task.id == task.id)
     )
     task = task_result.scalar_one()
