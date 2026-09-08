@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import sys
+import json
 from pathlib import Path
 
 
@@ -24,6 +25,8 @@ REQUIRED_FILES = {
     "tool.yaml",
     "README.md",
     "AGENTS.md",
+    "docs/model-card.md",
+    "docs/verification-record.md",
     "examples/input/molecules/smiles.csv",
     "examples/input/molecules/metadata.json",
     "examples/request.json",
@@ -88,6 +91,40 @@ def test_molp_pc_v2_golden_result_validates_prediction_table_roles():
     assert set(properties.files) == {"table_file", "metadata_json"}
     assert properties.metadata["molecule_id_field"] == "SMILES"
     assert properties.metadata["source_task_id"] == "example-task"
+
+
+def test_molp_pc_v2_scientific_metadata_declares_delivery_identity():
+    metadata = json.loads(
+        (PACKAGE_ROOT / "examples/output/artifacts/properties/metadata.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    report = json.loads(
+        (PACKAGE_ROOT / "examples/output/reports/report.json").read_text(encoding="utf-8")
+    )
+
+    assert metadata["model_name"] == "MolP-PC"
+    assert metadata["model_version"] == "0.1.1"
+    assert metadata["runtime_ref"] == "container:registry.example/sciminer/molp-pc-runtime@sha256:4444444444444444444444444444444444444444444444444444444444444444"
+    assert metadata["weights_ref"] == "artifacts://model-weights/molp-pc-property-prediction/0.1.1/weights.json#sha256:6666666666666666666666666666666666666666666666666666666666666666"
+    assert metadata["evidence_level"] == "engineering_smoke_only"
+    assert metadata["applicability_domain_status"] == "unknown"
+    assert metadata["unit_or_label_policy"] == "per_endpoint_definition_or_unknown"
+    assert metadata["model_card_ref"] == "docs/model-card.md"
+    assert metadata["verification_record_ref"] == "docs/verification-record.md"
+    assert sorted(report["task_groups"]) == [
+        "Absorption",
+        "Distribution",
+        "Ecotoxicity",
+        "Excretion",
+        "LD50",
+        "Metabolism",
+        "Tox21",
+        "Toxicology",
+    ]
+    assert report["scientific_interpretation"]["prediction_kind"] == "basic_admet_prediction"
+    assert report["scientific_interpretation"]["unit_or_label_policy"] == "per_endpoint_definition_or_unknown"
+    assert "not scientific validation" in (PACKAGE_ROOT / "docs/verification-record.md").read_text(encoding="utf-8")
 
 
 def test_molp_pc_v2_package_does_not_embed_deployment_secrets_or_host_paths():

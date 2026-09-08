@@ -16,6 +16,26 @@ LEGACY_PREDICTION_CANDIDATES = (
     f"artifacts/{LEGACY_PREDICTION_FILENAME}",
 )
 STANDARD_PREDICTION_FILENAME = "molp_pc_predictions.csv"
+MODEL_NAME = "MolP-PC"
+MODEL_VERSION = "0.1.1"
+RUNTIME_REF = (
+    "container:registry.example/sciminer/molp-pc-runtime@"
+    "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+)
+WEIGHTS_REF = (
+    "artifacts://model-weights/molp-pc-property-prediction/0.1.1/weights.json#"
+    "sha256:6666666666666666666666666666666666666666666666666666666666666666"
+)
+TASK_GROUPS = [
+    "Absorption",
+    "Distribution",
+    "Excretion",
+    "Metabolism",
+    "Toxicology",
+    "Tox21",
+    "Ecotoxicity",
+    "LD50",
+]
 
 
 def write_standard_result(
@@ -38,6 +58,7 @@ def write_standard_result(
     summary = inspect_prediction_table(source_csv)
     target_csv = properties_dir / STANDARD_PREDICTION_FILENAME
     shutil.copyfile(source_csv, target_csv)
+    scientific_metadata = _scientific_metadata(tool_slug=tool_slug)
 
     metadata = {
         "molecule_id_field": summary.molecule_id_field,
@@ -46,7 +67,7 @@ def write_standard_result(
         "row_count": summary.row_count,
         "property_column_count": len(summary.property_columns),
         "property_columns": summary.property_columns,
-        "model_name": "MolP-PC",
+        **scientific_metadata,
     }
     metadata_path = properties_dir / "metadata.json"
     write_json(metadata_path, metadata)
@@ -58,6 +79,11 @@ def write_standard_result(
         "source_task_id": task_id,
         "predicted_rows": summary.row_count,
         "property_column_count": len(summary.property_columns),
+        "task_groups": TASK_GROUPS,
+        "scientific_interpretation": {
+            "prediction_kind": "basic_admet_prediction",
+            **scientific_metadata,
+        },
     }
     report_path = report_dir / "report.json"
     write_json(report_path, report)
@@ -92,13 +118,33 @@ def write_standard_result(
                         content_type="application/json",
                     )
                 },
-                "metadata": {"source_task_id": task_id},
+                "metadata": {
+                    "source_task_id": task_id,
+                    "model_card_ref": scientific_metadata["model_card_ref"],
+                    "verification_record_ref": scientific_metadata["verification_record_ref"],
+                    "evidence_level": scientific_metadata["evidence_level"],
+                },
             },
         },
         "relations": [{"from": "report", "to": "properties", "type": "describes"}],
     }
     write_json(output_dir / "result.json", result)
     return result
+
+
+def _scientific_metadata(*, tool_slug: str) -> dict[str, str]:
+    return {
+        "model_name": MODEL_NAME,
+        "model_version": MODEL_VERSION,
+        "runtime_ref": RUNTIME_REF,
+        "weights_ref": WEIGHTS_REF,
+        "endpoint_ref": f"local_runtime:{tool_slug}@{MODEL_VERSION}",
+        "evidence_level": "engineering_smoke_only",
+        "applicability_domain_status": "unknown",
+        "unit_or_label_policy": "per_endpoint_definition_or_unknown",
+        "model_card_ref": "docs/model-card.md",
+        "verification_record_ref": "docs/verification-record.md",
+    }
 
 
 def _first_existing(base_dir: Path, candidates: tuple[str, ...]) -> Path:

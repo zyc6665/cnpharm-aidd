@@ -12,7 +12,7 @@
         },
         "metadata_json": {
           "path": "artifacts/properties/metadata.json",
-          "sha256": "78e7012d055a02d3b7fc8d4756072be4e6dd108390dde10a2866882a9880a4ca",
+          "sha256": "1c9db30b96ddb73a6df6c6e1a8b838194b82ad968f92597324ba30653067a0bc",
           "content_type": "application/json"
         }
       },
@@ -79,7 +79,16 @@
           "LC50DM",
           "LD50_zhu"
         ],
-        "model_name": "MolP-PC"
+        "model_name": "MolP-PC",
+        "model_version": "0.1.1",
+        "runtime_ref": "container:registry.example/sciminer/molp-pc-runtime@sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "weights_ref": "artifacts://model-weights/molp-pc-property-prediction/0.1.1/weights.json#sha256:6666666666666666666666666666666666666666666666666666666666666666",
+        "endpoint_ref": "local_runtime:molp-pc-property-prediction@0.1.1",
+        "evidence_level": "engineering_smoke_only",
+        "applicability_domain_status": "unknown",
+        "unit_or_label_policy": "per_endpoint_definition_or_unknown",
+        "model_card_ref": "docs/model-card.md",
+        "verification_record_ref": "docs/verification-record.md"
       }
     },
     "report": {
@@ -88,12 +97,15 @@
       "files": {
         "report_json": {
           "path": "reports/report.json",
-          "sha256": "143c6786204be01d33e7c117260da0af6a11322f5f6bc85480f9d724e69b20f9",
+          "sha256": "6393507464ee14536612cc2f8155a399b4e3681dc243e478d9311b13c7b94738",
           "content_type": "application/json"
         }
       },
       "metadata": {
-        "source_task_id": "example-task"
+        "source_task_id": "example-task",
+        "model_card_ref": "docs/model-card.md",
+        "verification_record_ref": "docs/verification-record.md",
+        "evidence_level": "engineering_smoke_only"
       }
     }
   },

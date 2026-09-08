@@ -47,9 +47,10 @@
 - 2026-09-07：Workflow Run 手动同步恢复补齐；用户点击同步最新运行状态后，同步回填 `input_files` 和新节点 `task_id` 详情，避免预检和节点卡片停留在旧任务状态。
 - 2026-09-07：任务中心 workflow 过滤上下文提示补齐；列表页在 URL 携带 run/definition/node 定位参数时展示当前过滤范围，避免从工作流跳转后失去来源感。
 - 2026-09-08：基础 ADMET 工具口径修正；确认 MolP-PC 是 V1 基础 ADMET 交付工具族，planner 的 `admet_prediction` intent 开始优先路由到 `molp-pc-property-prediction`，内置 builtin ADMET 保留为未配置占位防误用。
+- 2026-09-08：MolP-PC 基础 ADMET 交付元数据补齐；Tool Package v2 样例、模型侧 `result_builder` 和 legacy 标准化输出开始携带模型版本、runtime/endpoint、weights、单位/标签策略、证据等级、适用域状态、模型卡和验证记录引用。
 
 ## 下一步候选
 
-1. Workflow Hydration 继续检查：保存加载后恢复失败运行的预检提示和历史状态展示边界场景。
-2. 基础 ADMET MolP-PC 交付收口：补齐模型版本、runtime/endpoint 标识、单位/标签、模型卡和证据附件，并验证独立运行与 AT-003 工作流链路。
+1. 基础 ADMET MolP-PC 独立运行验收：验证 direct run 从 `molecule_table@1` 输入到 `molecule_table@1` / `run_report@1` 输出，并检查科学元数据和附件引用。
+2. AT-003 工作流链路验收：`Fetch PubChem -> Ligand Preparation -> RDKit -> MolP-PC ADMET` 端到端跑通。
 3. 任务中心失败定位增强：可继续检查失败任务详情页是否直接暴露错误原因、stderr/stdout 和标准产物缺失提示。

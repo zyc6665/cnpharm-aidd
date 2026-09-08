@@ -193,6 +193,7 @@ async def _legacy_molp_pc_result_v2(
         default_id_field="SMILES",
         model_name="MolP-PC",
     )
+    metadata.update(_legacy_molp_pc_scientific_metadata())
     metadata_ref = await _persist_generated_output_file(
         db,
         output_file_ids=output_file_ids,
@@ -218,6 +219,20 @@ async def _legacy_molp_pc_result_v2(
             }
         },
         "summary": {"standardized_from": "legacy_molp_pc"},
+    }
+
+
+def _legacy_molp_pc_scientific_metadata() -> dict[str, str]:
+    return {
+        "model_version": "0.1.1",
+        "runtime_ref": "local_runtime:legacy_molp_pc",
+        "weights_ref": "unknown",
+        "endpoint_ref": "local_runtime:molp-pc-property-prediction@0.1.1",
+        "evidence_level": "engineering_smoke_only",
+        "applicability_domain_status": "unknown",
+        "unit_or_label_policy": "per_endpoint_definition_or_unknown",
+        "model_card_ref": "example/MolP-PC/tool-package-v2/docs/model-card.md",
+        "verification_record_ref": "example/MolP-PC/tool-package-v2/docs/verification-record.md",
     }
 
 

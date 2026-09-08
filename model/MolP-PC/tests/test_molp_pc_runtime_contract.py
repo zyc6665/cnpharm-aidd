@@ -118,6 +118,31 @@ def test_result_builder_wraps_legacy_output_as_standard_result_v2(tmp_path: Path
     assert result["result_version"] == "aidd.sciminer/result.v2"
     assert result["artifacts"]["properties"]["type"] == "molecule_table@1"
     assert set(result["artifacts"]["properties"]["files"]) == {"table_file", "metadata_json"}
+    metadata = result["artifacts"]["properties"]["metadata"]
+    assert metadata["model_name"] == "MolP-PC"
+    assert metadata["model_version"] == "0.1.1"
+    assert metadata["endpoint_ref"] == "local_runtime:molp-pc-property-prediction@0.1.1"
+    assert metadata["evidence_level"] == "engineering_smoke_only"
+    assert metadata["applicability_domain_status"] == "unknown"
+    assert metadata["unit_or_label_policy"] == "per_endpoint_definition_or_unknown"
+    assert metadata["model_card_ref"] == "docs/model-card.md"
+    assert metadata["verification_record_ref"] == "docs/verification-record.md"
+    report = json.loads((output_dir / "reports/report.json").read_text(encoding="utf-8"))
+    assert report["scientific_interpretation"] == {
+        key: metadata[key]
+        for key in [
+            "model_name",
+            "model_version",
+            "runtime_ref",
+            "weights_ref",
+            "endpoint_ref",
+            "evidence_level",
+            "applicability_domain_status",
+            "unit_or_label_policy",
+            "model_card_ref",
+            "verification_record_ref",
+        ]
+    } | {"prediction_kind": "basic_admet_prediction"}
     assert (output_dir / "artifacts/properties/molp_pc_predictions.csv").is_file()
     assert (output_dir / "artifacts/properties/metadata.json").is_file()
     assert (output_dir / "reports/report.json").is_file()

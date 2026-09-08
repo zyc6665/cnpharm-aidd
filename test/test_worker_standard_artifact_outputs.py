@@ -363,6 +363,32 @@ async def test_worker_persists_standard_result_v2_as_artifact_versions(
     }
 
 
+def expect_molp_pc_scientific_metadata(
+    *,
+    source_task_id: str,
+    row_count: int,
+    property_columns: list[str],
+) -> dict:
+    return {
+        "molecule_id_field": "SMILES",
+        "source_task_id": source_task_id,
+        "source_input_ref": "input:molecules",
+        "row_count": row_count,
+        "property_column_count": len(property_columns),
+        "property_columns": property_columns,
+        "model_name": "MolP-PC",
+        "model_version": "0.1.1",
+        "runtime_ref": "local_runtime:legacy_molp_pc",
+        "weights_ref": "unknown",
+        "endpoint_ref": "local_runtime:molp-pc-property-prediction@0.1.1",
+        "evidence_level": "engineering_smoke_only",
+        "applicability_domain_status": "unknown",
+        "unit_or_label_policy": "per_endpoint_definition_or_unknown",
+        "model_card_ref": "example/MolP-PC/tool-package-v2/docs/model-card.md",
+        "verification_record_ref": "example/MolP-PC/tool-package-v2/docs/verification-record.md",
+    }
+
+
 @pytest.mark.asyncio
 async def test_worker_rejects_invalid_standard_result_without_persisting_artifacts(
     worker_standard_db_factory,
@@ -715,6 +741,11 @@ async def test_worker_standardizes_legacy_molp_pc_outputs(
         ).scalar_one()
 
     assert version_record.manifest_json["type"] == "molecule_table@1"
+    assert version_record.manifest_json["metadata"] == expect_molp_pc_scientific_metadata(
+        source_task_id=str(task_id),
+        row_count=1,
+        property_columns=["F20"],
+    )
     assert {file.role for file in version_record.files} == {"table_file", "metadata_json"}
     assert len(task_output.file_ids) == 2
 
