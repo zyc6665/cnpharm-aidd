@@ -438,6 +438,118 @@ async def test_project_artifacts_can_filter_by_type_and_source(
 
 
 @pytest.mark.asyncio
+async def test_project_artifacts_can_filter_by_latest_version_file_role(
+    artifact_client,
+    artifact_db: AsyncSession,
+    artifact_context: dict[str, object],
+):
+    from app.models.artifacts import Artifact, ArtifactVersion, ArtifactVersionFile
+    from app.models.files import File as FileModel, FileSourceType
+
+    client, _ = artifact_client
+    project = artifact_context["project"]
+    owner = artifact_context["owner"]
+    matching = Artifact(
+        project_id=project.id,
+        created_by=owner.id,
+        artifact_type="ligand_structure",
+        semantic_type="ligand_structure@1",
+        standard_type="ligand_structure",
+        standard_version=1,
+        name="prepared-ligand",
+    )
+    other = Artifact(
+        project_id=project.id,
+        created_by=owner.id,
+        artifact_type="ligand_structure",
+        semantic_type="ligand_structure@1",
+        standard_type="ligand_structure",
+        standard_version=1,
+        name="raw-ligand",
+    )
+    artifact_db.add_all([matching, other])
+    await artifact_db.flush()
+    matching_version = ArtifactVersion(
+        artifact_id=matching.id,
+        created_by=owner.id,
+        version=1,
+        filename="prepared.sdf",
+        content_type="chemical/x-mdl-sdfile",
+        size_bytes=12,
+        sha256="1" * 64,
+        storage_key="standard/prepared.sdf",
+        status="available",
+    )
+    other_version = ArtifactVersion(
+        artifact_id=other.id,
+        created_by=owner.id,
+        version=1,
+        filename="raw.sdf",
+        content_type="chemical/x-mdl-sdfile",
+        size_bytes=12,
+        sha256="2" * 64,
+        storage_key="standard/raw.sdf",
+        status="available",
+    )
+    artifact_db.add_all([matching_version, other_version])
+    await artifact_db.flush()
+    matching.latest_version_id = matching_version.id
+    matching.latest_version = matching_version
+    other.latest_version_id = other_version.id
+    other.latest_version = other_version
+    role_file = FileModel(
+        project_id=project.id,
+        owner_id=owner.id,
+        filename="prepared.sdf",
+        content_type="chemical/x-mdl-sdfile",
+        size_bytes=12,
+        sha256="1" * 64,
+        storage_path="standard/prepared.sdf",
+        source_type=FileSourceType.TOOL_OUTPUT.value,
+    )
+    raw_file = FileModel(
+        project_id=project.id,
+        owner_id=owner.id,
+        filename="raw.sdf",
+        content_type="chemical/x-mdl-sdfile",
+        size_bytes=12,
+        sha256="2" * 64,
+        storage_path="standard/raw.sdf",
+        source_type=FileSourceType.TOOL_OUTPUT.value,
+    )
+    artifact_db.add_all([role_file, raw_file])
+    await artifact_db.flush()
+    artifact_db.add_all(
+        [
+            ArtifactVersionFile(
+                artifact_version_id=matching_version.id,
+                role="structure_3d_sdf",
+                file_id=role_file.id,
+                is_primary=True,
+            ),
+            ArtifactVersionFile(
+                artifact_version_id=other_version.id,
+                role="structure_file",
+                file_id=raw_file.id,
+                is_primary=True,
+            ),
+        ]
+    )
+    await artifact_db.commit()
+
+    listed = await client.get(
+        f"/api/v1/projects/{project.id}/artifacts",
+        headers={"Authorization": "Bearer owner"},
+        params={"file_role": "structure_3d_sdf"},
+    )
+
+    assert listed.status_code == 200
+    assert [item["name"] for item in listed.json()["data"]["items"]] == [
+        "prepared-ligand"
+    ]
+
+
+@pytest.mark.asyncio
 async def test_standard_artifact_detail_exposes_role_files_and_downloads_each_role(
     artifact_client,
     artifact_db: AsyncSession,

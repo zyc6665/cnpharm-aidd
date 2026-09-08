@@ -12,6 +12,7 @@ export interface ProjectArtifactListParams {
   semantic_type?: string
   standard_type?: string
   source_task_id?: string
+  file_role?: string
   metadata_model_version?: string
   metadata_evidence_level?: string
 }

@@ -489,6 +489,7 @@ async def list_artifacts(
     semantic_type: str | None = None,
     standard_type: str | None = None,
     source_task_id: str | None = None,
+    file_role: str | None = None,
     metadata_model_version: str | None = None,
     metadata_evidence_level: str | None = None,
     current_user: User = Depends(get_current_user),
@@ -504,6 +505,14 @@ async def list_artifacts(
         filters.append(Artifact.standard_type == standard_type)
     if source_task_id:
         filters.append(Artifact.source_task_id == source_task_id)
+    if file_role:
+        filters.append(
+            Artifact.latest_version_id.in_(
+                select(ArtifactVersionFile.artifact_version_id).where(
+                    ArtifactVersionFile.role == file_role
+                )
+            )
+        )
     artifacts = (
         (
             await db.execute(

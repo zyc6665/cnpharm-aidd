@@ -48,4 +48,14 @@ describe('getProjectArtifacts', () => {
       source_task_id: 'task-rdkit',
     })
   })
+
+  it('透传 Artifact role 筛选参数', async () => {
+    vi.mocked(get).mockResolvedValueOnce({ code: 200, message: 'ok', data: { items: [] } } as never)
+
+    await getProjectArtifacts('project-1', { file_role: 'structure_3d_sdf' })
+
+    expect(get).toHaveBeenCalledWith('/projects/project-1/artifacts', {
+      file_role: 'structure_3d_sdf',
+    })
+  })
 })

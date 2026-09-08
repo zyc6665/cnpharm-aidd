@@ -64,9 +64,10 @@
 - 2026-09-08：Executor Gateway 健康面补齐；系统健康接口新增 `executor_gateway` 服务项，展示当前任务后端和 V1 已登记执行器类型，前端系统健康排序和中文标签同步更新。
 - 2026-09-08：MolP-PC runtime 依赖预检补齐；本地 AT-003 smoke 发现默认 Python 缺少 `dgl`/`torch`，模型 wrapper 在调用旧推理入口前显式检查 `dgl`、`rdkit`、`torch` 并输出 `admet.yml` / `MOLP_PC_PYTHON` 修复提示，避免误判为平台调度失败。
 - 2026-09-08：Artifact 基础检索补齐；项目 Artifact 列表接口支持按 `artifact_type`、`semantic_type`、`standard_type` 和 `source_task_id` 筛选，前端 API 类型同步，支撑 AT-010 类型/来源检索验收。
+- 2026-09-08：Artifact role 检索补齐；项目 Artifact 列表接口支持按最新 ArtifactVersion 的 `file_role` 筛选，复用现有 `ArtifactVersionFile.role`，不新增检索表。
 
 ## 下一步候选
 
 1. AT-003 端到端真实运行记录：在具备 MolP-PC runtime 和 PubChem 网络的环境中记录一次真实 smoke task ID、输入哈希和输出 ArtifactVersion。
 2. AT-003 direct smoke 自动化脚本：待 `admet.yml` runtime 可用后再封装最小 runner，避免脚本只自动化失败路径。
-3. Artifact 检索扩展：如产物库规模继续增大，再评估模型族、endpoint、适用域状态或 role 级聚合筛选。
+3. Artifact 检索扩展：如产物库规模继续增大，再评估模型族、endpoint 或适用域状态聚合筛选。
