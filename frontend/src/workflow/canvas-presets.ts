@@ -42,6 +42,60 @@ const WORKFLOW_NODE_LIBRARY = {
     position: { x: 40, y: 160 },
     producedOutputTypes: ['generated_ligand']
   },
+  fetchPubChem: {
+    id: 'tool-fetch-pubchem',
+    type: 'tool',
+    toolSlugs: ['builtin-fetch-ligand'],
+    recommendedToolSlug: 'builtin-fetch-ligand',
+    titleKey: 'workflow.nodes.fetchPubChem.title',
+    descriptionKey: 'workflow.nodes.fetchPubChem.description',
+    position: { x: 40, y: 360 },
+    producedOutputTypes: ['ligand_structure@1']
+  },
+  ligandPreparation: {
+    id: 'tool-ligand-preparation',
+    type: 'tool',
+    toolSlugs: ['ligand-preparation'],
+    recommendedToolSlug: 'ligand-preparation',
+    titleKey: 'workflow.nodes.ligandPreparation.title',
+    descriptionKey: 'workflow.nodes.ligandPreparation.description',
+    position: { x: 300, y: 360 },
+    requiredInputTypes: ['ligand_structure@1'],
+    producedOutputTypes: ['ligand_structure@1']
+  },
+  sdfToSmiles: {
+    id: 'tool-sdf-to-smiles',
+    type: 'tool',
+    toolSlugs: ['builtin-sdf-to-smiles-csv'],
+    recommendedToolSlug: 'builtin-sdf-to-smiles-csv',
+    titleKey: 'workflow.nodes.sdfToSmiles.title',
+    descriptionKey: 'workflow.nodes.sdfToSmiles.description',
+    position: { x: 560, y: 360 },
+    requiredInputTypes: ['ligand_structure@1'],
+    producedOutputTypes: ['molecule_table@1']
+  },
+  rdkitProperties: {
+    id: 'tool-rdkit-properties',
+    type: 'tool',
+    toolSlugs: ['builtin-rdkit-properties'],
+    recommendedToolSlug: 'builtin-rdkit-properties',
+    titleKey: 'workflow.nodes.rdkitProperties.title',
+    descriptionKey: 'workflow.nodes.rdkitProperties.description',
+    position: { x: 820, y: 360 },
+    requiredInputTypes: ['molecule_table@1'],
+    producedOutputTypes: ['molecule_table@1', 'run_report@1']
+  },
+  molpPcAdmet: {
+    id: 'tool-molp-pc-admet',
+    type: 'tool',
+    toolSlugs: ['molp-pc-property-prediction'],
+    recommendedToolSlug: 'molp-pc-property-prediction',
+    titleKey: 'workflow.nodes.molpPcAdmet.title',
+    descriptionKey: 'workflow.nodes.molpPcAdmet.description',
+    position: { x: 1080, y: 360 },
+    requiredInputTypes: ['molecule_table@1'],
+    producedOutputTypes: ['molecule_table@1', 'run_report@1']
+  },
   pocketExploration: {
     id: 'tool-pocket-exploration',
     type: 'tool',
@@ -141,6 +195,14 @@ const WORKFLOW_NODE_LIBRARY = {
     descriptionKey: 'workflow.nodes.resultProperty.description',
     position: { x: 560, y: 160 },
     requiredInputTypes: ['property_report']
+  },
+  resultAdmet: {
+    id: 'result-admet',
+    type: 'result',
+    titleKey: 'workflow.nodes.resultAdmet.title',
+    descriptionKey: 'workflow.nodes.resultAdmet.description',
+    position: { x: 1340, y: 360 },
+    requiredInputTypes: ['run_report@1']
   }
 } as const satisfies Record<string, WorkflowCanvasNode>
 
@@ -256,12 +318,35 @@ export const GENERATION_TO_PROPERTY_CANVAS_PRESET: WorkflowCanvasPreset = create
   ]
 })
 
+export const PUBCHEM_TO_ADMET_CANVAS_PRESET: WorkflowCanvasPreset = createCanvasPreset({
+  id: 'pubchem-admet-template',
+  kind: 'screening',
+  nameKey: 'workflow.canvasPresets.presets.pubchemToAdmet.name',
+  descriptionKey: 'workflow.canvasPresets.presets.pubchemToAdmet.description',
+  nodeKeys: [
+    'fetchPubChem',
+    'ligandPreparation',
+    'sdfToSmiles',
+    'rdkitProperties',
+    'molpPcAdmet',
+    'resultAdmet'
+  ],
+  edges: [
+    createEdge('edge-pubchem-ligand-preparation', 'tool-fetch-pubchem', 'tool-ligand-preparation', 'ligand_structure@1'),
+    createEdge('edge-ligand-smiles', 'tool-ligand-preparation', 'tool-sdf-to-smiles', 'ligand_structure@1'),
+    createEdge('edge-smiles-rdkit', 'tool-sdf-to-smiles', 'tool-rdkit-properties', 'molecule_table@1'),
+    createEdge('edge-rdkit-molp-pc', 'tool-rdkit-properties', 'tool-molp-pc-admet', 'molecule_table@1'),
+    createEdge('edge-molp-pc-admet-result', 'tool-molp-pc-admet', 'result-admet', 'run_report@1')
+  ]
+})
+
 export const WORKFLOW_CANVAS_PRESETS: readonly WorkflowCanvasPreset[] = [
   AIDD_WORKFLOW_CANVAS_PRESET,
   PROTEIN_TO_POCKET_CANVAS_PRESET,
   POCKET_TO_GENERATION_CANVAS_PRESET,
   PROTEIN_LIGAND_TO_DOCKING_CANVAS_PRESET,
-  GENERATION_TO_PROPERTY_CANVAS_PRESET
+  GENERATION_TO_PROPERTY_CANVAS_PRESET,
+  PUBCHEM_TO_ADMET_CANVAS_PRESET
 ]
 
 export function getWorkflowCanvasPresetById(presetId: string): WorkflowCanvasPreset | null {

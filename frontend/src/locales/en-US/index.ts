@@ -348,6 +348,10 @@ export default {
         generationToProperty: {
           name: 'Molecule Generation to Property Prediction',
           description: 'Evaluate physicochemical and ADMET-related properties for existing candidate molecules.'
+        },
+        pubchemToAdmet: {
+          name: 'PubChem to Basic ADMET',
+          description: 'Start from a PubChem ligand and chain ligand preparation, SMILES conversion, RDKit properties, and MolP-PC Basic ADMET.'
         }
       }
     },
@@ -632,6 +636,26 @@ export default {
         title: 'Generated Molecule Input',
         description: 'Reuse historical generated molecules or upload candidate molecules for downstream evaluation.'
       },
+      fetchPubChem: {
+        title: 'Fetch PubChem Ligand',
+        description: 'Fetch a ligand structure by PubChem CID and emit standard ligand_structure@1.'
+      },
+      ligandPreparation: {
+        title: 'Ligand Preparation',
+        description: 'Prepare hydrogens, conformer, and format while keeping a standard ligand structure.'
+      },
+      sdfToSmiles: {
+        title: 'SDF to SMILES Table',
+        description: 'Convert ligand structures into molecule_table@1 for RDKit and MolP-PC reuse.'
+      },
+      rdkitProperties: {
+        title: 'RDKit Properties',
+        description: 'Calculate basic physicochemical descriptors before the ADMET prediction step.'
+      },
+      molpPcAdmet: {
+        title: 'MolP-PC Basic ADMET',
+        description: 'Use the registered MolP-PC tool to emit ADMET tables and scientific attachments.'
+      },
       resultSummary: {
         title: 'Optimization Summary',
         description: 'Collect final lead optimization outputs for review and export.'
@@ -651,6 +675,10 @@ export default {
       resultProperty: {
         title: 'Property Prediction Result',
         description: 'Review physicochemical and ADMET predictions before the next decision.'
+      },
+      resultAdmet: {
+        title: 'Basic ADMET Result',
+        description: 'Review MolP-PC prediction tables, model version, and scientific attachments.'
       }
     },
     columns: {

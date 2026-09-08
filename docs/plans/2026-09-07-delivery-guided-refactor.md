@@ -49,9 +49,10 @@
 - 2026-09-08：基础 ADMET 工具口径修正；确认 MolP-PC 是 V1 基础 ADMET 交付工具族，planner 的 `admet_prediction` intent 开始优先路由到 `molp-pc-property-prediction`，内置 builtin ADMET 保留为未配置占位防误用。
 - 2026-09-08：MolP-PC 基础 ADMET 交付元数据补齐；Tool Package v2 样例、模型侧 `result_builder` 和 legacy 标准化输出开始携带模型版本、runtime/endpoint、weights、单位/标签策略、证据等级、适用域状态、模型卡和验证记录引用。
 - 2026-09-08：MolP-PC 独立运行标准产物补齐；legacy direct/worker 输出标准化时同步生成 `molecule_table@1` 与 `run_report@1`，并建立 report 描述 properties 的 lineage，满足基础 ADMET 表格加科学说明附件的最小验收口径。
+- 2026-09-08：AT-003 前端预设入口补齐；工作流画布新增 `PubChem -> Ligand Preparation -> SDF to SMILES -> RDKit Properties -> MolP-PC Basic ADMET` 预设，复用现有工具 slug 和标准 Artifact 类型，不新增运行器特判。
 
 ## 下一步候选
 
-1. AT-003 工作流链路验收：`Fetch PubChem -> Ligand Preparation -> RDKit -> MolP-PC ADMET` 端到端跑通。
+1. AT-003 工作流链路后端验收：确认保存/运行 `PubChem -> Ligand Preparation -> SDF to SMILES -> RDKit -> MolP-PC ADMET` 时 artifact binding 和预检状态可恢复。
 2. 基础 ADMET MolP-PC 附件下载验收：检查 `run_report@1` 和 metadata 中的模型卡/验证记录引用是否能在任务详情或 Artifact 详情中被用户定位。
 3. 任务中心失败定位增强：可继续检查失败任务详情页是否直接暴露错误原因、stderr/stdout 和标准产物缺失提示。

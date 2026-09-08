@@ -347,6 +347,10 @@ export default {
         generationToProperty: {
           name: '分子生成结果到性质预测',
           description: '对已有候选分子进行理化性质与 ADMET 相关评估。'
+        },
+        pubchemToAdmet: {
+          name: 'PubChem 到基础 ADMET',
+          description: '从 PubChem 配体开始，串联配体处理、SMILES 转换、RDKit 属性和 MolP-PC 基础 ADMET。'
         }
       }
     },
@@ -631,6 +635,26 @@ export default {
         title: '候选分子输入',
         description: '复用历史生成分子或上传候选分子文件，用于下游评估。'
       },
+      fetchPubChem: {
+        title: 'Fetch PubChem Ligand',
+        description: '按 PubChem CID 获取配体结构，输出标准 ligand_structure@1。'
+      },
+      ligandPreparation: {
+        title: 'Ligand Preparation',
+        description: '对配体进行加氢、构象和格式准备，保留标准配体结构。'
+      },
+      sdfToSmiles: {
+        title: 'SDF 转 SMILES 表',
+        description: '把配体结构转换为 MolP-PC 和 RDKit 可复用的 molecule_table@1。'
+      },
+      rdkitProperties: {
+        title: 'RDKit Properties',
+        description: '计算基础理化描述符，作为 ADMET 前的独立性质步骤。'
+      },
+      molpPcAdmet: {
+        title: 'MolP-PC 基础 ADMET',
+        description: '使用已登记的 MolP-PC 工具输出 ADMET 表格和科学说明附件。'
+      },
       resultSummary: {
         title: '优化结果汇总',
         description: '汇总最终先导优化结果与关键输出，便于复核与导出。'
@@ -650,6 +674,10 @@ export default {
       resultProperty: {
         title: '性质预测结果',
         description: '查看理化与 ADMET 预测结果，辅助后续决策。'
+      },
+      resultAdmet: {
+        title: '基础 ADMET 结果',
+        description: '查看 MolP-PC 输出的预测表格、模型版本和科学说明附件。'
       }
     },
     columns: {
