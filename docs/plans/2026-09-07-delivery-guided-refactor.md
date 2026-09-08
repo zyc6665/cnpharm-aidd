@@ -54,7 +54,7 @@
 - 2026-09-08：AT-003 后端定义验收补齐；后端 Workflow validation 可接收小分子链路标准 Artifact 绑定并按 `Fetch PubChem -> Ligand Preparation -> SDF to SMILES -> RDKit -> MolP-PC` 顺序生成可调度节点，结果节点不再被前端序列化为可执行工具。
 - 2026-09-08：AT-003 scheduler 绑定验收补齐；当 RDKit Properties 节点成功产出 `properties` ArtifactVersion 后，MolP-PC 节点调度会把该版本作为 `molecules` 标准输入绑定，并保留关联文件列表。
 - 2026-09-08：MolP-PC 科学附件定位补齐；任务输出详情开始从完整 `outputs.result.standard_result` 提取模型卡、验证记录和证据等级引用，用户可在基础 ADMET 结果区直接定位交付附件说明。
-- 2026-09-08：AT-003 本地 direct smoke 说明补齐；沉淀 `PubChem -> Ligand Preparation -> SDF to SMILES -> RDKit -> MolP-PC` 最小联调步骤、通过标准、失败排查和自动化回归命令。
+- 2026-09-08：AT-003 平台工具调用 smoke 说明补齐；沉淀 `PubChem -> Ligand Preparation -> SDF to SMILES -> RDKit -> MolP-PC` 平台工具调用步骤、通过标准、失败排查和自动化回归命令。
 - 2026-09-08：任务失败定位增强；执行器失败时保留 `TaskExecutionError.details` 到任务输出，任务详情页直接展示 stderr/stdout，并对标准产物缺失或 Result Manifest 问题给出醒目提示。
 - 2026-09-08：Artifact 详情交付元数据展示补齐；ArtifactVersion API 显式返回 `manifest_json`，文件类/报告类产物卡片展示模型版本、runtime、endpoint、证据等级、模型卡和验证记录等关键交付元数据。
 - 2026-09-08：任务失败诊断 API 收敛；任务详情接口新增结构化 `failure_diagnostics` 字段，前端优先消费该字段并保留旧输出 JSON 提取作为兼容兜底。
@@ -66,9 +66,10 @@
 - 2026-09-08：Artifact 基础检索补齐；项目 Artifact 列表接口支持按 `artifact_type`、`semantic_type`、`standard_type` 和 `source_task_id` 筛选，前端 API 类型同步，支撑 AT-010 类型/来源检索验收。
 - 2026-09-08：Artifact role 检索补齐；项目 Artifact 列表接口支持按最新 ArtifactVersion 的 `file_role` 筛选，复用现有 `ArtifactVersionFile.role`，不新增检索表。
 - 2026-09-08：Artifact 科学元数据筛选扩展；项目 Artifact 列表接口在已有模型版本和证据等级筛选基础上，补齐 `endpoint_ref` 与 `applicability_domain_status` 筛选，便于定位特定 MolP-PC runtime 或适用域状态结果。
+- 2026-09-08：MolP-PC 验收口径纠正；确认 AT-003 主验收必须通过平台注册 `molp-pc-property-prediction`、当前 `ToolVersion`、平台任务创建和 Executor Gateway 调度完成，`model/MolP-PC/platform_run.sh` 只保留为模型包本地调试和执行器 runtime 自检。
 
 ## 下一步候选
 
-1. AT-003 端到端真实运行记录：在具备 MolP-PC runtime 和 PubChem 网络的环境中记录一次真实 smoke task ID、输入哈希和输出 ArtifactVersion。
-2. AT-003 direct smoke 自动化脚本：待 `admet.yml` runtime 可用后再封装最小 runner，避免脚本只自动化失败路径。
+1. AT-003 平台工具调用真实运行记录：在具备 PubChem 网络和 MolP-PC runtime 的平台环境中记录一次 smoke task ID、输入哈希、ToolVersion 和输出 ArtifactVersion。
+2. AT-003 平台 smoke 自动化：优先封装平台 API/Workflow runner；不得用 `model/MolP-PC/platform_run.sh` 自动化结果替代平台任务验收。
 3. Artifact 检索扩展：如产物库规模继续增大，再评估模型族聚合筛选或常用筛选项前端表单化。

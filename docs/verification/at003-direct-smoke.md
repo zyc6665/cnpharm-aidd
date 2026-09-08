@@ -1,6 +1,6 @@
-# AT-003 本地 direct smoke 验收说明
+# AT-003 模型包本地调试补充说明
 
-> 状态：操作说明。本文用于 V1 小分子链路联调和交付前复核，不等同于科学验证报告。
+> 状态：补充排障说明。AT-003 主验收应使用 [AT-003 平台工具调用 smoke 验收说明](./at003-platform-tool-smoke.md)，本文只用于模型包本地调试和执行器 runtime 自检，不是 AT-003 平台验收主路径。
 
 ## 目标链路
 
@@ -12,15 +12,15 @@ Fetch PubChem Ligand
   -> MolP-PC Basic ADMET
 ```
 
-本 smoke 只验证平台链路、Artifact 绑定、Result Manifest 和结果可定位性。RDKit Properties 是独立理化描述符步骤，不替代 MolP-PC 基础 ADMET。
+本文用于定位 MolP-PC runtime、legacy wrapper 或执行器镜像问题。平台链路、Artifact 绑定、Result Manifest 和结果可定位性以平台工具调用 smoke 为准。RDKit Properties 是独立理化描述符步骤，不替代 MolP-PC 基础 ADMET。
 
 ## 前置条件
 
-- 后端使用本地开发配置启动，`TASK_EXECUTION_BACKEND=direct`。
+- 后端如需辅助复现，可使用本地开发配置启动，`TASK_EXECUTION_BACKEND=direct`。
 - 前端可访问后端 API，测试账号可登录并创建或进入项目。
 - 数据库已完成迁移和工具初始化，至少包含 `builtin-fetch-ligand`、`ligand-preparation`、`builtin-sdf-to-smiles-csv`、`builtin-rdkit-properties`、`molp-pc-property-prediction`。
-- MolP-PC 工具版本固定为 `0.1.1`，运行环境、weights、endpoint/runtime 标识与工具包声明一致。
-- 本地 MolP-PC 调试需使用 `admet.yml` 声明的 Python 3.8 / CUDA 11.3 环境；如 shell 默认 Python 不是该环境，需设置 `MOLP_PC_PYTHON`。
+- 平台内 MolP-PC 工具版本固定为 `0.1.1`，运行环境、weights、endpoint/runtime 标识与工具包声明一致。
+- 模型包本地调试需使用 `admet.yml` 声明的 Python 3.8 / CUDA 11.3 环境；如 shell 默认 Python 不是该环境，需设置 `MOLP_PC_PYTHON`。
 - PubChem 查询可访问外网；离线环境需提前准备等价的 `ligand_structure@1` 输入 Artifact。
 
 ## 启动方式
@@ -35,7 +35,7 @@ cd /data/zhouyc/cpumodel_sciminer/frontend
 npm run dev -- --host 0.0.0.0 --port 8585
 ```
 
-direct 模式只用于本地开发和单人联调。进程重启、热更新或长任务阻塞会影响任务连续性，交付演示和多人环境应使用 Celery + Redis。
+direct 模式只用于本地开发和单人联调。进程重启、热更新或长任务阻塞会影响任务连续性，交付演示和多人环境应使用平台队列后端。不得用 `model/MolP-PC/platform_run.sh` 的本地执行结果替代平台任务验收。
 
 ## 操作步骤
 
