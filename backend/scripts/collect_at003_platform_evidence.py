@@ -13,6 +13,7 @@ from urllib.request import Request, urlopen
 
 
 EXPECTED_TOOL_SLUG = "molp-pc-property-prediction"
+REQUIRED_SUCCESS_STANDARD_TYPES = {"molecule_table@1", "run_report@1"}
 
 
 def _unwrap_data(payload: Any) -> Any:
@@ -104,11 +105,21 @@ def _metadata_row(metadata: dict[str, Any], key: str, expected: str) -> str:
     return f"| {key} | {expected} | {metadata.get(key) or 'N/A'} |"
 
 
+def _require_success_outputs(task: dict[str, Any], artifacts: list[dict[str, Any]]) -> None:
+    if str(task.get("status") or "").lower() != "success":
+        return
+    standard_types = {str(item.get("standard_type") or "") for item in artifacts}
+    missing = sorted(REQUIRED_SUCCESS_STANDARD_TYPES - standard_types)
+    if missing:
+        raise ValueError(f"MolP-PC success task missing required Artifact outputs: {', '.join(missing)}")
+
+
 def build_record_markdown(task: dict[str, Any], artifacts: list[dict[str, Any]]) -> str:
     """Render the AT-003 platform evidence record from API payloads."""
     tool_slug = str(task.get("tool_slug") or "")
     if tool_slug != EXPECTED_TOOL_SLUG:
         raise ValueError(f"AT-003 平台验收任务必须是 {EXPECTED_TOOL_SLUG}，实际为 {tool_slug or 'N/A'}")
+    _require_success_outputs(task, artifacts)
 
     dispatch = _as_dict(task.get("dispatch"))
     metadata = _artifact_metadata(artifacts)

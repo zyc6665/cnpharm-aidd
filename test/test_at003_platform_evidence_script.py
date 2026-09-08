@@ -109,3 +109,22 @@ def test_at003_evidence_requires_workflow_node_task_id() -> None:
             {"id": "workflow-run-1", "node_states": {"molp_pc_admet": {}}},
             "molp_pc_admet",
         )
+
+
+def test_at003_evidence_requires_successful_task_standard_outputs() -> None:
+    module = _load_script_module()
+    task = {
+        "id": "task-molp-pc-1",
+        "tool_slug": "molp-pc-property-prediction",
+        "status": "success",
+    }
+    artifacts = [
+        {
+            "name": "molp-pc-properties",
+            "standard_type": "molecule_table@1",
+            "latest_version": {"id": "artifact-version-properties"},
+        }
+    ]
+
+    with pytest.raises(ValueError, match="run_report@1"):
+        module.build_record_markdown(task, artifacts)

@@ -71,6 +71,7 @@
 - 2026-09-08：任务创建响应取证字段补齐；`/tasks` 创建成功后返回 `tool_slug`、`tool_version_id`、当前版本摘要和调度信息，便于 AT-003 平台 smoke 自动化记录 MolP-PC 工具调用证据。
 - 2026-09-08：任务详情文件哈希取证补齐；任务详情的输入/输出文件摘要返回 `sha256`，平台 smoke 记录可直接填入输入哈希和下载文件校验信息。
 - 2026-09-08：AT-003 平台 API 取证脚本补齐；新增 `backend/scripts/collect_at003_platform_evidence.py`，支持从 MolP-PC task ID 或 WorkflowRun 节点状态生成真实运行记录，脚本不调用本地 MolP-PC wrapper。
+- 2026-09-08：AT-003 取证完整性门禁补齐；平台取证脚本对 success 状态的 MolP-PC 任务强制要求 `molecule_table@1` 与 `run_report@1` 输出，避免不完整 Artifact 被归档为验收通过。
 
 ## 下一步候选
 

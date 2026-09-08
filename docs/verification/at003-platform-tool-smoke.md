@@ -109,4 +109,4 @@ python "backend/scripts/collect_at003_platform_evidence.py" \
   --output "docs/verification/at003-platform-run-YYYY-MM-DD.md"
 ```
 
-脚本只调用平台 `/api/v1/workflows/runs/{run_id}`、`/api/v1/tasks/{task_id}` 和 `/api/v1/projects/{project_id}/artifacts`，不得替代或绕过平台任务执行。
+脚本只调用平台 `/api/v1/workflows/runs/{run_id}`、`/api/v1/tasks/{task_id}` 和 `/api/v1/projects/{project_id}/artifacts`，不得替代或绕过平台任务执行。若 MolP-PC 任务状态为 success 但缺少 `molecule_table@1` 或 `run_report@1`，脚本会直接报错，避免把不完整结果归档为通过。
