@@ -311,6 +311,14 @@ async def test_standard_artifact_detail_exposes_role_files_and_downloads_each_ro
         sha256=hashlib.sha256(structure_content).hexdigest(),
         storage_key="standard/ligand.sdf",
         status="available",
+        manifest_json={
+            "type": "run_report@1",
+            "metadata": {
+                "model_card_ref": "example/MolP-PC/tool-package-v2/docs/model-card.md",
+                "verification_record_ref": "example/MolP-PC/tool-package-v2/docs/verification-record.md",
+                "evidence_level": "engineering_smoke_only",
+            },
+        },
     )
     artifact_db.add(version)
     await artifact_db.flush()
@@ -379,7 +387,13 @@ async def test_standard_artifact_detail_exposes_role_files_and_downloads_each_ro
     )
 
     assert detail.status_code == 200
-    latest_files = detail.json()["data"]["latest_version"]["files"]
+    latest_version = detail.json()["data"]["latest_version"]
+    assert latest_version["manifest_json"]["metadata"] == {
+        "model_card_ref": "example/MolP-PC/tool-package-v2/docs/model-card.md",
+        "verification_record_ref": "example/MolP-PC/tool-package-v2/docs/verification-record.md",
+        "evidence_level": "engineering_smoke_only",
+    }
+    latest_files = latest_version["files"]
     assert [item["role"] for item in latest_files] == [
         "structure_file",
         "structure_2d_sdf",

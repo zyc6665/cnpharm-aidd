@@ -307,6 +307,34 @@ describe('ArtifactRenderer', () => {
     expect(link.attributes('href')).not.toContain('minio.internal')
   })
 
+  it('shows delivery metadata from artifact version manifests', () => {
+    const wrapper = mount(ArtifactRenderer, {
+      props: {
+        artifact: artifact({
+          artifact_type: 'run_report',
+          latest_version: {
+            ...version,
+            manifest_json: {
+              type: 'run_report@1',
+              metadata: {
+                model_card_ref: 'example/MolP-PC/tool-package-v2/docs/model-card.md',
+                verification_record_ref: 'example/MolP-PC/tool-package-v2/docs/verification-record.md',
+                evidence_level: 'engineering_smoke_only'
+              }
+            }
+          }
+        })
+      },
+      global: { stubs }
+    })
+
+    const metadata = wrapper.get('[data-testid="artifact-delivery-metadata"]')
+    expect(metadata.text()).toContain('交付元数据')
+    expect(metadata.text()).toContain('example/MolP-PC/tool-package-v2/docs/model-card.md')
+    expect(metadata.text()).toContain('example/MolP-PC/tool-package-v2/docs/verification-record.md')
+    expect(metadata.text()).toContain('engineering_smoke_only')
+  })
+
   it('renders artifact reference blocks in the conversation timeline with the shared renderer', () => {
     const message: ConversationMessage = {
       id: 'message-1',

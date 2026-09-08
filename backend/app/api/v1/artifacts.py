@@ -107,6 +107,7 @@ def _version_data(version, *, artifact_id: str | None = None) -> dict:
         "size_bytes": version.size_bytes,
         "sha256": version.sha256,
         "status": version.status,
+        "manifest_json": version.manifest_json,
         "expires_at": version.expires_at,
         "created_at": version.created_at,
         "files": _version_files_data(artifact_id=artifact_id, version=version)

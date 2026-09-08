@@ -10,6 +10,20 @@
 
     <p v-if="artifact.description" class="artifact-card__description">{{ artifact.description }}</p>
 
+    <div
+      v-if="deliveryMetadataEntries.length"
+      class="artifact-card__delivery-metadata"
+      data-testid="artifact-delivery-metadata"
+    >
+      <span class="artifact-card__metadata-title">交付元数据</span>
+      <dl>
+        <div v-for="entry in deliveryMetadataEntries" :key="entry.key">
+          <dt>{{ entry.label }}</dt>
+          <dd>{{ entry.value }}</dd>
+        </div>
+      </dl>
+    </div>
+
     <a-descriptions :column="1" size="small" class="artifact-card__meta">
       <a-descriptions-item label="文件名">{{ version.filename }}</a-descriptions-item>
       <a-descriptions-item label="大小">{{ fileSize }}</a-descriptions-item>
@@ -53,6 +67,20 @@ const props = defineProps<{
   artifact: TypedArtifact
 }>()
 
+const deliveryMetadataLabels: Record<string, string> = {
+  model_version: '模型版本',
+  runtime_ref: '运行环境',
+  endpoint_ref: 'Endpoint',
+  weights_ref: '权重',
+  evidence_level: '证据等级',
+  applicability_domain_status: '适用域',
+  unit_or_label_policy: '单位/标签策略',
+  model_card_ref: '模型卡',
+  verification_record_ref: '验证记录'
+}
+
+const deliveryMetadataKeys = Object.keys(deliveryMetadataLabels)
+
 const version = computed(() => props.artifact.latest_version)
 const downloadUrl = computed(() => buildArtifactVersionDownloadUrl(props.artifact.id, version.value.id))
 const roleFiles = computed(() =>
@@ -73,6 +101,27 @@ const fileSize = computed(() => {
   const units = ['B', 'KB', 'MB', 'GB']
   const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
   return `${(bytes / 1024 ** index).toFixed(index === 0 ? 0 : 1)} ${units[index]}`
+})
+const deliveryMetadataEntries = computed(() => {
+  const metadata = version.value.manifest_json?.metadata
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return []
+  }
+
+  return deliveryMetadataKeys.flatMap(key => {
+    const value = metadata[key]
+    if (value === null || value === undefined || value === '') {
+      return []
+    }
+
+    return [
+      {
+        key,
+        label: deliveryMetadataLabels[key],
+        value: typeof value === 'object' ? JSON.stringify(value) : String(value)
+      }
+    ]
+  })
 })
 
 async function download() {
@@ -132,6 +181,44 @@ async function downloadRoleFile(file: ArtifactVersionFile) {
 .artifact-card__description {
   margin: 0;
   color: @text-secondary;
+}
+
+.artifact-card__delivery-metadata {
+  display: flex;
+  flex-direction: column;
+  gap: @spacing-xs;
+  padding: @spacing-sm 0;
+  border-top: 1px solid @border-color;
+  border-bottom: 1px solid @border-color;
+
+  dl {
+    display: flex;
+    flex-direction: column;
+    gap: @spacing-xs;
+    margin: 0;
+  }
+
+  div {
+    display: grid;
+    grid-template-columns: 112px minmax(0, 1fr);
+    gap: @spacing-sm;
+    font-size: @font-size-sm;
+  }
+
+  dt {
+    color: @text-tertiary;
+  }
+
+  dd {
+    margin: 0;
+    color: @text-secondary;
+    overflow-wrap: anywhere;
+  }
+}
+
+.artifact-card__metadata-title {
+  color: @text-tertiary;
+  font-size: @font-size-xs;
 }
 
 .artifact-card__meta :deep(.ant-descriptions-item-label) {

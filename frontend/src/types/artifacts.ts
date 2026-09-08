@@ -28,6 +28,10 @@ export interface ArtifactVersion {
   size_bytes: number
   sha256: string
   status: string
+  manifest_json?: {
+    metadata?: Record<string, unknown>
+    [key: string]: unknown
+  } | null
   expires_at?: string | null
   created_at: string
   files?: ArtifactVersionFile[]
