@@ -58,6 +58,73 @@ def _extract_primary_output_data(result: Any) -> Any:
     return result
 
 
+_MAX_FAILURE_STREAM_LENGTH = 4000
+_STANDARD_ARTIFACT_ERROR_MARKERS = (
+    "required standard artifacts",
+    "missing required output artifact",
+    "result manifest",
+    "standard artifact persistence",
+)
+
+
+def _normalize_diagnostic_text(value: Any) -> str:
+    if not isinstance(value, str):
+        return ""
+    text = value.strip()
+    if len(text) <= _MAX_FAILURE_STREAM_LENGTH:
+        return text
+    return f"{text[:_MAX_FAILURE_STREAM_LENGTH]}..."
+
+
+def _read_diagnostic_field(source: Any, key: str, *, depth: int = 0) -> str:
+    if not isinstance(source, dict) or depth > 2:
+        return ""
+
+    direct = _normalize_diagnostic_text(source.get(key))
+    if direct:
+        return direct
+
+    from_details = _read_diagnostic_field(source.get("details"), key, depth=depth + 1)
+    if from_details:
+        return from_details
+
+    return _read_diagnostic_field(source.get("result"), key, depth=depth + 1)
+
+
+def _standard_artifact_failure_message(messages: list[str]) -> str:
+    for message in messages:
+        lowered = message.lower()
+        if any(marker in lowered for marker in _STANDARD_ARTIFACT_ERROR_MARKERS):
+            return message
+        if "standard artifact" in lowered and ("missing" in lowered or "required" in lowered):
+            return message
+    return ""
+
+
+def _task_failure_diagnostics(task: Task) -> dict[str, str] | None:
+    if _normalize_task_status(task.status) != "failure":
+        return None
+
+    result = task.outputs.result if task.outputs else None
+    output_data = _extract_primary_output_data(result)
+    error_message = _normalize_diagnostic_text(task.error_message)
+    stdout = _read_diagnostic_field(result, "stdout") or _read_diagnostic_field(output_data, "stdout")
+    stderr = _read_diagnostic_field(result, "stderr") or _read_diagnostic_field(output_data, "stderr")
+    standard_artifact_message = _standard_artifact_failure_message(
+        [error_message, stderr, stdout]
+    )
+
+    if not any([error_message, stdout, stderr, standard_artifact_message]):
+        return None
+
+    return {
+        "error_message": error_message,
+        "stdout": stdout,
+        "stderr": stderr,
+        "standard_artifact_message": standard_artifact_message,
+    }
+
+
 def _task_project_id(task: Task) -> Optional[str]:
     data = task.extra_data if isinstance(task.extra_data, dict) else {}
     project_id = data.get("project_id")
@@ -372,6 +439,7 @@ async def get_task(
         "progress": task.progress,
         "progress_message": task.progress_message,
         "error_message": task.error_message,
+        "failure_diagnostics": _task_failure_diagnostics(task),
         "started_at": task.started_at,
         "finished_at": task.finished_at,
         "completed_at": task.finished_at,

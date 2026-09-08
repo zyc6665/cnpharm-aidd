@@ -57,9 +57,10 @@
 - 2026-09-08：AT-003 本地 direct smoke 说明补齐；沉淀 `PubChem -> Ligand Preparation -> SDF to SMILES -> RDKit -> MolP-PC` 最小联调步骤、通过标准、失败排查和自动化回归命令。
 - 2026-09-08：任务失败定位增强；执行器失败时保留 `TaskExecutionError.details` 到任务输出，任务详情页直接展示 stderr/stdout，并对标准产物缺失或 Result Manifest 问题给出醒目提示。
 - 2026-09-08：Artifact 详情交付元数据展示补齐；ArtifactVersion API 显式返回 `manifest_json`，文件类/报告类产物卡片展示模型版本、runtime、endpoint、证据等级、模型卡和验证记录等关键交付元数据。
+- 2026-09-08：任务失败诊断 API 收敛；任务详情接口新增结构化 `failure_diagnostics` 字段，前端优先消费该字段并保留旧输出 JSON 提取作为兼容兜底。
 
 ## 下一步候选
 
 1. AT-003 端到端真实运行记录：在具备 MolP-PC runtime 和 PubChem 网络的环境中记录一次真实 smoke task ID、输入哈希和输出 ArtifactVersion。
-2. 任务失败诊断后端 API 收敛：后续可把失败诊断结构化为稳定字段，减少前端从通用输出 JSON 中提取。
-3. Artifact 元数据列表筛选：如产物库规模继续增大，可按 `manifest_json.metadata` 中的模型版本或证据等级增加服务端筛选。
+2. Artifact 元数据列表筛选：如产物库规模继续增大，可按 `manifest_json.metadata` 中的模型版本或证据等级增加服务端筛选。
+3. 交付验收索引整理：把 P0 主链路、验证命令、已知限制和对应文档入口收敛到一页，方便客户验收前快速巡检。

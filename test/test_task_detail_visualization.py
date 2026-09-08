@@ -190,6 +190,42 @@ async def test_task_detail_returns_visualization_ready_payload(test_client):
 
 
 @pytest.mark.asyncio
+async def test_task_detail_returns_structured_failure_diagnostics(test_client):
+    client, session_factory, current_user = test_client
+    seeded = await seed_visualization_task(session_factory, current_user)
+
+    async with session_factory() as session:
+        task = await session.get(Task, seeded["task_id"])
+        assert task is not None
+        task.status = "FAILURE"
+        task.error_message = "Workflow node missing required standard artifacts: report (run_report@1)"
+        output = (
+            await session.execute(select(TaskOutput).where(TaskOutput.task_id == seeded["task_id"]))
+        ).scalar_one()
+        output.result = {
+            "success": False,
+            "details": {
+                "stdout": "loading model",
+                "stderr": "Missing required output artifact: report",
+            },
+        }
+        output.file_ids = []
+        output.output_type = "json"
+        await session.commit()
+
+    response = await client.get(f"/api/v1/tasks/{seeded['task_id']}")
+
+    assert response.status_code == 200
+    diagnostics = response.json()["data"]["failure_diagnostics"]
+    assert diagnostics == {
+        "error_message": "Workflow node missing required standard artifacts: report (run_report@1)",
+        "stdout": "loading model",
+        "stderr": "Missing required output artifact: report",
+        "standard_artifact_message": "Workflow node missing required standard artifacts: report (run_report@1)",
+    }
+
+
+@pytest.mark.asyncio
 async def test_task_logs_endpoint_returns_paginated_items_with_metadata(test_client):
     client, session_factory, current_user = test_client
     seeded = await seed_visualization_task(session_factory, current_user)

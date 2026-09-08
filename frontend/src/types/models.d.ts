@@ -497,6 +497,13 @@ export interface TaskDispatchInfo {
   queue_priority?: number
 }
 
+export interface TaskFailureDiagnosticsPayload {
+  error_message?: string
+  stdout?: string
+  stderr?: string
+  standard_artifact_message?: string
+}
+
 export interface ArtifactBindingDecision {
   status: 'ready' | 'needs_preparation' | 'needs_conversion' | 'invalid' | string
   input_name?: string | null
@@ -524,6 +531,7 @@ export interface Task {
   inputs?: TaskInput
   outputs?: TaskOutput
   error_message?: string
+  failure_diagnostics?: TaskFailureDiagnosticsPayload | null
   started_at?: string
   finished_at?: string
   completed_at?: string  // 完成时间（兼容旧代码，实际使用finished_at）

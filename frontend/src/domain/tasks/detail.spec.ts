@@ -72,3 +72,26 @@ test('任务失败诊断提取 stderr、stdout 和标准产物缺失提示', () 
   )
   assert.equal(diagnostics.hasDetails, true)
 })
+
+test('任务失败诊断优先使用后端结构化字段', () => {
+  const diagnostics = buildTaskFailureDiagnostics({
+    error_message: 'old message',
+    failure_diagnostics: {
+      error_message: 'server message',
+      stdout: 'server stdout',
+      stderr: 'server stderr',
+      standard_artifact_message: 'server standard artifact hint'
+    },
+    outputs: {
+      result: { stdout: 'raw stdout', stderr: 'raw stderr' },
+      file_ids: [],
+      output_type: 'json'
+    },
+    output_data: null
+  })
+
+  assert.equal(diagnostics.errorMessage, 'server message')
+  assert.equal(diagnostics.stdout, 'server stdout')
+  assert.equal(diagnostics.stderr, 'server stderr')
+  assert.equal(diagnostics.standardArtifactMessage, 'server standard artifact hint')
+})

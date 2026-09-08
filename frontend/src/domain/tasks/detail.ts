@@ -71,8 +71,29 @@ function findStandardArtifactMessage(messages: string[]): string {
 }
 
 export function buildTaskFailureDiagnostics(
-  task: Pick<Task, 'error_message' | 'outputs' | 'output_data'> | null | undefined
+  task:
+    | Pick<Task, 'error_message' | 'failure_diagnostics' | 'outputs' | 'output_data'>
+    | null
+    | undefined
 ): TaskFailureDiagnostics {
+  const serverDiagnostics = task?.failure_diagnostics
+  if (serverDiagnostics) {
+    const errorMessage = normalizeDiagnosticText(serverDiagnostics.error_message)
+    const stdout = normalizeDiagnosticText(serverDiagnostics.stdout)
+    const stderr = normalizeDiagnosticText(serverDiagnostics.stderr)
+    const standardArtifactMessage =
+      normalizeDiagnosticText(serverDiagnostics.standard_artifact_message) ||
+      findStandardArtifactMessage([errorMessage, stderr, stdout])
+
+    return {
+      errorMessage,
+      stdout,
+      stderr,
+      standardArtifactMessage,
+      hasDetails: Boolean(errorMessage || stdout || stderr || standardArtifactMessage),
+    }
+  }
+
   const errorMessage = normalizeDiagnosticText(task?.error_message)
   const sources = [task?.outputs?.result, task?.output_data]
   const stdout = sources.map(source => readDiagnosticField(source, 'stdout')).find(Boolean) ?? ''
