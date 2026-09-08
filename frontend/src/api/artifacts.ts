@@ -15,6 +15,8 @@ export interface ProjectArtifactListParams {
   file_role?: string
   metadata_model_version?: string
   metadata_evidence_level?: string
+  metadata_endpoint_ref?: string
+  metadata_applicability_domain_status?: string
 }
 
 export const getProjectArtifacts = (

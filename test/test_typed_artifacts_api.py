@@ -315,6 +315,8 @@ async def test_project_artifacts_can_filter_by_delivery_metadata(
             "metadata": {
                 "model_version": "MolP-PC 0.1.1",
                 "evidence_level": "engineering_smoke_only",
+                "endpoint_ref": "local_runtime:molp-pc-property-prediction@0.1.1",
+                "applicability_domain_status": "unknown",
             }
         },
     )
@@ -330,8 +332,10 @@ async def test_project_artifacts_can_filter_by_delivery_metadata(
         status="available",
         manifest_json={
             "metadata": {
-                "model_version": "Other 1.0",
-                "evidence_level": "external_benchmark",
+                "model_version": "MolP-PC 0.1.1",
+                "evidence_level": "engineering_smoke_only",
+                "endpoint_ref": "remote:other-endpoint@1.0",
+                "applicability_domain_status": "outside_domain",
             }
         },
     )
@@ -349,6 +353,8 @@ async def test_project_artifacts_can_filter_by_delivery_metadata(
         params={
             "metadata_model_version": "MolP-PC 0.1.1",
             "metadata_evidence_level": "engineering_smoke_only",
+            "metadata_endpoint_ref": "local_runtime:molp-pc-property-prediction@0.1.1",
+            "metadata_applicability_domain_status": "unknown",
         },
     )
 

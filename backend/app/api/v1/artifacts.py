@@ -156,10 +156,20 @@ def _matches_delivery_metadata(
     *,
     model_version: str | None,
     evidence_level: str | None,
+    endpoint_ref: str | None,
+    applicability_domain_status: str | None,
 ) -> bool:
     if model_version and _artifact_metadata_value(artifact, "model_version") != model_version:
         return False
     if evidence_level and _artifact_metadata_value(artifact, "evidence_level") != evidence_level:
+        return False
+    if endpoint_ref and _artifact_metadata_value(artifact, "endpoint_ref") != endpoint_ref:
+        return False
+    if (
+        applicability_domain_status
+        and _artifact_metadata_value(artifact, "applicability_domain_status")
+        != applicability_domain_status
+    ):
         return False
     return True
 
@@ -492,6 +502,8 @@ async def list_artifacts(
     file_role: str | None = None,
     metadata_model_version: str | None = None,
     metadata_evidence_level: str | None = None,
+    metadata_endpoint_ref: str | None = None,
+    metadata_applicability_domain_status: str | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -545,6 +557,8 @@ async def list_artifacts(
             item,
             model_version=metadata_model_version,
             evidence_level=metadata_evidence_level,
+            endpoint_ref=metadata_endpoint_ref,
+            applicability_domain_status=metadata_applicability_domain_status,
         )
     ]
     return success_response(data={"items": [_artifact_data(item) for item in visible]})
