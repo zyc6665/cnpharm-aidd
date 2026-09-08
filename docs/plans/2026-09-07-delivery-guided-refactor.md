@@ -58,9 +58,10 @@
 - 2026-09-08：任务失败定位增强；执行器失败时保留 `TaskExecutionError.details` 到任务输出，任务详情页直接展示 stderr/stdout，并对标准产物缺失或 Result Manifest 问题给出醒目提示。
 - 2026-09-08：Artifact 详情交付元数据展示补齐；ArtifactVersion API 显式返回 `manifest_json`，文件类/报告类产物卡片展示模型版本、runtime、endpoint、证据等级、模型卡和验证记录等关键交付元数据。
 - 2026-09-08：任务失败诊断 API 收敛；任务详情接口新增结构化 `failure_diagnostics` 字段，前端优先消费该字段并保留旧输出 JSON 提取作为兼容兜底。
+- 2026-09-08：V1 交付验收索引补齐；新增一页 P0 验收入口，收敛主链路、地基模块、自动化命令、AT-003 smoke 说明和当前限制，便于客户验收前快速巡检。
 
 ## 下一步候选
 
 1. AT-003 端到端真实运行记录：在具备 MolP-PC runtime 和 PubChem 网络的环境中记录一次真实 smoke task ID、输入哈希和输出 ArtifactVersion。
 2. Artifact 元数据列表筛选：如产物库规模继续增大，可按 `manifest_json.metadata` 中的模型版本或证据等级增加服务端筛选。
-3. 交付验收索引整理：把 P0 主链路、验证命令、已知限制和对应文档入口收敛到一页，方便客户验收前快速巡检。
+3. 交付验收索引命令分层：如完整命令耗时过长，可把 smoke、回归、发布前全量检查拆成三个等级。
