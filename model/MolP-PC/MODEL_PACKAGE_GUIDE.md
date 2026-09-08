@@ -52,5 +52,6 @@ bash model/MolP-PC/platform_run.sh \
   --device cpu
 ```
 
-如果只是本地调试，可以用 `MOLP_PC_PYTHON` 指向临时解释器；这不属于生产部署契约。
+如果只是本地调试，可以用 `MOLP_PC_PYTHON` 指向 `admet.yml` 环境中的解释器；这不属于生产部署契约。
+runtime wrapper 会在调用旧模型前检查 `dgl`、`rdkit` 和 `torch`，缺失时先输出可读失败原因，避免把依赖问题误判成平台调度或 Result Manifest 问题。
 如果没有完整依赖、权重、Runtime Env 摘要和硬件记录，只运行合同测试，不声明模型科学结果已验证。

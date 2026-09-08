@@ -62,9 +62,10 @@
 - 2026-09-08：Artifact 元数据列表筛选补齐；项目 Artifact 列表接口支持按 `manifest_json.metadata.model_version` 和 `manifest_json.metadata.evidence_level` 筛选，前端 API 可直接透传交付元数据筛选参数。
 - 2026-09-08：交付验收命令分层补齐；V1 验收索引将命令集拆成 smoke 检查、P0 回归和发布前门禁，便于小步重构后快速验证，交付前再跑完整覆盖。
 - 2026-09-08：Executor Gateway 健康面补齐；系统健康接口新增 `executor_gateway` 服务项，展示当前任务后端和 V1 已登记执行器类型，前端系统健康排序和中文标签同步更新。
+- 2026-09-08：MolP-PC runtime 依赖预检补齐；本地 AT-003 smoke 发现默认 Python 缺少 `dgl`/`torch`，模型 wrapper 在调用旧推理入口前显式检查 `dgl`、`rdkit`、`torch` 并输出 `admet.yml` / `MOLP_PC_PYTHON` 修复提示，避免误判为平台调度失败。
 
 ## 下一步候选
 
 1. AT-003 端到端真实运行记录：在具备 MolP-PC runtime 和 PubChem 网络的环境中记录一次真实 smoke task ID、输入哈希和输出 ArtifactVersion。
-2. AT-003 direct smoke 自动化脚本：如手工步骤仍耗时，可基于现有 API 封装最小 smoke runner，但不在未验证运行环境前预设复杂编排。
+2. AT-003 direct smoke 自动化脚本：待 `admet.yml` runtime 可用后再封装最小 runner，避免脚本只自动化失败路径。
 3. Artifact 元数据筛选扩展：如产物库规模继续增大，再评估模型族、endpoint 或适用域状态聚合筛选。

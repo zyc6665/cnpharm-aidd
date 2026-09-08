@@ -20,6 +20,7 @@ Fetch PubChem Ligand
 - 前端可访问后端 API，测试账号可登录并创建或进入项目。
 - 数据库已完成迁移和工具初始化，至少包含 `builtin-fetch-ligand`、`ligand-preparation`、`builtin-sdf-to-smiles-csv`、`builtin-rdkit-properties`、`molp-pc-property-prediction`。
 - MolP-PC 工具版本固定为 `0.1.1`，运行环境、weights、endpoint/runtime 标识与工具包声明一致。
+- 本地 MolP-PC 调试需使用 `admet.yml` 声明的 Python 3.8 / CUDA 11.3 环境；如 shell 默认 Python 不是该环境，需设置 `MOLP_PC_PYTHON`。
 - PubChem 查询可访问外网；离线环境需提前准备等价的 `ligand_structure@1` 输入 Artifact。
 
 ## 启动方式
@@ -63,6 +64,7 @@ direct 模式只用于本地开发和单人联调。进程重启、热更新或�
 | PubChem 节点失败 | 外网访问、输入 CID/名称/SMILES、外部数据库超时日志。 |
 | Ligand Preparation 无 3D | RDKit/OpenBabel 依赖、构象生成日志、输出 role。 |
 | MolP-PC 未被调度 | RDKit 输出是否存在 `molecule_table@1`，工作流定义中 `molecules` 是否绑定到 `node:<rdkit>:properties`。 |
+| MolP-PC 失败并提示缺少 `dgl`、`rdkit` 或 `torch` | 当前 Python 不满足模型 runtime；激活 `admet.yml` 环境或设置 `MOLP_PC_PYTHON` 后重跑。 |
 | MolP-PC 输出无科学附件引用 | 任务 `outputs.result.standard_result.artifacts.report.metadata` 是否包含 `model_card_ref` 和 `verification_record_ref`。 |
 | 输出可下载但下游不能用 | Result Manifest role、checksum、Artifact type 与 tool contract 是否一致。 |
 
@@ -74,4 +76,3 @@ direct 模式只用于本地开发和单人联调。进程重启、热更新或�
 python -m pytest "test/test_workflow_scheduler.py" "test/test_workflow_validation_standard_artifacts.py" -q
 npm --prefix "frontend" test -- "test/workflow-canvas-presets.test.ts" "src/composables/useWorkflowCanvas.spec.ts" "src/domain/tasks/output-summary.spec.ts" "src/components/tasks/TaskOutputSummary.spec.ts"
 ```
-

@@ -4,9 +4,24 @@ from __future__ import annotations
 
 import os
 import sys
+import importlib.util
 from pathlib import Path
 
 from .result_builder import LEGACY_PREDICTION_FILENAME
+
+
+REQUIRED_LEGACY_MODULES = ("dgl", "rdkit", "torch")
+
+
+def validate_runtime_dependencies() -> None:
+    """Validate dependencies needed by the legacy MolP-PC predictor."""
+    missing = [name for name in REQUIRED_LEGACY_MODULES if importlib.util.find_spec(name) is None]
+    if missing:
+        raise RuntimeError(
+            "MolP-PC runtime dependencies missing: "
+            f"{', '.join(missing)}. Activate the environment declared in admet.yml "
+            "or set MOLP_PC_PYTHON to that environment's python executable."
+        )
 
 
 def run_legacy_predict(
@@ -23,6 +38,7 @@ def run_legacy_predict(
         raise FileNotFoundError(f"Prediction entry not found: {predict_dir / 'test.py'}")
     if not weights_dir.is_dir():
         raise FileNotFoundError(f"Model weights directory not found: {weights_dir}")
+    validate_runtime_dependencies()
 
     run_dir = work_dir / f"molp_pc_runtime_{os.getpid()}"
     run_dir.mkdir(parents=True, exist_ok=True)

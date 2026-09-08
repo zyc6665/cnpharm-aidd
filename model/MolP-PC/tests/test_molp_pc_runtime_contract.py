@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import importlib
+import importlib.util
 import json
 import sys
 from pathlib import Path
+
+import pytest
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
@@ -174,6 +177,21 @@ def test_result_builder_accepts_legacy_artifacts_prediction_csv(tmp_path: Path):
     )
 
     assert result["artifacts"]["properties"]["metadata"]["row_count"] == 1
+
+
+def test_runtime_dependency_check_reports_missing_legacy_dependencies(monkeypatch):
+    legacy_predict = importlib.import_module("molp_pc_runtime.legacy_predict")
+
+    def fake_find_spec(name: str):
+        return None if name == "dgl" else object()
+
+    monkeypatch.setattr(importlib.util, "find_spec", fake_find_spec)
+
+    with pytest.raises(RuntimeError, match="dgl") as exc_info:
+        legacy_predict.validate_runtime_dependencies()
+
+    assert "admet.yml" in str(exc_info.value)
+    assert "MOLP_PC_PYTHON" in str(exc_info.value)
 
 
 def test_platform_run_delegates_to_runtime_cli_without_embedded_python():
