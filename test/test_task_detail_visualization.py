@@ -182,9 +182,11 @@ async def test_task_detail_returns_visualization_ready_payload(test_client):
     assert payload["output_data"]["score"] == 0.87
     assert payload["input_files"][0]["id"] == seeded["input_file_id"]
     assert payload["input_files"][0]["original_name"] == "pocket_input.pdb"
+    assert payload["input_files"][0]["sha256"] == "a" * 64
     assert payload["input_files"][0]["url"] == f"/api/v1/files/{seeded['input_file_id']}/download"
     assert payload["output_files"][0]["id"] == seeded["output_file_id"]
     assert payload["output_files"][0]["original_name"] == "generated_ligand.sdf"
+    assert payload["output_files"][0]["sha256"] == "b" * 64
     assert payload["output_files"][0]["url"] == f"/api/v1/files/{seeded['output_file_id']}/download"
     assert payload["tool"]["current_version"]["config"]["output_schema"]["viewer_hint"] == "molecule"
 

@@ -185,6 +185,7 @@ async def _load_files(db: AsyncSession, file_ids: list[str]) -> list[dict[str, A
             "relative_path": relative_path,
             "size": file.size_bytes,
             "content_type": file.content_type,
+            "sha256": file.sha256,
             "url": f"/api/v1/files/{file.id}/download",
         })
 
