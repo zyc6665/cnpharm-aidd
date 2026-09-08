@@ -29,6 +29,7 @@ from app.services.model_services import (
     test_model_service,
     update_model_service,
 )
+from app.tasks.executors.factory import supported_executor_types
 
 router = APIRouter()
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
@@ -147,6 +148,11 @@ async def health_check(db: AsyncSession = Depends(get_db)):
     tool_package_status = await _check_tool_package_runtime(db)
     services.append(tool_package_status)
     if tool_package_status.status != "healthy" and overall_status == "healthy":
+        overall_status = "degraded"
+
+    executor_gateway_status = _check_executor_gateway()
+    services.append(executor_gateway_status)
+    if executor_gateway_status.status != "healthy" and overall_status == "healthy":
         overall_status = "degraded"
 
     # 5. 检查任务队列（如果启用）
@@ -308,6 +314,19 @@ async def _check_celery() -> ServiceStatus:
         return ServiceStatus(
             name="celery", status="unhealthy", message=f"Celery 检查失败: {str(e)}"
         )
+
+
+def _check_executor_gateway() -> ServiceStatus:
+    """检查 V1 Executor Gateway 已登记执行器类型和任务后端。"""
+    executors = ", ".join(supported_executor_types())
+    return ServiceStatus(
+        name="executor_gateway",
+        status="healthy",
+        message=(
+            "Executor Gateway 已配置: "
+            f"task_backend={settings.TASK_EXECUTION_BACKEND}, executors={executors}"
+        ),
+    )
 
 
 async def _check_tool_package_runtime(db: AsyncSession) -> ServiceStatus:

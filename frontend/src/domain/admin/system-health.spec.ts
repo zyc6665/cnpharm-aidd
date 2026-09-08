@@ -19,13 +19,14 @@ const services: HealthService[] = [
   { name: 'database', status: 'healthy', message: 'ok' },
   { name: 'database_schema', status: 'healthy', message: 'migrated' },
   { name: 'storage', status: 'unknown', message: 'checking' },
-  { name: 'celery', status: 'healthy', message: 'ready' }
+  { name: 'celery', status: 'healthy', message: 'ready' },
+  { name: 'executor_gateway', status: 'healthy', message: 'ready' }
 ]
 
 test('系统健康服务按固定运行依赖顺序展示，未知服务排在最后', () => {
   assert.deepEqual(
     sortSystemHealthServices(services).map(service => service.name),
-    ['database', 'database_schema', 'cache', 'storage', 'celery', 'tool_package_runtime', 'custom']
+    ['database', 'database_schema', 'cache', 'storage', 'celery', 'executor_gateway', 'tool_package_runtime', 'custom']
   )
 })
 
@@ -49,6 +50,7 @@ test('系统健康服务名称展示为中文业务标签', () => {
   assert.equal(getSystemHealthServiceLabel('cache'), '缓存')
   assert.equal(getSystemHealthServiceLabel('storage'), '存储')
   assert.equal(getSystemHealthServiceLabel('celery'), '任务队列')
+  assert.equal(getSystemHealthServiceLabel('executor_gateway'), '执行器网关')
   assert.equal(getSystemHealthServiceLabel('tool_package_runtime'), 'Tool Package Runtime')
   assert.equal(getSystemHealthServiceLabel('custom'), 'custom')
 })

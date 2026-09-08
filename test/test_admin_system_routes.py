@@ -192,3 +192,22 @@ async def test_system_health_reports_tool_package_runtime_readiness(
     assert "tool_package_runtime" in services
     assert services["tool_package_runtime"]["status"] in {"healthy", "unknown"}
     assert "Tool Package" in services["tool_package_runtime"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_system_health_reports_executor_gateway_readiness(
+    api_client: httpx.AsyncClient,
+):
+    """系统健康检查应暴露 Executor Gateway 和 V1 已登记执行器类型。"""
+    response = await api_client.get("/api/v1/system/health")
+
+    assert response.status_code == 200
+    payload = response.json()
+    services = {item["name"]: item for item in payload["services"]}
+
+    assert "executor_gateway" in services
+    assert services["executor_gateway"]["status"] == "healthy"
+    message = services["executor_gateway"]["message"]
+    assert "Executor Gateway" in message
+    for executor_type in ("builtin", "python_script", "docker_image", "ssh_job", "remote_api"):
+        assert executor_type in message

@@ -9,6 +9,7 @@ const serviceOrder = [
   'cache',
   'storage',
   'celery',
+  'executor_gateway',
   'tool_package_runtime'
 ]
 
@@ -18,6 +19,7 @@ const serviceLabels: Record<string, string> = {
   cache: '缓存',
   storage: '存储',
   celery: '任务队列',
+  executor_gateway: '执行器网关',
   tool_package_runtime: 'Tool Package Runtime'
 }
 

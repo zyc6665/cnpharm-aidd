@@ -19,6 +19,19 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+SUPPORTED_EXECUTOR_TYPES = (
+    "builtin",
+    "python_script",
+    "docker_image",
+    "ssh_job",
+    "remote_api",
+)
+
+
+def supported_executor_types() -> tuple[str, ...]:
+    """返回 V1 Executor Gateway 已登记的执行器类型。"""
+    return SUPPORTED_EXECUTOR_TYPES
+
 
 class TaskExecutor:
     """按工具类型选择执行器并管理 GPU 生命周期。"""
@@ -57,7 +70,7 @@ class TaskExecutor:
     def _get_executor(self) -> BaseExecutor:
         from app.tasks.executors.ssh_job import SSHJobExecutor
 
-        executors = {
+        executors: dict[str, type[BaseExecutor]] = {
             ToolType.REMOTE_API.value: RemoteAPIExecutor,
             ToolType.DOCKER_IMAGE.value: DockerExecutor,
             ToolType.PYTHON_SCRIPT.value: PythonScriptExecutor,
