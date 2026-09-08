@@ -138,6 +138,32 @@ def _artifact_data(artifact: Artifact, *, include_versions: bool = False) -> dic
     return data
 
 
+def _artifact_metadata_value(artifact: Artifact, key: str) -> str | None:
+    manifest = artifact.latest_version.manifest_json
+    if not isinstance(manifest, dict):
+        return None
+    metadata = manifest.get("metadata")
+    if not isinstance(metadata, dict):
+        return None
+    value = metadata.get(key)
+    if value is None:
+        return None
+    return str(value)
+
+
+def _matches_delivery_metadata(
+    artifact: Artifact,
+    *,
+    model_version: str | None,
+    evidence_level: str | None,
+) -> bool:
+    if model_version and _artifact_metadata_value(artifact, "model_version") != model_version:
+        return False
+    if evidence_level and _artifact_metadata_value(artifact, "evidence_level") != evidence_level:
+        return False
+    return True
+
+
 def _audit_artifact_download(
     *,
     current_user: User,
@@ -459,6 +485,8 @@ async def upload_artifact(
 @router.get("/projects/{project_id}/artifacts", response_model=dict)
 async def list_artifacts(
     project_id: str,
+    metadata_model_version: str | None = None,
+    metadata_evidence_level: str | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -490,6 +518,11 @@ async def list_artifacts(
         and (
             item.latest_version.expires_at is None
             or item.latest_version.expires_at > now
+        )
+        and _matches_delivery_metadata(
+            item,
+            model_version=metadata_model_version,
+            evidence_level=metadata_evidence_level,
         )
     ]
     return success_response(data={"items": [_artifact_data(item) for item in visible]})

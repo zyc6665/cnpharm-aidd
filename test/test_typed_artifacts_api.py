@@ -269,6 +269,96 @@ async def test_standard_artifact_metadata_is_returned_in_project_list(
 
 
 @pytest.mark.asyncio
+async def test_project_artifacts_can_filter_by_delivery_metadata(
+    artifact_client,
+    artifact_db: AsyncSession,
+    artifact_context: dict[str, object],
+):
+    from app.models.artifacts import Artifact, ArtifactVersion
+
+    client, _ = artifact_client
+    project = artifact_context["project"]
+    owner = artifact_context["owner"]
+
+    matching = Artifact(
+        project_id=project.id,
+        created_by=owner.id,
+        artifact_type="run_report",
+        semantic_type="run_report@1",
+        standard_type="run_report",
+        standard_version=1,
+        name="molp-pc-report",
+    )
+    other = Artifact(
+        project_id=project.id,
+        created_by=owner.id,
+        artifact_type="run_report",
+        semantic_type="run_report@1",
+        standard_type="run_report",
+        standard_version=1,
+        name="other-report",
+    )
+    artifact_db.add_all([matching, other])
+    await artifact_db.flush()
+
+    matching_version = ArtifactVersion(
+        artifact_id=matching.id,
+        created_by=owner.id,
+        version=1,
+        filename="molp-pc-report.json",
+        content_type="application/json",
+        size_bytes=12,
+        sha256="c" * 64,
+        storage_key="standard/molp-pc-report.json",
+        status="available",
+        manifest_json={
+            "metadata": {
+                "model_version": "MolP-PC 0.1.1",
+                "evidence_level": "engineering_smoke_only",
+            }
+        },
+    )
+    other_version = ArtifactVersion(
+        artifact_id=other.id,
+        created_by=owner.id,
+        version=1,
+        filename="other-report.json",
+        content_type="application/json",
+        size_bytes=12,
+        sha256="d" * 64,
+        storage_key="standard/other-report.json",
+        status="available",
+        manifest_json={
+            "metadata": {
+                "model_version": "Other 1.0",
+                "evidence_level": "external_benchmark",
+            }
+        },
+    )
+    artifact_db.add_all([matching_version, other_version])
+    await artifact_db.flush()
+    matching.latest_version_id = matching_version.id
+    matching.latest_version = matching_version
+    other.latest_version_id = other_version.id
+    other.latest_version = other_version
+    await artifact_db.commit()
+
+    listed = await client.get(
+        f"/api/v1/projects/{project.id}/artifacts",
+        headers={"Authorization": "Bearer owner"},
+        params={
+            "metadata_model_version": "MolP-PC 0.1.1",
+            "metadata_evidence_level": "engineering_smoke_only",
+        },
+    )
+
+    assert listed.status_code == 200
+    items = listed.json()["data"]["items"]
+    assert [item["name"] for item in items] == ["molp-pc-report"]
+    assert items[0]["latest_version"]["manifest_json"]["metadata"]["model_version"] == "MolP-PC 0.1.1"
+
+
+@pytest.mark.asyncio
 async def test_standard_artifact_detail_exposes_role_files_and_downloads_each_role(
     artifact_client,
     artifact_db: AsyncSession,

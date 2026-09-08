@@ -7,10 +7,16 @@ import type {
   TypedArtifact
 } from '@/types/artifacts'
 
+export interface ProjectArtifactListParams {
+  metadata_model_version?: string
+  metadata_evidence_level?: string
+}
+
 export const getProjectArtifacts = (
-  projectId: string
+  projectId: string,
+  params?: ProjectArtifactListParams
 ): Promise<ApiResponse<ArtifactListResponse>> => {
-  return get<ArtifactListResponse>(`/projects/${projectId}/artifacts`)
+  return get<ArtifactListResponse, ProjectArtifactListParams>(`/projects/${projectId}/artifacts`, params)
 }
 
 export const getArtifact = (artifactId: string): Promise<ApiResponse<TypedArtifact>> => {
