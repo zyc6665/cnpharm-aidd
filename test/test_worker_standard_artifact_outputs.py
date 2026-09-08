@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import sys
 from pathlib import Path
 
@@ -389,6 +390,15 @@ def expect_molp_pc_scientific_metadata(
     }
 
 
+def expect_molp_pc_report_metadata(*, source_task_id: str) -> dict:
+    return {
+        "source_task_id": source_task_id,
+        "model_card_ref": "example/MolP-PC/tool-package-v2/docs/model-card.md",
+        "verification_record_ref": "example/MolP-PC/tool-package-v2/docs/verification-record.md",
+        "evidence_level": "engineering_smoke_only",
+    }
+
+
 @pytest.mark.asyncio
 async def test_worker_rejects_invalid_standard_result_without_persisting_artifacts(
     worker_standard_db_factory,
@@ -729,16 +739,22 @@ async def test_worker_standardizes_legacy_molp_pc_outputs(
         task_output = (
             await db.execute(select(TaskOutputModel).where(TaskOutputModel.task_id == task_id))
         ).scalar_one()
-        artifact_version_id = task_output.result["standard_artifacts"][
+        artifact_version_ids = task_output.result["standard_artifacts"][
             "artifact_version_ids_by_ref"
-        ]["properties"]
-        version_record = (
+        ]
+        version_records = (
             await db.execute(
                 select(ArtifactVersionModel)
                 .options(selectinload(ArtifactVersionModel.files))
-                .where(ArtifactVersionModel.id == artifact_version_id)
+                .where(ArtifactVersionModel.id.in_(artifact_version_ids.values()))
             )
-        ).scalar_one()
+        ).scalars().all()
+        version_records_by_id = {record.id: record for record in version_records}
+        lineage_count = await db.scalar(select(func.count(ArtifactLineage.id)))
+
+    assert set(artifact_version_ids) == {"properties", "report"}
+    version_record = version_records_by_id[artifact_version_ids["properties"]]
+    report_record = version_records_by_id[artifact_version_ids["report"]]
 
     assert version_record.manifest_json["type"] == "molecule_table@1"
     assert version_record.manifest_json["metadata"] == expect_molp_pc_scientific_metadata(
@@ -746,8 +762,17 @@ async def test_worker_standardizes_legacy_molp_pc_outputs(
         row_count=1,
         property_columns=["F20"],
     )
+    assert report_record.manifest_json["type"] == "run_report@1"
+    assert report_record.manifest_json["metadata"] == expect_molp_pc_report_metadata(
+        source_task_id=str(task_id)
+    )
+    report_payload = json.loads(Path(report_record.storage_key).read_text(encoding="utf-8"))
+    assert report_payload["scientific_interpretation"]["prediction_kind"] == "basic_admet_prediction"
+    assert report_payload["scientific_interpretation"]["model_name"] == "MolP-PC"
+    assert lineage_count == 1
     assert {file.role for file in version_record.files} == {"table_file", "metadata_json"}
-    assert len(task_output.file_ids) == 2
+    assert {file.role for file in report_record.files} == {"report_json"}
+    assert len(task_output.file_ids) == 3
 
 
 @pytest.mark.asyncio

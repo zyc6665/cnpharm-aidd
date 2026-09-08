@@ -187,13 +187,14 @@ async def _legacy_molp_pc_result_v2(
         return None
     table_ref = _standard_file_ref(file_records, prediction_path)
 
+    scientific_metadata = _legacy_molp_pc_scientific_metadata()
     metadata = _molecule_table_metadata(
         table_record,
         source_task_id=source_task_id,
         default_id_field="SMILES",
         model_name="MolP-PC",
     )
-    metadata.update(_legacy_molp_pc_scientific_metadata())
+    metadata.update(scientific_metadata)
     metadata_ref = await _persist_generated_output_file(
         db,
         output_file_ids=output_file_ids,
@@ -203,6 +204,22 @@ async def _legacy_molp_pc_result_v2(
         content_type="application/json",
     )
     if metadata_ref is None:
+        return None
+
+    report = _legacy_molp_pc_report(
+        source_task_id=source_task_id,
+        metadata=metadata,
+        scientific_metadata=scientific_metadata,
+    )
+    report_ref = await _persist_generated_output_file(
+        db,
+        output_file_ids=output_file_ids,
+        seed_records=file_records,
+        relative_path="reports/report.json",
+        content=json.dumps(report, ensure_ascii=False, indent=2).encode("utf-8"),
+        content_type="application/json",
+    )
+    if report_ref is None:
         return None
 
     return {
@@ -216,10 +233,34 @@ async def _legacy_molp_pc_result_v2(
                     "metadata_json": metadata_ref,
                 },
                 "metadata": metadata,
+            },
+            "report": {
+                "type": "run_report@1",
+                "name": f"{source_task_id}_molp_pc_adapter_report",
+                "files": {"report_json": report_ref},
+                "metadata": {
+                    "source_task_id": source_task_id,
+                    "model_card_ref": scientific_metadata["model_card_ref"],
+                    "verification_record_ref": scientific_metadata["verification_record_ref"],
+                    "evidence_level": scientific_metadata["evidence_level"],
+                },
             }
         },
+        "relations": [{"from": "report", "to": "properties", "type": "describes"}],
         "summary": {"standardized_from": "legacy_molp_pc"},
     }
+
+
+_MOLP_PC_TASK_GROUPS = [
+    "Absorption",
+    "Distribution",
+    "Excretion",
+    "Metabolism",
+    "Toxicology",
+    "Tox21",
+    "Ecotoxicity",
+    "LD50",
+]
 
 
 def _legacy_molp_pc_scientific_metadata() -> dict[str, str]:
@@ -233,6 +274,29 @@ def _legacy_molp_pc_scientific_metadata() -> dict[str, str]:
         "unit_or_label_policy": "per_endpoint_definition_or_unknown",
         "model_card_ref": "example/MolP-PC/tool-package-v2/docs/model-card.md",
         "verification_record_ref": "example/MolP-PC/tool-package-v2/docs/verification-record.md",
+    }
+
+
+def _legacy_molp_pc_report(
+    *,
+    source_task_id: str,
+    metadata: dict[str, Any],
+    scientific_metadata: dict[str, str],
+) -> dict[str, Any]:
+    return {
+        "tool": "molp-pc-property-prediction",
+        "adapter": "legacy_standardization",
+        "status": "succeeded",
+        "source_task_id": source_task_id,
+        "predicted_rows": metadata.get("row_count", 0),
+        "property_column_count": metadata.get("property_column_count", 0),
+        "property_columns": metadata.get("property_columns", []),
+        "task_groups": _MOLP_PC_TASK_GROUPS,
+        "scientific_interpretation": {
+            "prediction_kind": "basic_admet_prediction",
+            "model_name": "MolP-PC",
+            **scientific_metadata,
+        },
     }
 
 
