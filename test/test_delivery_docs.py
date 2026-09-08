@@ -8,6 +8,7 @@ DELIVERY_INDEX = PROJECT_ROOT / "docs/delivery/04-V1交付验收索引.md"
 DEPLOYMENT_GUIDE = PROJECT_ROOT / "docs/delivery/03-企业交付部署运维说明书.md"
 PLATFORM_SMOKE = PROJECT_ROOT / "docs/verification/at003-platform-tool-smoke.md"
 LOCAL_RUNTIME_NOTE = PROJECT_ROOT / "docs/verification/at003-direct-smoke.md"
+PLATFORM_RECORD_TEMPLATE = PROJECT_ROOT / "docs/verification/templates/at003-platform-tool-run-record.md"
 
 
 def test_at003_acceptance_uses_platform_tool_invocation_as_primary_path() -> None:
@@ -29,3 +30,23 @@ def test_at003_acceptance_uses_platform_tool_invocation_as_primary_path() -> Non
 
     assert "模型包本地调试" in local_text
     assert "不是 AT-003 平台验收主路径" in local_text
+
+
+def test_at003_platform_run_record_template_tracks_required_evidence() -> None:
+    template_text = PLATFORM_RECORD_TEMPLATE.read_text(encoding="utf-8")
+
+    required_terms = [
+        "task_id",
+        "ToolVersion",
+        "tool_version_id",
+        "molp-pc-property-prediction",
+        "input_sha256",
+        "ArtifactVersion",
+        "artifact_version_id",
+        "run_report@1",
+        "molecule_table@1",
+    ]
+    for term in required_terms:
+        assert term in template_text
+
+    assert "不得记录 `model/MolP-PC/platform_run.sh`" in template_text

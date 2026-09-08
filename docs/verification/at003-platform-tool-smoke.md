@@ -51,6 +51,7 @@ Fetch PubChem Ligand
 - MolP-PC 结果显示模型版本、runtime/endpoint 标识、单位或标签策略、证据等级、模型卡引用和验证记录引用。
 - 下载行为走受保护文件下载入口，任务详情和任务中心能定位失败原因或输出文件。
 - 失败值不得用 0 填充；未评估适用域必须标记为 `unknown`。
+- 真实验收记录使用 [AT-003 平台工具调用真实运行记录模板](./templates/at003-platform-tool-run-record.md) 填写 task_id、ToolVersion、输入哈希和输出 ArtifactVersion。
 
 ## 失败排查
 
