@@ -68,9 +68,10 @@
 - 2026-09-08：Artifact 科学元数据筛选扩展；项目 Artifact 列表接口在已有模型版本和证据等级筛选基础上，补齐 `endpoint_ref` 与 `applicability_domain_status` 筛选，便于定位特定 MolP-PC runtime 或适用域状态结果。
 - 2026-09-08：MolP-PC 验收口径纠正；确认 AT-003 主验收必须通过平台注册 `molp-pc-property-prediction`、当前 `ToolVersion`、平台任务创建和 Executor Gateway 调度完成，`model/MolP-PC/platform_run.sh` 只保留为模型包本地调试和执行器 runtime 自检。
 - 2026-09-08：AT-003 平台真实运行记录模板补齐；新增 task_id、ToolVersion、输入哈希、输出 ArtifactVersion、科学元数据、下载审计和结论字段，平台 smoke 完成后可直接归档证据。
+- 2026-09-08：任务创建响应取证字段补齐；`/tasks` 创建成功后返回 `tool_slug`、`tool_version_id`、当前版本摘要和调度信息，便于 AT-003 平台 smoke 自动化记录 MolP-PC 工具调用证据。
 
 ## 下一步候选
 
 1. AT-003 平台工具调用真实运行：在具备 PubChem 网络和 MolP-PC runtime 的平台环境中执行一次 smoke，并按模板归档 task ID、输入哈希、ToolVersion 和输出 ArtifactVersion。
-2. AT-003 平台 smoke 自动化：优先封装平台 API/Workflow runner；不得用 `model/MolP-PC/platform_run.sh` 自动化结果替代平台任务验收。
+2. AT-003 平台 smoke 自动化：基于平台 API/Workflow runner 收集任务与 Artifact 证据；不得用 `model/MolP-PC/platform_run.sh` 自动化结果替代平台任务验收。
 3. Artifact 检索扩展：如产物库规模继续增大，再评估模型族聚合筛选或常用筛选项前端表单化。

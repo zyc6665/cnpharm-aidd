@@ -478,6 +478,12 @@ async def create_task(
         task_data=task_data,
         direct_runner=direct_task_runner,
     )
+    task_result = await db.execute(
+        select(Task)
+        .options(selectinload(Task.tool).selectinload(Tool.current_version))
+        .where(Task.id == task.id)
+    )
+    task = task_result.scalar_one()
 
     return success_response(
         data={
@@ -489,6 +495,9 @@ async def create_task(
             "user_id": task.user_id,
             "tool_id": task.tool_id,
             "tool_version_id": task.tool_version_id,
+            "tool_name": task.tool.name if task.tool else None,
+            "tool_slug": task.tool.slug if task.tool else None,
+            "tool": _serialize_task_tool(task.tool),
             "resource_snapshot": (task.extra_data or {}).get("resource_snapshot"),
             "dispatch": (task.extra_data or {}).get("dispatch"),
             "status": _normalize_task_status(task.status),

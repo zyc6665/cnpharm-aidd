@@ -18,6 +18,7 @@ Fetch PubChem Ligand
 
 - MolP-PC 必须通过平台注册工具 `molp-pc-property-prediction` 调用。
 - 平台任务必须使用该工具的当前 `ToolVersion`，并经由 `create_and_schedule_tool_task` 创建普通平台任务。
+- 平台任务创建响应和任务详情均应返回 `tool_slug`、`tool_version_id`、当前版本摘要和调度信息，便于填写真实运行记录。
 - 调度入口必须进入 Executor Gateway 支持的后端；开发环境可用 direct backend，交付演示和多人环境应使用 Celery + Redis。
 - 不得以 `model/MolP-PC/platform_run.sh` 作为平台验收主路径。该脚本只用于模型包本地调试、runtime 依赖自检或执行器镜像排障。
 - 任务输出必须回到平台 `TaskOutput`、标准 ArtifactVersion、文件下载权限和审计链路。

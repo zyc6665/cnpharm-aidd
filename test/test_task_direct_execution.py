@@ -439,6 +439,9 @@ async def test_create_task_uses_direct_runner_when_enabled(
     response_data = response.json()["data"]
     task_id = response_data["id"]
     assert runner.scheduled == [(task_id, published_tool.current_version_id)]
+    assert response_data["tool_slug"] == published_tool.slug
+    assert response_data["tool"]["current_version"]["id"] == published_tool.current_version_id
+    assert response_data["tool"]["current_version"]["version"] == "1.0.0"
     assert response_data["resource_snapshot"] == {
         "executor_type": "ssh_job",
         "gpu_required": False,
