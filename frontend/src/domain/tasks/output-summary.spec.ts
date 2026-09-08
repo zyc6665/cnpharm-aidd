@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Task } from '@/types/models'
 import {
+  getTaskScientificAttachmentEntries,
   getTaskOutputDataEntries,
   getTaskOutputFiles,
   hasTaskOutputSummaryContent,
@@ -40,5 +41,43 @@ describe('task output summary rules', () => {
     expect(hasTaskOutputSummaryContent(null, [])).toBe(false)
     expect(hasTaskOutputSummaryContent({ score: 0.9 }, [])).toBe(true)
     expect(hasTaskOutputSummaryContent(null, [{ filename: 'result.csv' }])).toBe(true)
+  })
+
+  it('extracts scientific attachment refs from MolP-PC standard results', () => {
+    const entries = getTaskScientificAttachmentEntries({
+      result: { success: true },
+      standard_result: {
+        result_version: 'aidd.sciminer/result.v2',
+        artifacts: {
+          report: {
+            type: 'run_report@1',
+            metadata: {
+              model_card_ref: 'example/MolP-PC/tool-package-v2/docs/model-card.md',
+              verification_record_ref:
+                'example/MolP-PC/tool-package-v2/docs/verification-record.md',
+              evidence_level: 'engineering_smoke_only',
+            },
+          },
+        },
+      },
+    })
+
+    expect(entries).toEqual([
+      {
+        key: 'model_card_ref',
+        labelKey: 'tasks.scientificModelCard',
+        value: 'example/MolP-PC/tool-package-v2/docs/model-card.md',
+      },
+      {
+        key: 'verification_record_ref',
+        labelKey: 'tasks.scientificVerificationRecord',
+        value: 'example/MolP-PC/tool-package-v2/docs/verification-record.md',
+      },
+      {
+        key: 'evidence_level',
+        labelKey: 'tasks.scientificEvidenceLevel',
+        value: 'engineering_smoke_only',
+      },
+    ])
   })
 })

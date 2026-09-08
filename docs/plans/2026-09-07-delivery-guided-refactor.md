@@ -53,9 +53,10 @@
 - 2026-09-08：AT-003 预设保存绑定补齐；小分子链路节点开始携带 `artifact_input_slots` / `artifact_outputs`，保存 WorkflowDefinition 时可生成 `node:<upstream>:<slot>` 形式的标准 Artifact 绑定。
 - 2026-09-08：AT-003 后端定义验收补齐；后端 Workflow validation 可接收小分子链路标准 Artifact 绑定并按 `Fetch PubChem -> Ligand Preparation -> SDF to SMILES -> RDKit -> MolP-PC` 顺序生成可调度节点，结果节点不再被前端序列化为可执行工具。
 - 2026-09-08：AT-003 scheduler 绑定验收补齐；当 RDKit Properties 节点成功产出 `properties` ArtifactVersion 后，MolP-PC 节点调度会把该版本作为 `molecules` 标准输入绑定，并保留关联文件列表。
+- 2026-09-08：MolP-PC 科学附件定位补齐；任务输出详情开始从完整 `outputs.result.standard_result` 提取模型卡、验证记录和证据等级引用，用户可在基础 ADMET 结果区直接定位交付附件说明。
 
 ## 下一步候选
 
-1. 基础 ADMET MolP-PC 附件下载验收：检查 `run_report@1` 和 metadata 中的模型卡/验证记录引用是否能在任务详情或 Artifact 详情中被用户定位。
-2. AT-003 端到端 smoke 说明：沉淀本地 direct 模式下的最小验证步骤和已知依赖前置条件。
-3. 任务中心失败定位增强：可继续检查失败任务详情页是否直接暴露错误原因、stderr/stdout 和标准产物缺失提示。
+1. AT-003 端到端 smoke 说明：沉淀本地 direct 模式下的最小验证步骤和已知依赖前置条件。
+2. 任务中心失败定位增强：可继续检查失败任务详情页是否直接暴露错误原因、stderr/stdout 和标准产物缺失提示。
+3. Artifact 详情交付元数据展示：如后续需要从产物库直接复核，可考虑在 ArtifactVersion 详情接口显式透出 `manifest_json.metadata`。

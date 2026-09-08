@@ -1,5 +1,23 @@
 <template>
   <div v-if="hasContent" class="task-output-summary">
+    <section
+      v-if="scientificAttachmentEntries.length"
+      class="scientific-attachments"
+      data-testid="task-scientific-attachments"
+    >
+      <h4>{{ t('tasks.scientificAttachments') }}</h4>
+      <dl>
+        <div
+          v-for="entry in scientificAttachmentEntries"
+          :key="entry.key"
+          class="scientific-attachment"
+        >
+          <dt>{{ t(entry.labelKey) }}</dt>
+          <dd>{{ entry.value }}</dd>
+        </div>
+      </dl>
+    </section>
+
     <div v-if="outputDataEntries.length" class="output-data">
       <JsonResultRenderer :value="outputData" />
     </div>
@@ -60,6 +78,7 @@
     formatTaskFileSize,
     getTaskOutputDataEntries,
     getTaskOutputFiles,
+    getTaskScientificAttachmentEntries,
     hasTaskOutputSummaryContent,
     selectMolpPcCsvSourceFile
   } from '@/domain/tasks'
@@ -86,10 +105,17 @@
     return getTaskOutputFiles(props.task)
   })
 
+  const scientificAttachmentEntries = computed(() => {
+    return getTaskScientificAttachmentEntries(props.task.outputs?.result, props.task.output_data)
+  })
+
   const canShowMolpPcCsvExport = computed(() => canExportMolpPcCsv(outputFiles.value))
 
   const hasContent = computed(() => {
-    return hasTaskOutputSummaryContent(props.task.output_data, outputFiles.value)
+    return (
+      hasTaskOutputSummaryContent(props.task.output_data, outputFiles.value) ||
+      scientificAttachmentEntries.value.length > 0
+    )
   })
 
   const formatFileSize = formatTaskFileSize
@@ -175,6 +201,44 @@
     }
   }
 
+  .scientific-attachments {
+    display: flex;
+    flex-direction: column;
+    gap: @spacing-sm;
+    padding: @spacing-md;
+    border: 1px solid rgba(220, 227, 240, 0.92);
+    border-radius: @border-radius-md;
+    background: @bg-elevated;
+
+    h4,
+    dl {
+      margin: 0;
+    }
+
+    h4 {
+      font-size: @font-size-md;
+      font-weight: @font-weight-semibold;
+      color: @text-color-light-primary;
+    }
+  }
+
+  .scientific-attachment {
+    display: grid;
+    grid-template-columns: minmax(120px, max-content) minmax(0, 1fr);
+    gap: @spacing-sm;
+    font-size: @font-size-sm;
+
+    dt {
+      color: @text-color-light-secondary;
+    }
+
+    dd {
+      margin: 0;
+      color: @text-color-light-primary;
+      overflow-wrap: anywhere;
+    }
+  }
+
   .files-header {
     display: flex;
     align-items: center;
@@ -220,6 +284,11 @@
   @media (max-width: @screen-sm) {
     .file-item {
       flex-wrap: wrap;
+    }
+
+    .scientific-attachment {
+      grid-template-columns: 1fr;
+      gap: @spacing-xs;
     }
 
     .file-name {
