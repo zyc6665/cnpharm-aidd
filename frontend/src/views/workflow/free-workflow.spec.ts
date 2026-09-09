@@ -201,9 +201,25 @@ describe('free workflow workbench', () => {
 
     expect(wrapper.text()).toContain('流程名称')
     expect(wrapper.text()).toContain('已保存流程')
+    expect(wrapper.text()).toContain('流程模式')
     expect(wrapper.text()).not.toContain('模板选择')
     expect(wrapper.text()).not.toContain('工作流模板')
     expect(wrapper.text()).not.toContain('模板图谱')
+  })
+
+  it('可以切换到 PubChem 到基础 ADMET 流程模式', async () => {
+    const wrapper = renderWorkflow()
+    await flushPromises()
+
+    const admetPreset = wrapper.findAll('.select-option')
+      .find(option => option.text() === 'PubChem 到基础 ADMET')
+    expect(admetPreset).toBeDefined()
+
+    await admetPreset!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('MolP-PC 基础 ADMET')
+    expect(wrapper.text()).toContain('基础 ADMET 结果')
   })
 
   it('保存默认自由流程时写入 WorkflowDefinition，不使用旧模板入口', async () => {
@@ -343,7 +359,7 @@ describe('free workflow workbench', () => {
 
     expect(wrapper.text()).toContain('生产流程')
     expect(wrapper.text()).not.toContain('归档流程')
-    await wrapper.find('.select-option').trigger('click')
+    await wrapper.findAll('.select-option').find(button => button.text() === '生产流程')!.trigger('click')
     await flushPromises()
 
     await wrapper.findAll('button').find(button => button.text() === '复制')!.trigger('click')
@@ -357,7 +373,7 @@ describe('free workflow workbench', () => {
     await flushPromises()
     expect(updateWorkflowDefinition).toHaveBeenCalledWith('flow-1', { status: 'archived' })
 
-    await wrapper.find('.select-option').trigger('click')
+    await wrapper.findAll('.select-option').find(button => button.text() === '生产流程')!.trigger('click')
     await wrapper.findAll('button').find(button => button.text() === '删除')!.trigger('click')
     await flushPromises()
     expect(deleteWorkflowDefinition).toHaveBeenCalledWith('flow-active')

@@ -99,6 +99,16 @@
             </template>
 
             <template #left>
+              <div class="canvas-preset-selector">
+                <span class="rail-kicker">{{ t('workflow.definition.templateLabel') }}</span>
+                <a-select
+                  class="canvas-preset-select"
+                  :value="workflowStore.canvasPresetId"
+                  :options="canvasPresetOptions"
+                  @change="handleCanvasPresetChange"
+                />
+              </div>
+
               <div class="workflow-status-summary">
                 <div class="status-summary-item is-ready">
                   <span>可运行</span>
@@ -336,6 +346,7 @@
     editableCanvasPreset,
     activeNode,
     selectedToolByActiveNode,
+    canvasPresetOptions,
     availableWorkflowTools,
     sidebarStageOptions,
     sidebarInputOptions,
@@ -354,6 +365,7 @@
     workflowReportRows,
     workflowRepairActions,
     workflowRepairableCount,
+    handleCanvasPresetChange,
     resolveNodeStatusReason,
     handleNodeToolSelect,
     handleAddToolNode,

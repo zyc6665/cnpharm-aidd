@@ -78,7 +78,9 @@
 - 2026-09-09：AT-003 平台 smoke 自动化补齐；新增 `backend/scripts/run_at003_platform_smoke.py`，脚本通过 `prepare-preview`、`/api/v1/tasks`、任务详情轮询和取证脚本完成平台端 smoke，不调用本地 MolP-PC wrapper。
 - 2026-09-09：研究页 Artifact 候选检索收敛；蛋白结构候选选择开始直接按 `standard_type=protein_structure` 请求项目 Artifact 列表，避免全量拉取后再本地过滤。
 - 2026-09-09：Artifact 模型名称检索补齐；项目 Artifact 列表支持按 `manifest_json.metadata.model_name` 筛选，前端 API 类型同步透传，便于直接定位 MolP-PC 工具族产物。
+- 2026-09-09：工作流流程模式入口恢复；手动工作台左侧栏重新接入 Canvas Preset 选择器，可直接切换到 `PubChem 到基础 ADMET` 并展示 MolP-PC 节点。
 
 ## 下一步候选
 
-1. Artifact 检索扩展：如产物库规模继续增大，再评估模型族聚合筛选 UI 或保存常用筛选视图。
+1. 前端浏览器端 AT-003 演示补测：用 Playwright 固化 `PubChem 到基础 ADMET` 预设切换、MolP-PC 节点展示和运行预检入口。
+2. Artifact 检索扩展：如产物库规模继续增大，再评估模型族聚合筛选 UI 或保存常用筛选视图。
