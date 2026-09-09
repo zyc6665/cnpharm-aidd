@@ -88,6 +88,18 @@ npm --prefix "frontend" test -- \
 
 ## 平台 API 取证
 
+可直接用 runner 自动创建 MolP-PC 平台任务、轮询终态并生成取证记录：
+
+```bash
+python "backend/scripts/run_at003_platform_smoke.py" \
+  --base-url "http://127.0.0.1:8000" \
+  --token "<platform bearer token>" \
+  --project-id "<project id>" \
+  --tool-id "<molp-pc tool id>" \
+  --input-artifact-version-id "<molecule_table@1 ArtifactVersion id>" \
+  --output "docs/verification/at003-platform-run-YYYY-MM-DD.md"
+```
+
 MolP-PC 平台任务完成后，可用以下脚本从平台 API 拉取任务、ToolVersion、输入/输出哈希和 ArtifactVersion 证据，并生成 Markdown 记录：
 
 ```bash
