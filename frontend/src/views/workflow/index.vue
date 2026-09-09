@@ -103,6 +103,7 @@
                 <span class="rail-kicker">{{ t('workflow.definition.templateLabel') }}</span>
                 <a-select
                   class="canvas-preset-select"
+                  data-testid="workflow-preset-select"
                   :value="workflowStore.canvasPresetId"
                   :options="canvasPresetOptions"
                   @change="handleCanvasPresetChange"

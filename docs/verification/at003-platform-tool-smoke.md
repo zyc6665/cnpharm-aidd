@@ -86,6 +86,15 @@ npm --prefix "frontend" test -- \
   "src/components/tasks/TaskOutputSummary.spec.ts"
 ```
 
+浏览器端演示入口可用以下 Playwright smoke 固化，覆盖项目工作流页面、流程模式切换和 MolP-PC 节点展示：
+
+```bash
+npm --prefix "frontend" exec -- playwright test \
+  --config "frontend/playwright.config.ts" \
+  "e2e/at003-workflow-preset.spec.ts" \
+  --project=chromium
+```
+
 ## 平台 API 取证
 
 可直接用 runner 自动创建 MolP-PC 平台任务、轮询终态并生成取证记录：
