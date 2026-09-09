@@ -82,7 +82,8 @@
 - 2026-09-09：AT-003 浏览器端演示补测；新增 Playwright smoke 覆盖项目工作流页面、流程模式选择、`PubChem 到基础 ADMET` 预设切换和 MolP-PC 节点展示。
 - 2026-09-09：Artifact 常用筛选 UI 补齐；项目总览的 Artifact 区开始提供最近、蛋白结构、分子表格和 MolP-PC 快捷筛选，并复用项目 Artifact 检索 API。
 - 2026-09-09：Artifact 常用筛选视图轻量保存；项目总览筛选状态写入 `artifact_filter` URL query，可直接分享或刷新恢复，不新增数据库表。
+- 2026-09-09：V1 P0 交付前完整回归完成；后端 P0 回归、前端 P0 回归、AT-003 浏览器 smoke、`vue-tsc` 和健康检查均已记录至 `docs/verification/v1-p0-regression-2026-09-09.md`。
 
 ## 下一步候选
 
-1. V1 P0 交付前完整回归：按 `docs/delivery/04-V1交付验收索引.md` 的 P0 回归和发布前门禁统一执行。
+1. 验收后增强：按客户反馈决定是否继续做规模化 Artifact 检索、K8s/Slurm 生产化或完整 MD 链路。
