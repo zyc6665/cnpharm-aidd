@@ -72,9 +72,11 @@
 - 2026-09-08：任务详情文件哈希取证补齐；任务详情的输入/输出文件摘要返回 `sha256`，平台 smoke 记录可直接填入输入哈希和下载文件校验信息。
 - 2026-09-08：AT-003 平台 API 取证脚本补齐；新增 `backend/scripts/collect_at003_platform_evidence.py`，支持从 MolP-PC task ID 或 WorkflowRun 节点状态生成真实运行记录，脚本不调用本地 MolP-PC wrapper。
 - 2026-09-08：AT-003 取证完整性门禁补齐；平台取证脚本对 success 状态的 MolP-PC 任务强制要求 `molecule_table@1` 与 `run_report@1` 输出，避免不完整 Artifact 被归档为验收通过。
+- 2026-09-09：AT-003 平台真实运行完成；通过 `/api/v1/tasks` 创建 MolP-PC 平台任务 `9322c6b7-0e1f-4ffc-8cfd-01f57269bee9`，使用上游 `molecule_table@1` ArtifactVersion 作为 `molecules` 输入，任务成功产出 `molecule_table@1` 与 `run_report@1`，证据归档至 `docs/verification/at003-platform-run-2026-09-09.md`。
+- 2026-09-09：AT-003 取证脚本兼容真实 API 形态；脚本支持 `standard_type`/`standard_version` 拆分字段、展开标准输入绑定的文件哈希，并优先从 properties Artifact 读取 MolP-PC 科学元数据。
+- 2026-09-09：MolP-PC legacy 标准化权重证据补齐；`runtime_ref` 与 `weights_ref` 改为从 Tool Package manifest 读取，避免平台验收记录出现 `weights_ref=unknown`。
 
 ## 下一步候选
 
-1. AT-003 平台工具调用真实运行：在具备 PubChem 网络和 MolP-PC runtime 的平台环境中执行一次 smoke，并用 API 取证脚本归档 task ID、输入哈希、ToolVersion 和输出 ArtifactVersion。
-2. AT-003 平台 smoke 自动化：如需进一步自动发起运行，再基于平台 Workflow API 封装 runner；不得用 `model/MolP-PC/platform_run.sh` 自动化结果替代平台任务验收。
-3. Artifact 检索扩展：如产物库规模继续增大，再评估模型族聚合筛选或常用筛选项前端表单化。
+1. AT-003 平台 smoke 自动化：如需进一步自动发起运行，再基于平台 Workflow API 封装 runner；不得用 `model/MolP-PC/platform_run.sh` 自动化结果替代平台任务验收。
+2. Artifact 检索扩展：如产物库规模继续增大，再评估模型族聚合筛选或常用筛选项前端表单化。

@@ -41,6 +41,7 @@ async def append_legacy_standard_result(
             output_result=output_result,
             output_file_ids=output_file_ids,
             source_task_id=source_task_id,
+            tool_version_config=tool_version_config,
         )
     elif _declares_standard_output(tool_version_config, "affinity", "molecule_table@1"):
         standard_result = await _legacy_msign_result_v2(
@@ -76,12 +77,7 @@ def _declares_standard_output(config: dict[str, Any], name: str, standard_type: 
 
 
 def _declared_standard_outputs(config: dict[str, Any]) -> list[dict[str, Any]]:
-    if not isinstance(config, dict):
-        return []
-    manifest = config.get("tool_package_manifest")
-    tool_package = config.get("tool_package")
-    if not isinstance(manifest, dict) and isinstance(tool_package, dict):
-        manifest = tool_package.get("manifest")
+    manifest = _tool_package_manifest(config)
     if isinstance(manifest, dict):
         artifacts = manifest.get("artifacts")
         outputs = artifacts.get("outputs") if isinstance(artifacts, dict) else None
@@ -91,6 +87,16 @@ def _declared_standard_outputs(config: dict[str, Any]) -> list[dict[str, Any]]:
     artifacts = config.get("artifacts")
     outputs = artifacts.get("outputs") if isinstance(artifacts, dict) else None
     return [item for item in outputs or [] if isinstance(item, dict)]
+
+
+def _tool_package_manifest(config: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(config, dict):
+        return {}
+    manifest = config.get("tool_package_manifest")
+    tool_package = config.get("tool_package")
+    if not isinstance(manifest, dict) and isinstance(tool_package, dict):
+        manifest = tool_package.get("manifest")
+    return manifest if isinstance(manifest, dict) else {}
 
 
 async def _legacy_lvpocket_result_v2(
@@ -168,6 +174,7 @@ async def _legacy_molp_pc_result_v2(
     output_result: dict[str, Any],
     output_file_ids: list[str],
     source_task_id: str,
+    tool_version_config: dict[str, Any],
 ) -> dict[str, Any] | None:
     legacy = output_result.get("result")
     if not isinstance(legacy, dict):
@@ -187,7 +194,7 @@ async def _legacy_molp_pc_result_v2(
         return None
     table_ref = _standard_file_ref(file_records, prediction_path)
 
-    scientific_metadata = _legacy_molp_pc_scientific_metadata()
+    scientific_metadata = _legacy_molp_pc_scientific_metadata(tool_version_config)
     metadata = _molecule_table_metadata(
         table_record,
         source_task_id=source_task_id,
@@ -263,18 +270,48 @@ _MOLP_PC_TASK_GROUPS = [
 ]
 
 
-def _legacy_molp_pc_scientific_metadata() -> dict[str, str]:
+def _legacy_molp_pc_scientific_metadata(tool_version_config: dict[str, Any]) -> dict[str, str]:
+    manifest = _tool_package_manifest(tool_version_config)
+    metadata = manifest.get("metadata") if isinstance(manifest.get("metadata"), dict) else {}
+    version = str(metadata.get("version") or "0.1.1")
     return {
-        "model_version": "0.1.1",
-        "runtime_ref": "local_runtime:legacy_molp_pc",
-        "weights_ref": "unknown",
-        "endpoint_ref": "local_runtime:molp-pc-property-prediction@0.1.1",
+        "model_version": version,
+        "runtime_ref": _legacy_molp_pc_runtime_ref(manifest),
+        "weights_ref": _legacy_molp_pc_weights_ref(manifest),
+        "endpoint_ref": f"local_runtime:molp-pc-property-prediction@{version}",
         "evidence_level": "engineering_smoke_only",
         "applicability_domain_status": "unknown",
         "unit_or_label_policy": "per_endpoint_definition_or_unknown",
         "model_card_ref": "example/MolP-PC/tool-package-v2/docs/model-card.md",
         "verification_record_ref": "example/MolP-PC/tool-package-v2/docs/verification-record.md",
     }
+
+
+def _legacy_molp_pc_runtime_ref(manifest: dict[str, Any]) -> str:
+    runtime = manifest.get("runtime") if isinstance(manifest.get("runtime"), dict) else {}
+    artifacts = runtime.get("artifacts") if isinstance(runtime.get("artifacts"), dict) else {}
+    primary = artifacts.get("primary") if isinstance(artifacts.get("primary"), dict) else {}
+    image = str(primary.get("image") or "").strip()
+    image_digest = str(primary.get("image_digest") or "").strip()
+    if image and image_digest:
+        return f"container:{image}@{image_digest}"
+
+    fallback = artifacts.get("fallback") if isinstance(artifacts.get("fallback"), dict) else {}
+    fallback_uri = str(fallback.get("uri") or "").strip()
+    fallback_sha256 = str(fallback.get("sha256") or "").strip()
+    if fallback_uri and fallback_sha256:
+        return f"conda_pack:{fallback_uri}#sha256:{fallback_sha256}"
+    return "local_runtime:legacy_molp_pc"
+
+
+def _legacy_molp_pc_weights_ref(manifest: dict[str, Any]) -> str:
+    runtime = manifest.get("runtime") if isinstance(manifest.get("runtime"), dict) else {}
+    weights = runtime.get("weights") if isinstance(runtime.get("weights"), dict) else {}
+    manifest_uri = str(weights.get("manifest_uri") or "").strip()
+    manifest_sha256 = str(weights.get("manifest_sha256") or "").strip()
+    if manifest_uri and manifest_sha256:
+        return f"{manifest_uri}#sha256:{manifest_sha256}"
+    return "unknown"
 
 
 def _legacy_molp_pc_report(

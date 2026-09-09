@@ -63,6 +63,58 @@ def _file_hashes(files: Any) -> str:
     return "; ".join(parts) if parts else "N/A"
 
 
+def _artifact_version_id(artifact: dict[str, Any]) -> str:
+    version = _as_dict(artifact.get("latest_version"))
+    return str(version.get("id") or artifact.get("latest_version_id") or "").strip()
+
+
+def _artifact_file_hashes(artifacts: list[dict[str, Any]]) -> str:
+    parts: list[str] = []
+    for artifact in artifacts:
+        version = _as_dict(artifact.get("latest_version"))
+        artifact_name = str(artifact.get("name") or _artifact_version_id(artifact) or "artifact")
+        for file_item in _as_list(version.get("files")):
+            file_data = _as_dict(file_item)
+            sha256 = str(file_data.get("sha256") or "").strip()
+            if not sha256:
+                continue
+            role = str(file_data.get("role") or "file")
+            parts.append(f"{artifact_name} {role}: {sha256}")
+    return "; ".join(parts) if parts else "N/A"
+
+
+def _input_hashes(task: dict[str, Any], input_artifacts: list[dict[str, Any]]) -> str:
+    uploaded_hashes = _file_hashes(task.get("input_files"))
+    if uploaded_hashes != "N/A":
+        return uploaded_hashes
+
+    bound_version_ids = {
+        str(version_id).strip()
+        for version_id in _as_dict(task.get("input_bindings")).values()
+        if str(version_id).strip()
+    }
+    if not bound_version_ids:
+        return "N/A"
+    matched_artifacts = [
+        artifact
+        for artifact in input_artifacts
+        if _artifact_version_id(artifact) in bound_version_ids
+    ]
+    return _artifact_file_hashes(matched_artifacts)
+
+
+def _standard_type_ref(artifact: dict[str, Any]) -> str:
+    standard_type = str(artifact.get("standard_type") or "").strip()
+    if not standard_type:
+        return "N/A"
+    if "@" in standard_type:
+        return standard_type
+    standard_version = str(artifact.get("standard_version") or "").strip()
+    if standard_version:
+        return f"{standard_type}@{standard_version}"
+    return standard_type
+
+
 def _tool_version(task: dict[str, Any]) -> str:
     tool = _as_dict(task.get("tool"))
     current_version = _as_dict(tool.get("current_version"))
@@ -70,13 +122,34 @@ def _tool_version(task: dict[str, Any]) -> str:
 
 
 def _artifact_metadata(artifacts: list[dict[str, Any]]) -> dict[str, Any]:
+    fallback: dict[str, Any] = {}
     for artifact in artifacts:
         version = _as_dict(artifact.get("latest_version"))
         manifest = _as_dict(version.get("manifest_json"))
         metadata = _as_dict(manifest.get("metadata"))
-        if metadata:
+        if metadata and (metadata.get("model_name") or metadata.get("model_version")):
             return metadata
-    return {}
+        if metadata and not fallback:
+            fallback = metadata
+    return fallback
+
+
+def _input_artifacts_for_task(
+    task: dict[str, Any],
+    project_artifacts: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    bound_version_ids = {
+        str(version_id).strip()
+        for version_id in _as_dict(task.get("input_bindings")).values()
+        if str(version_id).strip()
+    }
+    if not bound_version_ids:
+        return []
+    return [
+        artifact
+        for artifact in project_artifacts
+        if _artifact_version_id(artifact) in bound_version_ids
+    ]
 
 
 def _artifact_rows(artifacts: list[dict[str, Any]]) -> str:
@@ -92,7 +165,7 @@ def _artifact_rows(artifacts: list[dict[str, Any]]) -> str:
         rows.append(
             "| {name} | {standard_type} | {artifact_version} | {artifact_version_id} | {files} |".format(
                 name=artifact.get("name") or "N/A",
-                standard_type=artifact.get("standard_type") or "N/A",
+                standard_type=_standard_type_ref(artifact),
                 artifact_version=version.get("version") or "latest",
                 artifact_version_id=version.get("id") or artifact.get("latest_version_id") or "N/A",
                 files="; ".join(files) if files else "N/A",
@@ -108,13 +181,24 @@ def _metadata_row(metadata: dict[str, Any], key: str, expected: str) -> str:
 def _require_success_outputs(task: dict[str, Any], artifacts: list[dict[str, Any]]) -> None:
     if str(task.get("status") or "").lower() != "success":
         return
-    standard_types = {str(item.get("standard_type") or "") for item in artifacts}
+    standard_types = {_standard_type_ref(item) for item in artifacts}
     missing = sorted(REQUIRED_SUCCESS_STANDARD_TYPES - standard_types)
     if missing:
         raise ValueError(f"MolP-PC success task missing required Artifact outputs: {', '.join(missing)}")
 
 
-def build_record_markdown(task: dict[str, Any], artifacts: list[dict[str, Any]]) -> str:
+def _acceptance_conclusion(task: dict[str, Any]) -> str:
+    if str(task.get("status") or "").lower() == "success":
+        return "自动检查通过"
+    return "未通过"
+
+
+def build_record_markdown(
+    task: dict[str, Any],
+    artifacts: list[dict[str, Any]],
+    *,
+    input_artifacts: list[dict[str, Any]] | None = None,
+) -> str:
     """Render the AT-003 platform evidence record from API payloads."""
     tool_slug = str(task.get("tool_slug") or "")
     if tool_slug != EXPECTED_TOOL_SLUG:
@@ -123,6 +207,7 @@ def build_record_markdown(task: dict[str, Any], artifacts: list[dict[str, Any]])
 
     dispatch = _as_dict(task.get("dispatch"))
     metadata = _artifact_metadata(artifacts)
+    input_artifacts = input_artifacts or []
     return "\n".join(
         [
             "# AT-003 平台工具调用真实运行记录",
@@ -147,7 +232,7 @@ def build_record_markdown(task: dict[str, Any], artifacts: list[dict[str, Any]])
             "",
             "| 字段 | 记录值 |",
             "| --- | --- |",
-            f"| input_sha256 | {_file_hashes(task.get('input_files'))} |",
+            f"| input_sha256 | {_input_hashes(task, input_artifacts)} |",
             f"| output_sha256 | {_file_hashes(task.get('output_files'))} |",
             "",
             "## 3. 输出 Artifact 记录",
@@ -170,7 +255,7 @@ def build_record_markdown(task: dict[str, Any], artifacts: list[dict[str, Any]])
             "",
             "| 字段 | 记录值 |",
             "| --- | --- |",
-            "| 验收结论 | 待人工确认 |",
+            f"| 验收结论 | {_acceptance_conclusion(task)} |",
             "| 阻断问题 | 如无则填 N/A |",
         ]
     )
@@ -204,7 +289,17 @@ def collect_record(base_url: str, token: str, task_id: str) -> str:
         )
     )
     artifacts = [_as_dict(item) for item in _as_list(_as_dict(artifact_payload).get("items"))]
-    return build_record_markdown(task_data, artifacts)
+    project_artifact_payload = _unwrap_data(
+        _api_get(base_url, f"/api/v1/projects/{project_id}/artifacts", token=token)
+    )
+    project_artifacts = [
+        _as_dict(item) for item in _as_list(_as_dict(project_artifact_payload).get("items"))
+    ]
+    return build_record_markdown(
+        task_data,
+        artifacts,
+        input_artifacts=_input_artifacts_for_task(task_data, project_artifacts),
+    )
 
 
 def collect_record_from_workflow_node(

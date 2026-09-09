@@ -39,7 +39,8 @@ def test_at003_evidence_record_is_rendered_from_platform_task_and_artifacts() ->
     artifacts = [
         {
             "name": "molp-pc-properties",
-            "standard_type": "molecule_table@1",
+            "standard_type": "molecule_table",
+            "standard_version": 1,
             "latest_version": {
                 "id": "artifact-version-properties",
                 "sha256": "c" * 64,
@@ -59,7 +60,8 @@ def test_at003_evidence_record_is_rendered_from_platform_task_and_artifacts() ->
         },
         {
             "name": "molp-pc-report",
-            "standard_type": "run_report@1",
+            "standard_type": "run_report",
+            "standard_version": 1,
             "latest_version": {"id": "artifact-version-report", "files": []},
         },
     ]
@@ -78,6 +80,61 @@ def test_at003_evidence_record_is_rendered_from_platform_task_and_artifacts() ->
     assert "run_report@1" in record
     assert "engineering_smoke_only" in record
     assert "不得记录 `model/MolP-PC/platform_run.sh`" in record
+    assert "| 验收结论 | 自动检查通过 |" in record
+
+
+def test_at003_evidence_records_bound_input_artifact_hashes() -> None:
+    module = _load_script_module()
+    task = {
+        "id": "task-molp-pc-1",
+        "project_id": "project-1",
+        "tool_slug": "molp-pc-property-prediction",
+        "status": "success",
+        "input_bindings": {"molecules": "artifact-version-rdkit"},
+        "input_files": [],
+    }
+    output_artifacts = [
+        {
+            "name": "molp-pc-report",
+            "standard_type": "run_report",
+            "standard_version": 1,
+            "latest_version": {
+                "id": "artifact-version-report",
+                "files": [],
+                "manifest_json": {"metadata": {"evidence_level": "engineering_smoke_only"}},
+            },
+        },
+        {
+            "name": "molp-pc-properties",
+            "standard_type": "molecule_table",
+            "standard_version": 1,
+            "latest_version": {
+                "id": "artifact-version-properties",
+                "files": [],
+                "manifest_json": {
+                    "metadata": {
+                        "model_name": "MolP-PC",
+                        "model_version": "0.1.1",
+                    }
+                },
+            },
+        },
+    ]
+    input_artifacts = [
+        {
+            "name": "rdkit-properties",
+            "latest_version": {
+                "id": "artifact-version-rdkit",
+                "files": [{"role": "table_file", "sha256": "e" * 64}],
+            },
+        }
+    ]
+
+    record = module.build_record_markdown(task, output_artifacts, input_artifacts=input_artifacts)
+
+    assert "input_sha256" in record
+    assert "eeeeeeee" in record
+    assert "| model_name | MolP-PC | MolP-PC |" in record
 
 
 def test_at003_evidence_rejects_non_platform_molp_pc_task() -> None:
