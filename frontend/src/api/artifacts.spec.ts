@@ -17,6 +17,7 @@ describe('getProjectArtifacts', () => {
     vi.mocked(get).mockResolvedValueOnce(response as never)
 
     const result = await getProjectArtifacts('project-1', {
+      metadata_model_name: 'MolP-PC',
       metadata_model_version: 'MolP-PC 0.1.1',
       metadata_evidence_level: 'engineering_smoke_only',
       metadata_endpoint_ref: 'local_runtime:molp-pc-property-prediction@0.1.1',
@@ -24,6 +25,7 @@ describe('getProjectArtifacts', () => {
     })
 
     expect(get).toHaveBeenCalledWith('/projects/project-1/artifacts', {
+      metadata_model_name: 'MolP-PC',
       metadata_model_version: 'MolP-PC 0.1.1',
       metadata_evidence_level: 'engineering_smoke_only',
       metadata_endpoint_ref: 'local_runtime:molp-pc-property-prediction@0.1.1',

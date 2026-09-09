@@ -154,11 +154,14 @@ def _artifact_metadata_value(artifact: Artifact, key: str) -> str | None:
 def _matches_delivery_metadata(
     artifact: Artifact,
     *,
+    model_name: str | None,
     model_version: str | None,
     evidence_level: str | None,
     endpoint_ref: str | None,
     applicability_domain_status: str | None,
 ) -> bool:
+    if model_name and _artifact_metadata_value(artifact, "model_name") != model_name:
+        return False
     if model_version and _artifact_metadata_value(artifact, "model_version") != model_version:
         return False
     if evidence_level and _artifact_metadata_value(artifact, "evidence_level") != evidence_level:
@@ -500,6 +503,7 @@ async def list_artifacts(
     standard_type: str | None = None,
     source_task_id: str | None = None,
     file_role: str | None = None,
+    metadata_model_name: str | None = None,
     metadata_model_version: str | None = None,
     metadata_evidence_level: str | None = None,
     metadata_endpoint_ref: str | None = None,
@@ -555,6 +559,7 @@ async def list_artifacts(
         )
         and _matches_delivery_metadata(
             item,
+            model_name=metadata_model_name,
             model_version=metadata_model_version,
             evidence_level=metadata_evidence_level,
             endpoint_ref=metadata_endpoint_ref,

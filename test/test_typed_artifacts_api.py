@@ -313,6 +313,7 @@ async def test_project_artifacts_can_filter_by_delivery_metadata(
         status="available",
         manifest_json={
             "metadata": {
+                "model_name": "MolP-PC",
                 "model_version": "MolP-PC 0.1.1",
                 "evidence_level": "engineering_smoke_only",
                 "endpoint_ref": "local_runtime:molp-pc-property-prediction@0.1.1",
@@ -332,6 +333,7 @@ async def test_project_artifacts_can_filter_by_delivery_metadata(
         status="available",
         manifest_json={
             "metadata": {
+                "model_name": "OtherModel",
                 "model_version": "MolP-PC 0.1.1",
                 "evidence_level": "engineering_smoke_only",
                 "endpoint_ref": "remote:other-endpoint@1.0",
@@ -362,6 +364,16 @@ async def test_project_artifacts_can_filter_by_delivery_metadata(
     items = listed.json()["data"]["items"]
     assert [item["name"] for item in items] == ["molp-pc-report"]
     assert items[0]["latest_version"]["manifest_json"]["metadata"]["model_version"] == "MolP-PC 0.1.1"
+
+    listed_by_model_name = await client.get(
+        f"/api/v1/projects/{project.id}/artifacts",
+        headers={"Authorization": "Bearer owner"},
+        params={"metadata_model_name": "MolP-PC"},
+    )
+
+    assert listed_by_model_name.status_code == 200
+    model_name_items = listed_by_model_name.json()["data"]["items"]
+    assert [item["name"] for item in model_name_items] == ["molp-pc-report"]
 
 
 @pytest.mark.asyncio
