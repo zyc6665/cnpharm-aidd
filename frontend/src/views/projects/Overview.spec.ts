@@ -4,12 +4,15 @@ import ProjectOverview from './Overview.vue'
 import { getProjectOverview } from '@/api/projects'
 import { getProjectArtifacts } from '@/api/artifacts'
 
+const routerReplace = vi.fn()
+let routeQuery: Record<string, string | undefined> = {}
+
 vi.mock('vue-router', async importOriginal => {
   const actual = await importOriginal<typeof import('vue-router')>()
   return {
     ...actual,
-    useRoute: () => ({ params: { projectId: 'project-1' } }),
-    useRouter: () => ({ push: vi.fn() })
+    useRoute: () => ({ params: { projectId: 'project-1' }, query: routeQuery }),
+    useRouter: () => ({ push: vi.fn(), replace: routerReplace })
   }
 })
 
@@ -114,6 +117,7 @@ function renderOverview() {
 describe('ProjectOverview', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    routeQuery = {}
     vi.mocked(getProjectOverview).mockResolvedValue({ data: overview } as never)
     vi.mocked(getProjectArtifacts).mockResolvedValue({ data: { items: [] } } as never)
   })
@@ -189,5 +193,29 @@ describe('ProjectOverview', () => {
     })
     expect(wrapper.text()).toContain('MolP-PC ADMET table')
     expect(wrapper.text()).not.toContain('EGFR pocket')
+  })
+
+  it('Artifact 筛选视图写入 URL 并可从 URL 恢复', async () => {
+    vi.mocked(getProjectArtifacts).mockResolvedValue({ data: { items: [] } } as never)
+    const wrapper = renderOverview()
+    await flushPromises()
+
+    await wrapper.findAll('[data-testid="artifact-filter-preset"]')
+      .find(button => button.text() === 'MolP-PC')!
+      .trigger('click')
+    await flushPromises()
+
+    expect(routerReplace).toHaveBeenCalledWith({ query: { artifact_filter: 'molp_pc' } })
+
+    vi.clearAllMocks()
+    routeQuery = { artifact_filter: 'molecule_table' }
+    vi.mocked(getProjectOverview).mockResolvedValue({ data: overview } as never)
+    vi.mocked(getProjectArtifacts).mockResolvedValue({ data: { items: [] } } as never)
+    renderOverview()
+    await flushPromises()
+
+    expect(getProjectArtifacts).toHaveBeenCalledWith('project-1', {
+      standard_type: 'molecule_table'
+    })
   })
 })

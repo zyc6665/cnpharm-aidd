@@ -6,7 +6,8 @@ import {
   formatProjectResourceSize,
   formatProjectResourceTime,
   getProjectArtifactTypeLabel,
-  getProjectOverviewStatCards
+  getProjectOverviewStatCards,
+  resolveProjectArtifactFilterPreset
 } from './overview'
 
 function artifact(overrides: Partial<TypedArtifact> = {}): TypedArtifact {
@@ -78,4 +79,9 @@ test('项目 Artifact 常用筛选预设映射到后端检索参数', () => {
       ['molp_pc', 'MolP-PC', { metadata_model_name: 'MolP-PC' }]
     ]
   )
+})
+
+test('项目 Artifact 筛选预设可从 URL key 恢复', () => {
+  assert.equal(resolveProjectArtifactFilterPreset('molp_pc').params?.metadata_model_name, 'MolP-PC')
+  assert.equal(resolveProjectArtifactFilterPreset('missing').key, 'recent')
 })

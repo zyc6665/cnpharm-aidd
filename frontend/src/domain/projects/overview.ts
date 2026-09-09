@@ -23,6 +23,12 @@ export const PROJECT_ARTIFACT_FILTER_PRESETS: readonly ProjectArtifactFilterPres
   { key: 'molp_pc', label: 'MolP-PC', params: { metadata_model_name: 'MolP-PC' } }
 ]
 
+export function resolveProjectArtifactFilterPreset(key: unknown): ProjectArtifactFilterPreset {
+  if (typeof key !== 'string') return PROJECT_ARTIFACT_FILTER_PRESETS[0]!
+  return PROJECT_ARTIFACT_FILTER_PRESETS.find(preset => preset.key === key)
+    ?? PROJECT_ARTIFACT_FILTER_PRESETS[0]!
+}
+
 export function getProjectOverviewStatCards(
   counts: ProjectOverviewCounts | undefined
 ): ProjectOverviewStatCard[] {

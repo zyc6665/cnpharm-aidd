@@ -150,7 +150,7 @@
 
 <script setup lang="ts">
   import { computed, onMounted, ref } from 'vue'
-  import { useRoute } from 'vue-router'
+  import { useRoute, useRouter } from 'vue-router'
   import { getProjectOverview } from '@/api/projects'
   import { buildArtifactVersionDownloadUrl, getProjectArtifacts } from '@/api/artifacts'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
@@ -162,12 +162,14 @@
     formatProjectResourceTime,
     getProjectArtifactTypeLabel,
     getProjectOverviewStatCards,
+    resolveProjectArtifactFilterPreset,
     type ProjectArtifactFilterPreset
   } from '@/domain/projects'
   import type { ProjectOverview } from '@/types/projects'
   import type { TypedArtifact } from '@/types/artifacts'
 
   const route = useRoute()
+  const router = useRouter()
   const projectId = computed(() => String(route.params.projectId || ''))
   const projectTasksPath = computed(() => buildProjectTaskPath(projectId.value))
   const projectWorkflowPath = computed(() => buildProjectWorkflowPath(projectId.value))
@@ -192,9 +194,14 @@
     loadError.value = false
     try {
       overview.value = (await getProjectOverview(projectId.value)).data
-      activeArtifactFilterKey.value = 'recent'
-      artifactFilterResults.value = null
-      artifactFilterError.value = false
+      const preset = resolveProjectArtifactFilterPreset(route.query.artifact_filter)
+      if (preset.key === 'recent') {
+        activeArtifactFilterKey.value = 'recent'
+        artifactFilterResults.value = null
+        artifactFilterError.value = false
+      } else {
+        await selectArtifactFilter(preset, false)
+      }
     } catch {
       loadError.value = true
     } finally {
@@ -202,9 +209,17 @@
     }
   }
 
-  async function selectArtifactFilter(preset: ProjectArtifactFilterPreset) {
+  async function selectArtifactFilter(preset: ProjectArtifactFilterPreset, syncRoute = true) {
     activeArtifactFilterKey.value = preset.key
     artifactFilterError.value = false
+    if (syncRoute) {
+      void router.replace({
+        query: {
+          ...route.query,
+          artifact_filter: preset.key === 'recent' ? undefined : preset.key
+        }
+      })
+    }
     if (!preset.params) {
       artifactFilterResults.value = null
       return
