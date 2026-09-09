@@ -110,7 +110,9 @@ async function loadProteinArtifacts() {
     return
   }
 
-  const response = await getProjectArtifacts(projectId.value)
+  const response = await getProjectArtifacts(projectId.value, {
+    standard_type: 'protein_structure',
+  })
   proteinArtifacts.value = response.data.items.filter(isProteinArtifact)
   const optionValues = new Set(proteinArtifactOptions.value.map(option => option.value))
   if (

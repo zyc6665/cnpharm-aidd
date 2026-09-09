@@ -168,7 +168,9 @@ describe('ResearchView', () => {
     const wrapper = renderResearch()
     await flushPromises()
 
-    expect(getProjectArtifacts).toHaveBeenCalledWith('project-1')
+    expect(getProjectArtifacts).toHaveBeenCalledWith('project-1', {
+      standard_type: 'protein_structure',
+    })
     expect(wrapper.text()).toContain('target.pdb')
 
     await wrapper.get('textarea').setValue('寻找 target.pdb 的可成药口袋')

@@ -76,6 +76,7 @@
 - 2026-09-09：AT-003 取证脚本兼容真实 API 形态；脚本支持 `standard_type`/`standard_version` 拆分字段、展开标准输入绑定的文件哈希，并优先从 properties Artifact 读取 MolP-PC 科学元数据。
 - 2026-09-09：MolP-PC legacy 标准化权重证据补齐；`runtime_ref` 与 `weights_ref` 改为从 Tool Package manifest 读取，避免平台验收记录出现 `weights_ref=unknown`。
 - 2026-09-09：AT-003 平台 smoke 自动化补齐；新增 `backend/scripts/run_at003_platform_smoke.py`，脚本通过 `prepare-preview`、`/api/v1/tasks`、任务详情轮询和取证脚本完成平台端 smoke，不调用本地 MolP-PC wrapper。
+- 2026-09-09：研究页 Artifact 候选检索收敛；蛋白结构候选选择开始直接按 `standard_type=protein_structure` 请求项目 Artifact 列表，避免全量拉取后再本地过滤。
 
 ## 下一步候选
 
