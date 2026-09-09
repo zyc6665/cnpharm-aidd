@@ -44,12 +44,33 @@
       <div class="overview-grid">
         <section class="overview-section">
           <div class="section-heading">
-            <h2>最近 Artifact</h2>
+            <h2>Artifact 检索</h2>
             <router-link :to="`/projects/${projectId}/lineage`">Artifact 谱系</router-link>
           </div>
-          <div v-if="overview.artifacts.length" class="resource-list">
+          <div class="artifact-filter-bar" data-testid="artifact-filter-bar">
+            <button
+              v-for="preset in artifactFilterPresets"
+              :key="preset.key"
+              type="button"
+              data-testid="artifact-filter-preset"
+              class="artifact-filter-preset"
+              :class="{ 'is-active': preset.key === activeArtifactFilterKey }"
+              :disabled="artifactFilterLoading"
+              @click="selectArtifactFilter(preset)"
+            >
+              {{ preset.label }}
+            </button>
+          </div>
+          <a-alert
+            v-if="artifactFilterError"
+            class="overview-alert"
+            type="error"
+            show-icon
+            message="Artifact 检索失败"
+          />
+          <div v-if="displayedArtifacts.length" class="resource-list">
             <a
-              v-for="artifact in overview.artifacts"
+              v-for="artifact in displayedArtifacts"
               :key="artifact.id"
               :href="artifactDownloadUrl(artifact)"
               class="resource-row"
@@ -61,7 +82,7 @@
               >
             </a>
           </div>
-          <a-empty v-else description="暂无 Artifact" />
+          <a-empty v-else :description="artifactEmptyDescription" />
         </section>
 
         <section class="overview-section">
@@ -131,15 +152,17 @@
   import { computed, onMounted, ref } from 'vue'
   import { useRoute } from 'vue-router'
   import { getProjectOverview } from '@/api/projects'
-  import { buildArtifactVersionDownloadUrl } from '@/api/artifacts'
+  import { buildArtifactVersionDownloadUrl, getProjectArtifacts } from '@/api/artifacts'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import {
+    PROJECT_ARTIFACT_FILTER_PRESETS,
     buildProjectTaskPath,
     buildProjectWorkflowPath,
     formatProjectResourceSize,
     formatProjectResourceTime,
     getProjectArtifactTypeLabel,
-    getProjectOverviewStatCards
+    getProjectOverviewStatCards,
+    type ProjectArtifactFilterPreset
   } from '@/domain/projects'
   import type { ProjectOverview } from '@/types/projects'
   import type { TypedArtifact } from '@/types/artifacts'
@@ -151,8 +174,17 @@
   const overview = ref<ProjectOverview | null>(null)
   const loading = ref(false)
   const loadError = ref(false)
+  const artifactFilterPresets = PROJECT_ARTIFACT_FILTER_PRESETS
+  const activeArtifactFilterKey = ref<ProjectArtifactFilterPreset['key']>('recent')
+  const artifactFilterResults = ref<TypedArtifact[] | null>(null)
+  const artifactFilterLoading = ref(false)
+  const artifactFilterError = ref(false)
 
   const statCards = computed(() => getProjectOverviewStatCards(overview.value?.counts))
+  const displayedArtifacts = computed(() => artifactFilterResults.value ?? overview.value?.artifacts ?? [])
+  const artifactEmptyDescription = computed(() =>
+    activeArtifactFilterKey.value === 'recent' ? '暂无 Artifact' : '没有匹配的 Artifact'
+  )
 
   async function load() {
     if (!projectId.value) return
@@ -160,10 +192,32 @@
     loadError.value = false
     try {
       overview.value = (await getProjectOverview(projectId.value)).data
+      activeArtifactFilterKey.value = 'recent'
+      artifactFilterResults.value = null
+      artifactFilterError.value = false
     } catch {
       loadError.value = true
     } finally {
       loading.value = false
+    }
+  }
+
+  async function selectArtifactFilter(preset: ProjectArtifactFilterPreset) {
+    activeArtifactFilterKey.value = preset.key
+    artifactFilterError.value = false
+    if (!preset.params) {
+      artifactFilterResults.value = null
+      return
+    }
+
+    artifactFilterLoading.value = true
+    try {
+      artifactFilterResults.value = (await getProjectArtifacts(projectId.value, preset.params)).data.items
+    } catch {
+      artifactFilterResults.value = []
+      artifactFilterError.value = true
+    } finally {
+      artifactFilterLoading.value = false
     }
   }
 
@@ -270,6 +324,31 @@
   .section-heading a {
     color: @text-tertiary;
     font-size: @font-size-sm;
+  }
+  .artifact-filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: @spacing-xs;
+    margin-bottom: @spacing-sm;
+  }
+  .artifact-filter-preset {
+    padding: 4px 9px;
+    color: @text-secondary;
+    border: 1px solid @border-color;
+    border-radius: @border-radius-base;
+    background: @bg-elevated;
+    font-size: @font-size-xs;
+    cursor: pointer;
+  }
+  .artifact-filter-preset:hover,
+  .artifact-filter-preset.is-active {
+    color: @accent-color;
+    border-color: @accent-color;
+    background: @accent-color-light;
+  }
+  .artifact-filter-preset:disabled {
+    cursor: wait;
+    opacity: 0.6;
   }
   .resource-list {
     border-top: 1px solid @border-color;

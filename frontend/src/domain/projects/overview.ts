@@ -7,6 +7,22 @@ export interface ProjectOverviewStatCard {
   value: number
 }
 
+export interface ProjectArtifactFilterPreset {
+  key: 'recent' | 'protein_structure' | 'molecule_table' | 'molp_pc'
+  label: string
+  params?: {
+    standard_type?: string
+    metadata_model_name?: string
+  }
+}
+
+export const PROJECT_ARTIFACT_FILTER_PRESETS: readonly ProjectArtifactFilterPreset[] = [
+  { key: 'recent', label: '最近' },
+  { key: 'protein_structure', label: '蛋白结构', params: { standard_type: 'protein_structure' } },
+  { key: 'molecule_table', label: '分子表格', params: { standard_type: 'molecule_table' } },
+  { key: 'molp_pc', label: 'MolP-PC', params: { metadata_model_name: 'MolP-PC' } }
+]
+
 export function getProjectOverviewStatCards(
   counts: ProjectOverviewCounts | undefined
 ): ProjectOverviewStatCard[] {

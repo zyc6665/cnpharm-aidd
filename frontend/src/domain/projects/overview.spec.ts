@@ -2,6 +2,7 @@ import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import type { TypedArtifact } from '@/types/artifacts'
 import {
+  PROJECT_ARTIFACT_FILTER_PRESETS,
   formatProjectResourceSize,
   formatProjectResourceTime,
   getProjectArtifactTypeLabel,
@@ -65,4 +66,16 @@ test('项目资源大小和时间格式保持 Overview 页面约定', () => {
   assert.equal(formatProjectResourceSize(2048), '2 KB')
   assert.equal(formatProjectResourceSize(1024 * 1024), '1.0 MB')
   assert.equal(formatProjectResourceTime('2026-07-31T08:00:00Z'), '2026-07-31 08:00')
+})
+
+test('项目 Artifact 常用筛选预设映射到后端检索参数', () => {
+  assert.deepEqual(
+    PROJECT_ARTIFACT_FILTER_PRESETS.map(item => [item.key, item.label, item.params]),
+    [
+      ['recent', '最近', undefined],
+      ['protein_structure', '蛋白结构', { standard_type: 'protein_structure' }],
+      ['molecule_table', '分子表格', { standard_type: 'molecule_table' }],
+      ['molp_pc', 'MolP-PC', { metadata_model_name: 'MolP-PC' }]
+    ]
+  )
 })

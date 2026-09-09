@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ProjectOverview from './Overview.vue'
 import { getProjectOverview } from '@/api/projects'
+import { getProjectArtifacts } from '@/api/artifacts'
 
 vi.mock('vue-router', async importOriginal => {
   const actual = await importOriginal<typeof import('vue-router')>()
@@ -14,6 +15,12 @@ vi.mock('vue-router', async importOriginal => {
 
 vi.mock('@/api/projects', () => ({
   getProjectOverview: vi.fn()
+}))
+
+vi.mock('@/api/artifacts', () => ({
+  buildArtifactVersionDownloadUrl: (artifactId: string, versionId: string) =>
+    `/api/v1/artifacts/${artifactId}/versions/${versionId}/download`,
+  getProjectArtifacts: vi.fn()
 }))
 
 const overview = {
@@ -108,6 +115,7 @@ describe('ProjectOverview', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(getProjectOverview).mockResolvedValue({ data: overview } as never)
+    vi.mocked(getProjectArtifacts).mockResolvedValue({ data: { items: [] } } as never)
   })
 
   it('展示项目总览、最近资源和进入研究会话入口', async () => {
@@ -136,5 +144,50 @@ describe('ProjectOverview', () => {
     expect(wrapper.find('[data-testid="open-research"]').attributes('href')).toBe(
       '/projects/project-1/research'
     )
+  })
+
+  it('Artifact 常用筛选调用项目 Artifact 检索接口', async () => {
+    vi.mocked(getProjectArtifacts).mockResolvedValueOnce({
+      data: {
+        items: [
+          {
+            id: 'artifact-molp-pc',
+            project_id: 'project-1',
+            artifact_type: 'molecule_table',
+            semantic_type: 'molecule_table@1',
+            standard_type: 'molecule_table',
+            standard_version: 1,
+            name: 'MolP-PC ADMET table',
+            latest_version: {
+              id: 'artifact-version-molp-pc',
+              version: 1,
+              filename: 'molp-pc.csv',
+              content_type: 'text/csv',
+              size_bytes: 4096,
+              sha256: 'b'.repeat(64),
+              status: 'available',
+              created_at: '2026-09-09T00:00:00Z'
+            },
+            created_at: '2026-09-09T00:00:00Z',
+            updated_at: '2026-09-09T00:00:00Z'
+          }
+        ]
+      }
+    } as never)
+    const wrapper = renderOverview()
+    await flushPromises()
+
+    const molpPcFilter = wrapper.findAll('[data-testid="artifact-filter-preset"]')
+      .find(button => button.text() === 'MolP-PC')
+    expect(molpPcFilter).toBeDefined()
+
+    await molpPcFilter!.trigger('click')
+    await flushPromises()
+
+    expect(getProjectArtifacts).toHaveBeenCalledWith('project-1', {
+      metadata_model_name: 'MolP-PC'
+    })
+    expect(wrapper.text()).toContain('MolP-PC ADMET table')
+    expect(wrapper.text()).not.toContain('EGFR pocket')
   })
 })

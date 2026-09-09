@@ -80,7 +80,8 @@
 - 2026-09-09：Artifact 模型名称检索补齐；项目 Artifact 列表支持按 `manifest_json.metadata.model_name` 筛选，前端 API 类型同步透传，便于直接定位 MolP-PC 工具族产物。
 - 2026-09-09：工作流流程模式入口恢复；手动工作台左侧栏重新接入 Canvas Preset 选择器，可直接切换到 `PubChem 到基础 ADMET` 并展示 MolP-PC 节点。
 - 2026-09-09：AT-003 浏览器端演示补测；新增 Playwright smoke 覆盖项目工作流页面、流程模式选择、`PubChem 到基础 ADMET` 预设切换和 MolP-PC 节点展示。
+- 2026-09-09：Artifact 常用筛选 UI 补齐；项目总览的 Artifact 区开始提供最近、蛋白结构、分子表格和 MolP-PC 快捷筛选，并复用项目 Artifact 检索 API。
 
 ## 下一步候选
 
-1. Artifact 检索扩展：如产物库规模继续增大，再评估模型族聚合筛选 UI 或保存常用筛选视图。
+1. Artifact 检索扩展：如产物库规模继续增大，再评估保存常用筛选视图。
