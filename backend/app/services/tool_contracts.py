@@ -6,6 +6,8 @@ from typing import Any
 
 from app.artifact_standards.registry import StandardArtifactRegistryError, validate_standard_artifact_roles
 from app.artifact_standards.types import normalize_platform_artifact_type
+from app.tool_packages.config_resolver import tool_package_manifest_data
+from app.tool_packages.schemas import TOOL_PACKAGE_V2_API_VERSION
 
 
 TOOL_CONTRACT_VERSION = "1.0"
@@ -56,7 +58,7 @@ def _build_tool_package_contract(
     manifest: dict[str, Any],
 ) -> dict[str, Any]:
     """Project a Tool Package manifest onto the stable contract shape."""
-    if manifest.get("api_version") == "aidd.sciminer/tool-package.v2":
+    if manifest.get("api_version") == TOOL_PACKAGE_V2_API_VERSION:
         return _build_tool_package_v2_contract(package, current_version, manifest)
 
     metadata = manifest.get("metadata") if isinstance(manifest.get("metadata"), dict) else {}
@@ -435,11 +437,7 @@ def _package_manifest_from_version(current_version: Any | None) -> dict[str, Any
     config = getattr(current_version, "config", None)
     if not isinstance(config, dict):
         return None
-    manifest = config.get("tool_package_manifest")
-    tool_package_config = config.get("tool_package")
-    if not isinstance(manifest, dict) and isinstance(tool_package_config, dict):
-        manifest = tool_package_config.get("manifest")
-    return manifest if isinstance(manifest, dict) else None
+    return tool_package_manifest_data(config)
 
 
 def _artifact_input_slot(item: dict[str, Any]) -> dict[str, Any]:

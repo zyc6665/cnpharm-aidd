@@ -28,6 +28,7 @@ from app.schemas.tools import (
     ToolExampleFileResponse,
     ToolExampleResponse,
 )
+from app.tool_packages.config_resolver import tool_package_v2_manifest_data
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -98,8 +99,8 @@ def _collect_tool_example_configs(tool: Tool, config: dict[str, Any]) -> list[di
 
 def _tool_package_parameter_config(config: dict[str, Any]) -> Optional[dict[str, Any]]:
     """提取 Tool Package v2 详情页实际使用的参数 schema。"""
-    manifest = config.get("tool_package_manifest")
-    if not isinstance(manifest, dict) or manifest.get("api_version") != "aidd.sciminer/tool-package.v2":
+    manifest = tool_package_v2_manifest_data(config)
+    if manifest is None:
         return None
     parameter_schema = manifest.get("parameters_schema")
     if not isinstance(parameter_schema, dict):

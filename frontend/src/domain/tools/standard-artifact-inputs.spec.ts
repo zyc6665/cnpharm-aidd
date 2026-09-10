@@ -4,6 +4,8 @@ import type { Tool, ToolContract } from '@/types/models'
 import {
   buildStandardInputBindings,
   filterCompatibleProjectArtifacts,
+  getStandardInputAccept,
+  missingRequiredStandardInputSlots,
   resolveToolPackageParameterSchema,
   resolveToolStandardInputSlots,
 } from './standard-artifact-inputs'
@@ -203,6 +205,29 @@ describe('standard artifact tool inputs', () => {
     })
 
     expect(bindings).toEqual({ protein: 'version-1' })
+  })
+
+  it('resolves direct upload file accept values from standard input type', () => {
+    expect(getStandardInputAccept({ name: 'protein', type: 'protein_structure@1', required: true })).toBe('.pdb')
+    expect(getStandardInputAccept({ name: 'ligand', type: 'ligand_structure@1', required: true })).toBe('.sdf')
+    expect(getStandardInputAccept({ name: 'molecules', type: 'molecule_table@1', required: true })).toBe('.csv,.json')
+    expect(getStandardInputAccept({ name: 'map', type: 'cryoem_map@1', required: true })).toBeUndefined()
+  })
+
+  it('reports only required standard input slots without a binding or upload', () => {
+    const slots = [
+      { name: 'protein', type: 'protein_structure@1', required: true },
+      { name: 'ligand', type: 'ligand_structure@1', required: true },
+      { name: 'optional', type: 'molecule_table@1', required: false },
+    ] as const
+
+    expect(
+      missingRequiredStandardInputSlots({
+        slots,
+        inputBindings: { protein: 'version-1' },
+        hasUpload: slotName => slotName === 'optional',
+      }).map(slot => slot.name)
+    ).toEqual(['ligand'])
   })
 
   it('resolves v2 parameter schema from the embedded manifest instead of legacy input schema', () => {

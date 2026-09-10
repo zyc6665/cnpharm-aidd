@@ -11,7 +11,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Optional
 
-from pydantic import ValidationError
 from sqlalchemy import select
 
 from app.database.session import get_async_session
@@ -30,6 +29,7 @@ from app.tasks.executors.ssh_paths import build_remote_paths
 from app.tasks.executors.ssh_payload import build_params_payload
 from app.tasks.executors.ssh_result import load_result_json
 from app.tasks.ssh_transport import ParamikoSSHTransport
+from app.tool_packages.config_resolver import ToolPackageConfigError, tool_package_v2_manifest
 from app.tool_packages.schemas import ToolPackageV2Manifest
 
 logger = logging.getLogger(__name__)
@@ -540,18 +540,10 @@ class SSHJobExecutor(BaseExecutor):
         }.get(str(standard_type or ""), ())
 
     def _tool_package_v2_manifest(self) -> ToolPackageV2Manifest | None:
-        manifest_data = self.config.get("tool_package_manifest")
-        tool_package_config = self.config.get("tool_package")
-        if not isinstance(manifest_data, dict) and isinstance(tool_package_config, dict):
-            manifest_data = tool_package_config.get("manifest")
-        if not isinstance(manifest_data, dict):
-            return None
-        if manifest_data.get("api_version") != "aidd.sciminer/tool-package.v2":
-            return None
         try:
-            return ToolPackageV2Manifest.model_validate(manifest_data)
-        except ValidationError as exc:
-            raise TaskExecutionError(f"Invalid Tool Package v2 manifest: {exc}") from exc
+            return tool_package_v2_manifest(self.config)
+        except ToolPackageConfigError as exc:
+            raise TaskExecutionError(str(exc)) from exc
 
     def _standard_execution_context(
         self,

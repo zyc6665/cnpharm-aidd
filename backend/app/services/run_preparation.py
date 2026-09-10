@@ -19,6 +19,7 @@ from app.services.artifact_binding_resolver import (
 from app.services.semantic_types import normalize_semantic_type
 from app.services.tool_contracts import build_tool_contract
 from app.services.workflow_artifacts import standard_artifact_file_ids
+from app.tool_packages.config_resolver import tool_package_v2_manifest_data
 
 
 RunSurface = Literal["tool_detail", "standalone_node", "workflow_node", "agent_plan"]
@@ -455,14 +456,7 @@ def _tool_config(tool_version: Any) -> dict[str, Any]:
 
 
 def _tool_accepts_standard_input_bindings(config: dict[str, Any]) -> bool:
-    manifest = config.get("tool_package_manifest")
-    tool_package = config.get("tool_package")
-    if not isinstance(manifest, dict) and isinstance(tool_package, dict):
-        manifest = tool_package.get("manifest")
-    if (
-        isinstance(manifest, dict)
-        and manifest.get("api_version") == "aidd.sciminer/tool-package.v2"
-    ):
+    if tool_package_v2_manifest_data(config) is not None:
         return True
 
     if str(config.get("type") or "") != "remote_api":

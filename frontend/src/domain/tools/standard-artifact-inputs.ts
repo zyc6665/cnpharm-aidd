@@ -152,3 +152,27 @@ export function buildStandardInputBindings(
 
   return bindings
 }
+
+export function getStandardInputAccept(slot: StandardArtifactInputSlot): string | undefined {
+  switch (slot.type) {
+    case 'protein_structure@1':
+    case 'binding_pocket@1':
+      return '.pdb'
+    case 'ligand_structure@1':
+      return '.sdf'
+    case 'molecule_table@1':
+      return '.csv,.json'
+    default:
+      return undefined
+  }
+}
+
+export function missingRequiredStandardInputSlots(input: {
+  slots: readonly StandardArtifactInputSlot[]
+  inputBindings: Record<string, string | null | undefined>
+  hasUpload: (slotName: string) => boolean
+}): StandardArtifactInputSlot[] {
+  return input.slots.filter((slot) => {
+    return slot.required && !input.inputBindings[slot.name]?.trim() && !input.hasUpload(slot.name)
+  })
+}

@@ -21,12 +21,18 @@ from app.schemas.tasks import TaskCreate
 from app.services.project_access import load_project_membership
 from app.services.project_migration import ensure_migration_project_for_owner
 from app.services.run_preparation import PreparedRun, RunContext, RunPreparationInput, prepare_run
+from app.services.standard_input_uploads import (
+    accepts_materialized_standard_uploads,
+    materialize_standard_input_uploads,
+    standard_uploads_need_default_project,
+)
 from app.tasks.direct_runner import direct_task_runner as default_direct_task_runner
 from app.tasks.naming import (
     resolve_task_display_name,
 )
 from app.tasks.resource_profile import build_task_resource_snapshot
 from app.tasks.state_machine import TaskStateMachine
+from app.tool_packages.config_resolver import tool_package_v2_manifest_data
 
 
 logger = logging.getLogger(__name__)
@@ -39,6 +45,15 @@ def _is_standard_artifact_ref(value: object) -> bool:
 def _tool_config_emits_standard_artifacts(config: object) -> bool:
     if not isinstance(config, dict):
         return False
+
+    manifest = tool_package_v2_manifest_data(config)
+    if manifest is not None:
+        artifacts = manifest.get("artifacts")
+        outputs = artifacts.get("outputs") if isinstance(artifacts, dict) else None
+        if isinstance(outputs, list):
+            for output in outputs:
+                if isinstance(output, dict) and _is_standard_artifact_ref(output.get("type")):
+                    return True
 
     artifacts = config.get("artifacts")
     if isinstance(artifacts, dict):
@@ -155,10 +170,37 @@ async def _prepare_tool_task_run(
             user_id=current_user.id,
         )
         task_extra_data["project_id"] = project_id
-    elif assign_default_project and _tool_config_emits_standard_artifacts(tool_version.config):
+    elif assign_default_project and (
+        _tool_config_emits_standard_artifacts(tool_version.config)
+        or standard_uploads_need_default_project(
+            task_data.standard_input_uploads,
+            tool_version.config,
+        )
+    ):
         project = await ensure_migration_project_for_owner(db, current_user)
         project_id = str(project.id)
         task_extra_data["project_id"] = project_id
+
+    input_bindings = _normalize_requested_input_bindings(task_data.input_bindings)
+    standard_input_uploads = _normalize_requested_input_bindings(task_data.standard_input_uploads)
+    if (
+        assign_default_project
+        and project_id
+        and standard_input_uploads
+        and accepts_materialized_standard_uploads(tool_version.config)
+    ):
+        materialized_bindings = await materialize_standard_input_uploads(
+            db,
+            current_user=current_user,
+            tool=tool,
+            tool_version=tool_version,
+            project_id=project_id,
+            standard_input_uploads=standard_input_uploads,
+        )
+        input_bindings = {**input_bindings, **materialized_bindings}
+        task_extra_data["standard_input_uploads"] = standard_input_uploads
+        task_extra_data["materialized_standard_input_bindings"] = materialized_bindings
+        standard_input_uploads = {}
 
     prepared = await prepare_run(
         db,
@@ -172,8 +214,8 @@ async def _prepare_tool_task_run(
             ),
             params=dict(task_data.params or {}),
             file_ids=list(task_data.file_ids or []),
-            input_bindings=task_data.input_bindings,
-            standard_input_uploads=task_data.standard_input_uploads,
+            input_bindings=input_bindings,
+            standard_input_uploads=standard_input_uploads,
         ),
     )
     return tool, tool_version, version_id, prepared, task_extra_data
@@ -233,7 +275,9 @@ async def create_and_schedule_tool_task(
             detail={"binding_decisions": prepared.binding_decisions},
         )
     requested_input_bindings = _normalize_requested_input_bindings(task_data.input_bindings)
-    if requested_input_bindings:
+    if prepared.input_bindings:
+        extra_data["input_bindings"] = prepared.input_bindings
+    elif requested_input_bindings:
         extra_data["input_bindings"] = requested_input_bindings
     if prepared.standard_input_uploads:
         extra_data["standard_input_uploads"] = prepared.standard_input_uploads

@@ -30,7 +30,7 @@ from app.services.tool_contracts import (
     tool_contract_to_agent_summary,
 )
 from app.services.semantic_types import normalize_semantic_type
-from app.tool_packages.schemas import ToolPackageV2Manifest
+from app.tool_packages.config_resolver import tool_package_v2_manifest
 
 
 AGENT_CAPABILITY_CONFIG_KEY = "agent_capability"
@@ -136,7 +136,7 @@ def capability_from_config(tool_slug: str, config: dict[str, Any]) -> ToolCapabi
 
 def capability_from_tool_package_config(tool_slug: str, config: dict[str, Any]) -> ToolCapability | None:
     """Build a ToolCapability from a Tool Package v2 standard Artifact contract."""
-    manifest = _tool_package_v2_manifest_from_config(config)
+    manifest = tool_package_v2_manifest(config)
     if manifest is None or manifest.exposure.agent is not True:
         return None
 
@@ -220,21 +220,6 @@ def _tool_is_agent_available(tool: Tool) -> bool:
         and current_version.is_active is True
         and current_version.deprecated is not True
     )
-
-
-def _tool_package_v2_manifest_from_config(config: dict[str, Any]) -> ToolPackageV2Manifest | None:
-    if not isinstance(config, dict):
-        return None
-    manifest_data = config.get("tool_package_manifest")
-    tool_package_config = config.get("tool_package")
-    if not isinstance(manifest_data, dict) and isinstance(tool_package_config, dict):
-        manifest_data = tool_package_config.get("manifest")
-    if not isinstance(manifest_data, dict):
-        return None
-    if manifest_data.get("api_version") != "aidd.sciminer/tool-package.v2":
-        return None
-    return ToolPackageV2Manifest.model_validate(manifest_data)
-
 
 # ---------------------------------------------------------------------------
 # DB-first capability loading (primary path)

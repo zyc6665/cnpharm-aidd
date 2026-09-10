@@ -26,6 +26,7 @@ from app.services.project_access import load_project_membership, require_project
 from app.tasks.cancellation import cancel_platform_task
 from app.tasks.direct_runner import direct_task_runner as default_direct_task_runner
 from app.tasks.service import create_and_schedule_tool_task
+from app.tool_packages.config_resolver import tool_package_v2_manifest
 from app.tool_packages.schemas import ToolPackageV2Manifest
 
 
@@ -398,30 +399,13 @@ class ProjectAgentService:
         ):
             raise HTTPException(status_code=409, detail="LVpocket 标准任务版本不可用")
 
-        manifest = self._tool_package_v2_manifest_from_config(
-            tool.current_version.config if isinstance(tool.current_version.config, dict) else {}
+        manifest = tool_package_v2_manifest(
+            tool.current_version.config if isinstance(tool.current_version.config, dict) else {},
+            ignore_invalid=True,
         )
         if manifest is None or manifest.exposure.agent is not True:
             raise HTTPException(status_code=409, detail="LVpocket 标准任务版本不可用")
         return tool, tool.current_version, manifest
-
-    @staticmethod
-    def _tool_package_v2_manifest_from_config(
-        config: dict[str, Any],
-    ) -> ToolPackageV2Manifest | None:
-        manifest_data = config.get("tool_package_manifest")
-        tool_package_config = config.get("tool_package")
-        if not isinstance(manifest_data, dict) and isinstance(tool_package_config, dict):
-            manifest_data = tool_package_config.get("manifest")
-        if (
-            not isinstance(manifest_data, dict)
-            or manifest_data.get("api_version") != "aidd.sciminer/tool-package.v2"
-        ):
-            return None
-        try:
-            return ToolPackageV2Manifest.model_validate(manifest_data)
-        except ValueError:
-            return None
 
     @staticmethod
     def _required_input_name(

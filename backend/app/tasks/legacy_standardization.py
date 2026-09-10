@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.files.storage_path import ensure_storage_dir, get_file_path
 from app.models.files import File as FileModel, FileSourceType
+from app.tool_packages.config_resolver import tool_package_manifest_data
 
 
 async def append_legacy_standard_result(
@@ -77,7 +78,7 @@ def _declares_standard_output(config: dict[str, Any], name: str, standard_type: 
 
 
 def _declared_standard_outputs(config: dict[str, Any]) -> list[dict[str, Any]]:
-    manifest = _tool_package_manifest(config)
+    manifest = tool_package_manifest_data(config)
     if isinstance(manifest, dict):
         artifacts = manifest.get("artifacts")
         outputs = artifacts.get("outputs") if isinstance(artifacts, dict) else None
@@ -87,17 +88,6 @@ def _declared_standard_outputs(config: dict[str, Any]) -> list[dict[str, Any]]:
     artifacts = config.get("artifacts")
     outputs = artifacts.get("outputs") if isinstance(artifacts, dict) else None
     return [item for item in outputs or [] if isinstance(item, dict)]
-
-
-def _tool_package_manifest(config: dict[str, Any]) -> dict[str, Any]:
-    if not isinstance(config, dict):
-        return {}
-    manifest = config.get("tool_package_manifest")
-    tool_package = config.get("tool_package")
-    if not isinstance(manifest, dict) and isinstance(tool_package, dict):
-        manifest = tool_package.get("manifest")
-    return manifest if isinstance(manifest, dict) else {}
-
 
 async def _legacy_lvpocket_result_v2(
     db: AsyncSession,
@@ -271,7 +261,7 @@ _MOLP_PC_TASK_GROUPS = [
 
 
 def _legacy_molp_pc_scientific_metadata(tool_version_config: dict[str, Any]) -> dict[str, str]:
-    manifest = _tool_package_manifest(tool_version_config)
+    manifest = tool_package_manifest_data(tool_version_config) or {}
     metadata = manifest.get("metadata") if isinstance(manifest.get("metadata"), dict) else {}
     version = str(metadata.get("version") or "0.1.1")
     return {

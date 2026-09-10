@@ -27,6 +27,7 @@ from app.services.research_board_content import (
     board_node_count,
     normalize_board_content,
 )
+from app.tool_packages.config_resolver import tool_package_manifest_data
 
 router = APIRouter(
     dependencies=[Depends(require_feature_flag("PROJECT_RESEARCH_BOARD_ENABLED"))]
@@ -193,11 +194,7 @@ def _tool_artifacts_config(tool: Tool) -> dict[str, Any]:
     if not isinstance(config, dict):
         return {}
 
-    manifest = config.get("tool_package_manifest")
-    if not isinstance(manifest, dict):
-        tool_package = config.get("tool_package")
-        if isinstance(tool_package, dict):
-            manifest = tool_package.get("manifest")
+    manifest = tool_package_manifest_data(config)
     if isinstance(manifest, dict) and isinstance(manifest.get("artifacts"), dict):
         return manifest["artifacts"]
 

@@ -1,4 +1,5 @@
-import type { SchemaProperty } from '@/types/models'
+import type { ArtifactFile, FileUploadResponse, SchemaProperty } from '@/types/models'
+import type { UploadedToolFile } from './detail-schema'
 
 const SDF_TO_PDB_TOOL_SLUG = 'msign-affinity-prediction'
 const SDF_CONVERSION_FALLBACK_ERROR = 'SDF 转 PDB 失败，请检查文件格式或后端转换服务'
@@ -68,4 +69,20 @@ export function getToolRequestErrorMessage(error: unknown): string {
 
   const message = (error as { message?: unknown })?.message
   return typeof message === 'string' && message.trim() ? message : SDF_CONVERSION_FALLBACK_ERROR
+}
+
+export function fileResponseToUploadedToolFile(file: FileUploadResponse): UploadedToolFile {
+  return {
+    fileId: String(file.id),
+    filename: file.filename,
+    downloadUrl: file.url ?? `/api/v1/files/${file.id}/download`,
+  }
+}
+
+export function artifactFileToUploadedToolFile(artifact: ArtifactFile): UploadedToolFile {
+  return {
+    fileId: artifact.id,
+    filename: artifact.filename,
+    downloadUrl: artifact.download_url,
+  }
 }

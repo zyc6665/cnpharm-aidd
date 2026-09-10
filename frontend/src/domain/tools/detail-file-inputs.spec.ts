@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { SchemaProperty } from '@/types/models'
 import {
+  artifactFileToUploadedToolFile,
+  fileResponseToUploadedToolFile,
   getSdfConversionStatusText,
   getToolFileAccept,
   getToolRequestErrorMessage,
@@ -56,5 +58,46 @@ describe('tool detail file input rules', () => {
     ).toBe('conversion service unavailable')
     expect(getToolRequestErrorMessage(new Error('invalid sdf'))).toBe('invalid sdf')
     expect(getToolRequestErrorMessage({})).toBe('SDF 转 PDB 失败，请检查文件格式或后端转换服务')
+  })
+
+  it('normalizes uploaded file API responses for task submission', () => {
+    expect(fileResponseToUploadedToolFile({ id: 'file-1', filename: 'ligand.pdb' })).toEqual({
+      fileId: 'file-1',
+      filename: 'ligand.pdb',
+      downloadUrl: '/api/v1/files/file-1/download',
+    })
+
+    expect(
+      fileResponseToUploadedToolFile({
+        id: 'file-2',
+        filename: 'protein.pdb',
+        url: '/download/protein.pdb',
+      })
+    ).toEqual({
+      fileId: 'file-2',
+      filename: 'protein.pdb',
+      downloadUrl: '/download/protein.pdb',
+    })
+  })
+
+  it('normalizes selected artifact files for task submission', () => {
+    expect(
+      artifactFileToUploadedToolFile({
+        id: 'artifact-file-1',
+        filename: 'existing.sdf',
+        size_bytes: 10,
+        source_type: 'artifact',
+        download_url: '/download/existing.sdf',
+        task_id: 'task-1',
+        tool_id: 'tool-1',
+        tool_name: 'Tool',
+        tool_slug: 'tool',
+        created_at: '2026-09-10T00:00:00Z',
+      })
+    ).toEqual({
+      fileId: 'artifact-file-1',
+      filename: 'existing.sdf',
+      downloadUrl: '/download/existing.sdf',
+    })
   })
 })

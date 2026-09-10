@@ -3,7 +3,13 @@ import type { UploadFile } from 'ant-design-vue'
 import { uploadFile } from '@/api/files'
 import { createTask, getTaskDetail, isTaskTerminalStatus, prepareTaskRun } from '@/api/tasks'
 import { useArtifactsStore, useWorkflowStore } from '@/stores'
-import { buildStandardRunTaskExtras, buildTaskSubmissionPayload } from '@/domain/tools'
+import {
+  artifactFileToUploadedToolFile,
+  buildStandardRunTaskExtras,
+  buildTaskSubmissionPayload,
+  fileResponseToUploadedToolFile,
+  type UploadedToolFile,
+} from '@/domain/tools'
 import type { ArtifactFile, TaskCreateParams, TaskRunPreparationPreview, ToolSchema } from '@/types/models'
 import { normalizeWorkflowSemanticType } from '@/workflow/semantic-types'
 
@@ -20,12 +26,6 @@ interface ContractArtifactInput {
   required_roles?: string[]
   readiness_policy?: string | null
   suggested_preparation_tool?: string | null
-}
-
-interface UploadedFileRef {
-  fileId: string
-  filename: string
-  downloadUrl: string
 }
 
 interface StandardInputBindingProjection {
@@ -134,7 +134,7 @@ export function useStandaloneNodeRun(input: {
   }
 
   function omitBoundUploadedFiles(
-    uploadedFiles: Record<string, UploadedFileRef | undefined>,
+    uploadedFiles: Record<string, UploadedToolFile | undefined>,
     boundFieldKeys: Set<string>,
   ) {
     if (boundFieldKeys.size === 0) {
@@ -150,7 +150,7 @@ export function useStandaloneNodeRun(input: {
 
   function buildStandardInputUploads(
     options: StandaloneNodeRunOptions,
-    uploadedFiles: Record<string, UploadedFileRef | undefined>,
+    uploadedFiles: Record<string, UploadedToolFile | undefined>,
     inputBindings: Record<string, string>,
   ): StandardInputUploadProjection {
     const standardInputUploads: Record<string, string> = {}
@@ -177,7 +177,7 @@ export function useStandaloneNodeRun(input: {
     options: StandaloneNodeRunOptions,
     skipArtifactIds: Set<string> = new Set(),
   ) {
-    const uploadedFiles: Record<string, UploadedFileRef | undefined> = {}
+    const uploadedFiles: Record<string, UploadedToolFile | undefined> = {}
 
     for (const [key, artifact] of Object.entries(options.selectedArtifacts)) {
       if (!artifact) {
@@ -188,11 +188,7 @@ export function useStandaloneNodeRun(input: {
         continue
       }
 
-      uploadedFiles[key] = {
-        fileId: artifact.id,
-        filename: artifact.filename,
-        downloadUrl: artifact.download_url,
-      }
+      uploadedFiles[key] = artifactFileToUploadedToolFile(artifact)
     }
 
     for (const [key, files] of Object.entries(options.fileList)) {
@@ -202,12 +198,7 @@ export function useStandaloneNodeRun(input: {
       }
 
       const response = await uploadFile(file)
-      const fileId = String(response.data.id)
-      uploadedFiles[key] = {
-        fileId,
-        filename: response.data.filename,
-        downloadUrl: response.data.url ?? `/api/v1/files/${fileId}/download`,
-      }
+      uploadedFiles[key] = fileResponseToUploadedToolFile(response.data)
     }
 
     return uploadedFiles

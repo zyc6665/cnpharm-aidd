@@ -96,54 +96,19 @@
                     :placeholder="t('tasks.namePlaceholder')"
                   />
                 </a-form-item>
-                <div v-if="standardInputSlots.length" class="standard-artifact-inputs">
-                  <div class="standard-artifact-inputs__header">
-                    <span>标准 Artifact 输入</span>
-                    <a-tag color="blue">Tool Package v2</a-tag>
-                  </div>
-                  <a-alert
-                    v-if="!currentProjectId"
-                    type="warning"
-                    show-icon
-                    message="标准 Artifact 输入需要项目上下文，请从项目内进入工具或在 URL 带 project_id。"
-                  />
-                  <a-alert
-                    v-else-if="!standardArtifactsLoading && standardProjectArtifacts.length === 0"
-                    type="info"
-                    show-icon
-                    message="当前项目暂无可绑定的标准 Artifact。"
-                  />
-                  <a-form-item
-                    v-for="slot in standardInputSlots"
-                    :key="slot.name"
-                    :label="slot.name"
-                    :required="slot.required"
-                    :extra="`标准类型：${slot.type}`"
-                  >
-                    <a-select
-                      :value="selectedStandardArtifacts[slot.name]?.latest_version.id"
-                      :disabled="!currentProjectId"
-                      :loading="standardArtifactsLoading"
-                      allow-clear
-                      show-search
-                      option-filter-prop="label"
-                      placeholder="选择项目中的兼容 ArtifactVersion"
-                      @change="handleStandardArtifactSelection(slot.name, $event)"
-                    >
-                      <a-select-option
-                        v-for="artifact in compatibleStandardArtifacts(slot)"
-                        :key="artifact.latest_version.id"
-                        :value="artifact.latest_version.id"
-                        :label="formatStandardArtifactLabel(artifact)"
-                      >
-                        <div class="standard-artifact-option">
-                          <span>{{ artifact.name || artifact.latest_version.filename }}</span>
-                          <small>{{ artifact.semantic_type }} · v{{ artifact.latest_version.version }}</small>
-                        </div>
-                      </a-select-option>
-                    </a-select>
-                  </a-form-item>
-                </div>
+                <StandardArtifactInputs
+                  v-if="standardInputSlots.length"
+                  :slots="standardInputSlots"
+                  :current-project-id="currentProjectId"
+                  :project-artifacts="standardProjectArtifacts"
+                  :loading="standardArtifactsLoading"
+                  :selected-artifacts="selectedStandardArtifacts"
+                  :upload-lists="standardInputFileList"
+                  :tool-id="tool?.id"
+                  :tool-slug="tool?.slug"
+                  @select-artifact="handleStandardArtifactSelection"
+                  @update-upload-list="handleStandardInputFileListChange"
+                />
                 <template v-for="(prop, key) in flattenedSchema?.properties" :key="key">
                   <a-form-item
                     :name="key"
@@ -421,6 +386,7 @@
   } from '@ant-design/icons-vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import ArtifactFilePicker from '@/components/tools/ArtifactFilePicker.vue'
+  import StandardArtifactInputs from '@/components/tools/StandardArtifactInputs.vue'
   import ToolExamplePanel from '@/components/tools/ToolExamplePanel.vue'
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
   import SkeletonCard from '@/components/common/SkeletonCard.vue'
@@ -444,6 +410,8 @@
     formatToolMetricCount as formatNumber,
     flattenExampleParams,
     flattenToolInputSchema,
+    artifactFileToUploadedToolFile,
+    fileResponseToUploadedToolFile,
     getSdfConversionStatusText,
     getToolFileAccept,
     getToolRequestErrorMessage,
@@ -461,12 +429,10 @@
   import {
     buildStandardInputBindings,
     buildStandardRunTaskExtras,
-    filterCompatibleProjectArtifacts,
-    formatStandardArtifactLabel,
+    missingRequiredStandardInputSlots,
     resolveToolPackageParameterSchema,
     resolveToolStandardInputSlots,
-    shouldShowSdfToPdbConverter,
-    type StandardArtifactInputSlot
+    shouldShowSdfToPdbConverter
   } from '@/domain/tools'
 
   const route = useRoute()
@@ -488,6 +454,7 @@
   const standardProjectArtifacts = ref<TypedArtifact[]>([])
   const standardArtifactsLoading = ref(false)
   const selectedStandardArtifacts = reactive<Record<string, TypedArtifact | undefined>>({})
+  const standardInputFileList = reactive<Record<string, UploadFile[]>>({})
   const example = ref<ToolExample | null>(null)
   const applyingExample = ref(false)
   const previewOpen = ref(false)
@@ -620,16 +587,20 @@
   const standardInputBindings = computed(() => {
     return buildStandardInputBindings(selectedStandardArtifactRecord.value)
   })
+  const hasStandardInputUploadSelection = (slotName: string) => {
+    return Boolean(standardInputFileList[slotName]?.length)
+  }
   const missingRequiredStandardSlots = computed(() => {
-    return standardInputSlots.value.filter(
-      slot => slot.required && !standardInputBindings.value[slot.name]
-    )
+    return missingRequiredStandardInputSlots({
+      slots: standardInputSlots.value,
+      inputBindings: standardInputBindings.value,
+      hasUpload: hasStandardInputUploadSelection
+    })
   })
 
   const canSubmit = computed(() => {
     if (!userStore.isAuthenticated) return false
     if (Object.values(sdfConversionLoading).some(Boolean)) return false
-    if (standardInputSlots.value.length && !currentProjectId.value) return false
     if (missingRequiredStandardSlots.value.length > 0) return false
     return true
   })
@@ -692,17 +663,22 @@
     }
   }
 
-  const compatibleStandardArtifacts = (slot: StandardArtifactInputSlot) => {
-    return filterCompatibleProjectArtifacts(slot, standardProjectArtifacts.value)
-  }
-
-  const handleStandardArtifactSelection = (slotName: string, versionId: unknown) => {
-    const selectedVersionId = typeof versionId === 'string' ? versionId : undefined
-    selectedStandardArtifacts[slotName] = selectedVersionId
+  const handleStandardArtifactSelection = (slotName: string, versionId?: string) => {
+    selectedStandardArtifacts[slotName] = versionId
       ? standardProjectArtifacts.value.find(
-          artifact => artifact.latest_version.id === selectedVersionId
+          artifact => artifact.latest_version.id === versionId
         )
       : undefined
+    if (selectedStandardArtifacts[slotName]) {
+      standardInputFileList[slotName] = []
+    }
+  }
+
+  const handleStandardInputFileListChange = (slotName: string, files: UploadFile[]) => {
+    standardInputFileList[slotName] = files
+    if (files.length > 0) {
+      selectedStandardArtifacts[slotName] = undefined
+    }
   }
 
   const getFieldRules = (key: string, prop: SchemaProperty): Rule[] => {
@@ -764,6 +740,9 @@
     })
     Object.keys(selectedStandardArtifacts).forEach(key => {
       selectedStandardArtifacts[key] = undefined
+    })
+    Object.keys(standardInputFileList).forEach(key => {
+      standardInputFileList[key] = []
     })
     Object.keys(exampleFiles).forEach(key => {
       exampleFiles[key] = undefined
@@ -982,12 +961,8 @@
         message.error(t('common.noData'))
         return
       }
-      if (standardInputSlots.value.length && !currentProjectId.value) {
-        message.error('标准 Artifact 输入需要项目上下文，请从项目内进入工具。')
-        return
-      }
       if (missingRequiredStandardSlots.value.length) {
-        message.error(`请选择标准 Artifact 输入：${missingRequiredStandardSlots.value.map(slot => slot.name).join(', ')}`)
+        message.error(`请选择或上传标准 Artifact 输入：${missingRequiredStandardSlots.value.map(slot => slot.name).join(', ')}`)
         return
       }
 
@@ -997,11 +972,7 @@
           continue
         }
 
-        uploadedFiles[key] = {
-          fileId: file.id.toString(),
-          filename: file.filename,
-          downloadUrl: `/api/v1/files/${file.id}/download`
-        }
+        uploadedFiles[key] = fileResponseToUploadedToolFile(file)
       }
 
       for (const [key, file] of Object.entries(convertedFiles)) {
@@ -1009,11 +980,7 @@
           continue
         }
 
-        uploadedFiles[key] = {
-          fileId: file.id.toString(),
-          filename: file.filename,
-          downloadUrl: `/api/v1/files/${file.id}/download`
-        }
+        uploadedFiles[key] = fileResponseToUploadedToolFile(file)
       }
 
       for (const [key, artifact] of Object.entries(selectedArtifacts)) {
@@ -1021,11 +988,7 @@
           continue
         }
 
-        uploadedFiles[key] = {
-          fileId: artifact.id,
-          filename: artifact.filename,
-          downloadUrl: artifact.download_url
-        }
+        uploadedFiles[key] = artifactFileToUploadedToolFile(artifact)
       }
 
       for (const [key, items] of Object.entries(fileList)) {
@@ -1035,11 +998,18 @@
         }
 
         const res = await uploadFile(fileItem.originFileObj as File)
-        uploadedFiles[key] = {
-          fileId: res.data.id.toString(),
-          filename: res.data.filename,
-          downloadUrl: `/api/v1/files/${res.data.id}/download`
+        uploadedFiles[key] = fileResponseToUploadedToolFile(res.data)
+      }
+
+      const standardInputUploads: Record<string, string> = {}
+      for (const slot of standardInputSlots.value) {
+        const fileItem = standardInputFileList[slot.name]?.[0]
+        if (!fileItem?.originFileObj) {
+          continue
         }
+
+        const res = await uploadFile(fileItem.originFileObj as File)
+        standardInputUploads[slot.name] = res.data.id.toString()
       }
 
       const payload = buildTaskSubmissionPayload({
@@ -1057,7 +1027,7 @@
         ...buildStandardRunTaskExtras({
           projectId: currentProjectId.value,
           inputBindings: standardInputBindings.value,
-          standardInputUploads: {}
+          standardInputUploads
         })
       }
 
@@ -1106,6 +1076,7 @@
         }
         for (const slot of standardInputSlots.value) {
           selectedStandardArtifacts[slot.name] = undefined
+          standardInputFileList[slot.name] = []
         }
         await loadStandardProjectArtifacts()
         await fetchExample(id)
@@ -1262,43 +1233,6 @@
 
     .tool-form-actions {
       margin-bottom: 0;
-    }
-  }
-
-  .standard-artifact-inputs {
-    margin-bottom: @spacing-lg;
-    padding: @spacing-md;
-    border: 1px solid @accent-color-border;
-    border-radius: @border-radius-base;
-    background: @accent-color-light;
-
-    :deep(.ant-alert) {
-      margin-bottom: @spacing-md;
-    }
-
-    :deep(.ant-form-item:last-child) {
-      margin-bottom: 0;
-    }
-  }
-
-  .standard-artifact-inputs__header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: @spacing-sm;
-    margin-bottom: @spacing-md;
-    font-weight: @font-weight-semibold;
-    color: @text-primary;
-  }
-
-  .standard-artifact-option {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-
-    small {
-      color: @text-color-light-tertiary;
-      font-size: @font-size-sm;
     }
   }
 

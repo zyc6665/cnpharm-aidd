@@ -28,7 +28,7 @@ from app.execution.standard_contracts import (
 from app.models.artifacts import Artifact, ArtifactLineage, ArtifactVersion, ArtifactVersionFile
 from app.models.files import File as FileModel, FileSourceType
 from app.models.tasks import Task
-from app.tool_packages.schemas import ToolPackageV2Manifest
+from app.tool_packages.config_resolver import ToolPackageConfigError, tool_package_v2_manifest
 
 
 class StandardArtifactPersistenceError(ValueError):
@@ -198,7 +198,12 @@ def _standard_result_payload(output_result: dict[str, Any]) -> dict[str, Any] | 
 
 
 def _declared_outputs_from_config(config: dict[str, Any]) -> list[DeclaredArtifactOutput]:
-    manifest = _tool_package_v2_manifest_from_config(config)
+    try:
+        manifest = tool_package_v2_manifest(config)
+    except ToolPackageConfigError as exc:
+        raise StandardArtifactPersistenceError(
+            f"Invalid Tool Package v2 manifest for standard result: {exc}"
+        ) from exc
     if manifest is not None:
         return [
             DeclaredArtifactOutput(
@@ -231,26 +236,6 @@ def _declared_outputs_from_config(config: dict[str, Any]) -> list[DeclaredArtifa
         for item in raw_outputs
         if isinstance(item, dict)
     ]
-
-
-def _tool_package_v2_manifest_from_config(config: dict[str, Any]) -> ToolPackageV2Manifest | None:
-    if not isinstance(config, dict):
-        return None
-    manifest_data = config.get("tool_package_manifest")
-    tool_package_config = config.get("tool_package")
-    if not isinstance(manifest_data, dict) and isinstance(tool_package_config, dict):
-        manifest_data = tool_package_config.get("manifest")
-    if not isinstance(manifest_data, dict):
-        return None
-    if manifest_data.get("api_version") != "aidd.sciminer/tool-package.v2":
-        return None
-    try:
-        return ToolPackageV2Manifest.model_validate(manifest_data)
-    except ValidationError as exc:
-        raise StandardArtifactPersistenceError(
-            f"Invalid Tool Package v2 manifest for standard result: {exc}"
-        ) from exc
-
 
 async def _parse_collected_standard_result(
     db: AsyncSession,
