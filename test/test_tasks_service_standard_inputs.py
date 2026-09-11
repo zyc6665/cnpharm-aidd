@@ -184,19 +184,14 @@ async def _create_v2_standard_upload_task(
     tool.current_version_id = version.id
     tool.current_version = version
 
-    upload_path = tmp_path / filename
-    upload_path.write_bytes(content)
-    upload_file = FileModel(
-        owner_id=owner.id,
+    upload_file = await _create_uploaded_file(
+        db_session,
+        owner,
+        tmp_path,
         filename=filename,
         content_type=content_type,
-        size_bytes=len(content),
-        sha256=hashlib.sha256(content).hexdigest(),
-        storage_path=str(upload_path),
-        source_type=FileSourceType.UPLOAD.value,
+        content=content,
     )
-    db_session.add(upload_file)
-    await db_session.flush()
 
     task = await create_and_schedule_tool_task(
         db=db_session,
@@ -217,6 +212,31 @@ async def _create_v2_standard_upload_task(
         artifact_version=artifact_version,
         version_files=version_files,
     )
+
+
+async def _create_uploaded_file(
+    db_session: AsyncSession,
+    owner: UserModel,
+    tmp_path: Path,
+    *,
+    filename: str,
+    content: bytes,
+    content_type: str,
+) -> FileModel:
+    upload_path = tmp_path / filename
+    upload_path.write_bytes(content)
+    upload_file = FileModel(
+        owner_id=owner.id,
+        filename=filename,
+        content_type=content_type,
+        size_bytes=len(content),
+        sha256=hashlib.sha256(content).hexdigest(),
+        storage_path=str(upload_path),
+        source_type=FileSourceType.UPLOAD.value,
+    )
+    db_session.add(upload_file)
+    await db_session.flush()
+    return upload_file
 
 
 def test_task_create_accepts_standard_input_uploads():
@@ -614,6 +634,89 @@ async def test_tool_package_v2_invalid_standard_upload_content_does_not_create_a
             filename="molecules.csv",
             content_type="text/csv",
             content=b"\n",
+        )
+
+    artifacts = (await db_session.execute(select(ArtifactModel))).scalars().all()
+    artifact_versions = (await db_session.execute(select(ArtifactVersionModel))).scalars().all()
+    tasks = (await db_session.execute(select(Task))).scalars().all()
+
+    assert artifacts == []
+    assert artifact_versions == []
+    assert tasks == []
+
+
+@pytest.mark.asyncio
+async def test_tool_package_v2_multi_upload_failure_does_not_partially_materialize(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    monkeypatch.setattr("app.tasks.service.use_direct_task_execution", lambda: True)
+
+    owner = UserModel(
+        email="multi-standard-upload@example.com",
+        password_hash="hashed-password",
+        role=UserRole.USER.value,
+        status=UserStatus.ACTIVE.value,
+    )
+    db_session.add(owner)
+    await db_session.flush()
+
+    manifest = _minimal_tool_package_v2_manifest(output_type="molecule_table@1")
+    manifest["artifacts"]["inputs"].append(
+        {"name": "ligand", "type": "ligand_structure@1", "required": True}
+    )
+    tool = ToolModel(
+        owner_id=owner.id,
+        name="Multi Input Tool",
+        slug="multi-input-tool",
+        status=ToolStatus.PUBLISHED.value,
+        is_public=True,
+        provider_type=ToolProviderType.PLATFORM.value,
+    )
+    db_session.add(tool)
+    await db_session.flush()
+    version = ToolVersionModel(
+        tool_id=tool.id,
+        version="2.0.0",
+        config={"type": "ssh_job", "tool_package_manifest": manifest},
+        is_active=True,
+        deprecated=False,
+    )
+    db_session.add(version)
+    await db_session.flush()
+    tool.current_version_id = version.id
+    tool.current_version = version
+
+    molecule_file = await _create_uploaded_file(
+        db_session,
+        owner,
+        tmp_path,
+        filename="molecules.csv",
+        content_type="text/csv",
+        content=b"smiles,name\nCCO,e\n",
+    )
+    bad_ligand_file = await _create_uploaded_file(
+        db_session,
+        owner,
+        tmp_path,
+        filename="bad-ligand.sdf",
+        content_type="chemical/x-mdl-sdfile",
+        content=b"not an sdf\n",
+    )
+
+    with pytest.raises(ValidationException, match="标准 Artifact 上传内容无效"):
+        await create_and_schedule_tool_task(
+            db=db_session,
+            current_user=owner,
+            task_data=TaskCreate(
+                tool_id=tool.id,
+                standard_input_uploads={
+                    "molecules": molecule_file.id,
+                    "ligand": bad_ligand_file.id,
+                },
+            ),
+            direct_runner=SimpleNamespace(schedule_task=lambda *, task_id, tool_version_id: None),
         )
 
     artifacts = (await db_session.execute(select(ArtifactModel))).scalars().all()

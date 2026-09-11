@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import hashlib
 import json
 from pathlib import Path
@@ -32,6 +33,16 @@ from app.tool_packages.config_resolver import tool_package_v2_manifest_data
 RoleFile = tuple[str, FileModel, bool]
 
 
+@dataclass(frozen=True)
+class StandardInputUploadPlan:
+    slot_name: str
+    standard_ref: StandardArtifactRef
+    primary_role: FileRoleSpec
+    required_roles: list[FileRoleSpec]
+    uploaded_file: FileModel
+    metadata: dict[str, object]
+
+
 def accepts_materialized_standard_uploads(config: object) -> bool:
     return tool_package_v2_manifest_data(config) is not None
 
@@ -58,73 +69,103 @@ async def materialize_standard_input_uploads(
         return {}
 
     slots_by_name = _artifact_input_slots_by_name(tool, tool_version)
-    materialized: dict[str, str] = {}
+    plans: list[StandardInputUploadPlan] = []
     for slot_name, file_id in uploads.items():
-        slot = _require_slot(slots_by_name, slot_name)
-        standard_ref, primary_role, required_roles = _standard_roles_for_slot(slot, slot_name)
-        uploaded_file = await _load_standard_upload_file(
-            db,
-            file_id=file_id,
-            project_id=project_id,
-        )
-        _validate_primary_upload_format(
-            uploaded_file,
-            primary_role=primary_role,
-            slot_name=slot_name,
-        )
-
-        unsupported_roles = [
-            role.role
-            for role in required_roles
-            if role.role != primary_role.role and not _is_generated_metadata_role(role.role)
-        ]
-        if unsupported_roles:
-            raise ValidationException(
-                "标准 Artifact 上传文件无法自动补齐必需文件角色",
-                detail={"input_name": slot_name, "missing_roles": unsupported_roles},
+        plans.append(
+            await _build_standard_input_upload_plan(
+                db,
+                slots_by_name=slots_by_name,
+                slot_name=slot_name,
+                file_id=file_id,
+                project_id=project_id,
             )
-
-        metadata = build_standard_upload_metadata(
-            slot_name=slot_name,
-            standard_ref=standard_ref.ref,
-            uploaded_file=uploaded_file,
         )
+
+    materialized: dict[str, str] = {}
+    for plan in plans:
+        if not plan.uploaded_file.project_id:
+            plan.uploaded_file.project_id = project_id
         artifact = await _create_input_artifact(
             db,
             current_user=current_user,
             project_id=project_id,
-            slot_name=slot_name,
-            standard_type=standard_ref.type,
-            standard_version=standard_ref.version,
-            filename=uploaded_file.filename,
+            slot_name=plan.slot_name,
+            standard_type=plan.standard_ref.type,
+            standard_version=plan.standard_ref.version,
+            filename=plan.uploaded_file.filename,
         )
         role_files = await _build_role_files(
             db,
             current_user=current_user,
             project_id=project_id,
-            slot_name=slot_name,
-            primary_role=primary_role.role,
-            required_roles=[role.role for role in required_roles],
-            uploaded_file=uploaded_file,
-            metadata=metadata,
+            slot_name=plan.slot_name,
+            primary_role=plan.primary_role.role,
+            required_roles=[role.role for role in plan.required_roles],
+            uploaded_file=plan.uploaded_file,
+            metadata=plan.metadata,
         )
         version = await _create_input_artifact_version(
             db,
             current_user=current_user,
             artifact=artifact,
-            standard_ref=standard_ref.ref,
-            slot_name=slot_name,
-            primary_file=uploaded_file,
-            metadata=metadata,
+            standard_ref=plan.standard_ref.ref,
+            slot_name=plan.slot_name,
+            primary_file=plan.uploaded_file,
+            metadata=plan.metadata,
             role_files=role_files,
         )
         await _link_role_files(db, artifact_version_id=version.id, role_files=role_files)
         artifact.latest_version_id = version.id
         artifact.latest_version = version
-        materialized[slot_name] = str(version.id)
+        materialized[plan.slot_name] = str(version.id)
 
     await db.flush()
     return materialized
+
+
+async def _build_standard_input_upload_plan(
+    db: AsyncSession,
+    *,
+    slots_by_name: dict[str, dict],
+    slot_name: str,
+    file_id: str,
+    project_id: str,
+) -> StandardInputUploadPlan:
+    slot = _require_slot(slots_by_name, slot_name)
+    standard_ref, primary_role, required_roles = _standard_roles_for_slot(slot, slot_name)
+    uploaded_file = await _load_standard_upload_file(
+        db,
+        file_id=file_id,
+        project_id=project_id,
+    )
+    _validate_primary_upload_format(
+        uploaded_file,
+        primary_role=primary_role,
+        slot_name=slot_name,
+    )
+    unsupported_roles = [
+        role.role
+        for role in required_roles
+        if role.role != primary_role.role and not _is_generated_metadata_role(role.role)
+    ]
+    if unsupported_roles:
+        raise ValidationException(
+            "标准 Artifact 上传文件无法自动补齐必需文件角色",
+            detail={"input_name": slot_name, "missing_roles": unsupported_roles},
+        )
+
+    return StandardInputUploadPlan(
+        slot_name=slot_name,
+        standard_ref=standard_ref,
+        primary_role=primary_role,
+        required_roles=required_roles,
+        uploaded_file=uploaded_file,
+        metadata=build_standard_upload_metadata(
+            slot_name=slot_name,
+            standard_ref=standard_ref.ref,
+            uploaded_file=uploaded_file,
+        ),
+    )
 
 
 def _normalize_upload_mapping(values: dict[str, str] | None) -> dict[str, str]:
@@ -199,8 +240,6 @@ async def _load_standard_upload_file(
             "标准 Artifact 上传文件必须属于任务关联项目",
             detail={"mismatched_file_ids": [file_id]},
         )
-    if not file_record.project_id:
-        file_record.project_id = project_id
     return file_record
 
 
