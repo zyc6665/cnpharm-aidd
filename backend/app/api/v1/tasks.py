@@ -9,7 +9,6 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from typing import Any, Optional
 
-from app.config import use_direct_task_execution
 from app.database.session import get_db
 from app.models.files import File as FileModel
 from app.models.users import User
@@ -19,6 +18,7 @@ from app.tasks.cancellation import cancel_platform_task
 from app.tasks.direct_runner import direct_task_runner
 from app.tasks.service import (
     create_and_schedule_tool_task,
+    dispatch_tool_task,
     prepare_tool_task_preview,
     record_tool_usage,
 )
@@ -573,6 +573,16 @@ async def retry_task(
     if task.status not in [TaskStatus.FAILURE.value, TaskStatus.CANCELED.value]:
         raise ValidationException("任务状态不允许重试")
 
+    version_result = await db.execute(
+        select(ToolVersion).where(ToolVersion.id == task.tool_version_id)
+    )
+    tool_version = version_result.scalar_one()
+
+    user_result = await db.execute(
+        select(User).where(User.id == task.user_id)
+    )
+    task_user = user_result.scalar_one()
+
     # 重置任务状态
     task.status = TaskStatus.PENDING.value
     task.progress = 0.0
@@ -584,50 +594,17 @@ async def retry_task(
     task.execution_time_sec = None
 
     await db.commit()
-
-    try:
-        if use_direct_task_execution():
-            direct_task_runner.schedule_task(
-                task_id=str(task.id),
-                tool_version_id=str(task.tool_version_id),
-            )
-            logger.info("Task %s rescheduled in direct mode", task.id)
-        else:
-            from app.tasks.queue_manager import TaskQueueManager
-
-            version_result = await db.execute(
-                select(ToolVersion).where(ToolVersion.id == task.tool_version_id)
-            )
-            tool_version = version_result.scalar_one()
-
-            user_result = await db.execute(
-                select(User).where(User.id == task.user_id)
-            )
-            user = user_result.scalar_one()
-
-            queue = TaskQueueManager.determine_queue(
-                tool_config=tool_version.config,
-                user_role=user.role,
-                priority=task.priority
-            )
-
-            celery_task = TaskQueueManager.enqueue_task(
-                task_id=str(task.id),
-                tool_version_id=str(task.tool_version_id),
-                queue=queue
-            )
-
-            task.celery_task_id = celery_task.id
-            await db.commit()
-
-            logger.info(f"Task {task.id} re-enqueued to {queue} (retry {task.retry_count})")
-
-    except Exception as e:
-        logger.error(f"Failed to re-enqueue task {task.id}: {e}")
-        task.status = TaskStatus.FAILURE.value
-        task.error_message = f"任务重新分发失败: {str(e)}"
-        await db.commit()
-        raise HTTPException(status_code=500, detail="任务重新分发失败")
+    extra_data = task.extra_data if isinstance(task.extra_data, dict) else {}
+    resource_snapshot = extra_data.get("resource_snapshot")
+    await dispatch_tool_task(
+        db=db,
+        task=task,
+        tool_version=tool_version,
+        user_role=task_user.role,
+        direct_runner=direct_task_runner,
+        resource_snapshot=resource_snapshot if isinstance(resource_snapshot, dict) else None,
+        failure_detail="任务重新分发失败",
+    )
 
     return success_response(message="任务已重新提交")
 

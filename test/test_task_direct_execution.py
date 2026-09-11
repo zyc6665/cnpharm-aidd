@@ -641,6 +641,117 @@ async def test_retry_task_uses_direct_runner_when_enabled(
 
 
 @pytest.mark.asyncio
+async def test_retry_task_replaces_stale_celery_dispatch_when_direct_enabled(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    published_tool: Tool,
+    admin_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """切换到 direct 重试时应清理上一次 Celery 调度信息。"""
+    runner = RecordingDirectRunner()
+    monkeypatch.setattr(config_settings, "TASK_EXECUTION_BACKEND", "direct", raising=False)
+    monkeypatch.setattr(tasks_api, "direct_task_runner", runner, raising=False)
+
+    task = Task(
+        user_id=admin_user.id,
+        tool_id=published_tool.id,
+        tool_version_id=published_tool.current_version_id,
+        status=TaskStatus.FAILURE.value,
+        priority="normal",
+        progress=0.0,
+        error_message="boom",
+        celery_task_id="previous-celery-task",
+        extra_data={"dispatch": {"mode": "celery", "queue": "gpu", "queue_priority": 9}},
+    )
+    db_session.add(task)
+    await db_session.flush()
+    db_session.add(TaskInput(task_id=task.id, params={"foo": "bar"}, file_ids=[]))
+    await db_session.commit()
+
+    response = await api_client.post(
+        f"/api/v1/tasks/{task.id}/retry",
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 200
+    assert runner.scheduled == [(task.id, published_tool.current_version_id)]
+
+    refreshed_task = await db_session.get(Task, task.id)
+    assert refreshed_task is not None
+    assert refreshed_task.celery_task_id is None
+    assert refreshed_task.extra_data["dispatch"] == {"mode": "direct", "queue": None}
+
+
+@pytest.mark.asyncio
+async def test_retry_task_uses_tool_gpu_config_without_resource_snapshot(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    published_tool: Tool,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """重试旧任务没有资源快照时，应回退使用工具版本的 GPU 配置选队列。"""
+    task_user = User(
+        email="runner@example.com",
+        password_hash="hashed-password",
+        display_name="Runner",
+        role=UserRole.USER.value,
+        status=UserStatus.ACTIVE.value,
+    )
+    db_session.add(task_user)
+    await db_session.flush()
+
+    version = await db_session.get(ToolVersion, published_tool.current_version_id)
+    assert version is not None
+    version.config = {**version.config, "gpu_required": True}
+
+    task = Task(
+        user_id=task_user.id,
+        tool_id=published_tool.id,
+        tool_version_id=published_tool.current_version_id,
+        status=TaskStatus.FAILURE.value,
+        priority="normal",
+        progress=0.0,
+        error_message="boom",
+    )
+    db_session.add(task)
+    await db_session.flush()
+    db_session.add(TaskInput(task_id=task.id, params={"foo": "bar"}, file_ids=[]))
+    await db_session.commit()
+
+    queued: list[tuple[str, str]] = []
+    monkeypatch.setattr(config_settings, "TASK_EXECUTION_BACKEND", "celery", raising=False)
+    monkeypatch.setattr(config_settings, "CELERY_BROKER_URL", "redis://test", raising=False)
+    monkeypatch.setattr(
+        TaskQueueManager,
+        "enqueue_task",
+        classmethod(
+            lambda cls, task_id, tool_version_id, queue: (
+                queued.append((task_id, queue))
+                or type("DummyCeleryTask", (), {"id": "celery-retry-task"})()
+            )
+        ),
+    )
+
+    response = await api_client.post(
+        f"/api/v1/tasks/{task.id}/retry",
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 200
+    assert queued == [(task.id, "gpu_queue")]
+
+    refreshed_task = await db_session.get(Task, task.id)
+    assert refreshed_task is not None
+    assert refreshed_task.celery_task_id == "celery-retry-task"
+    assert refreshed_task.extra_data["dispatch"] == {
+        "mode": "celery",
+        "queue": "gpu_queue",
+        "queue_priority": 5,
+    }
+
+
+@pytest.mark.asyncio
 async def test_cancel_task_cancels_registered_direct_task(
     api_client: httpx.AsyncClient,
     db_session: AsyncSession,

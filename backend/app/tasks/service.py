@@ -113,6 +113,73 @@ def _normalize_requested_input_bindings(values: dict[str, str] | None) -> dict[s
     }
 
 
+def _set_task_extra_data(task: Task, **values: object) -> None:
+    base = task.extra_data if isinstance(task.extra_data, dict) else {}
+    task.extra_data = {**base, **values}
+
+
+async def dispatch_tool_task(
+    *,
+    db: AsyncSession,
+    task: Task,
+    tool_version: ToolVersion,
+    user_role: str | None,
+    direct_runner=default_direct_task_runner,
+    resource_snapshot: dict[str, object] | None = None,
+    failure_detail: str = "任务分发失败",
+) -> None:
+    """Dispatch a persisted task and keep dispatch metadata in sync."""
+    try:
+        if use_direct_task_execution():
+            task.celery_task_id = None
+            _set_task_extra_data(task, dispatch={"mode": "direct", "queue": None})
+            direct_runner.schedule_task(
+                task_id=str(task.id),
+                tool_version_id=str(tool_version.id),
+            )
+            await db.commit()
+            logger.info("Task %s scheduled in direct mode", task.id)
+            return
+
+        from app.tasks.queue_manager import TaskQueueManager
+
+        snapshot = resource_snapshot if isinstance(resource_snapshot, dict) else {}
+        gpu_required = snapshot.get("gpu_required")
+        queue = TaskQueueManager.determine_queue(
+            tool_config=tool_version.config,
+            user_role=user_role,
+            priority=task.priority,
+            gpu_required=gpu_required if isinstance(gpu_required, bool) else None,
+        )
+
+        _set_task_extra_data(
+            task,
+            dispatch={
+                "mode": "celery",
+                "queue": queue,
+                "queue_priority": TaskQueueManager.get_queue_priority(queue),
+            },
+        )
+        celery_task = TaskQueueManager.enqueue_task(
+            task_id=str(task.id),
+            tool_version_id=str(tool_version.id),
+            queue=queue,
+        )
+
+        task.celery_task_id = celery_task.id
+        await db.commit()
+        logger.info("Task %s enqueued to %s", task.id, queue)
+    except Exception as exc:
+        logger.error("Failed to dispatch task %s: %s", task.id, exc)
+        TaskStateMachine.complete(
+            task,
+            success=False,
+            error_message=f"{failure_detail}: {str(exc)}",
+        )
+        await db.commit()
+        raise HTTPException(status_code=500, detail=failure_detail) from exc
+
+
 async def _load_tool_and_version(
     db: AsyncSession,
     task_data: TaskCreate,
@@ -327,55 +394,13 @@ async def create_and_schedule_tool_task(
     await db.commit()
     await db.refresh(task)
 
-    try:
-        if use_direct_task_execution():
-            direct_runner.schedule_task(
-                task_id=str(task.id),
-                tool_version_id=str(version_id),
-            )
-            task.extra_data = {
-                **(task.extra_data or {}),
-                "dispatch": {"mode": "direct", "queue": None},
-            }
-            await db.commit()
-            logger.info("Task %s scheduled in direct mode", task.id)
-        else:
-            from app.tasks.queue_manager import TaskQueueManager
-
-            queue = TaskQueueManager.determine_queue(
-                tool_config=tool_version.config,
-                user_role=current_user.role,
-                priority=task_data.priority,
-                gpu_required=bool(extra_data["resource_snapshot"].get("gpu_required")),
-            )
-
-            celery_task = TaskQueueManager.enqueue_task(
-                task_id=str(task.id),
-                tool_version_id=str(version_id),
-                queue=queue,
-            )
-
-            task.celery_task_id = celery_task.id
-            task.extra_data = {
-                **(task.extra_data or {}),
-                "dispatch": {
-                    "mode": "celery",
-                    "queue": queue,
-                    "queue_priority": TaskQueueManager.get_queue_priority(queue),
-                },
-            }
-            await db.commit()
-
-            logger.info("Task %s enqueued to %s", task.id, queue)
-
-    except Exception as exc:
-        logger.error("Failed to enqueue task %s: %s", task.id, exc)
-        TaskStateMachine.complete(
-            task,
-            success=False,
-            error_message=f"任务分发失败: {str(exc)}",
-        )
-        await db.commit()
-        raise HTTPException(status_code=500, detail="任务分发失败") from exc
+    await dispatch_tool_task(
+        db=db,
+        task=task,
+        tool_version=tool_version,
+        user_role=current_user.role,
+        direct_runner=direct_runner,
+        resource_snapshot=extra_data.get("resource_snapshot"),
+    )
 
     return task
