@@ -20,6 +20,11 @@ from app.execution.request_builder import (
     build_standard_execution_request,
 )
 from app.models.files import File as FileModel
+from app.services.legacy_file_projection import (
+    legacy_file_fields,
+    select_legacy_file_field,
+    standard_input_file_path,
+)
 from app.tasks.executors.base import BaseExecutor
 from app.tasks.executors.errors import TaskExecutionError
 from app.tasks.executors.ssh_artifacts import prepare_output_files
@@ -434,7 +439,11 @@ class SSHJobExecutor(BaseExecutor):
 
         projected_input_files = self._project_standard_inputs_to_legacy_fields(payload, manifest)
         if projected_input_files:
-            existing = enriched.get("input_files") if isinstance(enriched.get("input_files"), dict) else {}
+            existing = (
+                enriched.get("input_files")
+                if isinstance(enriched.get("input_files"), dict)
+                else {}
+            )
             enriched["input_files"] = {**projected_input_files, **existing}
         return enriched
 
@@ -446,7 +455,7 @@ class SSHJobExecutor(BaseExecutor):
         inputs = payload.get("inputs")
         if not isinstance(inputs, dict):
             return {}
-        file_fields = self._legacy_file_fields()
+        file_fields = legacy_file_fields(self.config)
         if not file_fields:
             return {}
 
@@ -456,7 +465,7 @@ class SSHJobExecutor(BaseExecutor):
             standard_input = inputs.get(declaration.name)
             if not isinstance(standard_input, dict):
                 continue
-            file_field = self._legacy_file_field_for_standard_input(
+            file_field = select_legacy_file_field(
                 input_name=declaration.name,
                 standard_type=declaration.type,
                 file_fields=file_fields,
@@ -464,80 +473,12 @@ class SSHJobExecutor(BaseExecutor):
             )
             if not file_field:
                 continue
-            path = self._standard_input_file_path(standard_input, declaration.type)
+            path = standard_input_file_path(standard_input, declaration.type)
             if not path:
                 continue
             projected[file_field] = path
             used_fields.add(file_field)
         return projected
-
-    def _legacy_file_fields(self) -> list[str]:
-        input_schema = self.config.get("input_schema") if isinstance(self.config.get("input_schema"), dict) else {}
-        properties = input_schema.get("properties") if isinstance(input_schema.get("properties"), dict) else {}
-        return [
-            str(name)
-            for name, schema in properties.items()
-            if isinstance(schema, dict) and (schema.get("format") == "file" or schema.get("type") == "file")
-        ]
-
-    def _legacy_file_field_for_standard_input(
-        self,
-        *,
-        input_name: str,
-        standard_type: str,
-        file_fields: list[str],
-        used_fields: set[str],
-    ) -> str | None:
-        unused_fields = [field for field in file_fields if field not in used_fields]
-        if input_name in unused_fields:
-            return input_name
-        if not unused_fields:
-            return None
-        if len(unused_fields) == 1:
-            return unused_fields[0]
-
-        standard_type = str(standard_type or "")
-        if standard_type == "protein_structure@1":
-            return self._first_matching_field(unused_fields, ("protein", "receptor"))
-        if standard_type == "ligand_structure@1":
-            return self._first_matching_field(unused_fields, ("ligand",))
-        if standard_type == "molecule_table@1":
-            return self._first_matching_field(unused_fields, ("smiles", "molecule", "csv"))
-        if standard_type == "binding_pocket@1":
-            return self._first_matching_field(unused_fields, ("pocket",))
-        return unused_fields[0]
-
-    @staticmethod
-    def _first_matching_field(fields: list[str], tokens: tuple[str, ...]) -> str | None:
-        lowered = [(field, field.lower()) for field in fields]
-        for token in tokens:
-            match = next((field for field, lower in lowered if token in lower), None)
-            if match:
-                return match
-        return None
-
-    def _standard_input_file_path(self, standard_input: dict[str, Any], standard_type: str) -> str | None:
-        files = standard_input.get("files")
-        if not isinstance(files, dict):
-            return None
-        for role in self._preferred_standard_file_roles(standard_type):
-            file_ref = files.get(role)
-            if isinstance(file_ref, dict) and file_ref.get("path"):
-                return str(file_ref["path"])
-        for file_ref in files.values():
-            if isinstance(file_ref, dict) and file_ref.get("path"):
-                return str(file_ref["path"])
-        return None
-
-    @staticmethod
-    def _preferred_standard_file_roles(standard_type: str) -> tuple[str, ...]:
-        return {
-            "protein_structure@1": ("prepared_pdb", "structure_file", "raw_structure_file"),
-            "ligand_structure@1": ("structure_3d_sdf", "structure_file", "structure_2d_sdf"),
-            "molecule_table@1": ("table_file",),
-            "binding_pocket@1": ("residue_pocket_pdb", "atom_pocket_pdb"),
-            "run_report@1": ("report_json", "report_markdown"),
-        }.get(str(standard_type or ""), ())
 
     def _tool_package_v2_manifest(self) -> ToolPackageV2Manifest | None:
         try:

@@ -213,6 +213,101 @@ def _prepared_only_ssh_config() -> dict:
     }
 
 
+def _two_protein_ssh_config() -> dict:
+    return {
+        "type": "ssh_job",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "protein_a_pdb": {"type": "string", "format": "file"},
+                "protein_b_pdb": {"type": "string", "format": "file"},
+            },
+        },
+        "artifacts": {
+            "inputs": [
+                {
+                    "name": "protein_a",
+                    "type": "protein_structure@1",
+                    "required": True,
+                    "role_preferences": ["structure_file"],
+                },
+                {
+                    "name": "protein_b",
+                    "type": "protein_structure@1",
+                    "required": True,
+                    "role_preferences": ["structure_file"],
+                },
+            ],
+            "outputs": [],
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_prepare_run_projects_multiple_standard_inputs_to_distinct_legacy_fields(
+    db_session: AsyncSession,
+) -> None:
+    owner = await _create_owner(db_session)
+    protein_a_file = await _create_file(
+        db_session,
+        owner,
+        filename="protein-a.pdb",
+        content=b"ATOM protein a\n",
+    )
+    protein_b_file = await _create_file(
+        db_session,
+        owner,
+        filename="protein-b.pdb",
+        content=b"ATOM protein b\n",
+    )
+    protein_a_version = await _create_protein_version(
+        db_session,
+        owner,
+        name="protein-a",
+        roles={"structure_file": protein_a_file},
+        preparation_status="raw",
+    )
+    protein_b_version = await _create_protein_version(
+        db_session,
+        owner,
+        name="protein-b",
+        roles={"structure_file": protein_b_file},
+        preparation_status="raw",
+    )
+    tool, version = await _create_tool(
+        db_session,
+        owner,
+        slug="two-protein-ssh",
+        config=_two_protein_ssh_config(),
+    )
+
+    prepared = await prepare_run(
+        db_session,
+        input=RunPreparationInput(
+            tool=tool,
+            tool_version=version,
+            context=RunContext(
+                surface="tool_detail",
+                user_id=str(owner.id),
+                project_id="project-1",
+            ),
+            params={},
+            file_ids=[],
+            input_bindings={
+                "protein_a": protein_a_version.id,
+                "protein_b": protein_b_version.id,
+            },
+            standard_input_uploads={},
+        ),
+    )
+
+    assert prepared.ready is True
+    assert prepared.params["input_files"] == {
+        "protein_a_pdb": "input/protein-a.pdb",
+        "protein_b_pdb": "input/protein-b.pdb",
+    }
+
+
 @pytest.mark.asyncio
 async def test_prepare_run_projects_prepared_artifact_to_legacy_ssh_input(
     db_session: AsyncSession,

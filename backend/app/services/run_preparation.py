@@ -16,6 +16,7 @@ from app.services.artifact_binding_resolver import (
     ArtifactBindingDecision,
     resolve_artifact_binding,
 )
+from app.services.legacy_file_projection import legacy_file_fields, select_legacy_file_field
 from app.services.semantic_types import normalize_semantic_type
 from app.services.tool_contracts import build_tool_contract
 from app.services.workflow_artifacts import standard_artifact_file_ids
@@ -92,6 +93,7 @@ async def prepare_run(db: AsyncSession, *, input: RunPreparationInput) -> Prepar
     binding_decisions: dict[str, dict[str, Any]] = {}
     ready = True
     blocked_reason: str | None = None
+    legacy_projection_fields = _existing_input_file_fields(params)
 
     for slot_name, version_id in input_bindings.items():
         slot = artifact_inputs_by_name.get(slot_name)
@@ -119,6 +121,7 @@ async def prepare_run(db: AsyncSession, *, input: RunPreparationInput) -> Prepar
             input_slot=slot,
             file_id=decision.selected_file_id,
             params=params,
+            used_fields=legacy_projection_fields,
         )
 
     if ready:
@@ -135,6 +138,7 @@ async def prepare_run(db: AsyncSession, *, input: RunPreparationInput) -> Prepar
                     input_slot=slot,
                     file_id=file_id,
                     params=params,
+                    used_fields=legacy_projection_fields,
                 )
     task_input_bindings = dict(input_bindings) if accepts_standard_bindings else {}
 
@@ -473,6 +477,7 @@ async def _project_selected_file_to_legacy_params(
     input_slot: dict[str, Any],
     file_id: str,
     params: dict[str, Any],
+    used_fields: set[str] | None = None,
 ) -> None:
     config = _tool_config(tool_version)
     executor_type = str(config.get("type") or "")
@@ -493,7 +498,7 @@ async def _project_selected_file_to_legacy_params(
     file_record = await db.get(FileModel, file_id)
     if not file_record:
         return
-    file_field = _legacy_file_field_for_slot(config, input_slot)
+    file_field = _legacy_file_field_for_slot(config, input_slot, used_fields=used_fields)
     if not file_field:
         return
     input_files = params.get("input_files") if isinstance(params.get("input_files"), dict) else {}
@@ -501,60 +506,27 @@ async def _project_selected_file_to_legacy_params(
         **input_files,
         file_field: f"input/{Path(str(file_record.filename)).name}",
     }
+    if used_fields is not None:
+        used_fields.add(file_field)
 
 
-def _legacy_file_field_for_slot(config: dict[str, Any], input_slot: dict[str, Any]) -> str | None:
-    input_schema = (
-        config.get("input_schema") if isinstance(config.get("input_schema"), dict) else {}
+def _existing_input_file_fields(params: dict[str, Any]) -> set[str]:
+    input_files = params.get("input_files") if isinstance(params.get("input_files"), dict) else {}
+    return {str(field) for field in input_files}
+
+
+def _legacy_file_field_for_slot(
+    config: dict[str, Any],
+    input_slot: dict[str, Any],
+    *,
+    used_fields: set[str] | None = None,
+) -> str | None:
+    return select_legacy_file_field(
+        input_name=str(input_slot.get("name") or ""),
+        standard_type=str(input_slot.get("type") or ""),
+        file_fields=legacy_file_fields(config),
+        used_fields=used_fields,
     )
-    properties = (
-        input_schema.get("properties")
-        if isinstance(input_schema.get("properties"), dict)
-        else {}
-    )
-    file_fields = [
-        str(name)
-        for name, schema in properties.items()
-        if isinstance(schema, dict)
-        and (schema.get("format") == "file" or schema.get("type") == "file")
-    ]
-    if not file_fields:
-        return None
-
-    slot_name = str(input_slot.get("name") or "")
-    if slot_name in file_fields:
-        return slot_name
-    if len(file_fields) == 1:
-        return file_fields[0]
-
-    standard_type = str(input_slot.get("type") or "")
-    if standard_type == "protein_structure@1":
-        match = next(
-            (field for field in file_fields if "protein" in field or "receptor" in field),
-            None,
-        )
-        if match:
-            return match
-    if standard_type == "ligand_structure@1":
-        match = next((field for field in file_fields if "ligand" in field), None)
-        if match:
-            return match
-    if standard_type == "molecule_table@1":
-        match = next(
-            (
-                field
-                for field in file_fields
-                if "smiles" in field or "molecule" in field or "csv" in field
-            ),
-            None,
-        )
-        if match:
-            return match
-    if standard_type == "binding_pocket@1":
-        match = next((field for field in file_fields if "pocket" in field), None)
-        if match:
-            return match
-    return file_fields[0]
 
 
 async def _require_existing_file_id(
