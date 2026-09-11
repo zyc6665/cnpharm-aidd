@@ -49,7 +49,7 @@ from app.models.tools import ToolVersion as ToolVersionModel  # noqa: E402
 from app.models.users import User as UserModel  # noqa: E402
 from app.models.users import UserRole, UserStatus  # noqa: E402
 from app.schemas.tasks import TaskCreate, TaskInputSchema  # noqa: E402
-from app.tasks.service import create_and_schedule_tool_task  # noqa: E402
+from app.tasks.service import create_and_schedule_tool_task, prepare_tool_task_preview  # noqa: E402
 from app.tool_packages.schemas import ToolPackageV2Manifest  # noqa: E402
 
 
@@ -725,4 +725,70 @@ async def test_tool_package_v2_multi_upload_failure_does_not_partially_materiali
 
     assert artifacts == []
     assert artifact_versions == []
+    assert tasks == []
+
+
+@pytest.mark.asyncio
+async def test_tool_package_v2_prepare_preview_rejects_invalid_standard_upload_content(
+    db_session: AsyncSession,
+    tmp_path: Path,
+):
+    owner = UserModel(
+        email="preview-standard-upload@example.com",
+        password_hash="hashed-password",
+        role=UserRole.USER.value,
+        status=UserStatus.ACTIVE.value,
+    )
+    db_session.add(owner)
+    await db_session.flush()
+
+    tool = ToolModel(
+        owner_id=owner.id,
+        name="Preview Tool",
+        slug="preview-tool",
+        status=ToolStatus.PUBLISHED.value,
+        is_public=True,
+        provider_type=ToolProviderType.PLATFORM.value,
+    )
+    db_session.add(tool)
+    await db_session.flush()
+    version = ToolVersionModel(
+        tool_id=tool.id,
+        version="2.0.0",
+        config={
+            "type": "ssh_job",
+            "tool_package_manifest": _minimal_tool_package_v2_manifest(
+                output_type="molecule_table@1"
+            ),
+        },
+        is_active=True,
+        deprecated=False,
+    )
+    db_session.add(version)
+    await db_session.flush()
+    tool.current_version_id = version.id
+    tool.current_version = version
+    molecule_file = await _create_uploaded_file(
+        db_session,
+        owner,
+        tmp_path,
+        filename="molecules.csv",
+        content_type="text/csv",
+        content=b"\n",
+    )
+
+    with pytest.raises(ValidationException, match="标准 Artifact 上传内容无效"):
+        await prepare_tool_task_preview(
+            db=db_session,
+            current_user=owner,
+            task_data=TaskCreate(
+                tool_id=tool.id,
+                standard_input_uploads={"molecules": molecule_file.id},
+            ),
+        )
+
+    artifacts = (await db_session.execute(select(ArtifactModel))).scalars().all()
+    tasks = (await db_session.execute(select(Task))).scalars().all()
+
+    assert artifacts == []
     assert tasks == []

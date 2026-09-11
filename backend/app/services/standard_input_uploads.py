@@ -68,18 +68,13 @@ async def materialize_standard_input_uploads(
     if not uploads:
         return {}
 
-    slots_by_name = _artifact_input_slots_by_name(tool, tool_version)
-    plans: list[StandardInputUploadPlan] = []
-    for slot_name, file_id in uploads.items():
-        plans.append(
-            await _build_standard_input_upload_plan(
-                db,
-                slots_by_name=slots_by_name,
-                slot_name=slot_name,
-                file_id=file_id,
-                project_id=project_id,
-            )
-        )
+    plans = await _build_standard_input_upload_plans(
+        db,
+        tool=tool,
+        tool_version=tool_version,
+        project_id=project_id,
+        standard_input_uploads=uploads,
+    )
 
     materialized: dict[str, str] = {}
     for plan in plans:
@@ -123,13 +118,56 @@ async def materialize_standard_input_uploads(
     return materialized
 
 
+async def validate_standard_input_uploads(
+    db: AsyncSession,
+    *,
+    tool: Tool,
+    tool_version: ToolVersion,
+    project_id: str | None,
+    standard_input_uploads: dict[str, str] | None,
+) -> None:
+    uploads = _normalize_upload_mapping(standard_input_uploads)
+    if not uploads:
+        return
+    await _build_standard_input_upload_plans(
+        db,
+        tool=tool,
+        tool_version=tool_version,
+        project_id=project_id,
+        standard_input_uploads=uploads,
+    )
+
+
+async def _build_standard_input_upload_plans(
+    db: AsyncSession,
+    *,
+    tool: Tool,
+    tool_version: ToolVersion,
+    project_id: str | None,
+    standard_input_uploads: dict[str, str],
+) -> list[StandardInputUploadPlan]:
+    slots_by_name = _artifact_input_slots_by_name(tool, tool_version)
+    plans: list[StandardInputUploadPlan] = []
+    for slot_name, file_id in standard_input_uploads.items():
+        plans.append(
+            await _build_standard_input_upload_plan(
+                db,
+                slots_by_name=slots_by_name,
+                slot_name=slot_name,
+                file_id=file_id,
+                project_id=project_id,
+            )
+        )
+    return plans
+
+
 async def _build_standard_input_upload_plan(
     db: AsyncSession,
     *,
     slots_by_name: dict[str, dict],
     slot_name: str,
     file_id: str,
-    project_id: str,
+    project_id: str | None,
 ) -> StandardInputUploadPlan:
     slot = _require_slot(slots_by_name, slot_name)
     standard_ref, primary_role, required_roles = _standard_roles_for_slot(slot, slot_name)
@@ -227,7 +265,7 @@ async def _load_standard_upload_file(
     db: AsyncSession,
     *,
     file_id: str,
-    project_id: str,
+    project_id: str | None,
 ) -> FileModel:
     file_record = await db.get(FileModel, file_id)
     if not file_record:
@@ -235,7 +273,7 @@ async def _load_standard_upload_file(
             "标准 Artifact 上传文件不存在",
             detail={"missing_file_id": file_id},
         )
-    if file_record.project_id and str(file_record.project_id) != project_id:
+    if project_id and file_record.project_id and str(file_record.project_id) != project_id:
         raise ValidationException(
             "标准 Artifact 上传文件必须属于任务关联项目",
             detail={"mismatched_file_ids": [file_id]},

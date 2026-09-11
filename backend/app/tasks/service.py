@@ -25,6 +25,7 @@ from app.services.standard_input_uploads import (
     accepts_materialized_standard_uploads,
     materialize_standard_input_uploads,
     standard_uploads_need_default_project,
+    validate_standard_input_uploads,
 )
 from app.tasks.direct_runner import direct_task_runner as default_direct_task_runner
 from app.tasks.naming import (
@@ -201,6 +202,14 @@ async def _prepare_tool_task_run(
         task_extra_data["standard_input_uploads"] = standard_input_uploads
         task_extra_data["materialized_standard_input_bindings"] = materialized_bindings
         standard_input_uploads = {}
+    elif standard_input_uploads and accepts_materialized_standard_uploads(tool_version.config):
+        await validate_standard_input_uploads(
+            db,
+            tool=tool,
+            tool_version=tool_version,
+            project_id=project_id,
+            standard_input_uploads=standard_input_uploads,
+        )
 
     prepared = await prepare_run(
         db,
