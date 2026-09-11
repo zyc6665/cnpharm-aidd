@@ -6,6 +6,7 @@ import csv
 import json
 from pathlib import Path
 
+from app.common.exceptions import ValidationException
 from app.models.files import File as FileModel
 
 
@@ -31,9 +32,9 @@ def build_standard_upload_metadata(
             )
         )
     elif standard_ref == "protein_structure@1":
-        metadata.update(_protein_structure_upload_metadata(uploaded_file))
+        metadata.update(_protein_structure_upload_metadata(slot_name, uploaded_file))
     elif standard_ref == "ligand_structure@1":
-        metadata.update(_ligand_structure_upload_metadata(uploaded_file))
+        metadata.update(_ligand_structure_upload_metadata(slot_name, uploaded_file))
     return metadata
 
 
@@ -42,7 +43,13 @@ def _molecule_table_upload_metadata(
     slot_name: str,
     uploaded_file: FileModel,
 ) -> dict[str, object]:
-    columns, row_count = _read_molecule_table_shape(uploaded_file)
+    columns, row_count = _read_molecule_table_shape(slot_name, uploaded_file)
+    if not columns or row_count < 1:
+        raise _invalid_content_error(
+            slot_name,
+            uploaded_file,
+            "molecule_table@1 需要至少一个表头列和一行数据",
+        )
     return {
         "source_task_id": str(uploaded_file.id),
         "source_input_ref": f"input:{slot_name}",
@@ -53,12 +60,12 @@ def _molecule_table_upload_metadata(
     }
 
 
-def _read_molecule_table_shape(uploaded_file: FileModel) -> tuple[list[str], int]:
+def _read_molecule_table_shape(slot_name: str, uploaded_file: FileModel) -> tuple[list[str], int]:
     text = _read_text(uploaded_file.storage_path)
     if not text:
         return [], 0
     if Path(uploaded_file.filename).suffix.lower() == ".json":
-        return _read_json_table_shape(text)
+        return _read_json_table_shape(slot_name, uploaded_file, text)
     return _read_csv_shape(text)
 
 
@@ -68,11 +75,15 @@ def _read_csv_shape(text: str) -> tuple[list[str], int]:
     return columns, sum(1 for _row in reader)
 
 
-def _read_json_table_shape(text: str) -> tuple[list[str], int]:
+def _read_json_table_shape(
+    slot_name: str,
+    uploaded_file: FileModel,
+    text: str,
+) -> tuple[list[str], int]:
     try:
         payload = json.loads(text)
-    except json.JSONDecodeError:
-        return [], 0
+    except json.JSONDecodeError as exc:
+        raise _invalid_content_error(slot_name, uploaded_file, "JSON 文件无法解析") from exc
 
     rows = _json_table_rows(payload)
     if rows is None:
@@ -119,8 +130,17 @@ def _molecule_id_field(columns: list[str]) -> str:
     return columns[0] if columns else "molecule_id"
 
 
-def _protein_structure_upload_metadata(uploaded_file: FileModel) -> dict[str, object]:
+def _protein_structure_upload_metadata(
+    slot_name: str,
+    uploaded_file: FileModel,
+) -> dict[str, object]:
     stats = _read_pdb_stats(uploaded_file.storage_path)
+    if stats["atom_count"] < 1:
+        raise _invalid_content_error(
+            slot_name,
+            uploaded_file,
+            "protein_structure@1 需要包含 ATOM 或 HETATM 记录",
+        )
     return {
         **stats,
         "structure_format": _structure_format(uploaded_file.filename),
@@ -129,7 +149,11 @@ def _protein_structure_upload_metadata(uploaded_file: FileModel) -> dict[str, ob
     }
 
 
-def _ligand_structure_upload_metadata(uploaded_file: FileModel) -> dict[str, object]:
+def _ligand_structure_upload_metadata(
+    slot_name: str,
+    uploaded_file: FileModel,
+) -> dict[str, object]:
+    _validate_sdf_content(slot_name, uploaded_file)
     return {
         "ligand_id": Path(uploaded_file.filename).stem or str(uploaded_file.id),
         "source_database": "manual",
@@ -156,6 +180,16 @@ def _read_pdb_stats(storage_path: str | None) -> dict[str, object]:
     }
 
 
+def _validate_sdf_content(slot_name: str, uploaded_file: FileModel) -> None:
+    text = _read_text(uploaded_file.storage_path)
+    if "$$$$" not in text:
+        raise _invalid_content_error(
+            slot_name,
+            uploaded_file,
+            "ligand_structure@1 需要包含 SDF 记录分隔符 $$$$",
+        )
+
+
 def _structure_format(filename: str) -> str:
     extension = Path(filename).suffix.lower().lstrip(".")
     return "cif" if extension == "cif" else "pdb"
@@ -168,3 +202,18 @@ def _read_text(storage_path: str | None) -> str:
     if not path.is_file():
         return ""
     return path.read_text(encoding="utf-8", errors="replace")
+
+
+def _invalid_content_error(
+    slot_name: str,
+    uploaded_file: FileModel,
+    reason: str,
+) -> ValidationException:
+    return ValidationException(
+        "标准 Artifact 上传内容无效",
+        detail={
+            "input_name": slot_name,
+            "filename": uploaded_file.filename,
+            "reason": reason,
+        },
+    )

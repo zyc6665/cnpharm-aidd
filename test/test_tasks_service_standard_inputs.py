@@ -595,3 +595,31 @@ async def test_tool_package_v2_standard_upload_rejects_wrong_primary_file_format
             content_type="text/plain",
             content=b"not a pdb\n",
         )
+
+
+@pytest.mark.asyncio
+async def test_tool_package_v2_invalid_standard_upload_content_does_not_create_artifact(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    with pytest.raises(ValidationException, match="标准 Artifact 上传内容无效"):
+        await _create_v2_standard_upload_task(
+            db_session,
+            monkeypatch,
+            tmp_path,
+            input_name="molecules",
+            input_type="molecule_table@1",
+            output_type="molecule_table@1",
+            filename="molecules.csv",
+            content_type="text/csv",
+            content=b"\n",
+        )
+
+    artifacts = (await db_session.execute(select(ArtifactModel))).scalars().all()
+    artifact_versions = (await db_session.execute(select(ArtifactVersionModel))).scalars().all()
+    tasks = (await db_session.execute(select(Task))).scalars().all()
+
+    assert artifacts == []
+    assert artifact_versions == []
+    assert tasks == []

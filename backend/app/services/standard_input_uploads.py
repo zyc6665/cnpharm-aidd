@@ -84,6 +84,11 @@ async def materialize_standard_input_uploads(
                 detail={"input_name": slot_name, "missing_roles": unsupported_roles},
             )
 
+        metadata = build_standard_upload_metadata(
+            slot_name=slot_name,
+            standard_ref=standard_ref.ref,
+            uploaded_file=uploaded_file,
+        )
         artifact = await _create_input_artifact(
             db,
             current_user=current_user,
@@ -92,11 +97,6 @@ async def materialize_standard_input_uploads(
             standard_type=standard_ref.type,
             standard_version=standard_ref.version,
             filename=uploaded_file.filename,
-        )
-        metadata = build_standard_upload_metadata(
-            slot_name=slot_name,
-            standard_ref=standard_ref.ref,
-            uploaded_file=uploaded_file,
         )
         role_files = await _build_role_files(
             db,
