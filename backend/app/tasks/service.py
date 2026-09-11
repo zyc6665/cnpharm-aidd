@@ -10,6 +10,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
+from app.artifact_standards.registry import is_standard_artifact_ref
 from app.config import use_direct_task_execution
 from app.common.exceptions import NotFoundException, ValidationException
 from app.database.base import utcnow
@@ -39,8 +40,8 @@ from app.tool_packages.config_resolver import tool_package_v2_manifest_data
 logger = logging.getLogger(__name__)
 
 
-def _is_standard_artifact_ref(value: object) -> bool:
-    return isinstance(value, str) and "@" in value and bool(value.split("@", 1)[0])
+def _is_known_standard_artifact_ref(value: object) -> bool:
+    return isinstance(value, str) and is_standard_artifact_ref(value)
 
 
 def _tool_config_emits_standard_artifacts(config: object) -> bool:
@@ -53,7 +54,7 @@ def _tool_config_emits_standard_artifacts(config: object) -> bool:
         outputs = artifacts.get("outputs") if isinstance(artifacts, dict) else None
         if isinstance(outputs, list):
             for output in outputs:
-                if isinstance(output, dict) and _is_standard_artifact_ref(output.get("type")):
+                if isinstance(output, dict) and _is_known_standard_artifact_ref(output.get("type")):
                     return True
 
     artifacts = config.get("artifacts")
@@ -61,7 +62,7 @@ def _tool_config_emits_standard_artifacts(config: object) -> bool:
         outputs = artifacts.get("outputs")
         if isinstance(outputs, list):
             for output in outputs:
-                if isinstance(output, dict) and _is_standard_artifact_ref(output.get("type")):
+                if isinstance(output, dict) and _is_known_standard_artifact_ref(output.get("type")):
                     return True
 
     capability = config.get("agent_capability")
@@ -73,7 +74,7 @@ def _tool_config_emits_standard_artifacts(config: object) -> bool:
                     continue
                 if output.get("source") == "artifact":
                     return True
-                if _is_standard_artifact_ref(output.get("semantic_type")):
+                if _is_known_standard_artifact_ref(output.get("semantic_type")):
                     return True
 
     return False
