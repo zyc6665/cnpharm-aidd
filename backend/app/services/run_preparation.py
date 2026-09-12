@@ -17,6 +17,7 @@ from app.services.artifact_binding_resolver import (
     resolve_artifact_binding,
 )
 from app.services.legacy_file_projection import legacy_file_fields, select_legacy_file_field
+from app.services.run_input_normalization import normalize_string_mapping
 from app.services.semantic_types import normalize_semantic_type
 from app.services.tool_contracts import build_tool_contract
 from app.services.workflow_artifacts import standard_artifact_file_ids
@@ -70,8 +71,8 @@ async def prepare_run(db: AsyncSession, *, input: RunPreparationInput) -> Prepar
     """Normalize and validate inputs for a tool task without creating the task."""
     params = dict(input.params or {})
     file_ids = list(input.file_ids or [])
-    input_bindings = _normalize_string_mapping(input.input_bindings)
-    standard_input_uploads = _normalize_string_mapping(input.standard_input_uploads)
+    input_bindings = normalize_string_mapping(input.input_bindings)
+    standard_input_uploads = normalize_string_mapping(input.standard_input_uploads)
     project_id = input.context.project_id
 
     await _validate_standard_input_bindings(
@@ -360,14 +361,6 @@ async def _resolve_workflow_input_sources(
         semantic_file_bindings=semantic_file_bindings,
         artifact_slots=artifact_slots,
     )
-
-def _normalize_string_mapping(values: dict[str, str] | None) -> dict[str, str]:
-    return {
-        str(key): str(value)
-        for key, value in (values or {}).items()
-        if str(key).strip() and str(value).strip()
-    }
-
 
 async def _validate_standard_input_bindings(
     db: AsyncSession,

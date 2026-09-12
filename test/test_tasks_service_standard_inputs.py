@@ -488,6 +488,74 @@ async def test_tool_package_v2_standard_uploads_materialize_to_input_bindings(
 
 
 @pytest.mark.asyncio
+async def test_tool_package_v2_standard_uploads_trim_slot_and_file_ids(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    monkeypatch.setattr("app.tasks.service.use_direct_task_execution", lambda: True)
+
+    owner = UserModel(
+        email="trim-standard-upload@example.com",
+        password_hash="hashed-password",
+        role=UserRole.USER.value,
+        status=UserStatus.ACTIVE.value,
+    )
+    db_session.add(owner)
+    await db_session.flush()
+
+    tool = ToolModel(
+        owner_id=owner.id,
+        name="Trim Standard Upload Tool",
+        slug="trim-standard-upload-tool",
+        status=ToolStatus.PUBLISHED.value,
+        is_public=True,
+        provider_type=ToolProviderType.PLATFORM.value,
+    )
+    db_session.add(tool)
+    await db_session.flush()
+    version = ToolVersionModel(
+        tool_id=tool.id,
+        version="2.0.0",
+        config={
+            "type": "ssh_job",
+            "tool_package_manifest": _minimal_tool_package_v2_manifest(),
+        },
+        is_active=True,
+        deprecated=False,
+    )
+    db_session.add(version)
+    await db_session.flush()
+    tool.current_version_id = version.id
+    tool.current_version = version
+
+    molecule_file = await _create_uploaded_file(
+        db_session,
+        owner,
+        tmp_path,
+        filename="molecules.csv",
+        content_type="text/csv",
+        content=b"smiles,name\nCCO,e\n",
+    )
+
+    task = await create_and_schedule_tool_task(
+        db=db_session,
+        current_user=owner,
+        task_data=TaskCreate(
+            tool_id=tool.id,
+            standard_input_uploads={" molecules ": f" {molecule_file.id} "},
+        ),
+        direct_runner=SimpleNamespace(schedule_task=lambda *, task_id, tool_version_id: None),
+    )
+
+    artifact_version = (
+        await db_session.execute(select(ArtifactVersionModel))
+    ).scalar_one()
+    assert task.extra_data["standard_input_uploads"] == {"molecules": molecule_file.id}
+    assert task.extra_data["input_bindings"] == {"molecules": artifact_version.id}
+
+
+@pytest.mark.asyncio
 async def test_tool_package_v2_json_molecule_table_upload_generates_table_metadata(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,

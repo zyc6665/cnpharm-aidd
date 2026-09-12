@@ -21,6 +21,7 @@ from app.models.users import User
 from app.schemas.tasks import TaskCreate
 from app.services.project_access import load_project_membership
 from app.services.project_migration import ensure_migration_project_for_owner
+from app.services.run_input_normalization import normalize_string_mapping
 from app.services.run_preparation import PreparedRun, RunContext, RunPreparationInput, prepare_run
 from app.services.standard_input_uploads import (
     accepts_materialized_standard_uploads,
@@ -104,14 +105,6 @@ async def record_tool_usage(db: AsyncSession, tool_id: str) -> None:
     )
     db.add(statistics)
     await db.flush()
-
-
-def _normalize_requested_input_bindings(values: dict[str, str] | None) -> dict[str, str]:
-    return {
-        str(input_name): str(version_id)
-        for input_name, version_id in (values or {}).items()
-        if str(input_name).strip() and str(version_id).strip()
-    }
 
 
 def _set_task_extra_data(task: Task, **values: object) -> None:
@@ -250,8 +243,8 @@ async def _prepare_tool_task_run(
         project_id = str(project.id)
         task_extra_data["project_id"] = project_id
 
-    input_bindings = _normalize_requested_input_bindings(task_data.input_bindings)
-    standard_input_uploads = _normalize_requested_input_bindings(task_data.standard_input_uploads)
+    input_bindings = normalize_string_mapping(task_data.input_bindings)
+    standard_input_uploads = normalize_string_mapping(task_data.standard_input_uploads)
     if (
         assign_default_project
         and project_id
@@ -320,7 +313,7 @@ async def prepare_tool_task_preview(
         "params": prepared.params,
         "file_ids": prepared.file_ids,
         "input_bindings": prepared.input_bindings,
-        "requested_input_bindings": _normalize_requested_input_bindings(
+        "requested_input_bindings": normalize_string_mapping(
             task_data.input_bindings,
         ),
         "standard_input_uploads": prepared.standard_input_uploads,
@@ -351,7 +344,7 @@ async def create_and_schedule_tool_task(
             "标准 Artifact 输入尚未满足工具要求",
             detail={"binding_decisions": prepared.binding_decisions},
         )
-    requested_input_bindings = _normalize_requested_input_bindings(task_data.input_bindings)
+    requested_input_bindings = normalize_string_mapping(task_data.input_bindings)
     if prepared.input_bindings:
         extra_data["input_bindings"] = prepared.input_bindings
     elif requested_input_bindings:

@@ -7,7 +7,6 @@ import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +24,7 @@ from app.models.files import File as FileModel
 from app.models.files import FileSourceType
 from app.models.tools import Tool, ToolVersion
 from app.models.users import User
+from app.services.run_input_normalization import normalize_string_mapping
 from app.services.standard_upload_metadata import build_standard_upload_metadata
 from app.services.tool_contracts import build_tool_contract
 from app.tool_packages.config_resolver import tool_package_v2_manifest_data
@@ -64,7 +64,7 @@ async def materialize_standard_input_uploads(
     standard_input_uploads: dict[str, str] | None,
 ) -> dict[str, str]:
     """Create ArtifactVersions for direct uploads so v2 runners can consume request.v1."""
-    uploads = _normalize_upload_mapping(standard_input_uploads)
+    uploads = normalize_string_mapping(standard_input_uploads)
     if not uploads:
         return {}
 
@@ -126,7 +126,7 @@ async def validate_standard_input_uploads(
     project_id: str | None,
     standard_input_uploads: dict[str, str] | None,
 ) -> None:
-    uploads = _normalize_upload_mapping(standard_input_uploads)
+    uploads = normalize_string_mapping(standard_input_uploads)
     if not uploads:
         return
     await _build_standard_input_upload_plans(
@@ -204,14 +204,6 @@ async def _build_standard_input_upload_plan(
             uploaded_file=uploaded_file,
         ),
     )
-
-
-def _normalize_upload_mapping(values: dict[str, str] | None) -> dict[str, str]:
-    return {
-        str(input_name): str(file_id)
-        for input_name, file_id in (values or {}).items()
-        if str(input_name).strip() and str(file_id).strip()
-    }
 
 
 def _artifact_input_slots_by_name(tool: Tool, tool_version: ToolVersion) -> dict[str, dict]:
