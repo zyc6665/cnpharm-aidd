@@ -62,11 +62,11 @@ test('workflow node inspector embeds a real node run panel', () => {
   }
 
   for (const marker of [
-    'ToolParameterForm',
+    'ToolRunInputForm',
     'buildToolFormInitialState',
     'getToolDetail',
     'flattenToolInputSchema',
-    ':allow-uploads="false"'
+    ':allow-uploads="true"'
   ]) {
     assert.equal(runPanelSource.includes(marker), true, `run panel missing ${marker}`)
   }

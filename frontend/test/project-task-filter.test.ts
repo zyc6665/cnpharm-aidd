@@ -23,7 +23,7 @@ test('task center supports project-scoped task filtering from project overview',
   assert.equal(taskPageSource.includes('filterTasksForTab(tasks.value, currentTab.value)'), true)
   assert.equal(taskPageSource.includes('filterTasksByKeyword(filteredByTab, searchKeyword.value)'), true)
   assert.equal(taskPageSource.includes('route.query.project_id'), true)
-  assert.equal(taskPageSource.includes('params.project_id = projectId.value'), true)
+  assert.equal(taskPageSource.includes('projectId: projectId.value'), true)
   assert.equal(taskPageSource.includes('useAgentsStore'), false)
   assert.equal(taskPageSource.includes('AgentRunTaskCard'), false)
   assert.equal(taskPageSource.includes('agent-task-grouping'), false)

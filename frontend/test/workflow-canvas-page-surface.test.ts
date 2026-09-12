@@ -7,17 +7,21 @@ const pageSource = readFileSync(resolve('src/views/workflow/index.vue'), 'utf8')
 const canvasSource = readFileSync(resolve('src/composables/useWorkflowCanvas.ts'), 'utf8')
 const persistenceSource = readFileSync(resolve('src/composables/useWorkflowPersistence.ts'), 'utf8')
 const paletteSource = readFileSync(resolve('src/components/workflow/WorkflowToolPalette.vue'), 'utf8')
+const railSource = readFileSync(resolve('src/components/workflow/WorkflowWorkbenchRail.vue'), 'utf8')
+const shellSource = readFileSync(resolve('src/components/workflow/WorkflowWorkbenchShell.vue'), 'utf8')
 
 test('workflow page mounts template canvas and inspector in manual mode', () => {
   for (const marker of [
     'WorkflowCanvasBoard',
     'WorkflowNodeInspector',
     'useWorkflowCanvas',
-    'workflow-canvas-layout',
-    'workflow-step-rail'
+    'WorkflowWorkbenchShell',
+    'WorkflowWorkbenchRail'
   ]) {
     assert.equal(pageSource.includes(marker), true, `missing ${marker}`)
   }
+
+  assert.equal(shellSource.includes('ResizableWorkbenchSidebar'), true)
 
   for (const marker of [
     'WORKFLOW_CANVAS_PRESETS',
@@ -31,19 +35,20 @@ test('workflow page mounts template canvas and inspector in manual mode', () => 
 
 test('workflow page exposes a sidebar tool library and run summary', () => {
   for (const marker of [
-    'workflow-status-summary',
     'readyNodeCount',
     'blockedNodeCount',
     'runningNodeCount',
     'completedNodeCount',
     'failedNodeCount',
-    'WorkflowToolPalette',
     'handleRunWorkflowDefinition',
-    'WorkflowPreflightPanel',
-    'workflow-definition-bar'
+    'WorkflowPreflightPanel'
   ]) {
     assert.equal(pageSource.includes(marker), true, `missing ${marker}`)
   }
+
+  assert.equal(railSource.includes('workflow-status-summary'), true)
+  assert.equal(railSource.includes('WorkflowToolPalette'), true)
+  assert.equal(shellSource.includes('WorkflowWorkbenchHeader'), true)
 
   for (const marker of [
     'sidebarToolSearchKeyword',
@@ -64,7 +69,7 @@ test('workflow page exposes a sidebar tool library and run summary', () => {
 test('workflow page exposes workflow result report integration', () => {
   for (const marker of [
     'WorkflowResultsReportPanel',
-    'workflow-results-region',
+    'WorkflowResultsSidebar',
     'workflowReportRows'
   ]) {
     assert.equal(pageSource.includes(marker), true, `missing ${marker}`)

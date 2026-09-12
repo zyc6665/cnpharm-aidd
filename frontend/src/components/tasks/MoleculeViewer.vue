@@ -114,7 +114,7 @@ async function ensureViewer() {
     collapseRightPanel: true,
     viewportShowControls: false,
     viewportShowExpand: false,
-    viewportShowToggleFullscreen: props.allowNativeFullscreen,
+    viewportShowToggleFullscreen: true,
     viewportShowSettings: false,
     viewportShowSelectionMode: false,
     viewportShowAnimation: false,

@@ -63,6 +63,16 @@ function candidateFieldTokens(key: string, prop: { _originalKey?: string }): str
   )
 }
 
+function fieldConfigString(prop: unknown, keys: readonly string[]): string {
+  if (!prop || typeof prop !== 'object' || Array.isArray(prop)) {
+    return ''
+  }
+
+  const record = prop as Record<string, unknown>
+  const value = keys.map(key => record[key]).find(item => typeof item === 'string' && item.trim())
+  return typeof value === 'string' ? value.trim() : ''
+}
+
 function standardTypeFileFieldTokens(slot: StandardArtifactInputSlot): string[] {
   const standardBase = normalizeFieldToken(String(slot.type).split('@')[0])
   return Array.from(
@@ -79,6 +89,20 @@ function scoreStandardInputFileField(
   key: string,
   prop: { _originalKey?: string }
 ): number {
+  const explicitInput = normalizeFieldToken(
+    fieldConfigString(prop, ['x-standard-input', 'x_standard_input', 'standardInput', 'standard_input'])
+  )
+  if (explicitInput && explicitInput === normalizeFieldToken(slot.name)) {
+    return 1000
+  }
+
+  const explicitType = normalizeStandardType(
+    fieldConfigString(prop, ['x-standard-type', 'x_standard_type', 'standardType', 'standard_type', 'semantic_type'])
+  )
+  if (explicitType && explicitType === slot.type) {
+    return 950
+  }
+
   const fieldTokens = candidateFieldTokens(key, prop)
   const slotName = normalizeFieldToken(slot.name)
   const standardTokens = standardTypeFileFieldTokens(slot)

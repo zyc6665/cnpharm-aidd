@@ -15,11 +15,17 @@
         </div>
 
         <a-form ref="formRef" :model="formState" layout="vertical">
-          <ToolParameterForm
+          <ToolRunInputForm
             :schema="flattenedSchema"
             :form-state="formState"
             :file-list="fileList"
             :selected-artifacts="selectedArtifacts"
+            :standard-input-slots="standardInputSlots"
+            :show-standard-artifact-inputs="false"
+            :current-project-id="projectId ?? undefined"
+            :project-artifacts="emptyStandardProjectArtifacts"
+            :selected-standard-artifacts="emptyStandardArtifactSelections"
+            :standard-input-file-list="emptyStandardInputFileList"
             :hidden-field-keys="autoBoundFieldKeys"
             :allow-artifacts="userStore.isLoggedIn"
             :allow-uploads="true"
@@ -80,16 +86,20 @@
   import { useI18n } from 'vue-i18n'
   import type { FormInstance } from 'ant-design-vue/es/form'
   import type { UploadFile } from 'ant-design-vue'
-  import ToolParameterForm from '@/components/workflow/ToolParameterForm.vue'
+  import ToolRunInputForm from '@/components/tools/ToolRunInputForm.vue'
   import { isTaskTerminalStatus } from '@/api/tasks'
   import { getToolDetail } from '@/api/tools'
   import { useUserStore, useWorkflowStore } from '@/stores'
   import { useStandaloneNodeRun } from '@/composables/useStandaloneNodeRun'
   import type { ArtifactFile, SchemaProperty, Tool, ToolSchema } from '@/types/models'
+  import type { TypedArtifact } from '@/types/artifacts'
   import {
     buildToolFormInitialState,
     flattenToolInputSchema,
-    isFileSchemaProperty
+    isFileSchemaProperty,
+    resolveStandardInputFileFieldBindings,
+    resolveToolRunInputSurface,
+    type StandardArtifactInputSlot
   } from '@/domain/tools'
   import { taskRunPreparationBlockedMessage } from '@/domain/tasks'
   import type { WorkflowNodeArtifactRecommendation } from '@/workflow/canvas-artifacts'
@@ -100,16 +110,6 @@
     slug: string
     name: string
     description?: string
-  }
-
-  interface ContractArtifactInput {
-    name: string
-    type: string
-    required?: boolean
-    role_preferences?: string[]
-    required_roles?: string[]
-    readiness_policy?: string | null
-    suggested_preparation_tool?: string | null
   }
 
   const props = defineProps<{
@@ -141,6 +141,9 @@
   const fileList = reactive<Record<string, UploadFile[]>>({})
   const selectedArtifacts = reactive<Record<string, ArtifactFile | undefined>>({})
   const autoBoundArtifactByField = reactive<Record<string, ArtifactFile | undefined>>({})
+  const emptyStandardProjectArtifacts: TypedArtifact[] = []
+  const emptyStandardArtifactSelections: Record<string, TypedArtifact | undefined> = {}
+  const emptyStandardInputFileList: Record<string, UploadFile[]> = {}
   let detailRequestToken = 0
 
   const selectedToolSummary = computed(() => {
@@ -153,21 +156,16 @@
 
   const currentNodeTask = computed(() => workflowStore.taskByNode[props.nodeId] ?? null)
 
-  const contractArtifactInputs = computed<ContractArtifactInput[]>(() =>
-    selectedTool.value?.contract?.artifacts?.inputs ?? []
-  )
+  const inputSurface = computed(() => resolveToolRunInputSurface(selectedTool.value))
+  const standardInputSlots = computed(() => inputSurface.value.standardInputSlots)
 
   const inputSchema = computed<ToolSchema | undefined>(() => {
-    const config = selectedTool.value?.current_version?.config
-    if (config && typeof config === 'object' && 'input_schema' in config) {
-      const schema = config.input_schema as ToolSchema
-      if (schema?.properties && Object.keys(schema.properties).length > 0) {
-        return schema
-      }
+    if (inputSurface.value.schema?.properties && Object.keys(inputSurface.value.schema.properties).length > 0) {
+      return inputSurface.value.schema
     }
 
-    if (contractArtifactInputs.value.length > 0) {
-      return buildArtifactInputSchema(contractArtifactInputs.value)
+    if (standardInputSlots.value.length > 0) {
+      return buildArtifactInputSchema(standardInputSlots.value)
     }
 
     return undefined
@@ -200,6 +198,16 @@
       .filter(([, prop]) => isFileSchemaProperty(prop))
       .map(([key]) => key)
   )
+  const standardInputFileFieldBindings = computed(() => {
+    if (Object.keys(inputSurface.value.standardInputFileFieldBindings).length > 0) {
+      return inputSurface.value.standardInputFileFieldBindings
+    }
+
+    return resolveStandardInputFileFieldBindings({
+      slots: standardInputSlots.value,
+      flattenedSchema: flattenedSchema.value,
+    })
+  })
 
   const recommendedArtifactSignature = computed(() =>
     (props.recommendedArtifacts ?? [])
@@ -401,7 +409,7 @@
     }
   }
 
-  function buildArtifactInputSchema(artifactInputs: ContractArtifactInput[]): ToolSchema {
+  function buildArtifactInputSchema(artifactInputs: readonly StandardArtifactInputSlot[]): ToolSchema {
     const properties: ToolSchema['properties'] = {}
     const required: string[] = []
 
@@ -438,7 +446,8 @@
       fileList,
       selectedArtifacts,
       executorType: executorType.value,
-      contractArtifactInputs: contractArtifactInputs.value
+      contractArtifactInputs: standardInputSlots.value,
+      standardInputFileFieldBindings: standardInputFileFieldBindings.value
     })
   }
 

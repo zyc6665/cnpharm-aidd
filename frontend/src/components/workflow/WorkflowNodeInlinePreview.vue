@@ -179,7 +179,7 @@ const visualizationTask = computed(() => ({
   justify-content: center;
   padding: 0;
   border-color: rgba(15, 23, 42, 0.12);
-  background: rgba(255, 255, 255, 0.94);
+  background: @bg-elevated;
   color: #1d4ed8;
   font-size: @font-size-xs;
   font-weight: 800;
@@ -191,7 +191,7 @@ const visualizationTask = computed(() => ({
 .inline-preview-expand-button:hover,
 .inline-preview-expand-button:focus-visible {
   border-color: @accent-color;
-  background: #fff;
+  background: @bg-surface;
   color: @accent-color-active;
 }
 

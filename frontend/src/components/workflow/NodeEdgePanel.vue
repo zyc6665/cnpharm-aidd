@@ -7,12 +7,13 @@
         :key="`${suggestion.sourceNodeId}-${suggestion.semanticType}`"
         class="edge-item"
       >
-        <span
-          ><strong>{{ suggestion.sourceNodeTitle }}</strong
-          ><small>{{ suggestion.semanticType }}</small></span
-        ><a-button size="small" type="primary" ghost @click="addSuggestedEdge(suggestion)">{{
-          t('workflow.inspector.addEdge')
-        }}</a-button>
+        <span>
+          <strong>{{ suggestion.sourceNodeTitle }}</strong>
+          <small>{{ suggestion.semanticType }}</small>
+        </span>
+        <a-button size="small" type="primary" ghost @click="addSuggestedEdge(suggestion)">
+          {{ t('workflow.inspector.addEdge') }}
+        </a-button>
       </div>
     </div>
     <a-empty v-else :description="t('workflow.inspector.noRecommendedEdges')" />
@@ -21,12 +22,13 @@
     <div class="section-title">{{ t('workflow.inspector.upstreamEdge') }}</div>
     <div v-if="upstreamEdges.length" class="edge-list">
       <div v-for="edge in upstreamEdges" :key="edge.id" class="edge-item">
-        <span
-          ><strong>{{ nodeTitleById[edge.source] ?? edge.source }}</strong
-          ><small>{{ edge.artifactType ?? t('workflow.inspector.artifactFallback') }}</small></span
-        ><a-button size="small" danger @click="$emit('delete-edge', edge.id)">{{
-          t('workflow.inspector.deleteEdge')
-        }}</a-button>
+        <span>
+          <strong>{{ nodeTitleById[edge.source] ?? edge.source }}</strong>
+          <small>{{ edge.artifactType ?? t('workflow.inspector.artifactFallback') }}</small>
+        </span>
+        <a-button size="small" danger @click="$emit('delete-edge', edge.id)">
+          {{ t('workflow.inspector.deleteEdge') }}
+        </a-button>
       </div>
     </div>
     <div class="edge-editor">
@@ -50,10 +52,8 @@
     </div>
     <div v-else-if="recommendations.length" class="input-list">
       <div v-for="recommendation in recommendations" :key="recommendation.edgeId">
-        <a-tag color="blue">{{ recommendation.semanticType }}</a-tag
-        ><span>{{
-          recommendation.artifact?.filename ?? t('workflow.inspector.missingArtifact')
-        }}</span>
+        <a-tag color="blue">{{ recommendation.semanticType }}</a-tag>
+        <span>{{ recommendation.artifact?.filename ?? t('workflow.inspector.missingArtifact') }}</span>
       </div>
     </div>
     <div v-else-if="node.requiredInputTypes?.length">

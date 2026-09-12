@@ -59,7 +59,6 @@ describe('useAgentEventStream', () => {
     vi.mocked(streamAgentRunEvents).mockImplementation(async (_runId, options) => {
       options.onEvent({ id: '4', sequence: 4, event_type: 'thinking', payload: {} })
     })
-    const store = useProjectConversationStore()
     const stream = useAgentEventStream({ reconnectDelayMs: 10 })
 
     stream.connect('run-1')

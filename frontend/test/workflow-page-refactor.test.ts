@@ -30,6 +30,7 @@ test('工作台页面拆分后的 composable 与组件应存在', () => {
 
 test('工作台页面应通过 composable 和子组件组装，而不是继续堆叠实现细节', () => {
   const pageSource = readSource('src/views/workflow/index.vue')
+  const railSource = readSource('src/components/workflow/WorkflowWorkbenchRail.vue')
 
   assert.equal(pageSource.includes('useWorkflowCanvas'), true)
   assert.equal(pageSource.includes('useWorkflowPersistence'), true)
@@ -37,7 +38,8 @@ test('工作台页面应通过 composable 和子组件组装，而不是继续�
   assert.equal(pageSource.includes('WorkflowCanvasBoard'), true)
   assert.equal(pageSource.includes('WorkflowCanvasToolbar'), false)
   assert.equal(pageSource.includes('WorkflowRunInputPanel'), true)
-  assert.equal(pageSource.includes('WorkflowToolPalette'), true)
+  assert.equal(pageSource.includes('WorkflowWorkbenchRail'), true)
+  assert.equal(railSource.includes('WorkflowToolPalette'), true)
 })
 
 test('工作台页面应收敛到 700 行以内', () => {

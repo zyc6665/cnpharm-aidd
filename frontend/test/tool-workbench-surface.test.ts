@@ -71,19 +71,23 @@ test('共享产物文件选择器应使用路径式四级选择并过滤兼容�
 
 test('普通工具详情页应引用共享产物文件选择器', () => {
   const source = readSource('src/views/tools/Detail.vue')
+  const formSource = readSource('src/components/tools/ToolParameterForm.vue')
 
-  assert.equal(source.includes('ArtifactFilePicker'), true)
-  assert.equal(source.includes(':current-tool-id="tool?.id"'), true)
-  assert.equal(source.includes(':current-tool-slug="tool?.slug"'), true)
+  assert.equal(source.includes('ToolRunInputForm'), true)
+  assert.equal(source.includes(':tool-id="tool?.id"'), true)
+  assert.equal(source.includes(':tool-slug="tool?.slug"'), true)
+  assert.equal(formSource.includes('ArtifactFilePicker'), true)
 })
 
 test('节点运行区应经由参数表单复用共享产物选择器', () => {
   const runPanelSource = readSource('src/components/workflow/WorkflowNodeRunPanel.vue')
-  const formSource = readSource('src/components/workflow/ToolParameterForm.vue')
+  const runFormSource = readSource('src/components/tools/ToolRunInputForm.vue')
+  const formSource = readSource('src/components/tools/ToolParameterForm.vue')
 
-  assert.equal(runPanelSource.includes('ToolParameterForm'), true)
+  assert.equal(runPanelSource.includes('ToolRunInputForm'), true)
   assert.equal(runPanelSource.includes(':tool-id="selectedTool?.id"'), true)
   assert.equal(runPanelSource.includes(':tool-slug="selectedTool?.slug"'), true)
+  assert.equal(runFormSource.includes('ToolParameterForm'), true)
   assert.equal(formSource.includes('ArtifactFilePicker'), true)
 })
 

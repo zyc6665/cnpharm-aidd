@@ -51,8 +51,8 @@ const stubs = {
   AForm: { template: '<form><slot /></form>' },
   AButton: { props: ['loading', 'disabled'], template: '<button :disabled="disabled"><slot /></button>' },
   ATag: { template: '<span><slot /></span>' },
-  ToolParameterForm: {
-    name: 'ToolParameterForm',
+  ToolRunInputForm: {
+    name: 'ToolRunInputForm',
     props: ['schema', 'formState', 'fileList', 'allowUploads', 'hiddenFieldKeys'],
     emits: ['update:selectedArtifact'],
     template: '<div class="tool-parameter-form" :data-allow-uploads="String(allowUploads)" :data-schema-fields="Object.keys(schema.properties).join(\',\')" :data-hidden-fields="(hiddenFieldKeys || []).join(\',\')" />'
@@ -437,7 +437,7 @@ describe('WorkflowNodeRunPanel', () => {
     await flushPromises()
     expect(wrapper.find('.tool-parameter-form').attributes('data-schema-fields')).toBe('protein')
 
-    wrapper.findComponent({ name: 'ToolParameterForm' }).vm.$emit('update:selectedArtifact', 'protein', {
+    wrapper.findComponent({ name: 'ToolRunInputForm' }).vm.$emit('update:selectedArtifact', 'protein', {
       id: 'file-protein',
       filename: 'protein.pdb',
       download_url: '/api/v1/files/file-protein/download'

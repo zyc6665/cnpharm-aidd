@@ -461,7 +461,7 @@ function handleToolDragStart(event: DragEvent, toolSlug: string) {
   padding: @spacing-xs;
   border: 1px solid @border-color-light;
   border-radius: @border-radius-md;
-  background: rgba(255, 255, 255, 0.025);
+  background: @bg-elevated;
 }
 
 .sidebar-tool-quick-filter-panel {
@@ -472,7 +472,7 @@ function handleToolDragStart(event: DragEvent, toolSlug: string) {
   border-radius: @border-radius-md;
   background:
     linear-gradient(180deg, rgba(59, 130, 246, 0.06), rgba(34, 197, 94, 0.025)),
-    rgba(255, 255, 255, 0.02);
+    @bg-elevated;
 }
 
 .sidebar-tool-filter-heading {
@@ -591,7 +591,7 @@ function handleToolDragStart(event: DragEvent, toolSlug: string) {
   padding: @spacing-xs;
   border: 1px solid @border-color-light;
   border-radius: @border-radius-md;
-  background: rgba(255, 255, 255, 0.018);
+  background: @bg-surface;
 }
 
 .sidebar-tool-group + .sidebar-tool-group {
@@ -659,7 +659,7 @@ function handleToolDragStart(event: DragEvent, toolSlug: string) {
   border: 1px solid @border-color-hover;
   border-radius: @border-radius-sm;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015)),
+    linear-gradient(180deg, @bg-surface, @bg-elevated),
     @bg-elevated;
   text-align: left;
   cursor: pointer;

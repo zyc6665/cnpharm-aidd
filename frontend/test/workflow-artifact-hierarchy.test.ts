@@ -134,7 +134,7 @@ test('参数里的产物复用选择器应提供分组→工具→任务→产�
 
 test('节点参数表单应通过共享选择器提供分组→工具→任务→产物链路', () => {
   const source = readSource('src/components/tools/ArtifactFilePicker.vue')
-  const formSource = readSource('src/components/workflow/ToolParameterForm.vue')
+  const formSource = readSource('src/components/tools/ToolParameterForm.vue')
 
   assert.equal(source.includes('buildWorkflowArtifactHierarchy'), true)
   assert.equal(source.includes('selectedGroupId'), true)

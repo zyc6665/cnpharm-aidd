@@ -29,7 +29,7 @@ test('workflow page integrates preflight summary before the canvas', () => {
     'WorkflowPreflightPanel',
     'workflowPreflight',
     'buildWorkflowPreflight',
-    'workflow-preflight-region',
+    '<template #preflight>',
     '@run-ready-nodes="handleRunWorkflowDefinition"',
     '@select-node="workflowStore.setActiveNode"'
   ]) {

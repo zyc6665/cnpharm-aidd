@@ -129,8 +129,10 @@ test('流程工作台应拆出画布、工具栏与节点检查器组件', () =>
 
 test('流程工作台页面应组合工具栏、画布和节点检查器组件', () => {
   const source = readSource('src/views/workflow/index.vue')
+  const railSource = readSource('src/components/workflow/WorkflowWorkbenchRail.vue')
 
-  assert.equal(source.includes('WorkflowToolPalette'), true)
+  assert.equal(source.includes('WorkflowWorkbenchRail'), true)
+  assert.equal(railSource.includes('WorkflowToolPalette'), true)
   assert.equal(source.includes('WorkflowCanvasBoard'), true)
   assert.equal(source.includes('WorkflowNodeInspector'), true)
 })
@@ -145,7 +147,7 @@ test('节点参数面板应复用 schema 扁平化并避免单节点任务提交
 test('节点参数面板应提供参数表单与重置操作', () => {
   const source = readSource('src/components/workflow/WorkflowNodeRunPanel.vue')
 
-  assert.equal(source.includes('ToolParameterForm'), true)
+  assert.equal(source.includes('ToolRunInputForm'), true)
   assert.equal(source.includes('submitWorkflowForm'), false)
   assert.equal(source.includes('buildTaskSubmissionPayload'), false)
   assert.equal(source.includes('resetForm'), true)

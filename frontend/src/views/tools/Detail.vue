@@ -96,88 +96,35 @@
                     :placeholder="t('tasks.namePlaceholder')"
                   />
                 </a-form-item>
-                <StandardArtifactInputs
-                  v-if="showStandardArtifactInputs"
-                  :slots="standardInputSlots"
+                <ToolRunInputForm
+                  :schema="flattenedSchema"
+                  :form-state="formState"
+                  :file-list="fileList"
+                  :selected-artifacts="selectedArtifacts"
+                  :standard-input-slots="standardInputSlots"
+                  :show-standard-artifact-inputs="showStandardArtifactInputs"
                   :current-project-id="currentProjectId"
                   :project-artifacts="standardProjectArtifacts"
-                  :loading="standardArtifactsLoading"
-                  :selected-artifacts="selectedStandardArtifacts"
-                  :upload-lists="standardInputFileList"
+                  :standard-artifacts-loading="standardArtifactsLoading"
+                  :selected-standard-artifacts="selectedStandardArtifacts"
+                  :standard-input-file-list="standardInputFileList"
+                  :allow-artifacts="userStore.isLoggedIn"
+                  :allow-uploads="true"
                   :tool-id="tool?.id"
                   :tool-slug="tool?.slug"
-                  @select-artifact="handleStandardArtifactSelection"
-                  @update-upload-list="handleStandardInputFileListChange"
-                />
-                <template v-for="(prop, key) in flattenedSchema?.properties" :key="key">
-                  <a-form-item
-                    :name="key"
-                    :label="prop.title"
-                    :rules="getFieldRules(key, prop)"
-                    :extra="prop.description"
-                  >
-                    <!-- 文本输入 -->
-                    <a-input
-                      v-if="prop.type === 'string' && !prop.format && !prop.enum"
-                      v-model:value="formState[key]"
-                      :placeholder="prop.description"
-                    />
-                    <!-- 文本域 -->
-                    <a-textarea
-                      v-else-if="prop.type === 'string' && (prop.format === 'textarea' || prop.format === 'fasta' || prop.format === 'pdb')"
-                      v-model:value="formState[key]"
-                      :placeholder="prop.description"
-                      :rows="prop.format === 'fasta' || prop.format === 'pdb' ? 8 : 4"
-                      :class="{ 'code-input': prop.format === 'fasta' || prop.format === 'pdb' }"
-                    />
-                    <!-- 数字输入 -->
-                    <a-input-number
-                      v-else-if="prop.type === 'number'"
-                      v-model:value="formState[key]"
-                      :min="prop.minimum"
-                      :max="prop.maximum"
-                      style="width: 100%"
-                    />
-                    <!-- 布尔选择 -->
-                    <a-switch
-                      v-else-if="prop.type === 'boolean'"
-                      v-model:checked="formState[key]"
-                    />
-                    <!-- 下拉选择 -->
-                    <a-select
-                      v-else-if="prop.type === 'select' || (prop.enum && prop.type !== 'array')"
-                      v-model:value="formState[key]"
-                      :placeholder="prop.description"
-                    >
-                      <a-select-option v-for="opt in prop.enum" :key="opt" :value="opt">
-                        {{ opt }}
-                      </a-select-option>
-                    </a-select>
-                    <!-- 数组多选（enum） -->
-                    <a-select
-                      v-else-if="prop.type === 'array' && prop.items?.enum"
-                      v-model:value="formState[key]"
-                      mode="multiple"
-                      :placeholder="prop.description"
-                    >
-                      <a-select-option v-for="opt in prop.items.enum" :key="opt" :value="opt">
-                        {{ opt }}
-                      </a-select-option>
-                    </a-select>
-                    <!-- 文件上传 / 产物选择 -->
-                    <ArtifactFilePicker
-                      v-else-if="prop.type === 'file' || prop.format === 'uri' || prop.format === 'file'"
-                      :upload-list="fileList[key] ?? []"
-                      :selected-artifact="selectedArtifacts[key] ?? null"
-                      :accept="getFileAccept(String(key), prop)"
-                      :allow-artifacts="userStore.isLoggedIn"
-                      :current-tool-id="tool?.id"
-                      :current-tool-slug="tool?.slug"
-                      @update:upload-list="(files) => handleFileListChange(String(key), files)"
-                      @update:selected-artifact="(artifact) => handleArtifactSelection(String(key), artifact)"
-                    />
+                  :get-file-accept="getFileAccept"
+                  :is-file-field-satisfied="isFileFieldSatisfied"
+                  :required-message="requiredFieldMessage"
+                  :min-length-message="minLengthMessage"
+                  :max-length-message="maxLengthMessage"
+                  @select-standard-artifact="handleStandardArtifactSelection"
+                  @update-standard-upload-list="handleStandardInputFileListChange"
+                  @update:file-list="handleFileListChange"
+                  @update:selected-artifact="handleArtifactSelection"
+                >
+                  <template #file-field-extra="{ fieldKey, property }">
                     <div
-                      v-if="showSdfToPdbConverter(String(key))"
+                      v-if="showSdfToPdbConverter(String(fieldKey))"
                       class="sdf-converter"
                     >
                       <div class="sdf-converter__copy">
@@ -187,43 +134,43 @@
                       <a-upload
                         accept=".sdf"
                         :show-upload-list="false"
-                        :before-upload="createSdfUploadBefore(String(key))"
+                        :before-upload="createSdfUploadBefore(String(fieldKey))"
                       >
-                        <a-button size="small" :loading="sdfConversionLoading[String(key)]">
+                        <a-button size="small" :loading="sdfConversionLoading[String(fieldKey)]">
                           <FileTextOutlined />
                           上传 SDF 并转换
                         </a-button>
                       </a-upload>
                     </div>
                     <div
-                      v-if="showSdfToPdbConverter(String(key)) && sdfConversionStatusText(String(key))"
+                      v-if="showSdfToPdbConverter(String(fieldKey)) && sdfConversionStatusText(String(fieldKey))"
                       class="sdf-converter-status"
-                      :class="{ 'is-error': Boolean(sdfConversionErrors[String(key)]) }"
+                      :class="{ 'is-error': Boolean(sdfConversionErrors[String(fieldKey)]) }"
                     >
-                      {{ sdfConversionStatusText(String(key)) }}
+                      {{ sdfConversionStatusText(String(fieldKey)) }}
                     </div>
                     <div
-                      v-if="isFileSchemaProperty(prop) && exampleFiles[String(key)]"
+                      v-if="isFileSchemaProperty(property) && exampleFiles[String(fieldKey)]"
                       class="example-file-binding"
                     >
                       <FileTextOutlined />
-                      <span>{{ t('tools.exampleFileBound') }}: {{ exampleFiles[String(key)]?.filename }}</span>
-                      <a-button type="link" size="small" @click="clearExampleFile(String(key))">
+                      <span>{{ t('tools.exampleFileBound') }}: {{ exampleFiles[String(fieldKey)]?.filename }}</span>
+                      <a-button type="link" size="small" @click="clearExampleFile(String(fieldKey))">
                         {{ t('common.clear') }}
                       </a-button>
                     </div>
                     <div
-                      v-if="isFileSchemaProperty(prop) && convertedFiles[String(key)]"
+                      v-if="isFileSchemaProperty(property) && convertedFiles[String(fieldKey)]"
                       class="converted-file-binding"
                     >
                       <FileTextOutlined />
-                      <span>已转换: {{ convertedFiles[String(key)]?.filename }}</span>
-                      <a-button type="link" size="small" @click="clearConvertedFile(String(key))">
+                      <span>已转换: {{ convertedFiles[String(fieldKey)]?.filename }}</span>
+                      <a-button type="link" size="small" @click="clearConvertedFile(String(fieldKey))">
                         {{ t('common.clear') }}
                       </a-button>
                     </div>
-                  </a-form-item>
-                </template>
+                  </template>
+                </ToolRunInputForm>
 
                 <a-form-item class="tool-form-actions">
                   <a-space wrap>
@@ -372,7 +319,7 @@
   import { useRoute, useRouter } from 'vue-router'
   import { useI18n } from 'vue-i18n'
   import { message } from 'ant-design-vue'
-  import type { FormInstance, Rule } from 'ant-design-vue/es/form'
+  import type { FormInstance } from 'ant-design-vue/es/form'
   import type { UploadFile } from 'ant-design-vue'
   import {
     ToolOutlined,
@@ -385,8 +332,7 @@
     FileTextOutlined
   } from '@ant-design/icons-vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
-  import ArtifactFilePicker from '@/components/tools/ArtifactFilePicker.vue'
-  import StandardArtifactInputs from '@/components/tools/StandardArtifactInputs.vue'
+  import ToolRunInputForm from '@/components/tools/ToolRunInputForm.vue'
   import ToolExamplePanel from '@/components/tools/ToolExamplePanel.vue'
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
   import SkeletonCard from '@/components/common/SkeletonCard.vue'
@@ -405,37 +351,27 @@
   import { applyToolExample, getToolExample, previewToolExampleFile } from '@/api/tools'
   import { getToolValidationSummary } from '@/utils/tool-validation'
   import {
-    buildTaskSubmissionPayload,
+    buildStandardInputBindings,
+    buildStandardInputBindingsFromFileFields,
+    buildToolRunTaskPayload,
     formatToolDate as formatDate,
     formatToolMetricCount as formatNumber,
     flattenExampleParams,
-    flattenToolInputSchema,
-    artifactFileToUploadedToolFile,
-    fileResponseToUploadedToolFile,
     getSdfConversionStatusText,
     getToolFileAccept,
     getToolRequestErrorMessage,
     getToolStatusColor as getStatusColor,
     isFileSchemaProperty,
+    missingRequiredStandardInputSlots,
     resolveExampleFileFormKey,
-    type UploadedToolFile
+    resolveToolRunInputSurface,
+    shouldShowSdfToPdbConverter
   } from '@/domain/tools'
   import { taskRunPreparationBlockedMessage } from '@/domain/tasks'
   import {
     buildFallbackToolDocumentation,
     renderMarkdownToHtml,
     type ToolDocumentationLabels
-  } from '@/domain/tools'
-  import {
-    buildStandardInputBindings,
-    buildStandardInputBindingsFromFileFields,
-    buildStandardInputUploadsFromFileFields,
-    buildStandardRunTaskExtras,
-    missingRequiredStandardInputSlots,
-    resolveStandardInputFileFieldBindings,
-    resolveToolPackageParameterSchema,
-    resolveToolStandardInputSlots,
-    shouldShowSdfToPdbConverter
   } from '@/domain/tools'
 
   const route = useRoute()
@@ -477,46 +413,14 @@
   })
 
   const toolValidationSummary = computed(() => getToolValidationSummary(toolConfig.value))
-  const standardInputSlots = computed(() => resolveToolStandardInputSlots(tool.value))
-  const standardParameterSchema = computed(() => resolveToolPackageParameterSchema(tool.value))
-  const legacyInputSchema = computed<ToolSchema | undefined>(() => {
-    const config = toolConfig.value
-    if (config && typeof config === 'object' && 'input_schema' in config) {
-      return config.input_schema as ToolSchema
-    }
-    return undefined
-  })
-  const legacyFlattenedSchema = computed<ToolSchema | undefined>(() => {
-    return flattenToolInputSchema(legacyInputSchema.value)
-  })
-  const legacyStandardInputFileFieldBindings = computed(() => {
-    return resolveStandardInputFileFieldBindings({
-      slots: standardInputSlots.value,
-      flattenedSchema: legacyFlattenedSchema.value,
-    })
-  })
-  const usesLegacyStandardInputSurface = computed(() => {
-    const slots = standardInputSlots.value
-    return slots.length > 0 && slots.every(slot => legacyStandardInputFileFieldBindings.value[slot.name])
-  })
-  const standardInputFileFieldBindings = computed(() => {
-    return usesLegacyStandardInputSurface.value ? legacyStandardInputFileFieldBindings.value : {}
-  })
-  const showStandardArtifactInputs = computed(() => {
-    return standardInputSlots.value.length > 0 && !usesLegacyStandardInputSurface.value
-  })
+  const inputSurface = computed(() => resolveToolRunInputSurface(tool.value))
+  const standardInputSlots = computed(() => inputSurface.value.standardInputSlots)
+  const standardInputFileFieldBindings = computed(() => inputSurface.value.standardInputFileFieldBindings)
+  const showStandardArtifactInputs = computed(() => inputSurface.value.showStandardArtifactInputs)
   const currentProjectId = computed(() => {
     const raw = route.query.project_id ?? route.query.projectId ?? route.params.projectId
     const value = Array.isArray(raw) ? raw[0] : raw
     return typeof value === 'string' && value.trim() ? value.trim() : undefined
-  })
-
-  // 兼容旧 input_schema 的具体文件字段：界面展示旧字段，提交时投影为标准 Artifact 输入。
-  const inputSchema = computed<ToolSchema | undefined>(() => {
-    if (usesLegacyStandardInputSurface.value && legacyInputSchema.value) {
-      return legacyInputSchema.value
-    }
-    return standardParameterSchema.value ?? legacyInputSchema.value
   })
 
   const outputSchema = computed<ToolSchema | undefined>(() => {
@@ -599,17 +503,14 @@
     return '未完成'
   }
 
-  // 扁平化并归一化 schema，隐藏平台内部字段并兼容 input_files / integer / nullable
-  const flattenedSchema = computed<ToolSchema | undefined>(() => {
-    return flattenToolInputSchema(inputSchema.value)
-  })
+  const flattenedSchema = computed<ToolSchema | undefined>(() => inputSurface.value.flattenedSchema)
   const selectedStandardArtifactRecord = computed<Record<string, TypedArtifact | undefined>>(() => {
     return Object.fromEntries(
       standardInputSlots.value.map(slot => [slot.name, selectedStandardArtifacts[slot.name]])
     )
   })
   const legacyStandardInputBindingProjection = computed(() => {
-    if (!usesLegacyStandardInputSurface.value) {
+    if (Object.keys(standardInputFileFieldBindings.value).length === 0) {
       return { inputBindings: {}, boundFieldKeys: [] }
     }
 
@@ -620,7 +521,7 @@
     })
   })
   const standardInputBindings = computed(() => {
-    if (usesLegacyStandardInputSurface.value) {
+    if (Object.keys(standardInputFileFieldBindings.value).length > 0) {
       return legacyStandardInputBindingProjection.value.inputBindings
     }
 
@@ -640,7 +541,7 @@
     )
   }
   const hasStandardInputUploadSelection = (slotName: string) => {
-    if (usesLegacyStandardInputSurface.value) {
+    if (Object.keys(standardInputFileFieldBindings.value).length > 0) {
       return hasLegacyStandardInputUploadSelection(slotName)
     }
 
@@ -737,38 +638,19 @@
     }
   }
 
-  const getFieldRules = (key: string, prop: SchemaProperty): Rule[] => {
-    const rules: Rule[] = []
-    const schema = flattenedSchema.value
-    if (schema?.required?.includes(key)) {
-      if (isFileSchemaProperty(prop)) {
-        rules.push({
-          validator: async () => {
-            if (
-              sdfConversionLoading[key] ||
-              formState[key] ||
-              fileList[key]?.length ||
-              selectedArtifacts[key] ||
-              exampleFiles[key] ||
-              convertedFiles[key]
-            ) {
-              return Promise.resolve()
-            }
-            return Promise.reject(new Error(`${prop.title} ${t('common.required')}`))
-          },
-          trigger: 'change'
-        })
-      } else {
-        rules.push({ required: true, message: `${prop.title} ${t('common.required')}` })
-      }
-    }
-    if (prop.minLength) {
-      rules.push({ min: prop.minLength, message: t('validation.minLength', { min: prop.minLength }) })
-    }
-    if (prop.maxLength) {
-      rules.push({ max: prop.maxLength, message: t('validation.maxLength', { max: prop.maxLength }) })
-    }
-    return rules
+  const requiredFieldMessage = (title: string) => `${title} ${t('common.required')}`
+  const minLengthMessage = (min: number) => t('validation.minLength', { min })
+  const maxLengthMessage = (max: number) => t('validation.maxLength', { max })
+
+  const isFileFieldSatisfied = (key: string, _prop?: SchemaProperty) => {
+    return Boolean(
+      sdfConversionLoading[key] ||
+      formState[key] ||
+      fileList[key]?.length ||
+      selectedArtifacts[key] ||
+      exampleFiles[key] ||
+      convertedFiles[key]
+    )
   }
 
   const handleFavorite = async () => {
@@ -1003,17 +885,6 @@
     }
   }
 
-  function omitRecordKeys<T>(record: Record<string, T>, keys: readonly string[]): Record<string, T> {
-    if (!keys.length) {
-      return record
-    }
-
-    const omitted = new Set(keys)
-    return Object.fromEntries(
-      Object.entries(record).filter(([key]) => !omitted.has(key))
-    ) as Record<string, T>
-  }
-
   const handleSubmit = async () => {
     if (!userStore.isLoggedIn) {
       message.warning(t('auth.loginRequired'))
@@ -1033,98 +904,25 @@
         return
       }
 
-      const uploadedFiles: Record<string, UploadedToolFile | undefined> = {}
-      for (const [key, file] of Object.entries(exampleFiles)) {
-        if (!file) {
-          continue
-        }
-
-        uploadedFiles[key] = fileResponseToUploadedToolFile(file)
-      }
-
-      for (const [key, file] of Object.entries(convertedFiles)) {
-        if (!file) {
-          continue
-        }
-
-        uploadedFiles[key] = fileResponseToUploadedToolFile(file)
-      }
-
-      for (const [key, artifact] of Object.entries(selectedArtifacts)) {
-        if (!artifact) {
-          continue
-        }
-
-        uploadedFiles[key] = artifactFileToUploadedToolFile(artifact)
-      }
-
-      for (const [key, items] of Object.entries(fileList)) {
-        const fileItem = items?.[0]
-        if (!fileItem?.originFileObj) {
-          continue
-        }
-
-        const res = await uploadFile(fileItem.originFileObj as File)
-        uploadedFiles[key] = fileResponseToUploadedToolFile(res.data)
-      }
-
-      let taskInputBindings = standardInputBindings.value
-      let taskUploadedFiles = uploadedFiles
-      let taskFormState: Record<string, unknown> = formState
-      let standardInputUploads: Record<string, string> = {}
-
-      if (usesLegacyStandardInputSurface.value) {
-        const bindingProjection = buildStandardInputBindingsFromFileFields({
-          slots: standardInputSlots.value,
-          fileFieldBindings: standardInputFileFieldBindings.value,
-          selectedArtifacts,
-        })
-        const uploadProjection = buildStandardInputUploadsFromFileFields({
-          slots: standardInputSlots.value,
-          fileFieldBindings: standardInputFileFieldBindings.value,
-          uploadedFiles,
-          selectedArtifacts,
-          inputBindings: bindingProjection.inputBindings,
-        })
-        const boundFieldKeys = [
-          ...bindingProjection.boundFieldKeys,
-          ...uploadProjection.boundFieldKeys,
-        ]
-
-        taskInputBindings = bindingProjection.inputBindings
-        standardInputUploads = uploadProjection.standardInputUploads
-        taskUploadedFiles = omitRecordKeys(uploadedFiles, boundFieldKeys)
-        taskFormState = omitRecordKeys(formState, boundFieldKeys)
-      } else {
-        for (const slot of standardInputSlots.value) {
-          const fileItem = standardInputFileList[slot.name]?.[0]
-          if (!fileItem?.originFileObj) {
-            continue
-          }
-
-          const res = await uploadFile(fileItem.originFileObj as File)
-          standardInputUploads[slot.name] = res.data.id.toString()
-        }
-      }
-
-      const payload = buildTaskSubmissionPayload({
+      const taskPayload = await buildToolRunTaskPayload({
+        toolId: tool.value!.id,
+        taskName: taskName.value,
+        projectId: currentProjectId.value,
         flattenedSchema: schema,
-        formState: taskFormState,
-        uploadedFiles: taskUploadedFiles,
-        executorType: executorType.value
+        formState,
+        fileList,
+        selectedArtifacts,
+        resolvedFiles: {
+          example: exampleFiles,
+          converted: convertedFiles,
+        },
+        standardInputSlots: standardInputSlots.value,
+        standardInputFileFieldBindings: standardInputFileFieldBindings.value,
+        selectedStandardArtifacts,
+        standardInputFileList,
+        executorType: executorType.value,
+        uploadFile: async file => (await uploadFile(file)).data,
       })
-
-      const taskPayload = {
-        name: taskName.value.trim() || undefined,
-        tool_id: tool.value!.id,
-        params: payload.params,
-        file_ids: payload.fileIds.length > 0 ? payload.fileIds : undefined,
-        ...buildStandardRunTaskExtras({
-          projectId: currentProjectId.value,
-          inputBindings: taskInputBindings,
-          standardInputUploads
-        })
-      }
 
       const preparationPreview = await tasksStore.prepareTaskRun(taskPayload)
       const blockedMessage = taskRunPreparationBlockedMessage(preparationPreview)

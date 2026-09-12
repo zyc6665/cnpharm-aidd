@@ -4,12 +4,17 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const workflowPage = readFileSync(resolve('src/views/workflow/index.vue'), 'utf8')
+const workbenchShell = readFileSync(resolve('src/components/workflow/WorkflowWorkbenchShell.vue'), 'utf8')
+const resizableSidebar = readFileSync(resolve('src/components/workflow/ResizableWorkbenchSidebar.vue'), 'utf8')
 const canvas = readFileSync(resolve('src/components/workflow/WorkflowCanvasBoard.vue'), 'utf8')
 const inspector = readFileSync(resolve('src/components/workflow/WorkflowNodeInspector.vue'), 'utf8')
 
-test('workflow template layout keeps desktop three-column structure', () => {
-  assert.equal(workflowPage.includes('grid-template-columns: minmax(220px, 260px) minmax(0, 1fr) minmax(300px, 360px);'), true)
-  assert.equal(workflowPage.includes('@media (max-width: @screen-md)'), true)
+test('workflow template layout keeps desktop canvas between resizable sidebars', () => {
+  assert.equal(workflowPage.includes('WorkflowWorkbenchShell'), true)
+  assert.equal(workbenchShell.includes('ResizableWorkbenchSidebar'), true)
+  assert.equal(workbenchShell.includes('workflow-workbench__canvas'), true)
+  assert.equal(resizableSidebar.includes('sidebar-resize-handle'), true)
+  assert.equal(workbenchShell.includes('@media (max-width: @screen-md)'), true)
 })
 
 test('workflow canvas reserves stable surface height', () => {

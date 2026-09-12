@@ -76,10 +76,10 @@
               class="resource-row"
             >
               <strong>{{ artifact.name }}</strong>
-              <span
-                >{{ artifactTypeLabel(artifact) }} ·
-                {{ formatSize(artifact.latest_version.size_bytes) }}</span
-              >
+              <span>
+                {{ artifactTypeLabel(artifact) }} ·
+                {{ formatSize(artifact.latest_version.size_bytes) }}
+              </span>
             </a>
           </div>
           <a-empty v-else :description="artifactEmptyDescription" />
@@ -98,9 +98,7 @@
               class="resource-row"
             >
               <strong>{{ task.name || task.tool_name || task.id }}</strong>
-              <span
-                >{{ task.tool_name || '未知工具' }} · {{ task.status }} · {{ task.progress }}%</span
-              >
+              <span>{{ task.tool_name || '未知工具' }} · {{ task.status }} · {{ task.progress }}%</span>
             </router-link>
           </div>
           <a-empty v-else description="暂无任务" />

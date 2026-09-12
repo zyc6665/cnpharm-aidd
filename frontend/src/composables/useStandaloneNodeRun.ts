@@ -4,13 +4,10 @@ import { uploadFile } from '@/api/files'
 import { createTask, getTaskDetail, isTaskTerminalStatus, prepareTaskRun } from '@/api/tasks'
 import { useArtifactsStore, useWorkflowStore } from '@/stores'
 import {
-  artifactFileToUploadedToolFile,
-  buildStandardRunTaskExtras,
-  buildTaskSubmissionPayload,
-  fileResponseToUploadedToolFile,
-  type UploadedToolFile,
+  buildToolRunTaskPayload,
+  type StandardArtifactInputSlot,
 } from '@/domain/tools'
-import type { ArtifactFile, TaskCreateParams, TaskRunPreparationPreview, ToolSchema } from '@/types/models'
+import type { ArtifactFile, TaskRunPreparationPreview, ToolSchema } from '@/types/models'
 import { normalizeWorkflowSemanticType } from '@/workflow/semantic-types'
 
 interface StandaloneRunTool {
@@ -28,17 +25,6 @@ interface ContractArtifactInput {
   suggested_preparation_tool?: string | null
 }
 
-interface StandardInputBindingProjection {
-  inputBindings: Record<string, string>
-  boundArtifactIds: Set<string>
-  boundFieldKeys: Set<string>
-}
-
-interface StandardInputUploadProjection {
-  standardInputUploads: Record<string, string>
-  boundFieldKeys: Set<string>
-}
-
 type MaybeRef<T> = T | Ref<T>
 
 export interface StandaloneNodeRunOptions {
@@ -50,6 +36,7 @@ export interface StandaloneNodeRunOptions {
   selectedArtifacts: Record<string, ArtifactFile | undefined>
   executorType?: string
   contractArtifactInputs: ContractArtifactInput[]
+  standardInputFileFieldBindings?: Record<string, string>
 }
 
 export function useStandaloneNodeRun(input: {
@@ -75,133 +62,22 @@ export function useStandaloneNodeRun(input: {
     return String(normalizeWorkflowSemanticType(String(value ?? '').trim())).trim().toLowerCase()
   }
 
-  function artifactMatchesContractInput(
-    fieldKey: string,
-    artifact: ArtifactFile,
-    contractInput: ContractArtifactInput,
-  ) {
-    if (fieldKey === contractInput.name) {
-      return true
-    }
-
-    const artifactType = normalizeArtifactType(artifact.semantic_type)
-    const inputType = normalizeArtifactType(contractInput.type)
-    return Boolean(artifactType && inputType && artifactType === inputType)
+  function toStandardInputSlots(inputs: ContractArtifactInput[]): StandardArtifactInputSlot[] {
+    return inputs.map(input => ({
+      name: input.name,
+      type: normalizeArtifactType(input.type) as StandardArtifactInputSlot['type'],
+      required: input.required ?? true,
+    }))
   }
 
-  function buildStandardInputBindings(
-    options: StandaloneNodeRunOptions,
-  ): StandardInputBindingProjection {
-    const inputBindings: Record<string, string> = {}
-    const boundArtifactIds = new Set<string>()
-    const boundFieldKeys = new Set<string>()
-
-    for (const contractInput of options.contractArtifactInputs) {
-      const matchedEntry = Object.entries(options.selectedArtifacts).find(([fieldKey, artifact]) => {
-        return Boolean(
-          artifact?.artifact_version_id &&
-          !boundArtifactIds.has(artifact.id) &&
-          artifactMatchesContractInput(fieldKey, artifact, contractInput),
-        )
-      })
-
-      const [fieldKey, artifact] = matchedEntry ?? []
-      if (!fieldKey || !artifact?.artifact_version_id) {
-        continue
-      }
-
-      inputBindings[contractInput.name] = artifact.artifact_version_id
-      boundArtifactIds.add(artifact.id)
-      boundFieldKeys.add(fieldKey)
+  function standardInputFileFieldBindings(options: StandaloneNodeRunOptions) {
+    if (options.standardInputFileFieldBindings) {
+      return options.standardInputFileFieldBindings
     }
 
-    return { inputBindings, boundArtifactIds, boundFieldKeys }
-  }
-
-  function omitBoundArtifactFormValues(
-    formState: Record<string, unknown>,
-    boundFieldKeys: Set<string>,
-  ) {
-    if (boundFieldKeys.size === 0) {
-      return formState
-    }
-
-    const nextState = { ...formState }
-    for (const key of boundFieldKeys) {
-      delete nextState[key]
-    }
-    return nextState
-  }
-
-  function omitBoundUploadedFiles(
-    uploadedFiles: Record<string, UploadedToolFile | undefined>,
-    boundFieldKeys: Set<string>,
-  ) {
-    if (boundFieldKeys.size === 0) {
-      return uploadedFiles
-    }
-
-    const nextFiles = { ...uploadedFiles }
-    for (const key of boundFieldKeys) {
-      delete nextFiles[key]
-    }
-    return nextFiles
-  }
-
-  function buildStandardInputUploads(
-    options: StandaloneNodeRunOptions,
-    uploadedFiles: Record<string, UploadedToolFile | undefined>,
-    inputBindings: Record<string, string>,
-  ): StandardInputUploadProjection {
-    const standardInputUploads: Record<string, string> = {}
-    const boundFieldKeys = new Set<string>()
-
-    for (const contractInput of options.contractArtifactInputs) {
-      if (inputBindings[contractInput.name]) {
-        continue
-      }
-
-      const uploadedFile = uploadedFiles[contractInput.name]
-      if (!uploadedFile?.fileId) {
-        continue
-      }
-
-      standardInputUploads[contractInput.name] = uploadedFile.fileId
-      boundFieldKeys.add(contractInput.name)
-    }
-
-    return { standardInputUploads, boundFieldKeys }
-  }
-
-  async function resolveUploadedFiles(
-    options: StandaloneNodeRunOptions,
-    skipArtifactIds: Set<string> = new Set(),
-  ) {
-    const uploadedFiles: Record<string, UploadedToolFile | undefined> = {}
-
-    for (const [key, artifact] of Object.entries(options.selectedArtifacts)) {
-      if (!artifact) {
-        continue
-      }
-
-      if (skipArtifactIds.has(artifact.id)) {
-        continue
-      }
-
-      uploadedFiles[key] = artifactFileToUploadedToolFile(artifact)
-    }
-
-    for (const [key, files] of Object.entries(options.fileList)) {
-      const file = files[0]?.originFileObj as File | undefined
-      if (!file) {
-        continue
-      }
-
-      const response = await uploadFile(file)
-      uploadedFiles[key] = fileResponseToUploadedToolFile(response.data)
-    }
-
-    return uploadedFiles
+    return Object.fromEntries(
+      options.contractArtifactInputs.map(input => [input.name, input.name])
+    )
   }
 
   function refreshTaskBindings(
@@ -255,35 +131,21 @@ export function useStandaloneNodeRun(input: {
   async function run(options: StandaloneNodeRunOptions) {
     submitting.value = true
     try {
-      const bindingProjection = buildStandardInputBindings(options)
-      const uploadedFiles = await resolveUploadedFiles(options, bindingProjection.boundArtifactIds)
-      const uploadProjection = buildStandardInputUploads(
-        options,
-        uploadedFiles,
-        bindingProjection.inputBindings,
-      )
-      const boundFieldKeys = new Set([
-        ...bindingProjection.boundFieldKeys,
-        ...uploadProjection.boundFieldKeys,
-      ])
-      const formState = omitBoundArtifactFormValues(options.formState, boundFieldKeys)
-      const payload = buildTaskSubmissionPayload({
+      const taskPayload = await buildToolRunTaskPayload({
+        toolId: options.tool.id,
+        taskName: `${options.tool.name} · ${currentNodeId()}`,
+        projectId: currentProjectId(),
         flattenedSchema: options.flattenedSchema,
-        formState,
-        uploadedFiles: omitBoundUploadedFiles(uploadedFiles, uploadProjection.boundFieldKeys),
+        formState: options.formState,
+        fileList: options.fileList,
+        selectedArtifacts: options.selectedArtifacts,
+        standardInputSlots: toStandardInputSlots(options.contractArtifactInputs),
+        standardInputFileFieldBindings: standardInputFileFieldBindings(options),
+        selectedStandardArtifacts: {},
+        standardInputFileList: {},
         executorType: options.executorType,
+        uploadFile: async file => (await uploadFile(file)).data,
       })
-      const taskPayload: TaskCreateParams = {
-        name: `${options.tool.name} · ${currentNodeId()}`,
-        tool_id: options.tool.id,
-        params: payload.params,
-        file_ids: payload.fileIds.length > 0 ? payload.fileIds : undefined,
-        ...buildStandardRunTaskExtras({
-          projectId: currentProjectId(),
-          inputBindings: bindingProjection.inputBindings,
-          standardInputUploads: uploadProjection.standardInputUploads,
-        }),
-      }
 
       preparationPreview.value = (await prepareTaskRun(taskPayload)).data
       if (!preparationPreview.value.ready) {

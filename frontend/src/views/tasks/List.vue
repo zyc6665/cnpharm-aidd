@@ -186,8 +186,8 @@
                       {{ task.name || task.tool?.name || t('tasks.unknownTool') }}
                     </h3>
                     <span class="task-id">
-                      <template v-if="task.name && task.tool?.name"
-                        >{{ task.tool.name }} ·
+                      <template v-if="task.name && task.tool?.name">
+                        {{ task.tool.name }} ·
                       </template>
                       ID: {{ task.id.slice(0, 8) }}...
                     </span>
@@ -351,6 +351,8 @@
     canCancelTask as canCancelTaskForActor,
     canDeleteTask as canDeleteTaskForActor,
     canRetryTask as canRetryTaskForActor,
+    filterTasksByKeyword,
+    filterTasksForTab,
     getTaskArtifactLineagePath,
     getTaskProgressColor,
     getTaskProgressStatus,
@@ -415,7 +417,10 @@
   const attentionCount = computed(() => taskViewCounts.value.needs_attention)
   const historyCount = computed(() => taskViewCounts.value.history)
 
-  const displayTasks = computed<Task[]>(() => tasks.value)
+  const displayTasks = computed<Task[]>(() => {
+    const filteredByTab = filterTasksForTab(tasks.value, currentTab.value)
+    return filterTasksByKeyword(filteredByTab, searchKeyword.value)
+  })
 
   const hasDisplayItems = computed(() => displayTasks.value.length > 0)
   const currentTotal = computed(() => total.value)

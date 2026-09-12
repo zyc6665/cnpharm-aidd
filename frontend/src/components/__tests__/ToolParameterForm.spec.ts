@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
-import ToolParameterForm from '@/components/workflow/ToolParameterForm.vue'
+import ToolParameterForm from '@/components/tools/ToolParameterForm.vue'
 import type { ToolSchema } from '@/types/models'
 
 function makeSchema(overrides: Partial<ToolSchema> = {}): ToolSchema {

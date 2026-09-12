@@ -1,5 +1,5 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import i18n from '@/locales'
 import WorkflowRunStatusPanel from './WorkflowRunStatusPanel.vue'
 

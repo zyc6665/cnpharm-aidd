@@ -48,7 +48,7 @@ test('MSIGN 工具页应为 ligand_pdb 提供上传 SDF 转 PDB 辅助入口', (
   assert.equal(domainSource.includes("toolSlug === SDF_TO_PDB_TOOL_SLUG"), true)
   assert.equal(domainSource.includes("key === 'ligand_pdb' || key.endsWith('.ligand_pdb')"), true)
   assert.equal(source.includes('handleSdfToPdbConversion'), true)
-  assert.equal(source.includes('getFileAccept(String(key), prop)'), true)
+  assert.equal(source.includes(':get-file-accept="getFileAccept"'), true)
   assert.equal(filesApiSource.includes('convertSdfToPdb'), true)
 })
 

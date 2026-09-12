@@ -23,7 +23,7 @@ test('普通工具详情页应提供任务名称输入并在创建任务时传�
   assert.equal(source.includes("t('tasks.name')"), true)
   assert.equal(source.includes("t('tasks.namePlaceholder')"), true)
   assert.equal(source.includes('const taskName = ref('), true)
-  assert.equal(source.includes('name: taskName.value.trim() || undefined'), true)
+  assert.equal(source.includes('taskName: taskName.value'), true)
 })
 
 test('工作台已下线单任务运行面板，不再在面板内创建任务名称', () => {

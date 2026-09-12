@@ -95,7 +95,7 @@ test('workflow page exposes save, load and run-ready controls', () => {
     'handleSaveWorkflow',
     'handleLoadWorkflow',
     'handleRunWorkflowDefinition',
-    'workflow-definition-bar'
+    'WorkflowWorkbenchShell'
   ]) {
     assert.equal(source.includes(marker), true, `missing ${marker}`)
   }

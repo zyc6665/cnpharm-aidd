@@ -3,7 +3,14 @@
     <div class="workflow-shell">
       <ProjectWorkspaceNav v-if="routeProjectId" :project-id="routeProjectId" />
 
-      <a-tabs v-model:activeKey="activeMode" class="workflow-mode-tabs">
+      <AppPageHeader
+        :title="t('workflow.title')"
+        :subtitle="t('workflow.subtitle')"
+        align="center"
+      />
+
+      <div class="workflow-deck">
+        <a-tabs v-model:activeKey="activeMode" class="workflow-mode-tabs">
         <a-tab-pane key="manual" :tab="t('workflow.mode.manual')">
           <WorkflowWorkbenchShell
             :workflow-name="workflowName"
@@ -99,59 +106,18 @@
             </template>
 
             <template #left>
-              <div class="canvas-preset-selector">
-                <span class="rail-kicker">{{ t('workflow.definition.templateLabel') }}</span>
-                <a-select
-                  class="canvas-preset-select"
-                  data-testid="workflow-preset-select"
-                  :value="workflowStore.canvasPresetId"
-                  :options="canvasPresetOptions"
-                  @change="handleCanvasPresetChange"
-                />
-              </div>
-
-              <div class="workflow-status-summary">
-                <div class="status-summary-item is-ready">
-                  <span>可运行</span>
-                  <strong>{{ readyNodeCount }}</strong>
-                </div>
-                <div class="status-summary-item is-blocked">
-                  <span>阻塞</span>
-                  <strong>{{ blockedNodeCount }}</strong>
-                </div>
-                <div class="status-summary-item is-running">
-                  <span>运行中</span>
-                  <strong>{{ runningNodeCount }}</strong>
-                </div>
-                <div class="status-summary-item is-completed">
-                  <span>完成</span>
-                  <strong>{{ completedNodeCount }}</strong>
-                </div>
-                <div class="status-summary-item is-failed">
-                  <span>失败</span>
-                  <strong>{{ failedNodeCount }}</strong>
-                </div>
-              </div>
-
-              <div class="canvas-node-list">
-                <button
-                  v-for="node in editableCanvasPreset.nodes"
-                  :key="node.id"
-                  type="button"
-                  class="canvas-node-item"
-                  :class="{ 'is-active': node.id === activeNode?.id }"
-                  @click="workflowStore.setActiveNode(node.id)"
-                >
-                  <span class="node-item-title">{{ formatKey(node.titleKey) }}</span>
-                  <span class="node-item-reason">{{ resolveNodeStatusReason(node.id) }}</span>
-                  <WorkflowNodeStatusBadge :status="nodeStatuses[node.id] ?? 'idle'" />
-                </button>
-              </div>
-
-              <WorkflowControlNodePalette @add-control-node="handleAddControlNode" />
-
-              <WorkflowToolPalette
-                :search-keyword="sidebarToolSearchKeyword"
+              <WorkflowWorkbenchRail
+                :canvas-preset-id="workflowStore.canvasPresetId"
+                :canvas-preset-options="canvasPresetOptions"
+                :nodes="editableCanvasPreset.nodes"
+                :active-node-id="activeNode?.id ?? null"
+                :node-statuses="nodeStatuses"
+                :ready-count="readyNodeCount"
+                :blocked-count="blockedNodeCount"
+                :running-count="runningNodeCount"
+                :completed-count="completedNodeCount"
+                :failed-count="failedNodeCount"
+                :tool-search-keyword="sidebarToolSearchKeyword"
                 :stage-options="sidebarStageOptions"
                 :input-options="sidebarInputOptions"
                 :output-options="sidebarOutputOptions"
@@ -161,11 +127,16 @@
                 :output-filter="sidebarOutputFilter"
                 :executor-filter="sidebarExecutorFilter"
                 :tools="filteredSidebarToolOptions"
-                @update:search-keyword="sidebarToolSearchKeyword = $event"
+                :format-node-title="formatKey"
+                :resolve-node-status-reason="resolveNodeStatusReason"
+                @update:canvas-preset-id="handleCanvasPresetChange"
+                @update:tool-search-keyword="sidebarToolSearchKeyword = $event"
                 @update:stage-filter="sidebarStageFilter = $event"
                 @update:input-filter="sidebarInputFilter = $event"
                 @update:output-filter="sidebarOutputFilter = $event"
                 @update:executor-filter="sidebarExecutorFilter = $event"
+                @select-node="workflowStore.setActiveNode"
+                @add-control-node="handleAddControlNode"
                 @add-tool="handleAddToolNode"
               />
             </template>
@@ -274,7 +245,8 @@
         <a-tab-pane key="agent" :tab="t('workflow.mode.agent')">
           <AiddAgentPanel />
         </a-tab-pane>
-      </a-tabs>
+        </a-tabs>
+      </div>
     </div>
   </div>
 </template>
@@ -283,21 +255,20 @@
   import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { useRoute, useRouter } from 'vue-router'
+  import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import AiddAgentPanel from '@/components/workflow/AiddAgentPanel.vue'
   import WorkflowArtifactPanel from '@/components/workflow/WorkflowArtifactPanel.vue'
   import WorkflowNodeInspector from '@/components/workflow/WorkflowNodeInspector.vue'
-  import WorkflowNodeStatusBadge from '@/components/workflow/WorkflowNodeStatusBadge.vue'
   import WorkflowPreflightPanel from '@/components/workflow/WorkflowPreflightPanel.vue'
   import WorkflowResultsReportPanel from '@/components/workflow/WorkflowResultsReportPanel.vue'
   import WorkflowRunHistoryPanel from '@/components/workflow/WorkflowRunHistoryPanel.vue'
   import WorkflowRunInputPanel from '@/components/workflow/WorkflowRunInputPanel.vue'
   import WorkflowRunStatusPanel from '@/components/workflow/WorkflowRunStatusPanel.vue'
   import WorkflowCanvasBoard from '@/components/workflow/WorkflowCanvasBoard.vue'
-  import WorkflowControlNodePalette from '@/components/workflow/WorkflowControlNodePalette.vue'
-  import WorkflowToolPalette from '@/components/workflow/WorkflowToolPalette.vue'
   import WorkflowResultsSidebar from '@/components/workflow/WorkflowResultsSidebar.vue'
   import WorkflowWorkbenchShell from '@/components/workflow/WorkflowWorkbenchShell.vue'
+  import WorkflowWorkbenchRail from '@/components/workflow/WorkflowWorkbenchRail.vue'
   import { useWorkflowCanvas } from '@/composables/useWorkflowCanvas'
   import { useWorkflowNodeTaskPolling } from '@/composables/useWorkflowNodeTaskPolling'
   import { useWorkflowPersistence } from '@/composables/useWorkflowPersistence'
@@ -593,39 +564,12 @@
     }
   }
 
-  .workflow-definition-bar {
-    display: flex;
-    align-items: center;
-    gap: @spacing-sm;
-    padding: @spacing-md;
-    margin-bottom: @spacing-md;
-    border: 1px solid @border-color-hover;
-    border-radius: @border-radius-md;
-    background: @bg-elevated;
-    box-shadow: @shadow-sm;
-  }
-
   .workflow-name-input {
     width: min(280px, 100%);
   }
 
   .workflow-load-select {
     width: min(320px, 100%);
-  }
-
-  .workflow-preflight-region {
-    margin-bottom: @spacing-md;
-  }
-
-  .workflow-canvas-layout {
-    display: grid;
-    grid-template-columns: minmax(220px, 260px) minmax(0, 1fr) minmax(300px, 360px);
-    gap: @spacing-md;
-    align-items: start;
-  }
-
-  .workflow-results-region {
-    margin-top: @spacing-md;
   }
 
   .workflow-workbench :deep(.workflow-results-sidebar) {
@@ -660,153 +604,5 @@
   .workflow-workbench :deep(.canvas-viewport) {
     flex: 1;
     min-height: 0;
-  }
-
-  .workflow-step-rail {
-    min-width: 0;
-    max-height: 720px;
-    display: flex;
-    flex-direction: column;
-    border: 1px solid @border-color-hover;
-    border-radius: @border-radius-md;
-    background: @bg-light-secondary;
-    box-shadow: @shadow-sm;
-    overflow: hidden;
-  }
-
-  .canvas-preset-selector {
-    padding: @spacing-md;
-    border-bottom: 1px solid @border-color-light;
-  }
-
-  .rail-kicker {
-    display: block;
-    margin-bottom: @spacing-xs;
-    color: @text-color-light-tertiary;
-    font-size: @font-size-xs;
-    font-weight: 800;
-    letter-spacing: 0;
-    text-transform: uppercase;
-  }
-
-  .canvas-preset-select {
-    width: 100%;
-  }
-
-  .canvas-node-list {
-    display: grid;
-    gap: @spacing-xs;
-    padding: @spacing-sm;
-    max-height: 260px;
-    overflow: auto;
-  }
-
-  .canvas-node-item {
-    width: 100%;
-    display: grid;
-    gap: @spacing-xs;
-    padding: @spacing-sm;
-    border: 1px solid transparent;
-    border-radius: @border-radius-sm;
-    background: transparent;
-    color: @text-color-light-primary;
-    text-align: left;
-    cursor: pointer;
-  }
-
-  .canvas-node-item:hover,
-  .canvas-node-item.is-active {
-    border-color: rgba(59, 130, 246, 0.16);
-    background: @primary-color-light;
-  }
-
-  .node-item-title {
-    min-width: 0;
-    font-size: @font-size-sm;
-    font-weight: 700;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .node-item-reason {
-    min-width: 0;
-    color: @text-color-light-secondary;
-    font-size: @font-size-xs;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .workflow-status-summary {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: @spacing-xs;
-    padding: @spacing-sm;
-    border-bottom: 1px solid @border-color-light;
-  }
-
-  .status-summary-item {
-    min-width: 0;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: @spacing-xs;
-    padding: @spacing-xs @spacing-sm;
-    border: 1px solid @accent-color-border;
-    border-radius: @border-radius-sm;
-    background: @bg-elevated;
-  }
-
-  .status-summary-item span {
-    color: @text-color-light-secondary;
-    font-size: @font-size-xs;
-  }
-
-  .status-summary-item strong {
-    color: @text-color-light-primary;
-    font-size: @font-size-md;
-  }
-
-  .status-summary-item.is-ready strong {
-    color: @success-color;
-  }
-
-  .status-summary-item.is-blocked strong {
-    color: @warning-color;
-  }
-
-  .status-summary-item.is-running strong {
-    color: @primary-color;
-  }
-
-  .status-summary-item.is-failed strong {
-    color: @error-color;
-  }
-
-  @media (max-width: @screen-xl) {
-    .workflow-canvas-layout {
-      grid-template-columns: 220px minmax(0, 1fr);
-    }
-
-    .workflow-node-inspector {
-      grid-column: 1 / -1;
-    }
-  }
-
-  @media (max-width: @screen-md) {
-    .workflow-definition-bar {
-      align-items: stretch;
-      flex-direction: column;
-    }
-
-    .workflow-name-input,
-    .workflow-load-select {
-      width: 100%;
-    }
-
-    .workflow-canvas-layout {
-      grid-template-columns: 1fr;
-    }
   }
 </style>
