@@ -884,17 +884,20 @@
   import StructuredKeyValueEditor from '@/components/tools/StructuredKeyValueEditor.vue'
   import StructuredStringListEditor from '@/components/tools/StructuredStringListEditor.vue'
   import {
-    buildAgentCapabilityConfig,
+    buildTemplateExecutorConfig,
     createAgentCapabilityInputForm,
     createAgentCapabilityOutputForm,
-    buildToolVersionConfig,
-    formatToolConfigJsonText,
-    isAgentCapabilityFormComplete,
-    isToolConfigRecord,
-    parseAgentCapabilityForm,
+    createToolCreateEditorState,
+    createToolCreateFormState,
+    createToolCreateSubmission,
+    isSupportedToolType,
+    numberFromTemplate,
     serializeToolConfigForComparison,
-    type AgentCapabilityInputForm,
-    type AgentCapabilityOutputForm
+    templateInputToForm,
+    templateOutputToForm,
+    toolConfigToCreateFormPatch,
+    type ToolCreateEditorState,
+    type ToolCreateFormState
   } from '@/domain/tools'
   import { useToolsStore } from '@/stores'
   import {
@@ -909,14 +912,6 @@
     type ToolTemplateSummary,
     updateTool
   } from '@/api/tools'
-  import type { ToolCreateParams } from '@/types/models'
-  import {
-    keyValueEntriesToRecord,
-    normalizeStringList,
-    recordToKeyValueEntries,
-    stringListForConfig,
-    type KeyValueEntry
-  } from '@/utils/tool-config-editors'
 
   const route = useRoute()
   const router = useRouter()
@@ -939,109 +934,8 @@
   const isEdit = computed(() => route.name === 'AdminToolEdit' || route.name === 'ToolEdit')
   const toolId = computed(() => route.params.id as string)
 
-  // 扩展的表单状态接口
-  interface ExtendedFormState extends ToolCreateParams {
-    tag_ids: string[]
-    // 版本信息
-    version: string
-    changelog: string
-    notes: string
-    // 工具类型
-    tool_type: 'remote_api' | 'docker_image' | 'python_script' | 'ssh_job'
-    // API配置
-    remote_api_registration_mode: 'self_register' | 'manual'
-    remote_base_url: string
-    remote_run_smoke_test: boolean
-    remote_publish_on_success: boolean
-    api_endpoint: string
-    api_method: 'GET' | 'POST'
-    // Docker配置
-    docker_image: string
-    // Python配置
-    python_script: string
-    // SSH 配置
-    ssh_host: string
-    ssh_port: number
-    ssh_username: string
-    ssh_auth_type: 'key' | 'password'
-    ssh_auth_ref: string
-    ssh_password_ref: string
-    ssh_runner_mode: 'docker_exec' | 'shell'
-    ssh_remote_base_dir: string
-    ssh_container_base_dir: string
-    ssh_entrypoint: string
-    ssh_container_name: string
-    ssh_device: string
-    ssh_cleanup_remote: boolean
-    ssh_strict_host_key_checking: boolean
-    // 参数定义
-    input_schema: string  // JSON字符串
-    output_schema: string  // JSON字符串
-    documentation_markdown: string
-    // Agent 编排能力
-    agent_capability_enabled: boolean
-    agent_capability: string
-    agent_stage: string
-    agent_inputs: AgentCapabilityInputForm[]
-    agent_outputs: AgentCapabilityOutputForm[]
-  }
-
   // 表单状态
-  const formState = reactive<ExtendedFormState>({
-    name: '',
-    slug: '',
-    description: '',
-    category_id: '',
-    icon: '',
-    icon_url: '',
-    is_public: true,
-    gpu_required: false,
-    gpu_memory_mb: undefined,
-    timeout_sec: 3600,
-    tag_ids: [],
-    // 版本信息
-    version: '1.0.0',
-    changelog: '',
-    notes: '',
-    // 工具类型
-    tool_type: 'remote_api',
-    // API配置
-    remote_api_registration_mode: 'self_register',
-    remote_base_url: '',
-    remote_run_smoke_test: true,
-    remote_publish_on_success: false,
-    api_endpoint: '',
-    api_method: 'POST',
-    // Docker配置
-    docker_image: '',
-    // Python配置
-    python_script: '',
-    // SSH配置
-    ssh_host: '',
-    ssh_port: 22,
-    ssh_username: '',
-    ssh_auth_type: 'key',
-    ssh_auth_ref: '',
-    ssh_password_ref: '',
-    ssh_runner_mode: 'docker_exec',
-    ssh_remote_base_dir: '',
-    ssh_container_base_dir: '',
-    ssh_entrypoint: '',
-    ssh_container_name: '',
-    ssh_device: '',
-    ssh_cleanup_remote: true,
-    ssh_strict_host_key_checking: true,
-    // 参数定义
-    input_schema: '{}',
-    output_schema: '{}',
-    documentation_markdown: '',
-    // Agent 编排能力
-    agent_capability_enabled: false,
-    agent_capability: 'molecule_generation',
-    agent_stage: 'molecule_generation',
-    agent_inputs: [],
-    agent_outputs: []
-  })
+  const formState = reactive<ToolCreateFormState>(createToolCreateFormState())
 
   const isRemoteSelfRegister = computed(
     () => !isEdit.value &&
@@ -1049,17 +943,35 @@
       formState.remote_api_registration_mode === 'self_register'
   )
 
-  const apiHeaderEntries = ref<KeyValueEntry[]>([])
-  const dockerCommandItems = ref<string[]>([])
-  const dockerEnvEntries = ref<KeyValueEntry[]>([])
-  const pythonArgumentItems = ref<string[]>([])
-  const sshEnvEntries = ref<KeyValueEntry[]>([])
-  const sshOutputGlobItems = ref<string[]>([
-    'output/result.json',
-    'output/logs/run.log',
-    'output/artifacts/**/*'
+  const editorDefaults = createToolCreateEditorState()
+  const apiHeaderEntries = ref<ToolCreateEditorState['apiHeaderEntries']>([
+    ...editorDefaults.apiHeaderEntries
+  ])
+  const dockerCommandItems = ref<ToolCreateEditorState['dockerCommandItems']>([
+    ...editorDefaults.dockerCommandItems
+  ])
+  const dockerEnvEntries = ref<ToolCreateEditorState['dockerEnvEntries']>([
+    ...editorDefaults.dockerEnvEntries
+  ])
+  const pythonArgumentItems = ref<ToolCreateEditorState['pythonArgumentItems']>([
+    ...editorDefaults.pythonArgumentItems
+  ])
+  const sshEnvEntries = ref<ToolCreateEditorState['sshEnvEntries']>([
+    ...editorDefaults.sshEnvEntries
+  ])
+  const sshOutputGlobItems = ref<ToolCreateEditorState['sshOutputGlobItems']>([
+    ...editorDefaults.sshOutputGlobItems
   ])
   const agentDefaultsText = ref('{}')
+
+  const editorStateSnapshot = (): ToolCreateEditorState => ({
+    apiHeaderEntries: apiHeaderEntries.value,
+    dockerCommandItems: dockerCommandItems.value,
+    dockerEnvEntries: dockerEnvEntries.value,
+    pythonArgumentItems: pythonArgumentItems.value,
+    sshEnvEntries: sshEnvEntries.value,
+    sshOutputGlobItems: sshOutputGlobItems.value
+  })
 
   const selectedToolTemplate = computed(() =>
     toolTemplates.value.find(template => template.template_key === selectedToolTemplateKey.value)
@@ -1155,7 +1067,7 @@
       const draftResponse = await createToolDraftFromTemplate(selectedToolTemplateKey.value, {
         category_id: formState.category_id,
         executor_type: formState.tool_type,
-        executor_config: buildTemplateExecutorConfig(),
+        executor_config: buildTemplateExecutorConfig(formState, editorStateSnapshot()),
         publish: false
       })
       message.success('工具模板草稿创建成功')
@@ -1166,89 +1078,6 @@
     } finally {
       creatingTemplateDraft.value = false
     }
-  }
-
-  const buildTemplateExecutorConfig = (): Record<string, unknown> => {
-    if (formState.tool_type === 'remote_api') {
-      return {
-        endpoint: formState.api_endpoint,
-        method: formState.api_method,
-        headers: keyValueEntriesToRecord(apiHeaderEntries.value)
-      }
-    }
-    if (formState.tool_type === 'docker_image') {
-      return {
-        image: formState.docker_image,
-        command: stringListForConfig(dockerCommandItems.value),
-        env: keyValueEntriesToRecord(dockerEnvEntries.value)
-      }
-    }
-    if (formState.tool_type === 'python_script') {
-      return {
-        script_path: formState.python_script,
-        args: stringListForConfig(pythonArgumentItems.value)
-      }
-    }
-
-    const config: Record<string, unknown> = {
-      host: formState.ssh_host,
-      port: formState.ssh_port,
-      username: formState.ssh_username,
-      auth_type: formState.ssh_auth_type,
-      runner_mode: formState.ssh_runner_mode,
-      remote_base_dir: formState.ssh_remote_base_dir,
-      entrypoint: formState.ssh_entrypoint,
-      cleanup_remote: formState.ssh_cleanup_remote,
-      strict_host_key_checking: formState.ssh_strict_host_key_checking,
-      env: keyValueEntriesToRecord(sshEnvEntries.value),
-      output_globs: stringListForConfig(sshOutputGlobItems.value)
-    }
-    if (formState.ssh_auth_type === 'password') {
-      config.password_ref = formState.ssh_password_ref
-    } else {
-      config.auth_ref = formState.ssh_auth_ref
-    }
-    if (formState.ssh_runner_mode === 'docker_exec') {
-      config.container_name = formState.ssh_container_name
-      if (formState.ssh_container_base_dir) {
-        config.container_base_dir = formState.ssh_container_base_dir
-      }
-    }
-    if (formState.ssh_device) {
-      config.device = formState.ssh_device
-    }
-    return config
-  }
-
-  const isSupportedToolType = (value: string): value is ExtendedFormState['tool_type'] => {
-    return ['remote_api', 'docker_image', 'python_script', 'ssh_job'].includes(value)
-  }
-
-  const templateInputToForm = (input: Record<string, unknown>): AgentCapabilityInputForm => ({
-    semantic_type: String(input.semantic_type || ''),
-    field: String(input.field || input.semantic_type || ''),
-    accepted_extensions: Array.isArray(input.accepted_extensions)
-      ? input.accepted_extensions.map(item => String(item)).join(',')
-      : ''
-  })
-
-  const templateOutputToForm = (output: Record<string, unknown>): AgentCapabilityOutputForm => {
-    const match = isToolConfigRecord(output.match) ? output.match : {}
-    return {
-      semantic_type: String(output.semantic_type || ''),
-      source: output.source === 'output_data' ? 'output_data' : 'output_files',
-      path: String(output.path || ''),
-      match_extension: String(match.extension || ''),
-      filename_contains_any: Array.isArray(match.filename_contains_any)
-        ? match.filename_contains_any.map(item => String(item)).join(',')
-        : '',
-      required: output.required !== false
-    }
-  }
-
-  const numberFromTemplate = (value: unknown, fallback: number): number => {
-    const parsed = Number(value)
-    return Number.isFinite(parsed) ? parsed : fallback
   }
 
   const handleAgentCapabilityToggle = (checked: boolean | string | number) => {
@@ -1266,69 +1095,28 @@
     }
   }
 
-  const parseAgentCapabilityIntoForm = (config: Record<string, unknown>) => {
-    const parsedCapability = parseAgentCapabilityForm(config)
-    formState.agent_capability_enabled = parsedCapability.enabled
-    formState.agent_capability = parsedCapability.capability
-    formState.agent_stage = parsedCapability.stage
-    formState.agent_inputs = parsedCapability.inputs
-    formState.agent_outputs = parsedCapability.outputs
-    agentDefaultsText.value = parsedCapability.defaultsText
-  }
-
-  const parseToolConfigIntoForm = (config?: Record<string, unknown>) => {
-    if (!config || typeof config.type !== 'string') {
-      return
+  const applyToolConfigPatch = (config?: Record<string, unknown>) => {
+    const patch = toolConfigToCreateFormPatch(config)
+    Object.assign(formState, patch.form)
+    if (patch.editor.apiHeaderEntries) {
+      apiHeaderEntries.value = patch.editor.apiHeaderEntries
     }
-
-    parseAgentCapabilityIntoForm(config)
-
-    if (config.type === 'remote_api') {
-      formState.tool_type = 'remote_api'
-      if (config.mode === 'remote_tool_v1') {
-        formState.remote_api_registration_mode = 'self_register'
-        formState.remote_base_url = String(config.base_url || '')
-      } else {
-        formState.remote_api_registration_mode = 'manual'
-        formState.api_endpoint = String(config.endpoint || '')
-        formState.api_method = config.method === 'GET' ? 'GET' : 'POST'
-        apiHeaderEntries.value = recordToKeyValueEntries(config.headers)
-      }
-    } else if (config.type === 'docker_image') {
-      formState.tool_type = 'docker_image'
-      formState.docker_image = String(config.image || '')
-      dockerCommandItems.value = normalizeStringList(config.command)
-      dockerEnvEntries.value = recordToKeyValueEntries(config.env)
-    } else if (config.type === 'python_script') {
-      formState.tool_type = 'python_script'
-      formState.python_script = String(config.script_path || config.script || '')
-      pythonArgumentItems.value = normalizeStringList(config.args)
-    } else if (config.type === 'ssh_job') {
-      formState.tool_type = 'ssh_job'
-      formState.ssh_host = String(config.host || '')
-      formState.ssh_port = Number(config.port || 22)
-      formState.ssh_username = String(config.username || '')
-      formState.ssh_auth_type = config.auth_type === 'password' ? 'password' : 'key'
-      formState.ssh_auth_ref = String(config.auth_ref || '')
-      formState.ssh_password_ref = String(config.password_ref || '')
-      formState.ssh_runner_mode = config.runner_mode === 'shell' ? 'shell' : 'docker_exec'
-      formState.ssh_remote_base_dir = String(config.remote_base_dir || '')
-      formState.ssh_container_base_dir = String(config.container_base_dir || '')
-      formState.ssh_entrypoint = String(config.entrypoint || '')
-      formState.ssh_container_name = String(config.container_name || '')
-      formState.ssh_device = String(config.device || '')
-      formState.ssh_cleanup_remote = config.cleanup_remote !== false
-      formState.ssh_strict_host_key_checking = config.strict_host_key_checking !== false
-      sshEnvEntries.value = recordToKeyValueEntries(config.env)
-      sshOutputGlobItems.value = normalizeStringList(config.output_globs)
+    if (patch.editor.dockerCommandItems) {
+      dockerCommandItems.value = patch.editor.dockerCommandItems
     }
-
-    formState.input_schema = formatToolConfigJsonText(config.input_schema || {}, '{}')
-    formState.output_schema = formatToolConfigJsonText(config.output_schema || {}, '{}')
-    formState.documentation_markdown =
-      typeof config.documentation_markdown === 'string'
-        ? config.documentation_markdown
-        : ''
+    if (patch.editor.dockerEnvEntries) {
+      dockerEnvEntries.value = patch.editor.dockerEnvEntries
+    }
+    if (patch.editor.pythonArgumentItems) {
+      pythonArgumentItems.value = patch.editor.pythonArgumentItems
+    }
+    if (patch.editor.sshEnvEntries) {
+      sshEnvEntries.value = patch.editor.sshEnvEntries
+    }
+    if (patch.editor.sshOutputGlobItems) {
+      sshOutputGlobItems.value = patch.editor.sshOutputGlobItems
+    }
+    agentDefaultsText.value = patch.agentDefaultsText
   }
 
   // 表单验证规则
@@ -1429,13 +1217,20 @@
       originalNotes.value = tool.current_version?.notes || ''
       originalConfigSnapshot.value = serializeToolConfigForComparison(tool.current_version?.config || {})
 
-      parseToolConfigIntoForm(tool.current_version?.config as Record<string, unknown> | undefined)
+      applyToolConfigPatch(tool.current_version?.config as Record<string, unknown> | undefined)
     } catch {
       message.error(t('tools.loadFailed'))
       router.push('/tools')
     } finally {
       loading.value = false
     }
+  }
+
+  const formatSubmissionErrorMessage = (error: unknown) => {
+    if (error instanceof Error && error.message.includes('配置键')) {
+      return error.message
+    }
+    return 'JSON 格式错误，请检查配置'
   }
 
   // 提交表单
@@ -1453,163 +1248,47 @@
 
     submitting.value = true
     try {
-      let apiHeaders: Record<string, string> = {}
-      let dockerEnv: Record<string, string> = {}
-      let sshEnv: Record<string, string> = {}
-      let sshOutputGlobs: string[] = []
-      let inputSchema: Record<string, unknown> = {}
-      let outputSchema: Record<string, unknown> = {}
-      let agentDefaults: Record<string, unknown> = {}
-
+      let submission: ReturnType<typeof createToolCreateSubmission>
       try {
-        if (formState.tool_type === 'remote_api') {
-          apiHeaders = keyValueEntriesToRecord(apiHeaderEntries.value)
-        }
-        if (formState.tool_type === 'docker_image') {
-          dockerEnv = keyValueEntriesToRecord(dockerEnvEntries.value)
-        }
-        if (formState.tool_type === 'ssh_job') {
-          sshEnv = keyValueEntriesToRecord(sshEnvEntries.value)
-          sshOutputGlobs = stringListForConfig(sshOutputGlobItems.value)
-        }
+        submission = createToolCreateSubmission({
+          formState,
+          editorState: editorStateSnapshot(),
+          agentDefaultsText: agentDefaultsText.value,
+          isEdit: isEdit.value,
+          originalVersion: originalVersion.value,
+          originalChangelog: originalChangelog.value,
+          originalNotes: originalNotes.value,
+          originalConfigSnapshot: originalConfigSnapshot.value
+        })
       } catch (error) {
-        message.error(error instanceof Error ? error.message : '结构化配置无效')
-        submitting.value = false
+        message.error(formatSubmissionErrorMessage(error))
         return
       }
 
-      try {
-        if (formState.input_schema.trim()) {
-          inputSchema = JSON.parse(formState.input_schema)
-        }
-        if (formState.output_schema.trim()) {
-          outputSchema = JSON.parse(formState.output_schema)
-        }
-        if (formState.agent_capability_enabled && agentDefaultsText.value.trim()) {
-          agentDefaults = JSON.parse(agentDefaultsText.value)
-          if (!isToolConfigRecord(agentDefaults)) {
-            throw new Error('agent defaults must be an object')
-          }
-        }
-      } catch {
-        message.error('JSON 格式错误，请检查配置')
-        submitting.value = false
+      if (!submission.agentCapabilityComplete) {
+        message.error('Agent 编排能力需要填写能力、至少一个输入和至少一个输出')
         return
       }
 
-      if (formState.agent_capability_enabled) {
-        if (!isAgentCapabilityFormComplete({
-          enabled: formState.agent_capability_enabled,
-          capability: formState.agent_capability,
-          stage: formState.agent_stage,
-          inputs: formState.agent_inputs,
-          outputs: formState.agent_outputs
-        })) {
-          message.error('Agent 编排能力需要填写能力、至少一个输入和至少一个输出')
-          submitting.value = false
-          return
-        }
-      }
-
-      const agentCapabilityConfig = buildAgentCapabilityConfig(
-        {
-          enabled: formState.agent_capability_enabled,
-          capability: formState.agent_capability,
-          stage: formState.agent_stage,
-          inputs: formState.agent_inputs,
-          outputs: formState.agent_outputs
-        },
-        agentDefaults
-      )
-      // config.agent_capability is assembled by buildToolVersionConfig below.
-      const config = buildToolVersionConfig({
-        toolType: formState.tool_type,
-        timeoutSec: formState.timeout_sec ?? 3600,
-        gpuRequired: formState.gpu_required ?? false,
-        gpuMemoryMb: formState.gpu_memory_mb,
-        inputSchema,
-        outputSchema,
-        documentationMarkdown: formState.documentation_markdown,
-        agentCapabilityConfig,
-        apiEndpoint: formState.api_endpoint,
-        apiMethod: formState.api_method,
-        apiHeaders,
-        dockerImage: formState.docker_image,
-        dockerCommand: stringListForConfig(dockerCommandItems.value),
-        dockerEnv,
-        pythonScript: formState.python_script,
-        pythonArguments: stringListForConfig(pythonArgumentItems.value),
-        sshHost: formState.ssh_host,
-        sshPort: formState.ssh_port,
-        sshUsername: formState.ssh_username,
-        sshAuthType: formState.ssh_auth_type,
-        sshAuthRef: formState.ssh_auth_ref,
-        sshPasswordRef: formState.ssh_password_ref,
-        sshRunnerMode: formState.ssh_runner_mode,
-        sshRemoteBaseDir: formState.ssh_remote_base_dir,
-        sshContainerBaseDir: formState.ssh_container_base_dir,
-        sshEntrypoint: formState.ssh_entrypoint,
-        sshContainerName: formState.ssh_container_name,
-        sshDevice: formState.ssh_device,
-        sshCleanupRemote: formState.ssh_cleanup_remote,
-        sshStrictHostKeyChecking: formState.ssh_strict_host_key_checking,
-        sshEnv,
-        sshOutputGlobs
-      })
-
-      // 构建提交数据
-      const data: ToolCreateParams & { initial_version?: unknown } = {
-        name: formState.name,
-        slug: formState.slug,
-        description: formState.description || undefined,
-        category_id: formState.category_id,
-        icon: formState.icon || undefined,
-        icon_url: formState.icon_url || undefined,
-        is_public: formState.is_public,
-        gpu_required: formState.gpu_required,
-        gpu_memory_mb: formState.gpu_required ? formState.gpu_memory_mb : undefined,
-        timeout_sec: formState.timeout_sec,
-        tag_ids: formState.tag_ids.length > 0 ? formState.tag_ids : undefined
-      }
-
-      const versionConfigChanged = isEdit.value && (
-        formState.version !== originalVersion.value ||
-        formState.changelog !== originalChangelog.value ||
-        formState.notes !== originalNotes.value ||
-        serializeToolConfigForComparison(config) !== originalConfigSnapshot.value
-      )
-
-      if (versionConfigChanged && formState.version === originalVersion.value) {
+      if (submission.versionConfigChanged && formState.version === originalVersion.value) {
         message.error('修改版本配置时请填写新的版本号')
-        submitting.value = false
         return
-      }
-
-      // 添加版本信息（仅创建模式）
-      if (!isEdit.value) {
-        data.initial_version = {
-          version: formState.version,
-          changelog: formState.changelog || undefined,
-          notes: formState.notes || undefined,
-          config: config,
-          is_active: true
-        }
       }
 
       if (isEdit.value) {
-        await updateTool(toolId.value, data)
-        if (versionConfigChanged) {
+        await updateTool(toolId.value, submission.data)
+        if (submission.versionConfigChanged) {
           await createToolVersion(toolId.value, {
             version: formState.version,
             changelog: formState.changelog || undefined,
             notes: formState.notes || undefined,
-            config,
+            config: submission.config,
             is_active: true
           })
         }
-        message.success(versionConfigChanged ? '工具与版本更新成功' : t('tools.updateSuccess'))
+        message.success(submission.versionConfigChanged ? '工具与版本更新成功' : t('tools.updateSuccess'))
       } else {
-        const res = await createTool(data)
+        const res = await createTool(submission.data)
         message.success(t('tools.createSuccess'))
         // 跳转到工具详情页
         router.push(`/tools/${res.data.id}`)

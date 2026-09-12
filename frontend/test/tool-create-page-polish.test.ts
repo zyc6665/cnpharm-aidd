@@ -68,6 +68,7 @@ test('工具执行配置应提供可复用的结构化键值和列表编辑器',
 
 test('工具创建页应以结构化数据编辑全部执行器 map 和 list 字段', () => {
   const source = readSource('src/views/tools/Create.vue')
+  const createFormDomain = readSource('src/domain/tools/tool-create-form.ts')
 
   for (const marker of [
     'StructuredKeyValueEditor',
@@ -77,13 +78,27 @@ test('工具创建页应以结构化数据编辑全部执行器 map 和 list 字
     'v-model="dockerEnvEntries"',
     'v-model="pythonArgumentItems"',
     'v-model="sshEnvEntries"',
-    'v-model="sshOutputGlobItems"',
+    'v-model="sshOutputGlobItems"'
+  ]) {
+    assert.equal(source.includes(marker), true, `missing structured field marker ${marker}`)
+  }
+
+  for (const marker of [
     'recordToKeyValueEntries',
     'keyValueEntriesToRecord',
     'normalizeStringList',
-    'stringListForConfig'
+    'stringListForConfig',
+    'createToolCreateSubmission',
+    'toolConfigToCreateFormPatch'
   ]) {
-    assert.equal(source.includes(marker), true, `missing structured field marker ${marker}`)
+    assert.equal(createFormDomain.includes(marker), true, `missing form-domain marker ${marker}`)
+  }
+
+  for (const marker of [
+    'createToolCreateSubmission',
+    'toolConfigToCreateFormPatch'
+  ]) {
+    assert.equal(source.includes(marker), true, `missing page integration marker ${marker}`)
   }
 
   for (const removedMarker of [
@@ -96,9 +111,26 @@ test('工具创建页应以结构化数据编辑全部执行器 map 和 list 字
   }
 })
 
+test('工具创建表单领域模块应承接执行器配置解析和组装', () => {
+  const source = readSource('src/domain/tools/tool-create-form.ts')
+
+  for (const marker of [
+    'recordToKeyValueEntries',
+    'keyValueEntriesToRecord',
+    'normalizeStringList',
+    'stringListForConfig',
+    'buildTemplateExecutorConfig',
+    'toolConfigToCreateFormPatch',
+    'createToolCreateSubmission'
+  ]) {
+    assert.equal(source.includes(marker), true, `missing form-domain marker ${marker}`)
+  }
+})
+
 test('工具创建页应突出 Tool Package v2 主路径并标记旧语义映射为兼容项', () => {
   const source = readSource('src/views/tools/Create.vue')
   const domain = readSource('src/domain/tools/agent-capability.ts')
+  const createFormDomain = readSource('src/domain/tools/tool-create-form.ts')
   const toolConfigDomain = readSource('src/domain/tools/tool-config.ts')
   const versionConfigDomain = readSource('src/domain/tools/tool-version-config.ts')
 
@@ -116,10 +148,10 @@ test('工具创建页应突出 Tool Package v2 主路径并标记旧语义映射
   }
 
   assert.equal(source.includes("from '@/domain/tools'"), true)
-  assert.equal(source.includes('parseAgentCapabilityForm'), true)
-  assert.equal(source.includes('buildAgentCapabilityConfig'), true)
-  assert.equal(source.includes('buildToolVersionConfig'), true)
   assert.equal(source.includes('serializeToolConfigForComparison'), true)
+  assert.equal(createFormDomain.includes('parseAgentCapabilityForm'), true)
+  assert.equal(createFormDomain.includes('buildAgentCapabilityConfig'), true)
+  assert.equal(createFormDomain.includes('buildToolVersionConfig'), true)
   assert.equal(domain.includes('isAgentCapabilityFormComplete'), true)
   assert.equal(toolConfigDomain.includes('formatToolConfigJsonText'), true)
   assert.equal(versionConfigDomain.includes('sshRunnerMode'), true)

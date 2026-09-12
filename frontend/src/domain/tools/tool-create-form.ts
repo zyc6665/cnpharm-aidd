@@ -1,0 +1,433 @@
+import type { ToolCreateParams } from '@/types/models'
+import {
+  keyValueEntriesToRecord,
+  normalizeStringList,
+  recordToKeyValueEntries,
+  stringListForConfig,
+  type KeyValueEntry,
+} from '@/utils/tool-config-editors'
+import {
+  buildAgentCapabilityConfig,
+  isAgentCapabilityFormComplete,
+  parseAgentCapabilityForm,
+  type AgentCapabilityInputForm,
+  type AgentCapabilityOutputForm,
+} from './agent-capability'
+import {
+  formatToolConfigJsonText,
+  isToolConfigRecord,
+  serializeToolConfigForComparison,
+} from './tool-config'
+import { buildToolVersionConfig } from './tool-version-config'
+
+export const DEFAULT_SSH_OUTPUT_GLOBS = [
+  'output/result.json',
+  'output/logs/run.log',
+  'output/artifacts/**/*',
+]
+
+export interface ToolCreateFormState extends ToolCreateParams {
+  tag_ids: string[]
+  version: string
+  changelog: string
+  notes: string
+  tool_type: 'remote_api' | 'docker_image' | 'python_script' | 'ssh_job'
+  remote_api_registration_mode: 'self_register' | 'manual'
+  remote_base_url: string
+  remote_run_smoke_test: boolean
+  remote_publish_on_success: boolean
+  api_endpoint: string
+  api_method: 'GET' | 'POST'
+  docker_image: string
+  python_script: string
+  ssh_host: string
+  ssh_port: number
+  ssh_username: string
+  ssh_auth_type: 'key' | 'password'
+  ssh_auth_ref: string
+  ssh_password_ref: string
+  ssh_runner_mode: 'docker_exec' | 'shell'
+  ssh_remote_base_dir: string
+  ssh_container_base_dir: string
+  ssh_entrypoint: string
+  ssh_container_name: string
+  ssh_device: string
+  ssh_cleanup_remote: boolean
+  ssh_strict_host_key_checking: boolean
+  input_schema: string
+  output_schema: string
+  documentation_markdown: string
+  agent_capability_enabled: boolean
+  agent_capability: string
+  agent_stage: string
+  agent_inputs: AgentCapabilityInputForm[]
+  agent_outputs: AgentCapabilityOutputForm[]
+}
+
+export interface ToolCreateEditorState {
+  apiHeaderEntries: KeyValueEntry[]
+  dockerCommandItems: string[]
+  dockerEnvEntries: KeyValueEntry[]
+  pythonArgumentItems: string[]
+  sshEnvEntries: KeyValueEntry[]
+  sshOutputGlobItems: string[]
+}
+
+export interface ToolConfigFormPatch {
+  form: Partial<ToolCreateFormState>
+  editor: Partial<ToolCreateEditorState>
+  agentDefaultsText: string
+}
+
+export interface ToolCreateSubmissionInput {
+  formState: ToolCreateFormState
+  editorState: ToolCreateEditorState
+  agentDefaultsText: string
+  isEdit: boolean
+  originalVersion: string
+  originalChangelog: string
+  originalNotes: string
+  originalConfigSnapshot: string
+}
+
+export interface ToolCreateSubmissionResult {
+  data: ToolCreateParams & { initial_version?: unknown }
+  config: Record<string, unknown>
+  versionConfigChanged: boolean
+  agentCapabilityComplete: boolean
+}
+
+export function createToolCreateFormState(): ToolCreateFormState {
+  return {
+    name: '',
+    slug: '',
+    description: '',
+    category_id: '',
+    icon: '',
+    icon_url: '',
+    is_public: true,
+    gpu_required: false,
+    gpu_memory_mb: undefined,
+    timeout_sec: 3600,
+    tag_ids: [],
+    version: '1.0.0',
+    changelog: '',
+    notes: '',
+    tool_type: 'remote_api',
+    remote_api_registration_mode: 'self_register',
+    remote_base_url: '',
+    remote_run_smoke_test: true,
+    remote_publish_on_success: false,
+    api_endpoint: '',
+    api_method: 'POST',
+    docker_image: '',
+    python_script: '',
+    ssh_host: '',
+    ssh_port: 22,
+    ssh_username: '',
+    ssh_auth_type: 'key',
+    ssh_auth_ref: '',
+    ssh_password_ref: '',
+    ssh_runner_mode: 'docker_exec',
+    ssh_remote_base_dir: '',
+    ssh_container_base_dir: '',
+    ssh_entrypoint: '',
+    ssh_container_name: '',
+    ssh_device: '',
+    ssh_cleanup_remote: true,
+    ssh_strict_host_key_checking: true,
+    input_schema: '{}',
+    output_schema: '{}',
+    documentation_markdown: '',
+    agent_capability_enabled: false,
+    agent_capability: 'molecule_generation',
+    agent_stage: 'molecule_generation',
+    agent_inputs: [],
+    agent_outputs: [],
+  }
+}
+
+export function createToolCreateEditorState(): ToolCreateEditorState {
+  return {
+    apiHeaderEntries: [],
+    dockerCommandItems: [],
+    dockerEnvEntries: [],
+    pythonArgumentItems: [],
+    sshEnvEntries: [],
+    sshOutputGlobItems: [...DEFAULT_SSH_OUTPUT_GLOBS],
+  }
+}
+
+export function buildTemplateExecutorConfig(
+  formState: ToolCreateFormState,
+  editorState: ToolCreateEditorState,
+): Record<string, unknown> {
+  if (formState.tool_type === 'remote_api') {
+    return {
+      endpoint: formState.api_endpoint,
+      method: formState.api_method,
+      headers: keyValueEntriesToRecord(editorState.apiHeaderEntries),
+    }
+  }
+  if (formState.tool_type === 'docker_image') {
+    return {
+      image: formState.docker_image,
+      command: stringListForConfig(editorState.dockerCommandItems),
+      env: keyValueEntriesToRecord(editorState.dockerEnvEntries),
+    }
+  }
+  if (formState.tool_type === 'python_script') {
+    return {
+      script_path: formState.python_script,
+      args: stringListForConfig(editorState.pythonArgumentItems),
+    }
+  }
+
+  return buildSshTemplateExecutorConfig(formState, editorState)
+}
+
+export function isSupportedToolType(value: string): value is ToolCreateFormState['tool_type'] {
+  return ['remote_api', 'docker_image', 'python_script', 'ssh_job'].includes(value)
+}
+
+export function templateInputToForm(input: Record<string, unknown>): AgentCapabilityInputForm {
+  return {
+    semantic_type: String(input.semantic_type || ''),
+    field: String(input.field || input.semantic_type || ''),
+    accepted_extensions: Array.isArray(input.accepted_extensions)
+      ? input.accepted_extensions.map(item => String(item)).join(',')
+      : '',
+  }
+}
+
+export function templateOutputToForm(output: Record<string, unknown>): AgentCapabilityOutputForm {
+  const match = isToolConfigRecord(output.match) ? output.match : {}
+  return {
+    semantic_type: String(output.semantic_type || ''),
+    source: output.source === 'output_data' ? 'output_data' : 'output_files',
+    path: String(output.path || ''),
+    match_extension: String(match.extension || ''),
+    filename_contains_any: Array.isArray(match.filename_contains_any)
+      ? match.filename_contains_any.map(item => String(item)).join(',')
+      : '',
+    required: output.required !== false,
+  }
+}
+
+export function numberFromTemplate(value: unknown, fallback: number): number {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+export function toolConfigToCreateFormPatch(config?: Record<string, unknown>): ToolConfigFormPatch {
+  if (!config || typeof config.type !== 'string') {
+    return { form: {}, editor: {}, agentDefaultsText: '{}' }
+  }
+
+  const parsedCapability = parseAgentCapabilityForm(config)
+  const patch: ToolConfigFormPatch = {
+    form: {
+      agent_capability_enabled: parsedCapability.enabled,
+      agent_capability: parsedCapability.capability,
+      agent_stage: parsedCapability.stage,
+      agent_inputs: parsedCapability.inputs,
+      agent_outputs: parsedCapability.outputs,
+      input_schema: formatToolConfigJsonText(config.input_schema || {}, '{}'),
+      output_schema: formatToolConfigJsonText(config.output_schema || {}, '{}'),
+      documentation_markdown: typeof config.documentation_markdown === 'string'
+        ? config.documentation_markdown
+        : '',
+    },
+    editor: {},
+    agentDefaultsText: parsedCapability.defaultsText,
+  }
+
+  applyExecutorConfigPatch(patch, config)
+  return patch
+}
+
+export function createToolCreateSubmission(
+  input: ToolCreateSubmissionInput,
+): ToolCreateSubmissionResult {
+  const inputSchema = parseJsonRecord(input.formState.input_schema, '{}')
+  const outputSchema = parseJsonRecord(input.formState.output_schema, '{}')
+  const agentDefaults = input.formState.agent_capability_enabled
+    ? parseJsonRecord(input.agentDefaultsText, '{}')
+    : {}
+
+  const agentForm = {
+    enabled: input.formState.agent_capability_enabled,
+    capability: input.formState.agent_capability,
+    stage: input.formState.agent_stage,
+    inputs: input.formState.agent_inputs,
+    outputs: input.formState.agent_outputs,
+  }
+  const agentCapabilityComplete = isAgentCapabilityFormComplete(agentForm)
+  const agentCapabilityConfig = buildAgentCapabilityConfig(agentForm, agentDefaults)
+  const config = buildToolVersionConfig({
+    toolType: input.formState.tool_type,
+    timeoutSec: input.formState.timeout_sec ?? 3600,
+    gpuRequired: input.formState.gpu_required ?? false,
+    gpuMemoryMb: input.formState.gpu_memory_mb,
+    inputSchema,
+    outputSchema,
+    documentationMarkdown: input.formState.documentation_markdown,
+    agentCapabilityConfig,
+    apiEndpoint: input.formState.api_endpoint,
+    apiMethod: input.formState.api_method,
+    apiHeaders: keyValueEntriesToRecord(input.editorState.apiHeaderEntries),
+    dockerImage: input.formState.docker_image,
+    dockerCommand: stringListForConfig(input.editorState.dockerCommandItems),
+    dockerEnv: keyValueEntriesToRecord(input.editorState.dockerEnvEntries),
+    pythonScript: input.formState.python_script,
+    pythonArguments: stringListForConfig(input.editorState.pythonArgumentItems),
+    sshHost: input.formState.ssh_host,
+    sshPort: input.formState.ssh_port,
+    sshUsername: input.formState.ssh_username,
+    sshAuthType: input.formState.ssh_auth_type,
+    sshAuthRef: input.formState.ssh_auth_ref,
+    sshPasswordRef: input.formState.ssh_password_ref,
+    sshRunnerMode: input.formState.ssh_runner_mode,
+    sshRemoteBaseDir: input.formState.ssh_remote_base_dir,
+    sshContainerBaseDir: input.formState.ssh_container_base_dir,
+    sshEntrypoint: input.formState.ssh_entrypoint,
+    sshContainerName: input.formState.ssh_container_name,
+    sshDevice: input.formState.ssh_device,
+    sshCleanupRemote: input.formState.ssh_cleanup_remote,
+    sshStrictHostKeyChecking: input.formState.ssh_strict_host_key_checking,
+    sshEnv: keyValueEntriesToRecord(input.editorState.sshEnvEntries),
+    sshOutputGlobs: stringListForConfig(input.editorState.sshOutputGlobItems),
+  })
+  const versionConfigChanged = input.isEdit && (
+    input.formState.version !== input.originalVersion ||
+    input.formState.changelog !== input.originalChangelog ||
+    input.formState.notes !== input.originalNotes ||
+    serializeToolConfigForComparison(config) !== input.originalConfigSnapshot
+  )
+  const data: ToolCreateParams & { initial_version?: unknown } = {
+    name: input.formState.name,
+    slug: input.formState.slug,
+    description: input.formState.description || undefined,
+    category_id: input.formState.category_id,
+    icon: input.formState.icon || undefined,
+    icon_url: input.formState.icon_url || undefined,
+    is_public: input.formState.is_public,
+    gpu_required: input.formState.gpu_required,
+    gpu_memory_mb: input.formState.gpu_required ? input.formState.gpu_memory_mb : undefined,
+    timeout_sec: input.formState.timeout_sec,
+    tag_ids: input.formState.tag_ids.length > 0 ? input.formState.tag_ids : undefined,
+  }
+
+  if (!input.isEdit) {
+    data.initial_version = buildInitialVersion(input.formState, config)
+  }
+
+  return { data, config, versionConfigChanged, agentCapabilityComplete }
+}
+
+function buildSshTemplateExecutorConfig(
+  formState: ToolCreateFormState,
+  editorState: ToolCreateEditorState,
+): Record<string, unknown> {
+  const config: Record<string, unknown> = {
+    host: formState.ssh_host,
+    port: formState.ssh_port,
+    username: formState.ssh_username,
+    auth_type: formState.ssh_auth_type,
+    runner_mode: formState.ssh_runner_mode,
+    remote_base_dir: formState.ssh_remote_base_dir,
+    entrypoint: formState.ssh_entrypoint,
+    cleanup_remote: formState.ssh_cleanup_remote,
+    strict_host_key_checking: formState.ssh_strict_host_key_checking,
+    env: keyValueEntriesToRecord(editorState.sshEnvEntries),
+    output_globs: stringListForConfig(editorState.sshOutputGlobItems),
+  }
+
+  if (formState.ssh_auth_type === 'password') {
+    config.password_ref = formState.ssh_password_ref
+  } else {
+    config.auth_ref = formState.ssh_auth_ref
+  }
+  if (formState.ssh_runner_mode === 'docker_exec') {
+    config.container_name = formState.ssh_container_name
+    if (formState.ssh_container_base_dir) {
+      config.container_base_dir = formState.ssh_container_base_dir
+    }
+  }
+  if (formState.ssh_device) {
+    config.device = formState.ssh_device
+  }
+  return config
+}
+
+function applyExecutorConfigPatch(patch: ToolConfigFormPatch, config: Record<string, unknown>): void {
+  if (config.type === 'remote_api') {
+    patch.form.tool_type = 'remote_api'
+    if (config.mode === 'remote_tool_v1') {
+      patch.form.remote_api_registration_mode = 'self_register'
+      patch.form.remote_base_url = String(config.base_url || '')
+    } else {
+      patch.form.remote_api_registration_mode = 'manual'
+      patch.form.api_endpoint = String(config.endpoint || '')
+      patch.form.api_method = config.method === 'GET' ? 'GET' : 'POST'
+      patch.editor.apiHeaderEntries = recordToKeyValueEntries(config.headers)
+    }
+    return
+  }
+
+  if (config.type === 'docker_image') {
+    patch.form.tool_type = 'docker_image'
+    patch.form.docker_image = String(config.image || '')
+    patch.editor.dockerCommandItems = normalizeStringList(config.command)
+    patch.editor.dockerEnvEntries = recordToKeyValueEntries(config.env)
+    return
+  }
+
+  if (config.type === 'python_script') {
+    patch.form.tool_type = 'python_script'
+    patch.form.python_script = String(config.script_path || config.script || '')
+    patch.editor.pythonArgumentItems = normalizeStringList(config.args)
+    return
+  }
+
+  if (config.type === 'ssh_job') {
+    patch.form.tool_type = 'ssh_job'
+    patch.form.ssh_host = String(config.host || '')
+    patch.form.ssh_port = Number(config.port || 22)
+    patch.form.ssh_username = String(config.username || '')
+    patch.form.ssh_auth_type = config.auth_type === 'password' ? 'password' : 'key'
+    patch.form.ssh_auth_ref = String(config.auth_ref || '')
+    patch.form.ssh_password_ref = String(config.password_ref || '')
+    patch.form.ssh_runner_mode = config.runner_mode === 'shell' ? 'shell' : 'docker_exec'
+    patch.form.ssh_remote_base_dir = String(config.remote_base_dir || '')
+    patch.form.ssh_container_base_dir = String(config.container_base_dir || '')
+    patch.form.ssh_entrypoint = String(config.entrypoint || '')
+    patch.form.ssh_container_name = String(config.container_name || '')
+    patch.form.ssh_device = String(config.device || '')
+    patch.form.ssh_cleanup_remote = config.cleanup_remote !== false
+    patch.form.ssh_strict_host_key_checking = config.strict_host_key_checking !== false
+    patch.editor.sshEnvEntries = recordToKeyValueEntries(config.env)
+    patch.editor.sshOutputGlobItems = normalizeStringList(config.output_globs)
+  }
+}
+
+function parseJsonRecord(value: string, fallback: string): Record<string, unknown> {
+  const parsed = JSON.parse(value.trim() || fallback)
+  if (!isToolConfigRecord(parsed)) {
+    throw new Error('JSON value must be an object')
+  }
+  return parsed
+}
+
+function buildInitialVersion(
+  formState: ToolCreateFormState,
+  config: Record<string, unknown>,
+): NonNullable<(ToolCreateParams & { initial_version?: unknown })['initial_version']> {
+  return {
+    version: formState.version,
+    changelog: formState.changelog || undefined,
+    notes: formState.notes || undefined,
+    config,
+    is_active: true,
+  }
+}
