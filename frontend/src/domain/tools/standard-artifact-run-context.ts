@@ -24,7 +24,9 @@ export interface StandardRunTaskExtras {
 
 function compactRecord(value: Record<string, string>): Record<string, string> {
   return Object.fromEntries(
-    Object.entries(value).filter(([, item]) => typeof item === 'string' && item.trim())
+    Object.entries(value)
+      .map(([key, item]) => [key.trim(), item.trim()] as const)
+      .filter(([key, item]) => key && item)
   )
 }
 

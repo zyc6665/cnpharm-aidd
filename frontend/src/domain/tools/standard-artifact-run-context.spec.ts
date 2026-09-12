@@ -36,8 +36,8 @@ describe('standard artifact run context', () => {
   it('serializes project bindings and staged uploads separately', () => {
     expect(buildStandardRunTaskExtras({
       projectId: ' project-1 ',
-      inputBindings: { protein: 'version-1', empty: '' },
-      standardInputUploads: { ligand: 'file-1', blank: '   ' },
+      inputBindings: { ' protein ': ' version-1 ', empty: '' },
+      standardInputUploads: { ' ligand ': ' file-1 ', blank: '   ' },
     })).toEqual({
       project_id: 'project-1',
       input_bindings: { protein: 'version-1' },
