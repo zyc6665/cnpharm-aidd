@@ -67,16 +67,18 @@ const stubs = {
   SkeletonCard: { template: '<div />' },
   ToolExamplePanel: { template: '<div />' },
   ArtifactFilePicker: {
+    props: ['accept'],
     emits: ['update:uploadList', 'update:selectedArtifact'],
     template: '<button type="button" class="artifact-file-picker" @click="emitFile">pick file</button>',
-    setup(_props: unknown, { emit }: { emit: (event: string, ...args: unknown[]) => void }) {
+    setup(props: { accept?: string }, { emit }: { emit: (event: string, ...args: unknown[]) => void }) {
       return {
         emitFile() {
+          const name = props.accept?.includes('.pdb') ? 'protein.pdb' : 'molecules.csv'
           emit('update:uploadList', [
             {
-              uid: 'upload-molecules',
-              name: 'molecules.csv',
-              originFileObj: { name: 'molecules.csv' },
+              uid: `upload-${name}`,
+              name,
+              originFileObj: { name },
             },
           ])
         },
@@ -85,7 +87,7 @@ const stubs = {
   },
   RouterLink: { template: '<a><slot /></a>' },
   AForm: { emits: ['finish'], template: '<form @submit.prevent="$emit(\'finish\')"><slot /></form>' },
-  AFormItem: { template: '<div><slot /></div>' },
+  AFormItem: { props: ['label'], template: '<div><span class="form-label">{{ label }}</span><slot /></div>' },
   ASpace: { template: '<div><slot /></div>' },
   AButton: {
     props: ['disabled', 'htmlType'],
@@ -182,6 +184,89 @@ function mockToolPackageV2Detail() {
               ],
             },
             parameters_schema: { type: 'object', properties: {}, required: [] },
+            runtime: {},
+            variants: [],
+          },
+        },
+        is_active: true,
+        deprecated: false,
+        created_at: '2026-08-20T00:00:00Z',
+      },
+      created_at: '2026-08-20T00:00:00Z',
+    },
+  } as never)
+  vi.mocked(getToolExample).mockResolvedValue({ code: 200, message: 'ok', data: null } as never)
+}
+
+function mockToolPackageV2DetailWithLegacyFileSchema() {
+  vi.mocked(getToolDetail).mockResolvedValue({
+    code: 200,
+    message: 'ok',
+    data: {
+      id: 'tool-lvpocket',
+      slug: 'lvpocket-pocket-prediction',
+      name: 'LVpocket Pocket Prediction',
+      description: 'Predict protein pockets',
+      status: 'published',
+      is_public: true,
+      tags: [],
+      statistics: { usage_count: 0, view_count: 0, favorite_count: 0 },
+      current_version: {
+        id: 'version-lvpocket',
+        tool_id: 'tool-lvpocket',
+        version: '2.0.0',
+        config: {
+          type: 'ssh_job',
+          input_schema: {
+            type: 'object',
+            properties: {
+              protein_pdb: {
+                type: 'string',
+                format: 'file',
+                title: 'Protein PDB',
+                description: 'Protein receptor structure in PDB format.',
+                'ui:accept': '.pdb',
+              },
+              model_choice: {
+                type: 'string',
+                title: 'Model weight',
+                description: 'Manual choices map to new_best/*.hdf.',
+                default: 'auto',
+                enum: ['auto', 'all_scpdb'],
+              },
+              device: {
+                type: 'string',
+                title: 'Device',
+                description: 'cpu disables CUDA for parity or troubleshooting.',
+                default: 'auto',
+                enum: ['auto', 'gpu', 'cpu'],
+              },
+            },
+            required: ['protein_pdb'],
+          },
+          tool_package_manifest: {
+            api_version: 'aidd.sciminer/tool-package.v2',
+            kind: 'ToolPackage',
+            metadata: {
+              slug: 'lvpocket-standard-pocket',
+              name: 'LVpocket Standard Pocket Adapter',
+              version: '2.0.0',
+            },
+            artifacts: {
+              inputs: [
+                { name: 'protein', type: 'protein_structure@1', required: true },
+              ],
+              outputs: [
+                { name: 'pocket', type: 'binding_pocket@1', required: true },
+              ],
+            },
+            parameters_schema: {
+              type: 'object',
+              properties: {
+                model_choice: { type: 'string', default: 'auto', enum: ['auto', 'all_scpdb'] },
+              },
+              required: [],
+            },
             runtime: {},
             variants: [],
           },
@@ -310,5 +395,66 @@ describe('ToolDetail run preparation preview', () => {
     expect(prepareTaskRun).toHaveBeenCalledWith(expectedPayload)
     expect(createTask).toHaveBeenCalledWith(expectedPayload)
     expect(routerPush).toHaveBeenCalledWith('/tasks/task-created')
+  })
+
+  it('uses legacy file fields as the Tool Package v2 standard input surface', async () => {
+    routeState.params = { id: 'tool-lvpocket' }
+    routeState.query = {}
+    mockToolPackageV2DetailWithLegacyFileSchema()
+    vi.mocked(uploadFile).mockResolvedValue({
+      code: 200,
+      message: 'ok',
+      data: { id: 'file-protein-1', filename: 'protein.pdb' },
+    } as never)
+    vi.mocked(prepareTaskRun).mockResolvedValue({
+      code: 200,
+      message: 'ok',
+      data: {
+        ready: true,
+        project_id: null,
+        tool_id: 'tool-lvpocket',
+        tool_version_id: 'version-lvpocket',
+        params: { params: { model_choice: 'auto', device: 'auto' } },
+        file_ids: [],
+        input_bindings: {},
+        requested_input_bindings: {},
+        standard_input_uploads: { protein: 'file-protein-1' },
+        binding_decisions: {},
+        blocked_reason: null,
+        resource_snapshot: null,
+      },
+    } as never)
+    vi.mocked(createTask).mockResolvedValue({
+      code: 200,
+      message: 'ok',
+      data: { id: 'task-created' },
+    } as never)
+
+    const wrapper = mount(ToolDetail, {
+      global: { plugins: [i18n], stubs },
+    })
+
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('标准 Artifact 输入')
+    expect(wrapper.text()).toContain('Protein PDB')
+    expect(wrapper.text()).toContain('Model weight')
+    expect(wrapper.text()).toContain('Device')
+    expect(wrapper.findAll('.artifact-file-picker')).toHaveLength(1)
+
+    await wrapper.find('.artifact-file-picker').trigger('click')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    const expectedPayload = {
+      name: undefined,
+      tool_id: 'tool-lvpocket',
+      params: { params: { model_choice: 'auto', device: 'auto' } },
+      file_ids: undefined,
+      standard_input_uploads: { protein: 'file-protein-1' },
+    }
+    expect(uploadFile).toHaveBeenCalledWith({ name: 'protein.pdb' })
+    expect(prepareTaskRun).toHaveBeenCalledWith(expectedPayload)
+    expect(createTask).toHaveBeenCalledWith(expectedPayload)
   })
 })

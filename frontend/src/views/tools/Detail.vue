@@ -97,7 +97,7 @@
                   />
                 </a-form-item>
                 <StandardArtifactInputs
-                  v-if="standardInputSlots.length"
+                  v-if="showStandardArtifactInputs"
                   :slots="standardInputSlots"
                   :current-project-id="currentProjectId"
                   :project-artifacts="standardProjectArtifacts"
@@ -428,8 +428,11 @@
   } from '@/domain/tools'
   import {
     buildStandardInputBindings,
+    buildStandardInputBindingsFromFileFields,
+    buildStandardInputUploadsFromFileFields,
     buildStandardRunTaskExtras,
     missingRequiredStandardInputSlots,
+    resolveStandardInputFileFieldBindings,
     resolveToolPackageParameterSchema,
     resolveToolStandardInputSlots,
     shouldShowSdfToPdbConverter
@@ -476,23 +479,44 @@
   const toolValidationSummary = computed(() => getToolValidationSummary(toolConfig.value))
   const standardInputSlots = computed(() => resolveToolStandardInputSlots(tool.value))
   const standardParameterSchema = computed(() => resolveToolPackageParameterSchema(tool.value))
+  const legacyInputSchema = computed<ToolSchema | undefined>(() => {
+    const config = toolConfig.value
+    if (config && typeof config === 'object' && 'input_schema' in config) {
+      return config.input_schema as ToolSchema
+    }
+    return undefined
+  })
+  const legacyFlattenedSchema = computed<ToolSchema | undefined>(() => {
+    return flattenToolInputSchema(legacyInputSchema.value)
+  })
+  const legacyStandardInputFileFieldBindings = computed(() => {
+    return resolveStandardInputFileFieldBindings({
+      slots: standardInputSlots.value,
+      flattenedSchema: legacyFlattenedSchema.value,
+    })
+  })
+  const usesLegacyStandardInputSurface = computed(() => {
+    const slots = standardInputSlots.value
+    return slots.length > 0 && slots.every(slot => legacyStandardInputFileFieldBindings.value[slot.name])
+  })
+  const standardInputFileFieldBindings = computed(() => {
+    return usesLegacyStandardInputSurface.value ? legacyStandardInputFileFieldBindings.value : {}
+  })
+  const showStandardArtifactInputs = computed(() => {
+    return standardInputSlots.value.length > 0 && !usesLegacyStandardInputSurface.value
+  })
   const currentProjectId = computed(() => {
     const raw = route.query.project_id ?? route.query.projectId ?? route.params.projectId
     const value = Array.isArray(raw) ? raw[0] : raw
     return typeof value === 'string' && value.trim() ? value.trim() : undefined
   })
 
-  // v2 工具优先使用 Tool Package 参数 schema；标准文件输入由 artifacts.inputs 单独绑定
+  // 兼容旧 input_schema 的具体文件字段：界面展示旧字段，提交时投影为标准 Artifact 输入。
   const inputSchema = computed<ToolSchema | undefined>(() => {
-    if (standardParameterSchema.value) {
-      return standardParameterSchema.value
+    if (usesLegacyStandardInputSurface.value && legacyInputSchema.value) {
+      return legacyInputSchema.value
     }
-
-    const config = toolConfig.value
-    if (config && typeof config === 'object' && 'input_schema' in config) {
-      return config.input_schema as ToolSchema
-    }
-    return undefined
+    return standardParameterSchema.value ?? legacyInputSchema.value
   })
 
   const outputSchema = computed<ToolSchema | undefined>(() => {
@@ -584,10 +608,42 @@
       standardInputSlots.value.map(slot => [slot.name, selectedStandardArtifacts[slot.name]])
     )
   })
+  const legacyStandardInputBindingProjection = computed(() => {
+    if (!usesLegacyStandardInputSurface.value) {
+      return { inputBindings: {}, boundFieldKeys: [] }
+    }
+
+    return buildStandardInputBindingsFromFileFields({
+      slots: standardInputSlots.value,
+      fileFieldBindings: standardInputFileFieldBindings.value,
+      selectedArtifacts,
+    })
+  })
   const standardInputBindings = computed(() => {
+    if (usesLegacyStandardInputSurface.value) {
+      return legacyStandardInputBindingProjection.value.inputBindings
+    }
+
     return buildStandardInputBindings(selectedStandardArtifactRecord.value)
   })
+  const hasLegacyStandardInputUploadSelection = (slotName: string) => {
+    const fieldKey = standardInputFileFieldBindings.value[slotName]
+    if (!fieldKey || selectedArtifacts[fieldKey]?.artifact_version_id?.trim()) {
+      return false
+    }
+
+    return Boolean(
+      fileList[fieldKey]?.length ||
+      exampleFiles[fieldKey] ||
+      convertedFiles[fieldKey] ||
+      selectedArtifacts[fieldKey]?.id
+    )
+  }
   const hasStandardInputUploadSelection = (slotName: string) => {
+    if (usesLegacyStandardInputSurface.value) {
+      return hasLegacyStandardInputUploadSelection(slotName)
+    }
+
     return Boolean(standardInputFileList[slotName]?.length)
   }
   const missingRequiredStandardSlots = computed(() => {
@@ -947,6 +1003,17 @@
     }
   }
 
+  function omitRecordKeys<T>(record: Record<string, T>, keys: readonly string[]): Record<string, T> {
+    if (!keys.length) {
+      return record
+    }
+
+    const omitted = new Set(keys)
+    return Object.fromEntries(
+      Object.entries(record).filter(([key]) => !omitted.has(key))
+    ) as Record<string, T>
+  }
+
   const handleSubmit = async () => {
     if (!userStore.isLoggedIn) {
       message.warning(t('auth.loginRequired'))
@@ -1001,21 +1068,49 @@
         uploadedFiles[key] = fileResponseToUploadedToolFile(res.data)
       }
 
-      const standardInputUploads: Record<string, string> = {}
-      for (const slot of standardInputSlots.value) {
-        const fileItem = standardInputFileList[slot.name]?.[0]
-        if (!fileItem?.originFileObj) {
-          continue
-        }
+      let taskInputBindings = standardInputBindings.value
+      let taskUploadedFiles = uploadedFiles
+      let taskFormState: Record<string, unknown> = formState
+      let standardInputUploads: Record<string, string> = {}
 
-        const res = await uploadFile(fileItem.originFileObj as File)
-        standardInputUploads[slot.name] = res.data.id.toString()
+      if (usesLegacyStandardInputSurface.value) {
+        const bindingProjection = buildStandardInputBindingsFromFileFields({
+          slots: standardInputSlots.value,
+          fileFieldBindings: standardInputFileFieldBindings.value,
+          selectedArtifacts,
+        })
+        const uploadProjection = buildStandardInputUploadsFromFileFields({
+          slots: standardInputSlots.value,
+          fileFieldBindings: standardInputFileFieldBindings.value,
+          uploadedFiles,
+          selectedArtifacts,
+          inputBindings: bindingProjection.inputBindings,
+        })
+        const boundFieldKeys = [
+          ...bindingProjection.boundFieldKeys,
+          ...uploadProjection.boundFieldKeys,
+        ]
+
+        taskInputBindings = bindingProjection.inputBindings
+        standardInputUploads = uploadProjection.standardInputUploads
+        taskUploadedFiles = omitRecordKeys(uploadedFiles, boundFieldKeys)
+        taskFormState = omitRecordKeys(formState, boundFieldKeys)
+      } else {
+        for (const slot of standardInputSlots.value) {
+          const fileItem = standardInputFileList[slot.name]?.[0]
+          if (!fileItem?.originFileObj) {
+            continue
+          }
+
+          const res = await uploadFile(fileItem.originFileObj as File)
+          standardInputUploads[slot.name] = res.data.id.toString()
+        }
       }
 
       const payload = buildTaskSubmissionPayload({
         flattenedSchema: schema,
-        formState,
-        uploadedFiles,
+        formState: taskFormState,
+        uploadedFiles: taskUploadedFiles,
         executorType: executorType.value
       })
 
@@ -1026,7 +1121,7 @@
         file_ids: payload.fileIds.length > 0 ? payload.fileIds : undefined,
         ...buildStandardRunTaskExtras({
           projectId: currentProjectId.value,
-          inputBindings: standardInputBindings.value,
+          inputBindings: taskInputBindings,
           standardInputUploads
         })
       }

@@ -1,5 +1,5 @@
 import type { TypedArtifact } from '@/types/artifacts'
-import type { Tool, ToolContract, ToolSchema } from '@/types/models'
+import type { ArtifactFile, Tool, ToolContract, ToolSchema } from '@/types/models'
 import {
   deriveArtifactSlotsFromToolContract,
   type ArtifactInputSlot,
@@ -8,10 +8,29 @@ import {
   isWorkflowSemanticType,
   normalizeWorkflowSemanticType,
 } from '@/workflow/semantic-types'
+import { isFileSchemaProperty, type UploadedToolFile } from './detail-schema'
 
 export type StandardArtifactInputSlot = ArtifactInputSlot
 
+export interface StandardInputFileFieldProjection {
+  inputBindings: Record<string, string>
+  boundFieldKeys: string[]
+}
+
+export interface StandardInputUploadFieldProjection {
+  standardInputUploads: Record<string, string>
+  boundFieldKeys: string[]
+}
+
 type UnknownRecord = Record<string, unknown>
+
+const STANDARD_TYPE_FILE_FIELD_TOKENS: Record<string, readonly string[]> = {
+  'protein_structure@1': ['protein_pdb', 'receptor_pdb', 'protein', 'receptor', 'structure_file'],
+  'binding_pocket@1': ['pocket_pdb', 'binding_pocket', 'pocket', 'pocket_file'],
+  'ligand_structure@1': ['ligand_pdb', 'ligand_sdf', 'ligand', 'structure_file'],
+  'molecule_table@1': ['molecules', 'molecule_table', 'smiles_csv', 'ranking_csv', 'table_file'],
+  'run_report@1': ['report_json', 'report', 'run_report'],
+}
 
 function isRecord(value: unknown): value is UnknownRecord {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -24,6 +43,59 @@ function normalizeStandardType(value: unknown): StandardArtifactInputSlot['type'
 
   const normalized = normalizeWorkflowSemanticType(value.trim())
   return isWorkflowSemanticType(normalized) ? normalized : null
+}
+
+function normalizeFieldToken(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+}
+
+function candidateFieldTokens(key: string, prop: { _originalKey?: string }): string[] {
+  return Array.from(
+    new Set(
+      [key, key.split('.').pop(), prop._originalKey]
+        .map(normalizeFieldToken)
+        .filter(Boolean)
+    )
+  )
+}
+
+function standardTypeFileFieldTokens(slot: StandardArtifactInputSlot): string[] {
+  const standardBase = normalizeFieldToken(String(slot.type).split('@')[0])
+  return Array.from(
+    new Set(
+      [slot.name, standardBase, ...(STANDARD_TYPE_FILE_FIELD_TOKENS[slot.type] ?? [])]
+        .map(normalizeFieldToken)
+        .filter(Boolean)
+    )
+  )
+}
+
+function scoreStandardInputFileField(
+  slot: StandardArtifactInputSlot,
+  key: string,
+  prop: { _originalKey?: string }
+): number {
+  const fieldTokens = candidateFieldTokens(key, prop)
+  const slotName = normalizeFieldToken(slot.name)
+  const standardTokens = standardTypeFileFieldTokens(slot)
+
+  if (fieldTokens.includes(slotName)) {
+    return 100
+  }
+  if (fieldTokens.some(field => field.includes(slotName))) {
+    return 90
+  }
+  if (standardTokens.some(token => fieldTokens.includes(token))) {
+    return 80
+  }
+  if (standardTokens.some(token => fieldTokens.some(field => field.includes(token)))) {
+    return 70
+  }
+  return 0
 }
 
 function resolveToolContract(tool?: Tool | null): ToolContract | null {
@@ -83,6 +155,95 @@ export function resolveToolStandardInputSlots(tool?: Tool | null): StandardArtif
   }
 
   return resolveSlotsFromManifest(resolveEmbeddedManifest(tool))
+}
+
+export function resolveStandardInputFileFieldBindings(input: {
+  slots: readonly StandardArtifactInputSlot[]
+  flattenedSchema?: ToolSchema | null
+}): Record<string, string> {
+  const properties = input.flattenedSchema?.properties
+  if (!properties) {
+    return {}
+  }
+
+  const bindings: Record<string, string> = {}
+  const usedFieldKeys = new Set<string>()
+
+  for (const slot of input.slots) {
+    let bestMatch: { key: string; score: number } | undefined
+    for (const [key, prop] of Object.entries(properties)) {
+      if (usedFieldKeys.has(key) || !isFileSchemaProperty(prop)) {
+        continue
+      }
+
+      const score = scoreStandardInputFileField(slot, key, prop)
+      if (score > (bestMatch?.score ?? 0)) {
+        bestMatch = { key, score }
+      }
+    }
+
+    if (bestMatch) {
+      bindings[slot.name] = bestMatch.key
+      usedFieldKeys.add(bestMatch.key)
+    }
+  }
+
+  return bindings
+}
+
+export function buildStandardInputBindingsFromFileFields(input: {
+  slots: readonly StandardArtifactInputSlot[]
+  fileFieldBindings: Record<string, string>
+  selectedArtifacts: Record<string, ArtifactFile | null | undefined>
+}): StandardInputFileFieldProjection {
+  const inputBindings: Record<string, string> = {}
+  const boundFieldKeys = new Set<string>()
+
+  for (const slot of input.slots) {
+    const fieldKey = input.fileFieldBindings[slot.name]
+    const versionId = fieldKey ? input.selectedArtifacts[fieldKey]?.artifact_version_id?.trim() : ''
+    if (!fieldKey || !versionId) {
+      continue
+    }
+
+    inputBindings[slot.name] = versionId
+    boundFieldKeys.add(fieldKey)
+  }
+
+  return { inputBindings, boundFieldKeys: Array.from(boundFieldKeys) }
+}
+
+export function buildStandardInputUploadsFromFileFields(input: {
+  slots: readonly StandardArtifactInputSlot[]
+  fileFieldBindings: Record<string, string>
+  uploadedFiles: Record<string, UploadedToolFile | undefined>
+  selectedArtifacts: Record<string, ArtifactFile | null | undefined>
+  inputBindings: Record<string, string | null | undefined>
+}): StandardInputUploadFieldProjection {
+  const standardInputUploads: Record<string, string> = {}
+  const boundFieldKeys = new Set<string>()
+
+  for (const slot of input.slots) {
+    if (input.inputBindings[slot.name]?.trim()) {
+      continue
+    }
+
+    const fieldKey = input.fileFieldBindings[slot.name]
+    if (!fieldKey) {
+      continue
+    }
+
+    const fileId =
+      input.selectedArtifacts[fieldKey]?.id?.trim() || input.uploadedFiles[fieldKey]?.fileId?.trim()
+    if (!fileId) {
+      continue
+    }
+
+    standardInputUploads[slot.name] = fileId
+    boundFieldKeys.add(fieldKey)
+  }
+
+  return { standardInputUploads, boundFieldKeys: Array.from(boundFieldKeys) }
 }
 
 export function resolveToolPackageParameterSchema(tool?: Tool | null): ToolSchema | null {

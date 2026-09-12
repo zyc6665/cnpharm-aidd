@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import type { TypedArtifact } from '@/types/artifacts'
-import type { Tool, ToolContract } from '@/types/models'
+import type { ArtifactFile, Tool, ToolContract, ToolSchema } from '@/types/models'
 import {
   buildStandardInputBindings,
+  buildStandardInputBindingsFromFileFields,
+  buildStandardInputUploadsFromFileFields,
   filterCompatibleProjectArtifacts,
   getStandardInputAccept,
   missingRequiredStandardInputSlots,
+  resolveStandardInputFileFieldBindings,
   resolveToolPackageParameterSchema,
   resolveToolStandardInputSlots,
 } from './standard-artifact-inputs'
@@ -79,6 +82,23 @@ function makeArtifact(overrides: Partial<TypedArtifact> = {}): TypedArtifact {
     },
     created_at: '2026-08-02T00:00:00Z',
     updated_at: '2026-08-02T00:00:00Z',
+    ...overrides,
+  }
+}
+
+function makeArtifactFile(overrides: Partial<ArtifactFile> = {}): ArtifactFile {
+  return {
+    id: 'file-1',
+    filename: 'target.pdb',
+    content_type: 'chemical/x-pdb',
+    size_bytes: 123,
+    source_type: 'task_output',
+    download_url: '/api/v1/files/file-1/download',
+    task_id: 'task-1',
+    tool_id: 'tool-1',
+    tool_name: 'LVpocket',
+    tool_slug: 'lvpocket-standard-pocket',
+    created_at: '2026-08-02T00:00:00Z',
     ...overrides,
   }
 }
@@ -205,6 +225,95 @@ describe('standard artifact tool inputs', () => {
     })
 
     expect(bindings).toEqual({ protein: 'version-1' })
+  })
+
+  it('maps legacy protein file fields to standard input slots', () => {
+    const flattenedSchema: ToolSchema = {
+      type: 'object',
+      required: ['protein_pdb'],
+      properties: {
+        protein_pdb: {
+          type: 'file',
+          title: 'Protein PDB',
+          format: 'file',
+        },
+        model_choice: { type: 'string', title: 'Model weight' },
+      },
+    }
+
+    expect(
+      resolveStandardInputFileFieldBindings({
+        slots: [{ name: 'protein', type: 'protein_structure@1', required: true }],
+        flattenedSchema,
+      })
+    ).toEqual({ protein: 'protein_pdb' })
+  })
+
+  it('does not bind standard input slots without a matching legacy file field', () => {
+    const flattenedSchema: ToolSchema = {
+      type: 'object',
+      properties: {
+        notes: { type: 'string', title: 'Notes' },
+      },
+    }
+
+    expect(
+      resolveStandardInputFileFieldBindings({
+        slots: [{ name: 'protein', type: 'protein_structure@1', required: true }],
+        flattenedSchema,
+      })
+    ).toEqual({})
+  })
+
+  it('projects selected legacy standard artifact files into input bindings', () => {
+    expect(
+      buildStandardInputBindingsFromFileFields({
+        slots: [{ name: 'protein', type: 'protein_structure@1', required: true }],
+        fileFieldBindings: { protein: 'protein_pdb' },
+        selectedArtifacts: {
+          protein_pdb: makeArtifactFile({ artifact_version_id: 'artifact-version-1' }),
+        },
+      })
+    ).toEqual({
+      inputBindings: { protein: 'artifact-version-1' },
+      boundFieldKeys: ['protein_pdb'],
+    })
+  })
+
+  it('projects legacy file uploads into standard input uploads', () => {
+    expect(
+      buildStandardInputUploadsFromFileFields({
+        slots: [{ name: 'protein', type: 'protein_structure@1', required: true }],
+        fileFieldBindings: { protein: 'protein_pdb' },
+        selectedArtifacts: {},
+        uploadedFiles: {
+          protein_pdb: {
+            fileId: 'file-upload-1',
+            filename: 'target.pdb',
+            downloadUrl: '/api/v1/files/file-upload-1/download',
+          },
+        },
+        inputBindings: {},
+      })
+    ).toEqual({
+      standardInputUploads: { protein: 'file-upload-1' },
+      boundFieldKeys: ['protein_pdb'],
+    })
+  })
+
+  it('projects selected legacy non-standard artifact files into standard input uploads', () => {
+    expect(
+      buildStandardInputUploadsFromFileFields({
+        slots: [{ name: 'protein', type: 'protein_structure@1', required: true }],
+        fileFieldBindings: { protein: 'protein_pdb' },
+        selectedArtifacts: { protein_pdb: makeArtifactFile({ id: 'artifact-file-1' }) },
+        uploadedFiles: {},
+        inputBindings: {},
+      })
+    ).toEqual({
+      standardInputUploads: { protein: 'artifact-file-1' },
+      boundFieldKeys: ['protein_pdb'],
+    })
   })
 
   it('resolves direct upload file accept values from standard input type', () => {
