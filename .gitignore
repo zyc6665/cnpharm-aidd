@@ -39,6 +39,7 @@ backend/storage/direct-task-runs/
 backend/storage/recovery-downloads/
 /storage/
 /logs/
+backend/logs/
 
 # Local environment
 .env
