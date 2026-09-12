@@ -15,7 +15,75 @@ export interface ArtifactPickerToolNode {
 
 export interface ArtifactPickerGroupNode {
   groupId: string
+  groupName?: string
+  isUngrouped?: boolean
   tools: ArtifactPickerToolNode[]
+}
+
+export type ArtifactPickerStep = 'group' | 'tool' | 'task' | 'artifact'
+
+export interface ArtifactPickerLabels {
+  groupLabel: string
+  toolLabel: string
+  taskLabel: string
+  outputLabel: string
+  selectGroup: string
+  selectTool: string
+  selectTask: string
+  selectOutput: string
+  summarySelected: string
+  summaryFocused: string
+  summaryPending: string
+  ungroupedGroup: string
+  groupMeta: string
+  toolMeta: string
+  noArtifacts: string
+  noCompatibleArtifacts: string
+}
+
+export interface ArtifactPickerPathSegment {
+  step: ArtifactPickerStep
+  label: string
+  value: string
+  clickable: boolean
+  complete: boolean
+}
+
+export interface ArtifactPickerStepSummary {
+  label: string
+  title: string
+  count: number
+}
+
+export interface ArtifactPickerSelectionSummary {
+  label: string
+  title: string
+  meta: string
+}
+
+export interface ArtifactPickerViewModel {
+  selectedGroupNode: ArtifactPickerGroupNode | null
+  selectedGroupTools: ArtifactPickerToolNode[]
+  selectedToolNode: ArtifactPickerToolNode | null
+  selectedToolTasks: ArtifactPickerTaskNode[]
+  selectedTaskNode: ArtifactPickerTaskNode | null
+  selectedTaskArtifacts: ArtifactFile[]
+  compatibleArtifacts: ArtifactFile[]
+  highlightedArtifact: ArtifactFile | null
+  pathSegments: ArtifactPickerPathSegment[]
+  currentStep: ArtifactPickerStepSummary
+  summary: ArtifactPickerSelectionSummary
+}
+
+export interface BuildArtifactPickerViewModelInput {
+  groupNodes: ArtifactPickerGroupNode[]
+  activeStep: ArtifactPickerStep
+  selectedGroupId?: string | null
+  selectedToolSlug?: string | null
+  selectedTaskId?: string | null
+  focusedArtifactId?: string | null
+  selectedArtifact?: ArtifactFile | null
+  labels: ArtifactPickerLabels
 }
 
 export interface ArtifactPickerLocation {
@@ -82,4 +150,181 @@ export function resolveArtifactPickerPreferredToolSlug(
   }
 
   return undefined
+}
+
+export function buildArtifactPickerViewModel(
+  input: BuildArtifactPickerViewModelInput
+): ArtifactPickerViewModel {
+  const selectedGroupNode = input.groupNodes.find(
+    (group) => group.groupId === input.selectedGroupId
+  ) ?? null
+  const selectedGroupTools = selectedGroupNode?.tools ?? []
+  const selectedToolNode = selectedGroupTools.find(
+    (tool) => tool.toolSlug === input.selectedToolSlug
+  ) ?? null
+  const selectedToolTasks = selectedToolNode?.tasks ?? []
+  const selectedTaskNode = selectedToolTasks.find(
+    (task) => task.taskId === input.selectedTaskId
+  ) ?? null
+  const selectedTaskArtifacts = selectedTaskNode?.artifacts ?? []
+  const compatibleArtifacts = input.groupNodes.flatMap((group) =>
+    group.tools.flatMap((tool) => tool.tasks.flatMap((task) => task.artifacts))
+  )
+  const highlightedArtifact = selectedTaskArtifacts.find(
+    (artifact) => artifact.id === input.focusedArtifactId
+  ) ?? null
+
+  return {
+    selectedGroupNode,
+    selectedGroupTools,
+    selectedToolNode,
+    selectedToolTasks,
+    selectedTaskNode,
+    selectedTaskArtifacts,
+    compatibleArtifacts,
+    highlightedArtifact,
+    pathSegments: buildPathSegments({
+      ...input,
+      selectedGroupNode,
+      selectedToolNode,
+      selectedTaskNode,
+      highlightedArtifact,
+    }),
+    currentStep: buildCurrentStep({
+      ...input,
+      groupCount: input.groupNodes.length,
+      toolCount: selectedGroupTools.length,
+      taskCount: selectedToolTasks.length,
+      artifactCount: selectedTaskArtifacts.length,
+    }),
+    summary: buildSelectionSummary({
+      ...input,
+      selectedGroupNode,
+      selectedToolNode,
+      selectedTaskNode,
+      highlightedArtifact,
+    }),
+  }
+}
+
+function buildPathSegments(input: BuildArtifactPickerViewModelInput & {
+  selectedGroupNode: ArtifactPickerGroupNode | null
+  selectedToolNode: ArtifactPickerToolNode | null
+  selectedTaskNode: ArtifactPickerTaskNode | null
+  highlightedArtifact: ArtifactFile | null
+}): ArtifactPickerPathSegment[] {
+  const labels = input.labels
+  return [
+    {
+      step: 'group',
+      label: labels.groupLabel,
+      value: input.selectedGroupNode
+        ? groupDisplayName(input.selectedGroupNode, labels)
+        : labels.selectGroup,
+      clickable: input.groupNodes.length > 0,
+      complete: Boolean(input.selectedGroupNode),
+    },
+    {
+      step: 'tool',
+      label: labels.toolLabel,
+      value: input.selectedToolNode?.toolName ?? labels.selectTool,
+      clickable: Boolean(input.selectedGroupNode),
+      complete: Boolean(input.selectedToolNode),
+    },
+    {
+      step: 'task',
+      label: labels.taskLabel,
+      value: input.selectedTaskNode ? `#${input.selectedTaskNode.taskId}` : labels.selectTask,
+      clickable: Boolean(input.selectedToolNode),
+      complete: Boolean(input.selectedTaskNode),
+    },
+    {
+      step: 'artifact',
+      label: labels.outputLabel,
+      value: input.selectedArtifact?.filename
+        ?? input.highlightedArtifact?.filename
+        ?? labels.selectOutput,
+      clickable: Boolean(input.selectedTaskNode),
+      complete: Boolean(input.selectedArtifact ?? input.highlightedArtifact),
+    },
+  ]
+}
+
+function buildCurrentStep(input: BuildArtifactPickerViewModelInput & {
+  groupCount: number
+  toolCount: number
+  taskCount: number
+  artifactCount: number
+}): ArtifactPickerStepSummary {
+  const labels = input.labels
+  if (input.activeStep === 'group') {
+    return { label: labels.groupLabel, title: labels.selectGroup, count: input.groupCount }
+  }
+  if (input.activeStep === 'tool') {
+    return { label: labels.toolLabel, title: labels.selectTool, count: input.toolCount }
+  }
+  if (input.activeStep === 'task') {
+    return { label: labels.taskLabel, title: labels.selectTask, count: input.taskCount }
+  }
+  return { label: labels.outputLabel, title: labels.selectOutput, count: input.artifactCount }
+}
+
+function buildSelectionSummary(input: BuildArtifactPickerViewModelInput & {
+  selectedGroupNode: ArtifactPickerGroupNode | null
+  selectedToolNode: ArtifactPickerToolNode | null
+  selectedTaskNode: ArtifactPickerTaskNode | null
+  highlightedArtifact: ArtifactFile | null
+}): ArtifactPickerSelectionSummary {
+  const labels = input.labels
+  const selectedArtifact = input.selectedArtifact ?? null
+  if (selectedArtifact) {
+    return {
+      label: labels.summarySelected,
+      title: selectedArtifact.filename,
+      meta: formatArtifactPickerArtifactMeta(selectedArtifact),
+    }
+  }
+  if (input.highlightedArtifact) {
+    return {
+      label: labels.summaryFocused,
+      title: input.highlightedArtifact.filename,
+      meta: formatArtifactPickerArtifactMeta(input.highlightedArtifact),
+    }
+  }
+  if (input.selectedTaskNode) {
+    return {
+      label: labels.summaryPending,
+      title: `#${input.selectedTaskNode.taskId}`,
+      meta: formatArtifactPickerTaskMeta(
+        input.selectedTaskNode,
+        input.selectedToolNode?.toolName
+      ),
+    }
+  }
+  if (input.selectedToolNode) {
+    return {
+      label: labels.summaryPending,
+      title: input.selectedToolNode.toolName,
+      meta: labels.toolMeta,
+    }
+  }
+  if (input.selectedGroupNode) {
+    return {
+      label: labels.summaryPending,
+      title: groupDisplayName(input.selectedGroupNode, labels),
+      meta: labels.groupMeta,
+    }
+  }
+  return {
+    label: labels.summaryPending,
+    title: labels.noArtifacts,
+    meta: labels.noCompatibleArtifacts,
+  }
+}
+
+function groupDisplayName(
+  groupNode: ArtifactPickerGroupNode,
+  labels: ArtifactPickerLabels
+): string {
+  return groupNode.isUngrouped ? labels.ungroupedGroup : groupNode.groupName ?? groupNode.groupId
 }

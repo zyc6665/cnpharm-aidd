@@ -180,23 +180,22 @@
   import type { UploadFile } from 'ant-design-vue'
   import { UploadOutlined } from '@ant-design/icons-vue'
   import {
+    buildArtifactPickerViewModel,
     findArtifactPickerLocation,
     formatArtifactPickerArtifactMeta,
     formatArtifactPickerTaskMeta,
     resolveArtifactPickerPreferredGroupId,
-    resolveArtifactPickerPreferredToolSlug
+    resolveArtifactPickerPreferredToolSlug,
+    type ArtifactPickerGroupNode,
+    type ArtifactPickerStep,
+    type ArtifactPickerTaskNode
   } from '@/domain/tools'
   import { useArtifactsStore, useToolsStore } from '@/stores'
   import type { ArtifactFile } from '@/types/models'
   import {
     buildWorkflowArtifactHierarchy,
-    type WorkflowArtifactGroupNode,
-    type WorkflowArtifactSelectionPath,
-    type WorkflowArtifactTaskNode,
-    type WorkflowArtifactToolNode
+    type WorkflowArtifactSelectionPath
   } from '../../workflow/artifact-hierarchy.ts'
-
-  type ArtifactStep = 'group' | 'tool' | 'task' | 'artifact'
 
   const props = withDefaults(
     defineProps<{
@@ -244,7 +243,7 @@
 
     return sourceMode.value
   })
-  const activeStep = ref<ArtifactStep>('group')
+  const activeStep = ref<ArtifactPickerStep>('group')
   const selectedGroupId = ref<string>()
   const selectedToolSlug = ref<string>()
   const selectedTaskId = ref<string>()
@@ -259,178 +258,50 @@
     }).groups
   })
 
-  const selectedGroupNode = computed<WorkflowArtifactGroupNode | null>(() => {
-    return artifactGroupNodes.value.find((group) => group.groupId === selectedGroupId.value) ?? null
-  })
+  const pickerLabels = computed(() => ({
+    groupLabel: t('tools.artifactGroupLabel'),
+    toolLabel: t('tools.artifactToolLabel'),
+    taskLabel: t('tools.artifactTaskLabel'),
+    outputLabel: t('tools.artifactOutputLabel'),
+    selectGroup: t('tools.selectArtifactGroup'),
+    selectTool: t('tools.selectArtifactTool'),
+    selectTask: t('tools.selectArtifactTask'),
+    selectOutput: t('tools.selectArtifactOutput'),
+    summarySelected: t('tools.artifactSummarySelected'),
+    summaryFocused: t('tools.artifactSummaryFocused'),
+    summaryPending: t('tools.artifactSummaryPending'),
+    ungroupedGroup: t('workflow.artifacts.ungroupedGroup'),
+    groupMeta: t('tools.artifactGroupMeta'),
+    toolMeta: t('tools.artifactToolMeta'),
+    noArtifacts: t('tools.noArtifacts'),
+    noCompatibleArtifacts: t('tools.noCompatibleArtifacts')
+  }))
 
-  const selectedGroupTools = computed(() => {
-    return selectedGroupNode.value?.tools ?? []
-  })
+  const pickerViewModel = computed(() => buildArtifactPickerViewModel({
+    groupNodes: artifactGroupNodes.value,
+    activeStep: activeStep.value,
+    selectedGroupId: selectedGroupId.value,
+    selectedToolSlug: selectedToolSlug.value,
+    selectedTaskId: selectedTaskId.value,
+    focusedArtifactId: focusedArtifactId.value,
+    selectedArtifact: props.selectedArtifact,
+    labels: pickerLabels.value
+  }))
 
-  const selectedToolNode = computed<WorkflowArtifactToolNode | null>(() => {
-    return selectedGroupTools.value.find((tool) => tool.toolSlug === selectedToolSlug.value) ?? null
-  })
-
-  const selectedToolTasks = computed(() => {
-    return selectedToolNode.value?.tasks ?? []
-  })
-
-  const selectedTaskNode = computed<WorkflowArtifactTaskNode | null>(() => {
-    return selectedToolTasks.value.find((task) => task.taskId === selectedTaskId.value) ?? null
-  })
-
-  const selectedTaskArtifacts = computed(() => {
-    return selectedTaskNode.value?.artifacts ?? []
-  })
-
-  const compatibleArtifacts = computed(() => {
-    return artifactGroupNodes.value.flatMap((group) =>
-      group.tools.flatMap((tool) =>
-        tool.tasks.flatMap((task) => task.artifacts)
-      )
-    )
-  })
-
-  const highlightedArtifact = computed(() => {
-    return selectedTaskArtifacts.value.find((artifact) => artifact.id === focusedArtifactId.value) ?? null
-  })
-
-  const pathSegments = computed(() => {
-    return [
-      {
-        step: 'group' as const,
-        label: t('tools.artifactGroupLabel'),
-        value: selectedGroupNode.value
-          ? (selectedGroupNode.value.isUngrouped ? t('workflow.artifacts.ungroupedGroup') : selectedGroupNode.value.groupName)
-          : t('tools.selectArtifactGroup'),
-        clickable: artifactGroupNodes.value.length > 0,
-        complete: Boolean(selectedGroupNode.value)
-      },
-      {
-        step: 'tool' as const,
-        label: t('tools.artifactToolLabel'),
-        value: selectedToolNode.value?.toolName ?? t('tools.selectArtifactTool'),
-        clickable: Boolean(selectedGroupNode.value),
-        complete: Boolean(selectedToolNode.value)
-      },
-      {
-        step: 'task' as const,
-        label: t('tools.artifactTaskLabel'),
-        value: selectedTaskNode.value ? `#${selectedTaskNode.value.taskId}` : t('tools.selectArtifactTask'),
-        clickable: Boolean(selectedToolNode.value),
-        complete: Boolean(selectedTaskNode.value)
-      },
-      {
-        step: 'artifact' as const,
-        label: t('tools.artifactOutputLabel'),
-        value: props.selectedArtifact?.filename ?? highlightedArtifact.value?.filename ?? t('tools.selectArtifactOutput'),
-        clickable: Boolean(selectedTaskNode.value),
-        complete: Boolean(props.selectedArtifact ?? highlightedArtifact.value)
-      }
-    ]
-  })
-
-  const currentStepLabel = computed(() => {
-    switch (activeStep.value) {
-      case 'group':
-        return t('tools.artifactGroupLabel')
-      case 'tool':
-        return t('tools.artifactToolLabel')
-      case 'task':
-        return t('tools.artifactTaskLabel')
-      case 'artifact':
-      default:
-        return t('tools.artifactOutputLabel')
-    }
-  })
-
-  const currentStepTitle = computed(() => {
-    switch (activeStep.value) {
-      case 'group':
-        return t('tools.selectArtifactGroup')
-      case 'tool':
-        return t('tools.selectArtifactTool')
-      case 'task':
-        return t('tools.selectArtifactTask')
-      case 'artifact':
-      default:
-        return t('tools.selectArtifactOutput')
-    }
-  })
-
-  const currentStepCount = computed(() => {
-    switch (activeStep.value) {
-      case 'group':
-        return artifactGroupNodes.value.length
-      case 'tool':
-        return selectedGroupTools.value.length
-      case 'task':
-        return selectedToolTasks.value.length
-      case 'artifact':
-      default:
-        return selectedTaskArtifacts.value.length
-    }
-  })
-
-  const summaryLabel = computed(() => {
-    if (props.selectedArtifact) {
-      return t('tools.artifactSummarySelected')
-    }
-
-    if (highlightedArtifact.value) {
-      return t('tools.artifactSummaryFocused')
-    }
-
-    return t('tools.artifactSummaryPending')
-  })
-
-  const summaryTitle = computed(() => {
-    if (props.selectedArtifact) {
-      return props.selectedArtifact.filename
-    }
-
-    if (highlightedArtifact.value) {
-      return highlightedArtifact.value.filename
-    }
-
-    if (selectedTaskNode.value) {
-      return `#${selectedTaskNode.value.taskId}`
-    }
-
-    if (selectedToolNode.value) {
-      return selectedToolNode.value.toolName
-    }
-
-    if (selectedGroupNode.value) {
-      return selectedGroupNode.value.isUngrouped ? t('workflow.artifacts.ungroupedGroup') : selectedGroupNode.value.groupName
-    }
-
-    return t('tools.noArtifacts')
-  })
-
-  const summaryMeta = computed(() => {
-    if (props.selectedArtifact) {
-      return formatArtifactMeta(props.selectedArtifact)
-    }
-
-    if (highlightedArtifact.value) {
-      return formatArtifactMeta(highlightedArtifact.value)
-    }
-
-    if (selectedTaskNode.value) {
-      return formatTaskMeta(selectedTaskNode.value)
-    }
-
-    if (selectedToolNode.value) {
-      return t('tools.artifactToolMeta')
-    }
-
-    if (selectedGroupNode.value) {
-      return t('tools.artifactGroupMeta')
-    }
-
-    return t('tools.noCompatibleArtifacts')
-  })
+  const selectedGroupNode = computed(() => pickerViewModel.value.selectedGroupNode)
+  const selectedGroupTools = computed(() => pickerViewModel.value.selectedGroupTools)
+  const selectedToolNode = computed(() => pickerViewModel.value.selectedToolNode)
+  const selectedToolTasks = computed(() => pickerViewModel.value.selectedToolTasks)
+  const selectedTaskNode = computed(() => pickerViewModel.value.selectedTaskNode)
+  const selectedTaskArtifacts = computed(() => pickerViewModel.value.selectedTaskArtifacts)
+  const compatibleArtifacts = computed(() => pickerViewModel.value.compatibleArtifacts)
+  const pathSegments = computed(() => pickerViewModel.value.pathSegments)
+  const currentStepLabel = computed(() => pickerViewModel.value.currentStep.label)
+  const currentStepTitle = computed(() => pickerViewModel.value.currentStep.title)
+  const currentStepCount = computed(() => pickerViewModel.value.currentStep.count)
+  const summaryLabel = computed(() => pickerViewModel.value.summary.label)
+  const summaryTitle = computed(() => pickerViewModel.value.summary.title)
+  const summaryMeta = computed(() => pickerViewModel.value.summary.meta)
 
   function syncSourceMode() {
     if (!props.allowArtifacts) {
@@ -556,7 +427,7 @@
     activeStep.value = 'artifact'
   }
 
-  function handlePathSegmentClick(step: ArtifactStep) {
+  function handlePathSegmentClick(step: ArtifactPickerStep) {
     if (step === 'group') {
       selectedToolSlug.value = undefined
       selectedTaskId.value = undefined
@@ -592,7 +463,7 @@
     return formatArtifactPickerArtifactMeta(artifact)
   }
 
-  function formatTaskMeta(taskNode: WorkflowArtifactTaskNode): string {
+  function formatTaskMeta(taskNode: ArtifactPickerTaskNode): string {
     return formatArtifactPickerTaskMeta(taskNode, selectedToolNode.value?.toolName)
   }
 
@@ -604,7 +475,7 @@
     return resolveArtifactPickerPreferredGroupId(artifactGroupNodes.value, props.preferredGroupId)
   }
 
-  function resolvePreferredToolSlug(groupNode: WorkflowArtifactGroupNode | null): string | undefined {
+  function resolvePreferredToolSlug(groupNode: ArtifactPickerGroupNode | null): string | undefined {
     return resolveArtifactPickerPreferredToolSlug(
       groupNode,
       props.preferredToolSlug,

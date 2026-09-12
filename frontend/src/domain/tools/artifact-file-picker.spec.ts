@@ -1,12 +1,32 @@
 import { describe, expect, it } from 'vitest'
 import type { ArtifactFile } from '@/types/models'
 import {
+  buildArtifactPickerViewModel,
   findArtifactPickerLocation,
   formatArtifactPickerArtifactMeta,
   formatArtifactPickerTaskMeta,
   resolveArtifactPickerPreferredGroupId,
   resolveArtifactPickerPreferredToolSlug,
 } from './artifact-file-picker'
+
+const labels = {
+  groupLabel: 'Group',
+  toolLabel: 'Tool',
+  taskLabel: 'Task',
+  outputLabel: 'Output',
+  selectGroup: 'Select group',
+  selectTool: 'Select tool',
+  selectTask: 'Select task',
+  selectOutput: 'Select output',
+  summarySelected: 'Selected',
+  summaryFocused: 'Focused',
+  summaryPending: 'Pending',
+  ungroupedGroup: 'Ungrouped',
+  groupMeta: 'Group meta',
+  toolMeta: 'Tool meta',
+  noArtifacts: 'No artifacts',
+  noCompatibleArtifacts: 'No compatible artifacts',
+}
 
 function artifact(overrides: Partial<ArtifactFile> = {}): ArtifactFile {
   return {
@@ -82,5 +102,69 @@ describe('artifact file picker rules', () => {
       'docking-tool'
     )
     expect(resolveArtifactPickerPreferredToolSlug(firstGroup, 'missing', 'other')).toBeUndefined()
+  })
+
+  it('builds path, step, and summary view model from selection state', () => {
+    const selectedArtifact = artifact({ filename: 'picked.sdf' })
+
+    const viewModel = buildArtifactPickerViewModel({
+      groupNodes: groups,
+      activeStep: 'artifact',
+      selectedGroupId: 'group-1',
+      selectedToolSlug: 'docking-tool',
+      selectedTaskId: 'task-1',
+      focusedArtifactId: 'artifact-1',
+      selectedArtifact,
+      labels,
+    })
+
+    expect(viewModel.selectedGroupTools).toHaveLength(1)
+    expect(viewModel.selectedToolTasks).toHaveLength(1)
+    expect(viewModel.selectedTaskArtifacts).toHaveLength(1)
+    expect(viewModel.compatibleArtifacts).toHaveLength(1)
+    expect(viewModel.currentStep).toEqual({
+      label: 'Output',
+      title: 'Select output',
+      count: 1,
+    })
+    expect(viewModel.pathSegments.map(segment => ({
+      step: segment.step,
+      value: segment.value,
+      complete: segment.complete,
+    }))).toEqual([
+      { step: 'group', value: 'Group 1', complete: true },
+      { step: 'tool', value: 'Docking Tool', complete: true },
+      { step: 'task', value: '#task-1', complete: true },
+      { step: 'artifact', value: 'picked.sdf', complete: true },
+    ])
+    expect(viewModel.summary).toMatchObject({
+      label: 'Selected',
+      title: 'picked.sdf',
+    })
+    expect(viewModel.summary.meta).toContain('Docking Tool')
+  })
+
+  it('keeps pending summary anchored to the deepest selected level', () => {
+    const viewModel = buildArtifactPickerViewModel({
+      groupNodes: groups,
+      activeStep: 'task',
+      selectedGroupId: 'group-1',
+      selectedToolSlug: 'docking-tool',
+      selectedTaskId: undefined,
+      focusedArtifactId: undefined,
+      selectedArtifact: null,
+      labels,
+    })
+
+    expect(viewModel.currentStep).toEqual({
+      label: 'Task',
+      title: 'Select task',
+      count: 1,
+    })
+    expect(viewModel.summary).toEqual({
+      label: 'Pending',
+      title: 'Docking Tool',
+      meta: 'Tool meta',
+    })
   })
 })
