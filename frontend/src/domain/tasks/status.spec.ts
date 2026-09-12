@@ -5,6 +5,7 @@ import {
   getTaskProgressColor,
   getTaskProgressStatus,
   getTaskStatusColor,
+  getTaskStatusTextKey,
   isHistoryTask,
   isRunningTask,
   normalizeTaskStatus
@@ -26,6 +27,14 @@ test('任务状态展示规则保持与任务中心一致', () => {
   assert.equal(getTaskStatusColor('success'), 'success')
   assert.equal(getTaskStatusColor('failure'), 'error')
   assert.equal(getTaskStatusColor('canceled'), 'default')
+})
+
+test('任务状态文案 key 由状态模块统一提供', () => {
+  assert.equal(getTaskStatusTextKey('pending'), 'tasks.statusPending')
+  assert.equal(getTaskStatusTextKey('running'), 'tasks.statusRunning')
+  assert.equal(getTaskStatusTextKey('success'), 'tasks.statusSuccess')
+  assert.equal(getTaskStatusTextKey('failure'), 'tasks.statusFailure')
+  assert.equal(getTaskStatusTextKey('canceled'), 'tasks.statusCanceled')
 })
 
 test('任务进度条状态和颜色由任务状态决定', () => {

@@ -45,6 +45,32 @@ export interface TaskCountQueryParams {
 
 export type TaskViewCounts = Record<TaskSystemView, number>
 export type TaskWorkflowScopeKey = 'run' | 'definition' | 'node'
+export type TaskListEmptyTextKey =
+  | 'tasks.noTasks'
+  | 'tasks.noRunningTasks'
+  | 'tasks.noAttentionTasks'
+  | 'tasks.noHistoryTasks'
+
+export interface TaskListViewCounts {
+  all: number
+  running: number
+  attention: number
+  history: number
+}
+
+export interface TaskListViewModelInput {
+  tasks: Task[]
+  tab: TaskListTab
+  keyword: string
+  counts: TaskViewCounts
+}
+
+export interface TaskListViewModel {
+  displayTasks: Task[]
+  runningTasks: Task[]
+  hasDisplayItems: boolean
+  counts: TaskListViewCounts
+}
 
 export interface TaskWorkflowScopePart {
   key: TaskWorkflowScopeKey
@@ -69,6 +95,13 @@ export function taskListTabFromQueryParam(
     default:
       return fallback
   }
+}
+
+export function getTaskListEmptyTextKey(tab: TaskListTab): TaskListEmptyTextKey {
+  if (tab === 'running') return 'tasks.noRunningTasks'
+  if (tab === 'needs_attention') return 'tasks.noAttentionTasks'
+  if (tab === 'history') return 'tasks.noHistoryTasks'
+  return 'tasks.noTasks'
 }
 
 export function buildTaskWorkflowScopeParts(input: {
@@ -168,6 +201,25 @@ export function filterTasksByKeyword(tasks: Task[], keyword: string): Task[] {
     const searchableValues = [task.name, task.tool?.name, task.tool_name, task.id]
     return searchableValues.some(value => value?.toLowerCase().includes(normalizedKeyword))
   })
+}
+
+export function buildTaskListViewModel(input: TaskListViewModelInput): TaskListViewModel {
+  const displayTasks = filterTasksByKeyword(
+    filterTasksForTab(input.tasks, input.tab),
+    input.keyword
+  )
+
+  return {
+    displayTasks,
+    runningTasks: displayTasks.filter(isRunningTask),
+    hasDisplayItems: displayTasks.length > 0,
+    counts: {
+      all: input.counts.all,
+      running: input.counts.running,
+      attention: input.counts.needs_attention,
+      history: input.counts.history,
+    },
+  }
 }
 
 export function paginateTasks(tasks: Task[], page: number, pageSize: number): Task[] {

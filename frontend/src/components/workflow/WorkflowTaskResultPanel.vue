@@ -87,6 +87,7 @@
     formatTaskDetailTime,
     formatTaskRunningDuration,
     getTaskStatusColor,
+    getTaskStatusTextKey,
     normalizeTaskStatus
   } from '@/domain/tasks'
 
@@ -144,17 +145,7 @@
     return getTaskStatusColor(taskStatus.value)
   })
 
-  const statusText = computed(() => {
-    const texts: Record<TaskStatus, string> = {
-      pending: t('tasks.statusPending'),
-      running: t('tasks.statusRunning'),
-      success: t('tasks.statusSuccess'),
-      failure: t('tasks.statusFailure'),
-      canceled: t('tasks.statusCanceled')
-    }
-
-    return texts[taskStatus.value]
-  })
+  const statusText = computed(() => t(getTaskStatusTextKey(taskStatus.value)))
 
   const panelDescription = computed(() => {
     if (!currentTask.value) {

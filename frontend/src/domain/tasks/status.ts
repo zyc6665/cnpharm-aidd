@@ -1,6 +1,12 @@
 import type { Task, TaskStatus } from '@/types/models'
 
 export type TaskProgressStatus = 'normal' | 'active' | 'exception' | 'success'
+export type TaskStatusTextKey =
+  | 'tasks.statusPending'
+  | 'tasks.statusRunning'
+  | 'tasks.statusSuccess'
+  | 'tasks.statusFailure'
+  | 'tasks.statusCanceled'
 
 const runningStatuses: TaskStatus[] = ['pending', 'running']
 const historyStatuses: TaskStatus[] = ['success', 'failure', 'canceled']
@@ -23,6 +29,18 @@ export function getTaskStatusColor(status: TaskStatus): string {
   }
 
   return colors[status]
+}
+
+export function getTaskStatusTextKey(status: TaskStatus): TaskStatusTextKey {
+  const keys: Record<TaskStatus, TaskStatusTextKey> = {
+    pending: 'tasks.statusPending',
+    running: 'tasks.statusRunning',
+    success: 'tasks.statusSuccess',
+    failure: 'tasks.statusFailure',
+    canceled: 'tasks.statusCanceled',
+  }
+
+  return keys[status]
 }
 
 export function getTaskProgressStatus(status: TaskStatus): TaskProgressStatus {

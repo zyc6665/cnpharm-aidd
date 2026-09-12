@@ -2,11 +2,13 @@ import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import type { Task } from '@/types/models'
 import {
+  buildTaskListViewModel,
   buildTaskCountQueryParams,
   buildTaskListQueryParams,
   buildTaskWorkflowScopeParts,
   filterTasksByKeyword,
   filterTasksForTab,
+  getTaskListEmptyTextKey,
   paginateTasks,
   taskListTabFromQueryParam,
   taskSystemViewForTab,
@@ -62,6 +64,13 @@ test('任务列表从 URL view 参数恢复标签页', () => {
   assert.equal(taskListTabFromQueryParam(['history']), 'history')
   assert.equal(taskListTabFromQueryParam('recent_results'), 'all')
   assert.equal(taskListTabFromQueryParam(' ', 'running'), 'running')
+})
+
+test('任务列表空态文案 key 由标签页决定', () => {
+  assert.equal(getTaskListEmptyTextKey('all'), 'tasks.noTasks')
+  assert.equal(getTaskListEmptyTextKey('running'), 'tasks.noRunningTasks')
+  assert.equal(getTaskListEmptyTextKey('needs_attention'), 'tasks.noAttentionTasks')
+  assert.equal(getTaskListEmptyTextKey('history'), 'tasks.noHistoryTasks')
 })
 
 test('任务列表生成 workflow/node 筛选上下文摘要', () => {
@@ -161,4 +170,54 @@ test('任务列表分页只返回当前页数据', () => {
     paginateTasks(tasks, 2, 2).map(item => item.id),
     ['task-success', 'task-failure']
   )
+})
+
+test('任务列表视图模型集中处理展示任务、运行中监控和计数', () => {
+  const viewModel = buildTaskListViewModel({
+    tasks,
+    tab: 'all',
+    keyword: 'task',
+    counts: {
+      all: 5,
+      running: 2,
+      needs_attention: 1,
+      history: 3,
+      recent_results: 0,
+    },
+  })
+
+  assert.deepEqual(
+    viewModel.displayTasks.map(item => item.id),
+    tasks.map(item => item.id)
+  )
+  assert.deepEqual(
+    viewModel.runningTasks.map(item => item.id),
+    ['task-pending', 'task-running']
+  )
+  assert.equal(viewModel.hasDisplayItems, true)
+  assert.deepEqual(viewModel.counts, {
+    all: 5,
+    running: 2,
+    attention: 1,
+    history: 3,
+  })
+})
+
+test('任务列表视图模型按标签页和关键字过滤后返回空态', () => {
+  const viewModel = buildTaskListViewModel({
+    tasks,
+    tab: 'needs_attention',
+    keyword: 'pocket',
+    counts: {
+      all: 5,
+      running: 2,
+      needs_attention: 1,
+      history: 3,
+      recent_results: 0,
+    },
+  })
+
+  assert.deepEqual(viewModel.displayTasks, [])
+  assert.deepEqual(viewModel.runningTasks, [])
+  assert.equal(viewModel.hasDisplayItems, false)
 })

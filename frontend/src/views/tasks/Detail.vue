@@ -335,6 +335,7 @@ import {
   buildTaskFailureDiagnostics,
   getTaskCompletedTitleKey,
   getTaskStatusColor,
+  getTaskStatusTextKey,
   isTaskWebSocketMessageForTask,
   normalizeTaskStatus,
   resolveTaskWebSocketLog,
@@ -386,16 +387,7 @@ const failureDiagnostics = computed(() => buildTaskFailureDiagnostics(task.value
 // 方法
 const getStatusColor = getTaskStatusColor
 
-const getStatusText = (status: TaskStatus) => {
-  const texts: Record<TaskStatus, string> = {
-    pending: t('tasks.statusPending'),
-    running: t('tasks.statusRunning'),
-    success: t('tasks.statusSuccess'),
-    failure: t('tasks.statusFailure'),
-    canceled: t('tasks.statusCanceled')
-  }
-  return texts[status]
-}
+const getStatusText = (status: TaskStatus) => t(getTaskStatusTextKey(status))
 
 const getCompletedTitle = (status: TaskStatus) => {
   return t(getTaskCompletedTitleKey(status))
