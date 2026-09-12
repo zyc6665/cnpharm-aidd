@@ -6,7 +6,6 @@ from dataclasses import dataclass
 import hashlib
 import json
 from pathlib import Path
-from types import SimpleNamespace
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,9 +24,11 @@ from app.models.files import FileSourceType
 from app.models.tools import Tool, ToolVersion
 from app.models.users import User
 from app.services.run_input_normalization import normalize_string_mapping
+from app.services.standard_input_slots import (
+    artifact_input_slots_by_name_for_tool,
+    tool_accepts_materialized_standard_uploads,
+)
 from app.services.standard_upload_metadata import build_standard_upload_metadata
-from app.services.tool_contracts import build_tool_contract
-from app.tool_packages.config_resolver import tool_package_v2_manifest_data
 
 
 RoleFile = tuple[str, FileModel, bool]
@@ -44,7 +45,7 @@ class StandardInputUploadPlan:
 
 
 def accepts_materialized_standard_uploads(config: object) -> bool:
-    return tool_package_v2_manifest_data(config) is not None
+    return tool_accepts_materialized_standard_uploads(config)
 
 
 def standard_uploads_need_default_project(
@@ -146,7 +147,7 @@ async def _build_standard_input_upload_plans(
     project_id: str | None,
     standard_input_uploads: dict[str, str],
 ) -> list[StandardInputUploadPlan]:
-    slots_by_name = _artifact_input_slots_by_name(tool, tool_version)
+    slots_by_name = artifact_input_slots_by_name_for_tool(tool, tool_version)
     plans: list[StandardInputUploadPlan] = []
     for slot_name, file_id in standard_input_uploads.items():
         plans.append(
@@ -204,28 +205,6 @@ async def _build_standard_input_upload_plan(
             uploaded_file=uploaded_file,
         ),
     )
-
-
-def _artifact_input_slots_by_name(tool: Tool, tool_version: ToolVersion) -> dict[str, dict]:
-    contract = build_tool_contract(
-        SimpleNamespace(
-            id=getattr(tool, "id", None),
-            slug=getattr(tool, "slug", None),
-            name=getattr(tool, "name", None),
-            description=getattr(tool, "description", None),
-            status=getattr(tool, "status", None),
-            is_public=getattr(tool, "is_public", None),
-            timeout_sec=getattr(tool, "timeout_sec", None),
-            current_version=tool_version,
-        )
-    )
-    artifacts = contract.get("artifacts") if isinstance(contract.get("artifacts"), dict) else {}
-    inputs = artifacts.get("inputs") if isinstance(artifacts.get("inputs"), list) else []
-    return {
-        str(slot.get("name")): slot
-        for slot in inputs
-        if isinstance(slot, dict) and str(slot.get("name") or "")
-    }
 
 
 def _require_slot(slots_by_name: dict[str, dict], slot_name: str) -> dict:

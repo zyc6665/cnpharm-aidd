@@ -19,9 +19,14 @@ from app.services.artifact_binding_resolver import (
 from app.services.legacy_file_projection import legacy_file_fields, select_legacy_file_field
 from app.services.run_input_normalization import normalize_string_mapping
 from app.services.semantic_types import normalize_semantic_type
+from app.services.standard_input_slots import (
+    artifact_input_slots_by_name,
+    artifact_input_slots_by_name_for_node,
+    artifact_input_slots_for_run,
+    tool_accepts_standard_input_bindings,
+)
 from app.services.tool_contracts import build_tool_contract
 from app.services.workflow_artifacts import standard_artifact_file_ids
-from app.tool_packages.config_resolver import tool_package_v2_manifest_data
 
 
 RunSurface = Literal["tool_detail", "standalone_node", "workflow_node", "agent_plan"]
@@ -75,21 +80,20 @@ async def prepare_run(db: AsyncSession, *, input: RunPreparationInput) -> Prepar
     standard_input_uploads = normalize_string_mapping(input.standard_input_uploads)
     project_id = input.context.project_id
 
+    contract = build_tool_contract(input.tool)
+    artifact_inputs = artifact_input_slots_for_run(contract, input.workflow_node)
+    artifact_inputs_by_name = artifact_input_slots_by_name(artifact_inputs)
+    accepts_standard_bindings = tool_accepts_standard_input_bindings(
+        _tool_config(input.tool_version)
+    )
     await _validate_standard_input_bindings(
         db,
         project_id=project_id,
-        input_bindings=input_bindings,
-    )
-
-    contract = build_tool_contract(input.tool)
-    artifact_inputs = _artifact_input_slots_for_run(contract, input.workflow_node)
-    artifact_inputs_by_name = {
-        str(slot.get("name")): slot
-        for slot in artifact_inputs
-        if isinstance(slot, dict) and str(slot.get("name") or "")
-    }
-    accepts_standard_bindings = _tool_accepts_standard_input_bindings(
-        _tool_config(input.tool_version)
+        input_bindings=_input_bindings_requiring_validation(
+            input_bindings,
+            artifact_inputs_by_name,
+            accepts_standard_bindings=accepts_standard_bindings,
+        ),
     )
     binding_decisions: dict[str, dict[str, Any]] = {}
     ready = True
@@ -279,7 +283,7 @@ async def _resolve_workflow_input_sources(
         )
         semantic_file_bindings[semantic_key] = file_id
 
-    artifact_slots = _artifact_input_slots_by_name(node)
+    artifact_slots = artifact_input_slots_by_name_for_node(node)
     for slot_name, source in (node.get("artifact_inputs") or {}).items():
         normalized_slot = str(slot_name)
         if not isinstance(source, str):
@@ -362,6 +366,25 @@ async def _resolve_workflow_input_sources(
         artifact_slots=artifact_slots,
     )
 
+
+def _input_bindings_requiring_validation(
+    input_bindings: dict[str, str],
+    artifact_inputs_by_name: dict[str, dict[str, Any]],
+    *,
+    accepts_standard_bindings: bool,
+) -> dict[str, str]:
+    if accepts_standard_bindings:
+        return input_bindings
+
+    return {
+        slot_name: version_id
+        for slot_name, version_id in input_bindings.items()
+        if _slot_needs_binding_resolution(
+            artifact_inputs_by_name.get(slot_name) or {}
+        )
+    }
+
+
 async def _validate_standard_input_bindings(
     db: AsyncSession,
     *,
@@ -404,37 +427,6 @@ async def _validate_standard_input_bindings(
         )
 
 
-def _artifact_input_slots(contract: dict[str, Any]) -> list[dict[str, Any]]:
-    artifacts = contract.get("artifacts") if isinstance(contract.get("artifacts"), dict) else {}
-    inputs = artifacts.get("inputs") if isinstance(artifacts, dict) else []
-    return [slot for slot in inputs or [] if isinstance(slot, dict)]
-
-
-def _artifact_input_slots_for_run(
-    contract: dict[str, Any],
-    workflow_node: dict[str, Any] | None,
-) -> list[dict[str, Any]]:
-    slots_by_name = {
-        str(slot.get("name")): dict(slot)
-        for slot in _artifact_input_slots(contract)
-        if str(slot.get("name") or "")
-    }
-    if isinstance(workflow_node, dict):
-        for slot in workflow_node.get("artifact_input_slots") or []:
-            if isinstance(slot, dict) and str(slot.get("name") or ""):
-                slots_by_name[str(slot["name"])] = dict(slot)
-    return list(slots_by_name.values())
-
-
-def _artifact_input_slots_by_name(node: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    slots: dict[str, dict[str, Any]] = {}
-    for slot in node.get("artifact_input_slots") or []:
-        if not isinstance(slot, dict) or not slot.get("name"):
-            continue
-        slots[str(slot["name"])] = dict(slot)
-    return slots
-
-
 def _slot_needs_binding_resolution(slot: dict[str, Any]) -> bool:
     return any(
         key in slot and slot.get(key) not in (None, "", [])
@@ -450,17 +442,6 @@ def _slot_needs_binding_resolution(slot: dict[str, Any]) -> bool:
 def _tool_config(tool_version: Any) -> dict[str, Any]:
     config = getattr(tool_version, "config", None)
     return config if isinstance(config, dict) else {}
-
-
-def _tool_accepts_standard_input_bindings(config: dict[str, Any]) -> bool:
-    if tool_package_v2_manifest_data(config) is not None:
-        return True
-
-    if str(config.get("type") or "") != "remote_api":
-        return False
-    artifacts = config.get("artifacts")
-    inputs = artifacts.get("inputs") if isinstance(artifacts, dict) else None
-    return any(isinstance(item, dict) for item in inputs or [])
 
 
 async def _project_selected_file_to_legacy_params(
