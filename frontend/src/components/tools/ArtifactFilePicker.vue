@@ -180,13 +180,12 @@
   import type { UploadFile } from 'ant-design-vue'
   import { UploadOutlined } from '@ant-design/icons-vue'
   import {
+    applyArtifactPickerExternalSelectionPath,
     buildArtifactPickerViewModel,
-    findArtifactPickerLocation,
     formatArtifactPickerArtifactMeta,
     formatArtifactPickerTaskMeta,
-    resolveArtifactPickerPreferredGroupId,
-    resolveArtifactPickerPreferredToolSlug,
-    type ArtifactPickerGroupNode,
+    resolveArtifactPickerSelectionState,
+    type ArtifactPickerSelectionState,
     type ArtifactPickerStep,
     type ArtifactPickerTaskNode
   } from '@/domain/tools'
@@ -343,25 +342,6 @@
     }
   }
 
-  function activateDeepestMissingStep() {
-    if (!selectedGroupId.value) {
-      activeStep.value = 'group'
-      return
-    }
-
-    if (!selectedToolSlug.value) {
-      activeStep.value = 'tool'
-      return
-    }
-
-    if (!selectedTaskId.value) {
-      activeStep.value = 'task'
-      return
-    }
-
-    activeStep.value = 'artifact'
-  }
-
   function handleSourceModeChange(value: 'upload' | 'artifact') {
     if (value === 'upload' && !props.allowUploads) {
       return
@@ -467,110 +447,43 @@
     return formatArtifactPickerTaskMeta(taskNode, selectedToolNode.value?.toolName)
   }
 
-  function findArtifactLocation(artifactId: string) {
-    return findArtifactPickerLocation(artifactGroupNodes.value, artifactId)
+  function currentSelectionState(): ArtifactPickerSelectionState {
+    return {
+      activeStep: activeStep.value,
+      selectedGroupId: selectedGroupId.value,
+      selectedToolSlug: selectedToolSlug.value,
+      selectedTaskId: selectedTaskId.value,
+      focusedArtifactId: focusedArtifactId.value
+    }
   }
 
-  function resolvePreferredGroupId(): string | undefined {
-    return resolveArtifactPickerPreferredGroupId(artifactGroupNodes.value, props.preferredGroupId)
-  }
-
-  function resolvePreferredToolSlug(groupNode: ArtifactPickerGroupNode | null): string | undefined {
-    return resolveArtifactPickerPreferredToolSlug(
-      groupNode,
-      props.preferredToolSlug,
-      props.currentToolSlug
-    )
+  function applySelectionState(nextState: ArtifactPickerSelectionState) {
+    selectedGroupId.value = nextState.selectedGroupId
+    selectedToolSlug.value = nextState.selectedToolSlug
+    selectedTaskId.value = nextState.selectedTaskId
+    focusedArtifactId.value = nextState.focusedArtifactId
+    activeStep.value = nextState.activeStep
   }
 
   function syncSelectionPath() {
-    if (!props.allowArtifacts) {
-      selectedGroupId.value = undefined
-      selectedToolSlug.value = undefined
-      selectedTaskId.value = undefined
-      focusedArtifactId.value = undefined
-      activeStep.value = 'group'
-      return
-    }
-
-    if (props.selectedArtifact && compatibleArtifacts.value.some((artifact) => artifact.id === props.selectedArtifact?.id)) {
-      const artifactLocation = findArtifactLocation(props.selectedArtifact.id)
-      if (artifactLocation) {
-        selectedGroupId.value = artifactLocation.groupId
-        selectedToolSlug.value = artifactLocation.toolSlug
-        selectedTaskId.value = artifactLocation.taskId
-        focusedArtifactId.value = props.selectedArtifact.id
-        activeStep.value = 'artifact'
-        return
-      }
-    }
-
-    const nextGroupId = selectedGroupId.value && artifactGroupNodes.value.some((group) => group.groupId === selectedGroupId.value)
-      ? selectedGroupId.value
-      : resolvePreferredGroupId()
-    selectedGroupId.value = nextGroupId
-
-    const nextGroupNode = artifactGroupNodes.value.find((group) => group.groupId === nextGroupId) ?? null
-    if (!nextGroupNode) {
-      selectedToolSlug.value = undefined
-      selectedTaskId.value = undefined
-      focusedArtifactId.value = undefined
-      activeStep.value = 'group'
-      return
-    }
-
-    const nextToolSlug = selectedToolSlug.value && nextGroupNode.tools.some((tool) => tool.toolSlug === selectedToolSlug.value)
-      ? selectedToolSlug.value
-      : resolvePreferredToolSlug(nextGroupNode)
-    selectedToolSlug.value = nextToolSlug
-
-    const nextToolNode = nextGroupNode.tools.find((tool) => tool.toolSlug === nextToolSlug) ?? null
-    if (!nextToolNode) {
-      selectedTaskId.value = undefined
-      focusedArtifactId.value = undefined
-      activeStep.value = 'tool'
-      return
-    }
-
-    if (!selectedTaskId.value || !nextToolNode.tasks.some((task) => task.taskId === selectedTaskId.value)) {
-      selectedTaskId.value = undefined
-    }
-
-    if (!props.selectedArtifact) {
-      focusedArtifactId.value = undefined
-    }
-
-    activateDeepestMissingStep()
+    applySelectionState(resolveArtifactPickerSelectionState({
+      groupNodes: artifactGroupNodes.value,
+      currentState: currentSelectionState(),
+      allowArtifacts: props.allowArtifacts,
+      selectedArtifact: props.selectedArtifact,
+      preferredGroupId: props.preferredGroupId,
+      preferredToolSlug: props.preferredToolSlug,
+      currentToolSlug: props.currentToolSlug
+    }))
   }
 
   function syncExternalSelectionPath(path: WorkflowArtifactSelectionPath | null) {
-    if (!path || !props.allowArtifacts || artifactGroupNodes.value.length === 0) {
-      return
-    }
-
-    const artifactLocation = path.artifactId ? findArtifactLocation(path.artifactId) : null
-    const nextGroupId = path.groupId ?? artifactLocation?.groupId
-    if (nextGroupId && artifactGroupNodes.value.some((group) => group.groupId === nextGroupId)) {
-      selectedGroupId.value = nextGroupId
-    }
-
-    const nextGroupNode = artifactGroupNodes.value.find((group) => group.groupId === selectedGroupId.value) ?? null
-    const nextToolSlug = path.toolSlug ?? artifactLocation?.toolSlug
-    if (nextToolSlug && nextGroupNode?.tools.some((tool) => tool.toolSlug === nextToolSlug)) {
-      selectedToolSlug.value = nextToolSlug
-    }
-
-    const nextToolNode = nextGroupNode?.tools.find((tool) => tool.toolSlug === selectedToolSlug.value) ?? null
-    const nextTaskId = path.taskId ?? artifactLocation?.taskId
-    if (nextTaskId && nextToolNode?.tasks.some((task) => task.taskId === nextTaskId)) {
-      selectedTaskId.value = nextTaskId
-    }
-
-    if (path.artifactId && selectedTaskArtifacts.value.some((artifact) => artifact.id === path.artifactId)) {
-      focusedArtifactId.value = path.artifactId
-    }
-
-    activateDeepestMissingStep()
+    applySelectionState(applyArtifactPickerExternalSelectionPath({
+      groupNodes: artifactGroupNodes.value,
+      currentState: currentSelectionState(),
+      allowArtifacts: props.allowArtifacts,
+      path
+    }))
   }
 
   watch(

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { ArtifactFile } from '@/types/models'
 import {
+  applyArtifactPickerExternalSelectionPath,
   buildArtifactPickerViewModel,
   findArtifactPickerLocation,
   formatArtifactPickerArtifactMeta,
   formatArtifactPickerTaskMeta,
+  resolveArtifactPickerSelectionState,
   resolveArtifactPickerPreferredGroupId,
   resolveArtifactPickerPreferredToolSlug,
 } from './artifact-file-picker'
@@ -165,6 +167,70 @@ describe('artifact file picker rules', () => {
       label: 'Pending',
       title: 'Docking Tool',
       meta: 'Tool meta',
+    })
+  })
+
+  it('resolves stable selection state from availability and selected artifact', () => {
+    expect(resolveArtifactPickerSelectionState({
+      groupNodes: groups,
+      allowArtifacts: false,
+      selectedArtifact: artifact(),
+      currentState: {
+        activeStep: 'artifact',
+        selectedGroupId: 'group-1',
+        selectedToolSlug: 'docking-tool',
+        selectedTaskId: 'task-1',
+        focusedArtifactId: 'artifact-1',
+      },
+    })).toEqual({ activeStep: 'group' })
+
+    expect(resolveArtifactPickerSelectionState({
+      groupNodes: groups,
+      allowArtifacts: true,
+      selectedArtifact: artifact(),
+      currentState: { activeStep: 'group' },
+    })).toEqual({
+      activeStep: 'artifact',
+      selectedGroupId: 'group-1',
+      selectedToolSlug: 'docking-tool',
+      selectedTaskId: 'task-1',
+      focusedArtifactId: 'artifact-1',
+    })
+  })
+
+  it('keeps valid path pieces and resets invalid deeper selections', () => {
+    expect(resolveArtifactPickerSelectionState({
+      groupNodes: groups,
+      allowArtifacts: true,
+      selectedArtifact: null,
+      preferredGroupId: 'group-2',
+      preferredToolSlug: 'pocket-tool',
+      currentState: {
+        activeStep: 'artifact',
+        selectedGroupId: 'missing-group',
+        selectedToolSlug: 'missing-tool',
+        selectedTaskId: 'task-1',
+        focusedArtifactId: 'artifact-1',
+      },
+    })).toEqual({
+      activeStep: 'task',
+      selectedGroupId: 'group-2',
+      selectedToolSlug: 'pocket-tool',
+    })
+  })
+
+  it('applies an external selection path when every level is valid', () => {
+    expect(applyArtifactPickerExternalSelectionPath({
+      groupNodes: groups,
+      allowArtifacts: true,
+      currentState: { activeStep: 'group' },
+      path: { token: 1, artifactId: 'artifact-1' },
+    })).toEqual({
+      activeStep: 'artifact',
+      selectedGroupId: 'group-1',
+      selectedToolSlug: 'docking-tool',
+      selectedTaskId: 'task-1',
+      focusedArtifactId: 'artifact-1',
     })
   })
 })
