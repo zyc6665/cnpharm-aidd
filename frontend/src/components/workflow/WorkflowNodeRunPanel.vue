@@ -91,19 +91,22 @@
   import { getToolDetail } from '@/api/tools'
   import { useUserStore, useWorkflowStore } from '@/stores'
   import { useStandaloneNodeRun } from '@/composables/useStandaloneNodeRun'
-  import type { ArtifactFile, SchemaProperty, Tool, ToolSchema } from '@/types/models'
+  import type { ArtifactFile, Tool, ToolSchema } from '@/types/models'
   import type { TypedArtifact } from '@/types/artifacts'
   import {
     buildToolFormInitialState,
     flattenToolInputSchema,
     isFileSchemaProperty,
     resolveStandardInputFileFieldBindings,
-    resolveToolRunInputSurface,
-    type StandardArtifactInputSlot
+    resolveToolRunInputSurface
   } from '@/domain/tools'
   import { taskRunPreparationBlockedMessage } from '@/domain/tasks'
   import type { WorkflowNodeArtifactRecommendation } from '@/workflow/canvas-artifacts'
-  import { normalizeWorkflowSemanticType } from '@/workflow/semantic-types'
+  import {
+    buildArtifactInputSchema,
+    buildAutoBoundArtifactCards,
+    resolveRecommendedArtifactBindings
+  } from '@/workflow/node-run-inputs'
 
   interface WorkflowAvailableTool {
     id?: string
@@ -222,16 +225,10 @@
 
   const autoBoundFieldKeys = computed(() => Object.keys(autoBoundArtifactByField))
 
-  const autoBoundArtifactCards = computed(() =>
-    Object.entries(autoBoundArtifactByField)
-      .filter((entry): entry is [string, ArtifactFile] => Boolean(entry[1]))
-      .map(([fieldKey, artifact]) => ({
-        key: `${fieldKey}-${artifact.id}`,
-        fieldTitle: flattenedSchema.value.properties[fieldKey]?.title ?? fieldKey,
-        sourceLabel: `${artifact.tool_name || artifact.tool_slug || '上游节点'} · ${artifact.semantic_type || 'artifact'}`,
-        filename: artifact.filename,
-      }))
-  )
+  const autoBoundArtifactCards = computed(() => buildAutoBoundArtifactCards({
+    autoBoundArtifactByField,
+    flattenedSchema: flattenedSchema.value
+  }))
 
   const preparationBlockedReason = computed(() => {
     return taskRunPreparationBlockedMessage(preparationPreview.value)
@@ -271,112 +268,22 @@
     }
   }
 
-  function normalizeSemanticToken(value?: string | null): string {
-    return String(normalizeWorkflowSemanticType(String(value ?? '').trim())).trim().toLowerCase()
-  }
-
-  function normalizeFieldToken(value?: string | null): string {
-    return String(value ?? '')
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-  }
-
-  function fieldLooksCompatibleWithSemantic(fieldKey: string, prop: SchemaProperty, semanticType: string) {
-    const targetSemanticType = normalizeSemanticToken(semanticType)
-    const directCandidates = [fieldKey, prop._originalKey]
-      .filter((candidate): candidate is string => Boolean(candidate))
-
-    if (directCandidates.some(candidate => normalizeSemanticToken(candidate) === targetSemanticType)) {
-      return true
-    }
-
-    const fieldText = [fieldKey, prop._originalKey, prop.title, prop.description]
-      .map(value => normalizeFieldToken(value))
-      .filter(Boolean)
-      .join(' ')
-
-    if (!fieldText) {
-      return false
-    }
-
-    if (targetSemanticType === 'protein_structure@1') {
-      return /\b(protein|receptor)\b/.test(fieldText)
-    }
-
-    if (targetSemanticType === 'binding_pocket@1') {
-      return /\b(pocket|binding)\b/.test(fieldText)
-    }
-
-    if (targetSemanticType === 'ligand_structure@1') {
-      return /\b(ligand|sdf|mol2?|smiles)\b/.test(fieldText)
-    }
-
-    if (targetSemanticType === 'molecule_table@1') {
-      return /\b(molecule|table|csv|smiles)\b/.test(fieldText)
-    }
-
-    if (targetSemanticType === 'run_report@1') {
-      return /\b(report|metadata|json)\b/.test(fieldText)
-    }
-
-    return fieldText.includes(normalizeFieldToken(targetSemanticType))
-  }
-
-  function pickRecommendedArtifactForField(
-    fileFieldKey: string,
-    usedArtifactIds: Set<string>
-  ): ArtifactFile | null {
-    const recommendations = (props.recommendedArtifacts ?? [])
-      .filter(recommendation => recommendation.artifact && !usedArtifactIds.has(recommendation.artifact.id))
-
-    if (recommendations.length === 0) {
-      return null
-    }
-
-    const prop = flattenedSchema.value.properties[fileFieldKey]
-    if (!prop) {
-      return null
-    }
-
-    const matchedRecommendation = recommendations.find(recommendation =>
-      fieldLooksCompatibleWithSemantic(fileFieldKey, prop, recommendation.semanticType)
-    )
-
-    if (matchedRecommendation?.artifact) {
-      return matchedRecommendation.artifact
-    }
-
-    return recommendations.length === 1 ? recommendations[0]?.artifact ?? null : null
-  }
-
   function applyRecommendedArtifacts(fileFieldKeys: string[]) {
     if (!fileFieldKeys.length) {
       return
     }
 
-    const usedArtifactIds = new Set(
-      Object.values(selectedArtifacts)
-        .filter((artifact): artifact is ArtifactFile => Boolean(artifact))
-        .map(artifact => artifact.id)
-    )
-
-    for (const fileFieldKey of fileFieldKeys) {
-      if (selectedArtifacts[fileFieldKey] || fileList[fileFieldKey]?.length) {
-        continue
-      }
-
-      const artifact = pickRecommendedArtifactForField(fileFieldKey, usedArtifactIds)
-      if (!artifact) {
-        continue
-      }
-
+    const bindings = resolveRecommendedArtifactBindings({
+      fileFieldKeys,
+      flattenedSchema: flattenedSchema.value,
+      selectedArtifacts,
+      fileList,
+      recommendations: props.recommendedArtifacts ?? []
+    })
+    for (const [fileFieldKey, artifact] of Object.entries(bindings)) {
       selectedArtifacts[fileFieldKey] = artifact
       formState[fileFieldKey] = artifact.id
       autoBoundArtifactByField[fileFieldKey] = artifact
-      usedArtifactIds.add(artifact.id)
     }
   }
 
@@ -406,30 +313,6 @@
     formState[key] = artifact?.id
     if (artifact) {
       fileList[key] = []
-    }
-  }
-
-  function buildArtifactInputSchema(artifactInputs: readonly StandardArtifactInputSlot[]): ToolSchema {
-    const properties: ToolSchema['properties'] = {}
-    const required: string[] = []
-
-    for (const input of artifactInputs) {
-      properties[input.name] = {
-        type: 'file',
-        title: input.name,
-        description: `标准产物类型：${input.type}`,
-        format: 'file'
-      }
-
-      if (input.required) {
-        required.push(input.name)
-      }
-    }
-
-    return {
-      type: 'object',
-      properties,
-      required
     }
   }
 
