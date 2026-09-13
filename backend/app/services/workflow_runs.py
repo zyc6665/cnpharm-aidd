@@ -16,7 +16,7 @@ from app.models.tasks import Task, TaskStatus
 from app.models.users import User
 from app.models.workflows import WorkflowDefinition, WorkflowRun
 from app.schemas.workflows import WorkflowRunCreate
-from app.services.project_access import load_project_membership, require_project_role
+from app.services.project_access import load_project_membership
 from app.services.project_migration import ensure_migration_project_for_owner
 from app.services.standard_input_slots import tool_accepts_standard_input_bindings
 from app.tasks.cancellation import cancel_platform_task
@@ -36,6 +36,7 @@ from app.services.workflow_inputs import validate_input_files
 from app.services.workflow_loop_scheduler import reconcile_loop_body
 from app.services.workflow_map_scheduler import reconcile_map_sub_tasks
 from app.services.workflow_node_states import initial_node_states
+from app.services.workflow_run_access import ensure_run_operation_access, is_admin
 from app.services.workflow_scheduler import start_ready_workflow_nodes
 from app.services.workflow_tool_lookup import load_available_workflow_tool
 from app.services.workflow_validation import (
@@ -49,31 +50,7 @@ from app.services.workflow_validation import (
 )
 
 
-def _is_admin(user: User) -> bool:
-    return user.role == "admin"
-
-
-WORKFLOW_RUN_OPERATION_PROJECT_ROLES = {"owner", "editor", "runner"}
 WORKFLOW_RUN_TERMINAL_STATUSES = {"success", "failure", "canceled"}
-
-
-async def _ensure_run_operation_access(
-    db: AsyncSession,
-    *,
-    run: WorkflowRun,
-    current_user: User,
-) -> None:
-    if _is_admin(current_user) or run.owner_id == current_user.id:
-        return
-    if run.project_id:
-        await require_project_role(
-            db,
-            project_id=run.project_id,
-            user=current_user,
-            allowed_roles=WORKFLOW_RUN_OPERATION_PROJECT_ROLES,
-        )
-        return
-    raise ForbiddenException("No permission to operate workflow run")
 
 
 async def materialize_workflow_run_definition(
@@ -110,14 +87,14 @@ async def load_run_for_user(
     if not run:
         raise NotFoundException("Workflow run not found")
     if run.project_id:
-        if not _is_admin(current_user):
+        if not is_admin(current_user):
             await load_project_membership(
                 db,
                 project_id=run.project_id,
                 user_id=current_user.id,
             )
         return run
-    if run.owner_id != current_user.id and not _is_admin(current_user):
+    if run.owner_id != current_user.id and not is_admin(current_user):
         raise ForbiddenException("No permission to access workflow run")
     return run
 
@@ -135,14 +112,14 @@ async def load_definition_for_run(
     if not workflow:
         raise NotFoundException("Workflow definition not found")
     if workflow.project_id:
-        if not _is_admin(current_user):
+        if not is_admin(current_user):
             await load_project_membership(
                 db,
                 project_id=workflow.project_id,
                 user_id=current_user.id,
             )
         return workflow
-    if workflow.user_id != current_user.id and not _is_admin(current_user):
+    if workflow.user_id != current_user.id and not is_admin(current_user):
         raise NotFoundException("Workflow definition not found")
     return workflow
 
@@ -164,7 +141,7 @@ async def list_workflow_runs(
         )
         project_id = workflow.project_id
     if project_id:
-        if not _is_admin(current_user):
+        if not is_admin(current_user):
             await load_project_membership(
                 db,
                 project_id=project_id,
@@ -476,7 +453,7 @@ async def cancel_workflow_run(
     run_id: str,
 ) -> WorkflowRun:
     run = await load_run_for_user(db, run_id=run_id, current_user=current_user)
-    await _ensure_run_operation_access(db, run=run, current_user=current_user)
+    await ensure_run_operation_access(db, run=run, current_user=current_user)
 
     if run.status == "canceled":
         return run
@@ -515,7 +492,7 @@ async def retry_workflow_run_node(
     schedule_task_fn,
 ) -> WorkflowRun:
     run = await load_run_for_user(db, run_id=run_id, current_user=current_user)
-    await _ensure_run_operation_access(db, run=run, current_user=current_user)
+    await ensure_run_operation_access(db, run=run, current_user=current_user)
     if run.status == "canceled":
         raise ValidationException("Cannot retry a canceled workflow run")
 

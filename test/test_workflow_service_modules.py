@@ -16,6 +16,7 @@ def test_workflow_service_modules_exist():
         "workflow_map_scheduler.py",
         "workflow_node_states.py",
         "workflow_reconciliation.py",
+        "workflow_run_access.py",
         "workflow_runs.py",
         "workflow_scheduler.py",
         "workflow_skip.py",
