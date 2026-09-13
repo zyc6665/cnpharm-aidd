@@ -350,8 +350,8 @@
     type ToolDetailPresentationLabels,
   } from '@/composables/useToolDetailPresentation'
   import { useToolDetailRunForm } from '@/composables/useToolDetailRunForm'
+  import { useToolDetailSubmission } from '@/composables/useToolDetailSubmission'
   import {
-    buildToolRunTaskPayload,
     formatToolDate as formatDate,
     formatToolMetricCount as formatNumber,
     getToolFileAccept,
@@ -359,7 +359,6 @@
     getToolStatusColor as getStatusColor,
     isFileSchemaProperty,
   } from '@/domain/tools'
-  import { taskRunPreparationBlockedMessage } from '@/domain/tasks'
 
   const route = useRoute()
   const router = useRouter()
@@ -370,7 +369,6 @@
 
   const formRef = ref<FormInstance>()
   const loading = ref(false)
-  const submitting = ref(false)
   const favoriteLoading = ref(false)
   const tool = computed(() => toolsStore.currentTool)
   const standardProjectArtifacts = ref<TypedArtifact[]>([])
@@ -503,6 +501,45 @@
     return typeof value === 'string' && value.trim() ? value.trim() : undefined
   })
 
+  const { submitting, handleSubmit } = useToolDetailSubmission({
+    isLoggedIn: computed(() => userStore.isLoggedIn),
+    toolId: computed(() => tool.value?.id),
+    taskName,
+    projectId: currentProjectId,
+    flattenedSchema,
+    formState,
+    fileList,
+    selectedArtifacts,
+    resolvedFiles: {
+      example: exampleFiles,
+      converted: convertedFiles,
+    },
+    standardInputSlots,
+    standardInputFileFieldBindings,
+    selectedStandardArtifacts,
+    standardInputFileList,
+    executorType,
+    missingRequiredStandardSlots,
+    api: {
+      uploadFile: async file => (await uploadFile(file)).data,
+      prepareTaskRun: payload => tasksStore.prepareTaskRun(payload),
+      createTask: payload => tasksStore.createTask(payload),
+    },
+    onRequireLogin: () => {
+      message.warning(t('auth.loginRequired'))
+      router.push('/login')
+    },
+    onNoSchema: () => message.error(t('common.noData')),
+    onMissingStandardInputs: slotNames => {
+      message.error(`请选择或上传标准 Artifact 输入：${slotNames.join(', ')}`)
+    },
+    onBlocked: blockedMessage => message.error(blockedMessage),
+    onTaskCreated: task => {
+      message.success(t('tasks.created'))
+      router.push(`/tasks/${task.id}`)
+    },
+  })
+
   const loadStandardProjectArtifacts = async () => {
     if (!currentProjectId.value || !standardInputSlots.value.length) {
       standardProjectArtifacts.value = []
@@ -557,64 +594,6 @@
 
   const clearExampleFile = (key: string) => {
     clearExampleFileState(key)
-  }
-
-  const handleSubmit = async () => {
-    if (!userStore.isLoggedIn) {
-      message.warning(t('auth.loginRequired'))
-      router.push('/login')
-      return
-    }
-
-    submitting.value = true
-    try {
-      const schema = flattenedSchema.value
-      if (!schema) {
-        message.error(t('common.noData'))
-        return
-      }
-      if (missingRequiredStandardSlots.value.length) {
-        message.error(`请选择或上传标准 Artifact 输入：${missingRequiredStandardSlots.value.map(slot => slot.name).join(', ')}`)
-        return
-      }
-
-      const taskPayload = await buildToolRunTaskPayload({
-        toolId: tool.value!.id,
-        taskName: taskName.value,
-        projectId: currentProjectId.value,
-        flattenedSchema: schema,
-        formState,
-        fileList,
-        selectedArtifacts,
-        resolvedFiles: {
-          example: exampleFiles,
-          converted: convertedFiles,
-        },
-        standardInputSlots: standardInputSlots.value,
-        standardInputFileFieldBindings: standardInputFileFieldBindings.value,
-        selectedStandardArtifacts,
-        standardInputFileList,
-        executorType: executorType.value,
-        uploadFile: async file => (await uploadFile(file)).data,
-      })
-
-      const preparationPreview = await tasksStore.prepareTaskRun(taskPayload)
-      const blockedMessage = taskRunPreparationBlockedMessage(preparationPreview)
-      if (blockedMessage) {
-        message.error(blockedMessage)
-        return
-      }
-
-      // 创建任务
-      const task = await tasksStore.createTask(taskPayload)
-
-      message.success(t('tasks.created'))
-      router.push(`/tasks/${task.id}`)
-    } catch {
-      // 错误已在请求层处理
-    } finally {
-      submitting.value = false
-    }
   }
 
   onMounted(async () => {

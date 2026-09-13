@@ -20,12 +20,13 @@ test('任务类型定义应暴露 name 字段和可选创建参数', () => {
 test('普通工具详情页应提供任务名称输入并在创建任务时传递 name', () => {
   const source = readSource('src/views/tools/Detail.vue')
   const formSource = readSource('src/composables/useToolDetailRunForm.ts')
+  const submissionSource = readSource('src/composables/useToolDetailSubmission.ts')
 
   assert.equal(source.includes("t('tasks.name')"), true)
   assert.equal(source.includes("t('tasks.namePlaceholder')"), true)
   assert.equal(formSource.includes('const taskName = ref('), true)
   assert.equal(source.includes('taskName,'), true)
-  assert.equal(source.includes('taskName: taskName.value'), true)
+  assert.equal(submissionSource.includes('taskName: unref(options.taskName)'), true)
 })
 
 test('工作台已下线单任务运行面板，不再在面板内创建任务名称', () => {
