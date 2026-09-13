@@ -338,8 +338,6 @@
   import SkeletonCard from '@/components/common/SkeletonCard.vue'
   import { useToolsStore, useTasksStore, useUserStore } from '@/stores'
   import type {
-    ArtifactFile,
-    FileUploadResponse,
     SchemaProperty,
     ToolExample,
     ToolExampleFilePreview,
@@ -356,13 +354,11 @@
     formatToolDate as formatDate,
     formatToolMetricCount as formatNumber,
     flattenExampleParams,
-    getSdfConversionStatusText,
     getToolFileAccept,
     getToolRequestErrorMessage,
     getToolStatusColor as getStatusColor,
     isFileSchemaProperty,
     resolveExampleFileFormKey,
-    shouldShowSdfToPdbConverter
   } from '@/domain/tools'
   import { taskRunPreparationBlockedMessage } from '@/domain/tasks'
   import {
@@ -391,6 +387,17 @@
   const previewLoading = ref(false)
   const preview = ref<ToolExampleFilePreview | null>(null)
   const documentationOpen = ref(false)
+
+  function clearFieldValidation(key: string) {
+    const form = formRef.value as (FormInstance & { clearValidate?: (names?: string[]) => void }) | undefined
+    form?.clearValidate?.([key])
+  }
+
+  async function revalidateField(key: string) {
+    await nextTick()
+    await formRef.value?.validateFields([key]).catch(() => undefined)
+  }
+
   const {
     taskName,
     formState,
@@ -412,12 +419,25 @@
     reset: resetRunForm,
     selectStandardArtifact,
     updateStandardInputFileList,
+    handleFileListChange,
+    handleArtifactSelection,
     isFileFieldSatisfied,
     clearExampleFile: clearExampleFileState,
-    clearConvertedFile: clearConvertedFileState,
+    clearConvertedFile,
+    showSdfToPdbConverter,
+    sdfConversionStatusText,
+    createSdfUploadBefore,
   } = useToolDetailRunForm({
     tool,
     isAuthenticated: computed(() => userStore.isAuthenticated),
+    sdfConversion: {
+      convert: async file => (await convertSdfToPdb(file)).data,
+      getErrorMessage: getToolRequestErrorMessage,
+      clearFieldValidation,
+      revalidateField,
+      onInvalidFile: () => message.warning('请上传 SDF 文件'),
+      onSuccess: () => message.success('SDF 已转换为 PDB'),
+    },
   })
 
   const toolConfig = computed<Record<string, unknown> | undefined>(() => {
@@ -604,121 +624,14 @@
     resetRunForm()
   }
 
-  const clearFieldValidation = (key: string) => {
-    const form = formRef.value as (FormInstance & { clearValidate?: (names?: string[]) => void }) | undefined
-    form?.clearValidate?.([key])
-  }
-
   const getFileAccept = (key: string, prop: SchemaProperty): string | undefined => {
     return getToolFileAccept({ key, property: prop, toolSlug: tool.value?.slug })
-  }
-
-  const handleFileListChange = (key: string, files: UploadFile[]) => {
-    fileList[key] = files
-    if (files.length > 0) {
-      const uploadedFile = files[0]!
-      const rawFile = uploadedFile.originFileObj as File | undefined
-      const filename = rawFile?.name || uploadedFile.name || ''
-      if (showSdfToPdbConverter(key) && rawFile && filename.toLowerCase().endsWith('.sdf')) {
-        fileList[key] = []
-        formState[key] = undefined
-        clearFieldValidation(key)
-        void handleSdfToPdbConversion(key, rawFile)
-        return
-      }
-
-      selectedArtifacts[key] = undefined
-      exampleFiles[key] = undefined
-      convertedFiles[key] = undefined
-      sdfConversionErrors[key] = undefined
-      formState[key] = uploadedFile?.uid ?? uploadedFile?.name
-      clearFieldValidation(key)
-      return
-    }
-    convertedFiles[key] = undefined
-    sdfConversionErrors[key] = undefined
-    formState[key] = undefined
-  }
-
-  const handleArtifactSelection = (key: string, artifact: ArtifactFile | null) => {
-    selectedArtifacts[key] = artifact ?? undefined
-    if (artifact) {
-      fileList[key] = []
-      exampleFiles[key] = undefined
-      convertedFiles[key] = undefined
-      sdfConversionErrors[key] = undefined
-      formState[key] = artifact.id
-      clearFieldValidation(key)
-    } else {
-      formState[key] = undefined
-    }
   }
 
   const clearExampleFile = (key: string) => {
     clearExampleFileState(key)
   }
 
-  const clearConvertedFile = (key: string) => {
-    clearConvertedFileState(key)
-    void nextTick().then(() => formRef.value?.validateFields([key]).catch(() => undefined))
-  }
-
-  const createConvertedUploadFile = (file: FileUploadResponse): UploadFile => {
-    return {
-      uid: `converted-${file.id}`,
-      name: file.filename,
-      status: 'done',
-      url: `/api/v1/files/${file.id}/download`
-    }
-  }
-
-  const showSdfToPdbConverter = (key: string) => {
-    return shouldShowSdfToPdbConverter(tool.value?.slug, key)
-  }
-
-  const sdfConversionStatusText = (key: string) => {
-    return getSdfConversionStatusText({
-      error: sdfConversionErrors[key],
-      loading: sdfConversionLoading[key],
-      convertedFilename: convertedFiles[key]?.filename
-    })
-  }
-
-  const handleSdfToPdbConversion = async (key: string, file: File) => {
-    if (!file.name.toLowerCase().endsWith('.sdf')) {
-      message.warning('请上传 SDF 文件')
-      return
-    }
-
-    sdfConversionLoading[key] = true
-    sdfConversionErrors[key] = undefined
-    clearFieldValidation(key)
-    try {
-      const res = await convertSdfToPdb(file)
-      convertedFiles[key] = res.data
-      fileList[key] = [createConvertedUploadFile(res.data)]
-      selectedArtifacts[key] = undefined
-      exampleFiles[key] = undefined
-      formState[key] = res.data.id
-      await nextTick()
-      clearFieldValidation(key)
-      message.success('SDF 已转换为 PDB')
-    } catch (error) {
-      convertedFiles[key] = undefined
-      fileList[key] = []
-      formState[key] = undefined
-      sdfConversionErrors[key] = getToolRequestErrorMessage(error)
-    } finally {
-      sdfConversionLoading[key] = false
-    }
-  }
-
-  const createSdfUploadBefore = (key: string) => {
-    return (file: File) => {
-      void handleSdfToPdbConversion(key, file)
-      return false
-    }
-  }
 
   const fetchExample = async (toolId: string) => {
     try {

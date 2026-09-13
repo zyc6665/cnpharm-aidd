@@ -1,4 +1,4 @@
-import { computed, reactive, ref, unref, type Ref } from 'vue'
+import { computed, nextTick, reactive, ref, unref, type Ref } from 'vue'
 import type { UploadFile } from 'ant-design-vue'
 import type { TypedArtifact } from '@/types/artifacts'
 import type { ArtifactFile, FileUploadResponse, SchemaProperty, Tool } from '@/types/models'
@@ -6,8 +6,10 @@ import {
   buildStandardInputBindings,
   buildStandardInputBindingsFromFileFields,
   buildToolFormInitialState,
+  getSdfConversionStatusText,
   missingRequiredStandardInputSlots,
   resolveToolRunInputSurface,
+  shouldShowSdfToPdbConverter,
 } from '@/domain/tools'
 
 type MaybeRef<T> = T | Ref<T>
@@ -15,6 +17,14 @@ type MaybeRef<T> = T | Ref<T>
 export interface ToolDetailRunFormOptions {
   tool: MaybeRef<Tool | null | undefined>
   isAuthenticated: MaybeRef<boolean>
+  sdfConversion?: {
+    convert: (file: File) => Promise<FileUploadResponse>
+    getErrorMessage: (error: unknown) => string
+    clearFieldValidation?: (key: string) => void
+    revalidateField?: (key: string) => void | Promise<void>
+    onInvalidFile?: () => void
+    onSuccess?: () => void
+  }
 }
 
 export function useToolDetailRunForm(options: ToolDetailRunFormOptions) {
@@ -120,6 +130,48 @@ export function useToolDetailRunForm(options: ToolDetailRunFormOptions) {
     }
   }
 
+  function handleFileListChange(key: string, files: UploadFile[]) {
+    fileList[key] = files
+    if (files.length > 0) {
+      const uploadedFile = files[0]
+      const rawFile = uploadedFile?.originFileObj as File | undefined
+      const filename = rawFile?.name || uploadedFile?.name || ''
+      if (showSdfToPdbConverter(key) && rawFile && filename.toLowerCase().endsWith('.sdf')) {
+        fileList[key] = []
+        formState[key] = undefined
+        options.sdfConversion?.clearFieldValidation?.(key)
+        void convertSdfToPdbField(key, rawFile)
+        return
+      }
+
+      selectedArtifacts[key] = undefined
+      exampleFiles[key] = undefined
+      convertedFiles[key] = undefined
+      sdfConversionErrors[key] = undefined
+      formState[key] = uploadedFile?.uid ?? uploadedFile?.name
+      options.sdfConversion?.clearFieldValidation?.(key)
+      return
+    }
+
+    convertedFiles[key] = undefined
+    sdfConversionErrors[key] = undefined
+    formState[key] = undefined
+  }
+
+  function handleArtifactSelection(key: string, artifact: ArtifactFile | null) {
+    selectedArtifacts[key] = artifact ?? undefined
+    if (artifact) {
+      fileList[key] = []
+      exampleFiles[key] = undefined
+      convertedFiles[key] = undefined
+      sdfConversionErrors[key] = undefined
+      formState[key] = artifact.id
+      options.sdfConversion?.clearFieldValidation?.(key)
+    } else {
+      formState[key] = undefined
+    }
+  }
+
   function isFileFieldSatisfied(key: string, _prop?: SchemaProperty): boolean {
     return Boolean(
       sdfConversionLoading[key] ||
@@ -141,6 +193,58 @@ export function useToolDetailRunForm(options: ToolDetailRunFormOptions) {
     fileList[key] = []
     formState[key] = undefined
     sdfConversionErrors[key] = undefined
+    void nextTick().then(() => options.sdfConversion?.revalidateField?.(key))
+  }
+
+  function showSdfToPdbConverter(key: string) {
+    return shouldShowSdfToPdbConverter(unref(options.tool)?.slug, key)
+  }
+
+  function sdfConversionStatusText(key: string) {
+    return getSdfConversionStatusText({
+      error: sdfConversionErrors[key],
+      loading: sdfConversionLoading[key],
+      convertedFilename: convertedFiles[key]?.filename,
+    })
+  }
+
+  async function convertSdfToPdbField(key: string, file: File) {
+    if (!file.name.toLowerCase().endsWith('.sdf')) {
+      options.sdfConversion?.onInvalidFile?.()
+      return
+    }
+    if (!options.sdfConversion) {
+      return
+    }
+
+    sdfConversionLoading[key] = true
+    sdfConversionErrors[key] = undefined
+    options.sdfConversion.clearFieldValidation?.(key)
+    try {
+      const converted = await options.sdfConversion.convert(file)
+      convertedFiles[key] = converted
+      fileList[key] = [createConvertedUploadFile(converted)]
+      selectedArtifacts[key] = undefined
+      exampleFiles[key] = undefined
+      formState[key] = converted.id
+      await nextTick()
+      options.sdfConversion.clearFieldValidation?.(key)
+      options.sdfConversion.onSuccess?.()
+    } catch (error) {
+      convertedFiles[key] = undefined
+      fileList[key] = []
+      formState[key] = undefined
+      sdfConversionErrors[key] = options.sdfConversion.getErrorMessage(error)
+    } finally {
+      sdfConversionLoading[key] = false
+    }
+  }
+
+  function createSdfUploadBefore(key: string) {
+    return (file: File) => {
+      void convertSdfToPdbField(key, file)
+      return false
+    }
   }
 
   return {
@@ -166,9 +270,15 @@ export function useToolDetailRunForm(options: ToolDetailRunFormOptions) {
     reset,
     selectStandardArtifact,
     updateStandardInputFileList,
+    handleFileListChange,
+    handleArtifactSelection,
     isFileFieldSatisfied,
     clearExampleFile,
     clearConvertedFile,
+    showSdfToPdbConverter,
+    sdfConversionStatusText,
+    convertSdfToPdbField,
+    createSdfUploadBefore,
   }
 
   function hasConcreteStandardInputUploadSelection(slotName: string) {
@@ -209,4 +319,13 @@ function emptyArrayRecord(keys: readonly string[]): Record<string, UploadFile[]>
 
 function undefinedRecord<T = undefined>(keys: readonly string[]): Record<string, T | undefined> {
   return Object.fromEntries(keys.map(key => [key, undefined]))
+}
+
+function createConvertedUploadFile(file: FileUploadResponse): UploadFile {
+  return {
+    uid: `converted-${file.id}`,
+    name: file.filename,
+    status: 'done',
+    url: `/api/v1/files/${file.id}/download`,
+  }
 }

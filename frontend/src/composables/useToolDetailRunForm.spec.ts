@@ -1,9 +1,9 @@
 import { computed } from 'vue'
-import { describe, expect, it } from 'vitest'
-import type { Tool } from '@/types/models'
+import { describe, expect, it, vi } from 'vitest'
+import type { FileUploadResponse, Tool } from '@/types/models'
 import { useToolDetailRunForm } from './useToolDetailRunForm'
 
-function makeTool(config: Record<string, unknown>): Tool {
+function makeTool(config: Record<string, unknown>, overrides: Partial<Tool> = {}): Tool {
   return {
     id: 'tool-lvpocket',
     name: 'LVpocket',
@@ -25,6 +25,17 @@ function makeTool(config: Record<string, unknown>): Tool {
       deprecated: false,
       config,
     },
+    ...overrides,
+  }
+}
+
+function makeFileResponse(id: string, filename: string): FileUploadResponse {
+  return {
+    id,
+    filename,
+    size_bytes: 123,
+    content_type: 'chemical/x-pdb',
+    sha256: 'abc',
   }
 }
 
@@ -124,5 +135,53 @@ describe('useToolDetailRunForm', () => {
 
     expect(runForm.selectedStandardArtifacts.molecules).toBeUndefined()
     expect(runForm.missingRequiredStandardSlots.value).toEqual([])
+  })
+
+  it('converts SDF uploads into ligand PDB file field state', async () => {
+    const convert = vi.fn().mockResolvedValue(makeFileResponse('file-ligand-pdb', 'ligand.pdb'))
+    const clearFieldValidation = vi.fn()
+    const onSuccess = vi.fn()
+    const runForm = useToolDetailRunForm({
+      tool: computed(() => makeTool({
+        type: 'ssh_job',
+        input_schema: {
+          type: 'object',
+          required: ['ligand_pdb'],
+          properties: {
+            ligand_pdb: { type: 'string', format: 'file', title: 'Ligand PDB' },
+          },
+        },
+      }, { slug: 'msign-affinity-prediction' })),
+      isAuthenticated: computed(() => true),
+      sdfConversion: {
+        convert,
+        getErrorMessage: () => 'conversion failed',
+        clearFieldValidation,
+        onSuccess,
+      },
+    })
+    runForm.initializeFromSurface()
+
+    expect(runForm.showSdfToPdbConverter('ligand_pdb')).toBe(true)
+
+    await runForm.convertSdfToPdbField('ligand_pdb', new File(['sdf'], 'ligand.sdf'))
+
+    expect(convert).toHaveBeenCalledWith(expect.objectContaining({ name: 'ligand.sdf' }))
+    expect(runForm.convertedFiles.ligand_pdb?.id).toBe('file-ligand-pdb')
+    expect(runForm.fileList.ligand_pdb).toEqual([
+      {
+        uid: 'converted-file-ligand-pdb',
+        name: 'ligand.pdb',
+        status: 'done',
+        url: '/api/v1/files/file-ligand-pdb/download',
+      },
+    ])
+    expect(runForm.formState.ligand_pdb).toBe('file-ligand-pdb')
+    expect(runForm.selectedArtifacts.ligand_pdb).toBeUndefined()
+    expect(runForm.exampleFiles.ligand_pdb).toBeUndefined()
+    expect(runForm.sdfConversionErrors.ligand_pdb).toBeUndefined()
+    expect(runForm.sdfConversionStatusText('ligand_pdb')).toBe('转换成功，已生成 ligand.pdb')
+    expect(clearFieldValidation).toHaveBeenCalledWith('ligand_pdb')
+    expect(onSuccess).toHaveBeenCalled()
   })
 })
