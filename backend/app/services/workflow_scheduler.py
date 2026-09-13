@@ -11,7 +11,7 @@ from sqlalchemy.orm import selectinload
 from app.common.time import utcnow, utcnow_iso
 from app.common.exceptions import ForbiddenException, NotFoundException, ValidationException
 from app.models.files import File as FileModel
-from app.models.tasks import Task, TaskInput, TaskStatus
+from app.models.tasks import Task, TaskStatus
 from app.models.tools import Tool, ToolProviderType, ToolStatus
 from app.models.users import User
 from app.models.workflows import WorkflowRun
@@ -22,6 +22,7 @@ from app.services.workflow_map_items import resolve_map_items
 from app.services.run_preparation import prepare_workflow_node_run
 from app.services.semantic_types import normalize_semantic_type
 from app.services.workflow_skip import mark_unreachable_nodes_skipped
+from app.services.workflow_task_lookup import find_existing_workflow_node_task
 from app.services.workflow_validation import (
     is_condition_node,
     is_loop_node,
@@ -856,42 +857,6 @@ async def reconcile_loop_body(
     state["status"] = "pending"  # 需要重新调度
     node_states[node_id] = state
     return False
-
-
-async def find_existing_workflow_node_task(
-    db: AsyncSession,
-    *,
-    current_user: User,
-    run: WorkflowRun,
-    node_id: str,
-    tool_id: str,
-) -> Task | None:
-    result = await db.execute(
-        select(Task)
-        .options(selectinload(Task.inputs))
-        .join(TaskInput, TaskInput.task_id == Task.id)
-        .where(Task.user_id == current_user.id, Task.tool_id == tool_id)
-        .order_by(Task.created_at.desc(), Task.id.desc())
-        .limit(20)
-    )
-    tasks = list(result.scalars().all())
-
-    for task in tasks:
-        params = task.inputs.params if task.inputs else {}
-        if not isinstance(params, dict):
-            continue
-        if (
-            str(params.get("workflow_run_id") or "") == str(run.id)
-            and str(params.get("workflow_node_id") or "") == str(node_id)
-            and task.status in {
-                TaskStatus.PENDING.value,
-                TaskStatus.RUNNING.value,
-                TaskStatus.SUCCESS.value,
-            }
-        ):
-            return task
-
-    return None
 
 
 async def start_ready_workflow_nodes(
