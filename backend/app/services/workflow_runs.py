@@ -32,12 +32,12 @@ from app.services.workflow_artifacts import (
 )
 from app.services.workflow_scheduler import (
     load_available_workflow_tool,
-    reconcile_loop_body,
     start_ready_workflow_nodes,
     utcnow,
     utcnow_iso,
 )
 from app.services.workflow_inputs import validate_input_files
+from app.services.workflow_loop_scheduler import reconcile_loop_body
 from app.services.workflow_map_scheduler import reconcile_map_sub_tasks
 from app.services.workflow_node_states import initial_node_states
 from app.services.workflow_validation import (

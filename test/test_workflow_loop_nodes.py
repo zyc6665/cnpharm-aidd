@@ -22,9 +22,9 @@ from app.services.workflow_loop_convergence import (  # noqa: E402
     evaluate_loop_convergence,
     resolve_loop_value,
 )
-from app.services.workflow_scheduler import (  # noqa: E402
-    schedule_loop_node,
+from app.services.workflow_loop_scheduler import (  # noqa: E402
     reconcile_loop_body,
+    schedule_loop_node,
 )
 from app.services.workflow_validation import (  # noqa: E402
     validate_loop_node,
