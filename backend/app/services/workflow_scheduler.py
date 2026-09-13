@@ -14,12 +14,11 @@ from app.models.tasks import Task, TaskStatus
 from app.models.users import User
 from app.models.workflows import WorkflowRun
 from app.schemas.tasks import TaskCreate
-from app.services.workflow_conditions import evaluate_condition_expression
+from app.services.workflow_condition_scheduler import schedule_condition_node
 from app.services.workflow_dependencies import dependencies_satisfied
 from app.services.workflow_loop_convergence import evaluate_loop_convergence
 from app.services.workflow_map_items import resolve_map_items
 from app.services.run_preparation import prepare_workflow_node_run
-from app.services.workflow_skip import mark_unreachable_nodes_skipped
 from app.services.workflow_task_lookup import find_existing_workflow_node_task
 from app.services.workflow_tool_lookup import load_available_workflow_tool
 from app.services.workflow_validation import (
@@ -28,7 +27,6 @@ from app.services.workflow_validation import (
     is_map_node,
     is_tool_node,
     nodes_by_id,
-    workflow_edges,
 )
 
 
@@ -151,67 +149,6 @@ async def schedule_workflow_node(
     )
     node_states[node_id] = state
     return True
-
-
-async def schedule_condition_node(
-    *,
-    run: WorkflowRun,
-    node_id: str,
-    node: dict[str, Any],
-    node_states: dict[str, Any],
-) -> bool:
-    """评估 condition 节点，设置 active_branch，并跳过未激活分支。"""
-    expression = node.get("expression")
-    if not expression:
-        raise ValidationException(f"Condition node {node_id} missing expression")
-
-    try:
-        result = evaluate_condition_expression(
-            expression,
-            run=run,
-            node_states=node_states,
-        )
-    except ValidationException:
-        raise
-    except Exception as exc:
-        state = dict(node_states.get(node_id) or {})
-        state.update({
-            "status": "failure",
-            "error_message": f"Condition evaluation error: {exc}",
-            "finished_at": utcnow_iso(),
-        })
-        node_states[node_id] = state
-        return False
-
-    active_branch = "true" if result else "false"
-    definition = dict(run.definition or {})
-
-    # 标记未激活分支的下游节点为 skipped
-    for edge in workflow_edges(definition):
-        if str(edge.get("source") or "") != node_id:
-            continue
-        branch = edge.get("branch")
-        if not branch:
-            continue
-        target = str(edge.get("target") or "")
-        if branch != active_branch:
-            mark_unreachable_nodes_skipped(
-                node_states,
-                target,
-                f"Branch '{branch}' not active",
-                definition=definition,
-            )
-
-    state = dict(node_states.get(node_id) or {})
-    state.update({
-        "status": "success",
-        "active_branch": active_branch,
-        "result": result,
-        "finished_at": utcnow_iso(),
-    })
-    node_states[node_id] = state
-    return True
-
 
 # ---------------------------------------------------------------------------
 # Map node scheduling
