@@ -5,6 +5,7 @@ def test_workflow_service_modules_exist():
     root = Path(__file__).resolve().parents[1] / "backend" / "app" / "services"
     expected = [
         "workflow_artifacts.py",
+        "workflow_cancellation.py",
         "workflow_condition_scheduler.py",
         "workflow_conditions.py",
         "workflow_dependencies.py",

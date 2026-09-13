@@ -31,6 +31,7 @@ from app.services.workflow_artifacts import (
     required_outputs_present,
     standard_artifact_file_ids,
 )
+from app.services.workflow_cancellation import mark_active_workflow_state_canceled
 from app.services.workflow_inputs import validate_input_files
 from app.services.workflow_loop_scheduler import reconcile_loop_body
 from app.services.workflow_map_scheduler import reconcile_map_sub_tasks
@@ -54,46 +55,6 @@ def _is_admin(user: User) -> bool:
 
 WORKFLOW_RUN_OPERATION_PROJECT_ROLES = {"owner", "editor", "runner"}
 WORKFLOW_RUN_TERMINAL_STATUSES = {"success", "failure", "canceled"}
-WORKFLOW_RUN_ACTIVE_NODE_STATUSES = {"pending", "ready", "running", "waiting_task"}
-
-
-def _is_active_workflow_node_status(status: Any) -> bool:
-    return str(status or "").lower() in WORKFLOW_RUN_ACTIVE_NODE_STATUSES
-
-
-def _mark_active_workflow_state_canceled(
-    state: dict[str, Any],
-    *,
-    finished_at: str,
-) -> list[str]:
-    task_ids: list[str] = []
-
-    if _is_active_workflow_node_status(state.get("status")):
-        task_id = state.get("task_id")
-        if task_id:
-            task_ids.append(str(task_id))
-        state["status"] = "canceled"
-        state["finished_at"] = finished_at
-
-    for nested_key in ("sub_tasks", "loop_body_states"):
-        nested_states = {
-            key: dict(value)
-            for key, value in (state.get(nested_key) or {}).items()
-            if isinstance(value, dict)
-        }
-        if not nested_states:
-            continue
-        for nested_id, nested_state in nested_states.items():
-            if _is_active_workflow_node_status(nested_state.get("status")):
-                task_id = nested_state.get("task_id")
-                if task_id:
-                    task_ids.append(str(task_id))
-                nested_state["status"] = "canceled"
-                nested_state["finished_at"] = finished_at
-            nested_states[nested_id] = nested_state
-        state[nested_key] = nested_states
-
-    return task_ids
 
 
 async def _ensure_run_operation_access(
@@ -528,7 +489,7 @@ async def cancel_workflow_run(
 
     for node_id, raw_state in node_states.items():
         state = dict(raw_state or {})
-        task_ids.extend(_mark_active_workflow_state_canceled(state, finished_at=finished_at))
+        task_ids.extend(mark_active_workflow_state_canceled(state, finished_at=finished_at))
         node_states[node_id] = state
 
     if task_ids:
