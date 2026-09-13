@@ -35,9 +35,9 @@ from app.models.artifacts import ArtifactVersionFile as ArtifactVersionFileModel
 from app.models.tools import Tool, ToolProviderType, ToolStatus, ToolVersion  # noqa: E402
 from app.services.workflow_loop_scheduler import schedule_loop_node  # noqa: E402
 from app.services.workflow_map_scheduler import schedule_map_node  # noqa: E402
+from app.services.workflow_tool_scheduler import schedule_workflow_node  # noqa: E402
 from app.services.workflow_tool_lookup import load_available_workflow_tool  # noqa: E402
 from app.models.users import User, UserRole, UserStatus  # noqa: E402
-from app.services.workflow_scheduler import schedule_workflow_node  # noqa: E402
 
 
 @pytest_asyncio.fixture

@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 from app.agents.aidd.outputs import extract_semantic_outputs
 from app.agents.aidd.registry import load_tool_capability
 from app.common.exceptions import ForbiddenException, NotFoundException, ValidationException
+from app.common.time import utcnow, utcnow_iso
 from app.models.tasks import Task, TaskStatus
 from app.models.users import User
 from app.models.workflows import WorkflowDefinition, WorkflowRun
@@ -30,16 +31,12 @@ from app.services.workflow_artifacts import (
     required_outputs_present,
     standard_artifact_file_ids,
 )
-from app.services.workflow_scheduler import (
-    load_available_workflow_tool,
-    start_ready_workflow_nodes,
-    utcnow,
-    utcnow_iso,
-)
 from app.services.workflow_inputs import validate_input_files
 from app.services.workflow_loop_scheduler import reconcile_loop_body
 from app.services.workflow_map_scheduler import reconcile_map_sub_tasks
 from app.services.workflow_node_states import initial_node_states
+from app.services.workflow_scheduler import start_ready_workflow_nodes
+from app.services.workflow_tool_lookup import load_available_workflow_tool
 from app.services.workflow_validation import (
     is_loop_node,
     is_map_node,
