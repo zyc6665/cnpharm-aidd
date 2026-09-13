@@ -18,7 +18,6 @@ from app.models.workflows import WorkflowDefinition, WorkflowRun
 from app.schemas.workflows import WorkflowRunCreate
 from app.services.project_access import load_project_membership
 from app.services.project_migration import ensure_migration_project_for_owner
-from app.services.standard_input_slots import tool_accepts_standard_input_bindings
 from app.tasks.cancellation import cancel_platform_task
 from app.services.workflow_artifacts import (
     annotate_semantic_output_files,
@@ -37,43 +36,21 @@ from app.services.workflow_loop_scheduler import reconcile_loop_body
 from app.services.workflow_map_scheduler import reconcile_map_sub_tasks
 from app.services.workflow_node_states import initial_node_states
 from app.services.workflow_run_access import ensure_run_operation_access, is_admin
+from app.services.workflow_run_materialization import (
+    materialize_workflow_run_definition,
+    workflow_requires_standard_binding_project,
+)
 from app.services.workflow_scheduler import start_ready_workflow_nodes
-from app.services.workflow_tool_lookup import load_available_workflow_tool
 from app.services.workflow_validation import (
     is_loop_node,
     is_map_node,
-    is_tool_node,
     nodes_by_id,
     required_workflow_inputs,
     validate_workflow_definition,
-    workflow_nodes,
 )
 
 
 WORKFLOW_RUN_TERMINAL_STATUSES = {"success", "failure", "canceled"}
-
-
-async def materialize_workflow_run_definition(
-    db: AsyncSession,
-    *,
-    definition: dict[str, Any],
-) -> dict[str, Any]:
-    materialized_definition = {
-        **definition,
-        "nodes": [dict(node) for node in workflow_nodes(definition)],
-        "edges": list(definition.get("edges") or []),
-    }
-    for node in materialized_definition["nodes"]:
-        if not is_tool_node(node):
-            continue
-        tool = await load_available_workflow_tool(db, node=node)
-        node["tool_id"] = tool.id
-        node["tool_slug"] = tool.slug
-        node["tool_version"] = {
-            "id": tool.current_version_id,
-            "version": tool.current_version.version if tool.current_version else None,
-        }
-    return materialized_definition
 
 
 async def load_run_for_user(
@@ -209,7 +186,7 @@ async def create_workflow_run(
         )
 
     project_id = workflow.project_id
-    if project_id is None and await _workflow_requires_standard_binding_project(
+    if project_id is None and await workflow_requires_standard_binding_project(
         db,
         materialized_definition,
     ):
@@ -237,20 +214,6 @@ async def create_workflow_run(
         schedule_task_fn=schedule_task_fn,
     )
     return run
-
-
-async def _workflow_requires_standard_binding_project(
-    db: AsyncSession,
-    definition: dict[str, Any],
-) -> bool:
-    for node in workflow_nodes(definition):
-        if not is_tool_node(node):
-            continue
-        tool = await load_available_workflow_tool(db, node=node)
-        config = getattr(getattr(tool, "current_version", None), "config", None)
-        if tool_accepts_standard_input_bindings(config if isinstance(config, dict) else {}):
-            return True
-    return False
 
 
 async def sync_workflow_run(
