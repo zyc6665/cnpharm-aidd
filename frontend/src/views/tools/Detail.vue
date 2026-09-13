@@ -339,15 +339,17 @@
   import { useToolsStore, useTasksStore, useUserStore } from '@/stores'
   import type {
     SchemaProperty,
-    ToolSchema
   } from '@/types/models'
   import type { TypedArtifact } from '@/types/artifacts'
   import { uploadFile, convertSdfToPdb } from '@/api/files'
   import { getProjectArtifacts } from '@/api/artifacts'
   import { applyToolExample, getToolExample, previewToolExampleFile } from '@/api/tools'
   import { useToolDetailExamples } from '@/composables/useToolDetailExamples'
+  import {
+    useToolDetailPresentation,
+    type ToolDetailPresentationLabels,
+  } from '@/composables/useToolDetailPresentation'
   import { useToolDetailRunForm } from '@/composables/useToolDetailRunForm'
-  import { getToolValidationSummary } from '@/utils/tool-validation'
   import {
     buildToolRunTaskPayload,
     formatToolDate as formatDate,
@@ -358,11 +360,6 @@
     isFileSchemaProperty,
   } from '@/domain/tools'
   import { taskRunPreparationBlockedMessage } from '@/domain/tasks'
-  import {
-    buildFallbackToolDocumentation,
-    renderMarkdownToHtml,
-    type ToolDocumentationLabels
-  } from '@/domain/tools'
 
   const route = useRoute()
   const router = useRouter()
@@ -462,108 +459,10 @@
     onExampleLoaded: () => message.success(t('tools.exampleLoaded')),
   })
 
-  const toolConfig = computed<Record<string, unknown> | undefined>(() => {
-    const config = tool.value?.current_version?.config
-    return config && typeof config === 'object'
-      ? config as Record<string, unknown>
-      : undefined
-  })
-
-  const toolValidationSummary = computed(() => getToolValidationSummary(toolConfig.value))
-  const currentProjectId = computed(() => {
-    const raw = route.query.project_id ?? route.query.projectId ?? route.params.projectId
-    const value = Array.isArray(raw) ? raw[0] : raw
-    return typeof value === 'string' && value.trim() ? value.trim() : undefined
-  })
-
-  const outputSchema = computed<ToolSchema | undefined>(() => {
-    const config = toolConfig.value
-    if (config && typeof config === 'object' && 'output_schema' in config) {
-      return config.output_schema as ToolSchema
-    }
-    return undefined
-  })
-
-  const outputGlobs = computed<string[]>(() => {
-    const globs = toolConfig.value?.output_globs
-    return Array.isArray(globs) ? globs.filter((item): item is string => typeof item === 'string') : []
-  })
-
-  const executorType = computed<string | undefined>(() => {
-    const config = toolConfig.value
-    if (config && typeof config === 'object' && 'type' in config && typeof config.type === 'string') {
-      return config.type
-    }
-    return undefined
-  })
-  const isRemoteToolV1 = computed(() => {
-    return toolConfig.value?.type === 'remote_api' && toolConfig.value?.mode === 'remote_tool_v1'
-  })
-  const remoteToolBaseUrl = computed(() => {
-    const value = toolConfig.value?.base_url
-    return typeof value === 'string' ? value : ''
-  })
-  const remoteToolManifestHash = computed(() => {
-    const value = toolConfig.value?.manifest_sha256
-    return typeof value === 'string' ? value : ''
-  })
-  const remoteToolLastSmokeTest = computed<Record<string, unknown> | undefined>(() => {
-    const value = toolConfig.value?.last_smoke_test
-    return value && typeof value === 'object' ? value as Record<string, unknown> : undefined
-  })
-  const remoteToolSmokeStatus = computed(() => {
-    const status = remoteToolLastSmokeTest.value?.status
-    return typeof status === 'string' ? status : 'not_run'
-  })
-  const remoteToolSmokeTaskId = computed(() => {
-    const taskId = remoteToolLastSmokeTest.value?.task_id
-    return typeof taskId === 'string' ? taskId : ''
-  })
-  const remoteToolSmokeError = computed(() => {
-    const error = remoteToolLastSmokeTest.value?.error
-    return typeof error === 'string' ? error : ''
-  })
-
-  const remoteToolSmokeStatusColor = (status: string) => {
-    if (status === 'success') {
-      return 'green'
-    }
-    if (status === 'failure') {
-      return 'red'
-    }
-    if (status === 'scheduled') {
-      return 'blue'
-    }
-    if (status === 'stale') {
-      return 'orange'
-    }
-    return 'orange'
-  }
-
-  const remoteToolSmokeStatusText = (status: string) => {
-    if (status === 'success') {
-      return '已通过'
-    }
-    if (status === 'failure') {
-      return '失败'
-    }
-    if (status === 'scheduled') {
-      return '已排队'
-    }
-    if (status === 'stale') {
-      return 'Manifest 已变更'
-    }
-    return '未完成'
-  }
-
-  const detailSubtitle = computed(() => {
-    if (!tool.value) {
-      return t('tools.detail')
-    }
-
-    return `${t('tools.usageCount')}: ${formatNumber(tool.value.statistics?.usage_count)} · ${t('tools.viewCount')}: ${formatNumber(tool.value.statistics?.view_count)}`
-  })
-  const documentationLabels = computed<ToolDocumentationLabels>(() => ({
+  const presentationLabels = computed<ToolDetailPresentationLabels>(() => ({
+    detailFallback: t('tools.detail'),
+    usageCount: t('tools.usageCount'),
+    viewCount: t('tools.viewCount'),
     title: t('tools.introduction'),
     overview: t('tools.modelOverview'),
     parameters: t('tools.parameterDocs'),
@@ -576,27 +475,33 @@
     type: t('tools.fieldType'),
     description: t('common.description'),
     range: t('tools.valueRange'),
-    noDocumentation: t('tools.noDocumentation')
+    noDocumentation: t('tools.noDocumentation'),
   }))
-  const configuredDocumentationMarkdown = computed(() => {
-    const markdown = toolConfig.value?.documentation_markdown
-    return typeof markdown === 'string' ? markdown.trim() : ''
-  })
-  const documentationMarkdown = computed(() => {
-    if (configuredDocumentationMarkdown.value) {
-      return configuredDocumentationMarkdown.value
-    }
 
-    return buildFallbackToolDocumentation({
-      toolName: tool.value?.name || t('tools.detail'),
-      description: tool.value?.description,
-      inputSchema: flattenedSchema.value,
-      outputSchema: outputSchema.value,
-      outputGlobs: outputGlobs.value,
-      labels: documentationLabels.value
-    })
+  const {
+    toolValidationSummary,
+    executorType,
+    isRemoteToolV1,
+    remoteToolBaseUrl,
+    remoteToolManifestHash,
+    remoteToolSmokeStatus,
+    remoteToolSmokeTaskId,
+    remoteToolSmokeError,
+    remoteToolSmokeStatusColor,
+    remoteToolSmokeStatusText,
+    detailSubtitle,
+    documentationHtml,
+  } = useToolDetailPresentation({
+    tool,
+    inputSchema: flattenedSchema,
+    labels: presentationLabels,
   })
-  const documentationHtml = computed(() => renderMarkdownToHtml(documentationMarkdown.value))
+
+  const currentProjectId = computed(() => {
+    const raw = route.query.project_id ?? route.query.projectId ?? route.params.projectId
+    const value = Array.isArray(raw) ? raw[0] : raw
+    return typeof value === 'string' && value.trim() ? value.trim() : undefined
+  })
 
   const loadStandardProjectArtifacts = async () => {
     if (!currentProjectId.value || !standardInputSlots.value.length) {
