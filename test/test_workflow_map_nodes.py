@@ -16,10 +16,10 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.database.base import Base  # noqa: E402
+from app.services.workflow_map_items import resolve_map_items  # noqa: E402
 from app.services.workflow_scheduler import (  # noqa: E402
     dependencies_satisfied,
     schedule_condition_node,
-    _resolve_map_items,
     reconcile_map_sub_tasks,
 )
 from app.services.workflow_validation import (  # noqa: E402
@@ -122,14 +122,14 @@ class TestMapNodeValidation:
 
 
 class TestResolveMapItems:
-    """_resolve_map_items 函数测试。"""
+    """resolve_map_items 函数测试。"""
 
     @pytest.mark.asyncio
     async def test_workflow_input_list(self, db_session):
         from app.models.workflows import WorkflowRun
 
         run = WorkflowRun(input_files={"items": ["a", "b", "c"]})
-        result = await _resolve_map_items(
+        result = await resolve_map_items(
             db_session, over="workflow_input:items",
             run=run, node_states={},
         )
@@ -140,7 +140,7 @@ class TestResolveMapItems:
         from app.models.workflows import WorkflowRun
 
         run = WorkflowRun(input_files={"items": {"k1": "v1", "k2": "v2"}})
-        result = await _resolve_map_items(
+        result = await resolve_map_items(
             db_session, over="workflow_input:items",
             run=run, node_states={},
         )
@@ -151,7 +151,7 @@ class TestResolveMapItems:
         from app.models.workflows import WorkflowRun
 
         run = WorkflowRun(input_files={"items": "only_one"})
-        result = await _resolve_map_items(
+        result = await resolve_map_items(
             db_session, over="workflow_input:items",
             run=run, node_states={},
         )
@@ -162,7 +162,7 @@ class TestResolveMapItems:
         from app.models.workflows import WorkflowRun
 
         run = WorkflowRun(input_files={})
-        result = await _resolve_map_items(
+        result = await resolve_map_items(
             db_session, over="workflow_input:missing",
             run=run, node_states={},
         )
@@ -184,7 +184,7 @@ class TestResolveMapItems:
                 },
             }
         }
-        result = await _resolve_map_items(
+        result = await resolve_map_items(
             db_session, over="node:tool_1:smiles_list",
             run=run, node_states=node_states,
         )
@@ -221,7 +221,7 @@ class TestResolveMapItems:
         db_session.add(mock_file)
         await db_session.flush()
 
-        result = await _resolve_map_items(
+        result = await resolve_map_items(
             db_session, over="node:tool_1:smiles_csv",
             run=run, node_states=node_states,
         )
@@ -235,7 +235,7 @@ class TestResolveMapItems:
 
         run = WorkflowRun(input_files={})
         with pytest.raises(ValidationException, match="Unsupported map over"):
-            await _resolve_map_items(
+            await resolve_map_items(
                 db_session, over="invalid_ref:something",
                 run=run, node_states={},
             )

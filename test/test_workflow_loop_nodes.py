@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
@@ -18,11 +18,13 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.database.base import Base  # noqa: E402
+from app.services.workflow_loop_convergence import (  # noqa: E402
+    evaluate_loop_convergence,
+    resolve_loop_value,
+)
 from app.services.workflow_scheduler import (  # noqa: E402
     schedule_loop_node,
     reconcile_loop_body,
-    _evaluate_convergence,
-    _resolve_loop_value,
 )
 from app.services.workflow_validation import (  # noqa: E402
     validate_loop_node,
@@ -227,7 +229,7 @@ class TestEvaluateConvergence:
     """收敛条件评估。"""
 
     def test_equals_convergence_true(self):
-        result = _evaluate_convergence(
+        result = evaluate_loop_convergence(
             {"op": "==", "left": "node:step1:score", "right": 0.0},
             body_states={
                 "step1": {"outputs": {"score": 0.0}},
@@ -236,7 +238,7 @@ class TestEvaluateConvergence:
         assert result is True
 
     def test_lt_convergence_true(self):
-        result = _evaluate_convergence(
+        result = evaluate_loop_convergence(
             {"op": "<", "left": "node:step1:delta", "right": 0.01},
             body_states={
                 "step1": {"outputs": {"delta": 0.005}},
@@ -245,7 +247,7 @@ class TestEvaluateConvergence:
         assert result is True
 
     def test_lt_convergence_false(self):
-        result = _evaluate_convergence(
+        result = evaluate_loop_convergence(
             {"op": "<", "left": "node:step1:delta", "right": 0.01},
             body_states={
                 "step1": {"outputs": {"delta": 0.05}},
@@ -254,12 +256,12 @@ class TestEvaluateConvergence:
         assert result is False
 
     def test_no_condition_returns_false(self):
-        result = _evaluate_convergence(None, body_states={"step1": {}})
+        result = evaluate_loop_convergence(None, body_states={"step1": {}})
         assert result is False
 
     def test_no_condition_with_same_outputs_returns_true(self):
         outputs = {"step1": {"outputs": {"score": 1.0}}}
-        result = _evaluate_convergence(
+        result = evaluate_loop_convergence(
             None,
             body_states=outputs,
             previous_iteration_outputs=outputs,
@@ -267,14 +269,14 @@ class TestEvaluateConvergence:
         assert result is True
 
     def test_unknown_operator_returns_false(self):
-        result = _evaluate_convergence(
+        result = evaluate_loop_convergence(
             {"op": "~~~", "left": 1, "right": 1},
             body_states={},
         )
         assert result is False
 
     def test_type_error_returns_false(self):
-        result = _evaluate_convergence(
+        result = evaluate_loop_convergence(
             {"op": "<", "left": "string", "right": 123},
             body_states={},
         )
@@ -282,35 +284,35 @@ class TestEvaluateConvergence:
 
 
 class TestResolveLoopValue:
-    """_resolve_loop_value 值解析。"""
+    """resolve_loop_value 值解析。"""
 
     def test_resolves_node_output_value(self):
-        result = _resolve_loop_value(
+        result = resolve_loop_value(
             "node:step1:score",
             {"step1": {"outputs": {"score": 9.5}}},
         )
         assert result == 9.5
 
     def test_resolves_result_field(self):
-        result = _resolve_loop_value(
+        result = resolve_loop_value(
             "node:step1:score",
             {"step1": {"result": {"score": 8.0}}},
         )
         assert result == 8.0
 
     def test_returns_raw_value_for_non_node_ref(self):
-        result = _resolve_loop_value(42, {})
+        result = resolve_loop_value(42, {})
         assert result == 42
 
     def test_returns_none_for_missing_key(self):
-        result = _resolve_loop_value(
+        result = resolve_loop_value(
             "node:step1:missing",
             {"step1": {"outputs": {}}},
         )
         assert result is None
 
     def test_returns_none_for_missing_body_node(self):
-        result = _resolve_loop_value(
+        result = resolve_loop_value(
             "node:nonexistent:score",
             {},
         )

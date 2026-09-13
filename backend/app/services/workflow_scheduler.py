@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-import csv
-import io
-import json
-from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 from sqlalchemy import select
@@ -20,8 +16,12 @@ from app.models.tools import Tool, ToolProviderType, ToolStatus
 from app.models.users import User
 from app.models.workflows import WorkflowRun
 from app.schemas.tasks import TaskCreate
+from app.services.workflow_conditions import evaluate_condition_expression
+from app.services.workflow_loop_convergence import evaluate_loop_convergence
+from app.services.workflow_map_items import resolve_map_items
 from app.services.run_preparation import prepare_workflow_node_run
 from app.services.semantic_types import normalize_semantic_type
+from app.services.workflow_skip import mark_unreachable_nodes_skipped
 from app.services.workflow_validation import (
     is_condition_node,
     is_loop_node,
@@ -34,146 +34,6 @@ from app.services.workflow_validation import (
 
 
 ScheduleTaskFn = Callable[..., Awaitable[Any]]
-
-
-_CONDITION_OPERATORS = {
-    "==": lambda a, b: a == b,
-    "!=": lambda a, b: a != b,
-    ">": lambda a, b: _compare(a, b, lambda x, y: x > y),
-    "<": lambda a, b: _compare(a, b, lambda x, y: x < y),
-    ">=": lambda a, b: _compare(a, b, lambda x, y: x >= y),
-    "<=": lambda a, b: _compare(a, b, lambda x, y: x <= y),
-    "in": lambda a, b: a in b if isinstance(b, (list, tuple, str, set, dict)) else False,
-    "contains": lambda a, b: b in a if isinstance(a, (list, tuple, str, set, dict)) else False,
-}
-
-
-def _compare(left: Any, right: Any, op: Callable[[Any, Any], bool]) -> bool:
-    """带类型安全包装的比较操作。"""
-    try:
-        return op(left, right)
-    except TypeError as exc:
-        raise ValidationException(
-            f"Cannot compare values of types {type(left).__name__} and {type(right).__name__}"
-        ) from exc
-
-
-def _resolve_value(
-    ref: Any,
-    *,
-    run: WorkflowRun,
-    node_states: dict[str, Any],
-) -> Any:
-    """解析条件表达式中的值引用。"""
-    if not isinstance(ref, str):
-        return ref
-
-    if ref.startswith("workflow_input:"):
-        semantic_key = ref.split(":", 1)[1]
-        return (run.input_files or {}).get(semantic_key)
-
-    if ref.startswith("node:"):
-        parts = ref.split(":", 2)
-        if len(parts) != 3:
-            raise ValidationException(f"Invalid node reference: {ref}")
-        source_node_id = parts[1]
-        source_semantic_type = normalize_semantic_type(parts[2])
-        source_state = node_states.get(source_node_id) or {}
-        source_output = (source_state.get("semantic_outputs") or {}).get(source_semantic_type)
-        if not source_output:
-            return None
-        # 优先返回 value，否则返回 file_id
-        return source_output.get("value", source_output.get("file_id"))
-
-    return ref
-
-
-def evaluate_condition_expression(
-    expression: dict[str, Any],
-    *,
-    run: WorkflowRun,
-    node_states: dict[str, Any],
-) -> bool:
-    """评估 condition 表达式，返回 True/False。"""
-    op = expression.get("op")
-    if op not in _CONDITION_OPERATORS:
-        raise ValidationException(f"Unsupported condition operator: {op}")
-
-    left_value = _resolve_value(expression.get("left"), run=run, node_states=node_states)
-    right_value = _resolve_value(expression.get("right"), run=run, node_states=node_states)
-
-    try:
-        return bool(_CONDITION_OPERATORS[op](left_value, right_value))
-    except Exception as exc:
-        raise ValidationException(
-            f"Condition evaluation failed: {op}({left_value!r}, {right_value!r}): {exc}"
-        ) from exc
-
-
-def _mark_node_skipped(
-    node_states: dict[str, Any],
-    node_id: str,
-    reason: str,
-    *,
-    definition: dict[str, Any] | None = None,
-    force: bool = True,
-    visited: set[str] | None = None,
-) -> None:
-    """递归标记不可再到达的节点为 skipped。"""
-    if visited is None:
-        visited = set()
-    if node_id in visited:
-        return
-    visited.add(node_id)
-
-    state = dict(node_states.get(node_id) or {})
-    if state.get("status") in {"success", "failure", "skipped", "waiting_task", "running"}:
-        return
-    if not force and definition is not None and not _all_upstream_nodes_skipped(
-        node_states,
-        definition=definition,
-        node_id=node_id,
-    ):
-        return
-    state.update({
-        "status": "skipped",
-        "skip_reason": reason,
-        "finished_at": utcnow_iso(),
-    })
-    node_states[node_id] = state
-
-    if definition is None:
-        return
-    for edge in workflow_edges(definition):
-        if str(edge.get("source") or "") != node_id:
-            continue
-        target = str(edge.get("target") or "")
-        if target:
-            _mark_node_skipped(
-                node_states,
-                target,
-                reason,
-                definition=definition,
-                force=False,
-                visited=visited,
-            )
-
-
-def _all_upstream_nodes_skipped(
-    node_states: dict[str, Any],
-    *,
-    definition: dict[str, Any],
-    node_id: str,
-) -> bool:
-    upstream_ids = [
-        str(edge.get("source") or "")
-        for edge in workflow_edges(definition)
-        if str(edge.get("target") or "") == node_id
-    ]
-    return bool(upstream_ids) and all(
-        (node_states.get(upstream_id) or {}).get("status") == "skipped"
-        for upstream_id in upstream_ids
-    )
 
 
 async def validate_input_files(
@@ -463,7 +323,7 @@ async def schedule_condition_node(
             continue
         target = str(edge.get("target") or "")
         if branch != active_branch:
-            _mark_node_skipped(
+            mark_unreachable_nodes_skipped(
                 node_states,
                 target,
                 f"Branch '{branch}' not active",
@@ -484,58 +344,6 @@ async def schedule_condition_node(
 # ---------------------------------------------------------------------------
 # Map node scheduling
 # ---------------------------------------------------------------------------
-
-
-async def _resolve_map_items(
-    db: AsyncSession,
-    *,
-    over: str,
-    run: WorkflowRun,
-    node_states: dict[str, Any],
-) -> list[dict[str, Any]]:
-    """Resolve the map node *over* reference to a list of items."""
-    if over.startswith("workflow_input:"):
-        key = over.split(":", 1)[1]
-        raw = (run.input_files or {}).get(key)
-        if isinstance(raw, list):
-            return raw
-        if isinstance(raw, dict):
-            return list(raw.values())
-        return [raw] if raw is not None else []
-
-    if over.startswith("node:"):
-        parts = over.split(":", 2)
-        if len(parts) != 3:
-            raise ValidationException(f"Invalid map over reference: {over}")
-        source_node_id = parts[1]
-        source_semantic_type = normalize_semantic_type(parts[2])
-        source_state = node_states.get(source_node_id) or {}
-        source_output = (source_state.get("semantic_outputs") or {}).get(source_semantic_type)
-        if not source_output:
-            return []
-
-        value = source_output.get("value")
-        if isinstance(value, list):
-            return value
-
-        file_id = source_output.get("file_id")
-        if file_id:
-            file_record = await db.get(FileModel, str(file_id))
-            if file_record and file_record.storage_path:
-                path = Path(file_record.storage_path)
-                try:
-                    if path.suffix == ".csv":
-                        text = path.read_text(encoding="utf-8")
-                        reader = csv.DictReader(io.StringIO(text))
-                        return list(reader)
-                    if path.suffix == ".json":
-                        data = json.loads(path.read_text(encoding="utf-8"))
-                        return data if isinstance(data, list) else [data]
-                except (OSError, json.JSONDecodeError, csv.Error):
-                    return [source_output]
-        return [source_output]
-
-    raise ValidationException(f"Unsupported map over reference: {over}")
 
 
 async def schedule_map_node(
@@ -564,7 +372,7 @@ async def schedule_map_node(
 
     # First invocation: resolve items
     if state.get("map_items") is None:
-        items = await _resolve_map_items(
+        items = await resolve_map_items(
             db,
             over=str(over),
             run=run,
@@ -919,86 +727,6 @@ async def schedule_loop_node(
     return scheduled
 
 
-def _evaluate_convergence(
-    condition: dict[str, Any] | None,
-    *,
-    body_states: dict[str, Any],
-    previous_iteration_outputs: dict[str, Any] | None = None,
-) -> bool:
-    """评估循环收敛条件。
-
-    支持从 body 节点输出中读取值（使用 ``node:<body_node_id>:<field>`` 语法）。
-    未提供 convergence_condition 时使用 previous_iteration_outputs 判断迭代间变化。
-    """
-    if not condition:
-        if previous_iteration_outputs and body_states:
-            return body_states == previous_iteration_outputs
-        return False
-
-    op = condition.get("op")
-    left_raw = condition.get("left")
-    right_raw = condition.get("right")
-
-    left = _resolve_loop_value(left_raw, body_states)
-    right = _resolve_loop_value(right_raw, body_states)
-
-    # loop 收敛评估使用直接比较（不通过 _CONDITION_OPERATORS 的 _compare 封装，
-    # 因为 _compare 在类型不匹配时抛 ValidationException 而非返回 False）
-    if op == "==":
-        return left == right
-    if op == "!=":
-        return left != right
-    if op == "<":
-        try:
-            return left < right
-        except TypeError:
-            return False
-    if op == ">":
-        try:
-            return left > right
-        except TypeError:
-            return False
-    if op == "<=":
-        try:
-            return left <= right
-        except TypeError:
-            return False
-    if op == ">=":
-        try:
-            return left >= right
-        except TypeError:
-            return False
-    if op == "in":
-        try:
-            return left in right
-        except TypeError:
-            return False
-    if op == "contains":
-        try:
-            return right in left
-        except TypeError:
-            return False
-    return False
-
-
-def _resolve_loop_value(raw: Any, body_states: dict[str, Any]) -> Any:
-    """解析收敛条件中的值引用。
-
-    支持 ``node:<body_node_id>:<output_key>`` 格式从 body 节点输出中读取。
-    """
-    if isinstance(raw, str) and raw.startswith("node:"):
-        parts = raw.split(":", 2)
-        if len(parts) == 3:
-            node_ref = parts[1]
-            output_key = parts[2]
-            node_state = body_states.get(node_ref, {})
-            outputs = node_state.get("outputs") or node_state.get("result") or {}
-            if isinstance(outputs, dict):
-                return outputs.get(output_key)
-            return None
-    return raw
-
-
 async def reconcile_loop_body(
     db: AsyncSession,
     *,
@@ -1101,7 +829,7 @@ async def reconcile_loop_body(
     previous_outputs = history[-2].get("outputs") if len(history) >= 2 else None
 
     # 检查收敛条件
-    converged = _evaluate_convergence(
+    converged = evaluate_loop_convergence(
         node.get("convergence_condition"),
         body_states=body_states,
         previous_iteration_outputs=previous_outputs,
