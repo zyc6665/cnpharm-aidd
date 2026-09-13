@@ -11,7 +11,7 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.services.workflow_conditions import evaluate_condition_expression  # noqa: E402
-from app.services.workflow_scheduler import dependencies_satisfied
+from app.services.workflow_dependencies import dependencies_satisfied  # noqa: E402
 from app.services.workflow_validation import (
     is_condition_node,
     is_control_flow_node,

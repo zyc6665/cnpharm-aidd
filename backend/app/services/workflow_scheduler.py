@@ -9,17 +9,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.common.time import utcnow, utcnow_iso
-from app.common.exceptions import ForbiddenException, NotFoundException, ValidationException
-from app.models.files import File as FileModel
+from app.common.exceptions import ValidationException
 from app.models.tasks import Task, TaskStatus
 from app.models.users import User
 from app.models.workflows import WorkflowRun
 from app.schemas.tasks import TaskCreate
 from app.services.workflow_conditions import evaluate_condition_expression
+from app.services.workflow_dependencies import dependencies_satisfied
 from app.services.workflow_loop_convergence import evaluate_loop_convergence
 from app.services.workflow_map_items import resolve_map_items
 from app.services.run_preparation import prepare_workflow_node_run
-from app.services.semantic_types import normalize_semantic_type
 from app.services.workflow_skip import mark_unreachable_nodes_skipped
 from app.services.workflow_task_lookup import find_existing_workflow_node_task
 from app.services.workflow_tool_lookup import load_available_workflow_tool
@@ -29,97 +28,11 @@ from app.services.workflow_validation import (
     is_map_node,
     is_tool_node,
     nodes_by_id,
-    workflow_dependency_map,
     workflow_edges,
 )
 
 
 ScheduleTaskFn = Callable[..., Awaitable[Any]]
-
-
-async def validate_input_files(
-    db: AsyncSession,
-    *,
-    current_user: User,
-    input_files: dict[str, str],
-) -> dict[str, str]:
-    normalized = {
-        normalize_semantic_type(str(semantic_type)): str(file_id)
-        for semantic_type, file_id in input_files.items()
-        if file_id
-    }
-    for semantic_type, file_id in normalized.items():
-        file_record = await db.get(FileModel, file_id)
-        if not file_record:
-            raise NotFoundException(f"Workflow input file not found: {semantic_type}")
-        if file_record.owner_id != current_user.id and current_user.role != "admin":
-            raise ForbiddenException(f"No permission to use workflow input file: {semantic_type}")
-    return normalized
-
-
-def initial_node_states(definition: dict[str, Any], execution_order: list[str]) -> dict[str, Any]:
-    indexed_nodes = nodes_by_id(definition)
-    return {
-        current_node_id: {
-            "status": "pending",
-            "tool_slug": indexed_nodes[current_node_id].get("tool_slug"),
-            "tool_id": indexed_nodes[current_node_id].get("tool_id"),
-            "tool_version_id": (
-                indexed_nodes[current_node_id].get("tool_version") or {}
-            ).get("id"),
-            "tool_version": indexed_nodes[current_node_id].get("tool_version"),
-            "semantic_inputs": dict(indexed_nodes[current_node_id].get("semantic_inputs") or {}),
-            "artifact_inputs": dict(indexed_nodes[current_node_id].get("artifact_inputs") or {}),
-            "artifact_input_slots": list(
-                indexed_nodes[current_node_id].get("artifact_input_slots") or []
-            ),
-            "artifact_outputs": list(indexed_nodes[current_node_id].get("artifact_outputs") or []),
-            "params": dict(indexed_nodes[current_node_id].get("params") or {}),
-        }
-        for current_node_id in execution_order
-    }
-
-
-def dependency_tool_node_ids(definition: dict[str, Any], node_id: str) -> set[str]:
-    indexed_nodes = nodes_by_id(definition)
-    dependencies = workflow_dependency_map(definition)
-    return {
-        source
-        for source in dependencies.get(node_id, set())
-        if is_tool_node(indexed_nodes.get(source))
-    }
-
-
-def dependencies_satisfied(
-    *,
-    definition: dict[str, Any],
-    node_states: dict[str, Any],
-    node_id: str,
-) -> bool:
-    indexed_nodes = nodes_by_id(definition)
-
-    # 检查默认依赖是否 success
-    for dependency_id in dependency_tool_node_ids(definition, node_id):
-        if (node_states.get(dependency_id) or {}).get("status") != "success":
-            return False
-
-    # 对 condition 分支的下游节点，检查分支是否激活
-    for edge in workflow_edges(definition):
-        source = str(edge.get("source") or "")
-        target = str(edge.get("target") or "")
-        if target != node_id:
-            continue
-        branch = edge.get("branch")
-        if not branch or not is_condition_node(indexed_nodes.get(source)):
-            continue
-        source_state = node_states.get(source) or {}
-        if source_state.get("status") != "success":
-            return False
-        active_branch = source_state.get("active_branch")
-        if active_branch and branch != active_branch:
-            return False
-
-    return True
 
 
 async def schedule_workflow_node(

@@ -16,9 +16,9 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.database.base import Base  # noqa: E402
+from app.services.workflow_dependencies import dependencies_satisfied  # noqa: E402
 from app.services.workflow_map_items import resolve_map_items  # noqa: E402
 from app.services.workflow_scheduler import (  # noqa: E402
-    dependencies_satisfied,
     schedule_condition_node,
     reconcile_map_sub_tasks,
 )

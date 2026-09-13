@@ -14,7 +14,7 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.common.exceptions import ValidationException  # noqa: E402
-from app.services.workflow_scheduler import initial_node_states  # noqa: E402
+from app.services.workflow_node_states import initial_node_states  # noqa: E402
 from app.services.workflow_validation import (  # noqa: E402
     required_workflow_inputs,
     validate_workflow_definition,
