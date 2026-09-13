@@ -320,7 +320,6 @@
   import { useI18n } from 'vue-i18n'
   import { message } from 'ant-design-vue'
   import type { FormInstance } from 'ant-design-vue/es/form'
-  import type { UploadFile } from 'ant-design-vue'
   import {
     ToolOutlined,
     HeartOutlined,
@@ -340,7 +339,6 @@
   import type {
     SchemaProperty,
   } from '@/types/models'
-  import type { TypedArtifact } from '@/types/artifacts'
   import { uploadFile, convertSdfToPdb } from '@/api/files'
   import { getProjectArtifacts } from '@/api/artifacts'
   import { applyToolExample, getToolExample, previewToolExampleFile } from '@/api/tools'
@@ -350,6 +348,7 @@
     type ToolDetailPresentationLabels,
   } from '@/composables/useToolDetailPresentation'
   import { useToolDetailRunForm } from '@/composables/useToolDetailRunForm'
+  import { useToolDetailStandardArtifacts } from '@/composables/useToolDetailStandardArtifacts'
   import { useToolDetailSubmission } from '@/composables/useToolDetailSubmission'
   import {
     formatToolDate as formatDate,
@@ -371,8 +370,6 @@
   const loading = ref(false)
   const favoriteLoading = ref(false)
   const tool = computed(() => toolsStore.currentTool)
-  const standardProjectArtifacts = ref<TypedArtifact[]>([])
-  const standardArtifactsLoading = ref(false)
   const documentationOpen = ref(false)
 
   function clearFieldValidation(key: string) {
@@ -501,6 +498,20 @@
     return typeof value === 'string' && value.trim() ? value.trim() : undefined
   })
 
+  const {
+    standardProjectArtifacts,
+    standardArtifactsLoading,
+    loadStandardProjectArtifacts,
+    handleStandardArtifactSelection,
+    handleStandardInputFileListChange,
+  } = useToolDetailStandardArtifacts({
+    projectId: currentProjectId,
+    standardInputSlots,
+    api: { getProjectArtifacts },
+    selectStandardArtifact,
+    updateStandardInputFileList,
+  })
+
   const { submitting, handleSubmit } = useToolDetailSubmission({
     isLoggedIn: computed(() => userStore.isLoggedIn),
     toolId: computed(() => tool.value?.id),
@@ -539,31 +550,6 @@
       router.push(`/tasks/${task.id}`)
     },
   })
-
-  const loadStandardProjectArtifacts = async () => {
-    if (!currentProjectId.value || !standardInputSlots.value.length) {
-      standardProjectArtifacts.value = []
-      return
-    }
-
-    standardArtifactsLoading.value = true
-    try {
-      const res = await getProjectArtifacts(currentProjectId.value)
-      standardProjectArtifacts.value = res.data.items
-    } catch {
-      standardProjectArtifacts.value = []
-    } finally {
-      standardArtifactsLoading.value = false
-    }
-  }
-
-  const handleStandardArtifactSelection = (slotName: string, versionId?: string) => {
-    selectStandardArtifact(slotName, versionId, standardProjectArtifacts.value)
-  }
-
-  const handleStandardInputFileListChange = (slotName: string, files: UploadFile[]) => {
-    updateStandardInputFileList(slotName, files)
-  }
 
   const requiredFieldMessage = (title: string) => `${title} ${t('common.required')}`
   const minLengthMessage = (min: number) => t('validation.minLength', { min })
