@@ -26,7 +26,7 @@ from app.services.workflows import (
     retry_workflow_run_node,
     sync_workflow_run,
 )
-from app.services.workflow_runs import get_workflow_run, list_workflow_runs
+from app.services.workflow_run_queries import get_workflow_run, list_workflow_runs
 
 
 router = APIRouter()

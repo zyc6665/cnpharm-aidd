@@ -4,19 +4,18 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.agents.aidd.outputs import extract_semantic_outputs
 from app.agents.aidd.registry import load_tool_capability
-from app.common.exceptions import ForbiddenException, NotFoundException, ValidationException
+from app.common.exceptions import NotFoundException, ValidationException
 from app.common.time import utcnow, utcnow_iso
 from app.models.tasks import Task, TaskStatus
 from app.models.users import User
-from app.models.workflows import WorkflowDefinition, WorkflowRun
+from app.models.workflows import WorkflowRun
 from app.schemas.workflows import WorkflowRunCreate
-from app.services.project_access import load_project_membership
 from app.services.project_migration import ensure_migration_project_for_owner
 from app.tasks.cancellation import cancel_platform_task
 from app.services.workflow_artifacts import (
@@ -35,11 +34,12 @@ from app.services.workflow_inputs import validate_input_files
 from app.services.workflow_loop_scheduler import reconcile_loop_body
 from app.services.workflow_map_scheduler import reconcile_map_sub_tasks
 from app.services.workflow_node_states import initial_node_states
-from app.services.workflow_run_access import ensure_run_operation_access, is_admin
+from app.services.workflow_run_access import ensure_run_operation_access
 from app.services.workflow_run_materialization import (
     materialize_workflow_run_definition,
     workflow_requires_standard_binding_project,
 )
+from app.services.workflow_run_queries import load_definition_for_run, load_run_for_user
 from app.services.workflow_scheduler import start_ready_workflow_nodes
 from app.services.workflow_validation import (
     is_loop_node,
@@ -51,103 +51,6 @@ from app.services.workflow_validation import (
 
 
 WORKFLOW_RUN_TERMINAL_STATUSES = {"success", "failure", "canceled"}
-
-
-async def load_run_for_user(
-    db: AsyncSession,
-    *,
-    run_id: str,
-    current_user: User,
-) -> WorkflowRun:
-    result = await db.execute(select(WorkflowRun).where(WorkflowRun.id == run_id))
-    run = result.scalar_one_or_none()
-    if not run:
-        raise NotFoundException("Workflow run not found")
-    if run.project_id:
-        if not is_admin(current_user):
-            await load_project_membership(
-                db,
-                project_id=run.project_id,
-                user_id=current_user.id,
-            )
-        return run
-    if run.owner_id != current_user.id and not is_admin(current_user):
-        raise ForbiddenException("No permission to access workflow run")
-    return run
-
-
-async def load_definition_for_run(
-    db: AsyncSession,
-    *,
-    workflow_definition_id: str,
-    current_user: User,
-) -> WorkflowDefinition:
-    result = await db.execute(
-        select(WorkflowDefinition).where(WorkflowDefinition.id == workflow_definition_id)
-    )
-    workflow = result.scalar_one_or_none()
-    if not workflow:
-        raise NotFoundException("Workflow definition not found")
-    if workflow.project_id:
-        if not is_admin(current_user):
-            await load_project_membership(
-                db,
-                project_id=workflow.project_id,
-                user_id=current_user.id,
-            )
-        return workflow
-    if workflow.user_id != current_user.id and not is_admin(current_user):
-        raise NotFoundException("Workflow definition not found")
-    return workflow
-
-
-async def list_workflow_runs(
-    db: AsyncSession,
-    *,
-    current_user: User,
-    workflow_definition_id: str | None = None,
-    project_id: str | None = None,
-    page: int = 1,
-    page_size: int = 20,
-) -> tuple[list[WorkflowRun], int]:
-    if workflow_definition_id and not project_id:
-        workflow = await load_definition_for_run(
-            db,
-            workflow_definition_id=workflow_definition_id,
-            current_user=current_user,
-        )
-        project_id = workflow.project_id
-    if project_id:
-        if not is_admin(current_user):
-            await load_project_membership(
-                db,
-                project_id=project_id,
-                user_id=current_user.id,
-            )
-        query = select(WorkflowRun).where(WorkflowRun.project_id == project_id)
-    else:
-        query = select(WorkflowRun).where(WorkflowRun.owner_id == current_user.id)
-    if workflow_definition_id:
-        query = query.where(WorkflowRun.workflow_definition_id == workflow_definition_id)
-
-    count_result = await db.execute(select(func.count()).select_from(query.subquery()))
-    total = count_result.scalar() or 0
-    result = await db.execute(
-        query
-        .order_by(WorkflowRun.created_at.desc(), WorkflowRun.id.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-    )
-    return list(result.scalars().all()), total
-
-
-async def get_workflow_run(
-    db: AsyncSession,
-    *,
-    current_user: User,
-    run_id: str,
-) -> WorkflowRun:
-    return await load_run_for_user(db, run_id=run_id, current_user=current_user)
 
 
 async def create_workflow_run(
