@@ -55,6 +55,7 @@ test('MSIGN 工具页应为 ligand_pdb 提供上传 SDF 转 PDB 辅助入口', (
 test('SDF 转 PDB 后应同步文件显示和表单校验字段', () => {
   const source = readSource('src/views/tools/Detail.vue')
   const domainSource = readSource('src/domain/tools/detail-file-inputs.ts')
+  const formSource = readSource('src/composables/useToolDetailRunForm.ts')
 
   assert.equal(source.includes('getToolFileAccept'), true)
   assert.equal(domainSource.includes("tokens.add('.sdf')"), true)
@@ -63,7 +64,7 @@ test('SDF 转 PDB 后应同步文件显示和表单校验字段', () => {
   assert.equal(source.includes('createConvertedUploadFile'), true)
   assert.equal(source.includes('fileList[key] = [createConvertedUploadFile(res.data)]'), true)
   assert.equal(source.includes('formState[key] = res.data.id'), true)
-  assert.equal(source.includes('sdfConversionLoading[key] ||'), true)
+  assert.equal(formSource.includes('sdfConversionLoading[key] ||'), true)
   assert.equal(source.includes('clearFieldValidation(key)'), true)
   assert.equal(source.includes('sdfConversionStatusText'), true)
   assert.equal(source.includes('getToolRequestErrorMessage'), true)

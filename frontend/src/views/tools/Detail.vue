@@ -315,7 +315,7 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+  import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { useI18n } from 'vue-i18n'
   import { message } from 'ant-design-vue'
@@ -349,10 +349,9 @@
   import { uploadFile, convertSdfToPdb } from '@/api/files'
   import { getProjectArtifacts } from '@/api/artifacts'
   import { applyToolExample, getToolExample, previewToolExampleFile } from '@/api/tools'
+  import { useToolDetailRunForm } from '@/composables/useToolDetailRunForm'
   import { getToolValidationSummary } from '@/utils/tool-validation'
   import {
-    buildStandardInputBindings,
-    buildStandardInputBindingsFromFileFields,
     buildToolRunTaskPayload,
     formatToolDate as formatDate,
     formatToolMetricCount as formatNumber,
@@ -362,9 +361,7 @@
     getToolRequestErrorMessage,
     getToolStatusColor as getStatusColor,
     isFileSchemaProperty,
-    missingRequiredStandardInputSlots,
     resolveExampleFileFormKey,
-    resolveToolRunInputSurface,
     shouldShowSdfToPdbConverter
   } from '@/domain/tools'
   import { taskRunPreparationBlockedMessage } from '@/domain/tasks'
@@ -386,24 +383,42 @@
   const submitting = ref(false)
   const favoriteLoading = ref(false)
   const tool = computed(() => toolsStore.currentTool)
-  const taskName = ref('')
-  const formState = reactive<Record<string, unknown>>({})
-  const fileList = reactive<Record<string, UploadFile[]>>({})
-  const selectedArtifacts = reactive<Record<string, ArtifactFile | undefined>>({})
   const standardProjectArtifacts = ref<TypedArtifact[]>([])
   const standardArtifactsLoading = ref(false)
-  const selectedStandardArtifacts = reactive<Record<string, TypedArtifact | undefined>>({})
-  const standardInputFileList = reactive<Record<string, UploadFile[]>>({})
   const example = ref<ToolExample | null>(null)
   const applyingExample = ref(false)
   const previewOpen = ref(false)
   const previewLoading = ref(false)
   const preview = ref<ToolExampleFilePreview | null>(null)
-  const exampleFiles = reactive<Record<string, FileUploadResponse | undefined>>({})
-  const convertedFiles = reactive<Record<string, FileUploadResponse | undefined>>({})
-  const sdfConversionLoading = reactive<Record<string, boolean>>({})
-  const sdfConversionErrors = reactive<Record<string, string | undefined>>({})
   const documentationOpen = ref(false)
+  const {
+    taskName,
+    formState,
+    fileList,
+    selectedArtifacts,
+    selectedStandardArtifacts,
+    standardInputFileList,
+    exampleFiles,
+    convertedFiles,
+    sdfConversionLoading,
+    sdfConversionErrors,
+    flattenedSchema,
+    standardInputSlots,
+    standardInputFileFieldBindings,
+    showStandardArtifactInputs,
+    missingRequiredStandardSlots,
+    canSubmit,
+    initializeFromSurface,
+    reset: resetRunForm,
+    selectStandardArtifact,
+    updateStandardInputFileList,
+    isFileFieldSatisfied,
+    clearExampleFile: clearExampleFileState,
+    clearConvertedFile: clearConvertedFileState,
+  } = useToolDetailRunForm({
+    tool,
+    isAuthenticated: computed(() => userStore.isAuthenticated),
+  })
 
   const toolConfig = computed<Record<string, unknown> | undefined>(() => {
     const config = tool.value?.current_version?.config
@@ -413,10 +428,6 @@
   })
 
   const toolValidationSummary = computed(() => getToolValidationSummary(toolConfig.value))
-  const inputSurface = computed(() => resolveToolRunInputSurface(tool.value))
-  const standardInputSlots = computed(() => inputSurface.value.standardInputSlots)
-  const standardInputFileFieldBindings = computed(() => inputSurface.value.standardInputFileFieldBindings)
-  const showStandardArtifactInputs = computed(() => inputSurface.value.showStandardArtifactInputs)
   const currentProjectId = computed(() => {
     const raw = route.query.project_id ?? route.query.projectId ?? route.params.projectId
     const value = Array.isArray(raw) ? raw[0] : raw
@@ -503,64 +514,6 @@
     return '未完成'
   }
 
-  const flattenedSchema = computed<ToolSchema | undefined>(() => inputSurface.value.flattenedSchema)
-  const selectedStandardArtifactRecord = computed<Record<string, TypedArtifact | undefined>>(() => {
-    return Object.fromEntries(
-      standardInputSlots.value.map(slot => [slot.name, selectedStandardArtifacts[slot.name]])
-    )
-  })
-  const legacyStandardInputBindingProjection = computed(() => {
-    if (Object.keys(standardInputFileFieldBindings.value).length === 0) {
-      return { inputBindings: {}, boundFieldKeys: [] }
-    }
-
-    return buildStandardInputBindingsFromFileFields({
-      slots: standardInputSlots.value,
-      fileFieldBindings: standardInputFileFieldBindings.value,
-      selectedArtifacts,
-    })
-  })
-  const standardInputBindings = computed(() => {
-    if (Object.keys(standardInputFileFieldBindings.value).length > 0) {
-      return legacyStandardInputBindingProjection.value.inputBindings
-    }
-
-    return buildStandardInputBindings(selectedStandardArtifactRecord.value)
-  })
-  const hasLegacyStandardInputUploadSelection = (slotName: string) => {
-    const fieldKey = standardInputFileFieldBindings.value[slotName]
-    if (!fieldKey || selectedArtifacts[fieldKey]?.artifact_version_id?.trim()) {
-      return false
-    }
-
-    return Boolean(
-      fileList[fieldKey]?.length ||
-      exampleFiles[fieldKey] ||
-      convertedFiles[fieldKey] ||
-      selectedArtifacts[fieldKey]?.id
-    )
-  }
-  const hasStandardInputUploadSelection = (slotName: string) => {
-    if (Object.keys(standardInputFileFieldBindings.value).length > 0) {
-      return hasLegacyStandardInputUploadSelection(slotName)
-    }
-
-    return Boolean(standardInputFileList[slotName]?.length)
-  }
-  const missingRequiredStandardSlots = computed(() => {
-    return missingRequiredStandardInputSlots({
-      slots: standardInputSlots.value,
-      inputBindings: standardInputBindings.value,
-      hasUpload: hasStandardInputUploadSelection
-    })
-  })
-
-  const canSubmit = computed(() => {
-    if (!userStore.isAuthenticated) return false
-    if (Object.values(sdfConversionLoading).some(Boolean)) return false
-    if (missingRequiredStandardSlots.value.length > 0) return false
-    return true
-  })
   const detailSubtitle = computed(() => {
     if (!tool.value) {
       return t('tools.detail')
@@ -621,37 +574,16 @@
   }
 
   const handleStandardArtifactSelection = (slotName: string, versionId?: string) => {
-    selectedStandardArtifacts[slotName] = versionId
-      ? standardProjectArtifacts.value.find(
-          artifact => artifact.latest_version.id === versionId
-        )
-      : undefined
-    if (selectedStandardArtifacts[slotName]) {
-      standardInputFileList[slotName] = []
-    }
+    selectStandardArtifact(slotName, versionId, standardProjectArtifacts.value)
   }
 
   const handleStandardInputFileListChange = (slotName: string, files: UploadFile[]) => {
-    standardInputFileList[slotName] = files
-    if (files.length > 0) {
-      selectedStandardArtifacts[slotName] = undefined
-    }
+    updateStandardInputFileList(slotName, files)
   }
 
   const requiredFieldMessage = (title: string) => `${title} ${t('common.required')}`
   const minLengthMessage = (min: number) => t('validation.minLength', { min })
   const maxLengthMessage = (max: number) => t('validation.maxLength', { max })
-
-  const isFileFieldSatisfied = (key: string, _prop?: SchemaProperty) => {
-    return Boolean(
-      sdfConversionLoading[key] ||
-      formState[key] ||
-      fileList[key]?.length ||
-      selectedArtifacts[key] ||
-      exampleFiles[key] ||
-      convertedFiles[key]
-    )
-  }
 
   const handleFavorite = async () => {
     if (!userStore.isLoggedIn) {
@@ -669,28 +601,7 @@
 
   const resetForm = () => {
     formRef.value?.resetFields()
-    taskName.value = ''
-    Object.keys(fileList).forEach(key => {
-      fileList[key] = []
-    })
-    Object.keys(selectedArtifacts).forEach(key => {
-      selectedArtifacts[key] = undefined
-    })
-    Object.keys(selectedStandardArtifacts).forEach(key => {
-      selectedStandardArtifacts[key] = undefined
-    })
-    Object.keys(standardInputFileList).forEach(key => {
-      standardInputFileList[key] = []
-    })
-    Object.keys(exampleFiles).forEach(key => {
-      exampleFiles[key] = undefined
-    })
-    Object.keys(convertedFiles).forEach(key => {
-      convertedFiles[key] = undefined
-    })
-    Object.keys(sdfConversionErrors).forEach(key => {
-      sdfConversionErrors[key] = undefined
-    })
+    resetRunForm()
   }
 
   const clearFieldValidation = (key: string) => {
@@ -744,15 +655,11 @@
   }
 
   const clearExampleFile = (key: string) => {
-    exampleFiles[key] = undefined
-    formState[key] = undefined
+    clearExampleFileState(key)
   }
 
   const clearConvertedFile = (key: string) => {
-    convertedFiles[key] = undefined
-    fileList[key] = []
-    formState[key] = undefined
-    sdfConversionErrors[key] = undefined
+    clearConvertedFileState(key)
     void nextTick().then(() => formRef.value?.validateFields([key]).catch(() => undefined))
   }
 
@@ -950,27 +857,7 @@
       try {
         await toolsStore.fetchToolDetail(id)
 
-        // 初始化表单默认值
-        if (flattenedSchema.value?.properties) {
-          for (const [key, prop] of Object.entries(flattenedSchema.value.properties)) {
-            if (prop.default !== undefined) {
-              formState[key] = prop.default
-            }
-            // 初始化文件列表
-            if (isFileSchemaProperty(prop)) {
-              fileList[key] = []
-              selectedArtifacts[key] = undefined
-              exampleFiles[key] = undefined
-              convertedFiles[key] = undefined
-              sdfConversionLoading[key] = false
-              sdfConversionErrors[key] = undefined
-            }
-          }
-        }
-        for (const slot of standardInputSlots.value) {
-          selectedStandardArtifacts[slot.name] = undefined
-          standardInputFileList[slot.name] = []
-        }
+        initializeFromSurface()
         await loadStandardProjectArtifacts()
         await fetchExample(id)
       } finally {
