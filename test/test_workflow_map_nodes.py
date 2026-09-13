@@ -315,7 +315,7 @@ class TestReconcileMapSubTasks:
     @pytest.mark.asyncio
     async def test_all_sub_tasks_success(self, db_session):
         from app.models.workflows import WorkflowRun
-        from app.models.tasks import Task, TaskOutput, TaskStatus
+        from app.models.tasks import Task, TaskStatus
 
         run = WorkflowRun()
 
@@ -525,6 +525,45 @@ class TestScheduleConditionNode:
         assert node_states["cond"]["active_branch"] == "false"
         assert node_states["tool_a"]["status"] == "skipped"
         assert node_states["tool_b"]["status"] == "pending"
+
+    @pytest.mark.asyncio
+    async def test_schedule_condition_skips_inactive_branch_descendants(self):
+        from app.models.workflows import WorkflowRun
+
+        definition = {
+            "nodes": [
+                {"id": "cond", "kind": "condition", "expression": {"op": "==", "left": "x", "right": "x"}},
+                {"id": "active_tool", "kind": "tool", "tool_slug": "active"},
+                {"id": "inactive_tool", "kind": "tool", "tool_slug": "inactive"},
+                {"id": "inactive_child", "kind": "tool", "tool_slug": "child"},
+                {"id": "inactive_grandchild", "kind": "tool", "tool_slug": "grandchild"},
+            ],
+            "edges": [
+                {"source": "cond", "target": "active_tool", "branch": "true"},
+                {"source": "cond", "target": "inactive_tool", "branch": "false"},
+                {"source": "inactive_tool", "target": "inactive_child"},
+                {"source": "inactive_child", "target": "inactive_grandchild"},
+            ],
+        }
+        run = WorkflowRun(definition=definition, input_files={})
+        node_states = {
+            "cond": {"status": "pending"},
+            "active_tool": {"status": "pending"},
+            "inactive_tool": {"status": "pending"},
+            "inactive_child": {"status": "pending"},
+            "inactive_grandchild": {"status": "pending"},
+        }
+        await schedule_condition_node(
+            run=run,
+            node_id="cond",
+            node={"id": "cond", "kind": "condition", "expression": {"op": "==", "left": "x", "right": "x"}},
+            node_states=node_states,
+        )
+
+        assert node_states["active_tool"]["status"] == "pending"
+        assert node_states["inactive_tool"]["status"] == "skipped"
+        assert node_states["inactive_child"]["status"] == "skipped"
+        assert node_states["inactive_grandchild"]["status"] == "skipped"
 
 
 class TestStartReadyWorkflowNodes:

@@ -71,6 +71,7 @@ def test_admin_tool_forms_use_category_id_and_public_create_entry_is_removed():
 def test_admin_tool_form_exposes_agent_capability_config():
     """管理员工具表单应暴露 Agent 动态注册配置，而不是只能手写隐藏 JSON。"""
     create_source = read_source("frontend/src/views/tools/Create.vue")
+    config_source = read_source("frontend/src/domain/tools/tool-version-config.ts")
 
     assert "Agent 编排能力" in create_source
     assert "agent_capability_enabled" in create_source
@@ -78,7 +79,7 @@ def test_admin_tool_form_exposes_agent_capability_config():
     assert "molecule_generation" in create_source
     assert "agent_inputs" in create_source
     assert "agent_outputs" in create_source
-    assert "config.agent_capability" in create_source
+    assert "config.agent_capability" in config_source
 
 
 def test_tool_form_uses_structured_executor_config_editors():

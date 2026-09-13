@@ -16,6 +16,8 @@ from app.models.users import User
 from app.models.workflows import WorkflowDefinition, WorkflowRun
 from app.schemas.workflows import WorkflowRunCreate
 from app.services.project_access import load_project_membership, require_project_role
+from app.services.project_migration import ensure_migration_project_for_owner
+from app.services.standard_input_slots import tool_accepts_standard_input_bindings
 from app.tasks.cancellation import cancel_platform_task
 from app.services.workflow_artifacts import (
     annotate_semantic_output_files,
@@ -271,10 +273,18 @@ async def create_workflow_run(
             "Workflow run is missing required inputs: " + ", ".join(missing_inputs)
         )
 
+    project_id = workflow.project_id
+    if project_id is None and await _workflow_requires_standard_binding_project(
+        db,
+        materialized_definition,
+    ):
+        project = await ensure_migration_project_for_owner(db, current_user)
+        project_id = str(project.id)
+
     run = WorkflowRun(
         owner_id=current_user.id,
         workflow_definition_id=workflow.id,
-        project_id=workflow.project_id,
+        project_id=project_id,
         name=data.name or workflow.name,
         status="pending",
         definition=materialized_definition,
@@ -292,6 +302,20 @@ async def create_workflow_run(
         schedule_task_fn=schedule_task_fn,
     )
     return run
+
+
+async def _workflow_requires_standard_binding_project(
+    db: AsyncSession,
+    definition: dict[str, Any],
+) -> bool:
+    for node in workflow_nodes(definition):
+        if not is_tool_node(node):
+            continue
+        tool = await load_available_workflow_tool(db, node=node)
+        config = getattr(getattr(tool, "current_version", None), "config", None)
+        if tool_accepts_standard_input_bindings(config if isinstance(config, dict) else {}):
+            return True
+    return False
 
 
 async def sync_workflow_run(
@@ -377,6 +401,11 @@ async def sync_workflow_run(
             run.error_message = state["error_message"]
             run.finished_at = utcnow()
             continue
+
+        if run.project_id is None:
+            task_project_id = _task_project_id(task)
+            if task_project_id:
+                run.project_id = task_project_id
 
         file_ids = [str(file_id) for file_id in (task.outputs.file_ids if task.outputs else [])]
         output_files = await load_task_output_files(db, file_ids)
@@ -474,6 +503,12 @@ def _has_required_declared_standard_outputs(declared_outputs: list[dict[str, Any
         and declaration.get("required", True) is not False
         for declaration in declared_outputs
     )
+
+
+def _task_project_id(task: Task) -> str | None:
+    data = task.extra_data if isinstance(task.extra_data, dict) else {}
+    project_id = data.get("project_id")
+    return str(project_id) if project_id else None
 
 
 async def cancel_workflow_run(

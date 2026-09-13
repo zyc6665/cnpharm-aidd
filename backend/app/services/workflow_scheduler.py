@@ -114,10 +114,26 @@ def _mark_node_skipped(
     node_states: dict[str, Any],
     node_id: str,
     reason: str,
+    *,
+    definition: dict[str, Any] | None = None,
+    force: bool = True,
+    visited: set[str] | None = None,
 ) -> None:
-    """递归标记节点及其下游为 skipped。"""
+    """递归标记不可再到达的节点为 skipped。"""
+    if visited is None:
+        visited = set()
+    if node_id in visited:
+        return
+    visited.add(node_id)
+
     state = dict(node_states.get(node_id) or {})
-    if state.get("status") in {"success", "failure", "skipped", "waiting_task"}:
+    if state.get("status") in {"success", "failure", "skipped", "waiting_task", "running"}:
+        return
+    if not force and definition is not None and not _all_upstream_nodes_skipped(
+        node_states,
+        definition=definition,
+        node_id=node_id,
+    ):
         return
     state.update({
         "status": "skipped",
@@ -125,6 +141,39 @@ def _mark_node_skipped(
         "finished_at": utcnow_iso(),
     })
     node_states[node_id] = state
+
+    if definition is None:
+        return
+    for edge in workflow_edges(definition):
+        if str(edge.get("source") or "") != node_id:
+            continue
+        target = str(edge.get("target") or "")
+        if target:
+            _mark_node_skipped(
+                node_states,
+                target,
+                reason,
+                definition=definition,
+                force=False,
+                visited=visited,
+            )
+
+
+def _all_upstream_nodes_skipped(
+    node_states: dict[str, Any],
+    *,
+    definition: dict[str, Any],
+    node_id: str,
+) -> bool:
+    upstream_ids = [
+        str(edge.get("source") or "")
+        for edge in workflow_edges(definition)
+        if str(edge.get("target") or "") == node_id
+    ]
+    return bool(upstream_ids) and all(
+        (node_states.get(upstream_id) or {}).get("status") == "skipped"
+        for upstream_id in upstream_ids
+    )
 
 
 async def validate_input_files(
@@ -403,9 +452,10 @@ async def schedule_condition_node(
         return False
 
     active_branch = "true" if result else "false"
+    definition = dict(run.definition or {})
 
     # 标记未激活分支的下游节点为 skipped
-    for edge in workflow_edges(dict(run.definition or {})):
+    for edge in workflow_edges(definition):
         if str(edge.get("source") or "") != node_id:
             continue
         branch = edge.get("branch")
@@ -413,7 +463,12 @@ async def schedule_condition_node(
             continue
         target = str(edge.get("target") or "")
         if branch != active_branch:
-            _mark_node_skipped(node_states, target, f"Branch '{branch}' not active")
+            _mark_node_skipped(
+                node_states,
+                target,
+                f"Branch '{branch}' not active",
+                definition=definition,
+            )
 
     state = dict(node_states.get(node_id) or {})
     state.update({

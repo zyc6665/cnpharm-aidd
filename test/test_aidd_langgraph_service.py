@@ -187,10 +187,10 @@ async def test_build_plan_with_langgraph_normalizes_agent_input_with_semantic_su
             input_file=input_file,
             requested_outputs=["pocket_pdb"],
             params={},
-    )
+        )
 
     assert input_type == "protein_pdb"
-    assert plan.steps[0].inputs["protein_structure@1"] == "agent_input"
+    assert plan.steps[0].inputs == {"protein": "agent_input"}
 
 
 @pytest.mark.asyncio

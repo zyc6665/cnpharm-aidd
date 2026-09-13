@@ -86,14 +86,16 @@ async def prepare_run(db: AsyncSession, *, input: RunPreparationInput) -> Prepar
     accepts_standard_bindings = tool_accepts_standard_input_bindings(
         _tool_config(input.tool_version)
     )
+    input_bindings_to_validate = _input_bindings_requiring_validation(
+        input_bindings,
+        artifact_inputs_by_name,
+        accepts_standard_bindings=accepts_standard_bindings,
+        surface=input.context.surface,
+    )
     await _validate_standard_input_bindings(
         db,
         project_id=project_id,
-        input_bindings=_input_bindings_requiring_validation(
-            input_bindings,
-            artifact_inputs_by_name,
-            accepts_standard_bindings=accepts_standard_bindings,
-        ),
+        input_bindings=input_bindings_to_validate,
     )
     binding_decisions: dict[str, dict[str, Any]] = {}
     ready = True
@@ -372,7 +374,11 @@ def _input_bindings_requiring_validation(
     artifact_inputs_by_name: dict[str, dict[str, Any]],
     *,
     accepts_standard_bindings: bool,
+    surface: RunSurface,
 ) -> dict[str, str]:
+    if surface == "tool_detail":
+        return input_bindings
+
     if accepts_standard_bindings:
         return input_bindings
 

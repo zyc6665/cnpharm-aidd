@@ -33,6 +33,7 @@ from app.models import system_settings as _system_settings  # noqa: F401,E402
 from app.models import tasks as _task_models  # noqa: F401,E402
 from app.models import tools as _tools_models  # noqa: F401,E402
 from app.models import users as _users_models  # noqa: F401,E402
+from app.models.artifacts import Artifact, ArtifactVersion, ArtifactVersionFile  # noqa: E402
 from app.models.files import File as FileModel, FileSourceType  # noqa: E402
 from app.models.projects import Organization, Project, ProjectMember  # noqa: E402
 from app.models.tasks import Task, TaskInput, TaskOutput, TaskStatus  # noqa: E402
@@ -299,6 +300,65 @@ async def create_protein_file_for_user(
     await db_session.commit()
     await db_session.refresh(file_record)
     return file_record
+
+
+async def create_binding_pocket_version(
+    db_session: AsyncSession,
+    owner: User,
+    *,
+    project_id: str,
+    files: list[FileModel],
+) -> ArtifactVersion:
+    artifact = Artifact(
+        project_id=project_id,
+        created_by=owner.id,
+        artifact_type="binding_pocket",
+        semantic_type="binding_pocket",
+        standard_type="binding_pocket",
+        standard_version=1,
+        name="binding_pocket@1",
+    )
+    db_session.add(artifact)
+    await db_session.flush()
+
+    version = ArtifactVersion(
+        artifact_id=artifact.id,
+        created_by=owner.id,
+        version=1,
+        filename="binding_pocket.manifest.json",
+        content_type="application/json",
+        size_bytes=2,
+        sha256="0" * 64,
+        storage_key="test/binding_pocket.manifest.json",
+        status="available",
+        validation_status="passed",
+        validation_errors=[],
+        manifest_json={"type": "binding_pocket@1"},
+        summary_json={},
+        metrics_json={},
+    )
+    db_session.add(version)
+    await db_session.flush()
+
+    for index, (role, file_record) in enumerate(
+        zip(
+            ("residue_pocket_pdb", "atom_pocket_pdb", "pocket_metadata_json"),
+            files,
+            strict=False,
+        )
+    ):
+        db_session.add(
+            ArtifactVersionFile(
+                artifact_version_id=version.id,
+                role=role,
+                file_id=file_record.id,
+                is_primary=index == 0,
+                sort_order=index,
+            )
+        )
+    artifact.latest_version_id = version.id
+    await db_session.flush()
+    return version
 
 
 def template_definition(tool: Tool) -> dict:
@@ -1109,6 +1169,7 @@ async def test_sync_workflow_run_schedules_downstream_standard_artifact_slots(
         input_files={"protein_structure@1": protein_file.id},
     )
     run = run_response.json()["data"]
+    assert run["project_id"]
     first_state = run["node_states"]["pocket_prediction"]
     assert first_state["input_file_ids"] == [protein_file.id]
 
@@ -1119,6 +1180,7 @@ async def test_sync_workflow_run_schedules_downstream_standard_artifact_slots(
         ("pocket_metadata.json", b"{}"),
     ]:
         file_record = FileModel(
+            project_id=run["project_id"],
             owner_id=owner.id,
             filename=filename,
             content_type="application/json" if filename.endswith(".json") else "chemical/x-pdb",
@@ -1132,10 +1194,17 @@ async def test_sync_workflow_run_schedules_downstream_standard_artifact_slots(
         await db_session.flush()
         output_files.append(file_record)
 
+    pocket_version = await create_binding_pocket_version(
+        db_session,
+        owner,
+        project_id=run["project_id"],
+        files=output_files,
+    )
+
     task = await db_session.get(Task, first_state["task_id"])
     task.status = TaskStatus.SUCCESS.value
     standard_artifacts = {
-        "artifact_version_ids_by_ref": {"pocket": "artifact-version-pocket"},
+        "artifact_version_ids_by_ref": {"pocket": pocket_version.id},
         "file_ids_by_artifact_ref": {
             "pocket": [file_record.id for file_record in output_files]
         },
