@@ -339,26 +339,23 @@
   import { useToolsStore, useTasksStore, useUserStore } from '@/stores'
   import type {
     SchemaProperty,
-    ToolExample,
-    ToolExampleFilePreview,
     ToolSchema
   } from '@/types/models'
   import type { TypedArtifact } from '@/types/artifacts'
   import { uploadFile, convertSdfToPdb } from '@/api/files'
   import { getProjectArtifacts } from '@/api/artifacts'
   import { applyToolExample, getToolExample, previewToolExampleFile } from '@/api/tools'
+  import { useToolDetailExamples } from '@/composables/useToolDetailExamples'
   import { useToolDetailRunForm } from '@/composables/useToolDetailRunForm'
   import { getToolValidationSummary } from '@/utils/tool-validation'
   import {
     buildToolRunTaskPayload,
     formatToolDate as formatDate,
     formatToolMetricCount as formatNumber,
-    flattenExampleParams,
     getToolFileAccept,
     getToolRequestErrorMessage,
     getToolStatusColor as getStatusColor,
     isFileSchemaProperty,
-    resolveExampleFileFormKey,
   } from '@/domain/tools'
   import { taskRunPreparationBlockedMessage } from '@/domain/tasks'
   import {
@@ -381,11 +378,6 @@
   const tool = computed(() => toolsStore.currentTool)
   const standardProjectArtifacts = ref<TypedArtifact[]>([])
   const standardArtifactsLoading = ref(false)
-  const example = ref<ToolExample | null>(null)
-  const applyingExample = ref(false)
-  const previewOpen = ref(false)
-  const previewLoading = ref(false)
-  const preview = ref<ToolExampleFilePreview | null>(null)
   const documentationOpen = ref(false)
 
   function clearFieldValidation(key: string) {
@@ -438,6 +430,36 @@
       onInvalidFile: () => message.warning('请上传 SDF 文件'),
       onSuccess: () => message.success('SDF 已转换为 PDB'),
     },
+  })
+
+  const {
+    example,
+    applyingExample,
+    previewOpen,
+    previewLoading,
+    preview,
+    fetchExample,
+    handleUseExample,
+    handlePreviewExampleFile,
+  } = useToolDetailExamples({
+    tool,
+    isLoggedIn: computed(() => userStore.isLoggedIn),
+    flattenedSchema,
+    formState,
+    fileList,
+    selectedArtifacts,
+    exampleFiles,
+    convertedFiles,
+    api: {
+      getExample: getToolExample,
+      applyExample: applyToolExample,
+      previewFile: previewToolExampleFile,
+    },
+    onRequireLogin: () => {
+      message.warning(t('auth.loginRequired'))
+      router.push('/login')
+    },
+    onExampleLoaded: () => message.success(t('tools.exampleLoaded')),
   })
 
   const toolConfig = computed<Record<string, unknown> | undefined>(() => {
@@ -630,79 +652,6 @@
 
   const clearExampleFile = (key: string) => {
     clearExampleFileState(key)
-  }
-
-
-  const fetchExample = async (toolId: string) => {
-    try {
-      const res = await getToolExample(toolId)
-      example.value = res.data
-    } catch {
-      example.value = null
-    }
-  }
-
-  const applyExampleParams = (params: Record<string, unknown>) => {
-    const schema = flattenedSchema.value
-    if (!schema) {
-      return
-    }
-
-    const flattenedValues = flattenExampleParams(schema, params)
-    Object.entries(flattenedValues).forEach(([key, value]) => {
-      formState[key] = value
-    })
-  }
-
-  const handleUseExample = async () => {
-    if (!tool.value || !example.value) {
-      return
-    }
-
-    if (!userStore.isLoggedIn) {
-      message.warning(t('auth.loginRequired'))
-      router.push('/login')
-      return
-    }
-
-    applyingExample.value = true
-    try {
-      const res = await applyToolExample(tool.value.id)
-      applyExampleParams(res.data.params)
-
-      Object.entries(res.data.files).forEach(([field, file]) => {
-        const formKey = resolveExampleFileFormKey(flattenedSchema.value, field)
-        exampleFiles[formKey] = file
-        fileList[formKey] = []
-        selectedArtifacts[formKey] = undefined
-        convertedFiles[formKey] = undefined
-        formState[formKey] = file.id
-      })
-
-      message.success(t('tools.exampleLoaded'))
-    } catch {
-      // 错误已在请求层处理
-    } finally {
-      applyingExample.value = false
-    }
-  }
-
-  const handlePreviewExampleFile = async (field: string) => {
-    if (!tool.value) {
-      return
-    }
-
-    previewOpen.value = true
-    previewLoading.value = true
-    preview.value = null
-    try {
-      const res = await previewToolExampleFile(tool.value.id, field)
-      preview.value = res.data
-    } catch {
-      previewOpen.value = false
-    } finally {
-      previewLoading.value = false
-    }
   }
 
   const handleSubmit = async () => {
