@@ -12,7 +12,6 @@ from app.common.time import utcnow, utcnow_iso
 from app.common.exceptions import ForbiddenException, NotFoundException, ValidationException
 from app.models.files import File as FileModel
 from app.models.tasks import Task, TaskStatus
-from app.models.tools import Tool, ToolProviderType, ToolStatus
 from app.models.users import User
 from app.models.workflows import WorkflowRun
 from app.schemas.tasks import TaskCreate
@@ -23,6 +22,7 @@ from app.services.run_preparation import prepare_workflow_node_run
 from app.services.semantic_types import normalize_semantic_type
 from app.services.workflow_skip import mark_unreachable_nodes_skipped
 from app.services.workflow_task_lookup import find_existing_workflow_node_task
+from app.services.workflow_tool_lookup import load_available_workflow_tool
 from app.services.workflow_validation import (
     is_condition_node,
     is_loop_node,
@@ -120,48 +120,6 @@ def dependencies_satisfied(
             return False
 
     return True
-
-
-async def load_available_workflow_tool(
-    db: AsyncSession,
-    *,
-    node: dict[str, Any],
-) -> Tool:
-    tool_id = node.get("tool_id")
-    tool_slug = node.get("tool_slug")
-    query = select(Tool).options(selectinload(Tool.current_version))
-    if tool_id:
-        query = query.where(Tool.id == str(tool_id))
-    elif tool_slug:
-        query = query.where(Tool.slug == str(tool_slug))
-    else:
-        raise ValidationException("Workflow tool node is missing tool_id or tool_slug")
-
-    result = await db.execute(query)
-    tool = result.scalar_one_or_none()
-    if not tool:
-        raise ValidationException(f"Workflow tool is not configured: {tool_slug or tool_id}")
-    if tool.status != ToolStatus.PUBLISHED.value or (
-        tool.is_public is not True and not _is_private_platform_builtin(tool)
-    ):
-        raise ValidationException(f"Workflow tool is unavailable: {tool.slug}")
-    if (
-        not tool.current_version
-        or tool.current_version.is_active is not True
-        or tool.current_version.deprecated is True
-    ):
-        raise ValidationException(f"Workflow tool has no active version: {tool.slug}")
-    return tool
-
-
-def _is_private_platform_builtin(tool: Tool) -> bool:
-    current_version = tool.current_version
-    config = current_version.config if current_version and current_version.config else {}
-    return (
-        tool.provider_type == ToolProviderType.PLATFORM.value
-        and isinstance(config, dict)
-        and config.get("type") == "builtin"
-    )
 
 
 async def schedule_workflow_node(

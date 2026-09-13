@@ -33,9 +33,9 @@ from app.models.artifacts import Artifact as ArtifactModel  # noqa: E402
 from app.models.artifacts import ArtifactVersion as ArtifactVersionModel  # noqa: E402
 from app.models.artifacts import ArtifactVersionFile as ArtifactVersionFileModel  # noqa: E402
 from app.models.tools import Tool, ToolProviderType, ToolStatus, ToolVersion  # noqa: E402
+from app.services.workflow_tool_lookup import load_available_workflow_tool  # noqa: E402
 from app.models.users import User, UserRole, UserStatus  # noqa: E402
 from app.services.workflow_scheduler import (  # noqa: E402
-    load_available_workflow_tool,
     schedule_loop_node,
     schedule_map_node,
     schedule_workflow_node,
