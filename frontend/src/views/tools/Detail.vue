@@ -132,34 +132,13 @@
         </div>
         <a-empty v-else :description="t('common.noData')" />
     </div>
-    <a-modal
-      v-model:open="previewOpen"
-      :title="preview?.filename || t('tools.exampleFilePreview')"
-      :footer="null"
-      width="760px"
-    >
-      <SkeletonCard v-if="previewLoading" />
-        <div v-else-if="preview" class="example-preview">
-          <a-alert
-            v-if="preview.truncated"
-            type="info"
-            show-icon
-            :message="t('tools.previewTruncated')"
-            style="margin-bottom: 12px"
-          />
-          <pre v-if="preview.previewable" class="example-preview-content">{{ preview.content }}</pre>
-          <a-empty v-else :description="t('tools.previewUnavailable')" />
-        </div>
-    </a-modal>
-    <a-modal
-      v-model:open="documentationOpen"
-      :title="t('tools.introduction')"
-      :footer="null"
-      width="860px"
-      class="tool-documentation-modal"
-    >
-      <div class="tool-documentation-content" v-html="documentationHtml"></div>
-    </a-modal>
+    <ToolDetailModals
+      v-model:preview-open="previewOpen"
+      v-model:documentation-open="documentationOpen"
+      :preview-loading="previewLoading"
+      :preview="preview"
+      :documentation-html="documentationHtml"
+    />
   </div>
 </template>
 
@@ -177,11 +156,11 @@
   } from '@ant-design/icons-vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import ToolFileFieldExtras from '@/components/tools/ToolFileFieldExtras.vue'
+  import ToolDetailModals from '@/components/tools/ToolDetailModals.vue'
   import ToolDetailSidebar from '@/components/tools/ToolDetailSidebar.vue'
   import ToolRunInputForm from '@/components/tools/ToolRunInputForm.vue'
   import ToolExamplePanel from '@/components/tools/ToolExamplePanel.vue'
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
-  import SkeletonCard from '@/components/common/SkeletonCard.vue'
   import { useToolsStore, useTasksStore, useUserStore } from '@/stores'
   import type {
     SchemaProperty,
@@ -499,119 +478,8 @@
       margin-bottom: 0;
     }
 
-    .code-input {
-      font-family: monospace;
-    }
-
-    .file-item {
-      display: flex;
-      align-items: center;
-      gap: @spacing-xs;
-    }
-
     .tool-form-actions {
       margin-bottom: 0;
-    }
-  }
-
-  .example-preview-content {
-    max-height: 520px;
-    overflow: auto;
-    margin: 0;
-    padding: @spacing-md;
-    border: 1px solid @border-color;
-    border-radius: @border-radius-base;
-    background: #0f172a;
-    color: #e5e7eb;
-    font-family: monospace;
-    font-size: 12px;
-    line-height: 1.55;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-
-  .tool-documentation-content {
-    max-height: 68vh;
-    overflow: auto;
-    color: @text-color-light-secondary;
-    line-height: @line-height-loose;
-
-    :deep(h1),
-    :deep(h2),
-    :deep(h3) {
-      color: @text-color-light-primary;
-      font-weight: @font-weight-semibold;
-      margin: @spacing-lg 0 @spacing-sm;
-    }
-
-    :deep(h1) {
-      margin-top: 0;
-      font-size: 24px;
-    }
-
-    :deep(h2) {
-      font-size: @font-size-lg;
-    }
-
-    :deep(h3) {
-      font-size: @font-size-md;
-    }
-
-    :deep(p),
-    :deep(ul),
-    :deep(table),
-    :deep(pre) {
-      margin-bottom: @spacing-md;
-    }
-
-    :deep(ul) {
-      padding-left: @spacing-xl;
-    }
-
-    :deep(table) {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: @font-size-sm;
-    }
-
-    :deep(th),
-    :deep(td) {
-      padding: 8px 10px;
-      border: 1px solid @border-color;
-      vertical-align: top;
-    }
-
-    :deep(th) {
-      background: @bg-hover;
-      color: @text-primary;
-      font-weight: @font-weight-semibold;
-    }
-
-    :deep(code) {
-      padding: 2px 5px;
-      border-radius: 4px;
-      background: @bg-hover;
-      color: @text-secondary;
-      font-family: monospace;
-      font-size: 12px;
-    }
-
-    :deep(pre) {
-      padding: @spacing-md;
-      border-radius: @border-radius-base;
-      background: @bg-body;
-      border: 1px solid @border-color;
-      overflow: auto;
-
-      code {
-        padding: 0;
-        background: transparent;
-        color: @text-primary;
-      }
-    }
-
-    :deep(a) {
-      color: @accent-color;
     }
   }
 
