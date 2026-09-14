@@ -237,6 +237,12 @@ export function buildStandardInputBindingsFromFileFields(input: {
   return { inputBindings, boundFieldKeys: Array.from(boundFieldKeys) }
 }
 
+export function hasStandardInputFileFieldBindings(
+  fileFieldBindings: Record<string, string | null | undefined>,
+): boolean {
+  return Object.values(fileFieldBindings).some(value => Boolean(value?.trim()))
+}
+
 export function buildStandardInputUploadsFromFileFields(input: {
   slots: readonly StandardArtifactInputSlot[]
   fileFieldBindings: Record<string, string>

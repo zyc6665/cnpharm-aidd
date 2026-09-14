@@ -7,6 +7,7 @@ import {
   buildStandardInputUploadsFromFileFields,
   filterCompatibleProjectArtifacts,
   getStandardInputAccept,
+  hasStandardInputFileFieldBindings,
   missingRequiredStandardInputSlots,
   resolveStandardInputFileFieldBindings,
   resolveToolPackageParameterSchema,
@@ -104,6 +105,12 @@ function makeArtifactFile(overrides: Partial<ArtifactFile> = {}): ArtifactFile {
 }
 
 describe('standard artifact tool inputs', () => {
+  it('detects whether concrete file field bindings are present', () => {
+    expect(hasStandardInputFileFieldBindings({ protein: 'protein_pdb' })).toBe(true)
+    expect(hasStandardInputFileFieldBindings({ protein: '' })).toBe(false)
+    expect(hasStandardInputFileFieldBindings({})).toBe(false)
+  })
+
   it('resolves standard input slots from the tool contract first', () => {
     const tool = makeTool({ contract: makeToolContract() } as Partial<Tool>)
 

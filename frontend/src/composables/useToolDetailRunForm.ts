@@ -7,6 +7,7 @@ import {
   buildStandardInputBindingsFromFileFields,
   buildToolFormInitialState,
   getSdfConversionStatusText,
+  hasStandardInputFileFieldBindings,
   missingRequiredStandardInputSlots,
   resolveToolRunInputSurface,
   shouldShowSdfToPdbConverter,
@@ -45,9 +46,12 @@ export function useToolDetailRunForm(options: ToolDetailRunFormOptions) {
   const standardInputFileFieldBindings = computed(
     () => inputSurface.value.standardInputFileFieldBindings
   )
+  const usesConcreteStandardInputFields = computed(() => {
+    return hasStandardInputFileFieldBindings(standardInputFileFieldBindings.value)
+  })
   const showStandardArtifactInputs = computed(() => inputSurface.value.showStandardArtifactInputs)
   const concreteStandardInputBindingProjection = computed(() => {
-    if (Object.keys(standardInputFileFieldBindings.value).length === 0) {
+    if (!usesConcreteStandardInputFields.value) {
       return { inputBindings: {}, boundFieldKeys: [] }
     }
 
@@ -63,7 +67,7 @@ export function useToolDetailRunForm(options: ToolDetailRunFormOptions) {
     )
   })
   const standardInputBindings = computed(() => {
-    if (Object.keys(standardInputFileFieldBindings.value).length > 0) {
+    if (usesConcreteStandardInputFields.value) {
       return concreteStandardInputBindingProjection.value.inputBindings
     }
 
@@ -296,7 +300,7 @@ export function useToolDetailRunForm(options: ToolDetailRunFormOptions) {
   }
 
   function hasStandardInputUploadSelection(slotName: string) {
-    if (Object.keys(standardInputFileFieldBindings.value).length > 0) {
+    if (usesConcreteStandardInputFields.value) {
       return hasConcreteStandardInputUploadSelection(slotName)
     }
 

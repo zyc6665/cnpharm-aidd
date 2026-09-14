@@ -13,6 +13,7 @@ import {
   buildStandardInputBindings,
   buildStandardInputBindingsFromFileFields,
   buildStandardInputUploadsFromFileFields,
+  hasStandardInputFileFieldBindings,
   type StandardArtifactInputSlot,
 } from './standard-artifact-inputs'
 import { buildStandardRunTaskExtras } from './standard-artifact-run-context'
@@ -132,10 +133,13 @@ export async function buildToolRunTaskPayload(
     ...concreteBindingProjection.boundFieldKeys,
     ...concreteUploadProjection.boundFieldKeys,
   ]
-  const inputBindings = Object.keys(options.standardInputFileFieldBindings).length > 0
+  const usesConcreteStandardInputFields = hasStandardInputFileFieldBindings(
+    options.standardInputFileFieldBindings,
+  )
+  const inputBindings = usesConcreteStandardInputFields
     ? concreteBindingProjection.inputBindings
     : buildStandardInputBindings(options.selectedStandardArtifacts)
-  const standardInputUploads = Object.keys(options.standardInputFileFieldBindings).length > 0
+  const standardInputUploads = usesConcreteStandardInputFields
     ? concreteUploadProjection.standardInputUploads
     : await collectStandardInputUploads(options)
   const payload = buildTaskSubmissionPayload({
