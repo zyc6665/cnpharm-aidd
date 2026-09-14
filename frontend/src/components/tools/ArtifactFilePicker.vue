@@ -77,13 +77,11 @@
   import ArtifactPickerSelectionSummary from './ArtifactPickerSelectionSummary.vue'
   import {
     applyArtifactPickerExternalSelectionPath,
+    buildArtifactPickerStepOptions,
     buildArtifactPickerViewModel,
-    formatArtifactPickerArtifactMeta,
-    formatArtifactPickerTaskMeta,
     resolveArtifactPickerSelectionState,
     type ArtifactPickerSelectionState,
-    type ArtifactPickerStep,
-    type ArtifactPickerTaskNode
+    type ArtifactPickerStep
   } from '@/domain/tools'
   import { useArtifactsStore, useToolsStore } from '@/stores'
   import type { ArtifactFile } from '@/types/models'
@@ -122,16 +120,6 @@
   }>()
 
   const { t } = useI18n()
-
-  interface ArtifactPickerStepPanelOption {
-    id: string
-    title: string
-    meta: string
-    rightText?: string | number
-    rightColor?: string
-    selected?: boolean
-    focused?: boolean
-  }
 
   const artifactsStore = useArtifactsStore()
   const toolsStore = useToolsStore()
@@ -178,7 +166,9 @@
     groupMeta: t('tools.artifactGroupMeta'),
     toolMeta: t('tools.artifactToolMeta'),
     noArtifacts: t('tools.noArtifacts'),
-    noCompatibleArtifacts: t('tools.noCompatibleArtifacts')
+    noCompatibleArtifacts: t('tools.noCompatibleArtifacts'),
+    artifactSelectedTag: t('tools.artifactSelectedTag'),
+    artifactFocusTag: t('tools.artifactFocusTag')
   }))
 
   const pickerViewModel = computed(() => buildArtifactPickerViewModel({
@@ -205,51 +195,21 @@
   const summaryTitle = computed(() => pickerViewModel.value.summary.title)
   const summaryMeta = computed(() => pickerViewModel.value.summary.meta)
 
-  const currentStepOptions = computed<ArtifactPickerStepPanelOption[]>(() => {
-    if (activeStep.value === 'group') {
-      return artifactGroupNodes.value.map((groupNode) => ({
-        id: groupNode.groupId,
-        title: groupNode.isUngrouped
-          ? t('workflow.artifacts.ungroupedGroup')
-          : groupNode.groupName || '-',
-        meta: t('tools.artifactGroupMeta'),
-        rightText: groupNode.tools.length,
-        selected: selectedGroupId.value === groupNode.groupId
-      }))
-    }
-
-    if (activeStep.value === 'tool') {
-      return selectedGroupTools.value.map((toolNode) => ({
-        id: toolNode.toolSlug,
-        title: toolNode.toolName,
-        meta: t('tools.artifactToolMeta'),
-        rightText: toolNode.tasks.length,
-        selected: selectedToolSlug.value === toolNode.toolSlug
-      }))
-    }
-
-    if (activeStep.value === 'task') {
-      return selectedToolTasks.value.map((taskNode) => ({
-        id: taskNode.taskId,
-        title: `#${taskNode.taskId}`,
-        meta: formatTaskMeta(taskNode),
-        rightText: t('workflow.artifacts.taskCount', {
-          count: taskNode.artifacts.length
-        }),
-        selected: selectedTaskId.value === taskNode.taskId
-      }))
-    }
-
-    return selectedTaskArtifacts.value.map((artifact) => ({
-      id: artifact.id,
-      title: artifact.filename,
-      meta: formatArtifactMeta(artifact),
-      rightText: artifactOptionRightText(artifact),
-      rightColor: artifactOptionRightColor(artifact),
-      selected: isSelectedArtifact(artifact),
-      focused: isFocusedArtifact(artifact)
-    }))
-  })
+  const currentStepOptions = computed(() => buildArtifactPickerStepOptions({
+    activeStep: activeStep.value,
+    groupNodes: artifactGroupNodes.value,
+    selectedGroupTools: selectedGroupTools.value,
+    selectedToolNode: selectedToolNode.value,
+    selectedToolTasks: selectedToolTasks.value,
+    selectedTaskArtifacts: selectedTaskArtifacts.value,
+    selectedGroupId: selectedGroupId.value,
+    selectedToolSlug: selectedToolSlug.value,
+    selectedTaskId: selectedTaskId.value,
+    selectedArtifact: props.selectedArtifact,
+    focusedArtifactId: focusedArtifactId.value,
+    labels: pickerLabels.value,
+    formatTaskArtifactCount: (count) => t('workflow.artifacts.taskCount', { count })
+  }))
 
   function syncSourceMode() {
     if (!props.allowArtifacts) {
@@ -405,38 +365,6 @@
   function clearArtifactSelection() {
     clearSelectedArtifactValue()
     activeStep.value = selectedTaskId.value ? 'artifact' : 'task'
-  }
-
-  function formatArtifactMeta(artifact: ArtifactFile): string {
-    return formatArtifactPickerArtifactMeta(artifact)
-  }
-
-  function formatTaskMeta(taskNode: ArtifactPickerTaskNode): string {
-    return formatArtifactPickerTaskMeta(taskNode, selectedToolNode.value?.toolName)
-  }
-
-  function isSelectedArtifact(artifact: ArtifactFile): boolean {
-    return props.selectedArtifact?.id === artifact.id
-  }
-
-  function isFocusedArtifact(artifact: ArtifactFile): boolean {
-    return focusedArtifactId.value === artifact.id && !isSelectedArtifact(artifact)
-  }
-
-  function artifactOptionRightText(artifact: ArtifactFile): string | undefined {
-    if (isSelectedArtifact(artifact)) {
-      return t('tools.artifactSelectedTag')
-    }
-
-    return focusedArtifactId.value === artifact.id ? t('tools.artifactFocusTag') : undefined
-  }
-
-  function artifactOptionRightColor(artifact: ArtifactFile): string | undefined {
-    if (isSelectedArtifact(artifact)) {
-      return 'blue'
-    }
-
-    return focusedArtifactId.value === artifact.id ? 'gold' : undefined
   }
 
   function currentSelectionState(): ArtifactPickerSelectionState {

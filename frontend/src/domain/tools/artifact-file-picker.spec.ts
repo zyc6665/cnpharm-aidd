@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { ArtifactFile } from '@/types/models'
 import {
   applyArtifactPickerExternalSelectionPath,
+  buildArtifactPickerStepOptions,
   buildArtifactPickerViewModel,
   findArtifactPickerLocation,
   formatArtifactPickerArtifactMeta,
@@ -28,6 +29,8 @@ const labels = {
   toolMeta: 'Tool meta',
   noArtifacts: 'No artifacts',
   noCompatibleArtifacts: 'No compatible artifacts',
+  artifactSelectedTag: 'Selected',
+  artifactFocusTag: 'Focused',
 }
 
 function artifact(overrides: Partial<ArtifactFile> = {}): ArtifactFile {
@@ -144,6 +147,50 @@ describe('artifact file picker rules', () => {
       title: 'picked.sdf',
     })
     expect(viewModel.summary.meta).toContain('Docking Tool')
+  })
+
+  it('builds panel options for the active picker step', () => {
+    const selectedArtifact = artifact({
+      id: 'artifact-2',
+      filename: 'picked.pdb',
+    })
+    const taskNode = {
+      ...groups[0]!.tools[0]!.tasks[0]!,
+      artifacts: [artifact(), selectedArtifact],
+    }
+
+    const options = buildArtifactPickerStepOptions({
+      activeStep: 'artifact',
+      groupNodes: groups,
+      selectedGroupTools: groups[0]!.tools,
+      selectedToolNode: groups[0]!.tools[0]!,
+      selectedToolTasks: [taskNode],
+      selectedTaskArtifacts: taskNode.artifacts,
+      selectedGroupId: 'group-1',
+      selectedToolSlug: 'docking-tool',
+      selectedTaskId: 'task-1',
+      selectedArtifact,
+      focusedArtifactId: 'artifact-1',
+      labels,
+      formatTaskArtifactCount: (count) => `${count} outputs`,
+    })
+
+    expect(options).toEqual([
+      expect.objectContaining({
+        id: 'artifact-1',
+        title: 'result.sdf',
+        rightText: 'Focused',
+        rightColor: 'gold',
+        focused: true,
+      }),
+      expect.objectContaining({
+        id: 'artifact-2',
+        title: 'picked.pdb',
+        rightText: 'Selected',
+        rightColor: 'blue',
+        selected: true,
+      }),
+    ])
   })
 
   it('keeps pending summary anchored to the deepest selected level', () => {
