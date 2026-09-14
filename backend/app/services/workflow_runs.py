@@ -35,6 +35,7 @@ from app.services.workflow_loop_scheduler import reconcile_loop_body
 from app.services.workflow_map_scheduler import reconcile_map_sub_tasks
 from app.services.workflow_node_states import initial_node_states
 from app.services.workflow_run_access import ensure_run_operation_access
+from app.services.workflow_run_failures import mark_workflow_node_failed
 from app.services.workflow_run_materialization import (
     materialize_workflow_run_definition,
     workflow_requires_standard_binding_project,
@@ -165,13 +166,13 @@ async def sync_workflow_run(
 
         task_id = state.get("task_id")
         if not task_id:
-            state["status"] = "failure"
-            state["error_message"] = "Workflow node is waiting without a task id"
-            state["finished_at"] = utcnow_iso()
-            node_states[node_id] = state
-            run.status = "failure"
-            run.error_message = state["error_message"]
-            run.finished_at = utcnow()
+            mark_workflow_node_failed(
+                run,
+                node_states=node_states,
+                node_id=node_id,
+                state=state,
+                error_message="Workflow node is waiting without a task id",
+            )
             continue
 
         task_result = await db.execute(
@@ -181,26 +182,26 @@ async def sync_workflow_run(
         )
         task = task_result.scalar_one_or_none()
         if not task:
-            state["status"] = "failure"
-            state["error_message"] = "Workflow node task not found"
-            state["finished_at"] = utcnow_iso()
-            node_states[node_id] = state
-            run.status = "failure"
-            run.error_message = state["error_message"]
-            run.finished_at = utcnow()
+            mark_workflow_node_failed(
+                run,
+                node_states=node_states,
+                node_id=node_id,
+                state=state,
+                error_message="Workflow node task not found",
+            )
             continue
 
         if task.status in {TaskStatus.PENDING.value, TaskStatus.RUNNING.value}:
             continue
 
         if task.status in {TaskStatus.FAILURE.value, TaskStatus.CANCELED.value}:
-            state["status"] = "failure"
-            state["error_message"] = task.error_message or "Workflow node task failed"
-            state["finished_at"] = utcnow_iso()
-            node_states[node_id] = state
-            run.status = "failure"
-            run.error_message = state["error_message"]
-            run.finished_at = utcnow()
+            mark_workflow_node_failed(
+                run,
+                node_states=node_states,
+                node_id=node_id,
+                state=state,
+                error_message=task.error_message or "Workflow node task failed",
+            )
             continue
 
         if run.project_id is None:
@@ -235,27 +236,27 @@ async def sync_workflow_run(
                 capability=capability,
                 semantic_outputs=semantic_outputs,
             )
-            state["status"] = "failure"
-            state["missing_outputs"] = missing_outputs
-            state["error_message"] = format_missing_required_outputs_error(missing_outputs)
-            state["finished_at"] = utcnow_iso()
-            node_states[node_id] = state
-            run.status = "failure"
-            run.error_message = state["error_message"]
-            run.finished_at = utcnow()
+            mark_workflow_node_failed(
+                run,
+                node_states=node_states,
+                node_id=node_id,
+                state=state,
+                error_message=format_missing_required_outputs_error(missing_outputs),
+                missing_outputs=missing_outputs,
+            )
             continue
 
         if missing_artifacts:
-            state["status"] = "failure"
-            state["missing_outputs"] = missing_artifacts
-            state["error_message"] = format_missing_required_standard_artifacts_error(
-                missing_artifacts
+            mark_workflow_node_failed(
+                run,
+                node_states=node_states,
+                node_id=node_id,
+                state=state,
+                error_message=format_missing_required_standard_artifacts_error(
+                    missing_artifacts
+                ),
+                missing_outputs=missing_artifacts,
             )
-            state["finished_at"] = utcnow_iso()
-            node_states[node_id] = state
-            run.status = "failure"
-            run.error_message = state["error_message"]
-            run.finished_at = utcnow()
             continue
 
         state["status"] = "success"
