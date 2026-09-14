@@ -1,6 +1,7 @@
 export * from './agent-capability'
 export * from './artifact-file-picker'
 export * from './artifact-picker-options'
+export * from './artifact-picker-selection-state'
 export * from './artifact-selection'
 export * from './detail-display'
 export * from './detail-file-inputs'
