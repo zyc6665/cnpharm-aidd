@@ -29,57 +29,13 @@
           <div class="tool-detail">
             <!-- 左侧：工具信息 + 参数表单 -->
             <div class="tool-main">
-              <!-- 工具信息卡片 -->
-              <div class="tool-info tool-overview card">
-              <div class="tool-header">
-                <div class="tool-icon">
-                  <span v-if="tool.icon">{{ tool.icon }}</span>
-                  <ToolOutlined v-else />
+              <ToolDetailOverview :tool="tool" />
+
+              <!-- 参数表单 -->
+              <div class="tool-form card">
+                <div class="section-header">
+                  <h2 class="section-title">{{ t('tools.parameters') }}</h2>
                 </div>
-                <div class="tool-meta">
-                  <h2 class="overview-title">{{ t('tools.toolInfo') }}</h2>
-                  <div class="tool-tags">
-                    <a-tag v-if="tool.category" color="gold">{{ tool.category }}</a-tag>
-                    <a-tag v-for="tag in tool.tags" :key="tag.id" :color="tag.color">
-                      {{ tag.name }}
-                    </a-tag>
-                  </div>
-                </div>
-              </div>
-
-              <p class="tool-description">{{ tool.description }}</p>
-
-              <div class="tool-stats">
-                <span class="stat-item">
-                  <PlayCircleOutlined />
-                  {{ t('tools.usageCount') }}: {{ formatNumber(tool.statistics?.usage_count) }}
-                </span>
-                <span class="stat-item">
-                  <EyeOutlined />
-                  {{ t('tools.viewCount') }}: {{ formatNumber(tool.statistics?.view_count) }}
-                </span>
-                <span class="stat-item">
-                  <HeartOutlined />
-                  {{ t('tools.favoriteCount') }}: {{ formatNumber(tool.statistics?.favorite_count) }}
-                </span>
-                <span v-if="tool.current_version" class="stat-item">
-                  <TagOutlined />
-                  {{ t('tools.version') }}: v{{ tool.current_version.version }}
-                </span>
-              </div>
-
-              <!-- 版本更新日志 -->
-              <div v-if="tool.current_version?.changelog" class="tool-changelog">
-                <h3>{{ t('tools.changelog') }}</h3>
-                <p>{{ tool.current_version.changelog }}</p>
-              </div>
-            </div>
-
-            <!-- 参数表单 -->
-            <div class="tool-form card">
-              <div class="section-header">
-                <h2 class="section-title">{{ t('tools.parameters') }}</h2>
-              </div>
 
               <ToolExamplePanel
                 v-if="example"
@@ -193,92 +149,18 @@
             </div>
           </div>
 
-          <!-- 右侧：工具信息 -->
-          <div class="tool-sidebar">
-            <!-- 工具标签 -->
-            <div v-if="tool.tags?.length" class="tags-info card">
-              <h3 class="sidebar-title">
-                <TagOutlined />
-                {{ t('tools.tags') }}
-              </h3>
-              <div class="tags-list">
-                <a-tag v-for="tag in tool.tags" :key="tag.id" :color="tag.color">
-                  {{ tag.name }}
-                </a-tag>
-              </div>
-            </div>
-
-            <!-- 工具状态 -->
-            <div class="status-info card">
-              <h3 class="sidebar-title">
-                <InfoCircleOutlined />
-                {{ t('tools.toolInfo') }}
-              </h3>
-              <div class="info-list">
-                <div class="info-item">
-                  <span class="info-label">{{ t('tools.status') }}:</span>
-                  <a-tag :color="getStatusColor(tool.status)">{{ tool.status }}</a-tag>
-                </div>
-                <div class="info-item validation-info">
-                  <span class="info-label">验证等级:</span>
-                  <a-space size="small" wrap>
-                    <a-tag
-                      v-for="badge in toolValidationSummary.badges"
-                      :key="badge.label"
-                      :color="badge.color"
-                    >
-                      {{ badge.label }}
-                    </a-tag>
-                  </a-space>
-                </div>
-                <div class="info-item">
-                  <span class="info-label">{{ t('common.createdAt') }}:</span>
-                  <span>{{ formatDate(tool.created_at) }}</span>
-                </div>
-                <div v-if="tool.updated_at" class="info-item">
-                  <span class="info-label">{{ t('common.updatedAt') }}:</span>
-                  <span>{{ formatDate(tool.updated_at) }}</span>
-                </div>
-              </div>
-            </div>
-
-            <div v-if="isRemoteToolV1" class="remote-tool-info card">
-              <h3 class="sidebar-title">
-                <InfoCircleOutlined />
-                远程 API
-              </h3>
-              <div class="remote-tool-info-list">
-                <div class="remote-tool-info-item">
-                  <span class="remote-tool-info-label">协议:</span>
-                  <a-tag color="blue">remote_tool_v1</a-tag>
-                </div>
-                <div v-if="remoteToolBaseUrl" class="remote-tool-info-item">
-                  <span class="remote-tool-info-label">服务:</span>
-                  <span class="remote-tool-info-value">{{ remoteToolBaseUrl }}</span>
-                </div>
-                <div v-if="remoteToolManifestHash" class="remote-tool-info-item">
-                  <span class="remote-tool-info-label">manifest_sha256:</span>
-                  <code class="remote-tool-manifest-hash">{{ remoteToolManifestHash }}</code>
-                </div>
-                <div class="remote-tool-info-item">
-                  <span class="remote-tool-info-label">smoke test:</span>
-                  <a-tag :color="remoteToolSmokeStatusColor(remoteToolSmokeStatus)">
-                    {{ remoteToolSmokeStatusText(remoteToolSmokeStatus) }}
-                  </a-tag>
-                </div>
-                <div v-if="remoteToolSmokeTaskId" class="remote-tool-info-item">
-                  <span class="remote-tool-info-label">任务:</span>
-                  <router-link :to="`/tasks/${remoteToolSmokeTaskId}`">
-                    查看 smoke test 任务
-                  </router-link>
-                </div>
-                <div v-if="remoteToolSmokeError" class="remote-tool-info-item">
-                  <span class="remote-tool-info-label">失败原因:</span>
-                  <span class="remote-tool-info-value">{{ remoteToolSmokeError }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
+          <ToolDetailSidebar
+            :tool="tool"
+            :validation-badges="toolValidationSummary.badges"
+            :is-remote-tool-v1="isRemoteToolV1"
+            :remote-tool-base-url="remoteToolBaseUrl"
+            :remote-tool-manifest-hash="remoteToolManifestHash"
+            :remote-tool-smoke-status="remoteToolSmokeStatus"
+            :remote-tool-smoke-task-id="remoteToolSmokeTaskId"
+            :remote-tool-smoke-error="remoteToolSmokeError"
+            :remote-tool-smoke-status-color="remoteToolSmokeStatusColor"
+            :remote-tool-smoke-status-text="remoteToolSmokeStatusText"
+          />
         </div>
         </div>
         <a-empty v-else :description="t('common.noData')" />
@@ -321,16 +203,14 @@
   import { message } from 'ant-design-vue'
   import type { FormInstance } from 'ant-design-vue/es/form'
   import {
-    ToolOutlined,
     HeartOutlined,
     HeartFilled,
     PlayCircleOutlined,
-    EyeOutlined,
-    TagOutlined,
     InfoCircleOutlined,
     FileTextOutlined
   } from '@ant-design/icons-vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import ToolDetailSidebar from '@/components/tools/ToolDetailSidebar.vue'
   import ToolRunInputForm from '@/components/tools/ToolRunInputForm.vue'
   import ToolExamplePanel from '@/components/tools/ToolExamplePanel.vue'
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
@@ -351,11 +231,8 @@
   import { useToolDetailStandardArtifacts } from '@/composables/useToolDetailStandardArtifacts'
   import { useToolDetailSubmission } from '@/composables/useToolDetailSubmission'
   import {
-    formatToolDate as formatDate,
-    formatToolMetricCount as formatNumber,
     getToolFileAccept,
     getToolRequestErrorMessage,
-    getToolStatusColor as getStatusColor,
     isFileSchemaProperty,
   } from '@/domain/tools'
 
@@ -640,83 +517,6 @@
     gap: @spacing-xl;
   }
 
-  .tool-info {
-    .tool-header {
-      display: flex;
-      gap: @spacing-md;
-      margin-bottom: @spacing-lg;
-      flex-wrap: wrap;
-    }
-
-    .tool-icon {
-      width: 64px;
-      height: 64px;
-      border-radius: @border-radius-lg;
-      background: @accent-color-light;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 32px;
-      color: @accent-color;
-      flex-shrink: 0;
-    }
-
-    .tool-meta {
-      flex: 1;
-      min-width: 200px;
-    }
-
-    .overview-title {
-      font-size: @font-size-lg;
-      font-weight: @font-weight-semibold;
-      margin-bottom: @spacing-sm;
-    }
-
-    .tool-tags {
-      display: flex;
-      gap: @spacing-xs;
-      flex-wrap: wrap;
-    }
-
-    .tool-description {
-      color: @text-color-light-secondary;
-      font-size: @font-size-md;
-      margin-bottom: @spacing-lg;
-      line-height: @line-height-loose;
-    }
-
-    .tool-stats {
-      display: flex;
-      gap: @spacing-lg;
-      flex-wrap: wrap;
-      margin-bottom: @spacing-lg;
-    }
-
-    .stat-item {
-      display: flex;
-      align-items: center;
-      gap: @spacing-xs;
-      color: @text-color-light-tertiary;
-    }
-
-    .tool-changelog {
-      margin-top: @spacing-lg;
-      padding-top: @spacing-lg;
-      border-top: 1px solid @border-color-light;
-
-      h3 {
-        font-size: @font-size-md;
-        font-weight: @font-weight-semibold;
-        margin-bottom: @spacing-sm;
-      }
-
-      p {
-        color: @text-color-light-secondary;
-        font-size: @font-size-sm;
-      }
-    }
-  }
-
   .tool-form {
     .section-header {
       display: flex;
@@ -908,91 +708,6 @@
     }
   }
 
-  // 右侧栏
-  .tool-sidebar {
-    display: flex;
-    flex-direction: column;
-    gap: @spacing-lg;
-
-    @media (min-width: @screen-lg) {
-      position: sticky;
-      top: @spacing-lg;
-      align-self: start;
-    }
-
-    @media (max-width: @screen-lg) {
-      order: -1;
-    }
-  }
-
-  .sidebar-title {
-    font-size: @font-size-md;
-    font-weight: @font-weight-semibold;
-    margin-bottom: @spacing-md;
-    display: flex;
-    align-items: center;
-    gap: @spacing-xs;
-  }
-
-  .tags-info {
-    .tags-list {
-      display: flex;
-      flex-wrap: wrap;
-      gap: @spacing-xs;
-    }
-  }
-
-  .status-info {
-    .info-list {
-      display: flex;
-      flex-direction: column;
-      gap: @spacing-sm;
-    }
-
-    .info-item {
-      display: flex;
-      align-items: center;
-      gap: @spacing-sm;
-      font-size: @font-size-sm;
-    }
-
-    .info-label {
-      color: @text-color-light-tertiary;
-      min-width: 70px;
-    }
-  }
-
-  .remote-tool-info-list {
-    display: flex;
-    flex-direction: column;
-    gap: @spacing-sm;
-  }
-
-  .remote-tool-info-item {
-    display: flex;
-    align-items: flex-start;
-    gap: @spacing-sm;
-    font-size: @font-size-sm;
-  }
-
-  .remote-tool-info-label {
-    min-width: 96px;
-    color: @text-color-light-tertiary;
-  }
-
-  .remote-tool-info-value,
-  .remote-tool-manifest-hash {
-    flex: 1;
-    min-width: 0;
-    word-break: break-all;
-  }
-
-  .remote-tool-manifest-hash {
-    color: @text-color-light-secondary;
-    font-family: monospace;
-    font-size: 12px;
-  }
-
   :deep(.ant-btn-primary) {
     background: @accent-color;
     border-color: @accent-color;
@@ -1015,10 +730,6 @@
 
     .card {
       padding: @spacing-md;
-    }
-
-    .tool-info .tool-header {
-      align-items: flex-start;
     }
 
     .tool-form-actions {
