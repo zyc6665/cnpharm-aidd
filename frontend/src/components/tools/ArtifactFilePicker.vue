@@ -135,22 +135,13 @@
           </div>
         </div>
 
-        <div class="artifact-selection-summary">
-          <div class="artifact-selection-summary-copy">
-            <span class="artifact-selection-summary-label">{{ summaryLabel }}</span>
-            <strong class="artifact-selection-summary-title">{{ summaryTitle }}</strong>
-            <p class="artifact-selection-summary-meta">{{ summaryMeta }}</p>
-          </div>
-          <a-button
-            v-if="selectedArtifact"
-            type="link"
-            size="small"
-            class="artifact-selection-summary-action"
-            @click="clearArtifactSelection"
-          >
-            {{ t('tools.clearArtifactSelection') }}
-          </a-button>
-        </div>
+        <ArtifactPickerSelectionSummary
+          :label="summaryLabel"
+          :title="summaryTitle"
+          :meta="summaryMeta"
+          :show-clear="Boolean(selectedArtifact)"
+          @clear="clearArtifactSelection"
+        />
       </div>
 
       <a-empty
@@ -168,6 +159,7 @@
   import type { UploadFile } from 'ant-design-vue'
   import { UploadOutlined } from '@ant-design/icons-vue'
   import ArtifactPickerPath from './ArtifactPickerPath.vue'
+  import ArtifactPickerSelectionSummary from './ArtifactPickerSelectionSummary.vue'
   import {
     applyArtifactPickerExternalSelectionPath,
     buildArtifactPickerViewModel,
@@ -676,49 +668,6 @@
     white-space: nowrap;
   }
 
-  .artifact-selection-summary {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: @spacing-sm;
-    padding: @spacing-md;
-    border: 1px dashed #d8e1ee;
-    border-radius: @border-radius-md;
-    background: @accent-color-light;
-  }
-
-  .artifact-selection-summary-copy {
-    display: flex;
-    flex-direction: column;
-    gap: @spacing-xs;
-    min-width: 0;
-  }
-
-  .artifact-selection-summary-label {
-    color: @text-color-light-secondary;
-    font-size: @font-size-xs;
-  }
-
-  .artifact-selection-summary-title {
-    overflow: hidden;
-    color: @text-color-light-primary;
-    font-size: @font-size-sm;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .artifact-selection-summary-meta {
-    margin: 0;
-    color: @text-color-light-secondary;
-    font-size: @font-size-xs;
-    line-height: @line-height-base;
-    overflow-wrap: anywhere;
-  }
-
-  .artifact-selection-summary-action {
-    padding-inline: 0;
-  }
-
   .artifact-empty {
     padding: @spacing-md;
     border: 1px dashed #d8e1ee;
@@ -727,8 +676,7 @@
   }
 
   @media (max-width: @screen-md) {
-    .artifact-step-option,
-    .artifact-selection-summary {
+    .artifact-step-option {
       grid-template-columns: minmax(0, 1fr);
     }
   }
