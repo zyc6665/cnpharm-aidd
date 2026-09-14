@@ -41,65 +41,13 @@
           @select="handlePathSegmentClick"
         />
 
-        <div class="artifact-step-panel">
-          <div class="artifact-step-header">
-            <div class="artifact-step-copy">
-              <span class="artifact-step-kicker">{{ currentStepLabel }}</span>
-              <strong class="artifact-step-title">{{ currentStepTitle }}</strong>
-            </div>
-            <a-tag class="artifact-step-count">{{ currentStepCount }}</a-tag>
-          </div>
-
-          <div v-if="activeStep === 'group'" class="artifact-step-list">
-            <ArtifactPickerStepOption
-              v-for="groupNode in artifactGroupNodes"
-              :key="groupNode.groupId"
-              :title="groupNode.isUngrouped ? t('workflow.artifacts.ungroupedGroup') : groupNode.groupName || '-'"
-              :meta="t('tools.artifactGroupMeta')"
-              :right-text="groupNode.tools.length"
-              :selected="selectedGroupId === groupNode.groupId"
-              @select="handleGroupSelect(groupNode.groupId)"
-            />
-          </div>
-
-          <div v-else-if="activeStep === 'tool'" class="artifact-step-list">
-            <ArtifactPickerStepOption
-              v-for="toolNode in selectedGroupTools"
-              :key="toolNode.toolSlug"
-              :title="toolNode.toolName"
-              :meta="t('tools.artifactToolMeta')"
-              :right-text="toolNode.tasks.length"
-              :selected="selectedToolSlug === toolNode.toolSlug"
-              @select="handleToolSelect(toolNode.toolSlug)"
-            />
-          </div>
-
-          <div v-else-if="activeStep === 'task'" class="artifact-step-list">
-            <ArtifactPickerStepOption
-              v-for="taskNode in selectedToolTasks"
-              :key="taskNode.taskId"
-              :title="`#${taskNode.taskId}`"
-              :meta="formatTaskMeta(taskNode)"
-              :right-text="t('workflow.artifacts.taskCount', { count: taskNode.artifacts.length })"
-              :selected="selectedTaskId === taskNode.taskId"
-              @select="handleTaskSelect(taskNode.taskId)"
-            />
-          </div>
-
-          <div v-else class="artifact-step-list">
-            <ArtifactPickerStepOption
-              v-for="artifact in selectedTaskArtifacts"
-              :key="artifact.id"
-              :title="artifact.filename"
-              :meta="formatArtifactMeta(artifact)"
-              :right-text="artifactOptionRightText(artifact)"
-              :right-color="artifactOptionRightColor(artifact)"
-              :selected="isSelectedArtifact(artifact)"
-              :focused="isFocusedArtifact(artifact)"
-              @select="handleArtifactSelect(artifact.id)"
-            />
-          </div>
-        </div>
+        <ArtifactPickerStepPanel
+          :label="currentStepLabel"
+          :title="currentStepTitle"
+          :count="currentStepCount"
+          :options="currentStepOptions"
+          @select="handleStepOptionSelect"
+        />
 
         <ArtifactPickerSelectionSummary
           :label="summaryLabel"
@@ -125,8 +73,8 @@
   import type { UploadFile } from 'ant-design-vue'
   import { UploadOutlined } from '@ant-design/icons-vue'
   import ArtifactPickerPath from './ArtifactPickerPath.vue'
+  import ArtifactPickerStepPanel from './ArtifactPickerStepPanel.vue'
   import ArtifactPickerSelectionSummary from './ArtifactPickerSelectionSummary.vue'
-  import ArtifactPickerStepOption from './ArtifactPickerStepOption.vue'
   import {
     applyArtifactPickerExternalSelectionPath,
     buildArtifactPickerViewModel,
@@ -174,6 +122,17 @@
   }>()
 
   const { t } = useI18n()
+
+  interface ArtifactPickerStepPanelOption {
+    id: string
+    title: string
+    meta: string
+    rightText?: string | number
+    rightColor?: string
+    selected?: boolean
+    focused?: boolean
+  }
+
   const artifactsStore = useArtifactsStore()
   const toolsStore = useToolsStore()
   const sourceMode = ref<'upload' | 'artifact'>('upload')
@@ -245,6 +204,52 @@
   const summaryLabel = computed(() => pickerViewModel.value.summary.label)
   const summaryTitle = computed(() => pickerViewModel.value.summary.title)
   const summaryMeta = computed(() => pickerViewModel.value.summary.meta)
+
+  const currentStepOptions = computed<ArtifactPickerStepPanelOption[]>(() => {
+    if (activeStep.value === 'group') {
+      return artifactGroupNodes.value.map((groupNode) => ({
+        id: groupNode.groupId,
+        title: groupNode.isUngrouped
+          ? t('workflow.artifacts.ungroupedGroup')
+          : groupNode.groupName || '-',
+        meta: t('tools.artifactGroupMeta'),
+        rightText: groupNode.tools.length,
+        selected: selectedGroupId.value === groupNode.groupId
+      }))
+    }
+
+    if (activeStep.value === 'tool') {
+      return selectedGroupTools.value.map((toolNode) => ({
+        id: toolNode.toolSlug,
+        title: toolNode.toolName,
+        meta: t('tools.artifactToolMeta'),
+        rightText: toolNode.tasks.length,
+        selected: selectedToolSlug.value === toolNode.toolSlug
+      }))
+    }
+
+    if (activeStep.value === 'task') {
+      return selectedToolTasks.value.map((taskNode) => ({
+        id: taskNode.taskId,
+        title: `#${taskNode.taskId}`,
+        meta: formatTaskMeta(taskNode),
+        rightText: t('workflow.artifacts.taskCount', {
+          count: taskNode.artifacts.length
+        }),
+        selected: selectedTaskId.value === taskNode.taskId
+      }))
+    }
+
+    return selectedTaskArtifacts.value.map((artifact) => ({
+      id: artifact.id,
+      title: artifact.filename,
+      meta: formatArtifactMeta(artifact),
+      rightText: artifactOptionRightText(artifact),
+      rightColor: artifactOptionRightColor(artifact),
+      selected: isSelectedArtifact(artifact),
+      focused: isFocusedArtifact(artifact)
+    }))
+  })
 
   function syncSourceMode() {
     if (!props.allowArtifacts) {
@@ -349,6 +354,25 @@
     emit('update:selectedArtifact', artifact)
     resetUploadSelection()
     activeStep.value = 'artifact'
+  }
+
+  function handleStepOptionSelect(optionId: string) {
+    if (activeStep.value === 'group') {
+      handleGroupSelect(optionId)
+      return
+    }
+
+    if (activeStep.value === 'tool') {
+      handleToolSelect(optionId)
+      return
+    }
+
+    if (activeStep.value === 'task') {
+      handleTaskSelect(optionId)
+      return
+    }
+
+    handleArtifactSelect(optionId)
   }
 
   function handlePathSegmentClick(step: ArtifactPickerStep) {
@@ -551,51 +575,6 @@
     display: flex;
     flex-direction: column;
     gap: @spacing-sm;
-  }
-
-  .artifact-step-panel {
-    display: flex;
-    flex-direction: column;
-    gap: @spacing-sm;
-    padding: @spacing-md;
-    border: 1px solid #d8e1ee;
-    border-radius: @border-radius-md;
-    background: linear-gradient(180deg, @bg-elevated 0%, @accent-color-light 100%);
-  }
-
-  .artifact-step-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: @spacing-sm;
-  }
-
-  .artifact-step-copy {
-    display: flex;
-    flex-direction: column;
-    gap: @spacing-xs;
-    min-width: 0;
-  }
-
-  .artifact-step-kicker {
-    color: @text-color-light-secondary;
-    font-size: @font-size-xs;
-  }
-
-  .artifact-step-title {
-    color: @text-color-light-primary;
-    font-size: @font-size-sm;
-    font-weight: @font-weight-semibold;
-  }
-
-  .artifact-step-count {
-    margin-inline-end: 0;
-  }
-
-  .artifact-step-list {
-    display: flex;
-    flex-direction: column;
-    gap: @spacing-xs;
   }
 
   .artifact-empty {
