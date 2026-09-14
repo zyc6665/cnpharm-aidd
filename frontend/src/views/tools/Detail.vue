@@ -2,28 +2,26 @@
   <div class="tool-detail-page">
     <div class="container">
       <SkeletonDetail v-if="loading" />
-        <div v-else-if="tool" class="tool-detail-shell">
-          <AppPageHeader :title="tool.name" :subtitle="detailSubtitle">
-            <template #actions>
-              <ToolDetailHeaderActions
-                :tool="tool"
-                :favorite-loading="favoriteLoading"
-                @view-documentation="documentationOpen = true"
-                @toggle-favorite="handleFavorite"
-              />
-            </template>
-          </AppPageHeader>
+      <div v-else-if="tool" class="tool-detail-shell">
+        <AppPageHeader :title="tool.name" :subtitle="detailSubtitle">
+          <template #actions>
+            <ToolDetailHeaderActions
+              :tool="tool"
+              :favorite-loading="favoriteLoading"
+              @view-documentation="documentationOpen = true"
+              @toggle-favorite="handleFavorite"
+            />
+          </template>
+        </AppPageHeader>
 
-          <div class="tool-detail">
-            <!-- 左侧：工具信息 + 参数表单 -->
-            <div class="tool-main">
-              <ToolDetailOverview :tool="tool" />
+        <div class="tool-detail">
+          <div class="tool-main">
+            <ToolDetailOverview :tool="tool" />
 
-              <!-- 参数表单 -->
-              <div class="tool-form card">
-                <div class="section-header">
-                  <h2 class="section-title">{{ t('tools.parameters') }}</h2>
-                </div>
+            <div class="tool-form card">
+              <div class="section-header">
+                <h2 class="section-title">{{ t('tools.parameters') }}</h2>
+              </div>
 
               <ToolExamplePanel
                 v-if="example"
@@ -105,8 +103,8 @@
             :remote-tool-smoke-status-text="remoteToolSmokeStatusText"
           />
         </div>
-        </div>
-        <a-empty v-else :description="t('common.noData')" />
+      </div>
+      <a-empty v-else :description="t('common.noData')" />
     </div>
     <ToolDetailModals
       v-model:preview-open="previewOpen"
