@@ -80,8 +80,11 @@
     buildArtifactPickerStepOptions,
     buildArtifactPickerViewModel,
     fingerprintArtifactPickerGroups,
+    resolveArtifactPickerActiveSourceMode,
     resolveArtifactPickerSelectionState,
+    resolveArtifactPickerSyncedSourceMode,
     type ArtifactPickerSelectionState,
+    type ArtifactPickerSourceMode,
     type ArtifactPickerStep
   } from '@/domain/tools'
   import { useArtifactsStore, useToolsStore } from '@/stores'
@@ -124,18 +127,12 @@
 
   const artifactsStore = useArtifactsStore()
   const toolsStore = useToolsStore()
-  const sourceMode = ref<'upload' | 'artifact'>('upload')
-  const activeSourceMode = computed<'upload' | 'artifact'>(() => {
-    if (!props.allowUploads && props.allowArtifacts) {
-      return 'artifact'
-    }
-
-    if (!props.allowArtifacts && props.allowUploads) {
-      return 'upload'
-    }
-
-    return sourceMode.value
-  })
+  const sourceMode = ref<ArtifactPickerSourceMode>('upload')
+  const activeSourceMode = computed(() => resolveArtifactPickerActiveSourceMode({
+    allowArtifacts: props.allowArtifacts,
+    allowUploads: props.allowUploads,
+    sourceMode: sourceMode.value
+  }))
   const activeStep = ref<ArtifactPickerStep>('group')
   const selectedGroupId = ref<string>()
   const selectedToolSlug = ref<string>()
@@ -213,22 +210,11 @@
   }))
 
   function syncSourceMode() {
-    if (!props.allowArtifacts) {
-      sourceMode.value = 'upload'
-      return
-    }
-
-    if (!props.allowUploads) {
-      sourceMode.value = 'artifact'
-      return
-    }
-
-    if (props.selectedArtifact) {
-      sourceMode.value = 'artifact'
-      return
-    }
-
-    sourceMode.value = 'upload'
+    sourceMode.value = resolveArtifactPickerSyncedSourceMode({
+      allowArtifacts: props.allowArtifacts,
+      allowUploads: props.allowUploads,
+      hasSelectedArtifact: Boolean(props.selectedArtifact)
+    })
   }
 
   async function refreshArtifacts() {
@@ -252,7 +238,7 @@
     }
   }
 
-  function handleSourceModeChange(value: 'upload' | 'artifact') {
+  function handleSourceModeChange(value: ArtifactPickerSourceMode) {
     if (value === 'upload' && !props.allowUploads) {
       return
     }
