@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import mimetypes
 import shutil
 import uuid
 from pathlib import Path
@@ -28,22 +27,18 @@ from app.schemas.tools import (
     ToolExampleFileResponse,
     ToolExampleResponse,
 )
+from app.services.tool_example_paths import (
+    EXAMPLE_PREVIEW_MAX_BYTES,
+    PROJECT_ROOT as DEFAULT_PROJECT_ROOT,
+    guess_tool_example_content_type,
+    is_previewable_tool_example_file,
+    resolve_tool_example_base_dir,
+    resolve_tool_example_file_path,
+)
 from app.tool_packages.config_resolver import tool_package_v2_manifest_data
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-TEXT_PREVIEW_EXTENSIONS = {
-    ".txt",
-    ".json",
-    ".csv",
-    ".fasta",
-    ".fa",
-    ".pdb",
-    ".log",
-    ".md",
-}
-EXAMPLE_PREVIEW_MAX_BYTES = 64 * 1024
-_EXAMPLE_BASE_DIR_INDEX: dict[Path, dict[str, Path]] = {}
+PROJECT_ROOT = DEFAULT_PROJECT_ROOT
 SCHEMA_FALLBACK_EXAMPLE_VALUES = {
     "builtin-fetch-pdb": {"pdb_id": "1A2B"},
     "builtin-fetch-ligand": {"pubchem_cid": "2244"},
@@ -501,61 +496,26 @@ def get_tool_default_example(tool: Tool) -> Optional[dict[str, Any]]:
 
 def resolve_example_base_dir(tool: Tool, config: dict) -> Path:
     """解析工具示例文件根目录。"""
-    configured_base = config.get("example_base_dir")
-    if isinstance(configured_base, str) and configured_base.strip():
-        base_path = Path(configured_base)
-        if not base_path.is_absolute():
-            base_path = PROJECT_ROOT / base_path
-        return base_path.resolve()
-
-    example_root = (PROJECT_ROOT / "example").resolve()
-    slug_index = _get_example_base_dir_index(example_root)
-    if tool.slug in slug_index:
-        return slug_index[tool.slug]
-
-    return (example_root / tool.slug).resolve()
-
-
-def _get_example_base_dir_index(example_root: Path) -> dict[str, Path]:
-    """构建并缓存示例配置 slug 到目录的索引。"""
-    cached_index = _EXAMPLE_BASE_DIR_INDEX.get(example_root)
-    if cached_index is not None:
-        return cached_index
-
-    slug_index: dict[str, Path] = {}
-    for config_path in example_root.rglob("platform_tool*.json"):
-        try:
-            with config_path.open("r", encoding="utf-8") as config_file:
-                raw_config = json.load(config_file)
-        except (OSError, ValueError):
-            continue
-        slug = raw_config.get("slug")
-        if isinstance(slug, str) and slug.strip():
-            slug_index.setdefault(slug, config_path.parent.resolve())
-
-    _EXAMPLE_BASE_DIR_INDEX[example_root] = slug_index
-    return slug_index
+    return resolve_tool_example_base_dir(
+        tool,
+        config,
+        project_root=PROJECT_ROOT,
+    )
 
 
 def resolve_example_file_path(base_dir: Path, relative_path: str) -> Path:
     """解析并校验示例文件路径，防止路径穿越。"""
-    candidate = (base_dir / relative_path).resolve()
-    try:
-        candidate.relative_to(base_dir)
-    except ValueError as exc:
-        raise ValidationException("示例文件路径非法") from exc
-    return candidate
+    return resolve_tool_example_file_path(base_dir, relative_path)
 
 
 def guess_content_type(path: Path) -> Optional[str]:
     """根据文件名推断 content type。"""
-    content_type, _ = mimetypes.guess_type(path.name)
-    return content_type or "application/octet-stream"
+    return guess_tool_example_content_type(path)
 
 
 def is_previewable_example_file(path: Path) -> bool:
     """判断示例文件是否支持文本预览。"""
-    return path.suffix.lower() in TEXT_PREVIEW_EXTENSIONS
+    return is_previewable_tool_example_file(path)
 
 
 def build_example_file_response(field: str, relative_path: str, base_dir: Path) -> ToolExampleFileResponse:
