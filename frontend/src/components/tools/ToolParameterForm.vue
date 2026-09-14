@@ -55,7 +55,6 @@
         :accept="fileAccept(String(key), prop)"
         :allow-artifacts="allowArtifacts"
         :allow-uploads="allowUploads"
-        :current-tool-id="toolId"
         :current-tool-slug="toolSlug"
         :preferred-group-id="preferredGroupId"
         :preferred-tool-slug="preferredToolSlug"

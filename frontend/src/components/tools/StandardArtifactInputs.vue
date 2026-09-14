@@ -54,7 +54,6 @@
           :accept="getStandardInputAccept(slot)"
           :allow-artifacts="false"
           :allow-uploads="true"
-          :current-tool-id="toolId"
           :current-tool-slug="toolSlug"
           @update:upload-list="(files) => emit('update-upload-list', slot.name, files)"
         />

@@ -151,7 +151,6 @@
       accept?: string
       allowArtifacts?: boolean
       allowUploads?: boolean
-      currentToolId?: string | null
       currentToolSlug?: string | null
       preferredGroupId?: string | null
       preferredToolSlug?: string | null
@@ -162,7 +161,6 @@
       accept: undefined,
       allowArtifacts: true,
       allowUploads: true,
-      currentToolId: null,
       currentToolSlug: null,
       preferredGroupId: null,
       preferredToolSlug: null,
@@ -235,11 +233,9 @@
     labels: pickerLabels.value
   }))
 
-  const selectedGroupNode = computed(() => pickerViewModel.value.selectedGroupNode)
   const selectedGroupTools = computed(() => pickerViewModel.value.selectedGroupTools)
   const selectedToolNode = computed(() => pickerViewModel.value.selectedToolNode)
   const selectedToolTasks = computed(() => pickerViewModel.value.selectedToolTasks)
-  const selectedTaskNode = computed(() => pickerViewModel.value.selectedTaskNode)
   const selectedTaskArtifacts = computed(() => pickerViewModel.value.selectedTaskArtifacts)
   const compatibleArtifacts = computed(() => pickerViewModel.value.compatibleArtifacts)
   const pathSegments = computed(() => pickerViewModel.value.pathSegments)
