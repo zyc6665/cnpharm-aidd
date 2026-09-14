@@ -83,23 +83,11 @@
                   </template>
                 </ToolRunInputForm>
 
-                <a-form-item class="tool-form-actions">
-                  <a-space wrap>
-                    <a-button
-                      type="primary"
-                      html-type="submit"
-                      size="large"
-                      :loading="submitting"
-                      :disabled="!canSubmit"
-                    >
-                      <PlayCircleOutlined />
-                      {{ t('tools.runTool') }}
-                    </a-button>
-                    <a-button size="large" @click="resetForm">
-                      {{ t('common.reset') }}
-                    </a-button>
-                  </a-space>
-                </a-form-item>
+                <ToolRunFormActions
+                  :submitting="submitting"
+                  :can-submit="canSubmit"
+                  @reset="resetForm"
+                />
               </a-form>
             </div>
           </div>
@@ -136,13 +124,13 @@
   import { useI18n } from 'vue-i18n'
   import { message } from 'ant-design-vue'
   import type { FormInstance } from 'ant-design-vue/es/form'
-  import { PlayCircleOutlined } from '@ant-design/icons-vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import ToolDetailHeaderActions from '@/components/tools/ToolDetailHeaderActions.vue'
   import ToolFileFieldExtras from '@/components/tools/ToolFileFieldExtras.vue'
   import ToolDetailModals from '@/components/tools/ToolDetailModals.vue'
   import ToolDetailSidebar from '@/components/tools/ToolDetailSidebar.vue'
   import ToolRunInputForm from '@/components/tools/ToolRunInputForm.vue'
+  import ToolRunFormActions from '@/components/tools/ToolRunFormActions.vue'
   import ToolExamplePanel from '@/components/tools/ToolExamplePanel.vue'
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
   import { useToolsStore, useTasksStore, useUserStore } from '@/stores'
@@ -457,9 +445,6 @@
       margin-bottom: 0;
     }
 
-    .tool-form-actions {
-      margin-bottom: 0;
-    }
   }
 
   :deep(.ant-btn-primary) {
@@ -479,16 +464,6 @@
 
     .card {
       padding: @spacing-md;
-    }
-
-    .tool-form-actions {
-      :deep(.ant-space) {
-        width: 100%;
-      }
-
-      :deep(.ant-btn) {
-        width: 100%;
-      }
     }
 
     .tool-form .section-header {
