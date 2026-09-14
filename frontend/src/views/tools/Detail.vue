@@ -79,52 +79,19 @@
                   @update:selected-artifact="handleArtifactSelection"
                 >
                   <template #file-field-extra="{ fieldKey, property }">
-                    <div
-                      v-if="showSdfToPdbConverter(String(fieldKey))"
-                      class="sdf-converter"
-                    >
-                      <div class="sdf-converter__copy">
-                        <strong>SDF 转 Ligand PDB</strong>
-                        <span>上传一个 SDF 文件，转换后自动填入 ligand_pdb。</span>
-                      </div>
-                      <a-upload
-                        accept=".sdf"
-                        :show-upload-list="false"
-                        :before-upload="createSdfUploadBefore(String(fieldKey))"
-                      >
-                        <a-button size="small" :loading="sdfConversionLoading[String(fieldKey)]">
-                          <FileTextOutlined />
-                          上传 SDF 并转换
-                        </a-button>
-                      </a-upload>
-                    </div>
-                    <div
-                      v-if="showSdfToPdbConverter(String(fieldKey)) && sdfConversionStatusText(String(fieldKey))"
-                      class="sdf-converter-status"
-                      :class="{ 'is-error': Boolean(sdfConversionErrors[String(fieldKey)]) }"
-                    >
-                      {{ sdfConversionStatusText(String(fieldKey)) }}
-                    </div>
-                    <div
-                      v-if="isFileSchemaProperty(property) && exampleFiles[String(fieldKey)]"
-                      class="example-file-binding"
-                    >
-                      <FileTextOutlined />
-                      <span>{{ t('tools.exampleFileBound') }}: {{ exampleFiles[String(fieldKey)]?.filename }}</span>
-                      <a-button type="link" size="small" @click="clearExampleFile(String(fieldKey))">
-                        {{ t('common.clear') }}
-                      </a-button>
-                    </div>
-                    <div
-                      v-if="isFileSchemaProperty(property) && convertedFiles[String(fieldKey)]"
-                      class="converted-file-binding"
-                    >
-                      <FileTextOutlined />
-                      <span>已转换: {{ convertedFiles[String(fieldKey)]?.filename }}</span>
-                      <a-button type="link" size="small" @click="clearConvertedFile(String(fieldKey))">
-                        {{ t('common.clear') }}
-                      </a-button>
-                    </div>
+                    <ToolFileFieldExtras
+                      :field-key="String(fieldKey)"
+                      :property="property"
+                      :show-sdf-converter="showSdfToPdbConverter(String(fieldKey))"
+                      :sdf-conversion-loading="Boolean(sdfConversionLoading[String(fieldKey)])"
+                      :sdf-conversion-status-text="sdfConversionStatusText(String(fieldKey))"
+                      :sdf-conversion-error="sdfConversionErrors[String(fieldKey)]"
+                      :example-file="exampleFiles[String(fieldKey)]"
+                      :converted-file="convertedFiles[String(fieldKey)]"
+                      :create-sdf-upload-before="createSdfUploadBefore"
+                      @clear-example="clearExampleFile"
+                      @clear-converted="clearConvertedFile"
+                    />
                   </template>
                 </ToolRunInputForm>
 
@@ -206,10 +173,10 @@
     HeartOutlined,
     HeartFilled,
     PlayCircleOutlined,
-    InfoCircleOutlined,
-    FileTextOutlined
+    InfoCircleOutlined
   } from '@ant-design/icons-vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import ToolFileFieldExtras from '@/components/tools/ToolFileFieldExtras.vue'
   import ToolDetailSidebar from '@/components/tools/ToolDetailSidebar.vue'
   import ToolRunInputForm from '@/components/tools/ToolRunInputForm.vue'
   import ToolExamplePanel from '@/components/tools/ToolExamplePanel.vue'
@@ -233,7 +200,6 @@
   import {
     getToolFileAccept,
     getToolRequestErrorMessage,
-    isFileSchemaProperty,
   } from '@/domain/tools'
 
   const route = useRoute()
@@ -546,65 +512,6 @@
     .tool-form-actions {
       margin-bottom: 0;
     }
-  }
-
-  .example-file-binding {
-    display: flex;
-    align-items: center;
-    gap: @spacing-xs;
-    margin-top: @spacing-sm;
-    padding: 6px 10px;
-    border: 1px solid @success-color-light;
-    border-radius: @border-radius-base;
-    background: @success-color-light;
-    color: @text-primary;
-    font-size: @font-size-sm;
-    flex-wrap: wrap;
-  }
-
-  .sdf-converter {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: @spacing-sm;
-    margin-top: @spacing-sm;
-    padding: 8px 10px;
-    border: 1px solid @accent-color-border;
-    border-radius: @border-radius-base;
-    background: @accent-color-light;
-    flex-wrap: wrap;
-  }
-
-  .sdf-converter__copy {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    color: @text-primary;
-    font-size: @font-size-sm;
-  }
-
-  .sdf-converter-status {
-    margin-top: @spacing-xs;
-    color: @text-secondary;
-    font-size: @font-size-sm;
-
-    &.is-error {
-      color: @error-color;
-    }
-  }
-
-  .converted-file-binding {
-    display: flex;
-    align-items: center;
-    gap: @spacing-xs;
-    margin-top: @spacing-sm;
-    padding: 6px 10px;
-    border: 1px solid @accent-color-border;
-    border-radius: @border-radius-base;
-    background: @accent-color-light;
-    color: @text-primary;
-    font-size: @font-size-sm;
-    flex-wrap: wrap;
   }
 
   .example-preview-content {
