@@ -79,6 +79,7 @@
     applyArtifactPickerExternalSelectionPath,
     buildArtifactPickerStepOptions,
     buildArtifactPickerViewModel,
+    fingerprintArtifactPickerGroups,
     resolveArtifactPickerSelectionState,
     type ArtifactPickerSelectionState,
     type ArtifactPickerStep
@@ -423,9 +424,7 @@
       props.currentToolSlug,
       props.preferredGroupId,
       props.preferredToolSlug,
-      artifactGroupNodes.value
-        .map((group) => `${group.groupId}:${group.tools.map((tool) => `${tool.toolSlug}:${tool.tasks.map((task) => task.taskId).join(',')}`).join('|')}`)
-        .join(';')
+      fingerprintArtifactPickerGroups(artifactGroupNodes.value)
     ] as const,
     () => {
       syncSelectionPath()

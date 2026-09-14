@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { ArtifactFile } from '@/types/models'
 import {
   applyArtifactPickerExternalSelectionPath,
+  fingerprintArtifactPickerGroups,
   resolveArtifactPickerSelectionState,
 } from './artifact-picker-selection-state'
 import type { ArtifactPickerGroupNode } from './artifact-file-picker'
@@ -97,5 +98,11 @@ describe('artifact picker selection state', () => {
       selectedTaskId: 'task-1',
       focusedArtifactId: 'artifact-1',
     })
+  })
+
+  it('fingerprints group hierarchy for stable watcher keys', () => {
+    expect(fingerprintArtifactPickerGroups(groups)).toBe(
+      'group-1:docking-tool:task-1;group-2:pocket-tool:'
+    )
   })
 })

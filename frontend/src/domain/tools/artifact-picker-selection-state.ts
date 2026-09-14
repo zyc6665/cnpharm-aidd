@@ -42,6 +42,22 @@ export interface ApplyArtifactPickerExternalSelectionPathInput {
   path?: ArtifactPickerExternalSelectionPath | null
 }
 
+export function fingerprintArtifactPickerGroups(
+  groupNodes: ArtifactPickerGroupNode[]
+): string {
+  return groupNodes
+    .map((group) => {
+      const tools = group.tools
+        .map((tool) => {
+          const taskIds = tool.tasks.map((task) => task.taskId).join(',')
+          return `${tool.toolSlug}:${taskIds}`
+        })
+        .join('|')
+      return `${group.groupId}:${tools}`
+    })
+    .join(';')
+}
+
 export function resolveArtifactPickerSelectionState(
   input: ResolveArtifactPickerSelectionStateInput
 ): ArtifactPickerSelectionState {
