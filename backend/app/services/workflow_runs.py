@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.common.exceptions import ValidationException
 from app.common.time import utcnow_iso
-from app.models.tasks import Task, TaskStatus
+from app.models.tasks import Task
 from app.models.users import User
 from app.models.workflows import WorkflowRun
 from app.schemas.workflows import WorkflowRunCreate
@@ -20,7 +19,6 @@ from app.services.workflow_loop_scheduler import reconcile_loop_body
 from app.services.workflow_map_scheduler import reconcile_map_sub_tasks
 from app.services.workflow_node_states import initial_node_states
 from app.services.workflow_run_access import ensure_run_operation_access
-from app.services.workflow_run_failures import mark_workflow_node_failed
 from app.services.workflow_run_materialization import (
     materialize_workflow_run_definition,
     workflow_requires_standard_binding_project,
@@ -36,6 +34,7 @@ from app.services.workflow_validation import (
     required_workflow_inputs,
     validate_workflow_definition,
 )
+from app.services.workflow_waiting_task import load_finished_workflow_node_task
 
 
 WORKFLOW_RUN_TERMINAL_STATUSES = {"success", "failure", "canceled"}
@@ -151,44 +150,14 @@ async def sync_workflow_run(
             if state.get("status") not in ("waiting_task",):
                 continue
 
-        task_id = state.get("task_id")
-        if not task_id:
-            mark_workflow_node_failed(
-                run,
-                node_states=node_states,
-                node_id=node_id,
-                state=state,
-                error_message="Workflow node is waiting without a task id",
-            )
-            continue
-
-        task_result = await db.execute(
-            select(Task)
-            .options(selectinload(Task.outputs))
-            .where(Task.id == str(task_id))
+        task = await load_finished_workflow_node_task(
+            db,
+            run=run,
+            node_states=node_states,
+            node_id=node_id,
+            state=state,
         )
-        task = task_result.scalar_one_or_none()
-        if not task:
-            mark_workflow_node_failed(
-                run,
-                node_states=node_states,
-                node_id=node_id,
-                state=state,
-                error_message="Workflow node task not found",
-            )
-            continue
-
-        if task.status in {TaskStatus.PENDING.value, TaskStatus.RUNNING.value}:
-            continue
-
-        if task.status in {TaskStatus.FAILURE.value, TaskStatus.CANCELED.value}:
-            mark_workflow_node_failed(
-                run,
-                node_states=node_states,
-                node_id=node_id,
-                state=state,
-                error_message=task.error_message or "Workflow node task failed",
-            )
+        if task is None:
             continue
 
         await apply_successful_task_outputs(
