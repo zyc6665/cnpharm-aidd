@@ -5,15 +5,20 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, replace
 from typing import Any, Literal
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.common.exceptions import NotFoundException, ValidationException
-from app.models.artifacts import Artifact, ArtifactVersion
-from app.models.files import File as FileModel
+from app.common.exceptions import ValidationException
 from app.services.artifact_binding_resolver import (
     ArtifactBindingDecision,
     resolve_artifact_binding,
+)
+from app.services.run_input_validation import (
+    append_existing_file_id,
+    dedupe_ordered,
+    input_bindings_requiring_validation,
+    require_existing_file_id,
+    slot_needs_binding_resolution,
+    validate_standard_input_bindings,
 )
 from app.services.run_input_normalization import normalize_string_mapping
 from app.services.run_legacy_projection import (
@@ -89,13 +94,13 @@ async def prepare_run(db: AsyncSession, *, input: RunPreparationInput) -> Prepar
     accepts_standard_bindings = tool_accepts_standard_input_bindings(
         tool_version_config(input.tool_version)
     )
-    input_bindings_to_validate = _input_bindings_requiring_validation(
+    input_bindings_to_validate = input_bindings_requiring_validation(
         input_bindings,
         artifact_inputs_by_name,
         accepts_standard_bindings=accepts_standard_bindings,
         surface=input.context.surface,
     )
-    await _validate_standard_input_bindings(
+    await validate_standard_input_bindings(
         db,
         project_id=project_id,
         input_bindings=input_bindings_to_validate,
@@ -107,7 +112,7 @@ async def prepare_run(db: AsyncSession, *, input: RunPreparationInput) -> Prepar
 
     for slot_name, version_id in input_bindings.items():
         slot = artifact_inputs_by_name.get(slot_name)
-        if not slot or not _slot_needs_binding_resolution(slot):
+        if not slot or not slot_needs_binding_resolution(slot):
             continue
 
         decision = await resolve_artifact_binding(
@@ -139,7 +144,7 @@ async def prepare_run(db: AsyncSession, *, input: RunPreparationInput) -> Prepar
             slot = artifact_inputs_by_name.get(slot_name)
             if not slot:
                 continue
-            await _require_existing_file_id(db, file_id=file_id, project_id=project_id)
+            await require_existing_file_id(db, file_id=file_id, project_id=project_id)
             file_ids.append(file_id)
             if not accepts_standard_bindings:
                 await project_file_to_legacy_params(
@@ -156,7 +161,7 @@ async def prepare_run(db: AsyncSession, *, input: RunPreparationInput) -> Prepar
         ready=ready,
         project_id=project_id,
         params=params,
-        file_ids=_dedupe_ordered(file_ids) if ready else [],
+        file_ids=dedupe_ordered(file_ids) if ready else [],
         input_bindings=task_input_bindings,
         standard_input_uploads=standard_input_uploads,
         binding_decisions=binding_decisions,
@@ -279,7 +284,7 @@ async def _resolve_workflow_input_sources(
         if file_id is None:
             return None
         semantic_key = normalize_semantic_type(str(semantic_type))
-        await _append_existing_file_id(
+        await append_existing_file_id(
             db,
             file_ids=file_ids,
             seen_file_ids=seen_file_ids,
@@ -302,7 +307,7 @@ async def _resolve_workflow_input_sources(
                     f"Workflow run is missing required input: {artifact_key}"
                 )
             file_id = str(file_id)
-            await _append_existing_file_id(
+            await append_existing_file_id(
                 db,
                 file_ids=file_ids,
                 seen_file_ids=seen_file_ids,
@@ -327,7 +332,7 @@ async def _resolve_workflow_input_sources(
             slot = artifact_slots.get(normalized_slot)
             if version_id:
                 input_bindings[normalized_slot] = str(version_id)
-            if slot and _slot_needs_binding_resolution(slot):
+            if slot and slot_needs_binding_resolution(slot):
                 if not version_id:
                     binding_decisions[normalized_slot] = asdict(
                         ArtifactBindingDecision(
@@ -350,7 +355,7 @@ async def _resolve_workflow_input_sources(
                 return None
             legacy_file_bindings[normalized_slot] = artifact_file_ids[0]
             for file_id in artifact_file_ids:
-                await _append_existing_file_id(
+                await append_existing_file_id(
                     db,
                     file_ids=file_ids,
                     seen_file_ids=seen_file_ids,
@@ -370,117 +375,6 @@ async def _resolve_workflow_input_sources(
         semantic_file_bindings=semantic_file_bindings,
         artifact_slots=artifact_slots,
     )
-
-
-def _input_bindings_requiring_validation(
-    input_bindings: dict[str, str],
-    artifact_inputs_by_name: dict[str, dict[str, Any]],
-    *,
-    accepts_standard_bindings: bool,
-    surface: RunSurface,
-) -> dict[str, str]:
-    if surface == "tool_detail":
-        return input_bindings
-
-    if accepts_standard_bindings:
-        return input_bindings
-
-    return {
-        slot_name: version_id
-        for slot_name, version_id in input_bindings.items()
-        if _slot_needs_binding_resolution(
-            artifact_inputs_by_name.get(slot_name) or {}
-        )
-    }
-
-
-async def _validate_standard_input_bindings(
-    db: AsyncSession,
-    *,
-    project_id: str | None,
-    input_bindings: dict[str, str],
-) -> None:
-    if not input_bindings:
-        return
-    if not project_id:
-        raise ValidationException("标准 ArtifactVersion 输入绑定必须提供 project_id")
-
-    version_ids = set(input_bindings.values())
-    result = await db.execute(
-        select(ArtifactVersion.id, Artifact.project_id)
-        .join(Artifact, Artifact.id == ArtifactVersion.artifact_id)
-        .where(
-            ArtifactVersion.id.in_(version_ids),
-            ArtifactVersion.status == "available",
-        )
-    )
-    projects_by_version = {
-        str(version_id): str(owner_project_id)
-        for version_id, owner_project_id in result.all()
-    }
-    missing = sorted(version_ids - set(projects_by_version))
-    if missing:
-        raise ValidationException(
-            "输入绑定引用的 ArtifactVersion 不存在",
-            detail={"missing_artifact_version_ids": missing},
-        )
-    mismatched = sorted(
-        version_id
-        for version_id, owner_project_id in projects_by_version.items()
-        if owner_project_id != project_id
-    )
-    if mismatched:
-        raise ValidationException(
-            "输入绑定的 ArtifactVersion 必须属于任务关联项目",
-            detail={"mismatched_artifact_version_ids": mismatched},
-        )
-
-
-def _slot_needs_binding_resolution(slot: dict[str, Any]) -> bool:
-    return any(
-        key in slot and slot.get(key) not in (None, "", [])
-        for key in (
-            "role_preferences",
-            "required_roles",
-            "readiness_policy",
-            "suggested_preparation_tool",
-        )
-    )
-
-
-async def _require_existing_file_id(
-    db: AsyncSession,
-    *,
-    file_id: str,
-    project_id: str | None,
-) -> None:
-    file_record = await db.get(FileModel, file_id)
-    if not file_record:
-        raise ValidationException(
-            "标准 Artifact 上传文件不存在",
-            detail={"missing_file_id": file_id},
-        )
-    if project_id and file_record.project_id and str(file_record.project_id) != project_id:
-        raise ValidationException(
-            "标准 Artifact 上传文件必须属于任务关联项目",
-            detail={"mismatched_file_ids": [file_id]},
-        )
-
-
-async def _append_existing_file_id(
-    db: AsyncSession,
-    *,
-    file_ids: list[str],
-    seen_file_ids: set[str],
-    file_id: str,
-    label: str,
-) -> None:
-    file_record = await db.get(FileModel, file_id)
-    if not file_record:
-        raise NotFoundException(f"Workflow input file not found: {label}")
-    if file_id not in seen_file_ids:
-        seen_file_ids.add(file_id)
-        file_ids.append(file_id)
 
 
 def _workflow_semantic_source_file_id(
@@ -554,17 +448,9 @@ def _first_blocking_binding_reason(decisions: dict[str, dict[str, Any]]) -> str 
     for decision in decisions.values():
         if not isinstance(decision, dict) or decision.get("status") == "ready":
             continue
-        return str(decision.get("reason") or decision.get("status") or "Artifact binding blocked")
+        return str(
+            decision.get("reason")
+            or decision.get("status")
+            or "Artifact binding blocked"
+        )
     return None
-
-
-def _dedupe_ordered(values: list[str]) -> list[str]:
-    seen: set[str] = set()
-    ordered: list[str] = []
-    for value in values:
-        normalized = str(value)
-        if not normalized or normalized in seen:
-            continue
-        seen.add(normalized)
-        ordered.append(normalized)
-    return ordered
