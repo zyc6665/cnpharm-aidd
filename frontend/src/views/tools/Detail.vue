@@ -5,24 +5,12 @@
         <div v-else-if="tool" class="tool-detail-shell">
           <AppPageHeader :title="tool.name" :subtitle="detailSubtitle">
             <template #actions>
-              <a-space class="tool-detail-actions" wrap>
-                <a-button @click="documentationOpen = true">
-                  <InfoCircleOutlined />
-                  {{ t('tools.viewIntroduction') }}
-                </a-button>
-                <a-button
-                  :type="tool.is_favorited ? 'primary' : 'default'"
-                  :loading="favoriteLoading"
-                  @click="handleFavorite"
-                >
-                  <HeartFilled v-if="tool.is_favorited" />
-                  <HeartOutlined v-else />
-                  {{ tool.is_favorited ? t('tools.unfavorite') : t('tools.favorite') }}
-                </a-button>
-                <a-tag v-if="tool.current_version" color="blue">
-                  v{{ tool.current_version.version }}
-                </a-tag>
-              </a-space>
+              <ToolDetailHeaderActions
+                :tool="tool"
+                :favorite-loading="favoriteLoading"
+                @view-documentation="documentationOpen = true"
+                @toggle-favorite="handleFavorite"
+              />
             </template>
           </AppPageHeader>
 
@@ -148,13 +136,9 @@
   import { useI18n } from 'vue-i18n'
   import { message } from 'ant-design-vue'
   import type { FormInstance } from 'ant-design-vue/es/form'
-  import {
-    HeartOutlined,
-    HeartFilled,
-    PlayCircleOutlined,
-    InfoCircleOutlined
-  } from '@ant-design/icons-vue'
+  import { PlayCircleOutlined } from '@ant-design/icons-vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import ToolDetailHeaderActions from '@/components/tools/ToolDetailHeaderActions.vue'
   import ToolFileFieldExtras from '@/components/tools/ToolFileFieldExtras.vue'
   import ToolDetailModals from '@/components/tools/ToolDetailModals.vue'
   import ToolDetailSidebar from '@/components/tools/ToolDetailSidebar.vue'
@@ -433,11 +417,6 @@
     min-height: calc(100vh - @header-height - @footer-height);
   }
 
-  .tool-detail-actions {
-    align-items: center;
-    justify-content: flex-end;
-  }
-
   .tool-detail {
     display: grid;
     grid-template-columns: 1fr 320px;
@@ -496,11 +475,6 @@
   @media (max-width: @screen-md) {
     .tool-detail-page {
       padding: @spacing-lg 0;
-    }
-
-    .tool-detail-actions {
-      justify-content: flex-start;
-      width: 100%;
     }
 
     .card {
