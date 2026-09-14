@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -27,7 +25,6 @@ from app.services.workflow_artifacts import (
     format_missing_required_outputs_error,
     load_task_output_files,
     required_outputs_present,
-    standard_artifact_file_ids,
 )
 from app.services.workflow_cancellation import mark_active_workflow_state_canceled
 from app.services.workflow_inputs import validate_input_files
@@ -42,6 +39,11 @@ from app.services.workflow_run_materialization import (
 )
 from app.services.workflow_run_queries import load_definition_for_run, load_run_for_user
 from app.services.workflow_scheduler import start_ready_workflow_nodes
+from app.services.workflow_task_outputs import (
+    has_required_declared_standard_outputs,
+    task_project_id,
+    workflow_output_file_ids,
+)
 from app.services.workflow_validation import (
     is_loop_node,
     is_map_node,
@@ -205,9 +207,9 @@ async def sync_workflow_run(
             continue
 
         if run.project_id is None:
-            task_project_id = _task_project_id(task)
-            if task_project_id:
-                run.project_id = task_project_id
+            project_id = task_project_id(task)
+            if project_id:
+                run.project_id = project_id
 
         file_ids = [str(file_id) for file_id in (task.outputs.file_ids if task.outputs else [])]
         output_files = await load_task_output_files(db, file_ids)
@@ -225,7 +227,7 @@ async def sync_workflow_run(
             standard_artifacts=standard_artifacts,
         )
         standard_artifacts_satisfy_required = (
-            _has_required_declared_standard_outputs(declared_artifact_outputs)
+            has_required_declared_standard_outputs(declared_artifact_outputs)
             and not missing_artifacts
         )
         if (
@@ -264,18 +266,11 @@ async def sync_workflow_run(
         state["standard_artifacts"] = standard_artifacts
         state["missing_outputs"] = []
         await annotate_semantic_output_files(db, semantic_outputs=semantic_outputs)
-        output_file_ids = [
-            str(value["file_id"])
-            for value in semantic_outputs.values()
-            if value.get("source") == "output_files" and value.get("file_id")
-        ]
-        for declaration in declared_artifact_outputs:
-            if not isinstance(declaration, dict) or not declaration.get("name"):
-                continue
-            output_file_ids.extend(
-                standard_artifact_file_ids(standard_artifacts, str(declaration["name"]))
-            )
-        state["output_file_ids"] = list(dict.fromkeys(output_file_ids))
+        state["output_file_ids"] = workflow_output_file_ids(
+            semantic_outputs=semantic_outputs,
+            standard_artifacts=standard_artifacts,
+            declared_artifact_outputs=declared_artifact_outputs,
+        )
         state["finished_at"] = utcnow_iso()
         node_states[node_id] = state
         artifact_lineage[node_id] = dict(semantic_outputs)
@@ -296,21 +291,6 @@ async def sync_workflow_run(
         await db.commit()
         await db.refresh(run)
     return run
-
-
-def _has_required_declared_standard_outputs(declared_outputs: list[dict[str, Any]]) -> bool:
-    return any(
-        isinstance(declaration, dict)
-        and bool(declaration.get("name"))
-        and declaration.get("required", True) is not False
-        for declaration in declared_outputs
-    )
-
-
-def _task_project_id(task: Task) -> str | None:
-    data = task.extra_data if isinstance(task.extra_data, dict) else {}
-    project_id = data.get("project_id")
-    return str(project_id) if project_id else None
 
 
 async def cancel_workflow_run(

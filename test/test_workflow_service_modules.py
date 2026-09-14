@@ -26,6 +26,7 @@ def test_workflow_service_modules_exist():
         "workflow_task_lookup.py",
         "workflow_tool_lookup.py",
         "workflow_tool_scheduler.py",
+        "workflow_task_outputs.py",
         "workflow_validation.py",
         "run_preparation.py",
     ]
