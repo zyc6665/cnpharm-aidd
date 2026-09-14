@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
-from sqlalchemy import inspect, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -31,6 +30,11 @@ from app.services.artifacts import (
     create_artifact,
     create_artifact_version,
     load_artifact,
+)
+from app.services.artifact_responses import (
+    artifact_data,
+    content_disposition,
+    matches_delivery_metadata,
 )
 from app.services.project_access import load_project_membership, require_project_role
 from app.storage.factory import get_storage_backend
@@ -62,119 +66,6 @@ def _expires_at(value: str | None):
         return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None)
     except ValueError as exc:
         raise ValidationException("expires_at 必须是 ISO-8601 时间") from exc
-
-
-def _version_file_data(
-    *, artifact_id: str, version_id: str, file_link: ArtifactVersionFile
-) -> dict:
-    file_record = file_link.file
-    return {
-        "id": file_link.id,
-        "role": file_link.role,
-        "file_id": file_link.file_id,
-        "is_primary": file_link.is_primary,
-        "sort_order": file_link.sort_order,
-        "filename": file_record.filename if file_record else None,
-        "content_type": file_record.content_type if file_record else None,
-        "size_bytes": file_record.size_bytes if file_record else None,
-        "sha256": file_record.sha256 if file_record else None,
-        "download_url": (
-            f"/api/v1/artifacts/{artifact_id}/versions/{version_id}"
-            f"/files/{quote(file_link.role, safe='')}/download"
-        ),
-    }
-
-
-def _version_files_data(*, artifact_id: str, version) -> list[dict]:
-    if "files" in inspect(version).unloaded:
-        return []
-    return [
-        _version_file_data(
-            artifact_id=artifact_id,
-            version_id=version.id,
-            file_link=file_link,
-        )
-        for file_link in version.files
-    ]
-
-
-def _version_data(version, *, artifact_id: str | None = None) -> dict:
-    return {
-        "id": version.id,
-        "version": version.version,
-        "filename": version.filename,
-        "content_type": version.content_type,
-        "size_bytes": version.size_bytes,
-        "sha256": version.sha256,
-        "status": version.status,
-        "manifest_json": version.manifest_json,
-        "expires_at": version.expires_at,
-        "created_at": version.created_at,
-        "files": _version_files_data(artifact_id=artifact_id, version=version)
-        if artifact_id
-        else [],
-    }
-
-
-def _artifact_data(artifact: Artifact, *, include_versions: bool = False) -> dict:
-    data = {
-        "id": artifact.id,
-        "project_id": artifact.project_id,
-        "artifact_type": artifact.artifact_type,
-        "semantic_type": artifact.semantic_type,
-        "standard_type": artifact.standard_type,
-        "standard_version": artifact.standard_version,
-        "name": artifact.name,
-        "description": artifact.description,
-        "latest_version": _version_data(artifact.latest_version, artifact_id=artifact.id),
-        "deduplicated": bool(getattr(artifact, "deduplicated", False)),
-        "created_at": artifact.created_at,
-        "updated_at": artifact.updated_at,
-    }
-    if include_versions:
-        data["versions"] = [
-            _version_data(version, artifact_id=artifact.id) for version in artifact.versions
-        ]
-    return data
-
-
-def _artifact_metadata_value(artifact: Artifact, key: str) -> str | None:
-    manifest = artifact.latest_version.manifest_json
-    if not isinstance(manifest, dict):
-        return None
-    metadata = manifest.get("metadata")
-    if not isinstance(metadata, dict):
-        return None
-    value = metadata.get(key)
-    if value is None:
-        return None
-    return str(value)
-
-
-def _matches_delivery_metadata(
-    artifact: Artifact,
-    *,
-    model_name: str | None,
-    model_version: str | None,
-    evidence_level: str | None,
-    endpoint_ref: str | None,
-    applicability_domain_status: str | None,
-) -> bool:
-    if model_name and _artifact_metadata_value(artifact, "model_name") != model_name:
-        return False
-    if model_version and _artifact_metadata_value(artifact, "model_version") != model_version:
-        return False
-    if evidence_level and _artifact_metadata_value(artifact, "evidence_level") != evidence_level:
-        return False
-    if endpoint_ref and _artifact_metadata_value(artifact, "endpoint_ref") != endpoint_ref:
-        return False
-    if (
-        applicability_domain_status
-        and _artifact_metadata_value(artifact, "applicability_domain_status")
-        != applicability_domain_status
-    ):
-        return False
-    return True
 
 
 def _audit_artifact_download(
@@ -382,13 +273,6 @@ def _artifact_lineage_graph_data(
     }
 
 
-def _content_disposition(filename: str) -> str:
-    safe_filename = filename.replace('"', "")
-    return (
-        f"attachment; filename=\"{safe_filename}\"; filename*=UTF-8''{quote(filename)}"
-    )
-
-
 @router.get("/projects/{project_id}/artifact-lineage", response_model=dict)
 async def get_project_artifact_lineage(
     project_id: str,
@@ -492,7 +376,7 @@ async def upload_artifact(
         content_type=file.content_type,
         **metadata.model_dump(),
     )
-    return success_response(data=_artifact_data(artifact), message="Artifact 已保存")
+    return success_response(data=artifact_data(artifact), message="Artifact 已保存")
 
 
 @router.get("/projects/{project_id}/artifacts", response_model=dict)
@@ -557,7 +441,7 @@ async def list_artifacts(
             item.latest_version.expires_at is None
             or item.latest_version.expires_at > now
         )
-        and _matches_delivery_metadata(
+        and matches_delivery_metadata(
             item,
             model_name=metadata_model_name,
             model_version=metadata_model_version,
@@ -566,7 +450,7 @@ async def list_artifacts(
             applicability_domain_status=metadata_applicability_domain_status,
         )
     ]
-    return success_response(data={"items": [_artifact_data(item) for item in visible]})
+    return success_response(data={"items": [artifact_data(item) for item in visible]})
 
 
 @router.get("/artifacts/{artifact_id}", response_model=dict)
@@ -581,7 +465,7 @@ async def get_artifact(
     await load_project_membership(
         db, project_id=artifact.project_id, user_id=current_user.id
     )
-    return success_response(data=_artifact_data(artifact, include_versions=True))
+    return success_response(data=artifact_data(artifact, include_versions=True))
 
 
 @router.get("/artifacts/{artifact_id}/versions/{version_id}/download")
@@ -634,7 +518,7 @@ async def download_artifact_version(
     return Response(
         content=content,
         media_type=version.content_type or "application/octet-stream",
-        headers={"Content-Disposition": _content_disposition(version.filename)},
+        headers={"Content-Disposition": content_disposition(version.filename)},
     )
 
 
@@ -694,7 +578,7 @@ async def download_artifact_version_file(
     return Response(
         content=content,
         media_type=file_record.content_type or "application/octet-stream",
-        headers={"Content-Disposition": _content_disposition(file_record.filename)},
+        headers={"Content-Disposition": content_disposition(file_record.filename)},
     )
 
 
@@ -728,6 +612,6 @@ async def upload_artifact_version(
         expires_at=_expires_at(expires_at),
     )
     return success_response(
-        data=_artifact_data(artifact, include_versions=True),
+        data=artifact_data(artifact, include_versions=True),
         message="Artifact 新版本已保存",
     )

@@ -3,7 +3,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.artifacts import _artifact_data
 from app.auth.dependencies import get_current_user
 from app.common.responses import success_response
 from app.database.session import get_db
@@ -18,6 +17,7 @@ from app.external_databases.providers import (
 )
 from app.models.users import User
 from app.schemas.external_databases import ExternalDatabaseImportRequest
+from app.services.artifact_responses import artifact_data
 from app.services.project_access import require_project_role
 from app.storage.factory import get_storage_backend
 
@@ -94,7 +94,7 @@ async def import_external_database_artifact(
 
     return success_response(
         data={
-            "artifact": _artifact_data(result.artifact, include_versions=True),
+            "artifact": artifact_data(result.artifact, include_versions=True),
             "board_node": result.board_node,
         },
         message="外部数据库记录已导入",
