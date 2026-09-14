@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, replace
-from pathlib import Path
 from typing import Any, Literal
 
 from sqlalchemy import select
@@ -16,8 +15,12 @@ from app.services.artifact_binding_resolver import (
     ArtifactBindingDecision,
     resolve_artifact_binding,
 )
-from app.services.legacy_file_projection import legacy_file_fields, select_legacy_file_field
 from app.services.run_input_normalization import normalize_string_mapping
+from app.services.run_legacy_projection import (
+    existing_input_file_fields,
+    project_file_to_legacy_params,
+    tool_version_config,
+)
 from app.services.semantic_types import normalize_semantic_type
 from app.services.standard_input_slots import (
     artifact_input_slots_by_name,
@@ -84,7 +87,7 @@ async def prepare_run(db: AsyncSession, *, input: RunPreparationInput) -> Prepar
     artifact_inputs = artifact_input_slots_for_run(contract, input.workflow_node)
     artifact_inputs_by_name = artifact_input_slots_by_name(artifact_inputs)
     accepts_standard_bindings = tool_accepts_standard_input_bindings(
-        _tool_config(input.tool_version)
+        tool_version_config(input.tool_version)
     )
     input_bindings_to_validate = _input_bindings_requiring_validation(
         input_bindings,
@@ -100,7 +103,7 @@ async def prepare_run(db: AsyncSession, *, input: RunPreparationInput) -> Prepar
     binding_decisions: dict[str, dict[str, Any]] = {}
     ready = True
     blocked_reason: str | None = None
-    legacy_projection_fields = _existing_input_file_fields(params)
+    legacy_projection_fields = existing_input_file_fields(params)
 
     for slot_name, version_id in input_bindings.items():
         slot = artifact_inputs_by_name.get(slot_name)
@@ -122,7 +125,7 @@ async def prepare_run(db: AsyncSession, *, input: RunPreparationInput) -> Prepar
             continue
 
         file_ids.append(decision.selected_file_id)
-        await _project_selected_file_to_legacy_params(
+        await project_file_to_legacy_params(
             db,
             tool_version=input.tool_version,
             input_slot=slot,
@@ -139,7 +142,7 @@ async def prepare_run(db: AsyncSession, *, input: RunPreparationInput) -> Prepar
             await _require_existing_file_id(db, file_id=file_id, project_id=project_id)
             file_ids.append(file_id)
             if not accepts_standard_bindings:
-                await _project_selected_file_to_legacy_params(
+                await project_file_to_legacy_params(
                     db,
                     tool_version=input.tool_version,
                     input_slot=slot,
@@ -217,9 +220,9 @@ async def prepare_workflow_node_run(
         return prepared
 
     next_params = dict(prepared.params)
-    if _tool_config(getattr(tool, "current_version", None)).get("type") == "builtin":
+    if tool_version_config(getattr(tool, "current_version", None)).get("type") == "builtin":
         for standard_type, file_id in sources.semantic_file_bindings.items():
-            await _project_selected_file_to_legacy_params(
+            await project_file_to_legacy_params(
                 db,
                 tool_version=getattr(tool, "current_version", None),
                 input_slot={"name": standard_type, "type": standard_type},
@@ -229,7 +232,7 @@ async def prepare_workflow_node_run(
     if not prepared.input_bindings:
         for slot_name, file_id in sources.legacy_file_bindings.items():
             slot = sources.artifact_slots.get(slot_name) or {"name": slot_name}
-            await _project_selected_file_to_legacy_params(
+            await project_file_to_legacy_params(
                 db,
                 tool_version=getattr(tool, "current_version", None),
                 input_slot=slot,
@@ -442,70 +445,6 @@ def _slot_needs_binding_resolution(slot: dict[str, Any]) -> bool:
             "readiness_policy",
             "suggested_preparation_tool",
         )
-    )
-
-
-def _tool_config(tool_version: Any) -> dict[str, Any]:
-    config = getattr(tool_version, "config", None)
-    return config if isinstance(config, dict) else {}
-
-
-async def _project_selected_file_to_legacy_params(
-    db: AsyncSession,
-    *,
-    tool_version: Any,
-    input_slot: dict[str, Any],
-    file_id: str,
-    params: dict[str, Any],
-    used_fields: set[str] | None = None,
-) -> None:
-    config = _tool_config(tool_version)
-    executor_type = str(config.get("type") or "")
-    if executor_type == "builtin":
-        builtin_inputs = (
-            params.get("builtin_inputs")
-            if isinstance(params.get("builtin_inputs"), dict)
-            else {}
-        )
-        params["builtin_inputs"] = {
-            **builtin_inputs,
-            str(input_slot.get("type") or input_slot.get("name")): file_id,
-        }
-        return
-    if executor_type != "ssh_job":
-        return
-
-    file_record = await db.get(FileModel, file_id)
-    if not file_record:
-        return
-    file_field = _legacy_file_field_for_slot(config, input_slot, used_fields=used_fields)
-    if not file_field:
-        return
-    input_files = params.get("input_files") if isinstance(params.get("input_files"), dict) else {}
-    params["input_files"] = {
-        **input_files,
-        file_field: f"input/{Path(str(file_record.filename)).name}",
-    }
-    if used_fields is not None:
-        used_fields.add(file_field)
-
-
-def _existing_input_file_fields(params: dict[str, Any]) -> set[str]:
-    input_files = params.get("input_files") if isinstance(params.get("input_files"), dict) else {}
-    return {str(field) for field in input_files}
-
-
-def _legacy_file_field_for_slot(
-    config: dict[str, Any],
-    input_slot: dict[str, Any],
-    *,
-    used_fields: set[str] | None = None,
-) -> str | None:
-    return select_legacy_file_field(
-        input_name=str(input_slot.get("name") or ""),
-        standard_type=str(input_slot.get("type") or ""),
-        file_fields=legacy_file_fields(config),
-        used_fields=used_fields,
     )
 
 
