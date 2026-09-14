@@ -6,15 +6,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.common.exceptions import NotFoundException, ValidationException
-from app.common.time import utcnow, utcnow_iso
+from app.common.exceptions import ValidationException
+from app.common.time import utcnow_iso
 from app.models.tasks import Task, TaskStatus
 from app.models.users import User
 from app.models.workflows import WorkflowRun
 from app.schemas.workflows import WorkflowRunCreate
 from app.services.project_migration import ensure_migration_project_for_owner
 from app.tasks.cancellation import cancel_platform_task
-from app.services.workflow_cancellation import mark_active_workflow_state_canceled
+from app.services.workflow_cancellation import mark_workflow_run_canceled
 from app.services.workflow_inputs import validate_input_files
 from app.services.workflow_loop_scheduler import reconcile_loop_body
 from app.services.workflow_map_scheduler import reconcile_map_sub_tasks
@@ -26,6 +26,7 @@ from app.services.workflow_run_materialization import (
     workflow_requires_standard_binding_project,
 )
 from app.services.workflow_run_queries import load_definition_for_run, load_run_for_user
+from app.services.workflow_run_retry import prepare_workflow_node_retry
 from app.services.workflow_scheduler import start_ready_workflow_nodes
 from app.services.workflow_task_success import apply_successful_task_outputs
 from app.services.workflow_validation import (
@@ -230,24 +231,13 @@ async def cancel_workflow_run(
     if run.status in WORKFLOW_RUN_TERMINAL_STATUSES:
         raise ValidationException(f"Cannot cancel terminal workflow run: {run.status}")
 
-    node_states = dict(run.node_states or {})
-    finished_at = utcnow_iso()
-    task_ids: list[str] = []
-
-    for node_id, raw_state in node_states.items():
-        state = dict(raw_state or {})
-        task_ids.extend(mark_active_workflow_state_canceled(state, finished_at=finished_at))
-        node_states[node_id] = state
+    task_ids = mark_workflow_run_canceled(run, finished_at=utcnow_iso())
 
     if task_ids:
         result = await db.execute(select(Task).where(Task.id.in_(task_ids)))
         for task in result.scalars().all():
             await cancel_platform_task(db, task=task, current_user=current_user)
 
-    run.status = "canceled"
-    run.node_states = node_states
-    run.finished_at = utcnow()
-    run.error_message = None
     await db.commit()
     await db.refresh(run)
     return run
@@ -263,31 +253,7 @@ async def retry_workflow_run_node(
 ) -> WorkflowRun:
     run = await load_run_for_user(db, run_id=run_id, current_user=current_user)
     await ensure_run_operation_access(db, run=run, current_user=current_user)
-    if run.status == "canceled":
-        raise ValidationException("Cannot retry a canceled workflow run")
-
-    definition = dict(run.definition or {})
-    indexed_nodes = nodes_by_id(definition)
-    if node_id not in indexed_nodes:
-        raise NotFoundException("Workflow node not found")
-
-    node_states = dict(run.node_states or {})
-    current_state = dict(node_states.get(node_id) or {})
-    if current_state.get("status") != "failure":
-        raise ValidationException("Only failed workflow nodes can be retried")
-
-    initial_states = initial_node_states(definition, list(run.execution_order or []))
-    retry_state = dict(initial_states.get(node_id) or {"status": "pending"})
-    node_states[node_id] = retry_state
-
-    artifact_lineage = dict(run.artifact_lineage or {})
-    artifact_lineage.pop(node_id, None)
-
-    run.status = "pending"
-    run.error_message = None
-    run.finished_at = None
-    run.node_states = node_states
-    run.artifact_lineage = artifact_lineage
+    prepare_workflow_node_retry(run, node_id=node_id)
 
     await start_ready_workflow_nodes(
         db,

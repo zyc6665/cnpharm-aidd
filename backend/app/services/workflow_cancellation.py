@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.common.time import utcnow
+from app.models.workflows import WorkflowRun
+
 
 WORKFLOW_RUN_ACTIVE_NODE_STATUSES = {"pending", "ready", "running", "waiting_task"}
 
@@ -44,4 +47,24 @@ def mark_active_workflow_state_canceled(
             nested_states[nested_id] = nested_state
         state[nested_key] = nested_states
 
+    return task_ids
+
+
+def mark_workflow_run_canceled(
+    run: WorkflowRun,
+    *,
+    finished_at: str,
+) -> list[str]:
+    node_states = dict(run.node_states or {})
+    task_ids: list[str] = []
+
+    for node_id, raw_state in node_states.items():
+        state = dict(raw_state or {})
+        task_ids.extend(mark_active_workflow_state_canceled(state, finished_at=finished_at))
+        node_states[node_id] = state
+
+    run.status = "canceled"
+    run.node_states = node_states
+    run.finished_at = utcnow()
+    run.error_message = None
     return task_ids
