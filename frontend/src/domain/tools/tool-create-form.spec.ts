@@ -1,13 +1,118 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildTemplateExecutorConfig,
+  buildToolTemplateFormPatch,
   createToolCreateFormState,
   createToolCreateSubmission,
+  formatToolTemplateResourceText,
   toolConfigToCreateFormPatch,
   type ToolCreateEditorState,
 } from './tool-create-form'
 
 describe('tool create form domain', () => {
+  it('builds a create-form patch from a tool template summary', () => {
+    const patch = buildToolTemplateFormPatch({
+      currentToolType: 'remote_api',
+      template: {
+        name: 'LVpocket',
+        slug: 'lvpocket-pocket-prediction',
+        description: 'Predict binding pockets',
+        version: '2.0.0',
+        capability: 'pocket_prediction',
+        stage: 'pocket_prediction',
+        executor_types: ['ssh_job'],
+        inputs: [
+          {
+            semantic_type: 'protein_structure@1',
+            field: 'protein_pdb',
+            accepted_extensions: ['.pdb'],
+          },
+        ],
+        outputs: [
+          {
+            semantic_type: 'binding_pocket@1',
+            source: 'output_files',
+            path: 'output/pockets.pdb',
+            required: true,
+          },
+        ],
+        resource_profile: {
+          gpu_required: true,
+          gpu_memory_gb: 8,
+          timeout_minutes: 2000,
+        },
+      },
+    })
+
+    expect(patch.form).toMatchObject({
+      tool_type: 'ssh_job',
+      name: 'LVpocket',
+      slug: 'lvpocket-pocket-prediction',
+      description: 'Predict binding pockets',
+      version: '2.0.0',
+      agent_capability_enabled: true,
+      agent_capability: 'pocket_prediction',
+      agent_stage: 'pocket_prediction',
+      gpu_required: true,
+      gpu_memory_mb: 8192,
+      timeout_sec: 86400,
+    })
+    expect(patch.form.agent_inputs).toEqual([
+      {
+        semantic_type: 'protein_structure@1',
+        field: 'protein_pdb',
+        accepted_extensions: '.pdb',
+      },
+    ])
+    expect(patch.form.agent_outputs).toEqual([
+      {
+        semantic_type: 'binding_pocket@1',
+        source: 'output_files',
+        path: 'output/pockets.pdb',
+        match_extension: '',
+        filename_contains_any: '',
+        required: true,
+      },
+    ])
+    expect(patch.agentDefaultsText).toBe('{}')
+  })
+
+  it('forces manual remote registration when a remote template is selected', () => {
+    const patch = buildToolTemplateFormPatch({
+      currentToolType: 'remote_api',
+      template: {
+        name: 'Remote Scorer',
+        slug: 'remote-scorer',
+        description: 'Score molecules',
+        version: '1.0.0',
+        capability: 'property_prediction',
+        stage: 'property_prediction',
+        executor_types: ['remote_api'],
+        inputs: [],
+        outputs: [],
+        resource_profile: { gpu_required: false, timeout_minutes: 5 },
+      },
+    })
+
+    expect(patch.form.tool_type).toBeUndefined()
+    expect(patch.form.remote_api_registration_mode).toBe('manual')
+    expect(patch.form.timeout_sec).toBe(300)
+  })
+
+  it('formats template resource profile text for display', () => {
+    expect(formatToolTemplateResourceText({
+      tier: 'gpu-small',
+      cpu: 8,
+      memory_gb: 32,
+      expected_minutes: 20,
+      timeout_minutes: 60,
+      gpu_required: true,
+      gpu_memory_gb: 12,
+    })).toBe('gpu-small · GPU 12GB · CPU 8 · MEM 32GB · 20/60 min')
+
+    expect(formatToolTemplateResourceText(undefined)).toBe('')
+  })
+
   it('builds ssh template executor config from normalized editor state', () => {
     const formState = createToolCreateFormState()
     formState.tool_type = 'ssh_job'

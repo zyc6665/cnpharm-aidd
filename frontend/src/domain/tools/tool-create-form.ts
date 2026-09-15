@@ -79,6 +79,22 @@ export interface ToolConfigFormPatch {
   agentDefaultsText: string
 }
 
+export interface ToolTemplateFormPatchInput {
+  currentToolType: ToolCreateFormState['tool_type']
+  template: {
+    name: string
+    slug: string
+    description: string
+    version: string
+    executor_types: string[]
+    capability: string
+    stage: string
+    inputs: Array<Record<string, unknown>>
+    outputs: Array<Record<string, unknown>>
+    resource_profile: Record<string, unknown>
+  }
+}
+
 export interface ToolCreateSubmissionInput {
   formState: ToolCreateFormState
   editorState: ToolCreateEditorState
@@ -217,6 +233,59 @@ export function templateOutputToForm(output: Record<string, unknown>): AgentCapa
 export function numberFromTemplate(value: unknown, fallback: number): number {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : fallback
+}
+
+export function formatToolTemplateResourceText(resourceProfile?: Record<string, unknown>): string {
+  if (!resourceProfile) {
+    return ''
+  }
+
+  const tier = String(resourceProfile.tier || 'unknown')
+  const cpu = String(resourceProfile.cpu || '-')
+  const memory = String(resourceProfile.memory_gb || '-')
+  const expected = String(resourceProfile.expected_minutes || '-')
+  const timeout = String(resourceProfile.timeout_minutes || '-')
+  const gpu = resourceProfile.gpu_required
+    ? `GPU ${resourceProfile.gpu_memory_gb || '-'}GB`
+    : 'CPU'
+
+  return `${tier} · ${gpu} · CPU ${cpu} · MEM ${memory}GB · ${expected}/${timeout} min`
+}
+
+export function buildToolTemplateFormPatch(
+  input: ToolTemplateFormPatchInput,
+): Pick<ToolConfigFormPatch, 'form' | 'agentDefaultsText'> {
+  const preferredExecutor = input.template.executor_types.find(isSupportedToolType)
+  const toolType = preferredExecutor && !input.template.executor_types.includes(input.currentToolType)
+    ? preferredExecutor
+    : input.currentToolType
+  const resourceProfile = input.template.resource_profile
+  const form: Partial<ToolCreateFormState> = {
+    name: input.template.name,
+    slug: input.template.slug,
+    description: input.template.description,
+    version: input.template.version,
+    agent_capability_enabled: true,
+    agent_capability: input.template.capability,
+    agent_stage: input.template.stage,
+    agent_inputs: input.template.inputs.map(templateInputToForm),
+    agent_outputs: input.template.outputs.map(templateOutputToForm),
+    gpu_required: resourceProfile.gpu_required === true,
+    gpu_memory_mb: numberFromTemplate(resourceProfile.gpu_memory_gb, 0) * 1024,
+    timeout_sec: Math.min(
+      86400,
+      Math.max(60, numberFromTemplate(resourceProfile.timeout_minutes, 60) * 60),
+    ),
+  }
+
+  if (toolType !== input.currentToolType) {
+    form.tool_type = toolType
+  }
+  if (toolType === 'remote_api') {
+    form.remote_api_registration_mode = 'manual'
+  }
+
+  return { form, agentDefaultsText: '{}' }
 }
 
 export function toolConfigToCreateFormPatch(config?: Record<string, unknown>): ToolConfigFormPatch {

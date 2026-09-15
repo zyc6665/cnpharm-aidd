@@ -885,16 +885,14 @@
   import StructuredStringListEditor from '@/components/tools/StructuredStringListEditor.vue'
   import {
     buildTemplateExecutorConfig,
+    buildToolTemplateFormPatch,
     createAgentCapabilityInputForm,
     createAgentCapabilityOutputForm,
     createToolCreateEditorState,
     createToolCreateFormState,
     createToolCreateSubmission,
-    isSupportedToolType,
-    numberFromTemplate,
+    formatToolTemplateResourceText,
     serializeToolConfigForComparison,
-    templateInputToForm,
-    templateOutputToForm,
     toolConfigToCreateFormPatch,
     type ToolCreateEditorState,
     type ToolCreateFormState
@@ -978,17 +976,7 @@
   )
 
   const selectedToolTemplateResourceText = computed(() => {
-    const resource_profile = selectedToolTemplate.value?.resource_profile
-    if (!resource_profile) {
-      return ''
-    }
-    const tier = String(resource_profile.tier || 'unknown')
-    const cpu = String(resource_profile.cpu || '-')
-    const memory = String(resource_profile.memory_gb || '-')
-    const expected = String(resource_profile.expected_minutes || '-')
-    const timeout = String(resource_profile.timeout_minutes || '-')
-    const gpu = resource_profile.gpu_required ? `GPU ${resource_profile.gpu_memory_gb || '-'}GB` : 'CPU'
-    return `${tier} · ${gpu} · CPU ${cpu} · MEM ${memory}GB · ${expected}/${timeout} min`
+    return formatToolTemplateResourceText(selectedToolTemplate.value?.resource_profile)
   })
 
   const addAgentInput = () => {
@@ -1024,31 +1012,13 @@
     if (!template) {
       return
     }
-    const preferredExecutor = template.executor_types.find(isSupportedToolType)
-    if (preferredExecutor && !template.executor_types.includes(formState.tool_type)) {
-      formState.tool_type = preferredExecutor
-    }
-    if (formState.tool_type === 'remote_api') {
-      formState.remote_api_registration_mode = 'manual'
-    }
-    formState.name = template.name
-    formState.slug = template.slug
-    formState.description = template.description
-    formState.version = template.version
-    formState.agent_capability_enabled = true
-    formState.agent_capability = template.capability
-    formState.agent_stage = template.stage
-    formState.agent_inputs = template.inputs.map(templateInputToForm)
-    formState.agent_outputs = template.outputs.map(templateOutputToForm)
-    agentDefaultsText.value = '{}'
 
-    const resourceProfile = template.resource_profile
-    formState.gpu_required = resourceProfile.gpu_required === true
-    formState.gpu_memory_mb = numberFromTemplate(resourceProfile.gpu_memory_gb, 0) * 1024
-    formState.timeout_sec = Math.min(
-      86400,
-      Math.max(60, numberFromTemplate(resourceProfile.timeout_minutes, 60) * 60)
-    )
+    const patch = buildToolTemplateFormPatch({
+      currentToolType: formState.tool_type,
+      template,
+    })
+    Object.assign(formState, patch.form)
+    agentDefaultsText.value = patch.agentDefaultsText
   }
 
   const handleCreateTemplateDraft = async () => {
