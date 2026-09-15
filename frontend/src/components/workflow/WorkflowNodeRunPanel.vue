@@ -304,7 +304,7 @@
       fileList,
       selectedArtifacts,
       executorType: executorType.value,
-      contractArtifactInputs: standardInputSlots.value,
+      standardInputSlots: standardInputSlots.value,
       standardInputFileFieldBindings: standardInputFileFieldBindings.value
     })
   }

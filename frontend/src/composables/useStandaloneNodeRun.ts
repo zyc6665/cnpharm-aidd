@@ -8,21 +8,10 @@ import {
   type StandardArtifactInputSlot,
 } from '@/domain/tools'
 import type { ArtifactFile, TaskRunPreparationPreview, ToolSchema } from '@/types/models'
-import { normalizeWorkflowSemanticType } from '@/workflow/semantic-types'
 
 interface StandaloneRunTool {
   id: string
   name: string
-}
-
-interface ContractArtifactInput {
-  name: string
-  type: string
-  required?: boolean
-  role_preferences?: string[]
-  required_roles?: string[]
-  readiness_policy?: string | null
-  suggested_preparation_tool?: string | null
 }
 
 type MaybeRef<T> = T | Ref<T>
@@ -35,8 +24,8 @@ export interface StandaloneNodeRunOptions {
   fileList: Record<string, UploadFile[]>
   selectedArtifacts: Record<string, ArtifactFile | undefined>
   executorType?: string
-  contractArtifactInputs: ContractArtifactInput[]
-  standardInputFileFieldBindings?: Record<string, string>
+  standardInputSlots: readonly StandardArtifactInputSlot[]
+  standardInputFileFieldBindings: Record<string, string>
 }
 
 export function useStandaloneNodeRun(input: {
@@ -56,28 +45,6 @@ export function useStandaloneNodeRun(input: {
 
   function currentProjectId() {
     return unref(input.projectId)?.trim() || undefined
-  }
-
-  function normalizeArtifactType(value?: string | null) {
-    return String(normalizeWorkflowSemanticType(String(value ?? '').trim())).trim().toLowerCase()
-  }
-
-  function toStandardInputSlots(inputs: ContractArtifactInput[]): StandardArtifactInputSlot[] {
-    return inputs.map(input => ({
-      name: input.name,
-      type: normalizeArtifactType(input.type) as StandardArtifactInputSlot['type'],
-      required: input.required ?? true,
-    }))
-  }
-
-  function standardInputFileFieldBindings(options: StandaloneNodeRunOptions) {
-    if (options.standardInputFileFieldBindings) {
-      return options.standardInputFileFieldBindings
-    }
-
-    return Object.fromEntries(
-      options.contractArtifactInputs.map(input => [input.name, input.name])
-    )
   }
 
   function refreshTaskBindings(
@@ -139,8 +106,8 @@ export function useStandaloneNodeRun(input: {
         formState: options.formState,
         fileList: options.fileList,
         selectedArtifacts: options.selectedArtifacts,
-        standardInputSlots: toStandardInputSlots(options.contractArtifactInputs),
-        standardInputFileFieldBindings: standardInputFileFieldBindings(options),
+        standardInputSlots: options.standardInputSlots,
+        standardInputFileFieldBindings: options.standardInputFileFieldBindings,
         selectedStandardArtifacts: {},
         standardInputFileList: {},
         executorType: options.executorType,

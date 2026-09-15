@@ -95,7 +95,8 @@ describe('useStandaloneNodeRun', () => {
       fileList: {},
       selectedArtifacts: {},
       executorType: 'builtin',
-      contractArtifactInputs: [],
+      standardInputSlots: [],
+      standardInputFileFieldBindings: {},
     })
 
     expect(prepareTaskRun).toHaveBeenCalledWith({
@@ -176,14 +177,14 @@ describe('useStandaloneNodeRun', () => {
         },
       },
       executorType: 'ssh_job',
-      contractArtifactInputs: [
+      standardInputSlots: [
         {
           name: 'protein',
           type: 'protein_structure@1',
           required: true,
-          readiness_policy: 'require_prepared',
         },
       ],
+      standardInputFileFieldBindings: { protein: 'protein' },
     })
 
     expect(result).toBeUndefined()
