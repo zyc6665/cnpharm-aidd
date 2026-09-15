@@ -81,16 +81,6 @@ def _audit_file_download_denied(
     )
 
 
-async def calculate_sha256(file: UploadFile) -> str:
-    """计算文件SHA256哈希"""
-    sha256_hash = hashlib.sha256()
-    await file.seek(0)
-    while chunk := await file.read(8192):
-        sha256_hash.update(chunk)
-    await file.seek(0)
-    return sha256_hash.hexdigest()
-
-
 def _safe_converted_pdb_filename(filename: str | None) -> str:
     """根据上传文件名生成安全的 PDB 文件名。"""
     raw_name = Path(filename or "ligand.sdf").name
