@@ -1,0 +1,36 @@
+"""文件记录的通用路径、权限和删除规则。"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from app.files.storage_path import get_file_path
+
+
+def file_storage_path(file_record: Any) -> Path:
+    """返回文件记录实际落盘路径，兼容旧记录的路径缺省情况。"""
+    if file_record.storage_path:
+        return Path(file_record.storage_path)
+    return get_file_path(file_record.id, file_record.filename)
+
+
+def delete_stored_file(file_record: Any) -> None:
+    """删除文件记录对应的本地文件；不存在时保持幂等。"""
+    file_storage_path(file_record).unlink(missing_ok=True)
+
+
+def user_can_access_file(file_record: Any, user: Any | None) -> bool:
+    """判断用户是否可以读取文件内容或元数据。"""
+    if file_record.is_public:
+        return True
+    if user is None:
+        return False
+    return file_record.owner_id == user.id or user.role == "admin"
+
+
+def user_can_manage_file(file_record: Any, user: Any | None) -> bool:
+    """判断用户是否可以删除或管理文件。"""
+    if user is None:
+        return False
+    return file_record.owner_id == user.id or user.role == "admin"

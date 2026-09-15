@@ -34,6 +34,12 @@ from app.files.remote_access_tokens import (
     RemoteFileAccessTokenError,
     validate_remote_file_access_token,
 )
+from app.files.file_records import (
+    delete_stored_file,
+    file_storage_path,
+    user_can_access_file,
+    user_can_manage_file,
+)
 from app.files.storage_path import ensure_storage_dir, get_file_path
 from app.files.upload_staging import stream_upload, validate_upload_content
 from app.services.artifact_file_list import list_user_artifact_files
@@ -328,10 +334,8 @@ async def get_file_info(
         raise NotFoundException("文件不存在")
 
     # 权限检查
-    if not file.is_public and file.owner_id != current_user.id:
-        is_admin = current_user.role == "admin"
-        if not is_admin:
-            raise ForbiddenException("无权访问此文件")
+    if not user_can_access_file(file, current_user):
+        raise ForbiddenException("无权访问此文件")
 
     # 检查是否过期
     if file.expires_at and file.expires_at < utcnow():
@@ -384,7 +388,7 @@ async def download_file(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="需要登录才能访问此文件"
             )
-        if file.owner_id != current_user.id and current_user.role != "admin":
+        if not user_can_access_file(file, current_user):
             _audit_file_download_denied(
                 file=file,
                 current_user=current_user,
@@ -404,7 +408,7 @@ async def download_file(
         raise NotFoundException("文件已过期")
 
     # 检查文件是否存在
-    file_path = Path(file.storage_path) if file.storage_path else get_file_path(file.id, file.filename)
+    file_path = file_storage_path(file)
     if not file_path.exists():
         raise NotFoundException("文件已被删除")
 
@@ -451,10 +455,8 @@ async def get_download_url(
         raise NotFoundException("文件不存在")
 
     # 权限检查
-    if not file.is_public and file.owner_id != current_user.id:
-        is_admin = current_user.role == "admin"
-        if not is_admin:
-            raise ForbiddenException("无权访问此文件")
+    if not user_can_access_file(file, current_user):
+        raise ForbiddenException("无权访问此文件")
 
     # 对于本地存储，直接返回下载API路径
     download_url = f"/api/v1/files/{file_id}/download"
@@ -483,14 +485,10 @@ async def delete_file(
         raise NotFoundException("文件不存在")
 
     # 权限检查
-    is_admin = current_user.role == "admin"
-    if file.owner_id != current_user.id and not is_admin:
+    if not user_can_manage_file(file, current_user):
         raise ForbiddenException("无权删除此文件")
 
-    # 删除本地文件
-    file_path = Path(file.storage_path) if file.storage_path else get_file_path(file.id, file.filename)
-    if file_path.exists():
-        os.remove(file_path)
+    delete_stored_file(file)
 
     # 删除数据库记录
     await db.delete(file)
@@ -520,15 +518,11 @@ async def batch_delete_files(
             continue
 
         # 权限检查
-        is_admin = current_user.role == "admin"
-        if file.owner_id != current_user.id and not is_admin:
+        if not user_can_manage_file(file, current_user):
             failed_ids.append(file_id)
             continue
 
-        # 删除本地文件
-        file_path = Path(file.storage_path) if file.storage_path else get_file_path(file.id, file.filename)
-        if file_path.exists():
-            os.remove(file_path)
+        delete_stored_file(file)
 
         await db.delete(file)
         deleted_count += 1
