@@ -102,6 +102,17 @@ export interface ToolTemplateFormPatchInput {
   }
 }
 
+export interface RemoteToolRegistrationPayload {
+  base_url: string
+  category_id: string
+  run_smoke_test: boolean
+  publish_on_success: boolean
+  icon?: string
+  icon_url?: string
+  is_public: boolean
+  timeout_sec?: number
+}
+
 export interface ToolCreateSubmissionInput {
   formState: ToolCreateFormState
   editorState: ToolCreateEditorState
@@ -178,6 +189,23 @@ export function createToolCreateEditorState(): ToolCreateEditorState {
     pythonArgumentItems: [],
     sshEnvEntries: [],
     sshOutputGlobItems: [...DEFAULT_SSH_OUTPUT_GLOBS],
+  }
+}
+
+export function buildRemoteToolRegistrationPayload(
+  formState: ToolCreateFormState,
+): RemoteToolRegistrationPayload {
+  return {
+    base_url: formState.remote_base_url.trim(),
+    category_id: formState.category_id,
+    run_smoke_test: formState.remote_run_smoke_test,
+    publish_on_success: formState.remote_run_smoke_test
+      ? formState.remote_publish_on_success
+      : false,
+    icon: formState.icon || undefined,
+    icon_url: formState.icon_url || undefined,
+    is_public: formState.is_public ?? true,
+    timeout_sec: formState.timeout_sec,
   }
 }
 

@@ -884,6 +884,7 @@
   import StructuredKeyValueEditor from '@/components/tools/StructuredKeyValueEditor.vue'
   import StructuredStringListEditor from '@/components/tools/StructuredStringListEditor.vue'
   import {
+    buildRemoteToolRegistrationPayload,
     buildTemplateExecutorConfig,
     buildToolEditFormPatch,
     buildToolTemplateFormPatch,
@@ -1128,18 +1129,7 @@
     submitting.value = true
     remoteRegisterResult.value = null
     try {
-      const response = await registerRemoteTool({
-        base_url: formState.remote_base_url.trim(),
-        category_id: formState.category_id,
-        run_smoke_test: formState.remote_run_smoke_test,
-        publish_on_success: formState.remote_run_smoke_test
-          ? formState.remote_publish_on_success
-          : false,
-        icon: formState.icon || undefined,
-        icon_url: formState.icon_url || undefined,
-        is_public: formState.is_public,
-        timeout_sec: formState.timeout_sec
-      })
+      const response = await registerRemoteTool(buildRemoteToolRegistrationPayload(formState))
       remoteRegisterResult.value = response.data
       message.success(
         response.data.smoke_test_task_id

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildRemoteToolRegistrationPayload,
   buildTemplateExecutorConfig,
   buildToolEditFormPatch,
   buildToolTemplateFormPatch,
@@ -11,6 +12,29 @@ import {
 } from './tool-create-form'
 
 describe('tool create form domain', () => {
+  it('builds remote self-registration payload from create form state', () => {
+    const formState = createToolCreateFormState()
+    formState.remote_base_url = '  https://model.example.com  '
+    formState.category_id = 'cat-1'
+    formState.remote_run_smoke_test = false
+    formState.remote_publish_on_success = true
+    formState.icon = ''
+    formState.icon_url = 'https://cdn.example.com/icon.png'
+    formState.is_public = false
+    formState.timeout_sec = 1800
+
+    expect(buildRemoteToolRegistrationPayload(formState)).toEqual({
+      base_url: 'https://model.example.com',
+      category_id: 'cat-1',
+      run_smoke_test: false,
+      publish_on_success: false,
+      icon: undefined,
+      icon_url: 'https://cdn.example.com/icon.png',
+      is_public: false,
+      timeout_sec: 1800,
+    })
+  })
+
   it('builds an edit-form patch from an existing tool detail', () => {
     const config = {
       type: 'ssh_job',
