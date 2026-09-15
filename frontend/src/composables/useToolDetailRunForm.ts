@@ -2,6 +2,7 @@ import { computed, nextTick, reactive, ref, unref, type Ref } from 'vue'
 import type { UploadFile } from 'ant-design-vue'
 import type { TypedArtifact } from '@/types/artifacts'
 import type { ArtifactFile, FileUploadResponse, SchemaProperty, Tool } from '@/types/models'
+import { replaceRecord } from '@/utils/record-state'
 import {
   buildToolRunFormState,
   getSdfConversionStatusText,
@@ -280,15 +281,6 @@ export function useToolDetailRunForm(options: ToolDetailRunFormOptions) {
     )
   }
 
-}
-
-function replaceRecord<T>(target: Record<string, T>, next: Record<string, T>) {
-  for (const key of Object.keys(target)) {
-    delete target[key]
-  }
-  for (const [key, value] of Object.entries(next)) {
-    target[key] = value as T
-  }
 }
 
 function createConvertedUploadFile(file: FileUploadResponse): UploadFile {

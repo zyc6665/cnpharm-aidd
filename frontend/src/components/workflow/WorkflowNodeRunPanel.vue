@@ -93,6 +93,7 @@
   import { useStandaloneNodeRun } from '@/composables/useStandaloneNodeRun'
   import type { ArtifactFile, Tool, ToolSchema } from '@/types/models'
   import type { TypedArtifact } from '@/types/artifacts'
+  import { replaceRecord } from '@/utils/record-state'
   import {
     buildToolRunFormState,
     isFileSchemaProperty,
@@ -212,16 +213,6 @@
   function clearAutoBoundArtifacts() {
     for (const key of Object.keys(autoBoundArtifactByField)) {
       delete autoBoundArtifactByField[key]
-    }
-  }
-
-  function replaceRecord<T>(target: Record<string, T>, next: Record<string, T>) {
-    for (const key of Object.keys(target)) {
-      delete target[key]
-    }
-
-    for (const [key, value] of Object.entries(next)) {
-      target[key] = value as T
     }
   }
 
