@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildTemplateExecutorConfig,
+  buildToolEditFormPatch,
   buildToolTemplateFormPatch,
   createToolCreateFormState,
   createToolCreateSubmission,
@@ -10,6 +11,78 @@ import {
 } from './tool-create-form'
 
 describe('tool create form domain', () => {
+  it('builds an edit-form patch from an existing tool detail', () => {
+    const config = {
+      type: 'ssh_job',
+      host: 'gpu-host',
+      port: 2222,
+      username: 'runner',
+      auth_type: 'key',
+      auth_ref: 'secret/key',
+      runner_mode: 'shell',
+      remote_base_dir: '/opt/aidd',
+      entrypoint: './run.sh',
+      env: { CUDA_VISIBLE_DEVICES: '0' },
+      output_globs: ['output/result.json'],
+      input_schema: { type: 'object', properties: { protein_pdb: { type: 'file' } } },
+      output_schema: { type: 'object' },
+    }
+
+    const patch = buildToolEditFormPatch({
+      id: 'tool-1',
+      name: 'LVpocket',
+      slug: 'lvpocket-pocket-prediction',
+      description: 'Predict pockets',
+      category: 'AIDD',
+      category_id: 'cat-1',
+      tags: [{ id: 'tag-1', name: 'Pocket', color: '#1677ff', sort_order: 1 }],
+      status: 'published',
+      usage_count: 0,
+      view_count: 0,
+      favorite_count: 0,
+      is_public: true,
+      gpu_required: true,
+      gpu_memory_mb: 8192,
+      timeout_sec: 7200,
+      icon: 'ExperimentOutlined',
+      icon_url: '',
+      created_at: '2026-09-15T00:00:00Z',
+      current_version: {
+        id: 'version-1',
+        tool_id: 'tool-1',
+        version: '2.0.0',
+        changelog: 'Updated model',
+        notes: 'Keep CUDA image warm',
+        config,
+        is_active: true,
+        deprecated: false,
+      },
+    })
+
+    expect(patch.form).toMatchObject({
+      name: 'LVpocket',
+      slug: 'lvpocket-pocket-prediction',
+      description: 'Predict pockets',
+      category_id: 'cat-1',
+      tag_ids: ['tag-1'],
+      gpu_required: true,
+      gpu_memory_mb: 8192,
+      timeout_sec: 7200,
+      version: '2.0.0',
+      changelog: 'Updated model',
+      notes: 'Keep CUDA image warm',
+      tool_type: 'ssh_job',
+      ssh_host: 'gpu-host',
+      ssh_runner_mode: 'shell',
+    })
+    expect(patch.editor.sshEnvEntries).toEqual([{ key: 'CUDA_VISIBLE_DEVICES', value: '0' }])
+    expect(patch.editor.sshOutputGlobItems).toEqual(['output/result.json'])
+    expect(patch.originalVersion).toBe('2.0.0')
+    expect(patch.originalChangelog).toBe('Updated model')
+    expect(patch.originalNotes).toBe('Keep CUDA image warm')
+    expect(patch.originalConfigSnapshot).toContain('ssh_job')
+  })
+
   it('builds a create-form patch from a tool template summary', () => {
     const patch = buildToolTemplateFormPatch({
       currentToolType: 'remote_api',

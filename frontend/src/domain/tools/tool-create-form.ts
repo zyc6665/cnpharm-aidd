@@ -1,4 +1,4 @@
-import type { ToolCreateParams } from '@/types/models'
+import type { Tool, ToolCreateParams } from '@/types/models'
 import {
   keyValueEntriesToRecord,
   normalizeStringList,
@@ -77,6 +77,13 @@ export interface ToolConfigFormPatch {
   form: Partial<ToolCreateFormState>
   editor: Partial<ToolCreateEditorState>
   agentDefaultsText: string
+}
+
+export interface ToolEditFormPatch extends ToolConfigFormPatch {
+  originalVersion: string
+  originalChangelog: string
+  originalNotes: string
+  originalConfigSnapshot: string
 }
 
 export interface ToolTemplateFormPatchInput {
@@ -286,6 +293,41 @@ export function buildToolTemplateFormPatch(
   }
 
   return { form, agentDefaultsText: '{}' }
+}
+
+export function buildToolEditFormPatch(tool: Tool): ToolEditFormPatch {
+  const version = tool.current_version
+  const config = isToolConfigRecord(version?.config) ? version.config : {}
+  const configPatch = toolConfigToCreateFormPatch(config)
+  const originalVersion = version?.version || ''
+  const originalChangelog = version?.changelog || ''
+  const originalNotes = version?.notes || ''
+
+  return {
+    form: {
+      name: tool.name,
+      slug: tool.slug,
+      description: tool.description || '',
+      category_id: tool.category_id || '',
+      icon: tool.icon || '',
+      icon_url: tool.icon_url || '',
+      is_public: tool.is_public ?? true,
+      gpu_required: tool.gpu_required,
+      gpu_memory_mb: tool.gpu_memory_mb,
+      timeout_sec: tool.timeout_sec || 3600,
+      tag_ids: tool.tags?.map(tag => tag.id) || [],
+      version: originalVersion,
+      changelog: originalChangelog,
+      notes: originalNotes,
+      ...configPatch.form,
+    },
+    editor: configPatch.editor,
+    agentDefaultsText: configPatch.agentDefaultsText,
+    originalVersion,
+    originalChangelog,
+    originalNotes,
+    originalConfigSnapshot: serializeToolConfigForComparison(config),
+  }
 }
 
 export function toolConfigToCreateFormPatch(config?: Record<string, unknown>): ToolConfigFormPatch {

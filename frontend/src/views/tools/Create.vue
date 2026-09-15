@@ -885,6 +885,7 @@
   import StructuredStringListEditor from '@/components/tools/StructuredStringListEditor.vue'
   import {
     buildTemplateExecutorConfig,
+    buildToolEditFormPatch,
     buildToolTemplateFormPatch,
     createAgentCapabilityInputForm,
     createAgentCapabilityOutputForm,
@@ -892,9 +893,8 @@
     createToolCreateFormState,
     createToolCreateSubmission,
     formatToolTemplateResourceText,
-    serializeToolConfigForComparison,
-    toolConfigToCreateFormPatch,
     type ToolCreateEditorState,
+    type ToolConfigFormPatch,
     type ToolCreateFormState
   } from '@/domain/tools'
   import { useToolsStore } from '@/stores'
@@ -1065,8 +1065,7 @@
     }
   }
 
-  const applyToolConfigPatch = (config?: Record<string, unknown>) => {
-    const patch = toolConfigToCreateFormPatch(config)
+  const applyToolFormPatch = (patch: ToolConfigFormPatch) => {
     Object.assign(formState, patch.form)
     if (patch.editor.apiHeaderEntries) {
       apiHeaderEntries.value = patch.editor.apiHeaderEntries
@@ -1166,28 +1165,13 @@
     try {
       const res = await getToolDetail(toolId.value)
       const tool = res.data
+      const patch = buildToolEditFormPatch(tool)
 
-      // 填充表单
-      formState.name = tool.name
-      formState.slug = tool.slug
-      formState.description = tool.description || ''
-      formState.category_id = tool.category_id || ''
-      formState.icon = tool.icon || ''
-      formState.icon_url = tool.icon_url || ''
-      formState.is_public = tool.is_public ?? true
-      formState.gpu_required = tool.gpu_required
-      formState.gpu_memory_mb = tool.gpu_memory_mb
-      formState.timeout_sec = tool.timeout_sec || 3600
-      formState.tag_ids = tool.tags?.map(t => t.id) || []
-      formState.version = tool.current_version?.version || formState.version
-      formState.changelog = tool.current_version?.changelog || ''
-      formState.notes = tool.current_version?.notes || ''
-      originalVersion.value = tool.current_version?.version || ''
-      originalChangelog.value = tool.current_version?.changelog || ''
-      originalNotes.value = tool.current_version?.notes || ''
-      originalConfigSnapshot.value = serializeToolConfigForComparison(tool.current_version?.config || {})
-
-      applyToolConfigPatch(tool.current_version?.config as Record<string, unknown> | undefined)
+      applyToolFormPatch(patch)
+      originalVersion.value = patch.originalVersion
+      originalChangelog.value = patch.originalChangelog
+      originalNotes.value = patch.originalNotes
+      originalConfigSnapshot.value = patch.originalConfigSnapshot
     } catch {
       message.error(t('tools.loadFailed'))
       router.push('/tools')

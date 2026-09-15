@@ -96,7 +96,7 @@ test('工具创建页应以结构化数据编辑全部执行器 map 和 list 字
 
   for (const marker of [
     'createToolCreateSubmission',
-    'toolConfigToCreateFormPatch'
+    'buildToolEditFormPatch'
   ]) {
     assert.equal(source.includes(marker), true, `missing page integration marker ${marker}`)
   }
@@ -148,7 +148,7 @@ test('工具创建页应突出 Tool Package v2 主路径并标记旧语义映射
   }
 
   assert.equal(source.includes("from '@/domain/tools'"), true)
-  assert.equal(source.includes('serializeToolConfigForComparison'), true)
+  assert.equal(createFormDomain.includes('serializeToolConfigForComparison'), true)
   assert.equal(createFormDomain.includes('parseAgentCapabilityForm'), true)
   assert.equal(createFormDomain.includes('buildAgentCapabilityConfig'), true)
   assert.equal(createFormDomain.includes('buildToolVersionConfig'), true)
