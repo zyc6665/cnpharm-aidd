@@ -5,7 +5,7 @@ import type { ArtifactFile, FileUploadResponse, SchemaProperty, Tool } from '@/t
 import {
   buildStandardInputBindings,
   buildStandardInputBindingsFromFileFields,
-  buildToolFormInitialState,
+  buildToolRunFormState,
   getSdfConversionStatusText,
   hasStandardInputFileFieldBindings,
   missingRequiredStandardInputSlots,
@@ -91,22 +91,19 @@ export function useToolDetailRunForm(options: ToolDetailRunFormOptions) {
   })
 
   function initializeFromSurface() {
-    const initialState = buildToolFormInitialState({ flattenedSchema: flattenedSchema.value })
-    replaceRecord(formState, initialState.formState)
-    replaceRecord(fileList, emptyArrayRecord(initialState.fileFieldKeys))
-    replaceRecord(selectedArtifacts, undefinedRecord(initialState.fileFieldKeys))
-    replaceRecord(exampleFiles, undefinedRecord(initialState.fileFieldKeys))
-    replaceRecord(convertedFiles, undefinedRecord(initialState.fileFieldKeys))
-    replaceRecord(sdfConversionLoading, Object.fromEntries(initialState.fileFieldKeys.map(key => [key, false])))
-    replaceRecord(sdfConversionErrors, undefinedRecord(initialState.fileFieldKeys))
-    replaceRecord(
-      selectedStandardArtifacts,
-      undefinedRecord(standardInputSlots.value.map(slot => slot.name))
-    )
-    replaceRecord(
-      standardInputFileList,
-      emptyArrayRecord(standardInputSlots.value.map(slot => slot.name))
-    )
+    const state = buildToolRunFormState({
+      flattenedSchema: flattenedSchema.value,
+      standardInputSlots: standardInputSlots.value,
+    })
+    replaceRecord(formState, state.formState)
+    replaceRecord(fileList, state.fileList)
+    replaceRecord(selectedArtifacts, state.selectedArtifacts)
+    replaceRecord(exampleFiles, state.exampleFiles)
+    replaceRecord(convertedFiles, state.convertedFiles)
+    replaceRecord(sdfConversionLoading, state.sdfConversionLoading)
+    replaceRecord(sdfConversionErrors, state.sdfConversionErrors)
+    replaceRecord(selectedStandardArtifacts, state.selectedStandardArtifacts)
+    replaceRecord(standardInputFileList, state.standardInputFileList)
   }
 
   function reset() {
@@ -315,14 +312,6 @@ function replaceRecord<T>(target: Record<string, T>, next: Record<string, T>) {
   for (const [key, value] of Object.entries(next)) {
     target[key] = value as T
   }
-}
-
-function emptyArrayRecord(keys: readonly string[]): Record<string, UploadFile[]> {
-  return Object.fromEntries(keys.map(key => [key, []]))
-}
-
-function undefinedRecord<T = undefined>(keys: readonly string[]): Record<string, T | undefined> {
-  return Object.fromEntries(keys.map(key => [key, undefined]))
 }
 
 function createConvertedUploadFile(file: FileUploadResponse): UploadFile {
