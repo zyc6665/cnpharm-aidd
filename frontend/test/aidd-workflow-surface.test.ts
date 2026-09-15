@@ -139,8 +139,10 @@ test('流程工作台页面应组合工具栏、画布和节点检查器组件',
 
 test('节点参数面板应复用 schema 扁平化并避免单节点任务提交载荷', () => {
   const source = readSource('src/components/workflow/WorkflowNodeRunPanel.vue')
+  const inputSource = readSource('src/workflow/node-run-inputs.ts')
 
-  assert.equal(source.includes('flattenToolInputSchema'), true)
+  assert.equal(source.includes('resolveWorkflowNodeRunInputSurface'), true)
+  assert.equal(inputSource.includes('flattenToolInputSchema'), true)
   assert.equal(source.includes('buildTaskSubmissionPayload'), false)
 })
 

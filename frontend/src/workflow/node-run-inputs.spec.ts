@@ -5,6 +5,7 @@ import {
   buildAutoBoundArtifactCards,
   buildArtifactInputSchema,
   resolveRecommendedArtifactBindings,
+  resolveWorkflowNodeRunInputSurface,
 } from './node-run-inputs'
 
 function artifact(partial: Partial<ArtifactFile>): ArtifactFile {
@@ -47,6 +48,90 @@ describe('workflow node run inputs', () => {
       },
       required: ['protein'],
     })
+  })
+
+  it('resolves concrete tool package fields for node runs', () => {
+    const surface = resolveWorkflowNodeRunInputSurface({
+      tool: {
+        id: 'tool-1',
+        name: 'LVpocket',
+        slug: 'lvpocket-pocket-prediction',
+        description: 'Predict pockets',
+        category: 'AIDD',
+        tags: [],
+        status: 'published',
+        usage_count: 0,
+        view_count: 0,
+        favorite_count: 0,
+        gpu_required: true,
+        created_at: '2026-09-15T00:00:00Z',
+        current_version: {
+          id: 'version-1',
+          tool_id: 'tool-1',
+          version: '1.0.0',
+          is_active: true,
+          deprecated: false,
+          config: {
+            type: 'ssh_job',
+            tool_package_manifest: {
+              api_version: 'aidd.sciminer/tool-package.v2',
+              artifacts: {
+                inputs: [
+                  {
+                    name: 'protein',
+                    type: 'protein_structure@1',
+                    required: true,
+                  },
+                ],
+                outputs: [],
+              },
+              parameters_schema: {
+                type: 'object',
+                properties: {
+                  model_choice: { type: 'string', default: 'auto' },
+                },
+              },
+            },
+            input_schema: {
+              type: 'object',
+              required: ['protein_pdb'],
+              properties: {
+                protein_pdb: {
+                  type: 'string',
+                  format: 'file',
+                  title: 'Protein PDB',
+                },
+                model_choice: { type: 'string', default: 'auto' },
+              },
+            },
+          },
+        },
+      },
+    })
+
+    expect(surface.schema?.properties).toHaveProperty('protein_pdb')
+    expect(surface.flattenedSchema.properties).toHaveProperty('protein_pdb')
+    expect(surface.standardInputFileFieldBindings).toEqual({
+      protein: 'protein_pdb',
+    })
+    expect(surface.usesSyntheticStandardInputFields).toBe(false)
+  })
+
+  it('resolves synthetic artifact fields when a node tool has slots only', () => {
+    const surface = resolveWorkflowNodeRunInputSurface({
+      tool: null,
+      standardInputSlots: [
+        { name: 'protein', type: 'protein_structure@1', required: true },
+      ],
+    })
+
+    expect(surface.schema).toEqual(buildArtifactInputSchema([
+      { name: 'protein', type: 'protein_structure@1', required: true },
+    ]))
+    expect(surface.standardInputFileFieldBindings).toEqual({
+      protein: 'protein',
+    })
+    expect(surface.usesSyntheticStandardInputFields).toBe(true)
   })
 
   it('auto-binds compatible recommendations without overwriting explicit choices', () => {

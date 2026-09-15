@@ -12,20 +12,26 @@ function readSource(relativePath: string): string {
 
 test('工具详情页应使用统一页头承载工具标题和收藏操作', () => {
   const source = readSource('src/views/tools/Detail.vue')
+  const actionsSource = readSource('src/components/tools/ToolDetailHeaderActions.vue')
 
   assert.equal(source.includes('AppPageHeader'), true)
   assert.equal(source.includes(':title="tool.name"'), true)
   assert.equal(source.includes(':subtitle="detailSubtitle"'), true)
-  assert.equal(source.includes('tool-detail-actions'), true)
+  assert.equal(source.includes('ToolDetailHeaderActions'), true)
+  assert.equal(actionsSource.includes('tool-detail-actions'), true)
 })
 
 test('工具详情页应优化信息卡、表单操作区和侧栏布局', () => {
   const source = readSource('src/views/tools/Detail.vue')
+  const overviewSource = readSource('src/components/tools/ToolDetailOverview.vue')
+  const actionsSource = readSource('src/components/tools/ToolRunFormActions.vue')
+  const sidebarSource = readSource('src/components/tools/ToolDetailSidebar.vue')
 
-  assert.equal(source.includes('tool-overview'), true)
-  assert.equal(source.includes('overview-title'), true)
-  assert.equal(source.includes('tool-form-actions'), true)
-  assert.equal(source.includes('position: sticky'), true)
+  assert.equal(source.includes('ToolDetailOverview'), true)
+  assert.equal(overviewSource.includes('tool-overview'), true)
+  assert.equal(overviewSource.includes('overview-title'), true)
+  assert.equal(actionsSource.includes('tool-form-actions'), true)
+  assert.equal(sidebarSource.includes('position: sticky'), true)
   assert.equal(source.includes('@media (max-width: @screen-md)'), true)
 })
 

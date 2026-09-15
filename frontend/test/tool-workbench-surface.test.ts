@@ -54,12 +54,15 @@ test('共享产物文件选择器组件文件应存在', () => {
 
 test('共享产物文件选择器应使用路径式四级选择并过滤兼容文件', () => {
   const source = readSource('src/components/tools/ArtifactFilePicker.vue')
+  const pathSource = readSource('src/components/tools/ArtifactPickerPath.vue')
+  const stepPanelSource = readSource('src/components/tools/ArtifactPickerStepPanel.vue')
 
   assert.equal(source.includes('buildWorkflowArtifactHierarchy'), true)
-  assert.equal(source.includes('currentToolId'), true)
   assert.equal(source.includes('currentToolSlug'), true)
-  assert.equal(source.includes('artifact-path'), true)
-  assert.equal(source.includes('artifact-step-panel'), true)
+  assert.equal(source.includes('ArtifactPickerPath'), true)
+  assert.equal(source.includes('ArtifactPickerStepPanel'), true)
+  assert.equal(pathSource.includes('artifact-path'), true)
+  assert.equal(stepPanelSource.includes('artifact-step-panel'), true)
   assert.equal(source.includes('selectedTaskId'), true)
   assert.equal(source.includes('selectedGroupId'), true)
   assert.equal(source.includes('selectedToolSlug'), true)

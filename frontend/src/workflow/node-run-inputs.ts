@@ -1,4 +1,12 @@
-import type { ArtifactFile, SchemaProperty, ToolSchema } from '../types/models.d.ts'
+import type { ArtifactFile, SchemaProperty, Tool, ToolSchema } from '../types/models.d.ts'
+import { flattenToolInputSchema } from '../domain/tools/detail-schema.ts'
+import {
+  resolveStandardInputFileFieldBindings,
+  type StandardArtifactInputSlot,
+} from '../domain/tools/standard-artifact-inputs.ts'
+import {
+  resolveToolRunInputSurface,
+} from '../domain/tools/tool-run-input-surface.ts'
 import type { WorkflowNodeArtifactRecommendation } from './canvas-artifacts.ts'
 import { normalizeWorkflowSemanticType } from './semantic-types.ts'
 
@@ -21,6 +29,55 @@ export interface ResolveRecommendedArtifactBindingsInput {
   selectedArtifacts: Record<string, ArtifactFile | undefined>
   fileList: Record<string, readonly unknown[] | undefined>
   recommendations?: readonly WorkflowNodeArtifactRecommendation[]
+}
+
+export interface WorkflowNodeRunInputSurface {
+  schema?: ToolSchema
+  flattenedSchema: ToolSchema
+  standardInputSlots: StandardArtifactInputSlot[]
+  standardInputFileFieldBindings: Record<string, string>
+  usesSyntheticStandardInputFields: boolean
+}
+
+export function resolveWorkflowNodeRunInputSurface(input: {
+  tool?: Tool | null
+  standardInputSlots?: readonly StandardArtifactInputSlot[]
+}): WorkflowNodeRunInputSurface {
+  const toolSurface = resolveToolRunInputSurface(input.tool)
+  const standardInputSlots = [...(input.standardInputSlots ?? toolSurface.standardInputSlots)]
+  const schema = toolSurface.schema?.properties && Object.keys(toolSurface.schema.properties).length > 0
+    ? toolSurface.schema
+    : standardInputSlots.length > 0
+      ? buildArtifactInputSchema(standardInputSlots)
+      : undefined
+  const flattenedSchema = flattenToolInputSchema(schema) ?? {
+    type: 'object',
+    properties: {},
+    required: [],
+  }
+
+  if (Object.keys(toolSurface.standardInputFileFieldBindings).length > 0) {
+    return {
+      schema,
+      flattenedSchema,
+      standardInputSlots,
+      standardInputFileFieldBindings: toolSurface.standardInputFileFieldBindings,
+      usesSyntheticStandardInputFields: false,
+    }
+  }
+
+  const standardInputFileFieldBindings = resolveStandardInputFileFieldBindings({
+    slots: standardInputSlots,
+    flattenedSchema,
+  })
+
+  return {
+    schema,
+    flattenedSchema,
+    standardInputSlots,
+    standardInputFileFieldBindings,
+    usesSyntheticStandardInputFields: schema !== toolSurface.schema,
+  }
 }
 
 export function buildArtifactInputSchema(artifactInputs: readonly StandardArtifactInputLike[]): ToolSchema {

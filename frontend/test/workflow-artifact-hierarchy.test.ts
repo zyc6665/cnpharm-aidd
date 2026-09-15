@@ -117,6 +117,10 @@ test('工作台应存在共享产物四级层级派生器，并按分组顺序�
 
 test('参数里的产物复用选择器应提供分组→工具→任务→产物四级链路', () => {
   const source = readSource('src/components/tools/ArtifactFilePicker.vue')
+  const pathSource = readSource('src/components/tools/ArtifactPickerPath.vue')
+  const stepPanelSource = readSource('src/components/tools/ArtifactPickerStepPanel.vue')
+  const optionSource = readSource('src/components/tools/ArtifactPickerStepOption.vue')
+  const summarySource = readSource('src/components/tools/ArtifactPickerSelectionSummary.vue')
   const modelSource = readSource('src/types/models.d.ts')
 
   assert.equal(source.includes('selectedGroupId'), true)
@@ -124,22 +128,24 @@ test('参数里的产物复用选择器应提供分组→工具→任务→产�
   assert.equal(source.includes('selectedTaskId'), true)
   assert.equal(source.includes('activeStep'), true)
   assert.equal(source.includes('externalSelectionPath'), true)
-  assert.equal(source.includes('artifact-path'), true)
-  assert.equal(source.includes('artifact-step-panel'), true)
-  assert.equal(source.includes('artifact-step-option'), true)
-  assert.equal(source.includes('artifact-selection-summary'), true)
+  assert.equal(source.includes('ArtifactPickerPath'), true)
+  assert.equal(pathSource.includes('artifact-path'), true)
+  assert.equal(stepPanelSource.includes('artifact-step-panel'), true)
+  assert.equal(optionSource.includes('artifact-step-option'), true)
+  assert.equal(summarySource.includes('artifact-selection-summary'), true)
   assert.equal(source.includes('buildWorkflowArtifactHierarchy'), true)
   assert.equal(modelSource.includes('task_name?: string'), true)
 })
 
 test('节点参数表单应通过共享选择器提供分组→工具→任务→产物链路', () => {
   const source = readSource('src/components/tools/ArtifactFilePicker.vue')
+  const pathSource = readSource('src/components/tools/ArtifactPickerPath.vue')
   const formSource = readSource('src/components/tools/ToolParameterForm.vue')
 
   assert.equal(source.includes('buildWorkflowArtifactHierarchy'), true)
   assert.equal(source.includes('selectedGroupId'), true)
   assert.equal(source.includes('selectedToolSlug'), true)
   assert.equal(source.includes('selectedTaskId'), true)
-  assert.equal(source.includes('artifact-path'), true)
+  assert.equal(pathSource.includes('artifact-path'), true)
   assert.equal(formSource.includes('ArtifactFilePicker'), true)
 })

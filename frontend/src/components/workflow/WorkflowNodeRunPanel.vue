@@ -95,17 +95,14 @@
   import type { TypedArtifact } from '@/types/artifacts'
   import {
     buildToolFormInitialState,
-    flattenToolInputSchema,
     isFileSchemaProperty,
-    resolveStandardInputFileFieldBindings,
-    resolveToolRunInputSurface
   } from '@/domain/tools'
   import { taskRunPreparationBlockedMessage } from '@/domain/tasks'
   import type { WorkflowNodeArtifactRecommendation } from '@/workflow/canvas-artifacts'
   import {
-    buildArtifactInputSchema,
     buildAutoBoundArtifactCards,
-    resolveRecommendedArtifactBindings
+    resolveRecommendedArtifactBindings,
+    resolveWorkflowNodeRunInputSurface
   } from '@/workflow/node-run-inputs'
 
   interface WorkflowAvailableTool {
@@ -159,20 +156,11 @@
 
   const currentNodeTask = computed(() => workflowStore.taskByNode[props.nodeId] ?? null)
 
-  const inputSurface = computed(() => resolveToolRunInputSurface(selectedTool.value))
+  const inputSurface = computed(() => resolveWorkflowNodeRunInputSurface({
+    tool: selectedTool.value
+  }))
   const standardInputSlots = computed(() => inputSurface.value.standardInputSlots)
-
-  const inputSchema = computed<ToolSchema | undefined>(() => {
-    if (inputSurface.value.schema?.properties && Object.keys(inputSurface.value.schema.properties).length > 0) {
-      return inputSurface.value.schema
-    }
-
-    if (standardInputSlots.value.length > 0) {
-      return buildArtifactInputSchema(standardInputSlots.value)
-    }
-
-    return undefined
-  })
+  const inputSchema = computed<ToolSchema | undefined>(() => inputSurface.value.schema)
 
   const executorType = computed(() => {
     const contractExecutorType = selectedTool.value?.contract?.executor?.type
@@ -188,29 +176,16 @@
     return undefined
   })
 
-  const flattenedSchema = computed<ToolSchema>(() => {
-    return flattenToolInputSchema(inputSchema.value) ?? {
-      type: 'object',
-      properties: {},
-      required: []
-    }
-  })
+  const flattenedSchema = computed<ToolSchema>(() => inputSurface.value.flattenedSchema)
 
   const fileFieldKeys = computed(() =>
     Object.entries(flattenedSchema.value.properties)
       .filter(([, prop]) => isFileSchemaProperty(prop))
       .map(([key]) => key)
   )
-  const standardInputFileFieldBindings = computed(() => {
-    if (Object.keys(inputSurface.value.standardInputFileFieldBindings).length > 0) {
-      return inputSurface.value.standardInputFileFieldBindings
-    }
-
-    return resolveStandardInputFileFieldBindings({
-      slots: standardInputSlots.value,
-      flattenedSchema: flattenedSchema.value,
-    })
-  })
+  const standardInputFileFieldBindings = computed(
+    () => inputSurface.value.standardInputFileFieldBindings
+  )
 
   const recommendedArtifactSignature = computed(() =>
     (props.recommendedArtifacts ?? [])
