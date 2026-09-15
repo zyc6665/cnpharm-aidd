@@ -94,7 +94,7 @@
   import type { ArtifactFile, Tool, ToolSchema } from '@/types/models'
   import type { TypedArtifact } from '@/types/artifacts'
   import {
-    buildToolFormInitialState,
+    buildToolRunFormState,
     isFileSchemaProperty,
   } from '@/domain/tools'
   import { taskRunPreparationBlockedMessage } from '@/domain/tasks'
@@ -209,37 +209,19 @@
     return taskRunPreparationBlockedMessage(preparationPreview.value)
   })
 
-  function replaceFormState(nextState: Record<string, unknown>) {
-    for (const key of Object.keys(formState)) {
-      delete formState[key]
-    }
-
-    for (const [key, value] of Object.entries(nextState)) {
-      formState[key] = value
-    }
-  }
-
-  function replaceFileList(nextKeys: string[]) {
-    for (const key of Object.keys(fileList)) {
-      delete fileList[key]
-    }
-
-    for (const key of nextKeys) {
-      fileList[key] = []
-    }
-  }
-
-  function replaceSelectedArtifacts(nextKeys: string[]) {
-    for (const key of Object.keys(selectedArtifacts)) {
-      delete selectedArtifacts[key]
-    }
-
+  function clearAutoBoundArtifacts() {
     for (const key of Object.keys(autoBoundArtifactByField)) {
       delete autoBoundArtifactByField[key]
     }
+  }
 
-    for (const key of nextKeys) {
-      selectedArtifacts[key] = undefined
+  function replaceRecord<T>(target: Record<string, T>, next: Record<string, T>) {
+    for (const key of Object.keys(target)) {
+      delete target[key]
+    }
+
+    for (const [key, value] of Object.entries(next)) {
+      target[key] = value as T
     }
   }
 
@@ -264,15 +246,18 @@
 
   function applyInitialFormState(resetDraft = false) {
     const draft = resetDraft ? {} : workflowStore.nodeFormDrafts[props.nodeId]
-    const initialState = buildToolFormInitialState({
+    const state = buildToolRunFormState({
       flattenedSchema: flattenedSchema.value,
+      standardInputSlots: standardInputSlots.value,
       draft
     })
+    const nextFileFieldKeys = Object.keys(state.fileList)
 
-    replaceFormState(initialState.formState)
-    replaceFileList(initialState.fileFieldKeys)
-    replaceSelectedArtifacts(initialState.fileFieldKeys)
-    applyRecommendedArtifacts(initialState.fileFieldKeys)
+    replaceRecord(formState, state.formState)
+    replaceRecord(fileList, state.fileList)
+    replaceRecord(selectedArtifacts, state.selectedArtifacts)
+    clearAutoBoundArtifacts()
+    applyRecommendedArtifacts(nextFileFieldKeys)
   }
 
   function handleFileListChange(key: string, files: UploadFile[]) {
@@ -323,9 +308,10 @@
       if (!selectedToolSlug || !toolId) {
         selectedTool.value = null
         selectedToolLoading.value = false
-        replaceFormState({})
-        replaceFileList([])
-        replaceSelectedArtifacts([])
+        replaceRecord(formState, {})
+        replaceRecord(fileList, {})
+        replaceRecord(selectedArtifacts, {})
+        clearAutoBoundArtifacts()
         return
       }
 

@@ -63,7 +63,7 @@ test('workflow node inspector embeds a real node run panel', () => {
 
   for (const marker of [
     'ToolRunInputForm',
-    'buildToolFormInitialState',
+    'buildToolRunFormState',
     'getToolDetail',
     'resolveWorkflowNodeRunInputSurface',
     ':allow-uploads="true"'
@@ -72,6 +72,7 @@ test('workflow node inspector embeds a real node run panel', () => {
   }
 
   for (const marker of [
+    'buildToolFormInitialState',
     'buildTaskSubmissionPayload',
     'uploadFile',
     'recordNodeTask',
