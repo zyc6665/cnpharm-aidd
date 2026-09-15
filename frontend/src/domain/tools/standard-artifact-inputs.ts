@@ -367,3 +367,41 @@ export function missingRequiredStandardInputSlots(input: {
     return slot.required && !input.inputBindings[slot.name]?.trim() && !input.hasUpload(slot.name)
   })
 }
+
+export interface StandardInputUploadContext {
+  usesConcreteStandardInputFields: boolean
+}
+
+export interface StandardInputRunState {
+  usesConcreteStandardInputFields: boolean
+  inputBindings: Record<string, string>
+  missingRequiredSlots: StandardArtifactInputSlot[]
+}
+
+export function resolveStandardInputRunState(input: {
+  slots: readonly StandardArtifactInputSlot[]
+  fileFieldBindings: Record<string, string>
+  selectedArtifacts: Record<string, ArtifactFile | null | undefined>
+  selectedStandardArtifacts: Record<string, TypedArtifact | null | undefined>
+  hasUpload: (slotName: string, context: StandardInputUploadContext) => boolean
+}): StandardInputRunState {
+  const usesConcreteStandardInputFields = hasStandardInputFileFieldBindings(input.fileFieldBindings)
+  const inputBindings = usesConcreteStandardInputFields
+    ? buildStandardInputBindingsFromFileFields({
+        slots: input.slots,
+        fileFieldBindings: input.fileFieldBindings,
+        selectedArtifacts: input.selectedArtifacts,
+      }).inputBindings
+    : buildStandardInputBindings(input.selectedStandardArtifacts)
+  const context = { usesConcreteStandardInputFields }
+
+  return {
+    usesConcreteStandardInputFields,
+    inputBindings,
+    missingRequiredSlots: missingRequiredStandardInputSlots({
+      slots: input.slots,
+      inputBindings,
+      hasUpload: slotName => input.hasUpload(slotName, context),
+    }),
+  }
+}

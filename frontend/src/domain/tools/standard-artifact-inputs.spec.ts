@@ -10,6 +10,7 @@ import {
   hasStandardInputFileFieldBindings,
   missingRequiredStandardInputSlots,
   resolveStandardInputFileFieldBindings,
+  resolveStandardInputRunState,
   resolveToolPackageParameterSchema,
   resolveToolStandardInputSlots,
 } from './standard-artifact-inputs'
@@ -344,6 +345,41 @@ describe('standard artifact tool inputs', () => {
         hasUpload: slotName => slotName === 'optional',
       }).map(slot => slot.name)
     ).toEqual(['ligand'])
+  })
+
+  it('resolves concrete standard input run state from file-field ArtifactVersion selections', () => {
+    const state = resolveStandardInputRunState({
+      slots: [{ name: 'protein', type: 'protein_structure@1', required: true }],
+      fileFieldBindings: { protein: 'protein_pdb' },
+      selectedArtifacts: {
+        protein_pdb: makeArtifactFile({ artifact_version_id: 'artifact-version-1' }),
+      },
+      selectedStandardArtifacts: {},
+      hasUpload: () => false,
+    })
+
+    expect(state.usesConcreteStandardInputFields).toBe(true)
+    expect(state.inputBindings).toEqual({ protein: 'artifact-version-1' })
+    expect(state.missingRequiredSlots).toEqual([])
+  })
+
+  it('resolves direct standard input run state from selected versions and uploads', () => {
+    const slots = [
+      { name: 'protein', type: 'protein_structure@1', required: true },
+      { name: 'ligand', type: 'ligand_structure@1', required: true },
+    ] as const
+
+    const state = resolveStandardInputRunState({
+      slots,
+      fileFieldBindings: {},
+      selectedArtifacts: {},
+      selectedStandardArtifacts: { protein: makeArtifact() },
+      hasUpload: (slotName, context) => !context.usesConcreteStandardInputFields && slotName === 'ligand',
+    })
+
+    expect(state.usesConcreteStandardInputFields).toBe(false)
+    expect(state.inputBindings).toEqual({ protein: 'version-1' })
+    expect(state.missingRequiredSlots).toEqual([])
   })
 
   it('resolves v2 parameter schema from the embedded manifest instead of legacy input schema', () => {

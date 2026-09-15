@@ -3,12 +3,9 @@ import type { UploadFile } from 'ant-design-vue'
 import type { TypedArtifact } from '@/types/artifacts'
 import type { ArtifactFile, FileUploadResponse, SchemaProperty, Tool } from '@/types/models'
 import {
-  buildStandardInputBindings,
-  buildStandardInputBindingsFromFileFields,
   buildToolRunFormState,
   getSdfConversionStatusText,
-  hasStandardInputFileFieldBindings,
-  missingRequiredStandardInputSlots,
+  resolveStandardInputRunState,
   resolveToolRunInputSurface,
   shouldShowSdfToPdbConverter,
 } from '@/domain/tools'
@@ -46,40 +43,27 @@ export function useToolDetailRunForm(options: ToolDetailRunFormOptions) {
   const standardInputFileFieldBindings = computed(
     () => inputSurface.value.standardInputFileFieldBindings
   )
-  const usesConcreteStandardInputFields = computed(() => {
-    return hasStandardInputFileFieldBindings(standardInputFileFieldBindings.value)
-  })
   const showStandardArtifactInputs = computed(() => inputSurface.value.showStandardArtifactInputs)
-  const concreteStandardInputBindingProjection = computed(() => {
-    if (!usesConcreteStandardInputFields.value) {
-      return { inputBindings: {}, boundFieldKeys: [] }
-    }
-
-    return buildStandardInputBindingsFromFileFields({
+  const standardInputRunState = computed(() => {
+    return resolveStandardInputRunState({
       slots: standardInputSlots.value,
       fileFieldBindings: standardInputFileFieldBindings.value,
       selectedArtifacts,
-    })
-  })
-  const selectedStandardArtifactRecord = computed<Record<string, TypedArtifact | undefined>>(() => {
-    return Object.fromEntries(
-      standardInputSlots.value.map(slot => [slot.name, selectedStandardArtifacts[slot.name]])
-    )
-  })
-  const standardInputBindings = computed(() => {
-    if (usesConcreteStandardInputFields.value) {
-      return concreteStandardInputBindingProjection.value.inputBindings
-    }
+      selectedStandardArtifacts,
+      hasUpload: (slotName, context) => {
+        if (context.usesConcreteStandardInputFields) {
+          return hasConcreteStandardInputUploadSelection(slotName)
+        }
 
-    return buildStandardInputBindings(selectedStandardArtifactRecord.value)
-  })
-  const missingRequiredStandardSlots = computed(() => {
-    return missingRequiredStandardInputSlots({
-      slots: standardInputSlots.value,
-      inputBindings: standardInputBindings.value,
-      hasUpload: hasStandardInputUploadSelection,
+        return Boolean(standardInputFileList[slotName]?.length)
+      },
     })
   })
+  const usesConcreteStandardInputFields = computed(
+    () => standardInputRunState.value.usesConcreteStandardInputFields
+  )
+  const standardInputBindings = computed(() => standardInputRunState.value.inputBindings)
+  const missingRequiredStandardSlots = computed(() => standardInputRunState.value.missingRequiredSlots)
   const canSubmit = computed(() => {
     if (!unref(options.isAuthenticated)) {
       return false
@@ -296,13 +280,6 @@ export function useToolDetailRunForm(options: ToolDetailRunFormOptions) {
     )
   }
 
-  function hasStandardInputUploadSelection(slotName: string) {
-    if (usesConcreteStandardInputFields.value) {
-      return hasConcreteStandardInputUploadSelection(slotName)
-    }
-
-    return Boolean(standardInputFileList[slotName]?.length)
-  }
 }
 
 function replaceRecord<T>(target: Record<string, T>, next: Record<string, T>) {
