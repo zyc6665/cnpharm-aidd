@@ -5,7 +5,6 @@ import os
 import hashlib
 import aiofiles
 import re
-import tempfile
 import uuid
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status
@@ -35,30 +34,11 @@ from app.files.remote_access_tokens import (
     RemoteFileAccessTokenError,
     validate_remote_file_access_token,
 )
-from app.files.storage_path import STORAGE_PATH, ensure_storage_dir, get_file_path
+from app.files.storage_path import ensure_storage_dir, get_file_path
+from app.files.upload_staging import stream_upload, validate_upload_content
 from app.services.artifact_file_list import list_user_artifact_files
 
 router = APIRouter()
-
-UPLOAD_CHUNK_SIZE = 1024 * 1024
-UPLOAD_SIGNATURE_BYTES = 16
-_ALLOWED_UPLOAD_EXTENSIONS = {
-    ".bz2", ".cif", ".csv", ".dat", ".fa", ".faa", ".fasta", ".fastq", ".fna",
-    ".fq", ".gz", ".jpeg", ".jpg", ".json", ".log", ".mol", ".mol2", ".mmcif",
-    ".out", ".pdb", ".pdbqt", ".pdf", ".png", ".sdf", ".smi", ".smiles", ".tar",
-    ".tgz", ".tsv", ".txt", ".xml", ".xyz", ".xz", ".yaml", ".yml", ".zip",
-}
-_EXPECTED_FILE_SIGNATURES = {
-    ".bz2": (b"BZh",),
-    ".gz": (b"\x1f\x8b",),
-    ".jpeg": (b"\xff\xd8\xff",),
-    ".jpg": (b"\xff\xd8\xff",),
-    ".pdf": (b"%PDF-",),
-    ".png": (b"\x89PNG\r\n\x1a\n",),
-    ".xz": (b"\xfd7zXZ\x00",),
-    ".zip": (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08"),
-}
-_EXECUTABLE_SIGNATURES = (b"\x7fELF", b"MZ", b"#!", b"\xfe\xed\xfa\xce", b"\xcf\xfa\xed\xfe")
 
 
 def _audit_file_download(
@@ -101,52 +81,6 @@ def _audit_file_download_denied(
     )
 
 
-async def _stream_upload_to_staging(
-    file: UploadFile,
-    *,
-    max_size: int,
-) -> tuple[Path, int, str, bytes]:
-    """分块暂存上传文件，并在单次读取中计算大小与 SHA-256。"""
-    STORAGE_PATH.mkdir(parents=True, exist_ok=True)
-    descriptor, raw_path = tempfile.mkstemp(prefix=".upload-", dir=STORAGE_PATH)
-    os.close(descriptor)
-    staged_path = Path(raw_path)
-    sha256_hash = hashlib.sha256()
-    file_size = 0
-    header = bytearray()
-
-    try:
-        await file.seek(0)
-        async with aiofiles.open(staged_path, "wb") as staged_file:
-            while chunk := await file.read(UPLOAD_CHUNK_SIZE):
-                file_size += len(chunk)
-                if file_size > max_size:
-                    raise ValidationException(f"文件大小超过限制 ({settings.MAX_FILE_SIZE_MB}MB)")
-                sha256_hash.update(chunk)
-                if len(header) < UPLOAD_SIGNATURE_BYTES:
-                    header.extend(chunk[: UPLOAD_SIGNATURE_BYTES - len(header)])
-                await staged_file.write(chunk)
-        await file.seek(0)
-        return staged_path, file_size, sha256_hash.hexdigest(), bytes(header)
-    except Exception:
-        staged_path.unlink(missing_ok=True)
-        raise
-
-
-def _validate_upload_content(filename: str, header: bytes) -> None:
-    """校验上传扩展名与可识别二进制文件头。"""
-    extension = Path(filename).suffix.lower()
-    if extension not in _ALLOWED_UPLOAD_EXTENSIONS:
-        raise ValidationException(f"不支持的上传文件类型: {extension or '无扩展名'}")
-
-    if any(header.startswith(signature) for signature in _EXECUTABLE_SIGNATURES):
-        raise ValidationException("禁止上传可执行文件")
-
-    expected_signatures = _EXPECTED_FILE_SIGNATURES.get(extension)
-    if expected_signatures and not any(header.startswith(signature) for signature in expected_signatures):
-        raise ValidationException("文件内容与扩展名不匹配")
-
-
 async def calculate_sha256(file: UploadFile) -> str:
     """计算文件SHA256哈希"""
     sha256_hash = hashlib.sha256()
@@ -177,13 +111,13 @@ async def upload_file(
     ensure_storage_dir()
     max_size = settings.MAX_FILE_SIZE_MB * 1024 * 1024
     filename = Path(file.filename or "upload").name
-    staged_path, file_size, sha256, header = await _stream_upload_to_staging(
+    staged_path, file_size, sha256, header = await stream_upload(
         file,
         max_size=max_size,
     )
 
     try:
-        _validate_upload_content(filename, header)
+        validate_upload_content(filename, header)
 
         result = await db.execute(
             select(FileModel).where(
