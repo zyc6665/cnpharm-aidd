@@ -11,7 +11,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, case, or_
+from sqlalchemy import select, func, case
 from sqlalchemy.orm import joinedload
 from typing import Optional, List
 from datetime import timedelta
@@ -19,15 +19,12 @@ from datetime import timedelta
 from app.common.time import utcnow
 from app.database.session import get_db
 from app.models.users import User
-from app.models.artifacts import Artifact, ArtifactVersion, ArtifactVersionFile
 from app.models.files import File as FileModel, FileSourceType
-from app.models.tasks import Task
 from app.auth.dependencies import get_current_user, get_current_user_optional
 from app.schemas.files import (
     FileResponse as FileSchema,
     FileUploadResponse,
     FileDownloadUrl,
-    ArtifactFileResponse,
 )
 from app.common.responses import paginated_response, success_response
 from app.common.exceptions import NotFoundException, ForbiddenException, ValidationException
@@ -39,6 +36,7 @@ from app.files.remote_access_tokens import (
     validate_remote_file_access_token,
 )
 from app.files.storage_path import STORAGE_PATH, ensure_storage_dir, get_file_path
+from app.services.artifact_file_list import list_user_artifact_files
 
 router = APIRouter()
 
@@ -103,54 +101,6 @@ def _audit_file_download_denied(
     )
 
 
-async def _standard_artifact_metadata_by_file_id(
-    db: AsyncSession,
-    file_ids: list[str],
-) -> dict[str, dict[str, str]]:
-    if not file_ids:
-        return {}
-
-    result = await db.execute(
-        select(
-            ArtifactVersionFile.file_id,
-            ArtifactVersionFile.role,
-            ArtifactVersion.id,
-            ArtifactVersion.manifest_json,
-            Artifact.id,
-            Artifact.standard_type,
-            Artifact.standard_version,
-            Artifact.semantic_type,
-        )
-        .join(ArtifactVersion, ArtifactVersion.id == ArtifactVersionFile.artifact_version_id)
-        .join(Artifact, Artifact.id == ArtifactVersion.artifact_id)
-        .where(ArtifactVersionFile.file_id.in_(file_ids))
-    )
-
-    metadata: dict[str, dict[str, str]] = {}
-    for (
-        file_id,
-        role,
-        artifact_version_id,
-        manifest_json,
-        artifact_id,
-        standard_type,
-        standard_version,
-        semantic_type,
-    ) in result.all():
-        manifest = manifest_json if isinstance(manifest_json, dict) else {}
-        standard_ref = manifest.get("type")
-        if not standard_ref and standard_type and standard_version:
-            standard_ref = f"{standard_type}@{standard_version}"
-        metadata[str(file_id)] = {
-            "artifact_id": str(artifact_id),
-            "artifact_version_id": str(artifact_version_id),
-            "standard_artifact_role": str(role),
-            "standard_artifact_output": str(manifest.get("output_name") or ""),
-            "semantic_type": str(standard_ref or semantic_type or ""),
-        }
-    return metadata
-
-
 async def _stream_upload_to_staging(
     file: UploadFile,
     *,
@@ -195,6 +145,7 @@ def _validate_upload_content(filename: str, header: bytes) -> None:
     expected_signatures = _EXPECTED_FILE_SIGNATURES.get(extension)
     if expected_signatures and not any(header.startswith(signature) for signature in expected_signatures):
         raise ValidationException("文件内容与扩展名不匹配")
+
 
 async def calculate_sha256(file: UploadFile) -> str:
     """计算文件SHA256哈希"""
@@ -350,91 +301,16 @@ async def list_artifact_files(
     db: AsyncSession = Depends(get_db),
 ):
     """获取当前用户可复用的工具输出文件。"""
-    task_result = await db.execute(
-        select(Task)
-        .options(
-            joinedload(Task.tool),
-            joinedload(Task.outputs),
-        )
-        .where(Task.user_id == current_user.id)
-        .order_by(Task.created_at.desc(), Task.id.desc())
-    )
-    tasks = list(task_result.scalars().all())
-
-    artifact_sources: dict[str, tuple[Task, object]] = {}
-    for task in tasks:
-        if not task.outputs or not task.outputs.file_ids or not task.tool:
-            continue
-        for file_id in task.outputs.file_ids:
-            normalized_file_id = str(file_id)
-            artifact_sources.setdefault(normalized_file_id, (task, task.tool))
-
-    if not artifact_sources:
-        return paginated_response(
-            items=[],
-            total=0,
-            page=page,
-            page_size=page_size,
-        )
-
-    query = select(FileModel).where(
-        FileModel.id.in_(list(artifact_sources.keys())),
-        FileModel.owner_id == current_user.id,
-        FileModel.source_type == FileSourceType.TOOL_OUTPUT.value,
-        FileModel.deleted_at.is_(None),
-        or_(FileModel.expires_at.is_(None), FileModel.expires_at > utcnow()),
-    )
-
-    if search:
-        search_pattern = f"%{search}%"
-        query = query.where(FileModel.filename.ilike(search_pattern))
-
-    count_query = select(func.count()).select_from(query.subquery())
-    total_result = await db.execute(count_query)
-    total = total_result.scalar() or 0
-
-    query = query.order_by(FileModel.created_at.desc(), FileModel.id.desc())
-    query = query.offset((page - 1) * page_size).limit(page_size)
-    result = await db.execute(query)
-    files = list(result.scalars().all())
-    standard_metadata_by_file_id = await _standard_artifact_metadata_by_file_id(
+    result = await list_user_artifact_files(
         db,
-        [file_record.id for file_record in files],
+        user_id=current_user.id,
+        page=page,
+        page_size=page_size,
+        search=search,
     )
-
-    items = []
-    for file_record in files:
-        source = artifact_sources.get(file_record.id)
-        if not source:
-            continue
-        task, tool = source
-        standard_metadata = standard_metadata_by_file_id.get(file_record.id, {})
-        items.append(
-            ArtifactFileResponse(
-                id=file_record.id,
-                filename=file_record.filename,
-                content_type=file_record.content_type,
-                size_bytes=file_record.size_bytes,
-                source_type=file_record.source_type,
-                created_at=file_record.created_at,
-                updated_at=file_record.updated_at,
-                download_url=f"/api/v1/files/{file_record.id}/download",
-                task_id=task.id,
-                task_name=task.name,
-                tool_id=tool.id,
-                tool_name=tool.name,
-                tool_slug=tool.slug,
-                artifact_id=standard_metadata.get("artifact_id"),
-                artifact_version_id=standard_metadata.get("artifact_version_id"),
-                standard_artifact_role=standard_metadata.get("standard_artifact_role"),
-                standard_artifact_output=standard_metadata.get("standard_artifact_output"),
-                semantic_type=standard_metadata.get("semantic_type"),
-            ).model_dump()
-        )
-
     return paginated_response(
-        items=items,
-        total=total,
+        items=result.items,
+        total=result.total,
         page=page,
         page_size=page_size,
     )
