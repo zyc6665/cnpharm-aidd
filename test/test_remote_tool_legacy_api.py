@@ -53,3 +53,37 @@ def test_flatten_legacy_remote_api_params_json_encodes_nested_values() -> None:
         "files": '["input/protein.pdb"]',
         "dry_run": "True",
     }
+
+
+def test_legacy_output_filename_prefers_name_then_filename_then_fallback() -> None:
+    from app.remote_tools import legacy_api
+
+    output_filename = getattr(legacy_api, "legacy_output_filename", None)
+
+    assert callable(output_filename)
+    assert output_filename({"name": "result.pdb", "filename": "ignored.dat"}, "fallback.dat") == "result.pdb"
+    assert output_filename({"filename": "nested/report.json"}, "fallback.dat") == "nested/report.json"
+    assert output_filename({}, "fallback.dat") == "fallback.dat"
+
+
+def test_legacy_output_file_record_data_builds_tool_output_fields() -> None:
+    from app.remote_tools import legacy_api
+
+    build_record_data = getattr(legacy_api, "legacy_output_file_record_data", None)
+
+    assert callable(build_record_data)
+    assert build_record_data(
+        filename="result.pdb",
+        content_type="chemical/x-pdb",
+        content=b"POCKET",
+        owner_id="user-1",
+    ) == {
+        "filename": "result.pdb",
+        "content_type": "chemical/x-pdb",
+        "size_bytes": 6,
+        "sha256": "fdda3539d63f1ec143ad7b54774b89be75ddfa1f4c3b5e33a41e8900e4589314",
+        "source_type": "tool_output",
+        "owner_id": "user-1",
+        "is_public": False,
+        "is_permanent": False,
+    }

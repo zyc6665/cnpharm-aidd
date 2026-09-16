@@ -1,6 +1,5 @@
 """远程 API 工具执行器。"""
 
-import hashlib
 import logging
 import os
 import shutil
@@ -15,7 +14,7 @@ from sqlalchemy.orm import selectinload
 from app.database.session import get_async_session
 from app.models.artifacts import ArtifactVersion, ArtifactVersionFile
 from app.files.storage_path import get_file_path
-from app.models.files import File as FileModel, FileSourceType
+from app.models.files import File as FileModel
 from app.remote_tools.files import (
     remote_file_download_url,
     remote_file_payload,
@@ -35,6 +34,8 @@ from app.remote_tools.invocation import (
 from app.remote_tools.legacy_api import (
     build_legacy_remote_api_request_data,
     flatten_legacy_remote_api_params,
+    legacy_output_file_record_data,
+    legacy_output_filename,
 )
 from app.remote_tools.results import (
     RemoteToolResultError,
@@ -492,7 +493,7 @@ class RemoteAPIExecutor(BaseExecutor):
             try:
                 for file_info in output_files:
                     url = file_info.get("url")
-                    filename = file_info.get("name") or file_info.get("filename", f"output_{uuid.uuid4()}.dat")
+                    filename = legacy_output_filename(file_info, f"output_{uuid.uuid4()}.dat")
                     if not url:
                         logger.warning("Output file %s missing URL, skipping", filename)
                         continue
@@ -502,14 +503,12 @@ class RemoteAPIExecutor(BaseExecutor):
                             response.raise_for_status()
                             content = response.content
                         file_record = FileModel(
-                            filename=filename,
-                            content_type=response.headers.get("content-type", "application/octet-stream"),
-                            size_bytes=len(content),
-                            sha256=hashlib.sha256(content).hexdigest(),
-                            source_type=FileSourceType.TOOL_OUTPUT.value,
-                            owner_id=self.task.user_id,
-                            is_public=False,
-                            is_permanent=False,
+                            **legacy_output_file_record_data(
+                                filename=filename,
+                                content_type=response.headers.get("content-type", "application/octet-stream"),
+                                content=content,
+                                owner_id=self.task.user_id,
+                            )
                         )
                         session.add(file_record)
                         await session.flush()
