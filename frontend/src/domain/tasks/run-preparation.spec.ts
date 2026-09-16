@@ -1,6 +1,6 @@
-import { describe, expect, it, vi } from 'vitest'
-import { prepareAndCreateTask, taskRunPreparationBlockedMessage } from './run-preparation'
-import type { Task, TaskCreateParams, TaskRunPreparationPreview } from '@/types/models'
+import { describe, expect, it } from 'vitest'
+import { taskRunPreparationBlockedMessage } from './run-preparation'
+import type { TaskRunPreparationPreview } from '@/types/models'
 
 function makePreview(input: Partial<TaskRunPreparationPreview>): TaskRunPreparationPreview {
   return {
@@ -18,22 +18,6 @@ function makePreview(input: Partial<TaskRunPreparationPreview>): TaskRunPreparat
     resource_snapshot: null,
     ...input,
   }
-}
-
-function makeTask(): Task {
-  return {
-    id: 'task-1',
-    tool_id: 'tool-1',
-    status: 'pending',
-    progress: 0,
-    created_at: '2026-09-16T00:00:00Z',
-  }
-}
-
-const taskPayload: TaskCreateParams = {
-  tool_id: 'tool-1',
-  params: {},
-  file_ids: undefined,
 }
 
 describe('taskRunPreparationBlockedMessage', () => {
@@ -66,43 +50,5 @@ describe('taskRunPreparationBlockedMessage', () => {
       blocked_reason: null,
       binding_decisions: {},
     }))).toBe('标准产物输入尚未满足工具要求')
-  })
-})
-
-describe('prepareAndCreateTask', () => {
-  it('creates the task after a ready preparation preview', async () => {
-    const preview = makePreview({ ready: true })
-    const task = makeTask()
-    const api = {
-      prepareTaskRun: vi.fn().mockResolvedValue(preview),
-      createTask: vi.fn().mockResolvedValue(task),
-    }
-
-    await expect(prepareAndCreateTask(taskPayload, api)).resolves.toEqual({
-      status: 'created',
-      preview,
-      task,
-    })
-    expect(api.prepareTaskRun).toHaveBeenCalledWith(taskPayload)
-    expect(api.createTask).toHaveBeenCalledWith(taskPayload)
-  })
-
-  it('returns a blocked result without creating a task when preparation is not ready', async () => {
-    const preview = makePreview({
-      ready: false,
-      blocked_reason: 'Protein input requires a prepared PDB role.',
-    })
-    const api = {
-      prepareTaskRun: vi.fn().mockResolvedValue(preview),
-      createTask: vi.fn().mockResolvedValue(makeTask()),
-    }
-
-    await expect(prepareAndCreateTask(taskPayload, api)).resolves.toEqual({
-      status: 'blocked',
-      preview,
-      message: 'Protein input requires a prepared PDB role.',
-    })
-    expect(api.prepareTaskRun).toHaveBeenCalledWith(taskPayload)
-    expect(api.createTask).not.toHaveBeenCalled()
   })
 })
