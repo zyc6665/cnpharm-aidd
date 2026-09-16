@@ -108,6 +108,36 @@ def verify_remote_result_file_checksum(
     return actual_sha256
 
 
+def remote_result_file_record_data(
+    *,
+    file_ref: dict[str, Any],
+    artifact_ref: str,
+    artifact: dict[str, Any],
+    role: str,
+    content_length: int,
+    sha256: str,
+    owner_id: str | None,
+) -> dict[str, Any]:
+    return {
+        "filename": remote_result_filename(file_ref, role),
+        "content_type": file_ref.get("content_type") or "application/octet-stream",
+        "size_bytes": content_length,
+        "sha256": sha256,
+        "storage_path": "pending",
+        "source_type": "tool_output",
+        "owner_id": owner_id,
+        "is_public": False,
+        "is_permanent": False,
+        "file_meta": {
+            "remote_result_path": file_ref.get("path"),
+            "relative_path": file_ref.get("path"),
+            "artifact_ref": artifact.get("ref"),
+            "standard_artifact_output": artifact_ref,
+            "file_role": role,
+        },
+    }
+
+
 def iter_remote_result_artifacts(raw_artifacts: Any) -> Iterator[tuple[str, dict[str, Any]]]:
     if isinstance(raw_artifacts, list):
         for index, artifact in enumerate(raw_artifacts):

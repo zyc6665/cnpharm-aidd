@@ -147,3 +147,37 @@ def test_verify_remote_result_file_checksum_rejects_declared_sha_mismatch() -> N
             "pdb",
             content,
         )
+
+
+def test_remote_result_file_record_data_builds_output_record_fields() -> None:
+    from app.remote_tools import results
+
+    build_record_data = getattr(results, "remote_result_file_record_data", None)
+
+    assert callable(build_record_data)
+    assert build_record_data(
+        file_ref={"path": "outputs/result.pdb", "content_type": "chemical/x-pdb"},
+        artifact_ref="pocket[0]",
+        artifact={"ref": "pocket"},
+        role="pdb",
+        content_length=6,
+        sha256="a" * 64,
+        owner_id="user-1",
+    ) == {
+        "filename": "result.pdb",
+        "content_type": "chemical/x-pdb",
+        "size_bytes": 6,
+        "sha256": "a" * 64,
+        "storage_path": "pending",
+        "source_type": "tool_output",
+        "owner_id": "user-1",
+        "is_public": False,
+        "is_permanent": False,
+        "file_meta": {
+            "remote_result_path": "outputs/result.pdb",
+            "relative_path": "outputs/result.pdb",
+            "artifact_ref": "pocket",
+            "standard_artifact_output": "pocket[0]",
+            "file_role": "pdb",
+        },
+    }

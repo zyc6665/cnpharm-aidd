@@ -41,7 +41,7 @@ from app.remote_tools.results import (
     iter_remote_log_messages,
     iter_remote_result_artifacts,
     remote_log_next_cursor,
-    remote_result_filename,
+    remote_result_file_record_data,
     remote_status_state,
     verify_remote_result_file_checksum,
 )
@@ -373,28 +373,20 @@ class RemoteAPIExecutor(BaseExecutor):
                             actual_sha256 = verify_remote_result_file_checksum(file_ref, str(role), content)
                         except RemoteToolResultError as exc:
                             raise TaskExecutionError(str(exc)) from exc
-                        filename = remote_result_filename(file_ref, str(role))
                         file_record = FileModel(
-                            filename=filename,
-                            content_type=file_ref.get("content_type") or "application/octet-stream",
-                            size_bytes=len(content),
-                            sha256=actual_sha256,
-                            storage_path="pending",
-                            source_type=FileSourceType.TOOL_OUTPUT.value,
-                            owner_id=self.task.user_id,
-                            is_public=False,
-                            is_permanent=False,
-                            file_meta={
-                                "remote_result_path": file_ref.get("path"),
-                                "relative_path": file_ref.get("path"),
-                                "artifact_ref": artifact.get("ref"),
-                                "standard_artifact_output": artifact_ref,
-                                "file_role": str(role),
-                            },
+                            **remote_result_file_record_data(
+                                file_ref=file_ref,
+                                artifact_ref=artifact_ref,
+                                artifact=artifact,
+                                role=str(role),
+                                content_length=len(content),
+                                sha256=actual_sha256,
+                                owner_id=self.task.user_id,
+                            )
                         )
                         session.add(file_record)
                         await session.flush()
-                        storage_path = get_file_path(str(file_record.id), filename)
+                        storage_path = get_file_path(str(file_record.id), file_record.filename)
                         storage_path.parent.mkdir(parents=True, exist_ok=True)
                         with open(storage_path, "wb") as file_handle:
                             file_handle.write(content)
