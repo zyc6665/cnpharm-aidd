@@ -896,6 +896,7 @@
     createToolCreateSubmission,
     formatToolTemplateResourceText,
     formatToolCreateSubmissionErrorMessage,
+    mergeToolCreateEditorStatePatch,
     remoteToolStageStatusDisplay,
     resolveToolCreateSubmissionBlocker,
     type ToolCreateEditorState,
@@ -974,6 +975,15 @@
     sshEnvEntries: sshEnvEntries.value,
     sshOutputGlobItems: sshOutputGlobItems.value
   })
+
+  const applyEditorState = (editorState: ToolCreateEditorState) => {
+    apiHeaderEntries.value = editorState.apiHeaderEntries
+    dockerCommandItems.value = editorState.dockerCommandItems
+    dockerEnvEntries.value = editorState.dockerEnvEntries
+    pythonArgumentItems.value = editorState.pythonArgumentItems
+    sshEnvEntries.value = editorState.sshEnvEntries
+    sshOutputGlobItems.value = editorState.sshOutputGlobItems
+  }
 
   const selectedToolTemplate = computed(() =>
     toolTemplates.value.find(template => template.template_key === selectedToolTemplateKey.value)
@@ -1062,24 +1072,7 @@
 
   const applyToolFormPatch = (patch: ToolConfigFormPatch) => {
     Object.assign(formState, patch.form)
-    if (patch.editor.apiHeaderEntries) {
-      apiHeaderEntries.value = patch.editor.apiHeaderEntries
-    }
-    if (patch.editor.dockerCommandItems) {
-      dockerCommandItems.value = patch.editor.dockerCommandItems
-    }
-    if (patch.editor.dockerEnvEntries) {
-      dockerEnvEntries.value = patch.editor.dockerEnvEntries
-    }
-    if (patch.editor.pythonArgumentItems) {
-      pythonArgumentItems.value = patch.editor.pythonArgumentItems
-    }
-    if (patch.editor.sshEnvEntries) {
-      sshEnvEntries.value = patch.editor.sshEnvEntries
-    }
-    if (patch.editor.sshOutputGlobItems) {
-      sshOutputGlobItems.value = patch.editor.sshOutputGlobItems
-    }
+    applyEditorState(mergeToolCreateEditorStatePatch(editorStateSnapshot(), patch.editor))
     agentDefaultsText.value = patch.agentDefaultsText
   }
 

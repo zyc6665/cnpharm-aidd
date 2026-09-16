@@ -5,6 +5,7 @@ import {
   buildToolEditFormPatch,
   buildToolTemplateFormPatch,
   buildToolAgentCapabilityEnablePatch,
+  mergeToolCreateEditorStatePatch,
   createToolCreateFormState,
   createToolCreateSubmission,
   buildToolTemplateDraftPayload,
@@ -131,6 +132,28 @@ describe('tool create form domain', () => {
         args: ['--input', '--device cuda:0'],
       },
       publish: false,
+    })
+  })
+
+  it('merges editor patch without clearing unspecified editor fields', () => {
+    const current: ToolCreateEditorState = {
+      apiHeaderEntries: [{ key: 'Authorization', value: 'Bearer token' }],
+      dockerCommandItems: ['python', 'run.py'],
+      dockerEnvEntries: [{ key: 'CUDA_VISIBLE_DEVICES', value: '0' }],
+      pythonArgumentItems: ['--input', 'protein.pdb'],
+      sshEnvEntries: [{ key: 'OMP_NUM_THREADS', value: '8' }],
+      sshOutputGlobItems: ['output/**/*'],
+    }
+
+    const next = mergeToolCreateEditorStatePatch(current, {
+      dockerCommandItems: ['python', 'predict.py'],
+      sshOutputGlobItems: [],
+    })
+
+    expect(next).toEqual({
+      ...current,
+      dockerCommandItems: ['python', 'predict.py'],
+      sshOutputGlobItems: [],
     })
   })
 

@@ -214,6 +214,20 @@ export function createToolCreateEditorState(): ToolCreateEditorState {
   }
 }
 
+export function mergeToolCreateEditorStatePatch(
+  current: ToolCreateEditorState,
+  patch: Partial<ToolCreateEditorState>,
+): ToolCreateEditorState {
+  return {
+    apiHeaderEntries: patch.apiHeaderEntries ?? current.apiHeaderEntries,
+    dockerCommandItems: patch.dockerCommandItems ?? current.dockerCommandItems,
+    dockerEnvEntries: patch.dockerEnvEntries ?? current.dockerEnvEntries,
+    pythonArgumentItems: patch.pythonArgumentItems ?? current.pythonArgumentItems,
+    sshEnvEntries: patch.sshEnvEntries ?? current.sshEnvEntries,
+    sshOutputGlobItems: patch.sshOutputGlobItems ?? current.sshOutputGlobItems,
+  }
+}
+
 export function buildRemoteToolRegistrationPayload(
   formState: ToolCreateFormState,
 ): RemoteToolRegistrationPayload {
