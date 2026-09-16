@@ -34,6 +34,34 @@ def test_remote_status_progress_clamps_numeric_values_and_marks_success_complete
     assert remote_status_progress({}, "running") is None
 
 
+def test_remote_status_state_normalizes_success_message_and_progress() -> None:
+    from app.remote_tools import results
+
+    build_state = getattr(results, "remote_status_state", None)
+
+    assert callable(build_state)
+    state = build_state({"status": "SUCCESS", "message": " Done ", "progress": 45})
+
+    assert state.value == "success"
+    assert state.message == "Done"
+    assert state.progress == 45.0
+    assert state.is_success is True
+    assert state.can_poll is False
+    assert state.error_message is None
+
+
+def test_remote_status_state_maps_pollable_and_terminal_errors() -> None:
+    from app.remote_tools import results
+
+    build_state = getattr(results, "remote_status_state", None)
+
+    assert callable(build_state)
+    assert build_state({"status": "running"}).can_poll is True
+    assert build_state({"status": "failure", "error": "model failed"}).error_message == "model failed"
+    assert build_state({"status": "canceled"}).error_message == "Remote tool run was canceled"
+    assert build_state({"status": "paused"}).error_message == "Unsupported remote run status: paused"
+
+
 def test_remote_result_filename_uses_safe_basename_fallbacks() -> None:
     assert remote_result_filename({"filename": "nested/result.pdb"}, "pocket") == "result.pdb"
     assert remote_result_filename({"path": "outputs/report.json"}, "report") == "report.json"

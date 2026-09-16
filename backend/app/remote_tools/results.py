@@ -3,12 +3,23 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterator
 
 
 class RemoteToolResultError(ValueError):
     """Raised when a remote tool result payload is invalid."""
+
+
+@dataclass(frozen=True)
+class RemoteStatusState:
+    value: str
+    message: str
+    progress: float | None
+    is_success: bool
+    can_poll: bool
+    error_message: str | None
 
 
 def remote_status_message(payload: dict[str, Any]) -> str:
@@ -32,6 +43,27 @@ def remote_status_progress(payload: dict[str, Any], status_value: str) -> float 
     if status_value == "success":
         return 100.0
     return None
+
+
+def remote_status_state(payload: dict[str, Any]) -> RemoteStatusState:
+    status_value = str(payload.get("status") or "").lower()
+    message = remote_status_message(payload)
+    progress = remote_status_progress(payload, status_value)
+    error_message: str | None = None
+    if status_value == "failure":
+        error_message = message
+    elif status_value == "canceled":
+        error_message = "Remote tool run was canceled"
+    elif status_value not in {"queued", "running", "success"}:
+        error_message = f"Unsupported remote run status: {status_value}"
+    return RemoteStatusState(
+        value=status_value,
+        message=message,
+        progress=progress,
+        is_success=status_value == "success",
+        can_poll=status_value in {"queued", "running"},
+        error_message=error_message,
+    )
 
 
 def remote_result_filename(file_ref: dict[str, Any], role: str) -> str:

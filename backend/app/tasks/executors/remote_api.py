@@ -40,8 +40,7 @@ from app.remote_tools.results import (
     RemoteToolResultError,
     iter_remote_result_artifacts,
     remote_result_filename,
-    remote_status_message,
-    remote_status_progress,
+    remote_status_state,
     verify_remote_result_file_checksum,
 )
 from app.remote_tools.urls import (
@@ -268,25 +267,19 @@ class RemoteAPIExecutor(BaseExecutor):
         log_cursor: str | None = None
         for _ in range(max_polls):
             status_payload = await self._fetch_remote_status(client, remote_run_id)
-            status_value = str(status_payload.get("status") or "").lower()
-            message = remote_status_message(status_payload)
-            progress = remote_status_progress(status_payload, status_value)
+            status_state = remote_status_state(status_payload)
             log_cursor = await self._fetch_remote_logs(
                 client,
                 remote_run_id,
                 log_cursor,
-                progress=progress,
+                progress=status_state.progress,
             )
-            if self.progress_callback and progress is not None:
-                await self.progress_callback(progress, message)
-            if status_value == "success":
+            if self.progress_callback and status_state.progress is not None:
+                await self.progress_callback(status_state.progress, status_state.message)
+            if status_state.is_success:
                 return status_payload
-            if status_value == "failure":
-                raise TaskExecutionError(message)
-            if status_value == "canceled":
-                raise TaskExecutionError("Remote tool run was canceled")
-            if status_value not in {"queued", "running"}:
-                raise TaskExecutionError(f"Unsupported remote run status: {status_value}")
+            if status_state.error_message is not None:
+                raise TaskExecutionError(status_state.error_message)
             if poll_interval > 0:
                 await asyncio.sleep(poll_interval)
         raise TaskExecutionError("Remote tool run polling exceeded max_polls")
