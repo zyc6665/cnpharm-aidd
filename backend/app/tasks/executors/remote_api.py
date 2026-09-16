@@ -13,7 +13,6 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.artifact_standards.registry import get_standard_artifact_spec, parse_standard_ref
 from app.config import settings
 from app.database.session import get_async_session
 from app.files.remote_access_tokens import create_remote_file_access_token
@@ -21,9 +20,12 @@ from app.models.artifacts import ArtifactVersion, ArtifactVersionFile
 from app.files.storage_path import get_file_path
 from app.models.files import File as FileModel, FileSourceType
 from app.remote_tools.inputs import (
+    RemoteToolInputError,
     remote_artifact_input_declarations,
+    remote_artifact_input_payload,
     remote_example_input_refs,
     standard_input_bindings,
+    validate_remote_artifact_input,
 )
 from app.remote_tools.legacy_api import (
     build_legacy_remote_api_request_data,
@@ -203,11 +205,15 @@ class RemoteAPIExecutor(BaseExecutor):
                         raise TaskExecutionError(f"Missing required remote tool input: {input_name}")
                     continue
                 version = await self._load_artifact_version(session, version_id)
-                self._validate_remote_artifact_input(declaration, version)
-                inputs[input_name] = self._remote_artifact_input_payload(
-                    declaration=declaration,
-                    version=version,
-                )
+                try:
+                    validate_remote_artifact_input(declaration, version)
+                    inputs[input_name] = remote_artifact_input_payload(
+                        declaration=declaration,
+                        version=version,
+                        file_payload=self._remote_file_payload,
+                    )
+                except RemoteToolInputError as exc:
+                    raise TaskExecutionError(str(exc)) from exc
             break
         return inputs
 
@@ -224,65 +230,6 @@ class RemoteAPIExecutor(BaseExecutor):
         if version is None:
             raise TaskExecutionError(f"ArtifactVersion not found: {version_id}")
         return version
-
-    def _validate_remote_artifact_input(
-        self,
-        declaration: dict[str, Any],
-        version: ArtifactVersion,
-    ) -> None:
-        input_name = str(declaration.get("name") or "")
-        expected_ref = str(declaration.get("type") or "")
-        actual_ref = self._artifact_version_ref(version)
-        if actual_ref != parse_standard_ref(expected_ref).ref:
-            raise TaskExecutionError(
-                f"Input {input_name} expects {expected_ref}, got {actual_ref}"
-            )
-
-        spec = get_standard_artifact_spec(expected_ref)
-        available_roles = {file_link.role for file_link in version.files}
-        missing_roles = [
-            role.role
-            for role in spec.file_roles
-            if role.required and role.role not in available_roles
-        ]
-        if missing_roles:
-            raise TaskExecutionError(
-                f"Input {input_name} missing required file roles: " + ", ".join(missing_roles)
-            )
-
-    def _artifact_version_ref(self, version: ArtifactVersion) -> str:
-        artifact = version.artifact
-        if artifact and artifact.standard_type and artifact.standard_version:
-            return parse_standard_ref(f"{artifact.standard_type}@{artifact.standard_version}").ref
-        manifest = version.manifest_json if isinstance(version.manifest_json, dict) else {}
-        manifest_type = manifest.get("type")
-        if manifest_type:
-            return parse_standard_ref(str(manifest_type)).ref
-        raise TaskExecutionError(f"ArtifactVersion {version.id} is not a standard ArtifactVersion")
-
-    def _remote_artifact_input_payload(
-        self,
-        *,
-        declaration: dict[str, Any],
-        version: ArtifactVersion,
-    ) -> dict[str, Any]:
-        files: dict[str, dict[str, Any]] = {}
-        for file_link in sorted(version.files, key=lambda item: item.sort_order):
-            file_record = file_link.file
-            if file_record is None:
-                raise TaskExecutionError(
-                    f"Input {declaration.get('name')} role {file_link.role} has no file record"
-                )
-            files[str(file_link.role)] = self._remote_file_payload(file_record)
-
-        manifest = version.manifest_json if isinstance(version.manifest_json, dict) else {}
-        metadata = manifest.get("metadata") if isinstance(manifest.get("metadata"), dict) else {}
-        return {
-            "artifact_version_id": str(version.id),
-            "type": str(declaration.get("type") or self._artifact_version_ref(version)),
-            "files": files,
-            "metadata": dict(metadata),
-        }
 
     async def _remote_legacy_file_inputs(self, file_ids: list[str]) -> dict[str, Any]:
         files: dict[str, dict[str, Any]] = {}
