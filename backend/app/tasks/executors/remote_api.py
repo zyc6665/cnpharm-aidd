@@ -37,6 +37,11 @@ from app.remote_tools.results import (
     remote_status_message,
     remote_status_progress,
 )
+from app.remote_tools.urls import (
+    RemoteToolUrlError,
+    remote_endpoint_url,
+    remote_result_url,
+)
 from app.tasks.executors.base import BaseExecutor
 from app.tasks.executors.errors import TaskExecutionError
 
@@ -441,9 +446,7 @@ class RemoteAPIExecutor(BaseExecutor):
         return response.content
 
     def _remote_result_url(self, url: str) -> str:
-        if url.startswith("/"):
-            return f"{str(self.config.get('base_url') or '').rstrip('/')}{url}"
-        return url
+        return remote_result_url(str(self.config.get("base_url") or ""), url)
 
     async def cancel_remote_run(self) -> dict[str, Any]:
         remote_run_id = str((self.task.extra_data or {}).get("remote_run_id") or "")
@@ -458,16 +461,14 @@ class RemoteAPIExecutor(BaseExecutor):
             return payload
 
     def _remote_url(self, endpoint_name: str, *, remote_run_id: str | None = None) -> str:
-        base_url = str(self.config.get("base_url") or "").rstrip("/")
-        if not base_url:
-            raise TaskExecutionError("Missing base_url in remote_tool_v1 config")
-        endpoints = self.config.get("endpoints") or {}
-        path = endpoints.get(endpoint_name)
-        if not isinstance(path, str) or not path.startswith("/"):
-            raise TaskExecutionError(f"Missing endpoint path for remote tool endpoint: {endpoint_name}")
-        if remote_run_id is not None:
-            path = path.replace("{remote_run_id}", remote_run_id)
-        return f"{base_url}{path}"
+        try:
+            return remote_endpoint_url(
+                self.config,
+                endpoint_name,
+                remote_run_id=remote_run_id,
+            )
+        except RemoteToolUrlError as exc:
+            raise TaskExecutionError(str(exc)) from exc
 
     def _http_client(self, *, timeout: float | int) -> httpx.AsyncClient:
         transport = self.config.get("httpx_transport")
