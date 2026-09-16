@@ -62,6 +62,29 @@ def test_remote_status_state_maps_pollable_and_terminal_errors() -> None:
     assert build_state({"status": "paused"}).error_message == "Unsupported remote run status: paused"
 
 
+def test_iter_remote_log_messages_strips_non_empty_messages() -> None:
+    from app.remote_tools import results
+
+    iter_messages = getattr(results, "iter_remote_log_messages", None)
+
+    assert callable(iter_messages)
+    assert list(iter_messages({"items": [{"message": " queued "}, {"message": ""}, {}, "ignore"]})) == [
+        "queued"
+    ]
+    assert list(iter_messages({"items": "not-a-list"})) == []
+
+
+def test_remote_log_next_cursor_keeps_existing_cursor_without_next_cursor() -> None:
+    from app.remote_tools import results
+
+    next_cursor = getattr(results, "remote_log_next_cursor", None)
+
+    assert callable(next_cursor)
+    assert next_cursor({"next_cursor": "cursor-2"}, "cursor-1") == "cursor-2"
+    assert next_cursor({"next_cursor": ""}, "cursor-1") == "cursor-1"
+    assert next_cursor({}, None) is None
+
+
 def test_remote_result_filename_uses_safe_basename_fallbacks() -> None:
     assert remote_result_filename({"filename": "nested/result.pdb"}, "pocket") == "result.pdb"
     assert remote_result_filename({"path": "outputs/report.json"}, "report") == "report.json"

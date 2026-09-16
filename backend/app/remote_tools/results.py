@@ -66,6 +66,22 @@ def remote_status_state(payload: dict[str, Any]) -> RemoteStatusState:
     )
 
 
+def iter_remote_log_messages(payload: dict[str, Any]) -> Iterator[str]:
+    items = payload.get("items")
+    if not isinstance(items, list):
+        return
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        message = item.get("message")
+        if isinstance(message, str) and message.strip():
+            yield message.strip()
+
+
+def remote_log_next_cursor(payload: dict[str, Any], cursor: str | None) -> str | None:
+    return payload.get("next_cursor") or cursor
+
+
 def remote_result_filename(file_ref: dict[str, Any], role: str) -> str:
     explicit_name = file_ref.get("filename") or file_ref.get("name")
     if isinstance(explicit_name, str) and explicit_name.strip():

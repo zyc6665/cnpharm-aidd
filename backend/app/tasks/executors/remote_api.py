@@ -38,7 +38,9 @@ from app.remote_tools.legacy_api import (
 )
 from app.remote_tools.results import (
     RemoteToolResultError,
+    iter_remote_log_messages,
     iter_remote_result_artifacts,
+    remote_log_next_cursor,
     remote_result_filename,
     remote_status_state,
     verify_remote_result_file_checksum,
@@ -314,7 +316,7 @@ class RemoteAPIExecutor(BaseExecutor):
         if not isinstance(payload, dict):
             return cursor
         await self._publish_remote_log_messages(payload, progress=progress)
-        return payload.get("next_cursor") or cursor
+        return remote_log_next_cursor(payload, cursor)
 
     async def _publish_remote_log_messages(
         self,
@@ -324,18 +326,11 @@ class RemoteAPIExecutor(BaseExecutor):
     ) -> None:
         if not self.progress_callback:
             return
-        items = payload.get("items")
-        if not isinstance(items, list):
-            return
         current_progress = progress
         if current_progress is None:
             current_progress = float(getattr(self.task, "progress", 0.0) or 0.0)
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            message = item.get("message")
-            if isinstance(message, str) and message.strip():
-                await self.progress_callback(float(current_progress), message.strip())
+        for message in iter_remote_log_messages(payload):
+            await self.progress_callback(float(current_progress), message)
 
     async def _fetch_remote_artifacts(
         self,
