@@ -81,13 +81,11 @@
       loading?: boolean
       selectedArtifacts: Record<string, TypedArtifact | undefined>
       uploadLists: Record<string, UploadFile[]>
-      toolId?: string | null
       toolSlug?: string | null
     }>(),
     {
       currentProjectId: undefined,
       loading: false,
-      toolId: null,
       toolSlug: null,
     }
   )

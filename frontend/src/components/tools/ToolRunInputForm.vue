@@ -8,7 +8,6 @@
       :loading="standardArtifactsLoading"
       :selected-artifacts="selectedStandardArtifacts"
       :upload-lists="standardInputFileList"
-      :tool-id="toolId"
       :tool-slug="toolSlug"
       @select-artifact="(slotName, versionId) => emit('select-standard-artifact', slotName, versionId)"
       @update-upload-list="(slotName, files) => emit('update-standard-upload-list', slotName, files)"
