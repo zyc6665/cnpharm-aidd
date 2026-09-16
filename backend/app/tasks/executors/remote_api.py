@@ -7,7 +7,6 @@ import os
 import shutil
 import uuid
 import asyncio
-from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
@@ -22,6 +21,12 @@ from app.files.remote_access_tokens import create_remote_file_access_token
 from app.models.artifacts import ArtifactVersion, ArtifactVersionFile
 from app.files.storage_path import get_file_path
 from app.models.files import File as FileModel, FileSourceType
+from app.remote_tools.results import (
+    iter_remote_result_artifacts,
+    remote_result_filename,
+    remote_status_message,
+    remote_status_progress,
+)
 from app.tasks.executors.base import BaseExecutor
 from app.tasks.executors.errors import TaskExecutionError
 
@@ -336,8 +341,8 @@ class RemoteAPIExecutor(BaseExecutor):
         for _ in range(max_polls):
             status_payload = await self._fetch_remote_status(client, remote_run_id)
             status_value = str(status_payload.get("status") or "").lower()
-            message = _remote_status_message(status_payload)
-            progress = _remote_status_progress(status_payload, status_value)
+            message = remote_status_message(status_payload)
+            progress = remote_status_progress(status_payload, status_value)
             log_cursor = await self._fetch_remote_logs(
                 client,
                 remote_run_id,
@@ -431,7 +436,7 @@ class RemoteAPIExecutor(BaseExecutor):
         result_payload: dict[str, Any],
     ) -> list[str]:
         output_file_ids: list[str] = []
-        artifacts = list(_iter_remote_result_artifacts(result_payload.get("artifacts")))
+        artifacts = list(iter_remote_result_artifacts(result_payload.get("artifacts")))
         if not artifacts:
             result_payload["output_file_ids"] = output_file_ids
             return output_file_ids
@@ -455,7 +460,7 @@ class RemoteAPIExecutor(BaseExecutor):
                                 f"Remote result file checksum mismatch for {file_ref.get('path') or role}: "
                                 f"declared {declared_sha256}, actual {actual_sha256}"
                             )
-                        filename = _remote_result_filename(file_ref, str(role))
+                        filename = remote_result_filename(file_ref, str(role))
                         file_record = FileModel(
                             filename=filename,
                             content_type=file_ref.get("content_type") or "application/octet-stream",
@@ -636,52 +641,3 @@ class RemoteAPIExecutor(BaseExecutor):
             key: json.dumps(value) if isinstance(value, (dict, list)) else str(value)
             for key, value in data.items()
         }
-
-
-def _remote_status_message(payload: dict[str, Any]) -> str:
-    message = payload.get("message")
-    if isinstance(message, str) and message.strip():
-        return message
-    error = payload.get("error")
-    if isinstance(error, dict):
-        error_message = error.get("message")
-        if isinstance(error_message, str) and error_message.strip():
-            return error_message
-    if isinstance(error, str) and error.strip():
-        return error
-    return "Remote tool run status updated"
-
-
-def _remote_status_progress(payload: dict[str, Any], status_value: str) -> float | None:
-    raw_progress = payload.get("progress")
-    if isinstance(raw_progress, (int, float)):
-        return float(max(0, min(100, raw_progress)))
-    if status_value == "success":
-        return 100.0
-    return None
-
-
-def _remote_result_filename(file_ref: dict[str, Any], role: str) -> str:
-    explicit_name = file_ref.get("filename") or file_ref.get("name")
-    if isinstance(explicit_name, str) and explicit_name.strip():
-        return Path(explicit_name).name
-    path = file_ref.get("path")
-    if isinstance(path, str) and Path(path).name:
-        return Path(path).name
-    return f"{role}.dat"
-
-
-def _iter_remote_result_artifacts(raw_artifacts: Any):
-    if isinstance(raw_artifacts, list):
-        for index, artifact in enumerate(raw_artifacts):
-            if isinstance(artifact, dict):
-                yield str(artifact.get("ref") or artifact.get("name") or index), artifact
-        return
-    if isinstance(raw_artifacts, dict):
-        for artifact_ref, artifact in raw_artifacts.items():
-            if isinstance(artifact, list):
-                for index, item in enumerate(artifact):
-                    if isinstance(item, dict):
-                        yield f"{artifact_ref}[{index}]", item
-            elif isinstance(artifact, dict):
-                yield str(artifact_ref), artifact

@@ -1,0 +1,55 @@
+"""Remote tool result and status protocol helpers."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any, Iterator
+
+
+def remote_status_message(payload: dict[str, Any]) -> str:
+    message = payload.get("message")
+    if isinstance(message, str) and message.strip():
+        return message.strip()
+    error = payload.get("error")
+    if isinstance(error, dict):
+        error_message = error.get("message")
+        if isinstance(error_message, str) and error_message.strip():
+            return error_message.strip()
+    if isinstance(error, str) and error.strip():
+        return error.strip()
+    return "Remote tool run status updated"
+
+
+def remote_status_progress(payload: dict[str, Any], status_value: str) -> float | None:
+    raw_progress = payload.get("progress")
+    if isinstance(raw_progress, (int, float)):
+        return float(max(0, min(100, raw_progress)))
+    if status_value == "success":
+        return 100.0
+    return None
+
+
+def remote_result_filename(file_ref: dict[str, Any], role: str) -> str:
+    explicit_name = file_ref.get("filename") or file_ref.get("name")
+    if isinstance(explicit_name, str) and explicit_name.strip():
+        return Path(explicit_name).name
+    path = file_ref.get("path")
+    if isinstance(path, str) and Path(path).name:
+        return Path(path).name
+    return f"{role}.dat"
+
+
+def iter_remote_result_artifacts(raw_artifacts: Any) -> Iterator[tuple[str, dict[str, Any]]]:
+    if isinstance(raw_artifacts, list):
+        for index, artifact in enumerate(raw_artifacts):
+            if isinstance(artifact, dict):
+                yield str(artifact.get("ref") or artifact.get("name") or index), artifact
+        return
+    if isinstance(raw_artifacts, dict):
+        for artifact_ref, artifact in raw_artifacts.items():
+            if isinstance(artifact, list):
+                for index, item in enumerate(artifact):
+                    if isinstance(item, dict):
+                        yield f"{artifact_ref}[{index}]", item
+            elif isinstance(artifact, dict):
+                yield str(artifact_ref), artifact
