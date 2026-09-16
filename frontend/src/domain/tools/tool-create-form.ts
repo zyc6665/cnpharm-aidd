@@ -122,6 +122,14 @@ export interface ToolTemplateDraftPayload {
   publish: boolean
 }
 
+export interface ToolVersionCreatePayload {
+  version: string
+  changelog?: string
+  notes?: string
+  config: Record<string, unknown>
+  is_active: boolean
+}
+
 export type RemoteToolStageStatus = 'success' | 'warning' | 'failure'
 
 export interface RemoteToolStageStatusDisplay {
@@ -557,10 +565,23 @@ export function createToolCreateSubmission(
   }
 
   if (!input.isEdit) {
-    data.initial_version = buildInitialVersion(input.formState, config)
+    data.initial_version = buildToolVersionCreatePayload(input.formState, config)
   }
 
   return { data, config, versionConfigChanged, agentCapabilityComplete }
+}
+
+export function buildToolVersionCreatePayload(
+  formState: ToolCreateFormState,
+  config: Record<string, unknown>,
+): ToolVersionCreatePayload {
+  return {
+    version: formState.version,
+    changelog: formState.changelog || undefined,
+    notes: formState.notes || undefined,
+    config,
+    is_active: true,
+  }
 }
 
 function buildSshTemplateExecutorConfig(
@@ -655,17 +676,4 @@ function parseJsonRecord(value: string, fallback: string): Record<string, unknow
     throw new Error('JSON value must be an object')
   }
   return parsed
-}
-
-function buildInitialVersion(
-  formState: ToolCreateFormState,
-  config: Record<string, unknown>,
-): NonNullable<(ToolCreateParams & { initial_version?: unknown })['initial_version']> {
-  return {
-    version: formState.version,
-    changelog: formState.changelog || undefined,
-    notes: formState.notes || undefined,
-    config,
-    is_active: true,
-  }
 }

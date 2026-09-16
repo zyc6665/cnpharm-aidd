@@ -896,6 +896,7 @@
     createToolCreateSubmission,
     formatToolTemplateResourceText,
     formatToolCreateSubmissionErrorMessage,
+    buildToolVersionCreatePayload,
     remoteToolStageStatusDisplay,
     resolveToolCreateSubmissionBlocker,
     type ToolConfigFormPatch,
@@ -1155,13 +1156,10 @@
       if (isEdit.value) {
         await updateTool(toolId.value, submission.data)
         if (submission.versionConfigChanged) {
-          await createToolVersion(toolId.value, {
-            version: formState.version,
-            changelog: formState.changelog || undefined,
-            notes: formState.notes || undefined,
-            config: submission.config,
-            is_active: true
-          })
+          await createToolVersion(
+            toolId.value,
+            buildToolVersionCreatePayload(formState, submission.config)
+          )
         }
         message.success(submission.versionConfigChanged ? '工具与版本更新成功' : t('tools.updateSuccess'))
       } else {

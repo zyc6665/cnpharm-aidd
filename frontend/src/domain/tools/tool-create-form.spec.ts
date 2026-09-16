@@ -11,6 +11,7 @@ import {
   buildToolTemplateDraftPayload,
   formatToolCreateSubmissionErrorMessage,
   formatToolTemplateResourceText,
+  buildToolVersionCreatePayload,
   remoteToolStageStatusDisplay,
   resolveToolCreateSubmissionBlocker,
   toolConfigToCreateFormPatch,
@@ -417,6 +418,22 @@ describe('tool create form domain', () => {
       },
     })
     expect(submission.data.tag_ids).toEqual(['tag-1'])
+  })
+
+  it('builds a version create payload from form metadata and config', () => {
+    const formState = createToolCreateFormState()
+    const config = { type: 'ssh_job', entrypoint: './run.sh' }
+    formState.version = '2.1.0'
+    formState.changelog = 'Use fixed CUDA image'
+    formState.notes = ''
+
+    expect(buildToolVersionCreatePayload(formState, config)).toEqual({
+      version: '2.1.0',
+      changelog: 'Use fixed CUDA image',
+      notes: undefined,
+      config,
+      is_active: true,
+    })
   })
 
   it('converts existing tool config into form and editor patches', () => {
