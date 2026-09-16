@@ -21,6 +21,11 @@ from app.files.remote_access_tokens import create_remote_file_access_token
 from app.models.artifacts import ArtifactVersion, ArtifactVersionFile
 from app.files.storage_path import get_file_path
 from app.models.files import File as FileModel, FileSourceType
+from app.remote_tools.inputs import (
+    remote_artifact_input_declarations,
+    remote_example_input_refs,
+    standard_input_bindings,
+)
 from app.remote_tools.results import (
     iter_remote_result_artifacts,
     remote_result_filename,
@@ -138,20 +143,15 @@ class RemoteAPIExecutor(BaseExecutor):
         }
 
     async def _remote_tool_inputs(self) -> dict[str, Any]:
-        example_inputs = self._remote_example_input_refs()
+        example_inputs = remote_example_input_refs(self.task.extra_data)
         if example_inputs:
             return await self._remote_example_inputs(example_inputs)
-        bindings = self._standard_input_bindings()
-        if bindings and self._remote_artifact_input_declarations():
+        bindings = standard_input_bindings(self.task.extra_data)
+        if bindings and remote_artifact_input_declarations(self.config):
             return await self._remote_standard_artifact_inputs(bindings)
         if self.task.inputs and self.task.inputs.file_ids:
             return await self._remote_legacy_file_inputs(self.task.inputs.file_ids)
         return {}
-
-    def _remote_example_input_refs(self) -> dict[str, Any]:
-        data = self.task.extra_data if isinstance(self.task.extra_data, dict) else {}
-        inputs = data.get("remote_example_inputs")
-        return dict(inputs) if isinstance(inputs, dict) else {}
 
     async def _remote_example_inputs(self, example_inputs: dict[str, Any]) -> dict[str, Any]:
         payload: dict[str, Any] = {}
@@ -175,22 +175,11 @@ class RemoteAPIExecutor(BaseExecutor):
             break
         return payload
 
-    def _standard_input_bindings(self) -> dict[str, str]:
-        data = self.task.extra_data if isinstance(self.task.extra_data, dict) else {}
-        bindings = data.get("input_bindings")
-        if not isinstance(bindings, dict):
-            return {}
-        return {
-            str(input_name): str(version_id)
-            for input_name, version_id in bindings.items()
-            if str(input_name).strip() and str(version_id).strip()
-        }
-
     async def _remote_standard_artifact_inputs(
         self,
         bindings: dict[str, str],
     ) -> dict[str, Any]:
-        declarations = self._remote_artifact_input_declarations()
+        declarations = remote_artifact_input_declarations(self.config)
         declaration_by_name = {str(item.get("name")): item for item in declarations}
         unexpected_inputs = sorted(set(bindings) - set(declaration_by_name))
         if unexpected_inputs:
@@ -216,13 +205,6 @@ class RemoteAPIExecutor(BaseExecutor):
                 )
             break
         return inputs
-
-    def _remote_artifact_input_declarations(self) -> list[dict[str, Any]]:
-        artifacts = self.config.get("artifacts") if isinstance(self.config, dict) else None
-        raw_inputs = artifacts.get("inputs") if isinstance(artifacts, dict) else None
-        if not isinstance(raw_inputs, list):
-            return []
-        return [item for item in raw_inputs if isinstance(item, dict)]
 
     async def _load_artifact_version(self, session, version_id: str) -> ArtifactVersion:
         result = await session.execute(
