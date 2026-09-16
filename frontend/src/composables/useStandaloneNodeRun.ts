@@ -7,6 +7,7 @@ import {
   buildToolRunTaskPayload,
   type StandardArtifactInputSlot,
 } from '@/domain/tools'
+import { prepareAndCreateTask } from '@/domain/tasks'
 import type { ArtifactFile, TaskRunPreparationPreview, ToolSchema } from '@/types/models'
 
 interface StandaloneRunTool {
@@ -114,17 +115,19 @@ export function useStandaloneNodeRun(input: {
         uploadFile: async file => (await uploadFile(file)).data,
       })
 
-      preparationPreview.value = (await prepareTaskRun(taskPayload)).data
-      if (!preparationPreview.value.ready) {
+      const taskResult = await prepareAndCreateTask(taskPayload, {
+        prepareTaskRun: async payload => (await prepareTaskRun(payload)).data,
+        createTask: async payload => (await createTask(payload)).data,
+      })
+      preparationPreview.value = taskResult.preview
+      if (taskResult.status === 'blocked') {
         return undefined
       }
 
-      const response = await createTask(taskPayload)
-
-      workflowStore.recordNodeTask(currentNodeId(), response.data)
-      workflowStore.recordTask(options.selectedToolSlug, response.data)
-      startPolling(response.data.id, options.selectedToolSlug)
-      return response.data
+      workflowStore.recordNodeTask(currentNodeId(), taskResult.task)
+      workflowStore.recordTask(options.selectedToolSlug, taskResult.task)
+      startPolling(taskResult.task.id, options.selectedToolSlug)
+      return taskResult.task
     } finally {
       submitting.value = false
     }

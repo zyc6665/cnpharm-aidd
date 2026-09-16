@@ -15,7 +15,7 @@ import {
   type ToolRunResolvedFiles,
   type ToolRunUploadFile,
 } from '@/domain/tools'
-import { taskRunPreparationBlockedMessage } from '@/domain/tasks'
+import { prepareAndCreateTask } from '@/domain/tasks'
 
 type MaybeRef<T> = T | Ref<T>
 
@@ -94,15 +94,13 @@ export function useToolDetailSubmission(options: ToolDetailSubmissionOptions) {
         uploadFile: options.api.uploadFile,
       })
 
-      const preparationPreview = await options.api.prepareTaskRun(taskPayload)
-      const blockedMessage = taskRunPreparationBlockedMessage(preparationPreview)
-      if (blockedMessage) {
-        options.onBlocked(blockedMessage)
+      const taskResult = await prepareAndCreateTask(taskPayload, options.api)
+      if (taskResult.status === 'blocked') {
+        options.onBlocked(taskResult.message)
         return
       }
 
-      const task = await options.api.createTask(taskPayload)
-      options.onTaskCreated(task)
+      options.onTaskCreated(taskResult.task)
     } catch {
       // 请求层统一提示错误
     } finally {
