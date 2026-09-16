@@ -405,8 +405,8 @@
                       :key="stage.name"
                       class="remote-register-stage"
                     >
-                      <a-tag :color="remoteStageStatusColor(stage.status)">
-                        {{ remoteStageStatusText(stage.status) }}
+                      <a-tag :color="remoteStageStatusDisplay(stage.status).color">
+                        {{ remoteStageStatusDisplay(stage.status).text }}
                       </a-tag>
                       <span class="remote-register-stage-name">{{ stage.name }}</span>
                       <span class="remote-register-stage-message">{{ stage.message }}</span>
@@ -894,6 +894,7 @@
     createToolCreateFormState,
     createToolCreateSubmission,
     formatToolTemplateResourceText,
+    remoteToolStageStatusDisplay,
     type ToolCreateEditorState,
     type ToolConfigFormPatch,
     type ToolCreateFormState
@@ -907,7 +908,6 @@
     listToolTemplates,
     registerRemoteTool,
     type RemoteToolRegisterResult,
-    type RemoteToolStageDiagnostic,
     type ToolTemplateSummary,
     updateTool
   } from '@/api/tools'
@@ -1105,25 +1105,7 @@
     ]
   }
 
-  const remoteStageStatusColor = (status: RemoteToolStageDiagnostic['status']) => {
-    if (status === 'success') {
-      return 'green'
-    }
-    if (status === 'warning') {
-      return 'orange'
-    }
-    return 'red'
-  }
-
-  const remoteStageStatusText = (status: RemoteToolStageDiagnostic['status']) => {
-    if (status === 'success') {
-      return '成功'
-    }
-    if (status === 'warning') {
-      return '警告'
-    }
-    return '失败'
-  }
+  const remoteStageStatusDisplay = remoteToolStageStatusDisplay
 
   const handleRemoteSelfRegisterSubmit = async () => {
     submitting.value = true

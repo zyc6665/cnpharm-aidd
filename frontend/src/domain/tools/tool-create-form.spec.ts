@@ -7,11 +7,18 @@ import {
   createToolCreateFormState,
   createToolCreateSubmission,
   formatToolTemplateResourceText,
+  remoteToolStageStatusDisplay,
   toolConfigToCreateFormPatch,
   type ToolCreateEditorState,
 } from './tool-create-form'
 
 describe('tool create form domain', () => {
+  it('formats remote tool registration stage status display', () => {
+    expect(remoteToolStageStatusDisplay('success')).toEqual({ color: 'green', text: '成功' })
+    expect(remoteToolStageStatusDisplay('warning')).toEqual({ color: 'orange', text: '警告' })
+    expect(remoteToolStageStatusDisplay('failure')).toEqual({ color: 'red', text: '失败' })
+  })
+
   it('builds remote self-registration payload from create form state', () => {
     const formState = createToolCreateFormState()
     formState.remote_base_url = '  https://model.example.com  '

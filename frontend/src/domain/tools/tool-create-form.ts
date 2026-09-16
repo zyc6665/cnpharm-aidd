@@ -113,6 +113,13 @@ export interface RemoteToolRegistrationPayload {
   timeout_sec?: number
 }
 
+export type RemoteToolStageStatus = 'success' | 'warning' | 'failure'
+
+export interface RemoteToolStageStatusDisplay {
+  color: 'green' | 'orange' | 'red'
+  text: string
+}
+
 export interface ToolCreateSubmissionInput {
   formState: ToolCreateFormState
   editorState: ToolCreateEditorState
@@ -207,6 +214,19 @@ export function buildRemoteToolRegistrationPayload(
     is_public: formState.is_public ?? true,
     timeout_sec: formState.timeout_sec,
   }
+}
+
+export function remoteToolStageStatusDisplay(
+  status: RemoteToolStageStatus,
+): RemoteToolStageStatusDisplay {
+  if (status === 'success') {
+    return { color: 'green', text: '成功' }
+  }
+  if (status === 'warning') {
+    return { color: 'orange', text: '警告' }
+  }
+
+  return { color: 'red', text: '失败' }
 }
 
 export function buildTemplateExecutorConfig(
