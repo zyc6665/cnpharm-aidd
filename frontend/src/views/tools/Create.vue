@@ -885,10 +885,10 @@
   import StructuredStringListEditor from '@/components/tools/StructuredStringListEditor.vue'
   import {
     buildRemoteToolRegistrationPayload,
-    buildTemplateExecutorConfig,
     buildToolAgentCapabilityEnablePatch,
     buildToolEditFormPatch,
     buildToolTemplateFormPatch,
+    buildToolTemplateDraftPayload,
     createAgentCapabilityInputForm,
     createAgentCapabilityOutputForm,
     createToolCreateEditorState,
@@ -1038,12 +1038,10 @@
 
     creatingTemplateDraft.value = true
     try {
-      const draftResponse = await createToolDraftFromTemplate(selectedToolTemplateKey.value, {
-        category_id: formState.category_id,
-        executor_type: formState.tool_type,
-        executor_config: buildTemplateExecutorConfig(formState, editorStateSnapshot()),
-        publish: false
-      })
+      const draftResponse = await createToolDraftFromTemplate(
+        selectedToolTemplateKey.value,
+        buildToolTemplateDraftPayload(formState, editorStateSnapshot())
+      )
       message.success('工具模板草稿创建成功')
       const createdToolId = draftResponse.data.tool.id
       router.push(`/tools/${createdToolId}`)

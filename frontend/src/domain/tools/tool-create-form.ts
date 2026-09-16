@@ -115,6 +115,13 @@ export interface RemoteToolRegistrationPayload {
   timeout_sec?: number
 }
 
+export interface ToolTemplateDraftPayload {
+  executor_type: ToolCreateFormState['tool_type']
+  executor_config: Record<string, unknown>
+  category_id?: string
+  publish: boolean
+}
+
 export type RemoteToolStageStatus = 'success' | 'warning' | 'failure'
 
 export interface RemoteToolStageStatusDisplay {
@@ -301,6 +308,18 @@ export function buildTemplateExecutorConfig(
   }
 
   return buildSshTemplateExecutorConfig(formState, editorState)
+}
+
+export function buildToolTemplateDraftPayload(
+  formState: ToolCreateFormState,
+  editorState: ToolCreateEditorState,
+): ToolTemplateDraftPayload {
+  return {
+    category_id: formState.category_id,
+    executor_type: formState.tool_type,
+    executor_config: buildTemplateExecutorConfig(formState, editorState),
+    publish: false,
+  }
 }
 
 export function isSupportedToolType(value: string): value is ToolCreateFormState['tool_type'] {

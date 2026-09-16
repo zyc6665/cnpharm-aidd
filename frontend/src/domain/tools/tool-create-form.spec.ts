@@ -7,6 +7,7 @@ import {
   buildToolAgentCapabilityEnablePatch,
   createToolCreateFormState,
   createToolCreateSubmission,
+  buildToolTemplateDraftPayload,
   formatToolCreateSubmissionErrorMessage,
   formatToolTemplateResourceText,
   remoteToolStageStatusDisplay,
@@ -104,6 +105,32 @@ describe('tool create form domain', () => {
       icon_url: 'https://cdn.example.com/icon.png',
       is_public: false,
       timeout_sec: 1800,
+    })
+  })
+
+  it('builds template draft payload from form and editor state', () => {
+    const formState = createToolCreateFormState()
+    formState.category_id = 'cat-1'
+    formState.tool_type = 'python_script'
+    formState.python_script = 'run_model.py'
+
+    const payload = buildToolTemplateDraftPayload(formState, {
+      apiHeaderEntries: [],
+      dockerCommandItems: [],
+      dockerEnvEntries: [],
+      pythonArgumentItems: [' --input ', '', '--device cuda:0'],
+      sshEnvEntries: [],
+      sshOutputGlobItems: [],
+    })
+
+    expect(payload).toEqual({
+      category_id: 'cat-1',
+      executor_type: 'python_script',
+      executor_config: {
+        script_path: 'run_model.py',
+        args: ['--input', '--device cuda:0'],
+      },
+      publish: false,
     })
   })
 
