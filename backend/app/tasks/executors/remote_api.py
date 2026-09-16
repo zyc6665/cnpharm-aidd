@@ -41,6 +41,7 @@ from app.remote_tools.results import (
     RemoteToolResultError,
     iter_remote_log_messages,
     iter_remote_result_artifacts,
+    remote_artifacts_payload,
     remote_log_next_cursor,
     remote_result_file_record_data,
     remote_status_state,
@@ -340,12 +341,10 @@ class RemoteAPIExecutor(BaseExecutor):
     ) -> dict[str, Any]:
         response = await client.get(self._remote_url("artifacts", remote_run_id=remote_run_id))
         response.raise_for_status()
-        payload = response.json()
-        if not isinstance(payload, dict):
-            raise TaskExecutionError("Remote artifacts response must be an object")
-        if payload.get("result_version") != "aidd.sciminer/result.v2":
-            raise TaskExecutionError("Remote artifacts response must be result.v2")
-        return payload
+        try:
+            return remote_artifacts_payload(response.json())
+        except RemoteToolResultError as exc:
+            raise TaskExecutionError(str(exc)) from exc
 
     async def _materialize_remote_result_files(
         self,

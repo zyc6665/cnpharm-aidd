@@ -85,6 +85,20 @@ def test_remote_log_next_cursor_keeps_existing_cursor_without_next_cursor() -> N
     assert next_cursor({}, None) is None
 
 
+def test_remote_artifacts_payload_requires_result_v2_object() -> None:
+    from app.remote_tools import results
+
+    parse_payload = getattr(results, "remote_artifacts_payload", None)
+
+    assert callable(parse_payload)
+    payload = {"result_version": "aidd.sciminer/result.v2", "artifacts": [], "relations": []}
+    assert parse_payload(payload) is payload
+    with pytest.raises(ValueError, match="Remote artifacts response must be an object"):
+        parse_payload([])
+    with pytest.raises(ValueError, match="Remote artifacts response must be result.v2"):
+        parse_payload({"result_version": "legacy"})
+
+
 def test_remote_result_filename_uses_safe_basename_fallbacks() -> None:
     assert remote_result_filename({"filename": "nested/result.pdb"}, "pocket") == "result.pdb"
     assert remote_result_filename({"path": "outputs/report.json"}, "report") == "report.json"

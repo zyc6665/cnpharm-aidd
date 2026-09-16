@@ -82,6 +82,14 @@ def remote_log_next_cursor(payload: dict[str, Any], cursor: str | None) -> str |
     return payload.get("next_cursor") or cursor
 
 
+def remote_artifacts_payload(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise RemoteToolResultError("Remote artifacts response must be an object")
+    if payload.get("result_version") != "aidd.sciminer/result.v2":
+        raise RemoteToolResultError("Remote artifacts response must be result.v2")
+    return payload
+
+
 def remote_result_filename(file_ref: dict[str, Any], role: str) -> str:
     explicit_name = file_ref.get("filename") or file_ref.get("name")
     if isinstance(explicit_name, str) and explicit_name.strip():
