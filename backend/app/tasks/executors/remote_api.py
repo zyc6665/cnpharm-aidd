@@ -27,6 +27,10 @@ from app.remote_tools.inputs import (
     standard_input_bindings,
     validate_remote_artifact_input,
 )
+from app.remote_tools.invocation import (
+    build_remote_tool_invoke_payload,
+    remote_tool_parameters,
+)
 from app.remote_tools.legacy_api import (
     build_legacy_remote_api_request_data,
     flatten_legacy_remote_api_params,
@@ -136,23 +140,17 @@ class RemoteAPIExecutor(BaseExecutor):
 
     async def _remote_tool_invoke_payload(self) -> dict[str, Any]:
         input_params = self.task.inputs.params if self.task.inputs else {}
-        parameters = input_params.get("parameters") if isinstance(input_params, dict) else None
-        if parameters is None:
-            parameters = input_params if isinstance(input_params, dict) else {}
-        return {
-            "request_id": str(uuid.uuid4()),
-            "task": {
-                "id": str(self.task.id),
-                "tool_slug": self.config.get("tool_slug") or self.config.get("slug"),
-                "tool_version": getattr(self.tool_version, "version", None),
-            },
-            "inputs": await self._remote_tool_inputs(),
-            "parameters": parameters,
-            "context": {
-                "project_id": (self.task.extra_data or {}).get("project_id"),
-                "user_id": str(self.task.user_id) if self.task.user_id else None,
-            },
-        }
+        extra_data = self.task.extra_data if isinstance(self.task.extra_data, dict) else {}
+        return build_remote_tool_invoke_payload(
+            request_id=str(uuid.uuid4()),
+            task_id=str(self.task.id),
+            tool_slug=self.config.get("tool_slug") or self.config.get("slug"),
+            tool_version=getattr(self.tool_version, "version", None),
+            inputs=await self._remote_tool_inputs(),
+            parameters=remote_tool_parameters(input_params),
+            project_id=extra_data.get("project_id"),
+            user_id=str(self.task.user_id) if self.task.user_id else None,
+        )
 
     async def _remote_tool_inputs(self) -> dict[str, Any]:
         example_inputs = remote_example_input_refs(self.task.extra_data)
