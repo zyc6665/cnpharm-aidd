@@ -1,7 +1,6 @@
 """远程 API 工具执行器。"""
 
 import hashlib
-import json
 import logging
 import os
 import shutil
@@ -25,6 +24,10 @@ from app.remote_tools.inputs import (
     remote_artifact_input_declarations,
     remote_example_input_refs,
     standard_input_bindings,
+)
+from app.remote_tools.legacy_api import (
+    build_legacy_remote_api_request_data,
+    flatten_legacy_remote_api_params,
 )
 from app.remote_tools.results import (
     iter_remote_result_artifacts,
@@ -61,7 +64,9 @@ class RemoteAPIExecutor(BaseExecutor):
                     response = await client.post(endpoint, json=request_data, headers=headers)
                 elif method == "GET":
                     response = await client.get(
-                        endpoint, params=self._flatten_params(request_data), headers=headers
+                        endpoint,
+                        params=flatten_legacy_remote_api_params(request_data),
+                        headers=headers,
                     )
                 else:
                     raise TaskExecutionError(f"Unsupported HTTP method: {method}")
@@ -531,18 +536,15 @@ class RemoteAPIExecutor(BaseExecutor):
             return {}
 
         input_params = self.task.inputs.params or {}
-        if "params" in input_params and "input_files" in input_params:
-            request_data = {
-                "task_id": str(self.task.id),
-                "params": input_params["params"],
-                "input_files": input_params["input_files"],
-            }
-        else:
-            request_data = {"task_id": str(self.task.id), "params": input_params}
-
-        if self.task.inputs.file_ids:
-            request_data["files"] = await self._download_input_files()
-        return request_data
+        input_file_paths = (
+            await self._download_input_files()
+            if self.task.inputs.file_ids else None
+        )
+        return build_legacy_remote_api_request_data(
+            task_id=str(self.task.id),
+            input_params=input_params,
+            input_file_paths=input_file_paths,
+        )
 
     async def _download_input_files(self) -> list[str]:
         file_paths: list[str] = []
@@ -616,10 +618,3 @@ class RemoteAPIExecutor(BaseExecutor):
                 await session.rollback()
                 raise TaskExecutionError(f"Failed to process output files: {exc}") from exc
         return uploaded_ids
-
-    @staticmethod
-    def _flatten_params(data: dict[str, Any]) -> dict[str, str]:
-        return {
-            key: json.dumps(value) if isinstance(value, (dict, list)) else str(value)
-            for key, value in data.items()
-        }
