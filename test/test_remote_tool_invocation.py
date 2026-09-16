@@ -60,3 +60,14 @@ def test_remote_invoke_run_id_requires_non_empty_remote_run_id() -> None:
     assert run_id({"remote_run_id": " run-1 "}) == "run-1"
     with pytest.raises(ValueError, match="Remote tool invoke response missing remote_run_id"):
         run_id({"remote_run_id": ""})
+
+
+def test_recorded_remote_run_id_normalizes_task_extra_data() -> None:
+    from app.remote_tools import invocation
+
+    recorded_run_id = getattr(invocation, "recorded_remote_run_id", None)
+
+    assert callable(recorded_run_id)
+    assert recorded_run_id({"remote_run_id": " run-1 "}) == "run-1"
+    assert recorded_run_id({"remote_run_id": ""}) is None
+    assert recorded_run_id(None) is None

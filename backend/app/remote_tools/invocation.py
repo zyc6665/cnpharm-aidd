@@ -19,6 +19,13 @@ def remote_invoke_run_id(payload: dict[str, Any]) -> str:
     return remote_run_id
 
 
+def recorded_remote_run_id(extra_data: Any) -> str | None:
+    if not isinstance(extra_data, dict):
+        return None
+    remote_run_id = str(extra_data.get("remote_run_id") or "").strip()
+    return remote_run_id or None
+
+
 def build_remote_tool_invoke_payload(
     *,
     request_id: str,

@@ -29,6 +29,7 @@ from app.remote_tools.inputs import (
 )
 from app.remote_tools.invocation import (
     build_remote_tool_invoke_payload,
+    recorded_remote_run_id,
     remote_invoke_run_id,
     remote_tool_parameters,
 )
@@ -420,7 +421,7 @@ class RemoteAPIExecutor(BaseExecutor):
         return remote_result_url(str(self.config.get("base_url") or ""), url)
 
     async def cancel_remote_run(self) -> dict[str, Any]:
-        remote_run_id = str((self.task.extra_data or {}).get("remote_run_id") or "")
+        remote_run_id = recorded_remote_run_id(self.task.extra_data)
         if not remote_run_id:
             raise TaskExecutionError("Remote run id is not recorded for this task")
         async with self._http_client(timeout=self.config.get("timeout_sec", 600)) as client:
