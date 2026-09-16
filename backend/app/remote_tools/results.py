@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Any, Iterator
+
+
+class RemoteToolResultError(ValueError):
+    """Raised when a remote tool result payload is invalid."""
 
 
 def remote_status_message(payload: dict[str, Any]) -> str:
@@ -37,6 +42,22 @@ def remote_result_filename(file_ref: dict[str, Any], role: str) -> str:
     if isinstance(path, str) and Path(path).name:
         return Path(path).name
     return f"{role}.dat"
+
+
+def verify_remote_result_file_checksum(
+    file_ref: dict[str, Any],
+    role: str,
+    content: bytes,
+) -> str:
+    actual_sha256 = hashlib.sha256(content).hexdigest()
+    declared_sha256 = str(file_ref.get("sha256") or "").lower()
+    if declared_sha256 and actual_sha256 != declared_sha256:
+        result_path = file_ref.get("path") or role
+        raise RemoteToolResultError(
+            f"Remote result file checksum mismatch for {result_path}: "
+            f"declared {declared_sha256}, actual {actual_sha256}"
+        )
+    return actual_sha256
 
 
 def iter_remote_result_artifacts(raw_artifacts: Any) -> Iterator[tuple[str, dict[str, Any]]]:

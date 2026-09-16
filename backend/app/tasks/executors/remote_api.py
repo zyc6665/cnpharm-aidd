@@ -36,10 +36,12 @@ from app.remote_tools.legacy_api import (
     flatten_legacy_remote_api_params,
 )
 from app.remote_tools.results import (
+    RemoteToolResultError,
     iter_remote_result_artifacts,
     remote_result_filename,
     remote_status_message,
     remote_status_progress,
+    verify_remote_result_file_checksum,
 )
 from app.remote_tools.urls import (
     RemoteToolUrlError,
@@ -390,13 +392,10 @@ class RemoteAPIExecutor(BaseExecutor):
                         if not isinstance(file_ref, dict) or not file_ref.get("url"):
                             continue
                         content = await self._download_remote_result_file(client, str(file_ref["url"]))
-                        actual_sha256 = hashlib.sha256(content).hexdigest()
-                        declared_sha256 = str(file_ref.get("sha256") or "").lower()
-                        if declared_sha256 and actual_sha256 != declared_sha256:
-                            raise TaskExecutionError(
-                                f"Remote result file checksum mismatch for {file_ref.get('path') or role}: "
-                                f"declared {declared_sha256}, actual {actual_sha256}"
-                            )
+                        try:
+                            actual_sha256 = verify_remote_result_file_checksum(file_ref, str(role), content)
+                        except RemoteToolResultError as exc:
+                            raise TaskExecutionError(str(exc)) from exc
                         filename = remote_result_filename(file_ref, str(role))
                         file_record = FileModel(
                             filename=filename,

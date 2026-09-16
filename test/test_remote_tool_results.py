@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import sys
 from pathlib import Path
+
+import pytest
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -53,3 +56,43 @@ def test_iter_remote_result_artifacts_handles_lists_dicts_and_nested_lists() -> 
         ("pockets[0]", {"files": {"pdb": {}}}),
         ("metrics", {"files": {"json": {}}}),
     ]
+
+
+def test_verify_remote_result_file_checksum_returns_actual_sha_without_declared_sha() -> None:
+    from app.remote_tools import results
+
+    content = b"remote result file"
+    verify_checksum = getattr(results, "verify_remote_result_file_checksum", None)
+
+    assert callable(verify_checksum)
+    assert verify_checksum({"path": "outputs/result.pdb"}, "pdb", content) == hashlib.sha256(content).hexdigest()
+
+
+def test_verify_remote_result_file_checksum_accepts_declared_sha_case_insensitively() -> None:
+    from app.remote_tools import results
+
+    content = b"remote result file"
+    digest = hashlib.sha256(content).hexdigest()
+
+    assert results.verify_remote_result_file_checksum(
+        {"path": "outputs/result.pdb", "sha256": digest.upper()},
+        "pdb",
+        content,
+    ) == digest
+
+
+def test_verify_remote_result_file_checksum_rejects_declared_sha_mismatch() -> None:
+    from app.remote_tools import results
+
+    content = b"remote result file"
+    digest = hashlib.sha256(content).hexdigest()
+
+    with pytest.raises(
+        ValueError,
+        match=f"Remote result file checksum mismatch for outputs/result.pdb: declared deadbeef, actual {digest}",
+    ):
+        results.verify_remote_result_file_checksum(
+            {"path": "outputs/result.pdb", "sha256": "deadbeef"},
+            "pdb",
+            content,
+        )
