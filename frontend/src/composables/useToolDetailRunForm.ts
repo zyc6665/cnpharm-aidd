@@ -6,6 +6,7 @@ import { replaceRecord } from '@/utils/record-state'
 import {
   buildToolRunFormState,
   getSdfConversionStatusText,
+  hasConcreteStandardInputUploadSelection,
   resolveStandardInputRunState,
   resolveToolRunInputSurface,
   shouldShowSdfToPdbConverter,
@@ -53,7 +54,14 @@ export function useToolDetailRunForm(options: ToolDetailRunFormOptions) {
       selectedStandardArtifacts,
       hasUpload: (slotName, context) => {
         if (context.usesConcreteStandardInputFields) {
-          return hasConcreteStandardInputUploadSelection(slotName)
+          return hasConcreteStandardInputUploadSelection({
+            slotName,
+            fileFieldBindings: standardInputFileFieldBindings.value,
+            fileList,
+            selectedArtifacts,
+            exampleFiles,
+            convertedFiles,
+          })
         }
 
         return Boolean(standardInputFileList[slotName]?.length)
@@ -265,20 +273,6 @@ export function useToolDetailRunForm(options: ToolDetailRunFormOptions) {
     sdfConversionStatusText,
     convertSdfToPdbField,
     createSdfUploadBefore,
-  }
-
-  function hasConcreteStandardInputUploadSelection(slotName: string) {
-    const fieldKey = standardInputFileFieldBindings.value[slotName]
-    if (!fieldKey || selectedArtifacts[fieldKey]?.artifact_version_id?.trim()) {
-      return false
-    }
-
-    return Boolean(
-      fileList[fieldKey]?.length ||
-      exampleFiles[fieldKey] ||
-      convertedFiles[fieldKey] ||
-      selectedArtifacts[fieldKey]?.id
-    )
   }
 
 }

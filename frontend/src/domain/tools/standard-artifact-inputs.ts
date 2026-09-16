@@ -22,6 +22,15 @@ export interface StandardInputUploadFieldProjection {
   boundFieldKeys: string[]
 }
 
+export interface ConcreteStandardInputUploadSelectionInput {
+  slotName: string
+  fileFieldBindings: Record<string, string | null | undefined>
+  fileList?: Record<string, readonly unknown[] | undefined>
+  selectedArtifacts: Record<string, ArtifactFile | null | undefined>
+  exampleFiles?: Record<string, unknown>
+  convertedFiles?: Record<string, unknown>
+}
+
 type UnknownRecord = Record<string, unknown>
 
 const STANDARD_TYPE_FILE_FIELD_TOKENS: Record<string, readonly string[]> = {
@@ -241,6 +250,22 @@ export function hasStandardInputFileFieldBindings(
   fileFieldBindings: Record<string, string | null | undefined>,
 ): boolean {
   return Object.values(fileFieldBindings).some(value => Boolean(value?.trim()))
+}
+
+export function hasConcreteStandardInputUploadSelection(
+  input: ConcreteStandardInputUploadSelectionInput,
+): boolean {
+  const fieldKey = input.fileFieldBindings[input.slotName]
+  if (!fieldKey || input.selectedArtifacts[fieldKey]?.artifact_version_id?.trim()) {
+    return false
+  }
+
+  return Boolean(
+    input.fileList?.[fieldKey]?.length ||
+    input.exampleFiles?.[fieldKey] ||
+    input.convertedFiles?.[fieldKey] ||
+    input.selectedArtifacts[fieldKey]?.id
+  )
 }
 
 export function buildStandardInputUploadsFromFileFields(input: {

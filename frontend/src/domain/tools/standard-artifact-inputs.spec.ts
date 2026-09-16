@@ -7,6 +7,7 @@ import {
   buildStandardInputUploadsFromFileFields,
   filterCompatibleProjectArtifacts,
   getStandardInputAccept,
+  hasConcreteStandardInputUploadSelection,
   hasStandardInputFileFieldBindings,
   missingRequiredStandardInputSlots,
   resolveStandardInputFileFieldBindings,
@@ -110,6 +111,31 @@ describe('standard artifact tool inputs', () => {
     expect(hasStandardInputFileFieldBindings({ protein: 'protein_pdb' })).toBe(true)
     expect(hasStandardInputFileFieldBindings({ protein: '' })).toBe(false)
     expect(hasStandardInputFileFieldBindings({})).toBe(false)
+  })
+
+  it('detects concrete standard input upload selections from file field state', () => {
+    expect(hasConcreteStandardInputUploadSelection({
+      slotName: 'protein',
+      fileFieldBindings: { protein: 'protein_pdb' },
+      fileList: { protein_pdb: [{ uid: 'upload-protein' }] },
+      selectedArtifacts: {},
+    })).toBe(true)
+    expect(hasConcreteStandardInputUploadSelection({
+      slotName: 'protein',
+      fileFieldBindings: { protein: 'protein_pdb' },
+      selectedArtifacts: { protein_pdb: makeArtifactFile({ id: 'file-1' }) },
+    })).toBe(true)
+    expect(hasConcreteStandardInputUploadSelection({
+      slotName: 'protein',
+      fileFieldBindings: { protein: 'protein_pdb' },
+      selectedArtifacts: { protein_pdb: makeArtifactFile({ artifact_version_id: 'version-1' }) },
+      fileList: { protein_pdb: [{ uid: 'upload-protein' }] },
+    })).toBe(false)
+    expect(hasConcreteStandardInputUploadSelection({
+      slotName: 'ligand',
+      fileFieldBindings: { protein: 'protein_pdb' },
+      selectedArtifacts: {},
+    })).toBe(false)
   })
 
   it('resolves standard input slots from the tool contract first', () => {
