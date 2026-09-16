@@ -35,6 +35,7 @@ from app.remote_tools.invocation import (
 from app.remote_tools.legacy_api import (
     build_legacy_remote_api_request_data,
     flatten_legacy_remote_api_params,
+    legacy_input_file_stage_plan,
     legacy_output_file_record_data,
     legacy_output_filename,
 )
@@ -475,12 +476,13 @@ class RemoteAPIExecutor(BaseExecutor):
                     if not file_record:
                         logger.warning("Input file %s not found, skipping", file_id)
                         continue
-                    if not file_record.storage_path or not os.path.exists(file_record.storage_path):
+                    try:
+                        stage_plan = legacy_input_file_stage_plan(file_record, input_dir)
+                    except ValueError:
                         logger.error("Input file %s not found in storage", file_record.filename)
                         continue
-                    destination = os.path.join(input_dir, file_record.filename)
-                    shutil.copy2(file_record.storage_path, destination)
-                    file_paths.append(destination)
+                    shutil.copy2(stage_plan.source_path, stage_plan.destination_path)
+                    file_paths.append(stage_plan.destination_path)
                     logger.info("Downloaded input file: %s", file_record.filename)
                 break
             except Exception as exc:

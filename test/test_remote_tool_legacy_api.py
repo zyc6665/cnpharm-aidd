@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -39,6 +42,36 @@ def test_build_legacy_remote_api_request_data_wraps_plain_params_and_files() -> 
         "params": {"threshold": 0.5},
         "files": ["/work/input/protein.pdb"],
     }
+
+
+def test_legacy_input_file_stage_plan_builds_source_and_destination_paths(tmp_path: Path) -> None:
+    from app.remote_tools import legacy_api
+
+    build_plan = getattr(legacy_api, "legacy_input_file_stage_plan", None)
+    source_path = tmp_path / "protein.pdb"
+    source_path.write_text("ATOM\n", encoding="utf-8")
+
+    assert callable(build_plan)
+    plan = build_plan(
+        SimpleNamespace(filename="protein.pdb", storage_path=str(source_path)),
+        str(tmp_path / "input"),
+    )
+
+    assert plan.source_path == str(source_path)
+    assert plan.destination_path == str(tmp_path / "input" / "protein.pdb")
+
+
+def test_legacy_input_file_stage_plan_rejects_missing_storage_path(tmp_path: Path) -> None:
+    from app.remote_tools import legacy_api
+
+    build_plan = getattr(legacy_api, "legacy_input_file_stage_plan", None)
+
+    assert callable(build_plan)
+    with pytest.raises(ValueError, match="Input file protein.pdb not found in storage"):
+        build_plan(
+            SimpleNamespace(filename="protein.pdb", storage_path=str(tmp_path / "missing.pdb")),
+            str(tmp_path / "input"),
+        )
 
 
 def test_flatten_legacy_remote_api_params_json_encodes_nested_values() -> None:

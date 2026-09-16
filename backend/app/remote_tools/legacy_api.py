@@ -4,7 +4,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+from dataclasses import dataclass
 from typing import Any
+
+
+@dataclass(frozen=True)
+class LegacyInputFileStagePlan:
+    source_path: str
+    destination_path: str
 
 
 def build_legacy_remote_api_request_data(
@@ -25,6 +33,16 @@ def build_legacy_remote_api_request_data(
     if input_file_paths:
         request_data["files"] = input_file_paths
     return request_data
+
+
+def legacy_input_file_stage_plan(file_record: Any, input_dir: str) -> LegacyInputFileStagePlan:
+    source_path = str(file_record.storage_path or "")
+    if not source_path or not os.path.exists(source_path):
+        raise ValueError(f"Input file {file_record.filename} not found in storage")
+    return LegacyInputFileStagePlan(
+        source_path=source_path,
+        destination_path=os.path.join(input_dir, file_record.filename),
+    )
 
 
 def flatten_legacy_remote_api_params(data: dict[str, Any]) -> dict[str, str]:
