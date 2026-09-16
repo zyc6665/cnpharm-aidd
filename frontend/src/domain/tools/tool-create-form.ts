@@ -8,6 +8,8 @@ import {
 } from '@/utils/tool-config-editors'
 import {
   buildAgentCapabilityConfig,
+  createAgentCapabilityInputForm,
+  createAgentCapabilityOutputForm,
   isAgentCapabilityFormComplete,
   parseAgentCapabilityForm,
   type AgentCapabilityInputForm,
@@ -233,6 +235,22 @@ export function remoteToolStageStatusDisplay(
   }
 
   return { color: 'red', text: '失败' }
+}
+
+export function buildToolAgentCapabilityEnablePatch(
+  formState: ToolCreateFormState,
+): Partial<ToolCreateFormState> {
+  return {
+    ...(formState.agent_inputs.length === 0
+      ? { agent_inputs: [createAgentCapabilityInputForm()] }
+      : {}),
+    ...(formState.agent_outputs.length === 0
+      ? { agent_outputs: [createAgentCapabilityOutputForm()] }
+      : {}),
+    ...(!formState.agent_stage.trim()
+      ? { agent_stage: formState.agent_capability }
+      : {}),
+  }
 }
 
 export function formatToolCreateSubmissionErrorMessage(error: unknown): string {

@@ -4,6 +4,7 @@ import {
   buildTemplateExecutorConfig,
   buildToolEditFormPatch,
   buildToolTemplateFormPatch,
+  buildToolAgentCapabilityEnablePatch,
   createToolCreateFormState,
   createToolCreateSubmission,
   formatToolCreateSubmissionErrorMessage,
@@ -25,6 +26,42 @@ describe('tool create form domain', () => {
     expect(formatToolCreateSubmissionErrorMessage(new Error('配置键不能为空'))).toBe('配置键不能为空')
     expect(formatToolCreateSubmissionErrorMessage(new Error('Unexpected token'))).toBe('JSON 格式错误，请检查配置')
     expect(formatToolCreateSubmissionErrorMessage('bad json')).toBe('JSON 格式错误，请检查配置')
+  })
+
+  it('builds an agent capability enable patch without overwriting existing rows', () => {
+    const emptyState = createToolCreateFormState()
+    emptyState.agent_stage = ''
+
+    expect(buildToolAgentCapabilityEnablePatch(emptyState)).toMatchObject({
+      agent_inputs: [{ semantic_type: '', field: '', accepted_extensions: '' }],
+      agent_outputs: [
+        {
+          semantic_type: '',
+          source: 'output_files',
+          path: '',
+          match_extension: '',
+          filename_contains_any: '',
+          required: true,
+        },
+      ],
+      agent_stage: 'molecule_generation',
+    })
+
+    const populatedState = createToolCreateFormState()
+    populatedState.agent_stage = 'custom_stage'
+    populatedState.agent_inputs = [{ semantic_type: 'protein_structure@1', field: 'protein', accepted_extensions: '.pdb' }]
+    populatedState.agent_outputs = [
+      {
+        semantic_type: 'binding_pocket@1',
+        source: 'output_files',
+        path: 'output/pocket.pdb',
+        match_extension: '.pdb',
+        filename_contains_any: 'pocket',
+        required: true,
+      },
+    ]
+
+    expect(buildToolAgentCapabilityEnablePatch(populatedState)).toEqual({})
   })
 
   it('resolves submission blocker messages before API calls', () => {

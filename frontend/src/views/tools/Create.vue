@@ -886,6 +886,7 @@
   import {
     buildRemoteToolRegistrationPayload,
     buildTemplateExecutorConfig,
+    buildToolAgentCapabilityEnablePatch,
     buildToolEditFormPatch,
     buildToolTemplateFormPatch,
     createAgentCapabilityInputForm,
@@ -1057,15 +1058,8 @@
     if (!checked) {
       return
     }
-    if (formState.agent_inputs.length === 0) {
-      addAgentInput()
-    }
-    if (formState.agent_outputs.length === 0) {
-      addAgentOutput()
-    }
-    if (!formState.agent_stage.trim()) {
-      formState.agent_stage = formState.agent_capability
-    }
+
+    Object.assign(formState, buildToolAgentCapabilityEnablePatch(formState))
   }
 
   const applyToolFormPatch = (patch: ToolConfigFormPatch) => {
