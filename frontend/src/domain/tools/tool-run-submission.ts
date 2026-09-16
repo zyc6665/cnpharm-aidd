@@ -42,6 +42,22 @@ export interface BuildToolRunTaskPayloadOptions {
   uploadFile: ToolRunUploadFile
 }
 
+export interface ToolRunStandardInputOptions {
+  standardInputSlots: readonly StandardArtifactInputSlot[]
+  standardInputFileFieldBindings: Record<string, string>
+  selectedArtifacts: Record<string, ArtifactFile | undefined>
+  uploadedFiles: Record<string, UploadedToolFile | undefined>
+  selectedStandardArtifacts: Record<string, TypedArtifact | undefined>
+  directStandardInputUploads: Record<string, string>
+}
+
+export interface ToolRunStandardInputProjection {
+  usesConcreteStandardInputFields: boolean
+  inputBindings: Record<string, string>
+  standardInputUploads: Record<string, string>
+  boundFieldKeys: string[]
+}
+
 function compactName(value?: string): string | undefined {
   return value?.trim() || undefined
 }
@@ -113,10 +129,21 @@ async function collectStandardInputUploads(
   return standardInputUploads
 }
 
-export async function buildToolRunTaskPayload(
-  options: BuildToolRunTaskPayloadOptions,
-): Promise<TaskCreateParams> {
-  const uploadedFiles = await collectUploadedFiles(options)
+export function resolveToolRunStandardInputs(
+  options: ToolRunStandardInputOptions,
+): ToolRunStandardInputProjection {
+  const usesConcreteStandardInputFields = hasStandardInputFileFieldBindings(
+    options.standardInputFileFieldBindings,
+  )
+  if (!usesConcreteStandardInputFields) {
+    return {
+      usesConcreteStandardInputFields: false,
+      inputBindings: buildStandardInputBindings(options.selectedStandardArtifacts),
+      standardInputUploads: options.directStandardInputUploads,
+      boundFieldKeys: [],
+    }
+  }
+
   const concreteBindingProjection = buildStandardInputBindingsFromFileFields({
     slots: options.standardInputSlots,
     fileFieldBindings: options.standardInputFileFieldBindings,
@@ -125,27 +152,43 @@ export async function buildToolRunTaskPayload(
   const concreteUploadProjection = buildStandardInputUploadsFromFileFields({
     slots: options.standardInputSlots,
     fileFieldBindings: options.standardInputFileFieldBindings,
-    uploadedFiles,
+    uploadedFiles: options.uploadedFiles,
     selectedArtifacts: options.selectedArtifacts,
     inputBindings: concreteBindingProjection.inputBindings,
   })
-  const concreteBoundFieldKeys = [
-    ...concreteBindingProjection.boundFieldKeys,
-    ...concreteUploadProjection.boundFieldKeys,
-  ]
+
+  return {
+    usesConcreteStandardInputFields: true,
+    inputBindings: concreteBindingProjection.inputBindings,
+    standardInputUploads: concreteUploadProjection.standardInputUploads,
+    boundFieldKeys: [
+      ...concreteBindingProjection.boundFieldKeys,
+      ...concreteUploadProjection.boundFieldKeys,
+    ],
+  }
+}
+
+export async function buildToolRunTaskPayload(
+  options: BuildToolRunTaskPayloadOptions,
+): Promise<TaskCreateParams> {
+  const uploadedFiles = await collectUploadedFiles(options)
   const usesConcreteStandardInputFields = hasStandardInputFileFieldBindings(
     options.standardInputFileFieldBindings,
   )
-  const inputBindings = usesConcreteStandardInputFields
-    ? concreteBindingProjection.inputBindings
-    : buildStandardInputBindings(options.selectedStandardArtifacts)
-  const standardInputUploads = usesConcreteStandardInputFields
-    ? concreteUploadProjection.standardInputUploads
-    : await collectStandardInputUploads(options)
+  const standardInputs = resolveToolRunStandardInputs({
+    standardInputSlots: options.standardInputSlots,
+    standardInputFileFieldBindings: options.standardInputFileFieldBindings,
+    selectedArtifacts: options.selectedArtifacts,
+    uploadedFiles,
+    selectedStandardArtifacts: options.selectedStandardArtifacts,
+    directStandardInputUploads: usesConcreteStandardInputFields
+      ? {}
+      : await collectStandardInputUploads(options),
+  })
   const payload = buildTaskSubmissionPayload({
     flattenedSchema: options.flattenedSchema,
-    formState: omitRecordKeys(options.formState, concreteBoundFieldKeys),
-    uploadedFiles: omitRecordKeys(uploadedFiles, concreteBoundFieldKeys),
+    formState: omitRecordKeys(options.formState, standardInputs.boundFieldKeys),
+    uploadedFiles: omitRecordKeys(uploadedFiles, standardInputs.boundFieldKeys),
     executorType: options.executorType,
   })
 
@@ -159,8 +202,8 @@ export async function buildToolRunTaskPayload(
     params: payload.params,
     file_ids: payload.fileIds.length > 0 ? payload.fileIds : undefined,
     ...buildStandardRunTaskExtras({
-      inputBindings,
-      standardInputUploads,
+      inputBindings: standardInputs.inputBindings,
+      standardInputUploads: standardInputs.standardInputUploads,
     }),
   }
 }

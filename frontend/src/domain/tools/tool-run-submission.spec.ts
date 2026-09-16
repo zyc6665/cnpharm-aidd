@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from 'vitest'
 import type { UploadFile } from 'ant-design-vue'
 import type { ArtifactFile, FileUploadResponse, ToolSchema } from '@/types/models'
 import type { TypedArtifact } from '@/types/artifacts'
-import { buildToolRunTaskPayload, type ToolRunUploadFile } from './tool-run-submission'
+import {
+  buildToolRunTaskPayload,
+  resolveToolRunStandardInputs,
+  type ToolRunUploadFile,
+} from './tool-run-submission'
 
 function makeUploadItem(name: string): UploadFile {
   return {
@@ -72,6 +76,30 @@ const concreteSchema: ToolSchema = {
 }
 
 describe('tool run submission', () => {
+  it('resolves concrete standard input selections before standalone slot state', () => {
+    expect(resolveToolRunStandardInputs({
+      standardInputSlots: [{ name: 'protein', type: 'protein_structure@1', required: true }],
+      standardInputFileFieldBindings: { protein: 'protein_pdb' },
+      selectedArtifacts: {
+        protein_pdb: makeArtifactFile({ artifact_version_id: 'artifact-version-protein' }),
+      },
+      uploadedFiles: {
+        protein_pdb: {
+          fileId: 'file-upload-1',
+          filename: 'protein.pdb',
+          downloadUrl: '/api/v1/files/file-upload-1/download',
+        },
+      },
+      selectedStandardArtifacts: { protein: makeTypedArtifact() },
+      directStandardInputUploads: { protein: 'file-standalone' },
+    })).toEqual({
+      usesConcreteStandardInputFields: true,
+      inputBindings: { protein: 'artifact-version-protein' },
+      standardInputUploads: {},
+      boundFieldKeys: ['protein_pdb'],
+    })
+  })
+
   it('projects concrete file uploads into standard input uploads', async () => {
     const uploadFile = vi.fn<ToolRunUploadFile>().mockResolvedValue(makeFileResponse('file-upload-1', 'protein.pdb'))
 
