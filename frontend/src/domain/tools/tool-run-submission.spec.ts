@@ -4,6 +4,7 @@ import type { ArtifactFile, FileUploadResponse, ToolSchema } from '@/types/model
 import type { TypedArtifact } from '@/types/artifacts'
 import {
   buildToolRunTaskPayload,
+  resolveToolRunSubmissionGate,
   resolveToolRunStandardInputs,
   type ToolRunUploadFile,
 } from './tool-run-submission'
@@ -76,6 +77,46 @@ const concreteSchema: ToolSchema = {
 }
 
 describe('tool run submission', () => {
+  it('resolves the submission gate before task payload work starts', () => {
+    expect(resolveToolRunSubmissionGate({
+      isLoggedIn: false,
+      toolId: 'tool-lvpocket',
+      schema: concreteSchema,
+      missingRequiredStandardSlots: [],
+    })).toEqual({ status: 'requires_login' })
+
+    expect(resolveToolRunSubmissionGate({
+      isLoggedIn: true,
+      toolId: undefined,
+      schema: concreteSchema,
+      missingRequiredStandardSlots: [],
+    })).toEqual({ status: 'missing_schema' })
+
+    expect(resolveToolRunSubmissionGate({
+      isLoggedIn: true,
+      toolId: 'tool-lvpocket',
+      schema: concreteSchema,
+      missingRequiredStandardSlots: [
+        { name: 'protein', type: 'protein_structure@1', required: true },
+        { name: 'ligand', type: 'molecule_table@1', required: true },
+      ],
+    })).toEqual({
+      status: 'missing_standard_inputs',
+      slotNames: ['protein', 'ligand'],
+    })
+
+    expect(resolveToolRunSubmissionGate({
+      isLoggedIn: true,
+      toolId: 'tool-lvpocket',
+      schema: concreteSchema,
+      missingRequiredStandardSlots: [],
+    })).toEqual({
+      status: 'ready',
+      toolId: 'tool-lvpocket',
+      schema: concreteSchema,
+    })
+  })
+
   it('resolves concrete standard input selections before standalone slot state', () => {
     expect(resolveToolRunStandardInputs({
       standardInputSlots: [{ name: 'protein', type: 'protein_structure@1', required: true }],

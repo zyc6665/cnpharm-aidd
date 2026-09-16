@@ -58,6 +58,44 @@ export interface ToolRunStandardInputProjection {
   boundFieldKeys: string[]
 }
 
+export type ToolRunSubmissionGate =
+  | { status: 'requires_login' }
+  | { status: 'missing_schema' }
+  | { status: 'missing_standard_inputs'; slotNames: string[] }
+  | { status: 'ready'; toolId: string; schema: ToolSchema }
+
+export interface ResolveToolRunSubmissionGateOptions {
+  isLoggedIn: boolean
+  toolId?: string
+  schema?: ToolSchema
+  missingRequiredStandardSlots: readonly StandardArtifactInputSlot[]
+}
+
+export function resolveToolRunSubmissionGate(
+  options: ResolveToolRunSubmissionGateOptions,
+): ToolRunSubmissionGate {
+  if (!options.isLoggedIn) {
+    return { status: 'requires_login' }
+  }
+
+  if (!options.schema || !options.toolId) {
+    return { status: 'missing_schema' }
+  }
+
+  if (options.missingRequiredStandardSlots.length) {
+    return {
+      status: 'missing_standard_inputs',
+      slotNames: options.missingRequiredStandardSlots.map(slot => slot.name),
+    }
+  }
+
+  return {
+    status: 'ready',
+    toolId: options.toolId,
+    schema: options.schema,
+  }
+}
+
 function compactName(value?: string): string | undefined {
   return value?.trim() || undefined
 }

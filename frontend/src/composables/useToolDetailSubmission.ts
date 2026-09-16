@@ -10,6 +10,7 @@ import type {
 } from '@/types/models'
 import {
   buildToolRunTaskPayload,
+  resolveToolRunSubmissionGate,
   type StandardArtifactInputSlot,
   type ToolRunResolvedFiles,
   type ToolRunUploadFile,
@@ -52,31 +53,35 @@ export function useToolDetailSubmission(options: ToolDetailSubmissionOptions) {
   const submitting = ref(false)
 
   async function handleSubmit() {
-    if (!unref(options.isLoggedIn)) {
-      options.onRequireLogin()
-      return
-    }
-
     submitting.value = true
     try {
-      const schema = unref(options.flattenedSchema)
-      const toolId = unref(options.toolId)
-      if (!schema || !toolId) {
+      const submissionGate = resolveToolRunSubmissionGate({
+        isLoggedIn: unref(options.isLoggedIn),
+        toolId: unref(options.toolId),
+        schema: unref(options.flattenedSchema),
+        missingRequiredStandardSlots: unref(options.missingRequiredStandardSlots),
+      })
+
+      if (submissionGate.status === 'requires_login') {
+        options.onRequireLogin()
+        return
+      }
+
+      if (submissionGate.status === 'missing_schema') {
         options.onNoSchema()
         return
       }
 
-      const missingSlots = unref(options.missingRequiredStandardSlots)
-      if (missingSlots.length) {
-        options.onMissingStandardInputs(missingSlots.map(slot => slot.name))
+      if (submissionGate.status === 'missing_standard_inputs') {
+        options.onMissingStandardInputs(submissionGate.slotNames)
         return
       }
 
       const taskPayload = await buildToolRunTaskPayload({
-        toolId,
+        toolId: submissionGate.toolId,
         taskName: unref(options.taskName),
         projectId: unref(options.projectId),
-        flattenedSchema: schema,
+        flattenedSchema: submissionGate.schema,
         formState: options.formState,
         fileList: options.fileList,
         selectedArtifacts: options.selectedArtifacts,
