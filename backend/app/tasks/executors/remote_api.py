@@ -7,18 +7,19 @@ import shutil
 import uuid
 import asyncio
 from typing import Any
-from urllib.parse import quote
 
 import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.config import settings
 from app.database.session import get_async_session
-from app.files.remote_access_tokens import create_remote_file_access_token
 from app.models.artifacts import ArtifactVersion, ArtifactVersionFile
 from app.files.storage_path import get_file_path
 from app.models.files import File as FileModel, FileSourceType
+from app.remote_tools.files import (
+    remote_file_download_url,
+    remote_file_payload,
+)
 from app.remote_tools.inputs import (
     RemoteToolInputError,
     remote_artifact_input_declarations,
@@ -248,26 +249,14 @@ class RemoteAPIExecutor(BaseExecutor):
         return {"files": {"files": files, "metadata": {}}}
 
     def _remote_file_payload(self, file_record: FileModel) -> dict[str, Any]:
-        return {
-            "url": self._remote_file_download_url(str(file_record.id)),
-            "filename": file_record.filename,
-            "sha256": str(file_record.sha256).lower(),
-            "content_type": file_record.content_type,
-        }
-
-    def _remote_file_download_url(self, file_id: str) -> str:
-        expires_in = int(self.config.get("input_url_expires_in_sec", 3600))
-        token = create_remote_file_access_token(
-            file_id=file_id,
-            task_id=str(self.task.id),
-            expires_in_seconds=expires_in,
+        return remote_file_payload(
+            file_record,
+            download_url=remote_file_download_url(
+                file_id=str(file_record.id),
+                task_id=str(self.task.id),
+                config=self.config,
+            ),
         )
-        base_url = str(
-            self.config.get("platform_base_url")
-            or getattr(settings, "PUBLIC_API_BASE_URL", "")
-            or ""
-        ).rstrip("/")
-        return f"{base_url}/api/v1/files/{file_id}/download?token={quote(token)}"
 
     async def _poll_remote_run(
         self,
