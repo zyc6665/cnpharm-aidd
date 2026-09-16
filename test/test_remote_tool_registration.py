@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import httpx
 import pytest
 
 from app.remote_tools.client import RemoteToolDiscoveryClient, RemoteToolDiscoveryResult
 from app.remote_tools.diagnostics import RemoteToolStageDiagnostic
 from app.remote_tools.registration import (
+    build_remote_tool_smoke_result_update,
     remote_manifest_sha256,
     remote_tool_config,
     remote_tool_publish_errors,
@@ -214,3 +217,75 @@ def test_remote_tool_config_normalizes_discovery_payload() -> None:
     assert config["remote_health"] == {"status": "ok"}
     assert config["registration_diagnostics"][0]["name"] == "fetch_manifest"
     assert config["pending_publish_on_smoke_success"] is True
+
+
+def test_remote_tool_smoke_result_update_records_success_and_auto_publish() -> None:
+    config = {
+        "type": "remote_api",
+        "mode": "remote_tool_v1",
+        "manifest_sha256": "same",
+        "pending_publish_on_smoke_success": True,
+    }
+
+    update = build_remote_tool_smoke_result_update(
+        config=config,
+        extra_data={
+            "smoke_test": True,
+            "smoke_test_type": "remote_tool_v1",
+            "publish_on_success": True,
+            "manifest_sha256": "same",
+            "example_name": "default",
+        },
+        task_id="task-1",
+        status="success",
+        finished_at=datetime(2026, 9, 16, tzinfo=timezone.utc),
+        output_result={"remote_run_id": "run-1"},
+    )
+
+    assert update is not None
+    assert update.auto_publish is True
+    assert update.config["last_smoke_test"] == {
+        "status": "success",
+        "task_id": "task-1",
+        "manifest_sha256": "same",
+        "example_name": "default",
+        "finished_at": "2026-09-16T00:00:00+00:00",
+        "remote_run_id": "run-1",
+        "auto_published": True,
+    }
+    assert "pending_publish_on_smoke_success" not in update.config
+    assert "pending_publish_on_smoke_success" in config
+
+
+def test_remote_tool_smoke_result_update_ignores_non_remote_smoke_and_marks_stale() -> None:
+    config = {
+        "type": "remote_api",
+        "mode": "remote_tool_v1",
+        "manifest_sha256": "current",
+        "pending_publish_on_smoke_success": True,
+    }
+
+    assert build_remote_tool_smoke_result_update(
+        config=config,
+        extra_data={"smoke_test": False, "smoke_test_type": "remote_tool_v1"},
+        task_id="task-1",
+        status="success",
+        finished_at=None,
+    ) is None
+
+    update = build_remote_tool_smoke_result_update(
+        config=config,
+        extra_data={
+            "smoke_test": True,
+            "smoke_test_type": "remote_tool_v1",
+            "manifest_sha256": "old",
+        },
+        task_id="task-2",
+        status="success",
+        finished_at=None,
+    )
+
+    assert update is not None
+    assert update.auto_publish is False
+    assert update.config["last_smoke_test"]["status"] == "stale"
+    assert update.config["pending_publish_on_smoke_success"] is True

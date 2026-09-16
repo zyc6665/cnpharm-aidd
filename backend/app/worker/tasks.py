@@ -8,6 +8,7 @@ from celery.utils.log import get_task_logger
 
 from app.common.async_runtime import run_coro_sync
 from app.common.time import utcnow
+from app.remote_tools.registration import build_remote_tool_smoke_result_update
 from app.tasks.executors.errors import TaskExecutionError
 from app.tasks.naming import _extract_file_ids_from_result
 from app.tasks.state_machine import TaskStateMachine
@@ -112,45 +113,23 @@ async def _record_remote_tool_smoke_result_if_needed(
 ) -> None:
     """Record remote-tool.v1 smoke test outcomes on the active version config."""
     extra_data = dict(task.extra_data or {})
-    if extra_data.get("smoke_test") is not True:
-        return
-    if extra_data.get("smoke_test_type") != "remote_tool_v1":
-        return
-
-    config = dict(tool_version.config or {})
-    if config.get("type") != "remote_api" or config.get("mode") != "remote_tool_v1":
-        return
-
-    manifest_sha256 = str(extra_data.get("manifest_sha256") or "")
-    current_manifest_sha256 = str(config.get("manifest_sha256") or "")
-    smoke_status = status
-    if status == "success" and manifest_sha256 != current_manifest_sha256:
-        smoke_status = "stale"
-    smoke_summary: dict[str, Any] = {
-        "status": smoke_status,
-        "task_id": str(task.id),
-        "manifest_sha256": manifest_sha256,
-        "example_name": extra_data.get("example_name"),
-        "finished_at": task.finished_at.isoformat() if task.finished_at else None,
-    }
-    if error_message:
-        smoke_summary["error"] = error_message
-    if isinstance(output_result, dict) and output_result.get("remote_run_id"):
-        smoke_summary["remote_run_id"] = output_result["remote_run_id"]
-
-    should_publish = bool(
-        extra_data.get("publish_on_success")
-        or config.get("pending_publish_on_smoke_success")
+    update = build_remote_tool_smoke_result_update(
+        config=dict(tool_version.config or {}),
+        extra_data=extra_data,
+        task_id=str(task.id),
+        status=status,
+        finished_at=task.finished_at,
+        output_result=output_result,
+        error_message=error_message,
     )
-    if smoke_status == "success" and should_publish:
+    if update is None:
+        return
+
+    if update.auto_publish:
         from app.models.tools import ToolStatus
 
         tool.status = ToolStatus.PUBLISHED.value
-        config.pop("pending_publish_on_smoke_success", None)
-        smoke_summary["auto_published"] = True
-
-    config["last_smoke_test"] = smoke_summary
-    tool_version.config = config
+    tool_version.config = update.config
 
 
 async def _record_remote_tool_smoke_success_if_needed(
