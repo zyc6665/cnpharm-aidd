@@ -99,6 +99,30 @@ def test_remote_artifacts_payload_requires_result_v2_object() -> None:
         parse_payload({"result_version": "legacy"})
 
 
+def test_remote_status_payload_requires_object() -> None:
+    from app.remote_tools import results
+
+    parse_payload = getattr(results, "remote_status_payload", None)
+
+    assert callable(parse_payload)
+    payload = {"remote_run_id": "run-1", "status": "running"}
+    assert parse_payload(payload) is payload
+    with pytest.raises(ValueError, match="Remote status response must be an object"):
+        parse_payload([])
+
+
+def test_remote_cancel_payload_requires_object() -> None:
+    from app.remote_tools import results
+
+    parse_payload = getattr(results, "remote_cancel_payload", None)
+
+    assert callable(parse_payload)
+    payload = {"remote_run_id": "run-1", "status": "canceled"}
+    assert parse_payload(payload) is payload
+    with pytest.raises(ValueError, match="Remote cancel response must be an object"):
+        parse_payload("canceled")
+
+
 def test_remote_result_filename_uses_safe_basename_fallbacks() -> None:
     assert remote_result_filename({"filename": "nested/result.pdb"}, "pocket") == "result.pdb"
     assert remote_result_filename({"path": "outputs/report.json"}, "report") == "report.json"

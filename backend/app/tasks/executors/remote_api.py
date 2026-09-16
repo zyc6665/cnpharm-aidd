@@ -44,8 +44,10 @@ from app.remote_tools.results import (
     iter_remote_log_messages,
     iter_remote_result_artifacts,
     remote_artifacts_payload,
+    remote_cancel_payload,
     remote_log_next_cursor,
     remote_result_file_record_data,
+    remote_status_payload,
     remote_status_state,
     verify_remote_result_file_checksum,
 )
@@ -298,10 +300,10 @@ class RemoteAPIExecutor(BaseExecutor):
     ) -> dict[str, Any]:
         response = await client.get(self._remote_url("status", remote_run_id=remote_run_id))
         response.raise_for_status()
-        payload = response.json()
-        if not isinstance(payload, dict):
-            raise TaskExecutionError("Remote status response must be an object")
-        return payload
+        try:
+            return remote_status_payload(response.json())
+        except RemoteToolResultError as exc:
+            raise TaskExecutionError(str(exc)) from exc
 
     async def _fetch_remote_logs(
         self,
@@ -424,10 +426,10 @@ class RemoteAPIExecutor(BaseExecutor):
         async with self._http_client(timeout=self.config.get("timeout_sec", 600)) as client:
             response = await client.post(self._remote_url("cancel", remote_run_id=remote_run_id))
             response.raise_for_status()
-            payload = response.json()
-            if not isinstance(payload, dict):
-                raise TaskExecutionError("Remote cancel response must be an object")
-            return payload
+            try:
+                return remote_cancel_payload(response.json())
+            except RemoteToolResultError as exc:
+                raise TaskExecutionError(str(exc)) from exc
 
     def _remote_url(self, endpoint_name: str, *, remote_run_id: str | None = None) -> str:
         try:

@@ -90,6 +90,18 @@ def remote_artifacts_payload(payload: Any) -> dict[str, Any]:
     return payload
 
 
+def remote_status_payload(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise RemoteToolResultError("Remote status response must be an object")
+    return payload
+
+
+def remote_cancel_payload(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise RemoteToolResultError("Remote cancel response must be an object")
+    return payload
+
+
 def remote_result_filename(file_ref: dict[str, Any], role: str) -> str:
     explicit_name = file_ref.get("filename") or file_ref.get("name")
     if isinstance(explicit_name, str) and explicit_name.strip():
