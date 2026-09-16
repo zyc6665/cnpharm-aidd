@@ -12,6 +12,13 @@ def remote_tool_parameters(input_params: Any) -> dict[str, Any]:
     return parameters if isinstance(parameters, dict) else input_params
 
 
+def remote_invoke_run_id(payload: dict[str, Any]) -> str:
+    remote_run_id = str(payload.get("remote_run_id") or "").strip()
+    if not remote_run_id:
+        raise ValueError("Remote tool invoke response missing remote_run_id")
+    return remote_run_id
+
+
 def build_remote_tool_invoke_payload(
     *,
     request_id: str,

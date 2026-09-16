@@ -29,6 +29,7 @@ from app.remote_tools.inputs import (
 )
 from app.remote_tools.invocation import (
     build_remote_tool_invoke_payload,
+    remote_invoke_run_id,
     remote_tool_parameters,
 )
 from app.remote_tools.legacy_api import (
@@ -127,9 +128,10 @@ class RemoteAPIExecutor(BaseExecutor):
             except httpx.HTTPError as exc:
                 raise TaskExecutionError(f"Remote tool invoke failed: {exc}") from exc
 
-            remote_run_id = str(invoke_result.get("remote_run_id") or "")
-            if not remote_run_id:
-                raise TaskExecutionError("Remote tool invoke response missing remote_run_id")
+            try:
+                remote_run_id = remote_invoke_run_id(invoke_result)
+            except ValueError as exc:
+                raise TaskExecutionError(str(exc)) from exc
             self._set_task_extra("remote_run_id", remote_run_id)
 
             status_payload = await self._poll_remote_run(client, remote_run_id)

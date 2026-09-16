@@ -3,6 +3,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_ROOT = PROJECT_ROOT / "backend"
@@ -47,3 +49,14 @@ def test_build_remote_tool_invoke_payload_wraps_task_inputs_parameters_and_conte
         "parameters": {"threshold": 0.5},
         "context": {"project_id": "project-1", "user_id": "user-1"},
     }
+
+
+def test_remote_invoke_run_id_requires_non_empty_remote_run_id() -> None:
+    from app.remote_tools import invocation
+
+    run_id = getattr(invocation, "remote_invoke_run_id", None)
+
+    assert callable(run_id)
+    assert run_id({"remote_run_id": " run-1 "}) == "run-1"
+    with pytest.raises(ValueError, match="Remote tool invoke response missing remote_run_id"):
+        run_id({"remote_run_id": ""})
