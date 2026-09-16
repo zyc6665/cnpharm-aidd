@@ -4,7 +4,7 @@
 避免任务执行器反向依赖 API 路由层。
 """
 
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from app.config import settings
 
@@ -18,10 +18,18 @@ def ensure_storage_dir() -> None:
     STORAGE_PATH.mkdir(parents=True, exist_ok=True)
 
 
+def safe_storage_filename(filename: str) -> str:
+    """返回可安全拼入存储路径的文件名。"""
+    basename = PureWindowsPath(Path(filename or "file").name).name
+    if basename in {"", ".", ".."}:
+        return "file"
+    return basename
+
+
 def get_file_path(file_id: str, filename: str) -> Path:
     """获取文件存储路径
 
     使用文件 ID 的前两位作为子目录，避免单目录文件过多。
     """
     subdir = file_id[:2]
-    return STORAGE_PATH / subdir / f"{file_id}_{filename}"
+    return STORAGE_PATH / subdir / f"{file_id}_{safe_storage_filename(filename)}"
