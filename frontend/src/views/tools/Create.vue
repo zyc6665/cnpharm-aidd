@@ -883,6 +883,7 @@
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
   import StructuredKeyValueEditor from '@/components/tools/StructuredKeyValueEditor.vue'
   import StructuredStringListEditor from '@/components/tools/StructuredStringListEditor.vue'
+  import { useToolCreateEditorState } from '@/composables/useToolCreateEditorState'
   import {
     buildRemoteToolRegistrationPayload,
     buildToolAgentCapabilityEnablePatch,
@@ -891,15 +892,12 @@
     buildToolTemplateDraftPayload,
     createAgentCapabilityInputForm,
     createAgentCapabilityOutputForm,
-    createToolCreateEditorState,
     createToolCreateFormState,
     createToolCreateSubmission,
     formatToolTemplateResourceText,
     formatToolCreateSubmissionErrorMessage,
-    mergeToolCreateEditorStatePatch,
     remoteToolStageStatusDisplay,
     resolveToolCreateSubmissionBlocker,
-    type ToolCreateEditorState,
     type ToolConfigFormPatch,
     type ToolCreateFormState
   } from '@/domain/tools'
@@ -946,44 +944,17 @@
       formState.remote_api_registration_mode === 'self_register'
   )
 
-  const editorDefaults = createToolCreateEditorState()
-  const apiHeaderEntries = ref<ToolCreateEditorState['apiHeaderEntries']>([
-    ...editorDefaults.apiHeaderEntries
-  ])
-  const dockerCommandItems = ref<ToolCreateEditorState['dockerCommandItems']>([
-    ...editorDefaults.dockerCommandItems
-  ])
-  const dockerEnvEntries = ref<ToolCreateEditorState['dockerEnvEntries']>([
-    ...editorDefaults.dockerEnvEntries
-  ])
-  const pythonArgumentItems = ref<ToolCreateEditorState['pythonArgumentItems']>([
-    ...editorDefaults.pythonArgumentItems
-  ])
-  const sshEnvEntries = ref<ToolCreateEditorState['sshEnvEntries']>([
-    ...editorDefaults.sshEnvEntries
-  ])
-  const sshOutputGlobItems = ref<ToolCreateEditorState['sshOutputGlobItems']>([
-    ...editorDefaults.sshOutputGlobItems
-  ])
+  const {
+    apiHeaderEntries,
+    dockerCommandItems,
+    dockerEnvEntries,
+    pythonArgumentItems,
+    sshEnvEntries,
+    sshOutputGlobItems,
+    snapshot: editorStateSnapshot,
+    applyPatch: applyEditorPatch,
+  } = useToolCreateEditorState()
   const agentDefaultsText = ref('{}')
-
-  const editorStateSnapshot = (): ToolCreateEditorState => ({
-    apiHeaderEntries: apiHeaderEntries.value,
-    dockerCommandItems: dockerCommandItems.value,
-    dockerEnvEntries: dockerEnvEntries.value,
-    pythonArgumentItems: pythonArgumentItems.value,
-    sshEnvEntries: sshEnvEntries.value,
-    sshOutputGlobItems: sshOutputGlobItems.value
-  })
-
-  const applyEditorState = (editorState: ToolCreateEditorState) => {
-    apiHeaderEntries.value = editorState.apiHeaderEntries
-    dockerCommandItems.value = editorState.dockerCommandItems
-    dockerEnvEntries.value = editorState.dockerEnvEntries
-    pythonArgumentItems.value = editorState.pythonArgumentItems
-    sshEnvEntries.value = editorState.sshEnvEntries
-    sshOutputGlobItems.value = editorState.sshOutputGlobItems
-  }
 
   const selectedToolTemplate = computed(() =>
     toolTemplates.value.find(template => template.template_key === selectedToolTemplateKey.value)
@@ -1072,7 +1043,7 @@
 
   const applyToolFormPatch = (patch: ToolConfigFormPatch) => {
     Object.assign(formState, patch.form)
-    applyEditorState(mergeToolCreateEditorStatePatch(editorStateSnapshot(), patch.editor))
+    applyEditorPatch(patch.editor)
     agentDefaultsText.value = patch.agentDefaultsText
   }
 
