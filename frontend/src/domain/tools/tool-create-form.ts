@@ -138,6 +138,12 @@ export interface ToolCreateSubmissionResult {
   agentCapabilityComplete: boolean
 }
 
+export interface ToolCreateSubmissionBlockerInput {
+  submission: Pick<ToolCreateSubmissionResult, 'agentCapabilityComplete' | 'versionConfigChanged'>
+  version: string
+  originalVersion: string
+}
+
 export function createToolCreateFormState(): ToolCreateFormState {
   return {
     name: '',
@@ -227,6 +233,28 @@ export function remoteToolStageStatusDisplay(
   }
 
   return { color: 'red', text: '失败' }
+}
+
+export function formatToolCreateSubmissionErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.includes('配置键')) {
+    return error.message
+  }
+
+  return 'JSON 格式错误，请检查配置'
+}
+
+export function resolveToolCreateSubmissionBlocker(
+  input: ToolCreateSubmissionBlockerInput,
+): string | null {
+  if (!input.submission.agentCapabilityComplete) {
+    return 'Agent 编排能力需要填写能力、至少一个输入和至少一个输出'
+  }
+
+  if (input.submission.versionConfigChanged && input.version === input.originalVersion) {
+    return '修改版本配置时请填写新的版本号'
+  }
+
+  return null
 }
 
 export function buildTemplateExecutorConfig(

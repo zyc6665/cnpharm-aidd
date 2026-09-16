@@ -6,8 +6,10 @@ import {
   buildToolTemplateFormPatch,
   createToolCreateFormState,
   createToolCreateSubmission,
+  formatToolCreateSubmissionErrorMessage,
   formatToolTemplateResourceText,
   remoteToolStageStatusDisplay,
+  resolveToolCreateSubmissionBlocker,
   toolConfigToCreateFormPatch,
   type ToolCreateEditorState,
 } from './tool-create-form'
@@ -17,6 +19,32 @@ describe('tool create form domain', () => {
     expect(remoteToolStageStatusDisplay('success')).toEqual({ color: 'green', text: '成功' })
     expect(remoteToolStageStatusDisplay('warning')).toEqual({ color: 'orange', text: '警告' })
     expect(remoteToolStageStatusDisplay('failure')).toEqual({ color: 'red', text: '失败' })
+  })
+
+  it('formats tool create submission parse errors', () => {
+    expect(formatToolCreateSubmissionErrorMessage(new Error('配置键不能为空'))).toBe('配置键不能为空')
+    expect(formatToolCreateSubmissionErrorMessage(new Error('Unexpected token'))).toBe('JSON 格式错误，请检查配置')
+    expect(formatToolCreateSubmissionErrorMessage('bad json')).toBe('JSON 格式错误，请检查配置')
+  })
+
+  it('resolves submission blocker messages before API calls', () => {
+    expect(resolveToolCreateSubmissionBlocker({
+      submission: { agentCapabilityComplete: false, versionConfigChanged: false },
+      version: '1.0.0',
+      originalVersion: '1.0.0',
+    })).toBe('Agent 编排能力需要填写能力、至少一个输入和至少一个输出')
+
+    expect(resolveToolCreateSubmissionBlocker({
+      submission: { agentCapabilityComplete: true, versionConfigChanged: true },
+      version: '1.0.0',
+      originalVersion: '1.0.0',
+    })).toBe('修改版本配置时请填写新的版本号')
+
+    expect(resolveToolCreateSubmissionBlocker({
+      submission: { agentCapabilityComplete: true, versionConfigChanged: true },
+      version: '1.0.1',
+      originalVersion: '1.0.0',
+    })).toBeNull()
   })
 
   it('builds remote self-registration payload from create form state', () => {

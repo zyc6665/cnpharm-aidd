@@ -894,7 +894,9 @@
     createToolCreateFormState,
     createToolCreateSubmission,
     formatToolTemplateResourceText,
+    formatToolCreateSubmissionErrorMessage,
     remoteToolStageStatusDisplay,
+    resolveToolCreateSubmissionBlocker,
     type ToolCreateEditorState,
     type ToolConfigFormPatch,
     type ToolCreateFormState
@@ -1152,13 +1154,6 @@
     }
   }
 
-  const formatSubmissionErrorMessage = (error: unknown) => {
-    if (error instanceof Error && error.message.includes('配置键')) {
-      return error.message
-    }
-    return 'JSON 格式错误，请检查配置'
-  }
-
   // 提交表单
   const handleSubmit = async () => {
     try {
@@ -1187,17 +1182,17 @@
           originalConfigSnapshot: originalConfigSnapshot.value
         })
       } catch (error) {
-        message.error(formatSubmissionErrorMessage(error))
+        message.error(formatToolCreateSubmissionErrorMessage(error))
         return
       }
 
-      if (!submission.agentCapabilityComplete) {
-        message.error('Agent 编排能力需要填写能力、至少一个输入和至少一个输出')
-        return
-      }
-
-      if (submission.versionConfigChanged && formState.version === originalVersion.value) {
-        message.error('修改版本配置时请填写新的版本号')
+      const blocker = resolveToolCreateSubmissionBlocker({
+        submission,
+        version: formState.version,
+        originalVersion: originalVersion.value,
+      })
+      if (blocker) {
+        message.error(blocker)
         return
       }
 
