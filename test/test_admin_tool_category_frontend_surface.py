@@ -48,6 +48,7 @@ def test_admin_tool_forms_use_category_id_and_public_create_entry_is_removed():
     """管理员工具表单应使用分类接口和 category_id，普通用户入口应移除。"""
     admin_tools_source = read_source("frontend/src/views/admin/Tools.vue")
     create_source = read_source("frontend/src/views/tools/Create.vue")
+    create_form_domain_source = read_source("frontend/src/domain/tools/tool-create-form.ts")
     list_source = read_source("frontend/src/views/tools/List.vue")
     api_source = read_source("frontend/src/api/tools.ts")
 
@@ -60,7 +61,8 @@ def test_admin_tool_forms_use_category_id_and_public_create_entry_is_removed():
 
     assert "name=\"category_id\"" in create_source
     assert "formState.category_id" in create_source
-    assert "category_id: formState.category_id" in create_source
+    assert "buildToolTemplateDraftPayload" in create_source
+    assert "category_id: formState.category_id" in create_form_domain_source
 
     assert "goToCreate" not in list_source
     assert "name: 'ToolCreate'" not in read_source("frontend/src/router/index.ts")

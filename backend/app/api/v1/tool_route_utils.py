@@ -1,7 +1,6 @@
 """工具 API 路由共享辅助函数。"""
 
 import hashlib
-import json
 import base64
 from collections.abc import Iterable
 from pathlib import Path
@@ -35,6 +34,12 @@ from app.models.tool_packages import ToolPackage
 from app.models.users import User
 from app.remote_tools.client import RemoteToolDiscoveryResult
 from app.remote_tools.diagnostics import RemoteToolStageDiagnostic
+from app.remote_tools.registration import (
+    is_remote_tool_v1_config,
+    remote_manifest_sha256,
+    remote_tool_config,
+    remote_tool_publish_errors,
+)
 from app.remote_tools.schemas import RemoteToolExample
 from app.schemas.tasks import TaskCreate
 from app.schemas.tools import (
@@ -136,8 +141,8 @@ def build_validated_tool_contract(tool: Tool) -> dict:
     if current_version is not None and isinstance(config, dict):
         if config.get("type") == "builtin":
             pass
-        elif _is_remote_tool_v1_config(config):
-            errors.extend(_remote_tool_publish_errors(config))
+        elif is_remote_tool_v1_config(config):
+            errors.extend(remote_tool_publish_errors(config))
         else:
             validation_payload = {
                 "name": tool.name,
@@ -309,7 +314,7 @@ async def create_or_update_remote_tool_from_discovery(
     category = await require_active_tool_category(db, register_data.category_id)
     manifest = discovery.manifest
     manifest_payload = manifest.model_dump(mode="json", by_alias=True, exclude_none=True)
-    manifest_sha256 = _remote_manifest_sha256(manifest_payload)
+    manifest_sha256 = remote_manifest_sha256(manifest_payload)
     metadata = manifest.metadata
     version_value = metadata.version
 
@@ -360,7 +365,7 @@ async def create_or_update_remote_tool_from_discovery(
     if existing_version is not None and tool.status == ToolStatus.PUBLISHED.value:
         raise ConflictException("已发布版本不能覆盖，请发布新的语义版本")
 
-    config = _remote_tool_config(
+    config = remote_tool_config(
         base_url=register_data.base_url,
         manifest_payload=manifest_payload,
         manifest_sha256=manifest_sha256,
@@ -582,73 +587,3 @@ def _select_remote_smoke_example(
     if not examples:
         return None
     return next((example for example in examples if example.smoke), examples[0])
-
-
-def _is_remote_tool_v1_config(config: dict[str, Any]) -> bool:
-    return config.get("type") == "remote_api" and config.get("mode") == "remote_tool_v1"
-
-
-def _remote_tool_publish_errors(config: dict[str, Any]) -> list[str]:
-    if not _is_remote_tool_v1_config(config):
-        return []
-
-    last_smoke_test = config.get("last_smoke_test")
-    if not isinstance(last_smoke_test, dict):
-        return ["remote_tool_v1 requires successful smoke test before publish"]
-    if last_smoke_test.get("status") != "success":
-        return ["remote_tool_v1 requires successful smoke test before publish"]
-    if last_smoke_test.get("manifest_sha256") != config.get("manifest_sha256"):
-        return ["remote_tool_v1 smoke test manifest hash does not match current manifest"]
-    return []
-
-
-def _remote_manifest_sha256(manifest_payload: dict[str, Any]) -> str:
-    serialized = json.dumps(
-        manifest_payload,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-    )
-    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
-
-
-def _remote_tool_config(
-    *,
-    base_url: str,
-    manifest_payload: dict[str, Any],
-    manifest_sha256: str,
-    discovery: RemoteToolDiscoveryResult,
-    publish_on_success: bool,
-) -> dict[str, Any]:
-    parameters_schema = dict(manifest_payload.get("parameters_schema") or {})
-    config = {
-        "type": "remote_api",
-        "mode": "remote_tool_v1",
-        "base_url": base_url.rstrip("/"),
-        "tool_slug": manifest_payload.get("metadata", {}).get("slug"),
-        "manifest": manifest_payload,
-        "manifest_sha256": manifest_sha256,
-        "endpoints": dict(manifest_payload.get("endpoints") or {}),
-        "artifacts": dict(manifest_payload.get("artifacts") or {}),
-        "parameters_schema": parameters_schema,
-        "capabilities": dict(manifest_payload.get("capabilities") or {}),
-        "input_schema": parameters_schema,
-        "output_schema": {
-            "type": "object",
-            "properties": {
-                "result_version": {"type": "string"},
-                "artifacts": {"type": "object"},
-                "relations": {"type": "array"},
-            },
-        },
-        "remote_health": discovery.health,
-        "remote_examples": (
-            discovery.examples.model_dump(mode="json") if discovery.examples else None
-        ),
-        "registration_diagnostics": [
-            stage.model_dump() for stage in discovery.stages
-        ],
-    }
-    if publish_on_success:
-        config["pending_publish_on_smoke_success"] = True
-    return config
