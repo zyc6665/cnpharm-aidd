@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 
@@ -53,7 +54,8 @@ def flatten_legacy_remote_api_params(data: dict[str, Any]) -> dict[str, str]:
 
 
 def legacy_output_filename(file_info: dict[str, Any], fallback_filename: str) -> str:
-    return str(file_info.get("name") or file_info.get("filename") or fallback_filename)
+    raw_filename = file_info.get("name") or file_info.get("filename") or fallback_filename
+    return Path(str(raw_filename)).name or Path(fallback_filename).name
 
 
 def legacy_output_file_record_data(

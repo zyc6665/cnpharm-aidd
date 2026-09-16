@@ -95,7 +95,8 @@ def test_legacy_output_filename_prefers_name_then_filename_then_fallback() -> No
 
     assert callable(output_filename)
     assert output_filename({"name": "result.pdb", "filename": "ignored.dat"}, "fallback.dat") == "result.pdb"
-    assert output_filename({"filename": "nested/report.json"}, "fallback.dat") == "nested/report.json"
+    assert output_filename({"filename": "nested/report.json"}, "fallback.dat") == "report.json"
+    assert output_filename({"name": "../unsafe/result.sdf"}, "fallback.dat") == "result.sdf"
     assert output_filename({}, "fallback.dat") == "fallback.dat"
 
 
