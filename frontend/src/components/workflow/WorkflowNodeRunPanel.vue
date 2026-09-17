@@ -82,12 +82,11 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
+  import { computed, reactive, ref, watch } from 'vue'
   import { useI18n } from 'vue-i18n'
   import type { FormInstance } from 'ant-design-vue/es/form'
   import type { UploadFile } from 'ant-design-vue'
   import ToolRunInputForm from '@/components/tools/ToolRunInputForm.vue'
-  import { isTaskTerminalStatus } from '@/api/tasks'
   import { getToolDetail } from '@/api/tools'
   import { useUserStore, useWorkflowStore } from '@/stores'
   import { useStandaloneNodeRun } from '@/composables/useStandaloneNodeRun'
@@ -126,9 +125,7 @@
   const {
     submitting,
     preparationBlockedReason,
-    run: runStandaloneNode,
-    startPolling: startStandaloneTaskPolling,
-    stopPolling: stopStandaloneTaskPolling
+    run: runStandaloneNode
   } = useStandaloneNodeRun({
     nodeId: computed(() => props.nodeId),
     projectId: computed(() => props.projectId)
@@ -158,8 +155,6 @@
     },
     onMissingTool: clearNodeRunFormState,
   })
-
-  const currentNodeTask = computed(() => workflowStore.taskByNode[props.nodeId] ?? null)
 
   const inputSurface = computed(() => resolveWorkflowNodeRunInputSurface({
     tool: selectedTool.value
@@ -306,26 +301,6 @@
     { deep: true }
   )
 
-  watch(
-    () => [currentNodeTask.value?.id ?? null, currentNodeTask.value?.status ?? null, props.selectedToolSlug ?? null] as const,
-    ([taskId, status, selectedToolSlug]) => {
-      if (!taskId || !status) {
-        return
-      }
-
-      if (isTaskTerminalStatus(status)) {
-        stopStandaloneTaskPolling()
-        return
-      }
-
-      startStandaloneTaskPolling(taskId, selectedToolSlug ?? undefined)
-    },
-    { immediate: true }
-  )
-
-  onBeforeUnmount(() => {
-    stopStandaloneTaskPolling()
-  })
 </script>
 
 <style scoped lang="less">

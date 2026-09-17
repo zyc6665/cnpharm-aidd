@@ -6,7 +6,9 @@ type MaybeRef<T> = T | Ref<T>
 
 export function useWorkflowNodeTaskPolling(input: {
   taskByNode: MaybeRef<Record<string, WorkflowTaskRef | null | undefined>>
+  selectedToolByNode?: MaybeRef<Record<string, string | null | undefined>>
   recordNodeTask: (nodeId: string, task: WorkflowTaskRef) => void
+  recordTask?: (toolSlug: string, task: WorkflowTaskRef) => void
   refreshArtifacts?: () => void | Promise<unknown>
   intervalMs?: number
 }) {
@@ -36,6 +38,10 @@ export function useWorkflowNodeTaskPolling(input: {
       try {
         const response = await getTaskDetail(taskId)
         input.recordNodeTask(nodeId, response.data)
+        const toolSlug = unref(input.selectedToolByNode)?.[nodeId]
+        if (toolSlug) {
+          input.recordTask?.(toolSlug, response.data)
+        }
 
         if (isTaskTerminalStatus(response.data.status)) {
           stopNode(nodeId)

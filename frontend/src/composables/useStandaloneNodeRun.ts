@@ -1,8 +1,8 @@
 import { computed, ref, unref, type Ref } from 'vue'
 import type { UploadFile } from 'ant-design-vue'
 import { uploadFile } from '@/api/files'
-import { createTask, getTaskDetail, isTaskTerminalStatus, prepareTaskRun } from '@/api/tasks'
-import { useArtifactsStore, useWorkflowStore } from '@/stores'
+import { createTask, prepareTaskRun } from '@/api/tasks'
+import { useWorkflowStore } from '@/stores'
 import {
   buildToolRunTaskPayload,
   type StandardArtifactInputSlot,
@@ -34,12 +34,9 @@ export function useStandaloneNodeRun(input: {
   projectId?: MaybeRef<string | null | undefined>
 }) {
   const workflowStore = useWorkflowStore()
-  const artifactsStore = useArtifactsStore()
   const submitting = ref(false)
   const preparationPreview = ref<TaskRunPreparationPreview | null>(null)
   const preparationBlockedReason = computed(() => taskRunPreparationBlockedMessage(preparationPreview.value))
-  let pollTimer: number | null = null
-  let pollTaskId: string | null = null
 
   function currentNodeId() {
     return unref(input.nodeId)
@@ -47,54 +44,6 @@ export function useStandaloneNodeRun(input: {
 
   function currentProjectId() {
     return unref(input.projectId)?.trim() || undefined
-  }
-
-  function refreshTaskBindings(
-    task: Awaited<ReturnType<typeof getTaskDetail>>['data'],
-    selectedToolSlug?: string,
-  ) {
-    workflowStore.recordNodeTask(currentNodeId(), task)
-    if (selectedToolSlug) {
-      workflowStore.recordTask(selectedToolSlug, task)
-    }
-  }
-
-  function stopPolling() {
-    if (pollTimer !== null) {
-      window.clearTimeout(pollTimer)
-      pollTimer = null
-    }
-    pollTaskId = null
-  }
-
-  function startPolling(taskId: string, selectedToolSlug?: string) {
-    if (pollTaskId === taskId && pollTimer !== null) {
-      return
-    }
-
-    stopPolling()
-    pollTaskId = taskId
-
-    const poll = async () => {
-      try {
-        const response = await getTaskDetail(taskId)
-        refreshTaskBindings(response.data, selectedToolSlug)
-
-        if (isTaskTerminalStatus(response.data.status)) {
-          stopPolling()
-          if (response.data.status === 'success') {
-            void artifactsStore.fetchArtifacts({ page: 1, page_size: 100 })
-          }
-          return
-        }
-      } catch {
-        // Keep polling through transient network errors so canvas state can recover.
-      }
-
-      pollTimer = window.setTimeout(poll, 2000)
-    }
-
-    pollTimer = window.setTimeout(poll, 2000)
   }
 
   async function run(options: StandaloneNodeRunOptions) {
@@ -127,7 +76,6 @@ export function useStandaloneNodeRun(input: {
 
       workflowStore.recordNodeTask(currentNodeId(), taskResult.task)
       workflowStore.recordTask(options.selectedToolSlug, taskResult.task)
-      startPolling(taskResult.task.id, options.selectedToolSlug)
       return taskResult.task
     } finally {
       submitting.value = false
@@ -139,7 +87,5 @@ export function useStandaloneNodeRun(input: {
     preparationPreview,
     preparationBlockedReason,
     run,
-    startPolling,
-    stopPolling,
   }
 }

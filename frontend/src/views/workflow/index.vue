@@ -431,7 +431,9 @@
 
   useWorkflowNodeTaskPolling({
     taskByNode: computed(() => workflowStore.taskByNode),
+    selectedToolByNode: computed(() => workflowStore.selectedToolByNode),
     recordNodeTask: workflowStore.recordNodeTask,
+    recordTask: workflowStore.recordTask,
     refreshArtifacts: () => artifactsStore.fetchArtifacts({ page: 1, page_size: 100 })
   })
 

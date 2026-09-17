@@ -681,7 +681,7 @@ describe('WorkflowNodeRunPanel', () => {
     expect(wrapper.text()).toContain('Protein input requires a prepared PDB role.')
   })
 
-  it('独立运行创建后应轮询任务终态并更新当前节点状态', async () => {
+  it('独立运行创建后只绑定当前节点任务', async () => {
     vi.useFakeTimers()
     mockFetchPdbToolDetail()
     vi.mocked(createTask).mockResolvedValue({
@@ -695,22 +695,6 @@ describe('WorkflowNodeRunPanel', () => {
         status: 'pending',
         progress: 0,
         created_at: '2026-08-20T00:00:00Z'
-      }
-    } as never)
-    vi.mocked(getTaskDetail).mockResolvedValue({
-      code: 200,
-      message: 'ok',
-      data: {
-        id: 'task-fetch-pdb',
-        name: 'Fetch PDB Structure',
-        tool_id: 'tool-fetch-pdb',
-        tool_slug: 'builtin-fetch-pdb',
-        status: 'failure',
-        progress: 0,
-        progress_message: '任务失败',
-        error_message: 'Task extra_data.project_id is required for standard artifacts',
-        created_at: '2026-08-20T00:00:00Z',
-        updated_at: '2026-08-20T00:00:02Z'
       }
     } as never)
 
@@ -741,32 +725,13 @@ describe('WorkflowNodeRunPanel', () => {
     await vi.advanceTimersByTimeAsync(2000)
     await flushPromises()
 
-    expect(getTaskDetail).toHaveBeenCalledWith('task-fetch-pdb')
-    expect(workflowStore.taskByNode['fetch-pdb-node']).toMatchObject({
-      status: 'failure',
-      error_message: 'Task extra_data.project_id is required for standard artifacts'
-    })
+    expect(getTaskDetail).not.toHaveBeenCalled()
+    expect(workflowStore.taskByNode['fetch-pdb-node']).toMatchObject({ status: 'pending' })
   })
 
-  it('挂载时应恢复轮询已绑定但未终止的节点任务', async () => {
+  it('挂载时不在节点面板恢复轮询已绑定任务', async () => {
     vi.useFakeTimers()
     mockFetchPdbToolDetail()
-    vi.mocked(getTaskDetail).mockResolvedValue({
-      code: 200,
-      message: 'ok',
-      data: {
-        id: 'task-existing-fetch-pdb',
-        name: 'Fetch PDB Structure',
-        tool_id: 'tool-fetch-pdb',
-        tool_slug: 'builtin-fetch-pdb',
-        status: 'failure',
-        progress: 0,
-        progress_message: '任务失败',
-        error_message: 'Task extra_data.project_id is required for standard artifacts',
-        created_at: '2026-08-20T00:00:00Z',
-        updated_at: '2026-08-20T00:00:02Z'
-      }
-    } as never)
 
     const workflowStore = useWorkflowStore()
     workflowStore.recordNodeTask('fetch-pdb-node', {
@@ -799,10 +764,7 @@ describe('WorkflowNodeRunPanel', () => {
     await vi.advanceTimersByTimeAsync(2000)
     await flushPromises()
 
-    expect(getTaskDetail).toHaveBeenCalledWith('task-existing-fetch-pdb')
-    expect(workflowStore.taskByNode['fetch-pdb-node']).toMatchObject({
-      status: 'failure',
-      error_message: 'Task extra_data.project_id is required for standard artifacts'
-    })
+    expect(getTaskDetail).not.toHaveBeenCalled()
+    expect(workflowStore.taskByNode['fetch-pdb-node']).toMatchObject({ status: 'running' })
   })
 })
