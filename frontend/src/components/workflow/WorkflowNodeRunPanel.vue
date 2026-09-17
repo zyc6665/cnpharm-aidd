@@ -4,7 +4,7 @@
       v-if="!userStore.isAuthenticated"
       type="info"
       show-icon
-      message="请登录后选择已保存产物"
+      :message="t('workflow.nodeRun.loginPrompt')"
     />
     <a-spin :spinning="selectedToolLoading">
       <div v-if="selectedTool && selectedToolSlug" class="node-run-form">
@@ -37,7 +37,7 @@
           />
 
           <div v-if="autoBoundArtifactCards.length" class="auto-bound-artifacts">
-            <span class="auto-bound-title">已自动绑定上游产物</span>
+            <span class="auto-bound-title">{{ t('workflow.nodeRun.autoBoundTitle') }}</span>
             <div
               v-for="card in autoBoundArtifactCards"
               :key="card.key"
@@ -66,16 +66,16 @@
               :disabled="!selectedTool || !selectedToolSlug"
               @click="runCurrentNode"
             >
-              运行当前节点
+              {{ t('workflow.nodeRun.runCurrentNode') }}
             </a-button>
-            <a-button @click="resetForm">Reset</a-button>
+            <a-button @click="resetForm">{{ t('workflow.nodeRun.reset') }}</a-button>
           </div>
         </a-form>
       </div>
 
       <a-empty
         v-else
-        description="Select a real tool before configuring this node"
+        :description="t('workflow.nodeRun.selectToolFirst')"
       />
     </a-spin>
   </section>

@@ -416,6 +416,13 @@ export default {
       collapse: 'Collapse sidebar',
       resize: 'Resize sidebar width'
     },
+    nodeRun: {
+      loginPrompt: 'Sign in to select saved artifacts',
+      autoBoundTitle: 'Upstream artifacts auto-bound',
+      runCurrentNode: 'Run Current Node',
+      reset: 'Reset',
+      selectToolFirst: 'Select a real tool before configuring this node'
+    },
     palette: {
       title: 'Tool Library',
       toolsAvailable: '{count} tools available',

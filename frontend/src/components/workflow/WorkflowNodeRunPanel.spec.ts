@@ -1,4 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import WorkflowNodeRunPanel from './WorkflowNodeRunPanel.vue'
@@ -296,6 +298,37 @@ function mockRoleAwareLvpocketToolDetail() {
 }
 
 describe('WorkflowNodeRunPanel', () => {
+  it('keeps node run panel chrome in locale keys', () => {
+    const source = readFileSync(resolve('src/components/workflow/WorkflowNodeRunPanel.vue'), 'utf8')
+    const zhSource = readFileSync(resolve('src/locales/zh-CN/index.ts'), 'utf8')
+    const enSource = readFileSync(resolve('src/locales/en-US/index.ts'), 'utf8')
+
+    for (const marker of [
+      'workflow.nodeRun.loginPrompt',
+      'workflow.nodeRun.autoBoundTitle',
+      'workflow.nodeRun.runCurrentNode',
+      'workflow.nodeRun.reset',
+      'workflow.nodeRun.selectToolFirst',
+    ]) {
+      expect(source).toContain(marker)
+    }
+
+    for (const marker of ['nodeRun', 'loginPrompt', 'autoBoundTitle', 'selectToolFirst']) {
+      expect(zhSource).toContain(marker)
+      expect(enSource).toContain(marker)
+    }
+
+    for (const literal of [
+      '请登录后选择已保存产物',
+      '已自动绑定上游产物',
+      '运行当前节点',
+      '>Reset<',
+      'Select a real tool before configuring this node',
+    ]) {
+      expect(source).not.toContain(literal)
+    }
+  })
+
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.mocked(getToolDetail).mockReset()
@@ -324,7 +357,7 @@ describe('WorkflowNodeRunPanel', () => {
     })
 
     await flushPromises()
-    expect(wrapper.text()).toContain('Select a real tool before configuring this node')
+    expect(wrapper.text()).toContain('请先选择真实工具再配置节点')
     expect(getToolDetail).not.toHaveBeenCalled()
 
     await wrapper.setProps({
@@ -341,7 +374,7 @@ describe('WorkflowNodeRunPanel', () => {
 
     expect(getToolDetail).toHaveBeenCalledWith('tool-fetch-pdb')
     expect(wrapper.find('.tool-parameter-form').exists()).toBe(true)
-    expect(wrapper.text()).not.toContain('Select a real tool before configuring this node')
+    expect(wrapper.text()).not.toContain('请先选择真实工具再配置节点')
   })
 
   it('节点参数面板应允许上传并独立创建当前节点任务', async () => {

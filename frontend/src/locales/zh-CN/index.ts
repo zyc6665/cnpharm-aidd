@@ -415,6 +415,13 @@ export default {
       collapse: '折叠侧边栏',
       resize: '调整侧边栏宽度'
     },
+    nodeRun: {
+      loginPrompt: '请登录后选择已保存产物',
+      autoBoundTitle: '已自动绑定上游产物',
+      runCurrentNode: '运行当前节点',
+      reset: '重置',
+      selectToolFirst: '请先选择真实工具再配置节点'
+    },
     palette: {
       title: '工具库',
       toolsAvailable: '{count} 个工具可用',
