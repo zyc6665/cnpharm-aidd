@@ -296,7 +296,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -320,9 +320,8 @@ import {
 } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
 import { useTasksStore, useUserStore } from '@/stores'
-import { useWebSocket } from '@/composables/useWebSocket'
-import { getTaskLogs } from '@/api/tasks'
-import type { WSMessage, TaskStatus, TaskLog, Task } from '@/types/models'
+import { useTaskDetailLiveUpdates } from '@/composables/useTaskDetailLiveUpdates'
+import type { TaskStatus, Task } from '@/types/models'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
 import ResultVisualizationPanel from '@/components/tasks/ResultVisualizationPanel.vue'
@@ -336,12 +335,7 @@ import {
   getTaskCompletedTitleKey,
   getTaskStatusColor,
   getTaskStatusTextKey,
-  isTaskWebSocketMessageForTask,
   normalizeTaskStatus,
-  resolveTaskWebSocketLog,
-  resolveTaskWebSocketProgressUpdate,
-  shouldRefreshTaskAfterWebSocketMessage,
-  extractTaskLogs
 } from '@/domain/tasks'
 
 const route = useRoute()
@@ -353,12 +347,7 @@ const userStore = useUserStore()
 const taskId = computed(() => route.params.id as string)
 
 // 状态
-const logs = ref<TaskLog[]>([])
-const logsLoading = ref(false)
 const relatedTasks = ref<Task[]>([])
-
-// WebSocket
-const { connect, disconnect, onMessage } = useWebSocket()
 
 // 计算属性
 const loading = computed(() => tasksStore.loading)
@@ -407,17 +396,18 @@ const fetchTaskDetail = async () => {
   await tasksStore.fetchTaskDetail(taskId.value)
 }
 
-const fetchLogs = async () => {
-  logsLoading.value = true
-  try {
-    const res = await getTaskLogs(taskId.value)
-    logs.value = extractTaskLogs(res.data)
-  } catch {
-    // 错误已处理
-  } finally {
-    logsLoading.value = false
-  }
-}
+const {
+  logs,
+  logsLoading,
+  fetchLogs,
+  start: startLiveUpdates,
+  stop: stopLiveUpdates
+} = useTaskDetailLiveUpdates({
+  taskId,
+  task,
+  fetchTaskDetail,
+  updateTaskProgress: tasksStore.updateTaskProgress
+})
 
 const handleCancel = () => {
   Modal.confirm({
@@ -466,88 +456,13 @@ const goBack = () => {
   router.push('/tasks')
 }
 
-// WebSocket 消息处理
-const handleWSMessage = (msg: WSMessage) => {
-  if (!isTaskWebSocketMessageForTask(msg, taskId.value)) return
-
-  const progressUpdate = resolveTaskWebSocketProgressUpdate(msg, {
-    taskId: taskId.value,
-    currentProgress: task.value?.progress ?? 0
-  })
-  if (progressUpdate) {
-    tasksStore.updateTaskProgress(
-      progressUpdate.taskId,
-      progressUpdate.progress,
-      progressUpdate.status
-    )
-  }
-
-  const logEntry = resolveTaskWebSocketLog(msg, {
-    taskId: taskId.value,
-    id: Date.now(),
-    timestamp: new Date().toISOString()
-  })
-  if (logEntry) {
-    logs.value.push(logEntry)
-  }
-
-  if (shouldRefreshTaskAfterWebSocketMessage(msg)) {
-    void fetchTaskDetail()
-    void fetchLogs()
-  }
-}
-
-// 定时刷新
-let refreshTimer: ReturnType<typeof setInterval> | null = null
-
-const startRefresh = () => {
-  if (refreshTimer) return
-  refreshTimer = setInterval(() => {
-    if (taskStatus.value === 'running') {
-      fetchTaskDetail()
-    }
-  }, 5000)
-}
-
-const stopRefresh = () => {
-  if (refreshTimer) {
-    clearInterval(refreshTimer)
-    refreshTimer = null
-  }
-}
-
-// 监听任务状态变化
-watch(taskStatus, status => {
-  if (status === 'running') {
-    startRefresh()
-    return
-  }
-
-  stopRefresh()
-
-  if (['success', 'failure', 'canceled'].includes(status)) {
-    void fetchLogs()
-  }
-})
-
 // 生命周期
 onMounted(async () => {
-  await fetchTaskDetail()
-  await fetchLogs()
-
-  // 连接 WebSocket
-  connect(`/api/v1/ws/tasks/${taskId.value}`)
-  onMessage(handleWSMessage)
-
-  // 如果任务正在运行，启动定时刷新
-  if (taskStatus.value === 'running') {
-    startRefresh()
-  }
+  await startLiveUpdates()
 })
 
 onUnmounted(() => {
-  disconnect()
-  stopRefresh()
+  stopLiveUpdates()
   tasksStore.clearCurrentTask()
 })
 </script>

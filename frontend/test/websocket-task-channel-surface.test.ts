@@ -24,12 +24,14 @@ test('WebSocket 组合式函数应使用统一 ws 地址配置并对齐后端 ac
 
 test('任务详情页应连接任务专用 WebSocket 端点并兼容后端任务消息类型', () => {
   const source = readSource('src/views/tasks/Detail.vue')
+  const liveUpdatesSource = readSource('src/composables/useTaskDetailLiveUpdates.ts')
   const websocketDomainSource = readSource('src/domain/tasks/websocket.ts')
 
-  assert.equal(source.includes('/api/v1/ws/tasks/'), true)
+  assert.equal(source.includes('useTaskDetailLiveUpdates'), true)
+  assert.equal(liveUpdatesSource.includes('/api/v1/ws/tasks/'), true)
   assert.equal(source.includes("from '@/domain/tasks'"), true)
-  assert.equal(source.includes('resolveTaskWebSocketProgressUpdate'), true)
-  assert.equal(source.includes('resolveTaskWebSocketLog'), true)
+  assert.equal(liveUpdatesSource.includes('resolveTaskWebSocketProgressUpdate'), true)
+  assert.equal(liveUpdatesSource.includes('resolveTaskWebSocketLog'), true)
   assert.equal(websocketDomainSource.includes("message.type === 'task_progress'"), true)
   assert.equal(websocketDomainSource.includes("message.type === 'task_log'"), true)
   assert.equal(websocketDomainSource.includes("message.type === 'task_complete'"), true)
