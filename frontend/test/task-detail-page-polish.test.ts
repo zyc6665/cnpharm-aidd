@@ -46,6 +46,16 @@ test('任务详情页不应保留未加载的相关任务侧栏状态', () => {
   assert.equal(source.includes("t('tasks.relatedTasks')"), false)
 })
 
+test('任务详情页不应保留已迁移到共享组件的旧日志和下载样式', () => {
+  const source = readSource('src/views/tasks/Detail.vue')
+
+  assert.equal(source.includes('logs-container'), false)
+  assert.equal(source.includes('logs-list'), false)
+  assert.equal(source.includes('log-item'), false)
+  assert.equal(source.includes('download-all-btn'), false)
+  assert.equal(source.includes('&.downloadable:hover'), false)
+})
+
 test('MSIGN 工具页应为 ligand_pdb 提供上传 SDF 转 PDB 辅助入口', () => {
   const source = readSource('src/views/tools/Detail.vue')
   const domainSource = readSource('src/domain/tools/detail-file-inputs.ts')

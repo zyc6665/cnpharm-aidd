@@ -677,53 +677,6 @@ onUnmounted(() => {
     font-size: @font-size-sm;
   }
 
-  &.downloadable:hover {
-    background: @primary-color-light;
-  }
-}
-
-.download-all-btn {
-  margin-top: @spacing-md;
-}
-
-// 日志容器
-.logs-container {
-  max-height: 400px;
-  overflow-y: auto;
-  background: #1e1e1e;
-  border-radius: @border-radius-md;
-  padding: @spacing-md;
-}
-
-.logs-list {
-  font-family: 'Monaco', 'Menlo', monospace;
-  font-size: 12px;
-}
-
-.log-item {
-  display: flex;
-  align-items: flex-start;
-  gap: @spacing-sm;
-  padding: @spacing-xs 0;
-  color: #d4d4d4;
-
-  &.log-error {
-    color: #f48771;
-  }
-
-  &.log-warning {
-    color: #cca700;
-  }
-
-  .log-time {
-    color: #808080;
-    min-width: 90px;
-  }
-
-  .log-message {
-    flex: 1;
-    word-break: break-all;
-  }
 }
 
 // 工具卡片
