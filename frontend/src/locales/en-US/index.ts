@@ -1043,7 +1043,6 @@ export default {
     toolInfo: 'Tool Information',
     toolNotFound: 'Tool info unavailable',
     unknownTool: 'Unknown Tool',
-    relatedTasks: 'Related Tasks',
     // Errors
     errorMessage: 'Error Message',
     noLogs: 'No logs available',

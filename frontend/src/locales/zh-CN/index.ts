@@ -1042,7 +1042,6 @@ export default {
     toolInfo: '工具信息',
     toolNotFound: '工具信息不可用',
     unknownTool: '未知工具',
-    relatedTasks: '相关任务',
     // 错误
     errorMessage: '错误信息',
     noLogs: '暂无日志',

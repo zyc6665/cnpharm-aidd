@@ -255,26 +255,6 @@
                 <a-empty v-else :description="t('tasks.toolNotFound')" />
               </div>
 
-              <!-- 相关任务 -->
-              <div v-if="relatedTasks.length > 0" class="info-card">
-                <h3 class="card-title">
-                  <HistoryOutlined />
-                  {{ t('tasks.relatedTasks') }}
-                </h3>
-                <div class="related-tasks">
-                  <div
-                    v-for="related in relatedTasks"
-                    :key="related.id"
-                    class="related-task-item"
-                    @click="goToTask(related.id)"
-                  >
-                    <a-tag :color="getStatusColor(related.status)" size="small">
-                      {{ getStatusText(related.status) }}
-                    </a-tag>
-                    <span class="task-time">{{ formatTime(related.created_at) }}</span>
-                  </div>
-                </div>
-              </div>
             </a-col>
           </a-row>
         </div>
@@ -315,13 +295,12 @@ import {
   FileTextOutlined,
   ReloadOutlined,
   ToolOutlined,
-  PlayCircleOutlined,
-  HistoryOutlined
+  PlayCircleOutlined
 } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
 import { useTasksStore, useUserStore } from '@/stores'
 import { useTaskDetailLiveUpdates } from '@/composables/useTaskDetailLiveUpdates'
-import type { TaskStatus, Task } from '@/types/models'
+import type { TaskStatus } from '@/types/models'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
 import ResultVisualizationPanel from '@/components/tasks/ResultVisualizationPanel.vue'
@@ -345,9 +324,6 @@ const tasksStore = useTasksStore()
 const userStore = useUserStore()
 
 const taskId = computed(() => route.params.id as string)
-
-// 状态
-const relatedTasks = ref<Task[]>([])
 
 // 计算属性
 const loading = computed(() => tasksStore.loading)
@@ -446,10 +422,6 @@ const goToTool = () => {
   if (task.value?.tool_id) {
     router.push(`/tools/${task.value.tool_id}`)
   }
-}
-
-const goToTask = (id: string) => {
-  router.push(`/tasks/${id}`)
 }
 
 const goBack = () => {
@@ -812,33 +784,6 @@ onUnmounted(() => {
         font-size: @font-size-sm;
       }
     }
-  }
-}
-
-// 相关任务
-.related-tasks {
-  display: flex;
-  flex-direction: column;
-  gap: @spacing-xs;
-}
-
-.related-task-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: @spacing-sm;
-  background: @bg-color-light;
-  border-radius: @border-radius-sm;
-  cursor: pointer;
-  transition: all @transition-duration;
-
-  &:hover {
-    background: @primary-color-light;
-  }
-
-  .task-time {
-    color: @text-color-light-tertiary;
-    font-size: @font-size-sm;
   }
 }
 
