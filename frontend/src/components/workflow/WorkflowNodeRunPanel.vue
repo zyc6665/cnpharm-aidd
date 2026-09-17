@@ -104,6 +104,7 @@
     applyManualFileSelection,
     applyRecommendedArtifactBindings,
     buildAutoBoundArtifactCards,
+    clearAutoBoundArtifactBindings,
     resolveWorkflowNodeRunInputSurface
   } from '@/workflow/node-run-inputs'
 
@@ -162,7 +163,6 @@
     tool: selectedTool.value
   }))
   const standardInputSlots = computed(() => inputSurface.value.standardInputSlots)
-  const inputSchema = computed<ToolSchema | undefined>(() => inputSurface.value.schema)
 
   const executorType = computed(() => {
     const contractExecutorType = selectedTool.value?.contract?.executor?.type
@@ -207,12 +207,6 @@
     flattenedSchema: flattenedSchema.value
   }))
 
-  function clearAutoBoundArtifacts() {
-    for (const key of Object.keys(autoBoundArtifactByField)) {
-      delete autoBoundArtifactByField[key]
-    }
-  }
-
   function applyRecommendedArtifacts(fileFieldKeys: string[]) {
     if (!fileFieldKeys.length) {
       return
@@ -241,7 +235,7 @@
     replaceRecord(formState, state.formState)
     replaceRecord(fileList, state.fileList)
     replaceRecord(selectedArtifacts, state.selectedArtifacts)
-    clearAutoBoundArtifacts()
+    clearAutoBoundArtifactBindings(autoBoundArtifactByField)
     applyRecommendedArtifacts(nextFileFieldKeys)
   }
 
@@ -302,7 +296,7 @@
         replaceRecord(formState, {})
         replaceRecord(fileList, {})
         replaceRecord(selectedArtifacts, {})
-        clearAutoBoundArtifacts()
+        clearAutoBoundArtifactBindings(autoBoundArtifactByField)
         return
       }
 

@@ -7,6 +7,7 @@ import {
   applyRecommendedArtifactBindings,
   buildAutoBoundArtifactCards,
   buildArtifactInputSchema,
+  clearAutoBoundArtifactBindings,
   resolveRecommendedArtifactBindings,
   resolveWorkflowNodeRunInputSurface,
 } from './node-run-inputs'
@@ -289,6 +290,17 @@ describe('workflow node run inputs', () => {
     expect(formState.protein_pdb).toBe('file-selected')
     expect(fileList.protein_pdb).toEqual([])
     expect(autoBoundArtifactByField.protein_pdb).toBeUndefined()
+  })
+
+  it('clears all auto-bound artifact bindings', () => {
+    const autoBoundArtifactByField: Record<string, ArtifactFile | undefined> = {
+      protein_pdb: artifact({ id: 'file-protein' }),
+      ligand_sdf: undefined,
+    }
+
+    clearAutoBoundArtifactBindings(autoBoundArtifactByField)
+
+    expect(autoBoundArtifactByField).toEqual({})
   })
 
   it('builds compact auto-bound artifact cards from schema labels', () => {

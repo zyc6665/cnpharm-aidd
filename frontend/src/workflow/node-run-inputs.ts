@@ -198,6 +198,14 @@ export function applyManualArtifactSelection<FileItem extends WorkflowRunFileSel
   }
 }
 
+export function clearAutoBoundArtifactBindings(
+  autoBoundArtifactByField: Record<string, ArtifactFile | undefined>,
+): void {
+  for (const key of Object.keys(autoBoundArtifactByField)) {
+    delete autoBoundArtifactByField[key]
+  }
+}
+
 export function buildAutoBoundArtifactCards(input: {
   autoBoundArtifactByField: Record<string, ArtifactFile | undefined>
   flattenedSchema: ToolSchema
