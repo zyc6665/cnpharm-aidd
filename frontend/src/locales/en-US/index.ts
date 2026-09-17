@@ -477,6 +477,8 @@ export default {
       noIssues: 'There is no blocking issue right now. You can continue with ready nodes.',
       viewNode: 'View Node',
       runReadyNodes: 'Run Ready Nodes',
+      applyAutoRepair: 'Auto-add preparation nodes',
+      autoRepairTitle: 'Auto Repair Available',
       runHint: 'Ready nodes run in dependency order and the workflow pauses on failure.',
       hintRunning: 'Some nodes are already running. Wait for the current tasks to finish before continuing.',
       hintBlocked: 'You can run ready nodes first. Blocked nodes will become runnable after upstream artifacts are produced.',

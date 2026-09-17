@@ -1,10 +1,31 @@
 import { mount } from '@vue/test-utils'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import i18n from '@/locales'
 import type { WorkflowPreflightSummary } from '@/workflow/preflight'
 import WorkflowPreflightPanel from './WorkflowPreflightPanel.vue'
 
 describe('WorkflowPreflightPanel', () => {
+  it('keeps auto repair panel labels in locale keys', () => {
+    const source = readFileSync(resolve('src/components/workflow/WorkflowPreflightPanel.vue'), 'utf8')
+    const zhSource = readFileSync(resolve('src/locales/zh-CN/index.ts'), 'utf8')
+    const enSource = readFileSync(resolve('src/locales/en-US/index.ts'), 'utf8')
+
+    for (const marker of ['workflow.preflight.applyAutoRepair', 'workflow.preflight.autoRepairTitle']) {
+      expect(source).toContain(marker)
+    }
+
+    for (const marker of ['applyAutoRepair', 'autoRepairTitle']) {
+      expect(zhSource).toContain(marker)
+      expect(enSource).toContain(marker)
+    }
+
+    for (const literal of ['一键补齐准备节点', '可自动补齐']) {
+      expect(source).not.toContain(literal)
+    }
+  })
+
   const basePreflight: WorkflowPreflightSummary = {
     canRun: true,
     runnableCount: 1,

@@ -476,6 +476,8 @@ export default {
       noIssues: '当前没有阻塞问题，可以继续运行可执行节点。',
       viewNode: '查看节点',
       runReadyNodes: '运行可执行节点',
+      applyAutoRepair: '一键补齐准备节点',
+      autoRepairTitle: '可自动补齐',
       runHint: '会按依赖顺序运行已满足输入条件的节点，遇到失败会暂停。',
       hintRunning: '已有节点正在运行，建议等待当前任务结束后再继续。',
       hintBlocked: '可以先运行已就绪节点，阻塞节点会在上游产物生成后自动进入可运行状态。',

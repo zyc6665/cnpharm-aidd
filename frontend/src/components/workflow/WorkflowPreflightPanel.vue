@@ -22,7 +22,7 @@
         :disabled="running"
         @click="$emit('apply-auto-repair')"
       >
-        一键补齐准备节点
+        {{ t('workflow.preflight.applyAutoRepair') }}
       </a-button>
     </div>
 
@@ -52,7 +52,7 @@
         data-testid="workflow-auto-repair-explanations"
       >
         <div class="preflight-section-header">
-          <strong>可自动补齐</strong>
+          <strong>{{ t('workflow.preflight.autoRepairTitle') }}</strong>
           <a-tag color="blue">{{ repairActions.length }}</a-tag>
         </div>
         <div class="auto-repair-list">
