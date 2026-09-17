@@ -13,12 +13,12 @@ export function useWorkflowNodeTaskPolling(input: {
   intervalMs?: number
 }) {
   const intervalMs = input.intervalMs ?? 5000
-  const timers = new Map<string, number>()
+  const timers = new Map<string, { taskId: string; timer: number }>()
 
   function stopNode(nodeId: string) {
-    const timer = timers.get(nodeId)
-    if (timer !== undefined) {
-      window.clearTimeout(timer)
+    const entry = timers.get(nodeId)
+    if (entry) {
+      window.clearTimeout(entry.timer)
       timers.delete(nodeId)
     }
   }
@@ -30,13 +30,25 @@ export function useWorkflowNodeTaskPolling(input: {
   }
 
   function schedule(nodeId: string, taskId: string) {
-    if (timers.has(nodeId)) {
+    const existing = timers.get(nodeId)
+    if (existing?.taskId === taskId) {
       return
     }
+    stopNode(nodeId)
+
+    const isCurrentTask = () => timers.get(nodeId)?.taskId === taskId
 
     const poll = async () => {
+      if (!isCurrentTask()) {
+        return
+      }
+
       try {
         const response = await getTaskDetail(taskId)
+        if (!isCurrentTask()) {
+          return
+        }
+
         input.recordNodeTask(nodeId, response.data)
         const toolSlug = unref(input.selectedToolByNode)?.[nodeId]
         if (toolSlug) {
@@ -54,10 +66,12 @@ export function useWorkflowNodeTaskPolling(input: {
         // Keep polling through transient request failures so restored canvas state can recover.
       }
 
-      timers.set(nodeId, window.setTimeout(poll, intervalMs))
+      if (isCurrentTask()) {
+        timers.set(nodeId, { taskId, timer: window.setTimeout(poll, intervalMs) })
+      }
     }
 
-    timers.set(nodeId, window.setTimeout(poll, intervalMs))
+    timers.set(nodeId, { taskId, timer: window.setTimeout(poll, intervalMs) })
   }
 
   const stopWatching = watch(

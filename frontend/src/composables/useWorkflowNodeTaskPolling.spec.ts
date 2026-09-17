@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getTaskDetail } from '@/api/tasks'
 import { useWorkflowNodeTaskPolling } from './useWorkflowNodeTaskPolling'
@@ -53,6 +53,47 @@ describe('useWorkflowNodeTaskPolling', () => {
     expect(getTaskDetail).not.toHaveBeenCalledWith('task-b')
     expect(recordNodeTask).toHaveBeenCalledWith('a', expect.objectContaining({ id: 'task-a' }))
     expect(recordTask).toHaveBeenCalledWith('tool-a-slug', expect.objectContaining({ id: 'task-a' }))
+
+    polling.stop()
+  })
+
+  it('reschedules a node when its bound task id changes', async () => {
+    const taskByNode = ref({
+      a: {
+        id: 'task-old',
+        tool_id: 'tool-a',
+        status: 'running' as const,
+        progress: 10,
+        created_at: '2026-08-20T00:00:00Z',
+      },
+    })
+    const recordNodeTask = vi.fn()
+    vi.mocked(getTaskDetail).mockResolvedValue({
+      code: 200,
+      message: 'ok',
+      data: { id: 'task-new', status: 'success', progress: 100 },
+    } as never)
+
+    const polling = useWorkflowNodeTaskPolling({
+      taskByNode,
+      recordNodeTask,
+      intervalMs: 1000,
+    })
+
+    taskByNode.value = {
+      a: {
+        id: 'task-new',
+        tool_id: 'tool-a',
+        status: 'running',
+        progress: 20,
+        created_at: '2026-08-20T00:00:01Z',
+      },
+    }
+    await nextTick()
+    await vi.advanceTimersByTimeAsync(1000)
+
+    expect(getTaskDetail).not.toHaveBeenCalledWith('task-old')
+    expect(getTaskDetail).toHaveBeenCalledWith('task-new')
 
     polling.stop()
   })
