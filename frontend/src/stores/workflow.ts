@@ -89,7 +89,7 @@ export const useWorkflowStore = defineStore(
     } = storeToRefs(canvas)
     const { selectedToolByGroup, selectedToolByNode, toolFormDrafts, nodeFormDrafts } =
       storeToRefs(formDraft)
-    const { taskByTool, taskByNode, artifactBindingsByNode } = storeToRefs(taskBinding)
+    const { taskByNode, artifactBindingsByNode } = storeToRefs(taskBinding)
 
     // ── session computed ──
     const session = computed<WorkflowWorkbenchSession>(() => ({
@@ -101,7 +101,6 @@ export const useWorkflowStore = defineStore(
       selectedToolByNode: selectedToolByNode.value,
       toolFormDrafts: toolFormDrafts.value,
       nodeFormDrafts: nodeFormDrafts.value,
-      taskByTool: taskByTool.value,
       taskByNode: taskByNode.value,
       artifactBindingsByNode: artifactBindingsByNode.value,
       nodePositionById: nodePositionById.value,
@@ -279,20 +278,12 @@ export const useWorkflowStore = defineStore(
     }
 
     // ── delegation: task binding ──
-    const recordTask = (toolSlug: string, task: WorkflowTaskRef) => {
-      taskBinding.recordTask(toolSlug, task)
-      touchSession()
-    }
     const recordNodeTask = (nodeId: string, task: WorkflowTaskRef) => {
       taskBinding.recordNodeTask(nodeId, task)
       touchSession()
     }
     const setNodeArtifactBinding = (nodeId: string, field: string, artifactId: string) => {
       taskBinding.setNodeArtifactBinding(nodeId, field, artifactId)
-      touchSession()
-    }
-    const clearTask = (toolSlug: string) => {
-      taskBinding.clearTask(toolSlug)
       touchSession()
     }
     const clearNodeTask = (nodeId: string) => {
@@ -382,7 +373,6 @@ export const useWorkflowStore = defineStore(
       toolFormDrafts,
       nodeFormDrafts,
       // task bindings (re-export sub-store refs)
-      taskByTool,
       taskByNode,
       artifactBindingsByNode,
       // API state
@@ -427,10 +417,8 @@ export const useWorkflowStore = defineStore(
       setNodeFormDraft,
       clearToolFormDraft,
       // task delegation
-      recordTask,
       recordNodeTask,
       setNodeArtifactBinding,
-      clearTask,
       clearNodeTask,
       clearNodeTasks,
       // API

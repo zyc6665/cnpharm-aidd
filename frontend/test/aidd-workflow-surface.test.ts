@@ -70,10 +70,10 @@ test('工具工作台 store 应启用持久化并声明核心状态与动作', (
   assert.equal(source.includes('activeGroupId'), true)
   assert.equal(source.includes('selectedToolByGroup'), true)
   assert.equal(source.includes('toolFormDrafts'), true)
-  assert.equal(source.includes('taskByTool'), true)
+  assert.equal(source.includes('taskByNode'), true)
   assert.equal(source.includes('resetSession'), true)
   assert.equal(source.includes('selectTool'), true)
-  assert.equal(source.includes('recordTask'), true)
+  assert.equal(source.includes('recordNodeTask'), true)
   assert.equal(source.includes('setToolFormDraft'), true)
 })
 

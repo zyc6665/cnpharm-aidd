@@ -32,7 +32,6 @@ describe('useWorkflowNodeTaskPolling', () => {
       },
     })
     const recordNodeTask = vi.fn()
-    const recordTask = vi.fn()
     vi.mocked(getTaskDetail).mockResolvedValue({
       code: 200,
       message: 'ok',
@@ -41,9 +40,7 @@ describe('useWorkflowNodeTaskPolling', () => {
 
     const polling = useWorkflowNodeTaskPolling({
       taskByNode,
-      selectedToolByNode: ref({ a: 'tool-a-slug' }),
       recordNodeTask,
-      recordTask,
       intervalMs: 1000,
     })
 
@@ -52,7 +49,6 @@ describe('useWorkflowNodeTaskPolling', () => {
     expect(getTaskDetail).toHaveBeenCalledWith('task-a')
     expect(getTaskDetail).not.toHaveBeenCalledWith('task-b')
     expect(recordNodeTask).toHaveBeenCalledWith('a', expect.objectContaining({ id: 'task-a' }))
-    expect(recordTask).toHaveBeenCalledWith('tool-a-slug', expect.objectContaining({ id: 'task-a' }))
 
     polling.stop()
   })

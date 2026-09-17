@@ -19,7 +19,6 @@ type MaybeRef<T> = T | Ref<T>
 
 export interface StandaloneNodeRunOptions {
   tool: StandaloneRunTool
-  selectedToolSlug: string
   flattenedSchema: ToolSchema
   formState: Record<string, unknown>
   fileList: Record<string, UploadFile[]>
@@ -75,7 +74,6 @@ export function useStandaloneNodeRun(input: {
       }
 
       workflowStore.recordNodeTask(currentNodeId(), taskResult.task)
-      workflowStore.recordTask(options.selectedToolSlug, taskResult.task)
       return taskResult.task
     } finally {
       submitting.value = false

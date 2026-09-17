@@ -5,12 +5,10 @@ import type { WorkflowTaskRef } from '@/workflow/artifact-types'
 import { toWorkflowTaskRef } from '@/workflow/task-state'
 
 export const useWorkflowTaskBindingStore = defineStore('workflow-task-binding', () => {
-  const taskByTool = ref<Record<string, WorkflowTaskRef>>({})
   const taskByNode = ref<Record<string, WorkflowTaskRef>>({})
   const artifactBindingsByNode = ref<Record<string, Record<string, string>>>({})
 
   function normalizeShape() {
-    taskByTool.value = normalizeRecord<WorkflowTaskRef>(taskByTool.value)
     taskByNode.value = normalizeRecord<WorkflowTaskRef>(taskByNode.value)
     artifactBindingsByNode.value = normalizeRecord<Record<string, string>>(
       artifactBindingsByNode.value,
@@ -18,13 +16,8 @@ export const useWorkflowTaskBindingStore = defineStore('workflow-task-binding', 
   }
 
   function reset() {
-    taskByTool.value = {}
     taskByNode.value = {}
     artifactBindingsByNode.value = {}
-  }
-
-  function recordTask(toolSlug: string, taskInput: WorkflowTaskRef) {
-    taskByTool.value = { ...taskByTool.value, [toolSlug]: toWorkflowTaskRef(taskInput) }
   }
 
   function recordNodeTask(nodeId: string, taskInput: WorkflowTaskRef) {
@@ -39,13 +32,6 @@ export const useWorkflowTaskBindingStore = defineStore('workflow-task-binding', 
         [field]: artifactId,
       },
     }
-  }
-
-  function clearTask(toolSlug: string) {
-    if (!taskByTool.value[toolSlug]) return
-    const next = { ...taskByTool.value }
-    delete next[toolSlug]
-    taskByTool.value = next
   }
 
   function clearNodeTask(nodeId: string) {
@@ -77,21 +63,18 @@ export const useWorkflowTaskBindingStore = defineStore('workflow-task-binding', 
   }
 
   return {
-    taskByTool,
     taskByNode,
     artifactBindingsByNode,
     normalizeShape,
     reset,
-    recordTask,
     recordNodeTask,
     setNodeArtifactBinding,
-    clearTask,
     clearNodeTask,
     clearNodeTasks,
     clearNodeArtifactBindings,
   }
 }, {
   persist: {
-    pick: ['taskByTool', 'taskByNode', 'artifactBindingsByNode'],
+    pick: ['taskByNode', 'artifactBindingsByNode'],
   },
 })

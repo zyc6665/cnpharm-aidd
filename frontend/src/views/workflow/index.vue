@@ -220,7 +220,10 @@
                 </template>
 
                 <template #artifacts>
-                  <WorkflowArtifactPanel :selected-tool-slug="activeNode ? selectedToolByActiveNode : null" />
+                  <WorkflowArtifactPanel
+                    :selected-tool-slug="activeNode ? selectedToolByActiveNode : null"
+                    :active-task="activeNode ? (workflowStore.taskByNode[activeNode.id] ?? null) : null"
+                  />
                 </template>
 
                 <template #history>
@@ -431,9 +434,7 @@
 
   useWorkflowNodeTaskPolling({
     taskByNode: computed(() => workflowStore.taskByNode),
-    selectedToolByNode: computed(() => workflowStore.selectedToolByNode),
     recordNodeTask: workflowStore.recordNodeTask,
-    recordTask: workflowStore.recordTask,
     refreshArtifacts: () => artifactsStore.fetchArtifacts({ page: 1, page_size: 100 })
   })
 

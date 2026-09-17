@@ -265,7 +265,6 @@
 
     await runStandaloneNode({
       tool: selectedTool.value,
-      selectedToolSlug: props.selectedToolSlug,
       flattenedSchema: flattenedSchema.value,
       formState,
       fileList,

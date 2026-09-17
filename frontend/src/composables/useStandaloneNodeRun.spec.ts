@@ -62,7 +62,6 @@ describe('useStandaloneNodeRun', () => {
     const runner = useStandaloneNodeRun({ nodeId: 'fetch-pdb-node', projectId: 'project-1' })
     await runner.run({
       tool: { id: 'tool-fetch-pdb', name: 'Fetch PDB Structure' },
-      selectedToolSlug: 'builtin-fetch-pdb',
       flattenedSchema: {
         type: 'object',
         properties: { pdb_id: { type: 'string', title: 'PDB ID' } },
@@ -91,7 +90,6 @@ describe('useStandaloneNodeRun', () => {
       file_ids: undefined,
     })
     expect(workflowStore.taskByNode['fetch-pdb-node']).toMatchObject({ id: 'task-1', status: 'pending' })
-    expect(workflowStore.taskByTool['builtin-fetch-pdb']).toMatchObject({ id: 'task-1', status: 'pending' })
 
     await vi.advanceTimersByTimeAsync(2000)
 
@@ -128,7 +126,6 @@ describe('useStandaloneNodeRun', () => {
     const runner = useStandaloneNodeRun({ nodeId: 'lvpocket-node', projectId: 'project-1' })
     const result = await runner.run({
       tool: { id: 'tool-lvpocket', name: 'LVpocket Pocket Prediction' },
-      selectedToolSlug: 'lvpocket-pocket-prediction',
       flattenedSchema: {
         type: 'object',
         properties: {},

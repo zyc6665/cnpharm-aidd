@@ -309,8 +309,9 @@
   import { useRouter } from 'vue-router'
   import dayjs from 'dayjs'
   import { useI18n } from 'vue-i18n'
-  import { useArtifactsStore, useToolsStore, useUserStore, useWorkflowStore } from '@/stores'
+  import { useArtifactsStore, useToolsStore, useUserStore } from '@/stores'
   import type { ArtifactFile, WorkbenchGroup } from '@/types/models'
+  import type { WorkflowTaskRef } from '@/workflow/artifact-types'
   import { sortArtifactsByCreatedAtDesc } from '@/utils/artifact-sorting'
   import {
     buildWorkflowArtifactHierarchy,
@@ -325,6 +326,7 @@
   const props = defineProps<{
     group?: WorkbenchGroup | null
     selectedToolSlug?: string | null
+    activeTask?: WorkflowTaskRef | null
   }>()
 
   const emit = defineEmits<{
@@ -336,7 +338,6 @@
   const artifactsStore = useArtifactsStore()
   const toolsStore = useToolsStore()
   const userStore = useUserStore()
-  const workflowStore = useWorkflowStore()
   const expandedGroupIds = ref<string[]>([])
   const expandedToolSlugs = ref<string[]>([])
   const expandedTaskIds = ref<string[]>([])
@@ -360,13 +361,7 @@
     }).groups
   })
 
-  const activeTask = computed(() => {
-    if (!props.selectedToolSlug) {
-      return null
-    }
-
-    return workflowStore.taskByTool[props.selectedToolSlug] ?? null
-  })
+  const activeTask = computed(() => props.activeTask ?? null)
 
   async function refreshArtifacts() {
     if (!userStore.isLoggedIn) {

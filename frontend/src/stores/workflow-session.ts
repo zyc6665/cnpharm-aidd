@@ -18,7 +18,6 @@ export interface WorkflowWorkbenchSession {
   selectedToolByNode: Record<string, string>
   toolFormDrafts: Record<string, Record<string, unknown>>
   nodeFormDrafts: Record<string, Record<string, unknown>>
-  taskByTool: Record<string, WorkflowTaskRef>
   taskByNode: Record<string, WorkflowTaskRef>
   artifactBindingsByNode: Record<string, Record<string, string>>
   nodePositionById: Record<string, WorkflowCanvasPosition>
@@ -58,7 +57,6 @@ export function createInitialWorkflowSession(ownerUserId?: string): WorkflowWork
     selectedToolByNode: {},
     toolFormDrafts: {},
     nodeFormDrafts: {},
-    taskByTool: {},
     taskByNode: {},
     artifactBindingsByNode: {},
     nodePositionById: {},
