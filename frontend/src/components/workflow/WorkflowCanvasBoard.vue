@@ -47,8 +47,8 @@
           v-for="node in resolvedNodes"
           :key="node.id"
           :node="node"
-          :title="resolveWorkflowLabel(node.titleKey, t, te)"
-          :subtitle="node.descriptionKey ? resolveWorkflowLabel(node.descriptionKey, t, te) : undefined"
+          :title="resolveCanvasNodeLabel(node.titleKey)"
+          :subtitle="node.descriptionKey ? resolveCanvasNodeLabel(node.descriptionKey) : undefined"
           :status="resolvedNodeStatuses[node.id] ?? 'idle'"
           :selected="node.id === activeNodeId"
           :deletable="node.type !== 'input'"
@@ -122,7 +122,11 @@
   const connectingSourceNodeId = ref<string | null>(null)
   const surfaceRef = ref<HTMLElement | null>(null)
 
-  const presetName = computed(() => resolveWorkflowLabel(props.preset.nameKey, t, te))
+  const presetName = computed(() => resolveWorkflowLabel(props.preset.nameKey, t, te, t('workflow.definition.titleFallback')))
+
+  function resolveCanvasNodeLabel(key: unknown): string {
+    return resolveWorkflowLabel(key, t, te, t('workflow.canvasNode.titleFallback'))
+  }
   const resolvedNodeStatuses = computed(() => props.nodeStatuses ?? {})
   const resolvedNodes = computed(() => {
     return props.preset.nodes.map(node => ({

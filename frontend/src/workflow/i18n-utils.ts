@@ -1,9 +1,9 @@
-const WORKFLOW_LABEL_FALLBACK = '未命名节点'
+const WORKFLOW_LABEL_FALLBACK = 'Untitled Node'
 
-export function formatWorkflowKey(key: unknown): string {
+export function formatWorkflowKey(key: unknown, fallback = WORKFLOW_LABEL_FALLBACK): string {
   const normalizedKey = typeof key === 'string' ? key.trim() : ''
   if (!normalizedKey) {
-    return WORKFLOW_LABEL_FALLBACK
+    return fallback
   }
 
   const lastSegment = normalizedKey.split('.').pop() ?? normalizedKey
@@ -23,12 +23,13 @@ export function formatWorkflowKey(key: unknown): string {
 export function resolveWorkflowLabel(
   key: unknown,
   translate: (key: string) => string,
-  hasTranslation: (key: string) => boolean
+  hasTranslation: (key: string) => boolean,
+  fallback = WORKFLOW_LABEL_FALLBACK,
 ): string {
   const normalizedKey = typeof key === 'string' ? key.trim() : ''
   if (!normalizedKey) {
-    return WORKFLOW_LABEL_FALLBACK
+    return fallback
   }
 
-  return hasTranslation(normalizedKey) ? translate(normalizedKey) : formatWorkflowKey(normalizedKey)
+  return hasTranslation(normalizedKey) ? translate(normalizedKey) : formatWorkflowKey(normalizedKey, fallback)
 }

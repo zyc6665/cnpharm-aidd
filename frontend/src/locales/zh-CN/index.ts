@@ -398,6 +398,7 @@ export default {
       resetZoom: '复位'
     },
     canvasNode: {
+      titleFallback: '未命名节点',
       connectTo: '连接到此节点',
       connectFrom: '从此节点连接',
       run: '运行',

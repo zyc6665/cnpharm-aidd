@@ -399,6 +399,7 @@ export default {
       resetZoom: 'Reset Zoom'
     },
     canvasNode: {
+      titleFallback: 'Untitled Node',
       connectTo: 'Connect to this node',
       connectFrom: 'Connect from this node',
       run: 'Run',

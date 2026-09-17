@@ -518,7 +518,7 @@ export function useWorkflowCanvas(input: {
   }
 
   function formatKey(key: string): string {
-    return resolveWorkflowLabel(key, t, te)
+    return resolveWorkflowLabel(key, t, te, t('workflow.canvasNode.titleFallback'))
   }
 
   function resolveWorkflowSemanticTypes(values: string[]): WorkflowArtifactSemanticType[] {

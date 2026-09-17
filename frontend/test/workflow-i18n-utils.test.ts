@@ -17,8 +17,11 @@ describe('workflow i18n utils', () => {
 
 it('workflow canvas reuses shared i18n label helpers', () => {
   const source = readFileSync(resolve('src/composables/useWorkflowCanvas.ts'), 'utf8')
+  const boardSource = readFileSync(resolve('src/components/workflow/WorkflowCanvasBoard.vue'), 'utf8')
 
   expect(source.includes("import { resolveWorkflowLabel } from '@/workflow/i18n-utils'")).toBe(true)
+  expect(source.includes('workflow.canvasNode.titleFallback')).toBe(true)
+  expect(boardSource.includes('workflow.canvasNode.titleFallback')).toBe(true)
   expect(source.includes('function resolveLabel')).toBe(false)
   expect(source.includes("replace(/[-_]/g, ' ')")).toBe(false)
 })
