@@ -31,11 +31,16 @@ export function useTaskDetailLiveUpdates(options: TaskDetailLiveUpdatesOptions) 
   const taskStatus = computed(() => normalizeTaskStatus(options.task.value?.status))
   let refreshTimer: number | null = null
   let unsubscribeMessages: (() => void) | null = null
+  let started = false
 
-  async function fetchLogs() {
+  async function fetchLogs(taskId = options.taskId.value) {
     logsLoading.value = true
     try {
-      const response = await getTaskLogs(options.taskId.value)
+      const response = await getTaskLogs(taskId)
+      if (taskId !== options.taskId.value) {
+        return
+      }
+
       logs.value = mergeTaskLogs(extractTaskLogs(response.data), logs.value)
     } catch {
       // Request errors are surfaced by the shared API layer.
@@ -44,10 +49,10 @@ export function useTaskDetailLiveUpdates(options: TaskDetailLiveUpdatesOptions) 
     }
   }
 
-  async function refreshTaskAndLogs() {
+  async function refreshTaskAndLogs(taskId = options.taskId.value) {
     await Promise.allSettled([
       options.fetchTaskDetail(),
-      fetchLogs(),
+      fetchLogs(taskId),
     ])
   }
 
@@ -101,9 +106,15 @@ export function useTaskDetailLiveUpdates(options: TaskDetailLiveUpdatesOptions) 
     }
   }
 
-  async function start() {
-    await refreshTaskAndLogs()
-    websocket.connect(`/api/v1/ws/tasks/${options.taskId.value}`)
+  async function openCurrentTaskChannel() {
+    const currentTaskId = options.taskId.value
+    logs.value = []
+    await refreshTaskAndLogs(currentTaskId)
+    if (!started || currentTaskId !== options.taskId.value) {
+      return
+    }
+
+    websocket.connect(`/api/v1/ws/tasks/${currentTaskId}`)
     unsubscribeMessages?.()
     unsubscribeMessages = websocket.onMessage(handleWebSocketMessage)
 
@@ -112,12 +123,34 @@ export function useTaskDetailLiveUpdates(options: TaskDetailLiveUpdatesOptions) 
     }
   }
 
-  function stop() {
+  async function start() {
+    started = true
+    await openCurrentTaskChannel()
+  }
+
+  function closeCurrentTaskChannel() {
     stopRefresh()
     unsubscribeMessages?.()
     unsubscribeMessages = null
     websocket.disconnect()
   }
+
+  function stop() {
+    started = false
+    closeCurrentTaskChannel()
+  }
+
+  watch(
+    () => options.taskId.value,
+    async (taskId, previousTaskId) => {
+      if (!started || taskId === previousTaskId) {
+        return
+      }
+
+      closeCurrentTaskChannel()
+      await openCurrentTaskChannel()
+    }
+  )
 
   watch(taskStatus, (status) => {
     if (status === 'running') {

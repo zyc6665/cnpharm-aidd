@@ -1,4 +1,5 @@
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
+import { flushPromises } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getTaskLogs } from '@/api/tasks'
 import { useWebSocket } from '@/composables/useWebSocket'
@@ -117,5 +118,45 @@ describe('useTaskDetailLiveUpdates', () => {
     })
     expect(fetchTaskDetail).toHaveBeenCalledTimes(1)
     expect(getTaskLogs).toHaveBeenCalledWith('task-1')
+  })
+
+  it('restarts the live channel when the task id changes', async () => {
+    const unsubscribe = vi.fn()
+    websocket.onMessage.mockReturnValue(unsubscribe)
+    vi.mocked(getTaskLogs)
+      .mockResolvedValueOnce({
+        code: 200,
+        message: 'ok',
+        data: [{ id: 1, task_id: 'task-1', level: 'info', message: 'old', timestamp: '2026-08-20T00:00:00Z' }],
+      } as never)
+      .mockResolvedValueOnce({
+        code: 200,
+        message: 'ok',
+        data: [{ id: 2, task_id: 'task-2', level: 'info', message: 'new', timestamp: '2026-08-20T00:00:01Z' }],
+      } as never)
+    const taskId = ref('task-1')
+    const task = ref<Task | null>(buildTask('success', 100))
+    const fetchTaskDetail = vi.fn()
+    const updates = useTaskDetailLiveUpdates({
+      taskId,
+      task,
+      fetchTaskDetail,
+      updateTaskProgress: vi.fn(),
+    })
+
+    await updates.start()
+
+    taskId.value = 'task-2'
+    await nextTick()
+    await flushPromises()
+
+    expect(unsubscribe).toHaveBeenCalledTimes(1)
+    expect(websocket.disconnect).toHaveBeenCalledTimes(1)
+    expect(fetchTaskDetail).toHaveBeenCalledTimes(2)
+    expect(getTaskLogs).toHaveBeenLastCalledWith('task-2')
+    expect(websocket.connect).toHaveBeenLastCalledWith('/api/v1/ws/tasks/task-2')
+    expect(updates.logs.value).toEqual([
+      { id: 2, task_id: 'task-2', level: 'info', message: 'new', timestamp: '2026-08-20T00:00:01Z' },
+    ])
   })
 })
