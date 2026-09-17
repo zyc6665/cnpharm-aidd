@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { ArtifactFile, ToolSchema } from '@/types/models'
 import type { WorkflowNodeArtifactRecommendation } from './canvas-artifacts'
 import {
+  applyManualArtifactSelection,
+  applyManualFileSelection,
   applyRecommendedArtifactBindings,
   buildAutoBoundArtifactCards,
   buildArtifactInputSchema,
@@ -231,6 +233,62 @@ describe('workflow node run inputs', () => {
     expect(selectedArtifacts.protein_pdb).toBe(proteinArtifact)
     expect(formState.protein_pdb).toBe('file-protein')
     expect(autoBoundArtifactByField.protein_pdb).toBe(proteinArtifact)
+  })
+
+  it('applies manual file selection and clears artifact bindings for that field', () => {
+    const selectedArtifact = artifact({ id: 'file-selected' })
+    const autoBoundArtifact = artifact({ id: 'file-auto' })
+    const uploadedFile = { uid: 'upload-protein', name: 'protein.pdb' }
+    const fileList: Record<string, typeof uploadedFile[]> = {}
+    const selectedArtifacts: Record<string, ArtifactFile | undefined> = {
+      protein_pdb: selectedArtifact,
+    }
+    const formState: Record<string, unknown> = { protein_pdb: 'file-selected' }
+    const autoBoundArtifactByField: Record<string, ArtifactFile | undefined> = {
+      protein_pdb: autoBoundArtifact,
+    }
+
+    applyManualFileSelection({
+      fieldKey: 'protein_pdb',
+      files: [uploadedFile],
+      fileList,
+      selectedArtifacts,
+      formState,
+      autoBoundArtifactByField,
+    })
+
+    expect(fileList.protein_pdb).toEqual([uploadedFile])
+    expect(selectedArtifacts.protein_pdb).toBeUndefined()
+    expect(formState.protein_pdb).toBe('upload-protein')
+    expect(autoBoundArtifactByField.protein_pdb).toBeUndefined()
+  })
+
+  it('applies manual artifact selection and clears uploads for that field', () => {
+    const selectedArtifact = artifact({ id: 'file-selected' })
+    const autoBoundArtifact = artifact({ id: 'file-auto' })
+    const uploadedFile = { uid: 'upload-protein', name: 'protein.pdb' }
+    const fileList: Record<string, typeof uploadedFile[]> = {
+      protein_pdb: [uploadedFile],
+    }
+    const selectedArtifacts: Record<string, ArtifactFile | undefined> = {}
+    const formState: Record<string, unknown> = { protein_pdb: 'upload-protein' }
+    const autoBoundArtifactByField: Record<string, ArtifactFile | undefined> = {
+      protein_pdb: autoBoundArtifact,
+    }
+
+    applyManualArtifactSelection({
+      fieldKey: 'protein_pdb',
+      artifact: selectedArtifact,
+      fileList,
+      selectedArtifacts,
+      formState,
+      autoBoundArtifactByField,
+    })
+
+    expect(selectedArtifacts.protein_pdb).toBe(selectedArtifact)
+    expect(formState.protein_pdb).toBe('file-selected')
+    expect(fileList.protein_pdb).toEqual([])
+    expect(autoBoundArtifactByField.protein_pdb).toBeUndefined()
   })
 
   it('builds compact auto-bound artifact cards from schema labels', () => {

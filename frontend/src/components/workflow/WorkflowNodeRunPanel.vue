@@ -100,6 +100,8 @@
   } from '@/domain/tools'
   import type { WorkflowNodeArtifactRecommendation } from '@/workflow/canvas-artifacts'
   import {
+    applyManualArtifactSelection,
+    applyManualFileSelection,
     applyRecommendedArtifactBindings,
     buildAutoBoundArtifactCards,
     resolveWorkflowNodeRunInputSurface
@@ -244,19 +246,25 @@
   }
 
   function handleFileListChange(key: string, files: UploadFile[]) {
-    fileList[key] = files
-    selectedArtifacts[key] = undefined
-    autoBoundArtifactByField[key] = undefined
-    formState[key] = files[0]?.uid ?? files[0]?.name
+    applyManualFileSelection({
+      fieldKey: key,
+      files,
+      fileList,
+      selectedArtifacts,
+      formState,
+      autoBoundArtifactByField
+    })
   }
 
   function handleArtifactSelection(key: string, artifact: ArtifactFile | null) {
-    selectedArtifacts[key] = artifact ?? undefined
-    autoBoundArtifactByField[key] = undefined
-    formState[key] = artifact?.id
-    if (artifact) {
-      fileList[key] = []
-    }
+    applyManualArtifactSelection({
+      fieldKey: key,
+      artifact,
+      fileList,
+      selectedArtifacts,
+      formState,
+      autoBoundArtifactByField
+    })
   }
 
   async function runCurrentNode() {

@@ -36,6 +36,29 @@ export interface ApplyRecommendedArtifactBindingsInput extends ResolveRecommende
   autoBoundArtifactByField: Record<string, ArtifactFile | undefined>
 }
 
+export interface WorkflowRunFileSelectionItem {
+  uid?: string
+  name?: string
+}
+
+export interface ApplyManualFileSelectionInput<FileItem extends WorkflowRunFileSelectionItem> {
+  fieldKey: string
+  files: FileItem[]
+  fileList: Record<string, FileItem[]>
+  selectedArtifacts: Record<string, ArtifactFile | undefined>
+  formState: Record<string, unknown>
+  autoBoundArtifactByField: Record<string, ArtifactFile | undefined>
+}
+
+export interface ApplyManualArtifactSelectionInput<FileItem extends WorkflowRunFileSelectionItem> {
+  fieldKey: string
+  artifact: ArtifactFile | null
+  fileList: Record<string, FileItem[]>
+  selectedArtifacts: Record<string, ArtifactFile | undefined>
+  formState: Record<string, unknown>
+  autoBoundArtifactByField: Record<string, ArtifactFile | undefined>
+}
+
 export interface WorkflowNodeRunInputSurface {
   schema?: ToolSchema
   flattenedSchema: ToolSchema
@@ -153,6 +176,26 @@ export function applyRecommendedArtifactBindings(
   }
 
   return Object.keys(bindings)
+}
+
+export function applyManualFileSelection<FileItem extends WorkflowRunFileSelectionItem>(
+  input: ApplyManualFileSelectionInput<FileItem>,
+): void {
+  input.fileList[input.fieldKey] = input.files
+  input.selectedArtifacts[input.fieldKey] = undefined
+  input.autoBoundArtifactByField[input.fieldKey] = undefined
+  input.formState[input.fieldKey] = input.files[0]?.uid ?? input.files[0]?.name
+}
+
+export function applyManualArtifactSelection<FileItem extends WorkflowRunFileSelectionItem>(
+  input: ApplyManualArtifactSelectionInput<FileItem>,
+): void {
+  input.selectedArtifacts[input.fieldKey] = input.artifact ?? undefined
+  input.autoBoundArtifactByField[input.fieldKey] = undefined
+  input.formState[input.fieldKey] = input.artifact?.id
+  if (input.artifact) {
+    input.fileList[input.fieldKey] = []
+  }
 }
 
 export function buildAutoBoundArtifactCards(input: {
