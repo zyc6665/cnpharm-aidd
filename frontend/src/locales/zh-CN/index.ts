@@ -308,6 +308,11 @@ export default {
       nodeRetried: '工作流节点已重试',
       loaded: '流程已加载'
     },
+    autoRepair: {
+      reasonWithRoles: '{targetNodeTitle} 的 {inputSlotName} 需要{requiredRoles}，可通过 {toolName} 自动补齐。',
+      reasonWithoutRoles: '{targetNodeTitle} 的 {inputSlotName} 需要先准备或转换输入产物，可通过 {toolName} 自动补齐。',
+      roleSeparator: '、'
+    },
     canvasPresets: {
       kicker: '流程编排',
       unsaved: '未保存的工作台编排',

@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import type { WorkflowCanvasPreset } from './canvas-types'
 import { buildWorkflowAutoRepairPlan } from './auto-repair'
 
@@ -42,6 +44,20 @@ const remoteProteinPreparationTool = {
 }
 
 describe('buildWorkflowAutoRepairPlan', () => {
+  it('keeps repair reason copy injectable from the workflow canvas caller', () => {
+    const source = readFileSync(resolve('src/workflow/auto-repair.ts'), 'utf8')
+    const canvasSource = readFileSync(resolve('src/composables/useWorkflowCanvas.ts'), 'utf8')
+
+    expect(source).toContain('WorkflowAutoRepairLabels')
+    expect(source).toContain('DEFAULT_WORKFLOW_AUTO_REPAIR_LABELS')
+    expect(canvasSource).toContain('workflow.autoRepair.reasonWithRoles')
+    expect(canvasSource).toContain('workflow.autoRepair.reasonWithoutRoles')
+
+    for (const literal of ['自动补齐', '需要先准备或转换输入产物', '可通过']) {
+      expect(source).not.toContain(literal)
+    }
+  })
+
   it('为需要 receptor_pdbqt 的蛋白输入规划蛋白准备节点并重连原始边', () => {
     const template: WorkflowCanvasPreset = {
       id: 'free',
@@ -244,7 +260,14 @@ describe('buildWorkflowAutoRepairPlan', () => {
       ],
     }
 
-    const plan = buildWorkflowAutoRepairPlan({ template, tools: [remoteProteinPreparationTool] })
+    const plan = buildWorkflowAutoRepairPlan({
+      template,
+      tools: [remoteProteinPreparationTool],
+      labels: {
+        reasonWithRoles: input => `${input.targetNodeTitle} 的 ${input.inputSlotName} 需要${input.requiredRoleLabels.join('、')}，可通过 ${input.toolName} 自动补齐。`,
+        reasonWithoutRoles: input => `${input.targetNodeTitle} 的 ${input.inputSlotName} 需要先准备或转换输入产物，可通过 ${input.toolName} 自动补齐。`,
+      },
+    })
 
     expect(plan.actions).toEqual([
       expect.objectContaining({

@@ -299,7 +299,20 @@ export function useWorkflowCanvas(input: {
 
   const workflowRepairPlan = computed(() => buildWorkflowAutoRepairPlan({
     template: editableCanvasPreset.value,
-    tools: availableWorkflowTools.value
+    tools: availableWorkflowTools.value,
+    labels: {
+      reasonWithRoles: input => t('workflow.autoRepair.reasonWithRoles', {
+        targetNodeTitle: formatKey(input.targetNodeTitle),
+        inputSlotName: input.inputSlotName,
+        requiredRoles: input.requiredRoleLabels.join(t('workflow.autoRepair.roleSeparator')),
+        toolName: input.toolName,
+      }),
+      reasonWithoutRoles: input => t('workflow.autoRepair.reasonWithoutRoles', {
+        targetNodeTitle: formatKey(input.targetNodeTitle),
+        inputSlotName: input.inputSlotName,
+        toolName: input.toolName,
+      }),
+    }
   }))
 
   const workflowRepairableCount = computed(() => workflowRepairPlan.value.repairableCount)

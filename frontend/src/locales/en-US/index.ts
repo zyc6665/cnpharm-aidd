@@ -309,6 +309,11 @@ export default {
       nodeRetried: 'Workflow node retried',
       loaded: 'Flow loaded'
     },
+    autoRepair: {
+      reasonWithRoles: '{targetNodeTitle} {inputSlotName} requires {requiredRoles}; {toolName} can auto-repair it.',
+      reasonWithoutRoles: '{targetNodeTitle} {inputSlotName} needs preparation or conversion before use; {toolName} can auto-repair it.',
+      roleSeparator: ', '
+    },
     canvasPresets: {
       kicker: 'Flow Arrangement',
       unsaved: 'Unsaved workbench arrangement',

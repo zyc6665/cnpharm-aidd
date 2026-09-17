@@ -1,7 +1,7 @@
 import type { WorkflowArtifactSemanticType } from './artifact-types'
 import type { ArtifactInputSlot, ArtifactOutputSlot } from './contract-bindings'
 import type { WorkflowCanvasEdge, WorkflowCanvasNode, WorkflowCanvasPreset } from './canvas-types'
-import { formatArtifactRole, formatArtifactRoleList } from './artifact-role-registry'
+import { formatArtifactRole } from './artifact-role-registry'
 import { normalizeWorkflowSemanticType } from './semantic-types'
 
 export interface WorkflowAutoRepairTool {
@@ -35,10 +35,29 @@ export interface WorkflowAutoRepairPlan {
   repairableCount: number
 }
 
+export interface WorkflowAutoRepairReasonInput {
+  targetNodeTitle: string
+  inputSlotName: string
+  toolName: string
+  requiredRoleLabels: readonly string[]
+}
+
+export interface WorkflowAutoRepairLabels {
+  reasonWithRoles: (input: WorkflowAutoRepairReasonInput) => string
+  reasonWithoutRoles: (input: WorkflowAutoRepairReasonInput) => string
+}
+
+const DEFAULT_WORKFLOW_AUTO_REPAIR_LABELS: WorkflowAutoRepairLabels = {
+  reasonWithRoles: input => `${input.targetNodeTitle} ${input.inputSlotName} requires ${input.requiredRoleLabels.join(', ')}; ${input.toolName} can auto-repair it.`,
+  reasonWithoutRoles: input => `${input.targetNodeTitle} ${input.inputSlotName} needs preparation or conversion before use; ${input.toolName} can auto-repair it.`,
+}
+
 export function buildWorkflowAutoRepairPlan(input: {
   template: WorkflowCanvasPreset
   tools: readonly WorkflowAutoRepairTool[]
+  labels?: WorkflowAutoRepairLabels
 }): WorkflowAutoRepairPlan {
+  const labels = input.labels ?? DEFAULT_WORKFLOW_AUTO_REPAIR_LABELS
   const nodeById = new Map(input.template.nodes.map(node => [node.id, node]))
   const toolBySlug = new Map(input.tools.map(tool => [tool.slug, tool]))
   const actions: WorkflowAutoRepairAction[] = []
@@ -80,6 +99,7 @@ export function buildWorkflowAutoRepairPlan(input: {
       }
       plannedKeys.add(actionKey)
       const requiredRoles = desiredRolesForSlot(slot)
+      const roleLabels = requiredRoles.map(formatArtifactRole)
       const targetNodeTitle = String(targetNode.titleKey || targetNode.id)
       const toolName = repairTool.name || toolSlug
 
@@ -94,8 +114,8 @@ export function buildWorkflowAutoRepairPlan(input: {
         toolSlug,
         toolName,
         requiredRoles,
-        roleLabels: requiredRoles.map(formatArtifactRole),
-        reason: repairReasonForSlot({ slot, targetNodeTitle, toolName, requiredRoles }),
+        roleLabels,
+        reason: repairReasonForSlot({ slot, targetNodeTitle, toolName, requiredRoles, roleLabels, labels }),
         position: repairNodePosition({ sourceNode, targetNode }),
       })
     }
@@ -284,9 +304,17 @@ function repairReasonForSlot(input: {
   targetNodeTitle: string
   toolName: string
   requiredRoles: readonly string[]
+  roleLabels: readonly string[]
+  labels: WorkflowAutoRepairLabels
 }): string {
-  if (input.requiredRoles.length > 0) {
-    return `${input.targetNodeTitle} 的 ${input.slot.name} 需要${formatArtifactRoleList(input.requiredRoles)}，可通过 ${input.toolName} 自动补齐。`
+  const reasonInput: WorkflowAutoRepairReasonInput = {
+    targetNodeTitle: input.targetNodeTitle,
+    inputSlotName: input.slot.name,
+    toolName: input.toolName,
+    requiredRoleLabels: input.roleLabels,
   }
-  return `${input.targetNodeTitle} 的 ${input.slot.name} 需要先准备或转换输入产物，可通过 ${input.toolName} 自动补齐。`
+  if (input.requiredRoles.length > 0) {
+    return input.labels.reasonWithRoles(reasonInput)
+  }
+  return input.labels.reasonWithoutRoles(reasonInput)
 }
