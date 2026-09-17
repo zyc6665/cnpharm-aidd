@@ -1,27 +1,33 @@
 <template>
   <section class="workflow-results-sidebar">
     <a-tabs class="workflow-results-sidebar__tabs" size="small">
-      <a-tab-pane key="node" tab="节点结果">
+      <a-tab-pane key="node" :tab="t('workflow.resultsSidebar.tabs.node')">
         <slot name="node" />
       </a-tab-pane>
-      <a-tab-pane key="inputs" tab="运行配置">
+      <a-tab-pane key="inputs" :tab="t('workflow.resultsSidebar.tabs.inputs')">
         <slot name="inputs" />
       </a-tab-pane>
-      <a-tab-pane key="preflight" tab="预检">
+      <a-tab-pane key="preflight" :tab="t('workflow.resultsSidebar.tabs.preflight')">
         <slot name="preflight" />
       </a-tab-pane>
-      <a-tab-pane key="report" tab="结果报告">
+      <a-tab-pane key="report" :tab="t('workflow.resultsSidebar.tabs.report')">
         <slot name="report" />
       </a-tab-pane>
-      <a-tab-pane key="artifacts" tab="产物">
+      <a-tab-pane key="artifacts" :tab="t('workflow.resultsSidebar.tabs.artifacts')">
         <slot name="artifacts" />
       </a-tab-pane>
-      <a-tab-pane key="history" tab="历史">
+      <a-tab-pane key="history" :tab="t('workflow.resultsSidebar.tabs.history')">
         <slot name="history" />
       </a-tab-pane>
     </a-tabs>
   </section>
 </template>
+
+<script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
+</script>
 
 <style scoped lang="less">
 @import '@/assets/styles/variables.less';

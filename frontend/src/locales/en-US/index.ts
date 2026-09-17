@@ -531,6 +531,16 @@ export default {
         empty: 'No complete result is available for decision-making yet.'
       }
     },
+    resultsSidebar: {
+      tabs: {
+        node: 'Node Results',
+        inputs: 'Run Inputs',
+        preflight: 'Preflight',
+        report: 'Report',
+        artifacts: 'Artifacts',
+        history: 'History'
+      }
+    },
     runStatus: {
       pending: 'Pending',
       ready: 'Ready',

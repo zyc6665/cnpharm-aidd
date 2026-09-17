@@ -530,6 +530,16 @@ export default {
         empty: '暂无可用于决策的完整结果。'
       }
     },
+    resultsSidebar: {
+      tabs: {
+        node: '节点结果',
+        inputs: '运行配置',
+        preflight: '预检',
+        report: '结果报告',
+        artifacts: '产物',
+        history: '历史'
+      }
+    },
     runStatus: {
       pending: '等待中',
       ready: '就绪',
