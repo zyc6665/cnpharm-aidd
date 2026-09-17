@@ -1,5 +1,7 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import i18n from '@/locales'
 import WorkflowCanvasBoard from './WorkflowCanvasBoard.vue'
 import type { WorkflowCanvasPreset } from '@/workflow/canvas-types'
@@ -28,6 +30,22 @@ const canvasPreset: WorkflowCanvasPreset = {
 }
 
 describe('WorkflowCanvasBoard', () => {
+  it('keeps canvas zoom controls in locale keys', () => {
+    const source = readFileSync(resolve('src/components/workflow/WorkflowCanvasBoard.vue'), 'utf8')
+
+    for (const marker of [
+      'workflow.canvas.zoomOut',
+      'workflow.canvas.zoomIn',
+      'workflow.canvas.resetZoom',
+    ]) {
+      expect(source).toContain(marker)
+    }
+
+    for (const literal of ['title="缩小"', 'title="放大"', '>复位<']) {
+      expect(source).not.toContain(literal)
+    }
+  })
+
   it('拖动节点端口到目标节点时应发出语义连线事件', async () => {
     const wrapper = mount(WorkflowCanvasBoard, {
       props: { preset: canvasPreset },

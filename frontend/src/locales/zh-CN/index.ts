@@ -392,7 +392,10 @@ export default {
     canvas: {
       title: '流程画布',
       nodes: '{count} 个节点',
-      edges: '{count} 条连线'
+      edges: '{count} 条连线',
+      zoomOut: '缩小',
+      zoomIn: '放大',
+      resetZoom: '复位'
     },
     palette: {
       title: '工具库',

@@ -393,7 +393,10 @@ export default {
     canvas: {
       title: 'Flow Canvas',
       nodes: '{count} nodes',
-      edges: '{count} edges'
+      edges: '{count} edges',
+      zoomOut: 'Zoom Out',
+      zoomIn: 'Zoom In',
+      resetZoom: 'Reset Zoom'
     },
     palette: {
       title: 'Tool Library',

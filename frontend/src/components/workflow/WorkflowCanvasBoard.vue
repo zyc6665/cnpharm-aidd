@@ -8,10 +8,10 @@
       <a-space size="small">
         <a-tag>{{ t('workflow.canvas.nodes', { count: preset.nodes.length }) }}</a-tag>
         <a-tag>{{ t('workflow.canvas.edges', { count: preset.edges.length }) }}</a-tag>
-        <a-button size="small" title="缩小" @click="zoomOut"><ZoomOutOutlined /></a-button>
+        <a-button size="small" :title="t('workflow.canvas.zoomOut')" @click="zoomOut"><ZoomOutOutlined /></a-button>
         <span class="zoom-value">{{ Math.round(zoom * 100) }}%</span>
-        <a-button size="small" title="放大" @click="zoomIn"><ZoomInOutlined /></a-button>
-        <a-button size="small" @click="resetZoom">复位</a-button>
+        <a-button size="small" :title="t('workflow.canvas.zoomIn')" @click="zoomIn"><ZoomInOutlined /></a-button>
+        <a-button size="small" @click="resetZoom">{{ t('workflow.canvas.resetZoom') }}</a-button>
       </a-space>
     </div>
 
