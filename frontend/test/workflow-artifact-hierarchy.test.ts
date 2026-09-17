@@ -2,7 +2,8 @@ import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
+import { buildWorkflowArtifactHierarchy } from '../src/workflow/artifact-hierarchy.ts'
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -23,9 +24,7 @@ test('工作台应存在共享产物四级层级派生器，并按分组顺序�
     '缺少 src/workflow/artifact-hierarchy.ts，共享层级派生器尚未实现'
   )
 
-  const hierarchyModule = await import(pathToFileURL(modulePath).href)
-
-  assert.equal(typeof hierarchyModule.buildWorkflowArtifactHierarchy, 'function')
+  assert.equal(typeof buildWorkflowArtifactHierarchy, 'function')
 
   const groups = [
     {
@@ -93,7 +92,7 @@ test('工作台应存在共享产物四级层级派生器，并按分组顺序�
     }
   ]
 
-  const currentHierarchy = hierarchyModule.buildWorkflowArtifactHierarchy({
+  const currentHierarchy = buildWorkflowArtifactHierarchy({
     groups,
     artifacts,
     accept: '.sdf,.csv',

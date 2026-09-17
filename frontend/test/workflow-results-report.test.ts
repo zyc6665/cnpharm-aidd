@@ -2,6 +2,7 @@ import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { buildWorkflowReportMarkdown } from '../src/workflow/report.ts'
 
 test('workflow results report panel exposes summary and export surface', () => {
   const componentPath = resolve('src/components/workflow/WorkflowResultsReportPanel.vue')
@@ -41,8 +42,6 @@ test('workflow results report panel exposes summary and export surface', () => {
 })
 
 test('workflow markdown report should use injected labels', async () => {
-  const { buildWorkflowReportMarkdown } = await import('../src/workflow/report.ts')
-
   const markdown = buildWorkflowReportMarkdown({
     workflowName: '',
     decisionSummary: 'Review failed nodes first.',

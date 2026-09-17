@@ -3,18 +3,12 @@ import assert from 'node:assert/strict'
 
 import type { ToolContract, WorkbenchGroupTool } from '../src/types/models.d.ts'
 import type { WorkflowArtifact, WorkflowTaskRef } from '../src/workflow/artifact-types.ts'
-
-async function loadModule(): Promise<typeof import('../src/workflow/contract-bindings.ts')> {
-  try {
-    return await import('../src/workflow/contract-bindings.ts')
-  } catch (error) {
-    assert.fail(
-      `预期 contract-bindings 模块可加载，当前失败：${
-        error instanceof Error ? error.message : String(error)
-      }`
-    )
-  }
-}
+import {
+  buildWorkflowPreflightReport,
+  buildWorkflowToolBindingFromContract,
+  resolveWorkflowToolBinding,
+} from '../src/workflow/contract-bindings.ts'
+import { extractArtifactsFromTaskResultWithBinding } from '../src/workflow/artifact-resolver.ts'
 
 function createContract(): ToolContract {
   return {
@@ -158,7 +152,6 @@ function createTask(): WorkflowTaskRef {
 }
 
 test('应从 ToolContract 生成工作流输入绑定和输出提取规则', async () => {
-  const { buildWorkflowToolBindingFromContract } = await loadModule()
   const binding = buildWorkflowToolBindingFromContract(createContract())
 
   assert.equal(binding?.toolSlug, 'dynamic-pocket-generator')
@@ -177,7 +170,6 @@ test('应从 ToolContract 生成工作流输入绑定和输出提取规则', asy
 })
 
 test('动态工作台工具只能使用 embedded contract 生成绑定', async () => {
-  const { resolveWorkflowToolBinding } = await loadModule()
   const binding = resolveWorkflowToolBinding(createTool(createContract()))
 
   assert.equal(binding?.toolSlug, 'dynamic-pocket-generator')
@@ -193,7 +185,6 @@ test('动态工作台工具只能使用 embedded contract 生成绑定', async (
 })
 
 test('预检报告应展示已匹配输入和预期输出', async () => {
-  const { buildWorkflowToolBindingFromContract, buildWorkflowPreflightReport } = await loadModule()
   const binding = buildWorkflowToolBindingFromContract(createContract())
 
   assert.ok(binding)
@@ -210,8 +201,6 @@ test('预检报告应展示已匹配输入和预期输出', async () => {
 })
 
 test('动态 contract 输出提取器应能从任务结果生成语义产物', async () => {
-  const { buildWorkflowToolBindingFromContract } = await loadModule()
-  const { extractArtifactsFromTaskResultWithBinding } = await import('../src/workflow/artifact-resolver.ts')
   const binding = buildWorkflowToolBindingFromContract(createContract())
 
   assert.ok(binding)

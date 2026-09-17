@@ -1,10 +1,10 @@
 <template>
   <div class="workflow-node-inline-preview">
-    <a-empty v-if="!task" class="inline-preview-empty" description="暂无运行结果" />
+    <a-empty v-if="!task" class="inline-preview-empty" :description="t('workflow.inlinePreview.empty')" />
 
     <div v-else-if="isRunning" class="inline-preview-running">
       <div class="inline-preview-status-row">
-        <span>运行中</span>
+        <span>{{ t('workflow.inlinePreview.running') }}</span>
         <strong>{{ progress }}%</strong>
       </div>
       <a-progress :percent="progress" size="small" status="active" />
@@ -12,8 +12,8 @@
     </div>
 
     <div v-else-if="isFailure" class="inline-preview-error">
-      <strong>运行失败</strong>
-      <p>{{ task.error_message || '请查看任务日志定位失败原因。' }}</p>
+      <strong>{{ t('workflow.inlinePreview.failed') }}</strong>
+      <p>{{ task.error_message || t('workflow.inlinePreview.failureFallback') }}</p>
     </div>
 
     <div v-else-if="hasOutputs" class="inline-preview-success">
@@ -31,8 +31,8 @@
           class="inline-preview-expand-button"
           size="small"
           shape="circle"
-          title="放大查看"
-          aria-label="放大查看"
+          :title="t('workflow.inlinePreview.expand')"
+          :aria-label="t('workflow.inlinePreview.expand')"
           data-placement="top-left"
           data-appearance="light"
           @click.stop="previewOpen = true"
@@ -45,7 +45,7 @@
         v-model:open="previewOpen"
         class="workflow-node-preview-modal"
         wrap-class-name="workflow-node-preview-modal-wrap"
-        title="结果预览"
+        :title="t('workflow.inlinePreview.previewTitle')"
         :footer="null"
         :width="'min(1120px, 92vw)'"
         :destroy-on-close="true"
@@ -58,12 +58,13 @@
       </a-modal>
     </div>
 
-    <a-empty v-else class="inline-preview-empty" description="任务已完成，暂无可预览产物" />
+    <a-empty v-else class="inline-preview-empty" :description="t('workflow.inlinePreview.noPreviewableArtifacts')" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { FullscreenOutlined } from '@ant-design/icons-vue'
 import ResultVisualizationPanel from '@/components/tasks/ResultVisualizationPanel.vue'
 import { normalizeTaskStatus } from '@/domain/tasks'
@@ -75,6 +76,7 @@ const props = defineProps<{
   artifacts?: ArtifactFile[]
 }>()
 
+const { t } = useI18n()
 const previewOpen = ref(false)
 
 watch(

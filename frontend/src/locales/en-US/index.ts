@@ -541,6 +541,15 @@ export default {
         history: 'History'
       }
     },
+    inlinePreview: {
+      empty: 'No run result yet',
+      running: 'Running',
+      failed: 'Run failed',
+      failureFallback: 'Check task logs to diagnose the failure.',
+      expand: 'Expand Preview',
+      previewTitle: 'Result Preview',
+      noPreviewableArtifacts: 'Task completed with no previewable artifact'
+    },
     runStatus: {
       pending: 'Pending',
       ready: 'Ready',

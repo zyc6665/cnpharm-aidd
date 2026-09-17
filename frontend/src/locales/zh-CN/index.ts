@@ -540,6 +540,15 @@ export default {
         history: '历史'
       }
     },
+    inlinePreview: {
+      empty: '暂无运行结果',
+      running: '运行中',
+      failed: '运行失败',
+      failureFallback: '请查看任务日志定位失败原因。',
+      expand: '放大查看',
+      previewTitle: '结果预览',
+      noPreviewableArtifacts: '任务已完成，暂无可预览产物'
+    },
     runStatus: {
       pending: '等待中',
       ready: '就绪',

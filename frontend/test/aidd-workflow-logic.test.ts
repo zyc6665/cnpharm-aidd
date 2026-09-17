@@ -5,44 +5,9 @@ import type {
   WorkflowArtifact,
   WorkflowArtifactSemanticType,
   WorkflowStepKey,
-  WorkflowStepStatus,
-  WorkflowTaskRef
 } from '../src/workflow/artifact-types.ts'
-
-type SelectLatestValidArtifactBySemanticType = (input: {
-  artifacts: WorkflowArtifact[]
-  semanticType: WorkflowArtifactSemanticType
-  invalidArtifactIds?: Iterable<string>
-}) => WorkflowArtifact | null
-
-type MapTaskStatusToWorkflowStepStatus = (taskStatus: WorkflowTaskRef['status']) => Extract<
-  WorkflowStepStatus,
-  'running' | 'completed' | 'failed'
->
-
-async function loadNamedFunction<T extends (...args: never[]) => unknown>(
-  moduleRelativePath: string,
-  exportName: string
-): Promise<T> {
-  try {
-    const module = (await import(moduleRelativePath)) as Record<string, unknown>
-    const exportedValue = module[exportName]
-
-    assert.equal(
-      typeof exportedValue,
-      'function',
-      `预期 ${moduleRelativePath} 导出函数 ${exportName}，但当前导出类型为 ${typeof exportedValue}`
-    )
-
-    return exportedValue as T
-  } catch (error) {
-    assert.fail(
-      `预期 ${moduleRelativePath} 可加载且导出函数 ${exportName}，当前模块无法加载或导出缺失：${
-        error instanceof Error ? error.message : String(error)
-      }`
-    )
-  }
-}
+import { selectLatestValidArtifactBySemanticType } from '../src/workflow/artifact-resolver.ts'
+import { mapTaskStatusToWorkflowStepStatus } from '../src/workflow/task-state.ts'
 
 function createArtifact(input: {
   id: string
@@ -63,12 +28,6 @@ function createArtifact(input: {
 }
 
 test('应从多个候选产物中选出最新且仍然有效的语义结果', async () => {
-  const selectLatestValidArtifactBySemanticType =
-    await loadNamedFunction<SelectLatestValidArtifactBySemanticType>(
-      '../src/workflow/artifact-resolver.ts',
-      'selectLatestValidArtifactBySemanticType'
-    )
-
   const selectedArtifact = selectLatestValidArtifactBySemanticType({
     semanticType: 'generated_ligand',
     invalidArtifactIds: ['ligand-newest-invalid'],
@@ -108,12 +67,6 @@ test('应从多个候选产物中选出最新且仍然有效的语义结果', as
 })
 
 test('任务状态应映射为 workflow 的 running / completed / failed', async () => {
-  const mapTaskStatusToWorkflowStepStatus =
-    await loadNamedFunction<MapTaskStatusToWorkflowStepStatus>(
-      '../src/workflow/task-state.ts',
-      'mapTaskStatusToWorkflowStepStatus'
-    )
-
   assert.equal(mapTaskStatusToWorkflowStepStatus('pending'), 'running')
   assert.equal(mapTaskStatusToWorkflowStepStatus('running'), 'running')
   assert.equal(mapTaskStatusToWorkflowStepStatus('success'), 'completed')

@@ -1,8 +1,40 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import i18n from '@/locales'
 import WorkflowNodeInlinePreview from './WorkflowNodeInlinePreview.vue'
 
 describe('WorkflowNodeInlinePreview', () => {
+  it('keeps inline preview copy in locale keys', () => {
+    const source = readFileSync(resolve('src/components/workflow/WorkflowNodeInlinePreview.vue'), 'utf8')
+
+    for (const marker of [
+      'useI18n',
+      'workflow.inlinePreview.empty',
+      'workflow.inlinePreview.running',
+      'workflow.inlinePreview.failed',
+      'workflow.inlinePreview.failureFallback',
+      'workflow.inlinePreview.expand',
+      'workflow.inlinePreview.previewTitle',
+      'workflow.inlinePreview.noPreviewableArtifacts',
+    ]) {
+      expect(source).toContain(marker)
+    }
+
+    for (const literal of [
+      '暂无运行结果',
+      '运行中',
+      '运行失败',
+      '请查看任务日志定位失败原因。',
+      '放大查看',
+      '结果预览',
+      '任务已完成，暂无可预览产物',
+    ]) {
+      expect(source).not.toContain(literal)
+    }
+  })
+
   it('shows a lightweight running state while task is running', () => {
     const wrapper = mount(WorkflowNodeInlinePreview, {
       props: {
@@ -10,7 +42,7 @@ describe('WorkflowNodeInlinePreview', () => {
         task: { id: 'task-1', status: 'running', progress: 40, output_files: [] } as never,
         artifacts: [],
       },
-      global: { stubs: { AProgress: true, AEmpty: true, ResultVisualizationPanel: true } },
+      global: { plugins: [i18n], stubs: { AProgress: true, AEmpty: true, ResultVisualizationPanel: true } },
     })
 
     expect(wrapper.text()).toContain('40%')
@@ -29,6 +61,7 @@ describe('WorkflowNodeInlinePreview', () => {
         artifacts: [],
       },
       global: {
+        plugins: [i18n],
         stubs: {
           AEmpty: true,
           AProgress: true,
@@ -60,6 +93,7 @@ describe('WorkflowNodeInlinePreview', () => {
         artifacts: [],
       },
       global: {
+        plugins: [i18n],
         stubs: {
           AEmpty: true,
           AProgress: true,
