@@ -37,6 +37,7 @@ test('工作台页面应通过 composable 和子组件组装，而不是继续�
   assert.equal(pageSource.includes('useWorkflowExecution'), false)
   assert.equal(pageSource.includes('WorkflowCanvasBoard'), true)
   assert.equal(pageSource.includes('WorkflowCanvasToolbar'), false)
+  assert.equal(existsSync(resolve(rootDir, 'src/components/workflow/WorkflowCanvasToolbar.vue')), false)
   assert.equal(pageSource.includes('WorkflowRunInputPanel'), true)
   assert.equal(pageSource.includes('WorkflowWorkbenchRail'), true)
   assert.equal(railSource.includes('WorkflowToolPalette'), true)

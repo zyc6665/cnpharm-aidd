@@ -99,7 +99,6 @@ const stubs = {
   WorkflowRunInputPanel: true,
   WorkflowRunStatusPanel: true,
   WorkflowCanvasBoard: true,
-  WorkflowCanvasToolbar: true,
   WorkflowToolPalette: true,
 }
 
