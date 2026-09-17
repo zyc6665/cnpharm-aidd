@@ -57,11 +57,11 @@
     const value = route.params.runId
     return Array.isArray(value) ? value[0] : value
   })
-  const runTitle = computed(() => workflowStore.activeWorkflowRun?.name || '工作流运行详情')
+  const runTitle = computed(() => workflowStore.activeWorkflowRun?.name || t('workflow.runDetail.title'))
   const runSubtitle = computed(() => {
     const run = workflowStore.activeWorkflowRun
     if (!run) {
-      return '查看运行节点、任务和错误状态'
+      return t('workflow.runDetail.subtitle')
     }
     return `Run ID: ${run.id}`
   })
@@ -79,7 +79,7 @@
 
   async function handleCancel() {
     await workflowStore.cancelActiveWorkflowRun(runId.value)
-    message.success('工作流运行已取消')
+    message.success(t('workflow.runDetail.canceled'))
   }
 
   async function handleRetryNode(nodeId: string) {
@@ -87,7 +87,7 @@
       return
     }
     await workflowStore.retryWorkflowRunNode(runId.value, nodeId)
-    message.success('工作流节点已重试')
+    message.success(t('workflow.runDetail.nodeRetried'))
   }
 
   function goBackToWorkflow() {

@@ -51,14 +51,14 @@
                 :loading="workflowDefinitionsStore.saving"
                 @click="handleSaveWorkflow"
               >
-                保存
+                {{ t('workflow.definition.save') }}
               </a-button>
               <a-button
                 :disabled="!selectedSavedWorkflowId"
                 :loading="workflowDefinitionsStore.loading"
                 @click="handleLoadWorkflow"
               >
-                加载
+                {{ t('workflow.definition.load') }}
               </a-button>
               <a-button
                 :disabled="!selectedSavedWorkflowId"
@@ -95,13 +95,13 @@
                   {{ t('workflow.definition.delete') }}
                 </a-button>
               </a-popconfirm>
-              <a-tag v-if="routeProjectId" color="blue">项目工作流</a-tag>
+              <a-tag v-if="routeProjectId" color="blue">{{ t('workflow.definition.projectScoped') }}</a-tag>
               <a-button
                 :disabled="workflowStore.isRunningWorkflowDefinition"
                 :loading="workflowStore.isRunningWorkflowDefinition"
                 @click="handleRunWorkflowDefinition"
               >
-                运行工作流
+                {{ t('workflow.definition.runWorkflowDefinition') }}
               </a-button>
             </template>
 

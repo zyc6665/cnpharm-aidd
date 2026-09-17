@@ -276,11 +276,15 @@ export default {
       namePlaceholder: 'Flow name',
       loadPlaceholder: 'Saved flows',
       new: 'New',
+      save: 'Save',
+      load: 'Load',
       duplicate: 'Duplicate',
       archive: 'Archive',
       archiveConfirm: 'Archive the current flow? Archived flows are hidden from the default list and run records are kept.',
       delete: 'Delete',
-      templateLabel: 'Flow mode'
+      templateLabel: 'Flow mode',
+      projectScoped: 'Project Workflow',
+      runWorkflowDefinition: 'Run Workflow'
     },
     canvasPresets: {
       kicker: 'Flow Arrangement',
@@ -484,6 +488,12 @@ export default {
         title: 'Loop',
         description: 'Repeat inner tools until convergence or iteration limit'
       }
+    },
+    runDetail: {
+      title: 'Workflow Run Detail',
+      subtitle: 'Review run nodes, tasks, and error states',
+      canceled: 'Workflow run canceled',
+      nodeRetried: 'Workflow node retried'
     },
     runStatus: {
       pending: 'Pending',

@@ -9,6 +9,7 @@ const persistenceSource = readFileSync(resolve('src/composables/useWorkflowPersi
 const paletteSource = readFileSync(resolve('src/components/workflow/WorkflowToolPalette.vue'), 'utf8')
 const railSource = readFileSync(resolve('src/components/workflow/WorkflowWorkbenchRail.vue'), 'utf8')
 const shellSource = readFileSync(resolve('src/components/workflow/WorkflowWorkbenchShell.vue'), 'utf8')
+const runDetailSource = readFileSync(resolve('src/views/workflow/RunDetail.vue'), 'utf8')
 
 test('workflow page mounts template canvas and inspector in manual mode', () => {
   for (const marker of [
@@ -79,6 +80,39 @@ test('workflow page exposes workflow result report integration', () => {
 test('workflow page keeps agent mode available', () => {
   assert.equal(pageSource.includes('AiddAgentPanel'), true)
   assert.equal(pageSource.includes("key=\"agent\""), true)
+})
+
+test('workflow page and run detail user-facing copy should use locale keys', () => {
+  for (const marker of [
+    'workflow.definition.save',
+    'workflow.definition.load',
+    'workflow.definition.projectScoped',
+    'workflow.definition.runWorkflowDefinition'
+  ]) {
+    assert.equal(pageSource.includes(marker), true, `missing ${marker}`)
+  }
+
+  for (const literal of ['保存', '加载', '项目工作流', '运行工作流']) {
+    assert.equal(pageSource.includes(literal), false, `hardcoded workflow page literal: ${literal}`)
+  }
+
+  for (const marker of [
+    'workflow.runDetail.title',
+    'workflow.runDetail.subtitle',
+    'workflow.runDetail.canceled',
+    'workflow.runDetail.nodeRetried'
+  ]) {
+    assert.equal(runDetailSource.includes(marker), true, `missing ${marker}`)
+  }
+
+  for (const literal of [
+    '工作流运行详情',
+    '查看运行节点、任务和错误状态',
+    '工作流运行已取消',
+    '工作流节点已重试'
+  ]) {
+    assert.equal(runDetailSource.includes(literal), false, `hardcoded run detail literal: ${literal}`)
+  }
 })
 
 test('agent draft reuses persisted definition mapping and resets saved identity', () => {

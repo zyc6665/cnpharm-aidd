@@ -275,11 +275,15 @@ export default {
       namePlaceholder: '流程名称',
       loadPlaceholder: '已保存流程',
       new: '新建',
+      save: '保存',
+      load: '加载',
       duplicate: '复制',
       archive: '归档',
       archiveConfirm: '确认归档当前流程？归档后默认列表不再显示，可保留运行记录。',
       delete: '删除',
-      templateLabel: '流程模式'
+      templateLabel: '流程模式',
+      projectScoped: '项目工作流',
+      runWorkflowDefinition: '运行工作流'
     },
     canvasPresets: {
       kicker: '流程编排',
@@ -483,6 +487,12 @@ export default {
         title: '循环优化',
         description: '重复运行内部工具直到达到收敛条件或迭代上限'
       }
+    },
+    runDetail: {
+      title: '工作流运行详情',
+      subtitle: '查看运行节点、任务和错误状态',
+      canceled: '工作流运行已取消',
+      nodeRetried: '工作流节点已重试'
     },
     runStatus: {
       pending: '等待中',
