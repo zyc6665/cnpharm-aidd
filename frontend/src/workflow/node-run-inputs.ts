@@ -31,6 +31,11 @@ export interface ResolveRecommendedArtifactBindingsInput {
   recommendations?: readonly WorkflowNodeArtifactRecommendation[]
 }
 
+export interface ApplyRecommendedArtifactBindingsInput extends ResolveRecommendedArtifactBindingsInput {
+  formState: Record<string, unknown>
+  autoBoundArtifactByField: Record<string, ArtifactFile | undefined>
+}
+
 export interface WorkflowNodeRunInputSurface {
   schema?: ToolSchema
   flattenedSchema: ToolSchema
@@ -134,6 +139,20 @@ export function resolveRecommendedArtifactBindings(
   }
 
   return bindings
+}
+
+export function applyRecommendedArtifactBindings(
+  input: ApplyRecommendedArtifactBindingsInput,
+): string[] {
+  const bindings = resolveRecommendedArtifactBindings(input)
+
+  for (const [fileFieldKey, artifact] of Object.entries(bindings)) {
+    input.selectedArtifacts[fileFieldKey] = artifact
+    input.formState[fileFieldKey] = artifact.id
+    input.autoBoundArtifactByField[fileFieldKey] = artifact
+  }
+
+  return Object.keys(bindings)
 }
 
 export function buildAutoBoundArtifactCards(input: {

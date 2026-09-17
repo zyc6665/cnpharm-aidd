@@ -100,8 +100,8 @@
   } from '@/domain/tools'
   import type { WorkflowNodeArtifactRecommendation } from '@/workflow/canvas-artifacts'
   import {
+    applyRecommendedArtifactBindings,
     buildAutoBoundArtifactCards,
-    resolveRecommendedArtifactBindings,
     resolveWorkflowNodeRunInputSurface
   } from '@/workflow/node-run-inputs'
 
@@ -216,18 +216,15 @@
       return
     }
 
-    const bindings = resolveRecommendedArtifactBindings({
+    applyRecommendedArtifactBindings({
       fileFieldKeys,
       flattenedSchema: flattenedSchema.value,
       selectedArtifacts,
       fileList,
+      formState,
+      autoBoundArtifactByField,
       recommendations: props.recommendedArtifacts ?? []
     })
-    for (const [fileFieldKey, artifact] of Object.entries(bindings)) {
-      selectedArtifacts[fileFieldKey] = artifact
-      formState[fileFieldKey] = artifact.id
-      autoBoundArtifactByField[fileFieldKey] = artifact
-    }
   }
 
   function applyInitialFormState(resetDraft = false) {

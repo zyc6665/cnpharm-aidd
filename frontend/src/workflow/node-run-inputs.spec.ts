@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { ArtifactFile, ToolSchema } from '@/types/models'
 import type { WorkflowNodeArtifactRecommendation } from './canvas-artifacts'
 import {
+  applyRecommendedArtifactBindings,
   buildAutoBoundArtifactCards,
   buildArtifactInputSchema,
   resolveRecommendedArtifactBindings,
@@ -192,6 +193,44 @@ describe('workflow node run inputs', () => {
     })).toEqual({
       protein_pdb: proteinArtifact,
     })
+  })
+
+  it('applies recommended artifact bindings into run form state', () => {
+    const flattenedSchema: ToolSchema = {
+      type: 'object',
+      properties: {
+        protein_pdb: {
+          type: 'string',
+          format: 'file',
+          title: 'Protein receptor structure',
+        },
+      },
+      required: ['protein_pdb'],
+    }
+    const proteinArtifact = artifact({ id: 'file-protein', filename: '1A2B.pdb' })
+    const selectedArtifacts: Record<string, ArtifactFile | undefined> = {}
+    const formState: Record<string, unknown> = {}
+    const autoBoundArtifactByField: Record<string, ArtifactFile | undefined> = {}
+
+    expect(applyRecommendedArtifactBindings({
+      fileFieldKeys: ['protein_pdb'],
+      flattenedSchema,
+      selectedArtifacts,
+      fileList: {},
+      formState,
+      autoBoundArtifactByField,
+      recommendations: [
+        {
+          edgeId: 'edge-protein',
+          sourceNodeId: 'fetch-pdb-node',
+          semanticType: 'protein_structure@1',
+          artifact: proteinArtifact,
+        },
+      ],
+    })).toEqual(['protein_pdb'])
+    expect(selectedArtifacts.protein_pdb).toBe(proteinArtifact)
+    expect(formState.protein_pdb).toBe('file-protein')
+    expect(autoBoundArtifactByField.protein_pdb).toBe(proteinArtifact)
   })
 
   it('builds compact auto-bound artifact cards from schema labels', () => {
