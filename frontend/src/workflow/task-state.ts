@@ -1,5 +1,5 @@
 import type { Task, TaskStatus } from '@/types/models'
-import type { WorkflowStepKey, WorkflowStepRecord, WorkflowStepStatus, WorkflowTaskRef } from './artifact-types.ts'
+import type { WorkflowStepStatus, WorkflowTaskRef } from './artifact-types.ts'
 
 type WorkflowTaskDrivenStatus = Extract<WorkflowStepStatus, 'running' | 'completed' | 'failed'>
 
@@ -35,19 +35,5 @@ export function toWorkflowTaskRef(task: Task | WorkflowTaskRef): WorkflowTaskRef
     output_data: task.output_data,
     output_files: task.output_files,
     binding_decisions: task.binding_decisions
-  }
-}
-
-export function buildWorkflowStepRecordFromTask(input: {
-  stepKey: WorkflowStepKey
-  task: WorkflowTaskRef
-  previousStepRecord?: WorkflowStepRecord
-}): WorkflowStepRecord {
-  return {
-    ...input.previousStepRecord,
-    status: mapTaskStatusToWorkflowStepStatus(input.task.status),
-    toolSlug: input.task.tool_slug ?? input.previousStepRecord?.toolSlug,
-    task: input.task,
-    errorMessage: input.task.error_message ?? undefined
   }
 }

@@ -77,29 +77,26 @@ test('工具工作台 store 应启用持久化并声明核心状态与动作', (
   assert.equal(source.includes('setToolFormDraft'), true)
 })
 
-test('流程步骤 catalog 模块文件应存在', () => {
-  assert.equal(existsSync(resolve(rootDir, 'src/workflow/aidd-catalog.ts')), true)
+test('固定步骤 catalog 与步骤状态机模块不应作为工作流地基残留', () => {
+  assert.equal(existsSync(resolve(rootDir, 'src/workflow/aidd-catalog.ts')), false)
+  assert.equal(existsSync(resolve(rootDir, 'src/workflow/workflow-state.ts')), false)
+  assert.equal(existsSync(resolve(rootDir, 'src/workflow/step-tools.ts')), false)
 })
 
-test('流程步骤 catalog 应定义固定五步顺序', () => {
-  const catalogSource = readSource('src/workflow/aidd-catalog.ts')
-
-  assert.equal(catalogSource.includes('pocketExploration'), true)
-  assert.equal(catalogSource.includes('moleculeGenerationOrVirtualScreening'), true)
-  assert.equal(catalogSource.includes('molecularDockingAndAffinityPrediction'), true)
-  assert.equal(catalogSource.includes('propertyPrediction'), true)
-  assert.equal(catalogSource.includes('leadOptimization'), true)
-  assert.equal(catalogSource.includes('toolSlugs'), true)
-})
-
-test('流程产物类型模块文件应存在并导出核心骨架', () => {
+test('流程产物类型模块应只导出节点运行需要的核心骨架', () => {
   const source = readSource('src/workflow/artifact-types.ts')
 
   assert.equal(source.includes('WorkflowStepKey'), true)
   assert.equal(source.includes('WorkflowStepStatus'), true)
   assert.equal(source.includes('WorkflowArtifactSemanticType'), true)
-  assert.equal(source.includes('WorkflowSession'), true)
-  assert.equal(source.includes('WorkflowStepRecord'), true)
+  assert.equal(source.includes('WorkflowTaskRef'), true)
+  assert.equal(source.includes('WorkflowArtifact'), true)
+  assert.equal(source.includes('interface WorkflowSession'), false)
+  assert.equal(source.includes('interface WorkflowStepRecord'), false)
+  assert.equal(source.includes('WorkflowStepDraftMap'), false)
+  assert.equal(source.includes('WorkflowSelectedToolMap'), false)
+  assert.equal(source.includes('WorkflowStepStateMap'), false)
+  assert.equal(source.includes('WorkflowTaskMap'), false)
 })
 
 test('流程工具绑定应由契约模块提供，且不存在静态 fallback 映射', () => {

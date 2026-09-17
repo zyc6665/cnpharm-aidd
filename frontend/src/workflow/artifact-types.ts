@@ -61,29 +61,3 @@ export type WorkflowTaskRef = Pick<
     | 'output_files'
     | 'binding_decisions'
   >
-
-export interface WorkflowStepRecord {
-  status: WorkflowStepStatus
-  toolSlug?: string
-  task?: WorkflowTaskRef
-  errorMessage?: string
-  updatedAt?: string
-}
-
-export type WorkflowStepDraftMap = Partial<Record<WorkflowStepKey, Record<string, unknown>>>
-export type WorkflowSelectedToolMap = Partial<Record<WorkflowStepKey, string>>
-export type WorkflowStepStateMap = Partial<Record<WorkflowStepKey, WorkflowStepRecord>>
-export type WorkflowTaskMap = Partial<Record<WorkflowStepKey, WorkflowTaskRef>>
-
-export interface WorkflowSession {
-  sessionId: string
-  activeStepKey: WorkflowStepKey
-  selectedToolByStep: WorkflowSelectedToolMap
-  stepFormDrafts: WorkflowStepDraftMap
-  taskByStep: WorkflowTaskMap
-  stepStateByKey: WorkflowStepStateMap
-  artifacts: WorkflowArtifact[]
-  invalidArtifactIds: string[]
-  lastUpdatedAt: string
-  ownerUserId?: string
-}
