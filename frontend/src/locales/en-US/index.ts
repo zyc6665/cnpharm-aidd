@@ -297,6 +297,18 @@ export default {
       projectScoped: 'Project Workflow',
       runWorkflowDefinition: 'Run Workflow'
     },
+    persistence: {
+      untitledWorkflow: 'Untitled Workflow',
+      duplicateName: '{name} Copy',
+      saved: 'Flow saved',
+      duplicated: 'Flow duplicated',
+      archived: 'Flow archived',
+      deleted: 'Flow deleted',
+      draftSaved: 'Workflow draft saved',
+      runCanceled: 'Workflow run canceled',
+      nodeRetried: 'Workflow node retried',
+      loaded: 'Flow loaded'
+    },
     canvasPresets: {
       kicker: 'Flow Arrangement',
       unsaved: 'Unsaved workbench arrangement',

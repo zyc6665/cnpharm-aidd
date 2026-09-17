@@ -1,4 +1,6 @@
 import { computed } from 'vue'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getTaskDetail } from '@/api/tasks'
 import type { ToolContract } from '@/types/models'
@@ -298,6 +300,32 @@ describe('mapWorkflowDefinitionToCanvasPayload', () => {
 })
 
 describe('useWorkflowPersistence API', () => {
+  it('keeps persistence messages behind injected labels', () => {
+    const source = readFileSync(resolve('src/composables/useWorkflowPersistence.ts'), 'utf8')
+    const pageSource = readFileSync(resolve('src/views/workflow/index.vue'), 'utf8')
+
+    expect(source).toContain('WorkflowPersistenceLabels')
+    expect(source).toContain('DEFAULT_WORKFLOW_PERSISTENCE_LABELS')
+    expect(pageSource).toContain('workflowPersistenceLabels')
+    expect(pageSource).toContain('workflow.persistence.untitledWorkflow')
+
+    for (const literal of [
+      '未命名流程',
+      '流程已保存',
+      '流程已复制',
+      '流程已归档',
+      '流程已删除',
+      '工作流草稿已保存',
+      '工作流运行已取消',
+      '工作流节点已重试',
+      '流程已加载',
+      '请求层会展示错误信息',
+      '流程定义已经加载',
+    ]) {
+      expect(source).not.toContain(literal)
+    }
+  })
+
   beforeEach(() => {
     vi.mocked(getTaskDetail).mockReset()
   })

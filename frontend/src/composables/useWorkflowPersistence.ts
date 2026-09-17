@@ -36,6 +36,32 @@ type WorkflowStore = ReturnType<typeof useWorkflowStore>
 type WorkflowDefinitionsStore = ReturnType<typeof useWorkflowDefinitionsStore>
 type WorkflowToolContractLookup = Record<string, { contract?: ToolContract | null } | undefined>
 
+export interface WorkflowPersistenceLabels {
+  untitledWorkflow: string
+  duplicateName: (name: string) => string
+  saved: string
+  duplicated: string
+  archived: string
+  deleted: string
+  draftSaved: string
+  runCanceled: string
+  nodeRetried: string
+  loaded: string
+}
+
+const DEFAULT_WORKFLOW_PERSISTENCE_LABELS: WorkflowPersistenceLabels = {
+  untitledWorkflow: 'Untitled Workflow',
+  duplicateName: name => `${name} Copy`,
+  saved: 'Workflow saved',
+  duplicated: 'Workflow duplicated',
+  archived: 'Workflow archived',
+  deleted: 'Workflow deleted',
+  draftSaved: 'Workflow draft saved',
+  runCanceled: 'Workflow run canceled',
+  nodeRetried: 'Workflow node retried',
+  loaded: 'Workflow loaded',
+}
+
 export function useWorkflowPersistence(input: {
   userStore: UserStore
   artifactsStore: ArtifactsStore
@@ -50,6 +76,7 @@ export function useWorkflowPersistence(input: {
   workflowInputRequirements: ComputedRef<string[]>
   workflowToolsBySlug?: ComputedRef<WorkflowToolContractLookup>
   buildCurrentWorkflowDefinition: () => WorkflowDefinition
+  labels?: ComputedRef<WorkflowPersistenceLabels>
 }) {
   const {
     userStore,
@@ -63,7 +90,8 @@ export function useWorkflowPersistence(input: {
     buildCurrentWorkflowDefinition
   } = input
 
-  const workflowName = ref('未命名流程')
+  const persistenceLabels = computed(() => input.labels?.value ?? DEFAULT_WORKFLOW_PERSISTENCE_LABELS)
+  const workflowName = ref(persistenceLabels.value.untitledWorkflow)
   const selectedSavedWorkflowId = ref<string | undefined>()
   const workflowRunInputSelections = ref<Record<string, string | undefined>>({})
   const workflowRunAutoSyncTimer = ref<number | null>(null)
@@ -109,9 +137,9 @@ export function useWorkflowPersistence(input: {
       )
       selectedSavedWorkflowId.value = saved.id
       workflowName.value = saved.name
-      message.success('流程已保存')
+      message.success(persistenceLabels.value.saved)
     } catch {
-      // 请求层会展示错误信息。
+      // Request layer displays error details.
     }
   }
 
@@ -120,7 +148,7 @@ export function useWorkflowPersistence(input: {
     workflowStore.clearActiveWorkflowRun()
     workflowDefinitionsStore.clearCurrentWorkflowDefinition()
     selectedSavedWorkflowId.value = undefined
-    workflowName.value = '未命名流程'
+    workflowName.value = persistenceLabels.value.untitledWorkflow
     workflowRunInputSelections.value = {}
   }
 
@@ -130,7 +158,9 @@ export function useWorkflowPersistence(input: {
       return
     }
 
-    const name = `${workflowName.value.trim() || selectedWorkflow?.name || '未命名流程'} 副本`
+    const name = persistenceLabels.value.duplicateName(
+      workflowName.value.trim() || selectedWorkflow?.name || persistenceLabels.value.untitledWorkflow
+    )
     try {
       const saved = await workflowDefinitionsStore.saveWorkflowDefinition({
         ...buildWorkflowDefinitionPayload(name),
@@ -138,9 +168,9 @@ export function useWorkflowPersistence(input: {
       })
       selectedSavedWorkflowId.value = saved.id
       workflowName.value = saved.name
-      message.success('流程已复制')
+      message.success(persistenceLabels.value.duplicated)
     } catch {
-      // 请求层会展示错误信息。
+      // Request layer displays error details.
     }
   }
 
@@ -152,9 +182,9 @@ export function useWorkflowPersistence(input: {
     try {
       await workflowDefinitionsStore.archiveWorkflowDefinition(selectedSavedWorkflowId.value!)
       handleNewWorkflow()
-      message.success('流程已归档')
+      message.success(persistenceLabels.value.archived)
     } catch {
-      // 请求层会展示错误信息。
+      // Request layer displays error details.
     }
   }
 
@@ -166,9 +196,9 @@ export function useWorkflowPersistence(input: {
     try {
       await workflowDefinitionsStore.removeWorkflowDefinition(selectedSavedWorkflowId.value!)
       handleNewWorkflow()
-      message.success('流程已删除')
+      message.success(persistenceLabels.value.deleted)
     } catch {
-      // 请求层会展示错误信息。
+      // Request layer displays error details.
     }
   }
 
@@ -222,7 +252,7 @@ export function useWorkflowPersistence(input: {
         toolsBySlug: workflowToolsBySlug?.value,
       })
     )
-    message.success('工作流草稿已保存')
+    message.success(persistenceLabels.value.draftSaved)
     return saved
   }
 
@@ -236,7 +266,7 @@ export function useWorkflowPersistence(input: {
     }
 
     const saved = await workflowDefinitionsStore.saveWorkflowDefinition(
-      buildWorkflowDefinitionPayload(workflowName.value.trim() || '未命名流程'),
+      buildWorkflowDefinitionPayload(workflowName.value.trim() || persistenceLabels.value.untitledWorkflow),
       selectedSavedWorkflowId.value ?? workflowDefinitionsStore.currentWorkflowDefinition?.id
     )
     selectedSavedWorkflowId.value = saved.id
@@ -304,7 +334,7 @@ export function useWorkflowPersistence(input: {
       await restoreNodeTasksFromWorkflowRun(run)
     }
     clearWorkflowRunAutoSync()
-    message.success('工作流运行已取消')
+    message.success(persistenceLabels.value.runCanceled)
   }
 
   async function handleRetryWorkflowRunNode(nodeId: string) {
@@ -317,7 +347,7 @@ export function useWorkflowPersistence(input: {
       await restoreNodeTasksFromWorkflowRun(run)
     }
     await scheduleWorkflowRunAutoSync()
-    message.success('工作流节点已重试')
+    message.success(persistenceLabels.value.nodeRetried)
   }
 
   function handleWorkflowRunDetail(runId: string) {
@@ -398,9 +428,9 @@ export function useWorkflowPersistence(input: {
         await restoreNodeTasksFromTaskBindings(sessionTaskBindings, workflow)
       }
       await tryRestoreLatestWorkflowRunForDefinition(workflow.id)
-      message.success('流程已加载')
+      message.success(persistenceLabels.value.loaded)
     } catch {
-      // 请求层会展示错误信息。
+      // Request layer displays error details.
     }
   }
 
@@ -408,7 +438,7 @@ export function useWorkflowPersistence(input: {
     try {
       await restoreLatestWorkflowRunForDefinition(workflowDefinitionId)
     } catch {
-      // 流程定义已经加载，历史运行恢复失败不应让画布重新变空。
+      // The workflow definition is already loaded; run restore failures should not clear the canvas.
     }
   }
 
@@ -496,7 +526,7 @@ export function useWorkflowPersistence(input: {
     const definition = buildCurrentWorkflowDefinition()
     return {
       ...(projectId?.value ? { project_id: projectId.value } : {}),
-      name: nameOverride ?? (workflowName.value.trim() || '未命名流程'),
+      name: nameOverride ?? (workflowName.value.trim() || persistenceLabels.value.untitledWorkflow),
       canvas_preset_id: editableCanvasPreset.value.id,
       nodes: definition.nodes,
       edges: definition.edges.map((edge, index) => ({

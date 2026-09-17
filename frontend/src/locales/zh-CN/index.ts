@@ -296,6 +296,18 @@ export default {
       projectScoped: '项目工作流',
       runWorkflowDefinition: '运行工作流'
     },
+    persistence: {
+      untitledWorkflow: '未命名流程',
+      duplicateName: '{name} 副本',
+      saved: '流程已保存',
+      duplicated: '流程已复制',
+      archived: '流程已归档',
+      deleted: '流程已删除',
+      draftSaved: '工作流草稿已保存',
+      runCanceled: '工作流运行已取消',
+      nodeRetried: '工作流节点已重试',
+      loaded: '流程已加载'
+    },
     canvasPresets: {
       kicker: '流程编排',
       unsaved: '未保存的工作台编排',

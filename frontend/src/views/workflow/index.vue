@@ -365,6 +365,19 @@
     return accumulator
   }, {}))
 
+  const workflowPersistenceLabels = computed(() => ({
+    untitledWorkflow: t('workflow.persistence.untitledWorkflow'),
+    duplicateName: (name: string) => t('workflow.persistence.duplicateName', { name }),
+    saved: t('workflow.persistence.saved'),
+    duplicated: t('workflow.persistence.duplicated'),
+    archived: t('workflow.persistence.archived'),
+    deleted: t('workflow.persistence.deleted'),
+    draftSaved: t('workflow.persistence.draftSaved'),
+    runCanceled: t('workflow.persistence.runCanceled'),
+    nodeRetried: t('workflow.persistence.nodeRetried'),
+    loaded: t('workflow.persistence.loaded'),
+  }))
+
   const {
     leftWidth: leftWorkbenchWidth,
     rightWidth: rightWorkbenchWidth,
@@ -414,7 +427,8 @@
     projectId: routeProjectId,
     workflowInputRequirements,
     workflowToolsBySlug,
-    buildCurrentWorkflowDefinition
+    buildCurrentWorkflowDefinition,
+    labels: workflowPersistenceLabels
   })
 
   const workflowPreflight = computed(() => {
