@@ -1,5 +1,6 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
+import i18n from '@/locales'
 import WorkflowWorkbenchShell from './WorkflowWorkbenchShell.vue'
 
 describe('WorkflowWorkbenchShell', () => {
@@ -22,6 +23,7 @@ describe('WorkflowWorkbenchShell', () => {
         right: '<div data-testid="results-center">results</div>',
       },
       global: {
+        plugins: [i18n],
         stubs: {
           AButton: { template: '<button><slot /></button>' },
           ATag: { template: '<span><slot /></span>' },
@@ -54,6 +56,7 @@ describe('WorkflowWorkbenchShell', () => {
         canvas: '<div data-testid="canvas-region">canvas</div>',
       },
       global: {
+        plugins: [i18n],
         stubs: {
           AButton: { template: '<button><slot /></button>' },
           ATag: { template: '<span><slot /></span>' },

@@ -9,6 +9,7 @@ const persistenceSource = readFileSync(resolve('src/composables/useWorkflowPersi
 const paletteSource = readFileSync(resolve('src/components/workflow/WorkflowToolPalette.vue'), 'utf8')
 const railSource = readFileSync(resolve('src/components/workflow/WorkflowWorkbenchRail.vue'), 'utf8')
 const shellSource = readFileSync(resolve('src/components/workflow/WorkflowWorkbenchShell.vue'), 'utf8')
+const headerSource = readFileSync(resolve('src/components/workflow/WorkflowWorkbenchHeader.vue'), 'utf8')
 const runDetailSource = readFileSync(resolve('src/views/workflow/RunDetail.vue'), 'utf8')
 
 test('workflow page mounts template canvas and inspector in manual mode', () => {
@@ -112,6 +113,29 @@ test('workflow page and run detail user-facing copy should use locale keys', () 
     '工作流节点已重试'
   ]) {
     assert.equal(runDetailSource.includes(literal), false, `hardcoded run detail literal: ${literal}`)
+  }
+})
+
+test('workflow workbench chrome status copy should use locale keys', () => {
+  for (const marker of [
+    'workflow.workbenchHeader.kicker',
+    'workflow.workbenchHeader.titleFallback',
+    'workflow.statusSummary.ready',
+    'workflow.statusSummary.blocked',
+    'workflow.statusSummary.running',
+    'workflow.statusSummary.completed',
+    'workflow.statusSummary.failed'
+  ]) {
+    assert.equal(
+      railSource.includes(marker) || headerSource.includes(marker),
+      true,
+      `missing ${marker}`
+    )
+  }
+
+  for (const literal of ['工作流工作台', '未命名工作流', '可运行', '阻塞', '运行中', '完成', '失败']) {
+    assert.equal(railSource.includes(literal), false, `hardcoded rail literal: ${literal}`)
+    assert.equal(headerSource.includes(literal), false, `hardcoded header literal: ${literal}`)
   }
 })
 

@@ -1,15 +1,15 @@
 <template>
   <header class="workflow-workbench-header">
     <div class="workflow-workbench-header__main">
-      <span class="workflow-workbench-header__kicker">工作流工作台</span>
-      <h1>{{ workflowName || '未命名工作流' }}</h1>
+      <span class="workflow-workbench-header__kicker">{{ t('workflow.workbenchHeader.kicker') }}</span>
+      <h1>{{ workflowName || t('workflow.workbenchHeader.titleFallback') }}</h1>
     </div>
 
     <a-space class="workflow-workbench-header__metrics" size="small" wrap>
-      <a-tag color="blue">可运行 {{ readyCount }}</a-tag>
-      <a-tag color="processing">运行中 {{ runningCount }}</a-tag>
-      <a-tag color="green">完成 {{ completedCount }}</a-tag>
-      <a-tag color="red">失败 {{ failedCount }}</a-tag>
+      <a-tag color="blue">{{ t('workflow.statusSummary.ready') }} {{ readyCount }}</a-tag>
+      <a-tag color="processing">{{ t('workflow.statusSummary.running') }} {{ runningCount }}</a-tag>
+      <a-tag color="green">{{ t('workflow.statusSummary.completed') }} {{ completedCount }}</a-tag>
+      <a-tag color="red">{{ t('workflow.statusSummary.failed') }} {{ failedCount }}</a-tag>
     </a-space>
 
     <div class="workflow-workbench-header__actions">
@@ -19,6 +19,8 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
 defineProps<{
   workflowName: string
   readyCount: number
@@ -26,6 +28,8 @@ defineProps<{
   completedCount: number
   failedCount: number
 }>()
+
+const { t } = useI18n()
 </script>
 
 <style scoped lang="less">

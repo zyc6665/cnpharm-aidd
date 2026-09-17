@@ -271,6 +271,17 @@ export default {
       manual: '手动模式',
       agent: '项目智能体'
     },
+    workbenchHeader: {
+      kicker: '工作流工作台',
+      titleFallback: '未命名工作流'
+    },
+    statusSummary: {
+      ready: '可运行',
+      blocked: '阻塞',
+      running: '运行中',
+      completed: '完成',
+      failed: '失败'
+    },
     definition: {
       namePlaceholder: '流程名称',
       loadPlaceholder: '已保存流程',

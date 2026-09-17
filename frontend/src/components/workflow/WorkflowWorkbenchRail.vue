@@ -13,23 +13,23 @@
 
     <div class="workflow-status-summary">
       <div class="status-summary-item is-ready">
-        <span>可运行</span>
+        <span>{{ t('workflow.statusSummary.ready') }}</span>
         <strong>{{ readyCount }}</strong>
       </div>
       <div class="status-summary-item is-blocked">
-        <span>阻塞</span>
+        <span>{{ t('workflow.statusSummary.blocked') }}</span>
         <strong>{{ blockedCount }}</strong>
       </div>
       <div class="status-summary-item is-running">
-        <span>运行中</span>
+        <span>{{ t('workflow.statusSummary.running') }}</span>
         <strong>{{ runningCount }}</strong>
       </div>
       <div class="status-summary-item is-completed">
-        <span>完成</span>
+        <span>{{ t('workflow.statusSummary.completed') }}</span>
         <strong>{{ completedCount }}</strong>
       </div>
       <div class="status-summary-item is-failed">
-        <span>失败</span>
+        <span>{{ t('workflow.statusSummary.failed') }}</span>
         <strong>{{ failedCount }}</strong>
       </div>
     </div>

@@ -272,6 +272,17 @@ export default {
       manual: 'Manual Mode',
       agent: 'Project Agent'
     },
+    workbenchHeader: {
+      kicker: 'Workflow Workbench',
+      titleFallback: 'Untitled Workflow'
+    },
+    statusSummary: {
+      ready: 'Ready',
+      blocked: 'Blocked',
+      running: 'Running',
+      completed: 'Completed',
+      failed: 'Failed'
+    },
     definition: {
       namePlaceholder: 'Flow name',
       loadPlaceholder: 'Saved flows',
