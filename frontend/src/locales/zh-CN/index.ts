@@ -505,6 +505,31 @@ export default {
       canceled: '工作流运行已取消',
       nodeRetried: '工作流节点已重试'
     },
+    resultsReport: {
+      kicker: '结果中心',
+      workflowNameFallback: '未命名工作流',
+      reportTitleSuffix: '报告',
+      decisionSummary: '决策摘要',
+      export: '导出报告',
+      nodeResults: '节点结果',
+      successNodes: '成功节点',
+      failedNodes: '失败节点',
+      artifactSummary: '产物摘要',
+      noArtifacts: '无产物',
+      artifactSummaryLine: '共 {count} 个产物。',
+      downloadFilename: 'workflow-report.md',
+      table: {
+        node: '节点',
+        status: '状态',
+        task: '任务',
+        artifacts: '产物'
+      },
+      summary: {
+        failed: '存在失败节点，建议先检查失败原因和输入产物。',
+        ready: '已有可复核产物，可进入下一步筛选或团队评审。',
+        empty: '暂无可用于决策的完整结果。'
+      }
+    },
     runStatus: {
       pending: '等待中',
       ready: '就绪',

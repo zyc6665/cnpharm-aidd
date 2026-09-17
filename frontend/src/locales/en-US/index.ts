@@ -506,6 +506,31 @@ export default {
       canceled: 'Workflow run canceled',
       nodeRetried: 'Workflow node retried'
     },
+    resultsReport: {
+      kicker: 'Results Center',
+      workflowNameFallback: 'Untitled Workflow',
+      reportTitleSuffix: 'Report',
+      decisionSummary: 'Decision Summary',
+      export: 'Export Report',
+      nodeResults: 'Node Results',
+      successNodes: 'Successful Nodes',
+      failedNodes: 'Failed Nodes',
+      artifactSummary: 'Artifact Summary',
+      noArtifacts: 'No artifacts',
+      artifactSummaryLine: '{count} artifacts total.',
+      downloadFilename: 'workflow-report.md',
+      table: {
+        node: 'Node',
+        status: 'Status',
+        task: 'Task',
+        artifacts: 'Artifacts'
+      },
+      summary: {
+        failed: 'Some nodes failed. Review failure reasons and input artifacts first.',
+        ready: 'Reviewable artifacts are available for screening or team review.',
+        empty: 'No complete result is available for decision-making yet.'
+      }
+    },
     runStatus: {
       pending: 'Pending',
       ready: 'Ready',

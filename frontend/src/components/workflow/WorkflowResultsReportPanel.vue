@@ -2,30 +2,30 @@
   <section class="workflow-results-report-panel">
     <div class="report-header">
       <div>
-        <span class="report-kicker">结果中心</span>
-        <h3>{{ workflowName || '未命名工作流' }}</h3>
-        <p><strong>决策摘要</strong>：{{ decisionSummary }}</p>
+        <span class="report-kicker">{{ t('workflow.resultsReport.kicker') }}</span>
+        <h3>{{ workflowName || t('workflow.resultsReport.workflowNameFallback') }}</h3>
+        <p><strong>{{ t('workflow.resultsReport.decisionSummary') }}</strong>: {{ decisionSummary }}</p>
       </div>
       <a-button type="primary" ghost :disabled="rows.length === 0" @click="exportWorkflowReportMarkdown">
-        导出报告
+        {{ t('workflow.resultsReport.export') }}
       </a-button>
     </div>
 
     <div class="report-metrics">
       <div class="report-metric">
-        <span>节点结果</span>
+        <span>{{ t('workflow.resultsReport.nodeResults') }}</span>
         <strong>{{ rows.length }}</strong>
       </div>
       <div class="report-metric">
-        <span>成功节点</span>
+        <span>{{ t('workflow.resultsReport.successNodes') }}</span>
         <strong>{{ successCount }}</strong>
       </div>
       <div class="report-metric">
-        <span>失败节点</span>
+        <span>{{ t('workflow.resultsReport.failedNodes') }}</span>
         <strong>{{ failedCount }}</strong>
       </div>
       <div class="report-metric">
-        <span>产物摘要</span>
+        <span>{{ t('workflow.resultsReport.artifactSummary') }}</span>
         <strong>{{ artifactCount }}</strong>
       </div>
     </div>
@@ -42,7 +42,7 @@
           <a-tag :color="statusColor(record.status)">{{ record.statusLabel || record.status }}</a-tag>
         </template>
         <template v-else-if="column.key === 'artifacts'">
-          <span v-if="record.artifacts.length === 0" class="muted-text">无产物</span>
+          <span v-if="record.artifacts.length === 0" class="muted-text">{{ t('workflow.resultsReport.noArtifacts') }}</span>
           <a-space v-else size="small" wrap>
             <a v-for="artifact in record.artifacts.slice(0, 2)" :key="artifact.id" :href="artifact.url" target="_blank">
               {{ artifact.filename }}
@@ -57,6 +57,7 @@
 
 <script setup lang="ts">
   import { computed } from 'vue'
+  import { useI18n } from 'vue-i18n'
   import { buildWorkflowReportMarkdown, type WorkflowReportRow } from '@/workflow/report'
 
   const props = defineProps<{
@@ -64,12 +65,14 @@
     rows: WorkflowReportRow[]
   }>()
 
-  const columns = [
-    { title: '节点', dataIndex: 'nodeTitle', key: 'nodeTitle' },
-    { title: '状态', dataIndex: 'status', key: 'status' },
-    { title: '任务', dataIndex: 'taskId', key: 'taskId' },
-    { title: '产物摘要', dataIndex: 'artifacts', key: 'artifacts' }
-  ]
+  const { t } = useI18n()
+
+  const columns = computed(() => [
+    { title: t('workflow.resultsReport.table.node'), dataIndex: 'nodeTitle', key: 'nodeTitle' },
+    { title: t('workflow.resultsReport.table.status'), dataIndex: 'status', key: 'status' },
+    { title: t('workflow.resultsReport.table.task'), dataIndex: 'taskId', key: 'taskId' },
+    { title: t('workflow.resultsReport.table.artifacts'), dataIndex: 'artifacts', key: 'artifacts' }
+  ])
 
   const rows = computed(() => props.rows)
   const successCount = computed(() => rows.value.filter(row => row.status === 'completed').length)
@@ -78,13 +81,27 @@
 
   const decisionSummary = computed(() => {
     if (failedCount.value > 0) {
-      return '存在失败节点，建议先检查失败原因和输入产物。'
+      return t('workflow.resultsReport.summary.failed')
     }
     if (successCount.value > 0 && artifactCount.value > 0) {
-      return '已有可复核产物，可进入下一步筛选或团队评审。'
+      return t('workflow.resultsReport.summary.ready')
     }
-    return '暂无可用于决策的完整结果。'
+    return t('workflow.resultsReport.summary.empty')
   })
+
+  const reportLabels = computed(() => ({
+    workflowNameFallback: t('workflow.resultsReport.workflowNameFallback'),
+    reportTitleSuffix: t('workflow.resultsReport.reportTitleSuffix'),
+    decisionSummaryTitle: t('workflow.resultsReport.decisionSummary'),
+    nodeResultsTitle: t('workflow.resultsReport.nodeResults'),
+    artifactSummaryTitle: t('workflow.resultsReport.artifactSummary'),
+    tableNode: t('workflow.resultsReport.table.node'),
+    tableStatus: t('workflow.resultsReport.table.status'),
+    tableTask: t('workflow.resultsReport.table.task'),
+    tableArtifacts: t('workflow.resultsReport.table.artifacts'),
+    noArtifacts: t('workflow.resultsReport.noArtifacts'),
+    artifactSummaryLine: (count: number) => t('workflow.resultsReport.artifactSummaryLine', { count })
+  }))
 
   function statusColor(status: string): string {
     const colors: Record<string, string> = {
@@ -103,13 +120,14 @@
     const report = buildWorkflowReportMarkdown({
       workflowName: props.workflowName,
       rows: rows.value,
-      decisionSummary: decisionSummary.value
+      decisionSummary: decisionSummary.value,
+      labels: reportLabels.value
     })
     const blob = new Blob([report], { type: 'text/markdown;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
     anchor.href = url
-    anchor.download = 'workflow-report.md'
+    anchor.download = t('workflow.resultsReport.downloadFilename')
     document.body.appendChild(anchor)
     anchor.click()
     document.body.removeChild(anchor)
