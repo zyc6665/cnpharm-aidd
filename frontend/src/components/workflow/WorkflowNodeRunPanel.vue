@@ -91,7 +91,11 @@
   import { getToolDetail } from '@/api/tools'
   import { useUserStore, useWorkflowStore } from '@/stores'
   import { useStandaloneNodeRun } from '@/composables/useStandaloneNodeRun'
-  import type { ArtifactFile, Tool, ToolSchema } from '@/types/models'
+  import {
+    useWorkflowNodeSelectedTool,
+    type WorkflowAvailableTool,
+  } from '@/composables/useWorkflowNodeSelectedTool'
+  import type { ArtifactFile, ToolSchema } from '@/types/models'
   import type { TypedArtifact } from '@/types/artifacts'
   import { replaceRecord } from '@/utils/record-state'
   import {
@@ -107,13 +111,6 @@
     clearAutoBoundArtifactBindings,
     resolveWorkflowNodeRunInputSurface
   } from '@/workflow/node-run-inputs'
-
-  interface WorkflowAvailableTool {
-    id?: string
-    slug: string
-    name: string
-    description?: string
-  }
 
   const props = defineProps<{
     nodeId: string
@@ -138,8 +135,6 @@
   })
 
   const formRef = ref<FormInstance>()
-  const selectedTool = ref<Tool | null>(null)
-  const selectedToolLoading = ref(false)
   const formState = reactive<Record<string, unknown>>({})
   const fileList = reactive<Record<string, UploadFile[]>>({})
   const selectedArtifacts = reactive<Record<string, ArtifactFile | undefined>>({})
@@ -147,14 +142,21 @@
   const emptyStandardProjectArtifacts: TypedArtifact[] = []
   const emptyStandardArtifactSelections: Record<string, TypedArtifact | undefined> = {}
   const emptyStandardInputFileList: Record<string, UploadFile[]> = {}
-  let detailRequestToken = 0
 
-  const selectedToolSummary = computed(() => {
-    if (!props.selectedToolSlug) {
-      return null
-    }
+  function clearNodeRunFormState() {
+    replaceRecord(formState, {})
+    replaceRecord(fileList, {})
+    replaceRecord(selectedArtifacts, {})
+    clearAutoBoundArtifactBindings(autoBoundArtifactByField)
+  }
 
-    return props.availableTools?.find(tool => tool.slug === props.selectedToolSlug) ?? null
+  const { selectedTool, selectedToolLoading } = useWorkflowNodeSelectedTool({
+    selectedToolSlug: computed(() => props.selectedToolSlug),
+    availableTools: computed(() => props.availableTools),
+    api: {
+      getToolDetail: async toolId => (await getToolDetail(toolId)).data,
+    },
+    onMissingTool: clearNodeRunFormState,
   })
 
   const currentNodeTask = computed(() => workflowStore.taskByNode[props.nodeId] ?? null)
@@ -284,37 +286,6 @@
     workflowStore.setNodeFormDraft(props.nodeId, {})
     applyInitialFormState(true)
   }
-
-  watch(
-    () => [props.selectedToolSlug, selectedToolSummary.value?.id ?? null] as const,
-    async ([selectedToolSlug, toolId]) => {
-      const requestToken = ++detailRequestToken
-
-      if (!selectedToolSlug || !toolId) {
-        selectedTool.value = null
-        selectedToolLoading.value = false
-        replaceRecord(formState, {})
-        replaceRecord(fileList, {})
-        replaceRecord(selectedArtifacts, {})
-        clearAutoBoundArtifactBindings(autoBoundArtifactByField)
-        return
-      }
-
-      selectedTool.value = null
-      selectedToolLoading.value = true
-      try {
-        const response = await getToolDetail(toolId)
-        if (requestToken === detailRequestToken) {
-          selectedTool.value = response.data
-        }
-      } finally {
-        if (requestToken === detailRequestToken) {
-          selectedToolLoading.value = false
-        }
-      }
-    },
-    { immediate: true }
-  )
 
   watch(
     () => [props.nodeId, props.selectedToolSlug, flattenedSchema.value] as const,
