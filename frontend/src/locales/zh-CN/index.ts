@@ -397,6 +397,16 @@ export default {
       zoomIn: '放大',
       resetZoom: '复位'
     },
+    canvasNode: {
+      connectTo: '连接到此节点',
+      connectFrom: '从此节点连接',
+      run: '运行',
+      delete: '删除节点',
+      inputs: '输入 {count}',
+      outputs: '输出 {count}',
+      noIo: '暂无输入输出约束',
+      previewHint: '选择节点查看配置与结果'
+    },
     palette: {
       title: '工具库',
       toolsAvailable: '{count} 个工具可用',

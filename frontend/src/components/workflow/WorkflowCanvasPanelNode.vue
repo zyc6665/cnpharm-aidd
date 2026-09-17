@@ -18,7 +18,7 @@
       type="button"
       class="node-port node-port-input"
       :data-node-port="`${node.id}-input`"
-      aria-label="连接到此节点"
+      :aria-label="t('workflow.canvasNode.connectTo')"
       @pointerup.stop="$emit('finish-connect', node.id)"
       @pointerdown.stop
     />
@@ -27,7 +27,7 @@
       type="button"
       class="node-port node-port-output"
       :data-node-port="`${node.id}-output`"
-      aria-label="从此节点连接"
+      :aria-label="t('workflow.canvasNode.connectFrom')"
       @pointerdown.stop="$emit('start-connect', node.id)"
     />
 
@@ -47,13 +47,13 @@
           @click.stop="$emit('run-node', node.id)"
           @pointerdown.stop
         >
-          运行
+          {{ t('workflow.canvasNode.run') }}
         </button>
         <button
           v-if="deletable"
           type="button"
           class="panel-node-delete-button"
-          aria-label="Delete node"
+          :aria-label="t('workflow.canvasNode.delete')"
           @click.stop="$emit('delete-node', node.id)"
           @pointerdown.stop
         >
@@ -66,20 +66,20 @@
       <div class="panel-node-summary">
         <slot name="summary">
           <span v-if="node.requiredInputTypes?.length" class="panel-node-chip">
-            输入 {{ node.requiredInputTypes.length }}
+            {{ t('workflow.canvasNode.inputs', { count: node.requiredInputTypes.length }) }}
           </span>
           <span v-if="node.producedOutputTypes?.length" class="panel-node-chip">
-            输出 {{ node.producedOutputTypes.length }}
+            {{ t('workflow.canvasNode.outputs', { count: node.producedOutputTypes.length }) }}
           </span>
           <span v-if="!node.requiredInputTypes?.length && !node.producedOutputTypes?.length" class="panel-node-muted">
-            暂无输入输出约束
+            {{ t('workflow.canvasNode.noIo') }}
           </span>
         </slot>
       </div>
 
       <div class="panel-node-preview">
         <slot name="preview">
-          <span class="panel-node-muted">选择节点查看配置与结果</span>
+          <span class="panel-node-muted">{{ t('workflow.canvasNode.previewHint') }}</span>
         </slot>
       </div>
 
@@ -92,6 +92,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { WorkflowStepStatus } from '@/workflow/artifact-types'
 import type { WorkflowCanvasNode } from '@/workflow/canvas-types'
 import WorkflowNodeStatusBadge from './WorkflowNodeStatusBadge.vue'
@@ -105,6 +106,8 @@ const props = defineProps<{
   deletable?: boolean
   scale?: number
 }>()
+
+const { t } = useI18n()
 
 const emit = defineEmits<{
   (event: 'select-node', nodeId: string): void

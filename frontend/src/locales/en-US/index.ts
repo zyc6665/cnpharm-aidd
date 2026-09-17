@@ -398,6 +398,16 @@ export default {
       zoomIn: 'Zoom In',
       resetZoom: 'Reset Zoom'
     },
+    canvasNode: {
+      connectTo: 'Connect to this node',
+      connectFrom: 'Connect from this node',
+      run: 'Run',
+      delete: 'Delete node',
+      inputs: '{count} inputs',
+      outputs: '{count} outputs',
+      noIo: 'No input/output constraints',
+      previewHint: 'Select a node to inspect configuration and results'
+    },
     palette: {
       title: 'Tool Library',
       toolsAvailable: '{count} tools available',
