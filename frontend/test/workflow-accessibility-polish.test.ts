@@ -38,7 +38,7 @@ test('workflow palette and inspector empty states should guide the next action',
 
 test('workflow canvas exposes keyboard movement and graph semantics', () => {
   const canvasSource = readSource('src/components/workflow/WorkflowCanvasBoard.vue')
-  const nodeSource = readSource('src/components/workflow/WorkflowCanvasNode.vue')
+  const nodeSource = readSource('src/components/workflow/WorkflowCanvasPanelNode.vue')
 
   for (const marker of ['role="img"', ':aria-label="t(\'workflow.canvas.edges\'']) {
     assert.equal(canvasSource.includes(marker), true, `canvas missing ${marker}`)

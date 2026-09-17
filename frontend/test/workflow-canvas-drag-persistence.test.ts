@@ -35,7 +35,7 @@ test('workflow page normalizes persisted workflow session before rendering recor
 
 test('template canvas renders resolved node positions and emits move-node', () => {
   const canvas = readSource('src/components/workflow/WorkflowCanvasBoard.vue')
-  const node = readSource('src/components/workflow/WorkflowCanvasNode.vue')
+  const node = readSource('src/components/workflow/WorkflowCanvasPanelNode.vue')
 
   assert.equal(canvas.includes('nodePositions'), true)
   assert.equal(canvas.includes('resolvedNodes'), true)

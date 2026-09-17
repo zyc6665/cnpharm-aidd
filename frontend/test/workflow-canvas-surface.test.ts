@@ -10,25 +10,27 @@ function readSource(relativePath: string): string {
 test('workflow template canvas components exist', () => {
   for (const file of [
     'src/components/workflow/WorkflowCanvasBoard.vue',
-    'src/components/workflow/WorkflowCanvasNode.vue',
+    'src/components/workflow/WorkflowCanvasPanelNode.vue',
     'src/components/workflow/WorkflowCanvasEdge.vue',
     'src/components/workflow/WorkflowNodeStatusBadge.vue'
   ]) {
     assert.equal(existsSync(resolve(file)), true, `missing ${file}`)
   }
+
+  assert.equal(existsSync(resolve('src/components/workflow/WorkflowCanvasNode.vue')), false)
 })
 
 test('workflow template canvas exposes graph interaction surface', () => {
   const canvas = readSource('src/components/workflow/WorkflowCanvasBoard.vue')
-  const node = readSource('src/components/workflow/WorkflowCanvasNode.vue')
+  const node = readSource('src/components/workflow/WorkflowCanvasPanelNode.vue')
   const edge = readSource('src/components/workflow/WorkflowCanvasEdge.vue')
   const badge = readSource('src/components/workflow/WorkflowNodeStatusBadge.vue')
 
   assert.equal(canvas.includes('workflow-canvas-board'), true)
-  assert.equal(canvas.includes('WorkflowCanvasNode'), true)
+  assert.equal(canvas.includes('WorkflowCanvasPanelNode'), true)
   assert.equal(canvas.includes('WorkflowCanvasEdge'), true)
   assert.equal(canvas.includes('select-node'), true)
-  assert.equal(node.includes('workflow-canvas-node'), true)
+  assert.equal(node.includes('workflow-canvas-panel-node'), true)
   assert.equal(node.includes('is-selected'), true)
   assert.equal(edge.includes('workflow-canvas-edge'), true)
   assert.equal(badge.includes('workflow-node-status-badge'), true)
