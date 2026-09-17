@@ -582,16 +582,6 @@ export default {
       expectedOutputs: 'Expected Outputs',
       empty: 'Select a tool from the current group'
     },
-    results: {
-      title: 'Current Result',
-      latestTask: 'Current Result Task',
-      empty: 'Run a task and the result will appear here',
-      emptyHint: 'You can review visualizations, output files, and key logs here after completion.',
-      pendingHint: 'The task has been created, and the result will appear here once it is ready.',
-      runningHint: 'The task is running, and logs and results will keep updating in this panel.',
-      successHint: 'The task is complete. You can preview results and download output files directly here.',
-      failureHint: 'The task failed. Review the error and recent logs here first.'
-    },
     toolStatus: {
       recommended: 'Recommended',
       available: 'Available',

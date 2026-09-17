@@ -32,17 +32,14 @@ test('任务详情页应复用共享输出摘要和日志预览组件', () => {
   assert.equal(source.includes('ResultVisualizationPanel'), true)
 })
 
-test('工作台轻量结果面板应复用结果可视化、输出摘要与日志预览', () => {
-  assert.equal(existsSync(resolve(rootDir, 'src/components/workflow/WorkflowTaskResultPanel.vue')), true)
+test('工作台不应保留未引用的任务结果面板和孤儿翻译', () => {
+  assert.equal(existsSync(resolve(rootDir, 'src/components/workflow/WorkflowTaskResultPanel.vue')), false)
 
-  const source = readSource('src/components/workflow/WorkflowTaskResultPanel.vue')
+  const zhSource = readSource('src/locales/zh-CN/index.ts')
+  const enSource = readSource('src/locales/en-US/index.ts')
 
-  assert.equal(source.includes('ResultVisualizationPanel'), true)
-  assert.equal(source.includes('TaskOutputSummary'), true)
-  assert.equal(source.includes('TaskLogPreview'), true)
-  assert.equal(source.includes('getTaskDetail'), true)
-  assert.equal(source.includes('getTaskLogs'), true)
-  assert.equal(source.includes('workflow.currentTool.viewTask'), true)
+  assert.equal(zhSource.includes('results: {'), false)
+  assert.equal(enSource.includes('results: {'), false)
 })
 
 test('工作台页应提供节点结果标签、任务详情与产物下载入口', () => {

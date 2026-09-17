@@ -581,16 +581,6 @@ export default {
       expectedOutputs: '预期输出',
       empty: '请选择当前分组中的一个工具'
     },
-    results: {
-      title: '当前结果',
-      latestTask: '当前结果任务',
-      empty: '运行任务后，结果会显示在这里',
-      emptyHint: '完成后可直接查看可视化、输出文件和关键日志。',
-      pendingHint: '任务已创建，结果准备好后会直接出现在这里。',
-      runningHint: '任务正在运行，日志和结果会在当前面板持续更新。',
-      successHint: '任务已完成，可直接预览结果并下载输出文件。',
-      failureHint: '任务执行失败，可先在这里查看错误和最近日志。'
-    },
     toolStatus: {
       recommended: '推荐',
       available: '可用',
