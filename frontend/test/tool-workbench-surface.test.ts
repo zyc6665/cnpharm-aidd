@@ -25,12 +25,13 @@ test('工作台页面仍使用 /workflow 路由并保留独立视图文件', () 
   assert.equal(existsSync(resolve(rootDir, 'src/views/workflow/index.vue')), true)
 })
 
-test('工作台左栏应转为分组栏语义而不是步骤栏语义', () => {
-  const source = readSource('src/components/workflow/WorkflowStepSidebar.vue')
+test('工作台左栏应由 rail 承载分组与工具库语义', () => {
+  const source = readSource('src/components/workflow/WorkflowWorkbenchRail.vue')
 
-  assert.equal(source.includes('workflow.columns.groups'), true)
-  assert.equal(source.includes('workflow.columns.steps'), false)
-  assert.equal(source.includes('group-rail-card'), true)
+  assert.equal(existsSync(resolve(rootDir, 'src/components/workflow/WorkflowStepSidebar.vue')), false)
+  assert.equal(source.includes('workflow-status-summary'), true)
+  assert.equal(source.includes('WorkflowToolPalette'), true)
+  assert.equal(source.includes('canvas-node-list'), true)
 })
 
 test('/workflow 页面应同时加载工作台分组与可用于画布的工具集合', () => {

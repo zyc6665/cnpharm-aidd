@@ -1,6 +1,6 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -10,13 +10,13 @@ function readSource(relativePath: string): string {
   return readFileSync(resolve(rootDir, relativePath), 'utf8')
 }
 
-test('工作台左栏应展示分组摘要与推荐工具数量', () => {
-  const source = readSource('src/components/workflow/WorkflowStepSidebar.vue')
+test('工作台左栏应展示画布节点摘要与工具库入口', () => {
+  const source = readSource('src/components/workflow/WorkflowWorkbenchRail.vue')
 
-  assert.equal(source.includes('workflow.columns.groups'), true)
-  assert.equal(source.includes('workflow.groups.toolCount'), true)
-  assert.equal(source.includes('workflow.groups.recommendedCount'), true)
-  assert.equal(source.includes('getRecommendedCount'), true)
+  assert.equal(existsSync(resolve(rootDir, 'src/components/workflow/WorkflowStepSidebar.vue')), false)
+  assert.equal(source.includes('workflow-status-summary'), true)
+  assert.equal(source.includes('canvas-node-list'), true)
+  assert.equal(source.includes('WorkflowToolPalette'), true)
 })
 
 test('节点参数面板应提供工具摘要和重置动作区', () => {
