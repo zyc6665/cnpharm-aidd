@@ -11,12 +11,10 @@ function readSource(relativePath: string): string {
 }
 
 test('工作台不再使用旧运行面板承载轻量结果', () => {
-  const source = readSource('src/components/workflow/WorkflowRunPanel.vue')
   const resultPanelSource = readSource('src/components/workflow/NodeResultPanel.vue')
   const pageSource = readSource('src/views/workflow/index.vue')
 
-  assert.equal(source.includes('workflow-run-panel'), true)
-  assert.equal(source.includes('WorkflowTaskResultPanel'), false)
+  assert.equal(existsSync(resolve(rootDir, 'src/components/workflow/WorkflowRunPanel.vue')), false)
   assert.equal(resultPanelSource.includes('view-task-detail'), true)
   assert.equal(pageSource.includes('WorkflowResultsReportPanel'), true)
 })

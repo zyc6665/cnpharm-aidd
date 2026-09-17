@@ -1,6 +1,6 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -30,12 +30,7 @@ test('普通工具详情页应提供任务名称输入并在创建任务时传�
 })
 
 test('工作台已下线单任务运行面板，不再在面板内创建任务名称', () => {
-  const source = readSource('src/components/workflow/WorkflowRunPanel.vue')
-
-  assert.equal(source.includes('workflow-run-panel'), true)
-  assert.equal(source.includes("t('tasks.name')"), false)
-  assert.equal(source.includes('const taskName = ref('), false)
-  assert.equal(source.includes('name: taskName.value.trim() || undefined'), false)
+  assert.equal(existsSync(resolve(rootDir, 'src/components/workflow/WorkflowRunPanel.vue')), false)
 })
 
 test('任务列表和详情页应优先展示任务名而不是只展示工具名或任务 ID', () => {
