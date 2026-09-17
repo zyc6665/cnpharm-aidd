@@ -469,6 +469,21 @@ export default {
       downloadOutput: '下载输出',
       noOutputFiles: '当前还没有可下载的输出文件'
     },
+    controlNodes: {
+      title: '流程控制',
+      condition: {
+        title: '条件分支',
+        description: '按分数或字段选择路径'
+      },
+      map: {
+        title: '批量处理',
+        description: '并行处理候选集合'
+      },
+      loop: {
+        title: '循环优化',
+        description: '重复运行内部工具直到达到收敛条件或迭代上限'
+      }
+    },
     runStatus: {
       pending: '等待中',
       ready: '就绪',

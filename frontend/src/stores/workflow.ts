@@ -1,6 +1,10 @@
 import { computed } from 'vue'
 import { defineStore, storeToRefs } from 'pinia'
 import { type WorkflowArtifactSemanticType, type WorkflowTaskRef } from '@/workflow/artifact-types'
+import {
+  createWorkflowControlNodeDefaults,
+  type WorkflowControlNodeType,
+} from '@/workflow/control-nodes'
 import type {
   WorkflowCanvasEdge,
   WorkflowCanvasNode,
@@ -27,7 +31,7 @@ interface AddToolNodeInput {
 }
 
 interface AddControlNodeInput {
-  type: Extract<WorkflowCanvasNodeType, 'condition' | 'map' | 'loop'>
+  type: WorkflowControlNodeType
   position?: WorkflowCanvasPosition
 }
 
@@ -198,7 +202,7 @@ export const useWorkflowStore = defineStore(
 
     function addControlNode(input: AddControlNodeInput): WorkflowCanvasNode {
       const nodeId = `${input.type}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
-      const defaults = controlNodeDefaults(input.type)
+      const defaults = createWorkflowControlNodeDefaults(input.type)
       const node = canvas.addControlNode({
         id: nodeId,
         type: input.type,
@@ -207,31 +211,6 @@ export const useWorkflowStore = defineStore(
       })
       touchSession()
       return node
-    }
-
-    function controlNodeDefaults(type: AddControlNodeInput['type']) {
-      if (type === 'condition') {
-        return {
-          titleKey: '条件分支',
-          descriptionKey: '根据上游分数或字段选择 true / false 分支',
-          expression: { op: '==' as const, left: true, right: true }
-        }
-      }
-      if (type === 'map') {
-        return {
-          titleKey: '批量处理',
-          descriptionKey: '对候选分子集合进行并行子任务处理',
-          over: 'workflow_input:smiles_csv',
-          max_parallelism: 4
-        }
-      }
-      return {
-        titleKey: '循环优化',
-        descriptionKey: '重复运行内部工具直到达到收敛条件或迭代上限',
-        body: [],
-        max_iterations: 5,
-        convergence_condition: { op: '==' as const, left: true, right: true }
-      }
     }
 
     function deleteCanvasNode(nodeId: string) {

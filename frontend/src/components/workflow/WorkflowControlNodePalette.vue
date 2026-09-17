@@ -1,6 +1,6 @@
 <template>
   <div class="workflow-control-library">
-    <span class="rail-kicker">流程控制</span>
+    <span class="rail-kicker">{{ t('workflow.controlNodes.title') }}</span>
     <div class="control-node-actions">
       <button
         v-for="item in controlNodes"
@@ -18,18 +18,24 @@
 </template>
 
 <script setup lang="ts">
-import type { WorkflowCanvasNodeType } from '@/workflow/canvas-types'
-
-type ControlNodeType = Extract<WorkflowCanvasNodeType, 'condition' | 'map'>
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import {
+  ADDABLE_WORKFLOW_CONTROL_NODE_TYPES,
+  type AddableWorkflowControlNodeType,
+} from '@/workflow/control-nodes'
 
 const emit = defineEmits<{
-  'add-control-node': [type: ControlNodeType]
+  'add-control-node': [type: AddableWorkflowControlNodeType]
 }>()
 
-const controlNodes: Array<{ type: ControlNodeType; label: string; description: string }> = [
-  { type: 'condition', label: '条件分支', description: '按分数或字段选择路径' },
-  { type: 'map', label: '批量处理', description: '并行处理候选集合' },
-]
+const { t } = useI18n()
+
+const controlNodes = computed(() => ADDABLE_WORKFLOW_CONTROL_NODE_TYPES.map((type) => ({
+  type,
+  label: t(`workflow.controlNodes.${type}.title`),
+  description: t(`workflow.controlNodes.${type}.description`),
+})))
 </script>
 
 <style scoped lang="less">

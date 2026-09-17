@@ -10,6 +10,7 @@ import {
 } from '@/workflow/workflow-definitions'
 import { buildWorkflowRunListParams } from '@/workflow/project-context'
 import { shouldAutoSyncWorkflowRun } from '@/workflow/workflow-runs'
+import { resolveWorkflowControlNodeTitleKey } from '@/workflow/control-nodes'
 import {
   validateWorkflowDefinition,
   validateWorkflowExecutionOrder
@@ -714,7 +715,7 @@ function mapCanvasDefinitionNode(
     return {
       id: node.id,
       type: nodeKind as WorkflowCanvasNode['type'],
-      titleKey: stringValue(node.titleKey) ?? controlNodeTitle(nodeKind),
+      titleKey: stringValue(node.titleKey) ?? resolveWorkflowControlNodeTitleKey(nodeKind),
       descriptionKey: stringValue(node.descriptionKey),
       position: resolveWorkflowNodePosition(node),
       expression: conditionExpressionValue(node.expression),
@@ -760,14 +761,6 @@ function mapCanvasDefinitionNode(
     inputArtifactSlots,
     outputArtifactSlots
   }
-}
-
-function controlNodeTitle(nodeKind: string): string {
-  return ({
-    condition: '条件分支',
-    map: '批量处理',
-    loop: '循环优化',
-  } as Record<string, string>)[nodeKind] ?? nodeKind
 }
 
 function stringValue(value: unknown): string | undefined {

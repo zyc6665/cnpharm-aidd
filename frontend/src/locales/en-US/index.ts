@@ -470,6 +470,21 @@ export default {
       downloadOutput: 'Download Output',
       noOutputFiles: 'No downloadable output file yet'
     },
+    controlNodes: {
+      title: 'Flow Control',
+      condition: {
+        title: 'Condition',
+        description: 'Choose a path from scores or fields'
+      },
+      map: {
+        title: 'Map',
+        description: 'Process candidate collections in parallel'
+      },
+      loop: {
+        title: 'Loop',
+        description: 'Repeat inner tools until convergence or iteration limit'
+      }
+    },
     runStatus: {
       pending: 'Pending',
       ready: 'Ready',
