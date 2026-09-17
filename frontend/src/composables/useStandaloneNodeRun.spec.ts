@@ -189,6 +189,7 @@ describe('useStandaloneNodeRun', () => {
 
     expect(result).toBeUndefined()
     expect(createTask).not.toHaveBeenCalled()
+    expect(runner.preparationBlockedReason.value).toBe('Protein input requires a prepared PDB role.')
     expect(runner.preparationPreview.value).toMatchObject({
       ready: false,
       blocked_reason: 'Protein input requires a prepared PDB role.',

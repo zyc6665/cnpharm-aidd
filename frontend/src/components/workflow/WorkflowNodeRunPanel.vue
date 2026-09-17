@@ -98,7 +98,6 @@
     buildToolRunFormState,
     isFileSchemaProperty,
   } from '@/domain/tools'
-  import { taskRunPreparationBlockedMessage } from '@/domain/tasks'
   import type { WorkflowNodeArtifactRecommendation } from '@/workflow/canvas-artifacts'
   import {
     buildAutoBoundArtifactCards,
@@ -126,7 +125,7 @@
   const workflowStore = useWorkflowStore()
   const {
     submitting,
-    preparationPreview,
+    preparationBlockedReason,
     run: runStandaloneNode,
     startPolling: startStandaloneTaskPolling,
     stopPolling: stopStandaloneTaskPolling
@@ -205,10 +204,6 @@
     autoBoundArtifactByField,
     flattenedSchema: flattenedSchema.value
   }))
-
-  const preparationBlockedReason = computed(() => {
-    return taskRunPreparationBlockedMessage(preparationPreview.value)
-  })
 
   function clearAutoBoundArtifacts() {
     for (const key of Object.keys(autoBoundArtifactByField)) {

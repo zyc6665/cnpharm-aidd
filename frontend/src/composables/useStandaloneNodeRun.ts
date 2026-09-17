@@ -1,4 +1,4 @@
-import { ref, unref, type Ref } from 'vue'
+import { computed, ref, unref, type Ref } from 'vue'
 import type { UploadFile } from 'ant-design-vue'
 import { uploadFile } from '@/api/files'
 import { createTask, getTaskDetail, isTaskTerminalStatus, prepareTaskRun } from '@/api/tasks'
@@ -7,7 +7,7 @@ import {
   buildToolRunTaskPayload,
   type StandardArtifactInputSlot,
 } from '@/domain/tools'
-import { prepareAndCreateTask } from '@/domain/tasks'
+import { prepareAndCreateTask, taskRunPreparationBlockedMessage } from '@/domain/tasks'
 import type { ArtifactFile, TaskRunPreparationPreview, ToolSchema } from '@/types/models'
 
 interface StandaloneRunTool {
@@ -37,6 +37,7 @@ export function useStandaloneNodeRun(input: {
   const artifactsStore = useArtifactsStore()
   const submitting = ref(false)
   const preparationPreview = ref<TaskRunPreparationPreview | null>(null)
+  const preparationBlockedReason = computed(() => taskRunPreparationBlockedMessage(preparationPreview.value))
   let pollTimer: number | null = null
   let pollTaskId: string | null = null
 
@@ -136,6 +137,7 @@ export function useStandaloneNodeRun(input: {
   return {
     submitting,
     preparationPreview,
+    preparationBlockedReason,
     run,
     startPolling,
     stopPolling,
