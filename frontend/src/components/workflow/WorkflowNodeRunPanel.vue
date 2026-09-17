@@ -157,7 +157,11 @@
   })
 
   const inputSurface = computed(() => resolveWorkflowNodeRunInputSurface({
-    tool: selectedTool.value
+    tool: selectedTool.value,
+    labels: {
+      standardArtifactDescription: artifactType => t('workflow.nodeRun.standardArtifactDescription', { artifactType }),
+      upstreamNodeFallback: t('workflow.nodeRun.upstreamNodeFallback'),
+    },
   }))
   const standardInputSlots = computed(() => inputSurface.value.standardInputSlots)
 
@@ -201,7 +205,10 @@
 
   const autoBoundArtifactCards = computed(() => buildAutoBoundArtifactCards({
     autoBoundArtifactByField,
-    flattenedSchema: flattenedSchema.value
+    flattenedSchema: flattenedSchema.value,
+    labels: {
+      upstreamNodeFallback: t('workflow.nodeRun.upstreamNodeFallback'),
+    },
   }))
 
   function applyRecommendedArtifacts(fileFieldKeys: string[]) {

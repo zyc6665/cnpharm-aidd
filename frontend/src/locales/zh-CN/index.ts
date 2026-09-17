@@ -420,7 +420,9 @@ export default {
       autoBoundTitle: '已自动绑定上游产物',
       runCurrentNode: '运行当前节点',
       reset: '重置',
-      selectToolFirst: '请先选择真实工具再配置节点'
+      selectToolFirst: '请先选择真实工具再配置节点',
+      standardArtifactDescription: '标准产物类型：{artifactType}',
+      upstreamNodeFallback: '上游节点'
     },
     palette: {
       title: '工具库',

@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import type { ArtifactFile, ToolSchema } from '@/types/models'
 import type { WorkflowNodeArtifactRecommendation } from './canvas-artifacts'
 import {
@@ -30,6 +32,38 @@ function artifact(partial: Partial<ArtifactFile>): ArtifactFile {
 }
 
 describe('workflow node run inputs', () => {
+  it('keeps generated form labels injectable instead of hardcoded', () => {
+    const source = readFileSync(resolve('src/workflow/node-run-inputs.ts'), 'utf8')
+    expect(source).not.toContain('标准产物类型')
+    expect(source).not.toContain('上游节点')
+
+    const labels = {
+      standardArtifactDescription: (artifactType: string) => `Artifact type ${artifactType}`,
+      upstreamNodeFallback: 'Previous node',
+    }
+
+    expect(buildArtifactInputSchema([
+      { name: 'protein', type: 'protein_structure@1', required: true },
+    ], labels).properties.protein?.description).toBe('Artifact type protein_structure@1')
+
+    expect(buildAutoBoundArtifactCards({
+      autoBoundArtifactByField: {
+        protein_pdb: artifact({
+          id: 'file-protein',
+          filename: 'prepared.pdb',
+          tool_name: undefined,
+          tool_slug: undefined,
+        }),
+      },
+      flattenedSchema: {
+        type: 'object',
+        properties: { protein_pdb: { type: 'file', title: 'Protein PDB' } },
+        required: [],
+      },
+      labels,
+    })[0]?.sourceLabel).toBe('Previous node · protein_structure@1')
+  })
+
   it('builds file schema from standard artifact inputs', () => {
     expect(buildArtifactInputSchema([
       { name: 'protein', type: 'protein_structure@1', required: true },
@@ -40,13 +74,13 @@ describe('workflow node run inputs', () => {
         protein: {
           type: 'file',
           title: 'protein',
-          description: '标准产物类型：protein_structure@1',
+          description: 'Standard artifact type: protein_structure@1',
           format: 'file',
         },
         ligand: {
           type: 'file',
           title: 'ligand',
-          description: '标准产物类型：ligand_structure@1',
+          description: 'Standard artifact type: ligand_structure@1',
           format: 'file',
         },
       },

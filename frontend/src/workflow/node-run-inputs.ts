@@ -23,6 +23,16 @@ export interface AutoBoundArtifactCard {
   filename: string
 }
 
+export interface WorkflowNodeRunInputLabels {
+  standardArtifactDescription: (artifactType: string) => string
+  upstreamNodeFallback: string
+}
+
+const DEFAULT_WORKFLOW_NODE_RUN_INPUT_LABELS: WorkflowNodeRunInputLabels = {
+  standardArtifactDescription: artifactType => `Standard artifact type: ${artifactType}`,
+  upstreamNodeFallback: 'Upstream node',
+}
+
 export interface ResolveRecommendedArtifactBindingsInput {
   fileFieldKeys: readonly string[]
   flattenedSchema: ToolSchema
@@ -70,13 +80,14 @@ export interface WorkflowNodeRunInputSurface {
 export function resolveWorkflowNodeRunInputSurface(input: {
   tool?: Tool | null
   standardInputSlots?: readonly StandardArtifactInputSlot[]
+  labels?: WorkflowNodeRunInputLabels
 }): WorkflowNodeRunInputSurface {
   const toolSurface = resolveToolRunInputSurface(input.tool)
   const standardInputSlots = [...(input.standardInputSlots ?? toolSurface.standardInputSlots)]
   const schema = toolSurface.schema?.properties && Object.keys(toolSurface.schema.properties).length > 0
     ? toolSurface.schema
     : standardInputSlots.length > 0
-      ? buildArtifactInputSchema(standardInputSlots)
+      ? buildArtifactInputSchema(standardInputSlots, input.labels)
       : undefined
   const flattenedSchema = flattenToolInputSchema(schema) ?? {
     type: 'object',
@@ -108,7 +119,10 @@ export function resolveWorkflowNodeRunInputSurface(input: {
   }
 }
 
-export function buildArtifactInputSchema(artifactInputs: readonly StandardArtifactInputLike[]): ToolSchema {
+export function buildArtifactInputSchema(
+  artifactInputs: readonly StandardArtifactInputLike[],
+  labels: WorkflowNodeRunInputLabels = DEFAULT_WORKFLOW_NODE_RUN_INPUT_LABELS,
+): ToolSchema {
   const properties: ToolSchema['properties'] = {}
   const required: string[] = []
 
@@ -116,7 +130,7 @@ export function buildArtifactInputSchema(artifactInputs: readonly StandardArtifa
     properties[input.name] = {
       type: 'file',
       title: input.name,
-      description: `标准产物类型：${input.type}`,
+      description: labels.standardArtifactDescription(input.type),
       format: 'file',
     }
 
@@ -209,13 +223,17 @@ export function clearAutoBoundArtifactBindings(
 export function buildAutoBoundArtifactCards(input: {
   autoBoundArtifactByField: Record<string, ArtifactFile | undefined>
   flattenedSchema: ToolSchema
+  labels?: Pick<WorkflowNodeRunInputLabels, 'upstreamNodeFallback'>
 }): AutoBoundArtifactCard[] {
+  const upstreamNodeFallback = input.labels?.upstreamNodeFallback
+    ?? DEFAULT_WORKFLOW_NODE_RUN_INPUT_LABELS.upstreamNodeFallback
+
   return Object.entries(input.autoBoundArtifactByField)
     .filter((entry): entry is [string, ArtifactFile] => Boolean(entry[1]))
     .map(([fieldKey, artifact]) => ({
       key: `${fieldKey}-${artifact.id}`,
       fieldTitle: input.flattenedSchema.properties[fieldKey]?.title ?? fieldKey,
-      sourceLabel: `${artifact.tool_name || artifact.tool_slug || '上游节点'} · ${artifact.semantic_type || 'artifact'}`,
+      sourceLabel: `${artifact.tool_name || artifact.tool_slug || upstreamNodeFallback} · ${artifact.semantic_type || 'artifact'}`,
       filename: artifact.filename,
     }))
 }

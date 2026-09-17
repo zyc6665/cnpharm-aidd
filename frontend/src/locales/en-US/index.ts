@@ -421,7 +421,9 @@ export default {
       autoBoundTitle: 'Upstream artifacts auto-bound',
       runCurrentNode: 'Run Current Node',
       reset: 'Reset',
-      selectToolFirst: 'Select a real tool before configuring this node'
+      selectToolFirst: 'Select a real tool before configuring this node',
+      standardArtifactDescription: 'Standard artifact type: {artifactType}',
+      upstreamNodeFallback: 'Upstream node'
     },
     palette: {
       title: 'Tool Library',
