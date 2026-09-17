@@ -1,8 +1,34 @@
 import { mount } from '@vue/test-utils'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import i18n from '@/locales'
 import ResizableWorkbenchSidebar from './ResizableWorkbenchSidebar.vue'
 
 describe('ResizableWorkbenchSidebar', () => {
+  it('keeps sidebar accessibility labels in locale keys', () => {
+    const source = readFileSync(resolve('src/components/workflow/ResizableWorkbenchSidebar.vue'), 'utf8')
+    const zhSource = readFileSync(resolve('src/locales/zh-CN/index.ts'), 'utf8')
+    const enSource = readFileSync(resolve('src/locales/en-US/index.ts'), 'utf8')
+
+    for (const marker of [
+      'workflow.workbenchSidebar.expand',
+      'workflow.workbenchSidebar.collapse',
+      'workflow.workbenchSidebar.resize',
+    ]) {
+      expect(source).toContain(marker)
+    }
+
+    for (const marker of ['workbenchSidebar', 'expand', 'collapse', 'resize']) {
+      expect(zhSource).toContain(marker)
+      expect(enSource).toContain(marker)
+    }
+
+    for (const literal of ['展开侧边栏', '折叠侧边栏', '调整侧边栏宽度']) {
+      expect(source).not.toContain(literal)
+    }
+  })
+
   it('renders slot content and emits width changes from the resize handle', async () => {
     const wrapper = mount(ResizableWorkbenchSidebar, {
       props: {
@@ -13,6 +39,7 @@ describe('ResizableWorkbenchSidebar', () => {
         maxWidth: 480,
       },
       slots: { default: '<div data-testid="sidebar-content">Tools</div>' },
+      global: { plugins: [i18n] },
     })
 
     expect(wrapper.find('[data-testid="sidebar-content"]').text()).toBe('Tools')
@@ -38,6 +65,7 @@ describe('ResizableWorkbenchSidebar', () => {
         minWidth: 320,
         maxWidth: 560,
       },
+      global: { plugins: [i18n] },
     })
 
     expect(wrapper.attributes('style')).toContain('width: 56px')

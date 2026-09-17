@@ -16,7 +16,7 @@
       :data-edge-delete="edgeId"
       role="button"
       tabindex="0"
-      :aria-label="`删除连线 ${edgeId}`"
+      :aria-label="t('workflow.canvasEdge.delete', { edgeId })"
       @click.stop="$emit('delete-edge')"
       @keydown.enter.prevent="$emit('delete-edge')"
       @keydown.space.prevent="$emit('delete-edge')"
@@ -29,6 +29,7 @@
 
 <script setup lang="ts">
   import { computed } from 'vue'
+  import { useI18n } from 'vue-i18n'
 
   const props = defineProps<{
     edgeId: string
@@ -41,6 +42,8 @@
   defineEmits<{
     (event: 'delete-edge'): void
   }>()
+
+  const { t } = useI18n()
 
   const pathDefinition = computed(() => {
     const controlOffset = Math.max(80, Math.abs(props.target.x - props.source.x) / 2)

@@ -408,6 +408,14 @@ export default {
       noIo: 'No input/output constraints',
       previewHint: 'Select a node to inspect configuration and results'
     },
+    canvasEdge: {
+      delete: 'Delete edge {edgeId}'
+    },
+    workbenchSidebar: {
+      expand: 'Expand sidebar',
+      collapse: 'Collapse sidebar',
+      resize: 'Resize sidebar width'
+    },
     palette: {
       title: 'Tool Library',
       toolsAvailable: '{count} tools available',

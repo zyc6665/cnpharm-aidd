@@ -407,6 +407,14 @@ export default {
       noIo: '暂无输入输出约束',
       previewHint: '选择节点查看配置与结果'
     },
+    canvasEdge: {
+      delete: '删除连线 {edgeId}'
+    },
+    workbenchSidebar: {
+      expand: '展开侧边栏',
+      collapse: '折叠侧边栏',
+      resize: '调整侧边栏宽度'
+    },
     palette: {
       title: '工具库',
       toolsAvailable: '{count} 个工具可用',

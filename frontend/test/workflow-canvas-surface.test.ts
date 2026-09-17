@@ -33,6 +33,8 @@ test('workflow template canvas exposes graph interaction surface', () => {
   assert.equal(node.includes('workflow-canvas-panel-node'), true)
   assert.equal(node.includes('is-selected'), true)
   assert.equal(edge.includes('workflow-canvas-edge'), true)
+  assert.equal(edge.includes('workflow.canvasEdge.delete'), true)
+  assert.equal(edge.includes('删除连线'), false)
   assert.equal(badge.includes('workflow-node-status-badge'), true)
 })
 

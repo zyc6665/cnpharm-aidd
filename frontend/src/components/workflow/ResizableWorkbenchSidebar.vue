@@ -8,7 +8,7 @@
       type="button"
       class="sidebar-collapse-toggle"
       data-testid="sidebar-collapse-toggle"
-      :aria-label="collapsed ? '展开侧边栏' : '折叠侧边栏'"
+      :aria-label="collapsed ? t('workflow.workbenchSidebar.expand') : t('workflow.workbenchSidebar.collapse')"
       @click="emit('update:collapsed', !collapsed)"
     >
       {{ collapsed ? expandLabel : collapseLabel }}
@@ -23,7 +23,7 @@
       type="button"
       class="sidebar-resize-handle"
       data-testid="sidebar-resize-handle"
-      aria-label="调整侧边栏宽度"
+      :aria-label="t('workflow.workbenchSidebar.resize')"
       @pointerdown="handlePointerDown"
     />
   </aside>
@@ -31,6 +31,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 const COLLAPSED_WIDTH = 56
 
@@ -46,6 +47,8 @@ const emit = defineEmits<{
   'update:width': [width: number]
   'update:collapsed': [collapsed: boolean]
 }>()
+
+const { t } = useI18n()
 
 const sidebarStyle = computed(() => ({
   width: `${props.collapsed ? COLLAPSED_WIDTH : props.width}px`,
