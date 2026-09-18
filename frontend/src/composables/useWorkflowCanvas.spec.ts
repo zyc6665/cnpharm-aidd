@@ -2,6 +2,8 @@ import { mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { defineComponent } from 'vue'
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import i18n from '@/locales'
 import { useArtifactsStore, useToolsStore, useWorkflowStore } from '@/stores'
 import { useWorkflowCanvas } from './useWorkflowCanvas'
@@ -29,6 +31,13 @@ function mountCanvasHarness() {
 }
 
 describe('useWorkflowCanvas', () => {
+  it('uses one normalizer for workbench and workflow tool sources', () => {
+    const source = readFileSync(resolve('src/composables/useWorkflowCanvas.ts'), 'utf8')
+
+    expect(source).toContain('function normalizeWorkflowTool')
+    expect(source.match(/deriveArtifactSlotsFromToolContract\(tool\.contract\)/g) ?? []).toHaveLength(1)
+  })
+
   it('添加工具节点时应从工具契约带入语义输入输出并归一化别名', () => {
     const canvas = mountCanvasHarness()
     canvas.toolsStore.workbenchGroups = [

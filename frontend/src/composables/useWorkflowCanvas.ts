@@ -30,6 +30,28 @@ type WorkflowStore = ReturnType<typeof useWorkflowStore>
 type ToolsStore = ReturnType<typeof useToolsStore>
 type ArtifactsStore = ReturnType<typeof useArtifactsStore>
 
+type WorkflowToolSource = {
+  id?: string
+  slug: string
+  name: string
+  description?: string
+  category_id?: string
+  category?: string
+  tags?: Array<{ id?: string; name: string; color?: string }>
+  contract?: ToolContract | null
+}
+
+type AvailableWorkflowTool = WorkflowToolSource & {
+  executorType?: string
+  capability?: string
+  stage?: string
+  resourceProfile?: Record<string, unknown>
+  inputSemanticTypes: WorkflowArtifactSemanticType[]
+  outputSemanticTypes: WorkflowArtifactSemanticType[]
+  inputArtifactSlots: ArtifactInputSlot[]
+  outputArtifactSlots: ArtifactOutputSlot[]
+}
+
 export function useWorkflowCanvas(input: {
   workflowStore: WorkflowStore
   toolsStore: ToolsStore
@@ -76,92 +98,48 @@ export function useWorkflowCanvas(input: {
     }))
   })
 
+  function normalizeWorkflowTool(tool: WorkflowToolSource): AvailableWorkflowTool {
+    const artifactSlots = deriveArtifactSlotsFromToolContract(tool.contract)
+    return {
+      id: tool.id,
+      slug: tool.slug,
+      name: tool.name,
+      description: tool.description,
+      category_id: tool.category_id,
+      category: tool.category,
+      tags: tool.tags ?? [],
+      contract: tool.contract,
+      executorType: tool.contract?.executor.type,
+      capability: tool.contract?.capability.capability ?? undefined,
+      stage: tool.contract?.capability.stage ?? tool.contract?.capability.capability ?? undefined,
+      resourceProfile: tool.contract?.resource_profile,
+      inputSemanticTypes: artifactSlots.inputs.length
+        ? artifactSlots.inputs.map(slot => slot.type)
+        : resolveWorkflowSemanticTypes(
+            tool.contract?.capability.inputs.map(item => item.semantic_type) ?? []
+          ),
+      outputSemanticTypes: artifactSlots.outputs.length
+        ? artifactSlots.outputs.map(slot => slot.type)
+        : resolveWorkflowSemanticTypes(
+            tool.contract?.capability.outputs.map(item => item.semantic_type) ?? []
+          ),
+      inputArtifactSlots: [...artifactSlots.inputs],
+      outputArtifactSlots: [...artifactSlots.outputs]
+    }
+  }
+
   const availableWorkflowTools = computed(() => {
-    const toolsBySlug = new Map<
-      string,
-      {
-        id?: string
-        slug: string
-        name: string
-        description?: string
-        category_id?: string
-        category?: string
-        tags?: Array<{ id?: string; name: string; color?: string }>
-        contract?: ToolContract | null
-        executorType?: string
-        capability?: string
-        stage?: string
-        resourceProfile?: Record<string, unknown>
-        inputSemanticTypes: WorkflowArtifactSemanticType[]
-        outputSemanticTypes: WorkflowArtifactSemanticType[]
-        inputArtifactSlots: ArtifactInputSlot[]
-        outputArtifactSlots: ArtifactOutputSlot[]
-      }
-    >()
+    const toolsBySlug = new Map<string, AvailableWorkflowTool>()
 
     for (const group of toolsStore.workbenchGroups) {
       for (const tool of group.tools) {
-        const artifactSlots = deriveArtifactSlotsFromToolContract(tool.contract)
-        toolsBySlug.set(tool.slug, {
-          id: tool.id,
-          slug: tool.slug,
-          name: tool.name,
-          description: tool.description,
-          category_id: tool.category_id,
-          category: tool.category,
-          tags: tool.tags ?? [],
-          contract: tool.contract,
-          executorType: tool.contract?.executor.type,
-          capability: tool.contract?.capability.capability ?? undefined,
-          stage:
-            tool.contract?.capability.stage ?? tool.contract?.capability.capability ?? undefined,
-          resourceProfile: tool.contract?.resource_profile,
-          inputSemanticTypes: artifactSlots.inputs.length
-            ? artifactSlots.inputs.map(slot => slot.type)
-            : resolveWorkflowSemanticTypes(
-                tool.contract?.capability.inputs.map(item => item.semantic_type) ?? []
-              ),
-          outputSemanticTypes: artifactSlots.outputs.length
-            ? artifactSlots.outputs.map(slot => slot.type)
-            : resolveWorkflowSemanticTypes(
-                tool.contract?.capability.outputs.map(item => item.semantic_type) ?? []
-              ),
-          inputArtifactSlots: [...artifactSlots.inputs],
-          outputArtifactSlots: [...artifactSlots.outputs]
-        })
+        toolsBySlug.set(tool.slug, normalizeWorkflowTool(tool))
       }
     }
 
     for (const tool of toolsStore.workflowToolOptions) {
       if (!toolsBySlug.has(tool.slug)) {
-        const artifactSlots = deriveArtifactSlotsFromToolContract(tool.contract)
-        toolsBySlug.set(tool.slug, {
-          id: tool.id,
-          slug: tool.slug,
-          name: tool.name,
-          description: tool.description,
-          category_id: tool.category_id,
-          category: tool.category,
-          tags: tool.tags ?? [],
-          contract: tool.contract,
-          executorType: tool.contract?.executor.type,
-          capability: tool.contract?.capability.capability ?? undefined,
-          stage:
-            tool.contract?.capability.stage ?? tool.contract?.capability.capability ?? undefined,
-          resourceProfile: tool.contract?.resource_profile,
-          inputSemanticTypes: artifactSlots.inputs.length
-            ? artifactSlots.inputs.map(slot => slot.type)
-            : resolveWorkflowSemanticTypes(
-                tool.contract?.capability.inputs.map(item => item.semantic_type) ?? []
-              ),
-          outputSemanticTypes: artifactSlots.outputs.length
-            ? artifactSlots.outputs.map(slot => slot.type)
-            : resolveWorkflowSemanticTypes(
-                tool.contract?.capability.outputs.map(item => item.semantic_type) ?? []
-              ),
-          inputArtifactSlots: [...artifactSlots.inputs],
-          outputArtifactSlots: [...artifactSlots.outputs]
-        })
+        toolsBySlug.set(tool.slug, normalizeWorkflowTool(tool))
       }
     }
 
