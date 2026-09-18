@@ -502,7 +502,87 @@ export default {
       hintRunning: '已有节点正在运行，建议等待当前任务结束后再继续。',
       hintBlocked: '可以先运行已就绪节点，阻塞节点会在上游产物生成后自动进入可运行状态。',
       hintReady: '当前已有节点满足运行条件，可以启动流程推进。',
-      hintEmpty: '请先补齐工具选择、输入文件或上游产物，再启动流程。'
+      hintEmpty: '请先补齐工具选择、输入文件或上游产物，再启动流程。',
+      fallback: {
+        nodeTitle: '未命名节点',
+        sourceNode: '上游节点',
+        filename: '未知文件',
+        toolSlug: '未指定工具',
+        inputArtifact: '输入产物'
+      },
+      primary: {
+        runnableNodes: '有 {count} 个节点可运行',
+        missingWorkflowInput: '请先补齐工作流输入',
+        invalidToolContract: '部分工具契约不可执行，请先修复节点工具配置',
+        invalidSemanticEdge: '部分连线无效，请先修复节点依赖关系',
+        needsPreparationOrConversion: '存在标准产物需要准备或转换',
+        invalidArtifactBinding: '存在不可用的标准产物绑定',
+        empty: '当前没有可运行节点'
+      },
+      issues: {
+        missingTool: {
+          title: '缺少工具选择',
+          detail: '当前节点有多个候选工具，请先选择一个再运行。'
+        },
+        missingWorkflowInput: {
+          title: '缺少工作流输入',
+          detail: '请先为 {semanticType} 选择可用文件。'
+        },
+        waitingUpstream: {
+          title: '等待上游产物',
+          detail: '请先运行 {sourceNodeTitle}，成功后 {semanticType} 会自动绑定到当前节点。'
+        },
+        waitingInput: {
+          title: '等待输入连线',
+          detail: '当前节点声明了必需输入，但还没有配置可用的输入来源。'
+        },
+        invalidFileExtension: {
+          title: '输入文件格式不匹配',
+          detail: '所选文件 {filename} 不符合 {semanticType} 的扩展名要求。'
+        },
+        invalidSemanticEdge: {
+          title: '连线产物类型无效',
+          detail: '连线产物类型 {semanticType} 与上下游节点定义不匹配。'
+        },
+        invalidToolContract: {
+          title: '工具契约不可执行',
+          detail: '绑定工具 {toolSlug} 没有有效的工作流契约，或当前已被禁用。'
+        },
+        needsPreparation: {
+          title: '需要先准备输入产物',
+          detail: '当前节点输入产物不满足工具要求，请先运行匹配的准备工具。'
+        },
+        needsConversion: {
+          title: '需要先转换输入产物',
+          detail: '当前节点输入产物需要先完成格式转换，工具才能继续消费。'
+        },
+        invalidArtifactBinding: {
+          title: '标准产物绑定无效',
+          detail: '当前节点的标准产物绑定不可用，请重新选择输入或检查上游输出。'
+        },
+        running: {
+          title: '节点正在运行',
+          detail: '请等待当前任务结束后再调度下游节点。'
+        },
+        failed: {
+          title: '节点任务失败',
+          detail: '请先检查任务日志、参数或输入文件，再决定是否重新运行。'
+        },
+        invalidated: {
+          title: '节点需要重新运行',
+          detail: '上游输入或参数已发生变化，请重新运行当前节点以刷新结果。'
+        }
+      },
+      savedBinding: {
+        missing: '已保存的 {slotName} 绑定 {artifactId} 不在当前可用产物列表中，请重新选择输入。',
+        mismatch: '已保存的 {slotName} 绑定 {artifactId} 与当前输入要求不匹配，请重新选择输入。'
+      },
+      binding: {
+        suggestion: '建议运行：{suggestedTool}。',
+        fallbackPreparation: '{target} 需要先完成准备。',
+        fallbackConversion: '{target} 需要先完成转换。',
+        fallbackInvalid: '{target} 绑定不可用。'
+      }
     },
     inspector: {
       noSelectedNode: '未选择节点',

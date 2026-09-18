@@ -70,7 +70,7 @@ test('buildWorkflowPreflight disables full run when no tool nodes are runnable',
   assert.equal(preflight.canRun, false)
   assert.equal(preflight.failedCount, 1)
   assert.equal(preflight.issues.some(issue => issue.type === 'failed'), true)
-  assert.equal(preflight.primaryMessage, '当前没有可运行节点')
+  assert.equal(preflight.primaryMessage, 'No runnable nodes right now')
 })
 
 test('buildWorkflowPreflight reports missing workflow input and invalid semantic edges', () => {
@@ -133,5 +133,5 @@ test('buildWorkflowPreflight reports missing workflow input and invalid semantic
 
   assert.equal(preflight.issues.some(issue => issue.type === 'missing_workflow_input'), true)
   assert.equal(preflight.issues.some(issue => issue.type === 'invalid_semantic_edge'), true)
-  assert.equal(preflight.primaryMessage, '请先补齐工作流输入')
+  assert.equal(preflight.primaryMessage, 'Complete workflow inputs first')
 })

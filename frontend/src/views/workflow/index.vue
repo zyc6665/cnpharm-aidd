@@ -282,6 +282,7 @@
     resolveWorkflowRouteProjectId
   } from '@/workflow/project-context'
   import { buildWorkflowPreflight } from '@/workflow/preflight'
+  import { buildWorkflowPreflightLabels } from '@/workflow/preflight-labels'
   import type { AiddWorkflowDraft } from '@/types/models'
   import {
     useArtifactsStore,
@@ -378,6 +379,8 @@
     loaded: t('workflow.persistence.loaded'),
   }))
 
+  const workflowPreflightLabels = computed(() => buildWorkflowPreflightLabels((key, params) => t(key, params ?? {})))
+
   const {
     leftWidth: leftWorkbenchWidth,
     rightWidth: rightWorkbenchWidth,
@@ -442,7 +445,8 @@
       taskByNode: workflowStore.taskByNode,
       workflowRunNodeStates: workflowStore.activeWorkflowRun?.node_states,
       selectedToolByNode: workflowStore.selectedToolByNode,
-      toolsBySlug: workflowToolsBySlug.value
+      toolsBySlug: workflowToolsBySlug.value,
+      labels: workflowPreflightLabels.value
     })
   })
 

@@ -77,6 +77,137 @@ interface WorkflowPreflightTool {
   contract?: ToolContract | null
 }
 
+interface WorkflowPreflightIssueContext {
+  semanticType: string
+  sourceNodeTitle: string
+  filename: string
+  toolSlug: string
+}
+
+interface WorkflowPreflightIssueLabel {
+  title: string
+  detail: (context: WorkflowPreflightIssueContext) => string
+}
+
+export interface WorkflowPreflightLabels {
+  nodeTitleFallback: string
+  sourceNodeFallback: string
+  filenameFallback: string
+  toolSlugFallback: string
+  inputArtifactFallback: string
+  invalidArtifactBindingTitle: string
+  primary: {
+    runnableNodes: (count: number) => string
+    missingWorkflowInput: string
+    invalidToolContract: string
+    invalidSemanticEdge: string
+    needsPreparationOrConversion: string
+    invalidArtifactBinding: string
+    empty: string
+  }
+  issues: Record<WorkflowPreflightIssueType, WorkflowPreflightIssueLabel>
+  savedArtifactBindingMissing: (input: { slotName: string; artifactId: string }) => string
+  savedArtifactBindingMismatch: (input: { slotName: string; artifactId: string }) => string
+  bindingSuggestion: (suggestedTool: string) => string
+  bindingFallbackPreparation: (target: string) => string
+  bindingFallbackConversion: (target: string) => string
+  bindingFallbackInvalid: (target: string) => string
+}
+
+const WORKFLOW_PREFLIGHT_ISSUE_SEVERITY: Record<WorkflowPreflightIssueType, WorkflowPreflightSeverity> = {
+  missing_tool: 'error',
+  missing_workflow_input: 'error',
+  waiting_upstream: 'warning',
+  waiting_input: 'warning',
+  invalid_file_extension: 'error',
+  invalid_semantic_edge: 'error',
+  invalid_tool_contract: 'error',
+  needs_preparation: 'warning',
+  needs_conversion: 'warning',
+  invalid_artifact_binding: 'error',
+  running: 'info',
+  failed: 'error',
+  invalidated: 'warning',
+}
+
+export const DEFAULT_WORKFLOW_PREFLIGHT_LABELS: WorkflowPreflightLabels = {
+  nodeTitleFallback: 'Untitled Node',
+  sourceNodeFallback: 'upstream node',
+  filenameFallback: 'unknown file',
+  toolSlugFallback: 'unspecified tool',
+  inputArtifactFallback: 'input artifact',
+  invalidArtifactBindingTitle: 'Invalid standard artifact binding',
+  primary: {
+    runnableNodes: count => `${count} node${count === 1 ? '' : 's'} ready to run`,
+    missingWorkflowInput: 'Complete workflow inputs first',
+    invalidToolContract: 'Some tool contracts are not executable; fix node tools first',
+    invalidSemanticEdge: 'Some links are invalid; fix node dependencies first',
+    needsPreparationOrConversion: 'Some standard artifacts need preparation or conversion',
+    invalidArtifactBinding: 'Some standard artifact bindings are unavailable',
+    empty: 'No runnable nodes right now',
+  },
+  issues: {
+    missing_tool: {
+      title: 'Missing tool selection',
+      detail: () => 'This node has multiple candidate tools. Select one before running.',
+    },
+    missing_workflow_input: {
+      title: 'Missing workflow input',
+      detail: ({ semanticType }) => `Select an available file for semantic input ${semanticType} before continuing.`,
+    },
+    waiting_upstream: {
+      title: 'Waiting for upstream artifact',
+      detail: ({ sourceNodeTitle, semanticType }) => `Run ${sourceNodeTitle} first; ${semanticType} will bind to this node after success.`,
+    },
+    waiting_input: {
+      title: 'Waiting for input link',
+      detail: () => 'This node declares required inputs, but no available input source is configured.',
+    },
+    invalid_file_extension: {
+      title: 'Input file format mismatch',
+      detail: ({ filename, semanticType }) => `Selected file ${filename} does not match extension requirements for ${semanticType}.`,
+    },
+    invalid_semantic_edge: {
+      title: 'Invalid link semantic type',
+      detail: ({ semanticType }) => `The link semantic type ${semanticType} does not match upstream and downstream node definitions.`,
+    },
+    invalid_tool_contract: {
+      title: 'Tool contract is not executable',
+      detail: ({ toolSlug }) => `The bound tool ${toolSlug} has no valid workflow contract or is disabled.`,
+    },
+    needs_preparation: {
+      title: 'Input artifact needs preparation',
+      detail: () => 'This node input artifact does not satisfy tool requirements. Run the matching preparation tool first.',
+    },
+    needs_conversion: {
+      title: 'Input artifact needs conversion',
+      detail: () => 'This node input artifact must be converted before the tool can consume it.',
+    },
+    invalid_artifact_binding: {
+      title: 'Invalid standard artifact binding',
+      detail: () => 'This node standard artifact binding is unavailable. Select the input again or check upstream outputs.',
+    },
+    running: {
+      title: 'Node is running',
+      detail: () => 'Wait for the current task to finish before scheduling downstream nodes.',
+    },
+    failed: {
+      title: 'Node task failed',
+      detail: () => 'Check task logs, parameters, or input files before deciding whether to rerun.',
+    },
+    invalidated: {
+      title: 'Node needs rerun',
+      detail: () => 'Upstream inputs or parameters changed. Rerun this node to refresh results.',
+    },
+  },
+  savedArtifactBindingMissing: ({ slotName, artifactId }) => `Saved ${slotName} binding ${artifactId} is not in the available artifact list. Select the input again.`,
+  savedArtifactBindingMismatch: ({ slotName, artifactId }) => `Saved ${slotName} binding ${artifactId} does not match current input requirements. Select the input again.`,
+  bindingSuggestion: suggestedTool => `Suggested tool: ${suggestedTool}.`,
+  bindingFallbackPreparation: target => `${target} must be prepared first.`,
+  bindingFallbackConversion: target => `${target} must be converted first.`,
+  bindingFallbackInvalid: target => `${target} binding is unavailable.`,
+}
+
 const WORKFLOW_INPUT_ACCEPTED_EXTENSIONS: Partial<Record<WorkflowArtifactSemanticType, readonly string[]>> = {
   'protein_structure@1': ['.pdb', '.cif'],
   'binding_pocket@1': ['.pdb', '.cif'],
@@ -107,7 +238,9 @@ export function buildWorkflowPreflight(input: {
   workflowRunNodeStates?: Record<string, WorkflowRunNodeState | null | undefined>
   selectedToolByNode?: Record<string, string>
   toolsBySlug?: Record<string, WorkflowPreflightTool>
+  labels?: WorkflowPreflightLabels
 }): WorkflowPreflightSummary {
+  const labels = input.labels ?? DEFAULT_WORKFLOW_PREFLIGHT_LABELS
   const toolNodes = input.template.nodes.filter((node) => node.type === 'tool')
   const readyNodeIds = new Set(input.readyNodeIds)
   const artifactsById = new Map((input.artifacts ?? []).map((artifact) => [artifact.id, artifact]))
@@ -131,9 +264,9 @@ export function buildWorkflowPreflight(input: {
     const sourceOutputs = sourceNode.producedOutputTypes ?? []
     const targetInputs = targetNode.requiredInputTypes ?? []
     if (!sourceOutputs.includes(artifactType) || !targetInputs.includes(artifactType)) {
-      pushIssue(issues, issueIds, createIssue(edge.target, formatWorkflowKey(targetNode.titleKey), 'invalid_semantic_edge', {
+      pushIssue(issues, issueIds, createIssue(edge.target, formatPreflightNodeTitle(targetNode.titleKey, labels), 'invalid_semantic_edge', labels, {
         semanticType: artifactType,
-        sourceNodeTitle: formatWorkflowKey(sourceNode.titleKey),
+        sourceNodeTitle: formatPreflightNodeTitle(sourceNode.titleKey, labels),
       }))
     }
   }
@@ -145,33 +278,35 @@ export function buildWorkflowPreflight(input: {
     }
     if (status === 'running') {
       runningCount += 1
-      pushIssue(issues, issueIds, createIssue(node.id, formatWorkflowKey(node.titleKey), 'running'))
+      pushIssue(issues, issueIds, createIssue(node.id, formatPreflightNodeTitle(node.titleKey, labels), 'running', labels))
     }
     if (status === 'failed') {
       failedCount += 1
-      pushIssue(issues, issueIds, createIssue(node.id, formatWorkflowKey(node.titleKey), 'failed'))
+      pushIssue(issues, issueIds, createIssue(node.id, formatPreflightNodeTitle(node.titleKey, labels), 'failed', labels))
     }
     if (status === 'invalidated') {
-      pushIssue(issues, issueIds, createIssue(node.id, formatWorkflowKey(node.titleKey), 'invalidated'))
+      pushIssue(issues, issueIds, createIssue(node.id, formatPreflightNodeTitle(node.titleKey, labels), 'invalidated', labels))
     }
     if (status === 'needs_tool_selection') {
-      pushIssue(issues, issueIds, createIssue(node.id, formatWorkflowKey(node.titleKey), 'missing_tool'))
+      pushIssue(issues, issueIds, createIssue(node.id, formatPreflightNodeTitle(node.titleKey, labels), 'missing_tool', labels))
     }
 
     for (const issue of createBindingDecisionIssues({
       nodeId: node.id,
-      nodeTitle: formatWorkflowKey(node.titleKey),
+      nodeTitle: formatPreflightNodeTitle(node.titleKey, labels),
       task: input.taskByNode?.[node.id] ?? null,
       nodeState: input.workflowRunNodeStates?.[node.id] ?? null,
+      labels,
     })) {
       pushIssue(issues, issueIds, issue)
     }
 
     for (const issue of createSavedArtifactBindingIssues({
       node,
-      nodeTitle: formatWorkflowKey(node.titleKey),
+      nodeTitle: formatPreflightNodeTitle(node.titleKey, labels),
       bindings: input.artifactBindingsByNode?.[node.id],
       artifactsByBindingId,
+      labels,
     })) {
       pushIssue(issues, issueIds, issue)
     }
@@ -181,14 +316,14 @@ export function buildWorkflowPreflight(input: {
       ?? ((node.toolSlugs?.length ?? 0) === 1 ? node.toolSlugs?.[0] : undefined)
     const selectedTool = selectedToolSlug ? input.toolsBySlug?.[selectedToolSlug] : undefined
     if (selectedToolSlug && selectedTool && hasInvalidToolContract(selectedTool.contract)) {
-      pushIssue(issues, issueIds, createIssue(node.id, formatWorkflowKey(node.titleKey), 'invalid_tool_contract', {
+      pushIssue(issues, issueIds, createIssue(node.id, formatPreflightNodeTitle(node.titleKey, labels), 'invalid_tool_contract', labels, {
         toolSlug: selectedToolSlug,
       }))
     }
     if (selectedToolSlug && selectedTool) {
       const resourceSummary = buildResourceSummary({
         nodeId: node.id,
-        nodeTitle: formatWorkflowKey(node.titleKey),
+        nodeTitle: formatPreflightNodeTitle(node.titleKey, labels),
         toolSlug: selectedToolSlug,
         tool: selectedTool,
       })
@@ -208,7 +343,7 @@ export function buildWorkflowPreflight(input: {
       if (sourceNode.type === 'input') {
         const selectedArtifactId = input.selectedWorkflowInputFiles?.[artifactType]
         if (!selectedArtifactId) {
-          pushIssue(issues, issueIds, createIssue(node.id, formatWorkflowKey(node.titleKey), 'missing_workflow_input', {
+          pushIssue(issues, issueIds, createIssue(node.id, formatPreflightNodeTitle(node.titleKey, labels), 'missing_workflow_input', labels, {
             semanticType: artifactType,
           }))
           continue
@@ -216,7 +351,7 @@ export function buildWorkflowPreflight(input: {
 
         const artifact = artifactsById.get(selectedArtifactId)
         if (artifact && !hasAcceptedExtensionForSemanticType(artifact.filename, artifactType)) {
-          pushIssue(issues, issueIds, createIssue(node.id, formatWorkflowKey(node.titleKey), 'invalid_file_extension', {
+          pushIssue(issues, issueIds, createIssue(node.id, formatPreflightNodeTitle(node.titleKey, labels), 'invalid_file_extension', labels, {
             semanticType: artifactType,
             filename: artifact.filename,
           }))
@@ -226,15 +361,15 @@ export function buildWorkflowPreflight(input: {
 
       const upstreamTask = input.taskByNode?.[sourceNode.id]
       if (upstreamTask?.status !== 'success') {
-        pushIssue(issues, issueIds, createIssue(node.id, formatWorkflowKey(node.titleKey), 'waiting_upstream', {
+        pushIssue(issues, issueIds, createIssue(node.id, formatPreflightNodeTitle(node.titleKey, labels), 'waiting_upstream', labels, {
           semanticType: artifactType,
-          sourceNodeTitle: formatWorkflowKey(sourceNode.titleKey),
+          sourceNodeTitle: formatPreflightNodeTitle(sourceNode.titleKey, labels),
         }))
       }
     }
 
     if (status === 'idle' && node.requiredInputTypes?.length && incomingEdges.length === 0) {
-      pushIssue(issues, issueIds, createIssue(node.id, formatWorkflowKey(node.titleKey), 'waiting_input'))
+      pushIssue(issues, issueIds, createIssue(node.id, formatPreflightNodeTitle(node.titleKey, labels), 'waiting_input', labels))
     }
   }
 
@@ -253,6 +388,7 @@ export function buildWorkflowPreflight(input: {
     primaryMessage: resolvePrimaryMessage({
       runnableCount,
       issues,
+      labels,
     }),
   }
 }
@@ -283,6 +419,7 @@ function createSavedArtifactBindingIssues(input: {
   nodeTitle: string
   bindings?: Record<string, string>
   artifactsByBindingId: Map<string, ArtifactFile>
+  labels: WorkflowPreflightLabels
 }): WorkflowPreflightIssue[] {
   if (!input.bindings || !input.node.inputArtifactSlots?.length) {
     return []
@@ -300,7 +437,7 @@ function createSavedArtifactBindingIssues(input: {
     const artifact = input.artifactsByBindingId.get(artifactId)
     if (!artifact) {
       issues.push(
-        createSavedArtifactBindingIssue(input.node.id, input.nodeTitle, slotName, artifactId, 'missing')
+        createSavedArtifactBindingIssue(input.node.id, input.nodeTitle, slotName, artifactId, 'missing', input.labels)
       )
       continue
     }
@@ -310,7 +447,7 @@ function createSavedArtifactBindingIssues(input: {
     const artifactType = rawArtifactType ? normalizeWorkflowSemanticType(rawArtifactType) : ''
     if (expectedType && artifactType && expectedType !== artifactType) {
       issues.push(
-        createSavedArtifactBindingIssue(input.node.id, input.nodeTitle, slotName, artifactId, 'mismatch')
+        createSavedArtifactBindingIssue(input.node.id, input.nodeTitle, slotName, artifactId, 'mismatch', input.labels)
       )
     }
   }
@@ -323,10 +460,11 @@ function createSavedArtifactBindingIssue(
   slotName: string,
   artifactId: string,
   reason: 'missing' | 'mismatch',
+  labels: WorkflowPreflightLabels,
 ): WorkflowPreflightIssue {
   const detail = reason === 'missing'
-    ? `已保存的 ${slotName} 绑定 ${artifactId} 不在当前可用产物列表中，请重新选择输入。`
-    : `已保存的 ${slotName} 绑定 ${artifactId} 与当前输入要求不匹配，请重新选择输入。`
+    ? labels.savedArtifactBindingMissing({ slotName, artifactId })
+    : labels.savedArtifactBindingMismatch({ slotName, artifactId })
 
   return {
     id: `${nodeId}-invalid_artifact_binding-${slotName}`,
@@ -334,7 +472,7 @@ function createSavedArtifactBindingIssue(
     nodeTitle,
     type: 'invalid_artifact_binding',
     severity: 'error',
-    title: '标准产物绑定无效',
+    title: labels.invalidArtifactBindingTitle,
     detail,
   }
 }
@@ -342,32 +480,33 @@ function createSavedArtifactBindingIssue(
 function resolvePrimaryMessage(input: {
   runnableCount: number
   issues: WorkflowPreflightIssue[]
+  labels: WorkflowPreflightLabels
 }): string {
   if (input.runnableCount > 0) {
-    return `有 ${input.runnableCount} 个节点可运行`
+    return input.labels.primary.runnableNodes(input.runnableCount)
   }
 
   if (input.issues.some((issue) => issue.type === 'missing_workflow_input')) {
-    return '请先补齐工作流输入'
+    return input.labels.primary.missingWorkflowInput
   }
 
   if (input.issues.some((issue) => issue.type === 'invalid_tool_contract')) {
-    return '存在不可执行的工具契约，请先修复节点工具'
+    return input.labels.primary.invalidToolContract
   }
 
   if (input.issues.some((issue) => issue.type === 'invalid_semantic_edge')) {
-    return '存在无效连线，请先修复节点依赖'
+    return input.labels.primary.invalidSemanticEdge
   }
 
   if (input.issues.some((issue) => issue.type === 'needs_preparation' || issue.type === 'needs_conversion')) {
-    return '存在标准产物需要准备或转换'
+    return input.labels.primary.needsPreparationOrConversion
   }
 
   if (input.issues.some((issue) => issue.type === 'invalid_artifact_binding')) {
-    return '存在不可用的标准产物绑定'
+    return input.labels.primary.invalidArtifactBinding
   }
 
-  return '当前没有可运行节点'
+  return input.labels.primary.empty
 }
 
 function pushIssue(
@@ -387,6 +526,7 @@ function createIssue(
   nodeId: string,
   nodeTitle: string,
   type: WorkflowPreflightIssueType,
+  labels: WorkflowPreflightLabels,
   detailInput: {
     semanticType?: string
     sourceNodeTitle?: string
@@ -395,91 +535,22 @@ function createIssue(
   } = {},
 ): WorkflowPreflightIssue {
   const semanticType = detailInput.semanticType ?? ''
-  const sourceNodeTitle = detailInput.sourceNodeTitle ?? '上游节点'
-  const filename = detailInput.filename ?? '未知文件'
-  const toolSlug = detailInput.toolSlug ?? '未指定工具'
-
-  const issueTextByType: Record<WorkflowPreflightIssueType, {
-    severity: WorkflowPreflightSeverity
-    title: string
-    detail: string
-  }> = {
-    missing_tool: {
-      severity: 'error',
-      title: '缺少工具选择',
-      detail: '该节点存在多个候选工具，运行前需要明确指定其中一个工具。'
-    },
-    missing_workflow_input: {
-      severity: 'error',
-      title: '缺少工作流输入',
-      detail: `请先为语义输入 ${semanticType} 选择可用文件后再继续运行。`
-    },
-    waiting_upstream: {
-      severity: 'warning',
-      title: '等待上游产物',
-      detail: `先运行 ${sourceNodeTitle}，成功后 ${semanticType} 会自动绑定到当前节点。`
-    },
-    waiting_input: {
-      severity: 'warning',
-      title: '等待输入连线',
-      detail: '该节点声明了必需输入，但当前还没有配置任何可用输入来源。'
-    },
-    invalid_file_extension: {
-      severity: 'error',
-      title: '输入文件格式不匹配',
-      detail: `已选择文件 ${filename} 与当前语义输入 ${semanticType} 的扩展名要求不匹配。`
-    },
-    invalid_semantic_edge: {
-      severity: 'error',
-      title: '连线语义无效',
-      detail: `当前连线的语义类型 ${semanticType} 与上下游节点定义不一致，请检查节点依赖。`
-    },
-    invalid_tool_contract: {
-      severity: 'error',
-      title: '工具契约不可执行',
-      detail: `当前节点绑定的工具 ${toolSlug} 缺少有效工作流契约或已被禁用。`
-    },
-    needs_preparation: {
-      severity: 'warning',
-      title: '需要先准备输入产物',
-      detail: '该节点输入产物尚未满足工具要求，请先运行对应准备工具。'
-    },
-    needs_conversion: {
-      severity: 'warning',
-      title: '需要先转换输入产物',
-      detail: '该节点输入产物需要先转换为工具可消费的格式。'
-    },
-    invalid_artifact_binding: {
-      severity: 'error',
-      title: '标准产物绑定无效',
-      detail: '该节点的标准产物绑定不可用，请重新选择输入或检查上游输出。'
-    },
-    running: {
-      severity: 'info',
-      title: '节点正在运行',
-      detail: '等待当前任务结束后再继续调度后续节点。'
-    },
-    failed: {
-      severity: 'error',
-      title: '节点任务失败',
-      detail: '请先检查任务日志、参数或输入文件，再决定是否重新运行。'
-    },
-    invalidated: {
-      severity: 'warning',
-      title: '节点需要重跑',
-      detail: '上游输入或参数已经变化，建议重新运行该节点以刷新结果。'
-    }
+  const context: WorkflowPreflightIssueContext = {
+    semanticType,
+    sourceNodeTitle: detailInput.sourceNodeTitle ?? labels.sourceNodeFallback,
+    filename: detailInput.filename ?? labels.filenameFallback,
+    toolSlug: detailInput.toolSlug ?? labels.toolSlugFallback,
   }
-  const text = issueTextByType[type]
+  const text = labels.issues[type]
 
   return {
-    id: `${nodeId}-${type}-${semanticType}-${toolSlug}`,
+    id: `${nodeId}-${type}-${semanticType}`,
     nodeId,
     nodeTitle,
     type,
-    severity: text.severity,
+    severity: WORKFLOW_PREFLIGHT_ISSUE_SEVERITY[type],
     title: text.title,
-    detail: text.detail,
+    detail: text.detail(context),
   }
 }
 
@@ -488,13 +559,14 @@ function createBindingDecisionIssues(input: {
   nodeTitle: string
   task?: WorkflowTaskRef | null
   nodeState?: WorkflowRunNodeState | null
+  labels: WorkflowPreflightLabels
 }): WorkflowPreflightIssue[] {
   const decisions = {
     ...normalizeBindingDecisions(input.task?.binding_decisions),
     ...normalizeBindingDecisions(input.nodeState?.binding_decisions),
   }
   const issues = Object.entries(decisions).flatMap(([inputName, decision]) => {
-    const issue = createBindingDecisionIssue(input.nodeId, input.nodeTitle, inputName, decision)
+    const issue = createBindingDecisionIssue(input.nodeId, input.nodeTitle, inputName, decision, input.labels)
     return issue ? [issue] : []
   })
 
@@ -505,7 +577,7 @@ function createBindingDecisionIssues(input: {
       nodeTitle: input.nodeTitle,
       type: 'invalid_artifact_binding',
       severity: 'error',
-      title: '标准产物绑定无效',
+      title: input.labels.invalidArtifactBindingTitle,
       detail: input.nodeState.blocked_reason,
     })
   }
@@ -527,17 +599,18 @@ function createBindingDecisionIssue(
   nodeTitle: string,
   inputName: string,
   decision: ArtifactBindingDecision,
+  labels: WorkflowPreflightLabels,
 ): WorkflowPreflightIssue | null {
   const type = bindingIssueType(decision.status)
   if (!type) {
     return null
   }
 
-  const text = bindingIssueText(type)
+  const text = bindingIssueText(type, labels)
   const reason = normalizeDecisionText(decision.reason)
   const suggestedTool = normalizeDecisionText(decision.suggested_tool_slug)
-  const fallbackDetail = bindingFallbackDetail(type, decision.standard_type, inputName)
-  const suggestion = suggestedTool ? `建议运行 ${suggestedTool}。` : ''
+  const fallbackDetail = bindingFallbackDetail(type, labels, decision.standard_type, inputName)
+  const suggestion = suggestedTool ? labels.bindingSuggestion(suggestedTool) : ''
 
   return {
     id: `${nodeId}-${type}-${inputName || decision.input_name || 'artifact'}`,
@@ -563,32 +636,37 @@ function bindingIssueType(status: string): WorkflowPreflightIssueType | null {
   return null
 }
 
-function bindingIssueText(type: WorkflowPreflightIssueType): {
+function bindingIssueText(type: WorkflowPreflightIssueType, labels: WorkflowPreflightLabels): {
   severity: WorkflowPreflightSeverity
   title: string
 } {
   if (type === 'needs_preparation') {
-    return { severity: 'warning', title: '需要先准备输入产物' }
+    return { severity: 'warning', title: labels.issues.needs_preparation.title }
   }
   if (type === 'needs_conversion') {
-    return { severity: 'warning', title: '需要先转换输入产物' }
+    return { severity: 'warning', title: labels.issues.needs_conversion.title }
   }
-  return { severity: 'error', title: '标准产物绑定无效' }
+  return { severity: 'error', title: labels.invalidArtifactBindingTitle }
 }
 
 function bindingFallbackDetail(
   type: WorkflowPreflightIssueType,
+  labels: WorkflowPreflightLabels,
   standardType?: string | null,
   inputName?: string,
 ): string {
-  const target = standardType || inputName || '输入产物'
+  const target = standardType || inputName || labels.inputArtifactFallback
   if (type === 'needs_preparation') {
-    return `${target} 需要先完成准备处理。`
+    return labels.bindingFallbackPreparation(target)
   }
   if (type === 'needs_conversion') {
-    return `${target} 需要先完成格式转换。`
+    return labels.bindingFallbackConversion(target)
   }
-  return `${target} 绑定不可用。`
+  return labels.bindingFallbackInvalid(target)
+}
+
+function formatPreflightNodeTitle(key: unknown, labels: WorkflowPreflightLabels): string {
+  return formatWorkflowKey(key, labels.nodeTitleFallback)
 }
 
 function normalizeDecisionText(value?: string | null): string {

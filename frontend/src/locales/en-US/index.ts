@@ -503,7 +503,87 @@ export default {
       hintRunning: 'Some nodes are already running. Wait for the current tasks to finish before continuing.',
       hintBlocked: 'You can run ready nodes first. Blocked nodes will become runnable after upstream artifacts are produced.',
       hintReady: 'Some nodes already satisfy run conditions and can be started now.',
-      hintEmpty: 'Select the required tool, input file, or upstream artifact before starting the workflow.'
+      hintEmpty: 'Select the required tool, input file, or upstream artifact before starting the workflow.',
+      fallback: {
+        nodeTitle: 'Untitled Node',
+        sourceNode: 'upstream node',
+        filename: 'unknown file',
+        toolSlug: 'unspecified tool',
+        inputArtifact: 'input artifact'
+      },
+      primary: {
+        runnableNodes: '{count} node(s) ready to run',
+        missingWorkflowInput: 'Complete workflow inputs first',
+        invalidToolContract: 'Some tool contracts are not executable; fix node tools first',
+        invalidSemanticEdge: 'Some links are invalid; fix node dependencies first',
+        needsPreparationOrConversion: 'Some standard artifacts need preparation or conversion',
+        invalidArtifactBinding: 'Some standard artifact bindings are unavailable',
+        empty: 'No runnable nodes right now'
+      },
+      issues: {
+        missingTool: {
+          title: 'Missing tool selection',
+          detail: 'This node has multiple candidate tools. Select one before running.'
+        },
+        missingWorkflowInput: {
+          title: 'Missing workflow input',
+          detail: 'Select an available file for semantic input {semanticType} before continuing.'
+        },
+        waitingUpstream: {
+          title: 'Waiting for upstream artifact',
+          detail: 'Run {sourceNodeTitle} first; {semanticType} will bind to this node after success.'
+        },
+        waitingInput: {
+          title: 'Waiting for input link',
+          detail: 'This node declares required inputs, but no available input source is configured.'
+        },
+        invalidFileExtension: {
+          title: 'Input file format mismatch',
+          detail: 'Selected file {filename} does not match extension requirements for {semanticType}.'
+        },
+        invalidSemanticEdge: {
+          title: 'Invalid link semantic type',
+          detail: 'The link semantic type {semanticType} does not match upstream and downstream node definitions.'
+        },
+        invalidToolContract: {
+          title: 'Tool contract is not executable',
+          detail: 'The bound tool {toolSlug} has no valid workflow contract or is disabled.'
+        },
+        needsPreparation: {
+          title: 'Input artifact needs preparation',
+          detail: 'This node input artifact does not satisfy tool requirements. Run the matching preparation tool first.'
+        },
+        needsConversion: {
+          title: 'Input artifact needs conversion',
+          detail: 'This node input artifact must be converted before the tool can consume it.'
+        },
+        invalidArtifactBinding: {
+          title: 'Invalid standard artifact binding',
+          detail: 'This node standard artifact binding is unavailable. Select the input again or check upstream outputs.'
+        },
+        running: {
+          title: 'Node is running',
+          detail: 'Wait for the current task to finish before scheduling downstream nodes.'
+        },
+        failed: {
+          title: 'Node task failed',
+          detail: 'Check task logs, parameters, or input files before deciding whether to rerun.'
+        },
+        invalidated: {
+          title: 'Node needs rerun',
+          detail: 'Upstream inputs or parameters changed. Rerun this node to refresh results.'
+        }
+      },
+      savedBinding: {
+        missing: 'Saved {slotName} binding {artifactId} is not in the available artifact list. Select the input again.',
+        mismatch: 'Saved {slotName} binding {artifactId} does not match current input requirements. Select the input again.'
+      },
+      binding: {
+        suggestion: 'Suggested tool: {suggestedTool}.',
+        fallbackPreparation: '{target} must be prepared first.',
+        fallbackConversion: '{target} must be converted first.',
+        fallbackInvalid: '{target} binding is unavailable.'
+      }
     },
     inspector: {
       noSelectedNode: 'No selected node',

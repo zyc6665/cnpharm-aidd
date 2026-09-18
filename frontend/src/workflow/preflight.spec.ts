@@ -1,7 +1,44 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import type { ArtifactFile, ToolContract } from '@/types/models'
 import type { WorkflowCanvasPreset } from './canvas-types'
-import { buildWorkflowPreflight } from './preflight'
+import {
+  buildWorkflowPreflight,
+  DEFAULT_WORKFLOW_PREFLIGHT_LABELS,
+} from './preflight'
+import type { WorkflowPreflightLabels } from './preflight'
+
+const testPreflightLabels: WorkflowPreflightLabels = {
+  ...DEFAULT_WORKFLOW_PREFLIGHT_LABELS,
+  invalidArtifactBindingTitle: '标准产物绑定无效',
+  primary: {
+    ...DEFAULT_WORKFLOW_PREFLIGHT_LABELS.primary,
+    needsPreparationOrConversion: '存在标准产物需要准备或转换',
+    invalidArtifactBinding: '存在不可用的标准产物绑定',
+  },
+  issues: {
+    ...DEFAULT_WORKFLOW_PREFLIGHT_LABELS.issues,
+    needs_preparation: {
+      ...DEFAULT_WORKFLOW_PREFLIGHT_LABELS.issues.needs_preparation,
+      title: '需要先准备输入产物',
+    },
+    waiting_upstream: {
+      title: '等待上游产物',
+      detail: ({ sourceNodeTitle, semanticType }) => `先运行 ${sourceNodeTitle}，成功后 ${semanticType} 会自动绑定到当前节点。`,
+    },
+  },
+  savedArtifactBindingMissing: ({ slotName, artifactId }) => `已保存的 ${slotName} 绑定 ${artifactId} 不在当前可用产物列表中，请重新选择输入。`,
+  savedArtifactBindingMismatch: ({ slotName, artifactId }) => `已保存的 ${slotName} 绑定 ${artifactId} 与当前输入要求不匹配，请重新选择输入。`,
+  bindingSuggestion: suggestedTool => `建议运行 ${suggestedTool}。`,
+}
+
+function buildTestPreflight(input: Parameters<typeof buildWorkflowPreflight>[0]) {
+  return buildWorkflowPreflight({
+    ...input,
+    labels: testPreflightLabels,
+  })
+}
 
 function makeToolContract(overrides: Partial<ToolContract> = {}): ToolContract {
   return {
@@ -58,6 +95,26 @@ function artifact(overrides: Partial<ArtifactFile>): ArtifactFile {
 }
 
 describe('buildWorkflowPreflight', () => {
+  it('keeps preflight copy behind an injected labels interface', () => {
+    const source = readFileSync(resolve('src/workflow/preflight.ts'), 'utf8')
+    const pageSource = readFileSync(resolve('src/views/workflow/index.vue'), 'utf8')
+
+    expect(source).toContain('WorkflowPreflightLabels')
+    expect(source).toContain('DEFAULT_WORKFLOW_PREFLIGHT_LABELS')
+    expect(pageSource).toContain('buildWorkflowPreflightLabels')
+
+    for (const literal of [
+      '请先补齐工作流输入',
+      '标准产物绑定无效',
+      '缺少工具选择',
+      '等待上游产物',
+      '建议运行',
+      '输入产物',
+    ]) {
+      expect(source).not.toContain(literal)
+    }
+  })
+
   it('汇总可运行节点的工具执行器和资源画像', () => {
     const template: WorkflowCanvasPreset = {
       id: 'free',
@@ -75,7 +132,7 @@ describe('buildWorkflowPreflight', () => {
       edges: [],
     }
 
-    const preflight = buildWorkflowPreflight({
+    const preflight = buildTestPreflight({
       template,
       nodeStatuses: { 'dock-ligands': 'idle' },
       readyNodeIds: ['dock-ligands'],
@@ -124,7 +181,7 @@ describe('buildWorkflowPreflight', () => {
       edges: [],
     }
 
-    const preflight = buildWorkflowPreflight({
+    const preflight = buildTestPreflight({
       template,
       nodeStatuses: { 'predict-pocket': 'idle' },
       readyNodeIds: [],
@@ -187,7 +244,7 @@ describe('buildWorkflowPreflight', () => {
       edges: [],
     }
 
-    const preflight = buildWorkflowPreflight({
+    const preflight = buildTestPreflight({
       template,
       nodeStatuses: { 'predict-pocket': 'idle', 'dock-pocket': 'idle' },
       readyNodeIds: [],
@@ -243,7 +300,7 @@ describe('buildWorkflowPreflight', () => {
       ],
     }
 
-    const preflight = buildWorkflowPreflight({
+    const preflight = buildTestPreflight({
       template,
       nodeStatuses: { 'fetch-pdb': 'idle', 'predict-pocket': 'idle' },
       readyNodeIds: ['fetch-pdb'],
