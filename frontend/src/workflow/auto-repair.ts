@@ -1,7 +1,11 @@
 import type { WorkflowArtifactSemanticType } from './artifact-types'
 import type { ArtifactInputSlot, ArtifactOutputSlot } from './contract-bindings'
 import type { WorkflowCanvasEdge, WorkflowCanvasNode, WorkflowCanvasPreset } from './canvas-types'
-import { formatArtifactRole } from './artifact-role-registry'
+import {
+  DEFAULT_ARTIFACT_ROLE_LABELS,
+  formatArtifactRole,
+} from './artifact-role-registry'
+import type { ArtifactRoleLabels } from './artifact-role-registry'
 import { normalizeWorkflowSemanticType } from './semantic-types'
 
 export interface WorkflowAutoRepairTool {
@@ -56,8 +60,10 @@ export function buildWorkflowAutoRepairPlan(input: {
   template: WorkflowCanvasPreset
   tools: readonly WorkflowAutoRepairTool[]
   labels?: WorkflowAutoRepairLabels
+  artifactRoleLabels?: ArtifactRoleLabels
 }): WorkflowAutoRepairPlan {
   const labels = input.labels ?? DEFAULT_WORKFLOW_AUTO_REPAIR_LABELS
+  const artifactRoleLabels = input.artifactRoleLabels ?? DEFAULT_ARTIFACT_ROLE_LABELS
   const nodeById = new Map(input.template.nodes.map(node => [node.id, node]))
   const toolBySlug = new Map(input.tools.map(tool => [tool.slug, tool]))
   const actions: WorkflowAutoRepairAction[] = []
@@ -99,7 +105,7 @@ export function buildWorkflowAutoRepairPlan(input: {
       }
       plannedKeys.add(actionKey)
       const requiredRoles = desiredRolesForSlot(slot)
-      const roleLabels = requiredRoles.map(formatArtifactRole)
+      const roleLabels = requiredRoles.map(role => formatArtifactRole(role, artifactRoleLabels))
       const targetNodeTitle = String(targetNode.titleKey || targetNode.id)
       const toolName = repairTool.name || toolSlug
 

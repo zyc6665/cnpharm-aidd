@@ -1,27 +1,41 @@
-const ARTIFACT_ROLE_LABELS: Record<string, string> = {
-  atom_pocket_pdb: '原子口袋 PDB',
-  metadata_json: '元数据 JSON',
-  pocket_metadata_json: '口袋元数据 JSON',
-  preparation_report_json: '处理报告 JSON',
-  prepared_pdb: '已处理 PDB',
-  prepared_pqr: '已处理 PQR',
-  raw_structure_file: '原始结构文件',
-  receptor_pdbqt: '受体 PDBQT',
-  report_json: '报告 JSON',
-  report_markdown: '报告 Markdown',
-  residue_pocket_pdb: '残基口袋 PDB',
-  structure_2d_sdf: '2D 配体 SDF',
-  structure_3d_sdf: '3D 配体 SDF',
-  structure_file: '结构文件',
-  table_file: '表格文件',
+export interface ArtifactRoleLabels {
+  roleNames: Readonly<Record<string, string>>
+  listSeparator: string
 }
 
-export function formatArtifactRole(role: string): string {
+export const DEFAULT_ARTIFACT_ROLE_LABELS: ArtifactRoleLabels = {
+  roleNames: {
+    atom_pocket_pdb: 'Atom pocket PDB',
+    metadata_json: 'Metadata JSON',
+    pocket_metadata_json: 'Pocket metadata JSON',
+    preparation_report_json: 'Preparation report JSON',
+    prepared_pdb: 'Prepared PDB',
+    prepared_pqr: 'Prepared PQR',
+    raw_structure_file: 'Raw structure file',
+    receptor_pdbqt: 'Receptor PDBQT',
+    report_json: 'Report JSON',
+    report_markdown: 'Report Markdown',
+    residue_pocket_pdb: 'Residue pocket PDB',
+    structure_2d_sdf: '2D ligand SDF',
+    structure_3d_sdf: '3D ligand SDF',
+    structure_file: 'Structure file',
+    table_file: 'Table file',
+  },
+  listSeparator: ', ',
+}
+
+export function formatArtifactRole(
+  role: string,
+  labels: ArtifactRoleLabels = DEFAULT_ARTIFACT_ROLE_LABELS,
+): string {
   const normalizedRole = String(role).trim()
-  const label = ARTIFACT_ROLE_LABELS[normalizedRole]
+  const label = labels.roleNames[normalizedRole]
   return label ? `${label} (${normalizedRole})` : normalizedRole
 }
 
-export function formatArtifactRoleList(roles: readonly string[]): string {
-  return roles.map(formatArtifactRole).join('、')
+export function formatArtifactRoleList(
+  roles: readonly string[],
+  labels: ArtifactRoleLabels = DEFAULT_ARTIFACT_ROLE_LABELS,
+): string {
+  return roles.map(role => formatArtifactRole(role, labels)).join(labels.listSeparator)
 }

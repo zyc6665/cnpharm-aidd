@@ -314,6 +314,23 @@ export default {
       reasonWithoutRoles: '{targetNodeTitle} {inputSlotName} needs preparation or conversion before use; {toolName} can auto-repair it.',
       roleSeparator: ', '
     },
+    artifactRoles: {
+      atom_pocket_pdb: 'Atom pocket PDB',
+      metadata_json: 'Metadata JSON',
+      pocket_metadata_json: 'Pocket metadata JSON',
+      preparation_report_json: 'Preparation report JSON',
+      prepared_pdb: 'Prepared PDB',
+      prepared_pqr: 'Prepared PQR',
+      raw_structure_file: 'Raw structure file',
+      receptor_pdbqt: 'Receptor PDBQT',
+      report_json: 'Report JSON',
+      report_markdown: 'Report Markdown',
+      residue_pocket_pdb: 'Residue pocket PDB',
+      structure_2d_sdf: '2D ligand SDF',
+      structure_3d_sdf: '3D ligand SDF',
+      structure_file: 'Structure file',
+      table_file: 'Table file'
+    },
     canvasPresets: {
       kicker: 'Flow Arrangement',
       unsaved: 'Unsaved workbench arrangement',

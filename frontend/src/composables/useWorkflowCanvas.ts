@@ -22,6 +22,7 @@ import {
   type ArtifactOutputSlot
 } from '@/workflow/contract-bindings'
 import { buildWorkflowAutoRepairPlan } from '@/workflow/auto-repair'
+import { buildArtifactRoleLabels } from '@/workflow/artifact-role-labels'
 import { resolveWorkflowCanvasNodeStatus } from '@/workflow/canvas-state'
 import { resolveWorkflowLabel } from '@/workflow/i18n-utils'
 
@@ -300,6 +301,7 @@ export function useWorkflowCanvas(input: {
   const workflowRepairPlan = computed(() => buildWorkflowAutoRepairPlan({
     template: editableCanvasPreset.value,
     tools: availableWorkflowTools.value,
+    artifactRoleLabels: buildArtifactRoleLabels(key => t(key)),
     labels: {
       reasonWithRoles: input => t('workflow.autoRepair.reasonWithRoles', {
         targetNodeTitle: formatKey(input.targetNodeTitle),
