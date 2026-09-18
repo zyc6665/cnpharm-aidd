@@ -50,18 +50,22 @@
           </div>
         </div>
 
-        <div class="artifact-group">
-          <h3 class="artifact-group-title">{{ t('workflow.artifacts.currentGroup') }}</h3>
-          <div v-if="currentGroupNodes.length > 0" class="artifact-tree">
+        <div
+          v-for="section in artifactSections"
+          :key="section.scope"
+          class="artifact-group"
+        >
+          <h3 class="artifact-group-title">{{ t(section.titleKey) }}</h3>
+          <div v-if="section.nodes.length > 0" class="artifact-tree">
             <section
-              v-for="groupNode in currentGroupNodes"
-              :key="groupKey('current', groupNode.groupId)"
+              v-for="groupNode in section.nodes"
+              :key="groupKey(section.scope, groupNode.groupId)"
               class="artifact-group-shell"
             >
               <button
                 type="button"
                 class="artifact-group-toggle"
-                @click="toggleGroup('current', groupNode.groupId)"
+                @click="toggleGroup(section.scope, groupNode.groupId)"
               >
                 <span class="artifact-group-toggle-copy">
                   <span class="artifact-group-toggle-kicker">{{ t('tools.artifactGroupLabel') }}</span>
@@ -70,17 +74,17 @@
                 <a-tag class="artifact-group-toggle-count">{{ groupNode.tools.length }}</a-tag>
               </button>
 
-              <div v-if="isGroupExpanded('current', groupNode.groupId)" class="artifact-group-content">
+              <div v-if="isGroupExpanded(section.scope, groupNode.groupId)" class="artifact-group-content">
                 <section
                   v-for="toolNode in groupNode.tools"
-                  :key="toolKey('current', groupNode.groupId, toolNode.toolSlug)"
+                  :key="toolKey(section.scope, groupNode.groupId, toolNode.toolSlug)"
                   class="artifact-tool-section"
                   :class="{ 'is-active': selectedToolSlug === toolNode.toolSlug }"
                 >
                   <button
                     type="button"
                     class="artifact-tool-toggle"
-                    @click="toggleTool('current', groupNode.groupId, toolNode.toolSlug)"
+                    @click="toggleTool(section.scope, groupNode.groupId, toolNode.toolSlug)"
                   >
                     <span class="artifact-tool-header">
                       <span class="artifact-tool-kicker">{{ t('workflow.artifacts.sourceToolLabel') }}</span>
@@ -91,17 +95,17 @@
                     </a-tag>
                   </button>
 
-                  <div v-if="isToolExpanded('current', groupNode.groupId, toolNode.toolSlug)" class="artifact-task-list">
+                  <div v-if="isToolExpanded(section.scope, groupNode.groupId, toolNode.toolSlug)" class="artifact-task-list">
                     <article
                       v-for="taskNode in toolNode.tasks"
-                      :key="taskKey('current', groupNode.groupId, toolNode.toolSlug, taskNode.taskId)"
+                      :key="taskKey(section.scope, groupNode.groupId, toolNode.toolSlug, taskNode.taskId)"
                       class="artifact-task-card"
                     >
                       <div class="artifact-task-header">
                         <button
                           type="button"
                           class="artifact-task-toggle"
-                          @click="toggleTask('current', groupNode.groupId, toolNode.toolSlug, taskNode.taskId)"
+                          @click="toggleTask(section.scope, groupNode.groupId, toolNode.toolSlug, taskNode.taskId)"
                         >
                           <div class="artifact-task-main">
                             <span class="artifact-task-kicker">{{ t('workflow.artifacts.taskLabel') }}</span>
@@ -135,7 +139,7 @@
                         </div>
                       </div>
 
-                      <div v-if="isTaskExpanded('current', groupNode.groupId, toolNode.toolSlug, taskNode.taskId)" class="artifact-task-content">
+                      <div v-if="isTaskExpanded(section.scope, groupNode.groupId, toolNode.toolSlug, taskNode.taskId)" class="artifact-task-content">
                         <div class="artifact-task-meta-grid">
                           <div class="artifact-task-meta-item">
                             <span class="artifact-meta-label">{{ t('workflow.artifacts.sourceToolLabel') }}</span>
@@ -172,132 +176,7 @@
               </div>
             </section>
           </div>
-          <a-empty v-else :description="t('workflow.artifacts.emptyCurrentGroup')" />
-        </div>
-
-        <div class="artifact-group">
-          <h3 class="artifact-group-title">{{ t('workflow.artifacts.recentGroup') }}</h3>
-          <div v-if="recentGroupNodes.length > 0" class="artifact-tree">
-            <section
-              v-for="groupNode in recentGroupNodes"
-              :key="groupKey('recent', groupNode.groupId)"
-              class="artifact-group-shell"
-            >
-              <button
-                type="button"
-                class="artifact-group-toggle"
-                @click="toggleGroup('recent', groupNode.groupId)"
-              >
-                <span class="artifact-group-toggle-copy">
-                  <span class="artifact-group-toggle-kicker">{{ t('tools.artifactGroupLabel') }}</span>
-                  <strong class="artifact-group-heading">{{ getGroupDisplayName(groupNode) }}</strong>
-                </span>
-                <a-tag class="artifact-group-toggle-count">{{ groupNode.tools.length }}</a-tag>
-              </button>
-
-              <div v-if="isGroupExpanded('recent', groupNode.groupId)" class="artifact-group-content">
-                <section
-                  v-for="toolNode in groupNode.tools"
-                  :key="toolKey('recent', groupNode.groupId, toolNode.toolSlug)"
-                  class="artifact-tool-section"
-                  :class="{ 'is-active': selectedToolSlug === toolNode.toolSlug }"
-                >
-                  <button
-                    type="button"
-                    class="artifact-tool-toggle"
-                    @click="toggleTool('recent', groupNode.groupId, toolNode.toolSlug)"
-                  >
-                    <span class="artifact-tool-header">
-                      <span class="artifact-tool-kicker">{{ t('workflow.artifacts.sourceToolLabel') }}</span>
-                      <strong class="artifact-tool-title">{{ toolNode.toolName }}</strong>
-                    </span>
-                    <a-tag class="artifact-tool-toggle-count">
-                      {{ t('workflow.artifacts.taskCount', { count: toolNode.tasks.length }) }}
-                    </a-tag>
-                  </button>
-
-                  <div v-if="isToolExpanded('recent', groupNode.groupId, toolNode.toolSlug)" class="artifact-task-list">
-                    <article
-                      v-for="taskNode in toolNode.tasks"
-                      :key="taskKey('recent', groupNode.groupId, toolNode.toolSlug, taskNode.taskId)"
-                      class="artifact-task-card"
-                    >
-                      <div class="artifact-task-header">
-                        <button
-                          type="button"
-                          class="artifact-task-toggle"
-                          @click="toggleTask('recent', groupNode.groupId, toolNode.toolSlug, taskNode.taskId)"
-                        >
-                          <div class="artifact-task-main">
-                            <span class="artifact-task-kicker">{{ t('workflow.artifacts.taskLabel') }}</span>
-                            <strong class="artifact-task-title">{{ getTaskDisplayName(taskNode) }}</strong>
-                            <p class="artifact-task-meta">
-                              <span class="artifact-task-short-id">{{ formatTaskShortId(taskNode.taskId) }}</span>
-                              <span>{{ formatDateTime(taskNode.latestCreatedAt) }}</span>
-                            </p>
-                          </div>
-                        </button>
-                        <div class="artifact-action">
-                          <a-tag class="artifact-task-count">
-                            {{ t('workflow.artifacts.taskCount', { count: taskNode.artifacts.length }) }}
-                          </a-tag>
-                          <a-button
-                            type="link"
-                            size="small"
-                            class="artifact-action-button"
-                            @click.stop="selectTaskPath(groupNode, toolNode, taskNode)"
-                          >
-                            {{ t('workflow.artifacts.locatePath') }}
-                          </a-button>
-                          <a-button
-                            type="link"
-                            size="small"
-                            class="artifact-action-button"
-                            @click.stop="openTaskDetail(taskNode.taskId)"
-                          >
-                            {{ t('workflow.currentTool.viewTask') }}
-                          </a-button>
-                        </div>
-                      </div>
-
-                      <div v-if="isTaskExpanded('recent', groupNode.groupId, toolNode.toolSlug, taskNode.taskId)" class="artifact-task-content">
-                        <div class="artifact-task-meta-grid">
-                          <div class="artifact-task-meta-item">
-                            <span class="artifact-meta-label">{{ t('workflow.artifacts.sourceToolLabel') }}</span>
-                            <strong class="artifact-meta-value">{{ toolNode.toolName }}</strong>
-                          </div>
-                          <div class="artifact-task-meta-item">
-                            <span class="artifact-meta-label">{{ t('workflow.artifacts.generatedAtLabel') }}</span>
-                            <strong class="artifact-meta-value">{{ formatDateTime(taskNode.latestCreatedAt) }}</strong>
-                          </div>
-                        </div>
-
-                        <div class="artifact-list artifact-list-compact">
-                          <button
-                            v-for="artifact in visibleArtifacts(taskNode.artifacts)"
-                            :key="artifact.id"
-                            type="button"
-                            class="artifact-item artifact-item-button"
-                            @click.stop="selectArtifactPath(groupNode, toolNode, taskNode, artifact)"
-                          >
-                            <div class="artifact-copy">
-                              <strong class="artifact-name">{{ artifact.filename }}</strong>
-                              <p class="artifact-meta">{{ formatDateTime(artifact.created_at) }}</p>
-                            </div>
-                          </button>
-                        </div>
-
-                        <p v-if="hiddenArtifactCount(taskNode.artifacts) > 0" class="artifact-more">
-                          {{ t('workflow.artifacts.moreArtifacts', { count: hiddenArtifactCount(taskNode.artifacts) }) }}
-                        </p>
-                      </div>
-                    </article>
-                  </div>
-                </section>
-              </div>
-            </section>
-          </div>
-          <a-empty v-else :description="t('workflow.artifacts.emptyRecent')" />
+          <a-empty v-else :description="t(section.emptyKey)" />
         </div>
       </div>
     </div>
@@ -360,6 +239,21 @@
       scope: 'global'
     }).groups
   })
+
+  const artifactSections = computed(() => [
+    {
+      scope: 'current' as const,
+      titleKey: 'workflow.artifacts.currentGroup',
+      emptyKey: 'workflow.artifacts.emptyCurrentGroup',
+      nodes: currentGroupNodes.value
+    },
+    {
+      scope: 'recent' as const,
+      titleKey: 'workflow.artifacts.recentGroup',
+      emptyKey: 'workflow.artifacts.emptyRecent',
+      nodes: recentGroupNodes.value
+    }
+  ])
 
   const activeTask = computed(() => props.activeTask ?? null)
 

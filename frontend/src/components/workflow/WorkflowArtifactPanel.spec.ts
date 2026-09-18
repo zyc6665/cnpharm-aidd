@@ -1,6 +1,8 @@
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import WorkflowArtifactPanel from './WorkflowArtifactPanel.vue'
 import { useUserStore } from '@/stores'
 import i18n from '@/locales'
@@ -41,5 +43,14 @@ describe('WorkflowArtifactPanel', () => {
     expect(wrapper.text()).toContain('Current Node Task')
     expect(wrapper.text()).toContain('running')
     expect(wrapper.text()).toContain('45%')
+  })
+
+  it('renders current and recent artifact trees through one shared template', () => {
+    const source = readFileSync(resolve('src/components/workflow/WorkflowArtifactPanel.vue'), 'utf8')
+
+    expect(source.match(/class="artifact-group"/g) ?? []).toHaveLength(1)
+    expect(source).toContain('artifactSections')
+    expect(source).not.toContain('currentGroupNodes.length > 0')
+    expect(source).not.toContain('recentGroupNodes.length > 0')
   })
 })
