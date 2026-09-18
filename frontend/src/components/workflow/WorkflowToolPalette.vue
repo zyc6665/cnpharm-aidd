@@ -128,6 +128,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { formatWorkflowResourceProfileLabel } from '@/workflow/resource-profile'
 
 interface PaletteTool {
   slug: string
@@ -367,28 +368,7 @@ function normalizedText(value?: string): string {
 }
 
 function resourceProfileLabel(resourceProfile?: Record<string, unknown>): string {
-  if (!resourceProfile) {
-    return ''
-  }
-  const segments = [String(resourceProfile.tier || '')].filter(Boolean)
-  if (hasResourceValue(resourceProfile.cpu)) {
-    segments.push(`CPU ${resourceProfile.cpu}`)
-  }
-  if (hasResourceValue(resourceProfile.memory_gb)) {
-    segments.push(`MEM ${resourceProfile.memory_gb}GB`)
-  }
-  if (resourceProfile.gpu_required) {
-    segments.push(
-      hasResourceValue(resourceProfile.gpu_memory_gb)
-        ? `GPU ${resourceProfile.gpu_memory_gb}GB`
-        : 'GPU'
-    )
-  }
-  return segments.join(' · ')
-}
-
-function hasResourceValue(value: unknown): boolean {
-  return value !== undefined && value !== null && value !== ''
+  return formatWorkflowResourceProfileLabel(resourceProfile, { includeTiming: false })
 }
 
 function handleToolDragStart(event: DragEvent, toolSlug: string) {

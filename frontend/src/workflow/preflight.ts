@@ -12,6 +12,13 @@ import type {
 import { normalizeWorkflowSemanticType } from './semantic-types.ts'
 import type { WorkflowCanvasPreset } from './canvas-types.ts'
 import { formatWorkflowKey } from './i18n-utils.ts'
+import {
+  formatWorkflowResourceProfileLabel as formatResourceProfileLabel,
+  readWorkflowResourceBoolean as readResourceBoolean,
+  readWorkflowResourceScalar as readResourceScalar,
+  readWorkflowResourceText as readResourceText,
+} from './resource-profile.ts'
+import type { WorkflowResourceScalar } from './resource-profile.ts'
 
 export type WorkflowPreflightIssueType =
   | 'missing_tool'
@@ -40,7 +47,7 @@ export interface WorkflowPreflightIssue {
   detail: string
 }
 
-export type WorkflowPreflightResourceScalar = string | number | boolean
+export type WorkflowPreflightResourceScalar = WorkflowResourceScalar
 
 export interface WorkflowPreflightResourceSummary {
   id: string
@@ -706,71 +713,6 @@ function buildResourceSummary(input: {
     timeoutMinutes: readResourceScalar(resourceProfile.timeout_minutes),
     label,
   }
-}
-
-function formatResourceProfileLabel(resourceProfile: Record<string, unknown>): string {
-  const segments: string[] = []
-  const tier = readResourceText(resourceProfile.tier)
-  const cpu = readResourceScalar(resourceProfile.cpu)
-  const memoryGb = readResourceScalar(resourceProfile.memory_gb)
-  const gpuRequired = readResourceBoolean(resourceProfile.gpu_required)
-  const gpuMemoryGb = readResourceScalar(resourceProfile.gpu_memory_gb)
-  const expectedMinutes = readResourceScalar(resourceProfile.expected_minutes)
-  const timeoutMinutes = readResourceScalar(resourceProfile.timeout_minutes)
-
-  if (tier) {
-    segments.push(tier)
-  }
-  if (cpu !== undefined) {
-    segments.push(`CPU ${cpu}`)
-  }
-  if (memoryGb !== undefined) {
-    segments.push(`MEM ${memoryGb}GB`)
-  }
-  if (gpuRequired) {
-    segments.push(gpuMemoryGb !== undefined ? `GPU ${gpuMemoryGb}GB` : 'GPU')
-  }
-  if (expectedMinutes !== undefined) {
-    segments.push(`ETA ${expectedMinutes}m`)
-  }
-  if (timeoutMinutes !== undefined) {
-    segments.push(`Timeout ${timeoutMinutes}m`)
-  }
-
-  return segments.join(' · ')
-}
-
-function readResourceText(value: unknown): string | undefined {
-  const scalar = readResourceScalar(value)
-  return scalar === undefined ? undefined : String(scalar)
-}
-
-function readResourceScalar(value: unknown): WorkflowPreflightResourceScalar | undefined {
-  if (value === undefined || value === null || value === '') {
-    return undefined
-  }
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-    return value
-  }
-  return String(value)
-}
-
-function readResourceBoolean(value: unknown): boolean | undefined {
-  if (typeof value === 'boolean') {
-    return value
-  }
-  if (typeof value === 'number') {
-    return value > 0
-  }
-  if (typeof value === 'string') {
-    if (value.toLowerCase() === 'true') {
-      return true
-    }
-    if (value.toLowerCase() === 'false') {
-      return false
-    }
-  }
-  return undefined
 }
 
 function hasInvalidToolContract(contract?: ToolContract | null) {
