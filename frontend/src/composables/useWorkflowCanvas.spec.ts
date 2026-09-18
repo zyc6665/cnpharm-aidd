@@ -38,6 +38,13 @@ describe('useWorkflowCanvas', () => {
     expect(source.match(/deriveArtifactSlotsFromToolContract\(tool\.contract\)/g) ?? []).toHaveLength(1)
   })
 
+  it('does not expose unused graph lookup helpers', () => {
+    const source = readFileSync(resolve('src/composables/useWorkflowCanvas.ts'), 'utf8')
+
+    expect(source).not.toContain('function resolveToolForNode')
+    expect(source).not.toContain('function resolveDownstreamNodeIds')
+  })
+
   it('添加工具节点时应从工具契约带入语义输入输出并归一化别名', () => {
     const canvas = mountCanvasHarness()
     canvas.toolsStore.workbenchGroups = [

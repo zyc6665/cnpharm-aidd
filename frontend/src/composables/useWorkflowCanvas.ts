@@ -467,47 +467,8 @@ export function useWorkflowCanvas(input: {
     )
   }
 
-  function resolveToolForNode(nodeId: string) {
-    const selectedToolSlug = resolveSelectedToolSlug(nodeId)
-    if (!selectedToolSlug) {
-      return null
-    }
-
-    const workbenchTool =
-      toolsStore.workbenchGroups
-        .flatMap(group => group.tools)
-        .find(tool => tool.slug === selectedToolSlug) ?? null
-    if (workbenchTool) {
-      return workbenchTool
-    }
-
-    return toolsStore.workflowToolOptions.find(tool => tool.slug === selectedToolSlug) ?? null
-  }
-
   function resolveAvailableTool(toolSlug: string) {
     return availableWorkflowTools.value.find(tool => tool.slug === toolSlug) ?? null
-  }
-
-  function resolveDownstreamNodeIds(nodeId: string): string[] {
-    const visited = new Set<string>()
-    const queue = [nodeId]
-
-    while (queue.length > 0) {
-      const currentNodeId = queue.shift()
-      if (!currentNodeId || visited.has(currentNodeId)) {
-        continue
-      }
-
-      visited.add(currentNodeId)
-
-      for (const edge of editableCanvasPreset.value.edges) {
-        if (edge.source === currentNodeId && !visited.has(edge.target)) {
-          queue.push(edge.target)
-        }
-      }
-    }
-
-    return Array.from(visited)
   }
 
   function formatKey(key: string): string {
@@ -706,9 +667,7 @@ export function useWorkflowCanvas(input: {
     handleDeleteEdge,
     hasRequiredInputs,
     resolveSelectedToolSlug,
-    resolveToolForNode,
     resolveAvailableTool,
-    resolveDownstreamNodeIds,
     formatKey,
     buildCurrentWorkflowDefinition
   }

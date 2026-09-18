@@ -350,7 +350,6 @@
     handleDeleteNode,
     handleAddEdge,
     handleDeleteEdge,
-    resolveToolForNode,
     formatKey,
     buildCurrentWorkflowDefinition
   } = useWorkflowCanvas({
