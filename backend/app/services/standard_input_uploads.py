@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.files.storage_path import ensure_storage_dir, get_file_path
+from app.files.writer import store_file_bytes
 from app.models.artifacts import Artifact, ArtifactVersion, ArtifactVersionFile
 from app.models.files import File as FileModel
-from app.models.files import FileSourceType
 from app.models.tools import Tool, ToolVersion
 from app.models.users import User
 from app.services.standard_input_upload_plans import (
@@ -228,25 +226,12 @@ async def _create_standard_upload_metadata_file(
 ) -> FileModel:
     content = json.dumps(metadata, ensure_ascii=False, sort_keys=True).encode("utf-8")
     filename = f"{slot_name}.{role}.json"
-    file_record = FileModel(
-        project_id=project_id,
-        owner_id=str(current_user.id),
+    return await store_file_bytes(
+        db,
+        content=content,
         filename=filename,
         content_type="application/json",
-        size_bytes=len(content),
-        sha256=hashlib.sha256(content).hexdigest(),
-        storage_path="pending",
-        source_type=FileSourceType.SYSTEM.value,
-        is_public=False,
-        is_permanent=False,
+        source_type="system",
+        project_id=project_id,
+        owner_id=str(current_user.id),
     )
-    db.add(file_record)
-    await db.flush()
-
-    ensure_storage_dir()
-    path = get_file_path(str(file_record.id), filename)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(content)
-    file_record.storage_path = str(path)
-    await db.flush()
-    return file_record

@@ -129,7 +129,7 @@ async def _build_task_statement(
                 project_id=query.project_id,
                 user_id=query.current_user.id,
             )
-        statement = statement.where(Task.extra_data["project_id"].as_string() == query.project_id)
+        statement = statement.where(Task.project_id_expression() == query.project_id)
     elif not is_admin:
         statement = statement.where(Task.user_id == query.current_user.id)
 

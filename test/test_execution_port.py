@@ -64,6 +64,32 @@ async def test_execution_service_delegates_complete_lifecycle_to_registered_adap
     ]
 
 
+@pytest.mark.asyncio
+async def test_execution_service_raises_domain_error_for_unknown_adapter():
+    from app.execution.service import ExecutionService, UnsupportedExecutionTypeError
+
+    service = ExecutionService({})
+
+    with pytest.raises(UnsupportedExecutionTypeError, match="不支持的执行器类型"):
+        service._adapter("missing")
+
+
+@pytest.mark.asyncio
+async def test_execution_service_binds_adapter_for_artifact_collection():
+    from app.execution.contracts import ProducedArtifact
+    from app.execution.service import ExecutionService
+
+    class FakeAdapter:
+        async def collect_artifacts(self, execution_id):
+            return [ProducedArtifact(filename="result.json", path=execution_id)]
+
+    source = ExecutionService({"ssh": FakeAdapter()}).artifact_source("ssh")
+
+    artifacts = await source.collect_artifacts("exec-2")
+
+    assert artifacts[0].path == "exec-2"
+
+
 def test_execution_request_contract_cannot_contain_inline_credentials():
     from pydantic import ValidationError
 

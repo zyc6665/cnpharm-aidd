@@ -29,6 +29,7 @@ from app.models.conversations import (
 from app.models.tool_packages import ToolPackage, ToolPackageVersion
 from app.models.artifacts import Artifact, ArtifactLineage, ArtifactVersion, ArtifactVersionFile
 from app.models.executions import ExecutionRecord
+from app.models.gpu import GPUAllocation, GPUAllocationStatus
 
 __all__ = [
     "User",
@@ -48,4 +49,5 @@ __all__ = [
     "ToolPackage", "ToolPackageVersion",
     "Artifact", "ArtifactLineage", "ArtifactVersion", "ArtifactVersionFile",
     "ExecutionRecord",
+    "GPUAllocation", "GPUAllocationStatus",
 ]

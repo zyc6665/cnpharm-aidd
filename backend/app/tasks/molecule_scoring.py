@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import hashlib
 import io
 import json
 import logging
@@ -12,7 +11,6 @@ import mimetypes
 import shutil
 import subprocess
 import tempfile
-import uuid
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.files import File as FileModel, FileSourceType
 from app.models.tasks import Task, TaskInput
 from app.models.tools import Tool, ToolVersion
-from app.files.storage_path import get_file_path
+from app.files.writer import store_file_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -477,37 +475,25 @@ async def _store_artifact(
     content: bytes,
     relative_path: str,
 ) -> FileModel:
-    file_hash = hashlib.sha256(content).hexdigest()
     content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
     if filename.endswith(".sdf"):
         content_type = "chemical/x-mdl-sdfile"
     elif filename.endswith(".csv"):
         content_type = "text/csv"
 
-    file_id = str(uuid.uuid4())
-    storage_path = get_file_path(file_id, filename)
-    file_record = FileModel(
-        id=file_id,
+    return await store_file_bytes(
+        db,
+        content=content,
         filename=filename,
         content_type=content_type,
-        size_bytes=len(content),
-        sha256=file_hash,
-        storage_path=str(storage_path),
-        source_type=FileSourceType.TOOL_OUTPUT.value,
+        source_type=FileSourceType.TOOL_OUTPUT,
         owner_id=task.user_id,
-        is_public=False,
-        is_permanent=False,
         file_meta={
             "relative_path": relative_path,
             "original_name": filename,
             "generated_by": "molecule_scoring",
         },
     )
-    db.add(file_record)
-    storage_path.parent.mkdir(parents=True, exist_ok=True)
-    storage_path.write_bytes(content)
-    await db.flush()
-    return file_record
 
 
 def _summary(scores: list[MoleculeScore], receptor_path: Path | None) -> dict[str, Any]:

@@ -21,6 +21,18 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_MAX_RETRIES = 3
+
+
+def _retry_limits(task: "Task") -> tuple[int, int]:
+    retry_count = task.retry_count if task.retry_count is not None else 0
+    max_retries = (
+        task.max_retries
+        if task.max_retries is not None
+        else DEFAULT_MAX_RETRIES
+    )
+    return retry_count, max_retries
+
 
 class TaskStateError(Exception):
     """任务状态转换错误"""
@@ -249,12 +261,14 @@ class TaskStateMachine:
         """
         current_status = TaskStatus(task.status) if isinstance(task.status, str) else task.status
 
-        # 只有FAILURE状态可以重试
-        if current_status != TaskStatus.FAILURE:
+        # 失败或取消状态可以重试
+        if current_status not in {TaskStatus.FAILURE, TaskStatus.CANCELED}:
             return False
 
+        retry_count, max_retries = _retry_limits(task)
+
         # 检查重试次数
-        if task.retry_count >= task.max_retries:
+        if retry_count >= max_retries:
             return False
 
         return True
@@ -285,9 +299,10 @@ class TaskStateMachine:
         """
         if not cls.can_retry(task):
             current_status = TaskStatus(task.status) if isinstance(task.status, str) else task.status
-            if task.retry_count >= task.max_retries:
+            retry_count, max_retries = _retry_limits(task)
+            if retry_count >= max_retries:
                 raise ValueError(
-                    f"Task {task.id} has reached maximum retry count ({task.max_retries})"
+                    f"Task {task.id} has reached maximum retry count ({max_retries})"
                 )
             raise TaskStateError(current_status, TaskStatus.PENDING, task.id)
 

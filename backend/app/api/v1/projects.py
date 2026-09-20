@@ -234,7 +234,7 @@ async def get_project_overview(
         project_id=project_id,
         user_id=current_user.id,
     )
-    task_filter = Task.extra_data["project_id"].as_string() == project_id
+    task_filter = Task.project_id_expression() == project_id
     artifact_filter = (
         Artifact.project_id == project_id,
         ArtifactVersion.status == "available",

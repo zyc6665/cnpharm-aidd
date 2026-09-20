@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import hashlib
 import io
 import json
 from pathlib import Path
@@ -12,7 +11,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.files.storage_path import ensure_storage_dir, get_file_path
+from app.files.writer import store_file_bytes
 from app.models.files import File as FileModel, FileSourceType
 from app.tool_packages.config_resolver import tool_package_manifest_data
 
@@ -482,28 +481,19 @@ async def _persist_generated_output_file(
         return None
 
     filename = relative_path.replace("/", "__")
-    digest = hashlib.sha256(content).hexdigest()
-    record = FileModel(
-        project_id=seed_record.project_id,
-        owner_id=seed_record.owner_id,
+    record = await store_file_bytes(
+        db,
+        content=content,
         filename=filename,
         content_type=content_type,
-        size_bytes=len(content),
-        sha256=digest,
-        storage_backend="local",
-        storage_path="",
-        source_type=FileSourceType.TOOL_OUTPUT.value,
-        file_meta={"relative_path": relative_path, "generated_by": "legacy_standardization"},
+        source_type=FileSourceType.TOOL_OUTPUT,
+        project_id=seed_record.project_id,
+        owner_id=seed_record.owner_id,
+        file_meta={
+            "relative_path": relative_path,
+            "generated_by": "legacy_standardization",
+        },
     )
-    db.add(record)
-    await db.flush()
-
-    ensure_storage_dir()
-    storage_path = get_file_path(str(record.id), filename)
-    storage_path.parent.mkdir(parents=True, exist_ok=True)
-    storage_path.write_bytes(content)
-    record.storage_path = str(storage_path)
-    await db.flush()
 
     if str(record.id) not in output_file_ids:
         output_file_ids.append(str(record.id))

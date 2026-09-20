@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -26,7 +25,7 @@ from app.agents.aidd.registry import (
 from app.config import settings
 from app.common.exceptions import ForbiddenException, NotFoundException, ValidationException
 from app.models.agent import AgentRun, AgentRunStep
-from app.models.files import File as FileModel, FileSourceType
+from app.models.files import File as FileModel
 from app.models.statistics import FileStatistics
 from app.models.tasks import Task, TaskStatus
 from app.models.tools import Tool, ToolStatus
@@ -37,6 +36,7 @@ from app.schemas.tasks import TaskCreate
 from app.artifact_standards.types import normalize_platform_artifact_type
 from app.services.semantic_types import CANONICAL_AGENT_INPUT_TYPES, normalize_semantic_type
 from app.services.aidd_builtin_tools import ensure_aidd_builtin_tool
+from app.files.writer import store_file_bytes
 from app.services.tool_contracts import build_tool_contract, tool_contract_to_agent_summary
 from app.services.workflow_artifacts import (
     describe_missing_required_standard_artifacts,
@@ -160,11 +160,6 @@ def _build_step_contract_traces(
     return traces
 
 
-def _storage_file_path(file_id: str, filename: str) -> Path:
-    storage_root = Path(settings.STORAGE_PATH)
-    return storage_root / file_id[:2] / f"{file_id}_{filename}"
-
-
 async def _create_agent_output_file(
     db: AsyncSession,
     *,
@@ -174,26 +169,15 @@ async def _create_agent_output_file(
     content_type: str,
     source_file_id: str | None = None,
 ) -> FileModel:
-    file_record = FileModel(
-        owner_id=owner_id,
+    return await store_file_bytes(
+        db,
+        content=content,
         filename=filename,
         content_type=content_type,
-        size_bytes=len(content),
-        sha256=hashlib.sha256(content).hexdigest(),
-        source_type=FileSourceType.TOOL_OUTPUT.value,
-        storage_path="pending",
-        is_public=False,
+        source_type="tool_output",
+        owner_id=owner_id,
         file_meta={"generated_by": "aidd_agent", "source_file_id": source_file_id},
     )
-    db.add(file_record)
-    await db.flush()
-
-    target_path = _storage_file_path(str(file_record.id), filename)
-    target_path.parent.mkdir(parents=True, exist_ok=True)
-    target_path.write_bytes(content)
-    file_record.storage_path = str(target_path)
-    await db.flush()
-    return file_record
 
 
 async def _load_owned_file(

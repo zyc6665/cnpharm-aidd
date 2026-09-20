@@ -276,11 +276,8 @@ async def test_remote_tool_executor_copies_result_files_to_platform_storage(
     async def fake_get_async_session():
         yield db_session
 
-    def fake_get_file_path(file_id: str, filename: str):
-        return tmp_path / f"{file_id}_{filename}"
-
     monkeypatch.setattr("app.tasks.executors.remote_api.get_async_session", fake_get_async_session)
-    monkeypatch.setattr("app.tasks.executors.remote_api.get_file_path", fake_get_file_path)
+    monkeypatch.setattr("app.files.storage_path.STORAGE_PATH", tmp_path / "storage")
 
     transport = httpx.MockTransport(handler)
     executor = RemoteAPIExecutor(
@@ -341,11 +338,8 @@ async def test_remote_tool_executor_copies_standard_dict_result_files(
     async def fake_get_async_session():
         yield db_session
 
-    def fake_get_file_path(file_id: str, filename: str):
-        return tmp_path / f"{file_id}_{filename}"
-
     monkeypatch.setattr("app.tasks.executors.remote_api.get_async_session", fake_get_async_session)
-    monkeypatch.setattr("app.tasks.executors.remote_api.get_file_path", fake_get_file_path)
+    monkeypatch.setattr("app.files.storage_path.STORAGE_PATH", tmp_path / "storage")
 
     transport = httpx.MockTransport(handler)
     executor = RemoteAPIExecutor(
@@ -559,8 +553,17 @@ async def test_cancel_platform_task_calls_remote_cancel_for_remote_tool(monkeypa
         def cancel_task(self, task_id: str) -> bool:
             return True
 
+    finished: list[tuple[str, str, str | None]] = []
+
+    async def fake_finish(db, *, task, status, error_message=None):
+        finished.append((str(task.id), status, error_message))
+
     monkeypatch.setattr("app.tasks.cancellation.use_direct_task_execution", lambda: True)
     monkeypatch.setattr("app.tasks.cancellation.RemoteAPIExecutor", FakeRemoteAPIExecutor)
+    monkeypatch.setattr(
+        "app.tasks.cancellation.finish_task_execution_record",
+        fake_finish,
+    )
 
     canceled = await cancel_platform_task(
         None,
@@ -572,3 +575,4 @@ async def test_cancel_platform_task_calls_remote_cancel_for_remote_tool(monkeypa
     assert canceled is True
     assert calls == ["task-1"]
     assert task.status == TaskStatus.CANCELED.value
+    assert finished == [("task-1", "cancelled", "任务已取消")]

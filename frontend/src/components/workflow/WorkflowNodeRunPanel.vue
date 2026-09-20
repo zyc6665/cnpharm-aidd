@@ -21,11 +21,12 @@
             :file-list="fileList"
             :selected-artifacts="selectedArtifacts"
             :standard-input-slots="standardInputSlots"
-            :show-standard-artifact-inputs="false"
+            :show-standard-artifact-inputs="inputSurface.showStandardArtifactInputs"
             :current-project-id="projectId ?? undefined"
-            :project-artifacts="emptyStandardProjectArtifacts"
-            :selected-standard-artifacts="emptyStandardArtifactSelections"
-            :standard-input-file-list="emptyStandardInputFileList"
+            :project-artifacts="standardProjectArtifacts"
+            :standard-artifacts-loading="standardArtifactsLoading"
+            :selected-standard-artifacts="selectedStandardArtifacts"
+            :standard-input-file-list="standardInputFileList"
             :hidden-field-keys="autoBoundFieldKeys"
             :allow-artifacts="userStore.isLoggedIn"
             :allow-uploads="true"
@@ -34,6 +35,8 @@
             :preferred-tool-slug="selectedTool?.slug"
             @update:file-list="handleFileListChange"
             @update:selected-artifact="handleArtifactSelection"
+            @select-standard-artifact="handleStandardArtifactSelection"
+            @update-standard-upload-list="handleStandardInputFileListChange"
           />
 
           <div v-if="autoBoundArtifactCards.length" class="auto-bound-artifacts">
@@ -87,9 +90,11 @@
   import type { FormInstance } from 'ant-design-vue/es/form'
   import type { UploadFile } from 'ant-design-vue'
   import ToolRunInputForm from '@/components/tools/ToolRunInputForm.vue'
+  import { getProjectArtifacts } from '@/api/artifacts'
   import { getToolDetail } from '@/api/tools'
   import { useUserStore, useWorkflowStore } from '@/stores'
   import { useStandaloneNodeRun } from '@/composables/useStandaloneNodeRun'
+  import { useToolDetailStandardArtifacts } from '@/composables/useToolDetailStandardArtifacts'
   import {
     useWorkflowNodeSelectedTool,
     type WorkflowAvailableTool,
@@ -135,15 +140,16 @@
   const formState = reactive<Record<string, unknown>>({})
   const fileList = reactive<Record<string, UploadFile[]>>({})
   const selectedArtifacts = reactive<Record<string, ArtifactFile | undefined>>({})
+  const selectedStandardArtifacts = reactive<Record<string, TypedArtifact | undefined>>({})
+  const standardInputFileList = reactive<Record<string, UploadFile[]>>({})
   const autoBoundArtifactByField = reactive<Record<string, ArtifactFile | undefined>>({})
-  const emptyStandardProjectArtifacts: TypedArtifact[] = []
-  const emptyStandardArtifactSelections: Record<string, TypedArtifact | undefined> = {}
-  const emptyStandardInputFileList: Record<string, UploadFile[]> = {}
 
   function clearNodeRunFormState() {
     replaceRecord(formState, {})
     replaceRecord(fileList, {})
     replaceRecord(selectedArtifacts, {})
+    replaceRecord(selectedStandardArtifacts, {})
+    replaceRecord(standardInputFileList, {})
     clearAutoBoundArtifactBindings(autoBoundArtifactByField)
   }
 
@@ -164,6 +170,32 @@
     },
   }))
   const standardInputSlots = computed(() => inputSurface.value.standardInputSlots)
+
+  const {
+    standardProjectArtifacts,
+    standardArtifactsLoading,
+    loadStandardProjectArtifacts,
+    handleStandardArtifactSelection,
+    handleStandardInputFileListChange,
+  } = useToolDetailStandardArtifacts({
+    projectId: computed(() => props.projectId ?? undefined),
+    standardInputSlots,
+    api: { getProjectArtifacts },
+    selectStandardArtifact: (slotName, versionId, projectArtifacts) => {
+      selectedStandardArtifacts[slotName] = versionId
+        ? projectArtifacts.find(artifact => artifact.latest_version.id === versionId)
+        : undefined
+      if (selectedStandardArtifacts[slotName]) {
+        standardInputFileList[slotName] = []
+      }
+    },
+    updateStandardInputFileList: (slotName, files) => {
+      standardInputFileList[slotName] = files
+      if (files.length) {
+        selectedStandardArtifacts[slotName] = undefined
+      }
+    },
+  })
 
   const executorType = computed(() => {
     const contractExecutorType = selectedTool.value?.contract?.executor?.type
@@ -239,6 +271,8 @@
     replaceRecord(formState, state.formState)
     replaceRecord(fileList, state.fileList)
     replaceRecord(selectedArtifacts, state.selectedArtifacts)
+    replaceRecord(selectedStandardArtifacts, state.selectedStandardArtifacts)
+    replaceRecord(standardInputFileList, state.standardInputFileList)
     clearAutoBoundArtifactBindings(autoBoundArtifactByField)
     applyRecommendedArtifacts(nextFileFieldKeys)
   }
@@ -278,7 +312,9 @@
       selectedArtifacts,
       executorType: executorType.value,
       standardInputSlots: standardInputSlots.value,
-      standardInputFileFieldBindings: standardInputFileFieldBindings.value
+      standardInputFileFieldBindings: standardInputFileFieldBindings.value,
+      selectedStandardArtifacts,
+      standardInputFileList,
     })
   }
 
@@ -291,6 +327,21 @@
   watch(
     () => [props.nodeId, props.selectedToolSlug, flattenedSchema.value] as const,
     () => applyInitialFormState(),
+    { immediate: true }
+  )
+
+  watch(
+    () => [
+      props.projectId,
+      props.selectedToolSlug,
+      standardInputSlots.value.map(slot => slot.name).join('|'),
+      inputSurface.value.showStandardArtifactInputs,
+    ] as const,
+    () => {
+      if (inputSurface.value.showStandardArtifactInputs) {
+        void loadStandardProjectArtifacts()
+      }
+    },
     { immediate: true }
   )
 

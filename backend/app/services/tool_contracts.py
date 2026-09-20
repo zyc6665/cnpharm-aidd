@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.artifact_standards.types import normalize_platform_artifact_type
+from app.artifact_standards.types import (
+    is_supported_platform_artifact_type,
+    normalize_platform_artifact_type,
+)
 from app.services.tool_contract_validation import (  # noqa: F401
     collect_tool_contract_config_validation_errors,
     collect_tool_contract_validation_errors,
@@ -52,6 +55,41 @@ def build_tool_contract(tool: Any, *, capability: Any | None = None) -> dict[str
         ),
         "validation": {"status": "valid", "errors": []},
     }
+
+
+def contract_emits_standard_artifacts(contract: dict[str, Any]) -> bool:
+    """Return whether a normalized contract declares platform artifacts."""
+    if not isinstance(contract, dict):
+        return False
+
+    artifacts = contract.get("artifacts")
+    artifact_outputs = artifacts.get("outputs") if isinstance(artifacts, dict) else []
+    for output in artifact_outputs or []:
+        if not isinstance(output, dict):
+            continue
+        artifact_type = output.get("type")
+        if artifact_type and is_supported_platform_artifact_type(str(artifact_type)):
+            return True
+
+    capability = contract.get("capability")
+    capability_outputs = capability.get("outputs") if isinstance(capability, dict) else []
+    for output in capability_outputs or []:
+        if not isinstance(output, dict):
+            continue
+        if output.get("source") == "artifact":
+            return True
+        semantic_type = output.get("semantic_type")
+        if semantic_type and is_supported_platform_artifact_type(str(semantic_type)):
+            return True
+
+    return False
+
+
+def tool_emits_standard_artifacts(tool: Any, *, capability: Any | None = None) -> bool:
+    """Return whether a persisted tool emits platform standard Artifacts."""
+    return contract_emits_standard_artifacts(
+        build_tool_contract(tool, capability=capability)
+    )
 
 
 def _build_tool_package_contract(
@@ -319,7 +357,7 @@ def _package_manifest_from_version(current_version: Any | None) -> dict[str, Any
 def _artifact_input_slot(item: dict[str, Any]) -> dict[str, Any]:
     slot = {
         "name": item.get("name"),
-        "type": item.get("type"),
+        "type": _semantic_type(item.get("type")),
         "required": bool(item.get("required", True)),
     }
     if "role_preferences" in item:
@@ -336,7 +374,7 @@ def _artifact_input_slot(item: dict[str, Any]) -> dict[str, Any]:
 def _artifact_output_slot(item: dict[str, Any]) -> dict[str, Any]:
     slot = {
         "name": item.get("name"),
-        "type": item.get("type"),
+        "type": _semantic_type(item.get("type")),
         "cardinality": item.get("cardinality") or "one",
         "required": bool(item.get("required", True)),
     }
@@ -460,7 +498,13 @@ def _capability_from_artifact_contract(
     artifacts: dict[str, Any],
 ) -> dict[str, Any] | None:
     inputs = [item for item in artifacts.get("inputs", []) if isinstance(item, dict)]
-    outputs = [item for item in artifacts.get("outputs", []) if isinstance(item, dict)]
+    outputs = [
+        item
+        for item in artifacts.get("outputs", [])
+        if isinstance(item, dict)
+        and item.get("type")
+        and is_supported_platform_artifact_type(str(item["type"]))
+    ]
     if not outputs:
         return None
 

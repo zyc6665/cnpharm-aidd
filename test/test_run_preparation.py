@@ -243,6 +243,28 @@ def _two_protein_ssh_config() -> dict:
     }
 
 
+def _plain_protein_ssh_config() -> dict:
+    return {
+        "type": "ssh_job",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "protein_pdb": {"type": "string", "format": "file"},
+            },
+        },
+        "artifacts": {
+            "inputs": [
+                {
+                    "name": "protein",
+                    "type": "protein_structure@1",
+                    "required": True,
+                }
+            ],
+            "outputs": [],
+        },
+    }
+
+
 @pytest.mark.asyncio
 async def test_prepare_run_projects_multiple_standard_inputs_to_distinct_legacy_fields(
     db_session: AsyncSession,
@@ -306,6 +328,90 @@ async def test_prepare_run_projects_multiple_standard_inputs_to_distinct_legacy_
         "protein_a_pdb": "input/protein-a.pdb",
         "protein_b_pdb": "input/protein-b.pdb",
     }
+
+
+@pytest.mark.asyncio
+async def test_tool_detail_and_workflow_node_prepare_same_legacy_artifact_binding(
+    db_session: AsyncSession,
+) -> None:
+    owner = await _create_owner(db_session)
+    protein_file = await _create_file(
+        db_session,
+        owner,
+        filename="shared-protein.pdb",
+        content=b"ATOM shared\n",
+    )
+    protein_version = await _create_protein_version(
+        db_session,
+        owner,
+        name="shared-protein",
+        roles={"structure_file": protein_file},
+        preparation_status="raw",
+    )
+    tool, version = await _create_tool(
+        db_session,
+        owner,
+        slug="plain-protein-ssh",
+        config=_plain_protein_ssh_config(),
+    )
+    run = SimpleNamespace(
+        id="run-1",
+        workflow_definition_id="workflow-1",
+        project_id="project-1",
+        input_files={},
+    )
+    node = {
+        "id": "plain_protein",
+        "kind": "tool",
+        "artifact_input_slots": [
+            {
+                "name": "protein",
+                "type": "protein_structure@1",
+                "required": True,
+            }
+        ],
+        "artifact_inputs": {"protein": "node:upstream:protein"},
+    }
+
+    direct = await prepare_run(
+        db_session,
+        input=RunPreparationInput(
+            tool=tool,
+            tool_version=version,
+            context=RunContext(
+                surface="tool_detail",
+                user_id=str(owner.id),
+                project_id="project-1",
+            ),
+            params={},
+            file_ids=[],
+            input_bindings={"protein": protein_version.id},
+            standard_input_uploads={},
+        ),
+    )
+    workflow = await prepare_workflow_node_run(
+        db_session,
+        run=run,
+        node_id="plain_protein",
+        node=node,
+        node_states={
+            "upstream": {
+                "status": "success",
+                "standard_artifacts": {
+                    "artifact_version_ids_by_ref": {"protein": protein_version.id},
+                    "file_ids_by_artifact_ref": {"protein": [protein_file.id]},
+                },
+            }
+        },
+        tool=tool,
+        current_user=owner,
+        params={},
+    )
+
+    assert workflow is not None
+    assert direct == workflow
+    assert direct.file_ids == [protein_file.id]
+    assert direct.params["input_files"] == {"protein_pdb": "input/shared-protein.pdb"}
 
 
 @pytest.mark.asyncio

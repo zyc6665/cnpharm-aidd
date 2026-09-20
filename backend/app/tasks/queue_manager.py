@@ -106,6 +106,7 @@ class TaskQueueManager:
         task_id: str,
         tool_version_id: str,
         queue: str,
+        attempt_id: Optional[str] = None,
         countdown: int = 0,
         eta: Optional[Any] = None
     ) -> "CeleryTask":
@@ -135,9 +136,13 @@ class TaskQueueManager:
             }
         )
 
+        task_args = [task_id, tool_version_id]
+        if attempt_id is not None:
+            task_args.append(attempt_id)
+
         celery_task = celery_app.send_task(
             "app.worker.tasks.execute_tool_task",
-            args=[task_id, tool_version_id],
+            args=task_args,
             queue=queue,
             priority=priority,
             countdown=countdown,

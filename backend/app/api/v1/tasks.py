@@ -15,7 +15,9 @@ from app.models.users import User
 from app.models.tools import Tool, ToolVersion
 from app.models.tasks import Task, TaskLog, TaskStatus
 from app.tasks.cancellation import cancel_platform_task
+from app.common.task_context import task_project_id
 from app.tasks.direct_runner import direct_task_runner
+from app.tasks.state_machine import TaskStateMachine
 from app.tasks.service import (
     create_and_schedule_tool_task,
     dispatch_tool_task,
@@ -33,6 +35,7 @@ from app.schemas.tasks import (
 )
 from app.common.responses import paginated_response, success_response
 from app.common.exceptions import NotFoundException, ForbiddenException, ValidationException
+from app.common.task_status import task_status_to_api
 from app.services.project_access import load_project_membership, require_project_role
 from app.services.task_views import TaskQueryInput, query_task_page, query_task_view_counts
 
@@ -42,9 +45,7 @@ TASK_OPERATION_PROJECT_ROLES = {"owner", "editor", "runner"}
 
 
 def _normalize_task_status(status: Optional[str]) -> Optional[str]:
-    if not status:
-        return status
-    return status.lower()
+    return task_status_to_api(status)
 
 
 def _extract_primary_output_data(result: Any) -> Any:
@@ -126,9 +127,7 @@ def _task_failure_diagnostics(task: Task) -> dict[str, str] | None:
 
 
 def _task_project_id(task: Task) -> Optional[str]:
-    data = task.extra_data if isinstance(task.extra_data, dict) else {}
-    project_id = data.get("project_id")
-    return str(project_id) if project_id else None
+    return task_project_id(task)
 
 
 def _task_input_bindings(task: Task) -> dict[str, str]:
@@ -583,15 +582,12 @@ async def retry_task(
     )
     task_user = user_result.scalar_one()
 
-    # 重置任务状态
-    task.status = TaskStatus.PENDING.value
-    task.progress = 0.0
-    task.progress_message = None
-    task.error_message = None
-    task.retry_count += 1
-    task.started_at = None
-    task.finished_at = None
-    task.execution_time_sec = None
+    if not TaskStateMachine.can_retry(task):
+        raise ValidationException(
+            f"任务已达到最大重试次数 ({task.max_retries})，无法再次重试"
+        )
+
+    TaskStateMachine.retry(task)
 
     await db.commit()
     extra_data = task.extra_data if isinstance(task.extra_data, dict) else {}

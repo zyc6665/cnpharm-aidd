@@ -46,6 +46,7 @@ def create_celery_app() -> Celery:
         task_routes={
             "app.worker.tasks.execute_tool_task": {"queue": "tool_tasks"},
             "app.worker.tasks.cleanup_expired_files": {"queue": "maintenance"},
+            "app.worker.tasks.reclaim_stale_gpu_leases": {"queue": "maintenance"},
             "app.worker.tasks.collect_gpu_stats": {"queue": "monitoring"},
         },
 
@@ -73,6 +74,10 @@ def create_celery_app() -> Celery:
             "cleanup-expired-files": {
                 "task": "app.worker.tasks.cleanup_expired_files",
                 "schedule": 3600.0,
+            },
+            "reclaim-stale-gpu-leases": {
+                "task": "app.worker.tasks.reclaim_stale_gpu_leases",
+                "schedule": 60.0,
             },
             # 每分钟收集 GPU 统计
             "collect-gpu-stats": {

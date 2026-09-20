@@ -29,7 +29,7 @@ from app.tasks.molecule_scoring import append_molecule_scoring_artifacts
 from app.tasks.direct_runner import direct_task_runner
 from app.tasks.service import create_and_schedule_tool_task
 from app.tasks.state_machine import TaskStateMachine
-from app.worker.tasks import prepare_task_output
+from app.tasks.output import prepare_task_output
 
 logger = logging.getLogger(__name__)
 

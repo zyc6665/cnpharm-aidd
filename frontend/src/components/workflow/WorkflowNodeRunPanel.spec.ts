@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import WorkflowNodeRunPanel from './WorkflowNodeRunPanel.vue'
+import { getProjectArtifacts } from '@/api/artifacts'
 import { getToolDetail } from '@/api/tools'
 import { uploadFile } from '@/api/files'
 import { createTask, getTaskDetail, prepareTaskRun } from '@/api/tasks'
@@ -12,6 +13,10 @@ import i18n from '@/locales'
 
 vi.mock('@/api/tools', () => ({
   getToolDetail: vi.fn()
+}))
+
+vi.mock('@/api/artifacts', () => ({
+  getProjectArtifacts: vi.fn()
 }))
 
 vi.mock('@/api/files', () => ({
@@ -55,8 +60,16 @@ const stubs = {
   ATag: { template: '<span><slot /></span>' },
   ToolRunInputForm: {
     name: 'ToolRunInputForm',
-    props: ['schema', 'formState', 'fileList', 'allowUploads', 'hiddenFieldKeys'],
-    emits: ['update:selectedArtifact'],
+    props: [
+      'schema',
+      'formState',
+      'fileList',
+      'allowUploads',
+      'hiddenFieldKeys',
+      'showStandardArtifactInputs',
+      'projectArtifacts',
+    ],
+    emits: ['select-standard-artifact', 'update-standard-upload-list', 'update:selectedArtifact'],
     template: '<div class="tool-parameter-form" :data-allow-uploads="String(allowUploads)" :data-schema-fields="Object.keys(schema.properties).join(\',\')" :data-hidden-fields="(hiddenFieldKeys || []).join(\',\')" />'
   }
 }
@@ -297,6 +310,53 @@ function mockRoleAwareLvpocketToolDetail() {
   } as never)
 }
 
+function mockToolPackageV2ToolDetail() {
+  vi.mocked(getToolDetail).mockResolvedValue({
+    code: 200,
+    message: 'ok',
+    data: {
+      id: 'tool-package-v2',
+      slug: 'tool-package-v2',
+      name: 'Tool Package V2',
+      description: 'Consumes a standard protein input',
+      status: 'published',
+      is_public: true,
+      tags: [],
+      usage_count: 0,
+      view_count: 0,
+      favorite_count: 0,
+      gpu_required: false,
+      created_at: '2026-09-15T00:00:00Z',
+      current_version: {
+        id: 'version-package-v2',
+        tool_id: 'tool-package-v2',
+        version: '1.0.0',
+        config: {
+          type: 'ssh_job',
+          tool_package_manifest: {
+            api_version: 'aidd.sciminer/tool-package.v2',
+            artifacts: {
+              inputs: [
+                { name: 'protein', type: 'protein_structure@1', required: true },
+              ],
+              outputs: [],
+            },
+            parameters_schema: {
+              type: 'object',
+              properties: {
+                device: { type: 'string', default: 'auto' },
+              },
+            },
+          },
+        },
+        is_active: true,
+        deprecated: false,
+        created_at: '2026-09-15T00:00:00Z',
+      },
+    },
+  } as never)
+}
+
 describe('WorkflowNodeRunPanel', () => {
   it('keeps node run panel chrome in locale keys', () => {
     const source = readFileSync(resolve('src/components/workflow/WorkflowNodeRunPanel.vue'), 'utf8')
@@ -331,6 +391,7 @@ describe('WorkflowNodeRunPanel', () => {
 
   beforeEach(() => {
     setActivePinia(createPinia())
+    vi.mocked(getProjectArtifacts).mockReset()
     vi.mocked(getToolDetail).mockReset()
     vi.mocked(uploadFile).mockReset()
     vi.mocked(createTask).mockReset()
@@ -375,6 +436,79 @@ describe('WorkflowNodeRunPanel', () => {
     expect(getToolDetail).toHaveBeenCalledWith('tool-fetch-pdb')
     expect(wrapper.find('.tool-parameter-form').exists()).toBe(true)
     expect(wrapper.text()).not.toContain('请先选择真实工具再配置节点')
+  })
+
+  it('Tool Package v2 节点应显示标准 Artifact 输入区', async () => {
+    mockToolPackageV2ToolDetail()
+    const projectArtifact = {
+      id: 'artifact-protein',
+      project_id: 'project-1',
+      artifact_type: 'protein_structure',
+      semantic_type: 'protein_structure@1',
+      name: 'protein.pdb',
+      latest_version: {
+        id: 'artifact-version-protein',
+        version: 1,
+        filename: 'protein.pdb',
+        status: 'available',
+      },
+    }
+    vi.mocked(getProjectArtifacts).mockResolvedValue({
+      code: 200,
+      message: 'ok',
+      data: { items: [projectArtifact] },
+    } as never)
+
+    const wrapper = mount(WorkflowNodeRunPanel, {
+      props: {
+        nodeId: 'tool-package-v2-node',
+        projectId: 'project-1',
+        selectedToolSlug: 'tool-package-v2',
+        availableTools: [
+          {
+            id: 'tool-package-v2',
+            slug: 'tool-package-v2',
+            name: 'Tool Package V2',
+          },
+        ],
+        recommendedArtifacts: [],
+      },
+      global: { plugins: [i18n], stubs },
+    })
+
+    await flushPromises()
+
+    const inputForm = wrapper.findComponent({ name: 'ToolRunInputForm' })
+    expect(inputForm.props('showStandardArtifactInputs')).toBe(true)
+    expect(getProjectArtifacts).toHaveBeenCalledWith('project-1')
+    expect(inputForm.props('projectArtifacts')).toEqual([projectArtifact])
+
+    vi.mocked(createTask).mockResolvedValue({
+      code: 200,
+      message: 'ok',
+      data: {
+        id: 'task-tool-package-v2',
+        name: 'Tool Package V2 · tool-package-v2-node',
+        tool_id: 'tool-package-v2',
+        tool_slug: 'tool-package-v2',
+        status: 'pending',
+        progress: 0,
+        created_at: '2026-09-15T00:01:00Z',
+      },
+    } as never)
+    inputForm.vm.$emit('select-standard-artifact', 'protein', 'artifact-version-protein')
+    await flushPromises()
+    await wrapper.find('[data-testid="run-current-node"]').trigger('click')
+    await flushPromises()
+
+    expect(createTask).toHaveBeenCalledWith({
+      name: 'Tool Package V2 · tool-package-v2-node',
+      tool_id: 'tool-package-v2',
+      project_id: 'project-1',
+      params: { params: { device: 'auto' } },
+      file_ids: undefined,
+      input_bindings: { protein: 'artifact-version-protein' },
+    })
   })
 
   it('节点参数面板应允许上传并独立创建当前节点任务', async () => {

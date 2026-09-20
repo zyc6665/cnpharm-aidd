@@ -14,6 +14,7 @@ from app.agents.aidd.registry import capability_to_tool_summary
 from app.services.tool_contracts import (
     build_tool_contract,
     collect_tool_contract_validation_errors,
+    contract_emits_standard_artifacts,
     tool_contract_to_agent_summary,
 )
 from app.api.v1.tool_route_utils import build_validated_tool_contract
@@ -164,6 +165,36 @@ def test_tool_contract_normalizes_legacy_semantic_aliases():
 
     assert contract["capability"]["inputs"][0]["semantic_type"] == "protein_structure@1"
     assert contract["capability"]["outputs"][0]["semantic_type"] == "binding_pocket@1"
+
+
+def test_contract_emits_standard_artifacts_uses_normalized_outputs():
+    artifact_contract = {
+        "artifacts": {
+            "outputs": [{"name": "pocket", "type": "binding_pocket@1"}],
+        },
+        "capability": {"outputs": []},
+    }
+    capability_contract = {
+        "artifacts": {"outputs": []},
+        "capability": {
+            "outputs": [
+                {
+                    "semantic_type": "generated_ligand",
+                    "source": "output_files",
+                }
+            ]
+        },
+    }
+    unknown_contract = {
+        "artifacts": {"outputs": [{"name": "custom", "type": "custom@1"}]},
+        "capability": {
+            "outputs": [{"semantic_type": "custom@1", "source": "output_files"}]
+        },
+    }
+
+    assert contract_emits_standard_artifacts(artifact_contract) is True
+    assert contract_emits_standard_artifacts(capability_contract) is True
+    assert contract_emits_standard_artifacts(unknown_contract) is False
 
 
 def test_tool_package_v2_contract_exposes_standard_artifact_slots_without_mappings():

@@ -2,6 +2,7 @@
 
 import logging
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -44,6 +45,9 @@ class _LocalDetector:
                 ),
             ],
         )
+
+    def get_gpu_stats(self, gpu_index: int):
+        return SimpleNamespace(utilization_percent=0.0)
 
 
 class _FailingNodeDetector:
@@ -102,6 +106,29 @@ async def test_load_balance_strategy_uses_most_free_memory():
 
 
 @pytest.mark.asyncio
+async def test_memory_fit_skips_busy_gpu():
+    allocator = GPUAllocator(db=None, detector=_LocalDetector())
+    allocator._is_gpu_idle = AsyncMock(side_effect=[False, True])
+
+    result = await allocator._try_allocate_by_memory(
+        [
+            {
+                "id": "local",
+                "gpus": [
+                    {"index": 0, "free_memory_mb": 6_000},
+                    {"index": 1, "free_memory_mb": 16_000},
+                ],
+            }
+        ],
+        task_id="task-memory-fit",
+        memory_required_mb=4_000,
+    )
+
+    assert result is not None
+    assert result.gpu_index == 1
+
+
+@pytest.mark.asyncio
 async def test_allocate_handles_local_node_probe_failure(caplog):
     allocator = GPUAllocator(db=None, detector=_FailingNodeDetector())
 
@@ -132,3 +159,40 @@ async def test_high_priority_preemption_skip_uses_debug_log(caplog):
     assert result.success is False
     assert result.wait_position == 1
     assert "GPU preemption skipped for task=task-preempt" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_create_allocation_persists_task_gpu_fields():
+    db = AsyncMock()
+    allocator = GPUAllocator(db=db, detector=_LocalDetector())
+
+    result = await allocator._create_allocation(
+        task_id="task-persist",
+        node_id="node-1",
+        gpu_index=0,
+        memory_mb=4096,
+    )
+
+    assert result.success is True
+    db.execute.assert_awaited_once()
+    db.flush.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_release_clears_persisted_task_gpu_fields():
+    db = AsyncMock()
+    allocator = GPUAllocator(db=db, detector=_LocalDetector())
+
+    assert await allocator.release(task_id="task-persist") is True
+
+    db.execute.assert_awaited_once()
+    db.flush.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_is_gpu_idle_rejects_persisted_active_task():
+    db = AsyncMock()
+    db.execute.return_value = SimpleNamespace(scalar_one_or_none=lambda: "task-active")
+    allocator = GPUAllocator(db=db, detector=_DetectorWithStats(0.0))
+
+    assert await allocator._is_gpu_idle("node-1", 0) is False

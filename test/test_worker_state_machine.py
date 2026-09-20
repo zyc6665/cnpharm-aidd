@@ -79,6 +79,27 @@ class TestStateMachineTransitions:
         assert task.status == TaskStatus.FAILURE.value
         assert task.error_message == "remote failed"
 
+    def test_retry_uses_model_defaults_before_flush(self):
+        task = _make_task(TaskStatus.FAILURE)
+        task.retry_count = None
+        task.max_retries = None
+
+        assert TaskStateMachine.can_retry(task) is True
+
+        TaskStateMachine.retry(task)
+
+        assert task.status == TaskStatus.PENDING.value
+        assert task.retry_count == 1
+
+    def test_zero_max_retries_still_disables_retry(self):
+        task = _make_task(TaskStatus.FAILURE)
+        task.retry_count = 0
+        task.max_retries = 0
+
+        assert TaskStateMachine.can_retry(task) is False
+        with pytest.raises(ValueError, match="maximum retry count"):
+            TaskStateMachine.retry(task)
+
     def test_invalid_transition_raises(self):
         task = _make_task(TaskStatus.SUCCESS)
         with pytest.raises(TaskStateError):

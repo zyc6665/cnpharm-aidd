@@ -10,6 +10,7 @@ from app.api.v1 import (
     conversations,
     external_databases,
     files,
+    gpu,
     projects,
     protein_preparation,
     research_boards,
@@ -41,6 +42,7 @@ api_router.include_router(tool_workbench_admin.group_router)
 api_router.include_router(tool_workbench_admin.mapping_router)
 api_router.include_router(tasks.router, prefix="/tasks", tags=["任务"])
 api_router.include_router(files.router, prefix="/files", tags=["文件"])
+api_router.include_router(gpu.router)
 api_router.include_router(projects.router, prefix="/projects", tags=["研究项目"])
 api_router.include_router(conversations.router, tags=["项目会话"])
 api_router.include_router(external_databases.router, tags=["外部数据库"])

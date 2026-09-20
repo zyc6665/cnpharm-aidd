@@ -226,6 +226,21 @@ class TestExecuteWithProgressGPU:
     """execute_with_progress GPU 重试 / 释放集成测试。"""
 
     @pytest.mark.asyncio
+    async def test_starts_before_reporting_initial_progress(self):
+        """兼容入口应先进入 RUNNING，再写入初始进度。"""
+        task = _make_task()
+        inner = AsyncMock()
+        inner.execute.return_value = {"success": True}
+
+        with patch.object(TaskExecutor, "_get_executor", return_value=inner) as get_executor:
+            executor = TaskExecutor(task, SimpleNamespace(config=_make_config()))
+            result = await executor.execute_with_progress()
+
+        assert result == {"success": True}
+        assert task.status == TaskStatus.SUCCESS.value
+        get_executor.assert_called_once_with()
+
+    @pytest.mark.asyncio
     async def test_reenqueues_on_gpu_failure_within_retry_limit(self):
         """分配失败 + 未达最大重试 → PENDING 重新入队。"""
         task = _make_task(retry_count=0, max_retries=3)
@@ -241,6 +256,21 @@ class TestExecuteWithProgressGPU:
         assert task.status == TaskStatus.PENDING.value
         assert task.retry_count == 1
         assert "GPU分配失败" in (task.progress_message or "")
+
+    @pytest.mark.asyncio
+    async def test_gpu_retry_uses_defaults_before_task_flush(self):
+        task = _make_task(retry_count=None, max_retries=None)
+        cfg = _make_config(gpu_required=True)
+        alloc = _make_allocator_mock(success=False, message="No GPU")
+
+        with patch("app.gpu.allocator.GPUAllocator", return_value=alloc):
+            with _patch_sm_for_ewp():
+                executor = TaskExecutor(task, SimpleNamespace(config=cfg))
+                with pytest.raises(GPUAllocationFailed):
+                    await executor.execute_with_progress()
+
+        assert task.status == TaskStatus.PENDING.value
+        assert task.retry_count == 1
 
     @pytest.mark.asyncio
     async def test_fails_on_gpu_failure_exceeding_retry_limit(self):
@@ -275,7 +305,7 @@ class TestExecuteWithProgressGPU:
 
         assert result == {"success": True}
         assert task.status == TaskStatus.SUCCESS.value
-        alloc.release.assert_called_once_with(task_id="task-001")
+        alloc.release.assert_called_once_with(task_id="task-001", allocation_id="alloc-1")
         assert task.gpu_node_id is None
 
     @pytest.mark.asyncio
@@ -294,7 +324,7 @@ class TestExecuteWithProgressGPU:
                     with pytest.raises(TaskExecutionError):
                         await executor.execute_with_progress()
 
-        alloc.release.assert_called_once_with(task_id="task-001")
+        alloc.release.assert_called_once_with(task_id="task-001", allocation_id="alloc-1")
         assert task.gpu_node_id is None
 
     @pytest.mark.asyncio

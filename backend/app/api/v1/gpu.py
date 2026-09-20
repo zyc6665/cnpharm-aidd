@@ -7,8 +7,10 @@
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user, get_admin_user
+from app.database.session import get_db
 from app.gpu.detector import get_gpu_detector
 from app.gpu.allocator import GPUAllocator, TaskPriority
 from app.gpu.monitor import GPUMonitor
@@ -242,11 +244,12 @@ async def check_gpu_health():
     "/allocate",
     response_model=AllocationResponse,
     summary="分配GPU资源",
-    description="为任务分配GPU资源（需要认证）"
+    description="为任务分配GPU资源（需要管理员权限）"
 )
 async def allocate_gpu(
     request: AllocationRequest,
-    current_user=Depends(get_current_user)
+    admin_user=Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """分配GPU资源"""
     # 验证优先级
@@ -255,14 +258,16 @@ async def allocate_gpu(
     except ValueError:
         priority = TaskPriority.NORMAL
 
-    # 创建分配器（需要数据库会话，这里简化处理）
-    allocator = GPUAllocator(db=None)
+    allocator = GPUAllocator(db=db)
 
     result = await allocator.allocate(
         task_id=request.task_id,
         memory_required_mb=request.memory_required_mb,
         priority=priority
     )
+
+    if result.success:
+        await db.commit()
 
     return AllocationResponse(
         success=result.success,
@@ -278,14 +283,15 @@ async def allocate_gpu(
 @router.post(
     "/release",
     summary="释放GPU资源",
-    description="释放任务占用的GPU资源（需要认证）"
+    description="释放任务占用的GPU资源（需要管理员权限）"
 )
 async def release_gpu(
     request: ReleaseRequest,
-    current_user=Depends(get_current_user)
+    admin_user=Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """释放GPU资源"""
-    allocator = GPUAllocator(db=None)
+    allocator = GPUAllocator(db=db)
 
     success = await allocator.release(
         task_id=request.task_id,
@@ -293,6 +299,7 @@ async def release_gpu(
     )
 
     if success:
+        await db.commit()
         return {"message": "GPU released successfully"}
     else:
         raise HTTPException(
@@ -307,10 +314,11 @@ async def release_gpu(
     description="获取当前GPU分配情况（需要认证）"
 )
 async def get_allocation_stats(
-    current_user=Depends(get_current_user)
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """获取GPU分配统计"""
-    allocator = GPUAllocator(db=None)
+    allocator = GPUAllocator(db=db)
     stats = await allocator.get_allocation_stats()
     return stats
 

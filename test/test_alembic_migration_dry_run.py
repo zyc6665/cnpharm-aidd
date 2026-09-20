@@ -6,6 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 
@@ -17,28 +18,74 @@ LEGACY_PROJECT_RESOURCE_TABLES = (
     "workflow_runs",
     "research_boards",
 )
+ALEMBIC_SUBPROCESS_TIMEOUT_SECONDS = int(
+    os.getenv("AIDD_ALEMBIC_TEST_TIMEOUT_SECONDS", "600")
+)
+
+
+def _run_alembic_command(
+    command: list[str],
+    *,
+    cwd: Path,
+    env: dict[str, str],
+) -> subprocess.CompletedProcess[str]:
+    try:
+        return subprocess.run(
+            command,
+            cwd=cwd,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=ALEMBIC_SUBPROCESS_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        stdout = exc.stdout or ""
+        stderr = exc.stderr or ""
+        if isinstance(stdout, bytes):
+            stdout = stdout.decode(errors="replace")
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode(errors="replace")
+        command_text = " ".join(str(item) for item in command)
+        raise AssertionError(
+            f"Alembic command timed out after {ALEMBIC_SUBPROCESS_TIMEOUT_SECONDS}s: "
+            f"{command_text}\nstdout:\n{stdout}\nstderr:\n{stderr}"
+        ) from exc
 
 
 def _run_alembic(*args: str, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
+    return _run_alembic_command(
         [sys.executable, "-m", "alembic", "-c", "alembic.ini", *args],
         cwd=PROJECT_ROOT,
         env=env,
-        capture_output=True,
-        text=True,
-        check=False,
     )
 
 
 def _run_backend_alembic(*args: str, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
+    return _run_alembic_command(
         [sys.executable, "-m", "alembic", "-c", "../alembic.ini", *args],
         cwd=PROJECT_ROOT / "backend",
         env=env,
-        capture_output=True,
-        text=True,
-        check=False,
     )
+
+
+def test_run_alembic_surfaces_timeout_diagnostics(monkeypatch: pytest.MonkeyPatch) -> None:
+    """迁移子进程超时时应暴露命令和已捕获输出。"""
+
+    def raise_timeout(*args, **kwargs):
+        raise subprocess.TimeoutExpired(
+            cmd=args[0],
+            timeout=30,
+            output="upgrade stdout",
+            stderr="upgrade stderr",
+        )
+
+    monkeypatch.setattr(subprocess, "run", raise_timeout)
+
+    with pytest.raises(AssertionError, match="upgrade stdout") as exc_info:
+        _run_alembic("upgrade", "head", env={})
+
+    assert "-m alembic -c alembic.ini upgrade head" in str(exc_info.value)
 
 
 def _current_alembic_head() -> str:
@@ -59,7 +106,16 @@ def test_alembic_sqlite_upgrade_and_downgrade_dry_run(tmp_path: Path) -> None:
     with sqlite3.connect(db_path) as conn:
         tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
 
-    assert {"alembic_version", "users", "tools", "tasks", "files", "workflow_runs", "tool_capabilities"}.issubset(
+    assert {
+        "alembic_version",
+        "users",
+        "tools",
+        "tasks",
+        "files",
+        "workflow_runs",
+        "tool_capabilities",
+        "gpu_allocations",
+    }.issubset(
         tables
     )
     assert "workflow_templates" not in tables

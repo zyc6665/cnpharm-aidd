@@ -5,6 +5,7 @@ from sqlalchemy import Column, String, Integer, Float, DateTime, Text, ForeignKe
 from sqlalchemy.orm import relationship
 
 from app.database.base import Base, TimestampMixin, UUIDMixin, utcnow
+from app.common.task_context import task_project_id
 
 
 class TaskStatus(str, enum.Enum):
@@ -78,8 +79,12 @@ class Task(Base, UUIDMixin, TimestampMixin):
     @property
     def project_id(self):
         """兼容响应序列化，从 extra_data 中读取研究项目 ID。"""
-        data = self.extra_data or {}
-        return data.get("project_id")
+        return task_project_id(self)
+
+    @classmethod
+    def project_id_expression(cls):
+        """Return the legacy storage expression used by task queries."""
+        return cls.extra_data["project_id"].as_string()
 
     # 关系
     user = relationship("User", back_populates="tasks")

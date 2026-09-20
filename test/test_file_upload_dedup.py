@@ -161,6 +161,31 @@ async def test_upload_file_returns_existing_record_when_duplicate_rows_exist(
 
 
 @pytest.mark.asyncio
+async def test_upload_file_persists_storage_path_before_flush(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    storage_root = tmp_path / "storage"
+    monkeypatch.setattr("app.files.storage_path.STORAGE_PATH", storage_root)
+    monkeypatch.setattr("app.files.upload_staging.STORAGE_PATH", storage_root)
+
+    content = b">receptor\nATOM\n"
+    response = await api_client.post(
+        "/api/v1/files/upload",
+        headers={"Authorization": "Bearer admin-token"},
+        files={"file": ("receptor.pdb", content, "chemical/x-pdb")},
+    )
+
+    assert response.status_code == 200
+    file_id = response.json()["data"]["id"]
+    record = await db_session.get(FileModel, file_id)
+    assert record is not None
+    assert Path(record.storage_path).read_bytes() == content
+
+
+@pytest.mark.asyncio
 async def test_convert_uploaded_sdf_to_pdb_creates_pdb_file(
     api_client: httpx.AsyncClient,
     db_session: AsyncSession,

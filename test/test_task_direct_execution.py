@@ -641,6 +641,52 @@ async def test_retry_task_uses_direct_runner_when_enabled(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("status", [TaskStatus.FAILURE.value, TaskStatus.CANCELED.value])
+async def test_retry_task_rejects_when_max_retries_reached(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    published_tool: Tool,
+    admin_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+    status: str,
+):
+    """达到最大重试次数的失败或取消任务不可再次调度。"""
+    runner = RecordingDirectRunner()
+    monkeypatch.setattr(config_settings, "TASK_EXECUTION_BACKEND", "direct", raising=False)
+    monkeypatch.setattr(tasks_api, "direct_task_runner", runner, raising=False)
+
+    task = Task(
+        user_id=admin_user.id,
+        tool_id=published_tool.id,
+        tool_version_id=published_tool.current_version_id,
+        status=status,
+        priority="normal",
+        progress=0.0,
+        error_message="boom" if status == TaskStatus.FAILURE.value else None,
+        retry_count=3,
+        max_retries=3,
+    )
+    db_session.add(task)
+    await db_session.flush()
+    db_session.add(TaskInput(task_id=task.id, params={"foo": "bar"}, file_ids=[]))
+    await db_session.commit()
+
+    response = await api_client.post(
+        f"/api/v1/tasks/{task.id}/retry",
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 422
+    assert "最大重试次数" in response.json()["message"]
+    assert runner.scheduled == []
+
+    refreshed_task = await db_session.get(Task, task.id)
+    assert refreshed_task is not None
+    assert refreshed_task.status == status
+    assert refreshed_task.retry_count == 3
+
+
+@pytest.mark.asyncio
 async def test_retry_task_replaces_stale_celery_dispatch_when_direct_enabled(
     api_client: httpx.AsyncClient,
     db_session: AsyncSession,
@@ -810,6 +856,88 @@ async def test_direct_runner_shutdown_does_not_mark_task_canceled(
     await runner.shutdown()
 
     assert canceled_task_ids == []
+
+
+@pytest.mark.asyncio
+async def test_direct_runner_old_completion_callback_does_not_remove_replacement(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """同一任务替换调度时，旧任务回调不得移除新任务注册。"""
+    runner = DirectTaskRunner()
+
+    class FakeTask:
+        def __init__(self) -> None:
+            self.is_done = False
+            self.callbacks = []
+
+        def done(self) -> bool:
+            return self.is_done
+
+        def add_done_callback(self, callback) -> None:
+            self.callbacks.append(callback)
+
+        def fire_done_callbacks(self) -> None:
+            for callback in self.callbacks:
+                callback(self)
+
+    created_tasks: list[FakeTask] = []
+
+    async def fake_run(task_id: str, tool_version_id: str) -> None:
+        return None
+
+    def fake_create_task(coro, *, name: str):
+        coro.close()
+        task = FakeTask()
+        created_tasks.append(task)
+        return task
+
+    monkeypatch.setattr(runner, "_run_task", fake_run)
+    monkeypatch.setattr("app.tasks.direct_runner.asyncio.create_task", fake_create_task)
+
+    first = runner.schedule_task("task-replaced", "version-1")
+    first.is_done = True
+    second = runner.schedule_task("task-replaced", "version-2")
+    first.fire_done_callbacks()
+
+    assert runner._tasks.get("task-replaced") is second
+
+
+@pytest.mark.asyncio
+async def test_direct_runner_requeues_after_current_task_finishes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """direct 模式 GPU 重试应等待当前协程退出后再启动下一次。"""
+    runner = DirectTaskRunner()
+    release = asyncio.Event()
+    first_started = asyncio.Event()
+    calls: list[tuple[str, str]] = []
+
+    async def fake_run(task_id: str, tool_version_id: str) -> None:
+        calls.append((task_id, tool_version_id))
+        if len(calls) == 1:
+            first_started.set()
+            await release.wait()
+
+    monkeypatch.setattr(runner, "_run_task", fake_run)
+
+    first = runner.schedule_task("task-gpu-retry", "version-1")
+    await first_started.wait()
+    runner.schedule_task_after_current("task-gpu-retry", "version-2")
+    await asyncio.sleep(0)
+
+    assert calls == [("task-gpu-retry", "version-1")]
+
+    release.set()
+    await first
+    for _ in range(10):
+        await asyncio.sleep(0)
+        if len(calls) == 2:
+            break
+
+    assert calls == [
+        ("task-gpu-retry", "version-1"),
+        ("task-gpu-retry", "version-2"),
+    ]
 
 
 @pytest.mark.asyncio

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import use_direct_task_execution
+from app.execution.records import finish_task_execution_record
 from app.logging.audit import AuditAction, AuditResult, get_audit_logger
 from app.models.tasks import Task, TaskStatus
 from app.models.tools import ToolVersion
@@ -12,7 +15,11 @@ from app.models.users import User
 from app.remote_tools.invocation import recorded_remote_run_id
 from app.tasks.executors.remote_api import RemoteAPIExecutor
 from app.tasks.direct_runner import direct_task_runner as default_direct_task_runner
+from app.common.task_context import task_project_id
 from app.tasks.state_machine import TaskStateMachine
+
+
+logger = logging.getLogger(__name__)
 
 
 async def cancel_platform_task(
@@ -36,19 +43,31 @@ async def cancel_platform_task(
         TaskQueueManager.revoke_task(task.celery_task_id)
 
     TaskStateMachine.cancel(task)
+    try:
+        await finish_task_execution_record(
+            db,
+            task=task,
+            status="cancelled",
+            error_message="任务已取消",
+        )
+    except Exception as exc:
+        logger.warning(
+            "Failed to finish execution record for canceled task %s: %s",
+            task.id,
+            exc,
+        )
     _audit_task_cancel(task=task, current_user=current_user)
     return True
 
 
 def _audit_task_cancel(*, task: Task, current_user: User) -> None:
-    extra_data = task.extra_data if isinstance(task.extra_data, dict) else {}
     get_audit_logger().log_task_operation(
         user_id=str(current_user.id),
         action=AuditAction.TASK_CANCEL,
         task_id=str(task.id),
         tool_id=str(task.tool_id),
         result=AuditResult.SUCCESS,
-        project_id=extra_data.get("project_id"),
+        project_id=task_project_id(task),
         tool_version_id=task.tool_version_id,
     )
 

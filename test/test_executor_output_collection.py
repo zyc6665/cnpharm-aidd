@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -124,3 +125,91 @@ async def test_ssh_executor_collect_uses_relative_path_callbacks():
         assert "filename_builder" in called_kwargs
         assert "file_meta_builder" in called_kwargs
         assert called_kwargs.get("skip_names") == {"result.json"}
+
+
+@pytest.mark.asyncio
+async def test_base_executor_sets_storage_path_before_flush(tmp_path):
+    from app.models.files import File as FileModel
+    from app.tasks.executors import base as base_module
+
+    source_path = tmp_path / "result.txt"
+    source_path.write_text("result", encoding="utf-8")
+    storage_root = tmp_path / "storage"
+
+    class FakeSession:
+        def __init__(self):
+            self.records = []
+
+        def add(self, record):
+            self.records.append(record)
+
+        async def flush(self):
+            assert all(record.storage_path for record in self.records)
+
+        async def commit(self):
+            return None
+
+        async def rollback(self):
+            return None
+
+    session = FakeSession()
+
+    async def fake_get_async_session():
+        yield session
+
+    def fake_get_file_path(file_id, filename):
+        return storage_root / file_id[:2] / f"{file_id}_{filename}"
+
+    executor = DockerExecutor(_build_task(), _build_tool_version())
+    with patch.object(base_module, "get_async_session", fake_get_async_session), patch.object(
+        base_module, "get_file_path", fake_get_file_path
+    ):
+        result = await base_module.BaseExecutor._collect_output_files(
+            executor,
+            [str(source_path)],
+        )
+
+    assert len(result) == 1
+    assert isinstance(session.records[0], FileModel)
+    assert Path(session.records[0].storage_path).read_text(encoding="utf-8") == "result"
+
+
+@pytest.mark.asyncio
+async def test_base_executor_does_not_add_record_when_copy_fails(tmp_path):
+    from app.tasks.executors import base as base_module
+
+    source_path = tmp_path / "result.txt"
+    source_path.write_text("result", encoding="utf-8")
+
+    class FakeSession:
+        def __init__(self):
+            self.records = []
+
+        def add(self, record):
+            self.records.append(record)
+
+        async def flush(self):
+            return None
+
+        async def commit(self):
+            return None
+
+        async def rollback(self):
+            return None
+
+    session = FakeSession()
+
+    async def fake_get_async_session():
+        yield session
+
+    executor = DockerExecutor(_build_task(), _build_tool_version())
+    with patch.object(base_module, "get_async_session", fake_get_async_session), patch.object(
+        base_module.shutil, "copy2", side_effect=OSError("disk full")
+    ):
+        result = await base_module.BaseExecutor._collect_output_files(
+            executor,
+            [str(source_path)],
+        )
+
+    assert result == []
+    assert session.records == []

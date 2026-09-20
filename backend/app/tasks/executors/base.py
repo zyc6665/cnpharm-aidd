@@ -5,6 +5,7 @@ import logging
 import mimetypes
 import os
 import shutil
+import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable
 from typing import TYPE_CHECKING, Any, Callable, Optional
@@ -100,11 +101,17 @@ class BaseExecutor(ABC):
                             if file_meta_builder
                             else None
                         )
+                        file_id = str(uuid.uuid4())
+                        storage_path = get_file_path(file_id, filename)
+                        storage_path.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(source_path, str(storage_path))
                         file_record = FileModel(
+                            id=file_id,
                             filename=filename,
                             content_type=content_type,
                             size_bytes=len(content),
                             sha256=hashlib.sha256(content).hexdigest(),
+                            storage_path=str(storage_path),
                             source_type=FileSourceType.TOOL_OUTPUT.value,
                             owner_id=self.task.user_id,
                             is_public=False,
@@ -114,14 +121,8 @@ class BaseExecutor(ABC):
                         session.add(file_record)
                         await session.flush()
 
-                        storage_path = get_file_path(file_record.id, filename)
-                        storage_path.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(source_path, str(storage_path))
-                        file_record.storage_path = str(storage_path)
-                        await session.flush()
-
-                        uploaded_ids.append(file_record.id)
-                        logger.info("Collected output file: %s -> %s", relative_path, file_record.id)
+                        uploaded_ids.append(file_id)
+                        logger.info("Collected output file: %s -> %s", relative_path, file_id)
                     except Exception as exc:
                         logger.error("Failed to collect output file %s: %s", source_path, exc)
 

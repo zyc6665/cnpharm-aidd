@@ -1,5 +1,6 @@
 import { computed, ref, unref, type Ref } from 'vue'
 import type { UploadFile } from 'ant-design-vue'
+import type { TypedArtifact } from '@/types/artifacts'
 import { uploadFile } from '@/api/files'
 import { createTask, prepareTaskRun } from '@/api/tasks'
 import { useWorkflowStore } from '@/stores'
@@ -26,6 +27,8 @@ export interface StandaloneNodeRunOptions {
   executorType?: string
   standardInputSlots: readonly StandardArtifactInputSlot[]
   standardInputFileFieldBindings: Record<string, string>
+  selectedStandardArtifacts?: Record<string, TypedArtifact | undefined>
+  standardInputFileList?: Record<string, UploadFile[]>
 }
 
 export function useStandaloneNodeRun(input: {
@@ -58,8 +61,8 @@ export function useStandaloneNodeRun(input: {
         selectedArtifacts: options.selectedArtifacts,
         standardInputSlots: options.standardInputSlots,
         standardInputFileFieldBindings: options.standardInputFileFieldBindings,
-        selectedStandardArtifacts: {},
-        standardInputFileList: {},
+        selectedStandardArtifacts: options.selectedStandardArtifacts ?? {},
+        standardInputFileList: options.standardInputFileList ?? {},
         executorType: options.executorType,
         uploadFile: async file => (await uploadFile(file)).data,
       })

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from types import SimpleNamespace
 from typing import Any
 
 from fastapi import HTTPException
@@ -10,7 +11,6 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
-from app.artifact_standards.registry import is_standard_artifact_ref
 from app.config import use_direct_task_execution
 from app.common.exceptions import NotFoundException, ValidationException
 from app.database.base import utcnow
@@ -23,62 +23,43 @@ from app.services.project_access import load_project_membership
 from app.services.project_migration import ensure_migration_project_for_owner
 from app.services.run_input_normalization import normalize_string_mapping
 from app.services.run_preparation import PreparedRun, RunContext, RunPreparationInput, prepare_run
+from app.services.tool_contracts import (
+    build_tool_contract,
+    contract_emits_standard_artifacts,
+    tool_emits_standard_artifacts,
+)
 from app.services.standard_input_uploads import (
     accepts_materialized_standard_uploads,
     materialize_standard_input_uploads,
     standard_uploads_need_default_project,
     validate_standard_input_uploads,
 )
+from app.tasks.attempts import (
+    invoke_with_optional_attempt,
+    new_execution_attempt_id,
+    set_execution_attempt_id,
+)
+from app.tasks.commands import TaskCommand
+from app.common.task_context import set_task_project_id
 from app.tasks.direct_runner import direct_task_runner as default_direct_task_runner
 from app.tasks.naming import (
     resolve_task_display_name,
 )
 from app.tasks.resource_profile import build_task_resource_snapshot
 from app.tasks.state_machine import TaskStateMachine
-from app.tool_packages.config_resolver import tool_package_v2_manifest_data
 
 
 logger = logging.getLogger(__name__)
 
 
-def _is_known_standard_artifact_ref(value: object) -> bool:
-    return isinstance(value, str) and is_standard_artifact_ref(value)
-
-
 def _tool_config_emits_standard_artifacts(config: object) -> bool:
     if not isinstance(config, dict):
         return False
-
-    manifest = tool_package_v2_manifest_data(config)
-    if manifest is not None:
-        artifacts = manifest.get("artifacts")
-        outputs = artifacts.get("outputs") if isinstance(artifacts, dict) else None
-        if isinstance(outputs, list):
-            for output in outputs:
-                if isinstance(output, dict) and _is_known_standard_artifact_ref(output.get("type")):
-                    return True
-
-    artifacts = config.get("artifacts")
-    if isinstance(artifacts, dict):
-        outputs = artifacts.get("outputs")
-        if isinstance(outputs, list):
-            for output in outputs:
-                if isinstance(output, dict) and _is_known_standard_artifact_ref(output.get("type")):
-                    return True
-
-    capability = config.get("agent_capability")
-    if isinstance(capability, dict):
-        outputs = capability.get("outputs")
-        if isinstance(outputs, list):
-            for output in outputs:
-                if not isinstance(output, dict):
-                    continue
-                if output.get("source") == "artifact":
-                    return True
-                if _is_known_standard_artifact_ref(output.get("semantic_type")):
-                    return True
-
-    return False
+    tool = SimpleNamespace(
+        slug=config.get("builtin_slug"),
+        current_version=SimpleNamespace(config=config),
+    )
+    return contract_emits_standard_artifacts(build_tool_contract(tool))
 
 
 async def record_tool_usage(db: AsyncSession, tool_id: str) -> None:
@@ -124,14 +105,19 @@ async def dispatch_tool_task(
 ) -> None:
     """Dispatch a persisted task and keep dispatch metadata in sync."""
     try:
+        attempt_id = new_execution_attempt_id()
+        set_execution_attempt_id(task, attempt_id)
+
         if use_direct_task_execution():
             task.celery_task_id = None
             _set_task_extra_data(task, dispatch={"mode": "direct", "queue": None})
-            direct_runner.schedule_task(
+            await db.commit()
+            invoke_with_optional_attempt(
+                direct_runner.schedule_task,
                 task_id=str(task.id),
                 tool_version_id=str(tool_version.id),
+                attempt_id=attempt_id,
             )
-            await db.commit()
             logger.info("Task %s scheduled in direct mode", task.id)
             return
 
@@ -154,10 +140,13 @@ async def dispatch_tool_task(
                 "queue_priority": TaskQueueManager.get_queue_priority(queue),
             },
         )
-        celery_task = TaskQueueManager.enqueue_task(
+        await db.commit()
+        celery_task = invoke_with_optional_attempt(
+            TaskQueueManager.enqueue_task,
             task_id=str(task.id),
             tool_version_id=str(tool_version.id),
             queue=queue,
+            attempt_id=attempt_id,
         )
 
         task.celery_task_id = celery_task.id
@@ -231,9 +220,9 @@ async def _prepare_tool_task_run(
             project_id=project_id,
             user_id=current_user.id,
         )
-        task_extra_data["project_id"] = project_id
+        task_extra_data = set_task_project_id(task_extra_data, project_id)
     elif assign_default_project and (
-        _tool_config_emits_standard_artifacts(tool_version.config)
+        tool_emits_standard_artifacts(tool)
         or standard_uploads_need_default_project(
             task_data.standard_input_uploads,
             tool_version.config,
@@ -241,7 +230,7 @@ async def _prepare_tool_task_run(
     ):
         project = await ensure_migration_project_for_owner(db, current_user)
         project_id = str(project.id)
-        task_extra_data["project_id"] = project_id
+        task_extra_data = set_task_project_id(task_extra_data, project_id)
 
     input_bindings = normalize_string_mapping(task_data.input_bindings)
     standard_input_uploads = normalize_string_mapping(task_data.standard_input_uploads)
@@ -344,32 +333,32 @@ async def create_and_schedule_tool_task(
             "标准 Artifact 输入尚未满足工具要求",
             detail={"binding_decisions": prepared.binding_decisions},
         )
-    requested_input_bindings = normalize_string_mapping(task_data.input_bindings)
-    if prepared.input_bindings:
-        extra_data["input_bindings"] = prepared.input_bindings
-    elif requested_input_bindings:
-        extra_data["input_bindings"] = requested_input_bindings
-    if prepared.standard_input_uploads:
-        extra_data["standard_input_uploads"] = prepared.standard_input_uploads
-    if prepared.binding_decisions:
-        extra_data["binding_decisions"] = prepared.binding_decisions
-    params = prepared.params
-    file_ids = prepared.file_ids
+    command = TaskCommand.from_prepared_run(
+        user_id=str(current_user.id),
+        tool_id=str(task_data.tool_id),
+        tool_version_id=version_id,
+        name=task_data.name,
+        priority=task_data.priority,
+        prepared_run=prepared,
+        requested_input_bindings=task_data.input_bindings,
+        extra_data=extra_data,
+    )
+    task_input = command.task_input
 
     task = Task(
-        user_id=current_user.id,
-        tool_id=task_data.tool_id,
-        tool_version_id=version_id,
+        user_id=command.user_id,
+        tool_id=command.tool_id,
+        tool_version_id=command.tool_version_id,
         status=TaskStatus.PENDING.value,
-        priority=task_data.priority,
+        priority=command.priority,
         progress=0.0,
-        extra_data=extra_data,
+        extra_data=command.extra_data,
     )
 
     db.add(task)
     await db.flush()
     task.name = resolve_task_display_name(
-        name=task_data.name,
+        name=command.name,
         tool_name=tool.name,
         created_at=task.created_at,
         task_id=task.id,
@@ -378,8 +367,8 @@ async def create_and_schedule_tool_task(
     db.add(
         TaskInput(
             task_id=task.id,
-            params=params,
-            file_ids=file_ids,
+            params=task_input["params"],
+            file_ids=task_input["file_ids"],
         )
     )
 
@@ -394,7 +383,7 @@ async def create_and_schedule_tool_task(
         tool_version=tool_version,
         user_role=current_user.role,
         direct_runner=direct_runner,
-        resource_snapshot=extra_data.get("resource_snapshot"),
+        resource_snapshot=command.extra_data.get("resource_snapshot"),
     )
 
     return task

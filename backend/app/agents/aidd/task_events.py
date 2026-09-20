@@ -41,34 +41,38 @@ async def append_task_agent_event(
     payload: dict[str, Any] | None = None,
     run_status: str | None = None,
     error_message: str | None = None,
+    flush: bool = True,
 ) -> str | None:
     """Append an AgentEvent for project-Agent-owned tasks and return the run id."""
     run_id = _agent_run_id(task)
     if not run_id:
         return None
 
-    run = await db.scalar(select(AgentRun).where(AgentRun.id == run_id).with_for_update())
-    if run is None:
-        return None
+    with db.no_autoflush:
+        run = await db.scalar(select(AgentRun).where(AgentRun.id == run_id).with_for_update())
+        if run is None:
+            return None
 
-    if run_status:
-        run.status = run_status
-        if run_status in TERMINAL_AGENT_STATUSES:
-            run.finished_at = utcnow()
-    if error_message:
-        run.error_message = error_message
+        if run_status:
+            run.status = run_status
+            if run_status in TERMINAL_AGENT_STATUSES:
+                run.finished_at = utcnow()
+        if error_message:
+            run.error_message = error_message
 
-    last_sequence = await db.scalar(
-        select(func.max(AgentEvent.sequence)).where(AgentEvent.agent_run_id == run_id)
-    )
-    event = AgentEvent(
-        agent_run_id=run_id,
-        sequence=(last_sequence or 0) + 1,
-        event_type=event_type,
-        payload={**_base_payload(task), **(payload or {})},
-    )
-    db.add(event)
-    await db.flush()
+        last_sequence = await db.scalar(
+            select(func.max(AgentEvent.sequence)).where(AgentEvent.agent_run_id == run_id)
+        )
+        event = AgentEvent(
+            agent_run_id=run_id,
+            sequence=(last_sequence or 0) + 1,
+            event_type=event_type,
+            payload={**_base_payload(task), **(payload or {})},
+        )
+        db.add(event)
+
+    if flush:
+        await db.flush()
     return run_id
 
 

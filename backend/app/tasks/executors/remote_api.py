@@ -13,7 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from app.database.session import get_async_session
 from app.models.artifacts import ArtifactVersion, ArtifactVersionFile
-from app.files.storage_path import get_file_path
+from app.files.writer import store_file_bytes
 from app.models.files import File as FileModel
 from app.remote_tools.files import (
     remote_file_download_url,
@@ -59,6 +59,7 @@ from app.remote_tools.urls import (
 )
 from app.tasks.executors.base import BaseExecutor
 from app.tasks.executors.errors import TaskExecutionError
+from app.common.task_context import task_project_id
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +153,6 @@ class RemoteAPIExecutor(BaseExecutor):
 
     async def _remote_tool_invoke_payload(self) -> dict[str, Any]:
         input_params = self.task.inputs.params if self.task.inputs else {}
-        extra_data = self.task.extra_data if isinstance(self.task.extra_data, dict) else {}
         return build_remote_tool_invoke_payload(
             request_id=str(uuid.uuid4()),
             task_id=str(self.task.id),
@@ -160,7 +160,7 @@ class RemoteAPIExecutor(BaseExecutor):
             tool_version=getattr(self.tool_version, "version", None),
             inputs=await self._remote_tool_inputs(),
             parameters=remote_tool_parameters(input_params),
-            project_id=extra_data.get("project_id"),
+            project_id=task_project_id(self.task),
             user_id=str(self.task.user_id) if self.task.user_id else None,
         )
 
@@ -379,25 +379,27 @@ class RemoteAPIExecutor(BaseExecutor):
                             actual_sha256 = verify_remote_result_file_checksum(file_ref, str(role), content)
                         except RemoteToolResultError as exc:
                             raise TaskExecutionError(str(exc)) from exc
-                        file_record = FileModel(
-                            **remote_result_file_record_data(
-                                file_ref=file_ref,
-                                artifact_ref=artifact_ref,
-                                artifact=artifact,
-                                role=str(role),
-                                content_length=len(content),
-                                sha256=actual_sha256,
-                                owner_id=self.task.user_id,
-                            )
+                        record_data = remote_result_file_record_data(
+                            file_ref=file_ref,
+                            artifact_ref=artifact_ref,
+                            artifact=artifact,
+                            role=str(role),
+                            content_length=len(content),
+                            sha256=actual_sha256,
+                            owner_id=self.task.user_id,
                         )
-                        session.add(file_record)
-                        await session.flush()
-                        storage_path = get_file_path(str(file_record.id), file_record.filename)
-                        storage_path.parent.mkdir(parents=True, exist_ok=True)
-                        with open(storage_path, "wb") as file_handle:
-                            file_handle.write(content)
-                        file_record.storage_path = str(storage_path)
-                        await session.flush()
+                        file_record = await store_file_bytes(
+                            session,
+                            content=content,
+                            filename=str(record_data["filename"]),
+                            content_type=record_data.get("content_type"),
+                            source_type=record_data.get("source_type", "tool_output"),
+                            owner_id=record_data.get("owner_id"),
+                            project_id=task_project_id(self.task),
+                            file_meta=record_data.get("file_meta"),
+                            is_public=bool(record_data.get("is_public", False)),
+                            is_permanent=bool(record_data.get("is_permanent", False)),
+                        )
                         file_ref["file_id"] = str(file_record.id)
                         output_file_ids.append(str(file_record.id))
                 await session.commit()
@@ -508,22 +510,24 @@ class RemoteAPIExecutor(BaseExecutor):
                             response = await client.get(url)
                             response.raise_for_status()
                             content = response.content
-                        file_record = FileModel(
-                            **legacy_output_file_record_data(
-                                filename=filename,
-                                content_type=response.headers.get("content-type", "application/octet-stream"),
-                                content=content,
-                                owner_id=self.task.user_id,
-                            )
+                        record_data = legacy_output_file_record_data(
+                            filename=filename,
+                            content_type=response.headers.get("content-type", "application/octet-stream"),
+                            content=content,
+                            owner_id=self.task.user_id,
                         )
-                        session.add(file_record)
-                        await session.flush()
-                        storage_path = get_file_path(file_record.id, filename)
-                        storage_path.parent.mkdir(parents=True, exist_ok=True)
-                        with open(storage_path, "wb") as file_handle:
-                            file_handle.write(content)
-                        file_record.storage_path = str(storage_path)
-                        await session.flush()
+                        file_record = await store_file_bytes(
+                            session,
+                            content=content,
+                            filename=filename,
+                            content_type=record_data.get("content_type"),
+                            source_type=record_data.get("source_type", "tool_output"),
+                            owner_id=record_data.get("owner_id"),
+                            project_id=task_project_id(self.task),
+                            file_meta=record_data.get("file_meta"),
+                            is_public=bool(record_data.get("is_public", False)),
+                            is_permanent=bool(record_data.get("is_permanent", False)),
+                        )
                         uploaded_ids.append(file_record.id)
                         logger.info("Processed output file from %s -> %s", url, file_record.id)
                     except httpx.HTTPError as exc:

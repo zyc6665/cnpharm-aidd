@@ -14,17 +14,12 @@ from sqlalchemy.orm import selectinload
 
 from app.models.tool_packages import ToolPackage, ToolPackageVersion
 from app.models.tools import Tool, ToolVersion
+from app.execution.executor_types import execution_types_for_tool_type
 from app.services.tool_contracts import collect_tool_contract_config_validation_errors
 from app.tool_packages.schemas import ToolPackageManifest
 from app.tool_packages.validator import validate_tool_package
 
 
-_EXECUTORS = {
-    "docker_image": ("container",),
-    "python_script": ("cli",),
-    "ssh_job": ("remote_job",),
-    "remote_api": ("remote_job",),
-}
 _SLUG_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
@@ -186,7 +181,7 @@ def build_legacy_tool_manifest(
         errors.append("agent_capability.enabled=true is required for migration")
 
     executor_type = str(config.get("type") or "").strip()
-    executor_types = _EXECUTORS.get(executor_type)
+    executor_types = execution_types_for_tool_type(executor_type)
     if executor_types is None:
         errors.append(f'config.type {executor_type or "<missing>"} is not migratable')
     if executor_type == "docker_image" and not str(config.get("image") or "").strip():

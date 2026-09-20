@@ -155,6 +155,58 @@ describe('workflow node run inputs', () => {
     expect(surface.usesSyntheticStandardInputFields).toBe(false)
   })
 
+  it('keeps standard artifact inputs visible beside Tool Package parameters', () => {
+    const surface = resolveWorkflowNodeRunInputSurface({
+      tool: {
+        id: 'tool-v2',
+        name: 'Tool Package V2',
+        slug: 'tool-package-v2',
+        description: 'Consumes a standard protein input',
+        category: 'AIDD',
+        tags: [],
+        status: 'published',
+        usage_count: 0,
+        view_count: 0,
+        favorite_count: 0,
+        gpu_required: false,
+        created_at: '2026-09-15T00:00:00Z',
+        current_version: {
+          id: 'version-v2',
+          tool_id: 'tool-v2',
+          version: '1.0.0',
+          is_active: true,
+          deprecated: false,
+          config: {
+            type: 'ssh_job',
+            tool_package_manifest: {
+              api_version: 'aidd.sciminer/tool-package.v2',
+              artifacts: {
+                inputs: [
+                  {
+                    name: 'protein',
+                    type: 'protein_structure@1',
+                    required: true,
+                  },
+                ],
+                outputs: [],
+              },
+              parameters_schema: {
+                type: 'object',
+                properties: {
+                  device: { type: 'string', default: 'auto' },
+                },
+              },
+            },
+          },
+        },
+      },
+    })
+
+    expect(surface.standardInputFileFieldBindings).toEqual({})
+    expect(surface.showStandardArtifactInputs).toBe(true)
+    expect(surface.flattenedSchema.properties).toHaveProperty('device')
+  })
+
   it('resolves synthetic artifact fields when a node tool has slots only', () => {
     const surface = resolveWorkflowNodeRunInputSurface({
       tool: null,

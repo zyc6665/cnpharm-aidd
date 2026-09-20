@@ -10,6 +10,7 @@ from app.files.storage_fallback import (
     FallbackReason,
     get_storage_fallback
 )
+from app.files.writer import store_file_bytes, store_file_path
 
 __all__ = [
     "FileDeduplicator",
@@ -23,4 +24,6 @@ __all__ = [
     "StorageBackend",
     "FallbackReason",
     "get_storage_fallback",
+    "store_file_bytes",
+    "store_file_path",
 ]

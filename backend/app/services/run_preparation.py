@@ -12,7 +12,6 @@ from app.services.run_input_validation import (
     dedupe_ordered,
     input_bindings_requiring_validation,
     require_existing_file_id,
-    slot_needs_binding_resolution,
     validate_standard_input_bindings,
 )
 from app.services.run_input_normalization import normalize_string_mapping
@@ -27,7 +26,10 @@ from app.services.standard_input_slots import (
     tool_accepts_standard_input_bindings,
 )
 from app.services.tool_contracts import build_tool_contract
-from app.services.workflow_run_input_sources import resolve_workflow_input_sources
+from app.services.workflow_run_input_sources import (
+    WorkflowInputSources,
+    resolve_workflow_input_sources,
+)
 
 
 RunSurface = Literal["tool_detail", "standalone_node", "workflow_node", "agent_plan"]
@@ -105,7 +107,7 @@ async def prepare_run(db: AsyncSession, *, input: RunPreparationInput) -> Prepar
 
     for slot_name, version_id in input_bindings.items():
         slot = artifact_inputs_by_name.get(slot_name)
-        if not slot or not slot_needs_binding_resolution(slot):
+        if not slot or accepts_standard_bindings:
             continue
 
         decision = await resolve_artifact_binding(
@@ -194,26 +196,39 @@ async def prepare_workflow_node_run(
             blocked_reason=_first_blocking_binding_reason(sources.binding_decisions),
         )
 
-    prepared = await prepare_run(
-        db,
-        input=RunPreparationInput(
-            tool=tool,
-            tool_version=getattr(tool, "current_version", None),
-            context=RunContext(
-                surface="workflow_node",
-                user_id=str(getattr(current_user, "id", "")),
-                project_id=getattr(run, "project_id", None),
-                workflow_run_id=str(getattr(run, "id", "")),
-                workflow_definition_id=str(getattr(run, "workflow_definition_id", "")),
-                workflow_node_id=str(node_id),
-            ),
-            params=dict(params),
-            file_ids=sources.file_ids,
-            input_bindings=sources.input_bindings,
-            standard_input_uploads=sources.standard_input_uploads,
-            workflow_node=node,
+    preparation_input = RunPreparationInput(
+        tool=tool,
+        tool_version=getattr(tool, "current_version", None),
+        context=RunContext(
+            surface="workflow_node",
+            user_id=str(getattr(current_user, "id", "")),
+            project_id=getattr(run, "project_id", None),
+            workflow_run_id=str(getattr(run, "id", "")),
+            workflow_definition_id=str(getattr(run, "workflow_definition_id", "")),
+            workflow_node_id=str(node_id),
         ),
+        params=dict(params),
+        file_ids=sources.file_ids,
+        input_bindings=sources.input_bindings,
+        standard_input_uploads=sources.standard_input_uploads,
+        workflow_node=node,
     )
+    prepared = await prepare_run(db, input=preparation_input)
+    if _can_fallback_to_workflow_files(prepared, sources):
+        fallback_input_bindings = {
+            slot_name: version_id
+            for slot_name, version_id in preparation_input.input_bindings.items()
+            if slot_name not in sources.legacy_file_bindings
+        }
+        fallback = await prepare_run(
+            db,
+            input=replace(
+                preparation_input,
+                input_bindings=fallback_input_bindings,
+            ),
+        )
+        if fallback.ready:
+            prepared = fallback
     if not prepared.ready:
         return prepared
 
@@ -251,3 +266,28 @@ def _first_blocking_binding_reason(decisions: dict[str, dict[str, Any]]) -> str 
             or "Artifact binding blocked"
         )
     return None
+
+
+def _can_fallback_to_workflow_files(
+    prepared: PreparedRun,
+    sources: WorkflowInputSources,
+) -> bool:
+    if prepared.ready or not sources.legacy_file_bindings:
+        return False
+
+    fallbackable_slots = 0
+    for slot_name, decision in prepared.binding_decisions.items():
+        if not isinstance(decision, dict) or decision.get("status") == "ready":
+            continue
+        if slot_name not in sources.legacy_file_bindings:
+            return False
+        reason = str(decision.get("reason") or "")
+        if (
+            decision.get("status") != "invalid"
+            or not reason.startswith("ArtifactVersion ")
+            or not reason.endswith(" was not found.")
+        ):
+            return False
+        fallbackable_slots += 1
+
+    return fallbackable_slots > 0

@@ -42,6 +42,7 @@ from app.files.file_records import (
 )
 from app.files.storage_path import ensure_storage_dir, get_file_path
 from app.files.upload_staging import stream_upload, validate_upload_content
+from app.files.writer import store_file_path
 from app.services.artifact_file_list import list_user_artifact_files
 
 router = APIRouter()
@@ -144,24 +145,18 @@ async def upload_file(
             )
 
         expires_at = utcnow() + timedelta(hours=expires_hours) if expires_hours else None
-        file_record = FileModel(
+        file_record = await store_file_path(
+            db,
+            source_path=staged_path,
             filename=filename,
             content_type=file.content_type,
+            source_type=FileSourceType.UPLOAD,
+            owner_id=current_user.id,
             size_bytes=file_size,
             sha256=sha256,
-            source_type=FileSourceType.UPLOAD,
             is_public=is_public,
             expires_at=expires_at,
-            owner_id=current_user.id
         )
-
-        db.add(file_record)
-        await db.flush()
-
-        file_path = get_file_path(file_record.id, filename)
-        file_path.parent.mkdir(parents=True, exist_ok=True)
-        os.replace(staged_path, file_path)
-        file_record.storage_path = str(file_path)
 
         await db.commit()
         await db.refresh(file_record)

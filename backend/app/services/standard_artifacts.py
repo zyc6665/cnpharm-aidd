@@ -24,6 +24,7 @@ from app.execution.result_parser import (
 from app.models.artifacts import Artifact, ArtifactLineage, ArtifactVersion, ArtifactVersionFile
 from app.models.files import File as FileModel, FileSourceType
 from app.models.tasks import Task
+from app.common.task_context import task_project_id
 from app.services.standard_artifact_collection import (
     collected_standard_result_payload,
     declared_standard_outputs_from_config,
@@ -396,8 +397,7 @@ def _artifact_ref_key(artifact: ParsedStandardArtifact) -> str:
 
 
 def _task_project_id(task: Task) -> str:
-    data = task.extra_data if isinstance(task.extra_data, dict) else {}
-    project_id = data.get("project_id")
+    project_id = task_project_id(task)
     if not project_id:
         raise StandardArtifactPersistenceError(
             "Task extra_data.project_id is required for standard artifacts"

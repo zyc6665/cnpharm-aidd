@@ -2,20 +2,36 @@
 
 from __future__ import annotations
 
-from fastapi import HTTPException
+from collections.abc import Mapping
+from dataclasses import dataclass
 
 from app.execution.contracts import ExecutionHandle, ExecutionRequest, ExecutionState, LogChunk, ProducedArtifact
 from app.execution.port import ExecutionPort
 
 
+class UnsupportedExecutionTypeError(ValueError):
+    """Raised when no execution adapter is registered for a request type."""
+
+
+@dataclass(frozen=True)
+class BoundExecutionArtifactSource:
+    """Bind one adapter type to the artifact collection seam."""
+
+    service: "ExecutionService"
+    adapter_type: str
+
+    async def collect_artifacts(self, execution_id: str) -> list[ProducedArtifact]:
+        return await self.service.collect_artifacts(self.adapter_type, execution_id)
+
+
 class ExecutionService:
-    def __init__(self, adapters: dict[str, ExecutionPort]):
+    def __init__(self, adapters: Mapping[str, ExecutionPort]):
         self._adapters = dict(adapters)
 
     def _adapter(self, adapter_type: str) -> ExecutionPort:
         adapter = self._adapters.get(adapter_type)
         if adapter is None:
-            raise HTTPException(status_code=422, detail=f"不支持的执行器类型: {adapter_type}")
+            raise UnsupportedExecutionTypeError(f"不支持的执行器类型: {adapter_type}")
         return adapter
 
     async def submit(self, request: ExecutionRequest) -> ExecutionHandle:
@@ -41,3 +57,8 @@ class ExecutionService:
         execution_id: str,
     ) -> list[ProducedArtifact]:
         return await self._adapter(adapter_type).collect_artifacts(execution_id)
+
+    def artifact_source(self, adapter_type: str) -> BoundExecutionArtifactSource:
+        """Return a source compatible with application-level result collection."""
+        self._adapter(adapter_type)
+        return BoundExecutionArtifactSource(self, adapter_type)

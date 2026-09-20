@@ -6,18 +6,27 @@
 """
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import timedelta
 from enum import Enum
 from typing import Any, Dict, List, Optional
 import asyncio
 import hashlib
 import logging
+import uuid
 
+from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.time import utcnow
 from app.gpu.detector import GPUDetector, get_gpu_detector
+from app.models.gpu import GPUAllocation, GPUAllocationStatus
+from app.models.tasks import Task, TaskStatus
 
 logger = logging.getLogger(__name__)
+
+GPU_LEASE_HEARTBEAT_INTERVAL_SECONDS = 30
+GPU_LEASE_TIMEOUT_SECONDS = 300
 
 
 class AllocationStrategy(str, Enum):
@@ -48,18 +57,6 @@ class AllocationResult:
     wait_position: Optional[int] = None  # 等待队列位置
 
 
-@dataclass
-class GPUAllocation:
-    """GPU分配记录"""
-    id: str
-    task_id: str
-    gpu_node_id: str
-    gpu_index: int
-    memory_allocated_mb: int
-    allocated_at: datetime
-    released_at: Optional[datetime] = None
-
-
 class GPUAllocator:
     """GPU智能调度器
 
@@ -81,7 +78,7 @@ class GPUAllocator:
 
     def __init__(
         self,
-        db: AsyncSession,
+        db: AsyncSession | None,
         detector: Optional[GPUDetector] = None,
         cache_client=None
     ):
@@ -101,7 +98,8 @@ class GPUAllocator:
         task_id: str,
         memory_required_mb: int,
         priority: TaskPriority = TaskPriority.NORMAL,
-        strategy: AllocationStrategy = AllocationStrategy.IDLE_FIRST
+        strategy: AllocationStrategy = AllocationStrategy.IDLE_FIRST,
+        attempt_id: str | None = None,
     ) -> AllocationResult:
         """分配GPU资源
 
@@ -138,7 +136,7 @@ class GPUAllocator:
 
             if strategy == AllocationStrategy.IDLE_FIRST:
                 result = await self._try_allocate_idle_gpu(
-                    available_nodes, task_id, memory_required_mb
+                    available_nodes, task_id, memory_required_mb, attempt_id
                 )
 
             if not result and strategy in (
@@ -146,17 +144,17 @@ class GPUAllocator:
                 AllocationStrategy.MEMORY_FIT
             ):
                 result = await self._try_allocate_by_memory(
-                    available_nodes, task_id, memory_required_mb
+                    available_nodes, task_id, memory_required_mb, attempt_id
                 )
 
             if not result and strategy == AllocationStrategy.ROUND_ROBIN:
                 result = await self._try_allocate_round_robin(
-                    available_nodes, task_id, memory_required_mb
+                    available_nodes, task_id, memory_required_mb, attempt_id
                 )
 
             if not result and strategy == AllocationStrategy.LOAD_BALANCE:
                 result = await self._try_allocate_by_load(
-                    available_nodes, task_id, memory_required_mb
+                    available_nodes, task_id, memory_required_mb, attempt_id
                 )
 
             # 高优先级任务尝试抢占
@@ -194,8 +192,56 @@ class GPUAllocator:
             bool: 是否成功释放
         """
         try:
-            # 这里需要根据实际模型更新
-            # 暂时使用简化逻辑
+            if self.db is not None:
+                now = utcnow()
+                if isinstance(self.db, AsyncSession):
+                    await self.db.execute(
+                        update(GPUAllocation)
+                        .where(
+                            GPUAllocation.task_id == task_id,
+                            GPUAllocation.status == GPUAllocationStatus.ACTIVE.value,
+                            *(
+                                [GPUAllocation.id == allocation_id]
+                                if allocation_id
+                                else []
+                            ),
+                        )
+                        .values(
+                            status=GPUAllocationStatus.RELEASED.value,
+                            heartbeat_at=now,
+                            released_at=now,
+                        )
+                    )
+                    active_lease_id = await self.db.scalar(
+                        select(GPUAllocation.id)
+                        .where(
+                            GPUAllocation.task_id == task_id,
+                            GPUAllocation.status == GPUAllocationStatus.ACTIVE.value,
+                        )
+                        .limit(1)
+                    )
+                    if active_lease_id is None:
+                        await self.db.execute(
+                            update(Task)
+                            .where(Task.id == task_id)
+                            .values(
+                                gpu_node_id=None,
+                                gpu_index=None,
+                                gpu_memory_allocated_mb=None,
+                            )
+                        )
+                else:
+                    await self.db.execute(
+                        update(Task)
+                        .where(Task.id == task_id)
+                        .values(
+                            gpu_node_id=None,
+                            gpu_index=None,
+                            gpu_memory_allocated_mb=None,
+                        )
+                    )
+                await self.db.flush()
+
             logger.info(
                 f"Released GPU allocation for task {task_id}",
                 extra={"task_id": task_id, "allocation_id": allocation_id}
@@ -205,6 +251,97 @@ class GPUAllocator:
         except Exception as e:
             logger.error(f"Failed to release GPU allocation: {e}")
             return False
+
+    async def heartbeat(self, task_id: str, allocation_id: str) -> bool:
+        """刷新活动租约心跳，返回租约是否仍然有效。"""
+        if not isinstance(self.db, AsyncSession):
+            return False
+
+        try:
+            result = await self.db.execute(
+                update(GPUAllocation)
+                .where(
+                    GPUAllocation.id == allocation_id,
+                    GPUAllocation.task_id == task_id,
+                    GPUAllocation.status == GPUAllocationStatus.ACTIVE.value,
+                )
+                .values(heartbeat_at=utcnow())
+            )
+            await self.db.flush()
+            return result.rowcount == 1
+        except Exception as exc:
+            logger.warning(
+                "Failed to heartbeat GPU allocation %s for task %s: %s",
+                allocation_id,
+                task_id,
+                exc,
+            )
+            return False
+
+    async def reclaim_stale_allocations(
+        self,
+        timeout_seconds: int = GPU_LEASE_TIMEOUT_SECONDS,
+    ) -> int:
+        """回收超时未更新心跳的活动租约。"""
+        if not isinstance(self.db, AsyncSession):
+            return 0
+
+        now = utcnow()
+        cutoff = now - timedelta(seconds=max(timeout_seconds, 0))
+        result = await self.db.execute(
+            select(GPUAllocation)
+            .where(
+                GPUAllocation.status == GPUAllocationStatus.ACTIVE.value,
+                GPUAllocation.heartbeat_at < cutoff,
+            )
+            .order_by(GPUAllocation.allocated_at)
+        )
+        stale_allocations = result.scalars().all()
+        reclaimed_count = 0
+
+        for allocation in stale_allocations:
+            released = await self.db.execute(
+                update(GPUAllocation)
+                .where(
+                    GPUAllocation.id == allocation.id,
+                    GPUAllocation.status == GPUAllocationStatus.ACTIVE.value,
+                    GPUAllocation.heartbeat_at < cutoff,
+                )
+                .values(
+                    status=GPUAllocationStatus.RELEASED.value,
+                    heartbeat_at=now,
+                    released_at=now,
+                )
+            )
+            if released.rowcount != 1:
+                continue
+
+            reclaimed_count += 1
+            active_lease_id = await self.db.scalar(
+                select(GPUAllocation.id)
+                .where(
+                    GPUAllocation.task_id == allocation.task_id,
+                    GPUAllocation.status == GPUAllocationStatus.ACTIVE.value,
+                )
+                .limit(1)
+            )
+            if active_lease_id is None:
+                await self.db.execute(
+                    update(Task)
+                    .where(
+                        Task.id == allocation.task_id,
+                        Task.gpu_node_id == allocation.gpu_node_id,
+                        Task.gpu_index == allocation.gpu_index,
+                    )
+                    .values(
+                        gpu_node_id=None,
+                        gpu_index=None,
+                        gpu_memory_allocated_mb=None,
+                    )
+                )
+
+        await self.db.flush()
+        return reclaimed_count
 
     async def _get_available_nodes(self) -> List[Dict[str, Any]]:
         """获取可用GPU节点
@@ -241,7 +378,8 @@ class GPUAllocator:
         self,
         nodes: List[Dict[str, Any]],
         task_id: str,
-        memory_required_mb: int
+        memory_required_mb: int,
+        attempt_id: str | None = None,
     ) -> Optional[AllocationResult]:
         """策略1: 优先空闲GPU
 
@@ -263,7 +401,8 @@ class GPUAllocator:
                         task_id=task_id,
                         node_id=node["id"],
                         gpu_index=gpu["index"],
-                        memory_mb=memory_required_mb
+                        memory_mb=memory_required_mb,
+                        attempt_id=attempt_id,
                     )
 
         return None
@@ -272,7 +411,8 @@ class GPUAllocator:
         self,
         nodes: List[Dict[str, Any]],
         task_id: str,
-        memory_required_mb: int
+        memory_required_mb: int,
+        attempt_id: str | None = None,
     ) -> Optional[AllocationResult]:
         """策略2: 显存最佳匹配
 
@@ -286,45 +426,38 @@ class GPUAllocator:
         Returns:
             Optional[AllocationResult]: 分配结果
         """
-        candidates = []
-
-        for node in nodes:
-            for gpu in node.get("gpus", []):
-                free_memory = gpu["free_memory_mb"]
-
-                if free_memory >= memory_required_mb:
-                    candidates.append({
-                        "node_id": node["id"],
-                        "gpu_index": gpu["index"],
-                        "free_memory": free_memory,
-                        "waste": free_memory - memory_required_mb
-                    })
+        candidates = await self._allocation_candidates(nodes, memory_required_mb)
 
         if not candidates:
             return None
 
         # 选择浪费最小的GPU
-        best = min(candidates, key=lambda x: x["waste"])
+        best = min(
+            candidates,
+            key=lambda candidate: candidate["free_memory"] - memory_required_mb,
+        )
 
         return await self._create_allocation(
             task_id=task_id,
             node_id=best["node_id"],
             gpu_index=best["gpu_index"],
-            memory_mb=memory_required_mb
+            memory_mb=memory_required_mb,
+            attempt_id=attempt_id,
         )
 
     async def _try_allocate_round_robin(
         self,
         nodes: List[Dict[str, Any]],
         task_id: str,
-        memory_required_mb: int
+        memory_required_mb: int,
+        attempt_id: str | None = None,
     ) -> Optional[AllocationResult]:
         """策略3: 轮询分配
 
         当前实现使用 task_id 的确定性哈希在候选 GPU 中选择位置，避免无状态服务
         每次都落到同一张卡，同时不引入额外持久化状态。
         """
-        candidates = self._allocation_candidates(nodes, memory_required_mb)
+        candidates = await self._allocation_candidates(nodes, memory_required_mb)
         if not candidates:
             return None
 
@@ -334,20 +467,22 @@ class GPUAllocator:
             task_id=task_id,
             node_id=candidate["node_id"],
             gpu_index=candidate["gpu_index"],
-            memory_mb=memory_required_mb
+            memory_mb=memory_required_mb,
+            attempt_id=attempt_id,
         )
 
     async def _try_allocate_by_load(
         self,
         nodes: List[Dict[str, Any]],
         task_id: str,
-        memory_required_mb: int
+        memory_required_mb: int,
+        attempt_id: str | None = None,
     ) -> Optional[AllocationResult]:
         """策略4: 负载均衡
 
         选择当前空闲显存最多的 GPU，优先把任务分配到余量最大的设备。
         """
-        candidates = self._allocation_candidates(nodes, memory_required_mb)
+        candidates = await self._allocation_candidates(nodes, memory_required_mb)
         if not candidates:
             return None
 
@@ -356,20 +491,23 @@ class GPUAllocator:
             task_id=task_id,
             node_id=best["node_id"],
             gpu_index=best["gpu_index"],
-            memory_mb=memory_required_mb
+            memory_mb=memory_required_mb,
+            attempt_id=attempt_id,
         )
 
-    def _allocation_candidates(
+    async def _allocation_candidates(
         self,
         nodes: List[Dict[str, Any]],
         memory_required_mb: int
     ) -> List[Dict[str, Any]]:
-        """提取满足显存要求的 GPU 候选。"""
+        """提取满足显存要求且当前空闲的 GPU 候选。"""
         candidates = []
         for node in nodes:
             for gpu in node.get("gpus", []):
                 free_memory = gpu["free_memory_mb"]
-                if free_memory >= memory_required_mb:
+                if free_memory >= memory_required_mb and await self._is_gpu_idle(
+                    node["id"], gpu["index"]
+                ):
                     candidates.append({
                         "node_id": node["id"],
                         "gpu_index": gpu["index"],
@@ -407,7 +545,8 @@ class GPUAllocator:
         task_id: str,
         node_id: str,
         gpu_index: int,
-        memory_mb: int
+        memory_mb: int,
+        attempt_id: str | None = None,
     ) -> AllocationResult:
         """创建分配记录
 
@@ -420,11 +559,54 @@ class GPUAllocator:
         Returns:
             AllocationResult: 分配结果
         """
-        import uuid
         allocation_id = str(uuid.uuid4())
 
-        # 这里应该创建数据库记录
-        # 暂时只记录日志
+        if self.db is not None:
+            if isinstance(self.db, AsyncSession):
+                task_exists = await self.db.scalar(
+                    select(Task.id).where(Task.id == task_id)
+                )
+                if task_exists is None:
+                    return AllocationResult(
+                        success=False,
+                        message=f"Task not found: {task_id}",
+                    )
+
+                lease = GPUAllocation(
+                    id=allocation_id,
+                    task_id=task_id,
+                    execution_attempt_id=attempt_id,
+                    gpu_node_id=node_id,
+                    gpu_index=gpu_index,
+                    memory_allocated_mb=memory_mb,
+                    status=GPUAllocationStatus.ACTIVE.value,
+                )
+                try:
+                    async with self.db.begin_nested():
+                        self.db.add(lease)
+                        await self.db.flush()
+                except IntegrityError:
+                    logger.info(
+                        "GPU lease conflict: node=%s gpu=%s task=%s",
+                        node_id,
+                        gpu_index,
+                        task_id,
+                    )
+                    return AllocationResult(
+                        success=False,
+                        message="GPU资源已被其他任务占用",
+                    )
+
+            await self.db.execute(
+                update(Task)
+                .where(Task.id == task_id)
+                .values(
+                    gpu_node_id=node_id,
+                    gpu_index=gpu_index,
+                    gpu_memory_allocated_mb=memory_mb,
+                )
+            )
+            await self.db.flush()
 
         logger.info(
             f"GPU allocated: task={task_id}, node={node_id}, "
@@ -457,8 +639,43 @@ class GPUAllocator:
         Returns:
             bool: 是否空闲
         """
-        # 这里应该查询数据库检查是否有任务在使用
-        # 暂时使用简化逻辑：检查利用率
+        if self.db is not None:
+            try:
+                lease_result = await self.db.execute(
+                    select(GPUAllocation.id)
+                    .where(
+                        GPUAllocation.gpu_node_id == node_id,
+                        GPUAllocation.gpu_index == gpu_index,
+                        GPUAllocation.status == GPUAllocationStatus.ACTIVE.value,
+                    )
+                    .limit(1)
+                )
+                if lease_result.scalar_one_or_none() is not None:
+                    return False
+
+                result = await self.db.execute(
+                    select(Task.id)
+                    .where(
+                        Task.gpu_node_id == node_id,
+                        Task.gpu_index == gpu_index,
+                        Task.status.in_(
+                            [TaskStatus.PENDING.value, TaskStatus.RUNNING.value]
+                        ),
+                    )
+                    .limit(1)
+                )
+                if result.scalar_one_or_none() is not None:
+                    return False
+            except Exception as e:
+                logger.warning(
+                    "Failed to query persisted GPU allocation for node=%s gpu=%s: %s",
+                    node_id,
+                    gpu_index,
+                    e,
+                )
+                return False
+
+        # 没有活动任务占用时，再用硬件利用率做兜底判断。
         try:
             stats = self.detector.get_gpu_stats(gpu_index)
             # 利用率低于10%视为空闲
@@ -520,13 +737,14 @@ class GPUAllocator:
         Returns:
             Dict[str, Any]: 分配统计信息
         """
+        active_allocations = await self._get_active_allocation_summaries()
         if not self.detector.is_available():
             return {
                 "available": False,
                 "gpu_count": 0,
                 "total_memory_mb": 0,
                 "used_memory_mb": 0,
-                "allocations": []
+                "allocations": active_allocations,
             }
 
         stats_list = self.detector.get_all_gpu_stats()
@@ -550,5 +768,33 @@ class GPUAllocator:
                     "temperature": s.temperature_celsius
                 }
                 for s in stats_list
-            ]
+            ],
+            "allocations": active_allocations,
         }
+
+    async def _get_active_allocation_summaries(self) -> List[Dict[str, Any]]:
+        """读取活动 GPU 租约的最小摘要。"""
+        if not isinstance(self.db, AsyncSession):
+            return []
+
+        try:
+            result = await self.db.execute(
+                select(GPUAllocation)
+                .where(GPUAllocation.status == GPUAllocationStatus.ACTIVE.value)
+                .order_by(GPUAllocation.allocated_at)
+            )
+            return [
+                {
+                    "allocation_id": allocation.id,
+                    "task_id": allocation.task_id,
+                    "execution_attempt_id": allocation.execution_attempt_id,
+                    "gpu_node_id": allocation.gpu_node_id,
+                    "gpu_index": allocation.gpu_index,
+                    "memory_allocated_mb": allocation.memory_allocated_mb,
+                    "status": allocation.status,
+                }
+                for allocation in result.scalars().all()
+            ]
+        except Exception as exc:
+            logger.warning("Failed to query active GPU allocations: %s", exc)
+            return []

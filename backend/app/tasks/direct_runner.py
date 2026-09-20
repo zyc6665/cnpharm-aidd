@@ -23,19 +23,65 @@ class DirectTaskRunner:
         self._tasks: Dict[str, asyncio.Task] = {}
         self._shutdown_task_ids: set[str] = set()
 
-    def schedule_task(self, task_id: str, tool_version_id: str) -> asyncio.Task:
+    def schedule_task(
+        self,
+        task_id: str,
+        tool_version_id: str,
+        attempt_id: str | None = None,
+    ) -> asyncio.Task:
         """注册并启动后台任务。"""
         existing_task = self._tasks.get(task_id)
         if existing_task and not existing_task.done():
             return existing_task
 
+        if attempt_id is None:
+            coroutine = self._run_task(task_id, tool_version_id)
+        else:
+            coroutine = self._run_task(task_id, tool_version_id, attempt_id)
         background_task = asyncio.create_task(
-            self._run_task(task_id, tool_version_id),
+            coroutine,
             name=f"direct-task:{task_id}",
         )
         self._tasks[task_id] = background_task
-        background_task.add_done_callback(lambda _: self._tasks.pop(task_id, None))
+
+        def forget_completed_task(done_task: asyncio.Task) -> None:
+            if self._tasks.get(task_id) is done_task:
+                self._tasks.pop(task_id, None)
+
+        background_task.add_done_callback(forget_completed_task)
         return background_task
+
+    def schedule_task_after_current(
+        self,
+        task_id: str,
+        tool_version_id: str,
+        attempt_id: str | None = None,
+    ) -> None:
+        """等待当前同 ID 任务退出后重新调度，避免 direct runner 自己拦截重试。"""
+        asyncio.get_running_loop().call_soon(
+            self._schedule_task_when_idle,
+            task_id,
+            tool_version_id,
+            attempt_id,
+        )
+
+    def _schedule_task_when_idle(
+        self,
+        task_id: str,
+        tool_version_id: str,
+        attempt_id: str | None,
+    ) -> None:
+        current_task = self._tasks.get(task_id)
+        if current_task and not current_task.done():
+            asyncio.get_running_loop().call_soon(
+                self._schedule_task_when_idle,
+                task_id,
+                tool_version_id,
+                attempt_id,
+            )
+            return
+
+        self.schedule_task(task_id, tool_version_id, attempt_id)
 
     def is_task_active(self, task_id: str) -> bool:
         """Return whether this process still owns a running direct task."""
@@ -73,12 +119,20 @@ class DirectTaskRunner:
         self._shutdown_task_ids.clear()
         self._tasks.clear()
 
-    async def _run_task(self, task_id: str, tool_version_id: str) -> None:
+    async def _run_task(
+        self,
+        task_id: str,
+        tool_version_id: str,
+        attempt_id: str | None = None,
+    ) -> None:
         """执行单个后台任务。"""
         from app.worker.tasks import _execute_tool_task_impl
 
         try:
-            await _execute_tool_task_impl(task_id, tool_version_id)
+            if attempt_id is None:
+                await _execute_tool_task_impl(task_id, tool_version_id)
+            else:
+                await _execute_tool_task_impl(task_id, tool_version_id, attempt_id)
         except asyncio.CancelledError:
             if task_id in self._shutdown_task_ids:
                 logger.info(
@@ -104,6 +158,14 @@ class DirectTaskRunner:
                 return
 
             TaskStateMachine.cancel(task)
+            from app.execution.records import finish_task_execution_record
+
+            await finish_task_execution_record(
+                db,
+                task=task,
+                status="cancelled",
+                error_message=message,
+            )
             task.progress_message = message
 
             db.add(

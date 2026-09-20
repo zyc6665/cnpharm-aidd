@@ -74,6 +74,7 @@ export interface WorkflowNodeRunInputSurface {
   flattenedSchema: ToolSchema
   standardInputSlots: StandardArtifactInputSlot[]
   standardInputFileFieldBindings: Record<string, string>
+  showStandardArtifactInputs: boolean
   usesSyntheticStandardInputFields: boolean
 }
 
@@ -101,6 +102,7 @@ export function resolveWorkflowNodeRunInputSurface(input: {
       flattenedSchema,
       standardInputSlots,
       standardInputFileFieldBindings: toolSurface.standardInputFileFieldBindings,
+      showStandardArtifactInputs: false,
       usesSyntheticStandardInputFields: false,
     }
   }
@@ -115,6 +117,8 @@ export function resolveWorkflowNodeRunInputSurface(input: {
     flattenedSchema,
     standardInputSlots,
     standardInputFileFieldBindings,
+    showStandardArtifactInputs:
+      standardInputSlots.length > 0 && Object.keys(standardInputFileFieldBindings).length === 0,
     usesSyntheticStandardInputFields: schema !== toolSurface.schema,
   }
 }

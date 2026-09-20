@@ -6,12 +6,11 @@ from typing import Any
 
 from app.models.tasks import Task
 from app.services.workflow_artifacts import standard_artifact_file_ids
+from app.common.task_context import task_project_id as read_task_project_id
 
 
 def task_project_id(task: Task) -> str | None:
-    data = task.extra_data if isinstance(task.extra_data, dict) else {}
-    project_id = data.get("project_id")
-    return str(project_id) if project_id else None
+    return read_task_project_id(task)
 
 
 def has_required_declared_standard_outputs(declared_outputs: list[dict[str, Any]]) -> bool:
