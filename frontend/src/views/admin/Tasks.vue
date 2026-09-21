@@ -27,6 +27,14 @@
           <a-statistic :title="t('admin.failedTasks')" :value="systemStats?.failed_tasks ?? 0" />
         </a-card>
       </a-col>
+      <a-col :xs="12" :sm="6">
+        <a-card class="stat-card" :loading="loading">
+          <a-statistic
+            :title="t('admin.remoteRecoveryAlerts')"
+            :value="systemStats?.remote_recovery_alerted_tasks ?? 0"
+          />
+        </a-card>
+      </a-col>
     </a-row>
 
     <AppFilterBar>
@@ -69,6 +77,18 @@
             <a-select-option value="canceled">{{ t('tasks.status.canceled') }}</a-select-option>
           </a-select>
         </a-form-item>
+        <a-form-item :label="t('tasks.remoteRecovery.alertFilter')">
+          <a-select
+            v-model:value="filters.remote_recovery_alerted"
+            :placeholder="t('common.all')"
+            style="width: 180px"
+            allowClear
+          >
+            <a-select-option :value="true">
+              {{ t('tasks.remoteRecovery.alertedOnly') }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
         <a-form-item>
           <a-space>
             <a-button type="primary" @click="handleSearch">
@@ -94,6 +114,9 @@
             <div class="task-cell">
               <span class="name">{{ formatTaskTitle(record) }}</span>
               <span class="id">ID: {{ record.id }}</span>
+              <span v-if="record.remote_recovery" class="recovery-status">
+                {{ t('tasks.remoteRecovery.failures', { count: record.remote_recovery.failures }) }}
+              </span>
             </div>
           </template>
           <template v-else-if="column.key === 'user'">
@@ -169,6 +192,24 @@
           <a-descriptions-item :label="t('tasks.progress')">
             <a-progress :percent="selectedTask.progress || 0" />
           </a-descriptions-item>
+          <a-descriptions-item
+            v-if="selectedTask.remote_recovery"
+            :label="t('tasks.remoteRecovery.title')"
+          >
+            <a-alert type="warning" show-icon>
+              <template #message>
+                {{ t('tasks.remoteRecovery.failures', { count: selectedTask.remote_recovery.failures }) }}
+              </template>
+              <template #description>
+                <div v-if="selectedTask.remote_recovery.next_attempt_at">
+                  {{ t('tasks.remoteRecovery.nextAttempt', { time: formatDate(selectedTask.remote_recovery.next_attempt_at) }) }}
+                </div>
+                <div v-if="selectedTask.remote_recovery.last_error">
+                  {{ t('tasks.remoteRecovery.lastError', { error: selectedTask.remote_recovery.last_error }) }}
+                </div>
+              </template>
+            </a-alert>
+          </a-descriptions-item>
           <a-descriptions-item :label="t('tasks.createdAt')">
             {{ formatDate(selectedTask.created_at) }}
           </a-descriptions-item>
@@ -234,7 +275,8 @@
   const filters = reactive({
     keyword: '',
     tool_id: undefined as string | undefined,
-    status: undefined as TaskStatus | undefined
+    status: undefined as TaskStatus | undefined,
+    remote_recovery_alerted: undefined as boolean | undefined
   })
 
   const pagination = reactive({
@@ -293,7 +335,8 @@
         page_size: pagination.pageSize,
         keyword: filters.keyword || undefined,
         tool_id: filters.tool_id,
-        status: filters.status
+        status: filters.status,
+        remote_recovery_alerted: filters.remote_recovery_alerted
       })
       tasks.value = res.data.items
       pagination.total = res.data.total
@@ -316,6 +359,7 @@
     filters.keyword = ''
     filters.tool_id = undefined
     filters.status = undefined
+    filters.remote_recovery_alerted = undefined
     pagination.current = 1
     await fetchTasks()
   }
@@ -415,6 +459,12 @@
     .user-email {
       font-size: @font-size-sm;
       color: @text-color-light-secondary;
+    }
+
+    .recovery-status {
+      color: @warning-color;
+      font-size: @font-size-sm;
+      font-weight: @font-weight-medium;
     }
 
     .json-view {

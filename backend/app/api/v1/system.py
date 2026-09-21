@@ -101,6 +101,7 @@ class SystemStatsResponse(BaseModel):
     running_tasks: int
     completed_tasks: int
     failed_tasks: int
+    remote_recovery_alerted_tasks: int
 
     # WebSocket 统计
     active_connections: int
@@ -498,6 +499,13 @@ async def get_system_stats(
     )
     failed_tasks = failed_result.scalar()
 
+    remote_recovery_alerted_result = await db.execute(
+        select(func.count(Task.id)).where(
+            Task.extra_data["remote_recovery_alerted"].as_boolean().is_(True)
+        )
+    )
+    remote_recovery_alerted_tasks = remote_recovery_alerted_result.scalar() or 0
+
     # WebSocket 连接数
     active_connections = ws_manager.get_connection_count()
 
@@ -511,6 +519,7 @@ async def get_system_stats(
             running_tasks=running_tasks,
             completed_tasks=completed_tasks,
             failed_tasks=failed_tasks,
+            remote_recovery_alerted_tasks=remote_recovery_alerted_tasks,
             active_connections=active_connections,
         ).model_dump()
     )

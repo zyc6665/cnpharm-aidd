@@ -6,7 +6,11 @@
 from app.tasks.executors.base import BaseExecutor
 from app.tasks.executors.builtin import BuiltinExecutor
 from app.tasks.executors.docker import DockerExecutor
-from app.tasks.executors.errors import GPUAllocationFailed, TaskExecutionError
+from app.tasks.executors.errors import (
+    GPUAllocationFailed,
+    ResourceAdmissionFailed,
+    TaskExecutionError,
+)
 from app.tasks.executors.factory import TaskExecutor
 from app.tasks.executors.python_script import PythonScriptExecutor
 from app.tasks.executors.remote_api import RemoteAPIExecutor
@@ -20,6 +24,7 @@ __all__ = [
     "GPUAllocationFailed",
     "ParamikoSSHTransport",
     "PythonScriptExecutor",
+    "ResourceAdmissionFailed",
     "RemoteAPIExecutor",
     "SSHJobExecutor",
     "TaskExecutionError",

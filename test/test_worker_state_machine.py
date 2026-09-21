@@ -40,6 +40,19 @@ class TestStateMachineTransitions:
         assert task.started_at is not None
         assert task.progress == 0.0
 
+    def test_pending_to_running_clears_resource_wait_metadata(self):
+        task = _make_task(TaskStatus.PENDING)
+        task.extra_data = {
+            "resource_snapshot": {"gpu_required": True},
+            "resource_wait_reason": "gpu_unavailable",
+            "resource_retry_count": 2,
+            "resource_retry_next_at": "2026-09-20T12:00:00",
+        }
+
+        TaskStateMachine.start(task)
+
+        assert task.extra_data == {"resource_snapshot": {"gpu_required": True}}
+
     def test_running_to_success(self):
         task = _make_task(TaskStatus.RUNNING)
         task.started_at = datetime(2024, 1, 1, 12, 0, 0)

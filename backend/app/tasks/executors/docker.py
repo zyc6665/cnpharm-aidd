@@ -72,7 +72,14 @@ class DockerExecutor(BaseExecutor):
             "--cpus", str(self.config.get("cpu_limit", 2)),
         ]
         if gpu_required:
-            docker_cmd.extend(["--gpus", str(self.config.get("gpu_config", {}).get("count", "all"))])
+            gpu_config = self.config.get("gpu_config") or {}
+            gpu_device = gpu_config.get("device")
+            gpu_request = (
+                f"device={gpu_device}"
+                if gpu_device is not None
+                else str(gpu_config.get("count", "all"))
+            )
+            docker_cmd.extend(["--gpus", gpu_request])
         for key, value in self.config.get("env", {}).items():
             docker_cmd.extend(["-e", f"{key}={value}"])
         docker_cmd.append(image)

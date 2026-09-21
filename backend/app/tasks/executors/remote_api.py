@@ -12,6 +12,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.database.session import get_async_session
+from app.execution.records import (
+    task_execution_record_id,
+    touch_task_execution_record_best_effort,
+    update_task_execution_record_external_id,
+)
 from app.models.artifacts import ArtifactVersion, ArtifactVersionFile
 from app.files.writer import store_file_bytes
 from app.models.files import File as FileModel
@@ -138,10 +143,61 @@ class RemoteAPIExecutor(BaseExecutor):
             except ValueError as exc:
                 raise TaskExecutionError(str(exc)) from exc
             self._set_task_extra("remote_run_id", remote_run_id)
+            await self._persist_external_run_id(remote_run_id)
 
             status_payload = await self._poll_remote_run(client, remote_run_id)
-            result_payload = await self._fetch_remote_artifacts(client, remote_run_id)
-            output_file_ids = await self._materialize_remote_result_files(client, result_payload)
+            return await self._collect_remote_run_result(
+                client,
+                remote_run_id,
+                status_payload,
+            )
+
+    async def recover_remote_run(self, remote_run_id: str | None = None) -> dict[str, Any]:
+        """Inspect an existing remote run without invoking it again."""
+        remote_run_id = remote_run_id or recorded_remote_run_id(self.task.extra_data)
+        if not remote_run_id:
+            raise TaskExecutionError("Remote run id is not recorded for this task")
+
+        timeout = self.config.get("timeout_sec", 600)
+        async with self._http_client(timeout=timeout) as client:
+            status_payload = await self._fetch_remote_status(client, remote_run_id)
+            await self._touch_execution_record_if_due()
+            status_state = remote_status_state(status_payload)
+            if status_state.error_message is not None:
+                if status_state.value in {"failure", "canceled"}:
+                    return {
+                        "success": False,
+                        "recovery_terminal": True,
+                        "remote_run_id": remote_run_id,
+                        "remote_status": status_payload,
+                        "result": {
+                            "success": False,
+                            "message": status_state.error_message,
+                        },
+                    }
+                raise TaskExecutionError(status_state.error_message)
+            if not status_state.is_success:
+                return {
+                    "success": False,
+                    "status": status_state.value,
+                    "recovery_pending": True,
+                    "remote_run_id": remote_run_id,
+                    "remote_status": status_payload,
+                }
+            return await self._collect_remote_run_result(
+                client,
+                remote_run_id,
+                status_payload,
+            )
+
+    async def _collect_remote_run_result(
+        self,
+        client: httpx.AsyncClient,
+        remote_run_id: str,
+        status_payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        result_payload = await self._fetch_remote_artifacts(client, remote_run_id)
+        output_file_ids = await self._materialize_remote_result_files(client, result_payload)
 
         return {
             "success": True,
@@ -150,6 +206,35 @@ class RemoteAPIExecutor(BaseExecutor):
             "result": result_payload,
             "output_file_ids": output_file_ids,
         }
+
+    async def _persist_external_run_id(self, remote_run_id: str) -> None:
+        """Make a remote handle cancellable while the run is still in progress."""
+        if not task_execution_record_id(self.task):
+            return
+
+        try:
+            async for session in get_async_session():
+                try:
+                    await update_task_execution_record_external_id(
+                        session,
+                        task=self.task,
+                        external_id=remote_run_id,
+                    )
+                    await session.commit()
+                except Exception as exc:
+                    await session.rollback()
+                    logger.warning(
+                        "Failed to persist remote run id for task %s: %s",
+                        self.task.id,
+                        exc,
+                    )
+                break
+        except Exception as exc:
+            logger.warning(
+                "Failed to open execution record session for task %s: %s",
+                self.task.id,
+                exc,
+            )
 
     async def _remote_tool_invoke_payload(self) -> dict[str, Any]:
         input_params = self.task.inputs.params if self.task.inputs else {}
@@ -277,6 +362,7 @@ class RemoteAPIExecutor(BaseExecutor):
         log_cursor: str | None = None
         for _ in range(max_polls):
             status_payload = await self._fetch_remote_status(client, remote_run_id)
+            await self._touch_execution_record_if_due()
             status_state = remote_status_state(status_payload)
             log_cursor = await self._fetch_remote_logs(
                 client,
@@ -293,6 +379,21 @@ class RemoteAPIExecutor(BaseExecutor):
             if poll_interval > 0:
                 await asyncio.sleep(poll_interval)
         raise TaskExecutionError("Remote tool run polling exceeded max_polls")
+
+    async def _touch_execution_record_if_due(self) -> None:
+        if not task_execution_record_id(self.task):
+            return
+
+        interval = max(
+            float(self.config.get("execution_record_heartbeat_sec", 30)),
+            1.0,
+        )
+        now = asyncio.get_running_loop().time()
+        last_touch = float(getattr(self, "_last_execution_record_heartbeat", 0.0))
+        if now - last_touch < interval:
+            return
+        self._last_execution_record_heartbeat = now
+        await touch_task_execution_record_best_effort(task=self.task)
 
     async def _fetch_remote_status(
         self,
@@ -422,8 +523,8 @@ class RemoteAPIExecutor(BaseExecutor):
     def _remote_result_url(self, url: str) -> str:
         return remote_result_url(str(self.config.get("base_url") or ""), url)
 
-    async def cancel_remote_run(self) -> dict[str, Any]:
-        remote_run_id = recorded_remote_run_id(self.task.extra_data)
+    async def cancel_remote_run(self, remote_run_id: str | None = None) -> dict[str, Any]:
+        remote_run_id = remote_run_id or recorded_remote_run_id(self.task.extra_data)
         if not remote_run_id:
             raise TaskExecutionError("Remote run id is not recorded for this task")
         async with self._http_client(timeout=self.config.get("timeout_sec", 600)) as client:

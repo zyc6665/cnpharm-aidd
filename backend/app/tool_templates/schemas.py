@@ -183,6 +183,7 @@ class ToolTemplateResourceProfile(BaseModel):
     gpu_memory_gb: float = Field(default=0, ge=0)
     expected_minutes: int = Field(gt=0)
     timeout_minutes: int = Field(gt=0)
+    parallelism: int = Field(default=1, ge=1)
     scheduler_hint: Literal["local", "ssh", "api", "future_cluster"]
 
     @model_validator(mode="after")

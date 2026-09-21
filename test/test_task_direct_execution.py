@@ -118,6 +118,7 @@ async def _seed_recoverable_standard_task(
     admin_user: User,
     *,
     slug: str,
+    execution_record_id: str | None = None,
 ) -> tuple[Task, ToolVersion]:
     organization = Organization(name=f"{slug} Lab", slug=f"{slug}-lab")
     db_session.add(organization)
@@ -162,6 +163,10 @@ async def _seed_recoverable_standard_task(
     db_session.add(version)
     await db_session.flush()
 
+    extra_data = {"project_id": project.id}
+    if execution_record_id:
+        extra_data["execution_record_id"] = execution_record_id
+
     task = Task(
         user_id=admin_user.id,
         tool_id=tool.id,
@@ -170,7 +175,7 @@ async def _seed_recoverable_standard_task(
         priority="normal",
         progress=0.0,
         progress_message="任务开始执行",
-        extra_data={"project_id": project.id},
+        extra_data=extra_data,
     )
     db_session.add(task)
     await db_session.flush()
@@ -447,6 +452,19 @@ async def test_create_task_uses_direct_runner_when_enabled(
         "gpu_required": False,
         "gpu_memory_mb": 0,
         "timeout_sec": 600,
+        "resource_request": {
+            "executor_type": "ssh_job",
+            "tier": None,
+            "cpu": None,
+            "memory_gb": None,
+            "cpu_limit": None,
+            "memory_limit": None,
+            "gpu_required": False,
+            "gpu_count": 0,
+            "gpu_memory_mb": 0,
+            "timeout_sec": 600,
+            "parallelism": 1,
+        },
         "resource_profile": {},
     }
     assert response_data["dispatch"] == {"mode": "direct", "queue": None}
@@ -922,15 +940,22 @@ async def test_direct_runner_requeues_after_current_task_finishes(
 
     first = runner.schedule_task("task-gpu-retry", "version-1")
     await first_started.wait()
-    runner.schedule_task_after_current("task-gpu-retry", "version-2")
+    runner.schedule_task_after_current(
+        "task-gpu-retry",
+        "version-2",
+        delay_seconds=0.01,
+    )
     await asyncio.sleep(0)
 
     assert calls == [("task-gpu-retry", "version-1")]
 
     release.set()
     await first
+    await asyncio.sleep(0)
+    assert calls == [("task-gpu-retry", "version-1")]
+
     for _ in range(10):
-        await asyncio.sleep(0)
+        await asyncio.sleep(0.005)
         if len(calls) == 2:
             break
 
@@ -1046,6 +1071,7 @@ async def test_reconcile_orphaned_direct_tasks_recovers_remote_success_result(
         priority="normal",
         progress=0.0,
         progress_message="开发模式 direct 任务已取消" if initial_status == TaskStatus.CANCELED.value else "任务开始执行",
+        extra_data={"execution_record_id": "record-1"},
     )
     db_session.add(task)
     await db_session.flush()
@@ -1066,6 +1092,15 @@ async def test_reconcile_orphaned_direct_tasks_recovers_remote_success_result(
             "stderr": "",
         }
 
+    finished: list[tuple[str, str]] = []
+
+    async def fake_finish(*, task, status, **kwargs):
+        finished.append((str(task.id), status))
+
+    monkeypatch.setattr(
+        "app.tasks.direct_recovery.finish_task_execution_record_best_effort",
+        fake_finish,
+    )
     monkeypatch.setattr(SSHJobExecutor, "recover_remote_result", fake_recover)
 
     recovered = await reconcile_orphaned_direct_tasks(db_session)
@@ -1087,6 +1122,7 @@ async def test_reconcile_orphaned_direct_tasks_recovers_remote_success_result(
     log_result = await db_session.execute(select(TaskLog).where(TaskLog.task_id == task.id))
     logs = log_result.scalars().all()
     assert any(log.message == "从远端 output 目录自动补回任务结果" for log in logs)
+    assert finished == [(str(task.id), "succeeded")]
 
 
 @pytest.mark.asyncio
@@ -1155,6 +1191,7 @@ async def test_reconcile_orphaned_direct_tasks_rejects_invalid_standard_result_w
         db_session,
         admin_user,
         slug="invalid-recovery",
+        execution_record_id="record-1",
     )
     output_file_ids, result_files = await _seed_standard_pocket_output_files(
         db_session,
@@ -1182,6 +1219,15 @@ async def test_reconcile_orphaned_direct_tasks_rejects_invalid_standard_result_w
             "stderr": "",
         }
 
+    finished: list[tuple[str, str]] = []
+
+    async def fake_finish(*, task, status, **kwargs):
+        finished.append((str(task.id), status))
+
+    monkeypatch.setattr(
+        "app.tasks.direct_recovery.finish_task_execution_record_best_effort",
+        fake_finish,
+    )
     monkeypatch.setattr(SSHJobExecutor, "recover_remote_result", fake_recover)
 
     recovered = await reconcile_orphaned_direct_tasks(db_session)
@@ -1201,6 +1247,7 @@ async def test_reconcile_orphaned_direct_tasks_rejects_invalid_standard_result_w
     assert task_output is None
     assert artifact_versions == []
     assert any("标准 result.v2 不合规" in log.message for log in logs)
+    assert finished == [(str(task.id), "failed")]
 
 
 @pytest.mark.asyncio

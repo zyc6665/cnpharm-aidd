@@ -148,6 +148,46 @@ def _task_binding_decisions(task: Task) -> dict[str, Any]:
     return decisions if isinstance(decisions, dict) else {}
 
 
+def _task_remote_recovery(task: Task) -> dict[str, Any] | None:
+    """Expose safe remote recovery diagnostics without leaking remote handles."""
+    data = task.extra_data if isinstance(task.extra_data, dict) else {}
+    try:
+        failures = int(data.get("remote_recovery_failures") or 0)
+    except (TypeError, ValueError):
+        failures = 0
+    if failures <= 0:
+        return None
+
+    next_attempt_at = data.get("remote_recovery_next_attempt_at")
+    last_error = data.get("remote_recovery_last_error")
+    return {
+        "failures": failures,
+        "next_attempt_at": str(next_attempt_at) if next_attempt_at else None,
+        "last_error": _normalize_diagnostic_text(last_error) or None,
+        "alerted": bool(data.get("remote_recovery_alerted")),
+    }
+
+
+def _task_resource_wait(task: Task) -> dict[str, Any] | None:
+    """Expose safe resource-wait metadata for pending tasks."""
+    data = task.extra_data if isinstance(task.extra_data, dict) else {}
+    reason = data.get("resource_wait_reason")
+    if not reason:
+        return None
+
+    try:
+        retry_count = int(data.get("resource_retry_count") or 0)
+    except (TypeError, ValueError):
+        retry_count = 0
+
+    next_attempt_at = data.get("resource_retry_next_at")
+    return {
+        "reason": str(reason),
+        "retry_count": retry_count,
+        "next_attempt_at": str(next_attempt_at) if next_attempt_at else None,
+    }
+
+
 def _serialize_task_log(log: TaskLog) -> dict[str, Any]:
     return {
         "id": log.id,
@@ -284,6 +324,9 @@ async def list_tasks(
     workflow_run_id: Optional[str] = Query(None, description="工作流运行 ID"),
     workflow_definition_id: Optional[str] = Query(None, description="工作流定义 ID"),
     workflow_node_id: Optional[str] = Query(None, description="工作流节点 ID"),
+    remote_recovery_alerted: Optional[bool] = Query(
+        None, description="仅返回存在 Remote API 恢复告警的任务"
+    ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -304,6 +347,7 @@ async def list_tasks(
             workflow_run_id=workflow_run_id,
             workflow_definition_id=workflow_definition_id,
             workflow_node_id=workflow_node_id,
+            remote_recovery_alerted=remote_recovery_alerted,
         ),
     )
 
@@ -324,6 +368,8 @@ async def list_tasks(
         task_dict["project_id"] = _task_project_id(task)
         task_dict["input_bindings"] = _task_input_bindings(task)
         task_dict["binding_decisions"] = _task_binding_decisions(task)
+        task_dict["remote_recovery"] = _task_remote_recovery(task)
+        task_dict["resource_wait"] = _task_resource_wait(task)
         task_dict["user_id"] = task.user_id
         if task.user:
             task_dict["user_name"] = task.user.display_name or task.user.email.split("@")[0]
@@ -348,6 +394,9 @@ async def get_task_counts(
     workflow_run_id: Optional[str] = Query(None, description="工作流运行 ID"),
     workflow_definition_id: Optional[str] = Query(None, description="工作流定义 ID"),
     workflow_node_id: Optional[str] = Query(None, description="工作流节点 ID"),
+    remote_recovery_alerted: Optional[bool] = Query(
+        None, description="仅返回存在 Remote API 恢复告警的任务"
+    ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -364,6 +413,7 @@ async def get_task_counts(
             workflow_run_id=workflow_run_id,
             workflow_definition_id=workflow_definition_id,
             workflow_node_id=workflow_node_id,
+            remote_recovery_alerted=remote_recovery_alerted,
         ),
     )
 
@@ -440,6 +490,8 @@ async def get_task(
         "progress_message": task.progress_message,
         "error_message": task.error_message,
         "failure_diagnostics": _task_failure_diagnostics(task),
+        "remote_recovery": _task_remote_recovery(task),
+        "resource_wait": _task_resource_wait(task),
         "started_at": task.started_at,
         "finished_at": task.finished_at,
         "completed_at": task.finished_at,
@@ -503,6 +555,7 @@ async def create_task(
             "tool": _serialize_task_tool(task.tool),
             "resource_snapshot": (task.extra_data or {}).get("resource_snapshot"),
             "dispatch": (task.extra_data or {}).get("dispatch"),
+            "resource_wait": _task_resource_wait(task),
             "status": _normalize_task_status(task.status),
             "priority": task.priority,
             "progress": task.progress,

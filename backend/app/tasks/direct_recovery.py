@@ -15,32 +15,22 @@ from sqlalchemy.orm import joinedload, selectinload
 from app.config import settings
 from app.database.base import utcnow
 from app.database.session import async_session_factory
+from app.execution.records import finish_task_execution_record_best_effort
 from app.models.tasks import Task, TaskLog, TaskOutput, TaskStatus
 from app.models.tools import ToolType
-from app.services.standard_artifacts import (
-    StandardArtifactPersistenceError,
-    attach_standard_artifact_summary,
-    persist_standard_artifacts_from_task_output,
-)
+from app.services.standard_artifacts import StandardArtifactPersistenceError
 from app.services.workflow_reconciliation import reconcile_waiting_workflow_runs
 from app.tasks.executor import SSHJobExecutor, TaskExecutionError
-from app.tasks.legacy_standardization import append_legacy_standard_result
-from app.tasks.molecule_scoring import append_molecule_scoring_artifacts
 from app.tasks.direct_runner import direct_task_runner
+from app.tasks.recovery import is_workflow_node_task, prepare_recovered_task_output
 from app.tasks.service import create_and_schedule_tool_task
 from app.tasks.state_machine import TaskStateMachine
-from app.tasks.output import prepare_task_output
 
 logger = logging.getLogger(__name__)
 
 SHUTDOWN_CANCEL_MESSAGE = "开发模式 direct 任务已取消"
 RECOVERED_SUCCESS_MESSAGE = "任务执行成功（远端结果自动补回）"
 RECOVERED_FAILURE_MESSAGE = "任务执行失败（远端结果自动补回）"
-
-
-def _is_workflow_node_task(task: Task) -> bool:
-    params = (task.inputs.params or {}) if task.inputs else {}
-    return bool(params.get("workflow_run_id") and params.get("workflow_node_id"))
 
 
 async def reconcile_orphaned_direct_tasks(db: AsyncSession) -> int:
@@ -89,37 +79,14 @@ async def reconcile_orphaned_direct_tasks(db: AsyncSession) -> int:
             continue
 
         task_id = str(task.id)
-        is_workflow_task = _is_workflow_node_task(task)
+        is_workflow_task = is_workflow_node_task(task)
 
         try:
-            output_result = await append_molecule_scoring_artifacts(
-                db,
-                task,
-                tool_version,
-                output_result,
-            )
-        except Exception as exc:
-            logger.warning(
-                "Recovered task %s molecule scoring failed, keeping original result: %s",
-                task.id,
-                exc,
-            )
-        try:
-            output_result = await append_legacy_standard_result(
+            prepared_output, output_result = await prepare_recovered_task_output(
                 db,
                 task=task,
-                tool_version_config=tool_version.config,
+                tool_version=tool_version,
                 output_result=output_result,
-                output_file_ids=prepare_task_output(output_result)["file_ids"],
-            )
-
-            prepared_output = prepare_task_output(output_result)
-            standard_persistence = await persist_standard_artifacts_from_task_output(
-                db,
-                task=task,
-                tool_version_config=tool_version.config,
-                output_result=output_result,
-                output_file_ids=prepared_output["file_ids"],
             )
         except StandardArtifactPersistenceError as exc:
             await db.rollback()
@@ -132,6 +99,11 @@ async def reconcile_orphaned_direct_tasks(db: AsyncSession) -> int:
                 error_message=str(exc),
                 progress_message=RECOVERED_FAILURE_MESSAGE,
             )
+            await finish_task_execution_record_best_effort(
+                task=recovered_task,
+                status="failed",
+                error_message=str(exc),
+            )
             db.add(
                 TaskLog(
                     task_id=task_id,
@@ -143,11 +115,6 @@ async def reconcile_orphaned_direct_tasks(db: AsyncSession) -> int:
             recovered_count += 1
             recovered_workflow_task = recovered_workflow_task or is_workflow_task
             continue
-        if standard_persistence is not None:
-            prepared_output["result"] = attach_standard_artifact_summary(
-                prepared_output["result"],
-                standard_persistence,
-            )
         task_output = task.outputs or TaskOutput(task_id=task.id)
         task_output.result = prepared_output["result"]
         task_output.file_ids = prepared_output["file_ids"]
@@ -182,6 +149,17 @@ async def reconcile_orphaned_direct_tasks(db: AsyncSession) -> int:
                 success=False,
                 error_message=remote_result.get("message") or "SSH job reported failure",
                 progress_message=RECOVERED_FAILURE_MESSAGE,
+            )
+            await finish_task_execution_record_best_effort(
+                task=task,
+                status="failed",
+                error_message=task.error_message,
+            )
+
+        if remote_success:
+            await finish_task_execution_record_best_effort(
+                task=task,
+                status="succeeded",
             )
 
         db.add(

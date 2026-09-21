@@ -85,3 +85,28 @@ def test_docker_command_requires_digest_in_production(monkeypatch: pytest.Monkey
         executor._build_docker_command(
             "scitool/docking:v1.0.0", ["python", "/app/dock.py"], "/tmp/task-1", False
         )
+
+
+def test_docker_command_uses_resource_limits_and_allocated_gpu_device() -> None:
+    executor = build_executor(
+        image="scitool/docking@sha256:" + "a" * 64,
+        command=["python", "/app/dock.py"],
+    )
+    executor.config.update(
+        {
+            "cpu_limit": 16,
+            "memory_limit": "64g",
+            "gpu_config": {"count": 1, "device": "2"},
+        }
+    )
+
+    command = executor._build_docker_command(
+        "scitool/docking@sha256:" + "a" * 64,
+        ["python", "/app/dock.py"],
+        "/tmp/task-1",
+        gpu_required=True,
+    )
+
+    assert ["--memory", "64g"] == command[command.index("--memory") : command.index("--memory") + 2]
+    assert ["--cpus", "16"] == command[command.index("--cpus") : command.index("--cpus") + 2]
+    assert ["--gpus", "device=2"] == command[command.index("--gpus") : command.index("--gpus") + 2]

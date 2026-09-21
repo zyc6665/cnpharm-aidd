@@ -59,18 +59,38 @@ class RedisCacheBackend(CacheBackend):
         self,
         key: str,
         value: Any,
-        expire: Optional[int] = None
+        expire: Optional[int] = None,
+        *,
+        nx: bool = False,
+        ex: Optional[int] = None,
     ) -> bool:
         """设置缓存值"""
         # 自动 JSON 序列化
         if isinstance(value, (dict, list)):
             value = json.dumps(value, ensure_ascii=False)
 
-        if expire:
-            await self._redis.setex(self._make_key(key), expire, value)
-        else:
-            await self._redis.set(self._make_key(key), value)
-        return True
+        ttl = ex if ex is not None else expire
+        result = await self._redis.set(
+            self._make_key(key),
+            value,
+            ex=ttl if ttl else None,
+            nx=nx,
+        )
+        return bool(result)
+
+    async def delete_if_value(self, key: str, value: Any) -> bool:
+        """仅当 Redis 中的缓存值匹配时原子删除。"""
+        script = (
+            "if redis.call('get', KEYS[1]) == ARGV[1] "
+            "then return redis.call('del', KEYS[1]) else return 0 end"
+        )
+        result = await self._redis.eval(
+            script,
+            1,
+            self._make_key(key),
+            str(value),
+        )
+        return result == 1
 
     async def delete(self, key: str) -> bool:
         """删除缓存"""

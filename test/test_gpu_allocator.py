@@ -66,6 +66,27 @@ async def test_is_gpu_idle_uses_utilization_threshold():
 
 
 @pytest.mark.asyncio
+async def test_allocator_uses_owner_token_for_distributed_lock():
+    from app.cache.memory import MemoryCacheBackend
+
+    cache = MemoryCacheBackend()
+    allocator = GPUAllocator(
+        db=None,
+        detector=_DetectorWithStats(0.0),
+        cache_client=cache,
+    )
+
+    assert await allocator._acquire_lock() is True
+    owner_token = await cache.get("gpu:alloc:lock")
+    assert isinstance(owner_token, str)
+    assert owner_token != "1"
+
+    await allocator._release_lock()
+
+    assert await cache.exists("gpu:alloc:lock") is False
+
+
+@pytest.mark.asyncio
 async def test_is_gpu_idle_logs_probe_failure(caplog):
     allocator = GPUAllocator(db=None, detector=_FailingDetector())
 

@@ -7,7 +7,10 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import use_direct_task_execution
-from app.execution.records import finish_task_execution_record
+from app.execution.records import (
+    finish_task_execution_record_best_effort,
+    task_execution_record_external_id,
+)
 from app.logging.audit import AuditAction, AuditResult, get_audit_logger
 from app.models.tasks import Task, TaskStatus
 from app.models.tools import ToolVersion
@@ -44,8 +47,7 @@ async def cancel_platform_task(
 
     TaskStateMachine.cancel(task)
     try:
-        await finish_task_execution_record(
-            db,
+        await finish_task_execution_record_best_effort(
             task=task,
             status="cancelled",
             error_message="任务已取消",
@@ -81,6 +83,11 @@ async def _cancel_remote_tool_if_needed(db: AsyncSession | None, *, task: Task) 
         return
     if config.get("type") != "remote_api" or config.get("mode") != "remote_tool_v1":
         return
-    if not recorded_remote_run_id(task.extra_data):
+    remote_run_id = recorded_remote_run_id(task.extra_data)
+    if not remote_run_id and db is not None:
+        remote_run_id = await task_execution_record_external_id(db, task=task)
+    if not remote_run_id:
         return
-    await RemoteAPIExecutor(task, tool_version, config=config).cancel_remote_run()
+    await RemoteAPIExecutor(task, tool_version, config=config).cancel_remote_run(
+        remote_run_id
+    )

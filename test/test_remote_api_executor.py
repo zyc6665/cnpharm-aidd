@@ -180,6 +180,91 @@ async def test_remote_tool_executor_invokes_polls_logs_and_collects_artifacts():
 
 
 @pytest.mark.asyncio
+async def test_remote_tool_executor_persists_external_run_id(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    record = type("ExecutionRecordStub", (), {"external_id": None})()
+
+    class FakeSession:
+        committed = False
+
+        async def get(self, model, record_id):
+            assert record_id == "record-1"
+            return record
+
+        async def commit(self):
+            self.committed = True
+
+        async def rollback(self):
+            return None
+
+    session = FakeSession()
+
+    async def fake_get_async_session():
+        yield session
+
+    monkeypatch.setattr(
+        "app.tasks.executors.remote_api.get_async_session",
+        fake_get_async_session,
+    )
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/invoke":
+            return httpx.Response(200, json={"remote_run_id": "run-1", "status": "queued"})
+        if request.method == "GET" and request.url.path == "/runs/run-1/logs":
+            return httpx.Response(200, json={"items": [], "next_cursor": None, "has_more": False})
+        if request.method == "GET" and request.url.path == "/runs/run-1":
+            return httpx.Response(200, json={"remote_run_id": "run-1", "status": "success"})
+        if request.method == "GET" and request.url.path == "/runs/run-1/artifacts":
+            return httpx.Response(
+                200,
+                json={
+                    "result_version": "aidd.sciminer/result.v2",
+                    "artifacts": [],
+                    "relations": [],
+                },
+            )
+        return httpx.Response(404)
+
+    task = build_task()
+    task.extra_data = {
+        "project_id": "project-1",
+        "execution_record_id": "record-1",
+    }
+    config = remote_tool_config(httpx.MockTransport(handler))
+    executor = RemoteAPIExecutor(task, build_tool_version(config), config=config)
+
+    result = await executor.execute()
+
+    assert result["remote_run_id"] == "run-1"
+    assert record.external_id == "run-1"
+    assert session.committed is True
+
+
+@pytest.mark.asyncio
+async def test_remote_tool_executor_skips_external_record_store_without_record_pointer(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def unexpected_get_async_session():
+        raise AssertionError("没有 ExecutionRecord 指针时不应创建数据库会话")
+        yield
+
+    monkeypatch.setattr(
+        "app.tasks.executors.remote_api.get_async_session",
+        unexpected_get_async_session,
+    )
+
+    executor = RemoteAPIExecutor(
+        build_task(),
+        build_tool_version(
+            remote_tool_config(httpx.MockTransport(lambda request: httpx.Response(200)))
+        ),
+    )
+
+    await executor._persist_external_run_id("run-1")
+
+
+@pytest.mark.asyncio
 async def test_remote_tool_executor_raises_on_remote_failure():
     async def handler(request: httpx.Request) -> httpx.Response:
         if request.method == "POST" and request.url.path == "/invoke":
@@ -231,6 +316,102 @@ async def test_remote_tool_executor_can_cancel_remote_run():
 
     assert result["status"] == "canceled"
     assert seen_paths == ["/runs/run-1/cancel"]
+
+
+@pytest.mark.asyncio
+async def test_remote_tool_executor_recovers_existing_run_without_reinvoking():
+    seen_requests: list[tuple[str, str]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen_requests.append((request.method, request.url.path))
+        if request.method == "GET" and request.url.path == "/runs/run-1/logs":
+            return httpx.Response(200, json={"items": [], "next_cursor": None, "has_more": False})
+        if request.method == "GET" and request.url.path == "/runs/run-1":
+            return httpx.Response(200, json={"remote_run_id": "run-1", "status": "success"})
+        if request.method == "GET" and request.url.path == "/runs/run-1/artifacts":
+            return httpx.Response(
+                200,
+                json={
+                    "result_version": "aidd.sciminer/result.v2",
+                    "artifacts": [],
+                    "relations": [],
+                },
+            )
+        return httpx.Response(404)
+
+    task = build_task()
+    task.extra_data = {"remote_run_id": "run-1"}
+    config = remote_tool_config(httpx.MockTransport(handler))
+    executor = RemoteAPIExecutor(task, build_tool_version(config), config=config)
+
+    result = await executor.recover_remote_run()
+
+    assert result["success"] is True
+    assert result["remote_run_id"] == "run-1"
+    assert result["remote_status"]["status"] == "success"
+    assert ("POST", "/invoke") not in seen_requests
+    assert ("GET", "/runs/run-1") in seen_requests
+    assert ("GET", "/runs/run-1/artifacts") in seen_requests
+
+
+@pytest.mark.asyncio
+async def test_remote_tool_executor_recovers_terminal_failure_as_task_result():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET" and request.url.path == "/runs/run-1":
+            return httpx.Response(
+                200,
+                json={
+                    "remote_run_id": "run-1",
+                    "status": "failure",
+                    "error": {"message": "remote model crashed"},
+                },
+            )
+        return httpx.Response(404)
+
+    task = build_task()
+    task.extra_data = {"remote_run_id": "run-1"}
+    config = remote_tool_config(httpx.MockTransport(handler))
+    executor = RemoteAPIExecutor(task, build_tool_version(config), config=config)
+
+    result = await executor.recover_remote_run()
+
+    assert result["success"] is False
+    assert result["recovery_terminal"] is True
+    assert result["result"] == {
+        "success": False,
+        "message": "remote model crashed",
+    }
+
+
+@pytest.mark.asyncio
+async def test_remote_tool_executor_heartbeats_execution_record_while_polling(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    heartbeat_task_ids: list[str] = []
+
+    async def heartbeat(*, task, now=None):
+        heartbeat_task_ids.append(str(task.id))
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET" and request.url.path == "/runs/run-1/logs":
+            return httpx.Response(200, json={"items": [], "next_cursor": None, "has_more": False})
+        if request.method == "GET" and request.url.path == "/runs/run-1":
+            return httpx.Response(200, json={"remote_run_id": "run-1", "status": "success"})
+        return httpx.Response(404)
+
+    monkeypatch.setattr(
+        "app.tasks.executors.remote_api.touch_task_execution_record_best_effort",
+        heartbeat,
+    )
+    task = build_task()
+    task.extra_data = {"execution_record_id": "record-1"}
+    config = remote_tool_config(httpx.MockTransport(handler))
+    executor = RemoteAPIExecutor(task, build_tool_version(config), config=config)
+
+    async with executor._http_client(timeout=10) as client:
+        await executor._poll_remote_run(client, "run-1")
+
+    assert heartbeat_task_ids == ["task-1"]
 
 
 @pytest.mark.asyncio
@@ -546,7 +727,7 @@ async def test_cancel_platform_task_calls_remote_cancel_for_remote_tool(monkeypa
             assert tool_version.version == "1.0.0"
             assert config["mode"] == "remote_tool_v1"
 
-        async def cancel_remote_run(self):
+        async def cancel_remote_run(self, remote_run_id=None):
             return {"status": "canceled"}
 
     class FakeDirectRunner:
@@ -555,13 +736,13 @@ async def test_cancel_platform_task_calls_remote_cancel_for_remote_tool(monkeypa
 
     finished: list[tuple[str, str, str | None]] = []
 
-    async def fake_finish(db, *, task, status, error_message=None):
+    async def fake_finish(*, task, status, error_message=None):
         finished.append((str(task.id), status, error_message))
 
     monkeypatch.setattr("app.tasks.cancellation.use_direct_task_execution", lambda: True)
     monkeypatch.setattr("app.tasks.cancellation.RemoteAPIExecutor", FakeRemoteAPIExecutor)
     monkeypatch.setattr(
-        "app.tasks.cancellation.finish_task_execution_record",
+        "app.tasks.cancellation.finish_task_execution_record_best_effort",
         fake_finish,
     )
 
@@ -576,3 +757,49 @@ async def test_cancel_platform_task_calls_remote_cancel_for_remote_tool(monkeypa
     assert calls == ["task-1"]
     assert task.status == TaskStatus.CANCELED.value
     assert finished == [("task-1", "cancelled", "任务已取消")]
+
+
+@pytest.mark.asyncio
+async def test_cancel_platform_task_uses_execution_record_external_id(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Task 元数据尚未提交时，取消仍应使用 ExecutionRecord 中的远程句柄。"""
+    task = build_task()
+    config = remote_tool_config(httpx.MockTransport(lambda _request: httpx.Response(200)))
+    task.tool_version = build_tool_version(config)
+    task.extra_data = {"execution_record_id": "record-1"}
+    current_user = User(id="user-1", role="user")
+    remote_ids: list[str | None] = []
+
+    class FakeDB:
+        async def get(self, model, record_id):
+            assert record_id == "record-1"
+            return type("Record", (), {"external_id": "run-from-record"})()
+
+    class FakeRemoteAPIExecutor:
+        def __init__(self, task: Task, tool_version: ToolVersion, config: dict):
+            pass
+
+        async def cancel_remote_run(self, remote_run_id=None):
+            remote_ids.append(remote_run_id)
+            return {"status": "canceled"}
+
+    async def fake_finish(*, task, status, error_message=None):
+        return None
+
+    monkeypatch.setattr("app.tasks.cancellation.use_direct_task_execution", lambda: True)
+    monkeypatch.setattr("app.tasks.cancellation.RemoteAPIExecutor", FakeRemoteAPIExecutor)
+    monkeypatch.setattr(
+        "app.tasks.cancellation.finish_task_execution_record_best_effort",
+        fake_finish,
+    )
+
+    canceled = await cancel_platform_task(
+        FakeDB(),
+        task=task,
+        current_user=current_user,
+        direct_runner=type("Runner", (), {"cancel_task": lambda self, task_id: True})(),
+    )
+
+    assert canceled is True
+    assert remote_ids == ["run-from-record"]

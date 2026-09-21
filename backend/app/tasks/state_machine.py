@@ -22,6 +22,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_RETRIES = 3
+RESOURCE_WAIT_METADATA_KEYS = (
+    "resource_wait_reason",
+    "resource_retry_count",
+    "resource_retry_next_at",
+)
 
 
 def _retry_limits(task: "Task") -> tuple[int, int]:
@@ -186,6 +191,10 @@ class TaskStateMachine:
             task.started_at = now
             task.progress = progress if progress is not None else 0.0
             task.progress_message = progress_message or "任务开始执行"
+            extra_data = dict(task.extra_data or {})
+            for key in RESOURCE_WAIT_METADATA_KEYS:
+                extra_data.pop(key, None)
+            task.extra_data = extra_data
 
         elif to_status == TaskStatus.SUCCESS:
             # 执行成功
@@ -218,9 +227,9 @@ class TaskStateMachine:
             task.progress_message = progress_message or "任务等待重新执行"
 
         elif to_status == TaskStatus.PENDING and old_status == TaskStatus.RUNNING:
-            # GPU不足重新入队
+            # 资源不足重新入队
             task.retry_count = (task.retry_count or 0) + 1
-            task.progress_message = progress_message or "GPU资源不足，重新入队等待"
+            task.progress_message = progress_message or "资源不足，重新入队等待"
             task.started_at = None
 
         # 更新进度（如果提供）

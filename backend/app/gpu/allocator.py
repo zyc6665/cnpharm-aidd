@@ -89,9 +89,14 @@ class GPUAllocator:
             detector: GPU检测器（可选）
             cache_client: 缓存客户端（用于分布式锁）
         """
+        if cache_client is None:
+            from app.cache import get_cache
+
+            cache_client = get_cache()
         self.db = db
         self.detector = detector or get_gpu_detector()
         self.cache = cache_client
+        self._lock_token: str | None = None
 
     async def allocate(
         self,
@@ -708,17 +713,23 @@ class GPUAllocator:
             return True  # 无缓存时不使用锁
 
         lock_key = "gpu:alloc:lock"
+        lock_token = uuid.uuid4().hex
         for _ in range(self.MAX_RETRIES):
             try:
                 acquired = await self.cache.set(
-                    lock_key, "1", nx=True, ex=self.LOCK_TIMEOUT
+                    lock_key,
+                    lock_token,
+                    nx=True,
+                    ex=self.LOCK_TIMEOUT,
                 )
                 if acquired:
+                    self._lock_token = lock_token
                     return True
                 await asyncio.sleep(self.RETRY_INTERVAL)
             except Exception as e:
                 logger.warning(f"Failed to acquire lock: {e}")
 
+        self._lock_token = None
         return False
 
     async def _release_lock(self) -> None:
@@ -726,8 +737,13 @@ class GPUAllocator:
         if not self.cache:
             return
 
+        lock_token = self._lock_token
+        self._lock_token = None
+        if lock_token is None:
+            return
+
         try:
-            await self.cache.delete("gpu:alloc:lock")
+            await self.cache.delete_if_value("gpu:alloc:lock", lock_token)
         except Exception as e:
             logger.warning(f"Failed to release lock: {e}")
 

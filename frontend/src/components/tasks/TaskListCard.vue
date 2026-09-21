@@ -54,6 +54,17 @@
             <SyncOutlined />
             {{ task.progress_message }}
           </div>
+          <div v-if="remoteRecovery" class="detail-item recovery-detail">
+            <WarningOutlined />
+            {{ t('tasks.remoteRecovery.failures', { count: remoteRecovery.failures }) }}
+          </div>
+          <div v-if="resourceWait" class="detail-item resource-wait-detail">
+            <ClockCircleOutlined />
+            {{ resourceWaitText }}
+            <span v-if="resourceWait.next_attempt_at">
+              · {{ t('tasks.resourceWait.nextAttempt', { time: formatTime(resourceWait.next_attempt_at) }) }}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -128,6 +139,7 @@
     StopOutlined,
     SyncOutlined,
     ToolOutlined,
+    WarningOutlined,
   } from '@ant-design/icons-vue'
   import type { Task, TaskStatus } from '@/types/models'
   import {
@@ -171,6 +183,21 @@
     currentProjectName: props.currentProjectName,
   }))
   const artifactLineagePath = computed(() => getTaskArtifactLineagePath(props.task))
+  const remoteRecovery = computed(() => {
+    const recovery = props.task.remote_recovery
+    return recovery && recovery.failures > 0 ? recovery : null
+  })
+  const resourceWait = computed(() => {
+    const wait = props.task.resource_wait
+    return taskStatus.value === 'pending' && wait ? wait : null
+  })
+  const resourceWaitText = computed(() => {
+    if (!resourceWait.value) return ''
+    if (resourceWait.value.reason === 'gpu_unavailable') {
+      return t('tasks.resourceWait.gpuUnavailable')
+    }
+    return t('tasks.resourceWait.title')
+  })
 
   const formatTime = formatTaskDetailTime
 </script>
@@ -260,6 +287,11 @@
     display: flex;
     align-items: center;
     gap: @spacing-xs;
+  }
+
+  .recovery-detail {
+    color: @warning-color;
+    font-weight: @font-weight-medium;
   }
 
   .project-detail,

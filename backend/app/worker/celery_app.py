@@ -47,6 +47,8 @@ def create_celery_app() -> Celery:
             "app.worker.tasks.execute_tool_task": {"queue": "tool_tasks"},
             "app.worker.tasks.cleanup_expired_files": {"queue": "maintenance"},
             "app.worker.tasks.reclaim_stale_gpu_leases": {"queue": "maintenance"},
+            "app.worker.tasks.reconcile_execution_records": {"queue": "maintenance"},
+            "app.worker.tasks.reconcile_remote_tasks": {"queue": "maintenance"},
             "app.worker.tasks.collect_gpu_stats": {"queue": "monitoring"},
         },
 
@@ -78,6 +80,18 @@ def create_celery_app() -> Celery:
             "reclaim-stale-gpu-leases": {
                 "task": "app.worker.tasks.reclaim_stale_gpu_leases",
                 "schedule": 60.0,
+            },
+            "heartbeat-worker-capability": {
+                "task": "app.worker.tasks.heartbeat_worker_capability",
+                "schedule": 30.0,
+            },
+            "reconcile-execution-records": {
+                "task": "app.worker.tasks.reconcile_execution_records",
+                "schedule": float(settings.EXECUTION_RECORD_RECONCILE_INTERVAL_SECONDS),
+            },
+            "reconcile-remote-tasks": {
+                "task": "app.worker.tasks.reconcile_remote_tasks",
+                "schedule": float(settings.REMOTE_TASK_RECOVERY_INTERVAL_SECONDS),
             },
             # 每分钟收集 GPU 统计
             "collect-gpu-stats": {

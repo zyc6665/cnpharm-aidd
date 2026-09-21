@@ -101,6 +101,20 @@ def _patch_sm_for_ewp():
 class TestGPUAllocation:
     """_allocate_gpu 单元测试。"""
 
+    def test_task_executor_uses_injected_cache_for_gpu_allocator(self):
+        from app.cache.memory import MemoryCacheBackend
+
+        cache = MemoryCacheBackend()
+        executor = TaskExecutor(
+            _make_task(),
+            SimpleNamespace(config=_make_config(gpu_required=True)),
+            cache_client=cache,
+        )
+
+        allocator = executor._get_gpu_allocator(object())
+
+        assert allocator.cache is cache
+
     def test_uses_tool_gpu_settings_over_version_config(self):
         task = _make_task()
         tool = SimpleNamespace(gpu_required=True, gpu_memory_mb=8192)

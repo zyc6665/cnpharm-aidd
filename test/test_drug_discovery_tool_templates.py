@@ -215,6 +215,7 @@ def test_resource_profile_is_exposed_on_tool_contract():
         "gpu_memory_gb": 0.0,
         "expected_minutes": 30,
         "timeout_minutes": 180,
+        "parallelism": 1,
         "scheduler_hint": "ssh",
     }
 

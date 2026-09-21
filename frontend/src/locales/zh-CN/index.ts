@@ -1183,6 +1183,20 @@ export default {
     realTimeMonitor: '实时监控',
     autoRefreshOn: '自动刷新',
     autoRefreshOff: '手动刷新',
+    remoteRecovery: {
+      title: '远端任务恢复中',
+      failures: '远端服务暂时不可用，已连续失败 {count} 次。',
+      nextAttempt: '计划于 {time} 再次探测。',
+      lastError: '最近错误：{error}',
+      alertFilter: '恢复告警',
+      alertedOnly: '仅显示有恢复告警'
+    },
+    resourceWait: {
+      title: '等待计算资源',
+      gpuUnavailable: 'GPU 资源暂时不足，任务将在资源可用后自动重试。',
+      nextAttempt: '下一次调度：{time}',
+      retryCount: '资源重试次数：{count}'
+    },
     // 操作
     progress: '进度',
     logs: '日志',
@@ -1488,6 +1502,7 @@ export default {
     runningTasks: '运行中',
     pendingTasks: '等待中',
     failedTasks: '失败',
+    remoteRecoveryAlerts: '恢复告警',
     searchTaskPlaceholder: '搜索任务名称或ID...',
     tool: '工具',
     user: '用户',

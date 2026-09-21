@@ -504,6 +504,19 @@ export interface TaskFailureDiagnosticsPayload {
   standard_artifact_message?: string
 }
 
+export interface TaskRemoteRecoveryStatus {
+  failures: number
+  next_attempt_at?: string | null
+  last_error?: string | null
+  alerted: boolean
+}
+
+export interface TaskResourceWaitStatus {
+  reason: string
+  retry_count: number
+  next_attempt_at?: string | null
+}
+
 export interface ArtifactBindingDecision {
   status: 'ready' | 'needs_preparation' | 'needs_conversion' | 'invalid' | string
   input_name?: string | null
@@ -532,6 +545,8 @@ export interface Task {
   outputs?: TaskOutput
   error_message?: string
   failure_diagnostics?: TaskFailureDiagnosticsPayload | null
+  remote_recovery?: TaskRemoteRecoveryStatus | null
+  resource_wait?: TaskResourceWaitStatus | null
   started_at?: string
   finished_at?: string
   completed_at?: string  // 完成时间（兼容旧代码，实际使用finished_at）
@@ -705,6 +720,7 @@ export interface SystemStats {
   running_tasks: number
   completed_tasks: number
   failed_tasks: number
+  remote_recovery_alerted_tasks: number
   active_connections: number
 }
 

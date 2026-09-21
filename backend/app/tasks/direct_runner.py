@@ -56,13 +56,15 @@ class DirectTaskRunner:
         task_id: str,
         tool_version_id: str,
         attempt_id: str | None = None,
+        delay_seconds: float = 0,
     ) -> None:
-        """等待当前同 ID 任务退出后重新调度，避免 direct runner 自己拦截重试。"""
+        """等待当前任务退出并按延迟重新调度，避免 direct runner 自拦截重试。"""
         asyncio.get_running_loop().call_soon(
             self._schedule_task_when_idle,
             task_id,
             tool_version_id,
             attempt_id,
+            max(0.0, float(delay_seconds)),
         )
 
     def _schedule_task_when_idle(
@@ -70,6 +72,7 @@ class DirectTaskRunner:
         task_id: str,
         tool_version_id: str,
         attempt_id: str | None,
+        delay_seconds: float,
     ) -> None:
         current_task = self._tasks.get(task_id)
         if current_task and not current_task.done():
@@ -78,10 +81,17 @@ class DirectTaskRunner:
                 task_id,
                 tool_version_id,
                 attempt_id,
+                delay_seconds,
             )
             return
 
-        self.schedule_task(task_id, tool_version_id, attempt_id)
+        asyncio.get_running_loop().call_later(
+            delay_seconds,
+            self.schedule_task,
+            task_id,
+            tool_version_id,
+            attempt_id,
+        )
 
     def is_task_active(self, task_id: str) -> bool:
         """Return whether this process still owns a running direct task."""
@@ -158,10 +168,9 @@ class DirectTaskRunner:
                 return
 
             TaskStateMachine.cancel(task)
-            from app.execution.records import finish_task_execution_record
+            from app.execution.records import finish_task_execution_record_best_effort
 
-            await finish_task_execution_record(
-                db,
+            await finish_task_execution_record_best_effort(
                 task=task,
                 status="cancelled",
                 error_message=message,

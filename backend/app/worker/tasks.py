@@ -1,6 +1,7 @@
 # backend/app/worker/tasks.py
 """Celery 任务定义"""
 
+from datetime import timedelta
 from typing import Dict, Any, Optional
 
 from celery import shared_task
@@ -8,7 +9,8 @@ from celery.utils.log import get_task_logger
 
 from app.common.async_runtime import run_coro_sync
 from app.common.time import utcnow
-from app.config import use_direct_task_execution
+from app.config import settings, use_direct_task_execution
+from app.execution.records import finish_task_execution_record_best_effort
 from app.remote_tools.registration import build_remote_tool_smoke_result_update
 from app.tasks.attempts import (
     commit_current_attempt,
@@ -17,7 +19,11 @@ from app.tasks.attempts import (
     new_execution_attempt_id,
     set_execution_attempt_id,
 )
-from app.tasks.executors.errors import GPUAllocationFailed, TaskExecutionError
+from app.tasks.executors.errors import (
+    GPUAllocationFailed,
+    ResourceAdmissionFailed,
+    TaskExecutionError,
+)
 from app.tasks.output import extract_output_file_ids, prepare_task_output
 from app.tasks.state_machine import TaskStateMachine
 
@@ -105,6 +111,32 @@ def _gpu_retry_message(task, exc: GPUAllocationFailed) -> str:
     )
 
 
+def _gpu_retry_delay_seconds(task) -> int:
+    """按 GPU 重试次数计算有上限的指数退避秒数。"""
+    retry_count = max(1, int(task.retry_count or 1))
+    initial = max(0, int(settings.GPU_RETRY_INITIAL_BACKOFF_SECONDS))
+    maximum = max(0, int(settings.GPU_RETRY_MAX_BACKOFF_SECONDS))
+    return min(initial * (2 ** (retry_count - 1)), maximum)
+
+
+def _resource_admission_retry_message(
+    task,
+    exc: ResourceAdmissionFailed,
+) -> str:
+    return (
+        f"Worker 资源准入失败: {exc.reason}；"
+        f"第 {(task.retry_count or 0) + 1}/{task.max_retries} 次重试"
+    )
+
+
+def _resource_admission_retry_delay_seconds(task) -> int:
+    """按资源准入重试次数计算有上限的指数退避秒数。"""
+    retry_count = max(1, int(task.retry_count or 1))
+    initial = max(0, int(settings.RESOURCE_ADMISSION_RETRY_INITIAL_BACKOFF_SECONDS))
+    maximum = max(0, int(settings.RESOURCE_ADMISSION_RETRY_MAX_BACKOFF_SECONDS))
+    return min(initial * (2 ** (retry_count - 1)), maximum)
+
+
 def _canceled_task_result() -> Dict[str, Any]:
     return {
         "success": False,
@@ -126,7 +158,14 @@ def _is_current_attempt(task, attempt_id: str | None) -> bool:
     return attempt_id is None or get_execution_attempt_id(task) == attempt_id
 
 
-async def _reschedule_after_gpu_shortage(db, *, task, tool_version) -> None:
+async def _reschedule_after_resource_wait(
+    db,
+    *,
+    task,
+    tool_version,
+    delay_seconds: int,
+    failure_detail: str,
+) -> None:
     if use_direct_task_execution():
         from app.tasks.direct_runner import direct_task_runner
 
@@ -138,6 +177,7 @@ async def _reschedule_after_gpu_shortage(db, *, task, tool_version) -> None:
             task_id=str(task.id),
             tool_version_id=str(tool_version.id),
             attempt_id=attempt_id,
+            delay_seconds=delay_seconds,
         )
         return
 
@@ -154,6 +194,23 @@ async def _reschedule_after_gpu_shortage(db, *, task, tool_version) -> None:
         tool_version=tool_version,
         user_role=user.role if user else None,
         resource_snapshot=resource_snapshot if isinstance(resource_snapshot, dict) else None,
+        failure_detail=failure_detail,
+        countdown=delay_seconds,
+    )
+
+
+async def _reschedule_after_gpu_shortage(
+    db,
+    *,
+    task,
+    tool_version,
+    delay_seconds: int,
+) -> None:
+    await _reschedule_after_resource_wait(
+        db,
+        task=task,
+        tool_version=tool_version,
+        delay_seconds=delay_seconds,
         failure_detail="GPU 资源不足，任务重新入队失败",
     )
 
@@ -357,11 +414,12 @@ async def _execute_tool_task_impl(
             from app.models.tools import Tool, ToolVersion
             from app.models.tasks import TaskInput
             from app.execution.records import (
-                finish_task_execution_record,
                 start_task_execution_record,
+                task_external_execution_id,
             )
             from app.tasks.executor import TaskExecutor
             from app.tasks.molecule_scoring import append_molecule_scoring_artifacts
+            from app.tasks.worker_capability import load_worker_capability
 
             # 获取工具版本配置
             version_result = await db.execute(
@@ -374,19 +432,82 @@ async def _execute_tool_task_impl(
             if tool is None:
                 raise ValueError(f"任务关联的工具不存在: {task.tool_id}")
 
-            execution_record = await start_task_execution_record(
-                db,
-                task=task,
-                tool_slug=str(tool.slug),
-                tool_version_id=str(tool_version.id),
-                tool_version=str(tool_version.version),
-                tool_type=str((tool_version.config or {}).get("type") or ""),
-                attempt_id=attempt_id,
-                tool_config=tool_version.config,
-            )
+            async def reload_execution_context() -> None:
+                nonlocal task, tool, tool_version
+
+                task_result = await db.execute(
+                    select(Task).where(Task.id == task_id)
+                )
+                task = task_result.scalar_one_or_none()
+                if task is None:
+                    return
+
+                version_result = await db.execute(
+                    select(ToolVersion).where(ToolVersion.id == tool_version_id)
+                )
+                tool_version = version_result.scalar_one_or_none()
+                if tool_version is not None:
+                    tool_result = await db.execute(
+                        select(Tool).where(Tool.id == task.tool_id)
+                    )
+                    tool = tool_result.scalar_one_or_none()
+
+            try:
+                execution_record = await start_task_execution_record(
+                    db,
+                    task=task,
+                    tool_slug=str(tool.slug),
+                    tool_version_id=str(tool_version.id),
+                    tool_version=str(tool_version.version),
+                    tool_type=str((tool_version.config or {}).get("type") or ""),
+                    attempt_id=attempt_id,
+                    tool_config=tool_version.config,
+                )
+            except Exception as execution_record_exc:
+                logger.warning(
+                    "任务 %s 执行记录启动失败，继续执行工具: %s",
+                    task_id,
+                    execution_record_exc,
+                )
+                await db.rollback()
+                await reload_execution_context()
+                if task is None:
+                    raise ValueError(f"任务不存在: {task_id}") from execution_record_exc
+                if not _is_current_attempt(task, attempt_id):
+                    return _stale_task_result(task)
+                if task.status == TaskStatus.CANCELED.value:
+                    return _canceled_task_result()
+                execution_record = None
+
             if execution_record is not None:
-                # 先持久化运行中记录和任务指针，后续执行失败 rollback 时仍可写回终态。
-                await db.commit()
+                try:
+                    # 先持久化运行中记录和任务指针，后续执行失败 rollback 时仍可写回终态。
+                    committed = await commit_current_attempt(
+                        db,
+                        task=task,
+                        attempt_id=attempt_id,
+                        expected_status=TaskStatus.RUNNING,
+                    )
+                except Exception as execution_record_exc:
+                    logger.warning(
+                        "任务 %s 执行记录提交失败，继续执行工具: %s",
+                        task_id,
+                        execution_record_exc,
+                    )
+                    await db.rollback()
+                    await reload_execution_context()
+                    if task is None:
+                        raise ValueError(f"任务不存在: {task_id}") from execution_record_exc
+                    if not _is_current_attempt(task, attempt_id):
+                        return _stale_task_result(task)
+                    if task.status == TaskStatus.CANCELED.value:
+                        return _canceled_task_result()
+                else:
+                    if not committed:
+                        latest_task = (
+                            await db.execute(select(Task).where(Task.id == task_id))
+                        ).scalar_one_or_none()
+                        return _stale_task_result(latest_task or task)
 
             # 获取任务输入参数
             input_result = await db.execute(
@@ -450,6 +571,7 @@ async def _execute_tool_task_impl(
                 tool_version,
                 tool=tool,
                 progress_callback=progress_callback,
+                worker_capability=load_worker_capability(),
             )
 
             # 执行任务
@@ -524,8 +646,7 @@ async def _execute_tool_task_impl(
                 success=True,
                 progress_message="任务执行成功",
             )
-            await finish_task_execution_record(
-                db,
+            await finish_task_execution_record_best_effort(
                 task=task,
                 status="succeeded",
             )
@@ -585,6 +706,7 @@ async def _execute_tool_task_impl(
 
         except Exception as e:
             # 清掉本轮未提交的输出/标准 Artifact 写入，避免失败任务留下下游产物。
+            external_execution_id = task_external_execution_id(task)
             await db.rollback()
             task_result = await db.execute(select(Task).where(Task.id == task_id))
             task = task_result.scalar_one_or_none()
@@ -619,6 +741,16 @@ async def _execute_tool_task_impl(
                     TaskStatus.PENDING,
                     progress_message=retry_message,
                 )
+                retry_delay_seconds = _gpu_retry_delay_seconds(task)
+                resource_retry_next_at = (
+                    utcnow() + timedelta(seconds=retry_delay_seconds)
+                ).isoformat()
+                task.extra_data = {
+                    **(task.extra_data if isinstance(task.extra_data, dict) else {}),
+                    "resource_wait_reason": "gpu_unavailable",
+                    "resource_retry_count": task.retry_count,
+                    "resource_retry_next_at": resource_retry_next_at,
+                }
                 db.add(
                     TaskLog(
                         task_id=task_id,
@@ -628,13 +760,16 @@ async def _execute_tool_task_impl(
                             "source": "gpu_allocator",
                             "wait_position": e.wait_position,
                             "retry_count": task.retry_count,
+                            "resource_wait_reason": "gpu_unavailable",
+                            "retry_delay_seconds": retry_delay_seconds,
+                            "resource_retry_next_at": resource_retry_next_at,
                         },
                     )
                 )
-                await finish_task_execution_record(
-                    db,
+                await finish_task_execution_record_best_effort(
                     task=task,
                     status="failed",
+                    external_id=external_execution_id,
                     error_message=str(e),
                 )
                 if not await commit_current_attempt(
@@ -652,6 +787,7 @@ async def _execute_tool_task_impl(
                     db,
                     task=task,
                     tool_version=tool_version,
+                    delay_seconds=retry_delay_seconds,
                 )
                 await notify_task_status(
                     task_id,
@@ -667,6 +803,83 @@ async def _execute_tool_task_impl(
                     "wait_position": e.wait_position,
                 }
 
+            if (
+                isinstance(e, ResourceAdmissionFailed)
+                and (task.retry_count or 0) < task.max_retries
+                and tool_version is not None
+            ):
+                retry_message = _resource_admission_retry_message(task, e)
+                TaskStateMachine.transition(
+                    task,
+                    TaskStatus.PENDING,
+                    progress_message=retry_message,
+                )
+                retry_delay_seconds = _resource_admission_retry_delay_seconds(task)
+                resource_retry_next_at = (
+                    utcnow() + timedelta(seconds=retry_delay_seconds)
+                ).isoformat()
+                task.extra_data = {
+                    **(task.extra_data if isinstance(task.extra_data, dict) else {}),
+                    "resource_wait_reason": "worker_capability_unavailable",
+                    "resource_retry_count": task.retry_count,
+                    "resource_retry_next_at": resource_retry_next_at,
+                }
+                db.add(
+                    TaskLog(
+                        task_id=task_id,
+                        level="WARNING",
+                        message=retry_message,
+                        log_data={
+                            "source": "worker_capability",
+                            "reason": e.reason,
+                            "worker_id": e.worker_id,
+                            "retry_count": task.retry_count,
+                            "resource_wait_reason": "worker_capability_unavailable",
+                            "retry_delay_seconds": retry_delay_seconds,
+                            "resource_retry_next_at": resource_retry_next_at,
+                        },
+                    )
+                )
+                await finish_task_execution_record_best_effort(
+                    task=task,
+                    status="failed",
+                    external_id=external_execution_id,
+                    error_message=str(e),
+                )
+                if not await commit_current_attempt(
+                    db,
+                    task=task,
+                    attempt_id=attempt_id,
+                    expected_status=TaskStatus.RUNNING,
+                ):
+                    latest_task = (
+                        await db.execute(select(Task).where(Task.id == task_id))
+                    ).scalar_one_or_none()
+                    logger.info("任务 %s 的 Worker 准入重入队已过期", task_id)
+                    return _stale_task_result(latest_task or task)
+
+                await _reschedule_after_resource_wait(
+                    db,
+                    task=task,
+                    tool_version=tool_version,
+                    delay_seconds=retry_delay_seconds,
+                    failure_detail="Worker 资源不足，任务重新入队失败",
+                )
+                await notify_task_status(
+                    task_id,
+                    TaskStatus.PENDING.value,
+                    retry_message,
+                )
+                await notify_task_log(task_id, "WARNING", retry_message)
+                return {
+                    "success": False,
+                    "status": TaskStatus.PENDING.value,
+                    "requeued": True,
+                    "message": retry_message,
+                    "reason": e.reason,
+                    "worker_id": e.worker_id,
+                }
+
             # 更新失败状态
             TaskStateMachine.complete(
                 task,
@@ -674,10 +887,10 @@ async def _execute_tool_task_impl(
                 error_message=str(e),
                 progress_message=f"任务失败: {str(e)}",
             )
-            await finish_task_execution_record(
-                db,
+            await finish_task_execution_record_best_effort(
                 task=task,
                 status="failed",
+                external_id=external_execution_id,
                 error_message=str(e),
             )
 
@@ -814,6 +1027,34 @@ def reclaim_stale_gpu_leases():
     return {"reclaimed_count": reclaimed_count}
 
 
+@shared_task(name="app.worker.tasks.heartbeat_worker_capability")
+def heartbeat_worker_capability():
+    """刷新当前 Worker 的 capability 在线状态。"""
+    capability = _load_worker_capability()
+    if capability is None:
+        return {"registered": False}
+
+    run_coro_sync(_register_worker_capability_impl(capability))
+    return {"registered": True, "worker_id": capability.worker_id}
+
+
+def _load_worker_capability():
+    from app.tasks.worker_capability import load_worker_capability
+
+    return load_worker_capability()
+
+
+async def _register_worker_capability_impl(capability) -> None:
+    from app.cache import get_cache
+    from app.tasks.worker_capability_registry import WorkerCapabilityRegistry
+
+    registry = WorkerCapabilityRegistry(
+        cache=get_cache(),
+        ttl_seconds=settings.WORKER_CAPABILITY_TTL_SECONDS,
+    )
+    await registry.register(capability)
+
+
 async def _reclaim_stale_gpu_leases_impl() -> int:
     """使用独立会话回收过期 GPU 租约。"""
     from app.database.session import async_session_factory
@@ -823,6 +1064,59 @@ async def _reclaim_stale_gpu_leases_impl() -> int:
         reclaimed_count = await GPUAllocator(db=db).reclaim_stale_allocations()
         await db.commit()
         return reclaimed_count
+
+
+@shared_task(name="app.worker.tasks.reconcile_execution_records")
+def reconcile_execution_records():
+    """收敛进程中断后遗留的运行中执行记录。"""
+    logger.info("开始对账执行记录")
+
+    reconciled_count = run_coro_sync(_reconcile_execution_records_impl())
+
+    logger.info("执行记录对账完成，收敛 %s 条", reconciled_count)
+    return {"reconciled_count": reconciled_count}
+
+
+async def _reconcile_execution_records_impl() -> int:
+    """使用独立会话执行执行记录对账。"""
+    from app.database.session import async_session_factory
+    from app.execution.records import reconcile_running_execution_records
+
+    async with async_session_factory() as db:
+        reconciled_count = await reconcile_running_execution_records(
+            db,
+            stale_after=timedelta(
+                seconds=settings.EXECUTION_RECORD_STALE_AFTER_SECONDS
+            ),
+            batch_size=settings.EXECUTION_RECORD_RECONCILE_BATCH_SIZE,
+        )
+        await db.commit()
+        return reconciled_count
+
+
+@shared_task(name="app.worker.tasks.reconcile_remote_tasks")
+def reconcile_remote_tasks():
+    """恢复 worker 中断后仍在远端运行的 Remote API 任务。"""
+    logger.info("开始恢复 Remote API 任务")
+
+    recovered_count = run_coro_sync(_reconcile_remote_tasks_impl())
+
+    logger.info("Remote API 任务恢复完成，收敛 %s 条", recovered_count)
+    return {"recovered_count": recovered_count}
+
+
+async def _reconcile_remote_tasks_impl() -> int:
+    """使用独立会话执行 Remote API 任务恢复。"""
+    from app.database.session import async_session_factory
+    from app.tasks.remote_recovery import reconcile_orphaned_remote_tasks
+
+    async with async_session_factory() as db:
+        recovered_count = await reconcile_orphaned_remote_tasks(
+            db,
+            stale_after=timedelta(seconds=settings.REMOTE_TASK_RECOVERY_STALE_AFTER_SECONDS),
+            batch_size=settings.REMOTE_TASK_RECOVERY_BATCH_SIZE,
+        )
+        return recovered_count
 
 
 @shared_task(name="app.worker.tasks.collect_gpu_stats")

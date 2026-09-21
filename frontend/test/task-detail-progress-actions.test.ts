@@ -23,3 +23,10 @@ test('任务详情页应展示远端进度文本并按管理员权限显示删�
   assert.equal(source.includes('v-if="canDeleteTask"'), true)
   assert.equal(source.includes('task.progress_message'), true)
 })
+
+test('任务详情页应展示资源等待状态和下一次调度时间', () => {
+  const source = readSource('src/views/tasks/Detail.vue')
+
+  assert.equal(source.includes('resourceWait'), true)
+  assert.equal(source.includes('tasks.resourceWait.nextAttempt'), true)
+})

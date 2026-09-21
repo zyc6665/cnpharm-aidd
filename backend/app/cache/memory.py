@@ -61,13 +61,24 @@ class MemoryCacheBackend(CacheBackend):
         self,
         key: str,
         value: Any,
-        expire: Optional[int] = None
+        expire: Optional[int] = None,
+        *,
+        nx: bool = False,
+        ex: Optional[int] = None,
     ) -> bool:
         """设置缓存值"""
         async with self._lock:
+            existing = self._cache.get(key)
+            if existing is not None and existing.is_expired():
+                del self._cache[key]
+                existing = None
+            if nx and existing is not None:
+                return False
+
             expires_at = None
-            if expire:
-                expires_at = utcnow() + timedelta(seconds=expire)
+            ttl = ex if ex is not None else expire
+            if ttl:
+                expires_at = utcnow() + timedelta(seconds=ttl)
 
             self._cache[key] = CacheEntry(value=value, expires_at=expires_at)
 
@@ -75,6 +86,20 @@ class MemoryCacheBackend(CacheBackend):
             if len(self._cache) % 100 == 0:
                 await self._cleanup_expired()
 
+            return True
+
+    async def delete_if_value(self, key: str, value: Any) -> bool:
+        """仅当缓存值匹配时删除键。"""
+        async with self._lock:
+            entry = self._cache.get(key)
+            if entry is None:
+                return False
+            if entry.is_expired():
+                del self._cache[key]
+                return False
+            if entry.value != value:
+                return False
+            del self._cache[key]
             return True
 
     async def delete(self, key: str) -> bool:

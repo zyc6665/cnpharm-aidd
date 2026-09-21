@@ -11,7 +11,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
-from app.config import use_direct_task_execution
+from app.config import settings, use_direct_task_execution
 from app.common.exceptions import NotFoundException, ValidationException
 from app.database.base import utcnow
 from app.models.statistics import ToolStatistics
@@ -45,7 +45,13 @@ from app.tasks.direct_runner import direct_task_runner as default_direct_task_ru
 from app.tasks.naming import (
     resolve_task_display_name,
 )
-from app.tasks.resource_profile import build_task_resource_snapshot
+from app.tasks.resource_profile import (
+    ResourceRequest,
+    build_resource_request,
+    build_task_resource_snapshot,
+)
+from app.tasks.resource_admission import ResourceAdmissionPolicy
+from app.tasks.worker_capability_registry import WorkerCapabilityRegistry
 from app.tasks.state_machine import TaskStateMachine
 
 
@@ -93,6 +99,115 @@ def _set_task_extra_data(task: Task, **values: object) -> None:
     task.extra_data = {**base, **values}
 
 
+def _resource_request_from_snapshot(
+    *,
+    tool_version: ToolVersion,
+    resource_snapshot: dict[str, object],
+) -> ResourceRequest:
+    payload = resource_snapshot.get("resource_request")
+    required_fields = {
+        "executor_type",
+        "tier",
+        "cpu",
+        "memory_gb",
+        "cpu_limit",
+        "memory_limit",
+        "gpu_required",
+        "gpu_count",
+        "gpu_memory_mb",
+        "timeout_sec",
+        "parallelism",
+    }
+    if isinstance(payload, dict) and required_fields.issubset(payload):
+        try:
+            return ResourceRequest(
+                executor_type=payload.get("executor_type"),
+                tier=payload.get("tier"),
+                cpu=float(payload["cpu"]) if payload["cpu"] is not None else None,
+                memory_gb=(
+                    float(payload["memory_gb"])
+                    if payload["memory_gb"] is not None
+                    else None
+                ),
+                cpu_limit=(
+                    float(payload["cpu_limit"])
+                    if payload["cpu_limit"] is not None
+                    else None
+                ),
+                memory_limit=payload.get("memory_limit"),
+                gpu_required=bool(payload["gpu_required"]),
+                gpu_count=int(payload["gpu_count"]),
+                gpu_memory_mb=int(payload["gpu_memory_mb"]),
+                timeout_sec=int(payload["timeout_sec"]),
+                parallelism=int(payload["parallelism"]),
+            )
+        except (TypeError, ValueError):
+            pass
+
+    fallback_kwargs: dict[str, object] = {}
+    gpu_required = resource_snapshot.get("gpu_required")
+    gpu_memory_mb = resource_snapshot.get("gpu_memory_mb")
+    if isinstance(gpu_required, bool):
+        fallback_kwargs["gpu_required"] = gpu_required
+    if isinstance(gpu_memory_mb, (int, float)):
+        fallback_kwargs["gpu_memory_mb"] = int(gpu_memory_mb)
+    return build_resource_request(tool_version.config, **fallback_kwargs)
+
+
+async def _resource_admission_metadata(
+    *,
+    tool_version: ToolVersion,
+    resource_snapshot: dict[str, object],
+) -> dict[str, object] | None:
+    """评估当前在线 Worker，但只记录结果，不阻断任务入队。"""
+    if not settings.WORKER_CAPABILITY_ADMISSION_ENABLED:
+        return None
+
+    try:
+        from app.cache import get_cache
+
+        request = _resource_request_from_snapshot(
+            tool_version=tool_version,
+            resource_snapshot=resource_snapshot,
+        )
+        registry = WorkerCapabilityRegistry(
+            cache=get_cache(),
+            ttl_seconds=settings.WORKER_CAPABILITY_TTL_SECONDS,
+        )
+        capabilities = await registry.list_active()
+        if not capabilities:
+            return {
+                "status": "unknown",
+                "worker_id": None,
+                "reason": "no_registered_workers",
+            }
+
+        decision = ResourceAdmissionPolicy.select_worker(request, capabilities)
+        if decision.admitted:
+            return {
+                "status": "admitted",
+                "worker_id": decision.worker_id,
+                "reason": None,
+            }
+
+        return {
+            "status": "rejected",
+            "worker_id": None,
+            "reason": decision.reason,
+        }
+    except Exception as exc:
+        logger.warning(
+            "Resource admission observation unavailable for task tool version %s: %s",
+            tool_version.id,
+            exc,
+        )
+        return {
+            "status": "unknown",
+            "worker_id": None,
+            "reason": "admission_check_unavailable",
+        }
+
+
 async def dispatch_tool_task(
     *,
     db: AsyncSession,
@@ -102,6 +217,7 @@ async def dispatch_tool_task(
     direct_runner=default_direct_task_runner,
     resource_snapshot: dict[str, object] | None = None,
     failure_detail: str = "任务分发失败",
+    countdown: int = 0,
 ) -> None:
     """Dispatch a persisted task and keep dispatch metadata in sync."""
     try:
@@ -124,6 +240,10 @@ async def dispatch_tool_task(
         from app.tasks.queue_manager import TaskQueueManager
 
         snapshot = resource_snapshot if isinstance(resource_snapshot, dict) else {}
+        if not snapshot and isinstance(task.extra_data, dict):
+            task_snapshot = task.extra_data.get("resource_snapshot")
+            if isinstance(task_snapshot, dict):
+                snapshot = task_snapshot
         gpu_required = snapshot.get("gpu_required")
         queue = TaskQueueManager.determine_queue(
             tool_config=tool_version.config,
@@ -132,20 +252,29 @@ async def dispatch_tool_task(
             gpu_required=gpu_required if isinstance(gpu_required, bool) else None,
         )
 
-        _set_task_extra_data(
-            task,
-            dispatch={
-                "mode": "celery",
-                "queue": queue,
-                "queue_priority": TaskQueueManager.get_queue_priority(queue),
-            },
+        dispatch_metadata: dict[str, object] = {
+            "mode": "celery",
+            "queue": queue,
+            "queue_priority": TaskQueueManager.get_queue_priority(queue),
+        }
+        admission_metadata = await _resource_admission_metadata(
+            tool_version=tool_version,
+            resource_snapshot=snapshot,
         )
+        if admission_metadata is not None:
+            dispatch_metadata["resource_admission"] = admission_metadata
+        _set_task_extra_data(task, dispatch=dispatch_metadata)
         await db.commit()
+        enqueue_kwargs = {
+            "task_id": str(task.id),
+            "tool_version_id": str(tool_version.id),
+            "queue": queue,
+        }
+        if countdown > 0:
+            enqueue_kwargs["countdown"] = int(countdown)
         celery_task = invoke_with_optional_attempt(
             TaskQueueManager.enqueue_task,
-            task_id=str(task.id),
-            tool_version_id=str(tool_version.id),
-            queue=queue,
+            **enqueue_kwargs,
             attempt_id=attempt_id,
         )
 

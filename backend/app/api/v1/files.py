@@ -1,7 +1,6 @@
 # backend/app/api/v1/files.py
 """文件管理API（本地存储版本）"""
 
-import os
 import hashlib
 import aiofiles
 import re

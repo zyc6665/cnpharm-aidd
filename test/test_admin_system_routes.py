@@ -28,6 +28,7 @@ from app.models import statistics as _statistics_models  # noqa: F401
 from app.models import tasks as _task_models  # noqa: F401
 from app.models import tools as _tool_models  # noqa: F401
 from app.models import users as _user_models  # noqa: F401
+from app.models.tasks import Task
 from app.models.users import User, UserRole, UserStatus
 
 
@@ -122,6 +123,42 @@ async def test_admin_system_routes_use_standard_response_shape(
     payload = response.json()
     assert payload["code"] == 200
     assert expected_keys.issubset(payload["data"].keys())
+
+
+@pytest.mark.asyncio
+async def test_system_stats_exposes_remote_recovery_alert_count(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    admin_user: User,
+):
+    """系统统计应暴露需要人工关注的 Remote API 恢复任务数。"""
+    db_session.add_all(
+        [
+            Task(
+                user_id=admin_user.id,
+                tool_id="tool-recovery-alert",
+                tool_version_id="version-recovery-alert",
+                status="RUNNING",
+                extra_data={"remote_recovery_alerted": True},
+            ),
+            Task(
+                user_id=admin_user.id,
+                tool_id="tool-recovery-pending",
+                tool_version_id="version-recovery-pending",
+                status="RUNNING",
+                extra_data={"remote_recovery_failures": 2},
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    response = await api_client.get(
+        "/api/v1/system/stats",
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["remote_recovery_alerted_tasks"] == 1
 
 
 @pytest.mark.asyncio

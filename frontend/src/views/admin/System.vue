@@ -53,6 +53,12 @@
                   <a-statistic :title="t('admin.failedTasks')" :value="systemStats?.failed_tasks ?? 0" />
                 </a-col>
                 <a-col :span="12">
+                  <a-statistic
+                    :title="t('admin.remoteRecoveryAlerts')"
+                    :value="systemStats?.remote_recovery_alerted_tasks ?? 0"
+                  />
+                </a-col>
+                <a-col :span="12">
                   <a-statistic :title="t('admin.activeConnections')" :value="systemStats?.active_connections ?? 0" />
                 </a-col>
               </a-row>

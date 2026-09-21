@@ -93,6 +93,34 @@
             </div>
           </div>
 
+          <div v-if="remoteRecovery" class="recovery-notice">
+            <a-alert type="warning" show-icon>
+              <template #message>{{ t('tasks.remoteRecovery.title') }}</template>
+              <template #description>
+                <div>{{ t('tasks.remoteRecovery.failures', { count: remoteRecovery.failures }) }}</div>
+                <div v-if="remoteRecovery.next_attempt_at">
+                  {{ t('tasks.remoteRecovery.nextAttempt', { time: formatTime(remoteRecovery.next_attempt_at) }) }}
+                </div>
+                <div v-if="remoteRecovery.last_error">
+                  {{ t('tasks.remoteRecovery.lastError', { error: remoteRecovery.last_error }) }}
+                </div>
+              </template>
+            </a-alert>
+          </div>
+
+          <div v-if="resourceWait" class="resource-wait-notice">
+            <a-alert type="info" show-icon>
+              <template #message>{{ t('tasks.resourceWait.title') }}</template>
+              <template #description>
+                <div>{{ resourceWaitText }}</div>
+                <div>{{ t('tasks.resourceWait.retryCount', { count: resourceWait.retry_count }) }}</div>
+                <div v-if="resourceWait.next_attempt_at">
+                  {{ t('tasks.resourceWait.nextAttempt', { time: formatTime(resourceWait.next_attempt_at) }) }}
+                </div>
+              </template>
+            </a-alert>
+          </div>
+
           <!-- 主体内容 -->
           <a-row :gutter="24">
             <!-- 左侧：任务信息 -->
@@ -348,6 +376,21 @@ const detailSubtitle = computed(() => {
   return `${getStatusText(taskStatus.value)} · ${formatTime(task.value.created_at)}`
 })
 const failureDiagnostics = computed(() => buildTaskFailureDiagnostics(task.value))
+const remoteRecovery = computed(() => {
+  const recovery = task.value?.remote_recovery
+  return recovery && recovery.failures > 0 ? recovery : null
+})
+const resourceWait = computed(() => {
+  const wait = task.value?.resource_wait
+  return taskStatus.value === 'pending' && wait ? wait : null
+})
+const resourceWaitText = computed(() => {
+  if (!resourceWait.value) return ''
+  if (resourceWait.value.reason === 'gpu_unavailable') {
+    return t('tasks.resourceWait.gpuUnavailable')
+  }
+  return t('tasks.resourceWait.title')
+})
 
 // 方法
 const getStatusColor = getTaskStatusColor
@@ -563,6 +606,10 @@ onUnmounted(() => {
       margin-right: @spacing-xs;
     }
   }
+}
+
+.recovery-notice {
+  margin-bottom: @spacing-xl;
 }
 
 // 信息卡片

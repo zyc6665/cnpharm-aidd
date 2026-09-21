@@ -137,7 +137,6 @@ def test_remote_tool_v1_template_runs_async_lifecycle_and_cancel():
 @pytest.mark.asyncio
 async def test_remote_tool_v1_template_runs_through_platform_client_and_executor(
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
 ):
     service = _load_service_module()
     remote_app = service.create_app()
@@ -158,11 +157,7 @@ async def test_remote_tool_v1_template_runs_through_platform_client_and_executor
         async with session_factory() as session:
             yield session
 
-    def fake_get_file_path(file_id: str, filename: str) -> Path:
-        return tmp_path / f"{file_id}_{filename}"
-
     monkeypatch.setattr("app.tasks.executors.remote_api.get_async_session", fake_get_async_session)
-    monkeypatch.setattr("app.tasks.executors.remote_api.get_file_path", fake_get_file_path)
 
     executor_transport = httpx.ASGITransport(app=remote_app)
     manifest_payload = discovery.manifest.model_dump(mode="json", by_alias=True)

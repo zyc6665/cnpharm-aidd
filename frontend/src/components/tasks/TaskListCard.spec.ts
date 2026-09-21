@@ -28,6 +28,7 @@ const stubs = {
   StopOutlined: true,
   SyncOutlined: true,
   ToolOutlined: true,
+  WarningOutlined: true,
 }
 
 function task(overrides: Partial<Task> = {}): Task {
@@ -100,5 +101,43 @@ describe('TaskListCard', () => {
     expect(wrapper.emitted('open')).toHaveLength(1)
     expect(wrapper.emitted('retry')).toHaveLength(1)
     expect(wrapper.emitted('delete')).toHaveLength(1)
+  })
+
+  it('shows remote recovery failures in the task summary', () => {
+    const wrapper = mount(TaskListCard, {
+      props: {
+        task: task({
+          remote_recovery: {
+            failures: 3,
+            next_attempt_at: '2026-09-20T12:03:00',
+            last_error: 'remote service unavailable',
+            alerted: false,
+          },
+        }),
+        actor: { isAdmin: false },
+      },
+      global: { stubs },
+    })
+
+    expect(wrapper.text()).toContain('tasks.remoteRecovery.failures')
+  })
+
+  it('shows resource wait status in the task summary', () => {
+    const wrapper = mount(TaskListCard, {
+      props: {
+        task: task({
+          status: 'pending',
+          resource_wait: {
+            reason: 'gpu_unavailable',
+            retry_count: 2,
+            next_attempt_at: '2026-09-20T12:03:00',
+          },
+        }),
+        actor: { isAdmin: false },
+      },
+      global: { stubs },
+    })
+
+    expect(wrapper.text()).toContain('tasks.resourceWait.nextAttempt')
   })
 })

@@ -1184,6 +1184,20 @@ export default {
     realTimeMonitor: 'Real-time Monitor',
     autoRefreshOn: 'Auto Refresh',
     autoRefreshOff: 'Manual',
+    remoteRecovery: {
+      title: 'Recovering remote task',
+      failures: 'The remote service is unavailable. Recovery has failed {count} consecutive times.',
+      nextAttempt: 'Next probe scheduled for {time}.',
+      lastError: 'Last error: {error}',
+      alertFilter: 'Recovery alert',
+      alertedOnly: 'Alerted tasks only'
+    },
+    resourceWait: {
+      title: 'Waiting for compute resources',
+      gpuUnavailable: 'GPU resources are temporarily unavailable. The task will retry automatically.',
+      nextAttempt: 'Next dispatch: {time}',
+      retryCount: 'Resource retry count: {count}'
+    },
     // Actions
     progress: 'Progress',
     logs: 'Logs',
@@ -1491,6 +1505,7 @@ export default {
     runningTasks: 'Running',
     pendingTasks: 'Pending',
     failedTasks: 'Failed',
+    remoteRecoveryAlerts: 'Recovery Alerts',
     searchTaskPlaceholder: 'Search task name or ID...',
     tool: 'Tool',
     user: 'User',

@@ -44,6 +44,7 @@ class TaskQueryInput:
     workflow_run_id: str | None = None
     workflow_definition_id: str | None = None
     workflow_node_id: str | None = None
+    remote_recovery_alerted: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -143,6 +144,11 @@ async def _build_task_statement(
 
     if query.tool_id:
         statement = statement.where(Task.tool_id == query.tool_id)
+
+    if query.remote_recovery_alerted:
+        statement = statement.where(
+            Task.extra_data["remote_recovery_alerted"].as_boolean().is_(True)
+        )
 
     if query.created_from:
         statement = statement.where(Task.created_at >= _naive_utc(query.created_from))

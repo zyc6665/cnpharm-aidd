@@ -27,7 +27,10 @@ class CacheBackend(ABC):
         self,
         key: str,
         value: Any,
-        expire: Optional[int] = None
+        expire: Optional[int] = None,
+        *,
+        nx: bool = False,
+        ex: Optional[int] = None,
     ) -> bool:
         """
         设置缓存值
@@ -40,6 +43,11 @@ class CacheBackend(ABC):
         Returns:
             是否成功
         """
+        pass
+
+    @abstractmethod
+    async def delete_if_value(self, key: str, value: Any) -> bool:
+        """仅当缓存值匹配时删除键。"""
         pass
 
     @abstractmethod

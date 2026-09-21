@@ -228,6 +228,120 @@ async def test_task_detail_returns_structured_failure_diagnostics(test_client):
 
 
 @pytest.mark.asyncio
+async def test_task_detail_exposes_remote_recovery_state_without_run_handle(test_client):
+    client, session_factory, current_user = test_client
+    seeded = await seed_visualization_task(session_factory, current_user)
+
+    async with session_factory() as session:
+        task = await session.get(Task, seeded["task_id"])
+        assert task is not None
+        task.status = "RUNNING"
+        task.extra_data = {
+            "project_id": "project-1",
+            "remote_run_id": "run-secret",
+            "remote_recovery_failures": 3,
+            "remote_recovery_next_attempt_at": "2026-09-20T12:03:00",
+            "remote_recovery_last_error": "remote service unavailable",
+            "remote_recovery_alerted": True,
+        }
+        await session.commit()
+
+    response = await client.get(f"/api/v1/tasks/{seeded['task_id']}")
+
+    assert response.status_code == 200
+    recovery = response.json()["data"]["remote_recovery"]
+    assert recovery == {
+        "failures": 3,
+        "next_attempt_at": "2026-09-20T12:03:00",
+        "last_error": "remote service unavailable",
+        "alerted": True,
+    }
+    assert "run-secret" not in response.text
+
+    list_response = await client.get("/api/v1/tasks?page=1&page_size=20")
+
+    assert list_response.status_code == 200
+    list_item = next(
+        item
+        for item in list_response.json()["data"]["items"]
+        if item["id"] == seeded["task_id"]
+    )
+    assert list_item["remote_recovery"] == recovery
+
+
+@pytest.mark.asyncio
+async def test_task_detail_exposes_resource_wait_state(test_client):
+    client, session_factory, current_user = test_client
+    seeded = await seed_visualization_task(session_factory, current_user)
+
+    async with session_factory() as session:
+        task = await session.get(Task, seeded["task_id"])
+        assert task is not None
+        task.status = "PENDING"
+        task.extra_data = {
+            "resource_wait_reason": "gpu_unavailable",
+            "resource_retry_count": 2,
+            "resource_retry_next_at": "2026-09-20T12:03:00",
+        }
+        await session.commit()
+
+    response = await client.get(f"/api/v1/tasks/{seeded['task_id']}")
+
+    assert response.status_code == 200
+    resource_wait = response.json()["data"]["resource_wait"]
+    assert resource_wait == {
+        "reason": "gpu_unavailable",
+        "retry_count": 2,
+        "next_attempt_at": "2026-09-20T12:03:00",
+    }
+
+    list_response = await client.get("/api/v1/tasks?page=1&page_size=20")
+    assert list_response.status_code == 200
+    list_item = next(
+        item
+        for item in list_response.json()["data"]["items"]
+        if item["id"] == seeded["task_id"]
+    )
+    assert list_item["resource_wait"] == resource_wait
+
+
+@pytest.mark.asyncio
+async def test_task_list_filters_remote_recovery_alerts(test_client):
+    client, session_factory, current_user = test_client
+    seeded = await seed_visualization_task(session_factory, current_user)
+    clean_task_id = str(uuid.uuid4())
+
+    async with session_factory() as session:
+        task = await session.get(Task, seeded["task_id"])
+        assert task is not None
+        task.status = "RUNNING"
+        task.extra_data = {
+            "remote_recovery_failures": 5,
+            "remote_recovery_alerted": True,
+        }
+        session.add(
+            Task(
+                id=clean_task_id,
+                user_id=current_user.id,
+                tool_id=seeded["tool_id"],
+                tool_version_id=task.tool_version_id,
+                status="RUNNING",
+                progress=0.5,
+                extra_data={},
+            )
+        )
+        await session.commit()
+
+    response = await client.get(
+        "/api/v1/tasks?page=1&page_size=20&remote_recovery_alerted=true"
+    )
+
+    assert response.status_code == 200
+    items = response.json()["data"]["items"]
+    assert [item["id"] for item in items] == [seeded["task_id"]]
+
+
+@pytest.mark.asyncio
 async def test_task_logs_endpoint_returns_paginated_items_with_metadata(test_client):
     client, session_factory, current_user = test_client
     seeded = await seed_visualization_task(session_factory, current_user)
