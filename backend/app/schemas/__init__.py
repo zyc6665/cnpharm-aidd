@@ -6,7 +6,8 @@ from app.schemas.users import (
 )
 from app.schemas.tools import (
     ToolCreate, ToolUpdate, ToolResponse, ToolListResponse,
-    ToolVersionCreate, ToolVersionResponse,
+    ToolVersionCreate, ToolVersionResponse, ToolVersionPublicResponse,
+    ToolPublicResponse, ToolListPublicResponse,
     TagCreate, TagResponse
 )
 from app.schemas.tasks import (
@@ -35,7 +36,8 @@ __all__ = [
     "TokenResponse",
     # Tools
     "ToolCreate", "ToolUpdate", "ToolResponse", "ToolListResponse",
-    "ToolVersionCreate", "ToolVersionResponse",
+    "ToolVersionCreate", "ToolVersionResponse", "ToolVersionPublicResponse",
+    "ToolPublicResponse", "ToolListPublicResponse",
     "TagCreate", "TagResponse",
     # Tasks
     "TaskCreate", "TaskResponse", "TaskListResponse",

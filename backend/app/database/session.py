@@ -58,8 +58,10 @@ async def init_db():
     开发环境保留 create_all 作为缺表兜底，生产和预发布环境依赖 Alembic 迁移。
     """
     from app.database.base import Base
-    # 导入所有模型以便注册
-    from app.models import agent, files, statistics, system_settings, tasks, tools, users, verification, workflows  # noqa
+    # 导入模型包以便注册所有声明的表。
+    from importlib import import_module
+
+    import_module("app.models")
 
     if settings.ENVIRONMENT != "development":
         logger.info("Skip create_all outside development; rely on Alembic migrations")

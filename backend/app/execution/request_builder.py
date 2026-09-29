@@ -17,6 +17,7 @@ from app.artifact_standards.registry import (
     get_standard_artifact_spec,
     parse_standard_ref,
 )
+from app.common.time import utcnow
 from app.execution.standard_contracts import (
     StandardExecutionContext,
     StandardExecutionRequest,
@@ -24,6 +25,7 @@ from app.execution.standard_contracts import (
     StandardInputArtifact,
     StandardTaskContext,
 )
+from app.files.file_records import is_file_usable
 from app.models.artifacts import ArtifactVersion, ArtifactVersionFile
 from app.models.files import File as FileModel
 from app.models.tasks import Task
@@ -114,6 +116,13 @@ async def _load_artifact_version(db: AsyncSession, version_id: str) -> ArtifactV
 
 
 def _validate_input_type(declaration: ArtifactInputV2, version: ArtifactVersion) -> None:
+    if version.status != "available":
+        raise StandardRequestBuilderError(
+            f"ArtifactVersion {version.id} is not available: {version.status}"
+        )
+    if version.expires_at is not None and version.expires_at <= utcnow():
+        raise StandardRequestBuilderError(f"ArtifactVersion {version.id} has expired")
+
     expected_ref = _parse_ref_for_error(declaration.type)
     actual_ref = _artifact_version_ref(version)
     if actual_ref != expected_ref:
@@ -122,6 +131,17 @@ def _validate_input_type(declaration: ArtifactInputV2, version: ArtifactVersion)
         )
 
     spec = get_standard_artifact_spec(expected_ref)
+    unavailable_roles = [
+        file_link.role
+        for file_link in version.files
+        if file_link.file is None or not is_file_usable(file_link.file)
+    ]
+    if unavailable_roles:
+        raise StandardRequestBuilderError(
+            f"Input {declaration.name} references unavailable file roles: "
+            + ", ".join(sorted(unavailable_roles))
+        )
+
     available_roles = {file_link.role for file_link in version.files}
     missing_roles = [
         role.role for role in spec.file_roles if role.required and role.role not in available_roles

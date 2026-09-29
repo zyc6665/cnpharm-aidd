@@ -6,10 +6,12 @@ import asyncio
 import contextlib
 import logging
 from collections.abc import Awaitable, Callable
+from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.cache import get_cache
 from app.config import settings
 from app.database.session import async_session_factory
 from app.models.users import User
@@ -21,6 +23,7 @@ from app.services.workflow_runs import sync_workflow_run
 logger = logging.getLogger(__name__)
 
 NON_TERMINAL_WORKFLOW_RUN_STATUSES = ("pending", "waiting_task")
+WORKFLOW_RECONCILE_LOCK_KEY = "workflow:reconcile:lock"
 
 ScheduleTaskFn = Callable[..., Awaitable[object]]
 
@@ -31,19 +34,32 @@ async def reconcile_waiting_workflow_runs(
     batch_size: int,
     schedule_task_fn: ScheduleTaskFn,
 ) -> int:
-    result = await db.execute(
-        select(WorkflowRun)
-        .where(WorkflowRun.status.in_(NON_TERMINAL_WORKFLOW_RUN_STATUSES))
-        .order_by(WorkflowRun.created_at.asc(), WorkflowRun.id.asc())
-        .limit(batch_size)
-    )
-    runs = list(result.scalars().all())
     processed = 0
+    processed_run_ids: set[str] = set()
 
-    for run in runs:
+    # Claim one run per transaction boundary. Downstream scheduling helpers
+    # commit their session, so selecting a whole batch up front would release
+    # locks for not-yet-processed rows and allow another instance to race.
+    while processed < max(int(batch_size), 0):
+        result = await db.execute(
+            select(WorkflowRun)
+            .where(
+                WorkflowRun.status.in_(NON_TERMINAL_WORKFLOW_RUN_STATUSES),
+                WorkflowRun.id.not_in(processed_run_ids),
+            )
+            .order_by(WorkflowRun.created_at.asc(), WorkflowRun.id.asc())
+            .limit(1)
+            .with_for_update(skip_locked=True)
+        )
+        run = result.scalar_one_or_none()
+        if run is None:
+            break
+        processed_run_ids.add(str(run.id))
+
         owner = await db.get(User, run.owner_id)
         if not owner:
             logger.warning("Skip workflow run %s because owner %s is missing", run.id, run.owner_id)
+            await db.commit()
             continue
 
         await sync_workflow_run(
@@ -61,12 +77,71 @@ async def reconcile_all_waiting_workflow_runs(
     *,
     batch_size: int | None = None,
 ) -> int:
+    cache = get_cache()
+    lock_token = uuid4().hex
+    lock_ttl = max(int(settings.WORKFLOW_RECONCILE_LOCK_TTL_SECONDS), 1)
+    acquired = await cache.set(
+        WORKFLOW_RECONCILE_LOCK_KEY,
+        lock_token,
+        ex=lock_ttl,
+        nx=True,
+    )
+    if not acquired:
+        logger.debug("Skip workflow reconciliation because another instance owns the lock")
+        return 0
+
+    renewal_task = asyncio.create_task(
+        _renew_workflow_lock(cache, lock_token, lock_ttl),
+        name="workflow-reconcile-lock-renewal",
+    )
+    reconcile_task = asyncio.create_task(
+        _reconcile_workflow_runs(batch_size=batch_size),
+        name="workflow-reconcile-work",
+    )
+    try:
+        done, _ = await asyncio.wait(
+            {reconcile_task, renewal_task},
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        if reconcile_task in done:
+            return await reconcile_task
+
+        renewal_error = renewal_task.exception()
+        if renewal_error is not None:
+            raise RuntimeError("Workflow reconcile lock renewal failed") from renewal_error
+        raise RuntimeError("Workflow reconcile lock was lost")
+    finally:
+        if not reconcile_task.done():
+            reconcile_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await reconcile_task
+        renewal_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await renewal_task
+        await cache.delete_if_value(WORKFLOW_RECONCILE_LOCK_KEY, lock_token)
+
+
+async def _reconcile_workflow_runs(*, batch_size: int | None) -> int:
     async with async_session_factory() as session:
         return await reconcile_waiting_workflow_runs(
             session,
             batch_size=batch_size or settings.WORKFLOW_RECONCILE_BATCH_SIZE,
             schedule_task_fn=create_and_schedule_tool_task,
         )
+
+
+async def _renew_workflow_lock(cache, lock_token: str, lock_ttl: int) -> None:
+    interval = max(lock_ttl / 3, 1.0)
+    while True:
+        await asyncio.sleep(interval)
+        renewed = await cache.expire_if_value(
+            WORKFLOW_RECONCILE_LOCK_KEY,
+            lock_token,
+            lock_ttl,
+        )
+        if not renewed:
+            logger.warning("Workflow reconcile lock was lost during renewal")
+            return
 
 
 class WorkflowReconcileLoop:
@@ -125,6 +200,7 @@ workflow_reconcile_loop = WorkflowReconcileLoop(
 
 __all__ = [
     "NON_TERMINAL_WORKFLOW_RUN_STATUSES",
+    "WORKFLOW_RECONCILE_LOCK_KEY",
     "WorkflowReconcileLoop",
     "reconcile_all_waiting_workflow_runs",
     "reconcile_waiting_workflow_runs",

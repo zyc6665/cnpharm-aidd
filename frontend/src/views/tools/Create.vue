@@ -20,7 +20,7 @@
             layout="vertical"
             @finish="handleSubmit"
           >
-            <template v-if="!isEdit">
+            <template v-if="showTemplateQuickStart">
               <a-divider orientation="left">药物研发工具模板</a-divider>
 
               <div class="drug-template-panel">
@@ -252,12 +252,21 @@
               description="模型部署时通过 adapter 把原始输入输出转换为平台标准 Artifact 输入/输出槽；下方旧版 ToolVersion.config 表单仅用于兼容已有工具。"
             />
 
+            <a-alert
+              v-if="registrationMode === 'package'"
+              type="success"
+              show-icon
+              :message="packageLoading ? '正在载入 Tool Package v2' : '已载入 Tool Package v2'"
+              description="manifest 会自动绑定到新版本。请继续填写执行器连接信息，保存后即可生成平台 ToolVersion。"
+            />
+
             <a-form-item label="工具类型" name="tool_type">
               <a-radio-group v-model:value="formState.tool_type">
                 <a-radio value="remote_api">远程API</a-radio>
                 <a-radio value="docker_image">Docker镜像</a-radio>
                 <a-radio value="python_script">Python脚本</a-radio>
                 <a-radio value="ssh_job">SSH作业</a-radio>
+                <a-radio value="k8s_job">Kubernetes Job</a-radio>
               </a-radio-group>
             </a-form-item>
 
@@ -442,6 +451,7 @@
                   </template>
                 </a-form-item>
               </template>
+
             </template>
 
             <!-- Docker配置 -->
@@ -686,6 +696,41 @@
               </a-row>
             </template>
 
+            <!-- Kubernetes Job 配置 -->
+            <template v-if="formState.tool_type === 'k8s_job'">
+              <a-divider orientation="left">Kubernetes Job 配置</a-divider>
+              <a-alert
+                type="info"
+                show-icon
+                message="受控集群执行"
+                description="镜像和资源档位由工具版本声明；集群、Namespace、ServiceAccount 与凭据由平台执行环境统一管理。"
+                class="executor-managed-alert"
+              />
+              <a-row :gutter="24">
+                <a-col :span="16">
+                  <a-form-item
+                    label="镜像 digest"
+                    name="k8s_image"
+                    :rules="[{ required: true, message: '请输入不可变镜像引用' }, { pattern: /@sha256:[a-fA-F0-9]{64}$/, message: '镜像必须使用完整 SHA-256 digest' }]"
+                  >
+                    <a-input
+                      v-model:value="formState.k8s_image"
+                      placeholder="registry.example/model@sha256:64 位 digest"
+                    />
+                  </a-form-item>
+                </a-col>
+                <a-col :span="8">
+                  <a-form-item
+                    label="资源档位"
+                    name="k8s_resource_profile"
+                    :rules="[{ required: true, message: '请输入资源档位' }]"
+                  >
+                    <a-input v-model:value="formState.k8s_resource_profile" placeholder="cpu-small / gpu-large" />
+                  </a-form-item>
+                </a-col>
+              </a-row>
+            </template>
+
             <template v-if="!isRemoteSelfRegister">
               <!-- 参数定义 -->
               <a-divider orientation="left">参数定义</a-divider>
@@ -849,6 +894,57 @@
               </template>
             </template>
 
+            <template v-if="formState.tool_type === 'remote_api'">
+              <a-divider orientation="left">远程服务容量</a-divider>
+              <a-form-item label="容量管理方式" name="remote_capacity_mode">
+                <a-select v-model:value="formState.remote_capacity_mode">
+                  <a-select-option value="unmanaged">不由平台管理</a-select-option>
+                  <a-select-option value="static">平台限制最大并发</a-select-option>
+                </a-select>
+                <template #extra>
+                  <span class="form-extra">
+                    静态并发适用于 AlphaFold 3、OpenDDE 等自建服务；相同服务必须使用相同容量组和并发上限。
+                  </span>
+                </template>
+              </a-form-item>
+              <template v-if="formState.remote_capacity_mode === 'static'">
+                <a-row :gutter="24">
+                  <a-col :span="12">
+                    <a-form-item
+                      label="容量共享组"
+                      name="remote_capacity_group"
+                      :rules="[{ required: true, message: '请输入容量共享组' }]"
+                    >
+                      <a-input
+                        v-model:value="formState.remote_capacity_group"
+                        placeholder="例如 alphafold3-production"
+                      />
+                    </a-form-item>
+                  </a-col>
+                  <a-col :span="6">
+                    <a-form-item label="最大并发" name="remote_max_inflight">
+                      <a-input-number
+                        v-model:value="formState.remote_max_inflight"
+                        :min="1"
+                        :max="1000"
+                        style="width: 100%"
+                      />
+                    </a-form-item>
+                  </a-col>
+                  <a-col :span="6">
+                    <a-form-item label="容量租约（秒）" name="remote_lease_ttl_sec">
+                      <a-input-number
+                        v-model:value="formState.remote_lease_ttl_sec"
+                        :min="60"
+                        :max="86400"
+                        style="width: 100%"
+                      />
+                    </a-form-item>
+                  </a-col>
+                </a-row>
+              </template>
+            </template>
+
             <!-- 提交按钮 -->
             <a-form-item class="form-actions">
               <a-space size="middle">
@@ -902,7 +998,9 @@
     type ToolConfigFormPatch,
     type ToolCreateFormState
   } from '@/domain/tools'
+  import type { ToolPackage } from '@/types/tool-packages'
   import { useToolsStore } from '@/stores'
+  import { getToolPackage } from '@/api/tool-packages'
   import {
     createTool,
     createToolDraftFromTemplate,
@@ -931,10 +1029,19 @@
   const originalChangelog = ref('')
   const originalNotes = ref('')
   const originalConfigSnapshot = ref('')
+  const packageManifest = ref<Record<string, unknown> | null>(null)
+  const packageLoading = ref(false)
 
   // 判断是编辑还是创建
   const isEdit = computed(() => route.name === 'AdminToolEdit' || route.name === 'ToolEdit')
   const toolId = computed(() => route.params.id as string)
+  const registrationMode = computed(() => {
+    const mode = route.query.mode
+    return mode === 'remote' || mode === 'advanced' || mode === 'template' || mode === 'package' ? mode : 'template'
+  })
+  const showTemplateQuickStart = computed(
+    () => !isEdit.value && registrationMode.value !== 'remote' && registrationMode.value !== 'advanced' && registrationMode.value !== 'package'
+  )
 
   // 表单状态
   const formState = reactive<ToolCreateFormState>(createToolCreateFormState())
@@ -1084,6 +1191,70 @@
     }
   }
 
+  const applyRegistrationMode = () => {
+    if (isEdit.value) {
+      return
+    }
+    if (registrationMode.value === 'remote') {
+      formState.tool_type = 'remote_api'
+      formState.remote_api_registration_mode = 'self_register'
+      formState.remote_capacity_mode = 'static'
+    } else if (registrationMode.value === 'advanced') {
+      formState.tool_type = 'remote_api'
+      formState.remote_api_registration_mode = 'manual'
+      formState.remote_capacity_mode = 'static'
+    } else if (registrationMode.value === 'package') {
+      formState.tool_type = 'ssh_job'
+      formState.remote_api_registration_mode = 'manual'
+    }
+  }
+
+  const loadToolPackage = async () => {
+    if (isEdit.value || registrationMode.value !== 'package') return
+    const packageId = String(route.query.package_id || '')
+    if (!packageId) return
+    packageLoading.value = true
+    try {
+      const response = await getToolPackage(packageId)
+      const pkg = response.data as ToolPackage
+      const version = pkg.current_version
+      if (!version?.manifest) {
+        message.error('Tool Package 当前没有可用 manifest')
+        return
+      }
+      packageManifest.value = version.manifest
+      formState.name = pkg.name
+      formState.slug = pkg.slug
+      formState.description = pkg.description || ''
+      formState.version = version.version
+      formState.notes = '由 Tool Package v2 导入'
+      const variants = Array.isArray(version.manifest.variants)
+        ? version.manifest.variants.filter(item => item && typeof item === 'object') as Array<Record<string, unknown>>
+        : []
+      const variant = variants[0]
+      if (variant) {
+        const entrypoint = Array.isArray(variant.entrypoint)
+          ? variant.entrypoint.map(item => String(item)).join(' ')
+          : ''
+        if (entrypoint) {
+          formState.ssh_entrypoint = entrypoint
+        }
+        const resources = variant.resources && typeof variant.resources === 'object'
+          ? variant.resources as Record<string, unknown>
+          : {}
+        const gpuMemory = Number(resources.gpu_memory_mb)
+        if (Number.isFinite(gpuMemory) && gpuMemory > 0) {
+          formState.gpu_required = true
+          formState.gpu_memory_mb = gpuMemory
+        }
+      }
+    } catch {
+      message.error('Tool Package 加载失败')
+    } finally {
+      packageLoading.value = false
+    }
+  }
+
   // 分类和标签
   const categories = computed(() => toolsStore.categories)
   const tags = computed(() => toolsStore.tags)
@@ -1136,7 +1307,8 @@
           originalVersion: originalVersion.value,
           originalChangelog: originalChangelog.value,
           originalNotes: originalNotes.value,
-          originalConfigSnapshot: originalConfigSnapshot.value
+          originalConfigSnapshot: originalConfigSnapshot.value,
+          toolPackageManifest: packageManifest.value || undefined
         })
       } catch (error) {
         message.error(formatToolCreateSubmissionErrorMessage(error))
@@ -1183,6 +1355,7 @@
   }
 
   onMounted(async () => {
+    applyRegistrationMode()
     // 加载分类和标签
     await Promise.all([
       toolsStore.fetchCategories(),
@@ -1193,6 +1366,8 @@
     // 编辑模式加载工具详情
     if (isEdit.value) {
       await loadToolDetail()
+    } else {
+      await loadToolPackage()
     }
   })
 </script>

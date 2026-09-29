@@ -97,7 +97,7 @@ async def get_workspace_overview(
         .where(
             File.owner_id == current_user.id,
             File.deleted_at.is_(None),
-            File.is_corrupted.is_(False),
+            or_(File.is_corrupted.is_(False), File.is_corrupted.is_(None)),
             or_(File.expires_at.is_(None), File.expires_at > utcnow()),
         )
         .order_by(File.updated_at.desc())

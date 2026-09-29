@@ -659,6 +659,58 @@ async def test_retry_task_uses_direct_runner_when_enabled(
 
 
 @pytest.mark.asyncio
+async def test_retry_waits_for_canceled_attempt_to_stop_and_clears_control(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    published_tool: Tool,
+    admin_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    runner = RecordingDirectRunner()
+    monkeypatch.setattr(config_settings, "TASK_EXECUTION_BACKEND", "direct", raising=False)
+    monkeypatch.setattr(tasks_api, "direct_task_runner", runner, raising=False)
+    task = Task(
+        user_id=admin_user.id,
+        tool_id=published_tool.id,
+        tool_version_id=published_tool.current_version_id,
+        status=TaskStatus.CANCELED.value,
+        priority="normal",
+        progress=0.0,
+        extra_data={
+            "execution_attempt_id": "attempt-old",
+            "execution_control": {
+                "state": "cancel_requested",
+                "attempt_id": "attempt-old",
+            },
+        },
+    )
+    db_session.add(task)
+    await db_session.flush()
+    db_session.add(TaskInput(task_id=task.id, params={"foo": "bar"}, file_ids=[]))
+    await db_session.commit()
+
+    blocked_response = await api_client.post(
+        f"/api/v1/tasks/{task.id}/retry",
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert blocked_response.status_code == 409
+    assert runner.scheduled == []
+
+    task.extra_data["execution_control"]["state"] = "released"
+    await db_session.commit()
+    retry_response = await api_client.post(
+        f"/api/v1/tasks/{task.id}/retry",
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert retry_response.status_code == 200
+    assert runner.scheduled == [(task.id, published_tool.current_version_id)]
+    await db_session.refresh(task)
+    assert "execution_control" not in task.extra_data
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("status", [TaskStatus.FAILURE.value, TaskStatus.CANCELED.value])
 async def test_retry_task_rejects_when_max_retries_reached(
     api_client: httpx.AsyncClient,

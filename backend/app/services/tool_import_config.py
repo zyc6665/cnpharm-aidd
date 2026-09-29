@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import shlex
 from pathlib import Path
 from typing import Any, Dict
@@ -20,7 +21,7 @@ class ToolImportConfigError(ValueError):
     """工具导入配置错误。"""
 
 
-SUPPORTED_TOOL_TYPES = {"remote_api", "docker_image", "python_script", "ssh_job"}
+SUPPORTED_TOOL_TYPES = {"remote_api", "docker_image", "python_script", "ssh_job", "k8s_job"}
 SUPPORTED_REMOTE_METHODS = {"GET", "POST"}
 SUPPORTED_SSH_RUNNER_MODES = {"docker_exec", "shell"}
 SUPPORTED_SSH_AUTH_TYPES = {"key", "password"}
@@ -100,6 +101,8 @@ def validate_tool_import_config(config: Dict[str, Any]) -> Dict[str, Any]:
         _validate_python_script_tool_config(tool_config)
     elif tool_type == "ssh_job":
         _validate_ssh_job_tool_config(tool_config)
+    elif tool_type == "k8s_job":
+        _validate_k8s_job_tool_config(tool_config)
 
     _validate_schema_object(tool_config, "input_schema")
     _validate_schema_object(tool_config, "output_schema")
@@ -143,6 +146,12 @@ def _validate_remote_api_tool_config(tool_config: Dict[str, Any]) -> None:
     if not isinstance(timeout_sec, int) or timeout_sec <= 0:
         raise ToolImportConfigError("tool_config.timeout_sec must be a positive integer")
     tool_config["timeout_sec"] = timeout_sec
+
+    from app.tasks.remote_capacity import validate_remote_capacity_policy
+
+    capacity_errors = validate_remote_capacity_policy(tool_config.get("capacity_policy"))
+    if capacity_errors:
+        raise ToolImportConfigError(capacity_errors[0])
 
 
 def _validate_docker_tool_config(tool_config: Dict[str, Any]) -> None:
@@ -234,6 +243,45 @@ def _validate_ssh_job_tool_config(tool_config: Dict[str, Any]) -> None:
                 raise ToolImportConfigError(
                     "tool_config.output_globs may only reference files under output/"
                 )
+
+
+def _validate_k8s_job_tool_config(tool_config: Dict[str, Any]) -> None:
+    """Validate an image runtime and approved Resource Profile reference."""
+    runtime = tool_config.get("runtime")
+    if not isinstance(runtime, dict):
+        raise ToolImportConfigError("tool_config.runtime is required for k8s_job")
+    image = runtime.get("image")
+    if not isinstance(image, str) or not re.search(r"@sha256:[a-fA-F0-9]{64}$", image):
+        raise ToolImportConfigError(
+            "tool_config.runtime.image must use an immutable sha256 digest for k8s_job"
+        )
+
+    resource_profile = tool_config.get("resource_profile")
+    if not isinstance(resource_profile, str) or not resource_profile.strip():
+        raise ToolImportConfigError(
+            "tool_config.resource_profile must reference an approved profile for k8s_job"
+        )
+    from app.tasks.resource_profile import resolve_registered_resource_profile
+
+    try:
+        resolve_registered_resource_profile(resource_profile)
+    except ValueError as exc:
+        raise ToolImportConfigError(str(exc)) from exc
+
+    for platform_field in (
+        "cluster_alias",
+        "namespace",
+        "credential_ref",
+        "service_account",
+        "token",
+        "private_key",
+        "password",
+        "credentials",
+    ):
+        if platform_field in tool_config:
+            raise ToolImportConfigError(
+                f"tool_config.{platform_field} is platform-managed for k8s_job"
+            )
 
 
 def _validate_schema_object(tool_config: Dict[str, Any], field_name: str) -> None:

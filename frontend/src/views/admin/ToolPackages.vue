@@ -4,7 +4,7 @@
       <template #actions>
         <a-button type="primary" @click="openCreateModal">
           <PlusOutlined />
-          注册 Tool Package v2
+          登记模型交付包
         </a-button>
       </template>
     </AppPageHeader>
@@ -13,8 +13,8 @@
       class="contract-alert"
       type="info"
       show-icon
-      message="新模型部署主路径：Tool Package v2"
-      description="在模型侧 adapter 中适配原始输入输出，平台只识别标准 Artifact 输入/输出槽；旧语义映射仅作为历史工具兼容路径。"
+      message="第一步：登记并校验模型交付物"
+      description="交付包包含运行环境、模型适配器和标准 Artifact 契约。发布交付包不会自动创建可运行工具；校验并发布后，请在详情中创建平台工具。"
     />
 
     <a-card>
@@ -75,7 +75,7 @@
 
     <a-modal
       v-model:open="createModalOpen"
-      title="注册 Tool Package v2"
+      title="登记模型交付包"
       :confirm-loading="saving"
       width="760px"
       @ok="handleCreatePackage"
@@ -89,7 +89,115 @@
         description="manifest 中声明标准 Artifact 输入/输出、runtime 与 variants；不要再为新工具维护旧语义映射。"
       />
       <a-form layout="vertical">
-        <a-form-item label="Tool Package manifest JSON">
+        <a-form-item label="注册方式">
+          <a-radio-group v-model:value="registrationEditor" button-style="solid">
+            <a-radio-button value="guided">向导生成</a-radio-button>
+            <a-radio-button value="json">粘贴 JSON</a-radio-button>
+          </a-radio-group>
+        </a-form-item>
+
+        <template v-if="registrationEditor === 'guided'">
+          <a-alert
+            class="guided-hint"
+            type="info"
+            show-icon
+            message="填写模型基本信息和运行资源，平台会生成 v2 manifest"
+            description="镜像 digest、权重清单和 fallback 包仍需填写真实值，避免发布不可复现的运行环境。"
+          />
+          <a-row :gutter="16">
+            <a-col :span="14">
+              <a-form-item label="工具名称" required>
+                <a-input v-model:value="guidedDraft.name" placeholder="例如：Pocket Prediction" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="10">
+              <a-form-item label="Slug" required>
+                <a-input v-model:value="guidedDraft.slug" placeholder="pocket-prediction" />
+              </a-form-item>
+            </a-col>
+          </a-row>
+          <a-row :gutter="16">
+            <a-col :span="12">
+              <a-form-item label="版本" required>
+                <a-input v-model:value="guidedDraft.version" placeholder="1.0.0" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item label="加速器">
+                <a-select v-model:value="guidedDraft.accelerator">
+                  <a-select-option value="cpu">CPU</a-select-option>
+                  <a-select-option value="nvidia_cuda">NVIDIA CUDA</a-select-option>
+                  <a-select-option value="haiguang_dcu">海光 DCU</a-select-option>
+                </a-select>
+              </a-form-item>
+            </a-col>
+          </a-row>
+          <a-form-item label="简介">
+            <a-textarea v-model:value="guidedDraft.description" :rows="2" placeholder="工具用途和适用场景" />
+          </a-form-item>
+          <a-row :gutter="16">
+            <a-col :span="12">
+              <a-form-item label="输入 Artifact" required>
+                <a-input v-model:value="guidedDraft.inputName" addon-before="名称" />
+                <a-input v-model:value="guidedDraft.inputType" addon-before="类型" class="stacked-input" placeholder="protein_structure@1" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item label="输出 Artifact" required>
+                <a-input v-model:value="guidedDraft.outputName" addon-before="名称" />
+                <a-input v-model:value="guidedDraft.outputType" addon-before="类型" class="stacked-input" placeholder="run_report@1" />
+              </a-form-item>
+            </a-col>
+          </a-row>
+          <a-row :gutter="16">
+            <a-col :span="14">
+              <a-form-item label="容器镜像" required>
+                <a-input v-model:value="guidedDraft.image" placeholder="registry.example.com/model:1.0.0" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="10">
+              <a-form-item label="Python">
+                <a-input v-model:value="guidedDraft.python" placeholder="3.11" />
+              </a-form-item>
+            </a-col>
+          </a-row>
+          <a-form-item label="镜像 digest" required>
+            <a-input v-model:value="guidedDraft.imageDigest" placeholder="sha256 加 64 位十六进制摘要" />
+          </a-form-item>
+          <a-row :gutter="16">
+            <a-col :span="12">
+              <a-form-item label="CPU 核数">
+                <a-input-number v-model:value="guidedDraft.cpu" :min="0.1" :step="0.5" style="width: 100%" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item label="内存（MB）">
+                <a-input-number v-model:value="guidedDraft.memoryMb" :min="128" :step="128" style="width: 100%" />
+              </a-form-item>
+            </a-col>
+          </a-row>
+          <a-form-item label="Entry point">
+            <a-input v-model:value="guidedDraft.entrypoint" placeholder="python -m adapter" />
+          </a-form-item>
+          <a-collapse ghost>
+            <a-collapse-panel key="runtime" header="高级运行时字段（发布前必填）">
+              <a-form-item label="Fallback 包 URI" required>
+                <a-input v-model:value="guidedDraft.fallbackUri" placeholder="s3://bucket/runtime.venv.tar.gz" />
+              </a-form-item>
+              <a-form-item label="Fallback SHA256" required>
+                <a-input v-model:value="guidedDraft.fallbackSha256" />
+              </a-form-item>
+              <a-form-item label="权重清单 URI" required>
+                <a-input v-model:value="guidedDraft.weightsUri" placeholder="s3://bucket/weights/manifest.json" />
+              </a-form-item>
+              <a-form-item label="权重清单 SHA256" required>
+                <a-input v-model:value="guidedDraft.weightsSha256" />
+              </a-form-item>
+            </a-collapse-panel>
+          </a-collapse>
+        </template>
+
+        <a-form-item v-else label="Tool Package manifest JSON">
           <a-textarea
             v-model:value="manifestText"
             :rows="16"
@@ -126,6 +234,18 @@
               {{ selectedPackage.status }}
             </a-descriptions-item>
           </a-descriptions>
+          <p class="next-step-hint">
+            {{ selectedPackage.status === 'published'
+              ? '交付包已发布，可以创建平台工具并配置分类与执行方式。'
+              : '完成签名、校验并发布交付包后，即可创建平台工具。' }}
+          </p>
+          <router-link
+            v-if="selectedPackage.status === 'published'"
+            :to="{ path: '/admin/tools/create', query: { mode: 'package', package_id: selectedPackage.id } }"
+          >
+            <a-button type="primary">创建平台工具</a-button>
+          </router-link>
+          <a-button v-else type="primary" disabled>创建平台工具</a-button>
         </section>
 
         <section class="detail-section">
@@ -206,6 +326,10 @@
     getToolPackageValidationErrors,
     getToolPackageVariantSummary
   } from '@/domain/tool-packages'
+  import {
+    buildToolPackageManifest,
+    createToolPackageGuidedDraft
+  } from '@/domain/tool-packages/manifest'
   import type { ToolPackage } from '@/types/tool-packages'
 
   const { t } = useI18n()
@@ -221,6 +345,8 @@
   const pageSize = ref(20)
   const manifestText = ref('')
   const signatureText = ref('')
+  const registrationEditor = ref<'guided' | 'json'>('guided')
+  const guidedDraft = ref(createToolPackageGuidedDraft())
 
   const columns = [
     { title: 'Tool Package', key: 'package' },
@@ -274,27 +400,34 @@
     createModalOpen.value = false
     manifestText.value = ''
     signatureText.value = ''
+    registrationEditor.value = 'guided'
+    guidedDraft.value = createToolPackageGuidedDraft()
   }
 
   async function handleCreatePackage() {
     let manifest: Record<string, unknown>
-    try {
-      manifest = JSON.parse(manifestText.value) as Record<string, unknown>
-    } catch {
-      message.error('manifest JSON 格式不正确')
-      return
+    if (registrationEditor.value === 'guided') {
+      manifest = buildToolPackageManifest(guidedDraft.value)
+    } else {
+      try {
+        manifest = JSON.parse(manifestText.value) as Record<string, unknown>
+      } catch {
+        message.error('manifest JSON 格式不正确')
+        return
+      }
     }
 
     saving.value = true
     try {
-      await createToolPackage({
+      const response = await createToolPackage({
         manifest,
         signature: signatureText.value.trim() || null
       })
-      message.success('Tool Package 已注册')
+      message.success('模型交付包已登记')
       resetCreateModal()
       page.value = 1
       await loadPackages()
+      await openDetail(response.data)
     } catch (cause) {
       message.error(cause instanceof Error ? cause.message : 'Tool Package 注册失败')
     } finally {
@@ -347,8 +480,13 @@
   }
 
   .contract-alert,
-  .modal-alert {
+  .modal-alert,
+  .guided-hint {
     margin-bottom: @spacing-sm;
+  }
+
+  .stacked-input {
+    margin-top: @spacing-xs;
   }
 
   .package-cell strong,

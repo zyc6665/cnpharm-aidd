@@ -97,6 +97,9 @@ async def seed_visualization_task(
             version="1.0.0",
             config={
                 "type": "python_script",
+                "endpoint": "https://internal.example/run",
+                "headers": {"Authorization": "Bearer secret"},
+                "script_content": "private script",
                 "input_schema": {"type": "object", "properties": {}},
                 "output_schema": {
                     "type": "object",
@@ -189,6 +192,9 @@ async def test_task_detail_returns_visualization_ready_payload(test_client):
     assert payload["output_files"][0]["sha256"] == "b" * 64
     assert payload["output_files"][0]["url"] == f"/api/v1/files/{seeded['output_file_id']}/download"
     assert payload["tool"]["current_version"]["config"]["output_schema"]["viewer_hint"] == "molecule"
+    assert "endpoint" not in payload["tool"]["current_version"]["config"]
+    assert "headers" not in payload["tool"]["current_version"]["config"]
+    assert "script_content" not in payload["tool"]["current_version"]["config"]
 
 
 @pytest.mark.asyncio
@@ -303,6 +309,99 @@ async def test_task_detail_exposes_resource_wait_state(test_client):
         if item["id"] == seeded["task_id"]
     )
     assert list_item["resource_wait"] == resource_wait
+
+
+@pytest.mark.asyncio
+async def test_task_detail_exposes_quota_wait_reason(test_client):
+    client, session_factory, current_user = test_client
+    seeded = await seed_visualization_task(session_factory, current_user)
+
+    async with session_factory() as session:
+        task = await session.get(Task, seeded["task_id"])
+        assert task is not None
+        task.status = "PENDING"
+        task.extra_data = {
+            "resource_wait_reason": "worker_capability_unavailable",
+            "resource_wait_code": "user_cpu_quota_exhausted",
+            "resource_wait_category": "quota",
+            "resource_wait_scope": "user",
+            "resource_wait_dimension": "cpu",
+            "resource_retry_count": 3,
+            "resource_retry_next_at": "2026-09-22T12:03:00",
+        }
+        await session.commit()
+
+    response = await client.get(f"/api/v1/tasks/{seeded['task_id']}")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["resource_wait"] == {
+        "reason": "user_cpu_quota_exhausted",
+        "retry_count": 3,
+        "next_attempt_at": "2026-09-22T12:03:00",
+        "category": "quota",
+        "scope": "user",
+        "dimension": "cpu",
+        "legacy_reason": "worker_capability_unavailable",
+    }
+
+
+@pytest.mark.asyncio
+async def test_task_list_filters_resource_wait_category_and_exposes_stats(test_client):
+    client, session_factory, current_user = test_client
+    seeded = await seed_visualization_task(session_factory, current_user)
+
+    async with session_factory() as session:
+        task = await session.get(Task, seeded["task_id"])
+        assert task is not None
+        task.status = "PENDING"
+        task.extra_data = {
+            "resource_wait_reason": "worker_capability_unavailable",
+            "resource_wait_code": "user_cpu_quota_exhausted",
+            "resource_wait_category": "quota",
+            "resource_wait_scope": "user",
+            "resource_wait_dimension": "cpu",
+            "resource_retry_count": 1,
+            "resource_retry_next_at": "2026-09-22T12:03:00",
+        }
+        session.add(
+            Task(
+                id=str(uuid.uuid4()),
+                user_id=current_user.id,
+                tool_id=task.tool_id,
+                tool_version_id=task.tool_version_id,
+                status="PENDING",
+                progress=0.0,
+                extra_data={
+                    "resource_wait_reason": "gpu_unavailable",
+                    "resource_wait_code": "gpu_unavailable",
+                    "resource_wait_category": "gpu",
+                    "resource_wait_dimension": "gpu",
+                    "resource_retry_count": 1,
+                    "resource_retry_next_at": "2026-09-22T12:04:00",
+                },
+            )
+        )
+        await session.commit()
+
+    filtered = await client.get(
+        "/api/v1/tasks",
+        params={"resource_wait_category": "quota", "page": 1, "page_size": 20},
+    )
+    assert filtered.status_code == 200
+    assert [item["id"] for item in filtered.json()["data"]["items"]] == [
+        seeded["task_id"]
+    ]
+
+    stats = await client.get("/api/v1/tasks/resource-wait-stats")
+    assert stats.status_code == 200
+    assert stats.json()["data"] == {
+        "total": 2,
+        "by_category": {"gpu": 1, "quota": 1},
+        "by_reason": {
+            "gpu_unavailable": 1,
+            "user_cpu_quota_exhausted": 1,
+        },
+    }
 
 
 @pytest.mark.asyncio

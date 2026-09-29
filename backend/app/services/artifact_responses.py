@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlalchemy import inspect
 
+from app.files.file_records import is_file_usable
 from app.models.artifacts import Artifact, ArtifactVersionFile
 
 
@@ -157,6 +158,7 @@ def _version_files_data(
             file_link=file_link,
         )
         for file_link in version.files
+        if file_link.file is not None and is_file_usable(file_link.file)
     ]
 
 

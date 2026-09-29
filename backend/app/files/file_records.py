@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+from datetime import UTC, datetime
 
+from app.common.time import utcnow
 from app.files.storage_path import get_file_path
 
 
@@ -34,3 +36,20 @@ def user_can_manage_file(file_record: Any, user: Any | None) -> bool:
     if user is None:
         return False
     return file_record.owner_id == user.id or user.role == "admin"
+
+
+def is_file_usable(file_record: Any, *, now: datetime | None = None) -> bool:
+    """Return whether a file may be read or bound to a new task."""
+    if getattr(file_record, "deleted_at", None) is not None:
+        return False
+    if bool(getattr(file_record, "is_corrupted", False)):
+        return False
+    expires_at = getattr(file_record, "expires_at", None)
+    if expires_at is None:
+        return True
+    current = now if now is not None else utcnow()
+    if expires_at.tzinfo is not None:
+        expires_at = expires_at.astimezone(UTC).replace(tzinfo=None)
+    if current.tzinfo is not None:
+        current = current.astimezone(UTC).replace(tzinfo=None)
+    return expires_at > current

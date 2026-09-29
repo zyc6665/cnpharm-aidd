@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
 from types import SimpleNamespace
-from typing import Any
 
 from fastapi import HTTPException
 from sqlalchemy import select, update
@@ -47,10 +47,10 @@ from app.tasks.naming import (
 )
 from app.tasks.resource_profile import (
     ResourceRequest,
-    build_resource_request,
     build_task_resource_snapshot,
+    resource_request_from_snapshot,
 )
-from app.tasks.resource_admission import ResourceAdmissionPolicy
+from app.tasks.resource_lease import WorkerResourceLeaseManager
 from app.tasks.worker_capability_registry import WorkerCapabilityRegistry
 from app.tasks.state_machine import TaskStateMachine
 
@@ -104,60 +104,43 @@ def _resource_request_from_snapshot(
     tool_version: ToolVersion,
     resource_snapshot: dict[str, object],
 ) -> ResourceRequest:
-    payload = resource_snapshot.get("resource_request")
-    required_fields = {
-        "executor_type",
-        "tier",
-        "cpu",
-        "memory_gb",
-        "cpu_limit",
-        "memory_limit",
-        "gpu_required",
-        "gpu_count",
-        "gpu_memory_mb",
-        "timeout_sec",
-        "parallelism",
-    }
-    if isinstance(payload, dict) and required_fields.issubset(payload):
-        try:
-            return ResourceRequest(
-                executor_type=payload.get("executor_type"),
-                tier=payload.get("tier"),
-                cpu=float(payload["cpu"]) if payload["cpu"] is not None else None,
-                memory_gb=(
-                    float(payload["memory_gb"])
-                    if payload["memory_gb"] is not None
-                    else None
-                ),
-                cpu_limit=(
-                    float(payload["cpu_limit"])
-                    if payload["cpu_limit"] is not None
-                    else None
-                ),
-                memory_limit=payload.get("memory_limit"),
-                gpu_required=bool(payload["gpu_required"]),
-                gpu_count=int(payload["gpu_count"]),
-                gpu_memory_mb=int(payload["gpu_memory_mb"]),
-                timeout_sec=int(payload["timeout_sec"]),
-                parallelism=int(payload["parallelism"]),
-            )
-        except (TypeError, ValueError):
-            pass
+    return resource_request_from_snapshot(tool_version.config, resource_snapshot)
 
-    fallback_kwargs: dict[str, object] = {}
-    gpu_required = resource_snapshot.get("gpu_required")
-    gpu_memory_mb = resource_snapshot.get("gpu_memory_mb")
-    if isinstance(gpu_required, bool):
-        fallback_kwargs["gpu_required"] = gpu_required
-    if isinstance(gpu_memory_mb, (int, float)):
-        fallback_kwargs["gpu_memory_mb"] = int(gpu_memory_mb)
-    return build_resource_request(tool_version.config, **fallback_kwargs)
+
+def _enqueue_task_with_optional_priority(
+    callback,
+    *,
+    enqueue_kwargs: dict[str, object],
+    attempt_id: str,
+):
+    """兼容未升级的 enqueue_task 调用方，同时支持新的 priority 参数。"""
+    kwargs = dict(enqueue_kwargs)
+    try:
+        parameters = inspect.signature(callback).parameters.values()
+    except (TypeError, ValueError):
+        parameters = ()
+
+    accepts_priority = any(
+        parameter.name == "priority"
+        or parameter.kind == inspect.Parameter.VAR_KEYWORD
+        for parameter in parameters
+    )
+    if not accepts_priority:
+        kwargs.pop("priority", None)
+    return invoke_with_optional_attempt(
+        callback,
+        **kwargs,
+        attempt_id=attempt_id,
+    )
 
 
 async def _resource_admission_metadata(
     *,
     tool_version: ToolVersion,
     resource_snapshot: dict[str, object],
+    reservation_id: str | None = None,
+    user_id: str | None = None,
+    project_id: str | None = None,
 ) -> dict[str, object] | None:
     """评估当前在线 Worker，但只记录结果，不阻断任务入队。"""
     if not settings.WORKER_CAPABILITY_ADMISSION_ENABLED:
@@ -174,21 +157,45 @@ async def _resource_admission_metadata(
             cache=get_cache(),
             ttl_seconds=settings.WORKER_CAPABILITY_TTL_SECONDS,
         )
-        capabilities = await registry.list_active()
-        if not capabilities:
+        if (
+            settings.WORKER_CAPABILITY_RESERVATION_ENABLED
+            and reservation_id
+        ):
+            decision = await registry.reserve_worker(
+                request,
+                reservation_id=reservation_id,
+                ttl_seconds=settings.RESOURCE_DISPATCH_RESERVATION_TTL_SECONDS,
+                user_id=user_id,
+                project_id=project_id,
+            )
+        else:
+            decision = await registry.select_available_worker(request)
+        if decision.reason == "no_registered_workers":
             return {
                 "status": "unknown",
                 "worker_id": None,
                 "reason": "no_registered_workers",
             }
 
-        decision = ResourceAdmissionPolicy.select_worker(request, capabilities)
         if decision.admitted:
-            return {
+            metadata: dict[str, object] = {
                 "status": "admitted",
                 "worker_id": decision.worker_id,
                 "reason": None,
             }
+            if settings.WORKER_CAPABILITY_ROUTING_ENABLED and decision.queue:
+                metadata["queue"] = decision.queue
+            if (
+                settings.WORKER_CAPABILITY_RESERVATION_ENABLED
+                and reservation_id
+            ):
+                metadata["resource_reservation"] = {
+                    "worker_id": decision.worker_id,
+                    "lease_id": reservation_id,
+                    "ttl_seconds": settings.RESOURCE_DISPATCH_RESERVATION_TTL_SECONDS,
+                    "status": "reserved",
+                }
+            return metadata
 
         return {
             "status": "rejected",
@@ -220,6 +227,7 @@ async def dispatch_tool_task(
     countdown: int = 0,
 ) -> None:
     """Dispatch a persisted task and keep dispatch metadata in sync."""
+    reservation_metadata: dict[str, object] | None = None
     try:
         attempt_id = new_execution_attempt_id()
         set_execution_attempt_id(task, attempt_id)
@@ -255,12 +263,40 @@ async def dispatch_tool_task(
         dispatch_metadata: dict[str, object] = {
             "mode": "celery",
             "queue": queue,
-            "queue_priority": TaskQueueManager.get_queue_priority(queue),
         }
         admission_metadata = await _resource_admission_metadata(
             tool_version=tool_version,
             resource_snapshot=snapshot,
+            reservation_id=f"{task.id}:{attempt_id}",
+            user_id=str(getattr(task, "user_id", "") or "") or None,
+            project_id=str(getattr(task, "project_id", "") or "") or None,
         )
+        if isinstance(admission_metadata, dict):
+            candidate = admission_metadata.pop("resource_reservation", None)
+            if isinstance(candidate, dict):
+                reservation_metadata = candidate
+                dispatch_metadata["resource_reservation"] = candidate
+        if (
+            settings.WORKER_CAPABILITY_ROUTING_ENABLED
+            and isinstance(admission_metadata, dict)
+            and isinstance(admission_metadata.get("queue"), str)
+            and admission_metadata["queue"].strip()
+        ):
+            queue = admission_metadata["queue"].strip()
+            dispatch_metadata["queue"] = queue
+        priority_details = TaskQueueManager.get_dispatch_priority_details(
+            queue,
+            task_priority=task.priority,
+            created_at=getattr(task, "created_at", None),
+        )
+        dispatch_metadata["queue_priority"] = priority_details["priority"]
+        if priority_details["priority_boost"] > 0:
+            dispatch_metadata.update(
+                {
+                    "wait_seconds": priority_details["wait_seconds"],
+                    "priority_boost": priority_details["priority_boost"],
+                }
+            )
         if admission_metadata is not None:
             dispatch_metadata["resource_admission"] = admission_metadata
         _set_task_extra_data(task, dispatch=dispatch_metadata)
@@ -269,12 +305,13 @@ async def dispatch_tool_task(
             "task_id": str(task.id),
             "tool_version_id": str(tool_version.id),
             "queue": queue,
+            "priority": int(dispatch_metadata["queue_priority"]),
         }
         if countdown > 0:
             enqueue_kwargs["countdown"] = int(countdown)
-        celery_task = invoke_with_optional_attempt(
+        celery_task = _enqueue_task_with_optional_priority(
             TaskQueueManager.enqueue_task,
-            **enqueue_kwargs,
+            enqueue_kwargs=enqueue_kwargs,
             attempt_id=attempt_id,
         )
 
@@ -283,6 +320,20 @@ async def dispatch_tool_task(
         logger.info("Task %s enqueued to %s", task.id, queue)
     except Exception as exc:
         logger.error("Failed to dispatch task %s: %s", task.id, exc)
+        if reservation_metadata:
+            try:
+                from app.cache import get_cache
+
+                await WorkerResourceLeaseManager(cache=get_cache()).release(
+                    worker_id=str(reservation_metadata.get("worker_id") or ""),
+                    lease_id=str(reservation_metadata.get("lease_id") or ""),
+                )
+            except Exception as release_exc:
+                logger.warning(
+                    "Failed to release dispatch reservation for task %s: %s",
+                    task.id,
+                    release_exc,
+                )
         TaskStateMachine.complete(
             task,
             success=False,

@@ -463,7 +463,7 @@ class LogRotationManager:
         cleaned = 0
         cutoff = utcnow() - timedelta(days=max_age_days)
 
-        for name, handler in self._handlers.items():
+        for handler in self._handlers.values():
             if hasattr(handler, "baseFilename"):
                 dir_path = os.path.dirname(handler.baseFilename)
                 if not os.path.exists(dir_path):

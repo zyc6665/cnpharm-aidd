@@ -61,6 +61,9 @@
           <div v-if="resourceWait" class="detail-item resource-wait-detail">
             <ClockCircleOutlined />
             {{ resourceWaitText }}
+            <span v-if="resourceWait.scope && resourceWait.dimension">
+              · {{ resourceWaitScopeText }} / {{ resourceWaitDimensionText }}
+            </span>
             <span v-if="resourceWait.next_attempt_at">
               · {{ t('tasks.resourceWait.nextAttempt', { time: formatTime(resourceWait.next_attempt_at) }) }}
             </span>
@@ -193,10 +196,29 @@
   })
   const resourceWaitText = computed(() => {
     if (!resourceWait.value) return ''
+    if (resourceWait.value.category === 'quota') {
+      return t('tasks.resourceWait.quotaExceeded')
+    }
+    if (resourceWait.value.category === 'worker_capacity') {
+      return t('tasks.resourceWait.workerCapacity')
+    }
     if (resourceWait.value.reason === 'gpu_unavailable') {
       return t('tasks.resourceWait.gpuUnavailable')
     }
+    if (resourceWait.value.category === 'scheduler') {
+      return t('tasks.resourceWait.schedulerBusy')
+    }
     return t('tasks.resourceWait.title')
+  })
+  const resourceWaitScopeText = computed(() => {
+    if (resourceWait.value?.scope === 'user') return t('tasks.resourceWait.userScope')
+    if (resourceWait.value?.scope === 'project') return t('tasks.resourceWait.projectScope')
+    return resourceWait.value?.scope || ''
+  })
+  const resourceWaitDimensionText = computed(() => {
+    const dimension = resourceWait.value?.dimension
+    if (!dimension) return ''
+    return t('tasks.resourceWait.dimensions.' + dimension)
   })
 
   const formatTime = formatTaskDetailTime

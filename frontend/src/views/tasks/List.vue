@@ -445,21 +445,33 @@
   }
 
   const handleCancel = async (id: string) => {
-    await tasksStore.cancelTask(id)
-    message.success(t('tasks.cancelSuccess'))
-    await fetchTasksAndCountsSafely()
+    try {
+      await tasksStore.cancelTask(id)
+      message.success(t('tasks.cancelSuccess'))
+      await fetchTasksAndCountsSafely()
+    } catch {
+      // 请求层已经展示具体错误，避免失败时误报成功。
+    }
   }
 
   const handleRetry = async (id: string) => {
-    await tasksStore.retryTask(id)
-    message.success(t('tasks.retrySuccess'))
-    await fetchTasksAndCountsSafely()
+    try {
+      await tasksStore.retryTask(id)
+      message.success(t('tasks.retrySuccess'))
+      await fetchTasksAndCountsSafely()
+    } catch {
+      // 请求层已经展示具体错误，避免失败时误报成功。
+    }
   }
 
   const handleDelete = async (id: string) => {
-    await tasksStore.deleteTask(id)
-    message.success(t('tasks.deleteSuccess'))
-    await fetchTasksAndCountsSafely()
+    try {
+      await tasksStore.deleteTask(id)
+      message.success(t('tasks.deleteSuccess'))
+      await fetchTasksAndCountsSafely()
+    } catch {
+      // 请求层已经展示具体错误，避免失败时误报成功。
+    }
   }
 
   const goToDetail = (id: string) => {

@@ -14,6 +14,7 @@ from app.artifact_standards.registry import (
     parse_standard_ref,
 )
 from app.common.exceptions import ValidationException
+from app.files.file_records import is_file_usable
 from app.models.files import File as FileModel
 from app.services.run_input_normalization import normalize_string_mapping
 from app.services.standard_input_slots import (
@@ -185,6 +186,11 @@ async def _load_standard_upload_file(
         raise ValidationException(
             "标准 Artifact 上传文件不存在",
             detail={"missing_file_id": file_id},
+        )
+    if not is_file_usable(file_record):
+        raise ValidationException(
+            "标准 Artifact 上传文件不可用",
+            detail={"unusable_file_ids": [file_id]},
         )
     if (
         project_id

@@ -267,3 +267,83 @@ async def test_resolver_loads_artifact_version_roles_from_database(
     assert decision.selected_role == "prepared_pdb"
     assert decision.selected_file_id == prepared_file.id
     assert decision.artifact_version_id == version.id
+
+
+@pytest.mark.asyncio
+async def test_resolver_rejects_expired_artifact_version(
+    resolver_db: AsyncSession,
+) -> None:
+    from datetime import timedelta
+
+    from app.common.time import utcnow
+
+    version, _ = await _seed_prepared_protein_version(resolver_db)
+    version.expires_at = utcnow() - timedelta(seconds=1)
+
+    decision = await resolve_artifact_binding(
+        resolver_db,
+        input_slot={
+            "name": "protein",
+            "type": "protein_structure@1",
+            "readiness_policy": "require_prepared",
+        },
+        candidate_artifact_version_id=version.id,
+    )
+
+    assert decision.status == "invalid"
+    assert "expired" in decision.reason.lower()
+
+
+@pytest.mark.asyncio
+async def test_resolver_rejects_unavailable_artifact_version(
+    resolver_db: AsyncSession,
+) -> None:
+    version, _ = await _seed_prepared_protein_version(resolver_db)
+    version.status = "pending"
+    await resolver_db.flush()
+
+    decision = await resolve_artifact_binding(
+        resolver_db,
+        input_slot={
+            "name": "protein",
+            "type": "protein_structure@1",
+            "readiness_policy": "require_prepared",
+        },
+        candidate_artifact_version_id=version.id,
+    )
+
+    assert decision.status == "invalid"
+    assert "not available" in decision.reason.lower()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("lifecycle_change", ["expired", "deleted", "corrupted"])
+async def test_resolver_rejects_unusable_artifact_role_file(
+    resolver_db: AsyncSession,
+    lifecycle_change: str,
+) -> None:
+    from datetime import timedelta
+
+    from app.common.time import utcnow
+
+    version, prepared_file = await _seed_prepared_protein_version(resolver_db)
+    if lifecycle_change == "expired":
+        prepared_file.expires_at = utcnow() - timedelta(seconds=1)
+    elif lifecycle_change == "deleted":
+        prepared_file.deleted_at = utcnow()
+    else:
+        prepared_file.is_corrupted = True
+    await resolver_db.flush()
+
+    decision = await resolve_artifact_binding(
+        resolver_db,
+        input_slot={
+            "name": "protein",
+            "type": "protein_structure@1",
+            "readiness_policy": "require_prepared",
+        },
+        candidate_artifact_version_id=version.id,
+    )
+
+    assert decision.status == "invalid"
+    assert "unavailable" in decision.reason.lower()

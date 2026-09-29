@@ -1,4 +1,4 @@
-export type ToolVersionConfigType = 'remote_api' | 'docker_image' | 'python_script' | 'ssh_job'
+export type ToolVersionConfigType = 'remote_api' | 'docker_image' | 'python_script' | 'ssh_job' | 'k8s_job'
 
 export interface BuildToolVersionConfigInput {
   toolType: ToolVersionConfigType
@@ -12,6 +12,7 @@ export interface BuildToolVersionConfigInput {
   apiEndpoint?: string
   apiMethod?: 'GET' | 'POST'
   apiHeaders?: Record<string, string>
+  remoteCapacityPolicy?: Record<string, unknown>
   dockerImage?: string
   dockerCommand?: string[]
   dockerEnv?: Record<string, string>
@@ -33,6 +34,9 @@ export interface BuildToolVersionConfigInput {
   sshStrictHostKeyChecking?: boolean
   sshEnv?: Record<string, string>
   sshOutputGlobs?: string[]
+  k8sImage?: string
+  k8sResourceProfile?: string
+  toolPackageManifest?: Record<string, unknown>
 }
 
 export function buildToolVersionConfig(
@@ -55,11 +59,17 @@ export function buildToolVersionConfig(
   if (input.gpuMemoryMb !== undefined) {
     config.gpu_memory_mb = input.gpuMemoryMb
   }
+  if (input.toolPackageManifest) {
+    config.tool_package_manifest = input.toolPackageManifest
+  }
 
   if (input.toolType === 'remote_api') {
     config.endpoint = input.apiEndpoint
     config.method = input.apiMethod
     assignNonEmptyRecord(config, 'headers', input.apiHeaders)
+    if (input.remoteCapacityPolicy?.mode && input.remoteCapacityPolicy.mode !== 'unmanaged') {
+      config.capacity_policy = input.remoteCapacityPolicy
+    }
   } else if (input.toolType === 'docker_image') {
     config.image = input.dockerImage
     assignNonEmptyList(config, 'command', input.dockerCommand)
@@ -69,6 +79,9 @@ export function buildToolVersionConfig(
     assignNonEmptyList(config, 'args', input.pythonArguments)
   } else if (input.toolType === 'ssh_job') {
     assignSshJobConfig(config, input)
+  } else if (input.toolType === 'k8s_job') {
+    config.runtime = { image: input.k8sImage }
+    config.resource_profile = input.k8sResourceProfile
   }
 
   return config

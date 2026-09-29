@@ -6,8 +6,11 @@
 """
 
 from enum import Enum
+from datetime import UTC, datetime
 from typing import Any, Dict, Optional, TYPE_CHECKING
 import logging
+
+from app.common.time import utcnow
 
 if TYPE_CHECKING:
     from celery import Task as CeleryTask
@@ -44,6 +47,8 @@ class TaskQueueManager:
 
     # 管理员可以使用高优先级队列。
     PRIVILEGED_ROLES = {"admin"}
+    AGING_INTERVAL_SECONDS = 300
+    MAX_CELERY_PRIORITY = 9
 
     @classmethod
     def determine_queue(
@@ -82,7 +87,7 @@ class TaskQueueManager:
                 return TaskQueue.HEAVY_COMPUTE_QUEUE.value
 
         # 4. 普通CPU任务
-        if tool_config.get("type") in ["docker_image", "python_script", "ssh_job"]:
+        if tool_config.get("type") in ["docker_image", "python_script", "ssh_job", "k8s_job"]:
             return TaskQueue.CPU_QUEUE.value
 
         # 5. 默认队列（API调用等）
@@ -100,6 +105,63 @@ class TaskQueueManager:
         """
         return cls.QUEUE_PRIORITY.get(queue, 1)
 
+    @staticmethod
+    def get_wait_seconds(
+        created_at: Optional[datetime],
+        *,
+        now: Optional[datetime] = None,
+    ) -> int:
+        """计算任务已等待秒数，未来时间按 0 处理。"""
+        if not isinstance(created_at, datetime):
+            return 0
+
+        current = now or utcnow()
+        if created_at.tzinfo is not None:
+            created_at = created_at.astimezone(UTC).replace(tzinfo=None)
+        if current.tzinfo is not None:
+            current = current.astimezone(UTC).replace(tzinfo=None)
+        return max(int((current - created_at).total_seconds()), 0)
+
+    @classmethod
+    def get_dispatch_priority_details(
+        cls,
+        queue: str,
+        *,
+        task_priority: Optional[str] = None,
+        created_at: Optional[datetime] = None,
+        now: Optional[datetime] = None,
+    ) -> dict[str, int]:
+        """返回基础队列优先级叠加等待时间后的最终调度优先级。"""
+        base_priority = cls.get_queue_priority(queue)
+        if task_priority == "high":
+            base_priority = max(base_priority, cls.MAX_CELERY_PRIORITY)
+
+        wait_seconds = cls.get_wait_seconds(created_at, now=now)
+        aging_boost = wait_seconds // cls.AGING_INTERVAL_SECONDS
+        priority = min(base_priority + aging_boost, cls.MAX_CELERY_PRIORITY)
+        return {
+            "priority": priority,
+            "wait_seconds": wait_seconds,
+            "priority_boost": priority - base_priority,
+        }
+
+    @classmethod
+    def get_dispatch_priority(
+        cls,
+        queue: str,
+        *,
+        task_priority: Optional[str] = None,
+        created_at: Optional[datetime] = None,
+        now: Optional[datetime] = None,
+    ) -> int:
+        """返回 Celery enqueue 使用的最终优先级。"""
+        return cls.get_dispatch_priority_details(
+            queue,
+            task_priority=task_priority,
+            created_at=created_at,
+            now=now,
+        )["priority"]
+
     @classmethod
     def enqueue_task(
         cls,
@@ -108,7 +170,8 @@ class TaskQueueManager:
         queue: str,
         attempt_id: Optional[str] = None,
         countdown: int = 0,
-        eta: Optional[Any] = None
+        eta: Optional[Any] = None,
+        priority: Optional[int] = None,
     ) -> "CeleryTask":
         """将任务加入队列
 
@@ -124,7 +187,11 @@ class TaskQueueManager:
         """
         from app.worker.celery_app import celery_app
 
-        priority = cls.get_queue_priority(queue)
+        priority = (
+            min(max(int(priority), 0), cls.MAX_CELERY_PRIORITY)
+            if priority is not None
+            else cls.get_queue_priority(queue)
+        )
 
         logger.info(
             f"Enqueuing task {task_id} to queue '{queue}' with priority {priority}",
@@ -214,14 +281,14 @@ class TaskQueueManager:
         }
 
         # 统计活跃任务
-        for worker, tasks in active_tasks.items():
+        for tasks in active_tasks.values():
             for task in tasks:
                 queue = task.get("delivery_info", {}).get("routing_key", "default")
                 if queue in queue_stats:
                     queue_stats[queue]["active"] += 1
 
         # 统计预留任务
-        for worker, tasks in reserved_tasks.items():
+        for tasks in reserved_tasks.values():
             for task in tasks:
                 queue = task.get("delivery_info", {}).get("routing_key", "default")
                 if queue in queue_stats:
@@ -356,7 +423,7 @@ class TaskQueueManager:
             reserved = inspect.reserved() or {}
 
             position = 0
-            for worker, tasks in reserved.items():
+            for tasks in reserved.values():
                 for task in tasks:
                     task_queue = task.get("delivery_info", {}).get("routing_key", "default")
                     if task_queue == queue:

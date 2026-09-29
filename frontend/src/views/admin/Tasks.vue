@@ -35,6 +35,43 @@
           />
         </a-card>
       </a-col>
+      <a-col :xs="12" :sm="6">
+        <a-card class="stat-card" :loading="loading">
+          <a-statistic :title="t('admin.resourceWaitTasks')" :value="resourceWaitStats?.total ?? 0" />
+        </a-card>
+      </a-col>
+      <a-col :xs="12" :sm="6">
+        <a-card class="stat-card" :loading="loading">
+          <a-statistic
+            :title="t('admin.quotaWaitTasks')"
+            :value="resourceWaitStats?.by_category.quota ?? 0"
+          />
+        </a-card>
+      </a-col>
+      <a-col :xs="12" :sm="6">
+        <a-card class="stat-card" :loading="loading">
+          <a-statistic
+            :title="t('admin.workerWaitTasks')"
+            :value="resourceWaitStats?.by_category.worker_capacity ?? 0"
+          />
+        </a-card>
+      </a-col>
+      <a-col :xs="12" :sm="6">
+        <a-card class="stat-card" :loading="loading">
+          <a-statistic
+            :title="t('admin.gpuWaitTasks')"
+            :value="resourceWaitStats?.by_category.gpu ?? 0"
+          />
+        </a-card>
+      </a-col>
+      <a-col :xs="12" :sm="6">
+        <a-card class="stat-card" :loading="loading">
+          <a-statistic
+            :title="t('admin.externalCapacityWaitTasks')"
+            :value="resourceWaitStats?.by_category.external_capacity ?? 0"
+          />
+        </a-card>
+      </a-col>
     </a-row>
 
     <AppFilterBar>
@@ -89,6 +126,25 @@
             </a-select-option>
           </a-select>
         </a-form-item>
+        <a-form-item :label="t('admin.resourceWaitCategory')">
+          <a-select
+            v-model:value="filters.resource_wait_category"
+            :placeholder="t('admin.resourceWaitAll')"
+            style="width: 190px"
+            allowClear
+          >
+            <a-select-option value="quota">{{ t('admin.resourceWaitQuota') }}</a-select-option>
+            <a-select-option value="worker_capacity">
+              {{ t('admin.resourceWaitWorkerCapacity') }}
+            </a-select-option>
+            <a-select-option value="gpu">{{ t('admin.resourceWaitGpu') }}</a-select-option>
+            <a-select-option value="scheduler">{{ t('admin.resourceWaitScheduler') }}</a-select-option>
+            <a-select-option value="external_capacity">
+              {{ t('admin.resourceWaitExternalCapacity') }}
+            </a-select-option>
+            <a-select-option value="resource">{{ t('admin.resourceWaitResource') }}</a-select-option>
+          </a-select>
+        </a-form-item>
         <a-form-item>
           <a-space>
             <a-button type="primary" @click="handleSearch">
@@ -116,6 +172,9 @@
               <span class="id">ID: {{ record.id }}</span>
               <span v-if="record.remote_recovery" class="recovery-status">
                 {{ t('tasks.remoteRecovery.failures', { count: record.remote_recovery.failures }) }}
+              </span>
+              <span v-if="record.resource_wait" class="resource-wait-status">
+                {{ resourceWaitLabel(record.resource_wait) }}
               </span>
             </div>
           </template>
@@ -210,6 +269,20 @@
               </template>
             </a-alert>
           </a-descriptions-item>
+          <a-descriptions-item
+            v-if="selectedTask.resource_wait"
+            :label="t('admin.resourceWaitReason')"
+          >
+            <a-alert type="info" show-icon>
+              <template #message>{{ resourceWaitLabel(selectedTask.resource_wait) }}</template>
+              <template #description>
+                <div>{{ selectedTask.resource_wait.reason }}</div>
+                <div v-if="selectedTask.resource_wait.next_attempt_at">
+                  {{ t('tasks.resourceWait.nextAttempt', { time: formatDate(selectedTask.resource_wait.next_attempt_at) }) }}
+                </div>
+              </template>
+            </a-alert>
+          </a-descriptions-item>
           <a-descriptions-item :label="t('tasks.createdAt')">
             {{ formatDate(selectedTask.created_at) }}
           </a-descriptions-item>
@@ -257,9 +330,22 @@
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import SkeletonCard from '@/components/common/SkeletonCard.vue'
   import { useRemoteToolOptions } from '@/composables/useRemoteToolOptions'
-  import { getTaskList, getTaskDetail, cancelTask, retryTask, deleteTask } from '@/api/tasks'
+  import {
+    getTaskList,
+    getTaskDetail,
+    getResourceWaitStats,
+    cancelTask,
+    retryTask,
+    deleteTask
+  } from '@/api/tasks'
   import { getSystemStats } from '@/api/system'
-  import type { SystemStats, Task, TaskStatus } from '@/types/models'
+  import type {
+    SystemStats,
+    Task,
+    TaskResourceWaitStats,
+    TaskResourceWaitStatus,
+    TaskStatus
+  } from '@/types/models'
 
   const { t } = useI18n()
 
@@ -269,6 +355,7 @@
   const selectedTask = ref<Task | null>(null)
   const tasks = ref<Task[]>([])
   const systemStats = ref<SystemStats | null>(null)
+  const resourceWaitStats = ref<TaskResourceWaitStats | null>(null)
   const { fetchToolOptions, searchToolOptions, toolOptions, toolOptionsLoading } =
     useRemoteToolOptions()
 
@@ -276,7 +363,8 @@
     keyword: '',
     tool_id: undefined as string | undefined,
     status: undefined as TaskStatus | undefined,
-    remote_recovery_alerted: undefined as boolean | undefined
+    remote_recovery_alerted: undefined as boolean | undefined,
+    resource_wait_category: undefined as string | undefined
   })
 
   const pagination = reactive({
@@ -322,9 +410,23 @@
     return task.id
   }
 
+  const resourceWaitLabel = (wait: TaskResourceWaitStatus) => {
+    if (wait.category === 'quota') return t('admin.resourceWaitQuota')
+    if (wait.category === 'worker_capacity') return t('admin.resourceWaitWorkerCapacity')
+    if (wait.category === 'gpu') return t('admin.resourceWaitGpu')
+    if (wait.category === 'scheduler') return t('admin.resourceWaitScheduler')
+    if (wait.category === 'external_capacity') return t('admin.resourceWaitExternalCapacity')
+    if (wait.category === 'resource') return t('admin.resourceWaitResource')
+    return wait.reason
+  }
+
   const fetchTaskStats = async () => {
-    const res = await getSystemStats()
-    systemStats.value = res.data
+    const [systemRes, resourceRes] = await Promise.all([
+      getSystemStats(),
+      getResourceWaitStats()
+    ])
+    systemStats.value = systemRes.data
+    resourceWaitStats.value = resourceRes.data
   }
 
   const fetchTasks = async () => {
@@ -336,7 +438,8 @@
         keyword: filters.keyword || undefined,
         tool_id: filters.tool_id,
         status: filters.status,
-        remote_recovery_alerted: filters.remote_recovery_alerted
+        remote_recovery_alerted: filters.remote_recovery_alerted,
+        resource_wait_category: filters.resource_wait_category
       })
       tasks.value = res.data.items
       pagination.total = res.data.total
@@ -360,6 +463,7 @@
     filters.tool_id = undefined
     filters.status = undefined
     filters.remote_recovery_alerted = undefined
+    filters.resource_wait_category = undefined
     pagination.current = 1
     await fetchTasks()
   }
@@ -465,6 +569,11 @@
       color: @warning-color;
       font-size: @font-size-sm;
       font-weight: @font-weight-medium;
+    }
+
+    .resource-wait-status {
+      color: @warning-color;
+      font-size: @font-size-sm;
     }
 
     .json-view {

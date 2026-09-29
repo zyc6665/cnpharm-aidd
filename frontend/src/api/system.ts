@@ -4,12 +4,15 @@ import type {
   ModelService,
   ModelServiceCreateParams,
   ModelServiceListResponse,
+  ModelServiceModelsResponse,
   ModelServiceTestResult,
   ModelServiceUpdateParams,
+  ResourceQuotaStatusResponse,
   SystemConfig,
   SystemHealth,
   SystemInfo,
-  SystemStats
+  SystemStats,
+  WorkerResourceStatusResponse
 } from '@/types/models'
 
 // 系统健康检查
@@ -25,6 +28,16 @@ export const getSystemInfo = (): Promise<ApiResponse<SystemInfo>> => {
 // 获取系统统计
 export const getSystemStats = (): Promise<ApiResponse<SystemStats>> => {
   return get<SystemStats>('/system/stats')
+}
+
+// 获取在线 Worker 资源状态
+export const getWorkerResourceStatus = (): Promise<ApiResponse<WorkerResourceStatusResponse>> => {
+  return get<WorkerResourceStatusResponse>('/system/resource-workers')
+}
+
+// 获取用户与项目资源配额状态
+export const getResourceQuotaStatus = (): Promise<ApiResponse<ResourceQuotaStatusResponse>> => {
+  return get<ResourceQuotaStatusResponse>('/system/resource-quotas')
 }
 
 // 获取系统配置
@@ -62,6 +75,12 @@ export const testModelService = (
   serviceId: string
 ): Promise<ApiResponse<ModelServiceTestResult>> => {
   return post<ModelServiceTestResult>(`/system/model-services/${serviceId}/test`)
+}
+
+export const discoverModelServiceModels = (
+  serviceId: string
+): Promise<ApiResponse<ModelServiceModelsResponse>> => {
+  return get<ModelServiceModelsResponse>(`/system/model-services/${serviceId}/models`)
 }
 
 // 设置默认模型服务

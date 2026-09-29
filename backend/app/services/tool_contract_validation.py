@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from app.artifact_standards.registry import (
@@ -15,6 +16,7 @@ SUPPORTED_TOOL_EXECUTOR_TYPES = {
     "docker_image",
     "python_script",
     "ssh_job",
+    "k8s_job",
     "builtin",
 }
 
@@ -40,6 +42,46 @@ def collect_tool_contract_config_validation_errors(
     elif executor_type not in SUPPORTED_TOOL_EXECUTOR_TYPES:
         supported = sorted(SUPPORTED_TOOL_EXECUTOR_TYPES)
         errors.append(f"executor.type must be one of {supported}")
+
+    if executor_type == "remote_api":
+        from app.tasks.remote_capacity import validate_remote_capacity_policy
+
+        errors.extend(
+            f"remote_api.{error}"
+            for error in validate_remote_capacity_policy(config.get("capacity_policy"))
+        )
+
+    if executor_type == "k8s_job":
+        runtime = config.get("runtime")
+        image = runtime.get("image") if isinstance(runtime, dict) else None
+        if not isinstance(image, str) or not re.search(r"@sha256:[a-fA-F0-9]{64}$", image):
+            errors.append("k8s_job.runtime.image must use an immutable sha256 digest")
+        profile_id = config.get("resource_profile")
+        if not isinstance(profile_id, str) or not profile_id.strip():
+            errors.append("k8s_job.resource_profile is required")
+        else:
+            from app.tasks.resource_profile import resolve_registered_resource_profile
+
+            try:
+                resolve_registered_resource_profile(profile_id)
+            except ValueError:
+                errors.append(
+                    f"k8s_job.resource_profile is not registered: {profile_id}"
+                )
+        for platform_field in (
+            "cluster_alias",
+            "namespace",
+            "credential_ref",
+            "service_account",
+            "token",
+            "private_key",
+            "password",
+            "credentials",
+        ):
+            if platform_field in config:
+                errors.append(
+                    f"k8s_job.{platform_field} is platform-managed"
+                )
 
     if current_version_active is not True:
         errors.append("current_version.is_active must be true")

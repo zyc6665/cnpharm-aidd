@@ -19,6 +19,7 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.database.base import Base  # noqa: E402
+from app.common.exceptions import ValidationException  # noqa: E402
 from app.models import (  # noqa: E402,F401
     Artifact,
     ArtifactVersion,
@@ -328,6 +329,50 @@ async def test_prepare_run_projects_multiple_standard_inputs_to_distinct_legacy_
         "protein_a_pdb": "input/protein-a.pdb",
         "protein_b_pdb": "input/protein-b.pdb",
     }
+
+
+@pytest.mark.asyncio
+async def test_prepare_run_rejects_unusable_raw_file_input(
+    db_session: AsyncSession,
+) -> None:
+    from datetime import timedelta
+
+    from app.common.time import utcnow
+
+    owner = await _create_owner(db_session)
+    file_record = await _create_file(
+        db_session,
+        owner,
+        filename="expired-input.pdb",
+        content=b"ATOM expired\n",
+    )
+    file_record.expires_at = utcnow() - timedelta(seconds=1)
+    tool, version = await _create_tool(
+        db_session,
+        owner,
+        slug="raw-file-input",
+        config=_plain_protein_ssh_config(),
+    )
+
+    with pytest.raises(ValidationException) as exc_info:
+        await prepare_run(
+            db_session,
+            input=RunPreparationInput(
+                tool=tool,
+                tool_version=version,
+                context=RunContext(
+                    surface="tool_detail",
+                    user_id=str(owner.id),
+                    project_id="project-1",
+                ),
+                params={},
+                file_ids=[file_record.id],
+                input_bindings={},
+                standard_input_uploads={},
+            ),
+        )
+
+    assert exc_info.value.detail == {"unusable_file_ids": [file_record.id]}
 
 
 @pytest.mark.asyncio

@@ -19,6 +19,7 @@ from app.execution.standard_contracts import (
     StandardExecutionResult,
     iter_declared_output_artifacts,
 )
+from app.files.file_records import is_file_usable
 from app.models.files import File as FileModel
 from app.services.standard_artifact_errors import (
     StandardArtifactPersistenceError,
@@ -77,7 +78,7 @@ def declared_standard_outputs_from_config(
     )
     if is_non_v1_remote:
         return []
-    if config_type not in {"remote_api", "builtin", "ssh_job"}:
+    if config_type not in {"remote_api", "builtin", "ssh_job", "k8s_job"}:
         return []
     artifacts = config.get("artifacts")
     raw_outputs = None
@@ -185,6 +186,8 @@ def _index_collected_file_records(
 ) -> dict[str, FileModel]:
     indexed = {}
     for record in records:
+        if not is_file_usable(record):
+            continue
         file_meta = {}
         if isinstance(record.file_meta, dict):
             file_meta = record.file_meta

@@ -45,6 +45,9 @@ class TestStateMachineTransitions:
         task.extra_data = {
             "resource_snapshot": {"gpu_required": True},
             "resource_wait_reason": "gpu_unavailable",
+            "resource_wait_code": "gpu_unavailable",
+            "resource_wait_category": "gpu",
+            "resource_wait_dimension": "gpu",
             "resource_retry_count": 2,
             "resource_retry_next_at": "2026-09-20T12:00:00",
         }

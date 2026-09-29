@@ -113,9 +113,39 @@
               <template #message>{{ t('tasks.resourceWait.title') }}</template>
               <template #description>
                 <div>{{ resourceWaitText }}</div>
+                <div v-if="resourceWait.scope && resourceWait.dimension">
+                  {{ t('tasks.resourceWait.scopeDimension', {
+                    scope: resourceWaitScopeText,
+                    dimension: resourceWaitDimensionText
+                  }) }}
+                </div>
+                <div v-if="resourceWait.category === 'quota'" class="resource-wait-code">
+                  <a-typography-text code>{{ resourceWait.reason }}</a-typography-text>
+                </div>
                 <div>{{ t('tasks.resourceWait.retryCount', { count: resourceWait.retry_count }) }}</div>
                 <div v-if="resourceWait.next_attempt_at">
                   {{ t('tasks.resourceWait.nextAttempt', { time: formatTime(resourceWait.next_attempt_at) }) }}
+                </div>
+              </template>
+            </a-alert>
+          </div>
+
+          <div v-if="resourceReservation" class="reservation-notice">
+            <a-alert :type="resourceReservationAlertType" show-icon>
+              <template #message>{{ t('tasks.resourceReservation.title') }}</template>
+              <template #description>
+                <div>{{ t('tasks.resourceReservation.status', { status: resourceReservationStatusText }) }}</div>
+                <div v-if="resourceReservation.worker_id">
+                  {{ t('tasks.resourceReservation.worker', { worker: resourceReservation.worker_id }) }}
+                </div>
+                <div v-if="task.dispatch?.queue">
+                  {{ t('tasks.resourceReservation.queue', { queue: task.dispatch.queue }) }}
+                </div>
+                <div v-if="resourceReservation.release_reason">
+                  {{ t('tasks.resourceReservation.releaseReason', { reason: resourceReservation.release_reason }) }}
+                </div>
+                <div v-if="resourceReservation.release_error">
+                  {{ t('tasks.resourceReservation.releaseError', { error: resourceReservation.release_error }) }}
                 </div>
               </template>
             </a-alert>
@@ -386,10 +416,47 @@ const resourceWait = computed(() => {
 })
 const resourceWaitText = computed(() => {
   if (!resourceWait.value) return ''
+  if (resourceWait.value.category === 'quota') {
+    return t('tasks.resourceWait.quotaExceeded')
+  }
+  if (resourceWait.value.category === 'worker_capacity') {
+    return t('tasks.resourceWait.workerCapacity')
+  }
   if (resourceWait.value.reason === 'gpu_unavailable') {
     return t('tasks.resourceWait.gpuUnavailable')
   }
+  if (resourceWait.value.category === 'scheduler') {
+    return t('tasks.resourceWait.schedulerBusy')
+  }
   return t('tasks.resourceWait.title')
+})
+const resourceWaitScopeText = computed(() => {
+  if (resourceWait.value?.scope === 'user') return t('tasks.resourceWait.userScope')
+  if (resourceWait.value?.scope === 'project') return t('tasks.resourceWait.projectScope')
+  return resourceWait.value?.scope || ''
+})
+const resourceWaitDimensionText = computed(() => {
+  const dimension = resourceWait.value?.dimension
+  if (!dimension) return ''
+  return t('tasks.resourceWait.dimensions.' + dimension)
+})
+const resourceReservation = computed(() => task.value?.dispatch?.resource_reservation ?? null)
+const resourceReservationStatus = computed(() => resourceReservation.value?.status || 'reserved')
+const resourceReservationStatusText = computed(() => {
+  const status = resourceReservationStatus.value
+  const statusKeys: Record<string, string> = {
+    reserved: 'reserved',
+    claimed: 'claimed',
+    released: 'released',
+    release_failed: 'releaseFailed',
+    not_found: 'notFound'
+  }
+  return t(`tasks.resourceReservation.statuses.${statusKeys[status] || 'reserved'}`)
+})
+const resourceReservationAlertType = computed(() => {
+  if (resourceReservationStatus.value === 'release_failed') return 'warning'
+  if (['claimed', 'released'].includes(resourceReservationStatus.value)) return 'success'
+  return 'info'
 })
 
 // 方法
@@ -435,15 +502,23 @@ const handleCancel = () => {
     okText: t('common.confirm'),
     cancelText: t('common.cancel'),
     onOk: async () => {
-      await tasksStore.cancelTask(taskId.value)
-      message.success(t('tasks.cancelSuccess'))
+      try {
+        await tasksStore.cancelTask(taskId.value)
+        message.success(t('tasks.cancelSuccess'))
+      } catch {
+        // 请求层已经展示具体错误，避免失败时误报成功。
+      }
     }
   })
 }
 
 const handleRetry = async () => {
-  await tasksStore.retryTask(taskId.value)
-  message.success(t('tasks.retrySuccess'))
+  try {
+    await tasksStore.retryTask(taskId.value)
+    message.success(t('tasks.retrySuccess'))
+  } catch {
+    // 请求层已经展示具体错误，避免失败时误报成功。
+  }
 }
 
 const handleDelete = () => {
@@ -454,9 +529,13 @@ const handleDelete = () => {
     okType: 'danger',
     cancelText: t('common.cancel'),
     onOk: async () => {
-      await tasksStore.deleteTask(taskId.value)
-      message.success(t('tasks.deleteSuccess'))
-      router.push('/tasks')
+      try {
+        await tasksStore.deleteTask(taskId.value)
+        message.success(t('tasks.deleteSuccess'))
+        router.push('/tasks')
+      } catch {
+        // 请求层已经展示具体错误，删除失败时保留当前任务详情。
+      }
     }
   })
 }
@@ -609,6 +688,10 @@ onUnmounted(() => {
 }
 
 .recovery-notice {
+  margin-bottom: @spacing-xl;
+}
+
+.reservation-notice {
   margin-bottom: @spacing-xl;
 }
 

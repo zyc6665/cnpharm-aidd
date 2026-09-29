@@ -61,3 +61,11 @@ class ModelServiceTestResponse(BaseModel):
     message: str
     last_test_status: str
     last_tested_at: datetime
+
+
+class ModelServiceModelsResponse(BaseModel):
+    """Models advertised by an OpenAI-compatible service."""
+
+    id: str
+    models: list[str]
+    message: str

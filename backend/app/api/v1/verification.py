@@ -43,7 +43,7 @@ async def send_verification_code(
     verification_service = await get_verification_service(db)
 
     try:
-        success, expires_in = await verification_service.send_code(
+        _, expires_in = await verification_service.send_code(
             email=data.email,
             purpose=data.purpose,
             ip_address=client_ip

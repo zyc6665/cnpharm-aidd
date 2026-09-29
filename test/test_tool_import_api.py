@@ -1153,3 +1153,78 @@ async def test_get_tool_contract_returns_actionable_validation_errors(
     payload = response.json()["data"]
     assert payload["validation"]["status"] == "invalid"
     assert any("agent_capability.inputs" in error for error in payload["validation"]["errors"])
+
+
+@pytest.mark.asyncio
+async def test_public_tool_versions_require_public_tool_and_redact_runtime_config(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    admin_user: User,
+):
+    public_tool = Tool(
+        owner_id=admin_user.id,
+        name="Published Runtime Tool",
+        slug="published-runtime-tool",
+        status=ToolStatus.PUBLISHED.value,
+        is_public=True,
+    )
+    private_tool = Tool(
+        owner_id=admin_user.id,
+        name="Draft Runtime Tool",
+        slug="draft-runtime-tool",
+        status=ToolStatus.DRAFT.value,
+        is_public=True,
+    )
+    db_session.add_all([public_tool, private_tool])
+    await db_session.flush()
+
+    config = {
+        "type": "docker_image",
+        "endpoint": "https://internal.example/run",
+        "headers": {"Authorization": "Bearer secret"},
+        "image": "private.registry/tool:latest",
+        "command": ["/srv/private-runner"],
+        "input_schema": {
+            "type": "object",
+            "properties": {"protein": {"type": "string"}},
+        },
+    }
+    public_version = ToolVersion(
+        tool_id=public_tool.id,
+        version="1.0.0",
+        changelog="Initial",
+        config=config,
+        is_active=True,
+    )
+    private_version = ToolVersion(
+        tool_id=private_tool.id,
+        version="0.1.0",
+        changelog="Draft",
+        config=config,
+        is_active=True,
+    )
+    db_session.add_all([public_version, private_version])
+    await db_session.flush()
+    public_tool.current_version_id = public_version.id
+    private_tool.current_version_id = private_version.id
+    await db_session.commit()
+
+    public_response = await api_client.get(
+        f"/api/v1/tools/{public_tool.id}/versions"
+    )
+    draft_response = await api_client.get(
+        f"/api/v1/tools/{private_tool.id}/versions"
+    )
+    draft_example_response = await api_client.get(
+        f"/api/v1/tools/{private_tool.id}/example"
+    )
+
+    assert public_response.status_code == 200
+    public_version = public_response.json()["data"][0]
+    assert public_version["version"] == "1.0.0"
+    assert "config" not in public_version
+    assert "endpoint" not in public_version
+    assert "headers" not in public_version
+    assert "script_content" not in public_version
+    assert draft_response.status_code == 404
+    assert draft_example_response.status_code == 404

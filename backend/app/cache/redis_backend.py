@@ -92,6 +92,45 @@ class RedisCacheBackend(CacheBackend):
         )
         return result == 1
 
+    async def set_if_exists(
+        self,
+        key: str,
+        value: Any,
+        expire: Optional[int] = None,
+    ) -> bool:
+        """仅当键仍存在时原子更新值和过期时间。"""
+        if isinstance(value, (dict, list)):
+            value = json.dumps(value, ensure_ascii=False)
+        ttl = max(int(expire), 1) if expire else 0
+        script = (
+            "if redis.call('exists', KEYS[1]) == 1 then "
+            "redis.call('set', KEYS[1], ARGV[1]) "
+            "if tonumber(ARGV[2]) > 0 then redis.call('expire', KEYS[1], ARGV[2]) end "
+            "return 1 else return 0 end"
+        )
+        result = await self._redis.eval(
+            script,
+            1,
+            self._make_key(key),
+            value,
+            str(ttl),
+        )
+        return result == 1
+
+    async def expire_if_value(self, key: str, value: Any, seconds: int) -> bool:
+        script = (
+            "if redis.call('get', KEYS[1]) == ARGV[1] "
+            "then return redis.call('expire', KEYS[1], ARGV[2]) else return 0 end"
+        )
+        result = await self._redis.eval(
+            script,
+            1,
+            self._make_key(key),
+            str(value),
+            str(max(int(seconds), 1)),
+        )
+        return result == 1
+
     async def delete(self, key: str) -> bool:
         """删除缓存"""
         result = await self._redis.delete(self._make_key(key))
@@ -120,16 +159,25 @@ class RedisCacheBackend(CacheBackend):
         return await self._redis.decrby(self._make_key(key), amount)
 
     async def keys(self, pattern: str = "*") -> List[str]:
-        """获取匹配的键列表"""
+        """获取匹配的键列表（兼容旧调用方）。"""
+        return await self.scan_keys(pattern)
+
+    async def scan_keys(self, pattern: str = "*", *, count: int = 500) -> List[str]:
+        """使用增量 SCAN 遍历匹配键，避免阻塞 Redis。"""
         full_pattern = self._make_key(pattern)
-        keys = await self._redis.keys(full_pattern)
-        return [self._strip_prefix(k) for k in keys]
+        keys: list[str] = []
+        async for key in self._redis.scan_iter(
+            match=full_pattern,
+            count=max(int(count), 1),
+        ):
+            keys.append(self._strip_prefix(key))
+        return keys
 
     async def clear(self) -> bool:
         """清空所有缓存（仅清空带前缀的键）"""
-        keys = await self._redis.keys(f"{self.prefix}*")
+        keys = await self.scan_keys("*")
         if keys:
-            await self._redis.delete(*keys)
+            await self._redis.delete(*(self._make_key(key) for key in keys))
         return True
 
     async def close(self):

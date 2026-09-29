@@ -68,9 +68,6 @@ export function useToolDetailRunForm(options: ToolDetailRunFormOptions) {
       },
     })
   })
-  const usesConcreteStandardInputFields = computed(
-    () => standardInputRunState.value.usesConcreteStandardInputFields
-  )
   const standardInputBindings = computed(() => standardInputRunState.value.inputBindings)
   const missingRequiredStandardSlots = computed(() => standardInputRunState.value.missingRequiredSlots)
   const canSubmit = computed(() => {

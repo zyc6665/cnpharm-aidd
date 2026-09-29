@@ -51,6 +51,21 @@ class CacheBackend(ABC):
         pass
 
     @abstractmethod
+    async def set_if_exists(
+        self,
+        key: str,
+        value: Any,
+        expire: Optional[int] = None,
+    ) -> bool:
+        """仅当键仍存在时更新值和过期时间。"""
+        pass
+
+    @abstractmethod
+    async def expire_if_value(self, key: str, value: Any, seconds: int) -> bool:
+        """仅当缓存值匹配时刷新过期时间。"""
+        pass
+
+    @abstractmethod
     async def delete(self, key: str) -> bool:
         """
         删除缓存
@@ -144,6 +159,14 @@ class CacheBackend(ABC):
         """
         pass
 
+    async def scan_keys(self, pattern: str = "*", *, count: int = 500) -> List[str]:
+        """Return matching keys without requiring a backend-specific API.
+
+        Redis overrides this with incremental SCAN iteration; lightweight
+        backends keep the existing in-memory implementation as a fallback.
+        """
+        return await self.keys(pattern)
+
     @abstractmethod
     async def clear(self) -> bool:
         """
@@ -174,6 +197,16 @@ class CacheBackend(ABC):
         """设置 JSON 缓存"""
         json_str = json.dumps(value, ensure_ascii=False)
         return await self.set(key, json_str, expire)
+
+    async def set_json_if_exists(
+        self,
+        key: str,
+        value: Any,
+        expire: Optional[int] = None,
+    ) -> bool:
+        """仅当键仍存在时原子更新 JSON 值和过期时间。"""
+        json_str = json.dumps(value, ensure_ascii=False)
+        return await self.set_if_exists(key, json_str, expire)
 
     async def get_or_set(
         self,

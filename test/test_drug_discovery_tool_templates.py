@@ -237,3 +237,21 @@ def test_template_import_config_rejects_unsupported_executor():
             executor_type="slurm",
             executor_config={"partition": "gpu"},
         )
+
+
+def test_template_generates_k8s_job_config_with_approved_profile_id():
+    template = load_tool_template("vina-docking")
+
+    config = build_tool_import_config_from_template(
+        template,
+        executor_type="k8s_job",
+        executor_config={
+            "runtime": {"image": f"registry.example/vina@sha256:{'a' * 64}"},
+            "resource_profile": "gpu-large",
+        },
+    )
+
+    validated = validate_tool_import_config(config)
+    assert validated["tool_config"]["type"] == "k8s_job"
+    assert validated["tool_config"]["runtime"]["image"].endswith("a" * 64)
+    assert validated["tool_config"]["resource_profile"] == "gpu-large"

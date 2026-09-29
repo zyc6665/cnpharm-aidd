@@ -6,6 +6,7 @@ import type {
   TaskCreateParams,
   TaskLog,
   TaskRunPreparationPreview,
+  TaskResourceWaitStats,
   TaskStatus,
   PaginatedResponse,
   PaginationParams
@@ -23,6 +24,8 @@ export interface TaskListParams extends PaginationParams {
   workflow_definition_id?: string
   workflow_node_id?: string
   remote_recovery_alerted?: boolean
+  resource_wait_category?: string
+  resource_wait_scope?: 'user' | 'project' | string
 }
 
 export const TERMINAL_TASK_STATUSES: readonly TaskStatus[] = ['success', 'failure', 'canceled']
@@ -44,6 +47,12 @@ export const getTaskCounts = (
   options?: RequestOptions
 ): Promise<ApiResponse<TaskViewCounts>> => {
   return get<TaskViewCounts, TaskCountQueryParams>('/tasks/counts', params, options)
+}
+
+export const getResourceWaitStats = (
+  options?: RequestOptions
+): Promise<ApiResponse<TaskResourceWaitStats>> => {
+  return get<TaskResourceWaitStats>('/tasks/resource-wait-stats', undefined, options)
 }
 
 // 创建任务

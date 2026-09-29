@@ -16,6 +16,7 @@ from app.common.responses import success_response
 from app.common.time import utcnow
 from app.config import settings
 from app.database.session import get_db
+from app.files.file_records import is_file_usable
 from app.logging.audit import AuditAction, AuditResult, get_audit_logger
 from app.models.artifacts import (
     Artifact,
@@ -392,6 +393,8 @@ async def download_artifact_version_file(
     if file_link is None or file_link.file is None:
         raise HTTPException(status_code=404, detail="Artifact 角色文件不存在")
     file_record = file_link.file
+    if not is_file_usable(file_record):
+        raise HTTPException(status_code=404, detail="Artifact 角色文件不存在")
     content = await storage.download(file_record.storage_path)
     _audit_artifact_download(
         current_user=current_user,

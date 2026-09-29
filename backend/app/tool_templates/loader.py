@@ -66,6 +66,15 @@ def build_tool_import_config_from_template(
 
     timeout_sec = int(template.resource_profile.timeout_minutes * 60)
     gpu_memory_mb = int(template.resource_profile.gpu_memory_gb * 1024)
+    resolved_resource_profile: dict[str, Any] | str = template.resource_profile.model_dump(mode="json")
+    if executor_type == "k8s_job":
+        profile_id = executor_config.get("resource_profile")
+        if not isinstance(profile_id, str) or not profile_id.strip():
+            raise ToolTemplateLoadError(
+                "k8s_job executor_config.resource_profile must be an approved profile id"
+            )
+        resolved_resource_profile = profile_id
+
     tool_config = {
         **executor_config,
         "type": executor_type,
@@ -74,7 +83,7 @@ def build_tool_import_config_from_template(
         "agent_capability": template.agent_capability.model_dump(mode="json"),
         "artifacts": _artifact_contract(template),
         "implementation": template.implementation.model_dump(mode="json"),
-        "resource_profile": template.resource_profile.model_dump(mode="json"),
+        "resource_profile": resolved_resource_profile,
         "template_key": template.metadata.template_key,
         "tool_family": template.metadata.family,
         "smoke_test": template.smoke_test.model_dump(mode="json"),

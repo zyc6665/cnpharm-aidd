@@ -1,6 +1,6 @@
 """科研白板接口模型。"""
 
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 

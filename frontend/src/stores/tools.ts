@@ -23,6 +23,7 @@ export const useToolsStore = defineStore('tools', () => {
   const currentView = ref<ToolView>('public')
   const loading = ref(false)
   const total = ref(0)
+  let currentToolRequestId = 0
 
   const currentToolsList = computed(() => tools.value)
   const currentTotal = computed(() => total.value)
@@ -44,13 +45,18 @@ export const useToolsStore = defineStore('tools', () => {
   }
 
   const fetchToolDetail = async (id: string) => {
+    const requestId = ++currentToolRequestId
     loading.value = true
     try {
       const res = await getToolDetail(id)
-      currentTool.value = res.data
+      if (requestId === currentToolRequestId) {
+        currentTool.value = res.data
+      }
       return res.data
     } finally {
-      loading.value = false
+      if (requestId === currentToolRequestId) {
+        loading.value = false
+      }
     }
   }
 
@@ -118,7 +124,9 @@ export const useToolsStore = defineStore('tools', () => {
   }
 
   const clearCurrentTool = () => {
+    currentToolRequestId += 1
     currentTool.value = null
+    loading.value = false
   }
 
   return {

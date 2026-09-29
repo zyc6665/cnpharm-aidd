@@ -44,6 +44,7 @@ from app.services.workflow_artifacts import (
     format_missing_required_standard_artifacts_error,
     required_standard_artifacts_present,
     standard_artifact_file_ids,
+    load_task_output_files,
 )
 from app.agents.aidd.workflow_drafts import build_workflow_definition_from_plan
 from app.tasks.service import create_and_schedule_tool_task
@@ -812,33 +813,6 @@ async def cascade_delete_agent_run(
     }
 
 
-async def _load_task_output_files(
-    db: AsyncSession,
-    file_ids: list[str],
-) -> list[dict[str, Any]]:
-    if not file_ids:
-        return []
-
-    result = await db.execute(select(FileModel).where(FileModel.id.in_(file_ids)))
-    files_by_id = {file.id: file for file in result.scalars().all()}
-    output_files: list[dict[str, Any]] = []
-
-    for file_id in file_ids:
-        file_record = files_by_id.get(str(file_id))
-        if not file_record:
-            continue
-        output_files.append(
-            {
-                "id": file_record.id,
-                "filename": file_record.filename,
-                "content_type": file_record.content_type,
-                "url": _file_download_url(file_record.id),
-            }
-        )
-
-    return output_files
-
-
 def _required_outputs_present(
     *,
     capability: ToolCapability,
@@ -1049,7 +1023,7 @@ async def reconcile_waiting_agent_steps(
             continue
 
         file_ids = [str(file_id) for file_id in (task.outputs.file_ids if task.outputs else [])]
-        output_files = await _load_task_output_files(db, file_ids)
+        output_files = await load_task_output_files(db, file_ids)
         output_data = task.outputs.result if task.outputs else None
         capability = await load_tool_capability(db, step.tool_slug)
         semantic_outputs = extract_semantic_outputs(

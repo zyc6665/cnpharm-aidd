@@ -9,7 +9,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, case
+from sqlalchemy import select, func, case, or_
 from sqlalchemy.orm import joinedload
 from typing import Optional, List
 from datetime import timedelta
@@ -36,6 +36,7 @@ from app.files.remote_access_tokens import (
 from app.files.file_records import (
     delete_stored_file,
     file_storage_path,
+    is_file_usable,
     user_can_access_file,
     user_can_manage_file,
 )
@@ -118,7 +119,11 @@ async def upload_file(
         result = await db.execute(
             select(FileModel).where(
                 FileModel.sha256 == sha256,
-                FileModel.owner_id == current_user.id
+                FileModel.owner_id == current_user.id,
+                FileModel.deleted_at.is_(None),
+                or_(FileModel.is_corrupted.is_(False), FileModel.is_corrupted.is_(None)),
+                (FileModel.expires_at.is_(None)) |
+                (FileModel.expires_at > utcnow()),
             ).order_by(
                 case(
                     (FileModel.source_type == FileSourceType.UPLOAD.value, 0),
@@ -190,8 +195,10 @@ async def list_files(
     if source_type:
         query = query.where(FileModel.source_type == source_type)
 
-    # 排除已过期文件
+    # 仅展示仍可使用的文件
     query = query.where(
+        FileModel.deleted_at.is_(None),
+        or_(FileModel.is_corrupted.is_(False), FileModel.is_corrupted.is_(None)),
         (FileModel.expires_at.is_(None)) |
         (FileModel.expires_at > utcnow())
     )
@@ -331,9 +338,8 @@ async def get_file_info(
     if not user_can_access_file(file, current_user):
         raise ForbiddenException("无权访问此文件")
 
-    # 检查是否过期
-    if file.expires_at and file.expires_at < utcnow():
-        raise NotFoundException("文件已过期")
+    if not is_file_usable(file):
+        raise NotFoundException("文件不存在")
 
     return success_response(data=FileSchema.model_validate(file).model_dump())
 
@@ -391,15 +397,14 @@ async def download_file(
             )
             raise ForbiddenException("无权下载此文件")
 
-    # 检查是否过期
-    if file.expires_at and file.expires_at < utcnow():
+    if not is_file_usable(file):
         _audit_file_download_denied(
             file=file,
             current_user=current_user,
             remote_token=remote_token_claims is not None,
-            reason="expired",
+            reason="unusable",
         )
-        raise NotFoundException("文件已过期")
+        raise NotFoundException("文件不存在")
 
     # 检查文件是否存在
     file_path = file_storage_path(file)
@@ -451,6 +456,8 @@ async def get_download_url(
     # 权限检查
     if not user_can_access_file(file, current_user):
         raise ForbiddenException("无权访问此文件")
+    if not is_file_usable(file):
+        raise NotFoundException("文件不存在")
 
     # 对于本地存储，直接返回下载API路径
     download_url = f"/api/v1/files/{file_id}/download"

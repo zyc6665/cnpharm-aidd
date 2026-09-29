@@ -265,26 +265,30 @@ export function useWorkflowPersistence(input: {
       return
     }
 
-    const saved = await workflowDefinitionsStore.saveWorkflowDefinition(
-      buildWorkflowDefinitionPayload(workflowName.value.trim() || persistenceLabels.value.untitledWorkflow),
-      selectedSavedWorkflowId.value ?? workflowDefinitionsStore.currentWorkflowDefinition?.id
-    )
-    selectedSavedWorkflowId.value = saved.id
-    workflowName.value = saved.name
+    try {
+      const saved = await workflowDefinitionsStore.saveWorkflowDefinition(
+        buildWorkflowDefinitionPayload(workflowName.value.trim() || persistenceLabels.value.untitledWorkflow),
+        selectedSavedWorkflowId.value ?? workflowDefinitionsStore.currentWorkflowDefinition?.id
+      )
+      selectedSavedWorkflowId.value = saved.id
+      workflowName.value = saved.name
 
-    const run = await workflowStore.runWorkflowDefinition(saved.id, {
-      name: saved.name,
-      input_files: selectedWorkflowInputFiles.value
-    })
-    await workflowStore.loadWorkflowRuns(
-      buildWorkflowRunListParams({
-        projectId: projectId?.value,
-        workflowDefinitionId: saved.id,
-        page: 1,
-        pageSize: 20
+      const run = await workflowStore.runWorkflowDefinition(saved.id, {
+        name: saved.name,
+        input_files: selectedWorkflowInputFiles.value
       })
-    )
-    await workflowStore.loadWorkflowRun(run.id)
+      await workflowStore.loadWorkflowRuns(
+        buildWorkflowRunListParams({
+          projectId: projectId?.value,
+          workflowDefinitionId: saved.id,
+          page: 1,
+          pageSize: 20
+        })
+      )
+      await workflowStore.loadWorkflowRun(run.id)
+    } catch {
+      // 请求层已经展示具体错误。
+    }
   }
 
   async function handleRefreshWorkflowRuns() {
@@ -322,19 +326,27 @@ export function useWorkflowPersistence(input: {
   }
 
   async function handleSyncWorkflowRun() {
-    const run = await workflowStore.syncActiveWorkflowRun()
-    if (run) {
-      await restoreNodeTasksFromWorkflowRun(run)
+    try {
+      const run = await workflowStore.syncActiveWorkflowRun()
+      if (run) {
+        await restoreNodeTasksFromWorkflowRun(run)
+      }
+    } catch {
+      // 请求层已经展示具体错误。
     }
   }
 
   async function handleCancelWorkflowRun() {
-    const run = await workflowStore.cancelActiveWorkflowRun()
-    if (run) {
-      await restoreNodeTasksFromWorkflowRun(run)
+    try {
+      const run = await workflowStore.cancelActiveWorkflowRun()
+      if (run) {
+        await restoreNodeTasksFromWorkflowRun(run)
+      }
+      clearWorkflowRunAutoSync()
+      message.success(persistenceLabels.value.runCanceled)
+    } catch {
+      // 请求层已经展示具体错误。
     }
-    clearWorkflowRunAutoSync()
-    message.success(persistenceLabels.value.runCanceled)
   }
 
   async function handleRetryWorkflowRunNode(nodeId: string) {
@@ -342,12 +354,16 @@ export function useWorkflowPersistence(input: {
     if (!runId) {
       return
     }
-    const run = await workflowStore.retryWorkflowRunNode(runId, nodeId)
-    if (run) {
-      await restoreNodeTasksFromWorkflowRun(run)
+    try {
+      const run = await workflowStore.retryWorkflowRunNode(runId, nodeId)
+      if (run) {
+        await restoreNodeTasksFromWorkflowRun(run)
+      }
+      await scheduleWorkflowRunAutoSync()
+      message.success(persistenceLabels.value.nodeRetried)
+    } catch {
+      // 请求层已经展示具体错误。
     }
-    await scheduleWorkflowRunAutoSync()
-    message.success(persistenceLabels.value.nodeRetried)
   }
 
   function handleWorkflowRunDetail(runId: string) {
@@ -384,7 +400,22 @@ export function useWorkflowPersistence(input: {
     }
 
     workflowRunAutoSyncTimer.value = window.setInterval(async () => {
-      await workflowStore.syncActiveWorkflowRun()
+      if (workflowStore.isSyncingWorkflowRun || workflowStore.isLoadingWorkflowRun) {
+        return
+      }
+      try {
+        const run = await workflowStore.syncActiveWorkflowRun()
+        if (!run) {
+          return
+        }
+        await restoreNodeTasksFromWorkflowRun(run)
+        if (['success', 'failure', 'canceled'].includes(run.status)) {
+          await artifactsStore.fetchArtifacts({ page: 1, page_size: 100 })
+          clearWorkflowRunAutoSync()
+        }
+      } catch {
+        clearWorkflowRunAutoSync()
+      }
     }, 5000)
   }
 

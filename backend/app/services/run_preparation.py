@@ -83,6 +83,13 @@ async def prepare_run(db: AsyncSession, *, input: RunPreparationInput) -> Prepar
     standard_input_uploads = normalize_string_mapping(input.standard_input_uploads)
     project_id = input.context.project_id
 
+    for file_id in dedupe_ordered(file_ids):
+        await require_existing_file_id(
+            db,
+            file_id=file_id,
+            project_id=project_id,
+        )
+
     contract = build_tool_contract(input.tool)
     artifact_inputs = artifact_input_slots_for_run(contract, input.workflow_node)
     artifact_inputs_by_name = artifact_input_slots_by_name(artifact_inputs)
@@ -124,6 +131,11 @@ async def prepare_run(db: AsyncSession, *, input: RunPreparationInput) -> Prepar
         if not decision.selected_file_id or accepts_standard_bindings:
             continue
 
+        await require_existing_file_id(
+            db,
+            file_id=decision.selected_file_id,
+            project_id=project_id,
+        )
         file_ids.append(decision.selected_file_id)
         await project_file_to_legacy_params(
             db,

@@ -18,6 +18,15 @@ from app.tool_packages.schemas import TOOL_PACKAGE_V2_API_VERSION
 
 TOOL_CONTRACT_VERSION = "1.0"
 
+__all__ = [
+    "TOOL_CONTRACT_VERSION",
+    "build_tool_contract",
+    "collect_tool_contract_config_validation_errors",
+    "collect_tool_contract_validation_errors",
+    "contract_emits_standard_artifacts",
+    "tool_emits_standard_artifacts",
+]
+
 
 def build_tool_contract(tool: Any, *, capability: Any | None = None) -> dict[str, Any]:
     """Build the stable platform-facing contract for a persisted tool."""
@@ -303,6 +312,8 @@ def _executor_contract(tool: Any, config: dict[str, Any]) -> dict[str, Any]:
 
 
 def _resource_profile_contract(value: Any) -> dict[str, Any]:
+    if isinstance(value, str) and value.strip():
+        return {"id": value.strip()}
     return dict(value) if isinstance(value, dict) else {}
 
 

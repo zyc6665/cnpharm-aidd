@@ -102,6 +102,33 @@ class MemoryCacheBackend(CacheBackend):
             del self._cache[key]
             return True
 
+    async def set_if_exists(
+        self,
+        key: str,
+        value: Any,
+        expire: Optional[int] = None,
+    ) -> bool:
+        """仅当键仍存在时更新值和过期时间。"""
+        async with self._lock:
+            existing = self._cache.get(key)
+            if existing is None or existing.is_expired():
+                if existing is not None:
+                    del self._cache[key]
+                return False
+            expires_at = None
+            if expire:
+                expires_at = utcnow() + timedelta(seconds=expire)
+            self._cache[key] = CacheEntry(value=value, expires_at=expires_at)
+            return True
+
+    async def expire_if_value(self, key: str, value: Any, seconds: int) -> bool:
+        async with self._lock:
+            entry = self._cache.get(key)
+            if entry is None or entry.is_expired() or entry.value != value:
+                return False
+            entry.expires_at = utcnow() + timedelta(seconds=max(int(seconds), 1))
+            return True
+
     async def delete(self, key: str) -> bool:
         """删除缓存"""
         async with self._lock:

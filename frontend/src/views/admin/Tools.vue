@@ -124,6 +124,40 @@
       </a-table>
     </a-card>
 
+    <a-modal
+      v-model:open="registrationModalVisible"
+      :title="t('admin.toolRegistrationTitle')"
+      :footer="null"
+      width="860px"
+      wrap-class-name="tool-registration-modal"
+    >
+      <p class="registration-description">{{ t('admin.toolRegistrationDescription') }}</p>
+      <div class="registration-options">
+        <button
+          v-for="option in registrationOptions"
+          :key="option.key"
+          type="button"
+          class="registration-option"
+          :class="[`registration-option--${option.key}`, { 'is-recommended': option.key === 'package' }]"
+          @click="selectRegistrationMode(option.key)"
+        >
+          <span class="registration-option-icon">
+            <component :is="option.icon" />
+          </span>
+          <span class="registration-option-copy">
+            <span class="registration-option-heading">
+              <strong>{{ t(option.title) }}</strong>
+              <span v-if="option.key === 'package'" class="registration-recommended">
+                {{ t('admin.toolRegistrationRecommended') }}
+              </span>
+            </span>
+            <span>{{ t(option.description) }}</span>
+          </span>
+          <RightOutlined class="registration-option-arrow" />
+        </button>
+      </div>
+    </a-modal>
+
     <input
       ref="importConfigFileInput"
       type="file"
@@ -184,10 +218,15 @@ import AppFilterBar from '@/components/common/AppFilterBar.vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import {
   DeleteOutlined,
+  ApiOutlined,
+  AppstoreOutlined,
+  CodeSandboxOutlined,
   EditOutlined,
   PlusOutlined,
   ReloadOutlined,
+  RightOutlined,
   SearchOutlined,
+  SettingOutlined,
   UploadOutlined
 } from '@ant-design/icons-vue'
 import type { Category, Tool } from '@/types/models'
@@ -211,6 +250,34 @@ const importConfigText = ref('')
 const importCategoryId = ref<string | undefined>()
 const importPublish = ref(false)
 const importConfigFileInput = ref<HTMLInputElement | null>(null)
+const registrationModalVisible = ref(false)
+
+const registrationOptions = [
+  {
+    key: 'template',
+    icon: AppstoreOutlined,
+    title: 'admin.toolRegistrationTemplateTitle',
+    description: 'admin.toolRegistrationTemplateDescription'
+  },
+  {
+    key: 'remote',
+    icon: ApiOutlined,
+    title: 'admin.toolRegistrationRemoteTitle',
+    description: 'admin.toolRegistrationRemoteDescription'
+  },
+  {
+    key: 'package',
+    icon: CodeSandboxOutlined,
+    title: 'admin.toolRegistrationPackageTitle',
+    description: 'admin.toolRegistrationPackageDescription'
+  },
+  {
+    key: 'advanced',
+    icon: SettingOutlined,
+    title: 'admin.toolRegistrationAdvancedTitle',
+    description: 'admin.toolRegistrationAdvancedDescription'
+  }
+] as const
 
 const filters = reactive({
   keyword: '',
@@ -288,7 +355,16 @@ const handleTableChange = async (pag: { current?: number; pageSize?: number }) =
 }
 
 const openCreatePage = () => {
-  router.push('/admin/tools/create')
+  registrationModalVisible.value = true
+}
+
+const selectRegistrationMode = (mode: string) => {
+  registrationModalVisible.value = false
+  if (mode === 'package') {
+    router.push('/admin/tool-packages')
+    return
+  }
+  router.push({ path: '/admin/tools/create', query: { mode } })
 }
 
 const openImportModal = () => {
@@ -380,6 +456,147 @@ onMounted(async () => {
   .import-config-description {
     margin-bottom: @spacing-md;
     color: @text-color-light-secondary;
+  }
+
+  .registration-description {
+    margin: 0 0 @spacing-lg;
+    color: @text-color-light-secondary;
+    font-size: @font-size-sm;
+    line-height: 1.6;
+  }
+
+  .registration-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .registration-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    min-width: 0;
+    min-height: 112px;
+    padding: 18px;
+    border: 1px solid @border-color;
+    border-radius: @border-radius-md;
+    background: @bg-surface;
+    color: @text-color-light-primary;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color @transition-fast, background @transition-fast, box-shadow @transition-fast;
+
+    &:hover {
+      border-color: @primary-color;
+      background: @bg-hover;
+      box-shadow: @shadow-sm;
+    }
+
+    &:focus-visible {
+      outline: 2px solid @primary-color;
+      outline-offset: 2px;
+    }
+
+    &.is-recommended {
+      border-color: fade(@success-color, 45%);
+
+      &:hover {
+        border-color: @success-color;
+      }
+    }
+  }
+
+  .registration-option-icon {
+    display: inline-flex;
+    flex: 0 0 40px;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: @border-radius-md;
+    background: @bg-elevated;
+    color: @text-secondary;
+    font-size: 19px;
+  }
+
+  .registration-option--template .registration-option-icon {
+    background: @accent-color-light;
+    color: @primary-color;
+  }
+
+  .registration-option--remote .registration-option-icon {
+    background: @info-color-light;
+    color: @info-color;
+  }
+
+  .registration-option--package .registration-option-icon {
+    background: @success-color-light;
+    color: @success-color;
+  }
+
+  .registration-option--advanced .registration-option-icon {
+    background: @warning-color-light;
+    color: @warning-color;
+  }
+
+  .registration-option-copy {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 7px;
+    min-width: 0;
+
+    strong {
+      color: @text-color-light-primary;
+      font-size: @font-size-md;
+      font-weight: @font-weight-semibold;
+      line-height: 1.35;
+    }
+
+    span {
+      color: @text-color-light-secondary;
+      font-size: @font-size-xs;
+      line-height: 1.6;
+    }
+  }
+
+  .registration-option-heading {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .registration-recommended {
+    padding: 2px 7px;
+    border-radius: @border-radius-sm;
+    background: @success-color-light;
+    color: @success-color !important;
+    font-size: 11px !important;
+    font-weight: @font-weight-medium;
+    line-height: 1.4 !important;
+  }
+
+  .registration-option-arrow {
+    flex: 0 0 auto;
+    margin-top: 12px;
+    color: @text-tertiary;
+    transition: color @transition-fast, transform @transition-fast;
+  }
+
+  .registration-option:hover .registration-option-arrow {
+    color: @primary-color;
+    transform: translateX(2px);
+  }
+
+  .registration-option--package:hover .registration-option-arrow {
+    color: @success-color;
+  }
+
+  @media (max-width: 720px) {
+    .registration-options {
+      grid-template-columns: 1fr;
+    }
   }
 
   .tool-cell {

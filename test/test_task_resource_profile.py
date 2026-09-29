@@ -88,3 +88,13 @@ def test_build_task_resource_snapshot_uses_tool_gpu_fields_as_runtime_source_of_
 
     assert snapshot["gpu_required"] is True
     assert snapshot["gpu_memory_mb"] == 8192
+
+
+def test_build_task_resource_snapshot_resolves_approved_profile_id():
+    snapshot = build_task_resource_snapshot(
+        {"type": "k8s_job", "resource_profile": "gpu-large", "gpu_required": False}
+    )
+
+    assert snapshot["resource_profile"]["id"] == "gpu-large"
+    assert snapshot["resource_request"]["gpu_required"] is True
+    assert snapshot["resource_request"]["cpu"] == 16.0

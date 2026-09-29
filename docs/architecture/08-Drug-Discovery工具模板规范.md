@@ -2,6 +2,10 @@
 
 > 修订日期：2026-09-05。本文模板包含 V1、V1.1 和 V2 规划状态；模板存在不代表工具已在 registry 注册或生产可运行。预测、生成、打分和筛选类工具必须配套模型卡/算法说明、科学结果语义和验证证据。
 
+> 执行环境重构说明：本文历史示例中的 `remote_api`、独立 `docker_image` 和独立 `python_script` 仅表示兼容字段。新模板应优先绑定 `k8s_job` 或 `ssh_job`，Docker/Python 作为 Job runtime；新模型不通过常驻 Remote API 上线。
+
+> 资源档位说明：下方早期模板中的 `cpu`、`memory_gb`、`gpu_required` 等内联值仅用于解释旧模板含义。新发布的 ToolVersion 必须引用管理员批准的 Resource Profile ID，真实 requests/limits、超时和并发策略由平台注册表统一管理。
+
 ## 1. 目标
 
 药物研发工具模板用于把外部数据库、传统 CADD 工具、平台内置轻量工具和深度学习模型统一成可注册、可运行、可编排、可视化的工具能力。新增工具不应再靠前端或工作流单独适配，而应通过 Tool Contract、标准 Artifact 和 Resource Profile 自动进入工具库、工作流和智能体上下文。
@@ -27,7 +31,7 @@
 2. 工具输入输出优先使用标准 Artifact Slot。
 3. 普通参数只放到 `parameters_schema`。
 4. 数据准备要求通过 `required_roles`、`role_preferences` 和 `readiness_policy` 声明。
-5. 计算资源通过 `resource_profile` 声明。
+5. 计算资源通过 `resource_profile` 引用管理员批准的资源档位。
 6. 执行方式通过 `executor.type` 声明。
 7. 可视化由 Artifact Renderer 决定，不由工具私有 UI 决定。
 8. 含预测、生成、打分或筛选语义的模板必须声明模型卡或算法说明、适用域、证据范围和结果解释边界。
@@ -640,7 +644,7 @@ executor:
 8. 预测、生成、打分或筛选类工具提供模型卡/算法说明、endpoint 或 score definition、适用域策略和验证记录。
 9. Result Manifest 输出的 `metadata_json` 能追溯模型版本、输入版本、失败分母、null/failed 原因和科学 profile 状态。
 10. 重排类工具声明候选集合版本、权重、方向、归一化、缺失策略和可比性范围。
-11. Docking、MD、K8s/Slurm 等 V2 模板在 registry 发布前必须标记为待实现或后续版本，不能进入默认验收清单。
+11. Docking、MD 等重计算模板必须绑定 `k8s_job` 或 `ssh_job`；尚未完成 Adapter 验证的模板标记为待实现，不能进入默认验收清单。
 12. 进入工具库、工作流节点库和智能体工具摘要。
 
 ## 15. 禁止事项

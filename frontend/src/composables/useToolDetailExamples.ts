@@ -40,13 +40,21 @@ export function useToolDetailExamples(options: ToolDetailExamplesOptions) {
   const previewOpen = ref(false)
   const previewLoading = ref(false)
   const preview = ref<ToolExampleFilePreview | null>(null)
+  let exampleRequestId = 0
+  let previewRequestId = 0
 
   async function fetchExample(toolId: string) {
+    const requestId = ++exampleRequestId
+    example.value = null
     try {
       const res = await options.api.getExample(toolId)
-      example.value = res.data
+      if (requestId === exampleRequestId && unref(options.tool)?.id === toolId) {
+        example.value = res.data
+      }
     } catch {
-      example.value = null
+      if (requestId === exampleRequestId) {
+        example.value = null
+      }
     }
   }
 
@@ -76,6 +84,9 @@ export function useToolDetailExamples(options: ToolDetailExamplesOptions) {
     applyingExample.value = true
     try {
       const res = await options.api.applyExample(currentTool.id)
+      if (unref(options.tool)?.id !== currentTool.id) {
+        return
+      }
       applyExampleParams(res.data.params)
 
       Object.entries(res.data.files).forEach(([field, file]) => {
@@ -101,16 +112,23 @@ export function useToolDetailExamples(options: ToolDetailExamplesOptions) {
       return
     }
 
+    const requestId = ++previewRequestId
     previewOpen.value = true
     previewLoading.value = true
     preview.value = null
     try {
       const res = await options.api.previewFile(currentTool.id, field)
-      preview.value = res.data
+      if (requestId === previewRequestId && unref(options.tool)?.id === currentTool.id) {
+        preview.value = res.data
+      }
     } catch {
-      previewOpen.value = false
+      if (requestId === previewRequestId) {
+        previewOpen.value = false
+      }
     } finally {
-      previewLoading.value = false
+      if (requestId === previewRequestId) {
+        previewLoading.value = false
+      }
     }
   }
 

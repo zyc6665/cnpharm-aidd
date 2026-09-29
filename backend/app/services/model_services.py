@@ -11,6 +11,7 @@ from app.common.secret_crypto import decrypt_secret, encrypt_secret, mask_secret
 from app.models.system_settings import ModelService
 from app.schemas.system_settings import (
     ModelServiceCreate,
+    ModelServiceModelsResponse,
     ModelServiceResponse,
     ModelServiceTestResponse,
     ModelServiceUpdate,
@@ -68,7 +69,13 @@ async def create_model_service(
     db: AsyncSession,
     data: ModelServiceCreate,
 ) -> ModelServiceResponse:
-    if data.is_default:
+    has_enabled_services = await db.scalar(
+        select(ModelService.id).where(ModelService.is_enabled.is_(True)).limit(1)
+    )
+    should_default = bool(
+        data.is_default or (data.is_enabled and not has_enabled_services)
+    )
+    if should_default:
         await _clear_default_services(db)
 
     service = ModelService(
@@ -77,7 +84,7 @@ async def create_model_service(
         base_url=data.base_url.rstrip("/"),
         api_key_encrypted=encrypt_secret(data.api_key),
         model_name=data.model_name,
-        is_default=data.is_default,
+        is_default=should_default,
         is_enabled=data.is_enabled,
         timeout_seconds=data.timeout_seconds,
         max_tokens=data.max_tokens,
@@ -85,6 +92,7 @@ async def create_model_service(
     )
     db.add(service)
     await db.flush()
+    await _promote_default_service(db)
     await db.refresh(service)
     return serialize_model_service(service)
 
@@ -98,7 +106,15 @@ async def update_model_service(
     update_data = data.model_dump(exclude_unset=True)
 
     if update_data.get("is_default") is True:
+        if update_data.get("is_enabled", service.is_enabled) is not True:
+            raise ValidationException("不能将已禁用的模型服务设为默认")
         await _clear_default_services(db)
+
+    disabling_default = (
+        update_data.get("is_enabled") is False and bool(service.is_default)
+    )
+    if disabling_default:
+        update_data["is_default"] = False
 
     for key, value in update_data.items():
         if key == "api_key":
@@ -111,13 +127,39 @@ async def update_model_service(
 
     await db.flush()
     await db.refresh(service)
+    await _promote_default_service(db)
+    await db.refresh(service)
     return serialize_model_service(service)
 
 
 async def delete_model_service(db: AsyncSession, service_id: str) -> None:
     service = await _load_model_service(db, service_id)
+    was_default = bool(service.is_default)
     await db.delete(service)
     await db.flush()
+    if was_default:
+        await _promote_default_service(db)
+
+
+async def _promote_default_service(db: AsyncSession) -> None:
+    """Keep one enabled service selected whenever one exists."""
+    defaults = await db.execute(
+        select(ModelService).where(ModelService.is_default.is_(True))
+    )
+    default_services = defaults.scalars().all()
+    if any(service.is_enabled for service in default_services):
+        return
+    for service in default_services:
+        service.is_default = False
+    candidate = await db.scalar(
+        select(ModelService)
+        .where(ModelService.is_enabled.is_(True))
+        .order_by(ModelService.created_at.asc(), ModelService.name.asc())
+        .limit(1)
+    )
+    if candidate:
+        candidate.is_default = True
+        await db.flush()
 
 
 async def set_default_model_service(
@@ -172,3 +214,18 @@ async def test_model_service(
         last_test_status=service.last_test_status,
         last_tested_at=service.last_tested_at,
     )
+
+
+async def discover_model_service_models(
+    db: AsyncSession,
+    service_id: str,
+) -> ModelServiceModelsResponse:
+    from app.services.openai_compatible import list_openai_compatible_models
+
+    service = await _load_model_service(db, service_id)
+    if service.provider_type != "openai_compatible":
+        raise ValidationException(f"不支持的模型服务类型: {service.provider_type}")
+    success, models, message = await list_openai_compatible_models(service)
+    if not success:
+        raise ValidationException(message)
+    return ModelServiceModelsResponse(id=service.id, models=models, message=message)

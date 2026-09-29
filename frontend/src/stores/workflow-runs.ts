@@ -29,6 +29,7 @@ export const useWorkflowRunsStore = defineStore('workflow-runs', () => {
   const isSyncingWorkflowRun = ref(false)
   const isCancelingWorkflowRun = ref(false)
   const retryingWorkflowRunNodeId = ref<string | null>(null)
+  let workflowRunRequestId = 0
 
   const hasMoreWorkflowRuns = computed(() => (
     workflowRunsPagination.value.page < workflowRunsPagination.value.totalPages
@@ -83,15 +84,20 @@ export const useWorkflowRunsStore = defineStore('workflow-runs', () => {
   }
 
   async function loadWorkflowRun(runId: string) {
+    const requestId = ++workflowRunRequestId
     isLoadingWorkflowRun.value = true
     try {
       const response = await getWorkflowRun(runId)
-      activeWorkflowRun.value = response.data
-      activeWorkflowRunId.value = response.data.id
-      upsertWorkflowRun(response.data)
+      if (requestId === workflowRunRequestId) {
+        activeWorkflowRun.value = response.data
+        activeWorkflowRunId.value = response.data.id
+        upsertWorkflowRun(response.data)
+      }
       return response.data
     } finally {
-      isLoadingWorkflowRun.value = false
+      if (requestId === workflowRunRequestId) {
+        isLoadingWorkflowRun.value = false
+      }
     }
   }
 
@@ -141,8 +147,10 @@ export const useWorkflowRunsStore = defineStore('workflow-runs', () => {
   }
 
   function clearActiveWorkflowRun() {
+    workflowRunRequestId += 1
     activeWorkflowRun.value = null
     activeWorkflowRunId.value = null
+    isLoadingWorkflowRun.value = false
   }
 
   function clear() {

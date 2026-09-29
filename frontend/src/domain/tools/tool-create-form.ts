@@ -33,13 +33,17 @@ export interface ToolCreateFormState extends ToolCreateParams {
   version: string
   changelog: string
   notes: string
-  tool_type: 'remote_api' | 'docker_image' | 'python_script' | 'ssh_job'
+  tool_type: 'remote_api' | 'docker_image' | 'python_script' | 'ssh_job' | 'k8s_job'
   remote_api_registration_mode: 'self_register' | 'manual'
   remote_base_url: string
   remote_run_smoke_test: boolean
   remote_publish_on_success: boolean
   api_endpoint: string
   api_method: 'GET' | 'POST'
+  remote_capacity_mode: 'unmanaged' | 'static'
+  remote_capacity_group: string
+  remote_max_inflight: number
+  remote_lease_ttl_sec: number
   docker_image: string
   python_script: string
   ssh_host: string
@@ -56,6 +60,8 @@ export interface ToolCreateFormState extends ToolCreateParams {
   ssh_device: string
   ssh_cleanup_remote: boolean
   ssh_strict_host_key_checking: boolean
+  k8s_image: string
+  k8s_resource_profile: string
   input_schema: string
   output_schema: string
   documentation_markdown: string
@@ -113,6 +119,7 @@ export interface RemoteToolRegistrationPayload {
   icon_url?: string
   is_public: boolean
   timeout_sec?: number
+  capacity_policy?: Record<string, unknown>
 }
 
 export interface ToolTemplateDraftPayload {
@@ -146,6 +153,7 @@ export interface ToolCreateSubmissionInput {
   originalChangelog: string
   originalNotes: string
   originalConfigSnapshot: string
+  toolPackageManifest?: Record<string, unknown>
 }
 
 export interface ToolCreateSubmissionResult {
@@ -184,6 +192,10 @@ export function createToolCreateFormState(): ToolCreateFormState {
     remote_publish_on_success: false,
     api_endpoint: '',
     api_method: 'POST',
+    remote_capacity_mode: 'static',
+    remote_capacity_group: '',
+    remote_max_inflight: 1,
+    remote_lease_ttl_sec: 3600,
     docker_image: '',
     python_script: '',
     ssh_host: '',
@@ -200,6 +212,8 @@ export function createToolCreateFormState(): ToolCreateFormState {
     ssh_device: '',
     ssh_cleanup_remote: true,
     ssh_strict_host_key_checking: true,
+    k8s_image: '',
+    k8s_resource_profile: 'cpu-small',
     input_schema: '{}',
     output_schema: '{}',
     documentation_markdown: '',
@@ -250,7 +264,27 @@ export function buildRemoteToolRegistrationPayload(
     icon_url: formState.icon_url || undefined,
     is_public: formState.is_public ?? true,
     timeout_sec: formState.timeout_sec,
+    capacity_policy: buildRemoteCapacityPolicy(formState),
   }
+}
+
+export function buildRemoteCapacityPolicy(
+  formState: Pick<
+    ToolCreateFormState,
+    'remote_capacity_mode' | 'remote_capacity_group' | 'remote_max_inflight' | 'remote_lease_ttl_sec'
+  >,
+): Record<string, unknown> {
+  if (formState.remote_capacity_mode === 'unmanaged') return {}
+
+  const policy: Record<string, unknown> = { mode: formState.remote_capacity_mode }
+  if (formState.remote_capacity_group.trim()) {
+    policy.capacity_group = formState.remote_capacity_group.trim()
+  }
+  if (formState.remote_capacity_mode === 'static') {
+    policy.max_inflight = formState.remote_max_inflight
+    policy.lease_ttl_sec = formState.remote_lease_ttl_sec
+  }
+  return policy
 }
 
 export function remoteToolStageStatusDisplay(
@@ -309,10 +343,14 @@ export function buildTemplateExecutorConfig(
   editorState: ToolCreateEditorState,
 ): Record<string, unknown> {
   if (formState.tool_type === 'remote_api') {
+    const capacityPolicy = buildRemoteCapacityPolicy(formState)
     return {
       endpoint: formState.api_endpoint,
       method: formState.api_method,
       headers: keyValueEntriesToRecord(editorState.apiHeaderEntries),
+      ...(Object.keys(capacityPolicy).length > 0
+        ? { capacity_policy: capacityPolicy }
+        : {}),
     }
   }
   if (formState.tool_type === 'docker_image') {
@@ -326,6 +364,13 @@ export function buildTemplateExecutorConfig(
     return {
       script_path: formState.python_script,
       args: stringListForConfig(editorState.pythonArgumentItems),
+    }
+  }
+
+  if (formState.tool_type === 'k8s_job') {
+    return {
+      runtime: { image: formState.k8s_image },
+      resource_profile: formState.k8s_resource_profile,
     }
   }
 
@@ -345,7 +390,7 @@ export function buildToolTemplateDraftPayload(
 }
 
 export function isSupportedToolType(value: string): value is ToolCreateFormState['tool_type'] {
-  return ['remote_api', 'docker_image', 'python_script', 'ssh_job'].includes(value)
+  return ['remote_api', 'docker_image', 'python_script', 'ssh_job', 'k8s_job'].includes(value)
 }
 
 export function templateInputToForm(input: Record<string, unknown>): AgentCapabilityInputForm {
@@ -522,6 +567,7 @@ export function createToolCreateSubmission(
     apiEndpoint: input.formState.api_endpoint,
     apiMethod: input.formState.api_method,
     apiHeaders: keyValueEntriesToRecord(input.editorState.apiHeaderEntries),
+    remoteCapacityPolicy: buildRemoteCapacityPolicy(input.formState),
     dockerImage: input.formState.docker_image,
     dockerCommand: stringListForConfig(input.editorState.dockerCommandItems),
     dockerEnv: keyValueEntriesToRecord(input.editorState.dockerEnvEntries),
@@ -543,6 +589,9 @@ export function createToolCreateSubmission(
     sshStrictHostKeyChecking: input.formState.ssh_strict_host_key_checking,
     sshEnv: keyValueEntriesToRecord(input.editorState.sshEnvEntries),
     sshOutputGlobs: stringListForConfig(input.editorState.sshOutputGlobItems),
+    k8sImage: input.formState.k8s_image,
+    k8sResourceProfile: input.formState.k8s_resource_profile,
+    toolPackageManifest: input.toolPackageManifest,
   })
   const versionConfigChanged = input.isEdit && (
     input.formState.version !== input.originalVersion ||
@@ -631,6 +680,7 @@ function applyExecutorConfigPatch(patch: ToolConfigFormPatch, config: Record<str
       patch.form.api_method = config.method === 'GET' ? 'GET' : 'POST'
       patch.editor.apiHeaderEntries = recordToKeyValueEntries(config.headers)
     }
+    applyRemoteCapacityPatch(patch.form, config.capacity_policy)
     return
   }
 
@@ -667,6 +717,37 @@ function applyExecutorConfigPatch(patch: ToolConfigFormPatch, config: Record<str
     patch.form.ssh_strict_host_key_checking = config.strict_host_key_checking !== false
     patch.editor.sshEnvEntries = recordToKeyValueEntries(config.env)
     patch.editor.sshOutputGlobItems = normalizeStringList(config.output_globs)
+    return
+  }
+
+  if (config.type === 'k8s_job') {
+    patch.form.tool_type = 'k8s_job'
+    const runtime = isToolConfigRecord(config.runtime) ? config.runtime : {}
+    patch.form.k8s_image = String(runtime.image || config.image || '')
+    patch.form.k8s_resource_profile = String(config.resource_profile || 'cpu-small')
+  }
+}
+
+function applyRemoteCapacityPatch(
+  form: Partial<ToolCreateFormState>,
+  rawPolicy: unknown,
+): void {
+  if (!rawPolicy || typeof rawPolicy !== 'object') {
+    form.remote_capacity_mode = 'unmanaged'
+    return
+  }
+  const policy = rawPolicy as Record<string, unknown>
+  if (policy.mode === 'static') {
+    form.remote_capacity_mode = policy.mode
+  }
+  if (typeof policy.capacity_group === 'string') {
+    form.remote_capacity_group = policy.capacity_group
+  }
+  if (typeof policy.max_inflight === 'number') {
+    form.remote_max_inflight = policy.max_inflight
+  }
+  if (typeof policy.lease_ttl_sec === 'number') {
+    form.remote_lease_ttl_sec = policy.lease_ttl_sec
   }
 }
 

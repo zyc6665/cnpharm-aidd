@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import sys
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -25,6 +26,7 @@ from app.common.exceptions import (  # noqa: E402
     NotFoundException,
     ValidationException,
 )
+from app.common.time import utcnow  # noqa: E402
 from app.database.base import Base  # noqa: E402
 from app.models import (  # noqa: E402,F401
     Artifact,
@@ -194,6 +196,34 @@ async def test_validate_standard_input_bindings_checks_project_ownership(
 
 
 @pytest.mark.asyncio
+async def test_validate_standard_input_bindings_rejects_expired_version(
+    db_session: AsyncSession,
+) -> None:
+    from datetime import timedelta
+
+    from app.common.time import utcnow
+
+    owner = await _create_owner(db_session)
+    version = await _create_artifact_version(
+        db_session,
+        owner,
+        project_id="project-1",
+    )
+    version.expires_at = utcnow() - timedelta(seconds=1)
+
+    with pytest.raises(ValidationException) as exc_info:
+        await validate_standard_input_bindings(
+            db_session,
+            project_id="project-1",
+            input_bindings={"protein": version.id},
+        )
+
+    assert exc_info.value.detail == {
+        "missing_artifact_version_ids": [version.id]
+    }
+
+
+@pytest.mark.asyncio
 async def test_file_validation_checks_project_and_deduplicates(
     db_session: AsyncSession,
 ) -> None:
@@ -236,3 +266,31 @@ async def test_file_validation_checks_project_and_deduplicates(
             file_id="missing-file",
             label="missing",
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("expires_at", utcnow() - timedelta(seconds=1)),
+        ("deleted_at", utcnow()),
+        ("is_corrupted", True),
+    ],
+)
+async def test_require_existing_file_id_rejects_unusable_files(
+    db_session: AsyncSession,
+    field: str,
+    value: object,
+) -> None:
+    owner = await _create_owner(db_session)
+    file_record = await _create_file(db_session, owner, project_id="project-1")
+    setattr(file_record, field, value)
+
+    with pytest.raises(ValidationException) as exc_info:
+        await require_existing_file_id(
+            db_session,
+            file_id=file_record.id,
+            project_id="project-1",
+        )
+
+    assert exc_info.value.detail == {"unusable_file_ids": [file_record.id]}

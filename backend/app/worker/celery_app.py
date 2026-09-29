@@ -31,6 +31,20 @@ def create_celery_app() -> Celery:
         ]
     )
 
+    heartbeat_queues = [
+        queue.strip()
+        for queue in (settings.WORKER_CAPABILITY_HEARTBEAT_QUEUES or "default").split(",")
+        if queue.strip()
+    ]
+    heartbeat_schedule = {
+        f"heartbeat-worker-capability-{queue}": {
+            "task": "app.worker.tasks.heartbeat_worker_capability",
+            "schedule": 30.0,
+            "options": {"queue": queue},
+        }
+        for queue in heartbeat_queues
+    }
+
     # Celery 配置
     app.conf.update(
         # 任务序列化
@@ -47,8 +61,11 @@ def create_celery_app() -> Celery:
             "app.worker.tasks.execute_tool_task": {"queue": "tool_tasks"},
             "app.worker.tasks.cleanup_expired_files": {"queue": "maintenance"},
             "app.worker.tasks.reclaim_stale_gpu_leases": {"queue": "maintenance"},
+            "app.worker.tasks.reclaim_stale_resource_reservations": {"queue": "maintenance"},
+            "app.worker.tasks.reclaim_stale_cancellations": {"queue": "maintenance"},
             "app.worker.tasks.reconcile_execution_records": {"queue": "maintenance"},
             "app.worker.tasks.reconcile_remote_tasks": {"queue": "maintenance"},
+            "app.worker.tasks.reconcile_remote_cancellations": {"queue": "maintenance"},
             "app.worker.tasks.collect_gpu_stats": {"queue": "monitoring"},
         },
 
@@ -81,10 +98,15 @@ def create_celery_app() -> Celery:
                 "task": "app.worker.tasks.reclaim_stale_gpu_leases",
                 "schedule": 60.0,
             },
-            "heartbeat-worker-capability": {
-                "task": "app.worker.tasks.heartbeat_worker_capability",
-                "schedule": 30.0,
+            "reclaim-stale-resource-reservations": {
+                "task": "app.worker.tasks.reclaim_stale_resource_reservations",
+                "schedule": 60.0,
             },
+            "reclaim-stale-cancellations": {
+                "task": "app.worker.tasks.reclaim_stale_cancellations",
+                "schedule": 60.0,
+            },
+            **heartbeat_schedule,
             "reconcile-execution-records": {
                 "task": "app.worker.tasks.reconcile_execution_records",
                 "schedule": float(settings.EXECUTION_RECORD_RECONCILE_INTERVAL_SECONDS),
@@ -92,6 +114,10 @@ def create_celery_app() -> Celery:
             "reconcile-remote-tasks": {
                 "task": "app.worker.tasks.reconcile_remote_tasks",
                 "schedule": float(settings.REMOTE_TASK_RECOVERY_INTERVAL_SECONDS),
+            },
+            "reconcile-remote-cancellations": {
+                "task": "app.worker.tasks.reconcile_remote_cancellations",
+                "schedule": float(settings.REMOTE_CANCEL_RETRY_INTERVAL_SECONDS),
             },
             # 每分钟收集 GPU 统计
             "collect-gpu-stats": {

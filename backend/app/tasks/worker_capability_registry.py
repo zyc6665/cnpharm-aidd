@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from app.cache.base import CacheBackend
@@ -12,6 +11,8 @@ from app.tasks.resource_admission import (
     ResourceAdmissionPolicy,
     WorkerCapability,
 )
+from app.tasks.resource_lease import WorkerResourceLeaseManager
+from app.tasks.resource_profile import ResourceRequest
 
 
 class WorkerCapabilityRegistry:
@@ -46,8 +47,13 @@ class WorkerCapabilityRegistry:
             return False
 
         payload["last_seen_at"] = self.clock().isoformat()
-        await self.cache.set_json(key, payload, expire=self.ttl_seconds)
-        return True
+        # Keep the heartbeat from recreating a key that expired or was
+        # unregistered after the read above.
+        return await self.cache.set_json_if_exists(
+            key,
+            payload,
+            expire=self.ttl_seconds,
+        )
 
     async def unregister(self, worker_id: str) -> bool:
         """注销 Worker capability。"""
@@ -68,6 +74,115 @@ class WorkerCapabilityRegistry:
         capabilities = await self.list_active()
         return ResourceAdmissionPolicy.select_worker(request, capabilities)
 
+    async def select_available_worker(
+        self,
+        request: ResourceRequest,
+    ) -> AdmissionDecision:
+        """选择静态能力匹配且当前动态容量可用的 Worker。"""
+        capabilities = await self.list_active()
+        if not capabilities:
+            return AdmissionDecision(False, "", "no_registered_workers")
+
+        lease_manager = WorkerResourceLeaseManager(cache=self.cache)
+        dynamic_rejection_reason: str | None = None
+        candidates = await self._ordered_candidates(
+            request,
+            capabilities,
+            lease_manager,
+        )
+        for _, capability, static_decision in candidates:
+
+            dynamic_rejection_reason = await lease_manager.capacity_failure_reason(
+                capability=capability,
+                request=request,
+            )
+            if dynamic_rejection_reason is None:
+                return static_decision
+
+        return AdmissionDecision(
+            False,
+            "",
+            dynamic_rejection_reason or "no_capable_worker",
+        )
+
+    async def reserve_worker(
+        self,
+        request: ResourceRequest,
+        *,
+        reservation_id: str,
+        ttl_seconds: int,
+        user_id: str | None = None,
+        project_id: str | None = None,
+    ) -> AdmissionDecision:
+        """原子预留第一个静态匹配且动态容量可用的 Worker。"""
+        capabilities = await self.list_active()
+        if not capabilities:
+            return AdmissionDecision(False, "", "no_registered_workers")
+
+        lease_manager = WorkerResourceLeaseManager(cache=self.cache)
+        dynamic_rejection_reason: str | None = None
+        candidates = await self._ordered_candidates(
+            request,
+            capabilities,
+            lease_manager,
+        )
+        for _, capability, static_decision in candidates:
+
+            lease_decision = await lease_manager.acquire(
+                capability=capability,
+                request=request,
+                lease_id=reservation_id,
+                ttl_seconds=ttl_seconds,
+                lease_phase="reserved",
+                user_id=user_id,
+                project_id=project_id,
+            )
+            if lease_decision.acquired:
+                return static_decision
+            dynamic_rejection_reason = lease_decision.reason or dynamic_rejection_reason
+
+        return AdmissionDecision(
+            False,
+            "",
+            dynamic_rejection_reason or "no_capable_worker",
+        )
+
+    async def _ordered_candidates(
+        self,
+        request: ResourceRequest,
+        capabilities: list[WorkerCapability],
+        lease_manager: WorkerResourceLeaseManager,
+    ) -> list[tuple[float, WorkerCapability, AdmissionDecision]]:
+        """按当前资源负载升序排列静态匹配的 Worker。"""
+        candidates: list[tuple[float, WorkerCapability, AdmissionDecision]] = []
+        for capability in capabilities:
+            decision = ResourceAdmissionPolicy.evaluate(request, capability)
+            if not decision.admitted:
+                continue
+            usage = await lease_manager.current_usage_summary(capability.worker_id)
+            candidates.append(
+                (
+                    self._load_score(capability, usage),
+                    capability,
+                    decision,
+                )
+            )
+        return sorted(candidates, key=lambda item: (item[0], item[1].worker_id))
+
+    @staticmethod
+    def _load_score(
+        capability: WorkerCapability,
+        usage: dict[str, float | int],
+    ) -> float:
+        ratios: list[float] = []
+        if capability.cpu_capacity and capability.cpu_capacity > 0:
+            ratios.append(float(usage["cpu"]) / capability.cpu_capacity)
+        if capability.memory_capacity_gb and capability.memory_capacity_gb > 0:
+            ratios.append(float(usage["memory_gb"]) / capability.memory_capacity_gb)
+        if capability.parallelism and capability.parallelism > 0:
+            ratios.append(float(usage["parallelism"]) / capability.parallelism)
+        return max(ratios, default=0.0)
+
     @classmethod
     def _key(cls, worker_id: str) -> str:
         return f"{cls.KEY_PREFIX}{worker_id}"
@@ -75,6 +190,7 @@ class WorkerCapabilityRegistry:
     def _serialize(self, capability: WorkerCapability) -> dict[str, Any]:
         return {
             "worker_id": capability.worker_id,
+            "queue": capability.queue,
             "executor_types": list(capability.executor_types),
             "tiers": list(capability.tiers),
             "cpu_capacity": capability.cpu_capacity,
@@ -95,6 +211,7 @@ class WorkerCapabilityRegistry:
             return None
         return WorkerCapability(
             worker_id=worker_id,
+            queue=_optional_string(payload.get("queue")),
             executor_types=tuple(payload.get("executor_types") or ()),
             tiers=tuple(payload.get("tiers") or ()),
             cpu_capacity=_optional_float(payload.get("cpu_capacity")),
@@ -110,6 +227,11 @@ def _optional_float(value: Any) -> float | None:
     if value is None:
         return None
     return float(value)
+
+
+def _optional_string(value: Any) -> str | None:
+    normalized = str(value or "").strip()
+    return normalized or None
 
 
 def _optional_int(value: Any) -> int | None:

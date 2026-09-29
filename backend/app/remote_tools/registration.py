@@ -106,6 +106,7 @@ def remote_tool_config(
     manifest_sha256: str,
     discovery: RemoteToolDiscoveryResult,
     publish_on_success: bool,
+    capacity_policy: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     parameters_schema = dict(manifest_payload.get("parameters_schema") or {})
     config = {
@@ -138,4 +139,6 @@ def remote_tool_config(
     }
     if publish_on_success:
         config["pending_publish_on_smoke_success"] = True
+    if capacity_policy and capacity_policy.get("mode") != "unmanaged":
+        config["capacity_policy"] = dict(capacity_policy)
     return config

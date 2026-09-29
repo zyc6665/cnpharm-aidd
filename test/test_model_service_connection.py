@@ -171,3 +171,49 @@ async def test_openai_compatible_connection_failure_is_observable(monkeypatch, c
     assert "model=model" in caplog.text
     assert "https://api.example.com/v1/" in caplog.text
     assert "sk-secret" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_openai_compatible_model_discovery_returns_sorted_ids(monkeypatch):
+    class DummyResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"data": [{"id": "z-model"}, {"id": "a-model"}, {"id": "z-model"}]}
+
+    class DummyClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def get(self, url, headers):
+            assert url == "https://api.example.com/v1/models"
+            assert headers["Authorization"] == "Bearer sk-direct"
+            return DummyResponse()
+
+    monkeypatch.setattr(openai_compatible.httpx, "AsyncClient", DummyClient)
+    service = ModelService(
+        name="Default",
+        provider_type="openai_compatible",
+        base_url="https://api.example.com/v1/",
+        api_key_encrypted=None,
+        model_name="model",
+        timeout_seconds=30,
+    )
+
+    success, models, message = await openai_compatible.list_openai_compatible_models(
+        service,
+        api_key="sk-direct",
+    )
+
+    assert success is True
+    assert models == ["a-model", "z-model"]
+    assert message == "已发现 2 个模型"

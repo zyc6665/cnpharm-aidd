@@ -76,6 +76,43 @@ def test_validate_rejects_missing_tool_config() -> None:
         )
 
 
+def test_validate_accepts_kubernetes_job_config():
+    config = validate_tool_import_config(
+        {
+            "name": "managed-model",
+            "slug": "managed-model",
+            "version": "1.0.0",
+            "tool_config": {
+                "type": "k8s_job",
+                "runtime": {"image": f"registry.example/model@sha256:{'a' * 64}"},
+                "resource_profile": "gpu-large",
+                "input_schema": {"type": "object", "properties": {}},
+                "output_schema": {"type": "object", "properties": {}},
+            },
+        }
+    )
+
+    assert config["tool_config"]["type"] == "k8s_job"
+
+
+def test_validate_rejects_unregistered_kubernetes_resource_profile():
+    with pytest.raises(ToolImportConfigError, match="未登记的资源档位"):
+        validate_tool_import_config(
+            {
+                "name": "managed-model",
+                "slug": "managed-model",
+                "version": "1.0.0",
+                "tool_config": {
+                    "type": "k8s_job",
+                    "runtime": {"image": f"registry.example/model@sha256:{'a' * 64}"},
+                    "resource_profile": "unknown-profile",
+                    "input_schema": {"type": "object", "properties": {}},
+                    "output_schema": {"type": "object", "properties": {}},
+                },
+            }
+        )
+
+
 def test_validate_rejects_invalid_http_method() -> None:
     """remote_api 仅允许 GET 和 POST。"""
     with pytest.raises(ToolImportConfigError, match="method"):

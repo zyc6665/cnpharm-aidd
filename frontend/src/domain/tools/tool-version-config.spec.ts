@@ -180,3 +180,50 @@ test('SSH shell/password 模式不写入 docker 容器字段并使用 password_r
   assert.equal('container_base_dir' in config, false)
   assert.equal('output_globs' in config, false)
 })
+
+test('Tool Package v2 manifest 与实际执行器配置共存', () => {
+  const manifest = { api_version: 'aidd.sciminer/tool-package.v2', kind: 'ToolPackage' }
+  const config = buildToolVersionConfig({
+    toolType: 'ssh_job',
+    timeoutSec: 3600,
+    gpuRequired: false,
+    inputSchema,
+    outputSchema,
+    toolPackageManifest: manifest,
+    sshHost: 'runner-1',
+    sshUsername: 'model',
+    sshAuthType: 'key',
+    sshAuthRef: 'ssh_model',
+    sshRunnerMode: 'shell',
+    sshRemoteBaseDir: '/srv/jobs',
+    sshEntrypoint: '/app/platform_run.sh',
+    sshCleanupRemote: true,
+    sshStrictHostKeyChecking: true,
+  })
+
+  assert.deepEqual(config.tool_package_manifest, manifest)
+  assert.equal(config.type, 'ssh_job')
+})
+
+test('Kubernetes Job 工具版本 config 只保存受控运行时引用', () => {
+  assert.deepEqual(
+    buildToolVersionConfig({
+      toolType: 'k8s_job',
+      timeoutSec: 14400,
+      gpuRequired: true,
+      inputSchema,
+      outputSchema,
+      k8sImage: 'registry.example/model@sha256:abc',
+      k8sResourceProfile: 'gpu-large',
+    }),
+    {
+      type: 'k8s_job',
+      timeout_sec: 14400,
+      gpu_required: true,
+      input_schema: inputSchema,
+      output_schema: outputSchema,
+      runtime: { image: 'registry.example/model@sha256:abc' },
+      resource_profile: 'gpu-large',
+    }
+  )
+})

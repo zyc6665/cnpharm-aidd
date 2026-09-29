@@ -1,5 +1,32 @@
 import type { ModelService, ModelServiceCreateParams, ModelServiceUpdateParams } from '@/types/models'
 
+export interface ModelServicePreset {
+  key: string
+  name: string
+  base_url: string
+  model_name: string
+  max_tokens: number
+  temperature: number
+}
+
+export const MODEL_SERVICE_PRESETS: ModelServicePreset[] = [
+  { key: 'openai', name: 'OpenAI', base_url: 'https://api.openai.com/v1', model_name: 'gpt-4o-mini', max_tokens: 2048, temperature: 0.2 },
+  { key: 'deepseek', name: 'DeepSeek', base_url: 'https://api.deepseek.com/v1', model_name: 'deepseek-chat', max_tokens: 4096, temperature: 0.2 },
+  { key: 'qwen', name: '通义千问 / DashScope', base_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model_name: 'qwen-plus', max_tokens: 4096, temperature: 0.2 },
+  { key: 'ollama', name: 'Ollama（本地）', base_url: 'http://localhost:11434/v1', model_name: 'llama3.1', max_tokens: 2048, temperature: 0.2 }
+]
+
+export function applyModelServicePreset(
+  form: ModelServiceCreateParams,
+  preset: ModelServicePreset
+): void {
+  form.name = preset.name
+  form.base_url = preset.base_url
+  form.model_name = preset.model_name
+  form.max_tokens = preset.max_tokens
+  form.temperature = preset.temperature
+}
+
 export function createDefaultModelServiceForm(): ModelServiceCreateParams {
   return {
     name: '',

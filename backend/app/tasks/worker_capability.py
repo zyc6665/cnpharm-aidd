@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 
 from app.config import settings
@@ -15,7 +16,7 @@ def load_worker_capability() -> WorkerCapability | None:
     if not raw or not raw.strip():
         return None
 
-    payload = json.loads(raw)
+    payload = json.loads(os.path.expandvars(raw))
     if not isinstance(payload, dict):
         raise ValueError("WORKER_CAPABILITY_JSON must be a JSON object")
 
@@ -25,6 +26,7 @@ def load_worker_capability() -> WorkerCapability | None:
 
     return WorkerCapability(
         worker_id=worker_id,
+        queue=_optional_string(payload.get("queue")),
         executor_types=_string_tuple(payload.get("executor_types")),
         tiers=_string_tuple(payload.get("tiers")),
         cpu_capacity=_optional_float(payload.get("cpu_capacity")),
@@ -36,10 +38,37 @@ def load_worker_capability() -> WorkerCapability | None:
     )
 
 
+def validate_worker_queue_contract(
+    capability: WorkerCapability,
+    listen_queues: str | None = None,
+) -> tuple[bool, str | None]:
+    """校验 Worker 声明的 queue 是否在实际监听队列中。"""
+    if not capability.queue:
+        return True, None
+
+    raw_queues = settings.WORKER_LISTEN_QUEUES if listen_queues is None else listen_queues
+    if not raw_queues or not raw_queues.strip():
+        return True, None
+
+    queues = {
+        item.strip()
+        for item in raw_queues.split(",")
+        if item.strip()
+    }
+    if capability.queue in queues:
+        return True, None
+    return False, "worker_queue_not_listened"
+
+
 def _string_tuple(value: Any) -> tuple[str, ...]:
     if not isinstance(value, (list, tuple)):
         return ()
     return tuple(str(item).strip() for item in value if str(item).strip())
+
+
+def _optional_string(value: Any) -> str | None:
+    normalized = str(value or "").strip()
+    return normalized or None
 
 
 def _optional_float(value: Any) -> float | None:

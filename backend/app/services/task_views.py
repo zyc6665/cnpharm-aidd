@@ -45,6 +45,8 @@ class TaskQueryInput:
     workflow_definition_id: str | None = None
     workflow_node_id: str | None = None
     remote_recovery_alerted: bool | None = None
+    resource_wait_category: str | None = None
+    resource_wait_scope: str | None = None
 
 
 @dataclass(frozen=True)
@@ -64,6 +66,15 @@ class TaskViewCounts:
     history: int
     needs_attention: int
     recent_results: int
+
+
+@dataclass(frozen=True)
+class ResourceWaitStats:
+    """当前可见 pending 任务的资源等待统计。"""
+
+    total: int
+    by_category: dict[str, int]
+    by_reason: dict[str, int]
 
 
 async def query_task_page(db: AsyncSession, query: TaskQueryInput) -> TaskQueryPage:
@@ -108,6 +119,49 @@ async def query_task_view_counts(db: AsyncSession, query: TaskQueryInput) -> Tas
     )
 
 
+async def query_resource_wait_stats(
+    db: AsyncSession,
+    query: TaskQueryInput,
+) -> ResourceWaitStats:
+    """统计当前可见 pending 任务的资源等待分类和原因。"""
+    statement = await _build_task_statement(
+        db,
+        query,
+        include_view_filters=False,
+        include_load_options=False,
+    )
+    statement = statement.where(Task.status == TaskStatus.PENDING.value)
+    statement = statement.where(
+        or_(
+            Task.extra_data["resource_wait_code"].as_string().is_not(None),
+            Task.extra_data["resource_wait_reason"].as_string().is_not(None),
+        )
+    )
+    wait_subquery = statement.with_only_columns(
+        Task.extra_data["resource_wait_category"].as_string().label("category"),
+        Task.extra_data["resource_wait_code"].as_string().label("reason"),
+    ).subquery()
+    result = await db.execute(
+        select(wait_subquery.c.category, wait_subquery.c.reason)
+    )
+
+    by_category: dict[str, int] = {}
+    by_reason: dict[str, int] = {}
+    total = 0
+    for category, reason in result.all():
+        total += 1
+        category_key = str(category or "legacy")
+        reason_key = str(reason or "resource_wait")
+        by_category[category_key] = by_category.get(category_key, 0) + 1
+        by_reason[reason_key] = by_reason.get(reason_key, 0) + 1
+
+    return ResourceWaitStats(
+        total=total,
+        by_category=dict(sorted(by_category.items())),
+        by_reason=dict(sorted(by_reason.items())),
+    )
+
+
 async def _build_task_statement(
     db: AsyncSession,
     query: TaskQueryInput,
@@ -148,6 +202,17 @@ async def _build_task_statement(
     if query.remote_recovery_alerted:
         statement = statement.where(
             Task.extra_data["remote_recovery_alerted"].as_boolean().is_(True)
+        )
+
+    if query.resource_wait_category:
+        statement = statement.where(
+            Task.extra_data["resource_wait_category"].as_string()
+            == query.resource_wait_category
+        )
+    if query.resource_wait_scope:
+        statement = statement.where(
+            Task.extra_data["resource_wait_scope"].as_string()
+            == query.resource_wait_scope
         )
 
     if query.created_from:

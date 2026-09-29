@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.artifact_standards.types import normalize_platform_artifact_type
+from app.common.time import utcnow
+from app.files.file_records import is_file_usable
 from app.models.artifacts import ArtifactVersion, ArtifactVersionFile
 
 
@@ -130,13 +132,58 @@ async def resolve_artifact_binding(
             standard_type=expected_type,
             reason=f"ArtifactVersion {candidate_artifact_version_id} was not found.",
         )
+    if version.status != "available":
+        return ArtifactBindingDecision(
+            status="invalid",
+            input_name=input_name,
+            standard_type=expected_type,
+            artifact_version_id=version.id,
+            reason=(
+                f"ArtifactVersion {candidate_artifact_version_id} is not available: "
+                f"{version.status}."
+            ),
+        )
+    if version.expires_at is not None and version.expires_at <= utcnow():
+        return ArtifactBindingDecision(
+            status="invalid",
+            input_name=input_name,
+            standard_type=expected_type,
+            artifact_version_id=version.id,
+            reason=f"ArtifactVersion {candidate_artifact_version_id} has expired.",
+        )
+
+    role_files: dict[str, str | None] = {}
+    unavailable_roles: list[str] = []
+    for version_file in version.files:
+        role = version_file.role
+        if not role:
+            continue
+        if version_file.file is None or not is_file_usable(version_file.file):
+            unavailable_roles.append(role)
+            continue
+        role_files[role] = version_file.file_id
 
     decision = resolve_artifact_binding_policy(
         input_slot=input_slot,
         artifact_type=_artifact_version_type(version),
-        available_roles={file.role: file.file_id for file in version.files if file.role},
+        available_roles=role_files,
         metadata=_artifact_version_metadata(version),
     )
+    if decision.status != "invalid":
+        unavailable_required_roles = _unavailable_required_roles(
+            input_slot=input_slot,
+            standard_type=decision.standard_type,
+            unavailable_roles=unavailable_roles,
+        )
+        if unavailable_required_roles:
+            decision = _invalid(
+                input_name=input_name,
+                standard_type=decision.standard_type,
+                reason=(
+                    "Artifact role(s) reference unavailable file(s): "
+                    f"{', '.join(unavailable_required_roles)}."
+                ),
+            )
     return replace(decision, artifact_version_id=version.id)
 
 
@@ -258,6 +305,23 @@ def _missing_required_role_decision(
             suggested_tool_slug=LIGAND_CONFORMER_TOOL_SLUG,
         )
     return _invalid(input_name, standard_type, f"Missing required role(s): {', '.join(missing_roles)}.")
+
+
+def _unavailable_required_roles(
+    *,
+    input_slot: Mapping[str, Any],
+    standard_type: str,
+    unavailable_roles: Iterable[str],
+) -> list[str]:
+    """Return roles that the selected policy cannot use when their files are unavailable."""
+    unavailable = set(unavailable_roles)
+    required = set(_list_string_values(input_slot.get("required_roles")))
+    policy = _readiness_policy(input_slot)
+    if policy == "require_prepared" and standard_type == PROTEIN_STRUCTURE:
+        required.add("prepared_pdb")
+    elif policy == "require_receptor" and standard_type == PROTEIN_STRUCTURE:
+        required.add("receptor_pdbqt")
+    return sorted(unavailable & required)
 
 
 def _ready(

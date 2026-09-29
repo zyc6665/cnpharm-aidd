@@ -7,6 +7,7 @@ from app.execution.service import (
     ExecutionService,
     UnsupportedExecutionTypeError,
 )
+from app.execution.runtime import configure_execution_service, get_execution_service
 
 __all__ = [
     "ExecutionPort",
@@ -14,4 +15,6 @@ __all__ = [
     "BoundExecutionArtifactSource",
     "ExecutionService",
     "UnsupportedExecutionTypeError",
+    "configure_execution_service",
+    "get_execution_service",
 ]

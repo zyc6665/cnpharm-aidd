@@ -3,7 +3,7 @@
 
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.schemas.common import TimestampMixin
 from app.schemas.files import FileUploadResponse
 from app.schemas.statistics import ToolStatisticsResponse
@@ -39,12 +39,14 @@ class ToolVersionCreate(BaseModel):
     is_active: bool = Field(default=True, description="是否激活")
     # config结构:
     # {
-    #     "type": "remote_api|docker_image|python_script|ssh_job",
+    #     "type": "remote_api|docker_image|python_script|ssh_job|k8s_job",
     #     "endpoint": "http://...",
     #     "method": "POST",
     #     "headers": {},
     #     "host": "gpu-node-01",  # ssh_job
     #     "entrypoint": "/app/platform_run.sh",  # ssh_job
+    #     "runtime": {"image": "registry.example/model@sha256:<digest>"},  # k8s_job
+    #     "resource_profile": "gpu-large",  # k8s_job
     #     "input_schema": {},
     #     "output_schema": {},
     # }
@@ -60,6 +62,72 @@ class ToolVersionResponse(TimestampMixin):
     config: Dict[str, Any]
     is_active: bool
     deprecated: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ToolVersionPublicResponse(TimestampMixin):
+    """公开工具版本响应。
+
+    公开契约只返回版本元数据；运行时配置必须通过 Tool Contract 的
+    公开字段表达，避免把 endpoint、headers、脚本和凭据带出 API。
+    """
+
+    id: str
+    tool_id: str
+    version: str
+    changelog: Optional[str] = None
+    notes: Optional[str] = None
+    is_active: bool
+    deprecated: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ToolPublicResponse(TimestampMixin):
+    """公开工具响应，当前版本只暴露公开元数据。"""
+    id: str
+    owner_id: str
+    name: str
+    slug: str
+    description: Optional[str] = None
+    category_id: Optional[str] = None
+    category: Optional[str] = None
+    icon: Optional[str] = None
+    icon_url: Optional[str] = None
+    status: str
+    is_public: bool
+    current_version_id: Optional[str] = None
+    gpu_required: bool = False
+    gpu_memory_mb: int = 0
+    timeout_sec: int = 600
+    tags: List[TagResponse] = Field(default_factory=list)
+    current_version: Optional[ToolVersionPublicResponse] = None
+    contract: Optional[Dict[str, Any]] = None
+    statistics: Optional[ToolStatisticsResponse] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ToolListPublicResponse(TimestampMixin):
+    """公开工具列表响应，当前版本不包含运行时配置。"""
+    id: str
+    name: str
+    slug: str
+    description: Optional[str] = None
+    category_id: Optional[str] = None
+    category: Optional[str] = None
+    icon: Optional[str] = None
+    icon_url: Optional[str] = None
+    status: str
+    is_public: bool = True
+    owner_id: Optional[str] = None
+    gpu_required: bool = False
+    tags: List[TagResponse] = Field(default_factory=list)
+    current_version: Optional[ToolVersionPublicResponse] = None
+    contract: Optional[Dict[str, Any]] = None
+    statistics: Optional[ToolStatisticsResponse] = None
+    created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -275,6 +343,18 @@ class RemoteToolRegisterRequest(BaseModel):
     icon_url: Optional[str] = Field(None, max_length=500, description="图标URL")
     is_public: bool = Field(default=True, description="是否公开")
     timeout_sec: int = Field(default=600, ge=60, le=MAX_TOOL_TIMEOUT_SEC, description="超时时间(秒)")
+    capacity_policy: Optional[Dict[str, Any]] = Field(
+        None, description="远程 API 服务容量策略"
+    )
+
+    @model_validator(mode="after")
+    def validate_capacity_policy(self):
+        from app.tasks.remote_capacity import validate_remote_capacity_policy
+
+        errors = validate_remote_capacity_policy(self.capacity_policy)
+        if errors:
+            raise ValueError(errors[0])
+        return self
 
 
 class ToolExampleFileResponse(BaseModel):

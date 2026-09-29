@@ -4,18 +4,41 @@ import pytest
 from fastapi import WebSocketDisconnect
 
 from app.api.v1 import websocket as websocket_api
+from app.models.users import User
 from app.websocket.manager import WebSocketManager
 
 
 class FakeWebSocket:
     def __init__(self):
         self.receive_count = 0
+        self.closed = []
+
+    async def close(self, *, code=None, reason=None):
+        self.closed.append((code, reason))
 
     async def receive_text(self):
         self.receive_count += 1
         if self.receive_count == 1:
             return "{bad-json"
         raise WebSocketDisconnect()
+
+
+class MessageWebSocket(FakeWebSocket):
+    def __init__(self, message):
+        super().__init__()
+        self.message = message
+
+    async def receive_text(self):
+        self.receive_count += 1
+        if self.receive_count == 1:
+            return self.message
+        raise WebSocketDisconnect()
+
+
+class HeaderWebSocket(FakeWebSocket):
+    def __init__(self, protocol_header):
+        super().__init__()
+        self.headers = {"sec-websocket-protocol": protocol_header}
 
 
 class FakeWebSocketManager:
@@ -43,16 +66,76 @@ async def test_task_websocket_reports_invalid_json(monkeypatch):
     manager = FakeWebSocketManager()
     monkeypatch.setattr(websocket_api, "ws_manager", manager)
 
+    async def load_user(db, token):
+        return User(id="user-1", role="user", status="active")
+
+    async def allow_task(db, *, task_id, current_user):
+        assert task_id == "task-1"
+        assert current_user.id == "user-1"
+
+    monkeypatch.setattr(websocket_api, "_load_authenticated_user", load_user)
+    monkeypatch.setattr(websocket_api, "load_task_for_read_access", allow_task)
+
     await websocket_api.task_websocket_endpoint(
         websocket=FakeWebSocket(),
         task_id="task-1",
-        token=None,
+        token="access-token",
+        db=object(),
     )
 
     assert manager.subscriptions == [("connection-1", "task-1")]
     assert manager.sent_messages == [
         ("connection-1", {"type": "error", "message": "无效的 JSON 格式"})
     ]
+    assert manager.disconnected == ["connection-1"]
+
+
+@pytest.mark.asyncio
+async def test_task_websocket_rejects_anonymous_connection(monkeypatch):
+    manager = FakeWebSocketManager()
+    monkeypatch.setattr(websocket_api, "ws_manager", manager)
+    websocket = FakeWebSocket()
+
+    await websocket_api.task_websocket_endpoint(
+        websocket=websocket,
+        task_id="task-1",
+        token=None,
+        db=object(),
+    )
+
+    assert websocket.closed == [(1008, "需要有效的登录凭证")]
+    assert manager.subscriptions == []
+
+
+def test_websocket_auth_token_can_be_carried_in_subprotocol_header():
+    websocket = HeaderWebSocket("scitool-access-token, access-token")
+
+    assert websocket_api._resolve_ws_token(websocket, None) == "access-token"
+
+
+@pytest.mark.asyncio
+async def test_general_websocket_rejects_task_without_read_access(monkeypatch):
+    manager = FakeWebSocketManager()
+    monkeypatch.setattr(websocket_api, "ws_manager", manager)
+    websocket = MessageWebSocket('{"action":"subscribe_task","task_id":"task-1"}')
+
+    async def load_user(db, token):
+        return User(id="user-1", role="user", status="active")
+
+    async def deny_task(db, *, task_id, current_user):
+        raise websocket_api.AppException("denied", code=403)
+
+    monkeypatch.setattr(websocket_api, "_load_authenticated_user", load_user)
+    monkeypatch.setattr(websocket_api, "load_task_for_read_access", deny_task)
+
+    await websocket_api.websocket_endpoint(
+        websocket=websocket,
+        token="access-token",
+        db=object(),
+    )
+
+    assert websocket.closed == [(1008, "无权订阅此任务")]
+    assert manager.subscriptions == []
     assert manager.disconnected == ["connection-1"]
 
 
@@ -84,12 +167,12 @@ async def test_task_progress_websocket_normalizes_percent_values(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_user_from_token_logs_decode_failure(monkeypatch, caplog):
-    """WebSocket token 解析失败时应匿名兜底并留下排障日志。"""
+    """WebSocket access token 解析失败时应拒绝并留下排障日志。"""
 
-    def fail_decode(token):
+    def fail_verify(token, token_type):
         raise RuntimeError("bad token")
 
-    monkeypatch.setattr(websocket_api, "decode_token", fail_decode)
+    monkeypatch.setattr(websocket_api, "verify_token", fail_verify)
 
     with caplog.at_level(logging.DEBUG, logger="app.api.v1.websocket"):
         assert await websocket_api.get_user_from_token("invalid-token") is None

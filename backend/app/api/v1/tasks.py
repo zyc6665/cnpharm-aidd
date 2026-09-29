@@ -14,9 +14,11 @@ from app.models.files import File as FileModel
 from app.models.users import User
 from app.models.tools import Tool, ToolVersion
 from app.models.tasks import Task, TaskLog, TaskStatus
+from app.tasks.attempts import is_task_cancellation_pending
 from app.tasks.cancellation import cancel_platform_task
 from app.common.task_context import task_project_id
 from app.tasks.direct_runner import direct_task_runner
+from app.tasks.resource_lease import release_task_resource_reservation
 from app.tasks.state_machine import TaskStateMachine
 from app.tasks.service import (
     create_and_schedule_tool_task,
@@ -34,16 +36,29 @@ from app.schemas.tasks import (
     TaskCreate, TaskListResponse
 )
 from app.common.responses import paginated_response, success_response
-from app.common.exceptions import NotFoundException, ForbiddenException, ValidationException
+from app.common.exceptions import (
+    ConflictException,
+    NotFoundException,
+    ValidationException,
+)
 from app.common.task_status import task_status_to_api
-from app.services.project_access import load_project_membership, require_project_role
-from app.services.task_views import TaskQueryInput, query_task_page, query_task_view_counts
+from app.files.file_records import is_file_usable
+from app.services.task_access import (
+    ensure_task_operation_access as _ensure_task_operation_access,
+    ensure_task_read_access as _ensure_task_read_access,
+)
+from app.services.task_views import (
+    TaskQueryInput,
+    query_resource_wait_stats,
+    query_task_page,
+    query_task_view_counts,
+)
+from app.api.v1.tool_route_utils import (
+    sanitize_public_tool_config,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-TASK_OPERATION_PROJECT_ROLES = {"owner", "editor", "runner"}
-
-
 def _normalize_task_status(status: Optional[str]) -> Optional[str]:
     return task_status_to_api(status)
 
@@ -171,7 +186,8 @@ def _task_remote_recovery(task: Task) -> dict[str, Any] | None:
 def _task_resource_wait(task: Task) -> dict[str, Any] | None:
     """Expose safe resource-wait metadata for pending tasks."""
     data = task.extra_data if isinstance(task.extra_data, dict) else {}
-    reason = data.get("resource_wait_reason")
+    legacy_reason = data.get("resource_wait_reason")
+    reason = data.get("resource_wait_code") or legacy_reason
     if not reason:
         return None
 
@@ -181,11 +197,27 @@ def _task_resource_wait(task: Task) -> dict[str, Any] | None:
         retry_count = 0
 
     next_attempt_at = data.get("resource_retry_next_at")
-    return {
+    result = {
         "reason": str(reason),
         "retry_count": retry_count,
         "next_attempt_at": str(next_attempt_at) if next_attempt_at else None,
     }
+    if data.get("resource_wait_code"):
+        result.update(
+            {
+                "category": str(data.get("resource_wait_category") or "resource"),
+                "scope": str(data["resource_wait_scope"])
+                if data.get("resource_wait_scope")
+                else None,
+                "dimension": str(data["resource_wait_dimension"])
+                if data.get("resource_wait_dimension")
+                else None,
+                "legacy_reason": str(legacy_reason)
+                if legacy_reason and legacy_reason != reason
+                else None,
+            }
+        )
+    return result
 
 
 def _serialize_task_log(log: TaskLog) -> dict[str, Any]:
@@ -211,7 +243,7 @@ async def _load_files(db: AsyncSession, file_ids: list[str]) -> list[dict[str, A
     serialized: list[dict[str, Any]] = []
     for file_id in file_ids:
         file = files.get(file_id)
-        if not file:
+        if not file or not is_file_usable(file):
             logger.warning("Task detail references missing file id %s", file_id)
             continue
 
@@ -241,7 +273,9 @@ def _serialize_task_tool(tool: Optional[Tool]) -> Optional[dict[str, Any]]:
             "id": tool.current_version.id,
             "tool_id": tool.current_version.tool_id,
             "version": tool.current_version.version,
-            "config": tool.current_version.config,
+            "config": sanitize_public_tool_config(
+                tool.current_version.config or {}
+            ),
             "is_active": tool.current_version.is_active,
             "deprecated": tool.current_version.deprecated,
         }
@@ -264,49 +298,6 @@ async def _record_tool_usage(db: AsyncSession, tool_id: str) -> None:
     await record_tool_usage(db, tool_id)
 
 
-def _is_admin(user: User) -> bool:
-    return user.role == "admin"
-
-
-async def _ensure_task_read_access(
-    db: AsyncSession,
-    *,
-    task: Task,
-    current_user: User,
-) -> None:
-    if _is_admin(current_user) or task.user_id == current_user.id:
-        return
-    project_id = _task_project_id(task)
-    if project_id:
-        await load_project_membership(
-            db,
-            project_id=project_id,
-            user_id=current_user.id,
-        )
-        return
-    raise ForbiddenException("无权访问此任务")
-
-
-async def _ensure_task_operation_access(
-    db: AsyncSession,
-    *,
-    task: Task,
-    current_user: User,
-) -> None:
-    if _is_admin(current_user) or task.user_id == current_user.id:
-        return
-    project_id = _task_project_id(task)
-    if project_id:
-        await require_project_role(
-            db,
-            project_id=project_id,
-            user=current_user,
-            allowed_roles=TASK_OPERATION_PROJECT_ROLES,
-        )
-        return
-    raise ForbiddenException("无权操作此任务")
-
-
 @router.get("", response_model=dict)
 async def list_tasks(
     page: int = Query(1, ge=1),
@@ -326,6 +317,12 @@ async def list_tasks(
     workflow_node_id: Optional[str] = Query(None, description="工作流节点 ID"),
     remote_recovery_alerted: Optional[bool] = Query(
         None, description="仅返回存在 Remote API 恢复告警的任务"
+    ),
+    resource_wait_category: Optional[str] = Query(
+        None, description="按资源等待分类筛选: quota/worker_capacity/gpu/scheduler/external_capacity/resource"
+    ),
+    resource_wait_scope: Optional[str] = Query(
+        None, description="按资源等待 scope 筛选: user/project"
     ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
@@ -348,6 +345,8 @@ async def list_tasks(
             workflow_definition_id=workflow_definition_id,
             workflow_node_id=workflow_node_id,
             remote_recovery_alerted=remote_recovery_alerted,
+            resource_wait_category=resource_wait_category,
+            resource_wait_scope=resource_wait_scope,
         ),
     )
 
@@ -418,6 +417,19 @@ async def get_task_counts(
     )
 
     return success_response(counts.__dict__)
+
+
+@router.get("/resource-wait-stats", response_model=dict)
+async def get_resource_wait_stats(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """获取当前用户可见 pending 任务的资源等待统计。"""
+    stats = await query_resource_wait_stats(
+        db,
+        TaskQueryInput(current_user=current_user),
+    )
+    return success_response(stats.__dict__)
 
 
 @router.post("/prepare-preview", response_model=dict)
@@ -580,7 +592,7 @@ async def cancel_task(
 ):
     """取消任务"""
     result = await db.execute(
-        select(Task).where(Task.id == task_id)
+        select(Task).where(Task.id == task_id).with_for_update()
     )
     task = result.scalar_one_or_none()
 
@@ -612,7 +624,7 @@ async def retry_task(
 ):
     """重试任务"""
     result = await db.execute(
-        select(Task).where(Task.id == task_id)
+        select(Task).where(Task.id == task_id).with_for_update()
     )
     task = result.scalar_one_or_none()
 
@@ -624,6 +636,8 @@ async def retry_task(
     # 只能重试失败或取消的任务
     if task.status not in [TaskStatus.FAILURE.value, TaskStatus.CANCELED.value]:
         raise ValidationException("任务状态不允许重试")
+    if is_task_cancellation_pending(task):
+        raise ConflictException("上一次执行尚未确认停止，暂时不能重试")
 
     version_result = await db.execute(
         select(ToolVersion).where(ToolVersion.id == task.tool_version_id)
@@ -640,6 +654,7 @@ async def retry_task(
             f"任务已达到最大重试次数 ({task.max_retries})，无法再次重试"
         )
 
+    await release_task_resource_reservation(task, reason="task_retry_requested")
     TaskStateMachine.retry(task)
 
     await db.commit()
@@ -713,13 +728,29 @@ async def delete_task(
 ):
     """删除任务（管理员）"""
     result = await db.execute(
-        select(Task).where(Task.id == task_id)
+        select(Task).where(Task.id == task_id).with_for_update()
     )
     task = result.scalar_one_or_none()
 
     if not task:
         raise NotFoundException("任务不存在")
 
+    if is_task_cancellation_pending(task):
+        raise ConflictException("任务取消尚未确认停止，暂时不能删除")
+
+    if task.status in {TaskStatus.PENDING.value, TaskStatus.RUNNING.value}:
+        was_running = task.status == TaskStatus.RUNNING.value
+        await cancel_platform_task(
+            db,
+            task=task,
+            current_user=current_user,
+            direct_runner=direct_task_runner,
+        )
+        if was_running:
+            await db.commit()
+            return success_response(message="运行中任务已发起取消，记录保留")
+    else:
+        await release_task_resource_reservation(task, reason="task_deleted")
     await db.delete(task)
     await db.commit()
 

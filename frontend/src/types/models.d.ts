@@ -421,7 +421,9 @@ export interface ToolVersion {
   version: string
   changelog?: string
   notes?: string
-  config: Record<string, unknown>  // 包含 input_schema, output_schema 等
+  // 管理员/内部接口返回运行时配置；公开工具接口只返回版本元数据。
+  config?: Record<string, unknown>  // 包含 input_schema, output_schema 等
+  tool_package?: Record<string, unknown>
   is_active: boolean
   deprecated: boolean
   created_at?: string
@@ -491,10 +493,30 @@ export interface TaskResourceSnapshot {
   resource_profile: Record<string, unknown>
 }
 
+export interface TaskResourceAdmissionInfo {
+  status: 'admitted' | 'unknown' | 'rejected' | string
+  worker_id?: string | null
+  reason?: string | null
+  queue?: string | null
+}
+
+export interface TaskResourceReservationInfo {
+  worker_id: string
+  lease_id?: string
+  ttl_seconds?: number
+  status?: 'reserved' | 'claimed' | 'released' | 'release_failed' | 'not_found' | string
+  release_reason?: string
+  release_result?: 'deleted' | 'already_absent' | string
+  released_at?: string
+  release_error?: string
+}
+
 export interface TaskDispatchInfo {
   mode: 'direct' | 'celery' | string
   queue?: string | null
   queue_priority?: number
+  resource_admission?: TaskResourceAdmissionInfo | null
+  resource_reservation?: TaskResourceReservationInfo | null
 }
 
 export interface TaskFailureDiagnosticsPayload {
@@ -513,8 +535,18 @@ export interface TaskRemoteRecoveryStatus {
 
 export interface TaskResourceWaitStatus {
   reason: string
+  category?: 'gpu' | 'quota' | 'worker_capacity' | 'scheduler' | 'resource' | string
+  scope?: 'user' | 'project' | string | null
+  dimension?: string | null
+  legacy_reason?: string | null
   retry_count: number
   next_attempt_at?: string | null
+}
+
+export interface TaskResourceWaitStats {
+  total: number
+  by_category: Record<string, number>
+  by_reason: Record<string, number>
 }
 
 export interface ArtifactBindingDecision {
@@ -724,6 +756,60 @@ export interface SystemStats {
   active_connections: number
 }
 
+export interface WorkerResourceStatus {
+  worker_id: string
+  queue?: string | null
+  healthy: boolean
+  executor_types: string[]
+  tiers: string[]
+  cpu_capacity?: number | null
+  cpu_used: number
+  cpu_available?: number | null
+  memory_capacity_gb?: number | null
+  memory_used_gb: number
+  memory_available_gb?: number | null
+  parallelism?: number | null
+  parallelism_used: number
+  parallelism_available?: number | null
+  reservation_count: number
+  execution_count: number
+  gpu_count?: number | null
+  gpu_memory_mb?: number | null
+}
+
+export interface WorkerResourceStatusResponse {
+  status: 'healthy' | 'degraded' | 'unknown' | 'unavailable' | string
+  timestamp: string
+  total_workers: number
+  workers: WorkerResourceStatus[]
+  error?: string | null
+}
+
+export interface ResourceQuotaScope {
+  scope_type: 'user' | 'project' | string
+  scope_id: string
+  cpu_limit?: number | null
+  cpu_used: number
+  cpu_available?: number | null
+  memory_limit_gb?: number | null
+  memory_used_gb: number
+  memory_available_gb?: number | null
+  parallelism_limit?: number | null
+  parallelism_used: number
+  parallelism_available?: number | null
+  gpu_requested_count: number
+  gpu_requested_memory_mb: number
+  rejection_counts: Record<string, number>
+}
+
+export interface ResourceQuotaStatusResponse {
+  enabled: boolean
+  timestamp: string
+  gpu_scope_quota: string
+  scopes: ResourceQuotaScope[]
+  error?: string | null
+}
+
 export interface SystemInfo {
   app_name: string
   app_version: string
@@ -805,6 +891,12 @@ export interface ModelServiceTestResult {
   message: string
   last_test_status: string
   last_tested_at: string
+}
+
+export interface ModelServiceModelsResponse {
+  id: string
+  models: string[]
+  message: string
 }
 
 // 分页相关类型

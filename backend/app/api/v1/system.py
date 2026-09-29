@@ -1,6 +1,7 @@
 # backend/app/api/v1/system.py
 """系统管理接口"""
 
+import logging
 import os
 import platform
 import psutil
@@ -9,7 +10,7 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 
@@ -23,6 +24,7 @@ from app.models.tool_packages import ToolPackage, ToolPackageVersion
 from app.schemas.system_settings import ModelServiceCreate, ModelServiceUpdate
 from app.services.model_services import (
     create_model_service,
+    discover_model_service_models,
     delete_model_service,
     list_model_services,
     set_default_model_service,
@@ -33,6 +35,25 @@ from app.tasks.executors.factory import supported_executor_types
 
 router = APIRouter()
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
+logger = logging.getLogger(__name__)
+
+
+def _optional_float(value: object) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _optional_int(value: object) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 # ==================== Schemas ====================
@@ -105,6 +126,68 @@ class SystemStatsResponse(BaseModel):
 
     # WebSocket 统计
     active_connections: int
+
+
+class WorkerResourceStatusItem(BaseModel):
+    """单个在线 Worker 的静态能力和动态占用。"""
+
+    worker_id: str
+    queue: Optional[str] = None
+    healthy: bool
+    executor_types: List[str]
+    tiers: List[str]
+    cpu_capacity: Optional[float] = None
+    cpu_used: float = 0.0
+    cpu_available: Optional[float] = None
+    memory_capacity_gb: Optional[float] = None
+    memory_used_gb: float = 0.0
+    memory_available_gb: Optional[float] = None
+    parallelism: Optional[int] = None
+    parallelism_used: int = 0
+    parallelism_available: Optional[int] = None
+    reservation_count: int = 0
+    execution_count: int = 0
+    gpu_count: Optional[int] = None
+    gpu_memory_mb: Optional[int] = None
+
+
+class WorkerResourceStatusResponse(BaseModel):
+    """Worker 资源调度状态汇总。"""
+
+    status: str
+    timestamp: str
+    total_workers: int
+    workers: List[WorkerResourceStatusItem]
+    error: Optional[str] = None
+
+
+class ResourceQuotaScopeItem(BaseModel):
+    """单个用户或项目 scope 的资源配额快照。"""
+
+    scope_type: str
+    scope_id: str
+    cpu_limit: Optional[float] = None
+    cpu_used: float = 0.0
+    cpu_available: Optional[float] = None
+    memory_limit_gb: Optional[float] = None
+    memory_used_gb: float = 0.0
+    memory_available_gb: Optional[float] = None
+    parallelism_limit: Optional[int] = None
+    parallelism_used: int = 0
+    parallelism_available: Optional[int] = None
+    gpu_requested_count: int = 0
+    gpu_requested_memory_mb: int = 0
+    rejection_counts: dict[str, int] = Field(default_factory=dict)
+
+
+class ResourceQuotaStatusResponse(BaseModel):
+    """用户/项目资源配额与拒绝原因汇总。"""
+
+    enabled: bool
+    timestamp: str
+    gpu_scope_quota: str
+    scopes: List[ResourceQuotaScopeItem]
+    error: Optional[str] = None
 
 
 # ==================== 健康检查 ====================
@@ -266,7 +349,7 @@ async def _check_storage() -> ServiceStatus:
     try:
         from app.storage import get_storage_backend
 
-        storage = get_storage_backend()
+        get_storage_backend()
 
         # 检查存储是否可用
         if settings.STORAGE_BACKEND == "local":
@@ -525,6 +608,182 @@ async def get_system_stats(
     )
 
 
+@router.get(
+    "/resource-workers",
+    response_model=dict,
+    summary="获取 Worker 资源状态",
+)
+async def get_resource_workers(admin_user: User = Depends(get_admin_user)):
+    """返回在线 Worker 的能力、动态资源占用和剩余容量。"""
+    from app.cache import get_cache
+    from app.tasks.resource_lease import WorkerResourceLeaseManager
+    from app.tasks.worker_capability_registry import WorkerCapabilityRegistry
+
+    try:
+        cache = get_cache()
+        registry = WorkerCapabilityRegistry(
+            cache=cache,
+            ttl_seconds=settings.WORKER_CAPABILITY_TTL_SECONDS,
+        )
+        lease_manager = WorkerResourceLeaseManager(cache=cache)
+        capabilities = await registry.list_active()
+        workers: list[WorkerResourceStatusItem] = []
+
+        for capability in capabilities:
+            usage = await lease_manager.current_usage_summary(capability.worker_id)
+            cpu_used = round(float(usage["cpu"]), 3)
+            memory_used = round(float(usage["memory_gb"]), 3)
+            parallelism_used = int(usage["parallelism"])
+            workers.append(
+                WorkerResourceStatusItem(
+                    worker_id=capability.worker_id,
+                    queue=capability.queue,
+                    healthy=capability.healthy,
+                    executor_types=list(capability.executor_types),
+                    tiers=list(capability.tiers),
+                    cpu_capacity=capability.cpu_capacity,
+                    cpu_used=cpu_used,
+                    cpu_available=(
+                        round(max(capability.cpu_capacity - cpu_used, 0), 3)
+                        if capability.cpu_capacity is not None
+                        else None
+                    ),
+                    memory_capacity_gb=capability.memory_capacity_gb,
+                    memory_used_gb=memory_used,
+                    memory_available_gb=(
+                        round(max(capability.memory_capacity_gb - memory_used, 0), 3)
+                        if capability.memory_capacity_gb is not None
+                        else None
+                    ),
+                    parallelism=capability.parallelism,
+                    parallelism_used=parallelism_used,
+                    parallelism_available=(
+                        max(capability.parallelism - parallelism_used, 0)
+                        if capability.parallelism is not None
+                        else None
+                    ),
+                    reservation_count=int(usage["reservation_count"]),
+                    execution_count=int(usage["execution_count"]),
+                    gpu_count=capability.gpu_count,
+                    gpu_memory_mb=capability.gpu_memory_mb,
+                )
+            )
+
+        status = "unknown"
+        if workers:
+            status = "healthy" if all(item.healthy for item in workers) else "degraded"
+
+        return success_response(
+            data=WorkerResourceStatusResponse(
+                status=status,
+                timestamp=utcnow().isoformat(),
+                total_workers=len(workers),
+                workers=workers,
+            ).model_dump()
+        )
+    except Exception as exc:
+        logger.warning("Worker resource status unavailable: %s", exc)
+        return success_response(
+            data=WorkerResourceStatusResponse(
+                status="unavailable",
+                timestamp=utcnow().isoformat(),
+                total_workers=0,
+                workers=[],
+                error="Worker resource status unavailable",
+            ).model_dump()
+        )
+
+
+@router.get(
+    "/resource-quotas",
+    response_model=dict,
+    summary="获取用户与项目资源配额",
+)
+async def get_resource_quotas(admin_user: User = Depends(get_admin_user)):
+    """返回用户/项目 CPU、内存、并发配额及运行期拒绝原因。"""
+    from app.cache import get_cache
+    from app.tasks.resource_quota import build_resource_quota_manager
+
+    try:
+        quota_manager = build_resource_quota_manager(get_cache())
+        if quota_manager is None:
+            return success_response(
+                data=ResourceQuotaStatusResponse(
+                    enabled=False,
+                    timestamp=utcnow().isoformat(),
+                    gpu_scope_quota="allocator_managed",
+                    scopes=[],
+                ).model_dump()
+            )
+
+        snapshot = await quota_manager.current_scope_snapshot()
+        scopes: list[ResourceQuotaScopeItem] = []
+        for scope_type in ("user", "project"):
+            for scope_id, entry in snapshot[scope_type].items():
+                usage = entry.get("usage", {})
+                limits = entry.get("limits", {})
+                gpu_usage = entry.get("gpu_usage", {})
+                cpu_limit = _optional_float(limits.get("cpu"))
+                memory_limit = _optional_float(limits.get("memory_gb"))
+                parallelism_limit = _optional_int(limits.get("parallelism"))
+                cpu_used = round(float(usage.get("cpu", 0.0)), 3)
+                memory_used = round(float(usage.get("memory_gb", 0.0)), 3)
+                parallelism_used = int(usage.get("parallelism", 0))
+                scopes.append(
+                    ResourceQuotaScopeItem(
+                        scope_type=scope_type,
+                        scope_id=scope_id,
+                        cpu_limit=cpu_limit,
+                        cpu_used=cpu_used,
+                        cpu_available=(
+                            round(max(cpu_limit - cpu_used, 0), 3)
+                            if cpu_limit is not None
+                            else None
+                        ),
+                        memory_limit_gb=memory_limit,
+                        memory_used_gb=memory_used,
+                        memory_available_gb=(
+                            round(max(memory_limit - memory_used, 0), 3)
+                            if memory_limit is not None
+                            else None
+                        ),
+                        parallelism_limit=parallelism_limit,
+                        parallelism_used=parallelism_used,
+                        parallelism_available=(
+                            max(parallelism_limit - parallelism_used, 0)
+                            if parallelism_limit is not None
+                            else None
+                        ),
+                        gpu_requested_count=int(gpu_usage.get("count", 0)),
+                        gpu_requested_memory_mb=int(gpu_usage.get("memory_mb", 0)),
+                        rejection_counts={
+                            str(key): int(value)
+                            for key, value in (entry.get("rejection_counts") or {}).items()
+                        },
+                    )
+                )
+
+        return success_response(
+            data=ResourceQuotaStatusResponse(
+                enabled=True,
+                timestamp=utcnow().isoformat(),
+                gpu_scope_quota="allocator_managed",
+                scopes=sorted(scopes, key=lambda item: (item.scope_type, item.scope_id)),
+            ).model_dump()
+        )
+    except Exception as exc:
+        logger.warning("Resource quota status unavailable: %s", exc)
+        return success_response(
+            data=ResourceQuotaStatusResponse(
+                enabled=False,
+                timestamp=utcnow().isoformat(),
+                gpu_scope_quota="allocator_managed",
+                scopes=[],
+                error="Resource quota status unavailable",
+            ).model_dump()
+        )
+
+
 # ==================== 配置管理 ====================
 
 
@@ -600,6 +859,20 @@ async def test_model_service_setting(
     db: AsyncSession = Depends(get_db),
 ):
     result = await test_model_service(db, service_id)
+    return success_response(data=result.model_dump(), message=result.message)
+
+
+@router.get(
+    "/model-services/{service_id}/models",
+    response_model=dict,
+    summary="发现模型服务支持的模型",
+)
+async def discover_model_service_models_setting(
+    service_id: str,
+    admin_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await discover_model_service_models(db, service_id)
     return success_response(data=result.model_dump(), message=result.message)
 
 

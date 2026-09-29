@@ -1,8 +1,10 @@
-# K8s / Slurm Executor Adapter 设计
+# K8s Job / SSH Executor Adapter 设计
+
+> 本文聚焦当前生产重构基线：Kubernetes Job 是主 Adapter，SSH 是过渡 Adapter。Slurm 只作为 SSH 登录节点或后续独立 Adapter 的实现细节，不作为当前管理后台的一级执行环境；Remote API 不属于平台可控资源执行路径。
 
 ## 1. 目标
 
-分子对接、MD、深度学习分子生成、大规模 ADMET 和虚拟筛选都可能需要远超 Web 服务本机能力的计算资源。平台需要一个小而稳定的 Executor Adapter Interface，让任务系统可以用同一套方式提交、查询、取消、收集日志和回收结果，而不用关心底层是 Docker、SSH、K8s、Slurm 还是 Remote API。
+分子对接、MD、深度学习分子生成、大规模 ADMET 和虚拟筛选都需要平台可管理的计算执行环境。平台需要一个小而稳定的 Executor Adapter Interface，让任务系统可以用同一套方式提交、查询、取消、收集日志和回收结果，而不用关心底层是 Kubernetes Job 还是 SSH 节点。
 
 该设计的核心是深模块：调用方只学习一个小 Interface，复杂的集群差异留在 Adapter 实现内部。
 
@@ -17,11 +19,8 @@ Execution Request Builder
   ▼
 Executor Adapter Interface
   │
-  ├─ Docker Adapter
-  ├─ SSH Adapter
   ├─ K8s Job Adapter
-  ├─ Slurm Adapter
-  └─ Remote API Adapter
+  └─ SSH Adapter
 ```
 
 职责分离：
@@ -60,12 +59,7 @@ tool_slug: molecular-docking
 run_context:
   project_id: <uuid-or-null>
 resource_profile:
-  tier: cpu-medium
-  cpu: 8
-  memory_gb: 16
-  gpu_required: false
-  expected_minutes: 30
-  timeout_minutes: 120
+  id: cpu-medium
 inputs:
   workdir: /work/<task_id>
   parameters_file: request.json
@@ -152,6 +146,8 @@ Adapter 只收集 manifest 和文件；标准 Artifact 校验由后端 Artifact 
 
 ## 7. Resource Profile 映射
 
+Resource Profile Registry 将已批准档位展开为下表资源字段；ToolVersion 只引用档位 ID，不能提交或覆盖这些值。
+
 ### 7.1 K8s 映射
 
 | Resource Profile | K8s 字段 |
@@ -201,7 +197,9 @@ Adapter 只收集 manifest 和文件；标准 Artifact 校验由后端 Artifact 
 
 日志来自 Pod logs。多容器时优先工具主容器；sidecar 日志作为诊断附件。
 
-## 9. Slurm Adapter
+## 9. Slurm Adapter（后续可选实现）
+
+Slurm 不属于当前管理后台的一级执行环境。若客户已有 Slurm 集群，优先通过 SSH 登录节点接入；只有在需要直接读取 Slurm 状态和资源队列时，才实现本节 Adapter。
 
 ### 9.1 提交
 

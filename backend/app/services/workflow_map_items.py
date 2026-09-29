@@ -11,6 +11,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.exceptions import ValidationException
+from app.files.file_records import is_file_usable
 from app.models.files import File as FileModel
 from app.models.workflows import WorkflowRun
 from app.services.semantic_types import normalize_semantic_type
@@ -51,7 +52,7 @@ async def resolve_map_items(
         file_id = source_output.get("file_id")
         if file_id:
             file_record = await db.get(FileModel, str(file_id))
-            if file_record and file_record.storage_path:
+            if file_record and is_file_usable(file_record) and file_record.storage_path:
                 resolved = _read_map_items_from_file(Path(file_record.storage_path))
                 if resolved is not None:
                     return resolved

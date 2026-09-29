@@ -377,7 +377,7 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
 
             return response
 
-        except Exception as e:
+        except Exception:
             duration = time.time() - start_time
 
             self.metrics.record_http_request(

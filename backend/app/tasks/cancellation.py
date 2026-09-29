@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import use_direct_task_execution
+from app.common.time import utcnow
+from app.config import settings, use_direct_task_execution
 from app.execution.records import (
     finish_task_execution_record_best_effort,
+    task_external_execution_id,
     task_execution_record_external_id,
 )
 from app.logging.audit import AuditAction, AuditResult, get_audit_logger
@@ -19,7 +22,12 @@ from app.remote_tools.invocation import recorded_remote_run_id
 from app.tasks.executors.remote_api import RemoteAPIExecutor
 from app.tasks.direct_runner import direct_task_runner as default_direct_task_runner
 from app.common.task_context import task_project_id
+from app.tasks.resource_lease import release_task_resource_reservation
 from app.tasks.state_machine import TaskStateMachine
+from app.tasks.attempts import (
+    get_execution_attempt_id,
+    mark_task_cancellation_requested,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -36,16 +44,65 @@ async def cancel_platform_task(
     if task.status not in {TaskStatus.PENDING.value, TaskStatus.RUNNING.value}:
         return False
 
-    await _cancel_remote_tool_if_needed(db, task=task)
+    was_running = task.status == TaskStatus.RUNNING.value
+    attempt_id = get_execution_attempt_id(task)
+
+    # Persist the local cancellation barrier before contacting a remote
+    # executor. A failed remote cancel must not leave the task RUNNING.
+    if was_running:
+        mark_task_cancellation_requested(
+            task,
+            attempt_id=attempt_id,
+            reason="user_requested",
+        )
+    TaskStateMachine.cancel(task)
+
+    try:
+        await _cancel_remote_tool_if_needed(db, task=task)
+    except Exception as exc:
+        logger.warning(
+            "Remote cancellation pending for task %s: %s",
+            task.id,
+            exc,
+        )
+        extra_data = dict(task.extra_data or {})
+        extra_data["remote_cancel_pending"] = True
+        extra_data["remote_cancel_error"] = str(exc)
+        extra_data["remote_cancel_next_retry_at"] = (
+            utcnow()
+            + timedelta(seconds=max(int(settings.REMOTE_CANCEL_RETRY_INTERVAL_SECONDS), 1))
+        ).isoformat()
+        task.extra_data = extra_data
 
     if use_direct_task_execution():
-        direct_runner.cancel_task(str(task.id))
+        try:
+            direct_runner.cancel_task(str(task.id))
+        except Exception as exc:
+            logger.warning("Direct cancellation failed for task %s: %s", task.id, exc)
     elif task.celery_task_id:
         from app.tasks.queue_manager import TaskQueueManager
 
-        TaskQueueManager.revoke_task(task.celery_task_id)
+        # A revoke without termination only prevents a queued message from
+        # being consumed.  For a task that is already running the worker may
+        # keep executing while the API has already marked the task canceled,
+        # which would make a subsequent retry overlap the old attempt.  Ask
+        # Celery to terminate the active child and keep a compatibility
+        # fallback for lightweight test doubles / legacy integrations that
+        # still expose the old one-argument signature.
+        try:
+            TaskQueueManager.revoke_task(
+                task.celery_task_id,
+                terminate=was_running,
+                signal="SIGTERM",
+            )
+        except TypeError:
+            TaskQueueManager.revoke_task(task.celery_task_id)
 
-    TaskStateMachine.cancel(task)
+    if not was_running:
+        # Pending reservations are safe to release immediately. A running
+        # worker may still hold the lease until its executor finally block
+        # exits; releasing it here could let another task overbook the worker.
+        await release_task_resource_reservation(task, reason="task_canceled")
     try:
         await finish_task_execution_record_best_effort(
             task=task,
@@ -81,6 +138,18 @@ async def _cancel_remote_tool_if_needed(db: AsyncSession | None, *, task: Task) 
     config = getattr(tool_version, "config", None)
     if not isinstance(config, dict):
         return
+    if config.get("type") == "k8s_job":
+        external_id = recorded_remote_run_id(task.extra_data)
+        if not external_id:
+            external_id = task_external_execution_id(task)
+        if not external_id and db is not None:
+            external_id = await task_execution_record_external_id(db, task=task)
+        if not external_id:
+            return
+        from app.execution.runtime import get_execution_service
+
+        await get_execution_service().cancel("k8s_job", external_id)
+        return
     if config.get("type") != "remote_api" or config.get("mode") != "remote_tool_v1":
         return
     remote_run_id = recorded_remote_run_id(task.extra_data)
@@ -91,3 +160,25 @@ async def _cancel_remote_tool_if_needed(db: AsyncSession | None, *, task: Task) 
     await RemoteAPIExecutor(task, tool_version, config=config).cancel_remote_run(
         remote_run_id
     )
+
+
+async def retry_remote_tool_cancellation(db: AsyncSession, *, task: Task) -> bool:
+    """Retry a remote cancellation recorded as pending by the API."""
+    extra_data = dict(task.extra_data or {})
+    if not extra_data.get("remote_cancel_pending"):
+        return False
+    try:
+        await _cancel_remote_tool_if_needed(db, task=task)
+    except Exception as exc:
+        extra_data["remote_cancel_error"] = str(exc)
+        extra_data["remote_cancel_next_retry_at"] = (
+            utcnow()
+            + timedelta(seconds=max(int(settings.REMOTE_CANCEL_RETRY_INTERVAL_SECONDS), 1))
+        ).isoformat()
+        task.extra_data = extra_data
+        return False
+    extra_data.pop("remote_cancel_pending", None)
+    extra_data.pop("remote_cancel_error", None)
+    extra_data.pop("remote_cancel_next_retry_at", None)
+    task.extra_data = extra_data
+    return True

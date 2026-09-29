@@ -28,6 +28,39 @@ _AIDD_FEATURE_FLAG_DESCRIPTIONS = {
     "LEGACY_AIDD_API_ENABLED": "旧 AIDD API 已下线",
 }
 
+_DEFAULT_RESOURCE_PROFILE_REGISTRY_JSON = json.dumps(
+    {
+        "cpu-small": {
+            "tier": "cpu-small",
+            "cpu": 2,
+            "memory_gb": 4,
+            "gpu_required": False,
+            "gpu_memory_gb": 0,
+            "timeout_minutes": 30,
+            "parallelism": 1,
+        },
+        "cpu-medium": {
+            "tier": "cpu-medium",
+            "cpu": 4,
+            "memory_gb": 8,
+            "gpu_required": False,
+            "gpu_memory_gb": 0,
+            "timeout_minutes": 60,
+            "parallelism": 1,
+        },
+        "gpu-large": {
+            "tier": "gpu-large",
+            "cpu": 16,
+            "memory_gb": 64,
+            "gpu_required": True,
+            "gpu_memory_gb": 24,
+            "timeout_minutes": 480,
+            "parallelism": 1,
+        },
+    },
+    separators=(",", ":"),
+)
+
 
 def _is_valid_deployment_cors_origin(origin: str) -> bool:
     """验证预发布和生产环境允许的 HTTPS Origin。"""
@@ -279,6 +312,7 @@ class Settings(BaseSettings):
     TASK_EXECUTION_BACKEND: Literal["celery", "direct"] = "celery"
     WORKFLOW_RECONCILE_INTERVAL_SECONDS: int = 5
     WORKFLOW_RECONCILE_BATCH_SIZE: int = 20
+    WORKFLOW_RECONCILE_LOCK_TTL_SECONDS: int = 60
     EXECUTION_RECORD_RECONCILE_INTERVAL_SECONDS: int = 60
     EXECUTION_RECORD_RECONCILE_BATCH_SIZE: int = 100
     EXECUTION_RECORD_STALE_AFTER_SECONDS: int = 86400
@@ -288,13 +322,43 @@ class Settings(BaseSettings):
     REMOTE_TASK_RECOVERY_INITIAL_BACKOFF_SECONDS: int = 60
     REMOTE_TASK_RECOVERY_MAX_BACKOFF_SECONDS: int = 1800
     REMOTE_TASK_RECOVERY_ALERT_AFTER_FAILURES: int = 5
+    REMOTE_CANCEL_RETRY_INTERVAL_SECONDS: int = 60
+    REMOTE_CANCEL_RETRY_BATCH_SIZE: int = 100
+    # 取消请求超时后只升级为人工介入，不自动释放运行中租约。
+    TASK_CANCELLATION_STALE_AFTER_SECONDS: int = 900
+    TASK_CANCELLATION_RECONCILE_BATCH_SIZE: int = 100
     GPU_RETRY_INITIAL_BACKOFF_SECONDS: int = 30
     GPU_RETRY_MAX_BACKOFF_SECONDS: int = 900
     RESOURCE_ADMISSION_RETRY_INITIAL_BACKOFF_SECONDS: int = 30
     RESOURCE_ADMISSION_RETRY_MAX_BACKOFF_SECONDS: int = 900
     WORKER_CAPABILITY_JSON: Optional[str] = None
+    RESOURCE_PROFILE_REGISTRY_JSON: Optional[str] = _DEFAULT_RESOURCE_PROFILE_REGISTRY_JSON
     WORKER_CAPABILITY_TTL_SECONDS: int = 90
+    WORKER_CAPABILITY_HEARTBEAT_QUEUES: Optional[str] = None
     WORKER_CAPABILITY_ADMISSION_ENABLED: bool = False
+    WORKER_CAPABILITY_ROUTING_ENABLED: bool = False
+    WORKER_CAPABILITY_RESERVATION_ENABLED: bool = False
+    RESOURCE_DISPATCH_RESERVATION_TTL_SECONDS: int = 60
+    RESOURCE_RESERVATION_STALE_AFTER_SECONDS: int = 120
+    RESOURCE_SCOPE_QUOTA_ENABLED: bool = False
+    RESOURCE_USER_MAX_CPU: Optional[float] = None
+    RESOURCE_USER_MAX_MEMORY_GB: Optional[float] = None
+    RESOURCE_USER_MAX_PARALLELISM: Optional[int] = None
+    RESOURCE_PROJECT_MAX_CPU: Optional[float] = None
+    RESOURCE_PROJECT_MAX_MEMORY_GB: Optional[float] = None
+    RESOURCE_PROJECT_MAX_PARALLELISM: Optional[int] = None
+    RESOURCE_QUOTA_LOCK_TTL_SECONDS: int = 10
+    RESOURCE_QUOTA_REJECTION_TTL_SECONDS: int = 86400
+    WORKER_LISTEN_QUEUES: Optional[str] = None
+
+    # 受控 Job 执行器开关。具体 K8s/SSH adapter 由 worker 启动时注入。
+    EXECUTOR_ENABLED_K8S: bool = False
+    EXECUTOR_ENABLED_SSH: bool = True
+    K8S_ADAPTER_CLUSTER_ALIAS: Optional[str] = None
+    K8S_ADAPTER_NAMESPACE: Optional[str] = None
+    K8S_ADAPTER_CREDENTIAL_REF: Optional[str] = None
+    K8S_ADAPTER_SERVICE_ACCOUNT: Optional[str] = None
+    K8S_ADAPTER_JOB_NAME_PREFIX: str = "sciminer"
 
     # ==================== Docker 执行器配置 ====================
     # 生产环境默认强制不可变 digest；该列表可进一步收紧为精确允许的镜像引用。

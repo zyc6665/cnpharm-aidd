@@ -35,6 +35,7 @@ export interface RemoteToolRegisterParams {
   icon_url?: string
   is_public?: boolean
   timeout_sec?: number
+  capacity_policy?: Record<string, unknown>
 }
 
 export interface RemoteToolStageDiagnostic {
@@ -60,7 +61,7 @@ export interface ToolTemplateSummary {
   version: string
   description: string
   family: string
-  executor_types: Array<'remote_api' | 'docker_image' | 'python_script' | 'ssh_job'>
+  executor_types: Array<'remote_api' | 'docker_image' | 'python_script' | 'ssh_job' | 'k8s_job'>
   capability: string
   stage: string
   inputs: Array<Record<string, unknown>>
@@ -70,14 +71,14 @@ export interface ToolTemplateSummary {
     provider: string
     runtime: string
     project_url?: string | null
-    recommended_executor: 'remote_api' | 'docker_image' | 'python_script' | 'ssh_job'
+    recommended_executor: 'remote_api' | 'docker_image' | 'python_script' | 'ssh_job' | 'k8s_job'
     notes?: string | null
   }
   resource_profile: Record<string, unknown>
 }
 
 export interface ToolTemplateDraftParams {
-  executor_type: 'remote_api' | 'docker_image' | 'python_script' | 'ssh_job'
+  executor_type: 'remote_api' | 'docker_image' | 'python_script' | 'ssh_job' | 'k8s_job'
   executor_config: Record<string, unknown>
   category_id?: string
   publish?: boolean

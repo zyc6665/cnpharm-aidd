@@ -8,6 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.exceptions import NotFoundException, ValidationException
+from app.common.time import utcnow
+from app.files.file_records import is_file_usable
 from app.models.artifacts import Artifact, ArtifactVersion
 from app.models.files import File as FileModel
 
@@ -52,6 +54,7 @@ async def validate_standard_input_bindings(
         .where(
             ArtifactVersion.id.in_(version_ids),
             ArtifactVersion.status == "available",
+            (ArtifactVersion.expires_at.is_(None)) | (ArtifactVersion.expires_at > utcnow()),
         )
     )
     projects_by_version = {
@@ -100,6 +103,11 @@ async def require_existing_file_id(
             "标准 Artifact 上传文件不存在",
             detail={"missing_file_id": file_id},
         )
+    if not is_file_usable(file_record):
+        raise ValidationException(
+            "标准 Artifact 上传文件不可用",
+            detail={"unusable_file_ids": [file_id]},
+        )
     mismatched_project = (
         project_id
         and file_record.project_id
@@ -122,6 +130,8 @@ async def append_existing_file_id(
 ) -> None:
     file_record = await db.get(FileModel, file_id)
     if not file_record:
+        raise NotFoundException(f"Workflow input file not found: {label}")
+    if not is_file_usable(file_record):
         raise NotFoundException(f"Workflow input file not found: {label}")
     if file_id not in seen_file_ids:
         seen_file_ids.add(file_id)

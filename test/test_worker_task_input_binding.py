@@ -43,6 +43,12 @@ def test_celery_registers_stale_gpu_lease_maintenance_task() -> None:
     assert worker_tasks.reconcile_execution_records.name == (
         "app.worker.tasks.reconcile_execution_records"
     )
+    assert worker_tasks.reclaim_stale_resource_reservations.name == (
+        "app.worker.tasks.reclaim_stale_resource_reservations"
+    )
+    assert worker_tasks.reclaim_stale_cancellations.name == (
+        "app.worker.tasks.reclaim_stale_cancellations"
+    )
 
 
 def test_gpu_retry_delay_uses_exponential_backoff(
@@ -81,12 +87,28 @@ def test_celery_sync_tasks_run_without_a_preexisting_event_loop(
     async def fake_reclaim() -> int:
         return 2
 
+    async def fake_reclaim_reservations() -> int:
+        return 5
+
+    async def fake_reclaim_cancellations() -> int:
+        return 6
+
     async def fake_reconcile() -> int:
         return 4
 
     monkeypatch.setattr(worker_tasks, "_execute_tool_task_impl", fake_execute)
     monkeypatch.setattr(worker_tasks, "_cleanup_expired_files_impl", fake_cleanup)
     monkeypatch.setattr(worker_tasks, "_reclaim_stale_gpu_leases_impl", fake_reclaim)
+    monkeypatch.setattr(
+        worker_tasks,
+        "_reclaim_stale_resource_reservations_impl",
+        fake_reclaim_reservations,
+    )
+    monkeypatch.setattr(
+        worker_tasks,
+        "_reclaim_stale_cancellations_impl",
+        fake_reclaim_cancellations,
+    )
     monkeypatch.setattr(
         worker_tasks,
         "_reconcile_execution_records_impl",
@@ -103,6 +125,12 @@ def test_celery_sync_tasks_run_without_a_preexisting_event_loop(
         reclaim_result = executor.submit(
             worker_tasks.reclaim_stale_gpu_leases.run
         ).result()
+        reservation_reclaim_result = executor.submit(
+            worker_tasks.reclaim_stale_resource_reservations.run
+        ).result()
+        cancellation_reclaim_result = executor.submit(
+            worker_tasks.reclaim_stale_cancellations.run
+        ).result()
         reconcile_result = executor.submit(
             worker_tasks.reconcile_execution_records.run
         ).result()
@@ -110,6 +138,8 @@ def test_celery_sync_tasks_run_without_a_preexisting_event_loop(
     assert task_result == {"task_id": "task-1", "tool_version_id": "version-1"}
     assert cleanup_result == {"deleted_count": 3}
     assert reclaim_result == {"reclaimed_count": 2}
+    assert reservation_reclaim_result == {"reclaimed_count": 5}
+    assert cancellation_reclaim_result == {"timed_out_count": 6}
     assert reconcile_result == {"reconciled_count": 4}
 
 
@@ -828,6 +858,8 @@ async def test_execute_tool_task_impl_requeues_worker_capability_wait(
         assert refreshed_task.retry_count == 1
         assert refreshed_task.error_message is None
         assert refreshed_task.extra_data["resource_wait_reason"] == "worker_capability_unavailable"
+        assert refreshed_task.extra_data["resource_wait_code"] == "no_capable_worker"
+        assert refreshed_task.extra_data["resource_wait_category"] == "resource"
         assert refreshed_task.extra_data["resource_retry_count"] == 1
         assert refreshed_task.extra_data["resource_retry_next_at"]
 

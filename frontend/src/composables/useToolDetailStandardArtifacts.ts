@@ -25,22 +25,31 @@ export interface ToolDetailStandardArtifactsOptions {
 export function useToolDetailStandardArtifacts(options: ToolDetailStandardArtifactsOptions) {
   const standardProjectArtifacts = ref<TypedArtifact[]>([])
   const standardArtifactsLoading = ref(false)
+  let requestId = 0
 
   async function loadStandardProjectArtifacts() {
+    const currentRequestId = ++requestId
     const projectId = unref(options.projectId)
     if (!projectId || !unref(options.standardInputSlots).length) {
       standardProjectArtifacts.value = []
+      standardArtifactsLoading.value = false
       return
     }
 
     standardArtifactsLoading.value = true
     try {
       const res = await options.api.getProjectArtifacts(projectId)
-      standardProjectArtifacts.value = res.data.items
+      if (currentRequestId === requestId) {
+        standardProjectArtifacts.value = res.data.items
+      }
     } catch {
-      standardProjectArtifacts.value = []
+      if (currentRequestId === requestId) {
+        standardProjectArtifacts.value = []
+      }
     } finally {
-      standardArtifactsLoading.value = false
+      if (currentRequestId === requestId) {
+        standardArtifactsLoading.value = false
+      }
     }
   }
 

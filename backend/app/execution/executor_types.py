@@ -7,6 +7,7 @@ TOOL_TYPE_TO_EXECUTION_TYPES: dict[str, tuple[str, ...]] = {
     "docker_image": ("container",),
     "python_script": ("cli",),
     "ssh_job": ("remote_job",),
+    "k8s_job": ("k8s_job",),
     "remote_api": ("remote_job",),
 }
 

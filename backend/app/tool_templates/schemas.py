@@ -22,7 +22,13 @@ except ImportError:  # pragma: no cover - optional dependency guard
 
 TOOL_TEMPLATE_API_VERSION = "aidd.sciminer/tool-template.v1"
 STANDARD_RESULT_VERSION = "aidd.sciminer/result.v2"
-SUPPORTED_TEMPLATE_EXECUTOR_TYPES = {"remote_api", "docker_image", "python_script", "ssh_job"}
+SUPPORTED_TEMPLATE_EXECUTOR_TYPES = {
+    "remote_api",
+    "docker_image",
+    "python_script",
+    "ssh_job",
+    "k8s_job",
+}
 
 
 class ToolTemplateMetadata(BaseModel):
@@ -243,7 +249,7 @@ class DrugDiscoveryToolTemplate(BaseModel):
     api_version: Literal[TOOL_TEMPLATE_API_VERSION]
     kind: Literal["ToolTemplate"]
     metadata: ToolTemplateMetadata
-    executor_types: list[Literal["remote_api", "docker_image", "python_script", "ssh_job"]] = Field(
+    executor_types: list[Literal["remote_api", "docker_image", "python_script", "ssh_job", "k8s_job"]] = Field(
         min_length=1
     )
     input_schema: dict[str, Any]

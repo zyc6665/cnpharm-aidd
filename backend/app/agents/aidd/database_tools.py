@@ -58,7 +58,7 @@ async def _request_with_retry(
                 response = await client.get(url, params=params)
                 response.raise_for_status()
                 return response.json()
-        except httpx.TimeoutException as exc:
+        except httpx.TimeoutException:
             last_exception = APITimeoutException(
                 message=f"{api_name} request timed out after {timeout}s: {url}",
                 api_name=api_name,

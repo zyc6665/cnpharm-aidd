@@ -24,6 +24,7 @@ def test_execution_type_mapping_matches_tool_package_migration_contract():
     assert execution_types_for_tool_type("docker_image") == ("container",)
     assert execution_types_for_tool_type("python_script") == ("cli",)
     assert execution_types_for_tool_type("ssh_job") == ("remote_job",)
+    assert execution_types_for_tool_type("k8s_job") == ("k8s_job",)
     assert execution_types_for_tool_type("remote_api") == ("remote_job",)
 
 
@@ -49,3 +50,16 @@ def test_execution_request_can_be_built_from_legacy_tool_config():
     assert request.executor_type == "remote_job"
     assert request.parameters == {"threshold": 0.5}
     assert request.resources == {"gpu_required": False}
+
+
+def test_execution_request_can_be_built_from_k8s_tool_config():
+    request = ExecutionRequest.from_tool_config(
+        idempotency_key="task-2:attempt-1",
+        project_id="project-1",
+        requested_by="user-1",
+        tool_package_version_id="package-version-1",
+        variant="gpu",
+        tool_config={"type": "k8s_job"},
+    )
+
+    assert request.executor_type == "k8s_job"

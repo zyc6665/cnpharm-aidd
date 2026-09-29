@@ -2,6 +2,8 @@ import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import type { ToolPackage } from '@/types/tool-packages'
 import {
+  buildToolPackageManifest,
+  createToolPackageGuidedDraft,
   formatToolPackageManifest,
   getToolPackageArtifactSlots,
   getToolPackageContractSummary,
@@ -10,6 +12,23 @@ import {
   getToolPackageValidationErrors,
   getToolPackageVariantSummary
 } from './manifest'
+
+test('向导草稿生成可提交的 Tool Package v2 manifest', () => {
+  const draft = createToolPackageGuidedDraft()
+  draft.slug = 'pocket-prediction'
+  draft.name = 'Pocket Prediction'
+  draft.image = 'registry.example.com/pocket:1.0.0'
+  const manifest = buildToolPackageManifest(draft)
+
+  assert.equal(manifest.api_version, 'aidd.sciminer/tool-package.v2')
+  assert.deepEqual(manifest.metadata, {
+    slug: 'pocket-prediction',
+    name: 'Pocket Prediction',
+    version: '1.0.0'
+  })
+  assert.equal((manifest.artifacts as { inputs: Array<{ type: string }> }).inputs[0]!.type, 'protein_structure@1')
+  assert.equal((manifest.variants as Array<{ image: string }>)[0]!.image, 'registry.example.com/pocket:1.0.0')
+})
 
 function toolPackage(overrides: Partial<ToolPackage> = {}): ToolPackage {
   return {

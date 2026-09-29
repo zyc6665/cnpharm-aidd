@@ -43,7 +43,6 @@ import {
   TeamOutlined,
   ToolOutlined,
   AppstoreOutlined,
-  CodeSandboxOutlined,
   ClusterOutlined,
   CloudServerOutlined,
   SettingOutlined,
@@ -59,7 +58,6 @@ const adminTabs = [
   { key: 'dashboard', icon: DashboardOutlined, labelKey: 'admin.dashboard' },
   { key: 'users', icon: TeamOutlined, labelKey: 'admin.users' },
   { key: 'tools', icon: ToolOutlined, labelKey: 'admin.tools' },
-  { key: 'tool-packages', icon: CodeSandboxOutlined, labelKey: 'admin.toolPackages' },
   { key: 'tool-categories', icon: AppstoreOutlined, labelKey: 'admin.toolCategories' },
   { key: 'workbench-groups', icon: ClusterOutlined, labelKey: 'admin.workbenchGroups' },
   { key: 'tasks', icon: CloudServerOutlined, labelKey: 'admin.tasks' },
@@ -70,6 +68,10 @@ watch(
   () => route.path,
   (path) => {
     const segment = path.split('/').pop()
+    if (segment === 'tool-packages') {
+      activeTab.value = 'tools'
+      return
+    }
     if (segment && adminTabs.some((t) => t.key === segment)) {
       activeTab.value = segment
     }

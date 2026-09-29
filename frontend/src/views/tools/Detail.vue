@@ -117,7 +117,7 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+  import { ref, computed, watch, onBeforeUnmount, nextTick } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { useI18n } from 'vue-i18n'
   import { message } from 'ant-design-vue'
@@ -374,23 +374,46 @@
     clearExampleFileState(key)
   }
 
-  onMounted(async () => {
-    const id = route.params.id as string
-    if (id) {
+  let detailLoadId = 0
+  watch(
+    () => route.params.id,
+    async rawId => {
+      const id = Array.isArray(rawId) ? rawId[0] : rawId
+      const requestId = ++detailLoadId
+      if (typeof id !== 'string' || !id.trim()) {
+        toolsStore.clearCurrentTool()
+        return
+      }
+
       loading.value = true
+      toolsStore.clearCurrentTool()
+      resetRunForm()
+      example.value = null
       try {
         await toolsStore.fetchToolDetail(id)
+        if (requestId !== detailLoadId || String(route.params.id) !== id) {
+          return
+        }
 
         initializeFromSurface()
-        await loadStandardProjectArtifacts()
-        await fetchExample(id)
+        await Promise.allSettled([loadStandardProjectArtifacts(), fetchExample(id)])
       } finally {
-        loading.value = false
+        if (requestId === detailLoadId) {
+          loading.value = false
+        }
       }
+    },
+    { immediate: true }
+  )
+
+  watch(currentProjectId, () => {
+    if (tool.value) {
+      void loadStandardProjectArtifacts()
     }
   })
 
   onBeforeUnmount(() => {
+    detailLoadId += 1
     toolsStore.clearCurrentTool()
   })
 </script>

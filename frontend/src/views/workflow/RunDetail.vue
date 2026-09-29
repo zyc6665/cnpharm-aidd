@@ -40,18 +40,20 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onMounted } from 'vue'
+  import { computed, onUnmounted, watch } from 'vue'
   import { message } from 'ant-design-vue'
   import { useI18n } from 'vue-i18n'
   import { useRoute, useRouter } from 'vue-router'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import WorkflowRunStatusPanel from '@/components/workflow/WorkflowRunStatusPanel.vue'
   import { useWorkflowStore } from '@/stores'
+  import { isWorkflowRunTerminal } from '@/workflow/workflow-runs'
 
   const { t } = useI18n()
   const route = useRoute()
   const router = useRouter()
   const workflowStore = useWorkflowStore()
+  let autoSyncTimer: number | null = null
 
   const runId = computed(() => {
     const value = route.params.runId
@@ -70,24 +72,46 @@
     if (!runId.value) {
       return
     }
-    await workflowStore.loadWorkflowRun(runId.value)
+    try {
+      await workflowStore.loadWorkflowRun(runId.value)
+      if (workflowStore.activeWorkflowRun?.id === runId.value) {
+        scheduleAutoSync()
+      }
+    } catch {
+      // 请求层已经展示具体错误。
+    }
   }
 
   async function handleSync() {
-    await workflowStore.syncActiveWorkflowRun(runId.value)
+    try {
+      await workflowStore.syncActiveWorkflowRun(runId.value)
+      scheduleAutoSync()
+    } catch {
+      // 请求层已经展示具体错误。
+    }
   }
 
   async function handleCancel() {
-    await workflowStore.cancelActiveWorkflowRun(runId.value)
-    message.success(t('workflow.runDetail.canceled'))
+    try {
+      await workflowStore.cancelActiveWorkflowRun(runId.value)
+      message.success(t('workflow.runDetail.canceled'))
+      scheduleAutoSync()
+    } catch {
+      // 请求层已经展示具体错误。
+    }
   }
 
   async function handleRetryNode(nodeId: string) {
     if (!runId.value) {
       return
     }
-    await workflowStore.retryWorkflowRunNode(runId.value, nodeId)
-    message.success(t('workflow.runDetail.nodeRetried'))
+    try {
+      await workflowStore.retryWorkflowRunNode(runId.value, nodeId)
+      message.success(t('workflow.runDetail.nodeRetried'))
+      scheduleAutoSync()
+    } catch {
+      // 请求层已经展示具体错误。
+    }
   }
 
   function goBackToWorkflow() {
@@ -99,8 +123,60 @@
     router.push({ name: 'Workflow' })
   }
 
-  onMounted(() => {
-    void loadRun()
+  function stopAutoSync() {
+    if (autoSyncTimer !== null) {
+      window.clearInterval(autoSyncTimer)
+      autoSyncTimer = null
+    }
+  }
+
+  function scheduleAutoSync() {
+    stopAutoSync()
+    const run = workflowStore.activeWorkflowRun
+    if (!run || isWorkflowRunTerminal(run.status)) {
+      return
+    }
+
+    autoSyncTimer = window.setInterval(async () => {
+      if (workflowStore.isSyncingWorkflowRun || workflowStore.isLoadingWorkflowRun) {
+        return
+      }
+      const currentRun = workflowStore.activeWorkflowRun
+      if (!currentRun || isWorkflowRunTerminal(currentRun.status)) {
+        stopAutoSync()
+        return
+      }
+
+      try {
+        await workflowStore.syncActiveWorkflowRun(runId.value)
+        if (
+          workflowStore.activeWorkflowRun &&
+          isWorkflowRunTerminal(workflowStore.activeWorkflowRun.status)
+        ) {
+          stopAutoSync()
+        }
+      } catch {
+        // 请求层已经展示错误，停止轮询等待用户手动刷新。
+        stopAutoSync()
+      }
+    }, 5000)
+  }
+
+  watch(
+    runId,
+    async id => {
+      stopAutoSync()
+      if (!id) {
+        return
+      }
+      workflowStore.clearActiveWorkflowRun()
+      void loadRun()
+    },
+    { immediate: true }
+  )
+
+  onUnmounted(() => {
+    stopAutoSync()
   })
 </script>
 

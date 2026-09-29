@@ -134,3 +134,82 @@ async def test_set_default_model_service_clears_other_defaults(session_factory):
         ("Second", True),
     ]
     assert [item.id for item in listed] == [second.id, first.id]
+
+
+@pytest.mark.asyncio
+async def test_first_enabled_service_becomes_default(session_factory):
+    async with session_factory() as session:
+        created = await create_model_service(
+            session,
+            ModelServiceCreate(
+                name="First",
+                base_url="https://one.example.com/v1",
+                model_name="one",
+            ),
+        )
+
+    assert created.is_default is True
+
+
+@pytest.mark.asyncio
+async def test_deleting_default_promotes_another_enabled_service(session_factory):
+    async with session_factory() as session:
+        first = await create_model_service(
+            session,
+            ModelServiceCreate(
+                name="First",
+                base_url="https://one.example.com/v1",
+                model_name="one",
+                is_default=True,
+            ),
+        )
+        second = await create_model_service(
+            session,
+            ModelServiceCreate(
+                name="Second",
+                base_url="https://two.example.com/v1",
+                model_name="two",
+            ),
+        )
+        from app.services.model_services import delete_model_service
+
+        await delete_model_service(session, first.id)
+        await session.commit()
+        stored = await session.get(ModelService, second.id)
+
+    assert stored is not None
+    assert stored.is_default is True
+
+
+@pytest.mark.asyncio
+async def test_disabling_default_promotes_another_enabled_service(session_factory):
+    async with session_factory() as session:
+        first = await create_model_service(
+            session,
+            ModelServiceCreate(
+                name="First",
+                base_url="https://one.example.com/v1",
+                model_name="one",
+                is_default=True,
+            ),
+        )
+        second = await create_model_service(
+            session,
+            ModelServiceCreate(
+                name="Second",
+                base_url="https://two.example.com/v1",
+                model_name="two",
+            ),
+        )
+
+        await update_model_service(
+            session,
+            first.id,
+            ModelServiceUpdate(is_enabled=False),
+        )
+        await session.commit()
+        stored_first = await session.get(ModelService, first.id)
+        stored_second = await session.get(ModelService, second.id)
+
+    assert stored_first is not None and stored_first.is_default is False
+    assert stored_second is not None and stored_second.is_default is True

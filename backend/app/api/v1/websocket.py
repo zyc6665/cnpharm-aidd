@@ -2,10 +2,15 @@
 """WebSocket 接口"""
 
 from typing import Optional
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.websocket import ws_manager
-from app.auth.jwt_handler import decode_token
+from app.auth.jwt_handler import verify_token
+from app.database.session import get_db
+from app.common.exceptions import AppException
+from app.models.users import User
+from app.services.task_access import load_task_for_read_access
 
 import logging
 import json
@@ -13,6 +18,23 @@ import json
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+WS_AUTH_SUBPROTOCOL = "scitool-access-token"
+
+
+def _resolve_ws_token(websocket: WebSocket, query_token: Optional[str]) -> Optional[str]:
+    """Prefer a WebSocket subprotocol token over the legacy query parameter."""
+    if query_token:
+        return query_token
+
+    headers = getattr(websocket, "headers", {})
+    protocol_header = headers.get("sec-websocket-protocol", "")
+    protocols = [part.strip() for part in protocol_header.split(",") if part.strip()]
+    try:
+        marker_index = protocols.index(WS_AUTH_SUBPROTOCOL)
+    except ValueError:
+        return None
+    token_index = marker_index + 1
+    return protocols[token_index] if token_index < len(protocols) else None
 
 
 async def get_user_from_token(token: Optional[str]) -> Optional[str]:
@@ -29,23 +51,43 @@ async def get_user_from_token(token: Optional[str]) -> Optional[str]:
         return None
 
     try:
-        payload = decode_token(token)
-        return payload.get("sub")
+        payload = verify_token(token, token_type="access")
+        user_id = payload.get("sub")
+        return str(user_id) if user_id else None
     except Exception as exc:
         logger.debug("Failed to decode WebSocket token: %s", exc)
         return None
 
 
+async def _load_authenticated_user(
+    db: AsyncSession,
+    token: Optional[str],
+) -> Optional[User]:
+    user_id = await get_user_from_token(token)
+    if not user_id:
+        return None
+    user = await db.get(User, user_id)
+    if user is None or user.status != "active":
+        return None
+    return user
+
+
+async def _reject_websocket(websocket: WebSocket, reason: str) -> None:
+    await websocket.close(code=1008, reason=reason)
+
+
 @router.websocket("/ws")
 async def websocket_endpoint(
     websocket: WebSocket,
-    token: Optional[str] = Query(None)
+    token: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     通用 WebSocket 连接端点
 
-    连接参数:
-    - token: JWT token（可选，用于身份认证）
+    认证方式:
+    - 首选：Sec-WebSocket-Protocol: scitool-access-token, <JWT access token>
+    - 兼容：查询参数 token（旧客户端）
 
     消息格式（客户端发送）:
     ```json
@@ -65,8 +107,14 @@ async def websocket_endpoint(
     }
     ```
     """
-    # 验证用户身份
-    user_id = await get_user_from_token(token)
+    current_user = await _load_authenticated_user(
+        db,
+        _resolve_ws_token(websocket, token),
+    )
+    if current_user is None:
+        await _reject_websocket(websocket, "需要有效的登录凭证")
+        return
+    user_id = str(current_user.id)
 
     # 建立连接
     connection_id = await ws_manager.connect(websocket, user_id)
@@ -84,6 +132,15 @@ async def websocket_endpoint(
                     # 订阅任务
                     task_id = message.get("task_id")
                     if task_id:
+                        try:
+                            await load_task_for_read_access(
+                                db,
+                                task_id=str(task_id),
+                                current_user=current_user,
+                            )
+                        except (AppException, HTTPException):
+                            await _reject_websocket(websocket, "无权订阅此任务")
+                            return
                         await ws_manager.subscribe_task(connection_id, task_id)
                         await ws_manager.send_personal(connection_id, {
                             "type": "subscribed",
@@ -131,7 +188,8 @@ async def websocket_endpoint(
 async def task_websocket_endpoint(
     websocket: WebSocket,
     task_id: str,
-    token: Optional[str] = Query(None)
+    token: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     任务专用 WebSocket 连接端点
@@ -141,14 +199,30 @@ async def task_websocket_endpoint(
     路径参数:
     - task_id: 任务 ID
 
-    查询参数:
-    - token: JWT token（可选）
+    认证方式:
+    - 首选：Sec-WebSocket-Protocol: scitool-access-token, <JWT access token>
+    - 兼容：查询参数 token（旧客户端）
     """
-    # 验证用户身份
-    user_id = await get_user_from_token(token)
+    current_user = await _load_authenticated_user(
+        db,
+        _resolve_ws_token(websocket, token),
+    )
+    if current_user is None:
+        await _reject_websocket(websocket, "需要有效的登录凭证")
+        return
+
+    try:
+        await load_task_for_read_access(
+            db,
+            task_id=task_id,
+            current_user=current_user,
+        )
+    except (AppException, HTTPException):
+        await _reject_websocket(websocket, "无权订阅此任务")
+        return
 
     # 建立连接
-    connection_id = await ws_manager.connect(websocket, user_id)
+    connection_id = await ws_manager.connect(websocket, str(current_user.id))
 
     # 自动订阅任务
     await ws_manager.subscribe_task(connection_id, task_id)

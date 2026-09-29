@@ -42,11 +42,15 @@ def _capability(**overrides) -> WorkerCapability:
 
 
 def test_admission_accepts_request_that_fits_worker_capability() -> None:
-    decision = ResourceAdmissionPolicy.evaluate(_request(), _capability())
+    decision = ResourceAdmissionPolicy.evaluate(
+        _request(),
+        _capability(queue="gpu-worker-queue"),
+    )
 
     assert decision.admitted is True
     assert decision.worker_id == "gpu-worker-1"
     assert decision.reason is None
+    assert decision.queue == "gpu-worker-queue"
 
 
 def test_admission_rejects_gpu_memory_shortage() -> None:

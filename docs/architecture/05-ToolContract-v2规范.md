@@ -2,6 +2,8 @@
 
 > 修订日期：2026-09-05。科学 profile 为 V1.1 拟议扩展；V1 使用模型卡与结果附件交付，本次未修改 builder、validator 或运行时 API。
 
+> 执行器重构说明：自 2026-09-28 起，新工具的生产 executor 只允许 `k8s_job` 和 `ssh_job`。`docker_image`、`python_script` 是兼容 runtime，`remote_api` 只允许旧工具迁移读取。详见 [执行环境与资源调度重构方案](./19-执行环境与资源调度重构方案.md)。
+
 ## 1. 目标
 
 Tool Contract v2 是平台对工具能力的统一理解方式。它要让工具可以同时被工具详情页、工作流、智能体、任务执行器和管理后台使用，而不需要为每个入口单独适配。
@@ -54,12 +56,7 @@ artifacts:
       cardinality: one
       required: true
 resource_profile:
-  tier: cpu-medium
-  cpu: 4
-  memory_gb: 8
-  gpu_required: false
-  expected_minutes: 5
-  timeout_minutes: 30
+  id: cpu-medium
 executor:
   type: ssh_job
 runtime:
@@ -139,37 +136,33 @@ JSON Schema object，只放普通参数：
 
 ### 4.6 `resource_profile`
 
-资源画像用于预检、调度和运维：
+生产工具只能引用管理员批准的资源档位。档位定义 CPU、内存、GPU、超时和并发边界；Tool Contract 不得自行声明硬件限额或请求任意资源。旧契约中的资源字段只用于兼容读取和迁移映射：
 
 ```yaml
 resource_profile:
-  tier: gpu-large
-  cpu: 16
-  memory_gb: 64
-  gpu_required: true
-  gpu_memory_gb: 24
-  expected_minutes: 120
-  timeout_minutes: 480
-  parallelism: 1
+  id: gpu-large
 ```
+
+管理员在 Resource Profile Registry 中维护 `cpu-medium`、`gpu-large` 等档位及真实资源上限。工具作者只能选择已批准档位，不能通过 ToolVersion 覆盖档位资源值。
 
 ### 4.7 `executor`
 
-标准 executor 类型：
+历史 executor 类型：
 
-- `builtin`
-- `python_script`
-- `docker_image`
-- `ssh_job`
-- `remote_api`
-- `k8s_job`
-- `slurm_job`
+- `builtin`：轻量兼容能力。
+- `python_script`：历史 runtime 配置。
+- `docker_image`：历史 runtime 配置。
+- `ssh_job`：受控远程执行器，继续支持。
+- `remote_api`：旧工具兼容连接器。
+- `k8s_job`：生产标准执行器。
+- `slurm_job`：不作为当前产品主路径；如需使用，通过 SSH 或后续专用 Adapter 接入。
 
 说明：
 
 - executor 只声明执行方式。实际 credentials、project_id、task_id 由平台运行时注入。
 - 工具是否以 Tool Package 交付不属于 executor 类型，应由 `package_format` 或 Tool Package manifest 来源表达。
-- `k8s_job` 和 `slurm_job` 是重计算生产化执行器，第一阶段可以先由 `ssh_job` 过渡，但契约层应保留标准类型。
+- 新工具必须落到 `k8s_job` 或 `ssh_job`。Kubernetes Scheduler 或受控 SSH 节点负责真实资源分配，平台只负责逻辑准入、任务生命周期和状态同步。
+- `k8s_job` 的 ToolVersion 只声明 `runtime.image`（不可变 digest）和已批准的 `resource_profile` ID；Namespace、ServiceAccount、集群凭据和节点池由平台执行环境绑定。
 
 ### 4.8 `package_format`
 
@@ -183,7 +176,7 @@ package_format: tool_package_v2
 
 - `package_format` 描述工具如何交付。
 - `executor.type` 描述工具如何运行。
-- 从 Tool Package v2 导入的工具也必须落到具体 executor，例如 `docker_image`、`ssh_job`、`k8s_job`、`slurm_job` 或 `remote_api`。
+- 从 Tool Package v2 导入的工具必须落到 `k8s_job` 或 `ssh_job`；Docker/Python 作为 runtime 写入对应执行配置，旧 Remote API 只允许迁移读取。
 
 ### 4.9 `scientific_profile`
 
@@ -220,7 +213,7 @@ Tool Contract v2
 
 ## 6. 与 Remote API 的关系
 
-Remote API 自注册服务提供 remote-tool manifest。平台拉取 manifest 后也转换为 Tool Contract v2。
+历史 Remote API 兼容服务可提供 remote-tool manifest，平台拉取后转换为带 legacy 标记的 Tool Contract v2；这不是新模型生产部署方式。
 
 ```text
 Remote Service /manifest

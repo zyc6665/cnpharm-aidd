@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.files.file_records import is_file_usable
 from app.models.files import File as FileModel
 
 
@@ -27,7 +28,7 @@ async def load_task_output_files(
 
     for file_id in file_ids:
         file_record = files_by_id.get(str(file_id))
-        if not file_record:
+        if not file_record or not is_file_usable(file_record):
             continue
         output_files.append(
             {

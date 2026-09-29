@@ -55,6 +55,7 @@ async def list_user_artifact_files(
         FileModel.owner_id == user_id,
         FileModel.source_type == FileSourceType.TOOL_OUTPUT.value,
         FileModel.deleted_at.is_(None),
+        or_(FileModel.is_corrupted.is_(False), FileModel.is_corrupted.is_(None)),
         or_(FileModel.expires_at.is_(None), FileModel.expires_at > utcnow()),
     )
 

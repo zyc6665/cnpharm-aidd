@@ -17,6 +17,7 @@ from app.models.files import File as FileModel
 from app.models.tools import ToolVersion
 from app.models.users import User
 from app.tasks.cancellation import cancel_platform_task
+from app.tasks.cancellation import retry_remote_tool_cancellation
 from app.tasks.executors.remote_api import RemoteAPIExecutor
 from app.tasks.executors.errors import TaskExecutionError
 
@@ -803,3 +804,67 @@ async def test_cancel_platform_task_uses_execution_record_external_id(
 
     assert canceled is True
     assert remote_ids == ["run-from-record"]
+
+
+@pytest.mark.asyncio
+async def test_cancel_platform_task_persists_local_cancel_when_remote_cancel_fails(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    task = build_task()
+    config = remote_tool_config(httpx.MockTransport(lambda _request: httpx.Response(200)))
+    task.tool_version = build_tool_version(config)
+    task.extra_data = {"remote_run_id": "run-1"}
+    current_user = User(id="user-1", role="user")
+
+    class FailingRemoteAPIExecutor:
+        def __init__(self, task, tool_version, config):
+            pass
+
+        async def cancel_remote_run(self, remote_run_id=None):
+            raise RuntimeError("remote cancel unavailable")
+
+    async def fake_finish(*, task, status, error_message=None):
+        return None
+
+    monkeypatch.setattr("app.tasks.cancellation.use_direct_task_execution", lambda: True)
+    monkeypatch.setattr("app.tasks.cancellation.RemoteAPIExecutor", FailingRemoteAPIExecutor)
+    monkeypatch.setattr(
+        "app.tasks.cancellation.finish_task_execution_record_best_effort",
+        fake_finish,
+    )
+
+    canceled = await cancel_platform_task(
+        None,
+        task=task,
+        current_user=current_user,
+        direct_runner=type("Runner", (), {"cancel_task": lambda self, task_id: True})(),
+    )
+
+    assert canceled is True
+    assert task.status == TaskStatus.CANCELED.value
+    assert task.extra_data["execution_control"]["state"] == "cancel_requested"
+    assert task.extra_data["remote_cancel_pending"] is True
+    assert task.extra_data["remote_cancel_next_retry_at"]
+
+
+@pytest.mark.asyncio
+async def test_retry_remote_tool_cancellation_defers_next_attempt_after_failure(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    task = build_task()
+    task.extra_data = {
+        "remote_run_id": "run-1",
+        "remote_cancel_pending": True,
+    }
+
+    async def fail_cancel(*args, **kwargs):
+        raise RuntimeError("remote cancel unavailable")
+
+    monkeypatch.setattr(
+        "app.tasks.cancellation._cancel_remote_tool_if_needed",
+        fail_cancel,
+    )
+
+    assert await retry_remote_tool_cancellation(None, task=task) is False
+    assert task.extra_data["remote_cancel_pending"] is True
+    assert task.extra_data["remote_cancel_next_retry_at"]

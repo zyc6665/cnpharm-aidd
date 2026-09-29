@@ -44,6 +44,15 @@
 **Resource Profile**
 : A normalized estimate of the compute resources, runtime, timeout, and scheduling class required by a tool run.
 
+**Managed Execution Environment**
+: A platform-controlled execution domain in which a task can be submitted, inspected, cancelled, reconciled, and collected. The production environments are Kubernetes Jobs and registered SSH execution nodes.
+
+**Execution Runtime**
+: The container or script details used inside a Managed Execution Environment, such as a Docker image or Python entrypoint. A runtime is not itself a resource scheduler.
+
+**Legacy External Connector**
+: A compatibility path for an existing external service, such as `remote_api`, that is not the production execution path for new model tools and does not provide platform-controlled resource scheduling.
+
 **Workflow Input**
 : A user-provided value or Artifact Binding promoted to the workflow level because a node requires it and no upstream node supplies it.
 

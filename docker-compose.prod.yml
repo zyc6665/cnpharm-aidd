@@ -66,6 +66,21 @@ services:
       CELERY_BROKER_URL: redis://:${REDIS_PASSWORD}@redis:6379/1
       CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD}@redis:6379/2
       TASK_EXECUTION_BACKEND: celery
+      WORKER_CAPABILITY_ADMISSION_ENABLED: "true"
+      WORKER_CAPABILITY_ROUTING_ENABLED: "true"
+      WORKER_CAPABILITY_RESERVATION_ENABLED: "true"
+      RESOURCE_SCOPE_QUOTA_ENABLED: "true"
+      TASK_CANCELLATION_STALE_AFTER_SECONDS: ${TASK_CANCELLATION_STALE_AFTER_SECONDS:-900}
+      TASK_CANCELLATION_RECONCILE_BATCH_SIZE: ${TASK_CANCELLATION_RECONCILE_BATCH_SIZE:-100}
+      WORKFLOW_RECONCILE_LOCK_TTL_SECONDS: ${WORKFLOW_RECONCILE_LOCK_TTL_SECONDS:-60}
+      REMOTE_CANCEL_RETRY_INTERVAL_SECONDS: ${REMOTE_CANCEL_RETRY_INTERVAL_SECONDS:-60}
+      REMOTE_CANCEL_RETRY_BATCH_SIZE: ${REMOTE_CANCEL_RETRY_BATCH_SIZE:-100}
+      RESOURCE_USER_MAX_CPU: ${RESOURCE_USER_MAX_CPU:-16}
+      RESOURCE_USER_MAX_MEMORY_GB: ${RESOURCE_USER_MAX_MEMORY_GB:-64}
+      RESOURCE_USER_MAX_PARALLELISM: ${RESOURCE_USER_MAX_PARALLELISM:-4}
+      RESOURCE_PROJECT_MAX_CPU: ${RESOURCE_PROJECT_MAX_CPU:-64}
+      RESOURCE_PROJECT_MAX_MEMORY_GB: ${RESOURCE_PROJECT_MAX_MEMORY_GB:-256}
+      RESOURCE_PROJECT_MAX_PARALLELISM: ${RESOURCE_PROJECT_MAX_PARALLELISM:-16}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set JWT_SECRET_KEY}
       SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:?set SETTINGS_ENCRYPTION_KEY}
       CORS_ORIGINS: ${CORS_ORIGINS:?set CORS_ORIGINS}
@@ -83,7 +98,10 @@ services:
     image: scitool-backend:${APP_VERSION:-latest}
     restart: unless-stopped
     command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=${CELERY_WORKER_CONCURRENCY:-4} --queues=default,tool_tasks,high_priority,cpu_queue,maintenance,monitoring
-    environment: *app_environment
+    environment:
+      <<: *app_environment
+      WORKER_LISTEN_QUEUES: default,tool_tasks,high_priority,cpu_queue,maintenance,monitoring
+      WORKER_CAPABILITY_JSON: '{"worker_id":"scitool-default-$${HOSTNAME}","queue":"tool_tasks","tiers":["cpu","standard"],"cpu_capacity":8,"memory_capacity_gb":32,"gpu_count":0,"parallelism":4}'
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -93,7 +111,10 @@ services:
     image: scitool-backend:${APP_VERSION:-latest}
     restart: unless-stopped
     command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=${CELERY_HEAVY_WORKER_CONCURRENCY:-1} --queues=heavy_compute
-    environment: *app_environment
+    environment:
+      <<: *app_environment
+      WORKER_LISTEN_QUEUES: heavy_compute
+      WORKER_CAPABILITY_JSON: '{"worker_id":"scitool-heavy-$${HOSTNAME}","queue":"heavy_compute","tiers":["heavy"],"cpu_capacity":16,"memory_capacity_gb":64,"gpu_count":0,"parallelism":1}'
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -104,11 +125,25 @@ services:
     restart: unless-stopped
     profiles: ["gpu"]
     command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=${CELERY_GPU_WORKER_CONCURRENCY:-1} --queues=gpu_queue
-    environment: *app_environment
+    environment:
+      <<: *app_environment
+      WORKER_LISTEN_QUEUES: gpu_queue
+      WORKER_CAPABILITY_JSON: '{"worker_id":"scitool-gpu-$${HOSTNAME}","queue":"gpu_queue","tiers":["gpu"],"cpu_capacity":8,"memory_capacity_gb":32,"gpu_count":1,"parallelism":1}'
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
       minio: { condition: service_healthy }
+
+  celery-beat:
+    image: scitool-backend:${APP_VERSION:-latest}
+    restart: unless-stopped
+    command: celery -A app.worker.celery_app beat --loglevel=info
+    environment:
+      <<: *app_environment
+      WORKER_CAPABILITY_HEARTBEAT_QUEUES: default,heavy_compute,gpu_queue
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
 
 volumes:
   postgres_data:

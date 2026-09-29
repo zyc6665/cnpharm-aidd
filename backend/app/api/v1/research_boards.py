@@ -58,7 +58,7 @@ async def _validate_references(
                 File.id.in_(file_ids),
                 File.owner_id == current_user.id,
                 File.deleted_at.is_(None),
-                File.is_corrupted.is_(False),
+                or_(File.is_corrupted.is_(False), File.is_corrupted.is_(None)),
             )
         )
         accessible_ids = set(result.scalars())

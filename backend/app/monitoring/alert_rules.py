@@ -570,7 +570,7 @@ async def check_disk_usage() -> float:
     import shutil
 
     try:
-        total, used, free = shutil.disk_usage("/")
+        total, used, _free = shutil.disk_usage("/")
         return (used / total) * 100
     except Exception:
         return 0.0

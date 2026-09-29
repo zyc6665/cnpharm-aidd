@@ -179,7 +179,7 @@ class StorageExceptionHandler:
             try:
                 await self.fallback.upload(file_content, file_path)
                 logger.info(
-                    f"Upload succeeded using fallback storage",
+                    "Upload succeeded using fallback storage",
                     extra={"file_path": file_path}
                 )
                 return {
@@ -251,7 +251,7 @@ class StorageExceptionHandler:
             try:
                 content = await self.fallback.download(file_path)
                 logger.info(
-                    f"Download succeeded using fallback storage",
+                    "Download succeeded using fallback storage",
                     extra={"file_path": file_path}
                 )
                 return {
@@ -327,7 +327,7 @@ class StorageExceptionHandler:
             await self.fallback.upload(content, file_path)
 
             logger.info(
-                f"File migrated to fallback storage",
+                "File migrated to fallback storage",
                 extra={"file_path": file_path}
             )
             return True
@@ -370,7 +370,7 @@ class StorageExceptionHandler:
                 )
 
             logger.info(
-                f"File migrated back to primary storage",
+                "File migrated back to primary storage",
                 extra={"file_path": file_path}
             )
             return True

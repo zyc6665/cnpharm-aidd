@@ -15,6 +15,7 @@ import logging
 
 from app.common.time import utcnow
 from app.models.tasks import TaskStatus
+from app.tasks.attempts import clear_task_execution_control
 
 if TYPE_CHECKING:
     from app.models.tasks import Task
@@ -24,6 +25,10 @@ logger = logging.getLogger(__name__)
 DEFAULT_MAX_RETRIES = 3
 RESOURCE_WAIT_METADATA_KEYS = (
     "resource_wait_reason",
+    "resource_wait_code",
+    "resource_wait_category",
+    "resource_wait_scope",
+    "resource_wait_dimension",
     "resource_retry_count",
     "resource_retry_next_at",
 )
@@ -316,6 +321,7 @@ class TaskStateMachine:
             raise TaskStateError(current_status, TaskStatus.PENDING, task.id)
 
         cls.transition(task, TaskStatus.PENDING, progress_message="任务重试")
+        clear_task_execution_control(task)
 
     @classmethod
     def cancel(cls, task: "Task") -> None:

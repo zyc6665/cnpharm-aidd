@@ -3,9 +3,10 @@
 | 文档项 | 内容 |
 | --- | --- |
 | 文档编号 | SCI-LITE-DES-001 |
-| 文档版本 | v0.1 |
+| 文档版本 | v0.2 |
 | 文档状态 | 方案草案 |
 | 编制日期 | 2026-09-09 |
+| 修订日期 | 2026-09-25 |
 | 适用系统 | 客户专用 AIDD Lite 平台 |
 | 来源基线 | 从现有 AI 制药研发平台裁剪独立 repo 交付 |
 
@@ -33,17 +34,17 @@
 
 ## 2. 推荐结论
 
-可以把模型内嵌在平台交付包中，但这里的“内嵌”应定义为：模型代码、权重、运行环境和工具契约作为平台固定资产随版本交付，而不是把推理过程放进 Web/API 进程中同步执行。
+可以把模型内嵌在平台交付包中，但这里的“内嵌”应定义为：模型代码、权重、运行环境和工具契约作为平台固定资产随版本交付，而不是把推理过程放进 Web/API 进程中同步执行。客户生产部署以集团 Kubernetes 集群为运行环境，所有模型和计算工具任务统一通过 Kubernetes Job 执行，不部署常驻模型推理服务。
 
 推荐做法是：
 
 - 模型和计算工具作为内置 Tool Runtime 随 repo 或镜像交付。
 - Backend 只负责鉴权、参数校验、任务创建、工作流编排和结果索引。
-- Worker 负责真正执行模型推理、GROMACS、RDKit 等计算任务。
-- Queue 负责隔离轻任务、GPU 推理任务和长时 MD 任务。
+- K8s Adapter Worker 负责把平台任务提交为 Kubernetes Job 并同步状态；计算 Pod 执行模型推理、GROMACS、RDKit 等任务。
+- 平台逻辑队列负责业务优先级和并发准入；Kubernetes Scheduler 负责节点和硬件资源分配。
 - Artifact Storage 负责保存输入快照、输出文件、日志、报告和谱系。
 
-这种方案兼顾部署方便和工程稳定性：客户无需单独注册模型服务，但平台仍不会因为模型长任务拖垮 API 服务。
+这种方案让模型、依赖和硬件资源通过不可变镜像及 Job 资源声明交付，不需要独立注册模型服务。模型冷启动和镜像拉取会增加单次任务启动时间，需通过镜像预热、权重缓存和合理的任务批量来控制。
 
 ## 3. 裁剪后的总体架构
 
@@ -69,21 +70,29 @@ Task / Workflow Service
   └─ 结果索引
       │
       ▼
-Queue
+平台 Queue / Task Scheduler
   ├─ cpu_light
   ├─ gpu_inference
   └─ md_heavy
       │
       ▼
-Worker Runtime
-  ├─ DL Model Runner
-  ├─ GROMACS Runner
-  ├─ RDKit Runner
-  └─ Report Runner
+K8s Adapter Worker (Deployment)
+  ├─ 创建 / 查询 / 取消 Job
+  ├─ 同步状态和日志
+  └─ 回收并校验输出
+      │
+      ▼
+Kubernetes Job / Pod
+  ├─ DL Model Runtime
+  ├─ GROMACS Runtime
+  ├─ RDKit Runtime
+  └─ Report Runtime
       │
       ▼
 Artifact / Result Storage
 ```
+
+平台和 Kubernetes 的职责边界：平台按固定工具配置选择逻辑队列、执行器和资源画像，并执行项目级准入、并发控制和任务生命周期管理；Kubernetes 根据 Pod 的 requests/limits、节点标签、污点和配额进行实际节点调度。平台可以观测 Job、Pod、Events 及经授权的集群指标，但不自行挑选节点，也不承诺精确预测任务何时获得资源。
 
 ### 3.1 与通用平台的主要区别
 
@@ -93,7 +102,7 @@ Artifact / Result Storage
 | 模型变更 | 管理员审核后发布 ToolVersion | 通过代码和交付包升级 |
 | Agent | 支持计划、解释、审批 | 不包含 |
 | 工作流 | 用户可自由编排和保存 | 以预置模板为主，允许有限参数化 |
-| 执行器 | builtin、python、docker、ssh、remote_api、k8s、slurm | 优先 builtin/docker，本地私有部署可保留 ssh/k8s/slurm 适配 |
+| 执行器 | `k8s_job`、`ssh_job` 以及兼容 runtime | 客户生产环境统一使用 `k8s_job`；无集群环境使用受控 `ssh_job`，本地 runner 不作为客户生产执行路径 |
 | 权限 | 多角色、多项目、治理审计 | 项目级权限和基础审计 |
 | 运维复杂度 | 面向扩展和治理 | 面向稳定交付和易部署 |
 
@@ -159,7 +168,7 @@ aidd-lite-customer-platform/
 ### 4.2 建议删除或关闭
 
 - Agent 对话、计划、审批和自动编排。
-- Remote API 自注册和在线 manifest 拉取。
+- 新建工具的 Remote API 自注册；历史 Remote API 工具仅在迁移确有需要时兼容导入。
 - 管理员动态创建工具、修改模型、发布 ToolVersion 的页面。
 - 通用 Governance Registry 中面向多租户和工具市场的配置项。
 - 不属于客户固定流程的工具模板、演示模板和历史兼容适配。
@@ -201,39 +210,43 @@ aidd-lite-customer-platform/
 
 ### 6.1 调度原则
 
-即使模型内嵌，推理调度也应走任务系统。内嵌解决的是交付和部署便利性，不改变运行时隔离原则。
+所有推理和计算任务都经过平台任务系统，并由 K8s Adapter 创建独立 Kubernetes Job。客户部署不使用常驻模型 Deployment，也不在 API 或 Celery Worker 进程中直接运行模型。
 
 核心原则：
 
 - API 进程只创建任务，不执行重计算。
-- Worker 按队列消费任务。
+- K8s Adapter Worker 按平台队列消费任务并提交 Job；它不运行模型计算本身。
 - 不同资源类型分队列，避免重任务阻塞轻任务。
-- 每个任务生成独立工作目录、输入快照、输出目录和日志。
-- 执行完成后统一读取 result manifest 并持久化 Artifact。
+- 每个任务尝试对应一个独立 Job/Pod、输入快照、输出前缀和日志；重试创建新的 Job。
+- 输入输出通过对象存储或客户批准的共享存储传递，不依赖 Pod 本地磁盘作为持久结果。
+- 执行完成后校验 result manifest，再持久化 Artifact；完成结果收集前不清理 Job 及输出。
 
 ### 6.2 推荐队列
 
 | 队列 | 任务类型 | 并发建议 | 说明 |
 | --- | --- | --- | --- |
-| `cpu_light` | 文件转换、RDKit 描述符、小表格处理 | 2-8 | 快速返回，限制单任务时长 |
-| `gpu_inference` | 深度学习模型推理、批量打分 | 按 GPU 数量设置 | 需要显存锁或单卡并发限制 |
-| `md_heavy` | GROMACS 能量最小化、MD、长时模拟 | 1-2 或交给集群 | 长任务独立队列，支持取消和日志轮询 |
-| `report` | 结果汇总、图表、PDF/HTML 报告 | 1-4 | 可异步生成，不阻塞主链路 |
+| `cpu_light` | 文件转换、RDKit 描述符、小表格处理 | 按 Namespace 配额和平台并发上限配置 | 仍使用独立 Job；以准入和并发上限控制大量短任务 |
+| `gpu_inference` | 深度学习模型推理、批量打分 | 按 GPU 配额、GPU 类型和客户并发策略配置 | Job 声明 GPU 资源；由 Kubernetes Scheduler 分配节点 |
+| `md_heavy` | GROMACS 能量最小化、MD、长时模拟 | 按 CPU/内存/时长配额配置 | 独立 Job，设置 deadline，支持取消和状态恢复 |
+| `report` | 结果汇总、图表、PDF/HTML 报告 | 按 Namespace 配额和平台并发上限配置 | 使用独立 Job；不阻塞 API 和计算任务 |
+
+队列是平台的业务隔离和流量控制层，不是 Kubernetes 节点队列的替代品。平台应限制同时创建和运行的 Job 数量，并对各队列设置等待上限；Job 创建成功但 Pod Pending 时，任务保持资源等待状态并展示可读原因。
 
 ### 6.3 单模型推理流程
 
 ```text
 用户选择模型工具并提交输入
   -> Backend 校验参数和输入类型
-  -> 创建 Task，记录输入快照
-  -> 根据模型资源需求选择 gpu_inference 或 cpu_light 队列
-  -> Worker 创建任务工作目录
-  -> Worker 启动模型 runtime 镜像或本地 runner
+  -> 创建 Task 和 attempt，记录输入/参数/工具版本快照
+  -> 根据固定资源画像选择 gpu_inference 或 cpu_light 逻辑队列
+  -> K8s Adapter Worker 创建带 task_id/attempt_id 标签的 Job
+  -> Kubernetes Scheduler 根据 requests、GPU、节点标签和配额选择节点
+  -> Job Pod 从对象存储或共享存储读取输入
   -> platform_run.sh 读取标准 request
   -> 模型 wrapper 调用真实推理代码
-  -> 输出 result.json、artifact 文件和日志
-  -> Worker 收集输出并持久化 Artifact
-  -> Backend 更新任务状态
+  -> 输出 result.v2、artifact 文件和日志到持久化存储
+  -> Adapter 校验输出、收集日志并更新 Task / Artifact
+  -> Job 完成且结果已回收后按 TTL 清理
   -> 前端展示结果、日志、下载入口和失败原因
 ```
 
@@ -243,27 +256,54 @@ aidd-lite-customer-platform/
 用户提交结构、参数和模拟模板
   -> Backend 校验输入文件、参数范围和资源预估
   -> 创建 Task 并进入 md_heavy 队列
-  -> Worker 准备独立 workdir
+  -> K8s Adapter 创建有 CPU/内存/时长限制的 Job
+  -> GROMACS Pod 从持久化输入准备独立 workdir
   -> GROMACS Runner 生成 mdp/top/gro/tpr 等运行文件
   -> 执行 grompp/mdrun 等步骤
   -> 增量写入日志和进度
-  -> 用户可取消任务，底层进程收到终止信号
-  -> 输出 trajectory、energy、log、summary report
-  -> Artifact 持久化并进入可视化/下载
+  -> 用户可取消任务，Adapter 删除 Job 并等待 Pod 终止
+  -> 输出 trajectory、energy、log、summary report 到持久化存储
+  -> Adapter 校验并登记 Artifact，之后清理 Job
 ```
 
-GROMACS 不应和普通模型推理抢同一 worker 并发。即使部署在单机，也应通过不同 Celery 队列或不同 worker 进程限制资源。
+GROMACS Job 与模型 Job 通过不同逻辑队列、并发上限和资源画像隔离；实际节点仍由 Kubernetes Scheduler 选择。
 
-### 6.5 工作流运行流程
+### 6.5 Kubernetes Job 生命周期
+
+```text
+Task queued
+  -> Job submitted
+  -> Pod Pending / Running
+  -> Job Succeeded -> collect and validate outputs -> Task succeeded
+  -> Job Failed -> collect diagnostics -> retry as a new attempt or Task failed
+  -> User cancellation -> delete Job -> wait for Pod termination -> Task cancelled
+```
+
+状态同步以 Kubernetes Job/Pod 状态为执行事实来源，以平台数据库为业务任务和 Artifact 的事实来源。Adapter 需要支持周期性 reconcile：进程重启后根据持久化的 namespace、job_name 和 attempt_id 找回 Job；Kubernetes API 暂时不可达时保留待检查状态，不可直接把任务标记成功或失败。Job/Pod 必须带平台任务、尝试次数和工具版本标签，日志和 Events 按相同标识归档。
+
+推荐 Job 默认策略：`restartPolicy: Never`、`backoffLimit: 0`，由平台统一控制重试；设置与工具超时对应的 `activeDeadlineSeconds` 和结果收集窗口。平台确认日志、result manifest 和 Artifact 已回收后，才允许 `ttlSecondsAfterFinished` 清理已完成 Job。取消采用有界宽限期，宽限期后强制删除 Job/Pod，并以底层终止结果确认平台取消状态。
+
+### 6.6 K8s 资源与镜像映射
+
+工具资源画像由固定配置维护，不接受普通用户提交任意镜像、命令、Namespace 或节点约束。Adapter 将 CPU、内存和 GPU 需求映射为 Pod `resources.requests/limits`，并套用管理员配置的 Namespace、节点标签、污点容忍、优先级和存储策略。`gpu_memory_mb` 只能作为工具准入或节点类型选择的辅助元数据，Kubernetes 通常不能据此直接切分和调度普通 GPU；GPU 型号和数量应使用集群安装的 Device Plugin 暴露的扩展资源及节点标签表达。
+
+镜像必须来自客户批准的内网 Registry，并固定到 digest；GPU Job 使用的驱动、Device Plugin、CUDA/ROCm/DTK 及模型镜像组合需针对目标硬件完成 smoke test。GPU 不足、配额不足或节点约束不匹配时，Job 可以保持 Pending，由平台显示 Pending 时长和可用的调度事件，不应绕过集群策略改投未验证硬件。
+
+### 6.7 工作流节点执行规则
+
+工作流每个节点创建一个独立 Task attempt 和 Kubernetes Job。节点间只传递已持久化并通过 manifest 校验的 Artifact 引用，不依赖前一 Pod 的本地目录。上游节点失败时暂停依赖节点；用户重试节点时创建新的 Job，并保留旧 attempt 的日志和输出以便审计。
+
+### 6.8 工作流运行流程
 
 ```text
 用户选择预置工作流模板
   -> 上传初始输入并填写少量参数
   -> Backend 展开 workflow preset
   -> 对每个节点做输入 readiness 检查
-  -> ready 节点创建 Task
+  -> ready 节点创建 Task 并入对应逻辑队列
+  -> Adapter 为节点创建独立 Kubernetes Job
   -> 节点完成后将 Artifact 自动绑定到下游节点
-  -> 下游节点继续入队运行
+  -> 下游节点读取上游 Artifact 后创建自己的 Job
   -> 任一节点失败时暂停后续依赖节点
   -> 用户查看失败日志，可重试失败节点
   -> 全部完成后生成汇总报告
@@ -284,6 +324,7 @@ slug: admet-predictor
 name: ADMET Predictor
 version: 1.0.0
 kind: builtin_model
+executor: k8s_job
 entrypoint: model-bundles/admet/platform_run.sh
 queue: gpu_inference
 inputs:
@@ -299,10 +340,17 @@ parameters_schema:
       type: integer
       default: 128
 resources:
-  accelerator: gpu
+  cpu: "8"
+  memory: 32Gi
+  accelerator: nvidia
+  gpu_count: 1
   gpu_memory_mb: 16000
   timeout_sec: 3600
+node_selector:
+  accelerator-class: approved-gpu
 ```
+
+`node_selector`、tolerations、PriorityClass、Namespace、镜像拉取凭据和存储挂载策略属于部署侧受控配置，工具 manifest 只引用经批准的资源档位，不直接指定客户节点名称。平台展示的资源预检是静态画像与 Namespace 配额摘要，不等价于 Kubernetes 对具体 Job 的调度承诺。
 
 ### 7.2 工具加载方式
 
@@ -427,7 +475,7 @@ AIDD Lite Frontend
 - 任务列表页：保留筛选、搜索、状态、队列、耗时、用户和项目维度。
 - 任务详情页：保留日志、输入快照、输出 Artifact、失败诊断、取消和重试。
 - Artifact/结果页：保留表格、结构、口袋、轨迹、报告预览和下载。
-- 系统状态页：从管理后台中拆出轻量只读页面，展示 API、队列、Worker、存储和模型 runtime 版本。
+- 系统状态页：从管理后台中拆出轻量只读页面，展示 API、平台队列、K8s Adapter、Job/Pod 汇总状态、存储和模型 runtime 版本；集群指标仅显示客户已授权且已接入的摘要。
 
 建议删除：
 
@@ -542,9 +590,9 @@ Lite 前端应减少全局状态数量，避免保留通用平台的隐性复杂
 
 ## 9. 部署形态
 
-### 9.1 单机版
+### 9.1 本地开发版
 
-适合演示、小规模使用或客户私有服务器资源有限的场景。
+仅用于开发和合同测试，不作为客户生产部署形态。可以使用本地 runner 验证 Tool Contract，但生产验收必须通过 Kubernetes Job 路径。
 
 ```text
 一台 Linux 服务器
@@ -554,12 +602,10 @@ Lite 前端应减少全局状态数量，避免保留通用平台的隐性复杂
   ├─ PostgreSQL 或 SQLite
   ├─ Redis
   ├─ MinIO 或 local storage
-  ├─ cpu_light worker
-  ├─ gpu_inference worker
-  └─ md_heavy worker
+  └─ 本地兼容 runner（非生产路径）
 ```
 
-单机版也必须让 API 和重任务分进程运行，避免 GROMACS 或模型推理占满资源后页面不可用。
+本地模式不证明集群调度、GPU 分配、RBAC、共享存储、Job 取消或节点故障恢复已通过验收。
 
 ### 9.2 私有服务器版
 
@@ -577,16 +623,52 @@ Web/API 节点
   └─ MinIO
 
 计算节点
-  ├─ model worker
-  ├─ gromacs worker
-  └─ runtime images / model bundles
+  └─ runtime images / model bundles（仅用于开发或联调）
 ```
 
-这种形态部署略复杂，但最符合企业内网长期运行要求。
+该形态可用于集群环境不可用时的开发/联调，不属于本客户目标生产形态。客户交付环境统一按下节 Kubernetes 集群版验收。
 
-### 9.3 集群版可选
+### 9.3 客户 Kubernetes 集群版（生产基线）
 
-如果客户已有 Slurm 或 Kubernetes，可将 `md_heavy` 和部分 `gpu_inference` 任务提交到集群。AIDD Lite 仍不需要开放动态工具注册，只需将固定工具 runner 映射到集群 job 模板。
+客户提供集团内部 Kubernetes 集群，平台控制面与计算 Job 部署在集群内或按客户网络规范访问该集群。所有固定模型、RDKit、Docking、GROMACS 和报告工具统一通过 Kubernetes Job 执行，不部署常驻模型推理 Deployment。
+
+```text
+Namespace: aidd-platform
+  ├─ Frontend / Ingress
+  ├─ Backend API (Deployment)
+  ├─ K8s Adapter Worker (Deployment, platform queues)
+  ├─ Redis (Deployment 或客户托管服务)
+  └─ PostgreSQL / Object Storage (优先使用客户托管服务)
+
+Namespace: aidd-compute
+  ├─ CPU tool Jobs
+  ├─ GPU model Jobs
+  └─ GROMACS / Docking Jobs
+       ├─ 固定镜像 digest
+       ├─ CPU / memory / GPU requests and limits
+       └─ 输入输出使用对象存储或批准的共享存储
+```
+
+平台 Worker 通过集群内 ServiceAccount 访问 Kubernetes API，生产不依赖人工 kubeconfig 文件。若计算集群与控制面集群分离，则使用客户批准的短期凭据或外部身份集成，并限制目标集群、Namespace 和操作范围。
+
+客户部署前必须确认：Kubernetes 版本及可用 Namespace/配额、GPU 型号与 Device Plugin、驱动和运行时版本、内网镜像仓库与镜像拉取策略、对象存储或 CSI/PVC、网络策略/DNS/出网限制、节点标签和污点、任务最大时长及并发配额。平台不负责安装或管理集团集群级组件。
+
+### 9.4 Kubernetes 权限和资源边界
+
+- 为 K8s Adapter 配置专用 ServiceAccount 和最小权限 RBAC，仅允许目标计算 Namespace 内创建/读取/删除 Job、读取 Pod 状态/日志/Events；默认不授予节点写权限或集群管理员权限。
+- 计算 Pod 使用独立 Runtime ServiceAccount，默认不允许访问 Kubernetes API；对象存储凭据通过短期凭证或限定权限的 Secret 注入，不把长期凭据写入镜像或任务参数。
+- 使用 Namespace ResourceQuota 和 LimitRange 控制 CPU、内存、GPU、Pod 数量及存储；平台同时设置每队列最大在途任务数，避免 Redis 队列被快速转成大量 Pod。
+- CPU/GPU 节点池通过客户维护的节点标签、taint/toleration 和准入策略管理。平台工具配置只选择预先批准的资源 profile，不接受用户指定节点或任意 Kubernetes 字段。
+- 平台集群页展示平台命名空间和计算 Job 的任务状态、排队时长、失败事件及配额摘要。节点级利用率/显存指标依赖客户提供的 Prometheus/GPU exporter 等只读接口，不作为提交 Job 的强依赖。
+
+### 9.5 Job 状态、结果和清理
+
+- Job 名称包含 task 短 ID 和 attempt 序号；标签记录 task_id、attempt_id、tool_slug、tool_version 和 workflow_run_id，避免名称泄漏用户输入。
+- Job 创建请求须具备幂等键。Adapter 在 API 超时后先按幂等键或标签查询已有 Job，再决定是否重试创建，避免重复计算。
+- Adapter 周期性 reconcile 数据库与 K8s 对象；Worker 重启或网络短暂中断后可继续跟踪既有 Job。
+- Job 成功不代表业务任务成功：必须验证退出码、result manifest、文件 checksum 和 Artifact 登记完成后才标记 Task 成功。
+- 任务日志支持运行期间查看；终态日志、Events 和失败诊断持久化到任务记录，Pod 被清理后仍可查阅。
+- Job TTL 只能在结果、日志和诊断信息完成回收之后生效；失败 Job 按约定保留诊断窗口，随后由 TTL 或清理任务移除。
 
 ## 10. 数据和结果规范
 
@@ -697,7 +779,8 @@ AIDD Lite 可简化权限，但不能取消安全边界。
 ### 阶段四：调度与工作流
 
 - 建立 `cpu_light`、`gpu_inference`、`md_heavy` 队列。
-- 为深度学习模型和 GROMACS 分别实现 runner。
+- 实现 K8s Adapter Worker，覆盖 Job 创建、幂等查询、状态 reconcile、日志采集、取消、重试和结果回收。
+- 为深度学习模型和 GROMACS 分别实现 K8s Job runner，并补充 CPU/GPU 资源画像、Namespace 配额和节点标签映射。
 - 编写预置工作流模板。
 - 实现节点输出到下游输入的自动绑定。
 - 前端接入固定工具运行、工作流模板运行、节点状态和 Artifact 下载。
@@ -706,14 +789,16 @@ AIDD Lite 可简化权限，但不能取消安全边界。
 
 - 跑单工具 smoke test。
 - 跑工作流端到端测试。
+- 在客户等价或真实 Kubernetes 环境验证 Job 提交、Pending 原因、GPU/CPU 调度、日志、取消、失败重试、Worker 重启恢复和 TTL 清理。
+- 验证 ServiceAccount、RBAC、ResourceQuota、LimitRange、镜像拉取、对象存储/PVC 和 NetworkPolicy。
 - 验证取消、失败、重试、日志和下载。
 - 验证前端裁剪路由、导航和构建依赖。
 - 编写客户部署说明、运维说明和验收记录。
 
 ## 15. 关键设计取舍
 
-推荐选择“固定内置工具 + 异步 Worker 调度 + 标准 Artifact”的方案。它比完整通用平台简单很多，也比把模型直接塞进 API 进程更稳。
+推荐选择“固定内置工具 + K8s Job 异步调度 + 标准 Artifact”的方案。它比完整通用平台简单，也避免把模型直接塞进 API 进程。
 
 该方案符合 KISS 和 YAGNI：客户不需要的动态模型治理、Agent 和工具市场全部移除；但任务队列、运行隔离、结果标准化这些真正影响稳定性的机制必须保留。
 
-最终交付边界应写清楚：这是客户专用固定模型平台，不是可由客户自行扩展模型的通用 AIDD PaaS。
+最终交付边界应写清楚：这是客户专用固定模型平台，不是可由客户自行扩展模型的通用 AIDD PaaS；客户生产运行统一依赖 Kubernetes Job，平台不提供常驻模型服务和节点级调度替代品。

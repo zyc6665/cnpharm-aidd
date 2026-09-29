@@ -112,6 +112,17 @@ class SSHExecutionAdapter:
     async def status(self, execution_id: str) -> ExecutionState:
         return await self._transport.status(execution_id, self._config, await self._credentials())
 
+    async def reconcile(self, execution_id: str) -> ExecutionState:
+        """Refresh SSH state; transport may later add scheduler-specific reconcile."""
+        reconcile = getattr(self._transport, "reconcile", None)
+        if reconcile is not None:
+            return await reconcile(
+                execution_id,
+                self._config,
+                await self._credentials(),
+            )
+        return await self.status(execution_id)
+
     async def logs(self, execution_id: str, cursor: str | None = None) -> LogChunk:
         credentials = await self._credentials()
         content, next_cursor = await self._transport.logs(

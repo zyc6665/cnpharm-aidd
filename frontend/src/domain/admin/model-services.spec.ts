@@ -4,6 +4,8 @@ import type { ModelService, ModelServiceCreateParams } from '@/types/models'
 import {
   createDefaultModelServiceForm,
   createModelServiceEditForm,
+  applyModelServicePreset,
+  MODEL_SERVICE_PRESETS,
   normalizeModelServicePayload,
   normalizeModelServiceUpdatePayload
 } from './model-services'
@@ -106,4 +108,18 @@ test('模型服务更新 payload 在密钥为空时不覆盖已有密钥', () =>
   assert.equal(payload.base_url, 'https://api.example.com/v1')
   assert.equal(payload.name, 'Custom Model')
   assert.equal(payload.model_name, 'gpt-test')
+})
+
+test('模型服务预设会填充常用连接参数', () => {
+  const form = createDefaultModelServiceForm()
+  const preset = MODEL_SERVICE_PRESETS.find((item) => item.key === 'deepseek')
+  assert.ok(preset)
+
+  applyModelServicePreset(form, preset)
+
+  assert.equal(form.name, 'DeepSeek')
+  assert.equal(form.base_url, 'https://api.deepseek.com/v1')
+  assert.equal(form.model_name, 'deepseek-chat')
+  assert.equal(form.max_tokens, 4096)
+  assert.equal(form.temperature, 0.2)
 })

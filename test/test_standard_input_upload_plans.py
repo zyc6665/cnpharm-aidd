@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import sys
+from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -14,6 +15,7 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.common.exceptions import ValidationException  # noqa: E402
+from app.common.time import utcnow  # noqa: E402
 from app.models.files import File as FileModel  # noqa: E402
 from app.models.files import FileSourceType  # noqa: E402
 from app.services.standard_input_upload_plans import (  # noqa: E402
@@ -140,3 +142,37 @@ async def test_build_standard_input_upload_plan_rejects_wrong_primary_format(
             project_id="project-1",
             standard_input_uploads={"protein": uploaded_file.id},
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "state",
+    [
+        {"expires_at": utcnow() - timedelta(seconds=1)},
+        {"deleted_at": utcnow()},
+        {"is_corrupted": True},
+    ],
+)
+async def test_build_standard_input_upload_plan_rejects_unusable_file(
+    tmp_path: Path,
+    state: dict[str, object],
+) -> None:
+    uploaded_file = _uploaded_file(
+        tmp_path,
+        filename="protein.pdb",
+        content=b"ATOM\n",
+    )
+    for field, value in state.items():
+        setattr(uploaded_file, field, value)
+    tool, tool_version = _tool_and_version()
+
+    with pytest.raises(ValidationException) as exc_info:
+        await build_standard_input_upload_plans(
+            FakeDb({uploaded_file.id: uploaded_file}),
+            tool=tool,
+            tool_version=tool_version,
+            project_id="project-1",
+            standard_input_uploads={"protein": uploaded_file.id},
+        )
+
+    assert exc_info.value.detail == {"unusable_file_ids": [uploaded_file.id]}

@@ -9,7 +9,12 @@ from app.gpu.allocator import AllocationResult
 from app.tasks.executors.factory import TaskExecutor
 from app.tasks.executors.errors import ResourceAdmissionFailed, TaskExecutionError
 from app.tasks.resource_admission import WorkerCapability
-from app.tasks.resource_profile import build_task_resource_snapshot
+from app.tasks.resource_lease import WorkerResourceLeaseManager
+from app.tasks.resource_profile import (
+    build_task_resource_snapshot,
+    resource_request_from_snapshot,
+)
+from app.cache.memory import MemoryCacheBackend
 
 
 def test_build_task_resource_snapshot_emits_canonical_resource_request() -> None:
@@ -98,6 +103,226 @@ def test_task_executor_rejects_request_that_worker_capability_cannot_admit() -> 
 
     with pytest.raises(ResourceAdmissionFailed, match="资源准入失败"):
         executor._admit_resources()
+
+
+@pytest.mark.asyncio
+async def test_task_executor_acquires_and_releases_dynamic_resource_lease() -> None:
+    cache = MemoryCacheBackend()
+    task = SimpleNamespace(
+        id="task-dynamic-resource",
+        extra_data={
+            "resource_snapshot": build_task_resource_snapshot(
+                {
+                    "type": "docker_image",
+                    "resource_profile": {
+                        "tier": "heavy",
+                        "cpu": 4,
+                        "memory_gb": 8,
+                        "parallelism": 1,
+                    },
+                }
+            )
+        },
+    )
+    executor = TaskExecutor(
+        task,
+        SimpleNamespace(config={"type": "docker_image"}),
+        cache_client=cache,
+        worker_capability=WorkerCapability(
+            worker_id="cpu-worker-1",
+            cpu_capacity=8,
+            memory_capacity_gb=16,
+            parallelism=2,
+        ),
+    )
+
+    await executor._acquire_resources()
+    assert executor._resource_lease_heartbeat_task is not None
+    usage = await WorkerResourceLeaseManager(cache=cache).current_usage("cpu-worker-1")
+    assert usage == {"cpu": 4.0, "memory_gb": 8.0, "parallelism": 1}
+
+    await executor._release_resource_lease()
+    assert executor._resource_lease_heartbeat_task is None
+    usage = await WorkerResourceLeaseManager(cache=cache).current_usage("cpu-worker-1")
+    assert usage == {"cpu": 0.0, "memory_gb": 0.0, "parallelism": 0}
+
+
+@pytest.mark.asyncio
+async def test_task_executor_stops_when_resource_lease_heartbeat_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache = MemoryCacheBackend()
+    task = SimpleNamespace(
+        id="task-lease-heartbeat-failure",
+        extra_data={
+            "resource_snapshot": build_task_resource_snapshot(
+                {
+                    "type": "docker_image",
+                    "resource_profile": {"cpu": 4, "memory_gb": 8, "parallelism": 1},
+                }
+            )
+        },
+    )
+    executor = TaskExecutor(
+        task,
+        SimpleNamespace(config={"type": "docker_image"}),
+        cache_client=cache,
+        worker_capability=WorkerCapability(
+            worker_id="cpu-worker-1",
+            cpu_capacity=8,
+            memory_capacity_gb=16,
+            parallelism=2,
+        ),
+    )
+
+    await executor._acquire_resources()
+
+    async def fail_sleep(_seconds: float) -> None:
+        return None
+
+    async def fail_heartbeat(**kwargs) -> bool:
+        raise RuntimeError("cache unavailable")
+
+    monkeypatch.setattr("app.tasks.executors.factory.asyncio.sleep", fail_sleep)
+    executor._resource_lease_manager.heartbeat = fail_heartbeat
+
+    await executor._resource_lease_heartbeat_loop()
+
+    assert executor._resource_lease_lost is True
+    await executor._release_resource_lease()
+
+
+@pytest.mark.asyncio
+async def test_task_executor_reuses_dispatch_reservation_without_double_counting() -> None:
+    cache = MemoryCacheBackend()
+    capability = WorkerCapability(
+        worker_id="cpu-worker-1",
+        cpu_capacity=8,
+        memory_capacity_gb=16,
+        parallelism=2,
+    )
+    snapshot = build_task_resource_snapshot(
+        {
+            "type": "docker_image",
+            "resource_profile": {
+                "tier": "heavy",
+                "cpu": 4,
+                "memory_gb": 8,
+                "parallelism": 1,
+            },
+        }
+    )
+    task = SimpleNamespace(
+        id="task-reserved-resource",
+        extra_data={
+            "execution_attempt_id": "attempt-1",
+            "dispatch": {
+                "resource_reservation": {
+                    "worker_id": "cpu-worker-1",
+                    "lease_id": "task-reserved-resource:attempt-1",
+                    "ttl_seconds": 60,
+                    "status": "reserved",
+                }
+            },
+            "resource_snapshot": snapshot,
+        },
+    )
+    request = resource_request_from_snapshot(
+        {"type": "docker_image"},
+        snapshot,
+    )
+    manager = WorkerResourceLeaseManager(cache=cache)
+    reservation = await manager.acquire(
+        capability=capability,
+        request=request,
+        lease_id="task-reserved-resource:attempt-1",
+        ttl_seconds=60,
+    )
+    assert reservation.acquired is True
+
+    executor = TaskExecutor(
+        task,
+        SimpleNamespace(config={"type": "docker_image"}),
+        cache_client=cache,
+        worker_capability=capability,
+    )
+
+    await executor._acquire_resources()
+
+    assert await manager.current_usage(capability.worker_id) == {
+        "cpu": 4.0,
+        "memory_gb": 8.0,
+        "parallelism": 1,
+    }
+    assert task.extra_data["dispatch"]["resource_reservation"]["status"] == "claimed"
+    await executor._release_resource_lease()
+    assert await manager.current_usage(capability.worker_id) == {
+        "cpu": 0.0,
+        "memory_gb": 0.0,
+        "parallelism": 0,
+    }
+
+
+@pytest.mark.asyncio
+async def test_task_executor_rejects_dispatch_reservation_on_wrong_worker() -> None:
+    task = SimpleNamespace(
+        id="task-reserved-wrong-worker",
+        extra_data={
+            "execution_attempt_id": "attempt-1",
+            "resource_snapshot": build_task_resource_snapshot(
+                {"type": "docker_image", "resource_profile": {"cpu": 1}}
+            ),
+            "dispatch": {
+                "resource_reservation": {
+                    "worker_id": "worker-target",
+                    "lease_id": "task-reserved-wrong-worker:attempt-1",
+                    "status": "reserved",
+                }
+            },
+        },
+    )
+    executor = TaskExecutor(
+        task,
+        SimpleNamespace(config={"type": "docker_image"}),
+        cache_client=MemoryCacheBackend(),
+        worker_capability=WorkerCapability(worker_id="worker-other", cpu_capacity=4),
+    )
+
+    with pytest.raises(ResourceAdmissionFailed, match="非目标 Worker"):
+        await executor._acquire_resources()
+
+
+@pytest.mark.asyncio
+async def test_task_executor_rejects_when_dynamic_capacity_is_exhausted() -> None:
+    cache = MemoryCacheBackend()
+    capability = WorkerCapability(
+        worker_id="cpu-worker-1",
+        cpu_capacity=4,
+        parallelism=1,
+    )
+    snapshot = build_task_resource_snapshot(
+        {
+            "type": "docker_image",
+            "resource_profile": {"tier": "heavy", "cpu": 4},
+        }
+    )
+    first = TaskExecutor(
+        SimpleNamespace(id="task-dynamic-1", extra_data={"resource_snapshot": snapshot}),
+        SimpleNamespace(config={"type": "docker_image"}),
+        cache_client=cache,
+        worker_capability=capability,
+    )
+    second = TaskExecutor(
+        SimpleNamespace(id="task-dynamic-2", extra_data={"resource_snapshot": snapshot}),
+        SimpleNamespace(config={"type": "docker_image"}),
+        cache_client=cache,
+        worker_capability=capability,
+    )
+
+    await first._acquire_resources()
+    with pytest.raises(ResourceAdmissionFailed, match="资源动态占用失败"):
+        await second._acquire_resources()
+    await first._release_resource_lease()
 
 
 @pytest.mark.asyncio

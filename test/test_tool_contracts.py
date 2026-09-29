@@ -1,3 +1,4 @@
+from datetime import datetime
 from types import SimpleNamespace
 import sys
 from pathlib import Path
@@ -17,7 +18,12 @@ from app.services.tool_contracts import (
     contract_emits_standard_artifacts,
     tool_contract_to_agent_summary,
 )
-from app.api.v1.tool_route_utils import build_validated_tool_contract
+from app.api.v1.tool_route_utils import (
+    build_validated_tool_contract,
+    sanitize_public_tool_config,
+    sanitize_public_tool_contract,
+)
+from app.schemas.tools import ToolPublicResponse, ToolVersionPublicResponse
 
 
 def _v2_manifest(*, agent_exposure: bool = True) -> dict:
@@ -118,6 +124,102 @@ def test_build_tool_contract_normalizes_identity_executor_schema_and_capability(
     assert contract["capability"]["enabled"] is True
     assert contract["capability"]["inputs"][0]["semantic_type"] == "binding_pocket@1"
     assert contract["capability"]["outputs"][0]["semantic_type"] == "ligand_structure@1"
+
+
+def test_public_tool_config_preserves_schemas_and_removes_nested_runtime_fields():
+    config = {
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "token": {
+                    "type": "string",
+                    "default": "must-not-be-exposed",
+                    "x-api-token": "nested-secret",
+                },
+                "token_label": {"type": "string"},
+            },
+            "default": "visible",
+        },
+        "output_schema": {"type": "object"},
+        "headers": {"Authorization": "Bearer secret"},
+        "endpoint": "https://internal.example/invoke",
+        "runtime": {
+            "script_content": "private script",
+            "api_token": "nested-secret",
+            "image": "registry.example/tool@sha256:abc",
+            "command": ["/private/runner"],
+        },
+    }
+
+    public = sanitize_public_tool_config(config)
+
+    assert public["input_schema"]["properties"]["token"]["type"] == "string"
+    assert public["input_schema"]["properties"]["token_label"] == {"type": "string"}
+    assert "default" not in public["input_schema"]["properties"]["token"]
+    assert "x-api-token" not in public["input_schema"]["properties"]["token"]
+    assert public["output_schema"] == config["output_schema"]
+    assert "headers" not in public
+    assert "endpoint" not in public
+    assert public["runtime"] == {}
+
+
+def test_public_tool_contract_omits_runtime_variants_and_nested_secrets():
+    contract = {
+        "executor": {"type": "docker", "timeout_sec": 60},
+        "schema": {"input": {"type": "object"}, "output": {}},
+        "variants": [{"image": "private.registry/tool", "entrypoint": ["run.sh"]}],
+        "capability": {"defaults": {"params.threshold": 0.5, "api_token": "secret"}},
+    }
+
+    public = sanitize_public_tool_contract(contract)
+
+    assert public["executor"] == {"type": "docker", "timeout_sec": 60}
+    assert public["schema"] == contract["schema"]
+    assert "variants" not in public
+    assert public["capability"]["defaults"] == {"params.threshold": 0.5}
+
+
+def test_public_tool_schema_excludes_runtime_version_config():
+    timestamp = datetime(2026, 9, 24)
+    tool = SimpleNamespace(
+        id="tool-public",
+        owner_id="owner-1",
+        name="Public Tool",
+        slug="public-tool",
+        description="safe",
+        category_id=None,
+        category=None,
+        icon=None,
+        icon_url=None,
+        status="published",
+        is_public=True,
+        current_version_id="version-1",
+        gpu_required=False,
+        gpu_memory_mb=0,
+        timeout_sec=60,
+        tags=[],
+        current_version=SimpleNamespace(
+            id="version-1",
+            tool_id="tool-public",
+            version="1.0.0",
+            changelog=None,
+            notes=None,
+            config={"endpoint": "https://private.example"},
+            is_active=True,
+            deprecated=False,
+            created_at=timestamp,
+            updated_at=timestamp,
+        ),
+        contract=None,
+        statistics=None,
+        created_at=timestamp,
+        updated_at=timestamp,
+    )
+
+    payload = ToolPublicResponse.model_validate(tool).model_dump()
+    assert isinstance(payload["current_version"], dict)
+    assert "config" not in payload["current_version"]
+    assert "config" not in ToolVersionPublicResponse.model_fields
 
 
 def test_agent_tool_summary_keeps_legacy_tool_slug_but_exposes_contract_slug():

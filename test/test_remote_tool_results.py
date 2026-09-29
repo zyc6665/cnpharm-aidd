@@ -62,6 +62,15 @@ def test_remote_status_state_maps_pollable_and_terminal_errors() -> None:
     assert build_state({"status": "paused"}).error_message == "Unsupported remote run status: paused"
 
 
+def test_remote_status_state_accepts_legacy_cancelled_spelling() -> None:
+    from app.remote_tools import results
+
+    state = results.remote_status_state({"status": "cancelled"})
+
+    assert state.value == "canceled"
+    assert state.error_message == "Remote tool run was canceled"
+
+
 def test_iter_remote_log_messages_strips_non_empty_messages() -> None:
     from app.remote_tools import results
 

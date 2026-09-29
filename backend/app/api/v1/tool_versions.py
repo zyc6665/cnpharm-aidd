@@ -4,19 +4,32 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import get_admin_user
+from app.api.v1.tool_route_utils import (
+    require_tool_read_access,
+    serialize_public_tool_version,
+    serialize_tool_version,
+)
+from app.auth.dependencies import get_admin_user, get_current_user_optional
 from app.common.exceptions import ConflictException, NotFoundException
 from app.common.responses import success_response
 from app.database.session import get_db
 from app.models.tools import Tool, ToolVersion
 from app.models.users import User
-from app.schemas.tools import ToolVersionCreate, ToolVersionResponse
+from app.schemas.tools import ToolVersionCreate
 
 router = APIRouter()
 
 
 @router.get("/{tool_id}/versions", response_model=dict)
-async def list_tool_versions(tool_id: str, db: AsyncSession = Depends(get_db)):
+async def list_tool_versions(
+    tool_id: str,
+    current_user: User | None = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+):
+    tool = await db.get(Tool, tool_id)
+    if tool is None:
+        raise NotFoundException("工具不存在")
+    require_tool_read_access(tool, current_user)
     versions = (
         await db.execute(
             select(ToolVersion)
@@ -25,7 +38,10 @@ async def list_tool_versions(tool_id: str, db: AsyncSession = Depends(get_db)):
         )
     ).scalars().all()
     return success_response(
-        data=[ToolVersionResponse.model_validate(version).model_dump() for version in versions]
+        data=[
+            serialize_public_tool_version(version)
+            for version in versions
+        ]
     )
 
 
@@ -64,6 +80,6 @@ async def create_tool_version(
     await db.commit()
     await db.refresh(version)
     return success_response(
-        data=ToolVersionResponse.model_validate(version).model_dump(),
+        data=serialize_tool_version(version),
         message="版本创建成功",
     )

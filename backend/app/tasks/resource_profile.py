@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import asdict, dataclass
+import json
 from typing import Any
 
 
@@ -27,6 +28,58 @@ class ResourceRequest:
         return asdict(self)
 
 
+RESOURCE_REQUEST_FIELDS = frozenset(
+    {
+        "executor_type",
+        "tier",
+        "cpu",
+        "memory_gb",
+        "cpu_limit",
+        "memory_limit",
+        "gpu_required",
+        "gpu_count",
+        "gpu_memory_mb",
+        "timeout_sec",
+        "parallelism",
+    }
+)
+
+
+def resource_request_from_snapshot(
+    config: dict[str, Any] | None,
+    snapshot: dict[str, Any] | None,
+) -> ResourceRequest:
+    """优先从任务快照恢复规范资源请求，缺失时回退到工具配置。"""
+    normalized_snapshot = snapshot if isinstance(snapshot, dict) else {}
+    payload = normalized_snapshot.get("resource_request")
+    if isinstance(payload, dict) and RESOURCE_REQUEST_FIELDS.issubset(payload):
+        try:
+            return ResourceRequest(
+                executor_type=payload.get("executor_type"),
+                tier=payload.get("tier"),
+                cpu=_optional_float(payload.get("cpu")),
+                memory_gb=_optional_float(payload.get("memory_gb")),
+                cpu_limit=_optional_float(payload.get("cpu_limit")),
+                memory_limit=payload.get("memory_limit"),
+                gpu_required=bool(payload.get("gpu_required")),
+                gpu_count=int(payload.get("gpu_count") or 0),
+                gpu_memory_mb=int(payload.get("gpu_memory_mb") or 0),
+                timeout_sec=int(payload.get("timeout_sec") or 600),
+                parallelism=int(payload.get("parallelism") or 1),
+            )
+        except (TypeError, ValueError):
+            pass
+
+    fallback_kwargs: dict[str, Any] = {}
+    gpu_required = normalized_snapshot.get("gpu_required")
+    gpu_memory_mb = normalized_snapshot.get("gpu_memory_mb")
+    if isinstance(gpu_required, bool):
+        fallback_kwargs["gpu_required"] = gpu_required
+    if isinstance(gpu_memory_mb, (int, float)):
+        fallback_kwargs["gpu_memory_mb"] = int(gpu_memory_mb)
+    return build_resource_request(config, **fallback_kwargs)
+
+
 def build_resource_request(
     config: dict[str, Any] | None,
     *,
@@ -37,18 +90,29 @@ def build_resource_request(
     """Normalize tool configuration into one runtime resource contract."""
     normalized = dict(config or {})
     profile = normalized.get("resource_profile")
+    if isinstance(profile, str):
+        profile = resolve_registered_resource_profile(profile)
     profile = profile if isinstance(profile, dict) else {}
 
     explicit_cpu = _requests_cpu(params)
+    profile_id_configured = isinstance(normalized.get("resource_profile"), str)
     resolved_gpu_required = (
         bool(gpu_required)
         if gpu_required is not None
-        else bool(normalized.get("gpu_required", profile.get("gpu_required", False)))
+        else bool(
+            profile.get("gpu_required", False)
+            if profile_id_configured
+            else normalized.get("gpu_required", profile.get("gpu_required", False))
+        )
     )
     resolved_gpu_memory_mb = (
         int(gpu_memory_mb or 0)
         if gpu_memory_mb is not None
-        else int(normalized.get("gpu_memory_mb", 0) or 0)
+        else int(
+            float(profile.get("gpu_memory_gb", 0) or 0) * 1024
+            if profile_id_configured
+            else normalized.get("gpu_memory_mb", 0) or 0
+        )
     )
     if not resolved_gpu_memory_mb:
         resolved_gpu_memory_mb = int(float(profile.get("gpu_memory_gb", 0) or 0) * 1024)
@@ -74,7 +138,11 @@ def build_resource_request(
         gpu_count = 1
 
     timeout_sec = int(
-        normalized.get("timeout_sec")
+        (
+            float(profile.get("timeout_minutes", 0) or 0) * 60
+            if profile_id_configured
+            else normalized.get("timeout_sec")
+        )
         or (float(profile.get("timeout_minutes", 0) or 0) * 60)
         or 600
     )
@@ -112,14 +180,40 @@ def build_task_resource_snapshot(
         params=params,
     )
 
+    if isinstance(resource_profile, str):
+        resource_profile_snapshot = resolve_registered_resource_profile(resource_profile)
+    else:
+        resource_profile_snapshot = deepcopy(resource_profile) if isinstance(resource_profile, dict) else {}
+
     return {
         "executor_type": request.executor_type,
         "gpu_required": request.gpu_required,
         "gpu_memory_mb": request.gpu_memory_mb,
         "timeout_sec": request.timeout_sec,
         "resource_request": request.as_dict(),
-        "resource_profile": deepcopy(resource_profile) if isinstance(resource_profile, dict) else {},
+        "resource_profile": resource_profile_snapshot,
     }
+
+
+def resolve_registered_resource_profile(profile_id: str) -> dict[str, Any]:
+    """Resolve a tool's profile id through the platform-approved registry."""
+    from app.config import settings
+
+    registry_json = settings.RESOURCE_PROFILE_REGISTRY_JSON
+    if not registry_json:
+        raise ValueError("RESOURCE_PROFILE_REGISTRY_JSON 未配置，无法解析资源档位")
+    try:
+        registry = json.loads(registry_json)
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise ValueError("RESOURCE_PROFILE_REGISTRY_JSON 必须是 JSON 对象") from exc
+    if not isinstance(registry, dict):
+        raise ValueError("RESOURCE_PROFILE_REGISTRY_JSON 必须是 JSON 对象")
+    profile = registry.get(profile_id)
+    if not isinstance(profile, dict):
+        raise ValueError(f"未登记的资源档位: {profile_id}")
+    resolved = dict(profile)
+    resolved["id"] = profile_id
+    return resolved
 
 
 def apply_resource_request_to_config(
@@ -158,6 +252,12 @@ def _positive_float(value: Any) -> float | None:
     except (TypeError, ValueError):
         return None
     return number if number > 0 else None
+
+
+def _optional_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    return float(value)
 
 
 def _positive_int(value: Any) -> int | None:

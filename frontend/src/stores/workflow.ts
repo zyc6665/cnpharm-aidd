@@ -8,7 +8,6 @@ import {
 import type {
   WorkflowCanvasEdge,
   WorkflowCanvasNode,
-  WorkflowCanvasNodeType,
   WorkflowCanvasPreset as CanvasWorkflowPreset
 } from '@/workflow/canvas-types'
 import { type ArtifactInputSlot, type ArtifactOutputSlot } from '@/workflow/contract-bindings'

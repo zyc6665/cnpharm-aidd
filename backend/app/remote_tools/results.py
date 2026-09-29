@@ -47,6 +47,10 @@ def remote_status_progress(payload: dict[str, Any], status_value: str) -> float 
 
 def remote_status_state(payload: dict[str, Any]) -> RemoteStatusState:
     status_value = str(payload.get("status") or "").lower()
+    # Older remote-tool registrations used the British spelling. Normalize it
+    # at the protocol seam so task recovery and cancellation share one state.
+    if status_value == "cancelled":
+        status_value = "canceled"
     message = remote_status_message(payload)
     progress = remote_status_progress(payload, status_value)
     error_message: str | None = None

@@ -228,8 +228,6 @@ class ToolSchemaValidator:
     ) -> Dict[str, Any]:
         """生成单个字段配置"""
         field_type = field_schema.get("type", "string")
-        field_format = field_schema.get("format")
-
         # 基础配置
         field_config = {
             "name": field_name,

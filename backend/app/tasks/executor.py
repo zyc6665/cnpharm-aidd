@@ -12,6 +12,7 @@ from app.tasks.executors.errors import (
     TaskExecutionError,
 )
 from app.tasks.executors.factory import TaskExecutor
+from app.tasks.executors.kubernetes_job import KubernetesJobExecutor
 from app.tasks.executors.python_script import PythonScriptExecutor
 from app.tasks.executors.remote_api import RemoteAPIExecutor
 from app.tasks.executors.ssh_job import SSHJobExecutor
@@ -22,6 +23,7 @@ __all__ = [
     "BuiltinExecutor",
     "DockerExecutor",
     "GPUAllocationFailed",
+    "KubernetesJobExecutor",
     "ParamikoSSHTransport",
     "PythonScriptExecutor",
     "ResourceAdmissionFailed",

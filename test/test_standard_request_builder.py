@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -359,6 +360,51 @@ async def test_builder_rejects_artifact_version_type_mismatch(
             task=task,
             tool_package_manifest=_manifest(),
             input_bindings={"protein": pocket_version.id},
+            parameters={},
+            work_dir=tmp_path / "work",
+            execution_context=StandardExecutionBuildContext(variant="cpu", accelerator="cpu"),
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("lifecycle_change", ["expired", "deleted", "corrupted"])
+async def test_builder_rejects_unusable_artifact_input_file(
+    request_builder_db: AsyncSession,
+    tmp_path: Path,
+    lifecycle_change: str,
+):
+    from datetime import timedelta
+
+    from app.common.time import utcnow
+
+    task = await _seed_task(request_builder_db)
+    protein_version = await _seed_standard_version(
+        request_builder_db,
+        tmp_path=tmp_path,
+        user_id=str(task.user_id),
+        type_ref="protein_structure@1",
+        artifact_name="unusable-protein",
+        role_contents={"structure_file": b"ATOM", "metadata_json": b"{}"},
+    )
+    file_record = (
+        await request_builder_db.execute(
+            select(FileModel).where(FileModel.filename == "structure_file.pdb")
+        )
+    ).scalar_one()
+    if lifecycle_change == "expired":
+        file_record.expires_at = utcnow() - timedelta(seconds=1)
+    elif lifecycle_change == "deleted":
+        file_record.deleted_at = utcnow()
+    else:
+        file_record.is_corrupted = True
+    await request_builder_db.flush()
+
+    with pytest.raises(StandardRequestBuilderError, match="unavailable file roles"):
+        await build_standard_execution_request(
+            request_builder_db,
+            task=task,
+            tool_package_manifest=_manifest(),
+            input_bindings={"protein": protein_version.id},
             parameters={},
             work_dir=tmp_path / "work",
             execution_context=StandardExecutionBuildContext(variant="cpu", accelerator="cpu"),

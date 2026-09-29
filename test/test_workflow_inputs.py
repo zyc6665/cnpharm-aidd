@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from datetime import timedelta
 
 import pytest
 
 from app.common.exceptions import ForbiddenException, NotFoundException  # noqa: E402
+from app.common.time import utcnow  # noqa: E402
 from app.models.files import File as FileModel  # noqa: E402
 from app.services.workflow_inputs import validate_input_files  # noqa: E402
 
@@ -65,3 +67,27 @@ async def test_validate_input_files_requires_owner_or_admin() -> None:
         current_user=admin_user,  # type: ignore[arg-type]
         input_files={"protein_pdb": "file-1"},
     ) == {"protein_pdb": "file-1"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "file_state",
+    [
+        {"expires_at": utcnow() - timedelta(seconds=1)},
+        {"deleted_at": utcnow()},
+        {"is_corrupted": True},
+    ],
+)
+async def test_validate_input_files_rejects_unusable_files(
+    file_state: dict[str, object],
+) -> None:
+    file_record = SimpleNamespace(owner_id="user-1", **file_state)
+    db = FakeDb({"file-1": file_record})
+    current_user = SimpleNamespace(id="user-1", role="user")
+
+    with pytest.raises(NotFoundException, match="Workflow input file not found"):
+        await validate_input_files(
+            db,  # type: ignore[arg-type]
+            current_user=current_user,  # type: ignore[arg-type]
+            input_files={"protein_pdb": "file-1"},
+        )

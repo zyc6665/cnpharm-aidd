@@ -522,7 +522,7 @@ class StorageFallbackStrategy:
         cleaned = 0
         cutoff = utcnow() - timedelta(days=max_age_days)
 
-        for root, dirs, files in os.walk(self.config.local_storage_path):
+        for root, _dirs, files in os.walk(self.config.local_storage_path):
             for file in files:
                 if file.startswith("."):  # 跳过隐藏文件
                     continue

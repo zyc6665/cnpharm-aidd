@@ -1,10 +1,12 @@
 # backend/app/worker/tasks.py
 """Celery 任务定义"""
 
-from datetime import timedelta
+import time
+from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
 
 from celery import shared_task
+from celery.signals import heartbeat_sent
 from celery.utils.log import get_task_logger
 
 from app.common.async_runtime import run_coro_sync
@@ -25,9 +27,17 @@ from app.tasks.executors.errors import (
     TaskExecutionError,
 )
 from app.tasks.output import extract_output_file_ids, prepare_task_output
+from app.tasks.resource_lease import release_task_resource_reservation
+from app.tasks.resource_wait import resource_wait_metadata
 from app.tasks.state_machine import TaskStateMachine
 
 logger = get_task_logger(__name__)
+_CAPABILITY_SIGNAL_REFRESH_INTERVAL_SECONDS = 30.0
+_capability_signal_last_refresh: dict[str, float] = {}
+
+
+def _capability_signal_now() -> float:
+    return time.monotonic()
 
 
 # ==================== WebSocket 通知辅助函数 ====================
@@ -340,6 +350,73 @@ async def _execute_tool_task_impl(
     tool_version_id: str,
     attempt_id: str | None = None,
 ) -> Dict[str, Any]:
+    """Execute one attempt and confirm cancellation after executor cleanup."""
+    try:
+        return await _execute_tool_task_impl_inner(
+            task_id,
+            tool_version_id,
+            attempt_id,
+        )
+    finally:
+        await _confirm_canceled_attempt_stopped(task_id, attempt_id)
+
+
+async def _confirm_canceled_attempt_stopped(
+    task_id: str,
+    attempt_id: str | None,
+) -> None:
+    from app.database.session import async_session_factory
+    from app.models.tasks import Task
+    from app.tasks.attempts import (
+        get_execution_control,
+        mark_task_execution_released,
+    )
+    from app.tasks.resource_lease import release_task_resource_reservation
+
+    try:
+        async with async_session_factory() as db:
+            task = await db.get(Task, task_id)
+            control = get_execution_control(task) if task is not None else {}
+            if (
+                task is None
+                or control.get("state") not in {"cancel_requested", "cancel_timeout"}
+            ):
+                return
+            controlled_attempt_id = control.get("attempt_id")
+            # Older tasks may not have an execution_attempt_id.  Their
+            # cancellation still needs an execution-exit confirmation so the
+            # reservation can be released and a retry can proceed.  When an
+            # attempt id exists, reject a late callback from another attempt.
+            if attempt_id is not None:
+                if controlled_attempt_id not in (None, attempt_id):
+                    return
+            elif controlled_attempt_id not in (None, ""):
+                return
+            confirmed_attempt_id = attempt_id or controlled_attempt_id
+            await release_task_resource_reservation(
+                task,
+                reason="execution_stopped",
+                attempt_id=confirmed_attempt_id,
+            )
+            mark_task_execution_released(
+                task,
+                attempt_id=confirmed_attempt_id,
+                reason="worker_execution_finished",
+            )
+            await db.commit()
+    except Exception:
+        logger.exception(
+            "Failed to confirm canceled task attempt stopped: task=%s attempt=%s",
+            task_id,
+            attempt_id,
+        )
+
+
+async def _execute_tool_task_impl_inner(
+    task_id: str,
+    tool_version_id: str,
+    attempt_id: str | None = None,
+) -> Dict[str, Any]:
     """
     任务执行实现
 
@@ -364,10 +441,21 @@ async def _execute_tool_task_impl(
             raise ValueError(f"任务不存在: {task_id}")
 
         if not _is_current_attempt(task, attempt_id):
+            await release_task_resource_reservation(
+                task,
+                reason="stale_attempt",
+                attempt_id=attempt_id,
+            )
             logger.info("任务 %s 的 attempt 已过期，跳过执行", task_id)
             return _stale_task_result(task)
 
         if task.status == TaskStatus.CANCELED.value:
+            if await release_task_resource_reservation(
+                task,
+                reason="task_canceled_before_execution",
+                attempt_id=attempt_id,
+            ):
+                await db.commit()
             logger.info("任务 %s 已取消，跳过排队消息", task_id)
             return _canceled_task_result()
 
@@ -417,6 +505,7 @@ async def _execute_tool_task_impl(
                 start_task_execution_record,
                 task_external_execution_id,
             )
+            from app.execution.runtime import get_execution_service
             from app.tasks.executor import TaskExecutor
             from app.tasks.molecule_scoring import append_molecule_scoring_artifacts
             from app.tasks.worker_capability import load_worker_capability
@@ -515,8 +604,6 @@ async def _execute_tool_task_impl(
             )
             task_input = input_result.scalar_one_or_none()
             task.inputs = task_input
-            params = task_input.params if task_input else {}
-
             logger.info(f"执行工具 {tool_version.tool_id}, 类型: {tool_version.config.get('executor_type')}")
 
             # 定义进度回调函数
@@ -572,6 +659,7 @@ async def _execute_tool_task_impl(
                 tool=tool,
                 progress_callback=progress_callback,
                 worker_capability=load_worker_capability(),
+                execution_service=get_execution_service(),
             )
 
             # 执行任务
@@ -718,6 +806,12 @@ async def _execute_tool_task_impl(
                 return _stale_task_result(task)
 
             if task.status == TaskStatus.CANCELED.value:
+                if await release_task_resource_reservation(
+                    task,
+                    reason="task_canceled_during_execution",
+                    attempt_id=attempt_id,
+                ):
+                    await db.commit()
                 logger.info("任务 %s 已取消，忽略执行异常回写", task_id)
                 return _canceled_task_result()
 
@@ -747,7 +841,10 @@ async def _execute_tool_task_impl(
                 ).isoformat()
                 task.extra_data = {
                     **(task.extra_data if isinstance(task.extra_data, dict) else {}),
-                    "resource_wait_reason": "gpu_unavailable",
+                    **resource_wait_metadata(
+                        "gpu_unavailable",
+                        legacy_reason="gpu_unavailable",
+                    ),
                     "resource_retry_count": task.retry_count,
                     "resource_retry_next_at": resource_retry_next_at,
                 }
@@ -771,6 +868,11 @@ async def _execute_tool_task_impl(
                     status="failed",
                     external_id=external_execution_id,
                     error_message=str(e),
+                )
+                await release_task_resource_reservation(
+                    task,
+                    reason="gpu_resource_wait",
+                    attempt_id=attempt_id,
                 )
                 if not await commit_current_attempt(
                     db,
@@ -820,7 +922,14 @@ async def _execute_tool_task_impl(
                 ).isoformat()
                 task.extra_data = {
                     **(task.extra_data if isinstance(task.extra_data, dict) else {}),
-                    "resource_wait_reason": "worker_capability_unavailable",
+                    **resource_wait_metadata(
+                        e.reason,
+                        legacy_reason=(
+                            "remote_capacity_unavailable"
+                            if str(e.reason or "").startswith("remote_capacity")
+                            else "worker_capability_unavailable"
+                        ),
+                    ),
                     "resource_retry_count": task.retry_count,
                     "resource_retry_next_at": resource_retry_next_at,
                 }
@@ -830,11 +939,19 @@ async def _execute_tool_task_impl(
                         level="WARNING",
                         message=retry_message,
                         log_data={
-                            "source": "worker_capability",
+                            "source": (
+                                "remote_capacity"
+                                if str(e.reason or "").startswith("remote_capacity")
+                                else "worker_capability"
+                            ),
                             "reason": e.reason,
                             "worker_id": e.worker_id,
                             "retry_count": task.retry_count,
-                            "resource_wait_reason": "worker_capability_unavailable",
+                            "resource_wait_reason": (
+                                "remote_capacity_unavailable"
+                                if str(e.reason or "").startswith("remote_capacity")
+                                else "worker_capability_unavailable"
+                            ),
                             "retry_delay_seconds": retry_delay_seconds,
                             "resource_retry_next_at": resource_retry_next_at,
                         },
@@ -845,6 +962,11 @@ async def _execute_tool_task_impl(
                     status="failed",
                     external_id=external_execution_id,
                     error_message=str(e),
+                )
+                await release_task_resource_reservation(
+                    task,
+                    reason="worker_resource_wait",
+                    attempt_id=attempt_id,
                 )
                 if not await commit_current_attempt(
                     db,
@@ -892,6 +1014,11 @@ async def _execute_tool_task_impl(
                 status="failed",
                 external_id=external_execution_id,
                 error_message=str(e),
+            )
+            await release_task_resource_reservation(
+                task,
+                reason="task_failed",
+                attempt_id=attempt_id,
             )
 
             # 添加错误日志
@@ -1027,12 +1154,76 @@ def reclaim_stale_gpu_leases():
     return {"reclaimed_count": reclaimed_count}
 
 
+@shared_task(name="app.worker.tasks.reclaim_stale_resource_reservations")
+def reclaim_stale_resource_reservations():
+    """回收超过年龄阈值且未被 Worker 接管的资源预留。"""
+    logger.info("开始回收过期资源预留")
+
+    reclaimed_count = run_coro_sync(_reclaim_stale_resource_reservations_impl())
+
+    logger.info("资源预留回收完成，回收 %s 条", reclaimed_count)
+    return {"reclaimed_count": reclaimed_count}
+
+
+@shared_task(name="app.worker.tasks.reclaim_stale_cancellations")
+def reclaim_stale_cancellations():
+    """将长时间未确认退出的取消请求升级为人工介入。"""
+    logger.info("开始检查超时取消任务")
+
+    timed_out_count = run_coro_sync(_reclaim_stale_cancellations_impl())
+
+    logger.info("超时取消任务检查完成，升级 %s 条", timed_out_count)
+    return {"timed_out_count": timed_out_count}
+
+
 @shared_task(name="app.worker.tasks.heartbeat_worker_capability")
 def heartbeat_worker_capability():
     """刷新当前 Worker 的 capability 在线状态。"""
+    return _refresh_worker_capability_once()
+
+
+@heartbeat_sent.connect(weak=False)
+def on_celery_heartbeat_sent(sender=None, **kwargs):
+    """在每个 Worker 本地心跳时刷新自身 capability。"""
     capability = _load_worker_capability()
     if capability is None:
         return {"registered": False}
+
+    now = _capability_signal_now()
+    last_refresh = _capability_signal_last_refresh.get(capability.worker_id)
+    if (
+        last_refresh is not None
+        and now - last_refresh < _CAPABILITY_SIGNAL_REFRESH_INTERVAL_SECONDS
+    ):
+        return {
+            "registered": False,
+            "worker_id": capability.worker_id,
+            "skipped": "throttled",
+        }
+
+    _capability_signal_last_refresh[capability.worker_id] = now
+    return _refresh_worker_capability_once(capability)
+
+
+def _refresh_worker_capability_once(capability=None) -> dict[str, object]:
+    capability = capability or _load_worker_capability()
+    if capability is None:
+        return {"registered": False}
+
+    from app.tasks.worker_capability import validate_worker_queue_contract
+
+    valid, reason = validate_worker_queue_contract(capability)
+    if not valid:
+        logger.error(
+            "Worker %s capability queue contract invalid: %s",
+            capability.worker_id,
+            reason,
+        )
+        return {
+            "registered": False,
+            "worker_id": capability.worker_id,
+            "reason": reason,
+        }
 
     run_coro_sync(_register_worker_capability_impl(capability))
     return {"registered": True, "worker_id": capability.worker_id}
@@ -1064,6 +1255,82 @@ async def _reclaim_stale_gpu_leases_impl() -> int:
         reclaimed_count = await GPUAllocator(db=db).reclaim_stale_allocations()
         await db.commit()
         return reclaimed_count
+
+
+async def _reclaim_stale_resource_reservations_impl() -> int:
+    """使用统一缓存租约管理器回收 stale reservation。"""
+    from app.cache import get_cache
+    from app.tasks.resource_lease import WorkerResourceLeaseManager
+
+    return await WorkerResourceLeaseManager(cache=get_cache()).reclaim_stale_reservations(
+        max_age_seconds=settings.RESOURCE_RESERVATION_STALE_AFTER_SECONDS,
+    )
+
+
+def _parse_cancellation_requested_at(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is not None:
+        parsed = parsed.replace(tzinfo=None)
+    return parsed
+
+
+async def _reclaim_stale_cancellations_impl() -> int:
+    """标记超时取消，但保留租约直到 Worker 确认退出。"""
+    from sqlalchemy import select
+    from app.database.session import async_session_factory
+    from app.models.tasks import Task, TaskStatus
+    from app.tasks.attempts import (
+        get_execution_control,
+        mark_task_cancellation_timed_out,
+    )
+
+    cutoff = utcnow() - timedelta(
+        seconds=max(1, int(settings.TASK_CANCELLATION_STALE_AFTER_SECONDS))
+    )
+    batch_size = max(1, int(settings.TASK_CANCELLATION_RECONCILE_BATCH_SIZE))
+    timed_out_count = 0
+
+    async with async_session_factory() as db:
+        requested_before = cutoff.isoformat()
+        result = await db.execute(
+            select(Task)
+            .where(
+                Task.status == TaskStatus.CANCELED.value,
+                Task.extra_data["execution_control"]["state"].as_string()
+                == "cancel_requested",
+                Task.extra_data["execution_control"]["requested_at"].as_string()
+                <= requested_before,
+            )
+            .order_by(Task.updated_at.asc())
+            .limit(batch_size)
+            .with_for_update(skip_locked=True)
+        )
+        tasks = result.scalars().all()
+
+        for task in tasks:
+            control = get_execution_control(task)
+            if control.get("state") != "cancel_requested":
+                continue
+            requested_at = _parse_cancellation_requested_at(
+                control.get("requested_at")
+            )
+            if requested_at is None or requested_at > cutoff:
+                continue
+            mark_task_cancellation_timed_out(
+                task,
+                timed_out_at=utcnow().isoformat(),
+                reason="worker_exit_not_confirmed",
+            )
+            timed_out_count += 1
+
+        await db.commit()
+
+    return timed_out_count
 
 
 @shared_task(name="app.worker.tasks.reconcile_execution_records")
@@ -1103,6 +1370,44 @@ def reconcile_remote_tasks():
 
     logger.info("Remote API 任务恢复完成，收敛 %s 条", recovered_count)
     return {"recovered_count": recovered_count}
+
+
+@shared_task(name="app.worker.tasks.reconcile_remote_cancellations")
+def reconcile_remote_cancellations():
+    """Retry remote cancellations that could not be confirmed by the API."""
+    retried_count = run_coro_sync(_reconcile_remote_cancellations_impl())
+    return {"retried_count": retried_count}
+
+
+async def _reconcile_remote_cancellations_impl() -> int:
+    from sqlalchemy import or_, select
+    from app.database.session import async_session_factory
+    from app.models.tasks import Task, TaskStatus
+    from app.tasks.cancellation import retry_remote_tool_cancellation
+
+    async with async_session_factory() as db:
+        retry_before = utcnow().isoformat()
+        next_retry_at = Task.extra_data["remote_cancel_next_retry_at"].as_string()
+        result = await db.execute(
+            select(Task)
+            .where(
+                Task.status == TaskStatus.CANCELED.value,
+                Task.extra_data["remote_cancel_pending"].as_boolean().is_(True),
+                or_(
+                    next_retry_at.is_(None),
+                    next_retry_at <= retry_before,
+                ),
+            )
+            .order_by(Task.updated_at.asc())
+            .limit(max(int(settings.REMOTE_CANCEL_RETRY_BATCH_SIZE), 1))
+            .with_for_update(skip_locked=True)
+        )
+        retried_count = 0
+        for task in result.scalars().all():
+            if await retry_remote_tool_cancellation(db, task=task):
+                retried_count += 1
+        await db.commit()
+        return retried_count
 
 
 async def _reconcile_remote_tasks_impl() -> int:

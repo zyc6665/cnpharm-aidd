@@ -31,6 +31,7 @@ export const useTasksStore = defineStore('tasks', () => {
   const loading = ref(false)
   const total = ref(0)
   const viewCounts = ref<TaskViewCounts>({ ...EMPTY_TASK_VIEW_COUNTS })
+  let taskDetailRequestId = 0
 
   // Actions
   const fetchTasks = async (params?: TaskListParams) => {
@@ -90,13 +91,18 @@ export const useTasksStore = defineStore('tasks', () => {
   }
 
   const fetchTaskDetail = async (id: string) => {
+    const requestId = ++taskDetailRequestId
     loading.value = true
     try {
       const res = await getTaskDetail(id)
-      currentTask.value = res.data
+      if (requestId === taskDetailRequestId) {
+        currentTask.value = res.data
+      }
       return res.data
     } finally {
-      loading.value = false
+      if (requestId === taskDetailRequestId) {
+        loading.value = false
+      }
     }
   }
 
@@ -124,50 +130,38 @@ export const useTasksStore = defineStore('tasks', () => {
   }
 
   const cancelTask = async (id: string) => {
-    try {
-      const res = await apiCancelTask(id)
-      // 更新列表中的任务状态
-      const index = tasks.value.findIndex(t => t.id === id)
-      if (index !== -1) {
-        tasks.value[index] = normalizeTaskSummary(res.data)
-      }
-      if (currentTask.value?.id === id) {
-        currentTask.value = res.data
-      }
-      return res.data
-    } catch {
-      // 错误已在请求层处理
+    const res = await apiCancelTask(id)
+    // 更新列表中的任务状态
+    const index = tasks.value.findIndex(t => t.id === id)
+    if (index !== -1) {
+      tasks.value[index] = normalizeTaskSummary(res.data)
     }
+    if (currentTask.value?.id === id) {
+      currentTask.value = res.data
+    }
+    return res.data
   }
 
   const retryTask = async (id: string) => {
-    try {
-      const res = await apiRetryTask(id)
-      // 更新列表中的任务状态
-      const index = tasks.value.findIndex(t => t.id === id)
-      if (index !== -1) {
-        tasks.value[index] = normalizeTaskSummary(res.data)
-      }
-      if (currentTask.value?.id === id) {
-        currentTask.value = res.data
-      }
-      return res.data
-    } catch {
-      // 错误已在请求层处理
+    const res = await apiRetryTask(id)
+    // 更新列表中的任务状态
+    const index = tasks.value.findIndex(t => t.id === id)
+    if (index !== -1) {
+      tasks.value[index] = normalizeTaskSummary(res.data)
     }
+    if (currentTask.value?.id === id) {
+      currentTask.value = res.data
+    }
+    return res.data
   }
 
   const deleteTask = async (id: string) => {
-    try {
-      await apiDeleteTask(id)
-      // 从列表中移除
-      tasks.value = tasks.value.filter(t => t.id !== id)
-      total.value--
-      if (currentTask.value?.id === id) {
-        currentTask.value = null
-      }
-    } catch {
-      // 错误已在请求层处理
+    await apiDeleteTask(id)
+    // 从列表中移除
+    tasks.value = tasks.value.filter(t => t.id !== id)
+    total.value = Math.max(total.value - 1, 0)
+    if (currentTask.value?.id === id) {
+      currentTask.value = null
     }
   }
 
@@ -188,7 +182,9 @@ export const useTasksStore = defineStore('tasks', () => {
   }
 
   const clearCurrentTask = () => {
+    taskDetailRequestId += 1
     currentTask.value = null
+    loading.value = false
   }
 
   return {

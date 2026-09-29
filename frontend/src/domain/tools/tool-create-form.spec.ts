@@ -7,6 +7,7 @@ import {
   buildToolAgentCapabilityEnablePatch,
   mergeToolCreateEditorStatePatch,
   createToolCreateFormState,
+  createToolCreateEditorState,
   createToolCreateSubmission,
   buildToolTemplateDraftPayload,
   formatToolCreateSubmissionErrorMessage,
@@ -100,6 +101,11 @@ describe('tool create form domain', () => {
 
     expect(buildRemoteToolRegistrationPayload(formState)).toEqual({
       base_url: 'https://model.example.com',
+      capacity_policy: {
+        mode: 'static',
+        max_inflight: 1,
+        lease_ttl_sec: 3600,
+      },
       category_id: 'cat-1',
       run_smoke_test: false,
       publish_on_success: false,
@@ -133,6 +139,21 @@ describe('tool create form domain', () => {
         args: ['--input', '--device cuda:0'],
       },
       publish: false,
+    })
+  })
+
+  it('builds a Kubernetes Job template payload with managed runtime references', () => {
+    const formState = createToolCreateFormState()
+    formState.tool_type = 'k8s_job'
+    formState.k8s_image = 'registry.example/model@sha256:abc'
+    formState.k8s_resource_profile = 'gpu-large'
+
+    expect(buildToolTemplateDraftPayload(formState, createToolCreateEditorState())).toMatchObject({
+      executor_type: 'k8s_job',
+      executor_config: {
+        runtime: { image: 'registry.example/model@sha256:abc' },
+        resource_profile: 'gpu-large',
+      },
     })
   })
 

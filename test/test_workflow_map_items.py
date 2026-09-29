@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,8 @@ if str(BACKEND_ROOT) not in sys.path:
 from app.common.exceptions import ValidationException  # noqa: E402
 from app.database.base import Base  # noqa: E402
 from app.models.workflows import WorkflowRun  # noqa: E402
+from app.models.files import File as FileModel  # noqa: E402
+from app.common.time import utcnow  # noqa: E402
 from app.services.workflow_map_items import resolve_map_items  # noqa: E402
 
 
@@ -67,3 +70,39 @@ async def test_resolve_map_items_rejects_unknown_reference(db_session: AsyncSess
             run=WorkflowRun(input_files={}),
             node_states={},
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("lifecycle_change", ["expired", "deleted", "corrupted"])
+async def test_resolve_map_items_does_not_read_unusable_source_file(
+    db_session: AsyncSession,
+    tmp_path: Path,
+    lifecycle_change: str,
+) -> None:
+    source_path = tmp_path / "items.json"
+    source_path.write_text('["should not be read"]', encoding="utf-8")
+    file_record = FileModel(
+        filename="items.json",
+        content_type="application/json",
+        size_bytes=20,
+        sha256="a" * 64,
+        storage_path=str(source_path),
+    )
+    if lifecycle_change == "expired":
+        file_record.expires_at = utcnow() - timedelta(seconds=1)
+    elif lifecycle_change == "deleted":
+        file_record.deleted_at = utcnow()
+    else:
+        file_record.is_corrupted = True
+    db_session.add(file_record)
+    await db_session.flush()
+
+    source_output = {"file_id": file_record.id, "value": "fallback"}
+    result = await resolve_map_items(
+        db_session,
+        over="node:source:table",
+        run=WorkflowRun(input_files={}),
+        node_states={"source": {"semantic_outputs": {"table": source_output}}},
+    )
+
+    assert result == [source_output]

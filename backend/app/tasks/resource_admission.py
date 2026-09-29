@@ -12,6 +12,7 @@ class WorkerCapability:
     """Worker 声明的静态执行能力和容量。"""
 
     worker_id: str
+    queue: str | None = None
     executor_types: tuple[str, ...] = ()
     tiers: tuple[str, ...] = ()
     cpu_capacity: float | None = None
@@ -29,6 +30,7 @@ class AdmissionDecision:
     admitted: bool
     worker_id: str
     reason: str | None = None
+    queue: str | None = None
 
 
 class ResourceAdmissionPolicy:
@@ -100,4 +102,4 @@ class ResourceAdmissionPolicy:
             ):
                 return AdmissionDecision(False, capability.worker_id, "gpu_memory_insufficient")
 
-        return AdmissionDecision(True, capability.worker_id)
+        return AdmissionDecision(True, capability.worker_id, queue=capability.queue)

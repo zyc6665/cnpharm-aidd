@@ -20,6 +20,7 @@ from app.main import app
 from app.models import users as _users_models  # noqa: F401
 from app.models.system_settings import ModelService
 from app.models.users import User
+from app.services import openai_compatible
 
 
 @pytest_asyncio.fixture
@@ -123,3 +124,35 @@ async def test_model_service_admin_crud_never_returns_plaintext_key(admin_client
 
     empty_response = await client.get("/api/v1/system/model-services")
     assert empty_response.json()["data"]["items"] == []
+
+
+@pytest.mark.asyncio
+async def test_model_service_admin_can_discover_models(admin_client, monkeypatch):
+    client, _ = admin_client
+    create_response = await client.post(
+        "/api/v1/system/model-services",
+        json={
+            "name": "Catalog",
+            "provider_type": "openai_compatible",
+            "base_url": "https://api.example.com/v1",
+            "api_key": "sk-secret",
+            "model_name": "gpt-test",
+        },
+    )
+    service_id = create_response.json()["data"]["id"]
+
+    async def fake_discovery(service, *, api_key=None):
+        assert service.id == service_id
+        assert api_key is None
+        return True, ["gpt-4o-mini", "gpt-test"], "已发现 2 个模型"
+
+    monkeypatch.setattr(openai_compatible, "list_openai_compatible_models", fake_discovery)
+    response = await client.get(f"/api/v1/system/model-services/{service_id}/models")
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {
+        "id": service_id,
+        "models": ["gpt-4o-mini", "gpt-test"],
+        "message": "已发现 2 个模型",
+    }
+    assert "sk-secret" not in response.text

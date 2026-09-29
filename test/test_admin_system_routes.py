@@ -162,6 +162,166 @@ async def test_system_stats_exposes_remote_recovery_alert_count(
 
 
 @pytest.mark.asyncio
+async def test_resource_workers_exposes_capability_and_dynamic_usage(
+    api_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """管理员资源页应能读取 Worker 静态能力和动态租约占用。"""
+    from app.cache.memory import MemoryCacheBackend
+    from app.tasks.resource_admission import WorkerCapability
+    from app.tasks.resource_lease import WorkerResourceLeaseManager
+    from app.tasks.resource_profile import ResourceRequest
+    from app.tasks.worker_capability_registry import WorkerCapabilityRegistry
+
+    cache = MemoryCacheBackend()
+    registry = WorkerCapabilityRegistry(cache=cache, ttl_seconds=60)
+    capability = WorkerCapability(
+        worker_id="admin-resource-worker",
+        queue="admin-resource-queue",
+        executor_types=("docker_image",),
+        tiers=("heavy",),
+        cpu_capacity=8,
+        memory_capacity_gb=16,
+        parallelism=2,
+    )
+    await registry.register(capability)
+    await WorkerResourceLeaseManager(cache=cache).acquire(
+        capability=capability,
+        request=ResourceRequest(
+            executor_type="docker_image",
+            tier="heavy",
+            cpu=4,
+            memory_gb=8,
+            cpu_limit=4,
+            memory_limit="8g",
+            gpu_required=False,
+            gpu_count=0,
+            gpu_memory_mb=0,
+            timeout_sec=600,
+            parallelism=1,
+        ),
+        lease_id="admin-resource-task",
+        lease_phase="running",
+    )
+    await WorkerResourceLeaseManager(cache=cache).acquire(
+        capability=capability,
+        request=ResourceRequest(
+            executor_type="docker_image",
+            tier="heavy",
+            cpu=1,
+            memory_gb=1,
+            cpu_limit=1,
+            memory_limit="1g",
+            gpu_required=False,
+            gpu_count=0,
+            gpu_memory_mb=0,
+            timeout_sec=600,
+            parallelism=1,
+        ),
+        lease_id="admin-resource-reservation",
+        lease_phase="reserved",
+    )
+    monkeypatch.setattr("app.cache.get_cache", lambda: cache)
+
+    response = await api_client.get(
+        "/api/v1/system/resource-workers",
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["status"] == "healthy"
+    assert payload["total_workers"] == 1
+    assert payload["workers"][0]["worker_id"] == "admin-resource-worker"
+    assert payload["workers"][0]["queue"] == "admin-resource-queue"
+    assert payload["workers"][0]["cpu_used"] == 5.0
+    assert payload["workers"][0]["cpu_available"] == 3.0
+    assert payload["workers"][0]["parallelism_used"] == 2
+    assert payload["workers"][0]["reservation_count"] == 1
+    assert payload["workers"][0]["execution_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_resource_quotas_exposes_scope_usage_and_rejections(
+    api_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """管理员资源页应能读取用户和项目 scope 的配额占用。"""
+    from app.cache.memory import MemoryCacheBackend
+    from app.tasks.resource_admission import WorkerCapability
+    from app.tasks.resource_lease import WorkerResourceLeaseManager
+    from app.tasks.resource_profile import ResourceRequest
+    from app.tasks.resource_quota import ResourceQuotaManager
+
+    monkeypatch.setattr("app.config.settings.RESOURCE_SCOPE_QUOTA_ENABLED", True)
+    monkeypatch.setattr("app.config.settings.RESOURCE_USER_MAX_CPU", 8)
+    monkeypatch.setattr("app.config.settings.RESOURCE_USER_MAX_MEMORY_GB", 16)
+    monkeypatch.setattr("app.config.settings.RESOURCE_USER_MAX_PARALLELISM", 2)
+    monkeypatch.setattr("app.config.settings.RESOURCE_PROJECT_MAX_CPU", 12)
+    monkeypatch.setattr("app.config.settings.RESOURCE_PROJECT_MAX_MEMORY_GB", 24)
+    monkeypatch.setattr("app.config.settings.RESOURCE_PROJECT_MAX_PARALLELISM", 3)
+
+    cache = MemoryCacheBackend()
+    capability = WorkerCapability(
+        worker_id="quota-admin-worker",
+        cpu_capacity=16,
+        memory_capacity_gb=32,
+        parallelism=4,
+    )
+    await WorkerResourceLeaseManager(cache=cache).acquire(
+        capability=capability,
+        request=ResourceRequest(
+            executor_type="docker_image",
+            tier="heavy",
+            cpu=4,
+            memory_gb=8,
+            cpu_limit=4,
+            memory_limit="8g",
+            gpu_required=False,
+            gpu_count=0,
+            gpu_memory_mb=0,
+            timeout_sec=600,
+            parallelism=1,
+        ),
+        lease_id="quota-admin-task",
+        user_id="quota-user",
+        project_id="quota-project",
+    )
+    quota = ResourceQuotaManager(
+        cache=cache,
+        user_max_cpu=8,
+        user_max_memory_gb=16,
+        user_max_parallelism=2,
+        project_max_cpu=12,
+        project_max_memory_gb=24,
+        project_max_parallelism=3,
+    )
+    await quota.record_rejection(
+        scope_type="user",
+        scope_id="quota-user",
+        reason="user_cpu_quota_exhausted",
+    )
+    monkeypatch.setattr("app.cache.get_cache", lambda: cache)
+
+    response = await api_client.get(
+        "/api/v1/system/resource-quotas",
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["enabled"] is True
+    assert payload["gpu_scope_quota"] == "allocator_managed"
+    scopes = {(item["scope_type"], item["scope_id"]): item for item in payload["scopes"]}
+    assert scopes[("user", "quota-user")]["cpu_used"] == 4.0
+    assert scopes[("user", "quota-user")]["cpu_limit"] == 8.0
+    assert scopes[("user", "quota-user")]["rejection_counts"] == {
+        "user_cpu_quota_exhausted": 1
+    }
+    assert scopes[("project", "quota-project")]["memory_used_gb"] == 8.0
+
+
+@pytest.mark.asyncio
 async def test_feature_flags_endpoint_exposes_aidd_release_gates(
     api_client: httpx.AsyncClient,
 ):

@@ -90,6 +90,53 @@ async def test_execution_service_binds_adapter_for_artifact_collection():
     assert artifacts[0].path == "exec-2"
 
 
+@pytest.mark.asyncio
+async def test_execution_service_reconcile_delegates_to_adapter_when_supported():
+    from app.execution.contracts import ExecutionState
+    from app.execution.service import ExecutionService
+
+    calls: list[tuple] = []
+
+    class Adapter:
+        async def reconcile(self, execution_id):
+            calls.append(("reconcile", execution_id))
+            return ExecutionState.SUCCEEDED
+
+    service = ExecutionService({"k8s_job": Adapter()})
+
+    assert await service.reconcile("k8s_job", "job-1") == ExecutionState.SUCCEEDED
+    assert calls == [("reconcile", "job-1")]
+
+
+@pytest.mark.asyncio
+async def test_execution_service_accepts_ssh_job_alias_for_registered_ssh_adapter():
+    from app.execution.contracts import ExecutionState
+    from app.execution.service import ExecutionService
+
+    class Adapter:
+        async def status(self, execution_id):
+            return ExecutionState.RUNNING
+
+    service = ExecutionService({"ssh": Adapter()})
+
+    assert await service.status("ssh_job", "job-1") == ExecutionState.RUNNING
+
+
+def test_execution_request_accepts_managed_job_types():
+    from app.execution.contracts import ExecutionRequest
+
+    for executor_type in ("k8s_job", "ssh_job"):
+        request = ExecutionRequest(
+            idempotency_key=f"key-{executor_type}",
+            project_id="project-1",
+            requested_by="user-1",
+            tool_package_version_id="version-1",
+            variant="default",
+            executor_type=executor_type,
+        )
+        assert request.executor_type == executor_type
+
+
 def test_execution_request_contract_cannot_contain_inline_credentials():
     from pydantic import ValidationError
 

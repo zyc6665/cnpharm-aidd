@@ -80,7 +80,7 @@ const routes: RouteRecordRaw[] = [
     path: '/workflow',
     name: 'Workflow',
     component: () => import('@/views/workflow/index.vue'),
-    meta: { title: 'workflow.title' }
+    meta: { title: 'workflow.title', requiresAuth: true }
   },
   {
     path: '/workflow/runs/:runId',

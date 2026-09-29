@@ -33,9 +33,7 @@ export function useWebSocket() {
       ? configuredBaseUrl.replace(/\/+$/, '')
       : `${protocol}//${window.location.host}`
     const normalizedPath = path.startsWith('/') ? path : `/${path}`
-    const token = userStore.token ?? ''
-    const separator = normalizedPath.includes('?') ? '&' : '?'
-    return `${baseUrl}${normalizedPath}${separator}token=${encodeURIComponent(token)}`
+    return `${baseUrl}${normalizedPath}`
   }
 
   const connect = (path = DEFAULT_WS_PATH) => {
@@ -51,7 +49,8 @@ export function useWebSocket() {
     try {
       currentPath = path
       const url = getWebSocketUrl(path)
-      ws.value = new WebSocket(url)
+      const token = userStore.token ?? ''
+      ws.value = new WebSocket(url, token ? ['scitool-access-token', token] : undefined)
 
       ws.value.onopen = () => {
         debugWebSocket('Connected')

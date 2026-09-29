@@ -10,7 +10,9 @@ from sqlalchemy.orm import joinedload, selectinload
 from app.api.v1.tool_route_utils import (
     build_validated_tool_contract,
     load_tool_packages_for_tools,
-    load_tool_with_current_version,
+    load_readable_tool_with_current_version,
+    require_tool_read_access,
+    sanitize_public_tool_contract,
     serialize_tool,
 )
 from app.auth.dependencies import get_current_user, get_current_user_optional
@@ -37,8 +39,8 @@ from app.schemas.tools import (
     TagResponse,
     ToolCategoryResponse,
     ToolContractResponse,
-    ToolListResponse,
-    ToolResponse,
+    ToolListPublicResponse,
+    ToolPublicResponse,
     ToolWorkbenchGroupPublicResponse,
     ToolWorkbenchGroupToolResponse,
 )
@@ -67,7 +69,11 @@ def _serialize_workbench_tool(
     is_recommended: bool,
     sort_order: int,
 ) -> dict:
-    contract = build_validated_tool_contract(tool) if tool.current_version else None
+    contract = (
+        sanitize_public_tool_contract(build_validated_tool_contract(tool))
+        if tool.current_version
+        else None
+    )
     tags = sorted(tool.tags, key=lambda tag: (tag.sort_order, tag.name))
     return ToolWorkbenchGroupToolResponse.model_validate(
         {
@@ -118,8 +124,9 @@ async def list_tools(
         query = query.join(ToolFavorite, ToolFavorite.tool_id == Tool.id).where(
             ToolFavorite.user_id == current_user.id
         )
-    elif not is_admin:
+    if not is_admin:
         query = query.where(Tool.status == ToolStatus.PUBLISHED.value)
+        query = query.where(Tool.is_public.is_(True))
     elif status:
         query = query.where(Tool.status == status)
     if category:
@@ -156,8 +163,9 @@ async def list_tools(
         items=[
             serialize_tool(
                 tool,
-                ToolListResponse,
+                ToolListPublicResponse,
                 tool_package=package_by_slug.get(tool.slug),
+                expose_runtime_config=False,
             )
             for tool in tools
         ],
@@ -280,9 +288,13 @@ async def list_tags(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{tool_id}/example", response_model=dict)
-async def get_tool_example(tool_id: str, db: AsyncSession = Depends(get_db)):
+async def get_tool_example(
+    tool_id: str,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+):
     example = build_tool_example_response(
-        await load_tool_with_current_version(db, tool_id)
+        await load_readable_tool_with_current_version(db, tool_id, current_user)
     )
     return success_response(data=example.model_dump() if example else None)
 
@@ -296,7 +308,7 @@ async def apply_tool_example(
     payload = await apply_tool_example_to_user(
         db,
         current_user,
-        await load_tool_with_current_version(db, tool_id),
+        await load_readable_tool_with_current_version(db, tool_id, current_user),
     )
     await db.commit()
     return success_response(data=payload.model_dump(), message="示例已应用")
@@ -317,15 +329,12 @@ async def get_tool_contract(
     ).scalar_one_or_none()
     if not tool:
         raise NotFoundException("工具不存在")
-    is_admin = current_user and current_user.role == "admin"
-    is_owner = current_user and tool.owner_id == current_user.id
-    if not is_admin and not is_owner and tool.status != ToolStatus.PUBLISHED.value:
-        raise NotFoundException("工具不存在")
+    require_tool_read_access(tool, current_user)
     if not tool.current_version:
         raise ValidationException("工具暂无可用版本")
     return success_response(
         data=ToolContractResponse.model_validate(
-            build_validated_tool_contract(tool)
+            sanitize_public_tool_contract(build_validated_tool_contract(tool))
         ).model_dump(by_alias=True)
     )
 
@@ -334,10 +343,11 @@ async def get_tool_contract(
 async def preview_tool_example_file(
     tool_id: str,
     field: str,
+    current_user: Optional[User] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),
 ):
     payload = build_tool_example_file_preview(
-        await load_tool_with_current_version(db, tool_id),
+        await load_readable_tool_with_current_version(db, tool_id, current_user),
         field,
     )
     return success_response(data=payload.model_dump())
@@ -365,10 +375,7 @@ async def get_tool(
     ).scalar_one_or_none()
     if not tool:
         raise NotFoundException("工具不存在")
-    is_admin = current_user and current_user.role == "admin"
-    is_owner = current_user and tool.owner_id == current_user.id
-    if not is_admin and not is_owner and tool.status != ToolStatus.PUBLISHED.value:
-        raise NotFoundException("工具不存在")
+    require_tool_read_access(tool, current_user)
     if tool.statistics:
         tool.statistics.view_count += 1
         await db.commit()
@@ -384,8 +391,9 @@ async def get_tool(
     package_by_slug = await load_tool_packages_for_tools(db, [tool])
     payload = serialize_tool(
         tool,
-        ToolResponse,
+        ToolPublicResponse,
         tool_package=package_by_slug.get(tool.slug),
+        expose_runtime_config=False,
     )
     payload["is_favorited"] = is_favorited
     return success_response(data=payload)

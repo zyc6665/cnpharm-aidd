@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import json
 import sys
+from datetime import timedelta
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -21,6 +22,7 @@ from app.tasks.executors.ssh_payload import build_params_payload
 from app.tasks.ssh_transport import ParamikoSSHTransport
 from app.tasks.queue_manager import TaskQueue, TaskQueueManager
 from app.config import bootstrap_process_env
+from app.common.time import utcnow
 
 
 def _build_task(task_id: str = "task-123") -> SimpleNamespace:
@@ -153,6 +155,25 @@ def test_determine_queue_routes_heavy_cpu_tools_to_heavy_compute_queue() -> None
     )
 
     assert queue == TaskQueue.HEAVY_COMPUTE_QUEUE.value
+
+
+def test_dispatch_priority_ages_waiting_tasks_without_exceeding_cap() -> None:
+    now = utcnow()
+    created_at = now - timedelta(seconds=900)
+
+    assert TaskQueueManager.get_wait_seconds(created_at, now=now) == 900
+    assert TaskQueueManager.get_dispatch_priority(
+        TaskQueue.CPU_QUEUE.value,
+        task_priority="normal",
+        created_at=created_at,
+        now=now,
+    ) == 6
+    assert TaskQueueManager.get_dispatch_priority(
+        TaskQueue.CPU_QUEUE.value,
+        task_priority="normal",
+        created_at=now - timedelta(hours=2),
+        now=now,
+    ) == 9
 
 
 def test_task_executor_returns_ssh_job_executor() -> None:

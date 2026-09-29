@@ -99,6 +99,154 @@
         </a-card>
       </a-tab-pane>
 
+      <a-tab-pane key="resources" :tab="t('admin.resourceWorkers')">
+        <a-card :loading="resourceLoading">
+          <div class="resource-status-toolbar">
+            <div>
+              <h3>{{ t('admin.resourceWorkers') }}</h3>
+              <p>{{ t('admin.resourceWorkersSubtitle') }}</p>
+            </div>
+            <a-space>
+              <a-tag :color="resourceStatusColor(resourceStatus?.status)">
+                {{ resourceStatusText(resourceStatus?.status) }}
+              </a-tag>
+              <span class="muted-text">
+                {{ t('admin.totalResourceWorkers') }}: {{ resourceStatus?.total_workers ?? 0 }}
+              </span>
+            </a-space>
+          </div>
+
+          <a-table
+            :columns="resourceWorkerColumns"
+            :data-source="resourceStatus?.workers ?? []"
+            :loading="resourceLoading"
+            :pagination="{ pageSize: 8, showSizeChanger: false }"
+            :scroll="{ x: 980 }"
+            row-key="worker_id"
+          >
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'worker_id'">
+                <a-space direction="vertical" size="small">
+                  <strong>{{ record.worker_id }}</strong>
+                  <a-tag :color="record.healthy ? 'green' : 'red'">
+                    {{ record.healthy ? t('admin.workerHealthy') : t('admin.workerUnhealthy') }}
+                  </a-tag>
+                </a-space>
+              </template>
+
+              <template v-else-if="column.key === 'queue'">
+                <a-typography-text code>{{ record.queue || '-' }}</a-typography-text>
+              </template>
+
+              <template v-else-if="column.key === 'executors'">
+                <a-space wrap>
+                  <a-tag v-for="item in record.executor_types" :key="item">{{ item }}</a-tag>
+                </a-space>
+              </template>
+
+              <template v-else-if="column.key === 'tiers'">
+                <a-space wrap>
+                  <a-tag v-for="item in record.tiers" :key="item" color="blue">{{ item }}</a-tag>
+                </a-space>
+              </template>
+
+              <template v-else-if="column.key === 'cpu'">
+                <span>{{ formatCapacity(record.cpu_used, record.cpu_capacity, ' cores') }}</span>
+              </template>
+
+              <template v-else-if="column.key === 'memory'">
+                <span>{{ formatCapacity(record.memory_used_gb, record.memory_capacity_gb, ' GB') }}</span>
+              </template>
+
+              <template v-else-if="column.key === 'parallelism'">
+                <span>{{ formatCapacity(record.parallelism_used, record.parallelism, '') }}</span>
+              </template>
+
+              <template v-else-if="column.key === 'reservations'">
+                <a-tag :color="record.reservation_count ? 'orange' : 'default'">
+                  {{ record.reservation_count }}
+                </a-tag>
+              </template>
+
+              <template v-else-if="column.key === 'executions'">
+                <a-tag :color="record.execution_count ? 'blue' : 'default'">
+                  {{ record.execution_count }}
+                </a-tag>
+              </template>
+
+              <template v-else-if="column.key === 'gpu'">
+                <span v-if="record.gpu_count != null">
+                  {{ record.gpu_count }} · {{ record.gpu_memory_mb ?? '-' }} MB
+                </span>
+                <span v-else>-</span>
+              </template>
+            </template>
+          </a-table>
+          <a-empty v-if="!resourceLoading && !(resourceStatus?.workers?.length)" :description="t('admin.noResourceWorkers')" />
+        </a-card>
+
+        <a-card class="quota-card" :loading="quotaLoading">
+          <div class="resource-status-toolbar">
+            <div>
+              <h3>{{ t('admin.resourceQuotas') }}</h3>
+              <p>{{ t('admin.resourceQuotasSubtitle') }}</p>
+            </div>
+            <a-space>
+              <a-tag :color="resourceQuotaStatus?.enabled ? 'green' : 'default'">
+                {{ resourceQuotaStatus?.enabled ? t('admin.quotaEnabled') : t('admin.quotaDisabled') }}
+              </a-tag>
+              <span class="muted-text">
+                {{ t('admin.gpuQuotaMode') }}: {{ resourceQuotaStatus?.gpu_scope_quota || '-' }}
+              </span>
+            </a-space>
+          </div>
+
+          <a-table
+            :columns="resourceQuotaColumns"
+            :data-source="resourceQuotaStatus?.scopes ?? []"
+            :loading="quotaLoading"
+            :pagination="{ pageSize: 8, showSizeChanger: false }"
+            :scroll="{ x: 1080 }"
+            :row-key="quotaRowKey"
+          >
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'scope'">
+                <a-space direction="vertical" size="small">
+                  <a-tag :color="record.scope_type === 'user' ? 'blue' : 'purple'">
+                    {{ record.scope_type === 'user' ? t('admin.userScope') : t('admin.projectScope') }}
+                  </a-tag>
+                  <a-typography-text code>{{ record.scope_id }}</a-typography-text>
+                </a-space>
+              </template>
+              <template v-else-if="column.key === 'cpu'">
+                {{ formatQuotaCapacity(record.cpu_used, record.cpu_limit, ' cores') }}
+              </template>
+              <template v-else-if="column.key === 'memory'">
+                {{ formatQuotaCapacity(record.memory_used_gb, record.memory_limit_gb, ' GB') }}
+              </template>
+              <template v-else-if="column.key === 'parallelism'">
+                {{ formatQuotaCapacity(record.parallelism_used, record.parallelism_limit, '') }}
+              </template>
+              <template v-else-if="column.key === 'gpu'">
+                {{ record.gpu_requested_count }} · {{ record.gpu_requested_memory_mb }} MB
+              </template>
+              <template v-else-if="column.key === 'rejections'">
+                <a-space v-if="Object.keys(record.rejection_counts).length" wrap>
+                  <a-tag v-for="(count, reason) in record.rejection_counts" :key="reason" color="orange">
+                    {{ reason }}: {{ count }}
+                  </a-tag>
+                </a-space>
+                <span v-else class="muted-text">-</span>
+              </template>
+            </template>
+          </a-table>
+          <a-empty
+            v-if="!quotaLoading && !(resourceQuotaStatus?.scopes?.length)"
+            :description="resourceQuotaStatus?.enabled ? t('admin.noQuotaScopes') : t('admin.quotaDisabled')"
+          />
+        </a-card>
+      </a-tab-pane>
+
       <a-tab-pane key="model-services" :tab="t('admin.modelServices')">
         <div class="model-services-panel">
           <div class="model-services-toolbar">
@@ -239,6 +387,17 @@
         :rules="modelServiceRules"
         layout="vertical"
       >
+        <a-form-item :label="t('admin.quickPreset')">
+          <a-select
+            :placeholder="t('admin.quickPresetPlaceholder')"
+            allow-clear
+            @change="applyPreset"
+          >
+            <a-select-option v-for="preset in MODEL_SERVICE_PRESETS" :key="preset.key" :value="preset.key">
+              {{ preset.name }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
         <a-form-item :label="t('common.name')" name="name">
           <a-input v-model:value="modelServiceForm.name" />
         </a-form-item>
@@ -251,7 +410,23 @@
           <a-input v-model:value="modelServiceForm.base_url" placeholder="https://api.example.com/v1" />
         </a-form-item>
         <a-form-item :label="t('admin.modelName')" name="model_name">
-          <a-input v-model:value="modelServiceForm.model_name" placeholder="gpt-4o-mini" />
+          <a-space direction="vertical" style="width: 100%">
+            <a-select
+              v-if="editingModelService && modelServiceModels.length"
+              v-model:value="modelServiceForm.model_name"
+              show-search
+              :options="modelServiceModels.map((value) => ({ label: value, value }))"
+            />
+            <a-input v-else v-model:value="modelServiceForm.model_name" placeholder="gpt-4o-mini" />
+            <a-button
+              v-if="editingModelService"
+              size="small"
+              :loading="discoveringModels"
+              @click="discoverModels"
+            >
+              {{ t('admin.discoverModels') }}
+            </a-button>
+          </a-space>
         </a-form-item>
         <a-form-item :label="t('admin.apiKey')" name="api_key">
           <a-input-password
@@ -338,6 +513,8 @@ import {
   getSystemHealthServiceLabel,
   getSystemHealthStatusColor,
   getSystemHealthStatusText,
+  MODEL_SERVICE_PRESETS,
+  applyModelServicePreset,
   normalizeModelServicePayload,
   normalizeModelServiceUpdatePayload,
   sortSystemHealthServices
@@ -345,11 +522,14 @@ import {
 import {
   createModelService,
   deleteModelService,
+  discoverModelServiceModels,
   getModelServices,
   getSystemConfig,
   getSystemHealth,
   getSystemInfo,
   getSystemStats,
+  getResourceQuotaStatus,
+  getWorkerResourceStatus,
   setDefaultModelService,
   testModelService,
   updateModelService
@@ -357,10 +537,13 @@ import {
 import type {
   ModelService,
   ModelServiceCreateParams,
+  ResourceQuotaScope,
   SystemConfig,
   SystemHealth,
   SystemInfo,
-  SystemStats
+  SystemStats,
+  ResourceQuotaStatusResponse,
+  WorkerResourceStatusResponse
 } from '@/types/models'
 
 const { t } = useI18n()
@@ -371,6 +554,10 @@ const systemInfo = ref<SystemInfo | null>(null)
 const systemStats = ref<SystemStats | null>(null)
 const systemConfig = ref<SystemConfig | null>(null)
 const systemHealth = ref<SystemHealth | null>(null)
+const resourceLoading = ref(false)
+const resourceStatus = ref<WorkerResourceStatusResponse | null>(null)
+const quotaLoading = ref(false)
+const resourceQuotaStatus = ref<ResourceQuotaStatusResponse | null>(null)
 
 const modelServices = ref<ModelService[]>([])
 const modelServicesLoading = ref(false)
@@ -380,6 +567,8 @@ const testingServiceId = ref<string | null>(null)
 const defaultingServiceId = ref<string | null>(null)
 const deletingServiceId = ref<string | null>(null)
 const editingModelService = ref<ModelService | null>(null)
+const modelServiceModels = ref<string[]>([])
+const discoveringModels = ref(false)
 const modelServiceFormRef = ref<FormInstance>()
 
 const modelServiceForm = reactive<ModelServiceCreateParams>(createDefaultModelServiceForm())
@@ -408,21 +597,69 @@ const modelServiceColumns = computed(() => [
   { title: t('common.actions'), key: 'actions', width: 360, fixed: 'right' as const }
 ])
 
+const resourceWorkerColumns = computed(() => [
+  { title: t('admin.workerId'), key: 'worker_id', width: 190 },
+  { title: t('admin.workerQueue'), key: 'queue', width: 180 },
+  { title: t('admin.executorTypes'), key: 'executors', width: 220 },
+  { title: t('admin.resourceTiers'), key: 'tiers', width: 140 },
+  { title: t('admin.resourceCpuUsage'), key: 'cpu', width: 150 },
+  { title: t('admin.resourceMemoryUsage'), key: 'memory', width: 150 },
+  { title: t('admin.resourceParallelismUsage'), key: 'parallelism', width: 150 },
+  { title: t('admin.resourceReservationCount'), key: 'reservations', width: 120 },
+  { title: t('admin.resourceExecutionCount'), key: 'executions', width: 120 },
+  { title: t('admin.resourceGpuCapacity'), key: 'gpu', width: 150 }
+])
+
+const resourceQuotaColumns = computed(() => [
+  { title: t('admin.quotaScope'), key: 'scope', width: 180 },
+  { title: t('admin.quotaCpu'), key: 'cpu', width: 150 },
+  { title: t('admin.quotaMemory'), key: 'memory', width: 160 },
+  { title: t('admin.quotaParallelism'), key: 'parallelism', width: 160 },
+  { title: t('admin.quotaGpuRequests'), key: 'gpu', width: 150 },
+  { title: t('admin.quotaRejections'), key: 'rejections', width: 360 }
+])
+
+const quotaRowKey = (record: ResourceQuotaScope) => record.scope_type + ':' + record.scope_id
+
 const fetchSystemData = async () => {
   loading.value = true
   try {
-    const [infoRes, statsRes, configRes, healthRes] = await Promise.all([
+    const [infoRes, statsRes, configRes, healthRes, resourceRes, quotaRes] = await Promise.all([
       getSystemInfo(),
       getSystemStats(),
       getSystemConfig(),
-      getSystemHealth()
+      getSystemHealth(),
+      fetchResourceStatus(),
+      fetchResourceQuotaStatus()
     ])
     systemInfo.value = infoRes.data
     systemStats.value = statsRes.data
     systemConfig.value = configRes.data
     systemHealth.value = healthRes.data
+    resourceStatus.value = resourceRes
+    resourceQuotaStatus.value = quotaRes
   } finally {
     loading.value = false
+  }
+}
+
+const fetchResourceStatus = async (): Promise<WorkerResourceStatusResponse> => {
+  resourceLoading.value = true
+  try {
+    const res = await getWorkerResourceStatus()
+    return res.data
+  } finally {
+    resourceLoading.value = false
+  }
+}
+
+const fetchResourceQuotaStatus = async (): Promise<ResourceQuotaStatusResponse> => {
+  quotaLoading.value = true
+  try {
+    const res = await getResourceQuotaStatus()
+    return res.data
+  } finally {
+    quotaLoading.value = false
   }
 }
 
@@ -443,6 +680,7 @@ const refreshSystemData = async () => {
 
 const resetModelServiceForm = () => {
   editingModelService.value = null
+  modelServiceModels.value = []
   Object.assign(modelServiceForm, createDefaultModelServiceForm())
   modelServiceFormRef.value?.clearValidate()
 }
@@ -454,8 +692,29 @@ const openCreateModelService = () => {
 
 const openEditModelService = (record: ModelService) => {
   editingModelService.value = record
+  modelServiceModels.value = []
   Object.assign(modelServiceForm, createModelServiceEditForm(record))
   modelServiceDrawerOpen.value = true
+}
+
+const applyPreset = (key: string) => {
+  const preset = MODEL_SERVICE_PRESETS.find((item) => item.key === key)
+  if (preset) applyModelServicePreset(modelServiceForm, preset)
+}
+
+const discoverModels = async () => {
+  if (!editingModelService.value) {
+    message.info(t('admin.saveBeforeDiscoveringModels'))
+    return
+  }
+  discoveringModels.value = true
+  try {
+    const res = await discoverModelServiceModels(editingModelService.value.id)
+    modelServiceModels.value = res.data.models
+    message.success(res.data.message)
+  } finally {
+    discoveringModels.value = false
+  }
 }
 
 const closeModelServiceDrawer = () => {
@@ -534,6 +793,38 @@ const healthStatusText = getSystemHealthStatusText
 const healthServiceLabel = getSystemHealthServiceLabel
 const formatDateTime = formatAdminDateTime
 
+const resourceStatusColor = (status?: string) => {
+  if (status === 'healthy') return 'green'
+  if (status === 'degraded') return 'orange'
+  if (status === 'unavailable') return 'red'
+  return 'default'
+}
+
+const resourceStatusText = (status?: string) => {
+  if (status === 'healthy') return t('admin.resourceStatusHealthy')
+  if (status === 'degraded') return t('admin.resourceStatusDegraded')
+  if (status === 'unavailable') return t('admin.resourceStatusUnavailable')
+  return t('admin.resourceStatusUnknown')
+}
+
+const formatCapacity = (
+  used: number,
+  capacity: number | null | undefined,
+  suffix: string
+) => {
+  if (capacity == null) return String(used) + suffix + ' / -'
+  return String(used) + suffix + ' / ' + String(capacity) + suffix
+}
+
+const formatQuotaCapacity = (
+  used: number,
+  limit: number | null | undefined,
+  suffix: string
+) => {
+  if (limit == null) return String(used) + suffix + ' / -'
+  return String(used) + suffix + ' / ' + String(limit) + suffix
+}
+
 onMounted(() => {
   void Promise.all([fetchSystemData(), fetchModelServices()])
 })
@@ -558,6 +849,28 @@ onMounted(() => {
 
   .health-card {
     margin-top: @spacing-md;
+  }
+
+  .quota-card {
+    margin-top: @spacing-md;
+  }
+
+  .resource-status-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: @spacing-md;
+    margin-bottom: @spacing-md;
+
+    h3,
+    p {
+      margin: 0;
+    }
+
+    p {
+      color: @text-color-light-secondary;
+      margin-top: @spacing-xs;
+    }
   }
 
   .health-panel {

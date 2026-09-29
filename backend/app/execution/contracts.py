@@ -41,10 +41,21 @@ class ExecutionRequest(BaseModel):
     requested_by: str
     tool_package_version_id: str
     variant: str = Field(min_length=1, max_length=100)
-    executor_type: Literal["container", "cli", "remote_job", "ssh"]
+    executor_type: Literal[
+        "container",
+        "cli",
+        "remote_job",
+        "ssh",
+        "k8s_job",
+        "ssh_job",
+    ]
     parameters: dict[str, Any] = Field(default_factory=dict)
     inputs: list[ExecutionInput] = Field(default_factory=list)
     resources: dict[str, Any] = Field(default_factory=dict)
+    runtime: dict[str, Any] = Field(default_factory=dict)
+    task_id: str | None = None
+    attempt_id: str | None = None
+    tool_version_id: str | None = None
 
     model_config = ConfigDict(extra="forbid")
 
