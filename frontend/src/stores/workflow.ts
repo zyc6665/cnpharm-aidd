@@ -160,6 +160,10 @@ export const useWorkflowStore = defineStore(
       canvas.moveNode(nodeId, pos)
       touchSession()
     }
+    const updateCanvasNode = (nodeId: string, changes: Partial<WorkflowCanvasNode>) => {
+      canvas.updateNode(nodeId, changes)
+      touchSession()
+    }
     const setNodePositions = (p: Record<string, WorkflowCanvasPosition>) => {
       canvas.setNodePositions(p)
       touchSession()
@@ -178,6 +182,10 @@ export const useWorkflowStore = defineStore(
     }
     const deleteCanvasEdge = (id: string) => {
       canvas.deleteEdge(id)
+      touchSession()
+    }
+    const updateCanvasEdge = (id: string, changes: Pick<WorkflowCanvasEdge, 'branch'>) => {
+      canvas.updateEdge(id, changes)
       touchSession()
     }
 
@@ -377,6 +385,7 @@ export const useWorkflowStore = defineStore(
       setActiveNode,
       setActiveGroup,
       moveNode,
+      updateCanvasNode,
       setNodePositions,
       ensureCanvasFromPreset,
       syncCanvasNodeSemanticTypes,
@@ -385,6 +394,7 @@ export const useWorkflowStore = defineStore(
       deleteCanvasNode,
       addCanvasEdge,
       deleteCanvasEdge,
+      updateCanvasEdge,
       exportWorkflowNodes,
       exportWorkflowEdges,
       applyWorkflowDefinition,

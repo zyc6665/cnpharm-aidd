@@ -238,6 +238,7 @@ export function buildWorkflowPreflight(input: {
   template: WorkflowCanvasPreset
   nodeStatuses: Record<string, WorkflowStepStatus>
   readyNodeIds: string[]
+  requiredWorkflowInputs?: string[]
   selectedWorkflowInputFiles?: Record<string, string>
   artifacts?: ArtifactFile[]
   artifactBindingsByNode?: Record<string, Record<string, string>>
@@ -259,6 +260,21 @@ export function buildWorkflowPreflight(input: {
   let completedCount = 0
   let runningCount = 0
   let failedCount = 0
+
+  for (const semanticType of input.requiredWorkflowInputs ?? []) {
+    if (input.selectedWorkflowInputFiles?.[semanticType]) continue
+    pushIssue(
+      issues,
+      issueIds,
+      createIssue(
+        `workflow-input-${semanticType}`,
+        labels.nodeTitleFallback,
+        'missing_workflow_input',
+        labels,
+        { semanticType },
+      ),
+    )
+  }
 
   for (const edge of input.template.edges) {
     const sourceNode = nodeById.get(edge.source)
@@ -384,7 +400,10 @@ export function buildWorkflowPreflight(input: {
   const blockedCount = issues.filter((issue) => issue.severity === 'error' || issue.severity === 'warning').length
 
   return {
-    canRun: runnableCount > 0 && runningCount === 0,
+    canRun:
+      runnableCount > 0 &&
+      runningCount === 0 &&
+      !issues.some(issue => issue.type === 'missing_workflow_input'),
     runnableCount,
     blockedCount,
     completedCount,

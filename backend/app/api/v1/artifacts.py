@@ -175,6 +175,8 @@ async def upload_artifact(
     project_id: str,
     artifact_type: str = Form(...),
     semantic_type: str = Form(...),
+    standard_type: str | None = Form(default=None),
+    standard_version: int | None = Form(default=None, ge=1),
     description: str | None = Form(default=None),
     expires_at: str | None = Form(default=None),
     file: UploadFile = File(...),
@@ -191,6 +193,8 @@ async def upload_artifact(
     metadata = ArtifactMetadata(
         artifact_type=artifact_type,
         semantic_type=semantic_type,
+        standard_type=standard_type,
+        standard_version=standard_version,
         description=description,
         expires_at=_expires_at(expires_at),
     )

@@ -50,7 +50,6 @@ export interface ProjectOverviewCounts {
   artifacts: number
   tasks: number
   workflows: number
-  boards: number
 }
 
 export interface ProjectOverviewTask {
@@ -77,21 +76,10 @@ export interface ProjectOverviewWorkflow {
   updated_at: string
 }
 
-export interface ProjectOverviewBoard {
-  id: string
-  project_id?: string | null
-  name: string
-  description?: string | null
-  node_count: number
-  created_at: string
-  updated_at: string
-}
-
 export interface ProjectOverview {
   project: ResearchProject
   counts: ProjectOverviewCounts
   artifacts: TypedArtifact[]
   tasks: ProjectOverviewTask[]
   workflows: ProjectOverviewWorkflow[]
-  boards: ProjectOverviewBoard[]
 }

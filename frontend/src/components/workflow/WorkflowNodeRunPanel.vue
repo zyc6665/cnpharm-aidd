@@ -304,6 +304,12 @@
       return
     }
 
+    try {
+      await formRef.value?.validate()
+    } catch {
+      return
+    }
+
     await runStandaloneNode({
       tool: selectedTool.value,
       flattenedSchema: flattenedSchema.value,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 
 from pydantic import BaseModel, Field
 
@@ -22,6 +22,41 @@ from app.tool_packages.schemas import (
 
 _IMAGE_DIGEST_RE = re.compile(r"^sha256:[a-f0-9]{64}$")
 _SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
+_PLATFORM_PARAMETER_NAMES = {
+    "base_url",
+    "command",
+    "cpu",
+    "devices",
+    "endpoint",
+    "entrypoint",
+    "gpu_device",
+    "gpu_memory_mb",
+    "gpu_required",
+    "memory_mb",
+    "resource_profile",
+    "resources",
+    "script",
+    "script_content",
+    "script_path",
+    "timeout_sec",
+    "worker_id",
+    "worker_queue",
+}
+_CREDENTIAL_PARAMETER_NAMES = {
+    "access_token",
+    "api_key",
+    "apikey",
+    "authorization",
+    "credentials",
+    "credential_ref",
+    "headers",
+    "password",
+    "password_ref",
+    "private_key",
+    "secret",
+    "secret_ref",
+    "token",
+}
 
 
 class ToolPackageValidationResult(BaseModel):
@@ -95,14 +130,29 @@ def _validate_tool_package_v2(manifest: ToolPackageV2Manifest) -> ToolPackageVal
             errors.append(f"standard artifact type is unknown: {item.type}")
 
     parameter_schema = manifest.parameters_schema or {}
-    if parameter_schema:
-        if parameter_schema.get("type") != "object":
-            errors.append("parameters_schema.type must be object")
-        required = parameter_schema.get("required", [])
-        if isinstance(required, list) and "device" in required:
+    for path in _undefined_required_parameter_paths(parameter_schema):
+        errors.append(f"parameters_schema.{path} is required but has no property definition")
+    required = parameter_schema.get("required", [])
+    if isinstance(required, list) and "device" in required:
+        errors.append(
+            "parameters_schema.device belongs in variant execution context, "
+            "not required business parameters"
+        )
+    for path, name, property_schema in _parameter_schema_fields(parameter_schema):
+        normalized_name = name.strip().lower().replace("-", "_")
+        if normalized_name in _PLATFORM_PARAMETER_NAMES:
             errors.append(
-                "parameters_schema.device belongs in variant execution context, "
-                "not required business parameters"
+                f"parameters_schema.{path} belongs in variant execution context, "
+                "not business parameters"
+            )
+        elif normalized_name in _CREDENTIAL_PARAMETER_NAMES:
+            errors.append(
+                f"parameters_schema.{path} must not collect credentials as task parameters"
+            )
+        if property_schema and property_schema.get("format") in {"file", "uri", "password"}:
+            errors.append(
+                f"parameters_schema.{path} uses a file or credential field format; "
+                "declare standard Artifact inputs or platform credentials instead"
             )
 
     for adapter_input in manifest.adapter.input:
@@ -174,6 +224,51 @@ def _validate_runtime_env(manifest: ToolPackageV2Manifest, errors: list[str]) ->
 
 def _dedupe(errors: list[str]) -> list[str]:
     return list(dict.fromkeys(errors))
+
+
+def _parameter_schema_fields(
+    schema: dict[str, object],
+    parent: str = "",
+) -> Iterator[tuple[str, str, dict[str, object] | None]]:
+    properties = schema.get("properties")
+    if not isinstance(properties, dict):
+        return
+
+    for raw_name, raw_property in properties.items():
+        name = str(raw_name)
+        path = f"{parent}.{name}" if parent else name
+        property_schema = raw_property if isinstance(raw_property, dict) else None
+        yield path, name, property_schema
+        if isinstance(raw_property, dict):
+            yield from _parameter_schema_fields(raw_property, path)
+            items = raw_property.get("items")
+            if isinstance(items, dict):
+                yield from _parameter_schema_fields(items, f"{path}[]")
+
+
+def _undefined_required_parameter_paths(
+    schema: dict[str, object],
+    parent: str = "",
+) -> Iterator[str]:
+    properties = schema.get("properties")
+    required = schema.get("required")
+    if isinstance(properties, dict) and isinstance(required, list):
+        for raw_name in required:
+            name = str(raw_name)
+            if name not in properties:
+                yield f"{parent}.{name}" if parent else name
+
+    if not isinstance(properties, dict):
+        return
+    for raw_name, raw_property in properties.items():
+        if not isinstance(raw_property, dict):
+            continue
+        name = str(raw_name)
+        path = f"{parent}.{name}" if parent else name
+        yield from _undefined_required_parameter_paths(raw_property, path)
+        items = raw_property.get("items")
+        if isinstance(items, dict):
+            yield from _undefined_required_parameter_paths(items, f"{path}[]")
 
 
 def main(argv: Sequence[str] | None = None) -> int:

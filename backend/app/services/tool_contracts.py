@@ -371,6 +371,10 @@ def _artifact_input_slot(item: dict[str, Any]) -> dict[str, Any]:
         "type": _semantic_type(item.get("type")),
         "required": bool(item.get("required", True)),
     }
+    if item.get("title"):
+        slot["title"] = str(item.get("title"))
+    if item.get("description"):
+        slot["description"] = str(item.get("description"))
     if "role_preferences" in item:
         slot["role_preferences"] = _string_list(item.get("role_preferences"))
     if "required_roles" in item:

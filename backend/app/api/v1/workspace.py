@@ -16,8 +16,7 @@ from app.models.projects import ProjectMember
 from app.models.tasks import Task
 from app.models.tools import Tool
 from app.models.users import User
-from app.models.workflows import ResearchBoard, WorkflowDefinition
-from app.services.research_board_content import board_node_count
+from app.models.workflows import WorkflowDefinition
 
 router = APIRouter(
     dependencies=[Depends(require_feature_flag("AIDD_PROJECT_WORKSPACE_ENABLED"))]
@@ -80,12 +79,6 @@ async def get_workspace_overview(
         "canceled": 0,
         **{str(status): count for status, count in count_result.all()},
     }
-    board_result = await db.execute(
-        select(ResearchBoard)
-        .where(ResearchBoard.owner_id == current_user.id)
-        .order_by(ResearchBoard.updated_at.desc())
-        .limit(6)
-    )
     workflow_result = await db.execute(
         select(WorkflowDefinition)
         .where(WorkflowDefinition.user_id == current_user.id)
@@ -146,15 +139,6 @@ async def get_workspace_overview(
                 task_status_counts[status] for status in ATTENTION_STATUSES
             ),
             "task_status_counts": task_status_counts,
-            "boards": [
-                {
-                    "id": board.id,
-                    "name": board.name,
-                    "node_count": board_node_count(board.content),
-                    "updated_at": board.updated_at,
-                }
-                for board in board_result.scalars()
-            ],
             "workflows": [
                 {
                     "id": workflow.id,

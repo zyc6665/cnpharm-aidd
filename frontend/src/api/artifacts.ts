@@ -45,6 +45,12 @@ export const uploadProjectArtifact = (
   formData.append('file', input.file)
   formData.append('artifact_type', input.artifact_type)
   formData.append('semantic_type', input.semantic_type)
+  if (input.standard_type) {
+    formData.append('standard_type', input.standard_type)
+  }
+  if (input.standard_version !== undefined) {
+    formData.append('standard_version', String(input.standard_version))
+  }
 
   if (input.description) {
     formData.append('description', input.description)

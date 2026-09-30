@@ -27,7 +27,7 @@ from app.models.conversations import (
 from app.models.tasks import Task, TaskStatus
 from app.models.tools import Tool, ToolVersion
 from app.models.users import User, UserRole, UserStatus
-from app.models.workflows import ResearchBoard, WorkflowDefinition
+from app.models.workflows import WorkflowDefinition
 
 
 @pytest_asyncio.fixture
@@ -176,12 +176,6 @@ async def test_project_overview_returns_project_scoped_resources(
                 artifact_bindings_by_node={},
                 status="draft",
             ),
-            ResearchBoard(
-                project_id=project["id"],
-                owner_id=owner.id,
-                name="口袋分析白板",
-                content={"nodes": [{"id": "note-1", "type": "note"}]},
-            ),
         ]
     )
     await db_session.commit()
@@ -198,13 +192,11 @@ async def test_project_overview_returns_project_scoped_resources(
         "artifacts": 1,
         "tasks": 1,
         "workflows": 1,
-        "boards": 1,
     }
     assert data["tasks"][0]["name"] == "项目口袋识别"
     assert data["tasks"][0]["status"] == "running"
     assert data["artifacts"][0]["latest_version"]["id"] == artifact_version.id
     assert data["workflows"][0]["name"] == "口袋到分子生成"
-    assert data["boards"][0]["node_count"] == 1
 
 
 @pytest.mark.asyncio

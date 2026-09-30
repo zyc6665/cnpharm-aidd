@@ -45,5 +45,6 @@ export interface WorkflowCanvasEdge {
   source: string
   target: string
   artifactType?: WorkflowArtifactSemanticType
+  branch?: 'true' | 'false'
   labelKey?: string
 }

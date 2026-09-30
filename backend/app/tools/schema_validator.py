@@ -18,6 +18,23 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+def validate_json_schema_definition(
+    schema: Dict[str, Any],
+    field_name: str = "JSON Schema",
+) -> Dict[str, Any]:
+    """Validate a JSON Schema definition with the supported Draft-07 validator."""
+    if not isinstance(schema, dict):
+        raise ValueError(f"{field_name} must be a JSON object")
+
+    if HAS_JSONSCHEMA:
+        try:
+            Draft7Validator.check_schema(schema)
+        except Exception as exc:
+            raise ValueError(f"{field_name} must be valid JSON Schema Draft-07: {exc}") from exc
+
+    return schema
+
+
 class SchemaValidationError(Exception):
     """Schema验证错误"""
 

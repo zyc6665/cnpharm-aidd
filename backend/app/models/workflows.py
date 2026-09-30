@@ -55,7 +55,7 @@ class WorkflowRun(Base, UUIDMixin, TimestampMixin):
 
 
 class ResearchBoard(Base, UUIDMixin, TimestampMixin):
-    """私有科研白板，保存非执行性的探索内容。"""
+    """Legacy table retained for historical records and cleanup only."""
 
     __tablename__ = "research_boards"
 

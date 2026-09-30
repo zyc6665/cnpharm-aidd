@@ -7,7 +7,11 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.artifact_standards.registry import is_standard_artifact_ref
 from app.common.exceptions import ValidationException
+from app.common.time import utcnow
+from app.files.file_records import is_file_usable
+from app.models.artifacts import ArtifactVersion
 from app.services.artifact_binding_resolver import ArtifactBindingDecision
 from app.services.run_input_validation import (
     append_existing_file_id,
@@ -18,6 +22,11 @@ from app.services.standard_input_slots import (
     artifact_input_slots_by_name_for_node,
 )
 from app.services.workflow_artifacts import standard_artifact_file_ids
+from app.services.workflow_inputs import (
+    WORKFLOW_ARTIFACT_VERSION_PREFIX,
+    artifact_matches_workflow_input_type,
+    load_project_artifact_version,
+)
 
 
 @dataclass(frozen=True)
@@ -47,7 +56,8 @@ async def resolve_workflow_input_sources(
     semantic_file_bindings: dict[str, str] = {}
 
     for semantic_type, source in (node.get("semantic_inputs") or {}).items():
-        file_id = workflow_semantic_source_file_id(
+        file_id = await workflow_semantic_source_file_id(
+            db,
             run=run,
             node_states=node_states,
             semantic_type=str(semantic_type),
@@ -75,13 +85,29 @@ async def resolve_workflow_input_sources(
 
         if source.startswith("workflow_input:"):
             artifact_key = source.split(":", 1)[1] or normalized_slot
+            if "@" not in artifact_key:
+                artifact_key = normalize_semantic_type(artifact_key)
             input_files = getattr(run, "input_files", None) or {}
-            file_id = input_files.get(artifact_key)
-            if not file_id:
+            input_value = input_files.get(artifact_key)
+            if not input_value:
                 raise ValidationException(
                     f"Workflow run is missing required input: {artifact_key}"
                 )
-            file_id = str(file_id)
+            if str(input_value).startswith(WORKFLOW_ARTIFACT_VERSION_PREFIX):
+                version = await load_workflow_input_version(
+                    db,
+                    run=run,
+                    semantic_type=artifact_key,
+                    selection=str(input_value),
+                )
+                slot = artifact_slots.get(normalized_slot) or {}
+                slot_type = str(slot.get("type") or "")
+                if is_standard_artifact_ref(slot_type) or slot_needs_binding_resolution(slot):
+                    input_bindings[normalized_slot] = str(version.id)
+                    continue
+                file_id = primary_workflow_artifact_file_id(version, label=normalized_slot)
+            else:
+                file_id = str(input_value)
             await append_existing_file_id(
                 db,
                 file_ids=file_ids,
@@ -204,7 +230,8 @@ async def _resolve_node_artifact_source(
     )
 
 
-def workflow_semantic_source_file_id(
+async def workflow_semantic_source_file_id(
+    db: AsyncSession,
     *,
     run: Any,
     node_states: dict[str, Any],
@@ -219,12 +246,20 @@ def workflow_semantic_source_file_id(
         semantic_key = normalize_semantic_type(
             source.split(":", 1)[1] or semantic_type
         )
-        file_id = (getattr(run, "input_files", None) or {}).get(semantic_key)
-        if not file_id:
+        input_value = (getattr(run, "input_files", None) or {}).get(semantic_key)
+        if not input_value:
             raise ValidationException(
                 f"Workflow run is missing required input: {semantic_key}"
             )
-        return str(file_id)
+        if str(input_value).startswith(WORKFLOW_ARTIFACT_VERSION_PREFIX):
+            version = await load_workflow_input_version(
+                db,
+                run=run,
+                semantic_type=semantic_key,
+                selection=str(input_value),
+            )
+            return primary_workflow_artifact_file_id(version, label=semantic_key)
+        return str(input_value)
     if source.startswith("node:"):
         parts = source.split(":", 2)
         if len(parts) != 3:
@@ -253,6 +288,36 @@ def workflow_semantic_source_file_id(
             )
         return str(file_id)
     raise ValidationException(f"Unsupported workflow input source: {source}")
+
+
+async def load_workflow_input_version(
+    db: AsyncSession,
+    *,
+    run: Any,
+    semantic_type: str,
+    selection: str,
+) -> ArtifactVersion:
+    version_id = selection[len(WORKFLOW_ARTIFACT_VERSION_PREFIX):]
+    version = await load_project_artifact_version(
+        db,
+        version_id=version_id,
+        project_id=getattr(run, "project_id", None),
+    )
+    if version.status != "available":
+        raise ValidationException(f"Workflow input ArtifactVersion is not available: {semantic_type}")
+    if version.expires_at is not None and version.expires_at <= utcnow():
+        raise ValidationException(f"Workflow input ArtifactVersion has expired: {semantic_type}")
+    if not artifact_matches_workflow_input_type(version, semantic_type):
+        raise ValidationException(f"Workflow input ArtifactVersion type does not match: {semantic_type}")
+    return version
+
+
+def primary_workflow_artifact_file_id(version: ArtifactVersion, *, label: str) -> str:
+    links = sorted(version.files, key=lambda item: (not item.is_primary, item.sort_order))
+    for link in links:
+        if link.file is not None and is_file_usable(link.file):
+            return str(link.file_id)
+    raise ValidationException(f"Workflow input ArtifactVersion has no usable files: {label}")
 
 
 def standard_artifact_version_id(

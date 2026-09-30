@@ -112,7 +112,6 @@ import {
   AppstoreOutlined,
   ExperimentOutlined,
   ApartmentOutlined,
-  EditOutlined,
   DashboardOutlined,
   SettingOutlined,
   BulbOutlined,
@@ -176,13 +175,6 @@ const mainNav: NavItem[] = [
     labelKey: 'nav.workflow',
     active: ['/workflow'],
   },
-  {
-    key: 'research-boards',
-    to: '/research-boards',
-    icon: EditOutlined,
-    labelKey: 'nav.researchBoards',
-    active: ['/research-boards'],
-  },
 ]
 
 const adminNav: NavItem[] = [
@@ -210,7 +202,7 @@ function toggleCollapsed() {
 
 // ── 路由过渡 ──
 const transitionName = ref('slide-left')
-const routeOrder = ['workspace', 'tools', 'tasks', 'workflow', 'research-boards', 'admin']
+const routeOrder = ['workspace', 'tools', 'tasks', 'workflow', 'admin']
 
 watch(
   () => route.path,

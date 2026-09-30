@@ -1,4 +1,6 @@
 import type { ToolPackage } from '@/types/tool-packages'
+import type { ToolSchema } from '@/types/models'
+import { createEmptyParameterSchema } from '@/domain/tools/parameter-schema'
 
 export interface ToolPackageGuidedDraft {
   slug: string
@@ -6,9 +8,12 @@ export interface ToolPackageGuidedDraft {
   version: string
   description: string
   inputName: string
+  inputTitle: string
+  inputDescription: string
   inputType: string
   outputName: string
   outputType: string
+  parametersSchema: ToolSchema
   image: string
   imageDigest: string
   entrypoint: string
@@ -32,9 +37,12 @@ export function createToolPackageGuidedDraft(): ToolPackageGuidedDraft {
     version: '1.0.0',
     description: '',
     inputName: 'input_artifact',
+    inputTitle: '',
+    inputDescription: '',
     inputType: 'protein_structure@1',
     outputName: 'output_report',
     outputType: 'run_report@1',
+    parametersSchema: createEmptyParameterSchema(),
     image: '',
     imageDigest: `sha256:${ZERO_SHA256}`,
     entrypoint: 'python -m adapter',
@@ -67,10 +75,16 @@ export function buildToolPackageManifest(draft: ToolPackageGuidedDraft): Record<
       ...(draft.description.trim() ? { description: draft.description.trim() } : {})
     },
     artifacts: {
-      inputs: [{ name: input, type: draft.inputType, required: true }],
+      inputs: [{
+        name: input,
+        ...(draft.inputTitle.trim() ? { title: draft.inputTitle.trim() } : {}),
+        ...(draft.inputDescription.trim() ? { description: draft.inputDescription.trim() } : {}),
+        type: draft.inputType,
+        required: true,
+      }],
       outputs: [{ name: output, type: draft.outputType, cardinality: 'one', required: true }]
     },
-    parameters_schema: { type: 'object', properties: {} },
+    parameters_schema: draft.parametersSchema,
     adapter: {
       input: [{ input, method: adapterInputMethod }],
       output: [{ output, method: adapterOutputMethod }]

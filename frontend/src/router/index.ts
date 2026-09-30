@@ -89,30 +89,6 @@ const routes: RouteRecordRaw[] = [
     meta: { titleLiteral: '工作流运行详情', requiresAuth: true }
   },
   {
-    path: '/research-boards',
-    name: 'ResearchBoards',
-    component: () => import('@/views/research-boards/List.vue'),
-    meta: { title: 'nav.researchBoards', requiresAuth: true }
-  },
-  {
-    path: '/research-boards/:boardId',
-    name: 'LegacyResearchBoard',
-    component: () => import('@/views/research-boards/Board.vue'),
-    meta: { titleLiteral: '科研白板', requiresAuth: true, focusMode: true }
-  },
-  {
-    path: '/projects/:projectId/boards',
-    name: 'ProjectResearchBoards',
-    component: () => import('@/views/research-boards/List.vue'),
-    meta: { titleLiteral: '科研白板', requiresAuth: true }
-  },
-  {
-    path: '/projects/:projectId/boards/:boardId',
-    name: 'ProjectResearchBoard',
-    component: () => import('@/views/research-boards/Board.vue'),
-    meta: { titleLiteral: '科研白板', requiresAuth: true, focusMode: true }
-  },
-  {
     path: '/tools/:id',
     name: 'ToolDetail',
     component: () => import('@/views/tools/Detail.vue'),

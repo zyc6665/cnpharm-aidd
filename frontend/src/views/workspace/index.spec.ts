@@ -24,7 +24,6 @@ const overview = {
     created_at: '2026-07-30T00:00:00Z',
     updated_at: '2026-07-30T00:01:00Z',
   }],
-  boards: [{ id: 'board-1', name: '先导优化', node_count: 4, updated_at: '2026-07-30T00:00:00Z' }],
   workflows: [],
   files: [],
   frequent_tools: [{ id: 'tool-1', name: 'Docking', slug: 'docking', usage_count: 7 }],

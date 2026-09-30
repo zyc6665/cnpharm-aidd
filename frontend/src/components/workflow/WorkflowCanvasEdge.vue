@@ -1,7 +1,7 @@
 <template>
   <g class="workflow-canvas-edge" :class="{ 'is-active': active }">
     <path class="edge-path edge-path-shadow" :d="pathDefinition" />
-    <path class="edge-path" :d="pathDefinition" />
+    <path class="edge-path" :class="{ 'is-preview': preview }" :d="pathDefinition" marker-end="url(#workflow-edge-arrow)" />
     <text
       v-if="label"
       class="edge-label"
@@ -12,6 +12,7 @@
       {{ label }}
     </text>
     <g
+      v-if="showDelete"
       class="edge-delete-control"
       :data-edge-delete="edgeId"
       role="button"
@@ -31,13 +32,18 @@
   import { computed } from 'vue'
   import { useI18n } from 'vue-i18n'
 
-  const props = defineProps<{
+  const props = withDefaults(defineProps<{
     edgeId: string
     source: { x: number; y: number }
     target: { x: number; y: number }
     label?: string
     active?: boolean
-  }>()
+    preview?: boolean
+    showDelete?: boolean
+  }>(), {
+    preview: false,
+    showDelete: true,
+  })
 
   defineEmits<{
     (event: 'delete-edge'): void
@@ -73,6 +79,11 @@
     fill: none;
     stroke: rgba(59, 130, 246, 0.4);
     stroke-width: 2;
+  }
+
+  .edge-path.is-preview {
+    stroke-dasharray: 7 5;
+    stroke-width: 2.5;
   }
 
   .edge-path-shadow {

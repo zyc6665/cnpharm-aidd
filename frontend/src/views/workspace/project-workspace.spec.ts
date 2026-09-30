@@ -53,7 +53,6 @@ const overview = {
       updated_at: '2026-07-31T07:10:00Z'
     }
   ],
-  boards: [],
   workflows: [],
   artifacts: [
     {

@@ -35,8 +35,7 @@ export function getProjectOverviewStatCards(
   return [
     { label: 'Artifact', value: counts?.artifacts ?? 0 },
     { label: '任务', value: counts?.tasks ?? 0 },
-    { label: '工作流', value: counts?.workflows ?? 0 },
-    { label: '白板', value: counts?.boards ?? 0 }
+    { label: '工作流', value: counts?.workflows ?? 0 }
   ]
 }
 

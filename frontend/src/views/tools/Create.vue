@@ -733,20 +733,24 @@
 
             <template v-if="!isRemoteSelfRegister">
               <!-- 参数定义 -->
-              <a-divider orientation="left">参数定义</a-divider>
+              <a-divider orientation="left">科学运行参数</a-divider>
 
-              <a-form-item label="输入参数Schema" name="input_schema">
-                <a-textarea
-                  v-model:value="formState.input_schema"
-                  placeholder='{"type": "object", "properties": {"input": {"type": "string"}}}'
-                  :rows="5"
+              <a-form-item v-if="registrationMode !== 'package'" name="input_schema">
+                <ToolParameterSchemaEditor
+                  v-model:model-value="inputParameterSchema"
+                  :allow-file-fields="true"
+                  @validity-change="setInputSchemaEditorValidity"
                 />
-                <template #extra>
-                  <span class="form-extra">JSON Schema格式，定义工具的输入参数结构</span>
-                </template>
               </a-form-item>
+              <a-alert
+                v-else
+                type="info"
+                show-icon
+                message="运行参数来自 Tool Package v2"
+                description="请在 Tool Package 管理中维护模型参数；平台资源和标准 Artifact 输入在独立契约中配置。"
+              />
 
-              <a-form-item label="输出参数Schema" name="output_schema">
+              <a-form-item v-if="registrationMode !== 'package'" label="输出参数 Schema" name="output_schema">
                 <a-textarea
                   v-model:value="formState.output_schema"
                   placeholder='{"type": "object", "properties": {"result": {"type": "string"}}}'
@@ -977,6 +981,7 @@
   } from '@ant-design/icons-vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
+  import ToolParameterSchemaEditor from '@/components/tools/ToolParameterSchemaEditor.vue'
   import StructuredKeyValueEditor from '@/components/tools/StructuredKeyValueEditor.vue'
   import StructuredStringListEditor from '@/components/tools/StructuredStringListEditor.vue'
   import { useToolCreateEditorState } from '@/composables/useToolCreateEditorState'
@@ -995,9 +1000,12 @@
     buildToolVersionCreatePayload,
     remoteToolStageStatusDisplay,
     resolveToolCreateSubmissionBlocker,
+    createEmptyParameterSchema,
+    validateParameterSchema,
     type ToolConfigFormPatch,
     type ToolCreateFormState
   } from '@/domain/tools'
+  import type { ToolSchema } from '@/types/models'
   import type { ToolPackage } from '@/types/tool-packages'
   import { useToolsStore } from '@/stores'
   import { getToolPackage } from '@/api/tool-packages'
@@ -1045,6 +1053,34 @@
 
   // 表单状态
   const formState = reactive<ToolCreateFormState>(createToolCreateFormState())
+  const inputParameterSchema = computed<ToolSchema>({
+    get() {
+      try {
+        const parsed: unknown = JSON.parse(formState.input_schema)
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          !Array.isArray(parsed) &&
+          (parsed as Record<string, unknown>).type === 'object'
+        ) {
+          const record = parsed as Record<string, unknown>
+          return {
+            ...record,
+            properties: record.properties && typeof record.properties === 'object' && !Array.isArray(record.properties)
+              ? record.properties
+              : {},
+          } as ToolSchema
+        }
+      } catch {
+        return createEmptyParameterSchema()
+      }
+      return createEmptyParameterSchema()
+    },
+    set(schema) {
+      formState.input_schema = JSON.stringify(schema, null, 2)
+    },
+  })
+  const inputSchemaEditorValid = ref(true)
 
   const isRemoteSelfRegister = computed(
     () => !isEdit.value &&
@@ -1173,6 +1209,10 @@
 
   const remoteStageStatusDisplay = remoteToolStageStatusDisplay
 
+  function setInputSchemaEditorValidity(valid: boolean) {
+    inputSchemaEditorValid.value = valid
+  }
+
   const handleRemoteSelfRegisterSubmit = async () => {
     submitting.value = true
     remoteRegisterResult.value = null
@@ -1293,6 +1333,14 @@
     if (isRemoteSelfRegister.value) {
       await handleRemoteSelfRegisterSubmit()
       return
+    }
+
+    if (registrationMode.value !== 'package') {
+      const schemaErrors = validateParameterSchema(inputParameterSchema.value)
+      if (!inputSchemaEditorValid.value || schemaErrors.length > 0) {
+        message.error(schemaErrors[0] || '请先修正运行参数 Schema')
+        return
+      }
     }
 
     submitting.value = true

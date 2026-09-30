@@ -4,6 +4,7 @@
       v-if="showStandardArtifactInputs"
       :slots="standardInputSlots"
       :current-project-id="currentProjectId"
+      :project-artifact-placeholder="projectArtifactPlaceholder"
       :project-artifacts="projectArtifacts"
       :loading="standardArtifactsLoading"
       :selected-artifacts="selectedStandardArtifacts"
@@ -59,6 +60,7 @@
       standardInputSlots: readonly StandardArtifactInputSlot[]
       showStandardArtifactInputs: boolean
       currentProjectId?: string
+      projectArtifactPlaceholder?: string
       projectArtifacts: readonly TypedArtifact[]
       standardArtifactsLoading?: boolean
       selectedStandardArtifacts: Record<string, TypedArtifact | undefined>
@@ -80,6 +82,7 @@
     {
       schema: undefined,
       currentProjectId: undefined,
+      projectArtifactPlaceholder: 'Select a project file',
       standardArtifactsLoading: false,
       allowArtifacts: true,
       allowUploads: true,

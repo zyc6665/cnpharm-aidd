@@ -245,6 +245,8 @@ export interface ToolContract {
   artifacts?: {
     inputs?: Array<{
       name: string
+      title?: string | null
+      description?: string | null
       type: string
       required?: boolean
       role_preferences?: string[]

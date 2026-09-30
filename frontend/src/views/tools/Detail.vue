@@ -46,6 +46,7 @@
                   :standard-input-slots="standardInputSlots"
                   :show-standard-artifact-inputs="showStandardArtifactInputs"
                   :current-project-id="currentProjectId"
+                  :project-artifact-placeholder="t('tools.selectProjectArtifact')"
                   :project-artifacts="standardProjectArtifacts"
                   :standard-artifacts-loading="standardArtifactsLoading"
                   :selected-standard-artifacts="selectedStandardArtifacts"
@@ -84,24 +85,15 @@
                 <ToolRunFormActions
                   :submitting="submitting"
                   :can-submit="canSubmit"
+                  :disabled-reason="userStore.isAuthenticated ? undefined : t('auth.loginRequired')"
+                  :login-required="!userStore.isAuthenticated"
+                  @login="handleLogin"
                   @reset="resetForm"
                 />
               </a-form>
             </div>
           </div>
 
-          <ToolDetailSidebar
-            :tool="tool"
-            :validation-badges="toolValidationSummary.badges"
-            :is-remote-tool-v1="isRemoteToolV1"
-            :remote-tool-base-url="remoteToolBaseUrl"
-            :remote-tool-manifest-hash="remoteToolManifestHash"
-            :remote-tool-smoke-status="remoteToolSmokeStatus"
-            :remote-tool-smoke-task-id="remoteToolSmokeTaskId"
-            :remote-tool-smoke-error="remoteToolSmokeError"
-            :remote-tool-smoke-status-color="remoteToolSmokeStatusColor"
-            :remote-tool-smoke-status-text="remoteToolSmokeStatusText"
-          />
         </div>
       </div>
       <a-empty v-else :description="t('common.noData')" />
@@ -123,10 +115,10 @@
   import { message } from 'ant-design-vue'
   import type { FormInstance } from 'ant-design-vue/es/form'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import ToolDetailOverview from '@/components/tools/ToolDetailOverview.vue'
   import ToolDetailHeaderActions from '@/components/tools/ToolDetailHeaderActions.vue'
   import ToolFileFieldExtras from '@/components/tools/ToolFileFieldExtras.vue'
   import ToolDetailModals from '@/components/tools/ToolDetailModals.vue'
-  import ToolDetailSidebar from '@/components/tools/ToolDetailSidebar.vue'
   import ToolRunInputForm from '@/components/tools/ToolRunInputForm.vue'
   import ToolRunFormActions from '@/components/tools/ToolRunFormActions.vue'
   import ToolExamplePanel from '@/components/tools/ToolExamplePanel.vue'
@@ -146,10 +138,7 @@
   import { useToolDetailRunForm } from '@/composables/useToolDetailRunForm'
   import { useToolDetailStandardArtifacts } from '@/composables/useToolDetailStandardArtifacts'
   import { useToolDetailSubmission } from '@/composables/useToolDetailSubmission'
-  import {
-    getToolFileAccept,
-    getToolRequestErrorMessage,
-  } from '@/domain/tools'
+  import { getToolFileAccept, getToolRequestErrorMessage } from '@/domain/tools'
 
   const route = useRoute()
   const router = useRouter()
@@ -266,16 +255,7 @@
   }))
 
   const {
-    toolValidationSummary,
     executorType,
-    isRemoteToolV1,
-    remoteToolBaseUrl,
-    remoteToolManifestHash,
-    remoteToolSmokeStatus,
-    remoteToolSmokeTaskId,
-    remoteToolSmokeError,
-    remoteToolSmokeStatusColor,
-    remoteToolSmokeStatusText,
     detailSubtitle,
     documentationHtml,
   } = useToolDetailPresentation({
@@ -333,9 +313,9 @@
       router.push('/login')
     },
     onNoSchema: () => message.error(t('common.noData')),
-    onMissingStandardInputs: slotNames => {
-      message.error(`请选择或上传标准 Artifact 输入：${slotNames.join(', ')}`)
-    },
+    onMissingStandardInputs: slotNames => message.error(
+      t('tasks.missingInputs', { inputs: slotNames.join(', ') })
+    ),
     onBlocked: blockedMessage => message.error(blockedMessage),
     onTaskCreated: task => {
       message.success(t('tasks.created'))
@@ -359,6 +339,10 @@
     } finally {
       favoriteLoading.value = false
     }
+  }
+
+  const handleLogin = () => {
+    router.push({ name: 'Login', query: { redirect: route.fullPath } })
   }
 
   const resetForm = () => {
@@ -427,13 +411,8 @@
   }
 
   .tool-detail {
-    display: grid;
-    grid-template-columns: 1fr 320px;
-    gap: @spacing-xl;
-
-    @media (max-width: @screen-lg) {
-      grid-template-columns: 1fr;
-    }
+    display: flex;
+    justify-content: center;
   }
 
   .card {
@@ -446,6 +425,9 @@
 
   .tool-main {
     display: flex;
+    width: 100%;
+    max-width: 920px;
+    min-width: 0;
     flex-direction: column;
     gap: @spacing-xl;
   }

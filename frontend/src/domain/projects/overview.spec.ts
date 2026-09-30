@@ -34,15 +34,14 @@ function artifact(overrides: Partial<TypedArtifact> = {}): TypedArtifact {
 
 test('项目总览统计卡片按固定标签输出', () => {
   assert.deepEqual(
-    getProjectOverviewStatCards({ artifacts: 2, tasks: 3, workflows: 4, boards: 5 }),
+    getProjectOverviewStatCards({ artifacts: 2, tasks: 3, workflows: 4 }),
     [
       { label: 'Artifact', value: 2 },
       { label: '任务', value: 3 },
-      { label: '工作流', value: 4 },
-      { label: '白板', value: 5 }
+      { label: '工作流', value: 4 }
     ]
   )
-  assert.deepEqual(getProjectOverviewStatCards(undefined).map(item => item.value), [0, 0, 0, 0])
+  assert.deepEqual(getProjectOverviewStatCards(undefined).map(item => item.value), [0, 0, 0])
 })
 
 test('Artifact 类型标签优先使用标准类型和版本', () => {

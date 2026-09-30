@@ -1,5 +1,9 @@
 <template>
-  <div class="workflow-canvas-board" :style="boardViewportStyle">
+  <div
+    class="workflow-canvas-board"
+    :class="{ 'is-connecting': Boolean(connectingSourceNodeId) }"
+    :style="boardViewportStyle"
+  >
     <div class="canvas-toolbar">
       <div>
         <span class="canvas-kicker">{{ t('workflow.canvas.title') }}</span>
@@ -11,13 +15,33 @@
         <a-button size="small" :title="t('workflow.canvas.zoomOut')" @click="zoomOut"><ZoomOutOutlined /></a-button>
         <span class="zoom-value">{{ Math.round(zoom * 100) }}%</span>
         <a-button size="small" :title="t('workflow.canvas.zoomIn')" @click="zoomIn"><ZoomInOutlined /></a-button>
-        <a-button size="small" @click="resetZoom">{{ t('workflow.canvas.resetZoom') }}</a-button>
+        <a-button
+          size="small"
+          :title="t('workflow.canvas.resetZoom')"
+          :aria-label="t('workflow.canvas.resetZoom')"
+          @click="resetZoom"
+        >
+          <ReloadOutlined />
+        </a-button>
+        <a-button
+          size="small"
+          data-testid="canvas-fit-view"
+          :title="t('workflow.canvas.fitView')"
+          :aria-label="t('workflow.canvas.fitView')"
+          @click="fitView"
+        >
+          <FullscreenOutlined />
+        </a-button>
       </a-space>
     </div>
 
     <div
+      ref="viewportRef"
       class="canvas-viewport"
       @pointerup="cancelConnect"
+      @pointercancel="cancelConnect"
+      @pointermove="handleConnectionPointerMove"
+      @keydown.esc="cancelConnect"
       @wheel.ctrl.prevent="setZoom(zoom - $event.deltaY * 0.001)"
       @dragover.prevent="handleToolDragOver"
       @drop.prevent="handleToolDrop"
@@ -31,6 +55,19 @@
           role="img"
           :aria-label="t('workflow.canvas.edges', { count: preset.edges.length })"
         >
+          <defs>
+            <marker
+              id="workflow-edge-arrow"
+              markerWidth="10"
+              markerHeight="10"
+              refX="9"
+              refY="5"
+              orient="auto"
+              markerUnits="strokeWidth"
+            >
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(59, 130, 246, 0.58)" />
+            </marker>
+          </defs>
           <WorkflowCanvasEdge
             v-for="edge in resolvedEdges"
             :key="edge.id"
@@ -40,6 +77,16 @@
             :label="edge.label"
             :active="edge.active"
             @delete-edge="$emit('delete-edge', edge.id)"
+          />
+          <WorkflowCanvasEdge
+            v-if="connectionPreviewEdge"
+            :source="connectionPreviewEdge.source"
+            :target="connectionPreviewEdge.target"
+            edge-id="connection-preview"
+            :label="t('workflow.canvas.connecting')"
+            :active="true"
+            :preview="true"
+            :show-delete="false"
           />
         </svg>
 
@@ -56,7 +103,7 @@
           @select-node="$emit('select-node', $event)"
           @move-node="$emit('move-node', $event.nodeId, $event.position)"
           @delete-node="$emit('delete-node', $event)"
-          @run-node="$emit('run-node', $event)"
+          @configure-node="$emit('configure-node', $event)"
           @start-connect="handleStartConnect"
           @finish-connect="handleFinishConnect"
         >
@@ -75,8 +122,8 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, ref } from 'vue'
-  import { ZoomInOutlined, ZoomOutOutlined } from '@ant-design/icons-vue'
+  import { computed, onMounted, ref } from 'vue'
+  import { FullscreenOutlined, ReloadOutlined, ZoomInOutlined, ZoomOutOutlined } from '@ant-design/icons-vue'
   import { useCanvasViewport } from '@/composables/useCanvasViewport'
   import { useI18n } from 'vue-i18n'
   import type { ArtifactFile } from '@/types/models'
@@ -114,13 +161,15 @@
     (event: 'move-node', nodeId: string, position: { x: number; y: number }): void
     (event: 'add-tool-node', input: { toolSlug: string; position: { x: number; y: number } }): void
     (event: 'delete-node', nodeId: string): void
-    (event: 'run-node', nodeId: string): void
+    (event: 'configure-node', nodeId: string): void
     (event: 'delete-edge', edgeId: string): void
     (event: 'add-edge', input: { source: string; target: string; artifactType?: WorkflowArtifactSemanticType }): void
   }>()
 
   const connectingSourceNodeId = ref<string | null>(null)
   const surfaceRef = ref<HTMLElement | null>(null)
+  const viewportRef = ref<HTMLElement | null>(null)
+  const connectionCursor = ref({ x: 0, y: 0 })
 
   const presetName = computed(() => resolveWorkflowLabel(props.preset.nameKey, t, te, t('workflow.definition.titleFallback')))
 
@@ -171,34 +220,64 @@
           x: targetNode.position.x,
           y: targetNode.position.y + NODE_HEIGHT / 2
         },
-        label: resolveEdgeLabel(edge.artifactType, sourceNode, targetNode),
+        label: resolveEdgeLabel(edge.artifactType, sourceNode, targetNode, edge.branch),
         active: sourceNode.id === props.activeNodeId || targetNode.id === props.activeNodeId
       }]
     })
+  })
+
+  const connectionPreviewEdge = computed(() => {
+    if (!connectingSourceNodeId.value) {
+      return null
+    }
+
+    const sourceNode = nodeById.value[connectingSourceNodeId.value]
+    if (!sourceNode) {
+      return null
+    }
+
+    return {
+      source: {
+        x: sourceNode.position.x + NODE_WIDTH,
+        y: sourceNode.position.y + NODE_HEIGHT / 2,
+      },
+      target: connectionCursor.value,
+    }
   })
 
   function resolveEdgeLabel(
     artifactType: WorkflowArtifactSemanticType | undefined,
     sourceNode: WorkflowCanvasNodeModel,
     targetNode: WorkflowCanvasNodeModel,
+    branch?: 'true' | 'false',
   ) {
+    const branchLabel = branch ? t(`workflow.inspector.${branch}Branch`) : ''
     if (!artifactType) {
-      return undefined
+      return branchLabel || undefined
     }
 
     const outputSlot = sourceNode.outputArtifactSlots?.find(slot => slot.type === artifactType)
     const inputSlot = targetNode.inputArtifactSlots?.find(slot => slot.type === artifactType)
     if (outputSlot?.name && inputSlot?.name) {
-      return `${outputSlot.name} -> ${inputSlot.name} · ${artifactType}`
+      return [branchLabel, `${outputSlot.name} -> ${inputSlot.name} · ${artifactType}`]
+        .filter(Boolean)
+        .join(' · ')
     }
     if (inputSlot?.name) {
-      return `${inputSlot.name} · ${artifactType}`
+      return [branchLabel, `${inputSlot.name} · ${artifactType}`].filter(Boolean).join(' · ')
     }
-    return artifactType
+    return [branchLabel, artifactType].filter(Boolean).join(' · ')
   }
 
   function handleStartConnect(nodeId: string) {
     connectingSourceNodeId.value = nodeId
+    const sourceNode = nodeById.value[nodeId]
+    if (sourceNode) {
+      connectionCursor.value = {
+        x: sourceNode.position.x + NODE_WIDTH,
+        y: sourceNode.position.y + NODE_HEIGHT / 2,
+      }
+    }
   }
 
   function handleFinishConnect(targetNodeId: string) {
@@ -224,6 +303,42 @@
   function cancelConnect() {
     connectingSourceNodeId.value = null
   }
+
+  function handleConnectionPointerMove(event: PointerEvent) {
+    if (!connectingSourceNodeId.value || !surfaceRef.value) {
+      return
+    }
+
+    const rect = surfaceRef.value.getBoundingClientRect()
+    connectionCursor.value = {
+      x: Math.max(0, (event.clientX - rect.left) / zoom.value),
+      y: Math.max(0, (event.clientY - rect.top) / zoom.value),
+    }
+  }
+
+  function fitView() {
+    const viewport = viewportRef.value
+    if (!viewport) {
+      return
+    }
+
+    const availableWidth = viewport.clientWidth - 64
+    const availableHeight = viewport.clientHeight - 64
+    if (availableWidth <= 0 || availableHeight <= 0) {
+      return
+    }
+
+    setZoom(Math.min(
+      availableWidth / canvasSize.value.width,
+      availableHeight / canvasSize.value.height,
+    ))
+  }
+
+  onMounted(() => {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(fitView)
+    }
+  })
 
   function handleToolDragOver(event: DragEvent) {
     if (!event.dataTransfer) {
@@ -306,6 +421,7 @@
   }
 
   .canvas-viewport {
+    position: relative;
     min-height: 0;
     flex: 1;
     overflow: auto;
@@ -323,6 +439,29 @@
 
   .canvas-stage { position: relative; min-width: 100%; min-height: 100%; }
   .zoom-value { width: 48px; text-align: center; color: @text-secondary; font-size: @font-size-xs; }
+
+  .workflow-canvas-board.is-connecting .canvas-viewport,
+  .workflow-canvas-board.is-connecting .canvas-surface {
+    cursor: crosshair;
+  }
+
+  .workflow-canvas-board.is-connecting :deep(.node-port-input) {
+    border-color: @success-color;
+    background: rgba(82, 196, 26, 0.12);
+    box-shadow: 0 0 0 4px rgba(82, 196, 26, 0.14);
+  }
+
+  @media (max-width: @screen-md) {
+    .canvas-toolbar {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .canvas-toolbar :deep(.ant-space) {
+      width: 100%;
+      flex-wrap: wrap;
+    }
+  }
 
   .canvas-edges {
     position: absolute;

@@ -14,7 +14,7 @@ describe('WorkflowCanvasPanelNode', () => {
     for (const marker of [
       'workflow.canvasNode.connectTo',
       'workflow.canvasNode.connectFrom',
-      'workflow.canvasNode.run',
+      'workflow.canvasNode.configure',
       'workflow.canvasNode.delete',
       'workflow.canvasNode.inputs',
       'workflow.canvasNode.outputs',
@@ -34,7 +34,7 @@ describe('WorkflowCanvasPanelNode', () => {
     }
   })
 
-  it('renders a large node panel with status, run action, and preview slot', async () => {
+  it('renders a large node panel with status, configuration action, and preview slot', async () => {
     const wrapper = mount(WorkflowCanvasPanelNode, {
       props: {
         node: {
@@ -63,7 +63,7 @@ describe('WorkflowCanvasPanelNode', () => {
     expect(wrapper.find('[data-testid="node-preview"]').exists()).toBe(true)
     expect(wrapper.find('.panel-node-title-group h3').exists()).toBe(true)
 
-    await wrapper.find('[data-testid="run-node-button"]').trigger('click')
-    expect(wrapper.emitted('run-node')).toEqual([['fetch-pdb-node']])
+    await wrapper.find('[data-testid="configure-node-button"]').trigger('click')
+    expect(wrapper.emitted('configure-node')).toEqual([['fetch-pdb-node']])
   })
 })

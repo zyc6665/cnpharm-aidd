@@ -1,7 +1,9 @@
-import { computed, ref, type ComputedRef } from 'vue'
-import { message } from 'ant-design-vue'
+import { computed, ref, watch, type ComputedRef } from 'vue'
+import { Modal, message } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
 import { getTaskDetail } from '@/api/tasks'
+import { getProjectArtifacts, uploadProjectArtifact } from '@/api/artifacts'
+import { uploadFile } from '@/api/files'
 import type { WorkflowDefinitionPayload } from '@/api/workflows'
 import { deriveArtifactSlotsFromToolContract } from '@/workflow/contract-bindings'
 import {
@@ -17,6 +19,7 @@ import {
 } from '@/workflow/canvas-runner'
 import { type WorkflowArtifactSemanticType, type WorkflowTaskRef } from '@/workflow/artifact-types'
 import { isWorkflowSemanticType, normalizeWorkflowSemanticType } from '@/workflow/semantic-types'
+import type { TypedArtifact } from '@/types/artifacts'
 import type {
   WorkflowCanvasEdge,
   WorkflowCanvasNode,
@@ -47,6 +50,11 @@ export interface WorkflowPersistenceLabels {
   runCanceled: string
   nodeRetried: string
   loaded: string
+  discardUnsavedTitle: string
+  discardUnsavedContent: string
+  discardUnsavedConfirm: string
+  discardUnsavedCancel: string
+  missingInputs: (inputs: string[]) => string
 }
 
 const DEFAULT_WORKFLOW_PERSISTENCE_LABELS: WorkflowPersistenceLabels = {
@@ -60,6 +68,11 @@ const DEFAULT_WORKFLOW_PERSISTENCE_LABELS: WorkflowPersistenceLabels = {
   runCanceled: 'Workflow run canceled',
   nodeRetried: 'Workflow node retried',
   loaded: 'Workflow loaded',
+  discardUnsavedTitle: 'Unsaved workflow changes',
+  discardUnsavedContent: 'Discard the current workflow edits?',
+  discardUnsavedConfirm: 'Discard changes',
+  discardUnsavedCancel: 'Continue editing',
+  missingInputs: inputs => `Select required inputs first: ${inputs.join(', ')}`,
 }
 
 export function useWorkflowPersistence(input: {
@@ -94,8 +107,47 @@ export function useWorkflowPersistence(input: {
   const workflowName = ref(persistenceLabels.value.untitledWorkflow)
   const selectedSavedWorkflowId = ref<string | undefined>()
   const workflowRunInputSelections = ref<Record<string, string | undefined>>({})
+  const projectWorkflowArtifacts = ref<TypedArtifact[]>([])
+  const projectWorkflowArtifactsLoading = ref(false)
+  const uploadingWorkflowInputKey = ref<string | null>(null)
   const workflowRunAutoSyncTimer = ref<number | null>(null)
+  const cleanWorkflowSignature = ref('')
   const router = useRouter()
+
+  function currentWorkflowSignature(): string {
+    const definition = buildCurrentWorkflowDefinition()
+    return JSON.stringify({
+      name: workflowName.value,
+      canvas_preset_id: editableCanvasPreset.value.id,
+      nodes: definition.nodes,
+      edges: definition.edges,
+      selected_tool_by_node: workflowStore.selectedToolByNode,
+      artifact_bindings_by_node: workflowStore.artifactBindingsByNode,
+    })
+  }
+
+  const hasUnsavedWorkflowChanges = computed(
+    () => currentWorkflowSignature() !== cleanWorkflowSignature.value
+  )
+
+  function markWorkflowClean() {
+    cleanWorkflowSignature.value = currentWorkflowSignature()
+  }
+
+  async function confirmDiscardWorkflowChanges(): Promise<boolean> {
+    if (!hasUnsavedWorkflowChanges.value) return true
+    return await new Promise(resolve => {
+      Modal.confirm({
+        title: persistenceLabels.value.discardUnsavedTitle,
+        content: persistenceLabels.value.discardUnsavedContent,
+        okText: persistenceLabels.value.discardUnsavedConfirm,
+        okType: 'danger',
+        cancelText: persistenceLabels.value.discardUnsavedCancel,
+        onOk: () => resolve(true),
+        onCancel: () => resolve(false),
+      })
+    })
+  }
 
   const savedWorkflowOptions = computed(() => {
     return workflowDefinitionsStore.workflowDefinitions
@@ -106,6 +158,10 @@ export function useWorkflowPersistence(input: {
       }))
   })
 
+  if (!workflowStore.hasCanvasOverride) {
+    markWorkflowClean()
+  }
+
   const selectedWorkflowInputFiles = computed(() => {
     return buildWorkflowInputFileMap(
       workflowInputRequirements.value,
@@ -113,19 +169,68 @@ export function useWorkflowPersistence(input: {
     )
   })
 
+  const workflowInputOptionsLoading = computed(() =>
+    projectId?.value ? projectWorkflowArtifactsLoading.value : artifactsStore.loading
+  )
+  const hasWorkflowInputOptions = computed(() =>
+    Object.values(artifactOptionsBySemanticType.value).some(options => options.length > 0)
+  )
+
   const artifactOptionsBySemanticType = computed(() => {
     return workflowInputRequirements.value.reduce<
       Record<string, Array<{ value: string; label: string }>>
     >((accumulator, semanticType) => {
-      accumulator[semanticType] = artifactsStore.items
-        .filter(artifact => artifact.semantic_type === semanticType)
-        .map(artifact => ({
-          value: artifact.id,
-          label: `${artifact.filename} · ${artifact.tool_name}`
-        }))
+      if (projectId?.value) {
+        accumulator[semanticType] = projectWorkflowArtifacts.value
+          .filter(artifact => isProjectArtifactUsableForInput(artifact, semanticType))
+          .map(artifact => ({
+            value: `artifact_version:${artifact.latest_version.id}`,
+            label: `${artifact.name} · v${artifact.latest_version.version}`
+          }))
+      } else {
+        accumulator[semanticType] = artifactsStore.items
+          .filter(artifact => artifact.semantic_type === semanticType)
+          .map(artifact => ({
+            value: artifact.id,
+            label: `${artifact.filename} · ${artifact.tool_name}`
+          }))
+      }
       return accumulator
     }, {})
   })
+
+  let artifactRequestId = 0
+  async function loadProjectWorkflowArtifacts() {
+    const requestId = ++artifactRequestId
+    const currentProjectId = projectId?.value
+    if (!currentProjectId || !userStore.isLoggedIn) {
+      projectWorkflowArtifacts.value = []
+      projectWorkflowArtifactsLoading.value = false
+      return
+    }
+
+    projectWorkflowArtifactsLoading.value = true
+    try {
+      const response = await getProjectArtifacts(currentProjectId)
+      if (requestId === artifactRequestId) {
+        projectWorkflowArtifacts.value = response.data.items
+      }
+    } catch {
+      if (requestId === artifactRequestId) {
+        projectWorkflowArtifacts.value = []
+      }
+    } finally {
+      if (requestId === artifactRequestId) {
+        projectWorkflowArtifactsLoading.value = false
+      }
+    }
+  }
+
+  watch(
+    () => [projectId?.value, userStore.isLoggedIn] as const,
+    () => void loadProjectWorkflowArtifacts(),
+    { immediate: true }
+  )
 
   async function handleSaveWorkflow() {
     const payload = buildWorkflowDefinitionPayload()
@@ -137,19 +242,26 @@ export function useWorkflowPersistence(input: {
       )
       selectedSavedWorkflowId.value = saved.id
       workflowName.value = saved.name
+      markWorkflowClean()
       message.success(persistenceLabels.value.saved)
     } catch {
       // Request layer displays error details.
     }
   }
 
-  function handleNewWorkflow() {
+  function resetToNewWorkflow() {
     workflowStore.resetSession(userStore.user?.id)
     workflowStore.clearActiveWorkflowRun()
     workflowDefinitionsStore.clearCurrentWorkflowDefinition()
     selectedSavedWorkflowId.value = undefined
     workflowName.value = persistenceLabels.value.untitledWorkflow
     workflowRunInputSelections.value = {}
+    markWorkflowClean()
+  }
+
+  async function handleNewWorkflow() {
+    if (!await confirmDiscardWorkflowChanges()) return
+    resetToNewWorkflow()
   }
 
   async function handleDuplicateWorkflow() {
@@ -168,6 +280,7 @@ export function useWorkflowPersistence(input: {
       })
       selectedSavedWorkflowId.value = saved.id
       workflowName.value = saved.name
+      markWorkflowClean()
       message.success(persistenceLabels.value.duplicated)
     } catch {
       // Request layer displays error details.
@@ -175,13 +288,13 @@ export function useWorkflowPersistence(input: {
   }
 
   async function handleArchiveWorkflow() {
-    if (!selectedWorkflowIdExists()) {
+    if (!selectedWorkflowIdExists() || !await confirmDiscardWorkflowChanges()) {
       return
     }
 
     try {
       await workflowDefinitionsStore.archiveWorkflowDefinition(selectedSavedWorkflowId.value!)
-      handleNewWorkflow()
+      resetToNewWorkflow()
       message.success(persistenceLabels.value.archived)
     } catch {
       // Request layer displays error details.
@@ -189,20 +302,21 @@ export function useWorkflowPersistence(input: {
   }
 
   async function handleDeleteWorkflow() {
-    if (!selectedWorkflowIdExists()) {
+    if (!selectedWorkflowIdExists() || !await confirmDiscardWorkflowChanges()) {
       return
     }
 
     try {
       await workflowDefinitionsStore.removeWorkflowDefinition(selectedSavedWorkflowId.value!)
-      handleNewWorkflow()
+      resetToNewWorkflow()
       message.success(persistenceLabels.value.deleted)
     } catch {
       // Request layer displays error details.
     }
   }
 
-  function applyWorkflowDraft(draft: AiddWorkflowDraft) {
+  async function applyWorkflowDraft(draft: AiddWorkflowDraft) {
+    if (!await confirmDiscardWorkflowChanges()) return
     workflowDefinitionsStore.clearCurrentWorkflowDefinition()
     selectedSavedWorkflowId.value = undefined
     workflowName.value = draft.name
@@ -219,6 +333,7 @@ export function useWorkflowPersistence(input: {
   }
 
   async function saveWorkflowDraft(draft: AiddWorkflowDraft, projectId: string) {
+    if (!await confirmDiscardWorkflowChanges()) return
     const canvasPayload = mapWorkflowDefinitionToCanvasPayload({
       canvasPresetId: 'aidd-workflow-draft',
       name: draft.name,
@@ -252,11 +367,20 @@ export function useWorkflowPersistence(input: {
         toolsBySlug: workflowToolsBySlug?.value,
       })
     )
+    markWorkflowClean()
     message.success(persistenceLabels.value.draftSaved)
     return saved
   }
 
   async function handleRunWorkflowDefinition() {
+    const missingInputs = workflowInputRequirements.value.filter(
+      semanticType => !selectedWorkflowInputFiles.value[semanticType]
+    )
+    if (missingInputs.length) {
+      message.warning(persistenceLabels.value.missingInputs(missingInputs))
+      return
+    }
+
     const definition = buildCurrentWorkflowDefinition()
     const validationResult = validateWorkflowDefinition(definition)
     const executionValidationResult = validateWorkflowExecutionOrder(definition)
@@ -272,6 +396,7 @@ export function useWorkflowPersistence(input: {
       )
       selectedSavedWorkflowId.value = saved.id
       workflowName.value = saved.name
+      markWorkflowClean()
 
       const run = await workflowStore.runWorkflowDefinition(saved.id, {
         name: saved.name,
@@ -373,8 +498,17 @@ export function useWorkflowPersistence(input: {
   async function autofillWorkflowInputSelections() {
     const nextSelections: Record<string, string | undefined> = {}
     for (const semanticType of workflowInputRequirements.value) {
-      const artifact = findLatestArtifactForSemanticType(artifactsStore.items, semanticType)
-      nextSelections[semanticType] = artifact?.id
+      if (projectId?.value) {
+        const artifact = [...projectWorkflowArtifacts.value]
+          .filter(item => isProjectArtifactUsableForInput(item, semanticType))
+          .sort((left, right) => right.updated_at.localeCompare(left.updated_at))[0]
+        nextSelections[semanticType] = artifact
+          ? `artifact_version:${artifact.latest_version.id}`
+          : undefined
+      } else {
+        const artifact = findLatestArtifactForSemanticType(artifactsStore.items, semanticType)
+        nextSelections[semanticType] = artifact?.id
+      }
     }
     workflowRunInputSelections.value = nextSelections
   }
@@ -383,6 +517,37 @@ export function useWorkflowPersistence(input: {
     workflowRunInputSelections.value = {
       ...workflowRunInputSelections.value,
       [semanticType]: artifactId
+    }
+  }
+
+  async function handleWorkflowInputUpload(semanticType: string, file: File) {
+    uploadingWorkflowInputKey.value = semanticType
+    try {
+      if (projectId?.value) {
+        const normalizedType = normalizeWorkflowSemanticType(semanticType)
+        const standardMatch = /^([a-z][a-z0-9_]*)@(\d+)$/.exec(normalizedType)
+        const baseSemanticType = semanticType.split('@')[0] ?? semanticType
+        const artifact = await uploadProjectArtifact(projectId.value, {
+          file,
+          artifact_type: standardMatch?.[1] ?? 'file',
+          semantic_type: baseSemanticType,
+          ...(standardMatch
+            ? { standard_type: standardMatch[1], standard_version: Number(standardMatch[2]) }
+            : {}),
+        })
+        await loadProjectWorkflowArtifacts()
+        handleWorkflowInputSelect(
+          semanticType,
+          `artifact_version:${artifact.data.latest_version.id}`
+        )
+      } else {
+        const uploaded = await uploadFile(file)
+        handleWorkflowInputSelect(semanticType, uploaded.data.id)
+      }
+    } catch {
+      // The request layer displays upload errors.
+    } finally {
+      uploadingWorkflowInputKey.value = null
     }
   }
 
@@ -435,7 +600,7 @@ export function useWorkflowPersistence(input: {
   }
 
   async function handleLoadWorkflow() {
-    if (!selectedSavedWorkflowId.value) {
+    if (!selectedSavedWorkflowId.value || !await confirmDiscardWorkflowChanges()) {
       return
     }
 
@@ -454,6 +619,7 @@ export function useWorkflowPersistence(input: {
         })
       )
       workflowName.value = workflow.name
+      markWorkflowClean()
       const restoredFromDefinition = await restoreNodeTasksFromWorkflowDefinition(workflow)
       if (restoredFromDefinition === 0) {
         await restoreNodeTasksFromTaskBindings(sessionTaskBindings, workflow)
@@ -589,8 +755,13 @@ export function useWorkflowPersistence(input: {
     workflowRunInputSelections,
     workflowRunAutoSyncTimer,
     savedWorkflowOptions,
+    hasUnsavedWorkflowChanges,
+    confirmDiscardWorkflowChanges,
     selectedWorkflowInputFiles,
     artifactOptionsBySemanticType,
+    workflowInputOptionsLoading,
+    hasWorkflowInputOptions,
+    uploadingWorkflowInputKey,
     handleSaveWorkflow,
     handleNewWorkflow,
     handleDuplicateWorkflow,
@@ -608,6 +779,7 @@ export function useWorkflowPersistence(input: {
     handleWorkflowRunDetail,
     autofillWorkflowInputSelections,
     handleWorkflowInputSelect,
+    handleWorkflowInputUpload,
     scheduleWorkflowRunAutoSync,
     clearWorkflowRunAutoSync,
     restoreActiveWorkflowRun,
@@ -638,7 +810,8 @@ export function mapWorkflowDefinitionToCanvasPayload(input: {
       id: resolveWorkflowEdgeId(edge.id, index),
       source: edge.source,
       target: edge.target,
-      artifactType: edge.source_output ?? edge.target_input
+      artifactType: edge.source_output ?? edge.target_input,
+      branch: edge.branch === 'true' || edge.branch === 'false' ? edge.branch : undefined
     })),
     selected_tool_by_node: buildSelectedToolByNode(nodes, selectedToolByNode),
     artifact_bindings_by_node: normalizeArtifactBindings(definition.artifact_bindings_by_node),
@@ -888,4 +1061,16 @@ function resolveWorkflowNodePosition(node: WorkflowDefinitionNode) {
 
 function resolveWorkflowEdgeId(edgeId: unknown, index: number): string {
   return typeof edgeId === 'string' && edgeId ? edgeId : `edge-${index}`
+}
+
+function isProjectArtifactUsableForInput(artifact: TypedArtifact, semanticType: string): boolean {
+  const version = artifact.latest_version
+  if (!version || version.status !== 'available') return false
+  if (version.expires_at && new Date(version.expires_at).getTime() <= Date.now()) return false
+
+  const expectedType = normalizeWorkflowSemanticType(semanticType)
+  const artifactType = artifact.standard_type && artifact.standard_version
+    ? `${artifact.standard_type}@${artifact.standard_version}`
+    : normalizeWorkflowSemanticType(artifact.semantic_type)
+  return artifactType === expectedType || normalizeWorkflowSemanticType(artifact.semantic_type) === expectedType
 }

@@ -112,7 +112,35 @@ defineEmits<{
   }
 
   .workflow-workbench__body {
-    min-height: 720px;
+    min-height: 0;
+    display: grid;
+    grid-template-rows: auto minmax(560px, 1fr) auto;
+    overflow: auto;
+  }
+
+  .workflow-workbench__canvas {
+    min-height: 560px;
+    order: 2;
+  }
+
+  .workflow-workbench__body :deep(.resizable-workbench-sidebar) {
+    width: 100% !important;
+    height: auto;
+    min-height: 0;
+    max-height: 360px;
+  }
+
+  .workflow-workbench__body :deep(.resizable-workbench-sidebar.is-left) {
+    order: 1;
+  }
+
+  .workflow-workbench__body :deep(.resizable-workbench-sidebar.is-right) {
+    order: 3;
+  }
+
+  .workflow-workbench__body :deep(.sidebar-content) {
+    height: auto;
+    max-height: 316px;
   }
 }
 </style>

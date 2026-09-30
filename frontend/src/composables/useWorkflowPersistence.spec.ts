@@ -244,10 +244,10 @@ describe('mapWorkflowDefinitionToCanvasPayload', () => {
     })
   })
 
-  it('preserves artifact bindings from research board workflow drafts', () => {
+  it('preserves artifact bindings when restoring a workflow definition', () => {
     const payload = mapWorkflowDefinitionToCanvasPayload({
-      canvasPresetId: 'research-board-draft',
-      name: 'Board Draft',
+      canvasPresetId: 'free-canvas',
+      name: 'Workflow Draft',
       definition: {
         nodes: [
           {

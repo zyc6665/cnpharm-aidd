@@ -68,6 +68,7 @@ async def create_workflow_run(
         db,
         current_user=current_user,
         input_files=data.input_files,
+        project_id=workflow.project_id,
     )
     missing_inputs = sorted(required_workflow_inputs(definition) - set(input_files.keys()))
     if missing_inputs:

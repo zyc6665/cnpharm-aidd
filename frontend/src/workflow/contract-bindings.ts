@@ -11,6 +11,8 @@ export interface WorkflowToolFieldBinding {
 
 export interface ArtifactInputSlot {
   readonly name: string
+  readonly title?: string
+  readonly description?: string
   readonly type: WorkflowArtifactSemanticType
   readonly required: boolean
   readonly rolePreferences?: readonly string[]
@@ -127,6 +129,8 @@ export function deriveArtifactSlotsFromToolContract(
 
         const inputSlot: ArtifactInputSlot = {
           name: slot.name,
+          title: slot.title ?? undefined,
+          description: slot.description ?? undefined,
           type,
           required: slot.required ?? true
         }

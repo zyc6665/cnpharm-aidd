@@ -17,7 +17,7 @@
       :description="t('workflow.canvasPresets.emptyRunInputs')"
     />
     <div v-else class="run-input-grid">
-      <label
+      <div
         v-for="requirement in displayRequirements"
         :key="requirement.key"
         class="run-input-field"
@@ -33,7 +33,25 @@
           option-filter-prop="label"
           @change="emit('select', requirement.key, $event)"
         />
-      </label>
+        <a-upload
+          :show-upload-list="false"
+          :before-upload="(file: File) => beforeUpload(requirement.key, file)"
+        >
+          <a-button
+            size="small"
+            :disabled="!canUpload"
+            :loading="uploadingKey === requirement.key"
+          >
+            {{
+              t(
+                uploadingKey === requirement.key
+                  ? 'workflow.canvasPresets.uploadingInput'
+                  : 'workflow.canvasPresets.uploadInput'
+              )
+            }}
+          </a-button>
+        </a-upload>
+      </div>
     </div>
   </div>
 </template>
@@ -50,11 +68,14 @@
     optionsBySemanticType: Record<string, Array<{ value: string; label: string }>>
     loading?: boolean
     autoFillDisabled?: boolean
+    canUpload?: boolean
+    uploadingKey?: string | null
   }>()
 
   const emit = defineEmits<{
     'auto-fill': []
     select: [semanticType: string, artifactId: string | undefined]
+    upload: [semanticType: string, file: File]
   }>()
 
   const { t } = useI18n()
@@ -73,6 +94,11 @@
 
   function resolveOptions(semanticType: string) {
     return props.optionsBySemanticType[semanticType] ?? []
+  }
+
+  function beforeUpload(semanticType: string, file: File) {
+    emit('upload', semanticType, file)
+    return false
   }
 </script>
 
@@ -109,6 +135,7 @@
   .run-input-field {
     display: grid;
     gap: @spacing-xs;
+    align-content: start;
 
     span {
       color: @text-color-light-secondary;

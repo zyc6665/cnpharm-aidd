@@ -138,17 +138,44 @@
           <a-row :gutter="16">
             <a-col :span="12">
               <a-form-item label="输入 Artifact" required>
-                <a-input v-model:value="guidedDraft.inputName" addon-before="名称" />
-                <a-input v-model:value="guidedDraft.inputType" addon-before="类型" class="stacked-input" placeholder="protein_structure@1" />
+                <a-input v-model:value="guidedDraft.inputName" addon-before="内部名称" />
+                <a-input
+                  v-model:value="guidedDraft.inputTitle"
+                  addon-before="显示名称"
+                  class="stacked-input"
+                  placeholder="例如：靶标蛋白结构"
+                />
+                <a-select v-model:value="guidedDraft.inputType" class="stacked-input">
+                  <a-select-option v-for="type in standardArtifactTypes" :key="type" :value="type">
+                    {{ standardArtifactTypeLabel(type) }} · {{ type }}
+                  </a-select-option>
+                </a-select>
+                <a-textarea
+                  v-model:value="guidedDraft.inputDescription"
+                  class="stacked-input"
+                  :rows="2"
+                  placeholder="输入文件的用途和格式要求"
+                />
               </a-form-item>
             </a-col>
             <a-col :span="12">
               <a-form-item label="输出 Artifact" required>
                 <a-input v-model:value="guidedDraft.outputName" addon-before="名称" />
-                <a-input v-model:value="guidedDraft.outputType" addon-before="类型" class="stacked-input" placeholder="run_report@1" />
+                <a-select v-model:value="guidedDraft.outputType" class="stacked-input">
+                  <a-select-option v-for="type in standardArtifactTypes" :key="type" :value="type">
+                    {{ standardArtifactTypeLabel(type) }} · {{ type }}
+                  </a-select-option>
+                </a-select>
               </a-form-item>
             </a-col>
           </a-row>
+          <a-form-item label="科学参数">
+            <ToolParameterSchemaEditor
+              v-model:model-value="guidedDraft.parametersSchema"
+              :allow-file-fields="false"
+              @validity-change="setPackageParameterSchemaValidity"
+            />
+          </a-form-item>
           <a-row :gutter="16">
             <a-col :span="14">
               <a-form-item label="容器镜像" required>
@@ -311,6 +338,7 @@
   import { message } from 'ant-design-vue'
   import { PlusOutlined } from '@ant-design/icons-vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import ToolParameterSchemaEditor from '@/components/tools/ToolParameterSchemaEditor.vue'
   import {
     createToolPackage,
     getToolPackage,
@@ -330,7 +358,10 @@
     buildToolPackageManifest,
     createToolPackageGuidedDraft
   } from '@/domain/tool-packages/manifest'
+  import { getStandardArtifactTypeLabelKey } from '@/domain/tools/standard-artifact-inputs'
   import type { ToolPackage } from '@/types/tool-packages'
+  import { validateParameterSchema } from '@/domain/tools/parameter-schema'
+  import { WORKFLOW_ARTIFACT_SEMANTIC_TYPES } from '@/workflow/semantic-types'
 
   const { t } = useI18n()
   const loading = ref(false)
@@ -347,6 +378,8 @@
   const signatureText = ref('')
   const registrationEditor = ref<'guided' | 'json'>('guided')
   const guidedDraft = ref(createToolPackageGuidedDraft())
+  const packageParameterSchemaValid = ref(true)
+  const standardArtifactTypes = WORKFLOW_ARTIFACT_SEMANTIC_TYPES.filter(type => type.includes('@'))
 
   const columns = [
     { title: 'Tool Package', key: 'package' },
@@ -402,11 +435,28 @@
     signatureText.value = ''
     registrationEditor.value = 'guided'
     guidedDraft.value = createToolPackageGuidedDraft()
+    packageParameterSchemaValid.value = true
+  }
+
+  function setPackageParameterSchemaValidity(valid: boolean) {
+    packageParameterSchemaValid.value = valid
+  }
+
+  function standardArtifactTypeLabel(type: string): string {
+    const key = getStandardArtifactTypeLabelKey(type)
+    return key ? t(key) : type
   }
 
   async function handleCreatePackage() {
     let manifest: Record<string, unknown>
     if (registrationEditor.value === 'guided') {
+      const schemaErrors = validateParameterSchema(guidedDraft.value.parametersSchema, {
+        allowLegacyUiTypes: false,
+      })
+      if (!packageParameterSchemaValid.value || schemaErrors.length > 0) {
+        message.error(schemaErrors[0] || '请先修正科学参数 Schema')
+        return
+      }
       manifest = buildToolPackageManifest(guidedDraft.value)
     } else {
       try {

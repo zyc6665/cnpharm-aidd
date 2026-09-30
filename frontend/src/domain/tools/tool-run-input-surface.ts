@@ -16,6 +16,13 @@ export interface ToolRunInputSurface {
   usesConcreteStandardInputFields: boolean
 }
 
+function resolveContractInputSchema(tool?: Tool | null): ToolSchema | undefined {
+  const schema = tool?.contract?.schema?.input
+  return schema?.type === 'object' && schema.properties && typeof schema.properties === 'object'
+    ? schema
+    : undefined
+}
+
 function resolveLegacyInputSchema(tool?: Tool | null): ToolSchema | undefined {
   const config = tool?.current_version?.config
   if (config && typeof config === 'object' && 'input_schema' in config) {
@@ -35,19 +42,19 @@ function concreteFieldsCoverAllStandardInputs(
 export function resolveToolRunInputSurface(tool?: Tool | null): ToolRunInputSurface {
   const standardInputSlots = resolveToolStandardInputSlots(tool)
   const standardParameterSchema = resolveToolPackageParameterSchema(tool) ?? undefined
-  const legacyInputSchema = resolveLegacyInputSchema(tool)
-  const legacyFlattenedSchema = flattenToolInputSchema(legacyInputSchema)
+  const inputSchema = resolveContractInputSchema(tool) ?? resolveLegacyInputSchema(tool)
+  const flattenedInputSchema = flattenToolInputSchema(inputSchema)
   const legacyStandardFieldBindings = resolveStandardInputFileFieldBindings({
     slots: standardInputSlots,
-    flattenedSchema: legacyFlattenedSchema,
+    flattenedSchema: flattenedInputSchema,
   })
   const usesConcreteStandardInputFields = concreteFieldsCoverAllStandardInputs(
     standardInputSlots,
     legacyStandardFieldBindings,
   )
   const schema = usesConcreteStandardInputFields
-    ? legacyInputSchema
-    : standardParameterSchema ?? legacyInputSchema
+    ? inputSchema
+    : standardParameterSchema ?? inputSchema
 
   return {
     schema,

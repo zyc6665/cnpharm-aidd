@@ -8,13 +8,7 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.artifact_standards.registry import is_standard_artifact_ref, validate_standard_artifact_roles
-
-try:
-    from jsonschema import Draft7Validator
-
-    HAS_JSONSCHEMA = True
-except ImportError:  # pragma: no cover - optional runtime dependency guard
-    HAS_JSONSCHEMA = False
+from app.tools.schema_validator import validate_json_schema_definition
 
 
 REMOTE_TOOL_API_VERSION = "aidd.sciminer/remote-tool.v1"
@@ -206,9 +200,4 @@ class RemoteToolManifest(BaseModel):
     def _validate_parameters_schema(cls, value: dict[str, Any]) -> dict[str, Any]:
         if value.get("type") != "object":
             raise ValueError("parameters_schema.type must be object")
-        if HAS_JSONSCHEMA:
-            try:
-                Draft7Validator.check_schema(value)
-            except Exception as exc:
-                raise ValueError(f"parameters_schema must be valid JSON Schema Draft-07: {exc}") from exc
-        return value
+        return validate_json_schema_definition(value, "parameters_schema")

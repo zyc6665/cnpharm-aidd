@@ -40,6 +40,17 @@ const STANDARD_TYPE_FILE_FIELD_TOKENS: Record<string, readonly string[]> = {
   'molecule_table@1': ['molecules', 'molecule_table', 'smiles_csv', 'ranking_csv', 'table_file'],
   'run_report@1': ['report_json', 'report', 'run_report'],
 }
+const STANDARD_ARTIFACT_TYPE_LABEL_KEYS: Record<string, string> = {
+  'protein_structure@1': 'tools.standardArtifactTypes.proteinStructure',
+  'binding_pocket@1': 'tools.standardArtifactTypes.bindingPocket',
+  'ligand_structure@1': 'tools.standardArtifactTypes.ligandStructure',
+  'molecule_table@1': 'tools.standardArtifactTypes.moleculeTable',
+  'run_report@1': 'tools.standardArtifactTypes.runReport',
+}
+
+export function getStandardArtifactTypeLabelKey(type: string): string | undefined {
+  return STANDARD_ARTIFACT_TYPE_LABEL_KEYS[type]
+}
 
 function isRecord(value: unknown): value is UnknownRecord {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -174,6 +185,12 @@ function resolveSlotsFromManifest(manifest: UnknownRecord | null): StandardArtif
 
       return {
         name: slot.name.trim(),
+        ...(typeof slot.title === 'string' && slot.title.trim()
+          ? { title: slot.title.trim() }
+          : {}),
+        ...(typeof slot.description === 'string' && slot.description.trim()
+          ? { description: slot.description.trim() }
+          : {}),
         type,
         required: typeof slot.required === 'boolean' ? slot.required : true,
       }
@@ -302,6 +319,14 @@ export function buildStandardInputUploadsFromFileFields(input: {
 }
 
 export function resolveToolPackageParameterSchema(tool?: Tool | null): ToolSchema | null {
+  const contract = resolveToolContract(tool)
+  if (contract?.executor.type === 'tool_package') {
+    const schema = contract.schema.input
+    if (schema?.type === 'object' && isRecord(schema.properties)) {
+      return schema
+    }
+  }
+
   const manifest = resolveEmbeddedManifest(tool)
   if (!manifest || manifest.api_version !== 'aidd.sciminer/tool-package.v2') {
     return null

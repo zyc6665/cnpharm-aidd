@@ -338,7 +338,6 @@ async def test_feature_flags_endpoint_exposes_aidd_release_gates(
         "AIDD_PROJECT_WORKSPACE_ENABLED",
         "AIDD_PROJECT_CONVERSATIONS_ENABLED",
         "TOOL_PACKAGE_V1_ENABLED",
-        "PROJECT_RESEARCH_BOARD_ENABLED",
         "LEGACY_AIDD_API_ENABLED",
     }
 
@@ -355,7 +354,6 @@ async def test_feature_flags_endpoint_exposes_aidd_release_gates(
         for item in items.values()
     )
     assert all(isinstance(item["rollout"]["user_count"], int) for item in items.values())
-    assert items["PROJECT_RESEARCH_BOARD_ENABLED"]["description"]
 
 
 @pytest.mark.asyncio

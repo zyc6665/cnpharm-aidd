@@ -1,29 +1,11 @@
 <template>
   <div class="standard-artifact-inputs">
-    <div class="standard-artifact-inputs__header">
-      <span>标准 Artifact 输入</span>
-      <a-tag color="blue">Tool Package v2</a-tag>
-    </div>
-
-    <a-alert
-      v-if="!currentProjectId"
-      type="info"
-      show-icon
-      message="可直接上传文件运行；如需复用项目 Artifact，请从项目内进入工具或在 URL 带 project_id。"
-    />
-    <a-alert
-      v-else-if="!loading && projectArtifacts.length === 0"
-      type="info"
-      show-icon
-      message="当前项目暂无可绑定的标准 Artifact。"
-    />
-
     <a-form-item
       v-for="slot in slots"
       :key="slot.name"
-      :label="slot.name"
+      :label="slot.title || standardArtifactTypeLabel(slot.type) || slot.name"
       :required="slot.required"
-      :extra="`标准类型：${slot.type}`"
+      :extra="slot.description"
     >
       <div class="standard-artifact-input-control">
         <a-select
@@ -33,7 +15,7 @@
           allow-clear
           show-search
           option-filter-prop="label"
-          placeholder="选择项目中的兼容 ArtifactVersion"
+          :placeholder="projectArtifactPlaceholder"
           @change="selectArtifact(slot.name, $event)"
         >
           <a-select-option
@@ -44,7 +26,7 @@
           >
             <div class="standard-artifact-option">
               <span>{{ artifact.name || artifact.latest_version.filename }}</span>
-              <small>{{ artifact.semantic_type }} · v{{ artifact.latest_version.version }}</small>
+              <small>{{ artifact.latest_version.filename }} · v{{ artifact.latest_version.version }}</small>
             </div>
           </a-select-option>
         </a-select>
@@ -64,14 +46,18 @@
 
 <script setup lang="ts">
   import type { UploadFile } from 'ant-design-vue'
+  import { useI18n } from 'vue-i18n'
   import type { TypedArtifact } from '@/types/artifacts'
   import {
     filterCompatibleProjectArtifacts,
     formatStandardArtifactLabel,
+    getStandardArtifactTypeLabelKey,
     getStandardInputAccept,
     type StandardArtifactInputSlot,
   } from '@/domain/tools'
   import ArtifactFilePicker from './ArtifactFilePicker.vue'
+
+  const { t } = useI18n()
 
   const props = withDefaults(
     defineProps<{
@@ -81,11 +67,13 @@
       loading?: boolean
       selectedArtifacts: Record<string, TypedArtifact | undefined>
       uploadLists: Record<string, UploadFile[]>
+      projectArtifactPlaceholder?: string
       toolSlug?: string | null
     }>(),
     {
       currentProjectId: undefined,
       loading: false,
+      projectArtifactPlaceholder: 'Select a project file',
       toolSlug: null,
     }
   )
@@ -99,6 +87,11 @@
     return filterCompatibleProjectArtifacts(slot, props.projectArtifacts)
   }
 
+  const standardArtifactTypeLabel = (type: string) => {
+    const key = getStandardArtifactTypeLabelKey(type)
+    return key ? t(key) : undefined
+  }
+
   const selectArtifact = (slotName: string, value: unknown) => {
     emit('select-artifact', slotName, typeof value === 'string' ? value : undefined)
   }
@@ -108,29 +101,11 @@
   @import '@/assets/styles/variables.less';
 
   .standard-artifact-inputs {
-    margin-bottom: @spacing-lg;
-    padding: @spacing-md;
-    border: 1px solid @accent-color-border;
-    border-radius: @border-radius-base;
-    background: @accent-color-light;
-
-    :deep(.ant-alert) {
-      margin-bottom: @spacing-md;
-    }
+    margin-bottom: @spacing-md;
 
     :deep(.ant-form-item:last-child) {
       margin-bottom: 0;
     }
-  }
-
-  .standard-artifact-inputs__header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: @spacing-sm;
-    margin-bottom: @spacing-md;
-    font-weight: @font-weight-semibold;
-    color: @text-primary;
   }
 
   .standard-artifact-input-control {

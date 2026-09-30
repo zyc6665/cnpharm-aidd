@@ -2,7 +2,6 @@ import { expect, test, type Page, type Route } from '@playwright/test'
 
 const projectId = 'e2e-project'
 const conversationId = 'e2e-conversation'
-const boardId = 'e2e-board'
 const runId = 'run-e2e'
 const planId = 'plan-e2e'
 
@@ -98,8 +97,8 @@ async function installAiddMocks(page: Page) {
             conversation_id: conversationId,
             branch_id: 'branch-e2e',
             role: 'assistant',
-            content: [{ type: 'artifact_ref', title: '加入科研白板的 Pocket Artifact' }],
-            plain_text: '加入科研白板',
+            content: [{ type: 'artifact_ref', title: 'LVpocket 口袋结果' }],
+            plain_text: 'LVpocket 口袋结果',
             sequence: 3,
           },
         ],
@@ -113,8 +112,8 @@ async function installAiddMocks(page: Page) {
         conversation_id: conversationId,
         branch_id: 'branch-e2e',
         role: 'user',
-        content: [{ type: 'text', text: '上传黄金蛋白，审批 LVpocket 后加入科研白板' }],
-        plain_text: '上传黄金蛋白，审批 LVpocket 后加入科研白板',
+        content: [{ type: 'text', text: '上传黄金蛋白并审批 LVpocket' }],
+        plain_text: '上传黄金蛋白并审批 LVpocket',
         sequence: 4,
       })
       return
@@ -125,7 +124,7 @@ async function installAiddMocks(page: Page) {
         id: runId,
         project_id: projectId,
         conversation_id: conversationId,
-        message: '上传黄金蛋白，审批 LVpocket 后加入科研白板',
+        message: '上传黄金蛋白并审批 LVpocket',
         intent: 'pocket_exploration',
         status: 'planning',
         requested_outputs: ['pocket_result'],
@@ -155,35 +154,6 @@ async function installAiddMocks(page: Page) {
             event_type: 'execution_completed',
             payload: { run_id: runId, summary: '刷新后恢复：LVpocket 已完成' },
           })}\n\n`,
-      })
-      return
-    }
-
-    if (path.endsWith('/research-boards') && method === 'GET') {
-      await fulfillJson(route, {
-        items: [{ id: boardId, project_id: projectId, name: 'Pocket 证据白板', node_count: 1 }],
-        total: 1,
-        page: 1,
-        page_size: 100,
-      })
-      return
-    }
-
-    if (path.endsWith(`/research-boards/${boardId}`) && method === 'GET') {
-      await fulfillJson(route, {
-        id: boardId,
-        project_id: projectId,
-        owner_id: 'e2e-user',
-        name: 'Pocket 证据白板',
-        description: '加入科研白板',
-        version: 1,
-        content: {
-          nodes: [
-            { id: 'artifact-pocket', type: 'artifact', position: { x: 120, y: 120 }, artifact_id: 'artifact-pocket' },
-          ],
-          edges: [],
-          viewport: { x: 0, y: 0, zoom: 1 },
-        },
       })
       return
     }
@@ -230,7 +200,7 @@ async function installAiddMocks(page: Page) {
   })
 }
 
-test('创建项目到审批 LVpocket 再加入科研白板，刷新后恢复', async ({ page }) => {
+test('创建项目并审批 LVpocket，刷新后恢复结果', async ({ page }) => {
   await installAiddMocks(page)
 
   await page.goto(`/projects/${projectId}/research/${conversationId}`)
@@ -241,17 +211,12 @@ test('创建项目到审批 LVpocket 再加入科研白板，刷新后恢复', a
   await expect(page.getByText('上传黄金蛋白并识别口袋')).toBeVisible()
   await expect(page.getByText('审批 LVpocket')).toBeVisible()
 
-  await page.getByPlaceholder('描述研究目标，或引用项目中的蛋白结构...').fill('上传黄金蛋白，审批 LVpocket 后加入科研白板')
+  await page.getByPlaceholder('描述研究目标，或引用项目中的蛋白结构...').fill('上传黄金蛋白并审批 LVpocket')
   await page.getByTitle('发送').click()
   await page.getByTestId('approve-plan').click()
   await page.getByText('智能体过程').click()
   await expect(page.getByText('刷新后恢复：LVpocket 已完成')).toBeVisible()
 
-  await page.goto(`/projects/${projectId}/boards/${boardId}`)
-  await expect(page.getByTestId('research-board-page')).toBeVisible()
-  await expect(page.getByText('Pocket 证据白板')).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'lvpocket-result.json' })).toBeVisible()
-
   await page.reload()
-  await expect(page.getByRole('heading', { name: 'lvpocket-result.json' })).toBeVisible()
+  await expect(page.getByText('LVpocket 口袋结果')).toBeVisible()
 })

@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.artifact_standards.registry import get_standard_artifact_spec, parse_standard_ref
@@ -19,10 +18,7 @@ from app.models.artifacts import Artifact, ArtifactVersion, ArtifactVersionFile
 from app.models.files import File as FileModel, FileSourceType
 from app.models.projects import Project
 from app.models.users import User
-from app.models.workflows import ResearchBoard
 from app.services.artifacts import load_artifact
-from app.services.project_access import require_project_role
-from app.services.research_board_content import normalize_board_content
 from app.storage.base import StorageBackend
 
 
@@ -33,7 +29,6 @@ class ExternalDatabaseImportError(ValueError):
 @dataclass(frozen=True)
 class ExternalDatabaseImportResult:
     artifact: Artifact
-    board_node: dict[str, Any] | None
 
 
 async def persist_external_database_payload(
@@ -45,8 +40,6 @@ async def persist_external_database_payload(
     source: str,
     identifier: str,
     payload: ExternalArtifactPayload,
-    board_id: str | None = None,
-    position: dict[str, float] | None = None,
 ) -> ExternalDatabaseImportResult:
     payload = replace(
         payload,
@@ -71,7 +64,6 @@ async def persist_external_database_payload(
     if primary_file is None:
         raise ExternalDatabaseImportError("External database payload has no files")
 
-    board = await _load_writable_board(db, board_id=board_id, project=project, user=user)
     artifact_id = str(uuid4())
     uploaded_paths: list[str] = []
     try:
@@ -162,7 +154,6 @@ async def persist_external_database_payload(
         db.add_all(file_links)
         artifact.latest_version_id = version.id
         artifact.latest_version = version
-        board_node = _append_board_node(board, artifact=artifact, position=position) if board else None
         await db.commit()
     except Exception:
         await db.rollback()
@@ -173,7 +164,7 @@ async def persist_external_database_payload(
     loaded = await load_artifact(db, artifact.id)
     if loaded is None:
         raise ExternalDatabaseImportError("Imported Artifact could not be reloaded")
-    return ExternalDatabaseImportResult(artifact=loaded, board_node=board_node)
+    return ExternalDatabaseImportResult(artifact=loaded)
 
 
 def _files_with_metadata(
@@ -228,51 +219,6 @@ def _manifest(
         },
         "metadata": payload.metadata,
     }
-
-
-async def _load_writable_board(
-    db: AsyncSession,
-    *,
-    board_id: str | None,
-    project: Project,
-    user: User,
-) -> ResearchBoard | None:
-    if not board_id:
-        return None
-    board = await db.get(ResearchBoard, board_id)
-    if board is None or board.project_id != project.id:
-        raise HTTPException(status_code=404, detail="科研白板不存在")
-    await require_project_role(
-        db,
-        project_id=project.id,
-        user=user,
-        allowed_roles={"owner", "editor"},
-    )
-    return board
-
-
-def _append_board_node(
-    board: ResearchBoard,
-    *,
-    artifact: Artifact,
-    position: dict[str, float] | None,
-) -> dict[str, Any]:
-    content = normalize_board_content(board.content)
-    node = {
-        "id": f"artifact:{artifact.id}",
-        "type": "artifact",
-        "position": {
-            "x": float(position["x"]) if position else 0.0,
-            "y": float(position["y"]) if position else 0.0,
-        },
-        "artifact_id": artifact.id,
-    }
-    content["nodes"] = [item for item in content["nodes"] if item.get("id") != node["id"]]
-    content["nodes"].append(node)
-    board.content = content
-    board.version += 1
-    board.updated_at = utcnow()
-    return node
 
 
 def _external_object_key(

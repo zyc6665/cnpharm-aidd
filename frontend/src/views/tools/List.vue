@@ -83,11 +83,20 @@
         </a-dropdown>
       </AppFilterBar>
 
-      <div class="tools-results-summary">
-        <span>{{ currentViewLabel }}</span>
-        <span>{{ t('common.totalItems', { total: displayTotal }) }}</span>
-        <span class="tools-results-sort">{{ sortLabel }}</span>
-      </div>
+    <div class="tools-results-summary">
+      <span>{{ currentViewLabel }}</span>
+      <span>{{ t('common.totalItems', { total: displayTotal }) }}</span>
+      <span class="tools-results-sort">{{ sortLabel }}</span>
+      <a-button
+        v-if="hasActiveFilters"
+        type="link"
+        size="small"
+        class="clear-filters-button"
+        @click="resetFilters"
+      >
+        {{ t('common.reset') }}
+      </a-button>
+    </div>
 
       <!-- 工具列表 -->
       <SkeletonList v-if="loading" :count="8" />
@@ -138,11 +147,25 @@
                       {{ formatNumber(tool.favorite_count) }}
                     </span>
                   </div>
+                  <a-button
+                    type="primary"
+                    size="small"
+                    class="tool-use-button"
+                    @click.stop="goToDetail(tool.id)"
+                  >
+                    <PlayCircleOutlined />
+                    {{ t('tools.useNow') }}
+                  </a-button>
                 </div>
               </div>
             </a-col>
           </a-row>
         </div>
+        <a-empty v-else-if="hasActiveFilters" :description="t('tools.noMatchingTools')">
+          <a-button type="primary" @click="resetFilters">
+            {{ t('common.reset') }}
+          </a-button>
+        </a-empty>
         <a-empty v-else :description="t('tools.noTools')" />
 
       <!-- 分页 -->
@@ -213,6 +236,9 @@
 
   const sortLabel = computed(() => t(getToolSortLabelKey(sortBy.value)))
   const currentViewLabel = computed(() => t(getToolViewLabelKey(currentView.value)))
+  const hasActiveFilters = computed(() => Boolean(
+    searchKeyword.value.trim() || selectedCategory.value || selectedTag.value
+  ))
 
   const formatNumber = formatToolCount
 
@@ -264,6 +290,14 @@
 
   const handlePageSizeChange = (_current: number, size: number) => {
     pageSize.value = size
+    currentPage.value = 1
+    fetchData()
+  }
+
+  const resetFilters = () => {
+    searchKeyword.value = ''
+    selectedCategory.value = undefined
+    selectedTag.value = undefined
     currentPage.value = 1
     fetchData()
   }
@@ -357,6 +391,10 @@
 
   .tools-results-sort {
     color: @text-color-light-tertiary;
+  }
+
+  .clear-filters-button {
+    padding: 0;
   }
 
   .tools-grid {
@@ -471,6 +509,10 @@
     .favorited {
       color: @error-color;
     }
+  }
+
+  .tool-use-button {
+    flex-shrink: 0;
   }
 
   .pagination {

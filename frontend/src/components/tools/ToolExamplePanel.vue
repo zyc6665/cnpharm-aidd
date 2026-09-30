@@ -9,7 +9,7 @@
         </span>
       </div>
       <a-space wrap>
-        <a-button @click="expanded = !expanded">
+        <a-button v-if="example.input_files.length" @click="expanded = !expanded">
           <EyeOutlined />
           {{ expanded ? t('tools.hideExample') : t('tools.viewExample') }}
         </a-button>
@@ -20,13 +20,8 @@
       </a-space>
     </div>
 
-    <div v-if="expanded" class="example-panel-body">
-      <div class="example-params">
-        <span class="example-section-label">{{ t('tools.exampleParams') }}</span>
-        <pre class="example-params-code">{{ formattedParams }}</pre>
-      </div>
-
-      <div v-if="example.input_files.length" class="example-files">
+    <div v-if="expanded && example.input_files.length" class="example-panel-body">
+      <div class="example-files">
         <span class="example-section-label">{{ t('tools.exampleFiles') }}</span>
         <div class="example-file-list">
           <button
@@ -50,7 +45,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, ref } from 'vue'
+  import { ref } from 'vue'
   import { useI18n } from 'vue-i18n'
   import {
     EyeOutlined,
@@ -71,10 +66,6 @@
 
   const { t } = useI18n()
   const expanded = ref(false)
-
-  const formattedParams = computed(() => {
-    return JSON.stringify(props.example?.params ?? {}, null, 2)
-  })
 </script>
 
 <style scoped lang="less">
@@ -134,22 +125,6 @@
     color: @text-color-light-tertiary;
     font-size: @font-size-xs;
     font-weight: @font-weight-semibold;
-  }
-
-  .example-params-code {
-    max-height: 180px;
-    overflow: auto;
-    margin: 0;
-    padding: @spacing-sm @spacing-md;
-    border: 1px solid #d6e4ff;
-    border-radius: @border-radius-base;
-    background: @bg-elevated;
-    color: @text-color-light;
-    font-family: monospace;
-    font-size: 12px;
-    line-height: 1.5;
-    white-space: pre-wrap;
-    word-break: break-word;
   }
 
   .example-file-list {

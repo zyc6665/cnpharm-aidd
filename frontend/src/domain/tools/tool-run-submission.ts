@@ -225,7 +225,10 @@ export async function buildToolRunTaskPayload(
   })
   const payload = buildTaskSubmissionPayload({
     flattenedSchema: options.flattenedSchema,
-    formState: omitRecordKeys(options.formState, standardInputs.boundFieldKeys),
+    formState: parseStructuredFormValues(
+      options.flattenedSchema,
+      omitRecordKeys(options.formState, standardInputs.boundFieldKeys),
+    ),
     uploadedFiles: omitRecordKeys(uploadedFiles, standardInputs.boundFieldKeys),
     executorType: options.executorType,
   })
@@ -244,4 +247,32 @@ export async function buildToolRunTaskPayload(
       standardInputUploads: standardInputs.standardInputUploads,
     }),
   }
+}
+
+function parseStructuredFormValues(
+  schema: ToolSchema,
+  formState: Record<string, unknown>,
+): Record<string, unknown> {
+  const normalized = { ...formState }
+  for (const [key, property] of Object.entries(schema.properties)) {
+    if (property.type !== 'object' && property.type !== 'array') continue
+    const value = normalized[key]
+    if (value === undefined || value === null || value === '') continue
+    if (typeof value !== 'string') continue
+
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(value)
+    } catch {
+      throw new Error(`${property.title ?? key} must contain valid JSON`)
+    }
+    const validShape = property.type === 'object'
+      ? parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
+      : Array.isArray(parsed)
+    if (!validShape) {
+      throw new Error(`${property.title ?? key} must be a JSON ${property.type}`)
+    }
+    normalized[key] = parsed
+  }
+  return normalized
 }

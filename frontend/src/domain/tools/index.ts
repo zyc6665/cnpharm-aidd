@@ -1,4 +1,5 @@
 export * from './agent-capability'
+export * from './parameter-schema'
 export * from './artifact-file-picker'
 export * from './artifact-picker-options'
 export * from './artifact-picker-selection-state'

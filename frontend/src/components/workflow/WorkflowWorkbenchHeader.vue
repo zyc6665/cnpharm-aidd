@@ -87,5 +87,18 @@ const { t } = useI18n()
     grid-template-columns: 1fr;
     align-items: stretch;
   }
+
+  .workflow-workbench-header__actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workflow-workbench-header__actions :deep(.ant-input),
+  .workflow-workbench-header__actions :deep(.ant-select),
+  .workflow-workbench-header__actions :deep(.ant-btn),
+  .workflow-workbench-header__actions :deep(.ant-tag) {
+    width: 100%;
+    max-width: 100%;
+  }
 }
 </style>

@@ -7,22 +7,22 @@
       :extra="prop.description"
     >
       <a-input
-        v-if="prop.type === 'string' && !prop.format && !prop.enum"
+        v-if="prop.type === 'string' && (!prop.format || prop.format === 'email' || prop.format === 'url') && !prop.enum"
         v-model:value="formState[key]"
-        :placeholder="prop.description"
+        :type="prop.format === 'email' ? 'email' : prop.format === 'url' ? 'url' : 'text'"
       />
       <a-textarea
         v-else-if="prop.type === 'string' && (prop.format === 'textarea' || prop.format === 'fasta' || prop.format === 'pdb')"
         v-model:value="formState[key]"
-        :placeholder="prop.description"
         :rows="prop.format === 'fasta' || prop.format === 'pdb' ? 8 : 4"
         :class="{ 'code-input': prop.format === 'fasta' || prop.format === 'pdb' }"
       />
       <a-input-number
-        v-else-if="prop.type === 'number'"
+        v-else-if="prop.type === 'number' || prop.type === 'integer'"
         v-model:value="formState[key]"
         :min="prop.minimum"
         :max="prop.maximum"
+        :step="prop.type === 'integer' ? 1 : undefined"
         style="width: 100%"
       />
       <a-switch
@@ -32,7 +32,6 @@
       <a-select
         v-else-if="prop.type === 'select' || (prop.enum && prop.type !== 'array')"
         v-model:value="formState[key]"
-        :placeholder="prop.description"
       >
         <a-select-option v-for="opt in prop.enum" :key="String(opt)" :value="opt">
           {{ opt }}
@@ -42,12 +41,18 @@
         v-else-if="prop.type === 'array' && prop.items?.enum"
         v-model:value="formState[key]"
         mode="multiple"
-        :placeholder="prop.description"
       >
         <a-select-option v-for="opt in prop.items.enum" :key="String(opt)" :value="opt">
           {{ opt }}
         </a-select-option>
       </a-select>
+      <a-textarea
+        v-else-if="isStructuredField(prop)"
+        :value="structuredEditorValue(String(key), prop)"
+        :rows="6"
+        class="code-input"
+        @update:value="updateStructuredValue(String(key), $event)"
+      />
       <ArtifactFilePicker
         v-else-if="isFileField(prop)"
         :upload-list="fileList[String(key)] ?? []"
@@ -69,6 +74,7 @@
 
 <script setup lang="ts">
   import { computed } from 'vue'
+  import { useI18n } from 'vue-i18n'
   import type { UploadFile } from 'ant-design-vue'
   import type { Rule } from 'ant-design-vue/es/form'
   import type { ArtifactFile, SchemaProperty, ToolSchema } from '@/types/models'
@@ -118,8 +124,25 @@
     'update:selectedArtifact': [key: string, artifact: ArtifactFile | null]
   }>()
 
+  const { t } = useI18n()
+
   function isFileField(prop: SchemaProperty): boolean {
     return isFileSchemaProperty(prop) || prop.type === 'file' || prop.format === 'uri' || prop.format === 'file'
+  }
+
+  function isStructuredField(prop: SchemaProperty): boolean {
+    return prop.type === 'object' || (prop.type === 'array' && !prop.items?.enum)
+  }
+
+  function structuredEditorValue(key: string, prop: SchemaProperty): string {
+    const value = props.formState[key]
+    if (typeof value === 'string') return value
+    if (value !== undefined) return JSON.stringify(value, null, 2)
+    return prop.default === undefined ? '' : JSON.stringify(prop.default, null, 2)
+  }
+
+  function updateStructuredValue(key: string, value: string) {
+    props.formState[key] = value
   }
 
   const visibleProperties = computed(() => {
@@ -159,6 +182,31 @@
       } else {
         rules.push({ required: true, message: props.requiredMessage(prop.title ?? key) })
       }
+    }
+
+    if (isStructuredField(prop)) {
+      rules.push({
+        validator: async (_rule, value: unknown) => {
+          if (value === undefined || value === null || value === '') {
+            return Promise.resolve()
+          }
+          if (typeof value !== 'string') {
+            return Promise.resolve()
+          }
+          try {
+            const parsed = JSON.parse(value)
+            const validShape = prop.type === 'object'
+              ? parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
+              : Array.isArray(parsed)
+            return validShape
+              ? Promise.resolve()
+              : Promise.reject(new Error(t(prop.type === 'object' ? 'tools.parameterJsonObject' : 'tools.parameterJsonArray')))
+          } catch {
+            return Promise.reject(new Error(t('tools.parameterJsonInvalid')))
+          }
+        },
+        trigger: 'change',
+      })
     }
 
     if (prop.minLength) {

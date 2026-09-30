@@ -443,13 +443,14 @@ export function useWorkflowCanvas(input: {
     }
 
     return node.requiredInputTypes.every(inputType => {
-      return editableCanvasPreset.value.edges.some(edge => {
-        const upstreamTask = workflowStore.taskByNode[edge.source]
-        return (
-          edge.target === nodeId &&
-          edge.artifactType === inputType &&
-          upstreamTask?.status === 'success'
-        )
+      const matchingEdges = editableCanvasPreset.value.edges.filter(
+        edge => edge.target === nodeId && edge.artifactType === inputType
+      )
+      if (matchingEdges.length === 0) return true
+      return matchingEdges.some(edge => {
+        const upstreamNode = editableCanvasPreset.value.nodes.find(item => item.id === edge.source)
+        if (upstreamNode?.type === 'input') return true
+        return workflowStore.taskByNode[edge.source]?.status === 'success'
       })
     })
   }
@@ -494,7 +495,8 @@ export function useWorkflowCanvas(input: {
       source: edge.source,
       target: edge.target,
       source_output: edge.artifactType,
-      target_input: edge.artifactType
+      target_input: edge.artifactType,
+      ...(edge.branch ? { branch: edge.branch } : {})
     }))
 
     return { nodes, edges }

@@ -59,7 +59,6 @@ export interface WorkspaceOverview {
   attention_task_count: number
   task_status_counts: Record<TaskStatus, number>
   tasks: WorkspaceTask[]
-  boards: Array<{ id: string; name: string; node_count: number; updated_at: string }>
   workflows: Array<{ id: string; name: string; status: string; updated_at: string }>
   artifacts?: WorkspaceArtifact[]
   files: WorkspaceLegacyFile[]

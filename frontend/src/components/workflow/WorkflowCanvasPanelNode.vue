@@ -1,13 +1,13 @@
 <template>
   <article
-    role="button"
+    role="group"
     tabindex="0"
     :aria-label="`${title}. ${status}`"
     :aria-grabbed="isDragging"
     class="workflow-canvas-panel-node"
-    :class="[`is-${node.type}`, `status-${status}`, { 'is-selected': selected }]"
+    :class="[`is-${node.type}`, `status-${status}`, { 'is-selected': selected, 'is-dragging': isDragging }]"
     :style="{ left: `${node.position.x}px`, top: `${node.position.y}px` }"
-    @click="$emit('select-node', node.id)"
+    @click="handleClick"
     @keydown.enter.prevent="$emit('select-node', node.id)"
     @keydown.space.prevent="$emit('select-node', node.id)"
     @keydown="handleKeydown"
@@ -33,7 +33,7 @@
 
     <header class="panel-node-header">
       <div class="panel-node-title-group">
-        <span class="panel-node-kind">{{ node.type }}</span>
+        <span class="panel-node-kind">{{ t('workflow.nodeType.' + node.type) }}</span>
         <h3>{{ title }}</h3>
         <p v-if="subtitle">{{ subtitle }}</p>
       </div>
@@ -43,11 +43,11 @@
           v-if="node.type === 'tool'"
           type="button"
           class="panel-node-run-button"
-          data-testid="run-node-button"
-          @click.stop="$emit('run-node', node.id)"
+          data-testid="configure-node-button"
+          @click.stop="$emit('configure-node', node.id)"
           @pointerdown.stop
         >
-          {{ t('workflow.canvasNode.run') }}
+          {{ t('workflow.canvasNode.configure') }}
         </button>
         <button
           v-if="deletable"
@@ -57,7 +57,7 @@
           @click.stop="$emit('delete-node', node.id)"
           @pointerdown.stop
         >
-          ×
+          <DeleteOutlined />
         </button>
       </div>
     </header>
@@ -93,6 +93,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { DeleteOutlined } from '@ant-design/icons-vue'
 import type { WorkflowStepStatus } from '@/workflow/artifact-types'
 import type { WorkflowCanvasNode } from '@/workflow/canvas-types'
 import WorkflowNodeStatusBadge from './WorkflowNodeStatusBadge.vue'
@@ -115,10 +116,11 @@ const emit = defineEmits<{
   (event: 'start-connect', nodeId: string): void
   (event: 'finish-connect', nodeId: string): void
   (event: 'move-node', payload: { nodeId: string; position: { x: number; y: number } }): void
-  (event: 'run-node', nodeId: string): void
+  (event: 'configure-node', nodeId: string): void
 }>()
 
 const isDragging = ref(false)
+const suppressClick = ref(false)
 
 function handleKeydown(event: KeyboardEvent) {
   const offsetByKey: Record<string, { x: number; y: number }> = {
@@ -136,22 +138,38 @@ function handleKeydown(event: KeyboardEvent) {
   })
 }
 
+function handleClick() {
+  if (suppressClick.value) {
+    suppressClick.value = false
+    return
+  }
+  emit('select-node', props.node.id)
+}
+
 function handlePointerDown(event: PointerEvent) {
   if (event.button !== 0) {
     return
   }
 
+  const target = event.target
+  if (target instanceof HTMLElement && target.closest('button, input, textarea, select, a')) {
+    return
+  }
+
   const startX = event.clientX
   const startY = event.clientY
-  const startPosition = props.node.position
+  const startPosition = { ...props.node.position }
   let hasDragged = false
-  isDragging.value = true
+  suppressClick.value = false
 
   const handlePointerMove = (moveEvent: PointerEvent) => {
     const deltaX = (moveEvent.clientX - startX) / (props.scale || 1)
     const deltaY = (moveEvent.clientY - startY) / (props.scale || 1)
     if (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2) {
       hasDragged = true
+      isDragging.value = true
+      suppressClick.value = true
+      moveEvent.preventDefault()
     }
 
     emit('move-node', {
@@ -166,6 +184,7 @@ function handlePointerDown(event: PointerEvent) {
   const handlePointerUp = () => {
     window.removeEventListener('pointermove', handlePointerMove)
     window.removeEventListener('pointerup', handlePointerUp)
+    window.removeEventListener('pointercancel', handlePointerUp)
     isDragging.value = false
     if (hasDragged) {
       event.preventDefault()
@@ -174,6 +193,7 @@ function handlePointerDown(event: PointerEvent) {
 
   window.addEventListener('pointermove', handlePointerMove)
   window.addEventListener('pointerup', handlePointerUp, { once: true })
+  window.addEventListener('pointercancel', handlePointerUp, { once: true })
 }
 </script>
 

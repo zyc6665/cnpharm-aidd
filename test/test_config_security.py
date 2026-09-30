@@ -74,7 +74,6 @@ class TestAiddFeatureFlags:
         assert flags["AIDD_PROJECT_WORKSPACE_ENABLED"]["enabled"] is True
         assert flags["AIDD_PROJECT_CONVERSATIONS_ENABLED"]["enabled"] is True
         assert flags["TOOL_PACKAGE_V1_ENABLED"]["enabled"] is True
-        assert flags["PROJECT_RESEARCH_BOARD_ENABLED"]["enabled"] is True
         assert flags["LEGACY_AIDD_API_ENABLED"]["enabled"] is False
         assert flags["LEGACY_AIDD_API_ENABLED"]["rollout"]["scope"] == "closed"
         assert {item["source"] for item in flags.values()} == {"default"}
@@ -94,7 +93,6 @@ class TestAiddFeatureFlags:
         assert flags["AIDD_PROJECT_WORKSPACE_ENABLED"]["enabled"] is False
         assert flags["AIDD_PROJECT_CONVERSATIONS_ENABLED"]["enabled"] is False
         assert flags["TOOL_PACKAGE_V1_ENABLED"]["enabled"] is False
-        assert flags["PROJECT_RESEARCH_BOARD_ENABLED"]["enabled"] is False
         assert flags["LEGACY_AIDD_API_ENABLED"]["enabled"] is False
         assert flags["LEGACY_AIDD_API_ENABLED"]["rollout"]["scope"] == "closed"
 

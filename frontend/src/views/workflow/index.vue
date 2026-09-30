@@ -101,7 +101,7 @@
                 :loading="workflowStore.isRunningWorkflowDefinition"
                 @click="handleRunWorkflowDefinition"
               >
-                {{ t('workflow.definition.runWorkflowDefinition') }}
+                {{ t('workflow.definition.startFullRun') }}
               </a-button>
             </template>
 
@@ -129,7 +129,7 @@
                 :tools="filteredSidebarToolOptions"
                 :format-node-title="formatKey"
                 :resolve-node-status-reason="resolveNodeStatusReason"
-                @update:canvas-preset-id="handleCanvasPresetChange"
+                @update:canvas-preset-id="handleCanvasPresetChangeGuarded"
                 @update:tool-search-keyword="sidebarToolSearchKeyword = $event"
                 @update:stage-filter="sidebarStageFilter = $event"
                 @update:input-filter="sidebarInputFilter = $event"
@@ -150,6 +150,7 @@
               :task-by-node="workflowStore.taskByNode"
               :artifacts="artifactsStore.items"
               @select-node="workflowStore.setActiveNode"
+              @configure-node="handleConfigureWorkflowNode"
               @move-node="workflowStore.moveNode"
               @add-tool-node="handleAddToolNode"
               @delete-node="handleDeleteNode"
@@ -162,6 +163,7 @@
               <WorkflowResultsSidebar>
                 <template #node>
                   <WorkflowNodeInspector
+                    ref="workflowNodeInspector"
                     :node="activeNode"
                     :project-id="routeProjectId"
                     :template="editableCanvasPreset"
@@ -172,9 +174,10 @@
                     :selected-tool-slug="activeNode ? selectedToolByActiveNode : null"
                     :task="activeNode ? (workflowStore.taskByNode[activeNode.id] ?? null) : null"
                     @select-tool="handleNodeToolSelect"
+                    @update-node="workflowStore.updateCanvasNode"
                     @add-edge="handleAddEdge"
                     @delete-edge="handleDeleteEdge"
-                    @run-node="handleRunWorkflowDefinition"
+                    @update-edge-branch="handleUpdateWorkflowEdgeBranch"
                     @view-task-detail="handleViewTaskDetail"
                   />
                 </template>
@@ -185,10 +188,13 @@
                   :artifact-requirements="workflowInputRequirementDetails"
                   :selections="workflowRunInputSelections"
                   :options-by-semantic-type="artifactOptionsBySemanticType"
-                  :loading="artifactsStore.loading"
-                  :auto-fill-disabled="artifactsStore.loading || artifactsStore.items.length === 0"
+                  :loading="workflowInputOptionsLoading"
+                  :auto-fill-disabled="workflowInputOptionsLoading || !hasWorkflowInputOptions"
+                  :can-upload="userStore.isLoggedIn"
+                  :uploading-key="uploadingWorkflowInputKey"
                   @auto-fill="autofillWorkflowInputSelections"
                   @select="handleWorkflowInputSelect"
+                  @upload="handleWorkflowInputUpload"
                 />
                 </template>
 
@@ -302,6 +308,7 @@
   const userStore = useUserStore()
   const workflowStore = useWorkflowStore()
   const workflowDefinitionsStore = useWorkflowDefinitionsStore()
+  const workflowNodeInspector = ref<{ focusConfiguration: () => void } | null>(null)
 
   workflowStore.normalizeSessionShape()
 
@@ -341,7 +348,7 @@
     workflowReportRows,
     workflowRepairActions,
     workflowRepairableCount,
-    handleCanvasPresetChange,
+    handleCanvasPresetChange: setCanvasPreset,
     resolveNodeStatusReason,
     handleNodeToolSelect,
     handleAddToolNode,
@@ -376,6 +383,11 @@
     runCanceled: t('workflow.persistence.runCanceled'),
     nodeRetried: t('workflow.persistence.nodeRetried'),
     loaded: t('workflow.persistence.loaded'),
+    discardUnsavedTitle: t('workflow.persistence.discardUnsavedTitle'),
+    discardUnsavedContent: t('workflow.persistence.discardUnsavedContent'),
+    discardUnsavedConfirm: t('workflow.persistence.discardUnsavedConfirm'),
+    discardUnsavedCancel: t('workflow.persistence.discardUnsavedCancel'),
+    missingInputs: (inputs: string[]) => t('workflow.canvasPresets.missingInputs', { inputs: inputs.join(', ') }),
   }))
 
   const workflowPreflightLabels = computed(() => buildWorkflowPreflightLabels((key, params) => t(key, params ?? {})))
@@ -399,6 +411,9 @@
     savedWorkflowOptions,
     selectedWorkflowInputFiles,
     artifactOptionsBySemanticType,
+    workflowInputOptionsLoading,
+    hasWorkflowInputOptions,
+    uploadingWorkflowInputKey,
     handleSaveWorkflow,
     handleNewWorkflow,
     handleDuplicateWorkflow,
@@ -414,8 +429,10 @@
     handleCancelWorkflowRun,
     handleRetryWorkflowRunNode,
     handleWorkflowRunDetail,
+    confirmDiscardWorkflowChanges,
     autofillWorkflowInputSelections,
     handleWorkflowInputSelect,
+    handleWorkflowInputUpload,
     scheduleWorkflowRunAutoSync,
     clearWorkflowRunAutoSync,
     restoreActiveWorkflowRun,
@@ -438,6 +455,7 @@
       template: editableCanvasPreset.value,
       nodeStatuses: nodeStatuses.value,
       readyNodeIds: readyToolNodeIds.value,
+      requiredWorkflowInputs: workflowInputRequirements.value,
       selectedWorkflowInputFiles: selectedWorkflowInputFiles.value,
       artifacts: artifactsStore.items,
       artifactBindingsByNode: workflowStore.artifactBindingsByNode,
@@ -460,9 +478,24 @@
     if (targetProjectId) {
       await saveWorkflowDraft(draft, targetProjectId)
     } else {
-      applyWorkflowDraft(draft)
+      await applyWorkflowDraft(draft)
     }
     activeMode.value = 'manual'
+  }
+
+  async function handleCanvasPresetChangeGuarded(canvasPresetId: unknown) {
+    if (typeof canvasPresetId !== 'string') return
+    if (!await confirmDiscardWorkflowChanges()) return
+    setCanvasPreset(canvasPresetId)
+  }
+
+  function handleConfigureWorkflowNode(nodeId: string) {
+    workflowStore.setActiveNode(nodeId)
+    workflowNodeInspector.value?.focusConfiguration()
+  }
+
+  function handleUpdateWorkflowEdgeBranch(edgeId: string, branch: 'true' | 'false' | undefined) {
+    workflowStore.updateCanvasEdge(edgeId, { branch })
   }
 
   function handleViewTaskDetail(nodeId: string) {
@@ -512,11 +545,6 @@
   )
 
   onMounted(async () => {
-    const boardDraft = sessionStorage.getItem('research-board-workflow-draft')
-    if (boardDraft) {
-      sessionStorage.removeItem('research-board-workflow-draft')
-      handleAgentWorkflowDraft(JSON.parse(boardDraft) as AiddWorkflowDraft)
-    }
     await Promise.allSettled([toolsStore.fetchWorkbenchGroups(), toolsStore.fetchWorkflowTools()])
   })
 

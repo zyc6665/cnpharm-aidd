@@ -29,6 +29,14 @@
         <a-button size="small" danger @click="$emit('delete-edge', edge.id)">
           {{ t('workflow.inspector.deleteEdge') }}
         </a-button>
+        <a-select
+          v-if="isConditionEdge(edge)"
+          :value="edge.branch"
+          allow-clear
+          :placeholder="t('workflow.inspector.conditionBranch')"
+          :options="conditionBranchOptions"
+          @change="$emit('update-edge-branch', edge.id, $event)"
+        />
       </div>
     </div>
     <div class="edge-editor">
@@ -90,7 +98,7 @@
     suggestWorkflowEdgesForNode,
     type WorkflowEdgeSuggestion
   } from '@/workflow/canvas-artifacts'
-  import type { WorkflowCanvasNode, WorkflowCanvasPreset } from '@/workflow/canvas-types'
+  import type { WorkflowCanvasEdge, WorkflowCanvasNode, WorkflowCanvasPreset } from '@/workflow/canvas-types'
   import type { ArtifactFile } from '@/types/models'
   const props = defineProps<{
     node: WorkflowCanvasNode
@@ -104,6 +112,7 @@
       input: { source: string; target: string; artifactType: WorkflowArtifactSemanticType }
     ): void
     (event: 'delete-edge', edgeId: string): void
+    (event: 'update-edge-branch', edgeId: string, branch: 'true' | 'false' | undefined): void
   }>()
   const { t, te } = useI18n()
   const sourceNodeId = ref<string>()
@@ -116,6 +125,16 @@
   const nodeTitleById = computed(() =>
     Object.fromEntries((props.template?.nodes ?? []).map(item => [item.id, label(item.titleKey)]))
   )
+  const sourceNodeById = computed(() =>
+    Object.fromEntries((props.template?.nodes ?? []).map(item => [item.id, item]))
+  )
+  const conditionBranchOptions = computed(() => [
+    { value: 'true', label: t('workflow.inspector.trueBranch') },
+    { value: 'false', label: t('workflow.inspector.falseBranch') }
+  ])
+  function isConditionEdge(edge: WorkflowCanvasEdge) {
+    return sourceNodeById.value[edge.source]?.type === 'condition'
+  }
   const upstreamEdges = computed(() =>
     (props.template?.edges ?? []).filter(edge => edge.target === props.node.id)
   )
@@ -225,6 +244,8 @@
   }
   .edge-item {
     display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     justify-content: space-between;
     gap: @spacing-sm;
     padding: @spacing-xs @spacing-sm;
@@ -234,6 +255,10 @@
   }
   .edge-item span {
     display: grid;
+  }
+
+  .edge-item :deep(.ant-select) {
+    flex: 0 0 140px;
   }
   small,
   span {

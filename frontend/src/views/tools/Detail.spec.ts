@@ -339,7 +339,7 @@ describe('ToolDetail run preparation preview', () => {
     expect(message.error).toHaveBeenCalledWith('Protein input requires a prepared PDB role.')
   })
 
-  it('runs Tool Package v2 standard inputs from the standalone detail page with direct upload', async () => {
+  it('runs declared file inputs from the standalone detail page with direct upload', async () => {
     routeState.params = { id: 'tool-molp-pc' }
     routeState.query = {}
     mockToolPackageV2Detail()
@@ -378,7 +378,8 @@ describe('ToolDetail run preparation preview', () => {
 
     await flushPromises()
 
-    expect(wrapper.text()).not.toContain('标准 Artifact 输入需要项目上下文')
+    expect(wrapper.text()).not.toContain('Tool Package v2')
+    expect(wrapper.text()).not.toContain('molecule_table@1')
 
     await wrapper.find('.artifact-file-picker').trigger('click')
     await wrapper.find('form').trigger('submit')
@@ -397,7 +398,7 @@ describe('ToolDetail run preparation preview', () => {
     expect(routerPush).toHaveBeenCalledWith('/tasks/task-created')
   })
 
-  it('uses legacy file fields as the Tool Package v2 standard input surface', async () => {
+  it('shows declared parameters and submits their default values', async () => {
     routeState.params = { id: 'tool-lvpocket' }
     routeState.query = {}
     mockToolPackageV2DetailWithLegacyFileSchema()
@@ -436,7 +437,6 @@ describe('ToolDetail run preparation preview', () => {
 
     await flushPromises()
 
-    expect(wrapper.text()).not.toContain('标准 Artifact 输入')
     expect(wrapper.text()).toContain('Protein PDB')
     expect(wrapper.text()).toContain('Model weight')
     expect(wrapper.text()).toContain('Device')

@@ -86,8 +86,6 @@ async def import_external_database_artifact(
             source=data.source,
             identifier=data.identifier,
             payload=payload,
-            board_id=data.board_id,
-            position=data.position.model_dump() if data.position else None,
         )
     except (ExternalDatabaseProviderError, ExternalDatabaseImportError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -95,7 +93,6 @@ async def import_external_database_artifact(
     return success_response(
         data={
             "artifact": artifact_data(result.artifact, include_versions=True),
-            "board_node": result.board_node,
         },
         message="外部数据库记录已导入",
     )

@@ -57,32 +57,16 @@ const inputSchema: ToolSchema = {
 }
 
 describe('useToolDetailPresentation', () => {
-  it('normalizes remote tool metadata and subtitle fields', () => {
+  it('provides executor metadata and a concise subtitle', () => {
     const presentation = useToolDetailPresentation({
       tool: computed(() => makeTool({
         type: 'remote_api',
-        mode: 'remote_tool_v1',
-        base_url: 'https://example.test/tool',
-        manifest_sha256: 'abc123',
-        last_smoke_test: {
-          status: 'success',
-          task_id: 'task-smoke',
-          error: 404,
-        },
       })),
       inputSchema: computed(() => inputSchema),
       labels: computed(() => labels),
     })
 
     expect(presentation.executorType.value).toBe('remote_api')
-    expect(presentation.isRemoteToolV1.value).toBe(true)
-    expect(presentation.remoteToolBaseUrl.value).toBe('https://example.test/tool')
-    expect(presentation.remoteToolManifestHash.value).toBe('abc123')
-    expect(presentation.remoteToolSmokeStatus.value).toBe('success')
-    expect(presentation.remoteToolSmokeTaskId.value).toBe('task-smoke')
-    expect(presentation.remoteToolSmokeError.value).toBe('')
-    expect(presentation.remoteToolSmokeStatusColor('success')).toBe('green')
-    expect(presentation.remoteToolSmokeStatusText('success')).toBe('已通过')
     expect(presentation.detailSubtitle.value).toBe('使用次数: 1.2w · 浏览次数: 456')
   })
 

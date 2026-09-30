@@ -1,4 +1,4 @@
-"""AIDD project-to-board vertical slice regression test."""
+"""AIDD project task and Artifact lifecycle regression test."""
 
 from __future__ import annotations
 
@@ -11,7 +11,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from app.api.v1.research_boards import create_research_board
 from app.config import settings as config_settings
 from app.database.base import Base
 from app.models.artifacts import Artifact, ArtifactVersion
@@ -25,7 +24,6 @@ from app.models.projects import Organization, Project, ProjectMember
 from app.models.tasks import Task
 from app.models.tools import Tool, ToolStatus, ToolVersion
 from app.models.users import User, UserRole, UserStatus
-from app.schemas.research_boards import ResearchBoardCreate
 
 
 @pytest_asyncio.fixture
@@ -194,7 +192,7 @@ async def _seed_project_context(
 
 
 @pytest.mark.asyncio
-async def test_approved_lvpocket_result_can_be_referenced_from_its_project_board(
+async def test_approved_lvpocket_result_completes_with_artifact(
     vertical_db: AsyncSession,
     vertical_direct_runner: SimpleNamespace,
 ):
@@ -263,27 +261,6 @@ async def test_approved_lvpocket_result_can_be_referenced_from_its_project_board
         summary="Fake LVpocket run identified three candidate pockets.",
     )
 
-    board = await create_research_board(
-        ResearchBoardCreate(
-            name="Pocket evidence",
-            project_id=project.id,
-            content={
-                "nodes": [
-                    {
-                        "id": "pocket-result",
-                        "type": "artifact",
-                        "position": {"x": 0, "y": 0},
-                        "artifact_id": pocket.id,
-                    }
-                ],
-                "edges": [],
-                "viewport": {"x": 0, "y": 0, "zoom": 1},
-            },
-        ),
-        user,
-        vertical_db,
-    )
-
     events = (
         (
             await vertical_db.execute(
@@ -303,5 +280,3 @@ async def test_approved_lvpocket_result_can_be_referenced_from_its_project_board
         "artifact_completed",
         "analysis_summary",
     ]
-    assert board["data"]["project_id"] == project.id
-    assert board["data"]["content"]["nodes"][0]["artifact_id"] == pocket.id

@@ -38,7 +38,6 @@ from app.schemas.projects import (
     ProjectUpdate,
 )
 from app.services.project_access import load_project_membership, require_project_role
-from app.services.research_board_content import board_node_count
 
 router = APIRouter(
     dependencies=[Depends(require_feature_flag("AIDD_PROJECT_WORKSPACE_ENABLED"))]
@@ -131,18 +130,6 @@ def _serialize_workflow_definition(workflow: WorkflowDefinition) -> dict:
         "status": workflow.status,
         "updated_at": workflow.updated_at,
         "created_at": workflow.created_at,
-    }
-
-
-def _serialize_board_summary(board: ResearchBoard) -> dict:
-    return {
-        "id": board.id,
-        "project_id": board.project_id,
-        "name": board.name,
-        "description": board.description,
-        "node_count": board_node_count(board.content),
-        "updated_at": board.updated_at,
-        "created_at": board.created_at,
     }
 
 
@@ -262,12 +249,6 @@ async def get_project_overview(
         .order_by(WorkflowDefinition.updated_at.desc())
         .limit(8)
     )
-    board_result = await db.execute(
-        select(ResearchBoard)
-        .where(ResearchBoard.project_id == project_id)
-        .order_by(ResearchBoard.updated_at.desc())
-        .limit(8)
-    )
     task_count = await db.scalar(select(func.count(Task.id)).where(task_filter))
     artifact_count = await db.scalar(
         select(func.count(Artifact.id))
@@ -279,10 +260,6 @@ async def get_project_overview(
             WorkflowDefinition.project_id == project_id
         )
     )
-    board_count = await db.scalar(
-        select(func.count(ResearchBoard.id)).where(ResearchBoard.project_id == project_id)
-    )
-
     return success_response(
         data={
             "project": _serialize(project, membership),
@@ -290,7 +267,6 @@ async def get_project_overview(
                 "artifacts": artifact_count or 0,
                 "tasks": task_count or 0,
                 "workflows": workflow_count or 0,
-                "boards": board_count or 0,
             },
             "tasks": [_serialize_project_task(task) for task in task_result.scalars()],
             "artifacts": [
@@ -300,7 +276,6 @@ async def get_project_overview(
                 _serialize_workflow_definition(workflow)
                 for workflow in workflow_result.scalars()
             ],
-            "boards": [_serialize_board_summary(board) for board in board_result.scalars()],
         }
     )
 

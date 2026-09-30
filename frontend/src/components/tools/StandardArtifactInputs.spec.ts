@@ -35,7 +35,6 @@ const stubs = {
     emits: ['update:uploadList'],
     template: '<button type="button" class="artifact-picker" :data-accept="accept" @click="$emit(\'update:uploadList\', [{ name: \'molecules.csv\' }])">pick</button>',
   },
-  AAlert: { props: ['message'], template: '<div class="alert">{{ message }}</div>' },
   AFormItem: { props: ['label', 'extra'], template: '<label><span class="label">{{ label }}</span><slot /></label>' },
   ASelect: {
     props: ['value'],
@@ -43,7 +42,6 @@ const stubs = {
     template: '<select class="artifact-select" :value="value" @change="$emit(\'change\', $event.target.value)"><slot /></select>',
   },
   ASelectOption: { props: ['value'], template: '<option :value="value"><slot /></option>' },
-  ATag: { template: '<span><slot /></span>' },
 }
 
 describe('StandardArtifactInputs', () => {
@@ -62,7 +60,8 @@ describe('StandardArtifactInputs', () => {
       global: { stubs },
     })
 
-    expect(wrapper.text()).toContain('可直接上传文件运行')
+    expect(wrapper.text()).not.toContain('Tool Package')
+    expect(wrapper.text()).not.toContain('molecule_table@1')
     expect(wrapper.find('.artifact-select').exists()).toBe(false)
     expect(wrapper.find('.artifact-picker').attributes('data-accept')).toBe('.csv,.json')
 
@@ -73,7 +72,7 @@ describe('StandardArtifactInputs', () => {
     ])
   })
 
-  it('renders compatible project ArtifactVersion options and emits selection changes', async () => {
+  it('renders project file options without exposing contract types', async () => {
     const wrapper = mount(StandardArtifactInputs, {
       props: {
         slots: [{ name: 'molecules', type: 'molecule_table@1', required: true }],
@@ -97,6 +96,7 @@ describe('StandardArtifactInputs', () => {
 
     expect(wrapper.findAll('option')).toHaveLength(1)
     expect(wrapper.text()).toContain('molecules.csv')
+    expect(wrapper.text()).not.toContain('molecule_table@1')
 
     await wrapper.find('.artifact-select').setValue('version-1')
 

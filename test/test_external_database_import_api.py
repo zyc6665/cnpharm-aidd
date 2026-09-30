@@ -25,13 +25,11 @@ from app.models import (  # noqa: F401
     Organization,
     Project,
     ProjectMember,
-    ResearchBoard,
     User,
 )
 from app.models.artifacts import Artifact
 from app.models.projects import Organization, Project, ProjectMember
 from app.models.users import User, UserRole, UserStatus
-from app.models.workflows import ResearchBoard
 from app.storage.base import StorageFile
 
 
@@ -155,15 +153,8 @@ async def external_db_context(external_db_session: AsyncSession) -> dict[str, ob
     external_db_session.add(project)
     await external_db_session.flush()
     external_db_session.add(ProjectMember(project_id=project.id, user_id=owner.id, role="owner"))
-    board = ResearchBoard(
-        owner_id=owner.id,
-        project_id=project.id,
-        name="Workbench board",
-        content={"nodes": [], "edges": [], "viewport": {"x": 0, "y": 0, "zoom": 1}},
-    )
-    external_db_session.add(board)
     await external_db_session.commit()
-    return {"owner": owner, "organization": organization, "project": project, "board": board}
+    return {"owner": owner, "organization": organization, "project": project}
 
 
 @pytest_asyncio.fixture
@@ -203,14 +194,13 @@ async def external_db_client(
 
 
 @pytest.mark.asyncio
-async def test_pubchem_ligand_import_creates_standard_artifact_and_board_node(
+async def test_pubchem_ligand_import_creates_standard_artifact(
     external_db_client,
     external_db_context: dict[str, object],
     external_db_session: AsyncSession,
 ):
     client, _ = external_db_client
     project = external_db_context["project"]
-    board = external_db_context["board"]
 
     response = await client.post(
         f"/api/v1/projects/{project.id}/external-databases/import",
@@ -219,8 +209,6 @@ async def test_pubchem_ligand_import_creates_standard_artifact_and_board_node(
             "source": "pubchem",
             "entity_type": "ligand",
             "identifier": "2244",
-            "board_id": board.id,
-            "position": {"x": 120, "y": 240},
         },
     )
 
@@ -237,12 +225,6 @@ async def test_pubchem_ligand_import_creates_standard_artifact_and_board_node(
         "metadata_json",
     }
     assert files_by_role["structure_file"]["is_primary"] is True
-    assert data["board_node"] == {
-        "id": f"artifact:{data['artifact']['id']}",
-        "type": "artifact",
-        "position": {"x": 120.0, "y": 240.0},
-        "artifact_id": data["artifact"]["id"],
-    }
 
     artifact = await external_db_session.get(
         Artifact,
@@ -252,9 +234,6 @@ async def test_pubchem_ligand_import_creates_standard_artifact_and_board_node(
     assert artifact is not None
     assert artifact.latest_version.manifest_json["metadata"]["pubchem_cid"] == "2244"
     assert artifact.latest_version.manifest_json["metadata"]["fetched_at"]
-    await external_db_session.refresh(board)
-    assert board.version == 2
-    assert board.content["nodes"][0]["artifact_id"] == data["artifact"]["id"]
 
 
 @pytest.mark.asyncio

@@ -40,7 +40,7 @@ const overview = {
     created_at: '2026-07-30T00:00:00Z',
     updated_at: '2026-07-31T08:30:00Z'
   },
-  counts: { artifacts: 1, tasks: 1, workflows: 1, boards: 1 },
+  counts: { artifacts: 1, tasks: 1, workflows: 1 },
   artifacts: [
     {
       id: 'artifact-1',
@@ -87,16 +87,6 @@ const overview = {
       updated_at: '2026-07-31T08:00:00Z'
     }
   ],
-  boards: [
-    {
-      id: 'board-1',
-      project_id: 'project-1',
-      name: '口袋分析白板',
-      node_count: 1,
-      created_at: '2026-07-31T08:00:00Z',
-      updated_at: '2026-07-31T08:00:00Z'
-    }
-  ]
 }
 
 function renderOverview() {
@@ -132,11 +122,10 @@ describe('ProjectOverview', () => {
     expect(wrapper.text()).toContain('Artifact')
     expect(wrapper.text()).toContain('任务')
     expect(wrapper.text()).toContain('工作流')
-    expect(wrapper.text()).toContain('白板')
     expect(wrapper.text()).toContain('EGFR pocket')
     expect(wrapper.text()).toContain('项目口袋识别')
     expect(wrapper.text()).toContain('口袋到分子生成')
-    expect(wrapper.text()).toContain('口袋分析白板')
+    expect(wrapper.text()).not.toContain('科研白板')
     const workflowEntry = wrapper
       .findAll('a')
       .find(link => link.text().includes('打开工作流'))

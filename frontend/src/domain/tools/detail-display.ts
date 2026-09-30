@@ -29,5 +29,5 @@ export function getToolStatusColor(status: string): string {
 
 export function formatStandardArtifactLabel(artifact: TypedArtifact): string {
   const filename = artifact.latest_version.filename || artifact.name
-  return `${artifact.name || filename} · ${artifact.semantic_type} · v${artifact.latest_version.version}`
+  return `${artifact.name || filename} · v${artifact.latest_version.version}`
 }

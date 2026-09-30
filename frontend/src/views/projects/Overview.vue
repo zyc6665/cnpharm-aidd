@@ -25,9 +25,6 @@
           <router-link :to="`/projects/${projectId}/research`" data-testid="open-research">
             <a-button type="primary">进入智能体研究</a-button>
           </router-link>
-          <router-link :to="`/projects/${projectId}/boards`">
-            <a-button>科研白板</a-button>
-          </router-link>
           <router-link :to="`/projects/${projectId}/settings`">
             <a-button>项目设置</a-button>
           </router-link>
@@ -123,24 +120,6 @@
           <a-empty v-else description="暂无工作流" />
         </section>
 
-        <section class="overview-section">
-          <div class="section-heading">
-            <h2>科研白板</h2>
-            <router-link :to="`/projects/${projectId}/boards`">全部白板</router-link>
-          </div>
-          <div v-if="overview.boards.length" class="resource-list">
-            <router-link
-              v-for="board in overview.boards"
-              :key="board.id"
-              :to="`/projects/${projectId}/boards/${board.id}`"
-              class="resource-row"
-            >
-              <strong>{{ board.name }}</strong>
-              <span>{{ board.node_count }} 个对象 · {{ formatTime(board.updated_at) }}</span>
-            </router-link>
-          </div>
-          <a-empty v-else description="暂无科研白板" />
-        </section>
       </div>
     </template>
   </main>

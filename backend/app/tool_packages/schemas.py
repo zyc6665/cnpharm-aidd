@@ -5,9 +5,10 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.artifact_standards.registry import validate_standard_artifact_roles
+from app.tools.schema_validator import validate_json_schema_definition
 
 
 TOOL_PACKAGE_API_VERSION = "aidd.sciminer/v1"
@@ -55,6 +56,8 @@ class ArtifactInputV2(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=100)
+    title: str | None = Field(default=None, max_length=160)
+    description: str | None = Field(default=None, max_length=500)
     type: str = Field(min_length=1, max_length=100)
     required: bool = True
     role_preferences: list[str] = Field(default_factory=list)
@@ -236,11 +239,32 @@ class ToolPackageV2Manifest(BaseModel):
     kind: Literal["ToolPackage"]
     metadata: ToolPackageMetadata
     artifacts: ArtifactContractV2
-    parameters_schema: dict[str, Any] = Field(default_factory=dict)
+    parameters_schema: dict[str, Any] = Field(
+        default_factory=lambda: {"type": "object", "properties": {}}
+    )
     adapter: AdapterDeclaration = Field(default_factory=AdapterDeclaration)
     exposure: ExposureDeclaration = Field(default_factory=ExposureDeclaration)
     runtime: RuntimeEnvManifest
     variants: list[ToolVariantManifestV2] = Field(min_length=1)
+
+    @field_validator("parameters_schema")
+    @classmethod
+    def validate_parameters_schema(cls, value: dict[str, Any]) -> dict[str, Any]:
+        if value.get("type") != "object":
+            raise ValueError("parameters_schema.type must be object")
+        properties = value.get("properties", {})
+        if not isinstance(properties, dict):
+            raise ValueError("parameters_schema.properties must be an object")
+        schema = validate_json_schema_definition(value, "parameters_schema")
+        required = schema.get("required", [])
+        if isinstance(required, list):
+            missing = [name for name in required if name not in properties]
+            if missing:
+                raise ValueError(
+                    "parameters_schema.required references undefined properties: "
+                    + ", ".join(str(name) for name in missing)
+                )
+        return schema
 
 
 AnyToolPackageManifest = ToolPackageManifest | ToolPackageV2Manifest

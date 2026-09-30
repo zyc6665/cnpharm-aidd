@@ -15,29 +15,14 @@ export interface ExternalDatabaseSourcesResponse {
   sources: ExternalDatabaseSource[]
 }
 
-export interface ExternalDatabasePosition {
-  x: number
-  y: number
-}
-
 export interface ExternalDatabaseImportPayload {
   source: string
   entity_type: ExternalDatabaseEntityType
   identifier: string
-  board_id?: string
-  position?: ExternalDatabasePosition
-}
-
-export interface ExternalDatabaseBoardNode {
-  id: string
-  type: 'artifact'
-  position: ExternalDatabasePosition
-  artifact_id: string
 }
 
 export interface ExternalDatabaseImportResult {
   artifact: TypedArtifact
-  board_node?: ExternalDatabaseBoardNode | null
 }
 
 export const getExternalDatabaseSources = (): Promise<

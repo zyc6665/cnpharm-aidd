@@ -55,11 +55,11 @@ describe('tool detail display rules', () => {
 
   it('builds readable standard artifact option labels', () => {
     expect(formatStandardArtifactLabel(makeArtifact())).toBe(
-      'Target Protein · protein_structure@1 · v3'
+      'Target Protein · v3'
     )
 
     expect(formatStandardArtifactLabel(makeArtifact({ name: '' }))).toBe(
-      'target.pdb · protein_structure@1 · v3'
+      'target.pdb · v3'
     )
   })
 })

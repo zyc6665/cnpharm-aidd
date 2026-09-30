@@ -132,6 +132,8 @@ export interface ArtifactUploadInput {
   file: File
   artifact_type: ArtifactType | string
   semantic_type: string
+  standard_type?: string
+  standard_version?: number
   description?: string
   expires_at?: string
 }

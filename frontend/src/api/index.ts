@@ -4,7 +4,6 @@ export * from './tasks'
 export * from './files'
 export * from './system'
 export * from './workflows'
-export * from './research-boards'
 export * from './workspace'
 export * from './artifacts'
 export {
