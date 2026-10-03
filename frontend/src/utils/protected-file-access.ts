@@ -22,6 +22,7 @@ interface ProtectedFileAccessDependencies {
   dom?: DownloadDomApi
   fetchBlob?: (url: string, headers: Record<string, string>) => Promise<Blob>
   fetchText?: (url: string, headers: Record<string, string>) => Promise<string>
+  fetchDownloadUrl?: (fileId: string, headers: Record<string, string>) => Promise<string>
   getToken?: () => string | null
   objectUrl?: ObjectUrlApi
 }
@@ -120,6 +121,40 @@ export function isProtectedFileDownloadUrl(url: string): boolean {
   }
 }
 
+function resolveProtectedFileId(url: string): string | null {
+  try {
+    const pathname = new URL(
+      url,
+      typeof window === 'undefined' ? 'http://localhost' : window.location.origin
+    ).pathname
+    const match = pathname.match(/^\/api\/v1\/files\/([^/]+)\/download$/)
+    return match?.[1] ? decodeURIComponent(match[1]) : null
+  } catch {
+    const match = url.match(/^\/api\/v1\/files\/([^/]+)\/download(?:\?|#|$)/)
+    return match?.[1] ? decodeURIComponent(match[1]) : null
+  }
+}
+
+async function fetchProtectedDownloadUrl(
+  fileId: string,
+  headers: Record<string, string>
+): Promise<string> {
+  const config: RequestOptions = {
+    params: { expires_in: 300 },
+    headers,
+    silent: true,
+  }
+  const response = await request.get(
+    `/files/${encodeURIComponent(fileId)}/download-url`,
+    config
+  ) as unknown as { data?: { url?: string } }
+  const url = response.data?.url
+  if (!url) {
+    throw new Error('未获取到文件下载地址')
+  }
+  return url
+}
+
 export async function createProtectedObjectUrl(
   fileUrl: string,
   dependencies: ProtectedFileAccessDependencies = {}
@@ -159,8 +194,28 @@ export async function triggerProtectedFileDownload(
     throw new Error('缺少文件下载地址')
   }
 
-  const resource = await createProtectedObjectUrl(file.url, dependencies)
   const dom = dependencies.dom || defaultDownloadDomApi
+  const fileId = resolveProtectedFileId(file.url)
+
+  if (fileId) {
+    try {
+      const headers = resolveProtectedAuthHeaders(dependencies)
+      const downloadUrl = await (dependencies.fetchDownloadUrl || fetchProtectedDownloadUrl)(fileId, headers)
+      const anchor = dom.createAnchor()
+      try {
+        anchor.href = downloadUrl
+        anchor.download = resolveDownloadName(file)
+        dom.appendAnchor(anchor)
+        anchor.click()
+      } finally {
+        anchor.remove()
+      }
+      return
+    } catch {
+    }
+  }
+
+  const resource = await createProtectedObjectUrl(file.url, dependencies)
   const anchor = dom.createAnchor()
 
   try {

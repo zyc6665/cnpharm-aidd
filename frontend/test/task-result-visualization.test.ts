@@ -96,8 +96,10 @@ test('多输出三维结果应保留固定输入并支持逐项切换输出', ()
 test('结果面板源码应包含输出结果列表选择逻辑', () => {
   const panelSource = readSource('src/components/tasks/ResultVisualizationPanel.vue')
 
-  assert.equal(panelSource.includes('selectedOutputKey'), true)
-  assert.equal(panelSource.includes('scene.outputEntries'), true)
+  assert.equal(panelSource.includes('selectedResultKey'), true)
+  assert.equal(panelSource.includes('buildVisualizationResultItems'), true)
+  assert.equal(panelSource.includes('visualization-result-next'), true)
+  assert.equal(panelSource.includes('scene.value.outputEntries'), true)
 })
 
 test('结果可视化应修复内置全屏入口，而不是额外包一层自定义全屏弹层', () => {
@@ -244,4 +246,65 @@ test('结果可视化应优先使用后端生成的 top10_molecules.sdf', () => 
 
   assert.equal(detectSdfScoreRankingFile(files[1]), files[1])
   assert.deepEqual(preferTopRankedSdfFiles(files).map(file => file.id), ['top10'])
+})
+
+test('普通输出文件应进入统一结果列表并标记预览能力', async () => {
+  const { buildVisualizationResultItems } = await import('../src/domain/tasks/result-visualization.ts')
+  const items = buildVisualizationResultItems({
+    id: 'task-file-preview',
+    tool_id: 'tool-1',
+    status: 'success',
+    progress: 100,
+    created_at: '2026-10-02T00:00:00Z',
+    output_files: [
+      {
+        id: 'structure-1',
+        filename: 'ligand.sdf',
+        content_type: 'chemical/x-mdl-sdfile',
+        url: '/api/v1/files/structure-1/download'
+      },
+      {
+        id: 'table-1',
+        filename: 'molecules.csv',
+        content_type: 'text/csv',
+        url: '/api/v1/files/table-1/download'
+      },
+      {
+        id: 'metadata-1',
+        filename: 'metadata.json',
+        content_type: 'application/json',
+        url: '/api/v1/files/metadata-1/download'
+      },
+      {
+        id: 'log-1',
+        filename: 'run.log',
+        content_type: 'application/octet-stream',
+        url: '/api/v1/files/log-1/download'
+      },
+      {
+        id: 'image-1',
+        filename: 'preview.png',
+        content_type: 'image/png',
+        url: '/api/v1/files/image-1/download'
+      },
+      {
+        id: 'binary-1',
+        filename: 'model.bin',
+        content_type: 'application/octet-stream',
+        url: '/api/v1/files/binary-1/download'
+      }
+    ]
+  })
+
+  assert.deepEqual(
+    items.map(item => [item.label, item.kind, item.previewKind]),
+    [
+      ['ligand.sdf', 'structure', undefined],
+      ['molecules.csv', 'csv', undefined],
+      ['metadata.json', 'file', 'json'],
+      ['run.log', 'file', 'text'],
+      ['preview.png', 'file', 'image'],
+      ['model.bin', 'file', 'download']
+    ]
+  )
 })

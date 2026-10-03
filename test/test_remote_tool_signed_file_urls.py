@@ -9,12 +9,14 @@ from fastapi import Header
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from app.auth.dependencies import get_current_user_optional
+from app.auth.dependencies import get_current_user, get_current_user_optional
 from app.database.base import Base
 from app.database.session import get_db
 from app.files.remote_access_tokens import (
     RemoteFileAccessTokenError,
+    create_browser_file_access_token,
     create_remote_file_access_token,
+    validate_browser_file_access_token,
     validate_remote_file_access_token,
 )
 from app.main import app
@@ -86,6 +88,70 @@ async def test_remote_file_access_token_rejects_expired_tokens():
 
     with pytest.raises(RemoteFileAccessTokenError):
         validate_remote_file_access_token(token, file_id="file-a", task_id="task-a")
+
+
+@pytest.mark.asyncio
+async def test_browser_file_access_token_is_scoped_to_file_and_expires():
+    token = create_browser_file_access_token(
+        file_id="file-a",
+        user_id="user-a",
+        expires_in_seconds=300,
+    )
+
+    claims = validate_browser_file_access_token(token, file_id="file-a")
+
+    assert claims["file_id"] == "file-a"
+    assert claims["user_id"] == "user-a"
+    with pytest.raises(RemoteFileAccessTokenError):
+        validate_browser_file_access_token(token, file_id="file-b")
+
+
+@pytest.mark.asyncio
+async def test_download_url_returns_short_lived_browser_url(
+    db_session: AsyncSession,
+    owner: User,
+    tmp_path,
+):
+    file_path = tmp_path / "molecules.sdf"
+    file_path.write_text("$$$$\n", encoding="utf-8")
+    file_record = FileModel(
+        owner_id=owner.id,
+        filename="molecules.sdf",
+        content_type="chemical/x-mdl-sdfile",
+        size_bytes=file_path.stat().st_size,
+        sha256="0" * 64,
+        storage_path=str(file_path),
+        source_type=FileSourceType.UPLOAD.value,
+        is_public=False,
+    )
+    db_session.add(file_record)
+    await db_session.commit()
+    await db_session.refresh(file_record)
+
+    async def override_get_db():
+        yield db_session
+
+    async def override_get_current_user():
+        return owner
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user] = override_get_current_user
+    try:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            response = await client.get(
+                f"/api/v1/files/{file_record.id}/download-url",
+                params={"expires_in": 300},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    download_url = response.json()["data"]["url"]
+    assert download_url.startswith(f"/api/v1/files/{file_record.id}/download?token=")
+    token = download_url.split("token=", 1)[1]
+    claims = validate_browser_file_access_token(token, file_id=file_record.id)
+    assert claims["user_id"] == owner.id
 
 
 @pytest.mark.asyncio

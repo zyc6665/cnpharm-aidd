@@ -40,11 +40,12 @@ test('createProtectedObjectUrl 应使用登录令牌拉取受保护文件并返�
   assert.equal(revokedUrl, 'blob:viewer-1')
 })
 
-test('triggerProtectedFileDownload 应通过 blob URL 触发下载而不是直接打开受保护接口', async () => {
+test('triggerProtectedFileDownload 应优先获取短时效 URL 后触发原生下载', async () => {
   const clicks: Array<{ href: string; download: string }> = []
   const appended: string[] = []
   const removed: string[] = []
-  const revoked: string[] = []
+  let requestedFileId = ''
+  let requestedHeaders: Record<string, string> | undefined
 
   await triggerProtectedFileDownload(
     {
@@ -53,14 +54,10 @@ test('triggerProtectedFileDownload 应通过 blob URL 触发下载而不是直�
     },
     {
       getToken: () => 'token-abc',
-      fetchBlob: async () => new Blob(['sdf']),
-      objectUrl: {
-        createObjectURL() {
-          return 'blob:download-1'
-        },
-        revokeObjectURL(url) {
-          revoked.push(url)
-        }
+      fetchDownloadUrl: async (fileId, headers) => {
+        requestedFileId = fileId
+        requestedHeaders = headers
+        return '/api/v1/files/file-2/download?token=short-lived'
       },
       dom: {
         appendAnchor(anchor) {
@@ -82,10 +79,54 @@ test('triggerProtectedFileDownload 应通过 blob URL 触发下载而不是直�
     }
   )
 
-  assert.deepEqual(clicks, [{ href: 'blob:download-1', download: 'generated_molecules.sdf' }])
+  assert.equal(requestedFileId, 'file-2')
+  assert.deepEqual(requestedHeaders, { Authorization: 'Bearer token-abc' })
+  assert.deepEqual(clicks, [{ href: '/api/v1/files/file-2/download?token=short-lived', download: 'generated_molecules.sdf' }])
   assert.deepEqual(appended, ['generated_molecules.sdf'])
   assert.deepEqual(removed, ['generated_molecules.sdf'])
-  assert.deepEqual(revoked, ['blob:download-1'])
+})
+
+test('triggerProtectedFileDownload 在短时效 URL 不可用时回退到 Blob 下载', async () => {
+  const clicks: Array<{ href: string; download: string }> = []
+  const revoked: string[] = []
+
+  await triggerProtectedFileDownload(
+    {
+      url: '/api/v1/files/file-legacy/download',
+      original_name: 'legacy.sdf'
+    },
+    {
+      getToken: () => 'token-legacy',
+      fetchDownloadUrl: async () => {
+        throw new Error('旧后端不支持短时效下载地址')
+      },
+      fetchBlob: async () => new Blob(['sdf']),
+      objectUrl: {
+        createObjectURL() {
+          return 'blob:legacy-download'
+        },
+        revokeObjectURL(url) {
+          revoked.push(url)
+        }
+      },
+      dom: {
+        appendAnchor() {},
+        createAnchor() {
+          return {
+            href: '',
+            download: '',
+            click() {
+              clicks.push({ href: this.href, download: this.download })
+            },
+            remove() {}
+          }
+        }
+      }
+    }
+  )
+
+  assert.deepEqual(clicks, [{ href: 'blob:legacy-download', download: 'legacy.sdf' }])
+  assert.deepEqual(revoked, ['blob:legacy-download'])
 })
 
 test('createProtectedObjectUrl 在缺少登录令牌时应直接失败', async () => {

@@ -479,7 +479,6 @@ export default {
       filterStage: '按阶段筛选',
       filterInput: '按输入语义筛选',
       filterOutput: '按输出语义筛选',
-      filterExecutor: '按执行器筛选',
       addNode: '添加节点',
       dragOrClick: '拖拽或点击添加',
       quickFilters: {
@@ -647,6 +646,11 @@ export default {
       noProducedOutput: '当前节点暂无产出',
       taskResult: '任务结果',
       noTaskResult: '当前没有任务结果',
+      resultSummary: '运行状态',
+      resultStatus: '当前状态',
+      resultFileCount: '{count} 个结果文件',
+      resultFileTypeUnknown: '文件',
+      downloadResult: '下载',
       outputFiles: '输出文件',
       downloadOutput: '下载输出',
       noOutputFiles: '当前还没有可下载的输出文件'
@@ -688,8 +692,7 @@ export default {
       table: {
         node: '节点',
         status: '状态',
-        task: '任务',
-        artifacts: '产物'
+        results: '结果'
       },
       summary: {
         failed: '存在失败节点，建议先检查失败原因和输入产物。',
@@ -714,7 +717,9 @@ export default {
       failureFallback: '请查看任务日志定位失败原因。',
       expand: '放大查看',
       previewTitle: '结果预览',
-      noPreviewableArtifacts: '任务已完成，暂无可预览产物'
+      noPreviewableArtifacts: '任务已完成，暂无可预览产物',
+      deferred: '选择节点后加载结果预览',
+      outputCount: '包含 {count} 个结果文件或产物'
     },
     runStatus: {
       pending: '等待中',
@@ -1281,12 +1286,23 @@ export default {
     visualizationResultList: '输出结果列表',
     visualizationResultListDesc: '共 {count} 个结果项，当前三维视图一次只展示选中的一个输出。',
     visualizationInputPinned: '固定输入结构',
+    visualizationPrevious: '查看上一个结果',
+    visualizationNext: '查看下一个结果',
     visualizationLoading: '正在加载三维结果...',
     visualizationFailed: '三维结果加载失败',
     visualizationUnsupported: '当前输出文件暂不支持在线预览',
     visualizationUnsupportedDesc: '目前已接入 PDB / mmCIF / PDBQT / SDF / MOL2 在线可视化，其它格式仍可直接下载。',
-    visualizationPartialSupport: '部分结果文件未接入在线预览',
-    visualizationPartialSupportDesc: '已优先展示可识别的结构或分子文件，其余文件请通过下方下载查看。',
+    filePreview: '结果文件',
+    filePreviewFile: '文件',
+    filePreviewLoading: '正在加载文件内容...',
+    filePreviewLoadFailed: '文件内容加载失败',
+    filePreviewTooLarge: '文件较大，暂不在线加载正文',
+    filePreviewTooLargeDesc: '为避免影响页面性能，请下载文件后查看完整内容。',
+    filePreviewMissingUrl: '缺少文件下载地址',
+    filePreviewEmpty: '暂无可展示的文件内容',
+    filePreviewDownloadOnly: '该文件暂不支持在线解析',
+    filePreviewDownloadOnlyDesc: '可以直接下载文件，在本地使用对应工具打开。',
+    visualizationDownloadOnlyHint: '列表中有 {count} 个文件暂不支持在线解析，可点击结果项下载查看。',
     cancel: '取消',
     retry: '重试',
     delete: '删除',

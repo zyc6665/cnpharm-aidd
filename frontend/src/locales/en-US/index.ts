@@ -480,7 +480,6 @@ export default {
       filterStage: 'Filter by stage',
       filterInput: 'Filter by input semantic',
       filterOutput: 'Filter by output semantic',
-      filterExecutor: 'Filter by executor',
       addNode: 'Add node',
       dragOrClick: 'Drag or click to add',
       quickFilters: {
@@ -648,6 +647,11 @@ export default {
       noProducedOutput: 'No produced output',
       taskResult: 'Task Result',
       noTaskResult: 'No task result',
+      resultSummary: 'Run Status',
+      resultStatus: 'Current status',
+      resultFileCount: '{count} result file(s)',
+      resultFileTypeUnknown: 'File',
+      downloadResult: 'Download',
       outputFiles: 'Output Files',
       downloadOutput: 'Download Output',
       noOutputFiles: 'No downloadable output file yet'
@@ -689,8 +693,7 @@ export default {
       table: {
         node: 'Node',
         status: 'Status',
-        task: 'Task',
-        artifacts: 'Artifacts'
+        results: 'Results'
       },
       summary: {
         failed: 'Some nodes failed. Review failure reasons and input artifacts first.',
@@ -715,7 +718,9 @@ export default {
       failureFallback: 'Check task logs to diagnose the failure.',
       expand: 'Expand Preview',
       previewTitle: 'Result Preview',
-      noPreviewableArtifacts: 'Task completed with no previewable artifact'
+      noPreviewableArtifacts: 'Task completed with no previewable artifact',
+      deferred: 'Select the node to load its result preview',
+      outputCount: '{count} result file(s) or artifact(s) available'
     },
     runStatus: {
       pending: 'Pending',
@@ -1282,12 +1287,23 @@ export default {
     visualizationResultList: 'Output Results',
     visualizationResultListDesc: '{count} result items are available. The 3D viewport shows one selected output at a time.',
     visualizationInputPinned: 'Pinned Input Structure',
+    visualizationPrevious: 'View previous result',
+    visualizationNext: 'View next result',
     visualizationLoading: 'Loading 3D results...',
     visualizationFailed: 'Failed to load 3D results',
     visualizationUnsupported: 'These output files are not supported for online preview yet',
     visualizationUnsupportedDesc: 'PDB / mmCIF / PDBQT / SDF / MOL2 previews are enabled first. Other files can still be downloaded directly.',
-    visualizationPartialSupport: 'Some result files are not available for online preview',
-    visualizationPartialSupportDesc: 'Recognized structure and molecule files are shown first. Download the remaining files below.',
+    filePreview: 'Result file',
+    filePreviewFile: 'File',
+    filePreviewLoading: 'Loading file content...',
+    filePreviewLoadFailed: 'Failed to load file content',
+    filePreviewTooLarge: 'This file is too large to load online',
+    filePreviewTooLargeDesc: 'Download the file to inspect its complete content without affecting page performance.',
+    filePreviewMissingUrl: 'Missing file download URL',
+    filePreviewEmpty: 'No file content is available for preview',
+    filePreviewDownloadOnly: 'This file is not supported for online parsing',
+    filePreviewDownloadOnlyDesc: 'Download the file and open it with the corresponding local tool.',
+    visualizationDownloadOnlyHint: '{count} file(s) are not supported for online parsing yet. Select a result item to download one.',
     cancel: 'Cancel',
     retry: 'Retry',
     delete: 'Delete',

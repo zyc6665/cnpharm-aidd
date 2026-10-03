@@ -28,7 +28,7 @@
     binding_pocket: PocketResultArtifact,
     pocket_result: PocketResultArtifact,
     ligand_structure: LigandStructureArtifact,
-    molecule_table: FileArtifact,
+    molecule_table: LigandStructureArtifact,
     file: FileArtifact,
     run_report: RunReportArtifact
   }

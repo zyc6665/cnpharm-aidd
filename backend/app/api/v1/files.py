@@ -6,6 +6,7 @@ import aiofiles
 import re
 import uuid
 from pathlib import Path
+from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,6 +32,8 @@ from app.config import settings
 from app.logging.audit import AuditAction, AuditResult, get_audit_logger
 from app.files.remote_access_tokens import (
     RemoteFileAccessTokenError,
+    create_browser_file_access_token,
+    validate_browser_file_access_token,
     validate_remote_file_access_token,
 )
 from app.files.file_records import (
@@ -366,14 +369,17 @@ async def download_file(
     if token:
         try:
             remote_token_claims = validate_remote_file_access_token(token, file_id=file_id)
-        except RemoteFileAccessTokenError as exc:
-            _audit_file_download_denied(
-                file=file,
-                current_user=current_user,
-                remote_token=True,
-                reason="invalid_remote_token",
-            )
-            raise ForbiddenException(str(exc)) from exc
+        except RemoteFileAccessTokenError:
+            try:
+                remote_token_claims = validate_browser_file_access_token(token, file_id=file_id)
+            except RemoteFileAccessTokenError as exc:
+                _audit_file_download_denied(
+                    file=file,
+                    current_user=current_user,
+                    remote_token=True,
+                    reason="invalid_remote_token",
+                )
+                raise ForbiddenException(str(exc)) from exc
 
     # 权限检查：公开文件允许匿名访问
     if not file.is_public and remote_token_claims is None:
@@ -459,8 +465,12 @@ async def get_download_url(
     if not is_file_usable(file):
         raise NotFoundException("文件不存在")
 
-    # 对于本地存储，直接返回下载API路径
-    download_url = f"/api/v1/files/{file_id}/download"
+    token = create_browser_file_access_token(
+        file_id=file_id,
+        user_id=current_user.id,
+        expires_in_seconds=expires_in,
+    )
+    download_url = f"/api/v1/files/{file_id}/download?token={quote(token)}"
 
     return success_response(
         data=FileDownloadUrl(

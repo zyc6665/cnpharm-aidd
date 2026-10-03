@@ -28,6 +28,7 @@ import { PluginCommands } from 'molstar/lib/mol-plugin/commands'
 import { Asset } from 'molstar/lib/mol-util/assets'
 
 import type { VisualizationScene } from '@/domain/tasks'
+import { createNormalizedSdfObjectUrl } from '@/domain/tasks'
 import { createProtectedObjectUrl } from '@/utils/protected-file-access'
 
 const props = withDefaults(defineProps<{
@@ -124,7 +125,6 @@ async function ensureViewer() {
 
   const subscription = viewer.plugin.layout.events.updated.subscribe(() => {
     syncFullscreenLayout()
-    viewer?.handleResize()
   })
   removeLayoutSyncListener = () => subscription.unsubscribe()
 }
@@ -151,7 +151,9 @@ async function renderScene() {
     const entryResources = await Promise.all(
       props.scene.entries.map(async entry => ({
         entry,
-        resource: await createProtectedObjectUrl(entry.url)
+        resource: entry.format === 'sdf'
+          ? await createNormalizedSdfObjectUrl(entry.url)
+          : await createProtectedObjectUrl(entry.url)
       }))
     )
 

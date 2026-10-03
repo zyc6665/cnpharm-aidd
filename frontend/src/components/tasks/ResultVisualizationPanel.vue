@@ -9,65 +9,82 @@
         <h4>{{ t('tasks.resultVisualization') }}</h4>
         <p>{{ panelDescription }}</p>
       </div>
-      <a-tag v-if="typedArtifacts.length" color="purple">
-        {{ typedArtifacts.length }} Artifact
-      </a-tag>
-      <a-tag v-else-if="csvResultFile" color="cyan">
-        CSV
-      </a-tag>
-      <a-tag v-else-if="scene.hasRenderableOutput" color="blue">
-        {{ scene.outputEntries.length }} {{ t('tasks.visualizationFiles') }}
+      <a-tag v-if="resultItems.length" color="blue">
+        {{ resultItems.length }} {{ t('tasks.visualizationFiles') }}
       </a-tag>
     </div>
 
-    <div v-if="typedArtifacts.length" class="typed-artifact-list">
-      <ArtifactRenderer
-        v-for="artifact in typedArtifacts"
-        :key="artifact.id"
-        :artifact="artifact"
-      />
-    </div>
+    <div v-if="resultItems.length" class="visualization-browser">
+      <nav class="visualization-result-list" :aria-label="t('tasks.visualizationResultList')">
+        <button
+          v-for="(item, index) in resultItems"
+          :key="item.key"
+          :data-testid="'visualization-result-item'"
+          :data-result-kind="item.kind"
+          type="button"
+          class="visualization-result-item"
+          :class="{ 'visualization-result-item--active': selectedResult?.key === item.key }"
+          :aria-current="selectedResult?.key === item.key ? 'true' : undefined"
+          @click="selectResult(item.key)"
+        >
+          <span class="visualization-result-item__index">{{ index + 1 }}</span>
+          <span class="visualization-result-item__meta">
+            <span class="visualization-result-item__name">{{ item.label }}</span>
+            <span class="visualization-result-item__desc">{{ item.description }}</span>
+          </span>
+        </button>
+      </nav>
 
-    <CsvResultViewer v-else-if="csvResultFile" :file="csvResultFile" />
-
-    <template v-else-if="scene.hasRenderableOutput">
-      <div v-if="!isCompact && scene.outputEntries.length > 1" class="output-browser">
-        <div class="output-browser__header">
-          <div>
-            <h5>{{ t('tasks.visualizationResultList') }}</h5>
-            <p>{{ t('tasks.visualizationResultListDesc', { count: scene.outputEntries.length }) }}</p>
-          </div>
-          <a-tag v-if="focusedScene.inputEntries.length" color="orange">
-            {{ t('tasks.visualizationInputPinned') }}
-          </a-tag>
-        </div>
-
-        <div class="output-browser__list">
+      <section class="visualization-preview" aria-live="polite">
+        <div class="visualization-preview__toolbar">
           <button
-            v-for="(entry, index) in scene.outputEntries"
-            :key="entry.key"
+            data-testid="visualization-result-previous"
             type="button"
-            class="output-browser__item"
-            :class="{ 'output-browser__item--active': selectedOutputKey === entry.key }"
-            @click="selectedOutputKey = entry.key"
+            class="visualization-preview__arrow"
+            :disabled="!hasPreviousResult"
+            :aria-label="t('tasks.visualizationPrevious')"
+            @click="selectAdjacentResult(-1)"
           >
-            <span class="output-browser__index">{{ index + 1 }}</span>
-            <span class="output-browser__meta">
-              <span class="output-browser__name">{{ entry.label }}</span>
-              <span class="output-browser__desc">
-                {{ entry.scoreLabel || entry.extension.replace('.', '').toUpperCase() }}
-              </span>
-            </span>
+            <ArrowLeftOutlined />
+          </button>
+          <span data-testid="visualization-result-position" class="visualization-preview__position">
+            {{ selectedResultIndex + 1 }} / {{ resultItems.length }}
+          </span>
+          <button
+            data-testid="visualization-result-next"
+            type="button"
+            class="visualization-preview__arrow"
+            :disabled="!hasNextResult"
+            :aria-label="t('tasks.visualizationNext')"
+            @click="selectAdjacentResult(1)"
+          >
+            <ArrowRightOutlined />
           </button>
         </div>
-      </div>
 
-      <MoleculeViewer
-        :scene="focusedScene"
-        :variant="variant"
-        :allow-native-fullscreen="allowNativeFullscreen"
-      />
-    </template>
+        <div class="visualization-preview__body">
+          <MoleculeViewer
+            v-if="selectedResult?.kind === 'structure'"
+            :scene="focusedScene"
+            :variant="variant"
+            :allow-native-fullscreen="allowNativeFullscreen"
+          />
+          <CsvResultViewer
+            v-else-if="selectedResult?.kind === 'csv' && selectedResult.file"
+            :file="selectedResult.file"
+          />
+          <ResultFilePreview
+            v-else-if="selectedResult?.kind === 'file' && selectedResult.file && selectedResult.previewKind"
+            :file="selectedResult.file"
+            :preview-kind="selectedResult.previewKind"
+          />
+          <ArtifactRenderer
+            v-else-if="selectedResult?.kind === 'artifact' && selectedResult.artifact"
+            :artifact="selectedResult.artifact"
+          />
+        </div>
+      </section>
+    </div>
 
     <a-alert
       v-else
@@ -77,7 +94,10 @@
       :description="t('tasks.visualizationUnsupportedDesc')"
     />
 
-    <div v-if="!isCompact && !csvResultFile && scene.hasRenderableOutput" class="scene-files">
+    <div
+      v-if="!isCompact && selectedResult?.kind === 'structure' && focusedScene.hasRenderableOutput"
+      class="scene-files"
+    >
       <div
         v-for="entry in focusedScene.entries"
         :key="entry.key"
@@ -89,21 +109,19 @@
       </div>
     </div>
 
-    <a-alert
-      v-if="!csvResultFile && scene.unsupportedOutputFiles.length"
-      v-show="!isCompact"
-      class="partial-support-alert"
-      type="info"
-      show-icon
-      :message="t('tasks.visualizationPartialSupport')"
-      :description="t('tasks.visualizationPartialSupportDesc')"
-    />
+    <div
+      v-if="downloadOnlyResultCount && !isCompact"
+      class="download-only-note"
+    >
+      {{ t('tasks.visualizationDownloadOnlyHint', { count: downloadOnlyResultCount }) }}
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { ArrowLeftOutlined, ArrowRightOutlined } from '@ant-design/icons-vue'
 
 import type { Task } from '@/types/models'
 import type { TypedArtifact } from '@/types/artifacts'
@@ -111,15 +129,13 @@ import type { TypedArtifact } from '@/types/artifacts'
 import ArtifactRenderer from '@/components/artifacts/ArtifactRenderer.vue'
 import CsvResultViewer from './CsvResultViewer.vue'
 import MoleculeViewer from './MoleculeViewer.vue'
+import ResultFilePreview from './ResultFilePreview.vue'
 import {
   buildFocusedVisualizationScene,
   buildVisualizationScene,
+  buildVisualizationResultItems,
   createVisualizationScene,
-  detectCsvResultFile,
-  detectSdfScoreRankingFile,
-  expandSdfOutputEntries,
-  preferTopRankedSdfFiles,
-  rankSdfEntriesByScoreFile
+  preferTopRankedSdfFiles
 } from '@/domain/tasks'
 
 const props = withDefaults(defineProps<{
@@ -136,135 +152,89 @@ const isCompact = computed(() => props.variant === 'compact')
 
 const hasOutputFiles = computed(() => Boolean(props.task.output_files?.length))
 const typedArtifacts = computed<TypedArtifact[]>(() => props.task.artifacts ?? [])
-const hasVisualizationContent = computed(() => typedArtifacts.value.length > 0 || hasOutputFiles.value)
 const preferredTask = computed(() => ({
   ...props.task,
   output_files: preferTopRankedSdfFiles(props.task.output_files)
 }))
-const usingTopRankedSdf = computed(() => (
-  Boolean(props.task.output_files?.length) &&
-  preferredTask.value.output_files !== props.task.output_files
-))
 const baseScene = computed(() => buildVisualizationScene(preferredTask.value))
-const scoreRankingFile = computed(
-  () => props.task.output_files?.find(file => detectSdfScoreRankingFile(file)) || null
+const scene = computed(() => baseScene.value)
+
+const resultItems = computed(() => buildVisualizationResultItems(props.task, scene.value))
+const downloadOnlyResultCount = computed(() => resultItems.value.filter(item => (
+  item.kind === 'file' && item.previewKind === 'download'
+)).length)
+const selectedResultKey = ref<string | null>(null)
+const selectedResult = computed(() =>
+  resultItems.value.find(item => item.key === selectedResultKey.value) || resultItems.value[0] || null
 )
-const csvResultFile = computed(() => {
-  if (baseScene.value.outputEntries.length) {
-    return null
+const selectedResultIndex = computed(() => {
+  const index = resultItems.value.findIndex(item => item.key === selectedResult.value?.key)
+  return index >= 0 ? index : 0
+})
+const hasPreviousResult = computed(() => selectedResultIndex.value > 0)
+const hasNextResult = computed(() => selectedResultIndex.value < resultItems.value.length - 1)
+const hasVisualizationContent = computed(() => (
+  resultItems.value.length > 0 ||
+  typedArtifacts.value.length > 0 ||
+  hasOutputFiles.value
+))
+
+const focusedScene = computed(() => {
+  const selected = selectedResult.value
+  if (selected?.kind !== 'structure' || !selected.entry) {
+    return createVisualizationScene([], [], [])
   }
 
-  return props.task.output_files?.find(file => detectCsvResultFile(file)) || null
-})
-const selectedOutputKey = ref<string | null>(null)
-const expandedOutputEntries = ref<typeof baseScene.value.outputEntries | null>(null)
-let revokeExpandedOutputs: (() => void) | null = null
+  const isOutputEntry = scene.value.outputEntries.some(entry => entry.key === selected.entry?.key)
+  if (isOutputEntry) {
+    return buildFocusedVisualizationScene(scene.value, selected.entry.key)
+  }
 
-function cleanupExpandedOutputs() {
-  revokeExpandedOutputs?.()
-  revokeExpandedOutputs = null
-  expandedOutputEntries.value = null
+  return createVisualizationScene([], [selected.entry], [])
+})
+
+function selectResult(key: string) {
+  selectedResultKey.value = key
 }
 
-async function hydrateExpandedOutputEntries() {
-  cleanupExpandedOutputs()
-
-  const hasSdfOutput = baseScene.value.outputEntries.some(entry => entry.format === 'sdf')
-  if (!hasSdfOutput) {
+function selectAdjacentResult(offset: number) {
+  const nextIndex = selectedResultIndex.value + offset
+  const nextItem = resultItems.value[nextIndex]
+  if (!nextItem) {
     return
   }
 
-  try {
-    const expanded = await expandSdfOutputEntries(baseScene.value.outputEntries)
-    const shouldUseExpandedEntries =
-      expanded.entries.length !== baseScene.value.outputEntries.length ||
-      expanded.entries.some((entry, index) => entry.key !== baseScene.value.outputEntries[index]?.key)
-    const rankedEntries = usingTopRankedSdf.value
-      ? expanded.entries
-      : await rankSdfEntriesByScoreFile(expanded.entries, scoreRankingFile.value)
-    const shouldUseRankedEntries =
-      rankedEntries.length !== expanded.entries.length ||
-      rankedEntries.some((entry, index) => (
-        entry.key !== expanded.entries[index]?.key ||
-        entry.scoreLabel !== expanded.entries[index]?.scoreLabel
-      ))
-
-    if (!shouldUseExpandedEntries && !shouldUseRankedEntries) {
-      expanded.revoke()
-      return
-    }
-
-    expandedOutputEntries.value = rankedEntries
-    revokeExpandedOutputs = expanded.revoke
-  } catch (error) {
-    cleanupExpandedOutputs()
-    console.warn('Failed to expand multi-molecule SDF outputs', error)
-  }
+  selectResult(nextItem.key)
 }
 
 watch(
-  () => baseScene.value.outputEntries.map(entry => `${entry.key}:${entry.url}`).join('|'),
+  () => resultItems.value.map(item => item.key).join('|'),
   () => {
-    void hydrateExpandedOutputEntries()
-  },
-  { immediate: true }
-)
-
-watch(
-  () => scoreRankingFile.value ? `${scoreRankingFile.value.id}:${scoreRankingFile.value.url}` : '',
-  () => {
-    void hydrateExpandedOutputEntries()
-  },
-)
-
-onUnmounted(() => {
-  cleanupExpandedOutputs()
-})
-
-const scene = computed(() => {
-  const outputEntries = expandedOutputEntries.value?.length
-    ? expandedOutputEntries.value
-    : baseScene.value.outputEntries
-
-  if (outputEntries === baseScene.value.outputEntries) {
-    return baseScene.value
-  }
-
-  return createVisualizationScene(
-    baseScene.value.inputEntries,
-    outputEntries,
-    baseScene.value.unsupportedOutputFiles
-  )
-})
-
-const focusedScene = computed(() => buildFocusedVisualizationScene(scene.value, selectedOutputKey.value))
-
-watch(
-  () => [scene.value.selectedOutputKey, scene.value.outputEntries.map(entry => entry.key).join('|')],
-  () => {
-    const hasSelectedOutput = scene.value.outputEntries.some(entry => entry.key === selectedOutputKey.value)
-
-    if (!hasSelectedOutput) {
-      selectedOutputKey.value = scene.value.selectedOutputKey
+    if (!resultItems.value.some(item => item.key === selectedResultKey.value)) {
+      selectedResultKey.value = resultItems.value[0]?.key || null
     }
   },
   { immediate: true }
 )
 
 const panelDescription = computed(() => {
-  if (typedArtifacts.value.length) {
-    return '展示结构化科研产物、谱系文件和运行报告'
-  }
-
-  if (csvResultFile.value) {
+  if (selectedResult.value?.kind === 'csv') {
     return t('tasks.csvVisualizationHint')
   }
 
-  if (!scene.value.hasRenderableOutput) {
+  if (selectedResult.value?.kind === 'artifact') {
+    return selectedResult.value.description
+  }
+
+  if (selectedResult.value?.kind === 'file') {
+    return t('tasks.filePreview')
+  }
+
+  if (!scene.value.hasRenderableOutput && !resultItems.value.length) {
     return t('tasks.visualizationUnsupportedDesc')
   }
 
-  if (scene.value.outputEntries.length > 1) {
+  if (resultItems.value.length > 1) {
     return t('tasks.visualizationSelectableHint')
   }
 
@@ -299,10 +269,9 @@ const panelDescription = computed(() => {
   min-height: 0;
 }
 
-.result-visualization-panel--compact .typed-artifact-list {
+.result-visualization-panel--compact .visualization-browser {
   height: 100%;
   min-height: 0;
-  overflow: hidden;
 }
 
 .panel-header {
@@ -325,99 +294,76 @@ const panelDescription = computed(() => {
   line-height: 1.6;
 }
 
-.output-browser {
+.visualization-browser {
+  display: grid;
+  grid-template-columns: minmax(190px, 260px) minmax(0, 1fr);
+  gap: 12px;
+  min-height: 520px;
+}
+
+.visualization-result-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-  border-radius: 20px;
-  background:
-    radial-gradient(circle at top right, rgba(56, 189, 248, 0.08), transparent 28%),
-    linear-gradient(180deg, @bg-elevated, @bg-hover);
+  gap: 2px;
+  min-width: 0;
+  max-height: 520px;
+  padding: 4px;
+  overflow: auto;
   border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: @bg-hover;
 }
 
-.output-browser__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.output-browser__header h5 {
-  margin: 0 0 6px;
-  font-size: 15px;
-  font-weight: 600;
-  color: #0f172a;
-}
-
-.output-browser__header p {
-  margin: 0;
-  color: #64748b;
-  line-height: 1.6;
-}
-
-.output-browser__list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 10px;
-}
-
-.output-browser__item {
+.visualization-result-item {
   display: flex;
   align-items: center;
   gap: 12px;
   width: 100%;
-  padding: 12px 14px;
-  border: 1px solid #dbe4ff;
-  border-radius: 16px;
-  background: @accent-color-light;
+  padding: 10px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
   color: #0f172a;
   text-align: left;
   cursor: pointer;
   transition:
     border-color 0.2s ease,
-    background-color 0.2s ease,
-    box-shadow 0.2s ease,
-    transform 0.2s ease;
+    background-color 0.2s ease;
 }
 
-.output-browser__item:hover {
+.visualization-result-item:hover,
+.visualization-result-item:focus-visible {
   border-color: @accent-color;
   background: @bg-hover;
-  transform: translateY(-1px);
 }
 
-.output-browser__item--active {
+.visualization-result-item--active {
   border-color: #2563eb;
-  background:
-    linear-gradient(180deg, rgba(37, 99, 235, 0.12), rgba(191, 219, 254, 0.26)),
-    #eef6ff;
-  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.12);
+  background: #eef6ff;
 }
 
-.output-browser__index {
+.visualization-result-item__index {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
   border-radius: 999px;
   background: #dbeafe;
   color: #1d4ed8;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   flex-shrink: 0;
 }
 
-.output-browser__meta {
+.visualization-result-item__meta {
   display: flex;
   flex-direction: column;
   gap: 3px;
   min-width: 0;
 }
 
-.output-browser__name {
+.visualization-result-item__name {
   font-size: 13px;
   font-weight: 600;
   line-height: 1.5;
@@ -425,10 +371,88 @@ const panelDescription = computed(() => {
   word-break: break-word;
 }
 
-.output-browser__desc {
+.visualization-result-item__desc {
   font-size: 12px;
   color: #64748b;
   letter-spacing: 0.04em;
+}
+
+.visualization-preview {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: @bg-elevated;
+}
+
+.visualization-preview__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 6px 10px;
+  border-bottom: 1px solid #e2e8f0;
+  background: @bg-hover;
+}
+
+.visualization-preview__arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: @bg-elevated;
+  color: #1d4ed8;
+  cursor: pointer;
+}
+
+.visualization-preview__arrow:hover:not(:disabled),
+.visualization-preview__arrow:focus-visible:not(:disabled) {
+  border-color: @accent-color;
+  background: @accent-color-light;
+}
+
+.visualization-preview__arrow:disabled {
+  color: #94a3b8;
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.visualization-preview__position {
+  color: #64748b;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.visualization-preview__body {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.result-visualization-panel--compact .visualization-browser {
+  grid-template-columns: minmax(132px, 190px) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.result-visualization-panel--compact .visualization-result-list {
+  max-height: none;
+  min-height: 0;
+}
+
+.result-visualization-panel--compact .visualization-preview {
+  min-height: 0;
+}
+
+.result-visualization-panel--compact .visualization-preview__body {
+  height: 100%;
 }
 
 .scene-files {
@@ -470,14 +494,15 @@ const panelDescription = computed(() => {
   line-height: 1.4;
 }
 
-.partial-support-alert {
+.download-only-note {
   margin-top: 4px;
-}
-
-.typed-artifact-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  color: #64748b;
+  background: #f8fafc;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 @media (max-width: 768px) {
@@ -485,12 +510,13 @@ const panelDescription = computed(() => {
     flex-direction: column;
   }
 
-  .output-browser__header {
-    flex-direction: column;
+  .visualization-browser {
+    grid-template-columns: 1fr;
+    min-height: 0;
   }
 
-  .output-browser__list {
-    grid-template-columns: 1fr;
+  .visualization-result-list {
+    max-height: 180px;
   }
 }
 </style>

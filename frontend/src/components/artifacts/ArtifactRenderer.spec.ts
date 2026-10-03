@@ -120,6 +120,41 @@ describe('ArtifactRenderer', () => {
     expect(wrapper.find('[data-testid="structure-artifact-preview"]').exists()).toBe(true)
   })
 
+  it('renders molecule table SDF files with the shared structure preview', async () => {
+    const wrapper = mount(ArtifactRenderer, {
+      props: {
+        artifact: artifact({
+          artifact_type: 'molecule_table',
+          semantic_type: 'molecule_table',
+          name: 'generated-molecules.sdf',
+          latest_version: {
+            ...version,
+            filename: 'generated-molecules.sdf',
+            content_type: 'chemical/x-mdl-sdfile',
+            files: [
+              {
+                id: 'role-file-1',
+                role: 'structure_3d_sdf',
+                file_id: 'file-1',
+                is_primary: true,
+                sort_order: 1,
+                filename: 'generated-molecules.sdf',
+                content_type: 'chemical/x-mdl-sdfile',
+                size_bytes: 2048,
+                download_url: '/files/generated-molecules.sdf',
+              },
+            ],
+          },
+        }),
+      },
+      global: { stubs },
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="structure-artifact-preview"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="molecule-viewer"]').exists()).toBe(true)
+  })
+
   it('prefers the ligand 3D role file when a ligand artifact exposes multiple role files', async () => {
     const twoDDownloadUrl =
       '/api/v1/artifacts/artifact-1/versions/version-1/files/structure_2d_sdf/download'
