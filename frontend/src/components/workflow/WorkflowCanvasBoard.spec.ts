@@ -1,5 +1,6 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
+import { nextTick } from 'vue'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import i18n from '@/locales'
@@ -44,6 +45,91 @@ describe('WorkflowCanvasBoard', () => {
     for (const literal of ['title="缩小"', 'title="放大"', '>复位<']) {
       expect(source).not.toContain(literal)
     }
+  })
+
+  it('拖动画布空白区域时应平移视口', async () => {
+    const wrapper = mount(WorkflowCanvasBoard, {
+      props: { preset: canvasPreset },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          AButton: {
+            emits: ['click'],
+            template: '<button @click="$emit(\'click\')"><slot /></button>',
+          },
+          ASpace: { template: '<div><slot /></div>' },
+          ATag: { template: '<span><slot /></span>' },
+          ZoomInOutlined: true,
+          ZoomOutOutlined: true,
+        },
+      },
+      attachTo: document.body,
+    })
+    const viewport = wrapper.find('.canvas-viewport')
+    const element = viewport.element as HTMLElement
+    element.scrollLeft = 120
+    element.scrollTop = 80
+
+    element.dispatchEvent(new PointerEvent('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      clientX: 200,
+      clientY: 160,
+      pointerId: 1,
+    }))
+    await nextTick()
+    element.dispatchEvent(new PointerEvent('pointermove', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 160,
+      clientY: 120,
+      pointerId: 1,
+    }))
+    await nextTick()
+
+    expect(element.scrollLeft).toBe(160)
+    expect(element.scrollTop).toBe(120)
+    expect(wrapper.find('.workflow-canvas-board').classes()).toContain('is-panning')
+
+    element.dispatchEvent(new PointerEvent('pointerup', {
+      bubbles: true,
+      cancelable: true,
+      pointerId: 1,
+    }))
+    await nextTick()
+    expect(wrapper.find('.workflow-canvas-board').classes()).not.toContain('is-panning')
+  })
+
+  it('Ctrl 加滚轮时只缩放画布并阻止浏览器默认缩放', async () => {
+    const wrapper = mount(WorkflowCanvasBoard, {
+      props: { preset: canvasPreset },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          AButton: {
+            emits: ['click'],
+            template: '<button @click="$emit(\'click\')"><slot /></button>',
+          },
+          ASpace: { template: '<div><slot /></div>' },
+          ATag: { template: '<span><slot /></span>' },
+          ZoomInOutlined: true,
+          ZoomOutOutlined: true,
+        },
+      },
+    })
+    const event = new WheelEvent('wheel', {
+      bubbles: true,
+      cancelable: true,
+      ctrlKey: true,
+      deltaY: 100,
+    })
+
+    wrapper.find('.canvas-viewport').element.dispatchEvent(event)
+    await nextTick()
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(wrapper.find('.zoom-value').text()).toBe('90%')
   })
 
   it('拖动节点端口到目标节点时应发出语义连线事件', async () => {
@@ -213,7 +299,7 @@ describe('WorkflowCanvasBoard', () => {
     expect(wrapper.find('.workflow-canvas-board').attributes('style')).toContain('flex: 1 1 auto')
   })
 
-  it('同一画布上的多个成功节点应同时渲染紧凑可视化', () => {
+  it('同一画布只为当前选中节点渲染紧凑可视化', async () => {
     const wrapper = mount(WorkflowCanvasBoard, {
       props: {
         preset: canvasPreset,
@@ -246,8 +332,8 @@ describe('WorkflowCanvasBoard', () => {
           ASpace: { template: '<div><slot /></div>' },
           ATag: { template: '<span><slot /></span>' },
           ResultVisualizationPanel: {
-            props: ['variant'],
-            template: '<div data-testid="visualization" :data-variant="variant" />',
+            props: ['variant', 'task'],
+            template: '<div data-testid="visualization" :data-variant="variant" :data-task-id="task.id" />',
           },
           ZoomInOutlined: true,
           ZoomOutOutlined: true,
@@ -256,8 +342,17 @@ describe('WorkflowCanvasBoard', () => {
     })
 
     const visualizations = wrapper.findAll('[data-testid="visualization"]')
-    expect(visualizations).toHaveLength(2)
+    expect(visualizations).toHaveLength(1)
     expect(visualizations.every(item => item.attributes('data-variant') === 'compact')).toBe(true)
+    expect(visualizations[0]?.attributes('data-task-id')).toBe('task-source')
+    expect(wrapper.findAll('[data-testid="deferred-preview"]')).toHaveLength(1)
+
+    await wrapper.setProps({ activeNodeId: 'target' })
+
+    const selectedVisualization = wrapper.find('[data-testid="visualization"]')
+    expect(selectedVisualization.attributes('data-task-id')).toBe('task-target')
+    expect(wrapper.findAll('[data-testid="visualization"]')).toHaveLength(1)
+    expect(wrapper.findAll('[data-testid="deferred-preview"]')).toHaveLength(1)
   })
 
 })

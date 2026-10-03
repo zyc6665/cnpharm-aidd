@@ -12,8 +12,8 @@ interface PaletteToolFixture {
   tags?: Array<{ id: string; name: string; color?: string }>
   capability?: string
   stage?: string
-  executorType?: string
   resourceProfile?: Record<string, unknown>
+  deployment?: { kind: string; executor_type?: string | null }
 }
 
 function mountPalette(tools: PaletteToolFixture[] = [
@@ -25,7 +25,6 @@ function mountPalette(tools: PaletteToolFixture[] = [
       stageOptions: [],
       inputOptions: [],
       outputOptions: [],
-      executorOptions: [],
       tools,
     },
     global: {
@@ -53,7 +52,7 @@ describe('WorkflowToolPalette', () => {
     expect(dataTransfer.effectAllowed).toBe('copy')
   })
 
-  it('按能力分组展示工具并显示执行器和资源画像', () => {
+  it('按能力分组展示工具和资源画像', () => {
     const wrapper = mountPalette([
       {
         slug: 'vina-docking',
@@ -61,7 +60,6 @@ describe('WorkflowToolPalette', () => {
         description: 'Docking',
         capability: 'molecular_docking',
         stage: 'docking_scoring',
-        executorType: 'docker_image',
         resourceProfile: {
           tier: 'medium',
           cpu: 8,
@@ -76,7 +74,6 @@ describe('WorkflowToolPalette', () => {
         name: 'RDKit Properties',
         capability: 'property_prediction',
         stage: 'property_prediction',
-        executorType: 'python_script',
         resourceProfile: { tier: 'light', cpu: 2, memory_gb: 4 },
       },
     ])
@@ -91,10 +88,30 @@ describe('WorkflowToolPalette', () => {
       '1',
     ])
     expect(wrapper.find('.sidebar-tool-grid').exists()).toBe(true)
-    expect(wrapper.text()).toContain('docker_image')
     expect(wrapper.text()).toContain('medium')
     expect(wrapper.text()).toContain('CPU 8')
     expect(wrapper.text()).toContain('MEM 16GB')
+  })
+
+  it('统一工具目录不按部署方式展示工具', () => {
+    const wrapper = mountPalette([
+      {
+        slug: 'builtin-protein-preparation',
+        name: 'Protein Preparation',
+        category: '蛋白与配体预处理',
+        deployment: { kind: 'platform_builtin', executor_type: 'builtin' },
+      },
+      {
+        slug: 'remote-admet',
+        name: 'Remote ADMET',
+        category: '性质预测',
+        deployment: { kind: 'external_service', executor_type: 'remote_api' },
+      },
+    ])
+
+    expect(wrapper.text()).not.toContain('平台内置部署')
+    expect(wrapper.text()).not.toContain('外部服务部署')
+    expect(wrapper.findAll('.sidebar-tool-group').length).toBe(2)
   })
 
   it('默认使用动态快捷筛选并折叠高级筛选', async () => {

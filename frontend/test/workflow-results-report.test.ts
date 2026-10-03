@@ -39,6 +39,9 @@ test('workflow results report panel exposes summary and export surface', () => {
   ]) {
     assert.equal(source.includes(literal), false, `hardcoded report panel literal: ${literal}`)
   }
+
+  assert.equal(source.includes("table.task"), false)
+  assert.equal(source.includes("record.taskId"), false)
 })
 
 test('workflow markdown report should use injected labels', async () => {
@@ -51,7 +54,6 @@ test('workflow markdown report should use injected labels', async () => {
         nodeTitle: 'Docking',
         status: 'failed',
         statusLabel: 'Failed',
-        taskId: undefined,
         artifacts: []
       },
       {
@@ -59,7 +61,6 @@ test('workflow markdown report should use injected labels', async () => {
         nodeTitle: 'Scoring',
         status: 'completed',
         statusLabel: 'Completed',
-        taskId: 'task-1',
         artifacts: [
           { id: 'a1', filename: 'score.csv', url: '/files/a1' },
           { id: 'a2', filename: 'pose.sdf', url: '/files/a2' }
@@ -74,15 +75,17 @@ test('workflow markdown report should use injected labels', async () => {
       artifactSummaryTitle: 'Artifact Summary',
       tableNode: 'Node',
       tableStatus: 'Status',
-      tableTask: 'Task',
-      tableArtifacts: 'Artifacts',
+      tableResults: 'Results',
       noArtifacts: 'No artifacts',
       artifactSummaryLine: (count: number) => `${count} artifacts total.`
     }
   })
 
   assert.equal(markdown.includes('# Untitled Workflow Report'), true)
-  assert.equal(markdown.includes('| Node | Status | Task | Artifacts |'), true)
+  assert.equal(markdown.includes('| Node | Status | Results |'), true)
+  assert.equal(markdown.includes('task-1'), false)
+  assert.equal(markdown.includes('/files/a1'), false)
+  assert.equal(markdown.includes('/files/a2'), false)
   assert.equal(markdown.includes('No artifacts'), true)
   assert.equal(markdown.includes('2 artifacts total.'), true)
 

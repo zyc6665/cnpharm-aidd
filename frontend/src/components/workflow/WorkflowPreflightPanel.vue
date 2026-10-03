@@ -97,9 +97,6 @@
               <strong>{{ resource.toolName }}</strong>
               <p>{{ resource.label }}</p>
             </div>
-            <a-tag v-if="resource.executorType" color="blue">
-              {{ resource.executorType }}
-            </a-tag>
           </div>
         </div>
         <div v-else class="preflight-empty is-muted">

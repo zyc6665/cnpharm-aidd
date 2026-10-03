@@ -37,7 +37,11 @@ type UserStore = ReturnType<typeof useUserStore>
 type ArtifactsStore = ReturnType<typeof useArtifactsStore>
 type WorkflowStore = ReturnType<typeof useWorkflowStore>
 type WorkflowDefinitionsStore = ReturnType<typeof useWorkflowDefinitionsStore>
-type WorkflowToolContractLookup = Record<string, { contract?: ToolContract | null } | undefined>
+type WorkflowToolContractLookup = Record<string, {
+  name?: string
+  description?: string
+  contract?: ToolContract | null
+} | undefined>
 
 export interface WorkflowPersistenceLabels {
   untitledWorkflow: string
@@ -967,6 +971,9 @@ function mapCanvasDefinitionNode(
   const toolSlugs = toolSlug
     ? Array.from(new Set([toolSlug, ...stringArrayValue(node.toolSlugs)]))
     : stringArrayValue(node.toolSlugs)
+  const tool = toolSlug ? toolsBySlug?.[toolSlug] : undefined
+  const toolName = stringValue(tool?.name)
+  const toolDescription = stringValue(tool?.description)
   const hydratedSlots = deriveWorkflowNodeArtifactSlots(node, toolsBySlug, toolSlug)
   const inputArtifactSlots = hydratedSlots.inputs
   const outputArtifactSlots = hydratedSlots.outputs
@@ -976,8 +983,8 @@ function mapCanvasDefinitionNode(
   return {
     id: node.id,
     type: node.kind === 'input' ? 'input' : 'tool',
-    titleKey: toolSlug || node.semantic_type || node.id,
-    descriptionKey: toolSlug || node.semantic_type || node.id,
+    titleKey: toolName || toolSlug || node.semantic_type || node.id,
+    descriptionKey: toolDescription || toolName || toolSlug || node.semantic_type || node.id,
     position: resolveWorkflowNodePosition(node),
     toolSlugs,
     recommendedToolSlug: toolSlug,

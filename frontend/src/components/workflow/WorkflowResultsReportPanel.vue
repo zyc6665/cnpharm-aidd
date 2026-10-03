@@ -41,14 +41,14 @@
         <template v-if="column.key === 'status'">
           <a-tag :color="statusColor(record.status)">{{ record.statusLabel || record.status }}</a-tag>
         </template>
-        <template v-else-if="column.key === 'artifacts'">
+        <template v-else-if="column.key === 'results'">
           <span v-if="record.artifacts.length === 0" class="muted-text">{{ t('workflow.resultsReport.noArtifacts') }}</span>
-          <a-space v-else size="small" wrap>
-            <a v-for="artifact in record.artifacts.slice(0, 2)" :key="artifact.id" :href="artifact.url" target="_blank">
+          <div v-else class="report-result-list">
+            <span v-for="artifact in record.artifacts.slice(0, 2)" :key="artifact.id" class="report-result-name">
               {{ artifact.filename }}
-            </a>
+            </span>
             <a-tag v-if="record.artifacts.length > 2">+{{ record.artifacts.length - 2 }}</a-tag>
-          </a-space>
+          </div>
         </template>
       </template>
     </a-table>
@@ -70,8 +70,7 @@
   const columns = computed(() => [
     { title: t('workflow.resultsReport.table.node'), dataIndex: 'nodeTitle', key: 'nodeTitle' },
     { title: t('workflow.resultsReport.table.status'), dataIndex: 'status', key: 'status' },
-    { title: t('workflow.resultsReport.table.task'), dataIndex: 'taskId', key: 'taskId' },
-    { title: t('workflow.resultsReport.table.artifacts'), dataIndex: 'artifacts', key: 'artifacts' }
+    { title: t('workflow.resultsReport.table.results'), dataIndex: 'artifacts', key: 'results' }
   ])
 
   const rows = computed(() => props.rows)
@@ -97,8 +96,7 @@
     artifactSummaryTitle: t('workflow.resultsReport.artifactSummary'),
     tableNode: t('workflow.resultsReport.table.node'),
     tableStatus: t('workflow.resultsReport.table.status'),
-    tableTask: t('workflow.resultsReport.table.task'),
-    tableArtifacts: t('workflow.resultsReport.table.artifacts'),
+    tableResults: t('workflow.resultsReport.table.results'),
     noArtifacts: t('workflow.resultsReport.noArtifacts'),
     artifactSummaryLine: (count: number) => t('workflow.resultsReport.artifactSummaryLine', { count })
   }))
@@ -204,6 +202,26 @@
   .muted-text {
     color: @text-color-light-tertiary;
     font-size: @font-size-xs;
+  }
+
+  .report-result-list {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: @spacing-xs;
+  }
+
+  .report-result-name {
+    max-width: 180px;
+    overflow: hidden;
+    padding: 3px @spacing-sm;
+    border: 1px solid @border-color-light;
+    border-radius: @border-radius-sm;
+    background: @bg-light-secondary;
+    color: @text-color-light-primary;
+    font-size: @font-size-xs;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   @media (max-width: @screen-md) {

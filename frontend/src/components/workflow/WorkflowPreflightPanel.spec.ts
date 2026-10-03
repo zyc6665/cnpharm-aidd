@@ -110,7 +110,7 @@ describe('WorkflowPreflightPanel', () => {
 
     expect(wrapper.text()).toContain('资源需求')
     expect(wrapper.text()).toContain('AutoDock Vina')
-    expect(wrapper.text()).toContain('docker_image')
+    expect(wrapper.text()).not.toContain('docker_image')
     expect(wrapper.text()).toContain('medium · CPU 8 · MEM 16GB · ETA 30m')
   })
 

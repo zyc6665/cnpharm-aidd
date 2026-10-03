@@ -16,6 +16,15 @@
       <p>{{ task.error_message || t('workflow.inlinePreview.failureFallback') }}</p>
     </div>
 
+    <div
+      v-else-if="hasOutputs && !selected"
+      data-testid="deferred-preview"
+      class="inline-preview-deferred"
+    >
+      <strong>{{ t('workflow.inlinePreview.deferred') }}</strong>
+      <span>{{ t('workflow.inlinePreview.outputCount', { count: outputCount }) }}</span>
+    </div>
+
     <div v-else-if="hasOutputs" class="inline-preview-success">
       <div
         class="inline-preview-visualization-shell"
@@ -51,6 +60,7 @@
         :destroy-on-close="true"
       >
         <ResultVisualizationPanel
+          v-if="previewOpen"
           :task="visualizationTask"
           variant="full"
           :allow-native-fullscreen="false"
@@ -94,6 +104,7 @@ const isFailure = computed(() => ['failure', 'canceled'].includes(taskStatus.val
 const progress = computed(() => Math.max(0, Math.min(100, Number(props.task?.progress ?? 0))))
 const outputFiles = computed(() => props.task?.output_files ?? [])
 const hasOutputs = computed(() => outputFiles.value.length > 0 || (props.task?.artifacts?.length ?? 0) > 0)
+const outputCount = computed(() => outputFiles.value.length + (props.task?.artifacts?.length ?? 0))
 const visualizationTask = computed(() => ({
   ...props.task!,
   artifacts: props.task?.artifacts ?? [],
@@ -123,11 +134,26 @@ const visualizationTask = computed(() => ({
 
 .inline-preview-running,
 .inline-preview-error,
+.inline-preview-deferred,
 .inline-preview-output-list {
   display: grid;
   align-content: center;
   gap: @spacing-xs;
   padding: @spacing-sm;
+}
+
+.inline-preview-deferred {
+  display: grid;
+  align-content: center;
+  gap: @spacing-xs;
+  min-height: 100%;
+  padding: @spacing-sm;
+  color: @text-color-light-secondary;
+  font-size: @font-size-xs;
+}
+
+.inline-preview-deferred strong {
+  color: @text-color-light-primary;
 }
 
 .inline-preview-status-row {

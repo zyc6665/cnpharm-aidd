@@ -1,7 +1,7 @@
 <template>
   <div
     class="workflow-canvas-board"
-    :class="{ 'is-connecting': Boolean(connectingSourceNodeId) }"
+    :class="{ 'is-connecting': Boolean(connectingSourceNodeId), 'is-panning': isPanning }"
     :style="boardViewportStyle"
   >
     <div class="canvas-toolbar">
@@ -38,11 +38,12 @@
     <div
       ref="viewportRef"
       class="canvas-viewport"
-      @pointerup="cancelConnect"
-      @pointercancel="cancelConnect"
-      @pointermove="handleConnectionPointerMove"
-      @keydown.esc="cancelConnect"
-      @wheel.ctrl.prevent="setZoom(zoom - $event.deltaY * 0.001)"
+      @pointerdown="handleViewportPointerDown"
+      @pointerup="handleViewportPointerUp"
+      @pointercancel="handleViewportPointerCancel"
+      @pointermove="handleViewportPointerMove"
+      @keydown.esc="handleViewportEscape"
+      @wheel="handleViewportWheel"
       @dragover.prevent="handleToolDragOver"
       @drop.prevent="handleToolDrop"
     >
@@ -122,7 +123,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onMounted, ref } from 'vue'
+  import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
   import { FullscreenOutlined, ReloadOutlined, ZoomInOutlined, ZoomOutOutlined } from '@ant-design/icons-vue'
   import { useCanvasViewport } from '@/composables/useCanvasViewport'
   import { useI18n } from 'vue-i18n'
@@ -170,6 +171,14 @@
   const surfaceRef = ref<HTMLElement | null>(null)
   const viewportRef = ref<HTMLElement | null>(null)
   const connectionCursor = ref({ x: 0, y: 0 })
+  const panState = ref<{
+    pointerId: number
+    startX: number
+    startY: number
+    startScrollLeft: number
+    startScrollTop: number
+  } | null>(null)
+  const isPanning = computed(() => Boolean(panState.value))
 
   const presetName = computed(() => resolveWorkflowLabel(props.preset.nameKey, t, te, t('workflow.definition.titleFallback')))
 
@@ -304,6 +313,118 @@
     connectingSourceNodeId.value = null
   }
 
+  function isPanTarget(event: PointerEvent) {
+    if (!(event.target instanceof Element)) {
+      return false
+    }
+
+    return !event.target.closest(
+      '.workflow-canvas-panel-node, .edge-delete-control, button, input, textarea, select, a, [role="button"]',
+    )
+  }
+
+  function addPanListeners() {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    window.addEventListener('pointermove', handlePanPointerMove)
+    window.addEventListener('pointerup', handlePanPointerUp)
+    window.addEventListener('pointercancel', handlePanPointerCancel)
+  }
+
+  function removePanListeners() {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    window.removeEventListener('pointermove', handlePanPointerMove)
+    window.removeEventListener('pointerup', handlePanPointerUp)
+    window.removeEventListener('pointercancel', handlePanPointerCancel)
+  }
+
+  function handleViewportPointerDown(event: PointerEvent) {
+    const viewport = viewportRef.value
+    if (
+      !viewport
+      || event.button !== 0
+      || connectingSourceNodeId.value
+      || !isPanTarget(event)
+    ) {
+      return
+    }
+
+    stopPan()
+    panState.value = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startScrollLeft: viewport.scrollLeft,
+      startScrollTop: viewport.scrollTop,
+    }
+    event.preventDefault()
+    addPanListeners()
+  }
+
+  function handlePanPointerMove(event: PointerEvent) {
+    const viewport = viewportRef.value
+    const state = panState.value
+    if (!viewport || !state || state.pointerId !== event.pointerId) {
+      return
+    }
+
+    viewport.scrollLeft = state.startScrollLeft + state.startX - event.clientX
+    viewport.scrollTop = state.startScrollTop + state.startY - event.clientY
+    event.preventDefault()
+  }
+
+  function stopPan(event?: PointerEvent) {
+    const state = panState.value
+    if (!state || (event && state.pointerId !== event.pointerId)) {
+      return
+    }
+
+    panState.value = null
+    removePanListeners()
+  }
+
+  function handlePanPointerUp(event: PointerEvent) {
+    stopPan(event)
+  }
+
+  function handlePanPointerCancel(event: PointerEvent) {
+    stopPan(event)
+  }
+
+  function handleViewportPointerUp(event: PointerEvent) {
+    cancelConnect()
+    stopPan(event)
+  }
+
+  function handleViewportPointerCancel(event: PointerEvent) {
+    cancelConnect()
+    stopPan(event)
+  }
+
+  function handleViewportEscape() {
+    cancelConnect()
+    stopPan()
+  }
+
+  function handleViewportWheel(event: WheelEvent) {
+    if (!event.ctrlKey && !event.metaKey) {
+      return
+    }
+
+    event.preventDefault()
+    setZoom(zoom.value - event.deltaY * 0.001)
+  }
+
+  function handleViewportPointerMove(event: PointerEvent) {
+    handleConnectionPointerMove(event)
+    handlePanPointerMove(event)
+  }
+
   function handleConnectionPointerMove(event: PointerEvent) {
     if (!connectingSourceNodeId.value || !surfaceRef.value) {
       return
@@ -338,6 +459,10 @@
     if (typeof requestAnimationFrame === 'function') {
       requestAnimationFrame(fitView)
     }
+  })
+
+  onBeforeUnmount(() => {
+    stopPan()
   })
 
   function handleToolDragOver(event: DragEvent) {
@@ -425,6 +550,9 @@
     min-height: 0;
     flex: 1;
     overflow: auto;
+    cursor: grab;
+    touch-action: none;
+    overscroll-behavior: contain;
     background-image:
       linear-gradient(rgba(59, 130, 246, 0.06) 1px, transparent 1px),
       linear-gradient(90deg, rgba(59, 130, 246, 0.06) 1px, transparent 1px);
@@ -443,6 +571,12 @@
   .workflow-canvas-board.is-connecting .canvas-viewport,
   .workflow-canvas-board.is-connecting .canvas-surface {
     cursor: crosshair;
+  }
+
+  .workflow-canvas-board.is-panning .canvas-viewport,
+  .workflow-canvas-board.is-panning .canvas-surface {
+    cursor: grabbing;
+    user-select: none;
   }
 
   .workflow-canvas-board.is-connecting :deep(.node-port-input) {

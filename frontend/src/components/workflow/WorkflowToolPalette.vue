@@ -71,14 +71,6 @@
             :options="outputOptions"
             @change="emit('update:outputFilter', $event)"
           />
-          <a-select
-            :value="executorFilter"
-            size="small"
-            allow-clear
-            :placeholder="t('workflow.palette.filterExecutor')"
-            :options="executorOptions"
-            @change="emit('update:executorFilter', $event)"
-          />
         </div>
       </div>
     </div>
@@ -103,7 +95,6 @@
           >
             <span class="sidebar-tool-card-head">
               <span class="sidebar-tool-name">{{ tool.name || tool.slug }}</span>
-              <span v-if="tool.executorType" class="sidebar-tool-executor">{{ tool.executorType }}</span>
             </span>
             <span v-if="tool.description" class="sidebar-tool-desc">{{ tool.description }}</span>
             <span class="sidebar-tool-meta">
@@ -139,7 +130,6 @@ interface PaletteTool {
   tags?: PaletteToolTag[]
   capability?: string
   stage?: string
-  executorType?: string
   resourceProfile?: Record<string, unknown>
 }
 
@@ -154,11 +144,9 @@ const props = defineProps<{
   stageFilter?: string
   inputFilter?: string
   outputFilter?: string
-  executorFilter?: string
   stageOptions: Array<{ value: string; label: string }>
   inputOptions: Array<{ value: string; label: string }>
   outputOptions: Array<{ value: string; label: string }>
-  executorOptions: Array<{ value: string; label: string }>
   tools: PaletteTool[]
 }>()
 
@@ -167,7 +155,6 @@ const emit = defineEmits<{
   'update:stageFilter': [value: string | undefined]
   'update:inputFilter': [value: string | undefined]
   'update:outputFilter': [value: string | undefined]
-  'update:executorFilter': [value: string | undefined]
   'add-tool': [toolSlug: string]
 }>()
 
@@ -676,21 +663,6 @@ function handleToolDragStart(event: DragEvent, toolSlug: string) {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
-}
-
-.sidebar-tool-executor {
-  flex: 0 0 auto;
-  max-width: 74px;
-  padding: 1px 5px;
-  border-radius: @border-radius-sm;
-  background: rgba(34, 197, 94, 0.12);
-  color: @success-color;
-  font-size: 10px;
-  font-weight: 800;
-  line-height: 1.4;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .sidebar-tool-desc {

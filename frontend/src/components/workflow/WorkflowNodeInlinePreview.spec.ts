@@ -18,6 +18,8 @@ describe('WorkflowNodeInlinePreview', () => {
       'workflow.inlinePreview.expand',
       'workflow.inlinePreview.previewTitle',
       'workflow.inlinePreview.noPreviewableArtifacts',
+      'workflow.inlinePreview.deferred',
+      'workflow.inlinePreview.outputCount',
     ]) {
       expect(source).toContain(marker)
     }
@@ -48,7 +50,7 @@ describe('WorkflowNodeInlinePreview', () => {
     expect(wrapper.text()).toContain('40%')
   })
 
-  it('renders compact visualization for successful nodes even when they are not selected', () => {
+  it('mounts visualization only while a successful node is selected', async () => {
     const wrapper = mount(WorkflowNodeInlinePreview, {
       props: {
         selected: false,
@@ -75,9 +77,18 @@ describe('WorkflowNodeInlinePreview', () => {
       },
     })
 
+    expect(wrapper.find('[data-testid="visualization"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="deferred-preview"]').exists()).toBe(true)
+
+    await wrapper.setProps({ selected: true })
+
     expect(wrapper.find('[data-testid="visualization"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="visualization"]').attributes('data-variant')).toBe('compact')
-    expect(wrapper.find('[data-testid="visualization"]').attributes('data-native-fullscreen')).toBe('false')
+    expect(wrapper.find('[data-testid="deferred-preview"]').exists()).toBe(false)
+
+    await wrapper.setProps({ selected: false })
+
+    expect(wrapper.find('[data-testid="visualization"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="deferred-preview"]').exists()).toBe(true)
   })
 
   it('uses a compact in-node visualization and opens full preview outside the canvas node', async () => {

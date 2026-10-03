@@ -9,8 +9,6 @@ export interface WorkflowReportRow {
   nodeTitle: string
   status: string
   statusLabel: string
-  taskId?: string
-  taskStatus?: string
   artifacts: WorkflowReportArtifactLink[]
 }
 
@@ -22,8 +20,7 @@ export interface WorkflowReportMarkdownLabels {
   artifactSummaryTitle: string
   tableNode: string
   tableStatus: string
-  tableTask: string
-  tableArtifacts: string
+  tableResults: string
   noArtifacts: string
   artifactSummaryLine: (artifactCount: number) => string
 }
@@ -36,8 +33,7 @@ const DEFAULT_WORKFLOW_REPORT_LABELS: WorkflowReportMarkdownLabels = {
   artifactSummaryTitle: 'Artifact Summary',
   tableNode: 'Node',
   tableStatus: 'Status',
-  tableTask: 'Task',
-  tableArtifacts: 'Artifacts',
+  tableResults: 'Results',
   noArtifacts: 'No artifacts',
   artifactSummaryLine: (artifactCount) => `${artifactCount} artifacts total.`
 }
@@ -60,15 +56,15 @@ export function buildWorkflowReportMarkdown(input: {
     '',
     `## ${labels.nodeResultsTitle}`,
     '',
-    `| ${labels.tableNode} | ${labels.tableStatus} | ${labels.tableTask} | ${labels.tableArtifacts} |`,
-    '| --- | --- | --- | --- |'
+    `| ${labels.tableNode} | ${labels.tableStatus} | ${labels.tableResults} |`,
+    '| --- | --- | --- |'
   ]
 
   for (const row of input.rows) {
-    const artifactLinks = row.artifacts.length
-      ? row.artifacts.map(artifact => `[${artifact.filename}](${artifact.url})`).join('<br>')
+    const artifactNames = row.artifacts.length
+      ? row.artifacts.map(artifact => artifact.filename).join('<br>')
       : labels.noArtifacts
-    lines.push(`| ${row.nodeTitle} | ${row.statusLabel || row.status} | ${row.taskId ?? '-'} | ${artifactLinks} |`)
+    lines.push(`| ${row.nodeTitle} | ${row.statusLabel || row.status} | ${artifactNames} |`)
   }
 
   lines.push('', `## ${labels.artifactSummaryTitle}`, '', labels.artifactSummaryLine(artifactCount))

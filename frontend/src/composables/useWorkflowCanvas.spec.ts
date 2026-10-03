@@ -1,6 +1,6 @@
 import { mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
-import { defineComponent } from 'vue'
+import { defineComponent, nextTick } from 'vue'
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -116,6 +116,96 @@ describe('useWorkflowCanvas', () => {
       artifact_outputs: [
         { name: 'pocket', type: 'binding_pocket@1', cardinality: 'one', required: true }
       ]
+    })
+  })
+
+  it('重新选择工具时应使用工具库名称更新节点展示信息，而不是显示 slug', () => {
+    const canvas = mountCanvasHarness()
+    canvas.toolsStore.workbenchGroups = [
+      {
+        id: 'structure-preparation',
+        name: '蛋白与配体预处理',
+        slug: 'structure-preparation',
+        sort_order: 2,
+        tools: [
+          {
+            id: 'tool-protein-preparation',
+            name: 'Protein Preparation',
+            slug: 'builtin-protein-preparation',
+            description: '使用开源组件完成蛋白结构预处理。',
+            status: 'published',
+            is_recommended: true,
+            sort_order: 1,
+            contract: null,
+          },
+        ],
+      },
+    ] as never
+    canvas.workflowStore.$patch({
+      hasCanvasOverride: true,
+      canvasNodes: [
+        {
+          id: 'protein-preparation-node',
+          type: 'tool',
+          titleKey: 'builtin-protein-preparation',
+          descriptionKey: 'builtin-protein-preparation',
+          toolSlugs: ['builtin-protein-preparation'],
+          recommendedToolSlug: 'builtin-protein-preparation',
+          position: { x: 0, y: 0 },
+        },
+      ],
+    })
+
+    canvas.handleNodeToolSelect('protein-preparation-node', 'builtin-protein-preparation')
+
+    expect(canvas.workflowStore.canvasNodes[0]).toMatchObject({
+      titleKey: 'Protein Preparation',
+      descriptionKey: '使用开源组件完成蛋白结构预处理。',
+    })
+  })
+
+  it('工具库异步加载后应回填已有节点的工具名称', async () => {
+    const canvas = mountCanvasHarness()
+    canvas.workflowStore.$patch({
+      hasCanvasOverride: true,
+      canvasNodes: [
+        {
+          id: 'fetch-pdb-node',
+          type: 'tool',
+          titleKey: 'builtin-fetch-pdb',
+          descriptionKey: 'builtin-fetch-pdb',
+          toolSlugs: ['builtin-fetch-pdb'],
+          recommendedToolSlug: 'builtin-fetch-pdb',
+          position: { x: 0, y: 0 },
+        },
+      ],
+    })
+
+    canvas.toolsStore.workbenchGroups = [
+      {
+        id: 'data-acquisition',
+        name: '数据获取',
+        slug: 'data-acquisition',
+        sort_order: 0,
+        tools: [
+          {
+            id: 'tool-fetch-pdb',
+            name: 'Fetch PDB Structure',
+            slug: 'builtin-fetch-pdb',
+            description: '从 RCSB PDB 获取蛋白结构。',
+            status: 'published',
+            is_recommended: true,
+            sort_order: 1,
+            contract: null,
+          },
+        ],
+      },
+    ] as never
+    await nextTick()
+
+    expect(canvas.workflowStore.canvasNodes[0]).toMatchObject({
+      titleKey: 'Fetch PDB Structure',
+      descriptionKey: '从 RCSB PDB 获取蛋白结构。',
     })
   })
 

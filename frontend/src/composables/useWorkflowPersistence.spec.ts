@@ -175,6 +175,8 @@ describe('mapWorkflowDefinitionToCanvasPayload', () => {
       name: 'Saved Canvas Workflow',
       toolsBySlug: {
         'lvpocket-pocket-prediction': {
+          name: 'LVpocket Pocket Prediction',
+          description: 'Predict ligand-binding pockets from a protein structure.',
           contract: makeToolContract(),
         },
       },
@@ -199,7 +201,8 @@ describe('mapWorkflowDefinitionToCanvasPayload', () => {
     expect(payload.nodes[0]).toMatchObject({
       id: 'lvpocket-node',
       type: 'tool',
-      titleKey: 'lvpocket-pocket-prediction',
+      titleKey: 'LVpocket Pocket Prediction',
+      descriptionKey: 'Predict ligand-binding pockets from a protein structure.',
       recommendedToolSlug: 'lvpocket-pocket-prediction',
       toolSlugs: ['lvpocket-pocket-prediction'],
       inputArtifactSlots: [{ name: 'protein', type: 'protein_structure@1', required: true }],

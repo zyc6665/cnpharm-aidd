@@ -121,11 +121,9 @@
                 :stage-options="sidebarStageOptions"
                 :input-options="sidebarInputOptions"
                 :output-options="sidebarOutputOptions"
-                :executor-options="sidebarExecutorOptions"
                 :stage-filter="sidebarStageFilter"
                 :input-filter="sidebarInputFilter"
                 :output-filter="sidebarOutputFilter"
-                :executor-filter="sidebarExecutorFilter"
                 :tools="filteredSidebarToolOptions"
                 :format-node-title="formatKey"
                 :resolve-node-status-reason="resolveNodeStatusReason"
@@ -134,7 +132,6 @@
                 @update:stage-filter="sidebarStageFilter = $event"
                 @update:input-filter="sidebarInputFilter = $event"
                 @update:output-filter="sidebarOutputFilter = $event"
-                @update:executor-filter="sidebarExecutorFilter = $event"
                 @select-node="workflowStore.setActiveNode"
                 @add-control-node="handleAddControlNode"
                 @add-tool="handleAddToolNode"
@@ -325,7 +322,6 @@
     sidebarStageFilter,
     sidebarInputFilter,
     sidebarOutputFilter,
-    sidebarExecutorFilter,
     editableCanvasPreset,
     activeNode,
     selectedToolByActiveNode,
@@ -334,7 +330,6 @@
     sidebarStageOptions,
     sidebarInputOptions,
     sidebarOutputOptions,
-    sidebarExecutorOptions,
     filteredSidebarToolOptions,
     workflowInputRequirements,
     workflowInputRequirementDetails,

@@ -56,17 +56,14 @@
       :stage-options="stageOptions"
       :input-options="inputOptions"
       :output-options="outputOptions"
-      :executor-options="executorOptions"
       :stage-filter="stageFilter"
       :input-filter="inputFilter"
       :output-filter="outputFilter"
-      :executor-filter="executorFilter"
       :tools="tools"
       @update:search-keyword="emit('update:toolSearchKeyword', $event)"
       @update:stage-filter="emit('update:stageFilter', $event)"
       @update:input-filter="emit('update:inputFilter', $event)"
       @update:output-filter="emit('update:outputFilter', $event)"
-      @update:executor-filter="emit('update:executorFilter', $event)"
       @add-tool="emit('add-tool', $event)"
     />
   </aside>
@@ -94,7 +91,6 @@
     tags?: Array<{ id?: string; name: string; color?: string }>
     capability?: string
     stage?: string
-    executorType?: string
     resourceProfile?: Record<string, unknown>
   }
 
@@ -113,11 +109,9 @@
     stageFilter?: string
     inputFilter?: string
     outputFilter?: string
-    executorFilter?: string
     stageOptions: SelectOption[]
     inputOptions: SelectOption[]
     outputOptions: SelectOption[]
-    executorOptions: SelectOption[]
     tools: WorkflowWorkbenchRailTool[]
     formatNodeTitle: (key: string) => string
     resolveNodeStatusReason: (nodeId: string) => string
@@ -129,7 +123,6 @@
     'update:stageFilter': [value: string | undefined]
     'update:inputFilter': [value: string | undefined]
     'update:outputFilter': [value: string | undefined]
-    'update:executorFilter': [value: string | undefined]
     'select-node': [nodeId: string]
     'add-control-node': [type: Extract<WorkflowCanvasNodeType, 'condition' | 'map'>]
     'add-tool': [toolSlug: string]

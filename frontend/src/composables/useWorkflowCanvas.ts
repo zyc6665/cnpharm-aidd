@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useArtifactsStore, useToolsStore, useWorkflowStore } from '@/stores'
 import type { WorkflowReportRow } from '@/workflow/report'
@@ -42,7 +42,6 @@ type WorkflowToolSource = {
 }
 
 type AvailableWorkflowTool = WorkflowToolSource & {
-  executorType?: string
   capability?: string
   stage?: string
   resourceProfile?: Record<string, unknown>
@@ -64,7 +63,6 @@ export function useWorkflowCanvas(input: {
   const sidebarStageFilter = ref<string>()
   const sidebarInputFilter = ref<string>()
   const sidebarOutputFilter = ref<string>()
-  const sidebarExecutorFilter = ref<string>()
 
   const activeCanvasPreset = computed(() => {
     return getWorkflowCanvasPresetById(workflowStore.canvasPresetId) ?? FREE_WORKFLOW_CANVAS_PRESET
@@ -109,7 +107,6 @@ export function useWorkflowCanvas(input: {
       category: tool.category,
       tags: tool.tags ?? [],
       contract: tool.contract,
-      executorType: tool.contract?.executor.type,
       capability: tool.contract?.capability.capability ?? undefined,
       stage: tool.contract?.capability.stage ?? tool.contract?.capability.capability ?? undefined,
       resourceProfile: tool.contract?.resource_profile,
@@ -146,6 +143,43 @@ export function useWorkflowCanvas(input: {
     return Array.from(toolsBySlug.values())
   })
 
+  function syncCanvasNodeToolLabels() {
+    for (const node of workflowStore.canvasNodes) {
+      if (node.type !== 'tool') {
+        continue
+      }
+      const toolSlug =
+        workflowStore.selectedToolByNode[node.id] ??
+        node.recommendedToolSlug ??
+        (node.toolSlugs?.length === 1 ? node.toolSlugs[0] : undefined)
+      if (!toolSlug) {
+        continue
+      }
+      const tool = resolveAvailableTool(toolSlug)
+      if (!tool) {
+        continue
+      }
+      const nextTitle = tool.name || toolSlug
+      const nextDescription = tool.description || tool.name || toolSlug
+      if (
+        node.titleKey === nextTitle &&
+        node.descriptionKey === nextDescription &&
+        node.recommendedToolSlug === toolSlug &&
+        node.toolSlugs?.includes(toolSlug)
+      ) {
+        continue
+      }
+      workflowStore.updateCanvasNode(node.id, {
+        titleKey: nextTitle,
+        descriptionKey: nextDescription,
+        recommendedToolSlug: toolSlug,
+        toolSlugs: Array.from(new Set([toolSlug, ...(node.toolSlugs ?? [])]))
+      })
+    }
+  }
+
+  watch(availableWorkflowTools, syncCanvasNodeToolLabels, { immediate: true })
+
   const sidebarStageOptions = computed(() => {
     return Array.from(
       new Set(availableWorkflowTools.value.map(tool => tool.stage).filter(Boolean))
@@ -175,15 +209,6 @@ export function useWorkflowCanvas(input: {
     }))
   })
 
-  const sidebarExecutorOptions = computed(() => {
-    return Array.from(
-      new Set(availableWorkflowTools.value.map(tool => tool.executorType).filter(Boolean))
-    ).map(executorType => ({
-      value: executorType!,
-      label: executorType!
-    }))
-  })
-
   const filteredSidebarToolOptions = computed(() => {
     const keyword = sidebarToolSearchKeyword.value.trim().toLowerCase()
     return availableWorkflowTools.value.filter(tool => {
@@ -199,10 +224,7 @@ export function useWorkflowCanvas(input: {
       const matchesOutput =
         !sidebarOutputFilter.value ||
         tool.outputSemanticTypes.includes(sidebarOutputFilter.value as WorkflowArtifactSemanticType)
-      const matchesExecutor =
-        !sidebarExecutorFilter.value || tool.executorType === sidebarExecutorFilter.value
-
-      return matchesKeyword && matchesStage && matchesInput && matchesOutput && matchesExecutor
+      return matchesKeyword && matchesStage && matchesInput && matchesOutput
     })
   })
 
@@ -269,8 +291,6 @@ export function useWorkflowCanvas(input: {
         nodeTitle: formatKey(node.titleKey),
         status: nodeStatuses.value[node.id] ?? 'idle',
         statusLabel: resolveNodeStatusReason(node.id),
-        taskId: task?.id,
-        taskStatus: task?.status,
         artifacts
       }
     })
@@ -351,6 +371,17 @@ export function useWorkflowCanvas(input: {
 
   function handleNodeToolSelect(nodeId: string, toolSlug: string) {
     workflowStore.selectNodeTool(nodeId, toolSlug)
+    const tool = resolveAvailableTool(toolSlug)
+    if (!tool) {
+      return
+    }
+    const currentNode = workflowStore.canvasNodes.find(node => node.id === nodeId)
+    workflowStore.updateCanvasNode(nodeId, {
+      titleKey: tool.name || toolSlug,
+      descriptionKey: tool.description || tool.name || toolSlug,
+      recommendedToolSlug: toolSlug,
+      toolSlugs: Array.from(new Set([toolSlug, ...(currentNode?.toolSlugs ?? [])]))
+    })
   }
 
   function handleAddToolNode(
@@ -632,7 +663,6 @@ export function useWorkflowCanvas(input: {
     sidebarStageFilter,
     sidebarInputFilter,
     sidebarOutputFilter,
-    sidebarExecutorFilter,
     activeCanvasPreset,
     editableCanvasPreset,
     activeNode,
@@ -642,7 +672,6 @@ export function useWorkflowCanvas(input: {
     sidebarStageOptions,
     sidebarInputOptions,
     sidebarOutputOptions,
-    sidebarExecutorOptions,
     filteredSidebarToolOptions,
     currentWorkflowDefinition,
     workflowInputRequirements,
