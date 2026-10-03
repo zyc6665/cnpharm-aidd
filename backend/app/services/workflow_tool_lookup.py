@@ -33,7 +33,7 @@ async def load_available_workflow_tool(
     if not tool:
         raise ValidationException(f"Workflow tool is not configured: {tool_slug or tool_id}")
     if tool.status != ToolStatus.PUBLISHED.value or (
-        tool.is_public is not True and not _is_private_platform_builtin(tool)
+        tool.is_public is not True and tool.provider_type != ToolProviderType.PLATFORM.value
     ):
         raise ValidationException(f"Workflow tool is unavailable: {tool.slug}")
     if (
@@ -43,13 +43,3 @@ async def load_available_workflow_tool(
     ):
         raise ValidationException(f"Workflow tool has no active version: {tool.slug}")
     return tool
-
-
-def _is_private_platform_builtin(tool: Tool) -> bool:
-    current_version = tool.current_version
-    config = current_version.config if current_version and current_version.config else {}
-    return (
-        tool.provider_type == ToolProviderType.PLATFORM.value
-        and isinstance(config, dict)
-        and config.get("type") == "builtin"
-    )

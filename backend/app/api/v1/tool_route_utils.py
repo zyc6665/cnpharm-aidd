@@ -80,6 +80,7 @@ def serialize_tool(
         if tool.current_version
         else None
     )
+    tool_data["deployment"] = build_tool_deployment(tool, tool_data["contract"])
     if not expose_runtime_config and tool.current_version is not None:
         public_version = serialize_public_tool_version(tool.current_version)
         if tool_package is not None:
@@ -250,12 +251,33 @@ def sanitize_public_tool_contract(contract: dict[str, Any]) -> dict[str, Any]:
     return sanitize_public_tool_config(contract)
 
 
+def build_tool_deployment(
+    tool: Tool,
+    contract: dict[str, Any] | None = None,
+) -> dict[str, str | None]:
+    """Return a safe deployment summary shared by tool surfaces."""
+    current_version = getattr(tool, "current_version", None)
+    config = getattr(current_version, "config", None)
+    config = config if isinstance(config, dict) else {}
+    contract_executor = contract.get("executor") if isinstance(contract, dict) else None
+    contract_executor = contract_executor if isinstance(contract_executor, dict) else {}
+    executor_type = contract_executor.get("type") or config.get("type")
+    return {
+        "kind": (
+            "platform_builtin"
+            if config.get("type") == "builtin"
+            else "external_service"
+        ),
+        "executor_type": str(executor_type) if executor_type else None,
+    }
+
+
 def require_tool_read_access(tool: Tool, current_user: Optional[User]) -> None:
     """Hide private and unpublished tools from users other than owner/admin."""
     is_admin = current_user is not None and current_user.role == "admin"
     is_owner = current_user is not None and tool.owner_id == current_user.id
-    is_public = (
-        tool.status == ToolStatus.PUBLISHED.value and bool(tool.is_public)
+    is_public = tool.status == ToolStatus.PUBLISHED.value and (
+        bool(tool.is_public) or tool.provider_type == ToolProviderType.PLATFORM.value
     )
     if not (is_admin or is_owner or is_public):
         raise NotFoundException("工具不存在")

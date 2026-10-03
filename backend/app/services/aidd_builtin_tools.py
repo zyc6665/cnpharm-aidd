@@ -56,6 +56,23 @@ def _capability_config(tool_slug: str) -> dict:
         },
     }
     if tool_slug == "builtin-protein-preparation":
+        config["input_schema"] = {
+            "type": "object",
+            "description": "使用 PDBFixer、OpenMM 和 Open Babel 的开源蛋白结构预处理流程。",
+            "properties": {
+                "ph": {"type": "number", "title": "Target pH", "minimum": 0, "maximum": 14, "default": 7.4},
+                "fill_missing_side_chains": {"type": "boolean", "title": "Fill missing side chains", "default": True},
+                "fill_missing_loops": {"type": "boolean", "title": "Fill missing loops", "default": True},
+                "add_hydrogens": {"type": "boolean", "title": "Add hydrogens", "default": True},
+                "optimize_hydrogen_bonding": {"type": "boolean", "title": "Optimize hydrogen bonding", "default": True},
+                "remove_water": {"type": "boolean", "title": "Remove water", "default": True},
+                "keep_metals": {"type": "boolean", "title": "Keep metal ions", "default": True},
+                "keep_cofactors": {"type": "boolean", "title": "Keep cofactors", "default": True},
+                "remove_non_target_ligands": {"type": "boolean", "title": "Remove non-target ligands", "default": True},
+                "energy_minimization": {"type": "boolean", "title": "Energy minimization", "default": True},
+            },
+            "required": [],
+        }
         config["artifacts"] = {
             "inputs": [
                 {
@@ -73,6 +90,84 @@ def _capability_config(tool_slug: str) -> dict:
                     "required": True,
                     "provided_roles": ["prepared_pdb", "receptor_pdbqt", "preparation_report_json"],
                 },
+            ],
+        }
+    if tool_slug == "builtin-ligand-preparation":
+        config["timeout_sec"] = 600
+        config["resource_profile"] = {
+            "tier": "medium",
+            "cpu": 4,
+            "memory_mb": 8192,
+            "gpu": False,
+        }
+        config["input_schema"] = {
+            "type": "object",
+            "properties": {
+                "smiles_column": {"type": "string", "title": "SMILES column", "default": "SMILES"},
+                "name_column": {"type": "string", "title": "Name column", "default": "name"},
+                "remove_explicit_hydrogens": {"type": "boolean", "title": "Remove explicit hydrogens", "default": True},
+                "remove_disconnected_fragments": {"type": "boolean", "title": "Keep largest molecular fragment", "default": True},
+                "normalize_structure": {"type": "boolean", "title": "Normalize structure", "default": True},
+                "reionize": {"type": "boolean", "title": "Reionize", "default": True},
+                "neutralize": {"type": "boolean", "title": "Neutralize", "default": True},
+                "remove_pains": {"type": "boolean", "title": "Remove PAINS", "default": True},
+                "remove_duplicates": {"type": "boolean", "title": "Remove duplicates", "default": True},
+                "min_molecular_weight": {"type": "number", "title": "Minimum molecular weight", "minimum": 0},
+                "max_molecular_weight": {"type": "number", "title": "Maximum molecular weight", "minimum": 0},
+                "generate_3d": {"type": "boolean", "title": "Generate 3D conformers", "default": True},
+                "drop_3d_failures": {"type": "boolean", "title": "Drop 3D generation failures", "default": True},
+                "forcefield": {"type": "string", "title": "Force field", "enum": ["uff", "mmff"], "default": "uff"},
+                "conformer_seed": {"type": "integer", "title": "Conformer random seed", "default": 20260930},
+            },
+            "required": [],
+        }
+        config["artifacts"] = {
+            "inputs": [
+                {
+                    "name": "molecules",
+                    "type": "molecule_table@1",
+                    "required": True,
+                    "role_preferences": ["table_file", "metadata_json"],
+                    "readiness_policy": "allow_raw",
+                },
+            ],
+            "outputs": [
+                {"name": "molecules", "type": "molecule_table@1", "required": True},
+                {"name": "ligands", "type": "ligand_structure@1", "required": True},
+                {"name": "report", "type": "run_report@1", "required": True},
+            ],
+        }
+    if tool_slug == "builtin-rdkit-conformer":
+        config["timeout_sec"] = 600
+        config["resource_profile"] = {
+            "tier": "medium",
+            "cpu": 4,
+            "memory_mb": 8192,
+            "gpu": False,
+        }
+        config["input_schema"] = {
+            "type": "object",
+            "properties": {
+                "generate_3d": {"type": "boolean", "title": "Generate 3D conformers", "default": True},
+                "drop_3d_failures": {"type": "boolean", "title": "Drop 3D generation failures", "default": True},
+                "forcefield": {"type": "string", "title": "Force field", "enum": ["uff", "mmff"], "default": "mmff"},
+                "conformer_seed": {"type": "integer", "title": "Conformer random seed", "default": 20260930},
+            },
+            "required": [],
+        }
+        config["artifacts"] = {
+            "inputs": [
+                {
+                    "name": "ligand",
+                    "type": "ligand_structure@1",
+                    "required": True,
+                    "role_preferences": ["structure_2d_sdf", "structure_file"],
+                    "readiness_policy": "allow_raw",
+                },
+            ],
+            "outputs": [
+                {"name": "ligand", "type": "ligand_structure@1", "required": True},
+                {"name": "report", "type": "run_report@1", "required": False},
             ],
         }
     if tool_slug in {"builtin-sdf-to-smiles-csv", "builtin-sdf-to-pdb"}:
@@ -232,7 +327,7 @@ async def ensure_aidd_builtin_tool(
         description="AIDD 平台内置任务执行器",
         category="aidd",
         status=ToolStatus.PUBLISHED.value,
-        is_public=False,
+        is_public=True,
         provider_type=ToolProviderType.PLATFORM.value,
         review_status=ToolReviewStatus.NOT_REQUIRED.value,
         timeout_sec=600,

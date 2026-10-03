@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import re
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,7 @@ TABLE_CANDIDATES = (
     "generated_smiles.csv",
     "smiles.csv",
 )
+MOLFILE_COUNTS_LINE = re.compile(r"^\s*\d{1,3}\s+\d{1,3}\s+.+\bV(?:2000|3000)\b")
 
 
 def write_standard_result(
@@ -157,9 +159,22 @@ def _split_sdf(source_sdf: Path, ligands_dir: Path) -> list[Path]:
     paths: list[Path] = []
     for index, block in enumerate(blocks, start=1):
         path = ligands_dir / f"ligand_{index:03d}.sdf"
-        path.write_text(block + "\n$$$$\n", encoding="utf-8")
+        path.write_text(_normalize_sdf_block(block) + "\n$$$$\n", encoding="utf-8")
         paths.append(path)
     return paths
+
+
+def _normalize_sdf_block(block: str) -> str:
+    """Ensure the molfile counts line follows the three-line header."""
+    normalized = block.replace("\r\n", "\n").replace("\r", "\n")
+    lines = normalized.split("\n")
+    counts_index = next(
+        (index for index, line in enumerate(lines) if MOLFILE_COUNTS_LINE.match(line)),
+        None,
+    )
+    if counts_index is not None and counts_index < 3:
+        lines[counts_index:counts_index] = [""] * (3 - counts_index)
+    return "\n".join(lines).strip()
 
 
 def _molecule_rows(raw_output_dir: Path, *, ligand_count: int) -> list[dict[str, str]]:

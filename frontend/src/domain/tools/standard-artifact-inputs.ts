@@ -402,7 +402,7 @@ export function getStandardInputAccept(slot: StandardArtifactInputSlot): string 
     case 'ligand_structure@1':
       return '.sdf'
     case 'molecule_table@1':
-      return '.csv,.json'
+      return '.csv,.json,.smi,.txt'
     default:
       return undefined
   }

@@ -150,3 +150,36 @@ async def test_resolve_workflow_input_sources_collects_node_file_ids() -> None:
     assert sources is not None
     assert sources.file_ids == ["raw-file", "prepared-file"]
     assert sources.legacy_file_bindings == {"protein": "raw-file"}
+
+
+@pytest.mark.asyncio
+async def test_semantic_input_resolves_standard_artifact_when_legacy_output_is_absent() -> None:
+    db = FakeDb({"raw-file": SimpleNamespace(id="raw-file")})
+    run = SimpleNamespace(input_files={})
+    node = {
+        "semantic_inputs": {
+            "protein_structure@1": "node:fetch:protein_structure@1"
+        },
+    }
+
+    sources = await resolve_workflow_input_sources(
+        db,  # type: ignore[arg-type]
+        run=run,
+        node=node,
+        node_states={
+            "fetch": {
+                "status": "success",
+                "semantic_outputs": {},
+                "artifact_outputs": [
+                    {"name": "protein", "type": "protein_structure@1"}
+                ],
+                "standard_artifacts": {
+                    "file_ids_by_artifact_ref": {"protein": ["raw-file"]}
+                },
+            }
+        },
+    )
+
+    assert sources is not None
+    assert sources.file_ids == ["raw-file"]
+    assert sources.semantic_file_bindings == {"protein_structure@1": "raw-file"}

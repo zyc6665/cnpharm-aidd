@@ -84,6 +84,13 @@ class ToolVersionPublicResponse(TimestampMixin):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ToolDeploymentResponse(BaseModel):
+    """用户可见的工具部署摘要，不暴露运行时敏感配置。"""
+
+    kind: str
+    executor_type: Optional[str] = None
+
+
 class ToolPublicResponse(TimestampMixin):
     """公开工具响应，当前版本只暴露公开元数据。"""
     id: str
@@ -104,6 +111,7 @@ class ToolPublicResponse(TimestampMixin):
     tags: List[TagResponse] = Field(default_factory=list)
     current_version: Optional[ToolVersionPublicResponse] = None
     contract: Optional[Dict[str, Any]] = None
+    deployment: Optional[ToolDeploymentResponse] = None
     statistics: Optional[ToolStatisticsResponse] = None
 
     model_config = ConfigDict(from_attributes=True)
@@ -126,6 +134,7 @@ class ToolListPublicResponse(TimestampMixin):
     tags: List[TagResponse] = Field(default_factory=list)
     current_version: Optional[ToolVersionPublicResponse] = None
     contract: Optional[Dict[str, Any]] = None
+    deployment: Optional[ToolDeploymentResponse] = None
     statistics: Optional[ToolStatisticsResponse] = None
     created_at: datetime
 
@@ -256,6 +265,7 @@ class ToolWorkbenchGroupToolResponse(BaseModel):
     sort_order: int = 0
     tags: List[TagResponse] = Field(default_factory=list)
     contract: Optional[Dict[str, Any]] = None
+    deployment: Optional[ToolDeploymentResponse] = None
 
 
 class ToolContractResponse(BaseModel):
@@ -413,6 +423,7 @@ class ToolResponse(TimestampMixin):
     tags: List[TagResponse] = Field(default_factory=list)
     current_version: Optional[ToolVersionResponse] = None
     contract: Optional[Dict[str, Any]] = None
+    deployment: Optional[ToolDeploymentResponse] = None
     statistics: Optional[ToolStatisticsResponse] = None
 
     model_config = ConfigDict(from_attributes=True)
@@ -436,6 +447,7 @@ class ToolListResponse(BaseModel):
     tags: List[TagResponse] = Field(default_factory=list)
     current_version: Optional[ToolVersionResponse] = None
     contract: Optional[Dict[str, Any]] = None
+    deployment: Optional[ToolDeploymentResponse] = None
     statistics: Optional[ToolStatisticsResponse] = None
     created_at: datetime
 

@@ -5,6 +5,8 @@ from __future__ import annotations
 import csv
 import io
 import json
+import logging
+import math
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.files.writer import store_file_bytes
 from app.models.files import File as FileModel, FileSourceType
 from app.tool_packages.config_resolver import tool_package_manifest_data
+
+logger = logging.getLogger(__name__)
 
 
 async def append_legacy_standard_result(
@@ -123,6 +127,26 @@ async def _legacy_lvpocket_result_v2(
     except KeyError:
         return None
 
+    center = _valid_coordinate_vector(outputs.get("center"))
+    bbox = _valid_bbox(outputs.get("bbox"))
+    if center is None or bbox is None:
+        atom_record = _lookup_file_record(file_records, atom_path)
+        geometry = (
+            _pdb_geometry(Path(atom_record.storage_path))
+            if atom_record is not None and atom_record.storage_path
+            else None
+        )
+        if geometry is None:
+            logger.warning(
+                "无法为旧版 LVpocket 输出生成有效 binding_pocket 元数据："
+                "center/bbox 缺失或无效，且口袋 PDB 无可解析坐标（%s）",
+                atom_ref.get("path"),
+            )
+            return None
+        calculated_center, calculated_bbox = geometry
+        center = center or calculated_center
+        bbox = bbox or calculated_bbox
+
     pocket_id = str(first_pocket.get("id") or "pocket0")
     return {
         "result_version": "aidd.sciminer/result.v2",
@@ -136,8 +160,8 @@ async def _legacy_lvpocket_result_v2(
                     "pocket_metadata_json": metadata_ref,
                 },
                 "metadata": {
-                    "center": outputs.get("center") or [0, 0, 0],
-                    "bbox": outputs.get("bbox") or {},
+                    "center": center,
+                    "bbox": bbox,
                     "residue_ids": outputs.get("residue_ids") or [],
                     "atom_ids": outputs.get("atom_ids") or [],
                     "source_protein_ref": "input/protein_pdb",
@@ -155,6 +179,61 @@ async def _legacy_lvpocket_result_v2(
         },
         "summary": {"standardized_from": "legacy_lvpocket"},
     }
+
+
+def _valid_coordinate_vector(value: Any) -> list[float] | None:
+    if not isinstance(value, (list, tuple)) or len(value) != 3:
+        return None
+    if any(isinstance(component, bool) for component in value):
+        return None
+    try:
+        coordinates = [float(component) for component in value]
+    except (TypeError, ValueError):
+        return None
+    return coordinates if all(math.isfinite(component) for component in coordinates) else None
+
+
+def _valid_bbox(value: Any) -> dict[str, list[float]] | None:
+    if not isinstance(value, dict):
+        return None
+    minimum = _valid_coordinate_vector(value.get("min"))
+    maximum = _valid_coordinate_vector(value.get("max"))
+    if minimum is None or maximum is None:
+        return None
+    if any(low > high for low, high in zip(minimum, maximum)):
+        return None
+    return {"min": minimum, "max": maximum}
+
+
+def _pdb_geometry(path: Path) -> tuple[list[float], dict[str, list[float]]] | None:
+    if not path.is_file():
+        return None
+    coordinates: list[list[float]] = []
+    try:
+        with path.open(encoding="ascii", errors="ignore") as pdb_file:
+            for line in pdb_file:
+                if line[0:6].strip() not in {"ATOM", "HETATM"}:
+                    continue
+                try:
+                    coordinates.append(
+                        [float(line[start:end]) for start, end in ((30, 38), (38, 46), (46, 54))]
+                    )
+                except ValueError:
+                    continue
+    except OSError:
+        return None
+    if not coordinates:
+        return None
+
+    minimum = [min(point[axis] for point in coordinates) for axis in range(3)]
+    maximum = [max(point[axis] for point in coordinates) for axis in range(3)]
+    center = [
+        sum(point[axis] for point in coordinates) / len(coordinates)
+        for axis in range(3)
+    ]
+    if not all(math.isfinite(value) for value in (*minimum, *maximum, *center)):
+        return None
+    return center, {"min": minimum, "max": maximum}
 
 
 async def _legacy_molp_pc_result_v2(

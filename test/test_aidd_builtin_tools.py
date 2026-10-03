@@ -24,6 +24,7 @@ from app.common.exceptions import ValidationException  # noqa: E402
 from app.execution.result_parser import parse_standard_result  # noqa: E402
 from app.execution.standard_contracts import DeclaredArtifactOutput  # noqa: E402
 from app.external_databases.providers import ExternalArtifactFile, ExternalArtifactPayload  # noqa: E402
+from app.protein_preparation.engine import OpenSourcePreparationUnavailable  # noqa: E402
 
 
 def test_sdf_to_smiles_csv_uses_molp_compatible_header() -> None:
@@ -99,6 +100,41 @@ def test_sdf_to_smiles_csv_builtin_emits_standard_molecule_table(
     assert molecules["metadata"]["molecule_id_field"] == "id"
 
 
+def test_sdf_to_smiles_csv_builtin_converts_all_ligand_files(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    sdf_paths = [tmp_path / "ligand_1.sdf", tmp_path / "ligand_2.sdf"]
+    for index, sdf_path in enumerate(sdf_paths, start=1):
+        sdf_path.write_text(f"mock sdf {index}", encoding="utf-8")
+    monkeypatch.setattr(
+        builtin_tools,
+        "parse_sdf_smiles",
+        lambda content: {"mock sdf 1": ["CCO"], "mock sdf 2": ["CCN"]}[content],
+    )
+
+    result = builtin_tools._run_sdf_to_smiles_csv_tool(
+        {
+            "ligand_structure@1": builtin_tools.BuiltinToolFile(
+                file_id="ligand-file-1",
+                filename="ligand_1.sdf",
+                path=sdf_paths[0],
+                content_type="chemical/x-mdl-sdfile",
+            ),
+            "ligand_structure@1:2": builtin_tools.BuiltinToolFile(
+                file_id="ligand-file-2",
+                filename="ligand_2.sdf",
+                path=sdf_paths[1],
+                content_type="chemical/x-mdl-sdfile",
+            ),
+        }
+    )
+
+    table = next(artifact for artifact in result.artifacts if artifact.filename.endswith(".csv"))
+    assert table.content.decode("utf-8") == "SMILES,id\nCCO,mol_1\nCCN,mol_2\n"
+    assert result.standard_result["artifacts"]["molecules"]["metadata"]["row_count"] == 2
+
+
 def test_sdf_to_pdb_builtin_emits_standard_ligand_structure(
     tmp_path: Path,
     monkeypatch,
@@ -129,6 +165,98 @@ def test_sdf_to_pdb_builtin_emits_standard_ligand_structure(
     assert ligand["type"] == "ligand_structure@1"
     assert set(ligand["files"]) == {"structure_file"}
     assert ligand["metadata"]["ligand_id"] == "ligand"
+
+
+def test_ligand_preparation_builtin_emits_parseable_standard_artifacts(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "molecules.smi"
+    source.write_text("CCO ethanol\nnot-a-smiles broken\n", encoding="utf-8")
+
+    result = builtin_tools._run_ligand_preparation_tool(
+        {
+            "molecule_table@1": builtin_tools.BuiltinToolFile(
+                file_id="molecule-file",
+                filename=source.name,
+                path=source,
+                content_type="chemical/x-daylight-smiles",
+            )
+        },
+        params={"options": {"conformer_seed": 17}},
+    )
+
+    artifacts = {artifact.filename: artifact for artifact in result.artifacts}
+    assert set(artifacts) == {
+        "normalized_molecules.csv",
+        "prepared_ligands.sdf",
+        "ligand_preparation_report.json",
+        "normalized_molecules_metadata.json",
+    }
+    report = json.loads(artifacts["ligand_preparation_report.json"].content)
+    assert report["stats"]["input_count"] == 2
+    assert report["stats"]["output_count"] == 1
+    assert report["rejected_records"][0]["reason"] == "invalid_smiles"
+
+    sdf_content = artifacts["prepared_ligands.sdf"].content.decode("utf-8")
+    assert "$$$$" in sdf_content
+    from rdkit import Chem
+
+    supplier = Chem.ForwardSDMolSupplier(io.BytesIO(artifacts["prepared_ligands.sdf"].content))
+    prepared_mol = next(molecule for molecule in supplier if molecule is not None)
+    assert prepared_mol.GetNumConformers() == 1
+    assert prepared_mol.GetConformer().Is3D()
+
+    output_dir = tmp_path / "outputs"
+    output_dir.mkdir()
+    for artifact in result.artifacts:
+        (output_dir / artifact.filename).write_bytes(artifact.content)
+    standard_result_path = output_dir / "result.json"
+    standard_result_path.write_text(json.dumps(result.standard_result), encoding="utf-8")
+    parsed = parse_standard_result(
+        result_path=standard_result_path,
+        output_dir=output_dir,
+        declared_outputs=[
+            DeclaredArtifactOutput(name="molecules", type="molecule_table@1"),
+            DeclaredArtifactOutput(name="ligands", type="ligand_structure@1"),
+            DeclaredArtifactOutput(name="report", type="run_report@1"),
+        ],
+    )
+
+    assert {artifact.output_name for artifact in parsed.artifacts} == {
+        "molecules",
+        "ligands",
+        "report",
+    }
+    assert {relation["type"] for relation in parsed.relations} == {"describes", "derived_from"}
+
+
+def test_rdkit_conformer_builtin_repairs_ligand_structure_input(tmp_path: Path) -> None:
+    from rdkit import Chem
+
+    source = tmp_path / "ligand.sdf"
+    molecule = Chem.MolFromSmiles("CCO")
+    molecule.SetProp("_Name", "ethanol")
+    source.write_text(Chem.MolToMolBlock(molecule) + "$$$$\n", encoding="utf-8")
+
+    result = builtin_tools._run_rdkit_conformer_tool(
+        {
+            "ligand_structure@1": builtin_tools.BuiltinToolFile(
+                file_id="ligand-file",
+                filename=source.name,
+                path=source,
+                content_type="chemical/x-mdl-sdfile",
+            )
+        },
+        params={"options": {"conformer_seed": 23}},
+    )
+
+    artifacts = {artifact.filename: artifact for artifact in result.artifacts}
+    assert set(artifacts) == {"conformers.sdf", "conformer_report.json"}
+    supplier = Chem.ForwardSDMolSupplier(io.BytesIO(artifacts["conformers.sdf"].content))
+    prepared_mol = next(mol for mol in supplier if mol is not None)
+    assert prepared_mol.GetNumConformers() == 1
+    assert prepared_mol.GetConformer().Is3D()
+    assert result.standard_result["artifacts"]["ligand"]["type"] == "ligand_structure@1"
 
 
 def test_placeholder_scientific_capabilities_are_not_executable() -> None:
@@ -452,6 +580,12 @@ def test_builtin_protein_preparation_emits_standard_result_v2(
         "app.protein_preparation.engine.convert_prepared_pdb_to_pdbqt",
         fake_convert,
     )
+    monkeypatch.setattr(
+        "app.protein_preparation.engine._run_open_source_preparation",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            OpenSourcePreparationUnavailable("test fallback")
+        ),
+    )
 
     result = builtin_tools._run_protein_preparation_tool(
         {
@@ -477,7 +611,7 @@ def test_builtin_protein_preparation_emits_standard_result_v2(
     assert result.standard_result["result_version"] == "aidd.sciminer/result.v2"
     prepared = result.standard_result["artifacts"]["prepared_protein"]
     assert prepared["type"] == "protein_structure@1"
-    assert prepared["metadata"]["preparation_status"] == "prepared"
+    assert prepared["metadata"]["preparation_status"] == "degraded"
     assert prepared["metadata"]["preparation_profile"] == "docking_v1"
     assert prepared["metadata"]["ph"] == 7.4
     assert set(prepared["files"]) == {

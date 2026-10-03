@@ -77,4 +77,19 @@ describe('ToolDetailOverview', () => {
 
     expect(wrapper.find('.tool-changelog').exists()).toBe(false)
   })
+
+  it('不在详情中显示部署方式', () => {
+    const wrapper = mount(ToolDetailOverview, {
+      props: {
+        tool: makeTool({
+          deployment: { kind: 'platform_builtin', executor_type: 'builtin' },
+        }),
+      },
+      global: { plugins: [i18n], stubs },
+    })
+
+    expect(wrapper.text()).not.toContain('平台内置部署')
+    expect(wrapper.text()).not.toContain('外部服务部署')
+    expect(wrapper.text()).not.toContain('builtin')
+  })
 })

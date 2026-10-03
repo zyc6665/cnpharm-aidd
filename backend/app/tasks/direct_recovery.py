@@ -22,6 +22,12 @@ from app.services.standard_artifacts import StandardArtifactPersistenceError
 from app.services.workflow_reconciliation import reconcile_waiting_workflow_runs
 from app.tasks.executor import SSHJobExecutor, TaskExecutionError
 from app.tasks.direct_runner import direct_task_runner
+from app.tasks.attempts import (
+    clear_task_execution_control,
+    get_execution_control,
+    new_execution_attempt_id,
+    set_execution_attempt_id,
+)
 from app.tasks.recovery import is_workflow_node_task, prepare_recovered_task_output
 from app.tasks.service import create_and_schedule_tool_task
 from app.tasks.state_machine import TaskStateMachine
@@ -63,9 +69,41 @@ async def reconcile_orphaned_direct_tasks(db: AsyncSession) -> int:
     for task in tasks:
         tool_version = task.tool_version
         config = tool_version.config if tool_version else {}
-        if not isinstance(config, dict) or config.get("type") != ToolType.SSH_JOB.value:
+        if not isinstance(config, dict):
             continue
         if task.status == TaskStatus.RUNNING.value and direct_task_runner.is_task_active(str(task.id)):
+            continue
+
+        if config.get("type") == "builtin" and task.status == TaskStatus.RUNNING.value:
+            control_state = get_execution_control(task).get("state")
+            if control_state in {"cancel_requested", "cancel_timeout"}:
+                continue
+            TaskStateMachine.transition(
+                task,
+                TaskStatus.PENDING,
+                progress=0.0,
+                progress_message="服务重启后重新排队",
+            )
+            clear_task_execution_control(task)
+            attempt_id = new_execution_attempt_id()
+            set_execution_attempt_id(task, attempt_id)
+            db.add(
+                TaskLog(
+                    task_id=task.id,
+                    level="WARNING",
+                    message="检测到服务重启遗留的内置任务，已重新排队执行",
+                )
+            )
+            await db.commit()
+            direct_task_runner.schedule_task(
+                task_id=str(task.id),
+                tool_version_id=str(task.tool_version_id),
+                attempt_id=attempt_id,
+            )
+            recovered_count += 1
+            continue
+
+        if config.get("type") != ToolType.SSH_JOB.value:
             continue
 
         executor = SSHJobExecutor(task, tool_version)

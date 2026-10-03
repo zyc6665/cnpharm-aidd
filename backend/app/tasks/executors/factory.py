@@ -59,6 +59,7 @@ class TaskExecutor:
         cache_client=None,
         worker_capability: WorkerCapability | None = None,
         execution_service: ExecutionService | None = None,
+        db_session: Any | None = None,
     ):
         self.task = task
         self.tool_version = tool_version
@@ -67,6 +68,7 @@ class TaskExecutor:
         self.cache_client = cache_client
         self.worker_capability = worker_capability
         self.execution_service = execution_service
+        self.db_session = db_session
         self._allocation_id: str | None = None
         self._gpu_heartbeat_task: asyncio.Task[None] | None = None
         self._resource_lease_manager: WorkerResourceLeaseManager | None = None
@@ -100,6 +102,7 @@ class TaskExecutor:
         executor_kwargs = {
             "config": self.config,
             "progress_callback": self.progress_callback,
+            "db_session": self.db_session,
         }
         if executor_type == "k8s_job":
             executor_kwargs["execution_service"] = self.execution_service
@@ -405,6 +408,9 @@ class TaskExecutor:
 
     async def _allocate_gpu(self) -> Optional[dict[str, Any]]:
         if not self.config.get("gpu_required", False):
+            return None
+        executor_type = str(self.config.get("type") or "").strip()
+        if executor_type in {"k8s_job", "remote_api", "ssh_job"}:
             return None
         from app.database.session import get_async_session
 

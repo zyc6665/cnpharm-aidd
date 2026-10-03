@@ -39,6 +39,13 @@ class BuiltinExecutor(BaseExecutor):
             raise TaskExecutionError("Builtin task builtin_inputs must be a mapping")
 
         input_ids = [str(file_id) for file_id in semantic_file_ids.values() if file_id]
+        if builtin_slug == "builtin-sdf-to-smiles-csv" and task_input:
+            input_ids.extend(
+                str(file_id)
+                for file_id in (task_input.file_ids or [])
+                if file_id
+            )
+        input_ids = list(dict.fromkeys(input_ids))
         files_by_id: dict[str, FileModel] = {}
         if input_ids:
             async for session in get_async_session():
@@ -57,6 +64,24 @@ class BuiltinExecutor(BaseExecutor):
                 path=Path(file_record.storage_path),
                 content_type=file_record.content_type,
             )
+
+        if builtin_slug == "builtin-sdf-to-smiles-csv":
+            primary_file_id = next(iter(semantic_file_ids.values()), None)
+            extra_file_ids = [
+                file_id for file_id in input_ids if file_id != str(primary_file_id)
+            ]
+            for index, file_id in enumerate(extra_file_ids, start=2):
+                file_record = files_by_id.get(file_id)
+                if not file_record or not file_record.storage_path:
+                    raise TaskExecutionError(
+                        f"Builtin input file is unavailable: ligand_structure@1:{index}"
+                    )
+                builtin_files[f"ligand_structure@1:{index}"] = BuiltinToolFile(
+                    file_id=str(file_record.id),
+                    filename=file_record.filename,
+                    path=Path(file_record.storage_path),
+                    content_type=file_record.content_type,
+                )
 
         result = await run_builtin_tool(builtin_slug, builtin_files, params=params)
         output_dir = Path(self._get_work_dir()) / "output"

@@ -36,6 +36,9 @@ aiofiles==23.2.1
 
 # Molecule scoring
 rdkit==2024.9.6
+# Open-source protein preparation stack
+pdbfixer==1.12.0
+openmm==8.6.1
 
 # System monitoring
 psutil==5.9.8

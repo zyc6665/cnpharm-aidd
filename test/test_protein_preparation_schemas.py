@@ -22,8 +22,18 @@ def test_preparation_options_accept_supported_settings():
 
     assert data.ph == 7.4
     assert data.output_formats == ["prepared_pdb", "receptor_pdbqt"]
+    assert data.fill_missing_side_chains is True
+    assert data.fill_missing_loops is True
+    assert data.add_hydrogens is True
+    assert data.optimize_hydrogen_bonding is True
+    assert data.energy_minimization is True
 
 
 def test_preparation_options_reject_unknown_output_format():
     with pytest.raises(ValidationError):
         ProteinPreparationOptions.model_validate({"output_formats": ["mol2"]})
+
+
+def test_preparation_options_rejects_removed_proprietary_engine():
+    with pytest.raises(ValidationError):
+        ProteinPreparationOptions.model_validate({"engine": "proprietary"})

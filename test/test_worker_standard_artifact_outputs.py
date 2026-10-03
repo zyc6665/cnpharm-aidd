@@ -53,6 +53,12 @@ from app.models.tasks import TaskStatus
 from app.models.tools import Tool as ToolModel
 from app.models.tools import ToolStatus
 from app.models.tools import ToolVersion as ToolVersionModel
+from app.execution.result_parser import (
+    ParsedStandardArtifact,
+    ParsedStandardFile,
+    ParsedStandardResult,
+)
+from app.services.standard_artifacts import create_artifact_versions_from_parsed_result
 from app.tasks.executors.errors import TaskExecutionError
 from app.models.users import User as UserModel
 from app.models.users import UserRole, UserStatus
@@ -204,6 +210,84 @@ async def _seed_output_file(
     db.add(file_record)
     await db.flush()
     return file_record
+
+
+@pytest.mark.asyncio
+async def test_standard_artifact_persistence_preserves_roles_for_shared_file_records(
+    worker_standard_db_factory,
+    tmp_path: Path,
+):
+    async with worker_standard_db_factory() as db:
+        task, _version = await _seed_task(
+            db,
+            tool_config={"type": "python_script"},
+        )
+        output_path = tmp_path / "prepared.pdb"
+        output_path.write_text("ATOM\nEND\n", encoding="utf-8")
+        content = output_path.read_bytes()
+        digest = hashlib.sha256(content).hexdigest()
+        file_record = await _seed_output_file(
+            db,
+            task=task,
+            tmp_path=tmp_path,
+            relative_path="prepared.pdb",
+            content=content,
+            content_type="chemical/x-pdb",
+        )
+        parsed_result = ParsedStandardResult(
+            artifacts=[
+                ParsedStandardArtifact(
+                    output_name="prepared_protein",
+                    type="protein_structure@1",
+                    name="Prepared protein",
+                    files={
+                        "structure_file": ParsedStandardFile(
+                            role="structure_file",
+                            path=output_path,
+                            relative_path="prepared.pdb",
+                            sha256=digest,
+                            content_type="chemical/x-pdb",
+                        ),
+                        "prepared_pdb": ParsedStandardFile(
+                            role="prepared_pdb",
+                            path=output_path,
+                            relative_path="prepared.pdb",
+                            sha256=digest,
+                            content_type="chemical/x-pdb",
+                        ),
+                    },
+                )
+            ],
+            relations=[],
+            summary={},
+            metrics={},
+        )
+
+        def resolve_file(_artifact, _role, _parsed_file):
+            return file_record
+
+        persistence_result = await create_artifact_versions_from_parsed_result(
+            db,
+            task=task,
+            parsed_result=parsed_result,
+            file_record_resolver=resolve_file,
+        )
+        await db.commit()
+
+        version_id = persistence_result.artifact_version_ids_by_ref["prepared_protein"]
+        roles = (
+            (
+                await db.execute(
+                    select(ArtifactVersionFileModel)
+                    .where(ArtifactVersionFileModel.artifact_version_id == version_id)
+                    .order_by(ArtifactVersionFileModel.sort_order)
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    assert [item.role for item in roles] == ["structure_file", "prepared_pdb"]
 
 
 def _molecule_table_manifest(
@@ -654,7 +738,11 @@ async def test_worker_standardizes_legacy_lvpocket_outputs(
             task=task,
             tmp_path=tmp_path,
             relative_path="artifacts/lv_results/input/pocket0.pdb",
-            content=b"atom",
+            content=(
+                "ATOM      1  C   LIG A   1      10.000  20.000  30.000  1.00 20.00           C\n"
+                "ATOM      2  O   LIG A   1      12.000  24.000  32.000  1.00 20.00           O\n"
+                "END\n"
+            ).encode(),
         )
         metadata = await _seed_output_file(
             db,
@@ -718,6 +806,11 @@ async def test_worker_standardizes_legacy_lvpocket_outputs(
         "residue_pocket_pdb",
         "atom_pocket_pdb",
         "pocket_metadata_json",
+    }
+    assert version_record.manifest_json["metadata"]["center"] == [11.0, 22.0, 31.0]
+    assert version_record.manifest_json["metadata"]["bbox"] == {
+        "min": [10.0, 20.0, 30.0],
+        "max": [12.0, 24.0, 32.0],
     }
 
 

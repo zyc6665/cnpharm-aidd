@@ -353,7 +353,7 @@ describe('standard artifact tool inputs', () => {
   it('resolves direct upload file accept values from standard input type', () => {
     expect(getStandardInputAccept({ name: 'protein', type: 'protein_structure@1', required: true })).toBe('.pdb')
     expect(getStandardInputAccept({ name: 'ligand', type: 'ligand_structure@1', required: true })).toBe('.sdf')
-    expect(getStandardInputAccept({ name: 'molecules', type: 'molecule_table@1', required: true })).toBe('.csv,.json')
+    expect(getStandardInputAccept({ name: 'molecules', type: 'molecule_table@1', required: true })).toBe('.csv,.json,.smi,.txt')
     expect(getStandardInputAccept({ name: 'map', type: 'cryoem_map@1', required: true })).toBeUndefined()
   })
 

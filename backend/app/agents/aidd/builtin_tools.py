@@ -25,6 +25,11 @@ from app.chemistry.conversion import (
     first_sdf_record_bytes as _first_sdf_record_bytes,
     normalize_pdb_block,
 )
+from app.chemistry.ligand_preparation import (
+    prepare_ligand_library,
+    prepared_ligand_sdf_content,
+    prepared_molecule_table_csv,
+)
 from app.common.time import utcnow
 from app.common.exceptions import ValidationException
 
@@ -380,18 +385,21 @@ def run_vina_docking_with_tool(protein_path: Path, ligand_path: Path) -> dict[st
 
 
 def _run_sdf_to_smiles_csv_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResult:
-    source_file = _sdf_ligand_input_file(files)
-    if not source_file:
+    source_files = _sdf_ligand_input_files(files)
+    if not source_files:
         raise ValidationException("SDF 转 SMILES 缺少 generated_ligand 或 ligand_structure@1 输入")
-    if not source_file.path.exists() or not source_file.path.is_file():
-        raise ValidationException("SDF 转 SMILES 输入文件已被删除")
-
-    smiles_values = parse_sdf_smiles(source_file.path.read_text(encoding="utf-8"))
-    if not smiles_values:
-        smiles_values = convert_sdf_to_smiles_with_tool(source_file.path)
+    smiles_values: list[str] = []
+    for source_file in source_files:
+        if not source_file.path.exists() or not source_file.path.is_file():
+            raise ValidationException(f"SDF 转 SMILES 输入文件已被删除: {source_file.filename}")
+        file_smiles = parse_sdf_smiles(source_file.path.read_text(encoding="utf-8"))
+        if not file_smiles:
+            file_smiles = convert_sdf_to_smiles_with_tool(source_file.path)
+        smiles_values.extend(file_smiles)
     if not smiles_values:
         raise ValidationException("无法从 SDF 文件提取 SMILES 字段")
 
+    source_file = source_files[0]
     table_filename = f"{Path(source_file.filename).stem}_smiles.csv"
     metadata_filename = f"{Path(source_file.filename).stem}_smiles_metadata.json"
     table_content = _smiles_csv_content(smiles_values)
@@ -400,6 +408,8 @@ def _run_sdf_to_smiles_csv_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToo
         "source_task_id": source_file.file_id,
         "source_file_id": source_file.file_id,
         "source_filename": source_file.filename,
+        "source_file_ids": [source.file_id for source in source_files],
+        "source_filenames": [source.filename for source in source_files],
         "row_count": len(smiles_values),
         "smiles_field": "SMILES",
     }
@@ -455,6 +465,18 @@ def _sdf_ligand_input_file(files: dict[str, BuiltinToolFile]) -> BuiltinToolFile
         or files.get("ligand")
         or files.get("structure_file")
     )
+
+
+def _sdf_ligand_input_files(files: dict[str, BuiltinToolFile]) -> list[BuiltinToolFile]:
+    preferred = _sdf_ligand_input_file(files)
+    if preferred is None:
+        return []
+    additional = [
+        file
+        for name, file in files.items()
+        if name.startswith("ligand_structure@1:") and file.file_id != preferred.file_id
+    ]
+    return [preferred, *additional]
 
 
 def _run_sdf_to_pdb_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResult:
@@ -558,6 +580,11 @@ def _run_protein_preparation_tool(
     if not isinstance(option_payload, dict):
         option_keys = {
             "ph",
+            "fill_missing_side_chains",
+            "fill_missing_loops",
+            "add_hydrogens",
+            "optimize_hydrogen_bonding",
+            "energy_minimization",
             "remove_water",
             "keep_metals",
             "keep_cofactors",
@@ -565,6 +592,10 @@ def _run_protein_preparation_tool(
             "output_formats",
         }
         option_payload = {key: params[key] for key in option_keys if key in params}
+    else:
+        option_payload = {
+            key: value for key, value in option_payload.items() if key != "engine"
+        }
     options = ProteinPreparationOptions.model_validate(option_payload)
     if "prepared_pdb" not in options.output_formats:
         options = options.model_copy(
@@ -593,6 +624,8 @@ def _run_protein_preparation_tool(
             source_file=protein_file,
             options=options,
             preparation_profile=preparation_profile,
+            preparation_engine=str(preparation.report.get("engine") or "unknown"),
+            preparation_status=str(preparation.report.get("status") or "prepared"),
         )
         report = dict(preparation.report)
         report.update(
@@ -673,6 +706,273 @@ def _run_protein_preparation_tool(
             "summary": {"prepared_protein": "prepared_protein"},
         },
     )
+
+
+def _run_ligand_preparation_tool(
+    files: dict[str, BuiltinToolFile],
+    params: dict[str, Any] | None = None,
+) -> BuiltinToolResult:
+    source_file = (
+        files.get("molecule_table@1")
+        or files.get("molecules")
+        or files.get("molecule_table")
+        or files.get("smiles_csv")
+        or files.get("ligand")
+    )
+    if not source_file:
+        raise ValidationException("小分子规范化缺少 molecule_table@1 输入")
+    if not source_file.path.exists() or not source_file.path.is_file():
+        raise ValidationException("小分子规范化输入文件已被删除")
+
+    options = _ligand_preparation_options(params)
+    preparation = prepare_ligand_library(source_file.path, options)
+    table_content = prepared_molecule_table_csv(preparation)
+    sdf_content = prepared_ligand_sdf_content(preparation)
+    metadata = {
+        "molecule_id_field": "molecule_id",
+        "source_task_id": source_file.file_id,
+        "source_file_id": source_file.file_id,
+        "source_filename": source_file.filename,
+        "row_count": preparation.stats["output_count"],
+        "input_count": preparation.stats["input_count"],
+        "valid_molecule_count": preparation.stats["valid_count"],
+        "backend_name": preparation.backend_name,
+        "backend_version": preparation.backend_version,
+    }
+    report = {
+        "tool": "builtin-ligand-preparation",
+        "status": "succeeded",
+        "source_file_id": source_file.file_id,
+        "source_filename": source_file.filename,
+        "options": options.model_dump(),
+        "stats": preparation.stats,
+        "rejected_records": list(preparation.rejected_records),
+        "backend_name": preparation.backend_name,
+        "backend_version": preparation.backend_version,
+    }
+    metadata_content = json.dumps(metadata, ensure_ascii=False, indent=2).encode("utf-8")
+    report_content = json.dumps(report, ensure_ascii=False, indent=2).encode("utf-8")
+    table_filename = "normalized_molecules.csv"
+    metadata_filename = "normalized_molecules_metadata.json"
+    sdf_filename = "prepared_ligands.sdf"
+    report_filename = "ligand_preparation_report.json"
+
+    return BuiltinToolResult(
+        artifacts=(
+            BuiltinToolArtifact(
+                semantic_type="normalized_molecules",
+                filename=table_filename,
+                content=table_content,
+                content_type="text/csv",
+                source_file_id=source_file.file_id,
+            ),
+            BuiltinToolArtifact(
+                semantic_type="prepared_ligands",
+                filename=sdf_filename,
+                content=sdf_content,
+                content_type="chemical/x-mdl-sdfile",
+                source_file_id=source_file.file_id,
+            ),
+            BuiltinToolArtifact(
+                semantic_type="ligand_preparation_report",
+                filename=report_filename,
+                content=report_content,
+                content_type="application/json",
+                source_file_id=source_file.file_id,
+            ),
+            BuiltinToolArtifact(
+                semantic_type="normalized_molecules_metadata",
+                filename=metadata_filename,
+                content=metadata_content,
+                content_type="application/json",
+                source_file_id=source_file.file_id,
+            ),
+        ),
+        standard_result={
+            "result_version": "aidd.sciminer/result.v2",
+            "artifacts": {
+                "molecules": {
+                    "type": "molecule_table@1",
+                    "name": "Normalized molecule library",
+                    "files": {
+                        "table_file": _standard_output_file_ref(table_filename, table_content, "text/csv"),
+                        "metadata_json": _standard_output_file_ref(metadata_filename, metadata_content, "application/json"),
+                    },
+                    "metadata": metadata,
+                },
+                "ligands": {
+                    "type": "ligand_structure@1",
+                    "name": "Prepared ligand conformers",
+                    "files": {
+                        "structure_file": _standard_output_file_ref(sdf_filename, sdf_content, "chemical/x-mdl-sdfile"),
+                    },
+                    "metadata": {
+                        "ligand_id": f"prepared-{source_file.file_id}",
+                        "source_database": "tool_output",
+                        "structure_3d_source": "rdkit_generated_3d",
+                        "source_file_id": source_file.file_id,
+                    },
+                },
+                "report": {
+                    "type": "run_report@1",
+                    "name": "Ligand preparation report",
+                    "files": {
+                        "report_json": _standard_output_file_ref(report_filename, report_content, "application/json"),
+                    },
+                    "metadata": {"source_task_id": source_file.file_id},
+                },
+            },
+            "relations": [
+                {"from": "report", "to": "molecules", "type": "describes"},
+                {"from": "ligands", "to": "molecules", "type": "derived_from"},
+            ],
+            "summary": {"row_count": preparation.stats["output_count"], "stats": preparation.stats},
+        },
+    )
+
+
+def _run_rdkit_conformer_tool(
+    files: dict[str, BuiltinToolFile],
+    params: dict[str, Any] | None = None,
+) -> BuiltinToolResult:
+    source_file = _sdf_ligand_input_file(files)
+    if not source_file:
+        raise ValidationException("RDKit 构象生成缺少 ligand_structure@1 输入")
+    if not source_file.path.exists() or not source_file.path.is_file():
+        raise ValidationException("RDKit 构象生成输入文件已被删除")
+
+    from rdkit import Chem
+
+    suffix = source_file.path.suffix.lower()
+    if suffix in {".sdf", ".mol", ".sd"}:
+        molecules = Chem.SDMolSupplier(str(source_file.path), removeHs=False, sanitize=True)
+    elif suffix == ".pdb":
+        molecule = Chem.MolFromPDBFile(str(source_file.path), removeHs=False, sanitize=True)
+        molecules = [molecule] if molecule is not None else []
+    else:
+        raise ValidationException("RDKit 构象生成仅支持 SDF、MOL 或 PDB 输入")
+
+    input_records: list[str] = []
+    for index, molecule in enumerate(molecules, start=1):
+        if molecule is None:
+            continue
+        name = molecule.GetProp("_Name") if molecule.HasProp("_Name") else f"mol_{index}"
+        smiles = Chem.MolToSmiles(molecule)
+        if smiles:
+            input_records.append(f"{smiles} {name}")
+    if not input_records:
+        raise ValidationException("RDKit 构象生成未读取到有效分子")
+
+    options = _ligand_preparation_options(params)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        suffix=".smi",
+        prefix="rdkit-conformer-",
+        delete=False,
+    ) as handle:
+        handle.write("\n".join(input_records) + "\n")
+        smiles_path = Path(handle.name)
+    try:
+        preparation = prepare_ligand_library(smiles_path, options)
+    finally:
+        smiles_path.unlink(missing_ok=True)
+
+    sdf_content = prepared_ligand_sdf_content(preparation)
+    report = {
+        "tool": "builtin-rdkit-conformer",
+        "status": "succeeded",
+        "source_file_id": source_file.file_id,
+        "source_filename": source_file.filename,
+        "options": options.model_dump(),
+        "stats": preparation.stats,
+        "rejected_records": list(preparation.rejected_records),
+        "backend_name": preparation.backend_name,
+        "backend_version": preparation.backend_version,
+    }
+    report_content = json.dumps(report, ensure_ascii=False, indent=2).encode("utf-8")
+    sdf_filename = "conformers.sdf"
+    report_filename = "conformer_report.json"
+    return BuiltinToolResult(
+        artifacts=(
+            BuiltinToolArtifact(
+                semantic_type="prepared_ligands",
+                filename=sdf_filename,
+                content=sdf_content,
+                content_type="chemical/x-mdl-sdfile",
+                source_file_id=source_file.file_id,
+            ),
+            BuiltinToolArtifact(
+                semantic_type="conformer_report",
+                filename=report_filename,
+                content=report_content,
+                content_type="application/json",
+                source_file_id=source_file.file_id,
+            ),
+        ),
+        standard_result={
+            "result_version": "aidd.sciminer/result.v2",
+            "artifacts": {
+                "ligand": {
+                    "type": "ligand_structure@1",
+                    "name": "RDKit ligand conformers",
+                    "files": {
+                        "structure_file": _standard_output_file_ref(
+                            sdf_filename,
+                            sdf_content,
+                            "chemical/x-mdl-sdfile",
+                        ),
+                    },
+                    "metadata": {
+                        "ligand_id": f"conformers-{source_file.file_id}",
+                        "source_database": "tool_output",
+                        "structure_3d_source": "rdkit_generated_3d",
+                        "source_file_id": source_file.file_id,
+                    },
+                },
+                "report": {
+                    "type": "run_report@1",
+                    "name": "RDKit conformer report",
+                    "files": {
+                        "report_json": _standard_output_file_ref(
+                            report_filename,
+                            report_content,
+                            "application/json",
+                        ),
+                    },
+                    "metadata": {"source_task_id": source_file.file_id},
+                },
+            },
+            "summary": {"row_count": preparation.stats["output_count"]},
+        },
+    )
+
+
+def _ligand_preparation_options(params: dict[str, Any] | None) -> Any:
+    from app.schemas.ligand_preparation import LigandPreparationOptions
+
+    raw_params = params if isinstance(params, dict) else {}
+    option_payload = raw_params.get("options")
+    if not isinstance(option_payload, dict):
+        option_keys = {
+            "smiles_column",
+            "name_column",
+            "remove_explicit_hydrogens",
+            "remove_disconnected_fragments",
+            "normalize_structure",
+            "reionize",
+            "neutralize",
+            "remove_pains",
+            "remove_duplicates",
+            "min_molecular_weight",
+            "max_molecular_weight",
+            "generate_3d",
+            "drop_3d_failures",
+            "forcefield",
+            "conformer_seed",
+        }
+        option_payload = {key: raw_params[key] for key in option_keys if key in raw_params}
+    return LigandPreparationOptions.model_validate(option_payload)
 
 
 def _standard_output_file_ref(path: str, content: bytes, content_type: str) -> dict[str, str]:
@@ -840,6 +1140,8 @@ def _protein_preparation_metadata(
     source_file: BuiltinToolFile,
     options: Any,
     preparation_profile: str,
+    preparation_engine: str,
+    preparation_status: str,
 ) -> dict[str, Any]:
     atoms = [line for line in prepared_pdb.splitlines() if line.startswith(("ATOM", "HETATM"))]
     chain_ids = sorted({line[21].strip() for line in atoms if len(line) > 21 and line[21].strip()})
@@ -857,14 +1159,14 @@ def _protein_preparation_metadata(
         "atom_count": len(atoms),
         "structure_format": "pdb",
         "source_filename": source_file.filename,
-        "preparation_status": "prepared",
+        "preparation_status": preparation_status,
         "preparation_profile": preparation_profile,
         "ph": options.ph,
         "remove_water": options.remove_water,
         "keep_metals": options.keep_metals,
         "keep_cofactors": options.keep_cofactors,
         "remove_non_target_ligands": options.remove_non_target_ligands,
-        "preparation_engine": "sciminer-local-v1",
+        "preparation_engine": preparation_engine,
     }
 
 
@@ -1399,6 +1701,8 @@ _BUILTIN_TOOL_REGISTRY: dict[str, str] = {
     "builtin-vina-docking": "vina_docking",
     "builtin-protein-preparation": "protein_preparation",
     "builtin-rdkit-properties": "rdkit_properties",
+    "builtin-ligand-preparation": "ligand_preparation",
+    "builtin-rdkit-conformer": "rdkit_conformer",
     "builtin-query-chembl": "query_chembl",
     "builtin-query-pubchem": "query_pubchem",
     "builtin-query-pdbbind": "query_pdbbind",
@@ -1439,6 +1743,10 @@ async def run_builtin_tool(
         return await asyncio.to_thread(_run_protein_preparation_tool, files, params)
     if handler_key == "rdkit_properties":
         return await asyncio.to_thread(_run_rdkit_properties_tool, files, params)
+    if handler_key == "ligand_preparation":
+        return await asyncio.to_thread(_run_ligand_preparation_tool, files, params)
+    if handler_key == "rdkit_conformer":
+        return await asyncio.to_thread(_run_rdkit_conformer_tool, files, params)
     if handler_key == "query_chembl":
         return await _run_query_chembl_tool(files)
     if handler_key == "query_pubchem":

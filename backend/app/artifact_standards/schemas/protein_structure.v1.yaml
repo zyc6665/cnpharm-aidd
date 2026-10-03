@@ -71,7 +71,7 @@ metadata_schema:
       type: string
     preparation_status:
       type: string
-      enum: [raw, prepared, failed]
+      enum: [raw, prepared, degraded, failed]
     preparation_profile:
       type: string
     ph:

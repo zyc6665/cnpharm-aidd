@@ -1076,6 +1076,69 @@ async def test_reconcile_orphaned_direct_tasks_skips_active_direct_runner_task(
 
 
 @pytest.mark.asyncio
+async def test_reconcile_orphaned_direct_tasks_reschedules_builtin_after_restart(
+    db_session: AsyncSession,
+    admin_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tool = Tool(
+        owner_id=admin_user.id,
+        name="Protein Preparation",
+        slug="builtin-protein-preparation",
+        description="Built-in protein preparation",
+        category="preparation",
+        status=ToolStatus.PUBLISHED.value,
+        is_public=True,
+    )
+    db_session.add(tool)
+    await db_session.flush()
+    version = ToolVersion(
+        tool_id=tool.id,
+        version="1.0.0",
+        config={"type": "builtin", "builtin_slug": "builtin-protein-preparation"},
+        is_active=True,
+    )
+    db_session.add(version)
+    await db_session.flush()
+    task = Task(
+        user_id=admin_user.id,
+        tool_id=tool.id,
+        tool_version_id=version.id,
+        status=TaskStatus.RUNNING.value,
+        priority="normal",
+        progress=0.0,
+        progress_message="任务开始执行",
+        extra_data={"dispatch": {"mode": "direct"}},
+    )
+    db_session.add(task)
+    await db_session.flush()
+    db_session.add(TaskInput(task_id=task.id, params={}, file_ids=[]))
+    await db_session.commit()
+
+    scheduled: list[tuple[str, str, str | None]] = []
+    monkeypatch.setattr(
+        "app.tasks.direct_recovery.direct_task_runner",
+        SimpleNamespace(
+            is_task_active=lambda _task_id: False,
+            schedule_task=lambda task_id, tool_version_id, attempt_id=None: scheduled.append(
+                (task_id, tool_version_id, attempt_id)
+            ),
+        ),
+    )
+
+    recovered = await reconcile_orphaned_direct_tasks(db_session)
+    await db_session.refresh(task)
+
+    assert recovered == 1
+    assert task.status == TaskStatus.PENDING.value
+    assert task.progress == 0.0
+    assert task.progress_message == "服务重启后重新排队"
+    assert len(scheduled) == 1
+    assert scheduled[0][:2] == (task.id, version.id)
+    assert scheduled[0][2]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("initial_status", [TaskStatus.RUNNING.value, TaskStatus.CANCELED.value])
 async def test_reconcile_orphaned_direct_tasks_recovers_remote_success_result(
     db_session: AsyncSession,

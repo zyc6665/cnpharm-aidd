@@ -14,7 +14,11 @@ from app.models.files import File as FileModel
 from app.models.users import User
 from app.models.tools import Tool, ToolVersion
 from app.models.tasks import Task, TaskLog, TaskStatus
-from app.tasks.attempts import is_task_cancellation_pending
+from app.tasks.attempts import (
+    get_execution_attempt_id,
+    is_task_cancellation_pending,
+    mark_task_execution_released,
+)
 from app.tasks.cancellation import cancel_platform_task
 from app.common.task_context import task_project_id
 from app.tasks.direct_runner import direct_task_runner
@@ -32,6 +36,7 @@ from app.tasks.naming import (
     _extract_file_ids_from_result,
 )
 from app.auth.dependencies import get_current_user, get_admin_user
+from app.config import use_direct_task_execution
 from app.schemas.tasks import (
     TaskCreate, TaskListResponse
 )
@@ -637,7 +642,19 @@ async def retry_task(
     if task.status not in [TaskStatus.FAILURE.value, TaskStatus.CANCELED.value]:
         raise ValidationException("任务状态不允许重试")
     if is_task_cancellation_pending(task):
-        raise ConflictException("上一次执行尚未确认停止，暂时不能重试")
+        is_direct_runner_idle = False
+        if use_direct_task_execution():
+            is_task_active = getattr(direct_task_runner, "is_task_active", None)
+            if callable(is_task_active):
+                is_direct_runner_idle = not is_task_active(str(task.id))
+        if is_direct_runner_idle:
+            mark_task_execution_released(
+                task,
+                attempt_id=get_execution_attempt_id(task),
+                reason="direct_runner_task_not_active",
+            )
+        else:
+            raise ConflictException("上一次执行尚未确认停止，暂时不能重试")
 
     version_result = await db.execute(
         select(ToolVersion).where(ToolVersion.id == task.tool_version_id)

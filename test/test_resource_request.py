@@ -326,6 +326,36 @@ async def test_task_executor_rejects_when_dynamic_capacity_is_exhausted() -> Non
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("executor_type", ["ssh_job", "k8s_job", "remote_api"])
+async def test_remote_executor_does_not_allocate_a_local_gpu(executor_type: str) -> None:
+    task = SimpleNamespace(
+        id=f"task-{executor_type}-gpu-resource",
+        extra_data={
+            "resource_snapshot": build_task_resource_snapshot(
+                {
+                    "type": executor_type,
+                    "gpu_required": True,
+                    "gpu_memory_mb": 24576,
+                }
+            )
+        },
+        gpu_node_id=None,
+        gpu_index=None,
+        gpu_memory_allocated_mb=None,
+    )
+    executor = TaskExecutor(
+        task,
+        SimpleNamespace(config={"type": executor_type, "gpu_required": True}),
+    )
+
+    with patch(
+        "app.database.session.get_async_session",
+        side_effect=AssertionError("Remote jobs must not allocate from the local GPU pool"),
+    ):
+        assert await executor._allocate_gpu() is None
+
+
+@pytest.mark.asyncio
 async def test_task_executor_binds_allocated_gpu_device_to_runtime_config() -> None:
     task = SimpleNamespace(
         id="task-gpu-resource",

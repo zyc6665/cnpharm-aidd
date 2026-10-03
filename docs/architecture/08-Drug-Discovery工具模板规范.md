@@ -144,6 +144,8 @@ executor:
 
 用途：将原始蛋白结构转换为下游可用的准备态蛋白，例如去水、去非目标配体、加氢、质子化状态处理和格式转换。
 
+实现约束：默认使用开源 PDBFixer 完成缺失残基/原子修复和加氢，使用 OpenMM 执行可选能量最小化，使用 Open Babel 进行 PDBQT 转换。工具报告必须记录实际执行步骤；开源依赖不可用时只能输出明确标记为 `degraded` 的基础清理结果，不得冒充完整准备态。
+
 ```yaml
 metadata:
   slug: builtin-protein-preparation

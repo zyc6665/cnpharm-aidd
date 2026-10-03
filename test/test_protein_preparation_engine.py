@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from app.protein_preparation import engine
 from app.schemas.protein_preparation import ProteinPreparationOptions
 
@@ -23,6 +25,13 @@ def test_prepare_protein_removes_water_and_returns_requested_roles(tmp_path, mon
         receptor_pdbqt.write_text("REMARK receptor pdbqt\n", encoding="utf-8")
 
     monkeypatch.setattr(engine, "convert_prepared_pdb_to_pdbqt", fake_convert)
+    monkeypatch.setattr(
+        engine,
+        "_run_open_source_preparation",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            engine.OpenSourcePreparationUnavailable("PDBFixer 不可用")
+        ),
+    )
 
     result = engine.prepare_protein(
         source,
@@ -38,7 +47,7 @@ def test_prepare_protein_removes_water_and_returns_requested_roles(tmp_path, mon
     assert result.report["advanced_options"] == {"chain_selection": ["A"]}
 
 
-def test_prepare_protein_can_emit_prepared_pdb_without_external_conversion(tmp_path):
+def test_prepare_protein_can_emit_prepared_pdb_without_external_conversion(tmp_path, monkeypatch):
     source = tmp_path / "raw.pdb"
     source.write_text(
         "ATOM      1  N   ALA A   1       0.000   0.000   0.000\n"
@@ -47,6 +56,13 @@ def test_prepare_protein_can_emit_prepared_pdb_without_external_conversion(tmp_p
         encoding="utf-8",
     )
 
+    monkeypatch.setattr(
+        engine,
+        "_run_open_source_preparation",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            engine.OpenSourcePreparationUnavailable("未安装开源蛋白修复依赖 PDBFixer，请安装 backend/requirements.txt")
+        ),
+    )
     result = engine.prepare_protein(
         source,
         ProteinPreparationOptions(output_formats=["prepared_pdb"]),
@@ -56,7 +72,35 @@ def test_prepare_protein_can_emit_prepared_pdb_without_external_conversion(tmp_p
 
     assert set(result.files) == {"prepared_pdb"}
     assert "WAT" not in result.files["prepared_pdb"].path.read_text(encoding="utf-8")
-    assert result.warnings == []
+    assert result.report["fallback_reason"] == "未安装开源蛋白修复依赖 PDBFixer，请安装 backend/requirements.txt"
+    assert result.warnings
+
+
+def test_prepare_protein_auto_fallback_reports_unexecuted_advanced_steps(tmp_path, monkeypatch):
+    source = tmp_path / "raw.pdb"
+    source.write_text(
+        "ATOM      1  N   ALA A   1       0.000   0.000   0.000\n"
+        "END\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        engine,
+        "_run_open_source_preparation",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            engine.OpenSourcePreparationUnavailable("PDBFixer 不可用")
+        ),
+    )
+
+    result = engine.prepare_protein(
+        source,
+        ProteinPreparationOptions(output_formats=["prepared_pdb"]),
+        output_dir=tmp_path / "out",
+    )
+
+    assert result.report["fallback_reason"] == "PDBFixer 不可用"
+    assert result.report["warnings"] == result.warnings
+    assert any("缺失侧链" in warning for warning in result.warnings)
+    assert any("能量最小化" in warning for warning in result.warnings)
 
 
 def test_convert_prepared_pdb_to_pdbqt_uses_rigid_openbabel_option(
@@ -93,3 +137,24 @@ def test_convert_prepared_pdb_to_pdbqt_uses_rigid_openbabel_option(
         "-xr",
     ]
 
+
+def test_prepare_protein_report_declares_open_source_backend(tmp_path, monkeypatch):
+    source = tmp_path / "raw.pdb"
+    source.write_text("ATOM      1  N   ALA A   1       0.000   0.000   0.000\nEND\n")
+    monkeypatch.setattr(
+        engine,
+        "_run_open_source_preparation",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            engine.OpenSourcePreparationUnavailable("PDBFixer 不可用")
+        ),
+    )
+
+    result = engine.prepare_protein(
+        source,
+        ProteinPreparationOptions(output_formats=["prepared_pdb"]),
+        output_dir=tmp_path / "out",
+    )
+
+    assert result.report["engine"] == "open-source-basic-fallback"
+    assert result.report["implementation"] == "open-source"
+    assert result.report["status"] == "degraded"

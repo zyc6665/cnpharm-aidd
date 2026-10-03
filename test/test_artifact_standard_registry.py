@@ -78,7 +78,7 @@ def test_protein_structure_metadata_schema_declares_preparation_fields():
     spec = get_standard_artifact_spec("protein_structure@1")
     properties = spec.metadata_schema["properties"]
 
-    assert properties["preparation_status"]["enum"] == ["raw", "prepared", "failed"]
+    assert properties["preparation_status"]["enum"] == ["raw", "prepared", "degraded", "failed"]
     assert properties["preparation_profile"]["type"] == "string"
     assert properties["ph"]["type"] == "number"
     assert properties["remove_water"]["type"] == "boolean"

@@ -285,6 +285,74 @@ AIDD_TOOL_CAPABILITIES: dict[str, ToolCapability] = {
         defaults={"smiles_field": "SMILES", "device": "cpu"},
         virtual=True,
     ),
+    "builtin-ligand-preparation": ToolCapability(
+        tool_slug="builtin-ligand-preparation",
+        capability="ligand_preparation",
+        stage="ligand_preparation",
+        inputs=(
+            CapabilityInput(
+                "molecule_table@1",
+                "molecules",
+                accepted_extensions=(".csv", ".json", ".smi", ".txt"),
+            ),
+        ),
+        outputs=(
+            CapabilityOutput(
+                "molecule_table@1",
+                "output_files",
+                OutputMatch(extension=".csv", filename_contains_any=("normalized_molecules",)),
+            ),
+            CapabilityOutput(
+                "ligand_structure@1",
+                "output_files",
+                OutputMatch(extension=".sdf", filename_contains_any=("prepared_ligands",)),
+            ),
+            CapabilityOutput(
+                "run_report@1",
+                "output_files",
+                OutputMatch(extension=".json", filename_contains_any=("ligand_preparation_report",)),
+            ),
+        ),
+        defaults={
+            "smiles_column": "SMILES",
+            "remove_explicit_hydrogens": True,
+            "remove_disconnected_fragments": True,
+            "normalize_structure": True,
+            "reionize": True,
+            "neutralize": True,
+            "remove_pains": True,
+            "remove_duplicates": True,
+            "generate_3d": True,
+        },
+        virtual=True,
+    ),
+    "builtin-rdkit-conformer": ToolCapability(
+        tool_slug="builtin-rdkit-conformer",
+        capability="conformer_generation",
+        stage="ligand_preparation",
+        inputs=(
+            CapabilityInput(
+                "ligand_structure@1",
+                "ligand",
+                accepted_extensions=(".sdf", ".mol", ".sd", ".pdb"),
+            ),
+        ),
+        outputs=(
+            CapabilityOutput(
+                "ligand_structure@1",
+                "output_files",
+                OutputMatch(extension=".sdf", filename_contains_any=("conformer", "ligand")),
+            ),
+            CapabilityOutput(
+                "run_report@1",
+                "output_files",
+                OutputMatch(extension=".json", filename_contains_any=("report",)),
+                required=False,
+            ),
+        ),
+        defaults={"generate_3d": True, "forcefield": "mmff"},
+        virtual=True,
+    ),
     "msign-affinity-prediction": ToolCapability(
         tool_slug="msign-affinity-prediction",
         capability="affinity_prediction",

@@ -92,7 +92,11 @@ def test_capability_lookup_by_output() -> None:
     assert [item.tool_slug for item in protein_artifact_capabilities] == ["builtin-fetch-pdb"]
 
     ligand_artifact_capabilities = get_capabilities_by_output("ligand_structure@1")
-    assert [item.tool_slug for item in ligand_artifact_capabilities] == ["builtin-fetch-ligand"]
+    assert [item.tool_slug for item in ligand_artifact_capabilities] == [
+        "builtin-fetch-ligand",
+        "builtin-ligand-preparation",
+        "builtin-rdkit-conformer",
+    ]
 
     docking_capabilities = get_capabilities_by_output("docking_report")
     assert [item.tool_slug for item in docking_capabilities] == ["builtin-vina-docking"]

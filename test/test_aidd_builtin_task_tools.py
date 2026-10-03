@@ -66,6 +66,7 @@ async def test_ensure_aidd_builtin_tool_creates_published_platform_tool(
 
     assert tool.owner_id == system_user.id
     assert tool.status == ToolStatus.PUBLISHED.value
+    assert tool.is_public is True
     assert tool.current_version is not None
     assert tool.current_version.config['type'] == 'builtin'
     assert tool.current_version.config['builtin_slug'] == 'builtin-vina-docking'

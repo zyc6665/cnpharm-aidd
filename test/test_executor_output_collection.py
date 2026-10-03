@@ -175,6 +175,49 @@ async def test_base_executor_sets_storage_path_before_flush(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_base_executor_uses_shared_session_without_committing(tmp_path):
+    from app.tasks.executors import base as base_module
+
+    source_path = tmp_path / "result.txt"
+    source_path.write_text("result", encoding="utf-8")
+
+    class FakeSession:
+        def __init__(self):
+            self.records = []
+            self.committed = False
+
+        def add(self, record):
+            self.records.append(record)
+
+        async def flush(self):
+            return None
+
+        async def commit(self):
+            self.committed = True
+
+    session = FakeSession()
+    executor = DockerExecutor(
+        _build_task(),
+        _build_tool_version(),
+        db_session=session,
+    )
+
+    async def fail_if_new_session_is_requested():
+        raise AssertionError("shared task session should be reused")
+
+    with patch.object(base_module, "get_async_session", fail_if_new_session_is_requested), patch.object(
+        base_module, "get_file_path", lambda file_id, filename: tmp_path / f"{file_id}_{filename}"
+    ):
+        result = await base_module.BaseExecutor._collect_output_files(
+            executor,
+            [str(source_path)],
+        )
+
+    assert len(result) == 1
+    assert session.committed is False
+
+
+@pytest.mark.asyncio
 async def test_base_executor_does_not_add_record_when_copy_fails(tmp_path):
     from app.tasks.executors import base as base_module
 

@@ -274,19 +274,37 @@ async def workflow_semantic_source_file_id(
         source_output = (source_state.get("semantic_outputs") or {}).get(
             source_semantic_type
         )
-        if not source_output:
-            return None
-        file_id = (
-            source_output.get("file_id")
-            if isinstance(source_output, dict)
-            else None
-        )
-        if not file_id:
-            raise ValidationException(
-                "Workflow node output is not file-backed: "
-                f"node={source_node_id}, semantic_type={source_semantic_type}"
+        if source_output:
+            file_id = (
+                source_output.get("file_id")
+                if isinstance(source_output, dict)
+                else None
             )
-        return str(file_id)
+            if not file_id:
+                raise ValidationException(
+                    "Workflow node output is not file-backed: "
+                    f"node={source_node_id}, semantic_type={source_semantic_type}"
+                )
+            return str(file_id)
+
+        requested_type = normalize_semantic_type(
+            source_semantic_type.split("@", 1)[0]
+        )
+        for declaration in source_state.get("artifact_outputs") or []:
+            if not isinstance(declaration, dict):
+                continue
+            declared_type = normalize_semantic_type(
+                str(declaration.get("type") or "").split("@", 1)[0]
+            )
+            if declared_type != requested_type:
+                continue
+            file_ids = standard_artifact_file_ids(
+                source_state.get("standard_artifacts") or {},
+                str(declaration.get("name") or ""),
+            )
+            if file_ids:
+                return file_ids[0]
+        return None
     raise ValidationException(f"Unsupported workflow input source: {source}")
 
 

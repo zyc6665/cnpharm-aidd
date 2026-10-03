@@ -28,6 +28,7 @@ from app.models import users as _user_models  # noqa: F401
 from app.models.tools import (
     Tool,
     ToolCategory,
+    ToolProviderType,
     ToolStatus,
     ToolVersion,
     ToolWorkbenchGroup,
@@ -268,6 +269,59 @@ async def test_public_tool_list_includes_valid_workflow_contract(
 
 
 @pytest.mark.asyncio
+async def test_public_tool_list_and_detail_include_platform_tools_without_public_flag(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    owner_user: User,
+    tool_category: ToolCategory,
+):
+    """平台工具按部署归属公开，不能因 is_public 历史值隐藏。"""
+    tool = await create_tool(
+        db_session,
+        owner_user,
+        tool_category,
+        name="Builtin Protein Preparation",
+        slug="builtin-protein-preparation",
+        is_public=False,
+    )
+    tool.provider_type = ToolProviderType.PLATFORM.value
+    await attach_tool_version(
+        db_session,
+        tool,
+        {
+            "type": "builtin",
+            "builtin_slug": "builtin-protein-preparation",
+            "agent_capability": {
+                "enabled": True,
+                "stage": "protein_preparation",
+                "capability": "protein_preparation",
+                "inputs": [],
+                "outputs": [],
+                "defaults": {},
+            },
+        },
+    )
+
+    list_response = await api_client.get("/api/v1/tools", params={"view": "public"})
+    assert list_response.status_code == 200
+    list_item = list_response.json()["data"]["items"][0]
+    assert list_item["slug"] == "builtin-protein-preparation"
+    assert list_item["deployment"] == {
+        "kind": "platform_builtin",
+        "executor_type": "builtin",
+    }
+
+    detail_response = await api_client.get(f"/api/v1/tools/{tool.id}")
+    assert detail_response.status_code == 200
+    detail_item = detail_response.json()["data"]
+    assert detail_item["slug"] == "builtin-protein-preparation"
+    assert detail_item["deployment"] == {
+        "kind": "platform_builtin",
+        "executor_type": "builtin",
+    }
+
+
+@pytest.mark.asyncio
 async def test_public_workbench_groups_only_returns_visible_tools_in_each_group(
     api_client: httpx.AsyncClient,
     db_session: AsyncSession,
@@ -292,6 +346,12 @@ async def test_public_workbench_groups_only_returns_visible_tools_in_each_group(
         tool_category,
         name="Visible Tool",
         slug="visible-tool",
+    )
+    visible_tool.provider_type = ToolProviderType.PLATFORM.value
+    await attach_tool_version(
+        db_session,
+        visible_tool,
+        {"type": "builtin", "builtin_slug": "visible-tool"},
     )
     private_tool = await create_tool(
         db_session,
@@ -354,6 +414,10 @@ async def test_public_workbench_groups_only_returns_visible_tools_in_each_group(
     assert len(payload["data"]) == 1
     assert payload["data"][0]["slug"] == "docking"
     assert [tool["slug"] for tool in payload["data"][0]["tools"]] == ["visible-tool"]
+    assert payload["data"][0]["tools"][0]["deployment"] == {
+        "kind": "platform_builtin",
+        "executor_type": "builtin",
+    }
 
 
 @pytest.mark.asyncio

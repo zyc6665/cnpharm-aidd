@@ -31,12 +31,14 @@ class BaseExecutor(ABC):
         tool_version: "ToolVersion",
         config: Optional[dict[str, Any]] = None,
         progress_callback: Optional[Callable[[float, str], Awaitable[None]]] = None,
+        db_session: Any | None = None,
     ):
         self.task = task
         self.tool_version = tool_version
         self.config = config if config is not None else tool_version.config
         self.work_dir: Optional[str] = None
         self.progress_callback = progress_callback
+        self.db_session = db_session
 
     @abstractmethod
     async def execute(self) -> dict[str, Any]:
@@ -68,69 +70,103 @@ class BaseExecutor(ABC):
         filename_builder: Optional[Callable[[str, str], str]] = None,
         skip_names: Optional[set[str]] = None,
     ) -> list[str]:
+        if self.db_session is not None:
+            return await self._collect_output_files_with_session(
+                self.db_session,
+                source_paths,
+                output_root=output_root,
+                file_meta_builder=file_meta_builder,
+                filename_builder=filename_builder,
+                skip_names=skip_names,
+                commit=False,
+            )
+
+        async for session in get_async_session():
+            return await self._collect_output_files_with_session(
+                session,
+                source_paths,
+                output_root=output_root,
+                file_meta_builder=file_meta_builder,
+                filename_builder=filename_builder,
+                skip_names=skip_names,
+                commit=True,
+            )
+        return []
+
+    async def _collect_output_files_with_session(
+        self,
+        session: Any,
+        source_paths: list[str],
+        *,
+        output_root: Optional[str],
+        file_meta_builder: Optional[Callable[[str, str], Optional[dict[str, Any]]]],
+        filename_builder: Optional[Callable[[str, str], str]],
+        skip_names: Optional[set[str]],
+        commit: bool,
+    ) -> list[str]:
         uploaded_ids: list[str] = []
         skip_names = skip_names or set()
 
-        async for session in get_async_session():
-            try:
-                for source_path in source_paths:
-                    if not os.path.isfile(source_path):
-                        continue
+        try:
+            for source_path in source_paths:
+                if not os.path.isfile(source_path):
+                    continue
 
-                    relative_path = (
-                        os.path.relpath(source_path, output_root)
-                        if output_root
-                        else os.path.basename(source_path)
+                relative_path = (
+                    os.path.relpath(source_path, output_root)
+                    if output_root
+                    else os.path.basename(source_path)
+                )
+                basename = os.path.basename(source_path)
+                if basename in skip_names or relative_path in skip_names:
+                    continue
+
+                try:
+                    with open(source_path, "rb") as file_handle:
+                        content = file_handle.read()
+
+                    filename = (
+                        filename_builder(source_path, relative_path)
+                        if filename_builder
+                        else basename
                     )
-                    basename = os.path.basename(source_path)
-                    if basename in skip_names or relative_path in skip_names:
-                        continue
+                    content_type = mimetypes.guess_type(source_path)[0] or "application/octet-stream"
+                    file_meta = (
+                        file_meta_builder(source_path, relative_path)
+                        if file_meta_builder
+                        else None
+                    )
+                    file_id = str(uuid.uuid4())
+                    storage_path = get_file_path(file_id, filename)
+                    storage_path.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(source_path, str(storage_path))
+                    file_record = FileModel(
+                        id=file_id,
+                        filename=filename,
+                        content_type=content_type,
+                        size_bytes=len(content),
+                        sha256=hashlib.sha256(content).hexdigest(),
+                        storage_path=str(storage_path),
+                        source_type=FileSourceType.TOOL_OUTPUT.value,
+                        owner_id=self.task.user_id,
+                        is_public=False,
+                        is_permanent=False,
+                        file_meta=file_meta,
+                    )
+                    session.add(file_record)
+                    await session.flush()
 
-                    try:
-                        with open(source_path, "rb") as file_handle:
-                            content = file_handle.read()
+                    uploaded_ids.append(file_id)
+                    logger.info("Collected output file: %s -> %s", relative_path, file_id)
+                except Exception as exc:
+                    logger.error("Failed to collect output file %s: %s", source_path, exc)
 
-                        filename = (
-                            filename_builder(source_path, relative_path)
-                            if filename_builder
-                            else basename
-                        )
-                        content_type = mimetypes.guess_type(source_path)[0] or "application/octet-stream"
-                        file_meta = (
-                            file_meta_builder(source_path, relative_path)
-                            if file_meta_builder
-                            else None
-                        )
-                        file_id = str(uuid.uuid4())
-                        storage_path = get_file_path(file_id, filename)
-                        storage_path.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(source_path, str(storage_path))
-                        file_record = FileModel(
-                            id=file_id,
-                            filename=filename,
-                            content_type=content_type,
-                            size_bytes=len(content),
-                            sha256=hashlib.sha256(content).hexdigest(),
-                            storage_path=str(storage_path),
-                            source_type=FileSourceType.TOOL_OUTPUT.value,
-                            owner_id=self.task.user_id,
-                            is_public=False,
-                            is_permanent=False,
-                            file_meta=file_meta,
-                        )
-                        session.add(file_record)
-                        await session.flush()
-
-                        uploaded_ids.append(file_id)
-                        logger.info("Collected output file: %s -> %s", relative_path, file_id)
-                    except Exception as exc:
-                        logger.error("Failed to collect output file %s: %s", source_path, exc)
-
+            if commit:
                 await session.commit()
-                break
-            except Exception as exc:
-                logger.error("Failed to collect output files: %s", exc)
+        except Exception as exc:
+            logger.error("Failed to collect output files: %s", exc)
+            if commit:
                 await session.rollback()
-                raise TaskExecutionError(f"Failed to collect output files: {exc}") from exc
+            raise TaskExecutionError(f"Failed to collect output files: {exc}") from exc
 
         return uploaded_ids

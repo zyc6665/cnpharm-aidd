@@ -4,8 +4,8 @@ file_roles:
   - role: table_file
     required: true
     primary: true
-    allowed_formats: [csv, json]
-    content_types: [text/csv, application/json, application/octet-stream]
+    allowed_formats: [csv, json, smi, txt]
+    content_types: [text/csv, text/plain, application/json, application/octet-stream]
     recommended_name: molecules.csv
   - role: metadata_json
     required: true

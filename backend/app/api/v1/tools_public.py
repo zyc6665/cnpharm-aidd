@@ -9,6 +9,7 @@ from sqlalchemy.orm import joinedload, selectinload
 
 from app.api.v1.tool_route_utils import (
     build_validated_tool_contract,
+    build_tool_deployment,
     load_tool_packages_for_tools,
     load_readable_tool_with_current_version,
     require_tool_read_access,
@@ -33,6 +34,7 @@ from app.models.tools import (
     ToolStatus,
     ToolWorkbenchGroup,
     ToolWorkbenchGroupMapping,
+    ToolProviderType,
 )
 from app.models.users import User
 from app.schemas.tools import (
@@ -93,6 +95,7 @@ def _serialize_workbench_tool(
             "sort_order": sort_order,
             "tags": [TagResponse.model_validate(tag).model_dump() for tag in tags],
             "contract": contract,
+            "deployment": build_tool_deployment(tool, contract),
         }
     ).model_dump()
 
@@ -126,7 +129,12 @@ async def list_tools(
         )
     if not is_admin:
         query = query.where(Tool.status == ToolStatus.PUBLISHED.value)
-        query = query.where(Tool.is_public.is_(True))
+        query = query.where(
+            or_(
+                Tool.is_public.is_(True),
+                Tool.provider_type == ToolProviderType.PLATFORM.value,
+            )
+        )
     elif status:
         query = query.where(Tool.status == status)
     if category:
@@ -219,7 +227,10 @@ async def list_public_workbench_groups(db: AsyncSession = Depends(get_db)):
                     ),
                     ToolWorkbenchGroupMapping.is_enabled.is_(True),
                     Tool.status == ToolStatus.PUBLISHED.value,
-                    Tool.is_public.is_(True),
+                    or_(
+                        Tool.is_public.is_(True),
+                        Tool.provider_type == ToolProviderType.PLATFORM.value,
+                    ),
                 )
                 .order_by(
                     ToolWorkbenchGroup.sort_order.asc(),

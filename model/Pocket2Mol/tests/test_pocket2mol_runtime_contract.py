@@ -60,7 +60,7 @@ def test_result_builder_wraps_legacy_pocket2mol_outputs_as_result_v2(tmp_path: P
     artifact_dir = raw_output_dir / "artifacts"
     artifact_dir.mkdir(parents=True)
     (artifact_dir / "generated_molecules.sdf").write_text(
-        "ligand_001\n  SciMiner\n\n  0  0  0  0  0  0            999 V2000\nM  END\n$$$$\n",
+        "ligand_001\n  SciMiner\n  0  0  0  0  0  0            999 V2000\nM  END\n$$$$\n",
         encoding="utf-8",
     )
     (artifact_dir / "molecules.csv").write_text(
@@ -86,6 +86,9 @@ def test_result_builder_wraps_legacy_pocket2mol_outputs_as_result_v2(tmp_path: P
     assert (output_dir / "artifacts/molecules/molecules.csv").is_file()
     assert (output_dir / "artifacts/ligands/ligand_001.sdf").is_file()
     assert (output_dir / "reports/report.json").is_file()
+    ligand_lines = (output_dir / "artifacts/ligands/ligand_001.sdf").read_text(encoding="utf-8").splitlines()
+    assert ligand_lines[2] == ""
+    assert ligand_lines[3].endswith("V2000")
 
 
 def test_cli_builds_legacy_params_from_standard_binding_pocket_request(tmp_path: Path):

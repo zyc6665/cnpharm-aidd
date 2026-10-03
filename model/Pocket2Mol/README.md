@@ -6,3 +6,6 @@
 
 真实部署时通过 `POCKET2MOL_LEGACY_ENTRYPOINT` 指向原始模型入口。该路径属于部署环境配置，
 不写入平台契约。
+
+模型侧 runtime 在写入标准 `artifacts/ligands/*.sdf` 前会规范化 Molfile 头部，确保 counts
+行位于三行 header 之后；平台前端仍保留兼容性修复，用于读取历史任务中已经生成的旧文件。

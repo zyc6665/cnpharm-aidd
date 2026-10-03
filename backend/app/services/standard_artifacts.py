@@ -217,7 +217,7 @@ async def _persist_artifact(
     db.add(artifact_record)
     await db.flush()
 
-    file_records: list[FileModel] = []
+    resolved_files: list[tuple[str, FileModel]] = []
     for role, parsed_file in artifact.files.items():
         file_record = await _resolve_file_record(
             task=task,
@@ -227,20 +227,19 @@ async def _persist_artifact(
             parsed_file=parsed_file,
             file_record_resolver=file_record_resolver,
         )
-        file_records.append(file_record)
+        resolved_files.append((role, file_record))
+    file_records = list(dict.fromkeys(file_record for _, file_record in resolved_files))
     db.add_all(file_records)
     await db.flush()
 
-    primary_file_record = file_records[
-        next(
-            (
-                index
-                for index, record in enumerate(file_records)
-                if record.file_meta.get("standard_artifact_role") == primary_file.role
-            ),
-            0,
-        )
-    ]
+    primary_file_record = next(
+        (
+            file_record
+            for role, file_record in resolved_files
+            if role == primary_file.role
+        ),
+        file_records[0],
+    )
     version = ArtifactVersion(
         artifact_id=artifact_record.id,
         created_by=user_id,
@@ -260,8 +259,7 @@ async def _persist_artifact(
     db.add(version)
     await db.flush()
 
-    for sort_order, file_record in enumerate(file_records):
-        role = str(file_record.file_meta.get("standard_artifact_role"))
+    for sort_order, (role, file_record) in enumerate(resolved_files):
         db.add(
             ArtifactVersionFile(
                 artifact_version_id=version.id,

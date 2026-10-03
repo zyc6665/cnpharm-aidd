@@ -660,6 +660,7 @@ async def _execute_tool_task_impl_inner(
                 progress_callback=progress_callback,
                 worker_capability=load_worker_capability(),
                 execution_service=get_execution_service(),
+                db_session=db,
             )
 
             # 执行任务

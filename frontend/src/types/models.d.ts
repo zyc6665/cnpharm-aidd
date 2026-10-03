@@ -67,6 +67,11 @@ export interface LoginResponse {
 // 工具相关类型
 export type ToolView = 'public' | 'favorites'
 
+export interface ToolDeployment {
+  kind: string
+  executor_type?: string | null
+}
+
 export interface Tool {
   id: string  // UUID
   name: string
@@ -100,6 +105,7 @@ export interface Tool {
   owner_id?: string
   is_favorited?: boolean  // 额外字段，由API返回
   contract?: ToolContract | null
+  deployment?: ToolDeployment | null
   created_at: string
   updated_at?: string
   // 兼容旧代码的字段
@@ -119,6 +125,7 @@ export interface ToolOptionSummary {
   icon_url?: Tool['icon_url']
   status: Tool['status']
   is_public?: Tool['is_public']
+  deployment?: ToolDeployment | null
   contract?: ToolContract | null
 }
 
@@ -288,6 +295,7 @@ export interface WorkbenchGroupTool {
   icon_url?: string
   status: Tool['status']
   is_public?: boolean
+  deployment?: ToolDeployment | null
   is_recommended: boolean
   sort_order: number
   contract?: ToolContract | null
