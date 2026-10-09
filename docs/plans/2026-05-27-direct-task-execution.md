@@ -101,7 +101,7 @@ Expected:
 ### Task 5: 配置开发环境默认走 direct 模式
 
 **Files:**
-- Modify: `docker-compose.yml`
+- Modify: `deploy/compose/docker-compose.dev.yml`
 
 **Step 1: Write minimal implementation**
 

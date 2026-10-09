@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - execution-rbac.yaml
+  - data-services-dev.yaml
+  - minio-dev.yaml
+  - minio-dev-nodeport.yaml
+  - registry-dev.yaml
+  - registry-dev-nodeport.yaml

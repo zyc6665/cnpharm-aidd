@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sciminer-system
+  labels:
+    app.kubernetes.io/part-of: sciminer
+    sciminer.io/purpose: control-plane
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sciminer-model-jobs
+  labels:
+    app.kubernetes.io/part-of: sciminer
+    sciminer.io/purpose: model-execution
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sciminer-storage
+  labels:
+    app.kubernetes.io/part-of: sciminer
+    sciminer.io/purpose: object-storage

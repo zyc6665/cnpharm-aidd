@@ -79,3 +79,39 @@ async def test_file_statistics_sum_size_bytes(db_session: AsyncSession) -> None:
     assert stats.permanent_files == 1
     assert stats.expiring_soon == 1
     assert stats.expired_pending_cleanup == 1
+
+
+@pytest.mark.asyncio
+async def test_cleanup_expired_files_reports_size_bytes_and_uses_record_backend(
+    db_session: AsyncSession,
+) -> None:
+    file_record = make_file(
+        "expired.txt",
+        4096,
+        expires_at=utcnow() - timedelta(days=1),
+        reference_count=0,
+    )
+    db_session.add(file_record)
+    await db_session.commit()
+
+    class FakeStorage:
+        def __init__(self) -> None:
+            self.deleted: list[str] = []
+
+        async def delete(self, path: str) -> bool:
+            self.deleted.append(path)
+            return True
+
+    storage = FakeStorage()
+    manager = FileLifecycleManager(db_session, storage_backend=storage)
+    manager._check_active_tasks = lambda _file_id: _empty_tasks()
+
+    result = await manager.cleanup_expired_files()
+
+    assert result.cleaned_count == 1
+    assert result.freed_bytes == 4096
+    assert storage.deleted == ["/tmp/expired.txt"]
+
+
+async def _empty_tasks() -> list[str]:
+    return []

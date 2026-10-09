@@ -79,8 +79,8 @@ def test_local_database_schema_uses_size_bytes_when_present():
 def test_executor_file_handling_entrypoints_are_implemented():
     """执行器关键文件处理方法不应退化为占位实现。"""
     required_methods = {
-        "_prepare_input_files": ("app/tasks/executors/ssh_job.py", "shutil.copy2"),
-        "_collect_output_files": ("app/tasks/executors/base.py", "FileModel"),
+        "_prepare_input_files": ("app/tasks/executors/ssh_job.py", "ensure_local_file"),
+        "_collect_output_files": ("app/tasks/executors/base.py", "_collect_output_files_with_session"),
         "_process_output_files": ("app/tasks/executors/remote_api.py", "httpx.AsyncClient"),
     }
 

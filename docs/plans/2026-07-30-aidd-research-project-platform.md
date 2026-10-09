@@ -703,8 +703,8 @@ Expected: PASS。
 ### Task 15: 完善 PostgreSQL、Redis、MinIO 和离线部署
 
 **Files:**
-- Modify: `docker-compose.prod.yml`
-- Create: `docker-compose.aidd-dev.yml`
+- Modify: `deploy/compose/docker-compose.prod.yml`
+- Create: `deploy/compose/docker-compose.dev.yml`
 - Modify: `backend/.env.example`
 - Modify: `backend/app/config.py`
 - Modify: `frontend/index.html`
@@ -741,8 +741,8 @@ cd frontend && npm test -- --run test/no-public-runtime-dependencies.test.ts
 Run:
 
 ```bash
-docker compose -f docker-compose.aidd-dev.yml config
-docker compose -f docker-compose.prod.yml config
+docker compose -f deploy/compose/docker-compose.dev.yml config
+docker compose -f deploy/compose/docker-compose.prod.yml config
 pytest test/test_aidd_production_compose.py -q
 cd frontend && npm test -- --run test/no-public-runtime-dependencies.test.ts
 ```

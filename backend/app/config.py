@@ -193,6 +193,22 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _validate_production_security(self):
         """生产环境强制校验安全关键配置。"""
+        if self.EXECUTOR_ENABLED_K8S:
+            required_k8s_settings = {
+                "K8S_ADAPTER_CLUSTER_ALIAS": self.K8S_ADAPTER_CLUSTER_ALIAS,
+                "K8S_ADAPTER_NAMESPACE": self.K8S_ADAPTER_NAMESPACE,
+                "K8S_ADAPTER_CREDENTIAL_REF": self.K8S_ADAPTER_CREDENTIAL_REF,
+                "K8S_ADAPTER_SERVICE_ACCOUNT": self.K8S_ADAPTER_SERVICE_ACCOUNT,
+            }
+            missing_k8s_settings = [
+                name for name, value in required_k8s_settings.items() if not value
+            ]
+            if missing_k8s_settings:
+                raise ValueError(
+                    "EXECUTOR_ENABLED_K8S requires: "
+                    + ", ".join(missing_k8s_settings)
+                )
+
         if (
             self.ENVIRONMENT in {"staging", "production"}
             and len(self.JWT_SECRET_KEY) < 32
@@ -281,6 +297,12 @@ class Settings(BaseSettings):
 
     # 文件大小限制
     MAX_FILE_SIZE_MB: int = 100
+    IMAGE_REGISTRY_ENDPOINT: str = "http://localhost:5000"
+    IMAGE_REGISTRY_USERNAME: str = ""
+    IMAGE_REGISTRY_PASSWORD: str = ""
+    IMAGE_REGISTRY_TIMEOUT_SECONDS: int = 120
+    IMAGE_IMPORT_MAX_SIZE_MB: int = 16384
+    IMAGE_IMPORT_ALLOWED_REPOSITORY_PREFIX: str = "sciminer"
 
     # ==================== 缓存配置 ====================
     # 缓存后端: memory | redis
@@ -300,6 +322,13 @@ class Settings(BaseSettings):
         """构建带认证的Redis连接URL"""
         auth = f":{self.REDIS_PASSWORD}@" if self.REDIS_PASSWORD else ""
         return f"redis://{auth}{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+
+    @property
+    def effective_redis_url(self) -> str:
+        """返回 Redis 客户端实际使用的连接 URL。"""
+        if "REDIS_URL" in self.model_fields_set:
+            return self.REDIS_URL
+        return self.redis_url_with_auth
 
     # ==================== Celery 配置 ====================
     # 为空时使用内存队列（同步执行），生产环境设置为 Redis URL
@@ -358,6 +387,23 @@ class Settings(BaseSettings):
     K8S_ADAPTER_CREDENTIAL_REF: Optional[str] = None
     K8S_ADAPTER_SERVICE_ACCOUNT: Optional[str] = None
     K8S_ADAPTER_JOB_NAME_PREFIX: str = "sciminer"
+    K8S_ADAPTER_API_SERVER: Optional[str] = None
+    K8S_ADAPTER_TOKEN_FILE: str = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+    K8S_ADAPTER_CA_FILE: str = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+    K8S_ADAPTER_REQUEST_TIMEOUT_SECONDS: int = 30
+    K8S_ADAPTER_OBJECT_STORAGE_ENDPOINT: Optional[str] = None
+    K8S_ADAPTER_OBJECT_STORAGE_BUCKET: Optional[str] = None
+    K8S_ADAPTER_OBJECT_STORAGE_SECRET_REF: Optional[str] = None
+    K8S_ADAPTER_OBJECT_STORAGE_INPUT_PREFIX: str = "inputs"
+    K8S_ADAPTER_OBJECT_STORAGE_OUTPUT_PREFIX: str = "executions"
+    K8S_ADAPTER_OBJECT_STORAGE_STAGING_ROOT: str = "/tmp/sciminer-k8s-artifacts"
+
+    IMAGE_REGISTRY_ENDPOINT: str = "http://sciminer-registry.sciminer-storage.svc.cluster.local:5000"
+    IMAGE_REGISTRY_IMAGE_PREFIX: str = "sciminer-registry.sciminer-storage.svc.cluster.local:5000"
+    IMAGE_REGISTRY_USERNAME: Optional[str] = None
+    IMAGE_REGISTRY_PASSWORD: Optional[str] = None
+    IMAGE_IMPORT_MAX_SIZE_MB: int = 16384
+    IMAGE_IMPORT_ALLOWED_REPOSITORY_PREFIX: str = "sciminer/"
 
     # ==================== Docker 执行器配置 ====================
     # 生产环境默认强制不可变 digest；该列表可进一步收紧为精确允许的镜像引用。

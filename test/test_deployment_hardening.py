@@ -8,7 +8,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 
 def test_compose_backend_healthcheck_uses_system_health_endpoint() -> None:
     """Compose 后端健康检查应使用真实存在的系统健康端点。"""
-    compose_source = (ROOT_DIR / "docker-compose.yml").read_text(encoding="utf-8")
+    compose_source = (ROOT_DIR / "deploy/compose/docker-compose.dev.yml").read_text(encoding="utf-8")
 
     assert "http://localhost:8000/api/v1/system/health" in compose_source
     assert "http://localhost:8000/api/v1/health" not in compose_source

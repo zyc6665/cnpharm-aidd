@@ -2,15 +2,24 @@ import type { WorkflowRun, WorkflowRunMissingOutput, WorkflowRunNodeState } from
 
 export type WorkflowRunTone = 'default' | 'processing' | 'success' | 'error' | 'warning'
 
+export interface WorkflowRunDisplayParameter {
+  key: string
+  value: string
+}
+
 export interface WorkflowRunNodeSummary {
   id: string
+  nodeTitle: string | null
   status: string
   toolSlug: string | null
   toolVersionId: string | null
+  toolVersion: string | null
   taskId: string | null
   inputFileIds: string[]
+  inputCount: number
   outputSemanticTypes: string[]
   paramsText: string | null
+  parameters: WorkflowRunDisplayParameter[]
   missingOutputs: WorkflowRunMissingOutput[]
   errorMessage: string | null
 }
@@ -74,6 +83,78 @@ function normalizeParamsText(value: unknown): string | null {
   }
 
   return entries.map(([key, entry]) => `${key}: ${JSON.stringify(entry)}`).join(', ')
+}
+
+function normalizeNodeTitle(
+  run: WorkflowRun,
+  nodeId: string,
+  state: UnknownRecord | null,
+  toolSlug: string | null
+): string | null {
+  const definitionNode = run.definition?.nodes?.find(node => node.id === nodeId)
+  return (
+    normalizeOptionalString(state?.node_title) ??
+    normalizeOptionalString(state?.tool_name) ??
+    normalizeOptionalString(definitionNode?.title) ??
+    normalizeOptionalString(definitionNode?.titleKey) ??
+    toolSlug
+  )
+}
+
+function normalizeToolVersion(value: unknown): string | null {
+  if (typeof value === 'string') {
+    return normalizeOptionalString(value)
+  }
+  if (!isUnknownRecord(value)) {
+    return null
+  }
+  return normalizeOptionalString(value.version)
+}
+
+const INTERNAL_PARAMETER_KEYS = new Set([
+  'builtin_inputs',
+  'file_ids',
+  'input_bindings',
+  'input_files',
+  'task_id',
+  'tool_id'
+])
+
+function isInternalParameterKey(key: string): boolean {
+  const normalizedKey = key.toLowerCase()
+  return (
+    INTERNAL_PARAMETER_KEYS.has(normalizedKey) ||
+    normalizedKey.startsWith('workflow_') ||
+    normalizedKey.endsWith('_file_id') ||
+    normalizedKey.endsWith('_version_id')
+  )
+}
+
+function normalizeDisplayParameterValue(value: unknown): string | null {
+  if (typeof value === 'string') {
+    return value.trim() || null
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value)
+  }
+  if (Array.isArray(value) && value.every(item => typeof item === 'string' || typeof item === 'number')) {
+    return value.join(', ')
+  }
+  return null
+}
+
+function normalizeDisplayParameters(value: unknown): WorkflowRunDisplayParameter[] {
+  if (!isUnknownRecord(value)) {
+    return []
+  }
+
+  return Object.entries(value).flatMap(([key, rawValue]) => {
+    if (isInternalParameterKey(key)) {
+      return []
+    }
+    const normalizedValue = normalizeDisplayParameterValue(rawValue)
+    return normalizedValue ? [{ key, value: normalizedValue }] : []
+  })
 }
 
 function normalizeMissingOutputMatch(value: unknown): WorkflowRunMissingOutput['match'] {
@@ -166,15 +247,21 @@ export function buildWorkflowRunSummary(run: WorkflowRun | null): WorkflowRunSum
 
   const nodes = nodeIds.map((nodeId) => {
     const state = asNodeState((run.node_states ?? {})[nodeId])
+    const toolSlug = normalizeOptionalString(state?.tool_slug)
+    const inputFileIds = normalizeStringArray(state?.input_file_ids)
     return {
       id: nodeId,
+      nodeTitle: normalizeNodeTitle(run, nodeId, state, toolSlug),
       status: normalizeStatus(state?.status),
-      toolSlug: normalizeOptionalString(state?.tool_slug),
+      toolSlug,
       toolVersionId: normalizeOptionalString(state?.tool_version_id),
+      toolVersion: normalizeToolVersion(state?.tool_version),
       taskId: normalizeOptionalString(state?.task_id),
-      inputFileIds: normalizeStringArray(state?.input_file_ids),
+      inputFileIds,
+      inputCount: inputFileIds.length,
       outputSemanticTypes: normalizeSemanticOutputs(state?.semantic_outputs),
       paramsText: normalizeParamsText(state?.params),
+      parameters: normalizeDisplayParameters(state?.params),
       missingOutputs: normalizeMissingOutputs(state?.missing_outputs),
       errorMessage: normalizeOptionalString(state?.error_message)
     }

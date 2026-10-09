@@ -4,7 +4,7 @@ import yaml
 
 
 def test_production_compose_contains_required_internal_services():
-    compose = yaml.safe_load(Path("docker-compose.prod.yml").read_text(encoding="utf-8"))
+    compose = yaml.safe_load(Path("deploy/compose/docker-compose.prod.yml").read_text(encoding="utf-8"))
     services = compose["services"]
 
     for service in (
@@ -25,7 +25,7 @@ def test_production_compose_contains_required_internal_services():
 
 
 def test_production_workers_consume_backend_routed_queues():
-    compose = yaml.safe_load(Path("docker-compose.prod.yml").read_text(encoding="utf-8"))
+    compose = yaml.safe_load(Path("deploy/compose/docker-compose.prod.yml").read_text(encoding="utf-8"))
     services = compose["services"]
     worker_command = compose["services"]["celery-worker"]["command"]
     heavy_worker_command = compose["services"]["celery-worker-heavy"]["command"]
@@ -44,7 +44,7 @@ def test_production_workers_consume_backend_routed_queues():
 
 
 def test_production_compose_enables_resource_scheduling_and_beat():
-    compose = yaml.safe_load(Path("docker-compose.prod.yml").read_text(encoding="utf-8"))
+    compose = yaml.safe_load(Path("deploy/compose/docker-compose.prod.yml").read_text(encoding="utf-8"))
     services = compose["services"]
     backend_environment = services["backend"]["environment"]
     worker_environment = services["celery-worker"]["environment"]
@@ -94,10 +94,10 @@ def test_ci_validates_and_builds_production_compose():
     assert required_variables <= environment.keys()
     assert all(environment[name] for name in required_variables)
     assert any(
-        "docker compose -f docker-compose.prod.yml config --quiet" in command
+        "docker compose -f deploy/compose/docker-compose.prod.yml config --quiet" in command
         for command in commands
     )
     assert any(
-        "docker compose -f docker-compose.prod.yml build backend" in command
+        "docker compose -f deploy/compose/docker-compose.prod.yml build backend" in command
         for command in commands
     )

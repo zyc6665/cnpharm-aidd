@@ -5,8 +5,10 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, replace
 from typing import Any, Literal
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.files import File as FileModel
 from app.services.artifact_binding_resolver import resolve_artifact_binding
 from app.services.run_input_validation import (
     dedupe_ordered,
@@ -79,9 +81,15 @@ async def prepare_run(db: AsyncSession, *, input: RunPreparationInput) -> Prepar
     """Normalize and validate inputs for a tool task without creating the task."""
     params = dict(input.params or {})
     file_ids = list(input.file_ids or [])
+    project_id = input.context.project_id
+    file_ids = await _include_legacy_input_files(
+        db,
+        params=params,
+        file_ids=file_ids,
+        project_id=project_id,
+    )
     input_bindings = normalize_string_mapping(input.input_bindings)
     standard_input_uploads = normalize_string_mapping(input.standard_input_uploads)
-    project_id = input.context.project_id
 
     for file_id in dedupe_ordered(file_ids):
         await require_existing_file_id(
@@ -174,6 +182,57 @@ async def prepare_run(db: AsyncSession, *, input: RunPreparationInput) -> Prepar
         binding_decisions=binding_decisions,
         blocked_reason=blocked_reason,
     )
+
+
+async def _include_legacy_input_files(
+    db: AsyncSession,
+    *,
+    params: dict[str, Any],
+    file_ids: list[str],
+    project_id: str | None,
+) -> list[str]:
+    """Resolve legacy input_files file IDs into the task's staged file list."""
+    input_files = params.get("input_files")
+    if not isinstance(input_files, dict):
+        return file_ids
+
+    referenced_ids = [
+        str(value)
+        for value in input_files.values()
+        if value and _looks_like_file_id(value)
+    ]
+    if not referenced_ids:
+        return file_ids
+
+    query = select(FileModel.id, FileModel.filename).where(
+        FileModel.id.in_(referenced_ids)
+    )
+    if project_id:
+        query = query.where(
+            (FileModel.project_id == project_id) | (FileModel.project_id.is_(None))
+        )
+    result = await db.execute(query)
+    file_records = {
+        str(file_id): str(filename)
+        for file_id, filename in result.all()
+    }
+    params["input_files"] = {
+        field: (
+            f"input/{file_records[str(value)]}"
+            if str(value) in file_records
+            else value
+        )
+        for field, value in input_files.items()
+    }
+    return dedupe_ordered(
+        [*file_ids, *[file_id for file_id in referenced_ids if file_id in file_records]]
+    )
+
+
+def _looks_like_file_id(value: Any) -> bool:
+    """Avoid treating legacy relative paths and ordinary values as file IDs."""
+    candidate = str(value).strip()
+    return "/" not in candidate and "\\" not in candidate
 
 
 async def prepare_workflow_node_run(

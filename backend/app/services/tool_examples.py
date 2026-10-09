@@ -6,18 +6,15 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
-import shutil
-import uuid
 from pathlib import Path
 from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.exceptions import NotFoundException, ValidationException
-from app.files.storage_path import ensure_storage_dir, get_file_path
-from app.models.files import File as FileModel, FileSourceType
+from app.files.writer import store_file_path
+from app.models.files import FileSourceType
 from app.models.tools import Tool
 from app.models.users import User
 from app.schemas.files import FileUploadResponse
@@ -165,27 +162,14 @@ async def register_example_file_for_user(
     source_path: Path,
 ) -> FileUploadResponse:
     """将示例文件复制到当前用户文件空间。"""
-    ensure_storage_dir()
-    content = source_path.read_bytes()
-    sha256 = hashlib.sha256(content).hexdigest()
-    file_id = str(uuid.uuid4())
-    target_path = get_file_path(file_id, source_path.name)
-    file_record = FileModel(
-        id=file_id,
+    file_record = await store_file_path(
+        db,
+        source_path=source_path,
         filename=source_path.name,
         content_type=guess_content_type(source_path),
-        size_bytes=len(content),
-        sha256=sha256,
-        source_type=FileSourceType.UPLOAD.value,
-        is_public=False,
+        source_type=FileSourceType.UPLOAD,
         owner_id=current_user.id,
-        storage_path=str(target_path),
     )
-    db.add(file_record)
-
-    target_path.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(source_path, target_path)
-    await db.flush()
 
     return FileUploadResponse(
         id=file_record.id,

@@ -136,7 +136,7 @@ async def _build_standard_input_upload_plan(
         primary_role=primary_role,
         required_roles=required_roles,
         uploaded_file=uploaded_file,
-        metadata=build_standard_upload_metadata(
+        metadata=await build_standard_upload_metadata(
             slot_name=slot_name,
             standard_ref=standard_ref.ref,
             uploaded_file=uploaded_file,

@@ -44,37 +44,47 @@
     </div>
 
     <div class="run-node-list">
-      <div v-for="node in summary.nodes" :key="node.id" class="run-node-row">
-        <a-tag :color="getWorkflowRunStatusTone(node.status)">
-          {{ t(`workflow.runStatus.${node.status}`) }}
-        </a-tag>
+      <div v-for="(node, index) in summary.nodes" :key="node.id" class="run-node-row">
+        <div class="run-node-status">
+          <span class="run-node-index">{{ index + 1 }}</span>
+          <a-tag :color="getWorkflowRunStatusTone(node.status)">
+            {{ statusLabel(node.status) }}
+          </a-tag>
+        </div>
         <div class="run-node-main">
-          <strong>{{ node.toolSlug || node.id }}</strong>
-          <span v-if="node.toolVersionId" class="run-node-meta">
-            {{ t('workflow.canvasPresets.toolVersion', { id: node.toolVersionId }) }}
-          </span>
-          <router-link
-            v-if="node.taskId"
-            class="run-node-meta task-detail-link"
-            :to="`/tasks/${node.taskId}`"
-          >
-            {{ t('workflow.canvasPresets.taskId', { id: node.taskId }) }}
-          </router-link>
-          <router-link
-            class="run-node-meta node-task-list-link"
-            :to="nodeTaskListPath(node.id, node.status)"
-          >
-            {{ t('workflow.canvasPresets.viewNodeTasks') }}
-          </router-link>
-          <span v-if="node.inputFileIds.length" class="run-node-meta">
-            {{ t('workflow.canvasPresets.inputFileIds', { ids: node.inputFileIds.join(', ') }) }}
-          </span>
-          <span v-if="node.outputSemanticTypes.length" class="run-node-meta">
-            {{ t('workflow.canvasPresets.outputSemanticTypes', { types: node.outputSemanticTypes.join(', ') }) }}
-          </span>
-          <span v-if="node.paramsText" class="run-node-meta">{{ node.paramsText }}</span>
+          <div class="run-node-heading">
+            <strong class="run-node-title">{{ resolveNodeTitle(node) }}</strong>
+            <span v-if="node.toolVersion" class="run-node-version">
+              {{ t('workflow.canvasPresets.toolVersionValue', { version: node.toolVersion }) }}
+            </span>
+          </div>
+
+          <div v-if="hasNodeSummary(node)" class="run-node-summary">
+            <span v-if="node.inputCount" class="run-node-chip">
+              {{ t('workflow.canvasPresets.inputBound', { count: node.inputCount }) }}
+            </span>
+            <span v-if="node.outputSemanticTypes.length" class="run-node-chip">
+              {{ t('workflow.canvasPresets.outputSummary', { types: outputLabels(node) }) }}
+            </span>
+            <span v-for="parameter in node.parameters" :key="parameter.key" class="run-node-chip">
+              {{ formatParameterLabel(parameter.key) }}：{{ parameter.value }}
+            </span>
+          </div>
+
+          <div v-if="node.taskId" class="run-node-actions">
+            <router-link class="run-node-action task-detail-link" :to="`/tasks/${node.taskId}`">
+              {{ t('workflow.inspector.viewTaskDetail') }}
+            </router-link>
+            <router-link
+              class="run-node-action node-task-list-link"
+              :to="nodeTaskListPath(node.id, node.status)"
+            >
+              {{ t('workflow.canvasPresets.viewNodeTasks') }}
+            </router-link>
+          </div>
+
           <span v-if="node.missingOutputs.length" class="run-node-error">
-            {{ t('workflow.canvasPresets.missingSemanticOutputs', { types: node.missingOutputs.map(item => item.semantic_type).join(', ') }) }}
+            {{ t('workflow.canvasPresets.missingSemanticOutputs', { types: missingOutputLabels(node) }) }}
           </span>
           <span v-if="node.errorMessage" class="run-node-error">{{ node.errorMessage }}</span>
         </div>
@@ -100,6 +110,7 @@
   import { useI18n } from 'vue-i18n'
   import { RedoOutlined, StopOutlined, SyncOutlined } from '@ant-design/icons-vue'
   import type { WorkflowRun } from '@/types/models'
+  import type { WorkflowRunNodeSummary } from '@/workflow/workflow-runs'
   import {
     buildWorkflowRunSummary,
     getWorkflowRunStatusTone,
@@ -119,7 +130,7 @@
     retryNode: [nodeId: string]
   }>()
 
-  const { t } = useI18n()
+  const { t, te } = useI18n()
   const summary = computed(() => buildWorkflowRunSummary(props.run))
   const statusTone = computed(() => getWorkflowRunStatusTone(props.run.status))
   const isTerminal = computed(() => isWorkflowRunTerminal(props.run.status))
@@ -132,6 +143,100 @@
     }
     return 'active'
   })
+
+  const toolTitleKeys: Record<string, string> = {
+    'builtin-fetch-pdb': 'workflow.canvasPresets.toolNames.fetchPdb',
+    'builtin-protein-preparation': 'workflow.canvasPresets.toolNames.proteinPreparation',
+    'builtin-ligand-preparation': 'workflow.canvasPresets.toolNames.ligandPreparation',
+    'builtin-molecule-standardization': 'workflow.canvasPresets.toolNames.moleculeStandardization',
+    'lvpocket-pocket-prediction': 'workflow.canvasPresets.toolNames.pocketPrediction',
+    pocket2mol: 'workflow.canvasPresets.toolNames.moleculeGeneration',
+    'molp-pc-admet': 'workflow.canvasPresets.toolNames.admetPrediction'
+  }
+
+  const semanticOutputKeys: Record<string, string> = {
+    protein_pdb: 'workflow.canvasPresets.semanticOutputs.proteinStructure',
+    protein_structure: 'workflow.canvasPresets.semanticOutputs.proteinStructure',
+    'protein_structure@1': 'workflow.canvasPresets.semanticOutputs.proteinStructure',
+    pocket_pdb: 'workflow.canvasPresets.semanticOutputs.pocketStructure',
+    'pocket_structure@1': 'workflow.canvasPresets.semanticOutputs.pocketStructure',
+    ligand_sdf: 'workflow.canvasPresets.semanticOutputs.ligandStructure',
+    ligand_structure: 'workflow.canvasPresets.semanticOutputs.ligandStructure',
+    'ligand_structure@1': 'workflow.canvasPresets.semanticOutputs.ligandStructure',
+    molecule_table: 'workflow.canvasPresets.semanticOutputs.moleculeTable',
+    'molecule_table@1': 'workflow.canvasPresets.semanticOutputs.moleculeTable',
+    admet_table: 'workflow.canvasPresets.semanticOutputs.admetTable'
+  }
+
+  const parameterLabelKeys: Record<string, string> = {
+    pdb_id: 'workflow.canvasPresets.parameterLabels.pdbId',
+    ph: 'workflow.canvasPresets.parameterLabels.ph',
+    remove_hs: 'workflow.canvasPresets.parameterLabels.removeHydrogens',
+    neutralize: 'workflow.canvasPresets.parameterLabels.neutralize',
+    generate_3d: 'workflow.canvasPresets.parameterLabels.generate3d'
+  }
+
+  function statusLabel(status: string): string {
+    const key = `workflow.runStatus.${status}`
+    return te(key) ? t(key) : status
+  }
+
+  function resolveNodeTitle(node: WorkflowRunNodeSummary): string {
+    const knownTitleKey = node.toolSlug ? toolTitleKeys[node.toolSlug] : undefined
+    if (knownTitleKey && te(knownTitleKey)) {
+      return t(knownTitleKey)
+    }
+
+    if (node.nodeTitle) {
+      if (te(node.nodeTitle)) {
+        return t(node.nodeTitle)
+      }
+      if (!node.nodeTitle.includes('-')) {
+        return node.nodeTitle
+      }
+    }
+
+    const fallback = node.nodeTitle || node.toolSlug || t('workflow.canvasNode.titleFallback')
+    return fallback
+      .replace(/^builtin[-_]/i, '')
+      .replace(/[-_]+/g, ' ')
+      .replace(/\b\w/g, letter => letter.toUpperCase())
+  }
+
+  function resolveSemanticOutputLabel(semanticType: string): string {
+    const key = semanticOutputKeys[semanticType]
+    if (key && te(key)) {
+      return t(key)
+    }
+    return semanticType
+      .replace(/@\d+$/, '')
+      .replace(/[-_]+/g, ' ')
+      .replace(/\b\w/g, letter => letter.toUpperCase())
+  }
+
+  function outputLabels(node: WorkflowRunNodeSummary): string {
+    return node.outputSemanticTypes.map(resolveSemanticOutputLabel).join(t('workflow.canvasPresets.valueSeparator'))
+  }
+
+  function missingOutputLabels(node: WorkflowRunNodeSummary): string {
+    return node.missingOutputs
+      .map(item => resolveSemanticOutputLabel(item.semantic_type))
+      .join(t('workflow.canvasPresets.valueSeparator'))
+  }
+
+  function formatParameterLabel(parameterKey: string): string {
+    const key = parameterLabelKeys[parameterKey]
+    if (key && te(key)) {
+      return t(key)
+    }
+    return parameterKey
+      .replace(/[-_]+/g, ' ')
+      .replace(/\b\w/g, letter => letter.toUpperCase())
+  }
+
+  function hasNodeSummary(node: WorkflowRunNodeSummary): boolean {
+    return Boolean(node.inputCount || node.outputSemanticTypes.length || node.parameters.length)
+  }
 
   function nodeTaskListPath(nodeId: string, nodeStatus: string): string {
     const params = new URLSearchParams({
@@ -219,9 +324,30 @@
     grid-template-columns: auto minmax(0, 1fr) auto;
     gap: @spacing-sm;
     align-items: start;
-    padding: @spacing-xs @spacing-sm;
-    border-radius: @border-radius-base;
+    padding: @spacing-sm;
+    border: 1px solid @border-color-light;
+    border-radius: @border-radius-md;
     background: @bg-elevated;
+  }
+
+  .run-node-status {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: @spacing-xs;
+  }
+
+  .run-node-index {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: @bg-light-secondary;
+    color: @text-color-light-secondary;
+    font-size: @font-size-xs;
+    font-weight: 700;
   }
 
   .retry-workflow-node {
@@ -233,25 +359,81 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: @spacing-xs;
 
     strong,
-    span {
-      overflow-wrap: anywhere;
-    }
-
     span,
     a {
-      color: @text-color-light-secondary;
-      font-size: @font-size-sm;
+      overflow-wrap: anywhere;
     }
+  }
+
+  .run-node-heading {
+    display: flex;
+    align-items: baseline;
+    gap: @spacing-sm;
+    min-width: 0;
+  }
+
+  .run-node-title {
+    color: @text-color-light;
+    font-size: @font-size-md;
+    line-height: 1.35;
+  }
+
+  .run-node-version {
+    color: @text-color-light-tertiary;
+    font-size: @font-size-xs;
+    white-space: nowrap;
+  }
+
+  .run-node-summary,
+  .run-node-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: @spacing-xs;
+  }
+
+  .run-node-chip {
+    padding: 3px @spacing-sm;
+    border: 1px solid @border-color-light;
+    border-radius: @border-radius-sm;
+    background: @bg-surface;
+    color: @text-color-light-secondary;
+    font-size: @font-size-xs;
+    line-height: 1.4;
+  }
+
+  .run-node-action {
+    color: @primary-color;
+    font-size: @font-size-xs;
+  }
+
+  .run-node-action + .run-node-action::before {
+    margin-right: @spacing-xs;
+    color: @text-color-light-tertiary;
+    content: '·';
   }
 
   .run-node-error {
     color: @error-color;
+    font-size: @font-size-xs;
+    line-height: 1.5;
   }
 
-  .run-node-meta {
-    color: @text-color-light-secondary;
+  @media (max-width: @screen-sm) {
+    .run-node-row {
+      grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .retry-workflow-node {
+      grid-column: 2;
+      justify-self: start;
+    }
+
+    .run-node-version {
+      white-space: normal;
+    }
   }
 </style>

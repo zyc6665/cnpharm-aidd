@@ -1,6 +1,6 @@
 """Typed, versioned research Artifact persistence models."""
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.database.base import Base, TimestampMixin, UUIDMixin
@@ -47,7 +47,7 @@ class ArtifactVersion(Base, UUIDMixin, TimestampMixin):
     version = Column(Integer, nullable=False)
     filename = Column(String(255), nullable=False)
     content_type = Column(String(160), nullable=True)
-    size_bytes = Column(Integer, nullable=False)
+    size_bytes = Column(BigInteger, nullable=False)
     sha256 = Column(String(64), nullable=False, index=True)
     storage_key = Column(String(1000), nullable=False)
     storage_etag = Column(String(255), nullable=True)

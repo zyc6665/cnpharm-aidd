@@ -1,7 +1,0 @@
-# Prefer admet.yml for reproducible installation.
-numpy==1.24.4
-pandas==2.0.3
-scikit-learn==1.3.0
-scipy==1.10.1
-torch==1.10.1
-tqdm==4.66.4

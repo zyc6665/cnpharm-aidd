@@ -15,6 +15,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.time import utcnow
+from app.files.file_records import delete_stored_content
 from app.models.files import File, FileAccessLog
 from app.models.tasks import Task, TaskInput
 
@@ -271,18 +272,17 @@ class FileLifecycleManager:
 
                 if not dry_run:
                     # 从存储后端删除
-                    if self.storage:
-                        try:
-                            await self.storage.delete(file.storage_path)
-                        except Exception as e:
-                            logger.warning(
-                                f"Failed to delete file from storage: {file.storage_path}, {e}"
-                            )
+                    try:
+                        await delete_stored_content(file, self.storage)
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to delete file from storage: {file.storage_path}, {e}"
+                        )
 
                     # 软删除（设置deleted_at）
                     file.deleted_at = now
 
-                freed_bytes += file.size
+                freed_bytes += file.size_bytes
                 cleaned_count += 1
 
             except Exception as e:

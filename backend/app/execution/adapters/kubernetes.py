@@ -12,6 +12,7 @@ from typing import Protocol
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.execution.contracts import (
+    ExecutionArtifactCollection,
     ExecutionHandle,
     ExecutionRequest,
     ExecutionState,
@@ -23,6 +24,7 @@ from app.execution.contracts import (
 class KubernetesCredentials(BaseModel):
     """Resolved credentials kept at the transport boundary only."""
 
+    api_server: str | None = None
     token: str | None = None
     certificate_authority: str | None = None
 
@@ -38,6 +40,15 @@ class KubernetesJobExecutionConfig(BaseModel):
     service_account: str = Field(min_length=1, max_length=255)
     job_name_prefix: str = Field(default="sciminer", min_length=1, max_length=63)
     image_pull_secret_ref: str | None = Field(default=None, max_length=255)
+    job_ttl_seconds: int = Field(default=86400, ge=0, le=604800)
+    object_storage_endpoint: str | None = Field(default=None, max_length=2048)
+    object_storage_bucket: str | None = Field(default=None, max_length=255)
+    object_storage_secret_ref: str | None = Field(default=None, max_length=255)
+    object_storage_output_prefix: str = Field(
+        default="executions",
+        min_length=1,
+        max_length=512,
+    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -89,6 +100,13 @@ class KubernetesJobTransport(Protocol):
         config: KubernetesJobExecutionConfig,
         credentials: KubernetesCredentials,
     ) -> list[ProducedArtifact]: ...
+
+    async def collect_result(
+        self,
+        external_id: str,
+        config: KubernetesJobExecutionConfig,
+        credentials: KubernetesCredentials,
+    ) -> ExecutionArtifactCollection: ...
 
 
 class KubernetesJobExecutionAdapter:
@@ -161,6 +179,18 @@ class KubernetesJobExecutionAdapter:
 
     async def collect_artifacts(self, execution_id: str) -> list[ProducedArtifact]:
         return await self._transport.collect_artifacts(
+            execution_id,
+            self._config,
+            await self._credentials(),
+        )
+
+    async def collect_result(self, execution_id: str) -> ExecutionArtifactCollection:
+        collect_result = getattr(self._transport, "collect_result", None)
+        if collect_result is None:
+            return ExecutionArtifactCollection(
+                artifacts=tuple(await self.collect_artifacts(execution_id))
+            )
+        return await collect_result(
             execution_id,
             self._config,
             await self._credentials(),

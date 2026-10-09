@@ -31,7 +31,7 @@
 ```bash
 pytest test/test_lvpocket_tool_package.py test/test_execution_port.py -q
 cd backend && python -m app.tool_packages.validator ../example/tool-package-lvpocket
-docker compose -f ../docker-compose.prod.yml config
+docker compose -f ../deploy/compose/docker-compose.prod.yml config
 ```
 
 随后以受控测试账号上传已登记 SHA-256 的 PDB 黄金样例，完成“创建项目 -> 研究会话 -> 审批 -> LVpocket -> Artifact -> 白板”流程。发布记录必须保存：工具包版本与签名摘要、镜像摘要、GPU 型号和驱动版本、输入哈希、输出 Artifact 哈希、数值容差对比、Agent Run ID、审批人和时间。

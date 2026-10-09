@@ -40,8 +40,8 @@ git commit -m "build(frontend): add production nginx image"
 ### Task 2: Add K100 Compose Stack
 
 **Files:**
-- Create: `docker-compose.k100-test.yml`
-- Create: `.env.k100-test.example`
+- Create: `deploy/compose/docker-compose.k100-test.yml`
+- Create: `deploy/compose/.env.k100-test.example`
 - Create: `backend/alembic.ini`
 
 **Step 1: Add backend-local Alembic config**
@@ -58,14 +58,14 @@ Document required secrets and K100-specific SSH variables without real values.
 
 **Step 4: Verify Compose config**
 
-Run: `docker compose --env-file .env.k100-test.example -f docker-compose.k100-test.yml config >/tmp/sciminer-k100-compose.yml`
+Run: `docker compose --env-file deploy/compose/.env.k100-test.example -f deploy/compose/docker-compose.k100-test.yml config >/tmp/sciminer-k100-compose.yml`
 
 Expected: Compose renders successfully.
 
 **Step 5: Commit**
 
 ```bash
-git add docker-compose.k100-test.yml .env.k100-test.example backend/alembic.ini
+git add deploy/compose/docker-compose.k100-test.yml deploy/compose/.env.k100-test.example backend/alembic.ini
 git commit -m "deploy: add k100 compose test stack"
 ```
 
@@ -88,7 +88,7 @@ Explain that model packages stay outside platform images and are called through 
 
 **Step 4: Verify Markdown and references**
 
-Run: `git diff --check -- docs/guides/k100-platform-deployment.md docker-compose.k100-test.yml .env.k100-test.example frontend/Dockerfile frontend/nginx.conf backend/alembic.ini`
+Run: `git diff --check -- docs/guides/k100-platform-deployment.md deploy/compose/docker-compose.k100-test.yml deploy/compose/.env.k100-test.example frontend/Dockerfile frontend/nginx.conf backend/alembic.ini`
 
 Expected: no whitespace errors.
 
@@ -98,4 +98,3 @@ Expected: no whitespace errors.
 git add docs/guides/k100-platform-deployment.md
 git commit -m "docs: add k100 platform deployment runbook"
 ```
-

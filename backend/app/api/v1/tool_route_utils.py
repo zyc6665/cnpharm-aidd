@@ -20,8 +20,6 @@ from app.common.exceptions import (
     ValidationException,
 )
 from app.common.time import utcnow
-from app.files.storage_path import get_file_path
-from app.models.files import File as FileModel, FileSourceType
 from app.models.tools import (
     Tool,
     ToolCategory,
@@ -58,6 +56,7 @@ from app.services.tool_import_config import (
     ToolImportConfigError,
     validate_tool_import_config,
 )
+from app.files.writer import store_file_bytes
 from app.tasks.service import create_and_schedule_tool_task
 
 
@@ -744,16 +743,13 @@ async def _materialize_remote_example_inputs(
                     f"smoke example file checksum mismatch: {input_name}.{role}"
                 )
             filename = Path(file_example.filename).name
-            file_record = FileModel(
+            file_record = await store_file_bytes(
+                db,
+                content=content,
                 filename=filename,
                 content_type=file_example.content_type or "application/octet-stream",
-                size_bytes=len(content),
-                sha256=actual_sha256,
-                storage_path="pending",
-                source_type=FileSourceType.SYSTEM.value,
+                source_type="system",
                 owner_id=current_user.id,
-                is_public=False,
-                is_permanent=False,
                 file_meta={
                     "remote_smoke_example": True,
                     "example_name": smoke_example.name,
@@ -761,13 +757,6 @@ async def _materialize_remote_example_inputs(
                     "file_role": role,
                 },
             )
-            db.add(file_record)
-            await db.flush()
-            storage_path = get_file_path(str(file_record.id), filename)
-            storage_path.parent.mkdir(parents=True, exist_ok=True)
-            storage_path.write_bytes(content)
-            file_record.storage_path = str(storage_path)
-            await db.flush()
             file_ids.append(str(file_record.id))
             files_by_role[str(role)] = str(file_record.id)
         remote_inputs[str(input_name)] = {

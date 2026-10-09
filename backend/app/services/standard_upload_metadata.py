@@ -7,10 +7,11 @@ import json
 from pathlib import Path
 
 from app.common.exceptions import ValidationException
+from app.files.content import read_file_bytes
 from app.models.files import File as FileModel
 
 
-def build_standard_upload_metadata(
+async def build_standard_upload_metadata(
     *,
     slot_name: str,
     standard_ref: str,
@@ -26,24 +27,24 @@ def build_standard_upload_metadata(
     }
     if standard_ref == "molecule_table@1":
         metadata.update(
-            _molecule_table_upload_metadata(
+            await _molecule_table_upload_metadata(
                 slot_name=slot_name,
                 uploaded_file=uploaded_file,
             )
         )
     elif standard_ref == "protein_structure@1":
-        metadata.update(_protein_structure_upload_metadata(slot_name, uploaded_file))
+        metadata.update(await _protein_structure_upload_metadata(slot_name, uploaded_file))
     elif standard_ref == "ligand_structure@1":
-        metadata.update(_ligand_structure_upload_metadata(slot_name, uploaded_file))
+        metadata.update(await _ligand_structure_upload_metadata(slot_name, uploaded_file))
     return metadata
 
 
-def _molecule_table_upload_metadata(
+async def _molecule_table_upload_metadata(
     *,
     slot_name: str,
     uploaded_file: FileModel,
 ) -> dict[str, object]:
-    columns, row_count = _read_molecule_table_shape(slot_name, uploaded_file)
+    columns, row_count = await _read_molecule_table_shape(slot_name, uploaded_file)
     if not columns or row_count < 1:
         raise _invalid_content_error(
             slot_name,
@@ -60,8 +61,8 @@ def _molecule_table_upload_metadata(
     }
 
 
-def _read_molecule_table_shape(slot_name: str, uploaded_file: FileModel) -> tuple[list[str], int]:
-    text = _read_text(uploaded_file.storage_path)
+async def _read_molecule_table_shape(slot_name: str, uploaded_file: FileModel) -> tuple[list[str], int]:
+    text = await _read_text(uploaded_file)
     if not text:
         return [], 0
     if Path(uploaded_file.filename).suffix.lower() == ".json":
@@ -130,11 +131,11 @@ def _molecule_id_field(columns: list[str]) -> str:
     return columns[0] if columns else "molecule_id"
 
 
-def _protein_structure_upload_metadata(
+async def _protein_structure_upload_metadata(
     slot_name: str,
     uploaded_file: FileModel,
 ) -> dict[str, object]:
-    stats = _read_pdb_stats(uploaded_file.storage_path)
+    stats = await _read_pdb_stats(uploaded_file)
     if stats["atom_count"] < 1:
         raise _invalid_content_error(
             slot_name,
@@ -149,19 +150,19 @@ def _protein_structure_upload_metadata(
     }
 
 
-def _ligand_structure_upload_metadata(
+async def _ligand_structure_upload_metadata(
     slot_name: str,
     uploaded_file: FileModel,
 ) -> dict[str, object]:
-    _validate_sdf_content(slot_name, uploaded_file)
+    await _validate_sdf_content(slot_name, uploaded_file)
     return {
         "ligand_id": Path(uploaded_file.filename).stem or str(uploaded_file.id),
         "source_database": "manual",
     }
 
 
-def _read_pdb_stats(storage_path: str | None) -> dict[str, object]:
-    text = _read_text(storage_path)
+async def _read_pdb_stats(uploaded_file: FileModel) -> dict[str, object]:
+    text = await _read_text(uploaded_file)
     chains: set[str] = set()
     residues: set[tuple[str, str]] = set()
     atom_count = 0
@@ -180,8 +181,8 @@ def _read_pdb_stats(storage_path: str | None) -> dict[str, object]:
     }
 
 
-def _validate_sdf_content(slot_name: str, uploaded_file: FileModel) -> None:
-    text = _read_text(uploaded_file.storage_path)
+async def _validate_sdf_content(slot_name: str, uploaded_file: FileModel) -> None:
+    text = await _read_text(uploaded_file)
     if "$$$$" not in text:
         raise _invalid_content_error(
             slot_name,
@@ -195,13 +196,14 @@ def _structure_format(filename: str) -> str:
     return "cif" if extension == "cif" else "pdb"
 
 
-def _read_text(storage_path: str | None) -> str:
-    if not storage_path:
+async def _read_text(uploaded_file: FileModel) -> str:
+    if not uploaded_file.storage_path:
         return ""
-    path = Path(str(storage_path))
-    if not path.is_file():
+    try:
+        content = await read_file_bytes(uploaded_file)
+    except FileNotFoundError:
         return ""
-    return path.read_text(encoding="utf-8", errors="replace")
+    return content.decode("utf-8", errors="replace")
 
 
 def _invalid_content_error(

@@ -742,7 +742,6 @@ async def test_register_remote_tool_materializes_smoke_example_files(
     db_session: AsyncSession,
     enabled_category: ToolCategory,
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
 ):
     """远端 examples 返回的样例文件会落到平台文件表并传入 smoke 任务。"""
     scheduled: list[dict] = []
@@ -762,9 +761,6 @@ async def test_register_remote_tool_materializes_smoke_example_files(
         })
         return Task(id="smoke-task-id")
 
-    def fake_get_file_path(file_id: str, filename: str):
-        return tmp_path / f"{file_id}_{filename}"
-
     monkeypatch.setattr(
         "app.api.v1.tools_admin.RemoteToolDiscoveryClient",
         FakeDiscoveryClient,
@@ -773,8 +769,6 @@ async def test_register_remote_tool_materializes_smoke_example_files(
         "app.api.v1.tool_route_utils.create_and_schedule_tool_task",
         fake_create_and_schedule_tool_task,
     )
-    monkeypatch.setattr("app.api.v1.tool_route_utils.get_file_path", fake_get_file_path)
-
     response = await api_client.post(
         "/api/v1/tools/register-remote",
         headers={"Authorization": "Bearer admin-token"},

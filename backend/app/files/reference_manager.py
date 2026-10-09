@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.time import utcnow
+from app.files.file_records import delete_stored_content
 from app.models.files import File, FileAccessLog
 
 logger = logging.getLogger(__name__)
@@ -221,13 +222,12 @@ class FileReferenceManager:
             file.deleted_at = now
 
             # 尝试从存储删除
-            if self.storage:
-                try:
-                    await self.storage.delete(file.storage_path)
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to delete file from storage during early cleanup: {e}"
-                    )
+            try:
+                await delete_stored_content(file, self.storage)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to delete file from storage during early cleanup: {e}"
+                )
 
             await self.db.commit()
 

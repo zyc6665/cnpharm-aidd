@@ -380,8 +380,8 @@ def test_validate_rejects_ssh_job_password_auth_without_password_ref() -> None:
 def test_resolve_script_relative_path_returns_absolute_repo_path() -> None:
     """脚本相对路径解析应在切换 cwd 后仍指向仓库根目录。"""
     resolved = resolve_script_relative_path(
-        "create_tool.py",
-        "example/remote-api-tool-template/platform_tool.json",
+        "scripts/create_tool.py",
+        "../example/remote-api-tool-template/platform_tool.json",
     )
 
     assert resolved.is_absolute()

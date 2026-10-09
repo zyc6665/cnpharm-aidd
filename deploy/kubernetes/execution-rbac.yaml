@@ -1,0 +1,61 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sciminer-execution-worker
+  namespace: sciminer-system
+  labels:
+    app.kubernetes.io/part-of: sciminer
+    app.kubernetes.io/component: execution-worker
+automountServiceAccountToken: true
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: model-runner
+  namespace: sciminer-model-jobs
+  labels:
+    app.kubernetes.io/part-of: sciminer
+    app.kubernetes.io/component: model-job
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sciminer-execution-worker
+  namespace: sciminer-model-jobs
+  labels:
+    app.kubernetes.io/part-of: sciminer
+    app.kubernetes.io/component: execution-worker
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "delete", "get", "list", "watch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs/status"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sciminer-execution-worker
+  namespace: sciminer-model-jobs
+  labels:
+    app.kubernetes.io/part-of: sciminer
+    app.kubernetes.io/component: execution-worker
+subjects:
+  - kind: ServiceAccount
+    name: sciminer-execution-worker
+    namespace: sciminer-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sciminer-execution-worker

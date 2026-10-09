@@ -2,7 +2,38 @@
 """Celery 应用配置"""
 
 from celery import Celery
+from celery.signals import worker_process_init, worker_process_shutdown
+
 from app.config import settings
+from app.common.async_runtime import run_coro_sync
+
+
+_kubernetes_runtime = None
+
+
+def configure_managed_execution_runtime():
+    """Register the configured managed execution Gateway in this worker process."""
+    from app.execution.runtime import configure_execution_service
+    from app.execution.transports.kubernetes_runtime import build_kubernetes_runtime
+
+    runtime = build_kubernetes_runtime(settings)
+    if runtime is not None:
+        configure_execution_service(runtime.service)
+    return runtime
+
+
+@worker_process_init.connect
+def _configure_managed_execution_runtime_on_worker_start(**kwargs):
+    global _kubernetes_runtime
+    _kubernetes_runtime = configure_managed_execution_runtime()
+
+
+@worker_process_shutdown.connect
+def _close_managed_execution_runtime_on_worker_shutdown(**kwargs):
+    global _kubernetes_runtime
+    if _kubernetes_runtime is not None:
+        run_coro_sync(_kubernetes_runtime.close())
+        _kubernetes_runtime = None
 
 
 def create_celery_app() -> Celery:
@@ -53,7 +84,7 @@ def create_celery_app() -> Celery:
         result_serializer="json",
 
         # 时区
-        timezone="Asia/Shanghai",
+        timezone=settings.CELERY_TIMEZONE,
         enable_utc=True,
 
         # 任务路由
@@ -76,8 +107,8 @@ def create_celery_app() -> Celery:
         result_expires=86400,
 
         # 任务超时
-        task_soft_time_limit=3600,  # 1小时软超时
-        task_time_limit=3660,  # 1小时1分钟硬超时
+        task_soft_time_limit=settings.CELERY_TASK_SOFT_TIME_LIMIT,
+        task_time_limit=settings.CELERY_TASK_TIME_LIMIT,
 
         # 并发控制
         worker_prefetch_multiplier=1,

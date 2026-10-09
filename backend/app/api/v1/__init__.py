@@ -24,6 +24,7 @@ from app.api.v1 import (
     verification,
     websocket,
     workflows,
+    image_assets,
 )
 
 api_router = APIRouter()
@@ -50,3 +51,4 @@ api_router.include_router(websocket.router, tags=["WebSocket"])
 api_router.include_router(agents.router, prefix="/agents", tags=["智能体"])
 api_router.include_router(workflows.router, prefix="/workflows", tags=["工作流"])
 api_router.include_router(workspace.router, prefix="/workspace", tags=["工作台"])
+api_router.include_router(image_assets.router, prefix="/admin/image-assets", tags=["管理员镜像资产"])

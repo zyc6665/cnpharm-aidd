@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import os
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,14 @@ import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_ROOT = PROJECT_ROOT / "backend"
+
+# Tests must never inherit the developer's persistent service endpoints.
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+os.environ.setdefault("STORAGE_BACKEND", "local")
+os.environ.setdefault("CACHE_BACKEND", "memory")
+os.environ.setdefault("TASK_EXECUTION_BACKEND", "direct")
+os.environ.setdefault("CELERY_BROKER_URL", "")
+os.environ.setdefault("CELERY_RESULT_BACKEND", "")
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 if str(BACKEND_ROOT) not in sys.path:

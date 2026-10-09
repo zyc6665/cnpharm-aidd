@@ -37,6 +37,7 @@ from app.artifact_standards.types import normalize_platform_artifact_type
 from app.services.semantic_types import CANONICAL_AGENT_INPUT_TYPES, normalize_semantic_type
 from app.services.aidd_builtin_tools import ensure_aidd_builtin_tool
 from app.files.writer import store_file_bytes
+from app.files.file_records import delete_stored_content
 from app.services.tool_contracts import build_tool_contract, tool_contract_to_agent_summary
 from app.services.workflow_artifacts import (
     describe_missing_required_standard_artifacts,
@@ -299,7 +300,7 @@ async def _load_agent_input_files(
         if file_id in requested_input_files.values():
             continue
         file_record = await _load_owned_file(db, file_id=file_id, current_user=current_user)
-        classified = classify_aidd_input_file(
+        classified = await classify_aidd_input_file(
             file_record,
             message=run_data.message,
             used_semantic_types=used_semantic_types,
@@ -756,14 +757,17 @@ async def _delete_file_records(db: AsyncSession, file_ids: set[str]) -> int:
     storage_root = Path(settings.STORAGE_PATH).resolve()
     for file in files:
         if file.storage_path:
-            path = Path(file.storage_path)
-            resolved_path = path.resolve()
-            if (
-                resolved_path.exists()
-                and resolved_path.is_file()
-                and resolved_path.is_relative_to(storage_root)
-            ):
-                resolved_path.unlink()
+            if file.storage_backend == "minio":
+                await delete_stored_content(file)
+            else:
+                path = Path(file.storage_path)
+                resolved_path = path.resolve()
+                if (
+                    resolved_path.exists()
+                    and resolved_path.is_file()
+                    and resolved_path.is_relative_to(storage_root)
+                ):
+                    resolved_path.unlink()
         await db.delete(file)
         deleted_count += 1
 

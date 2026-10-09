@@ -30,6 +30,7 @@ async def test_validate_input_files_normalizes_aliases_and_filters_empty_ids() -
         db,  # type: ignore[arg-type]
         current_user=current_user,  # type: ignore[arg-type]
         input_files={"protein_structure": "file-1", "ligand_pdb": ""},
+        project_id=None,
     )
 
     assert normalized == {"protein_pdb": "file-1"}
@@ -46,6 +47,7 @@ async def test_validate_input_files_rejects_missing_files() -> None:
             db,  # type: ignore[arg-type]
             current_user=current_user,  # type: ignore[arg-type]
             input_files={"protein_pdb": "missing-file"},
+            project_id=None,
         )
 
 
@@ -59,6 +61,7 @@ async def test_validate_input_files_requires_owner_or_admin() -> None:
             db,  # type: ignore[arg-type]
             current_user=current_user,  # type: ignore[arg-type]
             input_files={"protein_pdb": "file-1"},
+            project_id=None,
         )
 
     admin_user = SimpleNamespace(id="user-1", role="admin")
@@ -66,6 +69,7 @@ async def test_validate_input_files_requires_owner_or_admin() -> None:
         db,  # type: ignore[arg-type]
         current_user=admin_user,  # type: ignore[arg-type]
         input_files={"protein_pdb": "file-1"},
+        project_id=None,
     ) == {"protein_pdb": "file-1"}
 
 
@@ -87,7 +91,8 @@ async def test_validate_input_files_rejects_unusable_files(
 
     with pytest.raises(NotFoundException, match="Workflow input file not found"):
         await validate_input_files(
-            db,  # type: ignore[arg-type]
-            current_user=current_user,  # type: ignore[arg-type]
-            input_files={"protein_pdb": "file-1"},
+                db,  # type: ignore[arg-type]
+                current_user=current_user,  # type: ignore[arg-type]
+                input_files={"protein_pdb": "file-1"},
+                project_id=None,
         )

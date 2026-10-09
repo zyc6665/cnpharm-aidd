@@ -83,7 +83,11 @@ def _agent_event_channel(run_id: str) -> str:
 def _new_redis_client():
     import redis.asyncio as redis
 
-    return redis.from_url(settings.REDIS_URL, encoding="utf-8", decode_responses=True)
+    return redis.from_url(
+        settings.effective_redis_url,
+        encoding="utf-8",
+        decode_responses=True,
+    )
 
 
 async def _connect_redis_wakeup(run_id: str) -> RedisAgentEventWakeup:

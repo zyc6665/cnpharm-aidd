@@ -26,7 +26,7 @@ class RedisCacheBackend(CacheBackend):
         except ImportError:
             raise ImportError("请安装 redis: pip install redis")
 
-        self.url = url or settings.REDIS_URL
+        self.url = url or settings.effective_redis_url
         self.prefix = prefix
         self._redis = redis.from_url(
             self.url,

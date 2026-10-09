@@ -1,7 +1,7 @@
 # backend/app/models/files.py
 import enum
 
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, JSON
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, ForeignKey, Integer, JSON, String
 from sqlalchemy.orm import relationship
 
 from app.database.base import Base, TimestampMixin, UUIDMixin, utcnow
@@ -25,7 +25,7 @@ class File(Base, UUIDMixin, TimestampMixin):
     # 文件信息
     filename = Column(String(255), nullable=False)
     content_type = Column(String(100), nullable=True)
-    size_bytes = Column(Integer, nullable=False)  # 文件大小（字节）
+    size_bytes = Column(BigInteger, nullable=False)  # 文件大小（字节）
     sha256 = Column(String(64), nullable=False, index=True)
 
     # 存储信息

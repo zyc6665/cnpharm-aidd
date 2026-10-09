@@ -2,7 +2,7 @@
 
 ## 目标
 
-闭环技术债清单 `2.4.5`：让 `docker-compose.prod.yml` 在每次主分支提交和拉取请求中完成 Compose 配置解析与后端生产镜像构建验证。
+闭环技术债清单 `2.4.5`：让 `deploy/compose/docker-compose.prod.yml` 在每次主分支提交和拉取请求中完成 Compose 配置解析与后端生产镜像构建验证。
 
 ## 方案
 
@@ -10,8 +10,8 @@
 
 1. 使用 GitHub 托管的 Ubuntu runner。
 2. 在 job 级别提供仅用于 CI 插值的非生产占位环境变量。
-3. 执行 `docker compose -f docker-compose.prod.yml config --quiet`，验证必填变量、Compose 语法、锚点和服务引用。
-4. 执行 `docker compose -f docker-compose.prod.yml build backend`，验证 `backend/Dockerfile` 的 `production` target 和生产依赖安装。
+3. 执行 `docker compose -f deploy/compose/docker-compose.prod.yml config --quiet`，验证必填变量、Compose 语法、锚点和服务引用。
+4. 执行 `docker compose -f deploy/compose/docker-compose.prod.yml build backend`，验证 `backend/Dockerfile` 的 `production` target 和生产依赖安装。
 
 不在本任务中启动 PostgreSQL、Redis、MinIO、后端或 Worker。服务启动会引入健康检查等待、端口与外部镜像可用性等集成因素，超出“配置可通过 CI 构建验证”的清单范围。后续真实环境部署验收应在具备 Docker 的目标主机执行。
 

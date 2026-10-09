@@ -2,9 +2,9 @@
 
 import logging
 import os
-import shutil
 import uuid
 import asyncio
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.database.session import get_async_session
+from app.files.content import ensure_local_file
 from app.execution.records import (
     task_execution_record_id,
     touch_task_execution_record_best_effort,
@@ -41,7 +42,6 @@ from app.remote_tools.invocation import (
 from app.remote_tools.legacy_api import (
     build_legacy_remote_api_request_data,
     flatten_legacy_remote_api_params,
-    legacy_input_file_stage_plan,
     legacy_output_file_record_data,
     legacy_output_filename,
 )
@@ -582,13 +582,13 @@ class RemoteAPIExecutor(BaseExecutor):
                     if not file_record:
                         logger.warning("Input file %s not found, skipping", file_id)
                         continue
+                    destination_path = Path(input_dir) / Path(file_record.filename).name
                     try:
-                        stage_plan = legacy_input_file_stage_plan(file_record, input_dir)
-                    except ValueError:
+                        await ensure_local_file(file_record, destination_path)
+                    except (FileNotFoundError, OSError):
                         logger.error("Input file %s not found in storage", file_record.filename)
                         continue
-                    shutil.copy2(stage_plan.source_path, stage_plan.destination_path)
-                    file_paths.append(stage_plan.destination_path)
+                    file_paths.append(str(destination_path))
                     logger.info("Downloaded input file: %s", file_record.filename)
                 break
             except Exception as exc:

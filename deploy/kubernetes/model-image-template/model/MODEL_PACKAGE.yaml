@@ -1,0 +1,15 @@
+api_version: aidd.sciminer/model-package.v1
+slug: replace-with-model-slug
+name: Replace with model name
+version: 0.1.0
+entrypoint: platform_run.sh
+description: Model-side runtime package.
+runtime:
+  python: "3.10"
+  executor_support:
+    - k8s_job
+standard_contract:
+  inputs: []
+  outputs:
+    - name: report
+      type: run_report@1

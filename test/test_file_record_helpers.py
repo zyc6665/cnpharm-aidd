@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from app.files.file_records import (  # noqa: E402
+    delete_stored_content,
     delete_stored_file,
     file_storage_path,
+    read_stored_content,
     user_can_access_file,
     user_can_manage_file,
 )
@@ -79,3 +83,39 @@ def test_delete_stored_file_unlinks_existing_file(tmp_path) -> None:
     delete_stored_file(file_record)
 
     assert not file_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_delete_stored_content_uses_recorded_minio_backend(monkeypatch) -> None:
+    deleted_paths: list[str] = []
+
+    class FakeStorage:
+        async def delete(self, path: str) -> bool:
+            deleted_paths.append(path)
+            return True
+
+    monkeypatch.setattr(
+        "app.storage.factory.get_storage_backend",
+        lambda backend: FakeStorage(),
+    )
+
+    await delete_stored_content(
+        SimpleNamespace(storage_backend="minio", storage_path="files/input.pdb")
+    )
+
+    assert deleted_paths == ["files/input.pdb"]
+
+
+@pytest.mark.asyncio
+async def test_read_stored_content_uses_injected_configured_backend() -> None:
+    class FakeStorage:
+        async def download(self, path: str) -> bytes:
+            assert path == "/tmp/input.pdb"
+            return b"ATOM\n"
+
+    content = await read_stored_content(
+        SimpleNamespace(storage_backend="local", storage_path="/tmp/input.pdb"),
+        FakeStorage(),
+    )
+
+    assert content == b"ATOM\n"

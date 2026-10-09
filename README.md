@@ -151,10 +151,14 @@ cpumodel_sciminer/
 │   ├── src/                    # 页面、组件、状态和 API 客户端
 │   └── test/                   # Vitest 前端测试
 ├── test/                       # 后端 pytest 测试
+├── scripts/                    # 管理员维护脚本和数据迁移脚本
+├── docs/architecture/          # 领域、架构与执行设计文档
+├── docs/guides/                # 开发、部署和工具使用指南
+├── docs/product/               # 产品需求与功能文档
 ├── .github/workflows/          # CI 工作流
-├── docker-compose.yml          # 开发环境 Compose
-├── docker-compose.celery.yml   # Redis、Celery 与 Flower Compose
-├── docker-compose.prod.yml     # PostgreSQL、Redis、MinIO 与多 Worker 生产 Compose
+├── deploy/compose/docker-compose.dev.yml          # 开发环境 Compose（含 Redis、Celery、Flower）
+├── deploy/compose/docker-compose.prod.yml         # PostgreSQL、Redis、MinIO 与多 Worker 生产 Compose
+├── deploy/compose/docker-compose.k100-test.yml    # K100 硬件验证环境 Compose
 └── README.md                   # 本文件
 ```
 
@@ -191,7 +195,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 ### 生产模式
 
-生产部署使用 `docker-compose.prod.yml`，包含 PostgreSQL、Redis、MinIO、后端服务和多 Celery Worker。启动前先在 shell 或部署平台中设置必要密钥：
+生产部署使用 `deploy/compose/docker-compose.prod.yml`，包含 PostgreSQL、Redis、MinIO、后端服务和多 Celery Worker。启动前先在 shell 或部署平台中设置必要密钥：
 
 ```env
 # 环境
@@ -210,10 +214,10 @@ CORS_ORIGINS=["https://your-domain.example"]
 启动生产服务：
 
 ```bash
-docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f deploy/compose/docker-compose.prod.yml up -d --build
 ```
 
-如需 GPU Worker，额外启用 Compose profile：`docker compose -f docker-compose.prod.yml --profile gpu up -d --build`。
+如需 GPU Worker，额外启用 Compose profile：`docker compose -f deploy/compose/docker-compose.prod.yml --profile gpu up -d --build`。
 
 ---
 

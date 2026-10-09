@@ -19,8 +19,16 @@ from app.tasks.direct_runner import direct_task_runner
 from app.tasks.remote_recovery import remote_task_recovery_loop
 from app.agents.aidd.background import agent_reconcile_loop
 from app.services.workflow_reconciliation import workflow_reconcile_loop
+from app.worker.celery_app import configure_managed_execution_runtime
 
 logger = logging.getLogger(__name__)
+
+
+def configure_direct_managed_execution_runtime():
+    """Register managed execution adapters for the direct task runner only."""
+    if not use_direct_task_execution():
+        return None
+    return configure_managed_execution_runtime()
 
 
 @asynccontextmanager
@@ -28,6 +36,7 @@ async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     # 启动时初始化数据库
     await init_db()
+    managed_runtime = configure_direct_managed_execution_runtime()
     agent_reconcile_loop.start()
     workflow_reconcile_loop.start()
     if use_direct_task_execution():
@@ -42,6 +51,8 @@ async def lifespan(app: FastAPI):
         await direct_task_recovery_loop.stop()
         await remote_task_recovery_loop.stop()
         await direct_task_runner.shutdown()
+    if managed_runtime is not None:
+        await managed_runtime.close()
     logger.info("应用关闭")
 
 

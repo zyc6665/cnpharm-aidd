@@ -6,6 +6,8 @@ from typing import Any
 from sqlalchemy import select
 
 from app.database.session import get_async_session
+from app.files.content import ensure_local_file
+from app.files.file_records import file_storage_path
 from app.tasks.executors.base import BaseExecutor
 from app.tasks.executors.errors import TaskExecutionError
 
@@ -54,14 +56,25 @@ class BuiltinExecutor(BaseExecutor):
                 break
 
         builtin_files: dict[str, BuiltinToolFile] = {}
+        input_dir = Path(self._get_work_dir()) / "input"
         for semantic_type, file_id in semantic_file_ids.items():
             file_record = files_by_id.get(str(file_id))
             if not file_record or not file_record.storage_path:
                 raise TaskExecutionError(f"Builtin input file is unavailable: {semantic_type}")
+            if getattr(file_record, "storage_backend", "local") == "minio":
+                local_path = input_dir / file_record.filename
+                try:
+                    await ensure_local_file(file_record, local_path)
+                except FileNotFoundError as exc:
+                    raise TaskExecutionError(
+                        f"Builtin input file is unavailable: {semantic_type}"
+                    ) from exc
+            else:
+                local_path = file_storage_path(file_record)
             builtin_files[str(semantic_type)] = BuiltinToolFile(
                 file_id=str(file_record.id),
                 filename=file_record.filename,
-                path=Path(file_record.storage_path),
+                path=local_path,
                 content_type=file_record.content_type,
             )
 
@@ -76,10 +89,20 @@ class BuiltinExecutor(BaseExecutor):
                     raise TaskExecutionError(
                         f"Builtin input file is unavailable: ligand_structure@1:{index}"
                     )
+                if getattr(file_record, "storage_backend", "local") == "minio":
+                    local_path = input_dir / file_record.filename
+                    try:
+                        await ensure_local_file(file_record, local_path)
+                    except FileNotFoundError as exc:
+                        raise TaskExecutionError(
+                            f"Builtin input file is unavailable: ligand_structure@1:{index}"
+                        ) from exc
+                else:
+                    local_path = file_storage_path(file_record)
                 builtin_files[f"ligand_structure@1:{index}"] = BuiltinToolFile(
                     file_id=str(file_record.id),
                     filename=file_record.filename,
-                    path=Path(file_record.storage_path),
+                    path=local_path,
                     content_type=file_record.content_type,
                 )
 

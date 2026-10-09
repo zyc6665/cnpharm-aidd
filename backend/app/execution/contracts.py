@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from enum import Enum
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Literal, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -31,6 +33,10 @@ class ExecutionInput(BaseModel):
     name: str
     uri: str
     sha256: str
+    role: str | None = None
+    artifact_type: str | None = None
+    content_type: str | None = None
+    metadata: dict[str, Any] | None = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -109,3 +115,12 @@ class ProducedArtifact(BaseModel):
     content_type: str | None = None
     sha256: str | None = None
     artifact_type: str | None = None
+
+
+@dataclass(frozen=True)
+class ExecutionArtifactCollection:
+    """Collected files plus an optional standard result envelope and source root."""
+
+    artifacts: tuple[ProducedArtifact, ...]
+    result_payload: dict[str, Any] | None = None
+    source_root: Path | None = None

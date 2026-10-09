@@ -1,0 +1,162 @@
+# 这是显式启用模板，不会被默认 kustomization 引用。
+# 部署前必须将容器镜像替换为可被 K3s 节点访问的不可变 digest，
+# 并按 README 创建两个 Secret；不要把真实凭据提交到仓库。
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sciminer-execution-worker-config
+  namespace: sciminer-system
+  labels:
+    app.kubernetes.io/name: sciminer-execution-worker
+    app.kubernetes.io/part-of: sciminer
+    app.kubernetes.io/component: execution-worker
+data:
+  ENVIRONMENT: production
+  DEBUG: "false"
+  CORS_ORIGINS: '["https://sciminer.example.invalid"]'
+  CACHE_BACKEND: redis
+  REDIS_HOST: sciminer-redis.sciminer-system.svc.cluster.local
+  REDIS_PORT: "6379"
+  REDIS_DB: "0"
+  STORAGE_BACKEND: minio
+  MINIO_ENDPOINT: sciminer-minio.sciminer-storage.svc.cluster.local:9000
+  MINIO_BUCKET: scitool-files
+  MINIO_SECURE: "false"
+  TASK_EXECUTION_BACKEND: celery
+  EXECUTOR_ENABLED_K8S: "true"
+  EXECUTOR_ENABLED_SSH: "true"
+  K8S_ADAPTER_CLUSTER_ALIAS: platform
+  K8S_ADAPTER_NAMESPACE: sciminer-model-jobs
+  K8S_ADAPTER_CREDENTIAL_REF: platform-k8s
+  K8S_ADAPTER_SERVICE_ACCOUNT: model-runner
+  K8S_ADAPTER_JOB_NAME_PREFIX: sciminer
+  K8S_ADAPTER_API_SERVER: https://kubernetes.default.svc
+  K8S_ADAPTER_REQUEST_TIMEOUT_SECONDS: "30"
+  K8S_ADAPTER_OBJECT_STORAGE_ENDPOINT: http://sciminer-minio.sciminer-storage.svc.cluster.local:9000
+  K8S_ADAPTER_OBJECT_STORAGE_BUCKET: scitool-files
+  K8S_ADAPTER_OBJECT_STORAGE_SECRET_REF: sciminer-minio-client
+  K8S_ADAPTER_OBJECT_STORAGE_INPUT_PREFIX: inputs
+  K8S_ADAPTER_OBJECT_STORAGE_OUTPUT_PREFIX: executions
+  K8S_ADAPTER_OBJECT_STORAGE_STAGING_ROOT: /tmp/sciminer-k8s-artifacts
+  WORKER_CAPABILITY_ADMISSION_ENABLED: "true"
+  WORKER_CAPABILITY_ROUTING_ENABLED: "true"
+  WORKER_CAPABILITY_RESERVATION_ENABLED: "true"
+  WORKER_LISTEN_QUEUES: default,tool_tasks,high_priority,cpu_queue,heavy_compute,gpu_queue,maintenance,monitoring
+  WORKER_CAPABILITY_HEARTBEAT_QUEUES: default,tool_tasks,high_priority,cpu_queue,heavy_compute,gpu_queue
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sciminer-execution-worker
+  namespace: sciminer-system
+  labels:
+    app.kubernetes.io/name: sciminer-execution-worker
+    app.kubernetes.io/part-of: sciminer
+    app.kubernetes.io/component: execution-worker
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sciminer-execution-worker
+      app.kubernetes.io/part-of: sciminer
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sciminer-execution-worker
+        app.kubernetes.io/part-of: sciminer
+        app.kubernetes.io/component: execution-worker
+    spec:
+      serviceAccountName: sciminer-execution-worker
+      automountServiceAccountToken: true
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: registry.example.com/sciminer/backend@sha256:REPLACE_WITH_BACKEND_IMAGE_DIGEST
+          imagePullPolicy: IfNotPresent
+          command:
+            - celery
+          args:
+            - -A
+            - app.worker.celery_app
+            - worker
+            - --loglevel=info
+            - --concurrency=1
+            - --queues=default,tool_tasks,high_priority,cpu_queue,heavy_compute,gpu_queue,maintenance,monitoring
+          envFrom:
+            - configMapRef:
+                name: sciminer-execution-worker-config
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: WORKER_CAPABILITY_JSON
+              value: >-
+                {"worker_id":"sciminer-k8s-$(HOSTNAME)","queue":"tool_tasks","executor_types":["k8s_job","ssh_job"],"tiers":["cpu","standard","gpu"],"cpu_capacity":16,"memory_capacity_gb":64,"gpu_count":1,"parallelism":1}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: sciminer-execution-worker-secrets
+                  key: DATABASE_URL
+            - name: JWT_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: sciminer-execution-worker-secrets
+                  key: JWT_SECRET_KEY
+            - name: SETTINGS_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: sciminer-execution-worker-secrets
+                  key: SETTINGS_ENCRYPTION_KEY
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sciminer-execution-worker-secrets
+                  key: REDIS_PASSWORD
+            - name: CELERY_BROKER_URL
+              valueFrom:
+                secretKeyRef:
+                  name: sciminer-execution-worker-secrets
+                  key: CELERY_BROKER_URL
+            - name: CELERY_RESULT_BACKEND
+              valueFrom:
+                secretKeyRef:
+                  name: sciminer-execution-worker-secrets
+                  key: CELERY_RESULT_BACKEND
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: sciminer-execution-worker-secrets
+                  key: MINIO_ACCESS_KEY
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: sciminer-execution-worker-secrets
+                  key: MINIO_SECRET_KEY
+            - name: SSH_PASSWORD_REF_SSH_4090_ZHOUYC
+              valueFrom:
+                secretKeyRef:
+                  name: sciminer-execution-worker-secrets
+                  key: SSH_PASSWORD_REF_SSH_4090_ZHOUYC
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          volumeMounts:
+            - name: k8s-artifacts
+              mountPath: /tmp/sciminer-k8s-artifacts
+      volumes:
+        - name: k8s-artifacts
+          emptyDir:
+            sizeLimit: 20Gi

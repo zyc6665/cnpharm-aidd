@@ -38,7 +38,7 @@
 
 **Files:**
 - Verify: `.github/workflows/ci.yml`
-- Verify: `docker-compose.prod.yml`
+- Verify: `deploy/compose/docker-compose.prod.yml`
 - Verify: `backend/Dockerfile`
 
 **Steps:**

@@ -6,7 +6,6 @@ import logging
 import os
 import posixpath
 import queue
-import shutil
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Optional
@@ -14,6 +13,7 @@ from typing import Any, Optional
 from sqlalchemy import select
 
 from app.database.session import get_async_session
+from app.files.content import ensure_local_file
 from app.execution.request_builder import (
     StandardExecutionBuildContext,
     StandardRequestBuilderError,
@@ -349,13 +349,14 @@ class SSHJobExecutor(BaseExecutor):
                     if not file_record:
                         logger.warning("Input file %s not found, skipping", file_id)
                         continue
-                    if not file_record.storage_path or not os.path.exists(file_record.storage_path):
+                    destination_path = os.path.join(input_dir, file_record.filename)
+                    try:
+                        await ensure_local_file(file_record, Path(destination_path))
+                    except FileNotFoundError as exc:
                         raise TaskExecutionError(
                             f"Input file {file_record.filename} not found in storage",
                             details={"file_id": file_id, "storage_path": file_record.storage_path},
-                        )
-                    destination_path = os.path.join(input_dir, file_record.filename)
-                    shutil.copy2(file_record.storage_path, destination_path)
+                        ) from exc
                     staged_files.append(
                         {
                             "file_id": str(file_id),

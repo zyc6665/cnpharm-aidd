@@ -65,6 +65,56 @@ class TestCorsDefaults:
         assert "二者都缺失时，加密操作会失败" in contents
 
 
+class TestKubernetesExecutionSettings:
+    def test_k8s_executor_requires_platform_binding_settings(self):
+        with pytest.raises(ValueError, match="EXECUTOR_ENABLED_K8S requires"):
+            Settings(
+                ENVIRONMENT="development",
+                EXECUTOR_ENABLED_K8S=True,
+            )
+
+    def test_k8s_executor_accepts_complete_platform_binding_settings(self):
+        settings = Settings(
+            ENVIRONMENT="development",
+            EXECUTOR_ENABLED_K8S=True,
+            K8S_ADAPTER_CLUSTER_ALIAS="platform",
+            K8S_ADAPTER_NAMESPACE="model-jobs",
+            K8S_ADAPTER_CREDENTIAL_REF="platform-k8s",
+            K8S_ADAPTER_SERVICE_ACCOUNT="model-runner",
+        )
+
+        assert settings.EXECUTOR_ENABLED_K8S is True
+        assert settings.K8S_ADAPTER_NAMESPACE == "model-jobs"
+
+
+class TestRedisSettings:
+    def test_effective_redis_url_uses_host_settings_when_url_is_not_explicit(self):
+        settings = Settings(
+            ENVIRONMENT="development",
+            REDIS_HOST="redis.internal",
+            REDIS_PORT=6380,
+            REDIS_DB=4,
+            REDIS_PASSWORD="redis-password",
+        )
+
+        assert (
+            settings.effective_redis_url
+            == "redis://:redis-password@redis.internal:6380/4"
+        )
+
+    def test_effective_redis_url_preserves_an_explicit_url(self):
+        settings = Settings(
+            ENVIRONMENT="development",
+            REDIS_URL="redis://redis.internal:6381/5",
+            REDIS_HOST="unused",
+            REDIS_PORT=6390,
+            REDIS_DB=6,
+            REDIS_PASSWORD="unused-password",
+        )
+
+        assert settings.effective_redis_url == "redis://redis.internal:6381/5"
+
+
 class TestAiddFeatureFlags:
     def test_development_feature_flags_default_open_for_local_iteration(self):
         """开发环境默认开启新项目入口，但旧 AIDD API 默认关闭。"""

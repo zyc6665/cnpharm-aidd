@@ -1113,9 +1113,8 @@ async def _cleanup_expired_files_impl() -> int:
     from sqlalchemy import select
     from app.database.session import async_session_factory
     from app.models.files import File
-    from app.storage import get_storage_backend
+    from app.files.file_records import delete_stored_content
 
-    storage = get_storage_backend()
     deleted_count = 0
 
     async with async_session_factory() as db:
@@ -1132,7 +1131,7 @@ async def _cleanup_expired_files_impl() -> int:
             try:
                 # 删除存储文件
                 if file.storage_path:
-                    await storage.delete(file.storage_path)
+                    await delete_stored_content(file)
                 # 删除数据库记录
                 await db.delete(file)
                 deleted_count += 1

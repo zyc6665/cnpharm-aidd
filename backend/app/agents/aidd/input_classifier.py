@@ -7,6 +7,7 @@ import io
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.files.content import read_file_bytes
 from app.models.files import File as FileModel
 
 
@@ -18,13 +19,14 @@ class ClassifiedInputFile:
     reason: str
 
 
-def _read_text_sample(file_record: FileModel, max_bytes: int = 8192) -> str:
+async def _read_text_sample(file_record: FileModel, max_bytes: int = 8192) -> str:
     if not file_record.storage_path:
         return ""
-    path = Path(file_record.storage_path)
-    if not path.exists() or not path.is_file():
+    try:
+        content = await read_file_bytes(file_record)
+    except FileNotFoundError:
         return ""
-    return path.read_bytes()[:max_bytes].decode("utf-8", errors="ignore")
+    return content[:max_bytes].decode("utf-8", errors="ignore")
 
 
 def _csv_has_smiles_column(sample: str) -> bool:
@@ -38,7 +40,7 @@ def _csv_has_smiles_column(sample: str) -> bool:
     return any(cell.strip().lower() in {"smiles", "canonical_smiles"} for cell in header)
 
 
-def classify_aidd_input_file(
+async def classify_aidd_input_file(
     file_record: FileModel,
     *,
     message: str,
@@ -48,7 +50,7 @@ def classify_aidd_input_file(
     filename = file_record.filename.lower()
     suffix = Path(filename).suffix.lower()
     content_type = (file_record.content_type or "").lower()
-    sample = _read_text_sample(file_record)
+    sample = await _read_text_sample(file_record)
     lowered_message = message.lower()
 
     if suffix == ".csv" or "csv" in content_type:

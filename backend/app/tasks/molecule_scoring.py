@@ -19,6 +19,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.files.content import ensure_local_file, read_file_bytes
 from app.models.files import File as FileModel, FileSourceType
 from app.models.tasks import Task, TaskInput
 from app.models.tools import Tool, ToolVersion
@@ -108,15 +109,13 @@ def _candidate_name(base_name: str, record_index: int, record_count: int) -> str
     return filename if parent == "." else f"{parent}/{filename}"
 
 
-def _extract_candidates_from_sdf_file(
+def _extract_candidates_from_sdf_content(
     file_record: FileModel,
     *,
     next_global_index: int,
+    content: bytes,
 ) -> list[MoleculeCandidate]:
-    if not file_record.storage_path or not Path(file_record.storage_path).exists():
-        return []
-
-    text = Path(file_record.storage_path).read_text(encoding="utf-8", errors="replace")
+    text = content.decode("utf-8", errors="replace")
     records = split_sdf_records(text)
     base_name = _relative_name(file_record)
 
@@ -133,16 +132,14 @@ def _extract_candidates_from_sdf_file(
     ]
 
 
-def _extract_candidates_from_zip_file(
+def _extract_candidates_from_zip_content(
     file_record: FileModel,
     *,
     next_global_index: int,
+    content: bytes,
 ) -> list[MoleculeCandidate]:
-    if not file_record.storage_path or not Path(file_record.storage_path).exists():
-        return []
-
     candidates: list[MoleculeCandidate] = []
-    with zipfile.ZipFile(file_record.storage_path) as archive:
+    with zipfile.ZipFile(io.BytesIO(content)) as archive:
         for member_name in sorted(archive.namelist()):
             if member_name.endswith("/") or not member_name.lower().endswith(".sdf"):
                 continue
@@ -163,22 +160,30 @@ def _extract_candidates_from_zip_file(
     return candidates
 
 
-def extract_molecule_candidates(output_files: list[FileModel]) -> list[MoleculeCandidate]:
+async def extract_molecule_candidates(output_files: list[FileModel]) -> list[MoleculeCandidate]:
     """从任务输出文件中提取全部 SDF 分子候选。"""
     candidates: list[MoleculeCandidate] = []
     for file_record in output_files:
+        if not file_record.storage_path:
+            continue
+        try:
+            content = await read_file_bytes(file_record)
+        except FileNotFoundError:
+            continue
         if _is_sdf_file(file_record):
             candidates.extend(
-                _extract_candidates_from_sdf_file(
+                _extract_candidates_from_sdf_content(
                     file_record,
                     next_global_index=len(candidates),
+                    content=content,
                 )
             )
         elif _is_sdf_zip(file_record):
             candidates.extend(
-                _extract_candidates_from_zip_file(
+                _extract_candidates_from_zip_content(
                     file_record,
                     next_global_index=len(candidates),
+                    content=content,
                 )
             )
     return candidates
@@ -221,14 +226,13 @@ def score_molecule_descriptors(candidate: MoleculeCandidate) -> DescriptorScores
     return DescriptorScores(smiles=smiles, qed=qed, sa=sa, error=error)
 
 
-def _find_receptor_file(input_files: list[FileModel]) -> Path | None:
+def _find_receptor_file(input_files: list[FileModel]) -> FileModel | None:
     preferred: list[FileModel] = []
     fallback: list[FileModel] = []
     for file_record in input_files:
         if not file_record.storage_path:
             continue
-        path = Path(file_record.storage_path)
-        if not path.exists() or path.suffix.lower() not in {".pdb", ".ent"}:
+        if Path(file_record.filename).suffix.lower() not in {".pdb", ".ent"}:
             continue
         name = (file_record.filename + " " + _relative_name(file_record)).lower()
         if any(token in name for token in ("protein", "receptor", "pocket")):
@@ -237,7 +241,7 @@ def _find_receptor_file(input_files: list[FileModel]) -> Path | None:
             fallback.append(file_record)
 
     selected = (preferred or fallback)[0] if (preferred or fallback) else None
-    return Path(selected.storage_path) if selected and selected.storage_path else None
+    return selected if selected and selected.storage_path else None
 
 
 def _convert_candidate_to_pdb(candidate: MoleculeCandidate, output_path: Path) -> None:
@@ -524,13 +528,23 @@ async def append_molecule_scoring_artifacts(
 
     output_file_ids = _output_ids(output_result)
     output_files = await _load_files_by_ids(db, output_file_ids)
-    candidates = extract_molecule_candidates(output_files)
+    candidates = await extract_molecule_candidates(output_files)
     if not candidates:
         return output_result
 
     input_files = await _load_input_files(db, task)
-    receptor_path = _find_receptor_file(input_files)
-    scores = score_candidates(candidates, receptor_path=receptor_path)
+    receptor_file = _find_receptor_file(input_files)
+    if receptor_file and receptor_file.storage_backend == "minio":
+        receptor_dir = Path(tempfile.mkdtemp(prefix="sciminer-receptor-"))
+        receptor_path = receptor_dir / Path(receptor_file.filename).name
+        try:
+            await ensure_local_file(receptor_file, receptor_path)
+            scores = score_candidates(candidates, receptor_path=receptor_path)
+        finally:
+            shutil.rmtree(receptor_dir, ignore_errors=True)
+    else:
+        receptor_path = Path(receptor_file.storage_path) if receptor_file else None
+        scores = score_candidates(candidates, receptor_path=receptor_path)
     if not scores:
         return output_result
 

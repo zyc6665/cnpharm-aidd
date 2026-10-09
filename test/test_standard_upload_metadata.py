@@ -28,44 +28,48 @@ def _uploaded_file(tmp_path: Path, *, filename: str, content: bytes) -> SimpleNa
     )
 
 
-def test_molecule_table_upload_rejects_empty_csv(tmp_path: Path):
+@pytest.mark.asyncio
+async def test_molecule_table_upload_rejects_empty_csv(tmp_path: Path):
     uploaded_file = _uploaded_file(tmp_path, filename="molecules.csv", content=b"\n")
 
     with pytest.raises(ValidationException, match="标准 Artifact 上传内容无效"):
-        build_standard_upload_metadata(
+        await build_standard_upload_metadata(
             slot_name="molecules",
             standard_ref="molecule_table@1",
             uploaded_file=uploaded_file,
         )
 
 
-def test_molecule_table_upload_rejects_invalid_json(tmp_path: Path):
+@pytest.mark.asyncio
+async def test_molecule_table_upload_rejects_invalid_json(tmp_path: Path):
     uploaded_file = _uploaded_file(tmp_path, filename="molecules.json", content=b"{")
 
     with pytest.raises(ValidationException, match="标准 Artifact 上传内容无效"):
-        build_standard_upload_metadata(
+        await build_standard_upload_metadata(
             slot_name="molecules",
             standard_ref="molecule_table@1",
             uploaded_file=uploaded_file,
         )
 
 
-def test_protein_structure_upload_rejects_pdb_without_atoms(tmp_path: Path):
+@pytest.mark.asyncio
+async def test_protein_structure_upload_rejects_pdb_without_atoms(tmp_path: Path):
     uploaded_file = _uploaded_file(tmp_path, filename="protein.pdb", content=b"HEADER only\n")
 
     with pytest.raises(ValidationException, match="标准 Artifact 上传内容无效"):
-        build_standard_upload_metadata(
+        await build_standard_upload_metadata(
             slot_name="protein",
             standard_ref="protein_structure@1",
             uploaded_file=uploaded_file,
         )
 
 
-def test_ligand_structure_upload_rejects_sdf_without_record_delimiter(tmp_path: Path):
+@pytest.mark.asyncio
+async def test_ligand_structure_upload_rejects_sdf_without_record_delimiter(tmp_path: Path):
     uploaded_file = _uploaded_file(tmp_path, filename="ligand.sdf", content=b"not an sdf\n")
 
     with pytest.raises(ValidationException, match="标准 Artifact 上传内容无效"):
-        build_standard_upload_metadata(
+        await build_standard_upload_metadata(
             slot_name="ligand",
             standard_ref="ligand_structure@1",
             uploaded_file=uploaded_file,

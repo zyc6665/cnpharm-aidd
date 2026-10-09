@@ -184,14 +184,17 @@ test('工作流运行自动同步应只覆盖可轮询的非终态运行', () =>
   )
 })
 
-test('工作流运行状态面板应展示节点输入输出和版本追踪信息', () => {
+test('工作流运行状态面板应展示可读节点摘要而不是内部追踪字段', () => {
   const source = readFileSync(
     resolve(rootDir, 'src/components/workflow/WorkflowRunStatusPanel.vue'),
     'utf8'
   )
 
-  assert.equal(source.includes('node.toolVersionId'), true)
-  assert.equal(source.includes('node.inputFileIds'), true)
+  assert.equal(source.includes('node.toolVersion'), true)
+  assert.equal(source.includes('node.inputCount'), true)
   assert.equal(source.includes('node.outputSemanticTypes'), true)
-  assert.equal(source.includes('node.paramsText'), true)
+  assert.equal(source.includes('node.parameters'), true)
+  assert.equal(source.includes('node.toolVersionId'), false)
+  assert.equal(source.includes('node.inputFileIds'), false)
+  assert.equal(source.includes('node.paramsText'), false)
 })

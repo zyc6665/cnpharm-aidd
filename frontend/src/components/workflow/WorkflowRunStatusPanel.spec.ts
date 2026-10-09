@@ -29,7 +29,17 @@ function mountPanel() {
         workflow_definition_id: 'workflow-1',
         name: 'Failure Run',
         status: 'failure',
-        definition: { nodes: [], edges: [] },
+        definition: {
+          nodes: [
+            {
+              id: 'predict-pocket',
+              kind: 'tool',
+              titleKey: 'lvpocket-pocket-prediction',
+              tool_slug: 'lvpocket-pocket-prediction',
+            },
+          ],
+          edges: [],
+        },
         input_files: {},
         execution_order: ['predict-pocket'],
         node_states: {
@@ -37,6 +47,16 @@ function mountPanel() {
             status: 'failure',
             tool_slug: 'lvpocket-pocket-prediction',
             task_id: 'task-failed-pocket',
+            tool_version_id: 'version-internal-pocket',
+            tool_version: { id: 'version-internal-pocket', version: '1.0.0' },
+            input_file_ids: ['file-input-pocket'],
+            params: {
+              pdb_id: '1AKI',
+              workflow_run_id: 'run-1',
+              workflow_node_id: 'predict-pocket',
+              workflow_definition_id: 'workflow-1',
+              input_files: { protein_pdb: 'input/prepared.pdb' },
+            },
             error_message: 'Pocket prediction failed',
           },
         },
@@ -53,16 +73,25 @@ function mountPanel() {
 }
 
 describe('WorkflowRunStatusPanel', () => {
-  it('为带任务 ID 的失败节点提供任务详情入口', () => {
+  it('以可读信息展示失败节点，不暴露内部标识或原始参数', () => {
     const wrapper = mountPanel()
 
     const taskLink = wrapper.find('.task-detail-link')
     expect(taskLink.exists()).toBe(true)
     expect(taskLink.attributes('href')).toBe('/tasks/task-failed-pocket')
-    expect(taskLink.text()).toContain('task-failed-pocket')
+    expect(taskLink.text()).toContain('查看任务详情')
+    expect(wrapper.text()).toContain('口袋预测')
+    expect(wrapper.text()).toContain('1.0.0')
+    expect(wrapper.text()).toContain('已绑定 1 个输入')
+    expect(wrapper.text()).toContain('PDB 编号：1AKI')
+    expect(wrapper.text()).not.toContain('task-failed-pocket')
+    expect(wrapper.text()).not.toContain('version-internal-pocket')
+    expect(wrapper.text()).not.toContain('file-input-pocket')
+    expect(wrapper.text()).not.toContain('workflow_run_id')
+    expect(wrapper.text()).not.toContain('input/prepared.pdb')
   })
 
-  it('为运行节点提供按 workflow/node 过滤的任务列表入口', () => {
+  it('为运行节点提供不泄露内部参数的记录入口', () => {
     const wrapper = mountPanel()
 
     const listLink = wrapper.find('.node-task-list-link')
@@ -70,5 +99,7 @@ describe('WorkflowRunStatusPanel', () => {
     expect(listLink.attributes('href')).toBe(
       '/tasks?workflow_run_id=run-1&workflow_definition_id=workflow-1&workflow_node_id=predict-pocket&view=needs_attention'
     )
+    expect(listLink.text()).toContain('查看节点记录')
+    expect(listLink.text()).not.toContain('workflow_run_id')
   })
 })

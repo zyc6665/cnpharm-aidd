@@ -72,6 +72,5 @@ auth_ref = ssh_gpu_node_01
 在仓库根目录执行：
 
 ```bash
-python "create_tool.py" --config "example/ssh-job-tool-template/platform_tool.json" --validate-only
+python "scripts/create_tool.py" --config "example/ssh-job-tool-template/platform_tool.json" --validate-only
 ```
-

@@ -16,7 +16,7 @@ def _load_compose(filename: str) -> dict:
 
 def test_production_compose_uses_postgres_redis_and_minio_with_health_gates() -> None:
     """生产部署必须使用 PostgreSQL、Redis 和 MinIO，并以健康检查阻塞应用启动。"""
-    compose = _load_compose("docker-compose.prod.yml")
+    compose = _load_compose("deploy/compose/docker-compose.prod.yml")
     services = compose["services"]
 
     backend_environment = services["backend"]["environment"]
@@ -48,7 +48,7 @@ def test_production_compose_uses_postgres_redis_and_minio_with_health_gates() ->
 
 def test_production_compose_does_not_mount_host_docker_socket() -> None:
     """生产 API 和 Worker 容器不得挂载宿主机 Docker Socket。"""
-    compose = _load_compose("docker-compose.prod.yml")
+    compose = _load_compose("deploy/compose/docker-compose.prod.yml")
 
     for service_name in ("backend", "celery-worker", "celery-worker-gpu"):
         volumes = compose["services"][service_name].get("volumes", [])
@@ -57,7 +57,7 @@ def test_production_compose_does_not_mount_host_docker_socket() -> None:
 
 def test_aidd_development_compose_provides_local_stateful_services() -> None:
     """AIDD 开发 Compose 应提供本地 PostgreSQL、Redis、MinIO 基础设施。"""
-    compose = _load_compose("docker-compose.aidd-dev.yml")
+    compose = _load_compose("deploy/compose/docker-compose.dev.yml")
     services = compose["services"]
 
     for service_name in (
@@ -90,7 +90,7 @@ def test_offline_deployment_guide_covers_domestic_gpu_and_dcu_boundaries() -> No
         "NVIDIA GPU",
         "海光 DCU",
         "adapted_pending_hardware_validation",
-        "docker-compose.prod.yml",
+        "deploy/compose/docker-compose.prod.yml",
         "MinIO",
         "PostgreSQL",
         "Redis",

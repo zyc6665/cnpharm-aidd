@@ -2,13 +2,11 @@
 """文件管理API（本地存储版本）"""
 
 import hashlib
-import aiofiles
 import re
-import uuid
 from pathlib import Path
 from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, case, or_
 from sqlalchemy.orm import joinedload
@@ -37,16 +35,16 @@ from app.files.remote_access_tokens import (
     validate_remote_file_access_token,
 )
 from app.files.file_records import (
-    delete_stored_file,
+    delete_stored_content,
     file_storage_path,
     is_file_usable,
     user_can_access_file,
     user_can_manage_file,
 )
-from app.files.storage_path import ensure_storage_dir, get_file_path
 from app.files.upload_staging import stream_upload, validate_upload_content
-from app.files.writer import store_file_path
+from app.files.writer import store_file_bytes, store_file_path
 from app.services.artifact_file_list import list_user_artifact_files
+from app.storage.factory import get_storage_backend
 
 router = APIRouter()
 
@@ -108,7 +106,6 @@ async def upload_file(
     db: AsyncSession = Depends(get_db)
 ):
     """上传文件"""
-    ensure_storage_dir()
     max_size = settings.MAX_FILE_SIZE_MB * 1024 * 1024
     filename = Path(file.filename or "upload").name
     staged_path, file_size, sha256, header = await stream_upload(
@@ -257,8 +254,6 @@ async def convert_sdf_to_pdb(
     db: AsyncSession = Depends(get_db),
 ):
     """上传 SDF 并转换为 ligand PDB 文件。"""
-    ensure_storage_dir()
-
     file_content = await file.read()
     file_size = len(file_content)
     max_size = settings.MAX_FILE_SIZE_MB * 1024 * 1024
@@ -279,19 +274,14 @@ async def convert_sdf_to_pdb(
     output_filename = _safe_converted_pdb_filename(file.filename)
     output_content = pdb_text.encode("utf-8")
     sha256 = hashlib.sha256(output_content).hexdigest()
-    file_id = str(uuid.uuid4())
-    file_path = get_file_path(file_id, output_filename)
-
-    file_record = FileModel(
-        id=file_id,
+    file_record = await store_file_bytes(
+        db,
+        content=output_content,
         filename=output_filename,
         content_type="chemical/x-pdb",
-        size_bytes=len(output_content),
-        sha256=sha256,
-        storage_path=str(file_path),
-        source_type=FileSourceType.UPLOAD.value,
-        is_public=False,
+        source_type=FileSourceType.UPLOAD,
         owner_id=current_user.id,
+        sha256=sha256,
         file_meta={
             "original_name": output_filename,
             "converted_from": file.filename,
@@ -299,11 +289,6 @@ async def convert_sdf_to_pdb(
             "converter": converter,
         },
     )
-    db.add(file_record)
-
-    file_path.parent.mkdir(parents=True, exist_ok=True)
-    async with aiofiles.open(file_path, "wb") as converted_file:
-        await converted_file.write(output_content)
 
     await db.commit()
     await db.refresh(file_record)
@@ -412,10 +397,25 @@ async def download_file(
         )
         raise NotFoundException("文件不存在")
 
-    # 检查文件是否存在
-    file_path = file_storage_path(file)
-    if not file_path.exists():
-        raise NotFoundException("文件已被删除")
+    if file.storage_backend == "minio":
+        storage = get_storage_backend("minio")
+        if not await storage.exists(file.storage_path):
+            raise NotFoundException("文件已被删除")
+        content = await storage.download(file.storage_path)
+        response = Response(
+            content=content,
+            media_type=file.content_type,
+            headers={"Content-Disposition": f'attachment; filename="{file.filename}"'},
+        )
+    else:
+        file_path = file_storage_path(file)
+        if not file_path.exists():
+            raise NotFoundException("文件已被删除")
+        response = FileResponse(
+            path=str(file_path),
+            filename=file.filename,
+            media_type=file.content_type,
+        )
 
     # 更新下载计数（通过statistics表）
     if not file.statistics:
@@ -434,11 +434,7 @@ async def download_file(
         remote_token_claims=remote_token_claims,
     )
 
-    return FileResponse(
-        path=str(file_path),
-        filename=file.filename,
-        media_type=file.content_type
-    )
+    return response
 
 
 @router.get("/{file_id}/download-url", response_model=dict)
@@ -499,7 +495,7 @@ async def delete_file(
     if not user_can_manage_file(file, current_user):
         raise ForbiddenException("无权删除此文件")
 
-    delete_stored_file(file)
+    await delete_stored_content(file)
 
     # 删除数据库记录
     await db.delete(file)
@@ -533,7 +529,7 @@ async def batch_delete_files(
             failed_ids.append(file_id)
             continue
 
-        delete_stored_file(file)
+        await delete_stored_content(file)
 
         await db.delete(file)
         deleted_count += 1

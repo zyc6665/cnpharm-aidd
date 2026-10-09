@@ -10,7 +10,7 @@ def test_production_requirements_exclude_development_tools():
 
 def test_production_requirements_include_postgres_driver_used_by_compose():
     requirements = Path("backend/requirements.txt").read_text(encoding="utf-8")
-    compose = Path("docker-compose.prod.yml").read_text(encoding="utf-8")
+    compose = Path("deploy/compose/docker-compose.prod.yml").read_text(encoding="utf-8")
 
     assert "postgresql+asyncpg://" in compose
     assert "asyncpg==" in requirements

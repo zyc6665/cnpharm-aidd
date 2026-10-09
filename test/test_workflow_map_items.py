@@ -106,3 +106,39 @@ async def test_resolve_map_items_does_not_read_unusable_source_file(
     )
 
     assert result == [source_output]
+
+
+@pytest.mark.asyncio
+async def test_resolve_map_items_reads_minio_json_file(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    file_record = FileModel(
+        filename="items.json",
+        content_type="application/json",
+        size_bytes=19,
+        sha256="a" * 64,
+        storage_backend="minio",
+        storage_path="inputs/files/file-1/items.json",
+    )
+    db_session.add(file_record)
+    await db_session.flush()
+
+    class FakeStorage:
+        async def download(self, path: str) -> bytes:
+            assert path == file_record.storage_path
+            return b'["molecule-a", "molecule-b"]'
+
+    monkeypatch.setattr(
+        "app.files.content.get_storage_backend",
+        lambda backend: FakeStorage(),
+    )
+    source_output = {"file_id": file_record.id}
+    result = await resolve_map_items(
+        db_session,
+        over="node:source:table",
+        run=WorkflowRun(input_files={}),
+        node_states={"source": {"semantic_outputs": {"table": source_output}}},
+    )
+
+    assert result == ["molecule-a", "molecule-b"]

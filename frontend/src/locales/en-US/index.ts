@@ -364,6 +364,10 @@ export default {
       loadMoreRuns: 'Load More Runs',
       allRunsLoaded: 'All run records loaded',
       viewRunDetail: 'View Detail',
+      toolVersionValue: 'Tool version {version}',
+      inputBound: '{count} input(s) bound',
+      outputSummary: 'Outputs: {types}',
+      valueSeparator: ', ',
       selectInputArtifact: 'Select artifact file',
       uploadInput: 'Upload file',
       uploadingInput: 'Uploading',
@@ -372,17 +376,36 @@ export default {
       syncRun: 'Sync Run',
       cancelRun: 'Cancel Run',
       retryNode: 'Retry Node',
-      viewNodeTasks: 'View Node Tasks',
+      viewNodeTasks: 'View Node Records',
       runSynced: 'Workflow run status synced',
       restoreRunFailed: 'The latest workflow run is no longer available',
       emptyRunDetail: 'Workflow run detail is unavailable',
       runStatus: 'Latest Run',
       nodeProgress: '{completed}/{total} nodes complete',
-      taskId: 'Task: {id}',
-      toolVersion: 'Version: {id}',
-      inputFileIds: 'Input files: {ids}',
-      outputSemanticTypes: 'Output semantics: {types}',
       missingSemanticOutputs: 'Missing outputs: {types}',
+      toolNames: {
+        fetchPdb: 'Fetch PDB Structure',
+        proteinPreparation: 'Protein Structure Repair',
+        ligandPreparation: 'Ligand Preparation',
+        moleculeStandardization: 'Molecule Standardization',
+        pocketPrediction: 'Pocket Prediction',
+        moleculeGeneration: 'Molecule Generation',
+        admetPrediction: 'ADMET Prediction'
+      },
+      semanticOutputs: {
+        proteinStructure: 'Protein structure',
+        pocketStructure: 'Pocket structure',
+        ligandStructure: 'Ligand structure',
+        moleculeTable: 'Molecule table',
+        admetTable: 'ADMET results'
+      },
+      parameterLabels: {
+        pdbId: 'PDB ID',
+        ph: 'pH',
+        removeHydrogens: 'Remove hydrogens',
+        neutralize: 'Neutralize',
+        generate3d: 'Generate 3D conformer'
+      },
       presets: {
         fullPipeline: {
           name: 'Full AIDD Pipeline',

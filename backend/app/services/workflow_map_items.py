@@ -11,6 +11,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.exceptions import ValidationException
+from app.files.content import read_file_bytes
 from app.files.file_records import is_file_usable
 from app.models.files import File as FileModel
 from app.models.workflows import WorkflowRun
@@ -53,7 +54,11 @@ async def resolve_map_items(
         if file_id:
             file_record = await db.get(FileModel, str(file_id))
             if file_record and is_file_usable(file_record) and file_record.storage_path:
-                resolved = _read_map_items_from_file(Path(file_record.storage_path))
+                content = await read_file_bytes(file_record)
+                resolved = _read_map_items_from_content(
+                    Path(file_record.filename).suffix.lower(),
+                    content,
+                )
                 if resolved is not None:
                     return resolved
         return [source_output]
@@ -61,14 +66,14 @@ async def resolve_map_items(
     raise ValidationException(f"Unsupported map over reference: {over}")
 
 
-def _read_map_items_from_file(path: Path) -> list[Any] | None:
+def _read_map_items_from_content(suffix: str, content: bytes) -> list[Any] | None:
     try:
-        if path.suffix == ".csv":
-            text = path.read_text(encoding="utf-8")
+        text = content.decode("utf-8")
+        if suffix == ".csv":
             return list(csv.DictReader(io.StringIO(text)))
-        if path.suffix == ".json":
-            data = json.loads(path.read_text(encoding="utf-8"))
+        if suffix == ".json":
+            data = json.loads(text)
             return data if isinstance(data, list) else [data]
-    except (OSError, json.JSONDecodeError, csv.Error):
+    except (UnicodeDecodeError, json.JSONDecodeError, csv.Error):
         return None
     return None

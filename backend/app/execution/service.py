@@ -5,7 +5,14 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from app.execution.contracts import ExecutionHandle, ExecutionRequest, ExecutionState, LogChunk, ProducedArtifact
+from app.execution.contracts import (
+    ExecutionArtifactCollection,
+    ExecutionHandle,
+    ExecutionRequest,
+    ExecutionState,
+    LogChunk,
+    ProducedArtifact,
+)
 from app.execution.port import ExecutionPort
 
 
@@ -74,6 +81,19 @@ class ExecutionService:
         execution_id: str,
     ) -> list[ProducedArtifact]:
         return await self._adapter(adapter_type).collect_artifacts(execution_id)
+
+    async def collect_result(
+        self,
+        adapter_type: str,
+        execution_id: str,
+    ) -> ExecutionArtifactCollection:
+        adapter = self._adapter(adapter_type)
+        collect_result = getattr(adapter, "collect_result", None)
+        if collect_result is None:
+            return ExecutionArtifactCollection(
+                artifacts=tuple(await adapter.collect_artifacts(execution_id))
+            )
+        return await collect_result(execution_id)
 
     def artifact_source(self, adapter_type: str) -> BoundExecutionArtifactSource:
         """Return a source compatible with application-level result collection."""

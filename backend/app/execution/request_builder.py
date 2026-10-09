@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -26,6 +25,7 @@ from app.execution.standard_contracts import (
     StandardTaskContext,
 )
 from app.files.file_records import is_file_usable
+from app.files.content import ensure_local_file
 from app.models.artifacts import ArtifactVersion, ArtifactVersionFile
 from app.models.files import File as FileModel
 from app.models.tasks import Task
@@ -168,7 +168,7 @@ async def _stage_input_artifact(
             raise StandardRequestBuilderError(
                 f"Input {declaration.name} role {file_link.role} has no file record"
             )
-        files[file_link.role] = _stage_file(
+        files[file_link.role] = await _stage_file(
             work_dir=work_dir,
             input_name=input_name,
             role=role,
@@ -183,23 +183,22 @@ async def _stage_input_artifact(
     )
 
 
-def _stage_file(
+async def _stage_file(
     *,
     work_dir: Path,
     input_name: str,
     role: str,
     file_record: FileModel,
 ) -> StandardFileRef:
-    source_path = Path(str(file_record.storage_path or ""))
-    if not source_path.is_file():
-        raise StandardRequestBuilderError(
-            f"Input file does not exist for role {role}: {file_record.storage_path}"
-        )
-
     destination_dir = work_dir / "input" / input_name
     destination_dir.mkdir(parents=True, exist_ok=True)
     destination_path = destination_dir / _staged_filename(role, file_record.filename)
-    shutil.copy2(source_path, destination_path)
+    try:
+        await ensure_local_file(file_record, destination_path)
+    except FileNotFoundError as exc:
+        raise StandardRequestBuilderError(
+            f"Input file does not exist for role {role}: {file_record.storage_path}"
+        ) from exc
     relative_path = destination_path.relative_to(work_dir).as_posix()
 
     return StandardFileRef(

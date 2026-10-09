@@ -350,6 +350,48 @@ async def test_legacy_ssh_job_ignores_display_input_bindings(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_prepare_run_stages_legacy_input_file_ids() -> None:
+    from app.services.run_preparation import RunContext, RunPreparationInput, prepare_run
+
+    class FakeResult:
+        def all(self):
+            return [("file-receptor", "receptor.pdb"), ("file-peptide", "peptide.pdb")]
+
+    class FakeDb:
+        async def execute(self, query):
+            return FakeResult()
+
+        async def get(self, model, file_id):
+            return SimpleNamespace(id=file_id, project_id=None)
+
+    tool_version = SimpleNamespace(config={"type": "ssh_job"})
+    tool = SimpleNamespace(current_version=tool_version)
+    prepared = await prepare_run(
+        FakeDb(),
+        input=RunPreparationInput(
+            tool=tool,
+            tool_version=tool_version,
+            context=RunContext(surface="tool_detail", user_id="user-1"),
+            params={
+                "input_files": {
+                    "receptor_pdb": "file-receptor",
+                    "peptide_pdb": "file-peptide",
+                }
+            },
+            file_ids=[],
+            input_bindings={},
+            standard_input_uploads={},
+        ),
+    )
+
+    assert prepared.file_ids == ["file-receptor", "file-peptide"]
+    assert prepared.params["input_files"] == {
+        "receptor_pdb": "input/receptor.pdb",
+        "peptide_pdb": "input/peptide.pdb",
+    }
+
+
+@pytest.mark.asyncio
 async def test_ssh_job_executor_projects_standard_inputs_to_legacy_file_fields(
     monkeypatch,
     tmp_path,

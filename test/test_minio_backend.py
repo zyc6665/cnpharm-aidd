@@ -73,7 +73,7 @@ async def test_download_keeps_payload_when_response_cleanup_fails(fake_minio, ca
 
 
 @pytest.mark.asyncio
-async def test_delete_logs_failure_and_returns_false(fake_minio, caplog):
+async def test_delete_logs_failure_and_reraises_non_missing_errors(fake_minio, caplog):
     from app.storage.minio_backend import MinIOStorageBackend
 
     backend = MinIOStorageBackend(
@@ -87,6 +87,7 @@ async def test_delete_logs_failure_and_returns_false(fake_minio, caplog):
     )
 
     with caplog.at_level(logging.WARNING, logger="app.storage.minio_backend"):
-        assert await backend.delete("foo.txt") is False
+        with pytest.raises(RuntimeError, match="delete failed"):
+            await backend.delete("foo.txt")
 
     assert "Failed to delete MinIO object bucket/foo.txt" in caplog.text

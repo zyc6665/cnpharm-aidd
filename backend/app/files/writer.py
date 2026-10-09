@@ -14,6 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.files.storage_path import ensure_storage_dir, get_file_path, safe_storage_filename
 from app.models.files import File as FileModel, FileSourceType
+from app.config import settings
+from app.storage.factory import get_storage_backend
 
 
 async def store_file_bytes(
@@ -35,12 +37,23 @@ async def store_file_bytes(
     """写入本地文件并创建完整的 File 记录。"""
     safe_filename = safe_storage_filename(filename)
     file_id = str(uuid.uuid4())
-    ensure_storage_dir()
+    storage_backend = settings.STORAGE_BACKEND
+    object_key = f"inputs/files/{file_id}/{safe_filename}"
     storage_path = get_file_path(file_id, safe_filename)
-    storage_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        storage_path.write_bytes(content)
+        if storage_backend == "minio":
+            stored = await get_storage_backend("minio").upload(
+                content,
+                object_key,
+                content_type,
+            )
+            persisted_path = stored.path
+        else:
+            ensure_storage_dir()
+            storage_path.parent.mkdir(parents=True, exist_ok=True)
+            storage_path.write_bytes(content)
+            persisted_path = str(storage_path)
         file_record = FileModel(
             id=file_id,
             project_id=project_id,
@@ -49,7 +62,8 @@ async def store_file_bytes(
             content_type=content_type,
             size_bytes=len(content) if size_bytes is None else size_bytes,
             sha256=sha256 or hashlib.sha256(content).hexdigest(),
-            storage_path=str(storage_path),
+            storage_backend=storage_backend,
+            storage_path=persisted_path,
             source_type=(
                 source_type.value
                 if isinstance(source_type, FileSourceType)
@@ -64,7 +78,10 @@ async def store_file_bytes(
         await db.flush()
         return file_record
     except Exception:
-        storage_path.unlink(missing_ok=True)
+        if storage_backend == "minio":
+            await get_storage_backend("minio").delete(object_key)
+        else:
+            storage_path.unlink(missing_ok=True)
         raise
 
 
@@ -101,12 +118,25 @@ async def store_file_path(
 
     safe_filename = safe_storage_filename(filename)
     file_id = str(uuid.uuid4())
-    ensure_storage_dir()
+    storage_backend = settings.STORAGE_BACKEND
+    object_key = f"inputs/files/{file_id}/{safe_filename}"
     storage_path = get_file_path(file_id, safe_filename)
-    storage_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        shutil.copy2(source, storage_path)
+        if storage_backend == "minio":
+            with source.open("rb") as source_stream:
+                stored = await get_storage_backend("minio").upload_stream(
+                    source_stream,
+                    object_key,
+                    int(size_bytes),
+                    content_type,
+                )
+            persisted_path = stored.path
+        else:
+            ensure_storage_dir()
+            storage_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, storage_path)
+            persisted_path = str(storage_path)
         file_record = FileModel(
             id=file_id,
             project_id=project_id,
@@ -115,7 +145,8 @@ async def store_file_path(
             content_type=content_type,
             size_bytes=size_bytes,
             sha256=sha256,
-            storage_path=str(storage_path),
+            storage_backend=storage_backend,
+            storage_path=persisted_path,
             source_type=(
                 source_type.value
                 if isinstance(source_type, FileSourceType)
@@ -130,5 +161,8 @@ async def store_file_path(
         await db.flush()
         return file_record
     except Exception:
-        storage_path.unlink(missing_ok=True)
+        if storage_backend == "minio":
+            await get_storage_backend("minio").delete(object_key)
+        else:
+            storage_path.unlink(missing_ok=True)
         raise

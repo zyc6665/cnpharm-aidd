@@ -25,6 +25,7 @@ from app.models.artifacts import Artifact, ArtifactLineage, ArtifactVersion, Art
 from app.models.files import File as FileModel, FileSourceType
 from app.models.tasks import Task
 from app.common.task_context import task_project_id
+from app.files.writer import store_file_path
 from app.services.standard_artifact_collection import (
     collected_standard_result_payload,
     declared_standard_outputs_from_config,
@@ -220,6 +221,7 @@ async def _persist_artifact(
     resolved_files: list[tuple[str, FileModel]] = []
     for role, parsed_file in artifact.files.items():
         file_record = await _resolve_file_record(
+            db=db,
             task=task,
             project_id=project_id,
             standard_artifact=artifact,
@@ -283,6 +285,7 @@ async def _persist_artifact(
 
 async def _resolve_file_record(
     *,
+    db: AsyncSession,
     task: Task,
     project_id: str,
     standard_artifact: ParsedStandardArtifact,
@@ -291,7 +294,8 @@ async def _resolve_file_record(
     file_record_resolver: FileRecordResolver | None,
 ) -> FileModel:
     if file_record_resolver is None:
-        return _file_record_for_standard_file(
+        return await _file_record_for_standard_file(
+            db=db,
             task=task,
             project_id=project_id,
             standard_artifact=standard_artifact,
@@ -310,8 +314,9 @@ async def _resolve_file_record(
     )
 
 
-def _file_record_for_standard_file(
+async def _file_record_for_standard_file(
     *,
+    db: AsyncSession,
     task: Task,
     project_id: str,
     standard_artifact: ParsedStandardArtifact,
@@ -319,21 +324,23 @@ def _file_record_for_standard_file(
     parsed_file: ParsedStandardFile,
 ) -> FileModel:
     file_path = Path(parsed_file.path)
-    return _annotate_file_record(
-        FileModel(
-            project_id=project_id,
-            owner_id=task.user_id,
-            filename=file_path.name,
-            content_type=parsed_file.content_type
+    file_record = await store_file_path(
+        db,
+        source_path=file_path,
+        filename=file_path.name,
+        content_type=(
+            parsed_file.content_type
             or mimetypes.guess_type(file_path.name)[0]
-            or "application/octet-stream",
-            size_bytes=file_path.stat().st_size,
-            sha256=parsed_file.sha256,
-            storage_path=str(file_path),
-            source_type=FileSourceType.TOOL_OUTPUT.value,
-            is_public=False,
-            is_permanent=False,
+            or "application/octet-stream"
         ),
+        source_type=FileSourceType.TOOL_OUTPUT,
+        owner_id=task.user_id,
+        project_id=project_id,
+        size_bytes=file_path.stat().st_size,
+        sha256=parsed_file.sha256,
+    )
+    return _annotate_file_record(
+        file_record,
         task=task,
         project_id=project_id,
         standard_artifact=standard_artifact,

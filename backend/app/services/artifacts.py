@@ -13,7 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from app.common.time import utcnow
 from app.artifact_standards.registry import get_standard_artifact_spec, parse_standard_ref
-from app.files.file_records import delete_stored_file
+from app.files.file_records import delete_stored_content
 from app.files.writer import store_file_bytes
 from app.models.artifacts import (
     Artifact,
@@ -162,6 +162,7 @@ async def create_artifact(
             storage_etag=stored.etag,
             status="available",
             expires_at=expires_at,
+            files=[],
         )
         db.add_all([artifact, version])
         await db.flush()
@@ -253,6 +254,7 @@ async def create_artifact_version(
             storage_etag=stored.etag,
             status="available",
             expires_at=expires_at,
+            files=[],
         )
         db.add(version)
         await db.flush()
@@ -324,7 +326,7 @@ async def _attach_uploaded_file(
         await db.flush()
         return file_record
     except Exception:
-        delete_stored_file(file_record)
+        await delete_stored_content(file_record)
         raise
 
 

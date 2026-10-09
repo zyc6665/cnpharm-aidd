@@ -13,6 +13,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.files.content import read_file_bytes
 from app.files.writer import store_file_bytes
 from app.models.files import File as FileModel, FileSourceType
 from app.tool_packages.config_resolver import tool_package_manifest_data
@@ -131,11 +132,12 @@ async def _legacy_lvpocket_result_v2(
     bbox = _valid_bbox(outputs.get("bbox"))
     if center is None or bbox is None:
         atom_record = _lookup_file_record(file_records, atom_path)
-        geometry = (
-            _pdb_geometry(Path(atom_record.storage_path))
-            if atom_record is not None and atom_record.storage_path
-            else None
-        )
+        geometry = None
+        if atom_record is not None and atom_record.storage_path:
+            try:
+                geometry = _pdb_geometry(await read_file_bytes(atom_record))
+            except FileNotFoundError:
+                geometry = None
         if geometry is None:
             logger.warning(
                 "无法为旧版 LVpocket 输出生成有效 binding_pocket 元数据："
@@ -205,23 +207,17 @@ def _valid_bbox(value: Any) -> dict[str, list[float]] | None:
     return {"min": minimum, "max": maximum}
 
 
-def _pdb_geometry(path: Path) -> tuple[list[float], dict[str, list[float]]] | None:
-    if not path.is_file():
-        return None
+def _pdb_geometry(content: bytes) -> tuple[list[float], dict[str, list[float]]] | None:
     coordinates: list[list[float]] = []
-    try:
-        with path.open(encoding="ascii", errors="ignore") as pdb_file:
-            for line in pdb_file:
-                if line[0:6].strip() not in {"ATOM", "HETATM"}:
-                    continue
-                try:
-                    coordinates.append(
-                        [float(line[start:end]) for start, end in ((30, 38), (38, 46), (46, 54))]
-                    )
-                except ValueError:
-                    continue
-    except OSError:
-        return None
+    for line in content.decode("ascii", errors="ignore").splitlines():
+        if line[0:6].strip() not in {"ATOM", "HETATM"}:
+            continue
+        try:
+            coordinates.append(
+                [float(line[start:end]) for start, end in ((30, 38), (38, 46), (46, 54))]
+            )
+        except ValueError:
+            continue
     if not coordinates:
         return None
 

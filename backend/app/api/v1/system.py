@@ -5,6 +5,7 @@ import logging
 import os
 import platform
 import psutil
+import asyncio
 from pathlib import Path
 from typing import Optional, List
 from fastapi import APIRouter, Depends
@@ -240,7 +241,7 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         overall_status = "degraded"
 
     # 5. 检查任务队列（如果启用）
-    if use_async_tasks():
+    if settings.TASK_EXECUTION_BACKEND == "celery" and use_async_tasks():
         celery_status = await _check_celery()
         services.append(celery_status)
         if celery_status.status != "healthy" and overall_status == "healthy":
@@ -349,7 +350,7 @@ async def _check_storage() -> ServiceStatus:
     try:
         from app.storage import get_storage_backend
 
-        get_storage_backend()
+        storage_backend = get_storage_backend()
 
         # 检查存储是否可用
         if settings.STORAGE_BACKEND == "local":
@@ -368,11 +369,23 @@ async def _check_storage() -> ServiceStatus:
                     message=f"本地存储目录不可写: {storage_path}",
                 )
         else:
-            # MinIO 检查
+            bucket_exists = await asyncio.wait_for(
+                asyncio.to_thread(
+                    storage_backend.client.bucket_exists,
+                    storage_backend.bucket,
+                ),
+                timeout=3.0,
+            )
+            if not bucket_exists:
+                return ServiceStatus(
+                    name="storage",
+                    status="unhealthy",
+                    message=f"MinIO bucket 不存在: {storage_backend.bucket}",
+                )
             return ServiceStatus(
                 name="storage",
                 status="healthy",
-                message=f"存储服务正常 ({settings.STORAGE_BACKEND})",
+                message=f"MinIO bucket 可访问 ({storage_backend.bucket})",
             )
     except Exception as e:
         return ServiceStatus(
@@ -381,22 +394,42 @@ async def _check_storage() -> ServiceStatus:
 
 
 async def _check_celery() -> ServiceStatus:
-    """检查 Celery 任务队列"""
+    """检查 Celery broker 配置及至少一个活跃 Worker。"""
     try:
         from app.worker.celery_app import celery_app
 
-        # 简单检查 Celery 是否配置
-        if celery_app.conf.broker_url:
+        if not celery_app.conf.broker_url:
             return ServiceStatus(
-                name="celery", status="healthy", message="Celery 已配置"
+                name="celery", status="unhealthy", message="Celery broker 未配置"
             )
-        else:
+
+        def inspect_workers():
+            inspector = celery_app.control.inspect(timeout=1.0)
+            return inspector.ping() if inspector else None
+
+        responses = await asyncio.wait_for(
+            asyncio.to_thread(inspect_workers),
+            timeout=2.0,
+        )
+        active_workers = len(responses or {})
+        if active_workers:
             return ServiceStatus(
-                name="celery", status="unknown", message="Celery 未配置"
+                name="celery",
+                status="healthy",
+                message=f"Celery broker 正常，活跃 Worker 数: {active_workers}",
             )
+        return ServiceStatus(
+            name="celery",
+            status="degraded",
+            message="Celery broker 已配置，但没有活跃 Worker",
+        )
+    except asyncio.TimeoutError:
+        return ServiceStatus(
+            name="celery", status="degraded", message="Celery Worker 探测超时"
+        )
     except Exception as e:
         return ServiceStatus(
-            name="celery", status="unhealthy", message=f"Celery 检查失败: {str(e)}"
+            name="celery", status="degraded", message=f"Celery 检查失败: {str(e)}"
         )
 
 

@@ -1,0 +1,6 @@
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+model/tests/
+model/bundle-manifest.json
+pocket2mol-*.tar.gz

@@ -1,6 +1,6 @@
 # AIDD Offline Deployment Guide
 
-本文档定义企业离线部署的上线边界。平台生产部署以 `docker-compose.prod.yml` 为基线，控制面服务必须使用 PostgreSQL、Redis 和 MinIO，不允许回退到 SQLite、本地文件存储或内存缓存。
+本文档定义企业离线部署的上线边界。平台生产部署以 `deploy/compose/docker-compose.prod.yml` 为基线，控制面服务必须使用 PostgreSQL、Redis 和 MinIO，不允许回退到 SQLite、本地文件存储或内存缓存。
 
 ## 基础环境
 

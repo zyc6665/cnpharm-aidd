@@ -363,6 +363,10 @@ export default {
       loadMoreRuns: '加载更多运行',
       allRunsLoaded: '已加载全部运行记录',
       viewRunDetail: '查看详情',
+      toolVersionValue: '工具版本 {version}',
+      inputBound: '已绑定 {count} 个输入',
+      outputSummary: '输出：{types}',
+      valueSeparator: '、',
       selectInputArtifact: '选择产物文件',
       uploadInput: '上传文件',
       uploadingInput: '上传中',
@@ -371,17 +375,36 @@ export default {
       syncRun: '同步运行',
       cancelRun: '取消运行',
       retryNode: '重试节点',
-      viewNodeTasks: '查看该节点任务',
+      viewNodeTasks: '查看节点记录',
       runSynced: '工作流运行状态已同步',
       restoreRunFailed: '最近一次工作流运行已不可访问',
       emptyRunDetail: '未找到工作流运行详情',
       runStatus: '最近一次运行',
       nodeProgress: '{completed}/{total} 个节点完成',
-      taskId: '任务：{id}',
-      toolVersion: '版本：{id}',
-      inputFileIds: '输入文件：{ids}',
-      outputSemanticTypes: '输出语义：{types}',
       missingSemanticOutputs: '缺失输出：{types}',
+      toolNames: {
+        fetchPdb: '获取 PDB 结构',
+        proteinPreparation: '蛋白质结构修复',
+        ligandPreparation: '小分子处理',
+        moleculeStandardization: '小分子规范化',
+        pocketPrediction: '口袋预测',
+        moleculeGeneration: '分子生成',
+        admetPrediction: 'ADMET 预测'
+      },
+      semanticOutputs: {
+        proteinStructure: '蛋白质结构',
+        pocketStructure: '口袋结构',
+        ligandStructure: '小分子结构',
+        moleculeTable: '分子表格',
+        admetTable: 'ADMET 结果'
+      },
+      parameterLabels: {
+        pdbId: 'PDB 编号',
+        ph: 'pH',
+        removeHydrogens: '去除氢原子',
+        neutralize: '中性化',
+        generate3d: '生成 3D 构象'
+      },
       presets: {
         fullPipeline: {
           name: '完整 AIDD 流程',

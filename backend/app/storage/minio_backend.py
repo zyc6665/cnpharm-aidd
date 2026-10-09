@@ -3,6 +3,7 @@
 
 import io
 import logging
+import asyncio
 from typing import Optional, BinaryIO
 from datetime import timedelta
 
@@ -21,7 +22,7 @@ class MinIOStorageBackend(StorageBackend):
         access_key: Optional[str] = None,
         secret_key: Optional[str] = None,
         bucket: Optional[str] = None,
-        secure: bool = False
+        secure: bool | None = None
     ):
         # 延迟导入，避免未安装 minio 时报错
         try:
@@ -33,7 +34,7 @@ class MinIOStorageBackend(StorageBackend):
         self.access_key = access_key or settings.MINIO_ACCESS_KEY
         self.secret_key = secret_key or settings.MINIO_SECRET_KEY
         self.bucket = bucket or settings.MINIO_BUCKET
-        self.secure = secure or settings.MINIO_SECURE
+        self.secure = settings.MINIO_SECURE if secure is None else secure
 
         self.client = Minio(
             self.endpoint,
@@ -41,14 +42,6 @@ class MinIOStorageBackend(StorageBackend):
             secret_key=self.secret_key,
             secure=self.secure
         )
-
-        # 确保 bucket 存在
-        self._ensure_bucket()
-
-    def _ensure_bucket(self):
-        """确保存储桶存在"""
-        if not self.client.bucket_exists(self.bucket):
-            self.client.make_bucket(self.bucket)
 
     async def upload(
         self,
@@ -60,12 +53,13 @@ class MinIOStorageBackend(StorageBackend):
         data_stream = io.BytesIO(file_data)
         size = len(file_data)
 
-        result = self.client.put_object(
+        result = await asyncio.to_thread(
+            self.client.put_object,
             self.bucket,
             path,
             data_stream,
             size,
-            content_type=content_type or "application/octet-stream"
+            content_type=content_type or "application/octet-stream",
         )
 
         return StorageFile(
@@ -83,12 +77,13 @@ class MinIOStorageBackend(StorageBackend):
         content_type: Optional[str] = None
     ) -> StorageFile:
         """流式上传文件"""
-        result = self.client.put_object(
+        result = await asyncio.to_thread(
+            self.client.put_object,
             self.bucket,
             path,
             file_stream,
             size,
-            content_type=content_type or "application/octet-stream"
+            content_type=content_type or "application/octet-stream",
         )
 
         return StorageFile(
@@ -100,6 +95,9 @@ class MinIOStorageBackend(StorageBackend):
 
     async def download(self, path: str) -> bytes:
         """下载文件"""
+        return await asyncio.to_thread(self._download_sync, path)
+
+    def _download_sync(self, path: str) -> bytes:
         response = self.client.get_object(self.bucket, path)
         try:
             return response.read()
@@ -109,7 +107,7 @@ class MinIOStorageBackend(StorageBackend):
     async def delete(self, path: str) -> bool:
         """删除文件"""
         try:
-            self.client.remove_object(self.bucket, path)
+            await asyncio.to_thread(self.client.remove_object, self.bucket, path)
             return True
         except Exception as e:
             logger.warning(
@@ -118,35 +116,34 @@ class MinIOStorageBackend(StorageBackend):
                 path,
                 e,
             )
-            return False
+            if _is_missing_object_error(e):
+                return False
+            raise
 
     async def exists(self, path: str) -> bool:
         """检查文件是否存在"""
         try:
-            self.client.stat_object(self.bucket, path)
+            await asyncio.to_thread(self.client.stat_object, self.bucket, path)
             return True
         except Exception as e:
-            logger.debug(
-                "Failed to stat MinIO object %s/%s: %s",
-                self.bucket,
-                path,
-                e,
-            )
-            return False
+            if _is_missing_object_error(e):
+                return False
+            raise
 
     async def get_url(self, path: str, expires_in: int = 3600) -> str:
         """获取预签名URL"""
-        url = self.client.presigned_get_object(
+        url = await asyncio.to_thread(
+            self.client.presigned_get_object,
             self.bucket,
             path,
-            expires=timedelta(seconds=expires_in)
+            expires=timedelta(seconds=expires_in),
         )
         return url
 
     async def get_info(self, path: str) -> Optional[StorageFile]:
         """获取文件信息"""
         try:
-            stat = self.client.stat_object(self.bucket, path)
+            stat = await asyncio.to_thread(self.client.stat_object, self.bucket, path)
             return StorageFile(
                 path=path,
                 size=stat.size,
@@ -154,13 +151,9 @@ class MinIOStorageBackend(StorageBackend):
                 etag=stat.etag
             )
         except Exception as e:
-            logger.debug(
-                "Failed to read MinIO object info %s/%s: %s",
-                self.bucket,
-                path,
-                e,
-            )
-            return None
+            if _is_missing_object_error(e):
+                return None
+            raise
 
     def _close_response(self, response, path: str) -> None:
         """释放 MinIO 响应连接，避免清理失败掩盖下载结果。"""
@@ -183,3 +176,7 @@ class MinIOStorageBackend(StorageBackend):
                 path,
                 e,
             )
+
+
+def _is_missing_object_error(error: Exception) -> bool:
+    return getattr(error, "code", None) in {"NoSuchKey", "NoSuchObject"}

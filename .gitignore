@@ -32,6 +32,7 @@ backend/*.db
 backend/*.db-*
 backend/storage/*.db
 backend/storage/*.db-*
+backend/storage/*.db.*
 backend/storage/*.backup*.db
 backend/storage/*.db.backup.*
 backend/storage/uploads/
@@ -45,6 +46,7 @@ backend/logs/
 .env
 backend/.env
 *.local
+/deploy/compose/.env.k100-test
 
 # OS / editor
 .DS_Store
@@ -62,8 +64,15 @@ temp/
 htmlcov/
 
 # Generated model bundles and binary reports
+/model/GCDM/
+/model/LVpocket/
+/model/MSIGN/
+/model/MolP-PC/
+/model/Pocket2Mol/
 model/kaiwu-venv-model-bundles/
 model/**/*.tar.zst
 model/**/*.zip
 model/**/*.7z
+# Local model image build workspaces are not repository source.
+/model-build/
 *.docx

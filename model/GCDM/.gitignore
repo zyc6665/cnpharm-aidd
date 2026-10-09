@@ -1,7 +1,0 @@
-legacy/
-weights/
-wheelhouse/*.whl
-*.pyc
-__pycache__/
-platform_tool*.json
-runtime-artifacts/

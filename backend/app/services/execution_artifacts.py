@@ -15,6 +15,8 @@ from app.execution.contracts import ProducedArtifact
 from app.files.storage_path import ensure_storage_dir, get_file_path, safe_storage_filename
 from app.models.files import File as FileModel, FileSourceType
 from app.common.task_context import task_project_id
+from app.config import settings
+from app.storage.factory import get_storage_backend
 
 
 class ExecutionArtifactMaterializationError(ValueError):
@@ -52,10 +54,21 @@ async def materialize_execution_artifacts(
 
         filename = safe_storage_filename(artifact.filename or source_path.name)
         file_id = str(uuid.uuid4())
-        ensure_storage_dir()
-        storage_path = get_file_path(file_id, filename)
-        storage_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source_path, storage_path)
+        storage_backend = settings.STORAGE_BACKEND
+        object_key = f"inputs/files/{file_id}/{filename}"
+        if storage_backend == "minio":
+            stored = await get_storage_backend("minio").upload(
+                content,
+                object_key,
+                artifact.content_type,
+            )
+            persisted_path = stored.path
+        else:
+            ensure_storage_dir()
+            storage_path = get_file_path(file_id, filename)
+            storage_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source_path, storage_path)
+            persisted_path = str(storage_path)
         file_record = FileModel(
             id=file_id,
             project_id=task_project_id(task),
@@ -68,12 +81,14 @@ async def materialize_execution_artifacts(
             ),
             size_bytes=len(content),
             sha256=sha256,
-            storage_path=str(storage_path),
+            storage_backend=storage_backend,
+            storage_path=persisted_path,
             source_type=FileSourceType.TOOL_OUTPUT.value,
             is_public=False,
             is_permanent=False,
             file_meta={
                 "execution_artifact_path": artifact.path,
+                "relative_path": artifact.path,
                 "execution_artifact_type": artifact.artifact_type,
                 "source_task_id": str(getattr(task, "id", "")),
             },
