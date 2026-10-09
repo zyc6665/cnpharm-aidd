@@ -73,6 +73,8 @@ model/kaiwu-venv-model-bundles/
 model/**/*.tar.zst
 model/**/*.zip
 model/**/*.7z
+/scripts/create_model_image_context.py
+/docs/plans/2026-10-07-pocket2mol-k8s-runtime-verification.md
 # Local model image build workspaces are not repository source.
 /model-build/
 *.docx

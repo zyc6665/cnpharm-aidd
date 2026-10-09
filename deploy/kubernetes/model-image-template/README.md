@@ -27,7 +27,7 @@
     └── requirements.txt
 ```
 
-Pocket2Mol 这类带大型环境归档的构建上下文使用多阶段 Dockerfile：归档只在构建阶段解包，最终运行镜像不包含 `environment.tar.zst`、`legacy-source.tar.zst` 或旧版本导出归档。
+带大型环境归档的模型应使用多阶段 Dockerfile：归档只在构建阶段解包，最终运行镜像不包含构建归档或旧版本导出文件。
 
 ## 目录职责
 
@@ -65,57 +65,32 @@ Pocket2Mol 这类带大型环境归档的构建上下文使用多阶段 Dockerfi
 
 普通用户不修改该目录。管理员审核模型时，重点检查该层是否把模型私有路径、主机路径和凭据泄漏到平台契约中。
 
-## 当前 Pocket2Mol bundle 转换
+## 管理员构建流程
 
-浮浮酱提供了转换脚本，可以把现有 bundle 转成标准构建上下文：
+管理员在仓库外创建独立构建上下文，复制本目录模板后填入经审核的模型包：
 
 ```bash
-python scripts/create_model_image_context.py \
-  --bundle-dir /data/zhouyc/cpumodel_sciminer/model/kaiwu-venv-model-bundles/kaiwu-venv-model-bundles-20260805T074701Z/pocket2mol-pocket-ligand-generation \
-  --output-dir /data/zhouyc/cpumodel_sciminer/model-build/pocket2mol-pocket-ligand-generation-v4
+cp -a deploy/kubernetes/model-image-template /secure-build/<tool-slug>
 ```
 
-脚本会生成：
+构建上下文中的 `model/` 放置模型代码、权重、依赖、说明和模型侧 `platform_run.sh`；`platform_adaptor/` 使用通用平台适配层。不得将模型源码、权重、环境归档或构建上下文提交到平台仓库。
 
-```text
-pocket2mol-pocket-ligand-generation-v4/
-├── .dockerignore
-├── Dockerfile
-├── README.md
-├── model/
-│   ├── legacy-source.tar.zst
-│   ├── environment.tar.zst
-│   ├── MODEL_PACKAGE.yaml
-│   ├── README.md
-│   ├── platform_run.sh
-│   └── src/
-└── platform_adaptor/
-    ├── entrypoint.sh
-    ├── platform_run_v2.sh
-    ├── object_storage.py
-    └── requirements.txt
-```
-
-`legacy-source.tar.zst` 和 `environment.tar.zst` 只作为构建输入，Dockerfile 会在镜像构建阶段解包；它们不属于平台运行时的可编辑配置。
-
-## 构建和导出
-
-Pocket2Mol 当前 bundle 是 `linux/amd64`、CUDA 模型，构建机器执行：
+使用匹配模型依赖和目标硬件的可信基础镜像构建。发布到 Registry 时使用管理员批准的仓库与版本：
 
 ```bash
 docker buildx build \
-  --platform linux/amd64 \
-  -t sciminer/pocket2mol-pocket-ligand-generation:0.1.4 \
+  --platform <os/architecture> \
+  -t <registry>/<namespace>/<tool-slug>:<version> \
   --load \
-  /data/zhouyc/cpumodel_sciminer/model-build/pocket2mol-pocket-ligand-generation-v4
+  /secure-build/<tool-slug>
 
-docker save sciminer/pocket2mol-pocket-ligand-generation:0.1.4 \
-  | gzip -c > pocket2mol-pocket-ligand-generation-0.1.4-linux-amd64.tar.gz
+docker save <registry>/<namespace>/<tool-slug>:<version> \
+  | gzip -c > <tool-slug>-<version>.tar.gz
 
-sha256sum pocket2mol-pocket-ligand-generation-0.1.4-linux-amd64.tar.gz
+sha256sum <tool-slug>-<version>.tar.gz
 ```
 
-然后由管理员通过平台的镜像导入 API 上传，不要把 `latest` 注册为模型版本。
+管理员可将归档通过平台镜像导入功能上传至内部 Registry；也可按组织流程直接推送。注册工具时记录 Registry 返回的 manifest digest，不使用可变 tag 作为运行镜像身份。
 
 ## 管理员审核清单
 
