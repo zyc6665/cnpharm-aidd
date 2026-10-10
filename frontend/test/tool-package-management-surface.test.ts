@@ -12,15 +12,15 @@ function readSource(relativePath: string): string {
 
 test('后台应提供 Tool Package 管理页入口', () => {
   const routerSource = readSource('src/router/index.ts')
-  const adminSource = readSource('src/views/admin/index.vue')
+  const adminToolsSource = readSource('src/views/admin/Tools.vue')
   const pagePath = resolve(rootDir, 'src/views/admin/ToolPackages.vue')
 
   assert.equal(existsSync(pagePath), true)
   assert.equal(routerSource.includes("path: 'tool-packages'"), true)
   assert.equal(routerSource.includes("name: 'AdminToolPackages'"), true)
   assert.equal(routerSource.includes("import('@/views/admin/ToolPackages.vue')"), true)
-  assert.equal(adminSource.includes("key: 'tool-packages'"), true)
-  assert.equal(adminSource.includes("labelKey: 'admin.toolPackages'"), true)
+  assert.equal(adminToolsSource.includes("key: 'package'"), true)
+  assert.equal(adminToolsSource.includes("router.push('/admin/tool-packages')"), true)
 })
 
 test('Tool Package 前端 API 和类型应覆盖列表、创建、读取与发布', () => {

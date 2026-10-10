@@ -8,7 +8,8 @@ function readInspectorSources() {
     'WorkflowNodeInspector.vue',
     'NodeToolPanel.vue',
     'NodeEdgePanel.vue',
-    'NodeResultPanel.vue'
+    'NodeResultPanel.vue',
+    'WorkflowNodeRunPanel.vue'
   ].map(file => readFileSync(resolve(`src/components/workflow/${file}`), 'utf8')).join('\n')
 }
 
@@ -22,7 +23,7 @@ test('workflow node inspector exposes node configuration sections', () => {
     "workflow.inspector.toolSelector",
     "workflow.inspector.requiredInput",
     "workflow.inspector.upstreamEdge",
-    "workflow.inspector.runWorkflow",
+    "workflow.nodeRun.runCurrentNode",
     "workflow.inspector.taskResult",
     "workflow.inspector.noSelectedNode"
   ]) {

@@ -110,7 +110,7 @@ test('管理员工具管理页应接入完整工具创建与编辑路由', () =>
   assert.equal(routerSource.includes("path: 'tools/:id/edit'"), true)
   assert.equal(routerSource.includes("name: 'AdminToolEdit'"), true)
 
-  assert.equal(adminToolsSource.includes("router.push('/admin/tools/create')"), true)
+  assert.equal(adminToolsSource.includes("router.push({ path: '/admin/tools/create', query: { mode } })"), true)
   assert.equal(adminToolsSource.includes("router.push(`/admin/tools/${tool.id}/edit`)"), true)
   assert.equal(adminToolsSource.includes('showCreateModal'), false)
 

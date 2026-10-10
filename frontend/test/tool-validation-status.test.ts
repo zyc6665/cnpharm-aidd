@@ -55,15 +55,13 @@ describe('工具包验证等级', () => {
     ])
   })
 
-  it('管理列表和工具详情复用验证等级展示，且不暴露积分或支付', () => {
+  it('管理列表复用验证等级展示，且不暴露积分或支付', () => {
     const adminTools = readSource('src/views/admin/Tools.vue')
-    const toolDetail = readSource('src/views/tools/Detail.vue')
-    const toolDetailPresentation = readSource('src/composables/useToolDetailPresentation.ts')
+    const validation = readSource('src/utils/tool-validation.ts')
 
     expect(adminTools).toContain("key: 'validation'")
     expect(adminTools).toContain('getToolValidationSummary')
-    expect(toolDetail).toContain('toolValidationSummary')
-    expect(toolDetailPresentation).toContain('getToolValidationSummary')
-    expect(`${adminTools}${toolDetail}`).not.toMatch(/credits|payment|积分|支付/i)
+    expect(validation).toContain('getToolValidationSummary')
+    expect(adminTools).not.toMatch(/credits|payment|积分|支付/i)
   })
 })

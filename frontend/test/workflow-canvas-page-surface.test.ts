@@ -88,7 +88,7 @@ test('workflow page and run detail user-facing copy should use locale keys', () 
     'workflow.definition.save',
     'workflow.definition.load',
     'workflow.definition.projectScoped',
-    'workflow.definition.runWorkflowDefinition'
+    'workflow.definition.startFullRun'
   ]) {
     assert.equal(pageSource.includes(marker), true, `missing ${marker}`)
   }

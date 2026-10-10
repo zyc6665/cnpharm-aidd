@@ -3,6 +3,7 @@ import type { UploadFile } from 'ant-design-vue'
 import { describe, expect, it } from 'vitest'
 import type { TypedArtifact } from '@/types/artifacts'
 import StandardArtifactInputs from './StandardArtifactInputs.vue'
+import i18n from '@/locales'
 
 function makeArtifact(overrides: Partial<TypedArtifact> = {}): TypedArtifact {
   return {
@@ -57,13 +58,13 @@ describe('StandardArtifactInputs', () => {
         toolId: 'tool-1',
         toolSlug: 'molp-pc',
       },
-      global: { stubs },
+      global: { plugins: [i18n], stubs },
     })
 
     expect(wrapper.text()).not.toContain('Tool Package')
     expect(wrapper.text()).not.toContain('molecule_table@1')
     expect(wrapper.find('.artifact-select').exists()).toBe(false)
-    expect(wrapper.find('.artifact-picker').attributes('data-accept')).toBe('.csv,.json')
+    expect(wrapper.find('.artifact-picker').attributes('data-accept')).toBe('.csv,.json,.smi,.txt')
 
     await wrapper.find('.artifact-picker').trigger('click')
 
@@ -91,7 +92,7 @@ describe('StandardArtifactInputs', () => {
         toolId: 'tool-1',
         toolSlug: 'molp-pc',
       },
-      global: { stubs },
+      global: { plugins: [i18n], stubs },
     })
 
     expect(wrapper.findAll('option')).toHaveLength(1)

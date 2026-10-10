@@ -9,23 +9,27 @@ function readSource(relativePath: string): string {
 
 test('workflow node inspector exposes researcher-facing node actions', () => {
   const inspectorSource = readSource('src/components/workflow/WorkflowNodeInspector.vue')
+  const toolPanelSource = readSource('src/components/workflow/NodeToolPanel.vue')
   const resultSource = readSource('src/components/workflow/NodeResultPanel.vue')
+  const runPanelSource = readSource('src/components/workflow/WorkflowNodeRunPanel.vue')
   const pageSource = readSource('src/views/workflow/index.vue')
 
   for (const marker of [
-    'workflow.inspector.runWorkflow',
     'workflow.inspector.viewTaskDetail',
     'workflow.inspector.outputFiles',
-    "event: 'run-node'",
-    "emit('view-task-detail'"
+    "@view-task-detail=\"relayViewTaskDetail\""
   ]) {
     assert.equal((inspectorSource + resultSource).includes(marker), true, `missing ${marker}`)
   }
 
+  assert.equal(toolPanelSource.includes('WorkflowNodeRunPanel'), true)
+  assert.equal(runPanelSource.includes('data-testid="run-current-node"'), true)
+  assert.equal(runPanelSource.includes('@click="runCurrentNode"'), true)
+
   for (const marker of [
     'handleRunWorkflowDefinition',
     'handleViewTaskDetail',
-    '@run-node="handleRunWorkflowDefinition"',
+    '@run-ready-nodes="handleRunWorkflowDefinition"',
     '@view-task-detail="handleViewTaskDetail"'
   ]) {
     assert.equal(pageSource.includes(marker), true, `missing ${marker}`)
@@ -45,11 +49,9 @@ test('workflow tool palette exposes multi-dimensional tool filters', () => {
     'workflow.palette.filterStage',
     'workflow.palette.filterInput',
     'workflow.palette.filterOutput',
-    'workflow.palette.filterExecutor',
     'stageOptions',
     'inputOptions',
-    'outputOptions',
-    'executorOptions'
+    'outputOptions'
   ]) {
     assert.equal(paletteSource.includes(marker), true, `missing ${marker}`)
   }
@@ -57,8 +59,7 @@ test('workflow tool palette exposes multi-dimensional tool filters', () => {
   for (const marker of [
     'sidebarStageFilter',
     'sidebarInputFilter',
-    'sidebarOutputFilter',
-    'sidebarExecutorFilter'
+    'sidebarOutputFilter'
   ]) {
     assert.equal(canvasSource.includes(marker), true, `missing ${marker}`)
   }
@@ -66,8 +67,7 @@ test('workflow tool palette exposes multi-dimensional tool filters', () => {
   for (const marker of [
     ':stage-options="sidebarStageOptions"',
     ':input-options="sidebarInputOptions"',
-    ':output-options="sidebarOutputOptions"',
-    ':executor-options="sidebarExecutorOptions"'
+    ':output-options="sidebarOutputOptions"'
   ]) {
     assert.equal(pageSource.includes(marker), true, `missing ${marker}`)
   }

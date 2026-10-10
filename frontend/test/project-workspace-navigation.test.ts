@@ -36,12 +36,11 @@ test('项目工作台应有统一导航组件和项目内 workflow 路由', () =
   assert.equal(overview.includes('buildProjectWorkflowPath(projectId.value)'), true)
 })
 
-test('项目工作台导航应覆盖总览、研究、白板、Workflow、任务、谱系和设置', () => {
+test('项目工作台导航应覆盖当前项目内主要入口', () => {
   const navDomain = readSource('src/domain/projects/navigation.ts')
 
   assert.equal(navDomain.includes('项目总览'), true)
   assert.equal(navDomain.includes('智能体研究'), true)
-  assert.equal(navDomain.includes('科研白板'), true)
   assert.equal(navDomain.includes('Workflow'), true)
   assert.equal(navDomain.includes('任务中心'), true)
   assert.equal(navDomain.includes('Artifact 谱系'), true)

@@ -18,7 +18,10 @@ export interface ToolRunInputSurface {
 
 function resolveContractInputSchema(tool?: Tool | null): ToolSchema | undefined {
   const schema = tool?.contract?.schema?.input
-  return schema?.type === 'object' && schema.properties && typeof schema.properties === 'object'
+  return schema?.type === 'object'
+    && schema.properties
+    && typeof schema.properties === 'object'
+    && Object.keys(schema.properties).length > 0
     ? schema
     : undefined
 }

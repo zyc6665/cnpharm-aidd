@@ -85,6 +85,26 @@ describe('tool run input surface', () => {
     expect(Object.keys(surface.flattenedSchema?.properties ?? {})).toEqual(['model_choice'])
   })
 
+  it('falls back to the legacy input schema when the contract schema is empty', () => {
+    const tool = makeTool({
+      type: 'ssh_job',
+      input_schema: {
+        type: 'object',
+        properties: {
+          model_choice: { type: 'string', default: 'auto' },
+        },
+      },
+    })
+    tool.contract = {
+      executor: { type: 'ssh_job' },
+      schema: { input: { type: 'object', properties: {} } },
+    } as NonNullable<Tool['contract']>
+
+    const surface = resolveToolRunInputSurface(tool)
+
+    expect(Object.keys(surface.flattenedSchema?.properties ?? {})).toEqual(['model_choice'])
+  })
+
   it('supports explicit standard input declarations on arbitrary file fields', () => {
     const surface = resolveToolRunInputSurface(makeTool({
       type: 'ssh_job',

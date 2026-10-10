@@ -63,7 +63,7 @@ test('workflow graph maintenance exposes edge deletion and semantic sync', () =>
   }
 
   assert.equal(inspector.includes('NodeEdgePanel'), true)
-  assert.equal(inspector.includes('@delete-edge="$emit(\'delete-edge\', $event)"'), true)
+  assert.equal(inspector.includes('@delete-edge="relayDeleteEdge"'), true)
 
   for (const marker of ["event: 'delete-edge'", "t('workflow.inspector.deleteEdge')"]) {
     assert.equal(edgePanel.includes(marker), true, `edge panel missing ${marker}`)

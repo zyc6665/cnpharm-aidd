@@ -299,7 +299,7 @@ describe('free workflow workbench', () => {
       canvas_preset_id: 'free-canvas',
     }))
 
-    await wrapper.findAll('button').find(button => button.text() === '运行工作流')!.trigger('click')
+    await wrapper.findAll('button').find(button => button.text() === '开始完整运行')!.trigger('click')
     await flushPromises()
     expect(createWorkflowRun).toHaveBeenCalledWith('flow-1', expect.objectContaining({
       name: '未命名流程',

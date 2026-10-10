@@ -33,7 +33,7 @@ test('项目任务路径编码 project_id，项目工作流路径保持项目路
 })
 
 test('项目工作台导航 active 规则支持普通项目路径和任务中心 query', () => {
-  const [overview, , , workflow, tasks] = buildProjectWorkspaceNavItems('project-1')
+  const [overview, , workflow, tasks] = buildProjectWorkspaceNavItems('project-1')
 
   assert.equal(
     isProjectWorkspaceNavItemActive(overview!, {

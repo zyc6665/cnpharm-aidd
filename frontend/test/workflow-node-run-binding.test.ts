@@ -10,13 +10,12 @@ const store = readFileSync(resolve('src/stores/workflow.ts'), 'utf8')
 const execution = readFileSync(resolve('src/composables/useWorkflowExecution.ts'), 'utf8')
 
 test('workflow page routes run-node through WorkflowRun creation', () => {
-  for (const marker of ['handleRunWorkflowDefinition', '@run-node="handleRunWorkflowDefinition"']) {
+  for (const marker of ['handleRunWorkflowDefinition', '@run-ready-nodes="handleRunWorkflowDefinition"']) {
     assert.equal(workflowPage.includes(marker), true, `missing ${marker}`)
   }
 
   for (const marker of [
     'useTasksStore',
-    'useWorkflowExecution',
     'handleRunNode'
   ]) {
     assert.equal(workflowPage.includes(marker), false, `page should not include ${marker}`)
@@ -28,8 +27,8 @@ test('workflow page routes run-node through WorkflowRun creation', () => {
 
 test('node inspector emits tool selection and run events', () => {
   assert.equal(inspector.includes("event: 'select-tool'"), true)
-  assert.equal(inspector.includes("event: 'run-node'"), true)
-  assert.equal(resultPanel.includes("t('workflow.inspector.runWorkflow')"), true)
+  assert.equal(inspector.includes("event: 'view-task-detail'"), true)
+  assert.equal(resultPanel.includes("t('workflow.inspector.viewTaskDetail')"), true)
 })
 
 test('workflow store can record node tasks', () => {

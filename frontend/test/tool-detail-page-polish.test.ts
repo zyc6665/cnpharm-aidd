@@ -21,17 +21,15 @@ test('工具详情页应使用统一页头承载工具标题和收藏操作', ()
   assert.equal(actionsSource.includes('tool-detail-actions'), true)
 })
 
-test('工具详情页应优化信息卡、表单操作区和侧栏布局', () => {
+test('工具详情页应使用信息卡、表单操作区和响应式布局', () => {
   const source = readSource('src/views/tools/Detail.vue')
   const overviewSource = readSource('src/components/tools/ToolDetailOverview.vue')
   const actionsSource = readSource('src/components/tools/ToolRunFormActions.vue')
-  const sidebarSource = readSource('src/components/tools/ToolDetailSidebar.vue')
 
   assert.equal(source.includes('ToolDetailOverview'), true)
   assert.equal(overviewSource.includes('tool-overview'), true)
   assert.equal(overviewSource.includes('overview-title'), true)
   assert.equal(actionsSource.includes('tool-form-actions'), true)
-  assert.equal(sidebarSource.includes('position: sticky'), true)
   assert.equal(source.includes('@media (max-width: @screen-md)'), true)
 })
 

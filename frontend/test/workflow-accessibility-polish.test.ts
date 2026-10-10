@@ -27,7 +27,6 @@ test('workflow palette and inspector empty states should guide the next action',
     'filterStage',
     'filterInput',
     'filterOutput',
-    'filterExecutor',
     'viewTaskDetail',
     'runWorkflow'
   ]) {

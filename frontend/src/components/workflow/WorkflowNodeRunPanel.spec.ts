@@ -8,7 +8,7 @@ import { getProjectArtifacts } from '@/api/artifacts'
 import { getToolDetail } from '@/api/tools'
 import { uploadFile } from '@/api/files'
 import { createTask, getTaskDetail, prepareTaskRun } from '@/api/tasks'
-import { useWorkflowStore } from '@/stores'
+import { useUserStore, useWorkflowStore } from '@/stores'
 import i18n from '@/locales'
 
 vi.mock('@/api/tools', () => ({
@@ -55,7 +55,10 @@ const stubs = {
   AAlert: { props: ['message'], template: '<div class="alert"><slot />{{ message }}</div>' },
   ASpin: { template: '<div class="spin"><slot /></div>' },
   AEmpty: { props: ['description'], template: '<div class="empty">{{ description }}</div>' },
-  AForm: { template: '<form><slot /></form>' },
+  AForm: {
+    template: '<form><slot /></form>',
+    methods: { validate: vi.fn().mockResolvedValue(true) },
+  },
   AButton: { props: ['loading', 'disabled'], template: '<button :disabled="disabled"><slot /></button>' },
   ATag: { template: '<span><slot /></span>' },
   ToolRunInputForm: {
@@ -391,6 +394,7 @@ describe('WorkflowNodeRunPanel', () => {
 
   beforeEach(() => {
     setActivePinia(createPinia())
+    useUserStore().token = 'test-access-token'
     vi.mocked(getProjectArtifacts).mockReset()
     vi.mocked(getToolDetail).mockReset()
     vi.mocked(uploadFile).mockReset()

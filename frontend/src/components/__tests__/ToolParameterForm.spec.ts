@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ToolParameterForm from '@/components/tools/ToolParameterForm.vue'
 import type { ToolSchema } from '@/types/models'
+import i18n from '@/locales'
 
 function makeSchema(overrides: Partial<ToolSchema> = {}): ToolSchema {
   return {
@@ -33,7 +34,7 @@ describe('ToolParameterForm', () => {
     })
     const wrapper = mount(ToolParameterForm, {
       props: { schema, formState: noopProps, fileList: noopProps, selectedArtifacts: noopProps },
-      global: { stubs: globalStubs },
+      global: { plugins: [i18n], stubs: globalStubs },
     })
     expect(wrapper.find('.stub-form-item').exists()).toBe(true)
     expect(wrapper.find('.stub-input').exists()).toBe(true)
@@ -45,7 +46,7 @@ describe('ToolParameterForm', () => {
     })
     const wrapper = mount(ToolParameterForm, {
       props: { schema, formState: noopProps, fileList: noopProps, selectedArtifacts: noopProps },
-      global: { stubs: globalStubs },
+      global: { plugins: [i18n], stubs: globalStubs },
     })
     expect(wrapper.find('.stub-form-item').exists()).toBe(true)
     expect(wrapper.find('.stub-number').exists()).toBe(true)
@@ -57,7 +58,7 @@ describe('ToolParameterForm', () => {
     })
     const wrapper = mount(ToolParameterForm, {
       props: { schema, formState: noopProps, fileList: noopProps, selectedArtifacts: noopProps },
-      global: { stubs: globalStubs },
+      global: { plugins: [i18n], stubs: globalStubs },
     })
     expect(wrapper.find('.stub-form-item').exists()).toBe(true)
     expect(wrapper.find('.stub-switch').exists()).toBe(true)
@@ -69,7 +70,7 @@ describe('ToolParameterForm', () => {
     })
     const wrapper = mount(ToolParameterForm, {
       props: { schema, formState: noopProps, fileList: noopProps, selectedArtifacts: noopProps },
-      global: { stubs: globalStubs },
+      global: { plugins: [i18n], stubs: globalStubs },
     })
     expect(wrapper.find('.stub-form-item').exists()).toBe(true)
     expect(wrapper.find('.stub-select').exists()).toBe(true)
@@ -79,7 +80,7 @@ describe('ToolParameterForm', () => {
     const schema = makeSchema()
     const wrapper = mount(ToolParameterForm, {
       props: { schema, formState: noopProps, fileList: noopProps, selectedArtifacts: noopProps },
-      global: { stubs: globalStubs },
+      global: { plugins: [i18n], stubs: globalStubs },
     })
     expect(wrapper.find('.stub-form-item').exists()).toBe(false)
   })
