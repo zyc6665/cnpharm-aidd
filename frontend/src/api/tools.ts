@@ -5,6 +5,11 @@ import type {
   ToolView, ToolCreateParams, ToolOptionSummary, WorkbenchGroup, WorkbenchGroupMapping,
   ToolExample, ToolExampleApplyResult, ToolExampleFilePreview
 } from '@/types/models'
+import type {
+  KubernetesToolVersionPromotionResult,
+  KubernetesToolVersionSmokeInput,
+  KubernetesToolVersionSmokeResult
+} from '@/types/tool-packages'
 
 export interface ToolListParams extends PaginationParams {
   category?: string  // 分类名称
@@ -199,6 +204,26 @@ export const unfavoriteTool = (id: string): Promise<ApiResponse<null>> => {
 // 获取工具版本列表
 export const getToolVersions = (id: string): Promise<ApiResponse<ToolVersion[]>> => {
   return get<ToolVersion[]>(`/tools/${id}/versions`)
+}
+
+export const smokeToolVersion = (
+  toolId: string,
+  versionId: string,
+  data: KubernetesToolVersionSmokeInput
+): Promise<ApiResponse<KubernetesToolVersionSmokeResult>> => {
+  return post<KubernetesToolVersionSmokeResult>(
+    `/tools/${toolId}/versions/${versionId}/smoke`,
+    data
+  )
+}
+
+export const promoteToolVersion = (
+  toolId: string,
+  versionId: string
+): Promise<ApiResponse<KubernetesToolVersionPromotionResult>> => {
+  return post<KubernetesToolVersionPromotionResult>(
+    `/tools/${toolId}/versions/${versionId}/promote`
+  )
 }
 
 // 创建工具版本（管理员）

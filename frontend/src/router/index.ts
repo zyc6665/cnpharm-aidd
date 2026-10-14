@@ -155,12 +155,6 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'admin.users' }
       },
       {
-        path: 'tools/create',
-        name: 'AdminToolCreate',
-        component: () => import('@/views/tools/Create.vue'),
-        meta: { title: 'tools.createTool' }
-      },
-      {
         path: 'tools/:id/edit',
         name: 'AdminToolEdit',
         component: () => import('@/views/tools/Create.vue'),

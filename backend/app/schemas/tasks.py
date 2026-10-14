@@ -47,6 +47,15 @@ class TaskCreate(BaseModel):
     priority: str = Field(default="normal", description="优先级")
 
 
+class ToolVersionSmokeCreate(TaskInputSchema):
+    """管理员对候选工具版本执行 smoke 时允许提交的输入。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: Optional[str] = Field(None, max_length=120, description="Smoke 任务名称")
+    project_id: Optional[str] = Field(None, min_length=1, max_length=36)
+
+
 class TaskResponse(TimestampMixin):
     """任务响应"""
     id: str

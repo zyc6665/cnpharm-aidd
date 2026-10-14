@@ -2,16 +2,9 @@
   <div class="admin-tools">
     <AppPageHeader :title="t('admin.tools')" :subtitle="t('admin.toolsSubtitle')">
       <template #actions>
-      <a-space>
-        <a-button @click="openImportModal">
-          <UploadOutlined />
-          {{ t('admin.importToolConfig') }}
-        </a-button>
-        <a-button type="primary" @click="openCreatePage">
-          <PlusOutlined />
-          {{ t('admin.createTool') }}
-        </a-button>
-      </a-space>
+      <a-button type="primary" @click="openToolPackages">
+        {{ t('admin.toolRegistrationPackageTitle') }}
+      </a-button>
       </template>
     </AppPageHeader>
 
@@ -124,88 +117,6 @@
       </a-table>
     </a-card>
 
-    <a-modal
-      v-model:open="registrationModalVisible"
-      :title="t('admin.toolRegistrationTitle')"
-      :footer="null"
-      width="860px"
-      wrap-class-name="tool-registration-modal"
-    >
-      <p class="registration-description">{{ t('admin.toolRegistrationDescription') }}</p>
-      <div class="registration-options">
-        <button
-          v-for="option in registrationOptions"
-          :key="option.key"
-          type="button"
-          class="registration-option"
-          :class="[`registration-option--${option.key}`, { 'is-recommended': option.key === 'package' }]"
-          @click="selectRegistrationMode(option.key)"
-        >
-          <span class="registration-option-icon">
-            <component :is="option.icon" />
-          </span>
-          <span class="registration-option-copy">
-            <span class="registration-option-heading">
-              <strong>{{ t(option.title) }}</strong>
-              <span v-if="option.key === 'package'" class="registration-recommended">
-                {{ t('admin.toolRegistrationRecommended') }}
-              </span>
-            </span>
-            <span>{{ t(option.description) }}</span>
-          </span>
-          <RightOutlined class="registration-option-arrow" />
-        </button>
-      </div>
-    </a-modal>
-
-    <input
-      ref="importConfigFileInput"
-      type="file"
-      accept=".json,application/json"
-      class="hidden-file-input"
-      @change="handleImportConfigFileChange"
-    />
-
-    <a-modal
-      :open="importModalVisible"
-      :title="t('admin.importToolConfigTitle')"
-      :confirm-loading="importing"
-      @ok="handleImportConfig"
-      @cancel="resetImportModal"
-    >
-      <p class="import-config-description">{{ t('admin.importToolConfigDescription') }}</p>
-      <a-form layout="vertical">
-        <a-form-item :label="t('tools.category')">
-          <a-select
-            v-model:value="importCategoryId"
-            :placeholder="t('common.all')"
-            allow-clear
-          >
-            <a-select-option v-for="category in categories" :key="category.id" :value="category.id">
-              {{ category.name }}
-            </a-select-option>
-          </a-select>
-        </a-form-item>
-        <a-form-item>
-          <a-checkbox v-model:checked="importPublish">
-            {{ t('admin.importToolConfigPublish') }}
-          </a-checkbox>
-        </a-form-item>
-        <a-form-item :label="t('admin.importToolConfig')">
-          <a-space direction="vertical" style="width: 100%">
-            <a-button @click="triggerImportConfigFile">
-              <UploadOutlined />
-              {{ t('admin.importToolConfigFromFile') }}
-            </a-button>
-            <a-textarea
-              v-model:value="importConfigText"
-              :rows="14"
-              :placeholder="t('admin.importToolConfigPlaceholder')"
-            />
-          </a-space>
-        </a-form-item>
-      </a-form>
-    </a-modal>
   </div>
 </template>
 
@@ -218,24 +129,16 @@ import AppFilterBar from '@/components/common/AppFilterBar.vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import {
   DeleteOutlined,
-  ApiOutlined,
-  AppstoreOutlined,
-  CodeSandboxOutlined,
   EditOutlined,
-  PlusOutlined,
   ReloadOutlined,
-  RightOutlined,
-  SearchOutlined,
-  SettingOutlined,
-  UploadOutlined
+  SearchOutlined
 } from '@ant-design/icons-vue'
 import type { Category, Tool } from '@/types/models'
 import { getToolValidationSummary } from '@/utils/tool-validation'
 import {
   adminGetToolCategories,
   deleteTool,
-  getToolList,
-  importToolConfig
+  getToolList
 } from '@/api/tools'
 
 const { t } = useI18n()
@@ -244,40 +147,6 @@ const router = useRouter()
 const loading = ref(false)
 const categories = ref<Category[]>([])
 const tools = ref<Tool[]>([])
-const importModalVisible = ref(false)
-const importing = ref(false)
-const importConfigText = ref('')
-const importCategoryId = ref<string | undefined>()
-const importPublish = ref(false)
-const importConfigFileInput = ref<HTMLInputElement | null>(null)
-const registrationModalVisible = ref(false)
-
-const registrationOptions = [
-  {
-    key: 'template',
-    icon: AppstoreOutlined,
-    title: 'admin.toolRegistrationTemplateTitle',
-    description: 'admin.toolRegistrationTemplateDescription'
-  },
-  {
-    key: 'remote',
-    icon: ApiOutlined,
-    title: 'admin.toolRegistrationRemoteTitle',
-    description: 'admin.toolRegistrationRemoteDescription'
-  },
-  {
-    key: 'package',
-    icon: CodeSandboxOutlined,
-    title: 'admin.toolRegistrationPackageTitle',
-    description: 'admin.toolRegistrationPackageDescription'
-  },
-  {
-    key: 'advanced',
-    icon: SettingOutlined,
-    title: 'admin.toolRegistrationAdvancedTitle',
-    description: 'admin.toolRegistrationAdvancedDescription'
-  }
-] as const
 
 const filters = reactive({
   keyword: '',
@@ -354,73 +223,8 @@ const handleTableChange = async (pag: { current?: number; pageSize?: number }) =
   await fetchTools()
 }
 
-const openCreatePage = () => {
-  registrationModalVisible.value = true
-}
-
-const selectRegistrationMode = (mode: string) => {
-  registrationModalVisible.value = false
-  if (mode === 'package') {
-    router.push('/admin/tool-packages')
-    return
-  }
-  router.push({ path: '/admin/tools/create', query: { mode } })
-}
-
-const openImportModal = () => {
-  importModalVisible.value = true
-}
-
-const resetImportModal = () => {
-  importModalVisible.value = false
-  importConfigText.value = ''
-  importCategoryId.value = undefined
-  importPublish.value = false
-}
-
-const triggerImportConfigFile = () => {
-  importConfigFileInput.value?.click()
-}
-
-const handleImportConfigFileChange = async (event: Event) => {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) {
-    return
-  }
-
-  importConfigText.value = await file.text()
-  input.value = ''
-}
-
-const handleImportConfig = async () => {
-  if (!importConfigText.value.trim()) {
-    message.error(t('admin.importToolConfigRequired'))
-    return
-  }
-
-  let parsedConfig: Record<string, unknown>
-  try {
-    parsedConfig = JSON.parse(importConfigText.value)
-  } catch {
-    message.error(t('admin.importToolConfigInvalid'))
-    return
-  }
-
-  importing.value = true
-  try {
-    const response = await importToolConfig({
-      config: parsedConfig,
-      category_id: importCategoryId.value,
-      publish: importPublish.value
-    })
-
-    message.success(`${response.data.tool.name} · ${t('admin.importToolConfigSuccess')}`)
-    resetImportModal()
-    await fetchTools()
-  } finally {
-    importing.value = false
-  }
+const openToolPackages = () => {
+  router.push('/admin/tool-packages')
 }
 
 const handleEdit = (tool: Tool) => {

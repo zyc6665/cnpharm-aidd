@@ -97,27 +97,27 @@ def build_resource_request(
     explicit_cpu = _requests_cpu(params)
     profile_id_configured = isinstance(normalized.get("resource_profile"), str)
     resolved_gpu_required = (
-        bool(gpu_required)
-        if gpu_required is not None
-        else bool(
+        bool(
             profile.get("gpu_required", False)
             if profile_id_configured
             else normalized.get("gpu_required", profile.get("gpu_required", False))
         )
+        if profile_id_configured or gpu_required is None
+        else bool(gpu_required)
     )
     resolved_gpu_memory_mb = (
-        int(gpu_memory_mb or 0)
-        if gpu_memory_mb is not None
-        else int(
+        int(
             float(profile.get("gpu_memory_gb", 0) or 0) * 1024
             if profile_id_configured
             else normalized.get("gpu_memory_mb", 0) or 0
         )
+        if profile_id_configured or gpu_memory_mb is None
+        else int(gpu_memory_mb or 0)
     )
     if not resolved_gpu_memory_mb:
         resolved_gpu_memory_mb = int(float(profile.get("gpu_memory_gb", 0) or 0) * 1024)
 
-    if explicit_cpu:
+    if explicit_cpu and not profile_id_configured:
         resolved_gpu_required = False
         resolved_gpu_memory_mb = 0
 
@@ -197,6 +197,21 @@ def build_task_resource_snapshot(
 
 def resolve_registered_resource_profile(profile_id: str) -> dict[str, Any]:
     """Resolve a tool's profile id through the platform-approved registry."""
+    registry = _registered_resource_profile_registry()
+    profile = registry.get(profile_id)
+    if not isinstance(profile, dict):
+        raise ValueError(f"未登记的资源档位: {profile_id}")
+    resolved = dict(profile)
+    resolved["id"] = profile_id
+    return resolved
+
+
+def list_registered_resource_profile_ids() -> list[str]:
+    """Return the platform-approved resource profile identifiers."""
+    return sorted(_registered_resource_profile_registry())
+
+
+def _registered_resource_profile_registry() -> dict[str, Any]:
     from app.config import settings
 
     registry_json = settings.RESOURCE_PROFILE_REGISTRY_JSON
@@ -208,12 +223,7 @@ def resolve_registered_resource_profile(profile_id: str) -> dict[str, Any]:
         raise ValueError("RESOURCE_PROFILE_REGISTRY_JSON 必须是 JSON 对象") from exc
     if not isinstance(registry, dict):
         raise ValueError("RESOURCE_PROFILE_REGISTRY_JSON 必须是 JSON 对象")
-    profile = registry.get(profile_id)
-    if not isinstance(profile, dict):
-        raise ValueError(f"未登记的资源档位: {profile_id}")
-    resolved = dict(profile)
-    resolved["id"] = profile_id
-    return resolved
+    return registry
 
 
 def apply_resource_request_to_config(

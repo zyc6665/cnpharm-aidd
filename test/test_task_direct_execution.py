@@ -511,6 +511,71 @@ async def test_create_task_cpu_device_overrides_tool_gpu_requirement(
 
 
 @pytest.mark.asyncio
+async def test_create_task_rejects_inactive_candidate_version(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    published_tool: Tool,
+):
+    candidate = ToolVersion(
+        tool_id=published_tool.id,
+        version="2.0.0-k8s-candidate",
+        config={"type": "k8s_job"},
+        is_active=False,
+    )
+    db_session.add(candidate)
+    await db_session.commit()
+
+    response = await api_client.post(
+        "/api/v1/tasks",
+        headers={"Authorization": "Bearer admin-token"},
+        json={
+            "tool_id": published_tool.id,
+            "tool_version_id": candidate.id,
+        },
+    )
+
+    assert response.status_code == 422
+    assert "不可运行" in response.json()["message"]
+
+
+@pytest.mark.asyncio
+async def test_create_task_rejects_version_from_another_tool(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    published_tool: Tool,
+    admin_user: User,
+):
+    other_tool = Tool(
+        owner_id=admin_user.id,
+        name="Other Direct Runner Tool",
+        slug="other-direct-runner-tool",
+        status=ToolStatus.PUBLISHED.value,
+    )
+    db_session.add(other_tool)
+    await db_session.flush()
+    other_version = ToolVersion(
+        tool_id=other_tool.id,
+        version="1.0.0",
+        config={"type": "ssh_job"},
+        is_active=True,
+    )
+    db_session.add(other_version)
+    await db_session.commit()
+
+    response = await api_client.post(
+        "/api/v1/tasks",
+        headers={"Authorization": "Bearer admin-token"},
+        json={
+            "tool_id": published_tool.id,
+            "tool_version_id": other_version.id,
+        },
+    )
+
+    assert response.status_code == 422
+    assert "不属于该工具" in response.json()["message"]
+
+
+@pytest.mark.asyncio
 async def test_create_task_api_uses_shared_task_creation_service(
     api_client: httpx.AsyncClient,
     db_session: AsyncSession,

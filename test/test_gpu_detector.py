@@ -32,7 +32,7 @@ def test_node_info_logs_version_probe_failures(monkeypatch, caplog):
     detector.initialized = True
 
     monkeypatch.setattr(detector, "detect_gpus", lambda: [])
-    monkeypatch.setattr(detector_module, "pynvml", FakeNvml())
+    monkeypatch.setattr(detector_module, "pynvml", FakeNvml(), raising=False)
 
     with caplog.at_level("DEBUG", logger="app.gpu.detector"):
         node_info = detector.get_node_info(hostname="test-node")
@@ -53,7 +53,7 @@ def test_device_count_logs_probe_failure(monkeypatch, caplog):
 
     detector = GPUDetector()
     detector.initialized = True
-    monkeypatch.setattr(detector_module, "pynvml", FakeNvml())
+    monkeypatch.setattr(detector_module, "pynvml", FakeNvml(), raising=False)
 
     with caplog.at_level("DEBUG", logger="app.gpu.detector"):
         assert detector.get_device_count() == 0
@@ -70,7 +70,7 @@ def test_nvml_shutdown_failure_is_observable(monkeypatch, caplog):
 
     detector = GPUDetector()
     detector.initialized = True
-    monkeypatch.setattr(detector_module, "pynvml", FakeNvml())
+    monkeypatch.setattr(detector_module, "pynvml", FakeNvml(), raising=False)
 
     with caplog.at_level("DEBUG", logger="app.gpu.detector"):
         detector.__del__()

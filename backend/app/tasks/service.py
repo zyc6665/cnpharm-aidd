@@ -346,6 +346,8 @@ async def dispatch_tool_task(
 async def _load_tool_and_version(
     db: AsyncSession,
     task_data: TaskCreate,
+    *,
+    allow_inactive_candidate: bool = False,
 ) -> tuple[Tool, ToolVersion, str]:
     result = await db.execute(
         select(Tool)
@@ -372,6 +374,12 @@ async def _load_tool_and_version(
     tool_version = version_result.scalar_one_or_none()
     if not tool_version:
         raise ValidationException("工具版本不存在")
+    if tool_version.tool_id != tool.id:
+        raise ValidationException("工具版本不属于该工具")
+    if tool_version.deprecated:
+        raise ValidationException("工具版本已废弃，不可运行")
+    if not tool_version.is_active and not allow_inactive_candidate:
+        raise ValidationException("工具版本未激活，不可运行")
 
     return tool, tool_version, str(version_id)
 
@@ -383,8 +391,13 @@ async def _prepare_tool_task_run(
     task_data: TaskCreate,
     extra_data: dict[str, object] | None = None,
     assign_default_project: bool,
+    allow_inactive_candidate: bool = False,
 ) -> tuple[Tool, ToolVersion, str, PreparedRun, dict[str, object]]:
-    tool, tool_version, version_id = await _load_tool_and_version(db, task_data)
+    tool, tool_version, version_id = await _load_tool_and_version(
+        db,
+        task_data,
+        allow_inactive_candidate=allow_inactive_candidate,
+    )
 
     task_extra_data = dict(extra_data or {})
     task_extra_data["resource_snapshot"] = build_task_resource_snapshot(
@@ -402,7 +415,8 @@ async def _prepare_tool_task_run(
         )
         task_extra_data = set_task_project_id(task_extra_data, project_id)
     elif assign_default_project and (
-        tool_emits_standard_artifacts(tool)
+        str((tool_version.config or {}).get("type") or "") == "k8s_job"
+        or tool_emits_standard_artifacts(tool, tool_version=tool_version)
         or standard_uploads_need_default_project(
             task_data.standard_input_uploads,
             tool_version.config,
@@ -499,6 +513,7 @@ async def create_and_schedule_tool_task(
     task_data: TaskCreate,
     direct_runner=default_direct_task_runner,
     extra_data: dict[str, object] | None = None,
+    allow_inactive_candidate: bool = False,
 ) -> Task:
     """Create a normal platform task and schedule it through the configured backend."""
     tool, tool_version, version_id, prepared, extra_data = await _prepare_tool_task_run(
@@ -507,6 +522,7 @@ async def create_and_schedule_tool_task(
         task_data=task_data,
         extra_data=extra_data,
         assign_default_project=True,
+        allow_inactive_candidate=allow_inactive_candidate,
     )
     if not prepared.ready:
         raise ValidationException(

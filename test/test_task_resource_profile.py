@@ -98,3 +98,36 @@ def test_build_task_resource_snapshot_resolves_approved_profile_id():
     assert snapshot["resource_profile"]["id"] == "gpu-large"
     assert snapshot["resource_request"]["gpu_required"] is True
     assert snapshot["resource_request"]["cpu"] == 16.0
+
+
+def test_registered_resource_profile_takes_precedence_over_shared_tool_gpu_fields() -> None:
+    snapshot = build_task_resource_snapshot(
+        {
+            "type": "k8s_job",
+            "resource_profile": "gpu-large",
+            "gpu_required": False,
+            "gpu_memory_mb": 0,
+        },
+        gpu_required=False,
+        gpu_memory_mb=0,
+        params={"device": "cpu"},
+    )
+
+    assert snapshot["resource_request"]["gpu_required"] is True
+    assert snapshot["resource_request"]["gpu_memory_mb"] == 24 * 1024
+
+
+def test_cpu_resource_profile_is_not_overridden_by_shared_tool_gpu_fields() -> None:
+    snapshot = build_task_resource_snapshot(
+        {
+            "type": "k8s_job",
+            "resource_profile": "cpu-medium",
+            "gpu_required": True,
+            "gpu_memory_mb": 8192,
+        },
+        gpu_required=True,
+        gpu_memory_mb=8192,
+    )
+
+    assert snapshot["resource_request"]["gpu_required"] is False
+    assert snapshot["resource_request"]["gpu_memory_mb"] == 0

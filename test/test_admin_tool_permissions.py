@@ -269,69 +269,17 @@ async def test_admin_update_tool_slug_rejects_duplicate(
 
 
 @pytest.mark.asyncio
-async def test_admin_create_tool_requires_valid_enabled_category(
+async def test_admin_legacy_tool_creation_route_is_retired(
     api_client: httpx.AsyncClient,
-    db_session: AsyncSession,
 ):
-    """管理员创建工具时必须提供有效且启用的分类。"""
-    enabled_category = ToolCategory(
-        name="Docking",
-        slug="docking",
-        sort_order=0,
-        is_enabled=True,
-    )
-    disabled_category = ToolCategory(
-        name="Disabled",
-        slug="disabled",
-        sort_order=1,
-        is_enabled=False,
-    )
-    db_session.add_all([enabled_category, disabled_category])
-    await db_session.commit()
-
-    missing_category_response = await api_client.post(
+    """管理员创建工具的旧入口返回明确的下线响应。"""
+    response = await api_client.post(
         "/api/v1/tools",
         headers={"Authorization": "Bearer admin-token"},
-        json={
-            "name": "Missing Category Tool",
-            "slug": "missing-category-tool",
-        },
+        json={"name": "Legacy Tool", "slug": "legacy-tool"},
     )
-    assert missing_category_response.status_code == 422
-
-    invalid_category_response = await api_client.post(
-        "/api/v1/tools",
-        headers={"Authorization": "Bearer admin-token"},
-        json={
-            "name": "Invalid Category Tool",
-            "slug": "invalid-category-tool",
-            "category_id": "non-existent-category-id",
-        },
-    )
-    assert invalid_category_response.status_code == 422
-
-    disabled_category_response = await api_client.post(
-        "/api/v1/tools",
-        headers={"Authorization": "Bearer admin-token"},
-        json={
-            "name": "Disabled Category Tool",
-            "slug": "disabled-category-tool",
-            "category_id": disabled_category.id,
-        },
-    )
-    assert disabled_category_response.status_code == 422
-
-    valid_response = await api_client.post(
-        "/api/v1/tools",
-        headers={"Authorization": "Bearer admin-token"},
-        json={
-            "name": "Valid Tool",
-            "slug": "valid-tool",
-            "category_id": enabled_category.id,
-        },
-    )
-    assert valid_response.status_code == 200
-    assert valid_response.json()["data"]["category_id"] == enabled_category.id
+    assert response.status_code == 410
+    assert "Tool Package" in response.json()["detail"]
 
 
 @pytest.mark.asyncio

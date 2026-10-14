@@ -44,25 +44,18 @@ def test_admin_tool_categories_page_has_management_actions():
     assert "formState.slug || formState.name" in page_source
 
 
-def test_admin_tool_forms_use_category_id_and_public_create_entry_is_removed():
-    """管理员工具表单应使用分类接口和 category_id，普通用户入口应移除。"""
+def test_admin_tool_registration_uses_tool_packages_only():
+    """管理员工具页只保留 Tool Package 注册入口，不暴露旧创建/导入入口。"""
     admin_tools_source = read_source("frontend/src/views/admin/Tools.vue")
-    create_source = read_source("frontend/src/views/tools/Create.vue")
-    create_form_domain_source = read_source("frontend/src/domain/tools/tool-create-form.ts")
     list_source = read_source("frontend/src/views/tools/List.vue")
     api_source = read_source("frontend/src/api/tools.ts")
+    router_source = read_source("frontend/src/router/index.ts")
 
     assert "adminGetToolCategories" in api_source
-
-    # Phase 3: admin/Tools.vue 工具表单交棒给 Create.vue，使用 router.push 而非内联 createTool/updateTool
-    assert "adminGetToolCategories" in admin_tools_source
-    assert "openCreatePage" in admin_tools_source  # 跳转到 Create.vue
-    assert "category_id" in admin_tools_source  # import 等流程仍使用 category_id
-
-    assert "name=\"category_id\"" in create_source
-    assert "formState.category_id" in create_source
-    assert "buildToolTemplateDraftPayload" in create_source
-    assert "category_id: formState.category_id" in create_form_domain_source
+    assert "openToolPackages" in admin_tools_source
+    assert "openCreatePage" not in admin_tools_source
+    assert "importToolConfig" not in admin_tools_source
+    assert "path: 'tools/create'" not in router_source
 
     assert "goToCreate" not in list_source
     assert "name: 'ToolCreate'" not in read_source("frontend/src/router/index.ts")
@@ -96,20 +89,9 @@ def test_tool_form_uses_structured_executor_config_editors():
     assert "sshOutputGlobsText" not in create_source
 
 
-def test_admin_tool_form_exposes_drug_discovery_template_draft_flow():
-    """工具创建页应能从药物研发模板创建工具草稿。"""
-    create_source = read_source("frontend/src/views/tools/Create.vue")
-    api_source = read_source("frontend/src/api/tools.ts")
+def test_legacy_tool_template_registration_page_is_not_routable():
+    """旧模板注册能力不再通过管理员创建路由暴露。"""
+    router_source = read_source("frontend/src/router/index.ts")
 
-    assert "listToolTemplates" in api_source
-    assert "createToolDraftFromTemplate" in api_source
-    assert "/tool-templates" in api_source
-
-    assert "药物研发工具模板" in create_source
-    assert "selectedToolTemplateKey" in create_source
-    assert "toolTemplates" in create_source
-    assert "handleCreateTemplateDraft" in create_source
-    assert "createToolDraftFromTemplate" in create_source
-    assert "resource_profile" in create_source
-    assert "推荐实现" in create_source
-    assert "implementation.project_url" in create_source
+    assert "path: 'tools/create'" not in router_source
+    assert "name: 'AdminToolCreate'" not in router_source

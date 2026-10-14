@@ -28,9 +28,18 @@ __all__ = [
 ]
 
 
-def build_tool_contract(tool: Any, *, capability: Any | None = None) -> dict[str, Any]:
+def build_tool_contract(
+    tool: Any,
+    *,
+    capability: Any | None = None,
+    tool_version: Any | None = None,
+) -> dict[str, Any]:
     """Build the stable platform-facing contract for a persisted tool."""
-    current_version = getattr(tool, "current_version", None)
+    current_version = (
+        tool_version
+        if tool_version is not None
+        else getattr(tool, "current_version", None)
+    )
     package_manifest = _package_manifest_from_version(current_version)
     if isinstance(package_manifest, dict):
         return _build_tool_package_contract(tool, current_version, package_manifest)
@@ -94,10 +103,19 @@ def contract_emits_standard_artifacts(contract: dict[str, Any]) -> bool:
     return False
 
 
-def tool_emits_standard_artifacts(tool: Any, *, capability: Any | None = None) -> bool:
+def tool_emits_standard_artifacts(
+    tool: Any,
+    *,
+    capability: Any | None = None,
+    tool_version: Any | None = None,
+) -> bool:
     """Return whether a persisted tool emits platform standard Artifacts."""
     return contract_emits_standard_artifacts(
-        build_tool_contract(tool, capability=capability)
+        build_tool_contract(
+            tool,
+            capability=capability,
+            tool_version=tool_version,
+        )
     )
 
 

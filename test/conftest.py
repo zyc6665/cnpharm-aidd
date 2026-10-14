@@ -19,6 +19,10 @@ os.environ.setdefault("CACHE_BACKEND", "memory")
 os.environ.setdefault("TASK_EXECUTION_BACKEND", "direct")
 os.environ.setdefault("CELERY_BROKER_URL", "")
 os.environ.setdefault("CELERY_RESULT_BACKEND", "")
+os.environ.setdefault("JWT_SECRET_KEY", "test-only-jwt-secret-key-not-for-deployment")
+os.environ.setdefault(
+    "SETTINGS_ENCRYPTION_KEY", "test-only-settings-encryption-key-not-for-deployment"
+)
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 if str(BACKEND_ROOT) not in sys.path:

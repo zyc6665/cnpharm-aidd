@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.time import utcnow
+from app.models.tasks import Task, TaskStatus
 from app.models.tools import Tool, ToolVersion
 
 if TYPE_CHECKING:
@@ -158,6 +159,86 @@ class ToolVersionManager:
             }
         )
 
+        return tool
+
+    async def promote_version(
+        self,
+        tool_id: str,
+        version_id: str,
+        user_id: Optional[str] = None,
+    ) -> Tool:
+        tool_result = await self.db.execute(
+            select(Tool)
+            .where(Tool.id == tool_id)
+            .with_for_update()
+        )
+        tool = tool_result.scalar_one_or_none()
+        if tool is None:
+            raise VersionError("Tool not found", "TOOL_NOT_FOUND")
+
+        version_result = await self.db.execute(
+            select(ToolVersion)
+            .where(ToolVersion.id == version_id)
+            .with_for_update()
+        )
+        version = version_result.scalar_one_or_none()
+        if version is None:
+            raise VersionError("Version not found", "VERSION_NOT_FOUND")
+        if version.tool_id != tool.id:
+            raise VersionError(
+                "Version does not belong to this tool",
+                "VERSION_MISMATCH",
+            )
+        if version.deprecated:
+            raise VersionError(
+                "Cannot promote a deprecated version",
+                "VERSION_DEPRECATED",
+            )
+
+        if not version.is_active:
+            if (version.config or {}).get("type") != "k8s_job":
+                raise VersionError(
+                    "Only Kubernetes candidates can be promoted while inactive",
+                    "VERSION_INACTIVE",
+                )
+
+            smoke_result = await self.db.execute(
+                select(Task.status)
+                .where(
+                    Task.tool_id == tool.id,
+                    Task.tool_version_id == version.id,
+                    Task.extra_data["run_kind"].as_string()
+                    == "tool_version_smoke",
+                )
+                .order_by(Task.created_at.desc(), Task.id.desc())
+                .limit(1)
+            )
+            if smoke_result.scalar_one_or_none() != TaskStatus.SUCCESS.value:
+                raise VersionError(
+                    "A successful smoke task is required before promotion",
+                    "SMOKE_REQUIRED",
+                )
+
+            version.is_active = True
+
+        previous_version_id = tool.current_version_id
+        tool.current_version_id = version.id
+        await self.db.commit()
+        await self.db.refresh(tool)
+        await self._clear_tool_cache(tool.id)
+
+        logger.info(
+            "Promoted tool %s version: %s -> %s",
+            tool.id,
+            previous_version_id,
+            version.id,
+            extra={
+                "tool_id": tool.id,
+                "old_version_id": previous_version_id,
+                "new_version_id": version.id,
+                "user_id": user_id,
+            },
+        )
         return tool
 
     async def deprecate_version(

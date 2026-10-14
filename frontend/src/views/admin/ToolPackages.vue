@@ -14,7 +14,7 @@
       type="info"
       show-icon
       message="第一步：登记并校验模型交付物"
-      description="交付包包含运行环境、模型适配器和标准 Artifact 契约。发布交付包不会自动创建可运行工具；校验并发布后，请在详情中创建平台工具。"
+      description="交付包包含运行环境、模型适配器和标准 Artifact 契约。发布不会自动创建可运行工具；管理员可从详情注册 K8s 候选版本。平台不构建模型镜像。"
     />
 
     <a-card>
@@ -237,6 +237,54 @@
       </a-form>
     </a-modal>
 
+    <a-modal
+      v-model:open="kubernetesRegistrationModalOpen"
+      title="注册 Kubernetes 候选版本"
+      :confirm-loading="kubernetesRegistrationSaving"
+      :ok-button-props="{ disabled: !canSubmitKubernetesRegistration }"
+      width="680px"
+      @ok="handleRegisterKubernetesVersion"
+    >
+      <a-alert
+        v-if="kubernetesOptions"
+        class="modal-alert"
+        type="info"
+        show-icon
+        :message="`镜像：${kubernetesOptions.image || '未声明'}`"
+        :description="`Image digest：${kubernetesOptions.image_digest || '缺失'}；Manifest digest：${kubernetesOptions.manifest_digest}`"
+      />
+      <a-form layout="vertical">
+        <a-form-item label="运行变体" required>
+          <a-select
+            v-model:value="registrationVariantName"
+            :options="registrationVariantOptions"
+            @change="handleRegistrationVariantChange"
+          />
+        </a-form-item>
+        <a-form-item label="平台资源档位" required>
+          <a-select v-model:value="registrationResourceProfile" :options="resourceProfileOptions" />
+        </a-form-item>
+        <a-form-item label="ToolVersion 版本号" required>
+          <a-input v-model:value="registrationToolVersion" :maxlength="50" />
+        </a-form-item>
+        <a-alert
+          v-if="kubernetesOptions?.existing_tool"
+          class="modal-alert"
+          type="warning"
+          show-icon
+          :message="`将为 ${kubernetesOptions.existing_tool.slug} 添加版本`"
+          description="不会修改 Tool.current_version_id；已在运行的 SSH 版本保持不变。"
+        />
+        <a-form-item v-else label="新工具分类" required>
+          <a-select
+            v-model:value="registrationCategoryId"
+            :options="categoryOptions"
+            placeholder="选择分类"
+          />
+        </a-form-item>
+      </a-form>
+    </a-modal>
+
     <a-drawer
       v-model:open="detailDrawerOpen"
       title="Tool Package 详情与校验"
@@ -263,16 +311,136 @@
           </a-descriptions>
           <p class="next-step-hint">
             {{ selectedPackage.status === 'published'
-              ? '交付包已发布，可以创建平台工具并配置分类与执行方式。'
-              : '完成签名、校验并发布交付包后，即可创建平台工具。' }}
+              ? '已发布的交付包可以继续注册 Kubernetes 候选版本。'
+              : '完成签名、校验并发布交付包后，即可注册 Kubernetes 候选版本。' }}
           </p>
-          <router-link
-            v-if="selectedPackage.status === 'published'"
-            :to="{ path: '/admin/tools/create', query: { mode: 'package', package_id: selectedPackage.id } }"
-          >
-            <a-button type="primary">创建平台工具</a-button>
-          </router-link>
-          <a-button v-else type="primary" disabled>创建平台工具</a-button>
+        </section>
+
+        <section v-if="selectedPackage.status === 'published'" class="detail-section">
+          <h3>Kubernetes 候选版本</h3>
+          <a-alert
+            show-icon
+            type="info"
+            message="注册只创建 inactive ToolVersion，不会切换现有 SSH 当前版本。"
+            description="新建的平台工具保持草稿状态。候选版本需通过成功的真实 smoke 后才能提升；原 SSH 版本保留，可用于回切。"
+          />
+          <a-alert
+            class="modal-alert"
+            show-icon
+            type="warning"
+            message="真实 Smoke 的基础设施前置条件"
+            description="执行前确认 K8s Worker、MinIO 已部署，且 Registry 镜像可被节点拉取。输入文件需先上传到平台，或绑定已有 ArtifactVersion。"
+          />
+          <a-alert
+            v-if="kubernetesOptionsError"
+            show-icon
+            type="warning"
+            message="Kubernetes 注册选项暂不可用"
+            :description="kubernetesOptionsError"
+          />
+          <a-alert
+            v-if="kubernetesOptions && !canRegisterKubernetesPackage(kubernetesOptions)"
+            show-icon
+            type="warning"
+            message="该 Package 暂不满足 Kubernetes 注册条件"
+            description="需要声明 k8s_job executor、有效的 sha256 镜像摘要、可用变体和平台登记的资源档位。"
+          />
+          <a-space wrap>
+            <a-button
+              type="primary"
+              :loading="kubernetesOptionsLoading"
+              :disabled="!canOpenKubernetesRegistration"
+              @click="openKubernetesRegistration"
+            >
+              注册 K8s 候选版本
+            </a-button>
+            <a-button
+              :loading="kubernetesOptionsLoading"
+              @click="loadKubernetesRegistrationOptions"
+            >
+              刷新注册选项
+            </a-button>
+          </a-space>
+          <template v-if="kubernetesOptions?.existing_tool">
+            <p class="next-step-hint">
+              平台工具：{{ kubernetesOptions.existing_tool.name }}（{{ kubernetesOptions.existing_tool.status }}）
+              · 当前版本：{{ kubernetesOptions.existing_tool.current_version_id || '未设置' }}
+            </p>
+            <a-table
+              v-if="kubernetesOptions.tool_versions.length"
+              class="tool-version-table"
+              size="small"
+              :columns="toolVersionColumns"
+              :data-source="kubernetesOptions.tool_versions"
+              :pagination="false"
+              row-key="id"
+              :scroll="{ x: 720 }"
+            >
+              <template #bodyCell="{ column, record }">
+                <template v-if="column.key === 'version'">
+                  <a-space size="small" wrap>
+                    <span>{{ record.version }}</span>
+                    <a-tag v-if="isCurrentVersion(record.id)" color="blue">当前</a-tag>
+                    <a-tag v-else-if="record.is_active" color="green">已激活</a-tag>
+                    <a-tag v-if="record.deprecated" color="default">已废弃</a-tag>
+                  </a-space>
+                </template>
+                <template v-else-if="column.key === 'executor'">
+                  {{ record.executor_type || '未知' }}
+                </template>
+                <template v-else-if="column.key === 'smoke'">
+                  <a-tag :color="getSmokeStatusColor(record.smoke_status, record.executor_type)">
+                    {{ getSmokeStatusLabel(record.smoke_status, record.executor_type) }}
+                  </a-tag>
+                  <small v-if="record.smoke_task_id" class="smoke-task-id">
+                    {{ record.smoke_task_id }}
+                  </small>
+                </template>
+                <template v-else-if="column.key === 'actions'">
+                  <a-space size="small">
+                    <a-button
+                      v-if="canSmokeKubernetesToolVersion(record)"
+                      size="small"
+                      :loading="smokeVersionId === record.id"
+                      @click="openSmokeModal(record)"
+                    >
+                      Smoke
+                    </a-button>
+                    <a-popconfirm
+                      v-if="canPromoteKubernetesToolVersion(record, kubernetesOptions?.existing_tool?.current_version_id)"
+                      :title="`将 ${record.version} 切换为当前版本？`"
+                      ok-text="确认切换"
+                      cancel-text="取消"
+                      @confirm="handlePromoteToolVersion(record)"
+                    >
+                      <a-button
+                        size="small"
+                        type="link"
+                        :loading="promotionVersionId === record.id"
+                      >
+                        {{ record.is_active ? '回切' : '提升' }}
+                      </a-button>
+                    </a-popconfirm>
+                    <span
+                      v-if="!canSmokeKubernetesToolVersion(record) && !canPromoteKubernetesToolVersion(record, kubernetesOptions?.existing_tool?.current_version_id)"
+                      class="muted-action"
+                    >
+                      {{ isCurrentVersion(record.id) ? '当前版本' : '不可操作' }}
+                    </span>
+                  </a-space>
+                </template>
+              </template>
+            </a-table>
+            <a-empty
+              v-else
+              class="tool-version-empty"
+              description="尚无已注册版本，可从上方注册 K8s 候选版本"
+            />
+          </template>
+          <a-empty
+            v-else-if="kubernetesOptions && !kubernetesOptionsLoading"
+            description="注册会创建 inactive 候选版本；当前 SSH 版本不会切换"
+          />
         </section>
 
         <section class="detail-section">
@@ -329,6 +497,32 @@
         </section>
       </template>
     </a-drawer>
+
+    <a-modal
+      v-model:open="smokeModalOpen"
+      title="执行候选版本 Smoke"
+      :confirm-loading="smokeSubmitting"
+      :ok-button-props="{ disabled: !parsedSmokeInput }"
+      width="680px"
+      @ok="handleSubmitSmoke"
+    >
+      <a-alert
+        class="modal-alert"
+        show-icon
+        type="info"
+        :message="`候选版本：${selectedSmokeVersion?.version || '-'}`"
+        description="填写 TaskInput JSON。文件需先上传到平台，并在 file_ids、input_bindings 或 standard_input_uploads 中提供对应 ID。"
+      />
+      <a-form-item label="Smoke 输入 JSON" required>
+        <a-textarea v-model:value="smokeInputText" :rows="14" />
+      </a-form-item>
+      <a-alert
+        v-if="!parsedSmokeInput"
+        show-icon
+        type="error"
+        message="请输入有效的 JSON 对象"
+      />
+    </a-modal>
   </div>
 </template>
 
@@ -341,25 +535,43 @@
   import ToolParameterSchemaEditor from '@/components/tools/ToolParameterSchemaEditor.vue'
   import {
     createToolPackage,
+    getKubernetesRegistrationOptions,
     getToolPackage,
     listToolPackages,
-    publishToolPackage
+    publishToolPackage,
+    registerKubernetesToolVersion
   } from '@/api/tool-packages'
   import {
+    adminGetToolCategories,
+    promoteToolVersion,
+    smokeToolVersion
+  } from '@/api/tools'
+  import {
+    canPromoteKubernetesToolVersion,
+    canRegisterKubernetesPackage,
+    canSmokeKubernetesToolVersion,
+    createDefaultKubernetesToolVersion,
     formatToolPackageManifest,
     getToolPackageArtifactSlots,
     getToolPackageContractSummary,
     getToolPackagePublishReadiness,
     getToolPackageValidationColor,
     getToolPackageValidationErrors,
-    getToolPackageVariantSummary
+    getKubernetesRegistrationVariants,
+    getToolPackageVariantSummary,
+    parseKubernetesSmokeInput
   } from '@/domain/tool-packages'
   import {
     buildToolPackageManifest,
     createToolPackageGuidedDraft
   } from '@/domain/tool-packages/manifest'
   import { getStandardArtifactTypeLabelKey } from '@/domain/tools/standard-artifact-inputs'
-  import type { ToolPackage } from '@/types/tool-packages'
+  import type {
+    KubernetesToolVersionSummary,
+    KubernetesRegistrationOptions,
+    ToolPackage
+  } from '@/types/tool-packages'
+  import type { Category } from '@/types/models'
   import { validateParameterSchema } from '@/domain/tools/parameter-schema'
   import { WORKFLOW_ARTIFACT_SEMANTIC_TYPES } from '@/workflow/semantic-types'
 
@@ -369,13 +581,34 @@
   const detailLoading = ref(false)
   const createModalOpen = ref(false)
   const detailDrawerOpen = ref(false)
+  const kubernetesOptionsLoading = ref(false)
+  const kubernetesOptionsError = ref('')
+  const kubernetesRegistrationModalOpen = ref(false)
+  const kubernetesRegistrationSaving = ref(false)
+  const smokeModalOpen = ref(false)
+  const smokeSubmitting = ref(false)
+  const smokeVersionId = ref<string | null>(null)
+  const promotionVersionId = ref<string | null>(null)
   const packages = ref<ToolPackage[]>([])
   const selectedPackage = ref<ToolPackage | null>(null)
+  const selectedSmokeVersion = ref<KubernetesToolVersionSummary | null>(null)
+  const kubernetesOptions = ref<KubernetesRegistrationOptions | null>(null)
+  const categories = ref<Category[]>([])
+  const registrationVariantName = ref('')
+  const registrationResourceProfile = ref('')
+  const registrationToolVersion = ref('')
+  const registrationCategoryId = ref<string | undefined>()
   const total = ref(0)
   const page = ref(1)
   const pageSize = ref(20)
   const manifestText = ref('')
   const signatureText = ref('')
+  const smokeInputText = ref(JSON.stringify({
+    params: {},
+    file_ids: [],
+    input_bindings: {},
+    standard_input_uploads: {}
+  }, null, 2))
   const registrationEditor = ref<'guided' | 'json'>('guided')
   const guidedDraft = ref(createToolPackageGuidedDraft())
   const packageParameterSchemaValid = ref(true)
@@ -389,6 +622,13 @@
     { title: '操作', key: 'actions', width: 110 }
   ]
 
+  const toolVersionColumns = [
+    { title: '版本', key: 'version', width: 240 },
+    { title: '执行器', key: 'executor', width: 100 },
+    { title: 'Smoke', key: 'smoke', width: 130 },
+    { title: '操作', key: 'actions', width: 170 }
+  ]
+
   const pagination = computed(() => ({
     current: page.value,
     pageSize: pageSize.value,
@@ -399,12 +639,45 @@
   const formattedSelectedManifest = computed(() =>
     formatToolPackageManifest(selectedPackage.value)
   )
+  const parsedSmokeInput = computed(() => parseKubernetesSmokeInput(smokeInputText.value))
   const validationErrors = computed(() => getToolPackageValidationErrors(selectedPackage.value))
   const artifactInputs = computed(() => getToolPackageArtifactSlots(selectedPackage.value, 'inputs'))
   const artifactOutputs = computed(() => getToolPackageArtifactSlots(selectedPackage.value, 'outputs'))
   const publishReadiness = computed(() => getToolPackagePublishReadiness(selectedPackage.value))
   const publishReadinessType = computed(() => publishReadiness.value.type)
   const publishReadinessMessage = computed(() => publishReadiness.value.message)
+  const canOpenKubernetesRegistration = computed(() =>
+    Boolean(
+      selectedPackage.value?.status === 'published' &&
+      canRegisterKubernetesPackage(kubernetesOptions.value)
+    )
+  )
+  const canSubmitKubernetesRegistration = computed(() =>
+    Boolean(
+      canOpenKubernetesRegistration.value &&
+      registrationVariantName.value &&
+      registrationResourceProfile.value &&
+      registrationToolVersion.value.trim() &&
+      (kubernetesOptions.value?.existing_tool || registrationCategoryId.value)
+    )
+  )
+  const registrationVariantOptions = computed(() =>
+    getKubernetesRegistrationVariants(kubernetesOptions.value).map(variant => ({
+      label: `${variant.name} · ${variant.accelerator}`,
+      value: variant.name
+    }))
+  )
+  const resourceProfileOptions = computed(() =>
+    (kubernetesOptions.value?.resource_profiles || []).map(profile => ({
+      label: profile,
+      value: profile
+    }))
+  )
+  const categoryOptions = computed(() =>
+    categories.value
+      .filter(category => category.is_enabled !== false)
+      .map(category => ({ label: category.name, value: category.id }))
+  )
 
   async function loadPackages() {
     loading.value = true
@@ -497,6 +770,8 @@
 
   async function openDetail(item: ToolPackage) {
     selectedPackage.value = item
+    kubernetesOptions.value = null
+    kubernetesOptionsError.value = ''
     detailDrawerOpen.value = true
     detailLoading.value = true
     try {
@@ -505,10 +780,187 @@
       packages.value = packages.value.map(current =>
         current.id === item.id ? response.data : current
       )
+      if (response.data.status === 'published') {
+        await loadKubernetesRegistrationOptions()
+      }
     } catch (cause) {
       message.error(cause instanceof Error ? cause.message : 'Tool Package 详情加载失败')
     } finally {
       detailLoading.value = false
+    }
+  }
+
+  async function loadKubernetesRegistrationOptions() {
+    const packageId = selectedPackage.value?.id
+    if (!packageId || selectedPackage.value?.status !== 'published') return
+
+    kubernetesOptionsLoading.value = true
+    kubernetesOptionsError.value = ''
+    try {
+      const response = await getKubernetesRegistrationOptions(packageId)
+      kubernetesOptions.value = response.data
+    } catch (cause) {
+      kubernetesOptionsError.value = cause instanceof Error
+        ? cause.message
+        : '无法加载 K8s 注册选项'
+    } finally {
+      kubernetesOptionsLoading.value = false
+    }
+  }
+
+  async function openKubernetesRegistration() {
+    if (!kubernetesOptions.value) await loadKubernetesRegistrationOptions()
+    const options = kubernetesOptions.value
+    if (!options || !canRegisterKubernetesPackage(options)) {
+      message.error('该 Package 未满足 K8s executor、镜像摘要或平台资源档位要求')
+      return
+    }
+
+    if (categories.value.length === 0) {
+      try {
+        const response = await adminGetToolCategories()
+        categories.value = response.data
+      } catch (cause) {
+        message.error(cause instanceof Error ? cause.message : '工具分类加载失败')
+        return
+      }
+    }
+
+    const firstVariant = getKubernetesRegistrationVariants(options)[0]
+    registrationVariantName.value = firstVariant?.name || ''
+    registrationResourceProfile.value = selectDefaultResourceProfile(
+      firstVariant?.accelerator,
+      options.resource_profiles
+    )
+    registrationToolVersion.value = createDefaultKubernetesToolVersion(
+      options.package_version,
+      firstVariant?.name || 'default'
+    )
+    registrationCategoryId.value = categoryOptions.value[0]?.value
+    kubernetesRegistrationModalOpen.value = true
+  }
+
+  function handleRegistrationVariantChange(value: string) {
+    registrationVariantName.value = value
+    const variant = kubernetesOptions.value?.variants.find(item => item.name === value)
+    registrationToolVersion.value = createDefaultKubernetesToolVersion(
+      kubernetesOptions.value?.package_version || '1.0.0',
+      value
+    )
+    registrationResourceProfile.value = selectDefaultResourceProfile(
+      variant?.accelerator,
+      kubernetesOptions.value?.resource_profiles || []
+    )
+  }
+
+  function selectDefaultResourceProfile(
+    accelerator: string | undefined,
+    profiles: string[]
+  ): string {
+    const preferredPrefix = accelerator?.toLowerCase().includes('cpu') ? 'cpu-' : 'gpu-'
+    return profiles.find(profile => profile.startsWith(preferredPrefix)) || profiles[0] || ''
+  }
+
+  async function handleRegisterKubernetesVersion() {
+    const pkg = selectedPackage.value
+    const options = kubernetesOptions.value
+    if (!pkg || !options || !canSubmitKubernetesRegistration.value) return
+
+    kubernetesRegistrationSaving.value = true
+    try {
+      const response = await registerKubernetesToolVersion(pkg.id, {
+        package_version_id: options.package_version_id,
+        target_tool_id: options.existing_tool?.id || null,
+        category_id: options.existing_tool ? null : registrationCategoryId.value,
+        tool_version: registrationToolVersion.value.trim(),
+        variant_name: registrationVariantName.value,
+        resource_profile: registrationResourceProfile.value
+      })
+      kubernetesRegistrationModalOpen.value = false
+      message.success(`候选版本 ${response.data.version.version} 已注册，当前版本未切换`)
+      await loadKubernetesRegistrationOptions()
+    } catch (cause) {
+      message.error(cause instanceof Error ? cause.message : 'K8s 候选版本注册失败')
+    } finally {
+      kubernetesRegistrationSaving.value = false
+    }
+  }
+
+  function isCurrentVersion(versionId: string): boolean {
+    return kubernetesOptions.value?.existing_tool?.current_version_id === versionId
+  }
+
+  function getSmokeStatusLabel(status: string | null, executorType: string | null): string {
+    if (executorType !== 'k8s_job') return '不适用'
+    if (!status) return '未执行'
+    return {
+      PENDING: '排队中',
+      RUNNING: '运行中',
+      SUCCESS: '通过',
+      FAILURE: '失败',
+      CANCELED: '已取消'
+    }[status] || status
+  }
+
+  function getSmokeStatusColor(status: string | null, executorType: string | null): string {
+    if (executorType !== 'k8s_job' || !status) return 'default'
+    return {
+      PENDING: 'processing',
+      RUNNING: 'processing',
+      SUCCESS: 'success',
+      FAILURE: 'error',
+      CANCELED: 'warning'
+    }[status] || 'default'
+  }
+
+  function openSmokeModal(version: KubernetesToolVersionSummary) {
+    selectedSmokeVersion.value = version
+    smokeInputText.value = JSON.stringify({
+      params: {},
+      file_ids: [],
+      input_bindings: {},
+      standard_input_uploads: {}
+    }, null, 2)
+    smokeModalOpen.value = true
+  }
+
+  async function handleSubmitSmoke() {
+    const toolId = kubernetesOptions.value?.existing_tool?.id
+    const version = selectedSmokeVersion.value
+    const input = parsedSmokeInput.value
+    if (!toolId || !version || !input) {
+      message.error('Smoke 输入必须是有效的 JSON 对象')
+      return
+    }
+
+    smokeSubmitting.value = true
+    smokeVersionId.value = version.id
+    try {
+      const response = await smokeToolVersion(toolId, version.id, input)
+      smokeModalOpen.value = false
+      message.success(`Smoke 任务已提交：${response.data.task_id}`)
+      await loadKubernetesRegistrationOptions()
+    } catch (cause) {
+      message.error(cause instanceof Error ? cause.message : 'Smoke 任务提交失败')
+    } finally {
+      smokeSubmitting.value = false
+      smokeVersionId.value = null
+    }
+  }
+
+  async function handlePromoteToolVersion(version: KubernetesToolVersionSummary) {
+    const toolId = kubernetesOptions.value?.existing_tool?.id
+    if (!toolId) return
+
+    promotionVersionId.value = version.id
+    try {
+      await promoteToolVersion(toolId, version.id)
+      message.success(`版本 ${version.version} 已设为当前版本`)
+      await loadKubernetesRegistrationOptions()
+    } catch (cause) {
+      message.error(cause instanceof Error ? cause.message : '版本切换失败')
+    } finally {
+      promotionVersionId.value = null
     }
   }
 

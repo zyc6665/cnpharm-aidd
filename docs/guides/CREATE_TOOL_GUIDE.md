@@ -2,6 +2,20 @@
 
 本指南帮助你在SciTool平台上快速创建和测试新工具。
 
+## 新模型的管理员注册流程
+
+新接入的模型不通过本指南后续的脚本创建流程注册。模型维护人员负责准备并验证模型镜像；管理员通过平台的 Tool Package 管理页面注册模型：
+
+1. 按[模型 Runtime 打包规范](model-runtime-packaging.md)准备模型镜像和 `MODEL_PACKAGE.yaml`，镜像必须使用不可变 digest。镜像构建、签名和推送由模型维护人员或管理员在平台外完成，平台不会替模型构建或适配镜像。
+2. 管理员在 Tool Package 页面登记、校验并发布签名后的 Tool Package v2。
+3. 从已发布包详情选择“注册 K8s 候选版本”，选定 manifest 中的运行变体和平台已登记的资源档位。对已有工具只新增 inactive 版本，不会改动当前 SSH 版本；新工具会先以草稿状态创建。
+4. 在候选版本列表提交 Smoke 输入。输入 JSON 可包含 `params`、`file_ids`、`input_bindings`、`standard_input_uploads`，其中文件必须先上传到平台，或绑定已有 ArtifactVersion。最新 Smoke 任务必须真实成功，候选版本才允许提升；后续 Smoke 失败会再次关闭提升门禁。
+5. 管理员确认后提升候选版本为当前版本。原版本仍保留；如需回滚，可在版本列表中将仍有效的旧 SSH 版本切回当前版本。
+
+真实 Smoke 不是部署就绪探测。执行前必须确认任务执行后端能访问 Kubernetes、模型镜像可被目标节点拉取、MinIO bucket 和最小权限凭据已配置。Celery 模式还需要可用的集群执行 Worker。基础设施部署细节见 [Kubernetes 开发环境部署说明](../../deploy/kubernetes/README.md)。
+
+下方基于脚本和 `tool_config` 的步骤仅供仍在使用旧工具注册流程的维护者参考，不应用于新模型的 Tool Package 注册。
+
 ---
 
 ## 📋 准备工作

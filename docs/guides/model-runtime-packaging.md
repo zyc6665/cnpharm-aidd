@@ -16,6 +16,16 @@
 - `environment.yml`、`requirements.txt` 和 wheelhouse 只作为构建线索，不能替代已验证运行产物。
 - Executor 不安装依赖，只选择已验证的 Runtime Env，挂载权重、输入目录、输出目录，然后执行 `platform_run.sh`。
 
+## 平台注册与镜像责任
+
+- 模型维护人员负责构建、验证并推送模型镜像；平台只管理管理员注册的 Tool Package 和 ToolVersion，不接收模型源码、权重包或本地构建目录。
+- Tool Package v2 的主运行产物必须是 `container`，声明镜像地址和 `sha256:<64位十六进制>` digest。平台注册时按 digest 固定镜像引用，不接受管理员在注册请求中覆盖 manifest 或提交任意 Pod 配置。
+- Tool Package 经管理员校验、签名并发布后，管理员才可从详情创建 Kubernetes 候选版本。注册不会切换现有当前版本；候选最新一次真实 Smoke 必须成功才能显式提升，后续失败会关闭提升门禁。
+- Smoke 输入沿用任务输入契约：`params`、`file_ids`、`input_bindings`、`standard_input_uploads`。文件应先进入平台文件存储，Artifact 输入应绑定有效 ArtifactVersion。
+- 版本提升只更新当前版本指针；旧版本保留，未废弃的旧 SSH 版本可用于回切。平台不负责适配单个模型，也不把 registry 凭据或 Kubernetes Secret 写入 Tool Package、镜像或 ToolVersion。
+
+Smoke 成功依赖真实执行环境：执行后端需能提交并观察 K8s Job，节点需能拉取 digest 固定的镜像，Job 需能访问 MinIO 输入输出 bucket。Celery 执行模式还需部署集群 Worker。开发环境配置见 [Kubernetes 部署说明](../../deploy/kubernetes/README.md)。
+
 ## 打包边界
 
 - 模型包可以修改 `original_model/` 内的兼容代码、runtime wrapper、测试和样例。

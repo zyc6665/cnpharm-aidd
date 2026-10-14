@@ -98,7 +98,7 @@ async def prepare_run(db: AsyncSession, *, input: RunPreparationInput) -> Prepar
             project_id=project_id,
         )
 
-    contract = build_tool_contract(input.tool)
+    contract = build_tool_contract(input.tool, tool_version=input.tool_version)
     artifact_inputs = artifact_input_slots_for_run(contract, input.workflow_node)
     artifact_inputs_by_name = artifact_input_slots_by_name(artifact_inputs)
     accepts_standard_bindings = tool_accepts_standard_input_bindings(

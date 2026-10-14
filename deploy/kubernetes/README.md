@@ -105,6 +105,17 @@ mirrors:
 
 启用真实 K8s executor 前，必须在 `sciminer-model-jobs` 创建 MinIO client Secret（键名 `access-key`、`secret-key`），并确保 Worker Secret 中的数据库、Redis、MinIO、Celery 和 SSH 配置与当前环境一致。Worker 的 RBAC 只允许在模型 Job namespace 管理 Job、Pod、日志和事件，不允许读取 Kubernetes Secret。
 
+管理员界面中的候选版本 Smoke 会创建真实平台任务，不会自动检查或修复基础设施。使用 Celery 执行模式时，必须先部署并确认 `sciminer-execution-worker` 可用；使用 direct 模式时，运行 API 的进程必须具备提交和观察 K8s Job 所需的集群连接配置。Smoke 前还要确认 `sciminer-model-jobs` 中的 MinIO client Secret、目标 bucket 权限以及目标节点的 Registry 拉取配置均已就绪。Tool Package 中的镜像 digest 只能证明镜像身份固定，不能证明镜像可拉取或模型推理正确。
+
+可先检查基础组件和命名空间资源是否存在，不要输出 Secret 内容：
+
+```bash
+kubectl -n sciminer-system get deploy sciminer-postgres sciminer-redis
+kubectl -n sciminer-storage get deploy sciminer-minio sciminer-registry
+kubectl -n sciminer-model-jobs get secret sciminer-minio-client
+kubectl get nodes -o wide
+```
+
 smoke image 遵循平台的 `aidd.sciminer/result.v2` 契约，运行后在 `/workspace/output/result.json` 生成带 SHA-256 的 `run_report@1` 输出；配置对象存储凭据和输入描述符后，它还会验证 MinIO 输入 staging、输出上传和 `result.json` 最后提交，不替代真实模型镜像的推理验证。
 
 仓库只保留管理员使用的通用模型镜像构建模板：`deploy/kubernetes/model-image-template/`。具体模型的源码、权重、环境归档和镜像构建工作区（包括根目录下的 `model-build/`）均属于本地或制品存储，不应加入 Git 或随平台源码推送。
@@ -205,11 +216,11 @@ kubectl -n sciminer-system delete deployment/sciminer-execution-worker \
 
 ## 5. 构建 smoke image
 
-Worker 与 API 共用 `backend/Dockerfile` 的 `production` 阶段，Worker 仅通过 Kubernetes `command/args` 覆盖为 Celery 进程，不需要单独维护一份运行时依赖。当前执行环境的 Docker CLI 已安装但 daemon 尚未启动，因此这里只提供可复现构建命令，未执行构建或推送。准备好可构建机器后执行：
+Worker 与 API 共用 `backend/Dockerfile` 的 `production` 阶段，Worker 仅通过 Kubernetes `command/args` 覆盖为 Celery 进程，不需要单独维护一份运行时依赖。请在 Docker daemon 可用且能够访问开发 Registry 的构建机上执行：
 
 ```bash
 cd backend
-export IMAGE_REPOSITORY='10.202.2.228:30500/sciminer/backend'
+export IMAGE_REPOSITORY='<K3S节点IP>:30500/sciminer/backend'
 export IMAGE_VERSION='worker-20261008'
 docker build --target production -t "$IMAGE_REPOSITORY:$IMAGE_VERSION" .
 docker push "$IMAGE_REPOSITORY:$IMAGE_VERSION"

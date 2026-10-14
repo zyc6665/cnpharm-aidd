@@ -100,17 +100,18 @@ test('首页与注册页不应再宣传 GPU 或积分奖励', () => {
   assert.equal(registerSource.includes("t('auth.invitationBonus')"), false)
 })
 
-test('管理员工具管理页应接入完整工具创建与编辑路由', () => {
+test('管理员工具管理页应保留旧工具编辑并切换到 Tool Package 注册', () => {
   const routerSource = readSource('src/router/index.ts')
   const adminToolsSource = readSource('src/views/admin/Tools.vue')
   const createSource = readSource('src/views/tools/Create.vue')
 
-  assert.equal(routerSource.includes("path: 'tools/create'"), true)
-  assert.equal(routerSource.includes("name: 'AdminToolCreate'"), true)
+  assert.equal(routerSource.includes("path: 'tools/create'"), false)
+  assert.equal(routerSource.includes("name: 'AdminToolCreate'"), false)
   assert.equal(routerSource.includes("path: 'tools/:id/edit'"), true)
   assert.equal(routerSource.includes("name: 'AdminToolEdit'"), true)
 
-  assert.equal(adminToolsSource.includes("router.push({ path: '/admin/tools/create', query: { mode } })"), true)
+  assert.equal(adminToolsSource.includes("router.push('/admin/tool-packages')"), true)
+  assert.equal(adminToolsSource.includes("router.push({ path: '/admin/tools/create', query: { mode } })"), false)
   assert.equal(adminToolsSource.includes("router.push(`/admin/tools/${tool.id}/edit`)"), true)
   assert.equal(adminToolsSource.includes('showCreateModal'), false)
 
@@ -123,13 +124,13 @@ test('管理员工具管理页应接入完整工具创建与编辑路由', () =>
   assert.equal(createSource.includes('ssh_password_ref'), true)
 })
 
-test('管理员工具管理页应提供 platform_tool.json 导入入口', () => {
+test('管理员工具管理页不应再提供旧 platform_tool.json 导入入口', () => {
   const adminToolsSource = readSource('src/views/admin/Tools.vue')
   const toolsApiSource = readSource('src/api/tools.ts')
 
-  assert.equal(adminToolsSource.includes('handleImportConfig'), true)
-  assert.equal(adminToolsSource.includes('importConfigText'), true)
-  assert.equal(adminToolsSource.includes('importToolConfig'), true)
+  assert.equal(adminToolsSource.includes('handleImportConfig'), false)
+  assert.equal(adminToolsSource.includes('importConfigText'), false)
+  assert.equal(adminToolsSource.includes('importToolConfig'), false)
 
   assert.equal(toolsApiSource.includes('importToolConfig'), true)
   assert.equal(toolsApiSource.includes('/tools/import-config'), true)

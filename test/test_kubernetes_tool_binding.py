@@ -95,3 +95,63 @@ def test_build_kubernetes_tool_config_rejects_packages_without_k8s_support():
             variant_name="nvidia-cuda",
             resource_profile="gpu-large",
         )
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        ("missing_variant", "variant is not registered"),
+        ("unknown_profile", "未登记的资源档位"),
+        ("non_container", "primary container image and digest"),
+        ("missing_digest", "primary container image and digest"),
+        ("invalid_digest", "image_digest must be a sha256 digest"),
+    ],
+)
+def test_build_kubernetes_tool_config_rejects_invalid_binding_inputs(
+    mutation: str,
+    message: str,
+):
+    from app.tool_packages.kubernetes_binding import KubernetesToolBindingError
+    from app.tool_packages.kubernetes_binding import build_kubernetes_tool_config
+
+    manifest = _manifest()
+    variant_name = "nvidia-cuda"
+    resource_profile = "gpu-large"
+    primary = manifest.runtime.artifacts.primary
+
+    if mutation == "missing_variant":
+        variant_name = "unknown-variant"
+    elif mutation == "unknown_profile":
+        resource_profile = "unregistered-profile"
+    elif mutation == "non_container":
+        primary.kind = "venv_pack"
+    elif mutation == "missing_digest":
+        primary.image_digest = None
+    else:
+        primary.image_digest = "not-a-digest"
+
+    with pytest.raises(KubernetesToolBindingError, match=message):
+        build_kubernetes_tool_config(
+            manifest,
+            variant_name=variant_name,
+            resource_profile=resource_profile,
+        )
+
+
+def test_build_kubernetes_tool_config_replaces_existing_image_digest():
+    from app.tool_packages.kubernetes_binding import build_kubernetes_tool_config
+
+    manifest = _manifest()
+    manifest.runtime.artifacts.primary.image = (
+        "registry.example/managed-model:1.0.0@sha256:" + "a" * 64
+    )
+
+    config = build_kubernetes_tool_config(
+        manifest,
+        variant_name="nvidia-cuda",
+        resource_profile="gpu-large",
+    )
+
+    assert config["runtime"]["image"] == (
+        "registry.example/managed-model:1.0.0@sha256:" + "b" * 64
+    )

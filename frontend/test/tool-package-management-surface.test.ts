@@ -19,7 +19,7 @@ test('后台应提供 Tool Package 管理页入口', () => {
   assert.equal(routerSource.includes("path: 'tool-packages'"), true)
   assert.equal(routerSource.includes("name: 'AdminToolPackages'"), true)
   assert.equal(routerSource.includes("import('@/views/admin/ToolPackages.vue')"), true)
-  assert.equal(adminToolsSource.includes("key: 'package'"), true)
+  assert.equal(adminToolsSource.includes('openToolPackages'), true)
   assert.equal(adminToolsSource.includes("router.push('/admin/tool-packages')"), true)
 })
 

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
@@ -22,7 +20,15 @@ from app.database.session import get_db
 from app.feature_flags import require_feature_flag
 from app.models.tool_packages import ToolPackage, ToolPackageVersion
 from app.models.users import User
-from app.schemas.tool_packages import ToolPackageCreate
+from app.schemas.tool_packages import (
+    ToolPackageCreate,
+    ToolPackageKubernetesRegistrationCreate,
+)
+from app.tool_packages.digests import tool_package_manifest_digest
+from app.tool_packages.kubernetes_registration import (
+    get_kubernetes_registration_options,
+    register_kubernetes_tool_version,
+)
 from app.tool_packages.validator import validate_tool_package
 
 
@@ -63,7 +69,7 @@ async def create_tool_package(
         package_id=package.id,
         version=manifest.metadata.version,
         manifest=manifest_data,
-        manifest_digest=_manifest_digest(manifest_data),
+        manifest_digest=tool_package_manifest_digest(manifest_data),
         signature=request.signature,
         is_signed=bool(request.signature),
         validation_status="valid",
@@ -132,6 +138,33 @@ async def publish_tool_package(
     )
 
 
+@router.get("/{package_id}/kubernetes-options", response_model=dict)
+async def get_tool_package_kubernetes_options(
+    package_id: str,
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return success_response(
+        data=await get_kubernetes_registration_options(db, package_id)
+    )
+
+
+@router.post("/{package_id}/kubernetes-registrations", response_model=dict)
+async def register_tool_package_as_kubernetes_tool(
+    package_id: str,
+    request: ToolPackageKubernetesRegistrationCreate,
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await register_kubernetes_tool_version(
+        db,
+        package_id=package_id,
+        request=request,
+        current_user=current_user,
+    )
+    return success_response(data=result, message="Kubernetes 候选工具版本已注册")
+
+
 async def _load_package(db: AsyncSession, package_id: str) -> ToolPackage:
     package = (
         await db.execute(
@@ -143,13 +176,6 @@ async def _load_package(db: AsyncSession, package_id: str) -> ToolPackage:
     if package is None:
         raise NotFoundException("Tool Package 不存在")
     return package
-
-
-def _manifest_digest(manifest: dict[str, Any]) -> str:
-    canonical = json.dumps(
-        manifest, ensure_ascii=True, sort_keys=True, separators=(",", ":")
-    )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _serialize_package(package: ToolPackage) -> dict[str, Any]:

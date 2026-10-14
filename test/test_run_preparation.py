@@ -674,6 +674,66 @@ async def test_prepare_run_keeps_standard_bindings_for_tool_package_v2(
 
 
 @pytest.mark.asyncio
+async def test_prepare_run_uses_selected_candidate_version_contract(
+    db_session: AsyncSession,
+) -> None:
+    owner = await _create_owner(db_session)
+    tool, ssh_version = await _create_tool(
+        db_session,
+        owner,
+        slug="candidate-contract-tool",
+        config={"type": "ssh_job"},
+    )
+    candidate_version = ToolVersionModel(
+        tool_id=tool.id,
+        version="2.0.0-k8s-candidate",
+        is_active=False,
+        config={
+            "type": "k8s_job",
+            "tool_package_manifest": {
+                "api_version": "aidd.sciminer/tool-package.v2",
+                "kind": "ToolPackage",
+                "metadata": {
+                    "slug": "candidate-contract-tool",
+                    "name": "Candidate Contract Tool",
+                    "version": "2.0.0",
+                },
+                "artifacts": {
+                    "inputs": [
+                        {"name": "protein", "type": "protein_structure@1"}
+                    ],
+                    "outputs": [],
+                },
+                "parameters_schema": {"type": "object", "properties": {}},
+                "runtime": {},
+                "variants": [],
+            },
+        },
+    )
+    db_session.add(candidate_version)
+    await db_session.flush()
+    tool.current_version_id = ssh_version.id
+
+    with pytest.raises(ValidationException, match="标准 Artifact 上传文件不存在"):
+        await prepare_run(
+            db_session,
+            input=RunPreparationInput(
+                tool=tool,
+                tool_version=candidate_version,
+                context=RunContext(
+                    surface="tool_detail",
+                    user_id=str(owner.id),
+                    project_id="project-1",
+                ),
+                params={},
+                file_ids=[],
+                input_bindings={},
+                standard_input_uploads={"protein": "missing-file"},
+            ),
+        )
+
+
+@pytest.mark.asyncio
 async def test_prepare_workflow_node_run_projects_workflow_input_to_builtin(
     db_session: AsyncSession,
 ) -> None:

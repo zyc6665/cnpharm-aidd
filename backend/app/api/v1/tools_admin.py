@@ -1,6 +1,6 @@
 """管理员工具管理路由。"""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
@@ -8,8 +8,6 @@ from sqlalchemy.orm import joinedload, selectinload
 from app.api.v1.tool_route_utils import (
     build_validated_tool_contract,
     commit_or_raise_conflict,
-    create_or_update_remote_tool_from_discovery,
-    create_or_update_tool_from_import,
     load_tool_for_response,
     load_tool_with_current_version,
     require_active_tool_category,
@@ -21,101 +19,38 @@ from app.common.responses import success_response
 from app.database.session import get_db
 from app.models.tools import Tag, Tool, ToolProviderType, ToolReviewStatus, ToolStatus, ToolVersion
 from app.models.users import User
-from app.remote_tools.client import RemoteToolDiscoveryClient
 from app.schemas.tools import (
-    RemoteToolRegisterRequest,
     TagCreate,
     TagResponse,
-    ToolCreate,
-    ToolImportRequest,
     ToolUpdate,
 )
 
 router = APIRouter()
 
+LEGACY_TOOL_REGISTRATION_GONE_DETAIL = (
+    "旧工具注册入口已下线，请使用管理员 Tool Package 注册流程"
+)
+
 
 @router.post("/import-config", response_model=dict)
 async def import_tool_config(
-    import_data: ToolImportRequest,
     current_user: User = Depends(get_admin_user),
-    db: AsyncSession = Depends(get_db),
 ):
-    result = await create_or_update_tool_from_import(db, current_user, import_data)
-    return success_response(data=result, message="工具配置导入成功")
+    raise HTTPException(status_code=410, detail=LEGACY_TOOL_REGISTRATION_GONE_DETAIL)
 
 
 @router.post("/register-remote", response_model=dict)
 async def register_remote_tool(
-    register_data: RemoteToolRegisterRequest,
     current_user: User = Depends(get_admin_user),
-    db: AsyncSession = Depends(get_db),
 ):
-    discovery = await RemoteToolDiscoveryClient(register_data.base_url).discover()
-    result = await create_or_update_remote_tool_from_discovery(
-        db,
-        current_user,
-        register_data,
-        discovery,
-    )
-    return success_response(data=result, message="远程模型服务注册成功")
+    raise HTTPException(status_code=410, detail=LEGACY_TOOL_REGISTRATION_GONE_DETAIL)
 
 
 @router.post("", response_model=dict)
 async def create_tool(
-    tool_data: ToolCreate,
     current_user: User = Depends(get_admin_user),
-    db: AsyncSession = Depends(get_db),
 ):
-    existing = await db.execute(select(Tool).where(Tool.slug == tool_data.slug))
-    if existing.scalar_one_or_none():
-        raise ConflictException("工具标识已存在")
-    category = await require_active_tool_category(db, tool_data.category_id)
-    tags = []
-    if tool_data.tag_ids:
-        tags = list(
-            (
-                await db.execute(select(Tag).where(Tag.id.in_(tool_data.tag_ids)))
-            )
-            .scalars()
-            .all()
-        )
-    tool = Tool(
-        name=tool_data.name,
-        slug=tool_data.slug,
-        description=tool_data.description,
-        category_id=category.id,
-        category=category.name,
-        icon=tool_data.icon,
-        icon_url=tool_data.icon_url,
-        is_public=tool_data.is_public,
-        gpu_required=tool_data.gpu_required,
-        gpu_memory_mb=tool_data.gpu_memory_mb,
-        timeout_sec=tool_data.timeout_sec,
-        owner_id=current_user.id,
-        status=ToolStatus.DRAFT.value,
-        provider_type=ToolProviderType.PLATFORM.value,
-        review_status=ToolReviewStatus.NOT_REQUIRED.value,
-        tags=tags,
-    )
-    db.add(tool)
-    await db.flush()
-    if tool_data.initial_version:
-        version = ToolVersion(
-            tool_id=tool.id,
-            version=tool_data.initial_version.version,
-            changelog=tool_data.initial_version.changelog,
-            notes=tool_data.initial_version.notes,
-            config=tool_data.initial_version.config,
-            is_active=True,
-        )
-        db.add(version)
-        await db.flush()
-        tool.current_version_id = version.id
-    await db.commit()
-    return success_response(
-        data=serialize_tool(await load_tool_for_response(db, tool.id)),
-        message="工具创建成功",
-    )
+    raise HTTPException(status_code=410, detail=LEGACY_TOOL_REGISTRATION_GONE_DETAIL)
 
 
 @router.put("/{tool_id}", response_model=dict)
