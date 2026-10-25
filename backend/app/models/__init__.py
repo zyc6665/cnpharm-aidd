@@ -35,6 +35,7 @@ from app.models.compounds import (
     Compound,
     MoleculeFingerprint,
 )
+from app.models.traceability import AuditLog, TaskInputSnapshot
 
 __all__ = [
     "User",
@@ -54,4 +55,5 @@ __all__ = [
     "ImageAsset", "ImageImport", "ImageImportStatus",
     "Target", "Protein", "ProteinStructure", "Pocket", "PocketResidue",
     "Compound", "Candidate", "CandidateSet", "CandidateSetItem", "MoleculeFingerprint",
+    "AuditLog", "TaskInputSnapshot",
 ]
