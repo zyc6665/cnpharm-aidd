@@ -137,3 +137,23 @@ test('管理员工具管理页不应再提供旧 platform_tool.json 导入入口
   assert.equal(toolsApiSource.includes('registerRemoteTool'), false)
   assert.equal(toolsApiSource.includes('/tools/register-remote'), false)
 })
+
+test('项目总览页不应再指向已删除的智能体研究路由', () => {
+  const overviewSource = readSource('src/views/projects/Overview.vue')
+  const routerSource = readSource('src/router/index.ts')
+
+  // 步骤 3 删掉了 /projects/:projectId/research 路由；总览页若仍指向它会直接 404。
+  assert.equal(routerSource.includes("name: 'ProjectResearch'"), false)
+  assert.equal(overviewSource.includes('/research'), false)
+  assert.equal(overviewSource.includes('进入智能体研究'), false)
+  assert.equal(overviewSource.includes('/targets'), true)
+})
+
+test('前端不应再声明 WebSocket 环境变量', () => {
+  const apiTypesSource = readSource('src/types/api.d.ts')
+  const viteConfigSource = readSource('vite.config.ts')
+
+  // 步骤 9 用 SSE 替换 WebSocket：没有 WS 通道，就不该声明 WS 地址或配 ws 代理。
+  assert.equal(apiTypesSource.includes('VITE_WS_URL'), false)
+  assert.equal(viteConfigSource.includes('ws: true'), false)
+})

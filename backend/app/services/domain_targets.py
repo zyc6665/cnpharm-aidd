@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.common.exceptions import ConflictException, NotFoundException, ValidationException
+from app.common.time import isoformat_utc
 from app.files.file_records import is_file_usable, user_can_access_file
 from app.models.files import File as FileModel
 from app.models.targets import Pocket, PocketResidue, Protein, ProteinStructure, Target
@@ -161,7 +162,14 @@ async def pocket_structure(db: AsyncSession, pocket: Pocket) -> ProteinStructure
 
 
 def _iso(value: Any) -> Any:
-    return value.isoformat() if hasattr(value, "isoformat") else value
+    """序列化时间时补 ``Z``，避免前端按本地时区解释 naive UTC。
+
+    见 ``app.common.time.isoformat_utc``：库里存的是 naive UTC，裸 ``isoformat()``
+    会让东八区用户看到的时间整体晚 8 小时。
+    """
+    if hasattr(value, "isoformat"):
+        return isoformat_utc(value)
+    return value
 
 
 def loaded_relationship(obj: Any, attr: str) -> Any:

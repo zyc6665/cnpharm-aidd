@@ -328,11 +328,6 @@ onMounted(async () => {
     color: @primary-color;
   }
 
-  .registration-option--remote .registration-option-icon {
-    background: @info-color-light;
-    color: @info-color;
-  }
-
   .registration-option--package .registration-option-icon {
     background: @success-color-light;
     color: @success-color;
