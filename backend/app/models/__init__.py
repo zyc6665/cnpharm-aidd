@@ -21,6 +21,13 @@ from app.models.artifacts import Artifact, ArtifactLineage, ArtifactVersion, Art
 from app.models.executions import ExecutionRecord
 from app.models.gpu import GPUAllocation, GPUAllocationStatus
 from app.models.image_assets import ImageAsset, ImageImport, ImageImportStatus
+from app.models.targets import (
+    Pocket,
+    PocketResidue,
+    Protein,
+    ProteinStructure,
+    Target,
+)
 
 __all__ = [
     "User",
@@ -38,4 +45,5 @@ __all__ = [
     "ExecutionRecord",
     "GPUAllocation", "GPUAllocationStatus",
     "ImageAsset", "ImageImport", "ImageImportStatus",
+    "Target", "Protein", "ProteinStructure", "Pocket", "PocketResidue",
 ]

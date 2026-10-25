@@ -28,6 +28,7 @@ from app.schemas.projects import (
     ProjectMemberUpdate,
     ProjectUpdate,
 )
+from app.services.domain_targets import delete_project_domain_rows, project_domain_counts
 from app.services.project_access import load_project_membership, require_project_role
 
 router = APIRouter(
@@ -251,6 +252,7 @@ async def get_project_overview(
             WorkflowDefinition.project_id == project_id
         )
     )
+    domain_counts = await project_domain_counts(db, project_id=project_id)
     return success_response(
         data={
             "project": _serialize(project, membership),
@@ -258,6 +260,9 @@ async def get_project_overview(
                 "artifacts": artifact_count or 0,
                 "tasks": task_count or 0,
                 "workflows": workflow_count or 0,
+                "targets": domain_counts["targets"],
+                "structures": domain_counts["structures"],
+                "pockets": domain_counts["pockets"],
             },
             "tasks": [_serialize_project_task(task) for task in task_result.scalars()],
             "artifacts": [
@@ -340,6 +345,7 @@ async def _delete_project_related_rows(db: AsyncSession, project_id: str) -> Non
     await db.execute(
         sa_update(File).where(File.project_id == project_id).values(project_id=None)
     )
+    await delete_project_domain_rows(db, project_id=project_id)
     await db.execute(sa_delete(ProjectMember).where(ProjectMember.project_id == project_id))
 
 
