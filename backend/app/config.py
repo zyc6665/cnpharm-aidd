@@ -405,6 +405,15 @@ class Settings(BaseSettings):
 
     # ==================== AIDD Agent 配置 ====================
     AIDD_SYSTEM_USER_ID: Optional[str] = None
+    # 分子库导入上限。PRD M1-FR-03 要求化合物导入单文件 ≤200MB，与通用的
+    # MAX_FILE_SIZE_MB（100MB）不同：通用上限约束「工具输入附件」，分子库是批量
+    # 业务数据，两者体量口径不同，因此单独开一项而不是把通用上限整体抬高。
+    COMPOUND_IMPORT_MAX_FILE_SIZE_MB: int = 200
+    # 项目内候选物数量上限（docs/04 §5.7）。一期相似性检索是全表扫描 + 应用内
+    # Tanimoto，2 万条 × 2048bit ≈ 5MB，全扫 <200ms；超过这个量级必须改为专用
+    # 索引或外部检索服务，属二期范围。
+    MAX_PROJECT_CANDIDATES: int = 20000
+
     # 首月 AIDD 发布门禁。None 表示使用环境默认值：开发环境开启新入口，
     # 预发布/生产默认关闭新入口；旧 AIDD API 默认关闭。
     AIDD_PROJECT_WORKSPACE_ENABLED: Optional[bool] = None

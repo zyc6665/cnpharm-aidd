@@ -28,6 +28,13 @@ from app.models.targets import (
     ProteinStructure,
     Target,
 )
+from app.models.compounds import (
+    Candidate,
+    CandidateSet,
+    CandidateSetItem,
+    Compound,
+    MoleculeFingerprint,
+)
 
 __all__ = [
     "User",
@@ -46,4 +53,5 @@ __all__ = [
     "GPUAllocation", "GPUAllocationStatus",
     "ImageAsset", "ImageImport", "ImageImportStatus",
     "Target", "Protein", "ProteinStructure", "Pocket", "PocketResidue",
+    "Compound", "Candidate", "CandidateSet", "CandidateSetItem", "MoleculeFingerprint",
 ]
