@@ -1,36 +1,60 @@
-name: SciTool CI
+name: AIDD Platform CI
 
 on:
   push:
-    branches: [main, develop, 'cnpharm/**']
+    branches: [main, 'release/**']
   pull_request:
-    branches: [main, develop, 'cnpharm/**']
+    branches: [main, 'release/**']
+  workflow_dispatch:
+
+# 同一分支的连续推送只保留最新一次，避免排队浪费额度
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  backend-test:
-    name: Backend Tests
+  backend-lint:
+    name: 后端规范检查
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
+      - name: 安装依赖
         run: |
           python -m pip install --upgrade pip
           pip install -r backend/requirements-dev.txt
 
-      - name: Check backend unused imports
+      - name: 未使用导入检查（F401）
         run: python -m flake8 backend/app --select F401
 
-      - name: Run tests
-        run: python -m pytest test/ -v
+      - name: 语法检查（F821 未定义名 / E9 语法错误）
+        run: python -m flake8 backend/app --select F821,E9
+
+  backend-test:
+    name: 后端测试
+    runs-on: ubuntu-latest
+    needs: backend-lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements-dev.txt
+
+      - name: 运行 pytest
+        run: python -m pytest test/ -v --tb=short
 
   frontend-build:
-    name: Frontend Build
+    name: 前端构建
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -38,19 +62,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
-      - name: Install dependencies
+      - name: 安装依赖
         run: npm ci
 
-      - name: Build
+      - name: 类型检查与构建
         run: npm run build
 
   frontend-test:
-    name: Frontend Tests
+    name: 前端单元测试
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -58,42 +83,55 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
-      - name: Install dependencies
+      - name: 安装依赖
         run: npm ci
 
-      - name: Run tests
+      - name: 运行 vitest
         run: npm run test
 
   frontend-e2e:
-    name: Frontend E2E
+    name: 前端 E2E
     runs-on: ubuntu-latest
+    # E2E 较慢，只在主干与发布分支跑，功能分支靠单元测试把关
+    if: github.event_name == 'push' || github.base_ref == 'main'
     defaults:
       run:
         working-directory: ./frontend
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
-      - name: Install dependencies
+      - name: 安装依赖
         run: npm ci
 
-      - name: Install Playwright browser and system dependencies
+      - name: 安装 Playwright 浏览器与系统依赖
         run: npm run test:e2e:deps
 
-      - name: Run Playwright E2E
+      - name: 运行 Playwright
         run: npm run test:e2e -- --project=chromium --reporter=list --workers=1
 
-  production-compose:
-    name: Production Compose Validation
+  offline-check:
+    name: 离线合规扫描
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 扫描公网域名与外部 API 调用
+        run: python scripts/check_offline_compliance.py
+
+  compose-check:
+    name: 部署配置校验
     runs-on: ubuntu-latest
     env:
       POSTGRES_PASSWORD: ci-only-postgres-password
@@ -106,14 +144,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v3
 
-      - name: Show Docker Compose version
-        run: docker compose version
-
-      - name: Validate production Compose configuration
+      - name: 校验生产 compose 配置
         run: docker compose -f deploy/compose/docker-compose.prod.yml config --quiet
 
-      - name: Build production backend image
+      - name: 构建后端镜像
         run: docker compose -f deploy/compose/docker-compose.prod.yml build backend
+
+  docs-check:
+    name: 文档链接检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 检查 docs 内相对链接
+        run: python scripts/check_doc_links.py

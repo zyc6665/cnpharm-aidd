@@ -1,0 +1,38 @@
+# CODEOWNERS — 中国医药 AIDD 平台交付仓库
+# 语法同 .gitignore：后匹配的规则覆盖先匹配的。
+# 规则生效前提：仓库 Settings → Branches → main 保护中勾选 "Require review from Code Owners"。
+# 团队只有一人时不要勾选该选项（自己的 PR 无法自己 approve），成员到位后再逐条填写下方角色。
+
+# 兜底：未列出的路径由交付负责人把关
+*                                   @zyc6665
+
+# ---- 数据库与数据模型 -------------------------------------------------------
+# 迁移一旦合入不可修改，只能新增修正迁移，因此单独要求评审
+/backend/alembic/                   @zyc6665
+/backend/app/models/                @zyc6665
+
+# ---- 任务执行与调度 ---------------------------------------------------------
+# 状态机、执行器、队列、GPU 分配属于高危区，改动影响面覆盖全平台
+/backend/app/tasks/                 @zyc6665
+/backend/app/execution/             @zyc6665
+/backend/app/tools/                 @zyc6665
+/backend/app/tool_packages/         @zyc6665
+/backend/app/worker/                @zyc6665
+
+# ---- 产物与存储契约 ---------------------------------------------------------
+# artifact_standards 与 tool_templates 是模型镜像与平台之间的接口契约
+/backend/app/artifact_standards/    @zyc6665
+/backend/app/tool_templates/        @zyc6665
+/example/                           @zyc6665
+
+# ---- 交付与合规 -------------------------------------------------------------
+# 这些文件决定流水线门禁与离线红线，任何人不得绕过
+/.github/                           @zyc6665
+/scripts/                           @zyc6665
+/deploy/                            @zyc6665
+
+# ---- 需求与架构文档 ---------------------------------------------------------
+/docs/17-交付仓库与分支策略.md        @zyc6665
+/docs/03-系统架构设计说明书.md        @zyc6665
+/docs/04-数据模型设计说明书.md        @zyc6665
+/docs/03B-待决策与阻塞项总表.md       @zyc6665

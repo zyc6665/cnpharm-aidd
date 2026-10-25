@@ -1,46 +1,68 @@
-## 背景和目标
+## 背景与目标
 
-- 
+<!-- 这个 PR 解决什么问题？关联哪个需求编号或 Issue？ -->
 
-## 改动范围
+- 关联需求：<!-- 如 M2-FR-06 / D-25 / 无 -->
+- 关联 Issue：Closes #
 
-- 
+## 改动内容
+
+<!-- 逐条说明做了什么，评审者据此判断是否完整 -->
+
+-
 
 ## 影响模块
 
-- [ ] 后端 API
-- [ ] Tool Contract / 工具注册
-- [ ] Standard Artifact / 文件 / 结果持久化
-- [ ] Run Preparation / BindingDecision
-- [ ] Task / Executor / Worker
-- [ ] Workflow / 节点 / 保存加载
-- [ ] 前端工具中心 / 任务中心 / 工作台
-- [ ] Renderer / 可视化
-- [ ] 管理后台 / 治理 / 审计
+- [ ] 后端 API / Schema
+- [ ] 数据库迁移（**改动后必须更新 `04-数据模型设计说明书.md`**）
+- [ ] 任务 / 执行器 / Worker
+- [ ] 工作流 / 节点 / 调度
+- [ ] 产物 / 文件 / 存储
+- [ ] 模型与工具注册（ToolPackage / drp-runner 契约）
+- [ ] 前端页面 / 路由
+- [ ] 三维与可视化组件
 - [ ] 部署 / CI / 配置
 - [ ] 文档
 
-## 测试结果
+## 自检清单
 
-- [ ] `python -m pytest test/ -v`
+提交前请在本地跑过，勾选实际执行过的项：
+
 - [ ] `python -m flake8 backend/app --select F401`
-- [ ] `cd frontend && npm run test`
+- [ ] `python -m pytest test/ -v`
 - [ ] `cd frontend && npm run build`
-- [ ] `cd frontend && npm run test:e2e -- --project=chromium --reporter=list --workers=1`
-- [ ] 手工验证：Fetch PDB -> Protein Preparation -> LVpocket
-- [ ] 手工验证：PubChem -> Ligand Preparation -> RDKit Properties -> ADMET
-- [ ] 未运行项已说明原因
+- [ ] `cd frontend && npm run test`
+- [ ] `python scripts/check_offline_compliance.py`（离线合规，阻断项必须为 0）
+- [ ] `python scripts/check_doc_links.py`（文档链接）
+- [ ] 新增/变更的接口已更新 `05-API接口规格说明书.md`
+- [ ] 新增/变更的页面已更新 `06-UI交互与原型说明.md`
+- [ ] 未执行项已在此说明原因：
 
-## 风险和回滚
+## 高危改动确认
+
+涉及以下任一项时，必须填写对应说明，否则不予合入：
+
+- [ ] **数据库迁移**：已确认可回滚、不删列、不改已合入的历史迁移文件；回滚方式：
+- [ ] **任务状态机 / 执行器**：已确认不影响既有任务恢复与重试；影响面：
+- [ ] **删除代码**：已 grep 全部引用点并逐个处理；引用点清单：
+- [ ] **离线合规**：无新增公网域名 / 外部 API / 遥测；如确需例外，已在 `.github/offline-allowlist.txt` 登记理由
+- [ ] 以上均不涉及
+
+## 测试与验证
+
+<!-- 怎么证明它已生效？贴关键命令输出、截图或数据 -->
+
+| 验证项 | 方式 | 结果 |
+|---|---|---|
+|  |  |  |
+
+## 风险与回滚
 
 - 风险：
 - 回滚方式：
 
-## 文档
+## 评审关注点
 
-- [ ] 已更新相关文档
-- [ ] 不需要更新文档，原因：
+<!-- 希望评审者重点看哪里？哪里你还没把握？ -->
 
-## Review 关注点
-
-- 
+-
