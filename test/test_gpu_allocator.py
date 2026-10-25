@@ -88,12 +88,24 @@ async def test_allocator_uses_owner_token_for_distributed_lock():
 
 @pytest.mark.asyncio
 async def test_is_gpu_idle_logs_probe_failure(caplog):
+    """本机卡探针失败 → 判为不空闲并告警（避免把故障卡再分出去）。"""
     allocator = GPUAllocator(db=None, detector=_FailingDetector())
 
     with caplog.at_level(logging.WARNING, logger="app.gpu.allocator"):
-        assert await allocator._is_gpu_idle("node-a", 1) is False
+        assert await allocator._is_gpu_idle("local", 1) is False
 
-    assert "Failed to probe GPU idle state for node=node-a gpu=1" in caplog.text
+    assert "Failed to probe GPU idle state for node=local gpu=1" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_is_gpu_idle_does_not_probe_remote_slot_nodes(caplog):
+    """远程卡位/节点的卡由 Agent 观测上报，平台侧不探针（否则多节点下全部判忙）。"""
+    allocator = GPUAllocator(db=None, detector=_FailingDetector())
+
+    with caplog.at_level(logging.WARNING, logger="app.gpu.allocator"):
+        assert await allocator._is_gpu_idle("dcu-node-a", 1) is True
+
+    assert "Failed to probe GPU idle state" not in caplog.text
 
 
 @pytest.mark.asyncio

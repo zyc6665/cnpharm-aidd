@@ -4,16 +4,31 @@
 提供GPU资源查询、分配、监控等API端点。
 """
 
+import hmac
+import logging
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user, get_admin_user
+from app.config import settings
 from app.database.session import get_db
 from app.gpu.detector import get_gpu_detector
 from app.gpu.allocator import GPUAllocator, TaskPriority
 from app.gpu.monitor import GPUMonitor
+from app.gpu.slots import (
+    SLOT_STATES,
+    SlotConfigError,
+    describe_registry,
+    load_slot_registry,
+    load_slot_states,
+    record_slot_state,
+    slot_view,
+)
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/gpu", tags=["GPU资源管理"])
 
@@ -104,6 +119,19 @@ class ReleaseRequest(BaseModel):
     """GPU释放请求"""
     task_id: str = Field(..., description="任务ID")
     allocation_id: Optional[str] = Field(None, description="分配ID")
+
+
+class SlotStateReport(BaseModel):
+    """Agent 上报的卡位状态（docs/13 §4.4）。"""
+
+    nodeId: str = Field(..., description="节点 ID，需与 slots.yaml 一致")
+    slotId: str = Field(..., description="卡位 ID，如 A3")
+    state: str = Field(..., description="FREE / RESERVED / BUSY / FAULT / BORROWED")
+    message: Optional[str] = Field(None, description="状态说明，FAULT 时必填")
+    deviceCount: Optional[int] = Field(
+        None,
+        description="容器内 torch.cuda.device_count()；不等于 1 时平台直接置 FAULT",
+    )
 
 
 # ============ API 端点 ============
@@ -336,3 +364,95 @@ async def get_gpu_history(
     monitor = GPUMonitor()
     history = await monitor.get_historical_metrics(hours=hours)
     return {"history": history, "hours": hours}
+
+
+# ============ 卡位（slot）端点 ============
+#
+# 设计口径（docs/09 §5.6、docs/13 §4.4）：
+# * 卡位声明来自 slots.yaml，状态权威在 Agent；平台只做消费、展示与准入判断。
+# * 平台不提供「改卡位声明」的写接口——声明随镜像包与部署一起版本化（Helm values）,
+#   允许在线改等于让调度依据脱离版本控制。
+
+
+@router.get(
+    "/slots",
+    summary="获取卡位与节点视图",
+    description="返回 slots.yaml 声明的节点、卡位与当前状态（docs/06 P-36 算力与队列页数据源）",
+)
+async def get_slot_view(current_user=Depends(get_current_user)):
+    """卡位视图：节点 → 卡位 → 状态。"""
+    try:
+        registry = load_slot_registry()
+    except SlotConfigError as exc:
+        raise HTTPException(status_code=500, detail=f"卡位声明不可用: {exc}") from exc
+
+    states = await load_slot_states(registry)
+    nodes = slot_view(registry, states)
+    return {
+        "schemaVersion": registry.schema_version,
+        "source": registry.source,
+        "configured": bool(registry.nodes),
+        "summary": describe_registry(registry),
+        "nodeCount": len(registry.nodes),
+        "slotCount": len(registry.slots),
+        "schedulableSlotCount": sum(
+            1 for node in nodes for slot in node["slots"] if slot["schedulable"]
+        ),
+        "nodes": nodes,
+    }
+
+
+@router.post(
+    "/slots/report",
+    summary="接收 Agent 卡位状态上报",
+    description="drp-node-agent 主动上报卡位状态（辅通道 C，需携带上报 token）",
+)
+async def report_slot_state(
+    payload: SlotStateReport,
+    x_drp_agent_token: Optional[str] = Header(default=None, alias="X-DRP-Agent-Token"),
+):
+    """Agent 上报卡位状态。
+
+    该端点不走用户鉴权（Agent 不是平台用户），改用独立上报 token 校验；
+    ``DRP_NODE_AGENT_REPORT_TOKEN`` 未配置时直接 503——**默认关闭**，
+    避免内网裸奔部署被随意置 FAULT 造成拒绝服务。
+    """
+    expected = (settings.DRP_NODE_AGENT_REPORT_TOKEN or "").strip()
+    if not expected:
+        raise HTTPException(
+            status_code=503,
+            detail="未配置 DRP_NODE_AGENT_REPORT_TOKEN，卡位状态上报通道未启用",
+        )
+    provided = (x_drp_agent_token or "").strip()
+    if not hmac.compare_digest(provided, expected):
+        raise HTTPException(status_code=401, detail="卡位状态上报凭据无效")
+
+    try:
+        registry = load_slot_registry()
+        slot = registry.find(payload.nodeId, payload.slotId)
+        if slot is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"卡位未在 slots.yaml 中声明: {payload.nodeId}/{payload.slotId}",
+            )
+        record = await record_slot_state(
+            node_id=payload.nodeId,
+            slot_id=payload.slotId,
+            state=payload.state,
+            message=payload.message,
+            device_count=payload.deviceCount,
+        )
+    except SlotConfigError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if record["state"] not in SLOT_STATES:  # pragma: no cover - record_slot_state 已校验
+        raise HTTPException(status_code=422, detail=f"不支持的卡位状态: {record['state']}")
+
+    logger.info(
+        "Slot state reported: node=%s slot=%s state=%s device_count=%s",
+        payload.nodeId,
+        payload.slotId,
+        record["state"],
+        payload.deviceCount,
+    )
+    return record

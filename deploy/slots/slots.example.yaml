@@ -1,0 +1,172 @@
+# 卡位声明示例（slots.yaml）
+#
+# 依据 docs/09 §5.6 与 docs/13 §4.1~§4.5。三种挂载方式任选其一：
+#
+#   1. 环境变量内联（最省事，适合单节点验证）
+#        DRP_NODE_SLOTS_YAML="$(cat deploy/slots/slots.example.yaml)"
+#   2. 文件路径（推荐，随 Helm values 一起版本化）
+#        DRP_NODE_SLOTS_FILE=/etc/drp/slots.yaml
+#   3. Agent 自读（本文件的原始形态，Agent 与平台共用同一份）
+#
+# 硬约束（改这个文件前务必读完）：
+#
+#   * 一个卡位 = 一张（或一组）加速卡，**静态独占**，平台不做显存共享。
+#   * `accelerator.model` **只做观测展示，不参与调度判定**——判据是 slot 的可用性
+#     与 `memoryMb`，不是厂商名。
+#   * 容器内可见序号恒为 0。DCU 用 `ROCR_VISIBLE_DEVICES`/`HIP_VISIBLE_DEVICES`；
+#     NVIDIA 用 `NVIDIA_VISIBLE_DEVICES`（宿主卡号）+ `CUDA_VISIBLE_DEVICES: "0"`（容器内序号）。
+#     两个都填宿主卡号会让 `torch.cuda.device_count()==0` 并**静默回退 CPU**（v1.4 实测）。
+#   * DCU 卡位必须挂 `--device=/dev/kfd` 与 `--device=/dev/dri`。
+#   * 就绪自检必须断言 `device_count()==1`，失败由 Agent 上报 FAULT。
+#   * 文件名固定为 slots.yaml，不要按厂商分叉字段（禁止引入 vendor 开关）。
+
+schemaVersion: 2
+
+nodes:
+  # ---------------- 海光 K100-AI（DTK 26.04，宿主机 Docker，非 K8s） ----------------
+  - nodeId: dcu-node-01
+    hostname: dcu01.drp.local
+    # 平台 → Agent 主通道（docs/13 §4.2：8780/TCP）
+    agentEndpoint: http://dcu01.drp.local:8780
+    accelerator:
+      # 只用于页面展示与追溯包里的「执行环境」，不参与调度
+      model: Hygon K100-AI
+      count: 8
+    slots:
+      - id: A1
+        deviceIds: [0]
+        memoryMb: 65536
+        image: harbor.drp.local/drp/compute-boltz2:2.0.1-dtk26.04-py3.10-r3
+        models: [boltz-2, lvpocket]
+        env:
+          ROCR_VISIBLE_DEVICES: "0"
+          HIP_VISIBLE_DEVICES: "0"
+          DRP_DEVICE: cuda:0
+        dockerArgs:
+          - --device=/dev/kfd
+          - --device=/dev/dri
+          - --group-add
+          - video
+      - id: A2
+        deviceIds: [1]
+        memoryMb: 65536
+        image: harbor.drp.local/drp/compute-boltz2:2.0.1-dtk26.04-py3.10-r3
+        models: [boltz-2]
+        env:
+          ROCR_VISIBLE_DEVICES: "1"
+          HIP_VISIBLE_DEVICES: "1"
+          DRP_DEVICE: cuda:0
+        dockerArgs:
+          - --device=/dev/kfd
+          - --device=/dev/dri
+          - --group-add
+          - video
+      - id: A3
+        deviceIds: [2]
+        memoryMb: 65536
+        image: harbor.drp.local/drp/compute-std-diff:1.4.0-dtk26.04-py3.10-r2
+        models: [std-diff, pocket2mol]
+        env:
+          ROCR_VISIBLE_DEVICES: "2"
+          HIP_VISIBLE_DEVICES: "2"
+          DRP_DEVICE: cuda:0
+        dockerArgs:
+          - --device=/dev/kfd
+          - --device=/dev/dri
+          - --group-add
+          - video
+      - id: A4
+        deviceIds: [3]
+        memoryMb: 65536
+        # 不写 models = 通用卡位，任何声明了卡位数量的工具都能落进来
+        env:
+          ROCR_VISIBLE_DEVICES: "3"
+          HIP_VISIBLE_DEVICES: "3"
+          DRP_DEVICE: cuda:0
+        dockerArgs:
+          - --device=/dev/kfd
+          - --device=/dev/dri
+          - --group-add
+          - video
+      - id: A5
+        deviceIds: [4]
+        memoryMb: 65536
+        env:
+          ROCR_VISIBLE_DEVICES: "4"
+          HIP_VISIBLE_DEVICES: "4"
+          DRP_DEVICE: cuda:0
+        dockerArgs:
+          - --device=/dev/kfd
+          - --device=/dev/dri
+          - --group-add
+          - video
+      - id: A6
+        deviceIds: [5]
+        memoryMb: 65536
+        env:
+          ROCR_VISIBLE_DEVICES: "5"
+          HIP_VISIBLE_DEVICES: "5"
+          DRP_DEVICE: cuda:0
+        dockerArgs:
+          - --device=/dev/kfd
+          - --device=/dev/dri
+          - --group-add
+          - video
+      - id: A7
+        deviceIds: [6]
+        memoryMb: 65536
+        env:
+          ROCR_VISIBLE_DEVICES: "6"
+          HIP_VISIBLE_DEVICES: "6"
+          DRP_DEVICE: cuda:0
+        dockerArgs:
+          - --device=/dev/kfd
+          - --device=/dev/dri
+          - --group-add
+          - video
+      - id: A8
+        deviceIds: [7]
+        memoryMb: 65536
+        env:
+          ROCR_VISIBLE_DEVICES: "7"
+          HIP_VISIBLE_DEVICES: "7"
+          DRP_DEVICE: cuda:0
+        dockerArgs:
+          - --device=/dev/kfd
+          - --device=/dev/dri
+          - --group-add
+          - video
+
+  # ---------------- NVIDIA（仅 develop 环境，不构成 DCU 验收依据） ----------------
+  # docs/09 §5.6 迁移纪律 ③：dev4090 的数据不得作为耗时基线与容差签字依据。
+  - nodeId: dev-4090-node
+    hostname: dev4090.drp.local
+    agentEndpoint: http://dev4090.drp.local:8780
+    accelerator:
+      model: NVIDIA RTX 4090
+      count: 8
+    slots:
+      - id: B1
+        deviceIds: [3]
+        memoryMb: 24576
+        env:
+          # 宿主卡号
+          NVIDIA_VISIBLE_DEVICES: "3"
+          # 容器内序号恒为 0（写成 3 会导致 device_count()==0）
+          CUDA_VISIBLE_DEVICES: "0"
+          DRP_DEVICE: cuda:0
+        dockerArgs:
+          - --gpus
+          - device=3
+          - --ipc=host
+      - id: B2
+        deviceIds: [6]
+        memoryMb: 24576
+        env:
+          NVIDIA_VISIBLE_DEVICES: "6"
+          CUDA_VISIBLE_DEVICES: "0"
+          DRP_DEVICE: cuda:0
+        dockerArgs:
+          - --gpus
+          - device=6
+          - --ipc=host
