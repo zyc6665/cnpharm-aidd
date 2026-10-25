@@ -122,3 +122,30 @@ async def test_decision_item_rejects_delete(db_session: AsyncSession, project: P
     with pytest.raises(ImmutableRecordError):
         await db_session.commit()
     await db_session.rollback()
+
+
+def test_decision_item_candidate_id_is_required() -> None:
+    """``UniqueConstraint(decision_id, candidate_id)`` 不约束 NULL。
+
+    PostgreSQL 上多行 NULL 互不冲突，允许空值等于允许「没有候选物的快照行」——
+    ``docs/04`` §9.5 该列是 uuid，所以模型层必须 ``nullable=False``。
+    """
+    assert DecisionItem.__table__.c.candidate_id.nullable is False
+
+
+def test_decision_indexes_are_declared_once() -> None:
+    """索引只在 ``__table_args__`` 声明，避免 ``create_all`` 与 Alembic 漂移。"""
+    column_level = {
+        column.name
+        for table in (DecisionRecord.__table__, DecisionItem.__table__)
+        for column in table.columns
+        if column.index
+    }
+    assert column_level == set()
+
+    names = {index.name for index in DecisionRecord.__table__.indexes}
+    assert names == {
+        "ix_decision_records_project_point",
+        "ix_decision_records_project_decided",
+        "ix_decision_records_subject_id",
+    }

@@ -1,8 +1,8 @@
 """研发阶段与决策记录 API（docs/05 §3.2、§3.3；docs/03 §3.6）。
 
 端点挂在 ``project_router`` 上（无 prefix，由 ``api_router`` 统一挂 ``/projects``，
-与 targets / compounds / results 一致）；``router`` 本期没有独立路径，保留给后续
-「决策记录详情」使用，注册方式与既有域模块保持一致。
+与 targets / compounds / results 一致）。本模块只有三级路径，没有项目外的独立
+路径，所以不额外导出 ``router``。
 
 阶段接口是**纯推导**（``app.services.project_stage``），决策写入走
 ``app.services.decisions``。本模块只负责 HTTP 语义、权限入口与响应包装。
@@ -36,9 +36,8 @@ from app.services.project_stage import compute_project_stage
 _FEATURE_FLAG = Depends(require_feature_flag("AIDD_PROJECT_WORKSPACE_ENABLED"))
 
 project_router = APIRouter(dependencies=[_FEATURE_FLAG])
-router = APIRouter(dependencies=[_FEATURE_FLAG])
 
-__all__ = ["project_router", "router"]
+__all__ = ["project_router"]
 
 
 #: 阶段响应的字段名按 ``docs/05`` §3.2 的 camelCase 输出；Service 内部一律 snake_case。

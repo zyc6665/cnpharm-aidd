@@ -3,15 +3,22 @@
 HTTP 层只负责权限与响应包装，真正的规则在这里：
 
 * **归属校验**：``subject_type == "CANDIDATE_SET"`` 时，快照里的每个
-  ``candidate_id`` 必须是该集合的成员。否则一条决策记录可以宣称「我选了 100 个
-  候选物」，而集合里只有 3 个——记录一旦只追加就永远无法纠正。
+  ``candidate_id`` 必须是该集合的成员；其余三种对象类型（靶点/口袋/结构）没有
+  「成员」概念，但快照里引用的候选物仍必须是**本项目**的候选物。否则一条决策记录
+  可以宣称「我选了 100 个候选物」，或引用别的项目的候选 UUID——记录一旦只追加就
+  永远无法纠正，跨项目引用还顺手把权限模型绕过去了。
 * **成员快照入库**：把 ``selected_ids``/``excluded_ids`` 与 ``snapshot`` 合并成
   ``decision_items``，每行带决策当时的评分与排名。候选集合后续被改写不影响历史。
+  结论里的每个 id 都必然落成一行：没录到分的补 ``score=None`` 并标记
+  ``score_source="missing"``，保证「返回的结论 == 提交的结论」。
 * **审计**：写入同时追加 ``audit_logs``（与 ``docs/04`` §9.5 的权限段一致）。
+  审计按 ``docs/04`` §3.2.2 是**最终一致**的旁路：它失败不能把已经提交的数据变成
+  客户端眼里的 500。
 """
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from sqlalchemy import func, select
@@ -20,9 +27,15 @@ from sqlalchemy.orm import selectinload
 
 from app.common.exceptions import NotFoundException, ValidationException
 from app.common.time import utcnow
-from app.logging.audit import AuditAction, ResourceType, get_audit_logger
-from app.models.compounds import CandidateSetItem
-from app.models.decisions import DecisionItem, DecisionRecord
+from app.logging.audit import (
+    AuditAction,
+    AuditEvent,
+    AuditResult,
+    ResourceType,
+    get_audit_logger,
+)
+from app.models.compounds import Candidate, CandidateSetItem
+from app.models.decisions import SCORE_SOURCE_MISSING, DecisionItem, DecisionRecord
 from app.models.users import User
 from app.schemas.decisions import DecisionCreate
 from app.services.domain_compounds import load_candidate_set
@@ -34,11 +47,17 @@ from app.services.domain_targets import (
 )
 from app.services.project_access import require_project_role
 
+logger = logging.getLogger(__name__)
+
 #: 读：项目内全员（含 viewer）。决策记录是项目结论，成员都应该看得到。
 DECISION_READ_ROLES = ("owner", "editor", "runner", "viewer")
 
-#: 写：viewer 不能替项目做决策（docs/05 §3.3「需项目角色 ≥ MEMBER」）。
-DECISION_WRITE_ROLES = ("owner", "editor", "runner")
+#: 写：需项目角色 ≥ MEMBER（docs/04 §9.5「权限」末段）。仓库里 ``runner`` 低于
+#: ``editor``（见 ``domain_compounds.WRITE_ROLES``），能跑任务不等于能替项目拍板。
+DECISION_WRITE_ROLES = ("owner", "editor")
+
+#: ``decided_by`` 是 ``varchar(64)``（docs/04 §9.5），而 ``users.email`` 是 255。
+DECIDED_BY_MAX_LENGTH = 64
 
 
 def _iso(value: Any) -> Any:
@@ -129,6 +148,61 @@ async def _ensure_snapshot_membership(
         )
 
 
+async def _ensure_candidates_in_project(
+    db: AsyncSession, *, project_id: str, candidate_ids: list[str]
+) -> None:
+    """非 ``CANDIDATE_SET`` 的决策：快照里的候选物必须属于本项目。
+
+    这三种对象类型没有「成员集合」可查，于是此前``candidate_id`` 是任意字符串，
+    能把别的项目的候选 UUID 写进只追加表。这里只证明「这些候选物是本人的项目里的」，
+    不去判断它们与靶点/口袋的业务关联——那层语义由前端选择器保证，服务端兜底的是
+    权限边界。
+    """
+    if not candidate_ids:
+        return
+    rows = (
+        await db.execute(
+            select(Candidate.id).where(
+                Candidate.id.in_(candidate_ids),
+                Candidate.project_id == project_id,
+            )
+        )
+    ).scalars().all()
+    known = {str(value) for value in rows}
+    strangers = [value for value in candidate_ids if value not in known]
+    if strangers:
+        raise ValidationException(
+            "快照中有候选物不属于该项目：" + "、".join(strangers),
+            detail={"candidate_ids": strangers, "project_id": project_id},
+        )
+
+
+def _emit_decision_audit(*, user: User, record: DecisionRecord) -> None:
+    """Append one ``DECISION_CREATE`` audit event.
+
+    直接构造 ``AuditEvent`` 而不是走 ``log_data_access``：后者没有 ``user_email``
+    形参，``user_email=`` 会落进 ``**extra``，``event.user_email`` 仍为 ``None``，
+    最终 ``audit_logs.actor`` 退化成用户 UUID，而 ``docs/04`` §3 要求 actor 是
+    用户名快照（用户改名/停用后审计仍可读）。
+    """
+    event = AuditEvent(
+        action=AuditAction.DECISION_CREATE,
+        result=AuditResult.SUCCESS,
+        user_id=str(user.id),
+        user_email=user.email,
+        user_role=user.role,
+        resource_type=ResourceType.DECISION_RECORD,
+        resource_id=str(record.id),
+        extra={
+            "project_id": str(record.project_id),
+            "decision_point": record.decision_point,
+            "subject_type": record.subject_type,
+            "subject_id": str(record.subject_id),
+        },
+    )
+    get_audit_logger().log(event)
+
+
 async def create_decision(
     db: AsyncSession,
     *,
@@ -154,14 +228,24 @@ async def create_decision(
         await _ensure_snapshot_membership(
             db, set_id=data.subject_id, snapshot_ids=snapshot_ids
         )
+    else:
+        await _ensure_candidates_in_project(
+            db,
+            project_id=project_id,
+            candidate_ids=list(
+                dict.fromkeys([*data.selected_ids, *data.excluded_ids, *snapshot_ids])
+            ),
+        )
 
-    selected = set(data.selected_ids)
-    verdicts = {
-        candidate_id: ("SELECTED" if candidate_id in selected else "EXCLUDED")
-        for candidate_id in snapshot_ids
-    }
-    score_by_id = {item.candidate_id: item for item in data.snapshot}
+    # 结论是权威：``selected_ids``/``excluded_ids`` 里的每个 id 都要落成一行 item，
+    # 否则 ``serialize_decision`` 由 items 派生出的结论会与提交的结论不一致，而只追加
+    # 表没有第二次机会纠正。缺分的结论补 ``score=None`` + ``score_source="missing"``。
+    verdicts: list[tuple[str, str]] = [
+        (candidate_id, "SELECTED") for candidate_id in data.selected_ids
+    ] + [(candidate_id, "EXCLUDED") for candidate_id in data.excluded_ids]
+    snapshot_by_id = {item.candidate_id: item for item in data.snapshot}
 
+    decided_by = (user.email or user.display_name or str(user.id))[:DECIDED_BY_MAX_LENGTH]
     record = DecisionRecord(
         project_id=project_id,
         decision_point=data.decision_point,
@@ -170,19 +254,19 @@ async def create_decision(
         reason=data.reason.strip(),
         basis_task_ids=list(data.basis_task_ids),
         basis_metrics=dict(data.basis_metrics),
-        decided_by=user.email or user.display_name or str(user.id),
+        decided_by=decided_by,
         decided_by_id=str(user.id),
         decided_at=utcnow(),
     )
-    for candidate_id in snapshot_ids:
-        snapshot = score_by_id[candidate_id]
+    for candidate_id, verdict in verdicts:
+        snapshot = snapshot_by_id.get(candidate_id)
         record.items.append(
             DecisionItem(
                 candidate_id=candidate_id,
-                verdict=verdicts[candidate_id],
-                snapshot_score=snapshot.score,
-                snapshot_rank=snapshot.rank,
-                snapshot_attrs={},
+                verdict=verdict,
+                snapshot_score=snapshot.score if snapshot else None,
+                snapshot_rank=snapshot.rank if snapshot else None,
+                snapshot_attrs={} if snapshot else {"score_source": SCORE_SOURCE_MISSING},
             )
         )
 
@@ -199,17 +283,14 @@ async def create_decision(
         )
     ).scalar_one()
 
-    get_audit_logger().log_data_access(
-        user_id=str(user.id),
-        resource_type=ResourceType.DECISION_RECORD,
-        resource_id=str(stored.id),
-        action=AuditAction.DECISION_CREATE,
-        user_email=user.email,
-        project_id=str(project_id),
-        decision_point=stored.decision_point,
-        subject_type=stored.subject_type,
-        subject_id=str(stored.subject_id),
-    )
+    # 审计是最终一致的旁路（docs/04 §3.2.2）：数据此时已提交，审计写失败只能记日志，
+    # 不能反过来让客户端看到一个「其实已经成功」的 500。
+    try:
+        _emit_decision_audit(user=user, record=stored)
+    except Exception:  # noqa: BLE001 - 审计失败不得影响业务结果
+        logger.warning(
+            "决策记录 %s 已写入，但审计事件写入失败", stored.id, exc_info=True
+        )
     return stored
 
 
@@ -234,7 +315,13 @@ async def list_decisions(
                 select(DecisionRecord)
                 .options(selectinload(DecisionRecord.items))
                 .where(*conditions)
-                .order_by(DecisionRecord.decided_at.desc(), DecisionRecord.created_at.desc())
+                # 次级键 ``id``：``decided_at`` 精度不足以区分同一秒写入的两条记录，
+                # 只按时间排序时分页会出现重复行或漏行。
+                .order_by(
+                    DecisionRecord.decided_at.desc(),
+                    DecisionRecord.created_at.desc(),
+                    DecisionRecord.id.desc(),
+                )
                 .offset((page - 1) * page_size)
                 .limit(page_size)
             )
@@ -246,6 +333,7 @@ async def list_decisions(
 
 
 __all__ = [
+    "DECIDED_BY_MAX_LENGTH",
     "DECISION_READ_ROLES",
     "DECISION_WRITE_ROLES",
     "create_decision",

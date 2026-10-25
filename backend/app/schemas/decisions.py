@@ -3,6 +3,12 @@
 字段同时接受 snake_case 与 camelCase：``docs/05`` 的示例是 camelCase，而平台既有
 接口（``serialize_candidate`` 等）返回 snake_case，前端两种写法都在用。别名只解决
 **入参**，出参仍按仓库惯例输出 snake_case，避免同一个响应里出现两套命名。
+
+**``snapshot`` 允许是结论的子集**：``selectedIds``/``excludedIds`` 是决策结论，
+``snapshot`` 是「当时的评分」。用户完全可能只给入选者录了分，所以缺分的结论由
+``app.services.decisions.create_decision`` 补一条 ``score=None`` 的快照行并标记
+``score_source="missing"``——反过来（快照里有、结论里没有）才是错误，因为那一行
+没有 ``verdict`` 可落。
 """
 
 from __future__ import annotations
@@ -84,6 +90,10 @@ class DecisionCreate(BaseModel):
             raise ValueError("selected_ids 与 excluded_ids 不能同时为空")
         if not self.snapshot:
             raise ValueError("snapshot 不能为空：决策记录必须保存成员快照")
+        if len(set(self.selected_ids)) != len(self.selected_ids):
+            raise ValueError("selected_ids 不能重复")
+        if len(set(self.excluded_ids)) != len(self.excluded_ids):
+            raise ValueError("excluded_ids 不能重复")
 
         snapshot_ids = [item.candidate_id for item in self.snapshot]
         if len(set(snapshot_ids)) != len(snapshot_ids):
@@ -93,9 +103,11 @@ class DecisionCreate(BaseModel):
         if set(self.selected_ids) & set(self.excluded_ids):
             raise ValueError("同一个 candidate_id 不能同时入选与淘汰")
         if not set(snapshot_ids) <= verdict_ids:
-            # docs/05 §3.3 的示例里 snapshot 只覆盖部分成员（快照可以是子集），但反
-            # 过来不行：一条既没入选也没淘汰的快照行无法落成 decision_item 的 verdict。
-            raise ValueError("snapshot 中的 candidate_id 必须出现在 selected_ids 或 excluded_ids 中")
+            # 快照可以是结论的子集（缺分的结论由服务层补 ``score=None`` 行），但一条
+            # 既没入选也没淘汰的快照行没有 ``verdict`` 可落，只能拒绝。
+            raise ValueError(
+                "snapshot 中的 candidate_id 必须出现在 selected_ids 或 excluded_ids 中"
+            )
         return self
 
 

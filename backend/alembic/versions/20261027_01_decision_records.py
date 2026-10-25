@@ -18,6 +18,12 @@
 
 注意 ``(project_id, decision_point, subject_id)`` **不建唯一约束**：同一个决策点在同一
 对象上允许重复决策（改主意、换一批候选），这是研发过程的常态而非错误（docs/04 §9.5 末段）。
+
+索引口径：``project_id`` / ``decision_point`` 的单列索引被 ``(project_id,
+decision_point)`` 完全覆盖，``decision_point`` / ``subject_id`` 的单列选择性也很低，
+因此只保留 4 个——列表筛选组合、列表排序键、决策对象反查。索引**只在模型
+``__table_args__`` 里声明**（列上不再写 ``index=True``），避免 ``create_all`` 与
+Alembic 得到不同的索引集。
 """
 
 import sqlalchemy as sa
@@ -60,29 +66,24 @@ def upgrade() -> None:
             sa.PrimaryKeyConstraint("id"),
             sa.ForeignKeyConstraint(["project_id"], ["projects.id"]),
         )
-        op.create_index("ix_decision_records_project_id", "decision_records", ["project_id"])
-        op.create_index(
-            "ix_decision_records_decision_point", "decision_records", ["decision_point"]
-        )
-        op.create_index("ix_decision_records_subject_id", "decision_records", ["subject_id"])
-        op.create_index("ix_decision_records_decided_at", "decision_records", ["decided_at"])
         op.create_index(
             "ix_decision_records_project_point",
             "decision_records",
             ["project_id", "decision_point"],
         )
         op.create_index(
-            "ix_decision_records_project_created",
+            "ix_decision_records_project_decided",
             "decision_records",
-            ["project_id", "created_at"],
+            ["project_id", "decided_at"],
         )
+        op.create_index("ix_decision_records_subject_id", "decision_records", ["subject_id"])
 
     if "decision_items" not in existing:
         op.create_table(
             "decision_items",
             sa.Column("id", sa.String(length=36), nullable=False),
             sa.Column("decision_id", sa.String(length=36), nullable=False),
-            sa.Column("candidate_id", sa.String(length=36), nullable=True),
+            sa.Column("candidate_id", sa.String(length=36), nullable=False),
             sa.Column("verdict", sa.String(length=16), nullable=False),
             sa.Column("snapshot_score", sa.Numeric(precision=10, scale=4), nullable=True),
             sa.Column("snapshot_rank", sa.Integer(), nullable=True),

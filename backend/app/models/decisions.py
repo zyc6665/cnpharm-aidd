@@ -14,6 +14,10 @@
 
 两张表都是**只追加**（docs/10 DB-09，与 ``audit_logs`` 同级别）：ORM 层用事件守卫
 把 ``UPDATE``/``DELETE`` 变成立即报错的编程错误，生产环境再用窄授权兜底。
+
+**索引只在这里声明**（``__table_args__``），列上不再写 ``index=True``：两处并存会
+让 ``Base.metadata.create_all``（开发/测试）与 Alembic（生产）得到不同的索引集，
+而这种漂移只在生产才暴露。
 """
 
 from __future__ import annotations
@@ -39,11 +43,15 @@ from app.models.traceability import ImmutableRecordError
 #: 决策点（docs/03 §3.6.2）：DP1 靶点是否推进 → DP5 最终推荐进入实验。
 DECISION_POINTS = ("DP1", "DP2", "DP3", "DP4", "DP5")
 
-#: 决策对象类型。只有 ``CANDIDATE_SET`` 需要校验成员快照归属。
+#: 决策对象类型。``CANDIDATE_SET`` 额外校验成员快照归属（其余三类校验候选物归属）。
 DECISION_SUBJECT_TYPES = ("TARGET", "POCKET", "CANDIDATE_SET", "STRUCTURE")
 
 #: 决策结论。
 DECISION_VERDICTS = ("SELECTED", "EXCLUDED")
+
+#: 快照里「没有录到分」的标记。缺失写成 ``None`` 且打上这个标记，读者才知道这一行
+#: 是「当时没记录」而不是「当时为 0」——只追加表里两者一旦混淆就再也分不开。
+SCORE_SOURCE_MISSING = "missing"
 
 
 class DecisionRecord(Base, UUIDMixin, TimestampMixin):
@@ -51,27 +59,36 @@ class DecisionRecord(Base, UUIDMixin, TimestampMixin):
 
     __tablename__ = "decision_records"
     __table_args__ = (
+        # 列表页唯一的筛选组合（项目 + 决策点筛选）。
         Index("ix_decision_records_project_point", "project_id", "decision_point"),
-        Index("ix_decision_records_project_created", "project_id", "created_at"),
+        # 列表排序键；不带它时 PostgreSQL 会对倒序分页做全表排序。
+        Index("ix_decision_records_project_decided", "project_id", "decided_at"),
+        # 反查「这个靶点/口袋/候选集被决策过几次」。
+        Index("ix_decision_records_subject_id", "subject_id"),
     )
 
-    project_id = Column(String(36), ForeignKey("projects.id"), nullable=False, index=True)
-    decision_point = Column(String(8), nullable=False, index=True)
+    project_id = Column(String(36), ForeignKey("projects.id"), nullable=False)
+    decision_point = Column(String(8), nullable=False)
     subject_type = Column(String(32), nullable=False)
-    subject_id = Column(String(36), nullable=False, index=True)
+    subject_id = Column(String(36), nullable=False)
     reason = Column(Text, nullable=False)
     basis_task_ids = Column(JSON, nullable=False, default=list)
     basis_metrics = Column(JSON, nullable=False, default=dict)
     #: 决策人快照：用户改名或停用后，记录仍要可读（与 ``audit_logs.actor`` 同理）。
+    #: 长度按 ``docs/04`` §9.5 的 ``varchar(64)``；``users.email`` 是 255，所以写入
+    #: 时必须截断（否则超长邮箱在 PostgreSQL 上直接 500，SQLite 只是默默塞进去）。
     decided_by = Column(String(64), nullable=False)
     decided_by_id = Column(String(36), nullable=True)
-    decided_at = Column(DateTime, nullable=False, default=utcnow, index=True)
+    decided_at = Column(DateTime, nullable=False, default=utcnow)
 
     items = relationship(
         "DecisionItem",
         back_populates="decision",
         cascade="all, delete-orphan",
-        order_by="DecisionItem.snapshot_rank",
+        # 次级键 ``candidate_id``：``snapshot_rank`` 允许为空且可能重复，
+        # 只按它排序时 SQLite（NULLS FIRST）与 PostgreSQL（NULLS LAST）顺序不同，
+        # 派生出的 ``selected_ids`` 会随部署的数据库而变。
+        order_by="[DecisionItem.snapshot_rank, DecisionItem.candidate_id]",
     )
 
 
@@ -91,7 +108,8 @@ class DecisionItem(Base, UUIDMixin):
     decision_id = Column(
         String(36), ForeignKey("decision_records.id"), nullable=False
     )
-    candidate_id = Column(String(36), nullable=True)
+    #: 非空：``UniqueConstraint`` 不约束 NULL，允许空值等于允许「没有候选物的快照行」。
+    candidate_id = Column(String(36), nullable=False)
     verdict = Column(String(16), nullable=False)
     snapshot_score = Column(Numeric(10, 4), nullable=True)
     snapshot_rank = Column(Integer, nullable=True)
@@ -117,6 +135,7 @@ __all__ = [
     "DECISION_POINTS",
     "DECISION_SUBJECT_TYPES",
     "DECISION_VERDICTS",
+    "SCORE_SOURCE_MISSING",
     "DecisionItem",
     "DecisionRecord",
 ]
