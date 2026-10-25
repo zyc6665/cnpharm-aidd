@@ -1354,6 +1354,58 @@ export default {
       gpuUsage: 'GPU Usage',
       storageUsage: 'Storage Usage'
     },
+    // Compute queue
+    compute: {
+      title: 'Compute Queue',
+      subtitle: 'Inspect node slot declarations and occupancy; slots are versioned with deployment, this view is read-only',
+      totalSlots: 'Total Slots',
+      schedulableSlots: 'Schedulable Slots',
+      byVendor: 'By Vendor',
+      slotState: 'Slot State Overview',
+      emptyState: 'No slots declared yet (DRP_NODE_SLOTS_YAML / DRP_NODE_SLOTS_FILE)',
+      allocations: 'Active Allocations',
+      noAllocations: 'No active compute allocations',
+      nodeId: 'Node ID',
+      gpuCount: 'Accelerators',
+      agentEndpoint: 'Agent Endpoint',
+      acceleratorModel: 'Accelerator Model',
+      acceleratorVendor: 'Vendor',
+      deviceCount: 'Devices',
+      schedulable: 'Schedulable',
+      yes: 'Yes',
+      no: 'No',
+      taskId: 'Task ID',
+      slot: 'Slot',
+      gpuNode: 'GPU Node',
+      gpuIndex: 'GPU Index',
+      allocatedAt: 'Allocated At',
+      state: {
+        FREE: 'Free',
+        RESERVED: 'Reserved',
+        BUSY: 'Busy',
+        FAULT: 'Fault',
+        BORROWED: 'Borrowed'
+      }
+    },
+    // Audit log
+    audit: {
+      title: 'Audit Log',
+      subtitle: 'Search the append-only evidence trail by actor, action, result and resource type',
+      actor: 'Actor',
+      action: 'Action',
+      result: 'Result',
+      resourceType: 'Resource Type',
+      timeRange: 'Time Range',
+      startTime: 'Start Time',
+      endTime: 'End Time',
+      emptyState: 'No audit records match the current filters',
+      requestId: 'Request ID',
+      detail: 'Detail',
+      createdAt: 'Time',
+      target: 'Target',
+      ip: 'Source IP',
+      appendOnly: 'Append-only'
+    },
     // Dashboard
     todayNew: 'New Today',
     activeCount: 'Active',

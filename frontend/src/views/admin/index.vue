@@ -45,6 +45,8 @@ import {
   AppstoreOutlined,
   ClusterOutlined,
   CloudServerOutlined,
+  DatabaseOutlined,
+  FileSearchOutlined,
   SettingOutlined,
 } from '@ant-design/icons-vue'
 
@@ -61,6 +63,8 @@ const adminTabs = [
   { key: 'tool-categories', icon: AppstoreOutlined, labelKey: 'admin.toolCategories' },
   { key: 'workbench-groups', icon: ClusterOutlined, labelKey: 'admin.workbenchGroups' },
   { key: 'tasks', icon: CloudServerOutlined, labelKey: 'admin.tasks' },
+  { key: 'compute', icon: DatabaseOutlined, labelKey: 'admin.compute.title' },
+  { key: 'audit', icon: FileSearchOutlined, labelKey: 'admin.audit.title' },
   { key: 'system', icon: SettingOutlined, labelKey: 'admin.system' },
 ]
 

@@ -188,6 +188,18 @@ const routes: RouteRecordRaw[] = [
         name: 'AdminSystem',
         component: () => import('@/views/admin/System.vue'),
         meta: { title: 'admin.system' }
+      },
+      {
+        path: 'compute',
+        name: 'AdminCompute',
+        component: () => import('@/views/admin/Compute.vue'),
+        meta: { title: 'admin.compute.title' }
+      },
+      {
+        path: 'audit',
+        name: 'AdminAudit',
+        component: () => import('@/views/admin/Audit.vue'),
+        meta: { title: 'admin.audit.title' }
       }
     ]
   },
