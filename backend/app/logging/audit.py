@@ -54,6 +54,10 @@ class AuditAction(str, Enum):
     FILE_DOWNLOAD = "file_download"
     FILE_DELETE = "file_delete"
 
+    # 研发决策（docs/04 §9.5：决策写入必须同时追加审计；决策记录只追加，所以
+    # 只有 CREATE 没有 UPDATE/DELETE —— 后者在 ORM 层就是编程错误）
+    DECISION_CREATE = "decision_create"
+
     # 管理员操作
     ADMIN_USER_CREATE = "admin_user_create"
     ADMIN_USER_UPDATE = "admin_user_update"
@@ -85,6 +89,9 @@ class ResourceType(str, Enum):
     CONFIG = "config"
     SESSION = "session"
     SYSTEM = "system"
+    #: 研发决策记录（docs/04 §9.5）。单独一类而不是塞进 ``TASK``：审计员按资源
+    #: 类型检索「谁在什么时候把哪个候选推进了」时，需要能与任务提交区分开。
+    DECISION_RECORD = "decision_record"
 
 
 @dataclass
