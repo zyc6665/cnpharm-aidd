@@ -60,14 +60,15 @@ backend/            FastAPI 服务端
     tool_packages/  Tool Package v2 加载、校验、注册
     tool_templates/ 工具模板（含 drug_discovery 领域模板）
     tools/          工具能力注册表与内建工具执行（capabilities/registry/builtin_tools）
-  alembic/          数据库迁移（29 个版本）
+  alembic/          数据库迁移（30 个版本）
 frontend/           Vue 3 + Vite + ant-design-vue 4
   src/views/        页面（工作台/项目/任务/工具/工作流/管理后台）
   src/components/   workflow 画布、artifacts 渲染器
 deploy/             compose 与 K8s 部署资产
+  slots/            卡位声明（slots.yaml，算力节点与卡位映射的事实源）
 docs/               中国医药项目文档（00~17，见 docs/README.md）
   archive-upstream/ 产品线历史文档，只读归档
-test/               后端测试（217 个文件）
+test/               后端测试（218 个文件）
 example/            模型资产样例（tool-package v2）
 ```
 
@@ -98,12 +99,12 @@ Refs: M2-FR-02, 04-数据模型 §6.1~§6.3
 
 ## 5. 当前状态
 
-基线已就位，靶点域、化合物域与可追溯能力已落地（步骤 5、步骤 6、步骤 7）。较需求文档（62 个功能点 / 40 个页面）的差距：
+基线已就位，靶点域、化合物域、可追溯能力与 DCU 卡位调度已落地（步骤 5~步骤 8）。较需求文档（62 个功能点 / 40 个页面）的差距：
 
 | 类别 | 现状 |
 |---|---|
 | **可直接复用** | 任务队列/状态机/日志/取消/重试、执行后端抽象（K8s + SSH）、Tool Package v2、Artifact 版本与 lineage、工作流画布（拖拽/连边/条件分支已实现）、molstar 三维渲染 |
-| **必须新建** | 其余领域表（upload_session / dataset / decision_record）、Boltz-2 等 9 个模型资产、DCU 卡位调度、LDAP、40 个页面中的 30+ |
+| **必须新建** | 其余领域表（upload_session / dataset / decision_record）、Boltz-2 等 9 个模型资产、drp-node-agent 本体、LDAP、40 个页面中的 30+ |
 | **必须删除** | 已于步骤 3、步骤 4 完成：`agents/aidd` Agent 面、`external_databases`、`remote_tools`、`remote_capacity`、`image_registry`、`model_services`（详见下方「已完成的减法」） |
 
 **已完成的减法**（[docs/17](docs/17-交付仓库与分支策略.md) 第 5 节步骤 3、步骤 4）：
@@ -111,7 +112,7 @@ Refs: M2-FR-02, 04-数据模型 §6.1~§6.3
 - 步骤 3（拆包）：`agents/aidd` 的能力注册表与内建工具迁到 `backend/app/tools/`；Agent 对话/规划/计划审批链路（约 4500 行）连同 `agent_runs`、`conversations` 等 8 张表、前端 `Research` 页面与 Agent 模式标签页一并删除，迁移 `backend/alembic/versions/20261025_01_drop_agent_tables.py`。
 - 步骤 4（离线合规）：`external_databases`（公网 PubChem/RCSB/ChEMBL/PDBbind 抓取）、`remote_tools` + `remote_capacity` + `remote_api` 执行器、`image_registry` 死代码、`model_services`（LLM 服务配置）、前端 LLM 预设与产品线品牌外链全部删除；`builtin-fetch-*` / `builtin-query-*` 五个在线工具退场，画布预设 `PubChem 到基础 ADMET` 改为离线可执行的 `配体结构到基础 ADMET`。迁移 `20261025_02_drop_model_services.py`、`20261025_03_remove_external_database_tools.py`。`.github/offline-allowlist.txt` 现为空。
 
-**已完成的加法**（[docs/17](docs/17-交付仓库与分支策略.md) 第 5 节步骤 5、步骤 6、步骤 7）：
+**已完成的加法**（[docs/17](docs/17-交付仓库与分支策略.md) 第 5 节步骤 5~步骤 8）：
 
 - 步骤 5（靶点域）：新增 `targets` / `proteins` / `protein_structures` / `pockets` / `pocket_residues` 五张表与迁移 `backend/alembic/versions/20261026_01_domain_targets_and_pockets.py`；同一结构只允许一个 `selected` 口袋，由分区唯一索引 `uq_pockets_selected_structure` 在数据库层保证。API 覆盖 docs/05 §5 的 15 个端点（项目靶点集合、靶点增删改查、蛋白序列导入与版本、结构导入/预测/准备/导出、口袋登记/预测/选定/残基），领域逻辑集中在 `backend/app/services/domain_targets.py`，任务提交统一走 `create_and_schedule_tool_task`（与单项任务、工作流节点同一执行单元）。
 
@@ -119,7 +120,10 @@ Refs: M2-FR-02, 04-数据模型 §6.1~§6.3
 
 - 步骤 7（可追溯）：新增 `task_input_snapshots` 与 `audit_logs` 两张**只追加**表（迁移 `backend/alembic/versions/20261026_03_traceability.py`），并用 SQLAlchemy 的 `before_update` / `before_delete` 事件守卫在 ORM 层拒绝改写（docs/10 DB-09）；输入快照在 `create_and_schedule_tool_task` 里与任务同事务写入，因此任务一旦存在，输入就已是历史事实。`backend/app/services/traceability.py` 装配 docs/01 §11.2 要求的六类元数据，`GET /api/v1/results/{taskId}/traceability` 一键取回、`POST /api/v1/results/{taskId}:export` 落成 JSON 文件（含内容 sha256）。审计从滚动文件扩展为「文件 + 数据库」双写：`backend/app/services/audit_sink.py` 把 `AuditEvent` 映射进 `audit_logs`，用有界队列异步落库、队列满时丢弃而非阻塞请求（docs/04 §3.2.2 审计失败不阻断业务），管理员经 `GET /api/v1/admin/audit-logs` 按 actor/action/result/资源/时间范围检索。
 
+- 步骤 8（DCU 卡位）：新增 `backend/app/gpu/slots.py`——把 `slots.yaml`（`schemaVersion: 2`，支持 DCU 与 NVIDIA 双形态）解析成「节点 → 卡位 → 设备号/环境变量/镜像/可跑模型」，`accelerator.model` 只做观测展示、不参与调度判定。卡位状态机 `FREE/RESERVED/BUSY/FAULT/BORROWED` 由 drp-node-agent 维护并上报（`POST /api/v1/gpu/slots/report`，独立 token + `hmac.compare_digest`，**不开放在线改声明的写接口**），平台只做消费与调度决策；**Agent 上报 `deviceCount != 1` 时强制置 FAULT**，把 docs/09 §5.6 的 `device_count()==1` 验收纪律落成代码。`GPUAllocation` 增加 `slot_id`/`accelerator_model`/`accelerator_vendor`/`device_ids`/`agent_endpoint`/`image_ref` 六列（迁移 `backend/alembic/versions/20261026_04_gpu_allocation_slots.py`）**只做观测与追溯**，卡位互斥仍由静态声明 + Agent 单队列 + 活动租约唯一索引保证（docs/04 §4.1 明确无 slot 表）。同时修掉一个多节点下的致命缺陷：`GPUAllocator._is_gpu_idle` 原来对任意节点都用本机探针，远程卡位必然抛异常判为忙，导致有声明也分配不出来。`deploy/slots/slots.example.yaml` 随仓交付，是运维照抄的模板。
+
 首轮改造的 9 步提交切分见 [docs/17-交付仓库与分支策略.md](docs/17-交付仓库与分支策略.md) 第 5 节。
+
 ## 6. 关键文档入口
 
 新人按角色读，不要从头啃 22 份：

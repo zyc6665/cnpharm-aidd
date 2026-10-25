@@ -55,6 +55,13 @@ class AllocationResult:
     allocation_id: Optional[str] = None
     message: str = ""
     wait_position: Optional[int] = None  # 等待队列位置
+    # 卡位追溯（docs/13 §4.4）：Agent 按卡位启动容器，平台需要记住「在哪张卡上跑过」。
+    slot_id: Optional[str] = None
+    slot_identifier: Optional[str] = None
+    accelerator_model: Optional[str] = None
+    accelerator_vendor: Optional[str] = None
+    image_ref: Optional[str] = None
+    agent_endpoint: Optional[str] = None
 
 
 class GPUAllocator:
@@ -351,9 +358,17 @@ class GPUAllocator:
     async def _get_available_nodes(self) -> List[Dict[str, Any]]:
         """获取可用GPU节点
 
+        顺序：先看 ``slots.yaml`` 声明的卡位（生产形态，多节点/DCU），
+        再回退到本机 GPU 探测（开发机形态）。两者都有时以卡位声明为准——
+        卡位是调度的最小单位，本机探测拿不到跨节点视图（docs/09 §5.6）。
+
         Returns:
             List[Dict[str, Any]]: 可用节点列表
         """
+        slots_nodes = await self._get_slot_nodes()
+        if slots_nodes:
+            return slots_nodes
+
         # 本地模式：直接检测本地GPU
         try:
             if self.detector.is_available():
@@ -362,6 +377,7 @@ class GPUAllocator:
                     "id": "local",
                     "hostname": node_info.hostname,
                     "gpu_count": node_info.gpu_count,
+                    "source": "local_probe",
                     "gpus": [
                         {
                             "index": gpu.gpu_index,
@@ -376,8 +392,32 @@ class GPUAllocator:
             logger.warning("Failed to detect local GPU nodes: %s", e)
 
         # 如果没有本地GPU，返回空列表
-        # 生产环境中应该从数据库查询注册的GPU节点
         return []
+
+    async def _get_slot_nodes(self) -> List[Dict[str, Any]]:
+        """按卡位声明生成可调度节点视图；未配置卡位时返回空列表。"""
+        try:
+            from app.gpu.slots import load_slot_registry, schedulable_node_view
+
+            registry = load_slot_registry()
+        except Exception as exc:
+            logger.warning("Failed to load slot registry: %s", exc)
+            return []
+
+        if not registry.nodes:
+            return []
+
+        try:
+            nodes = await schedulable_node_view(registry, cache_client=self.cache)
+        except Exception as exc:
+            logger.warning("Failed to load slot states: %s", exc)
+            return []
+
+        logger.debug(
+            "Slot-based nodes available: %s",
+            [(node["id"], len(node.get("gpus", []))) for node in nodes],
+        )
+        return nodes
 
     async def _try_allocate_idle_gpu(
         self,
@@ -408,6 +448,7 @@ class GPUAllocator:
                         gpu_index=gpu["index"],
                         memory_mb=memory_required_mb,
                         attempt_id=attempt_id,
+                        slot=gpu,
                     )
 
         return None
@@ -448,6 +489,7 @@ class GPUAllocator:
             gpu_index=best["gpu_index"],
             memory_mb=memory_required_mb,
             attempt_id=attempt_id,
+            slot=best.get("gpu"),
         )
 
     async def _try_allocate_round_robin(
@@ -474,6 +516,7 @@ class GPUAllocator:
             gpu_index=candidate["gpu_index"],
             memory_mb=memory_required_mb,
             attempt_id=attempt_id,
+            slot=candidate.get("gpu"),
         )
 
     async def _try_allocate_by_load(
@@ -498,6 +541,7 @@ class GPUAllocator:
             gpu_index=best["gpu_index"],
             memory_mb=memory_required_mb,
             attempt_id=attempt_id,
+            slot=best.get("gpu"),
         )
 
     async def _allocation_candidates(
@@ -517,6 +561,7 @@ class GPUAllocator:
                         "node_id": node["id"],
                         "gpu_index": gpu["index"],
                         "free_memory": free_memory,
+                        "gpu": gpu,
                     })
         return candidates
 
@@ -552,6 +597,7 @@ class GPUAllocator:
         gpu_index: int,
         memory_mb: int,
         attempt_id: str | None = None,
+        slot: Dict[str, Any] | None = None,
     ) -> AllocationResult:
         """创建分配记录
 
@@ -560,11 +606,14 @@ class GPUAllocator:
             node_id: 节点ID
             gpu_index: GPU索引
             memory_mb: 分配显存
+            attempt_id: 执行尝试ID
+            slot: 卡位视图（来自 slots.yaml 的 ``gpus[i]``）；None 表示本机探测到的裸卡
 
         Returns:
             AllocationResult: 分配结果
         """
         allocation_id = str(uuid.uuid4())
+        slot = slot or {}
 
         if self.db is not None:
             if isinstance(self.db, AsyncSession):
@@ -585,6 +634,12 @@ class GPUAllocator:
                     gpu_index=gpu_index,
                     memory_allocated_mb=memory_mb,
                     status=GPUAllocationStatus.ACTIVE.value,
+                    slot_id=slot.get("slot_id"),
+                    accelerator_model=slot.get("accelerator_model"),
+                    accelerator_vendor=self._slot_vendor(slot),
+                    device_ids=self._slot_device_ids(slot),
+                    agent_endpoint=slot.get("agent_endpoint"),
+                    image_ref=slot.get("image"),
                 )
                 try:
                     async with self.db.begin_nested():
@@ -621,7 +676,10 @@ class GPUAllocator:
                 "node_id": node_id,
                 "gpu_index": gpu_index,
                 "memory_mb": memory_mb,
-                "allocation_id": allocation_id
+                "allocation_id": allocation_id,
+                "slot_id": slot.get("slot_id"),
+                "slot_identifier": slot.get("slot_identifier"),
+                "accelerator_model": slot.get("accelerator_model"),
             }
         )
 
@@ -631,8 +689,37 @@ class GPUAllocator:
             gpu_index=gpu_index,
             allocated_memory_mb=memory_mb,
             allocation_id=allocation_id,
-            message="GPU allocated successfully"
+            message="GPU allocated successfully",
+            slot_id=slot.get("slot_id"),
+            slot_identifier=slot.get("slot_identifier"),
+            accelerator_model=slot.get("accelerator_model"),
+            accelerator_vendor=self._slot_vendor(slot),
+            image_ref=slot.get("image"),
+            agent_endpoint=slot.get("agent_endpoint"),
         )
+
+    @staticmethod
+    def _slot_vendor(slot: Dict[str, Any]) -> Optional[str]:
+        """从卡位视图推断加速卡厂商，仅用于追溯与展示。"""
+        if slot.get("accelerator_vendor"):
+            return str(slot["accelerator_vendor"])
+        if slot.get("accelerator_model"):
+            model = str(slot["accelerator_model"]).lower()
+            if "dcu" in model or "hygon" in model or "k100" in model:
+                return "haiguang-dcu"
+            if "nvidia" in model or "a100" in model or "4090" in model or "v100" in model:
+                return "nvidia-cuda"
+        if slot.get("slot_id"):
+            return "declared"
+        return None
+
+    @staticmethod
+    def _slot_device_ids(slot: Dict[str, Any]) -> Optional[str]:
+        """把卡位声明的设备号序列化成逗号串，便于追溯回放。"""
+        device_ids = slot.get("device_ids")
+        if not device_ids:
+            return None
+        return ",".join(str(item) for item in device_ids)
 
     async def _is_gpu_idle(self, node_id: str, gpu_index: int) -> bool:
         """检查GPU是否空闲
@@ -681,6 +768,14 @@ class GPUAllocator:
                 return False
 
         # 没有活动任务占用时，再用硬件利用率做兜底判断。
+        #
+        # 只对本机（node_id == "local"）探针：卡位节点上的加速卡由 drp-node-agent 通过
+        # hy-smi / NVML 观测并经「辅通道 C」上报，平台侧进程根本看不到那些设备。
+        # 早前这里不分节点直接 get_gpu_stats，导致多节点部署下所有远程卡位一律判为忙，
+        # 分配永远失败（docs/09 §5.6 卡位状态权威在 Agent）。
+        if node_id != "local":
+            return True
+
         try:
             stats = self.detector.get_gpu_stats(gpu_index)
             # 利用率低于10%视为空闲

@@ -348,6 +348,19 @@ class Settings(BaseSettings):
     TASK_CANCELLATION_RECONCILE_BATCH_SIZE: int = 100
     GPU_RETRY_INITIAL_BACKOFF_SECONDS: int = 30
     GPU_RETRY_MAX_BACKOFF_SECONDS: int = 900
+    # 卡位调度（docs/09 §5.6、docs/13 §4.1）：卡位由 slots.yaml 静态声明，
+    # 状态由 drp-node-agent 维护并上报，平台只消费与展示。
+    # 内联 YAML 优先于文件路径；两者都为空时按「无卡位」启动，回退到本机 GPU 探测。
+    DRP_NODE_SLOTS_YAML: Optional[str] = None
+    DRP_NODE_SLOTS_FILE: Optional[str] = None
+    DRP_SLOT_STATE_TTL_SECONDS: int = 120
+    # Agent HTTP 通道（docs/13 §4.2：平台 → Agent 8780/TCP）。
+    DRP_NODE_AGENT_BASE_URL: Optional[str] = None
+    DRP_NODE_AGENT_TOKEN: Optional[str] = None
+    DRP_NODE_AGENT_TIMEOUT_SECONDS: float = 5.0
+    # Agent → 平台上报用的 token（docs/13 §4.3：DCU 机 /etc/drp/agent/report.token）。
+    # 与出站 token 分开，泄露时互不影响。
+    DRP_NODE_AGENT_REPORT_TOKEN: Optional[str] = None
     RESOURCE_ADMISSION_RETRY_INITIAL_BACKOFF_SECONDS: int = 30
     RESOURCE_ADMISSION_RETRY_MAX_BACKOFF_SECONDS: int = 900
     WORKER_CAPABILITY_JSON: Optional[str] = None

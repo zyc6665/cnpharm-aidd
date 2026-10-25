@@ -341,6 +341,19 @@ class TaskExecutor:
                 gpu_config = dict(self.config.get("gpu_config") or {})
                 gpu_config["count"] = 1
                 gpu_config["device"] = str(result.gpu_index)
+                # 卡位信息必须随执行配置下发：容器内设备序号恒为 0（docs/09 §5.6），
+                # 宿主卡号走 device，卡位号用于 Agent 定位与追溯回放。
+                if result.slot_id:
+                    gpu_config["slot_id"] = result.slot_id
+                    gpu_config["slot_identifier"] = result.slot_identifier
+                if result.accelerator_model:
+                    gpu_config["accelerator_model"] = result.accelerator_model
+                if result.accelerator_vendor:
+                    gpu_config["accelerator_vendor"] = result.accelerator_vendor
+                if result.image_ref:
+                    gpu_config["image_ref"] = result.image_ref
+                if result.agent_endpoint:
+                    gpu_config["agent_endpoint"] = result.agent_endpoint
                 self.config["gpu_config"] = gpu_config
                 await session.commit()
                 self._start_gpu_heartbeat()
@@ -349,6 +362,12 @@ class TaskExecutor:
                     "node_id": result.gpu_node_id,
                     "gpu_index": result.gpu_index,
                     "memory_mb": result.allocated_memory_mb,
+                    "slot_id": result.slot_id,
+                    "slot_identifier": result.slot_identifier,
+                    "accelerator_model": result.accelerator_model,
+                    "accelerator_vendor": result.accelerator_vendor,
+                    "image_ref": result.image_ref,
+                    "agent_endpoint": result.agent_endpoint,
                 }
             except GPUAllocationFailed:
                 raise
