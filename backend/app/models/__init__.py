@@ -36,6 +36,7 @@ from app.models.compounds import (
     MoleculeFingerprint,
 )
 from app.models.traceability import AuditLog, TaskInputSnapshot
+from app.models.decisions import DecisionItem, DecisionRecord
 
 __all__ = [
     "User",
@@ -56,4 +57,5 @@ __all__ = [
     "Target", "Protein", "ProteinStructure", "Pocket", "PocketResidue",
     "Compound", "Candidate", "CandidateSet", "CandidateSetItem", "MoleculeFingerprint",
     "AuditLog", "TaskInputSnapshot",
+    "DecisionRecord", "DecisionItem",
 ]
