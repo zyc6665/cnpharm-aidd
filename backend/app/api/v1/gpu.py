@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user, get_admin_user
+from app.common.responses import success_response
 from app.config import settings
 from app.database.session import get_db
 from app.gpu.detector import get_gpu_detector
@@ -348,7 +349,7 @@ async def get_allocation_stats(
     """获取GPU分配统计"""
     allocator = GPUAllocator(db=db)
     stats = await allocator.get_allocation_stats()
-    return stats
+    return success_response(data=stats)
 
 
 @router.get(
@@ -372,6 +373,9 @@ async def get_gpu_history(
 # * 卡位声明来自 slots.yaml，状态权威在 Agent；平台只做消费、展示与准入判断。
 # * 平台不提供「改卡位声明」的写接口——声明随镜像包与部署一起版本化（Helm values）,
 #   允许在线改等于让调度依据脱离版本控制。
+# * 响应体口径：本组端点中 /slots 与 /allocations 已对齐 docs/05 §1.2 统一响应体
+#   （success_response）；其余 /gpu/* 端点沿用基线裸返回（已有 response_model 与
+#   历史消费方），属待收敛技术债——不要照抄这里的裸返回写法。
 
 
 @router.get(
@@ -388,18 +392,20 @@ async def get_slot_view(current_user=Depends(get_current_user)):
 
     states = await load_slot_states(registry)
     nodes = slot_view(registry, states)
-    return {
-        "schemaVersion": registry.schema_version,
-        "source": registry.source,
-        "configured": bool(registry.nodes),
-        "summary": describe_registry(registry),
-        "nodeCount": len(registry.nodes),
-        "slotCount": len(registry.slots),
-        "schedulableSlotCount": sum(
-            1 for node in nodes for slot in node["slots"] if slot["schedulable"]
-        ),
-        "nodes": nodes,
-    }
+    return success_response(
+        data={
+            "schemaVersion": registry.schema_version,
+            "source": registry.source,
+            "configured": bool(registry.nodes),
+            "summary": describe_registry(registry),
+            "nodeCount": len(registry.nodes),
+            "slotCount": len(registry.slots),
+            "schedulableSlotCount": sum(
+                1 for node in nodes for slot in node["slots"] if slot["schedulable"]
+            ),
+            "nodes": nodes,
+        }
+    )
 
 
 @router.post(

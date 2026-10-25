@@ -434,6 +434,36 @@ async def test_allocator_allocates_slot_and_persists_trace_fields(
 
 
 @pytest.mark.asyncio
+async def test_allocation_stats_expose_slot_trace_fields(db_session, patched_slots_yaml):
+    """P-36 算力页分配表依赖卡位追溯字段，摘要必须真的带出来。"""
+    patched_slots_yaml(DCU_SLOTS_YAML)
+    owner = User(email="slot-owner-stats@example.com", password_hash="x", role=UserRole.USER.value)
+    db_session.add(owner)
+    await db_session.flush()
+    task = await _make_task(db_session, owner.id)
+    await db_session.commit()
+
+    allocator = GPUAllocator(db=db_session, cache_client=get_cache_backend("memory"))
+    result = await allocator.allocate(task_id=task.id, memory_required_mb=8192)
+    await db_session.commit()
+    assert result.success is True
+
+    stats = await allocator.get_allocation_stats()
+    summary = stats["allocations"][0]
+
+    assert summary["allocation_id"] == result.allocation_id
+    assert summary["task_id"] == task.id
+    assert summary["slot_id"] == "A1"
+    assert summary["accelerator_model"] == "Hygon K100-AI"
+    assert summary["accelerator_vendor"] == "haiguang-dcu"
+    assert summary["gpu_node_id"] == "dcu-node-a"
+    assert summary["gpu_index"] == 0
+    assert summary["status"] == GPUAllocationStatus.ACTIVE.value
+    assert isinstance(summary["allocated_at"], str)
+    assert summary["allocated_at"]
+
+
+@pytest.mark.asyncio
 async def test_allocator_skips_busy_slot(db_session, patched_slots_yaml):
     patched_slots_yaml(DCU_SLOTS_YAML)
     owner = User(email="slot-owner3@example.com", password_hash="x", role=UserRole.USER.value)
@@ -570,11 +600,11 @@ async def slot_api_client(db_session, patched_slots_yaml):
 async def test_slot_view_endpoint_lists_declared_slots(slot_api_client):
     response = await slot_api_client.get("/api/v1/gpu/slots")
     assert response.status_code == 200
-    data = response.json()
-    assert data["configured"] is True
-    assert data["nodeCount"] == 2
-    assert data["slotCount"] == 3
-    assert data["schedulableSlotCount"] == 3
+    payload = response.json()["data"]
+    assert payload["configured"] is True
+    assert payload["nodeCount"] == 2
+    assert payload["slotCount"] == 3
+    assert payload["schedulableSlotCount"] == 3
 
 
 @pytest.mark.asyncio
@@ -615,7 +645,7 @@ async def test_report_endpoint_records_state(slot_api_client, monkeypatch):
     assert response.json()["state"] == "BUSY"
 
     view = await slot_api_client.get("/api/v1/gpu/slots")
-    node = next(n for n in view.json()["nodes"] if n["nodeId"] == "dcu-node-a")
+    node = next(n for n in view.json()["data"]["nodes"] if n["nodeId"] == "dcu-node-a")
     slot = next(s for s in node["slots"] if s["slotId"] == "A1")
     assert slot["state"] == "BUSY"
     assert slot["schedulable"] is False
