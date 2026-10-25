@@ -2,9 +2,9 @@ name: SciTool CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, 'cnpharm/**']
   pull_request:
-    branches: [main, develop]
+    branches: [main, develop, 'cnpharm/**']
 
 jobs:
   backend-test:

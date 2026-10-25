@@ -1,0 +1,39 @@
+# 统一换行符入库形态：索引与仓库内一律 LF，检出行为交由 core.autocrlf 决定
+# 现状核实：`git ls-files --eol` 显示全仓索引已是 i/lf，故本规则不产生内容变更，
+# 仅防止后续新增文件在 Windows 上以 CRLF 入库造成 diff 噪声。
+* text=auto eol=lf
+
+# 二进制文件：禁止换行转换与文本 diff
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.tar binary
+*.zst binary
+*.db binary
+*.db-wal binary
+*.db-shm binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+
+# 模型产物与权重
+*.pt binary
+*.pth binary
+*.ckpt binary
+*.onnx binary
+*.safetensors binary
+*.h5 binary
+*.pkl binary
+
+# 校验和敏感文件：保持原样
+*.sha256 -text
+
+# 第三方目录不参与语言统计与 diff
+reference/** linguist-vendored
+frontend/node_modules/** -diff
