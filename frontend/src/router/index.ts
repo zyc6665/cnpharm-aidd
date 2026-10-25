@@ -37,6 +37,43 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/projects/Settings.vue'),
     meta: { titleLiteral: '项目设置', requiresAuth: true }
   },
+  // 靶点与结构（P-06~P-11）
+  {
+    path: '/projects/:projectId/targets',
+    name: 'ProjectTargets',
+    component: () => import('@/views/targets/List.vue'),
+    meta: { title: 'targets.list.title', requiresAuth: true }
+  },
+  {
+    path: '/targets/:targetId',
+    name: 'TargetDetail',
+    component: () => import('@/views/targets/Detail.vue'),
+    meta: { title: 'targets.detail.title', requiresAuth: true }
+  },
+  {
+    path: '/proteins/:proteinId/predict',
+    name: 'StructurePredict',
+    component: () => import('@/views/targets/Predict.vue'),
+    meta: { title: 'targets.predict.title', requiresAuth: true }
+  },
+  {
+    path: '/structures/:structureId/pockets',
+    name: 'StructurePockets',
+    component: () => import('@/views/targets/Pockets.vue'),
+    meta: { title: 'targets.pockets.title', requiresAuth: true }
+  },
+  {
+    path: '/structures/:structureId',
+    name: 'StructureDetail',
+    component: () => import('@/views/targets/StructureDetail.vue'),
+    meta: { title: 'targets.structure.title', requiresAuth: true }
+  },
+  {
+    path: '/pockets/:pocketId/residues',
+    name: 'PocketResidues',
+    component: () => import('@/views/targets/PocketResidues.vue'),
+    meta: { title: 'targets.residues.title', requiresAuth: true }
+  },
   {
     path: '/projects/:projectId/workflow',
     name: 'ProjectWorkflow',
