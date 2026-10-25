@@ -47,8 +47,9 @@ function resolveColumnLabel(candidate: ComparisonPropertySource, index: number):
 /**
  * 构建对比矩阵：行是 7 项固定性质，列是候选物。
  *
- * `highlight[j]` 为 `true` 当且仅当该行在这一列上「取值不全相同」——
- * 即整行并非所有候选物取值一致；一致的行整行都不高亮，避免满屏告警色。
+ * 判断粒度是「整行是否不一致；不一致则整行高亮」：`highlight[j]` 在同一行内取值
+ * 相同，只要该行存在任一候选物取值与其它不同，整行都标记为差异；全行一致则不
+ * 高亮，避免满屏告警色。
  */
 export function buildComparisonMatrix(
   candidates: ComparisonPropertySource[]

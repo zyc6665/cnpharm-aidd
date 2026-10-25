@@ -1463,7 +1463,8 @@ export default {
       status: '状态',
       finishedAt: '完成时间',
       submittedBy: '提交人',
-      executionTime: '耗时'
+      executionTime: '耗时',
+      size: '大小'
     },
     detail: {
       title: '结果详情',
@@ -1471,6 +1472,8 @@ export default {
       outputs: '产物列表',
       inputs: '输入快照',
       outputData: '输出数据',
+      outputDataHint: '任务提交时的原始输出 JSON；3D 结构与可视化面板排在下一期。',
+      outputDataEmpty: '本次运行没有输出数据',
       errorMessage: '错误信息',
       noOutputs: '本次运行没有产物',
       noInputs: '本次运行没有输入快照',

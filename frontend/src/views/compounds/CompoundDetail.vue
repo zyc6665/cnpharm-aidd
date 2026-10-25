@@ -6,7 +6,7 @@
           <a-button :loading="loading" data-testid="compound-refresh" @click="loadCompound">
             {{ t('common.refresh') }}
           </a-button>
-          <router-link v-if="compound?.id" :to="`/projects/${projectId}/assets`">
+          <router-link v-if="compound?.id && projectId" :to="`/projects/${projectId}/assets`">
             <a-button data-testid="compound-back-assets">{{ t('compounds.backToAssets') }}</a-button>
           </router-link>
         </a-space>
@@ -128,23 +128,29 @@
             :columns="similarityColumns"
             :data-source="similarityHits"
             :pagination="false"
-            row-key="id"
+            row-key="compound.id"
             size="small"
             data-testid="compound-similarity-table"
           >
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'name'">
-                <router-link :to="`/compounds/${record.id}`">
-                  {{ record.name || record.inchikey }}
+                <router-link :to="compoundRoute(record.compound.id)">
+                  {{ record.compound.name || record.compound.inchikey }}
                 </router-link>
+              </template>
+              <template v-else-if="column.key === 'inchikey'">
+                <span class="mono-cell">{{ record.compound.inchikey }}</span>
+              </template>
+              <template v-else-if="column.key === 'mol_formula'">
+                {{ record.compound.mol_formula || '-' }}
+              </template>
+              <template v-else-if="column.key === 'mol_weight'">
+                {{ formatPropertyValue('mol_weight', record.compound.mol_weight) }}
               </template>
               <template v-else-if="column.key === 'similarity'">
                 <span class="similarity-value" data-testid="compound-similarity-value">
-                  {{ record.similarity.toFixed(3) }}
+                  {{ formatSimilarity(record.similarity) }}
                 </span>
-              </template>
-              <template v-else-if="column.key === 'mol_weight'">
-                {{ formatPropertyValue('mol_weight', record.mol_weight) }}
               </template>
             </template>
           </a-table>
@@ -183,11 +189,16 @@
 
   const compoundId = computed(() => String(route.params.compoundId || ''))
 
+  /**
+   * 化合物本身不带 `project_id`，所属项目只能由入口链接的 query 传入
+   * （Assets/CandidateDetail/相似性表格跳转均带 `project_id`）。
+   * 取不到时「返回数据资产」按钮不渲染，避免生成 `/projects//assets` 死链。
+   */
+  const projectId = computed(() => String(route.query.project_id || ''))
+
   const loading = ref(false)
   const loadError = ref(false)
   const compound = ref<Compound | null>(null)
-
-  const projectId = ref('')
 
   const searching = ref(false)
   const similarityError = ref(false)
@@ -214,11 +225,28 @@
 
   const similarityColumns = computed(() => [
     { title: t('compounds.columns.name'), key: 'name', width: 220 },
-    { title: t('compounds.columns.inchikey'), dataIndex: 'inchikey', key: 'inchikey', width: 200 },
-    { title: t('compounds.columns.formula'), dataIndex: 'mol_formula', key: 'mol_formula', width: 120 },
+    { title: t('compounds.columns.inchikey'), key: 'inchikey', width: 200 },
+    { title: t('compounds.columns.formula'), key: 'mol_formula', width: 120 },
     { title: t('compounds.columns.molWeight'), key: 'mol_weight', width: 110 },
     { title: t('compounds.similarity.similarity'), key: 'similarity', width: 120 }
   ])
+
+  /** Tanimoto 相似度固定三位小数（docs/06 P-13）。 */
+  function formatSimilarity(value: number | null | undefined): string {
+    if (value === null || value === undefined || Number.isNaN(value)) {
+      return '-'
+    }
+    return value.toFixed(3)
+  }
+
+  /**
+   * 化合物详情路由必须带上 `project_id`，否则目标页拿不到所属项目、
+   * 「返回数据资产」无法生成（见 docs/06 P-13）。
+   */
+  function compoundRoute(id: string): string {
+    const base = `/compounds/${encodeURIComponent(id)}`
+    return projectId.value ? `${base}?project_id=${encodeURIComponent(projectId.value)}` : base
+  }
 
   function readValue(source: Compound | null, key: PropertyKey): number | null {
     if (!source) {
@@ -244,10 +272,8 @@
       const response = await getCompound(compoundId.value)
       compound.value = response.data
       if (!similarityQuery.value) {
-        similarityQuery.value = response.data.canonical_smiles
+        similarityQuery.value = response.data.canonical_smiles ?? ''
       }
-      const projectParam = String(route.query.project_id || '')
-      projectId.value = projectParam
     } catch {
       loadError.value = true
       compound.value = null

@@ -61,7 +61,7 @@
           <ul class="picker-list" data-testid="compare-picker-list">
             <li v-for="candidate in candidates" :key="candidate.id" class="picker-item">
               <div class="picker-meta">
-                <router-link :to="`/candidates/${candidate.id}`" class="picker-name">
+                <router-link :to="candidateRoute(candidate.id)" class="picker-name">
                   {{ candidateTitle(candidate) }}
                 </router-link>
                 <a-tag>{{ t(candidateLocationLabel(candidate)) }}</a-tag>
@@ -152,6 +152,12 @@
   const { t } = useI18n()
 
   const projectId = computed(() => String(route.params.projectId || ''))
+
+  /** 候选物详情页需要 `project_id` 才能渲染「返回数据资产」。 */
+  function candidateRoute(candidateId: string): string {
+    const base = `/candidates/${encodeURIComponent(candidateId)}`
+    return projectId.value ? `${base}?project_id=${encodeURIComponent(projectId.value)}` : base
+  }
 
   const loading = ref(false)
   const loadError = ref(false)

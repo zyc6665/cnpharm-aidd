@@ -68,7 +68,15 @@ test('项目导航的 assets 项紧跟在 tasks 之后且不影响既有 active 
   const items = buildProjectWorkspaceNavItems('project-1')
   const keys = items.map(item => item.key)
 
-  assert.deepEqual(keys, ['overview', 'workflow', 'tasks', 'assets', 'lineage', 'settings'])
+  assert.deepEqual(keys, [
+    'overview',
+    'workflow',
+    'tasks',
+    'assets',
+    'results',
+    'lineage',
+    'settings'
+  ])
   assert.equal(keys.indexOf('assets'), keys.indexOf('tasks') + 1)
   assert.equal(keys.indexOf('overview'), 0)
 
@@ -91,6 +99,14 @@ test('项目导航的 assets 项紧跟在 tasks 之后且不影响既有 active 
     }),
     false
   )
+
+  // P-33 结果中心必须从项目导航可达（assets 之后、lineage 之前）
+  const results = items.find(item => item.key === 'results')
+  assert.ok(results, '缺少 results 导航项')
+  assert.equal(results?.label, '结果中心')
+  assert.equal(results?.to, '/projects/project-1/results')
+  assert.equal(keys.indexOf('results'), keys.indexOf('assets') + 1)
+  assert.equal(keys.indexOf('results') + 1, keys.indexOf('lineage'))
 })
 
 test('i18n 中英双语均补齐 compounds / candidates / results 三个命名空间', () => {

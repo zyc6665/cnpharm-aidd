@@ -14,8 +14,8 @@ export interface CompoundProperties {
 export interface Compound {
   id: string
   name: string | null
-  inchikey: string
-  canonical_smiles: string
+  inchikey: string | null
+  canonical_smiles: string | null
   mol_formula: string | null
   mol_weight: number | null
   props: CompoundProperties

@@ -130,6 +130,22 @@
         </p>
       </section>
 
+      <!-- 输出数据：最小版 JSON 折叠块；3D/可视化面板下一期 -->
+      <section class="result-section">
+        <h3 class="section-title">{{ t('results.detail.outputData') }}</h3>
+        <p class="section-subtitle">{{ t('results.detail.outputDataHint') }}</p>
+        <a-collapse v-if="hasOutputData" data-testid="result-output-data">
+          <a-collapse-panel :header="t('results.detail.outputData')">
+            <pre class="json-block" data-testid="result-output-data-json">{{
+              outputDataJson
+            }}</pre>
+          </a-collapse-panel>
+        </a-collapse>
+        <p v-else class="section-empty" data-testid="result-output-data-empty">
+          {{ t('results.detail.outputDataEmpty') }}
+        </p>
+      </section>
+
       <!-- 追溯包：复用 getTraceability，不新建追溯组件 -->
       <section class="result-section">
         <div class="traceability-header">
@@ -329,7 +345,7 @@
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
   import { exportTraceability, getResult, getTraceability } from '@/api/results'
-  import { TRACEABILITY_SECTIONS, formatExecutionSeconds } from '@/domain/results'
+  import { TRACEABILITY_SECTIONS, formatBytes, formatExecutionSeconds } from '@/domain/results'
   import { triggerProtectedFileDownload } from '@/utils/protected-file-access'
   import type {
     ProjectResultDetail,
@@ -365,6 +381,14 @@
 
   const inputRows = computed<ResultInputSnapshot[]>(() => result.value?.inputs ?? [])
 
+  const hasOutputData = computed(() => {
+    const data = result.value?.output_data
+    return Boolean(data) && Object.keys(data ?? {}).length > 0
+  })
+
+  /** `output_data` 是后端 `run.output()` 的原样字典，直接折叠展示即可。 */
+  const outputDataJson = computed(() => JSON.stringify(result.value?.output_data ?? {}, null, 2))
+
   const traceInputRows = computed<TraceabilityInput[]>(() => traceability.value?.inputs ?? [])
 
   const outputColumns = computed(() => [
@@ -373,7 +397,7 @@
     { title: t('results.traceability.fields.semanticType'), dataIndex: 'semantic_type', key: 'semantic_type', width: 140 },
     { title: t('results.traceability.fields.filename'), dataIndex: 'filename', key: 'filename', width: 180 },
     { title: t('results.traceability.fields.sha256'), key: 'sha256', width: 160 },
-    { title: t('common.status'), key: 'size_bytes', width: 100 }
+    { title: t('results.columns.size'), key: 'size_bytes', width: 100 }
   ])
 
   const inputColumns = computed(() => [
@@ -400,7 +424,7 @@
     { title: t('results.traceability.fields.filename'), dataIndex: 'filename', key: 'filename', width: 180 },
     { title: t('results.traceability.fields.urn'), key: 'urn', width: 220 },
     { title: t('results.traceability.fields.sha256'), key: 'sha256', width: 140 },
-    { title: t('common.status'), key: 'sizeBytes', width: 100 }
+    { title: t('results.columns.size'), key: 'sizeBytes', width: 100 }
   ])
 
   function formatDate(value: string | null | undefined): string {
@@ -410,13 +434,6 @@
   function shortHash(value: string | null | undefined): string {
     if (!value) return '-'
     return value.length > 12 ? `${value.slice(0, 12)}…` : value
-  }
-
-  function formatBytes(value: number | null | undefined): string {
-    if (value === null || value === undefined) return '-'
-    if (value < 1024) return `${value} B`
-    if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`
-    return `${(value / (1024 * 1024)).toFixed(1)} MB`
   }
 
   async function loadResult(): Promise<void> {
@@ -544,6 +561,17 @@
   .mono-cell {
     font-family: @font-family-mono;
     font-size: @font-size-xs;
+    word-break: break-all;
+  }
+
+  .json-block {
+    max-height: 360px;
+    margin: 0;
+    overflow: auto;
+    color: @text-secondary;
+    font-family: @font-family-mono;
+    font-size: @font-size-xs;
+    white-space: pre-wrap;
     word-break: break-all;
   }
 </style>

@@ -56,13 +56,16 @@
         <a-row :gutter="24">
           <a-col :xs="24" :md="8">
             <div class="structure-panel" data-testid="candidate-structure">
-              <Smiles2DCell :smiles="candidate.compound.canonical_smiles" />
+              <Smiles2DCell
+                v-if="candidate.compound.canonical_smiles"
+                :smiles="candidate.compound.canonical_smiles"
+              />
             </div>
           </a-col>
           <a-col :xs="24" :md="16">
             <a-descriptions bordered :column="2" size="small">
               <a-descriptions-item :label="t('compounds.columns.name')">
-                <router-link :to="`/compounds/${candidate.compound.id}`">
+                <router-link :to="compoundRoute(candidate.compound.id)">
                   {{ candidate.compound.name || candidate.compound.inchikey }}
                 </router-link>
               </a-descriptions-item>
@@ -108,7 +111,7 @@
           <router-link :to="`/tasks/${candidate.task_id}`" class="related-link">
             {{ candidate.task_id }}
           </router-link>
-          <router-link :to="`/results/${candidate.task_id}`" class="related-link">
+          <router-link :to="resultRoute(candidate.task_id)" class="related-link">
             {{ t('candidates.detail.relatedResult') }}
           </router-link>
         </div>
@@ -145,6 +148,20 @@
   const { t } = useI18n()
 
   const candidateId = computed(() => String(route.params.candidateId || ''))
+
+  /**
+   * 化合物详情页拿不到所属项目，跳转时必须带上候选物的 `project_id`，
+   * 否则 P-13 的「返回数据资产」会退化成死链。
+   */
+  function compoundRoute(compoundId: string): string {
+    const projectId = candidate.value?.project_id
+    const base = `/compounds/${encodeURIComponent(compoundId)}`
+    return projectId ? `${base}?project_id=${encodeURIComponent(projectId)}` : base
+  }
+
+  function resultRoute(taskId: string): string {
+    return `/results/${encodeURIComponent(taskId)}`
+  }
 
   const loading = ref(false)
   const loadError = ref(false)

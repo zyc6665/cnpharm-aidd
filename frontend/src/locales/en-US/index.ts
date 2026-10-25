@@ -1465,7 +1465,8 @@ export default {
       status: 'Status',
       finishedAt: 'Finished at',
       submittedBy: 'Submitted by',
-      executionTime: 'Duration'
+      executionTime: 'Duration',
+      size: 'Size'
     },
     detail: {
       title: 'Result detail',
@@ -1473,6 +1474,9 @@ export default {
       outputs: 'Artifacts',
       inputs: 'Input snapshot',
       outputData: 'Output data',
+      outputDataHint:
+        'Raw output JSON submitted by the task; 3D structure and visualization panels are planned for the next iteration.',
+      outputDataEmpty: 'This run has no output data',
       errorMessage: 'Error message',
       noOutputs: 'This run produced no artifacts',
       noInputs: 'This run has no input snapshot',

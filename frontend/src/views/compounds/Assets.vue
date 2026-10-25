@@ -76,7 +76,7 @@
         >
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'name'">
-              <router-link :to="`/compounds/${record.id}`">
+              <router-link :to="compoundRoute(record.id)">
                 {{ record.name || record.inchikey }}
               </router-link>
             </template>
@@ -119,7 +119,7 @@
         >
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'name'">
-              <router-link :to="`/candidates/${record.id}`">
+              <router-link :to="candidateRoute(record.id)">
                 {{ candidateTitle(record) }}
               </router-link>
             </template>
@@ -173,7 +173,7 @@
         >
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'name'">
-              <router-link :to="`/candidate-sets/${record.id}`">
+              <router-link :to="candidateSetRoute(record.id)">
                 {{ record.name }}
               </router-link>
             </template>
@@ -281,7 +281,9 @@
               {{ t('compounds.import.errorRow') }} {{ error.row }}：{{ error.message }}
             </li>
           </ul>
-          <p class="import-errors-hint">{{ t('compounds.import.errorsTruncated') }}</p>
+          <p v-if="importErrorsTruncated" class="import-errors-hint">
+            {{ t('compounds.import.errorsTruncated') }}
+          </p>
         </template>
       </section>
     </a-modal>
@@ -374,6 +376,29 @@
   const projectId = computed(() => String(route.params.projectId || ''))
   const pageSize = 20
 
+  /** 后端导入错误清单最多回 500 条，达到上限才提示「已截断」。 */
+  const IMPORT_ERROR_LIMIT = 500
+
+  /**
+   * 详情页（`/compounds/:id`、`/candidates/:id`、`/candidate-sets/:id`）自己拿不到
+   * 所属项目，必须由入口链接带上 `project_id`，否则目标页的「返回数据资产」会变成死链。
+   */
+  const projectQuery = computed(() =>
+    projectId.value ? `?project_id=${encodeURIComponent(projectId.value)}` : ''
+  )
+
+  function compoundRoute(id: string): string {
+    return `/compounds/${encodeURIComponent(id)}${projectQuery.value}`
+  }
+
+  function candidateRoute(id: string): string {
+    return `/candidates/${encodeURIComponent(id)}${projectQuery.value}`
+  }
+
+  function candidateSetRoute(id: string): string {
+    return `/candidate-sets/${encodeURIComponent(id)}${projectQuery.value}`
+  }
+
   const activeTab = ref<TabKey>('compounds')
   const loading = ref(false)
   const loadError = ref(false)
@@ -430,6 +455,10 @@
   const importNameColumn = ref('')
   const dedupeStrategy = ref<DedupeStrategy>('INCHIKEY_SKIP')
   const importResult = ref<CompoundImportResult | null>(null)
+
+  const importErrorsTruncated = computed(
+    () => (importResult.value?.errors.length ?? 0) >= IMPORT_ERROR_LIMIT
+  )
 
   const createVisible = ref(false)
   const creating = ref(false)

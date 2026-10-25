@@ -1,5 +1,14 @@
 <template>
   <main class="candidate-set-page">
+    <router-link
+      v-if="candidateSet?.project_id"
+      :to="`/projects/${candidateSet.project_id}/assets`"
+      class="back-link"
+      data-testid="set-back-assets"
+    >
+      {{ t('compounds.backToAssets') }}
+    </router-link>
+
     <AppPageHeader :title="setTitle" :subtitle="t('candidates.set.subtitle')">
       <template #actions>
         <a-space>
@@ -117,7 +126,10 @@
               {{ record.ordinal }}
             </template>
             <template v-else-if="column.key === 'name'">
-              <router-link v-if="record.candidate" :to="`/candidates/${record.candidate.id}`">
+              <router-link
+                v-if="record.candidate"
+                :to="candidateRoute(record.candidate.id)"
+              >
                 {{ candidateTitle(record.candidate) }}
               </router-link>
               <span v-else>{{ record.candidate_id }}</span>
@@ -277,6 +289,13 @@
 
   function candidateTitle(candidate: Candidate): string {
     return candidate.name || candidate.code || candidate.peptide_sequence || candidate.id
+  }
+
+  /** 候选物详情页拿不到所属项目，跳转时带上集合的 `project_id`。 */
+  function candidateRoute(candidateId: string): string {
+    const projectId = candidateSet.value?.project_id
+    const base = `/candidates/${encodeURIComponent(candidateId)}`
+    return projectId ? `${base}?project_id=${encodeURIComponent(projectId)}` : base
   }
 
   function readCurrentVersion(error: unknown): number | null {
@@ -484,6 +503,12 @@
     max-width: 1240px;
     margin: 0 auto;
     padding: @spacing-xl @spacing-lg @spacing-xxl;
+  }
+
+  .back-link {
+    display: inline-block;
+    margin-bottom: @spacing-lg;
+    color: @text-tertiary;
   }
 
   .set-alert {

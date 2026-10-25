@@ -65,11 +65,6 @@ export function sortResultsByFinishedDesc<T extends { finished_at?: string | nul
     .map(entry => entry.result)
 }
 
-/** 追溯包是否已经导出过（`exportedAt` 有值）。 */
-export function isTraceabilityExported(traceability: TraceabilityPackage | null): boolean {
-  return Boolean(traceability?.exportedAt)
-}
-
 /** 追溯包的输入快照数量与产物数量，用于概要行。 */
 export function summarizeTraceability(traceability: TraceabilityPackage | null): {
   inputCount: number
@@ -96,6 +91,20 @@ export function formatExecutionSeconds(seconds: number | null | undefined): stri
   const minutes = Math.floor(seconds / 60)
   const remainder = Math.round(seconds - minutes * 60)
   return `${minutes}m ${remainder}s`
+}
+
+/** 产物字节数展示：结果详情与追溯包产物表共用。 */
+export function formatBytes(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return '-'
+  }
+  if (value < 1024) {
+    return `${value} B`
+  }
+  if (value < 1024 * 1024) {
+    return `${(value / 1024).toFixed(1)} KB`
+  }
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`
 }
 
 export interface ResultSortSource {
