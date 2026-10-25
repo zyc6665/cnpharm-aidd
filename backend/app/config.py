@@ -436,6 +436,16 @@ class Settings(BaseSettings):
     # 索引或外部检索服务，属二期范围。
     MAX_PROJECT_CANDIDATES: int = 20000
 
+    # 分片上传（docs/04 §5.8、docs/05 §4.2）。>100MB 的文件强制 Multipart
+    # （docs/04 §13.2），分片大小由服务端决定，客户端只按 partCount 循环上报。
+    # 16MB × 128 片 = 2GB，正好覆盖单文件上限。
+    UPLOAD_PART_SIZE_BYTES: int = 16777216
+    # 会话 24 小时过期：未完成的分片会在存储上长期占空间，必须有过期兜底。
+    UPLOAD_SESSION_TTL_HOURS: int = 24
+    # 服务端本地拼装的上限。超过此值不做内存/磁盘拼装，改为提示接入 MinIO 直传
+    # （review 时确认过：先把能力落地，直传是后续步骤，见 docs/17 §5.7）。
+    UPLOAD_MAX_ASSEMBLY_BYTES: int = 268435456
+
     # 首月 AIDD 发布门禁。None 表示使用环境默认值：开发环境开启新入口，
     # 预发布/生产默认关闭新入口；旧 AIDD API 默认关闭。
     AIDD_PROJECT_WORKSPACE_ENABLED: Optional[bool] = None

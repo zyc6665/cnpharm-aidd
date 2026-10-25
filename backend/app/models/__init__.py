@@ -37,6 +37,7 @@ from app.models.compounds import (
 )
 from app.models.traceability import AuditLog, TaskInputSnapshot
 from app.models.decisions import DecisionItem, DecisionRecord
+from app.models.uploads import DataFile, Dataset, UploadSession
 
 __all__ = [
     "User",
@@ -58,4 +59,5 @@ __all__ = [
     "Compound", "Candidate", "CandidateSet", "CandidateSetItem", "MoleculeFingerprint",
     "AuditLog", "TaskInputSnapshot",
     "DecisionRecord", "DecisionItem",
+    "UploadSession", "Dataset", "DataFile",
 ]
