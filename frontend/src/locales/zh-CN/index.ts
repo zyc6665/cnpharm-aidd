@@ -1558,7 +1558,7 @@ export default {
     diskTotal: '磁盘总量',
     diskFree: '磁盘可用',
     totalFiles: '文件总数',
-    activeConnections: '活动连接数',
+    sseSubscriptions: '实时订阅数',
     storageConfig: '存储配置',
     storageType: '存储类型',
     localStorage: '本地存储',

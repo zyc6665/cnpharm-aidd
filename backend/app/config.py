@@ -348,6 +348,15 @@ class Settings(BaseSettings):
     TASK_CANCELLATION_RECONCILE_BATCH_SIZE: int = 100
     GPU_RETRY_INITIAL_BACKOFF_SECONDS: int = 30
     GPU_RETRY_MAX_BACKOFF_SECONDS: int = 900
+    # 任务事件 SSE（docs/05 §1.5、§9；docs/10 API-08）。
+    # 连接建立后先下发快照，之后按 poll 间隔回读数据库；数据库是唯一真值，
+    # 进程内广播只用来把下一次回读提前，不承担正确性。
+    TASK_EVENT_POLL_INTERVAL_SECONDS: float = 1.0
+    TASK_EVENT_HEARTBEAT_SECONDS: float = 15.0
+    # 单条 SSE 连接的最长存活时间：数小时级的 MD 任务不占着连接不放，
+    # 到点后前端凭 Last-Event-ID 重连续订（docs/12 HA-T-06）。
+    TASK_EVENT_MAX_DURATION_SECONDS: int = 1800
+    TASK_EVENT_INCLUDE_LOGS: bool = True
     # 卡位调度（docs/09 §5.6、docs/13 §4.1）：卡位由 slots.yaml 静态声明，
     # 状态由 drp-node-agent 维护并上报，平台只消费与展示。
     # 内联 YAML 优先于文件路径；两者都为空时按「无卡位」启动，回退到本机 GPU 探测。

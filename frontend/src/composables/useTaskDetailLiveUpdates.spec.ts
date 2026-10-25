@@ -2,22 +2,40 @@ import { nextTick, ref } from 'vue'
 import { flushPromises } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getTaskLogs } from '@/api/tasks'
-import { useWebSocket } from '@/composables/useWebSocket'
-import type { Task, TaskLog, WSMessage } from '@/types/models'
+import { openTaskEventStream } from '@/api/task-events'
+import type { Task, TaskLog } from '@/types/models'
+import type { TaskEventPayload, TaskLogEventPayload } from '@/api/task-events'
 import { useTaskDetailLiveUpdates } from './useTaskDetailLiveUpdates'
 
-const websocket = vi.hoisted(() => ({
-  connect: vi.fn(),
-  disconnect: vi.fn(),
-  onMessage: vi.fn(),
+const stream = vi.hoisted(() => ({
+  close: vi.fn(),
 }))
+
+const handlers = vi.hoisted(() => ({
+  onSnapshot: undefined as ((payload: never) => void) | undefined,
+  onStatus: undefined as ((payload: never) => void) | undefined,
+  onProgress: undefined as ((payload: never) => void) | undefined,
+  onLog: undefined as ((payload: never) => void) | undefined,
+  onDone: undefined as ((payload: never) => void) | undefined,
+  onError: undefined as ((payload: never) => void) | undefined,
+}))
+
+type StreamHandlers = {
+  onSnapshot?: (payload: TaskEventPayload) => void
+  onStatus?: (payload: TaskEventPayload) => void
+  onProgress?: (payload: TaskEventPayload) => void
+  onLog?: (payload: TaskLogEventPayload) => void
+  onDone?: (payload: TaskEventPayload) => void
+  onError?: (payload: unknown) => void
+  [key: string]: unknown
+}
 
 vi.mock('@/api/tasks', () => ({
   getTaskLogs: vi.fn(),
 }))
 
-vi.mock('@/composables/useWebSocket', () => ({
-  useWebSocket: vi.fn(() => websocket),
+vi.mock('@/api/task-events', () => ({
+  openTaskEventStream: vi.fn(),
 }))
 
 function buildTask(status: Task['status'], progress = 0): Task {
@@ -38,19 +56,47 @@ function mockLogs(logs: TaskLog[] = []) {
   } as never)
 }
 
+function eventPayload(overrides: Record<string, unknown> = {}) {
+  return {
+    taskId: 'task-1',
+    status: null,
+    rawStatus: null,
+    progress: 0,
+    progressMessage: null,
+    errorMessage: null,
+    updatedAt: null,
+    terminal: false,
+    ...overrides,
+  }
+}
+
 describe('useTaskDetailLiveUpdates', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.mocked(getTaskLogs).mockReset()
-    vi.mocked(useWebSocket).mockClear()
-    websocket.connect.mockReset()
-    websocket.disconnect.mockReset()
-    websocket.onMessage.mockReset()
-    websocket.onMessage.mockReturnValue(vi.fn())
+    vi.mocked(openTaskEventStream).mockReset()
+    stream.close.mockReset()
+    handlers.onSnapshot = undefined
+    handlers.onStatus = undefined
+    handlers.onProgress = undefined
+    handlers.onLog = undefined
+    handlers.onDone = undefined
+    handlers.onError = undefined
+
+    vi.mocked(openTaskEventStream).mockImplementation((_taskId, nextHandlers) => {
+      const captured = nextHandlers as StreamHandlers
+      handlers.onSnapshot = captured.onSnapshot as never
+      handlers.onStatus = captured.onStatus as never
+      handlers.onProgress = captured.onProgress as never
+      handlers.onLog = captured.onLog as never
+      handlers.onDone = captured.onDone as never
+      handlers.onError = captured.onError as never
+      return { close: stream.close, available: true }
+    })
     mockLogs()
   })
 
-  it('loads detail and logs, connects task websocket, and refreshes running tasks', async () => {
+  it('loads detail and logs, opens the SSE stream, and does not double-poll while connected', async () => {
     const task = ref<Task | null>(buildTask('running', 10))
     const fetchTaskDetail = vi.fn()
     const updates = useTaskDetailLiveUpdates({
@@ -65,20 +111,14 @@ describe('useTaskDetailLiveUpdates', () => {
 
     expect(fetchTaskDetail).toHaveBeenCalledTimes(1)
     expect(getTaskLogs).toHaveBeenCalledWith('task-1')
-    expect(websocket.connect).toHaveBeenCalledWith('/api/v1/ws/tasks/task-1')
-    expect(websocket.onMessage).toHaveBeenCalledTimes(1)
+    expect(openTaskEventStream).toHaveBeenCalledTimes(1)
+    expect(updates.streamConnected.value).toBe(true)
 
     await vi.advanceTimersByTimeAsync(1000)
-
-    expect(fetchTaskDetail).toHaveBeenCalledTimes(2)
+    expect(fetchTaskDetail).toHaveBeenCalledTimes(1)
   })
 
-  it('applies websocket progress, appends logs, and refreshes terminal messages', async () => {
-    let handler: ((message: WSMessage) => void) | undefined
-    websocket.onMessage.mockImplementation((nextHandler: (message: WSMessage) => void) => {
-      handler = nextHandler
-      return vi.fn()
-    })
+  it('applies stream progress, appends stream logs, and refreshes on terminal events', async () => {
     const task = ref<Task | null>(buildTask('running', 10))
     const fetchTaskDetail = vi.fn()
     const updateTaskProgress = vi.fn((taskId: string, progress: number, status?: Task['status']) => {
@@ -94,7 +134,6 @@ describe('useTaskDetailLiveUpdates', () => {
       task,
       fetchTaskDetail,
       updateTaskProgress,
-      now: () => 101,
       timestamp: () => '2026-08-20T00:00:01Z',
     })
 
@@ -102,15 +141,15 @@ describe('useTaskDetailLiveUpdates', () => {
     vi.mocked(getTaskLogs).mockClear()
     fetchTaskDetail.mockClear()
 
-    handler?.({ type: 'task_progress', task_id: 'task-1', progress_percent: 42, status: 'running' })
-    handler?.({ type: 'task_log', task_id: 'task-1', log: 'started', level: 'info' })
-    handler?.({ type: 'task_complete', task_id: 'task-1' })
+    handlers.onProgress?.(eventPayload({ status: 'running', progress: 42 }) as never)
+    handlers.onLog?.({ id: 'log-1', taskId: 'task-1', level: 'info', message: 'started', timestamp: '2026-08-20T00:00:01Z' } as never)
+    handlers.onDone?.(eventPayload({ status: 'success', progress: 100, terminal: true }) as never)
     await vi.runAllTimersAsync()
 
     expect(updateTaskProgress).toHaveBeenCalledWith('task-1', 42, 'running')
     expect(updateTaskProgress).toHaveBeenCalledWith('task-1', 100, 'success')
     expect(updates.logs.value).toContainEqual({
-      id: 101,
+      id: 1,
       task_id: 'task-1',
       level: 'info',
       message: 'started',
@@ -120,9 +159,43 @@ describe('useTaskDetailLiveUpdates', () => {
     expect(getTaskLogs).toHaveBeenCalledWith('task-1')
   })
 
-  it('restarts the live channel when the task id changes', async () => {
-    const unsubscribe = vi.fn()
-    websocket.onMessage.mockReturnValue(unsubscribe)
+  it('ignores events addressed to another task', async () => {
+    const task = ref<Task | null>(buildTask('running', 10))
+    const updateTaskProgress = vi.fn()
+    const updates = useTaskDetailLiveUpdates({
+      taskId: ref('task-1'),
+      task,
+      fetchTaskDetail: vi.fn(),
+      updateTaskProgress,
+    })
+
+    await updates.start()
+    handlers.onProgress?.({ ...eventPayload(), taskId: 'task-2', progress: 99 } as never)
+
+    expect(updateTaskProgress).not.toHaveBeenCalled()
+    expect(updates.logs.value).toEqual([])
+  })
+
+  it('falls back to polling when the stream cannot be opened', async () => {
+    vi.mocked(openTaskEventStream).mockImplementation(() => ({ close: vi.fn(), available: false }))
+    const task = ref<Task | null>(buildTask('running', 10))
+    const fetchTaskDetail = vi.fn()
+    const updates = useTaskDetailLiveUpdates({
+      taskId: ref('task-1'),
+      task,
+      fetchTaskDetail,
+      updateTaskProgress: vi.fn(),
+      intervalMs: 1000,
+    })
+
+    await updates.start()
+    expect(updates.streamConnected.value).toBe(false)
+
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(fetchTaskDetail).toHaveBeenCalledTimes(2)
+  })
+
+  it('closes the previous stream and opens a new one when the task id changes', async () => {
     vi.mocked(getTaskLogs)
       .mockResolvedValueOnce({
         code: 200,
@@ -150,11 +223,11 @@ describe('useTaskDetailLiveUpdates', () => {
     await nextTick()
     await flushPromises()
 
-    expect(unsubscribe).toHaveBeenCalledTimes(1)
-    expect(websocket.disconnect).toHaveBeenCalledTimes(1)
+    expect(stream.close).toHaveBeenCalledTimes(1)
     expect(fetchTaskDetail).toHaveBeenCalledTimes(2)
     expect(getTaskLogs).toHaveBeenLastCalledWith('task-2')
-    expect(websocket.connect).toHaveBeenLastCalledWith('/api/v1/ws/tasks/task-2')
+    const calls = vi.mocked(openTaskEventStream).mock.calls
+    expect(calls[calls.length - 1]?.[0]).toBe('task-2')
     expect(updates.logs.value).toEqual([
       { id: 2, task_id: 'task-2', level: 'info', message: 'new', timestamp: '2026-08-20T00:00:01Z' },
     ])

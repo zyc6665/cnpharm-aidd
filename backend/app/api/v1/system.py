@@ -114,8 +114,8 @@ class SystemStatsResponse(BaseModel):
     completed_tasks: int
     failed_tasks: int
 
-    # WebSocket 统计
-    active_connections: int
+    # 当前进程内活跃的任务事件 SSE 订阅数（docs/05 §9：任务状态走 SSE）
+    sse_subscriptions: int = 0
 
 
 class WorkerResourceStatusItem(BaseModel):
@@ -558,14 +558,14 @@ async def get_system_stats(
     包括：
     - 数据库统计（用户数、工具数、任务数、文件数）
     - 任务状态统计
-    - WebSocket 连接数
+    - 实时订阅数（任务事件 SSE）
     """
     from sqlalchemy import func
     from app.models.users import User
     from app.models.tools import Tool
     from app.models.tasks import Task, TaskStatus
     from app.models.files import File
-    from app.websocket import ws_manager
+    from app.services.task_event_hub import get_task_event_hub
 
     # 用户数
     users_result = await db.execute(select(func.count(User.id)))
@@ -604,8 +604,8 @@ async def get_system_stats(
     )
     failed_tasks = failed_result.scalar()
 
-    # WebSocket 连接数
-    active_connections = ws_manager.get_connection_count()
+    # 任务事件 SSE 订阅数（进程内，单副本口径；多副本时各副本只统计自己）
+    sse_subscriptions = get_task_event_hub().total_subscribers()
 
     return success_response(
         data=SystemStatsResponse(
@@ -617,7 +617,7 @@ async def get_system_stats(
             running_tasks=running_tasks,
             completed_tasks=completed_tasks,
             failed_tasks=failed_tasks,
-            active_connections=active_connections,
+            sse_subscriptions=sse_subscriptions,
         ).model_dump()
     )
 

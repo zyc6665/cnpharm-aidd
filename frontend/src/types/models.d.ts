@@ -743,7 +743,7 @@ export interface SystemStats {
   running_tasks: number
   completed_tasks: number
   failed_tasks: number
-  active_connections: number
+  sse_subscriptions: number
 }
 
 export interface WorkerResourceStatus {
@@ -850,32 +850,6 @@ export interface PaginatedResponse<T> {
   total_pages: number
 }
 
-// WebSocket 消息类型
-export interface WSMessage {
-  type:
-    | 'connected'
-    | 'subscribed'
-    | 'unsubscribed'
-    | 'task_status'
-    | 'task_progress'
-    | 'task_log'
-    | 'task_complete'
-    | 'task_error'
-    | 'error'
-    | 'pong'
-  task_id?: string
-  progress?: number
-  progress_percent?: number
-  status?: TaskStatus
-  message?: string
-  log?: string
-  level?: string
-  error?: string
-  result?: unknown
-  connection_id?: string
-  timestamp?: string
-  data?: unknown
-}
 
 // 工具创建参数
 export interface ToolCreateParams {

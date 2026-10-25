@@ -1,6 +1,6 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -10,53 +10,53 @@ function readSource(relativePath: string): string {
   return readFileSync(resolve(rootDir, relativePath), 'utf8')
 }
 
-test('WebSocket 组合式函数应使用统一 ws 地址配置并对齐后端 action 协议', () => {
-  const source = readSource('src/composables/useWebSocket.ts')
+test('任务实时通道应使用 SSE，而不是自研 WebSocket 客户端', () => {
+  assert.equal(existsSync(resolve(rootDir, 'src/composables/useWebSocket.ts')), false)
+  assert.equal(existsSync(resolve(rootDir, 'src/domain/tasks/websocket.ts')), false)
 
-  assert.equal(source.includes('VITE_WS_URL'), true)
-  assert.equal(source.includes('VITE_WS_HOST'), false)
-  assert.equal(source.includes('console.log'), false)
-  assert.equal(source.includes('import.meta.env.DEV'), true)
-  assert.equal(source.includes("action: 'ping'"), true)
-  assert.equal(source.includes("action: 'subscribe_task'"), true)
-  assert.equal(source.includes("action: 'unsubscribe_task'"), true)
+  const eventsSource = readSource('src/api/task-events.ts')
+  assert.equal(eventsSource.includes('EventSource'), true)
+  assert.equal(eventsSource.includes('/api/v1/tasks/'), true)
+  assert.equal(eventsSource.includes('/events'), true)
+  // EventSource 不能设置请求头，token 只能走查询参数。
+  assert.equal(eventsSource.includes('token='), true)
 })
 
-test('任务详情页应连接任务专用 WebSocket 端点并兼容后端任务消息类型', () => {
+test('任务详情页应订阅任务事件流并保留终态刷新', () => {
   const source = readSource('src/views/tasks/Detail.vue')
   const liveUpdatesSource = readSource('src/composables/useTaskDetailLiveUpdates.ts')
-  const websocketDomainSource = readSource('src/domain/tasks/websocket.ts')
 
   assert.equal(source.includes('useTaskDetailLiveUpdates'), true)
-  assert.equal(liveUpdatesSource.includes('/api/v1/ws/tasks/'), true)
   assert.equal(source.includes("from '@/domain/tasks'"), true)
-  assert.equal(liveUpdatesSource.includes('resolveTaskWebSocketProgressUpdate'), true)
-  assert.equal(liveUpdatesSource.includes('resolveTaskWebSocketLog'), true)
-  assert.equal(websocketDomainSource.includes("message.type === 'task_progress'"), true)
-  assert.equal(websocketDomainSource.includes("message.type === 'task_log'"), true)
-  assert.equal(websocketDomainSource.includes("message.type === 'task_complete'"), true)
-  assert.equal(websocketDomainSource.includes("message.type === 'task_error'"), true)
-  assert.equal(websocketDomainSource.includes("message.type === 'task_status'"), true)
-  assert.equal(websocketDomainSource.includes('progress_percent'), true)
+  assert.equal(liveUpdatesSource.includes('openTaskEventStream'), true)
+  assert.equal(liveUpdatesSource.includes('onSnapshot'), true)
+  assert.equal(liveUpdatesSource.includes('onDone'), true)
+  assert.equal(liveUpdatesSource.includes('resolveTaskWebSocketProgressUpdate'), false)
+  assert.equal(liveUpdatesSource.includes('useWebSocket'), false)
 })
 
-test('任务列表页不应再建立无订阅的通用 WebSocket 连接', () => {
+test('SSE 不可用时才回退轮询，且间隔不小于 2 秒', () => {
+  const liveUpdatesSource = readSource('src/composables/useTaskDetailLiveUpdates.ts')
+
+  // docs/10 API-08：禁止前端轮询间隔 < 2s。
+  assert.equal(liveUpdatesSource.includes('intervalMs ?? 5000'), true)
+  assert.equal(liveUpdatesSource.includes('streamConnected'), true)
+  assert.equal(liveUpdatesSource.includes("taskStatus.value === 'running'"), true)
+})
+
+test('任务列表页不应建立自研 WebSocket 连接', () => {
   const source = readSource('src/views/tasks/List.vue')
 
-  assert.equal(source.includes("import { useWebSocket } from '@/composables/useWebSocket'"), false)
-  assert.equal(source.includes('const { connect, disconnect, onMessage } = useWebSocket()'), false)
-  assert.equal(source.includes('connect()'), false)
+  assert.equal(source.includes('useWebSocket'), false)
   assert.equal(source.includes('onMessage(handleWSMessage)'), false)
 })
 
-test('Vite 的 /api 代理应允许 WebSocket upgrade', () => {
+test('Vite 的 /api 代理不再需要 WebSocket upgrade', () => {
   const source = readSource('vite.config.ts')
-  const apiProxyBlock = source.match(/['"]\/api['"]:\s*\{([\s\S]*?)\n\s*\},\n\s*['"]\/ws['"]:/)
 
-  assert.ok(apiProxyBlock)
-  assert.match(apiProxyBlock[1], /target:\s*['"]http:\/\/localhost:8000['"]/)
-  assert.match(apiProxyBlock[1], /changeOrigin:\s*true/)
-  assert.match(apiProxyBlock[1], /ws:\s*true/)
+  assert.equal(source.includes('ws: true'), false)
+  assert.equal(source.includes("'/ws'"), false)
+  assert.match(source, /'\/api':\s*\{\s*target:\s*'http:\/\/localhost:8000'/)
 })
 
 test('中英文 locale 应补齐 tools.runs 文案', () => {
