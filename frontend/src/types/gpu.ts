@@ -5,8 +5,14 @@
  * 后端只提供只读视图与分配查询，前端不提供任何写接口。
  */
 
-/** 卡位状态枚举，与后端 SLOT_STATES 一致。 */
-export type GpuSlotState = 'FREE' | 'RESERVED' | 'BUSY' | 'FAULT' | 'BORROWED'
+/**
+ * 卡位状态枚举，与后端 SLOT_STATES 一致。
+ *
+ * `UNKNOWN` 是前端侧的安全兜底：后端若返回未声明状态（新增状态或拼写错误），
+ * 一律落到 `UNKNOWN` 并保留原始字符串，绝不降级成 `FREE`——
+ * 把不确定的卡位显示成「空闲」会直接误导调度。
+ */
+export type GpuSlotState = 'FREE' | 'RESERVED' | 'BUSY' | 'FAULT' | 'BORROWED' | 'UNKNOWN'
 
 /** 单个卡位（可调度最小单元）。 */
 export interface GpuSlot {
@@ -19,6 +25,8 @@ export interface GpuSlot {
   image: string
   models: string[]
   state: GpuSlotState
+  /** 后端原始状态字符串；`state === 'UNKNOWN'` 时页面需原样展示以便排障。 */
+  raw_state: string
   schedulable: boolean
   state_message: string
   device_count: number
@@ -43,15 +51,23 @@ export interface GpuSlotOverview {
   nodes: GpuSlotNode[]
 }
 
-/** 一次 GPU 占用租约。 */
+/**
+ * 一次 GPU 占用租约。
+ *
+ * 字段严格对应 `backend/app/gpu/allocator.py::_get_active_allocation_summaries()`
+ * 的真实返回，不虚构后端没有的列。`gpu_index` 允许为 null（缺失时页面渲染 '-'，
+ * 不能捏造成 0 假装是 0 号卡）。
+ */
 export interface GpuAllocation {
   id: string
   task_id: string
-  slot_id: string
+  execution_attempt_id: string | null
   gpu_node_id: string
-  gpu_index: number
-  accelerator_model: string
+  gpu_index: number | null
+  slot_id: string | null
+  accelerator_model: string | null
+  accelerator_vendor: string | null
+  memory_allocated_mb: number | null
   status: string
-  allocated_at: string
-  released_at: string | null
+  allocated_at: string | null
 }

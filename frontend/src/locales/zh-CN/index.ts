@@ -1362,6 +1362,7 @@ export default {
       byVendor: '按厂商分布',
       slotState: '卡位状态概览',
       emptyState: '尚未声明卡位（DRP_NODE_SLOTS_YAML / DRP_NODE_SLOTS_FILE）',
+      loadError: '卡位视图加载失败，请稍后重试或联系运维检查后端服务',
       allocations: '活跃分配',
       noAllocations: '当前没有活跃的算力分配',
       nodeId: '节点 ID',
@@ -1370,7 +1371,8 @@ export default {
       acceleratorModel: '加速卡型号',
       acceleratorVendor: '厂商',
       deviceCount: '设备数',
-      schedulable: '可调度',
+      schedulable: '可调度（由状态推导）',
+      rawState: '原始状态',
       yes: '是',
       no: '否',
       taskId: '任务 ID',
@@ -1383,13 +1385,18 @@ export default {
         RESERVED: '已预留',
         BUSY: '占用中',
         FAULT: '故障',
-        BORROWED: '已借出'
+        BORROWED: '已借出',
+        UNKNOWN: '未知'
       }
     },
     // 审计日志
     audit: {
       title: '审计日志',
       subtitle: '按操作者、动作、结果与资源类型检索只追加的操作证据链',
+      appendOnlyNotice: '本表只追加：任何记录都不可修改或删除',
+      detailNotice: '审计明细按原样展示，请勿向其中写入凭据',
+      loadError: '审计日志查询失败，请稍后重试或联系运维检查后端服务',
+      retryLoad: '重试',
       actor: '操作者',
       action: '动作',
       result: '结果',

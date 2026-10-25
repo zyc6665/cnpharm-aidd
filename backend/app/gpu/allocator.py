@@ -884,7 +884,7 @@ class GPUAllocator:
         }
 
     async def _get_active_allocation_summaries(self) -> List[Dict[str, Any]]:
-        """读取活动 GPU 租约的最小摘要。"""
+        """读取活动 GPU 租约的摘要（含卡位追溯字段，供 P-36 算力页展示）。"""
         if not isinstance(self.db, AsyncSession):
             return []
 
@@ -903,6 +903,15 @@ class GPUAllocator:
                     "gpu_index": allocation.gpu_index,
                     "memory_allocated_mb": allocation.memory_allocated_mb,
                     "status": allocation.status,
+                    # 卡位追溯字段（步骤 8 已入库），P-36 分配表据此展示卡位号与加速卡型号。
+                    "slot_id": allocation.slot_id,
+                    "accelerator_model": allocation.accelerator_model,
+                    "accelerator_vendor": allocation.accelerator_vendor,
+                    "allocated_at": (
+                        allocation.allocated_at.isoformat()
+                        if allocation.allocated_at is not None
+                        else None
+                    ),
                 }
                 for allocation in result.scalars().all()
             ]

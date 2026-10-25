@@ -8,6 +8,14 @@
       </template>
     </AppPageHeader>
 
+    <a-alert
+      class="audit-notice"
+      type="info"
+      show-icon
+      :message="t('admin.audit.appendOnlyNotice')"
+      :description="t('admin.audit.detailNotice')"
+    />
+
     <AppFilterBar class="audit-filters">
       <a-form layout="inline" :model="filters" @submit.prevent>
         <a-form-item :label="t('admin.audit.actor')">
@@ -69,12 +77,27 @@
       </a-form>
     </AppFilterBar>
 
+    <a-alert
+      v-if="errorMessage"
+      class="audit-error"
+      type="error"
+      show-icon
+      :message="t('admin.audit.loadError')"
+    >
+      <template #action>
+        <a-button size="small" danger @click="retryLoad">{{ t('admin.audit.retryLoad') }}</a-button>
+      </template>
+      <template #description>
+        <span>{{ errorMessage }}</span>
+      </template>
+    </a-alert>
+
     <a-table
       :columns="columns"
       :data-source="rows"
       :loading="loading"
       :pagination="pagination"
-      :locale="{ emptyText: t('admin.audit.emptyState') }"
+      :locale="{ emptyText: errorMessage ? t('admin.audit.loadError') : t('admin.audit.emptyState') }"
       row-key="id"
       size="middle"
       :scroll="{ x: 1200 }"
@@ -85,10 +108,7 @@
           <span class="audit-time">{{ formatAuditTimestamp(record.created_at) }}</span>
         </template>
         <template v-else-if="column.key === 'action'">
-          <a-space :size="4">
-            <span class="audit-action">{{ record.action }}</span>
-            <a-tag v-if="isImmutableAction(record.action)" color="orange">{{ t('admin.audit.appendOnly') }}</a-tag>
-          </a-space>
+          <span class="audit-action">{{ record.action }}</span>
         </template>
         <template v-else-if="column.key === 'result'">
           <a-tag :color="resultColor(record.result)">{{ record.result }}</a-tag>
@@ -137,8 +157,7 @@ import {
   buildAuditResourceTypeOptions,
   buildAuditResultOptions,
   describeAuditTarget,
-  formatAuditTimestamp,
-  isImmutableAction
+  formatAuditTimestamp
 } from '@/domain/admin/audit'
 import type { AuditFacets, AuditLogRow } from '@/types/audit'
 
@@ -148,6 +167,10 @@ const loading = ref(false)
 const rows = ref<AuditLogRow[]>([])
 const facets = ref<AuditFacets | null>(null)
 const dateRange = ref<[Dayjs, Dayjs] | null>(null)
+const errorMessage = ref('')
+
+/** 请求序号：并发筛选时只允许最后一次响应落地，避免旧结果覆盖新结果。 */
+let requestSeq = 0
 
 const filters = reactive({
   actor: undefined as string | undefined,
@@ -221,21 +244,44 @@ const fetchFacets = async (): Promise<void> => {
     const response = await getAuditFacets()
     facets.value = response.data ?? null
   } catch {
+    // facet 只是筛选下拉的数据源，取不到时保持空下拉，不影响表格主查询。
     facets.value = null
   }
 }
 
 const fetchRows = async (): Promise<void> => {
+  const seq = ++requestSeq
   loading.value = true
   try {
     const response = await listAuditLogs(buildAuditQueryParams(currentFilters()))
-    rows.value = response.data?.items ?? []
+    if (seq !== requestSeq) {
+      return
+    }
+
+    const items = response.data?.items ?? []
+    const totalPages = response.data?.total_pages ?? 0
+    // 越界页收敛：删掉最后一页的最后一条后再点「下一页」不应停留在空表。
+    if (totalPages > 0 && pagination.current > totalPages) {
+      pagination.current = totalPages
+      await fetchRows()
+      return
+    }
+
+    rows.value = items
     pagination.total = response.data?.total ?? 0
-  } catch {
+    errorMessage.value = ''
+  } catch (error) {
+    if (seq !== requestSeq) {
+      return
+    }
+    // 不静默成空表：明确提示查询失败，并允许原地重试。
     rows.value = []
     pagination.total = 0
+    errorMessage.value = error instanceof Error ? error.message : String(error)
   } finally {
-    loading.value = false
+    if (seq === requestSeq) {
+      loading.value = false
+    }
   }
 }
 
@@ -256,9 +302,16 @@ const handleReset = async (): Promise<void> => {
 }
 
 const handleTableChange = async (pag: { current?: number; pageSize?: number }): Promise<void> => {
-  pagination.current = pag.current || 1
-  pagination.pageSize = Math.min(pag.pageSize || DEFAULT_AUDIT_PAGE_SIZE, MAX_AUDIT_PAGE_SIZE)
+  const nextPageSize = Math.min(pag.pageSize || DEFAULT_AUDIT_PAGE_SIZE, MAX_AUDIT_PAGE_SIZE)
+  // 每页条数变化时页码必须回到 1，否则 current 与 pageSize 组合会落到空页。
+  const pageSizeChanged = nextPageSize !== pagination.pageSize
+  pagination.pageSize = nextPageSize
+  pagination.current = pageSizeChanged ? 1 : pag.current || 1
   await fetchRows()
+}
+
+const retryLoad = async (): Promise<void> => {
+  await Promise.all([fetchFacets(), fetchRows()])
 }
 
 const refreshAuditData = async (): Promise<void> => {
@@ -272,8 +325,16 @@ onMounted(refreshAuditData)
 @import '@/assets/styles/variables.less';
 
 .admin-audit {
+  .audit-notice {
+    margin-bottom: @spacing-md;
+  }
+
   .audit-filters {
     margin-bottom: @spacing-lg;
+  }
+
+  .audit-error {
+    margin-bottom: @spacing-md;
   }
 
   .audit-time {

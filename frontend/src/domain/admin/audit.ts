@@ -3,8 +3,13 @@
  *
  * 动作、资源类型、结果值一律来自后端 facets，此模块不维护动作清单。
  */
-import dayjs from 'dayjs'
 import type { AuditFacets, AuditLogRow } from '@/types/audit'
+
+/**
+ * 时间戳格式化统一复用 `system-health.ts` 的实现，避免同一仓库出现两套日期口径。
+ * 这里保留 `formatAuditTimestamp` 名字作为审计域的对外别名（仅转发，无第二份实现）。
+ */
+export { formatAdminDateTime as formatAuditTimestamp } from './system-health'
 
 /** 前端 page_size 上限，比后端（200）更严，避免一次拉取过多行。 */
 export const MAX_AUDIT_PAGE_SIZE = 100
@@ -13,8 +18,8 @@ export const MAX_AUDIT_PAGE_SIZE = 100
 export const DEFAULT_AUDIT_PAGE_SIZE = 50
 
 /**
- * 破坏性动作词根（小写）：动作名以这些词结尾时，语义上既成事实、只能追加记录，
- * 表格中给出「只追加」提示。注意这里只是后缀判定，**不是**动作清单——
+ * 破坏性动作词根（小写）：动作名以这些词结尾时，语义上既成事实、只能追加记录。
+ * 注意这里只是后缀判定，**不是**动作清单——
  * 动作下拉的可选值全部来自后端 facets。
  */
 const IRREVERSIBLE_SUFFIXES = ['delete', 'remove', 'revoke', 'reset', 'purge', 'destroy']
@@ -45,15 +50,6 @@ export interface AuditQueryParams {
   end_time?: string
   page: number
   page_size: number
-}
-
-/** ISO 时间戳展示；空值兜底 '-'，无法解析时原样返回。 */
-export function formatAuditTimestamp(value?: string | null): string {
-  if (value === undefined || value === null || value === '') {
-    return '-'
-  }
-  const parsed = dayjs(value)
-  return parsed.isValid() ? parsed.format('YYYY-MM-DD HH:mm:ss') : value
 }
 
 /** 审计对象：`resource_type/resource_id`，缺 id 时只显示类型。 */

@@ -1363,6 +1363,7 @@ export default {
       byVendor: 'By Vendor',
       slotState: 'Slot State Overview',
       emptyState: 'No slots declared yet (DRP_NODE_SLOTS_YAML / DRP_NODE_SLOTS_FILE)',
+      loadError: 'Failed to load the slot view. Retry later or ask operations to check the backend service.',
       allocations: 'Active Allocations',
       noAllocations: 'No active compute allocations',
       nodeId: 'Node ID',
@@ -1371,7 +1372,8 @@ export default {
       acceleratorModel: 'Accelerator Model',
       acceleratorVendor: 'Vendor',
       deviceCount: 'Devices',
-      schedulable: 'Schedulable',
+      schedulable: 'Schedulable (derived from state)',
+      rawState: 'Raw state',
       yes: 'Yes',
       no: 'No',
       taskId: 'Task ID',
@@ -1384,13 +1386,18 @@ export default {
         RESERVED: 'Reserved',
         BUSY: 'Busy',
         FAULT: 'Fault',
-        BORROWED: 'Borrowed'
+        BORROWED: 'Borrowed',
+        UNKNOWN: 'Unknown'
       }
     },
     // Audit log
     audit: {
       title: 'Audit Log',
       subtitle: 'Search the append-only evidence trail by actor, action, result and resource type',
+      appendOnlyNotice: 'This log is append-only: no record can be modified or deleted',
+      detailNotice: 'Audit details are shown verbatim — never write credentials into them',
+      loadError: 'Failed to load audit logs. Retry later or ask operations to check the backend service.',
+      retryLoad: 'Retry',
       actor: 'Actor',
       action: 'Action',
       result: 'Result',

@@ -75,24 +75,52 @@ test('中英文 i18n 均提供 admin.compute.title 与 admin.audit.title', () =>
   assert.equal(enSource.includes('DRP_NODE_SLOTS_YAML'), true)
 })
 
-test('SLOT_STATE_TONES 覆盖五种卡位状态并给出状态色', async () => {
+test('SLOT_STATE_TONES 覆盖后端五种卡位状态 + UNKNOWN 兜底并给出状态色', async () => {
   const computeDomain = await import('../src/domain/admin/compute.ts')
   const tones = computeDomain.SLOT_STATE_TONES
 
-  assert.deepEqual(Object.keys(tones).sort(), ['BORROWED', 'BUSY', 'FAULT', 'FREE', 'RESERVED'])
+  assert.deepEqual(
+    Object.keys(tones).sort(),
+    ['BORROWED', 'BUSY', 'FAULT', 'FREE', 'RESERVED', 'UNKNOWN']
+  )
   assert.equal(tones.FREE, 'success')
   assert.equal(tones.RESERVED, 'warning')
   assert.equal(tones.BUSY, 'processing')
   assert.equal(tones.FAULT, 'error')
   assert.equal(tones.BORROWED, 'default')
+  assert.equal(tones.UNKNOWN, 'default')
+  assert.deepEqual(
+    [...computeDomain.DECLARED_SLOT_STATES].sort(),
+    ['BORROWED', 'BUSY', 'FAULT', 'FREE', 'RESERVED']
+  )
 })
 
-test('countSlotsByState 对空数组返回五个 0', async () => {
+test('countSlotsByState 对空数组返回五个 0（外加 UNKNOWN 兜底桶）', async () => {
   const computeDomain = await import('../src/domain/admin/compute.ts')
   const counts = computeDomain.countSlotsByState([])
 
-  assert.deepEqual(counts, { FREE: 0, RESERVED: 0, BUSY: 0, FAULT: 0, BORROWED: 0 })
+  assert.deepEqual(counts, { FREE: 0, RESERVED: 0, BUSY: 0, FAULT: 0, BORROWED: 0, UNKNOWN: 0 })
   assert.equal(computeDomain.countSlotsByState(undefined).FREE, 0)
+})
+
+test('未知卡位状态归一化为 UNKNOWN 而非 FREE', async () => {
+  const computeDomain = await import('../src/domain/admin/compute.ts')
+
+  // 后端新增状态（DRAINING）或拼写错误都不得被乐观地当成「空闲」。
+  assert.equal(computeDomain.normalizeSlotState('DRAINING'), 'UNKNOWN')
+  assert.equal(computeDomain.normalizeSlotState('free'), 'UNKNOWN')
+  assert.equal(computeDomain.normalizeSlotState(''), 'UNKNOWN')
+  assert.equal(computeDomain.normalizeSlotState(undefined), 'UNKNOWN')
+  assert.equal(computeDomain.normalizeSlotState('FREE'), 'FREE')
+  assert.equal(computeDomain.normalizeSlotState('BORROWED'), 'BORROWED')
+
+  // 统计层面：未知状态进 UNKNOWN 桶，不会算进 FREE。
+  const counts = computeDomain.countSlotsByState([
+    { state: 'FREE' },
+    { state: 'DRAINING' },
+    { state: 'BUSY' }
+  ] as never)
+  assert.deepEqual(counts, { FREE: 1, RESERVED: 0, BUSY: 1, FAULT: 0, BORROWED: 0, UNKNOWN: 1 })
 })
 
 test('审计 domain 不硬编码动作列表，动作选项来自 facet', () => {
@@ -129,4 +157,27 @@ test('审计页分页 page_size 有 100 上限且经 domain 统一收敛', async
   const page = readSource('src/views/admin/Audit.vue')
   assert.equal(page.includes('buildAuditQueryParams'), true)
   assert.equal(/(page_size:\s*(?:[2-9]\d{2}|\d{4,}))/.test(page), false)
+})
+
+test('审计页查询失败必须显式呈现错误态，不能静默成空表', () => {
+  const page = readSource('src/views/admin/Audit.vue')
+
+  assert.equal(page.includes('errorMessage'), true)
+  assert.equal(page.includes('type="error"'), true)
+  assert.equal(page.includes("t('admin.audit.loadError')"), true)
+  assert.equal(page.includes('retryLoad'), true)
+})
+
+test('算力页分配表只展示后端真实返回的字段', () => {
+  const page = readSource('src/views/admin/Compute.vue')
+
+  // gpu_index 缺失时必须渲染 '-'，不得捏造成 0 号卡。
+  assert.equal(page.includes('record.gpu_index === null'), true)
+  // 订单/释放时间这类后端未返回的列不得出现在表头。
+  assert.equal(page.includes("key: 'released_at'"), false)
+  assert.equal(page.includes('record.released_at'), false)
+  assert.equal(page.includes("t('admin.compute.releasedAt')"), false)
+  // 未知状态需把后端原始状态原文显示出来，便于排障。
+  assert.equal(page.includes('raw_state'), true)
+  assert.equal(page.includes("t('admin.compute.rawState')"), true)
 })

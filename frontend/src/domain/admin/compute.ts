@@ -11,17 +11,51 @@ export const SLOT_STATE_TONES: Record<GpuSlotState, 'success' | 'processing' | '
   RESERVED: 'warning',
   BUSY: 'processing',
   FAULT: 'error',
-  BORROWED: 'default'
+  BORROWED: 'default',
+  // 未知状态用中性灰：既不能显示为空闲（绿），也不能显示成故障（红）误导判断。
+  UNKNOWN: 'default'
 }
 
 /** 全部卡位状态，顺序即展示顺序。 */
-export const SLOT_STATES: readonly GpuSlotState[] = ['FREE', 'RESERVED', 'BUSY', 'FAULT', 'BORROWED']
+export const SLOT_STATES: readonly GpuSlotState[] = [
+  'FREE',
+  'RESERVED',
+  'BUSY',
+  'FAULT',
+  'BORROWED',
+  'UNKNOWN'
+]
 
-function emptyStateCounts(): Record<GpuSlotState, number> {
-  return { FREE: 0, RESERVED: 0, BUSY: 0, FAULT: 0, BORROWED: 0 }
+/** 后端声明过的卡位状态（UNKNOWN 仅是前端兜底，不属于后端契约）。 */
+export const DECLARED_SLOT_STATES: readonly GpuSlotState[] = [
+  'FREE',
+  'RESERVED',
+  'BUSY',
+  'FAULT',
+  'BORROWED'
+]
+
+/** 判断状态字符串是否属于后端已声明状态。 */
+export function isDeclaredSlotState(value: string): value is GpuSlotState {
+  return (DECLARED_SLOT_STATES as readonly string[]).includes(value)
 }
 
-/** 按状态统计卡位数量；空入参返回五个 0。 */
+/**
+ * 后端状态字符串 → 展示状态。
+ *
+ * 未知值一律落到 `UNKNOWN`，**绝不**降级成 `FREE`：
+ * 把不确定显示成「空闲」会让算力页误导调度决策。
+ */
+export function normalizeSlotState(value: unknown): GpuSlotState {
+  const raw = typeof value === 'string' ? value.trim() : ''
+  return isDeclaredSlotState(raw) ? raw : 'UNKNOWN'
+}
+
+function emptyStateCounts(): Record<GpuSlotState, number> {
+  return { FREE: 0, RESERVED: 0, BUSY: 0, FAULT: 0, BORROWED: 0, UNKNOWN: 0 }
+}
+
+/** 按状态统计卡位数量；空入参返回六个 0（含 UNKNOWN 兜底桶）。 */
 export function countSlotsByState(slots?: readonly GpuSlot[] | null): Record<GpuSlotState, number> {
   const counts = emptyStateCounts()
   if (!slots || slots.length === 0) {
@@ -29,7 +63,11 @@ export function countSlotsByState(slots?: readonly GpuSlot[] | null): Record<Gpu
   }
 
   for (const slot of slots) {
-    counts[slot.state] += 1
+    const state = slot.state
+    // 运行时兜底：即便调用方绕过类型塞进未知状态，也归到 UNKNOWN 桶，
+    // 而不是新增一个键（那会让页面统计出现未声明的状态列）或算出 NaN。
+    const bucket: GpuSlotState = state in counts ? state : 'UNKNOWN'
+    counts[bucket] += 1
   }
   return counts
 }

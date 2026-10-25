@@ -6,12 +6,11 @@
  */
 import { get } from '@/api/request'
 import type { ApiResponse } from '@/types/api'
-import type { GpuAllocation, GpuSlot, GpuSlotNode, GpuSlotOverview, GpuSlotState } from '@/types/gpu'
+import { normalizeSlotState } from '@/domain/admin/compute'
+import type { GpuAllocation, GpuSlot, GpuSlotNode, GpuSlotOverview } from '@/types/gpu'
 
 /** 只读查询统一配置：不弹全局错误提示，失败重试一次。 */
 const READ_OPTIONS = { silent: true, retry: 1 } as const
-
-const SLOT_STATE_VALUES: readonly GpuSlotState[] = ['FREE', 'RESERVED', 'BUSY', 'FAULT', 'BORROWED']
 
 /**
  * 后端 `NodeSlot.to_dict()` 使用 camelCase 字段，与对外的 `GpuSlot`
@@ -51,17 +50,20 @@ interface RawSlotOverview {
   nodes?: RawNode[]
 }
 
+/** 活跃分配摘要的真实字段（见 `allocator._get_active_allocation_summaries()`）。 */
 interface RawAllocation {
-  id?: string
   allocation_id?: string
+  id?: string
   task_id?: string
-  slot_id?: string
+  execution_attempt_id?: string | null
   gpu_node_id?: string
-  gpu_index?: number
-  accelerator_model?: string
+  gpu_index?: number | null
+  slot_id?: string | null
+  accelerator_model?: string | null
+  accelerator_vendor?: string | null
+  memory_allocated_mb?: number | null
   status?: string
-  allocated_at?: string
-  released_at?: string | null
+  allocated_at?: string | null
 }
 
 interface RawAllocationStats {
@@ -72,10 +74,18 @@ function asString(value: unknown): string {
   return typeof value === 'string' ? value : ''
 }
 
-function toSlotState(value: unknown): GpuSlotState {
-  return SLOT_STATE_VALUES.find(state => state === value) ?? 'FREE'
+function asNullableString(value: unknown): string | null {
+  return typeof value === 'string' && value !== '' ? value : null
 }
 
+function asNullableNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+/**
+ * 卡位状态归一化统一走 `domain/admin/compute.ts::normalizeSlotState`，
+ * 未知值落到 `UNKNOWN` 并保留原文（见 `GpuSlot.raw_state`）。
+ */
 function normalizeSlot(raw: RawSlot): GpuSlot {
   const deviceIds = Array.isArray(raw.deviceIds) ? raw.deviceIds.map(item => String(item)) : []
   const models = Array.isArray(raw.models) ? raw.models.map(item => String(item)) : []
@@ -89,7 +99,8 @@ function normalizeSlot(raw: RawSlot): GpuSlot {
     accelerator_vendor: asString(raw.vendor),
     image: asString(raw.image),
     models,
-    state: toSlotState(raw.state),
+    state: normalizeSlotState(raw.state),
+    raw_state: asString(raw.state).trim() || 'UNKNOWN',
     schedulable: raw.schedulable === true,
     state_message: asString(raw.stateMessage),
     device_count: typeof raw.deviceCount === 'number' ? raw.deviceCount : deviceIds.length
@@ -129,27 +140,26 @@ function normalizeSlotOverview(raw: RawSlotOverview): GpuSlotOverview {
 
 function normalizeAllocation(raw: RawAllocation): GpuAllocation {
   return {
-    id: asString(raw.id) || asString(raw.allocation_id),
+    id: asString(raw.allocation_id) || asString(raw.id),
     task_id: asString(raw.task_id),
-    slot_id: asString(raw.slot_id),
+    execution_attempt_id: asNullableString(raw.execution_attempt_id),
     gpu_node_id: asString(raw.gpu_node_id),
-    gpu_index: typeof raw.gpu_index === 'number' ? raw.gpu_index : 0,
-    accelerator_model: asString(raw.accelerator_model),
+    gpu_index: asNullableNumber(raw.gpu_index),
+    slot_id: asNullableString(raw.slot_id),
+    accelerator_model: asNullableString(raw.accelerator_model),
+    accelerator_vendor: asNullableString(raw.accelerator_vendor),
+    memory_allocated_mb: asNullableNumber(raw.memory_allocated_mb),
     status: asString(raw.status),
-    allocated_at: asString(raw.allocated_at),
-    released_at: typeof raw.released_at === 'string' ? raw.released_at : null
+    allocated_at: asNullableString(raw.allocated_at)
   }
 }
 
 /** 卡位总览：节点与卡位声明、当前状态。 */
 export async function getGpuSlotOverview(): Promise<ApiResponse<GpuSlotOverview>> {
   const response = await get<RawSlotOverview>('/gpu/slots', undefined, READ_OPTIONS)
-  return { ...response, data: normalizeSlotOverview(response.data ?? {}) }
-}
-
-/** GPU 汇总信息（显存、利用率）。 */
-export async function getGpuSummary(): Promise<ApiResponse<Record<string, unknown>>> {
-  return get<Record<string, unknown>>('/gpu/summary', undefined, READ_OPTIONS)
+  // 后端已按 docs/05 §1.2 返回 { code, message, data }，这里不再对「信封缺失」做兜底：
+  // 若 data 缺失就让 normalizer 抛错，由视图区分「未配置卡位」与「请求失败」。
+  return { ...response, data: normalizeSlotOverview(response.data) }
 }
 
 /** 活跃的 GPU 分配列表。 */
@@ -157,9 +167,4 @@ export async function listGpuAllocations(params?: { status?: string }): Promise<
   const response = await get<RawAllocationStats>('/gpu/allocations', params, READ_OPTIONS)
   const allocations = Array.isArray(response.data?.allocations) ? response.data.allocations : []
   return { ...response, data: allocations.map(normalizeAllocation) }
-}
-
-/** GPU 健康状态。 */
-export async function getGpuHealth(): Promise<ApiResponse<Record<string, unknown>>> {
-  return get<Record<string, unknown>>('/gpu/health', undefined, READ_OPTIONS)
 }

@@ -172,17 +172,24 @@ async def test_allocation_stats_include_active_leases(db_session_factory):
 
         stats = await allocator.get_allocation_stats()
 
-        assert stats["allocations"] == [
-            {
-                "allocation_id": allocation.allocation_id,
-                "task_id": task.id,
-                "execution_attempt_id": "attempt-task-stats",
-                "gpu_node_id": "local",
-                "gpu_index": 0,
-                "memory_allocated_mb": 4096,
-                "status": GPUAllocationStatus.ACTIVE.value,
-            }
-        ]
+        lease = await db.get(GPUAllocation, allocation.allocation_id)
+        assert lease is not None
+
+        summary = stats["allocations"][0]
+        assert summary == {
+            "allocation_id": allocation.allocation_id,
+            "task_id": task.id,
+            "execution_attempt_id": "attempt-task-stats",
+            "gpu_node_id": "local",
+            "gpu_index": 0,
+            "memory_allocated_mb": 4096,
+            "status": GPUAllocationStatus.ACTIVE.value,
+            # 卡位追溯字段：本用例走裸卡路径（未传 slot），故三项为 None。
+            "slot_id": None,
+            "accelerator_model": None,
+            "accelerator_vendor": None,
+            "allocated_at": lease.allocated_at.isoformat(),
+        }
 
 
 @pytest.mark.asyncio

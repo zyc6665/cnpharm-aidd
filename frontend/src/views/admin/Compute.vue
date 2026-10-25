@@ -9,7 +9,15 @@
     </AppPageHeader>
 
     <a-alert
-      v-if="!loading && !overview?.configured"
+      v-if="loadError"
+      class="compute-empty"
+      type="error"
+      show-icon
+      :message="t('admin.compute.loadError')"
+    />
+
+    <a-alert
+      v-else-if="!loading && overview && !overview.configured"
       class="compute-empty"
       type="info"
       show-icon
@@ -68,6 +76,9 @@
             <div class="compute-slot__head">
               <span class="compute-slot__id">{{ formatSlotIdentifier(slot) }}</span>
               <a-tag :color="toneToTagColor(SLOT_STATE_TONES[slot.state])">{{ t(`admin.compute.state.${slot.state}`) }}</a-tag>
+              <span v-if="slot.state === 'UNKNOWN'" class="compute-slot__raw">
+                {{ t('admin.compute.rawState') }}: {{ slot.raw_state }}
+              </span>
             </div>
             <dl class="compute-slot__meta">
               <div>
@@ -123,13 +134,13 @@
             <span>{{ record.accelerator_model || '-' }}</span>
           </template>
           <template v-else-if="column.key === 'gpu_index'">
-            <span>#{{ record.gpu_index }}</span>
+            <span>{{ record.gpu_index === null ? '-' : `#${record.gpu_index}` }}</span>
           </template>
           <template v-else-if="column.key === 'status'">
             <a-tag :color="record.status === 'active' ? 'processing' : 'default'">{{ record.status }}</a-tag>
           </template>
           <template v-else-if="column.key === 'allocated_at'">
-            <span>{{ formatAuditTimestamp(record.allocated_at) }}</span>
+            <span>{{ formatAdminDateTime(record.allocated_at) }}</span>
           </template>
         </template>
       </a-table>
@@ -151,7 +162,7 @@ import {
   formatSlotIdentifier,
   summarizeSlotCapacity
 } from '@/domain/admin/compute'
-import { formatAuditTimestamp } from '@/domain/admin/audit'
+import { formatAdminDateTime } from '@/domain/admin/system-health'
 import type { GpuAllocation, GpuSlotOverview } from '@/types/gpu'
 
 const { t } = useI18n()
@@ -159,6 +170,7 @@ const { t } = useI18n()
 const simpleEmptyImage = Empty.PRESENTED_IMAGE_SIMPLE
 
 const loading = ref(false)
+const loadError = ref(false)
 const overview = ref<GpuSlotOverview | null>(null)
 const allocationLoading = ref(false)
 const allocations = ref<GpuAllocation[]>([])
@@ -198,8 +210,10 @@ const fetchOverview = async (): Promise<void> => {
   try {
     const response = await getGpuSlotOverview()
     overview.value = response.data ?? null
+    loadError.value = false
   } catch {
     overview.value = null
+    loadError.value = true
   } finally {
     loading.value = false
   }
