@@ -6,9 +6,6 @@ import {
 } from '@/domain/tools'
 
 export function useToolCreateEditorState(defaults = createToolCreateEditorState()) {
-  const apiHeaderEntries = ref<ToolCreateEditorState['apiHeaderEntries']>([
-    ...defaults.apiHeaderEntries,
-  ])
   const dockerCommandItems = ref<ToolCreateEditorState['dockerCommandItems']>([
     ...defaults.dockerCommandItems,
   ])
@@ -27,7 +24,6 @@ export function useToolCreateEditorState(defaults = createToolCreateEditorState(
 
   function snapshot(): ToolCreateEditorState {
     return {
-      apiHeaderEntries: apiHeaderEntries.value,
       dockerCommandItems: dockerCommandItems.value,
       dockerEnvEntries: dockerEnvEntries.value,
       pythonArgumentItems: pythonArgumentItems.value,
@@ -37,7 +33,6 @@ export function useToolCreateEditorState(defaults = createToolCreateEditorState(
   }
 
   function setState(editorState: ToolCreateEditorState): void {
-    apiHeaderEntries.value = editorState.apiHeaderEntries
     dockerCommandItems.value = editorState.dockerCommandItems
     dockerEnvEntries.value = editorState.dockerEnvEntries
     pythonArgumentItems.value = editorState.pythonArgumentItems
@@ -50,7 +45,6 @@ export function useToolCreateEditorState(defaults = createToolCreateEditorState(
   }
 
   return {
-    apiHeaderEntries,
     dockerCommandItems,
     dockerEnvEntries,
     pythonArgumentItems,

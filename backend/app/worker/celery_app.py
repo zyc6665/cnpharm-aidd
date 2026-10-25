@@ -95,8 +95,6 @@ def create_celery_app() -> Celery:
             "app.worker.tasks.reclaim_stale_resource_reservations": {"queue": "maintenance"},
             "app.worker.tasks.reclaim_stale_cancellations": {"queue": "maintenance"},
             "app.worker.tasks.reconcile_execution_records": {"queue": "maintenance"},
-            "app.worker.tasks.reconcile_remote_tasks": {"queue": "maintenance"},
-            "app.worker.tasks.reconcile_remote_cancellations": {"queue": "maintenance"},
             "app.worker.tasks.collect_gpu_stats": {"queue": "monitoring"},
         },
 
@@ -141,14 +139,6 @@ def create_celery_app() -> Celery:
             "reconcile-execution-records": {
                 "task": "app.worker.tasks.reconcile_execution_records",
                 "schedule": float(settings.EXECUTION_RECORD_RECONCILE_INTERVAL_SECONDS),
-            },
-            "reconcile-remote-tasks": {
-                "task": "app.worker.tasks.reconcile_remote_tasks",
-                "schedule": float(settings.REMOTE_TASK_RECOVERY_INTERVAL_SECONDS),
-            },
-            "reconcile-remote-cancellations": {
-                "task": "app.worker.tasks.reconcile_remote_cancellations",
-                "schedule": float(settings.REMOTE_CANCEL_RETRY_INTERVAL_SECONDS),
             },
             # 每分钟收集 GPU 统计
             "collect-gpu-stats": {

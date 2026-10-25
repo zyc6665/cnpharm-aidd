@@ -170,38 +170,6 @@ AIDD_TOOL_CAPABILITIES: dict[str, ToolCapability] = {
         ),
         virtual=True,
     ),
-    "builtin-fetch-pdb": ToolCapability(
-        tool_slug="builtin-fetch-pdb",
-        capability="external_database_fetch",
-        stage="data_acquisition",
-        inputs=(),
-        outputs=(
-            CapabilityOutput(
-                "protein_structure@1",
-                "artifact",
-                OutputMatch(content_type="protein_structure@1"),
-                path="protein",
-            ),
-        ),
-        defaults={"source": "rcsb"},
-        virtual=True,
-    ),
-    "builtin-fetch-ligand": ToolCapability(
-        tool_slug="builtin-fetch-ligand",
-        capability="external_database_fetch",
-        stage="data_acquisition",
-        inputs=(),
-        outputs=(
-            CapabilityOutput(
-                "ligand_structure@1",
-                "artifact",
-                OutputMatch(content_type="ligand_structure@1"),
-                path="ligand",
-            ),
-        ),
-        defaults={"source": "pubchem"},
-        virtual=True,
-    ),
     "builtin-vina-docking": ToolCapability(
         tool_slug="builtin-vina-docking",
         capability="docking_scoring",
@@ -519,78 +487,6 @@ AIDD_TOOL_CAPABILITIES: dict[str, ToolCapability] = {
                     filename_contains_any=("interaction",),
                     content_type="application/json",
                 ),
-            ),
-        ),
-        virtual=True,
-    ),
-    # ------------------------------------------------------------------
-    # 化学数据库查询（virtual tools，结果统一输出 database_query_result）
-    # ------------------------------------------------------------------
-    "builtin-query-chembl": ToolCapability(
-        tool_slug="builtin-query-chembl",
-        capability="database_query",
-        stage="database_query",
-        inputs=(
-            CapabilityInput(
-                "smiles_csv",
-                "smiles_csv",
-                accepted_extensions=(".csv",),
-                required=False,
-            ),
-        ),
-        outputs=(
-            CapabilityOutput(
-                "database_query_result",
-                "output_data",
-                path="result.database_query_result",
-            ),
-        ),
-        virtual=True,
-    ),
-    "builtin-query-pubchem": ToolCapability(
-        tool_slug="builtin-query-pubchem",
-        capability="database_query",
-        stage="database_query",
-        inputs=(
-            CapabilityInput(
-                "smiles_csv",
-                "smiles_csv",
-                accepted_extensions=(".csv",),
-                required=False,
-            ),
-        ),
-        outputs=(
-            CapabilityOutput(
-                "database_query_result",
-                "output_data",
-                path="result.database_query_result",
-            ),
-        ),
-        virtual=True,
-    ),
-    "builtin-query-pdbbind": ToolCapability(
-        tool_slug="builtin-query-pdbbind",
-        capability="database_query",
-        stage="database_query",
-        inputs=(
-            CapabilityInput(
-                "protein_pdb",
-                "protein_pdb",
-                accepted_extensions=(".pdb",),
-                required=False,
-            ),
-            CapabilityInput(
-                "ligand_pdb",
-                "ligand_pdb",
-                accepted_extensions=(".pdb",),
-                required=False,
-            ),
-        ),
-        outputs=(
-            CapabilityOutput(
-                "database_query_result",
-                "output_data",
-                path="result.database_query_result",
             ),
         ),
         virtual=True,

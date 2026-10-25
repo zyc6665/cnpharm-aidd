@@ -28,7 +28,7 @@ class ToolTemplateSummaryResponse(BaseModel):
 class ToolTemplateDraftCreate(BaseModel):
     """Request to create a Tool draft from a static template."""
 
-    executor_type: Literal["remote_api", "docker_image", "python_script", "ssh_job", "k8s_job"]
+    executor_type: Literal["docker_image", "python_script", "ssh_job", "k8s_job"]
     executor_config: dict[str, Any] = Field(default_factory=dict)
     category_id: Optional[str] = None
     publish: bool = False

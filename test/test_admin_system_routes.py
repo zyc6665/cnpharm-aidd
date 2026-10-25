@@ -126,42 +126,6 @@ async def test_admin_system_routes_use_standard_response_shape(
 
 
 @pytest.mark.asyncio
-async def test_system_stats_exposes_remote_recovery_alert_count(
-    api_client: httpx.AsyncClient,
-    db_session: AsyncSession,
-    admin_user: User,
-):
-    """系统统计应暴露需要人工关注的 Remote API 恢复任务数。"""
-    db_session.add_all(
-        [
-            Task(
-                user_id=admin_user.id,
-                tool_id="tool-recovery-alert",
-                tool_version_id="version-recovery-alert",
-                status="RUNNING",
-                extra_data={"remote_recovery_alerted": True},
-            ),
-            Task(
-                user_id=admin_user.id,
-                tool_id="tool-recovery-pending",
-                tool_version_id="version-recovery-pending",
-                status="RUNNING",
-                extra_data={"remote_recovery_failures": 2},
-            ),
-        ]
-    )
-    await db_session.commit()
-
-    response = await api_client.get(
-        "/api/v1/system/stats",
-        headers={"Authorization": "Bearer admin-token"},
-    )
-
-    assert response.status_code == 200
-    assert response.json()["data"]["remote_recovery_alerted_tasks"] == 1
-
-
-@pytest.mark.asyncio
 async def test_resource_workers_exposes_capability_and_dynamic_usage(
     api_client: httpx.AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -403,5 +367,6 @@ async def test_system_health_reports_executor_gateway_readiness(
     assert services["executor_gateway"]["status"] == "healthy"
     message = services["executor_gateway"]["message"]
     assert "Executor Gateway" in message
-    for executor_type in ("builtin", "python_script", "docker_image", "ssh_job", "remote_api"):
+    for executor_type in ("builtin", "python_script", "docker_image", "ssh_job"):
         assert executor_type in message
+    assert "remote_api" not in message

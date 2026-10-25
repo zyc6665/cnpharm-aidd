@@ -21,8 +21,7 @@ class ToolImportConfigError(ValueError):
     """工具导入配置错误。"""
 
 
-SUPPORTED_TOOL_TYPES = {"remote_api", "docker_image", "python_script", "ssh_job", "k8s_job"}
-SUPPORTED_REMOTE_METHODS = {"GET", "POST"}
+SUPPORTED_TOOL_TYPES = {"docker_image", "python_script", "ssh_job", "k8s_job"}
 SUPPORTED_SSH_RUNNER_MODES = {"docker_exec", "shell"}
 SUPPORTED_SSH_AUTH_TYPES = {"key", "password"}
 
@@ -61,10 +60,7 @@ def normalize_tool_import_config(raw_config: Dict[str, Any]) -> Dict[str, Any]:
         tool_config["timeout_sec"] = tool_config.pop("timeout")
 
     tool_type = tool_config.get("type")
-    if tool_type == "remote_api":
-        method = tool_config.get("method", "POST")
-        tool_config["method"] = str(method).upper()
-    elif tool_type == "python_script":
+    if tool_type == "python_script":
         if "script" in tool_config and "script_path" not in tool_config:
             tool_config["script_path"] = tool_config.pop("script")
     elif tool_type == "docker_image":
@@ -93,9 +89,7 @@ def validate_tool_import_config(config: Dict[str, Any]) -> Dict[str, Any]:
             f"tool_config.type must be one of {sorted(SUPPORTED_TOOL_TYPES)}"
         )
 
-    if tool_type == "remote_api":
-        _validate_remote_api_tool_config(tool_config)
-    elif tool_type == "docker_image":
+    if tool_type == "docker_image":
         _validate_docker_tool_config(tool_config)
     elif tool_type == "python_script":
         _validate_python_script_tool_config(tool_config)
@@ -127,31 +121,6 @@ def _require_non_empty_string(config: Dict[str, Any], field_name: str) -> None:
     value = config.get(field_name)
     if not isinstance(value, str) or not value.strip():
         raise ToolImportConfigError(f"{field_name} is required and must be a non-empty string")
-
-
-def _validate_remote_api_tool_config(tool_config: Dict[str, Any]) -> None:
-    """校验 remote_api 配置。"""
-    endpoint = tool_config.get("endpoint")
-    if not isinstance(endpoint, str) or not endpoint.strip():
-        raise ToolImportConfigError("tool_config.endpoint is required for remote_api")
-
-    method = str(tool_config.get("method", "POST")).upper()
-    if method not in SUPPORTED_REMOTE_METHODS:
-        raise ToolImportConfigError(
-            f"tool_config.method must be one of {sorted(SUPPORTED_REMOTE_METHODS)}"
-        )
-    tool_config["method"] = method
-
-    timeout_sec = tool_config.get("timeout_sec", 600)
-    if not isinstance(timeout_sec, int) or timeout_sec <= 0:
-        raise ToolImportConfigError("tool_config.timeout_sec must be a positive integer")
-    tool_config["timeout_sec"] = timeout_sec
-
-    from app.tasks.remote_capacity import validate_remote_capacity_policy
-
-    capacity_errors = validate_remote_capacity_policy(tool_config.get("capacity_policy"))
-    if capacity_errors:
-        raise ToolImportConfigError(capacity_errors[0])
 
 
 def _validate_docker_tool_config(tool_config: Dict[str, Any]) -> None:

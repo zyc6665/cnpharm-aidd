@@ -42,16 +42,6 @@ class ResourceLeaseLost(ResourceAdmissionFailed):
         )
 
 
-class RemoteCapacityLeaseLost(ResourceAdmissionFailed):
-    """远程 API 容量租约丢失，执行必须停止以避免远程服务超卖。"""
-
-    def __init__(self):
-        super().__init__(
-            "远程 API 容量租约已丢失，任务必须停止",
-            reason="remote_capacity_lease_lost",
-        )
-
-
 class GPUAllocationFailed(TaskExecutionError):
     """GPU 资源分配失败，可触发重试逻辑。"""
 

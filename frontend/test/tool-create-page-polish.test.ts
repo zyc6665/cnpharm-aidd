@@ -73,7 +73,6 @@ test('工具创建页应以结构化数据编辑全部执行器 map 和 list 字
   for (const marker of [
     'StructuredKeyValueEditor',
     'StructuredStringListEditor',
-    'v-model="apiHeaderEntries"',
     'v-model="dockerCommandItems"',
     'v-model="dockerEnvEntries"',
     'v-model="pythonArgumentItems"',
@@ -157,23 +156,25 @@ test('工具创建页应突出 Tool Package v2 主路径并标记旧语义映射
   assert.equal(versionConfigDomain.includes('sshRunnerMode'), true)
 })
 
-test('远程 API 自注册成功后应展示诊断阶段并提供 smoke 任务入口', () => {
+test('工具创建页不再提供远程 API 自注册入口', () => {
   const source = readSource('src/views/tools/Create.vue')
   const createFormDomain = readSource('src/domain/tools/tool-create-form.ts')
+  const toolsApiSource = readSource('src/api/tools.ts')
 
-  for (const marker of [
+  for (const removedMarker of [
     'remote-register-result',
     'remoteRegisterResult',
     'remoteStageStatusDisplay',
-    '注册诊断',
-    'smoke test 任务',
-    '`/tasks/${remoteRegisterResult.smoke_test_task_id}`',
-    '查看工具详情'
+    'remote_api',
+    'apiHeaderEntries',
+    'registerRemoteTool',
+    'importToolConfig'
   ]) {
-    assert.equal(source.includes(marker), true, `missing remote registration marker ${marker}`)
+    assert.equal(source.includes(removedMarker), false, `remote api entry remains: ${removedMarker}`)
   }
 
-  assert.equal(source.includes('router.push(`/tools/${response.data.tool.id}`)'), false)
-  assert.equal(createFormDomain.includes('remoteToolStageStatusDisplay'), true)
-  assert.equal(source.includes('remoteStageStatusColor'), false)
+  assert.equal(createFormDomain.includes('remoteToolStageStatusDisplay'), false)
+  assert.equal(createFormDomain.includes('remote_api'), false)
+  assert.equal(toolsApiSource.includes('/tools/register-remote'), false)
+  assert.equal(toolsApiSource.includes('/tools/import-config'), false)
 })

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  buildRemoteToolRegistrationPayload,
   buildTemplateExecutorConfig,
   buildToolEditFormPatch,
   buildToolTemplateFormPatch,
@@ -13,19 +12,12 @@ import {
   formatToolCreateSubmissionErrorMessage,
   formatToolTemplateResourceText,
   buildToolVersionCreatePayload,
-  remoteToolStageStatusDisplay,
   resolveToolCreateSubmissionBlocker,
   toolConfigToCreateFormPatch,
   type ToolCreateEditorState,
 } from './tool-create-form'
 
 describe('tool create form domain', () => {
-  it('formats remote tool registration stage status display', () => {
-    expect(remoteToolStageStatusDisplay('success')).toEqual({ color: 'green', text: '成功' })
-    expect(remoteToolStageStatusDisplay('warning')).toEqual({ color: 'orange', text: '警告' })
-    expect(remoteToolStageStatusDisplay('failure')).toEqual({ color: 'red', text: '失败' })
-  })
-
   it('formats tool create submission parse errors', () => {
     expect(formatToolCreateSubmissionErrorMessage(new Error('配置键不能为空'))).toBe('配置键不能为空')
     expect(formatToolCreateSubmissionErrorMessage(new Error('Unexpected token'))).toBe('JSON 格式错误，请检查配置')
@@ -88,34 +80,6 @@ describe('tool create form domain', () => {
     })).toBeNull()
   })
 
-  it('builds remote self-registration payload from create form state', () => {
-    const formState = createToolCreateFormState()
-    formState.remote_base_url = '  https://model.example.com  '
-    formState.category_id = 'cat-1'
-    formState.remote_run_smoke_test = false
-    formState.remote_publish_on_success = true
-    formState.icon = ''
-    formState.icon_url = 'https://cdn.example.com/icon.png'
-    formState.is_public = false
-    formState.timeout_sec = 1800
-
-    expect(buildRemoteToolRegistrationPayload(formState)).toEqual({
-      base_url: 'https://model.example.com',
-      capacity_policy: {
-        mode: 'static',
-        max_inflight: 1,
-        lease_ttl_sec: 3600,
-      },
-      category_id: 'cat-1',
-      run_smoke_test: false,
-      publish_on_success: false,
-      icon: undefined,
-      icon_url: 'https://cdn.example.com/icon.png',
-      is_public: false,
-      timeout_sec: 1800,
-    })
-  })
-
   it('builds template draft payload from form and editor state', () => {
     const formState = createToolCreateFormState()
     formState.category_id = 'cat-1'
@@ -123,7 +87,6 @@ describe('tool create form domain', () => {
     formState.python_script = 'run_model.py'
 
     const payload = buildToolTemplateDraftPayload(formState, {
-      apiHeaderEntries: [],
       dockerCommandItems: [],
       dockerEnvEntries: [],
       pythonArgumentItems: [' --input ', '', '--device cuda:0'],
@@ -159,7 +122,6 @@ describe('tool create form domain', () => {
 
   it('merges editor patch without clearing unspecified editor fields', () => {
     const current: ToolCreateEditorState = {
-      apiHeaderEntries: [{ key: 'Authorization', value: 'Bearer token' }],
       dockerCommandItems: ['python', 'run.py'],
       dockerEnvEntries: [{ key: 'CUDA_VISIBLE_DEVICES', value: '0' }],
       pythonArgumentItems: ['--input', 'protein.pdb'],
@@ -253,7 +215,7 @@ describe('tool create form domain', () => {
 
   it('builds a create-form patch from a tool template summary', () => {
     const patch = buildToolTemplateFormPatch({
-      currentToolType: 'remote_api',
+      currentToolType: 'docker_image',
       template: {
         name: 'LVpocket',
         slug: 'lvpocket-pocket-prediction',
@@ -318,28 +280,6 @@ describe('tool create form domain', () => {
     expect(patch.agentDefaultsText).toBe('{}')
   })
 
-  it('forces manual remote registration when a remote template is selected', () => {
-    const patch = buildToolTemplateFormPatch({
-      currentToolType: 'remote_api',
-      template: {
-        name: 'Remote Scorer',
-        slug: 'remote-scorer',
-        description: 'Score molecules',
-        version: '1.0.0',
-        capability: 'property_prediction',
-        stage: 'property_prediction',
-        executor_types: ['remote_api'],
-        inputs: [],
-        outputs: [],
-        resource_profile: { gpu_required: false, timeout_minutes: 5 },
-      },
-    })
-
-    expect(patch.form.tool_type).toBeUndefined()
-    expect(patch.form.remote_api_registration_mode).toBe('manual')
-    expect(patch.form.timeout_sec).toBe(300)
-  })
-
   it('formats template resource profile text for display', () => {
     expect(formatToolTemplateResourceText({
       tier: 'gpu-small',
@@ -369,7 +309,6 @@ describe('tool create form domain', () => {
     formState.ssh_device = 'cuda:0'
 
     const editorState: ToolCreateEditorState = {
-      apiHeaderEntries: [],
       dockerCommandItems: [],
       dockerEnvEntries: [],
       pythonArgumentItems: [],
@@ -411,8 +350,7 @@ describe('tool create form domain', () => {
     const submission = createToolCreateSubmission({
       formState,
       editorState: {
-        apiHeaderEntries: [],
-        dockerCommandItems: [' run ', '', '--score'],
+          dockerCommandItems: [' run ', '', '--score'],
         dockerEnvEntries: [{ key: 'OMP_NUM_THREADS', value: '4' }],
         pythonArgumentItems: [],
         sshEnvEntries: [],

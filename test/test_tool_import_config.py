@@ -113,34 +113,9 @@ def test_validate_rejects_unregistered_kubernetes_resource_profile():
         )
 
 
-def test_validate_rejects_invalid_http_method() -> None:
-    """remote_api 仅允许 GET 和 POST。"""
-    with pytest.raises(ToolImportConfigError, match="method"):
-        validate_tool_import_config(
-            {
-                "name": "bad-tool",
-                "slug": "bad-tool",
-                "version": "1.0.0",
-                "tool_config": {
-                    "type": "remote_api",
-                    "endpoint": "http://tool-service:8000/predict",
-                    "method": "PUT",
-                    "input_schema": {
-                        "type": "object",
-                        "properties": {},
-                    },
-                    "output_schema": {
-                        "type": "object",
-                        "properties": {},
-                    },
-                },
-            }
-        )
-
-
-def test_tools_api_uses_backend_package_import_for_tool_config() -> None:
-    """工具 API 不应通过修改 sys.path 依赖仓库根目录模块。"""
-    source = Path("backend/app/api/v1/tool_route_utils.py").read_text(encoding="utf-8")
+def test_tool_presentation_uses_backend_package_import_for_tool_config() -> None:
+    """工具契约校验不应通过修改 sys.path 依赖仓库根目录模块。"""
+    source = Path("backend/app/services/tool_presentation.py").read_text(encoding="utf-8")
 
     assert "sys.path.insert" not in source
     assert "from tool_import_config import" not in source
@@ -202,43 +177,6 @@ def test_normalize_docker_command_string_to_list() -> None:
         "--mode",
         "prod",
     ]
-
-
-def test_validate_accepts_template_platform_tool_config() -> None:
-    """新模板生成的 platform_tool.json 应通过校验。"""
-    config = {
-        "name": "Remote API Tool Template",
-        "slug": "remote-api-tool-template",
-        "description": "通用模板",
-        "version": "0.1.0",
-        "tool_config": {
-            "type": "remote_api",
-            "endpoint": "http://remote-api-tool-template:8000/predict",
-            "method": "POST",
-            "timeout_sec": 600,
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "task_id": {"type": "string"},
-                    "params": {"type": "object"},
-                },
-                "required": ["task_id", "params"],
-            },
-            "output_schema": {
-                "type": "object",
-                "properties": {
-                    "success": {"type": "boolean"},
-                    "task_id": {"type": "string"},
-                },
-                "required": ["success", "task_id"],
-            },
-        },
-    }
-
-    validated = validate_tool_import_config(config)
-
-    assert validated["tool_config"]["method"] == "POST"
-    assert validated["tool_config"]["timeout_sec"] == 600
 
 
 def test_validate_accepts_ssh_job_config() -> None:
@@ -381,7 +319,7 @@ def test_resolve_script_relative_path_returns_absolute_repo_path() -> None:
     """脚本相对路径解析应在切换 cwd 后仍指向仓库根目录。"""
     resolved = resolve_script_relative_path(
         "scripts/create_tool.py",
-        "../example/remote-api-tool-template/platform_tool.json",
+        "../example/ssh-job-tool-template/platform_tool.json",
     )
 
     assert resolved.is_absolute()

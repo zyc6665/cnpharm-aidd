@@ -68,7 +68,6 @@ export default {
     home: '首页',
     workspace: '工作台',
     tools: '工具',
-    cpupdb: 'CPUPDB',
     tasks: '任务',
     workflow: '工作流',
     admin: '管理',
@@ -179,7 +178,7 @@ export default {
     },
     platform: {
       title: '开放平台',
-      desc: 'CPUModel 与 PAIWSIT、CPUPDB 等科学数据库深度集成，构建从数据到发现的完整链路',
+      desc: '计算工具、镜像与运行环境统一纳管，任务调度与结果追溯都在同一平台内闭环',
       cta: '开始使用',
     },
     workflow: {
@@ -207,44 +206,6 @@ export default {
           title: '数据安全',
           description: '企业级数据加密与隐私保护'
         }
-      }
-    },
-    foundation: {
-      title: '靶点发现与平台底座',
-      subtitle: '从肿瘤病理图像入口、结构与口袋依据，到实际 AIDD 计算工作台，首页按 PAIWSIT、CPUPDB 与 CPUModel 串起研究路径。',
-      paiwsit: {
-        kicker: 'Target Discovery Entry',
-        title: 'PAIWSIT',
-        description: 'PAIWSIT 是面向肿瘤研究的病理学家标注与 AI 赋能全切片图像数据库，可作为从组织病理表型切入靶点发现与机制研究的数据入口。',
-        points: {
-          annotatedSlides: '提供病理学家标注的肿瘤全切片图像资源',
-          aiHeatmap: '支持 AI 辅助异常区域识别与热图可视化',
-          pathologyEvidence: '为靶点发现提供病理表型与组织层证据'
-        },
-        action: '访问 PAIWSIT'
-      },
-      cpupdb: {
-        kicker: 'Pocket Data Foundation',
-        title: 'CPUPDB',
-        description: '从病理与生物学线索进一步下钻到蛋白结构、口袋、多构象和相互作用分析，为后续筛选与设计提供结构依据。',
-        points: {
-          structures: '覆盖蛋白结构、配体、口袋与结合位点信息',
-          dynamics: '引入动力学数据，用于观察构象变化与隐蔽口袋',
-          analysis: '支持从检索、Explore、Dynamics 到 Detail 的连续分析'
-        },
-        action: '访问 CPUPDB',
-        help: '查看帮助文档'
-      },
-      platform: {
-        kicker: 'AIDD Workbench',
-        title: 'CPUModel 工作台',
-        description: '将靶点线索、结构数据与计算工具接到同一个工作台中，继续完成筛选、对接、性质评估与结果复用。',
-        points: {
-          groupedTools: '按研究分组组织工具与流程路径',
-          reusableArtifacts: '在任务之间复用历史产物继续计算',
-          chainedWorkflow: '串联口袋识别、筛选、对接与性质评估'
-        },
-        action: '进入工具工作台'
       }
     },
     tools: {
@@ -425,9 +386,9 @@ export default {
           name: '分子生成结果到性质预测',
           description: '对已有候选分子进行理化性质与 ADMET 相关评估。'
         },
-        pubchemToAdmet: {
-          name: 'PubChem 到基础 ADMET',
-          description: '从 PubChem 配体开始，串联配体处理、SMILES 转换、RDKit 属性和 MolP-PC 基础 ADMET。'
+        ligandToAdmet: {
+          name: '配体结构到基础 ADMET',
+          description: '从上传的配体结构开始，串联配体处理、SMILES 转换、RDKit 属性和 MolP-PC 基础 ADMET。'
         }
       }
     },
@@ -824,10 +785,6 @@ export default {
         title: '候选分子输入',
         description: '复用历史生成分子或上传候选分子文件，用于下游评估。'
       },
-      fetchPubChem: {
-        title: 'Fetch PubChem Ligand',
-        description: '按 PubChem CID 获取配体结构，输出标准 ligand_structure@1。'
-      },
       ligandPreparation: {
         title: 'Ligand Preparation',
         description: '对配体进行加氢、构象和格式准备，保留标准配体结构。'
@@ -1166,14 +1123,6 @@ export default {
     realTimeMonitor: '实时监控',
     autoRefreshOn: '自动刷新',
     autoRefreshOff: '手动刷新',
-    remoteRecovery: {
-      title: '远端任务恢复中',
-      failures: '远端服务暂时不可用，已连续失败 {count} 次。',
-      nextAttempt: '计划于 {time} 再次探测。',
-      lastError: '最近错误：{error}',
-      alertFilter: '恢复告警',
-      alertedOnly: '仅显示有恢复告警'
-    },
     resourceWait: {
       title: '等待计算资源',
       gpuUnavailable: 'GPU 资源暂时不足，任务将在资源可用后自动重试。',
@@ -1462,26 +1411,7 @@ export default {
     // 工具管理
     createTool: '创建工具',
     editTool: '编辑工具',
-    importToolConfig: '导入配置',
-    importToolConfigTitle: '导入 platform_tool.json',
-    importToolConfigDescription: '粘贴或读取 AI 生成的 platform_tool.json，系统会自动校验并创建工具与版本',
-    importToolConfigPlaceholder: '请粘贴完整的 platform_tool.json 内容',
-    importToolConfigFromFile: '从 JSON 文件读取',
-    importToolConfigPublish: '导入后直接发布',
-    importToolConfigSuccess: '工具配置导入成功',
-    importToolConfigRequired: '请先粘贴 platform_tool.json 内容',
-    importToolConfigInvalid: 'platform_tool.json 不是有效的 JSON',
-    toolRegistrationTitle: '选择模型接入方式',
-    toolRegistrationDescription: '根据模型目前的准备情况选择，后续可以继续补充运行配置。',
-    toolRegistrationTemplateTitle: '模型基础模板',
-    toolRegistrationTemplateDescription: '按药物研发场景快速生成 AIDD 能力、Artifact 输入和资源配置。',
-    toolRegistrationRemoteTitle: '连接远程模型服务',
-    toolRegistrationRemoteDescription: '适用于已部署的 HTTP 服务，可读取接口定义并检查服务连通性。',
     toolRegistrationPackageTitle: '模型交付包',
-    toolRegistrationPackageDescription: '生产部署推荐：登记运行环境、标准 Artifact 契约和可校验版本。',
-    toolRegistrationRecommended: '推荐',
-    toolRegistrationAdvancedTitle: '手动高级配置',
-    toolRegistrationAdvancedDescription: '自行配置容器、Python、SSH 或兼容 API 执行器。',
     toolsSubtitle: '统一维护工具目录与分类归属',
     toolPackages: '模型交付包',
     toolPackagesSubtitle: '登记并校验模型交付物。交付包发布后，还需创建平台工具才能供用户运行。',
@@ -1528,7 +1458,6 @@ export default {
     runningTasks: '运行中',
     pendingTasks: '等待中',
     failedTasks: '失败',
-    remoteRecoveryAlerts: '恢复告警',
     resourceWaitTasks: '资源等待',
     quotaWaitTasks: '配额等待',
     workerWaitTasks: 'Worker 容量等待',
@@ -1598,34 +1527,7 @@ export default {
     quotaGpuRequests: 'GPU 请求量',
     quotaRejections: '拒绝原因',
     noQuotaScopes: '暂无配额占用记录',
-    modelServices: '模型服务',
-    modelServicesSubtitle: '配置 Agent 自动规划时使用的 OpenAI-compatible 模型服务',
-    quickPreset: '快速预设',
-    quickPresetPlaceholder: '选择服务商，自动填充常用配置',
-    discoverModels: '发现模型',
-    saveBeforeDiscoveringModels: '请先保存服务，再发现模型列表',
-    createModelService: '新增模型服务',
-    editModelService: '编辑模型服务',
     providerType: '服务类型',
-    baseUrl: 'Base URL',
-    modelName: '模型名称',
-    apiKey: 'API Key',
-    apiKeyPlaceholder: '留空则保留原 API Key',
-    defaultService: '默认服务',
-    enabled: '启用',
-    timeoutSeconds: '超时时间',
-    maxTokens: '最大 Tokens',
-    temperature: '温度',
-    runtimeSettings: '运行参数',
-    lastTest: '最近测试',
-    setDefault: '设为默认',
-    modelServiceCreated: '模型服务已创建',
-    modelServiceUpdated: '模型服务已更新',
-    modelServiceDeleted: '模型服务已删除',
-    defaultModelServiceUpdated: '默认模型服务已更新',
-    confirmDeleteModelService: '确定要删除该模型服务吗？',
-    noApiKey: '未配置 Key',
-    configuredApiKey: '已配置 Key',
     siteSettings: '站点设置',
     siteName: '站点名称',
     siteDescription: '站点描述',
@@ -1667,7 +1569,6 @@ export default {
     bucket: '存储桶',
     maxFileSize: '最大文件大小',
     testConnection: '测试连接',
-    connectionSuccess: '连接成功',
     smtpConfig: 'SMTP配置',
     smtpHost: 'SMTP服务器',
     smtpPort: 'SMTP端口',

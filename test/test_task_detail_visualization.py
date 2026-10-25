@@ -234,7 +234,8 @@ async def test_task_detail_returns_structured_failure_diagnostics(test_client):
 
 
 @pytest.mark.asyncio
-async def test_task_detail_exposes_remote_recovery_state_without_run_handle(test_client):
+async def test_task_detail_no_longer_exposes_remote_recovery_state(test_client):
+    """交付线移除了远程 API 执行器，任务详情不再暴露其恢复状态。"""
     client, session_factory, current_user = test_client
     seeded = await seed_visualization_task(session_factory, current_user)
 
@@ -242,27 +243,13 @@ async def test_task_detail_exposes_remote_recovery_state_without_run_handle(test
         task = await session.get(Task, seeded["task_id"])
         assert task is not None
         task.status = "RUNNING"
-        task.extra_data = {
-            "project_id": "project-1",
-            "remote_run_id": "run-secret",
-            "remote_recovery_failures": 3,
-            "remote_recovery_next_attempt_at": "2026-09-20T12:03:00",
-            "remote_recovery_last_error": "remote service unavailable",
-            "remote_recovery_alerted": True,
-        }
+        task.extra_data = {"project_id": "project-1"}
         await session.commit()
 
     response = await client.get(f"/api/v1/tasks/{seeded['task_id']}")
 
     assert response.status_code == 200
-    recovery = response.json()["data"]["remote_recovery"]
-    assert recovery == {
-        "failures": 3,
-        "next_attempt_at": "2026-09-20T12:03:00",
-        "last_error": "remote service unavailable",
-        "alerted": True,
-    }
-    assert "run-secret" not in response.text
+    assert "remote_recovery" not in response.json()["data"]
 
     list_response = await client.get("/api/v1/tasks?page=1&page_size=20")
 
@@ -272,7 +259,7 @@ async def test_task_detail_exposes_remote_recovery_state_without_run_handle(test
         for item in list_response.json()["data"]["items"]
         if item["id"] == seeded["task_id"]
     )
-    assert list_item["remote_recovery"] == recovery
+    assert "remote_recovery" not in list_item
 
 
 @pytest.mark.asyncio
@@ -402,42 +389,6 @@ async def test_task_list_filters_resource_wait_category_and_exposes_stats(test_c
             "user_cpu_quota_exhausted": 1,
         },
     }
-
-
-@pytest.mark.asyncio
-async def test_task_list_filters_remote_recovery_alerts(test_client):
-    client, session_factory, current_user = test_client
-    seeded = await seed_visualization_task(session_factory, current_user)
-    clean_task_id = str(uuid.uuid4())
-
-    async with session_factory() as session:
-        task = await session.get(Task, seeded["task_id"])
-        assert task is not None
-        task.status = "RUNNING"
-        task.extra_data = {
-            "remote_recovery_failures": 5,
-            "remote_recovery_alerted": True,
-        }
-        session.add(
-            Task(
-                id=clean_task_id,
-                user_id=current_user.id,
-                tool_id=seeded["tool_id"],
-                tool_version_id=task.tool_version_id,
-                status="RUNNING",
-                progress=0.5,
-                extra_data={},
-            )
-        )
-        await session.commit()
-
-    response = await client.get(
-        "/api/v1/tasks?page=1&page_size=20&remote_recovery_alerted=true"
-    )
-
-    assert response.status_code == 200
-    items = response.json()["data"]["items"]
-    assert [item["id"] for item in items] == [seeded["task_id"]]
 
 
 @pytest.mark.asyncio

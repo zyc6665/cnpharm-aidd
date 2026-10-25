@@ -23,7 +23,6 @@ from app.tools.capabilities import AIDD_TOOL_CAPABILITIES  # noqa: E402
 from app.common.exceptions import ValidationException  # noqa: E402
 from app.execution.result_parser import parse_standard_result  # noqa: E402
 from app.execution.standard_contracts import DeclaredArtifactOutput  # noqa: E402
-from app.external_databases.providers import ExternalArtifactFile, ExternalArtifactPayload  # noqa: E402
 from app.protein_preparation.engine import OpenSourcePreparationUnavailable  # noqa: E402
 
 
@@ -379,157 +378,6 @@ async def test_run_builtin_tool_routes_rdkit_properties(monkeypatch, tmp_path: P
 
 
 @pytest.mark.asyncio
-async def test_fetch_pdb_builtin_emits_protein_structure_standard_result(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    class FakeRCSBProvider:
-        async def fetch_protein(self, identifier: str):
-            assert identifier == "1abc"
-            return ExternalArtifactPayload(
-                artifact_type="protein_structure",
-                standard_ref="protein_structure@1",
-                name="1ABC",
-                description="Imported from RCSB PDB",
-                metadata={
-                    "chain_ids": ["A"],
-                    "residue_count": 1,
-                    "atom_count": 1,
-                    "structure_format": "pdb",
-                    "source_filename": "1ABC.pdb",
-                    "source_database": "rcsb",
-                    "source_id": "1ABC",
-                },
-                files=[
-                    ExternalArtifactFile(
-                        role="structure_file",
-                        filename="1ABC.pdb",
-                        content=b"HEADER    TEST PDB\nEND\n",
-                        content_type="chemical/x-pdb",
-                    )
-                ],
-            )
-
-    monkeypatch.setattr(
-        builtin_tools,
-        "_external_database_providers",
-        lambda: {"rcsb": FakeRCSBProvider()},
-    )
-
-    result = await builtin_tools._run_fetch_pdb_tool({}, {"pdb_id": "1abc"})
-
-    assert result.standard_result is not None
-    protein = result.standard_result["artifacts"]["protein"]
-    assert protein["type"] == "protein_structure@1"
-    assert protein["metadata"]["source_database"] == "rcsb"
-    assert set(protein["files"]) == {"structure_file", "metadata_json"}
-    artifacts = {artifact.filename: artifact for artifact in result.artifacts}
-    assert {"1ABC.pdb", "metadata.json", "fetch_pdb_report.json"}.issubset(artifacts)
-
-    output_dir = tmp_path / "output"
-    output_dir.mkdir()
-    for artifact in result.artifacts:
-        (output_dir / artifact.filename).write_bytes(artifact.content)
-    (output_dir / "result.json").write_text(
-        json.dumps(result.standard_result, ensure_ascii=False),
-        encoding="utf-8",
-    )
-    parsed = parse_standard_result(
-        result_path=output_dir / "result.json",
-        output_dir=output_dir,
-        declared_outputs=[
-            DeclaredArtifactOutput(name="protein", type="protein_structure@1"),
-            DeclaredArtifactOutput(name="report", type="run_report@1", required=False),
-        ],
-    )
-    assert [artifact.output_name for artifact in parsed.artifacts] == ["protein", "report"]
-
-
-@pytest.mark.asyncio
-async def test_fetch_ligand_builtin_emits_ligand_structure_standard_result(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    class FakePubChemProvider:
-        async def fetch_ligand(self, identifier: str):
-            assert identifier == "2244"
-            return ExternalArtifactPayload(
-                artifact_type="ligand_structure",
-                standard_ref="ligand_structure@1",
-                name="Aspirin",
-                description="Imported from PubChem",
-                metadata={
-                    "ligand_id": "pubchem:2244",
-                    "source_database": "pubchem",
-                    "source_id": "2244",
-                    "pubchem_cid": "2244",
-                    "canonical_smiles": "CC(=O)OC1=CC=CC=C1C(=O)O",
-                    "structure_3d_source": "pubchem_3d",
-                    "hydrogens_added": False,
-                },
-                files=[
-                    ExternalArtifactFile(
-                        role="structure_file",
-                        filename="pubchem-2244.sdf",
-                        content=b"primary sdf",
-                        content_type="chemical/x-mdl-sdfile",
-                    ),
-                    ExternalArtifactFile(
-                        role="structure_2d_sdf",
-                        filename="pubchem-2244.2d.sdf",
-                        content=b"2d sdf",
-                        content_type="chemical/x-mdl-sdfile",
-                    ),
-                    ExternalArtifactFile(
-                        role="structure_3d_sdf",
-                        filename="pubchem-2244.3d.sdf",
-                        content=b"3d sdf",
-                        content_type="chemical/x-mdl-sdfile",
-                    ),
-                ],
-            )
-
-    monkeypatch.setattr(
-        builtin_tools,
-        "_external_database_providers",
-        lambda: {"pubchem": FakePubChemProvider()},
-    )
-
-    result = await builtin_tools._run_fetch_ligand_tool({}, {"pubchem_cid": "2244"})
-
-    assert result.standard_result is not None
-    ligand = result.standard_result["artifacts"]["ligand"]
-    assert ligand["type"] == "ligand_structure@1"
-    assert ligand["metadata"]["source_database"] == "pubchem"
-    assert set(ligand["files"]) == {
-        "structure_file",
-        "structure_2d_sdf",
-        "structure_3d_sdf",
-        "metadata_json",
-    }
-    artifacts = {artifact.filename: artifact for artifact in result.artifacts}
-    assert {"pubchem-2244.sdf", "metadata.json", "fetch_ligand_report.json"}.issubset(artifacts)
-
-    output_dir = tmp_path / "output"
-    output_dir.mkdir()
-    for artifact in result.artifacts:
-        (output_dir / artifact.filename).write_bytes(artifact.content)
-    (output_dir / "result.json").write_text(
-        json.dumps(result.standard_result, ensure_ascii=False),
-        encoding="utf-8",
-    )
-    parsed = parse_standard_result(
-        result_path=output_dir / "result.json",
-        output_dir=output_dir,
-        declared_outputs=[
-            DeclaredArtifactOutput(name="ligand", type="ligand_structure@1"),
-            DeclaredArtifactOutput(name="report", type="run_report@1", required=False),
-        ],
-    )
-    assert [artifact.output_name for artifact in parsed.artifacts] == ["ligand", "report"]
-
-
-@pytest.mark.asyncio
 async def test_run_builtin_tool_routes_protein_preparation(monkeypatch, tmp_path: Path) -> None:
     source = tmp_path / "protein.pdb"
     source.write_text("ATOM      1  N   ALA A   1       0.000   0.000   0.000\nEND\n")
@@ -745,118 +593,6 @@ class TestDictsToCsvBytes:
         assert len(lines) == 3
 
 
-class TestQueryChemblBuiltinTool:
-    @pytest.mark.asyncio
-    async def test_extracts_smiles_and_calls_query(self, tmp_path: Path, monkeypatch):
-        monkeypatch.setattr("app.config.settings.ENABLE_DATABASE_TOOLS", True)
-
-        csv_path = tmp_path / "smiles.csv"
-        csv_path.write_text("SMILES,id\nCCO,mol_1\n")
-
-        mock_result = {"source": "chembl", "record_count": 1, "records": []}
-
-        with patch(
-            "app.external_databases.database_tools.query_chembl",
-            new_callable=AsyncMock,
-            return_value=mock_result,
-        ):
-            result = await builtin_tools._run_query_chembl_tool({
-                "smiles_csv": builtin_tools.BuiltinToolFile(
-                    file_id="f1", filename="smiles.csv", path=csv_path,
-                )
-            })
-
-        assert len(result.outputs) == 1
-        assert result.outputs[0].semantic_type == "database_query_result"
-        assert result.outputs[0].data["source"] == "chembl"
-        assert len(result.artifacts) == 0
-
-    @pytest.mark.asyncio
-    async def test_disabled_flag_raises(self, tmp_path: Path, monkeypatch):
-        monkeypatch.setattr("app.config.settings.ENABLE_DATABASE_TOOLS", False)
-
-        csv_path = tmp_path / "smiles.csv"
-        csv_path.write_text("SMILES,id\nCCO,mol_1\n")
-
-        with pytest.raises(ValidationException, match="已禁用"):
-            await builtin_tools._run_query_chembl_tool({
-                "smiles_csv": builtin_tools.BuiltinToolFile(
-                    file_id="f1", filename="smiles.csv", path=csv_path,
-                )
-            })
-
-    @pytest.mark.asyncio
-    async def test_missing_smiles_csv_raises(self, tmp_path: Path, monkeypatch):
-        monkeypatch.setattr("app.config.settings.ENABLE_DATABASE_TOOLS", True)
-        with pytest.raises(ValidationException, match="需要 smiles_csv"):
-            await builtin_tools._run_query_chembl_tool({})
-
-
-class TestQueryPubchemBuiltinTool:
-    @pytest.mark.asyncio
-    async def test_extracts_smiles_and_calls_query(self, tmp_path: Path, monkeypatch):
-        monkeypatch.setattr("app.config.settings.ENABLE_DATABASE_TOOLS", True)
-
-        csv_path = tmp_path / "smiles.csv"
-        csv_path.write_text("SMILES,id\nCC(=O)Oc1ccccc1C(=O)O,mol_1\n")
-
-        mock_result = {"source": "pubchem", "record_count": 1, "records": []}
-
-        with patch(
-            "app.external_databases.database_tools.query_pubchem",
-            new_callable=AsyncMock,
-            return_value=mock_result,
-        ):
-            result = await builtin_tools._run_query_pubchem_tool({
-                "smiles_csv": builtin_tools.BuiltinToolFile(
-                    file_id="f1", filename="smiles.csv", path=csv_path,
-                )
-            })
-
-        assert len(result.outputs) == 1
-        assert result.outputs[0].semantic_type == "database_query_result"
-        assert result.outputs[0].data["source"] == "pubchem"
-
-
-class TestQueryPdbbindBuiltinTool:
-    @pytest.mark.asyncio
-    async def test_extracts_pdb_id_from_filename(self, tmp_path: Path, monkeypatch):
-        monkeypatch.setattr("app.config.settings.ENABLE_DATABASE_TOOLS", True)
-
-        mock_result = {"source": "pdbbind", "record_count": 1, "records": []}
-
-        with patch(
-            "app.external_databases.database_tools.query_pdbbind",
-            new_callable=AsyncMock,
-            return_value=mock_result,
-        ):
-            result = await builtin_tools._run_query_pdbbind_tool({
-                "protein_pdb": builtin_tools.BuiltinToolFile(
-                    file_id="f1", filename="3T5G_protein.pdb",
-                    path=tmp_path / "dummy.pdb",
-                )
-            })
-
-        assert len(result.outputs) == 1
-        assert result.outputs[0].semantic_type == "database_query_result"
-        assert result.outputs[0].data["source"] == "pdbbind"
-
-    @pytest.mark.asyncio
-    async def test_works_without_any_files(self, tmp_path: Path, monkeypatch):
-        monkeypatch.setattr("app.config.settings.ENABLE_DATABASE_TOOLS", True)
-
-        mock_result = {"source": "pdbbind", "record_count": 0, "records": []}
-
-        with patch(
-            "app.external_databases.database_tools.query_pdbbind",
-            new_callable=AsyncMock,
-            return_value=mock_result,
-        ):
-            result = await builtin_tools._run_query_pdbbind_tool({})
-
-        assert len(result.outputs) == 1
-
-
 class TestAdmetPredictionBuiltinTool:
     def test_produces_csv_report(self, tmp_path: Path):
         csv_path = tmp_path / "smiles.csv"
@@ -983,34 +719,14 @@ class TestRunBuiltinToolDispatch:
             )
 
     @pytest.mark.asyncio
-    async def test_registry_routes_to_correct_handler(self, tmp_path: Path, monkeypatch):
-        """验证每个注册的 tool slug 都能正确分发。"""
-        monkeypatch.setattr("app.config.settings.ENABLE_DATABASE_TOOLS", True)
-
+    async def test_placeholder_tools_fail_with_engine_gap(self, tmp_path: Path):
         csv_path = tmp_path / "smiles.csv"
         csv_path.write_text("SMILES,id\nCCO,mol_1\n")
-        csv_file = builtin_tools.BuiltinToolFile(
-            file_id="f1", filename="smiles.csv", path=csv_path,
-        )
-        files = {"smiles_csv": csv_file}
-
-        mock_result = {"source": "test", "record_count": 0, "records": []}
-
-        with patch(
-            "app.external_databases.database_tools.query_chembl",
-            new_callable=AsyncMock,
-            return_value=mock_result,
-        ):
-            r = await builtin_tools.run_builtin_tool("builtin-query-chembl", files)
-            assert r.outputs[0].semantic_type == "database_query_result"
-
-        with patch(
-            "app.external_databases.database_tools.query_pubchem",
-            new_callable=AsyncMock,
-            return_value=mock_result,
-        ):
-            r = await builtin_tools.run_builtin_tool("builtin-query-pubchem", files)
-            assert r.outputs[0].semantic_type == "database_query_result"
+        files = {
+            "smiles_csv": builtin_tools.BuiltinToolFile(
+                file_id="f1", filename="smiles.csv", path=csv_path,
+            )
+        }
 
         for slug in (
             "builtin-admet-prediction",
@@ -1027,31 +743,13 @@ class TestRunBuiltinToolDispatch:
         with pytest.raises(ValidationException, match="未知内置智能体工具"):
             await builtin_tools.run_builtin_tool("builtin-unknown-tool", {})
 
-    @pytest.mark.asyncio
-    async def test_query_tool_dispatch_runs_inside_existing_event_loop(
-        self,
-        tmp_path: Path,
-        monkeypatch,
-    ):
-        """数据库查询内置工具不能在已有事件循环中嵌套 asyncio.run。"""
-        monkeypatch.setattr("app.config.settings.ENABLE_DATABASE_TOOLS", True)
-
-        csv_path = tmp_path / "smiles.csv"
-        csv_path.write_text("SMILES,id\nCCO,mol_1\n")
-        files = {
-            "smiles_csv": builtin_tools.BuiltinToolFile(
-                file_id="f1",
-                filename="smiles.csv",
-                path=csv_path,
-            )
-        }
-        mock_result = {"source": "chembl", "record_count": 0, "records": []}
-
-        with patch(
-            "app.external_databases.database_tools.query_chembl",
-            new_callable=AsyncMock,
-            return_value=mock_result,
+    def test_offline_database_tools_are_not_registered(self):
+        """交付线禁止公网数据库查询，相关内置工具必须整体退场。"""
+        for slug in (
+            "builtin-fetch-pdb",
+            "builtin-fetch-ligand",
+            "builtin-query-chembl",
+            "builtin-query-pubchem",
+            "builtin-query-pdbbind",
         ):
-            result = await builtin_tools.run_builtin_tool("builtin-query-chembl", files)
-
-        assert result.outputs[0].data == mock_result
+            assert slug not in builtin_tools._BUILTIN_TOOL_REGISTRY

@@ -68,7 +68,6 @@ export default {
     home: 'Home',
     workspace: 'Workspace',
     tools: 'Tools',
-    cpupdb: 'CPUPDB',
     tasks: 'Tasks',
     workflow: 'Workflow',
     admin: 'Admin',
@@ -180,7 +179,7 @@ export default {
     },
     platform: {
       title: 'Open Platform',
-      desc: 'CPUModel integrates deeply with PAIWSIT, CPUPDB, and other scientific databases — a complete chain from data to discovery.',
+      desc: 'Tools, images and runtimes are managed in one place, with task scheduling and result traceability closed inside the same platform.',
       cta: 'Get Started',
     },
     workflow: {
@@ -208,44 +207,6 @@ export default {
           title: 'Data Security',
           description: 'Enterprise-grade encryption and privacy protection'
         }
-      }
-    },
-    foundation: {
-      title: 'Target Discovery & Platform Foundation',
-      subtitle: 'The homepage now connects the research path from pathology-first target discovery, to structural pocket evidence, and then into the CPUModel AIDD workbench.',
-      paiwsit: {
-        kicker: 'Target Discovery Entry',
-        title: 'PAIWSIT',
-        description: 'PAIWSIT is a pathologists-annotated and AI-empowered tumor whole-slide image database that can serve as an entry point from tissue pathology phenotypes into target discovery and mechanism research.',
-        points: {
-          annotatedSlides: 'Provides pathologist-annotated tumor whole-slide image resources',
-          aiHeatmap: 'Supports AI-assisted abnormal-region detection with heatmap visualization',
-          pathologyEvidence: 'Adds pathology phenotype and tissue-level evidence for target discovery'
-        },
-        action: 'Visit PAIWSIT'
-      },
-      cpupdb: {
-        kicker: 'Pocket Data Foundation',
-        title: 'CPUPDB',
-        description: 'It carries pathology and biology clues down into protein structures, pockets, multi-conformation states, and interaction analysis for later screening and design.',
-        points: {
-          structures: 'Covers protein structures, ligands, pockets, and binding-site information',
-          dynamics: 'Brings in dynamics data to observe conformational shifts and cryptic pockets',
-          analysis: 'Supports a continuous path from search to Explore, Dynamics, and Detail'
-        },
-        action: 'Visit CPUPDB',
-        help: 'View Help Docs'
-      },
-      platform: {
-        kicker: 'AIDD Workbench',
-        title: 'CPUModel Workbench',
-        description: 'CPUModel brings target clues, structural data, and computational tools into one workspace to continue screening, docking, property evaluation, and artifact reuse.',
-        points: {
-          groupedTools: 'Organize tools and research paths by themed groups',
-          reusableArtifacts: 'Reuse historical artifacts between tasks to continue computation',
-          chainedWorkflow: 'Chain pocket discovery, screening, docking, and property evaluation'
-        },
-        action: 'Open Tool Workbench'
       }
     },
     tools: {
@@ -426,9 +387,9 @@ export default {
           name: 'Molecule Generation to Property Prediction',
           description: 'Evaluate physicochemical and ADMET-related properties for existing candidate molecules.'
         },
-        pubchemToAdmet: {
-          name: 'PubChem to Basic ADMET',
-          description: 'Start from a PubChem ligand and chain ligand preparation, SMILES conversion, RDKit properties, and MolP-PC Basic ADMET.'
+        ligandToAdmet: {
+          name: 'Ligand Structure to Basic ADMET',
+          description: 'Start from an uploaded ligand structure and chain ligand preparation, SMILES conversion, RDKit properties, and MolP-PC Basic ADMET.'
         }
       }
     },
@@ -825,10 +786,6 @@ export default {
         title: 'Generated Molecule Input',
         description: 'Reuse historical generated molecules or upload candidate molecules for downstream evaluation.'
       },
-      fetchPubChem: {
-        title: 'Fetch PubChem Ligand',
-        description: 'Fetch a ligand structure by PubChem CID and emit standard ligand_structure@1.'
-      },
       ligandPreparation: {
         title: 'Ligand Preparation',
         description: 'Prepare hydrogens, conformer, and format while keeping a standard ligand structure.'
@@ -1167,14 +1124,6 @@ export default {
     realTimeMonitor: 'Real-time Monitor',
     autoRefreshOn: 'Auto Refresh',
     autoRefreshOff: 'Manual',
-    remoteRecovery: {
-      title: 'Recovering remote task',
-      failures: 'The remote service is unavailable. Recovery has failed {count} consecutive times.',
-      nextAttempt: 'Next probe scheduled for {time}.',
-      lastError: 'Last error: {error}',
-      alertFilter: 'Recovery alert',
-      alertedOnly: 'Alerted tasks only'
-    },
     resourceWait: {
       title: 'Waiting for compute resources',
       gpuUnavailable: 'GPU resources are temporarily unavailable. The task will retry automatically.',
@@ -1464,27 +1413,7 @@ export default {
     // Tool Management
     createTool: 'Create Tool',
     editTool: 'Edit Tool',
-    importToolConfig: 'Import Config',
-    importToolConfigTitle: 'Import platform_tool.json',
-    importToolConfigDescription:
-      'Paste or load the AI-generated platform_tool.json and the system will validate it before creating the tool and version',
-    importToolConfigPlaceholder: 'Paste the full platform_tool.json content',
-    importToolConfigFromFile: 'Load from JSON file',
-    importToolConfigPublish: 'Publish immediately after import',
-    importToolConfigSuccess: 'Tool config imported successfully',
-    importToolConfigRequired: 'Please paste the platform_tool.json content first',
-    importToolConfigInvalid: 'platform_tool.json is not valid JSON',
-    toolRegistrationTitle: 'Choose how to connect the model',
-    toolRegistrationDescription: 'Pick the path that matches the model’s current setup. You can add runtime details later.',
-    toolRegistrationTemplateTitle: 'Model starter template',
-    toolRegistrationTemplateDescription: 'Generate AIDD capabilities, Artifact inputs, and resource settings for drug discovery.',
-    toolRegistrationRemoteTitle: 'Connect a remote model service',
-    toolRegistrationRemoteDescription: 'For an existing HTTP service. Read its interface definition and check connectivity.',
     toolRegistrationPackageTitle: 'Model delivery package',
-    toolRegistrationPackageDescription: 'Recommended for production: register the runtime, standard Artifact contract, and verifiable versions.',
-    toolRegistrationRecommended: 'Recommended',
-    toolRegistrationAdvancedTitle: 'Manual advanced setup',
-    toolRegistrationAdvancedDescription: 'Configure a container, Python, SSH, or compatible API executor yourself.',
     toolsSubtitle: 'Maintain the tool catalog and category assignment in one place',
     toolPackages: 'Model delivery packages',
     toolPackagesSubtitle: 'Register and validate model deliverables. Publish a package, then create a platform tool before users can run it.',
@@ -1531,7 +1460,6 @@ export default {
     runningTasks: 'Running',
     pendingTasks: 'Pending',
     failedTasks: 'Failed',
-    remoteRecoveryAlerts: 'Recovery Alerts',
     resourceWaitTasks: 'Resource Waits',
     quotaWaitTasks: 'Quota Waits',
     workerWaitTasks: 'Worker Capacity Waits',
@@ -1601,34 +1529,7 @@ export default {
     quotaGpuRequests: 'GPU Requests',
     quotaRejections: 'Rejections',
     noQuotaScopes: 'No quota usage records',
-    modelServices: 'Model Services',
-    modelServicesSubtitle: 'Configure OpenAI-compatible model services used by Agent planning',
-    quickPreset: 'Quick preset',
-    quickPresetPlaceholder: 'Choose a provider to fill common settings',
-    discoverModels: 'Discover models',
-    saveBeforeDiscoveringModels: 'Save the service before discovering models',
-    createModelService: 'Create Model Service',
-    editModelService: 'Edit Model Service',
     providerType: 'Provider Type',
-    baseUrl: 'Base URL',
-    modelName: 'Model Name',
-    apiKey: 'API Key',
-    apiKeyPlaceholder: 'Leave empty to keep the existing API key',
-    defaultService: 'Default Service',
-    enabled: 'Enabled',
-    timeoutSeconds: 'Timeout',
-    maxTokens: 'Max Tokens',
-    temperature: 'Temperature',
-    runtimeSettings: 'Runtime',
-    lastTest: 'Last Test',
-    setDefault: 'Set Default',
-    modelServiceCreated: 'Model service created',
-    modelServiceUpdated: 'Model service updated',
-    modelServiceDeleted: 'Model service deleted',
-    defaultModelServiceUpdated: 'Default model service updated',
-    confirmDeleteModelService: 'Delete this model service?',
-    noApiKey: 'No API key',
-    configuredApiKey: 'API key configured',
     siteSettings: 'Site Settings',
     siteName: 'Site Name',
     siteDescription: 'Site Description',
@@ -1670,7 +1571,6 @@ export default {
     bucket: 'Bucket',
     maxFileSize: 'Max File Size',
     testConnection: 'Test Connection',
-    connectionSuccess: 'Connection successful',
     smtpConfig: 'SMTP Configuration',
     smtpHost: 'SMTP Host',
     smtpPort: 'SMTP Port',

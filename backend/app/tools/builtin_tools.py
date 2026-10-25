@@ -30,7 +30,6 @@ from app.chemistry.ligand_preparation import (
     prepared_ligand_sdf_content,
     prepared_molecule_table_csv,
 )
-from app.common.time import utcnow
 from app.common.exceptions import ValidationException
 
 
@@ -983,155 +982,6 @@ def _standard_output_file_ref(path: str, content: bytes, content_type: str) -> d
     }
 
 
-# ======================================================================
-# 外部数据库 fetch（RCSB PDB / PubChem → 标准 Artifact）
-# ======================================================================
-
-
-def _external_database_providers() -> dict[str, Any]:
-    from app.external_databases.providers import default_external_database_providers
-
-    return default_external_database_providers()
-
-
-async def _run_fetch_pdb_tool(
-    _files: dict[str, BuiltinToolFile],
-    params: dict[str, Any] | None = None,
-) -> BuiltinToolResult:
-    params = params if isinstance(params, dict) else {}
-    pdb_id = str(params.get("pdb_id") or params.get("identifier") or "").strip()
-    if not pdb_id:
-        raise ValidationException("fetch_pdb 需要 pdb_id 参数")
-    provider = _external_database_providers().get("rcsb")
-    if provider is None:
-        raise ValidationException("RCSB PDB fetch provider 未配置")
-    payload = await provider.fetch_protein(pdb_id)
-    return _external_payload_to_builtin_result(
-        payload,
-        output_name="protein",
-        report_filename="fetch_pdb_report.json",
-        report_title="Fetch PDB report",
-    )
-
-
-async def _run_fetch_ligand_tool(
-    _files: dict[str, BuiltinToolFile],
-    params: dict[str, Any] | None = None,
-) -> BuiltinToolResult:
-    params = params if isinstance(params, dict) else {}
-    pubchem_cid = str(
-        params.get("pubchem_cid") or params.get("cid") or params.get("identifier") or ""
-    ).strip()
-    if not pubchem_cid:
-        raise ValidationException("fetch_ligand 需要 pubchem_cid 参数")
-    provider = _external_database_providers().get("pubchem")
-    if provider is None:
-        raise ValidationException("PubChem fetch provider 未配置")
-    payload = await provider.fetch_ligand(pubchem_cid)
-    return _external_payload_to_builtin_result(
-        payload,
-        output_name="ligand",
-        report_filename="fetch_ligand_report.json",
-        report_title="Fetch ligand report",
-    )
-
-
-def _external_payload_to_builtin_result(
-    payload: Any,
-    *,
-    output_name: str,
-    report_filename: str,
-    report_title: str,
-) -> BuiltinToolResult:
-    metadata = dict(payload.metadata or {})
-    metadata.setdefault("fetched_at", utcnow().isoformat())
-    files_by_role = {artifact_file.role: artifact_file for artifact_file in payload.files}
-    if "metadata_json" not in files_by_role:
-        from app.external_databases.providers import ExternalArtifactFile
-
-        metadata_content = json.dumps(
-            metadata,
-            ensure_ascii=False,
-            sort_keys=True,
-            indent=2,
-        ).encode("utf-8")
-        files_by_role["metadata_json"] = ExternalArtifactFile(
-            role="metadata_json",
-            filename="metadata.json",
-            content=metadata_content,
-            content_type="application/json",
-        )
-
-    report = {
-        "status": "succeeded",
-        "output_name": output_name,
-        "artifact_type": payload.standard_ref,
-        "source_database": metadata.get("source_database"),
-        "source_id": metadata.get("source_id"),
-        "fetched_at": metadata.get("fetched_at"),
-    }
-    report_content = json.dumps(report, ensure_ascii=False, indent=2).encode("utf-8")
-
-    artifacts = [
-        BuiltinToolArtifact(
-            semantic_type=str(payload.standard_ref),
-            filename=artifact_file.filename,
-            content=artifact_file.content,
-            content_type=artifact_file.content_type,
-        )
-        for artifact_file in files_by_role.values()
-    ]
-    artifacts.append(
-        BuiltinToolArtifact(
-            semantic_type="run_report",
-            filename=report_filename,
-            content=report_content,
-            content_type="application/json",
-        )
-    )
-
-    output_files = {
-        role: _standard_output_file_ref(
-            artifact_file.filename,
-            artifact_file.content,
-            artifact_file.content_type,
-        )
-        for role, artifact_file in files_by_role.items()
-    }
-    return BuiltinToolResult(
-        artifacts=tuple(artifacts),
-        standard_result={
-            "result_version": "aidd.sciminer/result.v2",
-            "artifacts": {
-                output_name: {
-                    "type": payload.standard_ref,
-                    "name": payload.name,
-                    "files": output_files,
-                    "metadata": metadata,
-                    "summary": {
-                        "source_database": metadata.get("source_database"),
-                        "source_id": metadata.get("source_id"),
-                    },
-                },
-                "report": {
-                    "type": "run_report@1",
-                    "name": report_title,
-                    "files": {
-                        "report_json": _standard_output_file_ref(
-                            report_filename,
-                            report_content,
-                            "application/json",
-                        )
-                    },
-                    "metadata": {
-                        "source_task_id": str(metadata.get("source_id") or output_name),
-                    },
-                },
-            },
-            "relations": [{"from": "report", "to": output_name, "type": "describes"}],
-            "summary": {"fetched_artifact": output_name},
-        },
-    )
 
 
 def _protein_preparation_metadata(
@@ -1448,78 +1298,6 @@ def _read_smiles_from_csv(csv_path: Path) -> list[str]:
     return smiles_values
 
 
-async def _run_query_chembl_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResult:
-    """builtin-query-chembl: 从 SMILES CSV 提取分子，查询 ChEMBL。"""
-    from app.external_databases.database_tools import query_chembl as _query_chembl
-    from app.config import settings as _settings
-
-    if not _settings.ENABLE_DATABASE_TOOLS:
-        raise ValidationException("数据库查询工具已禁用")
-
-    csv_file = files.get("smiles_csv")
-    smiles_list = _read_smiles_from_csv(csv_file.path) if csv_file else []
-    if not smiles_list:
-        raise ValidationException("query_chembl 需要 smiles_csv 输入文件")
-
-    result = await _query_chembl(smiles=smiles_list[0])
-    return BuiltinToolResult(
-        outputs=(
-            BuiltinToolOutput(semantic_type="database_query_result", data=result),
-        )
-    )
-
-
-async def _run_query_pubchem_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResult:
-    """builtin-query-pubchem: 从 SMILES CSV 提取分子，查询 PubChem。"""
-    from app.external_databases.database_tools import query_pubchem as _query_pubchem
-    from app.config import settings as _settings
-
-    if not _settings.ENABLE_DATABASE_TOOLS:
-        raise ValidationException("数据库查询工具已禁用")
-
-    csv_file = files.get("smiles_csv")
-    smiles_list = _read_smiles_from_csv(csv_file.path) if csv_file else []
-    if not smiles_list:
-        raise ValidationException("query_pubchem 需要 smiles_csv 输入文件")
-
-    result = await _query_pubchem(smiles=smiles_list[0])
-    return BuiltinToolResult(
-        outputs=(
-            BuiltinToolOutput(semantic_type="database_query_result", data=result),
-        )
-    )
-
-
-async def _run_query_pdbbind_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResult:
-    """builtin-query-pdbbind: 从 PDB 文件名提取 PDB ID，查询 PDBbind。"""
-    from app.external_databases.database_tools import query_pdbbind as _query_pdbbind
-    from app.config import settings as _settings
-
-    if not _settings.ENABLE_DATABASE_TOOLS:
-        raise ValidationException("数据库查询工具已禁用")
-
-    protein_file = files.get("protein_pdb")
-    ligand_file = files.get("ligand_pdb")
-
-    pdb_id: str | None = None
-    if protein_file:
-        stem = Path(protein_file.filename).stem
-        # 尝试提取 4 字符 PDB ID
-        match = re.search(r"(\d[A-Za-z\d]{3})", stem)
-        pdb_id = match.group(1) if match else stem[:4]
-
-    ligand_name: str | None = None
-    if ligand_file:
-        ligand_name = Path(ligand_file.filename).stem
-
-    result = await _query_pdbbind(protein_pdb_id=pdb_id, ligand_name=ligand_name)
-    return BuiltinToolResult(
-        outputs=(
-            BuiltinToolOutput(semantic_type="database_query_result", data=result),
-        )
-    )
-
-
 # ======================================================================
 # ADMET / Toxicity / SA（SMILES CSV → 结构化报告）
 # ======================================================================
@@ -1696,16 +1474,11 @@ def _dicts_to_csv_bytes(records: list[dict[str, Any]]) -> bytes:
 _BUILTIN_TOOL_REGISTRY: dict[str, str] = {
     "builtin-sdf-to-smiles-csv": "sdf_to_smiles_csv",
     "builtin-sdf-to-pdb": "sdf_to_pdb",
-    "builtin-fetch-pdb": "fetch_pdb",
-    "builtin-fetch-ligand": "fetch_ligand",
     "builtin-vina-docking": "vina_docking",
     "builtin-protein-preparation": "protein_preparation",
     "builtin-rdkit-properties": "rdkit_properties",
     "builtin-ligand-preparation": "ligand_preparation",
     "builtin-rdkit-conformer": "rdkit_conformer",
-    "builtin-query-chembl": "query_chembl",
-    "builtin-query-pubchem": "query_pubchem",
-    "builtin-query-pdbbind": "query_pdbbind",
 }
 
 
@@ -1733,10 +1506,6 @@ async def run_builtin_tool(
         return await _run_sync_builtin_handler(_run_sdf_to_smiles_csv_tool, files)
     if handler_key == "sdf_to_pdb":
         return await _run_sync_builtin_handler(_run_sdf_to_pdb_tool, files)
-    if handler_key == "fetch_pdb":
-        return await _run_fetch_pdb_tool(files, params)
-    if handler_key == "fetch_ligand":
-        return await _run_fetch_ligand_tool(files, params)
     if handler_key == "vina_docking":
         return await _run_sync_builtin_handler(_run_vina_docking_tool, files)
     if handler_key == "protein_preparation":
@@ -1747,12 +1516,6 @@ async def run_builtin_tool(
         return await asyncio.to_thread(_run_ligand_preparation_tool, files, params)
     if handler_key == "rdkit_conformer":
         return await asyncio.to_thread(_run_rdkit_conformer_tool, files, params)
-    if handler_key == "query_chembl":
-        return await _run_query_chembl_tool(files)
-    if handler_key == "query_pubchem":
-        return await _run_query_pubchem_tool(files)
-    if handler_key == "query_pdbbind":
-        return await _run_query_pdbbind_tool(files)
     if handler_key == "admet_prediction":
         return await _run_sync_builtin_handler(_run_admet_prediction_tool, files)
     if handler_key == "toxicity_prediction":

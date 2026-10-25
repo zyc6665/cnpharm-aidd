@@ -72,13 +72,7 @@ def declared_standard_outputs_from_config(
     if not isinstance(config, dict):
         return []
     config_type = config.get("type")
-    is_non_v1_remote = (
-        config_type == "remote_api"
-        and config.get("mode") != "remote_tool_v1"
-    )
-    if is_non_v1_remote:
-        return []
-    if config_type not in {"remote_api", "builtin", "ssh_job", "k8s_job"}:
+    if config_type not in {"builtin", "ssh_job", "k8s_job"}:
         return []
     artifacts = config.get("artifacts")
     raw_outputs = None

@@ -10,10 +10,20 @@ function readSource(relativePath: string): string {
   return readFileSync(resolve(rootDir, relativePath), 'utf8')
 }
 
-test('首页平台与页脚应提供 CPUPDB 入口', () => {
+test('首页不出现任何公网品牌外链', () => {
   const homeSource = readSource('src/views/home/index.vue')
+  const zhLocaleSource = readSource('src/locales/zh-CN/index.ts')
+  const enLocaleSource = readSource('src/locales/en-US/index.ts')
 
-  assert.equal(homeSource.includes('https://www.cpupdb.com'), true)
+  // 中国医药交付线要求私有化离线部署，首页不得出现公网域名跳转
+  assert.equal(homeSource.includes('cpupdb.com'), false)
+  assert.equal(homeSource.includes('paiwsit.com'), false)
+  assert.equal(zhLocaleSource.includes('CPUPDB'), false)
+  assert.equal(zhLocaleSource.includes('PAIWSIT'), false)
+  assert.equal(enLocaleSource.includes('CPUPDB'), false)
+  assert.equal(enLocaleSource.includes('PAIWSIT'), false)
+
+  // 页脚导航仍然存在，只是不再挂外部站点
   assert.equal(homeSource.includes('<nav class="footer-nav">'), true)
 })
 
@@ -40,7 +50,6 @@ test('首页第二屏应改为 AIDD 平台功能流程', () => {
     true
   )
 
-  assert.equal(zhLocaleSource.includes("cpupdb: 'CPUPDB'"), true)
   assert.equal(zhLocaleSource.includes("title: '平台功能'"), true)
   assert.equal(zhLocaleSource.includes("title: '口袋探索'"), true)
   assert.equal(zhLocaleSource.includes("title: '分子生成或虚拟筛选'"), true)
@@ -48,7 +57,6 @@ test('首页第二屏应改为 AIDD 平台功能流程', () => {
   assert.equal(zhLocaleSource.includes("title: '性质预测'"), true)
   assert.equal(zhLocaleSource.includes("title: '先导化合物优化'"), true)
 
-  assert.equal(enLocaleSource.includes("cpupdb: 'CPUPDB'"), true)
   assert.equal(enLocaleSource.includes("title: 'Platform Functions'"), true)
   assert.equal(enLocaleSource.includes("title: 'Pocket Exploration'"), true)
   assert.equal(enLocaleSource.includes("title: 'Molecule Generation or Virtual Screening'"), true)
@@ -89,12 +97,11 @@ test('首页预览应包含工作区导航和内容卡片层级', () => {
   assert.equal(homeSource.includes('preview-card'), true)
 })
 
-test('首页平台区域应链接 PAIWSIT、CPUPDB 与注册入口', () => {
+test('首页平台区域应只保留平台内注册入口', () => {
   const homeSource = readSource('src/views/home/index.vue')
   assert.equal(homeSource.includes("t('home.platform.title')"), true)
-  assert.equal(homeSource.includes('http://www.paiwsit.com/'), true)
-  assert.equal(homeSource.includes('https://www.cpupdb.com'), true)
   assert.equal(homeSource.includes('to="/register"'), true)
+  assert.equal(homeSource.includes('target="_blank"'), false)
 })
 
 test('首页能力区应将流程步骤按连接关系呈现', () => {

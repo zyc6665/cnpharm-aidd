@@ -29,10 +29,6 @@ from app.models.tools import (
 )
 from app.models.tool_packages import ToolPackage
 from app.models.users import User
-from app.remote_tools.registration import (
-    is_remote_tool_v1_config,
-    remote_tool_publish_errors,
-)
 from app.schemas.tools import (
     ToolResponse,
     ToolVersionResponse,
@@ -349,8 +345,6 @@ def build_validated_tool_contract(tool: Tool) -> dict:
     if current_version is not None and isinstance(config, dict):
         if config.get("type") == "builtin":
             pass
-        elif is_remote_tool_v1_config(config):
-            errors.extend(remote_tool_publish_errors(config))
         else:
             validation_payload = {
                 "name": tool.name,

@@ -13,7 +13,6 @@ from app.common.async_runtime import run_coro_sync
 from app.common.time import utcnow
 from app.config import settings, use_direct_task_execution
 from app.execution.records import finish_task_execution_record_best_effort
-from app.remote_tools.registration import build_remote_tool_smoke_result_update
 from app.tasks.attempts import (
     commit_current_attempt,
     get_execution_attempt_id,
@@ -222,56 +221,6 @@ async def _reschedule_after_gpu_shortage(
         tool_version=tool_version,
         delay_seconds=delay_seconds,
         failure_detail="GPU 资源不足，任务重新入队失败",
-    )
-
-
-async def _record_remote_tool_smoke_result_if_needed(
-    db,
-    *,
-    task,
-    tool,
-    tool_version,
-    status: str,
-    output_result: Dict[str, Any] | None = None,
-    error_message: str | None = None,
-) -> None:
-    """Record remote-tool.v1 smoke test outcomes on the active version config."""
-    extra_data = dict(task.extra_data or {})
-    update = build_remote_tool_smoke_result_update(
-        config=dict(tool_version.config or {}),
-        extra_data=extra_data,
-        task_id=str(task.id),
-        status=status,
-        finished_at=task.finished_at,
-        output_result=output_result,
-        error_message=error_message,
-    )
-    if update is None:
-        return
-
-    if update.auto_publish:
-        from app.models.tools import ToolStatus
-
-        tool.status = ToolStatus.PUBLISHED.value
-    tool_version.config = update.config
-
-
-async def _record_remote_tool_smoke_success_if_needed(
-    db,
-    *,
-    task,
-    tool,
-    tool_version,
-    output_result: Dict[str, Any],
-) -> None:
-    """Record successful remote-tool.v1 smoke tests on the active version config."""
-    await _record_remote_tool_smoke_result_if_needed(
-        db,
-        task=task,
-        tool=tool,
-        tool_version=tool_version,
-        status="success",
-        output_result=output_result,
     )
 
 
@@ -720,13 +669,6 @@ async def _execute_tool_task_impl_inner(
                 message="任务执行成功"
             )
             db.add(log)
-            await _record_remote_tool_smoke_success_if_needed(
-                db,
-                task=task,
-                tool=tool,
-                tool_version=tool_version,
-                output_result=output_result,
-            )
             completion_payload: dict[str, Any] = {
                 "status": "success",
                 "progress": task.progress,
@@ -886,11 +828,7 @@ async def _execute_tool_task_impl_inner(
                     **(task.extra_data if isinstance(task.extra_data, dict) else {}),
                     **resource_wait_metadata(
                         e.reason,
-                        legacy_reason=(
-                            "remote_capacity_unavailable"
-                            if str(e.reason or "").startswith("remote_capacity")
-                            else "worker_capability_unavailable"
-                        ),
+                        legacy_reason="worker_capability_unavailable",
                     ),
                     "resource_retry_count": task.retry_count,
                     "resource_retry_next_at": resource_retry_next_at,
@@ -901,19 +839,11 @@ async def _execute_tool_task_impl_inner(
                         level="WARNING",
                         message=retry_message,
                         log_data={
-                            "source": (
-                                "remote_capacity"
-                                if str(e.reason or "").startswith("remote_capacity")
-                                else "worker_capability"
-                            ),
+                            "source": "worker_capability",
                             "reason": e.reason,
                             "worker_id": e.worker_id,
                             "retry_count": task.retry_count,
-                            "resource_wait_reason": (
-                                "remote_capacity_unavailable"
-                                if str(e.reason or "").startswith("remote_capacity")
-                                else "worker_capability_unavailable"
-                            ),
+                            "resource_wait_reason": "worker_capability_unavailable",
                             "retry_delay_seconds": retry_delay_seconds,
                             "resource_retry_next_at": resource_retry_next_at,
                         },
@@ -1009,15 +939,6 @@ async def _execute_tool_task_impl_inner(
                     existing_output.result = failure_result
                     existing_output.file_ids = failure_file_ids
                     existing_output.output_type = "json"
-            if tool is not None and tool_version is not None:
-                await _record_remote_tool_smoke_result_if_needed(
-                    db,
-                    task=task,
-                    tool=tool,
-                    tool_version=tool_version,
-                    status="failure",
-                    error_message=str(e),
-                )
             if not await commit_current_attempt(
                 db,
                 task=task,
@@ -1305,69 +1226,6 @@ async def _reconcile_execution_records_impl() -> int:
         )
         await db.commit()
         return reconciled_count
-
-
-@shared_task(name="app.worker.tasks.reconcile_remote_tasks")
-def reconcile_remote_tasks():
-    """恢复 worker 中断后仍在远端运行的 Remote API 任务。"""
-    logger.info("开始恢复 Remote API 任务")
-
-    recovered_count = run_coro_sync(_reconcile_remote_tasks_impl())
-
-    logger.info("Remote API 任务恢复完成，收敛 %s 条", recovered_count)
-    return {"recovered_count": recovered_count}
-
-
-@shared_task(name="app.worker.tasks.reconcile_remote_cancellations")
-def reconcile_remote_cancellations():
-    """Retry remote cancellations that could not be confirmed by the API."""
-    retried_count = run_coro_sync(_reconcile_remote_cancellations_impl())
-    return {"retried_count": retried_count}
-
-
-async def _reconcile_remote_cancellations_impl() -> int:
-    from sqlalchemy import or_, select
-    from app.database.session import async_session_factory
-    from app.models.tasks import Task, TaskStatus
-    from app.tasks.cancellation import retry_remote_tool_cancellation
-
-    async with async_session_factory() as db:
-        retry_before = utcnow().isoformat()
-        next_retry_at = Task.extra_data["remote_cancel_next_retry_at"].as_string()
-        result = await db.execute(
-            select(Task)
-            .where(
-                Task.status == TaskStatus.CANCELED.value,
-                Task.extra_data["remote_cancel_pending"].as_boolean().is_(True),
-                or_(
-                    next_retry_at.is_(None),
-                    next_retry_at <= retry_before,
-                ),
-            )
-            .order_by(Task.updated_at.asc())
-            .limit(max(int(settings.REMOTE_CANCEL_RETRY_BATCH_SIZE), 1))
-            .with_for_update(skip_locked=True)
-        )
-        retried_count = 0
-        for task in result.scalars().all():
-            if await retry_remote_tool_cancellation(db, task=task):
-                retried_count += 1
-        await db.commit()
-        return retried_count
-
-
-async def _reconcile_remote_tasks_impl() -> int:
-    """使用独立会话执行 Remote API 任务恢复。"""
-    from app.database.session import async_session_factory
-    from app.tasks.remote_recovery import reconcile_orphaned_remote_tasks
-
-    async with async_session_factory() as db:
-        recovered_count = await reconcile_orphaned_remote_tasks(
-            db,
-            stale_after=timedelta(seconds=settings.REMOTE_TASK_RECOVERY_STALE_AFTER_SECONDS),
-            batch_size=settings.REMOTE_TASK_RECOVERY_BATCH_SIZE,
-        )
-        return recovered_count
 
 
 @shared_task(name="app.worker.tasks.collect_gpu_stats")

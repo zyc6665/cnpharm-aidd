@@ -25,7 +25,13 @@ def test_execution_type_mapping_matches_tool_package_migration_contract():
     assert execution_types_for_tool_type("python_script") == ("cli",)
     assert execution_types_for_tool_type("ssh_job") == ("remote_job",)
     assert execution_types_for_tool_type("k8s_job") == ("k8s_job",)
-    assert execution_types_for_tool_type("remote_api") == ("remote_job",)
+
+
+def test_remote_api_tool_type_is_no_longer_supported():
+    """交付线移除了远程 API 工具类型，映射必须明确拒绝。"""
+    assert execution_types_for_tool_type("remote_api") is None
+    with pytest.raises(ValueError):
+        execution_type_for_tool_type("remote_api")
 
 
 def test_execution_type_mapping_rejects_builtin_and_unknown_types():

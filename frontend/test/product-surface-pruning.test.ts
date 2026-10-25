@@ -132,6 +132,8 @@ test('管理员工具管理页不应再提供旧 platform_tool.json 导入入口
   assert.equal(adminToolsSource.includes('importConfigText'), false)
   assert.equal(adminToolsSource.includes('importToolConfig'), false)
 
-  assert.equal(toolsApiSource.includes('importToolConfig'), true)
-  assert.equal(toolsApiSource.includes('/tools/import-config'), true)
+  assert.equal(toolsApiSource.includes('importToolConfig'), false)
+  assert.equal(toolsApiSource.includes('/tools/import-config'), false)
+  assert.equal(toolsApiSource.includes('registerRemoteTool'), false)
+  assert.equal(toolsApiSource.includes('/tools/register-remote'), false)
 })

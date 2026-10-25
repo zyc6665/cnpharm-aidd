@@ -12,7 +12,6 @@ from app.models.tools import (
 from app.models.tasks import Task, TaskInput, TaskOutput, TaskLog
 from app.models.files import File
 from app.models.workflows import ResearchBoard, WorkflowDefinition, WorkflowRun
-from app.models.system_settings import ModelService
 from app.models.verification import VerificationCode, VerificationDailyCount, VerificationPurpose
 from app.models.statistics import UserStatistics, ToolStatistics, FileStatistics
 from app.models.tool_capabilities import ToolCapability
@@ -30,7 +29,6 @@ __all__ = [
     "Task", "TaskInput", "TaskOutput", "TaskLog",
     "File",
     "ResearchBoard", "WorkflowDefinition", "WorkflowRun",
-    "ModelService",
     "VerificationCode", "VerificationDailyCount", "VerificationPurpose",
     "UserStatistics", "ToolStatistics", "FileStatistics",
     "ToolCapability",

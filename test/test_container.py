@@ -81,7 +81,6 @@ def test_executor_file_handling_entrypoints_are_implemented():
     required_methods = {
         "_prepare_input_files": ("app/tasks/executors/ssh_job.py", "ensure_local_file"),
         "_collect_output_files": ("app/tasks/executors/base.py", "_collect_output_files_with_session"),
-        "_process_output_files": ("app/tasks/executors/remote_api.py", "httpx.AsyncClient"),
     }
 
     for method_name, (source_path, expected_keyword) in required_methods.items():

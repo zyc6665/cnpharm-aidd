@@ -3,7 +3,7 @@
 
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 from app.schemas.common import TimestampMixin
 from app.schemas.files import FileUploadResponse
 from app.schemas.statistics import ToolStatisticsResponse
@@ -39,10 +39,7 @@ class ToolVersionCreate(BaseModel):
     is_active: bool = Field(default=True, description="是否激活")
     # config结构:
     # {
-    #     "type": "remote_api|docker_image|python_script|ssh_job|k8s_job",
-    #     "endpoint": "http://...",
-    #     "method": "POST",
-    #     "headers": {},
+    #     "type": "docker_image|python_script|ssh_job|k8s_job",
     #     "host": "gpu-node-01",  # ssh_job
     #     "entrypoint": "/app/platform_run.sh",  # ssh_job
     #     "runtime": {"image": "registry.example/model@sha256:<digest>"},  # k8s_job
@@ -334,37 +331,6 @@ class ToolUpdate(BaseModel):
     gpu_memory_mb: Optional[int] = Field(None, ge=0, description="GPU显存需求(MB)")
     timeout_sec: Optional[int] = Field(None, ge=60, le=MAX_TOOL_TIMEOUT_SEC, description="超时时间(秒)")
     tag_ids: Optional[List[str]] = Field(None, description="标签ID列表")
-
-
-class ToolImportRequest(BaseModel):
-    """导入平台工具配置。"""
-    config: Dict[str, Any] = Field(..., description="platform_tool.json 内容")
-    category_id: Optional[str] = Field(None, description="导入后绑定的工具分类ID")
-    publish: bool = Field(default=False, description="导入后是否直接发布")
-
-
-class RemoteToolRegisterRequest(BaseModel):
-    """注册 remote-tool.v1 远程模型服务。"""
-    base_url: str = Field(..., min_length=1, description="远程模型服务根 URL")
-    category_id: str = Field(..., min_length=1, description="工具分类ID")
-    run_smoke_test: bool = Field(default=True, description="注册后是否创建 smoke test 任务")
-    publish_on_success: bool = Field(default=False, description="smoke test 成功后是否自动发布")
-    icon: Optional[str] = Field(None, max_length=100, description="图标")
-    icon_url: Optional[str] = Field(None, max_length=500, description="图标URL")
-    is_public: bool = Field(default=True, description="是否公开")
-    timeout_sec: int = Field(default=600, ge=60, le=MAX_TOOL_TIMEOUT_SEC, description="超时时间(秒)")
-    capacity_policy: Optional[Dict[str, Any]] = Field(
-        None, description="远程 API 服务容量策略"
-    )
-
-    @model_validator(mode="after")
-    def validate_capacity_policy(self):
-        from app.tasks.remote_capacity import validate_remote_capacity_policy
-
-        errors = validate_remote_capacity_policy(self.capacity_policy)
-        if errors:
-            raise ValueError(errors[0])
-        return self
 
 
 class ToolExampleFileResponse(BaseModel):

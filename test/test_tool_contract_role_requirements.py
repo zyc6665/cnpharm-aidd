@@ -12,7 +12,6 @@ BACKEND_ROOT = PROJECT_ROOT / "backend"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.remote_tools.schemas import RemoteToolManifest  # noqa: E402
 from app.services.tool_contracts import build_tool_contract  # noqa: E402
 from app.tool_packages.schemas import ToolPackageV2Manifest  # noqa: E402
 
@@ -82,51 +81,8 @@ def _minimal_tool_package_v2_manifest() -> dict:
     }
 
 
-def _minimal_remote_tool_manifest() -> dict:
-    return {
-        "api_version": "aidd.sciminer/remote-tool.v1",
-        "kind": "RemoteTool",
-        "metadata": {
-            "slug": "role-aware-remote-pocket",
-            "name": "Role Aware Remote Pocket",
-            "version": "1.0.0",
-            "description": "Pocket prediction service",
-        },
-        "artifacts": {
-            "inputs": [dict(ROLE_AWARE_INPUT)],
-            "outputs": [
-                {
-                    "name": "pocket",
-                    "type": "binding_pocket@1",
-                    "cardinality": "one",
-                    "required": True,
-                }
-            ],
-        },
-        "parameters_schema": {"type": "object", "properties": {}},
-        "endpoints": {
-            "invoke": "/invoke",
-            "status": "/runs/{remote_run_id}",
-            "logs": "/runs/{remote_run_id}/logs",
-            "cancel": "/runs/{remote_run_id}/cancel",
-            "artifacts": "/runs/{remote_run_id}/artifacts",
-        },
-        "capabilities": {"async": True, "logs": True, "cancel": True, "progress": True},
-    }
-
-
 def test_tool_package_v2_artifact_inputs_accept_role_requirements() -> None:
     manifest = ToolPackageV2Manifest.model_validate(_minimal_tool_package_v2_manifest())
-    input_slot = manifest.artifacts.inputs[0]
-
-    assert input_slot.role_preferences == ["prepared_pdb", "structure_file"]
-    assert input_slot.required_roles == []
-    assert input_slot.readiness_policy == "prefer_prepared_warn_raw"
-    assert input_slot.suggested_preparation_tool == "builtin-protein-preparation"
-
-
-def test_remote_tool_artifact_inputs_accept_role_requirements() -> None:
-    manifest = RemoteToolManifest.model_validate(_minimal_remote_tool_manifest())
     input_slot = manifest.artifacts.inputs[0]
 
     assert input_slot.role_preferences == ["prepared_pdb", "structure_file"]

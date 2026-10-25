@@ -7,7 +7,7 @@ metadata:
   version: 1.0.0
   description: Standard wrapper for an internal or external ADMET prediction service.
   family: drug_discovery
-executor_types: [remote_api, docker_image, ssh_job, k8s_job]
+executor_types: [docker_image, ssh_job, k8s_job]
 input_schema:
   type: object
   properties:
@@ -42,7 +42,7 @@ implementation:
   source: internal_service
   provider: Internal ADMET Service
   runtime: admet_api
-  recommended_executor: remote_api
+  recommended_executor: docker_image
   notes: Register the platform-owned asynchronous ADMET service endpoint.
 resource_profile:
   tier: light

@@ -12,7 +12,7 @@ function readProjectFile(relativePath: string): string {
 test('frontend exposes a Playwright AIDD e2e test surface', () => {
   const packageJson = JSON.parse(readProjectFile('package.json'))
   const playwrightConfig = resolve(rootDir, 'playwright.config.ts')
-  const workflowPresetSpec = resolve(rootDir, 'e2e/at003-workflow-preset.spec.ts')
+  const workflowPresetSpec = resolve(rootDir, 'e2e/workflow-preset-offline.spec.ts')
   const researchFlowSpec = resolve(rootDir, 'e2e/aidd-research-flow.spec.ts')
 
   assert.equal(
@@ -27,8 +27,9 @@ test('frontend exposes a Playwright AIDD e2e test surface', () => {
 })
 
 test('AIDD e2e specs cover the production critical user flows', () => {
-  const workflowPreset = readProjectFile('e2e/at003-workflow-preset.spec.ts')
+  const workflowPreset = readProjectFile('e2e/workflow-preset-offline.spec.ts')
 
   assert.equal(workflowPreset.includes('workflow-preset-select'), true)
-  assert.equal(workflowPreset.includes('PubChem 到基础 ADMET'), true)
+  assert.equal(workflowPreset.includes('配体结构到基础 ADMET'), true)
+  assert.equal(workflowPreset.includes('builtin-fetch-ligand'), false)
 })

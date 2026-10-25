@@ -196,12 +196,12 @@ describe('free workflow workbench', () => {
     expect(wrapper.text()).not.toContain('模板图谱')
   })
 
-  it('可以切换到 PubChem 到基础 ADMET 流程模式', async () => {
+  it('可以切换到配体结构到基础 ADMET 流程模式', async () => {
     const wrapper = renderWorkflow()
     await flushPromises()
 
     const admetPreset = wrapper.findAll('.select-option')
-      .find(option => option.text() === 'PubChem 到基础 ADMET')
+      .find(option => option.text() === '配体结构到基础 ADMET')
     expect(admetPreset).toBeDefined()
 
     await admetPreset!.trigger('click')
@@ -209,6 +209,14 @@ describe('free workflow workbench', () => {
 
     expect(wrapper.text()).toContain('MolP-PC 基础 ADMET')
     expect(wrapper.text()).toContain('基础 ADMET 结果')
+  })
+
+  it('不再提供联网抓取配体的流程模式', async () => {
+    const wrapper = renderWorkflow()
+    await flushPromises()
+
+    const presetTexts = wrapper.findAll('.select-option').map(option => option.text())
+    expect(presetTexts.some(text => text.includes('PubChem'))).toBe(false)
   })
 
   it('保存默认自由流程时写入 WorkflowDefinition，不使用旧模板入口', async () => {

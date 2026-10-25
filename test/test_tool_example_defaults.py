@@ -52,24 +52,29 @@ def test_default_example_moves_schema_file_params_to_input_files() -> None:
 
 
 def test_select_default_tool_example_falls_back_to_schema_value() -> None:
+    """未声明 examples 时，应使用 schema 字段自带的 example 生成默认示例。"""
     example = select_default_tool_example(
         [
             {
                 "input_schema": {
                     "type": "object",
                     "properties": {
-                        "pdb_id": {"type": "string", "title": "PDB ID"},
+                        "structure_file": {
+                            "type": "string",
+                            "title": "结构文件",
+                            "example": "protein.pdb",
+                        },
                     },
                 }
             }
         ],
-        tool_slug="builtin-fetch-pdb",
+        tool_slug="builtin-protein-preparation",
         base_dir=None,
     )
 
     assert example == {
         "name": "默认示例",
         "description": "根据工具参数自动生成的示例输入",
-        "params": {"pdb_id": "1A2B"},
+        "params": {"structure_file": "protein.pdb"},
         "input_files": {},
     }

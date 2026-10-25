@@ -80,11 +80,4 @@ def tool_accepts_materialized_standard_uploads(config: object) -> bool:
 
 
 def tool_accepts_standard_input_bindings(config: dict[str, Any]) -> bool:
-    if tool_accepts_materialized_standard_uploads(config):
-        return True
-
-    if str(config.get("type") or "") != "remote_api":
-        return False
-    artifacts = config.get("artifacts")
-    inputs = artifacts.get("inputs") if isinstance(artifacts, dict) else None
-    return any(isinstance(item, dict) for item in inputs or [])
+    return tool_accepts_materialized_standard_uploads(config)

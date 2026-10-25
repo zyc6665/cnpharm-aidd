@@ -33,17 +33,7 @@ export interface ToolCreateFormState extends ToolCreateParams {
   version: string
   changelog: string
   notes: string
-  tool_type: 'remote_api' | 'docker_image' | 'python_script' | 'ssh_job' | 'k8s_job'
-  remote_api_registration_mode: 'self_register' | 'manual'
-  remote_base_url: string
-  remote_run_smoke_test: boolean
-  remote_publish_on_success: boolean
-  api_endpoint: string
-  api_method: 'GET' | 'POST'
-  remote_capacity_mode: 'unmanaged' | 'static'
-  remote_capacity_group: string
-  remote_max_inflight: number
-  remote_lease_ttl_sec: number
+  tool_type: 'docker_image' | 'python_script' | 'ssh_job' | 'k8s_job'
   docker_image: string
   python_script: string
   ssh_host: string
@@ -73,7 +63,6 @@ export interface ToolCreateFormState extends ToolCreateParams {
 }
 
 export interface ToolCreateEditorState {
-  apiHeaderEntries: KeyValueEntry[]
   dockerCommandItems: string[]
   dockerEnvEntries: KeyValueEntry[]
   pythonArgumentItems: string[]
@@ -110,18 +99,6 @@ export interface ToolTemplateFormPatchInput {
   }
 }
 
-export interface RemoteToolRegistrationPayload {
-  base_url: string
-  category_id: string
-  run_smoke_test: boolean
-  publish_on_success: boolean
-  icon?: string
-  icon_url?: string
-  is_public: boolean
-  timeout_sec?: number
-  capacity_policy?: Record<string, unknown>
-}
-
 export interface ToolTemplateDraftPayload {
   executor_type: ToolCreateFormState['tool_type']
   executor_config: Record<string, unknown>
@@ -135,13 +112,6 @@ export interface ToolVersionCreatePayload {
   notes?: string
   config: Record<string, unknown>
   is_active: boolean
-}
-
-export type RemoteToolStageStatus = 'success' | 'warning' | 'failure'
-
-export interface RemoteToolStageStatusDisplay {
-  color: 'green' | 'orange' | 'red'
-  text: string
 }
 
 export interface ToolCreateSubmissionInput {
@@ -185,17 +155,7 @@ export function createToolCreateFormState(): ToolCreateFormState {
     version: '1.0.0',
     changelog: '',
     notes: '',
-    tool_type: 'remote_api',
-    remote_api_registration_mode: 'self_register',
-    remote_base_url: '',
-    remote_run_smoke_test: true,
-    remote_publish_on_success: false,
-    api_endpoint: '',
-    api_method: 'POST',
-    remote_capacity_mode: 'static',
-    remote_capacity_group: '',
-    remote_max_inflight: 1,
-    remote_lease_ttl_sec: 3600,
+    tool_type: 'docker_image',
     docker_image: '',
     python_script: '',
     ssh_host: '',
@@ -227,7 +187,6 @@ export function createToolCreateFormState(): ToolCreateFormState {
 
 export function createToolCreateEditorState(): ToolCreateEditorState {
   return {
-    apiHeaderEntries: [],
     dockerCommandItems: [],
     dockerEnvEntries: [],
     pythonArgumentItems: [],
@@ -241,63 +200,12 @@ export function mergeToolCreateEditorStatePatch(
   patch: Partial<ToolCreateEditorState>,
 ): ToolCreateEditorState {
   return {
-    apiHeaderEntries: patch.apiHeaderEntries ?? current.apiHeaderEntries,
     dockerCommandItems: patch.dockerCommandItems ?? current.dockerCommandItems,
     dockerEnvEntries: patch.dockerEnvEntries ?? current.dockerEnvEntries,
     pythonArgumentItems: patch.pythonArgumentItems ?? current.pythonArgumentItems,
     sshEnvEntries: patch.sshEnvEntries ?? current.sshEnvEntries,
     sshOutputGlobItems: patch.sshOutputGlobItems ?? current.sshOutputGlobItems,
   }
-}
-
-export function buildRemoteToolRegistrationPayload(
-  formState: ToolCreateFormState,
-): RemoteToolRegistrationPayload {
-  return {
-    base_url: formState.remote_base_url.trim(),
-    category_id: formState.category_id,
-    run_smoke_test: formState.remote_run_smoke_test,
-    publish_on_success: formState.remote_run_smoke_test
-      ? formState.remote_publish_on_success
-      : false,
-    icon: formState.icon || undefined,
-    icon_url: formState.icon_url || undefined,
-    is_public: formState.is_public ?? true,
-    timeout_sec: formState.timeout_sec,
-    capacity_policy: buildRemoteCapacityPolicy(formState),
-  }
-}
-
-export function buildRemoteCapacityPolicy(
-  formState: Pick<
-    ToolCreateFormState,
-    'remote_capacity_mode' | 'remote_capacity_group' | 'remote_max_inflight' | 'remote_lease_ttl_sec'
-  >,
-): Record<string, unknown> {
-  if (formState.remote_capacity_mode === 'unmanaged') return {}
-
-  const policy: Record<string, unknown> = { mode: formState.remote_capacity_mode }
-  if (formState.remote_capacity_group.trim()) {
-    policy.capacity_group = formState.remote_capacity_group.trim()
-  }
-  if (formState.remote_capacity_mode === 'static') {
-    policy.max_inflight = formState.remote_max_inflight
-    policy.lease_ttl_sec = formState.remote_lease_ttl_sec
-  }
-  return policy
-}
-
-export function remoteToolStageStatusDisplay(
-  status: RemoteToolStageStatus,
-): RemoteToolStageStatusDisplay {
-  if (status === 'success') {
-    return { color: 'green', text: '成功' }
-  }
-  if (status === 'warning') {
-    return { color: 'orange', text: '警告' }
-  }
-
-  return { color: 'red', text: '失败' }
 }
 
 export function buildToolAgentCapabilityEnablePatch(
@@ -342,17 +250,6 @@ export function buildTemplateExecutorConfig(
   formState: ToolCreateFormState,
   editorState: ToolCreateEditorState,
 ): Record<string, unknown> {
-  if (formState.tool_type === 'remote_api') {
-    const capacityPolicy = buildRemoteCapacityPolicy(formState)
-    return {
-      endpoint: formState.api_endpoint,
-      method: formState.api_method,
-      headers: keyValueEntriesToRecord(editorState.apiHeaderEntries),
-      ...(Object.keys(capacityPolicy).length > 0
-        ? { capacity_policy: capacityPolicy }
-        : {}),
-    }
-  }
   if (formState.tool_type === 'docker_image') {
     return {
       image: formState.docker_image,
@@ -390,7 +287,7 @@ export function buildToolTemplateDraftPayload(
 }
 
 export function isSupportedToolType(value: string): value is ToolCreateFormState['tool_type'] {
-  return ['remote_api', 'docker_image', 'python_script', 'ssh_job', 'k8s_job'].includes(value)
+  return ['docker_image', 'python_script', 'ssh_job', 'k8s_job'].includes(value)
 }
 
 export function templateInputToForm(input: Record<string, unknown>): AgentCapabilityInputForm {
@@ -468,10 +365,6 @@ export function buildToolTemplateFormPatch(
   if (toolType !== input.currentToolType) {
     form.tool_type = toolType
   }
-  if (toolType === 'remote_api') {
-    form.remote_api_registration_mode = 'manual'
-  }
-
   return { form, agentDefaultsText: '{}' }
 }
 
@@ -564,10 +457,6 @@ export function createToolCreateSubmission(
     outputSchema,
     documentationMarkdown: input.formState.documentation_markdown,
     agentCapabilityConfig,
-    apiEndpoint: input.formState.api_endpoint,
-    apiMethod: input.formState.api_method,
-    apiHeaders: keyValueEntriesToRecord(input.editorState.apiHeaderEntries),
-    remoteCapacityPolicy: buildRemoteCapacityPolicy(input.formState),
     dockerImage: input.formState.docker_image,
     dockerCommand: stringListForConfig(input.editorState.dockerCommandItems),
     dockerEnv: keyValueEntriesToRecord(input.editorState.dockerEnvEntries),
@@ -669,21 +558,6 @@ function buildSshTemplateExecutorConfig(
 }
 
 function applyExecutorConfigPatch(patch: ToolConfigFormPatch, config: Record<string, unknown>): void {
-  if (config.type === 'remote_api') {
-    patch.form.tool_type = 'remote_api'
-    if (config.mode === 'remote_tool_v1') {
-      patch.form.remote_api_registration_mode = 'self_register'
-      patch.form.remote_base_url = String(config.base_url || '')
-    } else {
-      patch.form.remote_api_registration_mode = 'manual'
-      patch.form.api_endpoint = String(config.endpoint || '')
-      patch.form.api_method = config.method === 'GET' ? 'GET' : 'POST'
-      patch.editor.apiHeaderEntries = recordToKeyValueEntries(config.headers)
-    }
-    applyRemoteCapacityPatch(patch.form, config.capacity_policy)
-    return
-  }
-
   if (config.type === 'docker_image') {
     patch.form.tool_type = 'docker_image'
     patch.form.docker_image = String(config.image || '')
@@ -725,29 +599,6 @@ function applyExecutorConfigPatch(patch: ToolConfigFormPatch, config: Record<str
     const runtime = isToolConfigRecord(config.runtime) ? config.runtime : {}
     patch.form.k8s_image = String(runtime.image || config.image || '')
     patch.form.k8s_resource_profile = String(config.resource_profile || 'cpu-small')
-  }
-}
-
-function applyRemoteCapacityPatch(
-  form: Partial<ToolCreateFormState>,
-  rawPolicy: unknown,
-): void {
-  if (!rawPolicy || typeof rawPolicy !== 'object') {
-    form.remote_capacity_mode = 'unmanaged'
-    return
-  }
-  const policy = rawPolicy as Record<string, unknown>
-  if (policy.mode === 'static') {
-    form.remote_capacity_mode = policy.mode
-  }
-  if (typeof policy.capacity_group === 'string') {
-    form.remote_capacity_group = policy.capacity_group
-  }
-  if (typeof policy.max_inflight === 'number') {
-    form.remote_max_inflight = policy.max_inflight
-  }
-  if (typeof policy.lease_ttl_sec === 'number') {
-    form.remote_lease_ttl_sec = policy.lease_ttl_sec
   }
 }
 

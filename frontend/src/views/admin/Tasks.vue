@@ -29,14 +29,6 @@
       </a-col>
       <a-col :xs="12" :sm="6">
         <a-card class="stat-card" :loading="loading">
-          <a-statistic
-            :title="t('admin.remoteRecoveryAlerts')"
-            :value="systemStats?.remote_recovery_alerted_tasks ?? 0"
-          />
-        </a-card>
-      </a-col>
-      <a-col :xs="12" :sm="6">
-        <a-card class="stat-card" :loading="loading">
           <a-statistic :title="t('admin.resourceWaitTasks')" :value="resourceWaitStats?.total ?? 0" />
         </a-card>
       </a-col>
@@ -114,18 +106,6 @@
             <a-select-option value="canceled">{{ t('tasks.status.canceled') }}</a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item :label="t('tasks.remoteRecovery.alertFilter')">
-          <a-select
-            v-model:value="filters.remote_recovery_alerted"
-            :placeholder="t('common.all')"
-            style="width: 180px"
-            allowClear
-          >
-            <a-select-option :value="true">
-              {{ t('tasks.remoteRecovery.alertedOnly') }}
-            </a-select-option>
-          </a-select>
-        </a-form-item>
         <a-form-item :label="t('admin.resourceWaitCategory')">
           <a-select
             v-model:value="filters.resource_wait_category"
@@ -170,9 +150,6 @@
             <div class="task-cell">
               <span class="name">{{ formatTaskTitle(record) }}</span>
               <span class="id">ID: {{ record.id }}</span>
-              <span v-if="record.remote_recovery" class="recovery-status">
-                {{ t('tasks.remoteRecovery.failures', { count: record.remote_recovery.failures }) }}
-              </span>
               <span v-if="record.resource_wait" class="resource-wait-status">
                 {{ resourceWaitLabel(record.resource_wait) }}
               </span>
@@ -250,24 +227,6 @@
           </a-descriptions-item>
           <a-descriptions-item :label="t('tasks.progress')">
             <a-progress :percent="selectedTask.progress || 0" />
-          </a-descriptions-item>
-          <a-descriptions-item
-            v-if="selectedTask.remote_recovery"
-            :label="t('tasks.remoteRecovery.title')"
-          >
-            <a-alert type="warning" show-icon>
-              <template #message>
-                {{ t('tasks.remoteRecovery.failures', { count: selectedTask.remote_recovery.failures }) }}
-              </template>
-              <template #description>
-                <div v-if="selectedTask.remote_recovery.next_attempt_at">
-                  {{ t('tasks.remoteRecovery.nextAttempt', { time: formatDate(selectedTask.remote_recovery.next_attempt_at) }) }}
-                </div>
-                <div v-if="selectedTask.remote_recovery.last_error">
-                  {{ t('tasks.remoteRecovery.lastError', { error: selectedTask.remote_recovery.last_error }) }}
-                </div>
-              </template>
-            </a-alert>
           </a-descriptions-item>
           <a-descriptions-item
             v-if="selectedTask.resource_wait"
@@ -363,7 +322,6 @@
     keyword: '',
     tool_id: undefined as string | undefined,
     status: undefined as TaskStatus | undefined,
-    remote_recovery_alerted: undefined as boolean | undefined,
     resource_wait_category: undefined as string | undefined
   })
 
@@ -438,7 +396,6 @@
         keyword: filters.keyword || undefined,
         tool_id: filters.tool_id,
         status: filters.status,
-        remote_recovery_alerted: filters.remote_recovery_alerted,
         resource_wait_category: filters.resource_wait_category
       })
       tasks.value = res.data.items
@@ -462,7 +419,6 @@
     filters.keyword = ''
     filters.tool_id = undefined
     filters.status = undefined
-    filters.remote_recovery_alerted = undefined
     filters.resource_wait_category = undefined
     pagination.current = 1
     await fetchTasks()

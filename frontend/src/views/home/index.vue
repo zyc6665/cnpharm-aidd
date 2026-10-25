@@ -104,12 +104,6 @@
           <h2 class="platform-title">{{ t('home.platform.title') }}</h2>
           <p class="platform-desc">{{ t('home.platform.desc') }}</p>
           <div class="platform-links">
-            <a href="http://www.paiwsit.com/" target="_blank" rel="noreferrer">
-              <a-button size="large" class="btn-ghost">PAIWSIT</a-button>
-            </a>
-            <a href="https://www.cpupdb.com" target="_blank" rel="noreferrer">
-              <a-button size="large" class="btn-ghost">CPUPDB</a-button>
-            </a>
             <router-link to="/register">
               <a-button type="primary" size="large">{{ t('home.platform.cta') }}</a-button>
             </router-link>
@@ -134,7 +128,6 @@
         <nav class="footer-nav">
           <router-link to="/tools">{{ t('nav.tools') }}</router-link>
           <router-link to="/workflow">{{ t('nav.workflow') }}</router-link>
-          <a href="https://www.cpupdb.com" target="_blank" rel="noreferrer">CPUPDB</a>
           <router-link to="/login">{{ t('nav.login') }}</router-link>
         </nav>
         <span class="footer-copy">&copy; {{ year }} CPUModel</span>

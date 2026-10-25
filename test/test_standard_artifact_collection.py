@@ -102,7 +102,8 @@ def test_declared_standard_outputs_from_tool_package_v2_manifest() -> None:
     ]
 
 
-def test_declared_standard_outputs_from_legacy_remote_contract() -> None:
+def test_declared_standard_outputs_ignore_retired_remote_contract() -> None:
+    """交付线移除了 remote_api 执行器，其旧契约不再产出标准输出声明。"""
     outputs = declared_standard_outputs_from_config(
         {
             "type": "remote_api",
@@ -124,6 +125,4 @@ def test_declared_standard_outputs_from_legacy_remote_contract() -> None:
         for item in outputs
     ]
 
-    assert summary == [
-        ("report", "run_report@1", "one", False),
-    ]
+    assert summary == []

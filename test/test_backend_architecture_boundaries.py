@@ -10,7 +10,6 @@ BACKEND_APP = Path("backend/app")
 API_COMPOSITION_ROOTS = {Path("main")}
 API_ROUTE_ROOT = BACKEND_APP / "api" / "v1"
 TOOL_ROUTE_MODULES = {
-    "tool_route_utils.py",
     "tool_versions.py",
     "tools_admin.py",
     "tools_public.py",

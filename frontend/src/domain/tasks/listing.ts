@@ -30,7 +30,6 @@ export interface TaskListQueryParams {
   workflow_run_id?: string
   workflow_definition_id?: string
   workflow_node_id?: string
-  remote_recovery_alerted?: boolean
 }
 
 export interface TaskCountQueryParams {

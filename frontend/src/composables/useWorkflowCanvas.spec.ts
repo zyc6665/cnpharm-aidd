@@ -230,7 +230,7 @@ describe('useWorkflowCanvas', () => {
               slug: 'cryoem-fit',
               name: 'CryoEM Fit',
               status: 'published',
-              executor: { type: 'remote_api' },
+              executor: { type: 'ssh_job' },
               schema: { input: { type: 'object', properties: {} }, output: { type: 'object', properties: {} } },
               capability: { enabled: true, inputs: [], outputs: [], defaults: {} },
               artifacts: {
@@ -327,20 +327,15 @@ describe('useWorkflowCanvas', () => {
     ])
   })
 
-  it('AT-003 预设保存时应保留标准 Artifact slot 绑定', () => {
+  it('配体链路预设保存时应保留标准 Artifact slot 绑定', () => {
     const canvas = mountCanvasHarness()
-    canvas.workflowStore.setCanvasPreset('pubchem-admet-template')
+    canvas.workflowStore.setCanvasPreset('ligand-admet-template')
 
     const definition = canvas.buildCurrentWorkflowDefinition()
     const nodesById = new Map(definition.nodes.map(node => [node.id, node]))
 
-    expect(nodesById.get('tool-fetch-pubchem')).toMatchObject({
-      tool_slug: 'builtin-fetch-ligand',
-      artifact_outputs: [
-        { name: 'ligand', type: 'ligand_structure@1', cardinality: 'one', required: true },
-        { name: 'report', type: 'run_report@1', cardinality: 'one', required: false },
-      ],
-    })
+    expect(nodesById.get('input-ligand')).toMatchObject({ kind: 'input', type: 'input' })
+    expect(nodesById.get('input-ligand')?.tool_slug).toBeUndefined()
     expect(nodesById.get('tool-sdf-to-smiles')).toMatchObject({
       tool_slug: 'builtin-sdf-to-smiles-csv',
       artifact_input_slots: [{ name: 'ligand', type: 'ligand_structure@1', required: true }],

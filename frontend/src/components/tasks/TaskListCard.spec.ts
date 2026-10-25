@@ -103,25 +103,6 @@ describe('TaskListCard', () => {
     expect(wrapper.emitted('delete')).toHaveLength(1)
   })
 
-  it('shows remote recovery failures in the task summary', () => {
-    const wrapper = mount(TaskListCard, {
-      props: {
-        task: task({
-          remote_recovery: {
-            failures: 3,
-            next_attempt_at: '2026-09-20T12:03:00',
-            last_error: 'remote service unavailable',
-            alerted: false,
-          },
-        }),
-        actor: { isAdmin: false },
-      },
-      global: { stubs },
-    })
-
-    expect(wrapper.text()).toContain('tasks.remoteRecovery.failures')
-  })
-
   it('shows resource wait status in the task summary', () => {
     const wrapper = mount(TaskListCard, {
       props: {

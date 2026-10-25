@@ -536,13 +536,6 @@ export interface TaskFailureDiagnosticsPayload {
   standard_artifact_message?: string
 }
 
-export interface TaskRemoteRecoveryStatus {
-  failures: number
-  next_attempt_at?: string | null
-  last_error?: string | null
-  alerted: boolean
-}
-
 export interface TaskResourceWaitStatus {
   reason: string
   category?: 'gpu' | 'quota' | 'worker_capacity' | 'scheduler' | 'resource' | string
@@ -587,7 +580,6 @@ export interface Task {
   outputs?: TaskOutput
   error_message?: string
   failure_diagnostics?: TaskFailureDiagnosticsPayload | null
-  remote_recovery?: TaskRemoteRecoveryStatus | null
   resource_wait?: TaskResourceWaitStatus | null
   started_at?: string
   finished_at?: string
@@ -751,7 +743,6 @@ export interface SystemStats {
   running_tasks: number
   completed_tasks: number
   failed_tasks: number
-  remote_recovery_alerted_tasks: number
   active_connections: number
 }
 
@@ -842,61 +833,6 @@ export interface SystemConfig {
   log_level: string
 }
 
-export type ModelServiceProviderType = 'openai_compatible'
-
-export interface ModelService {
-  id: string
-  name: string
-  provider_type: ModelServiceProviderType
-  base_url: string
-  model_name: string
-  is_default: boolean
-  is_enabled: boolean
-  timeout_seconds: number
-  max_tokens: number
-  temperature: number
-  has_api_key: boolean
-  api_key_masked?: string | null
-  last_test_status?: 'success' | 'failure' | string | null
-  last_test_message?: string | null
-  last_tested_at?: string | null
-  created_at: string
-  updated_at: string
-}
-
-export interface ModelServiceListResponse {
-  items: ModelService[]
-  total: number
-}
-
-export interface ModelServiceCreateParams {
-  name: string
-  provider_type: ModelServiceProviderType
-  base_url: string
-  api_key?: string | null
-  model_name: string
-  is_default: boolean
-  is_enabled: boolean
-  timeout_seconds: number
-  max_tokens: number
-  temperature: number
-}
-
-export type ModelServiceUpdateParams = Partial<ModelServiceCreateParams>
-
-export interface ModelServiceTestResult {
-  id: string
-  success: boolean
-  message: string
-  last_test_status: string
-  last_tested_at: string
-}
-
-export interface ModelServiceModelsResponse {
-  id: string
-  models: string[]
-  message: string
-}
 
 // 分页相关类型
 export interface PaginationParams {

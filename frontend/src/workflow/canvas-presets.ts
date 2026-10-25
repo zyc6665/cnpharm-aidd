@@ -42,20 +42,6 @@ const WORKFLOW_NODE_LIBRARY = {
     position: { x: 40, y: 160 },
     producedOutputTypes: ['generated_ligand']
   },
-  fetchPubChem: {
-    id: 'tool-fetch-pubchem',
-    type: 'tool',
-    toolSlugs: ['builtin-fetch-ligand'],
-    recommendedToolSlug: 'builtin-fetch-ligand',
-    titleKey: 'workflow.nodes.fetchPubChem.title',
-    descriptionKey: 'workflow.nodes.fetchPubChem.description',
-    position: { x: 40, y: 360 },
-    producedOutputTypes: ['ligand_structure@1'],
-    outputArtifactSlots: [
-      { name: 'ligand', type: 'ligand_structure@1', cardinality: 'one', required: true },
-      { name: 'report', type: 'run_report@1', cardinality: 'one', required: false }
-    ]
-  },
   ligandPreparation: {
     id: 'tool-ligand-preparation',
     type: 'tool',
@@ -349,13 +335,13 @@ export const GENERATION_TO_PROPERTY_CANVAS_PRESET: WorkflowCanvasPreset = create
   ]
 })
 
-export const PUBCHEM_TO_ADMET_CANVAS_PRESET: WorkflowCanvasPreset = createCanvasPreset({
-  id: 'pubchem-admet-template',
+export const LIGAND_TO_ADMET_CANVAS_PRESET: WorkflowCanvasPreset = createCanvasPreset({
+  id: 'ligand-admet-template',
   kind: 'screening',
-  nameKey: 'workflow.canvasPresets.presets.pubchemToAdmet.name',
-  descriptionKey: 'workflow.canvasPresets.presets.pubchemToAdmet.description',
+  nameKey: 'workflow.canvasPresets.presets.ligandToAdmet.name',
+  descriptionKey: 'workflow.canvasPresets.presets.ligandToAdmet.description',
   nodeKeys: [
-    'fetchPubChem',
+    'inputLigand',
     'ligandPreparation',
     'sdfToSmiles',
     'rdkitProperties',
@@ -363,7 +349,7 @@ export const PUBCHEM_TO_ADMET_CANVAS_PRESET: WorkflowCanvasPreset = createCanvas
     'resultAdmet'
   ],
   edges: [
-    createEdge('edge-pubchem-ligand-preparation', 'tool-fetch-pubchem', 'tool-ligand-preparation', 'ligand_structure@1'),
+    createEdge('edge-input-ligand-preparation', 'input-ligand', 'tool-ligand-preparation', 'ligand_pdb'),
     createEdge('edge-ligand-smiles', 'tool-ligand-preparation', 'tool-sdf-to-smiles', 'ligand_structure@1'),
     createEdge('edge-smiles-rdkit', 'tool-sdf-to-smiles', 'tool-rdkit-properties', 'molecule_table@1'),
     createEdge('edge-rdkit-molp-pc', 'tool-rdkit-properties', 'tool-molp-pc-admet', 'molecule_table@1'),
@@ -377,7 +363,7 @@ export const WORKFLOW_CANVAS_PRESETS: readonly WorkflowCanvasPreset[] = [
   POCKET_TO_GENERATION_CANVAS_PRESET,
   PROTEIN_LIGAND_TO_DOCKING_CANVAS_PRESET,
   GENERATION_TO_PROPERTY_CANVAS_PRESET,
-  PUBCHEM_TO_ADMET_CANVAS_PRESET
+  LIGAND_TO_ADMET_CANVAS_PRESET
 ]
 
 export function getWorkflowCanvasPresetById(presetId: string): WorkflowCanvasPreset | null {

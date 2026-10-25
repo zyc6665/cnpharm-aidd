@@ -16,7 +16,6 @@ from app.common.exceptions import AppException
 from app.middleware import RateLimitMiddleware
 from app.tasks.direct_recovery import direct_task_recovery_loop
 from app.tasks.direct_runner import direct_task_runner
-from app.tasks.remote_recovery import remote_task_recovery_loop
 from app.services.workflow_reconciliation import workflow_reconcile_loop
 from app.worker.celery_app import configure_managed_execution_runtime
 
@@ -39,14 +38,12 @@ async def lifespan(app: FastAPI):
     workflow_reconcile_loop.start()
     if use_direct_task_execution():
         direct_task_recovery_loop.start()
-        remote_task_recovery_loop.start()
     logger.info("数据库初始化完成")
     yield
     # 关闭时清理资源
     await workflow_reconcile_loop.stop()
     if use_direct_task_execution():
         await direct_task_recovery_loop.stop()
-        await remote_task_recovery_loop.stop()
         await direct_task_runner.shutdown()
     if managed_runtime is not None:
         await managed_runtime.close()
