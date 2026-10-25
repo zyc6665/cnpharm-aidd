@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.tool_route_utils import (
+from app.services.tool_presentation import (
     require_tool_read_access,
     serialize_public_tool_version,
 )

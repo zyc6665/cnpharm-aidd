@@ -191,7 +191,7 @@ async def test_tool_response_embeds_migrated_package_manifest_for_validation_ui(
 ):
     await _legacy_tool(migration_db)
 
-    from app.api.v1.tool_route_utils import load_tool_packages_for_tools, serialize_tool
+    from app.services.tool_presentation import load_tool_packages_for_tools, serialize_tool
     from app.tool_packages.migration import migrate_tool_packages
 
     await migrate_tool_packages(migration_db, dry_run=False)

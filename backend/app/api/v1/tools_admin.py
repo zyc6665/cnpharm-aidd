@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
-from app.api.v1.tool_route_utils import (
+from app.services.tool_presentation import (
     build_validated_tool_contract,
     commit_or_raise_conflict,
     load_tool_for_response,

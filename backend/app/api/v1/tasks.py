@@ -58,9 +58,7 @@ from app.services.task_views import (
     query_task_page,
     query_task_view_counts,
 )
-from app.api.v1.tool_route_utils import (
-    sanitize_public_tool_config,
-)
+from app.services.tool_presentation import sanitize_public_tool_config
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

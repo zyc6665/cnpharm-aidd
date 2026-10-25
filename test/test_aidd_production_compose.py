@@ -79,7 +79,7 @@ def test_aidd_development_compose_provides_local_stateful_services() -> None:
 
 def test_offline_deployment_guide_covers_domestic_gpu_and_dcu_boundaries() -> None:
     """离线部署文档必须说明信创、NVIDIA 和海光 DCU 的上线边界。"""
-    guide = (ROOT_DIR / "docs/guides/aidd-offline-deployment.md").read_text(
+    guide = (ROOT_DIR / "docs/archive-upstream/guides/aidd-offline-deployment.md").read_text(
         encoding="utf-8"
     )
 

@@ -154,7 +154,7 @@ def test_model_package_template_prompt_tells_agents_not_to_change_platform():
         encoding="utf-8"
     )
     guide = (TEMPLATE_ROOT / "MODEL_PACKAGE_GUIDE.md").read_text(encoding="utf-8")
-    runtime_doc = (PROJECT_ROOT / "docs/guides/model-runtime-packaging.md").read_text(
+    runtime_doc = (PROJECT_ROOT / "docs/archive-upstream/guides/model-runtime-packaging.md").read_text(
         encoding="utf-8"
     )
 
