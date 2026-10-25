@@ -1,3 +1,8 @@
+"""Executor module layout tests."""
+
+from pathlib import Path
+
+
 def test_builtin_executor_has_a_dedicated_module_and_legacy_import():
     from app.tasks.executor import BuiltinExecutor as LegacyBuiltinExecutor
     from app.tasks.executors.builtin import BuiltinExecutor
@@ -21,11 +26,13 @@ def test_base_executor_has_a_shared_module_and_legacy_import():
     assert LegacyBaseExecutor is BaseExecutor
 
 
-def test_remote_api_executor_has_a_dedicated_module_and_legacy_import():
-    from app.tasks.executor import RemoteAPIExecutor as LegacyRemoteAPIExecutor
-    from app.tasks.executors.remote_api import RemoteAPIExecutor
+def test_remote_api_executor_is_gone():
+    """交付线禁止公网调用，远程 API 执行器及其兼容导出必须一并退场。"""
+    import app.tasks.executor as executor_module
 
-    assert LegacyRemoteAPIExecutor is RemoteAPIExecutor
+    assert not hasattr(executor_module, "RemoteAPIExecutor")
+    backend_root = Path(__file__).resolve().parents[1] / "backend"
+    assert not (backend_root / "app" / "tasks" / "executors" / "remote_api.py").exists()
 
 
 def test_docker_security_validation_has_a_dedicated_module():

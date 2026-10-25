@@ -22,16 +22,6 @@ from app.auth.dependencies import get_admin_user
 from app.common.responses import success_response
 from app.models.users import User
 from app.models.tool_packages import ToolPackage, ToolPackageVersion
-from app.schemas.system_settings import ModelServiceCreate, ModelServiceUpdate
-from app.services.model_services import (
-    create_model_service,
-    discover_model_service_models,
-    delete_model_service,
-    list_model_services,
-    set_default_model_service,
-    test_model_service,
-    update_model_service,
-)
 from app.tasks.executors.factory import supported_executor_types
 
 router = APIRouter()
@@ -123,7 +113,6 @@ class SystemStatsResponse(BaseModel):
     running_tasks: int
     completed_tasks: int
     failed_tasks: int
-    remote_recovery_alerted_tasks: int
 
     # WebSocket 统计
     active_connections: int
@@ -615,13 +604,6 @@ async def get_system_stats(
     )
     failed_tasks = failed_result.scalar()
 
-    remote_recovery_alerted_result = await db.execute(
-        select(func.count(Task.id)).where(
-            Task.extra_data["remote_recovery_alerted"].as_boolean().is_(True)
-        )
-    )
-    remote_recovery_alerted_tasks = remote_recovery_alerted_result.scalar() or 0
-
     # WebSocket 连接数
     active_connections = ws_manager.get_connection_count()
 
@@ -635,7 +617,6 @@ async def get_system_stats(
             running_tasks=running_tasks,
             completed_tasks=completed_tasks,
             failed_tasks=failed_tasks,
-            remote_recovery_alerted_tasks=remote_recovery_alerted_tasks,
             active_connections=active_connections,
         ).model_dump()
     )
@@ -818,95 +799,6 @@ async def get_resource_quotas(admin_user: User = Depends(get_admin_user)):
 
 
 # ==================== 配置管理 ====================
-
-
-@router.get("/model-services", response_model=dict, summary="获取模型服务配置")
-async def list_model_service_settings(
-    admin_user: User = Depends(get_admin_user),
-    db: AsyncSession = Depends(get_db),
-):
-    services = await list_model_services(db)
-    return success_response(
-        data={
-            "items": [service.model_dump() for service in services],
-            "total": len(services),
-        }
-    )
-
-
-@router.post("/model-services", response_model=dict, summary="创建模型服务配置")
-async def create_model_service_setting(
-    service_data: ModelServiceCreate,
-    admin_user: User = Depends(get_admin_user),
-    db: AsyncSession = Depends(get_db),
-):
-    service = await create_model_service(db, service_data)
-    return success_response(data=service.model_dump(), message="模型服务已创建")
-
-
-@router.put(
-    "/model-services/{service_id}", response_model=dict, summary="更新模型服务配置"
-)
-async def update_model_service_setting(
-    service_id: str,
-    service_data: ModelServiceUpdate,
-    admin_user: User = Depends(get_admin_user),
-    db: AsyncSession = Depends(get_db),
-):
-    service = await update_model_service(db, service_id, service_data)
-    return success_response(data=service.model_dump(), message="模型服务已更新")
-
-
-@router.delete(
-    "/model-services/{service_id}", response_model=dict, summary="删除模型服务配置"
-)
-async def delete_model_service_setting(
-    service_id: str,
-    admin_user: User = Depends(get_admin_user),
-    db: AsyncSession = Depends(get_db),
-):
-    await delete_model_service(db, service_id)
-    return success_response(data={"id": service_id}, message="模型服务已删除")
-
-
-@router.post(
-    "/model-services/{service_id}/set-default",
-    response_model=dict,
-    summary="设置默认模型服务",
-)
-async def set_default_model_service_setting(
-    service_id: str,
-    admin_user: User = Depends(get_admin_user),
-    db: AsyncSession = Depends(get_db),
-):
-    service = await set_default_model_service(db, service_id)
-    return success_response(data=service.model_dump(), message="默认模型服务已更新")
-
-
-@router.post(
-    "/model-services/{service_id}/test", response_model=dict, summary="测试模型服务连接"
-)
-async def test_model_service_setting(
-    service_id: str,
-    admin_user: User = Depends(get_admin_user),
-    db: AsyncSession = Depends(get_db),
-):
-    result = await test_model_service(db, service_id)
-    return success_response(data=result.model_dump(), message=result.message)
-
-
-@router.get(
-    "/model-services/{service_id}/models",
-    response_model=dict,
-    summary="发现模型服务支持的模型",
-)
-async def discover_model_service_models_setting(
-    service_id: str,
-    admin_user: User = Depends(get_admin_user),
-    db: AsyncSession = Depends(get_db),
-):
-    result = await discover_model_service_models(db, service_id)
-    return success_response(data=result.model_dump(), message=result.message)
 
 
 @router.get("/config", summary="获取系统配置（管理员）")

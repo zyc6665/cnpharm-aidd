@@ -99,7 +99,7 @@ async def test_start_task_execution_record_persists_safe_package_backed_attempt(
         tool_slug="remote-tool",
         tool_version_id="tool-version-1",
         tool_version="1.0.0",
-        tool_type="remote_api",
+        tool_type="ssh_job",
         attempt_id="attempt-1",
         tool_config={
             "timeout_sec": 600,

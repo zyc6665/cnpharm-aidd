@@ -104,9 +104,12 @@ Refs: M2-FR-02, 04-数据模型 §6.1~§6.3
 |---|---|
 | **可直接复用** | 任务队列/状态机/日志/取消/重试、执行后端抽象（K8s + SSH）、Tool Package v2、Artifact 版本与 lineage、工作流画布（拖拽/连边/条件分支已实现）、molstar 三维渲染 |
 | **必须新建** | 16 张领域表（target/protein/structure/pocket/compound/candidate…）、Boltz-2 等 9 个模型资产、DCU 卡位调度、LDAP + audit_log、追溯包导出、40 个页面中的 30+ |
-| **必须删除** | `external_databases`（460 行，含 pubchem/rcsb 公网调用）、`remote_tools`（993 行）、`image_registry`（343 行） |
+| **必须删除** | 已于步骤 3、步骤 4 完成：`agents/aidd` Agent 面、`external_databases`、`remote_tools`、`remote_capacity`、`image_registry`、`model_services`（详见下方「已完成的减法」） |
 
-**已完成的减法**（[docs/17](docs/17-交付仓库与分支策略.md) 第 5 节步骤 3）：`agents/aidd` 已拆包——能力注册表与内建工具迁到 `backend/app/tools/`，Agent 对话/规划/计划审批链路（约 4500 行）连同 `agent_runs`、`conversations` 等 8 张表、前端 `Research` 页面与 Agent 模式标签页一并删除，迁移见 `backend/alembic/versions/20261025_01_drop_agent_tables.py`。
+**已完成的减法**（[docs/17](docs/17-交付仓库与分支策略.md) 第 5 节步骤 3、步骤 4）：
+
+- 步骤 3（拆包）：`agents/aidd` 的能力注册表与内建工具迁到 `backend/app/tools/`；Agent 对话/规划/计划审批链路（约 4500 行）连同 `agent_runs`、`conversations` 等 8 张表、前端 `Research` 页面与 Agent 模式标签页一并删除，迁移 `backend/alembic/versions/20261025_01_drop_agent_tables.py`。
+- 步骤 4（离线合规）：`external_databases`（公网 PubChem/RCSB/ChEMBL/PDBbind 抓取）、`remote_tools` + `remote_capacity` + `remote_api` 执行器、`image_registry` 死代码、`model_services`（LLM 服务配置）、前端 LLM 预设与产品线品牌外链全部删除；`builtin-fetch-*` / `builtin-query-*` 五个在线工具退场，画布预设 `PubChem 到基础 ADMET` 改为离线可执行的 `配体结构到基础 ADMET`。迁移 `20261025_02_drop_model_services.py`、`20261025_03_remove_external_database_tools.py`。`.github/offline-allowlist.txt` 现为空。
 
 首轮改造的 9 步提交切分见 [docs/17-交付仓库与分支策略.md](docs/17-交付仓库与分支策略.md) 第 5 节。
 

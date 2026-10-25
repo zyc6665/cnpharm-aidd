@@ -1,12 +1,6 @@
-import { del, get, post, put, type RequestOptions } from './request'
+import { get, post, type RequestOptions } from './request'
 import type { ApiResponse } from '@/types/api'
 import type {
-  ModelService,
-  ModelServiceCreateParams,
-  ModelServiceListResponse,
-  ModelServiceModelsResponse,
-  ModelServiceTestResult,
-  ModelServiceUpdateParams,
   ResourceQuotaStatusResponse,
   SystemConfig,
   SystemHealth,
@@ -45,45 +39,3 @@ export const getSystemConfig = (): Promise<ApiResponse<SystemConfig>> => {
   return get<SystemConfig>('/system/config')
 }
 
-// 获取模型服务设置
-export const getModelServices = (): Promise<ApiResponse<ModelServiceListResponse>> => {
-  return get<ModelServiceListResponse>('/system/model-services')
-}
-
-// 创建模型服务设置
-export const createModelService = (
-  data: ModelServiceCreateParams
-): Promise<ApiResponse<ModelService>> => {
-  return post<ModelService>('/system/model-services', data)
-}
-
-// 更新模型服务设置
-export const updateModelService = (
-  serviceId: string,
-  data: ModelServiceUpdateParams
-): Promise<ApiResponse<ModelService>> => {
-  return put<ModelService>(`/system/model-services/${serviceId}`, data)
-}
-
-// 删除模型服务设置
-export const deleteModelService = (serviceId: string): Promise<ApiResponse<{ id: string }>> => {
-  return del<{ id: string }>(`/system/model-services/${serviceId}`)
-}
-
-// 测试模型服务连接
-export const testModelService = (
-  serviceId: string
-): Promise<ApiResponse<ModelServiceTestResult>> => {
-  return post<ModelServiceTestResult>(`/system/model-services/${serviceId}/test`)
-}
-
-export const discoverModelServiceModels = (
-  serviceId: string
-): Promise<ApiResponse<ModelServiceModelsResponse>> => {
-  return get<ModelServiceModelsResponse>(`/system/model-services/${serviceId}/models`)
-}
-
-// 设置默认模型服务
-export const setDefaultModelService = (serviceId: string): Promise<ApiResponse<ModelService>> => {
-  return post<ModelService>(`/system/model-services/${serviceId}/set-default`)
-}

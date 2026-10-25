@@ -60,13 +60,13 @@ describe('useToolDetailPresentation', () => {
   it('provides executor metadata and a concise subtitle', () => {
     const presentation = useToolDetailPresentation({
       tool: computed(() => makeTool({
-        type: 'remote_api',
+        type: 'ssh_job',
       })),
       inputSchema: computed(() => inputSchema),
       labels: computed(() => labels),
     })
 
-    expect(presentation.executorType.value).toBe('remote_api')
+    expect(presentation.executorType.value).toBe('ssh_job')
     expect(presentation.detailSubtitle.value).toBe('使用次数: 1.2w · 浏览次数: 456')
   })
 

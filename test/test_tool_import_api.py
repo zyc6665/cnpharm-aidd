@@ -42,9 +42,6 @@ from app.models.tools import (
     ToolVersion,
 )
 from app.models.users import User, UserRole, UserStatus
-from app.remote_tools.client import RemoteToolDiscoveryResult
-from app.remote_tools.diagnostics import RemoteToolStageDiagnostic
-from app.remote_tools.schemas import RemoteToolExamplesResponse, RemoteToolManifest
 
 
 @pytest_asyncio.fixture
@@ -158,7 +155,7 @@ async def enabled_category(db_session: AsyncSession) -> ToolCategory:
     return category
 
 
-def build_remote_api_config(version: str = "1.0.0") -> dict:
+def build_import_config(version: str = "1.0.0") -> dict:
     """构造导入配置。"""
     return {
         "name": "TargetDiff Service",
@@ -168,9 +165,8 @@ def build_remote_api_config(version: str = "1.0.0") -> dict:
         "version": version,
         "changelog": "Initial import",
         "tool_config": {
-            "type": "remote_api",
-            "endpoint": "http://targetdiff.example/api/predict",
-            "method": "post",
+            "type": "docker_image",
+            "image": "internal.registry/targetdiff:1.0.0",
             "timeout": 120,
         },
         "input_schema": {
@@ -187,145 +183,6 @@ def build_remote_api_config(version: str = "1.0.0") -> dict:
             },
         },
     }
-
-
-def build_remote_tool_manifest(version: str = "1.0.0") -> dict:
-    """构造 remote-tool.v1 manifest。"""
-    return {
-        "api_version": "aidd.sciminer/remote-tool.v1",
-        "kind": "RemoteTool",
-        "metadata": {
-            "slug": "lvpocket-api",
-            "name": "LVpocket API",
-            "version": version,
-            "description": "Pocket prediction service",
-        },
-        "artifacts": {
-            "inputs": [
-                {"name": "protein", "type": "protein_structure@1", "required": True}
-            ],
-            "outputs": [
-                {
-                    "name": "pocket",
-                    "type": "binding_pocket@1",
-                    "cardinality": "one",
-                    "required": True,
-                }
-            ],
-        },
-        "parameters_schema": {
-            "type": "object",
-            "properties": {},
-            "additionalProperties": False,
-        },
-        "endpoints": {
-            "invoke": "/invoke",
-            "status": "/runs/{remote_run_id}",
-            "logs": "/runs/{remote_run_id}/logs",
-            "cancel": "/runs/{remote_run_id}/cancel",
-            "artifacts": "/runs/{remote_run_id}/artifacts",
-            "examples": "/examples",
-            "health": "/health",
-        },
-        "capabilities": {"async": True, "logs": True, "cancel": True, "progress": True},
-    }
-
-
-def successful_remote_discovery(version: str = "1.0.0") -> RemoteToolDiscoveryResult:
-    return RemoteToolDiscoveryResult(
-        manifest=RemoteToolManifest.model_validate(build_remote_tool_manifest(version=version)),
-        health={"status": "healthy"},
-        examples=RemoteToolExamplesResponse.model_validate({"examples": []}),
-        stages=[
-            RemoteToolStageDiagnostic(
-                name="fetch_manifest",
-                status="success",
-                message="Loaded",
-            ),
-            RemoteToolStageDiagnostic(
-                name="validate_manifest",
-                status="success",
-                message="Manifest is valid",
-            ),
-            RemoteToolStageDiagnostic(
-                name="health_check",
-                status="success",
-                message="Loaded",
-            ),
-            RemoteToolStageDiagnostic(
-                name="fetch_examples",
-                status="success",
-                message="Loaded",
-            ),
-        ],
-    )
-
-
-def successful_remote_discovery_with_smoke_example(version: str = "1.0.0") -> RemoteToolDiscoveryResult:
-    result = successful_remote_discovery(version=version)
-    result.examples = RemoteToolExamplesResponse.model_validate(
-        {
-            "examples": [
-                {
-                    "name": "default",
-                    "smoke": True,
-                    "parameters": {"threshold": 0.5},
-                    "input_artifacts": {},
-                }
-            ]
-        }
-    )
-    return result
-
-
-def successful_remote_discovery_with_smoke_files(version: str = "1.0.0") -> RemoteToolDiscoveryResult:
-    structure_content = "ATOM\n"
-    metadata_content = '{"chain_ids":["A"]}'
-    result = successful_remote_discovery(version=version)
-    result.examples = RemoteToolExamplesResponse.model_validate(
-        {
-            "examples": [
-                {
-                    "name": "default-with-files",
-                    "smoke": True,
-                    "parameters": {"threshold": 0.5},
-                    "input_artifacts": {
-                        "protein": {
-                            "type": "protein_structure@1",
-                            "metadata": {"chain_ids": ["A"]},
-                            "files": {
-                                "structure_file": {
-                                    "filename": "protein.pdb",
-                                    "content_type": "chemical/x-pdb",
-                                    "encoding": "text",
-                                    "content": structure_content,
-                                    "sha256": hashlib.sha256(
-                                        structure_content.encode("utf-8")
-                                    ).hexdigest(),
-                                },
-                                "metadata_json": {
-                                    "filename": "metadata.json",
-                                    "content_type": "application/json",
-                                    "encoding": "text",
-                                    "content": metadata_content,
-                                    "sha256": hashlib.sha256(
-                                        metadata_content.encode("utf-8")
-                                    ).hexdigest(),
-                                },
-                            },
-                        }
-                    },
-                }
-            ]
-        }
-    )
-    return result
-
-
-def successful_remote_discovery_with_bad_smoke_file(version: str = "1.0.0") -> RemoteToolDiscoveryResult:
-    result = successful_remote_discovery_with_smoke_files(version=version)
-    result.examples.examples[0].input_artifacts["protein"].files["structure_file"].sha256 = "0" * 64
-    return result
 
 
 def build_ssh_job_config(version: str = "1.0.0") -> dict:
@@ -375,7 +232,7 @@ def build_ssh_job_config(version: str = "1.0.0") -> dict:
 
 
 def build_invalid_workflow_capability_config(version: str = "1.0.0") -> dict:
-    config = build_remote_api_config(version=version)
+    config = build_import_config(version=version)
     config["tool_config"]["agent_capability"] = {
         "enabled": True,
         "capability": "molecule_generation",
@@ -388,7 +245,7 @@ def build_invalid_workflow_capability_config(version: str = "1.0.0") -> dict:
 
 def build_agent_capability_config(version: str = "1.0.0") -> dict:
     """构造包含有效 AIDD 能力声明的导入配置。"""
-    config = build_remote_api_config(version=version)
+    config = build_import_config(version=version)
     config["tool_config"]["agent_capability"] = {
         "enabled": True,
         "capability": "molecule_generation",

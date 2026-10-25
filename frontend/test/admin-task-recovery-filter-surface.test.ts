@@ -10,10 +10,10 @@ function readSource(relativePath: string): string {
   return readFileSync(resolve(rootDir, relativePath), 'utf8')
 }
 
-test('管理员任务页应支持按 Remote Recovery 告警筛选', () => {
+test('管理员任务页不再提供 Remote Recovery 告警筛选', () => {
+  // 后端已随步骤 4 移除 remote_recovery 字段与过滤参数，前端筛选器一并退场。
   const source = readSource('src/views/admin/Tasks.vue')
 
-  assert.equal(source.includes('remote_recovery_alerted'), true)
-  assert.equal(source.includes('filters.remote_recovery_alerted = undefined'), true)
-  assert.equal(source.includes(':value="true"'), true)
+  assert.equal(source.includes('remote_recovery_alerted'), false)
+  assert.equal(source.includes('tasks.remoteRecovery'), false)
 })

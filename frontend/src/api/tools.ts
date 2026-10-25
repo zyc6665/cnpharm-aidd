@@ -19,44 +19,10 @@ export interface ToolListParams extends PaginationParams {
   view?: ToolView    // 视图类型：public/favorites
 }
 
-export interface ToolImportConfigParams {
-  config: Record<string, unknown>
-  category_id?: string
-  publish?: boolean
-}
-
-export interface ToolImportConfigResult {
+export interface ToolDraftResult {
   created_new_tool: boolean
   tool: Tool
   version: ToolVersion
-}
-
-export interface RemoteToolRegisterParams {
-  base_url: string
-  category_id: string
-  run_smoke_test?: boolean
-  publish_on_success?: boolean
-  icon?: string
-  icon_url?: string
-  is_public?: boolean
-  timeout_sec?: number
-  capacity_policy?: Record<string, unknown>
-}
-
-export interface RemoteToolStageDiagnostic {
-  name: string
-  status: 'success' | 'failure' | 'warning'
-  message: string
-  detail?: Record<string, unknown> | null
-}
-
-export interface RemoteToolRegisterResult {
-  created_new_tool: boolean
-  tool: Tool
-  version: ToolVersion
-  manifest_sha256: string
-  stages: RemoteToolStageDiagnostic[]
-  smoke_test_task_id?: string | null
 }
 
 export interface ToolTemplateSummary {
@@ -66,7 +32,7 @@ export interface ToolTemplateSummary {
   version: string
   description: string
   family: string
-  executor_types: Array<'remote_api' | 'docker_image' | 'python_script' | 'ssh_job' | 'k8s_job'>
+  executor_types: Array<'docker_image' | 'python_script' | 'ssh_job' | 'k8s_job'>
   capability: string
   stage: string
   inputs: Array<Record<string, unknown>>
@@ -76,14 +42,14 @@ export interface ToolTemplateSummary {
     provider: string
     runtime: string
     project_url?: string | null
-    recommended_executor: 'remote_api' | 'docker_image' | 'python_script' | 'ssh_job' | 'k8s_job'
+    recommended_executor: 'docker_image' | 'python_script' | 'ssh_job' | 'k8s_job'
     notes?: string | null
   }
   resource_profile: Record<string, unknown>
 }
 
 export interface ToolTemplateDraftParams {
-  executor_type: 'remote_api' | 'docker_image' | 'python_script' | 'ssh_job' | 'k8s_job'
+  executor_type: 'docker_image' | 'python_script' | 'ssh_job' | 'k8s_job'
   executor_config: Record<string, unknown>
   category_id?: string
   publish?: boolean
@@ -153,18 +119,6 @@ export const createTool = (data: ToolCreateParams): Promise<ApiResponse<Tool>> =
   return post<Tool>('/tools', data)
 }
 
-// 导入工具配置（管理员）
-export const importToolConfig = (data: ToolImportConfigParams): Promise<ApiResponse<ToolImportConfigResult>> => {
-  return post<ToolImportConfigResult>('/tools/import-config', data)
-}
-
-// 注册 remote-tool.v1 自描述服务（管理员）
-export const registerRemoteTool = (
-  data: RemoteToolRegisterParams
-): Promise<ApiResponse<RemoteToolRegisterResult>> => {
-  return post<RemoteToolRegisterResult>('/tools/register-remote', data)
-}
-
 export const listToolTemplates = (): Promise<ApiResponse<ToolTemplateSummary[]>> => {
   return get<ToolTemplateSummary[]>('/tool-templates')
 }
@@ -172,8 +126,8 @@ export const listToolTemplates = (): Promise<ApiResponse<ToolTemplateSummary[]>>
 export const createToolDraftFromTemplate = (
   templateKey: string,
   data: ToolTemplateDraftParams
-): Promise<ApiResponse<ToolImportConfigResult>> => {
-  return post<ToolImportConfigResult>(`/tool-templates/${templateKey}/draft`, data)
+): Promise<ApiResponse<ToolDraftResult>> => {
+  return post<ToolDraftResult>(`/tool-templates/${templateKey}/draft`, data)
 }
 
 // 更新工具（管理员）

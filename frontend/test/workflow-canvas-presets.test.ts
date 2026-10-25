@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import {
   AIDD_WORKFLOW_CANVAS_PRESET,
   GENERATION_TO_PROPERTY_CANVAS_PRESET,
-  PUBCHEM_TO_ADMET_CANVAS_PRESET,
+  LIGAND_TO_ADMET_CANVAS_PRESET,
   POCKET_TO_GENERATION_CANVAS_PRESET,
   PROTEIN_LIGAND_TO_DOCKING_CANVAS_PRESET,
   PROTEIN_TO_POCKET_CANVAS_PRESET,
@@ -38,7 +38,7 @@ test('workflow templates can be resolved by id', () => {
   assert.equal(getWorkflowCanvasPresetById('pocket-generation-template'), POCKET_TO_GENERATION_CANVAS_PRESET)
   assert.equal(getWorkflowCanvasPresetById('protein-ligand-docking-template'), PROTEIN_LIGAND_TO_DOCKING_CANVAS_PRESET)
   assert.equal(getWorkflowCanvasPresetById('generation-property-template'), GENERATION_TO_PROPERTY_CANVAS_PRESET)
-  assert.equal(getWorkflowCanvasPresetById('pubchem-admet-template'), PUBCHEM_TO_ADMET_CANVAS_PRESET)
+  assert.equal(getWorkflowCanvasPresetById('ligand-admet-template'), LIGAND_TO_ADMET_CANVAS_PRESET)
   assert.equal(getWorkflowCanvasPresetById('missing-template'), null)
 })
 
@@ -50,26 +50,26 @@ test('workflow templates include stage-oriented researcher presets', () => {
     'pocket-generation-template',
     'protein-ligand-docking-template',
     'generation-property-template',
-    'pubchem-admet-template'
+    'ligand-admet-template'
   ]) {
     assert.equal(canvasPresetIds.has(canvasPresetId), true, `missing ${canvasPresetId}`)
   }
 })
 
-test('PubChem to ADMET preset follows AT-003 delivery chain', () => {
-  assert.equal(PUBCHEM_TO_ADMET_CANVAS_PRESET.id, 'pubchem-admet-template')
+test('Ligand to ADMET preset stays fully offline', () => {
+  assert.equal(LIGAND_TO_ADMET_CANVAS_PRESET.id, 'ligand-admet-template')
 
-  const nodesById = new Map(PUBCHEM_TO_ADMET_CANVAS_PRESET.nodes.map((node) => [node.id, node]))
-  assert.equal(nodesById.get('tool-fetch-pubchem')?.recommendedToolSlug, 'builtin-fetch-ligand')
+  const nodesById = new Map(LIGAND_TO_ADMET_CANVAS_PRESET.nodes.map((node) => [node.id, node]))
+  assert.equal(nodesById.get('input-ligand')?.type, 'input')
   assert.equal(nodesById.get('tool-ligand-preparation')?.recommendedToolSlug, 'ligand-preparation')
   assert.equal(nodesById.get('tool-sdf-to-smiles')?.recommendedToolSlug, 'builtin-sdf-to-smiles-csv')
   assert.equal(nodesById.get('tool-rdkit-properties')?.recommendedToolSlug, 'builtin-rdkit-properties')
   assert.equal(nodesById.get('tool-molp-pc-admet')?.recommendedToolSlug, 'molp-pc-property-prediction')
 
   assert.deepEqual(
-    PUBCHEM_TO_ADMET_CANVAS_PRESET.edges.map((edge) => [edge.source, edge.target, edge.artifactType]),
+    LIGAND_TO_ADMET_CANVAS_PRESET.edges.map((edge) => [edge.source, edge.target, edge.artifactType]),
     [
-      ['tool-fetch-pubchem', 'tool-ligand-preparation', 'ligand_structure@1'],
+      ['input-ligand', 'tool-ligand-preparation', 'ligand_pdb'],
       ['tool-ligand-preparation', 'tool-sdf-to-smiles', 'ligand_structure@1'],
       ['tool-sdf-to-smiles', 'tool-rdkit-properties', 'molecule_table@1'],
       ['tool-rdkit-properties', 'tool-molp-pc-admet', 'molecule_table@1'],

@@ -18,7 +18,6 @@ class ToolStatus(str, enum.Enum):
 
 class ToolType(str, enum.Enum):
     """工具类型"""
-    REMOTE_API = "remote_api"
     DOCKER_IMAGE = "docker_image"
     PYTHON_SCRIPT = "python_script"
     SSH_JOB = "ssh_job"
@@ -162,10 +161,7 @@ class ToolVersion(Base, UUIDMixin, TimestampMixin):
     config = Column(JSON, nullable=False)
     # config结构:
     # {
-    #     "type": "remote_api|docker_image|python_script|ssh_job|k8s_job",
-    #     "endpoint": "http://...",  # remote_api
-    #     "method": "POST",          # remote_api
-    #     "headers": {},             # remote_api
+    #     "type": "docker_image|python_script|ssh_job|k8s_job",
     #     "image": "...",            # docker_image
     #     "runtime": {"image": "...@sha256:<digest>"},  # k8s_job
     #     "resource_profile": "gpu-large",              # k8s_job

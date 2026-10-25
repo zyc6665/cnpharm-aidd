@@ -128,7 +128,7 @@ test('ssh_job 提交参数应将上传文件映射为任务内相对路径', () 
   })
 })
 
-test('remote_api 提交参数应继续向 input_files 写入可下载 URL', () => {
+test('k8s_job 提交参数应继续向 input_files 写入可下载 URL', () => {
   const flattened = flattenToolInputSchema(gcdmSchema as never)
 
   const payload = buildTaskSubmissionPayload({
@@ -141,7 +141,7 @@ test('remote_api 提交参数应继续向 input_files 写入可下载 URL', () =
         downloadUrl: '/api/v1/files/file-2/download'
       }
     },
-    executorType: 'remote_api'
+    executorType: 'k8s_job'
   })
 
   assert.deepEqual(payload, {

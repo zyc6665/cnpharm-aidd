@@ -28,7 +28,6 @@ from app.database.session import get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import files as _files_models  # noqa: F401,E402
 from app.models import statistics as _statistics_models  # noqa: F401,E402
-from app.models import system_settings as _system_settings  # noqa: F401,E402
 from app.models import tasks as _task_models  # noqa: F401,E402
 from app.models import tools as _tools_models  # noqa: F401,E402
 from app.models import users as _users_models  # noqa: F401,E402

@@ -6,11 +6,9 @@ describe('useToolCreateEditorState', () => {
   it('exposes default editor refs and snapshots current values', () => {
     const editor = useToolCreateEditorState()
 
-    editor.apiHeaderEntries.value = [{ key: 'Authorization', value: 'Bearer token' }]
     editor.pythonArgumentItems.value = ['--input', 'protein.pdb']
 
     expect(editor.snapshot()).toEqual({
-      apiHeaderEntries: [{ key: 'Authorization', value: 'Bearer token' }],
       dockerCommandItems: [],
       dockerEnvEntries: [],
       pythonArgumentItems: ['--input', 'protein.pdb'],

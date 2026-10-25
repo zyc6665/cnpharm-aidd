@@ -44,7 +44,6 @@ class TaskQueryInput:
     workflow_run_id: str | None = None
     workflow_definition_id: str | None = None
     workflow_node_id: str | None = None
-    remote_recovery_alerted: bool | None = None
     resource_wait_category: str | None = None
     resource_wait_scope: str | None = None
 
@@ -198,11 +197,6 @@ async def _build_task_statement(
 
     if query.tool_id:
         statement = statement.where(Task.tool_id == query.tool_id)
-
-    if query.remote_recovery_alerted:
-        statement = statement.where(
-            Task.extra_data["remote_recovery_alerted"].as_boolean().is_(True)
-        )
 
     if query.resource_wait_category:
         statement = statement.where(

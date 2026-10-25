@@ -81,10 +81,11 @@ def test_artifact_input_slots_by_name_for_tool_uses_contract_shape():
     }
 
 
-def test_tool_accepts_standard_input_bindings_for_v2_and_remote_contracts():
+def test_tool_accepts_standard_input_bindings_for_v2_and_executor_contracts():
     assert tool_accepts_standard_input_bindings(
         {"tool_package_manifest": {"api_version": TOOL_PACKAGE_V2_API_VERSION}}
     ) is True
+    # 交付线移除了 remote_api 执行器，其旧契约不再被认作标准输入槽位来源。
     assert tool_accepts_standard_input_bindings(
         {
             "type": "remote_api",
@@ -92,7 +93,7 @@ def test_tool_accepts_standard_input_bindings_for_v2_and_remote_contracts():
                 "inputs": [{"name": "protein", "type": "protein_structure@1"}]
             },
         }
-    ) is True
+    ) is False
     assert tool_accepts_standard_input_bindings(
         {
             "type": "ssh_job",

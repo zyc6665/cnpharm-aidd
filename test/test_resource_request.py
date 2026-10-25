@@ -326,7 +326,7 @@ async def test_task_executor_rejects_when_dynamic_capacity_is_exhausted() -> Non
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("executor_type", ["ssh_job", "k8s_job", "remote_api"])
+@pytest.mark.parametrize("executor_type", ["ssh_job", "k8s_job"])
 async def test_remote_executor_does_not_allocate_a_local_gpu(executor_type: str) -> None:
     task = SimpleNamespace(
         id=f"task-{executor_type}-gpu-resource",

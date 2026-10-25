@@ -12,7 +12,6 @@ from app.artifact_standards.registry import (
 
 
 SUPPORTED_TOOL_EXECUTOR_TYPES = {
-    "remote_api",
     "docker_image",
     "python_script",
     "ssh_job",
@@ -42,14 +41,6 @@ def collect_tool_contract_config_validation_errors(
     elif executor_type not in SUPPORTED_TOOL_EXECUTOR_TYPES:
         supported = sorted(SUPPORTED_TOOL_EXECUTOR_TYPES)
         errors.append(f"executor.type must be one of {supported}")
-
-    if executor_type == "remote_api":
-        from app.tasks.remote_capacity import validate_remote_capacity_policy
-
-        errors.extend(
-            f"remote_api.{error}"
-            for error in validate_remote_capacity_policy(config.get("capacity_policy"))
-        )
 
     if executor_type == "k8s_job":
         runtime = config.get("runtime")

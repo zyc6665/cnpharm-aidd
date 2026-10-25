@@ -102,10 +102,10 @@ describe('WorkflowToolPalette', () => {
         deployment: { kind: 'platform_builtin', executor_type: 'builtin' },
       },
       {
-        slug: 'remote-admet',
-        name: 'Remote ADMET',
+        slug: 'k8s-admet',
+        name: 'K8s ADMET',
         category: '性质预测',
-        deployment: { kind: 'external_service', executor_type: 'remote_api' },
+        deployment: { kind: 'external_service', executor_type: 'k8s_job' },
       },
     ])
 

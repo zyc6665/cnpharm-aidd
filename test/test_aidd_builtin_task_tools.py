@@ -245,52 +245,24 @@ async def test_ensure_rdkit_properties_builtin_declares_standard_artifacts(
 
 
 @pytest.mark.asyncio
-async def test_ensure_fetch_pdb_builtin_declares_workflow_contract(
+async def test_retired_external_database_builtins_are_rejected(
     db_session: AsyncSession,
     system_user: User,
 ) -> None:
+    """交付线移除了公网数据库相关内置工具，注册入口必须直接拒绝。"""
+    from app.common.exceptions import ValidationException
     from app.services.aidd_builtin_tools import ensure_aidd_builtin_tool
 
-    tool = await ensure_aidd_builtin_tool(
-        db_session,
-        owner_id=system_user.id,
-        tool_slug='builtin-fetch-pdb',
-    )
-
-    config = tool.current_version.config
-    assert config['type'] == 'builtin'
-    assert config['builtin_slug'] == 'builtin-fetch-pdb'
-    assert config['input_schema']['required'] == ['pdb_id']
-    assert config['input_schema']['properties']['pdb_id']['title'] == 'PDB ID'
-    assert config['artifacts']['inputs'] == []
-    assert config['artifacts']['outputs'] == [
-        {'name': 'protein', 'type': 'protein_structure@1', 'required': True},
-        {'name': 'report', 'type': 'run_report@1', 'required': False},
-    ]
-    assert config['resource_profile']['tier'] == 'light'
-
-
-@pytest.mark.asyncio
-async def test_ensure_fetch_ligand_builtin_declares_workflow_contract(
-    db_session: AsyncSession,
-    system_user: User,
-) -> None:
-    from app.services.aidd_builtin_tools import ensure_aidd_builtin_tool
-
-    tool = await ensure_aidd_builtin_tool(
-        db_session,
-        owner_id=system_user.id,
-        tool_slug='builtin-fetch-ligand',
-    )
-
-    config = tool.current_version.config
-    assert config['type'] == 'builtin'
-    assert config['builtin_slug'] == 'builtin-fetch-ligand'
-    assert config['input_schema']['required'] == ['pubchem_cid']
-    assert config['input_schema']['properties']['pubchem_cid']['title'] == 'PubChem CID'
-    assert config['artifacts']['inputs'] == []
-    assert config['artifacts']['outputs'] == [
-        {'name': 'ligand', 'type': 'ligand_structure@1', 'required': True},
-        {'name': 'report', 'type': 'run_report@1', 'required': False},
-    ]
-    assert config['resource_profile']['tier'] == 'light'
+    for retired_slug in (
+        'builtin-fetch-pdb',
+        'builtin-fetch-ligand',
+        'builtin-query-chembl',
+        'builtin-query-pubchem',
+        'builtin-query-pdbbind',
+    ):
+        with pytest.raises(ValidationException):
+            await ensure_aidd_builtin_tool(
+                db_session,
+                owner_id=system_user.id,
+                tool_slug=retired_slug,
+            )

@@ -54,10 +54,6 @@
             <SyncOutlined />
             {{ task.progress_message }}
           </div>
-          <div v-if="remoteRecovery" class="detail-item recovery-detail">
-            <WarningOutlined />
-            {{ t('tasks.remoteRecovery.failures', { count: remoteRecovery.failures }) }}
-          </div>
           <div v-if="resourceWait" class="detail-item resource-wait-detail">
             <ClockCircleOutlined />
             {{ resourceWaitText }}
@@ -142,7 +138,6 @@
     StopOutlined,
     SyncOutlined,
     ToolOutlined,
-    WarningOutlined,
   } from '@ant-design/icons-vue'
   import type { Task, TaskStatus } from '@/types/models'
   import {
@@ -186,10 +181,6 @@
     currentProjectName: props.currentProjectName,
   }))
   const artifactLineagePath = computed(() => getTaskArtifactLineagePath(props.task))
-  const remoteRecovery = computed(() => {
-    const recovery = props.task.remote_recovery
-    return recovery && recovery.failures > 0 ? recovery : null
-  })
   const resourceWait = computed(() => {
     const wait = props.task.resource_wait
     return taskStatus.value === 'pending' && wait ? wait : null

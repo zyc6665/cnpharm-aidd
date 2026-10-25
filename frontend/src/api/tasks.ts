@@ -23,7 +23,6 @@ export interface TaskListParams extends PaginationParams {
   workflow_run_id?: string
   workflow_definition_id?: string
   workflow_node_id?: string
-  remote_recovery_alerted?: boolean
   resource_wait_category?: string
   resource_wait_scope?: 'user' | 'project' | string
 }

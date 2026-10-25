@@ -192,49 +192,9 @@ async def test_reaper_marks_stale_cancellation_without_releasing_reservation(
 
 
 @pytest.mark.asyncio
-async def test_remote_cancel_reconciler_honors_next_retry_time(
-    db_session_factory,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    now = utcnow()
-    async with db_session_factory() as db:
-        stale = Task(
-            user_id="user-1",
-            tool_id="tool-1",
-            tool_version_id="version-1",
-            status=TaskStatus.CANCELED.value,
-            extra_data={"remote_cancel_pending": True},
-        )
-        deferred = Task(
-            user_id="user-1",
-            tool_id="tool-1",
-            tool_version_id="version-1",
-            status=TaskStatus.CANCELED.value,
-            extra_data={
-                "remote_cancel_pending": True,
-                "remote_cancel_next_retry_at": (
-                    now + timedelta(minutes=5)
-                ).isoformat(),
-            },
-        )
-        db.add_all([stale, deferred])
-        await db.commit()
+async def test_remote_cancel_reconciler_is_retired() -> None:
+    """交付线移除了远程 API 执行器，其取消协调任务也必须一并退场。"""
+    assert not hasattr(worker_tasks, "_reconcile_remote_cancellations_impl")
+    assert not hasattr(worker_tasks, "reconcile_remote_tasks")
 
-    retried_ids: list[str] = []
 
-    async def fake_retry(db, *, task):
-        retried_ids.append(str(task.id))
-        return True
-
-    monkeypatch.setattr(
-        "app.database.session.async_session_factory",
-        db_session_factory,
-    )
-    monkeypatch.setattr(
-        "app.tasks.cancellation.retry_remote_tool_cancellation",
-        fake_retry,
-    )
-    monkeypatch.setattr(settings, "REMOTE_CANCEL_RETRY_BATCH_SIZE", 10, raising=False)
-
-    assert await worker_tasks._reconcile_remote_cancellations_impl() == 1
-    assert retried_ids == [str(stale.id)]

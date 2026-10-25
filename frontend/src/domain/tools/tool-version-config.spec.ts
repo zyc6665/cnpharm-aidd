@@ -5,35 +5,6 @@ import { buildToolVersionConfig } from './tool-version-config'
 const inputSchema = { type: 'object', properties: { input: { type: 'string' } } }
 const outputSchema = { type: 'object', properties: { result: { type: 'string' } } }
 
-test('远程 API 工具版本 config 保留基础字段、文档、Agent 和 headers', () => {
-  assert.deepEqual(
-    buildToolVersionConfig({
-      toolType: 'remote_api',
-      timeoutSec: 3600,
-      gpuRequired: false,
-      inputSchema,
-      outputSchema,
-      documentationMarkdown: '  ## Usage  ',
-      agentCapabilityConfig: { enabled: true, capability: 'general_tool' },
-      apiEndpoint: 'https://api.example.com/predict',
-      apiMethod: 'POST',
-      apiHeaders: { Authorization: 'Bearer ${TOKEN}' }
-    }),
-    {
-      type: 'remote_api',
-      timeout_sec: 3600,
-      gpu_required: false,
-      input_schema: inputSchema,
-      output_schema: outputSchema,
-      documentation_markdown: '## Usage',
-      agent_capability: { enabled: true, capability: 'general_tool' },
-      endpoint: 'https://api.example.com/predict',
-      method: 'POST',
-      headers: { Authorization: 'Bearer ${TOKEN}' }
-    }
-  )
-})
-
 test('Docker 工具版本 config 只在命令和环境变量非空时写入可选字段', () => {
   assert.deepEqual(
     buildToolVersionConfig({

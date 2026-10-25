@@ -28,7 +28,7 @@
                   type="info"
                   show-icon
                   message="从标准模板创建工具草稿"
-                  description="模板会固定药物研发能力、标准输入输出、resource_profile 和 smoke test；Docker、SSH、API 等部署参数仍按下方执行器配置填写。"
+                  description="模板会固定药物研发能力、标准输入输出、resource_profile 和 smoke test；Docker、Python、SSH、Kubernetes 等部署参数仍按下方执行器配置填写。"
                 />
                 <a-row :gutter="16" class="drug-template-row">
                   <a-col :span="14">
@@ -93,153 +93,149 @@
               </div>
             </template>
 
-            <template v-if="!isRemoteSelfRegister">
-              <!-- 基本信息 -->
-              <a-divider orientation="left">{{ t('tools.basicInfo') }}</a-divider>
+            <!-- 基本信息 -->
+            <a-divider orientation="left">{{ t('tools.basicInfo') }}</a-divider>
 
-              <a-row :gutter="24">
-                <a-col :span="12">
-                  <a-form-item :label="t('tools.toolName')" name="name">
-                    <a-input
-                      v-model:value="formState.name"
-                      :placeholder="t('tools.toolNamePlaceholder')"
-                      :max-length="100"
-                      show-count
-                    />
-                  </a-form-item>
-                </a-col>
-                <a-col :span="12">
-                  <a-form-item :label="t('tools.toolSlug')" name="slug">
-                    <a-input
-                      v-model:value="formState.slug"
-                      :placeholder="t('tools.toolSlugPlaceholder')"
-                      :max-length="50"
-                      show-count
-                    />
-                    <template #extra>
-                      <span class="form-extra">{{ t('tools.slugHint') }}</span>
-                    </template>
-                  </a-form-item>
-                </a-col>
-              </a-row>
+            <a-row :gutter="24">
+              <a-col :span="12">
+                <a-form-item :label="t('tools.toolName')" name="name">
+                  <a-input
+                    v-model:value="formState.name"
+                    :placeholder="t('tools.toolNamePlaceholder')"
+                    :max-length="100"
+                    show-count
+                  />
+                </a-form-item>
+              </a-col>
+              <a-col :span="12">
+                <a-form-item :label="t('tools.toolSlug')" name="slug">
+                  <a-input
+                    v-model:value="formState.slug"
+                    :placeholder="t('tools.toolSlugPlaceholder')"
+                    :max-length="50"
+                    show-count
+                  />
+                  <template #extra>
+                    <span class="form-extra">{{ t('tools.slugHint') }}</span>
+                  </template>
+                </a-form-item>
+              </a-col>
+            </a-row>
 
-              <a-form-item :label="t('common.description')" name="description">
-                <a-textarea
-                  v-model:value="formState.description"
-                  :placeholder="t('tools.descriptionPlaceholder')"
-                  :rows="4"
-                  :max-length="500"
-                  show-count
-                />
-              </a-form-item>
+            <a-form-item :label="t('common.description')" name="description">
+              <a-textarea
+                v-model:value="formState.description"
+                :placeholder="t('tools.descriptionPlaceholder')"
+                :rows="4"
+                :max-length="500"
+                show-count
+              />
+            </a-form-item>
 
-              <a-row :gutter="24">
-                <a-col :span="12">
-                  <a-form-item :label="t('tools.category')" name="category_id">
-                    <a-select
-                      v-model:value="formState.category_id"
-                      :placeholder="t('tools.selectCategory')"
-                      allow-clear
-                    >
-                      <a-select-option v-for="cat in categories" :key="cat.id" :value="cat.id">
-                        {{ cat.name }}
-                      </a-select-option>
-                    </a-select>
-                  </a-form-item>
-                </a-col>
-                <a-col :span="12">
-                  <a-form-item :label="t('tools.tags')" name="tag_ids">
-                    <a-select
-                      v-model:value="formState.tag_ids"
-                      :placeholder="t('tools.selectTags')"
-                      mode="multiple"
-                      allow-clear
-                    >
-                      <a-select-option v-for="tag in tags" :key="tag.id" :value="tag.id">
-                        <a-tag :color="tag.color" size="small">{{ tag.name }}</a-tag>
-                      </a-select-option>
-                    </a-select>
-                  </a-form-item>
-                </a-col>
-              </a-row>
+            <a-row :gutter="24">
+              <a-col :span="12">
+                <a-form-item :label="t('tools.category')" name="category_id">
+                  <a-select
+                    v-model:value="formState.category_id"
+                    :placeholder="t('tools.selectCategory')"
+                    allow-clear
+                  >
+                    <a-select-option v-for="cat in categories" :key="cat.id" :value="cat.id">
+                      {{ cat.name }}
+                    </a-select-option>
+                  </a-select>
+                </a-form-item>
+              </a-col>
+              <a-col :span="12">
+                <a-form-item :label="t('tools.tags')" name="tag_ids">
+                  <a-select
+                    v-model:value="formState.tag_ids"
+                    :placeholder="t('tools.selectTags')"
+                    mode="multiple"
+                    allow-clear
+                  >
+                    <a-select-option v-for="tag in tags" :key="tag.id" :value="tag.id">
+                      <a-tag :color="tag.color" size="small">{{ tag.name }}</a-tag>
+                    </a-select-option>
+                  </a-select>
+                </a-form-item>
+              </a-col>
+            </a-row>
 
-              <a-row :gutter="24">
-                <a-col :span="12">
-                  <a-form-item :label="t('tools.icon')" name="icon">
-                    <a-input
-                      v-model:value="formState.icon"
-                      :placeholder="t('tools.iconPlaceholder')"
-                    />
-                    <template #extra>
-                      <span class="form-extra">{{ t('tools.iconHint') }}</span>
-                    </template>
-                  </a-form-item>
-                </a-col>
-                <a-col :span="12">
-                  <a-form-item :label="t('tools.iconUrl')" name="icon_url">
-                    <a-input
-                      v-model:value="formState.icon_url"
-                      :placeholder="t('tools.iconUrlPlaceholder')"
-                    />
-                  </a-form-item>
-                </a-col>
-              </a-row>
-            </template>
+            <a-row :gutter="24">
+              <a-col :span="12">
+                <a-form-item :label="t('tools.icon')" name="icon">
+                  <a-input
+                    v-model:value="formState.icon"
+                    :placeholder="t('tools.iconPlaceholder')"
+                  />
+                  <template #extra>
+                    <span class="form-extra">{{ t('tools.iconHint') }}</span>
+                  </template>
+                </a-form-item>
+              </a-col>
+              <a-col :span="12">
+                <a-form-item :label="t('tools.iconUrl')" name="icon_url">
+                  <a-input
+                    v-model:value="formState.icon_url"
+                    :placeholder="t('tools.iconUrlPlaceholder')"
+                  />
+                </a-form-item>
+              </a-col>
+            </a-row>
 
-            <template v-if="!isRemoteSelfRegister">
-              <!-- 运行配置 -->
-              <a-divider orientation="left">{{ t('tools.runConfig') }}</a-divider>
+            <!-- 运行配置 -->
+            <a-divider orientation="left">{{ t('tools.runConfig') }}</a-divider>
 
-              <a-row :gutter="24">
-                <a-col :span="12">
-                  <a-form-item :label="t('tools.timeoutSec')" name="timeout_sec">
-                    <a-input-number
-                      v-model:value="formState.timeout_sec"
-                      :min="60"
-                      :max="86400"
-                      style="width: 100%"
-                    />
-                  </a-form-item>
-                </a-col>
-              </a-row>
+            <a-row :gutter="24">
+              <a-col :span="12">
+                <a-form-item :label="t('tools.timeoutSec')" name="timeout_sec">
+                  <a-input-number
+                    v-model:value="formState.timeout_sec"
+                    :min="60"
+                    :max="86400"
+                    style="width: 100%"
+                  />
+                </a-form-item>
+              </a-col>
+            </a-row>
 
-              <a-form-item :label="t('tools.isPublic')" name="is_public">
-                <a-switch v-model:checked="formState.is_public" />
-                <span class="switch-label">
-                  {{ formState.is_public ? t('tools.publicYes') : t('tools.publicNo') }}
-                </span>
-              </a-form-item>
+            <a-form-item :label="t('tools.isPublic')" name="is_public">
+              <a-switch v-model:checked="formState.is_public" />
+              <span class="switch-label">
+                {{ formState.is_public ? t('tools.publicYes') : t('tools.publicNo') }}
+              </span>
+            </a-form-item>
 
-              <!-- 版本信息 -->
-              <a-divider orientation="left">版本信息</a-divider>
+            <!-- 版本信息 -->
+            <a-divider orientation="left">版本信息</a-divider>
 
-              <a-row :gutter="24">
-                <a-col :span="8">
-                  <a-form-item label="版本号" name="version">
-                    <a-input
-                      v-model:value="formState.version"
-                      placeholder="例如：1.0.0"
-                    />
-                  </a-form-item>
-                </a-col>
-                <a-col :span="16">
-                  <a-form-item label="版本说明" name="notes">
-                    <a-input
-                      v-model:value="formState.notes"
-                      placeholder="简要说明此版本的特点"
-                    />
-                  </a-form-item>
-                </a-col>
-              </a-row>
+            <a-row :gutter="24">
+              <a-col :span="8">
+                <a-form-item label="版本号" name="version">
+                  <a-input
+                    v-model:value="formState.version"
+                    placeholder="例如：1.0.0"
+                  />
+                </a-form-item>
+              </a-col>
+              <a-col :span="16">
+                <a-form-item label="版本说明" name="notes">
+                  <a-input
+                    v-model:value="formState.notes"
+                    placeholder="简要说明此版本的特点"
+                  />
+                </a-form-item>
+              </a-col>
+            </a-row>
 
-              <a-form-item label="更新日志" name="changelog">
-                <a-textarea
-                  v-model:value="formState.changelog"
-                  placeholder="详细描述此版本的更新内容"
-                  :rows="3"
-                />
-              </a-form-item>
-            </template>
+            <a-form-item label="更新日志" name="changelog">
+              <a-textarea
+                v-model:value="formState.changelog"
+                placeholder="详细描述此版本的更新内容"
+                :rows="3"
+              />
+            </a-form-item>
 
             <!-- 工具类型 -->
             <a-divider orientation="left">工具类型</a-divider>
@@ -262,198 +258,12 @@
 
             <a-form-item label="工具类型" name="tool_type">
               <a-radio-group v-model:value="formState.tool_type">
-                <a-radio value="remote_api">远程API</a-radio>
                 <a-radio value="docker_image">Docker镜像</a-radio>
                 <a-radio value="python_script">Python脚本</a-radio>
                 <a-radio value="ssh_job">SSH作业</a-radio>
                 <a-radio value="k8s_job">Kubernetes Job</a-radio>
               </a-radio-group>
             </a-form-item>
-
-            <!-- API配置 -->
-            <template v-if="formState.tool_type === 'remote_api'">
-              <a-divider orientation="left">远程 API 注册</a-divider>
-
-              <a-form-item label="注册方式" name="remote_api_registration_mode">
-                <a-radio-group
-                  v-model:value="formState.remote_api_registration_mode"
-                  :disabled="isEdit"
-                >
-                  <a-radio value="self_register">服务自注册</a-radio>
-                  <a-radio value="manual">旧版手动配置</a-radio>
-                </a-radio-group>
-                <template #extra>
-                  <span class="form-extra">
-                    服务自注册只需要填写服务根 URL，平台会读取固定 manifest 并创建草稿版本。
-                  </span>
-                </template>
-              </a-form-item>
-
-              <template v-if="isRemoteSelfRegister">
-                <a-row :gutter="24">
-                  <a-col :span="14">
-                    <a-form-item
-                      label="服务根 URL"
-                      name="remote_base_url"
-                      :rules="[{ required: true, message: '请输入服务根 URL' }]"
-                    >
-                      <a-input
-                        v-model:value="formState.remote_base_url"
-                        placeholder="https://model.example.com"
-                      />
-                      <template #extra>
-                        <span class="form-extra">
-                          平台会请求 /.well-known/sciminer-tool.json 完成自发现。
-                        </span>
-                      </template>
-                    </a-form-item>
-                  </a-col>
-                  <a-col :span="10">
-                    <a-form-item
-                      :label="t('tools.category')"
-                      name="category_id"
-                      :rules="[{ required: true, message: '请选择工具分类' }]"
-                    >
-                      <a-select
-                        v-model:value="formState.category_id"
-                        :placeholder="t('tools.selectCategory')"
-                        allow-clear
-                      >
-                        <a-select-option v-for="cat in categories" :key="cat.id" :value="cat.id">
-                          {{ cat.name }}
-                        </a-select-option>
-                      </a-select>
-                    </a-form-item>
-                  </a-col>
-                </a-row>
-
-                <a-row :gutter="24">
-                  <a-col :span="8">
-                    <a-form-item label="运行 smoke test" name="remote_run_smoke_test">
-                      <a-switch v-model:checked="formState.remote_run_smoke_test" />
-                      <span class="switch-label">
-                        {{ formState.remote_run_smoke_test ? '开启' : '关闭' }}
-                      </span>
-                    </a-form-item>
-                  </a-col>
-                  <a-col :span="8">
-                    <a-form-item label="成功后发布" name="remote_publish_on_success">
-                      <a-switch
-                        v-model:checked="formState.remote_publish_on_success"
-                        :disabled="!formState.remote_run_smoke_test"
-                      />
-                      <span class="switch-label">
-                        {{ formState.remote_publish_on_success ? '开启' : '关闭' }}
-                      </span>
-                    </a-form-item>
-                  </a-col>
-                  <a-col :span="8">
-                    <a-form-item :label="t('tools.isPublic')" name="is_public">
-                      <a-switch v-model:checked="formState.is_public" />
-                      <span class="switch-label">
-                        {{ formState.is_public ? t('tools.publicYes') : t('tools.publicNo') }}
-                      </span>
-                    </a-form-item>
-                  </a-col>
-                </a-row>
-
-                <a-row :gutter="24">
-                  <a-col :span="8">
-                    <a-form-item :label="t('tools.timeoutSec')" name="timeout_sec">
-                      <a-input-number
-                        v-model:value="formState.timeout_sec"
-                        :min="60"
-                        :max="86400"
-                        style="width: 100%"
-                      />
-                    </a-form-item>
-                  </a-col>
-                  <a-col :span="8">
-                    <a-form-item :label="t('tools.icon')" name="icon">
-                      <a-input
-                        v-model:value="formState.icon"
-                        :placeholder="t('tools.iconPlaceholder')"
-                      />
-                    </a-form-item>
-                  </a-col>
-                  <a-col :span="8">
-                    <a-form-item :label="t('tools.iconUrl')" name="icon_url">
-                      <a-input
-                        v-model:value="formState.icon_url"
-                        :placeholder="t('tools.iconUrlPlaceholder')"
-                      />
-                    </a-form-item>
-                  </a-col>
-                </a-row>
-
-                <div v-if="remoteRegisterResult" class="remote-register-result">
-                  <div class="remote-register-result-header">
-                    <div>
-                      <div class="remote-register-result-title">远程 API 注册结果</div>
-                      <div class="remote-register-result-subtitle">
-                        manifest_sha256: <code>{{ remoteRegisterResult.manifest_sha256 }}</code>
-                      </div>
-                    </div>
-                    <a-space>
-                      <router-link :to="`/tools/${remoteRegisterResult.tool.id}`">
-                        查看工具详情
-                      </router-link>
-                      <router-link
-                        v-if="remoteRegisterResult.smoke_test_task_id"
-                        :to="`/tasks/${remoteRegisterResult.smoke_test_task_id}`"
-                      >
-                        查看 smoke test 任务
-                      </router-link>
-                    </a-space>
-                  </div>
-
-                  <div class="remote-register-stage-title">注册诊断</div>
-                  <div class="remote-register-stage-list">
-                    <div
-                      v-for="stage in remoteRegisterResult.stages"
-                      :key="stage.name"
-                      class="remote-register-stage"
-                    >
-                      <a-tag :color="remoteStageStatusDisplay(stage.status).color">
-                        {{ remoteStageStatusDisplay(stage.status).text }}
-                      </a-tag>
-                      <span class="remote-register-stage-name">{{ stage.name }}</span>
-                      <span class="remote-register-stage-message">{{ stage.message }}</span>
-                    </div>
-                  </div>
-                </div>
-              </template>
-
-              <template v-else>
-                <a-form-item label="API地址" name="api_endpoint" :rules="[{ required: true, message: '请输入API地址' }]">
-                  <a-input
-                    v-model:value="formState.api_endpoint"
-                    placeholder="https://api.example.com/predict"
-                  />
-                </a-form-item>
-
-                <a-form-item label="请求方法" name="api_method">
-                  <a-select v-model:value="formState.api_method">
-                    <a-select-option value="GET">GET</a-select-option>
-                    <a-select-option value="POST">POST</a-select-option>
-                  </a-select>
-                </a-form-item>
-
-                <a-form-item label="请求头（可选）" name="api_headers">
-                  <StructuredKeyValueEditor
-                    v-model="apiHeaderEntries"
-                    add-label="添加请求头"
-                    key-placeholder="请求头名称，如 Authorization"
-                    value-placeholder="请求头值"
-                  />
-                  <template #extra>
-                    <span class="form-extra">每个请求头单独填写；请使用密钥引用，避免保存明文凭证。</span>
-                  </template>
-                </a-form-item>
-              </template>
-
-            </template>
-
             <!-- Docker配置 -->
             <template v-if="formState.tool_type === 'docker_image'">
               <a-divider orientation="left">Docker配置</a-divider>
@@ -731,222 +541,169 @@
               </a-row>
             </template>
 
-            <template v-if="!isRemoteSelfRegister">
-              <!-- 参数定义 -->
-              <a-divider orientation="left">科学运行参数</a-divider>
+            <!-- 参数定义 -->
+            <a-divider orientation="left">科学运行参数</a-divider>
 
-              <a-form-item v-if="registrationMode !== 'package'" name="input_schema">
-                <ToolParameterSchemaEditor
-                  v-model:model-value="inputParameterSchema"
-                  :allow-file-fields="true"
-                  @validity-change="setInputSchemaEditorValidity"
-                />
-              </a-form-item>
-              <a-alert
-                v-else
-                type="info"
-                show-icon
-                message="运行参数来自 Tool Package v2"
-                description="请在 Tool Package 管理中维护模型参数；平台资源和标准 Artifact 输入在独立契约中配置。"
+            <a-form-item v-if="registrationMode !== 'package'" name="input_schema">
+              <ToolParameterSchemaEditor
+                v-model:model-value="inputParameterSchema"
+                :allow-file-fields="true"
+                @validity-change="setInputSchemaEditorValidity"
               />
+            </a-form-item>
+            <a-alert
+              v-else
+              type="info"
+              show-icon
+              message="运行参数来自 Tool Package v2"
+              description="请在 Tool Package 管理中维护模型参数；平台资源和标准 Artifact 输入在独立契约中配置。"
+            />
 
-              <a-form-item v-if="registrationMode !== 'package'" label="输出参数 Schema" name="output_schema">
-                <a-textarea
-                  v-model:value="formState.output_schema"
-                  placeholder='{"type": "object", "properties": {"result": {"type": "string"}}}'
-                  :rows="5"
-                />
-                <template #extra>
-                  <span class="form-extra">JSON Schema格式，定义工具的输出结果结构</span>
-                </template>
-              </a-form-item>
+            <a-form-item v-if="registrationMode !== 'package'" label="输出参数 Schema" name="output_schema">
+              <a-textarea
+                v-model:value="formState.output_schema"
+                placeholder='{"type": "object", "properties": {"result": {"type": "string"}}}'
+                :rows="5"
+              />
+              <template #extra>
+                <span class="form-extra">JSON Schema格式，定义工具的输出结果结构</span>
+              </template>
+            </a-form-item>
 
-              <a-form-item :label="t('tools.documentationMarkdown')" name="documentation_markdown">
-                <a-textarea
-                  v-model:value="formState.documentation_markdown"
-                  class="tool-documentation-editor"
-                  placeholder="## 模型介绍&#10;&#10;## 参数说明&#10;&#10;## 输出文件"
-                  :rows="10"
-                />
-                <template #extra>
-                  <span class="form-extra">{{ t('tools.documentationMarkdownHint') }}</span>
-                </template>
-              </a-form-item>
+            <a-form-item :label="t('tools.documentationMarkdown')" name="documentation_markdown">
+              <a-textarea
+                v-model:value="formState.documentation_markdown"
+                class="tool-documentation-editor"
+                placeholder="## 模型介绍&#10;&#10;## 参数说明&#10;&#10;## 输出文件"
+                :rows="10"
+              />
+              <template #extra>
+                <span class="form-extra">{{ t('tools.documentationMarkdownHint') }}</span>
+              </template>
+            </a-form-item>
 
-              <!-- Agent 编排能力 -->
-              <a-divider orientation="left">旧版 Agent 语义映射（兼容）</a-divider>
+            <!-- Agent 编排能力 -->
+            <a-divider orientation="left">旧版 Agent 语义映射（兼容）</a-divider>
 
-              <a-form-item label="Agent 可用" name="agent_capability_enabled">
-                <a-switch
-                  v-model:checked="formState.agent_capability_enabled"
-                  @change="handleAgentCapabilityToggle"
-                />
-                <span class="switch-label">
-                  {{ formState.agent_capability_enabled ? '开启' : '关闭' }}
-                </span>
-                <template #extra>
-                  <span class="form-extra">仅兼容旧工具；新工具应通过 Tool Package v2 声明标准 Artifact 输入/输出槽。</span>
-                </template>
-              </a-form-item>
+            <a-form-item label="Agent 可用" name="agent_capability_enabled">
+              <a-switch
+                v-model:checked="formState.agent_capability_enabled"
+                @change="handleAgentCapabilityToggle"
+              />
+              <span class="switch-label">
+                {{ formState.agent_capability_enabled ? '开启' : '关闭' }}
+              </span>
+              <template #extra>
+                <span class="form-extra">仅兼容旧工具；新工具应通过 Tool Package v2 声明标准 Artifact 输入/输出槽。</span>
+              </template>
+            </a-form-item>
 
-              <template v-if="formState.agent_capability_enabled">
-              <a-row :gutter="24">
-                <a-col :span="12">
-                  <a-form-item label="Agent 能力" name="agent_capability">
-                    <a-select v-model:value="formState.agent_capability">
-                      <a-select-option value="pocket_prediction">口袋预测 pocket_prediction</a-select-option>
-                      <a-select-option value="molecule_generation">分子生成 molecule_generation</a-select-option>
-                      <a-select-option value="format_conversion">格式转换 format_conversion</a-select-option>
-                      <a-select-option value="docking">分子对接 docking</a-select-option>
-                      <a-select-option value="affinity_prediction">亲和力预测 affinity_prediction</a-select-option>
-                      <a-select-option value="property_prediction">性质预测 property_prediction</a-select-option>
-                      <a-select-option value="general_tool">通用工具 general_tool</a-select-option>
-                    </a-select>
-                  </a-form-item>
+            <template v-if="formState.agent_capability_enabled">
+            <a-row :gutter="24">
+              <a-col :span="12">
+                <a-form-item label="Agent 能力" name="agent_capability">
+                  <a-select v-model:value="formState.agent_capability">
+                    <a-select-option value="pocket_prediction">口袋预测 pocket_prediction</a-select-option>
+                    <a-select-option value="molecule_generation">分子生成 molecule_generation</a-select-option>
+                    <a-select-option value="format_conversion">格式转换 format_conversion</a-select-option>
+                    <a-select-option value="docking">分子对接 docking</a-select-option>
+                    <a-select-option value="affinity_prediction">亲和力预测 affinity_prediction</a-select-option>
+                    <a-select-option value="property_prediction">性质预测 property_prediction</a-select-option>
+                    <a-select-option value="general_tool">通用工具 general_tool</a-select-option>
+                  </a-select>
+                </a-form-item>
+              </a-col>
+              <a-col :span="12">
+                <a-form-item label="Agent 阶段" name="agent_stage">
+                  <a-input
+                    v-model:value="formState.agent_stage"
+                    placeholder="默认与能力一致，例如 molecule_generation"
+                  />
+                </a-form-item>
+              </a-col>
+            </a-row>
+
+            <div class="agent-capability-block">
+              <div class="agent-capability-header">
+                <span>输入语义映射（兼容）</span>
+                <a-button size="small" @click="addAgentInput">
+                  <PlusOutlined />
+                  添加输入
+                </a-button>
+              </div>
+              <a-row
+                v-for="(input, index) in formState.agent_inputs"
+                :key="`agent-input-${index}`"
+                :gutter="12"
+                class="agent-capability-row"
+              >
+                <a-col :span="7">
+                  <a-input v-model:value="input.semantic_type" placeholder="semantic_type，如 binding_pocket@1" />
                 </a-col>
-                <a-col :span="12">
-                  <a-form-item label="Agent 阶段" name="agent_stage">
-                    <a-input
-                      v-model:value="formState.agent_stage"
-                      placeholder="默认与能力一致，例如 molecule_generation"
-                    />
-                  </a-form-item>
+                <a-col :span="7">
+                  <a-input v-model:value="input.field" placeholder="工具字段，如 protein_pdb" />
+                </a-col>
+                <a-col :span="7">
+                  <a-input v-model:value="input.accepted_extensions" placeholder="扩展名，如 .pdb,.sdf" />
+                </a-col>
+                <a-col :span="3">
+                  <a-button block danger @click="removeAgentInput(index)">
+                    <DeleteOutlined />
+                  </a-button>
                 </a-col>
               </a-row>
+            </div>
 
-              <div class="agent-capability-block">
-                <div class="agent-capability-header">
-                  <span>输入语义映射（兼容）</span>
-                  <a-button size="small" @click="addAgentInput">
-                    <PlusOutlined />
-                    添加输入
-                  </a-button>
-                </div>
-                <a-row
-                  v-for="(input, index) in formState.agent_inputs"
-                  :key="`agent-input-${index}`"
-                  :gutter="12"
-                  class="agent-capability-row"
-                >
-                  <a-col :span="7">
-                    <a-input v-model:value="input.semantic_type" placeholder="semantic_type，如 binding_pocket@1" />
-                  </a-col>
-                  <a-col :span="7">
-                    <a-input v-model:value="input.field" placeholder="工具字段，如 protein_pdb" />
-                  </a-col>
-                  <a-col :span="7">
-                    <a-input v-model:value="input.accepted_extensions" placeholder="扩展名，如 .pdb,.sdf" />
-                  </a-col>
-                  <a-col :span="3">
-                    <a-button block danger @click="removeAgentInput(index)">
-                      <DeleteOutlined />
-                    </a-button>
-                  </a-col>
-                </a-row>
+            <div class="agent-capability-block">
+              <div class="agent-capability-header">
+                <span>输出语义映射（兼容）</span>
+                <a-button size="small" @click="addAgentOutput">
+                  <PlusOutlined />
+                  添加输出
+                </a-button>
               </div>
-
-              <div class="agent-capability-block">
-                <div class="agent-capability-header">
-                  <span>输出语义映射（兼容）</span>
-                  <a-button size="small" @click="addAgentOutput">
-                    <PlusOutlined />
-                    添加输出
+              <a-row
+                v-for="(output, index) in formState.agent_outputs"
+                :key="`agent-output-${index}`"
+                :gutter="12"
+                class="agent-capability-row"
+              >
+                <a-col :span="5">
+                  <a-input v-model:value="output.semantic_type" placeholder="semantic_type，如 ligand_structure@1" />
+                </a-col>
+                <a-col :span="4">
+                  <a-select v-model:value="output.source">
+                    <a-select-option value="output_files">文件</a-select-option>
+                    <a-select-option value="output_data">结果数据</a-select-option>
+                  </a-select>
+                </a-col>
+                <a-col :span="4">
+                  <a-input v-model:value="output.path" placeholder="数据路径，可选" />
+                </a-col>
+                <a-col :span="4">
+                  <a-input v-model:value="output.match_extension" placeholder="扩展名，如 .sdf" />
+                </a-col>
+                <a-col :span="4">
+                  <a-input v-model:value="output.filename_contains_any" placeholder="文件名关键词，逗号分隔" />
+                </a-col>
+                <a-col :span="2">
+                  <a-switch v-model:checked="output.required" />
+                </a-col>
+                <a-col :span="1">
+                  <a-button danger @click="removeAgentOutput(index)">
+                    <DeleteOutlined />
                   </a-button>
-                </div>
-                <a-row
-                  v-for="(output, index) in formState.agent_outputs"
-                  :key="`agent-output-${index}`"
-                  :gutter="12"
-                  class="agent-capability-row"
-                >
-                  <a-col :span="5">
-                    <a-input v-model:value="output.semantic_type" placeholder="semantic_type，如 ligand_structure@1" />
-                  </a-col>
-                  <a-col :span="4">
-                    <a-select v-model:value="output.source">
-                      <a-select-option value="output_files">文件</a-select-option>
-                      <a-select-option value="output_data">结果数据</a-select-option>
-                    </a-select>
-                  </a-col>
-                  <a-col :span="4">
-                    <a-input v-model:value="output.path" placeholder="数据路径，可选" />
-                  </a-col>
-                  <a-col :span="4">
-                    <a-input v-model:value="output.match_extension" placeholder="扩展名，如 .sdf" />
-                  </a-col>
-                  <a-col :span="4">
-                    <a-input v-model:value="output.filename_contains_any" placeholder="文件名关键词，逗号分隔" />
-                  </a-col>
-                  <a-col :span="2">
-                    <a-switch v-model:checked="output.required" />
-                  </a-col>
-                  <a-col :span="1">
-                    <a-button danger @click="removeAgentOutput(index)">
-                      <DeleteOutlined />
-                    </a-button>
-                  </a-col>
-                </a-row>
-              </div>
+                </a-col>
+              </a-row>
+            </div>
 
-              <a-form-item label="Agent 默认参数 JSON" name="agent_defaults">
-                <a-textarea
-                  v-model:value="agentDefaultsText"
-                  placeholder='{"params.n_samples": 8, "params.device": "cuda:0"}'
-                  :rows="3"
-                />
-              </a-form-item>
-              </template>
-            </template>
-
-            <template v-if="formState.tool_type === 'remote_api'">
-              <a-divider orientation="left">远程服务容量</a-divider>
-              <a-form-item label="容量管理方式" name="remote_capacity_mode">
-                <a-select v-model:value="formState.remote_capacity_mode">
-                  <a-select-option value="unmanaged">不由平台管理</a-select-option>
-                  <a-select-option value="static">平台限制最大并发</a-select-option>
-                </a-select>
-                <template #extra>
-                  <span class="form-extra">
-                    静态并发适用于 AlphaFold 3、OpenDDE 等自建服务；相同服务必须使用相同容量组和并发上限。
-                  </span>
-                </template>
-              </a-form-item>
-              <template v-if="formState.remote_capacity_mode === 'static'">
-                <a-row :gutter="24">
-                  <a-col :span="12">
-                    <a-form-item
-                      label="容量共享组"
-                      name="remote_capacity_group"
-                      :rules="[{ required: true, message: '请输入容量共享组' }]"
-                    >
-                      <a-input
-                        v-model:value="formState.remote_capacity_group"
-                        placeholder="例如 alphafold3-production"
-                      />
-                    </a-form-item>
-                  </a-col>
-                  <a-col :span="6">
-                    <a-form-item label="最大并发" name="remote_max_inflight">
-                      <a-input-number
-                        v-model:value="formState.remote_max_inflight"
-                        :min="1"
-                        :max="1000"
-                        style="width: 100%"
-                      />
-                    </a-form-item>
-                  </a-col>
-                  <a-col :span="6">
-                    <a-form-item label="容量租约（秒）" name="remote_lease_ttl_sec">
-                      <a-input-number
-                        v-model:value="formState.remote_lease_ttl_sec"
-                        :min="60"
-                        :max="86400"
-                        style="width: 100%"
-                      />
-                    </a-form-item>
-                  </a-col>
-                </a-row>
-              </template>
+            <a-form-item label="Agent 默认参数 JSON" name="agent_defaults">
+              <a-textarea
+                v-model:value="agentDefaultsText"
+                placeholder='{"params.n_samples": 8, "params.device": "cuda:0"}'
+                :rows="3"
+              />
+            </a-form-item>
             </template>
 
             <!-- 提交按钮 -->
@@ -986,7 +743,6 @@
   import StructuredStringListEditor from '@/components/tools/StructuredStringListEditor.vue'
   import { useToolCreateEditorState } from '@/composables/useToolCreateEditorState'
   import {
-    buildRemoteToolRegistrationPayload,
     buildToolAgentCapabilityEnablePatch,
     buildToolEditFormPatch,
     buildToolTemplateFormPatch,
@@ -998,7 +754,6 @@
     formatToolTemplateResourceText,
     formatToolCreateSubmissionErrorMessage,
     buildToolVersionCreatePayload,
-    remoteToolStageStatusDisplay,
     resolveToolCreateSubmissionBlocker,
     createEmptyParameterSchema,
     validateParameterSchema,
@@ -1015,8 +770,6 @@
     createToolVersion,
     getToolDetail,
     listToolTemplates,
-    registerRemoteTool,
-    type RemoteToolRegisterResult,
     type ToolTemplateSummary,
     updateTool
   } from '@/api/tools'
@@ -1029,7 +782,6 @@
   const formRef = ref<FormInstance>()
   const loading = ref(false)
   const submitting = ref(false)
-  const remoteRegisterResult = ref<RemoteToolRegisterResult | null>(null)
   const toolTemplates = ref<ToolTemplateSummary[]>([])
   const selectedToolTemplateKey = ref<string>()
   const creatingTemplateDraft = ref(false)
@@ -1045,10 +797,10 @@
   const toolId = computed(() => route.params.id as string)
   const registrationMode = computed(() => {
     const mode = route.query.mode
-    return mode === 'remote' || mode === 'advanced' || mode === 'template' || mode === 'package' ? mode : 'template'
+    return mode === 'template' || mode === 'package' ? mode : 'template'
   })
   const showTemplateQuickStart = computed(
-    () => !isEdit.value && registrationMode.value !== 'remote' && registrationMode.value !== 'advanced' && registrationMode.value !== 'package'
+    () => !isEdit.value && registrationMode.value !== 'package'
   )
 
   // 表单状态
@@ -1082,14 +834,7 @@
   })
   const inputSchemaEditorValid = ref(true)
 
-  const isRemoteSelfRegister = computed(
-    () => !isEdit.value &&
-      formState.tool_type === 'remote_api' &&
-      formState.remote_api_registration_mode === 'self_register'
-  )
-
   const {
-    apiHeaderEntries,
     dockerCommandItems,
     dockerEnvEntries,
     pythonArgumentItems,
@@ -1207,45 +952,16 @@
     ]
   }
 
-  const remoteStageStatusDisplay = remoteToolStageStatusDisplay
-
   function setInputSchemaEditorValidity(valid: boolean) {
     inputSchemaEditorValid.value = valid
-  }
-
-  const handleRemoteSelfRegisterSubmit = async () => {
-    submitting.value = true
-    remoteRegisterResult.value = null
-    try {
-      const response = await registerRemoteTool(buildRemoteToolRegistrationPayload(formState))
-      remoteRegisterResult.value = response.data
-      message.success(
-        response.data.smoke_test_task_id
-          ? '远程工具已注册，smoke test 已创建，请查看下方任务入口'
-          : '远程工具已注册为草稿'
-      )
-    } catch {
-      // 错误已在请求层处理
-    } finally {
-      submitting.value = false
-    }
   }
 
   const applyRegistrationMode = () => {
     if (isEdit.value) {
       return
     }
-    if (registrationMode.value === 'remote') {
-      formState.tool_type = 'remote_api'
-      formState.remote_api_registration_mode = 'self_register'
-      formState.remote_capacity_mode = 'static'
-    } else if (registrationMode.value === 'advanced') {
-      formState.tool_type = 'remote_api'
-      formState.remote_api_registration_mode = 'manual'
-      formState.remote_capacity_mode = 'static'
-    } else if (registrationMode.value === 'package') {
+    if (registrationMode.value === 'package') {
       formState.tool_type = 'ssh_job'
-      formState.remote_api_registration_mode = 'manual'
     }
   }
 
@@ -1327,11 +1043,6 @@
     try {
       await formRef.value?.validate()
     } catch {
-      return
-    }
-
-    if (isRemoteSelfRegister.value) {
-      await handleRemoteSelfRegisterSubmit()
       return
     }
 
@@ -1484,56 +1195,6 @@
     color: @primary-color;
   }
 
-  .remote-register-result {
-    margin: @spacing-lg 0;
-    padding: @spacing-md;
-    border: 1px solid @border-color-light;
-    border-radius: @border-radius-base;
-    background: @bg-color-light;
-  }
-
-  .remote-register-result-header {
-    display: flex;
-    justify-content: space-between;
-    gap: @spacing-md;
-    align-items: flex-start;
-    margin-bottom: @spacing-md;
-  }
-
-  .remote-register-result-title,
-  .remote-register-stage-title {
-    color: @text-color-light-primary;
-    font-weight: @font-weight-semibold;
-  }
-
-  .remote-register-result-subtitle {
-    margin-top: @spacing-xs;
-    color: @text-color-light-tertiary;
-    font-size: @font-size-sm;
-    word-break: break-all;
-  }
-
-  .remote-register-stage-list {
-    margin-top: @spacing-sm;
-  }
-
-  .remote-register-stage {
-    display: flex;
-    gap: @spacing-sm;
-    align-items: center;
-    padding: @spacing-xs 0;
-  }
-
-  .remote-register-stage-name {
-    min-width: 140px;
-    color: @text-color-light-primary;
-    font-weight: @font-weight-medium;
-  }
-
-  .remote-register-stage-message {
-    color: @text-color-light-secondary;
-  }
-
   .switch-label {
     margin-left: @spacing-sm;
     color: @text-color-light-secondary;
@@ -1583,12 +1244,6 @@
   }
 
   @media (max-width: @screen-md) {
-    .remote-register-result-header,
-    .remote-register-stage {
-      flex-direction: column;
-      align-items: flex-start;
-    }
-
     :deep(.tool-form .ant-col-8),
     :deep(.tool-form .ant-col-12),
     :deep(.tool-form .ant-col-16) {

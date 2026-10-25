@@ -206,42 +206,6 @@ async def test_get_tool_example_returns_default_example_with_files(
 
 
 @pytest.mark.asyncio
-async def test_get_tool_example_falls_back_to_schema_default_for_builtin_fetch_pdb(
-    api_client: httpx.AsyncClient,
-    db_session: AsyncSession,
-):
-    """仅声明 schema 的内置查询工具也应在详情页暴露可一键填入的示例。"""
-    tool = await create_tool_with_config(
-        db_session,
-        {
-            "type": "builtin",
-            "builtin_slug": "builtin-fetch-pdb",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "pdb_id": {
-                        "type": "string",
-                        "title": "PDB ID",
-                        "description": "RCSB PDB entry ID, e.g. 1ABC",
-                    }
-                },
-                "required": ["pdb_id"],
-            },
-            "output_schema": {"type": "object", "properties": {}},
-        },
-        slug="builtin-fetch-pdb",
-    )
-
-    response = await api_client.get(f"/api/v1/tools/{tool.id}/example")
-
-    assert response.status_code == 200
-    payload = response.json()["data"]
-    assert payload["name"] == "默认示例"
-    assert payload["params"] == {"pdb_id": "1A2B"}
-    assert payload["input_files"] == []
-
-
-@pytest.mark.asyncio
 async def test_tool_example_infers_file_input_from_schema_and_applies_it(
     api_client: httpx.AsyncClient,
     db_session: AsyncSession,

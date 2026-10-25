@@ -51,9 +51,6 @@ def describe_resource_wait(reason: str | None) -> ResourceWaitDescriptor:
     if normalized in {"quota_lock_busy", "resource_lock_busy"}:
         return ResourceWaitDescriptor(normalized, "scheduler")
 
-    if normalized.startswith("remote_capacity"):
-        return ResourceWaitDescriptor(normalized, "external_capacity")
-
     return ResourceWaitDescriptor(normalized, "resource")
 
 

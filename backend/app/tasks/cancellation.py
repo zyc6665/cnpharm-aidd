@@ -18,8 +18,6 @@ from app.logging.audit import AuditAction, AuditResult, get_audit_logger
 from app.models.tasks import Task, TaskStatus
 from app.models.tools import ToolVersion
 from app.models.users import User
-from app.remote_tools.invocation import recorded_remote_run_id
-from app.tasks.executors.remote_api import RemoteAPIExecutor
 from app.tasks.direct_runner import direct_task_runner as default_direct_task_runner
 from app.common.task_context import task_project_id
 from app.tasks.resource_lease import release_task_resource_reservation
@@ -139,7 +137,7 @@ async def _cancel_remote_tool_if_needed(db: AsyncSession | None, *, task: Task) 
     if not isinstance(config, dict):
         return
     if config.get("type") == "k8s_job":
-        external_id = recorded_remote_run_id(task.extra_data)
+        external_id = task_external_execution_id(task)
         if not external_id:
             external_id = task_external_execution_id(task)
         if not external_id and db is not None:
@@ -150,35 +148,5 @@ async def _cancel_remote_tool_if_needed(db: AsyncSession | None, *, task: Task) 
 
         await get_execution_service().cancel("k8s_job", external_id)
         return
-    if config.get("type") != "remote_api" or config.get("mode") != "remote_tool_v1":
-        return
-    remote_run_id = recorded_remote_run_id(task.extra_data)
-    if not remote_run_id and db is not None:
-        remote_run_id = await task_execution_record_external_id(db, task=task)
-    if not remote_run_id:
-        return
-    await RemoteAPIExecutor(task, tool_version, config=config).cancel_remote_run(
-        remote_run_id
-    )
 
 
-async def retry_remote_tool_cancellation(db: AsyncSession, *, task: Task) -> bool:
-    """Retry a remote cancellation recorded as pending by the API."""
-    extra_data = dict(task.extra_data or {})
-    if not extra_data.get("remote_cancel_pending"):
-        return False
-    try:
-        await _cancel_remote_tool_if_needed(db, task=task)
-    except Exception as exc:
-        extra_data["remote_cancel_error"] = str(exc)
-        extra_data["remote_cancel_next_retry_at"] = (
-            utcnow()
-            + timedelta(seconds=max(int(settings.REMOTE_CANCEL_RETRY_INTERVAL_SECONDS), 1))
-        ).isoformat()
-        task.extra_data = extra_data
-        return False
-    extra_data.pop("remote_cancel_pending", None)
-    extra_data.pop("remote_cancel_error", None)
-    extra_data.pop("remote_cancel_next_retry_at", None)
-    task.extra_data = extra_data
-    return True

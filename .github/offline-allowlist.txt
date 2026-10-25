@@ -6,17 +6,7 @@
 # 规则：只允许登记「已知技术债」并写清移除计划。
 #       新代码不得登记豁免——修代码，不改清单。
 #       每次 PR 若删除了下列文件之一，必须同步删掉对应行，否则 CI 会提示清单过期。
-
-# --- 交付线基线自带的外部调用，随「docs/17 §5 步骤 3、步骤 4」一并清除 ---
-# 公网化合物/蛋白数据库查询模块。交付线整体删除，不保留任何在线抓取能力。
-backend/app/external_databases/providers.py 交付线删除（docs/17 §5 步骤 4）；含 pubchem/rcsb 在线抓取
-
-# 公网化合物/蛋白数据库查询工具（ChEMBL/PubChem/PDBbind）。
-# 拆包时从 agents/aidd 迁到 external_databases，与 providers.py 一起在步骤 4 整体删除。
-backend/app/external_databases/database_tools.py 交付线删除（docs/17 §5 步骤 4）；含 chembl/pubchem/pdbbind
-
-# 前端 LLM 服务预设，随 Agent 对话能力删除。交付线不接入任何大模型对话。
-frontend/src/domain/admin/model-services.ts 随 Agent 能力删除（docs/17 §5 步骤 3）；含 openai/deepseek/dashscope 预设
-
-# 工作台首页的产品线品牌外链，随首页改版移除。
-frontend/src/views/home/index.vue 首页改版时移除产品线品牌外链（cpupdb/paiwsit）
+#
+# 当前状态：交付线已完成 docs/17 §5 步骤 3、步骤 4 的减法，
+# 基线自带的外部调用（公网数据库抓取、LLM 服务预设、产品线品牌外链）已全部删除，
+# 因此本清单为空。新增豁免必须走 PR 评审，并在同一 PR 内说明移除计划。

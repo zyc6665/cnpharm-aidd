@@ -7,7 +7,7 @@ metadata:
   version: 1.0.0
   description: Merge docking scores with molecular properties to produce a ranked hit table.
   family: drug_discovery
-executor_types: [python_script, docker_image, ssh_job, remote_api, k8s_job]
+executor_types: [python_script, docker_image, ssh_job, k8s_job]
 input_schema:
   type: object
   properties:

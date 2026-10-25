@@ -81,10 +81,9 @@ def test_executor_file_handling_entrypoints_exist():
     docker_source = read_backend_source("app/tasks/executors/docker.py")
     ssh_source = read_backend_source("app/tasks/executors/ssh_job.py")
     base_source = read_backend_source("app/tasks/executors/base.py")
-    remote_api_source = read_backend_source("app/tasks/executors/remote_api.py")
 
     assert "class DockerExecutor" in docker_source
-    assert "class RemoteAPIExecutor" in remote_api_source
     assert "async def _prepare_input_files" in ssh_source
     assert "async def _collect_output_files" in base_source
-    assert "async def _process_output_files" in remote_api_source
+    # 交付线移除了远程 API 执行器，其输出处理入口不应再出现。
+    assert not (BACKEND_ROOT / "app" / "tasks" / "executors" / "remote_api.py").exists()

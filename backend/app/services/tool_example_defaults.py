@@ -10,10 +10,7 @@ from app.services.tool_example_paths import resolve_tool_example_file_path
 from app.tool_packages.config_resolver import tool_package_v2_manifest_data
 
 
-SCHEMA_FALLBACK_EXAMPLE_VALUES = {
-    "builtin-fetch-pdb": {"pdb_id": "1A2B"},
-    "builtin-fetch-ligand": {"pubchem_cid": "2244"},
-}
+SCHEMA_FALLBACK_EXAMPLE_VALUES: dict[str, dict[str, Any]] = {}
 SchemaField = tuple[str, str | None, str, dict[str, Any]]
 
 

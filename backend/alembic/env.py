@@ -21,7 +21,7 @@ load_dotenv(BACKEND_ROOT / ".env", override=False)
 
 from app.config import resolve_database_url, settings
 from app.database.base import Base
-from app.models import files, statistics, system_settings, tasks, tools, users, verification, workflows  # noqa: F401,E402
+from app.models import files, statistics, tasks, tools, users, verification, workflows  # noqa: F401,E402
 
 
 config = context.config

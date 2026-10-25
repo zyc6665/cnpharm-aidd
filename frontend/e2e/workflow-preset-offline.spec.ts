@@ -60,16 +60,25 @@ async function installWorkflowMocks(page: Page) {
   })
 }
 
-test('AT-003 工作流页面可切换到 PubChem 到基础 ADMET 预设', async ({ page }) => {
+test('工作流页面可切换到配体结构到基础 ADMET 预设', async ({ page }) => {
   await installWorkflowMocks(page)
 
   await page.goto(`/projects/${projectId}/workflow`)
   await page.getByTestId('workflow-preset-select').click()
-  await page.getByTitle('PubChem 到基础 ADMET').click()
+  await page.getByTitle('配体结构到基础 ADMET').click()
 
-  await expect(page.getByRole('heading', { name: 'PubChem 到基础 ADMET' })).toBeVisible()
-  await expect(page.getByText('Fetch PubChem Ligand').first()).toBeVisible()
+  await expect(page.getByRole('heading', { name: '配体结构到基础 ADMET' })).toBeVisible()
+  await expect(page.getByText('配体结构输入').first()).toBeVisible()
   await expect(page.getByText('RDKit Properties').first()).toBeVisible()
   await expect(page.getByText('MolP-PC 基础 ADMET').first()).toBeVisible()
   await expect(page.getByText('基础 ADMET 结果').first()).toBeVisible()
+})
+
+test('工作流预设不再包含联网抓取配体的流程', async ({ page }) => {
+  await installWorkflowMocks(page)
+
+  await page.goto(`/projects/${projectId}/workflow`)
+  await page.getByTestId('workflow-preset-select').click()
+
+  await expect(page.getByTitle('PubChem 到基础 ADMET')).toHaveCount(0)
 })

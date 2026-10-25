@@ -1,4 +1,4 @@
-export type ToolVersionConfigType = 'remote_api' | 'docker_image' | 'python_script' | 'ssh_job' | 'k8s_job'
+export type ToolVersionConfigType = 'docker_image' | 'python_script' | 'ssh_job' | 'k8s_job'
 
 export interface BuildToolVersionConfigInput {
   toolType: ToolVersionConfigType
@@ -9,10 +9,6 @@ export interface BuildToolVersionConfigInput {
   outputSchema: Record<string, unknown>
   documentationMarkdown?: string
   agentCapabilityConfig?: Record<string, unknown>
-  apiEndpoint?: string
-  apiMethod?: 'GET' | 'POST'
-  apiHeaders?: Record<string, string>
-  remoteCapacityPolicy?: Record<string, unknown>
   dockerImage?: string
   dockerCommand?: string[]
   dockerEnv?: Record<string, string>
@@ -63,14 +59,7 @@ export function buildToolVersionConfig(
     config.tool_package_manifest = input.toolPackageManifest
   }
 
-  if (input.toolType === 'remote_api') {
-    config.endpoint = input.apiEndpoint
-    config.method = input.apiMethod
-    assignNonEmptyRecord(config, 'headers', input.apiHeaders)
-    if (input.remoteCapacityPolicy?.mode && input.remoteCapacityPolicy.mode !== 'unmanaged') {
-      config.capacity_policy = input.remoteCapacityPolicy
-    }
-  } else if (input.toolType === 'docker_image') {
+  if (input.toolType === 'docker_image') {
     config.image = input.dockerImage
     assignNonEmptyList(config, 'command', input.dockerCommand)
     assignNonEmptyRecord(config, 'env', input.dockerEnv)
