@@ -28,6 +28,10 @@ from app.schemas.projects import (
     ProjectMemberUpdate,
     ProjectUpdate,
 )
+from app.services.domain_compounds import (
+    delete_project_compound_rows,
+    project_compound_counts,
+)
 from app.services.domain_targets import delete_project_domain_rows, project_domain_counts
 from app.services.project_access import load_project_membership, require_project_role
 
@@ -253,6 +257,7 @@ async def get_project_overview(
         )
     )
     domain_counts = await project_domain_counts(db, project_id=project_id)
+    compound_counts = await project_compound_counts(db, project_id=project_id)
     return success_response(
         data={
             "project": _serialize(project, membership),
@@ -263,6 +268,8 @@ async def get_project_overview(
                 "targets": domain_counts["targets"],
                 "structures": domain_counts["structures"],
                 "pockets": domain_counts["pockets"],
+                "candidates": compound_counts["candidates"],
+                "candidate_sets": compound_counts["candidate_sets"],
             },
             "tasks": [_serialize_project_task(task) for task in task_result.scalars()],
             "artifacts": [
@@ -345,6 +352,7 @@ async def _delete_project_related_rows(db: AsyncSession, project_id: str) -> Non
     await db.execute(
         sa_update(File).where(File.project_id == project_id).values(project_id=None)
     )
+    await delete_project_compound_rows(db, project_id=project_id)
     await delete_project_domain_rows(db, project_id=project_id)
     await db.execute(sa_delete(ProjectMember).where(ProjectMember.project_id == project_id))
 

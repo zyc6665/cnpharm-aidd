@@ -40,12 +40,16 @@ test('项目总览统计卡片按固定标签输出', () => {
       workflows: 4,
       targets: 5,
       structures: 6,
-      pockets: 7
+      pockets: 7,
+      candidates: 8,
+      candidate_sets: 9
     }),
     [
       { label: '靶点', value: 5 },
       { label: '结构', value: 6 },
       { label: '口袋', value: 7 },
+      { label: '候选物', value: 8 },
+      { label: '候选集', value: 9 },
       { label: 'Artifact', value: 2 },
       { label: '任务', value: 3 },
       { label: '工作流', value: 4 }
@@ -53,7 +57,7 @@ test('项目总览统计卡片按固定标签输出', () => {
   )
   assert.deepEqual(
     getProjectOverviewStatCards(undefined).map(item => item.value),
-    [0, 0, 0, 0, 0, 0]
+    [0, 0, 0, 0, 0, 0, 0, 0]
   )
 })
 

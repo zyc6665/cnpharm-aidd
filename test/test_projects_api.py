@@ -186,6 +186,8 @@ async def test_project_overview_returns_project_scoped_resources(
         "targets": 0,
         "structures": 0,
         "pockets": 0,
+        "candidates": 0,
+        "candidate_sets": 0,
     }
     assert data["tasks"][0]["name"] == "项目口袋识别"
     assert data["tasks"][0]["status"] == "running"

@@ -56,6 +56,10 @@ export interface ProjectOverviewCounts {
   structures: number
   /** 口袋数 */
   pockets: number
+  /** 候选物数（小分子与多肽，docs/06 P-04） */
+  candidates: number
+  /** 候选集数 */
+  candidate_sets: number
 }
 
 export interface ProjectOverviewTask {
