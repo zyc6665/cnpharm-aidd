@@ -7,9 +7,9 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
-from app.api.v1.tool_route_utils import (
-    build_validated_tool_contract,
+from app.services.tool_presentation import (
     build_tool_deployment,
+    build_validated_tool_contract,
     load_tool_packages_for_tools,
     load_readable_tool_with_current_version,
     require_tool_read_access,

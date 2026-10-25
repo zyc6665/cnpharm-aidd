@@ -18,7 +18,7 @@ from app.services.tool_contracts import (
     contract_emits_standard_artifacts,
     tool_contract_to_agent_summary,
 )
-from app.api.v1.tool_route_utils import (
+from app.services.tool_presentation import (
     build_validated_tool_contract,
     sanitize_public_tool_config,
     sanitize_public_tool_contract,

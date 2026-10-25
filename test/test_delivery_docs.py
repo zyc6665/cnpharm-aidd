@@ -4,11 +4,11 @@ from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DELIVERY_INDEX = PROJECT_ROOT / "docs/delivery/04-V1交付验收索引.md"
-DEPLOYMENT_GUIDE = PROJECT_ROOT / "docs/delivery/03-企业交付部署运维说明书.md"
-PLATFORM_SMOKE = PROJECT_ROOT / "docs/verification/at003-platform-tool-smoke.md"
-LOCAL_RUNTIME_NOTE = PROJECT_ROOT / "docs/verification/at003-direct-smoke.md"
-PLATFORM_RECORD_TEMPLATE = PROJECT_ROOT / "docs/verification/templates/at003-platform-tool-run-record.md"
+DELIVERY_INDEX = PROJECT_ROOT / "docs/archive-upstream/delivery/04-V1交付验收索引.md"
+DEPLOYMENT_GUIDE = PROJECT_ROOT / "docs/archive-upstream/delivery/03-企业交付部署运维说明书.md"
+PLATFORM_SMOKE = PROJECT_ROOT / "docs/archive-upstream/verification/at003-platform-tool-smoke.md"
+LOCAL_RUNTIME_NOTE = PROJECT_ROOT / "docs/archive-upstream/verification/at003-direct-smoke.md"
+PLATFORM_RECORD_TEMPLATE = PROJECT_ROOT / "docs/archive-upstream/verification/templates/at003-platform-tool-run-record.md"
 PLATFORM_EVIDENCE_SCRIPT = PROJECT_ROOT / "backend/scripts/collect_at003_platform_evidence.py"
 
 

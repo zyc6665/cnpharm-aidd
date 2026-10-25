@@ -78,7 +78,7 @@ def test_production_compose_enables_resource_scheduling_and_beat():
 
 def test_ci_validates_and_builds_production_compose():
     workflow = yaml.safe_load(Path(".github/workflows/ci.yml").read_text(encoding="utf-8"))
-    job = workflow["jobs"]["production-compose"]
+    job = workflow["jobs"]["compose-check"]
     environment = job["env"]
     required_variables = {
         "POSTGRES_PASSWORD",

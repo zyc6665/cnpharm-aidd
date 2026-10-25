@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.v1.tool_route_utils import (
+from app.services.tool_presentation import (
     load_tool_for_response,
     require_active_tool_category,
     serialize_tool,
