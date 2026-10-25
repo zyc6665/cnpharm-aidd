@@ -78,3 +78,6 @@ model/**/*.7z
 # Local model image build workspaces are not repository source.
 /model-build/
 *.docx
+
+# 本地并行开发工作区（worktree），不入库
+.worktrees/
