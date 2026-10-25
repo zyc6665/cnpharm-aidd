@@ -6,7 +6,7 @@
 
 用法：
     python scripts/setup_branch_protection.py            # 查看当前设置
-    python scripts/setup_branch_protection.py --apply    # 应用设置
+    python scripts/setup_branch_protection.py --apply    # 应用设置（管理员也不可绕过）
     python scripts/setup_branch_protection.py --apply --approvals 1
 
 前置：gh 已登录且对仓库有 admin 权限。
@@ -110,15 +110,15 @@ def main() -> int:
         help="必需评审数。单人期用 0；团队到位后改 1",
     )
     parser.add_argument(
-        "--enforce-admins",
+        "--allow-admin-bypass",
         action="store_true",
-        help="管理员也受规则约束。多人协作稳定后再开",
+        help="允许管理员绕过规则。默认禁止——能绕过就等于没有保护",
     )
     args = parser.parse_args()
 
     if not args.apply:
         return show_current()
-    return apply(args.approvals, args.enforce_admins)
+    return apply(args.approvals, enforce_admins=not args.allow_admin_bypass)
 
 
 if __name__ == "__main__":
