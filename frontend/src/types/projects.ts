@@ -50,6 +50,12 @@ export interface ProjectOverviewCounts {
   artifacts: number
   tasks: number
   workflows: number
+  /** 靶点数（docs/06 P-04 统计卡） */
+  targets: number
+  /** 蛋白结构数 */
+  structures: number
+  /** 口袋数 */
+  pockets: number
 }
 
 export interface ProjectOverviewTask {

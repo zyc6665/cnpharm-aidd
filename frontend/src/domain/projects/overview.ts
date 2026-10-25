@@ -33,6 +33,9 @@ export function getProjectOverviewStatCards(
   counts: ProjectOverviewCounts | undefined
 ): ProjectOverviewStatCard[] {
   return [
+    { label: '靶点', value: counts?.targets ?? 0 },
+    { label: '结构', value: counts?.structures ?? 0 },
+    { label: '口袋', value: counts?.pockets ?? 0 },
     { label: 'Artifact', value: counts?.artifacts ?? 0 },
     { label: '任务', value: counts?.tasks ?? 0 },
     { label: '工作流', value: counts?.workflows ?? 0 }

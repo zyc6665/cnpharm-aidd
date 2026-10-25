@@ -9,6 +9,7 @@ from app.api.v1 import (
     gpu,
     projects,
     system,
+    targets,
     tasks,
     tool_packages,
     tool_templates,
@@ -39,6 +40,8 @@ api_router.include_router(tasks.router, prefix="/tasks", tags=["任务"])
 api_router.include_router(files.router, prefix="/files", tags=["文件"])
 api_router.include_router(gpu.router)
 api_router.include_router(projects.router, prefix="/projects", tags=["研究项目"])
+api_router.include_router(targets.project_router, prefix="/projects", tags=["靶点与结构"])
+api_router.include_router(targets.router, tags=["靶点与结构"])
 api_router.include_router(system.router, prefix="/system", tags=["系统"])
 api_router.include_router(websocket.router, tags=["WebSocket"])
 api_router.include_router(workflows.router, prefix="/workflows", tags=["工作流"])
