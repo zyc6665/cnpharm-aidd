@@ -14,6 +14,7 @@ from app.database.session import init_db
 from app.api.v1 import api_router
 from app.common.exceptions import AppException
 from app.middleware import RateLimitMiddleware
+from app.services.audit_sink import configure_audit_db_writer
 from app.tasks.direct_recovery import direct_task_recovery_loop
 from app.tasks.direct_runner import direct_task_runner
 from app.services.workflow_reconciliation import workflow_reconcile_loop
@@ -38,9 +39,13 @@ async def lifespan(app: FastAPI):
     workflow_reconcile_loop.start()
     if use_direct_task_execution():
         direct_task_recovery_loop.start()
+    # 审计事件落库（步骤 7）：文件轨迹仍开启，数据库是查询入口。
+    audit_writer = configure_audit_db_writer()
+    audit_writer.start()
     logger.info("数据库初始化完成")
     yield
     # 关闭时清理资源
+    await audit_writer.stop()
     await workflow_reconcile_loop.stop()
     if use_direct_task_execution():
         await direct_task_recovery_loop.stop()

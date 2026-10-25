@@ -34,6 +34,7 @@ from app.services.standard_input_uploads import (
     standard_uploads_need_default_project,
     validate_standard_input_uploads,
 )
+from app.services.traceability import record_task_inputs
 from app.tasks.attempts import (
     invoke_with_optional_attempt,
     new_execution_attempt_id,
@@ -566,6 +567,16 @@ async def create_and_schedule_tool_task(
             params=task_input["params"],
             file_ids=task_input["file_ids"],
         )
+    )
+
+    # 输入快照与任务同事务写入（docs/04 §9.2 只追加）：任务一旦存在，它的输入
+    # 就已是历史事实，不允许事后从活表反推。
+    await record_task_inputs(
+        db,
+        task=task,
+        tool_version=tool_version,
+        prepared=prepared,
+        extra_data=command.extra_data,
     )
 
     await record_tool_usage(db, str(tool.id))

@@ -3,12 +3,14 @@
 
 from fastapi import APIRouter
 from app.api.v1 import (
+    admin_audit,
     artifacts,
     auth,
     compounds,
     files,
     gpu,
     projects,
+    results,
     system,
     targets,
     tasks,
@@ -45,8 +47,11 @@ api_router.include_router(targets.project_router, prefix="/projects", tags=["靶
 api_router.include_router(targets.router, tags=["靶点与结构"])
 api_router.include_router(compounds.project_router, prefix="/projects", tags=["化合物与候选物"])
 api_router.include_router(compounds.router, tags=["化合物与候选物"])
+api_router.include_router(results.project_router, prefix="/projects", tags=["结果与追溯"])
+api_router.include_router(results.router, tags=["结果与追溯"])
 api_router.include_router(system.router, prefix="/system", tags=["系统"])
 api_router.include_router(websocket.router, tags=["WebSocket"])
 api_router.include_router(workflows.router, prefix="/workflows", tags=["工作流"])
 api_router.include_router(workspace.router, prefix="/workspace", tags=["工作台"])
 api_router.include_router(image_assets.router, prefix="/admin/image-assets", tags=["管理员镜像资产"])
+api_router.include_router(admin_audit.router, prefix="/admin/audit-logs", tags=["管理员审计日志"])
