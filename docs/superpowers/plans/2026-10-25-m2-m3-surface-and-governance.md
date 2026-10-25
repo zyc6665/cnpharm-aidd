@@ -472,16 +472,17 @@ git worktree add .worktrees/pr4-compounds -b feat/compounds-results-ui main
 
 每个子智能体只在自己的 worktree 里工作，**绝不跨目录**。前端依赖各 worktree 独立 `npm ci`（Windows 下不要用 `ln -s`）。
 
-## 4.2 子智能体分工（4 个并行）
+## 4.2 子智能体分工（5 个并行）
 
-| 子智能体 | 范围 | 交付物 |
+| 子智能体 | 范围 | worktree / 分支 |
 |---|---|---|
-| `impl-pr1` | Task 1 + Task 2 | 分支 `feat/decisions-and-stage` 推送到远端 + 本地全绿 |
-| `impl-pr2` | Task 3 + Task 4 + Task 5 | 分支 `feat/multipart-datasets` 推送 + `alembic heads` 单头 |
-| `impl-pr3` | Task 6 + Task 7 | 分支 `feat/targets-ui` 推送 + `vue-tsc` 与 vitest 全绿 |
-| `impl-pr4` | Task 8 + Task 9 | 分支 `feat/compounds-results-ui` 推送 + `vue-tsc` 与 vitest 全绿 |
+| `impl-pr1` | Task 1 + Task 2 | `.worktrees/pr1-decisions` / `feat/decisions-and-stage` |
+| `impl-pr2` | Task 3 + Task 4 + Task 5 | `.worktrees/pr2-uploads` / `feat/multipart-datasets` |
+| `impl-pr3` | Task 6 + Task 7 | `.worktrees/pr3-targets` / `feat/targets-ui` |
+| `impl-pr4` | Task 8 + Task 9 | `.worktrees/pr4-compounds` / `feat/compounds-results-ui` |
+| `impl-pr5` | Task 10 | `.worktrees/pr5-admin` / `feat/admin-compute-audit` |
 
-每个子智能体的 prompt 必须自带：仓库路径、worktree 路径、分支名、任务编号、**§2 的插入锚点原文**、Global Constraints、以及「完成后回报：改动文件清单 / 测试命令与输出 / 已知未做项」。
+每个子智能体的 prompt 必须自带：仓库路径、worktree 路径、分支名、任务编号、**§2 的插入锚点原文**、Global Constraints、明确要求的验证命令与通过判据、以及「完成后回报：改动文件清单 / 测试命令与输出 / 已知未做项」。**明令不要跨 worktree 改代码，也不要伪造测试通过。**
 
 ## 4.3 Code Review（开发完成后逐个派）
 
@@ -493,7 +494,7 @@ git worktree add .worktrees/pr4-compounds -b feat/compounds-results-ui main
 4. 只追加表是否有 UPDATE/DELETE 路径；
 5. i18n 是否 zh/en 双份齐全；
 6. 是否有 `any`、`console.log`、公网域名；
-7. 迁移 `down_revision` 是否正确、`alembic heads` 是否单头；
+7. 迁移 `down_revision` 是否正确、`alembic heads` 是否单头（PR1+PR2 合入后）；
 8. 测试是否覆盖 Review Focus 的 6 条。
 
 reviewer 输出格式：`BLOCKER` / `SHOULD` / `NIT` 三级 + 文件:行号 + 具体改法。BLOCKER 必须修完再合。
@@ -505,12 +506,12 @@ reviewer 输出格式：`BLOCKER` / `SHOULD` / `NIT` 三级 + 文件:行号 + �
 gh pr merge <pr1> --repo zyc6665/cnpharm-aidd --squash --delete-branch
 git switch main && git pull --ff-only
 
-# 2) PR2 rebase 到新 main（merge 迁移此时与 20261027_01 汇合）
+# 2) PR2 rebase 到新 main（merge 迁移此时与 20261027_01 汇合，heads 收敛为单头）
 cd .worktrees/pr2-uploads && git fetch origin && git rebase origin/main && git push --force-with-lease
 gh pr merge <pr2> --repo zyc6665/cnpharm-aidd --squash --delete-branch
 
-# 3) PR3、PR4 同样 rebase 后合入；若 router/locales 冲突，保留双方新增（union），逐条核对路由名不重名
-# 4) PR5 由主线直接做
+# 3) PR3/PR4/PR5 同样 rebase 后合入；若 router/locales 冲突，保留双方新增（union），逐条核对路由名与 i18n 键不重名
+# 4) PR6 由主线直接做
 ```
 
 **关键检查点**：每次合入后立即在 main 上跑 `alembic upgrade head` 与 `alembic heads`，并在 CI 全绿后再合下一个。
