@@ -32,12 +32,29 @@ export function formatOptionalText(value: string | null | undefined): string {
   return trimmed.length > 0 ? trimmed : PLACEHOLDER
 }
 
+/**
+ * 后端 naive UTC 时间戳的形态：`2026-10-25T13:00:00` / `2026-10-25 13:00:00` 等，**不带时区后缀**。
+ *
+ * 后端所有时间列都是 naive UTC（`backend/app/common/time.py` 的 `utcnow()` 会
+ * `replace(tzinfo=None)`），序列化后不带 `Z`。而 `new Date('2026-10-25T13:00:00')`
+ * 会按**浏览器本地时区**解释，东八区会整体晚 8 小时。
+ */
+const NAIVE_DATE_TIME = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/
+
+/** 给 naive UTC 时间戳补上 `Z`，让 `new Date` 按 UTC 解析；已带时区的原样返回。 */
+export function normalizeServerTimestamp(value: string): string {
+  if (!NAIVE_DATE_TIME.test(value)) {
+    return value
+  }
+  return `${value.replace(' ', 'T')}Z`
+}
+
 /** 时间戳展示（本地时间）；无法解析时回退为原始文本。 */
 export function formatTargetDateTime(value: string | null | undefined): string {
   if (!value) {
     return PLACEHOLDER
   }
-  const parsed = new Date(value)
+  const parsed = new Date(normalizeServerTimestamp(value))
   if (Number.isNaN(parsed.getTime())) {
     return value
   }
@@ -71,6 +88,17 @@ export function pickStructureFile(
   preferredRoles: readonly string[] = STRUCTURE_PREVIEW_FILE_ROLES
 ): StructureFileLink | null {
   for (const role of preferredRoles) {
+    const match = files.find((file) => file.role === role && file.download_url)
+    if (match) {
+      return match
+    }
+  }
+  // 调用方给定的角色全部落空时，仍按默认优先级（结构 → 准备后 → pdbqt）兜底，
+  // 避免因为清单顺序把 pdbqt 当成首选渲染。
+  for (const role of STRUCTURE_PREVIEW_FILE_ROLES) {
+    if (preferredRoles.includes(role)) {
+      continue
+    }
     const match = files.find((file) => file.role === role && file.download_url)
     if (match) {
       return match
@@ -135,15 +163,32 @@ export function buildStructurePreviewArtifact(
   }
 }
 
-/** 结构文件角色的中文/英文展示标签（走 i18n 之外的兜底文案）。 */
+/** 结构文件角色的展示标签：后端给的是枚举名，原样透出。 */
 export function formatSourceType(value: string | null | undefined): string {
   if (!value) {
     return PLACEHOLDER
   }
-  const map: Record<string, string> = {
-    PREDICTED: 'PREDICTED',
-    IMPORTED: 'IMPORTED',
-    PREPARED: 'PREPARED'
+  return value
+}
+
+/**
+ * 从请求异常里取用户可读的错误文案。
+ *
+ * 与 `domain/tools/detail-file-inputs.ts` 的 `getToolRequestErrorMessage` 同构：
+ * axios 的原始 message 是 `Request failed with status code 400`，没有任何信息量；
+ * 后端 `ApiResponse.message` 才是真正的业务原因（如「蛋白缺少序列，无法提交结构预测」）。
+ */
+export function resolveTargetErrorMessage(cause: unknown, fallback: string): string {
+  const responseMessage = (cause as { response?: { data?: { message?: unknown } } })?.response?.data
+    ?.message
+  if (typeof responseMessage === 'string' && responseMessage.trim()) {
+    return responseMessage.trim()
   }
-  return map[value] ?? value
+
+  const message = (cause as { message?: unknown })?.message
+  if (typeof message === 'string' && message.trim()) {
+    return message.trim()
+  }
+
+  return fallback
 }

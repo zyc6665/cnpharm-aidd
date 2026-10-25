@@ -974,9 +974,13 @@ export default {
       title: 'Structure prediction',
       subtitle: 'Submit a Boltz-2 structure prediction task',
       model: 'Model name',
-      numRecycles: 'Recycles (num_recycles)',
+      numRecycles: 'Recycles (numRecycles)',
       seed: 'Random seed (seed)',
-      dcu: 'DCU count',
+      useMsa: 'Enable MSA (useMsa)',
+      useMsaHint:
+        'When off, no multiple sequence alignment is run — faster, and usually enough for single-sequence targets.',
+      resourceManagedByPlatform:
+        'Default resource profile is determined by the platform per tool version and cannot be adjusted per run.',
       submit: 'Submit prediction',
       submitted: 'Structure prediction task submitted',
       failed: 'Failed to submit structure prediction task',

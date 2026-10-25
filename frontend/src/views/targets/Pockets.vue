@@ -17,6 +17,7 @@
       :title="t('targets.loadFailed')"
       :description="t('targets.loadFailedHint')"
       :action-text="t('targets.pockets.backToStructure')"
+      :to="`/structures/${structureId}`"
     />
 
     <SkeletonList v-else-if="loading && pockets.length === 0" :count="4" />
@@ -113,6 +114,7 @@
     formatPocketScore,
     formatPocketVolume,
     pocketScoreTone,
+    resolveTargetErrorMessage,
     sortPocketsByScore
   } from '@/domain/targets'
   import type { PocketSummary } from '@/types/targets'
@@ -162,13 +164,13 @@
   async function handleSelect(pocket: PocketSummary) {
     selectingId.value = pocket.id
     try {
-      const response = await selectPocket(pocket.id, !pocket.selected)
-      rawPockets.value = rawPockets.value.map((item) =>
-        item.id === response.data.id ? response.data : item
-      )
+      await selectPocket(pocket.id, !pocket.selected)
+      // 选定是「同结构内互斥」语义：后端会连带把其余口袋置为未选。
+      // 本地手工 patch 必须复刻这条连带规则，一旦后端再演化（如新增取消语义）就会漏；整表重拉最稳。
+      await load()
       message.success(t('targets.pockets.selectSuccess'))
     } catch (cause) {
-      message.error(cause instanceof Error ? cause.message : t('targets.pockets.selectFailed'))
+      message.error(resolveTargetErrorMessage(cause, t('targets.pockets.selectFailed')))
     } finally {
       selectingId.value = ''
     }

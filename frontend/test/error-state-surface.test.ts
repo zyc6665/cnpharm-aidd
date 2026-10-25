@@ -28,5 +28,7 @@ test('统一错误状态组件应提供错误码、说明和返回首页操作',
   assert.equal(source.includes('app-error-state'), true)
   assert.equal(source.includes('code'), true)
   assert.equal(source.includes('description'), true)
-  assert.equal(source.includes('router-link to="/"'), true)
+  // 跳转目标可被页面覆盖（页面内错态回到项目/靶点），但默认必须仍是首页。
+  assert.equal(source.includes(':to="to"'), true)
+  assert.equal(source.includes("{ to: '/' }"), true)
 })

@@ -64,15 +64,25 @@ export function formatPocketCenter(center: AxisVector | null | undefined): strin
   return parts.map(formatAxis).join(', ')
 }
 
+/**
+ * 口袋评分分档阈值（结合自由能口径，单位 kcal/mol，越负越强）。
+ *
+ * ⚠️ 阈值待 LVpocket 输出契约确认：`docs/05` §5.2 的示例 score 是正值（18.42），
+ * 若后端最终确认是正值体系（越大越好），这三个阈值需整体反转，`pocketScoreTone`
+ * 的比较方向也要同步改。此处不预先定案，只把口径集中到具名常量。
+ */
+export const POCKET_SCORE_STRONG_THRESHOLD = -8
+export const POCKET_SCORE_MEDIUM_THRESHOLD = -6
+
 /** 按 `<= -8` / `<= -6` / 其他 分成 strong / medium / weak 三档。 */
 export function pocketScoreTone(score: number | null | undefined): PocketScoreTone {
   if (typeof score !== 'number' || !Number.isFinite(score)) {
     return 'weak'
   }
-  if (score <= -8) {
+  if (score <= POCKET_SCORE_STRONG_THRESHOLD) {
     return 'strong'
   }
-  if (score <= -6) {
+  if (score <= POCKET_SCORE_MEDIUM_THRESHOLD) {
     return 'medium'
   }
   return 'weak'

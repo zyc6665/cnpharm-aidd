@@ -166,9 +166,12 @@ export interface ProteinCreateInput {
 /** 结构预测入参（`StructurePredict`）。 */
 export interface StructurePredictInput {
   model_ref?: { name: string; version?: string }
+  /** 直接透传给工具的参数（后端 `params: {**data.params}`，**不做 snake↔camel 转换**）。 */
   params?: Record<string, string | number | boolean>
-  scale?: string
-  resource_profile?: string
+  /** 后端 `scale: dict[str, Any] | None`（schema `extra='forbid'`）。 */
+  scale?: Record<string, unknown>
+  /** 后端 `resource_profile: dict[str, Any] | None`；注意提交侧当前并不消费。 */
+  resource_profile?: Record<string, unknown>
   priority?: 'low' | 'normal' | 'high'
 }
 
@@ -187,5 +190,4 @@ export interface TargetListParams {
   page?: number
   page_size?: number
   keyword?: string
-  [key: string]: string | number | undefined
 }

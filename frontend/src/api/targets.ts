@@ -36,7 +36,7 @@ export interface StructurePrepareInput {
 
 /** GET /projects/{projectId}/targets */
 export const listTargets = (projectId: string, params?: TargetListParams) =>
-  get<PaginatedTargets>(`/projects/${projectId}/targets`, params, READ_OPTIONS)
+  get<PaginatedTargets, TargetListParams>(`/projects/${projectId}/targets`, params, READ_OPTIONS)
 
 /** POST /projects/{projectId}/targets */
 export const createTarget = (projectId: string, data: TargetCreateInput) =>
@@ -82,9 +82,9 @@ export const listStructures = (proteinId: string) =>
 export const getStructure = (structureId: string) =>
   get<ProteinStructureDetail>(`/structures/${structureId}`, undefined, READ_OPTIONS)
 
-/** POST /structures/{structureId}:prepare */
+/** POST /structures/{structureId}:prepare → 任务提交回执（含 task_id） */
 export const prepareStructure = (structureId: string, data: StructurePrepareInput = {}) =>
-  post<ProteinStructureDetail>(`/structures/${structureId}:prepare`, data, READ_OPTIONS)
+  post<TaskSubmission>(`/structures/${structureId}:prepare`, data, READ_OPTIONS)
 
 /** GET /structures/{structureId}/pdb 的浏览器访问地址（浏览器直连文件下载）。 */
 export const structurePdbUrl = (structureId: string): string =>

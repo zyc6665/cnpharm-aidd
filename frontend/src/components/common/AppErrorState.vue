@@ -5,7 +5,7 @@
       <h1 class="app-error-state__code">{{ code }}</h1>
       <h2 class="app-error-state__title">{{ title }}</h2>
       <p class="app-error-state__description">{{ description }}</p>
-      <router-link to="/">
+      <router-link :to="to">
         <a-button type="primary" size="large">
           {{ actionText }}
         </a-button>
@@ -15,12 +15,22 @@
 </template>
 
 <script setup lang="ts">
-  defineProps<{
-    code: string
-    title: string
-    description: string
-    actionText: string
-  }>()
+  withDefaults(
+    defineProps<{
+      code: string
+      title: string
+      description: string
+      actionText: string
+      /**
+       * 操作按钮的跳转目标。
+       *
+       * 默认 `/`（403/404 的「返回首页」）；页面内错态可传项目/靶点等上游路径，
+       * 让按钮真正回到用户上一级，而不是把用户甩到首页。
+       */
+      to?: string
+    }>(),
+    { to: '/' }
+  )
 </script>
 
 <style scoped lang="less">

@@ -13,6 +13,7 @@
       :title="t('targets.loadFailed')"
       :description="t('targets.loadFailedHint')"
       :action-text="t('targets.predict.backToTarget')"
+      :to="backLink"
     />
 
     <SkeletonDetail v-else-if="loading && !protein" />
@@ -65,16 +66,15 @@
             data-testid="predict-seed"
           />
         </a-form-item>
-        <a-form-item :label="t('targets.predict.dcu')">
-          <a-input-number
-            v-model:value="form.dcu"
-            class="number-input"
-            :min="1"
-            :max="8"
-            :precision="0"
-            data-testid="predict-dcu"
-          />
+        <a-form-item :label="t('targets.predict.useMsa')" :extra="t('targets.predict.useMsaHint')">
+          <a-switch v-model:checked="form.useMsa" data-testid="predict-use-msa" />
         </a-form-item>
+
+        <p class="resource-note" data-testid="predict-resource-note">
+          <a-typography-text type="secondary">
+            {{ t('targets.predict.resourceManagedByPlatform') }}
+          </a-typography-text>
+        </p>
 
         <div class="predict-actions">
           <a-button
@@ -101,12 +101,13 @@
   import AppErrorState from '@/components/common/AppErrorState.vue'
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
   import { getProtein, predictStructure } from '@/api/targets'
+  import { resolveTargetErrorMessage } from '@/domain/targets'
   import type { ProteinDetail } from '@/types/targets'
 
   const DEFAULT_MODEL = 'boltz-2'
   const DEFAULT_NUM_RECYCLES = 3
-  const DEFAULT_DCU = 1
   const DEFAULT_SEED = 42
+  const DEFAULT_USE_MSA = false
 
   const route = useRoute()
   const router = useRouter()
@@ -122,7 +123,7 @@
     modelName: DEFAULT_MODEL,
     numRecycles: DEFAULT_NUM_RECYCLES,
     seed: DEFAULT_SEED,
-    dcu: DEFAULT_DCU
+    useMsa: DEFAULT_USE_MSA
   })
 
   const sequenceMissing = computed(() => {
@@ -163,27 +164,28 @@
     const modelName = form.modelName.trim() || DEFAULT_MODEL
     const numRecycles = normalizeNumber(form.numRecycles, DEFAULT_NUM_RECYCLES)
     const seed = normalizeNumber(form.seed, DEFAULT_SEED)
-    const dcu = normalizeNumber(form.dcu, DEFAULT_DCU)
 
-    if (numRecycles < 1 || seed < 0 || dcu < 1) {
+    if (numRecycles < 1 || seed < 0) {
       message.warning(t('targets.predict.invalidNumber'))
       return
     }
 
     submitting.value = true
     try {
+      // 键名按 docs/05 §5.1 与 docs/16 的口径（camelCase）；后端 `params` 直接透传，
+      // 没有 snake↔camel 转换层，写成 num_recycles 工具侧会读不到。
       const response = await predictStructure(proteinId.value, {
         model_ref: { name: modelName },
         params: {
-          num_recycles: numRecycles,
-          seed,
-          num_dcu: dcu
+          useMsa: form.useMsa,
+          numRecycles,
+          seed
         }
       })
       message.success(t('targets.predict.submitted'))
       await router.push({ name: 'TaskDetail', params: { id: response.data.task_id } })
     } catch (cause) {
-      message.error(cause instanceof Error ? cause.message : t('targets.predict.failed'))
+      message.error(resolveTargetErrorMessage(cause, t('targets.predict.failed')))
     } finally {
       submitting.value = false
     }
@@ -230,6 +232,11 @@
 
   .number-input {
     width: 180px;
+  }
+
+  .resource-note {
+    margin: 0 0 @spacing-md;
+    font-size: @font-size-sm;
   }
 
   .predict-actions {

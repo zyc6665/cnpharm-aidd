@@ -8,6 +8,13 @@
       <template #actions>
         <a-button :loading="loading" @click="load">{{ t('targets.refresh') }}</a-button>
         <a-button
+          :loading="preparing"
+          data-testid="prepare-structure-button"
+          @click="handlePrepare"
+        >
+          {{ t('targets.structure.prepare') }}
+        </a-button>
+        <a-button
           type="primary"
           :loading="pocketSubmitting"
           data-testid="predict-pockets-button"
@@ -25,6 +32,7 @@
       :title="t('targets.loadFailed')"
       :description="t('targets.loadFailedHint')"
       :action-text="t('targets.structure.backToTarget')"
+      :to="backLink"
     />
 
     <SkeletonDetail v-else-if="loading && !structure" />
@@ -137,7 +145,8 @@
     getProtein,
     getStructure,
     getStructurePdbManifest,
-    predictPockets
+    predictPockets,
+    prepareStructure
   } from '@/api/targets'
   import {
     buildStructurePreviewArtifact,
@@ -146,6 +155,7 @@
     formatPocketScore,
     formatToolRef,
     pocketScoreTone,
+    resolveTargetErrorMessage,
     sortPocketsByScore,
     STRUCTURE_PREVIEW_FILE_ROLES
   } from '@/domain/targets'
@@ -164,6 +174,7 @@
   const loading = ref(false)
   const loadError = ref(false)
   const pocketSubmitting = ref(false)
+  const preparing = ref(false)
 
   const pockets = computed<PocketSummary[]>(() =>
     sortPocketsByScore(structure.value?.pockets ?? [])
@@ -235,9 +246,24 @@
         `${t('targets.structure.pocketsSubmitted')} (${response.data.task_id})`
       )
     } catch (cause) {
-      message.error(cause instanceof Error ? cause.message : t('targets.structure.pocketsFailed'))
+      message.error(resolveTargetErrorMessage(cause, t('targets.structure.pocketsFailed')))
     } finally {
       pocketSubmitting.value = false
+    }
+  }
+
+  async function handlePrepare() {
+    if (!structure.value) {
+      return
+    }
+    preparing.value = true
+    try {
+      const response = await prepareStructure(structure.value.id, {})
+      message.success(`${t('targets.structure.prepareSuccess')} (${response.data.task_id})`)
+    } catch (cause) {
+      message.error(resolveTargetErrorMessage(cause, t('targets.structure.prepareFailed')))
+    } finally {
+      preparing.value = false
     }
   }
 

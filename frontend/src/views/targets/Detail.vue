@@ -23,6 +23,7 @@
       :title="t('targets.loadFailed')"
       :description="t('targets.loadFailedHint')"
       :action-text="t('targets.backToProject')"
+      :to="projectId ? `/projects/${projectId}` : '/'"
     />
 
     <template v-else>
@@ -226,7 +227,8 @@
   import {
     formatOptionalText,
     formatPlddtMean,
-    formatTargetDateTime
+    formatTargetDateTime,
+    resolveTargetErrorMessage
   } from '@/domain/targets'
   import type {
     ProteinDetail,
@@ -343,7 +345,7 @@
       const response = await uploadFile(file)
       return response.data.id
     } catch (cause) {
-      message.error(cause instanceof Error ? cause.message : t('targets.detail.uploadFailed'))
+      message.error(resolveTargetErrorMessage(cause, t('targets.detail.uploadFailed')))
       return null
     }
   }
@@ -379,7 +381,7 @@
       message.success(t('targets.detail.addSuccess'))
       await load()
     } catch (cause) {
-      message.error(cause instanceof Error ? cause.message : t('targets.detail.addFailed'))
+      message.error(resolveTargetErrorMessage(cause, t('targets.detail.addFailed')))
     } finally {
       savingProtein.value = false
     }
@@ -414,7 +416,7 @@
       message.success(t('targets.detail.importSuccess'))
       await load()
     } catch (cause) {
-      message.error(cause instanceof Error ? cause.message : t('targets.detail.importFailed'))
+      message.error(resolveTargetErrorMessage(cause, t('targets.detail.importFailed')))
     } finally {
       importing.value = false
     }

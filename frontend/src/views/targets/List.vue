@@ -25,6 +25,7 @@
       :title="t('targets.loadFailed')"
       :description="t('targets.loadFailedHint')"
       :action-text="t('targets.backToProject')"
+      :to="`/projects/${projectId}`"
     />
 
     <template v-else>
@@ -148,7 +149,7 @@
   import SkeletonList from '@/components/common/SkeletonList.vue'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import { createTarget, listTargets } from '@/api/targets'
-  import { formatOptionalText, formatTargetDateTime } from '@/domain/targets'
+  import { formatOptionalText, formatTargetDateTime, resolveTargetErrorMessage } from '@/domain/targets'
   import type { TargetSummary } from '@/types/targets'
 
   const DEFAULT_PAGE_SIZE = 20
@@ -176,14 +177,14 @@
     description: ''
   })
 
-  const columns = [
-    { title: '名称', key: 'name' },
-    { title: '类型', key: 'targetType', width: 120 },
-    { title: 'UniProt', key: 'uniprot', width: 160 },
-    { title: '基因', key: 'gene', width: 140 },
-    { title: '创建时间', key: 'createdAt', width: 190 },
-    { title: '操作', key: 'actions', width: 110 }
-  ]
+  const columns = computed(() => [
+    { title: t('targets.list.name'), key: 'name' },
+    { title: t('targets.list.type'), key: 'targetType', width: 120 },
+    { title: t('targets.list.uniprot'), key: 'uniprot', width: 160 },
+    { title: t('targets.list.gene'), key: 'gene', width: 140 },
+    { title: t('targets.createdAt'), key: 'createdAt', width: 190 },
+    { title: t('targets.actions'), key: 'actions', width: 110 }
+  ])
 
   async function load() {
     if (!projectId.value) {
@@ -241,7 +242,7 @@
       message.success(t('targets.list.createSuccess'))
       await router.push({ name: 'TargetDetail', params: { targetId: response.data.id } })
     } catch (cause) {
-      message.error(cause instanceof Error ? cause.message : t('targets.list.createFailed'))
+      message.error(resolveTargetErrorMessage(cause, t('targets.list.createFailed')))
     } finally {
       creating.value = false
     }

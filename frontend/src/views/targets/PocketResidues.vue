@@ -27,6 +27,7 @@
       :title="t('targets.loadFailed')"
       :description="t('targets.loadFailedHint')"
       :action-text="t('targets.residues.backToPockets')"
+      :to="backLink"
     />
 
     <SkeletonList v-else-if="loading && residues.length === 0" :count="6" />
