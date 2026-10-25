@@ -11,8 +11,8 @@ BACKEND_ROOT = PROJECT_ROOT / "backend"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.agents.aidd.capabilities import CapabilityOutput, ToolCapability, get_capability  # noqa: E402
-from app.agents.aidd.outputs import extract_semantic_outputs, parse_sdf_smiles  # noqa: E402
+from app.tools.capabilities import CapabilityOutput, ToolCapability, get_capability  # noqa: E402
+from app.tools.semantic_outputs import extract_semantic_outputs, parse_sdf_smiles  # noqa: E402
 
 
 def test_extracts_output_file_by_extension_and_filename() -> None:

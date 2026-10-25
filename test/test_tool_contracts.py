@@ -9,9 +9,8 @@ BACKEND_ROOT = PROJECT_ROOT / "backend"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.agents.aidd.capabilities import AIDD_TOOL_CAPABILITIES
-from app.agents.aidd.plan_schema import parse_model_plan
-from app.agents.aidd.registry import capability_to_tool_summary
+from app.tools.capabilities import AIDD_TOOL_CAPABILITIES
+from app.tools.capability_registry import capability_to_tool_summary
 from app.services.tool_contracts import (
     build_tool_contract,
     collect_tool_contract_validation_errors,
@@ -669,34 +668,6 @@ def test_parameter_only_builtin_fetch_contract_is_valid_and_executable():
     assert contract["validation"] == {"status": "valid", "errors": []}
     assert contract["capability"]["inputs"] == []
     assert contract["capability"]["outputs"][0]["source"] == "artifact"
-
-
-def test_planner_available_tools_use_contract_slug_as_source_of_truth():
-    plan = parse_model_plan(
-        """
-        {
-          "intent": "property_prediction",
-          "steps": [
-            {
-              "step_key": "predict_property",
-              "capability": "property_prediction",
-              "tool_slug": "molp-pc-property-prediction",
-              "inputs": {"smiles_csv": "agent_input"},
-              "params": {}
-            }
-          ]
-        }
-        """,
-        available_tools=[
-            {
-                "slug": "molp-pc-property-prediction",
-                "capability": "property_prediction",
-                "outputs": ["property_report"],
-            }
-        ],
-    )
-
-    assert plan.steps[0].tool_slug == "molp-pc-property-prediction"
 
 
 def test_contract_validation_reports_enabled_capability_shape_errors():

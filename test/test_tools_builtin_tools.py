@@ -18,8 +18,8 @@ BACKEND_ROOT = PROJECT_ROOT / "backend"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.agents.aidd import builtin_tools  # noqa: E402
-from app.agents.aidd.capabilities import AIDD_TOOL_CAPABILITIES  # noqa: E402
+from app.tools import builtin_tools  # noqa: E402
+from app.tools.capabilities import AIDD_TOOL_CAPABILITIES  # noqa: E402
 from app.common.exceptions import ValidationException  # noqa: E402
 from app.execution.result_parser import parse_standard_result  # noqa: E402
 from app.execution.standard_contracts import DeclaredArtifactOutput  # noqa: E402
@@ -756,7 +756,7 @@ class TestQueryChemblBuiltinTool:
         mock_result = {"source": "chembl", "record_count": 1, "records": []}
 
         with patch(
-            "app.agents.aidd.database_tools.query_chembl",
+            "app.external_databases.database_tools.query_chembl",
             new_callable=AsyncMock,
             return_value=mock_result,
         ):
@@ -803,7 +803,7 @@ class TestQueryPubchemBuiltinTool:
         mock_result = {"source": "pubchem", "record_count": 1, "records": []}
 
         with patch(
-            "app.agents.aidd.database_tools.query_pubchem",
+            "app.external_databases.database_tools.query_pubchem",
             new_callable=AsyncMock,
             return_value=mock_result,
         ):
@@ -826,7 +826,7 @@ class TestQueryPdbbindBuiltinTool:
         mock_result = {"source": "pdbbind", "record_count": 1, "records": []}
 
         with patch(
-            "app.agents.aidd.database_tools.query_pdbbind",
+            "app.external_databases.database_tools.query_pdbbind",
             new_callable=AsyncMock,
             return_value=mock_result,
         ):
@@ -848,7 +848,7 @@ class TestQueryPdbbindBuiltinTool:
         mock_result = {"source": "pdbbind", "record_count": 0, "records": []}
 
         with patch(
-            "app.agents.aidd.database_tools.query_pdbbind",
+            "app.external_databases.database_tools.query_pdbbind",
             new_callable=AsyncMock,
             return_value=mock_result,
         ):
@@ -972,7 +972,7 @@ class TestInteractionAnalysisBuiltinTool:
 class TestRunBuiltinToolDispatch:
     def test_registry_covers_all_virtual_capabilities(self):
         """确保所有注册的虚拟工具都有分发处理。"""
-        from app.agents.aidd.capabilities import AIDD_TOOL_CAPABILITIES
+        from app.tools.capabilities import AIDD_TOOL_CAPABILITIES
 
         virtual_slugs = {
             slug for slug, cap in AIDD_TOOL_CAPABILITIES.items() if cap.virtual
@@ -997,7 +997,7 @@ class TestRunBuiltinToolDispatch:
         mock_result = {"source": "test", "record_count": 0, "records": []}
 
         with patch(
-            "app.agents.aidd.database_tools.query_chembl",
+            "app.external_databases.database_tools.query_chembl",
             new_callable=AsyncMock,
             return_value=mock_result,
         ):
@@ -1005,7 +1005,7 @@ class TestRunBuiltinToolDispatch:
             assert r.outputs[0].semantic_type == "database_query_result"
 
         with patch(
-            "app.agents.aidd.database_tools.query_pubchem",
+            "app.external_databases.database_tools.query_pubchem",
             new_callable=AsyncMock,
             return_value=mock_result,
         ):
@@ -1048,7 +1048,7 @@ class TestRunBuiltinToolDispatch:
         mock_result = {"source": "chembl", "record_count": 0, "records": []}
 
         with patch(
-            "app.agents.aidd.database_tools.query_chembl",
+            "app.external_databases.database_tools.query_chembl",
             new_callable=AsyncMock,
             return_value=mock_result,
         ):

@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 from app.database.base import Base
-from app.models.agent import AgentRun
 from app.models.files import File
 from app.models.projects import Project, ProjectMember
 from app.models.users import User, UserRole, UserStatus
@@ -55,13 +54,6 @@ async def test_backfill_legacy_resources_is_idempotent_and_preserves_history():
                 storage_path="legacy/protein.pdb",
                 created_at=original_created_at,
             ),
-            AgentRun(
-                user_id=user.id,
-                message="Find pockets",
-                intent="pocket_detection",
-                input_type="protein_structure",
-                created_at=original_created_at,
-            ),
             workflow_definition,
             WorkflowRun(
                 owner_id=user.id,
@@ -90,7 +82,7 @@ async def test_backfill_legacy_resources_is_idempotent_and_preserves_history():
         assert len(memberships) == 1
         assert memberships[0].role == "owner"
         assert first.projects_created == 1
-        assert first.resources_linked == 5
+        assert first.resources_linked == 4
         assert second.projects_created == 0
         assert second.resources_linked == 0
 

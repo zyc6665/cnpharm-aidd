@@ -8,7 +8,6 @@ from typing import Any
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.agent import AgentRun
 from app.models.files import File
 from app.models.projects import Organization, Project, ProjectMember
 from app.models.users import User
@@ -29,7 +28,6 @@ class ProjectBackfillResult:
 
 RESOURCE_OWNERS: tuple[tuple[type[Any], Any], ...] = (
     (File, File.owner_id),
-    (AgentRun, AgentRun.user_id),
     (WorkflowDefinition, WorkflowDefinition.user_id),
     (WorkflowRun, WorkflowRun.owner_id),
     (ResearchBoard, ResearchBoard.owner_id),

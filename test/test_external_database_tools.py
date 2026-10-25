@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.agents.aidd import database_tools
+from app.external_databases import database_tools
 from app.common.exceptions import ValidationException
 from app.config import settings
 from app.exceptions.external_api import APIResponseException, APITimeoutException

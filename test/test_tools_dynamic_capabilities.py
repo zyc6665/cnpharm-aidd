@@ -16,8 +16,8 @@ BACKEND_ROOT = PROJECT_ROOT / "backend"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.agents.aidd.capabilities import AIDD_TOOL_CAPABILITIES, ToolCapability  # noqa: E402
-from app.agents.aidd.registry import (  # noqa: E402
+from app.tools.capabilities import AIDD_TOOL_CAPABILITIES, ToolCapability  # noqa: E402
+from app.tools.capability_registry import (  # noqa: E402
     _db_row_to_capability,
     load_available_tool_capabilities,
     load_tool_capability,

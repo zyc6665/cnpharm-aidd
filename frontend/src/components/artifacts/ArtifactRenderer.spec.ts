@@ -1,10 +1,8 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import ArtifactRenderer from './ArtifactRenderer.vue'
-import MessageTimeline from '@/components/conversation/MessageTimeline.vue'
 import ResultVisualizationPanel from '@/components/tasks/ResultVisualizationPanel.vue'
 import type { TypedArtifact } from '@/types/artifacts'
-import type { ConversationMessage } from '@/types/conversations'
 import type { Task } from '@/types/models'
 
 vi.mock('vue-i18n', () => ({
@@ -368,32 +366,6 @@ describe('ArtifactRenderer', () => {
     expect(metadata.text()).toContain('example/MolP-PC/tool-package-v2/docs/model-card.md')
     expect(metadata.text()).toContain('example/MolP-PC/tool-package-v2/docs/verification-record.md')
     expect(metadata.text()).toContain('engineering_smoke_only')
-  })
-
-  it('renders artifact reference blocks in the conversation timeline with the shared renderer', () => {
-    const message: ConversationMessage = {
-      id: 'message-1',
-      conversation_id: 'conversation-1',
-      branch_id: 'branch-1',
-      role: 'assistant',
-      plain_text: '产物已生成',
-      sequence: 1,
-      content: [
-        {
-          type: 'artifact_ref',
-          title: '口袋结果',
-          artifact_id: 'artifact-1',
-          artifact: artifact({ artifact_type: 'pocket_result', semantic_type: 'pocket_result' })
-        }
-      ]
-    } as ConversationMessage
-
-    const wrapper = mount(MessageTimeline, {
-      props: { messages: [message], canRun: true },
-      global: { stubs }
-    })
-
-    expect(wrapper.find('[data-testid="pocket-result-artifact"]').exists()).toBe(true)
   })
 
   it('prefers typed artifacts over legacy task output files in task visualization results', () => {

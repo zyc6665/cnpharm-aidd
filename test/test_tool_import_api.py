@@ -21,7 +21,7 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.auth.dependencies import get_current_user, get_current_user_optional
-from app.agents.aidd.registry import load_available_tool_capabilities
+from app.tools.capability_registry import load_available_tool_capabilities
 from app.database.base import Base
 from app.database.session import get_db
 from app.main import app

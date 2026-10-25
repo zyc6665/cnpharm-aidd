@@ -1,6 +1,5 @@
 export type ProjectWorkspaceNavKey =
   | 'overview'
-  | 'research'
   | 'workflow'
   | 'tasks'
   | 'lineage'
@@ -29,7 +28,6 @@ export function buildProjectWorkflowPath(projectId: string): string {
 export function buildProjectWorkspaceNavItems(projectId: string): ProjectWorkspaceNavItem[] {
   return [
     { key: 'overview', label: '项目总览', to: `/projects/${projectId}` },
-    { key: 'research', label: '智能体研究', to: `/projects/${projectId}/research` },
     { key: 'workflow', label: 'Workflow', to: buildProjectWorkflowPath(projectId) },
     { key: 'tasks', label: '任务中心', to: buildProjectTaskPath(projectId) },
     { key: 'lineage', label: 'Artifact 谱系', to: `/projects/${projectId}/lineage` },

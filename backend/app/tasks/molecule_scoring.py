@@ -265,7 +265,7 @@ def score_molecule_vina(candidate: MoleculeCandidate, receptor_path: Path | None
     if receptor_path is None or not shutil.which("vina") or not shutil.which("obabel"):
         return None
 
-    from app.agents.aidd.builtin_tools import run_vina_docking_with_tool
+    from app.tools.builtin_tools import run_vina_docking_with_tool
 
     with tempfile.TemporaryDirectory(prefix="molecule-scoring-") as tmp_dir:
         ligand_path = Path(tmp_dir) / "ligand.pdb"
@@ -414,7 +414,7 @@ def _is_molecule_generation_tool(tool_version: ToolVersion, tool: Tool | None) -
 
     if tool:
         try:
-            from app.agents.aidd.capabilities import AIDD_TOOL_CAPABILITIES
+            from app.tools.capabilities import AIDD_TOOL_CAPABILITIES
 
             capability = AIDD_TOOL_CAPABILITIES.get(tool.slug)
             return bool(capability and capability.capability == "molecule_generation")

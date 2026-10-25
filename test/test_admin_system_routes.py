@@ -336,7 +336,6 @@ async def test_feature_flags_endpoint_exposes_aidd_release_gates(
     items = {item["key"]: item for item in payload["items"]}
     expected_keys = {
         "AIDD_PROJECT_WORKSPACE_ENABLED",
-        "AIDD_PROJECT_CONVERSATIONS_ENABLED",
         "TOOL_PACKAGE_V1_ENABLED",
         "LEGACY_AIDD_API_ENABLED",
     }

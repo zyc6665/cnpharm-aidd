@@ -247,11 +247,7 @@
             </template>
           </WorkflowWorkbenchShell>
         </a-tab-pane>
-
-        <a-tab-pane key="agent" :tab="t('workflow.mode.agent')">
-          <AiddAgentPanel />
-        </a-tab-pane>
-        </a-tabs>
+         </a-tabs>
       </div>
     </div>
   </div>
@@ -263,7 +259,6 @@
   import { useRoute, useRouter } from 'vue-router'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
-  import AiddAgentPanel from '@/components/workflow/AiddAgentPanel.vue'
   import WorkflowArtifactPanel from '@/components/workflow/WorkflowArtifactPanel.vue'
   import WorkflowNodeInspector from '@/components/workflow/WorkflowNodeInspector.vue'
   import WorkflowPreflightPanel from '@/components/workflow/WorkflowPreflightPanel.vue'
@@ -286,7 +281,6 @@
   } from '@/workflow/project-context'
   import { buildWorkflowPreflight } from '@/workflow/preflight'
   import { buildWorkflowPreflightLabels } from '@/workflow/preflight-labels'
-  import type { AiddWorkflowDraft } from '@/types/models'
   import {
     useArtifactsStore,
     useToolsStore,
@@ -295,7 +289,7 @@
     useWorkflowStore
   } from '@/stores'
 
-  type WorkflowMode = 'manual' | 'agent'
+  type WorkflowMode = 'manual'
 
   const { t } = useI18n()
   const route = useRoute()
@@ -414,8 +408,6 @@
     handleDuplicateWorkflow,
     handleArchiveWorkflow,
     handleDeleteWorkflow,
-    applyWorkflowDraft,
-    saveWorkflowDraft,
     handleRefreshWorkflowRuns,
     handleLoadMoreWorkflowRuns,
     handleRunWorkflowDefinition,
@@ -467,16 +459,6 @@
     recordNodeTask: workflowStore.recordNodeTask,
     refreshArtifacts: () => artifactsStore.fetchArtifacts({ page: 1, page_size: 100 })
   })
-
-  async function handleAgentWorkflowDraft(draft: AiddWorkflowDraft, projectId?: string) {
-    const targetProjectId = projectId ?? routeProjectId.value
-    if (targetProjectId) {
-      await saveWorkflowDraft(draft, targetProjectId)
-    } else {
-      await applyWorkflowDraft(draft)
-    }
-    activeMode.value = 'manual'
-  }
 
   async function handleCanvasPresetChangeGuarded(canvasPresetId: unknown) {
     if (typeof canvasPresetId !== 'string') return

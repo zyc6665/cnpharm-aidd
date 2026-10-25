@@ -78,9 +78,9 @@ test('workflow page exposes workflow result report integration', () => {
   }
 })
 
-test('workflow page keeps agent mode available', () => {
-  assert.equal(pageSource.includes('AiddAgentPanel'), true)
-  assert.equal(pageSource.includes("key=\"agent\""), true)
+test('workflow page no longer ships the agent mode tab', () => {
+  assert.equal(pageSource.includes('AiddAgentPanel'), false)
+  assert.equal(pageSource.includes("key=\"agent\""), false)
 })
 
 test('workflow page and run detail user-facing copy should use locale keys', () => {
@@ -139,15 +139,15 @@ test('workflow workbench chrome status copy should use locale keys', () => {
   }
 })
 
-test('agent draft reuses persisted definition mapping and resets saved identity', () => {
+test('workflow persistence keeps canvas mapping without agent draft helpers', () => {
   for (const marker of [
-    'applyWorkflowDraft',
     'mapWorkflowDefinitionToCanvasPayload',
-    'workflowDefinitionsStore.clearCurrentWorkflowDefinition()',
-    'workflowRunInputSelections.value = { ...draft.input_files }',
     'producedOutputTypes',
     'selected_tool_by_node'
   ]) {
     assert.equal(persistenceSource.includes(marker), true, `missing ${marker}`)
+  }
+  for (const removed of ['applyWorkflowDraft', 'saveWorkflowDraft', 'AiddWorkflowDraft']) {
+    assert.equal(persistenceSource.includes(removed), false, `should be removed: ${removed}`)
   }
 })

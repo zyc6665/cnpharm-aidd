@@ -81,16 +81,6 @@ const stubs = {
     template: '<span class="popconfirm" @click="$emit(\'confirm\')"><slot /></span>',
   },
   AEmpty: true,
-  AiddAgentPanel: {
-    template: `
-      <button
-        class="open-project-agent"
-        type="button"
-      >
-        进入项目智能体
-      </button>
-    `,
-  },
   WorkflowNodeInspector: true,
   WorkflowNodeStatusBadge: true,
   WorkflowPreflightPanel: true,
@@ -376,16 +366,5 @@ describe('free workflow workbench', () => {
     await wrapper.findAll('button').find(button => button.text() === '删除')!.trigger('click')
     await flushPromises()
     expect(deleteWorkflowDefinition).toHaveBeenCalledWith('flow-active')
-  })
-
-  it('Agent 模式只挂载项目智能体入口，不再导入旧草稿', async () => {
-    const wrapper = renderWorkflow()
-    await flushPromises()
-
-    const callsBefore = vi.mocked(createWorkflowDefinition).mock.calls.length
-    await wrapper.find('.open-project-agent').trigger('click')
-    await flushPromises()
-
-    expect(vi.mocked(createWorkflowDefinition).mock.calls.length).toBe(callsBefore)
   })
 })
