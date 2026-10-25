@@ -12,7 +12,7 @@ test('项目工作台导航项覆盖所有项目内入口', () => {
 
   assert.deepEqual(
     items.map(item => item.label),
-    ['项目总览', '靶点与结构', 'Workflow', '任务中心', 'Artifact 谱系', '项目设置']
+    ['项目总览', '靶点与结构', 'Workflow', '任务中心', '数据资产', 'Artifact 谱系', '项目设置']
   )
   assert.deepEqual(
     items.map(item => item.to),
@@ -21,6 +21,7 @@ test('项目工作台导航项覆盖所有项目内入口', () => {
       '/projects/project-1/targets',
       '/projects/project-1/workflow',
       '/tasks?project_id=project-1',
+      '/projects/project-1/assets',
       '/projects/project-1/lineage',
       '/projects/project-1/settings'
     ]

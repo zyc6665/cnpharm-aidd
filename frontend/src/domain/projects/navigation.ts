@@ -1,10 +1,11 @@
 export type ProjectWorkspaceNavKey =
   | 'overview'
+  | 'targets'
   | 'workflow'
   | 'tasks'
+  | 'assets'
   | 'lineage'
   | 'settings'
-  | 'targets'
 
 export interface ProjectWorkspaceNavItem {
   key: ProjectWorkspaceNavKey
@@ -30,12 +31,17 @@ export function buildProjectTargetsPath(projectId: string): string {
   return `/projects/${projectId}/targets`
 }
 
+export function buildProjectAssetsPath(projectId: string): string {
+  return `/projects/${projectId}/assets`
+}
+
 export function buildProjectWorkspaceNavItems(projectId: string): ProjectWorkspaceNavItem[] {
   return [
     { key: 'overview', label: '项目总览', to: `/projects/${projectId}` },
     { key: 'targets', label: '靶点与结构', to: buildProjectTargetsPath(projectId) },
     { key: 'workflow', label: 'Workflow', to: buildProjectWorkflowPath(projectId) },
     { key: 'tasks', label: '任务中心', to: buildProjectTaskPath(projectId) },
+    { key: 'assets', label: '数据资产', to: buildProjectAssetsPath(projectId) },
     { key: 'lineage', label: 'Artifact 谱系', to: `/projects/${projectId}/lineage` },
     { key: 'settings', label: '项目设置', to: `/projects/${projectId}/settings` }
   ]

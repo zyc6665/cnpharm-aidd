@@ -33,11 +33,16 @@ test('任务详情页应复用共享输出摘要和日志预览组件', () => {
 test('工作台不应保留未引用的任务结果面板和孤儿翻译', () => {
   assert.equal(existsSync(resolve(rootDir, 'src/components/workflow/WorkflowTaskResultPanel.vue')), false)
 
+  // P-33/P-34 结果中心上线后，results 命名空间由 src/views/results/ 消费，
+  // 不再属于「孤儿翻译」；此处守住「命名空间必须有用例引用」这一原始意图。
   const zhSource = readSource('src/locales/zh-CN/index.ts')
   const enSource = readSource('src/locales/en-US/index.ts')
+  const resultListView = readSource('src/views/results/List.vue')
+  const resultDetailView = readSource('src/views/results/ResultDetail.vue')
 
-  assert.equal(zhSource.includes('results: {'), false)
-  assert.equal(enSource.includes('results: {'), false)
+  assert.equal(zhSource.includes('results: {'), enSource.includes('results: {'))
+  assert.equal(resultListView.includes("results."), true)
+  assert.equal(resultDetailView.includes("results."), true)
 })
 
 test('工作台页应提供节点结果标签、任务详情与产物下载入口', () => {
