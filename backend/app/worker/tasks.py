@@ -39,40 +39,49 @@ def _capability_signal_now() -> float:
     return time.monotonic()
 
 
-# ==================== WebSocket 通知辅助函数 ====================
+# ==================== 任务事件通知辅助函数 ====================
+#
+# 通知只做一件事：把「这个任务变了」告诉进程内的 SSE 订阅者
+# （backend/app/services/task_event_stream.py）。真正的字段值由 SSE 生成器
+# 回读数据库得到，因此这里丢一条通知不会丢状态，跨进程也不需要任何协调。
 
-async def _notify_websocket(method_name: str, *args: Any) -> None:
-    """调用 WebSocket 管理器的通知方法，失败时不影响任务主流程。"""
+
+def _publish_task_event(task_id: str, event_type: str, **payload: Any) -> None:
+    """向 SSE 订阅者广播一条「有变化」信号，失败时不影响任务主流程。"""
     try:
-        from app.websocket import ws_manager
-        await getattr(ws_manager, method_name)(*args)
+        from app.services.task_event_hub import get_task_event_hub
+
+        get_task_event_hub().publish(
+            task_id,
+            {"type": event_type, "taskId": task_id, "payload": payload},
+        )
     except Exception as e:
-        logger.debug(f"WebSocket 通知失败（可忽略）: {e}")
+        logger.debug(f"任务事件广播失败（可忽略）: {e}")
 
 
 async def notify_task_status(task_id: str, status: str, message: Optional[str] = None):
-    """通过 WebSocket 通知任务状态变更"""
-    await _notify_websocket("send_task_status", task_id, status, message)
+    """通知任务状态变更（SSE）。"""
+    _publish_task_event(task_id, "status", status=status, message=message)
 
 
 async def notify_task_progress(task_id: str, progress: float, message: Optional[str] = None):
-    """通过 WebSocket 通知任务进度"""
-    await _notify_websocket("send_task_progress", task_id, progress, message)
+    """通知任务进度变更（SSE）。"""
+    _publish_task_event(task_id, "progress", progress=progress, message=message)
 
 
 async def notify_task_log(task_id: str, level: str, log_message: str):
-    """通过 WebSocket 通知任务日志"""
-    await _notify_websocket("send_task_log", task_id, level, log_message)
+    """通知任务产生新日志（SSE）。"""
+    _publish_task_event(task_id, "log", level=level, message=log_message)
 
 
 async def notify_task_complete(task_id: str, result: Optional[Dict[str, Any]] = None):
-    """通过 WebSocket 通知任务完成"""
-    await _notify_websocket("send_task_complete", task_id, result)
+    """通知任务完成（SSE）。"""
+    _publish_task_event(task_id, "complete", hasResult=result is not None)
 
 
 async def notify_task_error(task_id: str, error: str):
-    """通过 WebSocket 通知任务错误"""
-    await _notify_websocket("send_task_error", task_id, error)
+    """通知任务失败（SSE）。"""
+    _publish_task_event(task_id, "error", error=error)
 
 
 # ==================== 工具任务执行 ====================
@@ -369,7 +378,7 @@ async def _execute_tool_task_impl_inner(
     """
     任务执行实现
 
-    这里是实际执行工具的逻辑，同时通过 WebSocket 推送实时进度
+    这里是实际执行工具的逻辑，同时通过 SSE 推送实时进度
     """
     from sqlalchemy import select
     from app.database.session import async_session_factory
@@ -425,7 +434,7 @@ async def _execute_tool_task_impl_inner(
             ).scalar_one_or_none()
             return _stale_task_result(latest_task or task)
 
-        # WebSocket 通知：任务开始
+        # SSE 通知：任务开始
         await notify_task_status(task_id, TaskStatus.RUNNING.value, "任务开始执行")
         await notify_task_log(task_id, "INFO", "任务开始执行")
 
@@ -566,7 +575,7 @@ async def _execute_tool_task_impl_inner(
                     logger.info("任务 %s 的 attempt 已过期，忽略进度提交", task_id)
                     return
 
-                # WebSocket 通知：进度更新
+                # SSE 通知：进度更新
                 await notify_task_progress(task_id, progress, message)
                 await notify_task_log(task_id, "INFO", message)
 
@@ -690,7 +699,7 @@ async def _execute_tool_task_impl_inner(
                 logger.info("任务 %s 的 attempt 已过期，忽略成功提交", task_id)
                 return _stale_task_result(latest_task or task)
 
-            # WebSocket 通知：任务完成
+            # SSE 通知：任务完成
             await notify_task_log(task_id, "INFO", "任务执行成功")
             await notify_task_complete(task_id, output_result)
 
@@ -951,7 +960,7 @@ async def _execute_tool_task_impl_inner(
                 logger.info("任务 %s 的 attempt 已过期，忽略失败提交", task_id)
                 return _stale_task_result(latest_task or task)
 
-            # WebSocket 通知：任务失败
+            # SSE 通知：任务失败
             await notify_task_log(task_id, "ERROR", f"任务执行失败: {str(e)}")
             await notify_task_error(task_id, str(e))
 

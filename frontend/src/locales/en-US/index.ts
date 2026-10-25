@@ -1560,7 +1560,7 @@ export default {
     diskTotal: 'Total Disk',
     diskFree: 'Free Disk',
     totalFiles: 'Total Files',
-    activeConnections: 'Active Connections',
+    sseSubscriptions: 'Live Subscriptions',
     storageConfig: 'Storage Configuration',
     storageType: 'Storage Type',
     localStorage: 'Local Storage',

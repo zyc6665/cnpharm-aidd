@@ -3,13 +3,14 @@
 
 import logging
 from datetime import datetime
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import StreamingResponse
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
-from typing import Any, Optional
+from typing import Any, AsyncIterator, Optional
 
-from app.database.session import get_db
+from app.database.session import async_session_factory, get_db
 from app.models.files import File as FileModel
 from app.models.users import User
 from app.models.tools import Tool, ToolVersion
@@ -35,8 +36,8 @@ from app.tasks.naming import (
     _dedupe_file_ids,
     _extract_file_ids_from_result,
 )
-from app.auth.dependencies import get_current_user, get_admin_user
-from app.config import use_direct_task_execution
+from app.auth.dependencies import get_current_user, get_current_user_optional, get_admin_user
+from app.config import settings, use_direct_task_execution
 from app.schemas.tasks import (
     TaskCreate, TaskListResponse
 )
@@ -44,6 +45,7 @@ from app.common.responses import paginated_response, success_response
 from app.common.exceptions import (
     ConflictException,
     NotFoundException,
+    UnauthorizedException,
     ValidationException,
 )
 from app.common.task_status import task_status_to_api
@@ -59,6 +61,12 @@ from app.services.task_views import (
     query_task_view_counts,
 )
 from app.services.tool_presentation import sanitize_public_tool_config
+from app.services.task_access import load_task_for_read_access
+from app.services.task_event_stream import (
+    load_state as load_task_state,
+    stream_task_events as stream_events,
+)
+from app.auth.jwt_handler import verify_token
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -281,6 +289,51 @@ async def _record_tool_usage(db: AsyncSession, tool_id: str) -> None:
     await record_tool_usage(db, tool_id)
 
 
+def _resolve_session_factory(db: AsyncSession) -> async_sessionmaker[AsyncSession]:
+    """SSE 生成器要自己开关会话，不能复用请求作用域的 ``db``。
+
+    测试里会覆盖 ``get_db`` 指向内存库，此时必须用同一个 bind 建会话工厂，
+    否则流式阶段会去连生产库。
+    """
+    bind = db.get_bind()
+    bound_engine = getattr(bind, "engine", None) or bind
+    if bound_engine is async_session_factory.kw["bind"]:
+        return async_session_factory
+    return async_sessionmaker(bound_engine, expire_on_commit=False, autoflush=False)
+
+
+async def _load_user_from_query_token(db: AsyncSession, token: Optional[str]) -> Optional[User]:
+    """从查询参数里的 access token 还原用户（EventSource 无法带请求头）。"""
+    if not token:
+        return None
+    try:
+        payload = verify_token(token, token_type="access")
+    except Exception as exc:  # token 过期/被篡改用同一条 401 出口
+        logger.debug("SSE 查询参数 token 校验失败: %s", exc)
+        return None
+    user_id = payload.get("sub")
+    if not user_id:
+        return None
+    user = await db.get(User, str(user_id))
+    if user is None or user.status != "active":
+        return None
+    return user
+
+
+async def _guarded_event_source(
+    generator: AsyncIterator[str],
+    request: Request,
+) -> AsyncIterator[str]:
+    """浏览器关闭标签页时及时停止生成器，避免泄漏数据库轮询。"""
+    try:
+        async for chunk in generator:
+            if await request.is_disconnected():
+                break
+            yield chunk
+    finally:
+        await generator.aclose()
+
+
 @router.get("", response_model=dict)
 async def list_tasks(
     page: int = Query(1, ge=1),
@@ -407,8 +460,7 @@ async def get_resource_wait_stats(
 
 
 @router.post("/prepare-preview", response_model=dict)
-async def prepare_task_preview(
-    task_data: TaskCreate,
+async def prepare_task_preview(    task_data: TaskCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -419,6 +471,60 @@ async def prepare_task_preview(
         task_data=task_data,
     )
     return success_response(data=preview)
+
+
+@router.get("/{task_id}/events")
+async def stream_task_events(
+    task_id: str,
+    request: Request,
+    token: Optional[str] = Query(None, description="EventSource 无法携带请求头，浏览器场景用查询参数传 access token"),
+    include_logs: bool = Query(True, description="是否把新日志作为 log 事件一并推送"),
+    max_seconds: Optional[int] = Query(None, ge=5, le=7200, description="单条连接最长存活秒数"),
+    current_user: User = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+):
+    """SSE 订阅任务状态与进度（docs/05 §1.5、§9；docs/10 API-08）。
+
+    认证优先取 `Authorization: Bearer`，缺失时回退到 `?token=`（浏览器的
+    `EventSource` 不能自定义请求头，这是浏览器端唯一可行的传参方式）。
+
+    事件序列：`snapshot` → （`status` / `progress` / `log`）* → `done`。
+    任务进入终态后服务端主动关流；数小时级任务到 `max_seconds` 后由前端重连。
+    """
+    user = current_user
+    if user is None:
+        user = await _load_user_from_query_token(db, token)
+    if user is None:
+        raise UnauthorizedException("未提供认证凭证")
+
+    await load_task_for_read_access(db, task_id=task_id, current_user=user)
+    state = await load_task_state(db, task_id)
+    if state is None:
+        raise NotFoundException("任务不存在")
+
+    session_factory = _resolve_session_factory(db)
+    generator = stream_events(
+        session_factory=session_factory,
+        task_id=task_id,
+        initial=state,
+        poll_interval_seconds=settings.TASK_EVENT_POLL_INTERVAL_SECONDS,
+        heartbeat_seconds=settings.TASK_EVENT_HEARTBEAT_SECONDS,
+        max_duration_seconds=float(
+            max_seconds if max_seconds is not None else settings.TASK_EVENT_MAX_DURATION_SECONDS
+        ),
+        include_logs=include_logs and settings.TASK_EVENT_INCLUDE_LOGS,
+    )
+    headers = {
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        # 关掉 Nginx / Ingress 的响应缓冲，否则事件会被攒到缓冲区满才下发。
+        "X-Accel-Buffering": "no",
+    }
+    return StreamingResponse(
+        _guarded_event_source(generator, request),
+        media_type="text/event-stream",
+        headers=headers,
+    )
 
 
 @router.get("/{task_id}", response_model=dict)
