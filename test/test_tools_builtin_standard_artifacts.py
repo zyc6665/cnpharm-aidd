@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.agents.aidd.builtin_tools import BuiltinToolArtifact, BuiltinToolResult
+from app.tools.builtin_tools import BuiltinToolArtifact, BuiltinToolResult
 from app.tasks.executors.builtin import BuiltinExecutor
 
 
@@ -67,7 +67,7 @@ async def test_builtin_executor_returns_standard_result_v2(tmp_path, monkeypatch
         yield FakeSession()
 
     monkeypatch.setenv("TASK_WORK_DIR", str(tmp_path / "tasks"))
-    monkeypatch.setattr("app.agents.aidd.builtin_tools.run_builtin_tool", fake_run_builtin_tool)
+    monkeypatch.setattr("app.tools.builtin_tools.run_builtin_tool", fake_run_builtin_tool)
     monkeypatch.setattr("app.tasks.executors.builtin.get_async_session", fake_get_async_session)
 
     task = SimpleNamespace(
@@ -126,7 +126,7 @@ async def test_builtin_executor_allows_parameter_only_tools(tmp_path, monkeypatc
         )
 
     monkeypatch.setenv("TASK_WORK_DIR", str(tmp_path / "tasks"))
-    monkeypatch.setattr("app.agents.aidd.builtin_tools.run_builtin_tool", fake_run_builtin_tool)
+    monkeypatch.setattr("app.tools.builtin_tools.run_builtin_tool", fake_run_builtin_tool)
 
     task = SimpleNamespace(
         id="task-fetch",

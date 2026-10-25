@@ -31,7 +31,7 @@ import {
   useWorkflowDefinitionsStore,
   useWorkflowStore
 } from '@/stores'
-import type { AiddWorkflowDraft, ToolContract, WorkflowDefinition, WorkflowDefinitionNode, WorkflowRun } from '@/types/models'
+import type { ToolContract, WorkflowDefinition, WorkflowDefinitionNode, WorkflowRun } from '@/types/models'
 
 type UserStore = ReturnType<typeof useUserStore>
 type ArtifactsStore = ReturnType<typeof useArtifactsStore>
@@ -317,63 +317,6 @@ export function useWorkflowPersistence(input: {
     } catch {
       // Request layer displays error details.
     }
-  }
-
-  async function applyWorkflowDraft(draft: AiddWorkflowDraft) {
-    if (!await confirmDiscardWorkflowChanges()) return
-    workflowDefinitionsStore.clearCurrentWorkflowDefinition()
-    selectedSavedWorkflowId.value = undefined
-    workflowName.value = draft.name
-    workflowRunInputSelections.value = { ...draft.input_files }
-    workflowStore.applyWorkflowDefinition(
-      mapWorkflowDefinitionToCanvasPayload({
-        canvasPresetId: 'aidd-workflow-draft',
-        name: draft.name,
-        description: draft.description,
-        definition: draft.definition,
-        toolsBySlug: workflowToolsBySlug?.value,
-      })
-    )
-  }
-
-  async function saveWorkflowDraft(draft: AiddWorkflowDraft, projectId: string) {
-    if (!await confirmDiscardWorkflowChanges()) return
-    const canvasPayload = mapWorkflowDefinitionToCanvasPayload({
-      canvasPresetId: 'aidd-workflow-draft',
-      name: draft.name,
-      description: draft.description,
-      definition: draft.definition,
-      toolsBySlug: workflowToolsBySlug?.value,
-    })
-
-    const saved = await workflowDefinitionsStore.saveWorkflowDefinition({
-      project_id: projectId,
-      name: draft.name,
-      description: draft.description ?? null,
-      canvas_preset_id: canvasPayload.canvas_preset_id,
-      nodes: canvasPayload.nodes as unknown as WorkflowDefinitionPayload['nodes'],
-      edges: canvasPayload.edges,
-      selected_tool_by_node: canvasPayload.selected_tool_by_node,
-      artifact_bindings_by_node: canvasPayload.artifact_bindings_by_node,
-      task_bindings_by_node: {},
-      status: 'draft'
-    })
-
-    selectedSavedWorkflowId.value = saved.id
-    workflowName.value = saved.name
-    workflowRunInputSelections.value = { ...draft.input_files }
-    workflowStore.applyWorkflowDefinition(
-      mapWorkflowDefinitionToCanvasPayload({
-        canvasPresetId: saved.canvas_preset_id,
-        name: saved.name,
-        description: saved.description,
-        definition: saved as unknown as WorkflowDefinition,
-        toolsBySlug: workflowToolsBySlug?.value,
-      })
-    )
-    markWorkflowClean()
-    message.success(persistenceLabels.value.draftSaved)
-    return saved
   }
 
   async function handleRunWorkflowDefinition() {
@@ -771,8 +714,6 @@ export function useWorkflowPersistence(input: {
     handleDuplicateWorkflow,
     handleArchiveWorkflow,
     handleDeleteWorkflow,
-    applyWorkflowDraft,
-    saveWorkflowDraft,
     handleRunWorkflowDefinition,
     handleRefreshWorkflowRuns,
     handleLoadMoreWorkflowRuns,

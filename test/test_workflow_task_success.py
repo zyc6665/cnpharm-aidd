@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 from app.database.base import Base
-from app.models import agent as _agent_models  # noqa: F401
 from app.models import files as _files_models  # noqa: F401
 from app.models import statistics as _statistics_models  # noqa: F401
 from app.models import system_settings as _system_settings  # noqa: F401

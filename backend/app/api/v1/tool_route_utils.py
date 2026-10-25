@@ -16,7 +16,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.aidd.registry import upsert_capability_from_config
+from app.tools.capability_registry import upsert_capability_from_config
 from app.common.exceptions import ConflictException, ValidationException
 from app.common.time import utcnow
 from app.files.writer import store_file_bytes

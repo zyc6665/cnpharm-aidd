@@ -1,6 +1,6 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -26,33 +26,59 @@ test('前端不再暴露旧 /agents/aidd API 和旧智能体 store', () => {
   assert.equal(taskListSource.includes('agent-task-grouping'), false)
 })
 
-test('项目会话 API 承接 agent-run 查询、详情和取消', () => {
-  const conversationsSource = readSource('src/api/conversations.ts')
-
-  assert.equal(conversationsSource.includes('getProjectAgentRuns'), true)
-  assert.equal(conversationsSource.includes('getProjectAgentRun'), true)
-  assert.equal(conversationsSource.includes('cancelProjectAgentRun'), true)
-  assert.equal(conversationsSource.includes('`/projects/${projectId}/agent-runs`'), true)
-  assert.equal(conversationsSource.includes('`/projects/${projectId}/agent-runs/${runId}`'), true)
-  assert.equal(conversationsSource.includes('/agents/aidd'), false)
+test('项目会话与 Agent 覆盖层已从交付线移除', () => {
+  for (const removed of [
+    'src/api/conversations.ts',
+    'src/api/agent-stream.ts',
+    'src/stores/project-conversation.ts',
+    'src/types/conversations.ts',
+    'src/composables/useAgentEventStream.ts',
+    'src/components/workflow/AiddAgentPanel.vue',
+    'src/components/conversation/MessageTimeline.vue',
+    'src/components/conversation/ConversationSidebar.vue',
+    'src/views/projects/Research.vue'
+  ]) {
+    assert.equal(existsSync(resolve(rootDir, removed)), false, `should be removed: ${removed}`)
+  }
 })
 
-test('Workflow Agent 模式进入项目研究会话，不再生成旧工作流草稿', () => {
-  assert.equal(existsSync(resolve(rootDir, 'src/components/workflow/AiddAgentPanel.vue')), true)
+test('路由与工作流页面不再暴露 Agent 模式入口', () => {
+  const routerSource = readSource('src/router/index.ts')
   const workflowSource = readSource('src/views/workflow/index.vue')
-  const panelSource = readSource('src/components/workflow/AiddAgentPanel.vue')
   const zhSource = readSource('src/locales/zh-CN/index.ts')
   const enSource = readSource('src/locales/en-US/index.ts')
 
-  assert.equal(workflowSource.includes('<AiddAgentPanel />'), true)
-  assert.equal(workflowSource.includes('@draft-generated="handleAgentWorkflowDraft"'), false)
-  assert.equal(panelSource.includes("from '@/api/conversations'"), true)
-  assert.equal(panelSource.includes('createProjectConversation'), true)
-  assert.equal(panelSource.includes('startProjectAgentRun'), true)
-  assert.equal(panelSource.includes("name: 'ProjectResearch'"), true)
-  assert.equal(panelSource.includes('createAiddWorkflowDraft'), false)
-  assert.equal(panelSource.includes('uploadFile'), false)
-  assert.equal(panelSource.includes('input_file_ids'), false)
-  assert.equal(zhSource.includes('进入项目智能体'), true)
-  assert.equal(enSource.includes('Open Project Agent'), true)
+  assert.equal(routerSource.includes('ProjectResearch'), false)
+  assert.equal(routerSource.includes('/research/'), false)
+  assert.equal(workflowSource.includes('AiddAgentPanel'), false)
+  assert.equal(workflowSource.includes('key="agent"'), false)
+  assert.equal(zhSource.includes('进入项目智能体'), false)
+  assert.equal(enSource.includes('Open Project Agent'), false)
+})
+
+test('已删除的 Agent 覆盖层不再被残留引用', () => {
+  const offenders: string[] = []
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(resolve(rootDir, dir), { withFileTypes: true })) {
+      const rel = `${dir}/${entry.name}`
+      if (entry.isDirectory()) {
+        if (entry.name === 'node_modules' || entry.name === 'dist') continue
+        walk(rel)
+        continue
+      }
+      if (!/\.(ts|vue)$/.test(entry.name)) continue
+      const source = readSource(rel)
+      for (const needle of [
+        '@/api/conversations',
+        '@/api/agent-stream',
+        '@/types/conversations',
+        '@/stores/project-conversation',
+        'useAgentEventStream'
+      ]) {
+        if (source.includes(needle)) offenders.push(`${rel}: ${needle}`)
+      }
+    }
+  }
+  walk('src')
+  assert.deepEqual(offenders, [])
 })

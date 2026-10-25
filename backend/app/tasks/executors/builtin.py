@@ -16,7 +16,7 @@ class BuiltinExecutor(BaseExecutor):
     """Execute supported AIDD built-ins through the platform task runtime."""
 
     async def execute(self) -> dict[str, Any]:
-        from app.agents.aidd.builtin_tools import BuiltinToolFile, run_builtin_tool
+        from app.tools.builtin_tools import BuiltinToolFile, run_builtin_tool
         from app.models.files import File as FileModel
         from app.models.tasks import TaskInput
 

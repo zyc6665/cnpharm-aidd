@@ -26,7 +26,6 @@ from app.auth.dependencies import get_current_user  # noqa: E402
 from app.database.base import Base  # noqa: E402
 from app.database.session import get_db  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models import agent as _agent_models  # noqa: F401,E402
 from app.models import files as _files_models  # noqa: F401,E402
 from app.models import statistics as _statistics_models  # noqa: F401,E402
 from app.models import system_settings as _system_settings  # noqa: F401,E402

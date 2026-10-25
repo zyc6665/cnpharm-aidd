@@ -43,13 +43,6 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/workflow/index.vue'),
     meta: { titleLiteral: '项目工作流', requiresAuth: true }
   },
-  {
-    path: '/projects/:projectId/research/:conversationId?',
-    name: 'ProjectResearch',
-    component: () => import('@/views/projects/Research.vue'),
-    meta: { titleLiteral: '项目研究', requiresAuth: true, focusMode: true },
-    alias: ['/projects/:projectId/conversations/:conversationId?'],
-  },
   // 认证相关
   {
     path: '/login',

@@ -423,10 +423,6 @@ async def _execute_tool_task_impl_inner(
     这里是实际执行工具的逻辑，同时通过 WebSocket 推送实时进度
     """
     from sqlalchemy import select
-    from app.agents.aidd.task_events import (
-        append_task_agent_event,
-        notify_task_agent_event,
-    )
     from app.database.session import async_session_factory
     from app.models.tasks import Task, TaskStatus, TaskOutput, TaskLog
 
@@ -469,18 +465,6 @@ async def _execute_tool_task_impl_inner(
             message="任务开始执行"
         )
         db.add(log)
-        agent_run_id = await append_task_agent_event(
-            db,
-            task=task,
-            event_type="execution_started",
-            payload={
-                "status": "running",
-                "progress": task.progress,
-                "message": "任务开始执行",
-            },
-            run_status="running",
-            flush=False,
-        )
         if not await commit_current_attempt(
             db,
             task=task,
@@ -491,7 +475,6 @@ async def _execute_tool_task_impl_inner(
                 await db.execute(select(Task).where(Task.id == task_id))
             ).scalar_one_or_none()
             return _stale_task_result(latest_task or task)
-        await notify_task_agent_event(agent_run_id)
 
         # WebSocket 通知：任务开始
         await notify_task_status(task_id, TaskStatus.RUNNING.value, "任务开始执行")
@@ -625,18 +608,6 @@ async def _execute_tool_task_impl_inner(
                         log_data={"progress": progress, "source": "executor"},
                     )
                 )
-                agent_run_id = await append_task_agent_event(
-                    db,
-                    task=task,
-                    event_type="execution_progress",
-                    payload={
-                        "status": "running",
-                        "progress": progress,
-                        "message": message,
-                    },
-                    run_status="running",
-                    flush=False,
-                )
                 if not await commit_current_attempt(
                     db,
                     task=task,
@@ -645,7 +616,6 @@ async def _execute_tool_task_impl_inner(
                 ):
                     logger.info("任务 %s 的 attempt 已过期，忽略进度提交", task_id)
                     return
-                await notify_task_agent_event(agent_run_id)
 
                 # WebSocket 通知：进度更新
                 await notify_task_progress(task_id, progress, message)
@@ -766,14 +736,6 @@ async def _execute_tool_task_impl_inner(
                 standard_artifacts = prepared_output["result"].get("standard_artifacts")
                 if isinstance(standard_artifacts, dict):
                     completion_payload["standard_artifacts"] = standard_artifacts
-            agent_run_id = await append_task_agent_event(
-                db,
-                task=task,
-                event_type="execution_completed",
-                payload=completion_payload,
-                run_status="success",
-                flush=False,
-            )
             if not await commit_current_attempt(
                 db,
                 task=task,
@@ -785,7 +747,6 @@ async def _execute_tool_task_impl_inner(
                 ).scalar_one_or_none()
                 logger.info("任务 %s 的 attempt 已过期，忽略成功提交", task_id)
                 return _stale_task_result(latest_task or task)
-            await notify_task_agent_event(agent_run_id)
 
             # WebSocket 通知：任务完成
             await notify_task_log(task_id, "INFO", "任务执行成功")
@@ -1057,20 +1018,6 @@ async def _execute_tool_task_impl_inner(
                     status="failure",
                     error_message=str(e),
                 )
-            agent_run_id = await append_task_agent_event(
-                db,
-                task=task,
-                event_type="execution_failed",
-                payload={
-                    "status": "failure",
-                    "progress": task.progress,
-                    "message": f"任务失败: {str(e)}",
-                    "error": str(e),
-                },
-                run_status="failure",
-                error_message=str(e),
-                flush=False,
-            )
             if not await commit_current_attempt(
                 db,
                 task=task,
@@ -1082,7 +1029,6 @@ async def _execute_tool_task_impl_inner(
                 ).scalar_one_or_none()
                 logger.info("任务 %s 的 attempt 已过期，忽略失败提交", task_id)
                 return _stale_task_result(latest_task or task)
-            await notify_task_agent_event(agent_run_id)
 
             # WebSocket 通知：任务失败
             await notify_task_log(task_id, "ERROR", f"任务执行失败: {str(e)}")

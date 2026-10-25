@@ -122,7 +122,6 @@ class TestAiddFeatureFlags:
         flags = {item["key"]: item for item in settings.aidd_feature_flags()}
 
         assert flags["AIDD_PROJECT_WORKSPACE_ENABLED"]["enabled"] is True
-        assert flags["AIDD_PROJECT_CONVERSATIONS_ENABLED"]["enabled"] is True
         assert flags["TOOL_PACKAGE_V1_ENABLED"]["enabled"] is True
         assert flags["LEGACY_AIDD_API_ENABLED"]["enabled"] is False
         assert flags["LEGACY_AIDD_API_ENABLED"]["rollout"]["scope"] == "closed"
@@ -141,7 +140,6 @@ class TestAiddFeatureFlags:
         flags = {item["key"]: item for item in settings.aidd_feature_flags()}
 
         assert flags["AIDD_PROJECT_WORKSPACE_ENABLED"]["enabled"] is False
-        assert flags["AIDD_PROJECT_CONVERSATIONS_ENABLED"]["enabled"] is False
         assert flags["TOOL_PACKAGE_V1_ENABLED"]["enabled"] is False
         assert flags["LEGACY_AIDD_API_ENABLED"]["enabled"] is False
         assert flags["LEGACY_AIDD_API_ENABLED"]["rollout"]["scope"] == "closed"
@@ -204,7 +202,7 @@ class TestAiddFeatureFlags:
         )
 
         assert settings.is_aidd_feature_enabled_for_user(
-            "AIDD_PROJECT_CONVERSATIONS_ENABLED",
+            "AIDD_PROJECT_WORKSPACE_ENABLED",
             user_email="internal@example.com",
         ) is True
 

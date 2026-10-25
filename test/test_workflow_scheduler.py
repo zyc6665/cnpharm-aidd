@@ -20,7 +20,6 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from app.common.exceptions import ValidationException  # noqa: E402
 from app.database.base import Base  # noqa: E402
-from app.models import agent as _agent_models  # noqa: F401,E402
 from app.models import artifacts as _artifact_models  # noqa: F401,E402
 from app.models import files as _files_models  # noqa: F401,E402
 from app.models import statistics as _statistics_models  # noqa: F401,E402

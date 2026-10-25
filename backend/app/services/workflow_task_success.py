@@ -6,8 +6,8 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.aidd.outputs import extract_semantic_outputs
-from app.agents.aidd.registry import load_tool_capability
+from app.tools.semantic_outputs import extract_semantic_outputs
+from app.tools.capability_registry import load_tool_capability
 from app.common.time import utcnow_iso
 from app.models.tasks import Task
 from app.models.workflows import WorkflowRun

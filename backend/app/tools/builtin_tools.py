@@ -17,8 +17,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from app.agents.aidd.outputs import parse_sdf_smiles
-from app.agents.aidd.capabilities import PLACEHOLDER_AIDD_TOOL_SLUGS
+from app.tools.semantic_outputs import parse_sdf_smiles
+from app.tools.capabilities import PLACEHOLDER_AIDD_TOOL_SLUGS
 from app.chemistry.conversion import (
     canonicalize_smiles,
     convert_sdf_to_pdb_with_toolkit,
@@ -1450,7 +1450,7 @@ def _read_smiles_from_csv(csv_path: Path) -> list[str]:
 
 async def _run_query_chembl_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResult:
     """builtin-query-chembl: 从 SMILES CSV 提取分子，查询 ChEMBL。"""
-    from app.agents.aidd.database_tools import query_chembl as _query_chembl
+    from app.external_databases.database_tools import query_chembl as _query_chembl
     from app.config import settings as _settings
 
     if not _settings.ENABLE_DATABASE_TOOLS:
@@ -1471,7 +1471,7 @@ async def _run_query_chembl_tool(files: dict[str, BuiltinToolFile]) -> BuiltinTo
 
 async def _run_query_pubchem_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResult:
     """builtin-query-pubchem: 从 SMILES CSV 提取分子，查询 PubChem。"""
-    from app.agents.aidd.database_tools import query_pubchem as _query_pubchem
+    from app.external_databases.database_tools import query_pubchem as _query_pubchem
     from app.config import settings as _settings
 
     if not _settings.ENABLE_DATABASE_TOOLS:
@@ -1492,7 +1492,7 @@ async def _run_query_pubchem_tool(files: dict[str, BuiltinToolFile]) -> BuiltinT
 
 async def _run_query_pdbbind_tool(files: dict[str, BuiltinToolFile]) -> BuiltinToolResult:
     """builtin-query-pdbbind: 从 PDB 文件名提取 PDB ID，查询 PDBbind。"""
-    from app.agents.aidd.database_tools import query_pdbbind as _query_pdbbind
+    from app.external_databases.database_tools import query_pdbbind as _query_pdbbind
     from app.config import settings as _settings
 
     if not _settings.ENABLE_DATABASE_TOOLS:

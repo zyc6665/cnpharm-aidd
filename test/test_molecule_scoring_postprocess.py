@@ -296,7 +296,7 @@ def test_molecule_generation_capability_failure_is_observable(caplog, monkeypatc
     from app.tasks import molecule_scoring
 
     def fail_import(name, *args, **kwargs):
-        if name == "app.agents.aidd.capabilities":
+        if name == "app.tools.capabilities":
             raise RuntimeError("capability unavailable")
         return original_import(name, *args, **kwargs)
 

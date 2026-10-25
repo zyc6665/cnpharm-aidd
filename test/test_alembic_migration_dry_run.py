@@ -13,10 +13,21 @@ from alembic.script import ScriptDirectory
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 LEGACY_PROJECT_RESOURCE_TABLES = (
     "files",
-    "agent_runs",
     "workflow_definitions",
     "workflow_runs",
     "research_boards",
+)
+# 交付线移除了 Agent 特性面，agent_runs 由 20261025_01 迁移删除，
+# 因此不再属于「升级后必须带 project_id 的存量资源表」。
+DROPPED_AGENT_TABLES = (
+    "agent_runs",
+    "agent_run_steps",
+    "agent_events",
+    "conversations",
+    "conversation_branches",
+    "conversation_messages",
+    "plan_versions",
+    "plan_decisions",
 )
 ALEMBIC_SUBPROCESS_TIMEOUT_SECONDS = int(
     os.getenv("AIDD_ALEMBIC_TEST_TIMEOUT_SECONDS", "600")
@@ -175,6 +186,8 @@ def test_alembic_sqlite_legacy_project_link_upgrade_is_resumable(tmp_path: Path)
         conn.execute("CREATE TABLE workflow_templates (id VARCHAR(36) PRIMARY KEY)")
         for table_name in LEGACY_PROJECT_RESOURCE_TABLES:
             conn.execute(f"CREATE TABLE {table_name} (id VARCHAR(36) PRIMARY KEY)")
+        for table_name in DROPPED_AGENT_TABLES:
+            conn.execute(f"CREATE TABLE {table_name} (id VARCHAR(36) PRIMARY KEY)")
 
     env = os.environ.copy()
     env["DATABASE_URL"] = f"sqlite+aiosqlite:///{db_path}"
@@ -193,6 +206,8 @@ def test_alembic_sqlite_legacy_project_link_upgrade_is_resumable(tmp_path: Path)
             indexes = {row[1] for row in conn.execute(f"PRAGMA index_list({table_name})")}
             assert "project_id" in columns
             assert f"ix_{table_name}_project_id" in indexes
+        for table_name in DROPPED_AGENT_TABLES:
+            assert table_name not in tables
         workflow_run_columns = {
             row[1]: row for row in conn.execute("PRAGMA table_info(workflow_runs)")
         }

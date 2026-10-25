@@ -22,7 +22,6 @@ _IPV4_NUMERIC_HOST_PATTERN = re.compile(
 )
 _AIDD_FEATURE_FLAG_DESCRIPTIONS = {
     "AIDD_PROJECT_WORKSPACE_ENABLED": "项目优先研究工作台入口",
-    "AIDD_PROJECT_CONVERSATIONS_ENABLED": "项目研究对话与 Agent 审批链路",
     "TOOL_PACKAGE_V1_ENABLED": "Tool Package v1 导入、迁移和验证等级",
     "LEGACY_AIDD_API_ENABLED": "旧 AIDD API 已下线",
 }
@@ -418,7 +417,6 @@ class Settings(BaseSettings):
     # 首月 AIDD 发布门禁。None 表示使用环境默认值：开发环境开启新入口，
     # 预发布/生产默认关闭新入口；旧 AIDD API 默认关闭。
     AIDD_PROJECT_WORKSPACE_ENABLED: Optional[bool] = None
-    AIDD_PROJECT_CONVERSATIONS_ENABLED: Optional[bool] = None
     TOOL_PACKAGE_V1_ENABLED: Optional[bool] = None
     LEGACY_AIDD_API_ENABLED: Optional[bool] = None
     # 生产/预发布灰度账号。全局新入口关闭时，仅这些内部账号可访问。

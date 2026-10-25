@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from app.agents.aidd.capabilities import CapabilityOutput, ToolCapability
+from app.tools.capabilities import CapabilityOutput, ToolCapability
 
 
 def read_path(data: Any, path: str | None) -> Any:

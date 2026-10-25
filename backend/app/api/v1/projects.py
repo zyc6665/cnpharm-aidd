@@ -11,16 +11,7 @@ from app.common.responses import success_response
 from app.common.time import utcnow
 from app.database.session import get_db
 from app.feature_flags import require_feature_flag
-from app.models.agent import AgentRun, AgentRunStep
 from app.models.artifacts import Artifact, ArtifactLineage, ArtifactVersion
-from app.models.conversations import (
-    AgentEvent,
-    Conversation,
-    ConversationBranch,
-    ConversationMessage,
-    PlanDecision,
-    PlanVersion,
-)
 from app.models.executions import ExecutionRecord
 from app.models.files import File
 from app.models.projects import Organization, Project, ProjectMember
@@ -321,59 +312,6 @@ async def archive_project(
 
 
 async def _delete_project_related_rows(db: AsyncSession, project_id: str) -> None:
-    agent_run_ids = list(
-        (
-            await db.execute(
-                select(AgentRun.id).where(AgentRun.project_id == project_id)
-            )
-        ).scalars()
-    )
-    if agent_run_ids:
-        await db.execute(
-            sa_delete(AgentEvent).where(AgentEvent.agent_run_id.in_(agent_run_ids))
-        )
-        await db.execute(
-            sa_delete(AgentRunStep).where(AgentRunStep.agent_run_id.in_(agent_run_ids))
-        )
-        await db.execute(sa_delete(AgentRun).where(AgentRun.id.in_(agent_run_ids)))
-
-    plan_version_ids = list(
-        (
-            await db.execute(
-                select(PlanVersion.id).where(PlanVersion.project_id == project_id)
-            )
-        ).scalars()
-    )
-    if plan_version_ids:
-        await db.execute(
-            sa_delete(PlanDecision).where(
-                PlanDecision.plan_version_id.in_(plan_version_ids)
-            )
-        )
-    await db.execute(sa_delete(PlanVersion).where(PlanVersion.project_id == project_id))
-
-    conversation_ids = list(
-        (
-            await db.execute(
-                select(Conversation.id).where(Conversation.project_id == project_id)
-            )
-        ).scalars()
-    )
-    if conversation_ids:
-        await db.execute(
-            sa_delete(ConversationMessage).where(
-                ConversationMessage.conversation_id.in_(conversation_ids)
-            )
-        )
-        await db.execute(
-            sa_delete(ConversationBranch).where(
-                ConversationBranch.conversation_id.in_(conversation_ids)
-            )
-        )
-    await db.execute(
-        sa_delete(Conversation).where(Conversation.project_id == project_id)
-    )
-
     artifact_ids = list(
         (
             await db.execute(select(Artifact.id).where(Artifact.project_id == project_id))

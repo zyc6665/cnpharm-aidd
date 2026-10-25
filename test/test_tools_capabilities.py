@@ -11,7 +11,7 @@ BACKEND_ROOT = PROJECT_ROOT / "backend"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.agents.aidd.capabilities import (  # noqa: E402
+from app.tools.capabilities import (  # noqa: E402
     get_capabilities_by_output,
     get_capability,
 )

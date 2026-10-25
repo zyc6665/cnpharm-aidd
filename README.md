@@ -59,15 +59,15 @@ backend/            FastAPI 服务端
     execution/      执行后端抽象（ExecutionPort + K8s/SSH 适配器）
     tool_packages/  Tool Package v2 加载、校验、注册
     tool_templates/ 工具模板（含 drug_discovery 领域模板）
-    agents/aidd/    待拆包：能力注册表保留，Agent 对话/规划删除
-  alembic/          数据库迁移（23 个版本）
+    tools/          工具能力注册表与内建工具执行（capabilities/registry/builtin_tools）
+  alembic/          数据库迁移（24 个版本）
 frontend/           Vue 3 + Vite + ant-design-vue 4
   src/views/        页面（工作台/项目/任务/工具/工作流/管理后台）
   src/components/   workflow 画布、artifacts 渲染器
 deploy/             compose 与 K8s 部署资产
 docs/               中国医药项目文档（00~17，见 docs/README.md）
   archive-upstream/ 产品线历史文档，只读归档
-test/               后端测试（248 个文件）
+test/               后端测试（232 个文件）
 example/            模型资产样例（tool-package v2）
 ```
 
@@ -82,7 +82,7 @@ example/            模型资产样例（tool-package v2）
 
 工作流：`feature/xxx` → PR → CI 全绿 → approve（团队成形后强制 1 人）→ squash 合入 `main` → 删分支。
 
-> **当前阶段说明**：团队还没拉起来，`main` 的保护规则把 `required_approving_review_count` 设为 `0`、`enforce_admins=false`——否则唯一开发者无法合入自己的 PR，交付线会直接被锁死。**成员到位后立刻改为 1 并开启管理员约束**，命令见 [docs/17](docs/17-交付仓库与分支策略.md) 第 7 节。
+> **当前阶段说明**：团队还没拉起来，`main` 的保护规则把 `required_approving_review_count` 设为 `0`——否则唯一开发者无法合入自己的 PR，交付线会直接被锁死。**成员到位后立刻改为 1**，命令见 [docs/17](docs/17-交付仓库与分支策略.md) 第 7 节。管理员约束（`enforce_admins`）始终保持开启：保护规则要约束包括自己在内的所有人。
 
 **每条提交必须带 `Refs:`**，指向需求或决策编号，例如：
 
@@ -104,7 +104,9 @@ Refs: M2-FR-02, 04-数据模型 §6.1~§6.3
 |---|---|
 | **可直接复用** | 任务队列/状态机/日志/取消/重试、执行后端抽象（K8s + SSH）、Tool Package v2、Artifact 版本与 lineage、工作流画布（拖拽/连边/条件分支已实现）、molstar 三维渲染 |
 | **必须新建** | 16 张领域表（target/protein/structure/pocket/compound/candidate…）、Boltz-2 等 9 个模型资产、DCU 卡位调度、LDAP + audit_log、追溯包导出、40 个页面中的 30+ |
-| **必须删除** | `agents/aidd` 的 Agent 对话/规划（7109 行中的约 4500 行）、`remote_tools`（993 行）、`image_registry`（343 行）、`external_databases`（460 行，含 pubchem/rcsb 公网调用） |
+| **必须删除** | `external_databases`（460 行，含 pubchem/rcsb 公网调用）、`remote_tools`（993 行）、`image_registry`（343 行） |
+
+**已完成的减法**（[docs/17](docs/17-交付仓库与分支策略.md) 第 5 节步骤 3）：`agents/aidd` 已拆包——能力注册表与内建工具迁到 `backend/app/tools/`，Agent 对话/规划/计划审批链路（约 4500 行）连同 `agent_runs`、`conversations` 等 8 张表、前端 `Research` 页面与 Agent 模式标签页一并删除，迁移见 `backend/alembic/versions/20261025_01_drop_agent_tables.py`。
 
 首轮改造的 9 步提交切分见 [docs/17-交付仓库与分支策略.md](docs/17-交付仓库与分支策略.md) 第 5 节。
 

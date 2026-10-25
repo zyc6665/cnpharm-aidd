@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.agents.aidd.capabilities import AIDD_TOOL_CAPABILITIES
+from app.tools.capabilities import AIDD_TOOL_CAPABILITIES
 from app.common.exceptions import ValidationException
 from app.models.tools import Tool, ToolProviderType, ToolReviewStatus, ToolStatus, ToolVersion
 from app.models.users import User

@@ -665,17 +665,6 @@ export interface TaskLog {
   timestamp: string
 }
 
-export interface AiddWorkflowDraft {
-  name: string
-  description?: string | null
-  intent: string
-  definition: WorkflowDefinition
-  input_files: Record<string, string>
-  requested_outputs: string[]
-  reasoning_summary?: string | null
-  analysis_trace: string[]
-}
-
 // 文件相关类型
 export interface FileInfo {
   id: string

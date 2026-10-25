@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.agents.aidd.capabilities import (
+from app.tools.capabilities import (
     AIDD_TOOL_CAPABILITIES,
     CapabilityInput,
     CapabilityOutput,

@@ -19,7 +19,9 @@ depends_on = None
 
 def _metadata():
     from app.database.base import Base
-    from app.models import agent, files, statistics, system_settings, tasks, tool_capabilities, tools, users, verification, workflows  # noqa: F401
+    # 中国医药交付线移除了 Agent 特性面（app/models/agent.py 已删除），
+    # 基线不再注册该模块；对应的 8 张表由 20261025_01 显式收敛。
+    from app.models import files, statistics, system_settings, tasks, tool_capabilities, tools, users, verification, workflows  # noqa: F401
 
     return Base.metadata
 
