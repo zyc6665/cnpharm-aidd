@@ -1,6 +1,8 @@
 # 中国医药 AIDD 平台：M2/M3 界面落地与研发治理 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox（`- [ ]` → `- [x]`）syntax for tracking.
+>
+> **状态（2026-10-26 更新）：本计划 11 个 Task 已全部实施完毕，checkbox 已全部勾选。** 对应的 PR 与合入记录见文末「§6 实施结果」。计划保留为历史记录，后续在它之上新增的任务请另开计划文件，不要在本文件里继续追加。
 
 **Goal:** 把已就绪的后端域接口（靶点/结构/口袋、化合物/候选物、结果追溯、审计、卡位、SSE）接上可用界面，并补齐 PRD 要求但尚缺的三个后端能力（研发决策记录、项目阶段推导、分片上传会话），使 M1~M3 的验收链路可以在浏览器里走通。
 
@@ -194,7 +196,7 @@
   - 常量 `DECISION_POINTS = ("DP1","DP2","DP3","DP4","DP5")`、`DECISION_SUBJECT_TYPES = ("TARGET","POCKET","CANDIDATE_SET","STRUCTURE")`、`DECISION_VERDICTS = ("SELECTED","EXCLUDED")`。
   - 两个模型都注册 `event.listen(..., "before_update"/"before_delete", _reject_mutation)`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 # test/test_decisions_model.py
@@ -207,11 +209,11 @@ async def test_decision_record_rejects_update(db_session):
         await db_session.flush()
 ```
 
-- [ ] **Step 2: 跑测试确认失败** — `python -m pytest test/test_decisions_model.py -v`，期望 `ModuleNotFoundError: app.models.decisions`。
-- [ ] **Step 3: 实现模型与迁移** — 迁移 `revision="20261027_01"`、`down_revision="20261026_04"`（两个并行后端 PR 必须约定同一 base，统一用 `20261026_04`）。
-- [ ] **Step 4: 跑测试确认通过** — 期望 2 passed。
-- [ ] **Step 5: 验证迁移** — `rm -f /tmp/d1.db && DATABASE_URL="sqlite+aiosqlite:////tmp/d1.db" python -m alembic -c alembic.ini upgrade head`，期望 50 张表且含 `decision_records`、`decision_items`。
-- [ ] **Step 6: 提交** — `git commit -m "feat(decision): 新增决策记录与成员快照表（只追加）"`，body 带 `Refs: docs/04 §9.5, docs/05 §3.3`。
+- [x] **Step 2: 跑测试确认失败** — `python -m pytest test/test_decisions_model.py -v`，期望 `ModuleNotFoundError: app.models.decisions`。
+- [x] **Step 3: 实现模型与迁移** — 迁移 `revision="20261027_01"`、`down_revision="20261026_04"`（两个并行后端 PR 必须约定同一 base，统一用 `20261026_04`）。
+- [x] **Step 4: 跑测试确认通过** — 期望 2 passed。
+- [x] **Step 5: 验证迁移** — `rm -f /tmp/d1.db && DATABASE_URL="sqlite+aiosqlite:////tmp/d1.db" python -m alembic -c alembic.ini upgrade head`，期望 50 张表且含 `decision_records`、`decision_items`。
+- [x] **Step 6: 提交** — `git commit -m "feat(decision): 新增决策记录与成员快照表（只追加）"`，body 带 `Refs: docs/04 §9.5, docs/05 §3.3`。
 
 ## Task 2（PR1）：决策记录领域服务与接口
 
@@ -236,7 +238,7 @@ async def test_decision_record_rejects_update(db_session):
   - 路由：`project_router`（无 prefix，由 `__init__.py` 挂 `/projects`）提供 `GET /{project_id}/stage`、`GET /{project_id}/decisions`、`POST /{project_id}/decisions`。
 - 校验（写进 `DecisionCreate` 的 `@model_validator(mode="after")`）：`selected_ids` 与 `excluded_ids` 不得同时为空；`reason` 去空白后非空；`snapshot` 非空且每个 `candidate_id` 唯一。
 
-- [ ] **Step 1: 写失败测试**（`test/test_decisions_api.py`，9 个用例）
+- [x] **Step 1: 写失败测试**（`test/test_decisions_api.py`，9 个用例）
   1. owner 提交候选集决策 → 成功且返回 `id`、`created_at`；
   2. `snapshot` 里混入不属于该候选集的 `candidate_id` → 422 且 message 含「不属于」；
   3. viewer 提交 → 403；
@@ -246,14 +248,14 @@ async def test_decision_record_rejects_update(db_session):
   7. 决策写入后 `audit_logs` 多一条 `decision_create`；
   8. 列表分页：造 3 条，`page_size=2` 时 `len(items)==2`、`total==3`；
   9. 修改/删除决策记录 → 抛 `ImmutableRecordError`。
-- [ ] **Step 2: 跑测试确认失败** — 期望 404/`ImportError`。
-- [ ] **Step 3: 实现 schema + service + router**。关键点：
+- [x] **Step 2: 跑测试确认失败** — 期望 404/`ImportError`。
+- [x] **Step 3: 实现 schema + service + router**。关键点：
   - 校验快照归属：`subject_type == "CANDIDATE_SET"` 时用 `SELECT candidate_id FROM candidate_set_items WHERE set_id = :subject_id`；`TARGET`/`POCKET`/`STRUCTURE` 不校验 `snapshot`。
   - 写库后调 `get_audit_logger().log_data_access(...)`，`action="decision_create"`、`resource_type="decision_record"`。
   - `compute_project_stage` 纯推导：`S0 项目已建` → `S1 靶点已建`（`count(targets)>0`）→ `S2 结构与口袋就绪`（存在 `protein_structures` 且有 `pockets.selected`) → `S3 候选物已生成`（`count(candidates)>0`）→ `S4 已提交计算`（`tasks.status in (RUNNING,SUCCESS)`）→ `S5 已有结果`（`tasks.status == SUCCESS`）；`gaps` 最多 5 条，按阻塞程度排序 `NO_TARGET` > `NO_STRUCTURE` > `NO_POCKET_SELECTED` > `NO_CANDIDATE` > `NO_TASK`。
-- [ ] **Step 4: 跑测试确认通过** — 期望 9 passed。
-- [ ] **Step 5: 全量回归** — `python -m pytest test/ -q -p no:cacheprovider --tb=line`，失败数不超过基线 6 个 Windows 差异。
-- [ ] **Step 6: 提交**。
+- [x] **Step 4: 跑测试确认通过** — 期望 9 passed。
+- [x] **Step 5: 全量回归** — `python -m pytest test/ -q -p no:cacheprovider --tb=line`，失败数不超过基线 6 个 Windows 差异。
+- [x] **Step 6: 提交**。
 
 ## Task 3（PR2）：`upload_sessions` / `datasets` / `data_files` 模型与迁移
 
@@ -275,12 +277,12 @@ async def test_decision_record_rejects_update(db_session):
 - 迁移 2：`revision="20261027_02"`、`down_revision="20261026_04"`。
 - 迁移 3：`revision="20261027_03"`、`down_revision=("20261027_01","20261027_02")`。
 
-- [ ] **Step 1: 写失败测试** — 断言三表可插入、`uq_upload_sessions_object_key` 唯一、`parts` 默认 `[]`。
-- [ ] **Step 2: 跑测试确认失败**。
-- [ ] **Step 3: 实现模型与两个迁移**。
-- [ ] **Step 4: 跑测试确认通过**。
-- [ ] **Step 5: 验证迁移链** — `alembic heads` 必须只有一个 head（`20261027_03`）；再 `alembic downgrade base` 退出码 0。
-- [ ] **Step 6: 提交**。
+- [x] **Step 1: 写失败测试** — 断言三表可插入、`uq_upload_sessions_object_key` 唯一、`parts` 默认 `[]`。
+- [x] **Step 2: 跑测试确认失败**。
+- [x] **Step 3: 实现模型与两个迁移**。
+- [x] **Step 4: 跑测试确认通过**。
+- [x] **Step 5: 验证迁移链** — `alembic heads` 必须只有一个 head（`20261027_03`）；再 `alembic downgrade base` 退出码 0。
+- [x] **Step 6: 提交**。
 
 ## Task 4（PR2）：分片上传会话服务与接口
 
@@ -305,7 +307,7 @@ async def test_decision_record_rejects_update(db_session):
 - 端点（`router = APIRouter(prefix="/uploads", tags=["分片上传"])`）：`POST ""`（必填 `X-Idempotency-Key` 头）、`PUT /{upload_id}/parts/{part_number}`、`POST /{upload_id}:complete`、`DELETE /{upload_id}`。
 - `config.py` 新增 `UPLOAD_PART_SIZE_BYTES: int = 16777216`、`UPLOAD_SESSION_TTL_HOURS: int = 24`、`UPLOAD_MAX_ASSEMBLY_BYTES: int = 268435456`。
 
-- [ ] **Step 1: 写失败测试**（`test/test_uploads_api.py`，10 个用例）
+- [x] **Step 1: 写失败测试**（`test/test_uploads_api.py`，10 个用例）
   1. 创建会话返回 `uploadId`/`objectKey`/`partSize==16777216`/`partCount==ceil(size/partSize)`；
   2. 缺 `X-Idempotency-Key` → 422；
   3. 同一 `X-Idempotency-Key` 二次创建返回同一 `uploadId`；
@@ -316,10 +318,10 @@ async def test_decision_record_rejects_update(db_session):
   8. 会话已 `COMPLETED` 后再 PUT → 409；
   9. `DELETE` 后 `state == "ABORTED"`，再 PUT → 409；
   10. 累计分片超过 `UPLOAD_MAX_ASSEMBLY_BYTES` 时 complete → 422 且 message 指向后续 MinIO 直传步骤。
-- [ ] **Step 2: 跑测试确认失败**。
-- [ ] **Step 3: 实现 schema + service + router**。关键点：`parts` 是 JSON 列，**必须重新赋值再 `flag_modified`**（`from sqlalchemy.orm.attributes import flag_modified`；`session.parts = [*session.parts, entry]; flag_modified(session, "parts")`），否则 SQLAlchemy 不感知原地 append。
-- [ ] **Step 4: 跑测试确认通过** — 期望 10 passed。
-- [ ] **Step 5: 提交**。
+- [x] **Step 2: 跑测试确认失败**。
+- [x] **Step 3: 实现 schema + service + router**。关键点：`parts` 是 JSON 列，**必须重新赋值再 `flag_modified`**（`from sqlalchemy.orm.attributes import flag_modified`；`session.parts = [*session.parts, entry]; flag_modified(session, "parts")`），否则 SQLAlchemy 不感知原地 append。
+- [x] **Step 4: 跑测试确认通过** — 期望 10 passed。
+- [x] **Step 5: 提交**。
 
 ## Task 5（PR2）：数据集登记与查询
 
@@ -337,8 +339,8 @@ async def test_decision_record_rejects_update(db_session):
 - 端点：`project_router`（`GET /{project_id}/datasets`、`POST /{project_id}/datasets`），`router`（`GET /datasets/{dataset_id}`、`DELETE /datasets/{dataset_id}`）。
 - 语义：`POST /projects/{id}/datasets` 登记一个已完成的导入结果（`file_urn` + `summary`），**不重新解析文件**——解析仍走既有 `POST /projects/{id}/compounds:import`；`docs/05` §4.1 的 `datasets:import` 异步 taskId 形态记为后续步骤。
 
-- [ ] **Step 1~5** 同前，8 个用例（列表分页、类型筛选、跨项目 404、viewer 403、删除后不再出现在列表、`summary` 原样回读、`row_count` 校验非负、`file_urn` 必须 `file:` 前缀）。
-- [ ] **Step 6: 提交**。
+- [x] **Step 1~5** 同前，8 个用例（列表分页、类型筛选、跨项目 404、viewer 403、删除后不再出现在列表、`summary` 原样回读、`row_count` 校验非负、`file_urn` 必须 `file:` 前缀）。
+- [x] **Step 6: 提交**。
 
 ## Task 6（PR3）：靶点域 api/types/domain 层
 
@@ -361,11 +363,11 @@ async def test_decision_record_rejects_update(db_session):
   - `frontend/src/types/targets.ts`：`TargetSummary`、`ProteinDetail`、`ProteinStructureDetail`、`PocketSummary`、`PocketResidue`，字段名与后端 `serialize_*` 的 snake_case 一致。
   - `frontend/src/domain/targets/pockets.ts`：`sortPocketsByScore(pockets): PocketSummary[]`、`findSelectedPocket(pockets): PocketSummary | null`、`formatPocketCenter(pocket): string`（三位小数）、`pocketScoreTone(score): 'strong' | 'medium' | 'weak'`（`<= -8` / `<= -6` / 其他）。
 
-- [ ] **Step 1: 写失败测试**（`frontend/test/targets-domain.test.ts`，6 个用例：排序降序、`selected` 唯一、center 格式化、tone 三档、空数组、`score=null` 归 `weak`）。
-- [ ] **Step 2: 跑测试确认失败** — `export TZ=UTC && cd frontend && npx vitest run test/targets-domain.test.ts`。
-- [ ] **Step 3: 实现 api/types/domain**。
-- [ ] **Step 4: 跑测试确认通过**。
-- [ ] **Step 5: 提交**。
+- [x] **Step 1: 写失败测试**（`frontend/test/targets-domain.test.ts`，6 个用例：排序降序、`selected` 唯一、center 格式化、tone 三档、空数组、`score=null` 归 `weak`）。
+- [x] **Step 2: 跑测试确认失败** — `export TZ=UTC && cd frontend && npx vitest run test/targets-domain.test.ts`。
+- [x] **Step 3: 实现 api/types/domain**。
+- [x] **Step 4: 跑测试确认通过**。
+- [x] **Step 5: 提交**。
 
 ## Task 7（PR3）：靶点域六个页面 + 路由 + 导航 + i18n
 
@@ -381,12 +383,12 @@ async def test_decision_record_rejects_update(db_session):
 - Produces：路由名 `ProjectTargets`、`TargetDetail`、`StructurePredict`、`StructureDetail`、`StructurePockets`、`PocketResidues`；路径 `/projects/:projectId/targets`、`/targets/:targetId`、`/proteins/:proteinId/predict`、`/structures/:structureId`、`/structures/:structureId/pockets`、`/pockets/:pocketId/residues`。
 - 每页必含：加载骨架、`AppErrorState` 错态（含「返回项目」链接）、空态文案、`data-testid` 供测试断言。
 
-- [ ] **Step 1: 写失败测试**（`test/targets-pages-surface.test.ts`，8 个用例：6 个视图文件存在；router 源码含 6 个路由名；navigation 含 `'targets'` 键且位于 `overview` 之后；i18n 两文件都含 `targets:` 命名空间；List.vue 含空态文案键；Pockets.vue 含 `selected` 切换调用；PocketResidues.vue 含 `is_key` 渲染；StructureDetail.vue 不含 `import.*molstar`）。
-- [ ] **Step 2: 跑测试确认失败**。
-- [ ] **Step 3: 实现 6 个页面 + 路由 + 导航 + i18n**。约束：页面内不写业务计算，全部调 `@/domain/targets`；提交预测后 `router.push({ name: 'TaskDetail', params: { id: taskId } })`。
-- [ ] **Step 4: 跑测试 + 类型检查** — `npx vitest run test/targets-pages-surface.test.ts` 与 `npx vue-tsc --noEmit -p tsconfig.app.json` 均须通过。
-- [ ] **Step 5: 全量前端回归** — `TZ=UTC npx vitest run`，期望全绿。
-- [ ] **Step 6: 提交**。
+- [x] **Step 1: 写失败测试**（`test/targets-pages-surface.test.ts`，8 个用例：6 个视图文件存在；router 源码含 6 个路由名；navigation 含 `'targets'` 键且位于 `overview` 之后；i18n 两文件都含 `targets:` 命名空间；List.vue 含空态文案键；Pockets.vue 含 `selected` 切换调用；PocketResidues.vue 含 `is_key` 渲染；StructureDetail.vue 不含 `import.*molstar`）。
+- [x] **Step 2: 跑测试确认失败**。
+- [x] **Step 3: 实现 6 个页面 + 路由 + 导航 + i18n**。约束：页面内不写业务计算，全部调 `@/domain/targets`；提交预测后 `router.push({ name: 'TaskDetail', params: { id: taskId } })`。
+- [x] **Step 4: 跑测试 + 类型检查** — `npx vitest run test/targets-pages-surface.test.ts` 与 `npx vue-tsc --noEmit -p tsconfig.app.json` 均须通过。
+- [x] **Step 5: 全量前端回归** — `TZ=UTC npx vitest run`，期望全绿。
+- [x] **Step 6: 提交**。
 
 ## Task 8（PR4）：化合物/候选物/结果 api 与 domain 层
 
@@ -400,9 +402,9 @@ async def test_decision_record_rejects_update(db_session):
 - Produces（api）：`listCompounds`、`createCompound`、`importCompounds`、`getCompound`、`searchCompounds`、`listCandidates`、`createCandidate`、`getCandidate`、`updateCandidate`、`compareCandidates`、`listCandidateSets`、`createCandidateSet`、`getCandidateSet`、`updateCandidateSet`、`listCandidateSetItems`、`addCandidateSetItems`、`removeCandidateSetItem`、`exportCandidateSet`、`listProjectResults`、`getResult`、`getTraceability`、`exportTraceability`。
 - Produces（domain）：`PROPERTY_COLUMNS`（`mol_weight`/`logP`/`TPSA`/`HBD`/`HBA`/`RotB`/`QED`）、`formatPropertyValue(key, value): string`、`buildComparisonMatrix(candidates)`（差异高亮 = 该行取值不全相同）、`candidateLocationLabel(candidate)`、`sortResultsByFinishedDesc(results)`。
 
-- [ ] **Step 1: 写失败测试**（8 个用例：7 列属性顺序、`null` 显示 `-`、QED 三位、MW 三位、矩阵差异高亮命中、全相同不高亮、多肽位置标签、结果按 `finished_at` 降序且 `null` 排后）。
-- [ ] **Step 2~4**: 失败 → 实现 → 通过。
-- [ ] **Step 5: 提交**。
+- [x] **Step 1: 写失败测试**（8 个用例：7 列属性顺序、`null` 显示 `-`、QED 三位、MW 三位、矩阵差异高亮命中、全相同不高亮、多肽位置标签、结果按 `finished_at` 降序且 `null` 排后）。
+- [x] **Step 2~4**: 失败 → 实现 → 通过。
+- [x] **Step 5: 提交**。
 
 ## Task 9（PR4）：化合物/候选物/结果七个页面 + 路由 + 导航 + i18n
 
@@ -417,9 +419,9 @@ async def test_decision_record_rejects_update(db_session):
 - 路由名：`ProjectAssets`、`CompoundDetail`、`CandidateSetDetail`、`CandidateDetail`、`CandidateCompare`、`ProjectResults`、`ResultDetail`；路径 `/projects/:projectId/assets`、`/compounds/:compoundId`、`/candidate-sets/:setId`、`/candidates/:candidateId`、`/projects/:projectId/candidates/compare`、`/projects/:projectId/results`、`/results/:taskId`。
 - 复用：`@/components/tasks/Smiles2DCell` 渲染 SMILES；`ResultDetail.vue` 复用 `getTraceability`，**不新建第二个追溯组件**。
 
-- [ ] **Step 1: 写失败测试**（9 个用例：7 个视图存在、7 个路由名、`assets` 导航项位于 `tasks` 之后、i18n 三个命名空间齐全、`Compare.vue` 限制 6 个上限、`ResultDetail.vue` 含 `traceability` 与导出按钮、`Assets.vue` 含导入入口、`CandidateSetDetail.vue` 含导出、页面均无 `any`）。
-- [ ] **Step 2~5**: 失败 → 实现 → 通过 → 全量 `TZ=UTC npx vitest run` + `vue-tsc`。
-- [ ] **Step 6: 提交**。
+- [x] **Step 1: 写失败测试**（9 个用例：7 个视图存在、7 个路由名、`assets` 导航项位于 `tasks` 之后、i18n 三个命名空间齐全、`Compare.vue` 限制 6 个上限、`ResultDetail.vue` 含 `traceability` 与导出按钮、`Assets.vue` 含导入入口、`CandidateSetDetail.vue` 含导出、页面均无 `any`）。
+- [x] **Step 2~5**: 失败 → 实现 → 通过 → 全量 `TZ=UTC npx vitest run` + `vue-tsc`。
+- [x] **Step 6: 提交**。
 
 ## Task 10（PR5）：算力队列与审计日志界面（P-36 / P-38）
 
@@ -439,12 +441,12 @@ async def test_decision_record_rejects_update(db_session):
   - `frontend/src/domain/admin/compute.ts`：`SLOT_STATE_TONES: Record<'FREE'|'RESERVED'|'BUSY'|'FAULT'|'BORROWED', 'success'|'processing'|'warning'|'error'|'default'>`、`countSlotsByState(slots): Record<string, number>`、`formatSlotIdentifier(slot): string`（`nodeId/slotId`）、`summarizeSlotCapacity(nodes): { totalSlots, schedulableSlots, byVendor: Record<string, number> }`。
   - `frontend/src/domain/admin/audit.ts`：`AUDIT_ACTION_OPTIONS`（从 `actions` facet 直接映射，不硬编码）、`formatAuditTimestamp(value)`、`describeAuditTarget(row): string`（`${resource_type}/${resource_id}`，缺 `resource_id` 时只显示类型）、`isImmutableAction(action): boolean`（`action` 以 `delete` 结尾时也返回 true 用于提示「只追加」）。
 
-- [ ] **Step 1: 写失败测试**（`frontend/test/admin-compute-audit-surface.test.ts`，9 个用例：2 个视图存在；router 含 `AdminCompute`/`AdminAudit`；`views/admin/index.vue` 的 `adminTabs` 含 `compute`/`audit` 且位于 `system` 之前；i18n zh/en 都含 `admin.compute.title` 与 `admin.audit.title`；`compute.ts` 的 `SLOT_STATE_TONES` 覆盖 5 个状态；`countSlotsByState` 对空数组返回 5 个 0；`audit.ts` 不硬编码动作列表；`Compute.vue` 不含 `reportSlotState`；`Audit.vue` 分页参数带 `page_size` 上限）。
-- [ ] **Step 2: 跑测试确认失败** — `export TZ=UTC && cd frontend && npx vitest run test/admin-compute-audit-surface.test.ts`。
-- [ ] **Step 3: 实现 api/types/domain/两个页面 + 路由 + tabs + i18n**。约束：`Compute.vue` 展示「卡位网格（按节点分组，状态色块 + 可调度数）+ 节点表」，**不提供任何写操作**（卡位声明随部署版本化，后端也不给写接口）；`Audit.vue` 为只读列表 + facet 筛选（actor/action/result/resource_type/时间范围），分页 `page_size` 上限 100。
-- [ ] **Step 4: 跑测试 + 类型检查** — `npx vitest run test/admin-compute-audit-surface.test.ts` 与 `npx vue-tsc --noEmit -p tsconfig.app.json` 均须通过。
-- [ ] **Step 5: 全量前端回归** — `TZ=UTC npx vitest run`，期望全绿。
-- [ ] **Step 6: 提交**。
+- [x] **Step 1: 写失败测试**（`frontend/test/admin-compute-audit-surface.test.ts`，9 个用例：2 个视图存在；router 含 `AdminCompute`/`AdminAudit`；`views/admin/index.vue` 的 `adminTabs` 含 `compute`/`audit` 且位于 `system` 之前；i18n zh/en 都含 `admin.compute.title` 与 `admin.audit.title`；`compute.ts` 的 `SLOT_STATE_TONES` 覆盖 5 个状态；`countSlotsByState` 对空数组返回 5 个 0；`audit.ts` 不硬编码动作列表；`Compute.vue` 不含 `reportSlotState`；`Audit.vue` 分页参数带 `page_size` 上限）。
+- [x] **Step 2: 跑测试确认失败** — `export TZ=UTC && cd frontend && npx vitest run test/admin-compute-audit-surface.test.ts`。
+- [x] **Step 3: 实现 api/types/domain/两个页面 + 路由 + tabs + i18n**。约束：`Compute.vue` 展示「卡位网格（按节点分组，状态色块 + 可调度数）+ 节点表」，**不提供任何写操作**（卡位声明随部署版本化，后端也不给写接口）；`Audit.vue` 为只读列表 + facet 筛选（actor/action/result/resource_type/时间范围），分页 `page_size` 上限 100。
+- [x] **Step 4: 跑测试 + 类型检查** — `npx vitest run test/admin-compute-audit-surface.test.ts` 与 `npx vue-tsc --noEmit -p tsconfig.app.json` 均须通过。
+- [x] **Step 5: 全量前端回归** — `TZ=UTC npx vitest run`，期望全绿。
+- [x] **Step 6: 提交**。
 
 ## Task 11（PR6）：死链与残留清理 + 文档同步
 
@@ -453,7 +455,7 @@ async def test_decision_record_rejects_update(db_session):
 - Modify: `frontend/src/views/projects/Overview.vue`（删 `open-research` 死链，改指向 `ProjectTargets`）、`frontend/src/views/projects/Overview.spec.ts`、`frontend/src/types/api.d.ts`（删 `VITE_WS_URL`）、`frontend/src/views/admin/Tools.vue`（删 `.registration-option--remote`）、`README.md`、`docs/17-交付仓库与分支策略.md`（§5 步骤表 + 新增 §5.7/§5.8/§5.9）
 - Test: `frontend/test/product-surface-pruning.test.ts`（补一条断言 `open-research` 不存在）
 
-- [ ] **Step 1~5**：先改 `Overview.spec.ts` 断言为 `/projects/project-1/targets`；改 `Overview.vue`；补 pruning 断言；跑全量；提交。
+- [x] **Step 1~5**：先改 `Overview.spec.ts` 断言为 `/projects/project-1/targets`；改 `Overview.vue`；补 pruning 断言；跑全量；提交。
 
 ---
 
@@ -531,3 +533,38 @@ gh pr merge <pr2> --repo zyc6665/cnpharm-aidd --squash --delete-branch
 | 离线合规 | `python scripts/check_offline_compliance.py` | 阻断 0 |
 | 文档链接 | `python scripts/check_doc_links.py` | PASSED |
 | CI | 每个 PR 8 项检查 | 全绿后 squash 合入 |
+
+---
+
+# §6 实施结果（2026-10-26）
+
+11 个 Task 全部落地，拆成 6 个并行 PR，全部 8 项 CI 全绿后 squash 合入。
+
+| PR | 分支 | 内容 | 合入提交 |
+|---|---|---|---|
+| #13 | `feat/decisions-and-stage` | Task 1、Task 2：决策记录两表 + 阶段推导 | `e17bda1` |
+| #15 | `feat/multipart-datasets` | Task 3、Task 4、Task 5：分片上传 + 数据集 | `50af7ef` |
+| #16 | `feat/targets-ui` | Task 6、Task 7：靶点域 6 页（P-06~P-11） | `7bc938f` |
+| #17 | `feat/compounds-results-ui` | Task 8、Task 9：化合物域 7 页（P-12/13/18/19/20/33/34） | `2a6e74f` |
+| #14 | `feat/admin-compute-audit` | Task 10：算力队列与审计（P-36/P-38） | `612d650` |
+| #12 | `feat/cleanup-tech-debt` | Task 11：死链与残留清理 + 时区口径统一 | `37f9603` |
+
+## 与计划的偏差
+
+1. **PR 数量从 5 个变 6 个**：计划里 Task 11 与「清理」合并在 PR6，实施时 PR6 顺带把「时区口径统一」也做了（原计划把它记在后续步骤），因此 `docs/17` §5 的步骤表多了第 11 行。
+2. **PR2 的四条评审阻塞在合入后才收口**：并发丢 `parts`、幂等键唯一性、分片暂存脱离 `StorageBackend`、会话过期生效，这四条的修复落在 PR #18（步骤 12），本计划内没有预见。教训是「JSON 列存列表 + read-modify-write」在并发下必丢数据，评审应在设计阶段就拦住。
+3. **每个 PR 都经了一轮「只读 reviewer + 派回修复」**：计划只写了「Code Review 8 条」，实际执行时给每个 PR 都起了独立 reviewer 子智能体，报回的阻塞项（PR1 反向一致性、PR3 时间戳差 8 小时、PR4 字段错位、PR5 分配字段虚构、PR2 四条）全部修完才合入。这一步发现的缺陷数量远超预期，不应省略。
+4. **前端共享文件的合并冲突**：`frontend/src/domain/projects/navigation.ts` 的 `ProjectWorkspaceNavKey` union 被 PR3、PR4、PR6 各自追加一次，rebase 时连续两轮冲突。教训：枚举式列表类共享文件应在计划里预先分配「插入位置与最终顺序」，而不是各自 append。
+
+## 验收结果
+
+| 项 | 结果 |
+|---|---|
+| 后端 flake8 | 零输出 |
+| 后端测试 | 1488 passed / 6 failed（全部为已知 Windows 环境差异） |
+| 迁移链 | 单 head `20261028_01`，`upgrade head` 56 表，`downgrade base` exit 0 |
+| 前端类型 | `vue-tsc` exit 0 |
+| 前端测试 | 212 文件 / 832 用例全绿 |
+| 前端构建 | 成功 |
+| 离线合规 | 阻断 0 / 豁免 0 |
+| 文档链接 | PASSED |
