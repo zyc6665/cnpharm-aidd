@@ -73,6 +73,31 @@ def _clear_queued_at(task: "Task") -> None:
     task.extra_data = updated
 
 
+def _set_cost_metadata(task: "Task") -> None:
+    """终态落算力成本（docs/04 §5.3）。
+
+    为什么放在状态机里而不是 worker 里
+    ----------------------------------
+    走终态的路径不止一条：worker 成功/失败、排队超时巡检（``queue_timeout``）、
+    用户取消（``cancellation``）、远端结果补回、direct runner 兜底。每条路径
+    各自写一遍成本，漏一条就等于给那条路径留了白嫖算力的口子。``transition()``
+    是**所有**终态的必经之路，放在这里只需要写一次。
+
+    为什么是纯内存
+    --------------
+    本模块是纯同步的、不持有 session（``docs/04 §9.1`` 要求状态迁移走状态机，
+    但不是要求状态机自己提交）。这里只改 ``task.extra_data``，落库交给调用方
+    已有的 commit，从而「状态变更 + 成本核销」天然在同一事务里。
+
+    延迟 import：``app.services.project_quotas`` 会反过来 import ``app.models.tasks``
+    的类型，模块级 import 会在应用启动早期形成环。这个函数每次状态迁移只调一次，
+    函数内 import 的开销可以忽略。
+    """
+    from app.services.project_quotas import settle_task_cost_in_memory
+
+    settle_task_cost_in_memory(task)
+
+
 class TaskStateError(Exception):
     """任务状态转换错误"""
 
@@ -320,6 +345,13 @@ class TaskStateMachine:
         # 离开 QUEUED 时清掉排队锚点，否则重排任务会带着旧时间被立刻判超时
         if old_status == TaskStatus.QUEUED and to_status != TaskStatus.QUEUED:
             _clear_queued_at(task)
+
+        # 终态核销算力成本（docs/04 §5.3）：SUCCESS/FAILURE/TIMEOUT/CANCELED 都在此
+        # 覆盖——失败与取消同样核销，否则可以反复失败来白嫖算力。
+        # 放在进度兜底之前：成本只依赖 started_at/finished_at/execution_time_sec，
+        # 让它在最后一步之前完成，删掉这里就等于把所有终态路径的核销一起关掉。
+        if to_status in cls.TERMINAL_STATES:
+            _set_cost_metadata(task)
 
         # 更新进度（如果提供）
         if progress is not None and to_status not in {TaskStatus.SUCCESS}:

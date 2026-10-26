@@ -207,7 +207,10 @@ async def test_create_allocation_persists_task_gpu_fields():
     )
 
     assert result.success is True
-    db.execute.assert_awaited_once()
+    # 两条 UPDATE：一条落 gpu_node_id/gpu_index/gpu_memory_allocated_mb，
+    # 一条把不可变的「占过几张卡」写进 extra_data["allocatedDcuCount"]。
+    # 后者不能省——释放时 gpu_index 会被清空，而配额核销发生在终态之后。
+    assert db.execute.await_count == 2
     db.flush.assert_awaited_once()
 
 

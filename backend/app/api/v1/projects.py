@@ -15,6 +15,7 @@ from app.models.artifacts import Artifact, ArtifactLineage, ArtifactVersion
 from app.models.executions import ExecutionRecord
 from app.models.files import File
 from app.models.projects import Organization, Project, ProjectMember
+from app.models.quotas import ProjectQuota
 from app.models.tasks import Task
 from app.models.users import User
 from app.models.workflows import (
@@ -354,6 +355,10 @@ async def _delete_project_related_rows(db: AsyncSession, project_id: str) -> Non
     )
     await delete_project_compound_rows(db, project_id=project_id)
     await delete_project_domain_rows(db, project_id=project_id)
+    # 配额是项目的一等附属行，必须在删项目之前显式清掉：`project_quotas.project_id`
+    # 是普通外键（SQLite 默认不强制），留着孤儿行会让重建同名项目沿用旧配额，
+    # 也会让 `GET /compute/quota` 把已删项目的额度继续算进分母。
+    await db.execute(sa_delete(ProjectQuota).where(ProjectQuota.project_id == project_id))
     await db.execute(sa_delete(ProjectMember).where(ProjectMember.project_id == project_id))
 
 

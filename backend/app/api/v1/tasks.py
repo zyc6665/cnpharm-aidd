@@ -621,6 +621,12 @@ async def create_task(
 
     支持 ``X-Idempotency-Key``（docs/05 §12）：同键同体返回首响快照、同键异体
     40905、首次仍在处理中 40904 + ``Retry-After``。没带该请求头时行为完全不变。
+
+    项目配额（docs/04 §5.3）的准入检查不在这里，而在
+    ``app.tasks.service.create_and_schedule_tool_task``：那是全平台唯一的建任务入口，
+    k8s smoke、结构预测、workflow 节点、direct recovery 都走它。挂在路由上只能
+    覆盖 HTTP 这一条路径，其他入口可以绕开配额无限提交。被拦时抛 429
+    ``429 / 配额超出``，``detail`` 里带 ``dimension`` / ``limit`` / 已用量。
     """
     task = await create_and_schedule_tool_task(
         db=db,

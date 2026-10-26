@@ -356,6 +356,18 @@ class Settings(BaseSettings):
     TASK_QUEUE_TIMEOUT_SCAN_INTERVAL_SECONDS: int = 300
     TASK_QUEUE_TIMEOUT_SCAN_BATCH_SIZE: int = 200
     TASK_QUEUE_TIMEOUT_ENABLED: bool = True
+    # 项目配额（docs/04 §5.3、docs/05 §9）：表与端点始终存在，这个开关只控制
+    # 「提交准入是否拦截」与「漏核销兜底巡检是否启动」两件事。
+    # 默认开启是安全的：准入只在**存在配额记录**时才生效，而记录只会由
+    # `PUT /projects/{id}/quota` 显式创建（`GET` 是纯读，**不会**顺手建记录——
+    # 否则「有没有人点开过配额页」就会决定这个项目还能不能提交任务）。
+    # 没有任何记录的项目一律不限，升级不会因为「还没人配过」而挡住存量项目。
+    PROJECT_QUOTA_ENABLED: bool = True
+    # 兜底补核销：状态机终态核销是主路径，这里只补「不经过状态机」的历史/异常数据。
+    # 5 分钟一轮、每轮 200 条，与排队超时巡检同量级——配额是分钟级资源，
+    # 不需要秒级精度，扫得太勤只是白占连接。
+    QUOTA_SETTLEMENT_INTERVAL_SECONDS: float = 300.0
+    QUOTA_SETTLEMENT_BATCH_SIZE: int = 200
     GPU_RETRY_INITIAL_BACKOFF_SECONDS: int = 30
     GPU_RETRY_MAX_BACKOFF_SECONDS: int = 900
     # 任务事件 SSE（docs/05 §1.5、§9；docs/10 API-08）。

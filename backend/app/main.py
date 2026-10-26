@@ -21,6 +21,7 @@ from app.services.workflow_reconciliation import workflow_reconcile_loop
 from app.services.upload_maintenance import upload_sweep_loop
 from app.services.idempotency_maintenance import idempotency_sweep_loop
 from app.services.queue_timeout import queue_timeout_sweep_loop
+from app.services.quota_maintenance import quota_settlement_loop
 from app.worker.celery_app import configure_managed_execution_runtime
 
 logger = logging.getLogger(__name__)
@@ -55,9 +56,15 @@ async def lifespan(app: FastAPI):
     # 页面显示「排队中」而实际永远不会开始——必须有与用户行为无关的上限。
     if queue_timeout_sweep_loop is not None:
         queue_timeout_sweep_loop.start()
+    # 配额漏核销兜底（docs/04 §5.3）：主路径是状态机终态核销，这里只补历史数据与
+    # 绕过状态机的改库；开关关闭时 `quota_settlement_loop` 为 None。
+    if quota_settlement_loop is not None:
+        quota_settlement_loop.start()
     logger.info("数据库初始化完成")
     yield
     # 关闭时清理资源
+    if quota_settlement_loop is not None:
+        await quota_settlement_loop.stop()
     if queue_timeout_sweep_loop is not None:
         await queue_timeout_sweep_loop.stop()
     if idempotency_sweep_loop is not None:
