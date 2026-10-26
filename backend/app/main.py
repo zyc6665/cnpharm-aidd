@@ -18,6 +18,7 @@ from app.services.audit_sink import configure_audit_db_writer
 from app.tasks.direct_recovery import direct_task_recovery_loop
 from app.tasks.direct_runner import direct_task_runner
 from app.services.workflow_reconciliation import workflow_reconcile_loop
+from app.services.upload_maintenance import upload_sweep_loop
 from app.worker.celery_app import configure_managed_execution_runtime
 
 logger = logging.getLogger(__name__)
@@ -42,9 +43,14 @@ async def lifespan(app: FastAPI):
     # 审计事件落库（步骤 7）：文件轨迹仍开启，数据库是查询入口。
     audit_writer = configure_audit_db_writer()
     audit_writer.start()
+    # 过期分片上传会话清理：只在三个业务入口之外兜底，避免僵尸会话长期占存储。
+    if upload_sweep_loop is not None:
+        upload_sweep_loop.start()
     logger.info("数据库初始化完成")
     yield
     # 关闭时清理资源
+    if upload_sweep_loop is not None:
+        await upload_sweep_loop.stop()
     await audit_writer.stop()
     await workflow_reconcile_loop.stop()
     if use_direct_task_execution():
