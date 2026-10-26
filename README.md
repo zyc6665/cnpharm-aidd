@@ -60,7 +60,7 @@ backend/            FastAPI 服务端
     tool_packages/  Tool Package v2 加载、校验、注册
     tool_templates/ 工具模板（含 drug_discovery 领域模板）
     tools/          工具能力注册表与内建工具执行（capabilities/registry/builtin_tools）
-  alembic/          数据库迁移（36 个版本）
+  alembic/          数据库迁移（37 个版本）
 frontend/           Vue 3 + Vite + ant-design-vue 4
   src/views/        页面（工作台/项目/靶点/化合物/结果/任务/工具/工作流/管理后台）
   src/components/   workflow 画布、artifacts 渲染器
@@ -70,7 +70,7 @@ deploy/             compose 与 K8s 部署资产
   slots/            卡位声明（slots.yaml，算力节点与卡位映射的事实源）
 docs/               中国医药项目文档（00~18，见 docs/README.md）
   archive-upstream/ 产品线历史文档，只读归档
-test/               后端测试（225 个文件）
+test/               后端测试（227 个文件）
 example/            模型资产样例（tool-package v2）
 ```
 
@@ -101,7 +101,7 @@ Refs: M2-FR-02, 04-数据模型 §6.1~§6.3
 
 ## 5. 当前状态
 
-基线已就位，靶点域、化合物域、可追溯能力、DCU 卡位调度与实时状态推送已落地（步骤 5~步骤 9），40 个页面中的 29 个有界面（步骤 10、13），分片上传的四条评审阻塞已收口（步骤 12），排队超时巡检与 CI 硬时限兜底已收口（步骤 14）。较需求文档（62 个功能点 / 40 个页面）的差距：
+基线已就位，靶点域、化合物域、可追溯能力、DCU 卡位调度与实时状态推送已落地（步骤 5~步骤 9），40 个页面中的 29 个有界面（步骤 10、13），分片上传的四条评审阻塞已收口（步骤 12），排队超时巡检与 CI 硬时限兜底已收口（步骤 14），数据版本账本与幂等补挂已收口（步骤 15、16）。较需求文档（62 个功能点 / 40 个页面）的差距：
 
 | 类别 | 现状 |
 |---|---|
