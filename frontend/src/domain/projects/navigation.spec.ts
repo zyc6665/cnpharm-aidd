@@ -1,6 +1,7 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import {
+  buildProjectDecisionsPath,
   buildProjectTaskPath,
   buildProjectWorkflowPath,
   buildProjectWorkspaceNavItems,
@@ -12,7 +13,17 @@ test('项目工作台导航项覆盖所有项目内入口', () => {
 
   assert.deepEqual(
     items.map(item => item.label),
-    ['项目总览', '靶点与结构', 'Workflow', '任务中心', '数据资产', '结果中心', 'Artifact 谱系', '项目设置']
+    [
+      '项目总览',
+      '靶点与结构',
+      'Workflow',
+      '任务中心',
+      '数据资产',
+      '结果中心',
+      '决策记录',
+      'Artifact 谱系',
+      '项目设置'
+    ]
   )
   assert.deepEqual(
     items.map(item => item.to),
@@ -23,10 +34,24 @@ test('项目工作台导航项覆盖所有项目内入口', () => {
       '/tasks?project_id=project-1',
       '/projects/project-1/assets',
       '/projects/project-1/results',
+      '/projects/project-1/decisions',
       '/projects/project-1/lineage',
       '/projects/project-1/settings'
     ]
   )
+})
+
+test('决策记录导航项排在结果中心之后、Artifact 谱系之前', () => {
+  const items = buildProjectWorkspaceNavItems('project-1')
+  const keys = items.map(item => item.key)
+
+  assert.equal(keys.indexOf('decisions'), keys.indexOf('results') + 1)
+  assert.equal(keys.indexOf('decisions') + 1, keys.indexOf('lineage'))
+
+  const decisions = items.find(item => item.key === 'decisions')
+  assert.ok(decisions, '缺少 decisions 导航项')
+  assert.equal(decisions?.to, '/projects/project-1/decisions')
+  assert.equal(buildProjectDecisionsPath('project-1'), '/projects/project-1/decisions')
 })
 
 test('项目任务路径编码 project_id，项目工作流路径保持项目路由', () => {

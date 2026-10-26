@@ -1538,6 +1538,113 @@ export default {
     }
   },
 
+  // 决策记录（P-39）
+  decisions: {
+    title: '决策记录',
+    subtitle: '按决策点回看每一次「选谁往下走」的判断依据',
+    backToProject: '返回项目总览',
+    appendOnlyNotice: '决策记录只追加，不可修改、不可删除',
+    appendOnlyDescription: '如需更正，请追加一条新的决策记录并说明原因，历史记录会一并保留。',
+    create: '记录一次决策',
+    filterPoint: '按决策点筛选',
+    timeline: {
+      total: '共 {total} 条决策记录',
+      selected: '入选 {count}',
+      excluded: '淘汰 {count}',
+      decidedBy: '决策人',
+      decidedAt: '决策时间',
+      subject: '决策对象',
+      reason: '理由',
+      expand: '查看成员快照与依据',
+      collapse: '收起成员快照',
+      basisTasks: '依据任务',
+      basisMetrics: '依据指标',
+      noBasisTasks: '未关联依据任务',
+      noBasisMetrics: '未记录依据指标'
+    },
+    snapshot: {
+      title: '成员快照',
+      hint: '快照记录决策当时的分数与排名，不随后续重算而变化。',
+      candidateId: '候选物 ID',
+      verdict: '结论',
+      score: '当时分数',
+      rank: '当时排名',
+      notRecorded: '未记录',
+      missingHint: '当时未录分：score_source 为 missing，不等于 0 分'
+    },
+    points: {
+      DP1: '靶点是否值得推进',
+      DP2: '选定哪个结构/口袋作为设计起点',
+      DP3: '哪些候选进入评估',
+      DP4: '哪些候选进入重计算',
+      DP5: '最终推荐进入实验'
+    },
+    subjectTypes: {
+      TARGET: '靶点',
+      POCKET: '口袋',
+      CANDIDATE_SET: '候选集',
+      STRUCTURE: '结构'
+    },
+    verdicts: {
+      SELECTED: '入选',
+      EXCLUDED: '淘汰'
+    },
+    stage: {
+      title: '当前阶段',
+      current: '当前阶段',
+      reached: '已到达',
+      next: '下一阶段',
+      gaps: '待补齐的缺口',
+      noGaps: '当前阶段没有待补齐的缺口',
+      go: '去处理',
+      counters: {
+        targets: '靶点',
+        structures: '结构',
+        selectedPockets: '已选口袋',
+        candidates: '候选物',
+        submittedTasks: '已提交任务',
+        finishedTasks: '已完成任务',
+        decisions: '决策记录'
+      }
+    },
+    empty: {
+      title: '本项目还没有决策记录',
+      hint: '每次「选谁往下走」的判断都值得留档：记下决策点、入选/淘汰名单与理由，复盘时才有据可依。',
+      create: '记录第一条决策'
+    },
+    drawer: {
+      title: '记录一次决策',
+      decisionPoint: '决策点',
+      subjectType: '对象类型',
+      subjectId: '对象 ID',
+      subjectIdPlaceholder: '如候选集 ID',
+      reason: '决策理由',
+      reasonPlaceholder: '说明为什么这样取舍（必填）',
+      selectedIds: '入选成员',
+      excludedIds: '淘汰成员',
+      idsPlaceholder: '逗号分隔，如 candidate-1, candidate-2',
+      basisTaskIds: '依据任务 ID',
+      basisTaskIdsPlaceholder: '逗号分隔，提交后会链接到对应任务',
+      basisMetrics: '依据指标 JSON（可选）',
+      basisMetricsPlaceholder: '形如 pic50: 7.2 的键值对',
+      snapshotHint: '本次快照按入选/淘汰成员自动生成，分数留空：未录分的成员在记录里会标为「未记录」。',
+      submit: '提交决策',
+      cancel: '取消',
+      submitted: '决策已记录',
+      subjectRequired: '请填写决策对象 ID',
+      reasonRequired: '请填写决策理由',
+      verdictRequired: '至少填写一名入选或淘汰成员',
+      verdictDuplicated: '同一候选物不能既入选又淘汰'
+    },
+    errors: {
+      loadDecisions: '决策记录加载失败',
+      loadDecisionsHint: '决策记录只追加、不会被删除，重新加载即可看到历史记录。',
+      retry: '重试',
+      loadStage: '项目阶段加载失败',
+      createDecision: '决策提交失败'
+    }
+  },
+
   // 任务
   tasks: {
     title: '任务中心',

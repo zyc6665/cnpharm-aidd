@@ -156,6 +156,12 @@ const routes: RouteRecordRaw[] = [
     meta: { titleLiteral: '结果中心', requiresAuth: true }
   },
   {
+    path: '/projects/:projectId/decisions',
+    name: 'ProjectDecisions',
+    component: () => import('@/views/projects/Decisions.vue'),
+    meta: { titleLiteral: '决策记录', requiresAuth: true }
+  },
+  {
     path: '/results/:taskId',
     name: 'ResultDetail',
     component: () => import('@/views/results/ResultDetail.vue'),

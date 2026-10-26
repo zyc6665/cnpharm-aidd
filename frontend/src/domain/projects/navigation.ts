@@ -7,6 +7,7 @@ export type ProjectWorkspaceNavKey =
   | 'lineage'
   | 'settings'
   | 'results'
+  | 'decisions'
 
 export interface ProjectWorkspaceNavItem {
   key: ProjectWorkspaceNavKey
@@ -40,6 +41,10 @@ export function buildProjectResultsPath(projectId: string): string {
   return `/projects/${projectId}/results`
 }
 
+export function buildProjectDecisionsPath(projectId: string): string {
+  return `/projects/${projectId}/decisions`
+}
+
 export function buildProjectWorkspaceNavItems(projectId: string): ProjectWorkspaceNavItem[] {
   return [
     { key: 'overview', label: '项目总览', to: `/projects/${projectId}` },
@@ -48,6 +53,7 @@ export function buildProjectWorkspaceNavItems(projectId: string): ProjectWorkspa
     { key: 'tasks', label: '任务中心', to: buildProjectTaskPath(projectId) },
     { key: 'assets', label: '数据资产', to: buildProjectAssetsPath(projectId) },
     { key: 'results', label: '结果中心', to: buildProjectResultsPath(projectId) },
+    { key: 'decisions', label: '决策记录', to: buildProjectDecisionsPath(projectId) },
     { key: 'lineage', label: 'Artifact 谱系', to: `/projects/${projectId}/lineage` },
     { key: 'settings', label: '项目设置', to: `/projects/${projectId}/settings` }
   ]
