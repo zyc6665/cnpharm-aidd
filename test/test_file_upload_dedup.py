@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -140,6 +141,20 @@ async def test_upload_file_returns_existing_record_when_duplicate_rows_exist(
         source_type=FileSourceType.UPLOAD,
         storage_path="/tmp/receptor-new.pdb",
     )
+    # 显式给出递进的时间戳：Windows 上 ``datetime.utcnow()`` 的粒度可能粗到
+    # 毫秒级以下三行取到同一个值（实测同一批 12 次调用只得到 1 个不同值），
+    # 而 ``created_at`` / ``updated_at`` 都相同时排序会退化成 ``id`` 的随机
+    # 字典序——那时断言「必定取 newer_file」测的其实是 UUID 的运气。
+    # 这份 fixture 要验证的是「命中多条历史记录时按时间取最新」，所以把时间
+    # 写成确定的递进值，让排序列真正决定结果。
+    base = datetime(2026, 1, 1, 12, 0, 0)
+    older_file.created_at = base
+    older_file.updated_at = base
+    tool_output_file.created_at = base + timedelta(minutes=5)
+    tool_output_file.updated_at = base + timedelta(minutes=5)
+    newer_file.created_at = base + timedelta(minutes=10)
+    newer_file.updated_at = base + timedelta(minutes=10)
+
     db_session.add_all([older_file, tool_output_file, newer_file])
     await db_session.commit()
     await db_session.refresh(older_file)
