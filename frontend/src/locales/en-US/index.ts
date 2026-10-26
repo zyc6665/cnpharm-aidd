@@ -1541,6 +1541,115 @@ export default {
     }
   },
 
+  // Decisions (P-39)
+  decisions: {
+    title: 'Decision Records',
+    subtitle: 'Review the evidence behind every "who moves forward" call, by decision point',
+    backToProject: 'Back to project overview',
+    appendOnlyNotice: 'Decision records are append-only: they cannot be edited or deleted',
+    appendOnlyDescription:
+      'If something needs correcting, append a new decision record with the reason; the history stays intact.',
+    create: 'Record a decision',
+    filterPoint: 'Filter by decision point',
+    timeline: {
+      total: '{total} decision records',
+      selected: 'Selected {count}',
+      excluded: 'Excluded {count}',
+      decidedBy: 'Decided by',
+      decidedAt: 'Decided at',
+      subject: 'Subject',
+      reason: 'Reason',
+      expand: 'Show member snapshot and evidence',
+      collapse: 'Hide member snapshot',
+      basisTasks: 'Basis tasks',
+      basisMetrics: 'Basis metrics',
+      noBasisTasks: 'No basis tasks linked',
+      noBasisMetrics: 'No basis metrics recorded'
+    },
+    snapshot: {
+      title: 'Member snapshot',
+      hint: 'The snapshot keeps the scores and ranks as they were at decision time; later recomputes do not change it.',
+      candidateId: 'Candidate ID',
+      verdict: 'Verdict',
+      score: 'Score at the time',
+      rank: 'Rank at the time',
+      notRecorded: 'Not recorded',
+      missingHint: 'No score at the time: score_source is missing, which is not the same as a score of 0'
+    },
+    points: {
+      DP1: 'Whether the target is worth advancing',
+      DP2: 'Which structure or pocket to use as the design starting point',
+      DP3: 'Which candidates enter evaluation',
+      DP4: 'Which candidates enter the heavy compute',
+      DP5: 'Which candidates are finally recommended for experiments'
+    },
+    subjectTypes: {
+      TARGET: 'Target',
+      POCKET: 'Pocket',
+      CANDIDATE_SET: 'Candidate set',
+      STRUCTURE: 'Structure'
+    },
+    verdicts: {
+      SELECTED: 'Selected',
+      EXCLUDED: 'Excluded'
+    },
+    stage: {
+      title: 'Current stage',
+      current: 'Current stage',
+      reached: 'Reached',
+      next: 'Next stage',
+      gaps: 'Gaps to close',
+      noGaps: 'No gaps to close at the current stage',
+      go: 'Open',
+      counters: {
+        targets: 'Targets',
+        structures: 'Structures',
+        selectedPockets: 'Selected pockets',
+        candidates: 'Candidates',
+        submittedTasks: 'Submitted tasks',
+        finishedTasks: 'Finished tasks',
+        decisions: 'Decision records'
+      }
+    },
+    empty: {
+      title: 'No decision records in this project yet',
+      hint: 'Every "who moves forward" call deserves a record: capture the decision point, the selected/excluded lists and the reason, so later reviews have something to stand on.',
+      create: 'Record the first decision'
+    },
+    drawer: {
+      title: 'Record a decision',
+      decisionPoint: 'Decision point',
+      subjectType: 'Subject type',
+      subjectId: 'Subject ID',
+      subjectIdPlaceholder: 'e.g. the candidate set ID',
+      reason: 'Reason',
+      reasonPlaceholder: 'Explain the trade-off (required)',
+      selectedIds: 'Selected members',
+      excludedIds: 'Excluded members',
+      idsPlaceholder: 'Comma separated, e.g. candidate-1, candidate-2',
+      basisTaskIds: 'Basis task IDs',
+      basisTaskIdsPlaceholder: 'Comma separated; they will link to the tasks after submission',
+      basisMetrics: 'Basis metrics JSON (optional)',
+      basisMetricsPlaceholder: 'Key-value pairs such as pic50: 7.2',
+      snapshotHint:
+        'The snapshot is generated from the selected/excluded members with no scores: members without a score are marked "Not recorded" in the record.',
+      submit: 'Submit decision',
+      cancel: 'Cancel',
+      submitted: 'Decision recorded',
+      subjectRequired: 'Please fill in the subject ID',
+      reasonRequired: 'Please fill in the reason',
+      verdictRequired: 'Fill in at least one selected or excluded member',
+      verdictDuplicated: 'A candidate cannot be both selected and excluded'
+    },
+    errors: {
+      loadDecisions: 'Failed to load decision records',
+      loadDecisionsHint: 'Decision records are append-only and never deleted; reload to see the history.',
+      retry: 'Retry',
+      loadStage: 'Failed to load the project stage',
+      createDecision: 'Failed to submit the decision'
+    }
+  },
+
   // Tasks
   tasks: {
     title: 'Task Center',
