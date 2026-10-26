@@ -1,13 +1,21 @@
 # backend/app/tasks/state_machine.py
 """任务状态机
 
-根据详细设计说明书 4.1 节实现。
+依据《03-系统架构设计说明书》3.4 节与《04-数据模型设计说明书》4.2 节实现。
+规格八态 = CREATED / QUEUED / RUNNING / SUCCEEDED / FAILED / CANCELLED / TIMEOUT / REJECTED，
+与内部枚举的对应关系是 PENDING=CREATED、SUCCESS=SUCCEEDED、FAILURE=FAILED、
+CANCELED=CANCELLED；本次补齐 QUEUED 与 TIMEOUT 两态，共七态。
+REJECTED（准入拒绝）尚未落库，仍是规格与实现的既有偏差，不在本次范围。
+
 状态转换规则：
-- PENDING -> RUNNING, CANCELED, FAILURE (启动前校验失败)
-- RUNNING -> SUCCESS, FAILURE, CANCELED, PENDING (GPU不足重新入队)
+- PENDING -> QUEUED, RUNNING, CANCELED, FAILURE（入队 / 直接调度 / 取消 / 启动前校验失败）
+- QUEUED  -> RUNNING, CANCELED, FAILURE, TIMEOUT（被调度 / 取消 / 准入失败 / 排队超时）
+- RUNNING -> SUCCESS, FAILURE, CANCELED, TIMEOUT, QUEUED, PENDING
+             （完成 / 失败 / 取消 / 执行超时 / GPU 不足重新入队 / 旧路径回退重排）
 - SUCCESS -> (终态)
-- FAILURE -> PENDING (重试)
-- CANCELED -> PENDING (重新提交)
+- FAILURE -> PENDING, QUEUED（重试）
+- TIMEOUT -> PENDING, QUEUED（重试）
+- CANCELED -> PENDING, QUEUED, SUCCESS, FAILURE（重新提交 / 远端结果补回）
 """
 
 from typing import TYPE_CHECKING, Dict, Optional, Set
@@ -72,22 +80,37 @@ class TaskStateMachine:
     # 状态转换规则表
     TRANSITIONS: Dict[TaskStatus, Set[TaskStatus]] = {
         TaskStatus.PENDING: {
-            TaskStatus.RUNNING,
+            TaskStatus.QUEUED,  # 入队等待调度
+            TaskStatus.RUNNING,  # 直连执行模式下立即调度
             TaskStatus.CANCELED,
             TaskStatus.FAILURE  # 启动前校验或调度失败
+        },
+        TaskStatus.QUEUED: {
+            TaskStatus.RUNNING,  # 被调度执行
+            TaskStatus.CANCELED,
+            TaskStatus.FAILURE,  # 准入失败
+            TaskStatus.TIMEOUT  # 排队超时
         },
         TaskStatus.RUNNING: {
             TaskStatus.SUCCESS,
             TaskStatus.FAILURE,
             TaskStatus.CANCELED,
-            TaskStatus.PENDING  # 重试时回到PENDING，或GPU不足重新入队
+            TaskStatus.TIMEOUT,  # 执行超时（执行器 timeout_sec 到期）
+            TaskStatus.QUEUED,  # GPU 不足重新排队
+            TaskStatus.PENDING  # 兼容旧路径的重排重试
         },
         TaskStatus.SUCCESS: set(),  # 终态，不可转换
         TaskStatus.FAILURE: {
-            TaskStatus.PENDING  # 重试
+            TaskStatus.PENDING,  # 重试
+            TaskStatus.QUEUED  # 重试后直接入队
+        },
+        TaskStatus.TIMEOUT: {
+            TaskStatus.PENDING,  # 重试
+            TaskStatus.QUEUED  # 重试后直接入队
         },
         TaskStatus.CANCELED: {
             TaskStatus.PENDING,  # 重新提交
+            TaskStatus.QUEUED,  # 重新提交并直接入队
             TaskStatus.SUCCESS,  # 远端结果补回时发现实际成功
             TaskStatus.FAILURE,  # 远端结果补回时发现实际失败
         }
@@ -97,7 +120,14 @@ class TaskStateMachine:
     TERMINAL_STATES: Set[TaskStatus] = {
         TaskStatus.SUCCESS,
         TaskStatus.FAILURE,
-        TaskStatus.CANCELED
+        TaskStatus.CANCELED,
+        TaskStatus.TIMEOUT
+    }
+
+    # 未开始（尚未进入执行）的状态集合
+    PENDING_STATES: Set[TaskStatus] = {
+        TaskStatus.PENDING,
+        TaskStatus.QUEUED
     }
 
     @classmethod
@@ -163,9 +193,10 @@ class TaskStateMachine:
 
         执行状态转换并应用相应的副作用，包括：
         - RUNNING: 设置开始时间
-        - SUCCESS/FAILURE/CANCELED: 设置结束时间和执行时长
-        - FAILURE: 设置错误信息
-        - PENDING (从FAILURE/CANCELED): 清理并准备重试
+        - QUEUED: 清理上一轮执行信息并重新排队（非首次入队时累加重试次数）
+        - SUCCESS/FAILURE/CANCELED/TIMEOUT: 设置结束时间和执行时长
+        - FAILURE/TIMEOUT: 设置错误信息
+        - PENDING (从FAILURE/CANCELED/TIMEOUT): 清理并准备重试
 
         Args:
             task: 任务对象
@@ -215,13 +246,24 @@ class TaskStateMachine:
             task.progress_message = progress_message or "任务执行失败"
             cls._calculate_execution_time(task)
 
+        elif to_status == TaskStatus.TIMEOUT:
+            # 执行/排队超时（终态之一，可重试）
+            task.finished_at = now
+            task.error_message = error_message
+            task.progress_message = progress_message or "任务执行超时"
+            cls._calculate_execution_time(task)
+
         elif to_status == TaskStatus.CANCELED:
             # 取消任务
             task.finished_at = now
             task.progress_message = progress_message or "任务已取消"
             cls._calculate_execution_time(task)
 
-        elif to_status == TaskStatus.PENDING and old_status in {TaskStatus.FAILURE, TaskStatus.CANCELED}:
+        elif to_status == TaskStatus.PENDING and old_status in {
+            TaskStatus.FAILURE,
+            TaskStatus.CANCELED,
+            TaskStatus.TIMEOUT,
+        }:
             # 重试/重新提交
             task.retry_count = (task.retry_count or 0) + 1
             task.error_message = None
@@ -232,10 +274,25 @@ class TaskStateMachine:
             task.progress_message = progress_message or "任务等待重新执行"
 
         elif to_status == TaskStatus.PENDING and old_status == TaskStatus.RUNNING:
-            # 资源不足重新入队
+            # 资源不足重新入队（旧路径，仍保留 PENDING 作为重排目标以兼容既有调用）
             task.retry_count = (task.retry_count or 0) + 1
             task.progress_message = progress_message or "资源不足，重新入队等待"
             task.started_at = None
+
+        elif to_status == TaskStatus.QUEUED:
+            if old_status == TaskStatus.PENDING:
+                # 首次入队：仍属「未开始」，不算一次重试
+                task.progress = 0.0
+                task.progress_message = progress_message or "任务已入队等待调度"
+            else:
+                # RUNNING/FAILURE/CANCELED/TIMEOUT -> QUEUED：重新排队，计一次重试
+                task.retry_count = (task.retry_count or 0) + 1
+                task.error_message = None
+                task.started_at = None
+                task.finished_at = None
+                task.execution_time_sec = None
+                task.progress = 0.0
+                task.progress_message = progress_message or "资源不足，重新排队等待"
 
         # 更新进度（如果提供）
         if progress is not None and to_status not in {TaskStatus.SUCCESS}:
@@ -275,8 +332,12 @@ class TaskStateMachine:
         """
         current_status = TaskStatus(task.status) if isinstance(task.status, str) else task.status
 
-        # 失败或取消状态可以重试
-        if current_status not in {TaskStatus.FAILURE, TaskStatus.CANCELED}:
+        # 失败、取消或超时状态可以重试
+        if current_status not in {
+            TaskStatus.FAILURE,
+            TaskStatus.CANCELED,
+            TaskStatus.TIMEOUT,
+        }:
             return False
 
         retry_count, max_retries = _retry_limits(task)
@@ -379,6 +440,51 @@ class TaskStateMachine:
                 error_message=error_message,
                 progress_message=progress_message
             )
+
+    @classmethod
+    def mark_timeout(
+        cls,
+        task: "Task",
+        error_message: Optional[str] = None,
+        progress_message: Optional[str] = None
+    ) -> None:
+        """标记任务超时
+
+        执行器 timeout_sec 到期或排队超时时使用，落 TIMEOUT 终态（可重试）。
+
+        Args:
+            task: 任务对象
+            error_message: 错误信息
+            progress_message: 进度消息
+
+        Raises:
+            TaskStateError: 当当前状态不允许转换到 TIMEOUT 时抛出
+        """
+        cls.transition(
+            task, TaskStatus.TIMEOUT,
+            error_message=error_message,
+            progress_message=progress_message or "任务执行超时"
+        )
+
+    @classmethod
+    def enqueue(
+        cls,
+        task: "Task",
+        progress_message: Optional[str] = None
+    ) -> None:
+        """把任务放入调度队列
+
+        Args:
+            task: 任务对象
+            progress_message: 进度消息
+
+        Raises:
+            TaskStateError: 当当前状态不允许入队时抛出
+        """
+        cls.transition(
+            task, TaskStatus.QUEUED,
+            progress_message=progress_message or "任务已入队等待调度"
+        )
 
     @classmethod
     def update_progress(

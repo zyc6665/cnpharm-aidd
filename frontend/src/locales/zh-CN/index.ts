@@ -1556,15 +1556,19 @@ export default {
     // 状态
     status: {
       pending: '等待中',
+      queued: '排队中',
       running: '运行中',
       success: '已完成',
       failure: '失败',
+      timeout: '已超时',
       canceled: '已取消'
     },
     statusPending: '等待中',
+    statusQueued: '排队中',
     statusRunning: '运行中',
     statusSuccess: '已完成',
     statusFailure: '失败',
+    statusTimeout: '已超时',
     statusCanceled: '已取消',
     // 筛选
     searchPlaceholder: '搜索任务名称或ID...',
@@ -1700,6 +1704,7 @@ export default {
     started: '开始执行',
     completed: '执行完成',
     failed: '执行失败',
+    timedOut: '执行超时',
     canceled: '已取消',
     // 工具信息
     toolInfo: '工具信息',

@@ -718,7 +718,7 @@ async def test_retry_task_uses_direct_runner_when_enabled(
 
     refreshed_task = await db_session.get(Task, task.id)
     assert refreshed_task is not None
-    assert refreshed_task.status == TaskStatus.PENDING.value
+    assert refreshed_task.status == TaskStatus.QUEUED.value
     assert refreshed_task.retry_count == 1
     assert refreshed_task.celery_task_id is None
 
@@ -1195,7 +1195,7 @@ async def test_reconcile_orphaned_direct_tasks_reschedules_builtin_after_restart
     await db_session.refresh(task)
 
     assert recovered == 1
-    assert task.status == TaskStatus.PENDING.value
+    assert task.status == TaskStatus.QUEUED.value
     assert task.progress == 0.0
     assert task.progress_message == "服务重启后重新排队"
     assert len(scheduled) == 1

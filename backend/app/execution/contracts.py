@@ -18,6 +18,7 @@ class ExecutionState(str, Enum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    TIMEOUT = "timeout"
 
     @classmethod
     def from_task_status(cls, status: Any) -> "ExecutionState":

@@ -80,7 +80,7 @@ async def reconcile_orphaned_direct_tasks(db: AsyncSession) -> int:
                 continue
             TaskStateMachine.transition(
                 task,
-                TaskStatus.PENDING,
+                TaskStatus.QUEUED,
                 progress=0.0,
                 progress_message="服务重启后重新排队",
             )

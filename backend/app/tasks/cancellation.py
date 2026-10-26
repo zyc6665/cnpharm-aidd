@@ -38,8 +38,12 @@ async def cancel_platform_task(
     current_user: User,
     direct_runner=default_direct_task_runner,
 ) -> bool:
-    """Cancel a pending or running task through its configured execution backend."""
-    if task.status not in {TaskStatus.PENDING.value, TaskStatus.RUNNING.value}:
+    """Cancel a pending, queued or running task through its configured execution backend."""
+    if task.status not in {
+        TaskStatus.PENDING.value,
+        TaskStatus.QUEUED.value,
+        TaskStatus.RUNNING.value,
+    }:
         return False
 
     was_running = task.status == TaskStatus.RUNNING.value

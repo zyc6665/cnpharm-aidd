@@ -739,12 +739,12 @@ async def test_execute_tool_task_impl_requeues_gpu_shortage_before_failure(
 
     result = await worker_tasks._execute_tool_task_impl(task_id, version_id)
 
-    assert result["status"] == TaskStatus.PENDING.value
+    assert result["status"] == TaskStatus.QUEUED.value
     assert scheduled == [(task_id, version_id, 30)]
 
     async with db_session_factory() as session:
         refreshed_task = (await session.execute(select(Task).where(Task.id == task_id))).scalar_one()
-        assert refreshed_task.status == TaskStatus.PENDING.value
+        assert refreshed_task.status == TaskStatus.QUEUED.value
         assert refreshed_task.retry_count == 1
         assert refreshed_task.error_message is None
         assert refreshed_task.extra_data["resource_wait_reason"] == "gpu_unavailable"
@@ -847,14 +847,14 @@ async def test_execute_tool_task_impl_requeues_worker_capability_wait(
 
     result = await worker_tasks._execute_tool_task_impl(task_id, version_id)
 
-    assert result["status"] == TaskStatus.PENDING.value
+    assert result["status"] == TaskStatus.QUEUED.value
     assert scheduled == [(task_id, version_id, 30)]
 
     async with db_session_factory() as session:
         refreshed_task = (
             await session.execute(select(Task).where(Task.id == task_id))
         ).scalar_one()
-        assert refreshed_task.status == TaskStatus.PENDING.value
+        assert refreshed_task.status == TaskStatus.QUEUED.value
         assert refreshed_task.retry_count == 1
         assert refreshed_task.error_message is None
         assert refreshed_task.extra_data["resource_wait_reason"] == "worker_capability_unavailable"
@@ -960,14 +960,14 @@ async def test_execute_tool_task_impl_requeues_gpu_shortage_through_celery(
 
     result = await worker_tasks._execute_tool_task_impl(task_id, version_id)
 
-    assert result["status"] == TaskStatus.PENDING.value
+    assert result["status"] == TaskStatus.QUEUED.value
     assert queued == [(task_id, version_id, "gpu_queue", 30)]
 
     async with db_session_factory() as session:
         refreshed_task = (
             await session.execute(select(Task).where(Task.id == task_id))
         ).scalar_one()
-        assert refreshed_task.status == TaskStatus.PENDING.value
+        assert refreshed_task.status == TaskStatus.QUEUED.value
         assert refreshed_task.celery_task_id == "celery-gpu-retry"
         assert refreshed_task.extra_data["dispatch"] == {
             "mode": "celery",

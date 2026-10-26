@@ -669,6 +669,66 @@ async def test_stage_derives_s3_and_reports_missing_task(
 
 
 @pytest.mark.asyncio
+async def test_stage_reaches_s4_when_only_task_is_queued(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    project: Project,
+    users: dict[str, User],
+):
+    """排队中的任务也算「已提交」：S4 + 无 ``NO_TASK`` 缺口。
+
+    任务刚提交完还没轮到执行时状态是 ``QUEUED``。如果 ``SUBMITTED_STATUSES``
+    不含它，项目会掉回 S3 并报 ``NO_TASK``——等于告诉用户「你还没提交过任务」，
+    而任务明明在队列里。
+    """
+    target = Target(project_id=project.id, created_by=users[OWNER].id, name="EGFR")
+    db_session.add(target)
+    await db_session.flush()
+    protein = Protein(target_id=target.id, name="EGFR kinase", sequence="MEEP", seq_length=4)
+    db_session.add(protein)
+    await db_session.flush()
+    structure = ProteinStructure(protein_id=protein.id, source_type="IMPORTED")
+    db_session.add(structure)
+    await db_session.flush()
+    db_session.add(
+        Pocket(structure_id=structure.id, rank=1, selected=True, residue_count=8)
+    )
+    db_session.add(
+        Candidate(
+            project_id=project.id,
+            created_by=users[OWNER].id,
+            candidate_type="PEPTIDE",
+            peptide_sequence="MEEPQSDVRKC",
+        )
+    )
+    tool = await _register_tool(db_session, slug="queued-only", owner_id=users[OWNER].id)
+    db_session.add(
+        Task(
+            user_id=users[OWNER].id,
+            tool_id=tool.id,
+            tool_version_id=tool.current_version_id,
+            status=TaskStatus.QUEUED.value,
+            extra_data={"project_id": project.id},
+        )
+    )
+    await db_session.commit()
+
+    response = await api_client.get(
+        f"/api/v1/projects/{project.id}/stage", headers=_headers(VIEWER)
+    )
+
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["currentStage"] == "S4"
+    assert data["reachedStages"] == ["S0", "S1", "S2", "S3", "S4"]
+    assert data["nextStage"] == "S5"
+    # 排队中的任务计入 submitted，但还没有结果可看，所以 S5 未达成。
+    assert data["counters"]["submitted_tasks"] == 1
+    assert data["counters"]["finished_tasks"] == 0
+    assert "NO_TASK" not in [gap["code"] for gap in data["gaps"]]
+
+
+@pytest.mark.asyncio
 async def test_stage_reaches_s6_after_first_decision(
     api_client: httpx.AsyncClient,
     db_session: AsyncSession,

@@ -26,7 +26,7 @@ from app.services.legacy_file_projection import (
     standard_input_file_path,
 )
 from app.tasks.executors.base import BaseExecutor
-from app.tasks.executors.errors import TaskExecutionError
+from app.tasks.executors.errors import TaskExecutionError, TaskTimeoutError
 from app.tasks.executors.ssh_artifacts import prepare_output_files
 from app.tasks.executors.ssh_auth import resolve_auth_settings
 from app.tasks.executors.ssh_command import build_remote_exec_command
@@ -138,7 +138,10 @@ class SSHJobExecutor(BaseExecutor):
                 "stderr": remote_result.get("stderr", ""),
             }
         except TimeoutError as exc:
-            raise TaskExecutionError("SSH job execution timeout") from exc
+            raise TaskTimeoutError(
+                "SSH job execution timeout",
+                timeout_sec=self.config.get("timeout_sec"),
+            ) from exc
         except TaskExecutionError:
             raise
         except Exception as exc:

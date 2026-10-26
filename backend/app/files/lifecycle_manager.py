@@ -335,7 +335,7 @@ class FileLifecycleManager:
             # 这里假设TaskInput中有file_ids字段存储关联的文件ID
             result = await self.db.execute(
                 select(Task.id, TaskInput.file_ids).where(
-                    Task.status.in_(["pending", "running", "queued"]),
+                    Task.status.in_(["PENDING", "QUEUED", "RUNNING"]),
                 ).join(
                     TaskInput, Task.id == TaskInput.task_id
                 )

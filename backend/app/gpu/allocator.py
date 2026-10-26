@@ -751,7 +751,11 @@ class GPUAllocator:
                         Task.gpu_node_id == node_id,
                         Task.gpu_index == gpu_index,
                         Task.status.in_(
-                            [TaskStatus.PENDING.value, TaskStatus.RUNNING.value]
+                            [
+                                TaskStatus.PENDING.value,
+                                TaskStatus.QUEUED.value,
+                                TaskStatus.RUNNING.value,
+                            ]
                         ),
                     )
                     .limit(1)

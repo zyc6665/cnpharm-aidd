@@ -3,14 +3,40 @@ import type { Task, TaskStatus } from '@/types/models'
 export type TaskProgressStatus = 'normal' | 'active' | 'exception' | 'success'
 export type TaskStatusTextKey =
   | 'tasks.statusPending'
+  | 'tasks.statusQueued'
   | 'tasks.statusRunning'
   | 'tasks.statusSuccess'
   | 'tasks.statusFailure'
+  | 'tasks.statusTimeout'
   | 'tasks.statusCanceled'
 
-const runningStatuses: TaskStatus[] = ['pending', 'running']
-const historyStatuses: TaskStatus[] = ['success', 'failure', 'canceled']
-const taskStatusSet = new Set<TaskStatus>(['pending', 'running', 'success', 'failure', 'canceled'])
+/**
+ * 「进行中」列表页签的口径：任务已创建但还没有出结果，用户需要在这里看到它。
+ *
+ * - `pending`：新建未调度（docs/03 §3.4 的 CREATED，API 词表沿用 `pending`）。
+ * - `queued`：排队中，等 worker/GPU 资源。
+ * - `running`：真正在执行。
+ *
+ * 判断依据：只有 `running` 算「正在执行」（progress 会走、可以实时看日志）；
+ * `pending`/`queued` 都属于「未开始」。但任务中心 P-31 的「进行中」页签是
+ * 「还没出结果的任务」而不是「正在跑的任务」—— 排队中的任务如果不在这个页签
+ * 出现，用户会以为任务丢了，所以 `runningStatuses` 三者都收。
+ * 需要严格判定「正在执行」时请用 `isExecutingTask`，不要用 `isRunningTask`。
+ */
+const runningStatuses: TaskStatus[] = ['pending', 'queued', 'running']
+
+/** 终态：不会再自行流转，只能重试或留在历史里。 */
+const terminalStatuses: TaskStatus[] = ['success', 'failure', 'timeout', 'canceled']
+const historyStatuses: TaskStatus[] = terminalStatuses
+const taskStatusSet = new Set<TaskStatus>([
+  'pending',
+  'queued',
+  'running',
+  'success',
+  'failure',
+  'timeout',
+  'canceled'
+])
 
 export function normalizeTaskStatus(status?: string): TaskStatus {
   const normalizedStatus = status?.toLowerCase()
@@ -22,9 +48,11 @@ export function normalizeTaskStatus(status?: string): TaskStatus {
 export function getTaskStatusColor(status: TaskStatus): string {
   const colors: Record<TaskStatus, string> = {
     pending: 'orange',
+    queued: 'blue',
     running: 'processing',
     success: 'success',
     failure: 'error',
+    timeout: 'warning',
     canceled: 'default'
   }
 
@@ -34,9 +62,11 @@ export function getTaskStatusColor(status: TaskStatus): string {
 export function getTaskStatusTextKey(status: TaskStatus): TaskStatusTextKey {
   const keys: Record<TaskStatus, TaskStatusTextKey> = {
     pending: 'tasks.statusPending',
+    queued: 'tasks.statusQueued',
     running: 'tasks.statusRunning',
     success: 'tasks.statusSuccess',
     failure: 'tasks.statusFailure',
+    timeout: 'tasks.statusTimeout',
     canceled: 'tasks.statusCanceled',
   }
 
@@ -45,14 +75,14 @@ export function getTaskStatusTextKey(status: TaskStatus): TaskStatusTextKey {
 
 export function getTaskProgressStatus(status: TaskStatus): TaskProgressStatus {
   if (status === 'running') return 'active'
-  if (status === 'failure') return 'exception'
+  if (status === 'failure' || status === 'timeout') return 'exception'
   if (status === 'success') return 'success'
   return 'normal'
 }
 
 export function getTaskProgressColor(status: TaskStatus): string {
   if (status === 'running') return '#1890ff'
-  if (status === 'failure') return '#ff4d4f'
+  if (status === 'failure' || status === 'timeout') return '#ff4d4f'
   return '#52c41a'
 }
 
@@ -60,6 +90,16 @@ export function isRunningTask(task: Pick<Task, 'status'>): boolean {
   return runningStatuses.includes(task.status)
 }
 
+/** 任务是否真的在执行（进度会前进、可看实时日志）。 */
+export function isExecutingTask(task: Pick<Task, 'status'>): boolean {
+  return task.status === 'running'
+}
+
 export function isHistoryTask(task: Pick<Task, 'status'>): boolean {
   return historyStatuses.includes(task.status)
+}
+
+/** 任务是否已进入终态（成功/失败/超时/已取消）。 */
+export function isTerminalTask(task: Pick<Task, 'status'>): boolean {
+  return terminalStatuses.includes(task.status)
 }

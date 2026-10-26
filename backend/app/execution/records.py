@@ -314,11 +314,15 @@ async def reconcile_running_execution_records(
             continue
 
         execution_status = task_status_to_execution_state(task.status)
-        if execution_status in {"succeeded", "failed", "cancelled"}:
+        if execution_status in {"succeeded", "failed", "cancelled", "timeout"}:
             _finish_reconciled_record(
                 record,
                 status=execution_status,
-                error_message=task.error_message if execution_status == "failed" else None,
+                error_message=(
+                    task.error_message
+                    if execution_status in {"failed", "timeout"}
+                    else None
+                ),
                 finished_at=task.finished_at or current_time,
             )
             reconciled_count += 1

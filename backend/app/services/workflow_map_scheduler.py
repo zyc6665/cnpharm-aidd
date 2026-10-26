@@ -230,11 +230,20 @@ async def reconcile_map_sub_tasks(
             failed += 1
             continue
 
-        if task.status in {TaskStatus.PENDING.value, TaskStatus.RUNNING.value}:
-            sub_state["status"] = task.status.lower()
+        if task.status in {TaskStatus.PENDING.value, TaskStatus.QUEUED.value}:
+            # 子任务状态词表只有 pending/running，排队中按 pending 呈现
+            sub_state["status"] = "pending"
             continue
 
-        if task.status in {TaskStatus.FAILURE.value, TaskStatus.CANCELED.value}:
+        if task.status == TaskStatus.RUNNING.value:
+            sub_state["status"] = "running"
+            continue
+
+        if task.status in {
+            TaskStatus.FAILURE.value,
+            TaskStatus.CANCELED.value,
+            TaskStatus.TIMEOUT.value,
+        }:
             sub_state["status"] = "failure"
             sub_state["error_message"] = task.error_message or "Map sub-task failed"
             failed += 1

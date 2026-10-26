@@ -1,7 +1,11 @@
 import dayjs from 'dayjs'
 import type { Task, TaskStatus } from '@/types/models'
 
-export type TaskCompletedTitleKey = 'tasks.completed' | 'tasks.failed' | 'tasks.canceled'
+export type TaskCompletedTitleKey =
+  | 'tasks.completed'
+  | 'tasks.failed'
+  | 'tasks.timedOut'
+  | 'tasks.canceled'
 
 export interface TaskFailureDiagnostics {
   errorMessage: string
@@ -23,6 +27,7 @@ const STANDARD_ARTIFACT_ERROR_PATTERNS = [
 
 export function getTaskCompletedTitleKey(status: TaskStatus): TaskCompletedTitleKey {
   if (status === 'failure') return 'tasks.failed'
+  if (status === 'timeout') return 'tasks.timedOut'
   if (status === 'canceled') return 'tasks.canceled'
   return 'tasks.completed'
 }

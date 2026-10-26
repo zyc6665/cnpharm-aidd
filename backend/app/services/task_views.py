@@ -20,9 +20,22 @@ from app.services.project_access import load_project_membership
 TaskSystemView = Literal["all", "running", "history", "needs_attention", "recent_results"]
 
 _VIEW_STATUSES: dict[str, tuple[str, ...]] = {
-    "running": (TaskStatus.PENDING.value, TaskStatus.RUNNING.value),
-    "history": (TaskStatus.SUCCESS.value, TaskStatus.FAILURE.value, TaskStatus.CANCELED.value),
-    "needs_attention": (TaskStatus.FAILURE.value,),
+    # 「进行中」= 已创建但未出结果的任务，包含排队中（QUEUED）与运行中（RUNNING）。
+    "running": (
+        TaskStatus.PENDING.value,
+        TaskStatus.QUEUED.value,
+        TaskStatus.RUNNING.value,
+    ),
+    "history": (
+        TaskStatus.SUCCESS.value,
+        TaskStatus.FAILURE.value,
+        TaskStatus.CANCELED.value,
+        TaskStatus.TIMEOUT.value,
+    ),
+    "needs_attention": (
+        TaskStatus.FAILURE.value,
+        TaskStatus.TIMEOUT.value,
+    ),
     "recent_results": (TaskStatus.SUCCESS.value,),
 }
 
@@ -122,14 +135,16 @@ async def query_resource_wait_stats(
     db: AsyncSession,
     query: TaskQueryInput,
 ) -> ResourceWaitStats:
-    """统计当前可见 pending 任务的资源等待分类和原因。"""
+    """统计当前可见的排队/待调度任务的资源等待分类和原因。"""
     statement = await _build_task_statement(
         db,
         query,
         include_view_filters=False,
         include_load_options=False,
     )
-    statement = statement.where(Task.status == TaskStatus.PENDING.value)
+    statement = statement.where(
+        Task.status.in_([TaskStatus.PENDING.value, TaskStatus.QUEUED.value])
+    )
     statement = statement.where(
         or_(
             Task.extra_data["resource_wait_code"].as_string().is_not(None),

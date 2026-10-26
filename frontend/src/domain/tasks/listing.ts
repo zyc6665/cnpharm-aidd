@@ -189,7 +189,10 @@ export function buildTaskCountQueryParams(input: TaskListQueryInput): TaskCountQ
 export function filterTasksForTab(tasks: Task[], tab: TaskListTab): Task[] {
   if (tab === 'running') return tasks.filter(isRunningTask)
   if (tab === 'history') return tasks.filter(isHistoryTask)
-  if (tab === 'needs_attention') return tasks.filter(task => task.status === 'failure')
+  // 与后端 task_views 的 needs_attention 视图一致：失败与超时都需要人工关注。
+  if (tab === 'needs_attention') {
+    return tasks.filter(task => task.status === 'failure' || task.status === 'timeout')
+  }
   return tasks
 }
 

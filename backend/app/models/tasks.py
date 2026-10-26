@@ -9,11 +9,22 @@ from app.common.task_context import task_project_id
 
 
 class TaskStatus(str, enum.Enum):
-    """任务状态"""
+    """任务状态
+
+    与《03-系统架构设计说明书》3.4 节状态机一致：
+    PENDING -> QUEUED -> RUNNING -> SUCCESS / FAILURE / CANCELED / TIMEOUT
+
+    - PENDING：已创建但尚未入队调度
+    - QUEUED：已入队/资源不足重新排队，等待调度
+    - RUNNING：执行中
+    - SUCCESS / FAILURE / CANCELED / TIMEOUT：终态
+    """
     PENDING = "PENDING"
+    QUEUED = "QUEUED"
     RUNNING = "RUNNING"
     SUCCESS = "SUCCESS"
     FAILURE = "FAILURE"
+    TIMEOUT = "TIMEOUT"
     CANCELED = "CANCELED"
 
 

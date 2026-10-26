@@ -480,8 +480,8 @@ export interface RelatedTool {
   favorite_count: number
 }
 
-// 任务相关类型
-export type TaskStatus = 'pending' | 'running' | 'success' | 'failure' | 'canceled'
+// 任务相关类型（docs/03 §3.4 八态：pending=已创建、queued=排队中、running、success、failure、timeout、canceled）
+export type TaskStatus = 'pending' | 'queued' | 'running' | 'success' | 'failure' | 'timeout' | 'canceled'
 
 export interface TaskInput {
   params: Record<string, unknown>
