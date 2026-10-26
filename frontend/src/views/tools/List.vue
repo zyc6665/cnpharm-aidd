@@ -179,7 +179,6 @@
           show-size-changer
           :page-size-options="['12', '24', '48']"
           @change="handlePageChange"
-          @show-size-change="handlePageSizeChange"
         />
       </div>
     </div>
@@ -210,6 +209,7 @@
     AppstoreOutlined,
   } from '@ant-design/icons-vue'
   import { useToolsStore, useUserStore } from '@/stores'
+  import { resolvePaginationChange } from '@/utils/pagination'
   import type { ToolView } from '@/types/models'
 
   const router = useRouter()
@@ -283,14 +283,18 @@
     fetchData()
   }
 
-  const handlePageChange = (page: number) => {
-    currentPage.value = page
-    fetchData()
-  }
-
-  const handlePageSizeChange = (_current: number, size: number) => {
-    pageSize.value = size
-    currentPage.value = 1
+  // 只绑 `@change`（不绑 `@show-size-change`）：antd 改页大小时会连发两个事件，
+  // 第二个事件的页码是旧页码，双绑会打两次请求并把「回第 1 页」覆盖掉。
+  const handlePageChange = (page: number, size?: number) => {
+    const change = resolvePaginationChange({
+      nextPage: page,
+      nextSize: size,
+      currentSize: pageSize.value,
+    })
+    if (change.size !== null) {
+      pageSize.value = change.size
+    }
+    currentPage.value = change.page
     fetchData()
   }
 

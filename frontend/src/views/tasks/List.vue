@@ -196,7 +196,6 @@
           show-size-changer
           :page-size-options="['10', '20', '50']"
           @change="handlePageChange"
-          @show-size-change="handlePageSizeChange"
         />
       </div>
     </div>
@@ -223,6 +222,7 @@
     CloseCircleOutlined,
   } from '@ant-design/icons-vue'
   import { message } from 'ant-design-vue'
+  import { resolvePaginationChange } from '@/utils/pagination'
   import type { Dayjs } from 'dayjs'
   import { useTasksStore, useToolsStore, useUserStore } from '@/stores'
   import type { TaskListParams } from '@/api/tasks'
@@ -433,14 +433,18 @@
     }
   }
 
-  const handlePageChange = (page: number) => {
-    currentPage.value = page
-    void fetchTasksSafely()
-  }
-
-  const handlePageSizeChange = (_current: number, size: number) => {
-    pageSize.value = size
-    currentPage.value = 1
+  // 只绑 `@change`（不绑 `@show-size-change`）：antd 改页大小时会连发两个事件，
+  // 第二个事件的页码是旧页码，双绑会打两次请求并把「回第 1 页」覆盖掉。
+  const handlePageChange = (page: number, size?: number) => {
+    const change = resolvePaginationChange({
+      nextPage: page,
+      nextSize: size,
+      currentSize: pageSize.value,
+    })
+    if (change.size !== null) {
+      pageSize.value = change.size
+    }
+    currentPage.value = change.page
     void fetchTasksSafely()
   }
 
