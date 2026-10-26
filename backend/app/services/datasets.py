@@ -18,7 +18,9 @@ from sqlalchemy.orm import selectinload
 from app.common.exceptions import NotFoundException, ValidationException
 from app.models.uploads import DATASET_TYPES, Dataset
 from app.models.users import User
+from app.models.versions import ENTITY_TYPE_DATASET, SOURCE_TYPE_IMPORT
 from app.schemas.datasets import DatasetCreate
+from app.services import data_versions
 
 
 def serialize_dataset(dataset: Dataset, *, files: list | None = None) -> dict:
@@ -80,9 +82,35 @@ async def register_dataset(
         summary=dict(data.summary),
     )
     db.add(dataset)
+    await db.flush()
+    # 版本行落在 commit 之前：``record_version`` 自己不 commit，若这里先提交再记账，
+    # 记账失败会留下一个「有数据集、无版本」的静默缺口。
+    await data_versions.record_version(
+        db,
+        entity_type=ENTITY_TYPE_DATASET,
+        entity_id=str(dataset.id),
+        source_type=SOURCE_TYPE_IMPORT,
+        user=user,
+        source_file_urn=data.file_urn,
+        change_summary=f"登记数据集：{data.name}",
+        content=_dataset_version_content(dataset),
+    )
     await db.commit()
     await db.refresh(dataset)
     return dataset
+
+
+def _dataset_version_content(dataset: Dataset) -> dict:
+    """版本指纹的取样范围：``file_urn`` + 行数 + 解析摘要。
+
+    ``name`` / ``dataset_type`` 是标签而非内容，改名不该产生新版本；``summary`` 是
+    那次解析的产物，必须纳入，否则「同一份文件重新解析出不同结果」查不出来。
+    """
+    return {
+        "file_urn": dataset.file_urn,
+        "row_count": int(dataset.row_count or 0),
+        "summary": dataset.summary or {},
+    }
 
 
 async def list_datasets(

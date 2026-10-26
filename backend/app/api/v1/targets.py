@@ -28,8 +28,13 @@ from app.files.content import read_file_bytes
 from app.files.remote_access_tokens import create_browser_file_access_token
 from app.files.writer import store_file_bytes
 from app.models.files import File as FileModel, FileSourceType
-from app.models.targets import Protein, ProteinStructure, Target
+from app.models.targets import PROTEIN_SOURCE_IMPORT, Protein, ProteinStructure, Target
 from app.models.users import User
+from app.models.versions import (
+    ENTITY_TYPE_PROTEIN,
+    SOURCE_TYPE_IMPORT,
+    SOURCE_TYPE_MANUAL,
+)
 from app.schemas.targets import (
     PocketCreate,
     PocketSelectRequest,
@@ -41,7 +46,7 @@ from app.schemas.targets import (
     TargetCreate,
     TargetUpdate,
 )
-from app.services import domain_targets
+from app.services import data_versions, domain_targets
 from app.services.project_access import load_project_membership, require_project_role
 
 _FEATURE_FLAG = Depends(require_feature_flag("AIDD_PROJECT_WORKSPACE_ENABLED"))
@@ -119,6 +124,16 @@ async def _read_accessible_file(
 
 def _structure_sha256_or_none(structure: ProteinStructure) -> str | None:
     return structure.sha256
+
+
+def _protein_version_content(protein: Protein) -> dict:
+    """版本指纹的取样范围：``sequence`` 与它归属的 ``target_id``。
+
+    ``name`` 不进快照——给蛋白改名不改变它在结构预测里的任何输入，算成新版本
+    会让「第几版」表示的其实是「保存过几次」。``seq_length`` 也不进：它是
+    ``sequence`` 的派生量，重复计入只会让哈希对同一个序列算出两个值。
+    """
+    return {"target_id": protein.target_id, "sequence": protein.sequence}
 
 
 # ---------------------------------------------------------------------------
@@ -309,6 +324,20 @@ async def create_protein(
         current_version=1,
     )
     db.add(protein)
+    await db.flush()
+    # 版本行必须落在 commit 之前：否则蛋白写入失败会留下一条指向不存在蛋白的
+    # 孤儿版本；而 ``record_version`` 自己不 commit（见 data_versions 模块说明）。
+    await data_versions.record_version(
+        db,
+        entity_type=ENTITY_TYPE_PROTEIN,
+        entity_id=str(protein.id),
+        source_type=(
+            SOURCE_TYPE_IMPORT if data.source == PROTEIN_SOURCE_IMPORT else SOURCE_TYPE_MANUAL
+        ),
+        user=current_user,
+        change_summary="新建蛋白序列（第 1 版）",
+        content=_protein_version_content(protein),
+    )
     await db.commit()
     protein = await domain_targets.load_protein(db, protein.id)
     return success_response(
@@ -345,9 +374,28 @@ async def update_protein(
         normalized = "".join(str(payload["sequence"]).split()).upper()
         if not normalized:
             raise ValidationException("蛋白序列不能为空")
+        # 只有序列**真的变了**才递增版本号并记版：否则用户连续点两次保存、什么都没改，
+        # 版本号也会跳两格，``current_version`` 就不再表示「序列被改过几次」。判据是
+        # 内容哈希（与 compounds 的复用分支同一口径），比的是「与上一版」而不是「与
+        # 历史任意版」——改回原序列仍然算一次真实改动，版本照常递增。
+        before_hash = data_versions.content_hash_of(_protein_version_content(protein))
         protein.sequence = normalized
         protein.seq_length = len(normalized)
-        protein.current_version = (protein.current_version or 1) + 1
+        content = _protein_version_content(protein)
+        if data_versions.content_hash_of(content) != before_hash:
+            protein.current_version = (protein.current_version or 1) + 1
+            # 与 create_protein 同理：版本行落在 commit 之前，且 record_version 自己不
+            # commit。若哪一步失败，``current_version`` 的递增与版本行会一起回滚，
+            # 不会出现「计数器跳了、历史没记」的自相矛盾。
+            await data_versions.record_version(
+                db,
+                entity_type=ENTITY_TYPE_PROTEIN,
+                entity_id=str(protein.id),
+                source_type=SOURCE_TYPE_MANUAL,
+                user=current_user,
+                change_summary=f"更新蛋白序列（第 {protein.current_version} 版）",
+                content=content,
+            )
     if "name" in payload and payload["name"] is not None:
         protein.name = payload["name"]
     await db.commit()
