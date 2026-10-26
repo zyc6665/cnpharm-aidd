@@ -60,15 +60,17 @@ backend/            FastAPI 服务端
     tool_packages/  Tool Package v2 加载、校验、注册
     tool_templates/ 工具模板（含 drug_discovery 领域模板）
     tools/          工具能力注册表与内建工具执行（capabilities/registry/builtin_tools）
-  alembic/          数据库迁移（30 个版本）
+  alembic/          数据库迁移（33 个版本）
 frontend/           Vue 3 + Vite + ant-design-vue 4
-  src/views/        页面（工作台/项目/任务/工具/工作流/管理后台）
+  src/views/        页面（工作台/项目/靶点/化合物/结果/任务/工具/工作流/管理后台）
   src/components/   workflow 画布、artifacts 渲染器
+  src/domain/       领域计算（排序、分档、格式化、筛选参数），页面不写业务逻辑
+  src/utils/        datetime（服务端时间解析，统一补 Z）等通用工具
 deploy/             compose 与 K8s 部署资产
   slots/            卡位声明（slots.yaml，算力节点与卡位映射的事实源）
 docs/               中国医药项目文档（00~17，见 docs/README.md）
   archive-upstream/ 产品线历史文档，只读归档
-test/               后端测试（217 个文件）
+test/               后端测试（222 个文件）
 example/            模型资产样例（tool-package v2）
 ```
 
@@ -99,12 +101,12 @@ Refs: M2-FR-02, 04-数据模型 §6.1~§6.3
 
 ## 5. 当前状态
 
-基线已就位，靶点域、化合物域、可追溯能力、DCU 卡位调度与实时状态推送已落地（步骤 5~步骤 9）。较需求文档（62 个功能点 / 40 个页面）的差距：
+基线已就位，靶点域、化合物域、可追溯能力、DCU 卡位调度与实时状态推送已落地（步骤 5~步骤 9），40 个页面中的 25 个有界面（步骤 10）。较需求文档（62 个功能点 / 40 个页面）的差距：
 
 | 类别 | 现状 |
 |---|---|
 | **可直接复用** | 任务队列/状态机/日志/取消/重试、执行后端抽象（K8s + SSH）、Tool Package v2、Artifact 版本与 lineage、工作流画布（拖拽/连边/条件分支已实现）、molstar 三维渲染 |
-| **必须新建** | 其余领域表（upload_session / dataset / decision_record）、Boltz-2 等 9 个模型资产、drp-node-agent 本体、LDAP、40 个页面中的 30+ |
+| **必须新建** | Boltz-2 等 9 个模型资产、drp-node-agent 本体、LDAP、虚拟筛选/对接/MD/自由能页面（P-23~P-28，依赖模型资产先入库）、请求级 `X-Idempotency-Key` 幂等表 |
 | **必须删除** | 已于步骤 3、步骤 4 完成：`agents/aidd` Agent 面、`external_databases`、`remote_tools`、`remote_capacity`、`image_registry`、`model_services`（详见下方「已完成的减法」） |
 
 **已完成的减法**（[docs/17](docs/17-交付仓库与分支策略.md) 第 5 节步骤 3、步骤 4）：
@@ -124,7 +126,11 @@ Refs: M2-FR-02, 04-数据模型 §6.1~§6.3
 
 - 步骤 9（实时推送）：按 [docs/05](docs/05-API接口规格说明书.md) §9 与 [docs/10](docs/10-开发规范与编码约定.md) API-08 用 SSE 替换产品线遗留的 WebSocket。新端点 `GET /api/v1/tasks/{task_id}/events` 返回 `text/event-stream`，帧类型 `snapshot` / `status` / `progress` / `log` / `heartbeat` / `done`；`backend/app/services/task_event_stream.py` 每次被唤醒都开新会话回库重读，因此 worker 与 API 分属不同 Pod 时也能收敛（`test_stream_converges_without_any_notification` 钉住这条）。`backend/app/services/task_event_hub.py` 的队列有界，满了丢弃「有变化」信号而不反压任务执行。前端 `frontend/src/api/task-events.ts` 封装 `EventSource`（`done` 后主动 `close()`），`useTaskDetailLiveUpdates` 连上流就不再轮询、断流才退回 5 秒兜底。删除 `backend/app/websocket/`、`frontend/src/composables/useWebSocket.ts`、`frontend/src/domain/tasks/websocket.ts` 共约 938 行，`WSMessage` 类型与 Vite 的 `/ws` 代理一并退场，管理员统计页的「活动连接数」改为「实时订阅数」。
 
-首轮改造的 9 步提交切分见 [docs/17-交付仓库与分支策略.md](docs/17-交付仓库与分支策略.md) 第 5 节。
+- 步骤 10（界面落地）：后端接口齐全但页面只有 10 个，这一批补 15 个——P-06~P-11 靶点结构域（列表/详情/结构预测提交/结构详情 3D/口袋列表/口袋残基）、P-12/P-13/P-18/P-19/P-20（数据资产/化合物详情/候选集/候选物详情/候选物比较）与 P-33/P-34（结果中心/结果详情含追溯包导出）、P-36/P-38（算力与队列/审计日志）。同时补齐后端三块：`decision_records`/`decision_items` 两张只追加表与 `POST/GET /projects/{id}/decisions`、`GET /projects/{id}/stage`（S1~S6 纯推导，不引入 `project.stage` 字段）、`upload_sessions` 与 `dataset`/`data_file`/`data_version` 及分片上传四端点。页面只做编排与渲染，排序/分档/格式化/筛选参数拼装一律放 `frontend/src/domain/`。这批工作拆成六个 PR 并行推进，每个都过一遍只读 review，审查清单固定 8 条（越界改文件/分页 `ge,le`/跨项目 404/只追加表无 UPDATE/DELETE/i18n 双份/无 `any` 与 `console.log` 与公网域名/`down_revision` 单头/测试覆盖 Review Focus）。
+
+- 步骤 11（口径统一）：后端时间列全是 **naive UTC**，原来序列化用裸 `isoformat()` 得到 `2026-10-25T13:00:00`，前端 `new Date()` 会按本地时区解释——东八区用户看到的每个时间都晚 8 小时。现在 `isoformat_utc()` 统一补 `Z`（`domain_targets` / `domain_compounds` / `traceability` / `admin_audit` 四处），前端新增 `frontend/src/utils/datetime.ts` 的 `parseServerDate`/`formatServerDateTime` 并让 `formatAdminDateTime` 委托它；审计日志的时间范围筛选也在比较前把 aware 入参归一到 naive UTC，否则 PostgreSQL 会按会话时区隐式转换、窗口偏 8 小时。顺带清掉三处技术债：项目总览页指向已删除的 `/research` 路由的死链、`VITE_WS_URL` 残留声明、`Tools.vue` 的 `.registration-option--remote` 遗留样式。
+
+首轮改造的 11 步提交切分见 [docs/17-交付仓库与分支策略.md](docs/17-交付仓库与分支策略.md) 第 5 节。
 
 ## 6. 关键文档入口
 

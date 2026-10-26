@@ -27,7 +27,7 @@ from typing import Any, Iterable, Mapping
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.common.time import utcnow
+from app.common.time import isoformat_utc, utcnow
 from app.models.artifacts import Artifact, ArtifactVersion
 from app.models.files import File as FileModel
 from app.models.tasks import Task, TaskInput, TaskLog
@@ -66,7 +66,8 @@ def role_for_semantic_type(semantic_type: str | None) -> str | None:
 
 
 def _iso(value: datetime | None) -> str | None:
-    return value.isoformat() if value else None
+    """序列化时间时补 ``Z``（库里是 naive UTC，见 ``app.common.time``）。"""
+    return isoformat_utc(value)
 
 
 def sequence_sha256(sequence: str | None) -> str | None:
@@ -528,7 +529,7 @@ async def build_traceability_package(
             "projectId": extra_data.get("project_id"),
             "domain": extra_data.get("domain"),
         },
-        "exportedAt": utcnow().isoformat(),
+        "exportedAt": isoformat_utc(utcnow()),
         "packageVersion": "traceability.v1",
     }
 

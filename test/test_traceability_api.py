@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -844,6 +845,76 @@ async def test_admin_audit_facets_reflect_stored_values(
     assert "owner@example.com" in data["actors"]
     assert "LOGIN" in data["actions"]
     assert "SESSION" in data["resourceTypes"]
+
+
+@pytest.mark.asyncio
+async def test_admin_audit_logs_serialize_timestamps_as_utc(
+    api_client: httpx.AsyncClient, db_session: AsyncSession
+):
+    """时间戳必须带 ``Z``，否则前端按本地时区解释 naive UTC 会整体偏 8 小时。"""
+    db_session.add(
+        AuditLog(
+            actor="owner@example.com",
+            action="LOGIN",
+            result="SUCCESS",
+            resource_type="SESSION",
+            created_at=datetime(2026, 10, 25, 13, 0, 0),
+        )
+    )
+    await db_session.commit()
+
+    response = await api_client.get("/api/v1/admin/audit-logs", headers=_headers(ADMIN))
+    assert response.status_code == 200
+    created_at = response.json()["data"]["items"][0]["created_at"]
+    assert created_at == "2026-10-25T13:00:00Z"
+
+
+@pytest.mark.asyncio
+async def test_admin_audit_logs_normalize_timezone_aware_filters(
+    api_client: httpx.AsyncClient, db_session: AsyncSession
+):
+    """带时区的筛选入参要归一到 naive UTC，否则筛选窗口在东八区会偏移 8 小时。
+
+    记录时间 2026-10-25 13:00 UTC 等价于 21:00 +08:00：用后者做下界仍应命中。
+    """
+    db_session.add(
+        AuditLog(
+            actor="owner@example.com",
+            action="LOGIN",
+            result="SUCCESS",
+            resource_type="SESSION",
+            created_at=datetime(2026, 10, 25, 13, 0, 0),
+        )
+    )
+    await db_session.commit()
+
+    response = await api_client.get(
+        "/api/v1/admin/audit-logs?start_time=2026-10-25T20:59:00%2B08:00",
+        headers=_headers(ADMIN),
+    )
+    assert response.status_code == 200
+    assert response.json()["data"]["total"] == 1
+
+    # 同一时刻的上界若不做归一化，会被当成 20:59 UTC 而漏掉这条记录。
+    response = await api_client.get(
+        "/api/v1/admin/audit-logs?end_time=2026-10-25T21:00:00%2B08:00",
+        headers=_headers(ADMIN),
+    )
+    assert response.status_code == 200
+    assert response.json()["data"]["total"] == 1
+
+
+def test_to_naive_utc_normalizes_aware_values():
+    from app.api.v1 import admin_audit
+
+    assert admin_audit._to_naive_utc(None) is None
+    naive = datetime(2026, 10, 25, 13, 0, 0)
+    assert admin_audit._to_naive_utc(naive) is naive
+
+    aware = datetime(2026, 10, 25, 21, 0, 0, tzinfo=timezone(timedelta(hours=8)))
+    normalized = admin_audit._to_naive_utc(aware)
+    assert normalized == naive
+    assert normalized.tzinfo is None
 
 
 def test_traceability_module_exports_expected_helpers():

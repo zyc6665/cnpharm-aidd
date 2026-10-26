@@ -1,4 +1,5 @@
 import type { SystemHealth } from '@/types/models'
+import { formatServerDateTime } from '@/utils/datetime'
 
 export type SystemHealthService = SystemHealth['services'][number]
 export type SystemHealthStatus = SystemHealth['status'] | SystemHealthService['status'] | 'unknown'
@@ -56,17 +57,14 @@ export function getModelServiceTestStatusColor(status?: string | null): string {
   return 'default'
 }
 
+/**
+ * 后台时间展示（本地时区）。
+ *
+ * 服务端时间是不带时区的 UTC，直接 `new Date()` 会按本地时区解释，
+ * 东八区用户看到的每个时间都晚 8 小时。统一走 `utils/datetime` 补 `Z`。
+ */
 export function formatAdminDateTime(value?: string | null): string {
-  if (!value) {
-    return '-'
-  }
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-
-  return date.toLocaleString()
+  return formatServerDateTime(value)
 }
 
 function getServiceOrderIndex(name: string): number {

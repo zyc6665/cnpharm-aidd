@@ -22,8 +22,8 @@
           <p>{{ overview.project.goal || '尚未设置研究目标' }}</p>
         </div>
         <div class="header-actions">
-          <router-link :to="`/projects/${projectId}/research`" data-testid="open-research">
-            <a-button type="primary">进入智能体研究</a-button>
+          <router-link :to="`/projects/${projectId}/targets`" data-testid="open-targets">
+            <a-button type="primary">进入靶点分析</a-button>
           </router-link>
           <router-link :to="`/projects/${projectId}/settings`">
             <a-button>项目设置</a-button>

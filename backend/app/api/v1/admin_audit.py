@@ -12,7 +12,7 @@ ticket number needs deterministic, index-backed lookups, not fuzzy matching.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.dependencies import get_admin_user
 from app.common.exceptions import ValidationException
 from app.common.responses import paginated_response, success_response
+from app.common.time import isoformat_utc
 from app.database.session import get_db
 from app.logging.audit import AuditAction, ResourceType, get_audit_logger
 from app.models.traceability import AuditLog
@@ -43,7 +44,19 @@ _RESULT_VALUES = {"SUCCESS", "FAILURE", "DENIED", "ERROR"}
 
 
 def _iso(value: Any) -> str | None:
-    return value.isoformat() if value else None
+    """序列化时间时补 ``Z``（库里是 naive UTC，见 ``app.common.time``）。"""
+    if value is None:
+        return None
+    return isoformat_utc(value)
+
+
+def _to_naive_utc(value: datetime | None) -> datetime | None:
+    """把带时区的入参归一到库里的 naive UTC，便于直接比较时间列。"""
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(UTC).replace(tzinfo=None)
 
 
 def serialize_audit_log(row: AuditLog) -> dict[str, Any]:
@@ -91,6 +104,12 @@ async def list_audit_logs(
         raise ValidationException(f"不支持的审计结果: {result}")
     if start_time and end_time and start_time > end_time:
         raise ValidationException("起始时间不能晚于结束时间")
+
+    # 库里的 created_at 是 naive UTC（见 app.common.time）。FastAPI 会把带 Z / +08:00
+    # 的入参解析成 aware datetime，直接拿去比 naive 列，在 PostgreSQL 下会按会话时区
+    # 隐式转换，筛选窗口整体偏 8 小时。这里显式归一到 naive UTC。
+    start_time = _to_naive_utc(start_time)
+    end_time = _to_naive_utc(end_time)
 
     query = select(AuditLog)
     if actor:

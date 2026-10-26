@@ -134,9 +134,11 @@ describe('ProjectOverview', () => {
       .find(link => link.text().includes('全部任务'))
     expect(taskListEntry?.attributes('href')).toBe('/tasks?project_id=project-1')
     expect(workflowEntry?.attributes('href')).toBe('/projects/project-1/workflow')
-    expect(wrapper.find('[data-testid="open-research"]').attributes('href')).toBe(
-      '/projects/project-1/research'
+    expect(wrapper.find('[data-testid="open-targets"]').attributes('href')).toBe(
+      '/projects/project-1/targets'
     )
+    // 步骤 3 已删除 /projects/:projectId/research 路由，总览页不能再指向它（会 404）。
+    expect(wrapper.find('[data-testid="open-research"]').exists()).toBe(false)
   })
 
   it('Artifact 常用筛选调用项目 Artifact 检索接口', async () => {

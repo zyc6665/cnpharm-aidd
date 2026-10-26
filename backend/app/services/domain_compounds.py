@@ -41,7 +41,7 @@ from app.common.exceptions import (
     QuotaExceededException,
     ValidationException,
 )
-from app.common.time import utcnow
+from app.common.time import isoformat_utc, utcnow
 from app.config import settings
 from app.models.compounds import (
     CANDIDATE_TYPE_PEPTIDE,
@@ -70,7 +70,13 @@ MAX_IMPORT_ROWS = 50000
 
 
 def _iso(value: Any) -> Any:
-    return value.isoformat() if hasattr(value, "isoformat") else value
+    """序列化时间时补 ``Z``，避免前端按本地时区解释 naive UTC。
+
+    库里是 naive UTC，裸 ``isoformat()`` 会让东八区用户看到的时间整体晚 8 小时。
+    """
+    if hasattr(value, "isoformat"):
+        return isoformat_utc(value)
+    return value
 
 
 def _number(value: Any) -> Any:
