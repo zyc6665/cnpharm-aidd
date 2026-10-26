@@ -48,6 +48,7 @@
 from __future__ import annotations
 
 import functools
+import inspect
 import json
 import logging
 from typing import Any, Callable, Optional
@@ -189,6 +190,22 @@ def idempotent_route(
     """
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+        # ``functools.wraps`` 会把 ``__wrapped__`` 指向原函数，FastAPI 因此拿到的
+        # 是**原函数**的参数表；但它解析注解时用的 ``globalns`` 是 ``getattr(call,
+        # "__globals__")``，也就是**本模块**的全局名字。被包装的模块若写了
+        # ``from __future__ import annotations``（本仓 ``workflows.py`` 就是），
+        # 参数注解都会变成字符串，FastAPI 在本模块里 eval 不到
+        # ``WorkflowRunCreate`` 这样的名字，就会把参数**静默降级成 query 参数**，
+        # 请求体不再被解析，端点直接 422 ``{"loc":["query","data"]}``。
+        #
+        # 解法是在装饰期就把注解按**原函数自己的作用域**解析掉，并把解析后的签名
+        # 显式挂到 wrapper 上：FastAPI 看到的是真正类型化的参数，字符串注解不存在
+        # 了，也就不存在「用谁的 globals 去 eval」这个问题。
+        try:
+            _resolved_signature = inspect.signature(func, eval_str=True)
+        except (NameError, TypeError):  # pragma: no cover - 注解无法解析时退回原样
+            _resolved_signature = inspect.signature(func)
+
         @functools.wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             request: Optional[Request] = kwargs.get("request")
@@ -270,6 +287,10 @@ def idempotent_route(
             )
             return result
 
+        # 把「已解析注解的签名」挂到 wrapper 上：``functools.wraps`` 只复制
+        # ``__wrapped__``，不会重新求值注解，FastAPI 拿到的仍是原函数（字符串注解）；
+        # 显式覆盖 ``__signature__`` 才能让它以类型化参数注册端点。
+        wrapper.__signature__ = _resolved_signature  # type: ignore[attr-defined]
         return wrapper
 
     return decorator

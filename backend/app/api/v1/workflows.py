@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
 from app.common.responses import paginated_response, success_response
 from app.database.session import get_db
+from app.middleware.idempotency import idempotent_route
 from app.models.users import User
 from app.models.workflows import WorkflowDefinition, WorkflowRun
 from app.schemas.workflows import (
@@ -281,12 +282,27 @@ async def retry_run_node(
 
 
 @router.post("/{workflow_id}/runs", response_model=dict)
+@idempotent_route(
+    path_template="/api/v1/workflows/{workflow_id}/runs",
+    resource_type="workflow_run",
+)
 async def create_run(
     workflow_id: str,
     data: WorkflowRunCreate,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """创建一次工作流运行，支持 ``X-Idempotency-Key``（docs/05 §12）。
+
+    为什么这个端点也需要幂等：一次运行会按节点展开成多个任务并各自入队，重复提交
+    等于把整条链路跑两遍——与 ``POST /api/v1/tasks`` 相比，它的副作用更贵。规格里
+    「提交类接口必须幂等」没有把工作流启动排除在外。
+
+    ``path_template`` 用模板而不是真实路径：scope 由「用户 + 方法 + 模板」组成，
+    同一个客户端在**不同工作流**上误用同一个键时才会被 40905 拦住；若把真实
+    ``workflow_id`` 拼进 scope，误用就变成两个互不相干的作用域，键冲突永远发现不了。
+    """
     run = await create_workflow_run(
         db,
         current_user=current_user,
