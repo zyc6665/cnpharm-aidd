@@ -4,14 +4,18 @@
 任务会永远停在 QUEUED，页面显示「排队中」而实际永远不会开始——用户看不到失败
 也就不会重试，运维看队列深度还正常。所以必须有与用户行为无关的时间上限。
 
-关键回归点有三条，任何一条退回去都会让巡检失去意义：
+关键回归点有四条，任何一条退回去都会让巡检失去意义：
 1. 锚点必须是入队时刻（`queued_at`），不是 `created_at`——PENDING 停留的时间
    不该计入排队；
 2. 转 TIMEOUT 必须走状态机（CAS），否则 `test_worker_state_machine.py` 的
    AST 守卫会失败，且 `finished_at`/`error_message` 会缺；
-3. 离开 QUEUED 时必须清掉锚点，否则重排的任务带着旧时间会被立刻判超时。
+3. 离开 QUEUED 时必须清掉锚点，否则重排的任务带着旧时间会被立刻判超时；
+4. 巡检循环的退出条件必须写在 `while` 上——`stop()` 先 set 事件再 cancel，
+   若循环只靠 cancel 退出、而 sweep 又是纯计算，事件循环会被占满而投递不到
+   `CancelledError`，`stop()` 永久挂住（Linux 上必现，Windows 上因时序侥幸通过）。
 """
 
+import asyncio
 from datetime import timedelta
 
 import pytest
@@ -334,7 +338,10 @@ class TestSweepLoop:
         loop = QueueTimeoutSweepLoop(sweep=sweep, interval_seconds=1)
         loop.start()
         assert loop.is_running is True
-        await loop.stop()
+        # stop() 必须加超时：一旦循环的退出条件写错（例如 while True 只靠
+        # cancel()），事件循环会被纯计算的 sweep 占满而投递不到 CancelledError，
+        # 没有超时的话整个测试进程就永久挂住、CI 只会表现为「一直跑」。
+        await asyncio.wait_for(loop.stop(), timeout=5)
         assert loop.is_running is False
 
     @pytest.mark.asyncio
@@ -350,8 +357,24 @@ class TestSweepLoop:
         loop = QueueTimeoutSweepLoop(sweep=sweep, interval_seconds=1)
         loop.start()
         # 单轮抛异常不能让循环退出（否则一次数据库抖动静默关掉整个兜底）
-        import asyncio
-
         await asyncio.sleep(1.1)
         assert loop.is_running is True
-        await loop.stop()
+        await asyncio.wait_for(loop.stop(), timeout=5)
+        assert loop.is_running is False
+
+    @pytest.mark.asyncio
+    async def test_stop_does_not_loop_forever_on_pure_compute_sweep(self):
+        """`stop()` 必须在有限时间内返回，即使 sweep 从不挂起。
+
+        这是 Linux CI 上真实卡死过一次的回归：循环写 `while True` 时，`stop()`
+        先 set 事件让 `wait_for` 立即返回，紧接着一轮纯计算的 sweep 又把控制权
+        抢回去，`CancelledError` 没有机会投递，`await self._task` 永不返回。
+        """
+
+        async def sweep():
+            return 0
+
+        loop = QueueTimeoutSweepLoop(sweep=sweep, interval_seconds=1)
+        loop.start()
+        await asyncio.wait_for(loop.stop(), timeout=5)
+        assert loop.is_running is False

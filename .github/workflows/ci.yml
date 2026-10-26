@@ -51,7 +51,12 @@ jobs:
           pip install -r backend/requirements-dev.txt
 
       - name: 运行 pytest
-        run: python -m pytest test/ -v --tb=short
+        # `timeout` 是硬兜底，不是优化：整个作业曾因一个 `while True` 的巡检循环
+        # 占满事件循环而空转 45 分钟（asyncio 的 cancel/超时都投递不进去，pytest
+        # 内部的任何超时机制同样失效）。正常情况下全量约 3 分钟，20 分钟足够，
+        # 超时后 `timeout` 会杀掉进程让作业立刻变红，而不是无声挂着。
+        timeout-minutes: 20
+        run: timeout 900 python -m pytest test/ -v --tb=short
 
   frontend-build:
     name: 前端构建

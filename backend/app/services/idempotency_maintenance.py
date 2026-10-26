@@ -78,7 +78,10 @@ class IdempotencySweepLoop:
         self._task = None
 
     async def _run(self) -> None:
-        while True:
+        # 退出条件必须写在 while 上，不能只靠 cancel()：`stop()` 会先 set 事件再
+        # cancel，事件置位后 `wait_for` 立即返回，循环若继续转圈而 sweep 又是纯计算，
+        # 事件循环就没有挂起点可以投递 CancelledError，`await self._task` 会永久挂住。
+        while not self._stop_event.is_set():
             try:
                 await self._sweep()
             except asyncio.CancelledError:
