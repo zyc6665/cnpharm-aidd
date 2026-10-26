@@ -6,6 +6,7 @@
  *
  * 与 `domain/targets` 同构：`index.ts` 只是 barrel，实现集中在本文件，便于单测覆盖。
  */
+import { parseServerDate } from '@/utils/datetime'
 import {
   SCORE_SOURCE_MISSING,
   type DecisionCreateParams,
@@ -153,26 +154,41 @@ export function resolveDecisionSubjectLabel(record: DecisionRecord): DecisionSub
   }
 }
 
-/** 决策点的 i18n key（DP1~DP5 的中文含义见 docs/03 §3.6.2）。 */
-export function resolveDecisionPointKey(record: DecisionRecord): string {
-  return `decisions.points.${record.decision_point}`
+/**
+ * 决策时间的解析；无法解析返回 `null`。
+ *
+ * 后端时间列是不带时区的 UTC（`backend/app/common/time.py`），补 `Z` 再解析——
+ * 与 `utils/datetime` 的 `parseServerDate` 同一套规则，这里只是取毫秒数用于排序。
+ */
+export function toDecisionTimestamp(value: string | null | undefined): number | null {
+  return parseServerDate(value)?.getTime() ?? null
 }
 
-/** 决策时间的解析；无法解析返回 `null`。 */
-export function toDecisionTimestamp(value: string | null | undefined): number | null {
-  if (!value) {
-    return null
+/**
+ * 决策时间的展示（本地时区，`YYYY-MM-DD HH:mm`）。
+ *
+ * 必须与 `toDecisionTimestamp` 用同一套解析规则：排序按 UTC 补 `Z`，展示却按本地时区解释
+ * naive 串，会出现「时间标签和组内顺序打架」。这里统一走 `parseServerDate`。
+ *
+ * 没有复用 `formatServerDateTime`：它固定 `toLocaleString(undefined, options)`，默认
+ * `hour12` 随 locale 走，且 `zh-CN` 的 `/` 分隔符与数字补零不受控。本页需要稳定的
+ * `YYYY-MM-DD HH:mm`（`10:00` 而不是 `上午10:00`），因此显式给 locale 与选项。
+ */
+export function formatDecisionTime(value: string | null | undefined): string {
+  const date = parseServerDate(value)
+  if (!date) {
+    return PLACEHOLDER
   }
-  const text = value.trim()
-  if (!text) {
-    return null
-  }
-  // 后端时间列是不带时区的 UTC（`backend/app/common/time.py`），补 `Z` 再解析。
-  const normalized = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(text)
-    ? `${text.replace(' ', 'T')}Z`
-    : text
-  const parsed = Date.parse(normalized)
-  return Number.isNaN(parsed) ? null : parsed
+  return date
+    .toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23'
+    })
+    .replace(/\//g, '-')
 }
 
 /** `basis_metrics` 的 JSON 折叠展示；空对象给出占位符。 */
@@ -280,36 +296,6 @@ export function groupDecisionsByPoint(records: readonly DecisionRecord[]): Decis
     }))
 }
 
-/** 入选/淘汰计数：`selected`/`excluded` 按成员累加，`total` 是记录条数。 */
-export interface DecisionCounts {
-  selected: number
-  excluded: number
-  total: number
-}
-
-/**
- * 统计入选与淘汰数量。
- *
- * 直接数 `items[].verdict`（成员快照是权威），而不是 `selected_ids.length`——
- * 两者本应一致，但快照才是决策当时的真相，页面不该在数据不一致时替后端挑一个。
- */
-export function summarizeDecisionCounts(records: readonly DecisionRecord[]): DecisionCounts {
-  let selected = 0
-  let excluded = 0
-
-  for (const record of records) {
-    for (const item of record.items ?? []) {
-      if (item.verdict === 'SELECTED') {
-        selected += 1
-      } else if (item.verdict === 'EXCLUDED') {
-        excluded += 1
-      }
-    }
-  }
-
-  return { selected, excluded, total: records.length }
-}
-
 /** 单条记录里入选/淘汰的成员数，用于时间线卡片头。 */
 export function summarizeRecordCounts(record: DecisionRecord): {
   selected: number
@@ -320,6 +306,22 @@ export function summarizeRecordCounts(record: DecisionRecord): {
     selected: items.filter(item => item.verdict === 'SELECTED').length,
     excluded: items.filter(item => item.verdict === 'EXCLUDED').length
   }
+}
+
+/** 这条记录里是否有成员当时没录到分（「未记录」提示的开关）。 */
+export function recordHasMissingScore(record: DecisionRecord): boolean {
+  return (record.items ?? []).some(item => isSnapshotScoreMissing(item))
+}
+
+/**
+ * 这条记录的 `basis_metrics` 是否为空。
+ *
+ * 名字曾叫 `hasBasisMetrics`，但它返回的是「**没有**指标」——语义与名字相反的
+ * 布尔量最容易在模板里被反着用，因此改名为 `isBasisMetricsEmpty` 并下沉到这里，
+ * 与 `recordHasMissingScore` 并列，页面只负责调用。
+ */
+export function isBasisMetricsEmpty(record: DecisionRecord): boolean {
+  return Object.keys(record.basis_metrics ?? {}).length === 0
 }
 
 /* ------------------------------------------------------------------ */
@@ -355,26 +357,35 @@ export function parseIdList(text: string | null | undefined): string[] {
   return Array.from(new Set(parts))
 }
 
+/** `basis_metrics` 文本的解析结果：成功给对象，失败给 `ok: false`（不再静默回落）。 */
+export type ParseBasisMetricsResult =
+  | { ok: true; value: Record<string, unknown> }
+  | { ok: false }
+
 /**
  * `basis_metrics` 文本 → 对象。
  *
- * 留空 → `{}`（后端默认就是空 dict）；不是合法 JSON 或是数组/标量 → 也回落到 `{}`，
- * 不因为一个可选字段把整次提交废掉。
+ * 留空 → `{ ok: true, value: {} }`（该字段可选，后端默认就是空 dict）。
+ *
+ * 非空但不是「JSON 对象」→ `{ ok: false }`，由调用方转成表单错误。这里**不能**再像
+ * 早期实现那样 `catch { return {} }`：决策记录是只追加、不可修改的审计数据
+ * （`docs/10` DB-09），用户按提示输入 `pic50: 7.2`（不是合法 JSON）却被静默丢成 `{}`，
+ * 这笔提交就会留下一个再也补不回来的档案缺口。
  */
-export function parseBasisMetrics(text: string | null | undefined): Record<string, unknown> {
+export function parseBasisMetrics(text: string | null | undefined): ParseBasisMetricsResult {
   const trimmed = (text ?? '').trim()
   if (!trimmed) {
-    return {}
+    return { ok: true, value: {} }
   }
   try {
     const parsed: unknown = JSON.parse(trimmed)
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>
+      return { ok: true, value: parsed as Record<string, unknown> }
     }
   } catch {
-    return {}
+    return { ok: false }
   }
-  return {}
+  return { ok: false }
 }
 
 /**
@@ -409,6 +420,12 @@ export function buildDecisionCreatePayload(draft: DecisionDraft): DecisionPayloa
     return { ok: false, errorKey: 'decisions.drawer.verdictDuplicated' }
   }
 
+  // 依据指标：可选，但不合法时必须拦下——静默丢成 `{}` 会写进一条不可修的档案。
+  const basisMetrics = parseBasisMetrics(draft.basisMetricsText)
+  if (!basisMetrics.ok) {
+    return { ok: false, errorKey: 'decisions.drawer.basisMetricsInvalid' }
+  }
+
   const snapshot: DecisionSnapshotInput[] = [...selectedIds, ...excludedIds].map(candidateId => ({
     candidate_id: candidateId,
     score: null
@@ -423,7 +440,7 @@ export function buildDecisionCreatePayload(draft: DecisionDraft): DecisionPayloa
       selected_ids: selectedIds,
       excluded_ids: excludedIds,
       basis_task_ids: parseIdList(draft.basisTaskIdsText),
-      basis_metrics: parseBasisMetrics(draft.basisMetricsText),
+      basis_metrics: basisMetrics.value,
       reason,
       snapshot
     }

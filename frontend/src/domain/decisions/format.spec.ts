@@ -5,12 +5,18 @@ import {
   buildDecisionCreatePayload,
   clampDecisionPage,
   clampDecisionPageSize,
+  formatBasisMetrics,
+  formatDecisionTime,
+  formatSnapshotRank,
   formatSnapshotScore,
   groupDecisionsByPoint,
+  isBasisMetricsEmpty,
   isSnapshotScoreMissing,
+  parseBasisMetrics,
+  recordHasMissingScore,
   resolveDecisionErrorMessage,
   resolveDecisionSubjectLabel,
-  summarizeDecisionCounts
+  summarizeRecordCounts
 } from './format'
 import type { DecisionItem, DecisionRecord } from '@/types/decisions'
 
@@ -96,11 +102,10 @@ describe('formatSnapshotScore / isSnapshotScoreMissing', () => {
   })
 })
 
-describe('summarizeDecisionCounts / resolveDecisionSubjectLabel', () => {
-  it('统计入选与淘汰数量', () => {
-    const summary = summarizeDecisionCounts([
+describe('summarizeRecordCounts / resolveDecisionSubjectLabel', () => {
+  it('按成员快照统计单条记录的入选与淘汰数量', () => {
+    const summary = summarizeRecordCounts(
       record({
-        id: 'd-1',
         selected_ids: ['a', 'b'],
         excluded_ids: ['c'],
         items: [
@@ -108,16 +113,10 @@ describe('summarizeDecisionCounts / resolveDecisionSubjectLabel', () => {
           item({ candidate_id: 'b', verdict: 'SELECTED' }),
           item({ candidate_id: 'c', verdict: 'EXCLUDED' })
         ]
-      }),
-      record({
-        id: 'd-2',
-        selected_ids: [],
-        excluded_ids: ['d'],
-        items: [item({ candidate_id: 'd', verdict: 'EXCLUDED' })]
       })
-    ])
+    )
 
-    expect(summary).toEqual({ selected: 2, excluded: 2, total: 2 })
+    expect(summary).toEqual({ selected: 2, excluded: 1 })
   })
 
   it('对象标签给出 i18n key 与对象 ID', () => {
@@ -125,6 +124,70 @@ describe('summarizeDecisionCounts / resolveDecisionSubjectLabel', () => {
       typeKey: 'decisions.subjectTypes.POCKET',
       subjectId: 'pocket-9'
     })
+  })
+})
+
+describe('formatDecisionTime', () => {
+  it('空值与非法值回退占位符', () => {
+    expect(formatDecisionTime(undefined)).toBe('-')
+    expect(formatDecisionTime(null)).toBe('-')
+    expect(formatDecisionTime('   ')).toBe('-')
+    expect(formatDecisionTime('not-a-date')).toBe('-')
+  })
+
+  it('naive UTC 串与带 Z 的串输出相同（naive 一律当 UTC 解释）', () => {
+    // 后者带 `Z`，无论进程跑在哪个时区都只能解析成同一个瞬间；若实现把 naive 串
+    // 交给 `new Date()` 按本地时区解释，两条断言在非 UTC 时区下必然分叉。
+    // 整套测试跑在 `TZ=UTC` 下（仓库约定），那样两者恰好相等、断言会变成空转，
+    // 因此这里临时切到东八区，让「按本地时区解释」的实现偏 8 小时。
+    const original = process.env.TZ
+    process.env.TZ = 'Asia/Shanghai'
+    try {
+      const naive = formatDecisionTime('2026-10-05T02:00:00')
+      const explicitUtc = formatDecisionTime('2026-10-05T02:00:00Z')
+
+      expect(naive).toBe(explicitUtc)
+      expect(naive).toBe('2026-10-05 10:00')
+      expect(naive).toBe(formatDecisionTime('2026-10-05 02:00:00'))
+    } finally {
+      process.env.TZ = original
+    }
+  })
+
+  it('输出稳定的 YYYY-MM-DD HH:mm，不受 locale 分隔符与 12/24 小时制影响', () => {
+    expect(formatDecisionTime('2026-01-02T03:04:00Z')).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/)
+  })
+})
+
+describe('isSnapshotScoreMissing 边界', () => {
+  it('snapshot_score 为 undefined 也算缺失', () => {
+    expect(isSnapshotScoreMissing(item({ snapshot_score: undefined }))).toBe(true)
+  })
+
+  it('formatSnapshotRank 缺失回退占位符，有效值原样展示', () => {
+    expect(formatSnapshotRank(item({ snapshot_rank: null }))).toBe('-')
+    expect(formatSnapshotRank(item({ snapshot_rank: 3 }))).toBe('3')
+  })
+})
+
+describe('formatBasisMetrics / parseBasisMetrics', () => {
+  it('formatBasisMetrics 空对象给占位符，非空对象折叠成 JSON', () => {
+    expect(formatBasisMetrics({})).toBe('-')
+    expect(formatBasisMetrics(null)).toBe('-')
+    expect(formatBasisMetrics({ pic50: 7.2 })).toContain('"pic50": 7.2')
+  })
+
+  it('parseBasisMetrics：空值允许，合法 JSON 对象解析成功', () => {
+    expect(parseBasisMetrics('')).toEqual({ ok: true, value: {} })
+    expect(parseBasisMetrics('   ')).toEqual({ ok: true, value: {} })
+    expect(parseBasisMetrics('{"pic50": 7.2}')).toEqual({ ok: true, value: { pic50: 7.2 } })
+  })
+
+  it('parseBasisMetrics：非法 JSON 与数组/标量判为失败，不再静默丢成空对象', () => {
+    expect(parseBasisMetrics('pic50: 7.2')).toEqual({ ok: false })
+    expect(parseBasisMetrics('[1, 2]')).toEqual({ ok: false })
+    expect(parseBasisMetrics('42')).toEqual({ ok: false })
+    expect(parseBasisMetrics('null')).toEqual({ ok: false })
   })
 })
 
@@ -196,6 +259,42 @@ describe('buildDecisionCreatePayload', () => {
       ok: false,
       errorKey: 'decisions.drawer.subjectRequired'
     })
+  })
+
+  it('依据指标不是合法 JSON 时拒绝提交（不能静默丢成空对象）', () => {
+    expect(
+      buildDecisionCreatePayload({ ...baseDraft, basisMetricsText: 'pic50: 7.2' })
+    ).toEqual({ ok: false, errorKey: 'decisions.drawer.basisMetricsInvalid' })
+  })
+
+  it('依据指标留空仍允许提交，解析为合法 JSON 时进载荷', () => {
+    const empty = buildDecisionCreatePayload({ ...baseDraft, basisMetricsText: '  ' })
+    expect(empty.ok).toBe(true)
+    if (empty.ok) {
+      expect(empty.payload.basis_metrics).toEqual({})
+    }
+
+    const filled = buildDecisionCreatePayload({ ...baseDraft, basisMetricsText: '{"pic50": 7.2}' })
+    expect(filled.ok).toBe(true)
+    if (filled.ok) {
+      expect(filled.payload.basis_metrics).toEqual({ pic50: 7.2 })
+    }
+  })
+})
+
+describe('recordHasMissingScore / isBasisMetricsEmpty', () => {
+  it('有成员缺分时为 true，含 0 分成员但无缺失时为 false', () => {
+    expect(recordHasMissingScore(record({ items: [item({ snapshot_score: 0 })] }))).toBe(false)
+    expect(
+      recordHasMissingScore(
+        record({ items: [item({ snapshot_score: null, snapshot_attrs: { score_source: 'missing' } })] })
+      )
+    ).toBe(true)
+  })
+
+  it('isBasisMetricsEmpty 只在指标为空时为 true（语义与名字一致）', () => {
+    expect(isBasisMetricsEmpty(record({ basis_metrics: {} }))).toBe(true)
+    expect(isBasisMetricsEmpty(record({ basis_metrics: { pic50: 7.2 } }))).toBe(false)
   })
 })
 
