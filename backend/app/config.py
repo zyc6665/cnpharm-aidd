@@ -346,6 +346,16 @@ class Settings(BaseSettings):
     # 取消请求超时后只升级为人工介入，不自动释放运行中租约。
     TASK_CANCELLATION_STALE_AFTER_SECONDS: int = 900
     TASK_CANCELLATION_RECONCILE_BATCH_SIZE: int = 100
+    # 排队超时（docs/18 B-2b）：任务在 QUEUED 停留超过阈值即判 TIMEOUT。
+    # 状态机早就留了 QUEUED -> TIMEOUT 这条边，但此前没有任何东西去用——
+    # 一旦调度器不再捞这条任务（集群掉卡、配额被占死、消息丢了），任务会永远挂在
+    # QUEUED，页面显示「排队中」而实际永远不会开始。这里给一个兜底上限：
+    # 默认 6 小时，比最大单任务执行时长（k8s/ssh 3600s）留足余量，
+    # 只兜「排不进来」而不是「跑得慢」。
+    TASK_QUEUE_TIMEOUT_SECONDS: int = 21600
+    TASK_QUEUE_TIMEOUT_SCAN_INTERVAL_SECONDS: int = 300
+    TASK_QUEUE_TIMEOUT_SCAN_BATCH_SIZE: int = 200
+    TASK_QUEUE_TIMEOUT_ENABLED: bool = True
     GPU_RETRY_INITIAL_BACKOFF_SECONDS: int = 30
     GPU_RETRY_MAX_BACKOFF_SECONDS: int = 900
     # 任务事件 SSE（docs/05 §1.5、§9；docs/10 API-08）。
