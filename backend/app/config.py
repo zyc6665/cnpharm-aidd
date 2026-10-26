@@ -451,6 +451,18 @@ class Settings(BaseSettings):
     UPLOAD_SWEEP_INTERVAL_SECONDS: int = 3600
     UPLOAD_SWEEP_ENABLED: bool = True
 
+    # 请求级幂等（docs/04 §5.5、docs/05 §12、docs/18 §6.3 G-10）。
+    # 键的保留期 24 小时与上传会话同口径：覆盖「客户端断网重试」的合理窗口，
+    # 同时让 idempotency_keys 不至于无限增长。
+    IDEMPOTENCY_TTL_HOURS: int = 24
+    # 总开关。关闭后没有 ``X-Idempotency-Key`` 的语义（请求头被忽略、原样放行），
+    # 但不会让任何端点报错——幂等是增强而不是前置条件。
+    IDEMPOTENCY_ENABLED: bool = True
+    # 过期幂等记录清理任务的执行间隔（秒）与开关。测试环境可用
+    # ``IDEMPOTENCY_SWEEP_ENABLED=false`` 关掉，避免后台任务干扰断言。
+    IDEMPOTENCY_SWEEP_INTERVAL_SECONDS: int = 3600
+    IDEMPOTENCY_SWEEP_ENABLED: bool = True
+
     # 首月 AIDD 发布门禁。None 表示使用环境默认值：开发环境开启新入口，
     # 预发布/生产默认关闭新入口；旧 AIDD API 默认关闭。
     AIDD_PROJECT_WORKSPACE_ENABLED: Optional[bool] = None

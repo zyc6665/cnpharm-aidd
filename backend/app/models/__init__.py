@@ -38,6 +38,7 @@ from app.models.compounds import (
 from app.models.traceability import AuditLog, TaskInputSnapshot
 from app.models.decisions import DecisionItem, DecisionRecord
 from app.models.uploads import DataFile, Dataset, UploadPart, UploadSession
+from app.models.idempotency import IdempotencyKey
 
 __all__ = [
     "User",
@@ -60,4 +61,5 @@ __all__ = [
     "AuditLog", "TaskInputSnapshot",
     "DecisionRecord", "DecisionItem",
     "UploadSession", "UploadPart", "Dataset", "DataFile",
+    "IdempotencyKey",
 ]

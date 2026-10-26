@@ -19,6 +19,7 @@ from app.tasks.direct_recovery import direct_task_recovery_loop
 from app.tasks.direct_runner import direct_task_runner
 from app.services.workflow_reconciliation import workflow_reconcile_loop
 from app.services.upload_maintenance import upload_sweep_loop
+from app.services.idempotency_maintenance import idempotency_sweep_loop
 from app.worker.celery_app import configure_managed_execution_runtime
 
 logger = logging.getLogger(__name__)
@@ -46,9 +47,14 @@ async def lifespan(app: FastAPI):
     # 过期分片上传会话清理：只在三个业务入口之外兜底，避免僵尸会话长期占存储。
     if upload_sweep_loop is not None:
         upload_sweep_loop.start()
+    # 过期幂等记录清理：24h 保留期到点即删，避免带响应快照的行无限增长。
+    if idempotency_sweep_loop is not None:
+        idempotency_sweep_loop.start()
     logger.info("数据库初始化完成")
     yield
     # 关闭时清理资源
+    if idempotency_sweep_loop is not None:
+        await idempotency_sweep_loop.stop()
     if upload_sweep_loop is not None:
         await upload_sweep_loop.stop()
     await audit_writer.stop()
