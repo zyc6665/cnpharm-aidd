@@ -42,6 +42,7 @@ from app.schemas.tasks import (
     TaskCreate, TaskListResponse
 )
 from app.common.responses import paginated_response, success_response
+from app.middleware.idempotency import idempotent_route
 from app.common.exceptions import (
     ConflictException,
     NotFoundException,
@@ -609,12 +610,18 @@ async def get_task(
 
 
 @router.post("", response_model=dict)
+@idempotent_route(path_template="/api/v1/tasks", resource_type="task")
 async def create_task(
     task_data: TaskCreate,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """创建任务"""
+    """创建任务
+
+    支持 ``X-Idempotency-Key``（docs/05 §12）：同键同体返回首响快照、同键异体
+    40905、首次仍在处理中 40904 + ``Retry-After``。没带该请求头时行为完全不变。
+    """
     task = await create_and_schedule_tool_task(
         db=db,
         current_user=current_user,
