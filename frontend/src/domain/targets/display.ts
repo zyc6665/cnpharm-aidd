@@ -4,6 +4,7 @@
  * P-06~P-11 只负责编排，日期/置信度/来源文案与 3D 预览所需的
  * `TypedArtifact` 组装全部收敛在这里，便于单测覆盖。
  */
+import { formatServerDateTime } from '@/utils/datetime'
 import type { ArtifactVersionFile, TypedArtifact } from '@/types/artifacts'
 import type {
   ProteinStructureDetail,
@@ -32,33 +33,12 @@ export function formatOptionalText(value: string | null | undefined): string {
   return trimmed.length > 0 ? trimmed : PLACEHOLDER
 }
 
-/**
- * 后端 naive UTC 时间戳的形态：`2026-10-25T13:00:00` / `2026-10-25 13:00:00` 等，**不带时区后缀**。
- *
- * 后端所有时间列都是 naive UTC（`backend/app/common/time.py` 的 `utcnow()` 会
- * `replace(tzinfo=None)`），序列化后不带 `Z`。而 `new Date('2026-10-25T13:00:00')`
- * 会按**浏览器本地时区**解释，东八区会整体晚 8 小时。
- */
-const NAIVE_DATE_TIME = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/
-
-/** 给 naive UTC 时间戳补上 `Z`，让 `new Date` 按 UTC 解析；已带时区的原样返回。 */
-export function normalizeServerTimestamp(value: string): string {
-  if (!NAIVE_DATE_TIME.test(value)) {
-    return value
-  }
-  return `${value.replace(' ', 'T')}Z`
-}
-
 /** 时间戳展示（本地时间）；无法解析时回退为原始文本。 */
 export function formatTargetDateTime(value: string | null | undefined): string {
   if (!value) {
     return PLACEHOLDER
   }
-  const parsed = new Date(normalizeServerTimestamp(value))
-  if (Number.isNaN(parsed.getTime())) {
-    return value
-  }
-  return parsed.toLocaleString()
+  return formatServerDateTime(value)
 }
 
 /** 平均 pLDDT 展示（保留两位小数）。 */

@@ -7,7 +7,6 @@ import {
   formatPlddtMean,
   formatPocketCenter,
   formatTargetDateTime,
-  normalizeServerTimestamp,
   pickStructureFile,
   pocketScoreTone,
   resolveTargetErrorMessage,
@@ -131,19 +130,12 @@ test('score 为 null 或 undefined 时归入 weak 档', () => {
 
 test('formatTargetDateTime 把后端 naive UTC 当 UTC 解析，带 Z 与不带 Z 结果一致', () => {
   // 这条断言与运行时区无关：两种写法指向同一瞬时，格式化结果必须相同。
-  // 若不补 Z，东八区下 `2026-10-25T13:00:00` 会被当成 UTC+8 本地时间，整体差 8 小时。
+  // 时区归一化由共享的 `@/utils/datetime` 负责（PR6 收敛），此处只验证靶点域接上了它。
   assert.equal(
     formatTargetDateTime('2026-10-25T13:00:00'),
     formatTargetDateTime('2026-10-25T13:00:00Z'),
   )
-  assert.equal(normalizeServerTimestamp('2026-10-25T13:00:00'), '2026-10-25T13:00:00Z')
-  assert.equal(normalizeServerTimestamp('2026-10-25 13:00:00'), '2026-10-25T13:00:00Z')
-  assert.equal(
-    normalizeServerTimestamp('2026-10-25T13:00:00Z'),
-    '2026-10-25T13:00:00Z',
-    '已带时区的时间戳不应被二次追加 Z',
-  )
-  assert.equal(normalizeServerTimestamp('2026-10-25T13:00:00+08:00'), '2026-10-25T13:00:00+08:00')
+  assert.equal(formatTargetDateTime('2026-10-25T13:00:00'), new Date('2026-10-25T13:00:00Z').toLocaleString())
 })
 
 test('formatTargetDateTime 对空值与不可解析值给出稳定输出', () => {
