@@ -2,12 +2,22 @@
 
 三张表解决两组问题：
 
-* ``upload_sessions``：``>100MB`` 的文件必须走 Multipart 上传（docs/04 §13.2），
-  而分片状态一旦存内存，多副本重启后用户就无法续传。因此会话与已完成分片
-  落库（``parts`` JSON 列），``object_key`` 保证「一个目标对象只有一个活会话」。
+* ``upload_sessions`` + ``upload_parts``：``>100MB`` 的文件必须走 Multipart 上传
+  （docs/04 §13.2），而分片状态一旦存内存，多副本重启后用户就无法续传。因此会话
+  落库，**已收到的分片单独成行**（``upload_parts``，``(session_id, part_number)``
+  唯一），``object_key`` 保证「一个目标对象只有一个活会话」。
 * ``datasets`` / ``data_files``：数据资产只登记「已完成的导入结果」——库内保存
   ``urn`` 与 ``sha256``，文件内容始终在 ``files`` 表 + 存储后端，避免第二份真值源
   （docs/04 §1）。
+
+为什么分片不复用 ``upload_sessions.parts`` 这个 JSON 列
+------------------------------------------------------
+JSON 列只能整列读、整列写：两个并发 ``PUT /parts`` 都读到同一份旧数组、各自把
+自己的片追加进去，后提交者会覆盖前者——**字节没丢（暂存里都在），索引却丢了**，
+断点续传随即失效（PR #15 评审 B1 的复现路径）。改成一办法是给会话行加
+``SELECT ... FOR UPDATE``，但 SQLite 根本没有行锁，测试环境与开发环境会得到与
+生产不同的行为。因此把「一片一行」落到表里，用唯一约束 + 原生 upsert 让并发写入
+互相覆盖同一条记录，而不是互相覆盖整列。
 
 字段口径严格对齐 docs/04 §5.8 与 §8；本模块只声明结构，业务用例在
 ``app.services.uploads`` / ``app.services.datasets``。
@@ -27,6 +37,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 
+from app.common.time import utcnow
 from app.database.base import Base, TimestampMixin, UUIDMixin
 
 #: 分片上传会话状态机（docs/04 §5.8）。
@@ -42,14 +53,18 @@ DEFAULT_PART_SIZE = 16 * 1024 * 1024
 class UploadSession(Base, UUIDMixin, TimestampMixin):
     """分片上传会话（docs/04 §5.8）。
 
-    ``parts`` 是已完成分片的有序列表 ``[{partNumber, etag, size}]``。它是 JSON 列，
-    **原地 append 不会被 SQLAlchemy 感知**，写入方必须整列重新赋值（见
-    ``app.services.uploads.record_upload_part``）。
+    已收到的分片在 ``upload_parts`` 子表里，不在本表上——原因见模块 docstring。
     """
 
     __tablename__ = "upload_sessions"
     __table_args__ = (
         UniqueConstraint("object_key", name="uq_upload_sessions_object_key"),
+        #: 幂等键唯一（docs/04 §5.5）。只有唯一约束才能挡住并发创建：先查后插在
+        #: 两个请求同时到达时都会查到「不存在」，于是各建一个会话、返回两个不同
+        #: uploadId，客户端后续的分片就分叉到两个会话里。
+        UniqueConstraint(
+            "project_id", "idempotency_key", name="uq_upload_sessions_project_idem"
+        ),
     )
 
     project_id = Column(String(36), ForeignKey("projects.id"), nullable=False, index=True)
@@ -57,24 +72,58 @@ class UploadSession(Base, UUIDMixin, TimestampMixin):
 
     declared_filename = Column(String(255), nullable=False)
     declared_size = Column(BigInteger, nullable=False)
+    #: 客户端预先算好的 sha256；给了就在合并时校验（docs/05 §4.2 的 42205 口径）。
+    declared_sha256 = Column(String(64), nullable=True)
     content_type = Column(String(128), nullable=True)
 
-    #: MinIO Multipart Upload ID；本地落盘实现下为 ``None``，接入 MinIO 直传后回填。
+    #: MinIO Multipart Upload ID；当前实现是「对象级分片暂存」，未使用原生
+    #: Multipart Upload，因此保持 ``None``（见 ``app.files.part_staging``）。
     minio_upload_id = Column(String(255), nullable=True)
     object_key = Column(String(512), nullable=False)
 
     part_size = Column(Integer, nullable=False, default=DEFAULT_PART_SIZE)
-    parts = Column(JSON, nullable=False, default=list)
 
     state = Column(String(16), nullable=False, default=UPLOAD_STATES[0], index=True)
-    expires_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime, nullable=True, index=True)
 
-    #: 幂等键（docs/04 §5.5 的 ``X-Idempotency-Key``）。单独成列而不是塞进 ``parts``
-    #: 或 ``summary``：键需要在创建时就写入，而那时还没有任何分片。
-    idempotency_key = Column(String(128), nullable=True, index=True)
+    #: 幂等键（docs/04 §5.5 的 ``X-Idempotency-Key``）。单独成列而不是塞进
+    #: 分片表：键需要在创建时就写入，而那时还没有任何分片。
+    idempotency_key = Column(String(128), nullable=True)
 
     project = relationship("Project", foreign_keys=[project_id])
     creator = relationship("User", foreign_keys=[created_by])
+    part_records = relationship(
+        "UploadPart",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="UploadPart.reported_at",
+    )
+
+
+class UploadPart(Base, TimestampMixin):
+    """一个已收到的分片（``(session_id, part_number)`` 复合主键）。
+
+    复合主键而不是 UUID 主键：业务上「一个会话里每个片号只有一条记录」，让数据库
+    直接承担这个约束，写入方用 ``ON CONFLICT (session_id, part_number) DO UPDATE``
+    重传同一片即可，不需要读-改-写。
+    """
+
+    __tablename__ = "upload_parts"
+
+    session_id = Column(
+        String(36),
+        ForeignKey("upload_sessions.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    part_number = Column(Integer, primary_key=True)
+    etag = Column(String(128), nullable=False)
+    size_bytes = Column(BigInteger, nullable=False, default=0)
+    #: 首次收到该片的时间。列表按它排序，让 ``parts`` 保持「上报顺序」——
+    #: 顺序本身没有语义（前端只用片号集合判断该重传哪些），但它让响应稳定可测。
+    reported_at = Column(DateTime, nullable=False, default=utcnow, index=True)
+
+    session = relationship("UploadSession", back_populates="part_records")
 
 
 class Dataset(Base, UUIDMixin, TimestampMixin):
@@ -85,6 +134,13 @@ class Dataset(Base, UUIDMixin, TimestampMixin):
     """
 
     __tablename__ = "datasets"
+    __table_args__ = (
+        #: 同项目内同名同类型只允许一条：先查后插在并发下仍会落两条，登记接口
+        #: 靠它把重复登记变成 409 而不是两条口径不同的记录。
+        UniqueConstraint(
+            "project_id", "name", "dataset_type", name="uq_datasets_project_name_type"
+        ),
+    )
 
     project_id = Column(String(36), ForeignKey("projects.id"), nullable=False, index=True)
     created_by = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
@@ -134,5 +190,6 @@ __all__ = [
     "DataFile",
     "Dataset",
     "UPLOAD_STATES",
+    "UploadPart",
     "UploadSession",
 ]

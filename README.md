@@ -60,7 +60,7 @@ backend/            FastAPI 服务端
     tool_packages/  Tool Package v2 加载、校验、注册
     tool_templates/ 工具模板（含 drug_discovery 领域模板）
     tools/          工具能力注册表与内建工具执行（capabilities/registry/builtin_tools）
-  alembic/          数据库迁移（33 个版本）
+  alembic/          数据库迁移（34 个版本）
 frontend/           Vue 3 + Vite + ant-design-vue 4
   src/views/        页面（工作台/项目/靶点/化合物/结果/任务/工具/工作流/管理后台）
   src/components/   workflow 画布、artifacts 渲染器
@@ -101,7 +101,7 @@ Refs: M2-FR-02, 04-数据模型 §6.1~§6.3
 
 ## 5. 当前状态
 
-基线已就位，靶点域、化合物域、可追溯能力、DCU 卡位调度与实时状态推送已落地（步骤 5~步骤 9），40 个页面中的 25 个有界面（步骤 10）。较需求文档（62 个功能点 / 40 个页面）的差距：
+基线已就位，靶点域、化合物域、可追溯能力、DCU 卡位调度与实时状态推送已落地（步骤 5~步骤 9），40 个页面中的 25 个有界面（步骤 10），分片上传的四条评审阻塞已收口（步骤 12）。较需求文档（62 个功能点 / 40 个页面）的差距：
 
 | 类别 | 现状 |
 |---|---|
@@ -114,7 +114,7 @@ Refs: M2-FR-02, 04-数据模型 §6.1~§6.3
 - 步骤 3（拆包）：`agents/aidd` 的能力注册表与内建工具迁到 `backend/app/tools/`；Agent 对话/规划/计划审批链路（约 4500 行）连同 `agent_runs`、`conversations` 等 8 张表、前端 `Research` 页面与 Agent 模式标签页一并删除，迁移 `backend/alembic/versions/20261025_01_drop_agent_tables.py`。
 - 步骤 4（离线合规）：`external_databases`（公网 PubChem/RCSB/ChEMBL/PDBbind 抓取）、`remote_tools` + `remote_capacity` + `remote_api` 执行器、`image_registry` 死代码、`model_services`（LLM 服务配置）、前端 LLM 预设与产品线品牌外链全部删除；`builtin-fetch-*` / `builtin-query-*` 五个在线工具退场，画布预设 `PubChem 到基础 ADMET` 改为离线可执行的 `配体结构到基础 ADMET`。迁移 `20261025_02_drop_model_services.py`、`20261025_03_remove_external_database_tools.py`。`.github/offline-allowlist.txt` 现为空。
 
-**已完成的加法**（[docs/17](docs/17-交付仓库与分支策略.md) 第 5 节步骤 5~步骤 9）：
+**已完成的加法**（[docs/17](docs/17-交付仓库与分支策略.md) 第 5 节步骤 5~步骤 12）：
 
 - 步骤 5（靶点域）：新增 `targets` / `proteins` / `protein_structures` / `pockets` / `pocket_residues` 五张表与迁移 `backend/alembic/versions/20261026_01_domain_targets_and_pockets.py`；同一结构只允许一个 `selected` 口袋，由分区唯一索引 `uq_pockets_selected_structure` 在数据库层保证。API 覆盖 docs/05 §5 的 15 个端点（项目靶点集合、靶点增删改查、蛋白序列导入与版本、结构导入/预测/准备/导出、口袋登记/预测/选定/残基），领域逻辑集中在 `backend/app/services/domain_targets.py`，任务提交统一走 `create_and_schedule_tool_task`（与单项任务、工作流节点同一执行单元）。
 
@@ -130,7 +130,9 @@ Refs: M2-FR-02, 04-数据模型 §6.1~§6.3
 
 - 步骤 11（口径统一）：后端时间列全是 **naive UTC**，原来序列化用裸 `isoformat()` 得到 `2026-10-25T13:00:00`，前端 `new Date()` 会按本地时区解释——东八区用户看到的每个时间都晚 8 小时。现在 `isoformat_utc()` 统一补 `Z`（`domain_targets` / `domain_compounds` / `traceability` / `admin_audit` 四处），前端新增 `frontend/src/utils/datetime.ts` 的 `parseServerDate`/`formatServerDateTime` 并让 `formatAdminDateTime` 委托它；审计日志的时间范围筛选也在比较前把 aware 入参归一到 naive UTC，否则 PostgreSQL 会按会话时区隐式转换、窗口偏 8 小时。顺带清掉三处技术债：项目总览页指向已删除的 `/research` 路由的死链、`VITE_WS_URL` 残留声明、`Tools.vue` 的 `.registration-option--remote` 遗留样式。
 
-首轮改造的 11 步提交切分见 [docs/17-交付仓库与分支策略.md](docs/17-交付仓库与分支策略.md) 第 5 节。
+- 步骤 12（分片上传收口）：PR2 合入时带着四条 reviewer 阻塞，都会在生产规模下暴露——`upload_sessions.parts` 是 JSON 列只能整列读写，三个并发 `PUT /parts` 会互相覆盖，最后只留一片（**字节都在暂存里，索引却丢了**）；幂等键只有普通索引，并发创建会落两行、返回两个 uploadId；分片直写 `STORAGE_PATH/_uploads/` 绕过 `StorageBackend`，生产强制 minio 且容器不挂卷时重启即丢；`expires_at` 只写不校验、`EXPIRED` 全仓只有枚举定义。收口方式：分片索引搬进 `upload_parts`（`(session_id, part_number)` 复合主键 + `ON CONFLICT DO UPDATE`）、加 `uq_upload_sessions_project_idem` 并捕获 `IntegrityError` 重查、新增 `backend/app/files/part_staging.py` 按 `STORAGE_BACKEND` 选本地或对象存储暂存、三个业务入口统一 `_require_active` 拦截并新增 `UploadSessionSweepLoop` 挂 lifespan 兜底。顺带把合并改成流式（原 `bytearray` 拼装 2GB 要常驻 2GB 内存）、校验总字节数、把客户端声明的 `sha256` 落库并校验（`declared_sha256`，对应 docs/05 §4.2 的 42205）、合并上限 256MB 放宽到 2GB。迁移 `backend/alembic/versions/20261028_01_upload_parts_and_idempotency.py` 会**搬数据**：把旧 JSON 里的每条分片迁进新表后才删列，可重复执行且不丢已收到的索引。
+
+首轮改造的 12 步提交切分见 [docs/17-交付仓库与分支策略.md](docs/17-交付仓库与分支策略.md) 第 5 节。
 
 ## 6. 关键文档入口
 

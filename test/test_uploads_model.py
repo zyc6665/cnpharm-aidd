@@ -1,9 +1,10 @@
 """Upload session / dataset / data file model tests (docs/04 §5.8, §8).
 
 三张表是「大文件分片上传」与「数据资产登记」的地基：分片会话必须能在多副本
-重启后续传（因此 parts 落库），数据集只存 urn + summary（因此不复制文件内容）。
+重启后续传（因此分片索引落库），数据集只存 urn + summary（因此不复制文件内容）。
 本文件只覆盖模型层契约：三表可插入、``uq_upload_sessions_object_key`` 唯一、
-``parts`` 默认空列表，以及两个迁移的 revision 声明。
+``uq_upload_sessions_project_idem`` 幂等键唯一、``upload_parts`` 复合主键，
+以及迁移的 revision 声明。
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ from app.models.uploads import (  # noqa: E402
     UPLOAD_STATES,
     DataFile,
     Dataset,
+    UploadPart,
     UploadSession,
 )
 from app.models.users import User, UserRole, UserStatus  # noqa: E402
@@ -100,7 +102,12 @@ def _upload(project: Project, owner: User, *, object_key: str) -> UploadSession:
 async def test_upload_session_dataset_and_data_file_are_insertable(
     db_session: AsyncSession, project: Project, owner: User
 ) -> None:
-    """三张表均可插入；``parts`` 默认 ``[]``、``state`` 默认 ``INITIATED``。"""
+    """三张表均可插入；``state`` 默认 ``INITIATED``、``part_size`` 默认 16MB。
+
+    分片索引已从 ``upload_sessions.parts`` 这个 JSON 列搬到 ``upload_parts``
+    行级表（见 ``test_upload_parts_are_row_scoped``），所以这里不再断言
+    ``parts`` 默认值。
+    """
 
     upload = _upload(project, owner, object_key=f"{project.id}/upload/a.sdf")
     db_session.add(upload)
@@ -133,7 +140,7 @@ async def test_upload_session_dataset_and_data_file_are_insertable(
         select(UploadSession).where(UploadSession.id == upload.id)
     )
     assert stored is not None
-    assert stored.parts == []
+    assert stored.declared_sha256 is None
     assert stored.state == "INITIATED"
     assert stored.part_size == 16_777_216
     assert stored.declared_size == 33_554_432
@@ -149,6 +156,79 @@ async def test_upload_session_dataset_and_data_file_are_insertable(
     assert data_file is not None
     assert data_file.storage_tier == "STANDARD"
     assert data_file.size_bytes == 33_554_432
+
+
+@pytest.mark.asyncio
+async def test_idempotency_key_is_unique_per_project(
+    db_session: AsyncSession, project: Project, owner: User
+) -> None:
+    """``uq_upload_sessions_project_idem``：同项目同幂等键只能有一个会话。
+
+    这条约束是并发创建的唯一防线：服务层的「先查后插」在并发下两个请求都会
+    看到空结果，只有数据库能挡住第二条。
+    """
+
+    db_session.add(
+        _upload(project, owner, object_key=f"{project.id}/upload/idem-a.sdf")
+    )
+    await db_session.flush()
+    first = await db_session.scalar(select(UploadSession))
+    assert first is not None
+    first.idempotency_key = "same-key"
+    await db_session.commit()
+
+    duplicate = _upload(project, owner, object_key=f"{project.id}/upload/idem-b.sdf")
+    duplicate.idempotency_key = "same-key"
+    db_session.add(duplicate)
+    with pytest.raises(IntegrityError):
+        await db_session.commit()
+    await db_session.rollback()
+
+
+@pytest.mark.asyncio
+async def test_upload_parts_are_row_scoped(
+    db_session: AsyncSession, project: Project, owner: User
+) -> None:
+    """``upload_parts`` 以 ``(session_id, part_number)`` 为主键：同片号只有一行。
+
+    分片索引从 ``upload_sessions.parts`` 这个 JSON 列搬出来，就是为了让数据库
+    承担「一个会话里每个片号只有一条」的约束；并发上报不再互相覆盖。
+    """
+
+    upload = _upload(project, owner, object_key=f"{project.id}/upload/parts.sdf")
+    db_session.add(upload)
+    await db_session.commit()
+
+    db_session.add(
+        UploadPart(
+            session_id=upload.id,
+            part_number=1,
+            etag="e" * 32,
+            size_bytes=1024,
+        )
+    )
+    await db_session.commit()
+
+    stored = await db_session.scalar(select(UploadPart))
+    assert stored is not None
+    assert stored.part_number == 1
+    assert stored.size_bytes == 1024
+    assert stored.reported_at is not None
+
+    # 同一 session 里再插同主键会先在 ORM 身份映射里撞车（SAWarning）而不是走到
+    # 数据库唯一约束；先清掉身份映射，确保这次冲突确实由主键约束拒绝。
+    db_session.expunge_all()
+    db_session.add(
+        UploadPart(
+            session_id=upload.id,
+            part_number=1,
+            etag="f" * 32,
+            size_bytes=2048,
+        )
+    )
+    with pytest.raises(IntegrityError):
+        await db_session.commit()
+    await db_session.rollback()
 
 
 @pytest.mark.asyncio

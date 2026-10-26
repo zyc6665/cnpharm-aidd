@@ -1,11 +1,12 @@
 """分片上传会话 API（docs/05 §4.2、docs/04 §5.8）。
 
-四个端点覆盖一次完整的大文件上传：
+四个端点覆盖一次完整的大文件上传，外加一个断点续传查询端点：
 
 1. ``POST /uploads`` 创建会话（必填 ``X-Idempotency-Key``，同键重复创建返回同一会话）；
-2. ``PUT /uploads/{id}/parts/{partNumber}`` 上报单个分片（原始字节体）；
-3. ``POST /uploads/{id}:complete`` 按片号排序合并并落 files 表；
-4. ``DELETE /uploads/{id}`` 取消会话并清理临时分片。
+2. ``GET /uploads/{id}`` 查询已收到的分片（断点续传，前端只重传 ``missingPartNumbers``）；
+3. ``PUT /uploads/{id}/parts/{partNumber}`` 上报单个分片（原始字节体）；
+4. ``POST /uploads/{id}:complete`` 按片号排序流式合并并落 files 表；
+5. ``DELETE /uploads/{id}`` 取消会话并清理暂存分片。
 
 领域语义全部在 ``app.services.uploads``，本模块只做 HTTP 语义、权限与响应包装。
 权限沿用项目内写角色（owner/editor）；非成员 404「研究项目不存在」，角色不符 403。

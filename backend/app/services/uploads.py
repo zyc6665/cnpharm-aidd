@@ -2,40 +2,45 @@
 
 设计取舍
 --------
-**为什么分片落本地临时目录而不是 MinIO Multipart**：本期先落地「可续传 + 可合并」
-的能力，MinIO 服务端直传是后续步骤（docs/17 §5.7 明列未落地）。因此分片写到
-``STORAGE_PATH/_uploads/{session_id}/{part:05d}.part``，complete 时按序拼装后交给
-``store_file_bytes``，与其它上传入口共享同一套 ``files`` 记录与 sha256 口径。
+**分片字节放哪里**：交给 ``app.files.part_staging``——它按 ``STORAGE_BACKEND``
+选本地盘或对象存储。生产强制 ``minio``（``app.config`` 有硬校验）而 backend 容器
+不挂卷，分片若写本地盘，进程重启即丢、换副本即找不到，断点续传形同虚设。
 
-**为什么 complete 有 256MB 上限**：拼装在服务端进程内做，超大文件会同时打满内存与
-磁盘。超过上限时显式 422 并指向 MinIO 直传，而不是悄悄 OOM。
+**分片索引放哪里**：``upload_parts`` 表，``(session_id, part_number)`` 复合主键 +
+原生 upsert。JSON 列只能整列读整列写，两个并发 ``PUT`` 会互相覆盖整列——字节还在
+暂存里，索引却只剩最后一片（PR #15 评审 B1）。行级记录让并发写落到同一行上。
 
-**为什么 parts 必须整列重新赋值**：``parts`` 是 JSON 列，SQLAlchemy 不追踪 list 的
-原地 mutate。写成 ``session.parts.append(entry)`` 再 commit，数据库里仍是空数组——
-续传列表永远为空。必须 ``session.parts = [...]`` + ``flag_modified``。
+**为什么合并要流式**：早期实现在进程内 ``bytearray`` 拼装，2GB 文件要常驻 2GB 内存，
+并发两个合并就 OOM。现在先按片统计字节数做上限与 ``declared_size`` 校验，再逐片
+读、写临时文件、增量算 sha256，最后交给 ``store_file_path``——峰值内存只有一片。
+
+**过期**：会话 24 小时有效。三个入口（上报分片、合并、取消）都会检查 ``expires_at``，
+过期的当场置 ``EXPIRED`` 并清理暂存；另有 ``app.services.upload_maintenance`` 的
+定时任务兜底，处理「创建后就没再动过」的会话。
 """
 
 from __future__ import annotations
 
 import hashlib
 import math
-import shutil
+import tempfile
 import uuid
 from datetime import timedelta
 from pathlib import Path
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm.attributes import flag_modified
 
 from app.common.exceptions import ConflictException, NotFoundException, ValidationException
 from app.common.time import utcnow
 from app.config import settings
-from app.files.storage_path import safe_storage_filename
-from app.files.writer import store_file_bytes
+from app.files.part_staging import PartStaging, build_part_staging
+from app.files.storage_path import ensure_storage_dir, safe_storage_filename
+from app.files.writer import store_file_path
 from app.models.files import File as FileModel
 from app.models.files import FileSourceType
-from app.models.uploads import UploadSession
+from app.models.uploads import UploadPart, UploadSession
 from app.models.users import User
 from app.schemas.uploads import UploadPartRef, UploadSessionCreate
 
@@ -47,26 +52,20 @@ UPLOAD_SESSION_TTL_HOURS = settings.UPLOAD_SESSION_TTL_HOURS
 #: 单文件上限 2GB（docs/04 §13.2、docs/16 §4.1）；与 ``UploadSessionCreate.size`` 的
 #: ``le`` 同口径，服务层再兜一次，防止绕过 schema 直接调服务。
 UPLOAD_MAX_OBJECT_BYTES = 2 * 1024 * 1024 * 1024
-#: 服务端拼装上限 256MB；超出提示改走 MinIO 直传（docs/17 §5.7）。
+#: 服务端合并上限。流式落盘后不再受进程内存约束，因此与单文件上限同口径；
+#: 保留独立开关是为了部署侧能用更小的值限制临时盘占用。
 UPLOAD_MAX_ASSEMBLY_BYTES = settings.UPLOAD_MAX_ASSEMBLY_BYTES
 
 #: 允许继续上传分片 / 合并的状态。其余状态一律 409，避免「已完成/已取消」被续写。
 ACTIVE_STATES = ("INITIATED", "UPLOADING")
 
+#: 合并时逐片读写的块大小；与 ``store_file_path`` 的哈希块大小一致。
+_ASSEMBLY_CHUNK_BYTES = 1024 * 1024
+
 
 def part_count_for(size: int) -> int:
     """按 16MB 分片计算片数，至少 1 片（0 字节由 schema 的 ``gt=0`` 挡掉）。"""
     return max(1, math.ceil(int(size) / UPLOAD_PART_SIZE_BYTES))
-
-
-def parts_directory(session_id: str) -> Path:
-    """分片临时目录：``{STORAGE_PATH}/_uploads/{session_id}``。"""
-    return Path(settings.STORAGE_PATH) / "_uploads" / str(session_id)
-
-
-def part_file_path(session_id: str, part_number: int) -> Path:
-    """单个分片文件：``{STORAGE_PATH}/_uploads/{session_id}/{part:05d}.part``。"""
-    return parts_directory(session_id) / f"{int(part_number):05d}.part"
 
 
 def build_object_key(*, project_id: str, filename: str) -> str:
@@ -91,24 +90,29 @@ def _declared_part_count(session: UploadSession) -> int:
     return part_count_for(int(session.declared_size or 0))
 
 
-def _normalize_parts(raw) -> list[dict]:
-    """``parts`` 可能是 None（旧行/默认值未落库），统一成列表。"""
-    if not raw:
-        return []
-    return [dict(item) for item in raw if isinstance(item, dict)]
-
-
 def _stored_part_numbers(session: UploadSession) -> set[int]:
-    return {
-        int(item["partNumber"])
-        for item in _normalize_parts(session.parts)
-        if item.get("partNumber") is not None
-    }
+    return {int(item.part_number) for item in (session.part_records or [])}
+
+
+def _stored_parts(session: UploadSession) -> list[dict]:
+    """已收到分片的对外表示，按上报时间排序（写入顺序，不是片号顺序）。"""
+    records = sorted(
+        session.part_records or [],
+        key=lambda item: (item.reported_at or utcnow(), int(item.part_number)),
+    )
+    return [
+        {
+            "partNumber": int(item.part_number),
+            "etag": item.etag,
+            "size": int(item.size_bytes or 0),
+        }
+        for item in records
+    ]
 
 
 def serialize_upload_session(session: UploadSession) -> dict:
     """会话的对外表示（docs/05 §4.2 的创建与断点续传响应）。"""
-    parts = _normalize_parts(session.parts)
+    parts = _stored_parts(session)
     done = _stored_part_numbers(session)
     part_count = _declared_part_count(session)
     return {
@@ -139,13 +143,42 @@ async def get_upload_session(db: AsyncSession, *, upload_id: str) -> UploadSessi
     return session
 
 
+def is_expired(session: UploadSession, *, now=None) -> bool:
+    """会话是否已过期；``expires_at`` 为空视为不过期（兼容历史行）。"""
+    if session.expires_at is None:
+        return False
+    return session.expires_at <= (now or utcnow())
+
+
+async def expire_upload_session(
+    db: AsyncSession, *, session: UploadSession, staging: PartStaging | None = None
+) -> None:
+    """把会话置为 ``EXPIRED`` 并清掉暂存分片（幂等，可重复调用）。"""
+    if session.state not in ("EXPIRED", "COMPLETED", "ABORTED"):
+        session.state = "EXPIRED"
+        await db.commit()
+    await (staging or build_part_staging()).discard(str(session.id))
+
+
+async def _require_active(
+    db: AsyncSession, *, session: UploadSession, staging: PartStaging
+) -> None:
+    """过期 / 非活跃状态一律拦在这里，避免业务分支各写一遍。"""
+    if is_expired(session):
+        await expire_upload_session(db, session=session, staging=staging)
+        raise ConflictException("上传会话已过期（有效期 24 小时），请重新创建上传会话")
+    if session.state not in ACTIVE_STATES:
+        raise ConflictException(f"会话状态为 {session.state}，不能继续操作分片")
+
+
 async def find_idempotent_session(
     db: AsyncSession, *, project_id: str, idempotency_key: str
 ) -> UploadSession | None:
     """同 project + 同幂等键的既有会话。
 
-    幂等键单独成列而不是塞进 ``parts``：创建会话时还没有任何分片，塞进 ``parts``
-    会被第一次上报整列覆盖掉，幂等随即失效。
+    幂等键单独成列而不是塞进分片表：创建会话时还没有任何分片，塞进去会被后续
+    上报覆盖掉，幂等随即失效。唯一约束在 ``uq_upload_sessions_project_idem``，
+    本函数只是快路径——真正的互斥由数据库保证。
     """
     if not idempotency_key:
         return None
@@ -165,7 +198,13 @@ async def create_upload_session(
     data: UploadSessionCreate,
     idempotency_key: str,
 ) -> UploadSession:
-    """创建会话；同幂等键重复调用返回同一会话（不重置状态与已传分片）。"""
+    """创建会话；同幂等键重复调用返回同一会话（不重置状态与已传分片）。
+
+    并发下两个请求都可能走完 ``find_idempotent_session`` 的空结果分支，因此还要
+    依赖唯一约束兜底：插入失败（``IntegrityError``）时回滚并重查，返回先落库的
+    那个会话。没有这一步，同一个 ``X-Idempotency-Key`` 会换来两个 uploadId，
+    客户端的分片就分叉到两个会话里。
+    """
     existing = await find_idempotent_session(
         db, project_id=project_id, idempotency_key=idempotency_key
     )
@@ -180,52 +219,130 @@ async def create_upload_session(
         created_by=str(user.id),
         declared_filename=data.filename,
         declared_size=int(data.size),
+        declared_sha256=data.sha256,
         content_type=data.content_type,
         object_key=build_object_key(project_id=str(project_id), filename=data.filename),
         part_size=UPLOAD_PART_SIZE_BYTES,
-        parts=[],
         state="INITIATED",
         expires_at=utcnow() + timedelta(hours=UPLOAD_SESSION_TTL_HOURS),
         idempotency_key=idempotency_key,
     )
     db.add(session)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raced = await find_idempotent_session(
+            db, project_id=project_id, idempotency_key=idempotency_key
+        )
+        if raced is not None:
+            return raced
+        raise
     await db.refresh(session)
     return session
 
 
-async def record_upload_part(
-    db: AsyncSession, *, session: UploadSession, part_number: int, content: bytes
-) -> dict:
-    """落分片字节，并把 ``{partNumber, etag, size}`` 追加进 ``parts``。
+def _upsert_part_statement(
+    db: AsyncSession, *, session_id: str, part_number: int, etag: str, size: int
+):
+    """构造「同片号覆盖」的 upsert 语句；按会话实际绑定的方言选构造器。
 
-    追加而非覆盖：同一片可能被重传（网络抖动），按片号替换自己的旧项、其余保留；
-    整列覆盖会让先到的分片全部丢失（docs/04 §5.6「例外与补充」）。
+    方言从 ``db`` 上取而不是从全局 ``engine``：测试用的是独立的内存库，两者可能
+    不是同一个引擎。SQLite 与 PostgreSQL 都支持 ``ON CONFLICT ... DO UPDATE``；
+    其它方言返回 ``None``，调用方退化为「先删后插」——同片号仍只有一行，只是不
+    原子。部署侧只用前两种，这里只求不崩。
     """
-    if session.state not in ACTIVE_STATES:
-        raise ConflictException(f"会话状态为 {session.state}，不能继续上传分片")
+    values = {
+        "session_id": str(session_id),
+        "part_number": int(part_number),
+        "etag": etag,
+        "size_bytes": int(size),
+        "reported_at": utcnow(),
+        "created_at": utcnow(),
+        "updated_at": utcnow(),
+    }
+    dialect = _dialect_name(db)
+    if dialect == "postgresql":
+        from sqlalchemy.dialects.postgresql import insert as _insert
+    elif dialect == "sqlite":
+        from sqlalchemy.dialects.sqlite import insert as _insert
+    else:
+        return None
+    return _insert(UploadPart).values(**values).on_conflict_do_update(
+        index_elements=["session_id", "part_number"],
+        set_={"etag": etag, "size_bytes": int(size), "updated_at": utcnow()},
+    )
+
+
+def _dialect_name(db: AsyncSession) -> str:
+    bind = db.get_bind()
+    return getattr(getattr(bind, "dialect", None), "name", "sqlite")
+
+
+async def record_upload_part(
+    db: AsyncSession,
+    *,
+    session: UploadSession,
+    part_number: int,
+    content: bytes,
+    staging: PartStaging | None = None,
+) -> dict:
+    """落分片字节，并把 ``(session_id, part_number)`` 一行写进 ``upload_parts``。
+
+    重传同一片是常态（网络抖动）：字节覆盖同名的暂存对象，索引行用 upsert 覆盖，
+    两者都幂等。**不要**改成「读现有列表再整列写回」——并发下会丢掉别人刚写的片。
+    """
+    staging = staging or build_part_staging()
+    await _require_active(db, session=session, staging=staging)
 
     part_count = _declared_part_count(session)
     if int(part_number) < 1 or int(part_number) > part_count:
         raise ValidationException(f"分片号 {part_number} 超出范围 1..{part_count}")
 
-    parts_directory(session.id).mkdir(parents=True, exist_ok=True)
-    part_file_path(session.id, part_number).write_bytes(content)
-
+    written = await staging.write_part(str(session.id), int(part_number), content)
     # ETag 用 md5 与 S3/MinIO 的单片 ETag 同口径，客户端可原样回传。
     etag = hashlib.md5(content, usedforsecurity=False).hexdigest()
-    entry = {"partNumber": int(part_number), "etag": etag, "size": len(content)}
 
-    current = _normalize_parts(session.parts)
-    kept = [item for item in current if item.get("partNumber") != int(part_number)]
-    # 整列重新赋值 + flag_modified：JSON 列的原地 append 不会被 SQLAlchemy 感知。
-    session.parts = [*kept, entry]
-    session.state = "UPLOADING"
-    flag_modified(session, "parts")
+    statement = _upsert_part_statement(
+        db,
+        session_id=str(session.id),
+        part_number=int(part_number),
+        etag=etag,
+        size=written,
+    )
+    if statement is not None:
+        await db.execute(statement)
+    else:  # pragma: no cover - 仅非 sqlite/pg 方言
+        await db.delete(UploadPart).where(
+            UploadPart.session_id == str(session.id),
+            UploadPart.part_number == int(part_number),
+        )
+        db.add(
+            UploadPart(
+                session_id=str(session.id),
+                part_number=int(part_number),
+                etag=etag,
+                size_bytes=written,
+            )
+        )
 
+    if session.state != "UPLOADING":
+        session.state = "UPLOADING"
     await db.commit()
-    await db.refresh(session)
-    return entry
+    await _reload_parts(db, session)
+    return {"partNumber": int(part_number), "etag": etag, "size": written}
+
+
+async def _reload_parts(db: AsyncSession, session: UploadSession) -> None:
+    """重新加载分片集合。
+
+    用 ``db.execute`` 写的 upsert 不经过 ORM 身份映射，内存里的 ``part_records``
+    仍是旧集合；直接返回会让响应里的 ``receivedPartNumbers`` 缺一片。
+    """
+    try:
+        await db.refresh(session, attribute_names=["part_records"])
+    except Exception:  # noqa: BLE001 - 关系刷新失败时退化为整对象刷新
+        await db.refresh(session)
 
 
 async def complete_upload_session(
@@ -234,68 +351,118 @@ async def complete_upload_session(
     session: UploadSession,
     user: User,
     parts: list[UploadPartRef],
+    staging: PartStaging | None = None,
 ) -> FileModel:
-    """按 ``part_number`` 排序拼装分片，写入 files 表并置会话 COMPLETED。"""
-    if session.state not in ACTIVE_STATES:
-        raise ConflictException(f"会话状态为 {session.state}，不能再次合并")
+    """按 ``part_number`` 排序流式合并分片，写入 files 表并置会话 COMPLETED。"""
+    staging = staging or build_part_staging()
+    await _require_active(db, session=session, staging=staging)
 
     part_count = _declared_part_count(session)
     available = {int(item.part_number) for item in parts} | _stored_part_numbers(session)
     missing = [n for n in range(1, part_count + 1) if n not in available]
     if missing:
-        raise ValidationException(
-            "缺少分片: " + ",".join(str(n) for n in missing)
-        )
+        raise ValidationException("缺少分片: " + ",".join(str(n) for n in missing))
 
     ordered = sorted(available)
+    sizes: dict[int, int] = {}
     total = 0
     for number in ordered:
-        path = part_file_path(session.id, number)
-        if not path.exists():
+        size = await staging.part_size(str(session.id), number)
+        if size is None:
             raise ValidationException(f"分片 {number} 的数据已丢失，请重新上传")
-        total += path.stat().st_size
+        sizes[number] = int(size)
+        total += int(size)
         if total > UPLOAD_MAX_ASSEMBLY_BYTES:
             raise ValidationException(
                 "合并后的文件超过 "
-                f"{UPLOAD_MAX_ASSEMBLY_BYTES // (1024 ** 2)}MB 的服务端拼装上限；"
-                "后续步骤将接入 MinIO 分片直传（docs/17 §5.7），届时无需本地拼装"
+                f"{UPLOAD_MAX_ASSEMBLY_BYTES // (1024 ** 2)}MB 的服务端合并上限；"
+                "请改用更小的分片集合或联系管理员调整 UPLOAD_MAX_ASSEMBLY_BYTES"
             )
 
-    buffer = bytearray()
-    for number in ordered:
-        buffer.extend(part_file_path(session.id, number).read_bytes())
+    declared_size = int(session.declared_size or 0)
+    if total != declared_size:
+        raise ValidationException(
+            f"合并后的字节数 {total} 与创建会话时声明的 {declared_size} 不一致，"
+            "请重传缺失或有误的分片"
+        )
 
-    digest = hashlib.sha256(buffer).hexdigest()
-    stored_file = await store_file_bytes(
-        db,
-        content=bytes(buffer),
-        filename=session.declared_filename,
-        content_type=session.content_type,
-        source_type=FileSourceType.UPLOAD.value,
-        owner_id=str(user.id),
-        project_id=str(session.project_id),
-        is_permanent=True,
-        sha256=digest,
-    )
+    temp_path, digest = await _assemble_to_temp(staging, str(session.id), ordered, sizes)
+
+    declared_sha256 = (session.declared_sha256 or "").strip().lower()
+    if declared_sha256 and declared_sha256 != digest:
+        Path(temp_path).unlink(missing_ok=True)
+        raise ValidationException("合并后的文件 sha256 与客户端声明不一致（docs/05 §4.2 的 42205）")
+
+    try:
+        stored_file = await store_file_path(
+            db,
+            source_path=Path(temp_path),
+            filename=session.declared_filename,
+            content_type=session.content_type,
+            source_type=FileSourceType.UPLOAD.value,
+            owner_id=str(user.id),
+            project_id=str(session.project_id),
+            is_permanent=True,
+            size_bytes=total,
+            sha256=digest,
+        )
+    finally:
+        Path(temp_path).unlink(missing_ok=True)
+
     session.state = "COMPLETED"
     await db.commit()
     await db.refresh(session)
-    _cleanup_parts(session.id)
+    await staging.discard(str(session.id))
     return stored_file
 
 
-async def abort_upload_session(db: AsyncSession, *, session: UploadSession) -> None:
-    """取消会话：置 ABORTED 并清理临时分片。"""
+async def _assemble_to_temp(
+    staging: PartStaging, session_id: str, ordered: list[int], sizes: dict[int, int]
+) -> tuple[str, str]:
+    """把分片按序写进临时文件，返回 ``(临时路径, sha256)``。
+
+    逐片读写 + 增量哈希：峰值内存等于一片大小，而不是整个文件。临时文件放在
+    ``STORAGE_PATH`` 下的 ``.assembly-`` 前缀，与正式文件同盘，``store_file_path``
+    的复制不会跨文件系统。
+    """
+    ensure_storage_dir()
+    descriptor, raw_path = tempfile.mkstemp(prefix=".assembly-", dir=settings.STORAGE_PATH)
+    import os
+
+    os.close(descriptor)
+    temp_path = Path(raw_path)
+    digest = hashlib.sha256()
+    try:
+        with temp_path.open("wb") as handle:
+            for number in ordered:
+                chunk_offset = 0
+                content = await staging.read_part(session_id, number)
+                if len(content) != sizes[number]:
+                    raise ValidationException(
+                        f"分片 {number} 的大小在上报后发生变化，请重新上传该分片"
+                    )
+                view = memoryview(content)
+                while chunk_offset < len(content):
+                    end = min(chunk_offset + _ASSEMBLY_CHUNK_BYTES, len(content))
+                    block = view[chunk_offset:end]
+                    digest.update(block)
+                    handle.write(block)
+                    chunk_offset = end
+    except Exception:
+        temp_path.unlink(missing_ok=True)
+        raise
+    return str(temp_path), digest.hexdigest()
+
+
+async def abort_upload_session(
+    db: AsyncSession, *, session: UploadSession, staging: PartStaging | None = None
+) -> None:
+    """取消会话：置 ABORTED 并清理暂存分片。"""
     if session.state == "COMPLETED":
         raise ConflictException("会话已完成，不能取消")
     session.state = "ABORTED"
     await db.commit()
-    _cleanup_parts(session.id)
-
-
-def _cleanup_parts(session_id: str) -> None:
-    """尽力清理分片目录；清理失败不回滚已完成的业务结果。"""
-    shutil.rmtree(parts_directory(session_id), ignore_errors=True)
+    await (staging or build_part_staging()).discard(str(session.id))
 
 
 __all__ = [
@@ -308,11 +475,11 @@ __all__ = [
     "build_object_key",
     "complete_upload_session",
     "create_upload_session",
+    "expire_upload_session",
     "find_idempotent_session",
     "get_upload_session",
+    "is_expired",
     "part_count_for",
-    "part_file_path",
-    "parts_directory",
     "record_upload_part",
     "serialize_upload_session",
 ]

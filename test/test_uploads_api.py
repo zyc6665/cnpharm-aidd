@@ -1,9 +1,14 @@
 """分片上传会话 API tests (docs/05 §4.2, docs/04 §5.8).
 
 覆盖一次完整上传的四段生命周期：创建（幂等）→ 逐片上报（可乱序、可重传）→
-合并（缺片 422、超限 422、成功后落 files 表）→ 取消（409 后不可续传）。
-关键回归点：``parts`` 是 JSON 列，若实现里原地 ``append`` 而没整列重新赋值，
-用例 4 会立刻变红——这正是本文件存在的理由。
+合并（缺片 422、字节数不符 422、超限 422、成功后落 files 表）→ 取消（409 后不可续传）。
+关键回归点有两处：
+
+1. 分片索引落在 ``upload_parts`` 行级表（``session_id`` + ``part_number`` 复合主键），
+   不再复用 ``upload_sessions.parts`` 这个 JSON 列——JSON 列只能整列读写，并发上报
+   时后提交者会覆盖前者，**字节没丢但索引丢了**，断点续传直接失效；
+2. 会话过期要在三个业务入口都检查（创建后用户关掉页面就再没有入口碰到它），
+   并由 ``upload_maintenance`` 的定时任务兜底。
 """
 
 from __future__ import annotations
@@ -233,15 +238,15 @@ async def test_create_upload_is_idempotent(
 
 
 # ---------------------------------------------------------------------------
-# 4) parts 追加而非覆盖
+# 4) 乱序上报互不覆盖（分片索引按片号成行，不靠整列覆盖）
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_upload_parts_append_in_report_order(
+async def test_upload_parts_keep_every_reported_part(
     api_client: httpx.AsyncClient, project: Project
 ) -> None:
-    """先传第 3 片再传第 1 片：两片都在，且按上报顺序追加，互不覆盖。"""
+    """先传第 3 片再传第 1 片：两片都在，互不覆盖。"""
 
     data = await _create_upload(
         api_client, project.id, size=3 * PART_SIZE, idempotency_key="k4"
@@ -255,9 +260,106 @@ async def test_upload_parts_append_in_report_order(
     assert detail.status_code == 200, detail.text
     payload = detail.json()["data"]
 
-    assert [item["partNumber"] for item in payload["parts"]] == [3, 1]
+    assert sorted(item["partNumber"] for item in payload["parts"]) == [1, 3]
     assert payload["receivedPartNumbers"] == [1, 3]
+    assert payload["missingPartNumbers"] == [2]
     assert payload["state"] == "UPLOADING"
+
+
+@pytest.mark.asyncio
+async def test_stale_session_cannot_drop_another_part(
+    api_client: httpx.AsyncClient, db_session: AsyncSession, project: Project
+) -> None:
+    """用「过期的内存视图」写第 2 片，不会冲掉别人已写的第 1 片（B1 回归）。
+
+    这正是 JSON 列版本的失败形态：旧实现读 ``session.parts`` 拿整列再写回，
+    一个在写第 1 片之前就已经加载过的会话对象，``parts`` 仍是空列表，它写第 2
+    片时会把第 1 片覆盖掉。改成 ``upload_parts`` 行级记录后，两个片号是两行，
+    互相看不见也就互相覆盖不了。
+    """
+
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    data = await _create_upload(
+        api_client, project.id, size=3 * PART_SIZE, idempotency_key="k4b"
+    )
+    upload_id = data["uploadId"]
+
+    # 先在一个「旧」会话里把对象加载出来（此时还没有任何分片）。
+    # 注意用 ``db_session.bind``（AsyncEngine）而不是 ``get_bind()``，后者返回的
+    # 同步 Engine 不能喂给 ``async_sessionmaker``。
+    stale_factory = async_sessionmaker(
+        db_session.bind, expire_on_commit=False, autoflush=False
+    )
+    async with stale_factory() as stale:
+        stale_session = await uploads_service.get_upload_session(
+            stale, upload_id=upload_id
+        )
+        assert stale_session.part_records == []
+
+        # 期间另一个请求写入了第 3 片并提交。
+        assert (
+            await _put_part(api_client, upload_id, 3, b"third-part")
+        ).status_code == 200
+
+        # 旧会话再写第 1 片：若实现是整列覆盖，第 3 片会消失。
+        await uploads_service.record_upload_part(
+            stale, session=stale_session, part_number=1, content=b"first-part"
+        )
+
+    detail = await api_client.get(f"/api/v1/uploads/{upload_id}", headers=_headers(OWNER))
+    payload = detail.json()["data"]
+    assert payload["receivedPartNumbers"] == [1, 3]
+    assert payload["missingPartNumbers"] == [2]
+
+
+@pytest.mark.asyncio
+async def test_part_write_compiles_to_upsert(db_session: AsyncSession) -> None:
+    """分片写入必须编译成 ``ON CONFLICT ... DO UPDATE``，而不是读整列再写回。"""
+
+    from sqlalchemy.dialects import sqlite
+
+    from app.services.uploads import _upsert_part_statement
+
+    statement = _upsert_part_statement(
+        db_session, session_id="session-1", part_number=2, etag="e" * 32, size=1024
+    )
+    assert statement is not None
+    compiled = str(statement.compile(dialect=sqlite.dialect())).upper()
+    assert "ON CONFLICT" in compiled
+    assert "DO UPDATE" in compiled
+
+
+@pytest.mark.asyncio
+async def test_create_recovers_from_idempotency_race(
+    api_client: httpx.AsyncClient, db_session: AsyncSession, project: Project, monkeypatch
+) -> None:
+    """并发下「先查后插」都会看到空结果，插入失败方必须回滚重查并复用（B2 回归）。
+
+    这里让第一次 ``find_idempotent_session`` 假装没查到（模拟两个请求同时进入），
+    于是服务层会撞上 ``uq_upload_sessions_project_idem``；捕获 ``IntegrityError``
+    后重查，应返回对方已落库的会话而不是抛出 500。
+    """
+
+    first = await _create_upload(api_client, project.id, idempotency_key="race-key")
+
+    original = uploads_service.find_idempotent_session
+    calls = {"count": 0}
+
+    async def pretend_missed(*args, **kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return None
+        return await original(*args, **kwargs)
+
+    monkeypatch.setattr(uploads_service, "find_idempotent_session", pretend_missed)
+
+    second = await _create_upload(api_client, project.id, idempotency_key="race-key")
+
+    assert calls["count"] >= 2, "应进入「插入失败 → 重查」分支"
+    assert second["uploadId"] == first["uploadId"]
+    assert second["objectKey"] == first["objectKey"]
+
 
 
 # ---------------------------------------------------------------------------
@@ -314,13 +416,21 @@ async def test_complete_with_missing_part_is_rejected(
 async def test_complete_upload_stores_file(
     api_client: httpx.AsyncClient, db_session: AsyncSession, project: Project
 ) -> None:
-    """合并后返回 urn/size/sha256，``files`` 表多一行且 sha256 与实际内容一致。"""
+    """合并后返回 urn/size/sha256，``files`` 表多一行且 sha256 与实际内容一致。
+
+    ``size`` 必须与实际上报的字节数一致：合并阶段会校验总字节数是否等于创建时
+    声明的 ``declared_size``，不一致就 422——这条校验挡的是「客户端少传一片但
+    片号都在」的场景。
+    """
 
     before = await db_session.scalar(select(func.count(FileModel.id)))
 
-    data = await _create_upload(api_client, project.id, size=20, idempotency_key="k7")
+    payload_bytes = b"HEAD" + b"-payload"
+    data = await _create_upload(
+        api_client, project.id, size=len(payload_bytes), idempotency_key="k7"
+    )
     upload_id = data["uploadId"]
-    await _put_part(api_client, upload_id, 1, b"HEAD" + b"-payload")
+    await _put_part(api_client, upload_id, 1, payload_bytes)
 
     response = await api_client.post(
         f"/api/v1/uploads/{upload_id}:complete",
@@ -331,8 +441,11 @@ async def test_complete_upload_stores_file(
     payload = response.json()["data"]
 
     assert payload["urn"].startswith("file:")
-    assert payload["size"] == len(b"HEAD-payload")
-    assert payload["sha256"] == __import__("hashlib").sha256(b"HEAD-payload").hexdigest()
+    assert payload["size"] == len(payload_bytes)
+    assert (
+        payload["sha256"]
+        == __import__("hashlib").sha256(payload_bytes).hexdigest()
+    )
     assert payload["state"] == "COMPLETED"
 
     after = await db_session.scalar(select(func.count(FileModel.id)))
@@ -391,17 +504,17 @@ async def test_delete_upload_aborts_session(
 
 
 # ---------------------------------------------------------------------------
-# 10) 超过本地拼装上限
+# 10) 超过服务端合并上限
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_complete_over_assembly_limit_points_to_minio(
+async def test_complete_over_assembly_limit_is_rejected(
     api_client: httpx.AsyncClient, project: Project, monkeypatch
 ) -> None:
-    """累计字节 > UPLOAD_MAX_ASSEMBLY_BYTES → 422，message 指向后续 MinIO 直传。"""
+    """累计字节 > UPLOAD_MAX_ASSEMBLY_BYTES → 422，message 指向合并上限配置项。"""
 
-    # 把小文件真正写满 256MB 会让用例跑几十秒并吃掉 256MB 内存；这里把上限压到
+    # 把小文件真正写满 2GB 会让用例跑几十秒并吃掉同等磁盘；这里把上限压到
     # 4 字节，语义等价（比较的是累计字节数与常量），又不牺牲执行速度。
     monkeypatch.setattr(uploads_service, "UPLOAD_MAX_ASSEMBLY_BYTES", 4)
 
@@ -415,4 +528,143 @@ async def test_complete_over_assembly_limit_points_to_minio(
         json={"parts": [{"partNumber": 1, "etag": "e"}]},
     )
     assert response.status_code == 422, response.text
-    assert "MinIO" in response.json()["message"]
+    assert "UPLOAD_MAX_ASSEMBLY_BYTES" in response.json()["message"]
+
+
+# ---------------------------------------------------------------------------
+# 11) 合并字节数与声明不符
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_complete_rejects_size_mismatch(
+    api_client: httpx.AsyncClient, project: Project
+) -> None:
+    """纯客户端侧无法伪造：声明的 size 与实收字节不符 → 422。
+
+    ``declared_size`` 是创建会话时由客户端声明的，服务端在合并时校验实际字节数，
+    避免「片号齐了但内容被截断」的静默成功。
+    """
+
+    data = await _create_upload(api_client, project.id, size=100, idempotency_key="k11")
+    upload_id = data["uploadId"]
+    await _put_part(api_client, upload_id, 1, b"short")
+
+    response = await api_client.post(
+        f"/api/v1/uploads/{upload_id}:complete",
+        headers=_headers(OWNER),
+        json={"parts": [{"partNumber": 1, "etag": "e"}]},
+    )
+    assert response.status_code == 422, response.text
+    assert "不一致" in response.json()["message"]
+
+
+# ---------------------------------------------------------------------------
+# 12) 声明了 sha256 时合并后校验
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_complete_verifies_declared_sha256(
+    api_client: httpx.AsyncClient, project: Project
+) -> None:
+    """客户端声明了 sha256 且与实际不符 → 422（docs/05 §4.2 的 42205 口径）。"""
+
+    import hashlib
+
+    content = b"declared-digest-check"
+    response = await api_client.post(
+        "/api/v1/uploads",
+        headers=_headers(OWNER, idempotency_key="k12"),
+        json={
+            "projectId": project.id,
+            "filename": "digest.sdf",
+            "size": len(content),
+            "sha256": hashlib.sha256(b"other-content").hexdigest(),
+        },
+    )
+    assert response.status_code == 200, response.text
+    upload_id = response.json()["data"]["uploadId"]
+    await _put_part(api_client, upload_id, 1, content)
+
+    completed = await api_client.post(
+        f"/api/v1/uploads/{upload_id}:complete",
+        headers=_headers(OWNER),
+        json={"parts": [{"partNumber": 1, "etag": "e"}]},
+    )
+    assert completed.status_code == 422, completed.text
+    assert "sha256" in completed.json()["message"]
+
+
+# ---------------------------------------------------------------------------
+# 13) 过期会话不可再传
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_expired_session_rejects_new_parts(
+    api_client: httpx.AsyncClient, db_session: AsyncSession, project: Project
+) -> None:
+    """``expires_at`` 已过 → PUT 409 且会话被置为 EXPIRED（PR2 评审 B4 的回归用例）。"""
+
+    from datetime import timedelta
+
+    from app.common.time import utcnow
+    from app.models.uploads import UploadSession
+
+    data = await _create_upload(api_client, project.id, size=32, idempotency_key="k13")
+    upload_id = data["uploadId"]
+
+    session = await db_session.scalar(
+        select(UploadSession).where(UploadSession.id == upload_id)
+    )
+    assert session is not None
+    session.expires_at = utcnow() - timedelta(minutes=1)
+    await db_session.commit()
+
+    response = await _put_part(api_client, upload_id, 1, b"late")
+    assert response.status_code == 409, response.text
+    assert "过期" in response.json()["message"]
+
+    await db_session.refresh(session)
+    assert session.state == "EXPIRED"
+
+
+# ---------------------------------------------------------------------------
+# 14) 定时清理过期会话
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_expire_stale_upload_sessions_sweeps_only_expired(
+    api_client: httpx.AsyncClient, db_session: AsyncSession, project: Project
+) -> None:
+    """清理任务只碰已过期的活跃会话，且返回处理条数。"""
+
+    from datetime import timedelta
+
+    from app.common.time import utcnow
+    from app.models.uploads import UploadSession
+    from app.services.upload_maintenance import expire_stale_upload_sessions
+
+    stale = await _create_upload(api_client, project.id, size=8, idempotency_key="k14a")
+    fresh = await _create_upload(api_client, project.id, size=8, idempotency_key="k14b")
+
+    stale_row = await db_session.scalar(
+        select(UploadSession).where(UploadSession.id == stale["uploadId"])
+    )
+    assert stale_row is not None
+    stale_row.expires_at = utcnow() - timedelta(hours=1)
+    await db_session.commit()
+
+    swept = await expire_stale_upload_sessions(db_session)
+    assert swept == 1
+
+    stale_row = await db_session.scalar(
+        select(UploadSession).where(UploadSession.id == stale["uploadId"])
+    )
+    fresh_row = await db_session.scalar(
+        select(UploadSession).where(UploadSession.id == fresh["uploadId"])
+    )
+    assert stale_row is not None and stale_row.state == "EXPIRED"
+    assert fresh_row is not None and fresh_row.state == "INITIATED"

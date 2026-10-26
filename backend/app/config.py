@@ -441,10 +441,15 @@ class Settings(BaseSettings):
     # 16MB × 128 片 = 2GB，正好覆盖单文件上限。
     UPLOAD_PART_SIZE_BYTES: int = 16777216
     # 会话 24 小时过期：未完成的分片会在存储上长期占空间，必须有过期兜底。
+    # 三个入口（上报分片/合并/取消）都会校验 expires_at，另有过期清理任务兜底。
     UPLOAD_SESSION_TTL_HOURS: int = 24
-    # 服务端本地拼装的上限。超过此值不做内存/磁盘拼装，改为提示接入 MinIO 直传
-    # （review 时确认过：先把能力落地，直传是后续步骤，见 docs/17 §5.7）。
-    UPLOAD_MAX_ASSEMBLY_BYTES: int = 268435456
+    # 服务端合并上限。合并已改成逐片流式落盘（峰值内存只有一片），不再受进程内存
+    # 约束；这里只用于限制临时盘/对象存储占用，默认与单文件上限 2GB 同口径。
+    UPLOAD_MAX_ASSEMBLY_BYTES: int = 2 * 1024**3
+    # 过期会话清理任务的执行间隔（秒）与开关。测试环境可用
+    # ``UPLOAD_SWEEP_ENABLED=false`` 关掉，避免后台任务干扰断言。
+    UPLOAD_SWEEP_INTERVAL_SECONDS: int = 3600
+    UPLOAD_SWEEP_ENABLED: bool = True
 
     # 首月 AIDD 发布门禁。None 表示使用环境默认值：开发环境开启新入口，
     # 预发布/生产默认关闭新入口；旧 AIDD API 默认关闭。
