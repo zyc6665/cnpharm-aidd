@@ -27,6 +27,7 @@ from app.api.v1 import (
     image_assets,
     datasets,
     data_versions,
+    project_quotas,
     uploads,
 )
 
@@ -60,6 +61,12 @@ api_router.include_router(datasets.project_router, prefix="/projects", tags=["�
 api_router.include_router(datasets.router, tags=["数据集"])
 api_router.include_router(data_versions.project_router, prefix="/projects", tags=["数据版本"])
 api_router.include_router(data_versions.router, tags=["数据版本"])
+# 项目配额（docs/05 §3、§9）：`/projects/{id}/quota` 读写 + `/compute/quota` 汇总。
+# 两个 router 内部自带 feature flag 依赖，与 targets/compounds 的注册方式一致。
+api_router.include_router(
+    project_quotas.project_router, prefix="/projects", tags=["项目配额"]
+)
+api_router.include_router(project_quotas.router, prefix="/compute", tags=["项目配额"])
 api_router.include_router(uploads.router, tags=["分片上传"])
 api_router.include_router(image_assets.router, prefix="/admin/image-assets", tags=["管理员镜像资产"])
 api_router.include_router(admin_audit.router, prefix="/admin/audit-logs", tags=["管理员审计日志"])

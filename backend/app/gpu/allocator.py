@@ -590,6 +590,37 @@ class GPUAllocator:
         )
         return None
 
+    async def _stamp_allocated_dcu_count(self, task_id: str, *, gpu_index: int) -> None:
+        """把「这条任务占过几张卡」写进 ``extra_data``，只写一次、永不清空。
+
+        为什么不能只靠 ``gpu_index``：它是**当前占用**，释放时会被清空（本文件的
+        三处 ``values(gpu_index=None)`` 与 ``app/tasks/executors/factory.py`` 的
+        ``self.task.gpu_index = None``）。而配额核销发生在**终态之后**，那时
+        ``gpu_index`` 必然是 ``NULL``，若资源画像里 ``gpu_count`` 又是 0
+        （工具 ``gpu_required=False`` 但 profile 配了 GPU），一个真跑了 6 小时
+        DCU 的任务会被当成 CPU 任务核销，权重从 1.0 掉到 1/64。
+
+        写入口径：同一任务重复分配（重试）时取**最大值**，不累加——一轮重试仍然
+        只占 1 张卡，重复分配是同一个物理事实的重复上报，不是多用了算力。核销侧
+        按 ``retry_count`` 分轮累加，卡数由这里提供每轮的「同时占用数」。
+        """
+        # 局部 import 避免 app.gpu → app.services 的模块级依赖（allocator 是底层模块）。
+        from app.services.project_quotas import ALLOCATED_DCU_COUNT_KEY
+
+        current = await self.db.scalar(
+            select(Task.extra_data).where(Task.id == task_id)
+        )
+        extra_data = dict(current) if isinstance(current, dict) else {}
+        previous = extra_data.get(ALLOCATED_DCU_COUNT_KEY)
+        previous_count = int(previous) if isinstance(previous, (int, float)) else 0
+        count = max(previous_count, int(gpu_index is not None))
+        if count <= previous_count:
+            return
+        extra_data[ALLOCATED_DCU_COUNT_KEY] = count
+        await self.db.execute(
+            update(Task).where(Task.id == task_id).values(extra_data=extra_data)
+        )
+
     async def _create_allocation(
         self,
         task_id: str,
@@ -666,6 +697,7 @@ class GPUAllocator:
                     gpu_memory_allocated_mb=memory_mb,
                 )
             )
+            await self._stamp_allocated_dcu_count(task_id, gpu_index=gpu_index)
             await self.db.flush()
 
         logger.info(

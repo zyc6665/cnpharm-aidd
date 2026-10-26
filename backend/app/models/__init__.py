@@ -40,6 +40,7 @@ from app.models.decisions import DecisionItem, DecisionRecord
 from app.models.uploads import DataFile, Dataset, UploadPart, UploadSession
 from app.models.idempotency import IdempotencyKey
 from app.models.versions import DataVersion
+from app.models.quotas import ProjectQuota
 
 __all__ = [
     "User",
@@ -64,4 +65,5 @@ __all__ = [
     "UploadSession", "UploadPart", "Dataset", "DataFile",
     "IdempotencyKey",
     "DataVersion",
+    "ProjectQuota",
 ]

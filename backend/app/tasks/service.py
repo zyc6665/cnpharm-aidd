@@ -21,6 +21,7 @@ from app.models.users import User
 from app.schemas.tasks import TaskCreate
 from app.services.project_access import load_project_membership
 from app.services.project_migration import ensure_migration_project_for_owner
+from app.services.project_quotas import check_submission_allowed
 from app.services.run_input_normalization import normalize_string_mapping
 from app.services.run_preparation import PreparedRun, RunContext, RunPreparationInput, prepare_run
 from app.services.tool_contracts import (
@@ -517,6 +518,64 @@ async def prepare_tool_task_preview(
     }
 
 
+async def _enforce_project_quota(
+    db: AsyncSession,
+    *,
+    prepared: PreparedRun,
+    tool: Tool,
+    extra_data: dict[str, object],
+) -> None:
+    """项目配额准入（docs/04 §5.3、docs/05 §9）。
+
+    **为什么在这里而不在路由层**：``create_and_schedule_tool_task`` 是全平台唯一
+    的建任务入口（HTTP ``POST /tasks``、k8s smoke、结构预测/准备/口袋预测、
+    workflow 节点、direct recovery 都走它）。把准入挂在某个路由上时，其余入口
+    完全不经过检查——一条 workflow 链路能无限刷算力。放在这里对所有入口一致生效。
+
+    **为什么在 ``if not prepared.ready`` 之后**：``prepared`` 成型之前 ``project_id``
+    还没定下来。更关键的是，``_prepare_tool_task_run`` 会把「没显式传项目」的
+    k8s_job / 标准产物任务**自动挂到用户的迁移项目**（``ensure_migration_project_for_owner``
+    + ``set_task_project_id``）。若拿 ``task_data.project_id`` 判定，这两类任务会以
+    「没指定项目」为由被跳过，随后照样计入迁移项目的用量——配额形同虚设。
+    所以判定口径必须是 ``prepared.project_id``（与真正写进 ``extra_data["project_id"]``
+    的值同源）。
+
+    **为什么在 ``TaskCommand.from_prepared_run`` 之前**：早于任何 ``db.add`` /
+    ``flush``，被拦的提交不会留下 PENDING 空壳任务行。
+    """
+    if not settings.PROJECT_QUOTA_ENABLED:
+        return
+    project_id = (prepared.project_id or "").strip()
+    if not project_id:
+        # 仍存在无需项目上下文的分支：既没有显式 ``project_id``，工具也不是
+        # k8s_job、不产出标准产物、不带需要默认项目的标准上传。这类任务不会写
+        # ``extra_data["project_id"]``，因此不会被任何项目的用量统计捞到（
+        # ``project_usage_*`` 按 ``Task.project_id_expression()`` 过滤）。
+        # 对它们做配额校验只会拿一个空 project_id 去查库，没有意义。
+        return
+    await check_submission_allowed(
+        db,
+        project_id=project_id,
+        requires_dcu=bool(tool.gpu_required),
+        timeout_sec=_snapshot_timeout_sec(extra_data),
+    )
+
+
+def _snapshot_timeout_sec(extra_data: dict[str, object]) -> float | None:
+    """从本次提交的资源快照里取墙钟超时（秒），取不到返回 ``None``。
+
+    ``None`` 与 ``0`` 语义不同：``0`` 表示「声明的超时为 0」，``None`` 表示
+    「没有快照可看」。``check_submission_allowed`` 只在拿到数时才校验单任务时长。
+    """
+    snapshot = extra_data.get("resource_snapshot")
+    if not isinstance(snapshot, dict):
+        return None
+    value = snapshot.get("timeout_sec")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
+
+
 async def create_and_schedule_tool_task(
     *,
     db: AsyncSession,
@@ -540,6 +599,12 @@ async def create_and_schedule_tool_task(
             "标准 Artifact 输入尚未满足工具要求",
             detail={"binding_decisions": prepared.binding_decisions},
         )
+    await _enforce_project_quota(
+        db,
+        prepared=prepared,
+        tool=tool,
+        extra_data=extra_data,
+    )
     command = TaskCommand.from_prepared_run(
         user_id=str(current_user.id),
         tool_id=str(task_data.tool_id),
