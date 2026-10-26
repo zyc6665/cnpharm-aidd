@@ -240,7 +240,7 @@
               </ul>
 
               <h3 class="decisions-detail__title">{{ t('decisions.timeline.basisMetrics') }}</h3>
-              <p v-if="hasBasisMetrics(record)" class="decisions-detail__empty">
+              <p v-if="isBasisMetricsEmpty(record)" class="decisions-detail__empty">
                 {{ t('decisions.timeline.noBasisMetrics') }}
               </p>
               <details v-else class="decisions-detail__metrics">
@@ -263,7 +263,6 @@
           show-size-changer
           :show-total="(count: number) => t('decisions.timeline.total', { total: count })"
           @change="handlePageChange"
-          @showSizeChange="handlePageSizeChange"
         />
       </div>
     </template>
@@ -371,7 +370,6 @@
   import { useRoute } from 'vue-router'
   import { useI18n } from 'vue-i18n'
   import { message } from 'ant-design-vue'
-  import dayjs from 'dayjs'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import AppErrorState from '@/components/common/AppErrorState.vue'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
@@ -387,10 +385,13 @@
     clampDecisionPage,
     clampDecisionPageSize,
     formatBasisMetrics,
+    formatDecisionTime,
     formatSnapshotRank,
     formatSnapshotScore,
     groupDecisionsByPoint,
+    isBasisMetricsEmpty,
     isSnapshotScoreMissing,
+    recordHasMissingScore,
     resolveDecisionErrorMessage,
     resolveDecisionSubjectLabel,
     resolveVerdictKey,
@@ -511,19 +512,6 @@
     return summarizeRecordCounts(record)
   }
 
-  function hasBasisMetrics(record: DecisionRecord): boolean {
-    return Object.keys(record.basis_metrics ?? {}).length === 0
-  }
-
-  function recordHasMissingScore(record: DecisionRecord): boolean {
-    return (record.items ?? []).some(item => isSnapshotScoreMissing(item))
-  }
-
-  function formatDecisionTime(value: string): string {
-    const parsed = dayjs(value)
-    return parsed.isValid() ? parsed.format('YYYY-MM-DD HH:mm') : placeHolder
-  }
-
   function isExpanded(id: string): boolean {
     return expandedIds.value.includes(id)
   }
@@ -588,14 +576,16 @@
     void loadDecisions()
   }
 
-  function handlePageChange(next: number): void {
-    page.value = clampDecisionPage(next)
-    void loadDecisions()
-  }
-
-  function handlePageSizeChange(_current: number, next: number): void {
-    pageSize.value = clampDecisionPageSize(next)
-    page.value = 1
+  // 改页大小时 antd 会**先** emit `showSizeChange`、**再** emit `change(current, size)`，
+  // 两个 handler 并存时第二个 emit 会把 `page = 1` 覆盖回旧页码，并且一次操作打两次请求。
+  // 因此只监听 `change`，在同一个 handler 里按「size 变了没」分派。
+  function handlePageChange(next: number, size?: number): void {
+    if (typeof size === 'number' && size !== pageSize.value) {
+      pageSize.value = clampDecisionPageSize(size)
+      page.value = 1
+    } else {
+      page.value = clampDecisionPage(next)
+    }
     void loadDecisions()
   }
 

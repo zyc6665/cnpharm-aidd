@@ -47,11 +47,9 @@ vi.mock('vue-i18n', () => ({
   })
 }))
 
-const routerPushMock = vi.fn()
-
+// 页面只用 `useRoute`（导航一律走 `<router-link>`），因此不 mock `useRouter`。
 vi.mock('vue-router', () => ({
-  useRoute: () => ({ params: { projectId: 'project-1' }, query: {} }),
-  useRouter: () => ({ push: routerPushMock })
+  useRoute: () => ({ params: { projectId: 'project-1' }, query: {} })
 }))
 
 const ATableStub = {
@@ -76,6 +74,36 @@ const RouterLinkStub = {
 
 const PassThrough = { template: '<div><slot /></div>' }
 
+/**
+ * 分页器桩：把 props 透出成属性、把 `change`/`showSizeChange` 原样转发，
+ * 测试里用 `findComponent(APaginationStub).vm.$emit(...)` 复现 antd 的真实 emit 顺序。
+ */
+const APaginationStub = {
+  name: 'APagination',
+  props: ['current', 'total', 'pageSize', 'pageSizeOptions', 'showSizeChanger', 'showTotal'],
+  emits: ['change', 'showSizeChange', 'update:current', 'update:pageSize'],
+  template:
+    '<div class="a-pagination-stub" :data-current="current" :data-page-size="pageSize" />'
+}
+
+/**
+ * 输入桩：需要支持 `v-model:value`，否则抽屉里的表单用例无法写入草稿。
+ * 其余断言只读 `data-testid`，因此桩不影响既有用例。
+ */
+const AInputStub = {
+  name: 'AInput',
+  props: ['value'],
+  emits: ['update:value'],
+  template: '<input :value="value" @input="$emit(\'update:value\', $event.target.value)" />'
+}
+
+const ATextareaStub = {
+  name: 'ATextarea',
+  props: ['value'],
+  emits: ['update:value'],
+  template: '<textarea :value="value" @input="$emit(\'update:value\', $event.target.value)" />'
+}
+
 const stubs = {
   ATable: ATableStub,
   RouterLink: RouterLinkStub,
@@ -91,12 +119,12 @@ const stubs = {
   },
   ATag: PassThrough,
   ASelect: true,
-  APagination: true,
+  APagination: APaginationStub,
   ADrawer: PassThrough,
   AForm: PassThrough,
   AFormItem: PassThrough,
-  AInput: true,
-  ATextarea: true,
+  AInput: AInputStub,
+  ATextarea: ATextareaStub,
   AButton: {
     inheritAttrs: false,
     template: '<button type="button" v-bind="$attrs"><slot /></button>'
@@ -145,8 +173,10 @@ function decisionRecord(): DecisionRecord {
     basis_metrics: { pic50: 7.2, admet_pass_rate: 0.86 },
     decided_by: 'lead@example.com',
     decided_by_id: 'user-1',
-    decided_at: '2026-10-05T02:00:00Z',
-    created_at: '2026-10-05T02:00:00Z',
+    // 后端 `_iso()` 产出的是**不带 Z 的 naive UTC**（`app/services/decisions.py`）；
+    // fixture 必须照抄这个形态，否则时区 bug 会被一个根本不存在的 `Z` 掩护过去。
+    decided_at: '2026-10-05T02:00:00',
+    created_at: '2026-10-05T02:00:00',
     selected_ids: ['candidate-1'],
     excluded_ids: ['candidate-2'],
     items: [
@@ -179,7 +209,6 @@ describe('决策记录页 P-39', () => {
     listProjectDecisionsMock.mockReset()
     createProjectDecisionMock.mockReset()
     getProjectStageMock.mockReset()
-    routerPushMock.mockReset()
 
     listProjectDecisionsMock.mockResolvedValue({
       code: 0,
@@ -240,5 +269,118 @@ describe('决策记录页 P-39', () => {
     await flushPromises()
 
     expect(wrapper.find('[data-testid="decisions-drawer"]').exists()).toBe(true)
+  })
+
+  it('决策时间按 UTC 解析后按本机时区展示：naive UTC 02:00 在东八区显示 10:00', async () => {
+    // 后端给的是不带 Z 的 naive UTC（`backend/app/services/decisions.py` 的 `_iso()`）。
+    // 仓库约定整套测试跑在 `TZ=UTC` 下，那样 naive 串恰好等于本地时间，bug 会被掩盖；
+    // 这里临时把进程时区切到东八区，让「按本地时区解释 naive 串」的实现暴露 8 小时偏差。
+    const original = process.env.TZ
+    process.env.TZ = 'Asia/Shanghai'
+    try {
+      const wrapper = await mountPage()
+      const record = wrapper.get('[data-testid="decisions-record"]')
+
+      expect(record.text()).toContain('2026-10-05 10:00')
+      expect(record.text()).not.toContain('2026-10-05 02:00')
+    } finally {
+      process.env.TZ = original
+    }
+  })
+
+  it('改 page_size 时回到第 1 页，且只发出一次请求', async () => {
+    listProjectDecisionsMock.mockResolvedValue({
+      code: 0,
+      message: 'ok',
+      data: { items: [decisionRecord()], total: 120, page: 2, page_size: 20, total_pages: 6 }
+    })
+
+    const wrapper = await mountPage()
+    const pagination = wrapper.getComponent(APaginationStub)
+
+    // 先翻到第 2 页，再改页大小（否则「没回第 1 页」这个断言看不出区别）。
+    pagination.vm.$emit('change', 2, 20)
+    await flushPromises()
+    expect(pagination.props('current')).toBe(2)
+
+    const callsBefore = listProjectDecisionsMock.mock.calls.length
+
+    // antd 的 `changePageSize` 先 emit `showSizeChange`，再 emit `change`；
+    // 两个事件都发，模拟真实交互（`node_modules/ant-design-vue/es/vc-pagination/Pagination.js`）。
+    pagination.vm.$emit('showSizeChange', 2, 50)
+    pagination.vm.$emit('change', 2, 50)
+    await flushPromises()
+
+    expect(listProjectDecisionsMock.mock.calls.length - callsBefore).toBe(1)
+    expect(listProjectDecisionsMock).toHaveBeenLastCalledWith('project-1', {
+      page: 1,
+      page_size: 50
+    })
+    expect(pagination.props('current')).toBe(1)
+    expect(pagination.props('pageSize')).toBe(50)
+  })
+
+  it('加载失败时渲染错态与重试按钮，点重试会重新请求', async () => {
+    listProjectDecisionsMock.mockRejectedValueOnce(new Error('Network Error'))
+
+    const wrapper = await mountPage()
+
+    // `get` 在节点缺失时会直接抛错，本身已断言了错态存在。
+    expect(wrapper.get('[data-testid="decisions-error"]').text()).not.toBe('')
+    expect(wrapper.find('[data-testid="decisions-timeline"]').exists()).toBe(false)
+
+    // 第一页（含失败那次）已经过的调用次数，重试后应再 +1。
+    const callsBefore = listProjectDecisionsMock.mock.calls.length
+
+    await wrapper.get('[data-testid="decisions-error-retry"]').trigger('click')
+    await flushPromises()
+
+    expect(listProjectDecisionsMock.mock.calls.length).toBeGreaterThan(callsBefore)
+    expect(wrapper.find('[data-testid="decisions-error"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="decisions-timeline"]').exists()).toBe(true)
+  })
+
+  it('依据指标不是合法 JSON 时，抽屉里显示表单错误且不提交', async () => {
+    // 走空态入口打开抽屉：`AppPageHeader` 的 `#actions` 插槽在桩里不渲染，空态按钮更直接。
+    listProjectDecisionsMock.mockResolvedValue({
+      code: 0,
+      message: 'ok',
+      data: { items: [], total: 0, page: 1, page_size: 20, total_pages: 0 }
+    })
+
+    const wrapper = await mountPage()
+
+    await wrapper.get('[data-testid="decisions-empty-create"]').trigger('click')
+    await flushPromises()
+
+    const setValue = async (testId: string, value: string): Promise<void> => {
+      const input = wrapper.get(`[data-testid="${testId}"]`)
+      await input.setValue(value)
+    }
+
+    await setValue('decisions-drawer-subject-id', 'set-1')
+    await setValue('decisions-drawer-reason', '活性与选择性均达标')
+    await setValue('decisions-drawer-selected', 'candidate-1')
+    // 占位符早期写的是「形如 pic50: 7.2」，用户照抄的正是这种非 JSON 输入。
+    await setValue('decisions-drawer-basis-metrics', 'pic50: 7.2')
+
+    await wrapper.get('[data-testid="decisions-drawer-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="decisions-drawer-error"]').text()).toBe(
+      'decisions.drawer.basisMetricsInvalid'
+    )
+    expect(createProjectDecisionMock).not.toHaveBeenCalled()
+
+    // 改成合法 JSON 后同一按钮能正常提交，说明拦的只是格式而不是整条路径。
+    await setValue('decisions-drawer-basis-metrics', '{"pic50": 7.2}')
+    await wrapper.get('[data-testid="decisions-drawer-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(createProjectDecisionMock).toHaveBeenCalledTimes(1)
+    expect(createProjectDecisionMock).toHaveBeenCalledWith(
+      'project-1',
+      expect.objectContaining({ basis_metrics: { pic50: 7.2 } })
+    )
   })
 })

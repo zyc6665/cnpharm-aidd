@@ -1630,7 +1630,8 @@ export default {
       basisTaskIds: 'Basis task IDs',
       basisTaskIdsPlaceholder: 'Comma separated; they will link to the tasks after submission',
       basisMetrics: 'Basis metrics JSON (optional)',
-      basisMetricsPlaceholder: 'Key-value pairs such as pic50: 7.2',
+      basisMetricsPlaceholder: 'A JSON object, e.g. {"pic50": 7.2}',
+      basisMetricsInvalid: 'Basis metrics is not valid JSON',
       snapshotHint:
         'The snapshot is generated from the selected/excluded members with no scores: members without a score are marked "Not recorded" in the record.',
       submit: 'Submit decision',
