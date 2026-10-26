@@ -200,13 +200,24 @@ async def reconcile_loop_body(
             body_states[body_node_id] = sub_state
             continue
 
-        if task.status in {TaskStatus.PENDING.value, TaskStatus.RUNNING.value}:
-            sub_state["status"] = task.status.lower()
+        if task.status in {TaskStatus.PENDING.value, TaskStatus.QUEUED.value}:
+            # 节点状态词表只有 pending/running，排队中按 pending 呈现
+            sub_state["status"] = "pending"
             all_done = False
             body_states[body_node_id] = sub_state
             continue
 
-        if task.status in {TaskStatus.FAILURE.value, TaskStatus.CANCELED.value}:
+        if task.status == TaskStatus.RUNNING.value:
+            sub_state["status"] = "running"
+            all_done = False
+            body_states[body_node_id] = sub_state
+            continue
+
+        if task.status in {
+            TaskStatus.FAILURE.value,
+            TaskStatus.CANCELED.value,
+            TaskStatus.TIMEOUT.value,
+        }:
             sub_state["status"] = "failure"
             sub_state["error_message"] = task.error_message or "Loop body task failed"
             any_failed = True

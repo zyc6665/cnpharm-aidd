@@ -26,7 +26,7 @@ from app.services.execution_artifacts import materialize_execution_artifacts
 from app.services.kubernetes_input_staging import stage_kubernetes_inputs
 from app.tasks.attempts import get_execution_attempt_id
 from app.tasks.executors.base import BaseExecutor
-from app.tasks.executors.errors import TaskExecutionError
+from app.tasks.executors.errors import TaskExecutionError, TaskTimeoutError
 
 
 class KubernetesJobExecutor(BaseExecutor):
@@ -226,7 +226,10 @@ class KubernetesJobExecutor(BaseExecutor):
         while state in {ExecutionState.QUEUED, ExecutionState.RUNNING}:
             if loop.time() >= deadline:
                 await self.execution_service.cancel("k8s_job", execution_id)
-                raise TaskExecutionError("Kubernetes Job execution timeout")
+                raise TaskTimeoutError(
+                    f"Kubernetes Job execution timeout after {timeout}s",
+                    timeout_sec=timeout,
+                )
             state = await self.execution_service.reconcile("k8s_job", execution_id)
             if state in {ExecutionState.QUEUED, ExecutionState.RUNNING} and poll_interval:
                 await asyncio.sleep(poll_interval)

@@ -24,6 +24,7 @@ from app.tasks.executors.errors import (
     GPUAllocationFailed,
     ResourceAdmissionFailed,
     TaskExecutionError,
+    TaskTimeoutError,
 )
 from app.tasks.output import extract_output_file_ids, prepare_task_output
 from app.tasks.resource_lease import release_task_resource_reservation
@@ -413,7 +414,8 @@ async def _execute_tool_task_impl_inner(
             logger.info("任务 %s 已取消，跳过排队消息", task_id)
             return _canceled_task_result()
 
-        # 更新状态为运行中
+        # 更新状态为运行中（QUEUED/PENDING 均可开始执行）
+        previous_status = task.status
         TaskStateMachine.start(task, progress_message="任务开始执行")
 
         # 添加日志
@@ -427,7 +429,7 @@ async def _execute_tool_task_impl_inner(
             db,
             task=task,
             attempt_id=attempt_id,
-            expected_status=TaskStatus.PENDING,
+            expected_status=previous_status,
         ):
             latest_task = (
                 await db.execute(select(Task).where(Task.id == task_id))
@@ -745,7 +747,7 @@ async def _execute_tool_task_impl_inner(
                 retry_message = _gpu_retry_message(task, e)
                 TaskStateMachine.transition(
                     task,
-                    TaskStatus.PENDING,
+                    TaskStatus.QUEUED,
                     progress_message=retry_message,
                 )
                 retry_delay_seconds = _gpu_retry_delay_seconds(task)
@@ -806,13 +808,13 @@ async def _execute_tool_task_impl_inner(
                 )
                 await notify_task_status(
                     task_id,
-                    TaskStatus.PENDING.value,
+                    TaskStatus.QUEUED.value,
                     retry_message,
                 )
                 await notify_task_log(task_id, "WARNING", retry_message)
                 return {
                     "success": False,
-                    "status": TaskStatus.PENDING.value,
+                    "status": TaskStatus.QUEUED.value,
                     "requeued": True,
                     "message": retry_message,
                     "wait_position": e.wait_position,
@@ -826,7 +828,7 @@ async def _execute_tool_task_impl_inner(
                 retry_message = _resource_admission_retry_message(task, e)
                 TaskStateMachine.transition(
                     task,
-                    TaskStatus.PENDING,
+                    TaskStatus.QUEUED,
                     progress_message=retry_message,
                 )
                 retry_delay_seconds = _resource_admission_retry_delay_seconds(task)
@@ -890,35 +892,43 @@ async def _execute_tool_task_impl_inner(
                 )
                 await notify_task_status(
                     task_id,
-                    TaskStatus.PENDING.value,
+                    TaskStatus.QUEUED.value,
                     retry_message,
                 )
                 await notify_task_log(task_id, "WARNING", retry_message)
                 return {
                     "success": False,
-                    "status": TaskStatus.PENDING.value,
+                    "status": TaskStatus.QUEUED.value,
                     "requeued": True,
                     "message": retry_message,
                     "reason": e.reason,
                     "worker_id": e.worker_id,
                 }
 
-            # 更新失败状态
-            TaskStateMachine.complete(
-                task,
-                success=False,
-                error_message=str(e),
-                progress_message=f"任务失败: {str(e)}",
-            )
+            # 更新失败/超时状态
+            task_timed_out = isinstance(e, TaskTimeoutError)
+            if task_timed_out:
+                TaskStateMachine.mark_timeout(
+                    task,
+                    error_message=str(e),
+                    progress_message=f"任务执行超时: {str(e)}",
+                )
+            else:
+                TaskStateMachine.complete(
+                    task,
+                    success=False,
+                    error_message=str(e),
+                    progress_message=f"任务失败: {str(e)}",
+                )
             await finish_task_execution_record_best_effort(
                 task=task,
-                status="failed",
+                status="timeout" if task_timed_out else "failed",
                 external_id=external_execution_id,
                 error_message=str(e),
             )
             await release_task_resource_reservation(
                 task,
-                reason="task_failed",
+                reason="task_timeout" if task_timed_out else "task_failed",
                 attempt_id=attempt_id,
             )
 
@@ -926,7 +936,9 @@ async def _execute_tool_task_impl_inner(
             log = TaskLog(
                 task_id=task_id,
                 level="ERROR",
-                message=f"任务执行失败: {str(e)}"
+                message=(
+                    f"任务执行超时: {str(e)}" if task_timed_out else f"任务执行失败: {str(e)}"
+                )
             )
             db.add(log)
             failure_result = _task_execution_failure_result(e)
@@ -960,8 +972,9 @@ async def _execute_tool_task_impl_inner(
                 logger.info("任务 %s 的 attempt 已过期，忽略失败提交", task_id)
                 return _stale_task_result(latest_task or task)
 
-            # SSE 通知：任务失败
-            await notify_task_log(task_id, "ERROR", f"任务执行失败: {str(e)}")
+            # SSE 通知：任务失败/超时
+            failure_notice = "任务执行超时" if task_timed_out else "任务执行失败"
+            await notify_task_log(task_id, "ERROR", f"{failure_notice}: {str(e)}")
             await notify_task_error(task_id, str(e))
 
             raise

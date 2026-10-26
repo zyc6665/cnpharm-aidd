@@ -133,6 +133,81 @@ class TestStateMachineTransitions:
             TaskStateMachine.update_progress(task, 50.0)
 
 
+class TestQueuedAndTimeoutStates:
+    """docs/03 §3.4 八态：CREATED → QUEUED → RUNNING → .../TIMEOUT。"""
+
+    def test_pending_to_queued_does_not_consume_retry_budget(self):
+        task = _make_task(TaskStatus.PENDING)
+        task.retry_count = None
+
+        TaskStateMachine.enqueue(task)
+
+        assert task.status == TaskStatus.QUEUED.value
+        assert task.progress == 0.0
+        assert task.progress_message == "任务已入队等待调度"
+        # 首次入队不算一次重试
+        assert (task.retry_count or 0) == 0
+
+    def test_queued_to_running(self):
+        task = _make_task(TaskStatus.QUEUED)
+        TaskStateMachine.start(task)
+        assert task.status == TaskStatus.RUNNING.value
+        assert task.started_at is not None
+
+    def test_running_requeue_goes_to_queued_and_counts_retry(self):
+        task = _make_task(TaskStatus.RUNNING)
+        task.retry_count = 0
+        task.started_at = datetime(2024, 1, 1, 12, 0, 0)
+
+        TaskStateMachine.transition(task, TaskStatus.QUEUED, progress_message="GPU资源不足")
+
+        assert task.status == TaskStatus.QUEUED.value
+        assert task.retry_count == 1
+        assert task.started_at is None
+        assert task.progress == 0.0
+
+    def test_running_to_timeout_is_terminal(self):
+        task = _make_task(TaskStatus.RUNNING)
+        task.started_at = datetime(2024, 1, 1, 12, 0, 0)
+
+        TaskStateMachine.mark_timeout(task, error_message="Docker execution timeout")
+
+        assert task.status == TaskStatus.TIMEOUT.value
+        assert task.error_message == "Docker execution timeout"
+        assert task.finished_at is not None
+        assert TaskStateMachine.is_terminal(TaskStatus.TIMEOUT) is True
+        assert TaskStateMachine.is_terminal(task.status) is True
+
+    def test_queued_can_time_out(self):
+        task = _make_task(TaskStatus.QUEUED)
+        TaskStateMachine.mark_timeout(task)
+        assert task.status == TaskStatus.TIMEOUT.value
+        assert task.progress_message == "任务执行超时"
+
+    def test_timeout_is_retryable(self):
+        task = _make_task(TaskStatus.TIMEOUT)
+        task.retry_count = 0
+        task.max_retries = 3
+
+        assert TaskStateMachine.can_retry(task) is True
+
+        TaskStateMachine.retry(task)
+
+        assert task.status == TaskStatus.PENDING.value
+        assert task.retry_count == 1
+
+    def test_timeout_cannot_go_back_to_success_directly(self):
+        task = _make_task(TaskStatus.TIMEOUT)
+        with pytest.raises(TaskStateError):
+            TaskStateMachine.transition(task, TaskStatus.SUCCESS)
+
+    def test_queued_task_can_be_cancelled(self):
+        task = _make_task(TaskStatus.QUEUED)
+        assert TaskStateMachine.can_cancel(task) is True
+        TaskStateMachine.cancel(task)
+        assert task.status == TaskStatus.CANCELED.value
+
+
 class TestNoDirectStatusAssignments:
     def test_worker_tasks_does_not_assign_status_directly(self):
         """Spot-check: worker/tasks.py should not contain direct task.status assignments."""

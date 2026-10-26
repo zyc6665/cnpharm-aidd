@@ -256,7 +256,7 @@ class TestExecuteWithProgressGPU:
 
     @pytest.mark.asyncio
     async def test_reenqueues_on_gpu_failure_within_retry_limit(self):
-        """分配失败 + 未达最大重试 → PENDING 重新入队。"""
+        """分配失败 + 未达最大重试 → QUEUED 重新入队。"""
         task = _make_task(retry_count=0, max_retries=3)
         cfg = _make_config(gpu_required=True)
         alloc = _make_allocator_mock(success=False, message="No GPU")
@@ -267,7 +267,7 @@ class TestExecuteWithProgressGPU:
                 with pytest.raises(GPUAllocationFailed):
                     await executor.execute_with_progress()
 
-        assert task.status == TaskStatus.PENDING.value
+        assert task.status == TaskStatus.QUEUED.value
         assert task.retry_count == 1
         assert "GPU分配失败" in (task.progress_message or "")
 
@@ -283,7 +283,7 @@ class TestExecuteWithProgressGPU:
                 with pytest.raises(GPUAllocationFailed):
                     await executor.execute_with_progress()
 
-        assert task.status == TaskStatus.PENDING.value
+        assert task.status == TaskStatus.QUEUED.value
         assert task.retry_count == 1
 
     @pytest.mark.asyncio

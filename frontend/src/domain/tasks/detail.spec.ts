@@ -39,8 +39,10 @@ test('任务运行时长格式支持秒、分钟和小时', () => {
 test('任务完成标题 key 由终态决定，非终态回退 completed', () => {
   assert.equal(getTaskCompletedTitleKey('success'), 'tasks.completed')
   assert.equal(getTaskCompletedTitleKey('failure'), 'tasks.failed')
+  assert.equal(getTaskCompletedTitleKey('timeout'), 'tasks.timedOut')
   assert.equal(getTaskCompletedTitleKey('canceled'), 'tasks.canceled')
   assert.equal(getTaskCompletedTitleKey('running'), 'tasks.completed')
+  assert.equal(getTaskCompletedTitleKey('queued'), 'tasks.completed')
 })
 
 test('任务失败诊断提取 stderr、stdout 和标准产物缺失提示', () => {

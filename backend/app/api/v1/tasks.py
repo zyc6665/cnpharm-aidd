@@ -680,8 +680,12 @@ async def cancel_task(
 
     await _ensure_task_operation_access(db, task=task, current_user=current_user)
 
-    # 只能取消等待中或运行中的任务
-    if task.status not in [TaskStatus.PENDING.value, TaskStatus.RUNNING.value]:
+    # 只能取消待调度、排队中或运行中的任务
+    if task.status not in [
+        TaskStatus.PENDING.value,
+        TaskStatus.QUEUED.value,
+        TaskStatus.RUNNING.value,
+    ]:
         raise ValidationException("任务状态不允许取消")
 
     await cancel_platform_task(
@@ -712,8 +716,12 @@ async def retry_task(
 
     await _ensure_task_operation_access(db, task=task, current_user=current_user)
 
-    # 只能重试失败或取消的任务
-    if task.status not in [TaskStatus.FAILURE.value, TaskStatus.CANCELED.value]:
+    # 只能重试失败、超时或取消的任务
+    if task.status not in [
+        TaskStatus.FAILURE.value,
+        TaskStatus.TIMEOUT.value,
+        TaskStatus.CANCELED.value,
+    ]:
         raise ValidationException("任务状态不允许重试")
     if is_task_cancellation_pending(task):
         is_direct_runner_idle = False
@@ -829,7 +837,11 @@ async def delete_task(
     if is_task_cancellation_pending(task):
         raise ConflictException("任务取消尚未确认停止，暂时不能删除")
 
-    if task.status in {TaskStatus.PENDING.value, TaskStatus.RUNNING.value}:
+    if task.status in {
+        TaskStatus.PENDING.value,
+        TaskStatus.QUEUED.value,
+        TaskStatus.RUNNING.value,
+    }:
         was_running = task.status == TaskStatus.RUNNING.value
         await cancel_platform_task(
             db,

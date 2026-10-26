@@ -48,10 +48,18 @@ async def load_finished_workflow_node_task(
         )
         return None
 
-    if task.status in {TaskStatus.PENDING.value, TaskStatus.RUNNING.value}:
+    if task.status in {
+        TaskStatus.PENDING.value,
+        TaskStatus.QUEUED.value,
+        TaskStatus.RUNNING.value,
+    }:
         return None
 
-    if task.status in {TaskStatus.FAILURE.value, TaskStatus.CANCELED.value}:
+    if task.status in {
+        TaskStatus.FAILURE.value,
+        TaskStatus.CANCELED.value,
+        TaskStatus.TIMEOUT.value,
+    }:
         mark_workflow_node_failed(
             run,
             node_states=node_states,

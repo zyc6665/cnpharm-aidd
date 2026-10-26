@@ -12,6 +12,7 @@ from app.tasks.executors.errors import (
     ResourceLeaseLost,
     ResourceAdmissionFailed,
     TaskExecutionError,
+    TaskTimeoutError,
 )
 from app.tasks.attempts import get_execution_attempt_id
 from app.tasks.executors.resolver import ExecutorResolver
@@ -480,9 +481,10 @@ class TaskExecutor:
                     else DEFAULT_MAX_RETRIES
                 )
                 if retry_count < max_retries:
+                    # 资源不足重新排队 -> QUEUED（区别于「新建未调度」的 PENDING）
                     TaskStateMachine.transition(
                         self.task,
-                        TaskStatus.PENDING,
+                        TaskStatus.QUEUED,
                         progress_message=(
                             f"GPU分配失败: {exc.message}，"
                             f"重试 {retry_count}/{max_retries}"
@@ -510,6 +512,11 @@ class TaskExecutor:
                 raise ResourceLeaseLost(
                     worker_id=(self.worker_capability.worker_id if self.worker_capability else None)
                 )
+            raise
+        except TaskTimeoutError as exc:
+            # 执行器 timeout_sec 到期 -> TIMEOUT 终态（而不是 FAILURE）
+            if self._is_running():
+                TaskStateMachine.mark_timeout(self.task, error_message=exc.message)
             raise
         except TaskExecutionError as exc:
             if self._is_running():

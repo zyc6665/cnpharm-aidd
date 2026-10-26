@@ -52,6 +52,7 @@ def _matches_workflow_node(
         and task.status
         in {
             TaskStatus.PENDING.value,
+            TaskStatus.QUEUED.value,
             TaskStatus.RUNNING.value,
             TaskStatus.SUCCESS.value,
         }

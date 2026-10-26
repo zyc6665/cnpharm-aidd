@@ -16,7 +16,7 @@ from app.models.files import File as FileModel
 from app.tasks.executors.base import BaseExecutor
 from app.tasks.executors.docker_output import parse_docker_output
 from app.tasks.executors.docker_security import validate_docker_execution_inputs
-from app.tasks.executors.errors import TaskExecutionError
+from app.tasks.executors.errors import TaskExecutionError, TaskTimeoutError
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,10 @@ class DockerExecutor(BaseExecutor):
                 output["output_file_ids"] = output_files
             return {"success": True, "result": output, "stdout": process.stdout, "stderr": process.stderr}
         except subprocess.TimeoutExpired as exc:
-            raise TaskExecutionError("Docker execution timeout") from exc
+            raise TaskTimeoutError(
+                f"Docker execution timeout after {timeout}s",
+                timeout_sec=timeout,
+            ) from exc
         except TaskExecutionError:
             raise
         except Exception as exc:

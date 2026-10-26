@@ -8,7 +8,7 @@ import subprocess
 from typing import Any
 
 from app.tasks.executors.base import BaseExecutor
-from app.tasks.executors.errors import TaskExecutionError
+from app.tasks.executors.errors import TaskExecutionError, TaskTimeoutError
 from app.tasks.executors.script_output import parse_script_output
 from app.tasks.executors.script_trust import validate_script_trust
 
@@ -70,7 +70,10 @@ class PythonScriptExecutor(BaseExecutor):
                 output["output_file_ids"] = output_files
             return {"success": True, "result": output, "stdout": process.stdout, "stderr": process.stderr}
         except subprocess.TimeoutExpired as exc:
-            raise TaskExecutionError("Python script execution timeout") from exc
+            raise TaskTimeoutError(
+                f"Python script execution timeout after {timeout}s",
+                timeout_sec=timeout,
+            ) from exc
         except TaskExecutionError:
             raise
         except Exception as exc:

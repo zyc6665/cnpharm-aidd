@@ -10,6 +10,7 @@ from app.tasks.executors.errors import (
     GPUAllocationFailed,
     ResourceAdmissionFailed,
     TaskExecutionError,
+    TaskTimeoutError,
 )
 from app.tasks.executors.factory import TaskExecutor
 from app.tasks.executors.kubernetes_job import KubernetesJobExecutor
@@ -29,4 +30,5 @@ __all__ = [
     "SSHJobExecutor",
     "TaskExecutionError",
     "TaskExecutor",
+    "TaskTimeoutError",
 ]

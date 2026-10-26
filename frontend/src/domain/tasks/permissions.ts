@@ -9,9 +9,11 @@ export interface TaskActor {
 }
 
 const projectOperatorRoles: ProjectRole[] = ['owner', 'editor', 'runner']
-const retryableStatuses: Task['status'][] = ['failure', 'canceled']
-const cancellableStatuses: Task['status'][] = ['running', 'pending']
-const deletableStatuses: Task['status'][] = ['success', 'failure', 'canceled']
+// 与后端 api/v1/tasks.py 的守卫保持一致：超时与失败/取消一样可以重试，
+// 排队中（queued）与待调度（pending）、运行中一样可以取消。
+const retryableStatuses: Task['status'][] = ['failure', 'timeout', 'canceled']
+const cancellableStatuses: Task['status'][] = ['running', 'queued', 'pending']
+const deletableStatuses: Task['status'][] = ['success', 'failure', 'timeout', 'canceled']
 
 export function canOperateProjectTask(task: Task, actor: TaskActor): boolean {
   if (!task.project_id || task.project_id !== actor.currentProjectId) return false

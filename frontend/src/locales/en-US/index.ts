@@ -1559,15 +1559,19 @@ export default {
     // Status
     status: {
       pending: 'Pending',
+      queued: 'Queued',
       running: 'Running',
       success: 'Completed',
       failure: 'Failed',
+      timeout: 'Timed out',
       canceled: 'Canceled'
     },
     statusPending: 'Pending',
+    statusQueued: 'Queued',
     statusRunning: 'Running',
     statusSuccess: 'Completed',
     statusFailure: 'Failed',
+    statusTimeout: 'Timed out',
     statusCanceled: 'Canceled',
     // Filters
     searchPlaceholder: 'Search task name or ID...',
@@ -1703,6 +1707,7 @@ export default {
     started: 'Execution Started',
     completed: 'Execution Completed',
     failed: 'Execution Failed',
+    timedOut: 'Execution Timed out',
     canceled: 'Task Canceled',
     // Tool info
     toolInfo: 'Tool Information',

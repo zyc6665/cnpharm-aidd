@@ -55,3 +55,19 @@ class GPUAllocationFailed(TaskExecutionError):
         merged_details = details or {}
         merged_details.setdefault("wait_position", wait_position)
         super().__init__(message, details=merged_details)
+
+
+class TaskTimeoutError(TaskExecutionError):
+    """任务执行超时（执行器 timeout_sec 到期），落 TIMEOUT 终态。"""
+
+    def __init__(
+        self,
+        message: str = "任务执行超时",
+        *,
+        timeout_sec: float | None = None,
+        details: dict[str, Any] | None = None,
+    ):
+        self.timeout_sec = timeout_sec
+        merged_details = dict(details or {})
+        merged_details.setdefault("timeout_sec", timeout_sec)
+        super().__init__(message, details=merged_details)

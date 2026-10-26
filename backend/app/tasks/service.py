@@ -233,6 +233,16 @@ async def dispatch_tool_task(
         attempt_id = new_execution_attempt_id()
         set_execution_attempt_id(task, attempt_id)
 
+        # 任务进入调度链路即视为「排队中」：新建未调度为 PENDING，入队后为 QUEUED。
+        # 已是 QUEUED（例如资源不足重排后重新入队）则不重复转换。
+        current_status = (
+            TaskStatus(task.status) if isinstance(task.status, str) else task.status
+        )
+        if current_status != TaskStatus.QUEUED and TaskStateMachine.can_transition(
+            current_status, TaskStatus.QUEUED
+        ):
+            TaskStateMachine.enqueue(task)
+
         if use_direct_task_execution():
             task.celery_task_id = None
             _set_task_extra_data(task, dispatch={"mode": "direct", "queue": None})

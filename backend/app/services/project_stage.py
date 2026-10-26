@@ -65,8 +65,17 @@ GAP_ORDER = (
 )
 
 #: 一条任务到达这里才算「结果可看」；排队与运行中仍属于「已提交」。
+#: 失败/超时/取消没有结果可看，故不进入 FINISHED_STATUSES。
 FINISHED_STATUSES = (TaskStatus.SUCCESS.value,)
-SUBMITTED_STATUSES = (TaskStatus.RUNNING.value, TaskStatus.SUCCESS.value)
+#: 排队中（QUEUED）也算「已提交」：任务已进调度队列，只是还没轮到执行。
+#: 少了 QUEUED，刚提交完任务的项目会掉回 S3 并报 NO_TASK，等于告诉用户
+#: 「你还没提交过任务」，而任务明明在队列里。PENDING（刚创建、尚未入队调度）
+#: 不算已提交。
+SUBMITTED_STATUSES = (
+    TaskStatus.QUEUED.value,
+    TaskStatus.RUNNING.value,
+    TaskStatus.SUCCESS.value,
+)
 
 #: ``gaps[].link`` 指向 ``docs/06`` 里已定义的页面路由（P-06/P-09~P-11/P-18/P-31/
 #: P-39）。没有对应页面时给 ``None``，前端据此决定是否渲染跳转按钮。

@@ -37,6 +37,7 @@ TERMINAL_STATUSES = {
     TaskStatus.SUCCESS.value,
     TaskStatus.FAILURE.value,
     TaskStatus.CANCELED.value,
+    TaskStatus.TIMEOUT.value,
 }
 
 EVENT_SNAPSHOT = "snapshot"

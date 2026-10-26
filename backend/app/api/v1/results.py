@@ -54,6 +54,7 @@ RESULT_STATUSES = (
     TaskStatus.SUCCESS.value,
     TaskStatus.FAILURE.value,
     TaskStatus.CANCELED.value,
+    TaskStatus.TIMEOUT.value,
 )
 
 router = APIRouter(dependencies=[_FEATURE_FLAG])
