@@ -54,6 +54,8 @@ from app.models.compounds import (
 )
 from app.models.projects import Project
 from app.models.users import User
+from app.models.versions import ENTITY_TYPE_COMPOUND, SOURCE_TYPE_IMPORT
+from app.services import data_versions
 from app.services.project_access import load_project_membership, require_project_role
 
 WRITE_ROLES = ("owner", "editor")
@@ -190,6 +192,7 @@ async def upsert_compound(
     descriptor = describe_smiles(smiles)
     existing = await find_compound_by_inchikey(db, descriptor.inchikey)
     if existing is not None:
+        before_hash = data_versions.content_hash_of(_compound_version_content(existing))
         if refresh_descriptors:
             existing.props = descriptor.props
             existing.mol_formula = descriptor.mol_formula or existing.mol_formula
@@ -198,6 +201,20 @@ async def upsert_compound(
         if name and not existing.name:
             existing.name = name
         await db.flush()
+        # 复用既有分子时只在**内容真的变了**才追加版本：同一份文件导入两次不该产生
+        # 两条一模一样的版本行，否则「第几版」很快就不再表示任何语义。判据是内容
+        # 哈希而非「是否走过这个分支」，因为改名不算结构变化。
+        content = _compound_version_content(existing)
+        if data_versions.content_hash_of(content) != before_hash:
+            await data_versions.record_version(
+                db,
+                entity_type=ENTITY_TYPE_COMPOUND,
+                entity_id=str(existing.id),
+                source_type=SOURCE_TYPE_IMPORT,
+                user=user,
+                change_summary="按 InChIKey 复用并刷新派生性质",
+                content=content,
+            )
         return existing, False
 
     compound = Compound(
@@ -214,7 +231,31 @@ async def upsert_compound(
     # 指纹在写入时一次算好：相似性检索是全表扫描 + 应用内 Tanimoto，缺指纹的分子
     # 会直接从结果里消失（M1 的「按 IP 相似性找已知分子」就永远查不到新分子）。
     await ensure_fingerprint(db, compound)
+    # 版本行放在指纹之后、commit 之前：指纹写入失败会整笔回滚，不留孤儿版本。
+    await data_versions.record_version(
+        db,
+        entity_type=ENTITY_TYPE_COMPOUND,
+        entity_id=str(compound.id),
+        source_type=SOURCE_TYPE_IMPORT,
+        user=user,
+        change_summary="首次导入",
+        content=_compound_version_content(compound),
+    )
     return compound, True
+
+
+def _compound_version_content(compound: Compound) -> dict:
+    """版本指纹的取样范围：真值（``canonical_smiles``）+ 派生性质。
+
+    ``id`` / ``created_at`` / ``updated_at`` 故意不进快照——它们是行元数据，每次写入
+    都会变，纳入哈希会让「内容是否相同」永远为假。
+    """
+    return {
+        "inchikey": compound.inchikey,
+        "canonical_smiles": compound.canonical_smiles,
+        "mol_formula": compound.mol_formula,
+        "props": compound.props or {},
+    }
 
 
 async def ensure_fingerprint(db: AsyncSession, compound: Compound) -> MoleculeFingerprint:

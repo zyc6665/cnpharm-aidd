@@ -26,6 +26,7 @@ from app.api.v1 import (
     workflows,
     image_assets,
     datasets,
+    data_versions,
     uploads,
 )
 
@@ -57,6 +58,8 @@ api_router.include_router(workflows.router, prefix="/workflows", tags=["工作�
 api_router.include_router(workspace.router, prefix="/workspace", tags=["工作台"])
 api_router.include_router(datasets.project_router, prefix="/projects", tags=["数据集"])
 api_router.include_router(datasets.router, tags=["数据集"])
+api_router.include_router(data_versions.project_router, prefix="/projects", tags=["数据版本"])
+api_router.include_router(data_versions.router, tags=["数据版本"])
 api_router.include_router(uploads.router, tags=["分片上传"])
 api_router.include_router(image_assets.router, prefix="/admin/image-assets", tags=["管理员镜像资产"])
 api_router.include_router(admin_audit.router, prefix="/admin/audit-logs", tags=["管理员审计日志"])

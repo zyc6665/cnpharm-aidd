@@ -39,6 +39,7 @@ from app.models.traceability import AuditLog, TaskInputSnapshot
 from app.models.decisions import DecisionItem, DecisionRecord
 from app.models.uploads import DataFile, Dataset, UploadPart, UploadSession
 from app.models.idempotency import IdempotencyKey
+from app.models.versions import DataVersion
 
 __all__ = [
     "User",
@@ -62,4 +63,5 @@ __all__ = [
     "DecisionRecord", "DecisionItem",
     "UploadSession", "UploadPart", "Dataset", "DataFile",
     "IdempotencyKey",
+    "DataVersion",
 ]
