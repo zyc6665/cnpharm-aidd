@@ -61,15 +61,17 @@ test('router 在 WorkflowRunDetail 之后注册 7 条新路由', () => {
   assert.ok(routerSource.includes('path: \'/results/:taskId\''))
 })
 
-test('项目导航的 assets 项紧跟在 tasks 之后且不影响既有 active 判定', async () => {
+test('项目导航的 assets / results 项紧接在 tasks 之后且不影响既有 active 判定', async () => {
   const { buildProjectWorkspaceNavItems, isProjectWorkspaceNavItemActive } = await import(
     '../src/domain/projects/navigation'
   )
   const items = buildProjectWorkspaceNavItems('project-1')
   const keys = items.map(item => item.key)
 
+  // targets 由 PR3 加入（锚点：overview 之后、workflow 之前），此处只断言本 PR 新增的两项相对位置。
   assert.deepEqual(keys, [
     'overview',
+    'targets',
     'workflow',
     'tasks',
     'assets',
