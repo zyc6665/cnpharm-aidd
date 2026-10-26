@@ -20,6 +20,7 @@ from app.tasks.direct_runner import direct_task_runner
 from app.services.workflow_reconciliation import workflow_reconcile_loop
 from app.services.upload_maintenance import upload_sweep_loop
 from app.services.idempotency_maintenance import idempotency_sweep_loop
+from app.services.queue_timeout import queue_timeout_sweep_loop
 from app.worker.celery_app import configure_managed_execution_runtime
 
 logger = logging.getLogger(__name__)
@@ -50,9 +51,15 @@ async def lifespan(app: FastAPI):
     # 过期幂等记录清理：24h 保留期到点即删，避免带响应快照的行无限增长。
     if idempotency_sweep_loop is not None:
         idempotency_sweep_loop.start()
+    # 排队超时兜底（docs/18 §6.4 B-2b）：队列一旦停止消费，任务会永远挂 QUEUED，
+    # 页面显示「排队中」而实际永远不会开始——必须有与用户行为无关的上限。
+    if queue_timeout_sweep_loop is not None:
+        queue_timeout_sweep_loop.start()
     logger.info("数据库初始化完成")
     yield
     # 关闭时清理资源
+    if queue_timeout_sweep_loop is not None:
+        await queue_timeout_sweep_loop.stop()
     if idempotency_sweep_loop is not None:
         await idempotency_sweep_loop.stop()
     if upload_sweep_loop is not None:

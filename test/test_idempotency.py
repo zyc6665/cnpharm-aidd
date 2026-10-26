@@ -602,3 +602,48 @@ async def test_begin_request_reports_conflict_and_replay(
     )
     assert replay.status == OUTCOME_REPLAY
     assert replay.response == (201, {"code": 200})
+
+
+class TestSweepLoop:
+    """幂等键清理循环的启停（docs/18 §6.3 G-10 的兜底部分）。
+
+    这里专门守一个在 Linux CI 上真实卡死过的写法：循环体写 `while True`、只靠
+    `stop()` 里的 `cancel()` 退出时，`stop()` 先 set 事件让 `wait_for` 立即返回，
+    紧接着一轮纯计算的 sweep 又把控制权抢回去，`CancelledError` 没有机会投递，
+    `await self._task` 永不返回——测试进程挂死、CI 只表现为「一直在跑」。
+    """
+
+    @pytest.mark.asyncio
+    async def test_stop_returns_promptly_for_pure_compute_sweep(self):
+        import asyncio
+
+        from app.services.idempotency_maintenance import IdempotencySweepLoop
+
+        async def sweep():
+            return 0
+
+        loop = IdempotencySweepLoop(sweep=sweep, interval_seconds=1)
+        loop.start()
+        assert loop.is_running is True
+        await asyncio.wait_for(loop.stop(), timeout=5)
+        assert loop.is_running is False
+
+    @pytest.mark.asyncio
+    async def test_loop_survives_a_failing_round(self):
+        import asyncio
+
+        from app.services.idempotency_maintenance import IdempotencySweepLoop
+
+        state = {"count": 0}
+
+        async def sweep():
+            state["count"] += 1
+            if state["count"] == 1:
+                raise RuntimeError("boom")
+            return 0
+
+        loop = IdempotencySweepLoop(sweep=sweep, interval_seconds=1)
+        loop.start()
+        await asyncio.sleep(1.1)
+        assert loop.is_running is True
+        await asyncio.wait_for(loop.stop(), timeout=5)

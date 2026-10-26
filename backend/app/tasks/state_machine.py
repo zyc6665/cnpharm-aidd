@@ -31,6 +31,10 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_RETRIES = 3
+# 排队起点（docs/18 §6.4 B-2b）：转入 QUEUED 时写入，排队超时巡检据此判定。
+# 用它而不是 created_at：任务可能先 PENDING 停留（等上传物化、等前置校验），
+# 那段时间不该算排队。离开 QUEUED 时清掉，避免重排后用旧锚点被误判超时。
+QUEUED_AT_METADATA_KEY = "queued_at"
 RESOURCE_WAIT_METADATA_KEYS = (
     "resource_wait_reason",
     "resource_wait_code",
@@ -50,6 +54,23 @@ def _retry_limits(task: "Task") -> tuple[int, int]:
         else DEFAULT_MAX_RETRIES
     )
     return retry_count, max_retries
+
+
+def _set_queued_at(task: "Task", moment) -> None:
+    """写入排队起点（naive UTC ISO 字符串，与 extra_data 里其它时间同口径）。"""
+    extra_data = dict(task.extra_data or {})
+    extra_data[QUEUED_AT_METADATA_KEY] = moment.isoformat()
+    task.extra_data = extra_data
+
+
+def _clear_queued_at(task: "Task") -> None:
+    """离开 QUEUED 时清掉排队起点；没有该键则完全不碰 extra_data。"""
+    extra_data = task.extra_data
+    if not isinstance(extra_data, dict) or QUEUED_AT_METADATA_KEY not in extra_data:
+        return
+    updated = dict(extra_data)
+    updated.pop(QUEUED_AT_METADATA_KEY, None)
+    task.extra_data = updated
 
 
 class TaskStateError(Exception):
@@ -293,6 +314,12 @@ class TaskStateMachine:
                 task.execution_time_sec = None
                 task.progress = 0.0
                 task.progress_message = progress_message or "资源不足，重新排队等待"
+            # 记排队起点：排队超时巡检（app.services.queue_timeout）据此判定
+            _set_queued_at(task, now)
+
+        # 离开 QUEUED 时清掉排队锚点，否则重排任务会带着旧时间被立刻判超时
+        if old_status == TaskStatus.QUEUED and to_status != TaskStatus.QUEUED:
+            _clear_queued_at(task)
 
         # 更新进度（如果提供）
         if progress is not None and to_status not in {TaskStatus.SUCCESS}:
