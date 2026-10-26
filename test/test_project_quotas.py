@@ -1463,7 +1463,9 @@ async def test_task_attached_to_migration_project_is_blocked_by_quota(
 
 @pytest.mark.asyncio
 async def test_task_without_any_project_stays_unrestricted(
-    db_session: AsyncSession, users: dict[str, User]
+    db_session: AsyncSession,
+    users: dict[str, User],
+    direct_runner_stub: SimpleNamespace,
 ):
     """既无显式项目、也不落迁移项目的任务：不适用配额（写在这里是为了说明）。
 
@@ -1471,6 +1473,18 @@ async def test_task_without_any_project_stays_unrestricted(
     普通 CPU 脚本工具、不带标准上传/产物，``prepare_run`` 拿到的是
     ``project_id=None``，任务也就不会写 ``extra_data["project_id"]``——它不会
     被任何项目的用量统计或占用计数捞到，因此也不该被任何项目的配额拦住。
+
+    **必须把 ``direct_runner`` 显式传成 stub**：这是本文件里唯一一个真的走到
+    ``dispatch_tool_task`` 却不被配额拦下的用例（另两个调
+    ``create_and_schedule_tool_task`` 的用例都停在 ``QuotaExceededException``，
+    到不了分发）。不传的话会落到 ``service.py`` 里绑定在函数定义上的
+    ``default_direct_task_runner``，它用 ``asyncio.create_task`` 起一个真任务；
+    测试函数返回后那个 task 仍挂在事件循环上，pytest 跑完 41 个用例也不退出，
+    被 ``timeout`` 杀掉时退出码是 124（现象是「41 passed 然后卡住」）。
+
+    注意不能靠 ``direct_runner_stub`` fixture：它 monkeypatch 的是
+    ``tasks_api.direct_task_runner``，只影响 HTTP 路由，对直接调用 service 的
+    用例无效——默认参数在函数定义时就已绑定。
     """
     project = await _create_project(db_session, owner=users["owner"])
     quota = await get_or_create_project_quota(db_session, project_id=project.id)
@@ -1489,9 +1503,12 @@ async def test_task_without_any_project_stays_unrestricted(
         db=db_session,
         current_user=users["owner"],
         task_data=TaskCreate(name="no project", tool_id=tool.id, params={}),
+        direct_runner=direct_runner_stub,
     )
     assert task is not None
     assert (task.extra_data or {}).get("project_id") is None
+    # 任务确实被分发（不是被配额拦住），但分发交给 stub，没有起真后台任务。
+    assert direct_runner_stub.scheduled == [(str(task.id), str(tool.current_version_id))]
 
 
 @pytest.mark.asyncio
