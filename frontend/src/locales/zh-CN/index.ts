@@ -1224,6 +1224,320 @@ export default {
     avgDuration: '平均耗时'
   },
 
+  // 化合物 / 候选物 / 候选集
+  compounds: {
+    title: '数据资产',
+    subtitle: '管理项目内的化合物结构、候选物与候选集',
+    backToProject: '返回项目总览',
+    backToAssets: '返回数据资产',
+    detail: {
+      title: '化合物详情',
+      subtitle: '查看化合物结构、分子性质与相似化合物',
+      noStructure: '该化合物没有可渲染的结构'
+    },
+    tabs: {
+      compounds: '化合物',
+      candidates: '候选物',
+      candidateSets: '候选集'
+    },
+    properties: {
+      title: '分子性质',
+      column: '性质',
+      value: '取值',
+      molWeight: '分子量 MW',
+      logP: 'logP',
+      tpsa: 'TPSA',
+      hbd: 'HBD',
+      hba: 'HBA',
+      rotB: 'RotB',
+      qed: 'QED'
+    },
+    columns: {
+      name: '名称',
+      inchikey: 'InChIKey',
+      smiles: 'SMILES',
+      formula: '分子式',
+      molWeight: '分子量',
+      qed: 'QED',
+      structure: '结构',
+      createdAt: '创建时间'
+    },
+    actions: {
+      refresh: '刷新',
+      create: '新增化合物',
+      import: '批量导入',
+      compare: '候选物对比',
+      search: '相似性检索',
+      createSet: '新建候选集'
+    },
+    create: {
+      title: '新增化合物',
+      name: '名称',
+      namePlaceholder: '可选，留空则由服务端生成',
+      smiles: 'SMILES',
+      smilesPlaceholder: '例如 CCO',
+      submit: '创建',
+      success: '化合物已创建'
+    },
+    import: {
+      title: '批量导入化合物',
+      subtitle: '支持 .smi / .csv / .sdf 文件，导入后按 InChIKey 去重',
+      datasetName: '数据集名称',
+      datasetNamePlaceholder: '可选，便于检索',
+      smilesColumn: 'SMILES 列名',
+      smilesColumnPlaceholder: 'CSV 表头，留空自动识别',
+      nameColumn: '名称列名',
+      nameColumnPlaceholder: 'CSV 表头，留空自动识别',
+      dedupeStrategy: '去重策略',
+      dedupeOptions: {
+        skip: '跳过重复',
+        update: '覆盖重复',
+        error: '重复即报错'
+      },
+      selectFile: '选择文件',
+      fileName: '已选文件',
+      submit: '开始导入',
+      summary: '导入结果',
+      total: '总行数',
+      success: '成功',
+      failed: '失败',
+      duplicate: '重复',
+      errors: '错误清单',
+      errorRow: '行号',
+      errorMessage: '原因',
+      errorsTruncated: '仅展示前 500 条错误',
+      empty: '尚未导入任何文件',
+      fileRequired: '请先选择文件'
+    },
+    similarity: {
+      title: '相似性检索',
+      subtitle: '按 ECFP4 指纹计算 Tanimoto 相似度，结果按相似度降序',
+      threshold: '相似度下限',
+      limit: '返回条数',
+      submit: '检索',
+      similarity: 'Tanimoto',
+      empty: '未命中相似化合物',
+      hint: '默认使用当前化合物的 SMILES 作为查询',
+      querySmiles: '查询 SMILES',
+      queryRequired: '请输入查询 SMILES'
+    },
+    set: {
+      columns: {
+        name: '名称',
+        description: '描述',
+        itemCount: '成员数',
+        version: '版本',
+        sourceTask: '来源任务',
+        updatedAt: '更新时间'
+      },
+      create: {
+        title: '新建候选集',
+        name: '名称',
+        namePlaceholder: '例如 第一轮筛选',
+        description: '描述',
+        descriptionPlaceholder: '可选',
+        submit: '创建',
+        success: '候选集已创建'
+      }
+    },
+    empty: {
+      compounds: '项目内还没有化合物，可先批量导入',
+      candidates: '项目内还没有候选物',
+      candidateSets: '项目内还没有候选集'
+    },
+    errors: {
+      loadCompounds: '化合物列表加载失败',
+      loadCompound: '化合物详情加载失败',
+      searchSimilar: '相似性检索失败',
+      loadCandidates: '候选物列表加载失败',
+      loadCandidateSets: '候选集列表加载失败'
+    }
+  },
+
+  // 候选物
+  candidates: {
+    title: '候选物',
+    subtitle: '查看候选物结构、性质与来源任务',
+    location: {
+      compound: '小分子',
+      peptide: '多肽'
+    },
+    type: {
+      SMALL_MOLECULE: '小分子',
+      PEPTIDE: '多肽'
+    },
+    source: {
+      IMPORT: '导入',
+      DESIGN: '设计',
+      SCREENING: '筛选',
+      MANUAL: '手工'
+    },
+    fields: {
+      name: '名称',
+      code: '代号',
+      type: '类型',
+      source: '来源',
+      designScore: '设计评分',
+      sequence: '多肽序列',
+      task: '关联任务',
+      snapshotScore: '入集评分',
+      ordinal: '序号',
+      createdAt: '创建时间',
+      updatedAt: '更新时间'
+    },
+    detail: {
+      title: '候选物详情',
+      compoundInfo: '化合物信息',
+      properties: '分子性质',
+      noStructure: '该候选物没有可渲染的结构',
+      relatedTask: '关联任务',
+      relatedResult: '查看结果详情',
+      noRelatedTask: '未关联任务'
+    },
+    errors: {
+      load: '候选物详情加载失败'
+    },
+    compare: {
+      title: '候选物对比',
+      subtitle: '最多同时对比 6 个候选物，差异项会高亮显示',
+      selected: '已选 {count} / {max}',
+      limitHint: '最多只能对比 6 个候选物，请先移除一个',
+      add: '加入对比',
+      remove: '移除',
+      clear: '清空',
+      exportCsv: '导出 CSV',
+      pickHint: '从左侧候选物列表中选择要对比的对象',
+      empty: '还没有选择候选物',
+      rowHeader: '性质',
+      exportEmpty: '没有可导出的对比数据'
+    },
+    set: {
+      title: '候选集详情',
+      subtitle: '维护候选集成员，导出 CSV 供下游使用',
+      info: '集合信息',
+      version: '版本',
+      itemCount: '成员数',
+      sourceTask: '来源任务',
+      description: '描述',
+      columns: {
+        ordinal: '序号',
+        name: '名称',
+        type: '类型',
+        designScore: '设计评分',
+        snapshotScore: '入集评分'
+      },
+      actions: {
+        addItems: '添加成员',
+        removeItem: '移除',
+        export: '导出候选集',
+        refreshing: '刷新'
+      },
+      addTitle: '添加候选物到集合',
+      editTitle: '编辑候选集',
+      addPlaceholder: '选择要加入集合的候选物',
+      addSubmit: '添加',
+      addSuccess: '已添加 {count} 个候选物',
+      removeConfirm: '确认从集合中移除该候选物？',
+      removeSuccess: '已移除',
+      exportSuccess: '候选集已导出',
+      conflictTitle: '候选集已被他人修改',
+      conflictDescription: '当前服务端版本为 v{version}，请刷新后重试',
+      conflictRefresh: '刷新数据',
+      empty: '候选集还没有成员',
+      errors: {
+        load: '候选集加载失败',
+        loadItems: '候选集成员加载失败',
+        loadCandidates: '可选候选物加载失败',
+        export: '导出失败'
+      }
+    }
+  },
+
+  // 结果中心
+  results: {
+    title: '结果中心',
+    subtitle: '查看项目内已完成任务的结果、产物与追溯包',
+    columns: {
+      name: '任务名',
+      type: '类型',
+      status: '状态',
+      finishedAt: '完成时间',
+      submittedBy: '提交人',
+      executionTime: '耗时',
+      size: '大小'
+    },
+    detail: {
+      title: '结果详情',
+      summary: '结果概要',
+      outputs: '产物列表',
+      inputs: '输入快照',
+      outputData: '输出数据',
+      outputDataHint: '任务提交时的原始输出 JSON；3D 结构与可视化面板排在下一期。',
+      outputDataEmpty: '本次运行没有输出数据',
+      errorMessage: '错误信息',
+      noOutputs: '本次运行没有产物',
+      noInputs: '本次运行没有输入快照',
+      viewArtifact: '查看产物',
+      backToResults: '返回结果中心',
+      project: '所属项目',
+      startTime: '开始时间',
+      finishTime: '完成时间',
+      submittedBy: '提交人'
+    },
+    traceability: {
+      title: '追溯包',
+      subtitle: '一次性导出本次运行的任务、环境、参数、过程与产物快照',
+      export: '导出追溯包',
+      exporting: '导出中',
+      exported: '追溯包已导出',
+      packageVersion: '追溯包版本',
+      exportedAt: '导出时间',
+      empty: '追溯包尚未生成',
+      sections: {
+        task: '任务信息',
+        timeline: '时间线',
+        inputs: '输入快照',
+        environment: '运行环境',
+        process: '执行过程',
+        outputs: '产物清单'
+      },
+      fields: {
+        taskId: '任务 ID',
+        taskName: '任务名',
+        taskType: '任务类型',
+        status: '状态',
+        submittedBy: '提交人',
+        created: '创建时间',
+        started: '开始时间',
+        finished: '完成时间',
+        executionSeconds: '执行耗时',
+        retryCount: '重试次数',
+        image: '镜像',
+        executorType: '执行器',
+        tool: '工具',
+        model: '模型',
+        contractVersion: '契约版本',
+        exitMessage: '退出信息',
+        logAvailable: '日志可得',
+        urn: 'URN',
+        sha256: 'SHA256',
+        filename: '文件名',
+        artifactType: '产物类型',
+        semanticType: '语义类型',
+        inputRole: '输入角色',
+        entityType: '实体类型',
+        entityId: '实体 ID'
+      }
+    },
+    empty: '项目内还没有已完成的结果',
+    errors: {
+      loadResults: '结果列表加载失败',
+      loadResult: '结果详情加载失败',
+      loadTraceability: '追溯包加载失败',
+      exportTraceability: '追溯包导出失败'
+    }
+  },
+
   // 任务
   tasks: {
     title: '任务中心',

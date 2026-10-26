@@ -118,6 +118,49 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/workflow/RunDetail.vue'),
     meta: { titleLiteral: '工作流运行详情', requiresAuth: true }
   },
+  // 化合物 / 候选物 / 结果
+  {
+    path: '/projects/:projectId/assets',
+    name: 'ProjectAssets',
+    component: () => import('@/views/compounds/Assets.vue'),
+    meta: { titleLiteral: '数据资产', requiresAuth: true }
+  },
+  {
+    path: '/compounds/:compoundId',
+    name: 'CompoundDetail',
+    component: () => import('@/views/compounds/CompoundDetail.vue'),
+    meta: { titleLiteral: '化合物详情', requiresAuth: true }
+  },
+  {
+    path: '/candidate-sets/:setId',
+    name: 'CandidateSetDetail',
+    component: () => import('@/views/compounds/CandidateSetDetail.vue'),
+    meta: { titleLiteral: '候选集详情', requiresAuth: true }
+  },
+  {
+    path: '/candidates/:candidateId',
+    name: 'CandidateDetail',
+    component: () => import('@/views/compounds/CandidateDetail.vue'),
+    meta: { titleLiteral: '候选物详情', requiresAuth: true }
+  },
+  {
+    path: '/projects/:projectId/candidates/compare',
+    name: 'CandidateCompare',
+    component: () => import('@/views/compounds/Compare.vue'),
+    meta: { titleLiteral: '候选物对比', requiresAuth: true }
+  },
+  {
+    path: '/projects/:projectId/results',
+    name: 'ProjectResults',
+    component: () => import('@/views/results/List.vue'),
+    meta: { titleLiteral: '结果中心', requiresAuth: true }
+  },
+  {
+    path: '/results/:taskId',
+    name: 'ResultDetail',
+    component: () => import('@/views/results/ResultDetail.vue'),
+    meta: { titleLiteral: '结果详情', requiresAuth: true }
+  },
   {
     path: '/tools/:id',
     name: 'ToolDetail',
