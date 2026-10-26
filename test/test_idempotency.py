@@ -647,3 +647,68 @@ class TestSweepLoop:
         await asyncio.sleep(1.1)
         assert loop.is_running is True
         await asyncio.wait_for(loop.stop(), timeout=5)
+
+
+class TestDecoratorSignatures:
+    """守装饰器对**注解形态**的兼容性（一个真实踩过的坑）。
+
+    ``functools.wraps`` 让 FastAPI 拿到的仍是原函数的参数表，但它 eval 字符串注解时
+    用的是 ``getattr(call, "__globals__")``，也就是**中间件模块**的名字空间。被包装
+    的模块若写了 ``from __future__ import annotations``，注解全是字符串，
+    ``WorkflowRunCreate`` 这类名字在中间件里不存在，FastAPI eval 失败后会把
+    ``data: WorkflowRunCreate`` **静默降级成 ``query`` 参数**——端点从此不解析请求体，
+    返回 ``422 {"loc": ["query", "data"]}``，而 OpenAPI 文档看起来「一切正常」。
+
+    这不是假设：把幂等装饰器挂到 ``POST /api/v1/workflows/{id}/runs`` 上时就是这样
+    失败的（见 ``test/test_workflow_idempotency.py``）。这里用两个最小模块级函数
+    直接盯住根因，不依赖任何一个具体端点，将来在别的模块上挂装饰器也能拦住。
+    """
+
+    def test_wrapper_preserves_resolved_annotations_for_future_import_modules(self):
+        """包装后的函数签名必须是**已解析的类型**，不是字符串注解。"""
+        import inspect
+        from typing import get_type_hints
+
+        from app.middleware.idempotency import idempotent_route
+
+        # 这个模块（test_idempotency.py）自身就有 ``from __future__ import
+        # annotations``，正好复现被测场景。
+        async def handler(payload: _AnnotationPayload) -> str:  # noqa: F821
+            return payload.value
+
+        wrapped = idempotent_route(
+            path_template="/api/v1/annotation-probe", resource_type="probe"
+        )(handler)
+
+        signature = inspect.signature(wrapped)
+        annotation = signature.parameters["payload"].annotation
+        assert annotation is _AnnotationPayload, (
+            "装饰器没有把字符串注解解析成真实类型，"
+            "FastAPI 会把它当成 query 参数"
+        )
+        # 同时确认 FastAPI 真正用的那个解析入口也能跑通。
+        hints = get_type_hints(wrapped, include_extras=False)
+        assert hints["payload"] is _AnnotationPayload
+
+    def test_wrapper_keeps_metadata_of_the_original_function(self):
+        """解析注解不能把 ``wraps`` 的元数据弄丢（OpenAPI 名称/文档串要用）。"""
+        from app.middleware.idempotency import idempotent_route
+
+        async def handler(payload: str) -> str:
+            """原始文档串。"""
+            return payload
+
+        wrapped = idempotent_route(
+            path_template="/api/v1/metadata-probe", resource_type="probe"
+        )(handler)
+
+        assert wrapped.__name__ == "handler"
+        assert wrapped.__doc__ == "原始文档串。"
+        assert wrapped.__wrapped__ is handler
+
+
+class _AnnotationPayload:
+    """仅用于注解解析探测的占位类型。"""
+
+    def __init__(self, value: str = "") -> None:
+        self.value = value
