@@ -22,6 +22,7 @@ from app.services.upload_maintenance import upload_sweep_loop
 from app.services.idempotency_maintenance import idempotency_sweep_loop
 from app.services.queue_timeout import queue_timeout_sweep_loop
 from app.services.quota_maintenance import quota_settlement_loop
+from app.storage.lifecycle import ensure_lifecycle_on_startup
 from app.worker.celery_app import configure_managed_execution_runtime
 
 logger = logging.getLogger(__name__)
@@ -60,6 +61,10 @@ async def lifespan(app: FastAPI):
     # 绕过状态机的改库；开关关闭时 `quota_settlement_loop` 为 None。
     if quota_settlement_loop is not None:
         quota_settlement_loop.start()
+    # 对象存储生命周期规则（docs/04 §5.8、docs/15 §3.2）：默认关闭。改桶配置属于
+    # 运维动作（它会真的删 30 天前的暂存对象），应由部署脚本显式调用
+    # `python -m app.cli.storage_lifecycle --apply` 并留痕，而不是每次重启都动一次生产存储。
+    await ensure_lifecycle_on_startup()
     logger.info("数据库初始化完成")
     yield
     # 关闭时清理资源

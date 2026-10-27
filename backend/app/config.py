@@ -473,6 +473,20 @@ class Settings(BaseSettings):
     UPLOAD_SWEEP_INTERVAL_SECONDS: int = 3600
     UPLOAD_SWEEP_ENABLED: bool = True
 
+    # 对象存储生命周期规则（docs/04 §5.8、docs/03 §4.5、docs/15 §3.2）。
+    # 平台侧清理（上传会话巡检）跑在 backend 进程里，进程没起来就不清理；
+    # 桶上的 lifecycle 由 MinIO 自己执行，是最后一道保险。两者都要有。
+    MINIO_LIFECYCLE_TEMP_EXPIRATION_DAYS: int = 30
+    MINIO_LIFECYCLE_ABORT_INCOMPLETE_DAYS: int = 7
+    MINIO_LIFECYCLE_NONCURRENT_KEEP_DAYS: int = 90
+    # 转低频的 storage class。**留空表示不生成过渡规则**：MinIO 是单层存储，
+    # 过渡目标必须先用 `mc ilm tier add` 建出远程层，否则整份 lifecycle 配置会被拒——
+    # 一条配错的过渡规则会把「临时区清分片」这种关键规则一起带下水。
+    MINIO_LIFECYCLE_TRANSITION_STORAGE_CLASS: Optional[str] = None
+    # 启动时自动应用一次。默认关闭：改桶配置属于运维动作，应由部署脚本或
+    # `python -m app.cli.storage_lifecycle --apply` 显式执行并留痕。
+    MINIO_LIFECYCLE_APPLY_ON_STARTUP: bool = False
+
     # 请求级幂等（docs/04 §5.5、docs/05 §12、docs/18 §6.3 G-10）。
     # 键的保留期 24 小时与上传会话同口径：覆盖「客户端断网重试」的合理窗口，
     # 同时让 idempotency_keys 不至于无限增长。
