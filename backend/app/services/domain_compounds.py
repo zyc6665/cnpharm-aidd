@@ -171,6 +171,47 @@ async def load_compound(db: AsyncSession, compound_id: str) -> Compound:
     return compound
 
 
+async def require_compound_read_access(
+    db: AsyncSession, *, compound_id: str, user: User
+) -> Compound:
+    """化合物读取鉴权：**唯一**口径，详情 / 版本历史 / 版本差异三处共用。
+
+    化合物是全平台主数据，``compounds`` 表没有 ``project_id``（同一分子被多个项目
+    引用，写死一个归属会把去重表拆成多行）。因此可见性只能按「是否被当前用户在某
+    个可见项目里引用过」判定：本项目 ``candidates`` 指向它，且调用者在该项目里的
+    角色属于 ``READ_ROLES``。
+
+    取前 50 个引用项目逐个试即可：判定只需要一个反例不存在——只要有一个用户可见
+    的项目引用了这个分子，他就有权读；一个都没有才拒绝。``limit(50)`` 是防御性上限，
+    不是分页：一个被上千个项目引用的分子，前 50 个已经足够让绝大多数成员命中。
+
+    **不可见一律 404，不是 403**：403 等于告诉对方「这个 id 存在、只是你没权限」，
+    把主数据的存在性泄露给了任何拿到 id 的人（与 ``GET /compounds/{id}`` 同一口径，
+    见 ``app.api.v1.data_versions`` 的注释）。
+
+    已知取舍（**待产品口径确认，此处不改行为**）：一个从未被任何项目引用的化合物
+    （当前只能经 import 产生，无入口能造出该状态）对所有非管理员都是 404。要放开
+    得先回答「无项目归属的主数据该由谁读」，那不是本模块能定的。
+    """
+    compound = await load_compound(db, compound_id)
+    result = await db.execute(
+        select(Candidate.project_id)
+        .where(Candidate.compound_id == str(compound.id))
+        .limit(50)
+    )
+    for (project_id,) in result.all():
+        try:
+            _project, membership = await load_project_membership(
+                db, project_id=project_id, user_id=user.id
+            )
+        except Exception:
+            # 非成员（load_project_membership 抛 404）或项目已删：换下一个候选项目。
+            continue
+        if membership.role in READ_ROLES:
+            return compound
+    raise NotFoundException("化合物不存在")
+
+
 async def find_compound_by_inchikey(db: AsyncSession, inchikey: str) -> Compound | None:
     result = await db.execute(select(Compound).where(Compound.inchikey == inchikey))
     return result.scalar_one_or_none()

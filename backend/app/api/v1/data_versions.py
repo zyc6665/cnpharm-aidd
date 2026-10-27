@@ -26,7 +26,6 @@ from app.auth.dependencies import get_current_user
 from app.common.exceptions import NotFoundException
 from app.common.responses import paginated_response, success_response
 from app.database.session import get_db
-from app.models.compounds import Candidate
 from app.models.users import User
 from app.models.versions import (
     ENTITY_TYPE_COMPOUND,
@@ -37,7 +36,7 @@ from app.models.versions import (
 from app.services import data_versions as versions_service
 from app.services import datasets as datasets_service
 from app.services import domain_compounds, domain_targets
-from app.services.project_access import load_project_membership, require_project_role
+from app.services.project_access import require_project_role
 
 #: 项目内读角色（与 datasets/compounds 一致）。
 READ_ROLES = ("owner", "editor", "runner", "viewer")
@@ -49,26 +48,22 @@ router = APIRouter()
 async def _require_compound_visible(
     db: AsyncSession, *, entity_id: str, user: User
 ) -> None:
-    """化合物可见性：与 ``GET /compounds/{compound_id}`` 完全同一口径。
+    """化合物可见性：直接转交 ``domain_compounds.require_compound_read_access``。
 
     化合物是全局主数据、没有 ``project_id``，只能按「是否被当前用户可见的项目引用」
     判定；不可见时返回 404 而不是 403，避免把存在性当权限泄露。
+
+    这里**不再自己实现**一遍：化合物详情、版本历史、版本差异三处若各写一份，
+    口径迟早分叉（比如一处按 READ_ROLES、一处只判「是成员」，``runner`` 能读详情
+    却读不到历史）。唯一实现放在服务层，本函数只保留历史调用点。
 
     已知取舍（**待产品口径确认，此处不改行为**）：一个从未被任何项目引用的化合物
     （只能经 import 产生，当前无入口能造出该状态）其版本历史对所有非管理员都是 404。
     要修就得先回答「无项目归属的主数据该由谁读」，那不是本模块能定的。
     """
-    await domain_compounds.load_compound(db, entity_id)
-    result = await db.execute(
-        select(Candidate.project_id).where(Candidate.compound_id == entity_id).limit(50)
+    await domain_compounds.require_compound_read_access(
+        db, compound_id=entity_id, user=user
     )
-    for (project_id,) in result.all():
-        try:
-            await load_project_membership(db, project_id=project_id, user_id=user.id)
-        except Exception:
-            continue
-        return
-    raise NotFoundException("化合物不存在")
 
 
 async def _require_entity_read_access(
@@ -193,7 +188,12 @@ async def get_data_version(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """某个具体版本。不存在时 404，与实体详情同一口径。"""
+    """某个具体版本，**含**内容快照。不存在时 404，与实体详情同一口径。
+
+    这一条是唯一返回 ``content`` 的版本读端点：列表与 ``/latest`` 用
+    ``serialize_version``（不带快照，避免翻页时响应体翻倍），单版本按 id 取一行
+    时调用方的目的通常就是「看这一版到底长什么样」，故用 ``serialize_version_detail``。
+    """
     await _require_entity_read_access(
         db, entity_type=entity_type, entity_id=entity_id, user=current_user
     )
@@ -206,7 +206,7 @@ async def get_data_version(
     )
     if record is None:
         raise NotFoundException("数据版本不存在")
-    return success_response(data=versions_service.serialize_version(record))
+    return success_response(data=versions_service.serialize_version_detail(record))
 
 
 __all__ = ["project_router", "router"]

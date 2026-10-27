@@ -22,7 +22,7 @@ cannot both claim version N — the loser of that race retries with N+1 (see
 
 from __future__ import annotations
 
-from sqlalchemy import Column, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Column, Index, Integer, String, Text, UniqueConstraint
 
 from app.database.base import Base, TimestampMixin, UUIDMixin
 
@@ -54,6 +54,19 @@ class DataVersion(Base, UUIDMixin, TimestampMixin):
     不同" can be answered without diffing the payloads. ``source_file_urn`` and
     ``change_summary`` are nullable because not every version comes from a file
     (``COMPUTE``) or carries a human note.
+
+    ``content`` 存这一版内容本身的快照（JSON），而不只是它的哈希 —— 这是
+    ``GET /compounds/{id}/diff`` 能存在的前提。哈希只能回答「变没变」，回答不了
+    「哪个字段从什么变成了什么」：只剩哈希时，历史行对人是不可解释的
+    ——「第 3 版和第 1 版不同」这句结论没法再往下追问一步，用户仍然要自己去找
+    当时的文件。存了快照，diff 才能落到字段粒度（``canonical_smiles`` / ``props.logP``）。
+
+    代价是体积与「快照是否够小」的约束：快照只应装**真值与派生量**，不装行元数据
+    （``id`` / ``created_at`` / ``updated_at`` / ``name`` 这类每次写入都可能变、
+    却不改变科学含义的字段），否则每版都「有差异」，diff 立刻失去信息量
+    （取样范围见 ``app.services.domain_compounds._compound_version_content``）。
+    历史行写入之前的版本（本次迁移之前产生）``content`` 为 NULL，读接口对此必须
+    显式告知「无法比对字段」，不能假装「没有差异」。
     """
 
     __tablename__ = "data_versions"
@@ -79,6 +92,9 @@ class DataVersion(Base, UUIDMixin, TimestampMixin):
     source_file_urn = Column(String(512), nullable=True)
     change_summary = Column(Text, nullable=True)
     content_hash = Column(String(64), nullable=True)
+    #: 该版本的字段快照（``serialize_version`` 不返回它，见 ``serialize_version_detail``）。
+    #: 可空：本次迁移之前的历史行只有哈希，无法事后补出内容。
+    content = Column(JSON, nullable=True)
     operator = Column(String(64), nullable=True)
 
 

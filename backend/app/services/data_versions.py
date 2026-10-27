@@ -65,6 +65,23 @@ def content_hash_of(payload: Any) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
+def normalize_content(content: Any) -> Any:
+    """把任意 JSON-able 对象压成**只含 JSON 原生类型**的结构，供 ``JSON`` 列落库。
+
+    走一次 ``dumps`` → ``loads`` 往返，而不是直接塞给 ORM：
+    ``default=str`` 会把 ``datetime`` / ``Decimal`` / ``UUID`` / 枚举转成字符串，
+    剩下的（tuple 变 list、非字符串键变字符串）由 JSON 编解码器规范化。不做这一步，
+    同一个 ``content`` 在 SQLite（存文本）与 PostgreSQL（JSONB）下可能落成不同的
+    形态，之后按字段 diff 时会出现「同一次写入，两种取值」。
+
+    已经是 ``str`` / ``bytes`` 的内容（调用方直接传了一段原文）按 JSON 字符串落库：
+    ``JSON`` 列存裸文本会被双重编码，读回来就不是原文了。
+    """
+    if isinstance(content, bytes):
+        content = content.decode("utf-8", errors="replace")
+    return json.loads(json.dumps(content, ensure_ascii=False, default=str))
+
+
 def _operator_of(user: User | None) -> str | None:
     """把用户压成 ``operator`` 快照（username / email，见 docs/04 §3 note 1）。
 
@@ -116,6 +133,10 @@ async def record_version(
     ``content_hash`` 留 NULL —— 这比算一个「空内容」的哈希更诚实，调用方一看就知道
     这次没记内容指纹。
 
+    给了 ``content`` 就同时落一份 ``content`` 快照（经 ``normalize_content`` 规范化），
+    它是 ``diff`` 端点的唯一数据来源；只落哈希的话历史行不可解释（理由见
+    ``app.models.versions.DataVersion`` 的 docstring）。
+
     并发冲突处理：``begin_nested()`` 把这行放进 SAVEPOINT，唯一约束冲突时只回滚
     这个 SAVEPOINT（外层事务与已写入的实体行不受影响），重算版本号后重试一次。
     重试仍冲突则抛出 ``IntegrityError``——此时说明竞争超出预期，静默吞掉会让版本
@@ -144,6 +165,7 @@ async def record_version(
             source_file_urn=source_file_urn,
             change_summary=change_summary,
             content_hash=content_hash,
+            content=None if content is None else normalize_content(content),
             operator=_operator_of(user),
         )
         try:
@@ -293,7 +315,12 @@ async def list_project_versions(
 
 
 def serialize_version(record: DataVersion) -> dict:
-    """版本行的对外表示（camelCase，与前端既有约定一致）。"""
+    """版本行的对外表示（camelCase，与前端既有约定一致）。
+
+    **不含 ``content``**：列表页一次返回几十行，每行都带上完整快照会让响应体翻倍，
+    而列表里只需要「哪一版、谁改的、改了没改」。要看快照用
+    ``serialize_version_detail``。
+    """
     return {
         "id": str(record.id),
         "entityType": record.entity_type,
@@ -308,12 +335,133 @@ def serialize_version(record: DataVersion) -> dict:
     }
 
 
+def serialize_version_detail(record: DataVersion) -> dict:
+    """版本行的完整表示：在 ``serialize_version`` 之上补 ``content`` 快照。
+
+    ``content`` 为 NULL 是**有信息量**的（该版本没记快照，比对不出字段），故原样
+    返回 ``None`` 而不是换成 ``{}``。
+    """
+    payload = serialize_version(record)
+    payload["content"] = record.content
+    return payload
+
+
+def serialize_version_summary(record: DataVersion) -> dict:
+    """diff 响应里 ``from`` / ``to`` 两侧的版本摘要。
+
+    故意**不含** ``content`` 本身：diff 已经把差异摊到 ``changes`` 里，再把两份完整
+    快照各贴一遍，前端要么重复渲染要么干脆不用，白白撑大响应体。
+    """
+    return {
+        "version": int(record.version),
+        "createdAt": isoformat_utc(record.created_at),
+        "operator": record.operator,
+        "sourceType": record.source_type,
+        "changeSummary": record.change_summary,
+        "contentHash": record.content_hash,
+    }
+
+
+# ---------------------------------------------------------------------------
+# 内容快照的摊平与字段级比对
+# ---------------------------------------------------------------------------
+
+#: 摊平路径的分隔符（``props.logP``）。
+PATH_SEPARATOR = "."
+
+#: 「这一侧没有这个字段」的哨兵，与「字段存在但值为 null」区分开。
+MISSING = object()
+
+
+def _join_path(prefix: str, key: Any) -> str:
+    if isinstance(key, int):
+        return f"{prefix}[{key}]" if prefix else f"[{key}]"
+    return f"{prefix}{PATH_SEPARATOR}{key}" if prefix else str(key)
+
+
+def flatten_content(content: Any, *, prefix: str = "") -> dict[str, Any]:
+    """把嵌套快照摊平成 ``{点分路径: 标量}``，例如 ``{"props": {"logP": 0.1}}``
+    → ``{"props.logP": 0.1}``。
+
+    为什么必须摊平：``Compound.props`` 是一个装着 6 个描述符的 dict，若把整个
+    ``props`` 当作一个字段比较，改一个 ``logP`` 就会报成「props 整块变了」——
+    用户拿到的信息量与「有变化」两个字相同，diff 等于白做。摊平之后每条变化都
+    落在可命名的字段上（``props.logP``），前端可以直接高亮某个数值。
+
+    口径：
+    * dict 逐键递归，list 逐下标递归（``path[0]``）；
+    * **空容器摊平为空**——``{}`` 与 ``{}`` 之间没有字段可比，故不产生任何路径；
+    * 标量原样作为叶子，不做数值归一（``1`` 与 ``1.0`` 是两条不同的取值）。
+    """
+    if isinstance(content, dict):
+        flattened: dict[str, Any] = {}
+        for key, value in content.items():
+            flattened.update(flatten_content(value, prefix=_join_path(prefix, key)))
+        return flattened
+    if isinstance(content, (list, tuple)):
+        flattened = {}
+        for index, value in enumerate(content):
+            flattened.update(flatten_content(value, prefix=_join_path(prefix, index)))
+        return flattened
+    return {prefix: content}
+
+
+def _same_leaf(left: Any, right: Any) -> bool:
+    """叶子相等判定。``True`` 与 ``1`` 在 Python 里相等，但在 JSON 快照里是两种取值。"""
+    if isinstance(left, bool) != isinstance(right, bool):
+        return False
+    return left == right
+
+
+def diff_contents(before: Any, after: Any) -> tuple[list[dict], list[str]]:
+    """比对两份内容快照，返回 ``(changes, unchanged_fields)``。
+
+    ``changes`` 按字段路径排序，每条形如 ``{"field": "props.logP", "from": -0.0014,
+    "to": 0.13}``；某一侧缺这个字段时对应值为 ``None``（新增/删除字段）。
+
+    已知口径：**结构类型改变会被拆成两条**——``props`` 从 dict 变成标量时，
+    ``props.logP`` 报「消失」、``props`` 报「新增」。摊平后没有「同一个路径换了
+    容器类型」这种表达方式，拆成两条比造一个复合事件更好解释。
+
+    任一侧为 ``None``（该版本没有内容快照）时调用方**不该调用本函数**：那不是
+    「全部字段都变了」，而是「无从比对」，两者的区别必须由调用方显式表达
+    （见 ``app.api.v1.compound_versions`` 的 warning 分支）。
+    """
+    left = flatten_content(before)
+    right = flatten_content(after)
+
+    changes: list[dict] = []
+    unchanged: list[str] = []
+    for field in sorted(set(left) | set(right)):
+        old = left.get(field, MISSING)
+        new = right.get(field, MISSING)
+        if old is not MISSING and new is not MISSING and _same_leaf(old, new):
+            unchanged.append(field)
+            continue
+        changes.append(
+            {
+                "field": field,
+                "from": None if old is MISSING else old,
+                "to": None if new is MISSING else new,
+            }
+        )
+    return changes, unchanged
+
+
 __all__ = [
     "MAX_PAGE_SIZE",
+    "MISSING",
+    "PATH_SEPARATOR",
     "content_hash_of",
+    "diff_contents",
+    "flatten_content",
+    "list_project_versions",
     "list_versions",
     "next_version",
+    "normalize_content",
     "record_manual_version",
     "record_version",
     "serialize_version",
+    "serialize_version_detail",
+    "serialize_version_summary",
 ]
