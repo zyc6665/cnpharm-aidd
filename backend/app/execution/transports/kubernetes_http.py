@@ -7,6 +7,7 @@ from typing import Any
 
 import httpx
 
+from app.common.trace import TRACE_ID_HEADER, get_trace_id
 from app.execution.adapters.kubernetes import (
     KubernetesCredentials,
     KubernetesJobExecutionConfig,
@@ -219,6 +220,12 @@ class KubernetesHttpTransport:
         headers = {"Accept": "application/json"}
         if credentials.token:
             headers["Authorization"] = f"Bearer {credentials.token}"
+        # docs/10 §8.3 跨服务透传：这是仓库里唯一真正跨进程的业务出站，带上当前
+        # traceId，K8s 侧（以及其后的 apiserver 审计日志）才能和这次任务提交对上。
+        # K8s apiserver 接受并忽略不认识的请求头，不设置时保持原样不发空头。
+        trace_id = get_trace_id()
+        if trace_id:
+            headers[TRACE_ID_HEADER] = trace_id
         url = credentials.api_server.rstrip("/") + path
         return await self._client.request(
             method,

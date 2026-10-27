@@ -23,6 +23,7 @@ from app.auth.dependencies import get_admin_user
 from app.common.exceptions import ValidationException
 from app.common.responses import paginated_response, success_response
 from app.common.time import isoformat_utc
+from app.common.trace import get_trace_id
 from app.database.session import get_db
 from app.logging.audit import AuditAction, ResourceType, get_audit_logger
 from app.models.traceability import AuditLog
@@ -147,6 +148,9 @@ async def list_audit_logs(
         action=AuditAction.READ,
         reason="查询审计日志",
         user_email=current_user.email,
+        # 显式带上本请求的 traceId：谁查过审计日志，就能和这次请求的日志、
+        # 响应头 X-Request-Id 对上（docs/12 DEF-02）。
+        request_id=get_trace_id(),
     )
 
     return paginated_response(

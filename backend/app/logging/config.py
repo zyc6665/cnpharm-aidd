@@ -14,6 +14,7 @@ import os
 import sys
 
 from app.common.time import isoformat_z, utcnow
+from app.common.trace import PLACEHOLDER, TraceIdFilter, get_trace_id
 
 
 @dataclass
@@ -59,6 +60,11 @@ class CustomJsonFormatter(logging.Formatter):
         log_data = {
             "@timestamp": isoformat_z(utcnow()),
             "level": record.levelname,
+            "service": self.app_name,
+            # docs/10 §8.1：``trace_id`` 必填。由 ``TraceIdFilter`` 注入到 record 上；
+            # 这里再兜一次底（直接调 formatter 而不经过 handler 的场合），缺失时写
+            # ``"-"`` 而不是省略字段——省略会让 Loki 的字段分组多一路。
+            "trace_id": getattr(record, "trace_id", None) or get_trace_id() or PLACEHOLDER,
             "logger": record.name,
             "message": record.getMessage(),
             "app": self.app_name,
@@ -117,12 +123,22 @@ class ColoredFormatter(logging.Formatter):
 
     def __init__(self, fmt: Optional[str] = None, enable_colors: bool = True):
         if fmt is None:
-            fmt = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
+            # trace_id 放在 level 之后、logger 之前：一行日志里最能定位的字段
+            # 靠左，运维复制粘贴时不会漏掉尾部。
+            fmt = (
+                "%(asctime)s | %(levelname)-8s | "
+                "trace_id=%(trace_id)s | %(name)s | %(message)s"
+            )
         super().__init__(fmt)
         self.enable_colors = enable_colors
 
     def format(self, record: logging.LogRecord) -> str:
         """格式化日志记录"""
+        # 格式串里带 ``%(trace_id)s``，而 ``ColoredFormatter`` 也可能被单独
+        # 实例化（不经 ``setup_logging`` 装 filter）。这里补默认值，避免一个
+        # 没装 filter 的 handler 在打日志时抛 KeyError 把业务异常盖掉。
+        if not getattr(record, "trace_id", None):
+            record.trace_id = get_trace_id() or PLACEHOLDER
         if self.enable_colors and record.levelname in self.COLORS:
             record.levelname = (
                 f"{self.COLORS[record.levelname]}{record.levelname}{self.RESET}"
@@ -160,6 +176,7 @@ def setup_logging(config: Optional[LogConfig] = None) -> None:
     if config.output in ("console", "both"):
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setFormatter(formatter)
+        console_handler.addFilter(TraceIdFilter())
         root_logger.addHandler(console_handler)
 
     # 文件处理器
@@ -173,6 +190,7 @@ def setup_logging(config: Optional[LogConfig] = None) -> None:
             backupCount=config.backup_count
         )
         file_handler.setFormatter(formatter)
+        file_handler.addFilter(TraceIdFilter())
         root_logger.addHandler(file_handler)
 
     # 设置第三方库日志级别
