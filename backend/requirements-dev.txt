@@ -6,3 +6,6 @@ flower==2.0.1
 pytest==7.4.4
 pytest-asyncio==0.23.3
 flake8==7.1.1
+# 结果报告 PDF 的文本层断言（test_result_report_pdf.py）：只用于测试，
+# 不进运行时依赖——报告的生成侧完全不依赖 pypdf。
+pypdf==5.4.0
