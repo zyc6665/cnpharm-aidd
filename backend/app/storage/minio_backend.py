@@ -155,6 +155,46 @@ class MinIOStorageBackend(StorageBackend):
                 return None
             raise
 
+    async def get_bucket_lifecycle(self, bucket: Optional[str] = None):
+        """读取桶的生命周期配置；未配置时返回 ``None``（不是空配置）。
+
+        刻意不放进 ``StorageBackend`` 抽象基类：本地后端没有「桶」这个概念，塞进
+        基类会逼本地实现写两个 ``raise NotImplementedError``，反而让调用方失去
+        「先问这个后端有没有该能力」的机会。能力探测在 ``app.storage.lifecycle``。
+        """
+
+        target = bucket or self.bucket
+        return await asyncio.to_thread(self.client.get_bucket_lifecycle, target)
+
+    async def set_bucket_lifecycle(self, bucket: str, config) -> None:
+        """写入桶的生命周期配置（整体覆盖；合并逻辑在 ``app.storage.lifecycle``）。
+
+        参数顺序刻意与 minio SDK 保持一致（``bucket`` 在前、``config`` 在后）：
+        第一版写成了 ``(config, bucket=None)``，调用方按 SDK 习惯传
+        ``(target, config)`` 时就静默互换了两个参数，SDK 在
+        ``check_bucket_name`` 里拿 ``LifecycleConfig`` 当桶名，
+        报 ``TypeError: expected string or bytes-like object``。
+        单元测试的替身若采用同样的顺序就发现不了，只有真 MinIO 才能暴露。
+        """
+
+        await asyncio.to_thread(self.client.set_bucket_lifecycle, bucket, config)
+
+    async def delete_bucket_lifecycle(self, bucket: str) -> None:
+        """删除桶的生命周期配置。
+
+        真 MinIO 上实测：``set_bucket_lifecycle`` 传空规则会被拒绝并报
+        ``InvalidArgument: Lifecycle configuration should have at least one rule``。
+        「一条规则都不需要」在 S3 语义里对应的是**删除配置**，不是写一份空配置。
+        """
+
+        await asyncio.to_thread(self.client.delete_bucket_lifecycle, bucket)
+
+    async def get_bucket_versioning(self, bucket: Optional[str] = None):
+        """读取桶的版本化状态（决定 ``NoncurrentVersionExpiration`` 是否有意义）。"""
+
+        target = bucket or self.bucket
+        return await asyncio.to_thread(self.client.get_bucket_versioning, target)
+
     def _close_response(self, response, path: str) -> None:
         """释放 MinIO 响应连接，避免清理失败掩盖下载结果。"""
         try:
