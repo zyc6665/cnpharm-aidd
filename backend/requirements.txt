@@ -34,6 +34,8 @@ aiosmtplib==3.0.1
 
 # File handling
 aiofiles==23.2.1
+# 结果报告 PDF 渲染（内置 CID 字体 STSong-Light，渲染中文无需外部字体文件）
+reportlab==4.5.1
 
 # Molecule scoring
 rdkit==2024.9.6
