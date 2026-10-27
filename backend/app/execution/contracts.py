@@ -29,6 +29,22 @@ class ExecutionState(str, Enum):
         return cls(mapped)
 
 
+class ExecutionHandleGone(RuntimeError):
+    """Raised when a previously submitted execution no longer exists.
+
+    A managed Job can disappear from the cluster while the platform still holds
+    its handle: ``ttlSecondsAfterFinished`` reclaims it after the TTL, a user
+    cancellation deletes it, and an operator may delete it by hand. The
+    transport cannot tell those cases apart from "never existed", so it reports
+    the raw fact and lets the caller decide which terminal state applies.
+
+    This is deliberately not a ``KubernetesTransportError``: a vanished Job is a
+    *known terminal outcome*, not a transport failure. Callers must be able to
+    distinguish them, because a transport failure is retried while a vanished
+    Job is final.
+    """
+
+
 class ExecutionInput(BaseModel):
     artifact_version_id: str
     name: str

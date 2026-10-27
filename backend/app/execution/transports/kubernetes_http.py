@@ -14,6 +14,7 @@ from app.execution.adapters.kubernetes import (
 from app.execution.adapters.kubernetes_manifest import build_kubernetes_job_manifest
 from app.execution.contracts import (
     ExecutionArtifactCollection,
+    ExecutionHandleGone,
     ExecutionRequest,
     ExecutionState,
     ProducedArtifact,
@@ -83,6 +84,19 @@ class KubernetesHttpTransport:
         credentials: KubernetesCredentials,
     ) -> ExecutionState:
         return await self.status(external_id, config, credentials)
+
+    async def job_exists(
+        self,
+        external_id: str,
+        config: KubernetesJobExecutionConfig,
+        credentials: KubernetesCredentials,
+    ) -> bool:
+        """Report whether the Job is still present, without raising on 404."""
+        try:
+            await self._get_job(external_id, config, credentials)
+        except ExecutionHandleGone:
+            return False
+        return True
 
     async def logs(
         self,
@@ -159,6 +173,14 @@ class KubernetesHttpTransport:
             config,
             credentials,
         )
+        if response.status_code == 404:
+            # A 404 is the expected shape of "the Job is gone": TTL reclamation,
+            # a completed cancellation, or a job that never existed. Raise a
+            # dedicated signal instead of a transport error so callers can map it
+            # to a terminal state rather than a retryable failure.
+            raise ExecutionHandleGone(
+                f"Kubernetes Job no longer exists: {external_id}"
+            )
         self._raise_for_status(response, "read Kubernetes Job")
         return response.json()
 

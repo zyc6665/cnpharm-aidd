@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import shutil
 from pathlib import PurePosixPath
 from pathlib import Path
@@ -20,13 +21,15 @@ from app.execution.records import (
     task_execution_record_id,
     update_task_execution_record_external_id,
 )
-from app.execution.contracts import ExecutionRequest, ExecutionState
+from app.execution.contracts import ExecutionHandleGone, ExecutionRequest, ExecutionState
 from app.execution.service import ExecutionService
 from app.services.execution_artifacts import materialize_execution_artifacts
 from app.services.kubernetes_input_staging import stage_kubernetes_inputs
 from app.tasks.attempts import get_execution_attempt_id
 from app.tasks.executors.base import BaseExecutor
 from app.tasks.executors.errors import TaskExecutionError, TaskTimeoutError
+
+logger = logging.getLogger(__name__)
 
 
 class KubernetesJobExecutor(BaseExecutor):
@@ -168,6 +171,32 @@ class KubernetesJobExecutor(BaseExecutor):
                 return str(slug)
         return str(getattr(self.task, "tool_id", "unknown-tool"))
 
+    async def _recover_result_after_job_gone(self, execution_id: str):
+        """Try to collect the result manifest of a Job that left the cluster.
+
+        Returns the collected result when it exists, ``None`` otherwise. Output
+        artifacts live in object storage under the execution prefix, so their
+        availability does not depend on the Job still existing — only the
+        manifest download can tell us whether the run really finished.
+
+        Any collection error is treated as "no result": an unreadable or
+        incomplete manifest must surface as a failed run, not as a retry loop.
+        """
+        try:
+            collection = await self.execution_service.collect_result(
+                "k8s_job", execution_id
+            )
+        except Exception as exc:  # noqa: BLE001 - any failure means "no result"
+            logger.info(
+                "Kubernetes Job %s 已消失且无法取回结果清单: %s", execution_id, exc
+            )
+            return None
+        logger.warning(
+            "Kubernetes Job %s 已从集群消失，但对象存储中存在结果清单，按成功处理",
+            execution_id,
+        )
+        return collection
+
     async def _stage_inputs(self, attempt_id: str):
         task_inputs = getattr(self.task, "inputs", None)
         file_ids = list(getattr(task_inputs, "file_ids", None) or [])
@@ -222,6 +251,7 @@ class KubernetesJobExecutor(BaseExecutor):
         poll_interval = max(0.0, float(self.config.get("poll_interval_sec", 5)))
         loop = asyncio.get_running_loop()
         deadline = loop.time() + timeout
+        collection = None
 
         while state in {ExecutionState.QUEUED, ExecutionState.RUNNING}:
             if loop.time() >= deadline:
@@ -230,7 +260,31 @@ class KubernetesJobExecutor(BaseExecutor):
                     f"Kubernetes Job execution timeout after {timeout}s",
                     timeout_sec=timeout,
                 )
-            state = await self.execution_service.reconcile("k8s_job", execution_id)
+            try:
+                state = await self.execution_service.reconcile("k8s_job", execution_id)
+            except ExecutionHandleGone:
+                # The Job left the cluster mid-poll: TTL reclamation
+                # (ttlSecondsAfterFinished), a user cancellation, or an operator
+                # deleting it by hand. The transport cannot tell these apart, and
+                # none of them implies the run failed — results live in object
+                # storage, not in the Job. So look for the result manifest first:
+                # if it is there the run really did finish, and treating it as a
+                # failure would throw away a successful computation.
+                recovered = await self._recover_result_after_job_gone(execution_id)
+                if recovered is not None:
+                    state = ExecutionState.SUCCEEDED
+                    collection = recovered
+                    break
+                # No result manifest: either the run never produced one, or it is
+                # genuinely gone. The worker re-reads the task status on failure
+                # and turns a canceled task into CANCELLED, so raising here keeps
+                # cancellation working while turning the opaque "HTTP 404" into
+                # an actionable message.
+                raise TaskExecutionError(
+                    "Kubernetes Job 已从集群消失，且对象存储中没有结果清单，无法确认执行结果"
+                    "（可能被 ttlSecondsAfterFinished 回收，或已被取消/手工删除）",
+                    details={"external_id": execution_id, "reason": "job_gone"},
+                ) from None
             if state in {ExecutionState.QUEUED, ExecutionState.RUNNING} and poll_interval:
                 await asyncio.sleep(poll_interval)
 
@@ -241,7 +295,10 @@ class KubernetesJobExecutor(BaseExecutor):
         if state != ExecutionState.SUCCEEDED:
             raise TaskExecutionError(f"Kubernetes Job returned unexpected state: {state}")
 
-        collection = await self.execution_service.collect_result("k8s_job", execution_id)
+        if collection is None:
+            collection = await self.execution_service.collect_result(
+                "k8s_job", execution_id
+            )
         artifacts = list(collection.artifacts)
         if collection.source_root is not None:
             if self.db_session is None:

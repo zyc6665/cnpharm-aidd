@@ -75,6 +75,18 @@ class ExecutionService:
     async def cancel(self, adapter_type: str, execution_id: str) -> None:
         await self._adapter(adapter_type).cancel(execution_id)
 
+    async def execution_exists(self, adapter_type: str, execution_id: str) -> bool:
+        """Report whether the external execution still exists.
+
+        Only managed-orchestrator adapters can answer this; everything else
+        returns ``True`` so callers keep their previous behaviour.
+        """
+        adapter = self._adapter(adapter_type)
+        exists = getattr(adapter, "exists", None)
+        if exists is None:
+            return True
+        return await exists(execution_id)
+
     async def collect_artifacts(
         self,
         adapter_type: str,
