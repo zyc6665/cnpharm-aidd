@@ -38,6 +38,9 @@ TERMINAL_STATUSES = {
     TaskStatus.FAILURE.value,
     TaskStatus.CANCELED.value,
     TaskStatus.TIMEOUT.value,
+    # 被拒是终态：不在这里收尾的话，订阅方会一直等一个永远不会到来的
+    # 状态变化，连接挂到 max_duration_seconds（默认 30 分钟）才断。
+    TaskStatus.REJECTED.value,
 }
 
 EVENT_SNAPSHOT = "snapshot"

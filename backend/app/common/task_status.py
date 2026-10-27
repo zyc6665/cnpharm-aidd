@@ -7,6 +7,7 @@ from typing import Any
 
 _TASK_STATUS_TO_API = {
     "PENDING": "pending",
+    "REJECTED": "rejected",
     "QUEUED": "queued",
     "RUNNING": "running",
     "SUCCESS": "success",
@@ -18,8 +19,11 @@ _TASK_STATUS_TO_API = {
 # 任务状态 -> 执行器中性状态。
 # 注意：PENDING 表示「已创建但尚未入队」，因此映射为 created 而不是 queued；
 # queued 专指已进入调度队列（含资源不足重新排队）的 QUEUED 状态。
+# REJECTED 也落在 created 之后的 rejected：它从未进入队列，因此不能映射成
+# queued（那会让「被拒」在监控面板上与「排队中」混为一谈）。
 _TASK_STATUS_TO_EXECUTION = {
     "PENDING": "created",
+    "REJECTED": "rejected",
     "QUEUED": "queued",
     "RUNNING": "running",
     "SUCCESS": "succeeded",

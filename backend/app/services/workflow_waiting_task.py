@@ -59,6 +59,10 @@ async def load_finished_workflow_node_task(
         TaskStatus.FAILURE.value,
         TaskStatus.CANCELED.value,
         TaskStatus.TIMEOUT.value,
+        # 被拒（REJECTED）也算节点失败：节点任务同样过配额准入，被拦时会留下
+        # 一条 REJECTED 行而不会执行。不把它算失败，工作流会一直等一个永远
+        # 不会开始的任务，直到整体超时。
+        TaskStatus.REJECTED.value,
     }:
         mark_workflow_node_failed(
             run,

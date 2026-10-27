@@ -31,10 +31,17 @@ _VIEW_STATUSES: dict[str, tuple[str, ...]] = {
         TaskStatus.FAILURE.value,
         TaskStatus.CANCELED.value,
         TaskStatus.TIMEOUT.value,
+        # 被拒也是「已出结果」（结果是「没让你跑」）。漏在这里会让 REJECTED
+        # 行只在 view=all 下可见——用户去「历史」找「我那次被拒的提交」会找不到，
+        # 而它存在的唯一理由就是被找到。
+        TaskStatus.REJECTED.value,
     ),
     "needs_attention": (
         TaskStatus.FAILURE.value,
         TaskStatus.TIMEOUT.value,
+        # 刻意不含 REJECTED：这是「需要运维看一眼」的口径（执行侧炸了/超时了）。
+        # 被拒是用户侧的输入问题，已经在提交那一刻用 429 明确告知过，
+        # 混进来只会让值班的人去追一批「用户参数填大了」的历史记录。
     ),
     "recent_results": (TaskStatus.SUCCESS.value,),
 }

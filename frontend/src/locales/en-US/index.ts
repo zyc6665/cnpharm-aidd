@@ -1677,6 +1677,7 @@ export default {
       canceled: 'Canceled'
     },
     statusPending: 'Pending',
+    statusRejected: 'Rejected',
     statusQueued: 'Queued',
     statusRunning: 'Running',
     statusSuccess: 'Completed',

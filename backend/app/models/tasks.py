@@ -12,14 +12,21 @@ class TaskStatus(str, enum.Enum):
     """任务状态
 
     与《03-系统架构设计说明书》3.4 节状态机一致：
-    PENDING -> QUEUED -> RUNNING -> SUCCESS / FAILURE / CANCELED / TIMEOUT
+    CREATED -> REJECTED: 配额/参数校验失败
+    CREATED -> QUEUED -> RUNNING -> SUCCESS / FAILURE / CANCELED / TIMEOUT
 
-    - PENDING：已创建但尚未入队调度
+    - PENDING：已创建但尚未入队调度（对应文档里的 CREATED）
+    - REJECTED：准入被拒（配额不足、参数校验失败），从未进入队列
     - QUEUED：已入队/资源不足重新排队，等待调度
     - RUNNING：执行中
     - SUCCESS / FAILURE / CANCELED / TIMEOUT：终态
+
+    注意：``REJECTED`` 是终态，但**不核销算力占用**（docs/03 §7.3、
+    docs/04 §6.2：终态（含 FAILED/CANCELLED/TIMEOUT）一律核销，REJECTED
+    不核销）。它记的是「这次提交被拒过」，不是一个跑过又结束的作业。
     """
     PENDING = "PENDING"
+    REJECTED = "REJECTED"
     QUEUED = "QUEUED"
     RUNNING = "RUNNING"
     SUCCESS = "SUCCESS"

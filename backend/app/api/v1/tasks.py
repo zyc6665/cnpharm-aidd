@@ -734,6 +734,11 @@ async def retry_task(
     await _ensure_task_operation_access(db, task=task, current_user=current_user)
 
     # 只能重试失败、超时或取消的任务
+    #
+    # 被拒（REJECTED）**刻意不在这里**：本接口不做配额准入（配额只在
+    # ``create_and_schedule_tool_task`` 里查），放进来就等于给「提交被拒 →
+    # 点重试」开了一条绕过配额的路。被拒后应重新提交，走完整准入流程；
+    # 那条被拒的行留在库里作为审计证据（docs/03 §3.4）。
     if task.status not in [
         TaskStatus.FAILURE.value,
         TaskStatus.TIMEOUT.value,

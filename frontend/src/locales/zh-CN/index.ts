@@ -1672,6 +1672,7 @@ export default {
       canceled: '已取消'
     },
     statusPending: '等待中',
+    statusRejected: '已拒绝',
     statusQueued: '排队中',
     statusRunning: '运行中',
     statusSuccess: '已完成',
