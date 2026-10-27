@@ -129,7 +129,8 @@ class TaskStateMachine:
             TaskStatus.QUEUED,  # 入队等待调度
             TaskStatus.RUNNING,  # 直连执行模式下立即调度
             TaskStatus.CANCELED,
-            TaskStatus.FAILURE  # 启动前校验或调度失败
+            TaskStatus.FAILURE,  # 启动前校验或调度失败
+            TaskStatus.REJECTED  # 配额/参数校验失败（docs/03 §3.4 CREATED -> REJECTED）
         },
         TaskStatus.QUEUED: {
             TaskStatus.RUNNING,  # 被调度执行
@@ -159,11 +160,28 @@ class TaskStateMachine:
             TaskStatus.QUEUED,  # 重新提交并直接入队
             TaskStatus.SUCCESS,  # 远端结果补回时发现实际成功
             TaskStatus.FAILURE,  # 远端结果补回时发现实际失败
-        }
+        },
+        TaskStatus.REJECTED: set()  # 终态：不允许重试，见 can_retry 的说明
     }
 
     # 终态集合
+    #
+    # REJECTED 也在终态里：它一旦落库就再也不会自己动（docs/03 §3.4 只有
+    # CREATED -> REJECTED 一条入边）。但它在 ``transition()`` 里**不触发**
+    # 算力核销（见下面的 ``_SETTLED_STATUSES``），因为它压根没跑过。
+    # 把「终态」与「要核销」分成两个集合，是为了不让「加一个终态」自动等于
+    # 「多一条白嫖算力的口子」。
     TERMINAL_STATES: Set[TaskStatus] = {
+        TaskStatus.SUCCESS,
+        TaskStatus.FAILURE,
+        TaskStatus.CANCELED,
+        TaskStatus.TIMEOUT,
+        TaskStatus.REJECTED
+    }
+
+    # 需要核销算力成本的终态（docs/03 §7.3、docs/04 §6.2）：
+    # 失败与取消同样核销，REJECTED 不核销——它没有消费任何算力。
+    _SETTLED_STATUSES: Set[TaskStatus] = {
         TaskStatus.SUCCESS,
         TaskStatus.FAILURE,
         TaskStatus.CANCELED,
@@ -305,6 +323,17 @@ class TaskStateMachine:
             task.progress_message = progress_message or "任务已取消"
             cls._calculate_execution_time(task)
 
+        elif to_status == TaskStatus.REJECTED:
+            # 准入被拒（配额不足 / 参数校验失败）
+            #
+            # 不写 started_at、不算执行时长：这个任务从未开始执行。写 finished_at
+            # 是为了让「被拒时间」可排序、可统计——否则任务列表里它会永远挂在
+            # created_at 那一列，看不出是被拒在什么时候。
+            task.finished_at = now
+            task.error_message = error_message
+            task.progress = 0.0
+            task.progress_message = progress_message or "任务被拒绝"
+
         elif to_status == TaskStatus.PENDING and old_status in {
             TaskStatus.FAILURE,
             TaskStatus.CANCELED,
@@ -350,7 +379,10 @@ class TaskStateMachine:
         # 覆盖——失败与取消同样核销，否则可以反复失败来白嫖算力。
         # 放在进度兜底之前：成本只依赖 started_at/finished_at/execution_time_sec，
         # 让它在最后一步之前完成，删掉这里就等于把所有终态路径的核销一起关掉。
-        if to_status in cls.TERMINAL_STATES:
+        #
+        # 用 _SETTLED_STATUSES 而不是 TERMINAL_STATES：REJECTED 是终态但没消费算力，
+        # 核销它等于凭空扣用户额度（docs/03 §7.3「REJECTED 不核销」）。
+        if to_status in cls._SETTLED_STATUSES:
             _set_cost_metadata(task)
 
         # 更新进度（如果提供）
@@ -392,6 +424,12 @@ class TaskStateMachine:
         current_status = TaskStatus(task.status) if isinstance(task.status, str) else task.status
 
         # 失败、取消或超时状态可以重试
+        #
+        # REJECTED 刻意**不**可重试：它从未执行，没有「重试」可言；更关键的是
+        # 重试路径（``api/v1/tasks.py::retry_task``）**不做配额准入**（配额只在
+        # ``create_and_schedule_tool_task`` 里查）。若允许 REJECTED 重试，用户就能
+        # 靠「提交被拒 → 点重试」绕过配额无限提交。正确做法是重新提交，
+        # 走完整准入流程；被拒那一行留在库里作为审计证据。
         if current_status not in {
             TaskStatus.FAILURE,
             TaskStatus.CANCELED,
@@ -523,6 +561,32 @@ class TaskStateMachine:
             task, TaskStatus.TIMEOUT,
             error_message=error_message,
             progress_message=progress_message or "任务执行超时"
+        )
+
+    @classmethod
+    def reject(
+        cls,
+        task: "Task",
+        error_message: Optional[str] = None,
+        progress_message: Optional[str] = None
+    ) -> None:
+        """标记任务被拒（准入未通过）
+
+        用于配额不足、参数校验失败等「任务已创建但从未入队」的场景
+        （docs/03 §3.4 ``CREATED --> REJECTED``）。
+
+        Args:
+            task: 任务对象
+            error_message: 拒绝原因
+            progress_message: 进度消息
+
+        Raises:
+            TaskStateError: 当当前状态不允许转换到 REJECTED 时抛出
+        """
+        cls.transition(
+            task, TaskStatus.REJECTED,
+            error_message=error_message,
+            progress_message=progress_message or "任务被拒绝"
         )
 
     @classmethod

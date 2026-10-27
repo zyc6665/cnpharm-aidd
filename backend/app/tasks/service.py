@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.config import settings, use_direct_task_execution
-from app.common.exceptions import NotFoundException, ValidationException
+from app.common.exceptions import NotFoundException, QuotaExceededException, ValidationException
 from app.common.trace import get_trace_id
 from app.database.base import utcnow
 from app.models.statistics import ToolStatistics
@@ -543,6 +543,14 @@ async def _enforce_project_quota(
 
     **为什么在 ``TaskCommand.from_prepared_run`` 之前**：早于任何 ``db.add`` /
     ``flush``，被拦的提交不会留下 PENDING 空壳任务行。
+
+    2026-10-27 变更（REJECTED 第 8 态）
+    ----------------------------------
+    上面「不留 PENDING 空壳」的口径仍然成立，但被拦的提交现在会留下一条
+    **REJECTED** 终态行（见 ``create_and_schedule_tool_task`` 里的调用点）。
+    原因是 docs/03 §3.4 的状态机里有 ``CREATED --> REJECTED``，而一个只在
+    代码里抛异常、库里什么都看不到的「被拒」无法满足 M6 的「任务中心能看到
+    这次提交被拒过」与配额纠纷时的可追溯性。本函数仍然只做判定、不写库。
     """
     if not settings.PROJECT_QUOTA_ENABLED:
         return
@@ -560,6 +568,84 @@ async def _enforce_project_quota(
         requires_dcu=bool(tool.gpu_required),
         timeout_sec=_snapshot_timeout_sec(extra_data),
     )
+
+
+async def _record_quota_rejection(
+    db: AsyncSession,
+    *,
+    exc: QuotaExceededException,
+    command: TaskCommand,
+    tool: Tool,
+) -> None:
+    """把一次被配额拦下的提交落成 ``REJECTED`` 终态行（docs/03 §3.4）。
+
+    为什么落库而不只是抛 429
+    ------------------------
+    HTTP 429 只是这一次请求的响应，刷新页面就没了。用户在任务中心看不到
+    「我昨天下午提交过、被配额拒了」，运维在配额纠纷时也拿不出证据。
+    ``REJECTED`` 是状态机里明确存在的一态，落库才让它可查、可统计。
+
+    为什么写 ``TaskInput`` 但不做输入快照、不计工具用量
+    ---------------------------------------------------
+    用户需要能在详情页看到「我当时提交的是什么参数」——否则被拒记录除了
+    「被拒了」三个字之外没有任何信息量。但被拒的提交没有真的使用输入，也不该
+    算作工具被使用过，所以跳过 ``record_task_inputs`` / ``record_tool_usage``。
+
+    为什么不核销算力
+    ----------------
+    该任务从未入队、从未执行，``TaskStateMachine`` 的 ``_SETTLED_STATUSES``
+    刻意不含 ``REJECTED``（docs/03 §7.3「REJECTED 不核销」）。因此这里只需
+    状态迁移，不需要任何成本回填。
+
+    拒绝原因写进 ``extra_data["rejection"]``，与 ``check_submission_allowed``
+    抛出的 ``detail`` 同构（``dimension``/``limit``/``active`` 等），前端
+    任务详情页直接展示，不必再解析中文错误串。
+
+    本函数吞掉自身异常：记录失败不应该把一次明确的 429 变成 500。
+    """
+    try:
+        task = Task(
+            user_id=command.user_id,
+            tool_id=command.tool_id,
+            tool_version_id=command.tool_version_id,
+            status=TaskStatus.PENDING.value,
+            priority=command.priority,
+            progress=0.0,
+            extra_data=dict(command.extra_data),
+        )
+        db.add(task)
+        await db.flush()
+        task.name = resolve_task_display_name(
+            name=command.name,
+            tool_name=tool.name,
+            created_at=task.created_at,
+            task_id=task.id,
+        )
+        task_input = command.task_input
+        db.add(
+            TaskInput(
+                task_id=task.id,
+                params=task_input["params"],
+                file_ids=task_input["file_ids"],
+            )
+        )
+
+        detail = dict(exc.detail) if isinstance(exc.detail, dict) else {}
+        extra_data = dict(task.extra_data or {})
+        extra_data["rejection"] = {**detail, "message": exc.message}
+        task.extra_data = extra_data
+        TaskStateMachine.reject(task, error_message=exc.message)
+
+        await db.commit()
+        await db.refresh(task)
+        logger.info(
+            "任务提交被配额拒绝，已记录 REJECTED 行: task_id=%s dimension=%s",
+            task.id,
+            detail.get("dimension"),
+        )
+    except Exception:  # noqa: BLE001 - 记录失败不能改变 429 的语义
+        logger.exception("记录 REJECTED 任务失败（不影响 429 响应）")
+        await db.rollback()
 
 
 def _snapshot_timeout_sec(extra_data: dict[str, object]) -> float | None:
@@ -610,12 +696,6 @@ async def create_and_schedule_tool_task(
             "标准 Artifact 输入尚未满足工具要求",
             detail={"binding_decisions": prepared.binding_decisions},
         )
-    await _enforce_project_quota(
-        db,
-        prepared=prepared,
-        tool=tool,
-        extra_data=extra_data,
-    )
     command = TaskCommand.from_prepared_run(
         user_id=str(current_user.id),
         tool_id=str(task_data.tool_id),
@@ -626,6 +706,18 @@ async def create_and_schedule_tool_task(
         requested_input_bindings=task_data.input_bindings,
         extra_data=extra_data,
     )
+    try:
+        await _enforce_project_quota(
+            db,
+            prepared=prepared,
+            tool=tool,
+            extra_data=extra_data,
+        )
+    except QuotaExceededException as exc:
+        # 配额被拒 → 先落一条 REJECTED 终态行（docs/03 §3.4 ``CREATED --> REJECTED``），
+        # 再把原异常抛出去保持 429 契约不变（docs/05 §9 的 42902 / 40303 口径）。
+        await _record_quota_rejection(db, exc=exc, command=command, tool=tool)
+        raise
     task_input = command.task_input
 
     task = Task(

@@ -217,6 +217,9 @@ async def reconcile_loop_body(
             TaskStatus.FAILURE.value,
             TaskStatus.CANCELED.value,
             TaskStatus.TIMEOUT.value,
+            # 同 workflow_waiting_task：被拒的循环体任务等同失败，
+            # 否则循环永远等不到一个不会开始的任务。
+            TaskStatus.REJECTED.value,
         }:
             sub_state["status"] = "failure"
             sub_state["error_message"] = task.error_message or "Loop body task failed"

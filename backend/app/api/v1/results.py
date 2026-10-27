@@ -69,6 +69,10 @@ READ_ROLES = ("owner", "editor", "runner", "viewer")
 
 #: A task counts as a "result" once it reached a terminal state. Queued and
 #: running tasks are visible through the task center instead (docs/06 P-31).
+#:
+#: REJECTED 刻意**不在**这里：它是终态，但一个从未执行的任务没有「结果」可言，
+#: 出现在结果中心只会让用户点进去看到空产物。它属于任务中心（P-31）的
+#: 「历史」页签——那里才是「我那次提交发生了什么」的归宿。
 RESULT_STATUSES = (
     TaskStatus.SUCCESS.value,
     TaskStatus.FAILURE.value,

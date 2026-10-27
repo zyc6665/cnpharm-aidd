@@ -66,3 +66,16 @@ test('取消、重试、删除权限由状态和操作者共同决定', () => {
   assert.equal(canDeleteTask(task('running'), admin), false)
   assert.equal(canDeleteTask(task('success', { user_id: 'user-1' }), owner), false)
 })
+
+test('被拒任务不可重试、也不可取消，但管理员可把它从历史里删掉', () => {
+  const owner: TaskActor = { isAdmin: false, userId: 'user-1' }
+  const admin: TaskActor = { isAdmin: true }
+
+  // 不可重试：重试接口不做配额准入，放进来就是绕过配额。
+  assert.equal(canRetryTask(task('rejected', { user_id: 'user-1' }), owner), false)
+  // 不可取消：它已经是终态，从未入队。
+  assert.equal(canCancelTask(task('rejected', { user_id: 'user-1' }), owner), false)
+  // 可删除：被拒行留在库里是审计证据，但管理员清理历史时不该被它挡住。
+  assert.equal(canDeleteTask(task('rejected'), admin), true)
+  assert.equal(canDeleteTask(task('rejected', { user_id: 'user-1' }), owner), false)
+})

@@ -1291,9 +1291,17 @@ async def test_compute_quota_summary_aggregates_owned_projects(
 
 
 @pytest.mark.asyncio
-async def test_create_task_blocked_by_quota_leaves_no_task_row(
+async def test_create_task_blocked_by_quota_records_rejected_task_row(
     api_client: httpx.AsyncClient, db_session: AsyncSession, users: dict[str, User]
 ):
+    """被配额拦下的提交要留下一条 REJECTED 终态行，且不留 PENDING 空壳。
+
+    2026-10-27 前这里断言的是「一条都不留」——配额检查跑在建任务之前，被拦的
+    提交连 `Task` 行都没有。docs/03 §3.4 与 §7.3 要求 ``CREATED --> REJECTED``
+    是一个真正的状态：用户点开任务中心要能看到「我那次提交被拒了，原因是并发
+    DCU 超限」。所以现在落一条 REJECTED 行（终态、不核销算力、不重试），
+    但**仍然不允许**留 PENDING 空壳——那才是真正的脏数据。
+    """
     project = await _create_project(db_session, owner=users["owner"])
     tool = await _create_tool(db_session, owner=users["owner"], gpu_required=True)
     quota = await get_or_create_project_quota(db_session, project_id=project.id)
@@ -1327,8 +1335,35 @@ async def test_create_task_blocked_by_quota_leaves_no_task_row(
     after = (
         await db_session.execute(select(func.count()).select_from(Task))
     ).scalar_one()
-    # 拦在 create_and_schedule_tool_task 之前：连 PENDING 空壳都不留。
-    assert after == before
+    # 只多一条：那条 REJECTED 记录。
+    assert after == before + 1
+
+    rejected = (
+        await db_session.execute(
+            select(Task)
+            .where(Task.status == TaskStatus.REJECTED.value)
+            .order_by(Task.created_at.desc(), Task.id.desc())
+            .limit(1)
+        )
+    ).scalar_one()
+    assert rejected.project_id == project.id
+    assert rejected.extra_data["rejection"]["dimension"] == "maxConcurrentDcu"
+    assert rejected.error_message
+    # 从未执行：没有 started_at / execution_time_sec，但有 finished_at。
+    assert rejected.started_at is None
+    assert rejected.execution_time_sec is None
+    assert rejected.finished_at is not None
+    assert rejected.progress == 0.0
+
+    # 关键：不允许留下 PENDING 空壳。
+    pending = (
+        await db_session.execute(
+            select(func.count()).select_from(Task).where(
+                Task.status == TaskStatus.PENDING.value
+            )
+        )
+    ).scalar_one()
+    assert pending == 0
 
 
 @pytest.mark.asyncio
@@ -1420,8 +1455,30 @@ async def test_structure_prediction_is_blocked_by_quota(
     after = (
         await db_session.execute(select(func.count()).select_from(Task))
     ).scalar_one()
-    # 抛在建任务之前：领域入口被拦时也不留 PENDING 空壳。
-    assert after == before
+    # 领域入口被拦同样落一条 REJECTED 行（与 HTTP 入口行为一致），不留 PENDING 空壳。
+    assert after == before + 1
+
+    rejected = (
+        await db_session.execute(
+            select(Task)
+            .where(Task.status == TaskStatus.REJECTED.value)
+            .order_by(Task.created_at.desc(), Task.id.desc())
+            .limit(1)
+        )
+    ).scalar_one()
+    assert rejected.project_id == project.id
+    assert rejected.extra_data["rejection"]["dimension"] == "maxConcurrentDcu"
+    assert rejected.started_at is None
+    assert rejected.finished_at is not None
+
+    pending = (
+        await db_session.execute(
+            select(func.count()).select_from(Task).where(
+                Task.status == TaskStatus.PENDING.value
+            )
+        )
+    ).scalar_one()
+    assert pending == 0
 
 
 @pytest.mark.asyncio

@@ -115,5 +115,24 @@ test('归一化认得后端新增的 QUEUED / TIMEOUT，未知值仍降级 pendi
   assert.equal(normalizeTaskStatus('TIMEOUT'), 'timeout')
   assert.equal(normalizeTaskStatus('Timeout'), 'timeout')
   // 后端将来再加状态时前端不崩，仍然降级为 pending。
-  assert.equal(normalizeTaskStatus('REJECTED'), 'pending')
+  assert.equal(normalizeTaskStatus('SOMETHING_NEW'), 'pending')
+})
+
+test('被拒（REJECTED）是第八态：归终态与历史，不进行中，配色中性灰', () => {
+  // 归一化认得后端的大写形态。
+  assert.equal(normalizeTaskStatus('REJECTED'), 'rejected')
+  assert.equal(normalizeTaskStatus('Rejected'), 'rejected')
+
+  // 文案与配色：灰而不是错误红——红色留给「跑失败了」，被拒是「没让你跑」。
+  assert.equal(getTaskStatusTextKey('rejected'), 'tasks.statusRejected')
+  assert.equal(getTaskStatusColor('rejected'), 'default')
+  // 进度条走 normal（停在 0 是事实，标 exception 会让人以为执行到一半炸了）。
+  assert.equal(getTaskProgressStatus('rejected'), 'normal')
+  assert.equal(getTaskProgressColor('rejected'), '#8c8c8c')
+
+  // 终态 / 历史，但不是「进行中」，也不是「正在执行」。
+  assert.equal(isTerminalTask(task('rejected')), true)
+  assert.equal(isHistoryTask(task('rejected')), true)
+  assert.equal(isRunningTask(task('rejected')), false)
+  assert.equal(isExecutingTask(task('rejected')), false)
 })

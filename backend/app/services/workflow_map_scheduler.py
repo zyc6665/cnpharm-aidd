@@ -243,6 +243,9 @@ async def reconcile_map_sub_tasks(
             TaskStatus.FAILURE.value,
             TaskStatus.CANCELED.value,
             TaskStatus.TIMEOUT.value,
+            # 同 workflow_waiting_task：被拒的 map 子任务等同失败，
+            # 否则 map 永远等不到一个不会开始的任务。
+            TaskStatus.REJECTED.value,
         }:
             sub_state["status"] = "failure"
             sub_state["error_message"] = task.error_message or "Map sub-task failed"

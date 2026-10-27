@@ -3,6 +3,7 @@ import type { Task, TaskStatus } from '@/types/models'
 export type TaskProgressStatus = 'normal' | 'active' | 'exception' | 'success'
 export type TaskStatusTextKey =
   | 'tasks.statusPending'
+  | 'tasks.statusRejected'
   | 'tasks.statusQueued'
   | 'tasks.statusRunning'
   | 'tasks.statusSuccess'
@@ -25,11 +26,21 @@ export type TaskStatusTextKey =
  */
 const runningStatuses: TaskStatus[] = ['pending', 'queued', 'running']
 
-/** 终态：不会再自行流转，只能重试或留在历史里。 */
-const terminalStatuses: TaskStatus[] = ['success', 'failure', 'timeout', 'canceled']
+/**
+ * 终态：不会再自行流转，只能重试或留在历史里。
+ *
+ * `rejected`（准入被拒）也是终态：它从未入队，状态机里只有
+ * `PENDING -> REJECTED` 这一条入边，且**没有出边**（不可重试——重试接口不做
+ * 配额准入，允许重试等于给「提交被拒 → 点重试」开一条绕过配额的路；正确做法是
+ * 重新提交，走完整准入）。
+ * 归入终态而不是 `runningStatuses`，否则任务中心会把它算进「进行中」，
+ * 用户会等一个永远不会开始的任务。
+ */
+const terminalStatuses: TaskStatus[] = ['success', 'failure', 'timeout', 'canceled', 'rejected']
 const historyStatuses: TaskStatus[] = terminalStatuses
 const taskStatusSet = new Set<TaskStatus>([
   'pending',
+  'rejected',
   'queued',
   'running',
   'success',
@@ -48,6 +59,9 @@ export function normalizeTaskStatus(status?: string): TaskStatus {
 export function getTaskStatusColor(status: TaskStatus): string {
   const colors: Record<TaskStatus, string> = {
     pending: 'orange',
+    // 被拒用 `default`（灰）而不是 `error`（红）：红色留给「跑失败了」，
+    // 被拒是「没让你跑」，语义上更接近取消，不该和失败同一个视觉权重。
+    rejected: 'default',
     queued: 'blue',
     running: 'processing',
     success: 'success',
@@ -62,6 +76,7 @@ export function getTaskStatusColor(status: TaskStatus): string {
 export function getTaskStatusTextKey(status: TaskStatus): TaskStatusTextKey {
   const keys: Record<TaskStatus, TaskStatusTextKey> = {
     pending: 'tasks.statusPending',
+    rejected: 'tasks.statusRejected',
     queued: 'tasks.statusQueued',
     running: 'tasks.statusRunning',
     success: 'tasks.statusSuccess',
@@ -77,12 +92,16 @@ export function getTaskProgressStatus(status: TaskStatus): TaskProgressStatus {
   if (status === 'running') return 'active'
   if (status === 'failure' || status === 'timeout') return 'exception'
   if (status === 'success') return 'success'
+  // `rejected` 走 normal：进度条停在 0 是事实（它从未开始），
+  // 标成 exception 会让人以为执行到一半炸了。
   return 'normal'
 }
 
 export function getTaskProgressColor(status: TaskStatus): string {
   if (status === 'running') return '#1890ff'
   if (status === 'failure' || status === 'timeout') return '#ff4d4f'
+  // 被拒与取消一样用中性灰：绿色会让人以为「已完成」。
+  if (status === 'rejected' || status === 'canceled') return '#8c8c8c'
   return '#52c41a'
 }
 
@@ -99,7 +118,7 @@ export function isHistoryTask(task: Pick<Task, 'status'>): boolean {
   return historyStatuses.includes(task.status)
 }
 
-/** 任务是否已进入终态（成功/失败/超时/已取消）。 */
+/** 任务是否已进入终态（成功/失败/超时/已取消/被拒）。 */
 export function isTerminalTask(task: Pick<Task, 'status'>): boolean {
   return terminalStatuses.includes(task.status)
 }
