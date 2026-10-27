@@ -52,8 +52,8 @@ from app.models.compounds import (
     Compound,
     MoleculeFingerprint,
 )
-from app.models.projects import Project
-from app.models.users import User
+from app.models.projects import Project, ProjectMember
+from app.models.users import User, UserRole
 from app.models.versions import ENTITY_TYPE_COMPOUND, SOURCE_TYPE_IMPORT
 from app.services import data_versions
 from app.services.project_access import load_project_membership, require_project_role
@@ -181,9 +181,14 @@ async def require_compound_read_access(
     个可见项目里引用过」判定：本项目 ``candidates`` 指向它，且调用者在该项目里的
     角色属于 ``READ_ROLES``。
 
-    取前 50 个引用项目逐个试即可：判定只需要一个反例不存在——只要有一个用户可见
-    的项目引用了这个分子，他就有权读；一个都没有才拒绝。``limit(50)`` 是防御性上限，
-    不是分页：一个被上千个项目引用的分子，前 50 个已经足够让绝大多数成员命中。
+    实现上直接让数据库做「存在性判断」：一条 ``EXISTS`` 子查询同时限制项目、用户与
+    角色，最多回一个 ``project_id``。早期写成「取前 50 个引用项目再逐个查成员」，
+    两个毛病：①被 50 个以上项目引用的分子，成员资格落在第 51 个之后的项目会被误判
+    404；②每命中一个候选项目一次数据库往返，最坏 50 次。
+
+    **管理员旁路**：与 ``task_access`` / ``file_records`` 等同级口径，平台管理员可读
+    全部主数据——主数据没有项目归属，"能不能读某个项目的化合物"与"能不能读这条主
+    数据"是两件事。旁路只在这里开一处，调用方不必各写一遍。
 
     **不可见一律 404，不是 403**：403 等于告诉对方「这个 id 存在、只是你没权限」，
     把主数据的存在性泄露给了任何拿到 id 的人（与 ``GET /compounds/{id}`` 同一口径，
@@ -194,22 +199,21 @@ async def require_compound_read_access(
     得先回答「无项目归属的主数据该由谁读」，那不是本模块能定的。
     """
     compound = await load_compound(db, compound_id)
-    result = await db.execute(
-        select(Candidate.project_id)
-        .where(Candidate.compound_id == str(compound.id))
-        .limit(50)
+    if getattr(user, "role", None) == UserRole.ADMIN.value:
+        return compound
+    visible_project_id = await db.scalar(
+        select(ProjectMember.project_id)
+        .join(Candidate, Candidate.project_id == ProjectMember.project_id)
+        .where(
+            Candidate.compound_id == str(compound.id),
+            ProjectMember.user_id == user.id,
+            ProjectMember.role.in_(READ_ROLES),
+        )
+        .limit(1)
     )
-    for (project_id,) in result.all():
-        try:
-            _project, membership = await load_project_membership(
-                db, project_id=project_id, user_id=user.id
-            )
-        except Exception:
-            # 非成员（load_project_membership 抛 404）或项目已删：换下一个候选项目。
-            continue
-        if membership.role in READ_ROLES:
-            return compound
-    raise NotFoundException("化合物不存在")
+    if visible_project_id is None:
+        raise NotFoundException("化合物不存在")
+    return compound
 
 
 async def find_compound_by_inchikey(db: AsyncSession, inchikey: str) -> Compound | None:

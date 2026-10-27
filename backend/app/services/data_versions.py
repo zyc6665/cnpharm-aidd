@@ -53,15 +53,27 @@ def content_hash_of(payload: Any) -> str:
     ``payload`` 可以是 dict / list / str / bytes：非 ``bytes`` 一律先做**稳定序列化**
     （``sort_keys=True`` + ``ensure_ascii=False``）再算哈希，否则同一份内容因键序不同
     会得到两个哈希，「两版是否真的不同」就答不准。
+
+    **判等口径与 "值可落库" 绑定**：这里用 ``allow_nan=False``。``float('nan')``
+    经默认 ``json.dumps`` 会写成 ``NaN`` 字面量，而那不是合法 JSON——PostgreSQL 的
+    ``jsonb`` 直接拒收（``Token "NaN" is invalid``），SQLite 却静默存下，于是「同一份
+    内容在两种库上一种能写、一种报错」。把它挡在算哈希这一步，是为了让报错发生在
+    调用方看得懂的层（``ValidationException``），而不是等 ORM flush 时抛一个
+    "数据库返回的错"。
     """
     if isinstance(payload, bytes):
         raw = payload
     elif isinstance(payload, str):
         raw = payload.encode("utf-8")
     else:
-        raw = json.dumps(
-            payload, sort_keys=True, ensure_ascii=False, default=str
-        ).encode("utf-8")
+        try:
+            raw = json.dumps(
+                payload, sort_keys=True, ensure_ascii=False, default=str, allow_nan=False
+            ).encode("utf-8")
+        except ValueError as exc:
+            raise ValidationException(
+                "内容快照包含 NaN 或 Infinity，无法作为可复现的 JSON 快照落库"
+            ) from exc
     return hashlib.sha256(raw).hexdigest()
 
 
@@ -76,10 +88,21 @@ def normalize_content(content: Any) -> Any:
 
     已经是 ``str`` / ``bytes`` 的内容（调用方直接传了一段原文）按 JSON 字符串落库：
     ``JSON`` 列存裸文本会被双重编码，读回来就不是原文了。
+
+    同样用 ``allow_nan=False``：NaN / Infinity 不是合法 JSON。放进来会得到两种后果
+    ——PostgreSQL 的 ``jsonb`` 拒收（``Token "NaN" is invalid``）、SQLite 静默存下，
+    于是同一份内容在两种库上一种能写一种报错，而生产是前者、测试是后者。
     """
     if isinstance(content, bytes):
         content = content.decode("utf-8", errors="replace")
-    return json.loads(json.dumps(content, ensure_ascii=False, default=str))
+    try:
+        return json.loads(
+            json.dumps(content, ensure_ascii=False, default=str, allow_nan=False)
+        )
+    except ValueError as exc:
+        raise ValidationException(
+            "内容快照包含 NaN 或 Infinity，无法作为可复现的 JSON 快照落库"
+        ) from exc
 
 
 def _operator_of(user: User | None) -> str | None:
@@ -146,8 +169,15 @@ async def record_version(
         raise ValidationException(f"不支持的实体类型: {entity_type}")
     if source_type not in SOURCE_TYPES:
         raise ValidationException(f"不支持的版本来源: {source_type}")
-    if content_hash is None and content is not None:
-        content_hash = content_hash_of(content)
+    # 先规范化、再算哈希，两者口径必须完全一致。
+    # 早期实现是「原始对象算哈希、规范化后的值落库」：于是 ``0`` 与 ``0.0``
+    # 算出两个哈希（json 里是 ``0`` 与 ``0.0``）却被 diff 判为同一个值，
+    # 同一个响应里 ``contentHashChanged: true`` 与 ``changes: []`` 互相打脸。
+    # 现在哈希只认「最终落库的那个形态」，``contentHashChanged`` 与 ``changes``
+    # 就由同一份数据推出来。
+    snapshot = None if content is None else normalize_content(content)
+    if content_hash is None and snapshot is not None:
+        content_hash = content_hash_of(snapshot)
 
     entity_id = str(entity_id)
     attempt_version = version
@@ -165,7 +195,7 @@ async def record_version(
             source_file_urn=source_file_urn,
             change_summary=change_summary,
             content_hash=content_hash,
-            content=None if content is None else normalize_content(content),
+            content=snapshot,
             operator=_operator_of(user),
         )
         try:
@@ -224,6 +254,11 @@ async def list_versions(
     """按版本号**倒序**返回该实体的历史（最新在前），以及总条数。
 
     倒序是因为调用方几乎总是先看「最近一次改了什么」；升序要翻到最后一页才有用。
+
+    ``page`` 越界（大于 ``total_pages``）时返回空列表而**不夹取到最后一页**：
+    夹取会让「第 999 页」与「第 1 页」返回同一批数据，调用方无法区分
+    「你要的那页没有」和「已经到底了」；空列表 + ``total`` / ``total_pages``
+    是标准分页语义，由前端决定怎么提示。
     """
     if entity_type not in ENTITY_TYPES:
         raise ValidationException(f"不支持的实体类型: {entity_type}")
@@ -390,15 +425,24 @@ def flatten_content(content: Any, *, prefix: str = "") -> dict[str, Any]:
 
     口径：
     * dict 逐键递归，list 逐下标递归（``path[0]``）；
-    * **空容器摊平为空**——``{}`` 与 ``{}`` 之间没有字段可比，故不产生任何路径；
+    * **非顶层的空容器本身作为一个叶子**——``{"props": {}}`` 与 ``{}`` 之间
+      ``props`` 这个字段确实被去掉了，若把它摊平成「什么都没有」，两份内容一个字段
+      都没有，diff 就报 ``changes: []``，而哈希又因为键集不同报「变了」（同样是
+      ``contentHashChanged`` 与 ``changes`` 互相打脸）。落成的叶子值就是 ``{}`` /
+      ``[]`` 本身，JSON 可序列化，前端也能原样展示；
+    * 顶层的空容器不产生路径（没有字段名可报，``{}`` 与 ``{}`` 本就相等）；
     * 标量原样作为叶子，不做数值归一（``1`` 与 ``1.0`` 是两条不同的取值）。
     """
     if isinstance(content, dict):
+        if not content and prefix:
+            return {prefix: {}}
         flattened: dict[str, Any] = {}
         for key, value in content.items():
             flattened.update(flatten_content(value, prefix=_join_path(prefix, key)))
         return flattened
     if isinstance(content, (list, tuple)):
+        if not content and prefix:
+            return {prefix: []}
         flattened = {}
         for index, value in enumerate(content):
             flattened.update(flatten_content(value, prefix=_join_path(prefix, index)))
@@ -407,9 +451,25 @@ def flatten_content(content: Any, *, prefix: str = "") -> dict[str, Any]:
 
 
 def _same_leaf(left: Any, right: Any) -> bool:
-    """叶子相等判定。``True`` 与 ``1`` 在 Python 里相等，但在 JSON 快照里是两种取值。"""
+    """叶子相等判定。
+
+    三条刻意的「不等」：
+
+    * ``True`` 与 ``1`` 在 Python 里相等，但在 JSON 快照里是两种取值（布尔 vs 数值）；
+    * ``0`` 与 ``0.0`` 在 Python 里相等，但序列化后一个是 ``0``、一个是 ``0.0``，
+      哈希不同。既然 ``contentHashChanged`` 会因此报「变了」，diff 也必须报变化，
+      否则同一个响应里两个字段互相打脸；
+    * ``NaN != NaN`` 是 IEEE 754 的定义，但快照里两版都是 NaN 时它们是**同一份内容**。
+      用 ``repr`` 相等兜住这一种情况（``float('nan') == float('nan')`` 为 False，
+      而 ``repr`` 都是 ``'nan'``）。NaN 现在已进不来（``allow_nan=False`` 在写入侧
+      就拒收），这里只是让历史行与纯函数调用方不至于给出荒谬结论。
+    """
     if isinstance(left, bool) != isinstance(right, bool):
         return False
+    if isinstance(left, float) != isinstance(right, float):
+        return False
+    if isinstance(left, float) and left != left and isinstance(right, float) and right != right:
+        return True
     return left == right
 
 

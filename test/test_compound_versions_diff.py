@@ -53,9 +53,16 @@ from app.models.users import User, UserRole, UserStatus  # noqa: E402
 from app.models.versions import (  # noqa: E402
     ENTITY_TYPE_COMPOUND,
     SOURCE_TYPE_IMPORT,
+    SOURCE_TYPE_MANUAL,
     DataVersion,
 )
 from app.services import data_versions, domain_compounds  # noqa: E402
+from app.services.data_versions import (  # noqa: E402
+    _same_leaf,
+    content_hash_of,
+    diff_contents,
+    normalize_content,
+)
 
 OWNER = "owner"
 VIEWER = "viewer"
@@ -444,6 +451,81 @@ async def test_diff_warns_instead_of_failing_when_snapshot_missing(
     assert data["contentHashChanged"] is True
 
 
+@pytest.mark.asyncio
+async def test_diff_both_sides_missing_snapshot_reports_unknown_hash(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    users: dict[str, User],
+    project: Project,
+) -> None:
+    """两侧都没有内容快照 → ``contentHashChanged`` 必须是 ``null``（不知道），不是 ``False``。
+
+    ``False`` 会被前端渲染成「没有改动」，而实际上我们只是无从判断——把「未知」
+    说成「没变」是两种错误里更危险的那个（用户会据此跳过复核）。
+    """
+    candidate = await _create_candidate(api_client, project.id, smiles="CCO")
+    compound_id = candidate["compound_id"]
+    for summary in ("迁移前历史行 A", "迁移前历史行 B"):
+        await data_versions.record_version(
+            db_session,
+            entity_type=ENTITY_TYPE_COMPOUND,
+            entity_id=compound_id,
+            source_type=SOURCE_TYPE_IMPORT,
+            user=users[OWNER],
+            change_summary=summary,
+        )
+    await db_session.commit()
+
+    response = await api_client.get(
+        f"/api/v1/compounds/{compound_id}/diff?from=2&to=3",
+        headers=_headers(OWNER),
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["contentHashChanged"] is None
+    assert data["changes"] == []
+    assert "未记录内容快照" in data["warning"]
+
+
+@pytest.mark.asyncio
+async def test_data_versions_support_peptide_entity_type(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    users: dict[str, User],
+) -> None:
+    """``data_versions`` 是**通用**账本，不只为化合物服务。
+
+    ``docs/04`` §8.3 的 ``entity_type`` 是 ``COMPOUND`` / ``PROTEIN`` / ``DATASET``，
+    多肽候选物走 ``PEPTIDE``。若哪天有人把账本收窄成「只认化合物」，多肽的版本历史
+    会静默记不进去（``record_version`` 不报错，只是没留下东西）。
+    """
+    protein_id = "peptide-entity-1"
+    for index in (1, 2):
+        await data_versions.record_version(
+            db_session,
+            entity_type="PROTEIN",
+            entity_id=protein_id,
+            source_type=SOURCE_TYPE_MANUAL,
+            user=users[OWNER],
+            change_summary=f"第 {index} 次改序列",
+            content={"sequence": "MKTAYIAK" if index == 1 else "MKTAYIAKR"},
+        )
+    await db_session.commit()
+
+    records, total = await data_versions.list_versions(
+        db_session, entity_type="PROTEIN", entity_id=protein_id
+    )
+    assert total == 2
+    assert [record.version for record in records] == [2, 1]
+    assert records[0].content == {"sequence": "MKTAYIAKR"}
+
+    changes, unchanged = data_versions.diff_contents(
+        records[1].content, records[0].content
+    )
+    assert changes == [{"field": "sequence", "from": "MKTAYIAK", "to": "MKTAYIAKR"}]
+    assert unchanged == []
+
+
 # ---------------------------------------------------------------------------
 # 404：版本不存在、化合物不可见
 # ---------------------------------------------------------------------------
@@ -508,9 +590,131 @@ async def test_single_version_endpoint_returns_content_snapshot(
 async def test_unknown_compound_returns_404(
     api_client: httpx.AsyncClient,
 ) -> None:
-    """不存在的化合物 id 也是 404，与「无权」无法区分——这正是设计意图。"""
+    """不存在的化合物 id 也是 404，与「无权」无法区分——这正是设计意图。
+
+    断言消息而不只是状态码：FastAPI 对**未注册**的路由也回 404，只判
+    ``status_code == 404`` 的用例在路由被摘掉之后照样是绿的（实测：注释掉
+    ``api/v1/__init__.py`` 的注册行后，本文件其余 9 条变红、它仍绿）。
+    """
     response = await api_client.get(
         "/api/v1/compounds/00000000-0000-0000-0000-000000000000/versions",
         headers=_headers(OWNER),
     )
     assert response.status_code == 404, response.text
+    assert response.json()["message"] == "化合物不存在"
+
+
+@pytest.mark.asyncio
+async def test_low_privilege_role_cannot_read_compound_versions(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    users: dict[str, User],
+    project: Project,
+) -> None:
+    """角色不在 ``READ_ROLES`` 里时读不到版本历史（守住 G-3 收紧的鉴权）。
+
+    ``ProjectMember.role`` 没有 CHECK 约束，schema 之外的值能直插进库；这里换成一个
+    不在 ``READ_ROLES`` 里的角色，确保「可见性 = 必须是四种读角色之一」这条判据真的
+    被执行。变异验证：把 ``require_compound_read_access`` 里的角色判据改成无条件
+    返回，本用例立刻变红，而其余 11 条全绿——此前正是这样漏掉的。
+    """
+    candidate = await _create_candidate(api_client, project.id)
+    compound_id = candidate["compound"]["id"]
+    await db_session.execute(
+        text("UPDATE project_members SET role = 'auditor' WHERE user_id = :user_id"),
+        {"user_id": users[OWNER].id},
+    )
+    await db_session.commit()
+
+    for path in (
+        f"/api/v1/compounds/{compound_id}/versions",
+        f"/api/v1/compounds/{compound_id}/diff?from=1&to=1",
+        f"/api/v1/compounds/{compound_id}",
+    ):
+        response = await api_client.get(path, headers=_headers(OWNER))
+        assert response.status_code == 404, f"{path} -> {response.text}"
+        assert response.json()["message"] == "化合物不存在"
+
+
+# ===========================================================================
+# 哈希口径与 diff 判等必须一致（G-3 评审 B-1）
+# ---------------------------------------------------------------------------
+# ``contentHashChanged`` 由 ``content_hash_of`` 判，``changes`` 由 ``_same_leaf``
+# 判。两套判据只要不一致，同一个响应里就会出现「哈希说变了、diff 说没变」这种
+# 自相矛盾的结论——比单纯算错更难排查，因为两个字段各自都"看起来对"。
+# 下面三条分别守住评审实测出的三种矛盾。
+# ===========================================================================
+
+
+def test_zero_and_zero_float_are_reported_as_changed_by_both() -> None:
+    """``0`` 与 ``0.0``：哈希不同，diff 也必须报变化。
+
+    修复前：hash 视 ``0``/``0.0`` 为两次写入（序列化后是 ``0`` 与 ``0.0``），
+    而 ``_same_leaf`` 用 ``==`` 判等视为同一个值 → ``contentHashChanged: true``
+    配 ``changes: []``。
+    """
+    before = {"props": {"logP": 0}}
+    after = {"props": {"logP": 0.0}}
+
+    assert content_hash_of(before) != content_hash_of(after)
+    changes, unchanged = diff_contents(before, after)
+    assert changes == [{"field": "props.logP", "from": 0, "to": 0.0}]
+    assert unchanged == []
+
+
+def test_hash_is_computed_after_normalization() -> None:
+    """哈希必须只认「最终落库的那个形态」。
+
+    早期实现是「原始对象算哈希、``normalize_content`` 之后的值落库」，于是同一个
+    落库值可能对应两个不同的哈希来源。这里用 ``Decimal`` 做探针：它会被
+    ``default=str`` 变成字符串 ``"0.13"``，若哈希在规范化之前算，两者会得到不同
+    结果，而落库内容完全一致。
+    """
+    from decimal import Decimal
+
+    raw = {"a": Decimal("0.13")}
+    normalized = normalize_content(raw)
+
+    assert content_hash_of(normalized) == content_hash_of(normalize_content(normalized))
+    assert isinstance(normalized["a"], str)
+
+
+def test_vanished_empty_container_is_reported_as_changed() -> None:
+    """``{"props": {}}`` 与 ``{}``：``props`` 字段确实被删了，不能静默漏报。
+
+    修复前 ``flatten_content`` 把空容器摊平成「什么都没有」，两份内容都没有字段，
+    diff 报 ``changes: []`` 且 ``unchanged: []``——用户看到「没有任何变化」，
+    但哈希说变了。
+    """
+    before = {"props": {}}
+    after = {}
+
+    assert content_hash_of(before) != content_hash_of(after)
+    changes, unchanged = diff_contents(before, after)
+    assert changes == [{"field": "props", "from": {}, "to": None}]
+    assert unchanged == []
+
+
+def test_nan_snapshot_is_rejected_instead_of_written() -> None:
+    """NaN 不是合法 JSON：写入侧就拒收，而不是等 PG 的 jsonb 报错。
+
+    实测 PostgreSQL：``SELECT '{"x": NaN}'::jsonb`` → ``Token "NaN" is invalid``；
+    而 SQLite 会静默存下。同一份内容在两种库上一种能写一种报错，是最难查的那类
+    环境差异——所以把它挡在 ``normalize_content`` / ``content_hash_of`` 里。
+    """
+    from app.common.exceptions import ValidationException
+
+    with pytest.raises(ValidationException, match="NaN"):
+        normalize_content({"props": {"logP": float("nan")}})
+    with pytest.raises(ValidationException, match="NaN"):
+        content_hash_of({"props": {"logP": float("nan")}})
+
+
+def test_existing_nan_history_rows_still_compare_equal() -> None:
+    """历史行里若已有 NaN，两版都是 NaN 时应判为「没变化」而不是荒谬的差异。
+
+    NaN 现在写不进来了（上一条用例），但已落库的数据不能因为判据变严就冒出
+    ``from: null, to: null`` 这种用户无法理解的「变化」。
+    """
+    assert _same_leaf(float("nan"), float("nan")) is True
+    assert diff_contents({"a": float("nan")}, {"a": float("nan")}) == ([], ["a"])
