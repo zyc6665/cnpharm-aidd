@@ -7,6 +7,7 @@ from app.api.v1 import (
     artifacts,
     auth,
     compounds,
+    compound_versions,
     decisions,
     files,
     gpu,
@@ -51,6 +52,9 @@ api_router.include_router(targets.project_router, prefix="/projects", tags=["靶
 api_router.include_router(targets.router, tags=["靶点与结构"])
 api_router.include_router(compounds.project_router, prefix="/projects", tags=["化合物与候选物"])
 api_router.include_router(compounds.router, tags=["化合物与候选物"])
+# 化合物版本历史 / 版本差异（docs/05 §4）：独立模块，无 prefix，路径里写全
+# `/compounds/...`。feature flag 与 compounds 相同，开关关闭时两处一起消失。
+api_router.include_router(compound_versions.router, tags=["数据版本"])
 api_router.include_router(decisions.project_router, prefix="/projects", tags=["研发决策与阶段"])
 api_router.include_router(results.project_router, prefix="/projects", tags=["结果与追溯"])
 api_router.include_router(results.router, tags=["结果与追溯"])

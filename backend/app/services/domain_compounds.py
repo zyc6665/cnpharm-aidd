@@ -52,8 +52,8 @@ from app.models.compounds import (
     Compound,
     MoleculeFingerprint,
 )
-from app.models.projects import Project
-from app.models.users import User
+from app.models.projects import Project, ProjectMember
+from app.models.users import User, UserRole
 from app.models.versions import ENTITY_TYPE_COMPOUND, SOURCE_TYPE_IMPORT
 from app.services import data_versions
 from app.services.project_access import load_project_membership, require_project_role
@@ -167,6 +167,51 @@ def serialize_set_item(item: CandidateSetItem, candidate: Candidate | None) -> d
 async def load_compound(db: AsyncSession, compound_id: str) -> Compound:
     compound = await db.get(Compound, compound_id)
     if compound is None:
+        raise NotFoundException("化合物不存在")
+    return compound
+
+
+async def require_compound_read_access(
+    db: AsyncSession, *, compound_id: str, user: User
+) -> Compound:
+    """化合物读取鉴权：**唯一**口径，详情 / 版本历史 / 版本差异三处共用。
+
+    化合物是全平台主数据，``compounds`` 表没有 ``project_id``（同一分子被多个项目
+    引用，写死一个归属会把去重表拆成多行）。因此可见性只能按「是否被当前用户在某
+    个可见项目里引用过」判定：本项目 ``candidates`` 指向它，且调用者在该项目里的
+    角色属于 ``READ_ROLES``。
+
+    实现上直接让数据库做「存在性判断」：一条 ``EXISTS`` 子查询同时限制项目、用户与
+    角色，最多回一个 ``project_id``。早期写成「取前 50 个引用项目再逐个查成员」，
+    两个毛病：①被 50 个以上项目引用的分子，成员资格落在第 51 个之后的项目会被误判
+    404；②每命中一个候选项目一次数据库往返，最坏 50 次。
+
+    **管理员旁路**：与 ``task_access`` / ``file_records`` 等同级口径，平台管理员可读
+    全部主数据——主数据没有项目归属，"能不能读某个项目的化合物"与"能不能读这条主
+    数据"是两件事。旁路只在这里开一处，调用方不必各写一遍。
+
+    **不可见一律 404，不是 403**：403 等于告诉对方「这个 id 存在、只是你没权限」，
+    把主数据的存在性泄露给了任何拿到 id 的人（与 ``GET /compounds/{id}`` 同一口径，
+    见 ``app.api.v1.data_versions`` 的注释）。
+
+    已知取舍（**待产品口径确认，此处不改行为**）：一个从未被任何项目引用的化合物
+    （当前只能经 import 产生，无入口能造出该状态）对所有非管理员都是 404。要放开
+    得先回答「无项目归属的主数据该由谁读」，那不是本模块能定的。
+    """
+    compound = await load_compound(db, compound_id)
+    if getattr(user, "role", None) == UserRole.ADMIN.value:
+        return compound
+    visible_project_id = await db.scalar(
+        select(ProjectMember.project_id)
+        .join(Candidate, Candidate.project_id == ProjectMember.project_id)
+        .where(
+            Candidate.compound_id == str(compound.id),
+            ProjectMember.user_id == user.id,
+            ProjectMember.role.in_(READ_ROLES),
+        )
+        .limit(1)
+    )
+    if visible_project_id is None:
         raise NotFoundException("化合物不存在")
     return compound
 

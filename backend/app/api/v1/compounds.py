@@ -356,21 +356,9 @@ async def get_compound(
     db: AsyncSession = Depends(get_db),
 ):
     """化合物详情。化合物是全局主数据，因此按「是否被当前用户可见项目引用」鉴权。"""
-    compound = await domain_compounds.load_compound(db, compound_id)
-    result = await db.execute(
-        select(Candidate.project_id).where(Candidate.compound_id == compound_id).limit(50)
+    compound = await domain_compounds.require_compound_read_access(
+        db, compound_id=compound_id, user=current_user
     )
-    project_ids = [row[0] for row in result.all()]
-    visible = False
-    for project_id in project_ids:
-        try:
-            await load_project_membership(db, project_id=project_id, user_id=current_user.id)
-        except Exception:
-            continue
-        visible = True
-        break
-    if not visible:
-        raise NotFoundException("化合物不存在")
     return success_response(data=domain_compounds.serialize_compound(compound))
 
 
