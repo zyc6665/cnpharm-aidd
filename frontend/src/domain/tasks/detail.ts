@@ -1,4 +1,4 @@
-import dayjs from 'dayjs'
+import { formatDateTimeSeconds, parseServerDate } from '@/utils/datetime'
 import type { Task, TaskStatus } from '@/types/models'
 
 export type TaskCompletedTitleKey =
@@ -115,13 +115,28 @@ export function buildTaskFailureDiagnostics(
 }
 
 export function formatTaskDetailTime(time: string): string {
-  return dayjs(time).format('YYYY-MM-DD HH:mm:ss')
+  return formatDateTimeSeconds(time)
 }
 
+/**
+ * 运行时长。
+ *
+ * 起止时间都过 `parseServerDate`：后端返回的是「不带时区的 UTC」，
+ * 直接 `dayjs(...)` 会按本地时区解释。两端都错 8 小时看似能抵消，
+ * 但 `nowTime` 缺省时用的是本机真实时间，一端错一端对，差值就偏 8 小时。
+ */
 export function formatTaskRunningDuration(startTime: string, nowTime?: string | Date): string {
-  const start = dayjs(startTime)
-  const now = nowTime ? dayjs(nowTime) : dayjs()
-  const diff = now.diff(start, 'second')
+  const start = parseServerDate(startTime)
+  if (!start) {
+    return '-'
+  }
+
+  const now = nowTime ? parseServerDate(nowTime instanceof Date ? nowTime.toISOString() : nowTime) : new Date()
+  if (!now) {
+    return '-'
+  }
+
+  const diff = Math.max(0, Math.floor((now.getTime() - start.getTime()) / 1000))
 
   if (diff < 60) {
     return `${diff}s`

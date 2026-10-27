@@ -95,7 +95,11 @@
               <time :datetime="task.updated_at">{{ formatTime(task.updated_at) }}</time>
             </router-link>
           </div>
-          <a-empty v-else :description="t('workspace.emptyAttention')" />
+          <AppEmptyState
+            v-else
+            :title="t('workspace.emptyAttention')"
+            :description="t('workspace.emptyAttentionHint')"
+          />
         </section>
 
         <section class="workspace-section">
@@ -120,7 +124,11 @@
               <small>{{ formatSize(artifact.sizeBytes) }}</small>
             </a>
           </div>
-          <a-empty v-else :description="t('workspace.emptyArtifacts')" />
+          <AppEmptyState
+            v-else
+            :title="t('workspace.emptyArtifacts')"
+            :description="t('workspace.emptyArtifactsHint')"
+          />
         </section>
       </div>
     </template>
@@ -152,6 +160,7 @@ import {
 import { buildArtifactVersionDownloadUrl } from '@/api/artifacts'
 import { getSystemHealth } from '@/api/system'
 import ProjectCreateDialog from '@/components/projects/ProjectCreateDialog.vue'
+import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import ProjectList from '@/components/projects/ProjectList.vue'
 import {
   buildRecentWorkspaceArtifactRows,

@@ -49,6 +49,7 @@
         </div>
 
         <a-table
+          :scroll="{ x: 'max-content' }"
           :columns="memberColumns"
           :data-source="members"
           :loading="membersLoading"

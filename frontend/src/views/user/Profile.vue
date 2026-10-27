@@ -90,7 +90,7 @@ import { useI18n } from 'vue-i18n'
 import { PlusOutlined, CameraOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import type { UploadProps, UploadFile } from 'ant-design-vue'
-import dayjs from 'dayjs'
+import { formatDateOnly } from '@/utils/datetime'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import ProtectedAvatar from '@/components/common/ProtectedAvatar.vue'
 import { useUserStore } from '@/stores'
@@ -123,7 +123,7 @@ const rules = {
 }
 
 const formatDate = (date?: string) => {
-  return date ? dayjs(date).format('YYYY-MM-DD') : '-'
+  return date ? formatDateOnly(date) : '-'
 }
 
 const beforeUpload: UploadProps['beforeUpload'] = (file) => {

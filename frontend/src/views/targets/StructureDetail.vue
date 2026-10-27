@@ -46,7 +46,12 @@
             :artifact="previewArtifact"
             :preferred-file-roles="previewFileRoles"
           />
-          <a-empty v-else :description="t('targets.structure.previewEmpty')" />
+          <AppEmptyState
+            v-else
+            :title="t('targets.structure.previewEmpty')"
+            description="结构预览读取该结构对应的 PDB 产物；如果刚提交预测，请等任务完成后再回到本页。"
+            size="compact"
+          />
         </section>
 
         <aside class="info-column">
@@ -102,9 +107,11 @@
               </router-link>
             </div>
 
-            <a-empty
+            <AppEmptyState
               v-if="pockets.length === 0"
-              :description="t('targets.structure.pocketsEmpty')"
+              :title="t('targets.structure.pocketsEmpty')"
+              description="口袋由口袋预测任务产出，按评分降序排列；选定一个口袋后才能发起分子生成或对接。"
+              size="compact"
             />
             <ul v-else class="pocket-list">
               <li v-for="pocket in pockets" :key="pocket.id" class="pocket-item">
@@ -139,6 +146,7 @@
   import { useI18n } from 'vue-i18n'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import AppErrorState from '@/components/common/AppErrorState.vue'
+  import AppEmptyState from '@/components/common/AppEmptyState.vue'
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
   import StructureArtifactPreview from '@/components/artifacts/StructureArtifactPreview.vue'
   import {

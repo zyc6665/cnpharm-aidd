@@ -38,16 +38,16 @@
         {{ formatPocketCenter(selectedPocket.center) }}
       </p>
 
-      <a-empty
+      <AppEmptyState
         v-if="pockets.length === 0"
         class="pocket-empty"
         data-testid="pockets-empty"
-        :description="t('targets.pockets.empty')"
-      >
-        <p class="empty-hint">{{ t('targets.pockets.emptyHint') }}</p>
-      </a-empty>
+        :title="t('targets.pockets.empty')"
+        :description="t('targets.pockets.emptyHint')"
+      />
 
       <a-table
+        :scroll="{ x: 'max-content' }"
         v-else
         class="pocket-table"
         data-testid="pockets-table"
@@ -106,6 +106,7 @@
   import { useI18n } from 'vue-i18n'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import AppErrorState from '@/components/common/AppErrorState.vue'
+  import AppEmptyState from '@/components/common/AppEmptyState.vue'
   import SkeletonList from '@/components/common/SkeletonList.vue'
   import { listPockets, selectPocket } from '@/api/targets'
   import {

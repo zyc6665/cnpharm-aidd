@@ -1,7 +1,7 @@
 <template>
   <main class="app-error-state">
     <section class="app-error-state__panel">
-      <p class="app-error-state__eyebrow">CPUModel</p>
+      <p class="app-error-state__eyebrow">{{ PLATFORM_SHORT_NAME }}</p>
       <h1 class="app-error-state__code">{{ code }}</h1>
       <h2 class="app-error-state__title">{{ title }}</h2>
       <p class="app-error-state__description">{{ description }}</p>
@@ -15,6 +15,8 @@
 </template>
 
 <script setup lang="ts">
+  import { PLATFORM_SHORT_NAME } from '@/config/brand'
+
   withDefaults(
     defineProps<{
       code: string

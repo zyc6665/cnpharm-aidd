@@ -1,4 +1,4 @@
-import dayjs from 'dayjs'
+import { formatClockWithMillis } from '@/utils/datetime'
 import type { TaskLog } from '@/types/models'
 
 export function getVisibleTaskLogs(logs: TaskLog[], maxItems?: number): TaskLog[] {
@@ -18,7 +18,7 @@ export function getHiddenTaskLogCount(logs: TaskLog[], maxItems?: number): numbe
 }
 
 export function formatTaskLogPreviewTime(time: string): string {
-  return dayjs(time).format('HH:mm:ss.SSS')
+  return formatClockWithMillis(time)
 }
 
 export function getTaskLogPreviewColor(level: string): string {

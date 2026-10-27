@@ -113,6 +113,7 @@
         />
 
         <a-table
+          :scroll="{ x: 'max-content' }"
           :columns="itemColumns"
           :data-source="items"
           :pagination="false"

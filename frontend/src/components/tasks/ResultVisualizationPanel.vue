@@ -249,7 +249,7 @@ const panelDescription = computed(() => {
 })
 </script>
 
-<style scoped>
+<style scoped lang="less">
 .result-visualization-panel {
   display: flex;
   flex-direction: column;
@@ -290,7 +290,7 @@ const panelDescription = computed(() => {
 
 .panel-header p {
   margin: 0;
-  color: #64748b;
+  color: @text-secondary;
   line-height: 1.6;
 }
 
@@ -309,7 +309,7 @@ const panelDescription = computed(() => {
   max-height: 520px;
   padding: 4px;
   overflow: auto;
-  border: 1px solid #e2e8f0;
+  border: 1px solid @border-color;
   border-radius: 12px;
   background: @bg-hover;
 }
@@ -323,7 +323,7 @@ const panelDescription = computed(() => {
   border: 1px solid transparent;
   border-radius: 8px;
   background: transparent;
-  color: #0f172a;
+  color: @text-primary;
   text-align: left;
   cursor: pointer;
   transition:
@@ -349,8 +349,8 @@ const panelDescription = computed(() => {
   width: 24px;
   height: 24px;
   border-radius: 999px;
-  background: #dbeafe;
-  color: #1d4ed8;
+  background: @accent-color-border;
+  color: @accent-color;
   font-size: 12px;
   font-weight: 700;
   flex-shrink: 0;
@@ -367,13 +367,13 @@ const panelDescription = computed(() => {
   font-size: 13px;
   font-weight: 600;
   line-height: 1.5;
-  color: #0f172a;
+  color: @text-primary;
   word-break: break-word;
 }
 
 .visualization-result-item__desc {
   font-size: 12px;
-  color: #64748b;
+  color: @text-secondary;
   letter-spacing: 0.04em;
 }
 
@@ -383,7 +383,7 @@ const panelDescription = computed(() => {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid #e2e8f0;
+  border: 1px solid @border-color;
   border-radius: 12px;
   background: @bg-elevated;
 }
@@ -395,7 +395,7 @@ const panelDescription = computed(() => {
   gap: 12px;
   min-height: 44px;
   padding: 6px 10px;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid @border-color;
   background: @bg-hover;
 }
 
@@ -406,10 +406,10 @@ const panelDescription = computed(() => {
   width: 30px;
   height: 30px;
   padding: 0;
-  border: 1px solid #cbd5e1;
+  border: 1px solid @border-color-hover;
   border-radius: 7px;
   background: @bg-elevated;
-  color: #1d4ed8;
+  color: @accent-color;
   cursor: pointer;
 }
 
@@ -426,7 +426,7 @@ const panelDescription = computed(() => {
 }
 
 .visualization-preview__position {
-  color: #64748b;
+  color: @text-secondary;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
@@ -468,8 +468,8 @@ const panelDescription = computed(() => {
   padding: 10px 14px;
   border-radius: 999px;
   background: @bg-hover;
-  border: 1px solid #e2e8f0;
-  color: #0f172a;
+  border: 1px solid @border-color;
+  color: @text-primary;
 }
 
 .scene-file--input {
@@ -497,10 +497,10 @@ const panelDescription = computed(() => {
 .download-only-note {
   margin-top: 4px;
   padding: 8px 12px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid @border-color;
   border-radius: 8px;
-  color: #64748b;
-  background: #f8fafc;
+  color: @text-secondary;
+  background: @bg-hover;
   font-size: 12px;
   line-height: 1.5;
 }

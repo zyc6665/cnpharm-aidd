@@ -76,3 +76,33 @@
   --ant-select-dropdown-bg: #ffffff;
   --ant-select-background: #ffffff;
 }
+
+// ── 空状态统一观感 ──
+// 页面级空状态用 AppEmptyState（引导型：说明用途 + 一键开始，docs/06 §8）。
+// 组件内部那些一行的 a-empty 仍走 antd，但它的默认插图是浅灰纸箱，在 #09090b 上
+// 像一块发白的雾，还比周围文字更抢眼。这里统一压暗、缩小、去彩，让它是背景而不是噪音。
+.ant-empty {
+  margin-block: @spacing-lg;
+}
+
+.ant-empty-image {
+  height: 44px;
+  margin-bottom: @spacing-sm;
+  opacity: 0.45;
+  filter: grayscale(1);
+}
+
+[data-theme='dark'] .ant-empty-image {
+  // 深色底下把灰阶反过来，才是「淡淡的轮廓」而不是「发光的方块」
+  opacity: 0.3;
+  filter: grayscale(1) invert(1);
+}
+
+.ant-empty-description {
+  color: @text-tertiary;
+  font-size: @font-size-sm;
+}
+
+.ant-empty-footer {
+  margin-top: @spacing-sm;
+}

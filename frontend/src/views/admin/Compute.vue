@@ -42,7 +42,12 @@
               {{ vendor }}: {{ count }}
             </a-tag>
           </div>
-          <a-empty v-else :image="simpleEmptyImage" :description="t('admin.compute.emptyState')" />
+          <AppEmptyState
+            v-else
+            size="compact"
+            :title="t('admin.compute.emptyVendorTitle')"
+            :description="t('admin.compute.emptyVendorHint')"
+          />
         </a-card>
       </a-col>
     </a-row>
@@ -69,7 +74,12 @@
           </p>
         </header>
 
-        <a-empty v-if="node.slots.length === 0" :description="t('admin.compute.emptyState')" />
+        <AppEmptyState
+          v-if="node.slots.length === 0"
+          size="compact"
+          :title="t('admin.compute.emptyNodeTitle')"
+          :description="t('admin.compute.emptyNodeHint')"
+        />
 
         <div v-else class="compute-slots">
           <article v-for="slot in node.slots" :key="slot.slot_id || slot.slot_identifier" class="compute-slot">
@@ -103,14 +113,16 @@
         </div>
       </section>
 
-      <a-empty
+      <AppEmptyState
         v-if="!loading && (overview?.nodes.length ?? 0) === 0"
-        :description="t('admin.compute.emptyState')"
+        :title="t('admin.compute.emptyTitle')"
+        :description="t('admin.compute.emptyHint')"
       />
     </a-spin>
 
     <a-card :title="t('admin.compute.allocations')" class="compute-allocations">
       <a-table
+        :scroll="{ x: 900 }"
         :columns="allocationColumns"
         :data-source="allocations"
         :loading="allocationLoading"
@@ -118,7 +130,6 @@
         :locale="{ emptyText: t('admin.compute.noAllocations') }"
         row-key="id"
         size="middle"
-        :scroll="{ x: 900 }"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'task_id'">
@@ -151,9 +162,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Empty } from 'ant-design-vue'
 import { ReloadOutlined } from '@ant-design/icons-vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
+import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import { getGpuSlotOverview, listGpuAllocations } from '@/api/gpu'
 import {
   SLOT_STATES,
@@ -166,8 +177,6 @@ import { formatAdminDateTime } from '@/domain/admin/system-health'
 import type { GpuAllocation, GpuSlotOverview } from '@/types/gpu'
 
 const { t } = useI18n()
-
-const simpleEmptyImage = Empty.PRESENTED_IMAGE_SIMPLE
 
 const loading = ref(false)
 const loadError = ref(false)

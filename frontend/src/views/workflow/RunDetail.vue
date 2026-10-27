@@ -22,10 +22,15 @@
     </AppPageHeader>
 
     <a-skeleton v-if="workflowStore.isLoadingWorkflowRun && !workflowStore.activeWorkflowRun" active />
-    <a-empty
+    <!-- 运行详情拿不到有两种原因：链接过期（运行被清理）或还没有任何运行。
+         前者要引导回列表重选，后者要引导去运行一次，不能用同一句「无数据」打发。 -->
+    <AppEmptyState
       v-else-if="!workflowStore.activeWorkflowRun"
-      :description="t('workflow.canvasPresets.emptyRunDetail')"
-    />
+      :title="t('workflow.canvasPresets.emptyRunDetail')"
+      :description="t('workflow.canvasPresets.emptyRunDetailHint')"
+    >
+      <a-button @click="loadRun">{{ t('workflow.canvasPresets.refreshRuns') }}</a-button>
+    </AppEmptyState>
     <WorkflowRunStatusPanel
       v-else
       :run="workflowStore.activeWorkflowRun"
@@ -45,6 +50,7 @@
   import { useI18n } from 'vue-i18n'
   import { useRoute, useRouter } from 'vue-router'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import AppEmptyState from '@/components/common/AppEmptyState.vue'
   import WorkflowRunStatusPanel from '@/components/workflow/WorkflowRunStatusPanel.vue'
   import { useWorkflowStore } from '@/stores'
   import { isWorkflowRunTerminal } from '@/workflow/workflow-runs'

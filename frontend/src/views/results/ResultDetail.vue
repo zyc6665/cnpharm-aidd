@@ -77,6 +77,7 @@
       <section class="result-section">
         <h3 class="section-title">{{ t('results.detail.outputs') }}</h3>
         <a-table
+          :scroll="{ x: 'max-content' }"
           v-if="result.outputs.length > 0"
           :columns="outputColumns"
           :data-source="result.outputs"
@@ -105,6 +106,7 @@
       <section class="result-section">
         <h3 class="section-title">{{ t('results.detail.inputs') }}</h3>
         <a-table
+          :scroll="{ x: 'max-content' }"
           v-if="result.inputs.length > 0"
           :columns="inputColumns"
           :data-source="inputRows"
@@ -242,6 +244,7 @@
 
                 <!-- 输入快照 -->
                 <a-table
+                  :scroll="{ x: 'max-content' }"
                   v-else-if="section.key === 'inputs'"
                   :columns="traceInputColumns"
                   :data-source="traceInputRows"
@@ -300,6 +303,7 @@
 
                 <!-- 产物清单 -->
                 <a-table
+                  :scroll="{ x: 'max-content' }"
                   v-else
                   :columns="traceOutputColumns"
                   :data-source="traceability.outputs"
@@ -341,7 +345,7 @@
   import { useRoute } from 'vue-router'
   import { useI18n } from 'vue-i18n'
   import { message } from 'ant-design-vue'
-  import dayjs from 'dayjs'
+  import { formatDateTimeMinutes } from '@/utils/datetime'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
   import { exportTraceability, getResult, getTraceability } from '@/api/results'
@@ -428,7 +432,7 @@
   ])
 
   function formatDate(value: string | null | undefined): string {
-    return value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '-'
+    return value ? formatDateTimeMinutes(value) : '-'
   }
 
   function shortHash(value: string | null | undefined): string {

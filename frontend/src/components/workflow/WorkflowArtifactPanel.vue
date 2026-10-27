@@ -186,7 +186,7 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue'
   import { useRouter } from 'vue-router'
-  import dayjs from 'dayjs'
+  import { formatDateTimeSeconds } from '@/utils/datetime'
   import { useI18n } from 'vue-i18n'
   import { useArtifactsStore, useToolsStore, useUserStore } from '@/stores'
   import type { ArtifactFile, WorkbenchGroup } from '@/types/models'
@@ -306,7 +306,7 @@
       return '--'
     }
 
-    return dayjs(value).format('YYYY-MM-DD HH:mm:ss')
+    return formatDateTimeSeconds(value)
   }
 
   function groupKey(scope: 'current' | 'recent', groupId: string): string {

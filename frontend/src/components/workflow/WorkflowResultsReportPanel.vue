@@ -31,6 +31,7 @@
     </div>
 
     <a-table
+      :scroll="{ x: 'max-content' }"
       size="small"
       :pagination="false"
       :data-source="rows"

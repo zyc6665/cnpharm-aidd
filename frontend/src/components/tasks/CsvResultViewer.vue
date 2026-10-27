@@ -26,12 +26,12 @@
       />
 
       <a-table
+        :scroll="{ x: 'max-content', y: 560 }"
         v-else
         class="csv-result-viewer__table"
         :columns="tableColumns"
         :data-source="preview.rows"
         :pagination="false"
-        :scroll="{ x: 'max-content', y: 560 }"
         row-key="__rowKey"
         size="small"
       >
@@ -147,7 +147,7 @@ watch(
 )
 </script>
 
-<style scoped>
+<style scoped lang="less">
 .csv-result-viewer {
   display: flex;
   flex-direction: column;
@@ -157,7 +157,7 @@ watch(
   background:
     radial-gradient(circle at top right, rgba(34, 197, 94, 0.08), transparent 28%),
     linear-gradient(180deg, @bg-elevated, @bg-hover);
-  border: 1px solid #e2e8f0;
+  border: 1px solid @border-color;
 }
 
 .csv-result-viewer__header {
@@ -171,12 +171,12 @@ watch(
   margin: 0 0 6px;
   font-size: 16px;
   font-weight: 600;
-  color: #0f172a;
+  color: @text-primary;
 }
 
 .csv-result-viewer__header p {
   margin: 0;
-  color: #64748b;
+  color: @text-secondary;
   line-height: 1.6;
 }
 
@@ -203,7 +203,7 @@ watch(
   display: inline-block;
   min-width: 120px;
   max-width: 420px;
-  color: #334155;
+  color: @text-primary;
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;

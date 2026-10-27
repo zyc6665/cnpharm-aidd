@@ -24,7 +24,7 @@
         <div class="preview-window">
           <div class="preview-chrome">
             <div class="chrome-dots"><span></span><span></span><span></span></div>
-            <span class="chrome-title">CPUModel Workspace</span>
+            <span class="chrome-title">{{ PLATFORM_SHORT_NAME }} Workspace</span>
           </div>
           <div class="preview-body">
             <div class="preview-sidebar">
@@ -124,13 +124,13 @@
     <!-- Footer -->
     <footer class="footer">
       <div class="footer-inner">
-        <span class="footer-brand">CPUModel</span>
+        <span class="footer-brand">{{ PLATFORM_NAME }}</span>
         <nav class="footer-nav">
           <router-link to="/tools">{{ t('nav.tools') }}</router-link>
           <router-link to="/workflow">{{ t('nav.workflow') }}</router-link>
           <router-link to="/login">{{ t('nav.login') }}</router-link>
         </nav>
-        <span class="footer-copy">&copy; {{ year }} CPUModel</span>
+        <span class="footer-copy">{{ buildCopyright(year) }}</span>
       </div>
     </footer>
   </div>
@@ -138,6 +138,7 @@
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
+import { buildCopyright, PLATFORM_NAME, PLATFORM_SHORT_NAME } from '@/config/brand'
 import {
   ApartmentOutlined,
   SyncOutlined,

@@ -138,6 +138,7 @@
 
     <a-card>
       <a-table
+        :scroll="{ x: 'max-content' }"
         :columns="columns"
         :data-source="tasks"
         :loading="loading"
@@ -284,7 +285,7 @@
     StopOutlined
   } from '@ant-design/icons-vue'
   import { message, Modal } from 'ant-design-vue'
-  import dayjs from 'dayjs'
+  import { formatDateTimeMinutes } from '@/utils/datetime'
   import AppFilterBar from '@/components/common/AppFilterBar.vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import SkeletonCard from '@/components/common/SkeletonCard.vue'
@@ -359,7 +360,7 @@
     return 'active'
   }
 
-  const formatDate = (date: string) => dayjs(date).format('YYYY-MM-DD HH:mm')
+  const formatDate = (date: string) => formatDateTimeMinutes(date)
 
   const formatTaskTitle = (task: Task) => {
     if (task.tool_name) {

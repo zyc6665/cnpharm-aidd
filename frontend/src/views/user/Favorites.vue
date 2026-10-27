@@ -89,14 +89,17 @@
           </a-row>
         </template>
 
-        <a-empty v-else :description="t('user.noFavorites')">
-          <template #image>
-            <HeartOutlined style="font-size: 64px; color: #ccc" />
-          </template>
+        <!-- 自绘空状态而不是 `a-empty` + `#image`：antd 的 Empty 只接受图片插槽，
+             塞图标进去在深色底上仍是一块发白区域，且按钮位置与全站其它空状态不一致。 -->
+        <AppEmptyState
+          v-else
+          :title="t('user.noFavorites')"
+          :description="t('user.noFavoritesHint')"
+        >
           <a-button type="primary" @click="goToTools">
             {{ t('user.exploreTool') }}
           </a-button>
-        </a-empty>
+        </AppEmptyState>
     </a-card>
   </div>
 </template>
@@ -109,11 +112,11 @@ import {
   ExperimentOutlined,
   EyeOutlined,
   PlayCircleOutlined,
-  HeartOutlined,
   HeartFilled
 } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
+import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import SkeletonList from '@/components/common/SkeletonList.vue'
 import { useToolsStore } from '@/stores'
 import type { Tool } from '@/types/models'

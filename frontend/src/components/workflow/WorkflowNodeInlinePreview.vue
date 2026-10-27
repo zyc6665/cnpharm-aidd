@@ -206,13 +206,13 @@ const visualizationTask = computed(() => ({
   align-items: center;
   justify-content: center;
   padding: 0;
-  border-color: rgba(15, 23, 42, 0.12);
+  border-color: @border-color-hover;
   background: @bg-elevated;
-  color: #1d4ed8;
+  color: @accent-color;
   font-size: @font-size-xs;
   font-weight: 800;
   backdrop-filter: blur(8px);
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.18);
+  box-shadow: @shadow-md;
   pointer-events: auto;
 }
 

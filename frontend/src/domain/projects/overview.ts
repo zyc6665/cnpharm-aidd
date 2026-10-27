@@ -1,4 +1,4 @@
-import dayjs from 'dayjs'
+import { formatDateTimeMinutes } from '@/utils/datetime'
 import type { TypedArtifact } from '@/types/artifacts'
 import type { ProjectOverviewCounts } from '@/types/projects'
 
@@ -56,7 +56,7 @@ export function getProjectArtifactTypeLabel(
 }
 
 export function formatProjectResourceTime(value: string): string {
-  return dayjs(value).format('YYYY-MM-DD HH:mm')
+  return formatDateTimeMinutes(value)
 }
 
 export function formatProjectResourceSize(bytes: number): string {

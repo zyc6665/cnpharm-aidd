@@ -79,7 +79,23 @@
               </span>
             </a>
           </div>
-          <a-empty v-else :description="artifactEmptyDescription" />
+          <AppEmptyState
+            v-else
+            :title="activeArtifactFilterKey === 'recent' ? '还没有产出物' : '没有匹配的产出物'"
+            :description="
+              activeArtifactFilterKey === 'recent'
+                ? 'Artifact 是任务与工作流的产出沉淀：结构、口袋、分子表、运行报告都会自动归档到这里，可回溯到产生它的那次执行。'
+                : '换个筛选条件试试，或先清除筛选查看全部产出物。'
+            "
+            size="compact"
+          >
+            <a-button v-if="activeArtifactFilterKey !== 'recent'" size="small" @click="clearArtifactFilter">
+              查看全部产出物
+            </a-button>
+            <router-link v-else :to="projectTargetsPath">
+              <a-button size="small" type="primary">先从靶点开始</a-button>
+            </router-link>
+          </AppEmptyState>
         </section>
 
         <section class="overview-section">
@@ -98,7 +114,16 @@
               <span>{{ task.tool_name || '未知工具' }} · {{ task.status }} · {{ task.progress }}%</span>
             </router-link>
           </div>
-          <a-empty v-else description="暂无任务" />
+          <AppEmptyState
+            v-else
+            title="还没有执行任务"
+            description="任务按工具版本执行：提交后进入队列、分配算力、产出结果，全过程可追溯。"
+            size="compact"
+          >
+            <router-link :to="projectWorkflowPath">
+              <a-button size="small" type="primary">从工作流模板开始</a-button>
+            </router-link>
+          </AppEmptyState>
         </section>
 
         <section class="overview-section">
@@ -117,7 +142,16 @@
               <span>{{ workflow.status }} · {{ formatTime(workflow.updated_at) }}</span>
             </router-link>
           </div>
-          <a-empty v-else description="暂无工作流" />
+          <AppEmptyState
+            v-else
+            title="还没有工作流"
+            description="工作流把多个工具串成一条链路，一次提交按依赖顺序执行，节点状态与产物自动回填。"
+            size="compact"
+          >
+            <router-link :to="projectWorkflowPath">
+              <a-button size="small">打开工作流</a-button>
+            </router-link>
+          </AppEmptyState>
         </section>
 
       </div>
@@ -131,9 +165,11 @@
   import { getProjectOverview } from '@/api/projects'
   import { buildArtifactVersionDownloadUrl, getProjectArtifacts } from '@/api/artifacts'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
+  import AppEmptyState from '@/components/common/AppEmptyState.vue'
   import {
     PROJECT_ARTIFACT_FILTER_PRESETS,
     buildProjectTaskPath,
+    buildProjectTargetsPath,
     buildProjectWorkflowPath,
     formatProjectResourceSize,
     formatProjectResourceTime,
@@ -150,6 +186,7 @@
   const projectId = computed(() => String(route.params.projectId || ''))
   const projectTasksPath = computed(() => buildProjectTaskPath(projectId.value))
   const projectWorkflowPath = computed(() => buildProjectWorkflowPath(projectId.value))
+  const projectTargetsPath = computed(() => buildProjectTargetsPath(projectId.value))
   const overview = ref<ProjectOverview | null>(null)
   const loading = ref(false)
   const loadError = ref(false)
@@ -161,9 +198,10 @@
 
   const statCards = computed(() => getProjectOverviewStatCards(overview.value?.counts))
   const displayedArtifacts = computed(() => artifactFilterResults.value ?? overview.value?.artifacts ?? [])
-  const artifactEmptyDescription = computed(() =>
-    activeArtifactFilterKey.value === 'recent' ? '暂无 Artifact' : '没有匹配的 Artifact'
-  )
+  /** 把「没有匹配」退回「最近」——空状态里的按钮要有真实动作，不能只是装饰。 */
+  function clearArtifactFilter() {
+    void selectArtifactFilter(PROJECT_ARTIFACT_FILTER_PRESETS[0]!)
+  }
 
   async function load() {
     if (!projectId.value) return

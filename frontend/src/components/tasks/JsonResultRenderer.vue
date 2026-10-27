@@ -157,7 +157,7 @@
   }
 
   .json-result-value--number {
-    color: #1d4ed8;
+    color: @accent-color;
     font-variant-numeric: tabular-nums;
   }
 
@@ -239,8 +239,8 @@
       margin: @spacing-sm 0 0;
       padding: @spacing-sm;
       border-radius: @border-radius-sm;
-      background: #0f172a;
-      color: #e2e8f0;
+      background: @bg-body;
+      color: @text-primary;
       overflow-x: auto;
       font-size: @font-size-sm;
     }

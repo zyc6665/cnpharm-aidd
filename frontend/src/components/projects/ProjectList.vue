@@ -48,16 +48,17 @@
       </div>
     </router-link>
   </div>
-  <div v-else class="project-empty">
-    <FolderOpenOutlined />
-    <p>{{ t('workspace.emptyProjects') }}</p>
-  </div>
+  <AppEmptyState
+    v-else
+    :title="t('workspace.emptyProjects')"
+    :description="t('workspace.emptyProjectsHint')"
+  />
 </template>
 
 <script setup lang="ts">
-import dayjs from 'dayjs'
+import { formatDateTimeMinutes } from '@/utils/datetime'
 import { useI18n } from 'vue-i18n'
-import { FolderOpenOutlined } from '@ant-design/icons-vue'
+import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import type { ResearchProject } from '@/types/projects'
 
 defineProps<{ projects: ResearchProject[] }>()
@@ -67,7 +68,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const formatUpdatedAt = (value: string) => dayjs(value).format('YYYY-MM-DD HH:mm')
+const formatUpdatedAt = (value: string) => formatDateTimeMinutes(value)
 const canArchive = (project: ResearchProject) =>
   project.status !== 'archived' && ['owner', 'editor'].includes(project.membership.role)
 const canDelete = (project: ResearchProject) => project.membership.role === 'owner'
@@ -102,9 +103,6 @@ function handleArchive(projectId: string, event?: Event) {
 .project-actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: @spacing-xs; }
 .continue-action { color: @accent-color; font-size: @font-size-sm; }
 .project-action { height: 24px; padding: 0 4px; font-size: @font-size-xs; }
-.project-empty { padding: @spacing-xxl @spacing-md; color: @text-tertiary; text-align: center; }
-.project-empty :deep(.anticon) { font-size: 30px; }
-.project-empty p { margin: @spacing-sm 0 @spacing-xs; color: @text-secondary; }
 
 @media (max-width: @screen-sm) {
   .project-row { align-items: flex-start; }

@@ -89,7 +89,12 @@
               </article>
             </div>
           </div>
-          <a-empty v-else description="暂无健康检查数据" />
+          <AppEmptyState
+            v-else
+            size="compact"
+            :title="t('admin.emptyHealthTitle')"
+            :description="t('admin.emptyHealthHint')"
+          />
         </a-card>
       </a-tab-pane>
 
@@ -111,11 +116,11 @@
           </div>
 
           <a-table
+            :scroll="{ x: 980 }"
             :columns="resourceWorkerColumns"
             :data-source="resourceStatus?.workers ?? []"
             :loading="resourceLoading"
             :pagination="{ pageSize: 8, showSizeChanger: false }"
-            :scroll="{ x: 980 }"
             row-key="worker_id"
           >
             <template #bodyCell="{ column, record }">
@@ -176,7 +181,12 @@
               </template>
             </template>
           </a-table>
-          <a-empty v-if="!resourceLoading && !(resourceStatus?.workers?.length)" :description="t('admin.noResourceWorkers')" />
+          <AppEmptyState
+            v-if="!resourceLoading && !(resourceStatus?.workers?.length)"
+            size="compact"
+            :title="t('admin.noResourceWorkers')"
+            :description="t('admin.emptyWorkerHint')"
+          />
         </a-card>
 
         <a-card class="quota-card" :loading="quotaLoading">
@@ -196,11 +206,11 @@
           </div>
 
           <a-table
+            :scroll="{ x: 1080 }"
             :columns="resourceQuotaColumns"
             :data-source="resourceQuotaStatus?.scopes ?? []"
             :loading="quotaLoading"
             :pagination="{ pageSize: 8, showSizeChanger: false }"
-            :scroll="{ x: 1080 }"
             :row-key="quotaRowKey"
           >
             <template #bodyCell="{ column, record }">
@@ -234,9 +244,11 @@
               </template>
             </template>
           </a-table>
-          <a-empty
+          <AppEmptyState
             v-if="!quotaLoading && !(resourceQuotaStatus?.scopes?.length)"
-            :description="resourceQuotaStatus?.enabled ? t('admin.noQuotaScopes') : t('admin.quotaDisabled')"
+            size="compact"
+            :title="resourceQuotaStatus?.enabled ? t('admin.noQuotaScopes') : t('admin.quotaDisabled')"
+            :description="resourceQuotaStatus?.enabled ? t('admin.emptyQuotaHint') : t('admin.quotaDisabledHint')"
           />
         </a-card>
       </a-tab-pane>
@@ -263,6 +275,7 @@ import {
   ThunderboltOutlined
 } from '@ant-design/icons-vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
+import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import {
   formatAdminDateTime,
   getSystemHealthServiceLabel,

@@ -85,13 +85,13 @@
       <a-col :xs="24" :md="16">
         <section class="matrix-panel">
           <a-table
+            :scroll="{ x: 640 }"
             v-if="matrix.columns.length > 0"
             :columns="matrixColumns"
             :data-source="matrixRows"
             :pagination="false"
             row-key="key"
             size="small"
-            :scroll="{ x: 640 }"
             data-testid="compare-matrix"
           >
             <template #bodyCell="{ column, record }">
