@@ -157,6 +157,23 @@ class KubernetesJobExecutionAdapter:
             await self._credentials(),
         )
 
+    async def exists(self, execution_id: str) -> bool:
+        """Report whether the underlying Job is still present.
+
+        Returns ``True`` when the transport cannot answer (older transports and
+        test doubles do not implement ``job_exists``) so that an unknown answer
+        keeps the existing behaviour instead of silently inventing a terminal
+        state.
+        """
+        job_exists = getattr(self._transport, "job_exists", None)
+        if job_exists is None:
+            return True
+        return await job_exists(
+            execution_id,
+            self._config,
+            await self._credentials(),
+        )
+
     async def logs(self, execution_id: str, cursor: str | None = None) -> LogChunk:
         credentials = await self._credentials()
         content, next_cursor = await self._transport.logs(
