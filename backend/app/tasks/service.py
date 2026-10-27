@@ -13,6 +13,7 @@ from sqlalchemy.orm import joinedload, selectinload
 
 from app.config import settings, use_direct_task_execution
 from app.common.exceptions import NotFoundException, ValidationException
+from app.common.trace import get_trace_id
 from app.database.base import utcnow
 from app.models.statistics import ToolStatistics
 from app.models.tasks import Task, TaskInput, TaskStatus
@@ -594,6 +595,16 @@ async def create_and_schedule_tool_task(
         assign_default_project=True,
         allow_inactive_candidate=allow_inactive_candidate,
     )
+    # docs/10 §8.3：trace_id 要能写进任务元数据，任务详情页才能直接跳追踪面板。
+    # 本仓库的 Task 没有独立 ``env_json`` 列，等价物就是 ``extra_data``（JSON 列，
+    # 已是 project_id / resource_snapshot 等的落点），所以键名保留 docs 里的
+    # ``traceId`` 以便前端与文档同名字段对得上。
+    # 非 HTTP 入口（direct recovery 回填、k8s smoke、workflow 节点）没有请求上下文，
+    # ``get_trace_id()`` 为 None —— 此时**不写这个键**，避免详情页拿到一个
+    # "有字段但永远为空" 的 traceId 而误以为可跳转。
+    trace_id = get_trace_id()
+    if trace_id:
+        extra_data = {**extra_data, "traceId": trace_id}
     if not prepared.ready:
         raise ValidationException(
             "标准 Artifact 输入尚未满足工具要求",

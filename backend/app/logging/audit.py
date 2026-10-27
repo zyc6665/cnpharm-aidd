@@ -15,6 +15,7 @@ import os
 import uuid
 
 from app.common.time import isoformat_z, utcnow
+from app.common.trace import get_trace_id
 from app.logging.rotation import (
     LogRotationConfig,
     TimeRotationConfig,
@@ -244,7 +245,18 @@ class AuditLogger:
 
         Args:
             event: 审计事件
+
+        docs/12 DEF-02 要求缺陷能附 ``trace_id``，docs/10 §8.3 要求日志可按 traceId
+        串起全链路。``AuditEvent.request_id`` 与 ``audit_logs.request_id`` 列都存在，
+        但历史上没有任何调用点填值。这里在**唯一落盘点**补齐：调用方显式传入优先，
+        否则取当前请求的 trace_id；脱离请求上下文（CLI、定时任务、单元测试直接调用）
+        时为 None，保持原来的行为，不抛错。
         """
+        if event.request_id is None:
+            # 显式传入优先（各 log_* 入口都带 ``**extra``，调用方写
+            # ``request_id=...`` 会落在 extra 里），否则取当前请求的 trace_id。
+            event.request_id = event.extra.pop("request_id", None) or get_trace_id()
+
         # 脱敏处理
         if self.sanitize:
             event = self._sanitize_event(event)

@@ -23,7 +23,12 @@ def test_common_package_exports_paginated_response() -> None:
 
 
 def test_paginated_response_builds_standard_total_pages() -> None:
-    """分页响应应统一生成 total_pages 字段。"""
+    """分页响应应统一生成 total_pages 字段。
+
+    docs/05 §1.2 的统一响应体还要求 ``requestId`` / ``timestamp``（G-7 全链路串联），
+    所以这条精确相等断言一并覆盖它们。``requestId`` 取当前请求的 trace_id：
+    单元测试里没有请求上下文，因此是 ``None``。
+    """
     response = paginated_response(
         items=[{"id": "task-1"}],
         total=21,
@@ -31,9 +36,11 @@ def test_paginated_response_builds_standard_total_pages() -> None:
         page_size=10,
     )
 
+    timestamp = response.pop("timestamp")
     assert response == {
         "code": 200,
         "message": "success",
+        "requestId": None,
         "data": {
             "items": [{"id": "task-1"}],
             "total": 21,
@@ -42,6 +49,8 @@ def test_paginated_response_builds_standard_total_pages() -> None:
             "total_pages": 3,
         },
     }
+    # timestamp 必须是 docs/05 §1.2 示例里的带 Z 的 UTC ISO 字符串。
+    assert isinstance(timestamp, str) and timestamp.endswith("Z")
 
 
 def test_paginated_response_handles_empty_results() -> None:

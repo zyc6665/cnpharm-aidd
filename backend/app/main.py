@@ -13,7 +13,10 @@ from app.cache import get_cache
 from app.database.session import init_db
 from app.api.v1 import api_router
 from app.common.exceptions import AppException
+from app.common.time import isoformat_utc, utcnow
+from app.common.trace import TRACE_ID_HEADER, get_trace_id
 from app.middleware import RateLimitMiddleware
+from app.middleware.trace import TraceIdMiddleware
 from app.services.audit_sink import configure_audit_db_writer
 from app.tasks.direct_recovery import direct_task_recovery_loop
 from app.tasks.direct_runner import direct_task_runner
@@ -26,6 +29,25 @@ from app.storage.lifecycle import ensure_lifecycle_on_startup
 from app.worker.celery_app import configure_managed_execution_runtime
 
 logger = logging.getLogger(__name__)
+
+
+def _trace_id_from_scope(request: Request) -> str | None:
+    """从 ``request.scope["state"]`` 取 trace 中间件写入的 traceId。
+
+    contextvar 只在中间件栈内部有效；``ServerErrorMiddleware`` 的异常处理器在
+    contextvar 复位之后才被调用，必须回落到 scope 上那份副本。
+
+    用 ``getattr`` 而不是 ``request.scope``：既有单测
+    （``test/test_main_logging.py``）把 request 传成只带 ``method`` / ``url`` 的
+    ``SimpleNamespace`` 桩对象，直接点属性会 AttributeError 把 500 变成崩溃。
+    """
+    scope = getattr(request, "scope", None)
+    if not isinstance(scope, dict):
+        return None
+    state = scope.get("state")
+    if isinstance(state, dict):
+        return state.get("trace_id")
+    return None
 
 
 def configure_direct_managed_execution_runtime():
@@ -114,6 +136,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# traceId 中间件必须**最后注册**，也就是最外层（Starlette 的 ``add_middleware`` 是
+# ``user_middleware.insert(0, ...)``，建栈时再 reverse 包一层）。这样请求路径是
+# TraceId → CORS → RateLimit → 路由：限流中间件拒掉的 429 也会经过本中间件回写
+# ``X-Request-Id``，CORS 仍然包在限流外面（上面那条注释的行为不变，只是外面又多
+# 了一层只加响应头的中间件，不影响 429 的 CORS 头）。
+app.add_middleware(TraceIdMiddleware)
+
 
 # 全局异常处理器
 @app.exception_handler(AppException)
@@ -125,27 +154,45 @@ async def app_exception_handler(request: Request, exc: AppException):
             "code": exc.code,
             "message": exc.message,
             "data": None,
-            "detail": exc.detail
+            "detail": exc.detail,
+            # docs/05 §1.2：失败信封与成功信封字段一致，只是 code 非 0。
+            "requestId": get_trace_id(),
+            "timestamp": isoformat_utc(utcnow()),
         }
     )
 
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
-    """处理未知异常"""
+    """处理未知异常
+
+    这条路径上的 traceId 有两个坑，都必须显式处理：
+
+    1. 本处理器由 Starlette 的 ``ServerErrorMiddleware`` 调用，它在中间件栈的**最外层**，
+       trace 中间件已经把 contextvar 复位了 —— 所以不能只读 contextvar，要先从
+       ``request.scope["state"]``（trace 中间件写进去的那份）取；
+    2. 同一个原因，``ServerErrorMiddleware`` 用的是它自己拿到的 ``send``，绕过了 trace
+       中间件的响应头注入 —— 所以这里必须自己回写 ``X-Request-Id``，否则 500 响应
+       是唯一一个「有 requestId 却没有同名响应头」的响应。
+    """
+    trace_id = _trace_id_from_scope(request) or get_trace_id()
     logger.error(
-        "Unhandled API exception: %s %s",
+        "Unhandled API exception: %s %s trace_id=%s",
         request.method,
         request.url.path,
+        trace_id or "-",
         exc_info=exc,
     )
     return JSONResponse(
         status_code=500,
+        headers={TRACE_ID_HEADER: trace_id} if trace_id else None,
         content={
             "code": 500,
             "message": "服务器内部错误",
             "data": None,
-            "detail": str(exc) if settings.DEBUG else None
+            "detail": str(exc) if settings.DEBUG else None,
+            "requestId": trace_id,
+            "timestamp": isoformat_utc(utcnow()),
         }
     )
 

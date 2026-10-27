@@ -577,6 +577,9 @@ async def get_task(
         "tool": _serialize_task_tool(task.tool),
         "resource_snapshot": (task.extra_data or {}).get("resource_snapshot"),
         "dispatch": (task.extra_data or {}).get("dispatch"),
+        # docs/10 §8.3：任务详情页据此直接跳到追踪面板。老任务没有这个键（功能
+        # 上线前建的），返回 None 而不是空串，前端按 falsy 处理即可不显示入口。
+        "traceId": (task.extra_data or {}).get("traceId"),
         "status": _normalize_task_status(task.status),
         "priority": task.priority,
         "progress": task.progress,
@@ -659,6 +662,7 @@ async def create_task(
             "tool": _serialize_task_tool(task.tool),
             "resource_snapshot": (task.extra_data or {}).get("resource_snapshot"),
             "dispatch": (task.extra_data or {}).get("dispatch"),
+            "traceId": (task.extra_data or {}).get("traceId"),
             "resource_wait": _task_resource_wait(task),
             "status": _normalize_task_status(task.status),
             "priority": task.priority,
