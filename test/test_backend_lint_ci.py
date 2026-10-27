@@ -47,3 +47,22 @@ def test_every_ci_job_has_a_chinese_display_name():
     for job_key, job in _workflow()["jobs"].items():
         assert job.get("name"), f"作业 {job_key} 缺少 name，无法加入分支保护 contexts"
         assert job["name"] != job_key, f"作业 {job_key} 的 name 应与 job key 区分，便于人工阅读"
+
+
+def test_migrations_are_verified_on_postgres():
+    """迁移链必须有一个真 PostgreSQL 的作业。
+
+    SQLite 不校验外键目标是否存在、也不做跨表依赖检查，迁移链里的悬空外键与
+    删除顺序问题在 SQLite 上全是绿灯。交付环境按 docs/13 用 PostgreSQL，所以
+    必须有真 PG 双向（upgrade + downgrade）验证。此前 33 次迁移验证全在 SQLite
+    上，一次上 PG 就同时暴露了三个缺陷（基线漏建表、删除顺序反了、收尾漏删）。
+    """
+    job = _workflow()["jobs"]["migrations-postgres"]
+    commands = _commands(job)
+
+    assert job["name"] == "迁移链（PostgreSQL）"
+    services = job.get("services") or {}
+    assert "postgres" in services, "迁移作业必须起一个真的 PostgreSQL 服务容器"
+    assert str(services["postgres"]["image"]).startswith("postgres:")
+    assert any("alembic upgrade head" in command for command in commands)
+    assert any("alembic downgrade base" in command for command in commands)

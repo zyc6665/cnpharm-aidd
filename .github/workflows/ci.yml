@@ -58,6 +58,76 @@ jobs:
         timeout-minutes: 20
         run: timeout 900 python -m pytest test/ -v --tb=short
 
+  migrations-postgres:
+    name: 迁移链（PostgreSQL）
+    runs-on: ubuntu-latest
+    # SQLite 不校验外键目标是否存在、也不做跨表依赖检查，迁移链里的悬空外键
+    # 与删除顺序问题在 SQLite 上全部是绿灯。交付环境按 docs/13 用 PostgreSQL，
+    # 所以这里必须有一个真 PG 的作业：`upgrade head` 与 `downgrade base` 双向
+    # 各跑一次。之前 33 次迁移验证全在 SQLite 上，一次上 PG 就暴露了三个缺陷。
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: ci_migrate
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d ci_migrate"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql+asyncpg://ci:ci-only-password@localhost:5432/ci_migrate
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements-dev.txt
+
+      - name: upgrade head
+        working-directory: ./backend
+        run: python -m alembic upgrade head
+
+      - name: downgrade base
+        # 回退路径同样要验证：`downgrade base` 的语义是把库清空，写错会留下残表，
+        # 而残表的外键会让后续 re-upgrade 失败。这条只在 PG 上才真正有效。
+        working-directory: ./backend
+        run: python -m alembic downgrade base
+
+      - name: 确认库已清空
+        working-directory: ./backend
+        run: |
+          python - <<'PY'
+          import asyncio
+          import os
+
+          import sqlalchemy as sa
+          from sqlalchemy.ext.asyncio import create_async_engine
+
+          async def main() -> None:
+              engine = create_async_engine(os.environ["DATABASE_URL"])
+              async with engine.connect() as conn:
+                  rows = await conn.execute(sa.text(
+                      "select table_name from information_schema.tables "
+                      "where table_schema='public' and table_name <> 'alembic_version'"
+                  ))
+                  remaining = [row[0] for row in rows]
+              await engine.dispose()
+              assert not remaining, f"downgrade base 后仍有残留表: {remaining}"
+              print("downgrade base 后无残留表")
+
+          asyncio.run(main())
+          PY
+
   frontend-build:
     name: 前端构建
     runs-on: ubuntu-latest

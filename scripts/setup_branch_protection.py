@@ -27,6 +27,7 @@ BRANCH = "main"
 REQUIRED_CHECKS = [
     "后端规范检查",
     "后端测试",
+    "迁移链（PostgreSQL）",
     "前端构建",
     "前端单元测试",
     "离线合规扫描",
