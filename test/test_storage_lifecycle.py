@@ -322,6 +322,28 @@ def test_empty_rule_set_on_clean_bucket_is_noop():
     assert backend.deleted == [] and backend.written == []
 
 
+def test_empty_rule_set_never_constructs_sdk_lifecycle_config():
+    """空规则集绝不能构造 ``minio.LifecycleConfig([])``——两个受支持版本行为相反。
+
+    这条守的是一次真实的 CI 全红：本机 minio 7.2.20 允许空配置，``requirements.txt``
+    锁定的 7.2.3 直接 ``raise ValueError("rules must be provided")``，于是 13 条用例在
+    本机全绿、在 CI 全挂。空规则集只应产出本地 ``_EmptyLifecycleConfig``。
+    """
+
+    from app.storage import lifecycle as lifecycle_module
+
+    empty = lifecycle_module.build_lifecycle_config([])
+    assert isinstance(empty, lifecycle_module._EmptyLifecycleConfig)
+    assert empty.rules == []
+
+    # 非空仍必须是真正的 SDK 对象（否则「与版本无关」就变成了「压根没用 SDK」）。
+    from minio.lifecycleconfig import LifecycleConfig
+
+    full = lifecycle_module.build_lifecycle_config(default_lifecycle_rules())
+    assert isinstance(full, LifecycleConfig)
+    assert len(full.rules) >= 1
+
+
 def test_backend_without_lifecycle_support_is_reported_not_raised():
     """本地后端没有桶：要给出可读结论，不是抛 NotImplementedError。"""
 

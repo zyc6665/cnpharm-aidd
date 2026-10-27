@@ -285,9 +285,17 @@ def build_lifecycle_config(rules: Iterable[LifecycleRuleSpec]):
         if not _has_action(spec):
             continue
         sdk_rules.append(
+            # 全部用关键字传参：`Rule.__init__` 在 minio 7.2.3 与 7.2.20 之间的
+            # **位置参数顺序不同**——7.2.3 是
+            # `(status, abort_incomplete_multipart_upload, expiration, rule_filter, ...)`，
+            # 7.2.20 是 `(status, rule_filter, rule_id, abort_incomplete_multipart_upload, ...)`。
+            # 第一版把 `Filter(...)` 作为第二个位置参数传，本机 7.2.20 正常，CI 的 7.2.3
+            # 直接 `TypeError: Rule.__init__() got multiple values for argument
+            # 'abort_incomplete_multipart_upload'`——13 条测试同挂。关键字传参后与版
+            # 本无关，这是唯一稳妥的写法。
             Rule(
-                ENABLED,
-                Filter(prefix=spec.prefix) if spec.prefix else Filter(),
+                status=ENABLED,
+                rule_filter=Filter(prefix=spec.prefix) if spec.prefix else Filter(),
                 rule_id=spec.rule_id,
                 abort_incomplete_multipart_upload=(
                     AbortIncompleteMultipartUpload(spec.abort_incomplete_multipart_days)
@@ -327,7 +335,12 @@ def build_lifecycle_config(rules: Iterable[LifecycleRuleSpec]):
                 ),
             )
         )
-    return LifecycleConfig(sdk_rules)
+    # 空规则集不能交给 `LifecycleConfig(...)`：minio 7.2.3 对它
+    # `raise ValueError("rules must be provided")`，7.2.20 允许——而 `merge_rules`
+    # 在「期望规则为空」时会走到这里（例如所有时间窗都被配成 0）。返回本地空配置，
+    # 让这条路径与 SDK 版本无关；真 MinIO 永远走 DeleteBucketLifecycle 分支，不会
+    # 把这个对象交给 SDK。
+    return LifecycleConfig(sdk_rules) if sdk_rules else _EmptyLifecycleConfig()
 
 
 def rule_signature(rule: Any) -> tuple:
@@ -428,6 +441,21 @@ def _backend_supports_lifecycle(backend: Any) -> bool:
     )
 
 
+class _EmptyLifecycleConfig:
+    """「零条规则」的最小配置对象，用于兼容没有 DeleteBucketLifecycle 的后端。
+
+    刻意**不用** `minio.lifecycleconfig.LifecycleConfig([])`：minio 7.2.3（`requirements.txt`
+    锁定的版本）对它 `raise ValueError("rules must be provided")`，而 7.2.20 允许。
+    本类只保证 `rules == []`，够测试替身记录一次写入。
+    """
+
+    __slots__ = ()
+
+    @property
+    def rules(self) -> list:
+        return []
+
+
 async def _delete_lifecycle(backend: Any, bucket: str) -> None:
     """清空桶的生命周期配置。
 
@@ -440,9 +468,12 @@ async def _delete_lifecycle(backend: Any, bucket: str) -> None:
     if callable(delete):
         await delete(bucket)
         return
-    from minio.lifecycleconfig import LifecycleConfig
-
-    await backend.set_bucket_lifecycle(bucket, LifecycleConfig([]))
+    # 不构造 `minio.lifecycleconfig.LifecycleConfig([])`：minio 7.2.3 对空列表直接
+    # `raise ValueError("rules must be provided")`（7.2.20 允许），同一个调用在两个
+    # 支持的版本上行为相反。这条分支只为兼容没有 `delete_bucket_lifecycle` 的后端
+    # （测试替身 / 旧实现），真 MinIO 永远走上面的 DeleteBucketLifecycle，所以用一个
+    # 本地最小替身，让回退路径与 SDK 版本无关。
+    await backend.set_bucket_lifecycle(bucket, _EmptyLifecycleConfig())
 
 
 def resolve_rules(
