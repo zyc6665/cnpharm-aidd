@@ -255,7 +255,20 @@ def downgrade() -> None:
 
     分片索引会回写成 ``upload_sessions.parts``，因此「续传列表」不会丢；``parts``
     之外没有别的去处，``upload_parts`` 随后被删。
+
+    顺序要紧：**先删 `upload_parts`，再改 `upload_sessions`**。反过来的话，
+    ``batch_alter_table(recreate="always")`` 会重建整张 `upload_sessions`
+    （先 drop 主键约束再重建），而 PostgreSQL 会因为
+    ``upload_parts_session_id_fkey`` 仍依赖 `upload_sessions_pkey` 而拒绝
+    （`DependentObjectsStillExistError: cannot drop constraint
+    upload_sessions_pkey ... because other objects depend on it`）。
+    SQLite 不做这种跨表依赖检查，所以这个顺序问题只在 PG 上暴露。
     """
+    if UPLOAD_PARTS in _table_names():
+        if "ix_upload_parts_reported_at" in _index_names(UPLOAD_PARTS):
+            op.drop_index("ix_upload_parts_reported_at", table_name=UPLOAD_PARTS)
+        op.drop_table(UPLOAD_PARTS)
+
     if EXPIRES_INDEX in _index_names(UPLOAD_SESSIONS):
         op.drop_index(EXPIRES_INDEX, table_name=UPLOAD_SESSIONS)
 
@@ -272,8 +285,3 @@ def downgrade() -> None:
                 batch.drop_column("declared_sha256")
             if needs_drop_unique:
                 batch.drop_constraint(IDEMPOTENCY_UNIQUE, type_="unique")
-
-    if UPLOAD_PARTS in _table_names():
-        if "ix_upload_parts_reported_at" in _index_names(UPLOAD_PARTS):
-            op.drop_index("ix_upload_parts_reported_at", table_name=UPLOAD_PARTS)
-        op.drop_table(UPLOAD_PARTS)
