@@ -178,6 +178,7 @@
               <p class="decisions-detail__hint">{{ t('decisions.snapshot.hint') }}</p>
 
               <a-table
+                :scroll="{ x: 'max-content' }"
                 class="decisions-snapshot"
                 data-testid="decisions-snapshot-table"
                 :columns="snapshotColumns"

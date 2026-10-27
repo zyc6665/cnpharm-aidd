@@ -59,6 +59,7 @@
               <Smiles2DCell
                 v-if="candidate.compound.canonical_smiles"
                 :smiles="candidate.compound.canonical_smiles"
+                block
               />
             </div>
           </a-col>
@@ -87,6 +88,7 @@
 
         <h3 class="section-title">{{ t('candidates.detail.properties') }}</h3>
         <a-table
+          :scroll="{ x: 'max-content' }"
           :columns="propertyColumns"
           :data-source="propertyRows"
           :pagination="false"
@@ -131,7 +133,7 @@
   import { computed, onMounted, ref } from 'vue'
   import { useRoute } from 'vue-router'
   import { useI18n } from 'vue-i18n'
-  import dayjs from 'dayjs'
+  import { formatDateTimeMinutes } from '@/utils/datetime'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
   import Smiles2DCell from '@/components/tasks/Smiles2DCell.vue'
@@ -193,7 +195,7 @@
   })
 
   function formatDate(value: string | null | undefined): string {
-    return value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '-'
+    return value ? formatDateTimeMinutes(value) : '-'
   }
 
   async function loadCandidate(): Promise<void> {

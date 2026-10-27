@@ -1,10 +1,16 @@
 // ============================================
-// CPUModel 全局样式变量 — Dark-first 主题系统
+// 中国医药 AI 药物研发平台 · 全局样式变量 — Dark-first 主题系统
 // ============================================
 
-// ── 字体（Inter 通过 index.html link 预加载） ──
-@font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-  'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+// ── 字体 ──
+// 刻意不引 'Inter'：原注释写「Inter 通过 index.html link 预加载」，但 index.html 里
+// 既没有 link 也没有 @font-face，Inter 从未真正加载过——声明只会在 font-family 里
+// 留一个永远命不中的名字。而本平台是内网离线部署（docs/03 §10 约束 C-1 禁止任何
+// 外部网络调用），也不能改成引 CDN。
+// 因此直接落到系统字体栈：中文走系统默认，数值与标识符另有 @font-family-mono 兜底。
+// 若要统一成公司指定字体，应把 woff2 放进 src/assets/fonts/ 并在此处 @font-face。
+@font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+  'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei', Arial, 'Noto Sans', sans-serif;
 @font-family-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
 
 // ── 间距系统 ──

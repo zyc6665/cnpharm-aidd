@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useUserStore } from '@/stores'
 import { setLoginRedirectHandler } from '@/api/auth-redirect'
+import { buildDocumentTitle } from '@/config/brand'
 import i18n from '@/locales'
 
 // 路由配置
@@ -333,8 +334,8 @@ router.beforeEach(async (to, _from, next) => {
   const titleKey = typeof to.meta.title === 'string' ? to.meta.title : ''
   const translatedTitle = typeof to.meta.titleLiteral === 'string'
     ? to.meta.titleLiteral
-    : titleKey ? i18n.global.t(titleKey) : 'CPUModel'
-  document.title = `${translatedTitle} - CPUModel`
+    : titleKey ? i18n.global.t(titleKey) : ''
+  document.title = buildDocumentTitle(translatedTitle)
 
   // 认证页面（已登录用户重定向到工作台）
   if (to.meta.redirectAuthenticated && userStore.isLoggedIn) {

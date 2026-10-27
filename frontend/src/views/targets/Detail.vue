@@ -60,16 +60,17 @@
             {{ t('targets.detail.proteins', { count: proteins.length }) }}
           </h2>
 
-          <a-empty
+          <AppEmptyState
             v-if="proteins.length === 0"
             class="protein-empty"
             data-testid="protein-empty"
-            :description="t('targets.detail.empty')"
+            :title="t('targets.detail.empty')"
+            description="一条蛋白记录对应一个靶点的氨基酸序列；有了序列才能发起结构预测或导入实测结构。"
           >
             <a-button type="primary" @click="openProteinModal">
               {{ t('targets.detail.addProtein') }}
             </a-button>
-          </a-empty>
+          </AppEmptyState>
 
           <a-spin v-else :spinning="structuresLoading">
             <div class="protein-list">
@@ -216,6 +217,7 @@
   import { useI18n } from 'vue-i18n'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import AppErrorState from '@/components/common/AppErrorState.vue'
+  import AppEmptyState from '@/components/common/AppEmptyState.vue'
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
   import {
     createProtein,

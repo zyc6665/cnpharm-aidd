@@ -93,6 +93,7 @@
     </a-alert>
 
     <a-table
+      :scroll="{ x: 1200 }"
       :columns="columns"
       :data-source="rows"
       :loading="loading"
@@ -100,7 +101,6 @@
       :locale="{ emptyText: errorMessage ? t('admin.audit.loadError') : t('admin.audit.emptyState') }"
       row-key="id"
       size="middle"
-      :scroll="{ x: 1200 }"
       @change="handleTableChange"
     >
       <template #bodyCell="{ column, record }">

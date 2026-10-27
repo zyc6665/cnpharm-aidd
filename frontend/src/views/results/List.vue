@@ -44,6 +44,7 @@
     <SkeletonList v-if="loading && sortedResults.length === 0" :count="5" />
 
     <a-table
+      :scroll="{ x: 'max-content' }"
       v-else
       :columns="columns"
       :data-source="sortedResults"
@@ -96,7 +97,7 @@
   import { computed, onMounted, ref } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { useI18n } from 'vue-i18n'
-  import dayjs from 'dayjs'
+  import { formatDateTimeMinutes } from '@/utils/datetime'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import SkeletonList from '@/components/common/SkeletonList.vue'
@@ -146,7 +147,7 @@
   }
 
   function formatDate(value: string | null | undefined): string {
-    return value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '-'
+    return value ? formatDateTimeMinutes(value) : '-'
   }
 
   function handleRow(record: ProjectResultSummary): { onClick: () => void } {

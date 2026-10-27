@@ -131,6 +131,7 @@
   import { ref, reactive, computed, onBeforeUnmount } from 'vue'
   import { useRouter } from 'vue-router'
   import { useI18n } from 'vue-i18n'
+  import { passwordStrengthColor } from '@/domain/auth/password-strength'
   import { message } from 'ant-design-vue'
   import type { FormInstance, Rule } from 'ant-design-vue/es/form'
   import {
@@ -155,8 +156,7 @@
   // 密码强度
   const passwordStrength = ref(0)
   const strengthColor = computed(() => {
-    const colors = ['', '#ff4d4f', '#faad14', '#52c41a', '#1890ff']
-    return colors[passwordStrength.value] || ''
+    return passwordStrengthColor(passwordStrength.value)
   })
   const strengthText = computed(() => {
     const texts = ['', t('auth.passwordWeak'), t('auth.passwordMedium'), t('auth.passwordStrong'), t('auth.passwordVeryStrong')]
@@ -294,7 +294,7 @@
       .strength-bar {
         width: 40px;
         height: 4px;
-        background-color: #e8e8e8;
+        background-color: @border-color;
         border-radius: 2px;
         transition: background-color 0.3s;
       }
@@ -331,8 +331,8 @@
     }
 
     &:disabled {
-      background: #d9d9d9;
-      border-color: #d9d9d9;
+      background: @bg-active;
+      border-color: @border-color-hover;
     }
   }
 

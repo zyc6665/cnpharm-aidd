@@ -5,8 +5,8 @@
       <!-- Logo 区 -->
       <div class="sidebar-brand">
         <router-link to="/workspace" class="brand-link" :aria-label="t('nav.home')">
-          <img src="@/assets/logo.svg" alt="CPUModel" class="brand-logo" />
-          <span v-if="!collapsed" class="brand-text">CPUModel</span>
+          <img src="@/assets/logo.svg" :alt="PLATFORM_NAME" class="brand-logo" />
+          <span v-if="!collapsed" class="brand-text">{{ PLATFORM_SHORT_NAME }}</span>
         </router-link>
         <button
           class="sidebar-collapse-btn"
@@ -121,6 +121,7 @@ import {
 import { useUserStore, useAppStore } from '@/stores'
 import ProtectedAvatar from '@/components/common/ProtectedAvatar.vue'
 import CommandPalette from '@/components/common/CommandPalette.vue'
+import { PLATFORM_NAME, PLATFORM_SHORT_NAME } from '@/config/brand'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -289,11 +290,16 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 }
 
 .brand-text {
-  font-size: @font-size-md;
+  /* 中文品牌名比原来的英文短名长得多，240px 侧栏里要留出折叠按钮的位置，
+     所以字号收一档并允许省略——折叠态本来只显示 logo，不影响识别。 */
+  min-width: 0;
+  overflow: hidden;
+  font-size: @font-size-sm;
   font-weight: @font-weight-bold;
   color: @text-primary;
+  text-overflow: ellipsis;
   white-space: nowrap;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
 }
 
 .sidebar-collapse-btn {

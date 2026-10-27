@@ -1,4 +1,4 @@
-import dayjs from 'dayjs'
+import { formatMonthDayMinutes } from '@/utils/datetime'
 import type { WorkspaceArtifact, WorkspaceAttentionTask, WorkspaceLegacyFile } from '@/api/workspace'
 import type { SystemHealth } from '@/types/models'
 import type { ResearchProject } from '@/types/projects'
@@ -64,7 +64,7 @@ export function getWorkspaceTaskLabelKey(status: WorkspaceAttentionTask['status'
 }
 
 export function formatWorkspaceTime(value: string): string {
-  return dayjs(value).format('MM-DD HH:mm')
+  return formatMonthDayMinutes(value)
 }
 
 export function formatWorkspaceFileSize(bytes: number): string {

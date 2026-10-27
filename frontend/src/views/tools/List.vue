@@ -161,12 +161,20 @@
             </a-col>
           </a-row>
         </div>
-        <a-empty v-else-if="hasActiveFilters" :description="t('tools.noMatchingTools')">
+        <AppEmptyState
+          v-else-if="hasActiveFilters"
+          :title="t('tools.noMatchingTools')"
+          description="换个关键词或清除筛选条件，也可以直接浏览全部工具。"
+        >
           <a-button type="primary" @click="resetFilters">
             {{ t('common.reset') }}
           </a-button>
-        </a-empty>
-        <a-empty v-else :description="t('tools.noTools')" />
+        </AppEmptyState>
+        <AppEmptyState
+          v-else
+          :title="t('tools.noTools')"
+          description="工具由管理员通过 Tool Package 注册；注册并发布后，项目成员即可在任务与工作流中选用。"
+        />
 
       <!-- 分页 -->
       <div v-if="displayTotal > pageSize" class="pagination">
@@ -191,6 +199,7 @@
   import { useI18n } from 'vue-i18n'
   import AppFilterBar from '@/components/common/AppFilterBar.vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import AppEmptyState from '@/components/common/AppEmptyState.vue'
   import SkeletonList from '@/components/common/SkeletonList.vue'
   import {
     buildToolListParams,

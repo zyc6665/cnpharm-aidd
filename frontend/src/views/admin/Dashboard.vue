@@ -65,13 +65,13 @@
       <a-col :xs="24" :lg="12">
         <a-card class="dashboard-panel" :title="t('admin.recentTasks')">
           <a-table
+            :scroll="{ x: 560 }"
             :columns="taskColumns"
             :data-source="recentTasks"
             :loading="loading"
             :pagination="false"
             row-key="id"
             size="small"
-            :scroll="{ x: 560 }"
           >
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'task'">
@@ -96,13 +96,13 @@
       <a-col :xs="24" :lg="12">
         <a-card class="dashboard-panel" :title="t('admin.recentUsers')">
           <a-table
+            :scroll="{ x: 560 }"
             :columns="userColumns"
             :data-source="recentUsers"
             :loading="loading"
             :pagination="false"
             row-key="id"
             size="small"
-            :scroll="{ x: 560 }"
           >
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'avatar'">
@@ -144,7 +144,7 @@ import {
   UserOutlined
 } from '@ant-design/icons-vue'
 import ProtectedAvatar from '@/components/common/ProtectedAvatar.vue'
-import dayjs from 'dayjs'
+import { formatMonthDayMinutes } from '@/utils/datetime'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import { adminGetUsers, adminGetUserStats } from '@/api/users'
 import { getSystemStats } from '@/api/system'
@@ -200,7 +200,7 @@ const getRoleColor = (role: string) => {
   return colors[role] || 'default'
 }
 
-const formatTime = (time: string) => dayjs(time).format('MM-DD HH:mm')
+const formatTime = (time: string) => formatMonthDayMinutes(time)
 
 const fetchDashboard = async () => {
   loading.value = true

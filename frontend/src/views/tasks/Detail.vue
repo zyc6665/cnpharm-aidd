@@ -295,7 +295,12 @@
                     {{ t('tasks.viewTool') }}
                   </a-button>
                 </div>
-                <a-empty v-else :description="t('tasks.toolNotFound')" />
+                <AppEmptyState
+                  v-else
+                  size="compact"
+                  :title="t('tasks.toolNotFound')"
+                  :description="t('tasks.toolNotFoundHint')"
+                />
               </div>
 
             </a-col>
@@ -345,6 +350,7 @@ import { useTasksStore, useUserStore } from '@/stores'
 import { useTaskDetailLiveUpdates } from '@/composables/useTaskDetailLiveUpdates'
 import type { TaskStatus } from '@/types/models'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
+import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
 import ResultVisualizationPanel from '@/components/tasks/ResultVisualizationPanel.vue'
 import TaskLogPreview from '@/components/tasks/TaskLogPreview.vue'
@@ -725,6 +731,9 @@ onUnmounted(() => {
     padding: @spacing-sm;
     overflow-x: auto;
     border-radius: @border-radius-sm;
+    // 日志块刻意保留深底而不是 @bg-body：正文区在浅色主题下是白的，
+    // 白底等宽日志读起来像代码嵌入了一篇文章。这里固定成终端观感，
+    // 与 JsonResultRenderer 的代码块保持同一口径。
     background: #1e1e1e;
     color: #f8f8f2;
     font-size: @font-size-sm;

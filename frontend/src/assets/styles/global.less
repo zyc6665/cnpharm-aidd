@@ -1,5 +1,5 @@
 // ============================================
-// CPUModel 全局样式 — Dark-first
+// 中国医药 AI 药物研发平台 · 全局样式 — Dark-first
 // ============================================
 
 @import './variables.less';
@@ -293,5 +293,40 @@ img {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+// ── 表格在窄屏下的处理 ──
+// 各页面表格的列数在 5~8 之间，断点以下靠 antd 的横向滚动兜住，而不是让列宽硬挤：
+// 挤的直接后果是 SMILES 这类长串被压成一行一个字符，比出横向滚动条更难读。
+// 页面侧只需给 <a-table> 加 :scroll="{ x: 'max-content' }"，这里保证滚动条本身不突兀。
+.ant-table-wrapper {
+  .ant-table {
+    // 滚动容器出现时，表头与内容共用同一横向偏移
+    scrollbar-width: thin;
+  }
+
+  .ant-table-body,
+  .ant-table-content {
+    &::-webkit-scrollbar {
+      height: 8px;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      border-radius: 4px;
+      background: @border-color-hover;
+    }
+  }
+}
+
+@media (max-width: @screen-md) {
+  // 窄屏下表格容器不再强行撑满，交给横向滚动
+  .ant-table-wrapper {
+    overflow-x: auto;
+  }
+
+  // 操作列/工具栏在窄屏换行而不是被裁切
+  .ant-space {
+    flex-wrap: wrap;
   }
 }

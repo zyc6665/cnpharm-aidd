@@ -19,6 +19,7 @@
 
     <a-card>
       <a-table
+        :scroll="{ x: 'max-content' }"
         :columns="columns"
         :data-source="packages"
         :loading="loading"
@@ -367,6 +368,7 @@
               · 当前版本：{{ kubernetesOptions.existing_tool.current_version_id || '未设置' }}
             </p>
             <a-table
+              :scroll="{ x: 720 }"
               v-if="kubernetesOptions.tool_versions.length"
               class="tool-version-table"
               size="small"
@@ -374,7 +376,6 @@
               :data-source="kubernetesOptions.tool_versions"
               :pagination="false"
               row-key="id"
-              :scroll="{ x: 720 }"
             >
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'version'">
@@ -431,15 +432,18 @@
                 </template>
               </template>
             </a-table>
-            <a-empty
+            <AppEmptyState
               v-else
-              class="tool-version-empty"
-              description="尚无已注册版本，可从上方注册 K8s 候选版本"
+              size="compact"
+              :title="t('admin.toolVersionsEmptyTitle')"
+              :description="t('admin.toolVersionsEmptyHint')"
             />
           </template>
-          <a-empty
+          <AppEmptyState
             v-else-if="kubernetesOptions && !kubernetesOptionsLoading"
-            description="注册会创建 inactive 候选版本；当前 SSH 版本不会切换"
+            size="compact"
+            :title="t('admin.toolVersionsCandidateTitle')"
+            :description="t('admin.toolVersionsCandidateHint')"
           />
         </section>
 
@@ -532,6 +536,7 @@
   import { message } from 'ant-design-vue'
   import { PlusOutlined } from '@ant-design/icons-vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import AppEmptyState from '@/components/common/AppEmptyState.vue'
   import ToolParameterSchemaEditor from '@/components/tools/ToolParameterSchemaEditor.vue'
   import {
     createToolPackage,

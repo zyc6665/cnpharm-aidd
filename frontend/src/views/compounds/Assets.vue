@@ -66,6 +66,7 @@
         </div>
 
         <a-table
+          :scroll="{ x: 'max-content' }"
           :columns="compoundColumns"
           :data-source="compounds"
           :pagination="false"
@@ -109,6 +110,7 @@
       <!-- 候选物 -->
       <a-tab-pane key="candidates" :tab="t('compounds.tabs.candidates')">
         <a-table
+          :scroll="{ x: 'max-content' }"
           :columns="candidateColumns"
           :data-source="candidates"
           :pagination="false"
@@ -163,6 +165,7 @@
         </div>
 
         <a-table
+          :scroll="{ x: 'max-content' }"
           :columns="candidateSetColumns"
           :data-source="candidateSets"
           :pagination="false"
@@ -346,7 +349,7 @@
   import { useRoute } from 'vue-router'
   import { useI18n } from 'vue-i18n'
   import { message } from 'ant-design-vue'
-  import dayjs from 'dayjs'
+  import { formatDateTimeMinutes } from '@/utils/datetime'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import SkeletonList from '@/components/common/SkeletonList.vue'
@@ -471,7 +474,7 @@
   const createSetDescription = ref('')
 
   function formatDate(value: string | null | undefined): string {
-    return value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '-'
+    return value ? formatDateTimeMinutes(value) : '-'
   }
 
   function candidateTitle(candidate: Candidate): string {

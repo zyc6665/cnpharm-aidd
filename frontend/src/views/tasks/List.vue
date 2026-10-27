@@ -177,13 +177,18 @@
         </section>
       </div>
 
-      <a-empty v-else :description="emptyText">
-        <template #extra>
-          <a-button type="primary" @click="goToTools">
-            {{ t('tasks.goToTools') }}
-          </a-button>
-        </template>
-      </a-empty>
+      <!-- 原来这里是 `<a-empty>` + `<template #extra>`。antd 的 Empty 只有
+           `description`/`image`/默认插槽三个位置，没有 `extra`——那个「去工具页」
+           按钮其实从来没有渲染出来过。换成自绘空状态后按钮走默认插槽，真的能点了。 -->
+      <AppEmptyState
+        v-else
+        :title="emptyText"
+        description="任务按工具版本执行；提交后进入队列、分配算力、产出结果，全过程可追溯。"
+      >
+        <a-button type="primary" @click="goToTools">
+          {{ t('tasks.goToTools') }}
+        </a-button>
+      </AppEmptyState>
 
       <!-- 分页 -->
       <div v-if="currentTotal > pageSize" class="pagination">
@@ -208,6 +213,7 @@
   import { useI18n } from 'vue-i18n'
   import AppFilterBar from '@/components/common/AppFilterBar.vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import AppEmptyState from '@/components/common/AppEmptyState.vue'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import SkeletonList from '@/components/common/SkeletonList.vue'
   import TaskListCard from '@/components/tasks/TaskListCard.vue'

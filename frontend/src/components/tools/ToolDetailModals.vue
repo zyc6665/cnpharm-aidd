@@ -71,9 +71,9 @@
     padding: @spacing-md;
     border: 1px solid @border-color;
     border-radius: @border-radius-base;
-    background: #0f172a;
-    color: #e5e7eb;
-    font-family: monospace;
+    background: @bg-body;
+    color: @text-primary;
+    font-family: @font-family-mono;
     font-size: 12px;
     line-height: 1.55;
     white-space: pre-wrap;
@@ -142,7 +142,7 @@
       border-radius: 4px;
       background: @bg-hover;
       color: @text-secondary;
-      font-family: monospace;
+      font-family: @font-family-mono;
       font-size: 12px;
     }
 

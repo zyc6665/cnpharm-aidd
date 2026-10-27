@@ -96,7 +96,13 @@
 
         </div>
       </div>
-      <a-empty v-else :description="t('common.noData')" />
+      <!-- 工具不可用不是「暂无数据」：要么已被下架，要么当前账号无权访问，
+           两种都需要说清楚，否则用户会以为是自己点错了。 -->
+      <AppEmptyState
+        v-else
+        :title="t('common.noData')"
+        :description="t('tools.detailUnavailableHint')"
+      />
     </div>
     <ToolDetailModals
       v-model:preview-open="previewOpen"
@@ -115,6 +121,7 @@
   import { message } from 'ant-design-vue'
   import type { FormInstance } from 'ant-design-vue/es/form'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import AppEmptyState from '@/components/common/AppEmptyState.vue'
   import ToolDetailOverview from '@/components/tools/ToolDetailOverview.vue'
   import ToolDetailHeaderActions from '@/components/tools/ToolDetailHeaderActions.vue'
   import ToolFileFieldExtras from '@/components/tools/ToolFileFieldExtras.vue'

@@ -1,4 +1,4 @@
-import dayjs from 'dayjs'
+import { formatDateTimeMinutes } from '@/utils/datetime'
 import type { ArtifactFile } from '@/types/models'
 
 export interface ArtifactPickerTaskNode {
@@ -95,14 +95,14 @@ export interface ArtifactPickerLocation {
 }
 
 export function formatArtifactPickerArtifactMeta(artifact: ArtifactFile): string {
-  return `${artifact.tool_name} · ${dayjs(artifact.created_at).format('YYYY-MM-DD HH:mm')}`
+  return `${artifact.tool_name} · ${formatDateTimeMinutes(artifact.created_at)}`
 }
 
 export function formatArtifactPickerTaskMeta(
   taskNode: Pick<ArtifactPickerTaskNode, 'latestCreatedAt'>,
   toolName?: string | null
 ): string {
-  return `${toolName ?? '-'} · ${dayjs(taskNode.latestCreatedAt).format('YYYY-MM-DD HH:mm')}`
+  return `${toolName ?? '-'} · ${formatDateTimeMinutes(taskNode.latestCreatedAt)}`
 }
 
 export function findArtifactPickerLocation(

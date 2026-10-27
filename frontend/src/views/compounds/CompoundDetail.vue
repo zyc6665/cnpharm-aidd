@@ -32,7 +32,7 @@
       <a-row :gutter="24" class="compound-summary">
         <a-col :xs="24" :md="8">
           <div class="structure-panel" data-testid="compound-structure">
-            <Smiles2DCell v-if="compound.canonical_smiles" :smiles="compound.canonical_smiles" />
+            <Smiles2DCell v-if="compound.canonical_smiles" :smiles="compound.canonical_smiles" block />
             <p v-else class="structure-empty">{{ t('compounds.detail.noStructure') }}</p>
           </div>
         </a-col>
@@ -65,6 +65,7 @@
       <section class="compound-section">
         <h3 class="section-title">{{ t('compounds.properties.title') }}</h3>
         <a-table
+          :scroll="{ x: 'max-content' }"
           :columns="propertyColumns"
           :data-source="propertyRows"
           :pagination="false"
@@ -124,6 +125,7 @@
 
         <a-spin :spinning="searching">
           <a-table
+            :scroll="{ x: 'max-content' }"
             v-if="similarityHits.length > 0"
             :columns="similarityColumns"
             :data-source="similarityHits"
@@ -176,7 +178,7 @@
   import { useRoute } from 'vue-router'
   import { useI18n } from 'vue-i18n'
   import { message } from 'ant-design-vue'
-  import dayjs from 'dayjs'
+  import { formatDateTimeMinutes } from '@/utils/datetime'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
   import Smiles2DCell from '@/components/tasks/Smiles2DCell.vue'
@@ -260,7 +262,7 @@
   }
 
   function formatDate(value: string | null | undefined): string {
-    return value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '-'
+    return value ? formatDateTimeMinutes(value) : '-'
   }
 
   async function loadCompound(): Promise<void> {

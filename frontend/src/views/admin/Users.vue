@@ -74,6 +74,7 @@
 
     <a-card>
       <a-table
+        :scroll="{ x: 'max-content' }"
         :columns="columns"
         :data-source="users"
         :loading="loading"
@@ -230,7 +231,7 @@ import { ReloadOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import ProtectedAvatar from '@/components/common/ProtectedAvatar.vue'
 import { message, Modal } from 'ant-design-vue'
 import type { FormInstance } from 'ant-design-vue'
-import dayjs from 'dayjs'
+import { formatDateTimeMinutes } from '@/utils/datetime'
 import AppFilterBar from '@/components/common/AppFilterBar.vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import {
@@ -364,7 +365,7 @@ const getStatusBadge = (status: string) => {
   return badges[status] || 'default'
 }
 
-const formatDate = (date: string) => dayjs(date).format('YYYY-MM-DD HH:mm')
+const formatDate = (date: string) => formatDateTimeMinutes(date)
 
 const fetchUsers = async () => {
   loading.value = true

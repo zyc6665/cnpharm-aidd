@@ -160,16 +160,16 @@ onUnmounted(() => {
 })
 </script>
 
-<style scoped>
+<style scoped lang="less">
 .result-file-preview {
   display: flex;
   flex-direction: column;
   gap: 16px;
   min-height: 280px;
   padding: 18px;
-  border: 1px solid #e2e8f0;
-  border-radius: 20px;
-  background: linear-gradient(180deg, #ffffff, #f8fafc);
+  border: 1px solid @border-color;
+  border-radius: @border-radius-lg;
+  background: @bg-surface;
 }
 
 .result-file-preview__header {
@@ -181,8 +181,8 @@ onUnmounted(() => {
 
 .result-file-preview__header h5 {
   margin: 0 0 6px;
-  color: #0f172a;
-  font-size: 16px;
+  color: @text-primary;
+  font-size: @font-size-lg;
   font-weight: 600;
   overflow-wrap: anywhere;
 }
@@ -191,22 +191,22 @@ onUnmounted(() => {
 .result-file-preview__download-only span,
 .result-file-preview__state span {
   margin: 0;
-  color: #64748b;
+  color: @text-secondary;
   line-height: 1.6;
 }
 
 .result-file-preview__download {
   flex: 0 0 auto;
   padding: 6px 12px;
-  border: 1px solid #bfdbfe;
-  border-radius: 8px;
-  color: #1d4ed8;
-  background: #eff6ff;
+  border: 1px solid @accent-color-border;
+  border-radius: @border-radius-md;
+  color: @accent-color;
+  background: @accent-color-light;
   cursor: pointer;
 }
 
 .result-file-preview__download:hover {
-  background: #dbeafe;
+  background: @accent-color-border;
 }
 
 .result-file-preview__download-only,
@@ -217,16 +217,16 @@ onUnmounted(() => {
   gap: 6px;
   min-height: 220px;
   padding: 20px;
-  border: 1px dashed #cbd5e1;
-  border-radius: 14px;
-  color: #475569;
-  background: #f8fafc;
+  border: 1px dashed @border-color-hover;
+  border-radius: @border-radius-lg;
+  color: @text-secondary;
+  background: @bg-hover;
 }
 
 .result-file-preview__state--error {
-  border-color: #fecaca;
-  color: #b91c1c;
-  background: #fff7f7;
+  border-color: @error-color;
+  color: @error-color;
+  background: @error-color-light;
 }
 
 .result-file-preview__text {
@@ -235,9 +235,9 @@ onUnmounted(() => {
   padding: 16px;
   overflow: auto;
   border-radius: 12px;
-  color: #e2e8f0;
-  background: #0f172a;
-  font: 12px/1.65 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: @text-primary;
+  background: @bg-body;
+  font: @font-size-xs/1.65 @font-family-mono, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -247,7 +247,7 @@ onUnmounted(() => {
   width: 100%;
   max-height: 520px;
   object-fit: contain;
-  border-radius: 12px;
-  background: #f8fafc;
+  border-radius: @border-radius-md;
+  background: @bg-hover;
 }
 </style>

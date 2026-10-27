@@ -33,14 +33,16 @@
     <SkeletonList v-else-if="loading && residues.length === 0" :count="6" />
 
     <template v-else>
-      <a-empty
+      <AppEmptyState
         v-if="residues.length === 0"
         class="residue-empty"
         data-testid="residues-empty"
-        :description="t('targets.residues.empty')"
+        :title="t('targets.residues.empty')"
+        description="口袋残基来自口袋预测的输出，预测完成后会按贡献度标注关键残基。"
       />
 
       <a-table
+        :scroll="{ x: 'max-content' }"
         v-else
         class="residue-table"
         data-testid="residues-table"
@@ -81,6 +83,7 @@
   import { useI18n } from 'vue-i18n'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import AppErrorState from '@/components/common/AppErrorState.vue'
+  import AppEmptyState from '@/components/common/AppEmptyState.vue'
   import SkeletonList from '@/components/common/SkeletonList.vue'
   import { getPocket, listPocketResidues } from '@/api/targets'
   import { formatOptionalText, formatResidueContribution } from '@/domain/targets'

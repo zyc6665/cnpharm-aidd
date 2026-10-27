@@ -35,18 +35,21 @@
 
       <SkeletonList v-if="loading && targets.length === 0" :count="4" />
 
-      <a-empty v-else-if="targets.length === 0" class="targets-empty" data-testid="targets-empty">
-        <template #description>
-          <p class="empty-title">{{ t('targets.list.empty') }}</p>
-          <p class="empty-hint">{{ t('targets.list.emptyHint') }}</p>
-        </template>
+      <AppEmptyState
+        v-else-if="targets.length === 0"
+        class="targets-empty"
+        data-testid="targets-empty"
+        :title="t('targets.list.empty')"
+        :description="t('targets.list.emptyHint')"
+      >
         <a-button type="primary" @click="openCreateModal">
           {{ t('targets.list.create') }}
         </a-button>
-      </a-empty>
+      </AppEmptyState>
 
       <template v-else>
         <a-table
+          :scroll="{ x: 'max-content' }"
           class="targets-table"
           data-testid="targets-table"
           :columns="columns"
@@ -146,6 +149,7 @@
   import { useI18n } from 'vue-i18n'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import AppErrorState from '@/components/common/AppErrorState.vue'
+  import AppEmptyState from '@/components/common/AppEmptyState.vue'
   import SkeletonList from '@/components/common/SkeletonList.vue'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import { createTarget, listTargets } from '@/api/targets'
@@ -298,19 +302,6 @@
 
   .targets-empty {
     padding: @spacing-xxl 0;
-
-    .empty-title {
-      margin: 0 0 @spacing-xs;
-      color: @text-primary;
-      font-size: @font-size-lg;
-      font-weight: @font-weight-medium;
-    }
-
-    .empty-hint {
-      margin: 0 0 @spacing-md;
-      color: @text-tertiary;
-      font-size: @font-size-sm;
-    }
   }
 
   .targets-pagination {
