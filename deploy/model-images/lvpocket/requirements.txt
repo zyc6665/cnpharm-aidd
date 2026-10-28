@@ -1,0 +1,26 @@
+# LVpocket-2 运行依赖（版本取自 /data/zhouyc/kaiwu/LVpocket-2/env 的实际 pip list）
+#
+# tensorflow[and-cuda]==2.15.1 会一并安装 CUDA 12.2 / cuDNN 运行时，
+# 因此不需要 nvidia/cuda 基础镜像，python:3.11-slim 即可。
+tensorflow[and-cuda]==2.15.1
+keras==2.15.0
+numpy==1.26.4
+h5py==3.16.0
+biopython==1.87
+scikit-learn==1.7.2
+scipy==1.15.2
+pandas==2.3.3
+matplotlib==3.10.9
+tqdm==4.67.3
+protobuf==4.25.9
+
+# OpenBabel 3：pip wheel 自带 libopenbabel 与数据文件，自包含、可离线部署
+# 注意 openbabel-wheel 3.1.1.23 的 pybel 模块有 bug，需 patch（见 shared/patch_openbabel.py）
+openbabel-wheel
+
+# 以下两个是隐式依赖，原 env 里没显式列出但代码会 import：
+#   tfbio/net.py:11        import seaborn
+#   model/LV_former.py:15  from skimage.segmentation import clear_border
+# 缺任何一个都会在 import 阶段 ModuleNotFoundError，而不是在推理时。
+seaborn
+scikit-image

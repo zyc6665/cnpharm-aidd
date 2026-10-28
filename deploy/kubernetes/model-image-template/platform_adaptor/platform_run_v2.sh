@@ -31,8 +31,15 @@ PLATFORM_PYTHON="${PLATFORM_PYTHON:-python3}"
   --input-dir "${INPUT_DIR}" \
   --params-json "${PARAMS_JSON}"
 
+# 部分遗留模型的入口脚本不认 --model-root（它们从脚本自身所在目录解析模型根），
+# 直接传会以 `Unknown argument: --model-root` 退出码 2 失败。先探测脚本是否支持该参数。
+MODEL_ROOT_ARGS=()
+if grep -q -- '--model-root)' /opt/sciminer/model/platform_run.sh 2>/dev/null; then
+  MODEL_ROOT_ARGS+=(--model-root "${MODEL_PACKAGE_ROOT:-/opt/sciminer/model}")
+fi
+
 /opt/sciminer/model/platform_run.sh \
-  --model-root "${MODEL_PACKAGE_ROOT:-/opt/sciminer/model}" \
+  ${MODEL_ROOT_ARGS[@]+"${MODEL_ROOT_ARGS[@]}"} \
   --task-id "${TASK_ID}" \
   --input-dir "${INPUT_DIR}" \
   --output-dir "${OUTPUT_DIR}" \
