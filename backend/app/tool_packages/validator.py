@@ -205,9 +205,11 @@ def _validate_runtime_env(manifest: ToolPackageV2Manifest, errors: list[str]) ->
         errors.append("runtime.artifacts.fallback.sha256 must be 64 hex")
 
     weights = runtime.weights
-    if not weights.manifest_uri:
-        errors.append("runtime.weights.manifest_uri is required")
-    if not weights.manifest_sha256 or not _SHA256_RE.fullmatch(weights.manifest_sha256):
+    if not weights.manifest_uri and not weights.mounts:
+        errors.append("runtime.weights requires either manifest_uri or mounts")
+    if weights.manifest_uri and (
+        not weights.manifest_sha256 or not _SHA256_RE.fullmatch(weights.manifest_sha256)
+    ):
         errors.append("runtime.weights.manifest_sha256 must be 64 hex")
 
     cache_policy = runtime.cache_policy

@@ -80,11 +80,17 @@ def build_kubernetes_job_manifest(
             )
         container.setdefault("env", []).extend(platform_env)
 
+    weight_mounts, weight_volumes = _weight_mounts(runtime)
+    if weight_mounts:
+        container["volumeMounts"] = weight_mounts
+
     pod_spec: dict[str, Any] = {
         "restartPolicy": "Never",
         "serviceAccountName": config.service_account,
         "containers": [container],
     }
+    if weight_volumes:
+        pod_spec["volumes"] = weight_volumes
     if config.image_pull_secret_ref:
         pod_spec["imagePullSecrets"] = [{"name": config.image_pull_secret_ref}]
 
@@ -108,6 +114,65 @@ def build_kubernetes_job_manifest(
         },
         "spec": job_spec,
     }
+
+
+def _weight_mounts(
+    runtime: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Render ``runtime.weights.mounts`` into read-only hostPath volumes.
+
+    权重不进镜像：单个模型的权重常在 10~20 GB 量级，打进镜像会让每次小改都要
+    重推几十 GB，也让同一模型的不同权重版本无法共存。
+
+    这里只处理「节点上已缓存权重」的形态 —— hostPath 直挂、只读、
+    ``type: Directory``。故意不用 ``DirectoryOrCreate``：路径写错时 Pod 会卡在
+    ContainerCreating 并给出明确事件，比悄悄挂一个空目录、让模型读到 0 个权重
+    再报一个莫名其妙的推理错误要好查。
+
+    对象存储拉取（initContainer 下载 + sha256 校验）走 ``manifest_uri`` 那条
+    路径，尚未实现。
+    """
+    weights = runtime.get("weights")
+    if weights is None:
+        return [], []
+    if not isinstance(weights, dict):
+        raise KubernetesManifestError("runtime.weights must be an object")
+
+    mounts = weights.get("mounts") or []
+    if not isinstance(mounts, list):
+        raise KubernetesManifestError("runtime.weights.mounts must be a list")
+
+    volume_mounts: list[dict[str, Any]] = []
+    volumes: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in mounts:
+        if not isinstance(item, dict):
+            raise KubernetesManifestError("runtime.weights.mounts entries must be objects")
+        name = item.get("name")
+        host_path = item.get("host_path")
+        mount_path = item.get("mount_path")
+        if not isinstance(name, str) or not name:
+            raise KubernetesManifestError("runtime.weights.mounts[].name is required")
+        if not isinstance(host_path, str) or not host_path.startswith("/"):
+            raise KubernetesManifestError(
+                f"runtime.weights.mounts[{name}].host_path must be an absolute path"
+            )
+        if not isinstance(mount_path, str) or not mount_path.startswith("/"):
+            raise KubernetesManifestError(
+                f"runtime.weights.mounts[{name}].mount_path must be an absolute path"
+            )
+        if name in seen:
+            raise KubernetesManifestError(f"duplicate runtime.weights.mounts name: {name}")
+        seen.add(name)
+        volumes.append({"name": name, "hostPath": {"path": host_path, "type": "Directory"}})
+        volume_mounts.append(
+            {
+                "name": name,
+                "mountPath": mount_path,
+                "readOnly": bool(item.get("read_only", True)),
+            }
+        )
+    return volume_mounts, volumes
 
 
 def _resource_values(resources: dict[str, Any]) -> dict[str, Any]:

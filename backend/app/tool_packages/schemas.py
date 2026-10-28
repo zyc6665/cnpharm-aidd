@@ -197,11 +197,30 @@ class RuntimeArtifactsManifest(BaseModel):
     fallback: RuntimeArtifactManifest
 
 
-class RuntimeWeightsManifest(BaseModel):
+class RuntimeWeightMount(BaseModel):
+    """绑定到节点本地目录的单个权重挂载点。"""
+
     model_config = ConfigDict(extra="forbid")
 
-    manifest_uri: str = Field(min_length=1, max_length=500)
-    manifest_sha256: str = Field(max_length=64)
+    name: str = Field(min_length=1, max_length=63)
+    host_path: str = Field(min_length=1, max_length=500)
+    mount_path: str = Field(min_length=1, max_length=500)
+    read_only: bool = True
+    sha256: str | None = Field(default=None, max_length=64)
+
+
+class RuntimeWeightsManifest(BaseModel):
+    """权重声明。两种形态二选一，也可同时给出。
+
+    - ``manifest_uri``：指向对象存储里的权重清单，供 initContainer 拉取（后续步骤）
+    - ``mounts``：节点上已缓存权重的 hostPath 直挂点（当前实现的形态）
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    manifest_uri: str = Field(default="", max_length=500)
+    manifest_sha256: str = Field(default="", max_length=64)
+    mounts: list[RuntimeWeightMount] = Field(default_factory=list)
 
 
 class RuntimeCachePolicyManifest(BaseModel):
