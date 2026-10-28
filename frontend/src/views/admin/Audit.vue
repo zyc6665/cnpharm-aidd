@@ -353,7 +353,7 @@ onMounted(refreshAuditData)
 
   .audit-detail {
     padding: @spacing-sm @spacing-md;
-    background: rgba(148, 163, 184, 0.08);
+    background: @bg-hover;
     border-radius: 8px;
   }
 

@@ -555,7 +555,7 @@
     border-radius: 32px;
     background:
       linear-gradient(180deg, @bg-surface 0%, @bg-body 100%),
-      linear-gradient(135deg, rgba(13, 110, 253, 0.04) 0%, rgba(46, 196, 182, 0.04) 100%);
+      linear-gradient(135deg, @accent-color-light 0%, @success-color-light 100%);
     border: 1px solid @border-color;
     box-shadow: inset 0 1px 0 @border-color-hover;
   }

@@ -830,7 +830,7 @@
   .decisions-record__detail {
     padding: @spacing-md;
     margin-top: @spacing-sm;
-    background: rgba(127, 127, 127, 0.06);
+    background: @bg-hover;
     border-radius: @border-radius-md;
   }
 
@@ -897,7 +897,7 @@
 
   .decisions-drawer__error {
     margin: @spacing-sm 0 0;
-    color: #ff4d4f;
+    color: @error-color;
     font-size: @font-size-xs;
   }
 
