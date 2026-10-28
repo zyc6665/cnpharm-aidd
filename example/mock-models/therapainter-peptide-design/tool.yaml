@@ -1,0 +1,94 @@
+api_version: aidd.sciminer/tool-package.v2
+kind: ToolPackage
+metadata:
+  slug: therapainter-peptide-design
+  name: TheraPainter Mock Peptide Design
+  version: 0.1.0
+  description: Peptide binder design mock, standard molecule_table@1 output.
+  mock: true
+artifacts:
+  inputs:
+  - name: pocket
+    type: binding_pocket@1
+    required: true
+    role_preferences:
+    - residue_pocket_pdb
+  outputs:
+  - name: peptides
+    type: molecule_table@1
+    required: true
+  - name: report
+    type: run_report@1
+    required: false
+parameters_schema:
+  type: object
+  properties:
+    num_peptides:
+      type: integer
+      default: 50
+      minimum: 1
+      maximum: 500
+    length_min:
+      type: integer
+      default: 8
+      minimum: 2
+      maximum: 50
+    length_max:
+      type: integer
+      default: 15
+      minimum: 2
+      maximum: 50
+    seed:
+      type: integer
+      default: 42
+  additionalProperties: false
+adapter:
+  input:
+  - input: pocket
+    method: mount_pocket_standard_files
+  output:
+  - output: peptides
+    method: collect_peptides_standard_artifact
+  - output: report
+    method: collect_report_standard_artifact
+exposure:
+  agent: true
+  workflow: true
+  direct_run: true
+runtime:
+  python: '3.10'
+  cuda: '11.8'
+  executor_support:
+  - ssh_docker_exec
+  - slurm
+  - k8s_job
+  selection_policy: prefer container image by immutable digest; fallback to conda_pack
+    only when the executor cannot run containers
+  artifacts:
+    primary:
+      kind: container
+      image: harbor.drp.local/drp/compute-therapainter-peptide-design:0.1.0-dtk26.04-py3.10
+      image_digest: sha256:61d53a347652aba282ac259687793354b00c3fcb259e44a3a339426c41918402
+      includes:
+      - python
+      - rdkit
+    fallback:
+      kind: conda_pack
+      uri: artifacts://model-envs/therapainter-peptide-design/0.1.0/conda-env.tar.gz
+      sha256: b5bae29b53305ba01e24ea608048682e6cf5542c16351fa4517669ed3efc7d21
+      includes:
+      - python
+      - rdkit
+  weights:
+    manifest_uri: artifacts://model-weights/therapainter-peptide-design/0.1.0/weights.json
+    manifest_sha256: c13d43c1cad968272ff9ba46018da9dd685662046e593963137ee8ec76d0a31e
+  cache_policy:
+    key_fields:
+    - metadata.slug
+    - metadata.version
+    - runtime.artifacts.selected.digest_or_sha256
+    - runtime.weights.manifest_sha256
+    mutable_host_paths_forbidden: true
+variants:
+- variants/mock-local.yaml
+- variants/haiguang-dcu.yaml

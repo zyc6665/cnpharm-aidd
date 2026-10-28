@@ -1,0 +1,13 @@
+name: haiguang-dcu
+accelerator: haiguang_dcu
+executor_types:
+- container
+image: harbor.drp.local/drp/compute-gmx-mmpbsa-free-energy:0.1.0-dtk26.04-py3.10
+entrypoint:
+- python
+- runner/mock_runner.py
+resources:
+  cpu: 1
+  memory_mb: 1024
+validation_status: adapted_pending_hardware_validation
+hardware_validated: false

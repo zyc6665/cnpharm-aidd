@@ -1,0 +1,9 @@
+{
+  "chain_ids": [
+    "A"
+  ],
+  "residue_count": 3,
+  "atom_count": 3,
+  "structure_format": "pdb",
+  "source_filename": "structure.pdb"
+}

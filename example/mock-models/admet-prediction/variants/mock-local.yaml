@@ -1,0 +1,12 @@
+name: mock-local
+accelerator: cpu
+executor_types:
+- cli
+entrypoint:
+- python
+- runner/mock_runner.py
+resources:
+  cpu: 1
+  memory_mb: 1024
+validation_status: unvalidated
+hardware_validated: false

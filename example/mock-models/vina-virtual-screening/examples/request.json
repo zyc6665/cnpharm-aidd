@@ -1,0 +1,68 @@
+{
+  "request_version": "aidd.sciminer/request.v1",
+  "task": {
+    "id": "example-vina-virtual-screening",
+    "tool_slug": "vina-virtual-screening",
+    "tool_version": "0.1.0"
+  },
+  "inputs": {
+    "receptor": {
+      "artifact_version_id": "example-vina-receptor",
+      "type": "protein_structure@1",
+      "files": {
+        "structure_file": {
+          "path": "input/receptor/structure.pdb",
+          "sha256": "b02b0bec9e2e9a469c87557729d2c2b60dba4bb069a64ea303c91470b2d7e0cd",
+          "content_type": "chemical/x-pdb"
+        },
+        "metadata_json": {
+          "path": "input/receptor/metadata.json",
+          "sha256": "d84f5d837b56a432391eb4ab81b7d6be95c9420e1829e74e001249ac11ad09b6",
+          "content_type": "application/json"
+        }
+      },
+      "metadata": {
+        "chain_ids": [
+          "A"
+        ],
+        "residue_count": 3,
+        "atom_count": 3,
+        "structure_format": "pdb",
+        "source_filename": "structure.pdb"
+      }
+    },
+    "ligands": {
+      "artifact_version_id": "example-vina-ligands",
+      "type": "molecule_table@1",
+      "files": {
+        "table_file": {
+          "path": "input/ligands/ligands.csv",
+          "sha256": "fcfb38abb8e43d053215dc5c22d2dca29d81959077fc425a26e45ff94b349864",
+          "content_type": "text/csv"
+        },
+        "metadata_json": {
+          "path": "input/ligands/metadata.json",
+          "sha256": "81e422afaa367f9183cd24664cc6ff9ace20980602f4bc9ea919e7d6a25ba6b2",
+          "content_type": "application/json"
+        }
+      },
+      "metadata": {
+        "molecule_id_field": "smiles",
+        "source_task_id": "example-input"
+      }
+    }
+  },
+  "parameters": {
+    "pharmacophore_min_features": 3,
+    "docking_score_cutoff": -8.0,
+    "exhaustiveness": 8,
+    "top_n": 10,
+    "seed": 42
+  },
+  "execution": {
+    "variant": "mock-local",
+    "accelerator": "cpu",
+    "work_dir": "examples",
+    "output_dir": "output"
+  }
+}

@@ -1,0 +1,97 @@
+api_version: aidd.sciminer/tool-package.v2
+kind: ToolPackage
+metadata:
+  slug: gromacs-md-simulation
+  name: GROMACS Mock MD Simulation
+  version: 0.1.0
+  description: Molecular dynamics simulation mock, standard md_trajectory@1 output.
+  mock: true
+artifacts:
+  inputs:
+  - name: complex
+    type: protein_structure@1
+    required: true
+    role_preferences:
+    - prepared_pdb
+    - structure_file
+  outputs:
+  - name: trajectory
+    type: md_trajectory@1
+    required: true
+  - name: report
+    type: run_report@1
+    required: false
+parameters_schema:
+  type: object
+  properties:
+    force_field:
+      type: string
+      enum:
+      - amber99sb-ildn
+      - charmm36
+      default: amber99sb-ildn
+    duration_ns:
+      type: number
+      default: 100
+      minimum: 0.1
+      maximum: 1000
+    temperature_k:
+      type: number
+      default: 300
+    pressure_bar:
+      type: number
+      default: 1.0
+    seed:
+      type: integer
+      default: 42
+  additionalProperties: false
+adapter:
+  input:
+  - input: complex
+    method: mount_complex_standard_files
+  output:
+  - output: trajectory
+    method: collect_trajectory_standard_artifact
+  - output: report
+    method: collect_report_standard_artifact
+exposure:
+  agent: true
+  workflow: true
+  direct_run: true
+runtime:
+  python: '3.10'
+  cuda: '11.8'
+  executor_support:
+  - ssh_docker_exec
+  - slurm
+  - k8s_job
+  selection_policy: prefer container image by immutable digest; fallback to conda_pack
+    only when the executor cannot run containers
+  artifacts:
+    primary:
+      kind: container
+      image: harbor.drp.local/drp/compute-gromacs-md-simulation:0.1.0-dtk26.04-py3.10
+      image_digest: sha256:d21f0d7057b7c913d1cdd4bcf3802688a8881012108072744d426384de86e548
+      includes:
+      - python
+      - rdkit
+    fallback:
+      kind: conda_pack
+      uri: artifacts://model-envs/gromacs-md-simulation/0.1.0/conda-env.tar.gz
+      sha256: 91a14a6ad0c04df6eb9a5af6eadbc28a90c174b7237a6560694d2076d587e161
+      includes:
+      - python
+      - rdkit
+  weights:
+    manifest_uri: artifacts://model-weights/gromacs-md-simulation/0.1.0/weights.json
+    manifest_sha256: 6e6e5d02f5c15a07a2b9b99298ef5e31cb8846fdce41b98779f92882e1e7ef70
+  cache_policy:
+    key_fields:
+    - metadata.slug
+    - metadata.version
+    - runtime.artifacts.selected.digest_or_sha256
+    - runtime.weights.manifest_sha256
+    mutable_host_paths_forbidden: true
+variants:
+- variants/mock-local.yaml
+- variants/haiguang-dcu.yaml

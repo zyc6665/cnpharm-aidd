@@ -30,6 +30,7 @@ from app.services.tool_contracts import (
     contract_emits_standard_artifacts,
     tool_emits_standard_artifacts,
 )
+from app.tool_packages.config_resolver import tool_package_declares_mock
 from app.services.standard_input_uploads import (
     accepts_materialized_standard_uploads,
     materialize_standard_input_uploads,
@@ -413,6 +414,8 @@ async def _prepare_tool_task_run(
     )
 
     task_extra_data = dict(extra_data or {})
+    if tool_package_declares_mock(tool_version.config):
+        task_extra_data["mock"] = True
     task_extra_data["resource_snapshot"] = build_task_resource_snapshot(
         tool_version.config,
         gpu_required=tool.gpu_required,

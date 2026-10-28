@@ -1,0 +1,24 @@
+{
+  "type": "object",
+  "properties": {
+    "method": {
+      "type": "string",
+      "enum": [
+        "mmpbsa",
+        "mmgbsa"
+      ],
+      "default": "mmgbsa"
+    },
+    "frames": {
+      "type": "integer",
+      "default": 100,
+      "minimum": 1,
+      "maximum": 5000
+    },
+    "seed": {
+      "type": "integer",
+      "default": 42
+    }
+  },
+  "additionalProperties": false
+}

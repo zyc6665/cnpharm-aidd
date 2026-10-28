@@ -576,6 +576,7 @@ async def get_task(
         "tool_slug": task.tool.slug if task.tool else None,
         "tool": _serialize_task_tool(task.tool),
         "resource_snapshot": (task.extra_data or {}).get("resource_snapshot"),
+        "mock": bool((task.extra_data or {}).get("mock")),
         "dispatch": (task.extra_data or {}).get("dispatch"),
         # docs/10 §8.3：任务详情页据此直接跳到追踪面板。老任务没有这个键（功能
         # 上线前建的），返回 None 而不是空串，前端按 falsy 处理即可不显示入口。

@@ -34,6 +34,9 @@ class ToolPackageMetadata(BaseModel):
     name: str = Field(min_length=1, max_length=160)
     version: str = Field(pattern=r"^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$")
     description: str | None = None
+    # Demo/mock marker. Declared by demonstration-only model packages; the platform
+    # propagates it to task.extra_data["mock"], result responses and artifact manifests.
+    mock: bool = False
 
 
 class ArtifactDeclaration(BaseModel):

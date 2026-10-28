@@ -1,0 +1,100 @@
+api_version: aidd.sciminer/tool-package.v2
+kind: ToolPackage
+metadata:
+  slug: admet-prediction
+  name: ADMET Mock Prediction
+  version: 0.1.0
+  description: ADMET / physicochemical property prediction mock, standard molecule_table@1
+    output.
+  mock: true
+artifacts:
+  inputs:
+  - name: molecules
+    type: molecule_table@1
+    required: true
+  outputs:
+  - name: properties
+    type: molecule_table@1
+    required: true
+  - name: report
+    type: run_report@1
+    required: false
+parameters_schema:
+  type: object
+  properties:
+    task_groups:
+      type: array
+      items:
+        type: string
+        enum:
+        - Absorption
+        - Distribution
+        - Excretion
+        - Metabolism
+        - Toxicology
+        - Tox21
+        - Ecotoxicity
+        - LD50
+      default:
+      - Absorption
+      - Distribution
+      - Excretion
+      - Metabolism
+      - Toxicology
+      - Tox21
+      - Ecotoxicity
+      - LD50
+    seed:
+      type: integer
+      default: 42
+  additionalProperties: false
+adapter:
+  input:
+  - input: molecules
+    method: mount_molecules_standard_files
+  output:
+  - output: properties
+    method: collect_properties_standard_artifact
+  - output: report
+    method: collect_report_standard_artifact
+exposure:
+  agent: true
+  workflow: true
+  direct_run: true
+runtime:
+  python: '3.10'
+  cuda: '11.8'
+  executor_support:
+  - ssh_docker_exec
+  - slurm
+  - k8s_job
+  selection_policy: prefer container image by immutable digest; fallback to conda_pack
+    only when the executor cannot run containers
+  artifacts:
+    primary:
+      kind: container
+      image: harbor.drp.local/drp/compute-admet-prediction:0.1.0-dtk26.04-py3.10
+      image_digest: sha256:2d59ff5ab69b32902c9aeff4ae151ec9e26a9562e52b788cf079de9c8cd65012
+      includes:
+      - python
+      - rdkit
+    fallback:
+      kind: conda_pack
+      uri: artifacts://model-envs/admet-prediction/0.1.0/conda-env.tar.gz
+      sha256: 0fe017f3b86408d67795dc35f2ce4cff4a8e35d6c04aba16354c350a243d34f0
+      includes:
+      - python
+      - rdkit
+  weights:
+    manifest_uri: artifacts://model-weights/admet-prediction/0.1.0/weights.json
+    manifest_sha256: e9c642eac447e85ec47df449a6ad4bccca88fda3681f169d8ec9ed269f45ca12
+  cache_policy:
+    key_fields:
+    - metadata.slug
+    - metadata.version
+    - runtime.artifacts.selected.digest_or_sha256
+    - runtime.weights.manifest_sha256
+    mutable_host_paths_forbidden: true
+variants:
+- variants/mock-local.yaml
+- variants/haiguang-dcu.yaml

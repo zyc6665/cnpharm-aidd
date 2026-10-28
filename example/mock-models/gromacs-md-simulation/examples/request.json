@@ -1,0 +1,48 @@
+{
+  "request_version": "aidd.sciminer/request.v1",
+  "task": {
+    "id": "example-gromacs-md-simulation",
+    "tool_slug": "gromacs-md-simulation",
+    "tool_version": "0.1.0"
+  },
+  "inputs": {
+    "complex": {
+      "artifact_version_id": "example-md-complex",
+      "type": "protein_structure@1",
+      "files": {
+        "structure_file": {
+          "path": "input/complex/structure.pdb",
+          "sha256": "b02b0bec9e2e9a469c87557729d2c2b60dba4bb069a64ea303c91470b2d7e0cd",
+          "content_type": "chemical/x-pdb"
+        },
+        "metadata_json": {
+          "path": "input/complex/metadata.json",
+          "sha256": "d84f5d837b56a432391eb4ab81b7d6be95c9420e1829e74e001249ac11ad09b6",
+          "content_type": "application/json"
+        }
+      },
+      "metadata": {
+        "chain_ids": [
+          "A"
+        ],
+        "residue_count": 3,
+        "atom_count": 3,
+        "structure_format": "pdb",
+        "source_filename": "structure.pdb"
+      }
+    }
+  },
+  "parameters": {
+    "force_field": "amber99sb-ildn",
+    "duration_ns": 1.0,
+    "temperature_k": 300,
+    "pressure_bar": 1.0,
+    "seed": 42
+  },
+  "execution": {
+    "variant": "mock-local",
+    "accelerator": "cpu",
+    "work_dir": "examples",
+    "output_dir": "output"
+  }
+}

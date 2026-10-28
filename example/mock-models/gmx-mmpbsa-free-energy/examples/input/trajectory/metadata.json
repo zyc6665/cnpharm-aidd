@@ -1,0 +1,6 @@
+{
+  "source_task_id": "example-input",
+  "force_field": "amber99sb-ildn",
+  "duration_ns": 1.0,
+  "frames": 2
+}
