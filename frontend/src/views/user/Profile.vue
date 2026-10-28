@@ -233,6 +233,8 @@ onMounted(() => {
       left: 0;
       width: 100%;
       height: 100%;
+      // 头像悬停遮罩：黑遮罩 + 白字是图片上的固定搭配，不跟随主题
+      // （深色主题下若换成浅色遮罩，头像反而看不清）。
       background: rgba(0, 0, 0, 0.5);
       display: flex;
       align-items: center;

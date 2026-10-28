@@ -218,7 +218,7 @@ onMounted(() => {
       display: flex;
       align-items: center;
       justify-content: center;
-      background: linear-gradient(135deg, @primary-color-light 0%, #e6f7ff 100%);
+      background: linear-gradient(135deg, @primary-color-light 0%, @accent-color-light 100%);
       overflow: hidden;
 
       img {

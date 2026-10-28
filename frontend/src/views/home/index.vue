@@ -194,7 +194,7 @@ const values = [
     transform: translateX(-50%);
     width: 800px;
     height: 600px;
-    background: radial-gradient(ellipse at center, rgba(59, 130, 246, 0.08) 0%, transparent 70%);
+    background: radial-gradient(ellipse at center, @accent-color-light 0%, transparent 70%);
     pointer-events: none;
   }
 }
@@ -284,7 +284,7 @@ const values = [
   border-radius: @border-radius-xl;
   overflow: hidden;
   border: 1px solid @border-color;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  box-shadow: @shadow-xl;
   background: @bg-surface;
 }
 
@@ -315,9 +315,11 @@ const values = [
     border-radius: @border-radius-round;
     background: @text-disabled;
 
-    &:nth-child(1) { background: #ef4444; }
-    &:nth-child(2) { background: #f59e0b; }
-    &:nth-child(3) { background: #22c55e; }
+    // 三个圆点是模仿窗口控制按钮的装饰，红黄绿本身就是它的语义，
+    // 不跟随主题改色（浅色主题下也应保持这三个固定色）。
+    &:nth-child(1) { background: @error-color; }
+    &:nth-child(2) { background: @warning-color; }
+    &:nth-child(3) { background: @success-color; }
   }
 }
 
@@ -398,7 +400,7 @@ const values = [
   align-items: center;
   justify-content: center;
   background:
-    radial-gradient(circle at 40% 50%, rgba(59, 130, 246, 0.08), transparent 50%),
+    radial-gradient(circle at 40% 50%, @accent-color-light, transparent 50%),
     @bg-surface;
 }
 
@@ -435,12 +437,12 @@ const values = [
   height: 14px;
   border-radius: @border-radius-round;
   background: @accent-color;
-  box-shadow: 0 0 12px rgba(59, 130, 246, 0.3);
+  box-shadow: @shadow-glow;
 }
 
 .a1 { top: 73px; left: 133px; }
 .a2 { top: 110px; left: 155px; }
-.a3 { top: 83px; left: 175px; background: #22c55e; box-shadow: 0 0 12px rgba(34, 197, 94, 0.3); }
+.a3 { top: 83px; left: 175px; background: @success-color; box-shadow: 0 0 12px @success-color-light; }
 
 .mol-pocket {
   position: absolute;
@@ -448,7 +450,7 @@ const values = [
   left: 50px;
   width: 80px;
   height: 80px;
-  border: 1px dashed rgba(59, 130, 246, 0.3);
+  border: 1px dashed @accent-color-border;
   border-radius: @border-radius-round;
 }
 

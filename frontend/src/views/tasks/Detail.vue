@@ -80,6 +80,10 @@
               <span>{{ t('tasks.progress') }}</span>
               <span class="progress-percent">{{ task.progress }}%</span>
             </div>
+            <!-- 进度条的蓝→绿渐变是 antd 的默认观感，属组件内联属性而不是
+                 样式表，拿不到 LESS 令牌。若将来要让它跟随主题，正确做法是从
+                 ConfigProvider 的 token 取 colorPrimary/colorSuccess 再传进来，
+                 而不是在这里再抄一遍色值。 -->
             <a-progress
               :percent="task.progress"
               status="active"
