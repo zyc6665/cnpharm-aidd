@@ -27,6 +27,10 @@ class KubernetesCredentials(BaseModel):
     api_server: str | None = None
     token: str | None = None
     certificate_authority: str | None = None
+    # 仅集群外运行时（kubeconfig）会用到。集群内走 ServiceAccount token，这两项为空。
+    # 用 PEM 文本而不是文件路径：凭证生命周期由本对象持有，避免调用方约定临时文件位置。
+    client_certificate: str | None = None
+    client_key: str | None = None
 
     model_config = ConfigDict(extra="forbid")
 

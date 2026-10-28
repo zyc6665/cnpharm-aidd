@@ -423,6 +423,13 @@ class Settings(BaseSettings):
     K8S_ADAPTER_SERVICE_ACCOUNT: Optional[str] = None
     K8S_ADAPTER_JOB_NAME_PREFIX: str = "sciminer"
     K8S_ADAPTER_API_SERVER: Optional[str] = None
+    # 集群外运行时（平台进程跑在 Windows 工作站、算力跑在远程 k3s）用 kubeconfig 拿凭证。
+    # 设了它就走集群外模式，否则走 Pod 内 ServiceAccount（生产形态）。
+    K8S_ADAPTER_KUBECONFIG: Optional[str] = None
+    K8S_ADAPTER_KUBECONFIG_CONTEXT: Optional[str] = None
+    # 默认不信任环境里的 HTTP(S)_PROXY：内网机器普遍配了公司代理，httpx/urllib 默认会
+    # 把到集群 APIServer 的请求也交给代理，表现为连接超时而不是认证失败（很难查）。
+    K8S_ADAPTER_TRUST_ENV: bool = False
     K8S_ADAPTER_TOKEN_FILE: str = "/var/run/secrets/kubernetes.io/serviceaccount/token"
     K8S_ADAPTER_CA_FILE: str = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
     K8S_ADAPTER_REQUEST_TIMEOUT_SECONDS: int = 30
