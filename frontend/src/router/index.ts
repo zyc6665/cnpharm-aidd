@@ -169,6 +169,25 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/screening/DockingResultDetail.vue'),
     meta: { title: 'screening.detail.title', requiresAuth: true }
   },
+  // MD / 自由能页面
+  {
+    path: '/md',
+    name: 'MdSubmit',
+    component: () => import('@/views/md/MdSubmit.vue'),
+    meta: { title: 'md.submit.title', requiresAuth: true }
+  },
+  {
+    path: '/tasks/:id/md',
+    name: 'MdResult',
+    component: () => import('@/views/md/MdResult.vue'),
+    meta: { title: 'md.result.title', requiresAuth: true }
+  },
+  {
+    path: '/tasks/:id/free-energy',
+    name: 'FreeEnergyResult',
+    component: () => import('@/views/md/FreeEnergyResult.vue'),
+    meta: { title: 'md.freeEnergy.title', requiresAuth: true }
+  },
   // 化合物 / 候选物 / 结果
   {
     path: '/projects/:projectId/assets',
