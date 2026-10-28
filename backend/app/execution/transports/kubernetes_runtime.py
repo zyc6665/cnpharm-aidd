@@ -1,8 +1,15 @@
-"""Worker-side Kubernetes client bootstrap with ServiceAccount credentials."""
+"""Worker-side Kubernetes client bootstrap.
+
+支持两种凭证来源，适配器与业务代码对二者完全无感：
+
+* **集群内**（生产形态）：从 Pod 的 ServiceAccount 目录读 token / CA。
+* **集群外**（开发与交付验证）：从运维提供的 kubeconfig 读 token 或客户端证书。
+  平台进程跑在 Windows 工作站、算力跑在远程 k3s 时只能走这条路。
+"""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +27,12 @@ from app.execution.transports.kubernetes_artifacts import (
     KubernetesObjectStorageConfig,
 )
 from app.execution.transports.kubernetes_http import KubernetesHttpTransport
+from app.execution.transports.kubernetes_kubeconfig import (
+    KubeconfigSecretProvider,
+    build_ssl_context,
+    load_kubeconfig_credentials,
+    release_temp_files,
+)
 
 
 class KubernetesCredentialConfigurationError(RuntimeError):
@@ -71,9 +84,69 @@ class KubernetesRuntime:
 
     service: ExecutionService
     client: httpx.AsyncClient
+    out_of_cluster: bool = False
+    temp_files: list[str] = field(default_factory=list)
 
     async def close(self) -> None:
         await self.client.aclose()
+        if self.out_of_cluster:
+            release_temp_files()
+
+
+def _build_in_cluster(settings: Any) -> tuple[KubernetesSecretProvider, httpx.AsyncClient]:
+    token_file = Path(
+        getattr(
+            settings,
+            "K8S_ADAPTER_TOKEN_FILE",
+            "/var/run/secrets/kubernetes.io/serviceaccount/token",
+        )
+    )
+    ca_file = Path(
+        getattr(
+            settings,
+            "K8S_ADAPTER_CA_FILE",
+            "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
+        )
+    )
+    if not token_file.is_file() or not ca_file.is_file():
+        raise KubernetesCredentialConfigurationError(
+            "Kubernetes ServiceAccount token/CA files are unavailable"
+        )
+    api_server = (
+        getattr(settings, "K8S_ADAPTER_API_SERVER", None)
+        or "https://kubernetes.default.svc"
+    )
+    provider = InClusterSecretProvider(
+        credential_ref=settings.K8S_ADAPTER_CREDENTIAL_REF,
+        api_server=api_server,
+        token_file=token_file,
+        ca_file=ca_file,
+    )
+    client = httpx.AsyncClient(
+        verify=str(ca_file),
+        timeout=float(getattr(settings, "K8S_ADAPTER_REQUEST_TIMEOUT_SECONDS", 30)),
+        trust_env=bool(getattr(settings, "K8S_ADAPTER_TRUST_ENV", False)),
+    )
+    return provider, client
+
+
+def _build_out_of_cluster(
+    settings: Any, kubeconfig_path: str
+) -> tuple[KubernetesSecretProvider, httpx.AsyncClient]:
+    credentials = load_kubeconfig_credentials(
+        kubeconfig_path,
+        context=getattr(settings, "K8S_ADAPTER_KUBECONFIG_CONTEXT", None),
+    )
+    provider = KubeconfigSecretProvider(
+        credential_ref=settings.K8S_ADAPTER_CREDENTIAL_REF,
+        credentials=credentials,
+    )
+    client = httpx.AsyncClient(
+        verify=build_ssl_context(credentials),
+        timeout=float(getattr(settings, "K8S_ADAPTER_REQUEST_TIMEOUT_SECONDS", 30)),
+        trust_env=bool(getattr(settings, "K8S_ADAPTER_TRUST_ENV", False)),
+    )
+    return provider, client
 
 
 def build_kubernetes_runtime(settings: Any) -> KubernetesRuntime | None:
@@ -93,39 +166,13 @@ def build_kubernetes_runtime(settings: Any) -> KubernetesRuntime | None:
             "Kubernetes runtime requires: " + ", ".join(missing)
         )
 
-    token_file = Path(
-        getattr(
-            settings,
-            "K8S_ADAPTER_TOKEN_FILE",
-            "/var/run/secrets/kubernetes.io/serviceaccount/token",
-        )
-    )
-    ca_file = Path(
-        getattr(
-            settings,
-            "K8S_ADAPTER_CA_FILE",
-            "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
-        )
-    )
-    if not token_file.is_file() or not ca_file.is_file():
-        raise KubernetesCredentialConfigurationError(
-            "Kubernetes ServiceAccount token/CA files are unavailable"
-        )
+    kubeconfig_path = getattr(settings, "K8S_ADAPTER_KUBECONFIG", None)
+    out_of_cluster = bool(kubeconfig_path)
+    if out_of_cluster:
+        provider, client = _build_out_of_cluster(settings, kubeconfig_path)
+    else:
+        provider, client = _build_in_cluster(settings)
 
-    api_server = (
-        getattr(settings, "K8S_ADAPTER_API_SERVER", None)
-        or "https://kubernetes.default.svc"
-    )
-    provider = InClusterSecretProvider(
-        credential_ref=settings.K8S_ADAPTER_CREDENTIAL_REF,
-        api_server=api_server,
-        token_file=token_file,
-        ca_file=ca_file,
-    )
-    client = httpx.AsyncClient(
-        verify=str(ca_file),
-        timeout=float(getattr(settings, "K8S_ADAPTER_REQUEST_TIMEOUT_SECONDS", 30)),
-    )
     object_storage_endpoint = getattr(settings, "K8S_ADAPTER_OBJECT_STORAGE_ENDPOINT", None)
     object_storage_bucket = getattr(settings, "K8S_ADAPTER_OBJECT_STORAGE_BUCKET", None)
     object_storage_secret_ref = getattr(settings, "K8S_ADAPTER_OBJECT_STORAGE_SECRET_REF", None)
@@ -187,4 +234,5 @@ def build_kubernetes_runtime(settings: Any) -> KubernetesRuntime | None:
     return KubernetesRuntime(
         service=ExecutionService({"k8s_job": adapter}),
         client=client,
+        out_of_cluster=out_of_cluster,
     )
