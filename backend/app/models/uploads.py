@@ -43,8 +43,30 @@ from app.database.base import Base, TimestampMixin, UUIDMixin
 #: 分片上传会话状态机（docs/04 §5.8）。
 UPLOAD_STATES = ("INITIATED", "UPLOADING", "COMPLETED", "ABORTED", "EXPIRED")
 
-#: 数据集类型（docs/04 §8.1）。
-DATASET_TYPES = ("COMPOUND", "PROTEIN", "ACTIVITY", "LITERATURE", "EXPERIMENT")
+#: 数据集类型（docs/04 §8.1，docs/02 Q-03 的扩展形态见下）。
+#:
+#: 两类资产的处理方式不同：
+#:
+#: * **结构化资产** ``COMPOUND`` / ``PROTEIN`` / ``ACTIVITY``：文件会被解析成领域
+#:   行（化合物、蛋白、活性记录），``row_count`` / ``summary`` 记录解析结果。
+#: * **非结构资产** ``LITERATURE`` / ``EXPERIMENT`` / ``DOCUMENT``：**一律不解析**，
+#:   只登记文件（``file_urn`` → ``data_files``）+ 结构化属性字段（落在
+#:   ``Dataset.summary``）。这是 docs/02 Q-03 的结论——「文献」与「实验数据」的
+#:   具体形态 = 以附件与结构化属性字段承载；若需文献检索/解析需另立需求。
+#:
+#: 三个非结构类型的差别只在「装什么」，处理方式相同（都不解析、只登记）：
+#:
+#: - ``LITERATURE``：文献（论文、专利、期刊附件等）；
+#: - ``EXPERIMENT``：实验数据（仪器导出、实验记录、测定结果等）；
+#: - ``DOCUMENT``：通用文档附件（方案、报告、SOP、规范等），G-13 新增。
+DATASET_TYPES = (
+    "COMPOUND",
+    "PROTEIN",
+    "ACTIVITY",
+    "LITERATURE",
+    "EXPERIMENT",
+    "DOCUMENT",
+)
 
 #: 默认分片大小 16MB（docs/04 §5.8：2GB 上限 → ≤128 片）。
 DEFAULT_PART_SIZE = 16 * 1024 * 1024
@@ -131,6 +153,13 @@ class Dataset(Base, UUIDMixin, TimestampMixin):
 
     只存导入结果的引用（``file_urn``）与解析摘要（``summary``），**不复制文件内容**，
     也**不重新解析**——解析仍由既有的化合物导入用例完成。
+
+    ``summary`` 这一 JSON 列同时承载**结构化属性字段**（docs/02 Q-03）：结构化资产
+    存解析摘要（行数、列名、无效行统计等），``LITERATURE`` / ``EXPERIMENT`` /
+    ``DOCUMENT`` 这类**不做解析**的非结构资产则把用户登记的结构化属性（如文献的
+    DOI/作者/期刊、实验数据的仪器/批次/条件、文档的版本/生效日期）直接放在这里。
+    结构化属性是「任意键值」的形态，JSON 列足够表达，因此不额外新增 ``attributes``
+    列——加列只会让「解析摘要」与「结构化属性」分裂成两份真相源。
     """
 
     __tablename__ = "datasets"

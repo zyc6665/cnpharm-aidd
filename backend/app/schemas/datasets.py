@@ -3,19 +3,32 @@
 数据集只登记「已完成的导入结果」：``file_urn`` 指向 ``files`` 表里已有的文件，
 ``summary`` 是那次解析的摘要（行数、列名、无效行统计等）。本模块**不做解析**，
 因此这里也不接收文件内容——那是既有的 ``POST /projects/{id}/compounds:import``。
+
+``LITERATURE`` / ``EXPERIMENT`` / ``DOCUMENT`` 这类非结构资产不解析，只登记文件 +
+结构化属性（docs/02 Q-03）。结构化属性统一落到 ``Dataset.summary`` 这个 JSON 列，
+请求侧通过可选的 ``attributes`` 传入，由服务层并入 ``summary``（见
+``app.services.datasets.register_dataset``）。
+
+``file_urn`` 的 ``file:`` 前缀**不再是入口硬校验**：外部系统可能给出 ``oss://`` 等
+其它形态的 urn，登记仍然成功，只是不会解析出 ``data_files`` 行（兼容旧行为，详见
+``app.services.datasets.serialize_dataset`` 的说明）。``file:`` urn 指向的文件是否
+存在、是否属于本项目，由服务层在写库前校验。
 """
 
 from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
-#: 与 ``app.models.uploads.DATASET_TYPES`` 保持同一口径的字面量类型，让 422 在
-#: 请求入口就发生，而不是等到写库时才发现类型不认识。
-DatasetType = Literal["COMPOUND", "PROTEIN", "ACTIVITY", "LITERATURE", "EXPERIMENT"]
+from app.models.uploads import DATASET_TYPES
 
-#: 库内只存 urn + sha256（docs/04 §1），URN 必须带 ``file:`` scheme 才能反查文件。
+#: 与 ``app.models.uploads.DATASET_TYPES`` **从同一常量派生**，避免两处枚举漂移：
+#: 新增类型只改常量即可，``Literal`` 会跟着变大，422 依旧在请求入口发生。
+DatasetType = Literal[tuple(DATASET_TYPES)]
+
+#: 库内只存 urn + sha256（docs/04 §1）。保留这个常量供外部引用；解析复用
+#: ``app.services.domain_targets`` 的 ``FILE_URN_PREFIX`` / ``urn_file_id``。
 FILE_URN_PREFIX = "file:"
 
 
@@ -27,7 +40,7 @@ class DatasetCreate(BaseModel):
         validation_alias=AliasChoices("datasetType", "dataset_type"),
     )
     file_urn: str = Field(
-        min_length=len(FILE_URN_PREFIX) + 1,
+        min_length=1,
         max_length=512,
         validation_alias=AliasChoices("fileUrn", "file_urn"),
     )
@@ -37,22 +50,14 @@ class DatasetCreate(BaseModel):
         validation_alias=AliasChoices("rowCount", "row_count"),
     )
     summary: dict[str, Any] = Field(default_factory=dict)
+    #: 结构化属性字段（docs/02 Q-03）。非结构资产（文献/实验数据/文档附件）用它
+    #: 承载 DOI、作者、仪器、批次等键值；服务层把它并入 ``summary``，不落新列。
+    attributes: dict[str, Any] | None = Field(
+        default=None,
+        validation_alias=AliasChoices("attributes"),
+    )
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
-
-    @field_validator("file_urn")
-    @classmethod
-    def require_file_scheme(cls, value: str) -> str:
-        """``file_urn`` 必须是 ``file:`` 前缀，否则 422。
-
-        裸 uuid 或 ``oss://`` 都不能反查文件；放行会在 ``load_dataset`` 时才发现，
-        那时已经写了脏数据，因此在入口就拒绝。
-        """
-        if not value.startswith(FILE_URN_PREFIX):
-            raise ValueError(f"file_urn 必须以 {FILE_URN_PREFIX} 开头")
-        if not value[len(FILE_URN_PREFIX):].strip():
-            raise ValueError("file_urn 缺少文件标识")
-        return value
 
 
 __all__ = ["FILE_URN_PREFIX", "DatasetCreate", "DatasetType"]

@@ -28,6 +28,7 @@ from app.auth.dependencies import get_current_user  # noqa: E402
 from app.database.base import Base  # noqa: E402
 from app.database.session import get_db  # noqa: E402
 from app.main import app  # noqa: E402
+from app.models.files import File  # noqa: E402
 from app.models.projects import Organization, Project, ProjectMember  # noqa: E402
 from app.models.users import User, UserRole, UserStatus  # noqa: E402
 
@@ -115,8 +116,15 @@ async def other_project(db_session: AsyncSession, users: dict[str, User]) -> Pro
     return record
 
 
+# 记录当前用例的数据库会话，供 ``_seed_file`` 在走 HTTP 的用例里预置文件行。
+_ACTIVE_DB: AsyncSession | None = None
+
+
 @pytest_asyncio.fixture
 async def api_client(db_session: AsyncSession, users: dict[str, User]):
+    global _ACTIVE_DB
+    _ACTIVE_DB = db_session
+
     async def override_get_db():
         yield db_session
 
@@ -141,6 +149,34 @@ def _headers(user: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {user}"}
 
 
+async def _seed_file(project_id: str, urn: str) -> None:
+    """为 ``file:`` urn 预置一条 ``files`` 行。
+
+    登记数据集现在会把 ``file:`` urn 解析成 ``data_files`` 行，要求目标文件真实存在
+    且属于当前项目；旧用例里 ``file:u-0`` 这类占位 urn 因此需要先落一条文件记录。
+    非 ``file:`` urn 不会触发落库，直接跳过。
+    """
+    db = _ACTIVE_DB
+    file_id = urn[len("file:"):] if urn.startswith("file:") else None
+    if db is None or not file_id:
+        return
+    if await db.get(File, file_id) is not None:
+        return
+    db.add(
+        File(
+            id=file_id,
+            project_id=project_id,
+            filename=f"{file_id}.sdf",
+            content_type="chemical/x-sdf",
+            size_bytes=1024,
+            sha256="0" * 64,
+            storage_backend="local",
+            storage_path=f"/tmp/seed-{file_id}.sdf",
+        )
+    )
+    await db.commit()
+
+
 async def _create_dataset(
     client: httpx.AsyncClient,
     project_id: str,
@@ -152,6 +188,7 @@ async def _create_dataset(
     summary: dict | None = None,
     user: str = OWNER,
 ) -> dict:
+    await _seed_file(project_id, file_urn)
     response = await client.post(
         f"/api/v1/projects/{project_id}/datasets",
         headers=_headers(user),
@@ -354,15 +391,15 @@ async def test_negative_row_count_is_rejected(
 
 
 # ---------------------------------------------------------------------------
-# 8) file_urn 前缀校验
+# 8) 非 file: urn 的兼容分支
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_file_urn_requires_file_scheme(
+async def test_non_file_urn_registers_without_datafiles(
     api_client: httpx.AsyncClient, project: Project
 ) -> None:
-    """fileUrn 不带 ``file:`` 前缀 → 422（不能反查文件，入口即拒）。"""
+    """fileUrn 不带 ``file:`` 前缀 → 仍可登记，files 保持 []（旧行为兼容）。"""
 
     response = await api_client.post(
         f"/api/v1/projects/{project.id}/datasets",
@@ -375,4 +412,5 @@ async def test_file_urn_requires_file_scheme(
             "summary": {},
         },
     )
-    assert response.status_code == 422, response.text
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["files"] == []

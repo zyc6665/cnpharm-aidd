@@ -248,7 +248,7 @@ async def test_object_key_is_unique(
 
 
 def test_upload_states_and_dataset_types_constants() -> None:
-    """枚举常量必须与 docs/04 §5.8、§8 完全一致。"""
+    """枚举常量必须覆盖 docs/04 §5.8、§8 与 docs/02 Q-03 的扩展类型。"""
 
     assert UPLOAD_STATES == (
         "INITIATED",
@@ -263,4 +263,6 @@ def test_upload_states_and_dataset_types_constants() -> None:
         "ACTIVITY",
         "LITERATURE",
         "EXPERIMENT",
+        # G-13：通用文档附件（方案/报告/SOP 等），与文献/实验数据一样不解析。
+        "DOCUMENT",
     )
