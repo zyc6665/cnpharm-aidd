@@ -119,6 +119,25 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/workflow/RunDetail.vue'),
     meta: { titleLiteral: '工作流运行详情', requiresAuth: true }
   },
+  // 设计（分子生成 / 多肽设计 / 生成结果）
+  {
+    path: '/design/molecules',
+    name: 'MoleculeGeneration',
+    component: () => import('@/views/design/MoleculeGeneration.vue'),
+    meta: { title: 'design.molecule.title', requiresAuth: true }
+  },
+  {
+    path: '/design/peptides',
+    name: 'PeptideDesign',
+    component: () => import('@/views/design/PeptideDesign.vue'),
+    meta: { title: 'design.peptide.title', requiresAuth: true }
+  },
+  {
+    path: '/tasks/:id/results',
+    name: 'GenerationResults',
+    component: () => import('@/views/design/GenerationResults.vue'),
+    meta: { title: 'design.results.title', requiresAuth: true }
+  },
   // 化合物 / 候选物 / 结果
   {
     path: '/projects/:projectId/assets',
