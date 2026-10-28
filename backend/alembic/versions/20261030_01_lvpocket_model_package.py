@@ -48,7 +48,7 @@ TIMEOUT_SEC = 3600
 
 IMAGE = (
     "10.202.2.228:30500/aidd/compute-lvpocket"
-    "@sha256:daa60f5618f5f769c022dc1ecb2213e4368ef176fb71cc75662957e86b96ce4b"
+    "@sha256:93fbf6bcfd18bb9d353ae693a81267ff3104df2a415e44c1266b8adf79696828"
 )
 WEIGHT_HOST_PATH = "/data/zhouyc/model-cache/lvpocket/v2/new_best"
 WEIGHT_MOUNT_PATH = "/opt/sciminer/model/new_best"
