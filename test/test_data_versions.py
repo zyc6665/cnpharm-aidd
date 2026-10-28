@@ -37,6 +37,7 @@ from app.common.exceptions import ValidationException  # noqa: E402
 from app.database.base import Base  # noqa: E402
 from app.database.session import get_db  # noqa: E402
 from app.main import app  # noqa: E402
+from app.models.files import File  # noqa: E402
 from app.models.projects import Organization, Project, ProjectMember  # noqa: E402
 from app.models.users import User, UserRole, UserStatus  # noqa: E402
 from app.models.versions import (  # noqa: E402
@@ -133,8 +134,15 @@ async def other_project(db_session: AsyncSession, users: dict[str, User]) -> Pro
     return record
 
 
+# 记录当前用例的数据库会话，供 ``_seed_file`` 在走 HTTP 的用例里预置文件行。
+_ACTIVE_DB: AsyncSession | None = None
+
+
 @pytest_asyncio.fixture
 async def api_client(db_session: AsyncSession, users: dict[str, User]):
+    global _ACTIVE_DB
+    _ACTIVE_DB = db_session
+
     async def override_get_db():
         yield db_session
 
@@ -179,6 +187,29 @@ async def _create_candidate(
     return response.json()["data"]
 
 
+async def _seed_file(project_id: str, urn: str) -> None:
+    """为 ``file:`` urn 预置一条 ``files`` 行（登记数据集会解析成 data_files）。"""
+    db = _ACTIVE_DB
+    file_id = urn[len("file:"):] if urn.startswith("file:") else None
+    if db is None or not file_id:
+        return
+    if await db.get(File, file_id) is not None:
+        return
+    db.add(
+        File(
+            id=file_id,
+            project_id=project_id,
+            filename=f"{file_id}.sdf",
+            content_type="chemical/x-sdf",
+            size_bytes=1024,
+            sha256="0" * 64,
+            storage_backend="local",
+            storage_path=f"/tmp/seed-{file_id}.sdf",
+        )
+    )
+    await db.commit()
+
+
 async def _create_dataset(
     client: httpx.AsyncClient,
     project_id: str,
@@ -190,6 +221,7 @@ async def _create_dataset(
     summary: dict | None = None,
     user: str = OWNER,
 ) -> dict:
+    await _seed_file(project_id, file_urn)
     response = await client.post(
         f"/api/v1/projects/{project_id}/datasets",
         headers=_headers(user),
