@@ -138,6 +138,37 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/design/GenerationResults.vue'),
     meta: { title: 'design.results.title', requiresAuth: true }
   },
+  // 性质预测 / 虚拟筛选（P-21 ~ P-25）
+  {
+    path: '/predict',
+    name: 'PropertyPredict',
+    component: () => import('@/views/predict/PropertyPredictSubmit.vue'),
+    meta: { title: 'predict.submit.title', requiresAuth: true }
+  },
+  {
+    path: '/tasks/:id/predictions',
+    name: 'PropertyPredictResult',
+    component: () => import('@/views/predict/PropertyPredictResult.vue'),
+    meta: { title: 'predict.result.title', requiresAuth: true }
+  },
+  {
+    path: '/screen',
+    name: 'ScreenConfig',
+    component: () => import('@/views/screening/ScreenConfig.vue'),
+    meta: { title: 'screening.config.title', requiresAuth: true }
+  },
+  {
+    path: '/tasks/:id/screening',
+    name: 'ScreenResult',
+    component: () => import('@/views/screening/ScreenResult.vue'),
+    meta: { title: 'screening.result.title', requiresAuth: true }
+  },
+  {
+    path: '/docking-results/:id',
+    name: 'DockingResultDetail',
+    component: () => import('@/views/screening/DockingResultDetail.vue'),
+    meta: { title: 'screening.detail.title', requiresAuth: true }
+  },
   // 化合物 / 候选物 / 结果
   {
     path: '/projects/:projectId/assets',
