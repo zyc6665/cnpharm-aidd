@@ -1,0 +1,32 @@
+{
+  "type": "object",
+  "properties": {
+    "force_field": {
+      "type": "string",
+      "enum": [
+        "amber99sb-ildn",
+        "charmm36"
+      ],
+      "default": "amber99sb-ildn"
+    },
+    "duration_ns": {
+      "type": "number",
+      "default": 100,
+      "minimum": 0.1,
+      "maximum": 1000
+    },
+    "temperature_k": {
+      "type": "number",
+      "default": 300
+    },
+    "pressure_bar": {
+      "type": "number",
+      "default": 1.0
+    },
+    "seed": {
+      "type": "integer",
+      "default": 42
+    }
+  },
+  "additionalProperties": false
+}

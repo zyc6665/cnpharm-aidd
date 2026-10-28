@@ -1,0 +1,96 @@
+api_version: aidd.sciminer/tool-package.v2
+kind: ToolPackage
+metadata:
+  slug: std-diff-molecule-generation
+  name: STD-Diff Mock Molecule Generation
+  version: 0.1.0
+  description: De novo molecule generation mock, standard molecule_table@1 output.
+  mock: true
+artifacts:
+  inputs:
+  - name: pocket
+    type: binding_pocket@1
+    required: true
+    role_preferences:
+    - residue_pocket_pdb
+  outputs:
+  - name: molecules
+    type: molecule_table@1
+    required: true
+  - name: report
+    type: run_report@1
+    required: false
+parameters_schema:
+  type: object
+  properties:
+    num_molecules:
+      type: integer
+      default: 100
+      minimum: 1
+      maximum: 1000
+    mw_min:
+      type: number
+      default: 200
+    mw_max:
+      type: number
+      default: 600
+    logp_min:
+      type: number
+      default: -1
+    logp_max:
+      type: number
+      default: 5
+    seed:
+      type: integer
+      default: 42
+  additionalProperties: false
+adapter:
+  input:
+  - input: pocket
+    method: mount_pocket_standard_files
+  output:
+  - output: molecules
+    method: collect_molecules_standard_artifact
+  - output: report
+    method: collect_report_standard_artifact
+exposure:
+  agent: true
+  workflow: true
+  direct_run: true
+runtime:
+  python: '3.10'
+  cuda: '11.8'
+  executor_support:
+  - ssh_docker_exec
+  - slurm
+  - k8s_job
+  selection_policy: prefer container image by immutable digest; fallback to conda_pack
+    only when the executor cannot run containers
+  artifacts:
+    primary:
+      kind: container
+      image: harbor.drp.local/drp/compute-std-diff-molecule-generation:0.1.0-dtk26.04-py3.10
+      image_digest: sha256:0ea52ff15783cd8f957430a47107684ba71bc463436d551601ad6145f46bc607
+      includes:
+      - python
+      - rdkit
+    fallback:
+      kind: conda_pack
+      uri: artifacts://model-envs/std-diff-molecule-generation/0.1.0/conda-env.tar.gz
+      sha256: b8a56413ff87a42c9141dcc0b0022f7ac1277201976a802e9a0943743196cbcf
+      includes:
+      - python
+      - rdkit
+  weights:
+    manifest_uri: artifacts://model-weights/std-diff-molecule-generation/0.1.0/weights.json
+    manifest_sha256: aa8be3e3828d2a3c74363e5fad2948dcc987095fa4386e34cbe00fdef2baaa45
+  cache_policy:
+    key_fields:
+    - metadata.slug
+    - metadata.version
+    - runtime.artifacts.selected.digest_or_sha256
+    - runtime.weights.manifest_sha256
+    mutable_host_paths_forbidden: true
+variants:
+- variants/mock-local.yaml
+- variants/haiguang-dcu.yaml

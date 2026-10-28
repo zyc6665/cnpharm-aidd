@@ -167,6 +167,7 @@ def _serialize_result(task: Task) -> dict[str, Any]:
         "execution_time_sec": task.execution_time_sec,
         "error_message": task.error_message,
         "domain": (task.extra_data or {}).get("domain"),
+        "mock": bool((task.extra_data or {}).get("mock")),
     }
 
 

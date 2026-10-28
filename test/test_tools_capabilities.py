@@ -81,6 +81,7 @@ def test_capability_lookup_by_output() -> None:
     assert [item.tool_slug for item in ligand_artifact_capabilities] == [
         "builtin-ligand-preparation",
         "builtin-rdkit-conformer",
+        "vina-virtual-screening",
     ]
 
     docking_capabilities = get_capabilities_by_output("docking_report")

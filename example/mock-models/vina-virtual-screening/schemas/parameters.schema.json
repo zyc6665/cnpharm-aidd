@@ -1,0 +1,32 @@
+{
+  "type": "object",
+  "properties": {
+    "pharmacophore_min_features": {
+      "type": "integer",
+      "default": 3,
+      "minimum": 1,
+      "maximum": 10
+    },
+    "docking_score_cutoff": {
+      "type": "number",
+      "default": -8.0
+    },
+    "exhaustiveness": {
+      "type": "integer",
+      "default": 8,
+      "minimum": 1,
+      "maximum": 32
+    },
+    "top_n": {
+      "type": "integer",
+      "default": 100,
+      "minimum": 1,
+      "maximum": 1000
+    },
+    "seed": {
+      "type": "integer",
+      "default": 42
+    }
+  },
+  "additionalProperties": false
+}

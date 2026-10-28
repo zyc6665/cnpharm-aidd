@@ -1,0 +1,114 @@
+api_version: aidd.sciminer/tool-package.v2
+kind: ToolPackage
+metadata:
+  slug: vina-virtual-screening
+  name: Vina Mock Virtual Screening
+  version: 0.1.0
+  description: Virtual screening / docking funnel mock, standard molecule_table@1
+    and ligand_structure@1 outputs.
+  mock: true
+artifacts:
+  inputs:
+  - name: receptor
+    type: protein_structure@1
+    required: true
+    role_preferences:
+    - prepared_pdb
+    - structure_file
+  - name: ligands
+    type: molecule_table@1
+    required: true
+  - name: pocket
+    type: binding_pocket@1
+    required: false
+  outputs:
+  - name: ranked
+    type: molecule_table@1
+    required: true
+  - name: poses
+    type: ligand_structure@1
+    required: true
+  - name: report
+    type: run_report@1
+    required: false
+parameters_schema:
+  type: object
+  properties:
+    pharmacophore_min_features:
+      type: integer
+      default: 3
+      minimum: 1
+      maximum: 10
+    docking_score_cutoff:
+      type: number
+      default: -8.0
+    exhaustiveness:
+      type: integer
+      default: 8
+      minimum: 1
+      maximum: 32
+    top_n:
+      type: integer
+      default: 100
+      minimum: 1
+      maximum: 1000
+    seed:
+      type: integer
+      default: 42
+  additionalProperties: false
+adapter:
+  input:
+  - input: receptor
+    method: mount_receptor_standard_files
+  - input: ligands
+    method: mount_ligands_standard_files
+  - input: pocket
+    method: mount_pocket_standard_files
+  output:
+  - output: ranked
+    method: collect_ranked_standard_artifact
+  - output: poses
+    method: collect_poses_standard_artifact
+  - output: report
+    method: collect_report_standard_artifact
+exposure:
+  agent: true
+  workflow: true
+  direct_run: true
+runtime:
+  python: '3.10'
+  cuda: '11.8'
+  executor_support:
+  - ssh_docker_exec
+  - slurm
+  - k8s_job
+  selection_policy: prefer container image by immutable digest; fallback to conda_pack
+    only when the executor cannot run containers
+  artifacts:
+    primary:
+      kind: container
+      image: harbor.drp.local/drp/compute-vina-virtual-screening:0.1.0-dtk26.04-py3.10
+      image_digest: sha256:9710127db6e5e530ab60e4c71363210841d04f7ec887cd61d64983d3d59777d7
+      includes:
+      - python
+      - rdkit
+    fallback:
+      kind: conda_pack
+      uri: artifacts://model-envs/vina-virtual-screening/0.1.0/conda-env.tar.gz
+      sha256: a6cc0ebaf4e54956d288dac3c5e7ea092fcb69f25d85d5b1e6179f0ad52b373c
+      includes:
+      - python
+      - rdkit
+  weights:
+    manifest_uri: artifacts://model-weights/vina-virtual-screening/0.1.0/weights.json
+    manifest_sha256: 259c562e7ec4126200dab603c933fd3319989e816e612981d5b0c39f2563d473
+  cache_policy:
+    key_fields:
+    - metadata.slug
+    - metadata.version
+    - runtime.artifacts.selected.digest_or_sha256
+    - runtime.weights.manifest_sha256
+    mutable_host_paths_forbidden: true
+variants:
+- variants/mock-local.yaml
+- variants/haiguang-dcu.yaml

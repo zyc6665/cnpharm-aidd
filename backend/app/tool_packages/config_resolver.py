@@ -25,6 +25,15 @@ def tool_package_manifest_data(config: object) -> dict[str, Any] | None:
     return manifest if isinstance(manifest, dict) else None
 
 
+def tool_package_declares_mock(config: object) -> bool:
+    """Return whether the persisted manifest marks the package as a demo mock."""
+    manifest = tool_package_manifest_data(config)
+    if not manifest:
+        return False
+    metadata = manifest.get("metadata")
+    return isinstance(metadata, dict) and metadata.get("mock") is True
+
+
 def tool_package_v2_manifest_data(config: object) -> dict[str, Any] | None:
     manifest = tool_package_manifest_data(config)
     if manifest is None or manifest.get("api_version") != TOOL_PACKAGE_V2_API_VERSION:

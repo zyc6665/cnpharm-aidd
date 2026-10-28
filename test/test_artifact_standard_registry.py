@@ -35,6 +35,7 @@ def test_registry_loads_mvp_standard_artifact_types():
         "molecule_table@1",
         "ligand_structure@1",
         "run_report@1",
+        "md_trajectory@1",
     }
 
 

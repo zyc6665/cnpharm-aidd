@@ -254,7 +254,10 @@ async def _persist_artifact(
         status="available",
         validation_status="passed",
         validation_errors=[],
-        manifest_json=_manifest_for_artifact(artifact),
+        manifest_json=_manifest_for_artifact(
+            artifact,
+            mock=bool((task.extra_data or {}).get("mock")),
+        ),
         summary_json=artifact.summary,
         metrics_json=artifact.metrics,
     )
@@ -377,8 +380,12 @@ def _annotate_file_record(
     return file_record
 
 
-def _manifest_for_artifact(artifact: ParsedStandardArtifact) -> dict[str, Any]:
-    return {
+def _manifest_for_artifact(
+    artifact: ParsedStandardArtifact,
+    *,
+    mock: bool = False,
+) -> dict[str, Any]:
+    manifest = {
         "type": artifact.type,
         "name": artifact.name,
         "output_name": artifact.output_name,
@@ -393,6 +400,9 @@ def _manifest_for_artifact(artifact: ParsedStandardArtifact) -> dict[str, Any]:
         },
         "metadata": artifact.metadata,
     }
+    if mock:
+        manifest["mock"] = True
+    return manifest
 
 
 def _artifact_ref_key(artifact: ParsedStandardArtifact) -> str:

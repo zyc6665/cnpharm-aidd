@@ -1,0 +1,53 @@
+{
+  "request_version": "aidd.sciminer/request.v1",
+  "task": {
+    "id": "example-gmx-mmpbsa-free-energy",
+    "tool_slug": "gmx-mmpbsa-free-energy",
+    "tool_version": "0.1.0"
+  },
+  "inputs": {
+    "trajectory": {
+      "artifact_version_id": "example-mmpbsa-trajectory",
+      "type": "md_trajectory@1",
+      "files": {
+        "topology_pdb": {
+          "path": "input/trajectory/topology.pdb",
+          "sha256": "b02b0bec9e2e9a469c87557729d2c2b60dba4bb069a64ea303c91470b2d7e0cd",
+          "content_type": "chemical/x-pdb"
+        },
+        "trajectory_dcd": {
+          "path": "input/trajectory/trajectory.dcd",
+          "sha256": "e8ad71049cc2c3d48a3c35e24cb12ee641a3676334b0d1a781d6e7898059450c",
+          "content_type": "application/octet-stream"
+        },
+        "analysis_csv": {
+          "path": "input/trajectory/analysis.csv",
+          "sha256": "547fff7c4ed3fddf179e26edf574d6905bb9ba0d9a1af5a333b930b37c97fc6f",
+          "content_type": "text/csv"
+        },
+        "metadata_json": {
+          "path": "input/trajectory/metadata.json",
+          "sha256": "01a471dbc3847dd23afa2d90fc0f23e4b2f9835eecba63e3bffbd7ca0f034d30",
+          "content_type": "application/json"
+        }
+      },
+      "metadata": {
+        "source_task_id": "example-input",
+        "force_field": "amber99sb-ildn",
+        "duration_ns": 1.0,
+        "frames": 2
+      }
+    }
+  },
+  "parameters": {
+    "method": "mmgbsa",
+    "frames": 20,
+    "seed": 42
+  },
+  "execution": {
+    "variant": "mock-local",
+    "accelerator": "cpu",
+    "work_dir": "examples",
+    "output_dir": "output"
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "request_version": "aidd.sciminer/request.v1",
+  "task": {
+    "id": "example-admet-prediction",
+    "tool_slug": "admet-prediction",
+    "tool_version": "0.1.0"
+  },
+  "inputs": {
+    "molecules": {
+      "artifact_version_id": "example-admet-molecules",
+      "type": "molecule_table@1",
+      "files": {
+        "table_file": {
+          "path": "input/molecules/smiles.csv",
+          "sha256": "fe774a8ac33a077155bd50aa96f6fb466b59e8414646d60948dc6dcd16eeabc1",
+          "content_type": "text/csv"
+        },
+        "metadata_json": {
+          "path": "input/molecules/metadata.json",
+          "sha256": "81e422afaa367f9183cd24664cc6ff9ace20980602f4bc9ea919e7d6a25ba6b2",
+          "content_type": "application/json"
+        }
+      },
+      "metadata": {
+        "molecule_id_field": "smiles",
+        "source_task_id": "example-input"
+      }
+    }
+  },
+  "parameters": {
+    "task_groups": [
+      "Absorption",
+      "Distribution",
+      "Excretion",
+      "Metabolism",
+      "Toxicology",
+      "Tox21",
+      "Ecotoxicity",
+      "LD50"
+    ],
+    "seed": 42
+  },
+  "execution": {
+    "variant": "mock-local",
+    "accelerator": "cpu",
+    "work_dir": "examples",
+    "output_dir": "output"
+  }
+}

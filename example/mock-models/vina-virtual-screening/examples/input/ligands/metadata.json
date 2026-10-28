@@ -1,0 +1,4 @@
+{
+  "molecule_id_field": "smiles",
+  "source_task_id": "example-input"
+}

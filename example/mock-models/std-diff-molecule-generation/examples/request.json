@@ -1,0 +1,48 @@
+{
+  "request_version": "aidd.sciminer/request.v1",
+  "task": {
+    "id": "example-std-diff-molecule-generation",
+    "tool_slug": "std-diff-molecule-generation",
+    "tool_version": "0.1.0"
+  },
+  "inputs": {
+    "pocket": {
+      "artifact_version_id": "example-std-diff-molecule-generation-pocket",
+      "type": "binding_pocket@1",
+      "files": {
+        "residue_pocket_pdb": {
+          "path": "input/pocket/residue_pocket.pdb",
+          "sha256": "c62221d7bc5f31d0f99fce8fba49bc0078eab6725edc5b158b9d38afd1262a75",
+          "content_type": "chemical/x-pdb"
+        },
+        "atom_pocket_pdb": {
+          "path": "input/pocket/atom_pocket.pdb",
+          "sha256": "c62221d7bc5f31d0f99fce8fba49bc0078eab6725edc5b158b9d38afd1262a75",
+          "content_type": "chemical/x-pdb"
+        },
+        "pocket_metadata_json": {
+          "path": "input/pocket/metadata.json",
+          "sha256": "ca45a6d73344b5e3ec5963995e332c7b6222f5a32def4a107a12aea0cee2111f",
+          "content_type": "application/json"
+        }
+      },
+      "metadata": {
+        "source_protein_ref": "mock-example"
+      }
+    }
+  },
+  "parameters": {
+    "num_molecules": 12,
+    "mw_min": 200,
+    "mw_max": 600,
+    "logp_min": -1,
+    "logp_max": 5,
+    "seed": 42
+  },
+  "execution": {
+    "variant": "mock-local",
+    "accelerator": "cpu",
+    "work_dir": "examples",
+    "output_dir": "output"
+  }
+}

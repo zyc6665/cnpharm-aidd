@@ -1,0 +1,3 @@
+time_ps,rmsd_nm,rmsf_nm,rg_nm,temperature_k,potential_kj_mol
+10,0.2,0.08,1.9,300,-119000
+20,0.25,0.09,1.95,301,-118500

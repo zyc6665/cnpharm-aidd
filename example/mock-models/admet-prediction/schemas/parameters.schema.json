@@ -1,0 +1,36 @@
+{
+  "type": "object",
+  "properties": {
+    "task_groups": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "Absorption",
+          "Distribution",
+          "Excretion",
+          "Metabolism",
+          "Toxicology",
+          "Tox21",
+          "Ecotoxicity",
+          "LD50"
+        ]
+      },
+      "default": [
+        "Absorption",
+        "Distribution",
+        "Excretion",
+        "Metabolism",
+        "Toxicology",
+        "Tox21",
+        "Ecotoxicity",
+        "LD50"
+      ]
+    },
+    "seed": {
+      "type": "integer",
+      "default": 42
+    }
+  },
+  "additionalProperties": false
+}

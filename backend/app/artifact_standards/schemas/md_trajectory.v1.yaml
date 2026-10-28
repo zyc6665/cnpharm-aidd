@@ -1,0 +1,47 @@
+type: md_trajectory
+version: 1
+file_roles:
+  - role: topology_pdb
+    required: true
+    primary: true
+    allowed_formats: [pdb]
+    content_types: [chemical/x-pdb, application/octet-stream]
+    recommended_name: topology.pdb
+  - role: trajectory_dcd
+    required: true
+    allowed_formats: [dcd]
+    content_types: [application/octet-stream]
+    recommended_name: trajectory.dcd
+  - role: analysis_csv
+    required: true
+    allowed_formats: [csv]
+    content_types: [text/csv]
+    recommended_name: analysis.csv
+  - role: metadata_json
+    required: true
+    allowed_formats: [json]
+    content_types: [application/json]
+    recommended_name: metadata.json
+metadata_schema:
+  type: object
+  required:
+    - source_task_id
+    - force_field
+    - duration_ns
+  properties:
+    source_task_id:
+      type: string
+    force_field:
+      type: string
+    duration_ns:
+      type: number
+    frames:
+      type: integer
+    temperature_k:
+      type: number
+    mock:
+      type: boolean
+    note:
+      type: string
+validators:
+  - md_trajectory_v1_core
