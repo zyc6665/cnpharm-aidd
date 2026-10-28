@@ -511,6 +511,8 @@ async def build_traceability_package(
             "finished": _iso(task.finished_at),
             "executionSeconds": task.execution_time_sec,
             "retryCount": task.retry_count,
+            # 重试来源（重试链起点任务 id，G-4）；非重试任务为 None。
+            "retryOf": task.retry_of,
         },
         "inputs": [serialize_snapshot(row) for row in snapshots],
         "environment": environment,

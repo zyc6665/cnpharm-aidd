@@ -73,6 +73,8 @@ class TaskResponse(TimestampMixin):
     finished_at: Optional[datetime]
     execution_time_sec: Optional[int]
     retry_count: int
+    # 重试来源：这条重试链的起点任务 id（就地重试时等于自身 id），非重试任务为 None。
+    retry_of: Optional[str] = None
     # 工具信息
     tool_name: Optional[str] = None
     tool_slug: Optional[str] = None
@@ -98,6 +100,8 @@ class TaskListResponse(BaseModel):
     created_at: datetime
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
+    # 重试来源：这条重试链的起点任务 id（就地重试时等于自身 id），非重试任务为 None。
+    retry_of: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
