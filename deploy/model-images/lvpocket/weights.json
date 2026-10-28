@@ -1,0 +1,28 @@
+{
+  "_comment": "对应 tool-package.v2 manifest 的 runtime.weights[]。平台据此在节点上解析权重挂载点；source.kind 为 host-path 时不做 sha256 校验（开发期），为 object-store 时由 initContainer 拉取并校验。",
+  "image": "registry.internal/aidd/compute-lvpocket@sha256:daa60f5618f5f769c022dc1ecb2213e4368ef176fb71cc75662957e86b96ce4b",
+  "weights": [
+    {
+      "name": "lvpocket-new-best",
+      "mountPath": "/opt/sciminer/model/new_best",
+      "readOnly": true,
+      "source": {
+        "kind": "host-path",
+        "path": "/data/model-cache/lvpocket/2.0.0/new_best"
+      },
+      "cache": {
+        "kind": "host-path",
+        "path": "/data/model-cache/lvpocket/2.0.0/new_best"
+      },
+      "files": [
+        { "name": "a+b.hdf", "sizeBytes": 1181116006 },
+        { "name": "all_a.hdf", "sizeBytes": 1181116006 },
+        { "name": "all_b.hdf", "sizeBytes": 1181116006 },
+        { "name": "all_scpdb.hdf", "sizeBytes": 1288490189 },
+        { "name": "a_or_.hdf", "sizeBytes": 1181116006 }
+      ],
+      "_howToGetSha256": "sha256sum /data/model-cache/lvpocket/2.0.0/new_best/*.hdf —— 迁移到 object-store 形态时把每个文件的 sha256 填进 source.sha256（整包）或 files[].sha256（逐文件）。",
+      "_whyHostPath": "开发期权重直接放在算力节点本地盘（同机回环，零下载）。生产离线交付时改为 object-store：权重包 + SHA-256 清单一起上传内网 MinIO，由 initContainer 校验后解压到 cache 路径。"
+    }
+  ]
+}

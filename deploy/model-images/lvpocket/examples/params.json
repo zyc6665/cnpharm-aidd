@@ -1,0 +1,5 @@
+{
+  "task_name": "lvpocket-smoke",
+  "params": { "model_choice": "auto", "device": "gpu" },
+  "input_files": { "protein_pdb": "protein.pdb" }
+}
