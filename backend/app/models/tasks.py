@@ -70,6 +70,18 @@ class Task(Base, UUIDMixin, TimestampMixin):
     retry_count = Column(Integer, default=0)
     max_retries = Column(Integer, default=3)
 
+    # 重试来源：这条重试链的起点任务 id（G-4，docs/04 §615 ``retry_of``）。
+    # 语义为什么不是「指向上一行任务」：本仓库的重提是**就地复用同一个 task 行**——
+    # ``TaskStateMachine.retry`` 只把 status 改回 PENDING、retry_count+1，不新建行，
+    # 因此没有「新行的 retry_of 指向旧行」可言；「上一次执行」其实是同一行上的一次
+    # execution attempt（只存在于 ``extra_data["execution_attempt_id"]``，没有独立 attempt
+    # 表，attempt id 还是 32 位 hex 字符串，与 uuid 列类型不符）。
+    # 所以这里存「本次重试起源于哪个任务」，即重试链的第一个任务 id：首次重试时写入，
+    # 之后**永不覆盖**。就地重试时链起点就是本行自身，``retry_of`` 退化为「本行是重试
+    # 产物」的持久标记；若将来从别的任务派生出新行，它天然就是那条新行的旧任务来源。
+    # 为什么可空：非重试产生的任务没有重试来源，为 NULL；它不是主键/外键，只是可选归属信息。
+    retry_of = Column(String(36), nullable=True, index=True)
+
     # GPU分配
     gpu_node_id = Column(String(36), nullable=True)
     gpu_index = Column(Integer, nullable=True)

@@ -592,6 +592,7 @@ async def get_task(
         "completed_at": task.finished_at,
         "execution_time_sec": task.execution_time_sec,
         "retry_count": task.retry_count,
+        "retry_of": task.retry_of,
         "created_at": task.created_at,
         "updated_at": task.updated_at,
         "inputs": {
@@ -673,6 +674,7 @@ async def create_task(
             "finished_at": task.finished_at,
             "execution_time_sec": task.execution_time_sec,
             "retry_count": task.retry_count,
+            "retry_of": task.retry_of,
             "created_at": task.created_at,
             "updated_at": task.updated_at,
         },
@@ -776,6 +778,16 @@ async def retry_task(
         )
 
     await release_task_resource_reservation(task, reason="task_retry_requested")
+
+    # G-4：记录重试来源（重试链起点任务 id），且**只在为空时写一次**。
+    # 本仓库的重提是就地复用同一 task 行（``TaskStateMachine.retry`` 不新建行），
+    # 「上一次执行」只是同一行上的一次 execution attempt，并没有另一条 task 行可指。
+    # 因此 ``retry_of`` 记「本次重试起源于哪个任务」：首次重试时链起点就是本行自身，
+    # 写入 ``task.id``，语义退化为「本行是重试产物」的持久标记。写入后永不覆盖，
+    # 否则后续每次重试都会把「最初从哪条任务开始重试」这条信息抹掉（见测试变异验证）。
+    if not task.retry_of:
+        task.retry_of = str(task.id)
+
     TaskStateMachine.retry(task)
 
     await db.commit()
