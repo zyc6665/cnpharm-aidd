@@ -1651,6 +1651,97 @@ export default {
     }
   },
 
+  // 设计（P-15 分子生成 / P-16 多肽设计 / P-17 生成结果）
+  design: {
+    section: {
+      inputs: '输入选择',
+      parameters: '参数配置'
+    },
+    pocket: {
+      project: '项目',
+      target: '靶点',
+      protein: '蛋白',
+      structure: '结构',
+      pocket: '口袋',
+      projectPlaceholder: '请选择项目',
+      selectPlaceholder: '请选择',
+      noSelectedPockets: '该结构下没有已选中的口袋，请先在结构详情中标记口袋',
+      loadFailed: '数据加载失败，请稍后重试'
+    },
+    molecule: {
+      title: '分子生成',
+      subtitle: '基于选定口袋批量生成候选分子，用于界面与流程验证',
+      toolMissing: '未找到分子生成工具（std-diff-molecule-generation），请先在工具库发布该工具包',
+      numMolecules: '生成数量',
+      seed: '随机种子',
+      mwMin: '分子量下限 (Da)',
+      mwMax: '分子量上限 (Da)',
+      logpMin: 'logP 下限',
+      logpMax: 'logP 上限',
+      submit: '提交生成任务',
+      taskName: '分子生成',
+      submitted: '任务已提交，正在跳转到结果页',
+      failed: '任务提交失败，请稍后重试',
+      selectPocketFirst: '请先选择口袋',
+      invalidNum: '生成数量需在 1 ~ 1000 之间',
+      invalidMw: '分子量下限需大于 0，且上限必须大于下限',
+      invalidLogp: 'logP 上限必须大于下限',
+      invalidSeed: '随机种子不能为负数'
+    },
+    peptide: {
+      title: '多肽设计',
+      subtitle: '基于选定口袋设计候选多肽序列，用于界面与流程验证',
+      toolMissing: '未找到多肽设计工具（therapainter-peptide-design），请先在工具库发布该工具包',
+      numPeptides: '生成数量',
+      lengthMin: '多肽长度下限',
+      lengthMax: '多肽长度上限',
+      seed: '随机种子',
+      submit: '提交设计任务',
+      taskName: '多肽设计',
+      submitted: '任务已提交，正在跳转到结果页',
+      failed: '任务提交失败，请稍后重试',
+      selectPocketFirst: '请先选择口袋',
+      invalidNum: '生成数量需在 1 ~ 500 之间',
+      invalidLength: '长度下限需大于 0，且上限必须大于下限',
+      invalidSeed: '随机种子不能为负数'
+    },
+    status: {
+      pending: '排队中',
+      running: '运行中',
+      success: '已完成',
+      failure: '失败',
+      canceled: '已取消'
+    },
+    results: {
+      title: '生成结果',
+      subtitle: '查看生成分子的 2D 结构、评分与理化性质',
+      viewTask: '查看任务',
+      saveToSet: '保存至候选集合',
+      mockDisclaimer: '本页数据由演示模型（mock）生成，仅用于界面与流程验证，不可用于科研决策',
+      loadFailed: '结果加载失败，请稍后重试',
+      statusLabel: '任务状态',
+      taskFailed: '任务执行失败',
+      moleculeCount: '共 {count} 个分子',
+      tableMissing: '未找到分子表产物（molecule_table），无法渲染结构卡片',
+      sortBy: '排序',
+      desc: '降序',
+      asc: '升序',
+      min: '最小',
+      max: '最大',
+      reset: '重置筛选',
+      empty: '没有符合筛选条件的分子',
+      setName: '候选集合名称',
+      saveHint: '将把当前筛选后的 {count} 个分子保存为候选集合',
+      defaultSetName: '生成结果 {id}',
+      setDescription: '来自生成任务 {id} 的分子',
+      noProject: '缺少项目信息，无法保存',
+      setNameRequired: '请填写候选集合名称',
+      nothingToSave: '没有可保存的分子',
+      saved: '已保存 {count} 个分子到候选集合',
+      saveFailed: '保存失败，请稍后重试'
+    }
+  },
+
   // 任务
   tasks: {
     title: '任务中心',
