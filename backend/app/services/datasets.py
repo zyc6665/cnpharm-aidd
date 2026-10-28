@@ -11,11 +11,14 @@ SDF/CSV，也不创建任务；解析仍走既有 ``POST /projects/{id}/compound
 
 from __future__ import annotations
 
+from typing import Any
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.common.exceptions import NotFoundException, ValidationException
+from app.files.file_records import is_file_usable
 from app.models.files import File as FileModel
 from app.models.uploads import DATASET_TYPES, DataFile, Dataset
 from app.models.users import User
@@ -164,6 +167,11 @@ async def _materialize_data_file(
     - ``file:`` urn 指向的文件在 ``files`` 表里不存在 → ``ValidationException``，
       消息点明是 urn 无效。
     - 文件存在但 ``project_id`` 不同 → ``ValidationException``，消息点明跨项目。
+    - 文件存在且属于本项目、但已软删除 / 已损坏 / 已过期 → ``ValidationException``。
+      软删除与损坏的记录**仍留在 ``files`` 表里**（软删除要等物理清理、损坏只置标记），
+      只校验「存在」会让用户拿到一个指向已删文件的数据集，一直到下载时才 404。
+      这里直接复用 ``app.files.file_records.is_file_usable``，不另立一套「可用」判定——
+      「能不能被新任务绑定」与「能不能被登记进数据集」是同一个问题。
     """
     file_id = urn_file_id(urn)
     if file_id is None:
@@ -173,6 +181,10 @@ async def _materialize_data_file(
         raise ValidationException(f"file_urn 无效：files 表中不存在文件 {file_id}")
     if str(record.project_id) != str(project_id):
         raise ValidationException("file_urn 指向的文件不属于当前项目")
+    if not is_file_usable(record):
+        raise ValidationException(
+            f"file_urn 指向的文件{_unusable_reason(record)}，无法登记为数据集文件"
+        )
     return DataFile(
         dataset_id=dataset.id,
         urn=urn,
@@ -182,6 +194,20 @@ async def _materialize_data_file(
         sha256=record.sha256,
         storage_tier="STANDARD",
     )
+
+
+def _unusable_reason(file_record: Any) -> str:
+    """只为报错措辞服务的诊断函数，**不是第二道判定闸门**。
+
+    闸门是 ``is_file_usable``（见 ``_materialize_data_file``）；这里只在它已经判否之后
+    把原因说清楚，好让调用方知道该重新上传还是该换文件。若将来 ``is_file_usable`` 增加
+    新的不可用条件，本函数会退化成「已过期」，但不会改变放行/拒绝的结果。
+    """
+    if getattr(file_record, "deleted_at", None) is not None:
+        return "已被删除"
+    if bool(getattr(file_record, "is_corrupted", False)):
+        return "已损坏"
+    return "已过期"
 
 
 def _dataset_version_content(dataset: Dataset) -> dict:

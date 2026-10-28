@@ -35,6 +35,7 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.auth.dependencies import get_current_user  # noqa: E402
+from app.common.time import utcnow  # noqa: E402
 from app.database.base import Base  # noqa: E402
 from app.database.session import get_db  # noqa: E402
 from app.main import app  # noqa: E402
@@ -156,6 +157,8 @@ async def _seed_file(
     content_type: str | None = "chemical/x-sdf",
     size_bytes: int = 1024,
     sha256: str = "0" * 64,
+    deleted: bool = False,
+    corrupted: bool = False,
 ) -> File:
     """直接落一条 ``files`` 行（登记数据集会按 urn 反查它）。"""
     record = File(
@@ -167,7 +170,11 @@ async def _seed_file(
         sha256=sha256,
         storage_backend="local",
         storage_path=f"/tmp/{file_id}",
+        is_corrupted=corrupted,
     )
+    if deleted:
+        # 软删除只置 ``deleted_at``，行本身仍在 ``files`` 里等物理清理。
+        record.deleted_at = utcnow()
     db.add(record)
     await db.commit()
     return record
@@ -498,3 +505,50 @@ async def test_attributes_merge_into_summary_summary_wins(
     assert merged["journal"] == "J. Test"
     # summary 自有的键保持不动。
     assert merged["total"] == 5
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("deleted", "corrupted", "expected"),
+    [
+        (True, False, "已被删除"),
+        (False, True, "已损坏"),
+    ],
+)
+async def test_unusable_file_is_rejected(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    project: Project,
+    deleted: bool,
+    corrupted: bool,
+    expected: str,
+) -> None:
+    """软删除或已损坏的文件不得登记成 DataFile（否则要到下载时才 404）。
+
+    ``files`` 行在软删除/损坏后仍留在表里（软删除等物理清理、损坏只置标记），
+    因此只校验「存在」不够——必须复用 ``is_file_usable`` 的可用性判定。
+    """
+
+    project_id = str(project.id)
+    await _seed_file(
+        db_session,
+        file_id="unusable-1",
+        project_id=project_id,
+        deleted=deleted,
+        corrupted=corrupted,
+    )
+
+    response = await _post_dataset(
+        api_client, project_id, name="不可用文件资产", file_urn="file:unusable-1"
+    )
+    assert response.status_code == 422, response.text
+    payload = response.json()
+    message = payload.get("message") or payload.get("detail")
+    assert "无法登记为数据集文件" in message
+    assert expected in message
+
+    await db_session.rollback()
+    dataset_count = await db_session.scalar(select(func.count()).select_from(Dataset))
+    assert dataset_count == 0
+    data_file_count = await db_session.scalar(select(func.count()).select_from(DataFile))
+    assert data_file_count == 0
