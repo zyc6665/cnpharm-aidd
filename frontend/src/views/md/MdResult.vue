@@ -146,8 +146,6 @@
   import Papa from 'papaparse'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
-  // MockDataBanner 由 mock 模型包分支提供；本分支可能尚未合入，按冻结接口引用即可。
-  // @ts-ignore -- 跨分支组件，rebase 后文件存在；此处不依赖其类型。
   import MockDataBanner from '@/components/common/MockDataBanner.vue'
   import StructureArtifactPreview from '@/components/artifacts/StructureArtifactPreview.vue'
   import MdEchart from './MdEchart.vue'
