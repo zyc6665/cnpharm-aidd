@@ -1,6 +1,6 @@
 """Organization and research project models."""
 
-from sqlalchemy import Column, ForeignKey, JSON, String, Text, UniqueConstraint
+from sqlalchemy import Column, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.database.base import Base, TimestampMixin, UUIDMixin
@@ -25,6 +25,8 @@ class Project(Base, UUIDMixin, TimestampMixin):
     status = Column(String(32), nullable=False, default="draft", index=True)
     model_policy = Column(JSON, nullable=False, default=dict)
     data_policy = Column(JSON, nullable=False, default=dict)
+    # 乐观锁版本号：每次更新 +1，客户端用 expected_version 做条件更新。
+    version = Column(Integer, nullable=False, default=1, server_default="1")
 
     organization = relationship("Organization", back_populates="projects")
     creator = relationship("User")

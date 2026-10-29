@@ -15,8 +15,15 @@ def task_extra_data(task: Any) -> dict[str, Any]:
 
 
 def task_project_id(task: Any) -> str | None:
-    """Read the legacy project context from a task without leaking JSON details."""
-    value = task_extra_data(task).get(PROJECT_ID_KEY)
+    """Read the project context from a task.
+
+    Prefers the real ``tasks.project_id`` column. Falls back to the legacy
+    ``extra_data["project_id"]`` for lightweight objects (``SimpleNamespace`` in
+    tests, pre-migration snapshots) that never had the column.
+    """
+    value = getattr(task, "project_id", None)
+    if not value:
+        value = task_extra_data(task).get(PROJECT_ID_KEY)
     return str(value) if value else None
 
 

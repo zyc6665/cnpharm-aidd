@@ -90,7 +90,23 @@ async def admin_user(db_session: AsyncSession) -> User:
 
 
 @pytest_asyncio.fixture
-async def api_client(db_session: AsyncSession, admin_user: User):
+async def regular_user(db_session: AsyncSession) -> User:
+    """创建普通（非管理员）用户。"""
+    user = User(
+        email="user@example.com",
+        password_hash="hashed-password",
+        display_name="User",
+        role=UserRole.USER.value,
+        status=UserStatus.ACTIVE.value,
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture
+async def api_client(db_session: AsyncSession, admin_user: User, regular_user: User):
     """创建带依赖覆盖的 API 客户端。"""
 
     async def override_get_db():
@@ -101,6 +117,8 @@ async def api_client(db_session: AsyncSession, admin_user: User):
     ) -> User:
         if authorization == "Bearer admin-token":
             return admin_user
+        if authorization == "Bearer user-token":
+            return regular_user
         raise HTTPException(status_code=401, detail="未提供认证凭证")
 
     async def override_get_current_user_optional(
@@ -108,6 +126,8 @@ async def api_client(db_session: AsyncSession, admin_user: User):
     ) -> User | None:
         if authorization == "Bearer admin-token":
             return admin_user
+        if authorization == "Bearer user-token":
+            return regular_user
         return None
 
     app.dependency_overrides[get_db] = override_get_db
@@ -837,7 +857,7 @@ async def test_create_task_rejects_project_id_without_membership(
     published_tool: Tool,
     direct_runner_stub: SimpleNamespace,
 ):
-    """用户不是项目成员时，不能把任务挂到该项目下。"""
+    """非管理员用户不是项目成员时，不能把任务挂到该项目下（admin 按 RBAC 旁路可访问任意项目）。"""
     organization = Organization(name="Other Lab", slug="other-lab")
     db_session.add(organization)
     await db_session.flush()
@@ -852,7 +872,7 @@ async def test_create_task_rejects_project_id_without_membership(
 
     response = await api_client.post(
         "/api/v1/tasks",
-        headers={"Authorization": "Bearer admin-token"},
+        headers={"Authorization": "Bearer user-token"},
         json={
             "tool_id": published_tool.id,
             "project_id": project.id,
