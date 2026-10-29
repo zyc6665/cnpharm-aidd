@@ -7,13 +7,17 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 import json
 import logging
 import os
 import uuid
 
+from app.common.enums import (
+    AUDIT_ACTION as AuditAction,
+    AUDIT_RESULT as AuditResult,
+    RESOURCE_TYPE as ResourceType,
+)
 from app.common.time import isoformat_z, utcnow
 from app.common.trace import get_trace_id
 from app.logging.rotation import (
@@ -26,73 +30,6 @@ from app.logging.rotation import (
 from app.logging.sanitizer import LogSanitizer
 
 logger = logging.getLogger(__name__)
-
-
-class AuditAction(str, Enum):
-    """审计操作类型"""
-    # 认证相关
-    LOGIN = "login"
-    LOGOUT = "logout"
-    LOGIN_FAILED = "login_failed"
-    PASSWORD_CHANGE = "password_change"
-    TOKEN_REFRESH = "token_refresh"
-
-    # 数据操作
-    CREATE = "create"
-    READ = "read"
-    UPDATE = "update"
-    DELETE = "delete"
-    EXPORT = "export"
-    IMPORT = "import"
-
-    # 任务相关
-    TASK_SUBMIT = "task_submit"
-    TASK_CANCEL = "task_cancel"
-    TASK_RETRY = "task_retry"
-
-    # 文件相关
-    FILE_UPLOAD = "file_upload"
-    FILE_DOWNLOAD = "file_download"
-    FILE_DELETE = "file_delete"
-
-    # 研发决策（docs/04 §9.5：决策写入必须同时追加审计；决策记录只追加，所以
-    # 只有 CREATE 没有 UPDATE/DELETE —— 后者在 ORM 层就是编程错误）
-    DECISION_CREATE = "decision_create"
-
-    # 管理员操作
-    ADMIN_USER_CREATE = "admin_user_create"
-    ADMIN_USER_UPDATE = "admin_user_update"
-    ADMIN_USER_DELETE = "admin_user_delete"
-    ADMIN_CONFIG_CHANGE = "admin_config_change"
-    ADMIN_TOOL_CREATE = "admin_tool_create"
-    ADMIN_TOOL_UPDATE = "admin_tool_update"
-
-    # 系统操作
-    SYSTEM_START = "system_start"
-    SYSTEM_STOP = "system_stop"
-    SYSTEM_CONFIG = "system_config"
-
-
-class AuditResult(str, Enum):
-    """审计结果"""
-    SUCCESS = "success"
-    FAILURE = "failure"
-    DENIED = "denied"
-    ERROR = "error"
-
-
-class ResourceType(str, Enum):
-    """资源类型"""
-    USER = "user"
-    TASK = "task"
-    TOOL = "tool"
-    FILE = "file"
-    CONFIG = "config"
-    SESSION = "session"
-    SYSTEM = "system"
-    #: 研发决策记录（docs/04 §9.5）。单独一类而不是塞进 ``TASK``：审计员按资源
-    #: 类型检索「谁在什么时候把哪个候选推进了」时，需要能与任务提交区分开。
-    DECISION_RECORD = "decision_record"
 
 
 @dataclass

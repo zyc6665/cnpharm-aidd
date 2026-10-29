@@ -1,5 +1,16 @@
 import type { TypedArtifact } from './artifacts'
 
+// 契约枚举统一 re-export 自 codegen 产物（计划 §3.2，勿手改）。
+export type {
+  ProjectStatus,
+  ProjectRole,
+  TaskPriority,
+  ArtifactType,
+  AuditAction,
+  AuditResult,
+  ResourceType,
+} from './enums.generated'
+
 // 用户相关类型
 export interface UserInfo {
   id: string  // UUID

@@ -4,9 +4,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
+from app.common.enums import ProjectStatus
 
-ProjectStatus = Literal["draft", "active", "completed", "archived", "frozen"]
-ProjectRole = Literal["owner", "editor", "runner", "viewer"]
+# ProjectStatus 的取值集合统一由 app.common.enums 提供（计划 §3.1）。
 
 
 class ProjectCreate(BaseModel):

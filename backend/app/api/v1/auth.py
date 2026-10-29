@@ -1,7 +1,7 @@
 # backend/app/api/v1/auth.py
 """认证API"""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
@@ -26,9 +26,21 @@ from app.common.exceptions import (
     UnauthorizedException, ValidationException,
     ConflictException, NotFoundException
 )
+from app.logging.audit import AuditResult, get_audit_logger
 
 router = APIRouter()
 jwt_handler = JWTHandler()
+
+
+def _client_meta(request: Request | None) -> tuple[str | None, str | None]:
+    """从请求里取 (client_ip, user_agent)，审计事件用。"""
+    if request is None:
+        return None, None
+    client = getattr(request, "client", None)
+    ip = getattr(client, "host", None) if client else None
+    headers = getattr(request, "headers", None)
+    user_agent = headers.get("user-agent") if headers is not None else None
+    return ip, user_agent
 
 
 @router.post("/register", response_model=dict)
@@ -101,6 +113,7 @@ async def register(
 @router.post("/login", response_model=dict)
 async def login(
     login_data: UserLogin,
+    request: Request,
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -109,6 +122,9 @@ async def login(
     - **email**: 邮箱地址
     - **password**: 密码
     """
+    client_ip, user_agent = _client_meta(request)
+    audit = get_audit_logger()
+
     # 查找用户
     result = await db.execute(
         select(User)
@@ -118,13 +134,37 @@ async def login(
     user = result.scalar_one_or_none()
 
     if not user:
+        audit.log_login(
+            user_id=None,
+            email=login_data.email,
+            result=AuditResult.FAILURE,
+            client_ip=client_ip,
+            user_agent=user_agent,
+            reason="用户不存在",
+        )
         raise UnauthorizedException("用户不存在")
 
     if user.status != UserStatus.ACTIVE.value:
+        audit.log_login(
+            user_id=str(user.id),
+            email=user.email,
+            result=AuditResult.FAILURE,
+            client_ip=client_ip,
+            user_agent=user_agent,
+            reason="账户已被禁用",
+        )
         raise UnauthorizedException("账户已被禁用")
 
     # 验证密码
     if not verify_password(login_data.password, user.password_hash):
+        audit.log_login(
+            user_id=str(user.id),
+            email=user.email,
+            result=AuditResult.FAILURE,
+            client_ip=client_ip,
+            user_agent=user_agent,
+            reason="密码错误",
+        )
         raise UnauthorizedException("密码错误")
 
     # 生成令牌
@@ -134,6 +174,14 @@ async def login(
         role=user.role
     )
     refresh_token = jwt_handler.create_refresh_token(user_id=user.id)
+
+    audit.log_login(
+        user_id=str(user.id),
+        email=user.email,
+        result=AuditResult.SUCCESS,
+        client_ip=client_ip,
+        user_agent=user_agent,
+    )
 
     return success_response(
         data={
@@ -230,7 +278,14 @@ async def refresh_token(
 
 @router.post("/logout", response_model=dict)
 async def logout(
+    request: Request,
     current_user: User = Depends(get_current_user)
 ):
     """登出（客户端清除令牌即可）"""
+    client_ip, user_agent = _client_meta(request)
+    get_audit_logger().log_logout(
+        user_id=str(current_user.id),
+        client_ip=client_ip,
+        user_agent=user_agent,
+    )
     return success_response(message="登出成功")

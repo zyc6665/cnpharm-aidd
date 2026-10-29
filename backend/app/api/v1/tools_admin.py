@@ -16,6 +16,7 @@ from app.services.tool_presentation import (
 from app.auth.dependencies import get_admin_user
 from app.common.exceptions import ConflictException, NotFoundException, ValidationException
 from app.common.responses import success_response
+from app.logging.audit import AuditAction, ResourceType, get_audit_logger
 from app.database.session import get_db
 from app.models.tools import Tag, Tool, ToolStatus
 from app.models.users import User
@@ -75,6 +76,7 @@ async def update_tool(
     if not tool:
         raise NotFoundException("工具不存在")
     update_data = tool_data.model_dump(exclude_unset=True)
+    updated_fields = sorted(update_data.keys())
     if "tag_ids" in update_data:
         tag_ids = update_data.pop("tag_ids")
         if tag_ids is not None:
@@ -99,6 +101,13 @@ async def update_tool(
     for field, value in update_data.items():
         setattr(tool, field, value)
     await commit_or_raise_conflict(db, "工具标识已存在")
+    get_audit_logger().log_admin_operation(
+        admin_id=str(current_user.id),
+        action=AuditAction.ADMIN_TOOL_UPDATE,
+        target_type=ResourceType.TOOL,
+        target_id=tool_id,
+        changes={"updated_fields": updated_fields},
+    )
     return success_response(
         data=serialize_tool(await load_tool_for_response(db, tool.id)),
         message="工具更新成功",
@@ -116,8 +125,16 @@ async def delete_tool(
     ).scalar_one_or_none()
     if not tool:
         raise NotFoundException("工具不存在")
+    tool_slug = tool.slug
     await db.delete(tool)
     await db.commit()
+    get_audit_logger().log_admin_operation(
+        admin_id=str(current_user.id),
+        action=AuditAction.DELETE,
+        target_type=ResourceType.TOOL,
+        target_id=tool_id,
+        changes={"slug": tool_slug},
+    )
     return success_response(message="工具删除成功")
 
 
@@ -133,6 +150,13 @@ async def publish_tool(
         raise ValidationException("；".join(str(error) for error in errors))
     tool.status = ToolStatus.PUBLISHED.value
     await db.commit()
+    get_audit_logger().log_admin_operation(
+        admin_id=str(current_user.id),
+        action=AuditAction.ADMIN_TOOL_UPDATE,
+        target_type=ResourceType.TOOL,
+        target_id=tool_id,
+        changes={"status": ToolStatus.PUBLISHED.value},
+    )
     return success_response(message="工具发布成功")
 
 
@@ -153,6 +177,13 @@ async def create_tag(
     db.add(tag)
     await db.commit()
     await db.refresh(tag)
+    get_audit_logger().log_admin_operation(
+        admin_id=str(current_user.id),
+        action=AuditAction.ADMIN_TOOL_CREATE,
+        target_type=ResourceType.TOOL,
+        target_id=str(tag.id),
+        changes={"tag_name": tag.name},
+    )
     return success_response(
         data=TagResponse.model_validate(tag).model_dump(),
         message="标签创建成功",

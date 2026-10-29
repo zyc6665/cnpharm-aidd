@@ -5,14 +5,18 @@ from contextlib import asynccontextmanager
 import logging
 
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import settings, use_direct_task_execution
 from app.cache import get_cache
 from app.database.session import init_db
 from app.api.v1 import api_router
 from app.common.exceptions import AppException
+from app.common.responses import error_response
 from app.common.time import isoformat_utc, utcnow
 from app.common.trace import TRACE_ID_HEADER, get_trace_id
 from app.middleware import RateLimitMiddleware
@@ -159,6 +163,48 @@ async def app_exception_handler(request: Request, exc: AppException):
             "requestId": get_trace_id(),
             "timestamp": isoformat_utc(utcnow()),
         }
+    )
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """把 ``HTTPException`` 也纳入统一错误信封（计划 §3.3）。
+
+    业务里散布着大量 ``raise HTTPException(status_code=..., detail=...)``；此前它们
+    走 Starlette 默认处理器返回裸 ``{"detail": ...}``，与 ``AppException`` 的信封
+    不一致。这里统一改写成 ``error_response``：
+
+    * ``detail`` 是字符串时就是给用户看的 ``message``；
+    * ``detail`` 是结构化对象时（如 ``{"currentVersion": 2}``）保留到 ``detail`` 字段，
+      ``message`` 给一句通用文案，避免把 dict ``str()`` 成不可读的字符串。
+    """
+    detail = exc.detail
+    if isinstance(detail, str):
+        # 保留 ``detail`` 字段（既有调用方/测试仍读 ``response.json()["detail"]``），
+        # 同时把同一段文案放进 ``message``，让统一信封对前端可用。
+        content = error_response(message=detail, code=exc.status_code, detail=detail)
+    else:
+        content = error_response(
+            message="请求失败", code=exc.status_code, detail=detail
+        )
+    headers = getattr(exc, "headers", None)
+    return JSONResponse(
+        status_code=exc.status_code, content=content, headers=headers
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(
+    request: Request, exc: RequestValidationError
+):
+    """请求体/参数校验失败统一为 422 信封（计划 §3.3）。"""
+    return JSONResponse(
+        status_code=422,
+        content=error_response(
+            message="请求参数校验失败",
+            code=422,
+            detail=jsonable_encoder(exc.errors()),
+        ),
     )
 
 

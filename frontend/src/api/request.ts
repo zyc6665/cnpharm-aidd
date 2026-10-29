@@ -173,7 +173,7 @@ request.interceptors.response.use(
     // 对于 logout 接口的 401 错误，不显示错误消息（因为退出登录即使失败也会清除本地数据）
     const isLogoutRequest = originalRequest.url?.includes('/auth/logout')
     if (!isCanceledRequest && !originalRequest?.silent && !(error.response?.status === 401 && isLogoutRequest)) {
-      const errorMessage = error.response?.data?.message || error.message || '请求失败'
+      const errorMessage = error.response?.data?.detail ?? error.response?.data?.message ?? '请求失败'
       message.error(errorMessage)
     }
 
