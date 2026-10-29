@@ -12,7 +12,7 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.tool_packages.legacy_migration import migrate_legacy_artifact_type  # noqa: E402
-from app.tool_packages.schemas import ToolPackageV2Manifest  # noqa: E402
+from app.tool_packages.schemas import ToolPackageManifest  # noqa: E402
 from app.tool_packages.validator import validate_tool_package  # noqa: E402
 
 
@@ -37,9 +37,9 @@ def test_legacy_migration_requires_explicit_choice_for_generated_ligand() -> Non
 
 
 def test_v2_validator_rejects_legacy_alias_even_when_migration_exists() -> None:
-    manifest = ToolPackageV2Manifest.model_validate(
+    manifest = ToolPackageManifest.model_validate(
         {
-            "api_version": "aidd.sciminer/tool-package.v2",
+            "api_version": "aidd.sciminer/tool-package",
             "kind": "ToolPackage",
             "metadata": {
                 "slug": "legacy-alias-tool",

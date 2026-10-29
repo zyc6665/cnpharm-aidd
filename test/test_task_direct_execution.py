@@ -65,7 +65,7 @@ class RecordingDirectRunner:
 
 def _direct_recovery_v2_manifest() -> dict:
     return {
-        "api_version": "aidd.sciminer/tool-package.v2",
+        "api_version": "aidd.sciminer/tool-package",
         "kind": "ToolPackage",
         "metadata": {
             "slug": "recover-standard-pocket",
@@ -1329,7 +1329,7 @@ async def test_reconcile_orphaned_direct_tasks_persists_standard_artifacts(
         return {
             "success": True,
             "result": {
-                "result_version": "aidd.sciminer/result.v2",
+                "result_version": "aidd.sciminer/result",
                 "artifacts": {
                     "pocket": {
                         "name": "Recovered pocket",
@@ -1384,7 +1384,7 @@ async def test_reconcile_orphaned_direct_tasks_rejects_invalid_standard_result_w
         return {
             "success": True,
             "result": {
-                "result_version": "aidd.sciminer/result.v2",
+                "result_version": "aidd.sciminer/result",
                 "artifacts": {
                     "pocket": {
                         "name": "Recovered pocket",

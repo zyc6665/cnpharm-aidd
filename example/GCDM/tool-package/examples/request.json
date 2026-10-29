@@ -1,0 +1,32 @@
+{
+  "request_version": "aidd.sciminer/request",
+  "task": {
+    "id": "example-gcdm-task",
+    "tool_slug": "gcdm-pocket-generation",
+    "tool_version": "0.1.2"
+  },
+  "inputs": {
+    "pocket": {
+      "artifact_version_id": "example-binding-pocket-version",
+      "type": "binding_pocket@1",
+      "files": {
+        "residue_pocket_pdb": {
+          "path": "input/pocket/residue_pocket_pdb.pdb",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "content_type": "chemical/x-pdb"
+        }
+      },
+      "metadata": {
+        "pocket_id": "example-pocket"
+      }
+    }
+  },
+  "parameters": {
+    "n_samples": 1,
+    "timesteps": 10
+  },
+  "execution": {
+    "variant": "cpu",
+    "accelerator": "cpu"
+  }
+}

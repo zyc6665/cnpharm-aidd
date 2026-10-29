@@ -38,7 +38,7 @@ def _config() -> KubernetesJobExecutionConfig:
 def _result_payload(output_sha: str) -> bytes:
     return json.dumps(
         {
-            "result_version": "aidd.sciminer/result.v2",
+            "result_version": "aidd.sciminer/result",
             "artifacts": {
                 "report": {
                     "type": "run_report@1",
@@ -77,7 +77,7 @@ async def test_collector_downloads_result_and_output_files(tmp_path: Path):
         _config(),
     )
 
-    assert collection.result_payload["result_version"] == "aidd.sciminer/result.v2"
+    assert collection.result_payload["result_version"] == "aidd.sciminer/result"
     assert collection.artifacts[0].path == "reports/result.json"
     assert collection.artifacts[0].artifact_type == "run_report@1"
     assert collection.artifacts[0].sha256 == hashlib.sha256(output).hexdigest()
@@ -107,7 +107,7 @@ async def test_collector_rejects_output_checksum_mismatch(tmp_path: Path):
 async def test_collector_rejects_unsafe_result_path(tmp_path: Path):
     result = json.dumps(
         {
-            "result_version": "aidd.sciminer/result.v2",
+            "result_version": "aidd.sciminer/result",
             "artifacts": {
                 "report": {
                     "type": "run_report@1",

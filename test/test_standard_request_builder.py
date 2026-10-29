@@ -48,7 +48,7 @@ from app.models.tools import ToolStatus
 from app.models.tools import ToolVersion as ToolVersionModel
 from app.models.users import User as UserModel
 from app.models.users import UserRole, UserStatus
-from app.tool_packages.schemas import ToolPackageV2Manifest
+from app.tool_packages.schemas import ToolPackageManifest
 
 
 def minimal_runtime_manifest(slug: str) -> dict:
@@ -94,11 +94,11 @@ async def request_builder_db() -> AsyncSession:
     await engine.dispose()
 
 
-def _manifest(*, inputs: list[dict] | None = None) -> ToolPackageV2Manifest:
+def _manifest(*, inputs: list[dict] | None = None) -> ToolPackageManifest:
     slug = "standard-request-tool"
-    return ToolPackageV2Manifest.model_validate(
+    return ToolPackageManifest.model_validate(
         {
-            "api_version": "aidd.sciminer/tool-package.v2",
+            "api_version": "aidd.sciminer/tool-package",
             "kind": "ToolPackage",
             "metadata": {
                 "slug": slug,

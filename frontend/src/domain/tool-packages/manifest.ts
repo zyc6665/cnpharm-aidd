@@ -66,7 +66,7 @@ export function buildToolPackageManifest(draft: ToolPackageGuidedDraft): Record<
   const adapterOutputMethod = `adapter.outputs.${output}`
 
   return {
-    api_version: 'aidd.sciminer/tool-package.v2',
+    api_version: 'aidd.sciminer/tool-package',
     kind: 'ToolPackage',
     metadata: {
       slug: draft.slug.trim(),

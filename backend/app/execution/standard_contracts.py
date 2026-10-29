@@ -64,7 +64,7 @@ class StandardExecutionContext(BaseModel):
 class StandardExecutionRequest(BaseModel):
     """Standard request envelope consumed by Tool Package adapters."""
 
-    request_version: Literal["aidd.sciminer/request.v1"]
+    request_version: Literal["aidd.sciminer/request"]
     task: StandardTaskContext
     inputs: dict[str, StandardInputArtifact] = Field(default_factory=dict)
     parameters: dict[str, Any] = Field(default_factory=dict)
@@ -128,7 +128,7 @@ OutputArtifactValue = StandardOutputArtifact | list[StandardOutputArtifact]
 class StandardExecutionResult(BaseModel):
     """Standard result envelope emitted by Tool Package adapters."""
 
-    result_version: Literal["aidd.sciminer/result.v2"]
+    result_version: Literal["aidd.sciminer/result"]
     artifacts: dict[str, OutputArtifactValue] = Field(default_factory=dict)
     relations: list[StandardRelationDeclaration] = Field(default_factory=list)
     summary: dict[str, Any] = Field(default_factory=dict)

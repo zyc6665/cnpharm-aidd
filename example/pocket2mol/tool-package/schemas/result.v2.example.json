@@ -1,0 +1,86 @@
+{
+  "result_version": "aidd.sciminer/result",
+  "artifacts": {
+    "molecules": {
+      "name": "example_generated_molecules",
+      "type": "molecule_table@1",
+      "files": {
+        "table_file": {
+          "path": "artifacts/molecules/molecules.csv",
+          "sha256": "97ec548005b553fb598955bcb07a459667af9c49614e275b6a32fad70aabe847",
+          "content_type": "text/csv"
+        },
+        "metadata_json": {
+          "path": "artifacts/molecules/metadata.json",
+          "sha256": "81653cca6212f3b5d1d73f257693a964ac4e6b24c51ad4b9bdb364a8d6879089",
+          "content_type": "application/json"
+        }
+      },
+      "metadata": {
+        "molecule_id_field": "molecule_id",
+        "source_task_id": "example"
+      }
+    },
+    "ligands": [
+      {
+        "name": "ligand_001",
+        "type": "ligand_structure@1",
+        "files": {
+          "structure_file": {
+            "path": "artifacts/ligands/ligand_001.sdf",
+            "sha256": "1b37778e6c2545c03d6c416aef19149c248b02799f162044021bede5e0bc6f38",
+            "content_type": "chemical/x-mdl-sdfile"
+          }
+        },
+        "metadata": {
+          "ligand_id": "ligand_001"
+        }
+      },
+      {
+        "name": "ligand_002",
+        "type": "ligand_structure@1",
+        "files": {
+          "structure_file": {
+            "path": "artifacts/ligands/ligand_002.sdf",
+            "sha256": "3d6073b71337d330cec44121fdfc1997c89f2c6d64171a31b6a3db9b91447368",
+            "content_type": "chemical/x-mdl-sdfile"
+          }
+        },
+        "metadata": {
+          "ligand_id": "ligand_002"
+        }
+      }
+    ],
+    "report": {
+      "name": "example_pocket2mol_adapter_report",
+      "type": "run_report@1",
+      "files": {
+        "report_json": {
+          "path": "reports/report.json",
+          "sha256": "809931375b036e2849a627ae9ce9731e65478950d9ae093ef9978b6c3a53c7d4",
+          "content_type": "application/json"
+        }
+      },
+      "metadata": {
+        "source_task_id": "example"
+      }
+    }
+  },
+  "relations": [
+    {
+      "from": "molecules",
+      "to": "ligands[0]",
+      "type": "contains"
+    },
+    {
+      "from": "molecules",
+      "to": "ligands[1]",
+      "type": "contains"
+    },
+    {
+      "from": "report",
+      "to": "molecules",
+      "type": "describes"
+    }
+  ]
+}

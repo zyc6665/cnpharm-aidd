@@ -378,7 +378,7 @@ def build_generation(task: dict[str, Any], out_dir: Path) -> dict[str, Any]:
     )
     report = _report(out_dir, task_id, {"kind": "molecule_generation", "seed": seed, "num_molecules": len(rows)})
     return {
-        "result_version": "aidd.sciminer/result.v2",
+        "result_version": "aidd.sciminer/result",
         "artifacts": {"molecules": molecules, "report": report},
         "relations": [{"from": "report", "to": "molecules", "type": "describes"}],
         "summary": {"package": SLUG, "mock": True, "num_molecules": len(rows)},
@@ -455,7 +455,7 @@ def build_peptide(task: dict[str, Any], out_dir: Path) -> dict[str, Any]:
     )
     report = _report(out_dir, task_id, {"kind": "peptide_design", "seed": seed, "num_peptides": len(rows)})
     return {
-        "result_version": "aidd.sciminer/result.v2",
+        "result_version": "aidd.sciminer/result",
         "artifacts": {"peptides": peptides, "report": report},
         "relations": [{"from": "report", "to": "peptides", "type": "describes"}],
         "summary": {"package": SLUG, "mock": True, "num_peptides": len(rows)},
@@ -514,7 +514,7 @@ def build_admet(task: dict[str, Any], out_dir: Path) -> dict[str, Any]:
     )
     report = _report(out_dir, task_id, {"kind": "admet_prediction", "num_molecules": len(rows)})
     return {
-        "result_version": "aidd.sciminer/result.v2",
+        "result_version": "aidd.sciminer/result",
         "artifacts": {"properties": properties, "report": report},
         "relations": [{"from": "report", "to": "properties", "type": "describes"}],
         "summary": {"package": SLUG, "mock": True, "num_molecules": len(rows)},
@@ -642,7 +642,7 @@ def build_vina(task: dict[str, Any], out_dir: Path) -> dict[str, Any]:
     )
     report = _report(out_dir, task_id, {"kind": "virtual_screening", "num_ligands": len(shown), "top_n": top_n})
     return {
-        "result_version": "aidd.sciminer/result.v2",
+        "result_version": "aidd.sciminer/result",
         "artifacts": {"ranked": ranked, "poses": poses, "report": report},
         "relations": [
             {"from": "poses", "to": "ranked", "type": "derived_from"},
@@ -720,7 +720,7 @@ def build_md(task: dict[str, Any], out_dir: Path) -> dict[str, Any]:
     )
     report = _report(out_dir, task_id, {"kind": "md_simulation", "force_field": force_field, "duration_ns": duration_ns})
     return {
-        "result_version": "aidd.sciminer/result.v2",
+        "result_version": "aidd.sciminer/result",
         "artifacts": {"trajectory": trajectory, "report": report},
         "relations": [{"from": "report", "to": "trajectory", "type": "describes"}],
         "summary": {"package": SLUG, "mock": True, "frames": frames},
@@ -776,7 +776,7 @@ def build_mmpbsa(task: dict[str, Any], out_dir: Path) -> dict[str, Any]:
     )
     report = _report(out_dir, task_id, {"kind": "mmpbsa_free_energy", "method": method, "frames": len(rows)})
     return {
-        "result_version": "aidd.sciminer/result.v2",
+        "result_version": "aidd.sciminer/result",
         "artifacts": {"energies": energies, "report": report},
         "relations": [{"from": "report", "to": "energies", "type": "describes"}],
         "summary": {"package": SLUG, "mock": True, "frames": len(rows)},

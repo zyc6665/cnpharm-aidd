@@ -421,7 +421,7 @@ Response:
 
 ```json
 {
-  "result_version": "aidd.sciminer/result.v2",
+  "result_version": "aidd.sciminer/result",
   "artifacts": [
     {
       "ref": "pocket",

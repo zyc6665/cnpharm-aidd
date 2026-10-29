@@ -1,4 +1,4 @@
-api_version: aidd.sciminer/tool-template.v1
+api_version: aidd.sciminer/tool-template
 kind: ToolTemplate
 metadata:
   template_key: docking-rescore
@@ -18,7 +18,7 @@ input_schema:
 output_schema:
   type: object
   properties:
-    result_version: { const: aidd.sciminer/result.v2 }
+    result_version: { const: aidd.sciminer/result }
     artifacts: { type: array }
     summary: { type: object }
 agent_capability:
@@ -69,7 +69,7 @@ smoke_test:
   name: docking-rescore-smoke
   params: { vina_weight: 0.6, qed_weight: 0.2, sa_weight: 0.2 }
   input_artifacts: { ranking: examples/docking_scores.csv }
-  expected_result_version: aidd.sciminer/result.v2
+  expected_result_version: aidd.sciminer/result
   expected_outputs:
     - semantic_type: molecule_table@1
       role: table_file

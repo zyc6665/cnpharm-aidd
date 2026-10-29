@@ -200,7 +200,7 @@ def standard_tool_manifest(
     outputs: list[dict],
 ) -> dict:
     return {
-        "api_version": "aidd.sciminer/tool-package.v2",
+        "api_version": "aidd.sciminer/tool-package",
         "kind": "ToolPackage",
         "metadata": {
             "slug": slug,

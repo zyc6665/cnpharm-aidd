@@ -15,7 +15,7 @@ if str(BACKEND_ROOT) not in sys.path:
 from app.execution.result_parser import parse_standard_result  # noqa: E402
 from app.execution.standard_contracts import DeclaredArtifactOutput  # noqa: E402
 from app.tool_packages.loader import load_tool_package  # noqa: E402
-from app.tool_packages.schemas import ToolPackageV2Manifest  # noqa: E402
+from app.tool_packages.schemas import ToolPackageManifest  # noqa: E402
 from app.tool_packages.validator import validate_tool_package  # noqa: E402
 
 
@@ -48,7 +48,7 @@ def test_platformization_template_loads_as_standard_v2_manifest():
     manifest = load_tool_package(TEMPLATE_ROOT)
     result = validate_tool_package(manifest)
 
-    assert isinstance(manifest, ToolPackageV2Manifest)
+    assert isinstance(manifest, ToolPackageManifest)
     assert result.is_valid is True, result.errors
     assert [(item.name, item.type) for item in manifest.artifacts.inputs] == [
         ("protein", "protein_structure@1")

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from typing import Any, Iterable
 
 from app.services.tool_contracts import build_tool_contract
-from app.tool_packages.config_resolver import tool_package_v2_manifest_data
+from app.tool_packages.config_resolver import validated_tool_package_manifest_data
 
 
 def artifact_input_slots_from_contract(
@@ -76,7 +76,7 @@ def artifact_input_slots_by_name_for_tool(
 
 
 def tool_accepts_materialized_standard_uploads(config: object) -> bool:
-    return tool_package_v2_manifest_data(config) is not None
+    return validated_tool_package_manifest_data(config) is not None
 
 
 def tool_accepts_standard_input_bindings(config: dict[str, Any]) -> bool:

@@ -42,7 +42,7 @@ describe('TaskOutputSummary', () => {
         result: {
           result: { success: true },
           standard_result: {
-            result_version: 'aidd.sciminer/result.v2',
+            result_version: 'aidd.sciminer/result',
             artifacts: {
               report: {
                 type: 'run_report@1',

@@ -2,7 +2,7 @@
 
 These rules apply to coding agents modifying this package.
 
-1. Keep `api_version: aidd.sciminer/tool-package.v2`; new tools must use standard
+1. Keep `api_version: aidd.sciminer/tool-package`; new tools must use standard
    Artifact contracts, not legacy semantic mappings.
 2. Never embed credentials, access tokens, private addresses, or absolute host
    paths. Consume deployment-specific values through platform-managed settings.

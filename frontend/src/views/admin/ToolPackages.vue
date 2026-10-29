@@ -229,7 +229,7 @@
           <a-textarea
             v-model:value="manifestText"
             :rows="16"
-            placeholder='{"api_version":"aidd.sciminer/tool-package.v2","kind":"ToolPackage","metadata":{"slug":"model-standard","name":"Model Standard","version":"1.0.0"}}'
+            placeholder='{"api_version":"aidd.sciminer/tool-package","kind":"ToolPackage","metadata":{"slug":"model-standard","name":"Model Standard","version":"1.0.0"}}'
           />
         </a-form-item>
         <a-form-item label="签名（可选，发布前必需）">

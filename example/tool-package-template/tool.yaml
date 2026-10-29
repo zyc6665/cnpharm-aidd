@@ -1,4 +1,4 @@
-api_version: aidd.sciminer/tool-package.v2
+api_version: aidd.sciminer/tool-package
 kind: ToolPackage
 metadata:
   slug: protein-pocket-template

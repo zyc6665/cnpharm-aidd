@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from app.tool_packages.schemas import ToolPackageV2Manifest
+from app.tool_packages.schemas import ToolPackageManifest
 from app.tasks.resource_profile import resolve_registered_resource_profile
 
 
@@ -14,7 +14,7 @@ class KubernetesToolBindingError(ValueError):
 
 
 def build_kubernetes_tool_config(
-    manifest: ToolPackageV2Manifest,
+    manifest: ToolPackageManifest,
     *,
     variant_name: str,
     resource_profile: str,

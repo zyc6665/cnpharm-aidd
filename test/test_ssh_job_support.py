@@ -39,7 +39,7 @@ def _build_tool_version(config: dict) -> SimpleNamespace:
 
 def _v2_manifest() -> dict:
     return {
-        "api_version": "aidd.sciminer/tool-package.v2",
+        "api_version": "aidd.sciminer/tool-package",
         "kind": "ToolPackage",
         "metadata": {
             "slug": "standard-ssh-tool",
@@ -267,7 +267,7 @@ async def test_ssh_job_executor_writes_standard_request_from_input_bindings(
     class FakeStandardRequest:
         def model_dump(self, mode: str = "json") -> dict:
             return {
-                "request_version": "aidd.sciminer/request.v1",
+                "request_version": "aidd.sciminer/request",
                 "task": {
                     "id": "task-standard",
                     "tool_slug": "standard-ssh-tool",
@@ -311,7 +311,7 @@ async def test_ssh_job_executor_writes_standard_request_from_input_bindings(
     bundle = await executor._prepare_local_task_bundle()
     payload = json.loads(Path(bundle["params_path"]).read_text(encoding="utf-8"))
 
-    assert payload["request_version"] == "aidd.sciminer/request.v1"
+    assert payload["request_version"] == "aidd.sciminer/request"
     assert payload["inputs"]["protein"]["artifact_version_id"] == "artifact-version-1"
     assert payload["parameters"] == {"threshold": 0.5}
     assert called["input_bindings"] == {"protein": "artifact-version-1"}
@@ -435,7 +435,7 @@ async def test_ssh_job_executor_projects_standard_inputs_to_legacy_file_fields(
     class FakeStandardRequest:
         def model_dump(self, mode: str = "json") -> dict:
             return {
-                "request_version": "aidd.sciminer/request.v1",
+                "request_version": "aidd.sciminer/request",
                 "task": {
                     "id": "task-affinity",
                     "tool_slug": "msign-affinity-prediction",
@@ -480,7 +480,7 @@ async def test_ssh_job_executor_projects_standard_inputs_to_legacy_file_fields(
     bundle = await executor._prepare_local_task_bundle()
     payload = json.loads(Path(bundle["params_path"]).read_text(encoding="utf-8"))
 
-    assert payload["request_version"] == "aidd.sciminer/request.v1"
+    assert payload["request_version"] == "aidd.sciminer/request"
     assert payload["params"] == {"complex_id": "1A2B_generated_001", "distance": 5.0}
     assert payload["input_files"] == {
         "protein_pdb": "input/protein/structure_file.pdb",
@@ -523,7 +523,7 @@ async def test_ssh_job_executor_projects_molecule_table_to_smiles_csv(
     class FakeStandardRequest:
         def model_dump(self, mode: str = "json") -> dict:
             return {
-                "request_version": "aidd.sciminer/request.v1",
+                "request_version": "aidd.sciminer/request",
                 "task": {
                     "id": "task-admet",
                     "tool_slug": "molp-pc-property-prediction",
@@ -600,7 +600,7 @@ def test_ssh_job_executor_does_not_keep_sshpass_environment_helper() -> None:
 def test_ssh_job_executor_keeps_standard_result_v2_schema_clean() -> None:
     """平台内部 output_file_ids 不应写进标准 result.v2 本体。"""
     standard_result = {
-        "result_version": "aidd.sciminer/result.v2",
+        "result_version": "aidd.sciminer/result",
         "artifacts": {},
         "relations": [],
     }

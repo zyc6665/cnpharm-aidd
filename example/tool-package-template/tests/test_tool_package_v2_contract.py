@@ -44,7 +44,7 @@ def test_example_request_is_standard_request_v1():
 
     Draft202012Validator.check_schema(schema)
     Draft202012Validator(schema).validate(request["parameters"])
-    assert request["request_version"] == "aidd.sciminer/request.v1"
+    assert request["request_version"] == "aidd.sciminer/request"
     assert request["inputs"]["protein"]["type"] == "protein_structure@1"
 
 

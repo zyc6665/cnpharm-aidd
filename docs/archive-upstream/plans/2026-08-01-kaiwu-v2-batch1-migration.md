@@ -197,7 +197,7 @@ Run the full platform flow after local tests and remote upload:
 2. Create temporary non-current `ToolVersion` rows for the three existing Kaiwu tools.
 3. Upload real input files through `/api/v1/files/upload`.
 4. Create tasks through `/api/v1/tasks`.
-5. Poll `/api/v1/tasks/{task_id}` until completion and verify `result_version == "aidd.sciminer/result.v2"`.
+5. Poll `/api/v1/tasks/{task_id}` until completion and verify `result_version == "aidd.sciminer/result"`.
 
 Verified on 2026-08-01 against remote Kaiwu container path `/workspace/sciminer-v2-tools`:
 

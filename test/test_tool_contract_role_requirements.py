@@ -13,7 +13,7 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.services.tool_contracts import build_tool_contract  # noqa: E402
-from app.tool_packages.schemas import ToolPackageV2Manifest  # noqa: E402
+from app.tool_packages.schemas import ToolPackageManifest  # noqa: E402
 
 
 ROLE_AWARE_INPUT = {
@@ -27,9 +27,9 @@ ROLE_AWARE_INPUT = {
 }
 
 
-def _minimal_tool_package_v2_manifest() -> dict:
+def _minimal_validated_tool_package_manifest() -> dict:
     return {
-        "api_version": "aidd.sciminer/tool-package.v2",
+        "api_version": "aidd.sciminer/tool-package",
         "kind": "ToolPackage",
         "metadata": {
             "slug": "role-aware-pocket",
@@ -82,7 +82,7 @@ def _minimal_tool_package_v2_manifest() -> dict:
 
 
 def test_tool_package_v2_artifact_inputs_accept_role_requirements() -> None:
-    manifest = ToolPackageV2Manifest.model_validate(_minimal_tool_package_v2_manifest())
+    manifest = ToolPackageManifest.model_validate(_minimal_validated_tool_package_manifest())
     input_slot = manifest.artifacts.inputs[0]
 
     assert input_slot.role_preferences == ["prepared_pdb", "structure_file"]
@@ -92,7 +92,7 @@ def test_tool_package_v2_artifact_inputs_accept_role_requirements() -> None:
 
 
 def test_tool_contract_projects_role_requirements_to_artifact_inputs() -> None:
-    manifest = _minimal_tool_package_v2_manifest()
+    manifest = _minimal_validated_tool_package_manifest()
     tool = SimpleNamespace(
         id="tool-1",
         slug="role-aware-pocket",

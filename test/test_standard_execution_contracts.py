@@ -27,7 +27,7 @@ from app.execution.standard_contracts import (
 def test_request_inputs_are_keyed_by_manifest_input_name():
     request = StandardExecutionRequest.model_validate(
         {
-            "request_version": "aidd.sciminer/request.v1",
+            "request_version": "aidd.sciminer/request",
             "task": {
                 "id": "task-1",
                 "tool_slug": "pocket2mol",
@@ -64,7 +64,7 @@ def test_request_inputs_are_keyed_by_manifest_input_name():
 def test_result_artifact_keys_must_match_declared_output_names():
     result = StandardExecutionResult.model_validate(
         {
-            "result_version": "aidd.sciminer/result.v2",
+            "result_version": "aidd.sciminer/result",
             "artifacts": {
                 "pocket": {
                     "type": "binding_pocket@1",
@@ -94,7 +94,7 @@ def test_result_artifact_keys_must_match_declared_output_names():
 def test_cardinality_many_output_accepts_a_list_of_artifacts():
     result = StandardExecutionResult.model_validate(
         {
-            "result_version": "aidd.sciminer/result.v2",
+            "result_version": "aidd.sciminer/result",
             "artifacts": {
                 "generated_ligands": [
                     {
@@ -136,7 +136,7 @@ def test_output_paths_reject_absolute_and_parent_traversal():
         with pytest.raises(ValidationError):
             StandardExecutionResult.model_validate(
                 {
-                    "result_version": "aidd.sciminer/result.v2",
+                    "result_version": "aidd.sciminer/result",
                     "artifacts": {
                         "report": {
                             "type": "run_report@1",
@@ -155,7 +155,7 @@ def test_output_paths_reject_absolute_and_parent_traversal():
 def test_result_rejects_legacy_artifact_type_aliases():
     result = StandardExecutionResult.model_validate(
         {
-            "result_version": "aidd.sciminer/result.v2",
+            "result_version": "aidd.sciminer/result",
             "artifacts": {
                 "pocket": {
                     "type": "pocket_pdb",

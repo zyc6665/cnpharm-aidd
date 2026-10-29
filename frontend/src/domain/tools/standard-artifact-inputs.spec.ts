@@ -161,7 +161,7 @@ describe('standard artifact tool inputs', () => {
         config: {
           tool_package: {
             manifest: {
-              api_version: 'aidd.sciminer/tool-package.v2',
+              api_version: 'aidd.sciminer/tool-package',
               artifacts: {
                 inputs: [
                   { name: 'protein', type: 'protein_structure@1', required: true },
@@ -194,7 +194,7 @@ describe('standard artifact tool inputs', () => {
         config: {
           tool_package: {
             manifest: {
-              api_version: 'aidd.sciminer/tool-package.v2',
+              api_version: 'aidd.sciminer/tool-package',
               artifacts: {
                 inputs: [
                   { name: 'map', type: 'cryoem_map@1', required: true },
@@ -426,7 +426,7 @@ describe('standard artifact tool inputs', () => {
           },
           tool_package: {
             manifest: {
-              api_version: 'aidd.sciminer/tool-package.v2',
+              api_version: 'aidd.sciminer/tool-package',
               parameters_schema: {
                 type: 'object',
                 properties: {

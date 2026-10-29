@@ -14,11 +14,11 @@ if str(BACKEND_ROOT) not in sys.path:
 from app.execution.result_parser import parse_standard_result  # noqa: E402
 from app.execution.standard_contracts import DeclaredArtifactOutput  # noqa: E402
 from app.tool_packages.loader import load_tool_package  # noqa: E402
-from app.tool_packages.schemas import ToolPackageV2Manifest  # noqa: E402
+from app.tool_packages.schemas import ToolPackageManifest  # noqa: E402
 from app.tool_packages.validator import validate_tool_package  # noqa: E402
 
 
-PACKAGE_ROOT = PROJECT_ROOT / "example" / "pocket2mol" / "tool-package-v2"
+PACKAGE_ROOT = PROJECT_ROOT / "example" / "pocket2mol" / "tool-package"
 REQUIRED_FILES = {
     "tool.yaml",
     "README.md",
@@ -46,7 +46,7 @@ def test_pocket2mol_v2_manifest_consumes_standard_binding_pocket():
     manifest = load_tool_package(PACKAGE_ROOT)
     result = validate_tool_package(manifest)
 
-    assert isinstance(manifest, ToolPackageV2Manifest)
+    assert isinstance(manifest, ToolPackageManifest)
     assert result.is_valid is True, result.errors
     assert manifest.metadata.slug == "pocket2mol-pocket-ligand-generation"
     assert manifest.artifacts.inputs[0].name == "pocket"

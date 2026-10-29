@@ -60,7 +60,7 @@ def write_standard_result(
     write_json(report_path, report)
 
     result = {
-        "result_version": "aidd.sciminer/result.v2",
+        "result_version": "aidd.sciminer/result",
         "artifacts": {
             "properties": {
                 "name": f"{task_id}_predictions",

@@ -70,7 +70,7 @@ def binding_result_path(output_dir: Path) -> Path:
     path.write_text(
         json.dumps(
             {
-                "result_version": "aidd.sciminer/result.v2",
+                "result_version": "aidd.sciminer/result",
                 "artifacts": {
                     "pocket": {
                         "name": "Top pocket",
@@ -119,7 +119,7 @@ def ligand_result_path(output_dir: Path) -> Path:
     path.write_text(
         json.dumps(
             {
-                "result_version": "aidd.sciminer/result.v2",
+                "result_version": "aidd.sciminer/result",
                 "artifacts": {
                     "generated_ligands": [
                         {

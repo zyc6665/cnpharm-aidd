@@ -22,7 +22,7 @@ Tool Package v2 是模型交付格式，不是执行器。平台仍然使用 SSH
    --task-id --input-dir --output-dir --params-json --work-dir --device
    ```
 
-4. 在输出目录生成 `result.json`，内容使用 `aidd.sciminer/result.v2`。
+4. 在输出目录生成 `result.json`，内容使用 `aidd.sciminer/result`。
 5. 为输入发现、参数解析、模型调用和结果格式编写合同测试。
 
 可参考 `example/pocket2mol/tool-package-v2/`、`example/MolP-PC/tool-package-v2/` 和 `docs/guides/model-runtime-packaging.md`。

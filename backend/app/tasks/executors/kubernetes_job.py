@@ -136,7 +136,7 @@ class KubernetesJobExecutor(BaseExecutor):
         resources = dict(getattr(self.task, "extra_data", {}).get("resource_snapshot") or {})
         gpu_count = int(resources.get("gpu_count") or 0)
         return {
-            "request_version": "aidd.sciminer/request.v1",
+            "request_version": "aidd.sciminer/request",
             "task": {
                 "id": task_id,
                 "tool_slug": tool_slug,

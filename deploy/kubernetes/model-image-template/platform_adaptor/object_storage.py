@@ -155,9 +155,9 @@ def upload_output_directory(
     except (OSError, json.JSONDecodeError) as exc:
         raise ObjectStorageError("result.json is not valid JSON") from exc
     if not isinstance(result_payload, dict) or result_payload.get("result_version") != (
-        "aidd.sciminer/result.v2"
+        "aidd.sciminer/result"
     ):
-        raise ObjectStorageError("result.json must use aidd.sciminer/result.v2")
+        raise ObjectStorageError("result.json must use aidd.sciminer/result")
 
     normalized_prefix = _safe_object_key(prefix)
     files = sorted(

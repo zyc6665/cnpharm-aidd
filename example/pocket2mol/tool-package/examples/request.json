@@ -1,0 +1,32 @@
+{
+  "request_version": "aidd.sciminer/request",
+  "task": {
+    "id": "example-pocket2mol-task",
+    "tool_slug": "pocket2mol-pocket-ligand-generation",
+    "tool_version": "0.1.2"
+  },
+  "inputs": {
+    "pocket": {
+      "artifact_version_id": "example-binding-pocket-version",
+      "type": "binding_pocket@1",
+      "files": {
+        "atom_pocket_pdb": {
+          "path": "input/pocket/atom_pocket_pdb.pdb",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "content_type": "chemical/x-pdb"
+        }
+      },
+      "metadata": {
+        "center": [1.0, 2.0, 3.0]
+      }
+    }
+  },
+  "parameters": {
+    "num_samples": 2,
+    "seed": 2020
+  },
+  "execution": {
+    "variant": "cpu",
+    "accelerator": "cpu"
+  }
+}

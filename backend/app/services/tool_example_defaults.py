@@ -7,7 +7,7 @@ from typing import Any
 
 from app.common.exceptions import ValidationException
 from app.services.tool_example_paths import resolve_tool_example_file_path
-from app.tool_packages.config_resolver import tool_package_v2_manifest_data
+from app.tool_packages.config_resolver import validated_tool_package_manifest_data
 
 
 SCHEMA_FALLBACK_EXAMPLE_VALUES: dict[str, dict[str, Any]] = {}
@@ -46,7 +46,7 @@ def tool_package_parameter_config(
     config: dict[str, Any],
 ) -> dict[str, Any] | None:
     """提取 Tool Package v2 详情页实际使用的参数 schema。"""
-    manifest = tool_package_v2_manifest_data(config)
+    manifest = validated_tool_package_manifest_data(config)
     if manifest is None:
         return None
     parameter_schema = manifest.get("parameters_schema")

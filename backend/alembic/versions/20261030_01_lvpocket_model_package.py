@@ -80,7 +80,7 @@ def _tool_package_manifest() -> dict:
     即：光有扁平 type/image/runtime 能起 Pod，但走不通平台的标准输入物化。
     """
     return {
-        "api_version": "aidd.sciminer/tool-package.v2",
+        "api_version": "aidd.sciminer/tool-package",
         "kind": "ToolPackage",
         "metadata": {
             "slug": SLUG,

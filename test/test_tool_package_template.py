@@ -9,7 +9,7 @@ from pathlib import Path
 from jsonschema import Draft202012Validator
 
 from app.tool_packages.loader import load_tool_package
-from app.tool_packages.schemas import ToolPackageV2Manifest
+from app.tool_packages.schemas import ToolPackageManifest
 from app.tool_packages.validator import validate_tool_package
 
 
@@ -48,7 +48,7 @@ def test_template_loads_with_the_production_validator():
     package = load_tool_package(TEMPLATE_ROOT)
     result = validate_tool_package(package)
 
-    assert isinstance(package, ToolPackageV2Manifest)
+    assert isinstance(package, ToolPackageManifest)
     assert result.is_valid is True, result.errors
     assert [(item.name, item.type) for item in package.artifacts.inputs] == [
         ("protein", "protein_structure@1")
@@ -67,7 +67,7 @@ def test_template_example_request_matches_parameter_schema():
     )
     Draft202012Validator.check_schema(schema)
     Draft202012Validator(schema).validate(request["parameters"])
-    assert request["request_version"] == "aidd.sciminer/request.v1"
+    assert request["request_version"] == "aidd.sciminer/request"
     assert request["inputs"]["protein"]["type"] == "protein_structure@1"
 
 

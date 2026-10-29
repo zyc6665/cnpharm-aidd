@@ -51,7 +51,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-MARKER = '"result_version": "aidd.sciminer/result.v2"'
+MARKER = '"result_version": "aidd.sciminer/result"'
 
 OLD_BLOCK = '''payload = {
     "success": True,
@@ -87,7 +87,7 @@ for _a in artifacts:
     }
 
 payload = {
-    "result_version": "aidd.sciminer/result.v2",
+    "result_version": "aidd.sciminer/result",
     "artifacts": artifact_map,
     "metrics": {
         "message": "LVpocket pocket prediction completed",

@@ -27,7 +27,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function asStandardResult(value: unknown): Record<string, unknown> | null {
-  if (!isRecord(value) || value.result_version !== 'aidd.sciminer/result.v2') {
+  if (!isRecord(value) || value.result_version !== 'aidd.sciminer/result') {
     return null
   }
 

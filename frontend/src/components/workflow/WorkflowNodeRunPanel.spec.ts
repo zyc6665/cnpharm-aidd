@@ -337,7 +337,7 @@ function mockToolPackageV2ToolDetail() {
         config: {
           type: 'ssh_job',
           tool_package_manifest: {
-            api_version: 'aidd.sciminer/tool-package.v2',
+            api_version: 'aidd.sciminer/tool-package',
             artifacts: {
               inputs: [
                 { name: 'protein', type: 'protein_structure@1', required: true },

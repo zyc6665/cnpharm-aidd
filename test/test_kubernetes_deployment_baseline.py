@@ -131,7 +131,7 @@ def test_smoke_image_writes_standard_result_manifest():
     runner = (DEPLOY_ROOT / "smoke-image" / "run-smoke.py").read_text(
         encoding="utf-8"
     )
-    assert '"aidd.sciminer/result.v2"' in runner
+    assert '"aidd.sciminer/result"' in runner
     assert '"run_report@1"' in runner
     assert '"report_json"' in runner
     assert "sha256_file" in runner

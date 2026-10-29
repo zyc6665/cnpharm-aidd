@@ -95,7 +95,7 @@ async def test_kubernetes_job_executor_polls_gateway_and_collects_file_ids():
         "auto",
     ]
     request_payload = json.loads(request.runtime["env"]["SCIMINER_REQUEST_JSON"])
-    assert request_payload["request_version"] == "aidd.sciminer/request.v1"
+    assert request_payload["request_version"] == "aidd.sciminer/request"
     assert request_payload["task"]["tool_slug"] == "managed-model"
     assert request_payload["parameters"] == {"threshold": 0.5}
     assert calls == [

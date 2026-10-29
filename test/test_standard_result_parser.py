@@ -33,7 +33,7 @@ def _write_binding_pocket_result(output_dir: Path) -> Path:
     result_path.write_text(
         json.dumps(
             {
-                "result_version": "aidd.sciminer/result.v2",
+                "result_version": "aidd.sciminer/result",
                 "artifacts": {
                     "pocket": {
                         "name": "Top pocket",
@@ -123,7 +123,7 @@ def test_parser_rejects_output_path_escaping_output_dir(tmp_path: Path):
     result_path.write_text(
         json.dumps(
             {
-                "result_version": "aidd.sciminer/result.v2",
+                "result_version": "aidd.sciminer/result",
                 "artifacts": {
                     "report": {
                         "type": "run_report@1",
