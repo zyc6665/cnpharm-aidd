@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import WorkflowNodeRunPanel from './WorkflowNodeRunPanel.vue'
-import { getProjectArtifacts } from '@/api/artifacts'
+import { getAllProjectArtifacts } from '@/api/artifacts'
 import { getToolDetail } from '@/api/tools'
 import { uploadFile } from '@/api/files'
 import { createTask, getTaskDetail, prepareTaskRun } from '@/api/tasks'
@@ -16,7 +16,7 @@ vi.mock('@/api/tools', () => ({
 }))
 
 vi.mock('@/api/artifacts', () => ({
-  getProjectArtifacts: vi.fn()
+  getAllProjectArtifacts: vi.fn()
 }))
 
 vi.mock('@/api/files', () => ({
@@ -395,7 +395,7 @@ describe('WorkflowNodeRunPanel', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     useUserStore().token = 'test-access-token'
-    vi.mocked(getProjectArtifacts).mockReset()
+    vi.mocked(getAllProjectArtifacts).mockReset()
     vi.mocked(getToolDetail).mockReset()
     vi.mocked(uploadFile).mockReset()
     vi.mocked(createTask).mockReset()
@@ -457,7 +457,7 @@ describe('WorkflowNodeRunPanel', () => {
         status: 'available',
       },
     }
-    vi.mocked(getProjectArtifacts).mockResolvedValue({
+    vi.mocked(getAllProjectArtifacts).mockResolvedValue({
       code: 200,
       message: 'ok',
       data: { items: [projectArtifact] },
@@ -484,7 +484,7 @@ describe('WorkflowNodeRunPanel', () => {
 
     const inputForm = wrapper.findComponent({ name: 'ToolRunInputForm' })
     expect(inputForm.props('showStandardArtifactInputs')).toBe(true)
-    expect(getProjectArtifacts).toHaveBeenCalledWith('project-1')
+    expect(getAllProjectArtifacts).toHaveBeenCalledWith('project-1')
     expect(inputForm.props('projectArtifacts')).toEqual([projectArtifact])
 
     vi.mocked(createTask).mockResolvedValue({

@@ -52,6 +52,10 @@ export interface TypedArtifact {
 
 export interface ArtifactListResponse {
   items: TypedArtifact[]
+  total?: number
+  page?: number
+  page_size?: number
+  total_pages?: number
 }
 
 export type ArtifactLineageGraphNodeKind =

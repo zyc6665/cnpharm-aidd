@@ -15,6 +15,7 @@ from app.config import settings, use_direct_task_execution
 from app.cache import get_cache
 from app.database.session import init_db
 from app.api.v1 import api_router
+from app.artifact_standards.registry import StandardArtifactRegistryError
 from app.common.exceptions import AppException
 from app.common.responses import error_response
 from app.common.time import isoformat_utc, utcnow
@@ -26,6 +27,7 @@ from app.tasks.direct_recovery import direct_task_recovery_loop
 from app.tasks.direct_runner import direct_task_runner
 from app.services.workflow_reconciliation import workflow_reconcile_loop
 from app.services.upload_maintenance import upload_sweep_loop
+from app.services.artifact_gc import artifact_gc_loop
 from app.services.idempotency_maintenance import idempotency_sweep_loop
 from app.services.queue_timeout import queue_timeout_sweep_loop
 from app.services.quota_maintenance import quota_settlement_loop
@@ -76,6 +78,9 @@ async def lifespan(app: FastAPI):
     # 过期分片上传会话清理：只在三个业务入口之外兜底，避免僵尸会话长期占存储。
     if upload_sweep_loop is not None:
         upload_sweep_loop.start()
+    # 无引用 File 回收（计划 §5.6）：版本/项目删除后的对象存储孤儿兜底。
+    if artifact_gc_loop is not None:
+        artifact_gc_loop.start()
     # 过期幂等记录清理：24h 保留期到点即删，避免带响应快照的行无限增长。
     if idempotency_sweep_loop is not None:
         idempotency_sweep_loop.start()
@@ -100,6 +105,8 @@ async def lifespan(app: FastAPI):
         await queue_timeout_sweep_loop.stop()
     if idempotency_sweep_loop is not None:
         await idempotency_sweep_loop.stop()
+    if artifact_gc_loop is not None:
+        await artifact_gc_loop.stop()
     if upload_sweep_loop is not None:
         await upload_sweep_loop.stop()
     await audit_writer.stop()
@@ -205,6 +212,24 @@ async def validation_exception_handler(
             code=422,
             detail=jsonable_encoder(exc.errors()),
         ),
+    )
+
+
+@app.exception_handler(StandardArtifactRegistryError)
+async def standard_artifact_registry_exception_handler(
+    request: Request, exc: StandardArtifactRegistryError
+):
+    """标准 Artifact 注册表错误统一为 422 信封。
+
+    放在全局而不是路由层：``standard_type``/``standard_version`` 的解析散落在
+    Artifact 创建、任务输入校验等多条路径上，逐个路由 try/except 会漏掉未来新增
+    的入口；这里把领域层的 ``ValueError`` 子类一次收口，保持 ``AppException`` 一样
+    的 ``{code,message,data,detail}`` 形状。未知 ``standard_type`` 以前会冒泡到
+    500，对调用方来说是「服务端坏了」，语义上是「参数不对」。
+    """
+    return JSONResponse(
+        status_code=422,
+        content=error_response(message=str(exc), code=422, detail=str(exc)),
     )
 
 

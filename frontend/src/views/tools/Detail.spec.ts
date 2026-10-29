@@ -48,7 +48,7 @@ vi.mock('@/api/files', () => ({
 }))
 
 vi.mock('@/api/artifacts', () => ({
-  getProjectArtifacts: vi.fn(),
+  getAllProjectArtifacts: vi.fn(),
 }))
 
 vi.mock('@/api/tasks', () => ({

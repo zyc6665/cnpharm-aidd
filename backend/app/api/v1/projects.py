@@ -1,5 +1,7 @@
 """Research project APIs."""
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import func, or_, select, update as sa_update
@@ -19,6 +21,7 @@ from app.models.projects import Organization, Project, ProjectMember
 from app.models.quotas import ProjectQuota
 from app.models.tasks import Task
 from app.models.users import User
+from app.storage.factory import get_storage_backend
 from app.models.workflows import (
     ResearchBoard,
     WorkflowDefinition,
@@ -36,6 +39,8 @@ from app.services.domain_compounds import (
 )
 from app.services.domain_targets import delete_project_domain_rows, project_domain_counts
 from app.services.project_access import load_project_membership, require_project_role
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     dependencies=[Depends(require_feature_flag("AIDD_PROJECT_WORKSPACE_ENABLED"))]
@@ -381,6 +386,24 @@ async def _delete_project_related_rows(db: AsyncSession, project_id: str) -> Non
         await db.execute(
             sa_delete(ArtifactLineage).where(ArtifactLineage.project_id == project_id)
         )
+        # 先删对象再删行：只删行会在对象存储留下永久孤儿（无法再从库里枚举）。
+        storage_keys = list(
+            (
+                await db.execute(
+                    select(ArtifactVersion.storage_key).where(
+                        ArtifactVersion.artifact_id.in_(artifact_ids)
+                    )
+                )
+            ).scalars()
+        )
+        storage_backend = get_storage_backend()
+        for storage_key in storage_keys:
+            if not storage_key:
+                continue
+            try:
+                await storage_backend.delete(storage_key)
+            except Exception:  # noqa: BLE001 - 单个对象失败不阻塞项目删除
+                logger.warning("删除项目产物对象失败: %s", storage_key, exc_info=True)
         await db.execute(
             sa_delete(ArtifactVersion).where(ArtifactVersion.artifact_id.in_(artifact_ids))
         )

@@ -9,7 +9,7 @@
  *   用 papaparse 解析 CSV。
  */
 import Papa from 'papaparse'
-import { getProjectArtifacts } from '@/api/artifacts'
+import { getAllProjectArtifacts } from '@/api/artifacts'
 import { listProjects } from '@/api/projects'
 import { getResult } from '@/api/results'
 import { createTask } from '@/api/tasks'
@@ -110,7 +110,9 @@ export async function resolvePocketInputBinding(
   pocketId: string
 ): Promise<Record<string, string>> {
   try {
-    const response = await getProjectArtifacts(projectId, { artifact_type: 'binding_pocket' })
+    const response = await getAllProjectArtifacts(projectId, {
+      artifact_type: 'binding_pocket',
+    })
     const match = response.data.items.find((artifact) => {
       const metadata = artifact.latest_version?.manifest_json?.metadata
       if (!metadata) {

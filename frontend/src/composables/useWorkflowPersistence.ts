@@ -2,7 +2,7 @@ import { computed, ref, watch, type ComputedRef } from 'vue'
 import { Modal, message } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
 import { getTaskDetail } from '@/api/tasks'
-import { getProjectArtifacts, uploadProjectArtifact } from '@/api/artifacts'
+import { getAllProjectArtifacts, uploadProjectArtifact } from '@/api/artifacts'
 import { uploadFile } from '@/api/files'
 import type { WorkflowDefinitionPayload } from '@/api/workflows'
 import { deriveArtifactSlotsFromToolContract } from '@/workflow/contract-bindings'
@@ -215,7 +215,7 @@ export function useWorkflowPersistence(input: {
 
     projectWorkflowArtifactsLoading.value = true
     try {
-      const response = await getProjectArtifacts(currentProjectId)
+      const response = await getAllProjectArtifacts(currentProjectId)
       if (requestId === artifactRequestId) {
         projectWorkflowArtifacts.value = response.data.items
       }

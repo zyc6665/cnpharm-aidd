@@ -2,7 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ProjectOverview from './Overview.vue'
 import { getProjectOverview } from '@/api/projects'
-import { getProjectArtifacts } from '@/api/artifacts'
+import { getAllProjectArtifacts } from '@/api/artifacts'
 
 const routerReplace = vi.fn()
 let routeQuery: Record<string, string | undefined> = {}
@@ -23,7 +23,7 @@ vi.mock('@/api/projects', () => ({
 vi.mock('@/api/artifacts', () => ({
   buildArtifactVersionDownloadUrl: (artifactId: string, versionId: string) =>
     `/api/v1/artifacts/${artifactId}/versions/${versionId}/download`,
-  getProjectArtifacts: vi.fn()
+  getAllProjectArtifacts: vi.fn()
 }))
 
 const overview = {
@@ -110,7 +110,7 @@ describe('ProjectOverview', () => {
     vi.clearAllMocks()
     routeQuery = {}
     vi.mocked(getProjectOverview).mockResolvedValue({ data: overview } as never)
-    vi.mocked(getProjectArtifacts).mockResolvedValue({ data: { items: [] } } as never)
+    vi.mocked(getAllProjectArtifacts).mockResolvedValue({ data: { items: [] } } as never)
   })
 
   it('展示项目总览、最近资源和进入研究会话入口', async () => {
@@ -143,7 +143,7 @@ describe('ProjectOverview', () => {
   })
 
   it('Artifact 常用筛选调用项目 Artifact 检索接口', async () => {
-    vi.mocked(getProjectArtifacts).mockResolvedValueOnce({
+    vi.mocked(getAllProjectArtifacts).mockResolvedValueOnce({
       data: {
         items: [
           {
@@ -180,7 +180,7 @@ describe('ProjectOverview', () => {
     await molpPcFilter!.trigger('click')
     await flushPromises()
 
-    expect(getProjectArtifacts).toHaveBeenCalledWith('project-1', {
+    expect(getAllProjectArtifacts).toHaveBeenCalledWith('project-1', {
       metadata_model_name: 'MolP-PC'
     })
     expect(wrapper.text()).toContain('MolP-PC ADMET table')
@@ -188,7 +188,7 @@ describe('ProjectOverview', () => {
   })
 
   it('Artifact 筛选视图写入 URL 并可从 URL 恢复', async () => {
-    vi.mocked(getProjectArtifacts).mockResolvedValue({ data: { items: [] } } as never)
+    vi.mocked(getAllProjectArtifacts).mockResolvedValue({ data: { items: [] } } as never)
     const wrapper = renderOverview()
     await flushPromises()
 
@@ -202,11 +202,11 @@ describe('ProjectOverview', () => {
     vi.clearAllMocks()
     routeQuery = { artifact_filter: 'molecule_table' }
     vi.mocked(getProjectOverview).mockResolvedValue({ data: overview } as never)
-    vi.mocked(getProjectArtifacts).mockResolvedValue({ data: { items: [] } } as never)
+    vi.mocked(getAllProjectArtifacts).mockResolvedValue({ data: { items: [] } } as never)
     renderOverview()
     await flushPromises()
 
-    expect(getProjectArtifacts).toHaveBeenCalledWith('project-1', {
+    expect(getAllProjectArtifacts).toHaveBeenCalledWith('project-1', {
       standard_type: 'molecule_table'
     })
   })

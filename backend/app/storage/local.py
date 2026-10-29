@@ -2,12 +2,19 @@
 """本地文件存储后端"""
 
 import os
+import asyncio
 import aiofiles
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Optional, BinaryIO
 
 from app.storage.base import StorageBackend, StorageFile
 from app.config import settings
+
+
+def _open_local(path: Path):
+    """打开本地文件句柄（独立函数便于测试替换）。"""
+    return open(path, "rb")
 
 
 class LocalStorageBackend(StorageBackend):
@@ -95,6 +102,31 @@ class LocalStorageBackend(StorageBackend):
             os.remove(full_path)
             return True
         return False
+
+    def open_stream(self, path: str, chunk_size: int = 1024 * 1024) -> AsyncIterator[bytes]:
+        """按块流式读取本地文件，文件句柄随迭代结束关闭。
+
+        读文件放到 ``asyncio.to_thread``：同步 ``read`` 不会阻塞事件循环。
+        """
+
+        async def _iter() -> AsyncIterator[bytes]:
+            if os.path.isabs(path):
+                full_path = Path(path)
+            else:
+                full_path = self._get_full_path(path)
+            if not full_path.exists():
+                raise FileNotFoundError(f"文件不存在: {path}")
+            handle = await asyncio.to_thread(_open_local, full_path)
+            try:
+                while True:
+                    chunk = await asyncio.to_thread(handle.read, chunk_size)
+                    if not chunk:
+                        break
+                    yield chunk
+            finally:
+                await asyncio.to_thread(handle.close)
+
+        return _iter()
 
     async def exists(self, path: str) -> bool:
         """检查文件是否存在"""

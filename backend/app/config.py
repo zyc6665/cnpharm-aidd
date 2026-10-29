@@ -480,6 +480,12 @@ class Settings(BaseSettings):
     UPLOAD_SWEEP_INTERVAL_SECONDS: int = 3600
     UPLOAD_SWEEP_ENABLED: bool = True
 
+    # 无引用 File 回收（计划 §5.6）。产物版本/项目删除只删行会留下对象存储孤儿，
+    # 需要一个与用户行为无关的兜底。保留 30 天：先删版本再恢复的窗口。
+    ARTIFACT_GC_ENABLED: bool = True
+    ARTIFACT_GC_INTERVAL_SECONDS: int = 3600
+    ARTIFACT_GC_RETENTION_DAYS: int = 30
+
     # 对象存储生命周期规则（docs/04 §5.8、docs/03 §4.5、docs/15 §3.2）。
     # 平台侧清理（上传会话巡检）跑在 backend 进程里，进程没起来就不清理；
     # 桶上的 lifecycle 由 MinIO 自己执行，是最后一道保险。两者都要有。

@@ -135,7 +135,7 @@
     SchemaProperty,
   } from '@/types/models'
   import { uploadFile, convertSdfToPdb } from '@/api/files'
-  import { getProjectArtifacts } from '@/api/artifacts'
+  import { getAllProjectArtifacts } from '@/api/artifacts'
   import { applyToolExample, getToolExample, previewToolExampleFile } from '@/api/tools'
   import { useToolDetailExamples } from '@/composables/useToolDetailExamples'
   import {
@@ -286,7 +286,7 @@
   } = useToolDetailStandardArtifacts({
     projectId: currentProjectId,
     standardInputSlots,
-    api: { getProjectArtifacts },
+    api: { getAllProjectArtifacts },
     selectStandardArtifact,
     updateStandardInputFileList,
   })

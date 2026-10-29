@@ -163,7 +163,7 @@
   import { computed, onMounted, ref } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { getProjectOverview } from '@/api/projects'
-  import { buildArtifactVersionDownloadUrl, getProjectArtifacts } from '@/api/artifacts'
+  import { buildArtifactVersionDownloadUrl, getAllProjectArtifacts } from '@/api/artifacts'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import AppEmptyState from '@/components/common/AppEmptyState.vue'
   import {
@@ -242,7 +242,9 @@
 
     artifactFilterLoading.value = true
     try {
-      artifactFilterResults.value = (await getProjectArtifacts(projectId.value, preset.params)).data.items
+      artifactFilterResults.value = (
+        await getAllProjectArtifacts(projectId.value, preset.params)
+      ).data.items
     } catch {
       artifactFilterResults.value = []
       artifactFilterError.value = true
