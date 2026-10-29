@@ -14,6 +14,7 @@ from sqlalchemy.orm import joinedload, selectinload
 from app.config import settings, use_direct_task_execution
 from app.common.exceptions import NotFoundException, QuotaExceededException, ValidationException
 from app.common.trace import get_trace_id
+from app.logging.audit import AuditAction, get_audit_logger
 from app.database.base import utcnow
 from app.models.statistics import ToolStatistics
 from app.models.tasks import Task, TaskInput, TaskStatus
@@ -44,7 +45,7 @@ from app.tasks.attempts import (
     set_execution_attempt_id,
 )
 from app.tasks.commands import TaskCommand
-from app.common.task_context import set_task_project_id
+from app.common.task_context import set_task_project_id, task_project_id
 from app.tasks.direct_runner import direct_task_runner as default_direct_task_runner
 from app.tasks.naming import (
     resolve_task_display_name,
@@ -764,6 +765,17 @@ async def create_and_schedule_tool_task(
 
     await db.commit()
     await db.refresh(task)
+
+    # 提交审计（计划 §3.5 / docs/12 TC-NFR-04）：任务一旦 commit 即为历史事实，
+    # 必须在派发前留痕，避免「任务已建但审计缺失」。
+    get_audit_logger().log_task_operation(
+        user_id=str(current_user.id),
+        action=AuditAction.TASK_SUBMIT,
+        task_id=str(task.id),
+        tool_id=str(task.tool_id),
+        project_id=task_project_id(task),
+        tool_version_id=str(task.tool_version_id) if task.tool_version_id else None,
+    )
 
     await dispatch_tool_task(
         db=db,

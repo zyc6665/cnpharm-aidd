@@ -36,6 +36,7 @@ from app.models.compounds import (
     MoleculeFingerprint,
 )
 from app.models.traceability import AuditLog, TaskInputSnapshot
+from app.models.audit_deadletter import AuditLogDeadletter
 from app.models.decisions import DecisionItem, DecisionRecord
 from app.models.uploads import DataFile, Dataset, UploadPart, UploadSession
 from app.models.idempotency import IdempotencyKey
@@ -61,6 +62,7 @@ __all__ = [
     "Target", "Protein", "ProteinStructure", "Pocket", "PocketResidue",
     "Compound", "Candidate", "CandidateSet", "CandidateSetItem", "MoleculeFingerprint",
     "AuditLog", "TaskInputSnapshot",
+    "AuditLogDeadletter",
     "DecisionRecord", "DecisionItem",
     "UploadSession", "UploadPart", "Dataset", "DataFile",
     "IdempotencyKey",

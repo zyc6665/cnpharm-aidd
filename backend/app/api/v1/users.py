@@ -19,6 +19,7 @@ from app.models.workflows import ResearchBoard, WorkflowDefinition, WorkflowRun
 from app.auth.dependencies import get_current_user, get_admin_user
 from app.auth.password import hash_password, verify_password
 from app.common.responses import success_response
+from app.logging.audit import AuditAction, ResourceType, get_audit_logger
 from app.schemas.users import UserResponse
 
 router = APIRouter()
@@ -268,7 +269,14 @@ async def change_password(
     current_user.updated_at = utcnow()
     await db.commit()
 
-    return {"message": "密码修改成功"}
+    get_audit_logger().log_user_action(
+        AuditAction.PASSWORD_CHANGE,
+        user_id=str(current_user.id),
+        resource_type=ResourceType.USER,
+        resource_id=str(current_user.id),
+    )
+
+    return success_response(message="密码修改成功")
 
 
 # ==================== 管理员接口 ====================
@@ -296,6 +304,18 @@ async def admin_create_user(
     )
     db.add(created_user)
     await db.commit()
+
+    get_audit_logger().log_admin_operation(
+        admin_id=str(admin_user.id),
+        action=AuditAction.ADMIN_USER_CREATE,
+        target_type=ResourceType.USER,
+        target_id=str(created_user.id),
+        changes={
+            "email": created_user.email,
+            "role": created_user.role,
+            "status": created_user.status,
+        },
+    )
 
     loaded_user = await load_user_with_statistics(db, created_user.id)
     return success_response(
@@ -518,6 +538,14 @@ async def admin_update_user(
     user.updated_at = utcnow()
     await db.commit()
 
+    get_audit_logger().log_admin_operation(
+        admin_id=str(admin_user.id),
+        action=AuditAction.ADMIN_USER_UPDATE,
+        target_type=ResourceType.USER,
+        target_id=user_id,
+        changes=dict(update_data),
+    )
+
     refreshed_result = await db.execute(
         select(User)
         .options(joinedload(User.statistics))
@@ -551,6 +579,14 @@ async def admin_reset_user_password(
     user.password_hash = hash_password(password_reset.new_password)
     user.updated_at = utcnow()
     await db.commit()
+
+    get_audit_logger().log_admin_operation(
+        admin_id=str(admin_user.id),
+        action=AuditAction.ADMIN_USER_UPDATE,
+        target_type=ResourceType.USER,
+        target_id=user_id,
+        changes={"reset_password": True},
+    )
 
     return success_response(
         data={"message": "密码重置成功"},
@@ -594,6 +630,13 @@ async def admin_delete_user(
     if hard:
         await hard_delete_user_related_resources(db, user_id)
         await db.commit()
+        get_audit_logger().log_admin_operation(
+            admin_id=str(admin_user.id),
+            action=AuditAction.ADMIN_USER_DELETE,
+            target_type=ResourceType.USER,
+            target_id=user_id,
+            changes={"hard": True},
+        )
         return success_response(
             data={"message": "用户已彻底删除"},
             message="用户已彻底删除",
@@ -603,6 +646,14 @@ async def admin_delete_user(
     user.status = UserStatus.DISABLED.value
     user.updated_at = utcnow()
     await db.commit()
+
+    get_audit_logger().log_admin_operation(
+        admin_id=str(admin_user.id),
+        action=AuditAction.ADMIN_USER_DELETE,
+        target_type=ResourceType.USER,
+        target_id=user_id,
+        changes={"hard": False},
+    )
 
     return success_response(
         data={"message": "用户已删除"},

@@ -1,11 +1,7 @@
-export type ArtifactType =
-  | 'protein_structure'
-  | 'binding_pocket'
-  | 'pocket_result'
-  | 'ligand_structure'
-  | 'molecule_table'
-  | 'file'
-  | 'run_report'
+import type { ArtifactType } from './enums.generated'
+
+// 契约枚举统一来自 codegen 产物（计划 §3.2，勿手改）。
+export type { ArtifactType } from './enums.generated'
 
 export interface ArtifactVersionFile {
   id: string

@@ -12,8 +12,11 @@ Two design constraints decide the shape:
   最终一致，写入失败不阻断业务). ``AuditLogger`` calls ``db_writer`` synchronously
   from inside request handlers, so the writer must not await. It enqueues instead,
   and a single background task drains the queue with its own session.
-* **Dropping is preferable to stalling.** If the queue is full the event is
-  dropped with a warning rather than applying back-pressure to the request path.
+* **Dropping is no longer the last resort.** If the queue is full the event is
+  written *synchronously* to an append-only ``audit_log_deadletters`` table (plan
+  §3.5), so a burst degrades to a slower write instead of losing the trail. The
+  request path still never raises: a dead-letter write failure is counted and
+  swallowed.
 
 The file trail stays enabled: it is the only record that survives a database
 outage, and the two destinations are compared during acceptance (docs/12
@@ -24,8 +27,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, Callable
 
+import sqlalchemy as sa
+
+from app.common.time import utcnow
 from app.logging.audit import AuditEvent
 
 logger = logging.getLogger(__name__)
@@ -77,13 +83,63 @@ def event_to_row(event: AuditEvent) -> dict[str, Any]:
     }
 
 
+# --------------------------------------------------------------------------- #
+# Dead-letter sink (plan §3.5): append-only overflow for a full queue. The table
+# is owned by the ORM model ``app.models.audit_deadletter.AuditLogDeadletter``;
+# the sink only needs a synchronous engine to write it without importing the
+# async session (the writer callback must not await).
+# --------------------------------------------------------------------------- #
+
+_sync_engine: sa.Engine | None = None
+
+
+def _to_sync_url(url: str) -> str:
+    """Best-effort conversion of the configured async DSN to a synchronous one."""
+    if url.startswith("sqlite+aiosqlite"):
+        return "sqlite" + url[len("sqlite+aiosqlite"):]
+    if url.startswith("postgresql+asyncpg"):
+        return "postgresql+psycopg" + url[len("postgresql+asyncpg"):]
+    return url
+
+
+def _get_sync_engine() -> sa.Engine:
+    global _sync_engine
+    if _sync_engine is None:
+        from app.config import resolve_database_url, settings
+
+        _sync_engine = sa.create_engine(
+            _to_sync_url(resolve_database_url(settings.DATABASE_URL))
+        )
+    return _sync_engine
+
+
+def write_deadletter(event: AuditEvent) -> None:
+    """Synchronously append an overflowed event to ``audit_log_deadletters``."""
+    # Imported lazily so importing the sink never pulls in the ORM model graph
+    # (and to keep ``app.models`` → ... → ``audit_sink`` cycle-free).
+    from app.models.audit_deadletter import AuditLogDeadletter
+
+    row = event_to_row(event)
+    row["deadletter_reason"] = "queue_full"
+    row["deadletter_at"] = utcnow()
+    with _get_sync_engine().begin() as conn:
+        conn.execute(AuditLogDeadletter.__table__.insert().values(**row))
+
+
 class AuditDbWriter:
     """Queue-backed writer that persists audit events into ``audit_logs``."""
 
-    def __init__(self, *, queue_size: int = DEFAULT_QUEUE_SIZE) -> None:
+    def __init__(
+        self,
+        *,
+        queue_size: int = DEFAULT_QUEUE_SIZE,
+        deadletter_writer: Callable[[AuditEvent], None] | None = None,
+    ) -> None:
         self._queue: asyncio.Queue[AuditEvent] | None = None
         self._worker: asyncio.Task[None] | None = None
         self._queue_size = queue_size
+        self._deadletter_writer = deadletter_writer
+        self._closing = False
         self.dropped = 0
         self.written = 0
         self.failed = 0
@@ -94,13 +150,26 @@ class AuditDbWriter:
         """Create the queue and background drainer inside the running loop."""
         if self._worker is not None:
             return
+        self._closing = False
         self._queue = asyncio.Queue(maxsize=self._queue_size)
         self._worker = asyncio.create_task(self._drain(), name="audit-log-writer")
 
     async def stop(self) -> None:
-        """Flush what is queued, then cancel the drainer."""
+        """Stop accepting new events, drain the queue, then cancel the drainer."""
         if self._worker is None:
             return
+        # 1) Reject new enqueues so the queue can actually reach empty.
+        self._closing = True
+        queue = self._queue
+        if queue is not None:
+            try:
+                await asyncio.wait_for(queue.join(), timeout=10.0)
+            except asyncio.TimeoutError:  # pragma: no cover - defensive
+                logger.warning(
+                    "Audit queue did not drain within 10s; %s event(s) left",
+                    queue.qsize(),
+                )
+        # 2) Only now tear the worker down.
         worker, self._worker = self._worker, None
         worker.cancel()
         try:
@@ -112,6 +181,10 @@ class AuditDbWriter:
 
     def __call__(self, event: AuditEvent) -> None:
         """``AuditLogger`` calls this synchronously; it must not block."""
+        if self._closing:
+            # Shutdown in progress: never silently lose the event.
+            self._write_deadletter(event)
+            return
         queue = self._queue
         if queue is None:
             logger.debug("Audit DB writer not started; event stays in the file trail")
@@ -122,10 +195,21 @@ class AuditDbWriter:
             self.dropped += 1
             if self.dropped % 100 == 1:
                 logger.warning(
-                    "Audit queue full; dropped %s audit event(s) so far", self.dropped
+                    "Audit queue full; dead-lettered %s audit event(s) so far", self.dropped
                 )
+            self._write_deadletter(event)
 
     # -- internals ---------------------------------------------------------
+
+    def _write_deadletter(self, event: AuditEvent) -> None:
+        """Synchronously persist an overflowed event; never raise to the caller."""
+        if self._deadletter_writer is None:
+            return
+        try:
+            self._deadletter_writer(event)
+        except Exception:  # pragma: no cover - defensive
+            self.failed += 1
+            logger.exception("Failed to dead-letter audit event %s", event.id)
 
     async def _drain(self) -> None:
         from app.database.session import async_session_factory
@@ -157,10 +241,15 @@ def configure_audit_db_writer(writer: AuditDbWriter | None = None) -> AuditDbWri
     from app.logging.audit import get_audit_logger
 
     audit_logger = get_audit_logger()
-    sink = writer or AuditDbWriter()
+    sink = writer or AuditDbWriter(deadletter_writer=write_deadletter)
     audit_logger.enable_db_logging = True
     audit_logger._db_writer = sink  # noqa: SLF001 - the hook is private by design
     return sink
 
 
-__all__ = ["AuditDbWriter", "configure_audit_db_writer", "event_to_row"]
+__all__ = [
+    "AuditDbWriter",
+    "configure_audit_db_writer",
+    "event_to_row",
+    "write_deadletter",
+]

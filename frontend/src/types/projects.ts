@@ -1,8 +1,9 @@
 import type { TypedArtifact } from './artifacts'
 import type { TaskStatus } from './models'
+import type { ProjectRole, ProjectStatus } from './enums.generated'
 
-export type ProjectStatus = 'draft' | 'active' | 'completed' | 'archived' | 'frozen'
-export type ProjectRole = 'owner' | 'editor' | 'runner' | 'viewer'
+// 契约枚举统一来自 codegen 产物（计划 §3.2，勿手改）。
+export type { ProjectRole, ProjectStatus } from './enums.generated'
 
 export interface ProjectMembership {
   id: string

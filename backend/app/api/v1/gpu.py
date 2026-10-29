@@ -329,7 +329,7 @@ async def release_gpu(
 
     if success:
         await db.commit()
-        return {"message": "GPU released successfully"}
+        return success_response(message="GPU released successfully")
     else:
         raise HTTPException(
             status_code=400,
@@ -364,7 +364,7 @@ async def get_gpu_history(
     """获取GPU历史数据"""
     monitor = GPUMonitor()
     history = await monitor.get_historical_metrics(hours=hours)
-    return {"history": history, "hours": hours}
+    return success_response(data={"history": history, "hours": hours})
 
 
 # ============ 卡位（slot）端点 ============

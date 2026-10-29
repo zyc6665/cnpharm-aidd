@@ -92,7 +92,9 @@ async def test_release_gpu_uses_database_session(monkeypatch) -> None:
         db=db,
     )
 
-    assert result == {"message": "GPU released successfully"}
+    assert result["code"] == 200
+    assert result["message"] == "GPU released successfully"
+    assert result["data"] is None
     assert observed == {
         "session": db,
         "kwargs": {"task_id": "task-1", "allocation_id": "allocation-1"},
