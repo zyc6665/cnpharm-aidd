@@ -26,7 +26,8 @@ def test_platform_run_v2_probes_model_root_support() -> None:
     source = (TEMPLATE_ADAPTOR / "platform_run_v2.sh").read_text(encoding="utf-8")
 
     assert "MODEL_ROOT_ARGS=()" in source
-    assert "grep -q -- '--model-root)' /opt/sciminer/model/platform_run.sh" in source
+    # 入口改为支持 drp-runner 契约的 DRP_MODEL_ENTRY（默认仍是 /opt/sciminer/model/platform_run.sh）
+    assert 'grep -q -- \'--model-root)\' "${DRP_MODEL_ENTRY}"' in source
     assert '${MODEL_ROOT_ARGS[@]+"${MODEL_ROOT_ARGS[@]}"}' in source
     # 无条件传的写法必须已经不存在（否则探测就是摆设）
     assert '\n  --model-root "${MODEL_PACKAGE_ROOT:-/opt/sciminer/model}" \\\n' not in source

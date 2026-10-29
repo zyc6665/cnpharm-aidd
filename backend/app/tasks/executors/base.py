@@ -177,7 +177,17 @@ class BaseExecutor(ABC):
                     uploaded_ids.append(file_id)
                     logger.info("Collected output file: %s -> %s", relative_path, file_id)
                 except Exception as exc:
-                    logger.error("Failed to collect output file %s: %s", source_path, exc)
+                    # 不再静默跳过：产物写入失败必须让任务失败，并把原因向上抛给
+                    # worker 的失败处理链路写入 task.error_message（此前只 log 一行
+                    # 后继续，任务会以「成功但缺产物」收场，问题被吞掉）。
+                    logger.exception(
+                        "Failed to collect output file %s (%s)",
+                        source_path,
+                        relative_path,
+                    )
+                    raise TaskExecutionError(
+                        f"Failed to collect output file {relative_path}: {exc}"
+                    ) from exc
 
             if commit:
                 await session.commit()

@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 from fastapi import HTTPException
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -25,6 +26,7 @@ from app.services.project_migration import ensure_migration_project_for_owner
 from app.services.project_quotas import check_submission_allowed
 from app.services.rbac import require_project_action
 from app.services.run_input_normalization import normalize_string_mapping
+from app.services.workflow_task_lookup import find_existing_workflow_node_task
 from app.services.run_preparation import PreparedRun, RunContext, RunPreparationInput, prepare_run
 from app.services.tool_contracts import (
     build_tool_contract,
@@ -669,6 +671,26 @@ def _snapshot_timeout_sec(extra_data: dict[str, object]) -> float | None:
     return float(value)
 
 
+def _workflow_node_key(params: dict[str, object]) -> tuple[str | None, str | None, int | None]:
+    """Extract the workflow idempotency key from a prepared task's params.
+
+    ``workflow_run_id``/``workflow_node_id`` are written by the workflow
+    schedulers into every node task's params. Non-workflow tasks leave them
+    absent, so the returned key is all ``None`` and the DB unique index does
+    not apply (NULLs are distinct in a unique index).
+    """
+    run_id = params.get("workflow_run_id")
+    node_id = params.get("workflow_node_id")
+    if not run_id or not node_id:
+        return None, None, None
+    raw_attempt = params.get("workflow_node_attempt", 1)
+    try:
+        attempt = int(raw_attempt)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        attempt = 1
+    return str(run_id), str(node_id), attempt
+
+
 async def create_and_schedule_tool_task(
     *,
     db: AsyncSession,
@@ -725,6 +747,9 @@ async def create_and_schedule_tool_task(
         await _record_quota_rejection(db, exc=exc, command=command, tool=tool)
         raise
     task_input = command.task_input
+    workflow_run_id, workflow_node_id, workflow_node_attempt = _workflow_node_key(
+        task_input["params"]
+    )
 
     task = Task(
         user_id=command.user_id,
@@ -735,39 +760,64 @@ async def create_and_schedule_tool_task(
         priority=command.priority,
         progress=0.0,
         extra_data=command.extra_data,
+        workflow_run_id=workflow_run_id,
+        workflow_node_id=workflow_node_id,
+        workflow_node_attempt=workflow_node_attempt,
     )
 
-    db.add(task)
-    await db.flush()
-    task.name = resolve_task_display_name(
-        name=command.name,
-        tool_name=tool.name,
-        created_at=task.created_at,
-        task_id=task.id,
-    )
-
-    db.add(
-        TaskInput(
+    try:
+        db.add(task)
+        await db.flush()
+        task.name = resolve_task_display_name(
+            name=command.name,
+            tool_name=tool.name,
+            created_at=task.created_at,
             task_id=task.id,
-            params=task_input["params"],
-            file_ids=task_input["file_ids"],
         )
-    )
 
-    # 输入快照与任务同事务写入（docs/04 §9.2 只追加）：任务一旦存在，它的输入
-    # 就已是历史事实，不允许事后从活表反推。
-    await record_task_inputs(
-        db,
-        task=task,
-        tool_version=tool_version,
-        prepared=prepared,
-        extra_data=command.extra_data,
-    )
+        db.add(
+            TaskInput(
+                task_id=task.id,
+                params=task_input["params"],
+                file_ids=task_input["file_ids"],
+            )
+        )
 
-    await record_tool_usage(db, str(tool.id))
+        # 输入快照与任务同事务写入（docs/04 §9.2 只追加）：任务一旦存在，它的输入
+        # 就已是历史事实，不允许事后从活表反推。
+        await record_task_inputs(
+            db,
+            task=task,
+            tool_version=tool_version,
+            prepared=prepared,
+            extra_data=command.extra_data,
+        )
 
-    await db.commit()
-    await db.refresh(task)
+        await record_tool_usage(db, str(tool.id))
+
+        await db.commit()
+        await db.refresh(task)
+    except IntegrityError:
+        await db.rollback()
+        if workflow_run_id is None or workflow_node_id is None:
+            raise
+        # 并发/重复调度同一工作流节点：唯一约束已拒绝第二条插入，回查先落库
+        # 的那条并原样返回（幂等语义），不让它冒成 500。
+        existing = await find_existing_workflow_node_task(
+            db,
+            run_id=workflow_run_id,
+            node_id=workflow_node_id,
+            attempt=workflow_node_attempt or 1,
+        )
+        if existing is None:
+            raise
+        logger.info(
+            "工作流节点任务已存在，返回既有任务: run_id=%s node_id=%s task_id=%s",
+            workflow_run_id,
+            workflow_node_id,
+            existing.id,
+        )
+        return existing
 
     # 提交审计（计划 §3.5 / docs/12 TC-NFR-04）：任务一旦 commit 即为历史事实，
     # 必须在派发前留痕，避免「任务已建但审计缺失」。

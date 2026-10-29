@@ -9,10 +9,17 @@ from app.models.workflows import WorkflowRun
 
 
 WORKFLOW_RUN_ACTIVE_NODE_STATUSES = {"pending", "ready", "running", "waiting_task"}
+# 已终结的节点状态：取消 run 时不得再改动它们（blocked 同样是终态，等待人工介入）。
+WORKFLOW_TERMINAL_NODE_STATUSES = frozenset(
+    {"success", "failure", "skipped", "blocked", "canceled"}
+)
 
 
 def is_active_workflow_node_status(status: Any) -> bool:
-    return str(status or "").lower() in WORKFLOW_RUN_ACTIVE_NODE_STATUSES
+    normalized = str(status or "").lower()
+    if normalized in WORKFLOW_TERMINAL_NODE_STATUSES:
+        return False
+    return normalized in WORKFLOW_RUN_ACTIVE_NODE_STATUSES
 
 
 def mark_active_workflow_state_canceled(

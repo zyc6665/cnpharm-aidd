@@ -17,6 +17,7 @@ from app.services.run_preparation import prepare_workflow_node_run
 from app.services.workflow_loop_convergence import evaluate_loop_convergence
 from app.services.workflow_task_lookup import find_existing_workflow_node_task
 from app.services.workflow_tool_lookup import load_available_workflow_tool
+from app.services.workflow_tool_version import resolve_tool_version
 
 
 ScheduleTaskFn = Callable[..., Awaitable[Any]]
@@ -63,6 +64,9 @@ async def schedule_loop_node(
             continue
 
         tool = await load_available_workflow_tool(db, node=body_node)
+        resolved_version_id, _ = resolve_tool_version(
+            body_states.get(body_node_id) or {}, body_node, tool
+        )
         node_params = {
             **dict(body_node.get("params") or {}),
             "workflow_run_id": str(run.id),
@@ -108,10 +112,8 @@ async def schedule_loop_node(
 
         existing_task = await find_existing_workflow_node_task(
             db,
-            current_user=current_user,
-            run=run,
-            node_id=sub_node_id,
-            tool_id=str(tool.id),
+            run_id=str(run.id),
+            node_id=str(sub_node_id),
         )
 
         if existing_task:
@@ -129,7 +131,7 @@ async def schedule_loop_node(
                 name=f"Workflow {run.name} - {sub_node_id}",
                 project_id=run.project_id,
                 tool_id=tool.id,
-                tool_version_id=tool.current_version_id,
+                tool_version_id=resolved_version_id,
                 params=node_params,
                 file_ids=list(prepared.file_ids),
                 input_bindings=prepared.input_bindings,

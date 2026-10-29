@@ -1,7 +1,18 @@
 # backend/app/models/tasks.py
 import enum
 
-from sqlalchemy import Column, String, Integer, Float, DateTime, Text, ForeignKey, JSON, event
+from sqlalchemy import (
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    JSON,
+    String,
+    Text,
+    event,
+)
 from sqlalchemy.orm import relationship
 
 from app.database.base import Base, TimestampMixin, UUIDMixin, utcnow
@@ -44,6 +55,18 @@ class TaskPriority(str, enum.Enum):
 class Task(Base, UUIDMixin, TimestampMixin):
     """任务表"""
     __tablename__ = "tasks"
+    __table_args__ = (
+        # 工作流节点任务幂等键（Task 4-5）：同一 (run, node, attempt) 只允许一条任务。
+        # 非工作流任务三列均为 NULL；SQLite/MySQL/PostgreSQL 的唯一索引都允许
+        # 多行含 NULL，因此不影响普通任务。
+        Index(
+            "uq_tasks_workflow_node_attempt",
+            "workflow_run_id",
+            "workflow_node_id",
+            "workflow_node_attempt",
+            unique=True,
+        ),
+    )
 
     # 关联
     user_id = Column(String(36), ForeignKey("users.id"), nullable=True, index=True)
@@ -91,6 +114,19 @@ class Task(Base, UUIDMixin, TimestampMixin):
     # 产物」的持久标记；若将来从别的任务派生出新行，它天然就是那条新行的旧任务来源。
     # 为什么可空：非重试产生的任务没有重试来源，为 NULL；它不是主键/外键，只是可选归属信息。
     retry_of = Column(String(36), nullable=True, index=True)
+
+    # 工作流节点归属的唯一键（Task 4-5）。历史上 run/node 只写在 ``TaskInput.params``
+    # 的 JSON 里，去重只能靠「最近 20 条里猜」。这里落成真列并加唯一索引，让
+    # 「同一 run + node + attempt 只建一条任务」由数据库保证，而不是靠应用层先查后建
+    # 的竞态窗口。非工作流任务三列均为 NULL。
+    workflow_run_id = Column(String(36), nullable=True)
+    workflow_node_id = Column(String(128), nullable=True)
+    # 本列已预留：当前节点重试是就地复用同一 task 行（只改 status、retry_count+1，
+    # 不新建行），因此 workflow_node_attempt 恒为 1，实际唯一键等价于
+    # ``(run_id, node_id)``。若将来引入真正的 attempt 递增（每次重试新建一行），
+    # 必须同时修改 ``TaskCommand`` 与 workflow_tool/loop/map 调度器，让它们按
+    # 当前 attempt 写列，唯一约束才会真正按 attempt 区分。
+    workflow_node_attempt = Column(Integer, nullable=True)
 
     # GPU分配
     gpu_node_id = Column(String(36), nullable=True)

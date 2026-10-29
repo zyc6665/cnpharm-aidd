@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
+import os
 import re
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -14,6 +17,8 @@ from pydantic import ValidationError
 from app.execution.adapters.kubernetes import KubernetesJobExecutionConfig
 from app.execution.contracts import ExecutionArtifactCollection, ProducedArtifact
 from app.execution.standard_contracts import StandardExecutionResult, safe_output_relative_path
+
+logger = logging.getLogger(__name__)
 
 
 class KubernetesTransportError(RuntimeError):
@@ -26,6 +31,10 @@ class KubernetesArtifactCollectionError(KubernetesTransportError):
 
 class ObjectStorageReader(Protocol):
     async def download(self, path: str) -> bytes: ...
+
+    def open_stream(
+        self, path: str, chunk_size: int = 1024 * 1024
+    ) -> AsyncIterator[bytes]: ...
 
 
 @dataclass(frozen=True)
@@ -89,20 +98,14 @@ class KubernetesArtifactCollector:
                 for file_ref in artifact.files.values():
                     relative_path = _safe_result_path(file_ref.path)
                     object_key = f"{prefix}/{relative_path}"
-                    try:
-                        content = await self._storage.download(object_key)
-                    except Exception as exc:
-                        raise KubernetesArtifactCollectionError(
-                            f"failed to download Kubernetes output object: {object_key}"
-                        ) from exc
-                    actual_sha = hashlib.sha256(content).hexdigest()
-                    if actual_sha != str(file_ref.sha256).lower():
-                        raise KubernetesArtifactCollectionError(
-                            f"Kubernetes output checksum mismatch: {relative_path}"
-                        )
                     destination = output_root / relative_path
                     destination.parent.mkdir(parents=True, exist_ok=True)
-                    destination.write_bytes(content)
+                    actual_sha = await self._download_verify_and_stage(
+                        object_key=object_key,
+                        destination=destination,
+                        relative_path=relative_path,
+                        expected_sha=str(file_ref.sha256).lower(),
+                    )
                     artifacts.append(
                         ProducedArtifact(
                             filename=destination.name,
@@ -118,6 +121,59 @@ class KubernetesArtifactCollector:
             result_payload=result.model_dump(mode="json"),
             source_root=output_root,
         )
+
+    async def _download_verify_and_stage(
+        self,
+        *,
+        object_key: str,
+        destination: Path,
+        relative_path: str,
+        expected_sha: str,
+    ) -> str:
+        """流式下载对象 → 增量算 sha256 → 写入 staging 文件，峰值内存 = 1 个 chunk。
+
+        选择「先落同盘临时文件（``.part``）再原子改名」而不是 ``store_file_path``：
+        ``store_file_path`` 需要 ``AsyncSession`` 才能写 ``File`` 记录并把内容复制到平台
+        存储，而采集器的契约只是把字节暂存到 ``staging_root`` 并返回 ``source_root`` 供
+        下游摄取，引入 DB 会话会造成双份存储并泄漏未提交的文件行。这里直接按块写目标
+        文件，校验通过后再 ``os.replace``，既保持 1MB 峰值内存，又保证失败时不留半成品。
+        """
+        part_path = destination.with_name(destination.name + ".part")
+        digest = hashlib.sha256()
+        try:
+            with part_path.open("wb") as handle:
+                async for chunk in self._storage.open_stream(object_key):
+                    if not chunk:
+                        continue
+                    digest.update(chunk)
+                    handle.write(chunk)
+        except Exception as exc:
+            part_path.unlink(missing_ok=True)
+            logger.exception(
+                "Failed to stream Kubernetes output object: %s", object_key
+            )
+            raise KubernetesArtifactCollectionError(
+                f"failed to download Kubernetes output object: {object_key}"
+            ) from exc
+
+        actual_sha = digest.hexdigest()
+        if actual_sha != expected_sha:
+            part_path.unlink(missing_ok=True)
+            raise KubernetesArtifactCollectionError(
+                f"Kubernetes output checksum mismatch: {relative_path}"
+            )
+        try:
+            os.replace(part_path, destination)
+        except OSError as exc:
+            # os.replace 之前的所有失败都已清理；replace 自身失败也不能留下半截文件。
+            part_path.unlink(missing_ok=True)
+            logger.exception(
+                "Failed to finalize Kubernetes output object: %s", object_key
+            )
+            raise KubernetesArtifactCollectionError(
+                f"failed to finalize Kubernetes output object: {object_key}"
+            ) from exc
+        return actual_sha
 
     def _object_prefix(self, namespace: str, job_name: str) -> str:
         prefix = _safe_prefix(self._storage_config.output_prefix)

@@ -133,15 +133,10 @@ def stage_input_descriptors(
     return staged
 
 
-def upload_output_directory(
-    *,
-    output_dir: Path,
-    result_path: Path,
-    storage: Any,
-    bucket: str,
-    prefix: str,
-) -> list[str]:
-    """Upload output files and publish result.json last as the commit marker."""
+def _resolve_output_result(
+    output_dir: Path, result_path: Path
+) -> tuple[Path, Path, list[Path]]:
+    """校验 result.json 与声明产物，返回规整后的目录、结果文件与待上传文件列表。"""
     output_dir = Path(output_dir).resolve()
     raw_result_path = Path(result_path)
     if raw_result_path.is_symlink():
@@ -159,13 +154,31 @@ def upload_output_directory(
     ):
         raise ObjectStorageError("result.json must use aidd.sciminer/result")
 
-    normalized_prefix = _safe_object_key(prefix)
     files = sorted(
         path
         for path in output_dir.rglob("*")
         if path.is_file() and not path.is_symlink()
     )
     _verify_declared_output_files(output_dir, result_payload)
+    return output_dir, result_path, files
+
+
+def validate_output_directory(*, output_dir: Path, result_path: Path) -> None:
+    """只校验结果契约（result.json 存在、schema 正确、产物不越界），不上传。"""
+    _resolve_output_result(output_dir, result_path)
+
+
+def upload_output_directory(
+    *,
+    output_dir: Path,
+    result_path: Path,
+    storage: Any,
+    bucket: str,
+    prefix: str,
+) -> list[str]:
+    """Upload output files and publish result.json last as the commit marker."""
+    output_dir, result_path, files = _resolve_output_result(output_dir, result_path)
+    normalized_prefix = _safe_object_key(prefix)
 
     uploaded: list[str] = []
     for path in files:
@@ -319,12 +332,22 @@ def _main() -> int:
     prepare_parser.add_argument("--params-json", required=True)
     upload_parser = subparsers.add_parser("upload")
     upload_parser.add_argument("--output-dir", required=True)
+    validate_parser = subparsers.add_parser("validate")
+    validate_parser.add_argument("--output-dir", required=True)
     args = parser.parse_args()
 
     if args.command == "prepare":
         prepare_job_inputs(
             input_dir=Path(args.input_dir),
             params_path=Path(args.params_json),
+        )
+        return 0
+
+    if args.command == "validate":
+        output_dir = Path(args.output_dir).resolve()
+        validate_output_directory(
+            output_dir=output_dir,
+            result_path=output_dir / "result.json",
         )
         return 0
 

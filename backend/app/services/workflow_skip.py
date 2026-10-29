@@ -8,7 +8,7 @@ from app.common.time import utcnow_iso
 from app.services.workflow_validation import workflow_edges
 
 
-_NON_SKIPPABLE_STATUSES = {"success", "failure", "skipped", "waiting_task", "running"}
+_NON_SKIPPABLE_STATUSES = {"success", "failure", "skipped", "blocked", "waiting_task", "running"}
 
 
 def mark_unreachable_nodes_skipped(
