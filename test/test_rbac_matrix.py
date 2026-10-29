@@ -239,3 +239,92 @@ async def test_admin_can_read_non_member_project_via_api(
     assert admin_response.json()["data"]["membership"] is None
     assert outsider_response.status_code == 404
 
+
+@pytest.mark.asyncio
+async def test_admin_list_includes_non_member_project(
+    api_client: httpx.AsyncClient, scene: dict[str, object]
+) -> None:
+    project = scene["project"]
+    response = await api_client.get(
+        "/api/v1/projects", headers={"Authorization": "Bearer admin"}
+    )
+    assert response.status_code == 200
+    items = response.json()["data"]["items"]
+    entry = next(item for item in items if item["id"] == project.id)
+    # Admin has no membership row here, yet the project must still be listed.
+    assert entry["role"] == "admin"
+    assert entry["membership"] is None
+
+
+@pytest.mark.asyncio
+async def test_member_list_role_is_always_a_string(
+    api_client: httpx.AsyncClient, scene: dict[str, object]
+) -> None:
+    project = scene["project"]
+    for role in ("viewer", "runner", "editor", "owner"):
+        response = await api_client.get(
+            "/api/v1/projects", headers={"Authorization": f"Bearer {role}"}
+        )
+        assert response.status_code == 200
+        items = response.json()["data"]["items"]
+        entry = next(item for item in items if item["id"] == project.id)
+        assert entry["role"] == role
+        assert entry["membership"] is not None
+        assert entry["membership"]["role"] == role
+
+
+@pytest.mark.asyncio
+async def test_non_member_list_excludes_project(
+    api_client: httpx.AsyncClient, scene: dict[str, object]
+) -> None:
+    project = scene["project"]
+    response = await api_client.get(
+        "/api/v1/projects", headers={"Authorization": "Bearer outsider"}
+    )
+    assert response.status_code == 200
+    items = response.json()["data"]["items"]
+    assert all(item["id"] != project.id for item in items)
+
+
+@pytest.mark.asyncio
+async def test_task_list_filters_by_project_id(
+    db_session: AsyncSession, api_client: httpx.AsyncClient, scene: dict[str, object]
+) -> None:
+    from app.models.tasks import Task
+
+    project = scene["project"]
+    owner = scene["users"]["owner"]
+    db_session.add_all(
+        [
+            Task(
+                id="task-in-project",
+                user_id=owner.id,
+                tool_id="tool-1",
+                tool_version_id="tool-version-1",
+                name="in project",
+                status="PENDING",
+                priority="normal",
+                project_id=project.id,
+            ),
+            Task(
+                id="task-other-project",
+                user_id=owner.id,
+                tool_id="tool-1",
+                tool_version_id="tool-version-1",
+                name="other project",
+                status="PENDING",
+                priority="normal",
+                project_id=None,
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    response = await api_client.get(
+        f"/api/v1/tasks?project_id={project.id}",
+        headers={"Authorization": "Bearer owner"},
+    )
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    ids = {item["id"] for item in payload.get("items", payload)}
+    assert ids == {"task-in-project"}

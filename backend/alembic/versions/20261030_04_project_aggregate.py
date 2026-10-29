@@ -101,18 +101,20 @@ def upgrade() -> None:
 
     if COLUMN not in _column_names(bind, TASKS):
         if dialect == "sqlite" and PROJECTS in tables:
-            # SQLite 无法用 ALTER 追加独立命名外键；把 REFERENCES 内联进 ADD
-            # COLUMN（SQLite 允许 ADD COLUMN 带 REFERENCES），避免 batch 重建
-            # 时把同一条外键同时渲染成命名 + 匿名两份。
-            op.add_column(
-                TASKS,
-                sa.Column(
-                    COLUMN,
-                    sa.String(length=36),
-                    sa.ForeignKey(f"{PROJECTS}.id", ondelete="SET NULL"),
-                    nullable=True,
-                ),
-            )
+            # SQLite 无法用 ALTER TABLE 追加命名外键（alembic 的 sqlite 方言会抛
+            # ``NotImplementedError: No support for ALTER of constraints``）。
+            # 用 batch 模式重建表：重建时把命名外键一并带上。
+            with op.batch_alter_table(TASKS) as batch_op:
+                batch_op.add_column(
+                    sa.Column(
+                        COLUMN,
+                        sa.String(length=36),
+                        sa.ForeignKey(
+                            f"{PROJECTS}.id", name=FK, ondelete="SET NULL"
+                        ),
+                        nullable=True,
+                    )
+                )
         else:
             op.add_column(
                 TASKS, sa.Column(COLUMN, sa.String(length=36), nullable=True)

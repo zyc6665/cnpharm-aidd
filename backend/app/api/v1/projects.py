@@ -44,6 +44,9 @@ DEFAULT_ORGANIZATION_SLUG = "default"
 
 
 def _serialize(project: Project, membership: ProjectMember | None) -> dict:
+    # Platform admins bypass membership, so ``membership`` may be None. The
+    # top-level ``role`` is always a string so clients never have to null-check
+    # it (admins without a member row report ``"admin"``).
     return {
         "id": project.id,
         "organization_id": project.organization_id,
@@ -54,7 +57,8 @@ def _serialize(project: Project, membership: ProjectMember | None) -> dict:
         "model_policy": project.model_policy or {},
         "data_policy": project.data_policy or {},
         "version": project.version,
-        # Platform admins bypass membership, so this may legitimately be None.
+        "role": membership.role if membership is not None else "admin",
+        # Kept for backward compatibility; may be null for an admin non-member.
         "membership": (
             {"id": membership.id, "role": membership.role}
             if membership is not None
@@ -158,20 +162,27 @@ async def list_projects(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    query = (
-        select(Project, ProjectMember)
-        .join(ProjectMember, ProjectMember.project_id == Project.id)
-        .where(ProjectMember.user_id == current_user.id)
-        .order_by(Project.updated_at.desc())
-    )
-    if not include_archived:
-        query = query.where(Project.status != "archived")
-    result = await db.execute(query)
-    return success_response(
-        data={
-            "items": [_serialize(project, member) for project, member in result.all()]
-        }
-    )
+    if current_user.role == "admin":
+        # Admins bypass membership everywhere else (get/update/members/...),
+        # so the list must show every project too — otherwise a non-member
+        # project 200s on detail but is invisible in the list.
+        project_query = select(Project).order_by(Project.updated_at.desc())
+        if not include_archived:
+            project_query = project_query.where(Project.status != "archived")
+        projects = (await db.execute(project_query)).scalars().all()
+        items = [_serialize(project, None) for project in projects]
+    else:
+        query = (
+            select(Project, ProjectMember)
+            .join(ProjectMember, ProjectMember.project_id == Project.id)
+            .where(ProjectMember.user_id == current_user.id)
+            .order_by(Project.updated_at.desc())
+        )
+        if not include_archived:
+            query = query.where(Project.status != "archived")
+        result = await db.execute(query)
+        items = [_serialize(project, member) for project, member in result.all()]
+    return success_response(data={"items": items})
 
 
 @router.post("", response_model=dict)

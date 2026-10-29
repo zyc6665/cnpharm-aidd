@@ -52,7 +52,9 @@ class Task(Base, UUIDMixin, TimestampMixin):
     # 20261030_04 回填；一个版本周期内额外保留 extra_data 双写以防回滚丢数据。
     project_id = Column(
         String(36),
-        ForeignKey("projects.id", ondelete="SET NULL"),
+        ForeignKey(
+            "projects.id", name="fk_tasks_project_id", ondelete="SET NULL"
+        ),
         nullable=True,
         index=True,
     )

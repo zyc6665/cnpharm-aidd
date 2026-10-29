@@ -1,8 +1,12 @@
 """Migration backfill test for ``tasks.project_id`` (Task 2, plan §4).
 
-Builds a SQLite database at the revision *before* ``20261030_04``, inserts a task
-whose project only exists in ``extra_data["project_id"]`` (the legacy shape),
-then runs the new migration and asserts the real column is populated.
+These tests must exercise the *real* add-column / add-foreign-key path of
+``20261030_04``.  Building the "previous" database with
+``alembic upgrade 20261029_01`` is a false positive: the baseline revision calls
+``Base.metadata.create_all()`` with the **current** models, so a fresh database
+already has ``tasks.project_id`` and ``projects.version`` before the migration
+runs.  Instead we hand-write the legacy DDL (no ``project_id`` column, no
+``version`` column) and pin ``alembic_version`` to ``20261029_01``.
 """
 
 from __future__ import annotations
@@ -33,6 +37,46 @@ def _run_alembic(*args: str, env: dict[str, str]) -> subprocess.CompletedProcess
         check=False,
         timeout=600,
     )
+
+
+LEGACY_DDL = """
+CREATE TABLE alembic_version (
+    version_num VARCHAR(32) NOT NULL PRIMARY KEY
+);
+INSERT INTO alembic_version (version_num) VALUES ('20261029_01');
+
+CREATE TABLE projects (
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
+    organization_id VARCHAR(36) NOT NULL,
+    created_by VARCHAR(36) NOT NULL,
+    name VARCHAR(120) NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    model_policy JSON NOT NULL,
+    data_policy JSON NOT NULL,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
+);
+
+CREATE TABLE tasks (
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
+    user_id VARCHAR(36),
+    tool_id VARCHAR(36) NOT NULL,
+    tool_version_id VARCHAR(36) NOT NULL,
+    name VARCHAR(120),
+    status VARCHAR(32) NOT NULL,
+    priority VARCHAR(16) NOT NULL,
+    extra_data JSON,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
+);
+"""
+
+
+def _create_legacy_schema(db_path: Path) -> None:
+    """Hand-written pre-20261030_04 schema (no project_id column, no version)."""
+    with sqlite3.connect(db_path) as conn:
+        conn.executescript(LEGACY_DDL)
+        conn.commit()
 
 
 def _insert_legacy_rows(db_path: Path, *, extra_project_id: str) -> None:
@@ -68,6 +112,22 @@ def _insert_legacy_rows(db_path: Path, *, extra_project_id: str) -> None:
         conn.commit()
 
 
+def _columns(db_path: Path, table: str) -> dict[str, dict]:
+    with sqlite3.connect(db_path) as conn:
+        return {
+            row[1]: {"type": row[2], "notnull": row[3], "default": row[4]}
+            for row in conn.execute(f"PRAGMA table_info({table})")
+        }
+
+
+def _foreign_keys(db_path: Path, table: str) -> list[dict]:
+    with sqlite3.connect(db_path) as conn:
+        return [
+            {"table": row[2], "from": row[3], "to": row[4], "on_delete": row[6]}
+            for row in conn.execute(f"PRAGMA foreign_key_list({table})")
+        ]
+
+
 def test_alembic_heads_include_project_aggregate() -> None:
     config = Config(str(PROJECT_ROOT / "alembic.ini"))
     heads = ScriptDirectory.from_config(config).get_heads()
@@ -79,13 +139,25 @@ def test_project_id_column_backfilled_from_extra_data(tmp_path: Path) -> None:
     env = os.environ.copy()
     env["DATABASE_URL"] = f"sqlite+aiosqlite:///{db_path}"
 
-    baseline = _run_alembic("upgrade", PREVIOUS_REVISION, env=env)
-    assert baseline.returncode == 0, baseline.stderr or baseline.stdout
+    _create_legacy_schema(db_path)
+    # Sanity: the legacy schema really lacks the column, so upgrade must add it.
+    assert "project_id" not in _columns(db_path, "tasks")
+    assert "version" not in _columns(db_path, "projects")
 
     _insert_legacy_rows(db_path, extra_project_id="project-backfill")
 
     upgrade = _run_alembic("upgrade", "head", env=env)
     assert upgrade.returncode == 0, upgrade.stderr or upgrade.stdout
+
+    columns = _columns(db_path, "tasks")
+    assert "project_id" in columns
+
+    foreign_keys = _foreign_keys(db_path, "tasks")
+    project_fks = [fk for fk in foreign_keys if fk["table"] == "projects"]
+    assert len(project_fks) == 1, foreign_keys
+    assert project_fks[0]["from"] == "project_id"
+    assert project_fks[0]["to"] == "id"
+    assert project_fks[0]["on_delete"] == "SET NULL"
 
     with sqlite3.connect(db_path) as conn:
         row = conn.execute(
@@ -104,9 +176,7 @@ def test_backfill_ignores_dangling_project_reference(tmp_path: Path) -> None:
     env = os.environ.copy()
     env["DATABASE_URL"] = f"sqlite+aiosqlite:///{db_path}"
 
-    baseline = _run_alembic("upgrade", PREVIOUS_REVISION, env=env)
-    assert baseline.returncode == 0, baseline.stderr or baseline.stdout
-
+    _create_legacy_schema(db_path)
     _insert_legacy_rows(db_path, extra_project_id="missing-project")
 
     upgrade = _run_alembic("upgrade", "head", env=env)
@@ -118,6 +188,23 @@ def test_backfill_ignores_dangling_project_reference(tmp_path: Path) -> None:
         ).fetchone()
     # Dangling reference must not be backfilled (FK would reject it).
     assert row is not None and row[0] is None
+
+
+def test_sqlite_upgrade_downgrade_roundtrip(tmp_path: Path) -> None:
+    db_path = tmp_path / "task_project_aggregate_roundtrip.db"
+    env = os.environ.copy()
+    env["DATABASE_URL"] = f"sqlite+aiosqlite:///{db_path}"
+
+    _create_legacy_schema(db_path)
+    _insert_legacy_rows(db_path, extra_project_id="project-backfill")
+
+    upgrade = _run_alembic("upgrade", "head", env=env)
+    assert upgrade.returncode == 0, upgrade.stderr or upgrade.stdout
+    downgrade = _run_alembic("downgrade", PREVIOUS_REVISION, env=env)
+    assert downgrade.returncode == 0, downgrade.stderr or downgrade.stdout
+
+    assert "project_id" not in _columns(db_path, "tasks")
+    assert "version" not in _columns(db_path, "projects")
 
 
 @pytest.mark.asyncio
