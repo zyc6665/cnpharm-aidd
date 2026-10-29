@@ -177,7 +177,6 @@ async def get_gpu_info():
 
 @router.get(
     "/stats",
-    response_model=List[GPUStatsResponse],
     summary="获取GPU实时统计",
     description="获取所有GPU的实时利用率、温度等统计信息"
 )
@@ -193,19 +192,21 @@ async def get_gpu_stats():
 
     stats = detector.get_all_gpu_stats()
 
-    return [
-        GPUStatsResponse(
-            gpu_index=s.gpu_index,
-            utilization_percent=s.utilization_percent,
-            memory_used_mb=s.memory_used_mb,
-            memory_free_mb=s.memory_free_mb,
-            memory_total_mb=s.memory_total_mb,
-            temperature_celsius=s.temperature_celsius,
-            power_watts=s.power_watts,
-            fan_speed_percent=s.fan_speed_percent
-        )
-        for s in stats
-    ]
+    return success_response(
+        [
+            GPUStatsResponse(
+                gpu_index=s.gpu_index,
+                utilization_percent=s.utilization_percent,
+                memory_used_mb=s.memory_used_mb,
+                memory_free_mb=s.memory_free_mb,
+                memory_total_mb=s.memory_total_mb,
+                temperature_celsius=s.temperature_celsius,
+                power_watts=s.power_watts,
+                fan_speed_percent=s.fan_speed_percent
+            )
+            for s in stats
+        ]
+    )
 
 
 @router.get(

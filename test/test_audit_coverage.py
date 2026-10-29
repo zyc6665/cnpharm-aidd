@@ -308,3 +308,33 @@ async def test_tool_task_submit_emits_audit(
     await _assert_audit_row(db_session, captured_events, AuditAction.TASK_SUBMIT)
     # 提交已真实分发（没有被配额/校验拦在中间）。
     assert direct_runner.scheduled
+
+
+# --------------------------------------------------------------------------- #
+# 审计队列满：丢弃计数而绝不阻塞业务
+# --------------------------------------------------------------------------- #
+
+
+def test_audit_sink_counts_drops_when_queue_full() -> None:
+    """队列满时必须丢弃并计数，而不是抛异常或阻塞请求路径（计划 §3.4）。"""
+    import asyncio
+
+    from app.common.time import utcnow
+    from app.logging.audit import AuditEvent, AuditResult
+    from app.services.audit_sink import AuditDbWriter
+
+    writer = AuditDbWriter(queue_size=1)
+    writer._queue = asyncio.Queue(maxsize=1)  # noqa: SLF001
+    writer._queue.put_nowait(  # noqa: SLF001
+        AuditEvent(id="a", timestamp=utcnow(), action=AuditAction.READ, result=AuditResult.SUCCESS)
+    )
+
+    # 队列已满：后续事件被丢弃并计数，但调用方不感知、不阻塞。
+    writer(
+        AuditEvent(id="b", timestamp=utcnow(), action=AuditAction.LOGIN, result=AuditResult.SUCCESS)
+    )
+    writer(
+        AuditEvent(id="c", timestamp=utcnow(), action=AuditAction.LOGOUT, result=AuditResult.SUCCESS)
+    )
+
+    assert writer.dropped == 2

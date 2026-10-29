@@ -100,3 +100,35 @@ async def test_release_gpu_uses_database_session(monkeypatch) -> None:
         "kwargs": {"task_id": "task-1", "allocation_id": "allocation-1"},
     }
     db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_get_gpu_stats_returns_standard_envelope(monkeypatch) -> None:
+    """GPU 统计列表必须走统一响应信封，避免前端拿到裸数组。"""
+    stat = SimpleNamespace(
+        gpu_index=0,
+        utilization_percent=42.0,
+        memory_used_mb=1024,
+        memory_free_mb=2048,
+        memory_total_mb=3072,
+        temperature_celsius=55.0,
+        power_watts=120.0,
+        fan_speed_percent=40.0,
+    )
+
+    class FakeDetector:
+        def is_available(self):
+            return True
+
+        def get_all_gpu_stats(self):
+            return [stat]
+
+    monkeypatch.setattr(gpu, "get_gpu_detector", lambda: FakeDetector())
+
+    result = await gpu.get_gpu_stats()
+
+    assert result["code"] == 200
+    assert isinstance(result["data"], list)
+    first = result["data"][0]
+    assert first.gpu_index == 0
+    assert first.utilization_percent == 42.0
