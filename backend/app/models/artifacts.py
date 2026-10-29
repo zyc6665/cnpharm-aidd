@@ -6,13 +6,11 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
-    Index,
     Integer,
     JSON,
     String,
     Text,
     UniqueConstraint,
-    text,
 )
 from sqlalchemy.orm import relationship
 
@@ -51,16 +49,11 @@ class Artifact(Base, UUIDMixin, TimestampMixin):
 
 class ArtifactVersion(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "artifact_versions"
+    # 只在「版本维度」保留 (artifact_id, version) 唯一约束：这是并发取号正确性所需。
+    # 刻意不加 (artifact_id, sha256) 唯一约束 —— 该表是只追加的生产留痕表，不同任务
+    # 产出相同字节时必须各自留下一行来源（version），同内容只是复用同一个存储 blob。
     __table_args__ = (
         UniqueConstraint("artifact_id", "version", name="uq_artifact_versions_artifact_version"),
-        Index(
-            "uq_artifact_versions_artifact_sha256",
-            "artifact_id",
-            "sha256",
-            unique=True,
-            sqlite_where=text("status = 'available'"),
-            postgresql_where=text("status = 'available'"),
-        ),
     )
 
     artifact_id = Column(String(36), ForeignKey("artifacts.id"), nullable=False, index=True)

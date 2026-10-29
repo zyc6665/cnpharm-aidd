@@ -1,11 +1,10 @@
-"""Task 3a：产物真值化第一步 —— ``artifact_versions`` 来源字段 + 内容部分唯一索引。
+"""Task 3a：产物真值化第一步 —— ``artifact_versions`` 来源字段。
 
 背景
 ----
 ``Artifact`` 只有单值的 ``source_task_id``（Artifact 级），``ArtifactVersion`` 完全
 没有来源字段，于是无法回答「这个版本是哪次任务、哪次尝试、哪个工具版本产生的」。
-本迁移给 ``artifact_versions`` 补齐来源四列，并加一个「同产物下同 sha256 的可用版本
-唯一」的 partial 唯一索引，作为幂等写入的数据库兜底。
+本迁移给 ``artifact_versions`` 补齐来源四列。
 
 新列
 ----
@@ -14,16 +13,14 @@
 - ``source_tool_version_id`` ``String(36) NULL``
 - ``storage_tier`` ``String(16) NOT NULL DEFAULT 'standard'``
 
-部分唯一索引
-------------
-``uq_artifact_versions_artifact_sha256``：``(artifact_id, sha256)``，仅约束
-``status = 'available'`` 的行（``sqlite_where`` / ``postgresql_where`` 各写一份，
-照 ``backend/app/models/gpu.py`` 的 ``uq_gpu_allocations_active_device`` 写法）。
-
-**建索引前先查重**：若同一 ``(artifact_id, sha256)`` 在 ``status='available'`` 下
-已经存在重复行，则不建索引、直接 ``raise RuntimeError`` 并列出前 10 组重复，提示
-先人工合并。理由：静默跳过唯一约束会让后续幂等逻辑建立在错误前提上（参照
-``20261028_01_upload_parts_and_idempotency.py`` 的 ``_assert_no_duplicate_idempotency_keys``）。
+关于「内容唯一」取舍
+--------------------
+本迁移刻意**不加** ``(artifact_id, sha256)`` 唯一约束：``artifact_versions`` 是只追加
+的生产留痕表，不同任务产出相同字节时必须各自留下一行来源（version）；而存储层按
+内容寻址，同内容的不同版本指向同一个存储 blob（``storage_key`` 相同），并不会多存
+一份字节。即「每次生产都留痕」与「内容唯一」不可兼得，这里选择前者（见设计文档
+``04`` §9、``12`` TC-M7 的追溯口径）。仅保留 ``(artifact_id, version)`` 唯一约束，
+那是并发取号的正确性要求。
 
 幂等
 ----
@@ -45,7 +42,6 @@ depends_on = None
 
 ARTIFACT_VERSIONS = "artifact_versions"
 SOURCE_TASK_INDEX = "ix_artifact_versions_source_task_id"
-PARTIAL_UNIQUE_INDEX = "uq_artifact_versions_artifact_sha256"
 
 NEW_COLUMNS = (
     ("source_task_id", sa.String(36), True, None),
@@ -71,38 +67,6 @@ def _index_names(table_name: str) -> set[str]:
     return {index["name"] for index in sa.inspect(op.get_bind()).get_indexes(table_name)}
 
 
-def _assert_no_duplicate_available_sha() -> None:
-    """建部分唯一索引前先查重，给出可操作的中文报错而不是让数据库抛原生错误。"""
-    if ARTIFACT_VERSIONS not in _table_names():
-        return
-    bind = op.get_bind()
-    versions = sa.table(
-        ARTIFACT_VERSIONS,
-        sa.column("artifact_id", sa.String),
-        sa.column("sha256", sa.String),
-        sa.column("status", sa.String),
-    )
-    duplicates = bind.execute(
-        sa.select(
-            versions.c.artifact_id,
-            versions.c.sha256,
-            sa.func.count().label("n"),
-        )
-        .where(versions.c.status == "available")
-        .group_by(versions.c.artifact_id, versions.c.sha256)
-        .having(sa.func.count() > 1)
-    ).fetchall()
-    if duplicates:
-        sample = "; ".join(
-            f"{row[0]}/{row[1]}x{row[2]}" for row in duplicates[:10]
-        )
-        raise RuntimeError(
-            "存在重复的可用产物版本 (artifact_id, sha256)，无法建立部分唯一索引；"
-            "请先人工合并重复版本（保留一条 available）："
-            f"{sample}"
-        )
-
-
 def upgrade() -> None:
     if ARTIFACT_VERSIONS not in _table_names():
         return
@@ -124,24 +88,11 @@ def upgrade() -> None:
     if SOURCE_TASK_INDEX not in _index_names(ARTIFACT_VERSIONS):
         op.create_index(SOURCE_TASK_INDEX, ARTIFACT_VERSIONS, ["source_task_id"])
 
-    if PARTIAL_UNIQUE_INDEX not in _index_names(ARTIFACT_VERSIONS):
-        _assert_no_duplicate_available_sha()
-        op.create_index(
-            PARTIAL_UNIQUE_INDEX,
-            ARTIFACT_VERSIONS,
-            ["artifact_id", "sha256"],
-            unique=True,
-            sqlite_where=sa.text("status = 'available'"),
-            postgresql_where=sa.text("status = 'available'"),
-        )
-
 
 def downgrade() -> None:
     if ARTIFACT_VERSIONS not in _table_names():
         return
 
-    if PARTIAL_UNIQUE_INDEX in _index_names(ARTIFACT_VERSIONS):
-        op.drop_index(PARTIAL_UNIQUE_INDEX, table_name=ARTIFACT_VERSIONS)
     if SOURCE_TASK_INDEX in _index_names(ARTIFACT_VERSIONS):
         op.drop_index(SOURCE_TASK_INDEX, table_name=ARTIFACT_VERSIONS)
 

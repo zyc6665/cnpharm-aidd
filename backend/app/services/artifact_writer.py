@@ -242,20 +242,37 @@ async def upsert_version(
     source: ArtifactSource | None = None,
     expires_at: datetime | None = None,
 ) -> tuple[ArtifactVersion, bool]:
-    """Idempotently write an available ArtifactVersion for ``artifact``.
+    """Write an available ArtifactVersion for ``artifact`` and record where it came from.
 
-    Returns ``(version, created)``.  When ``source.task_id`` is set and an available
-    version with the same ``sha256`` already exists for the artifact, that version is
-    returned with ``created=False`` and no lineage is written.
+    Idempotency is scoped to a *single producing task*: when the same ``source.task_id``
+    is replayed/retried with the same ``sha256``, the existing version is returned with
+    ``created=False`` and no duplicate lineage is written.  A *different* task producing
+    identical bytes still gets its own version row (own ``source_task_id`` and its own
+    lineage edges) - every production run must leave a trace - and it reuses the existing
+    row's ``storage_key`` so the bytes are not stored twice.  Upload paths
+    (``source is None`` / ``source.task_id is None``) keep the historical content-dedup
+    semantics: an existing available version with the same ``sha256`` is reused.
+
+    Returns ``(version, created)``.
     """
-    if source is not None and source.task_id:
-        existing = await _find_available_version_by_sha(
-            db, artifact_id=artifact.id, sha256=sha256
+    existing = await _find_available_version_by_sha(
+        db, artifact_id=artifact.id, sha256=sha256
+    )
+    if existing is not None:
+        is_same_task = (
+            source is not None
+            and source.task_id is not None
+            and existing.source_task_id == source.task_id
         )
-        if existing is not None:
+        is_upload_dedup = source is None or source.task_id is None
+        if is_same_task or is_upload_dedup:
             _adopt_latest(artifact, existing)
             await db.flush()
             return existing, False
+        # Different producing task with identical bytes: keep a distinct version row,
+        # but point it at the already-stored blob instead of writing a second copy.
+        storage_key = existing.storage_key
+        storage_etag = existing.storage_etag or storage_etag
 
     version = await _create_version_with_retry(
         db,
