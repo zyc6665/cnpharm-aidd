@@ -259,5 +259,16 @@
 3. **`type=dataset` 从「回落到领域表」改为「两源合并」**。首轮把 `artifact_type='dataset'` 作为通用上传兜底，于是「Artifact 里没有数据集」这个前提不再成立，只查领域表会让用户刚上传的文件查不到。
 4. **`blocked` 必须改两处**（`workflow_scheduler` 收口集合 + `workflow_skip._NON_SKIPPABLE_STATUSES`），只改前者 run 会被判成功——「把卡住伪装成通过」比「卡住」更难发现。
 
+**§8 守护测试清单的实际落点**（清单给的是名字，实现按语义就近落位，据实记录）：
+
+| §8 清单名 | 实际落点 |
+|---|---|
+| `test_frontend_enum_parity` | `test/test_frontend_enum_parity.py`（同名） |
+| `test_rbac_matrix` | `test/test_rbac_matrix.py`（同名） |
+| `test_artifact_lineage_from_snapshot` | `test/test_artifact_lineage_from_snapshot.py`（同名） |
+| `test_artifact_writer_idempotent` | `test/test_artifact_version_source.py::test_upsert_version_is_idempotent_for_same_task_and_sha` |
+| `test_blocked_node_terminates` | `test/test_workflow_execution_hardening.py::test_blocked_node_converges_run_to_failure`、`::test_skip_propagation_does_not_override_blocked_node` |
+| `test_large_artifact_streaming` | `test/test_kubernetes_artifacts.py::test_collector_streams_large_output_without_buffering_whole_file`、`::test_collector_stream_open_failure_leaves_no_part_file`、`test/test_storage_open_stream.py`（两例） |
+
 **未做的事（有意）**：登录/提交/重试的审计补录留给下一批（§9 已注明）；`docs/04` §5.5 的请求级幂等只覆盖 `POST /api/v1/tasks` 与 `POST /workflows/{id}/runs`；角色名未改名。
 
