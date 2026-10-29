@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Sequence
 from uuid import uuid4
 
 from sqlalchemy import func, select
@@ -18,7 +18,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.time import utcnow
-from app.models.artifacts import Artifact, ArtifactLineage, ArtifactVersion
+from app.models.artifacts import (
+    Artifact,
+    ArtifactLineage,
+    ArtifactVersion,
+    ArtifactVersionFile,
+)
 from app.models.traceability import TaskInputSnapshot
 
 
@@ -222,6 +227,53 @@ async def _create_version_with_retry(
             continue
     assert last_error is not None
     raise last_error
+
+
+async def attach_version_files(
+    db: AsyncSession,
+    *,
+    version: ArtifactVersion,
+    files: Sequence[tuple[str, str, bool]],
+) -> list[str]:
+    """Attach ``role -> file`` rows to ``version``, skipping roles that already exist.
+
+    ``files`` items are ``(role, file_id, is_primary)`` and ``sort_order`` follows the
+    given order.  An idempotent replay (same producing task, same bytes) re-derives the
+    same role set for a version that already exists; writing those rows again would
+    violate ``uq_artifact_version_files_version_role``, so already-present roles are
+    skipped rather than raised on.  Returns the roles actually written.
+    """
+    if not files:
+        return []
+    existing = set(
+        (
+            await db.execute(
+                select(ArtifactVersionFile.role).where(
+                    ArtifactVersionFile.artifact_version_id == version.id
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    written: list[str] = []
+    for sort_order, (role, file_id, is_primary) in enumerate(files):
+        if role in existing:
+            continue
+        db.add(
+            ArtifactVersionFile(
+                artifact_version_id=version.id,
+                role=role,
+                file_id=file_id,
+                is_primary=is_primary,
+                sort_order=sort_order,
+            )
+        )
+        existing.add(role)
+        written.append(role)
+    if written:
+        await db.flush()
+    return written
 
 
 async def upsert_version(

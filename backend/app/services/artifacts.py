@@ -21,7 +21,7 @@ from app.models.artifacts import (
     ArtifactVersion,
     ArtifactVersionFile,
 )
-from app.models.files import FileSourceType
+from app.models.files import File as FileModel, FileSourceType
 from app.models.projects import Project
 from app.models.users import User
 from app.services.artifact_writer import upsert_version
@@ -153,7 +153,7 @@ async def create_artifact(
         )
         db.add(artifact)
         await db.flush()
-        version, _created = await upsert_version(
+        version, created = await upsert_version(
             db,
             artifact=artifact,
             filename=artifact.name,
@@ -170,6 +170,7 @@ async def create_artifact(
         file_record = await _attach_uploaded_file(
             db,
             version=version,
+            created=created,
             project=project,
             user=user,
             filename=filename,
@@ -180,7 +181,12 @@ async def create_artifact(
             standard_version=standard_version,
         )
         local_storage_path = file_record.storage_path
-        setattr(artifact, "deduplicated", False)
+        if not created:
+            # Content-dedup hit: the version already exists, so the blob we just
+            # uploaded is redundant. Drop it instead of leaving an orphan object.
+            await storage.delete(object_key)
+            local_storage_path = None
+        setattr(artifact, "deduplicated", not created)
         await db.commit()
         return artifact
     except Exception:
@@ -241,7 +247,7 @@ async def create_artifact_version(
     file_record = None
     local_storage_path = None
     try:
-        version, _created = await upsert_version(
+        version, created = await upsert_version(
             db,
             artifact=artifact,
             filename=Path(filename).name or artifact.name,
@@ -258,6 +264,7 @@ async def create_artifact_version(
         file_record = await _attach_uploaded_file(
             db,
             version=version,
+            created=created,
             project=project,
             user=user,
             filename=filename,
@@ -268,7 +275,12 @@ async def create_artifact_version(
             standard_version=artifact.standard_version,
         )
         local_storage_path = file_record.storage_path
-        setattr(artifact, "deduplicated", False)
+        if not created:
+            # Content-dedup hit: the version already exists, so the blob we just
+            # uploaded is redundant. Drop it instead of leaving an orphan object.
+            await storage.delete(object_key)
+            local_storage_path = None
+        setattr(artifact, "deduplicated", not created)
         await db.commit()
         return artifact
     except Exception:
@@ -291,7 +303,23 @@ async def _attach_uploaded_file(
     expires_at,
     standard_type: str | None,
     standard_version: int | None,
+    created: bool = True,
 ):
+    if not created:
+        # Idempotent replay: the version is reused, so one of its role files already
+        # describes these bytes. Return the existing row rather than storing a second
+        # File and colliding on uq_artifact_version_files_version_role.
+        existing = (
+            await db.execute(
+                select(FileModel)
+                .join(ArtifactVersionFile, ArtifactVersionFile.file_id == FileModel.id)
+                .where(ArtifactVersionFile.artifact_version_id == version.id)
+                .order_by(ArtifactVersionFile.sort_order)
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            return existing
     file_record = await store_file_bytes(
         db,
         content=content,

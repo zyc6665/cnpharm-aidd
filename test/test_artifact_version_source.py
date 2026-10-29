@@ -440,3 +440,123 @@ async def test_upsert_version_retries_when_version_number_collides(
     assert created is True
     assert version.version == 2
     assert calls["count"] >= 2
+
+
+@pytest.mark.asyncio
+async def test_attach_version_files_skips_roles_that_already_exist(
+    db_session: AsyncSession,
+) -> None:
+    from app.models.artifacts import ArtifactVersionFile
+    from app.models.files import File as FileModel
+    from app.services.artifact_writer import attach_version_files
+
+    user, project, _task = await _seed(db_session)
+    artifact = _new_artifact(project, user)
+    db_session.add(artifact)
+    await db_session.flush()
+    version = await _add_input_version(db_session, artifact, user, "a" * 64, 1)
+
+    primary = FileModel(
+        owner_id=user.id,
+        project_id=project.id,
+        filename="protein.pdb",
+        content_type="chemical/x-pdb",
+        size_bytes=3,
+        sha256="a" * 64,
+        storage_backend="local",
+        storage_path="storage/aa/protein.pdb",
+        source_type="upload",
+    )
+    metadata = FileModel(
+        owner_id=user.id,
+        project_id=project.id,
+        filename="protein.metadata_json.json",
+        content_type="application/json",
+        size_bytes=2,
+        sha256="b" * 64,
+        storage_backend="local",
+        storage_path="storage/bb/meta.json",
+        source_type="upload",
+    )
+    db_session.add_all([primary, metadata])
+    await db_session.flush()
+
+    files = [
+        ("structure_file", primary.id, True),
+        ("metadata_json", metadata.id, False),
+    ]
+    written = await attach_version_files(db_session, version=version, files=files)
+    assert written == ["structure_file", "metadata_json"]
+
+    # An idempotent replay re-derives the same roles: nothing new is written and the
+    # unique constraint (artifact_version_id, role) is never violated.
+    again = await attach_version_files(db_session, version=version, files=files)
+    assert again == []
+    total = (
+        await db_session.execute(
+            select(func.count())
+            .select_from(ArtifactVersionFile)
+            .where(ArtifactVersionFile.artifact_version_id == version.id)
+        )
+    ).scalar_one()
+    assert total == 2
+
+
+@pytest.mark.asyncio
+async def test_attach_uploaded_file_reuses_existing_row_on_replay(
+    db_session: AsyncSession,
+) -> None:
+    from app.models.artifacts import ArtifactVersionFile
+    from app.models.files import File as FileModel
+    from app.services import artifacts as artifacts_service
+    from app.services.artifact_writer import attach_version_files
+
+    user, project, _task = await _seed(db_session)
+    artifact = _new_artifact(project, user)
+    db_session.add(artifact)
+    await db_session.flush()
+    version = await _add_input_version(db_session, artifact, user, "c" * 64, 1)
+
+    existing = FileModel(
+        owner_id=user.id,
+        project_id=project.id,
+        filename="protein.pdb",
+        content_type="chemical/x-pdb",
+        size_bytes=3,
+        sha256="c" * 64,
+        storage_backend="local",
+        storage_path="storage/cc/protein.pdb",
+        source_type="upload",
+    )
+    db_session.add(existing)
+    await db_session.flush()
+    await attach_version_files(
+        db_session, version=version, files=[("structure_file", existing.id, True)]
+    )
+
+    before = (await db_session.execute(select(func.count()).select_from(FileModel))).scalar_one()
+    reused = await artifacts_service._attach_uploaded_file(
+        db_session,
+        version=version,
+        project=project,
+        user=user,
+        filename="protein.pdb",
+        content=b"ATOM",
+        content_type="chemical/x-pdb",
+        expires_at=None,
+        standard_type=None,
+        standard_version=None,
+        created=False,
+    )
+    after = (await db_session.execute(select(func.count()).select_from(FileModel))).scalar_one()
+
+    assert reused.id == existing.id
+    assert after == before  # no duplicate File row, no IntegrityError on the role link
+    links = (
+        await db_session.execute(
+            select(func.count())
+            .select_from(ArtifactVersionFile)
+            .where(ArtifactVersionFile.artifact_version_id == version.id)
+        )
+    ).scalar_one()
+    assert links == 1

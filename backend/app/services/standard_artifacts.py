@@ -21,12 +21,16 @@ from app.execution.result_parser import (
     ParsedStandardFile,
     ParsedStandardResult,
 )
-from app.models.artifacts import Artifact, ArtifactLineage, ArtifactVersionFile
+from app.models.artifacts import Artifact, ArtifactLineage
 from app.models.files import File as FileModel, FileSourceType
 from app.models.tasks import Task
 from app.common.task_context import task_project_id
 from app.files.writer import store_file_path
-from app.services.artifact_writer import ArtifactSource, upsert_version
+from app.services.artifact_writer import (
+    ArtifactSource,
+    attach_version_files,
+    upsert_version,
+)
 from app.services.standard_artifact_collection import (
     collected_standard_result_payload,
     declared_standard_outputs_from_config,
@@ -267,16 +271,16 @@ async def _persist_artifact(
         ),
     )
 
-    for sort_order, (role, file_record) in enumerate(resolved_files):
-        db.add(
-            ArtifactVersionFile(
-                artifact_version_id=version.id,
-                role=role,
-                file_id=file_record.id,
-                is_primary=role == primary_file.role,
-                sort_order=sort_order,
-            )
-        )
+    # Route through the writer so an idempotent replay (same task, same bytes) cannot
+    # re-write roles that already exist on the reused version.
+    await attach_version_files(
+        db,
+        version=version,
+        files=[
+            (role, file_record.id, role == primary_file.role)
+            for role, file_record in resolved_files
+        ],
+    )
 
     await db.flush()
     return (
