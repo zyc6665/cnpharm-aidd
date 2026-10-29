@@ -229,6 +229,64 @@ async def _create_version_with_retry(
     raise last_error
 
 
+async def upsert_artifact(
+    db: AsyncSession,
+    *,
+    project_id: str,
+    artifact_type: str,
+    semantic_type: str,
+    name: str,
+    created_by: str,
+    standard_type: str | None = None,
+    standard_version: int | None = None,
+    description: str | None = None,
+) -> tuple[Artifact, bool]:
+    """Find-or-create the Artifact row that owns versions of one logical asset.
+
+    An Artifact is the *identity* of a logical asset inside a project, not a per-run
+    record; versions are the per-run records.  If each producer created its own
+    Artifact, every one of them would also have to invent its first version number,
+    and the second producer for the same logical asset would either collide on
+    ``uq_artifact_versions_artifact_version`` or silently start a parallel history.
+
+    Returns ``(artifact, created)``.
+    """
+    statement = select(Artifact).where(
+        Artifact.project_id == project_id,
+        Artifact.artifact_type == artifact_type,
+        Artifact.semantic_type == semantic_type,
+    )
+    statement = statement.where(
+        Artifact.standard_type.is_(None)
+        if standard_type is None
+        else Artifact.standard_type == standard_type
+    )
+    statement = statement.where(
+        Artifact.standard_version.is_(None)
+        if standard_version is None
+        else Artifact.standard_version == standard_version
+    )
+    existing = (
+        await db.execute(statement.order_by(Artifact.created_at.asc()).limit(1))
+    ).scalars().first()
+    if existing is not None:
+        return existing, False
+
+    artifact = Artifact(
+        project_id=project_id,
+        created_by=created_by,
+        artifact_type=artifact_type,
+        semantic_type=semantic_type,
+        standard_type=standard_type,
+        standard_version=standard_version,
+        name=name,
+        description=description,
+    )
+    db.add(artifact)
+    await db.flush()
+    return artifact, True
+
+
 async def attach_version_files(
     db: AsyncSession,
     *,
