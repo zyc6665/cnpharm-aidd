@@ -1,11 +1,10 @@
 # backend/app/models/tasks.py
 import enum
 
-from sqlalchemy import Column, String, Integer, Float, DateTime, Text, ForeignKey, JSON
+from sqlalchemy import Column, String, Integer, Float, DateTime, Text, ForeignKey, JSON, event
 from sqlalchemy.orm import relationship
 
 from app.database.base import Base, TimestampMixin, UUIDMixin, utcnow
-from app.common.task_context import task_project_id
 
 
 class TaskStatus(str, enum.Enum):
@@ -48,6 +47,17 @@ class Task(Base, UUIDMixin, TimestampMixin):
 
     # 关联
     user_id = Column(String(36), ForeignKey("users.id"), nullable=True, index=True)
+    # 项目归属真列（plan §4）。历史上 project_id 只存在 extra_data JSON 里，
+    # 导致项目过滤只能走 JSON 表达式、且没有外键约束。此列由迁移
+    # 20261030_04 回填；一个版本周期内额外保留 extra_data 双写以防回滚丢数据。
+    project_id = Column(
+        String(36),
+        ForeignKey(
+            "projects.id", name="fk_tasks_project_id", ondelete="SET NULL"
+        ),
+        nullable=True,
+        index=True,
+    )
     tool_id = Column(String(36), ForeignKey("tools.id"), nullable=False, index=True)
     tool_version_id = Column(String(36), ForeignKey("tool_versions.id"), nullable=False)
     name = Column(String(120), nullable=True, index=True)
@@ -106,15 +116,14 @@ class Task(Base, UUIDMixin, TimestampMixin):
             data.pop("celery_task_id", None)
         self.extra_data = data
 
-    @property
-    def project_id(self):
-        """兼容响应序列化，从 extra_data 中读取研究项目 ID。"""
-        return task_project_id(self)
-
     @classmethod
     def project_id_expression(cls):
-        """Return the legacy storage expression used by task queries."""
-        return cls.extra_data["project_id"].as_string()
+        """Return the project id column used by task queries.
+
+        Kept as a classmethod for call-site compatibility; it now returns the
+        real column instead of a JSON expression.
+        """
+        return cls.project_id
 
     # 关系
     user = relationship("User", back_populates="tasks")
@@ -172,3 +181,20 @@ class TaskLog(Base, UUIDMixin):
 
     # 关系
     task = relationship("Task", back_populates="logs")
+
+
+@event.listens_for(Task, "before_insert")
+def _mirror_project_id_from_extra_data(_mapper, _connection, target: Task) -> None:
+    """One-cycle dual-write safety net (plan §4).
+
+    New tasks historically carried their project only in ``extra_data``.
+    ``set_task_project_id`` remains the compatibility writer for that JSON, but
+    every insert must also populate the real ``tasks.project_id`` column. Doing
+    it on the ORM event covers both explicit writers and direct ``Task(...)``
+    constructions (tests, worker retries) without touching each call site.
+    """
+    if target.project_id:
+        return
+    legacy = (target.extra_data or {}).get("project_id")
+    if legacy:
+        target.project_id = str(legacy)

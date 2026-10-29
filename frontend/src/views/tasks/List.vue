@@ -281,7 +281,7 @@
     workflowNodeId: workflowNodeId.value,
   }))
   const projectMembershipRole = computed<ProjectRole | undefined>(
-    () => project.value?.membership.role
+    () => project.value?.membership?.role
   )
   const taskActor = computed<TaskActor>(() => ({
     isAdmin: userStore.isAdmin,

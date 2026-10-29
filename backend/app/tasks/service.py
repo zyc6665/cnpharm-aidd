@@ -20,9 +20,9 @@ from app.models.tasks import Task, TaskInput, TaskStatus
 from app.models.tools import Tool, ToolVersion
 from app.models.users import User
 from app.schemas.tasks import TaskCreate
-from app.services.project_access import load_project_membership
 from app.services.project_migration import ensure_migration_project_for_owner
 from app.services.project_quotas import check_submission_allowed
+from app.services.rbac import require_project_action
 from app.services.run_input_normalization import normalize_string_mapping
 from app.services.run_preparation import PreparedRun, RunContext, RunPreparationInput, prepare_run
 from app.services.tool_contracts import (
@@ -424,10 +424,11 @@ async def _prepare_tool_task_run(
     )
     project_id = task_data.project_id
     if project_id:
-        await load_project_membership(
+        await require_project_action(
             db,
             project_id=project_id,
-            user_id=current_user.id,
+            user=current_user,
+            action="run",
         )
         task_extra_data = set_task_project_id(task_extra_data, project_id)
     elif assign_default_project and (
@@ -609,6 +610,7 @@ async def _record_quota_rejection(
     try:
         task = Task(
             user_id=command.user_id,
+            project_id=(command.extra_data or {}).get("project_id"),
             tool_id=command.tool_id,
             tool_version_id=command.tool_version_id,
             status=TaskStatus.PENDING.value,
@@ -725,6 +727,7 @@ async def create_and_schedule_tool_task(
 
     task = Task(
         user_id=command.user_id,
+        project_id=(command.extra_data or {}).get("project_id"),
         tool_id=command.tool_id,
         tool_version_id=command.tool_version_id,
         status=TaskStatus.PENDING.value,

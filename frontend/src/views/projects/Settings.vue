@@ -124,7 +124,9 @@
     role: 'viewer'
   })
 
-  const canManageMembers = computed(() => project.value?.membership.role === 'owner')
+  const canManageMembers = computed(() =>
+    ['owner', 'admin'].includes(project.value?.role ?? '')
+  )
   const memberColumns = [
     { title: '成员', key: 'member' },
     { title: '角色', key: 'role', width: 180 },

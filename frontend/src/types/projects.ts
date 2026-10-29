@@ -27,7 +27,10 @@ export interface ResearchProject {
   status: ProjectStatus
   model_policy: Record<string, unknown>
   data_policy: Record<string, unknown>
-  membership: ProjectMembership
+  /** Effective role of the current viewer; always a string ("admin" for platform admins without a member row). */
+  role: ProjectRole | 'admin'
+  /** Null only for a platform admin who is not a member of this project. */
+  membership: ProjectMembership | null
   created_at: string
   updated_at: string
 }

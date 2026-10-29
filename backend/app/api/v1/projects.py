@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.auth.dependencies import get_current_user
+from app.common.exceptions import ConflictException
 from app.common.responses import success_response
 from app.common.time import utcnow
 from app.database.session import get_db
@@ -42,7 +43,10 @@ router = APIRouter(
 DEFAULT_ORGANIZATION_SLUG = "default"
 
 
-def _serialize(project: Project, membership: ProjectMember) -> dict:
+def _serialize(project: Project, membership: ProjectMember | None) -> dict:
+    # Platform admins bypass membership, so ``membership`` may be None. The
+    # top-level ``role`` is always a string so clients never have to null-check
+    # it (admins without a member row report ``"admin"``).
     return {
         "id": project.id,
         "organization_id": project.organization_id,
@@ -52,7 +56,14 @@ def _serialize(project: Project, membership: ProjectMember) -> dict:
         "status": project.status,
         "model_policy": project.model_policy or {},
         "data_policy": project.data_policy or {},
-        "membership": {"id": membership.id, "role": membership.role},
+        "version": project.version,
+        "role": membership.role if membership is not None else "admin",
+        # Kept for backward compatibility; may be null for an admin non-member.
+        "membership": (
+            {"id": membership.id, "role": membership.role}
+            if membership is not None
+            else None
+        ),
         "created_at": project.created_at,
         "updated_at": project.updated_at,
     }
@@ -151,20 +162,27 @@ async def list_projects(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    query = (
-        select(Project, ProjectMember)
-        .join(ProjectMember, ProjectMember.project_id == Project.id)
-        .where(ProjectMember.user_id == current_user.id)
-        .order_by(Project.updated_at.desc())
-    )
-    if not include_archived:
-        query = query.where(Project.status != "archived")
-    result = await db.execute(query)
-    return success_response(
-        data={
-            "items": [_serialize(project, member) for project, member in result.all()]
-        }
-    )
+    if current_user.role == "admin":
+        # Admins bypass membership everywhere else (get/update/members/...),
+        # so the list must show every project too — otherwise a non-member
+        # project 200s on detail but is invisible in the list.
+        project_query = select(Project).order_by(Project.updated_at.desc())
+        if not include_archived:
+            project_query = project_query.where(Project.status != "archived")
+        projects = (await db.execute(project_query)).scalars().all()
+        items = [_serialize(project, None) for project in projects]
+    else:
+        query = (
+            select(Project, ProjectMember)
+            .join(ProjectMember, ProjectMember.project_id == Project.id)
+            .where(ProjectMember.user_id == current_user.id)
+            .order_by(Project.updated_at.desc())
+        )
+        if not include_archived:
+            query = query.where(Project.status != "archived")
+        result = await db.execute(query)
+        items = [_serialize(project, member) for project, member in result.all()]
+    return success_response(data={"items": items})
 
 
 @router.post("", response_model=dict)
@@ -297,8 +315,32 @@ async def update_project(
         user=current_user,
         allowed_roles={"owner", "editor"},
     )
-    for field, value in data.model_dump(exclude_unset=True).items():
-        setattr(project, field, value)
+    values = data.model_dump(exclude_unset=True, exclude={"expected_version"})
+    expected_version = data.expected_version
+    values["updated_at"] = utcnow()
+    if expected_version is not None:
+        values["version"] = expected_version + 1
+        result = await db.execute(
+            sa_update(Project)
+            .where(Project.id == project_id, Project.version == expected_version)
+            .values(**values)
+        )
+        if result.rowcount == 0:
+            await db.rollback()
+            current_version = (
+                await db.execute(
+                    select(Project.version).where(Project.id == project_id)
+                )
+            ).scalar_one_or_none()
+            raise ConflictException(
+                "项目已被其他人修改，请刷新后重试",
+                detail={"currentVersion": current_version},
+            )
+    else:
+        values["version"] = (project.version or 1) + 1
+        await db.execute(
+            sa_update(Project).where(Project.id == project_id).values(**values)
+        )
     await db.commit()
     await db.refresh(project)
     return success_response(

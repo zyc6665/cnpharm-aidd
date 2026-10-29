@@ -24,12 +24,14 @@ class ProjectUpdate(BaseModel):
     status: ProjectStatus | None = None
     model_policy: dict | None = None
     data_policy: dict | None = None
+    # 乐观锁：客户端携带读取时的 version，服务端做条件更新；为空则退化为覆盖更新。
+    expected_version: int | None = Field(default=None, ge=1)
 
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
     def require_change(self):
-        if not self.model_fields_set:
+        if not (self.model_fields_set - {"expected_version"}):
             raise ValueError("at least one project field is required")
         return self
 
