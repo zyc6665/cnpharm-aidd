@@ -34,8 +34,8 @@ from app.tasks.executors.ssh_paths import build_remote_paths
 from app.tasks.executors.ssh_payload import build_params_payload
 from app.tasks.executors.ssh_result import load_result_json
 from app.tasks.ssh_transport import ParamikoSSHTransport
-from app.tool_packages.config_resolver import ToolPackageConfigError, tool_package_v2_manifest
-from app.tool_packages.schemas import ToolPackageV2Manifest
+from app.tool_packages.config_resolver import ToolPackageConfigError, validated_tool_package_manifest
+from app.tool_packages.schemas import ToolPackageManifest
 
 logger = logging.getLogger(__name__)
 
@@ -178,7 +178,7 @@ class SSHJobExecutor(BaseExecutor):
         """Attach platform file IDs to legacy results without polluting result.v2."""
         if not output_file_ids:
             return result
-        if result.get("result_version") == "aidd.sciminer/result.v2":
+        if result.get("result_version") == "aidd.sciminer/result":
             return result
         enriched = dict(result)
         enriched["output_file_ids"] = output_file_ids
@@ -327,7 +327,7 @@ class SSHJobExecutor(BaseExecutor):
         }
 
     async def _prepare_params_payload(self, work_dir: str, input_dir: str) -> dict[str, Any]:
-        manifest = self._tool_package_v2_manifest()
+        manifest = self._validated_tool_package_manifest()
         input_bindings = self._standard_input_bindings() if manifest is not None else {}
         if input_bindings:
             payload = await self._build_standard_request_payload(
@@ -382,7 +382,7 @@ class SSHJobExecutor(BaseExecutor):
     async def _build_standard_request_payload(
         self,
         *,
-        manifest: ToolPackageV2Manifest,
+        manifest: ToolPackageManifest,
         input_bindings: dict[str, str],
         work_dir: Path,
     ) -> dict[str, Any]:
@@ -433,7 +433,7 @@ class SSHJobExecutor(BaseExecutor):
     def _append_legacy_standard_compat_payload(
         self,
         payload: dict[str, Any],
-        manifest: ToolPackageV2Manifest,
+        manifest: ToolPackageManifest,
     ) -> dict[str, Any]:
         """Expose v2 standard inputs through legacy params/input_files for old SSH runners."""
         enriched = dict(payload)
@@ -454,7 +454,7 @@ class SSHJobExecutor(BaseExecutor):
     def _project_standard_inputs_to_legacy_fields(
         self,
         payload: dict[str, Any],
-        manifest: ToolPackageV2Manifest,
+        manifest: ToolPackageManifest,
     ) -> dict[str, str]:
         inputs = payload.get("inputs")
         if not isinstance(inputs, dict):
@@ -484,15 +484,15 @@ class SSHJobExecutor(BaseExecutor):
             used_fields.add(file_field)
         return projected
 
-    def _tool_package_v2_manifest(self) -> ToolPackageV2Manifest | None:
+    def _validated_tool_package_manifest(self) -> ToolPackageManifest | None:
         try:
-            return tool_package_v2_manifest(self.config)
+            return validated_tool_package_manifest(self.config)
         except ToolPackageConfigError as exc:
             raise TaskExecutionError(str(exc)) from exc
 
     def _standard_execution_context(
         self,
-        manifest: ToolPackageV2Manifest,
+        manifest: ToolPackageManifest,
     ) -> StandardExecutionBuildContext:
         variant_name = str(
             self.config.get("variant")

@@ -30,7 +30,7 @@ from app.services.tool_contracts import (
     tool_contract_to_agent_summary,
 )
 from app.services.semantic_types import normalize_semantic_type
-from app.tool_packages.config_resolver import tool_package_v2_manifest
+from app.tool_packages.config_resolver import validated_tool_package_manifest
 
 
 AGENT_CAPABILITY_CONFIG_KEY = "agent_capability"
@@ -136,7 +136,7 @@ def capability_from_config(tool_slug: str, config: dict[str, Any]) -> ToolCapabi
 
 def capability_from_tool_package_config(tool_slug: str, config: dict[str, Any]) -> ToolCapability | None:
     """Build a ToolCapability from a Tool Package v2 standard Artifact contract."""
-    manifest = tool_package_v2_manifest(config)
+    manifest = validated_tool_package_manifest(config)
     if manifest is None or manifest.exposure.agent is not True:
         return None
 

@@ -168,7 +168,7 @@ Artifact relation 也必须平台受控，不能由工具自由写字符串。MV
 示例草案：
 
 ```yaml
-api_version: aidd.sciminer/tool-package.v2
+api_version: aidd.sciminer/tool-package
 kind: ToolPackage
 metadata:
   slug: lvpocket-pocket-prediction
@@ -247,7 +247,7 @@ runner 只看到标准 request 和本地 staged 文件。
 
 ```json
 {
-  "request_version": "aidd.sciminer/request.v1",
+  "request_version": "aidd.sciminer/request",
   "task": {
     "id": "task-id",
     "tool_slug": "lvpocket-pocket-prediction",
@@ -291,7 +291,7 @@ runner 只看到标准 request 和本地 staged 文件。
 
 ```json
 {
-  "result_version": "aidd.sciminer/result.v2",
+  "result_version": "aidd.sciminer/result",
   "artifacts": {
     "pocket": {
       "name": "Top pocket",

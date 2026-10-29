@@ -5,7 +5,7 @@ from app.services.standard_input_slots import (
     artifact_input_slots_for_run,
     tool_accepts_standard_input_bindings,
 )
-from app.tool_packages.schemas import TOOL_PACKAGE_V2_API_VERSION
+from app.tool_packages.schemas import TOOL_PACKAGE_API_VERSION
 
 
 def test_artifact_input_slots_for_run_merges_contract_and_workflow_overrides():
@@ -83,7 +83,7 @@ def test_artifact_input_slots_by_name_for_tool_uses_contract_shape():
 
 def test_tool_accepts_standard_input_bindings_for_v2_and_executor_contracts():
     assert tool_accepts_standard_input_bindings(
-        {"tool_package_manifest": {"api_version": TOOL_PACKAGE_V2_API_VERSION}}
+        {"tool_package_manifest": {"api_version": TOOL_PACKAGE_API_VERSION}}
     ) is True
     # 交付线移除了 remote_api 执行器，其旧契约不再被认作标准输入槽位来源。
     assert tool_accepts_standard_input_bindings(

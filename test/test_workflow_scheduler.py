@@ -491,7 +491,7 @@ async def test_workflow_node_receives_upstream_standard_artifact_binding(
         is_public=True,
         config={
             "type": "ssh_job",
-            "tool_package_manifest": {"api_version": "aidd.sciminer/tool-package.v2"},
+            "tool_package_manifest": {"api_version": "aidd.sciminer/tool-package"},
         },
     )
     run = SimpleNamespace(
@@ -587,7 +587,7 @@ async def test_at003_molp_pc_node_receives_rdkit_properties_artifact_binding(
         config={
             "type": "ssh_job",
             "tool_package_manifest": {
-                "api_version": "aidd.sciminer/tool-package.v2",
+                "api_version": "aidd.sciminer/tool-package",
                 "metadata": {"slug": "molp-pc-property-prediction"},
             },
         },
@@ -686,7 +686,7 @@ async def test_workflow_node_binds_first_cardinality_many_standard_artifact(
         is_public=True,
         config={
             "type": "ssh_job",
-            "tool_package_manifest": {"api_version": "aidd.sciminer/tool-package.v2"},
+            "tool_package_manifest": {"api_version": "aidd.sciminer/tool-package"},
         },
     )
     run = SimpleNamespace(
@@ -774,7 +774,7 @@ async def test_map_node_passes_standard_artifact_bindings_to_each_subtask(
         is_public=True,
         config={
             "type": "ssh_job",
-            "tool_package_manifest": {"api_version": "aidd.sciminer/tool-package.v2"},
+            "tool_package_manifest": {"api_version": "aidd.sciminer/tool-package"},
         },
     )
     run = SimpleNamespace(
@@ -866,7 +866,7 @@ async def test_loop_node_passes_standard_artifact_bindings_to_body_tasks(
         is_public=True,
         config={
             "type": "ssh_job",
-            "tool_package_manifest": {"api_version": "aidd.sciminer/tool-package.v2"},
+            "tool_package_manifest": {"api_version": "aidd.sciminer/tool-package"},
         },
     )
     run = SimpleNamespace(

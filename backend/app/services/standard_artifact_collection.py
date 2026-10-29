@@ -26,11 +26,11 @@ from app.services.standard_artifact_errors import (
 )
 from app.tool_packages.config_resolver import (
     ToolPackageConfigError,
-    tool_package_v2_manifest,
+    validated_tool_package_manifest,
 )
 
 
-STANDARD_RESULT_VERSION = "aidd.sciminer/result.v2"
+STANDARD_RESULT_VERSION = "aidd.sciminer/result"
 
 
 def collected_standard_result_payload(
@@ -53,7 +53,7 @@ def declared_standard_outputs_from_config(
     config: dict[str, Any],
 ) -> list[DeclaredArtifactOutput]:
     try:
-        manifest = tool_package_v2_manifest(config)
+        manifest = validated_tool_package_manifest(config)
     except ToolPackageConfigError as exc:
         raise StandardArtifactPersistenceError(
             f"Invalid Tool Package v2 manifest for standard result: {exc}"

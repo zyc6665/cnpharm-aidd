@@ -342,7 +342,7 @@ Add a test proving a builtin result can return a standard result.v2 envelope and
 def test_builtin_executor_returns_standard_result_v2(tmp_path, monkeypatch):
     result = BuiltinToolResult(
         standard_result={
-            "result_version": "aidd.sciminer/result.v2",
+            "result_version": "aidd.sciminer/result",
             "artifacts": {
                 "prepared_protein": {
                     "type": "protein_structure@1",
@@ -504,7 +504,7 @@ def test_builtin_protein_preparation_emits_standard_result_v2(tmp_path, monkeypa
         )
     }
     result = _run_protein_preparation_tool(files, params={"ph": 7.4})
-    assert result.standard_result["result_version"] == "aidd.sciminer/result.v2"
+    assert result.standard_result["result_version"] == "aidd.sciminer/result"
     prepared = result.standard_result["artifacts"]["prepared_protein"]
     assert prepared["type"] == "protein_structure@1"
     assert "prepared_pdb" in prepared["files"]

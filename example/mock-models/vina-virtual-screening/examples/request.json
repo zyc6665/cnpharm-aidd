@@ -1,5 +1,5 @@
 {
-  "request_version": "aidd.sciminer/request.v1",
+  "request_version": "aidd.sciminer/request",
   "task": {
     "id": "example-vina-virtual-screening",
     "tool_slug": "vina-virtual-screening",

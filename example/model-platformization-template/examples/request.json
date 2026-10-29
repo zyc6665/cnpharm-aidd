@@ -1,5 +1,5 @@
 {
-  "request_version": "aidd.sciminer/request.v1",
+  "request_version": "aidd.sciminer/request",
   "task": {
     "id": "example-task",
     "tool_slug": "standard-pocket-adapter-template",

@@ -98,7 +98,7 @@ def test_model_package_template_runtime_builds_standard_result(tmp_path: Path):
         output_dir=output_dir,
     )
 
-    assert result["result_version"] == "aidd.sciminer/result.v2"
+    assert result["result_version"] == "aidd.sciminer/result"
     assert result["artifacts"]["properties"]["type"] == "molecule_table@1"
     assert set(result["artifacts"]["properties"]["files"]) == {"table_file", "metadata_json"}
     assert result["artifacts"]["properties"]["metadata"]["molecule_id_field"] == "molecule_id"

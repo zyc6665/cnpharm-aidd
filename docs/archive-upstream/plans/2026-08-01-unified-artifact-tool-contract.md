@@ -240,7 +240,7 @@ Keep existing v1 models intact. Add:
 - `AdapterDeclaration`
 - `ExposureDeclaration`
 
-Support both `aidd.sciminer/v1` and `aidd.sciminer/tool-package.v2` in loader.
+Support both `aidd.sciminer/v1` and `aidd.sciminer/tool-package` in loader.
 
 **Step 3: Validate against standard registry**
 
@@ -448,7 +448,7 @@ Expected: new tests fail.
 
 **Step 2: Add standard result detection**
 
-Detect `result_version == "aidd.sciminer/result.v2"` and current tool package v2 manifest. If present:
+Detect `result_version == "aidd.sciminer/result"` and current tool package v2 manifest. If present:
 
 - Parse and validate result.
 - Collect files with file role metadata.

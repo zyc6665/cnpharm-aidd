@@ -65,7 +65,7 @@ const concreteStandardTool = makeTool({
     },
   },
   tool_package_manifest: {
-    api_version: 'aidd.sciminer/tool-package.v2',
+    api_version: 'aidd.sciminer/tool-package',
     kind: 'ToolPackage',
     artifacts: {
       inputs: [{ name: 'protein', type: 'protein_structure@1', required: true }],
@@ -109,7 +109,7 @@ describe('useToolDetailRunForm', () => {
     const tool = makeTool({
       type: 'ssh_job',
       tool_package_manifest: {
-        api_version: 'aidd.sciminer/tool-package.v2',
+        api_version: 'aidd.sciminer/tool-package',
         kind: 'ToolPackage',
         artifacts: {
           inputs: [{ name: 'molecules', type: 'molecule_table@1', required: true }],

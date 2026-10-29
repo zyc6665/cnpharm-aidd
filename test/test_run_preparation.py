@@ -626,14 +626,14 @@ async def test_prepare_run_keeps_standard_bindings_for_tool_package_v2(
     tool, version = await _create_tool(
         db_session,
         owner,
-        slug="tool-package-v2-consumer",
+        slug="tool-package-consumer",
         config={
             "type": "ssh_job",
             "tool_package_manifest": {
-                "api_version": "aidd.sciminer/tool-package.v2",
+                "api_version": "aidd.sciminer/tool-package",
                 "kind": "ToolPackage",
                 "metadata": {
-                    "slug": "tool-package-v2-consumer",
+                    "slug": "tool-package-consumer",
                     "name": "Tool Package V2 Consumer",
                     "version": "1.0.0",
                 },
@@ -691,7 +691,7 @@ async def test_prepare_run_uses_selected_candidate_version_contract(
         config={
             "type": "k8s_job",
             "tool_package_manifest": {
-                "api_version": "aidd.sciminer/tool-package.v2",
+                "api_version": "aidd.sciminer/tool-package",
                 "kind": "ToolPackage",
                 "metadata": {
                     "slug": "candidate-contract-tool",

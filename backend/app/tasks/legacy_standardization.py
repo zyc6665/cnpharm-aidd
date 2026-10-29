@@ -35,13 +35,13 @@ async def append_legacy_standard_result(
     source_task_id = str(getattr(task, "id", "") or _legacy_output_task_id(output_result) or "unknown-task")
     standard_result: dict[str, Any] | None = None
     if _declares_standard_output(tool_version_config, "pocket", "binding_pocket@1"):
-        standard_result = await _legacy_lvpocket_result_v2(
+        standard_result = await _legacy_lvpocket_result(
             db,
             output_result=output_result,
             output_file_ids=output_file_ids,
         )
     elif _declares_standard_output(tool_version_config, "properties", "molecule_table@1"):
-        standard_result = await _legacy_molp_pc_result_v2(
+        standard_result = await _legacy_molp_pc_result(
             db,
             output_result=output_result,
             output_file_ids=output_file_ids,
@@ -49,7 +49,7 @@ async def append_legacy_standard_result(
             tool_version_config=tool_version_config,
         )
     elif _declares_standard_output(tool_version_config, "affinity", "molecule_table@1"):
-        standard_result = await _legacy_msign_result_v2(
+        standard_result = await _legacy_msign_result(
             db,
             output_result=output_result,
             output_file_ids=output_file_ids,
@@ -65,13 +65,13 @@ async def append_legacy_standard_result(
 
 
 def _has_standard_result(output_result: dict[str, Any]) -> bool:
-    if output_result.get("result_version") == "aidd.sciminer/result.v2":
+    if output_result.get("result_version") == "aidd.sciminer/result":
         return True
     nested = output_result.get("result")
-    if isinstance(nested, dict) and nested.get("result_version") == "aidd.sciminer/result.v2":
+    if isinstance(nested, dict) and nested.get("result_version") == "aidd.sciminer/result":
         return True
     standard_result = output_result.get("standard_result")
-    return isinstance(standard_result, dict) and standard_result.get("result_version") == "aidd.sciminer/result.v2"
+    return isinstance(standard_result, dict) and standard_result.get("result_version") == "aidd.sciminer/result"
 
 
 def _declares_standard_output(config: dict[str, Any], name: str, standard_type: str) -> bool:
@@ -93,7 +93,7 @@ def _declared_standard_outputs(config: dict[str, Any]) -> list[dict[str, Any]]:
     outputs = artifacts.get("outputs") if isinstance(artifacts, dict) else None
     return [item for item in outputs or [] if isinstance(item, dict)]
 
-async def _legacy_lvpocket_result_v2(
+async def _legacy_lvpocket_result(
     db: AsyncSession,
     *,
     output_result: dict[str, Any],
@@ -151,7 +151,7 @@ async def _legacy_lvpocket_result_v2(
 
     pocket_id = str(first_pocket.get("id") or "pocket0")
     return {
-        "result_version": "aidd.sciminer/result.v2",
+        "result_version": "aidd.sciminer/result",
         "artifacts": {
             "pocket": {
                 "type": "binding_pocket@1",
@@ -232,7 +232,7 @@ def _pdb_geometry(content: bytes) -> tuple[list[float], dict[str, list[float]]] 
     return center, {"min": minimum, "max": maximum}
 
 
-async def _legacy_molp_pc_result_v2(
+async def _legacy_molp_pc_result(
     db: AsyncSession,
     *,
     output_result: dict[str, Any],
@@ -294,7 +294,7 @@ async def _legacy_molp_pc_result_v2(
         return None
 
     return {
-        "result_version": "aidd.sciminer/result.v2",
+        "result_version": "aidd.sciminer/result",
         "artifacts": {
             "properties": {
                 "type": "molecule_table@1",
@@ -346,8 +346,8 @@ def _legacy_molp_pc_scientific_metadata(tool_version_config: dict[str, Any]) -> 
         "evidence_level": "engineering_smoke_only",
         "applicability_domain_status": "unknown",
         "unit_or_label_policy": "per_endpoint_definition_or_unknown",
-        "model_card_ref": "example/MolP-PC/tool-package-v2/docs/model-card.md",
-        "verification_record_ref": "example/MolP-PC/tool-package-v2/docs/verification-record.md",
+        "model_card_ref": "example/MolP-PC/tool-package/docs/model-card.md",
+        "verification_record_ref": "example/MolP-PC/tool-package/docs/verification-record.md",
     }
 
 
@@ -401,7 +401,7 @@ def _legacy_molp_pc_report(
     }
 
 
-async def _legacy_msign_result_v2(
+async def _legacy_msign_result(
     db: AsyncSession,
     *,
     output_result: dict[str, Any],
@@ -452,7 +452,7 @@ async def _legacy_msign_result_v2(
         return None
 
     return {
-        "result_version": "aidd.sciminer/result.v2",
+        "result_version": "aidd.sciminer/result",
         "artifacts": {
             "affinity": {
                 "type": "molecule_table@1",

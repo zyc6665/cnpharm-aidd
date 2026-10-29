@@ -1,4 +1,4 @@
-api_version: aidd.sciminer/tool-template.v1
+api_version: aidd.sciminer/tool-template
 kind: ToolTemplate
 metadata:
   template_key: smina-docking
@@ -18,7 +18,7 @@ input_schema:
 output_schema:
   type: object
   properties:
-    result_version: { const: aidd.sciminer/result.v2 }
+    result_version: { const: aidd.sciminer/result }
     artifacts: { type: array }
     summary: { type: object }
 agent_capability:
@@ -94,7 +94,7 @@ smoke_test:
   name: smina-docking-smoke
   params: { box_center: [0, 0, 0], box_size: [16, 16, 16], exhaustiveness: 1 }
   input_artifacts: { protein: examples/receptor.pdb, ligand: examples/ligand.sdf }
-  expected_result_version: aidd.sciminer/result.v2
+  expected_result_version: aidd.sciminer/result
   expected_outputs:
     - semantic_type: ligand_structure@1
       role: structure_file

@@ -4,7 +4,7 @@
 
 ## 这是什么
 
-`therapainter-peptide-design` 是一个符合 `aidd.sciminer/tool-package.v2` 契约的 **mock 模型包**，用于在真实模型资产到位前
+`therapainter-peptide-design` 是一个符合 `aidd.sciminer/tool-package` 契约的 **mock 模型包**，用于在真实模型资产到位前
 解耦前端 P-15~P-28 页面与平台联调。mock 版与真实版同构：真模型到位后只替换镜像 tag 与 manifest，
 前端与平台零改动。
 

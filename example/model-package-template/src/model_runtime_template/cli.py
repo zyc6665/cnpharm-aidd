@@ -72,7 +72,7 @@ def build_run_request(
     device = str(device_override or parameters.get("device") or "cpu")
 
     molecule_id_field = "molecule_id"
-    if payload.get("request_version") == "aidd.sciminer/request.v1":
+    if payload.get("request_version") == "aidd.sciminer/request":
         molecules = payload.get("inputs", {}).get("molecules", {})
         table_ref = molecules.get("files", {}).get("table_file", {}).get("path")
         metadata = molecules.get("metadata") or {}

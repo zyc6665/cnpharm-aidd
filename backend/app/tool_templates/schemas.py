@@ -20,8 +20,8 @@ except ImportError:  # pragma: no cover - optional dependency guard
     HAS_JSONSCHEMA = False
 
 
-TOOL_TEMPLATE_API_VERSION = "aidd.sciminer/tool-template.v1"
-STANDARD_RESULT_VERSION = "aidd.sciminer/result.v2"
+TOOL_TEMPLATE_API_VERSION = "aidd.sciminer/tool-template"
+STANDARD_RESULT_VERSION = "aidd.sciminer/result"
 SUPPORTED_TEMPLATE_EXECUTOR_TYPES = {
     "docker_image",
     "python_script",
@@ -275,7 +275,7 @@ class DrugDiscoveryToolTemplate(BaseModel):
     def _validate_standard_result_contract(self) -> "DrugDiscoveryToolTemplate":
         result_version_schema = self.output_schema.get("properties", {}).get("result_version", {})
         if result_version_schema.get("const") != STANDARD_RESULT_VERSION:
-            raise ValueError("output_schema.properties.result_version.const must be aidd.sciminer/result.v2")
+            raise ValueError("output_schema.properties.result_version.const must be aidd.sciminer/result")
 
         capability_outputs = {output.semantic_type for output in self.agent_capability.outputs}
         expected_outputs = {output.semantic_type for output in self.smoke_test.expected_outputs}

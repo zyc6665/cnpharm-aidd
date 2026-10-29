@@ -14,8 +14,8 @@ from app.tool_packages.loader import ToolPackageLoadError, load_tool_package
 from app.tool_packages.schemas import (
     Accelerator,
     AnyToolPackageManifest,
+    LegacyToolPackageManifest,
     ToolPackageManifest,
-    ToolPackageV2Manifest,
     ValidationStatus,
 )
 
@@ -65,12 +65,12 @@ class ToolPackageValidationResult(BaseModel):
 
 
 def validate_tool_package(manifest: AnyToolPackageManifest) -> ToolPackageValidationResult:
-    if isinstance(manifest, ToolPackageV2Manifest):
-        return _validate_tool_package_v2(manifest)
-    return _validate_tool_package_v1(manifest)
+    if isinstance(manifest, LegacyToolPackageManifest):
+        return _validate_tool_package_v1(manifest)
+    return _validate_tool_package_spec(manifest)
 
 
-def _validate_tool_package_v1(manifest: ToolPackageManifest) -> ToolPackageValidationResult:
+def _validate_tool_package_v1(manifest: LegacyToolPackageManifest) -> ToolPackageValidationResult:
     errors: list[str] = []
     declared_inputs = {item.artifact_type for item in manifest.artifacts.inputs}
     declared_outputs = {item.artifact_type for item in manifest.artifacts.outputs}
@@ -115,7 +115,7 @@ def _validate_tool_package_v1(manifest: ToolPackageManifest) -> ToolPackageValid
     return ToolPackageValidationResult(is_valid=not errors, errors=_dedupe(errors))
 
 
-def _validate_tool_package_v2(manifest: ToolPackageV2Manifest) -> ToolPackageValidationResult:
+def _validate_tool_package_spec(manifest: ToolPackageManifest) -> ToolPackageValidationResult:
     errors: list[str] = []
     declared_inputs = {item.name for item in manifest.artifacts.inputs}
     declared_outputs = {item.name for item in manifest.artifacts.outputs}
@@ -185,7 +185,7 @@ def _validate_tool_package_v2(manifest: ToolPackageV2Manifest) -> ToolPackageVal
     return ToolPackageValidationResult(is_valid=not errors, errors=_dedupe(errors))
 
 
-def _validate_runtime_env(manifest: ToolPackageV2Manifest, errors: list[str]) -> None:
+def _validate_runtime_env(manifest: ToolPackageManifest, errors: list[str]) -> None:
     runtime = manifest.runtime
     primary = runtime.artifacts.primary
     fallback = runtime.artifacts.fallback

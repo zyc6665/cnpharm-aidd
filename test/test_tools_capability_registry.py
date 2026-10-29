@@ -55,7 +55,7 @@ def minimal_runtime_manifest(slug: str) -> dict:
 def _v2_manifest(*, agent_exposure: bool = True) -> dict:
     slug = "standard-pocket-tool"
     return {
-        "api_version": "aidd.sciminer/tool-package.v2",
+        "api_version": "aidd.sciminer/tool-package",
         "kind": "ToolPackage",
         "metadata": {
             "slug": slug,

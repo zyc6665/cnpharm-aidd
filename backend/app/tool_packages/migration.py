@@ -16,7 +16,7 @@ from app.models.tool_packages import ToolPackage, ToolPackageVersion
 from app.models.tools import Tool, ToolVersion
 from app.execution.executor_types import execution_types_for_tool_type
 from app.services.tool_contracts import collect_tool_contract_config_validation_errors
-from app.tool_packages.schemas import ToolPackageManifest
+from app.tool_packages.schemas import LegacyToolPackageManifest
 from app.tool_packages.validator import validate_tool_package
 
 
@@ -248,7 +248,7 @@ def build_legacy_tool_manifest(
         "variants": variants,
     }
     try:
-        parsed = ToolPackageManifest.model_validate(manifest)
+        parsed = LegacyToolPackageManifest.model_validate(manifest)
     except ValueError as exc:
         return None, [f"generated manifest is invalid: {exc}"]
     validation = validate_tool_package(parsed)

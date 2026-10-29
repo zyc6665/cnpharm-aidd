@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from app.tool_packages.schemas import TOOL_PACKAGE_V2_API_VERSION, ToolPackageV2Manifest
+from app.tool_packages.schemas import TOOL_PACKAGE_API_VERSION, ToolPackageManifest
 
 
 class ToolPackageConfigError(ValueError):
@@ -34,25 +34,25 @@ def tool_package_declares_mock(config: object) -> bool:
     return isinstance(metadata, dict) and metadata.get("mock") is True
 
 
-def tool_package_v2_manifest_data(config: object) -> dict[str, Any] | None:
+def validated_tool_package_manifest_data(config: object) -> dict[str, Any] | None:
     manifest = tool_package_manifest_data(config)
-    if manifest is None or manifest.get("api_version") != TOOL_PACKAGE_V2_API_VERSION:
+    if manifest is None or manifest.get("api_version") != TOOL_PACKAGE_API_VERSION:
         return None
     return manifest
 
 
-def tool_package_v2_manifest(
+def validated_tool_package_manifest(
     config: object,
     *,
     ignore_invalid: bool = False,
-) -> ToolPackageV2Manifest | None:
+) -> ToolPackageManifest | None:
     """Parse a Tool Package v2 manifest from config when present."""
-    manifest = tool_package_v2_manifest_data(config)
+    manifest = validated_tool_package_manifest_data(config)
     if manifest is None:
         return None
 
     try:
-        return ToolPackageV2Manifest.model_validate(manifest)
+        return ToolPackageManifest.model_validate(manifest)
     except ValidationError as exc:
         if ignore_invalid:
             return None

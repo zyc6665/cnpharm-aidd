@@ -13,7 +13,7 @@ from app.services.tool_contract_validation import (  # noqa: F401
     collect_tool_contract_validation_errors,
 )
 from app.tool_packages.config_resolver import tool_package_manifest_data
-from app.tool_packages.schemas import TOOL_PACKAGE_V2_API_VERSION
+from app.tool_packages.schemas import TOOL_PACKAGE_API_VERSION
 
 
 TOOL_CONTRACT_VERSION = "1.0"
@@ -125,8 +125,10 @@ def _build_tool_package_contract(
     manifest: dict[str, Any],
 ) -> dict[str, Any]:
     """Project a Tool Package manifest onto the stable contract shape."""
-    if manifest.get("api_version") == TOOL_PACKAGE_V2_API_VERSION:
-        return _build_tool_package_v2_contract(package, current_version, manifest)
+    if manifest.get("api_version") == TOOL_PACKAGE_API_VERSION:
+        return _build_tool_package_manifest_contract(
+            package, current_version, manifest
+        )
 
     metadata = manifest.get("metadata") if isinstance(manifest.get("metadata"), dict) else {}
     artifacts = manifest.get("artifacts") if isinstance(manifest.get("artifacts"), dict) else {}
@@ -195,7 +197,7 @@ def _build_tool_package_contract(
     }
 
 
-def _build_tool_package_v2_contract(
+def _build_tool_package_manifest_contract(
     package: Any,
     current_version: Any,
     manifest: dict[str, Any],
@@ -233,7 +235,7 @@ def _build_tool_package_v2_contract(
             "outputs": [_artifact_output_slot(item) for item in outputs],
         },
         "exposure": exposure,
-        "capability": _capability_from_v2_manifest(metadata, inputs, outputs, exposure),
+        "capability": _capability_from_manifest(metadata, inputs, outputs, exposure),
         "package": {
             "api_version": manifest.get("api_version"),
             "kind": manifest.get("kind"),
@@ -432,7 +434,7 @@ def _string_list(value: Any) -> list[str]:
     return [str(item) for item in value if str(item)]
 
 
-def _capability_from_v2_manifest(
+def _capability_from_manifest(
     metadata: dict[str, Any],
     inputs: list[dict[str, Any]],
     outputs: list[dict[str, Any]],

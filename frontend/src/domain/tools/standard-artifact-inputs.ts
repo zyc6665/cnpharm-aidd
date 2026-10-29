@@ -165,7 +165,7 @@ function resolveEmbeddedManifest(tool?: Tool | null): UnknownRecord | null {
 }
 
 function resolveSlotsFromManifest(manifest: UnknownRecord | null): StandardArtifactInputSlot[] {
-  if (!manifest || manifest.api_version !== 'aidd.sciminer/tool-package.v2') {
+  if (!manifest || manifest.api_version !== 'aidd.sciminer/tool-package') {
     return []
   }
 
@@ -328,7 +328,7 @@ export function resolveToolPackageParameterSchema(tool?: Tool | null): ToolSchem
   }
 
   const manifest = resolveEmbeddedManifest(tool)
-  if (!manifest || manifest.api_version !== 'aidd.sciminer/tool-package.v2') {
+  if (!manifest || manifest.api_version !== 'aidd.sciminer/tool-package') {
     return null
   }
 

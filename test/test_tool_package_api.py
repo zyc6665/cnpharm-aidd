@@ -58,7 +58,7 @@ def _manifest() -> dict:
 
 def _v2_manifest() -> dict:
     return {
-        "api_version": "aidd.sciminer/tool-package.v2",
+        "api_version": "aidd.sciminer/tool-package",
         "kind": "ToolPackage",
         "metadata": {
             "slug": "molp-pc-runtime-test",
@@ -272,7 +272,7 @@ async def test_admin_creates_v2_tool_package_with_runtime_metadata(
     data = created.json()["data"]
     manifest = data["current_version"]["manifest"]
     assert data["slug"] == "molp-pc-runtime-test"
-    assert manifest["api_version"] == "aidd.sciminer/tool-package.v2"
+    assert manifest["api_version"] == "aidd.sciminer/tool-package"
     assert manifest["runtime"]["artifacts"]["primary"]["image_digest"] == f"sha256:{'d' * 64}"
     assert manifest["runtime"]["weights"]["manifest_sha256"] == "f" * 64
 

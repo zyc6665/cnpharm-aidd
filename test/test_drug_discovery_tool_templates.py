@@ -53,7 +53,7 @@ def test_bundled_drug_discovery_templates_are_valid_and_smoke_testable():
         assert template.agent_capability.inputs
         assert template.agent_capability.outputs
         assert template.resource_profile.timeout_minutes >= template.resource_profile.expected_minutes
-        assert template.smoke_test.expected_result_version == "aidd.sciminer/result.v2"
+        assert template.smoke_test.expected_result_version == "aidd.sciminer/result"
         assert template.smoke_test.expected_outputs
 
 
@@ -87,7 +87,7 @@ def test_template_generates_existing_tool_import_config_for_docker_executor():
     assert tool_config["implementation"]["runtime"] == "autodock_vina"
     assert tool_config["resource_profile"]["tier"] == "medium"
     assert tool_config["output_schema"]["properties"]["result_version"]["const"] == (
-        "aidd.sciminer/result.v2"
+        "aidd.sciminer/result"
     )
     assert collect_tool_contract_config_validation_errors(
         tool_slug=validated["slug"],
@@ -224,7 +224,7 @@ def test_template_rejects_non_standard_smoke_test_result_version():
     raw = load_tool_template("rdkit-properties").model_dump(mode="json")
     raw["smoke_test"]["expected_result_version"] = "legacy-result.v1"
 
-    with pytest.raises(ValidationError, match="aidd.sciminer/result.v2"):
+    with pytest.raises(ValidationError, match="aidd.sciminer/result"):
         DrugDiscoveryToolTemplate.model_validate(raw)
 
 

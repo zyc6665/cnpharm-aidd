@@ -613,8 +613,8 @@ async def test_standard_artifact_detail_exposes_role_files_and_downloads_each_ro
         manifest_json={
             "type": "run_report@1",
             "metadata": {
-                "model_card_ref": "example/MolP-PC/tool-package-v2/docs/model-card.md",
-                "verification_record_ref": "example/MolP-PC/tool-package-v2/docs/verification-record.md",
+                "model_card_ref": "example/MolP-PC/tool-package/docs/model-card.md",
+                "verification_record_ref": "example/MolP-PC/tool-package/docs/verification-record.md",
                 "evidence_level": "engineering_smoke_only",
             },
         },
@@ -688,8 +688,8 @@ async def test_standard_artifact_detail_exposes_role_files_and_downloads_each_ro
     assert detail.status_code == 200
     latest_version = detail.json()["data"]["latest_version"]
     assert latest_version["manifest_json"]["metadata"] == {
-        "model_card_ref": "example/MolP-PC/tool-package-v2/docs/model-card.md",
-        "verification_record_ref": "example/MolP-PC/tool-package-v2/docs/verification-record.md",
+        "model_card_ref": "example/MolP-PC/tool-package/docs/model-card.md",
+        "verification_record_ref": "example/MolP-PC/tool-package/docs/verification-record.md",
         "evidence_level": "engineering_smoke_only",
     }
     latest_files = latest_version["files"]

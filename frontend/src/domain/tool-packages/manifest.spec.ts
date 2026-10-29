@@ -20,7 +20,7 @@ test('向导草稿生成可提交的 Tool Package v2 manifest', () => {
   draft.image = 'registry.example.com/pocket:1.0.0'
   const manifest = buildToolPackageManifest(draft)
 
-  assert.equal(manifest.api_version, 'aidd.sciminer/tool-package.v2')
+  assert.equal(manifest.api_version, 'aidd.sciminer/tool-package')
   assert.deepEqual(manifest.metadata, {
     slug: 'pocket-prediction',
     name: 'Pocket Prediction',

@@ -112,7 +112,7 @@ describe('workflow node run inputs', () => {
           config: {
             type: 'ssh_job',
             tool_package_manifest: {
-              api_version: 'aidd.sciminer/tool-package.v2',
+              api_version: 'aidd.sciminer/tool-package',
               artifacts: {
                 inputs: [
                   {
@@ -179,7 +179,7 @@ describe('workflow node run inputs', () => {
           config: {
             type: 'ssh_job',
             tool_package_manifest: {
-              api_version: 'aidd.sciminer/tool-package.v2',
+              api_version: 'aidd.sciminer/tool-package',
               artifacts: {
                 inputs: [
                   {

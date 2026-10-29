@@ -94,7 +94,7 @@ def write_result(task_id: str, attempt_id: str, report_path: Path) -> Path:
     result_path.write_text(
         json.dumps(
             {
-                "result_version": "aidd.sciminer/result.v2",
+                "result_version": "aidd.sciminer/result",
                 "artifacts": {
                     "report": {
                         "type": "run_report@1",

@@ -6,7 +6,7 @@
 
 - `MODEL_PACKAGE.yaml` 是模型侧元数据入口，声明模型版本、标准输入输出、Runtime Env、权重和缓存策略。
 - `platform_run.sh` 是薄入口，只负责接收平台通用参数并调用模型侧 runtime CLI。
-- 模型输出必须收敛为 `aidd.sciminer/result.v2`，由平台统一持久化标准 Artifact。
+- 模型输出必须收敛为 `aidd.sciminer/result`，由平台统一持久化标准 Artifact。
 - Runtime Env 是可复现运行环境，不是某台机器上的私有 conda 路径。
 
 ## Runtime Env

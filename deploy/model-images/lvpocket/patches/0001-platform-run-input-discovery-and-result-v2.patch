@@ -1,0 +1,77 @@
+--- a/platform_run.sh
++++ b/platform_run.sh
+@@ -142,6 +142,11 @@
+ params = payload.get("params") if isinstance(payload.get("params"), dict) else {}
+ input_files = payload.get("input_files") if isinstance(payload.get("input_files"), dict) else {}
+ 
++if not (input_files.get("protein_pdb") or input_files.get("pdb_file")):
++    _found = sorted(str(x) for x in Path(input_dir).rglob("*.pdb") if x.is_file())
++    if _found:
++        input_files["protein_pdb"] = _found[0]
++
+ for key in ("protein_pdb", "pdb_file"):
+     if key not in input_files and key in payload:
+         input_files[key] = payload[key]
+@@ -242,25 +247,51 @@
+     "content_type": "application/json",
+ })
+ 
++def _sha(rel):
++    import hashlib
++    h = hashlib.sha256()
++    h.update((result_json.parent / rel).read_bytes())
++    return h.hexdigest()
++
++# 按 binding_pocket@1 的必需 role 组织产物；classification/* 等中间产物
++# 不写入 result.v2（平台会报 Unexpected output artifact）。
++_residue = next((str(a["path"]) for a in artifacts
++                 if str(a["path"]).lower().endswith("protein_pocket_residues.pdb")), None)
++_atom = next((str(a["path"]) for a in artifacts
++              if str(a["path"]).lower().endswith(".pdb")
++              and "pocket" in str(a["path"]).lower()
++              and str(a["path"]) != _residue), None)
++_pred_rel = "artifacts/prediction.json"
++
++artifact_map = {}
++if _residue and _atom:
++    artifact_map["pocket"] = {
++        "type": "binding_pocket@1",
++        "files": {
++            "residue_pocket_pdb": {"path": _residue, "sha256": _sha(_residue)},
++            "atom_pocket_pdb": {"path": _atom, "sha256": _sha(_atom)},
++            "pocket_metadata_json": {"path": _pred_rel, "sha256": _sha(_pred_rel)},
++        },
++    }
++artifact_map["report"] = {
++    "type": "run_report@1",
++    "files": {"report_json": {"path": _pred_rel, "sha256": _sha(_pred_rel)}},
++}
++
+ payload = {
+-    "success": True,
+-    "message": "LVpocket pocket prediction completed",
+-    "outputs": {
++    "result_version": "aidd.sciminer/result.v2",
++    "artifacts": artifact_map,
++    "metrics": {
++        "message": "LVpocket pocket prediction completed",
++        "duration_sec": duration_sec,
++        "model_duration_sec": prediction.get("metrics", {}).get("duration_sec"),
+         "selected_model": prediction.get("selected_model"),
+         "model_choice": prediction.get("model_choice"),
+-        "classification": prediction.get("classification"),
+         "pocket_count": prediction.get("pocket_count"),
+         "pockets": prediction.get("pockets", []),
+         "protein_pocket_residues": prediction.get("protein_pocket_residues"),
+-        "protein_pocket_residues_list": prediction.get("protein_pocket_residues_list", []),
+         "device": prediction.get("device"),
+     },
+-    "artifacts": artifacts,
+-    "metrics": {
+-        "duration_sec": duration_sec,
+-        "model_duration_sec": prediction.get("metrics", {}).get("duration_sec"),
+-    },
+-    "error": None,
+ }
+ result_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+ PY

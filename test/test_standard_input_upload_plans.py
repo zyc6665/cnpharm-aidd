@@ -38,7 +38,7 @@ class FakeDb:
 
 def _tool_and_version(*, input_type: str = "protein_structure@1") -> tuple:
     manifest = {
-        "api_version": "aidd.sciminer/tool-package.v2",
+        "api_version": "aidd.sciminer/tool-package",
         "kind": "ToolPackage",
         "metadata": {
             "slug": "protein-tool",

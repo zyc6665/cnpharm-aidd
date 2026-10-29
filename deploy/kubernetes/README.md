@@ -116,7 +116,7 @@ kubectl -n sciminer-model-jobs get secret sciminer-minio-client
 kubectl get nodes -o wide
 ```
 
-smoke image 遵循平台的 `aidd.sciminer/result.v2` 契约，运行后在 `/workspace/output/result.json` 生成带 SHA-256 的 `run_report@1` 输出；配置对象存储凭据和输入描述符后，它还会验证 MinIO 输入 staging、输出上传和 `result.json` 最后提交，不替代真实模型镜像的推理验证。
+smoke image 遵循平台的 `aidd.sciminer/result` 契约，运行后在 `/workspace/output/result.json` 生成带 SHA-256 的 `run_report@1` 输出；配置对象存储凭据和输入描述符后，它还会验证 MinIO 输入 staging、输出上传和 `result.json` 最后提交，不替代真实模型镜像的推理验证。
 
 仓库只保留管理员使用的通用模型镜像构建模板：`deploy/kubernetes/model-image-template/`。具体模型的源码、权重、环境归档和镜像构建工作区（包括根目录下的 `model-build/`）均属于本地或制品存储，不应加入 Git 或随平台源码推送。
 
@@ -180,7 +180,7 @@ SCIMINER_EXECUTION_OUTPUT_PREFIX=executions/<namespace>/<job-name>
 SCIMINER_RESULT_OBJECT=executions/<namespace>/<job-name>/result.json
 ```
 
-模型运行时必须先上传输出文件，再上传 `result.json`。`result.json` 遵循 `aidd.sciminer/result.v2`，文件路径相对于输出前缀，且声明的 SHA-256 必须与对象内容一致。Worker 会下载并校验所有对象，校验通过后才创建平台 File 记录和标准 ArtifactVersion。
+模型运行时必须先上传输出文件，再上传 `result.json`。`result.json` 遵循 `aidd.sciminer/result`，文件路径相对于输出前缀，且声明的 SHA-256 必须与对象内容一致。Worker 会下载并校验所有对象，校验通过后才创建平台 File 记录和标准 ArtifactVersion。
 
 `smoke-image` 已包含对象存储输入 staging 和输出上传逻辑，可以用于验证 Job 的对象存储链路；它仍不替代真实模型镜像的推理和产物契约验证。
 

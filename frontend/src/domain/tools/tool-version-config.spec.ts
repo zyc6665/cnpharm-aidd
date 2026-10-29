@@ -153,7 +153,7 @@ test('SSH shell/password 模式不写入 docker 容器字段并使用 password_r
 })
 
 test('Tool Package v2 manifest 与实际执行器配置共存', () => {
-  const manifest = { api_version: 'aidd.sciminer/tool-package.v2', kind: 'ToolPackage' }
+  const manifest = { api_version: 'aidd.sciminer/tool-package', kind: 'ToolPackage' }
   const config = buildToolVersionConfig({
     toolType: 'ssh_job',
     timeoutSec: 3600,
