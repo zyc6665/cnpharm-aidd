@@ -240,4 +240,24 @@
 
 ## §10 实施结果
 
-（各 PR 合入后回填）
+全部 5 个 Task 已完成并本地合入 `main`（未推远端，等 GitHub Actions 额度恢复后统一提 PR）。
+
+| Task | 分支 | 合入提交 | 主要产出 |
+|---|---|---|---|
+| 1 契约收敛 + RBAC | `fix/contract-consistency` | `bf97078` / `c97276a` | 枚举单源与前端 codegen、异常与响应信封统一、RBAC 矩阵测试 |
+| 2 项目聚合根 | `feat/project-aggregate` | `4bcfee2` → `0abcb3c` | `tasks.project_id` 真列 + 外键、`role`/`membership` 序列化收敛 |
+| 3a 产物来源与血缘 | `refactor/artifact-source-lineage` | `8b073c3` → `29615bc` | `ArtifactWriter` 单点写入、来源列、按输入快照建血缘边 |
+| 3b 直传输入收编 | `refactor/standard-input-writer` | `d4ea1e8` | 输入物化走同一写入点、删除 `files/deduplication.py` 死代码 |
+| 3c 存储与生命周期 | `refactor/artifact-storage-gc` | `06e4b7a` / `d670d70` | 单份存储、流式下载、列表分页、生命周期回收 |
+| 4 执行链路硬化 | `fix/execution-hardening` | `58d36c6` / `da317e3` | `blocked` 收敛链条、run 超时、大产物流式、runner 契约、节点任务幂等 |
+| 5 资产统一 | `feat/asset-unification` | `ee43f83` / `f7ed864` | 8 个受控资产类型、渲染完备映射、统一检索、资产页重组 |
+
+**与计划的偏差（4 条）**：
+
+1. **Task 3 拆成 3a/3b/3c 三个分支**，而非一个 PR。原因是产物写入、输入物化、存储回收三块的测试面与风险面差异大，一个 PR 的 review 无法收敛。
+2. **Task 5 的渲染分派被首轮漏掉**，复核后退回补了一轮。根因是「只改写入侧、没改消费侧」，且 `types/artifacts.ts` 的 `(string & {})` 让 `Record` 完备性失效、TypeScript 不会报警。**教训：收紧枚举时必须同时点开每个消费方，编译器不会替你担保。**
+3. **`type=dataset` 从「回落到领域表」改为「两源合并」**。首轮把 `artifact_type='dataset'` 作为通用上传兜底，于是「Artifact 里没有数据集」这个前提不再成立，只查领域表会让用户刚上传的文件查不到。
+4. **`blocked` 必须改两处**（`workflow_scheduler` 收口集合 + `workflow_skip._NON_SKIPPABLE_STATUSES`），只改前者 run 会被判成功——「把卡住伪装成通过」比「卡住」更难发现。
+
+**未做的事（有意）**：登录/提交/重试的审计补录留给下一批（§9 已注明）；`docs/04` §5.5 的请求级幂等只覆盖 `POST /api/v1/tasks` 与 `POST /workflows/{id}/runs`；角色名未改名。
+
