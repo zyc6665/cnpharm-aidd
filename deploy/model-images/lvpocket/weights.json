@@ -1,6 +1,6 @@
 {
   "_comment": "对应 tool-package.v2 manifest 的 runtime.weights[]。平台据此在节点上解析权重挂载点；source.kind 为 host-path 时不做 sha256 校验（开发期），为 object-store 时由 initContainer 拉取并校验。",
-  "image": "registry.internal/aidd/compute-lvpocket@sha256:daa60f5618f5f769c022dc1ecb2213e4368ef176fb71cc75662957e86b96ce4b",
+  "image": "registry.internal/aidd/compute-lvpocket@sha256:61a95047affca501d26058c984ed44ef189033308c6110386432af0f965e372b",
   "weights": [
     {
       "name": "lvpocket-new-best",
