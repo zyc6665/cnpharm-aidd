@@ -70,7 +70,7 @@ deploy/             compose 与 K8s 部署资产
   slots/            卡位声明（slots.yaml，算力节点与卡位映射的事实源）
 docs/               中国医药项目文档（00~18，见 docs/README.md）
   archive-upstream/ 产品线历史文档，只读归档
-test/               后端测试（255 个文件）
+test/               后端测试（257 个文件）
 example/            模型资产样例（tool-package v2）
   mock-models/      6 个 mock 模型包（P-15~P-28 的演示驱动，metadata.mock: true）
 ```
