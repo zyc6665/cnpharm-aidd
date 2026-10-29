@@ -31,7 +31,11 @@ from alembic import op
 
 
 revision = "20261030_04"
-down_revision = "20261029_01"
+# 接在 20261030_02（契约单一版本口径）之后：那个迁移与本迁移分别在不同分支上
+# 开发，各自以 20261029_01 为父，合到一起会出现两个 head。这里改接父版本，
+# 让迁移链保持单头（docs/17 §5.24 的教训：迁移号要预留区间，不能两个并行分支
+# 各取一个连续号）。
+down_revision = "20261030_02"
 branch_labels = None
 depends_on = None
 
