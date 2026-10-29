@@ -130,8 +130,20 @@ def _foreign_keys(db_path: Path, table: str) -> list[dict]:
 
 def test_alembic_heads_include_project_aggregate() -> None:
     config = Config(str(PROJECT_ROOT / "alembic.ini"))
-    heads = ScriptDirectory.from_config(config).get_heads()
-    assert heads == [TARGET_REVISION], heads
+    script = ScriptDirectory.from_config(config)
+    heads = script.get_heads()
+    # 单头不变（每加一个迁移仍只能有一个 head），且项目聚合迁移 20261030_04
+    # 必须仍在当前 head 的祖先链上（后续迁移只是接在它后面，不会把它挤掉）。
+    assert len(heads) == 1, heads
+    chain: set[str] = set()
+    current = script.get_revision(heads[0])
+    while current is not None:
+        chain.add(current.revision)
+        down = current.down_revision
+        if isinstance(down, (tuple, list)):
+            down = down[0] if down else None
+        current = script.get_revision(down) if down else None
+    assert TARGET_REVISION in chain, (heads, sorted(chain))
 
 
 def test_project_id_column_backfilled_from_extra_data(tmp_path: Path) -> None:

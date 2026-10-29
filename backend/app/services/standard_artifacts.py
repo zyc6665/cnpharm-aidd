@@ -21,11 +21,12 @@ from app.execution.result_parser import (
     ParsedStandardFile,
     ParsedStandardResult,
 )
-from app.models.artifacts import Artifact, ArtifactLineage, ArtifactVersion, ArtifactVersionFile
+from app.models.artifacts import Artifact, ArtifactLineage, ArtifactVersionFile
 from app.models.files import File as FileModel, FileSourceType
 from app.models.tasks import Task
 from app.common.task_context import task_project_id
 from app.files.writer import store_file_path
+from app.services.artifact_writer import ArtifactSource, upsert_version
 from app.services.standard_artifact_collection import (
     collected_standard_result_payload,
     declared_standard_outputs_from_config,
@@ -167,7 +168,7 @@ async def create_artifact_versions_from_parsed_result(
                 input_version_id=refs[from_ref],
                 output_version_id=refs[to_ref],
                 created_by=user_id,
-                relation_type=relation_type,
+                relation_type="declared_relation",
             )
         )
 
@@ -242,27 +243,29 @@ async def _persist_artifact(
         ),
         file_records[0],
     )
-    version = ArtifactVersion(
-        artifact_id=artifact_record.id,
-        created_by=user_id,
-        version=1,
+    attempt_id = (task.extra_data or {}).get("execution_attempt_id")
+    version, _created = await upsert_version(
+        db,
+        artifact=artifact_record,
         filename=primary_file_record.filename,
         content_type=primary_file_record.content_type,
         size_bytes=primary_file_record.size_bytes,
         sha256=primary_file_record.sha256,
         storage_key=primary_file_record.storage_path,
-        status="available",
-        validation_status="passed",
-        validation_errors=[],
         manifest_json=_manifest_for_artifact(
             artifact,
             mock=bool((task.extra_data or {}).get("mock")),
         ),
         summary_json=artifact.summary,
         metrics_json=artifact.metrics,
+        validation_status="passed",
+        created_by=user_id,
+        source=ArtifactSource(
+            task_id=str(task.id),
+            attempt_id=str(attempt_id) if attempt_id else None,
+            tool_version_id=str(task.tool_version_id) if task.tool_version_id else None,
+        ),
     )
-    db.add(version)
-    await db.flush()
 
     for sort_order, (role, file_record) in enumerate(resolved_files):
         db.add(
@@ -275,8 +278,6 @@ async def _persist_artifact(
             )
         )
 
-    artifact_record.latest_version_id = version.id
-    artifact_record.latest_version = version
     await db.flush()
     return (
         _artifact_ref_key(artifact),

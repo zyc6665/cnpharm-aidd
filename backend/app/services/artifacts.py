@@ -24,6 +24,7 @@ from app.models.artifacts import (
 from app.models.files import FileSourceType
 from app.models.projects import Project
 from app.models.users import User
+from app.services.artifact_writer import upsert_version
 from app.storage.base import StorageBackend
 
 
@@ -150,24 +151,22 @@ async def create_artifact(
             name=Path(filename).name or "artifact.bin",
             description=description,
         )
-        version = ArtifactVersion(
-            artifact_id=artifact.id,
-            created_by=user.id,
-            version=1,
+        db.add(artifact)
+        await db.flush()
+        version, _created = await upsert_version(
+            db,
+            artifact=artifact,
             filename=artifact.name,
             content_type=content_type,
             size_bytes=len(content),
             sha256=digest,
             storage_key=object_key,
             storage_etag=stored.etag,
-            status="available",
+            validation_status="pending",
+            created_by=user.id,
+            source=None,
             expires_at=expires_at,
-            files=[],
         )
-        db.add_all([artifact, version])
-        await db.flush()
-        artifact.latest_version_id = version.id
-        artifact.latest_version = version
         file_record = await _attach_uploaded_file(
             db,
             version=version,
@@ -242,24 +241,20 @@ async def create_artifact_version(
     file_record = None
     local_storage_path = None
     try:
-        version = ArtifactVersion(
-            artifact_id=artifact.id,
-            created_by=user.id,
-            version=number,
+        version, _created = await upsert_version(
+            db,
+            artifact=artifact,
             filename=Path(filename).name or artifact.name,
             content_type=content_type,
             size_bytes=len(content),
             sha256=digest,
             storage_key=object_key,
             storage_etag=stored.etag,
-            status="available",
+            validation_status="pending",
+            created_by=user.id,
+            source=None,
             expires_at=expires_at,
-            files=[],
         )
-        db.add(version)
-        await db.flush()
-        artifact.latest_version_id = version.id
-        artifact.latest_version = version
         file_record = await _attach_uploaded_file(
             db,
             version=version,
@@ -322,7 +317,10 @@ async def _attach_uploaded_file(
             is_primary=True,
             sort_order=0,
         )
-        version.files.append(link)
+        # Use db.add rather than version.files.append: when ``version`` was created
+        # through the writer it is already flushed, so touching the unloaded
+        # ``files`` collection would trigger a lazy load (MissingGreenlet in async).
+        db.add(link)
         await db.flush()
         return file_record
     except Exception:

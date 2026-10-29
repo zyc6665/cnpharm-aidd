@@ -1,6 +1,19 @@
 """Typed, versioned research Artifact persistence models."""
 
-from sqlalchemy import BigInteger, Boolean, Column, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    JSON,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import relationship
 
 from app.database.base import Base, TimestampMixin, UUIDMixin
@@ -40,6 +53,14 @@ class ArtifactVersion(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "artifact_versions"
     __table_args__ = (
         UniqueConstraint("artifact_id", "version", name="uq_artifact_versions_artifact_version"),
+        Index(
+            "uq_artifact_versions_artifact_sha256",
+            "artifact_id",
+            "sha256",
+            unique=True,
+            sqlite_where=text("status = 'available'"),
+            postgresql_where=text("status = 'available'"),
+        ),
     )
 
     artifact_id = Column(String(36), ForeignKey("artifacts.id"), nullable=False, index=True)
@@ -58,6 +79,12 @@ class ArtifactVersion(Base, UUIDMixin, TimestampMixin):
     summary_json = Column(JSON, nullable=False, default=dict)
     metrics_json = Column(JSON, nullable=False, default=dict)
     expires_at = Column(DateTime, nullable=True, index=True)
+    source_task_id = Column(String(36), nullable=True, index=True)
+    source_attempt_id = Column(String(64), nullable=True)
+    source_tool_version_id = Column(String(36), nullable=True)
+    storage_tier = Column(
+        String(16), nullable=False, default="standard", server_default="standard"
+    )
 
     artifact = relationship("Artifact", back_populates="versions", foreign_keys=[artifact_id])
     files = relationship(
