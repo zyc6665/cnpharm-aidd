@@ -36,7 +36,7 @@ test('项目成员 API 与类型应覆盖列表、添加、改角色和移除', 
   assert.equal(apiSource.includes("`/projects/${projectId}/members`"), true)
 })
 
-test('项目设置页应调用成员接口并按 owner 权限展示管理操作', () => {
+test('项目设置页应调用成员接口并按项目角色展示管理操作', () => {
   const source = readSource('src/views/projects/Settings.vue')
 
   assert.equal(source.includes('listProjectMembers'), true)
@@ -44,5 +44,10 @@ test('项目设置页应调用成员接口并按 owner 权限展示管理操作'
   assert.equal(source.includes('updateProjectMember'), true)
   assert.equal(source.includes('removeProjectMember'), true)
   assert.equal(source.includes('canManageMembers'), true)
-  assert.equal(source.includes("membership.role === 'owner'"), true)
+  // 管理权限改由「项目上下文里的角色」判定（Plan §3.4）：admin 拿到的项目
+  // context 里 role 就是 'admin'、membership 为 null，因此不能再从 membership.role 推。
+  assert.equal(
+    source.includes("['owner', 'admin'].includes(project.value?.role ?? '')"),
+    true
+  )
 })
