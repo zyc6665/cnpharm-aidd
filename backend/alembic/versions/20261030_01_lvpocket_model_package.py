@@ -48,7 +48,7 @@ TIMEOUT_SEC = 3600
 
 IMAGE = (
     "10.202.2.228:30500/aidd/compute-lvpocket"
-    "@sha256:61a95047affca501d26058c984ed44ef189033308c6110386432af0f965e372b"
+    "@sha256:d66e317d61f9f03580e613bd4ac689c4ebf37d64d42ab372cfea4d2eeaeb076a"
 )
 WEIGHT_HOST_PATH = "/data/zhouyc/model-cache/lvpocket/v2/new_best"
 WEIGHT_MOUNT_PATH = "/opt/sciminer/model/new_best"
@@ -69,10 +69,115 @@ PARAMETERS_SCHEMA = {
 }
 
 
+def _tool_package_manifest() -> dict:
+    """Tool Package v2 清单。
+
+    必须带 ``tool_package_manifest``：``backend/app/services/standard_input_slots.py``
+    的 ``tool_accepts_materialized_standard_uploads()`` 只认 v2 清单，没有它
+    ``standard_input_uploads`` 会被静默忽略，输入项拿不到 role/artifact_type，
+    ``backend/app/tasks/executors/kubernetes_job.py`` 就会抛
+    「Kubernetes inputs require a materialized standard ArtifactVersion」。
+    即：光有扁平 type/image/runtime 能起 Pod，但走不通平台的标准输入物化。
+    """
+    return {
+        "api_version": "aidd.sciminer/tool-package.v2",
+        "kind": "ToolPackage",
+        "metadata": {
+            "slug": SLUG,
+            "name": TOOL_NAME,
+            "version": VERSION,
+            "description": "LVpocket-2 口袋预测（TensorFlow 2.15 + OpenBabel 3.1，GPU 推理）",
+        },
+        "artifacts": {
+            "inputs": [
+                {
+                    "name": "protein",
+                    "title": "蛋白结构",
+                    "type": "protein_structure@1",
+                    "required": True,
+                    "role_preferences": ["prepared_pdb", "structure_file"],
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "pocket",
+                    "type": "binding_pocket@1",
+                    "cardinality": "one",
+                    "required": True,
+                },
+                {
+                    "name": "report",
+                    "type": "run_report@1",
+                    "cardinality": "one",
+                    "required": False,
+                },
+            ],
+        },
+        "parameters_schema": PARAMETERS_SCHEMA,
+        "runtime": {
+            "python": "3.11",
+            "cuda": "12.2",
+            "executor_support": ["k8s_job"],
+            "selection_policy": (
+                "prefer container image by immutable digest; weights are mounted "
+                "from the node-local cache"
+            ),
+            "artifacts": {
+                "primary": {
+                    "kind": "container",
+                    "image": IMAGE,
+                    "image_digest": IMAGE.split("@", 1)[1],
+                    "includes": ["python", "tensorflow", "openbabel", "ncbi-blast+"],
+                },
+                "fallback": {
+                    "kind": "container",
+                    "image": IMAGE,
+                    "image_digest": IMAGE.split("@", 1)[1],
+                    "includes": ["python"],
+                },
+            },
+            "weights": {
+                "mounts": [
+                    {
+                        "name": "lvpocket-weights",
+                        "host_path": WEIGHT_HOST_PATH,
+                        "mount_path": WEIGHT_MOUNT_PATH,
+                        "read_only": True,
+                    }
+                ]
+            },
+            "cache_policy": {
+                "key_fields": [
+                    "metadata.slug",
+                    "metadata.version",
+                    "runtime.artifacts.primary.image_digest",
+                ],
+                "mutable_host_paths_forbidden": True,
+            },
+        },
+        "variants": [
+            {
+                "name": "nvidia-cuda",
+                "accelerator": "nvidia_cuda",
+                "executor_types": ["container"],
+                "image": IMAGE,
+                "entrypoint": [
+                    "/usr/bin/tini",
+                    "--",
+                    "/opt/sciminer/platform_adaptor/entrypoint.sh",
+                ],
+                "validation_status": "validated",
+                "hardware_validated": True,
+            }
+        ],
+    }
+
+
 def _tool_config() -> dict:
     """ToolVersion.config —— 任务执行器直接读这里的 type / image / runtime。"""
     return {
         "type": "k8s_job",
+        "tool_package_manifest": _tool_package_manifest(),
         "image": IMAGE,
         "timeout_sec": TIMEOUT_SEC,
         "gpu_required": True,
