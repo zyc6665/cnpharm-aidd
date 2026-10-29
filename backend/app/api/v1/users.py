@@ -204,15 +204,15 @@ async def hard_delete_user_related_resources(db: AsyncSession, user_id: str) -> 
 
 # ==================== 当前用户接口 ====================
 
-@router.get("/me", response_model=UserResponse, summary="获取当前用户信息")
+@router.get("/me", summary="获取当前用户信息")
 async def get_current_user_info(
     current_user: User = Depends(get_current_user)
 ):
     """获取当前登录用户的详细信息"""
-    return UserResponse.model_validate(current_user)
+    return success_response(UserResponse.model_validate(current_user).model_dump())
 
 
-@router.patch("/me", response_model=UserResponse, summary="更新当前用户信息")
+@router.patch("/me", summary="更新当前用户信息")
 async def update_current_user_info(
     user_update: UserUpdate,
     current_user: User = Depends(get_current_user),
@@ -247,7 +247,7 @@ async def update_current_user_info(
     await db.commit()
     await db.refresh(current_user)
 
-    return UserResponse.model_validate(current_user)
+    return success_response(UserResponse.model_validate(current_user).model_dump())
 
 
 @router.put("/me/password", summary="修改密码")
@@ -453,7 +453,6 @@ async def admin_get_user_stats(
 
 @router.get(
     "/admin/{user_id}",
-    response_model=UserResponse,
     summary="获取用户详情（管理员）"
 )
 async def admin_get_user(
@@ -475,7 +474,7 @@ async def admin_get_user(
             detail="用户不存在"
         )
 
-    return UserResponse.model_validate(user)
+    return success_response(UserResponse.model_validate(user).model_dump())
 
 
 @router.patch(

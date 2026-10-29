@@ -183,7 +183,7 @@ class ResourceQuotaStatusResponse(BaseModel):
 # ==================== 健康检查 ====================
 
 
-@router.get("/health", response_model=HealthResponse, summary="系统健康检查")
+@router.get("/health", summary="系统健康检查")
 async def health_check(db: AsyncSession = Depends(get_db)):
     """
     检查系统各组件的健康状态
@@ -236,12 +236,14 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         if celery_status.status != "healthy" and overall_status == "healthy":
             overall_status = "degraded"
 
-    return HealthResponse(
-        status=overall_status,
-        version=settings.APP_VERSION,
-        environment=settings.ENVIRONMENT,
-        timestamp=utcnow().isoformat(),
-        services=services,
+    return success_response(
+        HealthResponse(
+            status=overall_status,
+            version=settings.APP_VERSION,
+            environment=settings.ENVIRONMENT,
+            timestamp=utcnow().isoformat(),
+            services=services,
+        ).model_dump()
     )
 
 

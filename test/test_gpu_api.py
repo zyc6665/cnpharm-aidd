@@ -66,7 +66,8 @@ async def test_allocate_gpu_uses_database_session(monkeypatch) -> None:
         db=db,
     )
 
-    assert result == expected
+    assert result["code"] == 200
+    assert result["data"] == expected.model_dump()
     db.commit.assert_awaited_once()
 
 

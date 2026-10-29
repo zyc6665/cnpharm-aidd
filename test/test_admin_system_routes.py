@@ -328,12 +328,12 @@ async def test_system_health_reports_database_schema_revision(
 
     assert response.status_code == 200
     payload = response.json()
-    services = {item["name"]: item for item in payload["services"]}
+    services = {item["name"]: item for item in payload["data"]["services"]}
 
     assert "database_schema" in services
     assert services["database_schema"]["status"] == "unhealthy"
     assert "Alembic" in services["database_schema"]["message"]
-    assert payload["status"] == "unhealthy"
+    assert payload["data"]["status"] == "unhealthy"
 
 
 @pytest.mark.asyncio
@@ -345,7 +345,7 @@ async def test_system_health_reports_tool_package_runtime_readiness(
 
     assert response.status_code == 200
     payload = response.json()
-    services = {item["name"]: item for item in payload["services"]}
+    services = {item["name"]: item for item in payload["data"]["services"]}
 
     assert "tool_package_runtime" in services
     assert services["tool_package_runtime"]["status"] in {"healthy", "unknown"}
@@ -361,7 +361,7 @@ async def test_system_health_reports_executor_gateway_readiness(
 
     assert response.status_code == 200
     payload = response.json()
-    services = {item["name"]: item for item in payload["services"]}
+    services = {item["name"]: item for item in payload["data"]["services"]}
 
     assert "executor_gateway" in services
     assert services["executor_gateway"]["status"] == "healthy"
