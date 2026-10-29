@@ -379,7 +379,9 @@ async def test_snapshot_records_artifact_binding_and_domain_entity(
     artifact = Artifact(
         project_id=project.id,
         created_by=owner.id,
-        artifact_type="structure",
+        # 资产类型收敛为受控枚举：此夹具历史上用 structure（非受控值），现归一为
+        # protein_structure。
+        artifact_type="protein_structure",
         semantic_type="protein_structure@1",
         name="EGFR",
     )

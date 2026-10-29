@@ -196,6 +196,12 @@ const routes: RouteRecordRaw[] = [
     meta: { titleLiteral: '数据资产', requiresAuth: true }
   },
   {
+    path: '/projects/:projectId/candidates',
+    name: 'ProjectCandidates',
+    component: () => import('@/views/compounds/Candidates.vue'),
+    meta: { titleLiteral: '候选物', requiresAuth: true }
+  },
+  {
     path: '/compounds/:compoundId',
     name: 'CompoundDetail',
     component: () => import('@/views/compounds/CompoundDetail.vue'),

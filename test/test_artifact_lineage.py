@@ -71,8 +71,10 @@ async def test_lineage_accepts_same_project_and_rejects_cross_project_reference(
             filename="pockets.json",
             content=b"{}",
             content_type="application/json",
-            artifact_type="pocket_result",
-            semantic_type="pocket_result",
+            # 资产类型收敛为受控枚举：此夹具历史上用 pocket_result（旧渲染别名），
+            # 现已归一为 binding_pocket，保留注释以免后来者误判语义。
+            artifact_type="binding_pocket",
+            semantic_type="binding_pocket",
         )
         foreign = await create_artifact(
             db,
@@ -81,8 +83,10 @@ async def test_lineage_accepts_same_project_and_rejects_cross_project_reference(
             filename="foreign.json",
             content=b'{"foreign":true}',
             content_type="application/json",
-            artifact_type="pocket_result",
-            semantic_type="pocket_result",
+            # 资产类型收敛为受控枚举：此夹具历史上用 pocket_result（旧渲染别名），
+            # 现已归一为 binding_pocket，保留注释以免后来者误判语义。
+            artifact_type="binding_pocket",
+            semantic_type="binding_pocket",
         )
 
         edge = await link_artifact_lineage(

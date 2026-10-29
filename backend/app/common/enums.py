@@ -27,6 +27,8 @@ from __future__ import annotations
 import enum
 from typing import Literal, Tuple
 
+from app.artifact_standards.asset_types import ASSET_ARTIFACT_TYPES
+
 
 class _StringEnum(str, enum.Enum):
     """``str`` 枚举基类，提供稳定的 ``values()`` 供内省与 codegen。"""
@@ -64,20 +66,14 @@ class TASK_PRIORITY(_StringEnum):
     HIGH = "high"
 
 
-class ARTIFACT_TYPE(_StringEnum):
-    """产物类型（前端 ArtifactRenderer 的 7 个渲染分支）。
-
-    与 ``backend/app/artifact_standards/schemas/*.yaml`` 的标准产物类型对齐；
-    ``pocket_result`` 是历史别名（映射到 ``binding_pocket@1``）。
-    """
-
-    PROTEIN_STRUCTURE = "protein_structure"
-    BINDING_POCKET = "binding_pocket"
-    POCKET_RESULT = "pocket_result"
-    LIGAND_STRUCTURE = "ligand_structure"
-    MOLECULE_TABLE = "molecule_table"
-    FILE = "file"
-    RUN_REPORT = "run_report"
+#: 数据资产根类型（Task 5 §7.1）。取值真源是
+#: ``app.artifact_standards.asset_types.ASSET_ARTIFACT_TYPES``——这里用函数式 API
+#: **派生**出 ``_StringEnum`` 供 ``scripts/gen_frontend_enums.py`` 迭代，避免在前端
+#: 再手抄一份 8 值清单。成员名由取值大写生成（如 ``COMPOUND_SET``）。
+ASSET_ARTIFACT_TYPE = _StringEnum(
+    "ASSET_ARTIFACT_TYPE",
+    {value.upper(): value for value in ASSET_ARTIFACT_TYPES},
+)
 
 
 class AUDIT_ACTION(_StringEnum):
@@ -151,7 +147,7 @@ class RESOURCE_TYPE(_StringEnum):
 ProjectStatus = Literal[PROJECT_STATUS.values()]
 ProjectRole = Literal[PROJECT_ROLE.values()]
 TaskPriority = Literal[TASK_PRIORITY.values()]
-ArtifactType = Literal[ARTIFACT_TYPE.values()]
+AssetArtifactType = Literal[ASSET_ARTIFACT_TYPE.values()]
 AuditAction = Literal[AUDIT_ACTION.values()]
 AuditResult = Literal[AUDIT_RESULT.values()]
 ResourceType = Literal[RESOURCE_TYPE.values()]
@@ -161,14 +157,14 @@ __all__ = [
     "PROJECT_STATUS",
     "PROJECT_ROLE",
     "TASK_PRIORITY",
-    "ARTIFACT_TYPE",
+    "ASSET_ARTIFACT_TYPE",
     "AUDIT_ACTION",
     "AUDIT_RESULT",
     "RESOURCE_TYPE",
     "ProjectStatus",
     "ProjectRole",
     "TaskPriority",
-    "ArtifactType",
+    "AssetArtifactType",
     "AuditAction",
     "AuditResult",
     "ResourceType",

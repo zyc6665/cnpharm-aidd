@@ -12,8 +12,8 @@ export type ProjectRole = (typeof PROJECT_ROLE)[number]
 export const TASK_PRIORITY = ["low", "normal", "high"] as const
 export type TaskPriority = (typeof TASK_PRIORITY)[number]
 
-export const ARTIFACT_TYPE = ["protein_structure", "binding_pocket", "pocket_result", "ligand_structure", "molecule_table", "file", "run_report"] as const
-export type ArtifactType = (typeof ARTIFACT_TYPE)[number]
+export const ASSET_ARTIFACT_TYPE = ["compound_set", "protein_structure", "binding_pocket", "ligand_structure", "molecule_table", "md_trajectory", "run_report", "dataset"] as const
+export type AssetArtifactType = (typeof ASSET_ARTIFACT_TYPE)[number]
 
 export const AUDIT_ACTION = ["login", "logout", "login_failed", "password_change", "token_refresh", "create", "read", "update", "delete", "export", "import", "task_submit", "task_cancel", "task_retry", "file_upload", "file_download", "file_delete", "decision_create", "admin_user_create", "admin_user_update", "admin_user_delete", "admin_config_change", "admin_tool_create", "admin_tool_update", "system_start", "system_stop", "system_config"] as const
 export type AuditAction = (typeof AUDIT_ACTION)[number]

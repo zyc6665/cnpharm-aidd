@@ -43,6 +43,7 @@ from app.services.artifact_responses import (
     matches_delivery_metadata,
 )
 from app.services.artifact_lineage_graph import artifact_lineage_graph_data
+from app.services.asset_search import list_project_assets
 from app.services.project_access import load_project_membership, require_project_role
 from app.storage.factory import get_storage_backend
 
@@ -319,6 +320,38 @@ async def list_artifacts(
         total=total,
         page=page,
         page_size=page_size,
+    )
+
+
+@router.get("/projects/{project_id}/assets", response_model=dict)
+async def search_project_assets(
+    project_id: str,
+    asset_type: str | None = Query(None, alias="type"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """数据资产页统一检索（docs/06 P-12）。``?type=`` 可选 8 个资产类型或 dataset。
+
+    权限复用 ``require_project_role``：非项目成员 404（沿用统一「项目不存在」口径），
+    项目内成员按角色放行。底层语义见 ``app.services.asset_search``。
+    """
+    await require_project_role(
+        db,
+        project_id=project_id,
+        user=current_user,
+        allowed_roles=("owner", "editor", "runner", "viewer"),
+    )
+    items, total = await list_project_assets(
+        db,
+        project_id=project_id,
+        asset_type=asset_type,
+        page=page,
+        page_size=page_size,
+    )
+    return paginated_response(
+        items=items, total=total, page=page, page_size=page_size
     )
 
 

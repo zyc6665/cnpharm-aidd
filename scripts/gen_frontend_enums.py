@@ -37,7 +37,7 @@ ENUM_GROUPS = [
     ("PROJECT_STATUS", "ProjectStatus"),
     ("PROJECT_ROLE", "ProjectRole"),
     ("TASK_PRIORITY", "TaskPriority"),
-    ("ARTIFACT_TYPE", "ArtifactType"),
+    ("ASSET_ARTIFACT_TYPE", "AssetArtifactType"),
     ("AUDIT_ACTION", "AuditAction"),
     ("AUDIT_RESULT", "AuditResult"),
     ("RESOURCE_TYPE", "ResourceType"),

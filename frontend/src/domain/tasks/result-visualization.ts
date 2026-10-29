@@ -179,9 +179,11 @@ function buildRenderableEntries(
 const ARTIFACT_PREVIEW_ROLES: Record<string, string[]> = {
   protein_structure: ['prepared_pdb', 'structure_file', 'raw_structure_file'],
   binding_pocket: ['pocket_file', 'structure_file'],
-  pocket_result: ['pocket_file', 'structure_file'],
   ligand_structure: ['structure_3d_sdf', 'structure_file', 'structure_2d_sdf'],
   molecule_table: ['structure_3d_sdf', 'structure_file', 'structure_2d_sdf'],
+  // MD 轨迹的 DCD 不在 molstar `BuiltInTrajectoryFormat` 里，按既有约定只做
+  // 拓扑结构的静态预览（完整轨迹文件仍可下载，RMSD/RMSF 曲线见任务 MD 结果页）。
+  md_trajectory: ['topology_pdb', 'structure_file', 'structure_pdb'],
 }
 
 function normalizeArtifactType(artifact: TypedArtifact): string {

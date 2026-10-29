@@ -19,7 +19,8 @@ import {
 } from '@/workflow/canvas-runner'
 import { type WorkflowArtifactSemanticType, type WorkflowTaskRef } from '@/workflow/artifact-types'
 import { isWorkflowSemanticType, normalizeWorkflowSemanticType } from '@/workflow/semantic-types'
-import type { TypedArtifact } from '@/types/artifacts'
+import { ASSET_ARTIFACT_TYPE } from '@/types/enums.generated'
+import type { AssetArtifactType, TypedArtifact } from '@/types/artifacts'
 import type {
   WorkflowCanvasEdge,
   WorkflowCanvasNode,
@@ -467,7 +468,13 @@ export function useWorkflowPersistence(input: {
     }
   }
 
-  async function handleWorkflowInputUpload(semanticType: string, file: File) {
+  function resolveAssetArtifactType(value: string | undefined): AssetArtifactType | null {
+  return value && (ASSET_ARTIFACT_TYPE as readonly string[]).includes(value)
+    ? (value as AssetArtifactType)
+    : null
+}
+
+async function handleWorkflowInputUpload(semanticType: string, file: File) {
     uploadingWorkflowInputKey.value = semanticType
     try {
       if (projectId?.value) {
@@ -476,7 +483,9 @@ export function useWorkflowPersistence(input: {
         const baseSemanticType = semanticType.split('@')[0] ?? semanticType
         const artifact = await uploadProjectArtifact(projectId.value, {
           file,
-          artifact_type: standardMatch?.[1] ?? 'file',
+          // 无标准类型后缀的通用输入文件按数据资产上传（后端已把 artifact_type 收敛为受控枚举，
+          // 旧实现回退的 'file' 不再合法）。
+          artifact_type: resolveAssetArtifactType(standardMatch?.[1]) ?? 'dataset',
           semantic_type: baseSemanticType,
           ...(standardMatch
             ? { standard_type: standardMatch[1], standard_version: Number(standardMatch[2]) }

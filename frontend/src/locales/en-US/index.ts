@@ -1234,7 +1234,7 @@ export default {
   // Compounds / candidates / candidate sets
   compounds: {
     title: 'Data Assets',
-    subtitle: 'Manage compound structures, candidates and candidate sets within the project',
+    subtitle: 'Manage compounds, protein structure outputs and datasets in the project',
     backToProject: 'Back to project overview',
     backToAssets: 'Back to data assets',
     detail: {
@@ -1244,6 +1244,8 @@ export default {
     },
     tabs: {
       compounds: 'Compounds',
+      proteins: 'Proteins',
+      datasets: 'Datasets',
       candidates: 'Candidates',
       candidateSets: 'Candidate sets'
     },
@@ -1269,11 +1271,35 @@ export default {
       structure: 'Structure',
       createdAt: 'Created at'
     },
+    proteinColumns: {
+      name: 'Name',
+      filename: 'File',
+      source: 'Source',
+      createdAt: 'Created at'
+    },
+    datasetColumns: {
+      name: 'Name',
+      source: 'Source',
+      datasetType: 'Type',
+      rowCount: 'Rows',
+      fileCount: 'Files',
+      createdAt: 'Created at'
+    },
+    datasetSource: {
+      upload: 'Uploaded file',
+      dataset: 'Registered dataset'
+    },
+    notes: {
+      proteins:
+        'Only protein structure outputs produced by models or uploaded here are shown. Protein master data you imported yourself lives under "Targets & structures".',
+      datasets: 'Datasets come from dataset registration (import results) and are a different source from Artifacts.'
+    },
     actions: {
       refresh: 'Refresh',
       create: 'New compound',
       import: 'Bulk import',
       compare: 'Compare candidates',
+      candidates: 'Candidates',
       search: 'Similarity search',
       createSet: 'New candidate set'
     },
@@ -1349,6 +1375,8 @@ export default {
     },
     empty: {
       compounds: 'No compounds yet — start with a bulk import',
+      proteins: 'No protein structure outputs in this project yet',
+      datasets: 'No datasets in this project yet',
       candidates: 'No candidates in this project yet',
       candidateSets: 'No candidate sets in this project yet'
     },
@@ -1357,7 +1385,13 @@ export default {
       loadCompound: 'Failed to load the compound',
       searchSimilar: 'Similarity search failed',
       loadCandidates: 'Failed to load candidates',
-      loadCandidateSets: 'Failed to load candidate sets'
+      loadCandidateSets: 'Failed to load candidate sets',
+      loadAssets: 'Failed to load data assets'
+    },
+    candidatesPage: {
+      title: 'Candidates',
+      subtitle: 'Candidates and candidate sets are managed here (M3 domain), moved out of the data assets tabs',
+      backToAssets: 'Back to data assets'
     }
   },
 
@@ -2625,6 +2659,26 @@ export default {
     '404': {
       title: '404',
       description: 'Sorry, the page you visited does not exist'
+    }
+  },
+
+  artifactAssets: {
+    createdAt: 'Created at',
+    fileRole: 'File role',
+    fileName: 'File name',
+    fileSize: 'Size',
+    mdTrajectory: {
+      notice: 'Trajectory files (e.g. DCD) are download-only; a static topology preview is shown here. See the task MD result page for RMSD/RMSF curves.'
+    },
+    compoundSet: {
+      notice: 'Compound set artifact: download member files here, or manage them on the candidates page.',
+      openCandidates: 'Open candidates'
+    },
+    dataset: {
+      notice: 'Dataset asset summary; individual files are downloadable.',
+      name: 'Name',
+      type: 'Type',
+      fileCount: 'Files'
     }
   },
 

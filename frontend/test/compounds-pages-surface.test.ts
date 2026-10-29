@@ -12,6 +12,7 @@ function readSource(relativePath: string): string {
 
 const VIEW_FILES = [
   'src/views/compounds/Assets.vue',
+  'src/views/compounds/Candidates.vue',
   'src/views/compounds/CompoundDetail.vue',
   'src/views/compounds/CandidateSetDetail.vue',
   'src/views/compounds/CandidateDetail.vue',
@@ -22,6 +23,7 @@ const VIEW_FILES = [
 
 const ROUTE_NAMES = [
   'ProjectAssets',
+  'ProjectCandidates',
   'CompoundDetail',
   'CandidateSetDetail',
   'CandidateDetail',
@@ -53,6 +55,7 @@ test('router 在 WorkflowRunDetail 之后注册 7 条新路由', () => {
   }
 
   assert.ok(routerSource.includes('path: \'/projects/:projectId/assets\''))
+  assert.ok(routerSource.includes('path: \'/projects/:projectId/candidates\''))
   assert.ok(routerSource.includes('path: \'/compounds/:compoundId\''))
   assert.ok(routerSource.includes('path: \'/candidate-sets/:setId\''))
   assert.ok(routerSource.includes('path: \'/candidates/:candidateId\''))
@@ -76,6 +79,7 @@ test('项目导航的 assets / results 项紧接在 tasks 之后且不影响既�
     'workflow',
     'tasks',
     'assets',
+    'candidates',
     'results',
     'decisions',
     'lineage',
@@ -109,7 +113,9 @@ test('项目导航的 assets / results 项紧接在 tasks 之后且不影响既�
   assert.ok(results, '缺少 results 导航项')
   assert.equal(results?.label, '结果中心')
   assert.equal(results?.to, '/projects/project-1/results')
-  assert.equal(keys.indexOf('results'), keys.indexOf('assets') + 1)
+  // P-12 之后候选物从资产页签移出、在导航中以独立入口紧随 assets；结果中心仍在 lineage 之前。
+  assert.equal(keys.indexOf('candidates'), keys.indexOf('assets') + 1)
+  assert.equal(keys.indexOf('results'), keys.indexOf('candidates') + 1)
   // P-39 在 results 与 lineage 之间插入了 decisions，results 的直接后继因此不再是 lineage。
   assert.equal(keys.indexOf('decisions'), keys.indexOf('results') + 1)
   assert.equal(keys.indexOf('decisions') + 1, keys.indexOf('lineage'))
@@ -153,7 +159,51 @@ test('Assets.vue 提供批量导入入口并展示导入汇总', () => {
   assert.ok(source.includes('uploadFile'), 'Assets.vue 必须先用 files/upload 拿 file_id')
   assert.ok(source.includes('.smi') && source.includes('.csv') && source.includes('.sdf'))
   assert.ok(source.includes('duplicate'), 'Assets.vue 需要展示 duplicate 统计')
-  assert.ok(source.includes('candidateSets') || source.includes('candidate-sets'), 'Assets.vue 需要候选集页签')
+})
+
+test('数据资产页 Tab 为 化合物/蛋白/数据集，候选物移到独立页面', () => {
+  const assets = readSource('src/views/compounds/Assets.vue')
+
+  assert.ok(assets.includes('key="compounds"'), 'Assets.vue 缺少化合物 Tab')
+  assert.ok(assets.includes('key="proteins"'), 'Assets.vue 缺少蛋白 Tab')
+  assert.ok(assets.includes('key="datasets"'), 'Assets.vue 缺少数据集 Tab')
+  assert.equal(assets.includes('key="candidates"'), false, 'Assets.vue 不应再含候选物 Tab')
+  assert.equal(
+    assets.includes('key="candidateSets"'),
+    false,
+    'Assets.vue 不应再含候选集 Tab'
+  )
+  // 蛋白 Tab 必须说明「只含 Artifact 结构产物，蛋白主数据在靶点与结构」。
+  assert.ok(assets.includes('compounds.notes.proteins'), '蛋白 Tab 缺少语义说明')
+  // 候选物必须有等价入口，不能成孤儿页面。
+  assert.ok(assets.includes('/candidates'), 'Assets.vue 缺少候选物入口链接')
+  assert.ok(assets.includes('listProjectAssets'), 'Assets.vue 必须调用统一资产接口')
+  // 数据集 Tab 里 artifact_type='dataset' 的上传产物要区别于登记数据集。
+  assert.ok(
+    assets.includes('compounds.datasetSource.upload'),
+    'Assets.vue 数据集 Tab 缺少「上传文件」来源标记'
+  )
+
+  const candidates = readSource('src/views/compounds/Candidates.vue')
+  assert.ok(candidates.includes('listCandidates'), 'Candidates.vue 必须列出候选物')
+  assert.ok(candidates.includes('listCandidateSets'), 'Candidates.vue 必须列出候选集')
+  assert.ok(candidates.includes('data-testid'), 'Candidates.vue 缺少 data-testid')
+})
+
+test('i18n 中英双语补齐数据资产新增 Tab 与候选物页面文案', () => {
+  for (const localePath of ['src/locales/zh-CN/index.ts', 'src/locales/en-US/index.ts']) {
+    const source = readSource(localePath)
+    for (const key of [
+      'proteinColumns:',
+      'datasetColumns:',
+      'datasetSource:',
+      'notes:',
+      'candidatesPage:',
+      'loadAssets:'
+    ]) {
+      assert.ok(source.includes(key), `${localePath} 缺少 ${key}`)
+    }
+  }
 })
 
 test('CandidateSetDetail.vue 支持成员增删与导出', () => {

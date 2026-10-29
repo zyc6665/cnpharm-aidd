@@ -1232,7 +1232,7 @@ export default {
   // 化合物 / 候选物 / 候选集
   compounds: {
     title: '数据资产',
-    subtitle: '管理项目内的化合物结构、候选物与候选集',
+    subtitle: '管理项目内的化合物、蛋白结构产物与数据集',
     backToProject: '返回项目总览',
     backToAssets: '返回数据资产',
     detail: {
@@ -1242,6 +1242,8 @@ export default {
     },
     tabs: {
       compounds: '化合物',
+      proteins: '蛋白',
+      datasets: '数据集',
       candidates: '候选物',
       candidateSets: '候选集'
     },
@@ -1267,11 +1269,35 @@ export default {
       structure: '结构',
       createdAt: '创建时间'
     },
+    proteinColumns: {
+      name: '名称',
+      filename: '文件',
+      source: '来源',
+      createdAt: '创建时间'
+    },
+    datasetColumns: {
+      name: '名称',
+      source: '来源',
+      datasetType: '类型',
+      rowCount: '行数',
+      fileCount: '文件数',
+      createdAt: '创建时间'
+    },
+    datasetSource: {
+      upload: '上传文件',
+      dataset: '登记数据集'
+    },
+    notes: {
+      proteins:
+        '这里只展示模型产出或上传的蛋白结构产物；你自行导入的蛋白主数据请前往「靶点与结构」查看。',
+      datasets: '数据集来自数据集登记（导入结果），与 Artifact 产物分属不同来源。'
+    },
     actions: {
       refresh: '刷新',
       create: '新增化合物',
       import: '批量导入',
       compare: '候选物对比',
+      candidates: '候选物',
       search: '相似性检索',
       createSet: '新建候选集'
     },
@@ -1347,6 +1373,8 @@ export default {
     },
     empty: {
       compounds: '项目内还没有化合物，可先批量导入',
+      proteins: '项目内还没有蛋白结构产物',
+      datasets: '项目内还没有数据集',
       candidates: '项目内还没有候选物',
       candidateSets: '项目内还没有候选集'
     },
@@ -1355,7 +1383,13 @@ export default {
       loadCompound: '化合物详情加载失败',
       searchSimilar: '相似性检索失败',
       loadCandidates: '候选物列表加载失败',
-      loadCandidateSets: '候选集列表加载失败'
+      loadCandidateSets: '候选集列表加载失败',
+      loadAssets: '数据资产加载失败'
+    },
+    candidatesPage: {
+      title: '候选物',
+      subtitle: '候选物与候选集集中在此管理（M3 域），已从数据资产页签移出',
+      backToAssets: '返回数据资产'
     }
   },
 
@@ -2619,6 +2653,25 @@ export default {
   },
 
   // 页脚
+  artifactAssets: {
+    createdAt: '创建时间',
+    fileRole: '文件角色',
+    fileName: '文件名',
+    fileSize: '大小',
+    mdTrajectory: {
+      notice: '轨迹文件（如 DCD）仅提供下载；此处展示拓扑结构的静态预览，RMSD/RMSF 曲线请到任务 MD 结果页查看。'
+    },
+    compoundSet: {
+      notice: '化合物集合产物：可直接下载成员文件，或前往候选物页面管理。',
+      openCandidates: '前往候选物'
+    },
+    dataset: {
+      notice: '数据资产摘要，明细文件可直接下载。',
+      name: '名称',
+      type: '类型',
+      fileCount: '文件数'
+    }
+  },
   footer: {
     copyright: '© 中国医药健康产业股份有限公司',
     about: '关于我们',

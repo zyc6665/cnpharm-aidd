@@ -15,9 +15,9 @@
           >
             {{ t('compounds.actions.refresh') }}
           </a-button>
-          <router-link :to="`/projects/${projectId}/candidates/compare`">
-            <a-button data-testid="assets-compare-link">
-              {{ t('compounds.actions.compare') }}
+          <router-link :to="`/projects/${projectId}/candidates`">
+            <a-button data-testid="assets-candidates-link">
+              {{ t('compounds.actions.candidates') }}
             </a-button>
           </router-link>
         </a-space>
@@ -30,7 +30,7 @@
       type="error"
       show-icon
       data-testid="assets-error"
-      :message="t('compounds.errors.loadCompounds')"
+      :message="t('compounds.errors.loadAssets')"
     >
       <template #action>
         <a-button size="small" @click="loadAll">{{ t('common.refresh') }}</a-button>
@@ -107,32 +107,30 @@
         </div>
       </a-tab-pane>
 
-      <!-- 候选物 -->
-      <a-tab-pane key="candidates" :tab="t('compounds.tabs.candidates')">
+      <!-- 蛋白（模型产出/上传的结构产物，非蛋白主数据） -->
+      <a-tab-pane key="proteins" :tab="t('compounds.tabs.proteins')">
+        <a-alert
+          class="assets-tab-note"
+          type="info"
+          show-icon
+          data-testid="assets-protein-note"
+          :message="t('compounds.notes.proteins')"
+        />
+
         <a-table
           :scroll="{ x: 'max-content' }"
-          :columns="candidateColumns"
-          :data-source="candidates"
+          :columns="proteinColumns"
+          :data-source="proteins"
           :pagination="false"
-          :locale="{ emptyText: t('compounds.empty.candidates') }"
+          :loading="proteinsLoading"
+          :locale="{ emptyText: t('compounds.empty.proteins') }"
           row-key="id"
           size="middle"
-          data-testid="assets-candidate-table"
+          data-testid="assets-protein-table"
         >
           <template #bodyCell="{ column, record }">
-            <template v-if="column.key === 'name'">
-              <router-link :to="candidateRoute(record.id)">
-                {{ candidateTitle(record) }}
-              </router-link>
-            </template>
-            <template v-else-if="column.key === 'type'">
-              <a-tag>{{ t(candidateLocationLabel(record)) }}</a-tag>
-            </template>
-            <template v-else-if="column.key === 'source'">
-              {{ t(`candidates.source.${record.source}`) }}
-            </template>
-            <template v-else-if="column.key === 'design_score'">
-              {{ record.design_score ?? '-' }}
+            <template v-if="column.key === 'filename'">
+              <span class="mono-cell">{{ record.metadata.filename || '-' }}</span>
             </template>
             <template v-else-if="column.key === 'created_at'">
               {{ formatDate(record.created_at) }}
@@ -140,62 +138,62 @@
           </template>
         </a-table>
 
-        <div v-if="candidateTotal > pageSize" class="assets-pagination">
+        <div v-if="proteinTotal > pageSize" class="assets-pagination">
           <a-pagination
-            v-model:current="candidatePage"
-            :total="candidateTotal"
+            v-model:current="proteinPage"
+            :total="proteinTotal"
             :page-size="pageSize"
             :show-total="(total: number) => t('common.totalItems', { total })"
-            @change="loadCandidates"
+            @change="loadProteins"
           />
         </div>
       </a-tab-pane>
 
-      <!-- 候选集 -->
-      <a-tab-pane key="candidateSets" :tab="t('compounds.tabs.candidateSets')">
-        <div class="assets-toolbar">
-          <span />
-          <a-button
-            type="primary"
-            data-testid="assets-create-set-open"
-            @click="createSetVisible = true"
-          >
-            {{ t('compounds.actions.createSet') }}
-          </a-button>
-        </div>
-
+      <!-- 数据集（登记的数据集领域对象） -->
+      <a-tab-pane key="datasets" :tab="t('compounds.tabs.datasets')">
         <a-table
           :scroll="{ x: 'max-content' }"
-          :columns="candidateSetColumns"
-          :data-source="candidateSets"
+          :columns="datasetColumns"
+          :data-source="datasets"
           :pagination="false"
-          :locale="{ emptyText: t('compounds.empty.candidateSets') }"
+          :loading="datasetsLoading"
+          :locale="{ emptyText: t('compounds.empty.datasets') }"
           row-key="id"
           size="middle"
-          data-testid="assets-candidate-set-table"
+          data-testid="assets-dataset-table"
         >
           <template #bodyCell="{ column, record }">
-            <template v-if="column.key === 'name'">
-              <router-link :to="candidateSetRoute(record.id)">
-                {{ record.name }}
-              </router-link>
+            <template v-if="column.key === 'source'">
+              <a-tag :color="record.source === 'artifact' ? 'blue' : 'green'">
+                {{
+                  record.source === 'artifact'
+                    ? t('compounds.datasetSource.upload')
+                    : t('compounds.datasetSource.dataset')
+                }}
+              </a-tag>
             </template>
-            <template v-else-if="column.key === 'description'">
-              {{ record.description || '-' }}
+            <template v-else-if="column.key === 'dataset_type'">
+              {{ record.metadata.datasetType || '-' }}
             </template>
-            <template v-else-if="column.key === 'updated_at'">
-              {{ formatDate(record.updated_at) }}
+            <template v-else-if="column.key === 'row_count'">
+              {{ record.metadata.rowCount ?? '-' }}
+            </template>
+            <template v-else-if="column.key === 'file_count'">
+              {{ record.metadata.fileCount ?? '-' }}
+            </template>
+            <template v-else-if="column.key === 'created_at'">
+              {{ formatDate(record.created_at) }}
             </template>
           </template>
         </a-table>
 
-        <div v-if="setTotal > pageSize" class="assets-pagination">
+        <div v-if="datasetTotal > pageSize" class="assets-pagination">
           <a-pagination
-            v-model:current="setPage"
-            :total="setTotal"
+            v-model:current="datasetPage"
+            :total="datasetTotal"
             :page-size="pageSize"
             :show-total="(total: number) => t('common.totalItems', { total })"
-            @change="loadCandidateSets"
+            @change="loadDatasets"
           />
         </div>
       </a-tab-pane>
@@ -315,32 +313,6 @@
         </a-form-item>
       </a-form>
     </a-modal>
-
-    <!-- 新建候选集 -->
-    <a-modal
-      v-model:open="createSetVisible"
-      :title="t('compounds.set.create.title')"
-      :ok-text="t('compounds.set.create.submit')"
-      :confirm-loading="creatingSet"
-      data-testid="assets-create-set-modal"
-      @ok="submitCreateSet"
-    >
-      <a-form layout="vertical">
-        <a-form-item :label="t('compounds.set.create.name')" required>
-          <a-input
-            v-model:value="createSetName"
-            :placeholder="t('compounds.set.create.namePlaceholder')"
-          />
-        </a-form-item>
-        <a-form-item :label="t('compounds.set.create.description')">
-          <a-textarea
-            v-model:value="createSetDescription"
-            :rows="3"
-            :placeholder="t('compounds.set.create.descriptionPlaceholder')"
-          />
-        </a-form-item>
-      </a-form>
-    </a-modal>
   </main>
 </template>
 
@@ -354,24 +326,21 @@
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import SkeletonList from '@/components/common/SkeletonList.vue'
   import { uploadFile } from '@/api/files'
+  import { listProjectAssets } from '@/api/assets'
   import {
-    createCandidateSet,
     createCompound,
     importCompounds,
-    listCandidateSets,
-    listCandidates,
     listCompounds
   } from '@/api/compounds'
-  import { candidateLocationLabel, formatPropertyValue } from '@/domain/compounds'
+  import { formatPropertyValue } from '@/domain/compounds'
+  import type { AssetItem } from '@/types/assets'
   import type {
-    Candidate,
-    CandidateSet,
     Compound,
     CompoundImportResult,
     DedupeStrategy
   } from '@/types/compounds'
 
-  type TabKey = 'compounds' | 'candidates' | 'candidateSets'
+  type TabKey = 'compounds' | 'proteins' | 'datasets'
 
   const route = useRoute()
   const { t } = useI18n()
@@ -383,8 +352,8 @@
   const IMPORT_ERROR_LIMIT = 500
 
   /**
-   * 详情页（`/compounds/:id`、`/candidates/:id`、`/candidate-sets/:id`）自己拿不到
-   * 所属项目，必须由入口链接带上 `project_id`，否则目标页的「返回数据资产」会变成死链。
+   * 详情页（`/compounds/:id`）自己拿不到所属项目，必须由入口链接带上 `project_id`，
+   * 否则目标页的「返回数据资产」会变成死链。
    */
   const projectQuery = computed(() =>
     projectId.value ? `?project_id=${encodeURIComponent(projectId.value)}` : ''
@@ -392,14 +361,6 @@
 
   function compoundRoute(id: string): string {
     return `/compounds/${encodeURIComponent(id)}${projectQuery.value}`
-  }
-
-  function candidateRoute(id: string): string {
-    return `/candidates/${encodeURIComponent(id)}${projectQuery.value}`
-  }
-
-  function candidateSetRoute(id: string): string {
-    return `/candidate-sets/${encodeURIComponent(id)}${projectQuery.value}`
   }
 
   const activeTab = ref<TabKey>('compounds')
@@ -411,16 +372,21 @@
   const compoundPage = ref(1)
   const compoundKeyword = ref('')
 
-  const candidates = ref<Candidate[]>([])
-  const candidateTotal = ref(0)
-  const candidatePage = ref(1)
+  const proteins = ref<AssetItem[]>([])
+  const proteinTotal = ref(0)
+  const proteinPage = ref(1)
+  const proteinsLoading = ref(false)
 
-  const candidateSets = ref<CandidateSet[]>([])
-  const setTotal = ref(0)
-  const setPage = ref(1)
+  const datasets = ref<AssetItem[]>([])
+  const datasetTotal = ref(0)
+  const datasetPage = ref(1)
+  const datasetsLoading = ref(false)
 
   const hasAnyRecord = computed(
-    () => compounds.value.length > 0 || candidates.value.length > 0 || candidateSets.value.length > 0
+    () =>
+      compounds.value.length > 0 ||
+      proteins.value.length > 0 ||
+      datasets.value.length > 0
   )
 
   const compoundColumns = computed(() => [
@@ -433,20 +399,19 @@
     { title: t('compounds.columns.createdAt'), key: 'created_at', width: 160 }
   ])
 
-  const candidateColumns = computed(() => [
-    { title: t('candidates.fields.name'), key: 'name', width: 220 },
-    { title: t('candidates.fields.type'), key: 'type', width: 120 },
-    { title: t('candidates.fields.source'), key: 'source', width: 120 },
-    { title: t('candidates.fields.designScore'), key: 'design_score', width: 120 },
-    { title: t('candidates.fields.createdAt'), key: 'created_at', width: 160 }
+  const proteinColumns = computed(() => [
+    { title: t('compounds.proteinColumns.name'), dataIndex: 'name', key: 'name', width: 240 },
+    { title: t('compounds.proteinColumns.filename'), key: 'filename', width: 240 },
+    { title: t('compounds.proteinColumns.createdAt'), key: 'created_at', width: 160 }
   ])
 
-  const candidateSetColumns = computed(() => [
-    { title: t('compounds.set.columns.name'), key: 'name', width: 220 },
-    { title: t('compounds.set.columns.description'), key: 'description' },
-    { title: t('compounds.set.columns.itemCount'), dataIndex: 'item_count', key: 'item_count', width: 100 },
-    { title: t('compounds.set.columns.version'), dataIndex: 'version', key: 'version', width: 90 },
-    { title: t('compounds.set.columns.updatedAt'), key: 'updated_at', width: 160 }
+  const datasetColumns = computed(() => [
+    { title: t('compounds.datasetColumns.name'), dataIndex: 'name', key: 'name', width: 240 },
+    { title: t('compounds.datasetColumns.source'), key: 'source', width: 120 },
+    { title: t('compounds.datasetColumns.datasetType'), key: 'dataset_type', width: 140 },
+    { title: t('compounds.datasetColumns.rowCount'), key: 'row_count', width: 110 },
+    { title: t('compounds.datasetColumns.fileCount'), key: 'file_count', width: 110 },
+    { title: t('compounds.datasetColumns.createdAt'), key: 'created_at', width: 160 }
   ])
 
   const importVisible = ref(false)
@@ -468,17 +433,8 @@
   const createName = ref('')
   const createSmiles = ref('')
 
-  const createSetVisible = ref(false)
-  const creatingSet = ref(false)
-  const createSetName = ref('')
-  const createSetDescription = ref('')
-
   function formatDate(value: string | null | undefined): string {
     return value ? formatDateTimeMinutes(value) : '-'
-  }
-
-  function candidateTitle(candidate: Candidate): string {
-    return candidate.name || candidate.code || candidate.peptide_sequence || candidate.id
   }
 
   function optionalText(value: string): string | undefined {
@@ -498,24 +454,36 @@
     compoundTotal.value = response.data.total
   }
 
-  async function loadCandidates(): Promise<void> {
+  async function loadProteins(): Promise<void> {
     if (!projectId.value) return
-    const response = await listCandidates(projectId.value, {
-      page: candidatePage.value,
-      page_size: pageSize
-    })
-    candidates.value = response.data.items
-    candidateTotal.value = response.data.total
+    proteinsLoading.value = true
+    try {
+      const response = await listProjectAssets(projectId.value, {
+        type: 'protein_structure',
+        page: proteinPage.value,
+        page_size: pageSize
+      })
+      proteins.value = response.data.items
+      proteinTotal.value = response.data.total
+    } finally {
+      proteinsLoading.value = false
+    }
   }
 
-  async function loadCandidateSets(): Promise<void> {
+  async function loadDatasets(): Promise<void> {
     if (!projectId.value) return
-    const response = await listCandidateSets(projectId.value, {
-      page: setPage.value,
-      page_size: pageSize
-    })
-    candidateSets.value = response.data.items
-    setTotal.value = response.data.total
+    datasetsLoading.value = true
+    try {
+      const response = await listProjectAssets(projectId.value, {
+        type: 'dataset',
+        page: datasetPage.value,
+        page_size: pageSize
+      })
+      datasets.value = response.data.items
+      datasetTotal.value = response.data.total
+    } finally {
+      datasetsLoading.value = false
+    }
   }
 
   async function loadAll(): Promise<void> {
@@ -524,8 +492,8 @@
     loadError.value = false
     const settled = await Promise.allSettled([
       loadCompounds(),
-      loadCandidates(),
-      loadCandidateSets()
+      loadProteins(),
+      loadDatasets()
     ])
     loadError.value = settled.some(result => result.status === 'rejected')
     loading.value = false
@@ -606,33 +574,6 @@
     }
   }
 
-  async function submitCreateSet(): Promise<void> {
-    const name = createSetName.value.trim()
-    if (!name) {
-      message.warning(t('compounds.set.create.name'))
-      return
-    }
-
-    creatingSet.value = true
-    try {
-      const description = optionalText(createSetDescription.value)
-      await createCandidateSet(projectId.value, {
-        name,
-        ...(description ? { description } : {})
-      })
-      message.success(t('compounds.set.create.success'))
-      createSetVisible.value = false
-      createSetName.value = ''
-      createSetDescription.value = ''
-      setPage.value = 1
-      await loadCandidateSets()
-    } catch {
-      message.error(t('common.error'))
-    } finally {
-      creatingSet.value = false
-    }
-  }
-
   onMounted(() => {
     void loadAll()
   })
@@ -655,6 +596,10 @@
 
   .assets-alert {
     margin-bottom: @spacing-lg;
+  }
+
+  .assets-tab-note {
+    margin-bottom: @spacing-md;
   }
 
   .assets-toolbar {

@@ -248,7 +248,9 @@ async def _create_artifact_with_metrics(
     artifact = Artifact(
         project_id=project.id,
         created_by=owner.id,
-        artifact_type="file",
+        # 资产类型收敛为受控枚举：此夹具历史上用 file（旧渲染别名），现归一为
+        # run_report；semantic_type 仍是 docking_result@1，PDF 渲染样例不受影响。
+        artifact_type="run_report",
         semantic_type="docking_result@1",
         name="对接结果",
         source_task_id=str(task.id),

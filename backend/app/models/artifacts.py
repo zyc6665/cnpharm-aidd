@@ -3,6 +3,7 @@
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     Column,
     DateTime,
     ForeignKey,
@@ -14,11 +15,22 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 
+from app.artifact_standards.asset_types import ASSET_ARTIFACT_TYPE_CHECK_SQL
 from app.database.base import Base, TimestampMixin, UUIDMixin
 
 
 class Artifact(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "artifacts"
+    __table_args__ = (
+        # ``artifact_type`` 是资产根的判别字段，必须对**所有**写入路径生效：
+        # 上传、标准产物持久化、执行回传、导入 staging 都会落这张表，其中执行回传
+        # 不经过 Pydantic schema。DB CHECK 是唯一能覆盖全部入口的真值约束
+        # （取值来自 ``app.artifact_standards.asset_types`` 单一真源）。
+        CheckConstraint(
+            ASSET_ARTIFACT_TYPE_CHECK_SQL,
+            name="ck_artifacts_artifact_type_asset_enum",
+        ),
+    )
 
     project_id = Column(String(36), ForeignKey("projects.id"), nullable=False, index=True)
     created_by = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)

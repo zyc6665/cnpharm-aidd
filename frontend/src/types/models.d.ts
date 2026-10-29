@@ -5,7 +5,7 @@ export type {
   ProjectStatus,
   ProjectRole,
   TaskPriority,
-  ArtifactType,
+  AssetArtifactType,
   AuditAction,
   AuditResult,
   ResourceType,
