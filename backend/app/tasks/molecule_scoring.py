@@ -19,6 +19,11 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.archive_limits import (
+    MAX_ARCHIVE_ENTRIES,
+    MAX_ARCHIVE_UNCOMPRESSED_BYTES,
+)
+from app.common.exceptions import ValidationException
 from app.files.content import ensure_local_file, read_file_bytes
 from app.models.files import File as FileModel, FileSourceType
 from app.models.tasks import Task, TaskInput
@@ -140,10 +145,32 @@ def _extract_candidates_from_zip_content(
 ) -> list[MoleculeCandidate]:
     candidates: list[MoleculeCandidate] = []
     with zipfile.ZipFile(io.BytesIO(content)) as archive:
-        for member_name in sorted(archive.namelist()):
+        infos = archive.infolist()
+        # P2 硬化：先卡条目数，再在逐成员流式读取时累计解压字节，超限即中止，
+        # 不再 ``archive.read()`` 把单个（可能被伪造体积的）成员整段读入内存。
+        if len(infos) > MAX_ARCHIVE_ENTRIES:
+            raise ValidationException(
+                f"压缩包条目数超过上限 {MAX_ARCHIVE_ENTRIES}"
+            )
+        decompressed_total = 0
+        for info in sorted(infos, key=lambda item: item.filename):
+            member_name = info.filename
             if member_name.endswith("/") or not member_name.lower().endswith(".sdf"):
                 continue
-            text = archive.read(member_name).decode("utf-8", errors="replace")
+            chunks: list[bytes] = []
+            with archive.open(info) as handle:
+                while True:
+                    chunk = handle.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    decompressed_total += len(chunk)
+                    if decompressed_total > MAX_ARCHIVE_UNCOMPRESSED_BYTES:
+                        raise ValidationException(
+                            "压缩包解压后总大小超过上限 "
+                            f"{MAX_ARCHIVE_UNCOMPRESSED_BYTES // (1024 * 1024)}MB"
+                        )
+                    chunks.append(chunk)
+            text = b"".join(chunks).decode("utf-8", errors="replace")
             records = split_sdf_records(text)
             for record_index, record in enumerate(records):
                 candidates.append(

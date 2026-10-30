@@ -27,12 +27,18 @@ import tempfile
 import uuid
 from datetime import timedelta
 from pathlib import Path
+from typing import AsyncIterator
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.common.exceptions import ConflictException, NotFoundException, ValidationException
+from app.common.exceptions import (
+    ConflictException,
+    NotFoundException,
+    PayloadTooLargeException,
+    ValidationException,
+)
 from app.common.time import utcnow
 from app.config import settings
 from app.files.part_staging import PartStaging, build_part_staging
@@ -55,6 +61,15 @@ UPLOAD_MAX_OBJECT_BYTES = 2 * 1024 * 1024 * 1024
 #: 服务端合并上限。流式落盘后不再受进程内存约束，因此与单文件上限同口径；
 #: 保留独立开关是为了部署侧能用更小的值限制临时盘占用。
 UPLOAD_MAX_ASSEMBLY_BYTES = settings.UPLOAD_MAX_ASSEMBLY_BYTES
+
+#: 单个分片的大小上限（P2 注入/存储 DoS 硬化）。请求体按块计量，一旦累计超过
+#: 该值立即 413，不把整段分片读入内存。默认取部署侧配置；未配置时默认 8 MiB，
+#: 但**不得小于声明分片大小** ``UPLOAD_PART_SIZE_BYTES``——否则客户端按会话返回的
+#: ``part_size``（16 MiB）正常上传的整片会被误杀，破坏既有契约。
+UPLOAD_MAX_PART_SIZE_BYTES = max(
+    int(getattr(settings, "UPLOAD_MAX_PART_SIZE_BYTES", 8 * 1024 * 1024)),
+    int(UPLOAD_PART_SIZE_BYTES),
+)
 
 #: 允许继续上传分片 / 合并的状态。其余状态一律 409，避免「已完成/已取消」被续写。
 ACTIVE_STATES = ("INITIATED", "UPLOADING")
@@ -279,30 +294,19 @@ def _dialect_name(db: AsyncSession) -> str:
     return getattr(getattr(bind, "dialect", None), "name", "sqlite")
 
 
-async def record_upload_part(
+async def _persist_part_row(
     db: AsyncSession,
     *,
     session: UploadSession,
     part_number: int,
-    content: bytes,
-    staging: PartStaging | None = None,
+    etag: str,
+    written: int,
 ) -> dict:
-    """落分片字节，并把 ``(session_id, part_number)`` 一行写进 ``upload_parts``。
+    """把 ``(session_id, part_number)`` 一行 upsert 进 ``upload_parts`` 并返回回执。
 
-    重传同一片是常态（网络抖动）：字节覆盖同名的暂存对象，索引行用 upsert 覆盖，
-    两者都幂等。**不要**改成「读现有列表再整列写回」——并发下会丢掉别人刚写的片。
+    ``record_upload_part``（整段字节）与 ``record_upload_part_stream``（流式）共用，
+    保证两条路径的落库行为完全一致：幂等覆盖、状态置 ``UPLOADING``、重载分片集合。
     """
-    staging = staging or build_part_staging()
-    await _require_active(db, session=session, staging=staging)
-
-    part_count = _declared_part_count(session)
-    if int(part_number) < 1 or int(part_number) > part_count:
-        raise ValidationException(f"分片号 {part_number} 超出范围 1..{part_count}")
-
-    written = await staging.write_part(str(session.id), int(part_number), content)
-    # ETag 用 md5 与 S3/MinIO 的单片 ETag 同口径，客户端可原样回传。
-    etag = hashlib.md5(content, usedforsecurity=False).hexdigest()
-
     statement = _upsert_part_statement(
         db,
         session_id=str(session.id),
@@ -331,6 +335,84 @@ async def record_upload_part(
     await db.commit()
     await _reload_parts(db, session)
     return {"partNumber": int(part_number), "etag": etag, "size": written}
+
+
+async def record_upload_part(
+    db: AsyncSession,
+    *,
+    session: UploadSession,
+    part_number: int,
+    content: bytes,
+    staging: PartStaging | None = None,
+) -> dict:
+    """落分片字节，并把 ``(session_id, part_number)`` 一行写进 ``upload_parts``。
+
+    重传同一片是常态（网络抖动）：字节覆盖同名的暂存对象，索引行用 upsert 覆盖，
+    两者都幂等。**不要**改成「读现有列表再整列写回」——并发下会丢掉别人刚写的片。
+    """
+    staging = staging or build_part_staging()
+    await _require_active(db, session=session, staging=staging)
+
+    part_count = _declared_part_count(session)
+    if int(part_number) < 1 or int(part_number) > part_count:
+        raise ValidationException(f"分片号 {part_number} 超出范围 1..{part_count}")
+
+    written = await staging.write_part(str(session.id), int(part_number), content)
+    # ETag 用 md5 与 S3/MinIO 的单片 ETag 同口径，客户端可原样回传。
+    etag = hashlib.md5(content, usedforsecurity=False).hexdigest()
+    return await _persist_part_row(
+        db, session=session, part_number=part_number, etag=etag, written=written
+    )
+
+
+async def record_upload_part_stream(
+    db: AsyncSession,
+    *,
+    session: UploadSession,
+    part_number: int,
+    chunks: AsyncIterator[bytes],
+    staging: PartStaging | None = None,
+    max_part_bytes: int | None = None,
+) -> dict:
+    """流式落分片：边读边计量，超过单分片上限立即 413，不整段驻留内存（P2）。
+
+    ``chunks`` 是请求体的异步字节块迭代器（FastAPI ``Request.stream()``）。计量
+    生成器把「超限检查」与「md5 计算」放进同一次遍历，字节只被消费一遍，进程内存
+    峰值仅为单个块——这是相对旧 ``Body(...)``（整段读入内存）的核心硬化点。
+    """
+    staging = staging or build_part_staging()
+    await _require_active(db, session=session, staging=staging)
+
+    part_count = _declared_part_count(session)
+    if int(part_number) < 1 or int(part_number) > part_count:
+        raise ValidationException(f"分片号 {part_number} 超出范围 1..{part_count}")
+
+    limit = int(
+        max_part_bytes if max_part_bytes is not None else UPLOAD_MAX_PART_SIZE_BYTES
+    )
+    digest = hashlib.md5(usedforsecurity=False)
+    total = 0
+
+    async def _metered() -> AsyncIterator[bytes]:
+        nonlocal total
+        async for chunk in chunks:
+            if not chunk:
+                continue
+            total += len(chunk)
+            if total > limit:
+                raise PayloadTooLargeException(
+                    f"分片大小超过上限 {limit // (1024 * 1024)}MB"
+                )
+            digest.update(chunk)
+            yield chunk
+
+    written = await staging.write_part_stream(
+        str(session.id), int(part_number), _metered()
+    )
+    etag = digest.hexdigest()
+    return await _persist_part_row(
+        db, session=session, part_number=part_number, etag=etag, written=written
+    )
 
 
 async def _reload_parts(db: AsyncSession, session: UploadSession) -> None:
@@ -469,6 +551,7 @@ __all__ = [
     "ACTIVE_STATES",
     "UPLOAD_MAX_ASSEMBLY_BYTES",
     "UPLOAD_MAX_OBJECT_BYTES",
+    "UPLOAD_MAX_PART_SIZE_BYTES",
     "UPLOAD_PART_SIZE_BYTES",
     "UPLOAD_SESSION_TTL_HOURS",
     "abort_upload_session",
@@ -481,5 +564,6 @@ __all__ = [
     "is_expired",
     "part_count_for",
     "record_upload_part",
+    "record_upload_part_stream",
     "serialize_upload_session",
 ]

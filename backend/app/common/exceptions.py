@@ -85,3 +85,19 @@ class BusinessException(AppException):
     ):
         super().__init__(message, code=code, detail=detail)
         self.http_status = http_status
+
+
+class PayloadTooLargeException(BusinessException):
+    """请求体/分片超过允许上限（HTTP 413，业务码 41300）。
+
+    docs/05 的错误码表现在同时给出 HTTP 状态与业务码：413 是传输层的
+    ``Payload Too Large``，业务码 41300 归入「资源/请求过大」一档，供前端按码
+    提示「文件或分片过大」。默认 HTTP 413、业务码 41300。
+    """
+
+    def __init__(
+        self,
+        message: str = "请求体超过允许大小",
+        detail: Optional[Any] = None,
+    ):
+        super().__init__(message, http_status=413, code=41300, detail=detail)

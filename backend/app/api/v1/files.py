@@ -25,10 +25,16 @@ from app.schemas.files import (
     FileDownloadUrl,
 )
 from app.common.responses import paginated_response, success_response
-from app.common.exceptions import NotFoundException, ForbiddenException, ValidationException
+from app.common.exceptions import (
+    ForbiddenException,
+    NotFoundException,
+    PayloadTooLargeException,
+    ValidationException,
+)
 from app.chemistry.conversion import convert_sdf_to_pdb_with_toolkit as _convert_sdf_to_pdb_with_toolkit
 from app.config import settings
 from app.logging.audit import AuditAction, AuditResult, get_audit_logger
+from app.services.artifact_responses import content_disposition
 from app.files.remote_access_tokens import (
     RemoteFileAccessTokenError,
     create_browser_file_access_token,
@@ -253,11 +259,22 @@ async def convert_sdf_to_pdb(
     db: AsyncSession = Depends(get_db),
 ):
     """上传 SDF 并转换为 ligand PDB 文件。"""
-    file_content = await file.read()
-    file_size = len(file_content)
+    # P2 硬化：边读边累计，超过上限立即 413，避免先把整段文件读入内存再判断大小
+    # （原实现 ``await file.read()`` 无上限地把请求体全部驻留内存，构成内存 DoS）。
     max_size = settings.MAX_FILE_SIZE_MB * 1024 * 1024
-    if file_size > max_size:
-        raise ValidationException(f"文件大小超过限制 ({settings.MAX_FILE_SIZE_MB}MB)")
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(1024 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_size:
+            raise PayloadTooLargeException(
+                f"文件大小超过限制 ({settings.MAX_FILE_SIZE_MB}MB)"
+            )
+        chunks.append(chunk)
+    file_content = b"".join(chunks)
 
     lower_name = (file.filename or "").lower()
     lower_type = (file.content_type or "").lower()
@@ -475,7 +492,7 @@ async def download_file(
         response = Response(
             content=content,
             media_type=file.content_type,
-            headers={"Content-Disposition": f'attachment; filename="{file.filename}"'},
+            headers={"Content-Disposition": content_disposition(file.filename)},
         )
     else:
         file_path = file_storage_path(file)

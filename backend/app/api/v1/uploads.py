@@ -14,7 +14,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Body, Depends, Header, Path
+from fastapi import APIRouter, Depends, Header, Path, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
@@ -84,16 +84,20 @@ async def get_upload(
 
 @router.put("/{upload_id}/parts/{part_number}", response_model=dict)
 async def upload_part(
+    request: Request,
     upload_id: str = Path(...),
     part_number: int = Path(..., ge=1),
-    content: bytes = Body(...),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """上报单个分片。请求体为该分片的原始字节（``application/octet-stream``）。"""
+    """上报单个分片。请求体为该分片的原始字节（``application/octet-stream``）。
+
+    分片按块流式消费：边读边计量，累计超过单分片上限（``UPLOAD_MAX_PART_SIZE_BYTES``）
+    立即返回 413 业务错误，不再用 ``Body(...)`` 把整段分片读入进程内存（P2 硬化）。
+    """
     session = await _load_authorized_session(db, upload_id=upload_id, user=current_user)
-    entry = await uploads_service.record_upload_part(
-        db, session=session, part_number=part_number, content=content
+    entry = await uploads_service.record_upload_part_stream(
+        db, session=session, part_number=part_number, chunks=request.stream()
     )
     return success_response(
         {
