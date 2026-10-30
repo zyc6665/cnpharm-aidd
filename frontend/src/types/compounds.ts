@@ -255,6 +255,7 @@ export interface ProjectResultSummary {
   execution_time_sec: number | null
   error_message: string | null
   domain: string | null
+  mock: boolean
 }
 
 /** 结果详情里的输入快照（`serialize_snapshot`，camelCase）。 */
@@ -311,6 +312,7 @@ export interface TraceabilityTimeline {
   finished: string | null
   executionSeconds: number | null
   retryCount: number | null
+  retryOf: string | null
 }
 
 export interface TraceabilityToolRef {
@@ -369,7 +371,7 @@ export interface TraceabilityOutput {
 
 export interface TraceabilityBizRef {
   projectId: string | null
-  domain: string | null
+  domain: Record<string, unknown> | null
 }
 
 export interface TraceabilityPackage {

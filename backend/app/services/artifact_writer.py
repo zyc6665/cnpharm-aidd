@@ -240,6 +240,7 @@ async def upsert_artifact(
     standard_type: str | None = None,
     standard_version: int | None = None,
     description: str | None = None,
+    match_name: bool = False,
 ) -> tuple[Artifact, bool]:
     """Find-or-create the Artifact row that owns versions of one logical asset.
 
@@ -249,6 +250,11 @@ async def upsert_artifact(
     and the second producer for the same logical asset would either collide on
     ``uq_artifact_versions_artifact_version`` or silently start a parallel history.
 
+    ``match_name`` opts callers that can emit several same-type assets in one run
+    (e.g. standard artifacts: many ligands) into treating ``name`` as part of the
+    identity.  Default ``False`` keeps the historical type-only identity for the
+    generic call sites.
+
     Returns ``(artifact, created)``.
     """
     statement = select(Artifact).where(
@@ -256,6 +262,8 @@ async def upsert_artifact(
         Artifact.artifact_type == artifact_type,
         Artifact.semantic_type == semantic_type,
     )
+    if match_name:
+        statement = statement.where(Artifact.name == name)
     statement = statement.where(
         Artifact.standard_type.is_(None)
         if standard_type is None

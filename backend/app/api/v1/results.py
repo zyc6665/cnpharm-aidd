@@ -151,6 +151,7 @@ async def _artifact_outputs(db: AsyncSession, task_id: str) -> list[dict[str, An
 
 
 def _serialize_result(task: Task) -> dict[str, Any]:
+    domain = (task.extra_data or {}).get("domain") or {}
     return {
         "task_id": str(task.id),
         "name": task.name,
@@ -166,7 +167,8 @@ def _serialize_result(task: Task) -> dict[str, Any]:
         "finished_at": _iso(task.finished_at),
         "execution_time_sec": task.execution_time_sec,
         "error_message": task.error_message,
-        "domain": (task.extra_data or {}).get("domain"),
+        # 列表页按字符串渲染；domain 是结构化 dict，直接下发会显示 [object Object]。
+        "domain": domain.get("kind") if isinstance(domain, dict) else None,
         "mock": bool((task.extra_data or {}).get("mock")),
     }
 
@@ -563,7 +565,10 @@ async def list_candidate_results(
         raise NotFoundException("候选物不存在")
     await require_candidate_read_access(db, candidate=candidate, user=current_user)
 
-    query = select(Task).where(Task.status.in_(RESULT_STATUSES))
+    query = select(Task).where(
+        Task.status.in_(RESULT_STATUSES),
+        Task.extra_data["domain"]["candidate_id"].as_string() == candidate_id,
+    )
     total = (
         await db.execute(select(func.count()).select_from(query.subquery()))
     ).scalar_one()
@@ -576,15 +581,9 @@ async def list_candidate_results(
         )
     ).scalars().all()
 
-    matched = [
-        task
-        for task in rows
-        if str(((task.extra_data or {}).get("domain") or {}).get("candidate_id") or "")
-        == str(candidate.id)
-    ]
     return paginated_response(
-        items=[_serialize_result(task) for task in matched],
-        total=len(matched),
+        items=[_serialize_result(task) for task in rows],
+        total=total,
         page=page,
         page_size=page_size,
     )

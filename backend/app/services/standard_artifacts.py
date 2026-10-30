@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.artifact_standards.registry import (
@@ -21,7 +22,7 @@ from app.execution.result_parser import (
     ParsedStandardFile,
     ParsedStandardResult,
 )
-from app.models.artifacts import Artifact, ArtifactLineage
+from app.models.artifacts import ArtifactLineage
 from app.models.files import File as FileModel, FileSourceType
 from app.models.tasks import Task
 from app.common.task_context import task_project_id
@@ -29,6 +30,7 @@ from app.files.writer import store_file_path
 from app.services.artifact_writer import (
     ArtifactSource,
     attach_version_files,
+    upsert_artifact,
     upsert_version,
 )
 from app.services.standard_artifact_collection import (
@@ -166,13 +168,23 @@ async def create_artifact_versions_from_parsed_result(
             raise StandardArtifactPersistenceError(
                 f"Relation references unknown artifact: {from_ref} -> {to_ref}"
             )
+        existing_lineage = await db.scalar(
+            select(ArtifactLineage.id).where(
+                ArtifactLineage.input_version_id == refs[from_ref],
+                ArtifactLineage.output_version_id == refs[to_ref],
+            )
+        )
+        if existing_lineage is not None:
+            # 同一任务重放会复用同一批版本；受控关系边必须保持幂等，
+            # 否则 uq_artifact_lineage_input_output 会直接冲突。
+            continue
         db.add(
             ArtifactLineage(
                 project_id=project_id,
                 input_version_id=refs[from_ref],
                 output_version_id=refs[to_ref],
                 created_by=user_id,
-                relation_type="declared_relation",
+                relation_type=relation_type,
             )
         )
 
@@ -210,18 +222,20 @@ async def _persist_artifact(
             f"Artifact {artifact.output_name} has no files to persist"
         )
 
-    artifact_record = Artifact(
+    # Artifact 是逻辑资产的「身份」，版本才是每次运行的记录。走统一写入点按稳定标识
+    # 取或建，避免同一任务重试/重放时每次都新建一个资产根。按 name 参与身份判据，
+    # 因为一次运行可能产出多个同类型、不同名字的资产（如多个配体）。
+    artifact_record, _artifact_created = await upsert_artifact(
+        db,
         project_id=project_id,
-        created_by=user_id,
         artifact_type=standard_ref.type,
         semantic_type=standard_ref.type,
         standard_type=standard_ref.type,
         standard_version=standard_ref.version,
         name=artifact.name or _artifact_ref_key(artifact),
-        source_task_id=str(task.id),
+        created_by=user_id,
+        match_name=True,
     )
-    db.add(artifact_record)
-    await db.flush()
 
     resolved_files: list[tuple[str, FileModel]] = []
     for role, parsed_file in artifact.files.items():

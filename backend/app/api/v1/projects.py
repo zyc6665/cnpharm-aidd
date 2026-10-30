@@ -13,12 +13,19 @@ from app.common.exceptions import ConflictException
 from app.common.responses import success_response
 from app.common.time import utcnow
 from app.database.session import get_db
+from app.files.file_records import delete_stored_content
 from app.feature_flags import require_feature_flag
-from app.models.artifacts import Artifact, ArtifactLineage, ArtifactVersion
+from app.models.artifacts import (
+    Artifact,
+    ArtifactLineage,
+    ArtifactVersion,
+    ArtifactVersionFile,
+)
 from app.models.executions import ExecutionRecord
-from app.models.files import File
+from app.models.files import File, FileAccessLog
 from app.models.projects import Organization, Project, ProjectMember
 from app.models.quotas import ProjectQuota
+from app.models.statistics import FileStatistics
 from app.models.tasks import Task
 from app.models.users import User
 from app.storage.factory import get_storage_backend
@@ -404,6 +411,24 @@ async def _delete_project_related_rows(db: AsyncSession, project_id: str) -> Non
                 await storage_backend.delete(storage_key)
             except Exception:  # noqa: BLE001 - 单个对象失败不阻塞项目删除
                 logger.warning("删除项目产物对象失败: %s", storage_key, exc_info=True)
+        # ArtifactVersionFile.artifact_version_id 外键没有 ondelete（见
+        # 20260801_01_standard_artifact_versions.py），必须显式先删子行，
+        # 否则 PG 上删版本会 ForeignKeyViolation 导致整个删除事务回滚。
+        version_ids = list(
+            (
+                await db.execute(
+                    select(ArtifactVersion.id).where(
+                        ArtifactVersion.artifact_id.in_(artifact_ids)
+                    )
+                )
+            ).scalars()
+        )
+        if version_ids:
+            await db.execute(
+                sa_delete(ArtifactVersionFile).where(
+                    ArtifactVersionFile.artifact_version_id.in_(version_ids)
+                )
+            )
         await db.execute(
             sa_delete(ArtifactVersion).where(ArtifactVersion.artifact_id.in_(artifact_ids))
         )
@@ -415,9 +440,55 @@ async def _delete_project_related_rows(db: AsyncSession, project_id: str) -> Non
         sa_delete(WorkflowDefinition).where(WorkflowDefinition.project_id == project_id)
     )
     await db.execute(sa_delete(ResearchBoard).where(ResearchBoard.project_id == project_id))
-    await db.execute(
-        sa_update(File).where(File.project_id == project_id).values(project_id=None)
+    # 项目内的普通文件（USER_INPUT / system / SYSTEM / UPLOAD 等）不在 artifact_gc
+    # 的回收范围内（它只回收 source_type='tool_output'），只把 project_id 置 NULL
+    # 会让对象永久泄漏、files 行永久孤儿。因此先删存储对象再删行；删除是幂等的，
+    # 与 artifact_gc 的职责不重叠（这里只处理 project_id 指向该项目的记录）。
+    project_files = list(
+        (await db.execute(select(File).where(File.project_id == project_id))).scalars()
     )
+    project_file_ids = [file_record.id for file_record in project_files]
+    # 上传去重按 sha256 + owner 查（files.py 的上传路径不带 project 过滤），同一个
+    # File 行可能被同一 owner 的多个项目共用，后续项目只是没有 project_id。只要它
+    # 仍被任何 ArtifactVersionFile 引用（artifact_version_files.file_id 是非空外键、
+    # 无 ondelete），删 File 行在 PG 上就会 ForeignKeyViolation 并回滚整个删除事务。
+    # 这里用 SQL 先取被引用的 file_id 集合，再只删没有被引用的行。
+    referenced_file_ids: set[str] = set()
+    if project_file_ids:
+        referenced_file_ids = set(
+            (
+                await db.execute(
+                    select(ArtifactVersionFile.file_id)
+                    .where(ArtifactVersionFile.file_id.in_(project_file_ids))
+                    .distinct()
+                )
+            ).scalars()
+        )
+    deletable_files = [
+        file_record
+        for file_record in project_files
+        if file_record.id not in referenced_file_ids
+    ]
+    for file_record in project_files:
+        if file_record.id in referenced_file_ids:
+            logger.info("文件仍被产物版本引用，跳过删除: file_id=%s", file_record.id)
+    if deletable_files:
+        deletable_file_ids = [file_record.id for file_record in deletable_files]
+        # file_access_logs 同样没有 ondelete，且批量 delete 不会触发 ORM 的
+        # cascade；file_statistics 虽有 ondelete=CASCADE，但 SQLite 默认不强制
+        # 外键，显式清理可避免留下孤儿统计行。
+        await db.execute(
+            sa_delete(FileAccessLog).where(FileAccessLog.file_id.in_(deletable_file_ids))
+        )
+        await db.execute(
+            sa_delete(FileStatistics).where(FileStatistics.file_id.in_(deletable_file_ids))
+        )
+        for file_record in deletable_files:
+            try:
+                await delete_stored_content(file_record)
+            except Exception:  # noqa: BLE001 - 单个对象失败不阻塞项目删除
+                logger.warning("删除项目文件对象失败: %s", file_record.id, exc_info=True)
+        await db.execute(sa_delete(File).where(File.id.in_(deletable_file_ids)))
     await delete_project_compound_rows(db, project_id=project_id)
     await delete_project_domain_rows(db, project_id=project_id)
     # 配额是项目的一等附属行，必须在删项目之前显式清掉：`project_quotas.project_id`

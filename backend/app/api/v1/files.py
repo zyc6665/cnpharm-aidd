@@ -17,6 +17,7 @@ from app.common.time import utcnow
 from app.database.session import get_db
 from app.models.users import User
 from app.models.files import File as FileModel, FileSourceType
+from app.models.projects import ProjectMember
 from app.auth.dependencies import get_current_user, get_current_user_optional
 from app.schemas.files import (
     FileResponse as FileSchema,
@@ -332,6 +333,30 @@ async def get_file_info(
     return success_response(data=FileSchema.model_validate(file).model_dump())
 
 
+async def _user_can_access_download_file(
+    db: AsyncSession, file: FileModel, user: User | None
+) -> bool:
+    """下载入口的项目感知鉴权。
+
+    产物下载（artifacts.py）认项目成员；文件下载若仍只认 owner_id，被移出项目的
+    editor 仍能凭 owner_id 下载，两条入口语义不一致。这里在 file.project_id 非空时
+    改为校验项目成员（任意角色）；project_id 为空时保持原 owner/public/admin 语义。
+    """
+    if user is None:
+        return False
+    if user.role == "admin":
+        return True
+    if file.project_id:
+        membership = await db.scalar(
+            select(ProjectMember.id).where(
+                ProjectMember.project_id == file.project_id,
+                ProjectMember.user_id == user.id,
+            )
+        )
+        return membership is not None
+    return user_can_access_file(file, user)
+
+
 @router.get("/{file_id}/download")
 async def download_file(
     file_id: str,
@@ -356,7 +381,12 @@ async def download_file(
             remote_token_claims = validate_remote_file_access_token(token, file_id=file_id)
         except RemoteFileAccessTokenError:
             try:
-                remote_token_claims = validate_browser_file_access_token(token, file_id=file_id)
+                # 浏览器下载令牌绑定具体用户，兑换时必须与当前请求者一致。
+                if current_user is None:
+                    raise RemoteFileAccessTokenError("浏览器文件下载令牌需要登录用户")
+                remote_token_claims = validate_browser_file_access_token(
+                    token, file_id=file_id, user_id=str(current_user.id)
+                )
             except RemoteFileAccessTokenError as exc:
                 _audit_file_download_denied(
                     file=file,
@@ -379,7 +409,7 @@ async def download_file(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="需要登录才能访问此文件"
             )
-        if not user_can_access_file(file, current_user):
+        if not await _user_can_access_download_file(db, file, current_user):
             _audit_file_download_denied(
                 file=file,
                 current_user=current_user,

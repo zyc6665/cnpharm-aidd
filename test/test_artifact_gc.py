@@ -278,3 +278,242 @@ async def test_project_delete_removes_artifact_objects_before_rows(
     assert deleted_keys == ["artifacts/target.pdb"]
     assert await gc_db.scalar(select(Artifact).where(Artifact.id == artifact.id)) is None
     assert await gc_db.scalar(select(ArtifactVersion).where(ArtifactVersion.id == version.id)) is None
+
+
+@pytest.mark.asyncio
+async def test_project_delete_removes_artifact_version_files_before_versions(
+    gc_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """回归 A1：ArtifactVersionFile 外键无 ondelete，删除顺序必须先子后父。"""
+    from app.api.v1 import projects as projects_api
+
+    user, project = await _seed_project(gc_db)
+    artifact = Artifact(
+        project_id=project.id,
+        created_by=user.id,
+        artifact_type="protein_structure",
+        semantic_type="protein_structure",
+        name="target.pdb",
+    )
+    gc_db.add(artifact)
+    await gc_db.flush()
+    version = ArtifactVersion(
+        artifact_id=artifact.id,
+        created_by=user.id,
+        version=1,
+        filename="target.pdb",
+        size_bytes=3,
+        sha256="b" * 64,
+        storage_key="artifacts/target.pdb",
+        status="available",
+    )
+    file_row = File(
+        project_id=None,
+        owner_id=user.id,
+        filename="target.pdb",
+        content_type="application/octet-stream",
+        size_bytes=3,
+        sha256="c" * 64,
+        storage_backend="local",
+        storage_path="storage/target.pdb",
+        source_type="tool_output",
+    )
+    gc_db.add_all([version, file_row])
+    await gc_db.flush()
+    version_file = ArtifactVersionFile(
+        artifact_version_id=version.id,
+        role="primary",
+        file_id=file_row.id,
+    )
+    gc_db.add(version_file)
+    await gc_db.commit()
+
+    class FakeStorage:
+        async def delete(self, path: str) -> bool:
+            return True
+
+    monkeypatch.setattr(projects_api, "get_storage_backend", lambda: FakeStorage())
+    # 避免真正触碰本地磁盘；本用例只验证行清理顺序。
+    async def fake_delete(record, storage_backend=None):
+        return None
+
+    monkeypatch.setattr(projects_api, "delete_stored_content", fake_delete)
+
+    await projects_api._delete_project_related_rows(gc_db, project_id=project.id)
+    await gc_db.commit()
+
+    assert (
+        await gc_db.scalar(
+            select(ArtifactVersionFile).where(
+                ArtifactVersionFile.artifact_version_id == version.id
+            )
+        )
+        is None
+    )
+    assert await gc_db.scalar(select(ArtifactVersion).where(ArtifactVersion.id == version.id)) is None
+
+
+@pytest.mark.asyncio
+async def test_project_delete_removes_project_file_objects_and_rows(
+    gc_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """回归 A2：项目内非 tool_output 的 File 必须删对象并删行，而不是置 NULL。"""
+    from app.api.v1 import projects as projects_api
+
+    user, project = await _seed_project(gc_db)
+    project_file = File(
+        project_id=project.id,
+        owner_id=user.id,
+        filename="input.csv",
+        content_type="text/csv",
+        size_bytes=3,
+        sha256="d" * 64,
+        storage_backend="local",
+        storage_path="storage/input.csv",
+        source_type="USER_INPUT",
+    )
+    other_file = File(
+        project_id=None,
+        owner_id=user.id,
+        filename="keep.csv",
+        content_type="text/csv",
+        size_bytes=3,
+        sha256="e" * 64,
+        storage_backend="local",
+        storage_path="storage/keep.csv",
+        source_type="USER_INPUT",
+    )
+    gc_db.add_all([project_file, other_file])
+    await gc_db.commit()
+
+    deleted_ids: list[str] = []
+
+    async def fake_delete(record, storage_backend=None):
+        deleted_ids.append(record.id)
+
+    monkeypatch.setattr(projects_api, "delete_stored_content", fake_delete)
+
+    await projects_api._delete_project_related_rows(gc_db, project_id=project.id)
+    await gc_db.commit()
+
+    assert deleted_ids == [project_file.id]
+    assert await gc_db.scalar(select(File).where(File.id == project_file.id)) is None
+    # 其他项目/无项目文件不受影响
+    assert await gc_db.scalar(select(File).where(File.id == other_file.id)) is not None
+
+
+@pytest.mark.asyncio
+async def test_project_delete_skips_file_still_referenced_by_other_project_artifact(
+    gc_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """回归 A2：同一 sha256 去重会让 File 行被多个项目共用，删除本项目时
+    不能删掉仍被其他项目 ArtifactVersionFile 引用的 File 行（PG 上会 FK 500）。"""
+    from app.api.v1 import projects as projects_api
+
+    user, project = await _seed_project(gc_db)
+    other_project = Project(
+        organization_id=project.organization_id,
+        created_by=user.id,
+        name="Other GC Project",
+        status="active",
+    )
+    gc_db.add(other_project)
+    await gc_db.flush()
+
+    shared_file = File(
+        project_id=project.id,
+        owner_id=user.id,
+        filename="shared.csv",
+        content_type="text/csv",
+        size_bytes=3,
+        sha256="1" * 64,
+        storage_backend="local",
+        storage_path="storage/shared.csv",
+        source_type="USER_INPUT",
+    )
+    unreferenced_file = File(
+        project_id=project.id,
+        owner_id=user.id,
+        filename="only-here.csv",
+        content_type="text/csv",
+        size_bytes=3,
+        sha256="2" * 64,
+        storage_backend="local",
+        storage_path="storage/only-here.csv",
+        source_type="USER_INPUT",
+    )
+    gc_db.add_all([shared_file, unreferenced_file])
+    await gc_db.flush()
+
+    def _artifact(project_id: str, name: str) -> Artifact:
+        return Artifact(
+            project_id=project_id,
+            created_by=user.id,
+            artifact_type="dataset",
+            semantic_type="dataset",
+            name=name,
+        )
+
+    def _version(artifact: Artifact, sha256: str, storage_key: str) -> ArtifactVersion:
+        return ArtifactVersion(
+            artifact_id=artifact.id,
+            created_by=user.id,
+            version=1,
+            filename=f"{artifact.name}.csv",
+            size_bytes=3,
+            sha256=sha256,
+            storage_key=storage_key,
+            status="available",
+        )
+
+    artifact_a = _artifact(project.id, "project-a")
+    artifact_b = _artifact(other_project.id, "project-b")
+    gc_db.add_all([artifact_a, artifact_b])
+    await gc_db.flush()
+    version_a = _version(artifact_a, "a" * 64, "artifacts/a.csv")
+    version_b = _version(artifact_b, "b" * 64, "artifacts/b.csv")
+    gc_db.add_all([version_a, version_b])
+    await gc_db.flush()
+    version_file_a = ArtifactVersionFile(
+        artifact_version_id=version_a.id,
+        role="primary",
+        file_id=shared_file.id,
+    )
+    version_file_b = ArtifactVersionFile(
+        artifact_version_id=version_b.id,
+        role="primary",
+        file_id=shared_file.id,
+    )
+    gc_db.add_all([version_file_a, version_file_b])
+    await gc_db.commit()
+
+    deleted_ids: list[str] = []
+
+    async def fake_delete(record, storage_backend=None):
+        deleted_ids.append(record.id)
+
+    class FakeStorage:
+        async def delete(self, path: str) -> bool:
+            return True
+
+    monkeypatch.setattr(projects_api, "delete_stored_content", fake_delete)
+    monkeypatch.setattr(projects_api, "get_storage_backend", lambda: FakeStorage())
+
+    await projects_api._delete_project_related_rows(gc_db, project_id=project.id)
+    await gc_db.commit()
+
+    # 被其他项目产物引用的共享 File 必须保留，且对象不能删。
+    assert deleted_ids == [unreferenced_file.id]
+    assert await gc_db.scalar(select(File).where(File.id == shared_file.id)) is not None
+    assert (
+        await gc_db.scalar(
+            select(ArtifactVersionFile).where(ArtifactVersionFile.id == version_file_b.id)
+        )
+        is not None
+    )
+    # 本项目独占且无产物引用的 File 正常删除并删对象。
+    assert await gc_db.scalar(select(File).where(File.id == unreferenced_file.id)) is None
+    assert await gc_db.scalar(select(ArtifactVersionFile).where(ArtifactVersionFile.id == version_file_a.id)) is None

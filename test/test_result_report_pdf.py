@@ -28,7 +28,7 @@ BACKEND_ROOT = PROJECT_ROOT / "backend"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.auth.dependencies import get_current_user  # noqa: E402
+from app.auth.dependencies import get_current_user, get_current_user_optional  # noqa: E402
 from app.database.base import Base  # noqa: E402
 from app.database.session import get_db  # noqa: E402
 from app.main import app as main_app  # noqa: E402
@@ -132,6 +132,9 @@ async def api_client(db_session: AsyncSession, users: dict[str, User]):
         if token in users:
             return users[token]
         raise HTTPException(status_code=401, detail="未提供认证凭证")
+
+    # 下载入口用 optional 依赖；浏览器下载令牌兑换时要求能比对当前请求者。
+    main_app.dependency_overrides[get_current_user_optional] = override_get_current_user
 
     # 必须复用真实 app，否则 AppException 处理器不生效（404/422 会变成裸异常）。
     main_app.dependency_overrides[get_db] = override_get_db

@@ -33,6 +33,7 @@ from app.files.writer import store_file_bytes  # noqa: E402
 from app.logging.audit import AuditAction, AuditEvent, AuditResult, ResourceType  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.artifacts import Artifact, ArtifactVersion  # noqa: E402
+from app.models.compounds import Candidate  # noqa: E402
 from app.models.files import FileSourceType  # noqa: E402
 from app.models.projects import Organization, Project, ProjectMember  # noqa: E402
 from app.models.tasks import Task  # noqa: E402
@@ -928,3 +929,131 @@ def test_sequence_hash_is_stable():
     assert traceability.sequence_sha256("MKTAYIAK") == hashlib.sha256(b"MKTAYIAK").hexdigest()
     assert traceability.sequence_sha256("") is None
     assert traceability.sequence_sha256(None) is None
+
+
+# ---------------------------------------------------------------------------
+# 结果中心：domain 投影与候选物过滤下推（D7/D8）
+# ---------------------------------------------------------------------------
+
+
+async def _direct_task(
+    db: AsyncSession,
+    *,
+    owner: User,
+    project: Project,
+    tool: Tool,
+    domain: dict,
+    created_at: datetime | None = None,
+) -> Task:
+    task = Task(
+        user_id=owner.id,
+        project_id=project.id,
+        tool_id=tool.id,
+        tool_version_id=tool.current_version_id,
+        name="result task",
+        status="SUCCESS",
+        priority="normal",
+        progress=1.0,
+        extra_data={"project_id": str(project.id), "domain": domain},
+    )
+    if created_at is not None:
+        task.created_at = created_at
+    db.add(task)
+    await db.commit()
+    await db.refresh(task)
+    return task
+
+
+@pytest.mark.asyncio
+async def test_project_results_domain_is_kind_string(
+    db_session: AsyncSession,
+    users: dict[str, User],
+    project: Project,
+    api_client,
+):
+    """D7：列表页 domain 应输出 kind 字符串，不能把 dict 直接给前端。"""
+    tool = await _create_tool(db_session, users[OWNER])
+    await _direct_task(
+        db_session,
+        owner=users[OWNER],
+        project=project,
+        tool=tool,
+        domain={"kind": "docking", "model_ref": {"name": "vina"}},
+    )
+
+    response = await api_client.get(
+        f"/api/v1/projects/{project.id}/results", headers=_headers(OWNER)
+    )
+
+    assert response.status_code == 200
+    item = response.json()["data"]["items"][0]
+    assert item["domain"] == "docking"
+    assert item["mock"] is False
+
+
+@pytest.mark.asyncio
+async def test_candidate_results_filter_and_total_pushed_down_to_sql(
+    db_session: AsyncSession,
+    users: dict[str, User],
+    project: Project,
+    api_client,
+):
+    """D8：candidate_id 过滤与 total 必须在 SQL 层完成，不能只过滤当前页。"""
+    tool = await _create_tool(db_session, users[OWNER])
+    candidate = Candidate(
+        project_id=project.id,
+        created_by=users[OWNER].id,
+        candidate_type="PEPTIDE",
+        peptide_sequence="ACDEFG",
+        name="candidate-1",
+    )
+    db_session.add(candidate)
+    await db_session.commit()
+    await db_session.refresh(candidate)
+
+    base = utcnow()
+    matching_old = await _direct_task(
+        db_session,
+        owner=users[OWNER],
+        project=project,
+        tool=tool,
+        domain={"kind": "docking", "candidate_id": str(candidate.id)},
+        created_at=base - timedelta(seconds=30),
+    )
+    await _direct_task(
+        db_session,
+        owner=users[OWNER],
+        project=project,
+        tool=tool,
+        domain={"kind": "docking", "candidate_id": "other-candidate"},
+        created_at=base - timedelta(seconds=20),
+    )
+    matching_new = await _direct_task(
+        db_session,
+        owner=users[OWNER],
+        project=project,
+        tool=tool,
+        domain={"kind": "docking", "candidate_id": str(candidate.id)},
+        created_at=base - timedelta(seconds=10),
+    )
+
+    first = await api_client.get(
+        f"/api/v1/candidates/{candidate.id}/results",
+        params={"page": 1, "page_size": 1},
+        headers=_headers(OWNER),
+    )
+    second = await api_client.get(
+        f"/api/v1/candidates/{candidate.id}/results",
+        params={"page": 2, "page_size": 1},
+        headers=_headers(OWNER),
+    )
+
+    assert first.status_code == 200
+    first_payload = first.json()["data"]
+    assert first_payload["total"] == 2
+    assert [item["task_id"] for item in first_payload["items"]] == [matching_new.id]
+
+    assert second.status_code == 200
+    second_payload = second.json()["data"]
+    assert second_payload["total"] == 2
+    assert [item["task_id"] for item in second_payload["items"]] == [matching_old.id]

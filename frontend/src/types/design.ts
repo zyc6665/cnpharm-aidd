@@ -67,7 +67,7 @@ export interface DesignPocketSelection {
 
 /** 结果详情 + 契约里的 `mock` 标记。 */
 export interface DesignGenerationResult extends ProjectResultDetail {
-  mock?: boolean
+  mock: boolean
 }
 
 /** 解析后的表格列（`numeric` 用于限定可排序 / 可筛选的列）。 */
