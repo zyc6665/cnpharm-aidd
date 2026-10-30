@@ -54,6 +54,8 @@ export default {
     expand: '展开侧栏',
     collapse: '收起侧栏',
     totalItems: '共 {total} 条',
+    loadMore: '加载更多',
+    allLoaded: '已全部加载',
     copySuccess: '复制成功',
     required: '为必填项',
     optional: '可选',
@@ -76,7 +78,13 @@ export default {
     logout: '退出登录',
     profile: '个人中心',
     settings: '设置',
-    favorites: '收藏'
+    favorites: '收藏',
+    molecules: '分子生成',
+    peptides: '多肽设计',
+    predict: '性质预测',
+    screen: '虚拟筛选',
+    md: '分子动力学',
+    designSection: '设计工具'
   },
   command: {
     placeholder: '搜索页面、命令…',

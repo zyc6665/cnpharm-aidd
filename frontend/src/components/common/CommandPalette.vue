@@ -61,6 +61,11 @@ import {
   SettingOutlined,
   BulbOutlined,
   PlusOutlined,
+  DeploymentUnitOutlined,
+  ClusterOutlined,
+  LineChartOutlined,
+  FilterOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons-vue'
 import { useAppStore, useUserStore } from '@/stores'
 
@@ -111,6 +116,41 @@ const items = computed<PaletteItem[]>(() => {
       label: t('nav.workflow'),
       icon: ApartmentOutlined,
       action: () => router.push('/workflow'),
+      group: t('command.group.navigate'),
+    },
+    {
+      id: 'nav-molecules',
+      label: t('nav.molecules'),
+      icon: DeploymentUnitOutlined,
+      action: () => router.push('/design/molecules'),
+      group: t('command.group.navigate'),
+    },
+    {
+      id: 'nav-peptides',
+      label: t('nav.peptides'),
+      icon: ClusterOutlined,
+      action: () => router.push('/design/peptides'),
+      group: t('command.group.navigate'),
+    },
+    {
+      id: 'nav-predict',
+      label: t('nav.predict'),
+      icon: LineChartOutlined,
+      action: () => router.push('/predict'),
+      group: t('command.group.navigate'),
+    },
+    {
+      id: 'nav-screen',
+      label: t('nav.screen'),
+      icon: FilterOutlined,
+      action: () => router.push('/screen'),
+      group: t('command.group.navigate'),
+    },
+    {
+      id: 'nav-md',
+      label: t('nav.md'),
+      icon: ThunderboltOutlined,
+      action: () => router.push('/md'),
       group: t('command.group.navigate'),
     },
     {

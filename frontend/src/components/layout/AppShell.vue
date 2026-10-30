@@ -36,6 +36,22 @@
         </router-link>
       </nav>
 
+      <!-- 设计工具导航（直达页入口；移动端底部 Tab 不显示，避免项过多） -->
+      <nav class="sidebar-nav sidebar-design-nav" :aria-label="t('nav.designSection')">
+        <div v-if="!collapsed" class="sidebar-section-label">{{ t('nav.designSection') }}</div>
+        <router-link
+          v-for="item in designNav"
+          :key="item.key"
+          :to="item.to"
+          class="nav-item"
+          :class="{ active: isActive(item.active) }"
+          :aria-label="t(item.labelKey)"
+        >
+          <component :is="item.icon" class="nav-icon" />
+          <span v-if="!collapsed" class="nav-label">{{ t(item.labelKey) }}</span>
+        </router-link>
+      </nav>
+
       <!-- 分隔 -->
       <div class="sidebar-divider"></div>
 
@@ -117,6 +133,11 @@ import {
   BulbOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  DeploymentUnitOutlined,
+  ClusterOutlined,
+  LineChartOutlined,
+  FilterOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons-vue'
 import { useUserStore, useAppStore } from '@/stores'
 import ProtectedAvatar from '@/components/common/ProtectedAvatar.vue'
@@ -175,6 +196,46 @@ const mainNav: NavItem[] = [
     icon: ApartmentOutlined,
     labelKey: 'nav.workflow',
     active: ['/workflow'],
+  },
+]
+
+// 直达设计/分析页入口。这些页面此前「有路由、零入口」（docs/18 收口项），
+// 补到侧栏与命令面板，避免用户只能靠手敲 URL 进入。
+const designNav: NavItem[] = [
+  {
+    key: 'molecules',
+    to: '/design/molecules',
+    icon: DeploymentUnitOutlined,
+    labelKey: 'nav.molecules',
+    active: ['/design/molecules'],
+  },
+  {
+    key: 'peptides',
+    to: '/design/peptides',
+    icon: ClusterOutlined,
+    labelKey: 'nav.peptides',
+    active: ['/design/peptides'],
+  },
+  {
+    key: 'predict',
+    to: '/predict',
+    icon: LineChartOutlined,
+    labelKey: 'nav.predict',
+    active: ['/predict'],
+  },
+  {
+    key: 'screen',
+    to: '/screen',
+    icon: FilterOutlined,
+    labelKey: 'nav.screen',
+    active: ['/screen'],
+  },
+  {
+    key: 'md',
+    to: '/md',
+    icon: ThunderboltOutlined,
+    labelKey: 'nav.md',
+    active: ['/md'],
   },
 ]
 
@@ -332,6 +393,15 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   flex-direction: column;
   gap: 2px;
   padding: @spacing-xs;
+}
+
+.sidebar-section-label {
+  padding: @spacing-xs @spacing-sm 2px;
+  color: @text-tertiary;
+  font-size: @font-size-xs;
+  font-weight: @font-weight-semibold;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .nav-item {
@@ -500,6 +570,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   .sidebar-brand,
   .sidebar-divider,
   .sidebar-scroll .sidebar-nav[aria-label='管理导航'],
+  .sidebar-design-nav,
   .sidebar-footer {
     display: none;
   }

@@ -54,6 +54,8 @@ export default {
     expand: 'Expand sidebar',
     collapse: 'Collapse sidebar',
     totalItems: 'Total {total} items',
+    loadMore: 'Load more',
+    allLoaded: 'All loaded',
     copySuccess: 'Copied to clipboard',
     required: 'is required',
     optional: 'Optional',
@@ -76,7 +78,13 @@ export default {
     logout: 'Logout',
     profile: 'Profile',
     settings: 'Settings',
-    favorites: 'Favorites'
+    favorites: 'Favorites',
+    molecules: 'Molecule Design',
+    peptides: 'Peptide Design',
+    predict: 'Property Prediction',
+    screen: 'Virtual Screening',
+    md: 'Molecular Dynamics',
+    designSection: 'Design Tools'
   },
   command: {
     placeholder: 'Search pages, commands…',
