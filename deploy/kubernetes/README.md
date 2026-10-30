@@ -1,8 +1,8 @@
 # Kubernetes 开发环境一体化部署
 
-本套清单面向当前单节点 K3s 开发环境，一次部署 PostgreSQL、Redis、MinIO、私有 OCI Registry、持久卷、K8s Job RBAC，以及供当前本机后端连接的开发 NodePort。**平台 API 仍运行在当前开发机**；后端镜像尚未构建，因此集群 Celery Worker 保持为单独启用项，不会因默认部署产生拉取失败的 Pod。
+本套清单面向当前单节点 K3s 开发环境，一次部署 PostgreSQL、Redis、MinIO、私有 OCI Registry、持久卷、K8s Job RBAC 与默认拒绝的 NetworkPolicy。**平台 API 仍运行在当前开发机**；后端镜像尚未构建，因此集群 Celery Worker 保持为单独启用项，不会因默认部署产生拉取失败的 Pod。
 
-这是开发/联调配置，不是生产高可用方案：数据库、Redis、MinIO 和 Registry 都是单副本；Registry 使用无认证 HTTP；NodePort 仅用于受控开发网络。生产环境应另行使用 TLS、认证、备份、网络策略和高可用存储。
+这是开发/联调配置，不是生产高可用方案：数据库、Redis、MinIO 和 Registry 都是单副本。默认清单不暴露任何 NodePort，数据服务仅集群内可达，本机访问一律通过 `kubectl port-forward`；Registry 默认不暴露到宿主机，确需使用时必须先配置 basic auth。生产环境应另行使用 TLS、认证、备份、网络策略和高可用存储。
 
 ## 一次部署
 
@@ -51,53 +51,60 @@ kubectl -n sciminer-storage rollout status deployment/sciminer-registry
 kubectl get pvc -A
 ```
 
-MinIO 第一次启动后，在 `http://<K3S节点IP>:30901` 登录控制台并创建 bucket `scitool-files`。不要把 MinIO root 凭据用于平台运行任务；创建单独的 client 用户，并只授予该 bucket 所需权限。
+MinIO 第一次启动后，先在本机端口转发控制台：
+
+```bash
+kubectl -n sciminer-storage port-forward svc/sciminer-minio 9000:9000 9001:9001
+```
+
+再打开 `http://127.0.0.1:9001` 登录并创建 bucket `scitool-files`。不要把 MinIO root 凭据用于平台运行任务；创建单独的 client 用户，并只授予该 bucket 所需权限。
 
 ## 本机后端连接配置
 
-本机后端应使用 K3s 节点可达 IP，不能使用 `localhost` 或集群内部 DNS。下列端口由开发 NodePort 暴露：
+数据服务均为 ClusterIP，不在节点上开放端口。本机后端通过端口转发访问（保持以下命令在独立终端运行）：
 
-| 组件 | 地址 | 用途 |
+```bash
+kubectl -n sciminer-system port-forward svc/sciminer-postgres 5432:5432
+kubectl -n sciminer-system port-forward svc/sciminer-redis 6379:6379
+kubectl -n sciminer-storage port-forward svc/sciminer-minio 9000:9000 9001:9001
+# 仅在确需推送镜像时使用（使用前先为 Registry 配置 basic auth）：
+kubectl -n sciminer-storage port-forward svc/sciminer-registry 5000:5000
+```
+
+| 组件 | 本机地址 | 用途 |
 | --- | --- | --- |
-| PostgreSQL | `<K3S节点IP>:30432` | 本机 API 与 Worker 数据库 |
-| Redis | `<K3S节点IP>:30379` | Celery Broker、结果后端和缓存 |
-| MinIO API | `<K3S节点IP>:30900` | 本机 API 对象存储 |
-| MinIO Console | `<K3S节点IP>:30901` | 管理 bucket 和开发凭据 |
-| Registry | `<K3S节点IP>:30500` | 从构建机推送开发镜像 |
+| PostgreSQL | `127.0.0.1:5432` | 本机 API 与 Worker 数据库 |
+| Redis | `127.0.0.1:6379` | Celery Broker、结果后端和缓存 |
+| MinIO API | `127.0.0.1:9000` | 本机 API 对象存储 |
+| MinIO Console | `127.0.0.1:9001` | 管理 bucket 和开发凭据 |
+| Registry | `127.0.0.1:5000` | 仅在受控且已鉴权时推送开发镜像 |
 
 在本机 `backend/.env` 中设置（密码使用前面生成的值，MinIO 使用专用 client 凭据）：
 
 ```dotenv
-DATABASE_URL=postgresql+asyncpg://scitool:<POSTGRES_PASSWORD>@<K3S节点IP>:30432/scitool
-REDIS_HOST=<K3S节点IP>
-REDIS_PORT=30379
+DATABASE_URL=postgresql+asyncpg://scitool:<POSTGRES_PASSWORD>@127.0.0.1:5432/scitool
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
 REDIS_PASSWORD=<REDIS_PASSWORD>
-CELERY_BROKER_URL=redis://:<REDIS_PASSWORD>@<K3S节点IP>:30379/1
-CELERY_RESULT_BACKEND=redis://:<REDIS_PASSWORD>@<K3S节点IP>:30379/2
+CELERY_BROKER_URL=redis://:<REDIS_PASSWORD>@127.0.0.1:6379/1
+CELERY_RESULT_BACKEND=redis://:<REDIS_PASSWORD>@127.0.0.1:6379/2
 STORAGE_BACKEND=minio
-MINIO_ENDPOINT=<K3S节点IP>:30900
+MINIO_ENDPOINT=127.0.0.1:9000
 MINIO_ACCESS_KEY=<MINIO_CLIENT_ACCESS_KEY>
 MINIO_SECRET_KEY=<MINIO_CLIENT_SECRET_KEY>
 MINIO_BUCKET=scitool-files
 MINIO_SECURE=false
-IMAGE_REGISTRY_ENDPOINT=http://<K3S节点IP>:30500
-IMAGE_REGISTRY_IMAGE_PREFIX=<K3S节点IP>:30500/sciminer
+IMAGE_REGISTRY_ENDPOINT=http://127.0.0.1:5000
+IMAGE_REGISTRY_IMAGE_PREFIX=127.0.0.1:5000/sciminer
 ```
 
-`DATABASE_URL` 中的用户名/密码若含 URL 特殊字符需要 percent-encode。确保防火墙只允许可信开发机访问上述 NodePort，尤其不要将未认证的 Redis、PostgreSQL 或 HTTP Registry 暴露到公网。
+`DATABASE_URL` 中的用户名/密码若含 URL 特殊字符需要 percent-encode。端口转发默认只监听回环地址；不要把未认证的 Redis、PostgreSQL 或 HTTP Registry 通过防火墙或 NodePort 暴露出去。`network-policies-dev.yaml` 默认拒绝数据服务全部入站/出站，仅放行平台命名空间到 5432/6379/9000/9001/5000 及 DNS。
 
-## Registry 节点配置
+## Registry 使用边界
 
-开发 Registry 使用 HTTP，构建机推送可通过 `http://<K3S节点IP>:30500`。每台需要拉取该镜像的 K3s 节点都要在 `/etc/rancher/k3s/registries.yaml` 配置 HTTP mirror，然后重启 K3s：
+Registry 默认不在 kustomization 中暴露，且 `registry-dev.yaml` 未启用鉴权，只允许通过 `kubectl port-forward svc/sciminer-registry 5000:5000` 在本机受控使用。任何需要节点拉取镜像的场景，都必须先配置 htpasswd basic auth（见 `registry-dev.yaml` 注释）并显式增加受控的 Ingress/NodePort 与 TLS；禁止沿用无认证 HTTP 暴露。
 
-```yaml
-mirrors:
-  "<K3S节点IP>:30500":
-    endpoint:
-      - "http://<K3S节点IP>:30500"
-```
-
-重启前确认维护窗口；这会重启节点上的 K3s 服务。生产环境必须改为 HTTPS、认证和受信任证书。
+生产环境必须使用 HTTPS、认证、受信任证书与按节点配置的 `registries.yaml`。
 
 ## 集群执行 Worker
 

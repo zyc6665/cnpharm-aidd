@@ -8,8 +8,10 @@ from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.config import settings, use_direct_task_execution
 from app.cache import get_cache
@@ -119,44 +121,7 @@ async def lifespan(app: FastAPI):
     logger.info("应用关闭")
 
 
-# 创建 FastAPI 应用
-app = FastAPI(
-    title=settings.APP_NAME,
-    description="科学计算工具管理平台API",
-    version=settings.APP_VERSION,
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
-    lifespan=lifespan
-)
-
-# 先注册限流，再注册 CORS，确保限流响应仍带有 CORS 响应头。
-app.add_middleware(
-    RateLimitMiddleware,
-    cache_client=get_cache(),
-    requests_per_minute=settings.REQUEST_RATE_LIMIT_PER_MINUTE,
-    trust_proxy_headers=settings.RATE_LIMIT_TRUST_PROXY_HEADERS,
-)
-
-# 配置 CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# traceId 中间件必须**最后注册**，也就是最外层（Starlette 的 ``add_middleware`` 是
-# ``user_middleware.insert(0, ...)``，建栈时再 reverse 包一层）。这样请求路径是
-# TraceId → CORS → RateLimit → 路由：限流中间件拒掉的 429 也会经过本中间件回写
-# ``X-Request-Id``，CORS 仍然包在限流外面（上面那条注释的行为不变，只是外面又多
-# 了一层只加响应头的中间件，不影响 429 的 CORS 头）。
-app.add_middleware(TraceIdMiddleware)
-
-
 # 全局异常处理器
-@app.exception_handler(AppException)
 async def app_exception_handler(request: Request, exc: AppException):
     """处理应用异常"""
     # ``BusinessException`` 携带独立 ``http_status``（信封业务码与 HTTP 状态可不同）；
@@ -176,7 +141,6 @@ async def app_exception_handler(request: Request, exc: AppException):
     )
 
 
-@app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     """把 ``HTTPException`` 也纳入统一错误信封（计划 §3.3）。
 
@@ -203,7 +167,6 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     )
 
 
-@app.exception_handler(RequestValidationError)
 async def validation_exception_handler(
     request: Request, exc: RequestValidationError
 ):
@@ -218,7 +181,6 @@ async def validation_exception_handler(
     )
 
 
-@app.exception_handler(StandardArtifactRegistryError)
 async def standard_artifact_registry_exception_handler(
     request: Request, exc: StandardArtifactRegistryError
 ):
@@ -236,7 +198,6 @@ async def standard_artifact_registry_exception_handler(
     )
 
 
-@app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
     """处理未知异常
 
@@ -271,30 +232,151 @@ async def general_exception_handler(request: Request, exc: Exception):
     )
 
 
-# 注册API路由
-app.include_router(api_router, prefix="/api/v1")
+class ForwardedProtoHTTPSRedirectMiddleware(BaseHTTPMiddleware):
+    """生产环境强制 HTTPS，并尊重反向代理写入的 ``X-Forwarded-Proto``。
+
+    Starlette 自带的 ``HTTPSRedirectMiddleware`` 只看 ASGI scope 的 scheme；
+    在 nginx/负载均衡终止 TLS 的部署里 scope 仍是 http，会把已经加密的请求
+    反复重定向。这里优先读取代理头后再判断。
+    """
+
+    EXEMPT_PATHS = {"/health", "/api/v1/system/health"}
+
+    async def dispatch(self, request: Request, call_next):
+        if request.url.path in self.EXEMPT_PATHS:
+            return await call_next(request)
+        forwarded_proto = request.headers.get("x-forwarded-proto", "")
+        scheme = (
+            forwarded_proto.split(",", 1)[0].strip().lower()
+            if forwarded_proto
+            else request.url.scheme
+        )
+        if scheme == "https":
+            return await call_next(request)
+        return RedirectResponse(
+            url=str(request.url.replace(scheme="https")), status_code=307
+        )
 
 
-# 根路径
-@app.get("/")
-async def root():
-    """根路径"""
-    return {
-        "name": settings.APP_NAME,
-        "version": settings.APP_VERSION,
-        "docs": "/docs",
-        "status": "running"
-    }
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """统一安全响应头；HSTS 只在生产且请求已经 HTTPS 时下发。"""
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        forwarded_proto = request.headers.get("x-forwarded-proto", "")
+        scheme = (
+            forwarded_proto.split(",", 1)[0].strip().lower()
+            if forwarded_proto
+            else request.url.scheme
+        )
+        if settings.ENVIRONMENT == "production" and scheme == "https":
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+            )
+        return response
 
 
-# 健康检查
-@app.get("/health")
 async def health_check():
-    """健康检查"""
+    """进程级健康检查（保留模块级函数供既有调用方/测试使用）。"""
     return {
         "status": "healthy",
-        "version": settings.APP_VERSION
+        "version": settings.APP_VERSION,
     }
+
+
+def create_app() -> FastAPI:
+    """按当前 ``settings`` 构建 FastAPI 应用。
+
+    拆成工厂函数是为了让「生产关文档 / 开发开文档」的差异可被测试直接构造
+    验证，而不是只能靠改环境变量后重启进程。
+    """
+    docs_enabled = settings.docs_enabled
+    application = FastAPI(
+        title=settings.APP_NAME,
+        description="科学计算工具管理平台API",
+        version=settings.APP_VERSION,
+        docs_url="/docs" if docs_enabled else None,
+        redoc_url="/redoc" if docs_enabled else None,
+        openapi_url="/openapi.json" if docs_enabled else None,
+        lifespan=lifespan,
+    )
+
+    # 先注册限流，再注册 CORS，确保限流响应仍带有 CORS 响应头。
+    application.add_middleware(
+        RateLimitMiddleware,
+        cache_client=get_cache(),
+        requests_per_minute=settings.REQUEST_RATE_LIMIT_PER_MINUTE,
+        trust_proxy_headers=settings.RATE_LIMIT_TRUST_PROXY_HEADERS,
+        backend=settings.resolved_rate_limit_backend,
+        fail_mode=settings.RATE_LIMIT_FAIL_MODE,
+    )
+
+    # 配置 CORS
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.CORS_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # Host 头白名单：生产必须显式配置（config 层已拒绝 "*" 与空值）。
+    application.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=settings.ALLOWED_HOSTS,
+    )
+
+    if settings.https_redirect_enabled:
+        application.add_middleware(ForwardedProtoHTTPSRedirectMiddleware)
+
+    application.add_middleware(SecurityHeadersMiddleware)
+
+    # traceId 中间件必须**最后注册**，也就是最外层（Starlette 的 ``add_middleware`` 是
+    # ``user_middleware.insert(0, ...)``，建栈时再 reverse 包一层）。这样请求路径是
+    # TraceId → SecurityHeaders → HTTPS → TrustedHost → CORS → RateLimit → 路由：
+    # 限流中间件拒掉的 429 也会经过本中间件回写 ``X-Request-Id``，CORS 仍然包在
+    # 限流外面，不影响 429 的 CORS 头。
+    application.add_middleware(TraceIdMiddleware)
+
+    application.add_exception_handler(AppException, app_exception_handler)
+    application.add_exception_handler(
+        StarletteHTTPException, http_exception_handler
+    )
+    application.add_exception_handler(
+        RequestValidationError, validation_exception_handler
+    )
+    application.add_exception_handler(
+        StandardArtifactRegistryError, standard_artifact_registry_exception_handler
+    )
+    application.add_exception_handler(Exception, general_exception_handler)
+
+    # 注册API路由
+    application.include_router(api_router, prefix="/api/v1")
+
+    # 根路径
+    @application.get("/")
+    async def root():
+        """根路径"""
+        payload = {
+            "name": settings.APP_NAME,
+            "version": settings.APP_VERSION,
+            "status": "running",
+        }
+        if settings.docs_enabled:
+            payload["docs"] = "/docs"
+        return payload
+
+    # 健康检查
+    @application.get("/health")
+    async def health_check_endpoint():
+        """健康检查"""
+        return await health_check()
+
+    return application
+
+
+app = create_app()
 
 
 if __name__ == "__main__":

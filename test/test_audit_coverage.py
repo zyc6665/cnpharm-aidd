@@ -200,7 +200,7 @@ async def test_admin_user_crud_emits_audit(
 ):
     created = await api_client.post(
         "/api/v1/users/admin",
-        json={"username": "newbie", "email": "newbie@example.com", "password": "Secret123", "role": "user"},
+        json={"username": "newbie", "email": "newbie@example.com", "password": "NewbiePassw0rd!2026", "role": "user"},
         headers={"Authorization": "Bearer admin"},
     )
     assert created.status_code == 201

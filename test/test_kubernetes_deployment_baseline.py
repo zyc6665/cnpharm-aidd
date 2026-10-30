@@ -99,21 +99,20 @@ def test_dev_minio_uses_secret_credentials_and_persistent_storage():
     assert {port["port"] for port in service["spec"]["ports"]} == {9000, 9001}
 
 
-def test_dev_registry_nodeport_is_explicit_and_fixed():
+def test_dev_registry_exposure_is_disabled_by_default():
+    """Registry 不应默认通过 NodePort 暴露；仅保留 ClusterIP 供 port-forward。"""
     service = _resource(
         "registry-dev-nodeport.yaml",
         "Service",
         "sciminer-registry-nodeport",
     )
-    assert service["spec"]["type"] == "NodePort"
-    assert service["spec"]["ports"] == [
-        {
-            "name": "registry",
-            "port": 5000,
-            "targetPort": "registry",
-            "nodePort": 30500,
-        }
-    ]
+    assert service["spec"]["type"] == "ClusterIP"
+    assert all("nodePort" not in port for port in service["spec"]["ports"])
+
+    kustomization = yaml.safe_load(
+        (DEPLOY_ROOT / "kustomization.yaml").read_text(encoding="utf-8")
+    )
+    assert "registry-dev-nodeport.yaml" not in kustomization["resources"]
 
 
 def test_smoke_image_writes_standard_result_manifest():
@@ -150,6 +149,7 @@ def test_execution_worker_example_is_explicit_and_k8s_only():
         "ENVIRONMENT": "production",
         "DEBUG": "false",
         "CORS_ORIGINS": '["https://sciminer.example.invalid"]',
+        "ALLOWED_HOSTS": '["sciminer.example.invalid"]',
         "CACHE_BACKEND": "redis",
         "REDIS_HOST": "sciminer-redis.sciminer-system.svc.cluster.local",
         "REDIS_PORT": "6379",
@@ -157,7 +157,7 @@ def test_execution_worker_example_is_explicit_and_k8s_only():
         "STORAGE_BACKEND": "minio",
         "MINIO_ENDPOINT": "sciminer-minio.sciminer-storage.svc.cluster.local:9000",
         "MINIO_BUCKET": "scitool-files",
-        "MINIO_SECURE": "false",
+        "MINIO_SECURE": "true",
         "TASK_EXECUTION_BACKEND": "celery",
         "EXECUTOR_ENABLED_K8S": "true",
         "EXECUTOR_ENABLED_SSH": "true",
@@ -169,7 +169,7 @@ def test_execution_worker_example_is_explicit_and_k8s_only():
         "K8S_ADAPTER_API_SERVER": "https://kubernetes.default.svc",
         "K8S_ADAPTER_REQUEST_TIMEOUT_SECONDS": "30",
         "K8S_ADAPTER_OBJECT_STORAGE_ENDPOINT": (
-            "http://sciminer-minio.sciminer-storage.svc.cluster.local:9000"
+            "https://sciminer-minio.sciminer-storage.svc.cluster.local:9000"
         ),
         "K8S_ADAPTER_OBJECT_STORAGE_BUCKET": "scitool-files",
         "K8S_ADAPTER_OBJECT_STORAGE_SECRET_REF": "sciminer-minio-client",
@@ -284,10 +284,10 @@ def test_dev_data_services_are_pinned_and_host_reachable():
         "Service",
         "sciminer-redis",
     )
-    assert postgres_service["spec"]["type"] == "NodePort"
-    assert redis_service["spec"]["type"] == "NodePort"
-    assert postgres_service["spec"]["ports"][0]["nodePort"] == 30432
-    assert redis_service["spec"]["ports"][0]["nodePort"] == 30379
+    assert postgres_service["spec"]["type"] == "ClusterIP"
+    assert redis_service["spec"]["type"] == "ClusterIP"
+    assert all("nodePort" not in port for port in postgres_service["spec"]["ports"])
+    assert all("nodePort" not in port for port in redis_service["spec"]["ports"])
 
     for filename, deployment_name in (
         ("data-services-dev.yaml", "sciminer-postgres"),
@@ -310,9 +310,8 @@ def test_default_kustomization_contains_the_complete_hybrid_dev_infrastructure()
         "execution-rbac.yaml",
         "data-services-dev.yaml",
         "minio-dev.yaml",
-        "minio-dev-nodeport.yaml",
         "registry-dev.yaml",
-        "registry-dev-nodeport.yaml",
+        "network-policies-dev.yaml",
     }
     for resource in kustomization["resources"]:
         assert (DEPLOY_ROOT / resource).is_file()
@@ -327,3 +326,58 @@ def test_hybrid_deployment_guide_documents_the_single_apply_entrypoint():
         assert component in readme
     assert "平台 API 仍运行在当前开发机" in readme
     assert "execution-worker.example.yaml" in readme
+
+
+def test_dev_workloads_run_non_root_and_drop_capabilities():
+    """数据面工作负载必须具备基础 Pod/容器安全上下文。"""
+    targets = (
+        ("data-services-dev.yaml", "sciminer-postgres"),
+        ("data-services-dev.yaml", "sciminer-redis"),
+        ("minio-dev.yaml", "sciminer-minio"),
+        ("registry-dev.yaml", "sciminer-registry"),
+    )
+    for filename, name in targets:
+        deployment = _resource(filename, "Deployment", name)
+        pod_spec = deployment["spec"]["template"]["spec"]
+        pod_security = pod_spec["securityContext"]
+        assert pod_security["runAsNonRoot"] is True
+        assert pod_security["seccompProfile"]["type"] == "RuntimeDefault"
+        container_security = pod_spec["containers"][0]["securityContext"]
+        assert container_security["runAsNonRoot"] is True
+        assert container_security["allowPrivilegeEscalation"] is False
+        assert container_security["capabilities"]["drop"] == ["ALL"]
+
+
+def test_dev_network_policies_default_deny_and_allow_only_required_ports():
+    """开发数据面必须有默认拒绝策略，且只放行必要端口。"""
+    policies = _resources("network-policies-dev.yaml")
+    by_name = {}
+    for policy in policies:
+        assert policy["kind"] == "NetworkPolicy"
+        assert policy["spec"]["podSelector"]
+        by_name.setdefault(policy["metadata"]["name"], []).append(policy)
+
+    for name in (
+        "sciminer-default-deny-data",
+        "sciminer-default-deny-storage",
+        "sciminer-allow-data-ingress",
+        "sciminer-allow-storage-ingress",
+        "sciminer-allow-dns-egress",
+    ):
+        assert name in by_name
+
+    for policy in by_name["sciminer-default-deny-data"] + by_name[
+        "sciminer-default-deny-storage"
+    ]:
+        assert set(policy["spec"]["policyTypes"]) == {"Ingress", "Egress"}
+        assert "ingress" not in policy["spec"]
+        assert "egress" not in policy["spec"]
+
+    allowed_ports = {
+        port["port"]
+        for name in ("sciminer-allow-data-ingress", "sciminer-allow-storage-ingress")
+        for policy in by_name[name]
+        for rule in policy["spec"]["ingress"]
+        for port in rule["ports"]
+    }
+    assert allowed_ports <= {5432, 6379, 9000, 9001, 5000}

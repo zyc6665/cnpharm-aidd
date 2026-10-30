@@ -35,6 +35,7 @@ def _production_runtime_settings(environment: str) -> dict[str, object]:
         "CELERY_RESULT_BACKEND": "redis://:redis-password@redis:6379/2",
         "TASK_EXECUTION_BACKEND": "celery",
         "COOKIE_SECURE": True,
+        "ALLOWED_HOSTS": ["sciminer.example.com"],
     }
 
 
@@ -579,3 +580,48 @@ class TestSettingsEncryptionKey:
         """开发环境保留缺失配置加密密钥的兼容行为。"""
         settings = Settings(ENVIRONMENT="development", SETTINGS_ENCRYPTION_KEY=None)
         assert settings.SETTINGS_ENCRYPTION_KEY is None
+
+
+class TestDeploymentHardeningSettings:
+    """P2 配置加固：主机白名单、文档开关、限流后端与失败模式。"""
+
+    def _base(self, **overrides):
+        kwargs = {
+            "ENVIRONMENT": "production",
+            "DEBUG": False,
+            "CORS_ORIGINS": ["https://sciminer.example.com"],
+            "JWT_SECRET_KEY": "j" * 32,
+            "SETTINGS_ENCRYPTION_KEY": "e" * 32,
+            **_production_runtime_settings("production"),
+        }
+        kwargs.update(overrides)
+        return kwargs
+
+    def test_production_rejects_wildcard_or_missing_allowed_hosts(self):
+        for hosts in (["*"], [], ["  "]):
+            with pytest.raises(ValueError, match="ALLOWED_HOSTS"):
+                Settings(**self._base(ALLOWED_HOSTS=hosts))
+
+    def test_production_rejects_memory_rate_limit_backend(self):
+        with pytest.raises(ValueError, match="RATE_LIMIT_BACKEND"):
+            Settings(**self._base(RATE_LIMIT_BACKEND="memory"))
+
+    def test_production_rejects_fail_open_rate_limit(self):
+        with pytest.raises(ValueError, match="RATE_LIMIT_FAIL_MODE"):
+            Settings(**self._base(RATE_LIMIT_FAIL_MODE="open"))
+
+    def test_development_defaults_are_safe_and_overridable(self):
+        dev = Settings(ENVIRONMENT="development")
+        assert dev.docs_enabled is True
+        assert dev.resolved_rate_limit_backend == "memory"
+        assert dev.RATE_LIMIT_FAIL_MODE == "closed"
+
+        explicit = Settings(
+            ENVIRONMENT="development",
+            ENABLE_DOCS=False,
+            RATE_LIMIT_BACKEND="redis",
+            RATE_LIMIT_FAIL_MODE="open",
+        )
+        assert explicit.docs_enabled is False
+        assert explicit.resolved_rate_limit_backend == "redis"
+        assert explicit.RATE_LIMIT_FAIL_MODE == "open"

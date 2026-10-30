@@ -5,6 +5,8 @@ resources:
   - execution-rbac.yaml
   - data-services-dev.yaml
   - minio-dev.yaml
-  - minio-dev-nodeport.yaml
   - registry-dev.yaml
-  - registry-dev-nodeport.yaml
+  - network-policies-dev.yaml
+# 不再默认启用任何 NodePort 暴露入口：
+#   - minio-dev-nodeport.yaml / registry-dev-nodeport.yaml 仅作历史兼容文件保留，
+#     默认不 apply；从宿主访问请使用 kubectl port-forward。
