@@ -6,6 +6,7 @@ import os
 import platform
 import psutil
 import asyncio
+import shutil
 from pathlib import Path
 from typing import Optional, List
 from fastapi import APIRouter, Depends
@@ -191,17 +192,21 @@ class ResourceQuotaStatusResponse(BaseModel):
 
 # ==================== 健康检查 ====================
 
+# 对外健康检查只返回粗粒度状态，绝不回显异常原文、绝对路径、Bucket 名、
+# 执行器类型或 Celery 拓扑等内部细节；详细原因通过日志/管理员 /info 查看。
+_PUBLIC_SERVICE_MESSAGES = {
+    "healthy": "ok",
+    "degraded": "degraded",
+    "unhealthy": "unhealthy",
+    "unknown": "unknown",
+}
 
-@router.get("/health", summary="系统健康检查")
-async def health_check(db: AsyncSession = Depends(get_db)):
-    """
-    检查系统各组件的健康状态
 
-    返回：
-    - status: healthy（所有服务正常）、degraded（部分服务异常）、unhealthy（核心服务异常）
-    - services: 各服务的详细状态
-    """
-    services = []
+async def _collect_health_status(
+    db: AsyncSession,
+) -> tuple[str, List[ServiceStatus]]:
+    """运行内部健康检查，返回总体状态与含详细 message 的服务列表。"""
+    services: List[ServiceStatus] = []
     overall_status = "healthy"
 
     # 1. 检查数据库
@@ -245,13 +250,52 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         if celery_status.status != "healthy" and overall_status == "healthy":
             overall_status = "degraded"
 
+    return overall_status, services
+
+
+def _sanitize_service_status(service: ServiceStatus) -> ServiceStatus:
+    """把内部服务状态转换成对外可安全披露的粗粒度状态。"""
+    return ServiceStatus(
+        name=service.name,
+        status=service.status,
+        latency_ms=service.latency_ms,
+        message=_PUBLIC_SERVICE_MESSAGES.get(service.status, "unknown"),
+    )
+
+
+@router.get("/health", summary="系统健康检查")
+async def health_check(db: AsyncSession = Depends(get_db)):
+    """
+    检查系统各组件的健康状态
+
+    返回：
+    - status: healthy（所有服务正常）、degraded（部分服务异常）、unhealthy（核心服务异常）
+    - services: 各服务的粗粒度状态（不包含内部实现细节）
+
+    完整的诊断信息（异常原文、路径、Bucket、执行器拓扑等）只通过日志和
+    管理员端点 GET /system/info 提供。
+    """
+    overall_status, services = await _collect_health_status(db)
+
+    if overall_status != "healthy":
+        logger.warning(
+            "系统健康检查结果=%s，异常服务: %s",
+            overall_status,
+            "; ".join(
+                f"{service.name}={service.status}: {service.message}"
+                for service in services
+                if service.status != "healthy"
+            ),
+        )
+
     return success_response(
         HealthResponse(
             status=overall_status,
             version=settings.APP_VERSION,
-            environment=settings.ENVIRONMENT,
+            # 匿名探针无需感知部署环境，统一脱敏为固定值
+            environment="hidden",
             timestamp=utcnow().isoformat(),
-            services=services,
+            services=[_sanitize_service_status(service) for service in services],
         ).model_dump()
     )
 
@@ -508,7 +552,10 @@ async def _check_tool_package_runtime(db: AsyncSession) -> ServiceStatus:
 
 
 @router.get("/info", response_model=dict, summary="获取系统信息")
-async def get_system_info(admin_user: User = Depends(get_admin_user)):
+async def get_system_info(
+    admin_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
     """
     获取系统详细信息（仅管理员可访问）
 
@@ -516,10 +563,14 @@ async def get_system_info(admin_user: User = Depends(get_admin_user)):
     - 应用配置信息
     - 运行时环境信息
     - 系统资源使用情况
+    - 各组件健康检查的完整诊断信息（异常原文/路径/Bucket/执行器拓扑等），
+      这些细节不对外暴露，只在此管理员端点提供
     """
-    # 系统资源
+    # 系统资源（psutil.disk_usage 在部分 Windows/Python 组合上对 "/" 会报
+    # SystemError，改用标准库 shutil 获取磁盘占用，行为一致且跨平台稳定）
     memory = psutil.virtual_memory()
-    disk = psutil.disk_usage("/")
+    disk = shutil.disk_usage(os.path.abspath(os.sep))
+    disk_percent = round(disk.used / disk.total * 100, 2) if disk.total else 0
 
     # 数据库类型
     if "sqlite" in settings.DATABASE_URL:
@@ -532,28 +583,34 @@ async def get_system_info(admin_user: User = Depends(get_admin_user)):
     # 任务队列
     task_queue = "Celery" if use_async_tasks() else "Sync (开发模式)"
 
-    return success_response(
-        data=SystemInfoResponse(
-            app_name=settings.APP_NAME,
-            app_version=settings.APP_VERSION,
-            environment=settings.ENVIRONMENT,
-            debug=settings.DEBUG,
-            python_version=platform.python_version(),
-            platform=f"{platform.system()} {platform.release()}",
-            hostname=platform.node(),
-            database_type=db_type,
-            storage_backend=settings.STORAGE_BACKEND,
-            cache_backend=settings.CACHE_BACKEND,
-            task_queue=task_queue,
-            cpu_count=psutil.cpu_count(),
-            memory_total_gb=round(memory.total / (1024**3), 2),
-            memory_available_gb=round(memory.available / (1024**3), 2),
-            memory_percent=memory.percent,
-            disk_total_gb=round(disk.total / (1024**3), 2),
-            disk_free_gb=round(disk.free / (1024**3), 2),
-            disk_percent=disk.percent,
-        ).model_dump()
-    )
+    health_status, health_services = await _collect_health_status(db)
+
+    payload = SystemInfoResponse(
+        app_name=settings.APP_NAME,
+        app_version=settings.APP_VERSION,
+        environment=settings.ENVIRONMENT,
+        debug=settings.DEBUG,
+        python_version=platform.python_version(),
+        platform=f"{platform.system()} {platform.release()}",
+        hostname=platform.node(),
+        database_type=db_type,
+        storage_backend=settings.STORAGE_BACKEND,
+        cache_backend=settings.CACHE_BACKEND,
+        task_queue=task_queue,
+        cpu_count=psutil.cpu_count(),
+        memory_total_gb=round(memory.total / (1024**3), 2),
+        memory_available_gb=round(memory.available / (1024**3), 2),
+        memory_percent=memory.percent,
+        disk_total_gb=round(disk.total / (1024**3), 2),
+        disk_free_gb=round(disk.free / (1024**3), 2),
+        disk_percent=disk_percent,
+    ).model_dump()
+    payload["health"] = {
+        "status": health_status,
+        "timestamp": utcnow().isoformat(),
+        "services": [service.model_dump() for service in health_services],
+    }
+    return success_response(data=payload)
 
 
 # ==================== 系统统计 ====================

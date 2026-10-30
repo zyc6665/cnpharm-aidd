@@ -21,6 +21,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     EXEMPT_PATHS = {
         "/health",
+        # 容器/K8s 探针高频调用，且响应已脱敏，不能被限流误伤（否则探针 429 会触发重启）
         "/api/v1/system/health",
         "/docs",
         "/redoc",
