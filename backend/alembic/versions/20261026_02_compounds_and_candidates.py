@@ -22,6 +22,13 @@ M1「研发项目与数据管理」与 M3「AI 分子与多肽设计」的数据
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects.postgresql import JSONB
+
+
+def _json_column_type():
+    """PG 用 ``jsonb``（GIN 需要 jsonb 的操作符类），SQLite 用 JSON。"""
+
+    return sa.JSON().with_variant(JSONB, "postgresql")
 
 
 revision = "20261026_02"
@@ -86,7 +93,7 @@ def upgrade() -> None:
             sa.Column("source", sa.String(32), nullable=False, server_default="DESIGN"),
             sa.Column("design_score", sa.Numeric(10, 4)),
             sa.Column("task_id", sa.String(36)),
-            sa.Column("attrs", sa.JSON(), nullable=False),
+            sa.Column("attrs", _json_column_type(), nullable=False),
             sa.Column("created_at", sa.DateTime(), nullable=False),
             sa.Column("updated_at", sa.DateTime(), nullable=False),
             sa.CheckConstraint(

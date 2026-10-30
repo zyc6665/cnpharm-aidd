@@ -29,6 +29,9 @@ REQUIRED_COMPOSITE_INDEXES: dict[str, tuple[str, list[str]]] = {
     ),
     "ix_tasks_queued_updated": ("tasks", ["updated_at"]),
     "ix_tasks_status_finished": ("tasks", ["status", "finished_at"]),
+    # 游标翻页的排序键。缺了它，不带筛选的任务列表游标翻页在 PostgreSQL 上会退化
+    # 成 Parallel Seq Scan（20 万行实测 21ms），上了游标等于白上。
+    "ix_tasks_created_at_id": ("tasks", ["created_at", "id"]),
     "ix_task_logs_task_timestamp": ("task_logs", ["task_id", "timestamp"]),
     "ix_artifacts_project_type_updated": (
         "artifacts",

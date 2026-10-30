@@ -239,9 +239,12 @@ def _backfill_execution_task_id() -> None:
         # 目标行，也就没有可回填的合法值，跳过即可。
         return
     if _dialect() == "postgresql":
+        # ``?`` 是 **jsonb** 的运算符，``json`` 上没有它（报
+        # ``operator does not exist: json ? unknown``）。``request_snapshot`` 是
+        # ``sa.JSON`` → PG 上是 ``json``，所以必须先转 jsonb。
         op.execute(
             "UPDATE execution_records SET task_id = request_snapshot->>'task_id' "
-            "WHERE task_id IS NULL AND request_snapshot ? 'task_id' "
+            "WHERE task_id IS NULL AND (request_snapshot::jsonb) ? 'task_id' "
             "AND EXISTS (SELECT 1 FROM tasks t WHERE t.id = request_snapshot->>'task_id')"
         )
         return

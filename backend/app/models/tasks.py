@@ -62,6 +62,11 @@ class Task(Base, UUIDMixin, TimestampMixin):
         Index("ix_tasks_project_status_created", "project_id", "status", "created_at"),
         # 任务列表：user_id + status + ORDER BY created_at DESC。
         Index("ix_tasks_user_status_created", "user_id", "status", "created_at"),
+        # 游标（keyset）翻页的排序键：``(created_at, id) < (?, ?)``。没有以
+        # ``created_at`` 打头的索引时，**不带筛选**的任务列表游标翻页在 PostgreSQL
+        # 上会退化成 Parallel Seq Scan（20 万行实测 21ms，和展开成 ``OR`` 一样慢）。
+        # SQLite 建普通升序即可（其 DESC 反向扫描天然把 NULL 放最后）。
+        Index("ix_tasks_created_at_id", "created_at", "id"),
         # 调度侧按状态 + 完成时间检索（超时扫描 / 状态巡检）。
         Index("ix_tasks_status_finished", "status", "finished_at"),
         # 仅 QUEUED 任务按 updated_at 排序的调度队列；只索引排队中的行，其余状态不进索引。

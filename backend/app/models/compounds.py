@@ -34,6 +34,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 
 from app.common.time import utcnow
 from app.database.base import Base, TimestampMixin, UUIDMixin
@@ -110,9 +111,12 @@ class Candidate(Base, UUIDMixin, TimestampMixin):
     #: 产出该候选物的任务；与 ``protein_structures.task_id`` 同样只存字符串不建外键，
     #: 任务有独立归档与清理策略（docs/04 §9.1）。
     task_id = Column(String(36), nullable=True, index=True)
-    #: 设计条件、修饰、自定义属性（docs/04 §7.2 要求 GIN 索引，PostgreSQL 侧由迁移
-    #: 单独创建；SQLite 无 GIN，迁移里跳过）。
-    attrs = Column(JSON, nullable=False, default=dict)
+    #: 设计条件、修饰、自定义属性（docs/04 §7.2 要求 GIN 索引）。
+    #: PostgreSQL 侧必须是 ``jsonb``：``json`` 没有 GIN 的默认操作符类，
+    #: ``CREATE INDEX ... USING gin (json_col)`` 会直接报
+    #: 「data type json has no default operator class for access method "gin"」，
+    #: 整个迁移链在空库上跑不完。SQLite 侧仍是 JSON（``with_variant`` 只在 PG 生效）。
+    attrs = Column(JSON().with_variant(JSONB, "postgresql"), nullable=False, default=dict)
 
 
 class CandidateSet(Base, UUIDMixin, TimestampMixin):
