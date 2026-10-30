@@ -799,19 +799,44 @@ class SimilarityHit:
 
 
 async def search_similar(
-    db: AsyncSession, *, smiles: str, limit: int = 20, threshold: float = 0.0
+    db: AsyncSession,
+    *,
+    smiles: str,
+    user: User,
+    limit: int = 20,
+    threshold: float = 0.0,
 ) -> list[SimilarityHit]:
-    """Tanimoto similarity search over the whole compound table (docs/04 §5.7).
+    """Tanimoto similarity search over the caller-visible compound subset (docs/04 §5.7).
 
-    一期是全表扫描 + 应用内 Tanimoto：2 万条 × 2048bit ≈ 5MB 内存，全扫 <200ms。
-    超过 ``MAX_PROJECT_CANDIDATES`` 量级必须换专用索引或外部检索服务（二期）。
+    化合物是全平台去重主数据（``compounds`` 没有 ``project_id``），因此相似性检索
+    不能全表放行——否则任意登录用户都能枚举全平台分子，造成跨租户泄露。可见性口径
+    与 :func:`require_compound_read_access` 完全一致：只返回「被当前用户以
+    ``READ_ROLES`` 身份所属项目的候选物 ``Candidate`` 引用」的化合物；管理员
+    （``role == "admin"``）旁路返回全量。
+
+    可见性过滤在 SQL 层用 ``Compound.id IN (子查询)`` 下推，**不会**先把全表捞到
+    Python 再过滤。一期检索本身仍是应用内 Tanimoto（2 万条 × 2048bit ≈ 5MB，全扫
+    <200ms），过滤只收窄候选行。超过 ``MAX_PROJECT_CANDIDATES`` 量级必须换专用索引
+    或外部检索服务（二期）。
     """
     query_payload = fingerprints_of(smiles)
-    result = await db.execute(
+    stmt = (
         select(Compound, MoleculeFingerprint)
         .join(MoleculeFingerprint, MoleculeFingerprint.compound_id == Compound.id)
         .where(MoleculeFingerprint.fp_ecfp4.is_not(None))
     )
+    if getattr(user, "role", None) != UserRole.ADMIN.value:
+        visible_compound_ids = (
+            select(Candidate.compound_id)
+            .join(ProjectMember, ProjectMember.project_id == Candidate.project_id)
+            .where(
+                ProjectMember.user_id == user.id,
+                ProjectMember.role.in_(READ_ROLES),
+                Candidate.compound_id.is_not(None),
+            )
+        )
+        stmt = stmt.where(Compound.id.in_(visible_compound_ids))
+    result = await db.execute(stmt)
     hits: list[SimilarityHit] = []
     for compound, fingerprint in result.all():
         if not fingerprint.fp_ecfp4:

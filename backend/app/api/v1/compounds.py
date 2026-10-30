@@ -370,9 +370,12 @@ async def search_compounds_by_similarity(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """按 ECFP4 Tanimoto 检索相似分子（docs/04 §5.7 一期全表扫描实现）。"""
+    """按 ECFP4 Tanimoto 检索相似分子（docs/04 §5.7 一期实现）。
+
+    只返回当前用户可见的化合物（其所属项目的候选物引用到的分子）；管理员返回全量。
+    """
     hits = await domain_compounds.search_similar(
-        db, smiles=data.smiles, limit=limit, threshold=threshold
+        db, smiles=data.smiles, user=current_user, limit=limit, threshold=threshold
     )
     return success_response(
         data={
