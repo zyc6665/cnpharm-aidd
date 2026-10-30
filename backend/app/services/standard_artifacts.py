@@ -27,6 +27,7 @@ from app.models.files import File as FileModel, FileSourceType
 from app.models.tasks import Task
 from app.common.task_context import task_project_id
 from app.files.writer import store_file_path
+from app.services.artifact_identity import resolve_identity_full
 from app.services.artifact_writer import (
     ArtifactSource,
     attach_version_files,
@@ -225,13 +226,19 @@ async def _persist_artifact(
     # Artifact 是逻辑资产的「身份」，版本才是每次运行的记录。走统一写入点按稳定标识
     # 取或建，避免同一任务重试/重放时每次都新建一个资产根。按 name 参与身份判据，
     # 因为一次运行可能产出多个同类型、不同名字的资产（如多个配体）。
+    # 三列身份统一由解析器给出，标准产物三列都收敛到标准 type，版本只走 standard_version。
+    resolved_type, resolved_semantic, resolved_standard, resolved_version = resolve_identity_full(
+        standard_ref.type,
+        standard_type=standard_ref.type,
+        standard_version=standard_ref.version,
+    )
     artifact_record, _artifact_created = await upsert_artifact(
         db,
         project_id=project_id,
-        artifact_type=standard_ref.type,
-        semantic_type=standard_ref.type,
-        standard_type=standard_ref.type,
-        standard_version=standard_ref.version,
+        artifact_type=resolved_type,
+        semantic_type=resolved_semantic,
+        standard_type=resolved_standard,
+        standard_version=resolved_version,
         name=artifact.name or _artifact_ref_key(artifact),
         created_by=user_id,
         match_name=True,

@@ -31,6 +31,14 @@ class Artifact(Base, UUIDMixin, TimestampMixin):
             ASSET_ARTIFACT_TYPE_CHECK_SQL,
             name="ck_artifacts_artifact_type_asset_enum",
         ),
+        # 三列身份不变量（DB 层）：standard_type 只能为 NULL（非标准产物）或等于
+        # artifact_type（标准产物）。semantic_type == artifact_type 由服务层统一解析器
+        # 保证而不落成 CHECK——存量的历史行/测试夹具合法地用 ``type@vN`` 表达版本，
+        # 硬 CHECK 会拒绝这些行（数据事实见 app/services/artifact_identity.py 文档）。
+        CheckConstraint(
+            "standard_type IS NULL OR standard_type = artifact_type",
+            name="ck_artifacts_standard_type_matches_artifact",
+        ),
         # 项目资产列表：project_id + artifact_type 过滤、按 updated_at 倒序翻页。
         Index(
             "ix_artifacts_project_type_updated",
@@ -38,6 +46,9 @@ class Artifact(Base, UUIDMixin, TimestampMixin):
             "artifact_type",
             "updated_at",
         ),
+        # 产物列表游标（keyset）翻页的排序键：(created_at DESC, id DESC) 全序。
+        # 刻意不用 updated_at——它不是只增的，深页会漏行/重复。
+        Index("ix_artifacts_project_created_id", "project_id", "created_at", "id"),
     )
 
     project_id = Column(String(36), ForeignKey("projects.id"), nullable=False)

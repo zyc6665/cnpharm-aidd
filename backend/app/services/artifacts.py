@@ -26,6 +26,7 @@ from app.models.artifacts import (
 from app.models.files import File as FileModel, FileSourceType
 from app.models.projects import Project
 from app.models.users import User
+from app.services.artifact_identity import resolve_identity_full
 from app.services.artifact_writer import upsert_version
 
 
@@ -96,6 +97,15 @@ async def create_artifact(
     description: str | None = None,
     expires_at=None,
 ) -> Artifact:
+    # One identity resolver for the three columns; the upload form hands over raw
+    # labels (semantic_type may even be a sub-label like "generic_file") and the
+    # resolver decides the canonical triple before dedup and insert.
+    artifact_type, semantic_type, standard_type, standard_version = resolve_identity_full(
+        artifact_type,
+        semantic_type=semantic_type,
+        standard_type=standard_type,
+        standard_version=standard_version,
+    )
     digest = hashlib.sha256(content).hexdigest()
     duplicate = await _existing_project_content(
         db,

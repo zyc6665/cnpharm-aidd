@@ -25,6 +25,7 @@ from app.models.artifacts import (
     ArtifactVersionFile,
 )
 from app.models.traceability import TaskInputSnapshot
+from app.services.artifact_identity import resolve_identity_full
 
 
 MAX_VERSION_RETRIES = 3
@@ -257,6 +258,14 @@ async def upsert_artifact(
 
     Returns ``(artifact, created)``.
     """
+    # Single source of truth for the three identity columns (and the version carrier):
+    # every caller hands over raw labels, the resolver decides the canonical triple.
+    artifact_type, semantic_type, standard_type, standard_version = resolve_identity_full(
+        artifact_type,
+        semantic_type=semantic_type,
+        standard_type=standard_type,
+        standard_version=standard_version,
+    )
     statement = select(Artifact).where(
         Artifact.project_id == project_id,
         Artifact.artifact_type == artifact_type,

@@ -10,6 +10,7 @@ from app.files.writer import store_file_bytes
 from app.models.files import File as FileModel
 from app.models.tools import Tool, ToolVersion
 from app.models.users import User
+from app.services.artifact_identity import resolve_identity_full
 from app.services.artifact_writer import (
     attach_version_files,
     upsert_artifact,
@@ -59,15 +60,23 @@ async def materialize_standard_input_uploads(
     for plan in plans:
         if not plan.uploaded_file.project_id:
             plan.uploaded_file.project_id = project_id
+        # 标准直传输入同样是标准产物：三列身份交给统一解析器，版本只走 standard_version。
+        resolved_type, resolved_semantic, resolved_standard, resolved_version = (
+            resolve_identity_full(
+                plan.standard_ref.type,
+                standard_type=plan.standard_ref.type,
+                standard_version=plan.standard_ref.version,
+            )
+        )
         artifact, _artifact_created = await upsert_artifact(
             db,
             project_id=project_id,
-            artifact_type=plan.standard_ref.type,
-            semantic_type=plan.standard_ref.type,
+            artifact_type=resolved_type,
+            semantic_type=resolved_semantic,
             name=f"{plan.slot_name}: {plan.uploaded_file.filename}",
             description="由工具详情页标准 Artifact 直传输入自动创建。",
-            standard_type=plan.standard_ref.type,
-            standard_version=plan.standard_ref.version,
+            standard_type=resolved_standard,
+            standard_version=resolved_version,
             created_by=str(current_user.id),
         )
         role_files = await _build_role_files(
