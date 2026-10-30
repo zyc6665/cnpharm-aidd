@@ -164,14 +164,14 @@ async def test_login_failure_and_success_emit_audit(
 ):
     failed = await api_client.post(
         "/api/v1/auth/login",
-        json={"email": "member@example.com", "password": "wrong-secret"},
+        json={"username": "member", "password": "wrong-secret"},
     )
     assert failed.status_code == 401
     assert any(e.action == AuditAction.LOGIN_FAILED for e in captured_events)
 
     ok = await api_client.post(
         "/api/v1/auth/login",
-        json={"email": "member@example.com", "password": "Secret123"},
+        json={"username": "member", "password": "Secret123"},
     )
     assert ok.status_code == 200
     await _assert_audit_row(db_session, captured_events, AuditAction.LOGIN_FAILED)
@@ -200,7 +200,7 @@ async def test_admin_user_crud_emits_audit(
 ):
     created = await api_client.post(
         "/api/v1/users/admin",
-        json={"email": "newbie@example.com", "password": "Secret123", "role": "user"},
+        json={"username": "newbie", "email": "newbie@example.com", "password": "Secret123", "role": "user"},
         headers={"Authorization": "Bearer admin"},
     )
     assert created.status_code == 201

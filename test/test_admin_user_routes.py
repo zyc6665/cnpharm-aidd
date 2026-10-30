@@ -246,6 +246,7 @@ async def test_admin_create_user_creates_hashed_password(
     response = await api_client.post(
         "/api/v1/users/admin",
         json={
+            "username": "created",
             "email": "created@example.com",
             "display_name": "Created User",
             "password": "CreatedSecret123",

@@ -37,10 +37,18 @@ class ProjectUpdate(BaseModel):
 
 
 class ProjectMemberCreate(BaseModel):
-    email: EmailStr
+    # 优先用 username（企业内网主标识）；email 仅为向后兼容保留。
+    username: str | None = Field(default=None, min_length=1, max_length=64)
+    email: EmailStr | None = None
     role: Literal["editor", "runner", "viewer"]
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def require_identifier(self):
+        if not self.username and not self.email:
+            raise ValueError("username 与 email 至少提供一个")
+        return self
 
 
 class ProjectMemberUpdate(BaseModel):

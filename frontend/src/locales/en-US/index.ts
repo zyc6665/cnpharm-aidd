@@ -62,7 +62,8 @@ export default {
     createdAt: 'Created At',
     updatedAt: 'Updated At',
     seconds: 'seconds',
-    sort: 'Sort'
+    sort: 'Sort',
+    memberUsername: 'Member username'
   },
 
   // Navigation
@@ -74,7 +75,6 @@ export default {
     workflow: 'Workflow',
     admin: 'Admin',
     login: 'Login',
-    register: 'Register',
     logout: 'Logout',
     profile: 'Profile',
     settings: 'Settings',
@@ -167,7 +167,7 @@ export default {
     hero: {
       title: 'From target to lead compound, in one workspace',
       description: 'Pocket identification, virtual screening, molecular docking, ADMET prediction — all computational steps orchestrated, executed, and traced on one platform',
-      cta: 'Get Started Free',
+      cta: 'Sign In',
       secondary: 'Browse Tools',
     },
     values: {
@@ -227,8 +227,8 @@ export default {
     },
     cta: {
       title: 'Start Your Research Today',
-      description: 'Register for free basic features and begin your computational biology journey',
-      button: 'Sign Up Free'
+      description: 'Sign in to use the platform core features and begin your computational biology journey',
+      button: 'Sign In'
     }
   },
 
@@ -852,64 +852,27 @@ export default {
   // Auth
   auth: {
     login: 'Login',
-    register: 'Register',
-    forgotPassword: 'Forgot Password',
-    forgotPasswordDesc: 'Enter the email you used to register and we will send you a verification code',
+    account: 'Account',
     username: 'Username',
     email: 'Email',
     password: 'Password',
     confirmPassword: 'Confirm Password',
     newPassword: 'New Password',
-    confirmNewPassword: 'Confirm New Password',
     rememberMe: 'Remember me',
-    noAccount: "Don't have an account?",
-    hasAccount: 'Already have an account?',
-    goRegister: 'Sign up now',
     goLogin: 'Sign in now',
     loginSuccess: 'Login successful',
-    registerSuccess: 'Registration successful',
     logoutSuccess: 'Logout successful',
     loginRequired: 'Please login first',
-    // Verification code
-    verificationCode: 'Verification Code',
-    sendCode: 'Send Code',
-    codeSent: 'Verification code sent',
-    resendCode: 'Resend',
-    resendCodeIn: 'Resend in {seconds}s',
-    invalidCode: 'Invalid or expired verification code',
-    // Password strength
-    passwordWeak: 'Weak',
-    passwordMedium: 'Medium',
-    passwordStrong: 'Strong',
-    passwordVeryStrong: 'Very Strong',
-    // Password reset steps
-    step1Email: 'Enter Email',
-    step2Verify: 'Verify Identity',
-    step3Reset: 'Reset Password',
-    sendResetCode: 'Send Reset Code',
-    codeSentTo: 'Code sent to {email}',
-    verifyCode: 'Verify',
-    resetPassword: 'Reset Password',
-    resetSuccess: 'Password Reset Successful',
-    resetSuccessDesc: 'Your password has been reset successfully. Please login with your new password',
-    // Agreement
-    agreementPrefix: 'I have read and agree to the',
-    termsOfService: 'Terms of Service',
-    agreementAnd: 'and',
-    privacyPolicy: 'Privacy Policy',
     validation: {
+      accountRequired: 'Please enter account',
       usernameRequired: 'Please enter username',
       usernameLength: 'Username must be 3-20 characters',
-      usernameFormat: 'Username can only contain letters, numbers and underscores',
       emailRequired: 'Please enter email',
       emailInvalid: 'Please enter a valid email address',
       passwordRequired: 'Please enter password',
       passwordLength: 'Password must be at least 6 characters',
       confirmPasswordRequired: 'Please confirm password',
-      passwordMismatch: 'Passwords do not match',
-      codeRequired: 'Please enter verification code',
-      codeLength: 'Verification code must be 6 digits',
-      agreementRequired: 'Please read and agree to the Terms of Service and Privacy Policy'
+      passwordMismatch: 'Passwords do not match'
     }
   },
 
@@ -2429,6 +2392,14 @@ export default {
     createUser: 'Create User',
     editUser: 'Edit User',
     userInfo: 'User Info',
+    username: 'Account',
+    authSource: 'Auth Source',
+    authSourceLocal: 'Local',
+    authSourceLdap: 'LDAP',
+    emailOptional: 'Optional; can be empty for LDAP users',
+    usernameRequired: 'Please enter account name',
+    usernameFormat: 'Account name may contain letters, digits, dot, underscore and hyphen, 1-64 characters',
+    resetPasswordLdapDisabled: 'LDAP user passwords are managed by the directory service and cannot be reset here',
     keyword: 'Keyword',
     searchUserPlaceholder: 'Search username or email...',
     status: 'Status',

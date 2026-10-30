@@ -88,18 +88,6 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/auth/Login.vue'),
     meta: { title: 'auth.login', redirectAuthenticated: true }
   },
-  {
-    path: '/register',
-    name: 'Register',
-    component: () => import('@/views/auth/Register.vue'),
-    meta: { title: 'auth.register', redirectAuthenticated: true }
-  },
-  {
-    path: '/forgot-password',
-    name: 'ForgotPassword',
-    component: () => import('@/views/auth/ForgotPassword.vue'),
-    meta: { title: 'auth.forgotPassword', redirectAuthenticated: true }
-  },
   // 工具相关
   {
     path: '/tools',

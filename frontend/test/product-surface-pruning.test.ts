@@ -89,15 +89,14 @@ test('后台与任务页不应再显示积分字段', () => {
   assert.equal(taskDetailSource.includes('task.tool.credits'), false)
 })
 
-test('首页与注册页不应再宣传 GPU 或积分奖励', () => {
+test('首页不应再宣传 GPU 或积分奖励（注册页已下线）', () => {
   const homeSource = readSource('src/views/home/index.vue')
-  const registerSource = readSource('src/views/auth/Register.vue')
 
   assert.equal(homeSource.includes('ThunderboltOutlined'), false)
   assert.equal(homeSource.includes('gpu:'), false)
 
-  assert.equal(registerSource.includes('invitationBonus'), false)
-  assert.equal(registerSource.includes("t('auth.invitationBonus')"), false)
+  // 自助注册页已删除，不再存在邀请奖励文案
+  assert.equal(existsSync(resolve(rootDir, 'src/views/auth/Register.vue')), false)
 })
 
 test('管理员工具管理页应保留旧工具编辑并切换到 Tool Package 注册', () => {

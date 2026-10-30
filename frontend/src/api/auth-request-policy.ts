@@ -1,9 +1,7 @@
 const PUBLIC_AUTH_PATHS = [
   '/auth/login',
   '/auth/logout',
-  '/auth/register',
-  '/auth/refresh',
-  '/auth/reset-password'
+  '/auth/refresh'
 ] as const
 
 const API_PREFIX = '/api/v1'

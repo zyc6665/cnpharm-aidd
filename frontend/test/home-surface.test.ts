@@ -97,10 +97,11 @@ test('首页预览应包含工作区导航和内容卡片层级', () => {
   assert.equal(homeSource.includes('preview-card'), true)
 })
 
-test('首页平台区域应只保留平台内注册入口', () => {
+test('首页平台区域只保留平台内登录入口（自助注册已下线）', () => {
   const homeSource = readSource('src/views/home/index.vue')
   assert.equal(homeSource.includes("t('home.platform.title')"), true)
-  assert.equal(homeSource.includes('to="/register"'), true)
+  assert.equal(homeSource.includes('to="/register"'), false)
+  assert.equal(homeSource.includes('to="/login"'), true)
   assert.equal(homeSource.includes('target="_blank"'), false)
 })
 

@@ -66,3 +66,22 @@ class TooManyRequestsException(AppException):
 
     def __init__(self, message: str = "请求过于频繁", detail: Optional[Any] = None):
         super().__init__(message, code=429, detail=detail)
+
+
+class BusinessException(AppException):
+    """业务规则异常：``http_status`` 与信封业务码 ``code`` 可以不同。
+
+    docs/05 把业务码（如 40002 参数非法、40101 未登录）与 HTTP 状态码分开；
+    本异常让路由既能返回合适的 HTTP 状态（400/401/403），又能在响应体里给出
+    稳定的业务码，供前端/测试按码分支。
+    """
+
+    def __init__(
+        self,
+        message: str,
+        http_status: int = 400,
+        code: int = 40002,
+        detail: Optional[Any] = None,
+    ):
+        super().__init__(message, code=code, detail=detail)
+        self.http_status = http_status

@@ -87,6 +87,7 @@ def _serialize_member(membership: ProjectMember) -> dict:
         "id": membership.id,
         "project_id": membership.project_id,
         "user_id": membership.user_id,
+        "username": user.username if user else None,
         "email": user.email if user else None,
         "display_name": user.display_name if user else None,
         "role": membership.role,
@@ -558,9 +559,17 @@ async def add_project_member(
         user=current_user,
         allowed_roles={"owner"},
     )
-    user = (
-        await db.execute(select(User).where(User.email == data.email))
-    ).scalar_one_or_none()
+    user = None
+    if data.username:
+        user = (
+            await db.execute(
+                select(User).where(func.lower(User.username) == data.username.lower())
+            )
+        ).scalar_one_or_none()
+    elif data.email:
+        user = (
+            await db.execute(select(User).where(User.email == data.email))
+        ).scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=404, detail="用户不存在")
     existing = (

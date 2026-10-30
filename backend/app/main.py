@@ -159,8 +159,11 @@ app.add_middleware(TraceIdMiddleware)
 @app.exception_handler(AppException)
 async def app_exception_handler(request: Request, exc: AppException):
     """处理应用异常"""
+    # ``BusinessException`` 携带独立 ``http_status``（信封业务码与 HTTP 状态可不同）；
+    # 其余 AppException 仍以 code 作为 HTTP 状态。
+    status_code = getattr(exc, "http_status", None) or exc.code
     return JSONResponse(
-        status_code=exc.code,
+        status_code=status_code,
         content={
             "code": exc.code,
             "message": exc.message,

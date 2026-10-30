@@ -62,7 +62,8 @@ export default {
     createdAt: '创建时间',
     updatedAt: '更新时间',
     seconds: '秒',
-    sort: '排序'
+    sort: '排序',
+    memberUsername: '成员用户名'
   },
 
   // 导航
@@ -74,7 +75,6 @@ export default {
     workflow: '工作流',
     admin: '管理',
     login: '登录',
-    register: '注册',
     logout: '退出登录',
     profile: '个人中心',
     settings: '设置',
@@ -166,7 +166,7 @@ export default {
     hero: {
       title: '从靶点到先导化合物，一个工作台完成',
       description: '口袋识别、虚拟筛选、分子对接、ADMET 预测——所有计算环节在同一平台上编排、执行、追溯',
-      cta: '免费注册',
+      cta: '立即登录',
       secondary: '浏览工具',
     },
     values: {
@@ -226,8 +226,8 @@ export default {
     },
     cta: {
       title: '立即开始您的研究',
-      description: '注册即可免费使用基础功能，开启计算生物学之旅',
-      button: '免费注册'
+      description: '登录后即可使用平台基础功能，开启计算生物学之旅',
+      button: '立即登录'
     }
   },
 
@@ -851,64 +851,27 @@ export default {
   // 认证
   auth: {
     login: '登录',
-    register: '注册',
-    forgotPassword: '忘记密码',
-    forgotPasswordDesc: '输入您注册时使用的邮箱，我们将发送重置密码的验证码',
+    account: '账号',
     username: '用户名',
     email: '邮箱',
     password: '密码',
     confirmPassword: '确认密码',
     newPassword: '新密码',
-    confirmNewPassword: '确认新密码',
     rememberMe: '记住我',
-    noAccount: '没有账号？',
-    hasAccount: '已有账号？',
-    goRegister: '立即注册',
     goLogin: '立即登录',
     loginSuccess: '登录成功',
-    registerSuccess: '注册成功',
     logoutSuccess: '退出成功',
     loginRequired: '请先登录',
-    // 验证码
-    verificationCode: '验证码',
-    sendCode: '发送验证码',
-    codeSent: '验证码已发送',
-    resendCode: '重新发送',
-    resendCodeIn: '{seconds}秒后重新发送',
-    invalidCode: '验证码错误或已过期',
-    // 密码强度
-    passwordWeak: '弱',
-    passwordMedium: '中',
-    passwordStrong: '强',
-    passwordVeryStrong: '非常强',
-    // 找回密码步骤
-    step1Email: '填写邮箱',
-    step2Verify: '验证身份',
-    step3Reset: '重置密码',
-    sendResetCode: '发送重置验证码',
-    codeSentTo: '验证码已发送至 {email}',
-    verifyCode: '验证',
-    resetPassword: '重置密码',
-    resetSuccess: '密码重置成功',
-    resetSuccessDesc: '您的密码已成功重置，请使用新密码登录',
-    // 用户协议
-    agreementPrefix: '我已阅读并同意',
-    termsOfService: '服务条款',
-    agreementAnd: '和',
-    privacyPolicy: '隐私政策',
     validation: {
+      accountRequired: '请输入账号',
       usernameRequired: '请输入用户名',
       usernameLength: '用户名长度为 3-20 个字符',
-      usernameFormat: '用户名只能包含字母、数字和下划线',
       emailRequired: '请输入邮箱',
       emailInvalid: '请输入有效的邮箱地址',
       passwordRequired: '请输入密码',
       passwordLength: '密码长度至少为 6 个字符',
       confirmPasswordRequired: '请确认密码',
-      passwordMismatch: '两次输入的密码不一致',
-      codeRequired: '请输入验证码',
-      codeLength: '验证码为6位数字',
-      agreementRequired: '请阅读并同意服务条款和隐私政策'
+      passwordMismatch: '两次输入的密码不一致'
     }
   },
 
@@ -2420,6 +2383,14 @@ export default {
     createUser: '创建用户',
     editUser: '编辑用户',
     userInfo: '用户信息',
+    username: '账号',
+    authSource: '认证源',
+    authSourceLocal: '本地',
+    authSourceLdap: 'LDAP',
+    emailOptional: '可选，LDAP 用户可不填',
+    usernameRequired: '请输入账号名',
+    usernameFormat: '账号名只能包含字母、数字、点、下划线和短横线，长度 1-64',
+    resetPasswordLdapDisabled: 'LDAP 用户的口令由目录服务管理，无法在此重置',
     keyword: '关键词',
     searchUserPlaceholder: '搜索用户名或邮箱...',
     status: '状态',

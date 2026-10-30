@@ -1,14 +1,15 @@
 # backend/app/api/v1/users.py
 """用户管理接口"""
 
-from typing import Optional, List
+from typing import Optional, List, Literal
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select, func, or_, delete, update
 from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.common.time import utcnow
+from app.common.exceptions import BusinessException
 from app.database.session import get_db
 from app.models.files import File, FileAccessLog
 from app.models.statistics import FileStatistics, ToolStatistics, UserStatistics
@@ -34,6 +35,14 @@ class UserUpdate(BaseModel):
     avatar_url: Optional[str] = Field(None, description="头像URL")
     bio: Optional[str] = Field(None, description="个人简介")
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def _blank_email_to_none(cls, value):
+        """前端清空邮箱会下发空串；归一为 None，避免触发唯一/格式校验。"""
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
 
 class PasswordChange(BaseModel):
     """密码修改"""
@@ -48,12 +57,30 @@ class AdminUserUpdate(BaseModel):
     role: Optional[str] = Field(None, description="角色: user, admin")
     status: Optional[str] = Field(None, description="状态: active, disabled, pending")
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def _blank_email_to_none(cls, value):
+        """前端清空邮箱会下发空串；归一为 None，避免触发唯一/格式校验。"""
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
 
 class AdminUserCreate(BaseModel):
     """管理员创建用户"""
-    email: str = Field(..., description="邮箱")
+    username: str = Field(
+        ...,
+        pattern=r"^[A-Za-z0-9._-]{1,64}$",
+        description="登录用户名（大小写不敏感唯一）",
+    )
+    auth_source: Literal["local", "ldap"] = Field(
+        default="local", description="认证源: local / ldap"
+    )
+    email: Optional[str] = Field(None, description="邮箱（可选；LDAP 用户可不落邮箱）")
     display_name: Optional[str] = Field(None, description="显示名称")
-    password: str = Field(..., min_length=6, max_length=50, description="初始密码")
+    password: Optional[str] = Field(
+        None, min_length=6, max_length=50, description="初始密码（local 必填；ldap 忽略）"
+    )
     role: str = Field(default=UserRole.USER.value, description="角色: user, admin")
     status: str = Field(default=UserStatus.ACTIVE.value, description="状态: active, disabled, pending")
 
@@ -140,6 +167,19 @@ async def ensure_user_email_unique(db: AsyncSession, email: str, exclude_user_id
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="该邮箱已被使用"
         )
+
+
+async def ensure_username_unique(
+    db: AsyncSession, username: str, exclude_user_id: Optional[str] = None
+) -> None:
+    """确保用户名大小写不敏感唯一；冲突返回业务码 40002。"""
+    filters = [func.lower(User.username) == username.lower()]
+    if exclude_user_id:
+        filters.append(User.id != exclude_user_id)
+
+    result = await db.execute(select(User.id).where(*filters).limit(1))
+    if result.first():
+        raise BusinessException("该用户名已被使用", http_status=400, code=40002)
 
 
 async def hard_delete_user_related_resources(db: AsyncSession, user_id: str) -> None:
@@ -257,6 +297,13 @@ async def change_password(
     db: AsyncSession = Depends(get_db)
 ):
     """修改当前用户的密码"""
+    if current_user.auth_source == "ldap":
+        raise BusinessException(
+            "LDAP 用户的口令由企业目录管理，请在目录中修改",
+            http_status=400,
+            code=40002,
+        )
+
     # 验证旧密码
     if not verify_password(password_change.old_password, current_user.password_hash):
         raise HTTPException(
@@ -293,12 +340,27 @@ async def admin_create_user(
     db: AsyncSession = Depends(get_db)
 ):
     """管理员直接创建用户。"""
-    await ensure_user_email_unique(db, user_data.email)
+    username = user_data.username.strip()
+    await ensure_username_unique(db, username)
+    if user_data.email:
+        await ensure_user_email_unique(db, user_data.email)
+
+    if user_data.auth_source == "local":
+        if not user_data.password:
+            raise BusinessException(
+                "本地用户必须设置初始密码", http_status=400, code=40002
+            )
+        pwd_hash = hash_password(user_data.password)
+    else:
+        # LDAP 用户不保存本地口令
+        pwd_hash = None
 
     created_user = User(
+        username=username,
+        auth_source=user_data.auth_source,
         email=user_data.email,
         display_name=user_data.display_name,
-        password_hash=hash_password(user_data.password),
+        password_hash=pwd_hash,
         role=validate_user_role(user_data.role),
         status=validate_user_status(user_data.status),
     )
@@ -311,7 +373,9 @@ async def admin_create_user(
         target_type=ResourceType.USER,
         target_id=str(created_user.id),
         changes={
+            "username": created_user.username,
             "email": created_user.email,
+            "auth_source": created_user.auth_source,
             "role": created_user.role,
             "status": created_user.status,
         },
@@ -354,6 +418,7 @@ async def admin_get_users(
     if keyword:
         query = query.where(
             (User.display_name.ilike(f"%{keyword}%")) |
+            (User.username.ilike(f"%{keyword}%")) |
             (User.email.ilike(f"%{keyword}%"))
         )
 
@@ -573,6 +638,13 @@ async def admin_reset_user_password(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="用户不存在"
+        )
+
+    if user.auth_source == "ldap":
+        raise BusinessException(
+            "LDAP 用户的口令由企业目录管理，不能在平台重置",
+            http_status=400,
+            code=40002,
         )
 
     user.password_hash = hash_password(password_reset.new_password)

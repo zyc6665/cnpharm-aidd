@@ -10,7 +10,7 @@
         <h1 class="hero-title">{{ t('home.hero.title') }}</h1>
         <p class="hero-subtitle">{{ t('home.hero.description') }}</p>
         <div class="hero-actions">
-          <a-button type="primary" size="large" @click="$router.push('/register')">
+          <a-button type="primary" size="large" @click="$router.push('/login')">
             {{ t('home.hero.cta') }}
           </a-button>
           <a-button size="large" class="btn-ghost" @click="$router.push('/tools')">
@@ -104,7 +104,7 @@
           <h2 class="platform-title">{{ t('home.platform.title') }}</h2>
           <p class="platform-desc">{{ t('home.platform.desc') }}</p>
           <div class="platform-links">
-            <router-link to="/register">
+            <router-link to="/login">
               <a-button type="primary" size="large">{{ t('home.platform.cta') }}</a-button>
             </router-link>
           </div>
@@ -116,7 +116,7 @@
     <section class="cta">
       <h2 class="cta-title">{{ t('home.cta.title') }}</h2>
       <p class="cta-desc">{{ t('home.cta.description') }}</p>
-      <router-link to="/register">
+      <router-link to="/login">
         <a-button type="primary" size="large">{{ t('home.cta.button') }}</a-button>
       </router-link>
     </section>

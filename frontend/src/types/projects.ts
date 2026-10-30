@@ -13,7 +13,9 @@ export interface ProjectMembership {
 export interface ProjectMember extends ProjectMembership {
   project_id: string
   user_id: string
-  email: string
+  /** 邮箱可能为空（如 LDAP 账号未绑定邮箱） */
+  email?: string | null
+  username?: string | null
   display_name?: string | null
   created_at: string
   updated_at: string
@@ -42,7 +44,10 @@ export interface ProjectCreateInput {
 }
 
 export interface ProjectMemberCreateInput {
-  email: string
+  /** 优先按账号名邀请 */
+  username: string
+  /** 兼容旧版按邮箱邀请；后端仍接受 email 字段 */
+  email?: string
   role: Exclude<ProjectRole, 'owner'>
 }
 

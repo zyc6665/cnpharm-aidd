@@ -189,6 +189,22 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     SETTINGS_ENCRYPTION_KEY: Optional[str] = None
 
+    # ==================== LDAP（企业内网目录认证）====================
+    # 全部有默认值；LDAP_ENABLED=False 时登录链路完全不触发 LDAP。
+    LDAP_ENABLED: bool = False
+    LDAP_SERVER_URI: str = ""
+    LDAP_START_TLS: bool = False
+    LDAP_BASE_DN: str = ""
+    LDAP_USER_FILTER: str = "(uid={username})"
+    LDAP_ATTR_UID: str = "uid"
+    LDAP_ATTR_MAIL: str = "mail"
+    LDAP_ATTR_DISPLAY_NAME: str = "cn"
+    LDAP_BIND_DN: str = ""
+    LDAP_BIND_PASSWORD: str = ""
+    LDAP_TIMEOUT_SECONDS: float = 5.0
+    LDAP_CA_CERT_FILE: str = ""
+    LDAP_TLS_VALIDATE: bool = True
+
     @model_validator(mode="after")
     def _validate_production_security(self):
         """生产环境强制校验安全关键配置。"""

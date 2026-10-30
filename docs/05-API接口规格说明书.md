@@ -92,7 +92,7 @@
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| POST | `/api/v1/auth/login` | 登录，返回 access/refresh token |
+| POST | `/api/v1/auth/login` | 登录，返回 access/refresh token；请求体 `{username, password}`（`username` 大小写不敏感，**email 不再作为登录名**）；失败统一 `40101`，不区分「用户不存在/口令错/LDAP 未启用」 |
 | POST | `/api/v1/auth/refresh` | 刷新 token |
 | POST | `/api/v1/auth/logout` | 登出 |
 | GET | `/api/v1/auth/me` | 当前用户信息与全局角色 |
@@ -104,6 +104,8 @@
 | POST | `/api/v1/auth/change-password` | **用户自助改密**；body `{oldPassword, newPassword}`；成功后置 `must_change_password=false`、更新 `password_updated_at`，并**吊销该用户全部 refresh token**（Redis `jti` 黑名单）；`oldPassword` 错误返回 `40101` |
 
 > **v1.2 补齐说明**：此前只有「创建/启停」，`16` §14.1 却承诺「重置密码」，导致开发无处落接口。现补 `:reset-password` 与 `auth/change-password` 两个动作，并在 `04` §5.0 补 `must_change_password` / `password_reset_by` 两个字段。**口令一律不落明文、不由服务端回显历史口令**；临时口令只在创建/重置的响应中出现一次。
+>
+> **v1.28（2026-10-30）企业账号制认证**：`POST /auth/register` 已删除；`/auth/reset-password`、`/verification/send-code`、`/verification/verify` 停用（HTTP 403 + `40002`）。`POST /users` 的 `authSource` 取 `local|ldap`（默认 `local`），`email` 可空，`username` 必填且创建后不可改；**LDAP 用户不存本地口令**，管理员重置其口令与自助改密均返回 `40002`。`UserResponse`、登录响应、`/users/me` 均含 `username`/`authSource`/`lastLoginAt`。
 
 ---
 

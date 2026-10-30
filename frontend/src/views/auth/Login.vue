@@ -7,14 +7,14 @@
       layout="vertical"
       @finish="handleSubmit"
     >
-          <a-form-item name="email" :label="t('auth.email')">
+          <a-form-item name="username" :label="t('auth.account')">
             <a-input
-              v-model:value="formState.email"
+              v-model:value="formState.username"
               size="large"
-              :placeholder="t('auth.validation.emailRequired')"
+              :placeholder="t('auth.validation.accountRequired')"
             >
               <template #prefix>
-                <MailOutlined />
+                <UserOutlined />
               </template>
             </a-input>
           </a-form-item>
@@ -32,14 +32,9 @@
           </a-form-item>
 
           <a-form-item>
-            <div class="form-extra">
-              <a-checkbox v-model:checked="formState.remember">
-                {{ t('auth.rememberMe') }}
-              </a-checkbox>
-              <router-link to="/forgot-password" class="forgot-link">
-                {{ t('auth.forgotPassword') }}
-              </router-link>
-            </div>
+            <a-checkbox v-model:checked="formState.remember">
+              {{ t('auth.rememberMe') }}
+            </a-checkbox>
           </a-form-item>
 
           <a-form-item>
@@ -47,11 +42,6 @@
               {{ t('auth.login') }}
             </a-button>
           </a-form-item>
-
-          <div class="auth-footer">
-            <span>{{ t('auth.noAccount') }}</span>
-            <router-link to="/register">{{ t('auth.goRegister') }}</router-link>
-          </div>
     </a-form>
 
   </AuthShell>
@@ -64,7 +54,7 @@
   import { message } from 'ant-design-vue'
   import type { FormInstance, Rule } from 'ant-design-vue/es/form'
   import {
-    MailOutlined,
+    UserOutlined,
     LockOutlined
   } from '@ant-design/icons-vue'
   import AuthShell from '@/components/auth/AuthShell.vue'
@@ -79,15 +69,14 @@
   const loading = ref(false)
 
   const formState = reactive({
-    email: '',
+    username: '',
     password: '',
     remember: true
   })
 
   const rules: Record<string, Rule[]> = {
-    email: [
-      { required: true, message: t('auth.validation.emailRequired'), trigger: 'blur' },
-      { type: 'email', message: t('auth.validation.emailInvalid'), trigger: 'blur' }
+    username: [
+      { required: true, message: t('auth.validation.accountRequired'), trigger: 'blur' }
     ],
     password: [
       { required: true, message: t('auth.validation.passwordRequired'), trigger: 'blur' }
@@ -98,8 +87,9 @@
     loading.value = true
     try {
       await userStore.login({
-        email: formState.email,
-        password: formState.password
+        username: formState.username,
+        password: formState.password,
+        remember: formState.remember
       })
       message.success(t('auth.loginSuccess'))
       const redirect = route.query.redirect as string
@@ -115,35 +105,6 @@
 
 <style scoped lang="less">
   @import '@/assets/styles/variables.less';
-
-  .form-extra {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-
-    .forgot-link {
-      color: @accent-color;
-
-      &:hover {
-        color: @accent-color-hover;
-      }
-    }
-  }
-
-  .auth-footer {
-    text-align: center;
-    margin-top: @spacing-md;
-    color: @text-color-light-secondary;
-
-    a {
-      color: @accent-color;
-      margin-left: @spacing-xs;
-
-      &:hover {
-        color: @accent-color-hover;
-      }
-    }
-  }
 
   :deep(.ant-btn-primary) {
     background: @accent-color;

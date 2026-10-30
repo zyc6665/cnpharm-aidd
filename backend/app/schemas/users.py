@@ -1,6 +1,7 @@
 # backend/app/schemas/users.py
 """用户相关Schema"""
 
+from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field, EmailStr, field_validator
 from app.schemas.common import TimestampMixin
@@ -21,8 +22,8 @@ class UserCreate(BaseModel):
 
 
 class UserLogin(BaseModel):
-    """用户登录"""
-    email: EmailStr = Field(..., description="邮箱")
+    """用户登录（登录标识为 username；email 不再作为凭证）"""
+    username: str = Field(..., min_length=1, max_length=64, description="用户名")
     password: str = Field(..., description="密码")
 
 
@@ -33,9 +34,12 @@ class UserUpdate(BaseModel):
 
 
 class UserResponse(TimestampMixin):
-    """用户响应"""
+    """用户响应（email 可为空：LDAP 用户不落邮箱）"""
     id: str
-    email: str
+    username: str
+    auth_source: str
+    email: Optional[str] = None
+    last_login_at: Optional[datetime] = None
     display_name: Optional[str]
     avatar_url: Optional[str]
     role: str

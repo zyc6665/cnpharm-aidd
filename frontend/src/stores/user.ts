@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed, onScopeDispose } from 'vue'
-import type { UserInfo, LoginParams, RegisterParams } from '@/types/models'
+import type { UserInfo, LoginParams } from '@/types/models'
 import {
   changePassword as apiChangePassword,
   updateUserProfile
@@ -8,10 +8,8 @@ import {
 import { normalizeUserInfo } from '@/utils/user-normalization'
 import {
   login as apiLogin,
-  register as apiRegister,
   logout as apiLogout,
   getCurrentUser,
-  sendEmailCode as apiSendEmailCode,
   refreshToken as apiRefreshToken
 } from '@/api/auth'
 import {
@@ -87,31 +85,6 @@ export const useUserStore = defineStore('user', () => {
 
     authReady.value = true
     return userInfo.value
-  }
-
-  const register = async (params: RegisterParams) => {
-    loading.value = true
-    try {
-      const res = await apiRegister(params)
-      // 注册成功后自动登录
-      if (res.data.access_token) {
-        clearTokens()
-        token.value = res.data.access_token
-        refreshToken.value = res.data.refresh_token
-        userInfo.value = normalizeUserInfo(res.data.user)
-        setToken(res.data.access_token)
-        setRefreshToken(res.data.refresh_token)
-      }
-      return res.data
-    } finally {
-      loading.value = false
-      authReady.value = true
-    }
-  }
-
-  // 发送邮箱验证码
-  const sendEmailCode = async (email: string, purpose: 'register' | 'reset_password' = 'register') => {
-    return await apiSendEmailCode(email, purpose)
   }
 
   const logout = async () => {
@@ -206,8 +179,6 @@ export const useUserStore = defineStore('user', () => {
     role,
     // Actions
     login,
-    register,
-    sendEmailCode,
     logout,
     fetchUserInfo,
     bootstrapAuthState,

@@ -34,8 +34,8 @@
 
         <div v-if="canManageMembers" class="member-form">
           <a-input
-            v-model:value="newMember.email"
-            placeholder="成员邮箱"
+            v-model:value="newMember.username"
+            placeholder="成员用户名"
             @pressEnter="handleAddMember"
           />
           <a-select v-model:value="newMember.role" class="role-select">
@@ -59,8 +59,8 @@
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'member'">
               <div class="member-cell">
-                <strong>{{ record.display_name || record.email }}</strong>
-                <span>{{ record.email }}</span>
+                <strong>{{ record.display_name || record.username || record.email || '—' }}</strong>
+                <span>{{ record.email || '—' }}</span>
               </div>
             </template>
             <template v-else-if="column.key === 'role'">
@@ -119,8 +119,8 @@
   const membersLoading = ref(false)
   const saving = ref(false)
   const loadError = ref(false)
-  const newMember = reactive<{ email: string; role: Exclude<ProjectRole, 'owner'> }>({
-    email: '',
+  const newMember = reactive<{ username: string; role: Exclude<ProjectRole, 'owner'> }>({
+    username: '',
     role: 'viewer'
   })
 
@@ -154,13 +154,14 @@
   }
 
   async function handleAddMember() {
-    const email = newMember.email.trim()
-    if (!email || !canManageMembers.value) return
+    const username = newMember.username.trim()
+    if (!username || !canManageMembers.value) return
     saving.value = true
     try {
-      const response = await addProjectMember(projectId.value, { email, role: newMember.role })
+      // 优先传账号名；后端兼容按 email 匹配的逻辑
+      const response = await addProjectMember(projectId.value, { username, role: newMember.role })
       members.value = [...members.value, response.data]
-      newMember.email = ''
+      newMember.username = ''
       newMember.role = 'viewer'
       message.success('项目成员已添加')
     } catch (cause) {

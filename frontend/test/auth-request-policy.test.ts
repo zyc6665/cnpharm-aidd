@@ -9,7 +9,7 @@ import {
 
 test('登录接口不应附带旧的认证头', () => {
   assert.equal(shouldAttachAuthHeader('/auth/login'), false)
-  assert.equal(shouldAttachAuthHeader('http://127.0.0.1:8002/api/v1/auth/register'), false)
+  assert.equal(shouldAttachAuthHeader('http://127.0.0.1:8002/api/v1/auth/login'), false)
 })
 
 test('登录和刷新接口的 401 不应触发刷新令牌', () => {

@@ -359,26 +359,31 @@ class AuditLogger:
 
     def log_login(
         self,
-        user_id: Optional[str],
-        email: str,
-        result: AuditResult,
-        client_ip: str,
+        user_id: Optional[str] = None,
+        email: Optional[str] = None,
+        result: AuditResult = AuditResult.SUCCESS,
+        client_ip: Optional[str] = None,
         user_agent: Optional[str] = None,
         reason: Optional[str] = None,
+        username: Optional[str] = None,
         **extra
     ) -> None:
         """记录登录事件
 
         Args:
             user_id: 用户ID（登录失败时可能为None）
-            email: 用户邮箱
+            email: 用户邮箱（LDAP 用户可能为空）
             result: 登录结果
             client_ip: 客户端IP
             user_agent: User-Agent
             reason: 失败原因
+            username: 登录用户名（登录标识；会比 email 更常用于排障）
             **extra: 额外字段
         """
         action = AuditAction.LOGIN if result == AuditResult.SUCCESS else AuditAction.LOGIN_FAILED
+
+        if username:
+            extra.setdefault("username", username)
 
         event = AuditEvent(
             action=action,

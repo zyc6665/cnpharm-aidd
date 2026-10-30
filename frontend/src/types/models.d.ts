@@ -16,9 +16,15 @@ export type {
 // 用户相关类型
 export interface UserInfo {
   id: string  // UUID
-  email: string
+  /** 邮箱可能为空（如 LDAP 账号未绑定邮箱），展示时需回退 */
+  email?: string | null
   display_name?: string
-  username?: string  // 用户名（兼容旧代码）
+  /** 账号名，本地与 LDAP 用户必填 */
+  username: string
+  /** 认证来源：本地口令或企业 LDAP 目录 */
+  auth_source: 'local' | 'ldap'
+  /** 最近一次登录时间，未登录过为 null */
+  last_login_at?: string | null
   avatar_url?: string
   avatar?: string  // 头像URL（兼容旧代码，实际使用avatar_url）
   role: 'user' | 'admin'
@@ -52,16 +58,9 @@ export interface AdminUserStats {
 }
 
 export interface LoginParams {
-  email: string
+  username: string
   password: string
   remember?: boolean
-}
-
-export interface RegisterParams {
-  email: string
-  password: string
-  verification_code: string
-  display_name?: string
 }
 
 export interface AuthTokens {
