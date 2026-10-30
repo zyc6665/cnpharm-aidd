@@ -358,6 +358,13 @@ async def list_tasks(
     resource_wait_scope: Optional[str] = Query(
         None, description="按资源等待 scope 筛选: user/project"
     ),
+    cursor: Optional[str] = Query(
+        None,
+        description=(
+            "游标分页（深分页用）。传入上一页响应里的 nextCursor 即可，"
+            "此时不再返回 total，只用 nextCursor/hasMore 翻页"
+        ),
+    ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -381,6 +388,7 @@ async def list_tasks(
             resource_wait_category=resource_wait_category,
             resource_wait_scope=resource_wait_scope,
         ),
+        cursor=cursor,
     )
 
     # 构建响应
@@ -407,12 +415,21 @@ async def list_tasks(
             task_dict["user_email"] = task.user.email
         task_list.append(task_dict)
 
-    return paginated_response(
+    response = paginated_response(
         items=task_list,
-        total=page_result.total,
+        total=page_result.total or 0,
         page=page,
         page_size=page_size,
     )
+    # 游标模式不承诺 total：算总数与深分页同代价，会把这轮优化的收益抵掉。
+    data = response["data"]
+    data["nextCursor"] = page_result.next_cursor
+    data["hasMore"] = page_result.has_more
+    data["totalKnown"] = page_result.total is not None
+    if page_result.total is None:
+        data["total"] = None
+        data["total_pages"] = None
+    return response
 
 
 @router.get("/counts", response_model=dict)

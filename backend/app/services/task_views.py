@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.common.exceptions import ValidationException
+from app.common.keyset import apply_desc_keyset, encode_cursor, next_cursor
 from app.models.tasks import Task, TaskStatus
 from app.models.tools import Tool
 from app.models.users import User
@@ -71,10 +72,16 @@ class TaskQueryInput:
 
 @dataclass(frozen=True)
 class TaskQueryPage:
-    """任务分页查询结果。"""
+    """任务分页查询结果。
+
+    ``total`` 在游标模式下是 ``None``——算总数与深分页同代价，会把这轮优化的收益
+    抵掉；调用方看到 ``next_cursor`` 就应该只用它翻页。
+    """
 
     tasks: list[Task]
-    total: int
+    total: int | None
+    next_cursor: str | None = None
+    has_more: bool = False
 
 
 @dataclass(frozen=True)
@@ -97,22 +104,68 @@ class ResourceWaitStats:
     by_reason: dict[str, int]
 
 
-async def query_task_page(db: AsyncSession, query: TaskQueryInput) -> TaskQueryPage:
-    """按系统视图和基础筛选查询当前用户可见任务。"""
+async def query_task_page(
+    db: AsyncSession,
+    query: TaskQueryInput,
+    *,
+    cursor: str | None = None,
+) -> TaskQueryPage:
+    """按系统视图和基础筛选查询当前用户可见任务。
+
+    两种取页方式：
+
+    * 不给 ``cursor``：保留 ``page``/``page_size`` 偏移分页与 ``total``，
+      兼容既有调用方与前端「第 N 页」交互；
+    * 给 ``cursor``：走 keyset，**不计算 total**，用「多取一条」判断 ``hasMore``。
+      排序键 ``(created_at DESC, id DESC)`` 与 ``ix_tasks_created_at`` /
+      主键配合，代价与页深无关。
+    """
     statement = await _build_task_statement(
         db,
         query,
         include_view_filters=True,
         include_load_options=True,
     )
+    page_size = max(query.page_size, 1)
+
+    if cursor:
+        statement, _last = apply_desc_keyset(
+            statement,
+            timestamp_column=Task.created_at,
+            id_column=Task.id,
+            cursor=cursor,
+        )
+        result = await db.execute(
+            statement.order_by(Task.created_at.desc(), Task.id.desc()).limit(page_size + 1)
+        )
+        fetched = list(result.scalars().all())
+        has_more = len(fetched) > page_size
+        rows = fetched[:page_size]
+        return TaskQueryPage(
+            tasks=rows,
+            total=None,
+            # 游标取「本页最后一行」，且只在确实还有下一页时给，免得前端多跑一次空请求。
+            next_cursor=next_cursor(
+                fetched, timestamp_attr="created_at", id_attr="id", limit=page_size
+            ),
+            has_more=has_more,
+        )
 
     total = await _count_tasks(db, statement)
-    page_size = max(query.page_size, 1)
     offset = (max(query.page, 1) - 1) * page_size
     result = await db.execute(
-        statement.order_by(Task.created_at.desc()).offset(offset).limit(page_size)
+        statement.order_by(Task.created_at.desc(), Task.id.desc()).offset(offset).limit(page_size)
     )
-    return TaskQueryPage(tasks=list(result.scalars().all()), total=total)
+    rows = list(result.scalars().all())
+    # 偏移模式也给出 nextCursor：客户端翻到第 3 页想换成游标分页时不需要额外接口，
+    # 直接拿这一页的 nextCursor 接着走即可。hasMore 用 total 判断，零额外查询。
+    has_more = bool(rows) and (offset + len(rows)) < total
+    return TaskQueryPage(
+        tasks=rows,
+        total=total,
+        next_cursor=encode_cursor([rows[-1].created_at, rows[-1].id]) if has_more else None,
+        has_more=has_more,
+    )
 
 
 async def query_task_view_counts(db: AsyncSession, query: TaskQueryInput) -> TaskViewCounts:
