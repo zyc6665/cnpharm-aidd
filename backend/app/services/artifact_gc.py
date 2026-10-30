@@ -18,11 +18,12 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 from datetime import timedelta
 from uuid import uuid4
 
-from sqlalchemy import Text, cast, select
+from sqlalchemy import Text, cast, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cache import get_cache
@@ -42,22 +43,36 @@ ARTIFACT_GC_LOCK_KEY = "artifact:gc:lock"
 DEFAULT_GC_BATCH_SIZE = 200
 
 
-async def _is_still_referenced(db: AsyncSession, file_id: str) -> bool:
-    """File 是否仍被任务输入/输出引用。
+async def _referenced_file_ids(db: AsyncSession, file_ids: list[str]) -> set[str]:
+    """返回这批 File 中「仍被任务输入/输出引用」的 id 集合。
 
     ``TaskInput.file_ids`` / ``TaskOutput.file_ids`` 是 JSON 数组，没有外键，
-    数据库层拦不住 File 被删；必须在 Python 侧逐条查。用 ``CAST(json AS TEXT)
-    LIKE '%"<id>"%'`` 而不是 ``json_each``，SQLite 与 PostgreSQL 都能跑。
+    数据库层拦不住 File 被删。用 ``CAST(json AS TEXT) LIKE '%"<id>"%'`` 而不是
+    ``json_each``，SQLite 与 PostgreSQL 都能跑。
+
+    这里刻意做成「整批一次查」而不是「每个文件两次查」：原实现每删一个文件都要
+    发 2 条前导通配全表扫，一轮 200 个文件就是 400 次全表扫；改成每张表一次
+    ``OR`` 查询（最多 2 条），再在 Python 里按 id 做归属判定，往返次数从 O(n) 降到 O(1)。
     """
+    wanted = [str(file_id) for file_id in file_ids]
+    if not wanted:
+        return set()
+    referenced: set[str] = set()
     for model in (TaskInput, TaskOutput):
-        matched = await db.scalar(
-            select(model.id)
-            .where(cast(model.file_ids, Text).like(f'%"{file_id}"%'))
-            .limit(1)
+        predicates = [cast(model.file_ids, Text).like(f'%"{file_id}"%') for file_id in wanted]
+        rows = await db.execute(
+            select(model.file_ids).where(or_(*predicates))
         )
-        if matched is not None:
-            return True
-    return False
+        blobs = [row[0] for row in rows.all() if row[0] is not None]
+        if not blobs:
+            continue
+        haystack = json.dumps(blobs, ensure_ascii=False)
+        for file_id in wanted:
+            if file_id in referenced:
+                continue
+            if f'"{file_id}"' in haystack:
+                referenced.add(file_id)
+    return referenced
 
 
 async def collect_orphan_files(
@@ -89,13 +104,14 @@ async def collect_orphan_files(
     # 之后不能再依赖这些对象的属性，逐条按 id 重新 get。
     file_ids = [str(record.id) for record in records]
 
+    referenced = await _referenced_file_ids(db, file_ids)
     removed = 0
     for file_id in file_ids:
         record = await db.get(File, file_id)
         if record is None:
             continue
         try:
-            if await _is_still_referenced(db, file_id):
+            if file_id in referenced:
                 logger.debug("跳过仍被任务引用的 File: %s", file_id)
                 continue
             # 先删对象（可重试），再删行（不可重试）。

@@ -126,10 +126,19 @@ async def _artifact_outputs(db: AsyncSession, task_id: str) -> list[dict[str, An
             .order_by(Artifact.created_at)
         )
     ).scalars().all()
+    # 一次取回这批产物对应的版本行，避免在循环里逐条 db.get（每个产物一次往返）。
+    version_ids = [str(a.latest_version_id) for a in artifacts if a.latest_version_id]
+    versions_by_id: dict[str, ArtifactVersion] = {}
+    if version_ids:
+        rows = await db.execute(
+            select(ArtifactVersion).where(ArtifactVersion.id.in_(version_ids))
+        )
+        versions_by_id = {str(row.id): row for row in rows.scalars().all()}
+
     entries: list[dict[str, Any]] = []
     for artifact in artifacts:
         version = (
-            await db.get(ArtifactVersion, artifact.latest_version_id)
+            versions_by_id.get(str(artifact.latest_version_id))
             if artifact.latest_version_id
             else None
         )
@@ -368,10 +377,17 @@ async def _report_payload(
             .order_by(Artifact.created_at)
         )
     ).scalars().all()
+    version_ids = [str(a.latest_version_id) for a in artifacts if a.latest_version_id]
+    versions_by_id: dict[str, ArtifactVersion] = {}
+    if version_ids:
+        rows = await db.execute(
+            select(ArtifactVersion).where(ArtifactVersion.id.in_(version_ids))
+        )
+        versions_by_id = {str(row.id): row for row in rows.scalars().all()}
     for artifact in artifacts:
         if not artifact.latest_version_id:
             continue
-        version = await db.get(ArtifactVersion, artifact.latest_version_id)
+        version = versions_by_id.get(str(artifact.latest_version_id))
         if version is None:
             continue
         merged: dict[str, Any] = {}

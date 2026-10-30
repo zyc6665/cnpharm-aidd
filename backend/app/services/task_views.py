@@ -11,9 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.common.exceptions import ValidationException
-from app.models.tasks import Task, TaskInput, TaskStatus
+from app.models.tasks import Task, TaskStatus
 from app.models.tools import Tool
 from app.models.users import User
+from app.models.workflows import WorkflowRun
 from app.services.project_access import load_project_membership
 
 
@@ -237,39 +238,45 @@ async def _build_task_statement(
         statement = statement.where(Task.created_at <= _naive_utc(query.created_to))
 
     if query.workflow_run_id or query.workflow_definition_id or query.workflow_node_id:
-        statement = statement.join(TaskInput, TaskInput.task_id == Task.id)
-        if query.workflow_run_id:
-            statement = statement.where(
-                TaskInput.params["workflow_run_id"].as_string() == query.workflow_run_id
-            )
+        # 这三项原先都从 ``TaskInput.params`` 的 JSON 里取，既要多 join 一张表，
+        # 又让 `params->>'…'` 这种表达式挡在 WHERE 里用不上索引。`tasks` 上已有
+        # 真列 `workflow_run_id` / `workflow_node_id`（迁移 20261030_06 已从 params
+        # 回填），并且 `uq_tasks_workflow_node_attempt` 的前缀正好覆盖 run 维度。
+        # `workflow_definition_id` 不在 tasks 上，改为按 run 反查（两表、两侧都有索引）。
         if query.workflow_definition_id:
-            statement = statement.where(
-                TaskInput.params["workflow_definition_id"].as_string()
-                == query.workflow_definition_id
+            statement = statement.join(
+                WorkflowRun, WorkflowRun.id == Task.workflow_run_id
+            ).where(
+                WorkflowRun.workflow_definition_id == query.workflow_definition_id
             )
+        if query.workflow_run_id:
+            statement = statement.where(Task.workflow_run_id == query.workflow_run_id)
         if query.workflow_node_id:
-            statement = statement.where(
-                TaskInput.params["workflow_node_id"].as_string() == query.workflow_node_id
-            )
+            statement = statement.where(Task.workflow_node_id == query.workflow_node_id)
 
     if query.keyword:
-        search_pattern = f"%{query.keyword}%"
-        statement = (
-            statement.join(Tool, Task.tool_id == Tool.id, isouter=True)
-            .join(User, Task.user_id == User.id, isouter=True)
-            .where(
-                or_(
-                    Task.id.ilike(search_pattern),
-                    Task.name.ilike(search_pattern),
-                    Task.error_message.ilike(search_pattern),
-                    Task.progress_message.ilike(search_pattern),
-                    Tool.name.ilike(search_pattern),
-                    Tool.slug.ilike(search_pattern),
-                    User.email.ilike(search_pattern),
-                    User.display_name.ilike(search_pattern),
+        keyword = query.keyword.strip()
+        if keyword:
+            search_pattern = f"%{keyword}%"
+            # 关键字搜索只覆盖「标识类」短字段：任务名、工具名/别名、用户邮箱/显示名，
+            # 外加任务 ID 的精确匹配。原来是 8 列 ilike('%kw%') 的 OR（含
+            # error_message / progress_message 两个 Text 列）——前导通配无法走索引，
+            # 两个长文本列又把每行要扫的字节放大一个量级，且会强制带上 Tool/User
+            # 两个 outer join。长文本检索交给任务日志（task_logs）承担。
+            statement = (
+                statement.join(Tool, Task.tool_id == Tool.id, isouter=True)
+                .join(User, Task.user_id == User.id, isouter=True)
+                .where(
+                    or_(
+                        Task.id == keyword,
+                        Task.name.ilike(search_pattern),
+                        Tool.name.ilike(search_pattern),
+                        Tool.slug.ilike(search_pattern),
+                        User.email.ilike(search_pattern),
+                        User.display_name.ilike(search_pattern),
+                    )
                 )
             )
-        )
 
     return statement
 
@@ -288,7 +295,12 @@ def _statuses_for_view(view: str | None) -> tuple[str, ...]:
 
 
 async def _count_tasks(db: AsyncSession, statement) -> int:
-    result = await db.execute(select(func.count()).select_from(statement.subquery()))
+    # 计数只需要 WHERE 条件（以及过滤用的 JOIN），ORDER BY 对 count 毫无意义。
+    # 保留排序会让数据库在子查询里白排一遍全部命中行——任务列表默认按
+    # created_at DESC + id DESC 排，几万行时这部分开销与真正返回 20 行同量级。
+    result = await db.execute(
+        select(func.count()).select_from(statement.order_by(None).subquery())
+    )
     return int(result.scalar() or 0)
 
 
