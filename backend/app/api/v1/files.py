@@ -39,8 +39,6 @@ from app.files.file_records import (
     delete_stored_content,
     file_storage_path,
     is_file_usable,
-    user_can_access_file,
-    user_can_manage_file,
 )
 from app.files.upload_staging import stream_upload, validate_upload_content
 from app.files.writer import store_file_bytes, store_file_path
@@ -324,7 +322,7 @@ async def get_file_info(
         raise NotFoundException("文件不存在")
 
     # 权限检查
-    if not user_can_access_file(file, current_user):
+    if not await _user_can_access_file_record(db, file, current_user):
         raise ForbiddenException("无权访问此文件")
 
     if not is_file_usable(file):
@@ -333,28 +331,65 @@ async def get_file_info(
     return success_response(data=FileSchema.model_validate(file).model_dump())
 
 
-async def _user_can_access_download_file(
+async def _project_member_exists(
+    db: AsyncSession, project_id: str, user_id: str
+) -> bool:
+    """判断用户是否为指定项目的成员（任意角色）。"""
+    membership = await db.scalar(
+        select(ProjectMember.id).where(
+            ProjectMember.project_id == project_id,
+            ProjectMember.user_id == user_id,
+        )
+    )
+    return membership is not None
+
+
+async def _user_can_access_file_record(
     db: AsyncSession, file: FileModel, user: User | None
 ) -> bool:
-    """下载入口的项目感知鉴权。
+    """项目感知的文件读取/下载鉴权（单一权威入口）。
 
-    产物下载（artifacts.py）认项目成员；文件下载若仍只认 owner_id，被移出项目的
-    editor 仍能凭 owner_id 下载，两条入口语义不一致。这里在 file.project_id 非空时
-    改为校验项目成员（任意角色）；project_id 为空时保持原 owner/public/admin 语义。
+    - 公开文件：任何人可读（含匿名）。
+    - admin：始终可读。
+    - 项目文件（project_id 非空）：仅项目成员（任意角色）可读；owner 但已被移出
+      项目的用户不再可读（broken access control 修复点）。
+    - 非项目文件：保持 owner / admin 语义。
+    """
+    if file.is_public:
+        return True
+    if user is None:
+        return False
+    if user.role == "admin":
+        return True
+    if file.project_id:
+        return await _project_member_exists(db, file.project_id, user.id)
+    return file.owner_id == user.id
+
+
+async def _user_can_manage_file_record(
+    db: AsyncSession, file: FileModel, user: User | None
+) -> bool:
+    """项目感知的文件管理（删除）鉴权。
+
+    - 匿名不可管理（即使是公开文件）。
+    - admin：始终可管理。
+    - 项目文件：仅项目成员（任意角色）可管理；owner 但已非成员的不能删除。
+    - 非项目文件：保持 owner / admin 语义。
     """
     if user is None:
         return False
     if user.role == "admin":
         return True
     if file.project_id:
-        membership = await db.scalar(
-            select(ProjectMember.id).where(
-                ProjectMember.project_id == file.project_id,
-                ProjectMember.user_id == user.id,
-            )
-        )
-        return membership is not None
-    return user_can_access_file(file, user)
+        return await _project_member_exists(db, file.project_id, user.id)
+    return file.owner_id == user.id
+
+
+async def _user_can_access_download_file(
+    db: AsyncSession, file: FileModel, user: User | None
+) -> bool:
+    """下载入口的项目感知鉴权，复用统一的文件读取规则。"""
+    return await _user_can_access_file_record(db, file, user)
 
 
 @router.get("/{file_id}/download")
@@ -376,6 +411,7 @@ async def download_file(
         raise NotFoundException("文件不存在")
 
     remote_token_claims = None
+    browser_token_used = False
     if token:
         try:
             remote_token_claims = validate_remote_file_access_token(token, file_id=file_id)
@@ -387,6 +423,7 @@ async def download_file(
                 remote_token_claims = validate_browser_file_access_token(
                     token, file_id=file_id, user_id=str(current_user.id)
                 )
+                browser_token_used = True
             except RemoteFileAccessTokenError as exc:
                 _audit_file_download_denied(
                     file=file,
@@ -396,8 +433,11 @@ async def download_file(
                 )
                 raise ForbiddenException(str(exc)) from exc
 
-    # 权限检查：公开文件允许匿名访问
-    if not file.is_public and remote_token_claims is None:
+    # 权限检查：公开文件允许匿名访问。远程任务令牌由签发侧担保任务与文件的绑定，
+    # 保持可用；浏览器下载令牌只用于证明 file_id 绑定与用户身份，仍需按当前身份
+    # 做授权（项目文件认项目成员），不能因令牌有效就跳过项目成员校验。
+    token_grants_access = remote_token_claims is not None and not browser_token_used
+    if not file.is_public and not token_grants_access:
         if not current_user:
             _audit_file_download_denied(
                 file=file,
@@ -413,7 +453,7 @@ async def download_file(
             _audit_file_download_denied(
                 file=file,
                 current_user=current_user,
-                remote_token=False,
+                remote_token=browser_token_used,
                 reason="forbidden",
             )
             raise ForbiddenException("无权下载此文件")
@@ -485,8 +525,9 @@ async def get_download_url(
     if not file:
         raise NotFoundException("文件不存在")
 
-    # 权限检查
-    if not user_can_access_file(file, current_user):
+    # 权限检查：与下载保持一致，项目文件必须校验项目成员（admin/public 例外），
+    # 被移出项目的 owner 不能再凭 owner_id 取得下载 URL。
+    if not await _user_can_access_file_record(db, file, current_user):
         raise ForbiddenException("无权访问此文件")
     if not is_file_usable(file):
         raise NotFoundException("文件不存在")
@@ -521,8 +562,8 @@ async def delete_file(
     if not file:
         raise NotFoundException("文件不存在")
 
-    # 权限检查
-    if not user_can_manage_file(file, current_user):
+    # 权限检查：项目文件需要项目成员（或 admin）才可删除；非项目文件保持 owner/admin。
+    if not await _user_can_manage_file_record(db, file, current_user):
         raise ForbiddenException("无权删除此文件")
 
     await delete_stored_content(file)
@@ -554,8 +595,8 @@ async def batch_delete_files(
             failed_ids.append(file_id)
             continue
 
-        # 权限检查
-        if not user_can_manage_file(file, current_user):
+        # 权限检查：项目文件需要项目成员（或 admin）才可删除。
+        if not await _user_can_manage_file_record(db, file, current_user):
             failed_ids.append(file_id)
             continue
 
