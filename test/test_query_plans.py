@@ -39,11 +39,11 @@ def _plan(connection, sql: str, params: dict) -> str:
     ("name", "sql", "params", "expected_index"),
     [
         (
-            "结果中心：project_id + 终态 + finished_at DESC",
+            # 单值等值 + 排序：索引一次区间扫完，不应出现内存排序。
+            "结果中心（单终态）：project_id + status + finished_at DESC",
             """
             SELECT id FROM tasks
-            WHERE project_id = :project_id
-              AND status IN ('SUCCESS', 'FAILURE', 'CANCELED', 'TIMEOUT')
+            WHERE project_id = :project_id AND status = 'SUCCESS'
             ORDER BY finished_at DESC, created_at DESC
             LIMIT 20
             """,
@@ -102,6 +102,32 @@ def test_hot_pagination_query_uses_index_without_sort(
     plan = _plan(plan_connection, sql, params)
     assert "TEMP B-TREE" not in plan.upper(), f"{name} 仍在内存排序：\n{plan}"
     assert expected_index in plan, f"{name} 未使用预期索引 {expected_index}：\n{plan}"
+
+
+def test_result_center_multi_status_still_uses_index(plan_connection) -> None:
+    """结果中心的 ``status IN (...)`` 形态：共用同一棵复合索引。
+
+    这条**不断言**没有 TEMP B-TREE，原因是 SQLite 的能力边界而不是索引没建对：
+    ``status IN (4 个值)`` 会被拆成多段区间扫描，每段内部有序、跨段不保证整体有序，
+    SQLite 只能再排一次。PostgreSQL 会做「分段有序 + 归并」，同一棵索引能保住
+    ORDER BY（实测 6.26ms→1.10ms 就是靠它）。因此这里只断言索引被用上，
+    性能收益由 docs/20 §1 的实测数据负责。
+    """
+    plan = _plan(
+        plan_connection,
+        """
+        SELECT id FROM tasks
+        WHERE project_id = :project_id
+          AND status IN ('SUCCESS', 'FAILURE', 'CANCELED', 'TIMEOUT')
+        ORDER BY finished_at DESC, created_at DESC
+        LIMIT 20
+        """,
+        {"project_id": "p1"},
+    )
+    # SQLite 可能选 (project_id, status, created_at) 而不是 finished_at 版本——两者
+    # 都能把扫描收敛到 project+status 区间；PG 侧则会选 DESC NULLS LAST 那个来消排序。
+    used = ("ix_tasks_project_status_finished", "ix_tasks_project_status_created")
+    assert any(name in plan for name in used), plan
 
 
 def test_count_subquery_without_order_by_does_not_sort(plan_connection) -> None:

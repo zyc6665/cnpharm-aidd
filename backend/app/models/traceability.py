@@ -81,11 +81,15 @@ class AuditLog(Base, UUIDMixin):
     __table_args__ = (
         Index("ix_audit_logs_actor_created", "actor", "created_at"),
         Index("ix_audit_logs_resource", "resource_type", "resource_id"),
+        # 审计页的主查询：action 等值 + created_at 范围 + 按 created_at 倒序取 50。
+        # 只有单列 action 索引时数据库要回表再排一遍（12 万行实测 51.07ms）；
+        # 复合后顺序扫描取前 50 行即止（0.69ms）。见 docs/20 §1/§4.1。
+        Index("ix_audit_logs_action_created", "action", "created_at"),
     )
 
     actor = Column(String(64), nullable=False)
     actor_id = Column(String(36), nullable=True)
-    action = Column(String(64), nullable=False, index=True)
+    action = Column(String(64), nullable=False)
     result = Column(String(16), nullable=False, default="SUCCESS")
     resource_type = Column(String(64), nullable=True)
     resource_id = Column(String(64), nullable=True, index=True)

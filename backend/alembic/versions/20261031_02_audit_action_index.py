@@ -34,7 +34,20 @@ INDEX = "ix_audit_logs_action_created"
 COLUMNS = ["action", "created_at"]
 
 
+def _table_exists() -> bool:
+    return TABLE in sa.inspect(op.get_bind()).get_table_names()
+
+
 def _index_names() -> set[str]:
+    """返回 ``audit_logs`` 上已有的索引名。
+
+    必须容忍表不存在：``test_alembic_migration_dry_run`` 与
+    ``test_task_project_aggregate`` 会在**中途某个旧 revision** 建库后直接
+    ``upgrade head``，那条路径上 ``audit_logs`` 还没建出来，反射会抛
+    ``NoSuchTableError``。表不存在时没什么可加，直接跳过。
+    """
+    if not _table_exists():
+        return set()
     bind = op.get_bind()
     return {item["name"] for item in sa.inspect(bind).get_indexes(TABLE)}
 
@@ -44,7 +57,7 @@ def _is_postgresql() -> bool:
 
 
 def upgrade() -> None:
-    if INDEX in _index_names():
+    if not _table_exists() or INDEX in _index_names():
         return
     if _is_postgresql():
         # 只追加的高写入表，必须 CONCURRENTLY 建，否则 SHARE 锁会把审计写入挡在后面。
@@ -58,7 +71,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    if INDEX not in _index_names():
+    if not _table_exists() or INDEX not in _index_names():
         return
     if _is_postgresql():
         with op.get_context().autocommit_block():

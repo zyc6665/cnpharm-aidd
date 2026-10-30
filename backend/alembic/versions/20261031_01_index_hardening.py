@@ -233,6 +233,11 @@ def _drop_datasets_unique() -> None:
 def _backfill_execution_task_id() -> None:
     if "task_id" not in _column_names(EXECUTION_RECORDS):
         return
+    if TASKS not in _table_names():
+        # legacy 精简基线库可能没有 ``tasks``（``test_alembic_migration_dry_run``
+        # 会在中途 revision 建库后直接 upgrade head）。没有 tasks 就没有可校验的
+        # 目标行，也就没有可回填的合法值，跳过即可。
+        return
     if _dialect() == "postgresql":
         op.execute(
             "UPDATE execution_records SET task_id = request_snapshot->>'task_id' "
@@ -257,7 +262,7 @@ def _add_execution_task_column() -> None:
         EXECUTION_RECORDS,
         sa.Column("task_id", sa.String(length=36), nullable=True),
     )
-    if _dialect() == "postgresql":
+    if _dialect() == "postgresql" and TASKS in _table_names():
         op.create_foreign_key(
             EXECUTION_TASK_FK,
             EXECUTION_RECORDS,
