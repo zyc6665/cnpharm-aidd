@@ -58,11 +58,11 @@ class TestCorsDefaults:
         )
         assert "*" not in json.loads(cors_line.removeprefix("CORS_ORIGINS="))
         assert "SETTINGS_ENCRYPTION_KEY=" in contents
-        assert "生产/预发布环境" in contents
+        assert "预发布/生产环境" in contents
         assert "独立" in contents
-        assert "自动生成临时密钥" not in contents
-        assert "SETTINGS_ENCRYPTION_KEY 缺失时回退到 JWT_SECRET_KEY" in contents
-        assert "二者都缺失时，加密操作会失败" in contents
+        assert "自动生成临时密钥" in contents
+        assert "加密操作会回退到 JWT_SECRET_KEY" in contents
+        assert "否则拒绝启动" in contents
 
 
 class TestKubernetesExecutionSettings:
@@ -354,10 +354,44 @@ class TestDeploymentCorsOrigins:
 
 
 class TestJWTSecretKey:
-    def test_development_allows_empty_jwt_secret(self):
-        """开发环境允许 JWT_SECRET_KEY 为空。"""
-        settings = Settings(ENVIRONMENT="development", JWT_SECRET_KEY="")
-        assert settings.JWT_SECRET_KEY == ""
+    def test_development_generates_ephemeral_jwt_secret_when_empty(self, caplog):
+        """开发环境 JWT_SECRET_KEY 为空时自动生成一次性随机密钥并告警。"""
+        with caplog.at_level("WARNING"):
+            settings = Settings(ENVIRONMENT="development", JWT_SECRET_KEY="")
+        assert settings.JWT_SECRET_KEY
+        assert len(settings.JWT_SECRET_KEY) >= 32
+        assert "JWT_SECRET_KEY is not configured" in caplog.text
+
+    def test_development_replaces_placeholder_jwt_secret(self, caplog):
+        """开发环境遇到占位符 JWT 密钥时告警并回退到随机值。"""
+        with caplog.at_level("WARNING"):
+            settings = Settings(
+                ENVIRONMENT="development", JWT_SECRET_KEY="change-me-in-production"
+            )
+        assert settings.JWT_SECRET_KEY != "change-me-in-production"
+        assert len(settings.JWT_SECRET_KEY) >= 32
+        assert "placeholder/example value" in caplog.text
+
+    @pytest.mark.parametrize("environment", ["staging", "production"])
+    def test_deployment_environment_rejects_placeholder_jwt_secret(self, environment):
+        """预发布/生产环境拒绝示例占位符 JWT 密钥。"""
+        with pytest.raises(ValueError, match="placeholder/example value"):
+            Settings(
+                ENVIRONMENT=environment,
+                JWT_SECRET_KEY="change-me-in-production-for-jwt",
+            )
+
+    @pytest.mark.parametrize("environment", ["staging", "production"])
+    def test_deployment_environment_rejects_placeholder_settings_encryption_key(
+        self, environment
+    ):
+        """预发布/生产环境拒绝示例占位符配置加密密钥。"""
+        with pytest.raises(ValueError, match="SETTINGS_ENCRYPTION_KEY must not use"):
+            Settings(
+                ENVIRONMENT=environment,
+                JWT_SECRET_KEY="j" * 32,
+                SETTINGS_ENCRYPTION_KEY="replace-with-a-real-settings-key-min-32-chars",
+            )
 
     def test_staging_rejects_short_jwt_secret(self):
         """预发布环境拒绝长度不足的 JWT_SECRET_KEY。"""

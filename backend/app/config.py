@@ -3,8 +3,10 @@
 
 import ipaddress
 import json
+import logging
 import os
 import re
+import secrets
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional, List, Literal
@@ -15,11 +17,40 @@ from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+logger = logging.getLogger(__name__)
+
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 _DNS_LABEL_PATTERN = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?")
 _IPV4_NUMERIC_HOST_PATTERN = re.compile(
     r"(?:0x[0-9a-f]+|0[0-7]*|[1-9][0-9]*)(?:\.(?:0x[0-9a-f]+|0[0-7]*|[1-9][0-9]*)){0,3}"
 )
+# 已知的示例/占位符密钥片段（不区分大小写）。这些值一旦进入运行环境就等同于
+# 公开密钥：预发布/生产环境必须拒绝启动，开发环境告警并回退到随机值。
+_PLACEHOLDER_SECRET_MARKERS = (
+    "change-me",
+    "changeme",
+    "replace-with",
+    "replace_with",
+    "your-secret",
+    "your_secret",
+    "your-access-key",
+    "your-email",
+    "example-secret",
+    "example-secret-key",
+)
+_PLACEHOLDER_SECRET_PREFIXES = ("dev-", "dev_")
+
+
+def _looks_like_placeholder_secret(value: str) -> bool:
+    """判断密钥是否为仓库示例里出现过的占位符/可猜值。"""
+    normalized = value.strip().lower()
+    if not normalized:
+        return False
+    if normalized.startswith(_PLACEHOLDER_SECRET_PREFIXES):
+        return True
+    return any(marker in normalized for marker in _PLACEHOLDER_SECRET_MARKERS)
+
+
 _AIDD_FEATURE_FLAG_DESCRIPTIONS = {
     "AIDD_PROJECT_WORKSPACE_ENABLED": "项目优先研究工作台入口",
     "TOOL_PACKAGE_V1_ENABLED": "Tool Package v1 导入、迁移和验证等级",
@@ -224,6 +255,35 @@ class Settings(BaseSettings):
                     + ", ".join(missing_k8s_settings)
                 )
 
+        # 所有环境都拒绝明显的占位符/示例密钥：预发布/生产直接拒绝启动，
+        # 开发环境告警并回退到一次性的随机值。
+        if self.JWT_SECRET_KEY and _looks_like_placeholder_secret(self.JWT_SECRET_KEY):
+            if self.ENVIRONMENT in {"staging", "production"}:
+                raise ValueError(
+                    f"JWT_SECRET_KEY must not use a placeholder/example value in {self.ENVIRONMENT} environment"
+                )
+            logger.warning(
+                "JWT_SECRET_KEY looks like a placeholder/example value in %s environment; "
+                "generating an ephemeral random key instead",
+                self.ENVIRONMENT,
+            )
+            self.JWT_SECRET_KEY = secrets.token_urlsafe(48)
+
+        if not self.JWT_SECRET_KEY:
+            if self.ENVIRONMENT == "development":
+                # 空密钥会让 HS256 签名可被任意伪造。开发环境自动生成一次性随机密钥，
+                # 避免本地启动/测试因缺少配置大面积失败，同时保证进程内密钥不可预测。
+                self.JWT_SECRET_KEY = secrets.token_urlsafe(48)
+                logger.warning(
+                    "JWT_SECRET_KEY is not configured; generated an ephemeral random key "
+                    "for development. Sessions will be invalidated on restart; set "
+                    "JWT_SECRET_KEY explicitly to persist them."
+                )
+            else:
+                raise ValueError(
+                    f"JWT_SECRET_KEY must be at least 32 characters long in {self.ENVIRONMENT} environment"
+                )
+
         if (
             self.ENVIRONMENT in {"staging", "production"}
             and len(self.JWT_SECRET_KEY) < 32
@@ -231,6 +291,20 @@ class Settings(BaseSettings):
             raise ValueError(
                 f"JWT_SECRET_KEY must be at least 32 characters long in {self.ENVIRONMENT} environment"
             )
+
+        if self.SETTINGS_ENCRYPTION_KEY and _looks_like_placeholder_secret(
+            self.SETTINGS_ENCRYPTION_KEY
+        ):
+            if self.ENVIRONMENT in {"staging", "production"}:
+                raise ValueError(
+                    f"SETTINGS_ENCRYPTION_KEY must not use a placeholder/example value in {self.ENVIRONMENT} environment"
+                )
+            logger.warning(
+                "SETTINGS_ENCRYPTION_KEY looks like a placeholder/example value in %s "
+                "environment; ignoring it and falling back to existing derivation logic",
+                self.ENVIRONMENT,
+            )
+            self.SETTINGS_ENCRYPTION_KEY = None
 
         if self.ENVIRONMENT in {"staging", "production"}:
             if not self.SETTINGS_ENCRYPTION_KEY:
