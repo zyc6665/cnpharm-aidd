@@ -37,7 +37,7 @@ class ProjectMember(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "project_members"
     __table_args__ = (UniqueConstraint("project_id", "user_id", name="uq_project_members_project_user"),)
 
-    project_id = Column(String(36), ForeignKey("projects.id"), nullable=False, index=True)
+    project_id = Column(String(36), ForeignKey("projects.id"), nullable=False)
     user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     role = Column(String(32), nullable=False, index=True)
 

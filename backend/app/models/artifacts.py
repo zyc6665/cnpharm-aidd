@@ -7,6 +7,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     JSON,
     String,
@@ -30,9 +31,16 @@ class Artifact(Base, UUIDMixin, TimestampMixin):
             ASSET_ARTIFACT_TYPE_CHECK_SQL,
             name="ck_artifacts_artifact_type_asset_enum",
         ),
+        # 项目资产列表：project_id + artifact_type 过滤、按 updated_at 倒序翻页。
+        Index(
+            "ix_artifacts_project_type_updated",
+            "project_id",
+            "artifact_type",
+            "updated_at",
+        ),
     )
 
-    project_id = Column(String(36), ForeignKey("projects.id"), nullable=False, index=True)
+    project_id = Column(String(36), ForeignKey("projects.id"), nullable=False)
     created_by = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     artifact_type = Column(String(100), nullable=False, index=True)
     semantic_type = Column(String(100), nullable=False, index=True)
@@ -66,9 +74,16 @@ class ArtifactVersion(Base, UUIDMixin, TimestampMixin):
     # 产出相同字节时必须各自留下一行来源（version），同内容只是复用同一个存储 blob。
     __table_args__ = (
         UniqueConstraint("artifact_id", "version", name="uq_artifact_versions_artifact_version"),
+        # 版本查重 / 去重命中：artifact_id + sha256 + status，避免只按 sha256 全表扫。
+        Index(
+            "ix_artifact_versions_artifact_sha_status",
+            "artifact_id",
+            "sha256",
+            "status",
+        ),
     )
 
-    artifact_id = Column(String(36), ForeignKey("artifacts.id"), nullable=False, index=True)
+    artifact_id = Column(String(36), ForeignKey("artifacts.id"), nullable=False)
     created_by = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     version = Column(Integer, nullable=False)
     filename = Column(String(255), nullable=False)
@@ -111,7 +126,7 @@ class ArtifactVersionFile(Base, UUIDMixin, TimestampMixin):
     )
 
     artifact_version_id = Column(
-        String(36), ForeignKey("artifact_versions.id"), nullable=False, index=True
+        String(36), ForeignKey("artifact_versions.id"), nullable=False
     )
     role = Column(String(100), nullable=False, index=True)
     file_id = Column(String(36), ForeignKey("files.id"), nullable=False, index=True)

@@ -12,6 +12,7 @@ from sqlalchemy import (
     String,
     Text,
     event,
+    text,
 )
 from sqlalchemy.orm import relationship
 
@@ -44,10 +45,36 @@ class Task(Base, UUIDMixin, TimestampMixin):
             "workflow_node_attempt",
             unique=True,
         ),
+        # 结果中心：project_id + status IN (...) + ORDER BY finished_at DESC, created_at DESC。
+        # 等值列在前、排序列在后，才能消掉 ``results.py`` 的 USE TEMP B-TREE。
+        # PG 侧建索引必须用 ``finished_at DESC NULLS LAST, created_at DESC``（见
+        # 迁移 20261031_01）；普通升序索引反扫会得到 NULLS FIRST，与查询语义不符。
+        # SQLite 不支持 NULLS LAST 索引语法，迁移里建普通升序即可（其 DESC 扫描天然
+        # 把 NULL 放到最后）。
+        Index(
+            "ix_tasks_project_status_finished",
+            "project_id",
+            "status",
+            "finished_at",
+            "created_at",
+        ),
+        # 结果中心按状态筛选、不带 finished_at 排序时的降级路径 / 一般结果列表排序。
+        Index("ix_tasks_project_status_created", "project_id", "status", "created_at"),
+        # 任务列表：user_id + status + ORDER BY created_at DESC。
+        Index("ix_tasks_user_status_created", "user_id", "status", "created_at"),
+        # 调度侧按状态 + 完成时间检索（超时扫描 / 状态巡检）。
+        Index("ix_tasks_status_finished", "status", "finished_at"),
+        # 仅 QUEUED 任务按 updated_at 排序的调度队列；只索引排队中的行，其余状态不进索引。
+        Index(
+            "ix_tasks_queued_updated",
+            "updated_at",
+            sqlite_where=text("status = 'QUEUED'"),
+            postgresql_where=text("status = 'QUEUED'"),
+        ),
     )
 
     # 关联
-    user_id = Column(String(36), ForeignKey("users.id"), nullable=True, index=True)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=True)
     # 项目归属真列（plan §4）。历史上 project_id 只存在 extra_data JSON 里，
     # 导致项目过滤只能走 JSON 表达式、且没有外键约束。此列由迁移
     # 20261030_04 回填；一个版本周期内额外保留 extra_data 双写以防回滚丢数据。
@@ -57,14 +84,13 @@ class Task(Base, UUIDMixin, TimestampMixin):
             "projects.id", name="fk_tasks_project_id", ondelete="SET NULL"
         ),
         nullable=True,
-        index=True,
     )
     tool_id = Column(String(36), ForeignKey("tools.id"), nullable=False, index=True)
     tool_version_id = Column(String(36), ForeignKey("tool_versions.id"), nullable=False)
     name = Column(String(120), nullable=True, index=True)
 
     # 状态
-    status = Column(String(20), default=TaskStatus.PENDING.value, nullable=False, index=True)
+    status = Column(String(20), default=TaskStatus.PENDING.value, nullable=False)
     priority = Column(String(20), default=TaskPriority.NORMAL.value, nullable=False)
 
     # 时间
@@ -186,8 +212,12 @@ class TaskOutput(Base, UUIDMixin, TimestampMixin):
 class TaskLog(Base, UUIDMixin):
     """任务日志表"""
     __tablename__ = "task_logs"
+    __table_args__ = (
+        # 日志回看：固定按 task_id 过滤、按 timestamp 顺序翻页，复合列避免回表排序。
+        Index("ix_task_logs_task_timestamp", "task_id", "timestamp"),
+    )
 
-    task_id = Column(String(36), ForeignKey("tasks.id"), nullable=False, index=True)
+    task_id = Column(String(36), ForeignKey("tasks.id"), nullable=False)
     timestamp = Column(DateTime, default=utcnow, nullable=False)
     level = Column(String(20), default="INFO")  # DEBUG, INFO, WARNING, ERROR
     message = Column(Text, nullable=False)

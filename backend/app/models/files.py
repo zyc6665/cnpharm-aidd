@@ -1,7 +1,7 @@
 # backend/app/models/files.py
 import enum
 
-from sqlalchemy import BigInteger, Boolean, Column, DateTime, ForeignKey, Integer, JSON, String
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, ForeignKey, Index, Integer, JSON, String
 from sqlalchemy.orm import relationship
 
 from app.database.base import Base, TimestampMixin, UUIDMixin, utcnow
@@ -18,9 +18,13 @@ class FileSourceType(str, enum.Enum):
 class File(Base, UUIDMixin, TimestampMixin):
     """文件表"""
     __tablename__ = "files"
+    __table_args__ = (
+        # 「我的文件」列表：owner_id 过滤、按 created_at 倒序翻页。
+        Index("ix_files_owner_created", "owner_id", "created_at"),
+    )
 
     project_id = Column(String(36), ForeignKey("projects.id"), nullable=True, index=True)
-    owner_id = Column(String(36), ForeignKey("users.id"), nullable=True, index=True)
+    owner_id = Column(String(36), ForeignKey("users.id"), nullable=True)
 
     # 文件信息
     filename = Column(String(255), nullable=False)

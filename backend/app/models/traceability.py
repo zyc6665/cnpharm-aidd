@@ -55,7 +55,7 @@ class TaskInputSnapshot(Base, UUIDMixin):
         Index("ix_task_input_snapshots_task_role", "task_id", "input_role"),
     )
 
-    task_id = Column(String(36), nullable=False, index=True)
+    task_id = Column(String(36), nullable=False)
     input_role = Column(String(32), nullable=False)
     ordinal = Column(Integer, nullable=False, default=0)
     entity_type = Column(String(64), nullable=True)
@@ -83,11 +83,11 @@ class AuditLog(Base, UUIDMixin):
         Index("ix_audit_logs_resource", "resource_type", "resource_id"),
     )
 
-    actor = Column(String(64), nullable=False, index=True)
-    actor_id = Column(String(36), nullable=True, index=True)
+    actor = Column(String(64), nullable=False)
+    actor_id = Column(String(36), nullable=True)
     action = Column(String(64), nullable=False, index=True)
-    result = Column(String(16), nullable=False, default="SUCCESS", index=True)
-    resource_type = Column(String(64), nullable=True, index=True)
+    result = Column(String(16), nullable=False, default="SUCCESS")
+    resource_type = Column(String(64), nullable=True)
     resource_id = Column(String(64), nullable=True, index=True)
     resource_name = Column(String(255), nullable=True)
     detail = Column(JSON, nullable=False, default=dict)
