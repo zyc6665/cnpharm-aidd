@@ -18,8 +18,15 @@ from app.models.tools import Tool, ToolFavorite, ToolVersion, tool_tag_associati
 from app.models.users import User, UserRole, UserStatus
 from app.models.workflows import ResearchBoard, WorkflowDefinition, WorkflowRun
 from app.auth.dependencies import get_current_user, get_admin_user
-from app.auth.password import hash_password, verify_password
+from app.auth.password import (
+    MAX_BCRYPT_PASSWORD_BYTES,
+    MIN_PASSWORD_LENGTH,
+    hash_password,
+    validate_password_policy,
+    verify_password,
+)
 from app.common.responses import success_response
+from app.common.search import DEFAULT_KEYWORD_MAX_LENGTH, LIKE_ESCAPE, like_pattern
 from app.logging.audit import AuditAction, ResourceType, get_audit_logger
 from app.schemas.users import UserResponse
 
@@ -47,7 +54,18 @@ class UserUpdate(BaseModel):
 class PasswordChange(BaseModel):
     """密码修改"""
     old_password: str = Field(..., description="旧密码")
-    new_password: str = Field(..., min_length=6, max_length=50, description="新密码")
+    new_password: str = Field(
+        ...,
+        min_length=MIN_PASSWORD_LENGTH,
+        max_length=MAX_BCRYPT_PASSWORD_BYTES,
+        description="新密码",
+    )
+
+    @field_validator("new_password")
+    @classmethod
+    def _validate_new_password(cls, value: str) -> str:
+        """沿用统一口令策略（最小 12 位 + bcrypt 72 字节）。"""
+        return validate_password_policy(value)
 
 
 class AdminUserUpdate(BaseModel):
@@ -79,15 +97,37 @@ class AdminUserCreate(BaseModel):
     email: Optional[str] = Field(None, description="邮箱（可选；LDAP 用户可不落邮箱）")
     display_name: Optional[str] = Field(None, description="显示名称")
     password: Optional[str] = Field(
-        None, min_length=6, max_length=50, description="初始密码（local 必填；ldap 忽略）"
+        None,
+        min_length=MIN_PASSWORD_LENGTH,
+        max_length=MAX_BCRYPT_PASSWORD_BYTES,
+        description="初始密码（local 必填；ldap 忽略）",
     )
     role: str = Field(default=UserRole.USER.value, description="角色: user, admin")
     status: str = Field(default=UserStatus.ACTIVE.value, description="状态: active, disabled, pending")
 
+    @field_validator("password")
+    @classmethod
+    def _validate_password(cls, value: Optional[str]) -> Optional[str]:
+        """仅 local 用户填写口令时校验；LDAP 用户传 None 直接放行。"""
+        if value is None:
+            return None
+        return validate_password_policy(value)
+
 
 class AdminPasswordReset(BaseModel):
     """管理员重置用户密码"""
-    new_password: str = Field(..., min_length=6, max_length=50, description="新密码")
+    new_password: str = Field(
+        ...,
+        min_length=MIN_PASSWORD_LENGTH,
+        max_length=MAX_BCRYPT_PASSWORD_BYTES,
+        description="新密码",
+    )
+
+    @field_validator("new_password")
+    @classmethod
+    def _validate_new_password(cls, value: str) -> str:
+        """管理员重置同样受统一口令策略约束。"""
+        return validate_password_policy(value)
 
 
 class UserListResponse(BaseModel):
@@ -396,7 +436,9 @@ async def admin_create_user(
 async def admin_get_users(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
-    keyword: Optional[str] = Query(None, description="搜索关键词（用户名/邮箱）"),
+    keyword: Optional[str] = Query(
+        None, max_length=DEFAULT_KEYWORD_MAX_LENGTH, description="搜索关键词（用户名/邮箱）"
+    ),
     role: Optional[str] = Query(None, description="角色筛选"),
     status_filter: Optional[str] = Query(None, alias="status", description="状态筛选"),
     admin_user: User = Depends(get_admin_user),
@@ -416,10 +458,11 @@ async def admin_get_users(
 
     # 关键词搜索
     if keyword:
+        pattern = like_pattern(keyword)
         query = query.where(
-            (User.display_name.ilike(f"%{keyword}%")) |
-            (User.username.ilike(f"%{keyword}%")) |
-            (User.email.ilike(f"%{keyword}%"))
+            (User.display_name.ilike(pattern, escape=LIKE_ESCAPE)) |
+            (User.username.ilike(pattern, escape=LIKE_ESCAPE)) |
+            (User.email.ilike(pattern, escape=LIKE_ESCAPE))
         )
 
     # 角色筛选

@@ -3,14 +3,33 @@
 
 import bcrypt
 
-MAX_BCRYPT_PASSWORD_BYTES = 72
+from app.pwdpolicy import (
+    MAX_BCRYPT_PASSWORD_BYTES,
+    MIN_PASSWORD_LENGTH,
+    PASSWORD_TOO_LONG_MESSAGE,
+    PASSWORD_TOO_SHORT_MESSAGE,
+    validate_password_policy as _validate_password_policy,
+)
+
+#: 兼容既有调用点（schemas/users.py、api/v1/users.py 引用该名字）。
+validate_password_policy = _validate_password_policy
+
+__all__ = [
+    "MIN_PASSWORD_LENGTH",
+    "MAX_BCRYPT_PASSWORD_BYTES",
+    "PASSWORD_TOO_SHORT_MESSAGE",
+    "PASSWORD_TOO_LONG_MESSAGE",
+    "validate_password_policy",
+    "hash_password",
+    "verify_password",
+]
 
 
 def _encode_password(password: str) -> bytes:
     """Encode passwords without silently changing their value."""
     password_bytes = password.encode("utf-8")
     if len(password_bytes) > MAX_BCRYPT_PASSWORD_BYTES:
-        raise ValueError("密码长度不能超过 72 个 UTF-8 字节")
+        raise ValueError(PASSWORD_TOO_LONG_MESSAGE)
     return password_bytes
 
 

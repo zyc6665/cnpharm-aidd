@@ -126,7 +126,7 @@ async def test_get_gpu_stats_returns_standard_envelope(monkeypatch) -> None:
 
     monkeypatch.setattr(gpu, "get_gpu_detector", lambda: FakeDetector())
 
-    result = await gpu.get_gpu_stats()
+    result = await gpu.get_gpu_stats(current_user=object())
 
     assert result["code"] == 200
     assert isinstance(result["data"], list)

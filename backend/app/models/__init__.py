@@ -41,6 +41,7 @@ from app.models.uploads import DataFile, Dataset, UploadPart, UploadSession
 from app.models.idempotency import IdempotencyKey
 from app.models.versions import DataVersion
 from app.models.quotas import ProjectQuota
+from app.models.refresh_tokens import RefreshToken
 
 __all__ = [
     "User",
@@ -66,4 +67,5 @@ __all__ = [
     "IdempotencyKey",
     "DataVersion",
     "ProjectQuota",
+    "RefreshToken",
 ]

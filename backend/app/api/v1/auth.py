@@ -30,6 +30,16 @@ from app.auth.cookies import (
 from app.auth.ldap_provider import LdapAuthenticator, get_ldap_authenticator
 from app.schemas.users import UserLogin, UserResponse
 from app.schemas.verification import PasswordResetRequest
+from app.services import login_throttle
+from app.services.refresh_token_store import (
+    ROTATE_OK,
+    ROTATE_REUSE,
+    expires_at_from_payload,
+    revoke_all_for_user,
+    revoke_refresh_token,
+    rotate_refresh_token,
+    store_refresh_token,
+)
 from app.common.responses import success_response
 from app.common.exceptions import BusinessException, UnauthorizedException
 from app.common.time import utcnow
@@ -79,6 +89,9 @@ async def login(
 
     username = (login_data.username or "").strip()
 
+    # 账户级锁定：username+IP 连续失败超阈值 -> 429；计数后端不可用 -> 503（fail-closed）。
+    await login_throttle.ensure_not_locked(username, client_ip)
+
     # 大小写不敏感按 username 查用户
     result = await db.execute(
         select(User)
@@ -97,6 +110,7 @@ async def login(
             user_agent=user_agent,
             reason="用户不存在",
         )
+        await login_throttle.register_failure(username, client_ip)
         raise _login_failed()
 
     if user.status != UserStatus.ACTIVE.value:
@@ -109,6 +123,7 @@ async def login(
             user_agent=user_agent,
             reason="账户已被禁用",
         )
+        await login_throttle.register_failure(username, client_ip)
         raise _login_failed()
 
     if user.auth_source == "ldap":
@@ -122,6 +137,7 @@ async def login(
                 user_agent=user_agent,
                 reason="LDAP 未启用",
             )
+            await login_throttle.register_failure(username, client_ip)
             raise _login_failed()
 
         ldap_result = authenticator.authenticate(username, login_data.password)
@@ -135,6 +151,7 @@ async def login(
                 user_agent=user_agent,
                 reason="LDAP 校验失败",
             )
+            await login_throttle.register_failure(username, client_ip)
             raise _login_failed()
 
         # 回填目录 DN 与最近登录时间；不写 password_hash。
@@ -154,6 +171,7 @@ async def login(
                 user_agent=user_agent,
                 reason="密码错误",
             )
+            await login_throttle.register_failure(username, client_ip)
             raise _login_failed()
 
         user.last_login_at = utcnow()
@@ -166,6 +184,21 @@ async def login(
         role=user.role,
     )
     refresh_token = jwt_handler.create_refresh_token(user_id=user.id)
+
+    # 落库 refresh 的 jti：后续 refresh 走轮换 + 复用检测，logout 可吊销。
+    refresh_payload = jwt_handler.decode_token(refresh_token) or {}
+    await store_refresh_token(
+        db,
+        jti=str(refresh_payload.get("jti") or ""),
+        user_id=str(user.id),
+        expires_at=expires_at_from_payload(refresh_payload),
+        user_agent=user_agent,
+        ip_address=client_ip,
+    )
+    await db.commit()
+
+    # 成功登录清零账户级失败计数。
+    await login_throttle.reset(username, client_ip)
 
     audit.log_login(
         user_id=str(user.id),
@@ -214,6 +247,7 @@ async def refresh_token(
     ``refresh_token``（旧契约，供 CLI/测试）。响应 body 默认不含 token，仅当请求头
     ``X-Token-Transport: body`` 时返回，便于非浏览器客户端迁移。
     """
+    client_ip, user_agent = _client_meta(request)
     token = request.cookies.get(REFRESH_COOKIE_NAME)
     if not token and refresh_data is not None:
         token = refresh_data.refresh_token
@@ -227,6 +261,10 @@ async def refresh_token(
         raise UnauthorizedException("无效的刷新令牌")
 
     user_id = payload.get("sub")
+    old_jti = payload.get("jti")
+    # 旧版未带 jti 的 refresh 无法做吊销/复用检测，按无效处理（强制重新登录）。
+    if not user_id or not old_jti:
+        raise UnauthorizedException("无效的刷新令牌")
 
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
@@ -241,6 +279,27 @@ async def refresh_token(
         role=user.role,
     )
     new_refresh_token = jwt_handler.create_refresh_token(user_id=user.id)
+    new_payload = jwt_handler.decode_token(new_refresh_token) or {}
+
+    rotate_result = await rotate_refresh_token(
+        db,
+        old_jti=str(old_jti),
+        user_id=str(user.id),
+        new_jti=str(new_payload.get("jti") or ""),
+        new_expires_at=expires_at_from_payload(new_payload),
+        user_agent=user_agent,
+        ip_address=client_ip,
+    )
+
+    if rotate_result == ROTATE_REUSE:
+        # 已吊销的 jti 再次使用 = 复用入侵：吊销该用户全部 refresh，强制重新登录。
+        await revoke_all_for_user(db, str(user.id))
+        await db.commit()
+        raise UnauthorizedException("刷新令牌已被使用，请重新登录")
+    if rotate_result != ROTATE_OK:
+        raise UnauthorizedException("无效的刷新令牌")
+
+    await db.commit()
 
     set_auth_cookies(
         response,
@@ -262,9 +321,24 @@ async def logout(
     request: Request,
     response: Response,
     current_user: User = Depends(get_current_user),
+    refresh_data: RefreshTokenRequest | None = None,
+    db: AsyncSession = Depends(get_db),
 ):
-    """登出：清理三个认证 Cookie，保留审计。"""
+    """登出：吊销当前 refresh 的 jti，清理三个认证 Cookie，保留审计。
+
+    Cookie 场景从 ``cpumodel_refresh`` 读取；Bearer/CLI 可把 refresh 放进请求体
+    ``refresh_token``（与 /refresh 一致）。access token 不落库、无需吊销。
+    """
     client_ip, user_agent = _client_meta(request)
+    refresh_token = request.cookies.get(REFRESH_COOKIE_NAME)
+    if not refresh_token and refresh_data is not None:
+        refresh_token = refresh_data.refresh_token
+    if refresh_token:
+        payload = jwt_handler.decode_token(refresh_token) or {}
+        jti = payload.get("jti")
+        if jti and payload.get("type") == "refresh":
+            await revoke_refresh_token(db, str(jti))
+            await db.commit()
     get_audit_logger().log_logout(
         user_id=str(current_user.id),
         client_ip=client_ip,

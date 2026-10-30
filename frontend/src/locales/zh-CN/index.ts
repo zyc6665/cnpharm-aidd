@@ -869,7 +869,7 @@ export default {
       emailRequired: '请输入邮箱',
       emailInvalid: '请输入有效的邮箱地址',
       passwordRequired: '请输入密码',
-      passwordLength: '密码长度至少为 6 个字符',
+      passwordLength: '密码长度至少为 12 个字符',
       confirmPasswordRequired: '请确认密码',
       passwordMismatch: '两次输入的密码不一致'
     }

@@ -202,6 +202,19 @@ class Settings(BaseSettings):
         "http://127.0.0.1:8585",
     ]
 
+    # ==================== 主机白名单 / 反向代理 / 文档开关 ====================
+    # TrustedHostMiddleware 的白名单。开发环境默认放行任意 Host；预发布/生产
+    # 必须显式配置具体域名（生产缺省或为 "*" 时拒绝启动，见下方校验）。
+    ALLOWED_HOSTS: List[str] = ["*"]
+    # 是否暴露 /docs、/redoc、/openapi.json。None 表示按环境推导：
+    # development 打开，预发布/生产关闭。
+    ENABLE_DOCS: Optional[bool] = None
+    # 是否强制 HTTPS 跳转。None 表示「生产 + COOKIE_SECURE」时启用；
+    # 显式 true/false 可覆盖，便于反向代理已终止 TLS 的内部部署。
+    ENFORCE_HTTPS: Optional[bool] = None
+    # 反向代理会改写 Host/X-Forwarded-Proto 时置 true；默认不信任外部头。
+    TRUST_PROXY_HEADERS: bool = False
+
     # ==================== 数据库配置 ====================
     # 开发环境: sqlite+aiosqlite:///./storage/scitool.db
     # 生产环境: postgresql+asyncpg://user:pass@host:5432/scitool
@@ -339,6 +352,23 @@ class Settings(BaseSettings):
         if self.ENVIRONMENT == "production":
             if self.DEBUG:
                 raise ValueError("DEBUG must be disabled in production environment")
+            # Host 头是路由与缓存键的一部分；生产放行 "*" 等于允许任意 Host
+            # 注入（密码重置链接投毒、缓存混淆）。必须显式配置。
+            allowed_hosts = [
+                host.strip() for host in self.ALLOWED_HOSTS if host and host.strip()
+            ]
+            if not allowed_hosts or "*" in allowed_hosts:
+                raise ValueError(
+                    "ALLOWED_HOSTS must list explicit hostnames in production environment"
+                )
+            if self.RATE_LIMIT_BACKEND == "memory":
+                raise ValueError(
+                    "RATE_LIMIT_BACKEND must use redis in production environment"
+                )
+            if self.RATE_LIMIT_FAIL_MODE != "closed":
+                raise ValueError(
+                    "RATE_LIMIT_FAIL_MODE must be closed in production environment"
+                )
             if not self.DATABASE_URL.startswith("postgresql"):
                 raise ValueError(
                     "DATABASE_URL must use PostgreSQL in production environment"
@@ -411,6 +441,13 @@ class Settings(BaseSettings):
     CACHE_BACKEND: Literal["memory", "redis"] = "memory"
     REQUEST_RATE_LIMIT_PER_MINUTE: int = 60
     RATE_LIMIT_TRUST_PROXY_HEADERS: bool = False
+    # 限流计数后端：auto 表示预发布/生产用 Redis、开发用进程内缓存；
+    # redis/memory 可显式覆盖。多 worker 部署必须使用 redis，否则各进程计数
+    # 互不可见，等于把阈值放大 N 倍。
+    RATE_LIMIT_BACKEND: Literal["auto", "redis", "memory"] = "auto"
+    # 计数后端不可用时的行为。closed 返回 503（生产默认，防止绕过限流）；
+    # open 放行并告警（仅建议本地开发使用）。
+    RATE_LIMIT_FAIL_MODE: Literal["open", "closed"] = "closed"
 
     # Redis 配置（生产环境）
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -431,6 +468,27 @@ class Settings(BaseSettings):
         if "REDIS_URL" in self.model_fields_set:
             return self.REDIS_URL
         return self.redis_url_with_auth
+
+    @property
+    def docs_enabled(self) -> bool:
+        """是否暴露 Swagger/ReDoc/OpenAPI。"""
+        if self.ENABLE_DOCS is not None:
+            return self.ENABLE_DOCS
+        return self.ENVIRONMENT == "development"
+
+    @property
+    def https_redirect_enabled(self) -> bool:
+        """是否启用 HTTP -> HTTPS 跳转。"""
+        if self.ENFORCE_HTTPS is not None:
+            return self.ENFORCE_HTTPS
+        return self.ENVIRONMENT == "production" and self.COOKIE_SECURE
+
+    @property
+    def resolved_rate_limit_backend(self) -> Literal["redis", "memory"]:
+        """限流计数实际使用的后端。"""
+        if self.RATE_LIMIT_BACKEND == "auto":
+            return "redis" if self.ENVIRONMENT in {"staging", "production"} else "memory"
+        return self.RATE_LIMIT_BACKEND
 
     # ==================== Celery 配置 ====================
     # 为空时使用内存队列（同步执行），生产环境设置为 Redis URL
@@ -625,6 +683,21 @@ class Settings(BaseSettings):
     # 生产/预发布灰度账号。全局新入口关闭时，仅这些内部账号可访问。
     AIDD_ROLLOUT_USER_EMAILS: List[str] = []
     AIDD_ROLLOUT_USER_IDS: List[str] = []
+
+    @field_validator("ALLOWED_HOSTS", mode="before")
+    @classmethod
+    def _parse_allowed_hosts(cls, value):
+        """兼容 JSON 数组和逗号分隔环境变量。"""
+        if value is None:
+            return []
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return []
+            if stripped.startswith("["):
+                return json.loads(stripped)
+            return [item.strip() for item in stripped.split(",") if item.strip()]
+        return value
 
     @field_validator("AIDD_ROLLOUT_USER_EMAILS", "AIDD_ROLLOUT_USER_IDS", mode="before")
     @classmethod

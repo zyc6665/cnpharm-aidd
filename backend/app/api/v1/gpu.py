@@ -142,8 +142,8 @@ class SlotStateReport(BaseModel):
     summary="获取GPU节点信息",
     description="获取当前节点的GPU硬件信息"
 )
-async def get_gpu_info():
-    """获取GPU节点信息"""
+async def get_gpu_info(current_user=Depends(get_current_user)):
+    """获取GPU节点信息（P2：至少要求登录）"""
     detector = get_gpu_detector()
 
     if not detector.is_available():
@@ -181,8 +181,8 @@ async def get_gpu_info():
     summary="获取GPU实时统计",
     description="获取所有GPU的实时利用率、温度等统计信息"
 )
-async def get_gpu_stats():
-    """获取GPU实时统计"""
+async def get_gpu_stats(current_user=Depends(get_current_user)):
+    """获取GPU实时统计（P2：至少要求登录）"""
     detector = get_gpu_detector()
 
     if not detector.is_available():
@@ -215,8 +215,8 @@ async def get_gpu_stats():
     summary="获取指定GPU统计",
     description="获取指定GPU的详细统计信息"
 )
-async def get_single_gpu_stats(gpu_index: int):
-    """获取指定GPU统计"""
+async def get_single_gpu_stats(gpu_index: int, current_user=Depends(get_current_user)):
+    """获取指定GPU统计（P2：至少要求登录）"""
     detector = get_gpu_detector()
 
     if not detector.is_available():
@@ -251,8 +251,8 @@ async def get_single_gpu_stats(gpu_index: int):
     summary="获取GPU摘要",
     description="获取GPU资源的整体摘要信息"
 )
-async def get_gpu_summary():
-    """获取GPU摘要"""
+async def get_gpu_summary(admin_user=Depends(get_admin_user)):
+    """获取GPU摘要（P2：汇总类信息，要求管理员）"""
     monitor = GPUMonitor()
     summary = await monitor.get_gpu_summary()
     return success_response(GPUSummaryResponse(**summary).model_dump())
@@ -263,8 +263,8 @@ async def get_gpu_summary():
     summary="GPU健康检查",
     description="检查GPU节点的健康状态"
 )
-async def check_gpu_health():
-    """GPU健康检查"""
+async def check_gpu_health(current_user=Depends(get_current_user)):
+    """GPU健康检查（P2：至少要求登录；内部探活可改用节点令牌专用端点）"""
     monitor = GPUMonitor()
     health = await monitor.check_gpu_node_health()
     return success_response(GPUHealthResponse(**health).model_dump())

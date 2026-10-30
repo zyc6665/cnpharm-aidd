@@ -870,7 +870,7 @@ export default {
       emailRequired: 'Please enter email',
       emailInvalid: 'Please enter a valid email address',
       passwordRequired: 'Please enter password',
-      passwordLength: 'Password must be at least 6 characters',
+      passwordLength: 'Password must be at least 12 characters',
       confirmPasswordRequired: 'Please confirm password',
       passwordMismatch: 'Passwords do not match'
     }

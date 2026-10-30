@@ -6,12 +6,22 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field, EmailStr, field_validator
 from app.schemas.common import TimestampMixin
 from app.schemas.statistics import UserStatisticsResponse
+from app.pwdpolicy import (
+    MAX_BCRYPT_PASSWORD_BYTES,
+    MIN_PASSWORD_LENGTH,
+    validate_password_policy,
+)
 
 
 class UserCreate(BaseModel):
     """用户注册"""
     email: EmailStr = Field(..., description="邮箱")
-    password: str = Field(..., min_length=6, max_length=100, description="密码")
+    password: str = Field(
+        ...,
+        min_length=MIN_PASSWORD_LENGTH,
+        max_length=MAX_BCRYPT_PASSWORD_BYTES,
+        description="密码",
+    )
     display_name: Optional[str] = Field(None, max_length=100, description="显示名称")
     verification_code: str = Field(
         ...,
@@ -19,6 +29,12 @@ class UserCreate(BaseModel):
         max_length=6,
         description="邮箱验证码"
     )
+
+    @field_validator("password")
+    @classmethod
+    def _validate_password_policy(cls, value: str) -> str:
+        """最小长度 12 + bcrypt 72 字节上限，超限返回 422 而非 500。"""
+        return validate_password_policy(value)
 
 
 class UserLogin(BaseModel):
@@ -73,4 +89,15 @@ class TokenResponse(BaseModel):
 class PasswordChange(BaseModel):
     """修改密码"""
     old_password: str = Field(..., description="旧密码")
-    new_password: str = Field(..., min_length=6, max_length=100, description="新密码")
+    new_password: str = Field(
+        ...,
+        min_length=MIN_PASSWORD_LENGTH,
+        max_length=MAX_BCRYPT_PASSWORD_BYTES,
+        description="新密码",
+    )
+
+    @field_validator("new_password")
+    @classmethod
+    def _validate_new_password_policy(cls, value: str) -> str:
+        """新口令同样受 12 位 + 72 字节约束。"""
+        return validate_password_policy(value)

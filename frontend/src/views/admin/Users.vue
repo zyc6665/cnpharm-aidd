@@ -347,7 +347,7 @@ const createFormRules = computed(() => ({
   password: createForm.auth_source === 'local'
     ? [
         { required: true, message: t('auth.validation.passwordRequired') },
-        { min: 6, message: t('auth.validation.passwordLength') }
+        { min: 12, message: t('auth.validation.passwordLength') }
       ]
     : [],
   role: [{ required: true, message: t('admin.selectRole') }],
@@ -366,7 +366,7 @@ const formRules = computed(() => ({
 const resetPasswordRules = computed(() => ({
   new_password: [
     { required: true, message: t('auth.validation.passwordRequired') },
-    { min: 6, message: t('auth.validation.passwordLength') }
+    { min: 12, message: t('auth.validation.passwordLength') }
   ]
 }))
 

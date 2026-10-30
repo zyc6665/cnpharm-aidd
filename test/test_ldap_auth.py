@@ -333,7 +333,7 @@ async def test_ldap_user_reset_and_change_password_forbidden(
 ):
     reset = await api_client.post(
         f"/api/v1/users/admin/{accounts['ldap'].id}/reset-password",
-        json={"new_password": "NewPass123"},
+        json={"new_password": "LdapResetPass123"},
         headers={"Authorization": "Bearer admin"},
     )
     assert reset.status_code == 400, reset.text
@@ -341,7 +341,7 @@ async def test_ldap_user_reset_and_change_password_forbidden(
 
     change = await api_client.put(
         "/api/v1/users/me/password",
-        json={"old_password": "whatever", "new_password": "NewPass123"},
+        json={"old_password": "whatever", "new_password": "LdapResetPass123"},
         headers={"Authorization": "Bearer ldap"},
     )
     assert change.status_code == 400, change.text
