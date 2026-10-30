@@ -25,7 +25,11 @@ export interface BuildFallbackToolDocumentationOptions {
   labels: ToolDocumentationLabels
 }
 
-const UNSAFE_PROTOCOL_RE = /^\s*(javascript|data|vbscript):/i
+const CONTROL_OR_WHITESPACE_RE = /[\u0000-\u0020\u007f]/g
+const HREF_SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i
+const RELATIVE_HREF_RE = /^(?:\/|#|\?|\.\/|\.\.\/)/
+const ALLOWED_HREF_PROTOCOLS = new Set(['http:', 'https:', 'mailto:'])
+const URL_BASE = 'https://placeholder.invalid'
 
 function escapeHtml(value: unknown): string {
   return String(value ?? '')
@@ -37,11 +41,27 @@ function escapeHtml(value: unknown): string {
 }
 
 function sanitizeHref(href: string): string {
-  const trimmed = href.trim()
-  if (!trimmed || UNSAFE_PROTOCOL_RE.test(trimmed)) {
+  const value = href.replace(CONTROL_OR_WHITESPACE_RE, '').trim()
+  if (!value) {
     return '#'
   }
-  return escapeHtml(trimmed)
+
+  let parsed: URL
+  try {
+    parsed = new URL(value, URL_BASE)
+  } catch {
+    return '#'
+  }
+
+  if (HREF_SCHEME_RE.test(value)) {
+    return ALLOWED_HREF_PROTOCOLS.has(parsed.protocol) ? escapeHtml(value) : '#'
+  }
+
+  if (!RELATIVE_HREF_RE.test(value) || value.slice(0, 32).includes(':')) {
+    return '#'
+  }
+
+  return escapeHtml(value)
 }
 
 function renderInline(text: string): string {
