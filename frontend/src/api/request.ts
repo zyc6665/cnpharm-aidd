@@ -1,24 +1,17 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig, AxiosError, type InternalAxiosRequestConfig } from 'axios'
 import { message } from 'ant-design-vue'
 import type { ApiResponse, ApiError } from '@/types/api'
-import {
-  buildRefreshTokenRequestConfig,
-  shouldAttachAuthHeader,
-  shouldAttemptTokenRefresh
-} from './auth-request-policy'
+import { shouldAttemptTokenRefresh } from './auth-request-policy'
 import { redirectToLogin } from './auth-redirect'
-import {
-  clearAuthStorage,
-  getRefreshToken,
-  getToken,
-  setRefreshToken,
-  setToken
-} from '@/utils/auth-storage'
+import { clearAuthStorage } from '@/utils/auth-storage'
+import { buildCsrfHeader } from '@/utils/cookies'
 
 export interface RequestOptions extends AxiosRequestConfig {
   silent?: boolean
   retry?: number
   retryDelayMs?: number
+  /** 启动恢复会话等场景：刷新失败时不要强制跳转登录页 */
+  skipAuthRedirect?: boolean
 }
 
 type RetryableRequestConfig = InternalAxiosRequestConfig & RequestOptions & {
@@ -30,46 +23,42 @@ export const DEFAULT_TIMEOUT_MS = 30_000
 export const LONG_RUNNING_TIMEOUT_MS = 0
 export const UPLOAD_TIMEOUT_MS = 5 * 60_000
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
+
 // 创建 axios 实例
 const request: AxiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL,
+  baseURL: API_BASE_URL,
   timeout: DEFAULT_TIMEOUT_MS,
+  // 认证依赖后端 httpOnly Cookie，所有请求都必须携带 Cookie
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json'
   }
 })
 
-export {
-  AUTH_CLEARED_EVENT,
-  getRefreshToken,
-  getToken,
-  setRefreshToken,
-  setToken
-} from '@/utils/auth-storage'
+export { AUTH_CLEARED_EVENT } from '@/utils/auth-storage'
 
 // 清除认证状态
 export const clearTokens = (): void => {
   clearAuthStorage()
 }
 
-// 是否正在刷新 Token
+// 是否正在刷新会话
 let isRefreshing = false
-// 等待刷新的请求队列
+// 等待刷新的请求队列：刷新成功只广播「可以重放」信号，不再传递 token
 type RefreshSubscriber = {
-  resolve: (token: string) => void
+  resolve: () => void
   reject: (error: unknown) => void
 }
 
 let refreshSubscribers: RefreshSubscriber[] = []
 
-// 订阅 Token 刷新
 const subscribeTokenRefresh = (subscriber: RefreshSubscriber) => {
   refreshSubscribers.push(subscriber)
 }
 
-// 通知所有订阅者
-const onTokenRefreshed = (token: string) => {
-  refreshSubscribers.forEach(subscriber => subscriber.resolve(token))
+const onTokenRefreshed = () => {
+  refreshSubscribers.forEach(subscriber => subscriber.resolve())
   refreshSubscribers = []
 }
 
@@ -78,12 +67,14 @@ const rejectRefreshSubscribers = (error: unknown) => {
   refreshSubscribers = []
 }
 
-// 请求拦截器
+// 请求拦截器：不再从 storage 读取 token，非安全方法附加 CSRF 头
 request.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const token = getToken()
-    if (token && config.headers && shouldAttachAuthHeader(config.url)) {
-      config.headers.Authorization = `Bearer ${token}`
+    const csrfHeaders = buildCsrfHeader(config.method)
+    if (config.headers) {
+      Object.entries(csrfHeaders).forEach(([name, value]) => {
+        config.headers[name] = value
+      })
     }
     return config
   },
@@ -101,16 +92,13 @@ request.interceptors.response.use(
     const originalRequest = error.config as RetryableRequestConfig
     const canRefreshToken = shouldAttemptTokenRefresh(originalRequest?.url)
 
-    // 401 未授权，尝试刷新 Token
+    // 401 未授权，尝试通过刷新 Cookie 恢复会话
     if (error.response?.status === 401 && canRefreshToken && !originalRequest._retry) {
       if (isRefreshing) {
-        // 等待 Token 刷新完成
+        // 等待会话刷新完成，成功后直接重放原请求（Cookie 会自动携带）
         return new Promise((resolve, reject) => {
           subscribeTokenRefresh({
-            resolve: (token: string) => {
-              if (originalRequest.headers) {
-                originalRequest.headers.Authorization = `Bearer ${token}`
-              }
+            resolve: () => {
               resolve(request(originalRequest))
             },
             reject
@@ -121,40 +109,25 @@ request.interceptors.response.use(
       originalRequest._retry = true
       isRefreshing = true
 
-      const refreshToken = getRefreshToken()
-      if (refreshToken) {
-        try {
-          const response = await axios.post<ApiResponse<{ access_token: string; refresh_token: string }>>(
-            `${import.meta.env.VITE_API_BASE_URL}/auth/refresh`,
-            undefined,
-            buildRefreshTokenRequestConfig(refreshToken)
-          )
+      try {
+        await axios.post<ApiResponse<unknown>>(
+          `${API_BASE_URL}/auth/refresh`,
+          undefined,
+          { withCredentials: true, headers: buildCsrfHeader('POST') }
+        )
 
-          const { access_token, refresh_token: newRefreshToken } = response.data.data
-          setToken(access_token)
-          setRefreshToken(newRefreshToken)
-          onTokenRefreshed(access_token)
-
-          if (originalRequest.headers) {
-            originalRequest.headers.Authorization = `Bearer ${access_token}`
-          }
-          return request(originalRequest)
-        } catch {
-          // 刷新失败，清除 Token 并跳转登录
-          clearTokens()
-          rejectRefreshSubscribers(error)
-          redirectToLogin(window.location.pathname)
-          return Promise.reject(error)
-        } finally {
-          isRefreshing = false
-        }
-      } else {
-        // 没有 Refresh Token，跳转登录
+        onTokenRefreshed()
+        return request(originalRequest)
+      } catch (refreshError) {
+        // 刷新失败，清除用户态并跳转登录
         clearTokens()
-        rejectRefreshSubscribers(error)
-        isRefreshing = false
-        redirectToLogin(window.location.pathname)
+        rejectRefreshSubscribers(refreshError)
+        if (!originalRequest.skipAuthRedirect) {
+          redirectToLogin(window.location.pathname)
+        }
         return Promise.reject(error)
+      } finally {
+        isRefreshing = false
       }
     }
 

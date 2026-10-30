@@ -10,7 +10,8 @@
 公开注册已移除；邮箱验证码/自助重置等链路统一停用（HTTP 403 + 业务码 40002）。
 """
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload
@@ -20,6 +21,12 @@ from app.models.users import User, UserStatus
 from app.auth.jwt_handler import JWTHandler
 from app.auth.password import verify_password
 from app.auth.dependencies import get_current_user
+from app.auth.cookies import (
+    REFRESH_COOKIE_NAME,
+    clear_auth_cookies,
+    generate_csrf_token,
+    set_auth_cookies,
+)
 from app.auth.ldap_provider import LdapAuthenticator, get_ldap_authenticator
 from app.schemas.users import UserLogin, UserResponse
 from app.schemas.verification import PasswordResetRequest
@@ -34,6 +41,12 @@ jwt_handler = JWTHandler()
 #: 统一登录失败文案：不泄露用户是否存在/认证源/是否禁用。
 _LOGIN_FAILED_MESSAGE = "用户名或密码错误"
 _DISABLED_MESSAGE = "该功能已停用，请联系管理员"
+
+
+class RefreshTokenRequest(BaseModel):
+    """刷新请求体：字段可选，兼容 Cookie 模式下的空 body。"""
+
+    refresh_token: str | None = None
 
 
 def _client_meta(request: Request | None) -> tuple[str | None, str | None]:
@@ -56,6 +69,7 @@ def _login_failed() -> BusinessException:
 async def login(
     login_data: UserLogin,
     request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db),
     authenticator: LdapAuthenticator | None = Depends(get_ldap_authenticator),
 ):
@@ -162,6 +176,14 @@ async def login(
         user_agent=user_agent,
     )
 
+    # 新契约：httpOnly Cookie + CSRF；body 里的 token 为兼容旧客户端保留（逐步弃用）。
+    set_auth_cookies(
+        response,
+        access_token=access_token,
+        refresh_token=refresh_token,
+        csrf_token=generate_csrf_token(),
+    )
+
     return success_response(
         data={
             "user": UserResponse.model_validate(user).model_dump(),
@@ -181,12 +203,26 @@ async def reset_password(data: PasswordResetRequest | None = None):
 
 @router.post("/refresh", response_model=dict)
 async def refresh_token(
-    refresh_token: str,
+    request: Request,
+    response: Response,
+    refresh_data: RefreshTokenRequest | None = None,
     db: AsyncSession = Depends(get_db),
 ):
-    """刷新令牌"""
+    """刷新令牌。
+
+    优先读取 ``cpumodel_refresh`` Cookie；无 Cookie 时回退到 JSON body 的
+    ``refresh_token``（旧契约，供 CLI/测试）。响应 body 默认不含 token，仅当请求头
+    ``X-Token-Transport: body`` 时返回，便于非浏览器客户端迁移。
+    """
+    token = request.cookies.get(REFRESH_COOKIE_NAME)
+    if not token and refresh_data is not None:
+        token = refresh_data.refresh_token
+
+    if not token:
+        raise UnauthorizedException("无效的刷新令牌")
+
     try:
-        payload = jwt_handler.verify_token(refresh_token, token_type="refresh")
+        payload = jwt_handler.verify_token(token, token_type="refresh")
     except Exception:
         raise UnauthorizedException("无效的刷新令牌")
 
@@ -206,26 +242,33 @@ async def refresh_token(
     )
     new_refresh_token = jwt_handler.create_refresh_token(user_id=user.id)
 
-    return success_response(
-        data={
-            "access_token": new_access_token,
-            "refresh_token": new_refresh_token,
-            "token_type": "bearer",
-        },
-        message="令牌刷新成功",
+    set_auth_cookies(
+        response,
+        access_token=new_access_token,
+        refresh_token=new_refresh_token,
+        csrf_token=generate_csrf_token(),
     )
+
+    data: dict[str, object] = {"token_type": "bearer"}
+    if request.headers.get("X-Token-Transport") == "body":
+        data["access_token"] = new_access_token
+        data["refresh_token"] = new_refresh_token
+
+    return success_response(data=data, message="令牌刷新成功")
 
 
 @router.post("/logout", response_model=dict)
 async def logout(
     request: Request,
+    response: Response,
     current_user: User = Depends(get_current_user),
 ):
-    """登出（客户端清除令牌即可）"""
+    """登出：清理三个认证 Cookie，保留审计。"""
     client_ip, user_agent = _client_meta(request)
     get_audit_logger().log_logout(
         user_id=str(current_user.id),
         client_ip=client_ip,
         user_agent=user_agent,
     )
+    clear_auth_cookies(response)
     return success_response(message="登出成功")

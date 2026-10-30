@@ -1,4 +1,3 @@
-import { getToken as getStoredToken } from './auth-storage.ts'
 import request, { type RequestOptions } from '@/api/request'
 
 interface ObjectUrlApi {
@@ -23,7 +22,6 @@ interface ProtectedFileAccessDependencies {
   fetchBlob?: (url: string, headers: Record<string, string>) => Promise<Blob>
   fetchText?: (url: string, headers: Record<string, string>) => Promise<string>
   fetchDownloadUrl?: (fileId: string, headers: Record<string, string>) => Promise<string>
-  getToken?: () => string | null
   objectUrl?: ObjectUrlApi
 }
 
@@ -97,15 +95,9 @@ function resolveDownloadName(file: ProtectedFileReference): string {
   return file.original_name || file.filename || 'download'
 }
 
-function resolveProtectedAuthHeaders(
-  dependencies: ProtectedFileAccessDependencies = {}
-): Record<string, string> {
-  const token = (dependencies.getToken || getStoredToken)()
-  if (token) {
-    return { Authorization: `Bearer ${token}` }
-  }
-
-  throw new Error('需要登录后才能访问此文件')
+function resolveProtectedAuthHeaders(): Record<string, string> {
+  // 认证由 httpOnly Cookie 承载，请求会自动携带；这里不再拼 Authorization。
+  return {}
 }
 
 function isBrowserObjectUrl(url: string): boolean {
@@ -166,7 +158,7 @@ export async function createProtectedObjectUrl(
     }
   }
 
-  const headers = resolveProtectedAuthHeaders(dependencies)
+  const headers = resolveProtectedAuthHeaders()
 
   const blob = await (dependencies.fetchBlob || fetchProtectedFileBlob)(fileUrl, headers)
   const objectUrlApi = dependencies.objectUrl || defaultObjectUrlApi
@@ -182,7 +174,7 @@ export async function fetchProtectedFileText(
   fileUrl: string,
   dependencies: ProtectedFileAccessDependencies = {}
 ): Promise<string> {
-  const headers = resolveProtectedAuthHeaders(dependencies)
+  const headers = resolveProtectedAuthHeaders()
   return await (dependencies.fetchText || fetchProtectedTextContent)(fileUrl, headers)
 }
 
@@ -199,7 +191,7 @@ export async function triggerProtectedFileDownload(
 
   if (fileId) {
     try {
-      const headers = resolveProtectedAuthHeaders(dependencies)
+      const headers = resolveProtectedAuthHeaders()
       const downloadUrl = await (dependencies.fetchDownloadUrl || fetchProtectedDownloadUrl)(fileId, headers)
       const anchor = dom.createAnchor()
       try {

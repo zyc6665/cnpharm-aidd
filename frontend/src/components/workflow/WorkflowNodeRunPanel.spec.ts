@@ -8,7 +8,7 @@ import { getAllProjectArtifacts } from '@/api/artifacts'
 import { getToolDetail } from '@/api/tools'
 import { uploadFile } from '@/api/files'
 import { createTask, getTaskDetail, prepareTaskRun } from '@/api/tasks'
-import { useUserStore, useWorkflowStore } from '@/stores'
+import { useWorkflowStore } from '@/stores'
 import i18n from '@/locales'
 
 vi.mock('@/api/tools', () => ({
@@ -394,7 +394,6 @@ describe('WorkflowNodeRunPanel', () => {
 
   beforeEach(() => {
     setActivePinia(createPinia())
-    useUserStore().token = 'test-access-token'
     vi.mocked(getAllProjectArtifacts).mockReset()
     vi.mocked(getToolDetail).mockReset()
     vi.mocked(uploadFile).mockReset()

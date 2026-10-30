@@ -7,6 +7,7 @@ import { getToolDetail, getToolExample } from '@/api/tools'
 import { createTask, prepareTaskRun } from '@/api/tasks'
 import { uploadFile } from '@/api/files'
 import { useUserStore } from '@/stores'
+import type { UserInfo } from '@/types/models'
 import i18n from '@/locales'
 
 const routerPush = vi.fn()
@@ -295,8 +296,8 @@ describe('ToolDetail run preparation preview', () => {
     vi.mocked(message.error).mockReset()
     vi.mocked(message.success).mockReset()
 
-    const userStore = useUserStore()
-    userStore.token = 'token'
+    // 登录态由 Cookie 会话 + userInfo 决定，测试直接注入用户信息
+    useUserStore().userInfo = { id: 'user-1', username: 'tester' } as UserInfo
   })
 
   it('stops task creation and shows backend reason when preparation preview is blocked', async () => {

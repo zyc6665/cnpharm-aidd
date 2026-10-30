@@ -7,7 +7,7 @@ import {
   triggerProtectedFileDownload
 } from '../src/utils/protected-file-access.ts'
 
-test('createProtectedObjectUrl 应使用登录令牌拉取受保护文件并返回可撤销 blob URL', async () => {
+test('createProtectedObjectUrl 应通过 Cookie 拉取受保护文件并返回可撤销 blob URL', async () => {
   let requestedUrl = ''
   let requestedHeaders: Record<string, string> | undefined
   let revokedUrl = ''
@@ -15,7 +15,6 @@ test('createProtectedObjectUrl 应使用登录令牌拉取受保护文件并返�
   const blob = new Blob(['mol'])
 
   const resource = await createProtectedObjectUrl('/api/v1/files/file-1/download', {
-    getToken: () => 'token-123',
     fetchBlob: async (url, headers) => {
       requestedUrl = url
       requestedHeaders = headers
@@ -33,7 +32,8 @@ test('createProtectedObjectUrl 应使用登录令牌拉取受保护文件并返�
   })
 
   assert.equal(requestedUrl, '/api/v1/files/file-1/download')
-  assert.deepEqual(requestedHeaders, { Authorization: 'Bearer token-123' })
+  // 不再附带 Authorization，认证由浏览器自动携带 httpOnly Cookie
+  assert.deepEqual(requestedHeaders, {})
   assert.equal(resource.url, 'blob:viewer-1')
 
   resource.revoke()
@@ -53,7 +53,6 @@ test('triggerProtectedFileDownload 应优先获取短时效 URL 后触发原生�
       original_name: 'generated_molecules.sdf'
     },
     {
-      getToken: () => 'token-abc',
       fetchDownloadUrl: async (fileId, headers) => {
         requestedFileId = fileId
         requestedHeaders = headers
@@ -80,7 +79,7 @@ test('triggerProtectedFileDownload 应优先获取短时效 URL 后触发原生�
   )
 
   assert.equal(requestedFileId, 'file-2')
-  assert.deepEqual(requestedHeaders, { Authorization: 'Bearer token-abc' })
+  assert.deepEqual(requestedHeaders, {})
   assert.deepEqual(clicks, [{ href: '/api/v1/files/file-2/download?token=short-lived', download: 'generated_molecules.sdf' }])
   assert.deepEqual(appended, ['generated_molecules.sdf'])
   assert.deepEqual(removed, ['generated_molecules.sdf'])
@@ -96,7 +95,6 @@ test('triggerProtectedFileDownload 在短时效 URL 不可用时回退到 Blob �
       original_name: 'legacy.sdf'
     },
     {
-      getToken: () => 'token-legacy',
       fetchDownloadUrl: async () => {
         throw new Error('旧后端不支持短时效下载地址')
       },
@@ -129,22 +127,29 @@ test('triggerProtectedFileDownload 在短时效 URL 不可用时回退到 Blob �
   assert.deepEqual(revoked, ['blob:legacy-download'])
 })
 
-test('createProtectedObjectUrl 在缺少登录令牌时应直接失败', async () => {
-  await assert.rejects(
-    () =>
-      createProtectedObjectUrl('/api/v1/files/file-3/download', {
-        getToken: () => null
-      }),
-    /登录/
-  )
+test('createProtectedObjectUrl 无本地 token 时仍通过 Cookie 请求，不再本地抛错', async () => {
+  let requested = false
+
+  const resource = await createProtectedObjectUrl('/api/v1/files/file-3/download', {
+    fetchBlob: async () => {
+      requested = true
+      return new Blob(['ok'])
+    },
+    objectUrl: {
+      createObjectURL: () => 'blob:cookie-only',
+      revokeObjectURL: () => undefined
+    }
+  })
+
+  assert.equal(requested, true)
+  assert.equal(resource.url, 'blob:cookie-only')
 })
 
-test('fetchProtectedFileText 应使用登录令牌拉取受保护文本文件', async () => {
+test('fetchProtectedFileText 应通过 Cookie 拉取受保护文本文件', async () => {
   let requestedUrl = ''
   let requestedHeaders: Record<string, string> | undefined
 
   const text = await fetchProtectedFileText('/api/v1/files/file-4/download', {
-    getToken: () => 'token-text',
     fetchText: async (url, headers) => {
       requestedUrl = url
       requestedHeaders = headers
@@ -153,13 +158,14 @@ test('fetchProtectedFileText 应使用登录令牌拉取受保护文本文件', 
   })
 
   assert.equal(requestedUrl, '/api/v1/files/file-4/download')
-  assert.deepEqual(requestedHeaders, { Authorization: 'Bearer token-text' })
+  assert.deepEqual(requestedHeaders, {})
   assert.equal(text, 'SMILES,score\\nCCO,0.8\\n')
 })
 
-test('fetchProtectedFileText 应在无登录令牌时拒绝访问', async () => {
-  await assert.rejects(
-    () => fetchProtectedFileText('/api/v1/files/file-5/download', { getToken: () => null }),
-    /需要登录后才能访问此文件/
-  )
+test('fetchProtectedFileText 无本地 token 时也可发起请求', async () => {
+  const text = await fetchProtectedFileText('/api/v1/files/file-5/download', {
+    fetchText: async () => 'cookie-session-ok'
+  })
+
+  assert.equal(text, 'cookie-session-ok')
 })

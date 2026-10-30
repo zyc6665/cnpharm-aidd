@@ -119,6 +119,7 @@ def test_production_settings_reject_local_runtime_backends() -> None:
         "CELERY_BROKER_URL": "redis://:redis-password@redis:6379/1",
         "CELERY_RESULT_BACKEND": "redis://:redis-password@redis:6379/2",
         "TASK_EXECUTION_BACKEND": "celery",
+        "COOKIE_SECURE": True,
     }
     Settings(**base_kwargs)
 

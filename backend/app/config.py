@@ -220,6 +220,14 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     SETTINGS_ENCRYPTION_KEY: Optional[str] = None
 
+    # ==================== Cookie 认证配置 ====================
+    # 令牌优先通过 httpOnly Cookie 下发。COOKIE_SECURE=False 仅适合本地 http 开发；
+    # 预发布/生产环境必须为 True（见 _validate_production_security），否则拒绝启动。
+    COOKIE_SECURE: bool = False
+    # 留空表示不设置 Domain（主机域 Cookie）。
+    COOKIE_DOMAIN: Optional[str] = None
+    COOKIE_SAMESITE: Literal["lax", "strict", "none"] = "lax"
+
     # ==================== LDAP（企业内网目录认证）====================
     # 全部有默认值；LDAP_ENABLED=False 时登录链路完全不触发 LDAP。
     LDAP_ENABLED: bool = False
@@ -366,6 +374,11 @@ class Settings(BaseSettings):
             if self.TASK_EXECUTION_BACKEND != "celery":
                 raise ValueError(
                     "TASK_EXECUTION_BACKEND must be celery in production environment"
+                )
+            # Cookie 认证只应经 HTTPS 传输：生产环境关闭 Secure 会让会话 Cookie 明文暴露。
+            if not self.COOKIE_SECURE:
+                raise ValueError(
+                    "COOKIE_SECURE must be enabled in production environment"
                 )
 
         return self

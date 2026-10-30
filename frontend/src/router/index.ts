@@ -393,6 +393,12 @@ setLoginRedirectHandler((redirectPath: string) => {
 router.beforeEach(async (to, _from, next) => {
   const userStore = useUserStore()
 
+  // 认证依赖 httpOnly Cookie，首次导航时先用 /users/me 恢复会话，
+  // 避免已登录用户被误判为未登录而跳转登录页。
+  if (!userStore.authReady) {
+    await userStore.bootstrapAuthState()
+  }
+
   // 设置页面标题
   const titleKey = typeof to.meta.title === 'string' ? to.meta.title : ''
   const translatedTitle = typeof to.meta.titleLiteral === 'string'

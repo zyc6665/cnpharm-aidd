@@ -18,8 +18,9 @@ test('任务实时通道应使用 SSE，而不是自研 WebSocket 客户端', ()
   assert.equal(eventsSource.includes('EventSource'), true)
   assert.equal(eventsSource.includes('/api/v1/tasks/'), true)
   assert.equal(eventsSource.includes('/events'), true)
-  // EventSource 不能设置请求头，token 只能走查询参数。
-  assert.equal(eventsSource.includes('token='), true)
+  // 认证改由 httpOnly Cookie 承载，不再把 token 拼进查询参数。
+  assert.equal(eventsSource.includes('token='), false)
+  assert.equal(eventsSource.includes('withCredentials: true'), true)
 })
 
 test('任务详情页应订阅任务事件流并保留终态刷新', () => {

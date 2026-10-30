@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import WorkflowArtifactPanel from './WorkflowArtifactPanel.vue'
 import { useUserStore } from '@/stores'
+import type { UserInfo } from '@/types/models'
 import i18n from '@/locales'
 import type { WorkflowTaskRef } from '@/workflow/artifact-types'
 
@@ -18,7 +19,8 @@ const stubs = {
 describe('WorkflowArtifactPanel', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    useUserStore().token = 'token'
+    // 登录态由 Cookie 会话 + userInfo 决定，测试直接注入用户信息
+    useUserStore().userInfo = { id: 'user-1', username: 'tester' } as UserInfo
   })
 
   it('renders the active node task passed by the workflow page', () => {

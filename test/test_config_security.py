@@ -34,6 +34,7 @@ def _production_runtime_settings(environment: str) -> dict[str, object]:
         "CELERY_BROKER_URL": "redis://:redis-password@redis:6379/1",
         "CELERY_RESULT_BACKEND": "redis://:redis-password@redis:6379/2",
         "TASK_EXECUTION_BACKEND": "celery",
+        "COOKIE_SECURE": True,
     }
 
 
@@ -465,6 +466,31 @@ class TestJWTSecretKey:
                 CORS_ORIGINS=["*"],
                 JWT_SECRET_KEY="a" * 32,
                 SETTINGS_ENCRYPTION_KEY="e" * 32,
+            )
+
+
+class TestCookieSettings:
+    def test_development_cookie_defaults_allow_local_http(self):
+        """开发环境默认允许 http，且不设置 Domain。"""
+        settings = Settings(ENVIRONMENT="development")
+        assert settings.COOKIE_SECURE is False
+        assert settings.COOKIE_DOMAIN is None
+        assert settings.COOKIE_SAMESITE == "lax"
+
+    def test_production_rejects_insecure_cookie(self):
+        """生产环境仅允许 Secure Cookie，否则拒绝启动。"""
+        runtime = dict(_production_runtime_settings("production"))
+        runtime["COOKIE_SECURE"] = False
+        with pytest.raises(
+            ValueError, match="COOKIE_SECURE must be enabled in production environment"
+        ):
+            Settings(
+                ENVIRONMENT="production",
+                DEBUG=False,
+                CORS_ORIGINS=["https://sciminer.example.com"],
+                JWT_SECRET_KEY="a" * 32,
+                SETTINGS_ENCRYPTION_KEY="e" * 32,
+                **runtime,
             )
 
 
