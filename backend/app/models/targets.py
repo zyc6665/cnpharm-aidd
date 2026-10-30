@@ -133,7 +133,7 @@ class Pocket(Base, UUIDMixin, TimestampMixin):
     )
 
     structure_id = Column(
-        String(36), ForeignKey("protein_structures.id"), nullable=False, index=True
+        String(36), ForeignKey("protein_structures.id"), nullable=False
     )
     rank = Column(Integer, nullable=False)
     score = Column(Numeric(10, 4), nullable=True)
@@ -174,7 +174,7 @@ class PocketResidue(Base, UUIDMixin, TimestampMixin):
         Index("ix_pocket_residues_pocket_id_is_key", "pocket_id", "is_key"),
     )
 
-    pocket_id = Column(String(36), ForeignKey("pockets.id"), nullable=False, index=True)
+    pocket_id = Column(String(36), ForeignKey("pockets.id"), nullable=False)
     chain = Column(String(8), nullable=False)
     residue_seq = Column(Integer, nullable=False)
     residue_name = Column(String(8), nullable=False)

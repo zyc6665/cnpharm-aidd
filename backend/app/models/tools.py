@@ -1,7 +1,7 @@
 # backend/app/models/tools.py
 """工具相关模型"""
 
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, Text, ForeignKey, JSON, Table, UniqueConstraint
+from sqlalchemy import Column, String, Integer, Boolean, DateTime, Text, ForeignKey, Index, JSON, Table, UniqueConstraint
 from sqlalchemy.orm import relationship
 import enum
 
@@ -96,6 +96,10 @@ class ToolWorkbenchGroupMapping(Base, UUIDMixin, TimestampMixin):
 class Tool(Base, UUIDMixin, TimestampMixin):
     """工具表"""
     __tablename__ = "tools"
+    __table_args__ = (
+        # 工具广场列表：status 过滤、按 created_at 倒序翻页。
+        Index("ix_tools_status_created", "status", "created_at"),
+    )
 
     owner_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     name = Column(String(100), nullable=False)

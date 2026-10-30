@@ -1,6 +1,6 @@
 """Workflow persistence models."""
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, JSON, String, Text, text
 from sqlalchemy.orm import relationship
 
 from app.database.base import Base, TimestampMixin, UUIDMixin
@@ -30,6 +30,17 @@ class WorkflowRun(Base, UUIDMixin, TimestampMixin):
     """One execution instance created from a workflow definition."""
 
     __tablename__ = "workflow_runs"
+    __table_args__ = (
+        # 活跃运行巡检（超时/对账）：只索引非终态行。终态值经 grep 核实为
+        # success / failure / canceled（workflow_reconciliation.py、
+        # workflow_cancellation.py），非终态为 pending / waiting_task。
+        Index(
+            "ix_workflow_runs_active_created",
+            "created_at",
+            sqlite_where=text("status NOT IN ('success', 'failure', 'canceled')"),
+            postgresql_where=text("status NOT IN ('success', 'failure', 'canceled')"),
+        ),
+    )
 
     project_id = Column(String(36), ForeignKey("projects.id"), nullable=True, index=True)
     owner_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
