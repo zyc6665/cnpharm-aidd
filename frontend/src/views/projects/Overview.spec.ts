@@ -2,7 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ProjectOverview from './Overview.vue'
 import { getProjectOverview } from '@/api/projects'
-import { getAllProjectArtifacts } from '@/api/artifacts'
+import { getProjectArtifacts } from '@/api/artifacts'
 
 const routerReplace = vi.fn()
 let routeQuery: Record<string, string | undefined> = {}
@@ -23,7 +23,7 @@ vi.mock('@/api/projects', () => ({
 vi.mock('@/api/artifacts', () => ({
   buildArtifactVersionDownloadUrl: (artifactId: string, versionId: string) =>
     `/api/v1/artifacts/${artifactId}/versions/${versionId}/download`,
-  getAllProjectArtifacts: vi.fn()
+  getProjectArtifacts: vi.fn()
 }))
 
 const overview = {
@@ -110,7 +110,18 @@ describe('ProjectOverview', () => {
     vi.clearAllMocks()
     routeQuery = {}
     vi.mocked(getProjectOverview).mockResolvedValue({ data: overview } as never)
-    vi.mocked(getAllProjectArtifacts).mockResolvedValue({ data: { items: [] } } as never)
+    vi.mocked(getProjectArtifacts).mockResolvedValue({
+      data: {
+        items: overview.artifacts,
+        total: overview.artifacts.length,
+        page: 1,
+        page_size: 20,
+        total_pages: 1,
+        nextCursor: null,
+        hasMore: false,
+        totalKnown: true
+      }
+    } as never)
   })
 
   it('展示项目总览、最近资源和进入研究会话入口', async () => {
@@ -143,7 +154,10 @@ describe('ProjectOverview', () => {
   })
 
   it('Artifact 常用筛选调用项目 Artifact 检索接口', async () => {
-    vi.mocked(getAllProjectArtifacts).mockResolvedValueOnce({
+    const wrapper = renderOverview()
+    await flushPromises()
+
+    vi.mocked(getProjectArtifacts).mockResolvedValueOnce({
       data: {
         items: [
           {
@@ -167,11 +181,16 @@ describe('ProjectOverview', () => {
             created_at: '2026-09-09T00:00:00Z',
             updated_at: '2026-09-09T00:00:00Z'
           }
-        ]
+        ],
+        total: 1,
+        page: 1,
+        page_size: 20,
+        total_pages: 1,
+        nextCursor: null,
+        hasMore: false,
+        totalKnown: true
       }
     } as never)
-    const wrapper = renderOverview()
-    await flushPromises()
 
     const molpPcFilter = wrapper.findAll('[data-testid="artifact-filter-preset"]')
       .find(button => button.text() === 'MolP-PC')
@@ -180,15 +199,17 @@ describe('ProjectOverview', () => {
     await molpPcFilter!.trigger('click')
     await flushPromises()
 
-    expect(getAllProjectArtifacts).toHaveBeenCalledWith('project-1', {
-      metadata_model_name: 'MolP-PC'
+    expect(getProjectArtifacts).toHaveBeenCalledWith('project-1', {
+      metadata_model_name: 'MolP-PC',
+      page: 1,
+      page_size: 20
     })
     expect(wrapper.text()).toContain('MolP-PC ADMET table')
     expect(wrapper.text()).not.toContain('EGFR pocket')
   })
 
   it('Artifact 筛选视图写入 URL 并可从 URL 恢复', async () => {
-    vi.mocked(getAllProjectArtifacts).mockResolvedValue({ data: { items: [] } } as never)
+    vi.mocked(getProjectArtifacts).mockResolvedValue({ data: { items: [] } } as never)
     const wrapper = renderOverview()
     await flushPromises()
 
@@ -202,12 +223,14 @@ describe('ProjectOverview', () => {
     vi.clearAllMocks()
     routeQuery = { artifact_filter: 'molecule_table' }
     vi.mocked(getProjectOverview).mockResolvedValue({ data: overview } as never)
-    vi.mocked(getAllProjectArtifacts).mockResolvedValue({ data: { items: [] } } as never)
+    vi.mocked(getProjectArtifacts).mockResolvedValue({ data: { items: [] } } as never)
     renderOverview()
     await flushPromises()
 
-    expect(getAllProjectArtifacts).toHaveBeenCalledWith('project-1', {
-      standard_type: 'molecule_table'
+    expect(getProjectArtifacts).toHaveBeenCalledWith('project-1', {
+      standard_type: 'molecule_table',
+      page: 1,
+      page_size: 20
     })
   })
 })

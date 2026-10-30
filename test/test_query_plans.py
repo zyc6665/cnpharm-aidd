@@ -94,6 +94,45 @@ def _plan(connection, sql: str, params: dict) -> str:
             {"task_id": "t1"},
             "ix_task_logs_task_timestamp",
         ),
+        (
+            # C1 产物列表游标：project_id 等值 + (created_at, id) 行值区间 + 全序 ORDER BY。
+            "产物列表（游标）：project_id + (created_at, id) < (?, ?)",
+            """
+            SELECT id FROM artifacts
+            WHERE project_id = :project_id
+              AND (created_at, id) < (:last_ts, :last_id)
+            ORDER BY created_at DESC, id DESC
+            LIMIT 20
+            """,
+            {"project_id": "p1", "last_ts": "2026-01-01 00:00:00", "last_id": "x"},
+            "ix_artifacts_project_created_id",
+        ),
+        (
+            # C1 工作流运行游标（按项目）：project_id 等值 + (created_at, id) 行值区间。
+            "工作流运行（游标，按项目）：project_id + (created_at, id) < (?, ?)",
+            """
+            SELECT id FROM workflow_runs
+            WHERE project_id = :project_id
+              AND (created_at, id) < (:last_ts, :last_id)
+            ORDER BY created_at DESC, id DESC
+            LIMIT 20
+            """,
+            {"project_id": "p1", "last_ts": "2026-01-01 00:00:00", "last_id": "x"},
+            "ix_workflow_runs_project_created",
+        ),
+        (
+            # C1 工作流运行游标（按 owner）：owner_id 等值 + (created_at, id) 行值区间。
+            "工作流运行（游标，按 owner）：owner_id + (created_at, id) < (?, ?)",
+            """
+            SELECT id FROM workflow_runs
+            WHERE owner_id = :owner_id
+              AND (created_at, id) < (:last_ts, :last_id)
+            ORDER BY created_at DESC, id DESC
+            LIMIT 20
+            """,
+            {"owner_id": "u1", "last_ts": "2026-01-01 00:00:00", "last_id": "x"},
+            "ix_workflow_runs_owner_created",
+        ),
     ],
 )
 def test_hot_pagination_query_uses_index_without_sort(
@@ -124,10 +163,46 @@ def test_result_center_multi_status_still_uses_index(plan_connection) -> None:
         """,
         {"project_id": "p1"},
     )
-    # SQLite 可能选 (project_id, status, created_at) 而不是 finished_at 版本——两者
-    # 都能把扫描收敛到 project+status 区间；PG 侧则会选 DESC NULLS LAST 那个来消排序。
-    used = ("ix_tasks_project_status_finished", "ix_tasks_project_status_created")
+    # 终态多值 IN 现在由部分索引 ix_tasks_project_terminal_finished_id 支撑（status
+    # 写进谓词、不进键）。旧的两棵复合索引仍可能被 SQLite 选中（例如偏移模式按
+    # created_at 兜底排序时），一并接受。
+    used = (
+        "ix_tasks_project_terminal_finished_id",
+        "ix_tasks_project_status_finished",
+        "ix_tasks_project_status_created",
+    )
     assert any(name in plan for name in used), plan
+
+
+def test_result_center_cursor_keyset_uses_index(plan_connection) -> None:
+    """结果中心游标查询：单终态走既有复合索引，多终态/默认走部分索引。
+
+    单个终态时：``project_id + status`` 等值 + ``finished_at`` 行值区间，索引一次
+    seek；同一毫秒并列行的 ``id`` 兜底由 SQLite 的「RIGHT PART OF ORDER BY」完成
+    （只排等值并列组，有界，不是整表排序）。终态多值 IN 时由部分索引
+    ``ix_tasks_project_terminal_finished_id`` 支撑（status 进谓词不进键）。因此只
+    断言「没有整表 TEMP B-TREE FOR ORDER BY」且用上了预期索引，不要求零临时排序。
+    """
+    plan = _plan(
+        plan_connection,
+        """
+        SELECT id FROM tasks
+        WHERE project_id = :project_id
+          AND status = 'SUCCESS'
+          AND finished_at IS NOT NULL
+          AND (finished_at, id) < (:last_ts, :last_id)
+        ORDER BY finished_at DESC, id DESC
+        LIMIT 20
+        """,
+        {"project_id": "p1", "last_ts": "2026-01-01 00:00:00", "last_id": "x"},
+    )
+    used = (
+        "ix_tasks_project_terminal_finished_id",
+        "ix_tasks_project_status_finished",
+    )
+    assert any(name in plan for name in used), plan
+    # 收紧到「没有整表排序」：RIGHT PART 的并列组排序不算。
+    assert "USE TEMP B-TREE FOR ORDER BY" not in plan, plan
 
 
 def test_count_subquery_without_order_by_does_not_sort(plan_connection) -> None:

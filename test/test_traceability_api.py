@@ -26,6 +26,7 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.auth.dependencies import get_current_user  # noqa: E402
+from app.common.keyset import encode_cursor  # noqa: E402
 from app.common.time import utcnow  # noqa: E402
 from app.database.base import Base  # noqa: E402
 from app.database.session import get_db  # noqa: E402
@@ -51,7 +52,6 @@ from app.services.traceability import (  # noqa: E402
     INPUT_ROLE_FILE,
     INPUT_ROLE_LIGAND,
     INPUT_ROLE_RECEPTOR,
-    INPUT_ROLE_SEQUENCE,
     build_traceability_package,
     record_task_inputs,
     role_for_semantic_type,
@@ -721,10 +721,95 @@ async def test_project_results_status_is_lowercase_and_lowercase_filter_hits(
     assert timeout_ids == [timed_out.id]
 
 
+@pytest.mark.asyncio
+async def test_project_results_cursor_pagination_contract_and_continuity(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    users: dict[str, User],
+    project: Project,
+):
+    """结果中心游标分页：不传 cursor 有 total；传 cursor 不算 total 且不重不漏。"""
+    from datetime import datetime as _datetime
+
+    tool = await _create_tool(db_session, users[OWNER])
+    upload = await _upload(
+        db_session,
+        owner=users[OWNER],
+        project=project,
+        filename="egfr.pdb",
+        content=b"ATOM\n",
+    )
+    fixed = _datetime(2026, 1, 1, 12, 0, 0)
+    tasks = []
+    for _ in range(5):
+        task = await _create_task(
+            db_session, owner=users[OWNER], project=project, tool=tool, file_id=upload.id
+        )
+        task.status = "SUCCESS"
+        # 全部压到同一毫秒：只有靠 id 兜底才能保证全序、不重不漏。
+        task.finished_at = fixed
+        tasks.append(task)
+    await db_session.commit()
+
+    expected = sorted((task.id for task in tasks), reverse=True)
+
+    # 1) 不传 cursor：与旧行为一致（有 total），并从本页末行给出 nextCursor。
+    offset_resp = await api_client.get(
+        f"/api/v1/projects/{project.id}/results?page=1&page_size=2",
+        headers=_headers(OWNER),
+    )
+    assert offset_resp.status_code == 200, offset_resp.text
+    offset_data = offset_resp.json()["data"]
+    assert offset_data["total"] == 5
+    assert offset_data["totalKnown"] is True
+    assert offset_data["hasMore"] is True
+    assert offset_data["page"] == 1
+    assert offset_data["page_size"] == 2
+    assert len(offset_data["items"]) == 2
+    assert offset_data["nextCursor"]
+
+    # 2) 纯游标模式：从「全集之上」开始翻，验证 total=None 且顺序/去重正确。
+    cursor = encode_cursor([fixed, "ffffffff-ffff-ffff-ffff-ffffffffffff"])
+    collected = []
+    pages = 0
+    while True:
+        resp = await api_client.get(
+            f"/api/v1/projects/{project.id}/results?page_size=2&cursor={cursor}",
+            headers=_headers(OWNER),
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()["data"]
+        assert data["total"] is None
+        assert data["total_pages"] is None
+        assert data["totalKnown"] is False
+        collected.extend(item["task_id"] for item in data["items"])
+        pages += 1
+        assert pages < 10, "游标翻页没有收敛"
+        if not data["hasMore"]:
+            break
+        cursor = data["nextCursor"]
+        assert cursor
+
+    assert collected == expected
+    assert len(collected) == len(set(collected)) == 5
+
+
+@pytest.mark.asyncio
+async def test_project_results_rejects_invalid_cursor(
+    api_client: httpx.AsyncClient,
+    users: dict[str, User],
+    project: Project,
+):
+    response = await api_client.get(
+        f"/api/v1/projects/{project.id}/results?cursor=not-a-cursor",
+        headers=_headers(OWNER),
+    )
+    assert response.status_code == 422, response.text
+
+
 # ---------------------------------------------------------------------------
 # audit sink
 # ---------------------------------------------------------------------------
-
 
 def test_event_to_row_snapshots_the_actor_name():
     event = AuditEvent(

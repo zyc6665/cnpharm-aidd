@@ -854,11 +854,25 @@ export interface SystemConfig {
 export interface PaginationParams {
   page?: number
   page_size?: number
+  /** 游标分页：传入后进入 cursor 模式（total/total_pages 为 null，items 不重不漏） */
+  cursor?: string
   sort_by?: string
   sort_order?: 'asc' | 'desc'
 }
 
-export interface PaginatedResponse<T> {
+/**
+ * 游标分页响应元信息（后端 C-2 契约）。
+ * - 不传 cursor（offset 首屏）：仍返回 total/page/page_size，并额外给 nextCursor/hasMore/totalKnown
+ * - 传 cursor：total=null、total_pages=null、totalKnown=false，nextCursor=null 表示到底
+ * 三处列表共享此形状，避免每个页面各写一份。
+ */
+export interface CursorPageMeta {
+  nextCursor?: string | null
+  hasMore?: boolean
+  totalKnown?: boolean
+}
+
+export interface PaginatedResponse<T> extends CursorPageMeta {
   items: T[]
   total: number
   page: number

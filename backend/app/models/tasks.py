@@ -58,6 +58,25 @@ class Task(Base, UUIDMixin, TimestampMixin):
             "finished_at",
             "created_at",
         ),
+        # 结果中心「游标」深页（docs/06 P-33）：默认不带状态时是
+        # ``project_id = ? AND status IN (SUCCESS/FAILURE/CANCELED/TIMEOUT)``，
+        # 按 ``(finished_at DESC, id DESC)`` 做 keyset seek。把终态集合写成部分索引
+        # 谓词后，状态列不必进索引键，``project_id`` 等值 + ``(finished_at, id)`` 行值
+        # 区间即可做 Index Only Scan（20 万行真 PostgreSQL 实测无 TEMP B-TREE；
+        # 见 docs/20 §5.13）。`IN (...)` 无法用「status 在键里」的普通复合索引消除排序——
+        # PostgreSQL 对多值 IN 只能位图扫描/整段扫描，故用部分索引。
+        Index(
+            "ix_tasks_project_terminal_finished_id",
+            "project_id",
+            "finished_at",
+            "id",
+            sqlite_where=text(
+                "status IN ('SUCCESS','FAILURE','CANCELED','TIMEOUT')"
+            ),
+            postgresql_where=text(
+                "status IN ('SUCCESS','FAILURE','CANCELED','TIMEOUT')"
+            ),
+        ),
         # 结果中心按状态筛选、不带 finished_at 排序时的降级路径 / 一般结果列表排序。
         Index("ix_tasks_project_status_created", "project_id", "status", "created_at"),
         # 任务列表：user_id + status + ORDER BY created_at DESC。

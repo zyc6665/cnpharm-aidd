@@ -378,14 +378,15 @@ export function useWorkflowPersistence(input: {
 
   async function handleLoadMoreWorkflowRuns() {
     const workflowDefinitionId = selectedSavedWorkflowId.value ?? undefined
-    if (!workflowStore.hasMoreWorkflowRuns) {
+    const cursor = workflowStore.workflowRunsNextCursor
+    if (!workflowStore.hasMoreWorkflowRuns || !cursor) {
       return
     }
     await workflowStore.loadWorkflowRuns(
       buildWorkflowRunListParams({
         projectId: projectId?.value,
         workflowDefinitionId,
-        page: workflowStore.workflowRunsPagination.page + 1,
+        cursor,
         pageSize: workflowStore.workflowRunsPagination.pageSize
       }),
       { append: true }

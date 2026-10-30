@@ -297,6 +297,8 @@ export interface ProjectResultListParams {
   status?: TaskStatus
   page?: number
   page_size?: number
+  /** 游标分页（C-2）：传入后返回 total=null，nextCursor=null 表示到底 */
+  cursor?: string
 }
 
 /** 追溯包（`services/traceability.py`，`traceability.v1`）。 */

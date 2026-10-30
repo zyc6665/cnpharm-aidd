@@ -81,14 +81,16 @@
       </template>
     </a-table>
 
-    <div v-if="total > pageSize" class="results-pagination">
-      <a-pagination
-        v-model:current="page"
-        :total="total"
-        :page-size="pageSize"
-        :show-total="(count: number) => t('common.totalItems', { total: count })"
-        @change="loadResults"
-      />
+    <div v-if="results.length" class="results-pagination" data-testid="results-load-more-area">
+      <a-button
+        v-if="hasMore"
+        :loading="loadingMore"
+        data-testid="results-load-more"
+        @click="loadMoreResults"
+      >
+        {{ t('common.loadMore') }}
+      </a-button>
+      <span v-else data-testid="results-all-loaded">{{ t('common.allLoaded') }}</span>
     </div>
   </main>
 </template>
@@ -103,6 +105,7 @@
   import SkeletonList from '@/components/common/SkeletonList.vue'
   import { listProjectResults } from '@/api/results'
   import { RESULT_STATUSES, formatExecutionSeconds, sortResultsByFinishedDesc } from '@/domain/results'
+  import { mergeCursorPage } from '@/utils/pagination'
   import type { ProjectResultSummary } from '@/types/compounds'
   import type { TaskStatus } from '@/types/models'
 
@@ -119,10 +122,12 @@
   const pageSize = 20
 
   const loading = ref(false)
+  const loadingMore = ref(false)
   const loadError = ref(false)
   const results = ref<ProjectResultSummary[]>([])
   const total = ref(0)
-  const page = ref(1)
+  const nextCursor = ref<string | null>(null)
+  const hasMore = ref(false)
   const statusFilter = ref<TaskStatus | undefined>(undefined)
 
   const sortedResults = computed(() => sortResultsByFinishedDesc(results.value))
@@ -159,10 +164,15 @@
   }
 
   function handleFilterChange(): void {
-    page.value = 1
+    // 切换筛选必须重置游标与已加载列表，避免把不同筛选结果拼在一起。
+    nextCursor.value = null
+    hasMore.value = false
+    results.value = []
+    total.value = 0
     void loadResults()
   }
 
+  /** 首屏仍走原 offset 请求（兼容），并从响应里接出游标。 */
   async function loadResults(): Promise<void> {
     if (!projectId.value) return
 
@@ -170,18 +180,54 @@
     loadError.value = false
     try {
       const response = await listProjectResults(projectId.value, {
-        page: page.value,
+        page: 1,
         page_size: pageSize,
         ...(statusFilter.value ? { status: statusFilter.value } : {})
       })
-      results.value = response.data.items
-      total.value = response.data.total
+      const state = mergeCursorPage(
+        { items: [], nextCursor: null, hasMore: false },
+        response.data,
+        item => item.task_id
+      )
+      results.value = state.items
+      nextCursor.value = state.nextCursor
+      hasMore.value = state.hasMore
+      total.value = response.data.total ?? state.items.length
     } catch {
       loadError.value = true
       results.value = []
       total.value = 0
+      nextCursor.value = null
+      hasMore.value = false
     } finally {
       loading.value = false
+    }
+  }
+
+  /** 加载更多：带 cursor 请求并去重追加，nextCursor=null 时到底。 */
+  async function loadMoreResults(): Promise<void> {
+    if (!projectId.value || !hasMore.value || loadingMore.value || !nextCursor.value) return
+
+    loadingMore.value = true
+    try {
+      const response = await listProjectResults(projectId.value, {
+        page_size: pageSize,
+        cursor: nextCursor.value,
+        ...(statusFilter.value ? { status: statusFilter.value } : {})
+      })
+      const state = mergeCursorPage(
+        { items: results.value, nextCursor: nextCursor.value, hasMore: hasMore.value },
+        response.data,
+        item => item.task_id,
+        { append: true }
+      )
+      results.value = state.items
+      nextCursor.value = state.nextCursor
+      hasMore.value = state.hasMore
+    } catch {
+      loadError.value = true
+    } finally {
+      loadingMore.value = false
     }
   }
 

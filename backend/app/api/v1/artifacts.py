@@ -6,12 +6,18 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import RedirectResponse, StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.auth.dependencies import get_current_user
 from app.common.exceptions import ValidationException
+from app.common.keyset import (
+    apply_desc_keyset,
+    decode_cursor,
+    encode_cursor,
+    next_cursor,
+)
 from app.common.responses import paginated_response, success_response
 from app.common.time import utcnow
 from app.config import settings
@@ -252,6 +258,9 @@ async def list_artifacts(
     metadata_applicability_domain_status: str | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    cursor: str | None = Query(
+        default=None, description="游标（keyset）翻页；传入后不再返回 total"
+    ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -273,20 +282,119 @@ async def list_artifacts(
                 )
             )
         )
+
+    load_options = (
+        selectinload(Artifact.versions)
+        .selectinload(ArtifactVersion.files)
+        .selectinload(ArtifactVersionFile.file),
+        selectinload(Artifact.latest_version)
+        .selectinload(ArtifactVersion.files)
+        .selectinload(ArtifactVersionFile.file),
+    )
+
+    # manifest 元数据过滤只能放 Python 侧（manifest_json 是 JSON 列）；只要有一个
+    # metadata_* 过滤，就走全量 + Python 过滤的诚实回落路径。
+    has_metadata_filter = any(
+        (
+            metadata_model_name,
+            metadata_model_version,
+            metadata_evidence_level,
+            metadata_endpoint_ref,
+            metadata_applicability_domain_status,
+        )
+    )
+
+    if not has_metadata_filter:
+        # 无 manifest 过滤 → 走 SQL keyset，排序键用稳定全序 (created_at DESC, id DESC)。
+        # 刻意不用 updated_at：它不是只增的，深页会漏行/重复。latest_version 的「可用 +
+        # 未过期」也下推到 SQL（EXISTS），否则 limit+1 之后再在 Python 过滤会漏掉本页行。
+        now = utcnow()
+        active_version = (
+            select(ArtifactVersion.id)
+            .where(ArtifactVersion.id == Artifact.latest_version_id)
+            .where(ArtifactVersion.status == "available")
+            .where(
+                or_(
+                    ArtifactVersion.expires_at.is_(None),
+                    ArtifactVersion.expires_at > now,
+                )
+            )
+            .exists()
+        )
+        statement = select(Artifact).where(*filters, active_version)
+
+        if cursor:
+            statement, _last = apply_desc_keyset(
+                statement,
+                timestamp_column=Artifact.created_at,
+                id_column=Artifact.id,
+                cursor=cursor,
+            )
+            fetched = list(
+                (
+                    await db.execute(
+                        statement.options(*load_options)
+                        .order_by(Artifact.created_at.desc(), Artifact.id.desc())
+                        .limit(page_size + 1)
+                    )
+                ).scalars().all()
+            )
+            has_more = len(fetched) > page_size
+            page_items = fetched[:page_size]
+            payload = paginated_response(
+                items=[artifact_data(item) for item in page_items],
+                total=0,
+                page=page,
+                page_size=page_size,
+            )
+            data = payload["data"]
+            data["nextCursor"] = next_cursor(
+                fetched, timestamp_attr="created_at", id_attr="id", limit=page_size
+            )
+            data["hasMore"] = has_more
+            data["totalKnown"] = False
+            data["total"] = None
+            data["total_pages"] = None
+            return payload
+
+        total = (
+            await db.execute(select(func.count()).select_from(statement.subquery()))
+        ).scalar_one()
+        offset = (page - 1) * page_size
+        rows = list(
+            (
+                await db.execute(
+                    statement.options(*load_options)
+                    .order_by(Artifact.created_at.desc(), Artifact.id.desc())
+                    .offset(offset)
+                    .limit(page_size)
+                )
+            ).scalars().all()
+        )
+        has_more = offset + len(rows) < total
+        payload = paginated_response(
+            items=[artifact_data(item) for item in rows],
+            total=total,
+            page=page,
+            page_size=page_size,
+        )
+        data = payload["data"]
+        data["nextCursor"] = (
+            encode_cursor([rows[-1].created_at, rows[-1].id])
+            if rows and has_more
+            else None
+        )
+        data["hasMore"] = has_more
+        data["totalKnown"] = True
+        return payload
+
+    # 有 metadata_* 过滤：诚实回落（不假装 SQL 游标）。全量加载 → Python 过滤 →
+    # 稳定全序 (created_at DESC, id DESC) 后切片；带 cursor 时在内存里做 keyset 续页，
+    # 避免深页重复拉取，同时保证与 SQL 路径同序。
     artifacts = (
         (
             await db.execute(
-                select(Artifact)
-                .options(
-                    selectinload(Artifact.versions)
-                    .selectinload(ArtifactVersion.files)
-                    .selectinload(ArtifactVersionFile.file),
-                    selectinload(Artifact.latest_version)
-                    .selectinload(ArtifactVersion.files)
-                    .selectinload(ArtifactVersionFile.file),
-                )
-                .where(*filters)
-                .order_by(Artifact.updated_at.desc())
+                select(Artifact).options(*load_options).where(*filters)
             )
         )
         .scalars()
@@ -296,7 +404,8 @@ async def list_artifacts(
     visible = [
         item
         for item in artifacts
-        if item.latest_version.status == "available"
+        if item.latest_version is not None
+        and item.latest_version.status == "available"
         and (
             item.latest_version.expires_at is None
             or item.latest_version.expires_at > now
@@ -310,17 +419,54 @@ async def list_artifacts(
             applicability_domain_status=metadata_applicability_domain_status,
         )
     ]
-    # 元数据过滤只能放到 Python 侧做（manifest_json 是 JSON 列），所以先得到完整
-    # visible 列表再切片：这样 total 是过滤后的真实总数，而不是本页条数。
+    visible.sort(key=lambda item: (item.created_at, item.id), reverse=True)
+
+    if cursor:
+        last_ts, last_id = decode_cursor(cursor)
+        remaining = [
+            item
+            for item in visible
+            if (item.created_at, item.id) < (last_ts, last_id)
+        ]
+        page_items = remaining[:page_size]
+        has_more = len(remaining) > page_size
+        payload = paginated_response(
+            items=[artifact_data(item) for item in page_items],
+            total=0,
+            page=page,
+            page_size=page_size,
+        )
+        data = payload["data"]
+        data["nextCursor"] = (
+            encode_cursor([page_items[-1].created_at, page_items[-1].id])
+            if has_more
+            else None
+        )
+        data["hasMore"] = has_more
+        data["totalKnown"] = False
+        data["total"] = None
+        data["total_pages"] = None
+        return payload
+
     total = len(visible)
     start = (page - 1) * page_size
     page_items = visible[start : start + page_size]
-    return paginated_response(
+    has_more = start + len(page_items) < total
+    payload = paginated_response(
         items=[artifact_data(item) for item in page_items],
         total=total,
         page=page,
         page_size=page_size,
     )
+    data = payload["data"]
+    data["nextCursor"] = (
+        encode_cursor([page_items[-1].created_at, page_items[-1].id])
+        if page_items and has_more
+        else None
+    )
+    data["hasMore"] = has_more
+    data["totalKnown"] = True
+    return payload
 
 
 @router.get("/projects/{project_id}/assets", response_model=dict)

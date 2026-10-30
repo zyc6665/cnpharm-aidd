@@ -20,6 +20,8 @@ export interface ProjectArtifactListParams {
   metadata_applicability_domain_status?: string
   page?: number
   page_size?: number
+  /** 游标分页（C-2）：传入后返回 total=null，nextCursor=null 表示到底 */
+  cursor?: string
 }
 
 export const getProjectArtifacts = (

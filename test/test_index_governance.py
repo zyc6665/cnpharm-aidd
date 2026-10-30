@@ -2,7 +2,7 @@
 
 用 ``Base.metadata`` 做静态断言，防止后续改动把本轮索引硬化悄悄改回去：
 
-* 13 个必需复合索引必须存在，且**列顺序**完全一致（等值列在前、排序列在后）。
+* 16 个必需复合索引必须存在，且**列顺序**完全一致（等值列在前、排序列在后）。
 * 不允许出现「某单列索引被更长复合索引 / 唯一约束以真前缀覆盖」的新增冗余；
   历史遗留的冗余索引集中登记在 ``ALLOWED_REDUNDANT_PREFIXES``，每项注明原因。
 * ``audit_logs`` 是写最频繁的只追加表，索引数必须 ≤7（每多一个索引，每次插入就
@@ -27,6 +27,12 @@ REQUIRED_COMPOSITE_INDEXES: dict[str, tuple[str, list[str]]] = {
         "tasks",
         ["project_id", "status", "finished_at", "created_at"],
     ),
+    # C1 游标翻页：结果中心默认（不带 status）是终态多值 IN，普通复合索引无法消除
+    # 排序，改用部分索引 WHERE status IN (终态)：键 (project_id, finished_at, id)。
+    "ix_tasks_project_terminal_finished_id": (
+        "tasks",
+        ["project_id", "finished_at", "id"],
+    ),
     "ix_tasks_queued_updated": ("tasks", ["updated_at"]),
     "ix_tasks_status_finished": ("tasks", ["status", "finished_at"]),
     # 游标翻页的排序键。缺了它，不带筛选的任务列表游标翻页在 PostgreSQL 上会退化
@@ -37,6 +43,11 @@ REQUIRED_COMPOSITE_INDEXES: dict[str, tuple[str, list[str]]] = {
         "artifacts",
         ["project_id", "artifact_type", "updated_at"],
     ),
+    # C1 游标翻页：产物列表按 (created_at DESC, id DESC) 深页 seek，不用 updated_at。
+    "ix_artifacts_project_created_id": (
+        "artifacts",
+        ["project_id", "created_at", "id"],
+    ),
     "ix_artifact_versions_artifact_sha_status": (
         "artifact_versions",
         ["artifact_id", "sha256", "status"],
@@ -45,6 +56,16 @@ REQUIRED_COMPOSITE_INDEXES: dict[str, tuple[str, list[str]]] = {
     "ix_candidate_sets_project_created": ("candidate_sets", ["project_id", "created_at"]),
     "ix_files_owner_created": ("files", ["owner_id", "created_at"]),
     "ix_workflow_runs_active_created": ("workflow_runs", ["created_at"]),
+    # C1 游标翻页：工作流运行按项目 / 按 owner 两个入口的等值前缀 + 全序排序键
+    # (created_at DESC, id DESC)。末列 id 必须包含，否则同毫秒并列行仍要内存排序。
+    "ix_workflow_runs_project_created": (
+        "workflow_runs",
+        ["project_id", "created_at", "id"],
+    ),
+    "ix_workflow_runs_owner_created": (
+        "workflow_runs",
+        ["owner_id", "created_at", "id"],
+    ),
     "ix_tools_status_created": ("tools", ["status", "created_at"]),
 }
 

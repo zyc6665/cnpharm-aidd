@@ -1,4 +1,5 @@
 import type { AssetArtifactType } from './enums.generated'
+import type { CursorPageMeta } from './models'
 
 // 契约枚举统一来自 codegen 产物（计划 §3.2，勿手改）。
 export type { AssetArtifactType } from './enums.generated'
@@ -52,7 +53,7 @@ export interface TypedArtifact {
   [key: string]: unknown
 }
 
-export interface ArtifactListResponse {
+export interface ArtifactListResponse extends CursorPageMeta {
   items: TypedArtifact[]
   total?: number
   page?: number

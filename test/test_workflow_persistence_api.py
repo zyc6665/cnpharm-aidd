@@ -1741,3 +1741,80 @@ async def test_sync_workflow_run_records_missing_required_output_details(
     assert "pocket_pdb" in node_state["error_message"]
     assert node_state["missing_outputs"][0]["semantic_type"] == "pocket_pdb"
     assert node_state["missing_outputs"][0]["match"]["extension"] == ".pdb"
+
+
+@pytest.mark.asyncio
+async def test_list_workflow_runs_cursor_contract(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+) -> None:
+    """运行列表 API：不传 cursor 有 total；传 cursor total=None + nextCursor/hasMore。"""
+    from datetime import datetime
+
+    workflow = WorkflowDefinition(
+        user_id=owner.id,
+        name="Cursor workflow",
+        canvas_preset_id="free-canvas",
+        nodes=[],
+        edges=[],
+        selected_tool_by_node={},
+        artifact_bindings_by_node={},
+    )
+    db_session.add(workflow)
+    await db_session.flush()
+
+    fixed = datetime(2026, 1, 1, 12, 0, 0)
+    runs = []
+    for index in range(5):
+        run = WorkflowRun(
+            owner_id=owner.id,
+            workflow_definition_id=workflow.id,
+            name=f"cursor-run-{index}",
+            status="pending",
+            definition={"nodes": [], "edges": []},
+            input_files={},
+            execution_order=[],
+            node_states={},
+            artifact_lineage={},
+        )
+        db_session.add(run)
+        runs.append(run)
+    await db_session.flush()
+    for run in runs:
+        run.created_at = fixed
+    await db_session.commit()
+    expected = sorted((run.id for run in runs), reverse=True)
+
+    offset_resp = await api_client.get(
+        "/api/v1/workflows/runs?page=1&page_size=2",
+        headers={"Authorization": "Bearer owner-token"},
+    )
+    assert offset_resp.status_code == 200, offset_resp.text
+    offset_data = offset_resp.json()["data"]
+    assert offset_data["total"] == 5
+    assert offset_data["totalKnown"] is True
+    assert offset_data["hasMore"] is True
+    assert offset_data["nextCursor"]
+    assert [item["id"] for item in offset_data["items"]] == expected[:2]
+
+    collected = [item["id"] for item in offset_data["items"]]
+    cursor = offset_data["nextCursor"]
+    pages = 0
+    while cursor:
+        resp = await api_client.get(
+            f"/api/v1/workflows/runs?page_size=2&cursor={cursor}",
+            headers={"Authorization": "Bearer owner-token"},
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()["data"]
+        assert data["total"] is None
+        assert data["total_pages"] is None
+        assert data["totalKnown"] is False
+        collected.extend(item["id"] for item in data["items"])
+        pages += 1
+        assert pages < 10, "游标翻页没有收敛"
+        cursor = data["nextCursor"] if data["hasMore"] else None
+
+    assert collected == expected
+    assert len(collected) == len(set(collected)) == 5

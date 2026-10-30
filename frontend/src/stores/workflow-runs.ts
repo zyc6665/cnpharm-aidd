@@ -10,6 +10,7 @@ import {
   syncWorkflowRun,
 } from '@/api/workflows'
 import type { WorkflowRun, WorkflowRunCreateParams } from '@/types/models'
+import { mergeCursorPage } from '@/utils/pagination'
 import type { WorkflowRunsPagination } from './workflow-session'
 
 export const useWorkflowRunsStore = defineStore('workflow-runs', () => {
@@ -22,6 +23,8 @@ export const useWorkflowRunsStore = defineStore('workflow-runs', () => {
   })
   const activeWorkflowRun = ref<WorkflowRun | null>(null)
   const activeWorkflowRunId = ref<string | null>(null)
+  const workflowRunsNextCursor = ref<string | null>(null)
+  const workflowRunsHasMore = ref(false)
   const isLoadingWorkflowRuns = ref(false)
   const isLoadingMoreWorkflowRuns = ref(false)
   const isLoadingWorkflowRun = ref(false)
@@ -31,9 +34,8 @@ export const useWorkflowRunsStore = defineStore('workflow-runs', () => {
   const retryingWorkflowRunNodeId = ref<string | null>(null)
   let workflowRunRequestId = 0
 
-  const hasMoreWorkflowRuns = computed(() => (
-    workflowRunsPagination.value.page < workflowRunsPagination.value.totalPages
-  ))
+  // 游标分页下 total_pages 为 null，不能用 page < totalPages 判断，改由接口的 hasMore/nextCursor 驱动。
+  const hasMoreWorkflowRuns = computed(() => workflowRunsHasMore.value)
 
   function upsertWorkflowRun(run: WorkflowRun) {
     workflowRuns.value = [run, ...workflowRuns.value.filter((item) => item.id !== run.id)]
@@ -50,15 +52,27 @@ export const useWorkflowRunsStore = defineStore('workflow-runs', () => {
     }
     try {
       const response = await getWorkflowRuns(params)
-      const next = response.data.items
-      workflowRuns.value = options.append
-        ? [...workflowRuns.value, ...next.filter((item) => !workflowRuns.value.some((run) => run.id === item.id))]
-        : next
-      workflowRunsPagination.value = {
-        total: response.data.total,
-        page: response.data.page,
-        pageSize: response.data.page_size,
-        totalPages: response.data.total_pages,
+      const state = mergeCursorPage(
+        {
+          items: options.append ? workflowRuns.value : [],
+          nextCursor: workflowRunsNextCursor.value,
+          hasMore: workflowRunsHasMore.value,
+        },
+        response.data,
+        (run) => run.id,
+        { append: options.append === true }
+      )
+      workflowRuns.value = state.items
+      workflowRunsNextCursor.value = state.nextCursor
+      workflowRunsHasMore.value = state.hasMore
+      // 首屏 offset 响应才带 total/page/total_pages；cursor 模式这些为 null，保留上一页的值。
+      if (!options.append) {
+        workflowRunsPagination.value = {
+          total: response.data.total ?? state.items.length,
+          page: response.data.page ?? 1,
+          pageSize: response.data.page_size ?? 20,
+          totalPages: response.data.total_pages ?? 0,
+        }
       }
       return response.data
     } finally {
@@ -156,6 +170,8 @@ export const useWorkflowRunsStore = defineStore('workflow-runs', () => {
   function clear() {
     workflowRuns.value = []
     workflowRunsPagination.value = { total: 0, page: 1, pageSize: 20, totalPages: 0 }
+    workflowRunsNextCursor.value = null
+    workflowRunsHasMore.value = false
     clearActiveWorkflowRun()
   }
 
@@ -172,6 +188,8 @@ export const useWorkflowRunsStore = defineStore('workflow-runs', () => {
   return {
     workflowRuns,
     workflowRunsPagination,
+    workflowRunsNextCursor,
+    workflowRunsHasMore,
     activeWorkflowRun,
     activeWorkflowRunId,
     isLoadingWorkflowRuns,

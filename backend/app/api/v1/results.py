@@ -28,6 +28,7 @@ from sqlalchemy.orm import selectinload
 
 from app.auth.dependencies import get_current_user
 from app.common.exceptions import ForbiddenException, NotFoundException, ValidationException
+from app.common.keyset import apply_desc_keyset, encode_cursor, next_cursor
 from app.common.responses import paginated_response, success_response
 from app.common.task_context import task_project_id
 from app.common.task_status import task_status_to_api
@@ -191,6 +192,9 @@ async def list_project_results(
     ),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    cursor: str | None = Query(
+        default=None, description="游标（keyset）翻页；传入后不再返回 total"
+    ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -209,6 +213,43 @@ async def list_project_results(
     else:
         query = query.where(Task.status.in_(RESULT_STATUSES))
 
+    if cursor:
+        # 游标模式：只翻已完成的终态，排序键 (finished_at DESC, id DESC) 是全序，
+        # 同毫秒多行由 id 兜底。多取一条判 hasMore，不算 total（算 total 与深分页同代价）。
+        query = query.where(Task.finished_at.is_not(None))
+        query, _last = apply_desc_keyset(
+            query,
+            timestamp_column=Task.finished_at,
+            id_column=Task.id,
+            cursor=cursor,
+        )
+        fetched = list(
+            (
+                await db.execute(
+                    query.options(selectinload(Task.tool))
+                    .order_by(Task.finished_at.desc(), Task.id.desc())
+                    .limit(page_size + 1)
+                )
+            ).scalars().all()
+        )
+        has_more = len(fetched) > page_size
+        rows = fetched[:page_size]
+        payload = paginated_response(
+            items=[_serialize_result(task) for task in rows],
+            total=0,
+            page=page,
+            page_size=page_size,
+        )
+        data = payload["data"]
+        data["nextCursor"] = next_cursor(
+            fetched, timestamp_attr="finished_at", id_attr="id", limit=page_size
+        )
+        data["hasMore"] = has_more
+        data["totalKnown"] = False
+        data["total"] = None
+        data["total_pages"] = None
+        return payload
+
     total = (
         await db.execute(select(func.count()).select_from(query.subquery()))
     ).scalar_one()
@@ -221,12 +262,22 @@ async def list_project_results(
         )
     ).scalars().all()
 
-    return paginated_response(
+    offset = (page - 1) * page_size
+    has_more = offset + len(rows) < total
+    payload = paginated_response(
         items=[_serialize_result(task) for task in rows],
         total=total,
         page=page,
         page_size=page_size,
     )
+    data = payload["data"]
+    # 偏移模式保留 total，同时给出游标（从本页末行算）以便客户端切换到游标翻页。
+    data["nextCursor"] = (
+        encode_cursor([rows[-1].finished_at, rows[-1].id]) if rows and has_more else None
+    )
+    data["hasMore"] = has_more
+    data["totalKnown"] = True
+    return payload
 
 
 @router.get("/results/{task_id}", summary="结果详情")

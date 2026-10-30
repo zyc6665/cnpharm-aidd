@@ -79,6 +79,18 @@
               </span>
             </a>
           </div>
+          <div v-if="displayedArtifacts.length" class="artifact-list-footer">
+            <a-button
+              v-if="artifactHasMore"
+              size="small"
+              :loading="artifactLoadingMore"
+              data-testid="artifact-load-more"
+              @click="loadMoreArtifacts"
+            >
+              加载更多
+            </a-button>
+            <span v-else data-testid="artifact-all-loaded">已全部加载</span>
+          </div>
           <AppEmptyState
             v-else
             :title="activeArtifactFilterKey === 'recent' ? '还没有产出物' : '没有匹配的产出物'"
@@ -163,7 +175,8 @@
   import { computed, onMounted, ref } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { getProjectOverview } from '@/api/projects'
-  import { buildArtifactVersionDownloadUrl, getAllProjectArtifacts } from '@/api/artifacts'
+  import { buildArtifactVersionDownloadUrl, getProjectArtifacts } from '@/api/artifacts'
+  import { mergeCursorPage } from '@/utils/pagination'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import AppEmptyState from '@/components/common/AppEmptyState.vue'
   import {
@@ -192,12 +205,18 @@
   const loadError = ref(false)
   const artifactFilterPresets = PROJECT_ARTIFACT_FILTER_PRESETS
   const activeArtifactFilterKey = ref<ProjectArtifactFilterPreset['key']>('recent')
-  const artifactFilterResults = ref<TypedArtifact[] | null>(null)
+  const artifactPageSize = 20
+  const artifactItems = ref<TypedArtifact[] | null>(null)
+  const artifactNextCursor = ref<string | null>(null)
+  const artifactHasMore = ref(false)
   const artifactFilterLoading = ref(false)
+  const artifactLoadingMore = ref(false)
   const artifactFilterError = ref(false)
 
   const statCards = computed(() => getProjectOverviewStatCards(overview.value?.counts))
-  const displayedArtifacts = computed(() => artifactFilterResults.value ?? overview.value?.artifacts ?? [])
+  const displayedArtifacts = computed(
+    () => artifactItems.value ?? overview.value?.artifacts ?? []
+  )
   /** 把「没有匹配」退回「最近」——空状态里的按钮要有真实动作，不能只是装饰。 */
   function clearArtifactFilter() {
     void selectArtifactFilter(PROJECT_ARTIFACT_FILTER_PRESETS[0]!)
@@ -210,13 +229,7 @@
     try {
       overview.value = (await getProjectOverview(projectId.value)).data
       const preset = resolveProjectArtifactFilterPreset(route.query.artifact_filter)
-      if (preset.key === 'recent') {
-        activeArtifactFilterKey.value = 'recent'
-        artifactFilterResults.value = null
-        artifactFilterError.value = false
-      } else {
-        await selectArtifactFilter(preset, false)
-      }
+      await selectArtifactFilter(preset, false)
     } catch {
       loadError.value = true
     } finally {
@@ -235,21 +248,77 @@
         }
       })
     }
-    if (!preset.params) {
-      artifactFilterResults.value = null
-      return
-    }
+    // 切换筛选：重置游标与列表，再走首屏 offset 请求。
+    artifactItems.value = []
+    artifactNextCursor.value = null
+    artifactHasMore.value = false
+    await loadArtifactPage(preset)
+  }
 
+  /** 首屏 offset 请求（兼容旧行为），同时接出游标供「加载更多」使用。 */
+  async function loadArtifactPage(preset: ProjectArtifactFilterPreset) {
+    if (!projectId.value) return
     artifactFilterLoading.value = true
     try {
-      artifactFilterResults.value = (
-        await getAllProjectArtifacts(projectId.value, preset.params)
-      ).data.items
+      const response = await getProjectArtifacts(projectId.value, {
+        ...(preset.params ?? {}),
+        page: 1,
+        page_size: artifactPageSize
+      })
+      const state = mergeCursorPage(
+        { items: [], nextCursor: null, hasMore: false },
+        response.data,
+        artifact => artifact.id
+      )
+      artifactItems.value = state.items
+      artifactNextCursor.value = state.nextCursor
+      artifactHasMore.value = state.hasMore
     } catch {
-      artifactFilterResults.value = []
+      artifactItems.value = []
+      artifactNextCursor.value = null
+      artifactHasMore.value = false
       artifactFilterError.value = true
     } finally {
       artifactFilterLoading.value = false
+    }
+  }
+
+  /** 加载更多：带 cursor 请求并去重追加。 */
+  async function loadMoreArtifacts() {
+    if (
+      !projectId.value ||
+      !artifactHasMore.value ||
+      artifactLoadingMore.value ||
+      !artifactNextCursor.value
+    ) {
+      return
+    }
+
+    const preset = resolveProjectArtifactFilterPreset(activeArtifactFilterKey.value)
+    artifactLoadingMore.value = true
+    try {
+      const response = await getProjectArtifacts(projectId.value, {
+        ...(preset.params ?? {}),
+        page_size: artifactPageSize,
+        cursor: artifactNextCursor.value
+      })
+      const state = mergeCursorPage(
+        {
+          items: artifactItems.value ?? [],
+          nextCursor: artifactNextCursor.value,
+          hasMore: artifactHasMore.value
+        },
+        response.data,
+        artifact => artifact.id,
+        { append: true }
+      )
+      artifactItems.value = state.items
+      artifactNextCursor.value = state.nextCursor
+      artifactHasMore.value = state.hasMore
+    } catch {
+      artifactFilterError.value = true
+    } finally {
+      artifactLoadingMore.value = false
     }
   }
 
@@ -384,6 +453,13 @@
   }
   .resource-list {
     border-top: 1px solid @border-color;
+  }
+  .artifact-list-footer {
+    display: flex;
+    justify-content: center;
+    margin-top: @spacing-sm;
+    color: @text-tertiary;
+    font-size: @font-size-sm;
   }
   .resource-row {
     display: block;

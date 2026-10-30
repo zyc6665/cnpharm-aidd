@@ -341,6 +341,85 @@ async def test_project_artifacts_list_is_paginated(
 
 
 @pytest.mark.asyncio
+async def test_project_artifacts_cursor_pagination_without_metadata_filter(
+    artifact_client,
+    artifact_db: AsyncSession,
+    artifact_context: dict[str, object],
+):
+    """无 metadata_* 过滤时产物列表走 SQL keyset：不传 cursor 有 total，传 cursor 不算 total。"""
+    from datetime import datetime as _datetime
+
+    from app.models.artifacts import Artifact
+
+    client, _ = artifact_client
+    project = artifact_context["project"]
+    headers = {"Authorization": "Bearer owner"}
+    created_ids = []
+    for index in range(5):
+        created = await client.post(
+            f"/api/v1/projects/{project.id}/artifacts",
+            headers=headers,
+            data={
+                "artifact_type": "protein_structure",
+                "semantic_type": "protein_structure",
+            },
+            files={
+                "file": (
+                    f"p-{index}.pdb",
+                    f"HEADER {index}\nEND\n".encode(),
+                    "chemical/x-pdb",
+                )
+            },
+        )
+        assert created.status_code == 200, created.text
+        created_ids.append(created.json()["data"]["id"])
+
+    # 全部压到同一 created_at：验证同毫秒多行由 id 兜底。
+    fixed = _datetime(2026, 1, 1, 12, 0, 0)
+    artifacts = (await artifact_db.execute(select(Artifact))).scalars().all()
+    for artifact in artifacts:
+        artifact.created_at = fixed
+    await artifact_db.commit()
+
+    expected = sorted(created_ids, reverse=True)
+
+    # 1) 不传 cursor：旧行为（有 total），并给出 nextCursor 供切换到游标。
+    offset_resp = await client.get(
+        f"/api/v1/projects/{project.id}/artifacts?page=1&page_size=2",
+        headers=headers,
+    )
+    assert offset_resp.status_code == 200, offset_resp.text
+    offset_data = offset_resp.json()["data"]
+    assert offset_data["total"] == 5
+    assert offset_data["totalKnown"] is True
+    assert offset_data["hasMore"] is True
+    assert len(offset_data["items"]) == 2
+    assert offset_data["nextCursor"]
+
+    # 2) 从 offset 的 nextCursor 切到游标模式：不重不漏，total 变为 None。
+    collected = [item["id"] for item in offset_data["items"]]
+    cursor = offset_data["nextCursor"]
+    pages = 0
+    while cursor:
+        resp = await client.get(
+            f"/api/v1/projects/{project.id}/artifacts?page_size=2&cursor={cursor}",
+            headers=headers,
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()["data"]
+        assert data["total"] is None
+        assert data["total_pages"] is None
+        assert data["totalKnown"] is False
+        collected.extend(item["id"] for item in data["items"])
+        pages += 1
+        assert pages < 10, "游标翻页没有收敛"
+        cursor = data["nextCursor"] if data["hasMore"] else None
+
+    assert collected == expected
+    assert len(collected) == len(set(collected)) == 5
+
+
+@pytest.mark.asyncio
 async def test_unknown_standard_type_returns_422_envelope(
     artifact_client,
     artifact_context: dict[str, object],
