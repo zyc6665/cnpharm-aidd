@@ -30,6 +30,7 @@ from app.auth.dependencies import get_current_user
 from app.common.exceptions import ForbiddenException, NotFoundException, ValidationException
 from app.common.responses import paginated_response, success_response
 from app.common.task_context import task_project_id
+from app.common.task_status import task_status_to_api
 from app.common.time import utcnow
 from app.database.session import get_db
 from app.feature_flags import require_feature_flag
@@ -155,7 +156,7 @@ def _serialize_result(task: Task) -> dict[str, Any]:
     return {
         "task_id": str(task.id),
         "name": task.name,
-        "status": task.status,
+        "status": task_status_to_api(task.status),
         "priority": task.priority,
         "project_id": task_project_id(task),
         "tool_id": str(task.tool_id) if task.tool_id else None,
@@ -176,7 +177,9 @@ def _serialize_result(task: Task) -> dict[str, Any]:
 @project_router.get("/{project_id}/results", summary="项目结果列表")
 async def list_project_results(
     project_id: str,
-    status: str | None = Query(default=None, description="按终态过滤：success/failure/canceled"),
+    status: str | None = Query(
+        default=None, description="按终态过滤（小写）：success/failure/canceled/timeout"
+    ),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     current_user: User = Depends(get_current_user),
@@ -189,9 +192,11 @@ async def list_project_results(
 
     query = select(Task).where(Task.project_id_expression() == project_id)
     if status:
-        if status not in RESULT_STATUSES:
+        # 前端按小写契约传参（success/failure/canceled/timeout），库里是枚举大写值。
+        normalized = status.strip().upper()
+        if normalized not in RESULT_STATUSES:
             raise ValidationException(f"不支持的结果状态: {status}")
-        query = query.where(Task.status == status)
+        query = query.where(Task.status == normalized)
     else:
         query = query.where(Task.status.in_(RESULT_STATUSES))
 
@@ -322,7 +327,7 @@ async def get_result_report(
         data={
             "task_id": str(task.id),
             "name": task.name,
-            "status": task.status,
+            "status": task_status_to_api(task.status),
             "summary": (task.outputs.result if task.outputs else None),
             "artifacts": outputs,
             "lineage_hint": {

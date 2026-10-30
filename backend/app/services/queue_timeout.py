@@ -36,7 +36,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.time import utcnow
@@ -133,25 +133,102 @@ async def expire_timed_out_queue_entries(
         anchor = queue_anchor(task)
         if anchor is None or anchor > cutoff:
             continue
-        TaskStateMachine.mark_timeout(
-            task,
-            error_message=_timeout_message(window),
-            progress_message="排队超时",
-        )
-        db.add(
-            TaskLog(
-                task_id=task.id,
-                level=QUEUED_TIMEOUT_LOG_LEVEL,
-                message=_timeout_message(window),
-            )
-        )
-        # 排队中的任务可能已持有 dispatch reservation（准入通过、消息还没被消费），
-        # 转终态后必须归还，否则这份租约会一直占着配额到 stale 回收为止。
-        await release_task_resource_reservation(task, reason="task_queue_timeout")
-        expired_tasks.append(task)
+        try:
+            if await _expire_task_if_still_queued(db, task, window=window):
+                expired_tasks.append(task)
+        except Exception:  # noqa: BLE001 - 单行失败不能让整批停下
+            logger.exception("排队超时巡检处理任务 %s 失败，跳过该行", task.id)
+            with contextlib.suppress(Exception):
+                db.expunge(task)
+            continue
 
     _publish_status_change(expired_tasks)
     return len(expired_tasks)
+
+
+async def _expire_task_if_still_queued(
+    db: AsyncSession,
+    task: Task,
+    *,
+    window: int,
+) -> bool:
+    """用 CAS 把单条排队任务置为 `TIMEOUT`；返回是否真的由本轮巡检落库。
+
+    为什么不能直接 ORM 写回：`with_for_update` 在 SQLite 下会被忽略，PostgreSQL
+    虽然有行锁，但 SELECT 与写回之间仍有窗口。如果 worker 恰好在这段时间把任务
+    从 `QUEUED` 启动成 `RUNNING`，普通 ORM UPDATE 会把它覆盖回 `TIMEOUT`，已经
+    花掉的算力和产物都会被丢弃。所以写回必须带 `WHERE status = 'QUEUED'` 条件，
+    `rowcount != 1` 就说明这行已经被别人改了，本轮跳过并记日志。
+
+    这里先用状态机 `mark_timeout` 算出终态字段，再用 Core UPDATE 落地；写回前
+    `expunge` 掉 ORM 实例，避免它的脏状态在后续 flush 时绕过 CAS 再次覆盖并发
+    写入。**资源租约只在 CAS 命中后才归还**，确保不会把已被 worker 启动的任务
+    的配额提前释放。
+    """
+    TaskStateMachine.mark_timeout(
+        task,
+        error_message=_timeout_message(window),
+        progress_message="排队超时",
+    )
+
+    values = {
+        "status": task.status,
+        "finished_at": task.finished_at,
+        "error_message": task.error_message,
+        "progress_message": task.progress_message,
+        "execution_time_sec": task.execution_time_sec,
+        "extra_data": task.extra_data,
+    }
+    task_id = task.id
+    db.expunge(task)
+
+    with db.no_autoflush:
+        update_result = await db.execute(
+            update(Task)
+            .where(
+                Task.id == task_id,
+                Task.status == TaskStatus.QUEUED.value,
+            )
+            .values(**values)
+            .execution_options(synchronize_session=False)
+        )
+    if update_result.rowcount != 1:
+        logger.warning(
+            "排队超时巡检跳过任务 %s：状态已被并发改写为非 QUEUED（可能是 worker 已启动）",
+            task_id,
+        )
+        return False
+
+    # CAS 成功后才归还资源租约：如果上面发现任务已被 worker 启动，这一步绝不能
+    # 执行——否则会把 RUNNING 任务占着的 worker 配额提前释放掉，正是本次要防的
+    # 那类「已执行的任务资源被丢弃」。归还本身可能失败，记日志后交给 stale 回收，
+    # 不能因为租约管理器抖动就把已落库的超时判定丢掉。
+    queued_extra_data = task.extra_data
+    try:
+        await release_task_resource_reservation(task, reason="task_queue_timeout")
+    except Exception:  # noqa: BLE001 - 租约归还失败不应回滚超时判定
+        logger.exception("排队超时任务 %s 归还资源租约失败，等待 stale 回收", task_id)
+    else:
+        if task.extra_data != queued_extra_data:
+            with db.no_autoflush:
+                await db.execute(
+                    update(Task)
+                    .where(
+                        Task.id == task_id,
+                        Task.status == TaskStatus.TIMEOUT.value,
+                    )
+                    .values(extra_data=task.extra_data)
+                    .execution_options(synchronize_session=False)
+                )
+
+    db.add(
+        TaskLog(
+            task_id=task_id,
+            level=QUEUED_TIMEOUT_LOG_LEVEL,
+            message=_timeout_message(window),
+        )
+    )
+    return True
 
 
 def _publish_status_change(tasks: list[Task]) -> None:

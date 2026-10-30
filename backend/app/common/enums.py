@@ -66,6 +66,40 @@ class TASK_PRIORITY(_StringEnum):
     HIGH = "high"
 
 
+class TASK_STATUS(_StringEnum):
+    """任务状态（单一源）。
+
+    与《03-系统架构设计说明书》3.4 节状态机一致：
+    CREATED -> REJECTED: 配额/参数校验失败
+    CREATED -> QUEUED -> RUNNING -> SUCCESS / FAILURE / CANCELED / TIMEOUT
+
+    - PENDING：已创建但尚未入队调度（对应文档里的 CREATED）
+    - REJECTED：准入被拒（配额不足、参数校验失败），从未进入队列
+    - QUEUED：已入队/资源不足重新排队，等待调度
+    - RUNNING：执行中
+    - SUCCESS / FAILURE / CANCELED / TIMEOUT：终态
+
+    注意：``REJECTED`` 是终态，但**不核销算力占用**（docs/03 §7.3、
+    docs/04 §6.2：终态（含 FAILED/CANCELLED/TIMEOUT）一律核销，REJECTED
+    不核销）。它记的是「这次提交被拒过」，不是一个跑过又结束的作业。
+
+    历史沿革：本类原先定义在 ``app/models/tasks.py``，只有前端枚举 codegen
+    之外的地方用它，导致 ``TaskStatus`` 扩成八态时无人拦截前端硬编码数组。
+    迁到本模块后由 ``scripts/gen_frontend_enums.py`` 生成前端常量，
+    ``test/test_frontend_enum_parity.py`` 即可守护。``app.models.tasks`` 仍以
+    同名 re-export，老的 ``from app.models.tasks import TaskStatus`` 不变。
+    """
+
+    PENDING = "PENDING"
+    REJECTED = "REJECTED"
+    QUEUED = "QUEUED"
+    RUNNING = "RUNNING"
+    SUCCESS = "SUCCESS"
+    FAILURE = "FAILURE"
+    TIMEOUT = "TIMEOUT"
+    CANCELED = "CANCELED"
+
+
 #: 数据资产根类型（Task 5 §7.1）。取值真源是
 #: ``app.artifact_standards.asset_types.ASSET_ARTIFACT_TYPES``——这里用函数式 API
 #: **派生**出 ``_StringEnum`` 供 ``scripts/gen_frontend_enums.py`` 迭代，避免在前端
@@ -147,6 +181,9 @@ class RESOURCE_TYPE(_StringEnum):
 ProjectStatus = Literal[PROJECT_STATUS.values()]
 ProjectRole = Literal[PROJECT_ROLE.values()]
 TaskPriority = Literal[TASK_PRIORITY.values()]
+#: 任务状态的 Literal 别名。取名 ``TaskStatusValue`` 而不是 ``TaskStatus``，
+#: 因为后者是 ``app.models.tasks`` 里 ORM 层沿用的枚举类名（对外导入路径）。
+TaskStatusValue = Literal[TASK_STATUS.values()]
 AssetArtifactType = Literal[ASSET_ARTIFACT_TYPE.values()]
 AuditAction = Literal[AUDIT_ACTION.values()]
 AuditResult = Literal[AUDIT_RESULT.values()]
@@ -157,6 +194,7 @@ __all__ = [
     "PROJECT_STATUS",
     "PROJECT_ROLE",
     "TASK_PRIORITY",
+    "TASK_STATUS",
     "ASSET_ARTIFACT_TYPE",
     "AUDIT_ACTION",
     "AUDIT_RESULT",
@@ -164,6 +202,7 @@ __all__ = [
     "ProjectStatus",
     "ProjectRole",
     "TaskPriority",
+    "TaskStatusValue",
     "AssetArtifactType",
     "AuditAction",
     "AuditResult",

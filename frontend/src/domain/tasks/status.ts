@@ -24,7 +24,7 @@ export type TaskStatusTextKey =
  * 出现，用户会以为任务丢了，所以 `runningStatuses` 三者都收。
  * 需要严格判定「正在执行」时请用 `isExecutingTask`，不要用 `isRunningTask`。
  */
-const runningStatuses: TaskStatus[] = ['pending', 'queued', 'running']
+export const runningStatuses: readonly TaskStatus[] = ['pending', 'queued', 'running']
 
 /**
  * 终态：不会再自行流转，只能重试或留在历史里。
@@ -36,8 +36,17 @@ const runningStatuses: TaskStatus[] = ['pending', 'queued', 'running']
  * 归入终态而不是 `runningStatuses`，否则任务中心会把它算进「进行中」，
  * 用户会等一个永远不会开始的任务。
  */
-const terminalStatuses: TaskStatus[] = ['success', 'failure', 'timeout', 'canceled', 'rejected']
-const historyStatuses: TaskStatus[] = terminalStatuses
+export const terminalStatuses: readonly TaskStatus[] = ['success', 'failure', 'timeout', 'canceled', 'rejected']
+
+/**
+ * 「结果异常」终态：执行没有产出可用结果，预览面板按错误态展示。
+ *
+ * `timeout`（超时）必须包含在内——否则超时任务在预览里会停留在「进行中」的骨架屏。
+ * 与 `terminalStatuses` 的区别是排除 `success`（成功）和 `rejected`
+ * （从未入队，没有执行过程可展示）。
+ */
+export const failureStatuses: readonly TaskStatus[] = ['failure', 'timeout', 'canceled']
+const historyStatuses: readonly TaskStatus[] = terminalStatuses
 const taskStatusSet = new Set<TaskStatus>([
   'pending',
   'rejected',

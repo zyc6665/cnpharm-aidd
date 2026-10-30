@@ -109,10 +109,19 @@ class SystemStatsResponse(BaseModel):
     total_files: int
 
     # 任务统计
-    pending_tasks: int
-    running_tasks: int
-    completed_tasks: int
-    failed_tasks: int
+    pending_tasks: int = Field(
+        description="等待执行的任务数：含 PENDING（待调度）与 QUEUED（已入队排队中）"
+    )
+    running_tasks: int = Field(description="正在执行的任务数：RUNNING")
+    completed_tasks: int = Field(description="成功完成的任务数：SUCCESS")
+    failed_tasks: int = Field(description="失败类任务数：含 FAILURE 与 TIMEOUT（超时）")
+    canceled_tasks: int = Field(
+        default=0, description="已取消任务数：CANCELED"
+    )
+    rejected_tasks: int = Field(
+        default=0,
+        description="准入被拒任务数：REJECTED（从未入队，不核销算力）",
+    )
 
     # 当前进程内活跃的任务事件 SSE 订阅数（docs/05 §9：任务状态走 SSE）
     sse_subscriptions: int = 0
@@ -585,9 +594,14 @@ async def get_system_stats(
     files_result = await db.execute(select(func.count(File.id)))
     total_files = files_result.scalar()
 
-    # 任务状态统计
+    # 任务状态统计：六个桶必须完整划分八态，保证
+    # pending+running+completed+failed+canceled+rejected == total_tasks。
+    # pending 覆盖 PENDING+QUEUED（QUEUED 单独没有桶），failed 覆盖
+    # FAILURE+TIMEOUT（超时也是失败），CANCELED/REJECTED 各占一桶。
     pending_result = await db.execute(
-        select(func.count(Task.id)).where(Task.status == TaskStatus.PENDING.value)
+        select(func.count(Task.id)).where(
+            Task.status.in_((TaskStatus.PENDING.value, TaskStatus.QUEUED.value))
+        )
     )
     pending_tasks = pending_result.scalar()
 
@@ -602,9 +616,21 @@ async def get_system_stats(
     completed_tasks = completed_result.scalar()
 
     failed_result = await db.execute(
-        select(func.count(Task.id)).where(Task.status == TaskStatus.FAILURE.value)
+        select(func.count(Task.id)).where(
+            Task.status.in_((TaskStatus.FAILURE.value, TaskStatus.TIMEOUT.value))
+        )
     )
     failed_tasks = failed_result.scalar()
+
+    canceled_result = await db.execute(
+        select(func.count(Task.id)).where(Task.status == TaskStatus.CANCELED.value)
+    )
+    canceled_tasks = canceled_result.scalar()
+
+    rejected_result = await db.execute(
+        select(func.count(Task.id)).where(Task.status == TaskStatus.REJECTED.value)
+    )
+    rejected_tasks = rejected_result.scalar()
 
     # 任务事件 SSE 订阅数（进程内，单副本口径；多副本时各副本只统计自己）
     sse_subscriptions = get_task_event_hub().total_subscribers()
@@ -619,6 +645,8 @@ async def get_system_stats(
             running_tasks=running_tasks,
             completed_tasks=completed_tasks,
             failed_tasks=failed_tasks,
+            canceled_tasks=canceled_tasks,
+            rejected_tasks=rejected_tasks,
             sse_subscriptions=sse_subscriptions,
         ).model_dump()
     )

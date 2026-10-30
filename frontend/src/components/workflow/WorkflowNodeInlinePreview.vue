@@ -77,7 +77,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { FullscreenOutlined } from '@ant-design/icons-vue'
 import ResultVisualizationPanel from '@/components/tasks/ResultVisualizationPanel.vue'
-import { normalizeTaskStatus } from '@/domain/tasks'
+import { failureStatuses, normalizeTaskStatus, runningStatuses } from '@/domain/tasks'
 import type { ArtifactFile, Task } from '@/types/models'
 
 const props = defineProps<{
@@ -99,8 +99,8 @@ watch(
 )
 
 const taskStatus = computed(() => normalizeTaskStatus(props.task?.status))
-const isRunning = computed(() => ['pending', 'running'].includes(taskStatus.value))
-const isFailure = computed(() => ['failure', 'canceled'].includes(taskStatus.value))
+const isRunning = computed(() => runningStatuses.includes(taskStatus.value))
+const isFailure = computed(() => failureStatuses.includes(taskStatus.value))
 const progress = computed(() => Math.max(0, Math.min(100, Number(props.task?.progress ?? 0))))
 const outputFiles = computed(() => props.task?.output_files ?? [])
 const hasOutputs = computed(() => outputFiles.value.length > 0 || (props.task?.artifacts?.length ?? 0) > 0)

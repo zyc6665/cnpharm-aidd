@@ -67,14 +67,13 @@ GAP_ORDER = (
 #: 一条任务到达这里才算「结果可看」；排队与运行中仍属于「已提交」。
 #: 失败/超时/取消没有结果可看，故不进入 FINISHED_STATUSES。
 FINISHED_STATUSES = (TaskStatus.SUCCESS.value,)
-#: 排队中（QUEUED）也算「已提交」：任务已进调度队列，只是还没轮到执行。
-#: 少了 QUEUED，刚提交完任务的项目会掉回 S3 并报 NO_TASK，等于告诉用户
-#: 「你还没提交过任务」，而任务明明在队列里。PENDING（刚创建、尚未入队调度）
-#: 不算已提交。
-SUBMITTED_STATUSES = (
-    TaskStatus.QUEUED.value,
-    TaskStatus.RUNNING.value,
-    TaskStatus.SUCCESS.value,
+#: 「已提交」= 除 PENDING 之外的全部状态：PENDING 是刚创建、尚未入队调度，
+#: 不算用户提交过；其余七态（QUEUED/RUNNING/SUCCESS/FAILURE/TIMEOUT/CANCELED/
+#: REJECTED）都代表用户确实提交过任务。这里用集合推导而不是手写清单，避免
+#: 状态机再扩态时又漏改——漏掉的后果是「任务全部失败/超时」的项目从 S4 掉回
+#: S3 并误报 NO_TASK（「还没有提交过计算任务」）。
+SUBMITTED_STATUSES = tuple(
+    status.value for status in TaskStatus if status is not TaskStatus.PENDING
 )
 
 #: ``gaps[].link`` 指向 ``docs/06`` 里已定义的页面路由（P-06/P-09~P-11/P-18/P-31/

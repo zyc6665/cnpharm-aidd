@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import sys
+from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -30,6 +31,7 @@ from app.main import app  # noqa: E402
 from app.models.files import FileSourceType  # noqa: E402
 from app.models.projects import Organization, Project, ProjectMember  # noqa: E402
 from app.models.targets import Pocket, PocketResidue, Protein, ProteinStructure, Target  # noqa: E402
+from app.models.tasks import Task  # noqa: E402
 from app.models.tools import Tool, ToolStatus, ToolVersion  # noqa: E402
 from app.models.users import User, UserRole, UserStatus  # noqa: E402
 from app.services import domain_targets  # noqa: E402
@@ -649,7 +651,9 @@ async def submitted_tasks(monkeypatch: pytest.MonkeyPatch) -> list[SimpleNamespa
     async def fake_create_and_schedule_tool_task(*, db, current_user, task_data, extra_data=None, **_kwargs):
         record = SimpleNamespace(
             id=f"task-{len(captured) + 1}",
-            status="pending",
+            # 真实 dispatch_tool_task 返回前已把任务置为 QUEUED（大写库值），
+            # 这里用大写值才能验证提交响应的状态确实被转成了小写契约。
+            status="QUEUED",
             priority=task_data.priority,
             project_id=task_data.project_id,
             tool_id=task_data.tool_id,
@@ -715,7 +719,8 @@ async def test_structure_prediction_submits_boltz_task(
     assert response.status_code == 200, response.text
     data = response.json()["data"]
     assert data["task_id"] == "task-1"
-    assert data["status"] == "pending"
+    # 与列表接口同一套小写契约：库里的 QUEUED 必须输出成 "queued"。
+    assert data["status"] == "queued"
     assert data["priority"] == "high"
     assert len(submitted_tasks) == 1
     submitted = submitted_tasks[0]
@@ -829,3 +834,47 @@ async def test_deleting_project_removes_domain_rows(
     for model in (Target, Protein, ProteinStructure, Pocket, PocketResidue):
         remaining = (await db_session.execute(select(model))).scalars().all()
         assert remaining == [], f"{model.__tablename__} should be cleared with the project"
+
+
+@pytest.mark.asyncio
+async def test_task_queue_position_counts_pending_and_queued_only(
+    db_session: AsyncSession,
+    project: Project,
+    users: dict[str, User],
+):
+    """提交响应里的 queue_position 要覆盖 PENDING 与 QUEUED。
+
+    调度返回前任务已被置为 QUEUED（大写枚举值），旧实现只认 ``"pending"``：
+    判定永远为真、直接返回 None，前端拿到的 queue_position 恒为空。
+    """
+    tool = await _register_tool(db_session, slug="queue-position", owner_id=users[OWNER].id)
+    base = utcnow() - timedelta(minutes=10)
+
+    async def _make(status: str, priority: str, offset_seconds: int) -> Task:
+        task = Task(
+            user_id=users[OWNER].id,
+            project_id=project.id,
+            tool_id=tool.id,
+            tool_version_id=tool.current_version_id,
+            status=status,
+            priority=priority,
+            created_at=base + timedelta(seconds=offset_seconds),
+        )
+        db_session.add(task)
+        await db_session.flush()
+        return task
+
+    first_pending = await _make("PENDING", "normal", 0)
+    target_queued = await _make("QUEUED", "normal", 10)
+    await _make("PENDING", "normal", 20)
+    running = await _make("RUNNING", "normal", 30)
+    high_priority = await _make("PENDING", "high", 5)
+    await db_session.commit()
+
+    # 同优先级、created_at 不晚于自己的 PENDING/QUEUED 共 2 条（含自己）。
+    assert await domain_targets.task_queue_position(db_session, task=target_queued) == 2
+    assert await domain_targets.task_queue_position(db_session, task=first_pending) == 1
+    # 非排队态不给位置。
+    assert await domain_targets.task_queue_position(db_session, task=running) is None
+    # 优先级不同不互相占位。
+    assert await domain_targets.task_queue_position(db_session, task=high_priority) == 1

@@ -37,6 +37,10 @@ ENUM_GROUPS = [
     ("PROJECT_STATUS", "ProjectStatus"),
     ("PROJECT_ROLE", "ProjectRole"),
     ("TASK_PRIORITY", "TaskPriority"),
+    # 后端 TaskStatus 取值是大写（PENDING/QUEUED/...），前端 API 契约是小写。
+    # 这里生成 ``TaskStatusGenerated``，由 ``types/models.d.ts`` 用
+    # ``Lowercase<TaskStatusGenerated>`` 派生小写联合，避免手抄八态清单。
+    ("TASK_STATUS", "TaskStatusGenerated"),
     ("ASSET_ARTIFACT_TYPE", "AssetArtifactType"),
     ("AUDIT_ACTION", "AuditAction"),
     ("AUDIT_RESULT", "AuditResult"),

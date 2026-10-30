@@ -2068,6 +2068,7 @@ export default {
     // Status
     status: {
       pending: 'Pending',
+      rejected: 'Rejected',
       queued: 'Queued',
       running: 'Running',
       success: 'Completed',

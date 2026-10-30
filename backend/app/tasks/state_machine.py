@@ -35,13 +35,16 @@ DEFAULT_MAX_RETRIES = 3
 # 用它而不是 created_at：任务可能先 PENDING 停留（等上传物化、等前置校验），
 # 那段时间不该算排队。离开 QUEUED 时清掉，避免重排后用旧锚点被误判超时。
 QUEUED_AT_METADATA_KEY = "queued_at"
+# 进入 RUNNING 时要清掉的「当前等待」元数据。
+# 注意 `resource_retry_count` 不在其中：它是「连续资源重排次数」的累计值，
+# 必须跨尝试保留——否则任务每次启动都把它清回 0，`max_retries` 永远达不到，
+# 资源不足时会无限重排。
 RESOURCE_WAIT_METADATA_KEYS = (
     "resource_wait_reason",
     "resource_wait_code",
     "resource_wait_category",
     "resource_wait_scope",
     "resource_wait_dimension",
-    "resource_retry_count",
     "resource_retry_next_at",
 )
 
@@ -61,6 +64,21 @@ def _set_queued_at(task: "Task", moment) -> None:
     extra_data = dict(task.extra_data or {})
     extra_data[QUEUED_AT_METADATA_KEY] = moment.isoformat()
     task.extra_data = extra_data
+
+
+def _increment_resource_retry_count(task: "Task") -> int:
+    """累加「资源不足重排」计数，返回新值。
+
+    为什么不复用 ``retry_count``：``retry_count`` 是用户的 ``max_retries`` 额度，
+    资源不足（GPU 被占、准入失败）导致的基础设施重排不该消耗它——否则排队失败
+    三次后用户点「重试」会被直接拒绝。资源重排单独记在
+    ``extra_data["resource_retry_count"]``（worker 侧已有该键）。
+    """
+    extra_data = dict(task.extra_data or {})
+    count = int(extra_data.get("resource_retry_count") or 0) + 1
+    extra_data["resource_retry_count"] = count
+    task.extra_data = extra_data
+    return count
 
 
 def _clear_queued_at(task: "Task") -> None:
@@ -350,7 +368,8 @@ class TaskStateMachine:
 
         elif to_status == TaskStatus.PENDING and old_status == TaskStatus.RUNNING:
             # 资源不足重新入队（旧路径，仍保留 PENDING 作为重排目标以兼容既有调用）
-            task.retry_count = (task.retry_count or 0) + 1
+            # 这是基础设施重排，不占用户的 retry_count 额度
+            _increment_resource_retry_count(task)
             task.progress_message = progress_message or "资源不足，重新入队等待"
             task.started_at = None
 
@@ -359,8 +378,18 @@ class TaskStateMachine:
                 # 首次入队：仍属「未开始」，不算一次重试
                 task.progress = 0.0
                 task.progress_message = progress_message or "任务已入队等待调度"
+            elif old_status == TaskStatus.RUNNING:
+                # RUNNING -> QUEUED：资源不足重新排队，属于基础设施重排，
+                # 记到 resource_retry_count，保留用户的 retry_count 额度
+                _increment_resource_retry_count(task)
+                task.error_message = None
+                task.started_at = None
+                task.finished_at = None
+                task.execution_time_sec = None
+                task.progress = 0.0
+                task.progress_message = progress_message or "资源不足，重新排队等待"
             else:
-                # RUNNING/FAILURE/CANCELED/TIMEOUT -> QUEUED：重新排队，计一次重试
+                # FAILURE/CANCELED/TIMEOUT -> QUEUED：用户主动重试重排，计一次重试
                 task.retry_count = (task.retry_count or 0) + 1
                 task.error_message = None
                 task.started_at = None

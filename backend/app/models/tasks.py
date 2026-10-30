@@ -17,32 +17,10 @@ from sqlalchemy.orm import relationship
 
 from app.database.base import Base, TimestampMixin, UUIDMixin, utcnow
 
-
-class TaskStatus(str, enum.Enum):
-    """任务状态
-
-    与《03-系统架构设计说明书》3.4 节状态机一致：
-    CREATED -> REJECTED: 配额/参数校验失败
-    CREATED -> QUEUED -> RUNNING -> SUCCESS / FAILURE / CANCELED / TIMEOUT
-
-    - PENDING：已创建但尚未入队调度（对应文档里的 CREATED）
-    - REJECTED：准入被拒（配额不足、参数校验失败），从未进入队列
-    - QUEUED：已入队/资源不足重新排队，等待调度
-    - RUNNING：执行中
-    - SUCCESS / FAILURE / CANCELED / TIMEOUT：终态
-
-    注意：``REJECTED`` 是终态，但**不核销算力占用**（docs/03 §7.3、
-    docs/04 §6.2：终态（含 FAILED/CANCELLED/TIMEOUT）一律核销，REJECTED
-    不核销）。它记的是「这次提交被拒过」，不是一个跑过又结束的作业。
-    """
-    PENDING = "PENDING"
-    REJECTED = "REJECTED"
-    QUEUED = "QUEUED"
-    RUNNING = "RUNNING"
-    SUCCESS = "SUCCESS"
-    FAILURE = "FAILURE"
-    TIMEOUT = "TIMEOUT"
-    CANCELED = "CANCELED"
+#: 任务状态枚举的单一源在 ``app.common.enums``（供前端枚举 codegen 与 parity
+#: 测试守护）。这里同名 re-export，保持 ``from app.models.tasks import
+#: TaskStatus`` 这一对外导入路径与 ``TaskStatus.PENDING`` 等成员访问完全不变。
+from app.common.enums import TASK_STATUS as TaskStatus
 
 
 class TaskPriority(str, enum.Enum):

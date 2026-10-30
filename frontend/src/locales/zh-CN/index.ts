@@ -2059,6 +2059,7 @@ export default {
     // 状态
     status: {
       pending: '等待中',
+      rejected: '已拒绝',
       queued: '排队中',
       running: '运行中',
       success: '已完成',

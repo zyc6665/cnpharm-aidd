@@ -54,7 +54,12 @@ class TestStateMachineTransitions:
 
         TaskStateMachine.start(task)
 
-        assert task.extra_data == {"resource_snapshot": {"gpu_required": True}}
+        # 当前等待原因清掉；resource_retry_count 是跨尝试累计值，必须保留，
+        # 否则每次启动归零会让资源重排无限循环
+        assert task.extra_data == {
+            "resource_snapshot": {"gpu_required": True},
+            "resource_retry_count": 2,
+        }
 
     def test_running_to_success(self):
         task = _make_task(TaskStatus.RUNNING)
@@ -80,8 +85,12 @@ class TestStateMachineTransitions:
 
     def test_running_to_pending_for_gpu_requeue(self):
         task = _make_task(TaskStatus.RUNNING)
+        task.retry_count = 0
         TaskStateMachine.transition(task, TaskStatus.PENDING, progress_message="GPU资源不足")
         assert task.status == TaskStatus.PENDING.value
+        # 资源重排走 resource_retry_count，不吃用户的 retry_count 额度
+        assert (task.retry_count or 0) == 0
+        assert task.extra_data["resource_retry_count"] == 1
 
     def test_canceled_to_success_for_recovery(self):
         task = _make_task(TaskStatus.CANCELED)
@@ -154,7 +163,7 @@ class TestQueuedAndTimeoutStates:
         assert task.status == TaskStatus.RUNNING.value
         assert task.started_at is not None
 
-    def test_running_requeue_goes_to_queued_and_counts_retry(self):
+    def test_running_requeue_goes_to_queued_and_counts_resource_retry(self):
         task = _make_task(TaskStatus.RUNNING)
         task.retry_count = 0
         task.started_at = datetime(2024, 1, 1, 12, 0, 0)
@@ -162,9 +171,38 @@ class TestQueuedAndTimeoutStates:
         TaskStateMachine.transition(task, TaskStatus.QUEUED, progress_message="GPU资源不足")
 
         assert task.status == TaskStatus.QUEUED.value
-        assert task.retry_count == 1
+        # 资源不足重排不占用用户 max_retries 额度（否则用户重试会被拒）
+        assert (task.retry_count or 0) == 0
+        assert task.extra_data["resource_retry_count"] == 1
         assert task.started_at is None
         assert task.progress == 0.0
+
+    def test_failure_to_queued_still_counts_user_retry(self):
+        task = _make_task(TaskStatus.FAILURE)
+        task.retry_count = 0
+
+        TaskStateMachine.transition(task, TaskStatus.QUEUED, progress_message="用户重新提交")
+
+        assert task.status == TaskStatus.QUEUED.value
+        # 用户在终态上主动重试才消耗 retry_count
+        assert task.retry_count == 1
+        assert "resource_retry_count" not in (task.extra_data or {})
+
+    def test_resource_requeues_do_not_consume_user_retry_budget(self):
+        task = _make_task(TaskStatus.RUNNING)
+        task.retry_count = 0
+        task.max_retries = 3
+
+        for _ in range(3):
+            TaskStateMachine.transition(task, TaskStatus.QUEUED, progress_message="资源不足")
+            TaskStateMachine.start(task)
+
+        # 三次资源重排后计数累计到 3，用户额度仍是 0
+        assert task.extra_data["resource_retry_count"] == 3
+        assert (task.retry_count or 0) == 0
+
+        TaskStateMachine.complete(task, success=False, error_message="boom")
+        assert TaskStateMachine.can_retry(task) is True
 
     def test_running_to_timeout_is_terminal(self):
         task = _make_task(TaskStatus.RUNNING)

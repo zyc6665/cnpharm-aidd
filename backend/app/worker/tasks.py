@@ -118,6 +118,17 @@ def _task_execution_failure_result(exc: Exception) -> Dict[str, Any] | None:
     return result
 
 
+def _resource_retry_count(task) -> int:
+    """基础设施重排次数（GPU 被占 / 准入失败），与用户的 retry_count 额度无关。"""
+    extra_data = getattr(task, "extra_data", None)
+    if not isinstance(extra_data, dict):
+        return 0
+    try:
+        return int(extra_data.get("resource_retry_count") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _gpu_retry_message(task, exc: GPUAllocationFailed) -> str:
     wait_position = (
         f"，队列位置 {exc.wait_position}"
@@ -126,13 +137,13 @@ def _gpu_retry_message(task, exc: GPUAllocationFailed) -> str:
     )
     return (
         f"GPU 分配失败: {exc.message}{wait_position}；"
-        f"第 {(task.retry_count or 0) + 1}/{task.max_retries} 次重试"
+        f"第 {_resource_retry_count(task) + 1}/{task.max_retries} 次重试"
     )
 
 
 def _gpu_retry_delay_seconds(task) -> int:
     """按 GPU 重试次数计算有上限的指数退避秒数。"""
-    retry_count = max(1, int(task.retry_count or 1))
+    retry_count = max(1, _resource_retry_count(task) or 1)
     initial = max(0, int(settings.GPU_RETRY_INITIAL_BACKOFF_SECONDS))
     maximum = max(0, int(settings.GPU_RETRY_MAX_BACKOFF_SECONDS))
     return min(initial * (2 ** (retry_count - 1)), maximum)
@@ -144,13 +155,13 @@ def _resource_admission_retry_message(
 ) -> str:
     return (
         f"Worker 资源准入失败: {exc.reason}；"
-        f"第 {(task.retry_count or 0) + 1}/{task.max_retries} 次重试"
+        f"第 {_resource_retry_count(task) + 1}/{task.max_retries} 次重试"
     )
 
 
 def _resource_admission_retry_delay_seconds(task) -> int:
     """按资源准入重试次数计算有上限的指数退避秒数。"""
-    retry_count = max(1, int(task.retry_count or 1))
+    retry_count = max(1, _resource_retry_count(task) or 1)
     initial = max(0, int(settings.RESOURCE_ADMISSION_RETRY_INITIAL_BACKOFF_SECONDS))
     maximum = max(0, int(settings.RESOURCE_ADMISSION_RETRY_MAX_BACKOFF_SECONDS))
     return min(initial * (2 ** (retry_count - 1)), maximum)
@@ -741,7 +752,7 @@ async def _execute_tool_task_impl_inner(
 
             if (
                 isinstance(e, GPUAllocationFailed)
-                and (task.retry_count or 0) < task.max_retries
+                and _resource_retry_count(task) < task.max_retries
                 and tool_version is not None
             ):
                 retry_message = _gpu_retry_message(task, e)
@@ -760,7 +771,7 @@ async def _execute_tool_task_impl_inner(
                         "gpu_unavailable",
                         legacy_reason="gpu_unavailable",
                     ),
-                    "resource_retry_count": task.retry_count,
+                    "resource_retry_count": _resource_retry_count(task),
                     "resource_retry_next_at": resource_retry_next_at,
                 }
                 db.add(
@@ -771,7 +782,7 @@ async def _execute_tool_task_impl_inner(
                         log_data={
                             "source": "gpu_allocator",
                             "wait_position": e.wait_position,
-                            "retry_count": task.retry_count,
+                            "retry_count": _resource_retry_count(task),
                             "resource_wait_reason": "gpu_unavailable",
                             "retry_delay_seconds": retry_delay_seconds,
                             "resource_retry_next_at": resource_retry_next_at,
@@ -822,7 +833,7 @@ async def _execute_tool_task_impl_inner(
 
             if (
                 isinstance(e, ResourceAdmissionFailed)
-                and (task.retry_count or 0) < task.max_retries
+                and _resource_retry_count(task) < task.max_retries
                 and tool_version is not None
             ):
                 retry_message = _resource_admission_retry_message(task, e)
@@ -841,7 +852,7 @@ async def _execute_tool_task_impl_inner(
                         e.reason,
                         legacy_reason="worker_capability_unavailable",
                     ),
-                    "resource_retry_count": task.retry_count,
+                    "resource_retry_count": _resource_retry_count(task),
                     "resource_retry_next_at": resource_retry_next_at,
                 }
                 db.add(
@@ -853,7 +864,7 @@ async def _execute_tool_task_impl_inner(
                             "source": "worker_capability",
                             "reason": e.reason,
                             "worker_id": e.worker_id,
-                            "retry_count": task.retry_count,
+                            "retry_count": _resource_retry_count(task),
                             "resource_wait_reason": "worker_capability_unavailable",
                             "retry_delay_seconds": retry_delay_seconds,
                             "resource_retry_next_at": resource_retry_next_at,

@@ -370,3 +370,60 @@ async def test_system_health_reports_executor_gateway_readiness(
     for executor_type in ("builtin", "python_script", "docker_image", "ssh_job"):
         assert executor_type in message
     assert "remote_api" not in message
+
+
+@pytest.mark.asyncio
+async def test_system_stats_buckets_count_queued_and_timeout(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    admin_user: User,
+):
+    """六个统计桶必须能完整划分八态任务，且各桶口径正确。
+
+    旧口径 pending 只数 PENDING、failed 只数 FAILURE：QUEUED 在四个桶里
+    都不存在、TIMEOUT 不算失败；CANCELED/REJECTED 也从未计入任何桶。
+    除了逐桶断言，最后那条求和等式才是真正的守护：以后再加状态时，
+    只要忘了给它分配桶，这个等式会立刻变红。
+    """
+    statuses = [
+        "PENDING",
+        "QUEUED",
+        "RUNNING",
+        "SUCCESS",
+        "FAILURE",
+        "TIMEOUT",
+        "CANCELED",
+        "REJECTED",
+    ]
+    for index, status in enumerate(statuses):
+        db_session.add(
+            Task(
+                user_id=admin_user.id,
+                tool_id=f"stats-tool-{index}",
+                tool_version_id="stats-version",
+                status=status,
+            )
+        )
+    await db_session.commit()
+
+    response = await api_client.get(
+        "/api/v1/system/stats", headers={"Authorization": "Bearer admin-token"}
+    )
+
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["total_tasks"] == len(statuses)
+    assert data["pending_tasks"] == 2  # PENDING + QUEUED
+    assert data["running_tasks"] == 1  # RUNNING
+    assert data["completed_tasks"] == 1  # SUCCESS
+    assert data["failed_tasks"] == 2  # FAILURE + TIMEOUT
+    assert data["canceled_tasks"] == 1  # CANCELED
+    assert data["rejected_tasks"] == 1  # REJECTED
+    assert (
+        data["pending_tasks"]
+        + data["running_tasks"]
+        + data["completed_tasks"]
+        + data["failed_tasks"]
+        + data["canceled_tasks"]
+        + data["rejected_tasks"]
+    ) == data["total_tasks"]

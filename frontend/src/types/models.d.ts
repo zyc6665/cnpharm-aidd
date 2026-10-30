@@ -1,10 +1,12 @@
 import type { TypedArtifact } from './artifacts'
+import type { TaskStatusGenerated } from './enums.generated'
 
 // 契约枚举统一 re-export 自 codegen 产物（计划 §3.2，勿手改）。
 export type {
   ProjectStatus,
   ProjectRole,
   TaskPriority,
+  TaskStatusGenerated,
   AssetArtifactType,
   AuditAction,
   AuditResult,
@@ -491,16 +493,11 @@ export interface RelatedTool {
   favorite_count: number
 }
 
-// 任务相关类型（docs/03 §3.4 八态：pending=已创建、queued=排队中、running、success、failure、timeout、canceled）
-export type TaskStatus =
-  | 'pending'
-  | 'rejected'
-  | 'queued'
-  | 'running'
-  | 'success'
-  | 'failure'
-  | 'timeout'
-  | 'canceled'
+// 任务相关类型（docs/03 §3.4 八态：pending=已创建、queued=排队中、running、success、failure、timeout、canceled、rejected）
+// 取值来自后端单一枚举源（TASK_STATUS），API 契约是小写，所以这里 Lowercase 派生：
+// 后端新增/删除状态时，`test/test_frontend_enum_parity.py` 会先拦住生成文件，
+// 类型也随之漂移，不会再出现前端手抄漏状态。
+export type TaskStatus = Lowercase<TaskStatusGenerated>
 
 export interface TaskInput {
   params: Record<string, unknown>

@@ -268,7 +268,9 @@ class TestExecuteWithProgressGPU:
                     await executor.execute_with_progress()
 
         assert task.status == TaskStatus.QUEUED.value
-        assert task.retry_count == 1
+        # 资源重排只计 resource_retry_count，不动用户的 retry_count 额度
+        assert (task.retry_count or 0) == 0
+        assert task.extra_data["resource_retry_count"] == 1
         assert "GPU分配失败" in (task.progress_message or "")
 
     @pytest.mark.asyncio
@@ -284,12 +286,17 @@ class TestExecuteWithProgressGPU:
                     await executor.execute_with_progress()
 
         assert task.status == TaskStatus.QUEUED.value
-        assert task.retry_count == 1
+        assert (task.retry_count or 0) == 0
+        assert task.extra_data["resource_retry_count"] == 1
 
     @pytest.mark.asyncio
     async def test_fails_on_gpu_failure_exceeding_retry_limit(self):
         """分配失败 + 已达最大重试 → FAILURE。"""
-        task = _make_task(retry_count=3, max_retries=3)
+        task = _make_task(
+            retry_count=0,
+            max_retries=3,
+            extra_data={"resource_retry_count": 3},
+        )
         cfg = _make_config(gpu_required=True)
         alloc = _make_allocator_mock(success=False, message="No GPU")
 

@@ -2,7 +2,7 @@ import { computed, getCurrentScope, onScopeDispose, ref, watch, type Ref } from 
 import { getTaskLogs } from '@/api/tasks'
 import { openTaskEventStream, type TaskEventPayload, type TaskLogEventPayload } from '@/api/task-events'
 import type { Task, TaskLog, TaskStatus } from '@/types/models'
-import { extractTaskLogs, normalizeTaskLogLevel, normalizeTaskStatus } from '@/domain/tasks'
+import { extractTaskLogs, normalizeTaskLogLevel, normalizeTaskStatus, terminalStatuses } from '@/domain/tasks'
 
 export interface TaskDetailLiveUpdatesOptions {
   taskId: Ref<string>
@@ -175,7 +175,7 @@ export function useTaskDetailLiveUpdates(options: TaskDetailLiveUpdatesOptions) 
 
     stopRefresh()
 
-    if (['success', 'failure', 'canceled'].includes(status)) {
+    if (terminalStatuses.includes(status)) {
       void fetchLogs()
     }
   })

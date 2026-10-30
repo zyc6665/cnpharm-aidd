@@ -669,6 +669,58 @@ async def test_project_results_only_lists_terminal_tasks(
     assert running.id not in ids
 
 
+@pytest.mark.asyncio
+async def test_project_results_status_is_lowercase_and_lowercase_filter_hits(
+    api_client: httpx.AsyncClient, db_session: AsyncSession, users: dict[str, User], project: Project
+):
+    """结果列表对外状态必须是前端契约的小写值，筛选也按小写入参命中。
+
+    库里存的是大写枚举值（SUCCESS/FAILURE/TIMEOUT），前端按小写解析；
+    之前 ``_serialize_result`` 直接透出 ``task.status``，列表显示不出终态，
+    且筛选把小写入参拿去和大写常量比较，直接 422。
+    """
+    tool = await _create_tool(db_session, users[OWNER])
+    upload = await _upload(
+        db_session, owner=users[OWNER], project=project, filename="egfr.pdb", content=b"ATOM\\n"
+    )
+    success = await _create_task(
+        db_session, owner=users[OWNER], project=project, tool=tool, file_id=upload.id
+    )
+    failed = await _create_task(
+        db_session, owner=users[OWNER], project=project, tool=tool, file_id=upload.id
+    )
+    timed_out = await _create_task(
+        db_session, owner=users[OWNER], project=project, tool=tool, file_id=upload.id
+    )
+    for task, status in ((success, "SUCCESS"), (failed, "FAILURE"), (timed_out, "TIMEOUT")):
+        task.status = status
+        task.finished_at = utcnow()
+    await db_session.commit()
+
+    response = await api_client.get(
+        f"/api/v1/projects/{project.id}/results", headers=_headers(OWNER)
+    )
+    assert response.status_code == 200
+    items = {item["task_id"]: item for item in response.json()["data"]["items"]}
+    assert items[success.id]["status"] == "success"
+    assert items[failed.id]["status"] == "failure"
+    assert items[timed_out.id]["status"] == "timeout"
+
+    filtered = await api_client.get(
+        f"/api/v1/projects/{project.id}/results?status=success", headers=_headers(OWNER)
+    )
+    assert filtered.status_code == 200, filtered.text
+    filtered_ids = [item["task_id"] for item in filtered.json()["data"]["items"]]
+    assert filtered_ids == [success.id]
+
+    timeout_filtered = await api_client.get(
+        f"/api/v1/projects/{project.id}/results?status=timeout", headers=_headers(OWNER)
+    )
+    assert timeout_filtered.status_code == 200, timeout_filtered.text
+    timeout_ids = [item["task_id"] for item in timeout_filtered.json()["data"]["items"]]
+    assert timeout_ids == [timed_out.id]
+
+
 # ---------------------------------------------------------------------------
 # audit sink
 # ---------------------------------------------------------------------------
