@@ -212,7 +212,50 @@ def pocket2mol(output_dir: Path, task_id: str, legacy: dict[str, Any]) -> dict[s
     }
 
 
-BUILDERS = {"molp-pc": molp_pc, "msign": msign, "pocket2mol": pocket2mol}
+def therapainter(output_dir: Path, task_id: str, legacy: dict[str, Any]) -> dict[str, Any]:
+    """DualPep peptide activity/toxicity prediction -> molecule_table@1."""
+    outputs = legacy.get("outputs") or {}
+    table = "artifacts/predictions.csv"
+    if not (output_dir / table).is_file():
+        raise SystemExit("TheraPainter legacy result has no predictions.csv")
+    metadata = molecule_table_metadata(output_dir, task_id, "seq")
+    report = run_report(
+        output_dir,
+        task_id,
+        "therapainter-peptide-prediction",
+        {
+            "sequence_count": outputs.get("sequence_count"),
+            "prediction_mode": outputs.get("prediction_mode"),
+            "top_prediction": outputs.get("top_prediction"),
+        },
+    )
+    return {
+        "result_version": "aidd.sciminer/result",
+        "artifacts": {
+            "peptides": {
+                "type": "molecule_table@1",
+                "files": {
+                    "table_file": file_ref(output_dir, table),
+                    "metadata_json": file_ref(output_dir, metadata),
+                },
+                "metadata": {"molecule_id_field": "seq", "source_task_id": task_id},
+            },
+            "report": {
+                "type": "run_report@1",
+                "files": {"report_json": file_ref(output_dir, report)},
+                "metadata": {"source_task_id": task_id},
+            },
+        },
+        "metrics": legacy.get("metrics") or {},
+    }
+
+
+BUILDERS = {
+    "molp-pc": molp_pc,
+    "msign": msign,
+    "pocket2mol": pocket2mol,
+    "therapainter": therapainter,
+}
 
 
 def main() -> int:

@@ -60,8 +60,23 @@ def main() -> int:
             chosen = chosen[len("input/") :]
         input_files[name] = chosen
 
+    # Platform requests may carry an empty legacy ``params`` alongside the v2
+    # ``parameters``. Some executors also double-wrap: parameters={"params": {...}}.
+    # Normalise all shapes into a flat legacy ``params`` mapping.
+    raw_parameters = payload.get("parameters") or {}
+    if isinstance(raw_parameters, dict) and isinstance(raw_parameters.get("params"), dict):
+        legacy_params = raw_parameters["params"]
+        extra_files = raw_parameters.get("input_files") or {}
+    else:
+        legacy_params = raw_parameters
+        extra_files = {}
+    payload["params"] = {
+        **(payload.get("params") or {}),
+        **(legacy_params if isinstance(legacy_params, dict) else {}),
+    }
+    for key, value in (extra_files or {}).items():
+        input_files.setdefault(key, value)
     payload["input_files"] = input_files
-    payload.setdefault("params", payload.get("parameters") or {})
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return 0
 

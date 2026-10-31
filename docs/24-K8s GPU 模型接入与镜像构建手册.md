@@ -63,6 +63,7 @@ docker push 127.0.0.1:30500/aidd/compute-molp-pc:1.0.0
 | MSIGN | `aidd/compute-msign:1.0.0` | `babc088f46692bf5b4c433bf3a34cb5ea40587351273e449cabf55c91512bca8` |
 | Pocket2Mol | `aidd/compute-pocket2mol:1.0.0` | `f834fd01c614c531d861d55a32b2b60454575b12a3a04f861dc69d859a72dd26` |
 | AutoDock Vina（CPU） | `aidd/compute-vina:1.0.0` | `0788db8da9d7b84423cebe5986fceb898b89a0b58b97bd5c10386abfd6c0e50b` |
+| TheraPainter | `aidd/compute-therapainter:1.0.0` | `61d2d40853cc9153c73bbf42d4a16b76fd9966dd38f3b4194f0db7c7cd7f8a2c` |
 
 ## 4. 注册平台工具
 
@@ -186,6 +187,7 @@ MSIGN 支持两种批量入口（迁移 `20261031_10` / `20261031_11`，工具�
 | `autodock-vina-docking` | `aidd/compute-vina@sha256:0788db8d…` | CPU | `protein_pdb` + `ligand_sdf`（SDF 可多配体） | `molecule_table@1` + `ligand_structure@1` + `run_report@1` |
 | `boltz2-structure-prediction` | `aidd/compute-boltz2@sha256:83dc125a…` | GPU | 蛋白序列（`parameters.sequence`） | `protein_structure@1`（`structure.pdb` + `metadata.json`） |
 | `boltz2-affinity-prediction` | `aidd/compute-boltz2-affinity@sha256:d380abc4…` | GPU | 蛋白序列（`parameters.sequence`）+ `ligand_smiles`（CSV，按行逐配体推理） | `molecule_table@1`（亲和力/概率/置信度/iptm）+ `run_report@1` |
+| `therapainter-peptide-prediction` | `aidd/compute-therapainter@sha256:61d2d408…` | GPU（CPU 可降级） | `parameters.sequence`（多肽序列，多行/FASTA，可批量） | `molecule_table@1`（活性/MIC/毒性）+ `run_report@1` |
 
 Boltz-2 权重以 hostPath 只读挂载：宿主
 `/data/zhouyc/k8s-model-build/boltz2_cache` → 容器 `/opt/boltz2_cache`（conf / aff /
