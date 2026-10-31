@@ -552,6 +552,10 @@ async def _execute_tool_task_impl_inner(
                         ).scalar_one_or_none()
                         return _stale_task_result(latest_task or task)
 
+            # commit_current_attempt 使用 ORM UPDATE 同步会话，可能使 task 属性
+            # 过期；执行器构造会读取 task.extra_data，先显式刷新避免惰性加载。
+            await db.refresh(task)
+
             # 获取任务输入参数
             input_result = await db.execute(
                 select(TaskInput).where(TaskInput.task_id == task_id)
