@@ -50,22 +50,6 @@
             <div class="viewer-caption">GRK4 激酶结构域 · PDB 4YHJ · 卡通模型</div>
           </a-card>
         </section>
-
-        <a-card title="预测质量评估" :bordered="false" class="panel-card">
-          <div class="metric-grid">
-            <div v-for="metric in structureMetrics" :key="metric.label" class="metric-item">
-              <div class="metric-value">{{ metric.value }}</div>
-              <div class="metric-label">{{ metric.label }}</div>
-            </div>
-          </div>
-          <a-table
-            :columns="domainColumns"
-            :data-source="domains"
-            :pagination="false"
-            size="small"
-            class="result-table"
-          />
-        </a-card>
       </a-tab-pane>
 
       <a-tab-pane key="pocket" tab="结合口袋预测">
@@ -259,29 +243,6 @@ const scene = computed<VisualizationScene | null>(() => {
     selectedOutputKey: 'grk4'
   }
 })
-
-const structureMetrics = [
-  { value: '92.4', label: '平均 pLDDT' },
-  { value: '3.12 Å', label: '预测 PAE' },
-  { value: '584 aa', label: '序列长度' },
-  { value: '96.8%', label: 'Ramachandran 合理区' },
-  { value: '0.42%', label: 'Clash 比例' },
-  { value: '94.1', label: 'ProQ3 综合分' }
-]
-
-const domainColumns = [
-  { title: '结构域', dataIndex: 'name', key: 'name' },
-  { title: '残基范围', dataIndex: 'range', key: 'range' },
-  { title: '平均 pLDDT', dataIndex: 'plddt', key: 'plddt' },
-  { title: '二级结构', dataIndex: 'ss', key: 'ss' }
-]
-const domains = [
-  { key: '1', name: 'N 端调控区', range: '1-120', plddt: '88.6', ss: 'α-螺旋为主' },
-  { key: '2', name: '激酶小 N 叶', range: '121-230', plddt: '94.2', ss: 'β-折叠 + α-螺旋' },
-  { key: '3', name: '激酶大 C 叶', range: '231-410', plddt: '95.1', ss: 'α-螺旋为主' },
-  { key: '4', name: '激活环', range: '411-470', plddt: '91.7', ss: '柔性环' },
-  { key: '5', name: 'C 端尾部', range: '471-584', plddt: '86.9', ss: '无序' }
-]
 
 interface PocketRow {
   id: string
@@ -657,31 +618,6 @@ onBeforeUnmount(() => {
   margin-top: 18px;
   width: 160px;
 }
-.metric-grid {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
-}
-.metric-item {
-  text-align: center;
-  padding: 12px 4px;
-  background: var(--color-fill-quaternary);
-  border-radius: 8px;
-}
-.metric-value {
-  font-size: 20px;
-  font-weight: 600;
-  color: #1677ff;
-}
-.metric-label {
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--color-text-secondary);
-}
-.result-table {
-  margin-top: 4px;
-}
 .selected-row {
   background: #e6f4ff;
 }
@@ -741,7 +677,6 @@ onBeforeUnmount(() => {
 }
 @media (max-width: 1100px) {
   .summary-grid,
-  .metric-grid,
   .peptide-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
