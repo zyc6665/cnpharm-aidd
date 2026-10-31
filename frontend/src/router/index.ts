@@ -102,6 +102,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'workflow.title', requiresAuth: true }
   },
   {
+    path: '/achievements',
+    name: 'Achievements',
+    component: () => import('@/views/demo/Achievements.vue'),
+    meta: { title: 'nav.achievements', requiresAuth: true }
+  },
+  {
     path: '/workflow/runs/:runId',
     name: 'WorkflowRunDetail',
     component: () => import('@/views/workflow/RunDetail.vue'),

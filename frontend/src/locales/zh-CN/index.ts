@@ -73,6 +73,7 @@ export default {
     tools: '工具',
     tasks: '任务',
     workflow: '工作流',
+    achievements: '项目成果',
     admin: '管理',
     login: '登录',
     logout: '退出登录',

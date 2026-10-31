@@ -138,6 +138,7 @@ import {
   LineChartOutlined,
   FilterOutlined,
   ThunderboltOutlined,
+  TrophyOutlined,
 } from '@ant-design/icons-vue'
 import { useUserStore, useAppStore } from '@/stores'
 import ProtectedAvatar from '@/components/common/ProtectedAvatar.vue'
@@ -196,6 +197,13 @@ const mainNav: NavItem[] = [
     icon: ApartmentOutlined,
     labelKey: 'nav.workflow',
     active: ['/workflow'],
+  },
+  {
+    key: 'achievements',
+    to: '/achievements',
+    icon: TrophyOutlined,
+    labelKey: 'nav.achievements',
+    active: ['/achievements'],
   },
 ]
 

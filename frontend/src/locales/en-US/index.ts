@@ -73,6 +73,7 @@ export default {
     tools: 'Tools',
     tasks: 'Tasks',
     workflow: 'Workflow',
+    achievements: 'Achievements',
     admin: 'Admin',
     login: 'Login',
     logout: 'Logout',
