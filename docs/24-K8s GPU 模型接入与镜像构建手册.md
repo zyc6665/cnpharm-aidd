@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | 文档编号 | DRP-MODEL-ONBOARD-K8S-v1.0 |
-| 文档版本 | **v1.0**（2026-10-31，首个真机验证版：MolP-PC / MSIGN / Pocket2Mol 三模型经 4090 k3s 全链路跑通） |
+| 文档版本 | **v1.1**（2026-10-31，新增 AutoDock Vina CPU 对接模型；修复输入选择：manifest 中同名 `metadata_json` 条目会覆盖真实结构文件，`pick_input` 现按后缀校验并跳过元数据条目） |
 | 上游 | `07-模型交付与运行规范.md`、`19-模型镜像构建与权重外置流程.md` |
 | 适用范围 | 有 GPU 的 Kubernetes / k3s 集群；模型以容器镜像交付，由平台 `k8s_job` 执行器调度 |
 
@@ -62,6 +62,7 @@ docker push 127.0.0.1:30500/aidd/compute-molp-pc:1.0.0
 | MolP-PC | `aidd/compute-molp-pc:1.0.0` | `e72ee34c4ea8850dcc715dcd43fc0d16c92e3a2643524e1ccac7008551800cc9` |
 | MSIGN | `aidd/compute-msign:1.0.0` | `babc088f46692bf5b4c433bf3a34cb5ea40587351273e449cabf55c91512bca8` |
 | Pocket2Mol | `aidd/compute-pocket2mol:1.0.0` | `f834fd01c614c531d861d55a32b2b60454575b12a3a04f861dc69d859a72dd26` |
+| AutoDock Vina（CPU） | `aidd/compute-vina:1.0.0` | `0788db8da9d7b84423cebe5986fceb898b89a0b58b97bd5c10386abfd6c0e50b` |
 
 ## 4. 注册平台工具
 
@@ -116,6 +117,7 @@ python scripts/e2e_model_task.py \
 | K8s E2E Pocket2Mol | SUCCESS（581.7s） | `molecule_table@1` + `ligand_structure@1` + `run_report@1` |
 | K8s E2E MSIGN batch SDF | SUCCESS（28.0s） | `molecule_table@1`（2 条） + `run_report@1` |
 | K8s E2E MSIGN SMILES v4 | SUCCESS | `molecule_table@1`（3 成功 + 1 解析失败行） + `run_report@1` |
+| K8s E2E Vina 11 | SUCCESS | `molecule_table@1`（3 配体，best -5.871 kcal/mol） + `ligand_structure@1` + `run_report@1` |
 
 ### 6.1 MSIGN 批量与 SMILES 输入
 
