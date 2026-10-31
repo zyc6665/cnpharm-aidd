@@ -60,7 +60,7 @@ docker push 127.0.0.1:30500/aidd/compute-molp-pc:1.0.0
 | 模型 | 镜像 | digest（sha256） |
 |---|---|---|
 | MolP-PC | `aidd/compute-molp-pc:1.0.0` | `e72ee34c4ea8850dcc715dcd43fc0d16c92e3a2643524e1ccac7008551800cc9` |
-| MSIGN | `aidd/compute-msign:1.0.0` | `d4e739c710a85dd5c289e4687f088c72540314886f4161bdb8587532ee8ab4f4` |
+| MSIGN | `aidd/compute-msign:1.0.0` | `babc088f46692bf5b4c433bf3a34cb5ea40587351273e449cabf55c91512bca8` |
 | Pocket2Mol | `aidd/compute-pocket2mol:1.0.0` | `f834fd01c614c531d861d55a32b2b60454575b12a3a04f861dc69d859a72dd26` |
 
 ## 4. 注册平台工具
@@ -114,6 +114,33 @@ python scripts/e2e_model_task.py \
 | K8s E2E MolP 11 | SUCCESS | `molecule_table@1` + `run_report@1` |
 | K8s E2E MSIGN 2 | SUCCESS | `molecule_table@1` |
 | K8s E2E Pocket2Mol | SUCCESS（581.7s） | `molecule_table@1` + `ligand_structure@1` + `run_report@1` |
+| K8s E2E MSIGN batch SDF | SUCCESS（28.0s） | `molecule_table@1`（2 条） + `run_report@1` |
+| K8s E2E MSIGN SMILES v4 | SUCCESS | `molecule_table@1`（3 成功 + 1 解析失败行） + `run_report@1` |
+
+### 6.1 MSIGN 批量与 SMILES 输入
+
+MSIGN 支持两种批量入口（迁移 `20261031_10` / `20261031_11`，工具版本 1.2.0）：
+
+* `ligand_sdf`（`ligand_structure@1`，多记录 SDF）：每个记录是一个配体，逐条预测，
+  输出一行一分子；适合已有 3D 构象/对接位姿的场景。
+* `ligand_smiles`（`molecule_table@1` CSV，含 SMILES 列）：镜像内 `smiles_to_sdf.py`
+  用 RDKit ETKDG 批量生成 3D 构象后再预测；解析/嵌入失败的分子写成 `error` 行，
+  报告里给出 `smiles_conversion.requested/written/failed`。
+
+两者都输出 `molecule_table@1`（`table_file=artifacts/affinity.csv` +
+`metadata_json`）与 `run_report@1`，逐分子列含 `prediction.predicted_affinity`、
+`prediction.predicted_ligand_to_pocket` 等。
+
+> 构建 MSIGN 镜像前，先在构建目录执行
+> `bash deploy/model-images/k8s/msign/prepare_build_context.sh`，由 `model.tar.gz`
+> 生成带 `--center-from-protein` 补丁的 `model_v2.tar.gz`（Dockerfile 使用后者）。
+
+> **重要限制**：SMILES-only 路径没有真实对接，配体只是用 ETKDG 生成构象并放在
+> 「离蛋白几何中心最近的蛋白重原子」处（medoid 锚点），仅用于打通“一批 SMILES 快速
+> 出分”的流程，亲和力数值不具备结合模式意义。需要可靠分数时，请提供已对接的
+> `ligand_sdf`（真实位姿）。镜像构建时必须让 MSIGN 的 `platform_run.sh` 调
+> `smiles_to_sdf.py` 时带 `--center-from-protein "${PROTEIN_PDB}"`，否则配体停在原点，
+> 会报 `No protein pocket atoms were found within 5 Angstrom of the ligand`。
 
 ## 7. 踩坑清单
 
@@ -130,7 +157,8 @@ python scripts/e2e_model_task.py \
 5. **旧 runner 参数**：部分模型不认 `--model-root`，适配层已用 `MODEL_ROOT_ARGS`
    探测后再传；否则 `Unknown argument` 退出码 2。
 6. **输入字段**：MolP CSV 表头必须是 `SMILES`（大写）；Pocket2Mol 需要 `protein_pdb`
-   标准输入；MSIGN 需要 `protein_pdb` + `ligand_pdb`。
+   标准输入；MSIGN 需要 `protein_pdb` + 三选一的配体输入（`ligand_pdb` /
+   `ligand_sdf` 多记录 SDF / `ligand_smiles` CSV 表）。
 7. **GPU 设备字符串**：模型内部若写死 `device='cuda'`，在无 GPU 环境会崩；适配层已
    对 `device=="auto"` 做回落（`cpu`）。
 

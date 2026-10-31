@@ -125,6 +125,23 @@ def msign(output_dir: Path, task_id: str, legacy: dict[str, Any]) -> dict[str, A
         row = flatten_prediction(prediction)
         row.setdefault("molecule_id", str(outputs.get("complex_id") or "complex_1"))
         rows.append(row)
+    conversion_path = output_dir / "artifacts/smiles_conversion_errors.json"
+    conversion_summary: dict[str, Any] = {}
+    if conversion_path.is_file():
+        try:
+            conversion_summary = json.loads(conversion_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            conversion_summary = {}
+        for item in conversion_summary.get("errors") or []:
+            if not isinstance(item, dict):
+                continue
+            rows.append(
+                {
+                    "molecule_id": str(item.get("molecule_id") or ""),
+                    "smiles": item.get("smiles"),
+                    "error": item.get("error") or "SMILES to 3D conversion failed",
+                }
+            )
     if not rows:
         raise SystemExit("MSIGN legacy result has no prediction rows")
 
@@ -135,7 +152,14 @@ def msign(output_dir: Path, task_id: str, legacy: dict[str, Any]) -> dict[str, A
         writer.writeheader()
         writer.writerows(rows)
     metadata = molecule_table_metadata(output_dir, task_id, "molecule_id")
-    report = run_report(output_dir, task_id, "msign-affinity-prediction", outputs)
+    report_summary = dict(outputs)
+    if conversion_summary:
+        report_summary["smiles_conversion"] = {
+            "requested_count": conversion_summary.get("requested_count"),
+            "written_count": conversion_summary.get("written_count"),
+            "failed_count": conversion_summary.get("failed_count"),
+        }
+    report = run_report(output_dir, task_id, "msign-affinity-prediction", report_summary)
     return {
         "result_version": "aidd.sciminer/result",
         "artifacts": {
