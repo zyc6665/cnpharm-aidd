@@ -134,7 +134,8 @@ class KubernetesJobExecutor(BaseExecutor):
             artifact["files"][item.role] = file_ref
 
         resources = dict(getattr(self.task, "extra_data", {}).get("resource_snapshot") or {})
-        gpu_count = int(resources.get("gpu_count") or 0)
+        request_resources = resources.get("resource_request") or {}
+        gpu_count = int(resources.get("gpu_count") or request_resources.get("gpu_count") or 0)
         return {
             "request_version": "aidd.sciminer/request",
             "task": {
@@ -369,7 +370,8 @@ def _platform_entrypoint_args(
     resources: dict[str, Any],
     runtime: dict[str, Any],
 ) -> list[str]:
-    gpu_count = int(resources.get("gpu_count") or 0)
+    request_resources = resources.get("resource_request") or {}
+    gpu_count = int(resources.get("gpu_count") or request_resources.get("gpu_count") or 0)
     device = str(runtime.get("device") or ("cuda" if gpu_count or "cuda" in variant else "auto"))
     return [
         "--task-id",
