@@ -85,3 +85,4 @@ model/**/*.7z
 # 本地开发中间件（kind）生成的密码与端口转发临时文件，不入库
 backend/.tmp_mw.env
 backend/.tmp_portforward/
+backend/.ssh/

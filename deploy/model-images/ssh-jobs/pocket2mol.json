@@ -1,0 +1,259 @@
+{
+  "name": "Pocket2Mol Pocket Ligand Generation",
+  "slug": "pocket2mol-pocket-ligand-generation",
+  "description": "第三方 Pocket2Mol 模型的 PDB pocket ligand generation 包装。平台上传 pocket/protein PDB，调用上游原始 sample_for_pdb.py 采样，并归一化输出 SDF、SMILES 和 result.json。",
+  "icon": "P",
+  "category": "molecule-generation",
+  "version": "0.1.2",
+  "changelog": "Initial ssh_job wrapper for the upstream Pocket2Mol repository. This is a third-party academic model; the wrapper only adapts platform I/O.",
+  "tool_config": {
+    "type": "ssh_job",
+    "host": "10.202.2.228",
+    "port": 22,
+    "username": "zhouyc",
+    "auth_ref": "ssh_4090_zhouyc",
+    "runner_mode": "docker_exec",
+    "remote_base_dir": "/data/zhouyc/kaiwu/platform-jobs",
+    "entrypoint": "/workspace/Pocket2Mol-main/platform_run.sh",
+    "timeout_sec": 14400,
+    "cleanup_remote": false,
+    "strict_host_key_checking": true,
+    "env": {
+      "PATH": "/home/zhuwy/.conda/envs/Pocket2Mol/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "POCKET2MOL_PYTHON": "/home/zhuwy/.conda/envs/Pocket2Mol/bin/python",
+      "PLATFORM_PYTHON": "/home/zhuwy/.conda/envs/Pocket2Mol/bin/python"
+    },
+    "output_globs": [
+      "output/result.json",
+      "output/logs/run.log",
+      "output/artifacts/**/*"
+    ],
+    "example_params": {
+      "protein_pdb": "input/4yhj.pdb",
+      "center": "32.0,28.0,36.0",
+      "bbox_size": 23.0,
+      "num_samples": 20,
+      "beam_size": 100,
+      "max_steps": 50,
+      "seed": 2020,
+      "device": "cuda:0"
+    },
+    "platform_run_params_example": {
+      "task_name": "pocket2mol_pdb_sampling",
+      "params": {
+        "center": "32.0,28.0,36.0",
+        "bbox_size": 23.0,
+        "num_samples": 20,
+        "beam_size": 100,
+        "max_steps": 50,
+        "seed": 2020,
+        "device": "cuda:0"
+      },
+      "input_files": {
+        "protein_pdb": "input/4yhj.pdb"
+      }
+    },
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "protein_pdb": {
+          "type": "string",
+          "format": "file",
+          "title": "Protein/Pocket PDB",
+          "description": "蛋白或已裁剪 pocket 的 PDB 文件。若未填写 center，平台包装会用 PDB 重原子几何中心作为 pocket center。",
+          "ui:accept": ".pdb",
+          "ui:maxSize": 104857600
+        },
+        "center": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "title": "Pocket center",
+          "description": "Pocket bounding box center，格式为 x,y,z。完整 receptor PDB 建议显式填写；pocket-only PDB 可留空自动估计。",
+          "default": null,
+          "examples": [
+            "32.0,28.0,36.0"
+          ]
+        },
+        "auto_center": {
+          "type": "boolean",
+          "title": "Auto center",
+          "description": "center 为空时，是否使用 PDB 重原子几何中心。",
+          "default": true
+        },
+        "bbox_size": {
+          "type": "number",
+          "title": "Bounding box size",
+          "description": "Pocket bounding box side length in Angstrom.",
+          "default": 23.0,
+          "minimum": 1.0
+        },
+        "num_samples": {
+          "type": "integer",
+          "title": "Number of molecules",
+          "description": "目标生成分子数量。上游默认值为 100。",
+          "default": 100,
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "beam_size": {
+          "type": "integer",
+          "title": "Beam size",
+          "description": "Pocket2Mol sampling beam size。上游 sample_for_pdb 默认值为 300。",
+          "default": 300,
+          "minimum": 1,
+          "maximum": 100000
+        },
+        "max_steps": {
+          "type": "integer",
+          "title": "Max steps",
+          "description": "最大原子增长步数。上游默认值为 50。",
+          "default": 50,
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "seed": {
+          "type": "integer",
+          "title": "Seed",
+          "description": "随机种子。",
+          "default": 2020,
+          "minimum": 0
+        },
+        "checkpoint_pt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "file",
+          "title": "Checkpoint",
+          "description": "可选上传 checkpoint；不上传时使用 ckpt/pretrained_Pocket2Mol.pt。",
+          "ui:accept": ".pt,.pth,.ckpt",
+          "ui:maxSize": 2147483648,
+          "default": null
+        },
+        "device": {
+          "type": "string",
+          "title": "Device",
+          "description": "运行设备。cuda:N 会设置 CUDA_VISIBLE_DEVICES=N，并传 cuda 给上游脚本。",
+          "default": "cuda:0",
+          "enum": [
+            "auto",
+            "gpu",
+            "cuda",
+            "cuda:0",
+            "cuda:1",
+            "cuda:2",
+            "cuda:3",
+            "cuda:4",
+            "cuda:5",
+            "cuda:6",
+            "cuda:7",
+            "cpu"
+          ]
+        },
+        "summary_top_n": {
+          "type": "integer",
+          "title": "Summary top N",
+          "description": "result.json 中展示的 SMILES 数量。",
+          "default": 20,
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "include_samples_pt": {
+          "type": "boolean",
+          "title": "Include raw PT",
+          "description": "是否把上游 samples_all.pt 复制为平台 artifact。默认关闭以减少输出体积。",
+          "default": false
+        },
+        "taskset_cpu": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "title": "Taskset CPU",
+          "description": "可选 CPU 亲和性，例如 0 或 0-3。上游 README 建议采样时使用单 CPU。",
+          "default": null
+        }
+      },
+      "required": [
+        "protein_pdb"
+      ]
+    },
+    "output_schema": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        },
+        "outputs": {
+          "type": "object",
+          "properties": {
+            "generated_molecule_count": {
+              "type": "integer"
+            },
+            "smiles": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "center": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            "center_source": {
+              "type": "string"
+            },
+            "bbox_size": {
+              "type": "number"
+            },
+            "combined_sdf": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "smiles_file": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "metadata_csv": {
+              "type": "string"
+            },
+            "third_party_model": {
+              "type": "string"
+            }
+          }
+        },
+        "artifacts": {
+          "type": "array"
+        },
+        "metrics": {
+          "type": "object"
+        },
+        "error": {
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "success",
+        "message",
+        "outputs",
+        "artifacts"
+      ]
+    },
+    "container_base_dir": "/workspace/platform-jobs",
+    "container_name": "kaiwu"
+  }
+}
