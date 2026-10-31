@@ -86,3 +86,7 @@ model/**/*.7z
 backend/.tmp_mw.env
 backend/.tmp_portforward/
 backend/.ssh/
+
+# E2E 临时输入/日志、4090 k3s 的本地 kubeconfig
+.tmp_e2e/
+backend/.kube/

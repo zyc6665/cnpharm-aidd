@@ -44,8 +44,16 @@ def main() -> int:
     parser.add_argument("--tool", required=True)
     parser.add_argument("--version", required=True)
     parser.add_argument("--file", action="append", default=[], metavar="FIELD=PATH")
+    parser.add_argument(
+        "--standard-file",
+        action="append",
+        default=[],
+        metavar="FIELD=PATH",
+        help="标准 Artifact 输入槽的直接上传（走 standard_input_uploads 物化）",
+    )
     parser.add_argument("--params", default="{}")
     parser.add_argument("--name", default="模型接入 E2E")
+    parser.add_argument("--project", default=None, help="可选：项目 id，标准输入直传需要")
     parser.add_argument("--timeout", type=int, default=1800)
     args = parser.parse_args()
 
@@ -55,6 +63,13 @@ def main() -> int:
         if not field or not path:
             parser.error(f"--file 需要 FIELD=PATH，收到 {item!r}")
         file_fields[field] = pathlib.Path(path)
+
+    standard_fields: dict[str, pathlib.Path] = {}
+    for item in args.standard_file:
+        field, _, path = item.partition("=")
+        if not field or not path:
+            parser.error(f"--standard-file 需要 FIELD=PATH，收到 {item!r}")
+        standard_fields[field] = pathlib.Path(path)
 
     username, password = _load_credentials()
     session = requests.Session()
@@ -72,14 +87,27 @@ def main() -> int:
         file_ids[field] = response.json()["data"]["id"]
         print(f"UPLOAD {field} {path.name} -> {file_ids[field]}")
 
+    standard_uploads: dict[str, str] = {}
+    for field, path in standard_fields.items():
+        with open(path, "rb") as handle:
+            response = session.post(f"{BASE}/files/upload", files={"file": (path.name, handle)})
+        response.raise_for_status()
+        standard_uploads[field] = response.json()["data"]["id"]
+        print(f"STANDARD_UPLOAD {field} {path.name} -> {standard_uploads[field]}")
+
     payload = {
         "name": args.name,
         "tool_id": args.tool,
         "tool_version_id": args.version,
         "params": {"params": json.loads(args.params), "input_files": file_ids},
         "file_ids": list(file_ids.values()),
+        "standard_input_uploads": standard_uploads,
     }
+    if args.project:
+        payload["project_id"] = args.project
     response = session.post(f"{BASE}/tasks", json=payload)
+    if response.status_code >= 400:
+        print(f"TASK_CREATE_FAILED {response.status_code} {response.text}")
     response.raise_for_status()
     task_id = response.json()["data"]["id"]
     print(f"TASK {task_id}")

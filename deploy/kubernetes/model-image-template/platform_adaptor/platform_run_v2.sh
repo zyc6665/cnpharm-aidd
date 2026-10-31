@@ -73,6 +73,17 @@ if ! "${PLATFORM_PYTHON}" "${SCRIPT_DIR}/object_storage.py" prepare \
   exit 10
 fi
 
+# 步骤 2.5：可选的请求契约桥接。研究型模型的入口脚本读旧版
+# ``input_files``/``params``；平台下发的是 ``inputs``/``parameters``。
+# 镜像设置 PLATFORM_LEGACY_REQUEST_BRIDGE=1 时由适配层补齐旧字段。
+if [[ -n "${PLATFORM_LEGACY_REQUEST_BRIDGE:-}" ]]; then
+  if ! "${PLATFORM_PYTHON}" "${SCRIPT_DIR}/request_to_legacy.py" \
+    --params-json "${PARAMS_JSON}"; then
+    echo "Legacy request bridge failed" >&2
+    exit 10
+  fi
+fi
+
 # 部分遗留模型的入口脚本不认 --model-root（它们从脚本自身所在目录解析模型根），
 # 直接传会以 `Unknown argument: --model-root` 退出码 2 失败。先探测脚本是否支持该参数。
 MODEL_ROOT_ARGS=()
@@ -96,6 +107,19 @@ set -e
 if [[ ${MODEL_EXIT} -ne 0 ]]; then
   echo "Model entry failed with exit code ${MODEL_EXIT}" >&2
   exit 12
+fi
+
+# 步骤 3.5：可选的 legacy→result.v2 后处理。研究型模型往往只产出旧版
+# result.json；镜像通过 PLATFORM_POSTPROCESS_MODEL 声明模型键后，由平台适配层
+# 统一转换成 aidd.sciminer/result，避免每个模型重复实现契约。
+if [[ -n "${PLATFORM_POSTPROCESS_MODEL:-}" ]]; then
+  if ! "${PLATFORM_PYTHON}" "${SCRIPT_DIR}/postprocess_result.py" \
+    --model "${PLATFORM_POSTPROCESS_MODEL}" \
+    --output-dir "${OUTPUT_DIR}" \
+    --task-id "${TASK_ID}"; then
+    echo "Result post-processing failed" >&2
+    exit 12
+  fi
 fi
 
 # 步骤 4：校验 result.json 存在、schema 正确且产物不越界 → 缺失/越界退出码 11。
