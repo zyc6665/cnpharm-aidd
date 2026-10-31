@@ -185,6 +185,7 @@ MSIGN 支持两种批量入口（迁移 `20261031_10` / `20261031_11`，工具�
 | `pocket2mol-pocket-ligand-generation` | `aidd/compute-pocket2mol@sha256:f834fd01…` | GPU | `protein_pdb` + `pocket` 参数 | `molecule_table@1` + `ligand_structure@1` + `run_report@1` |
 | `autodock-vina-docking` | `aidd/compute-vina@sha256:0788db8d…` | CPU | `protein_pdb` + `ligand_sdf`（SDF 可多配体） | `molecule_table@1` + `ligand_structure@1` + `run_report@1` |
 | `boltz2-structure-prediction` | `aidd/compute-boltz2@sha256:83dc125a…` | GPU | 蛋白序列（`parameters.sequence`） | `protein_structure@1`（`structure.pdb` + `metadata.json`） |
+| `boltz2-affinity-prediction` | `aidd/compute-boltz2-affinity@sha256:d380abc4…` | GPU | 蛋白序列（`parameters.sequence`）+ `ligand_smiles`（CSV，按行逐配体推理） | `molecule_table@1`（亲和力/概率/置信度/iptm）+ `run_report@1` |
 
 Boltz-2 权重以 hostPath 只读挂载：宿主
 `/data/zhouyc/k8s-model-build/boltz2_cache` → 容器 `/opt/boltz2_cache`（conf / aff /

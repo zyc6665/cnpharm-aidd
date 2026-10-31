@@ -1,0 +1,6 @@
+FROM 127.0.0.1:30500/aidd/compute-boltz2:1.0.0
+
+COPY boltz_affinity_platform.py /opt/sciminer/boltz2/boltz_affinity_platform.py
+RUN chmod +x /opt/sciminer/boltz2/boltz_affinity_platform.py
+
+ENV DRP_MODEL_ENTRY=/opt/sciminer/boltz2/boltz_affinity_platform.py
