@@ -8,17 +8,19 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.api.v1 import gpu
-from app.api.v1 import api_router
+from app.main import app
 from app.auth.dependencies import get_admin_user
 
 
 def test_gpu_router_is_registered_in_v1_api() -> None:
     """GPU接口应暴露在统一的v1路由下。"""
-    paths = {route.path for route in api_router.routes}
+    # FastAPI 新版对 include_router 采用惰性 _IncludedRouter，直接遍历
+    # api_router.routes 拿不到叶子路由；改从构建后的 OpenAPI 路径表断言。
+    paths = set(app.openapi()["paths"])
 
-    assert "/gpu/info" in paths
-    assert "/gpu/allocate" in paths
-    assert "/gpu/release" in paths
+    assert "/api/v1/gpu/info" in paths
+    assert "/api/v1/gpu/allocate" in paths
+    assert "/api/v1/gpu/release" in paths
 
 
 def test_gpu_mutation_routes_require_admin() -> None:
