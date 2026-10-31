@@ -64,6 +64,8 @@ docker push 127.0.0.1:30500/aidd/compute-molp-pc:1.0.0
 | Pocket2Mol | `aidd/compute-pocket2mol:1.0.0` | `f834fd01c614c531d861d55a32b2b60454575b12a3a04f861dc69d859a72dd26` |
 | AutoDock Vina（CPU） | `aidd/compute-vina:1.0.0` | `0788db8da9d7b84423cebe5986fceb898b89a0b58b97bd5c10386abfd6c0e50b` |
 | TheraPainter | `aidd/compute-therapainter:1.0.0` | `61d2d40853cc9153c73bbf42d4a16b76fd9966dd38f3b4194f0db7c7cd7f8a2c` |
+| GROMACS MD | `aidd/compute-gromacs:1.0.0` | `28f64b63cd573e41684d794aa6f34c615f16e9b340303e9c04eac5e6391cab95` |
+| gmx_MMPBSA | `aidd/compute-gmx-mmpbsa:1.0.0` | `d61753513a21ae4909f44611f3f7cc568b1db589f9d8238107928532919e94fb` |
 
 ## 4. 注册平台工具
 
