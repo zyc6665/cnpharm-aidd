@@ -83,6 +83,37 @@ request.interceptors.request.use(
   }
 )
 
+// 后端错误 detail 可能为字符串、校验错误数组或对象；统一转成可读且限长的提示，
+// 避免把内部细节原样弹窗或渲染出 [object Object]。
+const MAX_ERROR_DISPLAY_LENGTH = 200
+
+export const buildErrorDisplayMessage = (error: AxiosError<ApiError>): string => {
+  const status = error.response?.status
+  const data = error.response?.data
+  const raw: unknown = (data as { detail?: unknown; message?: unknown } | undefined)?.detail
+    ?? (data as { message?: unknown } | undefined)?.message
+
+  let text = ''
+  if (typeof raw === 'string') {
+    text = raw.trim()
+  } else if (Array.isArray(raw)) {
+    const first = raw.find(item => item && typeof item === 'object' && 'msg' in item) as { msg?: unknown } | undefined
+    if (first && typeof first.msg === 'string') {
+      text = first.msg.trim()
+    }
+  }
+  if (text.length > MAX_ERROR_DISPLAY_LENGTH) {
+    text = `${text.slice(0, MAX_ERROR_DISPLAY_LENGTH)}…`
+  }
+  if (text) {
+    return text
+  }
+  if (status !== undefined && status >= 500) {
+    return '服务器内部错误，请稍后重试'
+  }
+  return '请求失败'
+}
+
 // 响应拦截器
 request.interceptors.response.use(
   response => {
@@ -146,8 +177,7 @@ request.interceptors.response.use(
     // 对于 logout 接口的 401 错误，不显示错误消息（因为退出登录即使失败也会清除本地数据）
     const isLogoutRequest = originalRequest.url?.includes('/auth/logout')
     if (!isCanceledRequest && !originalRequest?.silent && !(error.response?.status === 401 && isLogoutRequest)) {
-      const errorMessage = error.response?.data?.detail ?? error.response?.data?.message ?? '请求失败'
-      message.error(errorMessage)
+      message.error(buildErrorDisplayMessage(error))
     }
 
     return Promise.reject(error)
