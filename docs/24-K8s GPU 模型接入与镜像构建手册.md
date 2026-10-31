@@ -175,3 +175,22 @@ MSIGN 支持两种批量入口（迁移 `20261031_10` / `20261031_11`，工具�
 - `19-模型镜像构建与权重外置流程.md`（镜像分层、权重外置）
 - `07-模型交付与运行规范.md`（10 模型清单与运行契约）
 - `23-模型接入操作手册（SSH直连与工具注册）.md`（已弃用的 SSH 历史方案）
+
+## 10. 当前已接入的 K8s 模型清单（2026-10-31）
+
+| 工具 slug | 镜像 | 调度 | 输入 | 输出 |
+| --- | --- | --- | --- | --- |
+| `molp-pc-property-prediction` | `aidd/compute-molp-pc@sha256:e72ee34c…` | GPU | `smiles_csv`（表头 `SMILES`） | `molecule_table@1` + `run_report@1` |
+| `msign-affinity-prediction` | `aidd/compute-msign@sha256:babc088f…` | GPU | `protein_pdb` + 三选一：`ligand_pdb` / `ligand_sdf`（多记录）/ `ligand_smiles`（CSV 表） | `molecule_table@1` + `run_report@1` |
+| `pocket2mol-pocket-ligand-generation` | `aidd/compute-pocket2mol@sha256:f834fd01…` | GPU | `protein_pdb` + `pocket` 参数 | `molecule_table@1` + `ligand_structure@1` + `run_report@1` |
+| `autodock-vina-docking` | `aidd/compute-vina@sha256:0788db8d…` | CPU | `protein_pdb` + `ligand_sdf`（SDF 可多配体） | `molecule_table@1` + `ligand_structure@1` + `run_report@1` |
+| `boltz2-structure-prediction` | `aidd/compute-boltz2@sha256:83dc125a…` | GPU | 蛋白序列（`parameters.sequence`） | `protein_structure@1`（`structure.pdb` + `metadata.json`） |
+
+Boltz-2 权重以 hostPath 只读挂载：宿主
+`/data/zhouyc/k8s-model-build/boltz2_cache` → 容器 `/opt/boltz2_cache`（conf / aff /
+mols 三件，约 6.2 GB），因此需要能调度到该宿主的 nodeSelector；
+`runtime.weights.mounts` 已写在迁移 `20261031_13` 的工具配置里。
+
+Boltz-2 纯离线单序列：镜像内生成 `>query\n<SEQ>` 的 A3M 文件并在 YAML 里
+`msa: <path>` 引用（`msa: empty` 会被 Boltz-2 判为非法）。镜像未装
+cuequivariance，入口固定加 `--no_kernels`。
