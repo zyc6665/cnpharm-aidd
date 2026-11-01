@@ -496,10 +496,24 @@ class Settings(BaseSettings):
     # 为空时使用内存队列（同步执行），生产环境设置为 Redis URL
     CELERY_BROKER_URL: Optional[str] = None
     CELERY_RESULT_BACKEND: Optional[str] = None
+    # 数据库连接池模式。`pooled` 是常规的进程级连接池；`null` 表示「每个会话新建
+    # 连接、用完即关」。
+    #
+    # 为什么需要这个开关：Celery 的 threads/prefork 池里，同一个任务函数可能在不同
+    # 线程/进程的不同事件循环中执行，而 asyncpg 的连接**绑定到创建它的事件循环**。
+    # 共享一个进程级池，第二个并发任务会拿到绑在别人循环上的连接，报
+    # `Future attached to a different loop` / `another operation is in progress`。
+    # 因此 Worker 进程必须用 `null`（任务本身是分钟级，每条任务一条连接的代价可忽略），
+    # API 进程保持 `pooled`。见 docs/17「Celery Worker 部署前置条件」。
+    DB_POOL_MODE: Literal["pooled", "null"] = "pooled"
     CELERY_TIMEZONE: str = "Asia/Shanghai"
     CELERY_TASK_SOFT_TIME_LIMIT: int = 3600  # 1小时软超时
     CELERY_TASK_TIME_LIMIT: int = 7200  # 2小时硬超时
     TASK_EXECUTION_BACKEND: Literal["celery", "direct"] = "celery"
+    # Worker 可用性探测：派发任务与健康检查都先问一次「有没有 Worker 在消费」。
+    # 单次 ping 的等待上限，以及结果缓存时长（避免每次提交任务都付一次广播开销）。
+    CELERY_WORKER_PROBE_TIMEOUT_SECONDS: float = 2.0
+    CELERY_WORKER_PROBE_CACHE_SECONDS: float = 10.0
     WORKFLOW_RECONCILE_INTERVAL_SECONDS: int = 5
     WORKFLOW_RECONCILE_BATCH_SIZE: int = 20
     WORKFLOW_RECONCILE_LOCK_TTL_SECONDS: int = 60

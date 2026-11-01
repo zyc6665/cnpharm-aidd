@@ -980,6 +980,8 @@ async def test_execute_tool_task_impl_requeues_gpu_shortage_through_celery(
             "mode": "celery",
             "queue": "gpu_queue",
             "queue_priority": 5,
+            # 测试环境没有真实 Worker，派发时的探测会把这个事实记进 dispatch
+            "worker_available": False,
         }
         assert refreshed_task.extra_data["resource_wait_reason"] == "gpu_unavailable"
         assert refreshed_task.extra_data["resource_retry_count"] == 1

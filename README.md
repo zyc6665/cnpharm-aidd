@@ -47,6 +47,21 @@ docker compose -f deploy/compose/docker-compose.dev.yml up -d
 
 > 首次启动前需按 `deploy/compose/README.md` 准备 `.env`。**不要把真实密钥提交进仓库**，CI 使用 `ci-only-*` 假值。
 
+### 2.1 任务执行：Celery Worker 是必需组件
+
+任务不在 API 进程内执行，而是「API 入队 → Redis → Worker 消费 → 提交 K8s Job」。
+**少了 Worker，任务会一直停在「排队中」且不报错**——Broker 收下消息就算成功，
+链路上每一环都正常，只是没人拿货。三件套必须同时齐：
+
+| 组件 | 命令 | 说明 |
+|---|---|---|
+| Redis | `docker compose -f deploy/compose/docker-compose.dev.yml up -d redis` | Broker（db 0）与结果后端（db 1） |
+| Worker | `celery -A app.worker.celery_app worker --pool=threads --concurrency=4 -Q high_priority,gpu_queue,heavy_compute,cpu_queue,default,tool_tasks,maintenance,monitoring` | **`-Q` 必须覆盖全部 8 个队列**，少一个该队列的任务就永远不动；Windows 用 `threads`，Linux 用默认 `prefork`，**不要用 `solo`**（单线程占满控制通道，健康检查会误报「没有 Worker」） |
+| Beat | `celery -A app.worker.celery_app beat` | 定时任务：`reclaim-stale-*`、`cleanup-expired-files`、`reconcile-execution-records`、`heartbeat-worker-capability` |
+
+自检：`GET /api/v1/system/health` 的 `celery` 项应为 `healthy`，任务详情的
+`dispatch.worker_available` 应为 `true`。详见 `docs/17-交付仓库与分支策略.md` §5.38。
+
 ## 3. 目录结构
 
 ```
@@ -70,7 +85,7 @@ deploy/             compose 与 K8s 部署资产
   slots/            卡位声明（slots.yaml，算力节点与卡位映射的事实源）
 docs/               中国医药项目文档（00~18，见 docs/README.md）
   archive-upstream/ 产品线历史文档，只读归档
-test/               后端测试（269 个文件）
+test/               后端测试（271 个文件）
 example/            模型资产样例（tool-package v2）
   mock-models/      6 个 mock 模型包（P-15~P-28 的演示驱动，metadata.mock: true）
 ```
