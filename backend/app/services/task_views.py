@@ -59,6 +59,10 @@ class TaskQueryInput:
     view: str | None = None
     status: str | None = None
     tool_id: str | None = None
+    # 按工具 slug 集合筛选。「设计任务」页要一次列出六类设计/预测/模拟工具的任务，
+    # 用 tools 子查询而不是再 join 一次——keyword 分支已经 join 了 Tool，
+    # 同一个实体二次 join 会报歧义，而 slug 上有唯一索引，子查询代价可忽略。
+    tool_slugs: tuple[str, ...] | None = None
     keyword: str | None = None
     project_id: str | None = None
     created_from: datetime | None = None
@@ -273,6 +277,11 @@ async def _build_task_statement(
 
     if query.tool_id:
         statement = statement.where(Task.tool_id == query.tool_id)
+
+    if query.tool_slugs:
+        statement = statement.where(
+            Task.tool_id.in_(select(Tool.id).where(Tool.slug.in_(tuple(query.tool_slugs))))
+        )
 
     if query.resource_wait_category:
         statement = statement.where(

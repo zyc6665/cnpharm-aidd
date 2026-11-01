@@ -11,6 +11,7 @@ vi.mock('@/api/projects', () => ({
   archiveProject: vi.fn(),
   deleteProject: vi.fn()
 }))
+vi.mock('@/api/tasks', () => ({ getTaskCounts: vi.fn() }))
 vi.mock('@/api/workspace', () => ({ getWorkspaceOverview: vi.fn() }))
 
 const projects = [
@@ -131,7 +132,7 @@ describe('Project workspace', () => {
     expect(wrapper.text()).toContain('新建项目')
     expect(wrapper.text()).toContain('最近项目')
     expect(wrapper.text()).toContain('EGFR 口袋研究')
-    expect(wrapper.text()).toContain('待审批与失败任务')
+    expect(wrapper.text()).toContain('需要关注的任务')
     expect(wrapper.text()).toContain('LVpocket 执行审批')
     expect(wrapper.text()).toContain('远程执行节点不可用')
     expect(wrapper.text()).toContain('最近 Artifact')

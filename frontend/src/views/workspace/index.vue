@@ -71,6 +71,30 @@
         />
       </section>
 
+      <!-- 待办概览：把「有什么在等我」变成一屏可见，不用分别去任务中心/结果中心翻 -->
+      <section class="workspace-section todo-section" data-testid="workspace-todo">
+        <div class="section-heading">
+          <div>
+            <h2>{{ t('workspace.todoTitle') }}</h2>
+            <span>{{ t('workspace.todoHint') }}</span>
+          </div>
+        </div>
+        <div class="todo-cards">
+          <router-link
+            v-for="card in todoCards"
+            :key="card.key"
+            class="todo-card"
+            :class="`todo-${card.tone}`"
+            :to="card.to"
+            :data-testid="`workspace-todo-${card.key}`"
+          >
+            <span class="todo-label">{{ t(card.labelKey) }}</span>
+            <strong class="todo-value">{{ card.value }}</strong>
+            <span class="todo-desc">{{ t(card.hintKey) }}</span>
+          </router-link>
+        </div>
+      </section>
+
       <div class="workspace-columns">
         <section class="workspace-section">
           <div class="section-heading">
@@ -167,6 +191,7 @@ import {
 } from '@/api/workspace'
 import { buildArtifactVersionDownloadUrl } from '@/api/artifacts'
 import { getSystemHealth } from '@/api/system'
+import { getTaskCounts } from '@/api/tasks'
 import ProjectCreateDialog from '@/components/projects/ProjectCreateDialog.vue'
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import ProjectList from '@/components/projects/ProjectList.vue'
@@ -194,9 +219,42 @@ const projects = ref<ResearchProject[]>([])
 const tasks = ref<WorkspaceAttentionTask[]>([])
 const artifacts = ref<WorkspaceArtifact[]>([])
 const legacyFiles = ref<WorkspaceLegacyFile[]>([])
+// 待办计数：来自任务系统视图的口径（running / needs_attention / recent_results），
+// 与任务中心的页签一一对应，点进去就能看到同一批记录。
+const todoCounts = ref<{ running: number; needs_attention: number; recent_results: number } | null>(null)
 
 const recentProjects = computed(() => getRecentWorkspaceProjects(projects.value))
 const attentionTasks = computed(() => getWorkspaceAttentionTasks(tasks.value))
+
+const todoCards = computed(() => {
+  const counts = todoCounts.value
+  return [
+    {
+      key: 'running',
+      labelKey: 'workspace.todo.running',
+      hintKey: 'workspace.todo.runningHint',
+      to: '/tasks?view=running',
+      tone: 'running',
+      value: counts ? counts.running : '—'
+    },
+    {
+      key: 'attention',
+      labelKey: 'workspace.todo.attention',
+      hintKey: 'workspace.todo.attentionHint',
+      to: '/tasks?view=needs_attention',
+      tone: 'attention',
+      value: counts ? counts.needs_attention : '—'
+    },
+    {
+      key: 'results',
+      labelKey: 'workspace.todo.results',
+      hintKey: 'workspace.todo.resultsHint',
+      to: '/tasks?view=recent_results',
+      tone: 'results',
+      value: counts ? counts.recent_results : '—'
+    }
+  ]
+})
 const recentArtifacts = computed<RecentWorkspaceArtifactRow[]>(() =>
   buildRecentWorkspaceArtifactRows({
     artifacts: artifacts.value,
@@ -214,10 +272,19 @@ async function loadWorkspace() {
   overviewLoadError.value = false
   schemaMigrationLoadError.value = false
   try {
-    const [projectResult, workspaceResult] = await Promise.allSettled([
+    const [projectResult, workspaceResult, countResult] = await Promise.allSettled([
       listProjects(),
-      getWorkspaceOverview()
+      getWorkspaceOverview(),
+      getTaskCounts()
     ])
+    const countData = countResult.status === 'fulfilled' ? countResult.value?.data : null
+    todoCounts.value = countData
+      ? {
+          running: countData.running ?? 0,
+          needs_attention: countData.needs_attention ?? 0,
+          recent_results: countData.recent_results ?? 0
+        }
+      : null
 
     if (projectResult.status === 'rejected') {
       loadError.value = true
@@ -298,6 +365,38 @@ onMounted(() => { void loadWorkspace() })
 .workspace-header h1 { margin: 0; color: @text-primary; font-size: @font-size-xxl; line-height: @line-height-tight; letter-spacing: 0; }
 .workspace-error { margin-bottom: @spacing-lg; }
 .workspace-section { min-width: 0; padding: 0 0 @spacing-xl; }
+
+.todo-section { margin-bottom: @spacing-lg; }
+
+.todo-cards {
+  display: grid;
+  gap: @spacing-md;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.todo-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: @spacing-md @spacing-lg;
+  border: 1px solid @border-color;
+  border-radius: @border-radius-md;
+  background: @bg-surface;
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+
+  &:hover {
+    border-color: @primary-color;
+    box-shadow: 0 2px 8px rgb(0 0 0 / 8%);
+  }
+}
+
+.todo-label { color: @text-secondary; font-size: @font-size-sm; }
+.todo-value { color: @text-primary; font-size: 26px; font-weight: 600; line-height: 1.3; }
+.todo-desc { color: @text-tertiary; font-size: @font-size-xs; }
+.todo-attention .todo-value { color: @error-color; }
+.todo-running .todo-value { color: @primary-color; }
 .projects-section { margin-bottom: @spacing-xl; border-bottom: 1px solid @border-color; }
 .workspace-columns { display: grid; grid-template-columns: minmax(0, 3fr) minmax(280px, 2fr); gap: @spacing-xxl; }
 .section-heading { display: flex; align-items: flex-end; justify-content: space-between; min-height: 40px; margin-bottom: @spacing-md; }

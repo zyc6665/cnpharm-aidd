@@ -17,6 +17,8 @@ export interface TaskListParams extends PaginationParams {
   view?: TaskSystemView
   status?: TaskStatus
   tool_id?: string
+  /** 按工具 slug 集合筛选（数组以重复参数下发），设计任务页按类别拉取。 */
+  tool_slugs?: string[]
   keyword?: string
   project_id?: string
   created_from?: string

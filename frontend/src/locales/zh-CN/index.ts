@@ -93,6 +93,7 @@ export default {
     predict: '性质预测',
     screen: '虚拟筛选',
     md: '分子动力学',
+    designRuns: '设计任务',
     designSection: '设计工具'
   },
   command: {
@@ -117,7 +118,17 @@ export default {
     openProject: '项目总览',
     emptyProjects: '还没有研究项目',
     emptyProjectsHint: '新建项目后即可在项目内管理靶点、化合物、任务与结果；所有产出都归属于项目。',
-    attentionTitle: '待审批与失败任务',
+    todoTitle: '我的待办',
+    todoHint: '需要你关注的任务，点卡片直达对应列表',
+    todo: {
+      running: '排队 / 运行中',
+      runningHint: '还没出结果的任务',
+      attention: '失败 / 超时待处理',
+      attentionHint: '执行侧出错，需要重试或排查',
+      results: '已完成待查看',
+      resultsHint: '最近成功的结果'
+    },
+    attentionTitle: '需要关注的任务',
     emptyAttention: '暂无待审批或失败任务',
     emptyAttentionHint: '待审批与执行失败的任务会出现在这里；当前没有需要处理的任务。',
     pendingApproval: '等待审批',
@@ -1690,6 +1701,35 @@ export default {
 
   // 设计（P-15 分子生成 / P-16 多肽设计 / P-17 生成结果）
   design: {
+    runs: {
+      title: '设计任务',
+      subtitle: '你和团队在这个平台上跑过的分子生成、多肽设计、性质预测、虚拟筛选与分子动力学任务',
+      newRun: '新建设计任务',
+      loadError: '设计任务加载失败',
+      empty: '还没有设计任务，从「新建设计任务」开始',
+      openResult: '查看结果',
+      openDetail: '任务详情',
+      columns: {
+        name: '任务',
+        category: '类别',
+        tool: '工具',
+        project: '项目',
+        status: '状态',
+        progress: '进度',
+        createdAt: '提交时间',
+        actions: '操作'
+      },
+      category: {
+        all: '全部',
+        molecule: '分子生成',
+        peptide: '多肽设计',
+        predict: '性质预测',
+        screening: '虚拟筛选',
+        md: '分子动力学',
+        freeEnergy: '自由能计算',
+        other: '其他'
+      }
+    },
     section: {
       inputs: '输入选择',
       parameters: '参数配置'
@@ -2128,6 +2168,7 @@ export default {
     },
     // 操作
     progress: '进度',
+    logCount: '共 {count} 条',
     logs: '日志',
     result: '结果',
     inputParams: '输入参数',

@@ -127,6 +127,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'design.peptide.title', requiresAuth: true }
   },
   {
+    path: '/design/runs',
+    name: 'DesignRuns',
+    component: () => import('@/views/design/Runs.vue'),
+    meta: { title: 'design.runs.title', requiresAuth: true }
+  },
+  {
     path: '/tasks/:id/results',
     name: 'GenerationResults',
     component: () => import('@/views/design/GenerationResults.vue'),

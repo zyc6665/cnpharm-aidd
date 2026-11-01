@@ -94,6 +94,7 @@ export default {
     predict: 'Property Prediction',
     screen: 'Virtual Screening',
     md: 'Molecular Dynamics',
+    designRuns: 'Design Runs',
     designSection: 'Design Tools'
   },
   command: {
@@ -118,7 +119,17 @@ export default {
     openProject: 'Overview',
     emptyProjects: 'No research projects yet',
     emptyProjectsHint: 'Create a project to hold targets, compounds, tasks and results. Every output belongs to a project.',
-    attentionTitle: 'Approvals & Failed Tasks',
+    todoTitle: 'My To-do',
+    todoHint: 'Tasks that need your attention — click a card to jump to the list',
+    todo: {
+      running: 'Queued / Running',
+      runningHint: 'Tasks that have not produced a result yet',
+      attention: 'Failed / Timed out',
+      attentionHint: 'Execution-side errors that need retry or investigation',
+      results: 'Completed, unreviewed',
+      resultsHint: 'Recently finished results'
+    },
+    attentionTitle: 'Needs attention',
     emptyAttention: 'No pending approvals or failed tasks',
     emptyAttentionHint: 'Tasks awaiting approval or failing during execution show up here. Nothing needs attention right now.',
     pendingApproval: 'Pending approval',
@@ -1698,6 +1709,35 @@ export default {
 
   // Design (P-15 molecule generation / P-16 peptide design / P-17 generation results)
   design: {
+    runs: {
+      title: 'Design Runs',
+      subtitle: 'Molecule generation, peptide design, property prediction, virtual screening and MD runs you and your team launched here',
+      newRun: 'New design run',
+      loadError: 'Failed to load design runs',
+      empty: 'No design runs yet — start from "New design run"',
+      openResult: 'View result',
+      openDetail: 'Task detail',
+      columns: {
+        name: 'Task',
+        category: 'Category',
+        tool: 'Tool',
+        project: 'Project',
+        status: 'Status',
+        progress: 'Progress',
+        createdAt: 'Submitted',
+        actions: 'Actions'
+      },
+      category: {
+        all: 'All',
+        molecule: 'Molecule generation',
+        peptide: 'Peptide design',
+        predict: 'Property prediction',
+        screening: 'Virtual screening',
+        md: 'Molecular dynamics',
+        freeEnergy: 'Free energy',
+        other: 'Other'
+      }
+    },
     section: {
       inputs: 'Inputs',
       parameters: 'Parameters'
@@ -2140,6 +2180,7 @@ export default {
     },
     // Actions
     progress: 'Progress',
+    logCount: '{count} entries',
     logs: 'Logs',
     result: 'Result',
     inputParams: 'Input Parameters',

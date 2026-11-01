@@ -164,6 +164,7 @@ import {
   ClusterOutlined,
   LineChartOutlined,
   FilterOutlined,
+  HistoryOutlined,
   ThunderboltOutlined,
   TrophyOutlined,
 } from '@ant-design/icons-vue'
@@ -273,6 +274,13 @@ const designNav: NavItem[] = [
     icon: ThunderboltOutlined,
     labelKey: 'nav.md',
     active: ['/md'],
+  },
+  {
+    key: 'designRuns',
+    to: '/design/runs',
+    icon: HistoryOutlined,
+    labelKey: 'nav.designRuns',
+    active: ['/design/runs'],
   },
 ]
 
