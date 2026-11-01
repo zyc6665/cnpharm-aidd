@@ -30,6 +30,7 @@ from app.tasks.output import extract_output_file_ids, prepare_task_output
 from app.tasks.resource_lease import release_task_resource_reservation
 from app.tasks.resource_wait import resource_wait_metadata
 from app.tasks.state_machine import TaskStateMachine
+from app.services.runtime_logs import harvest_task_runtime_logs
 
 logger = get_task_logger(__name__)
 _CAPABILITY_SIGNAL_REFRESH_INTERVAL_SECONDS = 30.0
@@ -674,6 +675,10 @@ async def _execute_tool_task_impl_inner(
                 logger.info("任务 %s 已取消，回滚迟到产物", task_id)
                 return _canceled_task_result()
 
+            # 归档容器日志：Job 的 TTL 一到 Pod 就没了，日志必须先落库。
+            # 尽力而为，失败只记 warning，不影响任务成功写入。
+            await harvest_task_runtime_logs(db, task=task)
+
             # 更新任务状态
             TaskStateMachine.complete(
                 task,
@@ -919,6 +924,9 @@ async def _execute_tool_task_impl_inner(
                     "reason": e.reason,
                     "worker_id": e.worker_id,
                 }
+
+            # 失败/超时任务更需要日志：先把容器输出归档，再写终态。
+            await harvest_task_runtime_logs(db, task=task)
 
             # 更新失败/超时状态
             task_timed_out = isinstance(e, TaskTimeoutError)
