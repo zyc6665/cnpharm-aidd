@@ -929,6 +929,8 @@ async def test_retry_task_uses_tool_gpu_config_without_resource_snapshot(
         "mode": "celery",
         "queue": "gpu_queue",
         "queue_priority": 5,
+        # 测试环境没有真实 Worker，派发时的探测会把这个事实记进 dispatch
+        "worker_available": False,
     }
 
 

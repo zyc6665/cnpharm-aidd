@@ -105,6 +105,8 @@ services:
     environment:
       <<: *app_environment
       WORKER_LISTEN_QUEUES: default,tool_tasks,high_priority,cpu_queue,maintenance,monitoring
+      # Worker 用 null 池：asyncpg 连接绑定事件循环，threads/prefork 池下共享池会跨循环
+      DB_POOL_MODE: null
       WORKER_CAPABILITY_JSON: '{"worker_id":"scitool-default-$${HOSTNAME}","queue":"tool_tasks","tiers":["cpu","standard"],"cpu_capacity":8,"memory_capacity_gb":32,"gpu_count":0,"parallelism":4}'
     depends_on:
       postgres: { condition: service_healthy }
@@ -118,6 +120,8 @@ services:
     environment:
       <<: *app_environment
       WORKER_LISTEN_QUEUES: heavy_compute
+      # Worker 用 null 池：asyncpg 连接绑定事件循环，threads/prefork 池下共享池会跨循环
+      DB_POOL_MODE: null
       WORKER_CAPABILITY_JSON: '{"worker_id":"scitool-heavy-$${HOSTNAME}","queue":"heavy_compute","tiers":["heavy"],"cpu_capacity":16,"memory_capacity_gb":64,"gpu_count":0,"parallelism":1}'
     depends_on:
       postgres: { condition: service_healthy }
@@ -132,6 +136,8 @@ services:
     environment:
       <<: *app_environment
       WORKER_LISTEN_QUEUES: gpu_queue
+      # Worker 用 null 池：asyncpg 连接绑定事件循环，threads/prefork 池下共享池会跨循环
+      DB_POOL_MODE: null
       WORKER_CAPABILITY_JSON: '{"worker_id":"scitool-gpu-$${HOSTNAME}","queue":"gpu_queue","tiers":["gpu"],"cpu_capacity":8,"memory_capacity_gb":32,"gpu_count":1,"parallelism":1}'
     depends_on:
       postgres: { condition: service_healthy }

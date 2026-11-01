@@ -316,6 +316,22 @@ async def dispatch_tool_task(
             )
         if admission_metadata is not None:
             dispatch_metadata["resource_admission"] = admission_metadata
+
+        # 入队是盲写：Broker 收下消息就算成功。没有 Worker 消费时任务会永远停在
+        # 「排队中」且不报错，所以派发前主动问一次，并把结论写进 dispatch 元数据，
+        # 让任务详情能解释「为什么一直排队」。
+        from app.worker.health import worker_availability
+
+        availability = await worker_availability()
+        dispatch_metadata["worker_available"] = availability.available
+        if availability.configured and not availability.available:
+            logger.warning(
+                "任务 %s 将入队 %s，但当前没有 Celery Worker 消费：任务会一直停在排队中。"
+                "请确认 Worker 已启动且订阅了该队列（CELERY_BROKER_URL=%s）",
+                task.id,
+                queue,
+                "已配置",
+            )
         _set_task_extra_data(task, dispatch=dispatch_metadata)
         await db.commit()
         enqueue_kwargs = {

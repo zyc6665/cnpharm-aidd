@@ -5,16 +5,31 @@ import logging
 from typing import AsyncGenerator
 from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy.pool import NullPool
 from app.config import resolve_database_url, settings
 
 
 logger = logging.getLogger(__name__)
 
+
+def _engine_kwargs() -> dict:
+    """按运行形态决定连接池参数。
+
+    `DB_POOL_MODE=null` 用于 Celery Worker：asyncpg 连接绑定创建它的事件循环，
+    而 threads/prefork 池里并发的两个任务可能跑在不同循环上，共享进程级池会拿到
+    「绑在别人循环上」的连接。每个会话新建连接是最简单也最不会错的解法。
+    """
+    kwargs: dict = {"echo": settings.DEBUG, "future": True}
+    if settings.DB_POOL_MODE == "null":
+        kwargs["poolclass"] = NullPool
+        kwargs["pool_pre_ping"] = False
+    return kwargs
+
+
 # 创建异步引擎
 engine = create_async_engine(
     resolve_database_url(settings.DATABASE_URL),
-    echo=settings.DEBUG,
-    future=True,
+    **_engine_kwargs(),
 )
 
 # 创建异步会话工厂

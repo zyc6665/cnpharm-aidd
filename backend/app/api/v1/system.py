@@ -438,43 +438,37 @@ async def _check_storage() -> ServiceStatus:
 
 
 async def _check_celery() -> ServiceStatus:
-    """检查 Celery broker 配置及至少一个活跃 Worker。"""
-    try:
-        from app.worker.celery_app import celery_app
+    """检查 Celery broker 配置及至少一个活跃 Worker。
 
-        if not celery_app.conf.broker_url:
-            return ServiceStatus(
-                name="celery", status="unhealthy", message="Celery broker 未配置"
-            )
+    两点与派发路径不同：
 
-        def inspect_workers():
-            inspector = celery_app.control.inspect(timeout=1.0)
-            return inspector.ping() if inspector else None
+    1. Broker 地址取「实际生效值」——`settings.CELERY_BROKER_URL` 为空时回落到
+       `celery_app.conf.broker_url`（程序化配置、测试替身都走这条路）。
+    2. **不走探测缓存**。健康检查就是用来发现「Worker 刚死掉」的，用一份几分钟前的
+       缓存回答等于把要发现的问题藏起来。一次 ``inspect().ping()`` 的代价在探针
+       周期（通常 10~30 秒）下可以接受。
+    """
 
-        responses = await asyncio.wait_for(
-            asyncio.to_thread(inspect_workers),
-            timeout=2.0,
+    from app.worker.health import _effective_broker_url, probe_workers
+
+    broker_url = _effective_broker_url()
+    if not broker_url:
+        return ServiceStatus(
+            name="celery", status="unhealthy", message="Celery broker 未配置"
         )
-        active_workers = len(responses or {})
-        if active_workers:
-            return ServiceStatus(
-                name="celery",
-                status="healthy",
-                message=f"Celery broker 正常，活跃 Worker 数: {active_workers}",
-            )
+
+    availability = await probe_workers()
+    if availability.available:
         return ServiceStatus(
             name="celery",
-            status="degraded",
-            message="Celery broker 已配置，但没有活跃 Worker",
+            status="healthy",
+            message=f"Celery broker 正常，活跃 Worker 数: {len(availability.workers)}",
         )
-    except asyncio.TimeoutError:
-        return ServiceStatus(
-            name="celery", status="degraded", message="Celery Worker 探测超时"
-        )
-    except Exception as e:
-        return ServiceStatus(
-            name="celery", status="degraded", message=f"Celery 检查失败: {str(e)}"
-        )
+    return ServiceStatus(
+        name="celery",
+        status="degraded",
+        message="Celery broker 已配置，但没有活跃 Worker",
+    )
 
 
 def _check_executor_gateway() -> ServiceStatus:
