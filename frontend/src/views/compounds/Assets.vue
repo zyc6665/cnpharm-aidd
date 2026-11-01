@@ -76,7 +76,7 @@
           :columns="compoundColumns"
           :data-source="compounds"
           :pagination="false"
-          :locale="{ emptyText: t('compounds.empty.compounds') }"
+          :locale="{ emptyText: emptyTextFor('compounds.empty.compounds') }"
           row-key="id"
           size="middle"
           data-testid="assets-compound-table"
@@ -132,7 +132,7 @@
           :data-source="proteins"
           :pagination="false"
           :loading="proteinsLoading"
-          :locale="{ emptyText: t('compounds.empty.proteins') }"
+          :locale="{ emptyText: emptyTextFor('compounds.empty.proteins') }"
           row-key="id"
           size="middle"
           data-testid="assets-protein-table"
@@ -166,7 +166,7 @@
           :data-source="datasets"
           :pagination="false"
           :loading="datasetsLoading"
-          :locale="{ emptyText: t('compounds.empty.datasets') }"
+          :locale="{ emptyText: emptyTextFor('compounds.empty.datasets') }"
           row-key="id"
           size="middle"
           data-testid="assets-dataset-table"
@@ -378,6 +378,8 @@
   const activeTab = ref<TabKey>('compounds')
   const loading = ref(false)
   const loadError = ref(false)
+  // 加载失败时不能再说「还没有化合物」——那会让人以为要重新导入。
+  const emptyTextFor = (key: string) => (loadError.value ? t('common.listStates.emptyAfterError') : t(key))
 
   const compounds = ref<Compound[]>([])
   const compoundTotal = ref(0)

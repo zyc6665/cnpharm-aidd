@@ -31,9 +31,10 @@ from app.models.compounds import (  # noqa: E402
     MoleculeFingerprint,
 )
 from app.models.decisions import DecisionItem, DecisionRecord  # noqa: E402
-from app.models.projects import Organization, Project  # noqa: E402
+from app.models.projects import Organization, Project, ProjectMember  # noqa: E402
 from app.models.targets import Pocket, PocketResidue, Protein, ProteinStructure, Target  # noqa: E402
 from app.models.tasks import Task  # noqa: E402
+from app.chemistry.molecule_properties import describe_smiles
 from app.models.users import User  # noqa: E402
 from app.models.workflows import WorkflowDefinition, WorkflowRun  # noqa: E402
 
@@ -54,7 +55,7 @@ COMPOUNDS = [
     ("CC(=O)Oc1ccccc1C(=O)O", "阿司匹林"),
     ("CC(C)Cc1ccc(cc1)C(C)C(=O)O", "布洛芬"),
     ("CN1CCC[C@H]1c2cccnc2", "尼古丁"),
-    ("c1ccc2c(c1)nc(n2)C(=O)N", "苯并咪唑甲酰胺"),
+    ("O=C(N)c1nc2ccccc2[nH]1", "苯并咪唑甲酰胺"),
 ]
 
 
@@ -112,6 +113,8 @@ async def _clean(db) -> None:
         if run_ids:
             await db.execute(delete(WorkflowRun).where(WorkflowRun.id.in_(run_ids)))
         await db.execute(delete(WorkflowDefinition).where(WorkflowDefinition.project_id == pid))
+        # 成员关系必须显式先删：走查时手工加过成员，直接删项目会撞外键。
+        await db.execute(delete(ProjectMember).where(ProjectMember.project_id == pid))
         await db.execute(delete(Project).where(Project.id == pid))
     demo_compounds = (
         await db.execute(select(Compound.id).where(Compound.props["demo_tag"].as_string() == DEMO_TAG))
@@ -254,15 +257,19 @@ async def main() -> int:
         compounds = []
         for smiles, name in COMPOUNDS:
             digest = _sha(smiles)
+            # 演示数据也走真实化学层：InChIKey 与分子性质都由 RDKit 算出来，
+            # 否则截图里会出现「DEMO...」这种假 InChIKey 和一片「未计算」，
+            # 让走查的人误判成平台算不出来（真实导入路径本来就会算）。
+            descriptor = describe_smiles(smiles)
             compound = Compound(
                 id=str(uuid.uuid4()),
                 created_by=owner.id,
                 name=name,
-                inchikey=f"DEMO{digest[:21].upper()}",
-                canonical_smiles=smiles,
-                mol_formula=None,
-                mol_weight=None,
-                props={"demo_tag": DEMO_TAG, "logP": None, "TPSA": None, "QED": None},
+                inchikey=descriptor.inchikey,
+                canonical_smiles=descriptor.canonical_smiles,
+                mol_formula=descriptor.mol_formula,
+                mol_weight=descriptor.mol_weight,
+                props={**descriptor.props, "demo_tag": DEMO_TAG},
                 structure_urn=None,
             )
             db.add(compound)

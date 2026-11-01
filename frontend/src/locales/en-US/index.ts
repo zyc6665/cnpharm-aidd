@@ -67,6 +67,7 @@ export default {
     // Shared list four-state copy (load error / empty)
     listStates: {
       errorTitle: 'Failed to load',
+      emptyAfterError: 'Data not loaded, please retry',
       errorDescription:
         'Something went wrong while fetching data. The network may be unstable or the service may be temporarily unavailable. Please try again later.',
       retry: 'Retry',

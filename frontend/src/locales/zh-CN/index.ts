@@ -68,6 +68,7 @@ export default {
     listStates: {
       errorTitle: '加载失败',
       errorDescription: '请求数据时出现异常，可能是网络不稳定或服务暂时不可用，请稍后重试。',
+      emptyAfterError: '数据未加载，请先重试',
       retry: '重试',
       emptyTitle: '暂无数据'
     }
