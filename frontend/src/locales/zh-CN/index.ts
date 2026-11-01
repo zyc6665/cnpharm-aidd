@@ -63,7 +63,14 @@ export default {
     updatedAt: '更新时间',
     seconds: '秒',
     sort: '排序',
-    memberUsername: '成员用户名'
+    memberUsername: '成员用户名',
+    // 列表四态通用文案（加载失败 / 空状态）
+    listStates: {
+      errorTitle: '加载失败',
+      errorDescription: '请求数据时出现异常，可能是网络不稳定或服务暂时不可用，请稍后重试。',
+      retry: '重试',
+      emptyTitle: '暂无数据'
+    }
   },
 
   // 导航
@@ -1350,6 +1357,11 @@ export default {
       candidates: '项目内还没有候选物',
       candidateSets: '项目内还没有候选集'
     },
+    emptyHint: {
+      assets: '这里汇总项目内的化合物、蛋白结构与数据集；可先批量导入化合物，或新增单个分子。',
+      candidates: '候选物来自筛选、设计与导入任务；候选集用于把候选物组织成集合。',
+      goAssets: '前往数据资产导入'
+    },
     errors: {
       loadCompounds: '化合物列表加载失败',
       loadCompound: '化合物详情加载失败',
@@ -1541,6 +1553,9 @@ export default {
       }
     },
     empty: '项目内还没有已完成的结果',
+    emptyHint: '运行工具或工作流任务后，完成的结果会自动汇总到这里。',
+    goTools: '去工具页',
+    clearFilter: '清除筛选',
     errors: {
       loadResults: '结果列表加载失败',
       loadResult: '结果详情加载失败',
@@ -2287,6 +2302,27 @@ export default {
     tasks: '任务管理',
     system: '系统设置',
     backToSite: '返回前台',
+    // 列表四态：各页面加载失败与空状态引导文案
+    listStates: {
+      usersLoadError: '用户列表加载失败',
+      usersEmptyTitle: '还没有用户',
+      usersEmptyHint: '平台还没有创建任何用户。新建用户后即可分配角色并开始协作。',
+      toolsLoadError: '工具列表加载失败',
+      toolsEmptyTitle: '还没有工具',
+      toolsEmptyHint: '工具目录为空。先登记模型交付包并创建平台工具，用户才能运行。',
+      goToolPackages: '去登记交付包',
+      tasksLoadError: '任务列表加载失败',
+      tasksEmptyTitle: '暂无任务',
+      tasksEmptyHint: '还没有任务记录。用户提交工具任务后，运行状态会实时显示在这里。',
+      workbenchGroupsLoadError: '分组与映射加载失败',
+      groupsEmptyTitle: '还没有分组',
+      groupsEmptyHint: '使用上方表单创建第一个工作台分组，再把工具映射进来。',
+      mappingsEmptyTitle: '还没有映射',
+      mappingsEmptyHint: '把工具映射到分组后，工作台会按分组展示工具。',
+      categoriesLoadError: '分类列表加载失败',
+      categoriesEmptyTitle: '还没有分类',
+      categoriesEmptyHint: '分类用于把工具归类展示；先创建第一个分类，再创建工具。'
+    },
     stats: {
       totalUsers: '用户总数',
       totalTools: '工具总数',
@@ -2353,6 +2389,7 @@ export default {
       startTime: '开始时间',
       endTime: '结束时间',
       emptyState: '没有符合条件的审计记录',
+      emptyHint: '当前筛选条件下没有审计记录。可调整筛选条件，或重置后查看全部记录。',
       requestId: '请求 ID',
       detail: '详情',
       createdAt: '时间',

@@ -10,7 +10,28 @@
     </AppPageHeader>
 
     <a-card>
+      <SkeletonList v-if="loading && categories.length === 0" :count="6" />
+
+      <AppInlineError
+        v-else-if="loadError"
+        data-testid="categories-error"
+        :title="t('admin.listStates.categoriesLoadError')"
+        :description="t('common.listStates.errorDescription')"
+        :detail="loadErrorDetail"
+      >
+        <a-button size="small" @click="fetchCategories">{{ t('common.listStates.retry') }}</a-button>
+      </AppInlineError>
+
+      <AppEmptyState
+        v-else-if="categories.length === 0"
+        :title="t('admin.listStates.categoriesEmptyTitle')"
+        :description="t('admin.listStates.categoriesEmptyHint')"
+      >
+        <a-button type="primary" @click="openCreateModal">{{ t('admin.createCategory') }}</a-button>
+      </AppEmptyState>
+
       <a-table
+        v-else
         :scroll="{ x: 'max-content' }"
         :columns="columns"
         :data-source="categories"
@@ -106,6 +127,9 @@ import {
   PlusOutlined
 } from '@ant-design/icons-vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
+import AppEmptyState from '@/components/common/AppEmptyState.vue'
+import AppInlineError from '@/components/common/AppInlineError.vue'
+import SkeletonList from '@/components/common/SkeletonList.vue'
 import type { Category } from '@/types/models'
 import {
   adminCreateToolCategory,
@@ -119,6 +143,8 @@ import {
 const { t } = useI18n()
 
 const loading = ref(false)
+const loadError = ref(false)
+const loadErrorDetail = ref('')
 const saving = ref(false)
 const showCreateModal = ref(false)
 const editingCategory = ref<Category | null>(null)
@@ -156,11 +182,15 @@ const normalizeCategorySlug = (value: string) => {
 
 const fetchCategories = async () => {
   loading.value = true
+  loadError.value = false
+  loadErrorDetail.value = ''
   try {
     const res = await adminGetToolCategories()
     categories.value = res.data
-  } catch {
+  } catch (error) {
     categories.value = []
+    loadError.value = true
+    loadErrorDetail.value = error instanceof Error ? error.message : String(error)
   } finally {
     loading.value = false
   }

@@ -13,19 +13,6 @@
       </template>
     </AppPageHeader>
 
-    <a-alert
-      v-if="loadError"
-      class="results-alert"
-      type="error"
-      show-icon
-      data-testid="results-error"
-      :message="t('results.errors.loadResults')"
-    >
-      <template #action>
-        <a-button size="small" @click="loadResults">{{ t('common.refresh') }}</a-button>
-      </template>
-    </a-alert>
-
     <div class="results-toolbar">
       <a-select
         v-model:value="statusFilter"
@@ -42,6 +29,29 @@
     </div>
 
     <SkeletonList v-if="loading && sortedResults.length === 0" :count="5" />
+
+    <AppInlineError
+      v-else-if="loadError"
+      class="results-alert"
+      data-testid="results-error"
+      :title="t('results.errors.loadResults')"
+      :description="t('common.listStates.errorDescription')"
+    >
+      <a-button size="small" @click="loadResults">{{ t('common.listStates.retry') }}</a-button>
+    </AppInlineError>
+
+    <AppEmptyState
+      v-else-if="sortedResults.length === 0"
+      :title="t('results.empty')"
+      :description="t('results.emptyHint')"
+    >
+      <a-button v-if="statusFilter" @click="clearStatusFilter">
+        {{ t('results.clearFilter') }}
+      </a-button>
+      <a-button v-else type="primary" @click="router.push('/tools')">
+        {{ t('results.goTools') }}
+      </a-button>
+    </AppEmptyState>
 
     <a-table
       :scroll="{ x: 'max-content' }"
@@ -101,6 +111,8 @@
   import { useI18n } from 'vue-i18n'
   import { formatDateTimeMinutes } from '@/utils/datetime'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import AppEmptyState from '@/components/common/AppEmptyState.vue'
+  import AppInlineError from '@/components/common/AppInlineError.vue'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import SkeletonList from '@/components/common/SkeletonList.vue'
   import { listProjectResults } from '@/api/results'
@@ -170,6 +182,12 @@
     results.value = []
     total.value = 0
     void loadResults()
+  }
+
+  /** 空状态里的「清除筛选」：清掉状态过滤后按全量重新加载。 */
+  function clearStatusFilter(): void {
+    statusFilter.value = undefined
+    handleFilterChange()
   }
 
   /** 首屏仍走原 offset 请求（兼容），并从响应里接出游标。 */

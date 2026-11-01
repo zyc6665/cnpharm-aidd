@@ -285,9 +285,11 @@
 </script>
 
 <style scoped lang="less">
+  @import '@/assets/styles/variables.less';
+
   .pocket-picker__hint {
     margin: 8px 0 0;
     font-size: 12px;
-    color: #d46b08;
+    color: @warning-color;
   }
 </style>

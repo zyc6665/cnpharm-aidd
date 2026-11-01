@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as echarts from 'echarts'
+import { chartPalette } from '@/utils/chartTheme'
 import type { FunnelStage } from './funnel'
 
 const props = withDefaults(
@@ -26,7 +27,7 @@ function render(): void {
   chart.setOption(
     {
       tooltip: { trigger: 'item', formatter: '{b}: {c}' },
-      color: ['#5b8ff9', '#61ddaa', '#f6bd16', '#ff9845'],
+      color: [...chartPalette],
       series: [
         {
           type: 'funnel',

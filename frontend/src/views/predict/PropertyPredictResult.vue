@@ -227,7 +227,7 @@ onMounted(() => {
 }
 
 .predict-result__count {
-  color: var(--ant-color-text-secondary, #8c8c8c);
+  color: var(--ant-color-text-secondary, var(--theme-text-secondary));
 }
 
 .predict-result__charts {
@@ -237,7 +237,7 @@ onMounted(() => {
 }
 
 .predict-result__chart-cell {
-  border: 1px solid var(--ant-color-border, #f0f0f0);
+  border: 1px solid var(--ant-color-border, var(--theme-border));
   border-radius: 8px;
   padding: 8px;
 }

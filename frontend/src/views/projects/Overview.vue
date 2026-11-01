@@ -494,7 +494,9 @@
       align-items: flex-start;
       flex-direction: column;
     }
-    .overview-stats,
+    .overview-stats {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
     .overview-grid {
       grid-template-columns: 1fr;
     }

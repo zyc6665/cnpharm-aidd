@@ -148,11 +148,57 @@
 // 边框色
 @border-color: var(--theme-border, rgba(255, 255, 255, 0.06));
 @border-color-hover: var(--theme-border-hover, rgba(255, 255, 255, 0.1));
+// 兼容别名（历史组件使用 @border-color-base / @border-color-split）
+@border-color-base: @border-color;
+@border-color-split: @border-color;
 
 // 滚动条
 @scrollbar-track: rgba(255, 255, 255, 0.02);
 @scrollbar-thumb: rgba(255, 255, 255, 0.08);
 @scrollbar-thumb-hover: rgba(255, 255, 255, 0.14);
+
+// ═══════════════════════════════════════════════
+// 语义 token（阶段 1 收口）——视图层唯一可引用的调色入口
+// ═══════════════════════════════════════════════
+// 命名严格对齐 docs/superpowers/plans/2026-11-01 §1.1：
+//   surface / text / border / status-bg / chart-1..8。
+// 所有可变 token 都走 --theme-* CSS 自定义属性，暗色值作为 fallback，
+// [data-theme="light"] 在 global.less 里逐项覆盖——视图层只引用这里的变量，
+// 不再出现裸十六进制色值（极少数第三方内联色见 hardcoded-color-whitelist.md）。
+// 速查表：frontend/src/assets/styles/design-tokens.md
+
+// ── 表面 ──
+@surface-base: var(--theme-surface-base, #09090b); // 页面底
+@surface-elevated: var(--theme-surface-elevated, #1a1a21); // 卡片/浮层
+@surface-sunken: var(--theme-surface-sunken, #0d0d11); // 表格斑马/输入底
+
+// ── 文本 ──（@text-primary / @text-secondary / @text-tertiary / @text-disabled 见上方既有定义）
+@text-inverse: var(--theme-text-inverse, #0b1120); // 反色文本（浅底上用）
+
+// ── 边框 ──
+@border-base: var(--theme-border, rgba(255, 255, 255, 0.06));
+@border-strong: var(--theme-border-strong, rgba(255, 255, 255, 0.14));
+@border-subtle: var(--theme-border-subtle, rgba(255, 255, 255, 0.03));
+
+// ── 状态弱底 ──
+@success-bg: var(--theme-success-bg, rgba(34, 197, 94, 0.12));
+@warning-bg: var(--theme-warning-bg, rgba(245, 158, 11, 0.12));
+@error-bg: var(--theme-error-bg, rgba(239, 68, 68, 0.12));
+@info-bg: var(--theme-info-bg, rgba(59, 130, 246, 0.12));
+
+// ── 图表色（供 ECharts；必须与 frontend/src/utils/chartTheme.ts 保持一致）──
+@chart-1: #5b8ff9;
+@chart-2: #61ddaa;
+@chart-3: #f6bd16;
+@chart-4: #ff9845;
+@chart-5: #7262fd;
+@chart-6: #9270ca;
+@chart-7: #52c41a;
+@chart-8: #f5222d;
+
+// ── 终端日志块（刻意固定深底，暗/浅主题都不变）──
+@terminal-bg: var(--theme-terminal-bg, #1e1e1e);
+@terminal-fg: var(--theme-terminal-fg, #f8f8f2);
 
 // ═══════════════════════════════════════════════
 // 浅色主题覆盖（暗色模式下通过 [data-theme="light"] 应用）

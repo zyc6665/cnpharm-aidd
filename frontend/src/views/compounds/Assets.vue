@@ -24,20 +24,26 @@
       </template>
     </AppPageHeader>
 
-    <a-alert
+    <AppInlineError
       v-if="loadError"
       class="assets-alert"
-      type="error"
-      show-icon
       data-testid="assets-error"
-      :message="t('compounds.errors.loadAssets')"
+      :title="t('compounds.errors.loadAssets')"
+      :description="t('common.listStates.errorDescription')"
     >
-      <template #action>
-        <a-button size="small" @click="loadAll">{{ t('common.refresh') }}</a-button>
-      </template>
-    </a-alert>
+      <a-button size="small" @click="loadAll">{{ t('common.listStates.retry') }}</a-button>
+    </AppInlineError>
 
     <SkeletonList v-if="loading && !hasAnyRecord" :count="5" />
+
+    <AppEmptyState
+      v-else-if="!loadError && !hasAnyRecord"
+      :title="t('compounds.empty.compounds')"
+      :description="t('compounds.emptyHint.assets')"
+    >
+      <a-button type="primary" @click="openImport">{{ t('compounds.actions.import') }}</a-button>
+      <a-button @click="createVisible = true">{{ t('compounds.actions.create') }}</a-button>
+    </AppEmptyState>
 
     <a-tabs v-else v-model:activeKey="activeTab" data-testid="assets-tabs">
       <!-- 化合物 -->
@@ -323,6 +329,8 @@
   import { message } from 'ant-design-vue'
   import { formatDateTimeMinutes } from '@/utils/datetime'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import AppEmptyState from '@/components/common/AppEmptyState.vue'
+  import AppInlineError from '@/components/common/AppInlineError.vue'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import SkeletonList from '@/components/common/SkeletonList.vue'
   import { uploadFile } from '@/api/files'

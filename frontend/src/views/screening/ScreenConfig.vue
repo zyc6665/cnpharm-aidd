@@ -67,6 +67,15 @@ const stageRows = computed(() =>
   })
 )
 
+const canSubmit = computed(
+  () =>
+    !submitting.value &&
+    Boolean(receptorFile.value) &&
+    Boolean(ligandsFile.value) &&
+    Number.isFinite(ligandCount.value) &&
+    ligandCount.value > 0
+)
+
 function handleReceptorUpload(file: File): boolean {
   receptorFile.value = file
   receptorName.value = file.name
@@ -254,7 +263,7 @@ async function handleSubmit(): Promise<void> {
         type="primary"
         size="large"
         :loading="submitting"
-        :disabled="submitting"
+        :disabled="!canSubmit"
         data-testid="screen-config-submit"
         @click="handleSubmit"
       >
@@ -283,7 +292,7 @@ async function handleSubmit(): Promise<void> {
 
 .screen-config__hint {
   margin: 8px 0 0;
-  color: var(--ant-color-text-secondary, #8c8c8c);
+  color: var(--ant-color-text-secondary, var(--theme-text-secondary));
 }
 
 .screen-config__footer {

@@ -16,7 +16,8 @@ test('任务实时通道应使用 SSE，而不是自研 WebSocket 客户端', ()
 
   const eventsSource = readSource('src/api/task-events.ts')
   assert.equal(eventsSource.includes('EventSource'), true)
-  assert.equal(eventsSource.includes('/api/v1/tasks/'), true)
+  assert.equal(eventsSource.includes('/tasks/'), true)
+  assert.equal(eventsSource.includes('/api/v1/api/v1'), false)
   assert.equal(eventsSource.includes('/events'), true)
   // 认证改由 httpOnly Cookie 承载，不再把 token 拼进查询参数。
   assert.equal(eventsSource.includes('token='), false)

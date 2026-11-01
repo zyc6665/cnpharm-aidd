@@ -127,14 +127,18 @@ export function useWorkflowCanvas(input: {
 
   const availableWorkflowTools = computed(() => {
     const toolsBySlug = new Map<string, AvailableWorkflowTool>()
+    const groups = Array.isArray(toolsStore.workbenchGroups) ? toolsStore.workbenchGroups : []
 
-    for (const group of toolsStore.workbenchGroups) {
-      for (const tool of group.tools) {
+    for (const group of groups) {
+      for (const tool of group.tools ?? []) {
         toolsBySlug.set(tool.slug, normalizeWorkflowTool(tool))
       }
     }
 
-    for (const tool of toolsStore.workflowToolOptions) {
+    const toolOptions = Array.isArray(toolsStore.workflowToolOptions)
+      ? toolsStore.workflowToolOptions
+      : []
+    for (const tool of toolOptions) {
       if (!toolsBySlug.has(tool.slug)) {
         toolsBySlug.set(tool.slug, normalizeWorkflowTool(tool))
       }

@@ -27,20 +27,30 @@
       </template>
     </AppPageHeader>
 
-    <a-alert
+    <AppInlineError
       v-if="loadError"
       class="candidates-alert"
-      type="error"
-      show-icon
       data-testid="candidates-error"
-      :message="t('compounds.errors.loadCandidates')"
+      :title="t('compounds.errors.loadCandidates')"
+      :description="t('common.listStates.errorDescription')"
     >
-      <template #action>
-        <a-button size="small" @click="loadAll">{{ t('common.refresh') }}</a-button>
-      </template>
-    </a-alert>
+      <a-button size="small" @click="loadAll">{{ t('common.listStates.retry') }}</a-button>
+    </AppInlineError>
 
     <SkeletonList v-if="loading && !hasAnyRecord" :count="5" />
+
+    <AppEmptyState
+      v-else-if="!loadError && !hasAnyRecord"
+      :title="t('compounds.empty.candidates')"
+      :description="t('compounds.emptyHint.candidates')"
+    >
+      <router-link :to="`/projects/${projectId}/assets`">
+        <a-button>{{ t('compounds.emptyHint.goAssets') }}</a-button>
+      </router-link>
+      <a-button type="primary" @click="createSetVisible = true">
+        {{ t('compounds.actions.createSet') }}
+      </a-button>
+    </AppEmptyState>
 
     <template v-else>
       <section class="candidates-section">
@@ -171,6 +181,8 @@
   import { message } from 'ant-design-vue'
   import { formatDateTimeMinutes } from '@/utils/datetime'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import AppEmptyState from '@/components/common/AppEmptyState.vue'
+  import AppInlineError from '@/components/common/AppInlineError.vue'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import SkeletonList from '@/components/common/SkeletonList.vue'
   import { createCandidateSet, listCandidateSets, listCandidates } from '@/api/compounds'

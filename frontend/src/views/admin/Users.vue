@@ -73,7 +73,32 @@
     </AppFilterBar>
 
     <a-card>
+      <SkeletonList v-if="loading && users.length === 0" :count="6" />
+
+      <AppInlineError
+        v-else-if="loadError"
+        data-testid="users-error"
+        :title="t('admin.listStates.usersLoadError')"
+        :description="t('common.listStates.errorDescription')"
+        :detail="loadErrorDetail"
+      >
+        <a-button size="small" @click="refreshUsersPage">
+          {{ t('common.listStates.retry') }}
+        </a-button>
+      </AppInlineError>
+
+      <AppEmptyState
+        v-else-if="users.length === 0"
+        :title="t('admin.listStates.usersEmptyTitle')"
+        :description="t('admin.listStates.usersEmptyHint')"
+      >
+        <a-button type="primary" @click="openCreateModal">
+          {{ t('admin.createUser') }}
+        </a-button>
+      </AppEmptyState>
+
       <a-table
+        v-else
         :scroll="{ x: 'max-content' }"
         :columns="columns"
         :data-source="users"
@@ -261,6 +286,9 @@ import type { FormInstance } from 'ant-design-vue'
 import { formatDateTimeMinutes } from '@/utils/datetime'
 import AppFilterBar from '@/components/common/AppFilterBar.vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
+import AppEmptyState from '@/components/common/AppEmptyState.vue'
+import AppInlineError from '@/components/common/AppInlineError.vue'
+import SkeletonList from '@/components/common/SkeletonList.vue'
 import {
   adminCreateUser,
   adminDeleteUser,
@@ -277,6 +305,8 @@ import { buildAdminUserCreatePayload } from '@/utils/admin-user-payload'
 const { t } = useI18n()
 
 const loading = ref(false)
+const loadError = ref(false)
+const loadErrorDetail = ref('')
 const createLoading = ref(false)
 const saveLoading = ref(false)
 const resetPasswordLoading = ref(false)
@@ -406,6 +436,8 @@ const formatDate = (date: string) => formatDateTimeMinutes(date)
 
 const fetchUsers = async () => {
   loading.value = true
+  loadError.value = false
+  loadErrorDetail.value = ''
   try {
     const res = await adminGetUsers({
       page: pagination.current,
@@ -416,9 +448,11 @@ const fetchUsers = async () => {
     })
     users.value = res.data.items
     pagination.total = res.data.total
-  } catch {
+  } catch (error) {
     users.value = []
     pagination.total = 0
+    loadError.value = true
+    loadErrorDetail.value = error instanceof Error ? error.message : String(error)
   } finally {
     loading.value = false
   }

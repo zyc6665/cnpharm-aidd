@@ -63,7 +63,15 @@ export default {
     updatedAt: 'Updated At',
     seconds: 'seconds',
     sort: 'Sort',
-    memberUsername: 'Member username'
+    memberUsername: 'Member username',
+    // Shared list four-state copy (load error / empty)
+    listStates: {
+      errorTitle: 'Failed to load',
+      errorDescription:
+        'Something went wrong while fetching data. The network may be unstable or the service may be temporarily unavailable. Please try again later.',
+      retry: 'Retry',
+      emptyTitle: 'No data yet'
+    }
   },
 
   // Navigation
@@ -1352,6 +1360,13 @@ export default {
       candidates: 'No candidates in this project yet',
       candidateSets: 'No candidate sets in this project yet'
     },
+    emptyHint: {
+      assets:
+        'This page gathers the project’s compounds, protein structures and datasets. Import compounds in bulk, or add a single molecule, to get started.',
+      candidates:
+        'Candidates come from screening, design or import tasks; candidate sets organize them into collections.',
+      goAssets: 'Go to data assets'
+    },
     errors: {
       loadCompounds: 'Failed to load compounds',
       loadCompound: 'Failed to load the compound',
@@ -1544,6 +1559,9 @@ export default {
       }
     },
     empty: 'No finished results in this project yet',
+    emptyHint: 'Finished results from tool or workflow tasks will be collected here automatically.',
+    goTools: 'Go to tools',
+    clearFilter: 'Clear filters',
     errors: {
       loadResults: 'Failed to load results',
       loadResult: 'Failed to load the result',
@@ -2296,6 +2314,33 @@ export default {
     tasks: 'Task Management',
     system: 'System Settings',
     backToSite: 'Back to Site',
+    // List four-state: per-page load-error and guided empty copy
+    listStates: {
+      usersLoadError: 'Failed to load users',
+      usersEmptyTitle: 'No users yet',
+      usersEmptyHint:
+        'No users have been created yet. Create a user to assign roles and start collaborating.',
+      toolsLoadError: 'Failed to load tools',
+      toolsEmptyTitle: 'No tools yet',
+      toolsEmptyHint:
+        'The tool catalog is empty. Register a model delivery package and create a platform tool so users can run it.',
+      goToolPackages: 'Register a delivery package',
+      tasksLoadError: 'Failed to load tasks',
+      tasksEmptyTitle: 'No tasks yet',
+      tasksEmptyHint:
+        'There are no tasks yet. Once users submit tool tasks, their status will show here in real time.',
+      workbenchGroupsLoadError: 'Failed to load groups and mappings',
+      groupsEmptyTitle: 'No groups yet',
+      groupsEmptyHint:
+        'Create your first workbench group with the form above, then map tools into it.',
+      mappingsEmptyTitle: 'No mappings yet',
+      mappingsEmptyHint:
+        'After mapping tools to a group, the workbench will list tools grouped accordingly.',
+      categoriesLoadError: 'Failed to load categories',
+      categoriesEmptyTitle: 'No categories yet',
+      categoriesEmptyHint:
+        'Categories group tools for display. Create the first category, then create tools.'
+    },
     stats: {
       totalUsers: 'Total Users',
       totalTools: 'Total Tools',
@@ -2362,6 +2407,8 @@ export default {
       startTime: 'Start Time',
       endTime: 'End Time',
       emptyState: 'No audit records match the current filters',
+      emptyHint:
+        'No audit records match the current filters. Adjust the filters, or reset to view all records.',
       requestId: 'Request ID',
       detail: 'Detail',
       createdAt: 'Time',

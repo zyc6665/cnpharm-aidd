@@ -549,6 +549,8 @@
 </script>
 
 <style scoped lang="less">
+  @import '@/assets/styles/variables.less';
+
   .results-page {
     max-width: 1200px;
     margin: 0 auto;
@@ -558,14 +560,14 @@
   .results-progress {
     margin-bottom: 24px;
     padding: 20px;
-    border: 1px solid #f0f0f0;
+    border: 1px solid @border-color;
     border-radius: 8px;
-    background: #fff;
+    background: @bg-surface;
   }
 
   .results-progress__text {
     margin: 8px 0 0;
-    color: #595959;
+    color: @text-secondary;
   }
 
   .results-summary {
@@ -583,9 +585,9 @@
     gap: 12px;
     margin-bottom: 20px;
     padding: 16px;
-    border: 1px solid #f0f0f0;
+    border: 1px solid @border-color;
     border-radius: 8px;
-    background: #fafafa;
+    background: @surface-sunken;
   }
 
   .results-filters__sort,
@@ -598,11 +600,11 @@
 
   .results-filters__label {
     font-weight: 500;
-    color: #595959;
+    color: @text-secondary;
   }
 
   .results-filters__dash {
-    color: #bfbfbf;
+    color: @text-tertiary;
   }
 
   .filter-control {
@@ -622,10 +624,10 @@
   .molecule-card {
     display: flex;
     flex-direction: column;
-    border: 1px solid #f0f0f0;
+    border: 1px solid @border-color;
     border-radius: 8px;
     overflow: hidden;
-    background: #fff;
+    background: @bg-surface;
     transition: box-shadow 0.2s ease;
   }
 
@@ -639,13 +641,13 @@
     justify-content: center;
     min-height: 140px;
     padding: 12px;
-    background: #fcfcfc;
+    background: @surface-sunken;
   }
 
   .molecule-card__sequence {
     font-family: monospace;
     font-size: 12px;
-    color: #595959;
+    color: @text-secondary;
     word-break: break-all;
     text-align: center;
   }
@@ -660,19 +662,19 @@
 
   .molecule-card__metric dt {
     font-size: 12px;
-    color: #8c8c8c;
+    color: @text-tertiary;
   }
 
   .molecule-card__metric dd {
     margin: 2px 0 0;
     font-weight: 600;
-    color: #262626;
+    color: @text-primary;
   }
 
   .results-empty {
     padding: 48px 0;
     text-align: center;
-    color: #8c8c8c;
+    color: @text-tertiary;
   }
 
   .results-pagination {
@@ -682,6 +684,6 @@
 
   .save-hint {
     margin: 0;
-    color: #8c8c8c;
+    color: @text-tertiary;
   }
 </style>

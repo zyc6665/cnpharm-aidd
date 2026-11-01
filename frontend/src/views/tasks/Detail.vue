@@ -87,10 +87,7 @@
             <a-progress
               :percent="task.progress"
               status="active"
-              :stroke-color="{
-                '0%': '#108ee9',
-                '100%': '#87d068',
-              }"
+              :stroke-color="progressStroke"
             />
             <div v-if="task.progress_message" class="progress-info">
               {{ task.progress_message }}
@@ -349,7 +346,7 @@ import {
   ToolOutlined,
   PlayCircleOutlined
 } from '@ant-design/icons-vue'
-import { message, Modal } from 'ant-design-vue'
+import { message, Modal, theme } from 'ant-design-vue'
 import { useTasksStore, useUserStore } from '@/stores'
 import { useTaskDetailLiveUpdates } from '@/composables/useTaskDetailLiveUpdates'
 import type { TaskStatus } from '@/types/models'
@@ -373,10 +370,17 @@ import {
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
+const { token: antdToken } = theme.useToken()
 const tasksStore = useTasksStore()
 const userStore = useUserStore()
 
 const taskId = computed(() => route.params.id as string)
+
+// 进度条渐变色跟随主题（取自 ConfigProvider token，避免写死色值）
+const progressStroke = computed(() => ({
+  '0%': antdToken.value.colorPrimary,
+  '100%': antdToken.value.colorSuccess
+}))
 
 // 计算属性
 const loading = computed(() => tasksStore.loading)
@@ -738,8 +742,8 @@ onUnmounted(() => {
     // 日志块刻意保留深底而不是 @bg-body：正文区在浅色主题下是白的，
     // 白底等宽日志读起来像代码嵌入了一篇文章。这里固定成终端观感，
     // 与 JsonResultRenderer 的代码块保持同一口径。
-    background: #1e1e1e;
-    color: #f8f8f2;
+    background: @terminal-bg;
+    color: @terminal-fg;
     font-size: @font-size-sm;
     white-space: pre-wrap;
   }

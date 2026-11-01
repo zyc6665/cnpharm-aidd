@@ -101,7 +101,7 @@
                 <a-progress
                   :percent="Math.round(record.score * 100)"
                   size="small"
-                  :stroke-color="record.score > 0.85 ? '#52c41a' : '#1677ff'"
+                  :stroke-color="record.score > 0.85 ? chartColors.positive : chartColors.primary"
                 />
               </template>
               <template v-else-if="column.key === 'status'">
@@ -202,6 +202,7 @@ import MoleculeViewer from '@/components/tasks/MoleculeViewer.vue'
 import Smiles2DCell from '@/components/tasks/Smiles2DCell.vue'
 import type { VisualizationScene } from '@/domain/tasks'
 import DemoChart from './DemoChart.vue'
+import { chartColors, chartPalette } from '@/utils/chartTheme'
 
 const activeTab = ref('structure')
 const selectedPocket = ref('Pocket-01')
@@ -366,14 +367,14 @@ const admetBarOption: EChartsOption = {
       name: 'QED',
       type: 'bar',
       data: admetRows.map(row => row.qed),
-      itemStyle: { color: '#1677ff', borderRadius: [4, 4, 0, 0] }
+      itemStyle: { color: chartColors.primary, borderRadius: [4, 4, 0, 0] }
     }
   ]
 }
 
 const funnelOption: EChartsOption = {
   tooltip: { trigger: 'item', formatter: '{b}: {c}' },
-  color: ['#5b8ff9', '#61ddaa', '#f6bd16', '#ff9845', '#7262fd'],
+  color: [...chartPalette],
   series: [
     {
       type: 'funnel',
@@ -407,7 +408,7 @@ const rankBarOption: EChartsOption = {
     {
       type: 'bar',
       data: topRows.slice(0, 8).map(row => row.docking).reverse(),
-      itemStyle: { color: '#61ddaa', borderRadius: [0, 4, 4, 0] }
+      itemStyle: { color: chartPalette[1], borderRadius: [0, 4, 4, 0] }
     }
   ]
 }
@@ -467,7 +468,7 @@ const rmsdOption: EChartsOption = {
       symbol: 'none',
       data: [0.2, 0.8, 1.3, 1.6, 1.8, 1.9, 2.1, 2.0, 2.2, 2.1, 2.3, 2.2, 2.3, 2.4, 2.3, 2.4, 2.4, 2.5, 2.4, 2.5, 2.4],
       areaStyle: { opacity: 0.12 },
-      lineStyle: { color: '#1677ff', width: 2 }
+      lineStyle: { color: chartColors.primary, width: 2 }
     }
   ]
 }
@@ -487,7 +488,7 @@ const rmsfOption: EChartsOption = {
       smooth: true,
       symbol: 'none',
       data: [0.4, 0.6, 0.5, 0.8, 1.1, 0.9, 0.7, 1.3, 1.8, 2.2, 1.7, 1.2, 0.9, 0.8, 1.1, 1.4, 1.9, 2.4, 1.8, 1.3, 0.9, 0.7, 0.8, 1.0, 1.3, 1.1, 0.9, 0.7, 0.6, 0.5],
-      lineStyle: { color: '#52c41a', width: 2 }
+      lineStyle: { color: chartColors.positive, width: 2 }
     }
   ]
 }
@@ -501,11 +502,11 @@ const freeEnergyOption: EChartsOption = {
     {
       type: 'bar',
       data: [
-        { value: -48.32, itemStyle: { color: '#52c41a' } },
-        { value: -126.74, itemStyle: { color: '#1677ff' } },
-        { value: 138.92, itemStyle: { color: '#faad14' } },
-        { value: -6.72, itemStyle: { color: '#722ed1' } },
-        { value: -42.86, itemStyle: { color: '#f5222d' } }
+        { value: -48.32, itemStyle: { color: chartColors.positive } },
+        { value: -126.74, itemStyle: { color: chartColors.primary } },
+        { value: 138.92, itemStyle: { color: chartColors.warning } },
+        { value: -6.72, itemStyle: { color: chartPalette[4] } },
+        { value: -42.86, itemStyle: { color: chartColors.negative } }
       ],
       label: { show: true, position: 'top', formatter: '{c}' },
       itemStyle: { borderRadius: [4, 4, 0, 0] }
@@ -619,7 +620,7 @@ onBeforeUnmount(() => {
   width: 160px;
 }
 .selected-row {
-  background: #e6f4ff;
+  background: var(--theme-accent-light);
 }
 .residue-list {
   display: flex;
@@ -656,7 +657,7 @@ onBeforeUnmount(() => {
   font-size: 13px;
   line-height: 1.8;
   word-break: break-all;
-  color: #1677ff;
+  color: var(--theme-accent);
   min-height: 72px;
 }
 .peptide-meta {

@@ -42,8 +42,10 @@ test('5 个直达页必须在命令面板可达', () => {
   }
 })
 
-test('直达页导航在移动端底部 Tab 中隐藏，避免底部项过多', () => {
+test('直达页导航在移动端抽屉中仍可达，入口不再被隐藏', () => {
   const appShell = readSource('src/components/layout/AppShell.vue')
-  assert.equal(appShell.includes('sidebar-design-nav'), true)
-  assert.equal(appShell.includes('.sidebar-design-nav'), true)
+  // 移动端由「底部 Tab 隐藏设计导航」改为「抽屉复用同一套导航」，入口零丢失
+  assert.equal(appShell.includes('sidebar-nav sidebar-design-nav'), true)
+  assert.equal(appShell.includes('.mobile-topbar {'), true)
+  assert.equal(appShell.includes('.sidebar-footer {\n    display: none;'), false)
 })

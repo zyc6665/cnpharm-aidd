@@ -72,7 +72,10 @@ export function buildTaskEventStreamUrl(
     params.push(`max_seconds=${options.maxSeconds}`)
   }
   const query = params.length > 0 ? `?${params.join('&')}` : ''
-  return `${resolveBaseUrl(options.baseUrl)}/api/v1/tasks/${taskId}/events${query}`
+  const base = resolveBaseUrl(options.baseUrl)
+  // VITE_API_BASE_URL 已包含 API 前缀；不能再重复拼接。
+  const prefix = base || '/api/v1'
+  return `${prefix}/tasks/${taskId}/events${query}`
 }
 
 function parsePayload<T>(raw: string): T | null {

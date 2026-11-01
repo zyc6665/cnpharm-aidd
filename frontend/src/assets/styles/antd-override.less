@@ -58,7 +58,7 @@
   --ant-primary-color-hover: #1D4ED8;
   --ant-primary-color-active: #1E40AF;
 
-  --ant-body-background: #f8fafc;
+  --ant-body-background: #f1f5f9;
   --ant-component-background: #ffffff;
   --ant-popover-background: #ffffff;
   --ant-text-color: #0f172a;
@@ -75,6 +75,78 @@
 
   --ant-select-dropdown-bg: #ffffff;
   --ant-select-background: #ffffff;
+}
+
+// ═══════════════════════════════════════════════
+// 组件密度统一（阶段 1 §1.3）
+// ═══════════════════════════════════════════════
+// 统一在全局覆写，视图层不再各写 :deep(.ant-card / .ant-table / .ant-form)：
+//   · 卡片：圆角 8px、内边距 @spacing-lg、标题 16px/600、次级文字 13px
+//   · 表格：中等密度 13px；数字列 tabular-nums（右对齐见 .num-cell / align:'right'）
+//   · 表单：标签 13px @text-secondary，说明文字 12px
+
+// ── 卡片 ──
+.ant-card {
+  border-radius: @border-radius-md;
+
+  .ant-card-head {
+    min-height: 48px;
+    padding: 0 @spacing-lg;
+    border-bottom-color: @border-subtle;
+
+    .ant-card-head-title {
+      font-size: @font-size-md;
+      font-weight: @font-weight-semibold;
+    }
+  }
+
+  .ant-card-body {
+    padding: @spacing-lg;
+  }
+
+  .ant-card-extra {
+    font-size: @font-size-sm;
+    color: @text-secondary;
+  }
+}
+
+// 小尺寸卡片（size="small"）降低一档内边距
+.ant-card-small {
+  > .ant-card-head {
+    min-height: 40px;
+    padding: 0 @spacing-md;
+  }
+
+  > .ant-card-body {
+    padding: @spacing-md;
+  }
+}
+
+// ── 表格 ──
+.ant-table {
+  font-size: 13px;
+
+  .ant-table-thead > tr > th {
+    font-size: 13px;
+    font-weight: @font-weight-semibold;
+    color: @text-secondary;
+  }
+
+  .ant-table-tbody > tr > td,
+  .ant-table-tbody > tr > th {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+// ── 表单 ──
+.ant-form-item-label > label {
+  font-size: 13px;
+  color: @text-secondary;
+}
+
+.ant-form-item-extra,
+.ant-form-item-explain {
+  font-size: 12px;
 }
 
 // ── 空状态统一观感 ──

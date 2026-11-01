@@ -163,7 +163,7 @@ test('审计页查询失败必须显式呈现错误态，不能静默成空表',
   const page = readSource('src/views/admin/Audit.vue')
 
   assert.equal(page.includes('errorMessage'), true)
-  assert.equal(page.includes('type="error"'), true)
+  assert.equal(page.includes('AppInlineError'), true)
   assert.equal(page.includes("t('admin.audit.loadError')"), true)
   assert.equal(page.includes('retryLoad'), true)
 })
