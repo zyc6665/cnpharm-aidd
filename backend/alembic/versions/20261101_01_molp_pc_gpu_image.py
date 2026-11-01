@@ -61,6 +61,14 @@ def _rewrite(config: dict, *, digest: str, cuda: str) -> dict:
 
 def _update(*, digest: str, cuda: str) -> None:
     bind = op.get_bind()
+    # 本迁移必须能在「从更早版本逐步升级上来的空库/半成品库」上跑通：
+    # 那类库里 `tools`/`tool_versions` 可能尚未建出（仓库里有若干用例从
+    # 20260730_02 起的局部 schema 一路 upgrade 到 head）。此时本迁移无事可做，
+    # 直接返回，绝不能抛「no such table」。
+    existing = set(sa.inspect(bind).get_table_names())
+    if "tools" not in existing or "tool_versions" not in existing:
+        return
+
     rows = bind.execute(
         sa.text(
             """
