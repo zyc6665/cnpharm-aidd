@@ -544,6 +544,12 @@ class Settings(BaseSettings):
     # 到点后前端凭 Last-Event-ID 重连续订（docs/12 HA-T-06）。
     TASK_EVENT_MAX_DURATION_SECONDS: int = 1800
     TASK_EVENT_INCLUDE_LOGS: bool = True
+    # 容器日志归档：任务进入终态时把 Pod 日志抓一次写进 task_logs，
+    # 让「看日志」不再依赖 Pod 是否还活着，Job 的保留时长也才能调短。
+    # 关掉它等于回到「TTL 一到日志永久消失」，生产不应关闭。
+    TASK_LOG_HARVEST_ENABLED: bool = True
+    # 单任务最多归档多少字节；超出部分截断并标注，避免刷屏模型撑爆日志表。
+    TASK_LOG_MAX_BYTES: int = 2_000_000
     # 卡位调度（docs/09 §5.6、docs/13 §4.1）：卡位由 slots.yaml 静态声明，
     # 状态由 drp-node-agent 维护并上报，平台只消费与展示。
     # 内联 YAML 优先于文件路径；两者都为空时按「无卡位」启动，回退到本机 GPU 探测。
@@ -587,6 +593,11 @@ class Settings(BaseSettings):
     K8S_ADAPTER_CREDENTIAL_REF: Optional[str] = None
     K8S_ADAPTER_SERVICE_ACCOUNT: Optional[str] = None
     K8S_ADAPTER_JOB_NAME_PREFIX: str = "sciminer"
+    # 已结束的 Job（及其 Pod）保留多久。Pod 一删容器日志就没了，所以这个值只在
+    # TASK_LOG_HARVEST_ENABLED 把日志落库之后才能安全调短。
+    # 默认 1800 秒：够运维在页面上看到刚失败任务的现场，又不至于让
+    # 「每天任务数」等于「常驻 Pod 数」（原默认 24h 会长期堆几百个 Completed Pod）。
+    K8S_ADAPTER_JOB_TTL_SECONDS: int = 1800
     K8S_ADAPTER_API_SERVER: Optional[str] = None
     # 集群外运行时（平台进程跑在 Windows 工作站、算力跑在远程 k3s）用 kubeconfig 拿凭证。
     # 设了它就走集群外模式，否则走 Pod 内 ServiceAccount（生产形态）。

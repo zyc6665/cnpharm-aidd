@@ -219,6 +219,9 @@ def build_kubernetes_runtime(settings: Any) -> KubernetesRuntime | None:
             credential_ref=settings.K8S_ADAPTER_CREDENTIAL_REF,
             service_account=settings.K8S_ADAPTER_SERVICE_ACCOUNT,
             job_name_prefix=settings.K8S_ADAPTER_JOB_NAME_PREFIX,
+            # 已结束 Job 的保留时长。日志已在任务终态时归档进 task_logs
+            # （services/runtime_logs.py），这里不必再留一整天。
+            job_ttl_seconds=settings.K8S_ADAPTER_JOB_TTL_SECONDS,
             object_storage_endpoint=object_storage_endpoint,
             object_storage_bucket=object_storage_bucket,
             object_storage_secret_ref=object_storage_secret_ref,
