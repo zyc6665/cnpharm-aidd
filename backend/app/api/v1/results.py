@@ -110,6 +110,7 @@ async def _load_task(db: AsyncSession, task_id: str) -> Task:
             selectinload(Task.tool).selectinload(Tool.current_version),
             selectinload(Task.inputs),
             selectinload(Task.outputs),
+            selectinload(Task.user),
         )
         .where(Task.id == task_id)
     )
@@ -163,6 +164,9 @@ async def _artifact_outputs(db: AsyncSession, task_id: str) -> list[dict[str, An
 
 def _serialize_result(task: Task) -> dict[str, Any]:
     domain = (task.extra_data or {}).get("domain") or {}
+    # task.user 在结果列表/详情查询中已 selectinload；任务详情页仍用 user_id 兜底，
+    # 避免在未加载关系的调用点触发异步惰性加载（MissingGreenlet）。
+    submitter = task.__dict__.get("user")
     return {
         "task_id": str(task.id),
         "name": task.name,
@@ -172,7 +176,11 @@ def _serialize_result(task: Task) -> dict[str, Any]:
         "tool_id": str(task.tool_id) if task.tool_id else None,
         "tool_name": task.tool.name if task.tool else None,
         "tool_slug": task.tool.slug if task.tool else None,
-        "submitted_by": str(task.user_id) if task.user_id else None,
+        "submitted_by": (
+            (submitter.username or submitter.email or str(task.user_id))
+            if submitter is not None and task.user_id
+            else (str(task.user_id) if task.user_id else None)
+        ),
         "created_at": _iso(task.created_at),
         "started_at": _iso(task.started_at),
         "finished_at": _iso(task.finished_at),
@@ -226,7 +234,7 @@ async def list_project_results(
         fetched = list(
             (
                 await db.execute(
-                    query.options(selectinload(Task.tool))
+                    query.options(selectinload(Task.tool), selectinload(Task.user))
                     .order_by(Task.finished_at.desc(), Task.id.desc())
                     .limit(page_size + 1)
                 )
@@ -255,7 +263,7 @@ async def list_project_results(
     ).scalar_one()
     rows = (
         await db.execute(
-            query.options(selectinload(Task.tool))
+            query.options(selectinload(Task.tool), selectinload(Task.user))
             .order_by(Task.finished_at.desc().nullslast(), Task.created_at.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)
@@ -646,7 +654,7 @@ async def list_candidate_results(
     ).scalar_one()
     rows = (
         await db.execute(
-            query.options(selectinload(Task.tool))
+            query.options(selectinload(Task.tool), selectinload(Task.user))
             .order_by(Task.created_at.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)

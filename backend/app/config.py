@@ -188,6 +188,8 @@ class Settings(BaseSettings):
     APP_VERSION: str = "1.0.0"
     ENVIRONMENT: Literal["development", "staging", "production"] = "development"
     DEBUG: bool = True
+    # Prometheus 指标端点 /metrics。内部部署默认开启；如需在公网入口彻底隐藏可置 false。
+    METRICS_ENABLED: bool = True
 
     # API配置
     API_V1_PREFIX: str = "/api/v1"

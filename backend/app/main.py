@@ -24,6 +24,7 @@ from app.common.time import isoformat_utc, utcnow
 from app.common.trace import TRACE_ID_HEADER, get_trace_id
 from app.middleware import RateLimitMiddleware
 from app.middleware.trace import TraceIdMiddleware
+from app.monitoring.prometheus_metrics import PrometheusMiddleware, metrics_endpoint
 from app.services.audit_sink import configure_audit_db_writer
 from app.tasks.direct_recovery import direct_task_recovery_loop
 from app.tasks.direct_runner import direct_task_runner
@@ -332,6 +333,11 @@ def create_app() -> FastAPI:
 
     application.add_middleware(SecurityHeadersMiddleware)
 
+    # Prometheus 指标：放在 trace 之外、限流之内，能记录到 429 与业务请求；
+    # /metrics 是内部抓取端点，不进 OpenAPI。默认始终开启（内部部署）。
+    if settings.METRICS_ENABLED:
+        application.add_middleware(PrometheusMiddleware)
+
     # traceId 中间件必须**最后注册**，也就是最外层（Starlette 的 ``add_middleware`` 是
     # ``user_middleware.insert(0, ...)``，建栈时再 reverse 包一层）。这样请求路径是
     # TraceId → SecurityHeaders → HTTPS → TrustedHost → CORS → RateLimit → 路由：
@@ -353,6 +359,14 @@ def create_app() -> FastAPI:
 
     # 注册API路由
     application.include_router(api_router, prefix="/api/v1")
+
+    if settings.METRICS_ENABLED:
+        application.add_api_route(
+            "/metrics",
+            metrics_endpoint,
+            methods=["GET"],
+            include_in_schema=False,
+        )
 
     # 根路径
     @application.get("/")
