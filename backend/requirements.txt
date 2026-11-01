@@ -49,7 +49,7 @@ openmm==8.6.1
 psutil==5.9.8
 
 # Utilities
-python-dotenv==1.0.0
+python-dotenv==1.2.2
 
 # Celery 任务队列
 celery[redis]==5.3.6

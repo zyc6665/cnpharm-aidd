@@ -213,6 +213,7 @@ jobs:
       REDIS_PASSWORD: ci-only-redis-password
       MINIO_ROOT_USER: ci-only-minio-user
       MINIO_ROOT_PASSWORD: ci-only-minio-password
+      MINIO_CERTS_DIR: /tmp/ci-minio-certs
       JWT_SECRET_KEY: ci-only-jwt-secret-key-with-at-least-32-characters
       SETTINGS_ENCRYPTION_KEY: ci-only-settings-key-with-at-least-32-characters
       CORS_ORIGINS: '["https://ci.example.invalid"]'
