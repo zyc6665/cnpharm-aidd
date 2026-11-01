@@ -1004,8 +1004,8 @@ export default {
       emptyHint: 'Pockets appear here sorted by score once prediction finishes.',
       rank: 'Rank',
       score: 'Score',
-      volume: 'Volume',
-      center: 'Center',
+      volume: 'Volume (Å³)',
+      center: 'Center (Å)',
       residueCount: 'Residues',
       selected: 'Selection',
       select: 'Select',
@@ -1214,6 +1214,7 @@ export default {
 
   // Compounds / candidates / candidate sets
   compounds: {
+    notCalculated: 'Not computed',
     title: 'Data Assets',
     subtitle: 'Manage compounds, protein structure outputs and datasets in the project',
     backToProject: 'Back to project overview',

@@ -39,7 +39,7 @@
           bordered
         >
           <a-descriptions-item :label="t('targets.list.type')">
-            {{ formatOptionalText(target.target_type) }}
+            {{ formatTargetType(target.target_type) }}
           </a-descriptions-item>
           <a-descriptions-item :label="t('targets.list.uniprot')">
             {{ formatOptionalText(target.uniprot_id) }}
@@ -230,6 +230,7 @@
     formatOptionalText,
     formatPlddtMean,
     formatTargetDateTime,
+    formatTargetType,
     resolveTargetErrorMessage
   } from '@/domain/targets'
   import type {

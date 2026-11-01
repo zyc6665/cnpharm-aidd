@@ -1001,8 +1001,8 @@ export default {
       emptyHint: '口袋预测完成后会在这里按评分排序展示。',
       rank: '排名',
       score: '评分',
-      volume: '体积',
-      center: '中心坐标',
+      volume: '体积 (Å³)',
+      center: '中心坐标 (Å)',
       residueCount: '残基数',
       selected: '选定状态',
       select: '选定',
@@ -1211,6 +1211,7 @@ export default {
 
   // 化合物 / 候选物 / 候选集
   compounds: {
+    notCalculated: '未计算',
     title: '数据资产',
     subtitle: '管理项目内的化合物、蛋白结构产物与数据集',
     backToProject: '返回项目总览',

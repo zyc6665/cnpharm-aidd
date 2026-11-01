@@ -33,9 +33,11 @@
       />
 
       <p v-if="selectedPocket" class="pocket-summary" data-testid="pockets-selected-summary">
-        {{ t('targets.pockets.selectedBadge') }}：#{{ selectedPocket.rank ?? '-' }} ·
-        {{ formatPocketScore(selectedPocket.score) }} ·
-        {{ formatPocketCenter(selectedPocket.center) }}
+        {{ t('targets.pockets.selectedBadge') }}：{{ t('targets.pockets.rank') }}
+        #{{ selectedPocket.rank ?? '-' }} ·
+        {{ t('targets.pockets.score') }} {{ formatPocketScore(selectedPocket.score) }} ·
+        {{ t('targets.pockets.center') }} {{ formatPocketCenter(selectedPocket.center) }} ·
+        {{ t('targets.pockets.volume') }} {{ formatPocketVolume(selectedPocket.volume) }}
       </p>
 
       <AppEmptyState
