@@ -37,12 +37,12 @@ from app.database.session import get_db
 from app.feature_flags import require_feature_flag
 from app.files.remote_access_tokens import create_browser_file_access_token
 from app.files.writer import store_file_bytes
-from app.models.artifacts import Artifact, ArtifactVersion
 from app.models.compounds import Candidate
 from app.models.files import FileSourceType
 from app.models.tasks import Task, TaskStatus
 from app.models.tools import Tool
 from app.models.users import User
+from app.services.artifact_outputs import artifact_outputs_for_task
 from app.services.domain_compounds import require_candidate_read_access
 from app.services.param_diff import (
     MAX_TASKS,
@@ -121,45 +121,14 @@ async def _load_task(db: AsyncSession, task_id: str) -> Task:
 
 
 async def _artifact_outputs(db: AsyncSession, task_id: str) -> list[dict[str, Any]]:
-    artifacts = (
-        await db.execute(
-            select(Artifact)
-            .where(Artifact.source_task_id == task_id)
-            .order_by(Artifact.created_at)
-        )
-    ).scalars().all()
-    # 一次取回这批产物对应的版本行，避免在循环里逐条 db.get（每个产物一次往返）。
-    version_ids = [str(a.latest_version_id) for a in artifacts if a.latest_version_id]
-    versions_by_id: dict[str, ArtifactVersion] = {}
-    if version_ids:
-        rows = await db.execute(
-            select(ArtifactVersion).where(ArtifactVersion.id.in_(version_ids))
-        )
-        versions_by_id = {str(row.id): row for row in rows.scalars().all()}
+    """本任务产出的产物。
 
-    entries: list[dict[str, Any]] = []
-    for artifact in artifacts:
-        version = (
-            versions_by_id.get(str(artifact.latest_version_id))
-            if artifact.latest_version_id
-            else None
-        )
-        entries.append(
-            {
-                "id": str(artifact.id),
-                "artifact_type": artifact.artifact_type,
-                "semantic_type": artifact.semantic_type,
-                "standard_type": artifact.standard_type,
-                "standard_version": artifact.standard_version,
-                "name": artifact.name,
-                "version_id": artifact.latest_version_id,
-                "version": getattr(version, "version", None),
-                "filename": getattr(version, "filename", None),
-                "size_bytes": getattr(version, "size_bytes", None),
-                "sha256": getattr(version, "sha256", None),
-            }
-        )
-    return entries
+    按**版本级**来源解析（``ArtifactVersion.source_task_id``），而不是
+    ``Artifact.source_task_id``——后者是跨任务共享逻辑实体的首建者，用它过滤会
+    让非首建任务一条产物都看不到。参见 ``app.services.artifact_outputs``。
+    """
+    outputs = await artifact_outputs_for_task(db, task_id=task_id)
+    return [output.as_dict() for output in outputs]
 
 
 def _serialize_result(task: Task) -> dict[str, Any]:
@@ -429,32 +398,13 @@ async def _report_payload(
     )
 
     summaries: list[tuple[str, dict[str, Any]]] = []
-    artifacts = (
-        await db.execute(
-            select(Artifact)
-            .where(Artifact.source_task_id == str(task.id))
-            .order_by(Artifact.created_at)
-        )
-    ).scalars().all()
-    version_ids = [str(a.latest_version_id) for a in artifacts if a.latest_version_id]
-    versions_by_id: dict[str, ArtifactVersion] = {}
-    if version_ids:
-        rows = await db.execute(
-            select(ArtifactVersion).where(ArtifactVersion.id.in_(version_ids))
-        )
-        versions_by_id = {str(row.id): row for row in rows.scalars().all()}
-    for artifact in artifacts:
-        if not artifact.latest_version_id:
-            continue
-        version = versions_by_id.get(str(artifact.latest_version_id))
-        if version is None:
-            continue
+    for output in await artifact_outputs_for_task(db, task_id=str(task.id)):
         merged: dict[str, Any] = {}
-        for source in (getattr(version, "metrics_json", None), getattr(version, "summary_json", None)):
+        for source in (output.metrics_json, output.summary_json):
             if isinstance(source, dict):
                 merged.update(source)
         if merged:
-            summaries.append((artifact.name or artifact.semantic_type, merged))
+            summaries.append((output.name or output.semantic_type, merged))
 
     conclusions = extract_conclusions(
         task.outputs.result if task.outputs else None,
