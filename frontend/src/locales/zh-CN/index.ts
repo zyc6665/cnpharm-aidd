@@ -811,7 +811,7 @@ export default {
       },
       sdfToSmiles: {
         title: 'SDF 转 SMILES 表',
-        description: '把配体结构转换为 MolP-PC 和 RDKit 可复用的 molecule_table@1。'
+        description: '把配体结构转换为 MolP-PC 和 RDKit 可复用的 molecule_table{\'@\'}1。'
       },
       rdkitProperties: {
         title: 'RDKit Properties',

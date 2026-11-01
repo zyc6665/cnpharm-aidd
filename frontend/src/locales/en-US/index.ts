@@ -813,7 +813,7 @@ export default {
       },
       sdfToSmiles: {
         title: 'SDF to SMILES Table',
-        description: 'Convert ligand structures into molecule_table@1 for RDKit and MolP-PC reuse.'
+        description: 'Convert ligand structures into molecule_table{\'@\'}1 for RDKit and MolP-PC reuse.'
       },
       rdkitProperties: {
         title: 'RDKit Properties',
