@@ -207,3 +207,38 @@ async def test_harvest_ignores_empty_output(db_session):
         )
     ).scalar()
     assert count == 0
+
+
+@pytest.mark.asyncio
+async def test_harvest_falls_back_to_execution_record_handle(db_session):
+    """句柄只在 ExecutionRecord 上时（Celery 直接派发的 k8s 任务就是这样）也要能归档。
+
+    回归背景：任务元数据里没有 ``external_id``，而托管执行器把句柄写在
+    ``execution_records.external_id``。只查 ``extra_data`` 会一直取到 None，
+    归档于是静默不生效——线上表现为「任务失败但一条容器日志都没有」。
+    """
+    from app.models.executions import ExecutionRecord
+
+    task = _task(external_id=None)
+    db_session.add(task)
+    db_session.add(
+        ExecutionRecord(
+            id="record-1",
+            task_id="task-1",
+            project_id="project-1",
+            requested_by="user-1",
+            tool_package_version_id="tpv-1",
+            idempotency_key="idem-1",
+            adapter_type="k8s_job",
+            external_id="sciminer-model-jobs/sciminer-abc123",
+            status="failed",
+        )
+    )
+    await db_session.flush()
+    task.extra_data = {"execution_record_id": "record-1"}
+
+    service = FakeExecutionService({None: ("from record handle\n", None)})
+    rows = await harvest_task_runtime_logs(db_session, task=task, execution_service=service)
+
+    assert rows == 1
+    assert service.calls[0][1] == "sciminer-model-jobs/sciminer-abc123"
