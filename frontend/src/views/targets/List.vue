@@ -69,7 +69,7 @@
               </router-link>
             </template>
             <template v-else-if="column.key === 'targetType'">
-              <a-tag v-if="record.target_type" color="blue">{{ record.target_type }}</a-tag>
+              <a-tag v-if="record.target_type" color="blue">{{ formatTargetType(record.target_type) }}</a-tag>
               <span v-else class="muted">-</span>
             </template>
             <template v-else-if="column.key === 'uniprot'">
@@ -153,7 +153,12 @@
   import SkeletonList from '@/components/common/SkeletonList.vue'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import { createTarget, listTargets } from '@/api/targets'
-  import { formatOptionalText, formatTargetDateTime, resolveTargetErrorMessage } from '@/domain/targets'
+  import {
+    formatOptionalText,
+    formatTargetDateTime,
+    formatTargetType,
+    resolveTargetErrorMessage
+  } from '@/domain/targets'
   import type { TargetSummary } from '@/types/targets'
 
   const DEFAULT_PAGE_SIZE = 20

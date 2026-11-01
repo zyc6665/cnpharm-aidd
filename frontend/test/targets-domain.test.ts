@@ -5,6 +5,8 @@ import {
   buildStructurePreviewArtifact,
   findSelectedPocket,
   formatPlddtMean,
+  formatSourceType,
+  formatTargetType,
   formatPocketCenter,
   formatTargetDateTime,
   pickStructureFile,
@@ -217,4 +219,19 @@ test('resolveTargetErrorMessage 优先取后端 message，其次 Error.message�
   assert.equal(resolveTargetErrorMessage({}, '提交失败'), '提交失败')
   assert.equal(resolveTargetErrorMessage(null, '提交失败'), '提交失败')
   assert.equal(resolveTargetErrorMessage({ response: { data: { message: '   ' } } }, '提交失败'), '提交失败')
+})
+
+test('formatSourceType 把结构来源枚举翻成中文，未知值原样透出', () => {
+  assert.equal(formatSourceType('PREDICTED'), '预测')
+  assert.equal(formatSourceType('IMPORTED'), '导入')
+  assert.equal(formatSourceType('PREPARED'), '预处理')
+  // 未知枚举宁可露出原始值，也不要吞成 '-' 让人以为是空数据
+  assert.equal(formatSourceType('SYNTHETIC'), 'SYNTHETIC')
+  assert.equal(formatSourceType(null), '-')
+})
+
+test('formatTargetType 把靶点类型枚举翻成中文', () => {
+  assert.equal(formatTargetType('PROTEIN'), '蛋白')
+  assert.equal(formatTargetType('RNA'), 'RNA')
+  assert.equal(formatTargetType(undefined), '-')
 })

@@ -143,12 +143,42 @@ export function buildStructurePreviewArtifact(
   }
 }
 
-/** 结构文件角色的展示标签：后端给的是枚举名，原样透出。 */
+/**
+ * 结构来源的展示标签。
+ *
+ * 后端枚举是 `PREDICTED` / `IMPORTED` / `PREPARED`，直接印在页面上就是内部术语。
+ * 这里翻成中文，未知值原样透出——宁可露出原始枚举，也不要吞成「-」让人以为是空数据。
+ */
+const STRUCTURE_SOURCE_LABELS: Record<string, string> = {
+  PREDICTED: '预测',
+  IMPORTED: '导入',
+  PREPARED: '预处理',
+}
+
 export function formatSourceType(value: string | null | undefined): string {
   if (!value) {
     return PLACEHOLDER
   }
-  return value
+  return STRUCTURE_SOURCE_LABELS[value] ?? value
+}
+
+/**
+ * 靶点类型的展示标签。
+ *
+ * 一期只支持蛋白（`PROTEIN`），但枚举留着其它类型的余地，因此做成映射而不是写死。
+ */
+const TARGET_TYPE_LABELS: Record<string, string> = {
+  PROTEIN: '蛋白',
+  RNA: 'RNA',
+  DNA: 'DNA',
+  SMALL_MOLECULE: '小分子',
+}
+
+export function formatTargetType(value: string | null | undefined): string {
+  if (!value) {
+    return PLACEHOLDER
+  }
+  return TARGET_TYPE_LABELS[value] ?? value
 }
 
 /**

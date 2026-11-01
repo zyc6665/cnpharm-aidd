@@ -82,7 +82,10 @@
           data-testid="assets-compound-table"
         >
           <template #bodyCell="{ column, record }">
-            <template v-if="column.key === 'name'">
+            <template v-if="column.key === 'structure'">
+              <Smiles2DCell :smiles="record.canonical_smiles || ''" :width="120" />
+            </template>
+            <template v-else-if="column.key === 'name'">
               <router-link :to="compoundRoute(record.id)">
                 {{ record.name || record.inchikey }}
               </router-link>
@@ -91,10 +94,10 @@
               <span class="mono-cell">{{ record.canonical_smiles }}</span>
             </template>
             <template v-else-if="column.key === 'mol_weight'">
-              {{ formatPropertyValue('mol_weight', record.mol_weight) }}
+              {{ propertyText('mol_weight', record.mol_weight) }}
             </template>
             <template v-else-if="column.key === 'qed'">
-              {{ formatPropertyValue('QED', record.props?.QED) }}
+              {{ propertyText('QED', record.props?.QED) }}
             </template>
             <template v-else-if="column.key === 'created_at'">
               {{ formatDate(record.created_at) }}
@@ -340,6 +343,7 @@
     importCompounds,
     listCompounds
   } from '@/api/compounds'
+  import Smiles2DCell from '@/components/tasks/Smiles2DCell.vue'
   import { formatPropertyValue } from '@/domain/compounds'
   import type { AssetItem } from '@/types/assets'
   import type {
@@ -397,7 +401,21 @@
       datasets.value.length > 0
   )
 
+  /**
+   * 性质列的空值文案。
+   *
+   * 资产表里一列全是 `-` 时，用户分不清「这个分子还没算性质」还是「算过但为空」。
+   * RDKit 描述符只在导入或手动刷新时计算，所以「未计算」才是真实语义。
+   */
+  function propertyText(key: 'mol_weight' | 'QED', value: number | null | undefined): string {
+    if (value === null || value === undefined || Number.isNaN(value)) {
+      return t('compounds.notCalculated')
+    }
+    return formatPropertyValue(key, value)
+  }
+
   const compoundColumns = computed(() => [
+    { title: t('compounds.columns.structure'), key: 'structure', width: 140 },
     { title: t('compounds.columns.name'), key: 'name', width: 220 },
     { title: t('compounds.columns.inchikey'), dataIndex: 'inchikey', key: 'inchikey', width: 200 },
     { title: t('compounds.columns.smiles'), key: 'smiles', width: 220 },

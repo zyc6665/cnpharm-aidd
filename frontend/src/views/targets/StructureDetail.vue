@@ -68,13 +68,14 @@
                 v-if="backTargetId"
                 :to="`/targets/${backTargetId}`"
                 data-testid="structure-target-link"
+                :title="structure.protein_id"
               >
-                {{ structure.protein_id }}
+                {{ backProteinName || structure.protein_id }}
               </router-link>
               <span v-else class="mono">{{ structure.protein_id }}</span>
             </a-descriptions-item>
             <a-descriptions-item :label="t('targets.structure.sourceType')">
-              {{ formatOptionalText(structure.source_type) }}
+              {{ formatSourceType(structure.source_type) }}
             </a-descriptions-item>
             <a-descriptions-item :label="t('targets.structure.plddt')">
               <span data-testid="structure-plddt">{{ formatPlddtMean(structure.plddt_mean) }}</span>
@@ -161,6 +162,7 @@
     formatOptionalText,
     formatPlddtMean,
     formatPocketScore,
+    formatSourceType,
     formatToolRef,
     pocketScoreTone,
     resolveTargetErrorMessage,
@@ -196,6 +198,8 @@
   })
 
   const backTargetId = ref('')
+  // 蛋白名单独留一份：详情里显示 UUID 对使用者没有意义，链接文字用名字、悬停看 id。
+  const backProteinName = ref('')
 
   const previewFileRoles = [...STRUCTURE_PREVIEW_FILE_ROLES]
 
@@ -212,8 +216,10 @@
     try {
       const response = await getProtein(proteinId)
       backTargetId.value = response.data.target_id
+      backProteinName.value = response.data.name
     } catch {
       backTargetId.value = ''
+      backProteinName.value = ''
     }
   }
 

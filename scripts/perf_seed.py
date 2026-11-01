@@ -313,6 +313,10 @@ async def run_seed(args: argparse.Namespace) -> int:
                     status = "success"
                     finished = collision_ts
                     started = collision_ts - timedelta(seconds=30)
+                    # collision_ts 是固定时刻，而 created 是按 now 倒推的，两者会错开一小时。
+                    # 时间线必须满足 created <= started <= finished，否则页面上会出现
+                    # 「开始时间早于创建时间」这种不可能的顺序。
+                    created = finished - timedelta(seconds=90)
                     progress = 100.0
                 else:
                     roll = rng.random()

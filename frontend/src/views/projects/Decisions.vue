@@ -149,7 +149,7 @@
               <span class="decisions-record__meta-item">
                 {{ t('decisions.timeline.subject') }}:
                 {{ t(resolveDecisionSubjectLabel(record).typeKey) }}
-                {{ resolveDecisionSubjectLabel(record).subjectId }}
+                <span :title="record.subject_id">{{ resolveSubjectText(record) }}</span>
               </span>
               <a-tag color="green">
                 {{ t('decisions.timeline.selected', { count: recordCounts(record).selected }) }}
@@ -376,6 +376,7 @@
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import SkeletonList from '@/components/common/SkeletonList.vue'
   import { createProjectDecision, getProjectStage, listProjectDecisions } from '@/api/decisions'
+  import { listCandidateSets } from '@/api/compounds'
   import {
     DECISION_POINT_OPTIONS,
     DECISION_SUBJECT_TYPE_OPTIONS,
@@ -525,6 +526,34 @@
 
   /* 加载 */
 
+  // 决策对象的名字。后端只存 subject_id，直接印 UUID 对使用者没有意义；
+  // 候选集是本页最常见的对象，按项目把「id → 名称」拉一次即可，其余类型退化为短 id。
+  const subjectNames = ref<Record<string, string>>({})
+
+  async function loadSubjectNames(): Promise<void> {
+    if (!projectId.value) {
+      return
+    }
+    try {
+      const response = await listCandidateSets(projectId.value, { page: 1, page_size: 100 })
+      const mapping: Record<string, string> = {}
+      for (const item of response.data.items) {
+        mapping[item.id] = item.name
+      }
+      subjectNames.value = mapping
+    } catch {
+      subjectNames.value = {}
+    }
+  }
+
+  function resolveSubjectText(record: DecisionRecord): string {
+    const name = subjectNames.value[record.subject_id]
+    if (name) {
+      return name
+    }
+    return record.subject_id ? `${record.subject_id.slice(0, 8)}…` : placeHolder
+  }
+
   async function loadStage(): Promise<void> {
     if (!projectId.value) {
       return
@@ -569,6 +598,7 @@
 
   function loadAll(): void {
     void loadStage()
+    void loadSubjectNames()
     void loadDecisions()
   }
 

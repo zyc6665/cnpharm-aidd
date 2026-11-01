@@ -66,10 +66,18 @@ test('项目工作台导航 active 规则支持普通项目路径和任务中心
 
   assert.equal(
     isProjectWorkspaceNavItemActive(overview!, {
-      currentPath: '/projects/project-1/settings',
+      currentPath: '/projects/project-1',
       currentProjectId: 'project-1'
     }),
     true
+  )
+  // 项目总览的路径是所有子页的前缀：进子页时只能高亮子页，不能连总览一起亮。
+  assert.equal(
+    isProjectWorkspaceNavItemActive(overview!, {
+      currentPath: '/projects/project-1/settings',
+      currentProjectId: 'project-1'
+    }),
+    false
   )
   assert.equal(
     isProjectWorkspaceNavItemActive(targets!, {

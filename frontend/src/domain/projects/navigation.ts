@@ -78,5 +78,11 @@ export function isProjectWorkspaceNavItemActive(
     return location.currentPath === '/tasks' && location.queryProjectId === location.currentProjectId
   }
 
+  if (item.key === 'overview') {
+    // 项目总览的地址是所有子页的前缀（`/projects/:id`），必须精确匹配，
+    // 否则进任何子页都会同时高亮「项目总览」，看起来像两条都被选中。
+    return location.currentPath === item.to
+  }
+
   return location.currentPath === item.to || location.currentPath.startsWith(`${item.to}/`)
 }
