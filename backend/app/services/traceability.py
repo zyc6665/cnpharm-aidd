@@ -33,6 +33,7 @@ from app.models.files import File as FileModel
 from app.models.tasks import Task, TaskInput, TaskLog
 from app.models.traceability import TaskInputSnapshot
 from app.models.users import User
+from app.services.artifact_outputs import artifact_outputs_for_task
 from app.services.tool_contracts import build_tool_contract
 
 #: Input roles from docs/04 §9.2 (RECEPTOR / LIGAND / SEQUENCE / POCKET / SET)
@@ -439,33 +440,19 @@ async def build_traceability_package(
         await db.execute(select(TaskInput).where(TaskInput.task_id == task_id))
     ).scalar_one_or_none()
 
-    artifact_rows = (
-        await db.execute(
-            select(Artifact)
-            .options()
-            .where(Artifact.source_task_id == task_id)
-            .order_by(Artifact.created_at)
-        )
-    ).scalars().all()
-
     outputs: list[dict[str, Any]] = []
-    for artifact in artifact_rows:
-        version = (
-            await db.get(ArtifactVersion, artifact.latest_version_id)
-            if artifact.latest_version_id
-            else None
-        )
+    for output in await artifact_outputs_for_task(db, task_id=task_id):
         outputs.append(
             {
                 "kind": "artifact",
-                "artifactType": artifact.artifact_type,
-                "semanticType": artifact.semantic_type,
-                "standardType": artifact.standard_type,
-                "standardVersion": artifact.standard_version,
-                "urn": f"artifact:{artifact.latest_version_id}" if artifact.latest_version_id else None,
-                "sha256": getattr(version, "sha256", None),
-                "sizeBytes": getattr(version, "size_bytes", None),
-                "filename": getattr(version, "filename", None),
+                "artifactType": output.artifact_type,
+                "semanticType": output.semantic_type,
+                "standardType": output.standard_type,
+                "standardVersion": output.standard_version,
+                "urn": f"artifact:{output.version_id}",
+                "sha256": output.sha256,
+                "sizeBytes": output.size_bytes,
+                "filename": output.filename,
             }
         )
 
