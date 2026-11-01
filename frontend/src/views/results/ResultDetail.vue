@@ -88,7 +88,15 @@
         >
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'name'">
-              {{ record.name || record.filename || record.id }}
+              <strong :title="artifactDisplay(record).title">{{ artifactDisplay(record).title }}</strong>
+              <span
+                v-if="artifactDisplay(record).fileName"
+                class="mono-cell artifact-file-hint"
+                :title="artifactDisplay(record).fileName || undefined"
+              >{{ artifactDisplay(record).fileName }}</span>
+            </template>
+            <template v-else-if="column.key === 'artifact_type'">
+              <span :title="record.artifact_type">{{ artifactDisplay(record).typeLabel }}</span>
             </template>
             <template v-else-if="column.key === 'sha256'">
               <span class="mono-cell">{{ shortHash(record.sha256) }}</span>
@@ -344,6 +352,7 @@
   import { computed, onMounted, ref } from 'vue'
   import { useRoute } from 'vue-router'
   import { useI18n } from 'vue-i18n'
+import { buildArtifactDisplay } from '@/domain/artifacts/presentation'
   import { message } from 'ant-design-vue'
   import { formatDateTimeMinutes } from '@/utils/datetime'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
@@ -354,6 +363,7 @@
   import type {
     ProjectResultDetail,
     ResultInputSnapshot,
+    ResultOutputArtifact,
     TraceabilityInput,
     TraceabilityOutput,
     TraceabilityPackage
@@ -394,6 +404,22 @@
   const outputDataJson = computed(() => JSON.stringify(result.value?.output_data ?? {}, null, 2))
 
   const traceInputRows = computed<TraceabilityInput[]>(() => traceability.value?.inputs ?? [])
+
+  /** 产物展示口径：类型中文名 + 可读标题，文件名降到次要行。 */
+  function artifactDisplay(record: ResultOutputArtifact) {
+    const display = buildArtifactDisplay(
+      {
+        name: record.name,
+        artifactType: record.artifact_type,
+        semanticType: record.semantic_type,
+        standardType: record.standard_type,
+        version: record.version,
+        filename: record.filename
+      },
+      t
+    )
+    return { ...display, typeLabel: t(display.typeKey) }
+  }
 
   const outputColumns = computed(() => [
     { title: t('results.detail.outputs'), dataIndex: 'name', key: 'name', width: 220 },
@@ -562,7 +588,8 @@
     font-size: @font-size-xs;
   }
 
-  .mono-cell {
+  .artifact-file-hint { display: block; color: @text-tertiary; font-size: @font-size-xs; }
+.mono-cell {
     font-family: @font-family-mono;
     font-size: @font-size-xs;
     word-break: break-all;

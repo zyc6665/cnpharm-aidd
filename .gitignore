@@ -93,3 +93,6 @@ backend/.kube/
 
 # Celery 本地运行产物
 backend/celerybeat-schedule*
+
+# 本地构建临时目录（Windows 下 esbuild 需要可写的 TMPDIR）
+frontend/.tmp-build/
