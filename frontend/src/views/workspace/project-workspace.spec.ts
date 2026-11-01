@@ -136,7 +136,10 @@ describe('Project workspace', () => {
     expect(wrapper.text()).toContain('远程执行节点不可用')
     expect(wrapper.text()).toContain('最近 Artifact')
     expect(wrapper.text()).toContain('EGFR 口袋')
-    expect(wrapper.text()).toContain('binding_pocket@1')
+    // 类型显示中文名而不是 ``binding_pocket@1`` 这种协议标识；文件名降到次要行。
+    expect(wrapper.text()).toContain('结合口袋')
+    expect(wrapper.text()).toContain('egfr-pocket.pdb')
+    expect(wrapper.text()).not.toContain('binding_pocket@1')
     expect(wrapper.find('.artifact-row').attributes('href')).toBe(
       '/api/v1/artifacts/artifact-1/versions/artifact-version-1/download'
     )

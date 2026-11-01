@@ -126,6 +126,7 @@ export default {
     emptyArtifacts: 'No artifacts yet',
     emptyArtifactsHint: 'Artifacts are registered automatically when tasks or workflows produce results. The latest version is downloadable here.',
     unknownArtifactType: 'Unknown type',
+    downloadFile: 'Download',
     loadFailed: 'Research workspace failed to load',
     loadFailedHint: 'Latest project data is unavailable. Check your connection and retry.',
     overviewLoadFailed: 'Tasks and artifacts are temporarily unavailable',
@@ -1482,6 +1483,19 @@ export default {
   },
 
   // Results
+  artifacts: {
+    type: {
+      compoundSet: 'Compound set',
+      proteinStructure: 'Protein structure',
+      bindingPocket: 'Binding pocket',
+      ligandStructure: 'Ligand structure',
+      moleculeTable: 'Molecule table',
+      mdTrajectory: 'MD trajectory',
+      runReport: 'Run report',
+      dataset: 'Dataset',
+      unknown: 'Other artifact'
+    }
+  },
   results: {
     title: 'Results',
     subtitle: 'Inspect results, artifacts and traceability packages of finished tasks',

@@ -1,3 +1,4 @@
+import { buildArtifactDisplay } from '@/domain/artifacts/presentation'
 import { formatMonthDayMinutes } from '@/utils/datetime'
 import type { WorkspaceArtifact, WorkspaceAttentionTask, WorkspaceLegacyFile } from '@/api/workspace'
 import type { SystemHealth } from '@/types/models'
@@ -5,9 +6,15 @@ import type { ResearchProject } from '@/types/projects'
 
 export interface RecentWorkspaceArtifactRow {
   id: string
-  name: string
+  /** 用户读得懂的标题：可能是后端可读名，也可能是「类型名 · vN」。 */
+  title: string
+  /** 类型中文名（`分子表`、`结合口袋`…），不再是 `molecule_table@1`。 */
   typeLabel: string
+  /** 真实文件名，作为次要信息保留；没有则为 null。 */
+  fileName: string | null
   sizeBytes: number
+  /** ISO 时间串，由页面按用户时区渲染。 */
+  updatedAt: string
   downloadUrl: string
 }
 
@@ -16,6 +23,8 @@ export interface BuildRecentWorkspaceArtifactRowsOptions {
   legacyFiles: WorkspaceLegacyFile[]
   unknownArtifactTypeLabel: string
   buildArtifactDownloadUrl: (artifactId: string, versionId: string) => string
+  /** i18n 翻译函数；类型名文案由 `artifacts.type.*` 提供。 */
+  translate: (key: string) => string
 }
 
 export function getRecentWorkspaceProjects(
@@ -36,15 +45,31 @@ export function buildRecentWorkspaceArtifactRows({
   artifacts,
   legacyFiles,
   unknownArtifactTypeLabel,
-  buildArtifactDownloadUrl
+  buildArtifactDownloadUrl,
+  translate
 }: BuildRecentWorkspaceArtifactRowsOptions): RecentWorkspaceArtifactRow[] {
-  const standardArtifacts = artifacts.map(artifact => ({
-    id: artifact.id,
-    name: artifact.name,
-    typeLabel: getWorkspaceArtifactTypeLabel(artifact, unknownArtifactTypeLabel),
-    sizeBytes: artifact.latest_version.size_bytes,
-    downloadUrl: buildArtifactDownloadUrl(artifact.id, artifact.latest_version.id)
-  }))
+  const standardArtifacts = artifacts.map(artifact => {
+    const display = buildArtifactDisplay(
+      {
+        name: artifact.name,
+        artifactType: artifact.artifact_type,
+        semanticType: artifact.semantic_type,
+        standardType: artifact.standard_type,
+        version: artifact.latest_version.version,
+        filename: artifact.latest_version.filename
+      },
+      translate
+    )
+    return {
+      id: artifact.id,
+      title: display.title,
+      typeLabel: translate(display.typeKey),
+      fileName: display.fileName,
+      sizeBytes: artifact.latest_version.size_bytes,
+      updatedAt: artifact.updated_at,
+      downloadUrl: buildArtifactDownloadUrl(artifact.id, artifact.latest_version.id)
+    }
+  })
 
   if (standardArtifacts.length) {
     return standardArtifacts.slice(0, 6)
@@ -52,9 +77,11 @@ export function buildRecentWorkspaceArtifactRows({
 
   return legacyFiles.slice(0, 6).map(file => ({
     id: file.id,
-    name: file.filename,
+    title: file.filename,
     typeLabel: file.content_type || unknownArtifactTypeLabel,
+    fileName: file.filename,
     sizeBytes: file.size_bytes,
+    updatedAt: file.updated_at,
     downloadUrl: `/api/v1/files/${file.id}/download`
   }))
 }
@@ -81,12 +108,3 @@ export function hasWorkspaceSchemaMigrationHealthIssue(
   )
 }
 
-function getWorkspaceArtifactTypeLabel(
-  artifact: WorkspaceArtifact,
-  unknownArtifactTypeLabel: string
-): string {
-  if (artifact.standard_type) {
-    return `${artifact.standard_type}@${artifact.standard_version ?? 1}`
-  }
-  return artifact.semantic_type || artifact.artifact_type || unknownArtifactTypeLabel
-}

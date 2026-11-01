@@ -42,6 +42,13 @@ function createTask(input: {
   }
 }
 
+const fakeTranslate = (key: string): string =>
+  ({
+    'artifacts.type.bindingPocket': '结合口袋',
+    'artifacts.type.moleculeTable': '分子表',
+    'artifacts.type.unknown': '其他产物'
+  })[key] ?? key
+
 const artifact: WorkspaceArtifact = {
   id: 'artifact-1',
   project_id: 'project-1',
@@ -90,15 +97,18 @@ test('工作台 Artifact 展示优先使用标准 Artifact，缺失时回退 leg
     artifacts: [artifact],
     legacyFiles: [legacyFile],
     unknownArtifactTypeLabel: '未知类型',
-    buildArtifactDownloadUrl: (artifactId, versionId) => `/artifacts/${artifactId}/${versionId}`
+    buildArtifactDownloadUrl: (artifactId, versionId) => `/artifacts/${artifactId}/${versionId}`,
+    translate: fakeTranslate
   })
 
   assert.deepEqual(standardRows, [
     {
       id: 'artifact-1',
-      name: 'Pocket',
-      typeLabel: 'pocket.pdb@2',
+      title: 'Pocket',
+      typeLabel: '其他产物',
+      fileName: 'pocket.pdb',
       sizeBytes: 2048,
+      updatedAt: '2026-08-05T00:00:00Z',
       downloadUrl: '/artifacts/artifact-1/version-1'
     }
   ])
@@ -107,15 +117,18 @@ test('工作台 Artifact 展示优先使用标准 Artifact，缺失时回退 leg
     artifacts: [],
     legacyFiles: [legacyFile],
     unknownArtifactTypeLabel: '未知类型',
-    buildArtifactDownloadUrl: (artifactId, versionId) => `/artifacts/${artifactId}/${versionId}`
+    buildArtifactDownloadUrl: (artifactId, versionId) => `/artifacts/${artifactId}/${versionId}`,
+    translate: fakeTranslate
   })
 
   assert.deepEqual(legacyRows, [
     {
       id: 'file-1',
-      name: 'legacy.pdb',
+      title: 'legacy.pdb',
       typeLabel: 'chemical/x-pdb',
+      fileName: 'legacy.pdb',
       sizeBytes: 4096,
+      updatedAt: '2026-08-05T00:00:00Z',
       downloadUrl: '/api/v1/files/file-1/download'
     }
   ])

@@ -125,6 +125,7 @@ export default {
     emptyArtifacts: '暂无 Artifact',
     emptyArtifactsHint: '任务或工作流产出结果后会自动登记为 Artifact，可在此直接下载最新版本。',
     unknownArtifactType: '未知类型',
+    downloadFile: '下载',
     loadFailed: '研究工作台加载失败',
     loadFailedHint: '无法获取最新项目数据，请检查网络后重试。',
     overviewLoadFailed: '任务与 Artifact 暂时不可用',
@@ -1477,6 +1478,19 @@ export default {
   },
 
   // 结果中心
+  artifacts: {
+    type: {
+      compoundSet: '化合物集合',
+      proteinStructure: '蛋白结构',
+      bindingPocket: '结合口袋',
+      ligandStructure: '配体结构',
+      moleculeTable: '分子表',
+      mdTrajectory: '动力学轨迹',
+      runReport: '运行报告',
+      dataset: '数据集',
+      unknown: '其他产物'
+    }
+  },
   results: {
     title: '结果中心',
     subtitle: '查看项目内已完成任务的结果、产物与追溯包',

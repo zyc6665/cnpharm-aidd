@@ -117,11 +117,19 @@
               class="artifact-row"
             >
               <FileOutlined />
-              <div>
-                <strong>{{ artifact.name }}</strong>
-                <span>{{ artifact.typeLabel }}</span>
+              <div class="artifact-main">
+                <strong :title="artifact.title">{{ artifact.title }}</strong>
+                <span class="artifact-meta">
+                  <em class="artifact-type">{{ artifact.typeLabel }}</em>
+                  <span
+                    v-if="artifact.fileName"
+                    class="artifact-file mono-cell"
+                    :title="artifact.fileName"
+                  >{{ artifact.fileName }}</span>
+                  <span>{{ formatSize(artifact.sizeBytes) }}</span>
+                </span>
               </div>
-              <small>{{ formatSize(artifact.sizeBytes) }}</small>
+              <time>{{ formatTime(artifact.updatedAt) }}</time>
             </a>
           </div>
           <AppEmptyState
@@ -194,7 +202,8 @@ const recentArtifacts = computed<RecentWorkspaceArtifactRow[]>(() =>
     artifacts: artifacts.value,
     legacyFiles: legacyFiles.value,
     unknownArtifactTypeLabel: t('workspace.unknownArtifactType'),
-    buildArtifactDownloadUrl: buildArtifactVersionDownloadUrl
+    buildArtifactDownloadUrl: buildArtifactVersionDownloadUrl,
+    translate: t
   })
 )
 
@@ -308,6 +317,11 @@ onMounted(() => { void loadWorkspace() })
 .status-row span, .artifact-row span, .status-row time, .artifact-row small { color: @text-tertiary; font-size: @font-size-xs; }
 .status-row time { white-space: nowrap; }
 .artifact-row :deep(.anticon) { color: @accent-color; font-size: @font-size-lg; }
+.artifact-main { min-width: 0; }
+.artifact-meta { display: flex; align-items: center; gap: @spacing-xs; min-width: 0; }
+.artifact-type { flex: none; padding: 0 6px; border-radius: 9px; background: @bg-hover; color: @accent-color; font-style: normal; line-height: 18px; }
+.artifact-file { min-width: 0; font-family: @font-family-mono; }
+.artifact-row time { color: @text-tertiary; font-size: @font-size-xs; white-space: nowrap; }
 
 @media (max-width: @screen-md) {
   .workspace-columns { grid-template-columns: 1fr; gap: @spacing-lg; }
