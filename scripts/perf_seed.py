@@ -299,7 +299,7 @@ async def run_seed(args: argparse.Namespace) -> int:
         collision_ts = now - timedelta(hours=1)  # 第 1 项目碰撞组的统一 finished_at
         project_task_ids: dict[str, list[str]] = {pid: [] for pid in project_ids}
         terminal_counts: dict[str, int] = {pid: 0 for pid in project_ids}
-        status_hits = {s: 0 for s in ("success", "failure", "canceled", "timeout", "running", "queued", "pending")}
+        status_hits = {s: 0 for s in ("SUCCESS", "FAILURE", "CANCELED", "TIMEOUT", "RUNNING", "QUEUED", "PENDING")}
 
         for pi, pid in enumerate(project_ids):
             n = args.tasks_per_project
@@ -310,7 +310,7 @@ async def run_seed(args: argparse.Namespace) -> int:
 
                 # 第 1 项目前 collision_rows 个任务：同一 finished_at，用于 keyset 不重不漏校验
                 if pi == 0 and ti < args.collision_rows:
-                    status = "success"
+                    status = "SUCCESS"
                     finished = collision_ts
                     started = collision_ts - timedelta(seconds=30)
                     # collision_ts 是固定时刻，而 created 是按 now 倒推的，两者会错开一小时。
@@ -321,19 +321,19 @@ async def run_seed(args: argparse.Namespace) -> int:
                 else:
                     roll = rng.random()
                     if roll < 0.70:
-                        status = "success"
+                        status = "SUCCESS"
                     elif roll < 0.80:
-                        status = "failure"
+                        status = "FAILURE"
                     elif roll < 0.85:
-                        status = "canceled"
+                        status = "CANCELED"
                     elif roll < 0.88:
-                        status = "timeout"
+                        status = "TIMEOUT"
                     elif roll < 0.92:
-                        status = "running"
+                        status = "RUNNING"
                     elif roll < 0.97:
-                        status = "queued"
+                        status = "QUEUED"
                     else:
-                        status = "pending"
+                        status = "PENDING"
                     if status in TERMINAL_STATUSES:
                         finished = min(now, created + timedelta(seconds=rng.randint(5, 900)))
                         started = created + timedelta(seconds=rng.randint(0, 4))

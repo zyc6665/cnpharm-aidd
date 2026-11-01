@@ -249,22 +249,6 @@
                 </div>
               </div>
 
-              <!-- 运行日志 -->
-              <div class="info-card">
-                <h3 class="card-title">
-                  <FileTextOutlined />
-                  {{ t('tasks.logs') }}
-                  <a-button
-                    type="link"
-                    size="small"
-                    :loading="logsLoading"
-                    @click="fetchLogs"
-                  >
-                    <ReloadOutlined />
-                  </a-button>
-                </h3>
-                <TaskLogPreview :logs="logs" :max-items="0" />
-              </div>
             </a-col>
 
             <!-- 右侧：工具信息 -->
@@ -304,6 +288,24 @@
                 />
               </div>
 
+              <!-- 运行日志：默认折叠、限高滚动。日志是排障时才看的，不该把整页拉到几千像素 -->
+              <div class="info-card log-card" data-testid="task-log-card">
+                <a-collapse ghost :bordered="false" v-model:activeKey="logCollapseKeys">
+                  <a-collapse-panel key="logs" :header="t('tasks.logs')">
+                    <template #extra>
+                      <a-space :size="4">
+                        <span class="log-count">{{ t('tasks.logCount', { count: logs.length }) }}</span>
+                        <a-button type="link" size="small" :loading="logsLoading" @click.stop="fetchLogs">
+                          <ReloadOutlined />
+                        </a-button>
+                      </a-space>
+                    </template>
+                    <div class="log-scroll">
+                      <TaskLogPreview :logs="logs" :max-items="0" />
+                    </div>
+                  </a-collapse-panel>
+                </a-collapse>
+              </div>
             </a-col>
           </a-row>
         </div>
@@ -325,7 +327,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -341,7 +343,6 @@ import {
   FieldTimeOutlined,
   SettingOutlined,
   FileOutlined,
-  FileTextOutlined,
   ReloadOutlined,
   ToolOutlined,
   PlayCircleOutlined
@@ -488,6 +489,13 @@ const {
   task,
   fetchTaskDetail,
   updateTaskProgress: tasksStore.updateTaskProgress
+})
+
+// 日志默认收起。任务处于运行中或失败时自动展开，省一次点击。
+const logCollapseKeys = ref<string[]>(['logs'])
+watch(taskStatus, (status) => {
+  const shouldOpen = ['running', 'failure', 'timeout', 'queued'].includes(String(status))
+  logCollapseKeys.value = shouldOpen ? ['logs'] : []
 })
 
 const handleCancel = () => {
@@ -688,6 +696,31 @@ onUnmounted(() => {
 
 .reservation-notice {
   margin-bottom: @spacing-xl;
+}
+
+// 运行日志卡片
+.log-card {
+  margin-top: @spacing-lg;
+
+  :deep(.ant-collapse-header) {
+    padding: 0 !important;
+    align-items: center;
+  }
+
+  :deep(.ant-collapse-content-box) {
+    padding: 8px 0 0 !important;
+  }
+}
+
+.log-count {
+  color: @text-tertiary;
+  font-size: @font-size-xs;
+}
+
+.log-scroll {
+  max-height: 360px;
+  overflow: auto;
+  padding-right: 4px;
 }
 
 // 信息卡片

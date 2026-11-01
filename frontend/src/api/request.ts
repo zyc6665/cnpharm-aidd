@@ -33,6 +33,14 @@ const request: AxiosInstance = axios.create({
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json'
+  },
+  // 数组参数必须序列化成重复键（tool_slugs=a&tool_slugs=b）。
+  // axios 默认会序列化成 tool_slugs[]=a&tool_slugs[]=b，而 FastAPI 的
+  // `Query(None)` 列表参数只认重复键——方括号形式会被当成未知参数**静默忽略**，
+  // 于是「按工具过滤」退化成「不过滤」，返回全量任务且不报错。
+  // indexes: null 即「不写下标、重复键」，与 FastAPI/Starlette 的解析一致。
+  paramsSerializer: {
+    indexes: null
   }
 })
 

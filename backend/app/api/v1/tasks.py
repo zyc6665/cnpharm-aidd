@@ -326,6 +326,9 @@ async def list_tasks(
     ),
     status: Optional[str] = None,
     tool_id: Optional[str] = None,
+    tool_slugs: Optional[list[str]] = Query(
+        None, description="按工具 slug 集合筛选（设计任务页按类别拉取）"
+    ),
     keyword: Optional[str] = None,
     project_id: Optional[str] = Query(None, min_length=1, max_length=36),
     created_from: Optional[datetime] = Query(None, description="创建时间起点"),
@@ -359,6 +362,7 @@ async def list_tasks(
             view=view,
             status=status,
             tool_id=tool_id,
+            tool_slugs=tuple(tool_slugs) if tool_slugs else None,
             keyword=keyword,
             project_id=project_id,
             created_from=created_from,

@@ -6,6 +6,7 @@ import { getWorkspaceOverview } from '@/api/workspace'
 import { listProjects } from '@/api/projects'
 import { getSystemHealth } from '@/api/system'
 
+vi.mock('@/api/tasks', () => ({ getTaskCounts: vi.fn() }))
 vi.mock('@/api/workspace', () => ({ getWorkspaceOverview: vi.fn() }))
 vi.mock('@/api/projects', () => ({ listProjects: vi.fn(), createProject: vi.fn() }))
 vi.mock('@/api/system', () => ({ getSystemHealth: vi.fn() }))
