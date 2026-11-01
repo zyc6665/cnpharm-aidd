@@ -1,11 +1,8 @@
-export type ArtifactType =
-  | 'protein_structure'
-  | 'binding_pocket'
-  | 'pocket_result'
-  | 'ligand_structure'
-  | 'molecule_table'
-  | 'file'
-  | 'run_report'
+import type { AssetArtifactType } from './enums.generated'
+import type { CursorPageMeta } from './models'
+
+// 契约枚举统一来自 codegen 产物（计划 §3.2，勿手改）。
+export type { AssetArtifactType } from './enums.generated'
 
 export interface ArtifactVersionFile {
   id: string
@@ -40,7 +37,9 @@ export interface ArtifactVersion {
 export interface TypedArtifact {
   id: string
   project_id: string
-  artifact_type: ArtifactType | (string & {})
+  // 反序列化边界：后端已收敛为受控 8 值，但历史响应仍可能带 `type@version`/旧别名，
+  // 这里保留 `(string & {})` 供边界容错；渲染分派处必须用类型守卫收窄，不能直接断言。
+  artifact_type: AssetArtifactType | (string & {})
   semantic_type: string
   standard_type?: string | null
   standard_version?: number | null
@@ -54,8 +53,12 @@ export interface TypedArtifact {
   [key: string]: unknown
 }
 
-export interface ArtifactListResponse {
+export interface ArtifactListResponse extends CursorPageMeta {
   items: TypedArtifact[]
+  total?: number
+  page?: number
+  page_size?: number
+  total_pages?: number
 }
 
 export type ArtifactLineageGraphNodeKind =
@@ -130,7 +133,7 @@ export interface ArtifactLineageGraph {
 
 export interface ArtifactUploadInput {
   file: File
-  artifact_type: ArtifactType | string
+  artifact_type: AssetArtifactType
   semantic_type: string
   standard_type?: string
   standard_version?: number

@@ -18,13 +18,60 @@ export interface ProjectArtifactListParams {
   metadata_evidence_level?: string
   metadata_endpoint_ref?: string
   metadata_applicability_domain_status?: string
+  page?: number
+  page_size?: number
+  /** 游标分页（C-2）：传入后返回 total=null，nextCursor=null 表示到底 */
+  cursor?: string
 }
 
 export const getProjectArtifacts = (
   projectId: string,
   params?: ProjectArtifactListParams
 ): Promise<ApiResponse<ArtifactListResponse>> => {
-  return get<ArtifactListResponse, ProjectArtifactListParams>(`/projects/${projectId}/artifacts`, params)
+  // 分页接口：参数原样透传，不塞默认 page_size，避免调用方误以为拿到了全量。
+  return get<ArtifactListResponse, ProjectArtifactListParams>(
+    `/projects/${projectId}/artifacts`,
+    params
+  )
+}
+
+const ARTIFACT_PAGE_SIZE = 100
+
+/**
+ * 取全量产物：按 page_size=100 逐页拉取并合并 items。
+ *
+ * 后端列表接口已分页，单次最多 100 条；需要「全量」的页面必须走这里，
+ * 否则超过 100 条的产物会被静默截断。
+ */
+export const getAllProjectArtifacts = async (
+  projectId: string,
+  params?: Omit<ProjectArtifactListParams, 'page' | 'page_size'>
+): Promise<ApiResponse<ArtifactListResponse>> => {
+  const items: TypedArtifact[] = []
+  let page = 1
+  let total = 0
+  let lastResponse!: ApiResponse<ArtifactListResponse>
+
+  do {
+    const response = await getProjectArtifacts(projectId, {
+      ...params,
+      page,
+      page_size: ARTIFACT_PAGE_SIZE,
+    })
+    lastResponse = response
+    items.push(...response.data.items)
+    total = response.data.total ?? 0
+    page += 1
+  } while ((page - 1) * ARTIFACT_PAGE_SIZE < total)
+
+  return {
+    ...lastResponse,
+    data: {
+      ...lastResponse.data,
+      items,
+      total,
+    },
+  }
 }
 
 export const getArtifact = (artifactId: string): Promise<ApiResponse<TypedArtifact>> => {

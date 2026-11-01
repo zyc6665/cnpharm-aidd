@@ -68,9 +68,15 @@ def test_gpu_retry_delay_uses_exponential_backoff(
         raising=False,
     )
 
-    assert worker_tasks._gpu_retry_delay_seconds(SimpleNamespace(retry_count=1)) == 30
-    assert worker_tasks._gpu_retry_delay_seconds(SimpleNamespace(retry_count=2)) == 60
-    assert worker_tasks._gpu_retry_delay_seconds(SimpleNamespace(retry_count=4)) == 90
+    assert worker_tasks._gpu_retry_delay_seconds(
+        SimpleNamespace(extra_data={"resource_retry_count": 1})
+    ) == 30
+    assert worker_tasks._gpu_retry_delay_seconds(
+        SimpleNamespace(extra_data={"resource_retry_count": 2})
+    ) == 60
+    assert worker_tasks._gpu_retry_delay_seconds(
+        SimpleNamespace(extra_data={"resource_retry_count": 4})
+    ) == 90
 
 
 def test_celery_sync_tasks_run_without_a_preexisting_event_loop(
@@ -745,7 +751,8 @@ async def test_execute_tool_task_impl_requeues_gpu_shortage_before_failure(
     async with db_session_factory() as session:
         refreshed_task = (await session.execute(select(Task).where(Task.id == task_id))).scalar_one()
         assert refreshed_task.status == TaskStatus.QUEUED.value
-        assert refreshed_task.retry_count == 1
+        # 用户重试额度必须不被基础设施重排消耗
+        assert (refreshed_task.retry_count or 0) == 0
         assert refreshed_task.error_message is None
         assert refreshed_task.extra_data["resource_wait_reason"] == "gpu_unavailable"
         assert refreshed_task.extra_data["resource_retry_count"] == 1
@@ -855,7 +862,7 @@ async def test_execute_tool_task_impl_requeues_worker_capability_wait(
             await session.execute(select(Task).where(Task.id == task_id))
         ).scalar_one()
         assert refreshed_task.status == TaskStatus.QUEUED.value
-        assert refreshed_task.retry_count == 1
+        assert (refreshed_task.retry_count or 0) == 0
         assert refreshed_task.error_message is None
         assert refreshed_task.extra_data["resource_wait_reason"] == "worker_capability_unavailable"
         assert refreshed_task.extra_data["resource_wait_code"] == "no_capable_worker"

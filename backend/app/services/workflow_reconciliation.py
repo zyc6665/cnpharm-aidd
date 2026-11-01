@@ -6,12 +6,14 @@ import asyncio
 import contextlib
 import logging
 from collections.abc import Awaitable, Callable
+from datetime import UTC, timedelta
 from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cache import get_cache
+from app.common.time import utcnow
 from app.config import settings
 from app.database.session import async_session_factory
 from app.models.users import User
@@ -26,6 +28,31 @@ NON_TERMINAL_WORKFLOW_RUN_STATUSES = ("pending", "waiting_task")
 WORKFLOW_RECONCILE_LOCK_KEY = "workflow:reconcile:lock"
 
 ScheduleTaskFn = Callable[..., Awaitable[object]]
+
+
+def _expire_timed_out_run(run: WorkflowRun) -> bool:
+    """把超过 ``WORKFLOW_RUN_TIMEOUT_SECONDS`` 的非终结 run 置为 failure。
+
+    只对 ``reconcile_waiting_workflow_runs`` 选出的非终结 run 调用。返回 True
+    表示本次已把该 run 收敛为 failure（调用方据此计入 processed 并跳过同步）。
+    """
+    timeout_seconds = int(settings.WORKFLOW_RUN_TIMEOUT_SECONDS)
+    if timeout_seconds <= 0 or run.created_at is None:
+        return False
+    created_at = run.created_at
+    if created_at.tzinfo is not None:
+        created_at = created_at.astimezone(UTC).replace(tzinfo=None)
+    now = utcnow()
+    if now - created_at < timedelta(seconds=timeout_seconds):
+        return False
+    run.status = "failure"
+    run.error_message = (
+        "Workflow run timed out: created_at="
+        f"{created_at.isoformat()} exceeded "
+        f"WORKFLOW_RUN_TIMEOUT_SECONDS={timeout_seconds}"
+    )
+    run.finished_at = now
+    return True
 
 
 async def reconcile_waiting_workflow_runs(
@@ -55,6 +82,14 @@ async def reconcile_waiting_workflow_runs(
         if run is None:
             break
         processed_run_ids.add(str(run.id))
+
+        if _expire_timed_out_run(run):
+            logger.warning(
+                "Mark workflow run %s as failure: %s", run.id, run.error_message
+            )
+            await db.commit()
+            processed += 1
+            continue
 
         owner = await db.get(User, run.owner_id)
         if not owner:

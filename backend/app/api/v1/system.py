@@ -6,6 +6,7 @@ import os
 import platform
 import psutil
 import asyncio
+import shutil
 from pathlib import Path
 from typing import Optional, List
 from fastapi import APIRouter, Depends
@@ -109,10 +110,19 @@ class SystemStatsResponse(BaseModel):
     total_files: int
 
     # 任务统计
-    pending_tasks: int
-    running_tasks: int
-    completed_tasks: int
-    failed_tasks: int
+    pending_tasks: int = Field(
+        description="等待执行的任务数：含 PENDING（待调度）与 QUEUED（已入队排队中）"
+    )
+    running_tasks: int = Field(description="正在执行的任务数：RUNNING")
+    completed_tasks: int = Field(description="成功完成的任务数：SUCCESS")
+    failed_tasks: int = Field(description="失败类任务数：含 FAILURE 与 TIMEOUT（超时）")
+    canceled_tasks: int = Field(
+        default=0, description="已取消任务数：CANCELED"
+    )
+    rejected_tasks: int = Field(
+        default=0,
+        description="准入被拒任务数：REJECTED（从未入队，不核销算力）",
+    )
 
     # 当前进程内活跃的任务事件 SSE 订阅数（docs/05 §9：任务状态走 SSE）
     sse_subscriptions: int = 0
@@ -182,17 +192,21 @@ class ResourceQuotaStatusResponse(BaseModel):
 
 # ==================== 健康检查 ====================
 
+# 对外健康检查只返回粗粒度状态，绝不回显异常原文、绝对路径、Bucket 名、
+# 执行器类型或 Celery 拓扑等内部细节；详细原因通过日志/管理员 /info 查看。
+_PUBLIC_SERVICE_MESSAGES = {
+    "healthy": "ok",
+    "degraded": "degraded",
+    "unhealthy": "unhealthy",
+    "unknown": "unknown",
+}
 
-@router.get("/health", response_model=HealthResponse, summary="系统健康检查")
-async def health_check(db: AsyncSession = Depends(get_db)):
-    """
-    检查系统各组件的健康状态
 
-    返回：
-    - status: healthy（所有服务正常）、degraded（部分服务异常）、unhealthy（核心服务异常）
-    - services: 各服务的详细状态
-    """
-    services = []
+async def _collect_health_status(
+    db: AsyncSession,
+) -> tuple[str, List[ServiceStatus]]:
+    """运行内部健康检查，返回总体状态与含详细 message 的服务列表。"""
+    services: List[ServiceStatus] = []
     overall_status = "healthy"
 
     # 1. 检查数据库
@@ -236,12 +250,53 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         if celery_status.status != "healthy" and overall_status == "healthy":
             overall_status = "degraded"
 
-    return HealthResponse(
-        status=overall_status,
-        version=settings.APP_VERSION,
-        environment=settings.ENVIRONMENT,
-        timestamp=utcnow().isoformat(),
-        services=services,
+    return overall_status, services
+
+
+def _sanitize_service_status(service: ServiceStatus) -> ServiceStatus:
+    """把内部服务状态转换成对外可安全披露的粗粒度状态。"""
+    return ServiceStatus(
+        name=service.name,
+        status=service.status,
+        latency_ms=service.latency_ms,
+        message=_PUBLIC_SERVICE_MESSAGES.get(service.status, "unknown"),
+    )
+
+
+@router.get("/health", summary="系统健康检查")
+async def health_check(db: AsyncSession = Depends(get_db)):
+    """
+    检查系统各组件的健康状态
+
+    返回：
+    - status: healthy（所有服务正常）、degraded（部分服务异常）、unhealthy（核心服务异常）
+    - services: 各服务的粗粒度状态（不包含内部实现细节）
+
+    完整的诊断信息（异常原文、路径、Bucket、执行器拓扑等）只通过日志和
+    管理员端点 GET /system/info 提供。
+    """
+    overall_status, services = await _collect_health_status(db)
+
+    if overall_status != "healthy":
+        logger.warning(
+            "系统健康检查结果=%s，异常服务: %s",
+            overall_status,
+            "; ".join(
+                f"{service.name}={service.status}: {service.message}"
+                for service in services
+                if service.status != "healthy"
+            ),
+        )
+
+    return success_response(
+        HealthResponse(
+            status=overall_status,
+            version=settings.APP_VERSION,
+            # 匿名探针无需感知部署环境，统一脱敏为固定值
+            environment="hidden",
+            timestamp=utcnow().isoformat(),
+            services=[_sanitize_service_status(service) for service in services],
+        ).model_dump()
     )
 
 
@@ -497,7 +552,10 @@ async def _check_tool_package_runtime(db: AsyncSession) -> ServiceStatus:
 
 
 @router.get("/info", response_model=dict, summary="获取系统信息")
-async def get_system_info(admin_user: User = Depends(get_admin_user)):
+async def get_system_info(
+    admin_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
     """
     获取系统详细信息（仅管理员可访问）
 
@@ -505,10 +563,14 @@ async def get_system_info(admin_user: User = Depends(get_admin_user)):
     - 应用配置信息
     - 运行时环境信息
     - 系统资源使用情况
+    - 各组件健康检查的完整诊断信息（异常原文/路径/Bucket/执行器拓扑等），
+      这些细节不对外暴露，只在此管理员端点提供
     """
-    # 系统资源
+    # 系统资源（psutil.disk_usage 在部分 Windows/Python 组合上对 "/" 会报
+    # SystemError，改用标准库 shutil 获取磁盘占用，行为一致且跨平台稳定）
     memory = psutil.virtual_memory()
-    disk = psutil.disk_usage("/")
+    disk = shutil.disk_usage(os.path.abspath(os.sep))
+    disk_percent = round(disk.used / disk.total * 100, 2) if disk.total else 0
 
     # 数据库类型
     if "sqlite" in settings.DATABASE_URL:
@@ -521,28 +583,34 @@ async def get_system_info(admin_user: User = Depends(get_admin_user)):
     # 任务队列
     task_queue = "Celery" if use_async_tasks() else "Sync (开发模式)"
 
-    return success_response(
-        data=SystemInfoResponse(
-            app_name=settings.APP_NAME,
-            app_version=settings.APP_VERSION,
-            environment=settings.ENVIRONMENT,
-            debug=settings.DEBUG,
-            python_version=platform.python_version(),
-            platform=f"{platform.system()} {platform.release()}",
-            hostname=platform.node(),
-            database_type=db_type,
-            storage_backend=settings.STORAGE_BACKEND,
-            cache_backend=settings.CACHE_BACKEND,
-            task_queue=task_queue,
-            cpu_count=psutil.cpu_count(),
-            memory_total_gb=round(memory.total / (1024**3), 2),
-            memory_available_gb=round(memory.available / (1024**3), 2),
-            memory_percent=memory.percent,
-            disk_total_gb=round(disk.total / (1024**3), 2),
-            disk_free_gb=round(disk.free / (1024**3), 2),
-            disk_percent=disk.percent,
-        ).model_dump()
-    )
+    health_status, health_services = await _collect_health_status(db)
+
+    payload = SystemInfoResponse(
+        app_name=settings.APP_NAME,
+        app_version=settings.APP_VERSION,
+        environment=settings.ENVIRONMENT,
+        debug=settings.DEBUG,
+        python_version=platform.python_version(),
+        platform=f"{platform.system()} {platform.release()}",
+        hostname=platform.node(),
+        database_type=db_type,
+        storage_backend=settings.STORAGE_BACKEND,
+        cache_backend=settings.CACHE_BACKEND,
+        task_queue=task_queue,
+        cpu_count=psutil.cpu_count(),
+        memory_total_gb=round(memory.total / (1024**3), 2),
+        memory_available_gb=round(memory.available / (1024**3), 2),
+        memory_percent=memory.percent,
+        disk_total_gb=round(disk.total / (1024**3), 2),
+        disk_free_gb=round(disk.free / (1024**3), 2),
+        disk_percent=disk_percent,
+    ).model_dump()
+    payload["health"] = {
+        "status": health_status,
+        "timestamp": utcnow().isoformat(),
+        "services": [service.model_dump() for service in health_services],
+    }
+    return success_response(data=payload)
 
 
 # ==================== 系统统计 ====================
@@ -583,9 +651,14 @@ async def get_system_stats(
     files_result = await db.execute(select(func.count(File.id)))
     total_files = files_result.scalar()
 
-    # 任务状态统计
+    # 任务状态统计：六个桶必须完整划分八态，保证
+    # pending+running+completed+failed+canceled+rejected == total_tasks。
+    # pending 覆盖 PENDING+QUEUED（QUEUED 单独没有桶），failed 覆盖
+    # FAILURE+TIMEOUT（超时也是失败），CANCELED/REJECTED 各占一桶。
     pending_result = await db.execute(
-        select(func.count(Task.id)).where(Task.status == TaskStatus.PENDING.value)
+        select(func.count(Task.id)).where(
+            Task.status.in_((TaskStatus.PENDING.value, TaskStatus.QUEUED.value))
+        )
     )
     pending_tasks = pending_result.scalar()
 
@@ -600,9 +673,21 @@ async def get_system_stats(
     completed_tasks = completed_result.scalar()
 
     failed_result = await db.execute(
-        select(func.count(Task.id)).where(Task.status == TaskStatus.FAILURE.value)
+        select(func.count(Task.id)).where(
+            Task.status.in_((TaskStatus.FAILURE.value, TaskStatus.TIMEOUT.value))
+        )
     )
     failed_tasks = failed_result.scalar()
+
+    canceled_result = await db.execute(
+        select(func.count(Task.id)).where(Task.status == TaskStatus.CANCELED.value)
+    )
+    canceled_tasks = canceled_result.scalar()
+
+    rejected_result = await db.execute(
+        select(func.count(Task.id)).where(Task.status == TaskStatus.REJECTED.value)
+    )
+    rejected_tasks = rejected_result.scalar()
 
     # 任务事件 SSE 订阅数（进程内，单副本口径；多副本时各副本只统计自己）
     sse_subscriptions = get_task_event_hub().total_subscribers()
@@ -617,6 +702,8 @@ async def get_system_stats(
             running_tasks=running_tasks,
             completed_tasks=completed_tasks,
             failed_tasks=failed_tasks,
+            canceled_tasks=canceled_tasks,
+            rejected_tasks=rejected_tasks,
             sse_subscriptions=sse_subscriptions,
         ).model_dump()
     )

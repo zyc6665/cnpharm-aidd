@@ -76,6 +76,7 @@ describe('WorkspaceView', () => {
           status: 'active',
           model_policy: {},
           data_policy: {},
+          role: 'owner',
           membership: { id: 'membership-1', role: 'owner' },
           created_at: '2026-07-30T00:00:00Z',
           updated_at: '2026-07-30T00:00:00Z',

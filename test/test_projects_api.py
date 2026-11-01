@@ -278,6 +278,22 @@ async def test_owner_can_manage_project_members(api_client: httpx.AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_owner_can_add_project_member_by_username(
+    api_client: httpx.AsyncClient,
+):
+    project = await _create_project(api_client)
+    response = await api_client.post(
+        f"/api/v1/projects/{project['id']}/members",
+        headers={"Authorization": "Bearer owner"},
+        json={"username": "other", "role": "viewer"},
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()["data"]
+    assert payload["username"] == "other"
+    assert payload["email"] == "other@example.com"
+
+
+@pytest.mark.asyncio
 async def test_owner_can_archive_project_and_default_list_hides_it(
     api_client: httpx.AsyncClient,
 ):

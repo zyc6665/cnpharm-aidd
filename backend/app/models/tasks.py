@@ -1,38 +1,27 @@
 # backend/app/models/tasks.py
 import enum
 
-from sqlalchemy import Column, String, Integer, Float, DateTime, Text, ForeignKey, JSON
+from sqlalchemy import (
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    JSON,
+    String,
+    Text,
+    event,
+    text,
+)
 from sqlalchemy.orm import relationship
 
 from app.database.base import Base, TimestampMixin, UUIDMixin, utcnow
-from app.common.task_context import task_project_id
 
-
-class TaskStatus(str, enum.Enum):
-    """任务状态
-
-    与《03-系统架构设计说明书》3.4 节状态机一致：
-    CREATED -> REJECTED: 配额/参数校验失败
-    CREATED -> QUEUED -> RUNNING -> SUCCESS / FAILURE / CANCELED / TIMEOUT
-
-    - PENDING：已创建但尚未入队调度（对应文档里的 CREATED）
-    - REJECTED：准入被拒（配额不足、参数校验失败），从未进入队列
-    - QUEUED：已入队/资源不足重新排队，等待调度
-    - RUNNING：执行中
-    - SUCCESS / FAILURE / CANCELED / TIMEOUT：终态
-
-    注意：``REJECTED`` 是终态，但**不核销算力占用**（docs/03 §7.3、
-    docs/04 §6.2：终态（含 FAILED/CANCELLED/TIMEOUT）一律核销，REJECTED
-    不核销）。它记的是「这次提交被拒过」，不是一个跑过又结束的作业。
-    """
-    PENDING = "PENDING"
-    REJECTED = "REJECTED"
-    QUEUED = "QUEUED"
-    RUNNING = "RUNNING"
-    SUCCESS = "SUCCESS"
-    FAILURE = "FAILURE"
-    TIMEOUT = "TIMEOUT"
-    CANCELED = "CANCELED"
+#: 任务状态枚举的单一源在 ``app.common.enums``（供前端枚举 codegen 与 parity
+#: 测试守护）。这里同名 re-export，保持 ``from app.models.tasks import
+#: TaskStatus`` 这一对外导入路径与 ``TaskStatus.PENDING`` 等成员访问完全不变。
+from app.common.enums import TASK_STATUS as TaskStatus
 
 
 class TaskPriority(str, enum.Enum):
@@ -45,15 +34,87 @@ class TaskPriority(str, enum.Enum):
 class Task(Base, UUIDMixin, TimestampMixin):
     """任务表"""
     __tablename__ = "tasks"
+    __table_args__ = (
+        # 工作流节点任务幂等键（Task 4-5）：同一 (run, node, attempt) 只允许一条任务。
+        # 非工作流任务三列均为 NULL；SQLite/MySQL/PostgreSQL 的唯一索引都允许
+        # 多行含 NULL，因此不影响普通任务。
+        Index(
+            "uq_tasks_workflow_node_attempt",
+            "workflow_run_id",
+            "workflow_node_id",
+            "workflow_node_attempt",
+            unique=True,
+        ),
+        # 结果中心：project_id + status IN (...) + ORDER BY finished_at DESC, created_at DESC。
+        # 等值列在前、排序列在后，才能消掉 ``results.py`` 的 USE TEMP B-TREE。
+        # PG 侧建索引必须用 ``finished_at DESC NULLS LAST, created_at DESC``（见
+        # 迁移 20261031_01）；普通升序索引反扫会得到 NULLS FIRST，与查询语义不符。
+        # SQLite 不支持 NULLS LAST 索引语法，迁移里建普通升序即可（其 DESC 扫描天然
+        # 把 NULL 放到最后）。
+        Index(
+            "ix_tasks_project_status_finished",
+            "project_id",
+            "status",
+            "finished_at",
+            "created_at",
+        ),
+        # 结果中心「游标」深页（docs/06 P-33）：默认不带状态时是
+        # ``project_id = ? AND status IN (SUCCESS/FAILURE/CANCELED/TIMEOUT)``，
+        # 按 ``(finished_at DESC, id DESC)`` 做 keyset seek。把终态集合写成部分索引
+        # 谓词后，状态列不必进索引键，``project_id`` 等值 + ``(finished_at, id)`` 行值
+        # 区间即可做 Index Only Scan（20 万行真 PostgreSQL 实测无 TEMP B-TREE；
+        # 见 docs/20 §5.13）。`IN (...)` 无法用「status 在键里」的普通复合索引消除排序——
+        # PostgreSQL 对多值 IN 只能位图扫描/整段扫描，故用部分索引。
+        Index(
+            "ix_tasks_project_terminal_finished_id",
+            "project_id",
+            "finished_at",
+            "id",
+            sqlite_where=text(
+                "status IN ('SUCCESS','FAILURE','CANCELED','TIMEOUT')"
+            ),
+            postgresql_where=text(
+                "status IN ('SUCCESS','FAILURE','CANCELED','TIMEOUT')"
+            ),
+        ),
+        # 结果中心按状态筛选、不带 finished_at 排序时的降级路径 / 一般结果列表排序。
+        Index("ix_tasks_project_status_created", "project_id", "status", "created_at"),
+        # 任务列表：user_id + status + ORDER BY created_at DESC。
+        Index("ix_tasks_user_status_created", "user_id", "status", "created_at"),
+        # 游标（keyset）翻页的排序键：``(created_at, id) < (?, ?)``。没有以
+        # ``created_at`` 打头的索引时，**不带筛选**的任务列表游标翻页在 PostgreSQL
+        # 上会退化成 Parallel Seq Scan（20 万行实测 21ms，和展开成 ``OR`` 一样慢）。
+        # SQLite 建普通升序即可（其 DESC 反向扫描天然把 NULL 放最后）。
+        Index("ix_tasks_created_at_id", "created_at", "id"),
+        # 调度侧按状态 + 完成时间检索（超时扫描 / 状态巡检）。
+        Index("ix_tasks_status_finished", "status", "finished_at"),
+        # 仅 QUEUED 任务按 updated_at 排序的调度队列；只索引排队中的行，其余状态不进索引。
+        Index(
+            "ix_tasks_queued_updated",
+            "updated_at",
+            sqlite_where=text("status = 'QUEUED'"),
+            postgresql_where=text("status = 'QUEUED'"),
+        ),
+    )
 
     # 关联
-    user_id = Column(String(36), ForeignKey("users.id"), nullable=True, index=True)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=True)
+    # 项目归属真列（plan §4）。历史上 project_id 只存在 extra_data JSON 里，
+    # 导致项目过滤只能走 JSON 表达式、且没有外键约束。此列由迁移
+    # 20261030_04 回填；一个版本周期内额外保留 extra_data 双写以防回滚丢数据。
+    project_id = Column(
+        String(36),
+        ForeignKey(
+            "projects.id", name="fk_tasks_project_id", ondelete="SET NULL"
+        ),
+        nullable=True,
+    )
     tool_id = Column(String(36), ForeignKey("tools.id"), nullable=False, index=True)
     tool_version_id = Column(String(36), ForeignKey("tool_versions.id"), nullable=False)
     name = Column(String(120), nullable=True, index=True)
 
     # 状态
-    status = Column(String(20), default=TaskStatus.PENDING.value, nullable=False, index=True)
+    status = Column(String(20), default=TaskStatus.PENDING.value, nullable=False)
     priority = Column(String(20), default=TaskPriority.NORMAL.value, nullable=False)
 
     # 时间
@@ -82,6 +143,19 @@ class Task(Base, UUIDMixin, TimestampMixin):
     # 为什么可空：非重试产生的任务没有重试来源，为 NULL；它不是主键/外键，只是可选归属信息。
     retry_of = Column(String(36), nullable=True, index=True)
 
+    # 工作流节点归属的唯一键（Task 4-5）。历史上 run/node 只写在 ``TaskInput.params``
+    # 的 JSON 里，去重只能靠「最近 20 条里猜」。这里落成真列并加唯一索引，让
+    # 「同一 run + node + attempt 只建一条任务」由数据库保证，而不是靠应用层先查后建
+    # 的竞态窗口。非工作流任务三列均为 NULL。
+    workflow_run_id = Column(String(36), nullable=True)
+    workflow_node_id = Column(String(128), nullable=True)
+    # 本列已预留：当前节点重试是就地复用同一 task 行（只改 status、retry_count+1，
+    # 不新建行），因此 workflow_node_attempt 恒为 1，实际唯一键等价于
+    # ``(run_id, node_id)``。若将来引入真正的 attempt 递增（每次重试新建一行），
+    # 必须同时修改 ``TaskCommand`` 与 workflow_tool/loop/map 调度器，让它们按
+    # 当前 attempt 写列，唯一约束才会真正按 attempt 区分。
+    workflow_node_attempt = Column(Integer, nullable=True)
+
     # GPU分配
     gpu_node_id = Column(String(36), nullable=True)
     gpu_index = Column(Integer, nullable=True)
@@ -106,15 +180,14 @@ class Task(Base, UUIDMixin, TimestampMixin):
             data.pop("celery_task_id", None)
         self.extra_data = data
 
-    @property
-    def project_id(self):
-        """兼容响应序列化，从 extra_data 中读取研究项目 ID。"""
-        return task_project_id(self)
-
     @classmethod
     def project_id_expression(cls):
-        """Return the legacy storage expression used by task queries."""
-        return cls.extra_data["project_id"].as_string()
+        """Return the project id column used by task queries.
+
+        Kept as a classmethod for call-site compatibility; it now returns the
+        real column instead of a JSON expression.
+        """
+        return cls.project_id
 
     # 关系
     user = relationship("User", back_populates="tasks")
@@ -163,8 +236,12 @@ class TaskOutput(Base, UUIDMixin, TimestampMixin):
 class TaskLog(Base, UUIDMixin):
     """任务日志表"""
     __tablename__ = "task_logs"
+    __table_args__ = (
+        # 日志回看：固定按 task_id 过滤、按 timestamp 顺序翻页，复合列避免回表排序。
+        Index("ix_task_logs_task_timestamp", "task_id", "timestamp"),
+    )
 
-    task_id = Column(String(36), ForeignKey("tasks.id"), nullable=False, index=True)
+    task_id = Column(String(36), ForeignKey("tasks.id"), nullable=False)
     timestamp = Column(DateTime, default=utcnow, nullable=False)
     level = Column(String(20), default="INFO")  # DEBUG, INFO, WARNING, ERROR
     message = Column(Text, nullable=False)
@@ -172,3 +249,20 @@ class TaskLog(Base, UUIDMixin):
 
     # 关系
     task = relationship("Task", back_populates="logs")
+
+
+@event.listens_for(Task, "before_insert")
+def _mirror_project_id_from_extra_data(_mapper, _connection, target: Task) -> None:
+    """One-cycle dual-write safety net (plan §4).
+
+    New tasks historically carried their project only in ``extra_data``.
+    ``set_task_project_id`` remains the compatibility writer for that JSON, but
+    every insert must also populate the real ``tasks.project_id`` column. Doing
+    it on the ORM event covers both explicit writers and direct ``Task(...)``
+    constructions (tests, worker retries) without touching each call site.
+    """
+    if target.project_id:
+        return
+    legacy = (target.extra_data or {}).get("project_id")
+    if legacy:
+        target.project_id = str(legacy)

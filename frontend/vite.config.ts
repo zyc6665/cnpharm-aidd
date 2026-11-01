@@ -69,7 +69,8 @@ export default defineConfig({
   },
   server: {
     port: 3000,
-    host: '0.0.0.0',
+    // 仅监听回环地址，避免开发服务器默认暴露到局域网（如需真机联调显式改此值）。
+    host: '127.0.0.1',
     watch: {
       usePolling: true,
       interval: 1000

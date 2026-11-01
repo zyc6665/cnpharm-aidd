@@ -94,7 +94,8 @@ import {
   getTaskProgressStatus,
   getTaskStatusColor,
   getTaskStatusTextKey,
-  normalizeTaskStatus
+  normalizeTaskStatus,
+  runningStatuses
 } from '@/domain/tasks'
 import { triggerProtectedFileDownload } from '@/utils/protected-file-access'
 
@@ -129,7 +130,7 @@ const canRerun = computed(() => Boolean(
 const normalizedStatus = computed(() => normalizeTaskStatus(props.task?.status))
 const statusText = computed(() => t(getTaskStatusTextKey(normalizedStatus.value)))
 const statusColor = computed(() => getTaskStatusColor(normalizedStatus.value))
-const isRunning = computed(() => ['pending', 'running'].includes(normalizedStatus.value))
+const isRunning = computed(() => runningStatuses.includes(normalizedStatus.value))
 const progressStatus = computed(() => getTaskProgressStatus(normalizedStatus.value))
 
 function getFileType(filename: string, contentType?: string | null): string {

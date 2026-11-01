@@ -64,3 +64,60 @@ export function resolvePaginationChange(input: PaginationChangeInput): Paginatio
 
   return { page: normalizePage(input.nextPage), size: null }
 }
+
+/** 一页游标结果的最小形状（results / artifacts / workflow runs 通用）。 */
+export interface CursorPage<T> {
+  items: T[]
+  nextCursor?: string | null
+  hasMore?: boolean
+}
+
+/** 列表的游标状态：items 已合并、nextCursor 为 null 表示到底。 */
+export interface CursorPaginationState<T> {
+  items: T[]
+  nextCursor: string | null
+  hasMore: boolean
+}
+
+/**
+ * 归一化「是否还有下一页」：优先后端 `hasMore`，缺省时用 `nextCursor` 是否存在兜底。
+ * 这样既兼容只回 nextCursor 的旧实现，也能正确识别 cursor 模式（total/total_pages 为 null）。
+ */
+export function resolveCursorHasMore(input: {
+  nextCursor?: string | null
+  hasMore?: boolean
+}): boolean {
+  if (typeof input.hasMore === 'boolean') {
+    return input.hasMore
+  }
+  return Boolean(input.nextCursor)
+}
+
+/**
+ * 把一页结果合并进游标列表状态。
+ * - `append: false`（首屏 offset 或切换筛选）：直接替换
+ * - `append: true`（加载更多）：按 id 去重后追加
+ * - nextCursor / hasMore 始终以后到的一页为准（到底时 nextCursor=null, hasMore=false）
+ */
+export function mergeCursorPage<T>(
+  previous: CursorPaginationState<T>,
+  page: CursorPage<T>,
+  getId: (item: T) => string,
+  options: { append?: boolean } = {}
+): CursorPaginationState<T> {
+  const append = options.append === true
+  const items = append
+    ? [
+        ...previous.items,
+        ...page.items.filter(
+          item => !previous.items.some(existing => getId(existing) === getId(item))
+        )
+      ]
+    : [...page.items]
+
+  return {
+    items,
+    nextCursor: page.nextCursor ?? null,
+    hasMore: resolveCursorHasMore(page)
+  }
+}

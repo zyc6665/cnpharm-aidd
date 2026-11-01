@@ -90,7 +90,7 @@
   import type { FormInstance } from 'ant-design-vue/es/form'
   import type { UploadFile } from 'ant-design-vue'
   import ToolRunInputForm from '@/components/tools/ToolRunInputForm.vue'
-  import { getProjectArtifacts } from '@/api/artifacts'
+  import { getAllProjectArtifacts } from '@/api/artifacts'
   import { getToolDetail } from '@/api/tools'
   import { useUserStore, useWorkflowStore } from '@/stores'
   import { useStandaloneNodeRun } from '@/composables/useStandaloneNodeRun'
@@ -180,7 +180,7 @@
   } = useToolDetailStandardArtifacts({
     projectId: computed(() => props.projectId ?? undefined),
     standardInputSlots,
-    api: { getProjectArtifacts },
+    api: { getAllProjectArtifacts },
     selectStandardArtifact: (slotName, versionId, projectArtifacts) => {
       selectedStandardArtifacts[slotName] = versionId
         ? projectArtifacts.find(artifact => artifact.latest_version.id === versionId)

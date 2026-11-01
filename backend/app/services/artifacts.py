@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from uuid import uuid4
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -12,7 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.common.time import utcnow
-from app.artifact_standards.registry import get_standard_artifact_spec, parse_standard_ref
+from app.artifact_standards.registry import (
+    get_standard_artifact_spec,
+    validate_standard_artifact_roles,
+)
 from app.files.file_records import delete_stored_content
 from app.files.writer import store_file_bytes
 from app.models.artifacts import (
@@ -21,25 +23,30 @@ from app.models.artifacts import (
     ArtifactVersion,
     ArtifactVersionFile,
 )
-from app.models.files import FileSourceType
+from app.models.files import File as FileModel, FileSourceType
 from app.models.projects import Project
 from app.models.users import User
-from app.storage.base import StorageBackend
+from app.services.artifact_identity import resolve_identity_full
+from app.services.artifact_writer import upsert_version
 
 
-def artifact_object_key(
-    *,
-    organization_id: str,
-    project_id: str,
-    artifact_id: str,
-    version: int,
-    filename: str,
+def resolve_standard_file_role(
+    standard_type: str | None,
+    standard_version: int | None,
 ) -> str:
-    safe_filename = Path(filename).name or "artifact.bin"
-    return (
-        f"organizations/{organization_id}/projects/{project_id}/artifacts/"
-        f"{artifact_id}/{version}/{safe_filename}"
-    )
+    """返回上传文件在标准 Artifact 中的角色；未知标准/版本抛 ``StandardArtifactRegistryError``。
+
+    上传入口只有一份文件，角色固定取 registry 里标记 ``primary`` 的那个（没有就取第一
+    个）；再交给 :func:`validate_standard_artifact_roles` 过一遍，保证写进
+    ``artifact_version_files.role`` 的值一定在受控词表里，避免绕过 registry 直接落库。
+    """
+    if not (standard_type and standard_version):
+        return "input"
+    ref = f"{standard_type}@{standard_version}"
+    spec = get_standard_artifact_spec(ref)
+    primary_role = next((item.role for item in spec.file_roles if item.primary), None)
+    role = primary_role or spec.file_roles[0].role
+    return validate_standard_artifact_roles(ref, [role])[0]
 
 
 async def _existing_project_content(
@@ -78,7 +85,6 @@ async def _existing_project_content(
 async def create_artifact(
     db: AsyncSession,
     *,
-    storage: StorageBackend,
     project: Project,
     user: User,
     filename: str,
@@ -91,6 +97,15 @@ async def create_artifact(
     description: str | None = None,
     expires_at=None,
 ) -> Artifact:
+    # One identity resolver for the three columns; the upload form hands over raw
+    # labels (semantic_type may even be a sub-label like "generic_file") and the
+    # resolver decides the canonical triple before dedup and insert.
+    artifact_type, semantic_type, standard_type, standard_version = resolve_identity_full(
+        artifact_type,
+        semantic_type=semantic_type,
+        standard_type=standard_type,
+        standard_version=standard_version,
+    )
     digest = hashlib.sha256(content).hexdigest()
     duplicate = await _existing_project_content(
         db,
@@ -106,96 +121,95 @@ async def create_artifact(
         artifact.latest_version = version
         setattr(artifact, "deduplicated", True)
         if not version.files:
-            file_record = await _attach_uploaded_file(
-                db,
-                version=version,
-                project=project,
-                user=user,
-                filename=filename,
-                content=content,
-                content_type=content_type,
-                expires_at=version.expires_at,
-                standard_type=artifact.standard_type,
-                standard_version=artifact.standard_version,
-            )
-            local_storage_path = file_record.storage_path
+            file_record = None
             try:
+                file_record = await _store_uploaded_file(
+                    db,
+                    project=project,
+                    user=user,
+                    filename=filename,
+                    content=content,
+                    content_type=content_type,
+                    expires_at=version.expires_at,
+                )
+                await _link_version_file(
+                    db,
+                    version=version,
+                    file_record=file_record,
+                    standard_type=artifact.standard_type,
+                    standard_version=artifact.standard_version,
+                )
                 await db.commit()
             except Exception:
                 await db.rollback()
-                Path(local_storage_path).unlink(missing_ok=True)
+                if file_record is not None:
+                    await delete_stored_content(file_record)
                 raise
         return artifact
 
-    artifact_id = str(uuid4())
-    object_key = artifact_object_key(
-        organization_id=project.organization_id,
+    artifact = Artifact(
         project_id=project.id,
-        artifact_id=artifact_id,
-        version=1,
-        filename=filename,
+        created_by=user.id,
+        artifact_type=artifact_type,
+        semantic_type=semantic_type,
+        standard_type=standard_type,
+        standard_version=standard_version,
+        name=Path(filename).name or "artifact.bin",
+        description=description,
     )
-    stored = await storage.upload(content, object_key, content_type)
+    db.add(artifact)
+    await db.flush()
     file_record = None
-    local_storage_path = None
     try:
-        artifact = Artifact(
-            id=artifact_id,
-            project_id=project.id,
-            created_by=user.id,
-            artifact_type=artifact_type,
-            semantic_type=semantic_type,
-            standard_type=standard_type,
-            standard_version=standard_version,
-            name=Path(filename).name or "artifact.bin",
-            description=description,
-        )
-        version = ArtifactVersion(
-            artifact_id=artifact.id,
-            created_by=user.id,
-            version=1,
-            filename=artifact.name,
-            content_type=content_type,
-            size_bytes=len(content),
-            sha256=digest,
-            storage_key=object_key,
-            storage_etag=stored.etag,
-            status="available",
-            expires_at=expires_at,
-            files=[],
-        )
-        db.add_all([artifact, version])
-        await db.flush()
-        artifact.latest_version_id = version.id
-        artifact.latest_version = version
-        file_record = await _attach_uploaded_file(
+        file_record = await _store_uploaded_file(
             db,
-            version=version,
             project=project,
             user=user,
             filename=filename,
             content=content,
             content_type=content_type,
             expires_at=expires_at,
-            standard_type=standard_type,
-            standard_version=standard_version,
         )
-        local_storage_path = file_record.storage_path
-        setattr(artifact, "deduplicated", False)
+        version, created = await upsert_version(
+            db,
+            artifact=artifact,
+            filename=artifact.name,
+            content_type=content_type,
+            size_bytes=len(content),
+            sha256=digest,
+            storage_key=file_record.storage_path,
+            storage_etag=None,
+            validation_status="pending",
+            created_by=user.id,
+            source=None,
+            expires_at=expires_at,
+        )
+        if created:
+            await _link_version_file(
+                db,
+                version=version,
+                file_record=file_record,
+                standard_type=standard_type,
+                standard_version=standard_version,
+            )
+        else:
+            # Content-dedup hit: the version already points at a stored blob, so the
+            # bytes we just wrote are redundant. Drop both the object and its row.
+            await delete_stored_content(file_record)
+            await db.delete(file_record)
+        setattr(artifact, "deduplicated", not created)
         await db.commit()
         return artifact
     except Exception:
         await db.rollback()
-        await storage.delete(object_key)
-        if local_storage_path:
-            Path(local_storage_path).unlink(missing_ok=True)
+        if file_record is not None:
+            await delete_stored_content(file_record)
         raise
 
 
 async def create_artifact_version(
     db: AsyncSession,
     *,
-    storage: StorageBackend,
     artifact: Artifact,
     project: Project,
     user: User,
@@ -210,94 +224,90 @@ async def create_artifact_version(
             artifact.latest_version = version
             setattr(artifact, "deduplicated", True)
             if not version.files:
-                file_record = await _attach_uploaded_file(
-                    db,
-                    version=version,
-                    project=project,
-                    user=user,
-                    filename=filename,
-                    content=content,
-                    content_type=content_type,
-                    expires_at=version.expires_at,
-                    standard_type=artifact.standard_type,
-                    standard_version=artifact.standard_version,
-                )
-                local_storage_path = file_record.storage_path
+                file_record = None
                 try:
+                    file_record = await _store_uploaded_file(
+                        db,
+                        project=project,
+                        user=user,
+                        filename=filename,
+                        content=content,
+                        content_type=content_type,
+                        expires_at=version.expires_at,
+                    )
+                    await _link_version_file(
+                        db,
+                        version=version,
+                        file_record=file_record,
+                        standard_type=artifact.standard_type,
+                        standard_version=artifact.standard_version,
+                    )
                     await db.commit()
                 except Exception:
                     await db.rollback()
-                    Path(local_storage_path).unlink(missing_ok=True)
+                    if file_record is not None:
+                        await delete_stored_content(file_record)
                     raise
             return artifact
-    number = max((version.version for version in artifact.versions), default=0) + 1
-    object_key = artifact_object_key(
-        organization_id=project.organization_id,
-        project_id=project.id,
-        artifact_id=artifact.id,
-        version=number,
-        filename=filename,
-    )
-    stored = await storage.upload(content, object_key, content_type)
     file_record = None
-    local_storage_path = None
     try:
-        version = ArtifactVersion(
-            artifact_id=artifact.id,
-            created_by=user.id,
-            version=number,
-            filename=Path(filename).name or artifact.name,
-            content_type=content_type,
-            size_bytes=len(content),
-            sha256=digest,
-            storage_key=object_key,
-            storage_etag=stored.etag,
-            status="available",
-            expires_at=expires_at,
-            files=[],
-        )
-        db.add(version)
-        await db.flush()
-        artifact.latest_version_id = version.id
-        artifact.latest_version = version
-        file_record = await _attach_uploaded_file(
+        file_record = await _store_uploaded_file(
             db,
-            version=version,
             project=project,
             user=user,
             filename=filename,
             content=content,
             content_type=content_type,
             expires_at=expires_at,
-            standard_type=artifact.standard_type,
-            standard_version=artifact.standard_version,
         )
-        local_storage_path = file_record.storage_path
-        setattr(artifact, "deduplicated", False)
+        version, created = await upsert_version(
+            db,
+            artifact=artifact,
+            filename=Path(filename).name or artifact.name,
+            content_type=content_type,
+            size_bytes=len(content),
+            sha256=digest,
+            storage_key=file_record.storage_path,
+            storage_etag=None,
+            validation_status="pending",
+            created_by=user.id,
+            source=None,
+            expires_at=expires_at,
+        )
+        if created:
+            await _link_version_file(
+                db,
+                version=version,
+                file_record=file_record,
+                standard_type=artifact.standard_type,
+                standard_version=artifact.standard_version,
+            )
+        else:
+            # Content-dedup hit: drop the redundant object and row.
+            await delete_stored_content(file_record)
+            await db.delete(file_record)
+        setattr(artifact, "deduplicated", not created)
         await db.commit()
         return artifact
     except Exception:
         await db.rollback()
-        await storage.delete(object_key)
-        if local_storage_path:
-            Path(local_storage_path).unlink(missing_ok=True)
+        if file_record is not None:
+            await delete_stored_content(file_record)
         raise
 
 
-async def _attach_uploaded_file(
+async def _store_uploaded_file(
     db: AsyncSession,
     *,
-    version: ArtifactVersion,
     project: Project,
     user: User,
     filename: str,
     content: bytes,
     content_type: str | None,
     expires_at,
-    standard_type: str | None,
-    standard_version: int | None,
-):
-    file_record = await store_file_bytes(
+) -> FileModel:
+    """写入唯一一份物理内容，返回其 ``File`` 行（路径即版本的 storage_key）。"""
+    return await store_file_bytes(
         db,
         content=content,
         filename=filename,
@@ -306,28 +316,35 @@ async def _attach_uploaded_file(
         owner_id=user.id,
         project_id=project.id,
         expires_at=expires_at,
-        file_meta={"artifact_version_id": version.id},
     )
-    try:
-        role = "input"
-        if standard_type and standard_version:
-            standard_ref = parse_standard_ref(f"{standard_type}@{standard_version}")
-            spec = get_standard_artifact_spec(standard_ref.ref)
-            primary_role = next((item.role for item in spec.file_roles if item.primary), None)
-            role = primary_role or spec.file_roles[0].role
-        link = ArtifactVersionFile(
+
+
+async def _link_version_file(
+    db: AsyncSession,
+    *,
+    version: ArtifactVersion,
+    file_record: FileModel,
+    standard_type: str | None,
+    standard_version: int | None,
+) -> None:
+    file_record.file_meta = {
+        **(file_record.file_meta or {}),
+        "artifact_version_id": version.id,
+    }
+    role = resolve_standard_file_role(standard_type, standard_version)
+    db.add(
+        ArtifactVersionFile(
             artifact_version_id=version.id,
             role=role,
-            file=file_record,
+            file_id=file_record.id,
             is_primary=True,
             sort_order=0,
         )
-        version.files.append(link)
-        await db.flush()
-        return file_record
-    except Exception:
-        await delete_stored_content(file_record)
-        raise
+    )
+    # Use db.add rather than version.files.append: when ``version`` was created
+    # through the writer it is already flushed, so touching the unloaded
+    # ``files`` collection would trigger a lazy load (MissingGreenlet in async).
+    await db.flush()
 
 
 async def load_artifact(db: AsyncSession, artifact_id: str) -> Artifact | None:

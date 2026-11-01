@@ -113,7 +113,7 @@
               <template v-else-if="column.key === 'user'">
                 <div class="user-cell">
                   <span class="user-name">{{ getUserDisplayName(record) }}</span>
-                  <span class="user-email">{{ record.email }}</span>
+                  <span class="user-email">{{ formatUserEmail(record.email) }}</span>
                 </div>
               </template>
               <template v-else-if="column.key === 'role'">
@@ -150,6 +150,7 @@ import { adminGetUsers, adminGetUserStats } from '@/api/users'
 import { getSystemStats } from '@/api/system'
 import { getTaskList } from '@/api/tasks'
 import type { AdminUserStats, SystemStats, Task, UserInfo } from '@/types/models'
+import { formatUserEmail, getUserDisplayName } from '@/utils/user-display'
 
 const { t } = useI18n()
 
@@ -171,10 +172,6 @@ const userColumns = computed(() => [
   { title: t('admin.role'), key: 'role', width: 120 },
   { title: t('admin.registerTime'), key: 'created_at', width: 140 }
 ])
-
-const getUserDisplayName = (user: UserInfo) => {
-  return user.display_name || user.email.split('@')[0]
-}
 
 const getUserInitial = (user: UserInfo) => {
   const displayName = getUserDisplayName(user)

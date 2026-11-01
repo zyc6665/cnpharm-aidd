@@ -9,6 +9,10 @@ import tarfile
 from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
 
+from app.common.archive_limits import (
+    MAX_ARCHIVE_ENTRIES,
+    MAX_ARCHIVE_UNCOMPRESSED_BYTES,
+)
 from app.config import settings
 from app.registry.client import RegistryClient
 
@@ -19,8 +23,18 @@ class ImageArchiveError(ValueError):
 
 _DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 _TAG_RE = re.compile(r"^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$")
-_MAX_ARCHIVE_MEMBERS = 100000
+_MAX_ARCHIVE_MEMBERS = MAX_ARCHIVE_ENTRIES
 _MAX_METADATA_BLOB_BYTES = 16 * 1024 * 1024
+
+
+def _consume_budget(budget: list[int], size: int) -> None:
+    """从解压字节预算中扣减；扣成负数即超限（P2 解压炸弹防护）。"""
+    budget[0] -= size
+    if budget[0] < 0:
+        raise ImageArchiveError(
+            "镜像归档解压后总大小超过上限 "
+            f"{MAX_ARCHIVE_UNCOMPRESSED_BYTES // (1024 * 1024)}MB"
+        )
 
 
 def _digest_file(path: Path) -> tuple[str, int]:
@@ -43,16 +57,19 @@ def _safe_member(member: tarfile.TarInfo, *, allow_directory: bool = False) -> N
         raise ImageArchiveError("镜像归档只能包含普通文件")
 
 
-def _read_member(stream) -> bytes:
+def _read_member(stream, budget: list[int] | None = None) -> bytes:
     chunks: list[bytes] = []
     while chunk := stream.read(1024 * 1024):
+        if budget is not None:
+            _consume_budget(budget, len(chunk))
         chunks.append(chunk)
     return b"".join(chunks)
 
 
-def _discard_member(stream) -> None:
-    while stream.read(1024 * 1024):
-        pass
+def _discard_member(stream, budget: list[int] | None = None) -> None:
+    while chunk := stream.read(1024 * 1024):
+        if budget is not None:
+            _consume_budget(budget, len(chunk))
 
 
 def _prepare_archive_for_random_access(archive_path: Path, work_dir: Path) -> Path:
@@ -112,7 +129,8 @@ def _load_archive(archive_path: Path, work_dir: Path) -> tuple[dict, dict[str, P
             manifest_stream = archive.extractfile(manifest_member)
             if manifest_stream is None:
                 raise ImageArchiveError("无法读取 docker save manifest.json")
-            manifest = json.loads(manifest_stream.read())
+            with manifest_stream:
+                manifest = json.loads(_read_member(manifest_stream, [MAX_ARCHIVE_UNCOMPRESSED_BYTES]))
             if not isinstance(manifest, list) or len(manifest) != 1:
                 raise ImageArchiveError("只支持单镜像 docker save 归档")
             item = manifest[0]
@@ -123,6 +141,8 @@ def _load_archive(archive_path: Path, work_dir: Path) -> tuple[dict, dict[str, P
             wanted = [config_name, *layers]
             extracted: dict[str, Path] = {}
             members_by_name = {m.name: m for m in members}
+            # P2：累计解压/落盘字节预算，超出即中止，避免解压炸弹写满磁盘。
+            budget = [MAX_ARCHIVE_UNCOMPRESSED_BYTES]
             for name in wanted:
                 member = members_by_name.get(name)
                 if member is None:
@@ -134,6 +154,7 @@ def _load_archive(archive_path: Path, work_dir: Path) -> tuple[dict, dict[str, P
                     raise ImageArchiveError(f"无法读取归档文件: {name}")
                 with source, target.open("wb") as output:
                     while chunk := source.read(1024 * 1024):
+                        _consume_budget(budget, len(chunk))
                         output.write(chunk)
                 extracted[name] = target
             return item, extracted
@@ -151,6 +172,8 @@ def _load_oci_archive(
     index_bytes: bytes | None = None
     small_blobs: dict[str, bytes] = {}
     member_count = 0
+    # P2：预扫描同样可能读到解压炸弹，累计读取字节并设上限（只读不落盘也要限）。
+    prescan_budget = [MAX_ARCHIVE_UNCOMPRESSED_BYTES]
     try:
         with tarfile.open(archive_path, mode="r|*") as archive:
             for member in archive:
@@ -164,11 +187,11 @@ def _load_oci_archive(
                 if stream is None:
                     raise ImageArchiveError(f"无法读取 OCI 文件: {member.name}")
                 if member.name == "index.json":
-                    index_bytes = _read_member(stream)
+                    index_bytes = _read_member(stream, prescan_budget)
                 elif member.name.startswith("blobs/sha256/") and member.size <= _MAX_METADATA_BLOB_BYTES:
-                    small_blobs[member.name] = _read_member(stream)
+                    small_blobs[member.name] = _read_member(stream, prescan_budget)
                 else:
-                    _discard_member(stream)
+                    _discard_member(stream, prescan_budget)
     except ImageArchiveError:
         raise
     except (tarfile.TarError, OSError) as exc:
@@ -227,6 +250,8 @@ def _load_oci_archive(
     config_path.write_bytes(config_bytes)
     extracted: dict[str, Path] = {"config": config_path}
     remaining = set(expected_layers)
+    # P2：落盘阶段累计解压字节预算，超限中止，避免解压炸弹写满磁盘。
+    extract_budget = [MAX_ARCHIVE_UNCOMPRESSED_BYTES]
     try:
         with tarfile.open(archive_path, mode="r|*") as archive:
             for member in archive:
@@ -238,13 +263,14 @@ def _load_oci_archive(
                     raise ImageArchiveError(f"无法读取 OCI 文件: {member.name}")
                 target = expected_layers.get(member.name)
                 if target is None:
-                    _discard_member(stream)
+                    _discard_member(stream, extract_budget)
                     continue
                 output = work_dir / member.name.rsplit("/", 1)[-1]
                 digest = hashlib.sha256()
                 size = 0
                 with output.open("wb") as handle:
                     while chunk := stream.read(1024 * 1024):
+                        _consume_budget(extract_budget, len(chunk))
                         handle.write(chunk)
                         digest.update(chunk)
                         size += len(chunk)

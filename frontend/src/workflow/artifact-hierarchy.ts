@@ -64,11 +64,11 @@ function resolveTaskName(artifacts: ArtifactFile[]): string | undefined {
   return artifacts.find((artifact) => artifact.task_name?.trim())?.task_name?.trim()
 }
 
-export function buildPrimaryGroupMap(groups: WorkbenchGroup[]): Map<string, PrimaryGroupMeta> {
+export function buildPrimaryGroupMap(groups: WorkbenchGroup[] | undefined): Map<string, PrimaryGroupMeta> {
   const primaryGroupMap = new Map<string, PrimaryGroupMeta>()
 
-  groups.forEach((group, groupOrder) => {
-    group.tools.forEach((tool, toolOrder) => {
+  ;(groups ?? []).forEach((group, groupOrder) => {
+    ;(group.tools ?? []).forEach((tool, toolOrder) => {
       if (primaryGroupMap.has(tool.slug)) {
         return
       }
@@ -125,7 +125,7 @@ export function buildWorkflowArtifactHierarchy(
     bucketMap.set(groupId, toolMap)
   }
 
-  const groups = input.groups
+  const groups = (input.groups ?? [])
     .filter((group) => {
       if (input.scope === 'current-group' && input.currentGroupId && group.id !== input.currentGroupId) {
         return false

@@ -45,6 +45,7 @@ from app.models.users import User, UserRole, UserStatus  # noqa: E402
 OWNER = "owner"
 VIEWER = "viewer"
 OUTSIDER = "outsider"
+ADMIN = "admin"
 
 #: 三条小分子与一条重复（同一 InChIKey 的另一写法）。
 SMILES_CSV = "name,smiles\nethanol,CCO\nethane,CC\npropane,CCC\nethanol-dup,OCC\n"
@@ -67,12 +68,14 @@ async def db_session() -> AsyncSession:
     await engine.dispose()
 
 
-async def _create_user(db: AsyncSession, email: str) -> User:
+async def _create_user(
+    db: AsyncSession, email: str, *, role: str = UserRole.USER.value
+) -> User:
     user = User(
         email=email,
         password_hash="hashed-password",
         display_name=email.split("@")[0],
-        role=UserRole.USER.value,
+        role=role,
         status=UserStatus.ACTIVE.value,
     )
     db.add(user)
@@ -87,6 +90,9 @@ async def users(db_session: AsyncSession) -> dict[str, User]:
         OWNER: await _create_user(db_session, "owner@example.com"),
         VIEWER: await _create_user(db_session, "viewer@example.com"),
         OUTSIDER: await _create_user(db_session, "outsider@example.com"),
+        ADMIN: await _create_user(
+            db_session, "admin@example.com", role=UserRole.ADMIN.value
+        ),
     }
 
 
@@ -186,13 +192,13 @@ async def _import_csv(
 
 
 async def _create_candidate(
-    client: httpx.AsyncClient, project_id: str, **overrides
+    client: httpx.AsyncClient, project_id: str, *, user: str = OWNER, **overrides
 ) -> dict:
     payload = {"smiles": "CCO", "name": "ethanol"}
     payload.update(overrides)
     response = await client.post(
         f"/api/v1/projects/{project_id}/candidates",
-        headers=_headers(OWNER),
+        headers=_headers(user),
         json=payload,
     )
     assert response.status_code == 200, response.text
@@ -209,6 +215,25 @@ async def _create_set(client: httpx.AsyncClient, project_id: str, **overrides) -
     )
     assert response.status_code == 200, response.text
     return response.json()["data"]
+
+
+async def _make_project(db: AsyncSession, *, name: str, owner: User) -> Project:
+    """建一个项目并把 ``owner`` 设为项目 owner（用于跨项目可见性用例）。"""
+    organization = Organization(name=f"{name} org", slug=f"{name}-org")
+    db.add(organization)
+    await db.flush()
+    project = Project(
+        organization_id=organization.id,
+        created_by=owner.id,
+        name=name,
+        status="active",
+    )
+    db.add(project)
+    await db.flush()
+    db.add(ProjectMember(project_id=project.id, user_id=owner.id, role="owner"))
+    await db.commit()
+    await db.refresh(project)
+    return project
 
 
 # ---------------------------------------------------------------------------
@@ -389,11 +414,7 @@ async def test_similarity_search_ranks_self_first(
     api_client: httpx.AsyncClient, db_session: AsyncSession, project: Project
 ):
     for smiles in ("CCO", "CCN", "c1ccccc1"):
-        await api_client.post(
-            f"/api/v1/projects/{project.id}/compounds",
-            headers=_headers(OWNER),
-            json={"smiles": smiles},
-        )
+        await _create_candidate(api_client, project.id, smiles=smiles)
     response = await api_client.post(
         "/api/v1/compounds:search",
         headers=_headers(OWNER),
@@ -405,6 +426,72 @@ async def test_similarity_search_ranks_self_first(
     assert items[0]["similarity"] == 1.0
     assert items[0]["compound"]["inchikey"] == "LFQSCWFLJHTTHZ-UHFFFAOYSA-N"
     assert items[0]["similarity"] >= items[-1]["similarity"]
+
+
+@pytest.mark.asyncio
+async def test_similarity_search_only_returns_own_project_compounds(
+    api_client: httpx.AsyncClient, db_session: AsyncSession, project: Project, users
+):
+    """普通用户只能搜到自己项目引用的化合物，搜不到其他项目的（P1-1 跨租户泄露修复）。"""
+    await _create_candidate(api_client, project.id, smiles="CCO")
+
+    other_project = await _make_project(
+        db_session, name="outsider-program", owner=users[OUTSIDER]
+    )
+    await _create_candidate(api_client, other_project.id, smiles="CCN", user=OUTSIDER)
+
+    response = await api_client.post(
+        "/api/v1/compounds:search",
+        headers=_headers(OWNER),
+        params={"limit": 20},
+        json={"smiles": "CCO"},
+    )
+    assert response.status_code == 200, response.text
+    items = response.json()["data"]["items"]
+    assert len(items) == 1
+    assert items[0]["compound"]["inchikey"] == "LFQSCWFLJHTTHZ-UHFFFAOYSA-N"
+
+
+@pytest.mark.asyncio
+async def test_similarity_search_returns_empty_without_references(
+    api_client: httpx.AsyncClient, db_session: AsyncSession, project: Project, users
+):
+    """无任何项目引用的用户检索返回空列表（而不是全表放行）。"""
+    await _create_candidate(api_client, project.id, smiles="CCO")
+
+    response = await api_client.post(
+        "/api/v1/compounds:search",
+        headers=_headers(OUTSIDER),
+        params={"limit": 20},
+        json={"smiles": "CCO"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["items"] == []
+
+
+@pytest.mark.asyncio
+async def test_similarity_search_admin_sees_all_compounds(
+    api_client: httpx.AsyncClient, db_session: AsyncSession, project: Project, users
+):
+    """管理员按平台主数据口径可搜到全量化合物。"""
+    await _create_candidate(api_client, project.id, smiles="CCO")
+
+    other_project = await _make_project(
+        db_session, name="outsider-program", owner=users[OUTSIDER]
+    )
+    await _create_candidate(api_client, other_project.id, smiles="CCN", user=OUTSIDER)
+
+    response = await api_client.post(
+        "/api/v1/compounds:search",
+        headers=_headers(ADMIN),
+        params={"limit": 20},
+        json={"smiles": "CCO"},
+    )
+    assert response.status_code == 200, response.text
+    items = response.json()["data"]["items"]
+    assert len(items) == 2
+    inchikeys = {item["compound"]["inchikey"] for item in items}
+    assert "LFQSCWFLJHTTHZ-UHFFFAOYSA-N" in inchikeys
 
 
 # ---------------------------------------------------------------------------

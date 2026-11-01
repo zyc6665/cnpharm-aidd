@@ -27,11 +27,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.common.exceptions import ConflictException, NotFoundException, ValidationException
+from app.common.task_status import task_status_to_api
 from app.common.time import isoformat_utc
 from app.files.file_records import is_file_usable, user_can_access_file
 from app.models.files import File as FileModel
 from app.models.targets import Pocket, PocketResidue, Protein, ProteinStructure, Target
-from app.models.tasks import Task
+from app.models.tasks import Task, TaskStatus
 from app.models.tools import Tool, ToolStatus
 from app.models.users import User
 from app.schemas.tasks import TaskCreate
@@ -630,15 +631,22 @@ async def project_domain_counts(db: AsyncSession, *, project_id: str) -> dict[st
 
 
 async def task_queue_position(db: AsyncSession, *, task: Task) -> int | None:
-    """Best-effort queue position for the submission response (docs/05 §5.1)."""
-    if task.status != "pending":
+    """Best-effort queue position for the submission response (docs/05 §5.1).
+
+    提交响应返回前，``dispatch_tool_task`` 已把任务从 PENDING 置为 QUEUED，
+    所以判定与计数都必须同时认 PENDING 和 QUEUED；只认 ``"pending"`` 会让
+    queue_position 恒为 None。库里存的是大写枚举值，比较也须用枚举值。
+    位置按 ``priority`` + ``created_at`` 统计排在前面的任务数（1 起，含自己）。
+    """
+    waiting_statuses = (TaskStatus.PENDING.value, TaskStatus.QUEUED.value)
+    if task.status not in waiting_statuses:
         return None
     position = (
         await db.execute(
             select(func.count())
             .select_from(Task)
             .where(
-                Task.status == "pending",
+                Task.status.in_(waiting_statuses),
                 Task.priority == task.priority,
                 Task.created_at <= task.created_at,
             )
@@ -648,9 +656,15 @@ async def task_queue_position(db: AsyncSession, *, task: Task) -> int | None:
 
 
 def serialize_task_submission(task: Task, *, queue_position: int | None) -> dict:
+    """任务提交回执（docs/05 §5.1）。
+
+    ``status`` 与任务列表/结果接口同一套小写 API 契约：库里存的是大写枚举值，
+    直接透出会让前端拿到 ``QUEUED`` 而按 ``queued`` 解析不到。走
+    ``task_status_to_api`` 统一转换。
+    """
     return {
         "task_id": task.id,
-        "status": task.status,
+        "status": task_status_to_api(task.status),
         "queue_position": queue_position,
         "priority": task.priority,
     }

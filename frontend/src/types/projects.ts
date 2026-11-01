@@ -1,8 +1,9 @@
 import type { TypedArtifact } from './artifacts'
 import type { TaskStatus } from './models'
+import type { ProjectRole, ProjectStatus } from './enums.generated'
 
-export type ProjectStatus = 'draft' | 'active' | 'completed' | 'archived' | 'frozen'
-export type ProjectRole = 'owner' | 'editor' | 'runner' | 'viewer'
+// 契约枚举统一来自 codegen 产物（计划 §3.2，勿手改）。
+export type { ProjectRole, ProjectStatus } from './enums.generated'
 
 export interface ProjectMembership {
   id: string
@@ -12,7 +13,9 @@ export interface ProjectMembership {
 export interface ProjectMember extends ProjectMembership {
   project_id: string
   user_id: string
-  email: string
+  /** 邮箱可能为空（如 LDAP 账号未绑定邮箱） */
+  email?: string | null
+  username?: string | null
   display_name?: string | null
   created_at: string
   updated_at: string
@@ -27,7 +30,10 @@ export interface ResearchProject {
   status: ProjectStatus
   model_policy: Record<string, unknown>
   data_policy: Record<string, unknown>
-  membership: ProjectMembership
+  /** Effective role of the current viewer; always a string ("admin" for platform admins without a member row). */
+  role: ProjectRole | 'admin'
+  /** Null only for a platform admin who is not a member of this project. */
+  membership: ProjectMembership | null
   created_at: string
   updated_at: string
 }
@@ -38,7 +44,10 @@ export interface ProjectCreateInput {
 }
 
 export interface ProjectMemberCreateInput {
-  email: string
+  /** 优先按账号名邀请 */
+  username: string
+  /** 兼容旧版按邮箱邀请；后端仍接受 email 字段 */
+  email?: string
   role: Exclude<ProjectRole, 'owner'>
 }
 

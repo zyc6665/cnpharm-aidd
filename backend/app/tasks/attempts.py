@@ -154,6 +154,7 @@ async def commit_current_attempt(
                 Task.extra_data[EXECUTION_ATTEMPT_KEY].as_string() == attempt_id,
             )
             .values(**task_values)
+            .execution_options(synchronize_session=False)
         )
 
     if result.rowcount != 1:

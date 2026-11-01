@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
 from app.common.time import utcnow
@@ -39,6 +40,28 @@ async def read_stored_content(file_record: Any, storage_backend: Any | None = No
     """按文件记录的后端读取内容，支持注入当前配置后端。"""
     backend = _resolve_storage_backend(file_record, storage_backend)
     return await backend.download(file_record.storage_path)
+
+
+def open_stored_stream(
+    file_record: Any,
+    storage_backend: Any | None = None,
+    *,
+    chunk_size: int = 1024 * 1024,
+) -> AsyncIterator[bytes]:
+    """按文件记录的后端打开流式读取。"""
+    backend = _resolve_storage_backend(file_record, storage_backend)
+    return backend.open_stream(file_record.storage_path, chunk_size=chunk_size)
+
+
+async def stored_content_url(
+    file_record: Any,
+    *,
+    expires_in: int,
+    storage_backend: Any | None = None,
+) -> str:
+    """按文件记录的后端生成带签名的临时访问 URL。"""
+    backend = _resolve_storage_backend(file_record, storage_backend)
+    return await backend.get_url(file_record.storage_path, expires_in=expires_in)
 
 
 async def delete_stored_content(

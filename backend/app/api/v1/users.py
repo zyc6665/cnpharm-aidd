@@ -1,14 +1,15 @@
 # backend/app/api/v1/users.py
 """用户管理接口"""
 
-from typing import Optional, List
+from typing import Optional, List, Literal
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select, func, or_, delete, update
 from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.common.time import utcnow
+from app.common.exceptions import BusinessException
 from app.database.session import get_db
 from app.models.files import File, FileAccessLog
 from app.models.statistics import FileStatistics, ToolStatistics, UserStatistics
@@ -17,8 +18,16 @@ from app.models.tools import Tool, ToolFavorite, ToolVersion, tool_tag_associati
 from app.models.users import User, UserRole, UserStatus
 from app.models.workflows import ResearchBoard, WorkflowDefinition, WorkflowRun
 from app.auth.dependencies import get_current_user, get_admin_user
-from app.auth.password import hash_password, verify_password
+from app.auth.password import (
+    MAX_BCRYPT_PASSWORD_BYTES,
+    MIN_PASSWORD_LENGTH,
+    hash_password,
+    validate_password_policy,
+    verify_password,
+)
 from app.common.responses import success_response
+from app.common.search import DEFAULT_KEYWORD_MAX_LENGTH, LIKE_ESCAPE, like_pattern
+from app.logging.audit import AuditAction, ResourceType, get_audit_logger
 from app.schemas.users import UserResponse
 
 router = APIRouter()
@@ -33,11 +42,30 @@ class UserUpdate(BaseModel):
     avatar_url: Optional[str] = Field(None, description="头像URL")
     bio: Optional[str] = Field(None, description="个人简介")
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def _blank_email_to_none(cls, value):
+        """前端清空邮箱会下发空串；归一为 None，避免触发唯一/格式校验。"""
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
 
 class PasswordChange(BaseModel):
     """密码修改"""
     old_password: str = Field(..., description="旧密码")
-    new_password: str = Field(..., min_length=6, max_length=50, description="新密码")
+    new_password: str = Field(
+        ...,
+        min_length=MIN_PASSWORD_LENGTH,
+        max_length=MAX_BCRYPT_PASSWORD_BYTES,
+        description="新密码",
+    )
+
+    @field_validator("new_password")
+    @classmethod
+    def _validate_new_password(cls, value: str) -> str:
+        """沿用统一口令策略（最小 12 位 + bcrypt 72 字节）。"""
+        return validate_password_policy(value)
 
 
 class AdminUserUpdate(BaseModel):
@@ -47,19 +75,59 @@ class AdminUserUpdate(BaseModel):
     role: Optional[str] = Field(None, description="角色: user, admin")
     status: Optional[str] = Field(None, description="状态: active, disabled, pending")
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def _blank_email_to_none(cls, value):
+        """前端清空邮箱会下发空串；归一为 None，避免触发唯一/格式校验。"""
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
 
 class AdminUserCreate(BaseModel):
     """管理员创建用户"""
-    email: str = Field(..., description="邮箱")
+    username: str = Field(
+        ...,
+        pattern=r"^[A-Za-z0-9._-]{1,64}$",
+        description="登录用户名（大小写不敏感唯一）",
+    )
+    auth_source: Literal["local", "ldap"] = Field(
+        default="local", description="认证源: local / ldap"
+    )
+    email: Optional[str] = Field(None, description="邮箱（可选；LDAP 用户可不落邮箱）")
     display_name: Optional[str] = Field(None, description="显示名称")
-    password: str = Field(..., min_length=6, max_length=50, description="初始密码")
+    password: Optional[str] = Field(
+        None,
+        min_length=MIN_PASSWORD_LENGTH,
+        max_length=MAX_BCRYPT_PASSWORD_BYTES,
+        description="初始密码（local 必填；ldap 忽略）",
+    )
     role: str = Field(default=UserRole.USER.value, description="角色: user, admin")
     status: str = Field(default=UserStatus.ACTIVE.value, description="状态: active, disabled, pending")
+
+    @field_validator("password")
+    @classmethod
+    def _validate_password(cls, value: Optional[str]) -> Optional[str]:
+        """仅 local 用户填写口令时校验；LDAP 用户传 None 直接放行。"""
+        if value is None:
+            return None
+        return validate_password_policy(value)
 
 
 class AdminPasswordReset(BaseModel):
     """管理员重置用户密码"""
-    new_password: str = Field(..., min_length=6, max_length=50, description="新密码")
+    new_password: str = Field(
+        ...,
+        min_length=MIN_PASSWORD_LENGTH,
+        max_length=MAX_BCRYPT_PASSWORD_BYTES,
+        description="新密码",
+    )
+
+    @field_validator("new_password")
+    @classmethod
+    def _validate_new_password(cls, value: str) -> str:
+        """管理员重置同样受统一口令策略约束。"""
+        return validate_password_policy(value)
 
 
 class UserListResponse(BaseModel):
@@ -141,6 +209,19 @@ async def ensure_user_email_unique(db: AsyncSession, email: str, exclude_user_id
         )
 
 
+async def ensure_username_unique(
+    db: AsyncSession, username: str, exclude_user_id: Optional[str] = None
+) -> None:
+    """确保用户名大小写不敏感唯一；冲突返回业务码 40002。"""
+    filters = [func.lower(User.username) == username.lower()]
+    if exclude_user_id:
+        filters.append(User.id != exclude_user_id)
+
+    result = await db.execute(select(User.id).where(*filters).limit(1))
+    if result.first():
+        raise BusinessException("该用户名已被使用", http_status=400, code=40002)
+
+
 async def hard_delete_user_related_resources(db: AsyncSession, user_id: str) -> None:
     """彻底删除用户及其关联资源。"""
     await db.execute(
@@ -203,15 +284,15 @@ async def hard_delete_user_related_resources(db: AsyncSession, user_id: str) -> 
 
 # ==================== 当前用户接口 ====================
 
-@router.get("/me", response_model=UserResponse, summary="获取当前用户信息")
+@router.get("/me", summary="获取当前用户信息")
 async def get_current_user_info(
     current_user: User = Depends(get_current_user)
 ):
     """获取当前登录用户的详细信息"""
-    return UserResponse.model_validate(current_user)
+    return success_response(UserResponse.model_validate(current_user).model_dump())
 
 
-@router.patch("/me", response_model=UserResponse, summary="更新当前用户信息")
+@router.patch("/me", summary="更新当前用户信息")
 async def update_current_user_info(
     user_update: UserUpdate,
     current_user: User = Depends(get_current_user),
@@ -246,7 +327,7 @@ async def update_current_user_info(
     await db.commit()
     await db.refresh(current_user)
 
-    return UserResponse.model_validate(current_user)
+    return success_response(UserResponse.model_validate(current_user).model_dump())
 
 
 @router.put("/me/password", summary="修改密码")
@@ -256,6 +337,13 @@ async def change_password(
     db: AsyncSession = Depends(get_db)
 ):
     """修改当前用户的密码"""
+    if current_user.auth_source == "ldap":
+        raise BusinessException(
+            "LDAP 用户的口令由企业目录管理，请在目录中修改",
+            http_status=400,
+            code=40002,
+        )
+
     # 验证旧密码
     if not verify_password(password_change.old_password, current_user.password_hash):
         raise HTTPException(
@@ -268,7 +356,14 @@ async def change_password(
     current_user.updated_at = utcnow()
     await db.commit()
 
-    return {"message": "密码修改成功"}
+    get_audit_logger().log_user_action(
+        AuditAction.PASSWORD_CHANGE,
+        user_id=str(current_user.id),
+        resource_type=ResourceType.USER,
+        resource_id=str(current_user.id),
+    )
+
+    return success_response(message="密码修改成功")
 
 
 # ==================== 管理员接口 ====================
@@ -285,17 +380,46 @@ async def admin_create_user(
     db: AsyncSession = Depends(get_db)
 ):
     """管理员直接创建用户。"""
-    await ensure_user_email_unique(db, user_data.email)
+    username = user_data.username.strip()
+    await ensure_username_unique(db, username)
+    if user_data.email:
+        await ensure_user_email_unique(db, user_data.email)
+
+    if user_data.auth_source == "local":
+        if not user_data.password:
+            raise BusinessException(
+                "本地用户必须设置初始密码", http_status=400, code=40002
+            )
+        pwd_hash = hash_password(user_data.password)
+    else:
+        # LDAP 用户不保存本地口令
+        pwd_hash = None
 
     created_user = User(
+        username=username,
+        auth_source=user_data.auth_source,
         email=user_data.email,
         display_name=user_data.display_name,
-        password_hash=hash_password(user_data.password),
+        password_hash=pwd_hash,
         role=validate_user_role(user_data.role),
         status=validate_user_status(user_data.status),
     )
     db.add(created_user)
     await db.commit()
+
+    get_audit_logger().log_admin_operation(
+        admin_id=str(admin_user.id),
+        action=AuditAction.ADMIN_USER_CREATE,
+        target_type=ResourceType.USER,
+        target_id=str(created_user.id),
+        changes={
+            "username": created_user.username,
+            "email": created_user.email,
+            "auth_source": created_user.auth_source,
+            "role": created_user.role,
+            "status": created_user.status,
+        },
+    )
 
     loaded_user = await load_user_with_statistics(db, created_user.id)
     return success_response(
@@ -312,7 +436,9 @@ async def admin_create_user(
 async def admin_get_users(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
-    keyword: Optional[str] = Query(None, description="搜索关键词（用户名/邮箱）"),
+    keyword: Optional[str] = Query(
+        None, max_length=DEFAULT_KEYWORD_MAX_LENGTH, description="搜索关键词（用户名/邮箱）"
+    ),
     role: Optional[str] = Query(None, description="角色筛选"),
     status_filter: Optional[str] = Query(None, alias="status", description="状态筛选"),
     admin_user: User = Depends(get_admin_user),
@@ -332,9 +458,11 @@ async def admin_get_users(
 
     # 关键词搜索
     if keyword:
+        pattern = like_pattern(keyword)
         query = query.where(
-            (User.display_name.ilike(f"%{keyword}%")) |
-            (User.email.ilike(f"%{keyword}%"))
+            (User.display_name.ilike(pattern, escape=LIKE_ESCAPE)) |
+            (User.username.ilike(pattern, escape=LIKE_ESCAPE)) |
+            (User.email.ilike(pattern, escape=LIKE_ESCAPE))
         )
 
     # 角色筛选
@@ -433,7 +561,6 @@ async def admin_get_user_stats(
 
 @router.get(
     "/admin/{user_id}",
-    response_model=UserResponse,
     summary="获取用户详情（管理员）"
 )
 async def admin_get_user(
@@ -455,7 +582,7 @@ async def admin_get_user(
             detail="用户不存在"
         )
 
-    return UserResponse.model_validate(user)
+    return success_response(UserResponse.model_validate(user).model_dump())
 
 
 @router.patch(
@@ -518,6 +645,14 @@ async def admin_update_user(
     user.updated_at = utcnow()
     await db.commit()
 
+    get_audit_logger().log_admin_operation(
+        admin_id=str(admin_user.id),
+        action=AuditAction.ADMIN_USER_UPDATE,
+        target_type=ResourceType.USER,
+        target_id=user_id,
+        changes=dict(update_data),
+    )
+
     refreshed_result = await db.execute(
         select(User)
         .options(joinedload(User.statistics))
@@ -548,9 +683,24 @@ async def admin_reset_user_password(
             detail="用户不存在"
         )
 
+    if user.auth_source == "ldap":
+        raise BusinessException(
+            "LDAP 用户的口令由企业目录管理，不能在平台重置",
+            http_status=400,
+            code=40002,
+        )
+
     user.password_hash = hash_password(password_reset.new_password)
     user.updated_at = utcnow()
     await db.commit()
+
+    get_audit_logger().log_admin_operation(
+        admin_id=str(admin_user.id),
+        action=AuditAction.ADMIN_USER_UPDATE,
+        target_type=ResourceType.USER,
+        target_id=user_id,
+        changes={"reset_password": True},
+    )
 
     return success_response(
         data={"message": "密码重置成功"},
@@ -594,6 +744,13 @@ async def admin_delete_user(
     if hard:
         await hard_delete_user_related_resources(db, user_id)
         await db.commit()
+        get_audit_logger().log_admin_operation(
+            admin_id=str(admin_user.id),
+            action=AuditAction.ADMIN_USER_DELETE,
+            target_type=ResourceType.USER,
+            target_id=user_id,
+            changes={"hard": True},
+        )
         return success_response(
             data={"message": "用户已彻底删除"},
             message="用户已彻底删除",
@@ -603,6 +760,14 @@ async def admin_delete_user(
     user.status = UserStatus.DISABLED.value
     user.updated_at = utcnow()
     await db.commit()
+
+    get_audit_logger().log_admin_operation(
+        admin_id=str(admin_user.id),
+        action=AuditAction.ADMIN_USER_DELETE,
+        target_type=ResourceType.USER,
+        target_id=user_id,
+        changes={"hard": False},
+    )
 
     return success_response(
         data={"message": "用户已删除"},

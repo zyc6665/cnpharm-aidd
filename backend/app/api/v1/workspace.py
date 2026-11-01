@@ -66,10 +66,12 @@ async def get_workspace_overview(
         .order_by(Task.updated_at.desc())
         .limit(12)
     )
+    # status 存的是大写枚举值（backend/app/common/enums.py），不需要 lower()。
+    # 一旦套上 func.lower，`ix_tasks_user_status_created` 就用不上，只能全扫该用户任务。
     count_result = await db.execute(
-        select(func.lower(Task.status), func.count(Task.id))
+        select(Task.status, func.count(Task.id))
         .where(Task.user_id == current_user.id)
-        .group_by(func.lower(Task.status))
+        .group_by(Task.status)
     )
     task_status_counts = {
         "pending": 0,
@@ -77,7 +79,7 @@ async def get_workspace_overview(
         "success": 0,
         "failure": 0,
         "canceled": 0,
-        **{str(status): count for status, count in count_result.all()},
+        **{str(status).lower(): count for status, count in count_result.all()},
     }
     workflow_result = await db.execute(
         select(WorkflowDefinition)

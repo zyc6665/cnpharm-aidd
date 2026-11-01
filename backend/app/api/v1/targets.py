@@ -22,6 +22,7 @@ from sqlalchemy.orm import selectinload
 from app.auth.dependencies import get_current_user
 from app.common.exceptions import NotFoundException, ValidationException
 from app.common.responses import paginated_response, success_response
+from app.common.search import DEFAULT_KEYWORD_MAX_LENGTH, LIKE_ESCAPE, like_pattern
 from app.database.session import get_db
 from app.feature_flags import require_feature_flag
 from app.files.content import read_file_bytes
@@ -146,14 +147,16 @@ async def list_project_targets(
     project_id: str,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200),
-    keyword: str | None = Query(None, max_length=128),
+    keyword: str | None = Query(None, max_length=DEFAULT_KEYWORD_MAX_LENGTH),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     await load_project_membership(db, project_id=project_id, user_id=current_user.id)
     conditions = [Target.project_id == project_id]
     if keyword:
-        conditions.append(Target.name.ilike(f"%{keyword}%"))
+        conditions.append(
+            Target.name.ilike(like_pattern(keyword), escape=LIKE_ESCAPE)
+        )
     total = await db.scalar(select(func.count(Target.id)).where(*conditions))
     result = await db.execute(
         select(Target)

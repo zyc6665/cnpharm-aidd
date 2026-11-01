@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.artifact_standards.registry import (
@@ -21,11 +22,18 @@ from app.execution.result_parser import (
     ParsedStandardFile,
     ParsedStandardResult,
 )
-from app.models.artifacts import Artifact, ArtifactLineage, ArtifactVersion, ArtifactVersionFile
+from app.models.artifacts import ArtifactLineage
 from app.models.files import File as FileModel, FileSourceType
 from app.models.tasks import Task
 from app.common.task_context import task_project_id
 from app.files.writer import store_file_path
+from app.services.artifact_identity import resolve_identity_full
+from app.services.artifact_writer import (
+    ArtifactSource,
+    attach_version_files,
+    upsert_artifact,
+    upsert_version,
+)
 from app.services.standard_artifact_collection import (
     collected_standard_result_payload,
     declared_standard_outputs_from_config,
@@ -161,6 +169,16 @@ async def create_artifact_versions_from_parsed_result(
             raise StandardArtifactPersistenceError(
                 f"Relation references unknown artifact: {from_ref} -> {to_ref}"
             )
+        existing_lineage = await db.scalar(
+            select(ArtifactLineage.id).where(
+                ArtifactLineage.input_version_id == refs[from_ref],
+                ArtifactLineage.output_version_id == refs[to_ref],
+            )
+        )
+        if existing_lineage is not None:
+            # 同一任务重放会复用同一批版本；受控关系边必须保持幂等，
+            # 否则 uq_artifact_lineage_input_output 会直接冲突。
+            continue
         db.add(
             ArtifactLineage(
                 project_id=project_id,
@@ -205,18 +223,26 @@ async def _persist_artifact(
             f"Artifact {artifact.output_name} has no files to persist"
         )
 
-    artifact_record = Artifact(
-        project_id=project_id,
-        created_by=user_id,
-        artifact_type=standard_ref.type,
-        semantic_type=standard_ref.type,
+    # Artifact 是逻辑资产的「身份」，版本才是每次运行的记录。走统一写入点按稳定标识
+    # 取或建，避免同一任务重试/重放时每次都新建一个资产根。按 name 参与身份判据，
+    # 因为一次运行可能产出多个同类型、不同名字的资产（如多个配体）。
+    # 三列身份统一由解析器给出，标准产物三列都收敛到标准 type，版本只走 standard_version。
+    resolved_type, resolved_semantic, resolved_standard, resolved_version = resolve_identity_full(
+        standard_ref.type,
         standard_type=standard_ref.type,
         standard_version=standard_ref.version,
-        name=artifact.name or _artifact_ref_key(artifact),
-        source_task_id=str(task.id),
     )
-    db.add(artifact_record)
-    await db.flush()
+    artifact_record, _artifact_created = await upsert_artifact(
+        db,
+        project_id=project_id,
+        artifact_type=resolved_type,
+        semantic_type=resolved_semantic,
+        standard_type=resolved_standard,
+        standard_version=resolved_version,
+        name=artifact.name or _artifact_ref_key(artifact),
+        created_by=user_id,
+        match_name=True,
+    )
 
     resolved_files: list[tuple[str, FileModel]] = []
     for role, parsed_file in artifact.files.items():
@@ -242,41 +268,41 @@ async def _persist_artifact(
         ),
         file_records[0],
     )
-    version = ArtifactVersion(
-        artifact_id=artifact_record.id,
-        created_by=user_id,
-        version=1,
+    attempt_id = (task.extra_data or {}).get("execution_attempt_id")
+    version, _created = await upsert_version(
+        db,
+        artifact=artifact_record,
         filename=primary_file_record.filename,
         content_type=primary_file_record.content_type,
         size_bytes=primary_file_record.size_bytes,
         sha256=primary_file_record.sha256,
         storage_key=primary_file_record.storage_path,
-        status="available",
-        validation_status="passed",
-        validation_errors=[],
         manifest_json=_manifest_for_artifact(
             artifact,
             mock=bool((task.extra_data or {}).get("mock")),
         ),
         summary_json=artifact.summary,
         metrics_json=artifact.metrics,
+        validation_status="passed",
+        created_by=user_id,
+        source=ArtifactSource(
+            task_id=str(task.id),
+            attempt_id=str(attempt_id) if attempt_id else None,
+            tool_version_id=str(task.tool_version_id) if task.tool_version_id else None,
+        ),
     )
-    db.add(version)
-    await db.flush()
 
-    for sort_order, (role, file_record) in enumerate(resolved_files):
-        db.add(
-            ArtifactVersionFile(
-                artifact_version_id=version.id,
-                role=role,
-                file_id=file_record.id,
-                is_primary=role == primary_file.role,
-                sort_order=sort_order,
-            )
-        )
+    # Route through the writer so an idempotent replay (same task, same bytes) cannot
+    # re-write roles that already exist on the reused version.
+    await attach_version_files(
+        db,
+        version=version,
+        files=[
+            (role, file_record.id, role == primary_file.role)
+            for role, file_record in resolved_files
+        ],
+    )
 
-    artifact_record.latest_version_id = version.id
-    artifact_record.latest_version = version
     await db.flush()
     return (
         _artifact_ref_key(artifact),

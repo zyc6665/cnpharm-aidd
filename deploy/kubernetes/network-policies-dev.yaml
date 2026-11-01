@@ -1,0 +1,138 @@
+# 开发集群数据面的最小网络策略：
+# 1) 对数据服务 Pod 默认拒绝全部入站/出站；
+# 2) 仅放行平台命名空间到 PostgreSQL/Redis/MinIO/Registry 的必要端口；
+# 3) DNS 出站仅放行到 kube-system。
+# 生产环境应在此基础上按实际拓扑收紧命名空间选择器。
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sciminer-default-deny-data
+  namespace: sciminer-system
+spec:
+  podSelector:
+    matchExpressions:
+      - key: sciminer.io/purpose
+        operator: In
+        values: ["database", "broker"]
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sciminer-default-deny-storage
+  namespace: sciminer-storage
+spec:
+  podSelector:
+    matchExpressions:
+      - key: sciminer.io/purpose
+        operator: In
+        values: ["object-storage", "image-registry"]
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sciminer-allow-data-ingress
+  namespace: sciminer-system
+spec:
+  podSelector:
+    matchExpressions:
+      - key: sciminer.io/purpose
+        operator: In
+        values: ["database", "broker"]
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: sciminer-system
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: sciminer-model-jobs
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sciminer-allow-storage-ingress
+  namespace: sciminer-storage
+spec:
+  podSelector:
+    matchExpressions:
+      - key: sciminer.io/purpose
+        operator: In
+        values: ["object-storage", "image-registry"]
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: sciminer-system
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: sciminer-model-jobs
+      ports:
+        - protocol: TCP
+          port: 9000
+        - protocol: TCP
+          port: 9001
+        - protocol: TCP
+          port: 5000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sciminer-allow-dns-egress
+  namespace: sciminer-system
+spec:
+  podSelector:
+    matchExpressions:
+      - key: sciminer.io/purpose
+        operator: In
+        values: ["database", "broker"]
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sciminer-allow-dns-egress
+  namespace: sciminer-storage
+spec:
+  podSelector:
+    matchExpressions:
+      - key: sciminer.io/purpose
+        operator: In
+        values: ["object-storage", "image-registry"]
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

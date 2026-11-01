@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed, onScopeDispose } from 'vue'
-import type { UserInfo, LoginParams, RegisterParams } from '@/types/models'
+import type { UserInfo, LoginParams } from '@/types/models'
 import {
   changePassword as apiChangePassword,
   updateUserProfile
@@ -8,31 +8,21 @@ import {
 import { normalizeUserInfo } from '@/utils/user-normalization'
 import {
   login as apiLogin,
-  register as apiRegister,
   logout as apiLogout,
-  getCurrentUser,
-  sendEmailCode as apiSendEmailCode,
-  refreshToken as apiRefreshToken
+  getCurrentUser
 } from '@/api/auth'
-import {
-  AUTH_CLEARED_EVENT,
-  setToken,
-  setRefreshToken,
-  clearTokens,
-  getToken,
-  getRefreshToken
-} from '@/api/request'
+import { AUTH_CLEARED_EVENT, clearTokens } from '@/api/request'
+import { getCsrfToken } from '@/utils/cookies'
 
 export const useUserStore = defineStore('user', () => {
-  // State
-  const token = ref<string | null>(getToken())
-  const refreshToken = ref<string | null>(getRefreshToken())
+  // State：不再持有 access/refresh token，登录态以 Cookie 会话 + userInfo 为准
   const userInfo = ref<UserInfo | null>(null)
   const loading = ref(false)
-  const authReady = ref(!getToken())
+  const authReady = ref(false)
+  let bootstrapPromise: Promise<UserInfo | null> | null = null
 
   // Getters
-  const isLoggedIn = computed(() => !!token.value)
+  const isLoggedIn = computed(() => !!userInfo.value)
   const isAuthenticated = isLoggedIn
   const user = computed(() => normalizeUserInfo(userInfo.value))
   const isAdmin = computed(() => user.value?.role === 'admin')
@@ -44,8 +34,6 @@ export const useUserStore = defineStore('user', () => {
   const role = computed(() => userRole.value)
 
   const clearLocalAuthState = () => {
-    token.value = null
-    refreshToken.value = null
     userInfo.value = null
     authReady.value = true
   }
@@ -62,56 +50,56 @@ export const useUserStore = defineStore('user', () => {
     loading.value = true
     try {
       const res = await apiLogin(params)
+      // 清理历史遗留 token，再写入用户信息
       clearTokens()
-      token.value = res.data.access_token
-      refreshToken.value = res.data.refresh_token
       userInfo.value = normalizeUserInfo(res.data.user)
-      setToken(res.data.access_token)
-      setRefreshToken(res.data.refresh_token)
+      authReady.value = true
       return res.data
     } finally {
       loading.value = false
-      authReady.value = true
     }
   }
 
-  const bootstrapAuthState = async () => {
-    if (!token.value) {
-      authReady.value = true
-      return null
+  /**
+   * 启动时恢复会话：后端 Cookie 对 JS 不可见，因此用可读的 CSRF Cookie
+   * 判断「可能已有会话」，再通过 GET /users/me 校验并恢复用户信息。
+   * 没有 token 也能恢复；没有 CSRF Cookie 时直接视为未登录，避免公开页 401。
+   */
+  const bootstrapAuthState = async (force = false) => {
+    if (!force && authReady.value) {
+      return userInfo.value
     }
 
-    if (!userInfo.value) {
-      return await fetchUserInfo()
+    if (bootstrapPromise) {
+      return bootstrapPromise
     }
 
-    authReady.value = true
-    return userInfo.value
-  }
-
-  const register = async (params: RegisterParams) => {
-    loading.value = true
-    try {
-      const res = await apiRegister(params)
-      // 注册成功后自动登录
-      if (res.data.access_token) {
-        clearTokens()
-        token.value = res.data.access_token
-        refreshToken.value = res.data.refresh_token
-        userInfo.value = normalizeUserInfo(res.data.user)
-        setToken(res.data.access_token)
-        setRefreshToken(res.data.refresh_token)
+    bootstrapPromise = (async () => {
+      if (!getCsrfToken()) {
+        userInfo.value = null
+        authReady.value = true
+        return null
       }
-      return res.data
-    } finally {
-      loading.value = false
-      authReady.value = true
-    }
-  }
 
-  // 发送邮箱验证码
-  const sendEmailCode = async (email: string, purpose: 'register' | 'reset_password' = 'register') => {
-    return await apiSendEmailCode(email, purpose)
+      loading.value = true
+      try {
+        const res = await getCurrentUser({ silent: true, skipAuthRedirect: true })
+        userInfo.value = normalizeUserInfo(res.data)
+        return userInfo.value
+      } catch {
+        userInfo.value = null
+        return null
+      } finally {
+        loading.value = false
+        authReady.value = true
+      }
+    })()
+
+    try {
+      return await bootstrapPromise
+    } finally {
+      bootstrapPromise = null
+    }
   }
 
   const logout = async () => {
@@ -120,22 +108,21 @@ export const useUserStore = defineStore('user', () => {
     } catch {
       // 忽略退出登录的错误（如 401），因为无论如何都要清除本地数据
     } finally {
-      clearLocalAuthState()
       clearTokens()
+      clearLocalAuthState()
     }
   }
 
   const fetchUserInfo = async () => {
-    if (!token.value) return null
     loading.value = true
     try {
       const res = await getCurrentUser()
       userInfo.value = normalizeUserInfo(res.data)
       return res.data
     } catch {
-      // Token 无效，清除状态
-      clearLocalAuthState()
+      // 会话无效，清除状态
       clearTokens()
+      clearLocalAuthState()
       return null
     } finally {
       loading.value = false
@@ -170,27 +157,8 @@ export const useUserStore = defineStore('user', () => {
     return true
   }
 
-  // 刷新 Token
-  const refreshAccessToken = async () => {
-    if (!refreshToken.value) return false
-    try {
-      const res = await apiRefreshToken(refreshToken.value)
-      token.value = res.data.access_token
-      refreshToken.value = res.data.refresh_token
-      setToken(res.data.access_token)
-      setRefreshToken(res.data.refresh_token)
-      authReady.value = true
-      return true
-    } catch {
-      await logout()
-      return false
-    }
-  }
-
   return {
     // State
-    token,
-    refreshToken,
     userInfo,
     loading,
     authReady,
@@ -206,13 +174,10 @@ export const useUserStore = defineStore('user', () => {
     role,
     // Actions
     login,
-    register,
-    sendEmailCode,
     logout,
     fetchUserInfo,
     bootstrapAuthState,
     updateUserInfo,
-    refreshAccessToken,
     // Additional actions
     updateProfile,
     changePassword

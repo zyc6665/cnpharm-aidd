@@ -2,6 +2,7 @@
 """存储后端抽象基类"""
 
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from typing import Optional, BinaryIO
 from dataclasses import dataclass
 
@@ -70,6 +71,15 @@ class StorageBackend(ABC):
 
         Returns:
             bytes: 文件内容
+        """
+        pass
+
+    @abstractmethod
+    def open_stream(self, path: str, chunk_size: int = 1024 * 1024) -> AsyncIterator[bytes]:
+        """按块流式读取文件，供 ``StreamingResponse`` 使用。
+
+        调用方只消费异步迭代器；后端负责在迭代结束/异常时释放底层句柄或连接。
+        ``chunk_size`` 默认 1MB，避免大文件一次性读入内存。
         """
         pass
 

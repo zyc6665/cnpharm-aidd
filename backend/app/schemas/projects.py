@@ -4,9 +4,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
+from app.common.enums import ProjectStatus
 
-ProjectStatus = Literal["draft", "active", "completed", "archived", "frozen"]
-ProjectRole = Literal["owner", "editor", "runner", "viewer"]
+# ProjectStatus 的取值集合统一由 app.common.enums 提供（计划 §3.1）。
 
 
 class ProjectCreate(BaseModel):
@@ -24,21 +24,31 @@ class ProjectUpdate(BaseModel):
     status: ProjectStatus | None = None
     model_policy: dict | None = None
     data_policy: dict | None = None
+    # 乐观锁：客户端携带读取时的 version，服务端做条件更新；为空则退化为覆盖更新。
+    expected_version: int | None = Field(default=None, ge=1)
 
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
     def require_change(self):
-        if not self.model_fields_set:
+        if not (self.model_fields_set - {"expected_version"}):
             raise ValueError("at least one project field is required")
         return self
 
 
 class ProjectMemberCreate(BaseModel):
-    email: EmailStr
+    # 优先用 username（企业内网主标识）；email 仅为向后兼容保留。
+    username: str | None = Field(default=None, min_length=1, max_length=64)
+    email: EmailStr | None = None
     role: Literal["editor", "runner", "viewer"]
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def require_identifier(self):
+        if not self.username and not self.email:
+            raise ValueError("username 与 email 至少提供一个")
+        return self
 
 
 class ProjectMemberUpdate(BaseModel):

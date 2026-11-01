@@ -8,17 +8,19 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.api.v1 import gpu
-from app.api.v1 import api_router
+from app.main import app
 from app.auth.dependencies import get_admin_user
 
 
 def test_gpu_router_is_registered_in_v1_api() -> None:
     """GPU接口应暴露在统一的v1路由下。"""
-    paths = {route.path for route in api_router.routes}
+    # FastAPI 新版对 include_router 采用惰性 _IncludedRouter，直接遍历
+    # api_router.routes 拿不到叶子路由；改从构建后的 OpenAPI 路径表断言。
+    paths = set(app.openapi()["paths"])
 
-    assert "/gpu/info" in paths
-    assert "/gpu/allocate" in paths
-    assert "/gpu/release" in paths
+    assert "/api/v1/gpu/info" in paths
+    assert "/api/v1/gpu/allocate" in paths
+    assert "/api/v1/gpu/release" in paths
 
 
 def test_gpu_mutation_routes_require_admin() -> None:
@@ -66,7 +68,8 @@ async def test_allocate_gpu_uses_database_session(monkeypatch) -> None:
         db=db,
     )
 
-    assert result == expected
+    assert result["code"] == 200
+    assert result["data"] == expected.model_dump()
     db.commit.assert_awaited_once()
 
 
@@ -92,9 +95,43 @@ async def test_release_gpu_uses_database_session(monkeypatch) -> None:
         db=db,
     )
 
-    assert result == {"message": "GPU released successfully"}
+    assert result["code"] == 200
+    assert result["message"] == "GPU released successfully"
+    assert result["data"] is None
     assert observed == {
         "session": db,
         "kwargs": {"task_id": "task-1", "allocation_id": "allocation-1"},
     }
     db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_get_gpu_stats_returns_standard_envelope(monkeypatch) -> None:
+    """GPU 统计列表必须走统一响应信封，避免前端拿到裸数组。"""
+    stat = SimpleNamespace(
+        gpu_index=0,
+        utilization_percent=42.0,
+        memory_used_mb=1024,
+        memory_free_mb=2048,
+        memory_total_mb=3072,
+        temperature_celsius=55.0,
+        power_watts=120.0,
+        fan_speed_percent=40.0,
+    )
+
+    class FakeDetector:
+        def is_available(self):
+            return True
+
+        def get_all_gpu_stats(self):
+            return [stat]
+
+    monkeypatch.setattr(gpu, "get_gpu_detector", lambda: FakeDetector())
+
+    result = await gpu.get_gpu_stats(current_user=object())
+
+    assert result["code"] == 200
+    assert isinstance(result["data"], list)
+    first = result["data"][0]
+    assert first.gpu_index == 0
+    assert first.utilization_percent == 42.0

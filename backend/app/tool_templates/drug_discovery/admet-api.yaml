@@ -1,4 +1,4 @@
-api_version: aidd.sciminer/tool-template.v1
+api_version: aidd.sciminer/tool-template
 kind: ToolTemplate
 metadata:
   template_key: admet-api
@@ -17,7 +17,7 @@ input_schema:
 output_schema:
   type: object
   properties:
-    result_version: { const: aidd.sciminer/result.v2 }
+    result_version: { const: aidd.sciminer/result }
     artifacts: { type: array }
     summary: { type: object }
 agent_capability:
@@ -61,7 +61,7 @@ smoke_test:
   name: admet-api-smoke
   params: { smiles_column: smiles }
   input_artifacts: { molecules: examples/smiles.csv }
-  expected_result_version: aidd.sciminer/result.v2
+  expected_result_version: aidd.sciminer/result
   expected_outputs:
     - semantic_type: run_report@1
       role: report_json

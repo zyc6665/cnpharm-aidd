@@ -67,7 +67,6 @@ from app.services.task_event_stream import (
     load_state as load_task_state,
     stream_task_events as stream_events,
 )
-from app.auth.jwt_handler import verify_token
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -303,24 +302,6 @@ def _resolve_session_factory(db: AsyncSession) -> async_sessionmaker[AsyncSessio
     return async_sessionmaker(bound_engine, expire_on_commit=False, autoflush=False)
 
 
-async def _load_user_from_query_token(db: AsyncSession, token: Optional[str]) -> Optional[User]:
-    """从查询参数里的 access token 还原用户（EventSource 无法带请求头）。"""
-    if not token:
-        return None
-    try:
-        payload = verify_token(token, token_type="access")
-    except Exception as exc:  # token 过期/被篡改用同一条 401 出口
-        logger.debug("SSE 查询参数 token 校验失败: %s", exc)
-        return None
-    user_id = payload.get("sub")
-    if not user_id:
-        return None
-    user = await db.get(User, str(user_id))
-    if user is None or user.status != "active":
-        return None
-    return user
-
-
 async def _guarded_event_source(
     generator: AsyncIterator[str],
     request: Request,
@@ -358,6 +339,13 @@ async def list_tasks(
     resource_wait_scope: Optional[str] = Query(
         None, description="按资源等待 scope 筛选: user/project"
     ),
+    cursor: Optional[str] = Query(
+        None,
+        description=(
+            "游标分页（深分页用）。传入上一页响应里的 nextCursor 即可，"
+            "此时不再返回 total，只用 nextCursor/hasMore 翻页"
+        ),
+    ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -381,6 +369,7 @@ async def list_tasks(
             resource_wait_category=resource_wait_category,
             resource_wait_scope=resource_wait_scope,
         ),
+        cursor=cursor,
     )
 
     # 构建响应
@@ -407,12 +396,21 @@ async def list_tasks(
             task_dict["user_email"] = task.user.email
         task_list.append(task_dict)
 
-    return paginated_response(
+    response = paginated_response(
         items=task_list,
-        total=page_result.total,
+        total=page_result.total or 0,
         page=page,
         page_size=page_size,
     )
+    # 游标模式不承诺 total：算总数与深分页同代价，会把这轮优化的收益抵掉。
+    data = response["data"]
+    data["nextCursor"] = page_result.next_cursor
+    data["hasMore"] = page_result.has_more
+    data["totalKnown"] = page_result.total is not None
+    if page_result.total is None:
+        data["total"] = None
+        data["total_pages"] = None
+    return response
 
 
 @router.get("/counts", response_model=dict)
@@ -478,7 +476,6 @@ async def prepare_task_preview(    task_data: TaskCreate,
 async def stream_task_events(
     task_id: str,
     request: Request,
-    token: Optional[str] = Query(None, description="EventSource 无法携带请求头，浏览器场景用查询参数传 access token"),
     include_logs: bool = Query(True, description="是否把新日志作为 log 事件一并推送"),
     max_seconds: Optional[int] = Query(None, ge=5, le=7200, description="单条连接最长存活秒数"),
     current_user: User = Depends(get_current_user_optional),
@@ -486,15 +483,14 @@ async def stream_task_events(
 ):
     """SSE 订阅任务状态与进度（docs/05 §1.5、§9；docs/10 API-08）。
 
-    认证优先取 `Authorization: Bearer`，缺失时回退到 `?token=`（浏览器的
-    `EventSource` 不能自定义请求头，这是浏览器端唯一可行的传参方式）。
+    认证仅接受 `Authorization: Bearer` 或 HttpOnly Cookie（P1-7 起前端 EventSource
+    已用 `withCredentials` Cookie 认证）。不再接受 `?token=` 查询参数——URL 会进
+    访问日志/Referer，泄漏长寿命凭证（P2 已移除）。
 
     事件序列：`snapshot` → （`status` / `progress` / `log`）* → `done`。
     任务进入终态后服务端主动关流；数小时级任务到 `max_seconds` 后由前端重连。
     """
     user = current_user
-    if user is None:
-        user = await _load_user_from_query_token(db, token)
     if user is None:
         raise UnauthorizedException("未提供认证凭证")
 

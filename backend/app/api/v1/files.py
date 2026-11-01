@@ -17,6 +17,7 @@ from app.common.time import utcnow
 from app.database.session import get_db
 from app.models.users import User
 from app.models.files import File as FileModel, FileSourceType
+from app.models.projects import ProjectMember
 from app.auth.dependencies import get_current_user, get_current_user_optional
 from app.schemas.files import (
     FileResponse as FileSchema,
@@ -24,10 +25,16 @@ from app.schemas.files import (
     FileDownloadUrl,
 )
 from app.common.responses import paginated_response, success_response
-from app.common.exceptions import NotFoundException, ForbiddenException, ValidationException
+from app.common.exceptions import (
+    ForbiddenException,
+    NotFoundException,
+    PayloadTooLargeException,
+    ValidationException,
+)
 from app.chemistry.conversion import convert_sdf_to_pdb_with_toolkit as _convert_sdf_to_pdb_with_toolkit
 from app.config import settings
 from app.logging.audit import AuditAction, AuditResult, get_audit_logger
+from app.services.artifact_responses import content_disposition
 from app.files.remote_access_tokens import (
     RemoteFileAccessTokenError,
     create_browser_file_access_token,
@@ -38,8 +45,6 @@ from app.files.file_records import (
     delete_stored_content,
     file_storage_path,
     is_file_usable,
-    user_can_access_file,
-    user_can_manage_file,
 )
 from app.files.upload_staging import stream_upload, validate_upload_content
 from app.files.writer import store_file_bytes, store_file_path
@@ -254,11 +259,22 @@ async def convert_sdf_to_pdb(
     db: AsyncSession = Depends(get_db),
 ):
     """上传 SDF 并转换为 ligand PDB 文件。"""
-    file_content = await file.read()
-    file_size = len(file_content)
+    # P2 硬化：边读边累计，超过上限立即 413，避免先把整段文件读入内存再判断大小
+    # （原实现 ``await file.read()`` 无上限地把请求体全部驻留内存，构成内存 DoS）。
     max_size = settings.MAX_FILE_SIZE_MB * 1024 * 1024
-    if file_size > max_size:
-        raise ValidationException(f"文件大小超过限制 ({settings.MAX_FILE_SIZE_MB}MB)")
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(1024 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_size:
+            raise PayloadTooLargeException(
+                f"文件大小超过限制 ({settings.MAX_FILE_SIZE_MB}MB)"
+            )
+        chunks.append(chunk)
+    file_content = b"".join(chunks)
 
     lower_name = (file.filename or "").lower()
     lower_type = (file.content_type or "").lower()
@@ -323,13 +339,74 @@ async def get_file_info(
         raise NotFoundException("文件不存在")
 
     # 权限检查
-    if not user_can_access_file(file, current_user):
+    if not await _user_can_access_file_record(db, file, current_user):
         raise ForbiddenException("无权访问此文件")
 
     if not is_file_usable(file):
         raise NotFoundException("文件不存在")
 
     return success_response(data=FileSchema.model_validate(file).model_dump())
+
+
+async def _project_member_exists(
+    db: AsyncSession, project_id: str, user_id: str
+) -> bool:
+    """判断用户是否为指定项目的成员（任意角色）。"""
+    membership = await db.scalar(
+        select(ProjectMember.id).where(
+            ProjectMember.project_id == project_id,
+            ProjectMember.user_id == user_id,
+        )
+    )
+    return membership is not None
+
+
+async def _user_can_access_file_record(
+    db: AsyncSession, file: FileModel, user: User | None
+) -> bool:
+    """项目感知的文件读取/下载鉴权（单一权威入口）。
+
+    - 公开文件：任何人可读（含匿名）。
+    - admin：始终可读。
+    - 项目文件（project_id 非空）：仅项目成员（任意角色）可读；owner 但已被移出
+      项目的用户不再可读（broken access control 修复点）。
+    - 非项目文件：保持 owner / admin 语义。
+    """
+    if file.is_public:
+        return True
+    if user is None:
+        return False
+    if user.role == "admin":
+        return True
+    if file.project_id:
+        return await _project_member_exists(db, file.project_id, user.id)
+    return file.owner_id == user.id
+
+
+async def _user_can_manage_file_record(
+    db: AsyncSession, file: FileModel, user: User | None
+) -> bool:
+    """项目感知的文件管理（删除）鉴权。
+
+    - 匿名不可管理（即使是公开文件）。
+    - admin：始终可管理。
+    - 项目文件：仅项目成员（任意角色）可管理；owner 但已非成员的不能删除。
+    - 非项目文件：保持 owner / admin 语义。
+    """
+    if user is None:
+        return False
+    if user.role == "admin":
+        return True
+    if file.project_id:
+        return await _project_member_exists(db, file.project_id, user.id)
+    return file.owner_id == user.id
+
+
+async def _user_can_access_download_file(
+    db: AsyncSession, file: FileModel, user: User | None
+) -> bool:
+    """下载入口的项目感知鉴权，复用统一的文件读取规则。"""
+    return await _user_can_access_file_record(db, file, user)
 
 
 @router.get("/{file_id}/download")
@@ -351,12 +428,19 @@ async def download_file(
         raise NotFoundException("文件不存在")
 
     remote_token_claims = None
+    browser_token_used = False
     if token:
         try:
             remote_token_claims = validate_remote_file_access_token(token, file_id=file_id)
         except RemoteFileAccessTokenError:
             try:
-                remote_token_claims = validate_browser_file_access_token(token, file_id=file_id)
+                # 浏览器下载令牌绑定具体用户，兑换时必须与当前请求者一致。
+                if current_user is None:
+                    raise RemoteFileAccessTokenError("浏览器文件下载令牌需要登录用户")
+                remote_token_claims = validate_browser_file_access_token(
+                    token, file_id=file_id, user_id=str(current_user.id)
+                )
+                browser_token_used = True
             except RemoteFileAccessTokenError as exc:
                 _audit_file_download_denied(
                     file=file,
@@ -366,8 +450,11 @@ async def download_file(
                 )
                 raise ForbiddenException(str(exc)) from exc
 
-    # 权限检查：公开文件允许匿名访问
-    if not file.is_public and remote_token_claims is None:
+    # 权限检查：公开文件允许匿名访问。远程任务令牌由签发侧担保任务与文件的绑定，
+    # 保持可用；浏览器下载令牌只用于证明 file_id 绑定与用户身份，仍需按当前身份
+    # 做授权（项目文件认项目成员），不能因令牌有效就跳过项目成员校验。
+    token_grants_access = remote_token_claims is not None and not browser_token_used
+    if not file.is_public and not token_grants_access:
         if not current_user:
             _audit_file_download_denied(
                 file=file,
@@ -379,11 +466,11 @@ async def download_file(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="需要登录才能访问此文件"
             )
-        if not user_can_access_file(file, current_user):
+        if not await _user_can_access_download_file(db, file, current_user):
             _audit_file_download_denied(
                 file=file,
                 current_user=current_user,
-                remote_token=False,
+                remote_token=browser_token_used,
                 reason="forbidden",
             )
             raise ForbiddenException("无权下载此文件")
@@ -405,7 +492,7 @@ async def download_file(
         response = Response(
             content=content,
             media_type=file.content_type,
-            headers={"Content-Disposition": f'attachment; filename="{file.filename}"'},
+            headers={"Content-Disposition": content_disposition(file.filename)},
         )
     else:
         file_path = file_storage_path(file)
@@ -455,8 +542,9 @@ async def get_download_url(
     if not file:
         raise NotFoundException("文件不存在")
 
-    # 权限检查
-    if not user_can_access_file(file, current_user):
+    # 权限检查：与下载保持一致，项目文件必须校验项目成员（admin/public 例外），
+    # 被移出项目的 owner 不能再凭 owner_id 取得下载 URL。
+    if not await _user_can_access_file_record(db, file, current_user):
         raise ForbiddenException("无权访问此文件")
     if not is_file_usable(file):
         raise NotFoundException("文件不存在")
@@ -491,8 +579,8 @@ async def delete_file(
     if not file:
         raise NotFoundException("文件不存在")
 
-    # 权限检查
-    if not user_can_manage_file(file, current_user):
+    # 权限检查：项目文件需要项目成员（或 admin）才可删除；非项目文件保持 owner/admin。
+    if not await _user_can_manage_file_record(db, file, current_user):
         raise ForbiddenException("无权删除此文件")
 
     await delete_stored_content(file)
@@ -524,8 +612,8 @@ async def batch_delete_files(
             failed_ids.append(file_id)
             continue
 
-        # 权限检查
-        if not user_can_manage_file(file, current_user):
+        # 权限检查：项目文件需要项目成员（或 admin）才可删除。
+        if not await _user_can_manage_file_record(db, file, current_user):
             failed_ids.append(file_id)
             continue
 

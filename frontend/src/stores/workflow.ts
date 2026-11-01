@@ -71,6 +71,8 @@ export const useWorkflowStore = defineStore(
     const {
       workflowRuns,
       workflowRunsPagination,
+      workflowRunsNextCursor,
+      workflowRunsHasMore,
       activeWorkflowRun,
       activeWorkflowRunId,
       isLoadingWorkflowRuns,
@@ -364,6 +366,8 @@ export const useWorkflowStore = defineStore(
       // API state
       workflowRuns,
       workflowRunsPagination,
+      workflowRunsNextCursor,
+      workflowRunsHasMore,
       activeWorkflowRun,
       activeWorkflowRunId,
       isLoadingWorkflowRuns,

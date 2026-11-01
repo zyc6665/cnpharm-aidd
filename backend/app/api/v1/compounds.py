@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.dependencies import get_current_user
 from app.common.exceptions import NotFoundException, ValidationException
 from app.common.responses import paginated_response, success_response
+from app.common.search import DEFAULT_KEYWORD_MAX_LENGTH, LIKE_ESCAPE, like_pattern
 from app.config import settings
 from app.database.session import get_db
 from app.feature_flags import require_feature_flag
@@ -100,7 +101,7 @@ async def list_project_compounds(
     project_id: str,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200),
-    keyword: str | None = Query(None, max_length=128),
+    keyword: str | None = Query(None, max_length=DEFAULT_KEYWORD_MAX_LENGTH),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -112,10 +113,11 @@ async def list_project_compounds(
     )
     conditions = [Compound.id.in_(referenced)]
     if keyword:
+        pattern = like_pattern(keyword)
         conditions.append(
-            Compound.name.ilike(f"%{keyword}%")
-            | Compound.canonical_smiles.ilike(f"%{keyword}%")
-            | Compound.inchikey.ilike(f"%{keyword}%")
+            Compound.name.ilike(pattern, escape=LIKE_ESCAPE)
+            | Compound.canonical_smiles.ilike(pattern, escape=LIKE_ESCAPE)
+            | Compound.inchikey.ilike(pattern, escape=LIKE_ESCAPE)
         )
 
     total = await db.scalar(select(func.count(Compound.id)).where(*conditions))
@@ -370,9 +372,12 @@ async def search_compounds_by_similarity(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """按 ECFP4 Tanimoto 检索相似分子（docs/04 §5.7 一期全表扫描实现）。"""
+    """按 ECFP4 Tanimoto 检索相似分子（docs/04 §5.7 一期实现）。
+
+    只返回当前用户可见的化合物（其所属项目的候选物引用到的分子）；管理员返回全量。
+    """
     hits = await domain_compounds.search_similar(
-        db, smiles=data.smiles, limit=limit, threshold=threshold
+        db, smiles=data.smiles, user=current_user, limit=limit, threshold=threshold
     )
     return success_response(
         data={

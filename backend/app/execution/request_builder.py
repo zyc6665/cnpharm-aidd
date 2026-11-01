@@ -29,7 +29,7 @@ from app.files.content import ensure_local_file
 from app.models.artifacts import ArtifactVersion, ArtifactVersionFile
 from app.models.files import File as FileModel
 from app.models.tasks import Task
-from app.tool_packages.schemas import ArtifactInputV2, ToolPackageV2Manifest
+from app.tool_packages.schemas import ArtifactInputSpec, ToolPackageManifest
 
 
 class StandardRequestBuilderError(ValueError):
@@ -53,7 +53,7 @@ async def build_standard_execution_request(
     db: AsyncSession,
     *,
     task: Task,
-    tool_package_manifest: ToolPackageV2Manifest,
+    tool_package_manifest: ToolPackageManifest,
     input_bindings: dict[str, str],
     parameters: dict[str, Any],
     work_dir: Path,
@@ -83,7 +83,7 @@ async def build_standard_execution_request(
         )
 
     return StandardExecutionRequest(
-        request_version="aidd.sciminer/request.v1",
+        request_version="aidd.sciminer/request",
         task=StandardTaskContext(
             id=str(task.id),
             tool_slug=tool_package_manifest.metadata.slug,
@@ -115,7 +115,7 @@ async def _load_artifact_version(db: AsyncSession, version_id: str) -> ArtifactV
     return version
 
 
-def _validate_input_type(declaration: ArtifactInputV2, version: ArtifactVersion) -> None:
+def _validate_input_type(declaration: ArtifactInputSpec, version: ArtifactVersion) -> None:
     if version.status != "available":
         raise StandardRequestBuilderError(
             f"ArtifactVersion {version.id} is not available: {version.status}"
@@ -155,7 +155,7 @@ def _validate_input_type(declaration: ArtifactInputV2, version: ArtifactVersion)
 
 async def _stage_input_artifact(
     *,
-    declaration: ArtifactInputV2,
+    declaration: ArtifactInputSpec,
     version: ArtifactVersion,
     work_dir: Path,
 ) -> StandardInputArtifact:

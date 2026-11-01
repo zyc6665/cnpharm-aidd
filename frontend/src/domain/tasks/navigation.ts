@@ -3,6 +3,7 @@ import type { Task } from '@/types/models'
 export interface TaskProjectContext {
   currentProjectId?: string
   currentProjectName?: string
+  projectNames?: Record<string, string>
 }
 
 export function getTaskProjectContextLabel(
@@ -13,7 +14,8 @@ export function getTaskProjectContextLabel(
     return `项目：${context.currentProjectName}`
   }
 
-  return `项目：${task.project_id?.slice(0, 8) ?? '-'}`
+  const projectName = task.project_id ? context.projectNames?.[task.project_id] : undefined
+  return `项目：${projectName ?? task.project_id?.slice(0, 8) ?? '-'}`
 }
 
 export function getTaskArtifactLineagePath(task: Pick<Task, 'project_id'>): string {

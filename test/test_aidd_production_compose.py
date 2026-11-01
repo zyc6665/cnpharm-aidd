@@ -119,6 +119,8 @@ def test_production_settings_reject_local_runtime_backends() -> None:
         "CELERY_BROKER_URL": "redis://:redis-password@redis:6379/1",
         "CELERY_RESULT_BACKEND": "redis://:redis-password@redis:6379/2",
         "TASK_EXECUTION_BACKEND": "celery",
+        "COOKIE_SECURE": True,
+        "ALLOWED_HOSTS": ["sciminer.example.com"],
     }
     Settings(**base_kwargs)
 
@@ -144,3 +146,14 @@ def test_production_settings_reject_local_runtime_backends() -> None:
             assert message in str(exc)
         else:
             raise AssertionError(f"expected production settings to reject {key}")
+
+
+def test_production_compose_requires_minio_tls() -> None:
+    """生产 MinIO 客户端必须使用 TLS，并显式挂载证书目录。"""
+    compose = _load_compose("deploy/compose/docker-compose.prod.yml")
+    minio = compose["services"]["minio"]
+    backend_environment = compose["services"]["backend"]["environment"]
+
+    assert backend_environment["MINIO_SECURE"] == "true"
+    assert "--certs-dir" in minio["command"]
+    assert any("/certs" in str(volume) for volume in minio["volumes"])

@@ -11,9 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.common.exceptions import ValidationException
-from app.models.tasks import Task, TaskInput, TaskStatus
+from app.common.keyset import apply_desc_keyset, encode_cursor, next_cursor
+from app.models.tasks import Task, TaskStatus
 from app.models.tools import Tool
 from app.models.users import User
+from app.models.workflows import WorkflowRun
 from app.services.project_access import load_project_membership
 
 
@@ -70,10 +72,16 @@ class TaskQueryInput:
 
 @dataclass(frozen=True)
 class TaskQueryPage:
-    """任务分页查询结果。"""
+    """任务分页查询结果。
+
+    ``total`` 在游标模式下是 ``None``——算总数与深分页同代价，会把这轮优化的收益
+    抵掉；调用方看到 ``next_cursor`` 就应该只用它翻页。
+    """
 
     tasks: list[Task]
-    total: int
+    total: int | None
+    next_cursor: str | None = None
+    has_more: bool = False
 
 
 @dataclass(frozen=True)
@@ -96,22 +104,68 @@ class ResourceWaitStats:
     by_reason: dict[str, int]
 
 
-async def query_task_page(db: AsyncSession, query: TaskQueryInput) -> TaskQueryPage:
-    """按系统视图和基础筛选查询当前用户可见任务。"""
+async def query_task_page(
+    db: AsyncSession,
+    query: TaskQueryInput,
+    *,
+    cursor: str | None = None,
+) -> TaskQueryPage:
+    """按系统视图和基础筛选查询当前用户可见任务。
+
+    两种取页方式：
+
+    * 不给 ``cursor``：保留 ``page``/``page_size`` 偏移分页与 ``total``，
+      兼容既有调用方与前端「第 N 页」交互；
+    * 给 ``cursor``：走 keyset，**不计算 total**，用「多取一条」判断 ``hasMore``。
+      排序键 ``(created_at DESC, id DESC)`` 与 ``ix_tasks_created_at`` /
+      主键配合，代价与页深无关。
+    """
     statement = await _build_task_statement(
         db,
         query,
         include_view_filters=True,
         include_load_options=True,
     )
+    page_size = max(query.page_size, 1)
+
+    if cursor:
+        statement, _last = apply_desc_keyset(
+            statement,
+            timestamp_column=Task.created_at,
+            id_column=Task.id,
+            cursor=cursor,
+        )
+        result = await db.execute(
+            statement.order_by(Task.created_at.desc(), Task.id.desc()).limit(page_size + 1)
+        )
+        fetched = list(result.scalars().all())
+        has_more = len(fetched) > page_size
+        rows = fetched[:page_size]
+        return TaskQueryPage(
+            tasks=rows,
+            total=None,
+            # 游标取「本页最后一行」，且只在确实还有下一页时给，免得前端多跑一次空请求。
+            next_cursor=next_cursor(
+                fetched, timestamp_attr="created_at", id_attr="id", limit=page_size
+            ),
+            has_more=has_more,
+        )
 
     total = await _count_tasks(db, statement)
-    page_size = max(query.page_size, 1)
     offset = (max(query.page, 1) - 1) * page_size
     result = await db.execute(
-        statement.order_by(Task.created_at.desc()).offset(offset).limit(page_size)
+        statement.order_by(Task.created_at.desc(), Task.id.desc()).offset(offset).limit(page_size)
     )
-    return TaskQueryPage(tasks=list(result.scalars().all()), total=total)
+    rows = list(result.scalars().all())
+    # 偏移模式也给出 nextCursor：客户端翻到第 3 页想换成游标分页时不需要额外接口，
+    # 直接拿这一页的 nextCursor 接着走即可。hasMore 用 total 判断，零额外查询。
+    has_more = bool(rows) and (offset + len(rows)) < total
+    return TaskQueryPage(
+        tasks=rows,
+        total=total,
+        next_cursor=encode_cursor([rows[-1].created_at, rows[-1].id]) if has_more else None,
+        has_more=has_more,
+    )
 
 
 async def query_task_view_counts(db: AsyncSession, query: TaskQueryInput) -> TaskViewCounts:
@@ -237,39 +291,45 @@ async def _build_task_statement(
         statement = statement.where(Task.created_at <= _naive_utc(query.created_to))
 
     if query.workflow_run_id or query.workflow_definition_id or query.workflow_node_id:
-        statement = statement.join(TaskInput, TaskInput.task_id == Task.id)
-        if query.workflow_run_id:
-            statement = statement.where(
-                TaskInput.params["workflow_run_id"].as_string() == query.workflow_run_id
-            )
+        # 这三项原先都从 ``TaskInput.params`` 的 JSON 里取，既要多 join 一张表，
+        # 又让 `params->>'…'` 这种表达式挡在 WHERE 里用不上索引。`tasks` 上已有
+        # 真列 `workflow_run_id` / `workflow_node_id`（迁移 20261030_06 已从 params
+        # 回填），并且 `uq_tasks_workflow_node_attempt` 的前缀正好覆盖 run 维度。
+        # `workflow_definition_id` 不在 tasks 上，改为按 run 反查（两表、两侧都有索引）。
         if query.workflow_definition_id:
-            statement = statement.where(
-                TaskInput.params["workflow_definition_id"].as_string()
-                == query.workflow_definition_id
+            statement = statement.join(
+                WorkflowRun, WorkflowRun.id == Task.workflow_run_id
+            ).where(
+                WorkflowRun.workflow_definition_id == query.workflow_definition_id
             )
+        if query.workflow_run_id:
+            statement = statement.where(Task.workflow_run_id == query.workflow_run_id)
         if query.workflow_node_id:
-            statement = statement.where(
-                TaskInput.params["workflow_node_id"].as_string() == query.workflow_node_id
-            )
+            statement = statement.where(Task.workflow_node_id == query.workflow_node_id)
 
     if query.keyword:
-        search_pattern = f"%{query.keyword}%"
-        statement = (
-            statement.join(Tool, Task.tool_id == Tool.id, isouter=True)
-            .join(User, Task.user_id == User.id, isouter=True)
-            .where(
-                or_(
-                    Task.id.ilike(search_pattern),
-                    Task.name.ilike(search_pattern),
-                    Task.error_message.ilike(search_pattern),
-                    Task.progress_message.ilike(search_pattern),
-                    Tool.name.ilike(search_pattern),
-                    Tool.slug.ilike(search_pattern),
-                    User.email.ilike(search_pattern),
-                    User.display_name.ilike(search_pattern),
+        keyword = query.keyword.strip()
+        if keyword:
+            search_pattern = f"%{keyword}%"
+            # 关键字搜索只覆盖「标识类」短字段：任务名、工具名/别名、用户邮箱/显示名，
+            # 外加任务 ID 的精确匹配。原来是 8 列 ilike('%kw%') 的 OR（含
+            # error_message / progress_message 两个 Text 列）——前导通配无法走索引，
+            # 两个长文本列又把每行要扫的字节放大一个量级，且会强制带上 Tool/User
+            # 两个 outer join。长文本检索交给任务日志（task_logs）承担。
+            statement = (
+                statement.join(Tool, Task.tool_id == Tool.id, isouter=True)
+                .join(User, Task.user_id == User.id, isouter=True)
+                .where(
+                    or_(
+                        Task.id == keyword,
+                        Task.name.ilike(search_pattern),
+                        Tool.name.ilike(search_pattern),
+                        Tool.slug.ilike(search_pattern),
+                        User.email.ilike(search_pattern),
+                        User.display_name.ilike(search_pattern),
+                    )
                 )
             )
-        )
 
     return statement
 
@@ -288,7 +348,12 @@ def _statuses_for_view(view: str | None) -> tuple[str, ...]:
 
 
 async def _count_tasks(db: AsyncSession, statement) -> int:
-    result = await db.execute(select(func.count()).select_from(statement.subquery()))
+    # 计数只需要 WHERE 条件（以及过滤用的 JOIN），ORDER BY 对 count 毫无意义。
+    # 保留排序会让数据库在子查询里白排一遍全部命中行——任务列表默认按
+    # created_at DESC + id DESC 排，几万行时这部分开销与真正返回 20 行同量级。
+    result = await db.execute(
+        select(func.count()).select_from(statement.order_by(None).subquery())
+    )
     return int(result.scalar() or 0)
 
 

@@ -87,6 +87,36 @@ async def test_python_script_passes_configured_arguments_without_splitting(
 
 
 @pytest.mark.asyncio
+async def test_python_script_strips_sensitive_environment_variables(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    captured_env: dict[str, str] = {}
+
+    def fake_run(command, **kwargs):
+        captured_env.update(kwargs.get("env", {}))
+        return SimpleNamespace(returncode=0, stdout="{}", stderr="")
+
+    monkeypatch.setenv("TASK_WORK_DIR", str(tmp_path))
+    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://user:pw@db/app")
+    monkeypatch.setenv("JWT_SECRET_KEY", "super-secret-jwt-key")
+    monkeypatch.setenv("MINIO_SECRET_KEY", "minio-secret")
+    monkeypatch.setenv("PLATFORM_HARMLESS_FLAG", "ok")
+    monkeypatch.setattr("app.tasks.executors.script_trust.settings.ENVIRONMENT", "development")
+    monkeypatch.setattr("app.tasks.executors.script_trust.settings.TRUSTED_PYTHON_SCRIPT_SHA256", [])
+    monkeypatch.setattr("app.tasks.executors.python_script.subprocess.run", fake_run)
+    executor = build_executor(config={"type": "python_script", "script_path": "/opt/platform/run_model.py"})
+
+    await executor.execute()
+
+    assert "DATABASE_URL" not in captured_env
+    assert "JWT_SECRET_KEY" not in captured_env
+    assert "MINIO_SECRET_KEY" not in captured_env
+    assert captured_env.get("PLATFORM_HARMLESS_FLAG") == "ok"
+    assert captured_env.get("PYTHONPATH", "").startswith(str(tmp_path))
+
+
+@pytest.mark.asyncio
 async def test_python_script_rejects_non_string_arguments(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

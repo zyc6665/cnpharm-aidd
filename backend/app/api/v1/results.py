@@ -28,8 +28,10 @@ from sqlalchemy.orm import selectinload
 
 from app.auth.dependencies import get_current_user
 from app.common.exceptions import ForbiddenException, NotFoundException, ValidationException
+from app.common.keyset import apply_desc_keyset, encode_cursor, next_cursor
 from app.common.responses import paginated_response, success_response
 from app.common.task_context import task_project_id
+from app.common.task_status import task_status_to_api
 from app.common.time import utcnow
 from app.database.session import get_db
 from app.feature_flags import require_feature_flag
@@ -108,6 +110,7 @@ async def _load_task(db: AsyncSession, task_id: str) -> Task:
             selectinload(Task.tool).selectinload(Tool.current_version),
             selectinload(Task.inputs),
             selectinload(Task.outputs),
+            selectinload(Task.user),
         )
         .where(Task.id == task_id)
     )
@@ -125,10 +128,19 @@ async def _artifact_outputs(db: AsyncSession, task_id: str) -> list[dict[str, An
             .order_by(Artifact.created_at)
         )
     ).scalars().all()
+    # 一次取回这批产物对应的版本行，避免在循环里逐条 db.get（每个产物一次往返）。
+    version_ids = [str(a.latest_version_id) for a in artifacts if a.latest_version_id]
+    versions_by_id: dict[str, ArtifactVersion] = {}
+    if version_ids:
+        rows = await db.execute(
+            select(ArtifactVersion).where(ArtifactVersion.id.in_(version_ids))
+        )
+        versions_by_id = {str(row.id): row for row in rows.scalars().all()}
+
     entries: list[dict[str, Any]] = []
     for artifact in artifacts:
         version = (
-            await db.get(ArtifactVersion, artifact.latest_version_id)
+            versions_by_id.get(str(artifact.latest_version_id))
             if artifact.latest_version_id
             else None
         )
@@ -151,22 +163,31 @@ async def _artifact_outputs(db: AsyncSession, task_id: str) -> list[dict[str, An
 
 
 def _serialize_result(task: Task) -> dict[str, Any]:
+    domain = (task.extra_data or {}).get("domain") or {}
+    # task.user 在结果列表/详情查询中已 selectinload；任务详情页仍用 user_id 兜底，
+    # 避免在未加载关系的调用点触发异步惰性加载（MissingGreenlet）。
+    submitter = task.__dict__.get("user")
     return {
         "task_id": str(task.id),
         "name": task.name,
-        "status": task.status,
+        "status": task_status_to_api(task.status),
         "priority": task.priority,
         "project_id": task_project_id(task),
         "tool_id": str(task.tool_id) if task.tool_id else None,
         "tool_name": task.tool.name if task.tool else None,
         "tool_slug": task.tool.slug if task.tool else None,
-        "submitted_by": str(task.user_id) if task.user_id else None,
+        "submitted_by": (
+            (submitter.username or submitter.email or str(task.user_id))
+            if submitter is not None and task.user_id
+            else (str(task.user_id) if task.user_id else None)
+        ),
         "created_at": _iso(task.created_at),
         "started_at": _iso(task.started_at),
         "finished_at": _iso(task.finished_at),
         "execution_time_sec": task.execution_time_sec,
         "error_message": task.error_message,
-        "domain": (task.extra_data or {}).get("domain"),
+        # 列表页按字符串渲染；domain 是结构化 dict，直接下发会显示 [object Object]。
+        "domain": domain.get("kind") if isinstance(domain, dict) else None,
         "mock": bool((task.extra_data or {}).get("mock")),
     }
 
@@ -174,9 +195,14 @@ def _serialize_result(task: Task) -> dict[str, Any]:
 @project_router.get("/{project_id}/results", summary="项目结果列表")
 async def list_project_results(
     project_id: str,
-    status: str | None = Query(default=None, description="按终态过滤：success/failure/canceled"),
+    status: str | None = Query(
+        default=None, description="按终态过滤（小写）：success/failure/canceled/timeout"
+    ),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    cursor: str | None = Query(
+        default=None, description="游标（keyset）翻页；传入后不再返回 total"
+    ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -187,30 +213,79 @@ async def list_project_results(
 
     query = select(Task).where(Task.project_id_expression() == project_id)
     if status:
-        if status not in RESULT_STATUSES:
+        # 前端按小写契约传参（success/failure/canceled/timeout），库里是枚举大写值。
+        normalized = status.strip().upper()
+        if normalized not in RESULT_STATUSES:
             raise ValidationException(f"不支持的结果状态: {status}")
-        query = query.where(Task.status == status)
+        query = query.where(Task.status == normalized)
     else:
         query = query.where(Task.status.in_(RESULT_STATUSES))
+
+    if cursor:
+        # 游标模式：只翻已完成的终态，排序键 (finished_at DESC, id DESC) 是全序，
+        # 同毫秒多行由 id 兜底。多取一条判 hasMore，不算 total（算 total 与深分页同代价）。
+        query = query.where(Task.finished_at.is_not(None))
+        query, _last = apply_desc_keyset(
+            query,
+            timestamp_column=Task.finished_at,
+            id_column=Task.id,
+            cursor=cursor,
+        )
+        fetched = list(
+            (
+                await db.execute(
+                    query.options(selectinload(Task.tool), selectinload(Task.user))
+                    .order_by(Task.finished_at.desc(), Task.id.desc())
+                    .limit(page_size + 1)
+                )
+            ).scalars().all()
+        )
+        has_more = len(fetched) > page_size
+        rows = fetched[:page_size]
+        payload = paginated_response(
+            items=[_serialize_result(task) for task in rows],
+            total=0,
+            page=page,
+            page_size=page_size,
+        )
+        data = payload["data"]
+        data["nextCursor"] = next_cursor(
+            fetched, timestamp_attr="finished_at", id_attr="id", limit=page_size
+        )
+        data["hasMore"] = has_more
+        data["totalKnown"] = False
+        data["total"] = None
+        data["total_pages"] = None
+        return payload
 
     total = (
         await db.execute(select(func.count()).select_from(query.subquery()))
     ).scalar_one()
     rows = (
         await db.execute(
-            query.options(selectinload(Task.tool))
+            query.options(selectinload(Task.tool), selectinload(Task.user))
             .order_by(Task.finished_at.desc().nullslast(), Task.created_at.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)
         )
     ).scalars().all()
 
-    return paginated_response(
+    offset = (page - 1) * page_size
+    has_more = offset + len(rows) < total
+    payload = paginated_response(
         items=[_serialize_result(task) for task in rows],
         total=total,
         page=page,
         page_size=page_size,
     )
+    data = payload["data"]
+    # 偏移模式保留 total，同时给出游标（从本页末行算）以便客户端切换到游标翻页。
+    data["nextCursor"] = (
+        encode_cursor([rows[-1].finished_at, rows[-1].id]) if rows and has_more else None
+    )
+    data["hasMore"] = has_more
+    data["totalKnown"] = True
+    return payload
 
 
 @router.get("/results/{task_id}", summary="结果详情")
@@ -320,7 +395,7 @@ async def get_result_report(
         data={
             "task_id": str(task.id),
             "name": task.name,
-            "status": task.status,
+            "status": task_status_to_api(task.status),
             "summary": (task.outputs.result if task.outputs else None),
             "artifacts": outputs,
             "lineage_hint": {
@@ -361,10 +436,17 @@ async def _report_payload(
             .order_by(Artifact.created_at)
         )
     ).scalars().all()
+    version_ids = [str(a.latest_version_id) for a in artifacts if a.latest_version_id]
+    versions_by_id: dict[str, ArtifactVersion] = {}
+    if version_ids:
+        rows = await db.execute(
+            select(ArtifactVersion).where(ArtifactVersion.id.in_(version_ids))
+        )
+        versions_by_id = {str(row.id): row for row in rows.scalars().all()}
     for artifact in artifacts:
         if not artifact.latest_version_id:
             continue
-        version = await db.get(ArtifactVersion, artifact.latest_version_id)
+        version = versions_by_id.get(str(artifact.latest_version_id))
         if version is None:
             continue
         merged: dict[str, Any] = {}
@@ -563,28 +645,25 @@ async def list_candidate_results(
         raise NotFoundException("候选物不存在")
     await require_candidate_read_access(db, candidate=candidate, user=current_user)
 
-    query = select(Task).where(Task.status.in_(RESULT_STATUSES))
+    query = select(Task).where(
+        Task.status.in_(RESULT_STATUSES),
+        Task.extra_data["domain"]["candidate_id"].as_string() == candidate_id,
+    )
     total = (
         await db.execute(select(func.count()).select_from(query.subquery()))
     ).scalar_one()
     rows = (
         await db.execute(
-            query.options(selectinload(Task.tool))
+            query.options(selectinload(Task.tool), selectinload(Task.user))
             .order_by(Task.created_at.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)
         )
     ).scalars().all()
 
-    matched = [
-        task
-        for task in rows
-        if str(((task.extra_data or {}).get("domain") or {}).get("candidate_id") or "")
-        == str(candidate.id)
-    ]
     return paginated_response(
-        items=[_serialize_result(task) for task in matched],
-        total=len(matched),
+        items=[_serialize_result(task) for task in rows],
+        total=total,
         page=page,
         page_size=page_size,
     )

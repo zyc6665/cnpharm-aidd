@@ -39,7 +39,7 @@ const antdTheme = computed(() => {
 })
 
 // 不需要侧边栏的页面：首页、认证页、错误页
-const shellLessPaths = ['/login', '/register', '/forgot-password', '/403', '/404']
+const shellLessPaths = ['/login', '/403', '/404']
 const isShellLess = computed(() => {
   if (route.path === '/') return true
   return shellLessPaths.some((p) => route.path.startsWith(p))

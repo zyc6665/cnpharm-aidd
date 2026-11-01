@@ -3,8 +3,10 @@
 
 import ipaddress
 import json
+import logging
 import os
 import re
+import secrets
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional, List, Literal
@@ -15,11 +17,40 @@ from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+logger = logging.getLogger(__name__)
+
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 _DNS_LABEL_PATTERN = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?")
 _IPV4_NUMERIC_HOST_PATTERN = re.compile(
     r"(?:0x[0-9a-f]+|0[0-7]*|[1-9][0-9]*)(?:\.(?:0x[0-9a-f]+|0[0-7]*|[1-9][0-9]*)){0,3}"
 )
+# 已知的示例/占位符密钥片段（不区分大小写）。这些值一旦进入运行环境就等同于
+# 公开密钥：预发布/生产环境必须拒绝启动，开发环境告警并回退到随机值。
+_PLACEHOLDER_SECRET_MARKERS = (
+    "change-me",
+    "changeme",
+    "replace-with",
+    "replace_with",
+    "your-secret",
+    "your_secret",
+    "your-access-key",
+    "your-email",
+    "example-secret",
+    "example-secret-key",
+)
+_PLACEHOLDER_SECRET_PREFIXES = ("dev-", "dev_")
+
+
+def _looks_like_placeholder_secret(value: str) -> bool:
+    """判断密钥是否为仓库示例里出现过的占位符/可猜值。"""
+    normalized = value.strip().lower()
+    if not normalized:
+        return False
+    if normalized.startswith(_PLACEHOLDER_SECRET_PREFIXES):
+        return True
+    return any(marker in normalized for marker in _PLACEHOLDER_SECRET_MARKERS)
+
+
 _AIDD_FEATURE_FLAG_DESCRIPTIONS = {
     "AIDD_PROJECT_WORKSPACE_ENABLED": "项目优先研究工作台入口",
     "TOOL_PACKAGE_V1_ENABLED": "Tool Package v1 导入、迁移和验证等级",
@@ -157,6 +188,8 @@ class Settings(BaseSettings):
     APP_VERSION: str = "1.0.0"
     ENVIRONMENT: Literal["development", "staging", "production"] = "development"
     DEBUG: bool = True
+    # Prometheus 指标端点 /metrics。内部部署默认开启；如需在公网入口彻底隐藏可置 false。
+    METRICS_ENABLED: bool = True
 
     # API配置
     API_V1_PREFIX: str = "/api/v1"
@@ -170,6 +203,19 @@ class Settings(BaseSettings):
         "http://localhost:8585",
         "http://127.0.0.1:8585",
     ]
+
+    # ==================== 主机白名单 / 反向代理 / 文档开关 ====================
+    # TrustedHostMiddleware 的白名单。开发环境默认放行任意 Host；预发布/生产
+    # 必须显式配置具体域名（生产缺省或为 "*" 时拒绝启动，见下方校验）。
+    ALLOWED_HOSTS: List[str] = ["*"]
+    # 是否暴露 /docs、/redoc、/openapi.json。None 表示按环境推导：
+    # development 打开，预发布/生产关闭。
+    ENABLE_DOCS: Optional[bool] = None
+    # 是否强制 HTTPS 跳转。None 表示「生产 + COOKIE_SECURE」时启用；
+    # 显式 true/false 可覆盖，便于反向代理已终止 TLS 的内部部署。
+    ENFORCE_HTTPS: Optional[bool] = None
+    # 反向代理会改写 Host/X-Forwarded-Proto 时置 true；默认不信任外部头。
+    TRUST_PROXY_HEADERS: bool = False
 
     # ==================== 数据库配置 ====================
     # 开发环境: sqlite+aiosqlite:///./storage/scitool.db
@@ -188,6 +234,30 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     SETTINGS_ENCRYPTION_KEY: Optional[str] = None
+
+    # ==================== Cookie 认证配置 ====================
+    # 令牌优先通过 httpOnly Cookie 下发。COOKIE_SECURE=False 仅适合本地 http 开发；
+    # 预发布/生产环境必须为 True（见 _validate_production_security），否则拒绝启动。
+    COOKIE_SECURE: bool = False
+    # 留空表示不设置 Domain（主机域 Cookie）。
+    COOKIE_DOMAIN: Optional[str] = None
+    COOKIE_SAMESITE: Literal["lax", "strict", "none"] = "lax"
+
+    # ==================== LDAP（企业内网目录认证）====================
+    # 全部有默认值；LDAP_ENABLED=False 时登录链路完全不触发 LDAP。
+    LDAP_ENABLED: bool = False
+    LDAP_SERVER_URI: str = ""
+    LDAP_START_TLS: bool = False
+    LDAP_BASE_DN: str = ""
+    LDAP_USER_FILTER: str = "(uid={username})"
+    LDAP_ATTR_UID: str = "uid"
+    LDAP_ATTR_MAIL: str = "mail"
+    LDAP_ATTR_DISPLAY_NAME: str = "cn"
+    LDAP_BIND_DN: str = ""
+    LDAP_BIND_PASSWORD: str = ""
+    LDAP_TIMEOUT_SECONDS: float = 5.0
+    LDAP_CA_CERT_FILE: str = ""
+    LDAP_TLS_VALIDATE: bool = True
 
     @model_validator(mode="after")
     def _validate_production_security(self):
@@ -208,6 +278,35 @@ class Settings(BaseSettings):
                     + ", ".join(missing_k8s_settings)
                 )
 
+        # 所有环境都拒绝明显的占位符/示例密钥：预发布/生产直接拒绝启动，
+        # 开发环境告警并回退到一次性的随机值。
+        if self.JWT_SECRET_KEY and _looks_like_placeholder_secret(self.JWT_SECRET_KEY):
+            if self.ENVIRONMENT in {"staging", "production"}:
+                raise ValueError(
+                    f"JWT_SECRET_KEY must not use a placeholder/example value in {self.ENVIRONMENT} environment"
+                )
+            logger.warning(
+                "JWT_SECRET_KEY looks like a placeholder/example value in %s environment; "
+                "generating an ephemeral random key instead",
+                self.ENVIRONMENT,
+            )
+            self.JWT_SECRET_KEY = secrets.token_urlsafe(48)
+
+        if not self.JWT_SECRET_KEY:
+            if self.ENVIRONMENT == "development":
+                # 空密钥会让 HS256 签名可被任意伪造。开发环境自动生成一次性随机密钥，
+                # 避免本地启动/测试因缺少配置大面积失败，同时保证进程内密钥不可预测。
+                self.JWT_SECRET_KEY = secrets.token_urlsafe(48)
+                logger.warning(
+                    "JWT_SECRET_KEY is not configured; generated an ephemeral random key "
+                    "for development. Sessions will be invalidated on restart; set "
+                    "JWT_SECRET_KEY explicitly to persist them."
+                )
+            else:
+                raise ValueError(
+                    f"JWT_SECRET_KEY must be at least 32 characters long in {self.ENVIRONMENT} environment"
+                )
+
         if (
             self.ENVIRONMENT in {"staging", "production"}
             and len(self.JWT_SECRET_KEY) < 32
@@ -215,6 +314,20 @@ class Settings(BaseSettings):
             raise ValueError(
                 f"JWT_SECRET_KEY must be at least 32 characters long in {self.ENVIRONMENT} environment"
             )
+
+        if self.SETTINGS_ENCRYPTION_KEY and _looks_like_placeholder_secret(
+            self.SETTINGS_ENCRYPTION_KEY
+        ):
+            if self.ENVIRONMENT in {"staging", "production"}:
+                raise ValueError(
+                    f"SETTINGS_ENCRYPTION_KEY must not use a placeholder/example value in {self.ENVIRONMENT} environment"
+                )
+            logger.warning(
+                "SETTINGS_ENCRYPTION_KEY looks like a placeholder/example value in %s "
+                "environment; ignoring it and falling back to existing derivation logic",
+                self.ENVIRONMENT,
+            )
+            self.SETTINGS_ENCRYPTION_KEY = None
 
         if self.ENVIRONMENT in {"staging", "production"}:
             if not self.SETTINGS_ENCRYPTION_KEY:
@@ -241,6 +354,23 @@ class Settings(BaseSettings):
         if self.ENVIRONMENT == "production":
             if self.DEBUG:
                 raise ValueError("DEBUG must be disabled in production environment")
+            # Host 头是路由与缓存键的一部分；生产放行 "*" 等于允许任意 Host
+            # 注入（密码重置链接投毒、缓存混淆）。必须显式配置。
+            allowed_hosts = [
+                host.strip() for host in self.ALLOWED_HOSTS if host and host.strip()
+            ]
+            if not allowed_hosts or "*" in allowed_hosts:
+                raise ValueError(
+                    "ALLOWED_HOSTS must list explicit hostnames in production environment"
+                )
+            if self.RATE_LIMIT_BACKEND == "memory":
+                raise ValueError(
+                    "RATE_LIMIT_BACKEND must use redis in production environment"
+                )
+            if self.RATE_LIMIT_FAIL_MODE != "closed":
+                raise ValueError(
+                    "RATE_LIMIT_FAIL_MODE must be closed in production environment"
+                )
             if not self.DATABASE_URL.startswith("postgresql"):
                 raise ValueError(
                     "DATABASE_URL must use PostgreSQL in production environment"
@@ -277,6 +407,11 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "TASK_EXECUTION_BACKEND must be celery in production environment"
                 )
+            # Cookie 认证只应经 HTTPS 传输：生产环境关闭 Secure 会让会话 Cookie 明文暴露。
+            if not self.COOKIE_SECURE:
+                raise ValueError(
+                    "COOKIE_SECURE must be enabled in production environment"
+                )
 
         return self
 
@@ -308,6 +443,13 @@ class Settings(BaseSettings):
     CACHE_BACKEND: Literal["memory", "redis"] = "memory"
     REQUEST_RATE_LIMIT_PER_MINUTE: int = 60
     RATE_LIMIT_TRUST_PROXY_HEADERS: bool = False
+    # 限流计数后端：auto 表示预发布/生产用 Redis、开发用进程内缓存；
+    # redis/memory 可显式覆盖。多 worker 部署必须使用 redis，否则各进程计数
+    # 互不可见，等于把阈值放大 N 倍。
+    RATE_LIMIT_BACKEND: Literal["auto", "redis", "memory"] = "auto"
+    # 计数后端不可用时的行为。closed 返回 503（生产默认，防止绕过限流）；
+    # open 放行并告警（仅建议本地开发使用）。
+    RATE_LIMIT_FAIL_MODE: Literal["open", "closed"] = "closed"
 
     # Redis 配置（生产环境）
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -329,6 +471,27 @@ class Settings(BaseSettings):
             return self.REDIS_URL
         return self.redis_url_with_auth
 
+    @property
+    def docs_enabled(self) -> bool:
+        """是否暴露 Swagger/ReDoc/OpenAPI。"""
+        if self.ENABLE_DOCS is not None:
+            return self.ENABLE_DOCS
+        return self.ENVIRONMENT == "development"
+
+    @property
+    def https_redirect_enabled(self) -> bool:
+        """是否启用 HTTP -> HTTPS 跳转。"""
+        if self.ENFORCE_HTTPS is not None:
+            return self.ENFORCE_HTTPS
+        return self.ENVIRONMENT == "production" and self.COOKIE_SECURE
+
+    @property
+    def resolved_rate_limit_backend(self) -> Literal["redis", "memory"]:
+        """限流计数实际使用的后端。"""
+        if self.RATE_LIMIT_BACKEND == "auto":
+            return "redis" if self.ENVIRONMENT in {"staging", "production"} else "memory"
+        return self.RATE_LIMIT_BACKEND
+
     # ==================== Celery 配置 ====================
     # 为空时使用内存队列（同步执行），生产环境设置为 Redis URL
     CELERY_BROKER_URL: Optional[str] = None
@@ -340,6 +503,8 @@ class Settings(BaseSettings):
     WORKFLOW_RECONCILE_INTERVAL_SECONDS: int = 5
     WORKFLOW_RECONCILE_BATCH_SIZE: int = 20
     WORKFLOW_RECONCILE_LOCK_TTL_SECONDS: int = 60
+    # 单个工作流 run 的最长存活时间（默认 12 小时）；超过即由巡检置为 failure。
+    WORKFLOW_RUN_TIMEOUT_SECONDS: int = 12 * 60 * 60
     EXECUTION_RECORD_RECONCILE_INTERVAL_SECONDS: int = 60
     EXECUTION_RECORD_RECONCILE_BATCH_SIZE: int = 100
     EXECUTION_RECORD_STALE_AFTER_SECONDS: int = 86400
@@ -480,6 +645,12 @@ class Settings(BaseSettings):
     UPLOAD_SWEEP_INTERVAL_SECONDS: int = 3600
     UPLOAD_SWEEP_ENABLED: bool = True
 
+    # 无引用 File 回收（计划 §5.6）。产物版本/项目删除只删行会留下对象存储孤儿，
+    # 需要一个与用户行为无关的兜底。保留 30 天：先删版本再恢复的窗口。
+    ARTIFACT_GC_ENABLED: bool = True
+    ARTIFACT_GC_INTERVAL_SECONDS: int = 3600
+    ARTIFACT_GC_RETENTION_DAYS: int = 30
+
     # 对象存储生命周期规则（docs/04 §5.8、docs/03 §4.5、docs/15 §3.2）。
     # 平台侧清理（上传会话巡检）跑在 backend 进程里，进程没起来就不清理；
     # 桶上的 lifecycle 由 MinIO 自己执行，是最后一道保险。两者都要有。
@@ -514,6 +685,21 @@ class Settings(BaseSettings):
     # 生产/预发布灰度账号。全局新入口关闭时，仅这些内部账号可访问。
     AIDD_ROLLOUT_USER_EMAILS: List[str] = []
     AIDD_ROLLOUT_USER_IDS: List[str] = []
+
+    @field_validator("ALLOWED_HOSTS", mode="before")
+    @classmethod
+    def _parse_allowed_hosts(cls, value):
+        """兼容 JSON 数组和逗号分隔环境变量。"""
+        if value is None:
+            return []
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return []
+            if stripped.startswith("["):
+                return json.loads(stripped)
+            return [item.strip() for item in stripped.split(",") if item.strip()]
+        return value
 
     @field_validator("AIDD_ROLLOUT_USER_EMAILS", "AIDD_ROLLOUT_USER_IDS", mode="before")
     @classmethod

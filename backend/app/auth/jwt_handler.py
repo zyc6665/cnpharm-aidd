@@ -21,16 +21,18 @@ class JWTHandler:
     def create_access_token(
         self,
         user_id: str,
-        email: str,
-        role: str,
-        extra_claims: Optional[Dict[str, Any]] = None
+        email: Optional[str] = None,
+        role: str = "user",
+        extra_claims: Optional[Dict[str, Any]] = None,
+        username: Optional[str] = None,
     ) -> str:
-        """生成Access Token"""
+        """生成Access Token（username 为登录标识；email 可选）"""
         now = utcnow()
         expire = now + timedelta(minutes=self.access_token_expire_minutes)
 
         payload = {
             "sub": user_id,
+            "username": username,
             "email": email,
             "role": role,
             "exp": expire,
@@ -95,9 +97,16 @@ class JWTHandler:
 jwt_handler = JWTHandler()
 
 
-def create_access_token(user_id: str, email: str, role: str) -> str:
+def create_access_token(
+    user_id: str,
+    email: Optional[str] = None,
+    role: str = "user",
+    username: Optional[str] = None,
+) -> str:
     """创建Access Token的便捷函数"""
-    return jwt_handler.create_access_token(user_id, email, role)
+    return jwt_handler.create_access_token(
+        user_id, email=email, role=role, username=username
+    )
 
 
 def create_refresh_token(user_id: str) -> str:

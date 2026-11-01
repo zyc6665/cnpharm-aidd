@@ -73,7 +73,32 @@
     </AppFilterBar>
 
     <a-card>
+      <SkeletonList v-if="loading && users.length === 0" :count="6" />
+
+      <AppInlineError
+        v-else-if="loadError"
+        data-testid="users-error"
+        :title="t('admin.listStates.usersLoadError')"
+        :description="t('common.listStates.errorDescription')"
+        :detail="loadErrorDetail"
+      >
+        <a-button size="small" @click="refreshUsersPage">
+          {{ t('common.listStates.retry') }}
+        </a-button>
+      </AppInlineError>
+
+      <AppEmptyState
+        v-else-if="users.length === 0"
+        :title="t('admin.listStates.usersEmptyTitle')"
+        :description="t('admin.listStates.usersEmptyHint')"
+      >
+        <a-button type="primary" @click="openCreateModal">
+          {{ t('admin.createUser') }}
+        </a-button>
+      </AppEmptyState>
+
       <a-table
+        v-else
         :scroll="{ x: 'max-content' }"
         :columns="columns"
         :data-source="users"
@@ -90,9 +115,17 @@
                 </ProtectedAvatar>
               <div class="user-info">
                 <span class="username">{{ getUserDisplayName(record) }}</span>
-                <span class="email">{{ record.email }}</span>
+                <span class="email">{{ formatUserEmail(record.email) }}</span>
               </div>
             </div>
+          </template>
+          <template v-else-if="column.key === 'username'">
+            {{ record.username || '—' }}
+          </template>
+          <template v-else-if="column.key === 'auth_source'">
+            <a-tag :color="record.auth_source === 'ldap' ? 'gold' : 'default'">
+              {{ record.auth_source === 'ldap' ? t('admin.authSourceLdap') : t('admin.authSourceLocal') }}
+            </a-tag>
           </template>
           <template v-else-if="column.key === 'role'">
             <a-tag :color="getRoleColor(record.role)">
@@ -110,7 +143,13 @@
               <a-button type="link" size="small" @click="handleEdit(record)">
                 {{ t('common.edit') }}
               </a-button>
-              <a-button type="link" size="small" @click="openResetPasswordModal(record)">
+              <a-button
+                type="link"
+                size="small"
+                :disabled="record.auth_source === 'ldap'"
+                :title="record.auth_source === 'ldap' ? t('admin.resetPasswordLdapDisabled') : undefined"
+                @click="openResetPasswordModal(record)"
+              >
                 {{ t('admin.resetPassword') }}
               </a-button>
               <a-button type="link" size="small" danger @click="handleSoftDelete(record)">
@@ -139,13 +178,26 @@
         :label-col="{ span: 6 }"
         :wrapper-col="{ span: 16 }"
       >
+        <a-form-item :label="t('admin.username')" name="username">
+          <a-input v-model:value="createForm.username" />
+        </a-form-item>
         <a-form-item :label="t('auth.email')" name="email">
-          <a-input v-model:value="createForm.email" />
+          <a-input v-model:value="createForm.email" :placeholder="t('admin.emailOptional')" />
         </a-form-item>
         <a-form-item :label="t('common.name')" name="display_name">
           <a-input v-model:value="createForm.display_name" />
         </a-form-item>
-        <a-form-item :label="t('auth.password')" name="password">
+        <a-form-item :label="t('admin.authSource')" name="auth_source">
+          <a-select v-model:value="createForm.auth_source">
+            <a-select-option value="local">{{ t('admin.authSourceLocal') }}</a-select-option>
+            <a-select-option value="ldap">{{ t('admin.authSourceLdap') }}</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item
+          v-if="createForm.auth_source === 'local'"
+          :label="t('auth.password')"
+          name="password"
+        >
           <a-input-password v-model:value="createForm.password" />
         </a-form-item>
         <a-form-item :label="t('admin.role')" name="role">
@@ -234,6 +286,9 @@ import type { FormInstance } from 'ant-design-vue'
 import { formatDateTimeMinutes } from '@/utils/datetime'
 import AppFilterBar from '@/components/common/AppFilterBar.vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
+import AppEmptyState from '@/components/common/AppEmptyState.vue'
+import AppInlineError from '@/components/common/AppInlineError.vue'
+import SkeletonList from '@/components/common/SkeletonList.vue'
 import {
   adminCreateUser,
   adminDeleteUser,
@@ -244,10 +299,14 @@ import {
 } from '@/api/users'
 import type { AdminResetUserPasswordParams, AdminUserCreateParams } from '@/api/users'
 import type { AdminUserStats, UserInfo } from '@/types/models'
+import { formatUserEmail, getUserDisplayName } from '@/utils/user-display'
+import { buildAdminUserCreatePayload } from '@/utils/admin-user-payload'
 
 const { t } = useI18n()
 
 const loading = ref(false)
+const loadError = ref(false)
+const loadErrorDetail = ref('')
 const createLoading = ref(false)
 const saveLoading = ref(false)
 const resetPasswordLoading = ref(false)
@@ -276,11 +335,13 @@ const pagination = reactive({
 })
 
 const createForm = reactive<AdminUserCreateParams>({
+  username: '',
   email: '',
   display_name: '',
   password: '',
   role: 'user',
-  status: 'active'
+  status: 'active',
+  auth_source: 'local'
 })
 
 const editForm = reactive({
@@ -305,14 +366,20 @@ const statusOptions = computed(() => ([
 ]))
 
 const createFormRules = computed(() => ({
+  username: [
+    { required: true, message: t('admin.usernameRequired') },
+    { pattern: /^[A-Za-z0-9._-]{1,64}$/, message: t('admin.usernameFormat') }
+  ],
   email: [
-    { required: true, message: t('auth.validation.emailRequired') },
     { type: 'email', message: t('auth.validation.emailInvalid') }
   ],
-  password: [
-    { required: true, message: t('auth.validation.passwordRequired') },
-    { min: 6, message: t('auth.validation.passwordLength') }
-  ],
+  // LDAP 用户由目录服务校验口令，创建时不要求填写
+  password: createForm.auth_source === 'local'
+    ? [
+        { required: true, message: t('auth.validation.passwordRequired') },
+        { min: 12, message: t('auth.validation.passwordLength') }
+      ]
+    : [],
   role: [{ required: true, message: t('admin.selectRole') }],
   status: [{ required: true, message: t('admin.selectStatus') }]
 }))
@@ -329,19 +396,19 @@ const formRules = computed(() => ({
 const resetPasswordRules = computed(() => ({
   new_password: [
     { required: true, message: t('auth.validation.passwordRequired') },
-    { min: 6, message: t('auth.validation.passwordLength') }
+    { min: 12, message: t('auth.validation.passwordLength') }
   ]
 }))
 
 const columns = computed(() => [
   { title: t('admin.userInfo'), key: 'user', width: 280 },
+  { title: t('admin.username'), key: 'username', width: 140 },
+  { title: t('admin.authSource'), key: 'auth_source', width: 120 },
   { title: t('admin.role'), key: 'role', width: 120 },
   { title: t('admin.status'), key: 'status', width: 120 },
   { title: t('admin.registerTime'), key: 'created_at', width: 180 },
   { title: t('common.actions'), key: 'actions', width: 260 }
 ])
-
-const getUserDisplayName = (user: UserInfo) => user.display_name || user.email.split('@')[0]
 
 const getUserInitial = (user: UserInfo) => {
   const displayName = getUserDisplayName(user)
@@ -369,6 +436,8 @@ const formatDate = (date: string) => formatDateTimeMinutes(date)
 
 const fetchUsers = async () => {
   loading.value = true
+  loadError.value = false
+  loadErrorDetail.value = ''
   try {
     const res = await adminGetUsers({
       page: pagination.current,
@@ -379,9 +448,11 @@ const fetchUsers = async () => {
     })
     users.value = res.data.items
     pagination.total = res.data.total
-  } catch {
+  } catch (error) {
     users.value = []
     pagination.total = 0
+    loadError.value = true
+    loadErrorDetail.value = error instanceof Error ? error.message : String(error)
   } finally {
     loading.value = false
   }
@@ -401,11 +472,13 @@ const refreshUsersPage = async () => {
 }
 
 const resetCreateForm = () => {
+  createForm.username = ''
   createForm.email = ''
   createForm.display_name = ''
   createForm.password = ''
   createForm.role = 'user'
   createForm.status = 'active'
+  createForm.auth_source = 'local'
 }
 
 const resetEditForm = () => {
@@ -431,9 +504,10 @@ const handleCreateUser = async () => {
     return
   }
 
+  const payload = buildAdminUserCreatePayload(createForm)
   createLoading.value = true
   try {
-    await adminCreateUser({ ...createForm })
+    await adminCreateUser(payload)
     message.success(t('admin.createUserSuccess'))
     showCreateModal.value = false
     resetCreateForm()
@@ -464,7 +538,7 @@ const handleTableChange = async (pag: { current?: number; pageSize?: number }) =
 
 const handleEdit = (record: UserInfo) => {
   editingUser.value = record
-  editForm.email = record.email
+  editForm.email = record.email || ''
   editForm.role = record.role
   editForm.status = record.status
   showEditModal.value = true
@@ -496,6 +570,10 @@ const handleSaveUser = async () => {
 }
 
 const openResetPasswordModal = (record: UserInfo) => {
+  if (record.auth_source === 'ldap') {
+    message.warning(t('admin.resetPasswordLdapDisabled'))
+    return
+  }
   resetPasswordUser.value = record
   resetPasswordForm.new_password = ''
   showResetPasswordModal.value = true
@@ -503,6 +581,10 @@ const openResetPasswordModal = (record: UserInfo) => {
 
 const handleResetPassword = async () => {
   if (!resetPasswordUser.value) return
+  if (resetPasswordUser.value.auth_source === 'ldap') {
+    message.warning(t('admin.resetPasswordLdapDisabled'))
+    return
+  }
 
   try {
     await resetPasswordFormRef.value?.validate()

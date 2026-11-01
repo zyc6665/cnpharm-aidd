@@ -88,18 +88,6 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/auth/Login.vue'),
     meta: { title: 'auth.login', redirectAuthenticated: true }
   },
-  {
-    path: '/register',
-    name: 'Register',
-    component: () => import('@/views/auth/Register.vue'),
-    meta: { title: 'auth.register', redirectAuthenticated: true }
-  },
-  {
-    path: '/forgot-password',
-    name: 'ForgotPassword',
-    component: () => import('@/views/auth/ForgotPassword.vue'),
-    meta: { title: 'auth.forgotPassword', redirectAuthenticated: true }
-  },
   // 工具相关
   {
     path: '/tools',
@@ -112,6 +100,12 @@ const routes: RouteRecordRaw[] = [
     name: 'Workflow',
     component: () => import('@/views/workflow/index.vue'),
     meta: { title: 'workflow.title', requiresAuth: true }
+  },
+  {
+    path: '/achievements',
+    name: 'Achievements',
+    component: () => import('@/views/demo/Achievements.vue'),
+    meta: { title: 'nav.achievements', requiresAuth: true }
   },
   {
     path: '/workflow/runs/:runId',
@@ -194,6 +188,12 @@ const routes: RouteRecordRaw[] = [
     name: 'ProjectAssets',
     component: () => import('@/views/compounds/Assets.vue'),
     meta: { titleLiteral: '数据资产', requiresAuth: true }
+  },
+  {
+    path: '/projects/:projectId/candidates',
+    name: 'ProjectCandidates',
+    component: () => import('@/views/compounds/Candidates.vue'),
+    meta: { titleLiteral: '候选物', requiresAuth: true }
   },
   {
     path: '/compounds/:compoundId',
@@ -398,6 +398,12 @@ setLoginRedirectHandler((redirectPath: string) => {
 // 路由守卫
 router.beforeEach(async (to, _from, next) => {
   const userStore = useUserStore()
+
+  // 认证依赖 httpOnly Cookie，首次导航时先用 /users/me 恢复会话，
+  // 避免已登录用户被误判为未登录而跳转登录页。
+  if (!userStore.authReady) {
+    await userStore.bootstrapAuthState()
+  }
 
   // 设置页面标题
   const titleKey = typeof to.meta.title === 'string' ? to.meta.title : ''

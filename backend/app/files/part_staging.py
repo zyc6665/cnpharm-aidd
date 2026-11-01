@@ -31,8 +31,12 @@ S3/MinIO 的原生 Multipart Upload（那个要把所有片挂在同一个 ``upl
 
 from __future__ import annotations
 
+import os
+import tempfile
 from pathlib import Path
-from typing import Protocol
+from typing import AsyncIterator, Protocol
+
+import aiofiles
 
 from app.config import settings
 from app.storage.factory import get_storage_backend
@@ -59,6 +63,18 @@ class PartStaging(Protocol):
 
     async def write_part(self, session_id: str, part_number: int, content: bytes) -> int:
         """写入一片，返回写入字节数。"""
+
+    async def write_part_stream(
+        self,
+        session_id: str,
+        part_number: int,
+        chunks: AsyncIterator[bytes],
+    ) -> int:
+        """流式写入一片，返回写入字节数。
+
+        与 ``write_part`` 的区别是不把整段字节驻留内存：调用方按块喂入，实现方
+        边收边落盘/上传。用于 P2 分片大小上限硬化（单分片不得整段 ``Body`` 读入）。
+        """
 
     async def read_part(self, session_id: str, part_number: int) -> bytes:
         """读回一片的字节。"""
@@ -87,6 +103,33 @@ class LocalPartStaging:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(content)
         return len(content)
+
+    async def write_part_stream(
+        self,
+        session_id: str,
+        part_number: int,
+        chunks: AsyncIterator[bytes],
+    ) -> int:
+        path = self.part_path(session_id, part_number)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # 先写同目录临时文件再 ``os.replace``，避免半截分片被合并流程读到。
+        temp_path = path.with_name(path.name + ".streaming")
+        written = 0
+        try:
+            async with aiofiles.open(temp_path, "wb") as handle:
+                async for chunk in chunks:
+                    if not chunk:
+                        continue
+                    await handle.write(chunk)
+                    written += len(chunk)
+            os.replace(temp_path, path)
+        except BaseException:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise
+        return written
 
     async def read_part(self, session_id: str, part_number: int) -> bytes:
         path = self.part_path(session_id, part_number)
@@ -122,6 +165,38 @@ class ObjectPartStaging:
             "application/octet-stream",
         )
         return len(content)
+
+    async def write_part_stream(
+        self,
+        session_id: str,
+        part_number: int,
+        chunks: AsyncIterator[bytes],
+    ) -> int:
+        key = scratch_object_key(session_id, part_number)
+        written = 0
+        temp_path: str | None = None
+        try:
+            # 先落本地临时文件收集全部块，再用后端 ``upload_stream`` 一次上传：
+            # 对象存储的 put_object 需要已知总大小，而请求流是分块到达的。
+            with tempfile.NamedTemporaryFile(delete=False) as spool:
+                temp_path = spool.name
+                async for chunk in chunks:
+                    if not chunk:
+                        continue
+                    spool.write(chunk)
+                    written += len(chunk)
+                spool.flush()
+            with open(temp_path, "rb") as handle:
+                await self._backend().upload_stream(
+                    handle, key, written, "application/octet-stream"
+                )
+        finally:
+            if temp_path is not None:
+                try:
+                    os.unlink(temp_path)
+                except OSError:
+                    pass
+        return written
 
     async def read_part(self, session_id: str, part_number: int) -> bytes:
         return await self._backend().download(

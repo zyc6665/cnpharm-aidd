@@ -275,10 +275,14 @@ async def reconcile_running_execution_records(
     """Converge running records after a worker or process interruption."""
     current_time = now or utcnow()
     cutoff = current_time - stale_after if stale_after is not None else None
-    task_id_expression = ExecutionRecord.request_snapshot["task_id"].as_string()
+    # 连接键用真列 `ExecutionRecord.task_id`（迁移 20261031_01 加列并回填），
+    # 不再把 `request_snapshot->>'task_id'` 放进 JOIN 条件：JSON 提取进连接
+    # 条件会让 PostgreSQL 放弃 `tasks.id` 的索引走哈希连接，而这里是 worker
+    # 恢复与对账巡检的热点。历史行若列为 NULL，下方 `_record_task_id()` 仍从
+    # JSON 兜底读取，行为不变。
     result = await db.execute(
         select(ExecutionRecord)
-        .outerjoin(Task, Task.id == task_id_expression)
+        .outerjoin(Task, Task.id == ExecutionRecord.task_id)
         .where(
             ExecutionRecord.status == "running",
             or_(Task.id.is_(None), Task.status != "RUNNING"),

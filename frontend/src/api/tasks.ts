@@ -1,5 +1,6 @@
 import { get, post, del, type RequestOptions } from './request'
 import type { ApiResponse } from '@/types/api'
+import { terminalStatuses } from '@/domain/tasks/status'
 import type { TaskCountQueryParams, TaskSystemView, TaskViewCounts } from '@/domain/tasks/listing'
 import type {
   Task,
@@ -27,7 +28,8 @@ export interface TaskListParams extends PaginationParams {
   resource_wait_scope?: 'user' | 'project' | string
 }
 
-export const TERMINAL_TASK_STATUSES: readonly TaskStatus[] = ['success', 'failure', 'canceled']
+/** 终态任务集合，统一取自 `domain/tasks/status`，避免各处硬编码漏状态。 */
+export const TERMINAL_TASK_STATUSES: readonly TaskStatus[] = terminalStatuses
 
 export function isTaskTerminalStatus(status: TaskStatus): boolean {
   return TERMINAL_TASK_STATUSES.includes(status)

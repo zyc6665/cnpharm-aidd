@@ -20,7 +20,7 @@ from datetime import timedelta
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -378,3 +378,135 @@ class TestSweepLoop:
         loop.start()
         await asyncio.wait_for(loop.stop(), timeout=5)
         assert loop.is_running is False
+
+
+class TestExpireQueueEntriesCas:
+    """超时落库必须是带 `status='QUEUED'` 条件的 CAS（docs/04 §9.1）。
+
+    SQLite 下 `with_for_update` 被忽略，普通 ORM UPDATE 会把「巡检 SELECT 之后、
+    写回之前」刚被 worker 启动成 RUNNING 的任务覆盖回 TIMEOUT，已经花掉的算力和
+    产物随之丢弃。这里用 monkeypatch 精确制造这个竞态窗口。
+    """
+
+    @pytest.mark.asyncio
+    async def test_skips_row_started_by_worker_before_write(self, db_session, monkeypatch):
+        """worker 在巡检拿到行之后、CAS 写回之前把它启动成 RUNNING。
+
+        直接把库里的状态改成 RUNNING（不 commit、不同步 ORM），巡检手里的 ORM
+        对象仍显示 QUEUED——正是真实竞态里巡检进程看到的样子。此时 CAS 应该
+        匹配不到行，返回 False，并且**不能**归还资源租约（任务还在跑）。
+        """
+        import app.services.queue_timeout as queue_timeout_module
+
+        owner = await _make_owner(db_session)
+        task = await _make_task(
+            db_session, owner, queued_at=utcnow() - timedelta(hours=7)
+        )
+        task_id = task.id
+
+        await db_session.execute(
+            update(Task)
+            .where(Task.id == task_id)
+            .values(status=TaskStatus.RUNNING.value)
+            .execution_options(synchronize_session=False)
+        )
+
+        released: list[str] = []
+
+        async def record_release(task, *, reason, **kwargs):
+            released.append(reason)
+            return False
+
+        # 若 CAS 之前就归还租约，这里会记录到一次调用——正是要防的回归。
+        monkeypatch.setattr(
+            queue_timeout_module,
+            "release_task_resource_reservation",
+            record_release,
+        )
+        expired = await queue_timeout_module._expire_task_if_still_queued(
+            db_session, task, window=21600
+        )
+        await db_session.commit()
+
+        assert expired is False
+        assert released == []
+        db_session.expire_all()
+        row = (
+            await db_session.execute(select(Task).where(Task.id == task_id))
+        ).scalar_one()
+        assert row.status == TaskStatus.RUNNING.value
+        logs = (
+            await db_session.execute(select(TaskLog).where(TaskLog.task_id == task_id))
+        ).scalars().all()
+        assert logs == []
+
+    @pytest.mark.asyncio
+    async def test_releases_reservation_only_after_cas_succeeds(self, db_session, monkeypatch):
+        """CAS 命中后再归还租约，并把归还结果写回（否则配额状态丢失）。"""
+        import app.services.queue_timeout as queue_timeout_module
+
+        owner = await _make_owner(db_session)
+        task = await _make_task(
+            db_session, owner, queued_at=utcnow() - timedelta(hours=7)
+        )
+        task_id = task.id
+
+        async def fake_release(task, *, reason, **kwargs):
+            task.extra_data = {**(task.extra_data or {}), "lease_released": True}
+            return True
+
+        monkeypatch.setattr(
+            queue_timeout_module,
+            "release_task_resource_reservation",
+            fake_release,
+        )
+
+        expired = await queue_timeout_module._expire_task_if_still_queued(
+            db_session, task, window=21600
+        )
+        await db_session.commit()
+
+        assert expired is True
+        db_session.expire_all()
+        row = (
+            await db_session.execute(select(Task).where(Task.id == task_id))
+        ).scalar_one()
+        assert row.status == TaskStatus.TIMEOUT.value
+        assert row.extra_data["lease_released"] is True
+
+    @pytest.mark.asyncio
+    async def test_one_bad_row_does_not_abort_the_batch(self, db_session, monkeypatch):
+        owner = await _make_owner(db_session)
+        bad = await _make_task(
+            db_session, owner, queued_at=utcnow() - timedelta(hours=7), suffix="-bad"
+        )
+        good = await _make_task(
+            db_session, owner, queued_at=utcnow() - timedelta(hours=7), suffix="-good"
+        )
+
+        original = TaskStateMachine.mark_timeout
+
+        def flaky_mark_timeout(task, **kwargs):
+            if task.id == bad.id:
+                raise RuntimeError("boom")
+            return original(task, **kwargs)
+
+        monkeypatch.setattr(
+            TaskStateMachine, "mark_timeout", staticmethod(flaky_mark_timeout)
+        )
+
+        expired = await expire_timed_out_queue_entries(db_session, timeout_seconds=21600)
+        await db_session.commit()
+
+        assert expired == 1
+        db_session.expire_all()
+        rows = {
+            row.id: row.status
+            for row in (
+                await db_session.execute(
+                    select(Task).where(Task.id.in_((bad.id, good.id)))
+                )
+            ).scalars()
+        }
+        assert rows[bad.id] == TaskStatus.QUEUED.value
+        assert rows[good.id] == TaskStatus.TIMEOUT.value

@@ -159,6 +159,7 @@
     actor: TaskActor
     currentProjectId?: string
     currentProjectName?: string
+    projectNames?: Record<string, string>
   }>()
 
   const emit = defineEmits<{
@@ -179,6 +180,7 @@
   const projectContextLabel = computed(() => getTaskProjectContextLabel(props.task, {
     currentProjectId: props.currentProjectId,
     currentProjectName: props.currentProjectName,
+    projectNames: props.projectNames,
   }))
   const artifactLineagePath = computed(() => getTaskArtifactLineagePath(props.task))
   const resourceWait = computed(() => {

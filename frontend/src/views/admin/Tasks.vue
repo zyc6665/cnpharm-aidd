@@ -137,7 +137,28 @@
     </AppFilterBar>
 
     <a-card>
+      <SkeletonList v-if="loading && tasks.length === 0" :count="6" />
+
+      <AppInlineError
+        v-else-if="loadError"
+        data-testid="tasks-error"
+        :title="t('admin.listStates.tasksLoadError')"
+        :description="t('common.listStates.errorDescription')"
+        :detail="loadErrorDetail"
+      >
+        <a-button size="small" @click="handleRefresh">{{ t('common.listStates.retry') }}</a-button>
+      </AppInlineError>
+
+      <AppEmptyState
+        v-else-if="tasks.length === 0"
+        :title="t('admin.listStates.tasksEmptyTitle')"
+        :description="t('admin.listStates.tasksEmptyHint')"
+      >
+        <a-button type="primary" @click="handleRefresh">{{ t('common.refresh') }}</a-button>
+      </AppEmptyState>
+
       <a-table
+        v-else
         :scroll="{ x: 'max-content' }"
         :columns="columns"
         :data-source="tasks"
@@ -288,6 +309,9 @@
   import { formatDateTimeMinutes } from '@/utils/datetime'
   import AppFilterBar from '@/components/common/AppFilterBar.vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import AppEmptyState from '@/components/common/AppEmptyState.vue'
+  import AppInlineError from '@/components/common/AppInlineError.vue'
+  import SkeletonList from '@/components/common/SkeletonList.vue'
   import SkeletonCard from '@/components/common/SkeletonCard.vue'
   import { useRemoteToolOptions } from '@/composables/useRemoteToolOptions'
   import {
@@ -310,6 +334,8 @@
   const { t } = useI18n()
 
   const loading = ref(false)
+  const loadError = ref(false)
+  const loadErrorDetail = ref('')
   const detailLoading = ref(false)
   const showDetailDrawer = ref(false)
   const selectedTask = ref<Task | null>(null)
@@ -390,6 +416,8 @@
 
   const fetchTasks = async () => {
     loading.value = true
+    loadError.value = false
+    loadErrorDetail.value = ''
     try {
       const res = await getTaskList({
         page: pagination.current,
@@ -401,13 +429,18 @@
       })
       tasks.value = res.data.items
       pagination.total = res.data.total
+    } catch (error) {
+      tasks.value = []
+      pagination.total = 0
+      loadError.value = true
+      loadErrorDetail.value = error instanceof Error ? error.message : String(error)
     } finally {
       loading.value = false
     }
   }
 
   const handleRefresh = async () => {
-    await Promise.all([fetchTaskStats(), fetchTasks()])
+    await Promise.allSettled([fetchTaskStats(), fetchTasks()])
     message.success(t('common.refreshSuccess'))
   }
 
@@ -490,7 +523,7 @@
   }
 
   onMounted(async () => {
-    await Promise.all([fetchTaskStats(), fetchToolOptions(), fetchTasks()])
+    await Promise.allSettled([fetchTaskStats(), fetchToolOptions(), fetchTasks()])
   })
 </script>
 

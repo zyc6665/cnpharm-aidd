@@ -77,28 +77,35 @@
       </a-form>
     </AppFilterBar>
 
-    <a-alert
-      v-if="errorMessage"
+    <SkeletonList v-if="loading && rows.length === 0" :count="6" />
+
+    <AppInlineError
+      v-else-if="errorMessage"
       class="audit-error"
-      type="error"
-      show-icon
-      :message="t('admin.audit.loadError')"
+      data-testid="audit-error"
+      :title="t('admin.audit.loadError')"
+      :description="t('common.listStates.errorDescription')"
+      :detail="errorMessage"
     >
-      <template #action>
-        <a-button size="small" danger @click="retryLoad">{{ t('admin.audit.retryLoad') }}</a-button>
-      </template>
-      <template #description>
-        <span>{{ errorMessage }}</span>
-      </template>
-    </a-alert>
+      <a-button size="small" danger @click="retryLoad">{{ t('admin.audit.retryLoad') }}</a-button>
+    </AppInlineError>
+
+    <AppEmptyState
+      v-else-if="rows.length === 0"
+      :title="t('admin.audit.emptyState')"
+      :description="t('admin.audit.emptyHint')"
+    >
+      <a-button type="primary" @click="handleReset">{{ t('common.reset') }}</a-button>
+    </AppEmptyState>
 
     <a-table
+      v-else
       :scroll="{ x: 1200 }"
       :columns="columns"
       :data-source="rows"
       :loading="loading"
       :pagination="pagination"
-      :locale="{ emptyText: errorMessage ? t('admin.audit.loadError') : t('admin.audit.emptyState') }"
+      :locale="{ emptyText: t('admin.audit.emptyState') }"
       row-key="id"
       size="middle"
       @change="handleTableChange"
@@ -147,6 +154,9 @@ import type { Dayjs } from 'dayjs'
 import { ClearOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import AppFilterBar from '@/components/common/AppFilterBar.vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
+import AppEmptyState from '@/components/common/AppEmptyState.vue'
+import AppInlineError from '@/components/common/AppInlineError.vue'
+import SkeletonList from '@/components/common/SkeletonList.vue'
 import { getAuditFacets, listAuditLogs } from '@/api/admin-audit'
 import {
   DEFAULT_AUDIT_PAGE_SIZE,

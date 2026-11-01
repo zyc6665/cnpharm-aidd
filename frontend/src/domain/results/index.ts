@@ -2,7 +2,7 @@ import type { ProjectResultSummary, TraceabilityPackage } from '@/types/compound
 import type { TaskStatus } from '@/types/models'
 
 /** 结果列表/详情的终态集合（后端只回终态任务）。 */
-export const RESULT_STATUSES: readonly TaskStatus[] = ['success', 'failure', 'canceled']
+export const RESULT_STATUSES: readonly TaskStatus[] = ['success', 'failure', 'timeout', 'canceled']
 
 /** 追溯包六个折叠分区，`key` 对应 `TraceabilityPackage` 的顶层字段。 */
 export type TraceabilitySectionKey =

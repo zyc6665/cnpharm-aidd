@@ -11,29 +11,15 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, type Component } from 'vue'
-  import type { ArtifactType, TypedArtifact } from '@/types/artifacts'
-  import FileArtifact from './FileArtifact.vue'
-  import LigandStructureArtifact from './LigandStructureArtifact.vue'
-  import PocketResultArtifact from './PocketResultArtifact.vue'
-  import ProteinStructureArtifact from './ProteinStructureArtifact.vue'
-  import RunReportArtifact from './RunReportArtifact.vue'
+import { computed } from 'vue'
 
-  const props = defineProps<{
-    artifact: TypedArtifact
-  }>()
+import type { TypedArtifact } from '@/types/artifacts'
 
-  const artifactComponents: Record<ArtifactType, Component> = {
-    protein_structure: ProteinStructureArtifact,
-    binding_pocket: PocketResultArtifact,
-    pocket_result: PocketResultArtifact,
-    ligand_structure: LigandStructureArtifact,
-    molecule_table: LigandStructureArtifact,
-    file: FileArtifact,
-    run_report: RunReportArtifact
-  }
+import { resolveArtifactComponent } from './registry'
 
-  const component = computed(
-    () => artifactComponents[props.artifact.artifact_type as ArtifactType] || null
-  )
+const props = defineProps<{
+  artifact: TypedArtifact
+}>()
+
+const component = computed(() => resolveArtifactComponent(String(props.artifact.artifact_type)))
 </script>

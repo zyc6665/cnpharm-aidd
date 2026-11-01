@@ -186,7 +186,7 @@ const passwordRules = {
   oldPassword: [{ required: true, message: t('user.enterOldPassword') }],
   newPassword: [
     { required: true, message: t('auth.validation.passwordRequired') },
-    { min: 6, message: t('auth.validation.passwordLength') }
+    { min: 12, message: t('auth.validation.passwordLength') }
   ],
   confirmPassword: [
     { required: true, message: t('auth.validation.confirmPasswordRequired') },

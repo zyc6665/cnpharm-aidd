@@ -1,9 +1,7 @@
 const PUBLIC_AUTH_PATHS = [
   '/auth/login',
   '/auth/logout',
-  '/auth/register',
-  '/auth/refresh',
-  '/auth/reset-password'
+  '/auth/refresh'
 ] as const
 
 const API_PREFIX = '/api/v1'
@@ -29,14 +27,10 @@ const isPublicAuthPath = (url?: string): boolean => {
   ))
 }
 
-export const shouldAttachAuthHeader = (url?: string): boolean => {
-  if (!url) {
-    return true
-  }
-
-  return !isPublicAuthPath(url)
-}
-
+/**
+ * 是否允许在 401 后尝试通过 `POST /auth/refresh` 恢复会话。
+ * 登录/刷新/登出接口自身失败时不再递归刷新。
+ */
 export const shouldAttemptTokenRefresh = (url?: string): boolean => {
   if (!url) {
     return true
@@ -44,9 +38,3 @@ export const shouldAttemptTokenRefresh = (url?: string): boolean => {
 
   return !isPublicAuthPath(url)
 }
-
-export const buildRefreshTokenRequestConfig = (refreshToken: string) => ({
-  params: {
-    refresh_token: refreshToken
-  }
-})

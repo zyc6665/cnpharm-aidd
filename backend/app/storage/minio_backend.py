@@ -4,6 +4,7 @@
 import io
 import logging
 import asyncio
+from collections.abc import AsyncIterator
 from typing import Optional, BinaryIO
 from datetime import timedelta
 
@@ -103,6 +104,28 @@ class MinIOStorageBackend(StorageBackend):
             return response.read()
         finally:
             self._close_response(response, path)
+
+    def open_stream(self, path: str, chunk_size: int = 1024 * 1024) -> AsyncIterator[bytes]:
+        """按块流式读取 MinIO 对象，迭代结束/异常时释放连接。
+
+        ``get_object`` 返回的是 urllib3 响应，必须显式 ``close`` + ``release_conn``，
+        否则连接池会被慢速下载逐个占满；复用 ``_download_sync`` 同一套关闭逻辑。
+        """
+
+        async def _iter() -> AsyncIterator[bytes]:
+            response = await asyncio.to_thread(
+                self.client.get_object, self.bucket, path
+            )
+            try:
+                while True:
+                    chunk = await asyncio.to_thread(response.read, chunk_size)
+                    if not chunk:
+                        break
+                    yield chunk
+            finally:
+                await asyncio.to_thread(self._close_response, response, path)
+
+        return _iter()
 
     async def delete(self, path: str) -> bool:
         """删除文件"""

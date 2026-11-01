@@ -7,7 +7,7 @@ import type { StandardArtifactInputSlot } from '@/domain/tools'
 type MaybeRef<T> = T | Ref<T>
 
 export interface ToolDetailStandardArtifactApi {
-  getProjectArtifacts: (projectId: string) => Promise<ApiResponse<ArtifactListResponse>>
+  getAllProjectArtifacts: (projectId: string) => Promise<ApiResponse<ArtifactListResponse>>
 }
 
 export interface ToolDetailStandardArtifactsOptions {
@@ -38,7 +38,7 @@ export function useToolDetailStandardArtifacts(options: ToolDetailStandardArtifa
 
     standardArtifactsLoading.value = true
     try {
-      const res = await options.api.getProjectArtifacts(projectId)
+      const res = await options.api.getAllProjectArtifacts(projectId)
       if (currentRequestId === requestId) {
         standardProjectArtifacts.value = res.data.items
       }

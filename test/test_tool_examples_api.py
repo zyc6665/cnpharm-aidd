@@ -284,7 +284,7 @@ async def test_tool_package_v2_example_uses_parameter_schema_before_legacy_schem
                 },
             },
             "tool_package_manifest": {
-                "api_version": "aidd.sciminer/tool-package.v2",
+                "api_version": "aidd.sciminer/tool-package",
                 "metadata": {"slug": "molp-pc-property-prediction", "version": "0.1.1"},
                 "artifacts": {
                     "inputs": [{"name": "molecules", "type": "molecule_table@1", "required": True}],

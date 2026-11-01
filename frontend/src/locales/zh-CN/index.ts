@@ -54,13 +54,23 @@ export default {
     expand: '展开侧栏',
     collapse: '收起侧栏',
     totalItems: '共 {total} 条',
+    loadMore: '加载更多',
+    allLoaded: '已全部加载',
     copySuccess: '复制成功',
     required: '为必填项',
     optional: '可选',
     createdAt: '创建时间',
     updatedAt: '更新时间',
     seconds: '秒',
-    sort: '排序'
+    sort: '排序',
+    memberUsername: '成员用户名',
+    // 列表四态通用文案（加载失败 / 空状态）
+    listStates: {
+      errorTitle: '加载失败',
+      errorDescription: '请求数据时出现异常，可能是网络不稳定或服务暂时不可用，请稍后重试。',
+      retry: '重试',
+      emptyTitle: '暂无数据'
+    }
   },
 
   // 导航
@@ -70,13 +80,19 @@ export default {
     tools: '工具',
     tasks: '任务',
     workflow: '工作流',
+    achievements: '项目成果',
     admin: '管理',
     login: '登录',
-    register: '注册',
     logout: '退出登录',
     profile: '个人中心',
     settings: '设置',
-    favorites: '收藏'
+    favorites: '收藏',
+    molecules: '分子生成',
+    peptides: '多肽设计',
+    predict: '性质预测',
+    screen: '虚拟筛选',
+    md: '分子动力学',
+    designSection: '设计工具'
   },
   command: {
     placeholder: '搜索页面、命令…',
@@ -158,7 +174,7 @@ export default {
     hero: {
       title: '从靶点到先导化合物，一个工作台完成',
       description: '口袋识别、虚拟筛选、分子对接、ADMET 预测——所有计算环节在同一平台上编排、执行、追溯',
-      cta: '免费注册',
+      cta: '立即登录',
       secondary: '浏览工具',
     },
     values: {
@@ -218,8 +234,8 @@ export default {
     },
     cta: {
       title: '立即开始您的研究',
-      description: '注册即可免费使用基础功能，开启计算生物学之旅',
-      button: '免费注册'
+      description: '登录后即可使用平台基础功能，开启计算生物学之旅',
+      button: '立即登录'
     }
   },
 
@@ -795,7 +811,7 @@ export default {
       },
       sdfToSmiles: {
         title: 'SDF 转 SMILES 表',
-        description: '把配体结构转换为 MolP-PC 和 RDKit 可复用的 molecule_table@1。'
+        description: '把配体结构转换为 MolP-PC 和 RDKit 可复用的 molecule_table{\'@\'}1。'
       },
       rdkitProperties: {
         title: 'RDKit Properties',
@@ -843,64 +859,27 @@ export default {
   // 认证
   auth: {
     login: '登录',
-    register: '注册',
-    forgotPassword: '忘记密码',
-    forgotPasswordDesc: '输入您注册时使用的邮箱，我们将发送重置密码的验证码',
+    account: '账号',
     username: '用户名',
     email: '邮箱',
     password: '密码',
     confirmPassword: '确认密码',
     newPassword: '新密码',
-    confirmNewPassword: '确认新密码',
     rememberMe: '记住我',
-    noAccount: '没有账号？',
-    hasAccount: '已有账号？',
-    goRegister: '立即注册',
     goLogin: '立即登录',
     loginSuccess: '登录成功',
-    registerSuccess: '注册成功',
     logoutSuccess: '退出成功',
     loginRequired: '请先登录',
-    // 验证码
-    verificationCode: '验证码',
-    sendCode: '发送验证码',
-    codeSent: '验证码已发送',
-    resendCode: '重新发送',
-    resendCodeIn: '{seconds}秒后重新发送',
-    invalidCode: '验证码错误或已过期',
-    // 密码强度
-    passwordWeak: '弱',
-    passwordMedium: '中',
-    passwordStrong: '强',
-    passwordVeryStrong: '非常强',
-    // 找回密码步骤
-    step1Email: '填写邮箱',
-    step2Verify: '验证身份',
-    step3Reset: '重置密码',
-    sendResetCode: '发送重置验证码',
-    codeSentTo: '验证码已发送至 {email}',
-    verifyCode: '验证',
-    resetPassword: '重置密码',
-    resetSuccess: '密码重置成功',
-    resetSuccessDesc: '您的密码已成功重置，请使用新密码登录',
-    // 用户协议
-    agreementPrefix: '我已阅读并同意',
-    termsOfService: '服务条款',
-    agreementAnd: '和',
-    privacyPolicy: '隐私政策',
     validation: {
+      accountRequired: '请输入账号',
       usernameRequired: '请输入用户名',
       usernameLength: '用户名长度为 3-20 个字符',
-      usernameFormat: '用户名只能包含字母、数字和下划线',
       emailRequired: '请输入邮箱',
       emailInvalid: '请输入有效的邮箱地址',
       passwordRequired: '请输入密码',
-      passwordLength: '密码长度至少为 6 个字符',
+      passwordLength: '密码长度至少为 12 个字符',
       confirmPasswordRequired: '请确认密码',
-      passwordMismatch: '两次输入的密码不一致',
-      codeRequired: '请输入验证码',
-      codeLength: '验证码为6位数字',
-      agreementRequired: '请阅读并同意服务条款和隐私政策'
+      passwordMismatch: '两次输入的密码不一致'
     }
   },
 
@@ -1232,7 +1211,7 @@ export default {
   // 化合物 / 候选物 / 候选集
   compounds: {
     title: '数据资产',
-    subtitle: '管理项目内的化合物结构、候选物与候选集',
+    subtitle: '管理项目内的化合物、蛋白结构产物与数据集',
     backToProject: '返回项目总览',
     backToAssets: '返回数据资产',
     detail: {
@@ -1242,6 +1221,8 @@ export default {
     },
     tabs: {
       compounds: '化合物',
+      proteins: '蛋白',
+      datasets: '数据集',
       candidates: '候选物',
       candidateSets: '候选集'
     },
@@ -1267,11 +1248,35 @@ export default {
       structure: '结构',
       createdAt: '创建时间'
     },
+    proteinColumns: {
+      name: '名称',
+      filename: '文件',
+      source: '来源',
+      createdAt: '创建时间'
+    },
+    datasetColumns: {
+      name: '名称',
+      source: '来源',
+      datasetType: '类型',
+      rowCount: '行数',
+      fileCount: '文件数',
+      createdAt: '创建时间'
+    },
+    datasetSource: {
+      upload: '上传文件',
+      dataset: '登记数据集'
+    },
+    notes: {
+      proteins:
+        '这里只展示模型产出或上传的蛋白结构产物；你自行导入的蛋白主数据请前往「靶点与结构」查看。',
+      datasets: '数据集来自数据集登记（导入结果），与 Artifact 产物分属不同来源。'
+    },
     actions: {
       refresh: '刷新',
       create: '新增化合物',
       import: '批量导入',
       compare: '候选物对比',
+      candidates: '候选物',
       search: '相似性检索',
       createSet: '新建候选集'
     },
@@ -1347,15 +1352,28 @@ export default {
     },
     empty: {
       compounds: '项目内还没有化合物，可先批量导入',
+      proteins: '项目内还没有蛋白结构产物',
+      datasets: '项目内还没有数据集',
       candidates: '项目内还没有候选物',
       candidateSets: '项目内还没有候选集'
+    },
+    emptyHint: {
+      assets: '这里汇总项目内的化合物、蛋白结构与数据集；可先批量导入化合物，或新增单个分子。',
+      candidates: '候选物来自筛选、设计与导入任务；候选集用于把候选物组织成集合。',
+      goAssets: '前往数据资产导入'
     },
     errors: {
       loadCompounds: '化合物列表加载失败',
       loadCompound: '化合物详情加载失败',
       searchSimilar: '相似性检索失败',
       loadCandidates: '候选物列表加载失败',
-      loadCandidateSets: '候选集列表加载失败'
+      loadCandidateSets: '候选集列表加载失败',
+      loadAssets: '数据资产加载失败'
+    },
+    candidatesPage: {
+      title: '候选物',
+      subtitle: '候选物与候选集集中在此管理（M3 域），已从数据资产页签移出',
+      backToAssets: '返回数据资产'
     }
   },
 
@@ -1535,6 +1553,9 @@ export default {
       }
     },
     empty: '项目内还没有已完成的结果',
+    emptyHint: '运行工具或工作流任务后，完成的结果会自动汇总到这里。',
+    goTools: '去工具页',
+    clearFilter: '清除筛选',
     errors: {
       loadResults: '结果列表加载失败',
       loadResult: '结果详情加载失败',
@@ -2025,6 +2046,7 @@ export default {
     // 状态
     status: {
       pending: '等待中',
+      rejected: '已拒绝',
       queued: '排队中',
       running: '运行中',
       success: '已完成',
@@ -2280,6 +2302,27 @@ export default {
     tasks: '任务管理',
     system: '系统设置',
     backToSite: '返回前台',
+    // 列表四态：各页面加载失败与空状态引导文案
+    listStates: {
+      usersLoadError: '用户列表加载失败',
+      usersEmptyTitle: '还没有用户',
+      usersEmptyHint: '平台还没有创建任何用户。新建用户后即可分配角色并开始协作。',
+      toolsLoadError: '工具列表加载失败',
+      toolsEmptyTitle: '还没有工具',
+      toolsEmptyHint: '工具目录为空。先登记模型交付包并创建平台工具，用户才能运行。',
+      goToolPackages: '去登记交付包',
+      tasksLoadError: '任务列表加载失败',
+      tasksEmptyTitle: '暂无任务',
+      tasksEmptyHint: '还没有任务记录。用户提交工具任务后，运行状态会实时显示在这里。',
+      workbenchGroupsLoadError: '分组与映射加载失败',
+      groupsEmptyTitle: '还没有分组',
+      groupsEmptyHint: '使用上方表单创建第一个工作台分组，再把工具映射进来。',
+      mappingsEmptyTitle: '还没有映射',
+      mappingsEmptyHint: '把工具映射到分组后，工作台会按分组展示工具。',
+      categoriesLoadError: '分类列表加载失败',
+      categoriesEmptyTitle: '还没有分类',
+      categoriesEmptyHint: '分类用于把工具归类展示；先创建第一个分类，再创建工具。'
+    },
     stats: {
       totalUsers: '用户总数',
       totalTools: '工具总数',
@@ -2346,6 +2389,7 @@ export default {
       startTime: '开始时间',
       endTime: '结束时间',
       emptyState: '没有符合条件的审计记录',
+      emptyHint: '当前筛选条件下没有审计记录。可调整筛选条件，或重置后查看全部记录。',
       requestId: '请求 ID',
       detail: '详情',
       createdAt: '时间',
@@ -2377,6 +2421,14 @@ export default {
     createUser: '创建用户',
     editUser: '编辑用户',
     userInfo: '用户信息',
+    username: '账号',
+    authSource: '认证源',
+    authSourceLocal: '本地',
+    authSourceLdap: 'LDAP',
+    emailOptional: '可选，LDAP 用户可不填',
+    usernameRequired: '请输入账号名',
+    usernameFormat: '账号名只能包含字母、数字、点、下划线和短横线，长度 1-64',
+    resetPasswordLdapDisabled: 'LDAP 用户的口令由目录服务管理，无法在此重置',
     keyword: '关键词',
     searchUserPlaceholder: '搜索用户名或邮箱...',
     status: '状态',
@@ -2619,6 +2671,25 @@ export default {
   },
 
   // 页脚
+  artifactAssets: {
+    createdAt: '创建时间',
+    fileRole: '文件角色',
+    fileName: '文件名',
+    fileSize: '大小',
+    mdTrajectory: {
+      notice: '轨迹文件（如 DCD）仅提供下载；此处展示拓扑结构的静态预览，RMSD/RMSF 曲线请到任务 MD 结果页查看。'
+    },
+    compoundSet: {
+      notice: '化合物集合产物：可直接下载成员文件，或前往候选物页面管理。',
+      openCandidates: '前往候选物'
+    },
+    dataset: {
+      notice: '数据资产摘要，明细文件可直接下载。',
+      name: '名称',
+      type: '类型',
+      fileCount: '文件数'
+    }
+  },
   footer: {
     copyright: '© 中国医药健康产业股份有限公司',
     about: '关于我们',

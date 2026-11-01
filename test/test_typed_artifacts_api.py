@@ -28,6 +28,7 @@ class RecordingStorage:
         self.fail = fail
         self.uploads: list[tuple[str, bytes]] = []
         self.objects: dict[str, tuple[bytes, str | None]] = {}
+        self.presign_calls: list[tuple[str, int]] = []
 
     async def upload(
         self, file_data: bytes, path: str, content_type: str | None = None
@@ -42,6 +43,19 @@ class RecordingStorage:
 
     async def download(self, path: str) -> bytes:
         return self.objects[path][0]
+
+    def open_stream(self, path: str, chunk_size: int = 1024 * 1024):
+        data = self.objects[path][0]
+
+        async def _iter():
+            for start in range(0, len(data), chunk_size):
+                yield data[start : start + chunk_size]
+
+        return _iter()
+
+    async def get_url(self, path: str, expires_in: int = 3600) -> str:
+        self.presign_calls.append((path, expires_in))
+        return f"https://presigned.example/{path}?expires={expires_in}"
 
     async def delete(self, path: str) -> bool:
         return True
@@ -105,9 +119,14 @@ async def artifact_context(artifact_db: AsyncSession) -> dict[str, object]:
 async def artifact_client(
     artifact_db: AsyncSession,
     artifact_context: dict[str, object],
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
 ):
     from app.api.v1.artifacts import get_artifact_storage
 
+    # Uploads now persist exactly one local copy via store_file_bytes; keep test
+    # bytes inside tmp_path instead of the real storage dir.
+    monkeypatch.setattr("app.files.storage_path.STORAGE_PATH", tmp_path)
     storage = RecordingStorage()
 
     async def override_get_db():
@@ -133,10 +152,14 @@ async def artifact_client(
 
 
 @pytest.mark.asyncio
-async def test_artifact_upload_uses_generated_key_and_deduplicates_by_sha256(
+async def test_artifact_upload_stores_single_copy_and_deduplicates_by_sha256(
     artifact_client,
+    artifact_db: AsyncSession,
     artifact_context: dict[str, object],
 ):
+    from app.models.artifacts import ArtifactVersion
+    from app.models.files import File as FileModel
+
     client, storage = artifact_client
     project = artifact_context["project"]
     content = b"HEADER    PUBLIC TEST PROTEIN\nEND\n"
@@ -164,12 +187,17 @@ async def test_artifact_upload_uses_generated_key_and_deduplicates_by_sha256(
     second_data = second.json()["data"]
     assert second_data["id"] == first_data["id"]
     assert second_data["deduplicated"] is True
-    assert len(storage.uploads) == 1
-    object_key = storage.uploads[0][0]
-    assert object_key.startswith(
-        f"organizations/{artifact_context['organization'].id}/projects/{project.id}/artifacts/"
-    )
-    assert "attacker" not in object_key
+    # 只有 store_file_bytes 一条写路径：不再向 storage 双写。
+    assert storage.uploads == []
+    files = (await artifact_db.execute(select(FileModel))).scalars().all()
+    assert len(files) == 1
+    version_row = (
+        await artifact_db.execute(
+            select(ArtifactVersion).where(ArtifactVersion.id == first_data["latest_version"]["id"])
+        )
+    ).scalar_one()
+    assert version_row.storage_key == files[0].storage_path
+    assert files[0].filename == "protein.pdb"
     assert first_data["latest_version"]["sha256"] == hashlib.sha256(content).hexdigest()
 
 
@@ -266,6 +294,155 @@ async def test_standard_artifact_metadata_is_returned_in_project_list(
     item = listed.json()["data"]["items"][0]
     assert item["standard_type"] == "protein_structure"
     assert item["standard_version"] == 1
+
+
+@pytest.mark.asyncio
+async def test_project_artifacts_list_is_paginated(
+    artifact_client,
+    artifact_context: dict[str, object],
+):
+    client, _ = artifact_client
+    project = artifact_context["project"]
+    headers = {"Authorization": "Bearer owner"}
+    for index in range(3):
+        created = await client.post(
+            f"/api/v1/projects/{project.id}/artifacts",
+            headers=headers,
+            data={"artifact_type": "protein_structure", "semantic_type": "protein_structure"},
+            files={"file": (f"protein-{index}.pdb", f"HEADER {index}\nEND\n".encode(), "chemical/x-pdb")},
+        )
+        assert created.status_code == 200
+
+    first_page = await client.get(
+        f"/api/v1/projects/{project.id}/artifacts?page=1&page_size=2", headers=headers
+    )
+    second_page = await client.get(
+        f"/api/v1/projects/{project.id}/artifacts?page=2&page_size=2", headers=headers
+    )
+
+    assert first_page.status_code == second_page.status_code == 200
+    first_data = first_page.json()["data"]
+    assert first_data["total"] == 3
+    assert first_data["page"] == 1
+    assert first_data["page_size"] == 2
+    assert len(first_data["items"]) == 2
+    second_data = second_page.json()["data"]
+    assert second_data["total"] == 3
+    assert second_data["page"] == 2
+    assert len(second_data["items"]) == 1
+    assert {item["id"] for item in first_data["items"]}.isdisjoint(
+        {item["id"] for item in second_data["items"]}
+    )
+
+    too_large = await client.get(
+        f"/api/v1/projects/{project.id}/artifacts?page_size=101", headers=headers
+    )
+    assert too_large.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_project_artifacts_cursor_pagination_without_metadata_filter(
+    artifact_client,
+    artifact_db: AsyncSession,
+    artifact_context: dict[str, object],
+):
+    """无 metadata_* 过滤时产物列表走 SQL keyset：不传 cursor 有 total，传 cursor 不算 total。"""
+    from datetime import datetime as _datetime
+
+    from app.models.artifacts import Artifact
+
+    client, _ = artifact_client
+    project = artifact_context["project"]
+    headers = {"Authorization": "Bearer owner"}
+    created_ids = []
+    for index in range(5):
+        created = await client.post(
+            f"/api/v1/projects/{project.id}/artifacts",
+            headers=headers,
+            data={
+                "artifact_type": "protein_structure",
+                "semantic_type": "protein_structure",
+            },
+            files={
+                "file": (
+                    f"p-{index}.pdb",
+                    f"HEADER {index}\nEND\n".encode(),
+                    "chemical/x-pdb",
+                )
+            },
+        )
+        assert created.status_code == 200, created.text
+        created_ids.append(created.json()["data"]["id"])
+
+    # 全部压到同一 created_at：验证同毫秒多行由 id 兜底。
+    fixed = _datetime(2026, 1, 1, 12, 0, 0)
+    artifacts = (await artifact_db.execute(select(Artifact))).scalars().all()
+    for artifact in artifacts:
+        artifact.created_at = fixed
+    await artifact_db.commit()
+
+    expected = sorted(created_ids, reverse=True)
+
+    # 1) 不传 cursor：旧行为（有 total），并给出 nextCursor 供切换到游标。
+    offset_resp = await client.get(
+        f"/api/v1/projects/{project.id}/artifacts?page=1&page_size=2",
+        headers=headers,
+    )
+    assert offset_resp.status_code == 200, offset_resp.text
+    offset_data = offset_resp.json()["data"]
+    assert offset_data["total"] == 5
+    assert offset_data["totalKnown"] is True
+    assert offset_data["hasMore"] is True
+    assert len(offset_data["items"]) == 2
+    assert offset_data["nextCursor"]
+
+    # 2) 从 offset 的 nextCursor 切到游标模式：不重不漏，total 变为 None。
+    collected = [item["id"] for item in offset_data["items"]]
+    cursor = offset_data["nextCursor"]
+    pages = 0
+    while cursor:
+        resp = await client.get(
+            f"/api/v1/projects/{project.id}/artifacts?page_size=2&cursor={cursor}",
+            headers=headers,
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()["data"]
+        assert data["total"] is None
+        assert data["total_pages"] is None
+        assert data["totalKnown"] is False
+        collected.extend(item["id"] for item in data["items"])
+        pages += 1
+        assert pages < 10, "游标翻页没有收敛"
+        cursor = data["nextCursor"] if data["hasMore"] else None
+
+    assert collected == expected
+    assert len(collected) == len(set(collected)) == 5
+
+
+@pytest.mark.asyncio
+async def test_unknown_standard_type_returns_422_envelope(
+    artifact_client,
+    artifact_context: dict[str, object],
+):
+    client, _ = artifact_client
+    project = artifact_context["project"]
+
+    response = await client.post(
+        f"/api/v1/projects/{project.id}/artifacts",
+        headers={"Authorization": "Bearer owner"},
+        data={
+            "artifact_type": "protein_structure",
+            "semantic_type": "protein_structure",
+            "standard_type": "mystery_standard",
+            "standard_version": "1",
+        },
+        files={"file": ("protein.pdb", b"HEADER X\nEND\n", "chemical/x-pdb")},
+    )
+
+    assert response.status_code == 422
+    payload = response.json()
+    assert payload["code"] == 422
+    assert "Unknown standard artifact type: mystery_standard" in payload["message"]
 
 
 @pytest.mark.asyncio
@@ -613,8 +790,8 @@ async def test_standard_artifact_detail_exposes_role_files_and_downloads_each_ro
         manifest_json={
             "type": "run_report@1",
             "metadata": {
-                "model_card_ref": "example/MolP-PC/tool-package-v2/docs/model-card.md",
-                "verification_record_ref": "example/MolP-PC/tool-package-v2/docs/verification-record.md",
+                "model_card_ref": "example/MolP-PC/tool-package/docs/model-card.md",
+                "verification_record_ref": "example/MolP-PC/tool-package/docs/verification-record.md",
                 "evidence_level": "engineering_smoke_only",
             },
         },
@@ -688,8 +865,8 @@ async def test_standard_artifact_detail_exposes_role_files_and_downloads_each_ro
     assert detail.status_code == 200
     latest_version = detail.json()["data"]["latest_version"]
     assert latest_version["manifest_json"]["metadata"] == {
-        "model_card_ref": "example/MolP-PC/tool-package-v2/docs/model-card.md",
-        "verification_record_ref": "example/MolP-PC/tool-package-v2/docs/verification-record.md",
+        "model_card_ref": "example/MolP-PC/tool-package/docs/model-card.md",
+        "verification_record_ref": "example/MolP-PC/tool-package/docs/verification-record.md",
         "evidence_level": "engineering_smoke_only",
     }
     latest_files = latest_version["files"]
@@ -858,15 +1035,72 @@ async def test_project_artifact_lineage_graph_includes_versions_tasks_and_workfl
 
 
 @pytest.mark.asyncio
-async def test_artifact_version_download_uses_storage_and_project_acl(
+async def test_artifact_version_download_presigns_large_and_trajectory_files(
     artifact_client,
+    artifact_db: AsyncSession,
+    artifact_context: dict[str, object],
+):
+    from app.models.artifacts import ArtifactVersion
+
+    client, storage = artifact_client
+    project = artifact_context["project"]
+
+    async def upload(name: str, content: bytes) -> dict[str, object]:
+        response = await client.post(
+            f"/api/v1/projects/{project.id}/artifacts",
+            headers={"Authorization": "Bearer owner"},
+            data={"artifact_type": "protein_structure", "semantic_type": "protein_structure"},
+            files={"file": (name, content, "application/octet-stream")},
+        )
+        assert response.status_code == 200
+        return response.json()["data"]
+
+    async def version_row(artifact: dict[str, object]) -> ArtifactVersion:
+        return (
+            await artifact_db.execute(
+                select(ArtifactVersion).where(
+                    ArtifactVersion.id == artifact["latest_version"]["id"]
+                )
+            )
+        ).scalar_one()
+
+    large = await upload("large.pdb", b"HEADER LARGE\nEND\n")
+    large_row = await version_row(large)
+    large_row.size_bytes = 100 * 1024 * 1024 + 1
+    await artifact_db.flush()
+    large_response = await client.get(
+        f"/api/v1/artifacts/{large['id']}/versions/{large['latest_version']['id']}/download",
+        headers={"Authorization": "Bearer owner"},
+    )
+    assert large_response.status_code == 302
+    from urllib.parse import unquote
+
+    assert unquote(large_response.headers["location"]) == (
+        f"https://presigned.example/{large_row.storage_key}?expires=900"
+    )
+
+    trajectory = await upload("trajectory.dcd", b"trajectory-bytes")
+    trajectory_row = await version_row(trajectory)
+    trajectory_response = await client.get(
+        f"/api/v1/artifacts/{trajectory['id']}/versions/{trajectory['latest_version']['id']}/download",
+        headers={"Authorization": "Bearer owner"},
+    )
+    assert trajectory_response.status_code == 302
+    assert (trajectory_row.storage_key, 900) in storage.presign_calls
+
+
+@pytest.mark.asyncio
+async def test_artifact_version_download_streams_from_storage_and_checks_acl(
+    artifact_client,
+    artifact_db: AsyncSession,
     artifact_context: dict[str, object],
     monkeypatch: pytest.MonkeyPatch,
 ):
     from app.api.v1 import artifacts as artifacts_api
     from app.logging.audit import AuditAction, AuditResult
+    from app.models.artifacts import ArtifactVersion
 
-    client, _ = artifact_client
+    client, storage = artifact_client
     project = artifact_context["project"]
     audit_events: list[dict[str, object]] = []
 
@@ -892,6 +1126,14 @@ async def test_artifact_version_download_uses_storage_and_project_acl(
     )
     artifact = created.json()["data"]
     version = artifact["latest_version"]
+    version_row = (
+        await artifact_db.execute(
+            select(ArtifactVersion).where(ArtifactVersion.id == version["id"])
+        )
+    ).scalar_one()
+    # The upload wrote a local file; expose the same bytes through the injected
+    # storage double so the download endpoint exercises its real streaming path.
+    storage.objects[version_row.storage_key] = (content, "chemical/x-pdb")
 
     downloaded = await client.get(
         f"/api/v1/artifacts/{artifact['id']}/versions/{version['id']}/download",
@@ -940,14 +1182,19 @@ async def test_artifact_version_download_uses_storage_and_project_acl(
 async def test_storage_failure_leaves_no_artifact_metadata(
     artifact_db: AsyncSession,
     artifact_context: dict[str, object],
+    monkeypatch: pytest.MonkeyPatch,
 ):
     from app.models.artifacts import Artifact, ArtifactVersion
     from app.services.artifacts import create_artifact
 
+    async def failing_store(*args, **kwargs):
+        raise RuntimeError("storage unavailable")
+
+    monkeypatch.setattr("app.services.artifacts.store_file_bytes", failing_store)
+
     with pytest.raises(RuntimeError, match="storage unavailable"):
         await create_artifact(
             artifact_db,
-            storage=RecordingStorage(fail=True),
             project=artifact_context["project"],
             user=artifact_context["owner"],
             filename="failed.pdb",

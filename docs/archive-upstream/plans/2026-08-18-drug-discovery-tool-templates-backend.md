@@ -19,7 +19,7 @@
 - Test: `test/test_drug_discovery_tool_templates.py`
 
 **Steps:**
-1. Write failing tests for loading bundled templates, enforcing `aidd.sciminer/result.v2`, and generating existing tool import configs.
+1. Write failing tests for loading bundled templates, enforcing `aidd.sciminer/result`, and generating existing tool import configs.
 2. Add Pydantic models for metadata, capability, resource profile, expected outputs, and smoke tests.
 3. Add YAML loader functions for one template and all templates in a family.
 4. Add `build_tool_import_config_from_template()` to produce current `platform_tool.json` shape.

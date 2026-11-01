@@ -37,7 +37,7 @@ def test_template_runtime_wraps_predictions_as_result_v2(tmp_path: Path):
         output_dir=output_dir,
     )
 
-    assert result["result_version"] == "aidd.sciminer/result.v2"
+    assert result["result_version"] == "aidd.sciminer/result"
     assert result["artifacts"]["properties"]["type"] == "molecule_table@1"
     assert set(result["artifacts"]["properties"]["files"]) == {"table_file", "metadata_json"}
     assert json.loads((output_dir / "result.json").read_text(encoding="utf-8")) == result

@@ -374,7 +374,7 @@ async def test_project_task_counts_support_system_views_and_keyword_filter(
     filtered_counts_response = await api_client.get(
         "/api/v1/tasks/counts",
         headers={"Authorization": "Bearer viewer"},
-        params={"project_id": project.id, "keyword": "invalid SDF"},
+        params={"project_id": project.id, "keyword": "Failed ligand"},
     )
 
     assert all_counts_response.status_code == 200
@@ -477,6 +477,13 @@ async def test_project_task_list_supports_workflow_node_filters(
         "workflow_definition_id": "workflow-def-1",
         "workflow_node_id": "lvpocket",
     }
+    # 真实建任务路径同时写 `task_inputs.params` 与 `tasks` 上的真列（迁移
+    # 20261030_06 已把历史数据从 params 回填）；列表筛选现在按真列走索引，
+    # 这里必须一起写，否则测的是不存在的旧数据形态。
+    matching_task.workflow_run_id = "workflow-run-1"
+    matching_task.workflow_node_id = "protein_preparation"
+    other_task.workflow_run_id = "workflow-run-1"
+    other_task.workflow_node_id = "lvpocket"
     await db_session.commit()
 
     response = await api_client.get(
@@ -494,7 +501,7 @@ async def test_project_task_list_supports_workflow_node_filters(
 
 
 @pytest.mark.asyncio
-async def test_project_task_list_keyword_search_matches_error_message(
+async def test_project_task_list_keyword_search_stays_on_identifier_fields(
     api_client: httpx.AsyncClient,
     db_session: AsyncSession,
     users: dict[str, User],
@@ -521,14 +528,23 @@ async def test_project_task_list_keyword_search_matches_error_message(
     other_task.error_message = "Pocket prediction failed: no cavities detected"
     await db_session.commit()
 
-    response = await api_client.get(
+    error_text_response = await api_client.get(
         "/api/v1/tasks",
         headers={"Authorization": "Bearer viewer"},
         params={"project_id": project.id, "keyword": "invalid SDF"},
     )
+    name_response = await api_client.get(
+        "/api/v1/tasks",
+        headers={"Authorization": "Bearer viewer"},
+        params={"project_id": project.id, "keyword": "Failed ligand"},
+    )
 
-    assert response.status_code == 200
-    assert [item["id"] for item in response.json()["data"]["items"]] == [matching_task.id]
+    # 关键字搜索只覆盖标识类短字段（任务名/工具名/用户名 + 任务 ID 精确匹配），
+    # 不再扫 error_message/progress_message 两个长文本列（见 docs/20 §5.1）。
+    assert error_text_response.status_code == 200
+    assert error_text_response.json()["data"]["items"] == []
+    assert name_response.status_code == 200
+    assert [item["id"] for item in name_response.json()["data"]["items"]] == [matching_task.id]
 
 
 @pytest.mark.asyncio

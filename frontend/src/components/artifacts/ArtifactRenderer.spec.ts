@@ -1,9 +1,11 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import ArtifactRenderer from './ArtifactRenderer.vue'
+import { ARTIFACT_COMPONENTS } from './registry'
 import ResultVisualizationPanel from '@/components/tasks/ResultVisualizationPanel.vue'
 import type { TypedArtifact } from '@/types/artifacts'
 import type { Task } from '@/types/models'
+import { ASSET_ARTIFACT_TYPE } from '@/types/enums.generated'
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (key: string) => key })
@@ -33,7 +35,7 @@ function artifact(overrides: Partial<TypedArtifact>): TypedArtifact {
   return {
     id: 'artifact-1',
     project_id: 'project-1',
-    artifact_type: 'file',
+    artifact_type: 'run_report',
     semantic_type: 'generic_file',
     name: 'target.pdb',
     description: '测试产物',
@@ -50,6 +52,7 @@ const stubs = {
     props: ['message', 'description']
   },
   AButton: { template: '<button><slot /></button>' },
+  RouterLink: { template: '<a><slot /></a>' },
   ADescriptions: { template: '<dl><slot /></dl>' },
   ADescriptionsItem: { template: '<div><slot /></div>' },
   AEmpty: true,
@@ -59,23 +62,37 @@ const stubs = {
 
 describe('ArtifactRenderer', () => {
   it.each([
+    ['compound_set', 'compound-set-artifact'],
     ['protein_structure', 'protein-structure-artifact'],
-    ['pocket_result', 'pocket-result-artifact'],
-    ['file', 'file-artifact'],
-    ['run_report', 'run-report-artifact']
+    ['binding_pocket', 'pocket-result-artifact'],
+    ['ligand_structure', 'ligand-structure-artifact'],
+    ['molecule_table', 'ligand-structure-artifact'],
+    ['md_trajectory', 'md-trajectory-artifact'],
+    ['run_report', 'run-report-artifact'],
+    ['dataset', 'dataset-artifact']
   ])('selects the registered renderer for %s artifacts', (artifactType, testId) => {
     const wrapper = mount(ArtifactRenderer, {
-      props: { artifact: artifact({ artifact_type: artifactType }) },
+      props: { artifact: artifact({ artifact_type: artifactType as TypedArtifact['artifact_type'] }) },
       global: { stubs }
     })
 
     expect(wrapper.find(`[data-testid="${testId}"]`).exists()).toBe(true)
+    expect(wrapper.find('[data-testid="artifact-fallback"]').exists()).toBe(false)
+  })
+
+  it('registers a non-empty renderer component for every asset artifact type', () => {
+    for (const artifactType of ASSET_ARTIFACT_TYPE) {
+      expect(ARTIFACT_COMPONENTS[artifactType], `missing renderer for ${artifactType}`).toBeTruthy()
+    }
   })
 
   it.each([
     ['binding_pocket', 'pocket-result-artifact'],
     ['ligand_structure', 'ligand-structure-artifact'],
-    ['molecule_table', 'file-artifact']
+    ['molecule_table', 'file-artifact'],
+    ['compound_set', 'compound-set-artifact'],
+    ['md_trajectory', 'md-trajectory-artifact'],
+    ['dataset', 'dataset-artifact']
   ])('renders standard %s artifacts without falling back', (artifactType, testId) => {
     const wrapper = mount(ArtifactRenderer, {
       props: { artifact: artifact({ artifact_type: artifactType }) },
@@ -328,7 +345,7 @@ describe('ArtifactRenderer', () => {
     const wrapper = mount(ArtifactRenderer, {
       props: {
         artifact: {
-          ...artifact({ artifact_type: 'file' }),
+          ...artifact({ artifact_type: 'run_report' }),
           object_storage_url: 'https://minio.internal/private-bucket/target.pdb'
         } as TypedArtifact
       },

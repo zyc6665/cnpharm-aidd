@@ -15,10 +15,13 @@ async function fulfillJson(route: Route, data: unknown) {
 }
 
 async function installWorkflowMocks(page: Page) {
-  await page.addInitScript(() => {
-    localStorage.setItem('cpumodel_token', 'e2e-token')
-    localStorage.setItem('cpumodel_refresh_token', 'e2e-refresh')
-  })
+  // 认证已改为 httpOnly Cookie（cpumodel_access/cpumodel_refresh）+ 可读 CSRF Cookie，
+  // 不能再只写 localStorage。这里预置 Cookie，模拟已登录会话。
+  await page.context().addCookies([
+    { name: 'cpumodel_access', value: 'e2e-access-token', domain: '127.0.0.1', path: '/' },
+    { name: 'cpumodel_refresh', value: 'e2e-refresh-token', domain: '127.0.0.1', path: '/api/v1/auth' },
+    { name: 'cpumodel_csrf', value: 'e2e-csrf-token', domain: '127.0.0.1', path: '/' },
+  ])
 
   await page.route('**/api/v1/**', async route => {
     const request = route.request()

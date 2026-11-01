@@ -70,8 +70,8 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const formatUpdatedAt = (value: string) => formatDateTimeMinutes(value)
 const canArchive = (project: ResearchProject) =>
-  project.status !== 'archived' && ['owner', 'editor'].includes(project.membership.role)
-const canDelete = (project: ResearchProject) => project.membership.role === 'owner'
+  project.status !== 'archived' && ['owner', 'editor', 'admin'].includes(project.role)
+const canDelete = (project: ResearchProject) => ['owner', 'admin'].includes(project.role)
 
 function stopAction(event?: Event) {
   event?.preventDefault()

@@ -8,22 +8,25 @@ from types import SimpleNamespace
 
 from fastapi import HTTPException
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.config import settings, use_direct_task_execution
 from app.common.exceptions import NotFoundException, QuotaExceededException, ValidationException
 from app.common.trace import get_trace_id
+from app.logging.audit import AuditAction, get_audit_logger
 from app.database.base import utcnow
 from app.models.statistics import ToolStatistics
 from app.models.tasks import Task, TaskInput, TaskStatus
 from app.models.tools import Tool, ToolVersion
 from app.models.users import User
 from app.schemas.tasks import TaskCreate
-from app.services.project_access import load_project_membership
 from app.services.project_migration import ensure_migration_project_for_owner
 from app.services.project_quotas import check_submission_allowed
+from app.services.rbac import require_project_action
 from app.services.run_input_normalization import normalize_string_mapping
+from app.services.workflow_task_lookup import find_existing_workflow_node_task
 from app.services.run_preparation import PreparedRun, RunContext, RunPreparationInput, prepare_run
 from app.services.tool_contracts import (
     build_tool_contract,
@@ -44,7 +47,7 @@ from app.tasks.attempts import (
     set_execution_attempt_id,
 )
 from app.tasks.commands import TaskCommand
-from app.common.task_context import set_task_project_id
+from app.common.task_context import set_task_project_id, task_project_id
 from app.tasks.direct_runner import direct_task_runner as default_direct_task_runner
 from app.tasks.naming import (
     resolve_task_display_name,
@@ -424,10 +427,11 @@ async def _prepare_tool_task_run(
     )
     project_id = task_data.project_id
     if project_id:
-        await load_project_membership(
+        await require_project_action(
             db,
             project_id=project_id,
-            user_id=current_user.id,
+            user=current_user,
+            action="run",
         )
         task_extra_data = set_task_project_id(task_extra_data, project_id)
     elif assign_default_project and (
@@ -609,6 +613,7 @@ async def _record_quota_rejection(
     try:
         task = Task(
             user_id=command.user_id,
+            project_id=(command.extra_data or {}).get("project_id"),
             tool_id=command.tool_id,
             tool_version_id=command.tool_version_id,
             status=TaskStatus.PENDING.value,
@@ -664,6 +669,26 @@ def _snapshot_timeout_sec(extra_data: dict[str, object]) -> float | None:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
     return float(value)
+
+
+def _workflow_node_key(params: dict[str, object]) -> tuple[str | None, str | None, int | None]:
+    """Extract the workflow idempotency key from a prepared task's params.
+
+    ``workflow_run_id``/``workflow_node_id`` are written by the workflow
+    schedulers into every node task's params. Non-workflow tasks leave them
+    absent, so the returned key is all ``None`` and the DB unique index does
+    not apply (NULLs are distinct in a unique index).
+    """
+    run_id = params.get("workflow_run_id")
+    node_id = params.get("workflow_node_id")
+    if not run_id or not node_id:
+        return None, None, None
+    raw_attempt = params.get("workflow_node_attempt", 1)
+    try:
+        attempt = int(raw_attempt)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        attempt = 1
+    return str(run_id), str(node_id), attempt
 
 
 async def create_and_schedule_tool_task(
@@ -722,48 +747,88 @@ async def create_and_schedule_tool_task(
         await _record_quota_rejection(db, exc=exc, command=command, tool=tool)
         raise
     task_input = command.task_input
+    workflow_run_id, workflow_node_id, workflow_node_attempt = _workflow_node_key(
+        task_input["params"]
+    )
 
     task = Task(
         user_id=command.user_id,
+        project_id=(command.extra_data or {}).get("project_id"),
         tool_id=command.tool_id,
         tool_version_id=command.tool_version_id,
         status=TaskStatus.PENDING.value,
         priority=command.priority,
         progress=0.0,
         extra_data=command.extra_data,
+        workflow_run_id=workflow_run_id,
+        workflow_node_id=workflow_node_id,
+        workflow_node_attempt=workflow_node_attempt,
     )
 
-    db.add(task)
-    await db.flush()
-    task.name = resolve_task_display_name(
-        name=command.name,
-        tool_name=tool.name,
-        created_at=task.created_at,
-        task_id=task.id,
-    )
-
-    db.add(
-        TaskInput(
+    try:
+        db.add(task)
+        await db.flush()
+        task.name = resolve_task_display_name(
+            name=command.name,
+            tool_name=tool.name,
+            created_at=task.created_at,
             task_id=task.id,
-            params=task_input["params"],
-            file_ids=task_input["file_ids"],
         )
+
+        db.add(
+            TaskInput(
+                task_id=task.id,
+                params=task_input["params"],
+                file_ids=task_input["file_ids"],
+            )
+        )
+
+        # 输入快照与任务同事务写入（docs/04 §9.2 只追加）：任务一旦存在，它的输入
+        # 就已是历史事实，不允许事后从活表反推。
+        await record_task_inputs(
+            db,
+            task=task,
+            tool_version=tool_version,
+            prepared=prepared,
+            extra_data=command.extra_data,
+        )
+
+        await record_tool_usage(db, str(tool.id))
+
+        await db.commit()
+        await db.refresh(task)
+    except IntegrityError:
+        await db.rollback()
+        if workflow_run_id is None or workflow_node_id is None:
+            raise
+        # 并发/重复调度同一工作流节点：唯一约束已拒绝第二条插入，回查先落库
+        # 的那条并原样返回（幂等语义），不让它冒成 500。
+        existing = await find_existing_workflow_node_task(
+            db,
+            run_id=workflow_run_id,
+            node_id=workflow_node_id,
+            attempt=workflow_node_attempt or 1,
+        )
+        if existing is None:
+            raise
+        logger.info(
+            "工作流节点任务已存在，返回既有任务: run_id=%s node_id=%s task_id=%s",
+            workflow_run_id,
+            workflow_node_id,
+            existing.id,
+        )
+        return existing
+
+    # 提交审计（计划 §3.5 / docs/12 TC-NFR-04）：任务一旦 commit 即为历史事实，
+    # 必须在派发前留痕，避免「任务已建但审计缺失」。
+    get_audit_logger().log_task_operation(
+        user_id=str(current_user.id),
+        action=AuditAction.TASK_SUBMIT,
+        task_id=str(task.id),
+        tool_id=str(task.tool_id),
+        project_id=task_project_id(task),
+        tool_version_id=str(task.tool_version_id) if task.tool_version_id else None,
     )
-
-    # 输入快照与任务同事务写入（docs/04 §9.2 只追加）：任务一旦存在，它的输入
-    # 就已是历史事实，不允许事后从活表反推。
-    await record_task_inputs(
-        db,
-        task=task,
-        tool_version=tool_version,
-        prepared=prepared,
-        extra_data=command.extra_data,
-    )
-
-    await record_tool_usage(db, str(tool.id))
-
-    await db.commit()
-    await db.refresh(task)
 
     await dispatch_tool_task(
         db=db,

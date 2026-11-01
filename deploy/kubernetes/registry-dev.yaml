@@ -1,3 +1,7 @@
+# 开发环境镜像仓库。
+# 安全说明：默认 kustomization 不启用 registry 的宿主机暴露入口；如确需让宿主访问，
+# 请使用 kubectl port-forward，且必须先为 Registry 配置 basic auth（htpasswd Secret）
+# 或前置带鉴权的反向代理，禁止匿名 push/pull 暴露到内网。
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -37,15 +41,33 @@ spec:
         app.kubernetes.io/name: registry
         app.kubernetes.io/part-of: sciminer
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: registry
           image: docker.1panel.live/library/registry:3
           imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           env:
             - name: REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY
               value: /var/lib/registry
             - name: REGISTRY_STORAGE_DELETE_ENABLED
               value: "true"
+            # 暴露到任何非回环地址前必须启用鉴权（示例，值来自 htpasswd Secret）：
+            # - name: REGISTRY_AUTH
+            #   value: htpasswd
+            # - name: REGISTRY_AUTH_HTPASSWD_REALM
+            #   value: sciminer-registry
+            # - name: REGISTRY_AUTH_HTPASSWD_PATH
+            #   value: /auth/htpasswd
           ports:
             - name: registry
               containerPort: 5000

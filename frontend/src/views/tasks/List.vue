@@ -169,6 +169,7 @@
             :actor="taskActor"
             :current-project-id="projectId"
             :current-project-name="project?.name"
+            :project-names="projectNames"
             @open="goToDetail"
             @cancel="handleCancel"
             @retry="handleRetry"
@@ -232,7 +233,7 @@
   import type { Dayjs } from 'dayjs'
   import { useTasksStore, useToolsStore, useUserStore } from '@/stores'
   import type { TaskListParams } from '@/api/tasks'
-  import { getProjectOverview } from '@/api/projects'
+  import { getProjectOverview, listProjects } from '@/api/projects'
   import {
     buildTaskListViewModel,
     buildTaskCountQueryParams,
@@ -271,6 +272,7 @@
   const refreshing = ref(false)
   const autoRefresh = ref(true)
   const project = ref<ResearchProject | null>(null)
+  const projectNames = ref<Record<string, string>>({})
   const projectId = computed(() => stringQueryParam(route.query.project_id))
   const workflowRunId = computed(() => stringQueryParam(route.query.workflow_run_id))
   const workflowDefinitionId = computed(() => stringQueryParam(route.query.workflow_definition_id))
@@ -281,7 +283,7 @@
     workflowNodeId: workflowNodeId.value,
   }))
   const projectMembershipRole = computed<ProjectRole | undefined>(
-    () => project.value?.membership.role
+    () => project.value?.membership?.role
   )
   const taskActor = computed<TaskActor>(() => ({
     isAdmin: userStore.isAdmin,
@@ -393,6 +395,15 @@
   const fetchProjectContextSafely = async () => {
     if (!projectId.value) {
       project.value = null
+      try {
+        const response = await listProjects()
+        projectNames.value = Object.fromEntries(
+          (response.data.items ?? []).map((item) => [item.id, item.name])
+        )
+      } catch (error) {
+        projectNames.value = {}
+        console.warn('[TaskCenter] Failed to load project names', error)
+      }
       return
     }
 

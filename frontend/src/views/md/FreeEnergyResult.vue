@@ -84,6 +84,7 @@
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
   import MockDataBanner from '@/components/common/MockDataBanner.vue'
   import MdEchart from './MdEchart.vue'
+  import { chartColors } from '@/utils/chartTheme'
   import { getArtifactDetail, getMdResult } from '@/api/md'
   import { fetchProtectedFileText } from '@/utils/protected-file-access'
   import {
@@ -157,7 +158,7 @@
         {
           type: 'bar',
           data: means.map((item) => (Number.isFinite(item.mean) ? Number(item.mean.toFixed(3)) : 0)),
-          itemStyle: { color: '#5b8ff9' }
+          itemStyle: { color: chartColors.primary }
         }
       ]
     }
@@ -181,7 +182,7 @@
           smooth: true,
           showSymbol: false,
           data: points.map((point) => [point.frame, point.value]),
-          itemStyle: { color: '#9270ca' }
+          itemStyle: { color: chartColors.purple }
         }
       ]
     }

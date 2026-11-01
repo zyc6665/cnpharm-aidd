@@ -99,7 +99,7 @@ manifest 中允许端点自定义路径，但必须是同服务相对路径。
 
 ```json
 {
-  "request_version": "aidd.sciminer/request.v1",
+  "request_version": "aidd.sciminer/request",
   "task": {
     "id": "platform-task-id",
     "tool_slug": "my-pocket-model",
@@ -203,7 +203,7 @@ manifest 中允许端点自定义路径，但必须是同服务相对路径。
 
 ```json
 {
-  "result_version": "aidd.sciminer/result.v2",
+  "result_version": "aidd.sciminer/result",
   "artifacts": {
     "pocket": {
       "type": "binding_pocket@1",

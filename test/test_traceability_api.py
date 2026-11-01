@@ -26,6 +26,7 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.auth.dependencies import get_current_user  # noqa: E402
+from app.common.keyset import encode_cursor  # noqa: E402
 from app.common.time import utcnow  # noqa: E402
 from app.database.base import Base  # noqa: E402
 from app.database.session import get_db  # noqa: E402
@@ -33,6 +34,7 @@ from app.files.writer import store_file_bytes  # noqa: E402
 from app.logging.audit import AuditAction, AuditEvent, AuditResult, ResourceType  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.artifacts import Artifact, ArtifactVersion  # noqa: E402
+from app.models.compounds import Candidate  # noqa: E402
 from app.models.files import FileSourceType  # noqa: E402
 from app.models.projects import Organization, Project, ProjectMember  # noqa: E402
 from app.models.tasks import Task  # noqa: E402
@@ -50,7 +52,6 @@ from app.services.traceability import (  # noqa: E402
     INPUT_ROLE_FILE,
     INPUT_ROLE_LIGAND,
     INPUT_ROLE_RECEPTOR,
-    INPUT_ROLE_SEQUENCE,
     build_traceability_package,
     record_task_inputs,
     role_for_semantic_type,
@@ -161,7 +162,7 @@ def _headers(user: str) -> dict[str, str]:
 
 def _manifest(*, input_name: str = "protein", input_type: str = "protein_structure@1") -> dict:
     return {
-        "api_version": "aidd.sciminer/tool-package.v2",
+        "api_version": "aidd.sciminer/tool-package",
         "kind": "ToolPackage",
         "metadata": {
             "slug": "boltz-2",
@@ -379,7 +380,9 @@ async def test_snapshot_records_artifact_binding_and_domain_entity(
     artifact = Artifact(
         project_id=project.id,
         created_by=owner.id,
-        artifact_type="structure",
+        # 资产类型收敛为受控枚举：此夹具历史上用 structure（非受控值），现归一为
+        # protein_structure。
+        artifact_type="protein_structure",
         semantic_type="protein_structure@1",
         name="EGFR",
     )
@@ -666,10 +669,147 @@ async def test_project_results_only_lists_terminal_tasks(
     assert running.id not in ids
 
 
+@pytest.mark.asyncio
+async def test_project_results_status_is_lowercase_and_lowercase_filter_hits(
+    api_client: httpx.AsyncClient, db_session: AsyncSession, users: dict[str, User], project: Project
+):
+    """结果列表对外状态必须是前端契约的小写值，筛选也按小写入参命中。
+
+    库里存的是大写枚举值（SUCCESS/FAILURE/TIMEOUT），前端按小写解析；
+    之前 ``_serialize_result`` 直接透出 ``task.status``，列表显示不出终态，
+    且筛选把小写入参拿去和大写常量比较，直接 422。
+    """
+    tool = await _create_tool(db_session, users[OWNER])
+    upload = await _upload(
+        db_session, owner=users[OWNER], project=project, filename="egfr.pdb", content=b"ATOM\\n"
+    )
+    success = await _create_task(
+        db_session, owner=users[OWNER], project=project, tool=tool, file_id=upload.id
+    )
+    failed = await _create_task(
+        db_session, owner=users[OWNER], project=project, tool=tool, file_id=upload.id
+    )
+    timed_out = await _create_task(
+        db_session, owner=users[OWNER], project=project, tool=tool, file_id=upload.id
+    )
+    for task, status in ((success, "SUCCESS"), (failed, "FAILURE"), (timed_out, "TIMEOUT")):
+        task.status = status
+        task.finished_at = utcnow()
+    await db_session.commit()
+
+    response = await api_client.get(
+        f"/api/v1/projects/{project.id}/results", headers=_headers(OWNER)
+    )
+    assert response.status_code == 200
+    items = {item["task_id"]: item for item in response.json()["data"]["items"]}
+    assert items[success.id]["status"] == "success"
+    assert items[failed.id]["status"] == "failure"
+    assert items[timed_out.id]["status"] == "timeout"
+
+    filtered = await api_client.get(
+        f"/api/v1/projects/{project.id}/results?status=success", headers=_headers(OWNER)
+    )
+    assert filtered.status_code == 200, filtered.text
+    filtered_ids = [item["task_id"] for item in filtered.json()["data"]["items"]]
+    assert filtered_ids == [success.id]
+
+    timeout_filtered = await api_client.get(
+        f"/api/v1/projects/{project.id}/results?status=timeout", headers=_headers(OWNER)
+    )
+    assert timeout_filtered.status_code == 200, timeout_filtered.text
+    timeout_ids = [item["task_id"] for item in timeout_filtered.json()["data"]["items"]]
+    assert timeout_ids == [timed_out.id]
+
+
+@pytest.mark.asyncio
+async def test_project_results_cursor_pagination_contract_and_continuity(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    users: dict[str, User],
+    project: Project,
+):
+    """结果中心游标分页：不传 cursor 有 total；传 cursor 不算 total 且不重不漏。"""
+    from datetime import datetime as _datetime
+
+    tool = await _create_tool(db_session, users[OWNER])
+    upload = await _upload(
+        db_session,
+        owner=users[OWNER],
+        project=project,
+        filename="egfr.pdb",
+        content=b"ATOM\n",
+    )
+    fixed = _datetime(2026, 1, 1, 12, 0, 0)
+    tasks = []
+    for _ in range(5):
+        task = await _create_task(
+            db_session, owner=users[OWNER], project=project, tool=tool, file_id=upload.id
+        )
+        task.status = "SUCCESS"
+        # 全部压到同一毫秒：只有靠 id 兜底才能保证全序、不重不漏。
+        task.finished_at = fixed
+        tasks.append(task)
+    await db_session.commit()
+
+    expected = sorted((task.id for task in tasks), reverse=True)
+
+    # 1) 不传 cursor：与旧行为一致（有 total），并从本页末行给出 nextCursor。
+    offset_resp = await api_client.get(
+        f"/api/v1/projects/{project.id}/results?page=1&page_size=2",
+        headers=_headers(OWNER),
+    )
+    assert offset_resp.status_code == 200, offset_resp.text
+    offset_data = offset_resp.json()["data"]
+    assert offset_data["total"] == 5
+    assert offset_data["totalKnown"] is True
+    assert offset_data["hasMore"] is True
+    assert offset_data["page"] == 1
+    assert offset_data["page_size"] == 2
+    assert len(offset_data["items"]) == 2
+    assert offset_data["nextCursor"]
+
+    # 2) 纯游标模式：从「全集之上」开始翻，验证 total=None 且顺序/去重正确。
+    cursor = encode_cursor([fixed, "ffffffff-ffff-ffff-ffff-ffffffffffff"])
+    collected = []
+    pages = 0
+    while True:
+        resp = await api_client.get(
+            f"/api/v1/projects/{project.id}/results?page_size=2&cursor={cursor}",
+            headers=_headers(OWNER),
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()["data"]
+        assert data["total"] is None
+        assert data["total_pages"] is None
+        assert data["totalKnown"] is False
+        collected.extend(item["task_id"] for item in data["items"])
+        pages += 1
+        assert pages < 10, "游标翻页没有收敛"
+        if not data["hasMore"]:
+            break
+        cursor = data["nextCursor"]
+        assert cursor
+
+    assert collected == expected
+    assert len(collected) == len(set(collected)) == 5
+
+
+@pytest.mark.asyncio
+async def test_project_results_rejects_invalid_cursor(
+    api_client: httpx.AsyncClient,
+    users: dict[str, User],
+    project: Project,
+):
+    response = await api_client.get(
+        f"/api/v1/projects/{project.id}/results?cursor=not-a-cursor",
+        headers=_headers(OWNER),
+    )
+    assert response.status_code == 422, response.text
+
+
 # ---------------------------------------------------------------------------
 # audit sink
 # ---------------------------------------------------------------------------
-
 
 def test_event_to_row_snapshots_the_actor_name():
     event = AuditEvent(
@@ -926,3 +1066,131 @@ def test_sequence_hash_is_stable():
     assert traceability.sequence_sha256("MKTAYIAK") == hashlib.sha256(b"MKTAYIAK").hexdigest()
     assert traceability.sequence_sha256("") is None
     assert traceability.sequence_sha256(None) is None
+
+
+# ---------------------------------------------------------------------------
+# 结果中心：domain 投影与候选物过滤下推（D7/D8）
+# ---------------------------------------------------------------------------
+
+
+async def _direct_task(
+    db: AsyncSession,
+    *,
+    owner: User,
+    project: Project,
+    tool: Tool,
+    domain: dict,
+    created_at: datetime | None = None,
+) -> Task:
+    task = Task(
+        user_id=owner.id,
+        project_id=project.id,
+        tool_id=tool.id,
+        tool_version_id=tool.current_version_id,
+        name="result task",
+        status="SUCCESS",
+        priority="normal",
+        progress=1.0,
+        extra_data={"project_id": str(project.id), "domain": domain},
+    )
+    if created_at is not None:
+        task.created_at = created_at
+    db.add(task)
+    await db.commit()
+    await db.refresh(task)
+    return task
+
+
+@pytest.mark.asyncio
+async def test_project_results_domain_is_kind_string(
+    db_session: AsyncSession,
+    users: dict[str, User],
+    project: Project,
+    api_client,
+):
+    """D7：列表页 domain 应输出 kind 字符串，不能把 dict 直接给前端。"""
+    tool = await _create_tool(db_session, users[OWNER])
+    await _direct_task(
+        db_session,
+        owner=users[OWNER],
+        project=project,
+        tool=tool,
+        domain={"kind": "docking", "model_ref": {"name": "vina"}},
+    )
+
+    response = await api_client.get(
+        f"/api/v1/projects/{project.id}/results", headers=_headers(OWNER)
+    )
+
+    assert response.status_code == 200
+    item = response.json()["data"]["items"][0]
+    assert item["domain"] == "docking"
+    assert item["mock"] is False
+
+
+@pytest.mark.asyncio
+async def test_candidate_results_filter_and_total_pushed_down_to_sql(
+    db_session: AsyncSession,
+    users: dict[str, User],
+    project: Project,
+    api_client,
+):
+    """D8：candidate_id 过滤与 total 必须在 SQL 层完成，不能只过滤当前页。"""
+    tool = await _create_tool(db_session, users[OWNER])
+    candidate = Candidate(
+        project_id=project.id,
+        created_by=users[OWNER].id,
+        candidate_type="PEPTIDE",
+        peptide_sequence="ACDEFG",
+        name="candidate-1",
+    )
+    db_session.add(candidate)
+    await db_session.commit()
+    await db_session.refresh(candidate)
+
+    base = utcnow()
+    matching_old = await _direct_task(
+        db_session,
+        owner=users[OWNER],
+        project=project,
+        tool=tool,
+        domain={"kind": "docking", "candidate_id": str(candidate.id)},
+        created_at=base - timedelta(seconds=30),
+    )
+    await _direct_task(
+        db_session,
+        owner=users[OWNER],
+        project=project,
+        tool=tool,
+        domain={"kind": "docking", "candidate_id": "other-candidate"},
+        created_at=base - timedelta(seconds=20),
+    )
+    matching_new = await _direct_task(
+        db_session,
+        owner=users[OWNER],
+        project=project,
+        tool=tool,
+        domain={"kind": "docking", "candidate_id": str(candidate.id)},
+        created_at=base - timedelta(seconds=10),
+    )
+
+    first = await api_client.get(
+        f"/api/v1/candidates/{candidate.id}/results",
+        params={"page": 1, "page_size": 1},
+        headers=_headers(OWNER),
+    )
+    second = await api_client.get(
+        f"/api/v1/candidates/{candidate.id}/results",
+        params={"page": 2, "page_size": 1},
+        headers=_headers(OWNER),
+    )
+
+    assert first.status_code == 200
+    first_payload = first.json()["data"]
+    assert first_payload["total"] == 2
+    assert [item["task_id"] for item in first_payload["items"]] == [matching_new.id]
+
+    assert second.status_code == 200
+    second_payload = second.json()["data"]
+    assert second_payload["total"] == 2
+    assert [item["task_id"] for item in second_payload["items"]] == [matching_old.id]

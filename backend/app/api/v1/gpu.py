@@ -139,12 +139,11 @@ class SlotStateReport(BaseModel):
 
 @router.get(
     "/info",
-    response_model=NodeInfoResponse,
     summary="获取GPU节点信息",
     description="获取当前节点的GPU硬件信息"
 )
-async def get_gpu_info():
-    """获取GPU节点信息"""
+async def get_gpu_info(current_user=Depends(get_current_user)):
+    """获取GPU节点信息（P2：至少要求登录）"""
     detector = get_gpu_detector()
 
     if not detector.is_available():
@@ -155,34 +154,35 @@ async def get_gpu_info():
 
     node_info = detector.get_node_info()
 
-    return NodeInfoResponse(
-        hostname=node_info.hostname,
-        gpu_count=node_info.gpu_count,
-        total_memory_mb=node_info.total_memory_mb,
-        cuda_version=node_info.cuda_version,
-        driver_version=node_info.driver_version,
-        gpus=[
-            GPUInfoResponse(
-                gpu_index=gpu.gpu_index,
-                gpu_name=gpu.gpu_name,
-                total_memory_mb=gpu.total_memory_mb,
-                free_memory_mb=gpu.free_memory_mb,
-                used_memory_mb=gpu.used_memory_mb,
-                uuid=gpu.uuid
-            )
-            for gpu in node_info.gpus
-        ]
+    return success_response(
+        NodeInfoResponse(
+            hostname=node_info.hostname,
+            gpu_count=node_info.gpu_count,
+            total_memory_mb=node_info.total_memory_mb,
+            cuda_version=node_info.cuda_version,
+            driver_version=node_info.driver_version,
+            gpus=[
+                GPUInfoResponse(
+                    gpu_index=gpu.gpu_index,
+                    gpu_name=gpu.gpu_name,
+                    total_memory_mb=gpu.total_memory_mb,
+                    free_memory_mb=gpu.free_memory_mb,
+                    used_memory_mb=gpu.used_memory_mb,
+                    uuid=gpu.uuid
+                )
+                for gpu in node_info.gpus
+            ]
+        ).model_dump()
     )
 
 
 @router.get(
     "/stats",
-    response_model=List[GPUStatsResponse],
     summary="获取GPU实时统计",
     description="获取所有GPU的实时利用率、温度等统计信息"
 )
-async def get_gpu_stats():
-    """获取GPU实时统计"""
+async def get_gpu_stats(current_user=Depends(get_current_user)):
+    """获取GPU实时统计（P2：至少要求登录）"""
     detector = get_gpu_detector()
 
     if not detector.is_available():
@@ -193,29 +193,30 @@ async def get_gpu_stats():
 
     stats = detector.get_all_gpu_stats()
 
-    return [
-        GPUStatsResponse(
-            gpu_index=s.gpu_index,
-            utilization_percent=s.utilization_percent,
-            memory_used_mb=s.memory_used_mb,
-            memory_free_mb=s.memory_free_mb,
-            memory_total_mb=s.memory_total_mb,
-            temperature_celsius=s.temperature_celsius,
-            power_watts=s.power_watts,
-            fan_speed_percent=s.fan_speed_percent
-        )
-        for s in stats
-    ]
+    return success_response(
+        [
+            GPUStatsResponse(
+                gpu_index=s.gpu_index,
+                utilization_percent=s.utilization_percent,
+                memory_used_mb=s.memory_used_mb,
+                memory_free_mb=s.memory_free_mb,
+                memory_total_mb=s.memory_total_mb,
+                temperature_celsius=s.temperature_celsius,
+                power_watts=s.power_watts,
+                fan_speed_percent=s.fan_speed_percent
+            )
+            for s in stats
+        ]
+    )
 
 
 @router.get(
     "/stats/{gpu_index}",
-    response_model=GPUStatsResponse,
     summary="获取指定GPU统计",
     description="获取指定GPU的详细统计信息"
 )
-async def get_single_gpu_stats(gpu_index: int):
-    """获取指定GPU统计"""
+async def get_single_gpu_stats(gpu_index: int, current_user=Depends(get_current_user)):
+    """获取指定GPU统计（P2：至少要求登录）"""
     detector = get_gpu_detector()
 
     if not detector.is_available():
@@ -226,15 +227,17 @@ async def get_single_gpu_stats(gpu_index: int):
 
     try:
         stats = detector.get_gpu_stats(gpu_index)
-        return GPUStatsResponse(
-            gpu_index=stats.gpu_index,
-            utilization_percent=stats.utilization_percent,
-            memory_used_mb=stats.memory_used_mb,
-            memory_free_mb=stats.memory_free_mb,
-            memory_total_mb=stats.memory_total_mb,
-            temperature_celsius=stats.temperature_celsius,
-            power_watts=stats.power_watts,
-            fan_speed_percent=stats.fan_speed_percent
+        return success_response(
+            GPUStatsResponse(
+                gpu_index=stats.gpu_index,
+                utilization_percent=stats.utilization_percent,
+                memory_used_mb=stats.memory_used_mb,
+                memory_free_mb=stats.memory_free_mb,
+                memory_total_mb=stats.memory_total_mb,
+                temperature_celsius=stats.temperature_celsius,
+                power_watts=stats.power_watts,
+                fan_speed_percent=stats.fan_speed_percent
+            ).model_dump()
         )
     except Exception as e:
         raise HTTPException(
@@ -245,33 +248,30 @@ async def get_single_gpu_stats(gpu_index: int):
 
 @router.get(
     "/summary",
-    response_model=GPUSummaryResponse,
     summary="获取GPU摘要",
     description="获取GPU资源的整体摘要信息"
 )
-async def get_gpu_summary():
-    """获取GPU摘要"""
+async def get_gpu_summary(admin_user=Depends(get_admin_user)):
+    """获取GPU摘要（P2：汇总类信息，要求管理员）"""
     monitor = GPUMonitor()
     summary = await monitor.get_gpu_summary()
-    return GPUSummaryResponse(**summary)
+    return success_response(GPUSummaryResponse(**summary).model_dump())
 
 
 @router.get(
     "/health",
-    response_model=GPUHealthResponse,
     summary="GPU健康检查",
     description="检查GPU节点的健康状态"
 )
-async def check_gpu_health():
-    """GPU健康检查"""
+async def check_gpu_health(current_user=Depends(get_current_user)):
+    """GPU健康检查（P2：至少要求登录；内部探活可改用节点令牌专用端点）"""
     monitor = GPUMonitor()
     health = await monitor.check_gpu_node_health()
-    return GPUHealthResponse(**health)
+    return success_response(GPUHealthResponse(**health).model_dump())
 
 
 @router.post(
     "/allocate",
-    response_model=AllocationResponse,
     summary="分配GPU资源",
     description="为任务分配GPU资源（需要管理员权限）"
 )
@@ -298,14 +298,16 @@ async def allocate_gpu(
     if result.success:
         await db.commit()
 
-    return AllocationResponse(
-        success=result.success,
-        gpu_node_id=result.gpu_node_id,
-        gpu_index=result.gpu_index,
-        allocated_memory_mb=result.allocated_memory_mb,
-        allocation_id=result.allocation_id,
-        message=result.message,
-        wait_position=result.wait_position
+    return success_response(
+        AllocationResponse(
+            success=result.success,
+            gpu_node_id=result.gpu_node_id,
+            gpu_index=result.gpu_index,
+            allocated_memory_mb=result.allocated_memory_mb,
+            allocation_id=result.allocation_id,
+            message=result.message,
+            wait_position=result.wait_position
+        ).model_dump()
     )
 
 
@@ -329,7 +331,7 @@ async def release_gpu(
 
     if success:
         await db.commit()
-        return {"message": "GPU released successfully"}
+        return success_response(message="GPU released successfully")
     else:
         raise HTTPException(
             status_code=400,
@@ -364,7 +366,7 @@ async def get_gpu_history(
     """获取GPU历史数据"""
     monitor = GPUMonitor()
     history = await monitor.get_historical_metrics(hours=hours)
-    return {"history": history, "hours": hours}
+    return success_response(data={"history": history, "hours": hours})
 
 
 # ============ 卡位（slot）端点 ============

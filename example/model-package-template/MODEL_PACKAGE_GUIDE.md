@@ -41,7 +41,7 @@
 2. 修改 `MODEL_PACKAGE.yaml` 的 `slug`、`name`、`version`、`legacy_entrypoint` 和标准契约。
 3. 在 `MODEL_PACKAGE.yaml.runtime` 中声明 container、conda-pack fallback、执行器支持和缓存策略。
 4. 在 `legacy_predict.py` 里调用原始模型入口，只在这里处理模型私有参数和文件布局。
-5. 在 `result_builder.py` 里把原始输出收敛为 `aidd.sciminer/result.v2`。
+5. 在 `result_builder.py` 里把原始输出收敛为 `aidd.sciminer/result`。
 6. 保持 `platform_run.sh` 是薄入口，接受 `--model-root`、`--input-dir`、`--output-dir`、
    `--params-json`、`--work-dir`、`--device` 等通用参数，不写死账号、主机、容器名或宿主机路径。
 7. 补充 `tests/test_model_package_runtime_contract.py`，至少覆盖输入校验、输出收敛和忽略规则。
@@ -51,7 +51,7 @@
 模型侧规范包不替代 `example/model-platformization-template` 或实际 Tool Package v2。建议流程是：
 
 1. 先把原始模型整理成这个模型侧规范包。
-2. 再把模型侧规范包封装成 `tool-package-v2`。
+2. 再把模型侧规范包封装成 `tool-package`。
 3. 平台只消费标准 Artifact 类型和 `result.v2`。
 
 ## 验证

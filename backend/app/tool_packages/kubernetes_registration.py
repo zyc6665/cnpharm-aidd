@@ -35,7 +35,7 @@ from app.tool_packages.kubernetes_binding import (
     KubernetesToolBindingError,
     build_kubernetes_tool_config,
 )
-from app.tool_packages.schemas import AnyToolPackageManifest, ToolPackageV2Manifest
+from app.tool_packages.schemas import AnyToolPackageManifest, ToolPackageManifest
 from app.tool_packages.validator import validate_tool_package
 
 
@@ -46,7 +46,7 @@ async def get_kubernetes_registration_options(
     db: AsyncSession,
     package_id: str,
 ) -> dict[str, Any]:
-    package, version, manifest = await _load_published_v2_package(db, package_id)
+    package, version, manifest = await _load_published_package(db, package_id)
     profiles = _resource_profile_ids()
     primary = manifest.runtime.artifacts.primary
     kubernetes_supported = "k8s_job" in manifest.runtime.executor_support
@@ -153,7 +153,7 @@ async def register_kubernetes_tool_version(
     request: ToolPackageKubernetesRegistrationCreate,
     current_user: User,
 ) -> dict[str, Any]:
-    package, package_version, manifest = await _load_published_v2_package(
+    package, package_version, manifest = await _load_published_package(
         db,
         package_id,
         package_version_id=request.package_version_id,
@@ -240,12 +240,12 @@ async def register_kubernetes_tool_version(
     }
 
 
-async def _load_published_v2_package(
+async def _load_published_package(
     db: AsyncSession,
     package_id: str,
     *,
     package_version_id: str | None = None,
-) -> tuple[ToolPackage, ToolPackageVersion, ToolPackageV2Manifest]:
+) -> tuple[ToolPackage, ToolPackageVersion, ToolPackageManifest]:
     package = (
         await db.execute(
             select(ToolPackage)
@@ -285,7 +285,7 @@ async def _load_published_v2_package(
         manifest = _MANIFEST_ADAPTER.validate_python(package_version.manifest)
     except ValidationError as exc:
         raise ValidationException("Tool Package manifest 格式无效") from exc
-    if not isinstance(manifest, ToolPackageV2Manifest):
+    if not isinstance(manifest, ToolPackageManifest):
         raise ValidationException("Kubernetes 注册仅支持 Tool Package v2")
     validation = validate_tool_package(manifest)
     if not validation.is_valid:

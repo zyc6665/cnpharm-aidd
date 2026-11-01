@@ -1,75 +1,34 @@
-import { get, post, patch } from './request'
+import { get, post, patch, type RequestOptions } from './request'
 import type { ApiResponse } from '@/types/api'
-import { buildRefreshTokenRequestConfig } from './auth-request-policy'
 import type {
   UserInfo,
   LoginParams,
-  RegisterParams,
   LoginResponse,
   AuthTokens
 } from '@/types/models'
 
-// 用户登录
+// 用户登录（企业内网：账号 + 口令，后端按账号解析本地/LDAP 认证源）。
+// 认证信息由后端通过 httpOnly Cookie 下发，响应里即使带 token 前端也忽略。
 export const login = (params: LoginParams): Promise<ApiResponse<LoginResponse>> => {
   return post<LoginResponse>('/auth/login', params)
 }
 
-// 用户注册
-export const register = (params: RegisterParams): Promise<ApiResponse<LoginResponse>> => {
-  return post<LoginResponse>('/auth/register', params)
+// 刷新会话：读取 refresh Cookie 并重设 Cookie，前端不接触 token。
+export const refreshToken = (): Promise<ApiResponse<AuthTokens | { access_token?: string }>> => {
+  return post<AuthTokens | { access_token?: string }>('/auth/refresh')
 }
 
-// 发送邮箱验证码
-export const sendEmailCode = (
-  email: string,
-  purpose: 'register' | 'reset_password'
-): Promise<ApiResponse<{ expires_in: number }>> => {
-  return post<{ expires_in: number }>('/verification/send-code', { email, purpose })
-}
-
-// 验证邮箱验证码
-export const verifyEmailCode = (
-  email: string,
-  code: string,
-  purpose: 'register' | 'reset_password'
-): Promise<ApiResponse<{ valid: boolean }>> => {
-  return post<{ valid: boolean }>('/verification/verify', { email, code, purpose })
-}
-
-// 刷新 Token
-export const refreshToken = (refresh_token: string): Promise<ApiResponse<AuthTokens>> => {
-  return post<AuthTokens>('/auth/refresh', undefined, buildRefreshTokenRequestConfig(refresh_token))
-}
-
-// 登出
+// 登出（后端清除 Cookie）
 export const logout = (): Promise<ApiResponse<null>> => {
   return post<null>('/auth/logout')
 }
 
-// 获取当前用户信息
-export const getCurrentUser = (): Promise<ApiResponse<UserInfo>> => {
-  return get<UserInfo>('/users/me')
+// 获取当前用户信息（Cookie 会话有效即可返回，无需前端持有 token）
+export const getCurrentUser = (config?: RequestOptions): Promise<ApiResponse<UserInfo>> => {
+  return get<UserInfo>('/users/me', undefined, config)
 }
 
 // 更新当前用户信息
 export const updateCurrentUser = (data: Partial<UserInfo>): Promise<ApiResponse<UserInfo>> => {
   return patch<UserInfo>('/users/me', data)
-}
-
-// 忘记密码 - 发送重置邮件（已废弃，使用 sendEmailCode 替代）
-// export const forgotPassword = (email: string): Promise<ApiResponse<{ message: string }>> => {
-//   return post<{ message: string }>('/auth/forgot-password', { email })
-// }
-
-// 重置密码（忘记密码场景）
-export const resetPassword = (
-  email: string,
-  code: string,
-  newPassword: string
-): Promise<ApiResponse<null>> => {
-  return post<null>('/auth/reset-password', {
-    email,
-    code,
-    new_password: newPassword
-  })
 }

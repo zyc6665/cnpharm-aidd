@@ -50,6 +50,14 @@ prepare() {
 
   log "上下文大小"
   du -sh model platform_adaptor
+  # 4) result.v2 契约对齐
+  #    源目录的 platform_run.sh 产出的是 v1 形状（顶层 success/message/outputs/error、
+  #    artifacts 是 list），而平台 StandardExecutionResult 是 extra="forbid"，
+  #    只认 result_version/artifacts/relations/summary/metrics，且 artifacts 必须是
+  #    按名分键的 object、每个产物必须带 type 与 files{role:{path,sha256}}。
+  #    详见 patches/patch_result_v2.py 的模块 docstring。
+  python3 patches/patch_result_v2.py model/platform_run.sh
+
   log "权重目录"
   du -sh "${WEIGHTS_DIR}"
 }

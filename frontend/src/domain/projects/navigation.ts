@@ -4,6 +4,7 @@ export type ProjectWorkspaceNavKey =
   | 'workflow'
   | 'tasks'
   | 'assets'
+  | 'candidates'
   | 'lineage'
   | 'settings'
   | 'results'
@@ -37,6 +38,15 @@ export function buildProjectAssetsPath(projectId: string): string {
   return `/projects/${projectId}/assets`
 }
 
+/**
+ * 候选物/候选集已从数据资产 Tab 移出（归 M3 域），但仍需一个可达入口：
+ * 项目工作台导航与数据资产页顶部的「候选物」按钮都指向它，避免 CandidateDetail /
+ * CandidateSetDetail 变成孤儿页面。
+ */
+export function buildProjectCandidatesPath(projectId: string): string {
+  return `/projects/${projectId}/candidates`
+}
+
 export function buildProjectResultsPath(projectId: string): string {
   return `/projects/${projectId}/results`
 }
@@ -52,6 +62,7 @@ export function buildProjectWorkspaceNavItems(projectId: string): ProjectWorkspa
     { key: 'workflow', label: 'Workflow', to: buildProjectWorkflowPath(projectId) },
     { key: 'tasks', label: '任务中心', to: buildProjectTaskPath(projectId) },
     { key: 'assets', label: '数据资产', to: buildProjectAssetsPath(projectId) },
+    { key: 'candidates', label: '候选物', to: buildProjectCandidatesPath(projectId) },
     { key: 'results', label: '结果中心', to: buildProjectResultsPath(projectId) },
     { key: 'decisions', label: '决策记录', to: buildProjectDecisionsPath(projectId) },
     { key: 'lineage', label: 'Artifact 谱系', to: `/projects/${projectId}/lineage` },

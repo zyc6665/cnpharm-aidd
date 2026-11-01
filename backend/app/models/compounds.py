@@ -34,6 +34,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 
 from app.common.time import utcnow
 from app.database.base import Base, TimestampMixin, UUIDMixin
@@ -65,7 +66,7 @@ class Compound(Base, UUIDMixin, TimestampMixin):
 
     created_by = Column(String(36), ForeignKey("users.id"), nullable=True, index=True)
     name = Column(String(128), nullable=True)
-    inchikey = Column(String(27), nullable=False, unique=True, index=True)
+    inchikey = Column(String(27), nullable=False, unique=True)
     canonical_smiles = Column(String(2048), nullable=False)
     mol_formula = Column(String(128), nullable=True)
     mol_weight = Column(Numeric(10, 3), nullable=True)
@@ -91,10 +92,14 @@ class Candidate(Base, UUIDMixin, TimestampMixin):
             name="ck_candidates_payload_matches_type",
         ),
         Index("ix_candidates_project_type_created", "project_id", "candidate_type", "created_at"),
+        Index("ix_candidates_project_created", "project_id", "created_at"),
         Index("ix_candidates_compound_id", "compound_id"),
+        # JSON attrs 的包含查询（docs/04 §7.2）：PG-only GIN，与迁移 20261026_02:110
+        # 的建法一致；SQLite 无 GIN，create_all 时会忽略 postgresql_using 变成普通索引。
+        Index("ix_candidates_attrs_gin", "attrs", postgresql_using="gin"),
     )
 
-    project_id = Column(String(36), ForeignKey("projects.id"), nullable=False, index=True)
+    project_id = Column(String(36), ForeignKey("projects.id"), nullable=False)
     created_by = Column(String(36), ForeignKey("users.id"), nullable=True, index=True)
     candidate_type = Column(String(32), nullable=False, default=CANDIDATE_TYPE_SMALL_MOLECULE)
     compound_id = Column(String(36), ForeignKey("compounds.id"), nullable=True)
@@ -106,9 +111,12 @@ class Candidate(Base, UUIDMixin, TimestampMixin):
     #: 产出该候选物的任务；与 ``protein_structures.task_id`` 同样只存字符串不建外键，
     #: 任务有独立归档与清理策略（docs/04 §9.1）。
     task_id = Column(String(36), nullable=True, index=True)
-    #: 设计条件、修饰、自定义属性（docs/04 §7.2 要求 GIN 索引，PostgreSQL 侧由迁移
-    #: 单独创建；SQLite 无 GIN，迁移里跳过）。
-    attrs = Column(JSON, nullable=False, default=dict)
+    #: 设计条件、修饰、自定义属性（docs/04 §7.2 要求 GIN 索引）。
+    #: PostgreSQL 侧必须是 ``jsonb``：``json`` 没有 GIN 的默认操作符类，
+    #: ``CREATE INDEX ... USING gin (json_col)`` 会直接报
+    #: 「data type json has no default operator class for access method "gin"」，
+    #: 整个迁移链在空库上跑不完。SQLite 侧仍是 JSON（``with_variant`` 只在 PG 生效）。
+    attrs = Column(JSON().with_variant(JSONB, "postgresql"), nullable=False, default=dict)
 
 
 class CandidateSet(Base, UUIDMixin, TimestampMixin):
@@ -119,8 +127,12 @@ class CandidateSet(Base, UUIDMixin, TimestampMixin):
     """
 
     __tablename__ = "candidate_sets"
+    __table_args__ = (
+        # 项目内候选集列表：project_id 过滤、按 created_at 倒序翻页。
+        Index("ix_candidate_sets_project_created", "project_id", "created_at"),
+    )
 
-    project_id = Column(String(36), ForeignKey("projects.id"), nullable=False, index=True)
+    project_id = Column(String(36), ForeignKey("projects.id"), nullable=False)
     created_by = Column(String(36), ForeignKey("users.id"), nullable=True, index=True)
     name = Column(String(128), nullable=False)
     description = Column(Text, nullable=True)

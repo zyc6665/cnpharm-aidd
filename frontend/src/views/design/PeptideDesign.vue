@@ -217,6 +217,8 @@
 </script>
 
 <style scoped lang="less">
+  @import '@/assets/styles/variables.less';
+
   .design-page {
     max-width: 960px;
     margin: 0 auto;
@@ -226,9 +228,9 @@
   .design-section {
     margin-bottom: 24px;
     padding: 20px;
-    border: 1px solid #f0f0f0;
+    border: 1px solid @border-color;
     border-radius: 8px;
-    background: #fff;
+    background: @bg-surface;
   }
 
   .design-section__title {

@@ -45,6 +45,13 @@ const candidateSetOptions = computed(() =>
   candidateSets.value.map(item => ({ label: item.name, value: item.id }))
 )
 
+const canSubmit = computed(() => {
+  if (submitting.value || !selectedGroups.value.length) {
+    return false
+  }
+  return source.value === 'upload' ? Boolean(smilesFile.value) : Boolean(candidateSetId.value)
+})
+
 function handleBeforeUpload(file: File): boolean {
   smilesFile.value = file
   smilesFileName.value = file.name
@@ -184,7 +191,7 @@ onMounted(() => {
         type="primary"
         size="large"
         :loading="submitting"
-        :disabled="submitting"
+        :disabled="!canSubmit"
         data-testid="predict-submit-button"
         @click="handleSubmit"
       >
@@ -212,7 +219,7 @@ onMounted(() => {
 
 .predict-submit__hint {
   margin: 8px 0 0;
-  color: var(--ant-color-text-secondary, #8c8c8c);
+  color: var(--ant-color-text-secondary, var(--theme-text-secondary));
 }
 
 .predict-submit__selected {

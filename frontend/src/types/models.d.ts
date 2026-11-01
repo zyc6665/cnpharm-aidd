@@ -1,11 +1,30 @@
 import type { TypedArtifact } from './artifacts'
+import type { TaskStatusGenerated } from './enums.generated'
+
+// 契约枚举统一 re-export 自 codegen 产物（计划 §3.2，勿手改）。
+export type {
+  ProjectStatus,
+  ProjectRole,
+  TaskPriority,
+  TaskStatusGenerated,
+  AssetArtifactType,
+  AuditAction,
+  AuditResult,
+  ResourceType,
+} from './enums.generated'
 
 // 用户相关类型
 export interface UserInfo {
   id: string  // UUID
-  email: string
+  /** 邮箱可能为空（如 LDAP 账号未绑定邮箱），展示时需回退 */
+  email?: string | null
   display_name?: string
-  username?: string  // 用户名（兼容旧代码）
+  /** 账号名，本地与 LDAP 用户必填 */
+  username: string
+  /** 认证来源：本地口令或企业 LDAP 目录 */
+  auth_source: 'local' | 'ldap'
+  /** 最近一次登录时间，未登录过为 null */
+  last_login_at?: string | null
   avatar_url?: string
   avatar?: string  // 头像URL（兼容旧代码，实际使用avatar_url）
   role: 'user' | 'admin'
@@ -39,16 +58,9 @@ export interface AdminUserStats {
 }
 
 export interface LoginParams {
-  email: string
+  username: string
   password: string
   remember?: boolean
-}
-
-export interface RegisterParams {
-  email: string
-  password: string
-  verification_code: string
-  display_name?: string
 }
 
 export interface AuthTokens {
@@ -480,16 +492,11 @@ export interface RelatedTool {
   favorite_count: number
 }
 
-// 任务相关类型（docs/03 §3.4 八态：pending=已创建、queued=排队中、running、success、failure、timeout、canceled）
-export type TaskStatus =
-  | 'pending'
-  | 'rejected'
-  | 'queued'
-  | 'running'
-  | 'success'
-  | 'failure'
-  | 'timeout'
-  | 'canceled'
+// 任务相关类型（docs/03 §3.4 八态：pending=已创建、queued=排队中、running、success、failure、timeout、canceled、rejected）
+// 取值来自后端单一枚举源（TASK_STATUS），API 契约是小写，所以这里 Lowercase 派生：
+// 后端新增/删除状态时，`test/test_frontend_enum_parity.py` 会先拦住生成文件，
+// 类型也随之漂移，不会再出现前端手抄漏状态。
+export type TaskStatus = Lowercase<TaskStatusGenerated>
 
 export interface TaskInput {
   params: Record<string, unknown>
@@ -846,11 +853,25 @@ export interface SystemConfig {
 export interface PaginationParams {
   page?: number
   page_size?: number
+  /** 游标分页：传入后进入 cursor 模式（total/total_pages 为 null，items 不重不漏） */
+  cursor?: string
   sort_by?: string
   sort_order?: 'asc' | 'desc'
 }
 
-export interface PaginatedResponse<T> {
+/**
+ * 游标分页响应元信息（后端 C-2 契约）。
+ * - 不传 cursor（offset 首屏）：仍返回 total/page/page_size，并额外给 nextCursor/hasMore/totalKnown
+ * - 传 cursor：total=null、total_pages=null、totalKnown=false，nextCursor=null 表示到底
+ * 三处列表共享此形状，避免每个页面各写一份。
+ */
+export interface CursorPageMeta {
+  nextCursor?: string | null
+  hasMore?: boolean
+  totalKnown?: boolean
+}
+
+export interface PaginatedResponse<T> extends CursorPageMeta {
   items: T[]
   total: number
   page: number

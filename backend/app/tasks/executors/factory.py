@@ -474,7 +474,13 @@ class TaskExecutor:
             try:
                 await self._allocate_gpu()
             except GPUAllocationFailed as exc:
-                retry_count = self.task.retry_count if self.task.retry_count is not None else 0
+                extra_data = (
+                    self.task.extra_data
+                    if isinstance(self.task.extra_data, dict)
+                    else {}
+                )
+                # 资源不足重排只消耗 resource_retry_count，不动用户的 retry_count 额度
+                retry_count = int(extra_data.get("resource_retry_count") or 0)
                 max_retries = (
                     self.task.max_retries
                     if self.task.max_retries is not None

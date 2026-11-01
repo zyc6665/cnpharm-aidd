@@ -1,5 +1,5 @@
 {
-  "result_version": "aidd.sciminer/result.v2",
+  "result_version": "aidd.sciminer/result",
   "artifacts": {
     "pocket": {
       "name": "example_binding_pocket",
@@ -38,7 +38,7 @@
       "files": {
         "report_json": {
           "path": "reports/report.json",
-          "sha256": "330b43ee4f138e20f0324500a8ea06471794a10ae6000ecad7d2b2fd89c9e5e4",
+          "sha256": "2035ac8aab53348e2146ff3795fa51e0d447064db1c72827db09e6f4167962f4",
           "content_type": "application/json"
         }
       },

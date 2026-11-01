@@ -11,8 +11,8 @@ from app.artifact_standards.registry import validate_standard_artifact_roles
 from app.tools.schema_validator import validate_json_schema_definition
 
 
-TOOL_PACKAGE_API_VERSION = "aidd.sciminer/v1"
-TOOL_PACKAGE_V2_API_VERSION = "aidd.sciminer/tool-package.v2"
+LEGACY_TOOL_PACKAGE_API_VERSION = "aidd.sciminer/v1"
+TOOL_PACKAGE_API_VERSION = "aidd.sciminer/tool-package"
 
 
 class Accelerator(str, Enum):
@@ -55,7 +55,7 @@ class ArtifactContract(BaseModel):
     outputs: list[ArtifactDeclaration] = Field(default_factory=list)
 
 
-class ArtifactInputV2(BaseModel):
+class ArtifactInputSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=100)
@@ -69,13 +69,13 @@ class ArtifactInputV2(BaseModel):
     suggested_preparation_tool: str | None = Field(default=None, max_length=100)
 
     @model_validator(mode="after")
-    def validate_file_roles(self) -> "ArtifactInputV2":
+    def validate_file_roles(self) -> "ArtifactInputSpec":
         self.role_preferences = validate_standard_artifact_roles(self.type, self.role_preferences)
         self.required_roles = validate_standard_artifact_roles(self.type, self.required_roles)
         return self
 
 
-class ArtifactOutputV2(BaseModel):
+class ArtifactOutputSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=100)
@@ -85,16 +85,16 @@ class ArtifactOutputV2(BaseModel):
     provided_roles: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def validate_file_roles(self) -> "ArtifactOutputV2":
+    def validate_file_roles(self) -> "ArtifactOutputSpec":
         self.provided_roles = validate_standard_artifact_roles(self.type, self.provided_roles)
         return self
 
 
-class ArtifactContractV2(BaseModel):
+class ArtifactContractSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    inputs: list[ArtifactInputV2] = Field(default_factory=list)
-    outputs: list[ArtifactOutputV2] = Field(default_factory=list)
+    inputs: list[ArtifactInputSpec] = Field(default_factory=list)
+    outputs: list[ArtifactOutputSpec] = Field(default_factory=list)
 
 
 class ResourceSpec(BaseModel):
@@ -128,7 +128,7 @@ class ToolVariantManifest(BaseModel):
         return self
 
 
-class ToolVariantManifestV2(BaseModel):
+class ToolVariantManifestSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=100)
@@ -141,7 +141,7 @@ class ToolVariantManifestV2(BaseModel):
     hardware_validated: bool = False
 
     @model_validator(mode="after")
-    def require_image_for_container(self) -> "ToolVariantManifestV2":
+    def require_image_for_container(self) -> "ToolVariantManifestSpec":
         if "container" in self.executor_types and not self.image:
             raise ValueError("container executor requires image")
         return self
@@ -244,30 +244,31 @@ class RuntimeEnvManifest(BaseModel):
     cache_policy: RuntimeCachePolicyManifest
 
 
-class ToolPackageManifest(BaseModel):
+class LegacyToolPackageManifest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    api_version: Literal[TOOL_PACKAGE_API_VERSION]
+    api_version: Literal[LEGACY_TOOL_PACKAGE_API_VERSION]
     kind: Literal["ToolPackage"]
     metadata: ToolPackageMetadata
     artifacts: ArtifactContract
     variants: list[ToolVariantManifest] = Field(min_length=1)
 
 
-class ToolPackageV2Manifest(BaseModel):
+class ToolPackageManifest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    api_version: Literal[TOOL_PACKAGE_V2_API_VERSION]
+    api_version: Literal[TOOL_PACKAGE_API_VERSION]
+    spec_version: int = 1
     kind: Literal["ToolPackage"]
     metadata: ToolPackageMetadata
-    artifacts: ArtifactContractV2
+    artifacts: ArtifactContractSpec
     parameters_schema: dict[str, Any] = Field(
         default_factory=lambda: {"type": "object", "properties": {}}
     )
     adapter: AdapterDeclaration = Field(default_factory=AdapterDeclaration)
     exposure: ExposureDeclaration = Field(default_factory=ExposureDeclaration)
     runtime: RuntimeEnvManifest
-    variants: list[ToolVariantManifestV2] = Field(min_length=1)
+    variants: list[ToolVariantManifestSpec] = Field(min_length=1)
 
     @field_validator("parameters_schema")
     @classmethod
@@ -289,4 +290,4 @@ class ToolPackageV2Manifest(BaseModel):
         return schema
 
 
-AnyToolPackageManifest = ToolPackageManifest | ToolPackageV2Manifest
+AnyToolPackageManifest = LegacyToolPackageManifest | ToolPackageManifest

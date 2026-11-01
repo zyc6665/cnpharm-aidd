@@ -488,11 +488,15 @@ async def test_sse_endpoint_missing_task_returns_forbidden(
 
 
 @pytest.mark.asyncio
-async def test_sse_endpoint_accepts_query_token(
+async def test_sse_endpoint_ignores_query_token(
     session_factory: async_sessionmaker[AsyncSession],
     db_session: AsyncSession,
 ) -> None:
-    """浏览器 EventSource 无法设置请求头，因此支持 ?token= 兼容路径。"""
+    """P2：SSE 不再接受 ``?token=`` 查询参数（只能 Cookie/Bearer 认证）。
+
+    即便传入一个完全合法的 access token，缺少 Cookie/Bearer 也必须是 401，
+    避免长寿命凭证泄漏到 URL / 访问日志 / Referer。
+    """
     from app.auth.jwt_handler import jwt_handler
 
     user = await _make_user(db_session)
@@ -502,11 +506,9 @@ async def test_sse_endpoint_accepts_query_token(
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        async with client.stream("GET", f"/api/v1/tasks/{task.id}/events?token={token}") as response:
-            assert response.status_code == 200
-            body = await response.aread()
+        response = await client.get(f"/api/v1/tasks/{task.id}/events?token={token}")
 
-    assert "event: snapshot" in body.decode("utf-8")
+    assert response.status_code == 401
 
 
 @pytest.mark.asyncio

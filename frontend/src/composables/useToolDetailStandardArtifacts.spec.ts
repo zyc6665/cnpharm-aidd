@@ -28,11 +28,11 @@ function makeArtifact(id: string, versionId: string): TypedArtifact {
 
 describe('useToolDetailStandardArtifacts', () => {
   it('clears project artifacts when project context or standard slots are missing', async () => {
-    const getProjectArtifacts = vi.fn()
+    const getAllProjectArtifacts = vi.fn()
     const standardArtifacts = useToolDetailStandardArtifacts({
       projectId: computed(() => undefined),
       standardInputSlots: computed(() => []),
-      api: { getProjectArtifacts },
+      api: { getAllProjectArtifacts },
       selectStandardArtifact: vi.fn(),
       updateStandardInputFileList: vi.fn(),
     })
@@ -40,20 +40,20 @@ describe('useToolDetailStandardArtifacts', () => {
 
     await standardArtifacts.loadStandardProjectArtifacts()
 
-    expect(getProjectArtifacts).not.toHaveBeenCalled()
+    expect(getAllProjectArtifacts).not.toHaveBeenCalled()
     expect(standardArtifacts.standardProjectArtifacts.value).toEqual([])
     expect(standardArtifacts.standardArtifactsLoading.value).toBe(false)
   })
 
   it('loads project artifacts and delegates standard input selection changes', async () => {
     const artifact = makeArtifact('artifact-protein', 'version-protein')
-    const getProjectArtifacts = vi.fn().mockResolvedValue({ data: { items: [artifact] } })
+    const getAllProjectArtifacts = vi.fn().mockResolvedValue({ data: { items: [artifact] } })
     const selectStandardArtifact = vi.fn()
     const updateStandardInputFileList = vi.fn()
     const standardArtifacts = useToolDetailStandardArtifacts({
       projectId: computed(() => 'project-1'),
       standardInputSlots: computed(() => [{ name: 'protein', type: 'protein_structure@1', required: true }]),
-      api: { getProjectArtifacts },
+      api: { getAllProjectArtifacts },
       selectStandardArtifact,
       updateStandardInputFileList,
     })
@@ -63,7 +63,7 @@ describe('useToolDetailStandardArtifacts', () => {
     standardArtifacts.handleStandardArtifactSelection('protein', 'version-protein')
     standardArtifacts.handleStandardInputFileListChange('protein', files)
 
-    expect(getProjectArtifacts).toHaveBeenCalledWith('project-1')
+    expect(getAllProjectArtifacts).toHaveBeenCalledWith('project-1')
     expect(standardArtifacts.standardProjectArtifacts.value).toEqual([artifact])
     expect(standardArtifacts.standardArtifactsLoading.value).toBe(false)
     expect(selectStandardArtifact).toHaveBeenCalledWith('protein', 'version-protein', [artifact])

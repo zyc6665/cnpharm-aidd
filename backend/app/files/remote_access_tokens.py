@@ -80,8 +80,10 @@ def create_browser_file_access_token(
     return jwt.encode(payload, _token_secret(), algorithm=settings.JWT_ALGORITHM)
 
 
-def validate_browser_file_access_token(token: str, *, file_id: str) -> dict[str, Any]:
-    """Validate a browser download capability scoped to one file."""
+def validate_browser_file_access_token(
+    token: str, *, file_id: str, user_id: str | None = None
+) -> dict[str, Any]:
+    """Validate a browser download capability scoped to one file and one user."""
     try:
         payload = jwt.decode(
             token,
@@ -95,14 +97,20 @@ def validate_browser_file_access_token(token: str, *, file_id: str) -> dict[str,
         raise RemoteFileAccessTokenError("浏览器文件下载令牌类型无效")
     if str(payload.get("file_id") or "") != str(file_id):
         raise RemoteFileAccessTokenError("浏览器文件下载令牌文件不匹配")
-    if not payload.get("user_id"):
+    token_user_id = str(payload.get("user_id") or "")
+    if not token_user_id:
         raise RemoteFileAccessTokenError("浏览器文件下载令牌用户无效")
+    # 兑换时必须与当前请求者比对，避免一个用户拿自己的 token 下载别人的私有文件。
+    if user_id is not None and token_user_id != str(user_id):
+        raise RemoteFileAccessTokenError("浏览器文件下载令牌用户不匹配")
     return payload
 
 
 def _token_secret() -> str:
-    return (
-        settings.JWT_SECRET_KEY
-        or settings.SETTINGS_ENCRYPTION_KEY
-        or "development-remote-file-access-token-secret"
-    )
+    secret = settings.JWT_SECRET_KEY or settings.SETTINGS_ENCRYPTION_KEY
+    if not secret:
+        # 绝不回退到源码里的固定字符串：那会让任何人伪造任意 file_id 的下载令牌。
+        raise RuntimeError(
+            "文件访问令牌签名密钥未配置（JWT_SECRET_KEY / SETTINGS_ENCRYPTION_KEY）"
+        )
+    return secret

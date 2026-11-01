@@ -113,10 +113,24 @@ def matches_delivery_metadata(
 
 
 def content_disposition(filename: str) -> str:
-    safe_filename = filename.replace('"', "")
+    """构造安全的 ``Content-Disposition`` 头（attachment）。
+
+    P2 硬化：原始文件名可能含 ``CR``/``LF`` 等控制字符（响应头注入）或引号，
+    直接拼进头部会让攻击者注入额外的响应头或拆分响应。这里先把控制字符剔除，
+    再用 RFC 5987 的 ``filename*=UTF-8''...`` 携带清洗后的原始文件名（中文等
+    非 ASCII 名可无损还原），ASCII 回退名去掉引号与反斜杠以免破坏头部语法。
+    """
+    original = filename or ""
+    # 仅保留可打印字符：剔除 CR/LF/NUL 及其它 C0/C1 控制字符，杜绝头注入。
+    sanitized = "".join(ch for ch in original if ch >= " " and ch != "\x7f")
+    # ASCII 回退：引号/反斜杠会破坏 ``filename=`` 的语法，非 ASCII 直接丢弃。
+    ascii_fallback = sanitized.replace('"', "").replace("\\", "")
+    ascii_fallback = ascii_fallback.encode("ascii", "ignore").decode("ascii").strip()
+    if not ascii_fallback:
+        ascii_fallback = "download"
     return (
-        f"attachment; filename=\"{safe_filename}\"; "
-        f"filename*=UTF-8''{quote(filename)}"
+        f"attachment; filename=\"{ascii_fallback}\"; "
+        f"filename*=UTF-8''{quote(sanitized)}"
     )
 
 

@@ -729,6 +729,77 @@ async def test_stage_reaches_s4_when_only_task_is_queued(
 
 
 @pytest.mark.asyncio
+async def test_stage_counts_settled_failure_states_as_submitted(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    project: Project,
+    users: dict[str, User],
+):
+    """失败/超时/取消/拒绝也代表用户确实提交过，不能报 NO_TASK。
+
+    旧 ``SUBMITTED_STATUSES`` 只有 QUEUED/RUNNING/SUCCESS，于是「本项目所有任务
+    都失败」时项目会从 S4 掉回 S3 并提示「还没有提交过计算任务」——逻辑倒错。
+    """
+    target = Target(project_id=project.id, created_by=users[OWNER].id, name="EGFR")
+    db_session.add(target)
+    await db_session.flush()
+    protein = Protein(target_id=target.id, name="EGFR kinase", sequence="MEEP", seq_length=4)
+    db_session.add(protein)
+    await db_session.flush()
+    structure = ProteinStructure(protein_id=protein.id, source_type="IMPORTED")
+    db_session.add(structure)
+    await db_session.flush()
+    db_session.add(
+        Pocket(structure_id=structure.id, rank=1, selected=True, residue_count=8)
+    )
+    db_session.add(
+        Candidate(
+            project_id=project.id,
+            created_by=users[OWNER].id,
+            candidate_type="PEPTIDE",
+            peptide_sequence="MEEPQSDVRKC",
+        )
+    )
+    tool = await _register_tool(db_session, slug="settled-only", owner_id=users[OWNER].id)
+    settled_statuses = (
+        TaskStatus.FAILURE.value,
+        TaskStatus.TIMEOUT.value,
+        TaskStatus.CANCELED.value,
+        TaskStatus.REJECTED.value,
+    )
+    for status in settled_statuses:
+        db_session.add(
+            Task(
+                user_id=users[OWNER].id,
+                tool_id=tool.id,
+                tool_version_id=tool.current_version_id,
+                status=status,
+                extra_data={"project_id": project.id},
+            )
+        )
+    await db_session.commit()
+
+    response = await api_client.get(
+        f"/api/v1/projects/{project.id}/stage", headers=_headers(VIEWER)
+    )
+
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["currentStage"] == "S4"
+    assert data["counters"]["submitted_tasks"] == len(settled_statuses)
+    assert data["counters"]["finished_tasks"] == 0
+    assert "NO_TASK" not in [gap["code"] for gap in data["gaps"]]
+
+
+def test_submitted_statuses_exclude_only_pending():
+    """「已提交」= 除 PENDING 之外的全部状态，新增状态时自动纳入。"""
+    from app.services.project_stage import SUBMITTED_STATUSES
+
+    all_statuses = {status.value for status in TaskStatus}
+    assert set(SUBMITTED_STATUSES) == all_statuses - {TaskStatus.PENDING.value}
+
+
+@pytest.mark.asyncio
 async def test_stage_reaches_s6_after_first_decision(
     api_client: httpx.AsyncClient,
     db_session: AsyncSession,

@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_admin_user
 from app.common.exceptions import ValidationException
+from app.common.keyset import apply_desc_keyset, encode_cursor, next_cursor
 from app.common.responses import paginated_response, success_response
 from app.common.time import isoformat_utc
 from app.common.trace import get_trace_id
@@ -90,6 +91,13 @@ async def list_audit_logs(
     end_time: datetime | None = Query(default=None, description="结束时间（含）"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=MAX_PAGE_SIZE),
+    cursor: str | None = Query(
+        default=None,
+        description=(
+            "游标分页（深分页用）。传入上一页响应里的 nextCursor 即可，"
+            "此时不再返回 total，只用 nextCursor/hasMore 翻页"
+        ),
+    ),
     current_user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -130,14 +138,52 @@ async def list_audit_logs(
     if end_time:
         query = query.where(AuditLog.created_at <= end_time)
 
+    if cursor:
+        # keyset：审计日志只增不改，(created_at DESC, id DESC) 是全序，翻页不重不漏。
+        # 不在这里算 total —— 12 万行 count(*) 要 8.5ms 且随数据量线性增长，
+        # 而深分页的全部收益就是别再让数据库为翻页越翻越慢。
+        query, _last = apply_desc_keyset(
+            query,
+            timestamp_column=AuditLog.created_at,
+            id_column=AuditLog.id,
+            cursor=cursor,
+        )
+        fetched = list(
+            (
+                await db.execute(
+                    query.order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+                    .limit(page_size + 1)
+                )
+            ).scalars().all()
+        )
+        has_more = len(fetched) > page_size
+        rows = fetched[:page_size]
+        payload = paginated_response(
+            items=[serialize_audit_log(row) for row in rows],
+            total=0,
+            page=page,
+            page_size=page_size,
+        )
+        data = payload["data"]
+        data["nextCursor"] = next_cursor(
+            fetched, timestamp_attr="created_at", id_attr="id", limit=page_size
+        )
+        data["hasMore"] = has_more
+        data["totalKnown"] = False
+        data["total"] = None
+        data["total_pages"] = None
+        return payload
+
     total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar_one()
     rows = (
         await db.execute(
-            query.order_by(AuditLog.created_at.desc())
+            query.order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)
         )
     ).scalars().all()
+    offset = (page - 1) * page_size
+    has_more = bool(rows) and (offset + len(rows)) < int(total)
 
     # Reading the trail is itself an auditable action (docs/10 AUD-06 adjacent):
     # the file trail records it without needing this request's transaction to commit.
@@ -153,12 +199,20 @@ async def list_audit_logs(
         request_id=get_trace_id(),
     )
 
-    return paginated_response(
+    payload = paginated_response(
         items=[serialize_audit_log(row) for row in rows],
         total=total,
         page=page,
         page_size=page_size,
     )
+    data = payload["data"]
+    # 偏移模式也给出 nextCursor，客户端想从第 N 页切成游标翻页时可直接接上。
+    data["nextCursor"] = (
+        encode_cursor([rows[-1].created_at, rows[-1].id]) if rows and has_more else None
+    )
+    data["hasMore"] = has_more
+    data["totalKnown"] = True
+    return payload
 
 
 @router.get("/facets", summary="审计日志过滤取值")

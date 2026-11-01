@@ -25,6 +25,11 @@ from app.services.workflow_validation import (
 
 ScheduleTaskFn = Callable[..., Awaitable[Any]]
 
+# 节点进入这些状态即视为已终结，不再参与调度；run 收口时据此判定是否收敛。
+TERMINAL_NODE_STATUSES = frozenset({"success", "failure", "skipped", "blocked"})
+# 其中这两种表示「未成功」：任一出现即把 run 收敛为 failure。
+FAILED_NODE_STATUSES = frozenset({"failure", "blocked"})
+
 
 async def start_ready_workflow_nodes(
     db: AsyncSession,
@@ -98,15 +103,22 @@ async def start_ready_workflow_nodes(
         run.started_at = run.started_at or utcnow()
     elif run.execution_order and all(
         (node_states.get(current_node_id) or {}).get("status")
-        in {"success", "failure", "skipped"}
+        in TERMINAL_NODE_STATUSES
         for current_node_id in run.execution_order
     ):
-        has_failure = any(
-            (node_states.get(current_node_id) or {}).get("status") == "failure"
+        failed_node_ids = [
+            current_node_id
             for current_node_id in run.execution_order
-        )
-        run.status = "failure" if has_failure else "success"
+            if (node_states.get(current_node_id) or {}).get("status")
+            in FAILED_NODE_STATUSES
+        ]
+        run.status = "failure" if failed_node_ids else "success"
         run.finished_at = utcnow()
+        if failed_node_ids and not run.error_message:
+            run.error_message = (
+                "Workflow run stopped because node(s) failed or blocked: "
+                + ", ".join(failed_node_ids)
+            )
     elif run.status == "pending":
         run.status = "pending"
 

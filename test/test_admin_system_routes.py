@@ -323,50 +323,130 @@ async def test_feature_flags_endpoint_exposes_aidd_release_gates(
 async def test_system_health_reports_database_schema_revision(
     api_client: httpx.AsyncClient,
 ):
-    """系统健康检查应暴露 Alembic schema 状态，避免迁移漏跑变成泛化 500。"""
+    """系统健康检查应暴露 Alembic schema 状态，但只返回粗粒度结果。"""
     response = await api_client.get("/api/v1/system/health")
 
     assert response.status_code == 200
     payload = response.json()
-    services = {item["name"]: item for item in payload["services"]}
+    services = {item["name"]: item for item in payload["data"]["services"]}
 
     assert "database_schema" in services
     assert services["database_schema"]["status"] == "unhealthy"
-    assert "Alembic" in services["database_schema"]["message"]
-    assert payload["status"] == "unhealthy"
+    # 对外响应不得泄露迁移实现细节（Alembic、异常原文等）
+    assert services["database_schema"]["message"] == "unhealthy"
+    assert "Alembic" not in services["database_schema"]["message"]
+    assert payload["data"]["status"] == "unhealthy"
+    assert payload["data"]["environment"] == "hidden"
 
 
 @pytest.mark.asyncio
 async def test_system_health_reports_tool_package_runtime_readiness(
     api_client: httpx.AsyncClient,
 ):
-    """系统健康检查应暴露 Tool Package 运行时可用性，方便排查模型部署链路。"""
+    """系统健康检查应暴露 Tool Package 运行时可用性，但只返回粗粒度结果。"""
     response = await api_client.get("/api/v1/system/health")
 
     assert response.status_code == 200
     payload = response.json()
-    services = {item["name"]: item for item in payload["services"]}
+    services = {item["name"]: item for item in payload["data"]["services"]}
 
     assert "tool_package_runtime" in services
     assert services["tool_package_runtime"]["status"] in {"healthy", "unknown"}
-    assert "Tool Package" in services["tool_package_runtime"]["message"]
+    # 不泄露 Tool Package 计数等内部运行细节
+    assert services["tool_package_runtime"]["message"] in {"ok", "unknown"}
 
 
 @pytest.mark.asyncio
 async def test_system_health_reports_executor_gateway_readiness(
     api_client: httpx.AsyncClient,
 ):
-    """系统健康检查应暴露 Executor Gateway 和 V1 已登记执行器类型。"""
+    """系统健康检查应暴露 Executor Gateway 状态，但不泄露执行器拓扑。"""
     response = await api_client.get("/api/v1/system/health")
 
     assert response.status_code == 200
     payload = response.json()
-    services = {item["name"]: item for item in payload["services"]}
+    services = {item["name"]: item for item in payload["data"]["services"]}
 
     assert "executor_gateway" in services
     assert services["executor_gateway"]["status"] == "healthy"
     message = services["executor_gateway"]["message"]
-    assert "Executor Gateway" in message
+    assert message == "ok"
     for executor_type in ("builtin", "python_script", "docker_image", "ssh_job"):
-        assert executor_type in message
+        assert executor_type not in message
     assert "remote_api" not in message
+
+
+@pytest.mark.asyncio
+async def test_system_info_exposes_detailed_health_for_admins(
+    api_client: httpx.AsyncClient,
+):
+    """/system/info 作为管理员端点保留详细诊断信息，供排查使用。"""
+    response = await api_client.get(
+        "/api/v1/system/info",
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    health = payload["data"]["health"]
+    services = {item["name"]: item for item in health["services"]}
+
+    assert health["status"] == "unhealthy"
+    assert "Alembic" in services["database_schema"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_system_stats_buckets_count_queued_and_timeout(
+    api_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    admin_user: User,
+):
+    """六个统计桶必须能完整划分八态任务，且各桶口径正确。
+
+    旧口径 pending 只数 PENDING、failed 只数 FAILURE：QUEUED 在四个桶里
+    都不存在、TIMEOUT 不算失败；CANCELED/REJECTED 也从未计入任何桶。
+    除了逐桶断言，最后那条求和等式才是真正的守护：以后再加状态时，
+    只要忘了给它分配桶，这个等式会立刻变红。
+    """
+    statuses = [
+        "PENDING",
+        "QUEUED",
+        "RUNNING",
+        "SUCCESS",
+        "FAILURE",
+        "TIMEOUT",
+        "CANCELED",
+        "REJECTED",
+    ]
+    for index, status in enumerate(statuses):
+        db_session.add(
+            Task(
+                user_id=admin_user.id,
+                tool_id=f"stats-tool-{index}",
+                tool_version_id="stats-version",
+                status=status,
+            )
+        )
+    await db_session.commit()
+
+    response = await api_client.get(
+        "/api/v1/system/stats", headers={"Authorization": "Bearer admin-token"}
+    )
+
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["total_tasks"] == len(statuses)
+    assert data["pending_tasks"] == 2  # PENDING + QUEUED
+    assert data["running_tasks"] == 1  # RUNNING
+    assert data["completed_tasks"] == 1  # SUCCESS
+    assert data["failed_tasks"] == 2  # FAILURE + TIMEOUT
+    assert data["canceled_tasks"] == 1  # CANCELED
+    assert data["rejected_tasks"] == 1  # REJECTED
+    assert (
+        data["pending_tasks"]
+        + data["running_tasks"]
+        + data["completed_tasks"]
+        + data["failed_tasks"]
+        + data["canceled_tasks"]
+        + data["rejected_tasks"]
+    ) == data["total_tasks"]

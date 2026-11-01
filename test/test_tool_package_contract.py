@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.tool_packages.loader import ToolPackageLoadError, load_tool_package
-from app.tool_packages.schemas import ToolPackageManifest
+from app.tool_packages.schemas import LegacyToolPackageManifest
 from app.tool_packages.validator import validate_tool_package
 from app.tool_packages import validator as validator_module
 from app.services.tool_contracts import build_tool_contract
@@ -117,7 +117,7 @@ def test_manifest_requires_semantic_inputs_and_outputs(direction: str):
     raw = _manifest()
     raw["artifacts"][direction] = []
 
-    result = validate_tool_package(ToolPackageManifest.model_validate(raw))
+    result = validate_tool_package(LegacyToolPackageManifest.model_validate(raw))
 
     assert result.is_valid is False
     assert any(f"artifacts.{direction}" in error for error in result.errors)
@@ -127,7 +127,7 @@ def test_variant_cannot_reference_undeclared_artifact_type():
     raw = _manifest()
     raw["variants"][0]["outputs"] = ["docking_score"]
 
-    result = validate_tool_package(ToolPackageManifest.model_validate(raw))
+    result = validate_tool_package(LegacyToolPackageManifest.model_validate(raw))
 
     assert any("docking_score" in error and "未声明" in error for error in result.errors)
 
@@ -137,7 +137,7 @@ def test_nvidia_variant_requires_device_and_driver_declarations():
     raw["variants"][1]["resources"].pop("devices")
     raw["variants"][1]["resources"].pop("driver")
 
-    result = validate_tool_package(ToolPackageManifest.model_validate(raw))
+    result = validate_tool_package(LegacyToolPackageManifest.model_validate(raw))
 
     assert any("NVIDIA" in error and "devices" in error for error in result.errors)
     assert any("NVIDIA" in error and "driver" in error for error in result.errors)
@@ -147,7 +147,7 @@ def test_unverified_dcu_variant_cannot_claim_validated_support():
     raw = _manifest()
     raw["variants"][2]["validation_status"] = "validated"
 
-    result = validate_tool_package(ToolPackageManifest.model_validate(raw))
+    result = validate_tool_package(LegacyToolPackageManifest.model_validate(raw))
 
     assert any("DCU" in error and "adapted_pending_hardware_validation" in error for error in result.errors)
 
@@ -159,7 +159,7 @@ def test_all_variants_must_expose_the_same_output_contract():
     )
     raw["variants"][2]["outputs"] = ["pocket_result", "run_report"]
 
-    result = validate_tool_package(ToolPackageManifest.model_validate(raw))
+    result = validate_tool_package(LegacyToolPackageManifest.model_validate(raw))
 
     assert any("输出契约" in error for error in result.errors)
 

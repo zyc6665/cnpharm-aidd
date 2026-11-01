@@ -1,17 +1,15 @@
-const TOKEN_KEY = 'cpumodel_token'
-const REFRESH_TOKEN_KEY = 'cpumodel_refresh_token'
+/**
+ * 认证本地状态清理。
+ *
+ * JWT 已改由后端 httpOnly Cookie 承载，前端不再读写 access/refresh token。
+ * 这里只保留历史遗留 token 的清理与「认证失效」广播，避免旧版本遗留在
+ * localStorage 里的 token 继续生效。
+ */
 
 export const AUTH_CLEARED_EVENT = 'cpumodel-auth-cleared'
 
-const getStorageItem = (key: string): string | null => {
-  return typeof localStorage === 'undefined' ? null : localStorage.getItem(key)
-}
-
-const setStorageItem = (key: string, value: string): void => {
-  if (typeof localStorage !== 'undefined') {
-    localStorage.setItem(key, value)
-  }
-}
+const LEGACY_TOKEN_KEY = 'cpumodel_token'
+const LEGACY_REFRESH_TOKEN_KEY = 'cpumodel_refresh_token'
 
 const removeStorageItem = (key: string): void => {
   if (typeof localStorage !== 'undefined') {
@@ -19,21 +17,10 @@ const removeStorageItem = (key: string): void => {
   }
 }
 
-export const getToken = (): string | null => getStorageItem(TOKEN_KEY)
-
-export const setToken = (token: string): void => {
-  setStorageItem(TOKEN_KEY, token)
-}
-
-export const getRefreshToken = (): string | null => getStorageItem(REFRESH_TOKEN_KEY)
-
-export const setRefreshToken = (token: string): void => {
-  setStorageItem(REFRESH_TOKEN_KEY, token)
-}
-
+/** 清除认证相关本地状态并广播事件，由用户 store 监听后清理内存用户信息。 */
 export const clearAuthStorage = (): void => {
-  removeStorageItem(TOKEN_KEY)
-  removeStorageItem(REFRESH_TOKEN_KEY)
+  removeStorageItem(LEGACY_TOKEN_KEY)
+  removeStorageItem(LEGACY_REFRESH_TOKEN_KEY)
 
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent(AUTH_CLEARED_EVENT))

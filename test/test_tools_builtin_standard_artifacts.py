@@ -16,7 +16,7 @@ async def test_builtin_executor_returns_standard_result_v2(tmp_path, monkeypatch
     input_path = tmp_path / "protein.pdb"
     input_path.write_text("ATOM      1  N   ALA A   1       0.000   0.000   0.000\nEND\n")
     standard_result = {
-        "result_version": "aidd.sciminer/result.v2",
+        "result_version": "aidd.sciminer/result",
         "artifacts": {
             "prepared_protein": {
                 "type": "protein_structure@1",
@@ -97,7 +97,7 @@ async def test_builtin_executor_returns_standard_result_v2(tmp_path, monkeypatch
 @pytest.mark.asyncio
 async def test_builtin_executor_allows_parameter_only_tools(tmp_path, monkeypatch):
     standard_result = {
-        "result_version": "aidd.sciminer/result.v2",
+        "result_version": "aidd.sciminer/result",
         "artifacts": {
             "protein": {
                 "type": "protein_structure@1",

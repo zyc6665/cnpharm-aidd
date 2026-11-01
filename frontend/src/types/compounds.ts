@@ -255,6 +255,7 @@ export interface ProjectResultSummary {
   execution_time_sec: number | null
   error_message: string | null
   domain: string | null
+  mock: boolean
 }
 
 /** 结果详情里的输入快照（`serialize_snapshot`，camelCase）。 */
@@ -296,6 +297,8 @@ export interface ProjectResultListParams {
   status?: TaskStatus
   page?: number
   page_size?: number
+  /** 游标分页（C-2）：传入后返回 total=null，nextCursor=null 表示到底 */
+  cursor?: string
 }
 
 /** 追溯包（`services/traceability.py`，`traceability.v1`）。 */
@@ -311,6 +314,7 @@ export interface TraceabilityTimeline {
   finished: string | null
   executionSeconds: number | null
   retryCount: number | null
+  retryOf: string | null
 }
 
 export interface TraceabilityToolRef {
@@ -369,7 +373,7 @@ export interface TraceabilityOutput {
 
 export interface TraceabilityBizRef {
   projectId: string | null
-  domain: string | null
+  domain: Record<string, unknown> | null
 }
 
 export interface TraceabilityPackage {

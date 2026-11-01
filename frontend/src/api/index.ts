@@ -9,9 +9,5 @@ export * from './artifacts'
 export {
   default as request,
   AUTH_CLEARED_EVENT,
-  clearTokens,
-  getRefreshToken,
-  getToken,
-  setRefreshToken,
-  setToken
+  clearTokens
 } from './request'

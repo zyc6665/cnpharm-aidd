@@ -44,10 +44,21 @@ spec:
         sciminer.io/purpose: database
     spec:
       terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: postgres
           image: docker.1panel.live/library/postgres@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
           imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           env:
             - name: POSTGRES_DB
               valueFrom:
@@ -110,7 +121,9 @@ metadata:
     app.kubernetes.io/part-of: sciminer
     sciminer.io/purpose: database
 spec:
-  type: NodePort
+  # 开发集群也不向宿主机暴露数据库端口；本机访问请使用：
+  #   kubectl -n sciminer-system port-forward svc/sciminer-postgres 5432:5432
+  type: ClusterIP
   selector:
     app.kubernetes.io/name: postgres
     app.kubernetes.io/part-of: sciminer
@@ -118,7 +131,6 @@ spec:
     - name: postgres
       port: 5432
       targetPort: postgres
-      nodePort: 30432
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -162,10 +174,21 @@ spec:
         sciminer.io/purpose: broker
     spec:
       terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: redis
           image: docker.1panel.live/library/redis@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
           imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           command:
             - sh
             - -c
@@ -223,7 +246,9 @@ metadata:
     app.kubernetes.io/part-of: sciminer
     sciminer.io/purpose: broker
 spec:
-  type: NodePort
+  # 本机访问请使用：
+  #   kubectl -n sciminer-system port-forward svc/sciminer-redis 6379:6379
+  type: ClusterIP
   selector:
     app.kubernetes.io/name: redis
     app.kubernetes.io/part-of: sciminer
@@ -231,4 +256,3 @@ spec:
     - name: redis
       port: 6379
       targetPort: redis
-      nodePort: 30379

@@ -5,6 +5,17 @@
       :subtitle="t('admin.workbenchGroupsSubtitle')"
     />
 
+    <AppInlineError
+      v-if="loadError"
+      class="workbench-load-error"
+      data-testid="workbench-groups-error"
+      :title="t('admin.listStates.workbenchGroupsLoadError')"
+      :description="t('common.listStates.errorDescription')"
+      :detail="loadErrorDetail"
+    >
+      <a-button size="small" @click="fetchData">{{ t('common.listStates.retry') }}</a-button>
+    </AppInlineError>
+
     <div class="page-grid">
       <a-card class="group-form">
         <template #title>{{ t('admin.workbenchGroups') }}</template>
@@ -39,7 +50,17 @@
 
         <a-divider />
 
-        <a-list :data-source="groups" :loading="loading">
+        <SkeletonList v-if="loading && groups.length === 0" :count="4" />
+
+        <AppEmptyState
+          v-else-if="!loading && !loadError && groups.length === 0"
+          :title="t('admin.listStates.groupsEmptyTitle')"
+          :description="t('admin.listStates.groupsEmptyHint')"
+        >
+          <a-button @click="fetchData">{{ t('common.refresh') }}</a-button>
+        </AppEmptyState>
+
+        <a-list v-else :data-source="groups" :loading="loading">
           <template #renderItem="{ item }">
             <a-list-item>
               <a-space direction="vertical" size="small">
@@ -145,7 +166,18 @@
           </a-button>
         </a-space>
 
+        <SkeletonList v-if="mappingLoading && mappings.length === 0" :count="4" />
+
+        <AppEmptyState
+          v-else-if="!mappingLoading && !loadError && mappings.length === 0"
+          :title="t('admin.listStates.mappingsEmptyTitle')"
+          :description="t('admin.listStates.mappingsEmptyHint')"
+        >
+          <a-button @click="fetchMappings">{{ t('common.refresh') }}</a-button>
+        </AppEmptyState>
+
         <a-list
+          v-else
           :data-source="mappings"
           :loading="mappingLoading"
           :pagination="mappingPaginationConfig"
@@ -186,6 +218,9 @@
   import { useI18n } from 'vue-i18n'
   import { message } from 'ant-design-vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import AppEmptyState from '@/components/common/AppEmptyState.vue'
+  import AppInlineError from '@/components/common/AppInlineError.vue'
+  import SkeletonList from '@/components/common/SkeletonList.vue'
   import { useRemoteToolOptions } from '@/composables/useRemoteToolOptions'
   import type { WorkbenchGroup, WorkbenchGroupMapping } from '@/types/models'
   import {
@@ -201,6 +236,8 @@
 
   const { t } = useI18n()
   const loading = ref(false)
+  const loadError = ref(false)
+  const loadErrorDetail = ref('')
   const mappingLoading = ref(false)
   const savingGroup = ref(false)
   const savingMapping = ref(false)
@@ -284,6 +321,8 @@
 
   const fetchData = async () => {
     loading.value = true
+    loadError.value = false
+    loadErrorDetail.value = ''
     try {
       const [groupsRes] = await Promise.all([
         adminGetWorkbenchGroups(),
@@ -291,10 +330,12 @@
         fetchToolOptions()
       ])
       groups.value = groupsRes.data
-    } catch {
+    } catch (error) {
       groups.value = []
       mappings.value = []
       tools.value = []
+      loadError.value = true
+      loadErrorDetail.value = error instanceof Error ? error.message : String(error)
     } finally {
       loading.value = false
     }

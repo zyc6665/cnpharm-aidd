@@ -1,15 +1,57 @@
 """Typed, versioned research Artifact persistence models."""
 
-from sqlalchemy import BigInteger, Boolean, Column, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    JSON,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import relationship
 
+from app.artifact_standards.asset_types import ASSET_ARTIFACT_TYPE_CHECK_SQL
 from app.database.base import Base, TimestampMixin, UUIDMixin
 
 
 class Artifact(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "artifacts"
+    __table_args__ = (
+        # ``artifact_type`` 是资产根的判别字段，必须对**所有**写入路径生效：
+        # 上传、标准产物持久化、执行回传、导入 staging 都会落这张表，其中执行回传
+        # 不经过 Pydantic schema。DB CHECK 是唯一能覆盖全部入口的真值约束
+        # （取值来自 ``app.artifact_standards.asset_types`` 单一真源）。
+        CheckConstraint(
+            ASSET_ARTIFACT_TYPE_CHECK_SQL,
+            name="ck_artifacts_artifact_type_asset_enum",
+        ),
+        # 三列身份不变量（DB 层）：standard_type 只能为 NULL（非标准产物）或等于
+        # artifact_type（标准产物）。semantic_type == artifact_type 由服务层统一解析器
+        # 保证而不落成 CHECK——存量的历史行/测试夹具合法地用 ``type@vN`` 表达版本，
+        # 硬 CHECK 会拒绝这些行（数据事实见 app/services/artifact_identity.py 文档）。
+        CheckConstraint(
+            "standard_type IS NULL OR standard_type = artifact_type",
+            name="ck_artifacts_standard_type_matches_artifact",
+        ),
+        # 项目资产列表：project_id + artifact_type 过滤、按 updated_at 倒序翻页。
+        Index(
+            "ix_artifacts_project_type_updated",
+            "project_id",
+            "artifact_type",
+            "updated_at",
+        ),
+        # 产物列表游标（keyset）翻页的排序键：(created_at DESC, id DESC) 全序。
+        # 刻意不用 updated_at——它不是只增的，深页会漏行/重复。
+        Index("ix_artifacts_project_created_id", "project_id", "created_at", "id"),
+    )
 
-    project_id = Column(String(36), ForeignKey("projects.id"), nullable=False, index=True)
+    project_id = Column(String(36), ForeignKey("projects.id"), nullable=False)
     created_by = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     artifact_type = Column(String(100), nullable=False, index=True)
     semantic_type = Column(String(100), nullable=False, index=True)
@@ -38,11 +80,21 @@ class Artifact(Base, UUIDMixin, TimestampMixin):
 
 class ArtifactVersion(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "artifact_versions"
+    # 只在「版本维度」保留 (artifact_id, version) 唯一约束：这是并发取号正确性所需。
+    # 刻意不加 (artifact_id, sha256) 唯一约束 —— 该表是只追加的生产留痕表，不同任务
+    # 产出相同字节时必须各自留下一行来源（version），同内容只是复用同一个存储 blob。
     __table_args__ = (
         UniqueConstraint("artifact_id", "version", name="uq_artifact_versions_artifact_version"),
+        # 版本查重 / 去重命中：artifact_id + sha256 + status，避免只按 sha256 全表扫。
+        Index(
+            "ix_artifact_versions_artifact_sha_status",
+            "artifact_id",
+            "sha256",
+            "status",
+        ),
     )
 
-    artifact_id = Column(String(36), ForeignKey("artifacts.id"), nullable=False, index=True)
+    artifact_id = Column(String(36), ForeignKey("artifacts.id"), nullable=False)
     created_by = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     version = Column(Integer, nullable=False)
     filename = Column(String(255), nullable=False)
@@ -58,6 +110,12 @@ class ArtifactVersion(Base, UUIDMixin, TimestampMixin):
     summary_json = Column(JSON, nullable=False, default=dict)
     metrics_json = Column(JSON, nullable=False, default=dict)
     expires_at = Column(DateTime, nullable=True, index=True)
+    source_task_id = Column(String(36), nullable=True, index=True)
+    source_attempt_id = Column(String(64), nullable=True)
+    source_tool_version_id = Column(String(36), nullable=True)
+    storage_tier = Column(
+        String(16), nullable=False, default="standard", server_default="standard"
+    )
 
     artifact = relationship("Artifact", back_populates="versions", foreign_keys=[artifact_id])
     files = relationship(
@@ -79,7 +137,7 @@ class ArtifactVersionFile(Base, UUIDMixin, TimestampMixin):
     )
 
     artifact_version_id = Column(
-        String(36), ForeignKey("artifact_versions.id"), nullable=False, index=True
+        String(36), ForeignKey("artifact_versions.id"), nullable=False
     )
     role = Column(String(100), nullable=False, index=True)
     file_id = Column(String(36), ForeignKey("files.id"), nullable=False, index=True)

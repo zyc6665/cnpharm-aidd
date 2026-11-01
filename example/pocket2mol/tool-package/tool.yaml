@@ -1,0 +1,125 @@
+api_version: aidd.sciminer/tool-package
+kind: ToolPackage
+metadata:
+  slug: pocket2mol-pocket-ligand-generation
+  name: Pocket2Mol Pocket Ligand Generation
+  version: 0.1.2
+  description: Adapt Pocket2Mol ligand generation to standard molecule table and ligand artifacts.
+artifacts:
+  inputs:
+    - name: pocket
+      type: binding_pocket@1
+      required: true
+  outputs:
+    - name: molecules
+      type: molecule_table@1
+      cardinality: one
+      required: true
+    - name: ligands
+      type: ligand_structure@1
+      cardinality: many
+      required: true
+    - name: report
+      type: run_report@1
+      cardinality: one
+      required: false
+parameters_schema:
+  type: object
+  properties:
+    num_samples:
+      type: integer
+      default: 100
+      minimum: 1
+    beam_size:
+      type: integer
+      default: 300
+      minimum: 1
+    max_steps:
+      type: integer
+      default: 50
+      minimum: 1
+    seed:
+      type: integer
+      default: 2020
+      minimum: 0
+  additionalProperties: false
+adapter:
+  input:
+    - input: pocket
+      method: mount_binding_pocket_primary_pdb_and_metadata
+  output:
+    - output: molecules
+      method: collect_generated_molecule_table
+      validator_profile: molecule_table_v1_core
+    - output: ligands
+      method: split_generated_ligands_to_ligand_structure_v1
+      validator_profile: ligand_structure_v1_core
+    - output: report
+      method: collect_adapter_report_json
+      validator_profile: run_report_v1_core
+exposure:
+  agent: true
+  workflow: true
+  direct_run: true
+runtime:
+  python: "3.10"
+  cuda: "11.8"
+  executor_support:
+    - ssh_docker_exec
+    - slurm
+    - k8s_job
+  selection_policy: "prefer container image by immutable digest; fallback to conda_pack only when the executor cannot run containers"
+  artifacts:
+    primary:
+      kind: container
+      image: registry.example/sciminer/pocket2mol-runtime:0.1.2
+      image_digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      includes:
+        - python
+        - cuda_runtime
+        - dependencies
+        - runtime_wrapper
+    fallback:
+      kind: conda_pack
+      uri: artifacts://model-envs/pocket2mol-pocket-ligand-generation/0.1.2/conda-env.tar.gz
+      sha256: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      includes:
+        - python
+        - dependencies
+  weights:
+    manifest_uri: artifacts://model-weights/pocket2mol-pocket-ligand-generation/0.1.2/weights.json
+    manifest_sha256: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  cache_policy:
+    key_fields:
+      - metadata.slug
+      - metadata.version
+      - runtime.artifacts.selected.digest_or_sha256
+      - runtime.weights.manifest_sha256
+    mutable_host_paths_forbidden: true
+variants:
+  - name: nvidia-cuda
+    accelerator: nvidia_cuda
+    executor_types:
+      - remote_job
+    entrypoint:
+      - runner/platform_run_v2.sh
+    resources:
+      cpu: 8
+      memory_mb: 24576
+      gpu_memory_mb: 24576
+      devices:
+        - nvidia.com/gpu
+      driver: ">=535"
+    validation_status: unvalidated
+    hardware_validated: false
+  - name: cpu
+    accelerator: cpu
+    executor_types:
+      - remote_job
+    entrypoint:
+      - runner/platform_run_v2.sh
+    resources:
+      cpu: 8
+      memory_mb: 24576
+    validation_status: unvalidated
+    hardware_validated: false

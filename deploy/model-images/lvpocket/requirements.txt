@@ -24,3 +24,9 @@ openbabel-wheel
 # 缺任何一个都会在 import 阶段 ModuleNotFoundError，而不是在推理时。
 seaborn
 scikit-image
+
+# 平台适配层把产物上传到对象存储，object_storage.py 直接 import minio。
+# 版本与后端 backend/requirements.txt 对齐；缺它会「推理跑完、上传阶段才报
+# ModuleNotFoundError」，从日志看像是模型失败，实际是收尾环节缺依赖。
+minio==7.2.3
+

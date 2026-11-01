@@ -48,11 +48,16 @@ export interface AdminUserUpdateParams {
 }
 
 export interface AdminUserCreateParams {
-  email: string
+  /** 账号名（必填），全局唯一 */
+  username: string
+  /** 邮箱可选；LDAP 用户可为空 */
+  email?: string
   display_name?: string
-  password: string
+  password?: string
   role?: string
   status?: string
+  /** 认证来源：本地口令或企业 LDAP */
+  auth_source: 'local' | 'ldap'
 }
 
 export interface AdminResetUserPasswordParams {

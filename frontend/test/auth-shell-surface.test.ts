@@ -13,11 +13,11 @@ function readSource(relativePath: string): string {
 test('认证页应复用统一 AuthShell 页面外壳', () => {
   assert.equal(existsSync(resolve(rootDir, 'src/components/auth/AuthShell.vue')), true)
 
-  for (const relativePath of [
-    'src/views/auth/Login.vue',
-    'src/views/auth/Register.vue',
-    'src/views/auth/ForgotPassword.vue'
-  ]) {
+  // 自助注册与找回密码已下线，仅保留登录页
+  assert.equal(existsSync(resolve(rootDir, 'src/views/auth/Register.vue')), false)
+  assert.equal(existsSync(resolve(rootDir, 'src/views/auth/ForgotPassword.vue')), false)
+
+  for (const relativePath of ['src/views/auth/Login.vue']) {
     const source = readSource(relativePath)
 
     assert.equal(source.includes('AuthShell'), true, relativePath)

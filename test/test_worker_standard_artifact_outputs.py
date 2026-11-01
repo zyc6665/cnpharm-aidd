@@ -78,7 +78,7 @@ async def worker_standard_db_factory():
 def _v2_manifest() -> dict:
     slug = "worker-standard-tool"
     return {
-        "api_version": "aidd.sciminer/tool-package.v2",
+        "api_version": "aidd.sciminer/tool-package",
         "kind": "ToolPackage",
         "metadata": {
             "slug": slug,
@@ -292,7 +292,7 @@ def _molecule_table_manifest(
     output_name: str,
 ) -> dict:
     return {
-        "api_version": "aidd.sciminer/tool-package.v2",
+        "api_version": "aidd.sciminer/tool-package",
         "kind": "ToolPackage",
         "metadata": {"slug": slug, "name": slug, "version": "1.0.0"},
         "artifacts": {
@@ -381,7 +381,7 @@ async def test_worker_persists_standard_result_v2_as_artifact_versions(
         file_ids = [residue.id, atom.id, metadata.id]
         await db.commit()
         result_payload = {
-            "result_version": "aidd.sciminer/result.v2",
+            "result_version": "aidd.sciminer/result",
             "artifacts": {
                 "pocket": {
                     "name": "Top pocket",
@@ -432,7 +432,7 @@ async def test_worker_persists_standard_result_v2_as_artifact_versions(
             )
         ).scalar_one()
 
-    assert result["result"]["result_version"] == "aidd.sciminer/result.v2"
+    assert result["result"]["result_version"] == "aidd.sciminer/result"
     assert task_record.progress == 100.0
     assert task_record.progress_message == "任务执行成功"
     assert task_output.file_ids == file_ids
@@ -466,16 +466,16 @@ def expect_molp_pc_scientific_metadata(
         "evidence_level": "engineering_smoke_only",
         "applicability_domain_status": "unknown",
         "unit_or_label_policy": "per_endpoint_definition_or_unknown",
-        "model_card_ref": "example/MolP-PC/tool-package-v2/docs/model-card.md",
-        "verification_record_ref": "example/MolP-PC/tool-package-v2/docs/verification-record.md",
+        "model_card_ref": "example/MolP-PC/tool-package/docs/model-card.md",
+        "verification_record_ref": "example/MolP-PC/tool-package/docs/verification-record.md",
     }
 
 
 def expect_molp_pc_report_metadata(*, source_task_id: str) -> dict:
     return {
         "source_task_id": source_task_id,
-        "model_card_ref": "example/MolP-PC/tool-package-v2/docs/model-card.md",
-        "verification_record_ref": "example/MolP-PC/tool-package-v2/docs/verification-record.md",
+        "model_card_ref": "example/MolP-PC/tool-package/docs/model-card.md",
+        "verification_record_ref": "example/MolP-PC/tool-package/docs/verification-record.md",
         "evidence_level": "engineering_smoke_only",
     }
 
@@ -524,7 +524,7 @@ async def test_worker_rejects_invalid_standard_result_without_persisting_artifac
         return {
             "success": True,
             "result": {
-                "result_version": "aidd.sciminer/result.v2",
+                "result_version": "aidd.sciminer/result",
                 "artifacts": {
                     "pocket": {
                         "name": "Top pocket",
@@ -946,7 +946,7 @@ async def test_worker_persists_builtin_standard_outputs(
         )
         file_ids = [residue.id, atom.id, metadata.id]
         result_payload = {
-            "result_version": "aidd.sciminer/result.v2",
+            "result_version": "aidd.sciminer/result",
             "artifacts": {
                 "pocket": {
                     "name": "Top pocket",

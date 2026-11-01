@@ -8,16 +8,22 @@ module is the writer that hook was waiting for.
 
 Two design constraints decide the shape:
 
-* **Audit must never block or break business code** (docs/04 §3.2.2: 审计日志为
-  最终一致，写入失败不阻断业务). ``AuditLogger`` calls ``db_writer`` synchronously
-  from inside request handlers, so the writer must not await. It enqueues instead,
-  and a single background task drains the queue with its own session.
-* **Dropping is preferable to stalling.** If the queue is full the event is
-  dropped with a warning rather than applying back-pressure to the request path.
-
-The file trail stays enabled: it is the only record that survives a database
-outage, and the two destinations are compared during acceptance (docs/12
-TC-NFR-04).
+* **The file trail is the first write target; this table is only the index layer.**
+  ``AuditLogger.log()`` writes the rotating JSON file *before* it calls
+  ``db_writer``, so when the bounded queue is full the event is already durably
+  recorded in the file — what a full queue loses is *queryability* (the row in
+  ``audit_logs``), never the audit record itself.
+* **Never block or break business code** (docs/04 §3.2.2: 审计日志为最终一致，
+  写入失败不阻断业务). ``AuditLogger`` calls ``db_writer`` synchronously from
+  inside request handlers, so the writer must not await: it enqueues, and a single
+  background task drains the queue with its own session. A full queue increments
+  ``dropped`` and warns once per process; it never raises.
+* **No synchronous dead-letter table.** An earlier draft wrote overflow to an
+  append-only table through a second synchronous engine; that would silently fail
+  on PostgreSQL (the configured async DSN needs ``psycopg`` while only ``asyncpg``
+  is installed) — a guarantee that looks real but is not. If the index later needs
+  to be complete, replay the file trail offline instead of adding a sync write on
+  the request path.
 """
 
 from __future__ import annotations
@@ -80,10 +86,17 @@ def event_to_row(event: AuditEvent) -> dict[str, Any]:
 class AuditDbWriter:
     """Queue-backed writer that persists audit events into ``audit_logs``."""
 
-    def __init__(self, *, queue_size: int = DEFAULT_QUEUE_SIZE) -> None:
+    def __init__(
+        self,
+        *,
+        queue_size: int = DEFAULT_QUEUE_SIZE,
+    ) -> None:
         self._queue: asyncio.Queue[AuditEvent] | None = None
         self._worker: asyncio.Task[None] | None = None
         self._queue_size = queue_size
+        self._closing = False
+        #: 每个进程只告警一次，避免队列长期满载时刷屏。
+        self._drop_warned = False
         self.dropped = 0
         self.written = 0
         self.failed = 0
@@ -94,13 +107,26 @@ class AuditDbWriter:
         """Create the queue and background drainer inside the running loop."""
         if self._worker is not None:
             return
+        self._closing = False
         self._queue = asyncio.Queue(maxsize=self._queue_size)
         self._worker = asyncio.create_task(self._drain(), name="audit-log-writer")
 
     async def stop(self) -> None:
-        """Flush what is queued, then cancel the drainer."""
+        """Stop accepting new events, drain the queue, then cancel the drainer."""
         if self._worker is None:
             return
+        # 1) Reject new enqueues so the queue can actually reach empty.
+        self._closing = True
+        queue = self._queue
+        if queue is not None:
+            try:
+                await asyncio.wait_for(queue.join(), timeout=10.0)
+            except asyncio.TimeoutError:  # pragma: no cover - defensive
+                logger.warning(
+                    "Audit queue did not drain within 10s; %s event(s) left",
+                    queue.qsize(),
+                )
+        # 2) Only now tear the worker down.
         worker, self._worker = self._worker, None
         worker.cancel()
         try:
@@ -112,6 +138,12 @@ class AuditDbWriter:
 
     def __call__(self, event: AuditEvent) -> None:
         """``AuditLogger`` calls this synchronously; it must not block."""
+        if self._closing:
+            # Shutdown in progress: the event is already in the file trail; only
+            # its index row is lost. Count it instead of enqueueing into a queue
+            # that will no longer be drained.
+            self._count_drop()
+            return
         queue = self._queue
         if queue is None:
             logger.debug("Audit DB writer not started; event stays in the file trail")
@@ -119,13 +151,23 @@ class AuditDbWriter:
         try:
             queue.put_nowait(event)
         except asyncio.QueueFull:
-            self.dropped += 1
-            if self.dropped % 100 == 1:
-                logger.warning(
-                    "Audit queue full; dropped %s audit event(s) so far", self.dropped
-                )
+            self._count_drop()
 
     # -- internals ---------------------------------------------------------
+
+    def _count_drop(self) -> None:
+        """Record an event that could not be indexed; warn once per process.
+
+        文件日志已在 ``AuditLogger.log()`` 里先于 db_writer 写入，所以这里丢的只是
+        「可查询性」，不是审计记录本身。每个进程只告警一次，避免刷屏。
+        """
+        self.dropped += 1
+        if not self._drop_warned:
+            self._drop_warned = True
+            logger.warning(
+                "审计队列已满，事件已写入文件日志但未进索引库（累计 %s 条）",
+                self.dropped,
+            )
 
     async def _drain(self) -> None:
         from app.database.session import async_session_factory
@@ -163,4 +205,8 @@ def configure_audit_db_writer(writer: AuditDbWriter | None = None) -> AuditDbWri
     return sink
 
 
-__all__ = ["AuditDbWriter", "configure_audit_db_writer", "event_to_row"]
+__all__ = [
+    "AuditDbWriter",
+    "configure_audit_db_writer",
+    "event_to_row",
+]

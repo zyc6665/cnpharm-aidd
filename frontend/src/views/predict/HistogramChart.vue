@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as echarts from 'echarts'
 import { buildHistogram } from './histogram'
+import { chartColors } from '@/utils/chartTheme'
 
 const props = withDefaults(
   defineProps<{ values: number[]; title?: string; bins?: number }>(),
@@ -41,7 +42,7 @@ function render(): void {
           type: 'bar',
           data: bins.map(bin => bin.count),
           barWidth: '62%',
-          itemStyle: { color: '#5b8ff9' }
+          itemStyle: { color: chartColors.primary }
         }
       ]
     },

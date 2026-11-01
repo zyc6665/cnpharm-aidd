@@ -50,10 +50,11 @@ from app.models.users import User as UserModel  # noqa: E402
 from app.models.users import UserRole, UserStatus  # noqa: E402
 from app.schemas.tasks import TaskCreate, TaskInputSchema  # noqa: E402
 from app.tasks.service import create_and_schedule_tool_task, prepare_tool_task_preview  # noqa: E402
-from app.tool_packages.schemas import ToolPackageV2Manifest  # noqa: E402
+from app.services.standard_input_uploads import materialize_standard_input_uploads  # noqa: E402
+from app.tool_packages.schemas import ToolPackageManifest  # noqa: E402
 
 
-def _minimal_tool_package_v2_manifest(
+def _minimal_validated_tool_package_manifest(
     *,
     input_name: str = "molecules",
     input_type: str = "molecule_table@1",
@@ -61,7 +62,7 @@ def _minimal_tool_package_v2_manifest(
     output_type: str = "molecule_table@1",
 ) -> dict:
     return {
-        "api_version": "aidd.sciminer/tool-package.v2",
+        "api_version": "aidd.sciminer/tool-package",
         "kind": "ToolPackage",
         "metadata": {
             "slug": "molp-pc",
@@ -169,7 +170,7 @@ async def _create_v2_standard_upload_task(
         version="2.0.0",
         config={
             "type": "ssh_job",
-            "tool_package_manifest": _minimal_tool_package_v2_manifest(
+            "tool_package_manifest": _minimal_validated_tool_package_manifest(
                 input_name=input_name,
                 input_type=input_type,
                 output_name="report",
@@ -377,7 +378,7 @@ async def test_tool_package_v2_standard_uploads_materialize_to_input_bindings(
         version="2.0.0",
         config={
             "type": "ssh_job",
-            "tool_package_manifest": _minimal_tool_package_v2_manifest(),
+            "tool_package_manifest": _minimal_validated_tool_package_manifest(),
         },
         is_active=True,
         deprecated=False,
@@ -475,8 +476,8 @@ async def test_tool_package_v2_standard_uploads_materialize_to_input_bindings(
     request = await build_standard_execution_request(
         db_session,
         task=task,
-        tool_package_manifest=ToolPackageV2Manifest.model_validate(
-            _minimal_tool_package_v2_manifest()
+        tool_package_manifest=ToolPackageManifest.model_validate(
+            _minimal_validated_tool_package_manifest()
         ),
         input_bindings=task.extra_data["input_bindings"],
         parameters={},
@@ -519,7 +520,7 @@ async def test_tool_package_v2_standard_uploads_trim_slot_and_file_ids(
         version="2.0.0",
         config={
             "type": "ssh_job",
-            "tool_package_manifest": _minimal_tool_package_v2_manifest(),
+            "tool_package_manifest": _minimal_validated_tool_package_manifest(),
         },
         is_active=True,
         deprecated=False,
@@ -730,7 +731,7 @@ async def test_tool_package_v2_multi_upload_failure_does_not_partially_materiali
     db_session.add(owner)
     await db_session.flush()
 
-    manifest = _minimal_tool_package_v2_manifest(output_type="molecule_table@1")
+    manifest = _minimal_validated_tool_package_manifest(output_type="molecule_table@1")
     manifest["artifacts"]["inputs"].append(
         {"name": "ligand", "type": "ligand_structure@1", "required": True}
     )
@@ -825,7 +826,7 @@ async def test_tool_package_v2_prepare_preview_rejects_invalid_standard_upload_c
         version="2.0.0",
         config={
             "type": "ssh_job",
-            "tool_package_manifest": _minimal_tool_package_v2_manifest(
+            "tool_package_manifest": _minimal_validated_tool_package_manifest(
                 output_type="molecule_table@1"
             ),
         },
@@ -860,3 +861,70 @@ async def test_tool_package_v2_prepare_preview_rejects_invalid_standard_upload_c
 
     assert artifacts == []
     assert tasks == []
+
+
+@pytest.mark.asyncio
+async def test_standard_upload_materialization_is_idempotent(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    """同一份直传输入重复物化：复用同一个 Artifact 与版本，不新建、不撞唯一约束。
+
+    这正是把 `standard_input_uploads` 收编到 `ArtifactWriter` 要解决的问题——此前它
+    每次裸建 `Artifact` 并写死 `version=1`，同一槽位重复物化必然撞
+    `uq_artifact_versions_artifact_version`。
+    """
+    from app.models.artifacts import Artifact as ArtifactModel
+
+    protein_content = (
+        b"ATOM      1  N   MET A   1      11.104  13.207   9.508  1.00 20.00           N\n"
+        b"ATOM      2  CA  MET A   1      12.560  13.310   9.620  1.00 20.00           C\n"
+    )
+    context = await _create_v2_standard_upload_task(
+        db_session,
+        monkeypatch,
+        tmp_path,
+        input_name="protein",
+        input_type="protein_structure@1",
+        filename="protein.pdb",
+        content_type="chemical/x-pdb",
+        content=protein_content,
+    )
+    first_version = context.artifact_version
+    first_roles = sorted(item.role for item in context.version_files)
+
+    tool = await db_session.get(ToolModel, context.task.tool_id)
+    tool_version = await db_session.get(ToolVersionModel, context.task.tool_version_id)
+    owner = await db_session.get(UserModel, context.task.user_id)
+    assert tool is not None and tool_version is not None and owner is not None
+
+    materialized = await materialize_standard_input_uploads(
+        db_session,
+        current_user=owner,
+        tool=tool,
+        tool_version=tool_version,
+        project_id=context.task.extra_data.get("project_id"),
+        standard_input_uploads={"protein": context.upload_file.id},
+    )
+    await db_session.flush()
+
+    assert materialized == {"protein": first_version.id}
+    artifacts = (await db_session.execute(select(ArtifactModel))).scalars().all()
+    assert len(artifacts) == 1
+    versions = (
+        await db_session.execute(
+            select(ArtifactVersionModel).where(
+                ArtifactVersionModel.artifact_id == first_version.artifact_id
+            )
+        )
+    ).scalars().all()
+    assert [item.id for item in versions] == [first_version.id]
+    links = (
+        await db_session.execute(
+            select(ArtifactVersionFileModel).where(
+                ArtifactVersionFileModel.artifact_version_id == first_version.id
+            )
+        )
+    ).scalars().all()
+    assert sorted(item.role for item in links) == first_roles

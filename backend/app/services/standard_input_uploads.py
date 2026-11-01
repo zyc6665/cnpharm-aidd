@@ -7,10 +7,15 @@ import json
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.files.writer import store_file_bytes
-from app.models.artifacts import Artifact, ArtifactVersion, ArtifactVersionFile
 from app.models.files import File as FileModel
 from app.models.tools import Tool, ToolVersion
 from app.models.users import User
+from app.services.artifact_identity import resolve_identity_full
+from app.services.artifact_writer import (
+    attach_version_files,
+    upsert_artifact,
+    upsert_version,
+)
 from app.services.standard_input_upload_plans import (
     StandardInputUploadPlan,
     accepts_materialized_standard_uploads,
@@ -55,14 +60,24 @@ async def materialize_standard_input_uploads(
     for plan in plans:
         if not plan.uploaded_file.project_id:
             plan.uploaded_file.project_id = project_id
-        artifact = await _create_input_artifact(
+        # 标准直传输入同样是标准产物：三列身份交给统一解析器，版本只走 standard_version。
+        resolved_type, resolved_semantic, resolved_standard, resolved_version = (
+            resolve_identity_full(
+                plan.standard_ref.type,
+                standard_type=plan.standard_ref.type,
+                standard_version=plan.standard_ref.version,
+            )
+        )
+        artifact, _artifact_created = await upsert_artifact(
             db,
-            current_user=current_user,
             project_id=project_id,
-            slot_name=plan.slot_name,
-            standard_type=plan.standard_ref.type,
-            standard_version=plan.standard_ref.version,
-            filename=plan.uploaded_file.filename,
+            artifact_type=resolved_type,
+            semantic_type=resolved_semantic,
+            name=f"{plan.slot_name}: {plan.uploaded_file.filename}",
+            description="由工具详情页标准 Artifact 直传输入自动创建。",
+            standard_type=resolved_standard,
+            standard_version=resolved_version,
+            created_by=str(current_user.id),
         )
         role_files = await _build_role_files(
             db,
@@ -74,20 +89,35 @@ async def materialize_standard_input_uploads(
             uploaded_file=plan.uploaded_file,
             metadata=plan.metadata,
         )
-        version = await _create_input_artifact_version(
+        # 走 ArtifactWriter：版本号由它分配（不再写死 version=1），同内容重复物化时
+        # 按 sha256 复用既有版本，角色文件写入也是幂等的。
+        version, _version_created = await upsert_version(
             db,
-            current_user=current_user,
             artifact=artifact,
-            standard_ref=plan.standard_ref.ref,
-            slot_name=plan.slot_name,
-            primary_file=plan.uploaded_file,
-            metadata=plan.metadata,
-            role_files=role_files,
+            filename=plan.uploaded_file.filename,
+            content_type=plan.uploaded_file.content_type,
+            size_bytes=plan.uploaded_file.size_bytes,
+            sha256=plan.uploaded_file.sha256,
+            storage_key=plan.uploaded_file.storage_path,
+            manifest_json={
+                "type": plan.standard_ref.ref,
+                "input_name": plan.slot_name,
+                "files": _role_file_manifest(role_files),
+                "metadata": plan.metadata,
+            },
+            summary_json={},
+            metrics_json={},
+            validation_status="pending",
+            created_by=str(current_user.id),
+            source=None,
         )
-        await _link_role_files(
+        await attach_version_files(
             db,
-            artifact_version_id=version.id,
-            role_files=role_files,
+            version=version,
+            files=[
+                (role, file_record.id, is_primary)
+                for role, file_record, is_primary in role_files
+            ],
         )
         artifact.latest_version_id = version.id
         artifact.latest_version = version
@@ -95,31 +125,6 @@ async def materialize_standard_input_uploads(
 
     await db.flush()
     return materialized
-
-
-async def _create_input_artifact(
-    db: AsyncSession,
-    *,
-    current_user: User,
-    project_id: str,
-    slot_name: str,
-    standard_type: str,
-    standard_version: int,
-    filename: str,
-) -> Artifact:
-    artifact = Artifact(
-        project_id=project_id,
-        created_by=str(current_user.id),
-        artifact_type=standard_type,
-        semantic_type=standard_type,
-        standard_type=standard_type,
-        standard_version=standard_version,
-        name=f"{slot_name}: {filename}",
-        description="由工具详情页标准 Artifact 直传输入自动创建。",
-    )
-    db.add(artifact)
-    await db.flush()
-    return artifact
 
 
 async def _build_role_files(
@@ -149,43 +154,6 @@ async def _build_role_files(
     return role_files
 
 
-async def _create_input_artifact_version(
-    db: AsyncSession,
-    *,
-    current_user: User,
-    artifact: Artifact,
-    standard_ref: str,
-    slot_name: str,
-    primary_file: FileModel,
-    metadata: dict[str, object],
-    role_files: list[RoleFile],
-) -> ArtifactVersion:
-    version = ArtifactVersion(
-        artifact_id=artifact.id,
-        created_by=str(current_user.id),
-        version=1,
-        filename=primary_file.filename,
-        content_type=primary_file.content_type,
-        size_bytes=primary_file.size_bytes,
-        sha256=primary_file.sha256,
-        storage_key=primary_file.storage_path,
-        status="available",
-        validation_status="pending",
-        validation_errors=[],
-        manifest_json={
-            "type": standard_ref,
-            "input_name": slot_name,
-            "files": _role_file_manifest(role_files),
-            "metadata": metadata,
-        },
-        summary_json={},
-        metrics_json={},
-    )
-    db.add(version)
-    await db.flush()
-    return version
-
-
 def _role_file_manifest(role_files: list[RoleFile]) -> dict[str, dict]:
     return {
         role: {
@@ -195,24 +163,6 @@ def _role_file_manifest(role_files: list[RoleFile]) -> dict[str, dict]:
         }
         for role, file_record, _is_primary in role_files
     }
-
-
-async def _link_role_files(
-    db: AsyncSession,
-    *,
-    artifact_version_id: str,
-    role_files: list[RoleFile],
-) -> None:
-    for sort_order, (role, file_record, is_primary) in enumerate(role_files):
-        db.add(
-            ArtifactVersionFile(
-                artifact_version_id=artifact_version_id,
-                role=role,
-                file_id=file_record.id,
-                is_primary=is_primary,
-                sort_order=sort_order,
-            )
-        )
 
 
 async def _create_standard_upload_metadata_file(

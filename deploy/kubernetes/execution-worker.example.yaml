@@ -14,6 +14,7 @@ data:
   ENVIRONMENT: production
   DEBUG: "false"
   CORS_ORIGINS: '["https://sciminer.example.invalid"]'
+  ALLOWED_HOSTS: '["sciminer.example.invalid"]'
   CACHE_BACKEND: redis
   REDIS_HOST: sciminer-redis.sciminer-system.svc.cluster.local
   REDIS_PORT: "6379"
@@ -21,7 +22,7 @@ data:
   STORAGE_BACKEND: minio
   MINIO_ENDPOINT: sciminer-minio.sciminer-storage.svc.cluster.local:9000
   MINIO_BUCKET: scitool-files
-  MINIO_SECURE: "false"
+  MINIO_SECURE: "true"
   TASK_EXECUTION_BACKEND: celery
   EXECUTOR_ENABLED_K8S: "true"
   EXECUTOR_ENABLED_SSH: "true"
@@ -32,7 +33,7 @@ data:
   K8S_ADAPTER_JOB_NAME_PREFIX: sciminer
   K8S_ADAPTER_API_SERVER: https://kubernetes.default.svc
   K8S_ADAPTER_REQUEST_TIMEOUT_SECONDS: "30"
-  K8S_ADAPTER_OBJECT_STORAGE_ENDPOINT: http://sciminer-minio.sciminer-storage.svc.cluster.local:9000
+  K8S_ADAPTER_OBJECT_STORAGE_ENDPOINT: https://sciminer-minio.sciminer-storage.svc.cluster.local:9000
   K8S_ADAPTER_OBJECT_STORAGE_BUCKET: scitool-files
   K8S_ADAPTER_OBJECT_STORAGE_SECRET_REF: sciminer-minio-client
   K8S_ADAPTER_OBJECT_STORAGE_INPUT_PREFIX: inputs

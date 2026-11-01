@@ -24,6 +24,7 @@ from app.common.exceptions import (
     ValidationException,
 )
 from app.common.responses import paginated_response, success_response
+from app.common.search import DEFAULT_KEYWORD_MAX_LENGTH, LIKE_ESCAPE, like_pattern
 from app.database.session import get_db
 from app.models.statistics import ToolStatistics
 from app.models.tools import (
@@ -106,7 +107,7 @@ async def list_tools(
     page_size: int = Query(20, ge=1, le=100),
     category: Optional[str] = None,
     tag: Optional[str] = None,
-    search: Optional[str] = None,
+    search: Optional[str] = Query(None, max_length=DEFAULT_KEYWORD_MAX_LENGTH),
     status: Optional[str] = None,
     view: Optional[Literal["public", "favorites"]] = Query(
         None, description="视图类型"
@@ -149,12 +150,12 @@ async def list_tools(
     if tag:
         query = query.where(Tool.tags.any(Tag.name == tag))
     if search:
-        pattern = f"%{search}%"
+        pattern = like_pattern(search)
         query = query.where(
             or_(
-                Tool.name.ilike(pattern),
-                Tool.description.ilike(pattern),
-                Tool.slug.ilike(pattern),
+                Tool.name.ilike(pattern, escape=LIKE_ESCAPE),
+                Tool.description.ilike(pattern, escape=LIKE_ESCAPE),
+                Tool.slug.ilike(pattern, escape=LIKE_ESCAPE),
             )
         )
     total = (

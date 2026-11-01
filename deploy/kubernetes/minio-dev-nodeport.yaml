@@ -1,3 +1,7 @@
+# 已弃用的开发访问入口：仅保留兼容占位，默认 kustomization 不再引用。
+# 需要从宿主访问 MinIO API/Console 时：
+#   kubectl -n sciminer-storage port-forward svc/sciminer-minio 9000:9000 9001:9001
+# 不要恢复 NodePort 暴露对象存储控制台。
 apiVersion: v1
 kind: Service
 metadata:
@@ -8,7 +12,7 @@ metadata:
     app.kubernetes.io/part-of: sciminer
     sciminer.io/purpose: development-access
 spec:
-  type: NodePort
+  type: ClusterIP
   selector:
     app.kubernetes.io/name: minio
     app.kubernetes.io/part-of: sciminer
@@ -16,8 +20,6 @@ spec:
     - name: api
       port: 9000
       targetPort: api
-      nodePort: 30900
     - name: console
       port: 9001
       targetPort: console
-      nodePort: 30901

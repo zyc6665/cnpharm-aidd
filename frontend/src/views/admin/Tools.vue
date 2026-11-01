@@ -59,7 +59,30 @@
     </AppFilterBar>
 
     <a-card>
+      <SkeletonList v-if="loading && tools.length === 0" :count="6" />
+
+      <AppInlineError
+        v-else-if="loadError"
+        data-testid="tools-error"
+        :title="t('admin.listStates.toolsLoadError')"
+        :description="t('common.listStates.errorDescription')"
+        :detail="loadErrorDetail"
+      >
+        <a-button size="small" @click="fetchTools">{{ t('common.listStates.retry') }}</a-button>
+      </AppInlineError>
+
+      <AppEmptyState
+        v-else-if="tools.length === 0"
+        :title="t('admin.listStates.toolsEmptyTitle')"
+        :description="t('admin.listStates.toolsEmptyHint')"
+      >
+        <a-button type="primary" @click="openToolPackages">
+          {{ t('admin.listStates.goToolPackages') }}
+        </a-button>
+      </AppEmptyState>
+
       <a-table
+        v-else
         :scroll="{ x: 'max-content' }"
         :columns="columns"
         :data-source="tools"
@@ -128,6 +151,9 @@ import { useI18n } from 'vue-i18n'
 import { message, Modal } from 'ant-design-vue'
 import AppFilterBar from '@/components/common/AppFilterBar.vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
+import AppEmptyState from '@/components/common/AppEmptyState.vue'
+import AppInlineError from '@/components/common/AppInlineError.vue'
+import SkeletonList from '@/components/common/SkeletonList.vue'
 import {
   DeleteOutlined,
   EditOutlined,
@@ -146,6 +172,8 @@ const { t } = useI18n()
 const router = useRouter()
 
 const loading = ref(false)
+const loadError = ref(false)
+const loadErrorDetail = ref('')
 const categories = ref<Category[]>([])
 const tools = ref<Tool[]>([])
 
@@ -190,6 +218,8 @@ const fetchCategories = async () => {
 
 const fetchTools = async () => {
   loading.value = true
+  loadError.value = false
+  loadErrorDetail.value = ''
   try {
     const res = await getToolList({
       page: pagination.current,
@@ -200,6 +230,11 @@ const fetchTools = async () => {
     })
     tools.value = res.data.items
     pagination.total = res.data.total
+  } catch (error) {
+    tools.value = []
+    pagination.total = 0
+    loadError.value = true
+    loadErrorDetail.value = error instanceof Error ? error.message : String(error)
   } finally {
     loading.value = false
   }
@@ -246,7 +281,7 @@ const handleDelete = (tool: Tool) => {
 }
 
 onMounted(async () => {
-  await Promise.all([fetchCategories(), fetchTools()])
+  await Promise.allSettled([fetchCategories(), fetchTools()])
 })
 </script>
 

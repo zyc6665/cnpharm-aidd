@@ -10,6 +10,14 @@ class ExecutionRecord(Base, UUIDMixin, TimestampMixin):
 
     project_id = Column(String(36), ForeignKey("projects.id"), nullable=False, index=True)
     requested_by = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    #: 所属任务。历史记录通过 request_snapshot['task_id'] 间接关联（迁移 20261031_01
+    #: 回填）；任务归档删除时置 NULL，执行审计记录本身保留（不级联删除）。
+    task_id = Column(
+        String(36),
+        ForeignKey("tasks.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     tool_package_version_id = Column(
         String(36), ForeignKey("tool_package_versions.id"), nullable=False, index=True
     )

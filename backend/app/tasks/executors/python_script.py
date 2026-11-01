@@ -14,6 +14,36 @@ from app.tasks.executors.script_trust import validate_script_trust
 
 logger = logging.getLogger(__name__)
 
+# 脚本运行在平台主机进程内，若原样继承 os.environ 会把数据库口令、缓存/对象存储
+# 密钥、JWT/加密密钥等平台机密暴露给工具脚本。这里按名称黑名单剥离敏感变量，
+# 只保留运行所需的通用环境（PATH/HOME/临时目录等）。
+_SENSITIVE_ENV_MARKERS = (
+    "SECRET",
+    "PASSWORD",
+    "PASSWD",
+    "TOKEN",
+    "API_KEY",
+    "PRIVATE_KEY",
+    "DATABASE_URL",
+    "REDIS_URL",
+    "MINIO",
+    "AWS_",
+    "JWT",
+    "ENCRYPTION_KEY",
+)
+
+
+def _build_script_env(work_dir: str) -> dict[str, str]:
+    """构造工具脚本的运行环境，剥离平台敏感变量并注入 PYTHONPATH。"""
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not any(marker in key.upper() for marker in _SENSITIVE_ENV_MARKERS)
+    }
+    env["PYTHONPATH"] = work_dir
+    return env
+
+
 
 def _configured_args(config: dict[str, Any]) -> list[str]:
     args = config.get("args", [])
@@ -57,7 +87,7 @@ class PythonScriptExecutor(BaseExecutor):
                 text=True,
                 timeout=timeout,
                 cwd=work_dir,
-                env={**os.environ, "PYTHONPATH": work_dir},
+                env=_build_script_env(work_dir),
             )
             if process.returncode != 0:
                 raise TaskExecutionError(

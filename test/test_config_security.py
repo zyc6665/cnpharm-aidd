@@ -34,6 +34,8 @@ def _production_runtime_settings(environment: str) -> dict[str, object]:
         "CELERY_BROKER_URL": "redis://:redis-password@redis:6379/1",
         "CELERY_RESULT_BACKEND": "redis://:redis-password@redis:6379/2",
         "TASK_EXECUTION_BACKEND": "celery",
+        "COOKIE_SECURE": True,
+        "ALLOWED_HOSTS": ["sciminer.example.com"],
     }
 
 
@@ -58,11 +60,11 @@ class TestCorsDefaults:
         )
         assert "*" not in json.loads(cors_line.removeprefix("CORS_ORIGINS="))
         assert "SETTINGS_ENCRYPTION_KEY=" in contents
-        assert "生产/预发布环境" in contents
+        assert "预发布/生产环境" in contents
         assert "独立" in contents
-        assert "自动生成临时密钥" not in contents
-        assert "SETTINGS_ENCRYPTION_KEY 缺失时回退到 JWT_SECRET_KEY" in contents
-        assert "二者都缺失时，加密操作会失败" in contents
+        assert "自动生成临时密钥" in contents
+        assert "加密操作会回退到 JWT_SECRET_KEY" in contents
+        assert "否则拒绝启动" in contents
 
 
 class TestKubernetesExecutionSettings:
@@ -354,10 +356,44 @@ class TestDeploymentCorsOrigins:
 
 
 class TestJWTSecretKey:
-    def test_development_allows_empty_jwt_secret(self):
-        """开发环境允许 JWT_SECRET_KEY 为空。"""
-        settings = Settings(ENVIRONMENT="development", JWT_SECRET_KEY="")
-        assert settings.JWT_SECRET_KEY == ""
+    def test_development_generates_ephemeral_jwt_secret_when_empty(self, caplog):
+        """开发环境 JWT_SECRET_KEY 为空时自动生成一次性随机密钥并告警。"""
+        with caplog.at_level("WARNING"):
+            settings = Settings(ENVIRONMENT="development", JWT_SECRET_KEY="")
+        assert settings.JWT_SECRET_KEY
+        assert len(settings.JWT_SECRET_KEY) >= 32
+        assert "JWT_SECRET_KEY is not configured" in caplog.text
+
+    def test_development_replaces_placeholder_jwt_secret(self, caplog):
+        """开发环境遇到占位符 JWT 密钥时告警并回退到随机值。"""
+        with caplog.at_level("WARNING"):
+            settings = Settings(
+                ENVIRONMENT="development", JWT_SECRET_KEY="change-me-in-production"
+            )
+        assert settings.JWT_SECRET_KEY != "change-me-in-production"
+        assert len(settings.JWT_SECRET_KEY) >= 32
+        assert "placeholder/example value" in caplog.text
+
+    @pytest.mark.parametrize("environment", ["staging", "production"])
+    def test_deployment_environment_rejects_placeholder_jwt_secret(self, environment):
+        """预发布/生产环境拒绝示例占位符 JWT 密钥。"""
+        with pytest.raises(ValueError, match="placeholder/example value"):
+            Settings(
+                ENVIRONMENT=environment,
+                JWT_SECRET_KEY="change-me-in-production-for-jwt",
+            )
+
+    @pytest.mark.parametrize("environment", ["staging", "production"])
+    def test_deployment_environment_rejects_placeholder_settings_encryption_key(
+        self, environment
+    ):
+        """预发布/生产环境拒绝示例占位符配置加密密钥。"""
+        with pytest.raises(ValueError, match="SETTINGS_ENCRYPTION_KEY must not use"):
+            Settings(
+                ENVIRONMENT=environment,
+                JWT_SECRET_KEY="j" * 32,
+                SETTINGS_ENCRYPTION_KEY="replace-with-a-real-settings-key-min-32-chars",
+            )
 
     def test_staging_rejects_short_jwt_secret(self):
         """预发布环境拒绝长度不足的 JWT_SECRET_KEY。"""
@@ -431,6 +467,31 @@ class TestJWTSecretKey:
                 CORS_ORIGINS=["*"],
                 JWT_SECRET_KEY="a" * 32,
                 SETTINGS_ENCRYPTION_KEY="e" * 32,
+            )
+
+
+class TestCookieSettings:
+    def test_development_cookie_defaults_allow_local_http(self):
+        """开发环境默认允许 http，且不设置 Domain。"""
+        settings = Settings(ENVIRONMENT="development")
+        assert settings.COOKIE_SECURE is False
+        assert settings.COOKIE_DOMAIN is None
+        assert settings.COOKIE_SAMESITE == "lax"
+
+    def test_production_rejects_insecure_cookie(self):
+        """生产环境仅允许 Secure Cookie，否则拒绝启动。"""
+        runtime = dict(_production_runtime_settings("production"))
+        runtime["COOKIE_SECURE"] = False
+        with pytest.raises(
+            ValueError, match="COOKIE_SECURE must be enabled in production environment"
+        ):
+            Settings(
+                ENVIRONMENT="production",
+                DEBUG=False,
+                CORS_ORIGINS=["https://sciminer.example.com"],
+                JWT_SECRET_KEY="a" * 32,
+                SETTINGS_ENCRYPTION_KEY="e" * 32,
+                **runtime,
             )
 
 
@@ -519,3 +580,48 @@ class TestSettingsEncryptionKey:
         """开发环境保留缺失配置加密密钥的兼容行为。"""
         settings = Settings(ENVIRONMENT="development", SETTINGS_ENCRYPTION_KEY=None)
         assert settings.SETTINGS_ENCRYPTION_KEY is None
+
+
+class TestDeploymentHardeningSettings:
+    """P2 配置加固：主机白名单、文档开关、限流后端与失败模式。"""
+
+    def _base(self, **overrides):
+        kwargs = {
+            "ENVIRONMENT": "production",
+            "DEBUG": False,
+            "CORS_ORIGINS": ["https://sciminer.example.com"],
+            "JWT_SECRET_KEY": "j" * 32,
+            "SETTINGS_ENCRYPTION_KEY": "e" * 32,
+            **_production_runtime_settings("production"),
+        }
+        kwargs.update(overrides)
+        return kwargs
+
+    def test_production_rejects_wildcard_or_missing_allowed_hosts(self):
+        for hosts in (["*"], [], ["  "]):
+            with pytest.raises(ValueError, match="ALLOWED_HOSTS"):
+                Settings(**self._base(ALLOWED_HOSTS=hosts))
+
+    def test_production_rejects_memory_rate_limit_backend(self):
+        with pytest.raises(ValueError, match="RATE_LIMIT_BACKEND"):
+            Settings(**self._base(RATE_LIMIT_BACKEND="memory"))
+
+    def test_production_rejects_fail_open_rate_limit(self):
+        with pytest.raises(ValueError, match="RATE_LIMIT_FAIL_MODE"):
+            Settings(**self._base(RATE_LIMIT_FAIL_MODE="open"))
+
+    def test_development_defaults_are_safe_and_overridable(self):
+        dev = Settings(ENVIRONMENT="development")
+        assert dev.docs_enabled is True
+        assert dev.resolved_rate_limit_backend == "memory"
+        assert dev.RATE_LIMIT_FAIL_MODE == "closed"
+
+        explicit = Settings(
+            ENVIRONMENT="development",
+            ENABLE_DOCS=False,
+            RATE_LIMIT_BACKEND="redis",
+            RATE_LIMIT_FAIL_MODE="open",
+        )
+        assert explicit.docs_enabled is False
+        assert explicit.resolved_rate_limit_backend == "redis"
+        assert explicit.RATE_LIMIT_FAIL_MODE == "open"

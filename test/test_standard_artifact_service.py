@@ -70,7 +70,7 @@ def binding_result_path(output_dir: Path) -> Path:
     path.write_text(
         json.dumps(
             {
-                "result_version": "aidd.sciminer/result.v2",
+                "result_version": "aidd.sciminer/result",
                 "artifacts": {
                     "pocket": {
                         "name": "Top pocket",
@@ -119,7 +119,7 @@ def ligand_result_path(output_dir: Path) -> Path:
     path.write_text(
         json.dumps(
             {
-                "result_version": "aidd.sciminer/result.v2",
+                "result_version": "aidd.sciminer/result",
                 "artifacts": {
                     "generated_ligands": [
                         {
@@ -363,3 +363,129 @@ async def test_service_rejects_invalid_relation_type(standard_db: AsyncSession):
             task=task,
             parsed_result=parsed,
         )
+
+
+@pytest.mark.asyncio
+async def test_service_writes_validated_relation_type(
+    standard_db: AsyncSession,
+    binding_result_path: Path,
+    output_dir: Path,
+):
+    """回归 B3：写库的 relation_type 必须是校验后的受控词表值，而非 declared_relation。"""
+    task = await _seed_task(standard_db)
+    parsed = parse_standard_result(
+        result_path=binding_result_path,
+        output_dir=output_dir,
+        declared_outputs=[
+            DeclaredArtifactOutput(name="pocket", type="binding_pocket@1"),
+            DeclaredArtifactOutput(name="report", type="run_report@1"),
+        ],
+    )
+
+    await create_artifact_versions_from_parsed_result(
+        standard_db,
+        task=task,
+        parsed_result=parsed,
+    )
+
+    lineage = (
+        await standard_db.execute(select(ArtifactLineage))
+    ).scalars().all()
+    assert len(lineage) == 1
+    assert lineage[0].relation_type == "describes"
+
+
+@pytest.mark.asyncio
+async def test_service_replay_reuses_artifact_identity(
+    standard_db: AsyncSession,
+    binding_result_path: Path,
+    output_dir: Path,
+):
+    """回归 B4：同一任务重放必须复用同一个 Artifact 根，而不是每次新建。"""
+    task = await _seed_task(standard_db)
+    parsed = parse_standard_result(
+        result_path=binding_result_path,
+        output_dir=output_dir,
+        declared_outputs=[
+            DeclaredArtifactOutput(name="pocket", type="binding_pocket@1"),
+            DeclaredArtifactOutput(name="report", type="run_report@1"),
+        ],
+    )
+
+    first = await create_artifact_versions_from_parsed_result(
+        standard_db, task=task, parsed_result=parsed
+    )
+    second = await create_artifact_versions_from_parsed_result(
+        standard_db, task=task, parsed_result=parsed
+    )
+
+    assert first.artifact_ids_by_ref == second.artifact_ids_by_ref
+    assert await standard_db.scalar(select(func.count(Artifact.id))) == 2
+    assert await standard_db.scalar(select(func.count(ArtifactVersion.id))) == 2
+
+
+@pytest.mark.asyncio
+async def test_service_reuses_artifact_identity_across_task_retry(
+    standard_db: AsyncSession,
+    binding_result_path: Path,
+    output_dir: Path,
+):
+    """同一项目的另一次运行（重试）复用资产根，但留下独立版本。"""
+    task = await _seed_task(standard_db)
+    parsed = parse_standard_result(
+        result_path=binding_result_path,
+        output_dir=output_dir,
+        declared_outputs=[
+            DeclaredArtifactOutput(name="pocket", type="binding_pocket@1"),
+            DeclaredArtifactOutput(name="report", type="run_report@1"),
+        ],
+    )
+    first = await create_artifact_versions_from_parsed_result(
+        standard_db, task=task, parsed_result=parsed
+    )
+
+    retry_task = Task(
+        user_id=task.user_id,
+        tool_id=task.tool_id,
+        tool_version_id=task.tool_version_id,
+        status=TaskStatus.SUCCESS.value,
+        extra_data={"project_id": task.extra_data["project_id"]},
+    )
+    standard_db.add(retry_task)
+    await standard_db.commit()
+    second = await create_artifact_versions_from_parsed_result(
+        standard_db, task=retry_task, parsed_result=parsed
+    )
+
+    assert first.artifact_ids_by_ref == second.artifact_ids_by_ref
+    assert await standard_db.scalar(select(func.count(Artifact.id))) == 2
+    assert await standard_db.scalar(select(func.count(ArtifactVersion.id))) == 4
+
+
+@pytest.mark.asyncio
+async def test_service_keeps_distinct_named_artifacts_apart(
+    standard_db: AsyncSession,
+    ligand_result_path: Path,
+    output_dir: Path,
+):
+    """同名类型但不同 name 的多个资产不能被身份去重合并成一个。"""
+    task = await _seed_task(standard_db)
+    parsed = parse_standard_result(
+        result_path=ligand_result_path,
+        output_dir=output_dir,
+        declared_outputs=[
+            DeclaredArtifactOutput(
+                name="generated_ligands",
+                type="ligand_structure@1",
+                cardinality="many",
+            )
+        ],
+    )
+
+    result = await create_artifact_versions_from_parsed_result(
+        standard_db, task=task, parsed_result=parsed
+    )
+
+    artifact_ids = set(result.artifact_ids_by_ref.values())
+    assert len(artifact_ids) == 2
+    assert await standard_db.scalar(select(func.count(Artifact.id))) == 2

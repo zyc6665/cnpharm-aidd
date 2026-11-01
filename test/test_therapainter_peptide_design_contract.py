@@ -65,7 +65,7 @@ def test_runner_outputs_follow_contract(tmp_path):
     request = json.loads((PKG / "examples" / "request.json").read_text(encoding="utf-8"))
     request["execution"]["work_dir"] = str(PKG / "examples")
     result = run_mock(request, tmp_path)
-    assert result["result_version"] == "aidd.sciminer/result.v2"
+    assert result["result_version"] == "aidd.sciminer/result"
 
     result_path = tmp_path / "result.json"
     result_path.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")

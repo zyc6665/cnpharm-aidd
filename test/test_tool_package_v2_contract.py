@@ -15,13 +15,13 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.tool_packages.loader import load_tool_package
-from app.tool_packages.schemas import ToolPackageV2Manifest
+from app.tool_packages.schemas import ToolPackageManifest
 from app.tool_packages.validator import validate_tool_package
 
 
 def _v2_manifest() -> dict:
     return {
-        "api_version": "aidd.sciminer/tool-package.v2",
+        "api_version": "aidd.sciminer/tool-package",
         "kind": "ToolPackage",
         "metadata": {
             "slug": "lvpocket-standard",
@@ -117,7 +117,7 @@ def _v2_manifest() -> dict:
 
 
 def test_v2_manifest_accepts_standard_artifact_refs_and_cardinality():
-    manifest = ToolPackageV2Manifest.model_validate(_v2_manifest())
+    manifest = ToolPackageManifest.model_validate(_v2_manifest())
     result = validate_tool_package(manifest)
 
     assert manifest.artifacts.inputs[0].type == "protein_structure@1"
@@ -130,7 +130,7 @@ def test_v2_manifest_preserves_artifact_output_provided_roles():
     raw = _v2_manifest()
     raw["artifacts"]["outputs"][0]["provided_roles"] = ["atom_pocket_pdb", "pocket_metadata_json"]
 
-    manifest = ToolPackageV2Manifest.model_validate(raw)
+    manifest = ToolPackageManifest.model_validate(raw)
 
     assert manifest.artifacts.outputs[0].provided_roles == ["atom_pocket_pdb", "pocket_metadata_json"]
 
@@ -140,7 +140,7 @@ def test_v2_manifest_rejects_output_roles_from_another_artifact_type():
     raw["artifacts"]["outputs"][0]["provided_roles"] = ["receptor_pdbqt"]
 
     with pytest.raises(ValidationError) as exc_info:
-        ToolPackageV2Manifest.model_validate(raw)
+        ToolPackageManifest.model_validate(raw)
 
     assert "Unknown file role" in str(exc_info.value)
 
@@ -150,13 +150,13 @@ def test_v2_manifest_requires_runtime_env_metadata():
     raw.pop("runtime")
 
     with pytest.raises(ValidationError):
-        ToolPackageV2Manifest.model_validate(raw)
+        ToolPackageManifest.model_validate(raw)
 
 
 def test_v2_validator_rejects_runtime_without_immutable_image_digest():
     raw = _v2_manifest()
     raw["runtime"]["artifacts"]["primary"]["image_digest"] = ""
-    manifest = ToolPackageV2Manifest.model_validate(raw)
+    manifest = ToolPackageManifest.model_validate(raw)
 
     result = validate_tool_package(manifest)
 
@@ -167,7 +167,7 @@ def test_v2_validator_rejects_runtime_without_immutable_image_digest():
 def test_v2_validator_rejects_runtime_without_fallback_sha256():
     raw = _v2_manifest()
     raw["runtime"]["artifacts"]["fallback"]["sha256"] = ""
-    manifest = ToolPackageV2Manifest.model_validate(raw)
+    manifest = ToolPackageManifest.model_validate(raw)
 
     result = validate_tool_package(manifest)
 
@@ -178,7 +178,7 @@ def test_v2_validator_rejects_runtime_without_fallback_sha256():
 def test_v2_validator_rejects_runtime_without_weight_manifest_sha256():
     raw = _v2_manifest()
     raw["runtime"]["weights"]["manifest_sha256"] = ""
-    manifest = ToolPackageV2Manifest.model_validate(raw)
+    manifest = ToolPackageManifest.model_validate(raw)
 
     result = validate_tool_package(manifest)
 
@@ -195,13 +195,13 @@ def test_v2_manifest_rejects_legacy_semantic_artifact_fields():
     }
 
     with pytest.raises(ValidationError):
-        ToolPackageV2Manifest.model_validate(raw)
+        ToolPackageManifest.model_validate(raw)
 
 
 def test_v2_validator_rejects_unknown_standard_artifact_type():
     raw = _v2_manifest()
     raw["artifacts"]["outputs"][0]["type"] = "pocket_pdb"
-    manifest = ToolPackageV2Manifest.model_validate(raw)
+    manifest = ToolPackageManifest.model_validate(raw)
 
     result = validate_tool_package(manifest)
 
@@ -216,7 +216,7 @@ def test_v2_validator_rejects_device_as_required_business_parameter():
         "properties": {"device": {"type": "string"}},
         "required": ["device"],
     }
-    manifest = ToolPackageV2Manifest.model_validate(raw)
+    manifest = ToolPackageManifest.model_validate(raw)
 
     result = validate_tool_package(manifest)
 
@@ -234,5 +234,5 @@ def test_loader_detects_v2_manifest(tmp_path: Path):
 
     manifest = load_tool_package(tmp_path)
 
-    assert isinstance(manifest, ToolPackageV2Manifest)
-    assert manifest.api_version == "aidd.sciminer/tool-package.v2"
+    assert isinstance(manifest, ToolPackageManifest)
+    assert manifest.api_version == "aidd.sciminer/tool-package"

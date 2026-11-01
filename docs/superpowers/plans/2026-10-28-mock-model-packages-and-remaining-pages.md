@@ -4,12 +4,12 @@
 
 按 `docs/06` §3 的 40 页清单，把剩下的 11 页做出来：P-15 分子生成、P-16 多肽设计、P-17 生成结果、P-21 性质预测提交、P-22 预测结果、P-23 虚拟筛选配置、P-24 筛选结果、P-25 对接结果详情、P-26 MD 提交、P-27 MD 结果、P-28 自由能结果。
 
-这 11 页此前全部卡在 G-1（9 个模型资产未交付）。本计划用 **mock 模型包** 解耦：模型以符合 `aidd.sciminer/tool-package.v2` 的包交付，mock 版与真实版**同构**，真模型到位后只换镜像 tag 与 manifest，页面与平台零改动。
+这 11 页此前全部卡在 G-1（9 个模型资产未交付）。本计划用 **mock 模型包** 解耦：模型以符合 `aidd.sciminer/tool-package` 的包交付，mock 版与真实版**同构**，真模型到位后只换镜像 tag 与 manifest，页面与平台零改动。
 
 ## Architecture（关键决定，不可改）
 
 1. **工具就是模型**。中国医药 21 份文档里没有「内置工具」这个角色（`grep -rn "内置工具" docs/*.md` → 零命中）。`backend/app/tools/builtin_tools.py` 的 7 个进程内工具是上游 CPUmodel_V2 遗留，**本计划不往里加任何东西**，也不删（另立项）。
-2. mock 以 **Tool Package** 交付，目录与 `example/MolP-PC/tool-package-v2/` 同构：`tool.yaml` + `schemas/` + `runner/` + `variants/` + `examples/` + `docs/`。
+2. mock 以 **Tool Package** 交付，目录与 `example/MolP-PC/tool-package/` 同构：`tool.yaml` + `schemas/` + `runner/` + `variants/` + `examples/` + `docs/`。
 3. 执行方式两档：
    - `mock-local` 变体走 **`python_script` 执行器**（`backend/app/tasks/executors/python_script.py` 已存在），本机零镜像依赖，用于开发与演示；
    - `haiguang-dcu` 变体走 **`docker_image`**，镜像名先占位，真模型到位后替换。

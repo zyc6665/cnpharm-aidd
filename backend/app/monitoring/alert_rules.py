@@ -536,7 +536,7 @@ async def check_task_failure_rate() -> float:
 
         failed_query = select(func.count(Task.id)).where(
             Task.created_at >= since,
-            Task.status == TaskStatus.FAILURE.value
+            Task.status.in_((TaskStatus.FAILURE.value, TaskStatus.TIMEOUT.value)),
         )
         failed_result = await session.execute(failed_query)
         failed = failed_result.scalar() or 0

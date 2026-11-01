@@ -1,5 +1,4 @@
 import type { TaskStatus } from '@/types/models'
-import { getToken } from '@/utils/auth-storage'
 
 /**
  * 任务事件流客户端（docs/05 §1.5、§9；docs/10 API-08）。
@@ -9,8 +8,8 @@ import { getToken } from '@/utils/auth-storage'
  * - 断线由浏览器自动重连，服务端按 `id:` 重放，不需要自定义重连协议；
  * - 交付线只需要「服务端 → 浏览器」单向推送，用双向通道是多余的能力。
  *
- * 认证：浏览器 `EventSource` 不能自定义请求头，因此 token 走查询参数
- * （与后端 `GET /api/v1/tasks/{id}/events` 的兼容路径一致）。
+ * 认证：依赖 httpOnly Cookie（同源/携带凭据的 EventSource 会自动带上），
+ * 不再把 token 拼进查询参数。
  */
 
 export type TaskEventName = 'snapshot' | 'status' | 'progress' | 'log' | 'done'
@@ -45,7 +44,6 @@ export interface TaskEventStreamHandlers {
 
 export interface TaskEventStreamOptions {
   baseUrl?: string
-  token?: string | null
   includeLogs?: boolean
   maxSeconds?: number
 }
@@ -67,10 +65,6 @@ export function buildTaskEventStreamUrl(
   options: TaskEventStreamOptions = {}
 ): string {
   const params: string[] = []
-  const token = options.token ?? getToken()
-  if (token) {
-    params.push(`token=${encodeURIComponent(token)}`)
-  }
   if (options.includeLogs === false) {
     params.push('include_logs=false')
   }
@@ -78,7 +72,10 @@ export function buildTaskEventStreamUrl(
     params.push(`max_seconds=${options.maxSeconds}`)
   }
   const query = params.length > 0 ? `?${params.join('&')}` : ''
-  return `${resolveBaseUrl(options.baseUrl)}/api/v1/tasks/${taskId}/events${query}`
+  const base = resolveBaseUrl(options.baseUrl)
+  // VITE_API_BASE_URL 已包含 API 前缀；不能再重复拼接。
+  const prefix = base || '/api/v1'
+  return `${prefix}/tasks/${taskId}/events${query}`
 }
 
 function parsePayload<T>(raw: string): T | null {
@@ -99,7 +96,7 @@ export function openTaskEventStream(
     return { close: () => undefined, available: false }
   }
 
-  const source = new EventSource(buildTaskEventStreamUrl(taskId, options))
+  const source = new EventSource(buildTaskEventStreamUrl(taskId, options), { withCredentials: true })
   let closed = false
 
   const close = () => {

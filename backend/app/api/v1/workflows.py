@@ -204,23 +204,38 @@ async def list_runs(
     project_id: Annotated[str | None, Query(min_length=1, max_length=36)] = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    cursor: str | None = Query(
+        default=None, description="游标（keyset）翻页；传入后不再返回 total"
+    ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    runs, total = await list_workflow_runs(
+    run_page = await list_workflow_runs(
         db,
         current_user=current_user,
         workflow_definition_id=workflow_definition_id,
         project_id=project_id,
         page=page,
         page_size=page_size,
+        cursor=cursor,
     )
-    return paginated_response(
-        items=[_serialize_run(run) for run in runs],
-        total=total,
+    payload = paginated_response(
+        items=[_serialize_run(run) for run in run_page.runs],
+        total=run_page.total if run_page.total is not None else 0,
         page=page,
         page_size=page_size,
     )
+    data = payload["data"]
+    data["nextCursor"] = run_page.next_cursor
+    data["hasMore"] = run_page.has_more
+    if run_page.total is None:
+        # 游标模式不计算 count，total 只是未知而非 0。
+        data["totalKnown"] = False
+        data["total"] = None
+        data["total_pages"] = None
+    else:
+        data["totalKnown"] = True
+    return payload
 
 
 @router.get("/runs/{run_id}", response_model=dict)

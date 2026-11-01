@@ -6,11 +6,11 @@ import pytest
 
 
 def _manifest():
-    from app.tool_packages.schemas import ToolPackageV2Manifest
+    from app.tool_packages.schemas import ToolPackageManifest
 
-    return ToolPackageV2Manifest.model_validate(
+    return ToolPackageManifest.model_validate(
         {
-            "api_version": "aidd.sciminer/tool-package.v2",
+            "api_version": "aidd.sciminer/tool-package",
             "kind": "ToolPackage",
             "metadata": {
                 "slug": "managed-model",

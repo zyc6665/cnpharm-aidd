@@ -1,3 +1,7 @@
+# 已弃用的开发访问入口：默认 kustomization 不再引用，禁止匿名暴露 Registry。
+# 需要从宿主访问时：
+#   kubectl -n sciminer-storage port-forward svc/sciminer-registry 5000:5000
+# 且必须先按 registry-dev.yaml 顶部说明配置 basic auth / htpasswd。
 apiVersion: v1
 kind: Service
 metadata:
@@ -8,7 +12,7 @@ metadata:
     app.kubernetes.io/part-of: sciminer
     sciminer.io/purpose: development-access
 spec:
-  type: NodePort
+  type: ClusterIP
   selector:
     app.kubernetes.io/name: registry
     app.kubernetes.io/part-of: sciminer
@@ -16,4 +20,3 @@ spec:
     - name: registry
       port: 5000
       targetPort: registry
-      nodePort: 30500

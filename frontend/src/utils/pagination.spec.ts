@@ -1,6 +1,6 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
-import { resolvePaginationChange } from './pagination'
+import { mergeCursorPage, resolveCursorHasMore, resolvePaginationChange } from './pagination'
 
 test('改页大小时回到第 1 页，并返回新的页大小', () => {
   assert.deepEqual(
@@ -71,4 +71,49 @@ test('「改页大小」事件携带旧页码是本次修复的核心场景', ()
   const result = resolvePaginationChange({ nextPage: 4, nextSize: 20, currentSize: 10 })
   assert.equal(result.page, 1)
   assert.equal(result.size, 20)
+})
+
+test('游标是否还有下一页：优先 hasMore，缺省用 nextCursor 兜底', () => {
+  assert.equal(resolveCursorHasMore({ hasMore: false, nextCursor: 'c1' }), false)
+  assert.equal(resolveCursorHasMore({ hasMore: true, nextCursor: null }), true)
+  assert.equal(resolveCursorHasMore({ nextCursor: 'c2' }), true)
+  assert.equal(resolveCursorHasMore({ nextCursor: null }), false)
+  assert.equal(resolveCursorHasMore({}), false)
+})
+
+test('首屏 offset 结果替换列表并接出游标', () => {
+  const state = mergeCursorPage(
+    { items: [{ id: 'stale' }], nextCursor: 'old', hasMore: true },
+    {
+      items: [{ id: 'a' }, { id: 'b' }],
+      nextCursor: 'cursor-2',
+      hasMore: true,
+    },
+    item => item.id
+  )
+  assert.deepEqual(state.items.map(item => item.id), ['a', 'b'])
+  assert.equal(state.nextCursor, 'cursor-2')
+  assert.equal(state.hasMore, true)
+})
+
+test('加载更多按 id 去重后追加，到底时 nextCursor=null 且 hasMore=false', () => {
+  const first = mergeCursorPage(
+    { items: [], nextCursor: null, hasMore: false },
+    { items: [{ id: 'a' }, { id: 'b' }], nextCursor: 'cursor-2', hasMore: true },
+    item => item.id
+  )
+  const second = mergeCursorPage(
+    first,
+    {
+      // 后端与前端重叠的 b 必须去重，不能出现两行；c 是新增页。
+      items: [{ id: 'b' }, { id: 'c' }],
+      nextCursor: null,
+      hasMore: false,
+    },
+    item => item.id,
+    { append: true }
+  )
+  assert.deepEqual(second.items.map(item => item.id), ['a', 'b', 'c'])
+  assert.equal(second.nextCursor, null)
+  assert.equal(second.hasMore, false)
 })

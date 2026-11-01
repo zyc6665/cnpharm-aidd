@@ -218,8 +218,9 @@ async def test_base_executor_uses_shared_session_without_committing(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_base_executor_does_not_add_record_when_copy_fails(tmp_path):
+async def test_base_executor_raises_and_adds_no_record_when_copy_fails(tmp_path):
     from app.tasks.executors import base as base_module
+    from app.tasks.executors.errors import TaskExecutionError
 
     source_path = tmp_path / "result.txt"
     source_path.write_text("result", encoding="utf-8")
@@ -249,10 +250,10 @@ async def test_base_executor_does_not_add_record_when_copy_fails(tmp_path):
     with patch.object(base_module, "get_async_session", fake_get_async_session), patch.object(
         base_module.shutil, "copy2", side_effect=OSError("disk full")
     ):
-        result = await base_module.BaseExecutor._collect_output_files(
-            executor,
-            [str(source_path)],
-        )
+        with pytest.raises(TaskExecutionError, match="Failed to collect output file"):
+            await base_module.BaseExecutor._collect_output_files(
+                executor,
+                [str(source_path)],
+            )
 
-    assert result == []
     assert session.records == []

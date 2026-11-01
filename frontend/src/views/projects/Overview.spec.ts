@@ -36,6 +36,7 @@ const overview = {
     status: 'active',
     model_policy: {},
     data_policy: {},
+    role: 'owner',
     membership: { id: 'membership-1', role: 'owner' },
     created_at: '2026-07-30T00:00:00Z',
     updated_at: '2026-07-31T08:30:00Z'
@@ -109,7 +110,18 @@ describe('ProjectOverview', () => {
     vi.clearAllMocks()
     routeQuery = {}
     vi.mocked(getProjectOverview).mockResolvedValue({ data: overview } as never)
-    vi.mocked(getProjectArtifacts).mockResolvedValue({ data: { items: [] } } as never)
+    vi.mocked(getProjectArtifacts).mockResolvedValue({
+      data: {
+        items: overview.artifacts,
+        total: overview.artifacts.length,
+        page: 1,
+        page_size: 20,
+        total_pages: 1,
+        nextCursor: null,
+        hasMore: false,
+        totalKnown: true
+      }
+    } as never)
   })
 
   it('展示项目总览、最近资源和进入研究会话入口', async () => {
@@ -142,6 +154,9 @@ describe('ProjectOverview', () => {
   })
 
   it('Artifact 常用筛选调用项目 Artifact 检索接口', async () => {
+    const wrapper = renderOverview()
+    await flushPromises()
+
     vi.mocked(getProjectArtifacts).mockResolvedValueOnce({
       data: {
         items: [
@@ -166,11 +181,16 @@ describe('ProjectOverview', () => {
             created_at: '2026-09-09T00:00:00Z',
             updated_at: '2026-09-09T00:00:00Z'
           }
-        ]
+        ],
+        total: 1,
+        page: 1,
+        page_size: 20,
+        total_pages: 1,
+        nextCursor: null,
+        hasMore: false,
+        totalKnown: true
       }
     } as never)
-    const wrapper = renderOverview()
-    await flushPromises()
 
     const molpPcFilter = wrapper.findAll('[data-testid="artifact-filter-preset"]')
       .find(button => button.text() === 'MolP-PC')
@@ -180,7 +200,9 @@ describe('ProjectOverview', () => {
     await flushPromises()
 
     expect(getProjectArtifacts).toHaveBeenCalledWith('project-1', {
-      metadata_model_name: 'MolP-PC'
+      metadata_model_name: 'MolP-PC',
+      page: 1,
+      page_size: 20
     })
     expect(wrapper.text()).toContain('MolP-PC ADMET table')
     expect(wrapper.text()).not.toContain('EGFR pocket')
@@ -206,7 +228,9 @@ describe('ProjectOverview', () => {
     await flushPromises()
 
     expect(getProjectArtifacts).toHaveBeenCalledWith('project-1', {
-      standard_type: 'molecule_table'
+      standard_type: 'molecule_table',
+      page: 1,
+      page_size: 20
     })
   })
 })

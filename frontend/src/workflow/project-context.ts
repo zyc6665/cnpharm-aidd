@@ -8,8 +8,11 @@ export interface WorkflowRouteProjectInput {
 export interface WorkflowRunListScope {
   projectId?: string
   workflowDefinitionId?: string
-  page: number
+  /** 首屏 offset 用；cursor 模式下省略 */
+  page?: number
   pageSize: number
+  /** 加载更多时传入；一旦传入走 cursor 模式（不带 page） */
+  cursor?: string
 }
 
 function normalizeProjectId(value: unknown): string | undefined {
@@ -37,7 +40,7 @@ export function buildWorkflowDefinitionListParams(
 
 export function buildWorkflowRunListParams(scope: WorkflowRunListScope): WorkflowRunListParams {
   return {
-    page: scope.page,
+    ...(scope.cursor ? { cursor: scope.cursor } : { page: scope.page ?? 1 }),
     page_size: scope.pageSize,
     ...(scope.projectId ? { project_id: scope.projectId } : {}),
     ...(scope.workflowDefinitionId ? { workflow_definition_id: scope.workflowDefinitionId } : {})

@@ -54,13 +54,24 @@ export default {
     expand: 'Expand sidebar',
     collapse: 'Collapse sidebar',
     totalItems: 'Total {total} items',
+    loadMore: 'Load more',
+    allLoaded: 'All loaded',
     copySuccess: 'Copied to clipboard',
     required: 'is required',
     optional: 'Optional',
     createdAt: 'Created At',
     updatedAt: 'Updated At',
     seconds: 'seconds',
-    sort: 'Sort'
+    sort: 'Sort',
+    memberUsername: 'Member username',
+    // Shared list four-state copy (load error / empty)
+    listStates: {
+      errorTitle: 'Failed to load',
+      errorDescription:
+        'Something went wrong while fetching data. The network may be unstable or the service may be temporarily unavailable. Please try again later.',
+      retry: 'Retry',
+      emptyTitle: 'No data yet'
+    }
   },
 
   // Navigation
@@ -70,13 +81,19 @@ export default {
     tools: 'Tools',
     tasks: 'Tasks',
     workflow: 'Workflow',
+    achievements: 'Achievements',
     admin: 'Admin',
     login: 'Login',
-    register: 'Register',
     logout: 'Logout',
     profile: 'Profile',
     settings: 'Settings',
-    favorites: 'Favorites'
+    favorites: 'Favorites',
+    molecules: 'Molecule Design',
+    peptides: 'Peptide Design',
+    predict: 'Property Prediction',
+    screen: 'Virtual Screening',
+    md: 'Molecular Dynamics',
+    designSection: 'Design Tools'
   },
   command: {
     placeholder: 'Search pages, commands…',
@@ -159,7 +176,7 @@ export default {
     hero: {
       title: 'From target to lead compound, in one workspace',
       description: 'Pocket identification, virtual screening, molecular docking, ADMET prediction — all computational steps orchestrated, executed, and traced on one platform',
-      cta: 'Get Started Free',
+      cta: 'Sign In',
       secondary: 'Browse Tools',
     },
     values: {
@@ -219,8 +236,8 @@ export default {
     },
     cta: {
       title: 'Start Your Research Today',
-      description: 'Register for free basic features and begin your computational biology journey',
-      button: 'Sign Up Free'
+      description: 'Sign in to use the platform core features and begin your computational biology journey',
+      button: 'Sign In'
     }
   },
 
@@ -796,7 +813,7 @@ export default {
       },
       sdfToSmiles: {
         title: 'SDF to SMILES Table',
-        description: 'Convert ligand structures into molecule_table@1 for RDKit and MolP-PC reuse.'
+        description: 'Convert ligand structures into molecule_table{\'@\'}1 for RDKit and MolP-PC reuse.'
       },
       rdkitProperties: {
         title: 'RDKit Properties',
@@ -844,64 +861,27 @@ export default {
   // Auth
   auth: {
     login: 'Login',
-    register: 'Register',
-    forgotPassword: 'Forgot Password',
-    forgotPasswordDesc: 'Enter the email you used to register and we will send you a verification code',
+    account: 'Account',
     username: 'Username',
     email: 'Email',
     password: 'Password',
     confirmPassword: 'Confirm Password',
     newPassword: 'New Password',
-    confirmNewPassword: 'Confirm New Password',
     rememberMe: 'Remember me',
-    noAccount: "Don't have an account?",
-    hasAccount: 'Already have an account?',
-    goRegister: 'Sign up now',
     goLogin: 'Sign in now',
     loginSuccess: 'Login successful',
-    registerSuccess: 'Registration successful',
     logoutSuccess: 'Logout successful',
     loginRequired: 'Please login first',
-    // Verification code
-    verificationCode: 'Verification Code',
-    sendCode: 'Send Code',
-    codeSent: 'Verification code sent',
-    resendCode: 'Resend',
-    resendCodeIn: 'Resend in {seconds}s',
-    invalidCode: 'Invalid or expired verification code',
-    // Password strength
-    passwordWeak: 'Weak',
-    passwordMedium: 'Medium',
-    passwordStrong: 'Strong',
-    passwordVeryStrong: 'Very Strong',
-    // Password reset steps
-    step1Email: 'Enter Email',
-    step2Verify: 'Verify Identity',
-    step3Reset: 'Reset Password',
-    sendResetCode: 'Send Reset Code',
-    codeSentTo: 'Code sent to {email}',
-    verifyCode: 'Verify',
-    resetPassword: 'Reset Password',
-    resetSuccess: 'Password Reset Successful',
-    resetSuccessDesc: 'Your password has been reset successfully. Please login with your new password',
-    // Agreement
-    agreementPrefix: 'I have read and agree to the',
-    termsOfService: 'Terms of Service',
-    agreementAnd: 'and',
-    privacyPolicy: 'Privacy Policy',
     validation: {
+      accountRequired: 'Please enter account',
       usernameRequired: 'Please enter username',
       usernameLength: 'Username must be 3-20 characters',
-      usernameFormat: 'Username can only contain letters, numbers and underscores',
       emailRequired: 'Please enter email',
       emailInvalid: 'Please enter a valid email address',
       passwordRequired: 'Please enter password',
-      passwordLength: 'Password must be at least 6 characters',
+      passwordLength: 'Password must be at least 12 characters',
       confirmPasswordRequired: 'Please confirm password',
-      passwordMismatch: 'Passwords do not match',
-      codeRequired: 'Please enter verification code',
-      codeLength: 'Verification code must be 6 digits',
-      agreementRequired: 'Please read and agree to the Terms of Service and Privacy Policy'
+      passwordMismatch: 'Passwords do not match'
     }
   },
 
@@ -1234,7 +1214,7 @@ export default {
   // Compounds / candidates / candidate sets
   compounds: {
     title: 'Data Assets',
-    subtitle: 'Manage compound structures, candidates and candidate sets within the project',
+    subtitle: 'Manage compounds, protein structure outputs and datasets in the project',
     backToProject: 'Back to project overview',
     backToAssets: 'Back to data assets',
     detail: {
@@ -1244,6 +1224,8 @@ export default {
     },
     tabs: {
       compounds: 'Compounds',
+      proteins: 'Proteins',
+      datasets: 'Datasets',
       candidates: 'Candidates',
       candidateSets: 'Candidate sets'
     },
@@ -1269,11 +1251,35 @@ export default {
       structure: 'Structure',
       createdAt: 'Created at'
     },
+    proteinColumns: {
+      name: 'Name',
+      filename: 'File',
+      source: 'Source',
+      createdAt: 'Created at'
+    },
+    datasetColumns: {
+      name: 'Name',
+      source: 'Source',
+      datasetType: 'Type',
+      rowCount: 'Rows',
+      fileCount: 'Files',
+      createdAt: 'Created at'
+    },
+    datasetSource: {
+      upload: 'Uploaded file',
+      dataset: 'Registered dataset'
+    },
+    notes: {
+      proteins:
+        'Only protein structure outputs produced by models or uploaded here are shown. Protein master data you imported yourself lives under "Targets & structures".',
+      datasets: 'Datasets come from dataset registration (import results) and are a different source from Artifacts.'
+    },
     actions: {
       refresh: 'Refresh',
       create: 'New compound',
       import: 'Bulk import',
       compare: 'Compare candidates',
+      candidates: 'Candidates',
       search: 'Similarity search',
       createSet: 'New candidate set'
     },
@@ -1349,15 +1355,30 @@ export default {
     },
     empty: {
       compounds: 'No compounds yet — start with a bulk import',
+      proteins: 'No protein structure outputs in this project yet',
+      datasets: 'No datasets in this project yet',
       candidates: 'No candidates in this project yet',
       candidateSets: 'No candidate sets in this project yet'
+    },
+    emptyHint: {
+      assets:
+        'This page gathers the project’s compounds, protein structures and datasets. Import compounds in bulk, or add a single molecule, to get started.',
+      candidates:
+        'Candidates come from screening, design or import tasks; candidate sets organize them into collections.',
+      goAssets: 'Go to data assets'
     },
     errors: {
       loadCompounds: 'Failed to load compounds',
       loadCompound: 'Failed to load the compound',
       searchSimilar: 'Similarity search failed',
       loadCandidates: 'Failed to load candidates',
-      loadCandidateSets: 'Failed to load candidate sets'
+      loadCandidateSets: 'Failed to load candidate sets',
+      loadAssets: 'Failed to load data assets'
+    },
+    candidatesPage: {
+      title: 'Candidates',
+      subtitle: 'Candidates and candidate sets are managed here (M3 domain), moved out of the data assets tabs',
+      backToAssets: 'Back to data assets'
     }
   },
 
@@ -1538,6 +1559,9 @@ export default {
       }
     },
     empty: 'No finished results in this project yet',
+    emptyHint: 'Finished results from tool or workflow tasks will be collected here automatically.',
+    goTools: 'Go to tools',
+    clearFilter: 'Clear filters',
     errors: {
       loadResults: 'Failed to load results',
       loadResult: 'Failed to load the result',
@@ -2034,6 +2058,7 @@ export default {
     // Status
     status: {
       pending: 'Pending',
+      rejected: 'Rejected',
       queued: 'Queued',
       running: 'Running',
       success: 'Completed',
@@ -2289,6 +2314,33 @@ export default {
     tasks: 'Task Management',
     system: 'System Settings',
     backToSite: 'Back to Site',
+    // List four-state: per-page load-error and guided empty copy
+    listStates: {
+      usersLoadError: 'Failed to load users',
+      usersEmptyTitle: 'No users yet',
+      usersEmptyHint:
+        'No users have been created yet. Create a user to assign roles and start collaborating.',
+      toolsLoadError: 'Failed to load tools',
+      toolsEmptyTitle: 'No tools yet',
+      toolsEmptyHint:
+        'The tool catalog is empty. Register a model delivery package and create a platform tool so users can run it.',
+      goToolPackages: 'Register a delivery package',
+      tasksLoadError: 'Failed to load tasks',
+      tasksEmptyTitle: 'No tasks yet',
+      tasksEmptyHint:
+        'There are no tasks yet. Once users submit tool tasks, their status will show here in real time.',
+      workbenchGroupsLoadError: 'Failed to load groups and mappings',
+      groupsEmptyTitle: 'No groups yet',
+      groupsEmptyHint:
+        'Create your first workbench group with the form above, then map tools into it.',
+      mappingsEmptyTitle: 'No mappings yet',
+      mappingsEmptyHint:
+        'After mapping tools to a group, the workbench will list tools grouped accordingly.',
+      categoriesLoadError: 'Failed to load categories',
+      categoriesEmptyTitle: 'No categories yet',
+      categoriesEmptyHint:
+        'Categories group tools for display. Create the first category, then create tools.'
+    },
     stats: {
       totalUsers: 'Total Users',
       totalTools: 'Total Tools',
@@ -2355,6 +2407,8 @@ export default {
       startTime: 'Start Time',
       endTime: 'End Time',
       emptyState: 'No audit records match the current filters',
+      emptyHint:
+        'No audit records match the current filters. Adjust the filters, or reset to view all records.',
       requestId: 'Request ID',
       detail: 'Detail',
       createdAt: 'Time',
@@ -2386,6 +2440,14 @@ export default {
     createUser: 'Create User',
     editUser: 'Edit User',
     userInfo: 'User Info',
+    username: 'Account',
+    authSource: 'Auth Source',
+    authSourceLocal: 'Local',
+    authSourceLdap: 'LDAP',
+    emailOptional: 'Optional; can be empty for LDAP users',
+    usernameRequired: 'Please enter account name',
+    usernameFormat: 'Account name may contain letters, digits, dot, underscore and hyphen, 1-64 characters',
+    resetPasswordLdapDisabled: 'LDAP user passwords are managed by the directory service and cannot be reset here',
     keyword: 'Keyword',
     searchUserPlaceholder: 'Search username or email...',
     status: 'Status',
@@ -2625,6 +2687,26 @@ export default {
     '404': {
       title: '404',
       description: 'Sorry, the page you visited does not exist'
+    }
+  },
+
+  artifactAssets: {
+    createdAt: 'Created at',
+    fileRole: 'File role',
+    fileName: 'File name',
+    fileSize: 'Size',
+    mdTrajectory: {
+      notice: 'Trajectory files (e.g. DCD) are download-only; a static topology preview is shown here. See the task MD result page for RMSD/RMSF curves.'
+    },
+    compoundSet: {
+      notice: 'Compound set artifact: download member files here, or manage them on the candidates page.',
+      openCandidates: 'Open candidates'
+    },
+    dataset: {
+      notice: 'Dataset asset summary; individual files are downloadable.',
+      name: 'Name',
+      type: 'Type',
+      fileCount: 'Files'
     }
   },
 
