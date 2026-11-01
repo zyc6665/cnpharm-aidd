@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from app.database.session import get_async_session
+from app.models.tasks import Task
 from app.config import settings
 from app.execution.records import (
     task_execution_record_id,
@@ -338,6 +339,10 @@ class KubernetesJobExecutor(BaseExecutor):
     async def _persist_external_id(self, external_id: str) -> None:
         """Persist the provider handle before the first reconcile call."""
         if not task_execution_record_id(self.task):
+            # 没有执行记录（Celery 直接派发的任务就没有）时也要把句柄落库：
+            # 失败/超时路径会回滚本次事务，内存里的 extra_data 改了也保不住，
+            # 而容器日志归档（app/services/runtime_logs.py）全靠这个句柄找 Job。
+            await self._persist_external_id_to_task(external_id)
             return
         try:
             async for session in get_async_session():
@@ -361,6 +366,24 @@ class KubernetesJobExecutor(BaseExecutor):
                 "无法保存 Kubernetes Job 外部句柄",
                 details={"error": str(exc)},
             ) from exc
+
+    async def _persist_external_id_to_task(self, external_id: str) -> None:
+        """把执行句柄写进任务元数据（独立事务，避免随失败回滚丢失）。"""
+        try:
+            async for session in get_async_session():
+                try:
+                    task = await session.get(Task, self.task.id)
+                    if task is not None:
+                        data = dict(task.extra_data or {})
+                        data["external_id"] = external_id
+                        task.extra_data = data
+                        await session.commit()
+                except Exception:
+                    await session.rollback()
+                    raise
+                break
+        except Exception as exc:  # noqa: BLE001 - 句柄持久化失败不阻断任务
+            logger.warning("持久化执行句柄失败（task=%s）：%s", self.task.id, exc)
 
 
 def _platform_entrypoint_args(

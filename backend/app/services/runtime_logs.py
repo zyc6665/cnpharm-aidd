@@ -29,7 +29,10 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.execution.records import task_external_execution_id
+from app.execution.records import (
+    task_execution_record_external_id,
+    task_external_execution_id,
+)
 from app.models.tasks import TaskLog
 
 logger = logging.getLogger(__name__)
@@ -155,7 +158,11 @@ async def harvest_task_runtime_logs(
 
     execution_id = task_external_execution_id(task)
     if not execution_id:
-        # 内置/直跑任务没有外部执行句柄，日志由执行器自己写，无需归档。
+        # k8s/ssh 这类托管执行器把句柄写在 ExecutionRecord 上，任务元数据里没有。
+        # 只查 extra_data 会一直取到 None，归档于是静默不生效（曾真实发生）。
+        execution_id = await task_execution_record_external_id(db, task=task)
+    if not execution_id:
+        # 内置/直跑任务确实没有外部执行句柄，日志由执行器自己写，无需归档。
         return 0
 
     try:

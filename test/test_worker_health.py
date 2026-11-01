@@ -145,3 +145,36 @@ async def test_health_check_is_unhealthy_without_broker(monkeypatch):
 
     assert status.status == "unhealthy"
     assert "未配置" in status.message
+
+
+def test_worker_registers_executor_gateway_for_both_pool_events() -> None:
+    """执行器网关必须在 `prefork` 与 `threads` 两种池下都被注册。
+
+    `worker_process_init` 只在 prefork 子进程里触发；`threads` 池不触发它。
+    只挂前者时，Worker 的执行器表是空的，提交任务会报「不支持的执行器类型: k8s_job」。
+    """
+    from celery.signals import worker_process_init, worker_ready
+
+    # 注意 `app/worker/__init__.py` 把 `celery_app` 这个名字导出成了 Celery 实例，
+    # 所以 `import app.worker.celery_app as m` 拿到的是实例而不是模块。
+    import importlib
+
+    celery_module = importlib.import_module("app.worker.celery_app")
+
+    # Celery 的 Signal.receivers 是 (lookup_key, receiver) 二元组列表，
+    # 而 receiver 可能是 weakref，需要解引用后才能与函数对象比较。
+    def _resolve(signal) -> set:
+        resolved = set()
+        for _key, receiver in signal.receivers:
+            target = receiver() if isinstance(receiver, weakref.ref) else receiver
+            if target is not None:
+                resolved.add(target)
+        return resolved
+
+    import weakref
+
+    init_receivers = _resolve(worker_process_init)
+    ready_receivers = _resolve(worker_ready)
+
+    assert celery_module._configure_managed_execution_runtime_on_worker_start in init_receivers
+    assert celery_module._configure_managed_execution_runtime_on_worker_ready in ready_receivers

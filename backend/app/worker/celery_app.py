@@ -2,7 +2,7 @@
 """Celery 应用配置"""
 
 from celery import Celery
-from celery.signals import worker_process_init, worker_process_shutdown
+from celery.signals import worker_process_init, worker_process_shutdown, worker_ready
 
 from app.config import settings
 from app.common.async_runtime import run_coro_sync
@@ -22,10 +22,24 @@ def configure_managed_execution_runtime():
     return runtime
 
 
+def _ensure_managed_execution_runtime() -> None:
+    """幂等地把执行器网关注册到当前进程。"""
+    global _kubernetes_runtime
+    if _kubernetes_runtime is None:
+        _kubernetes_runtime = configure_managed_execution_runtime()
+
+
 @worker_process_init.connect
 def _configure_managed_execution_runtime_on_worker_start(**kwargs):
-    global _kubernetes_runtime
-    _kubernetes_runtime = configure_managed_execution_runtime()
+    # `prefork` 池才有子进程初始化；`threads`/`solo` 池不会触发这个信号，
+    # 所以下面还必须再挂 `worker_ready`，否则执行器表是空的，
+    # 提交任务时报「不支持的执行器类型: k8s_job」。
+    _ensure_managed_execution_runtime()
+
+
+@worker_ready.connect
+def _configure_managed_execution_runtime_on_worker_ready(**kwargs):
+    _ensure_managed_execution_runtime()
 
 
 @worker_process_shutdown.connect
