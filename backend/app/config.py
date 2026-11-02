@@ -702,6 +702,13 @@ class Settings(BaseSettings):
     IDEMPOTENCY_SWEEP_INTERVAL_SECONDS: int = 3600
     IDEMPOTENCY_SWEEP_ENABLED: bool = True
 
+    # 启动期平台工具 seeding（见 app/services/platform_tool_seeding.py）。
+    # 历史遗留：部分「种子迁移」在没有任何 admin 时会静默空转（只推 alembic_version，
+    # 一行数据都不建）。在「先跑迁移、后创建第一个 admin」的部署顺序下，新部署/重建库
+    # 会重演该缺陷。这里在 init_db() 之后按 slug 幂等补齐平台必备工具兜底；无 owner 时
+    # 只跳过、绝不阻断启动。默认开启，测试环境可用 false 关掉。
+    SEED_PLATFORM_TOOLS_ON_STARTUP: bool = True
+
     # 首月 AIDD 发布门禁。None 表示使用环境默认值：开发环境开启新入口，
     # 预发布/生产默认关闭新入口；旧 AIDD API 默认关闭。
     AIDD_PROJECT_WORKSPACE_ENABLED: Optional[bool] = None
