@@ -21,13 +21,16 @@
 ========
 * **不复制 manifest**：工具定义（含 ``tool_package_manifest``）通过 ``importlib``
   加载原始迁移模块取得——lvpocket 用其 ``_tool_config()``，molp/msign/pocket2mol
-  用 ``20261031_09`` 的 ``MODELS``。原迁移模块都是幂等的 upsert，直接复用其数据。
+  用 ``20261031_09`` 的 ``MODELS``，vina/boltz2/boltz2-affinity/therapainter/gromacs
+  用各自迁移里的 ``_model()``/``_models()`` 工厂。原迁移模块都是幂等的 upsert，
+  直接复用其数据，不复制任何 manifest 文本。
 * **折叠后续增量**：``20261031_09`` 之后还有若干迁移原地改写了工具版本
   （``20261031_10``/``20261031_11`` 改 msign 输入与镜像、``20261101_01`` 把 molp
   换成 GPU 镜像）。如果直接拿 ``20261031_09.MODELS`` 落库会把工具**回退**到旧契约，
   因此这里再叠加这些迁移模块暴露的常量（``NEW_INPUTS`` / ``NEW_DIGEST`` /
   ``NEW_CUDA`` / ``NEW_VERSION`` / ``NEW_CHANGELOG``），保证种出来的是 head 状态。
-  新增工具定义的迁移今后也应同步到这里的版本折叠。
+  ``20261031_12``~``20261031_16`` 这 5 条新增工具迁移经核对没有后续增量覆盖，
+  直接取各自 head 定义。新增工具定义的迁移今后若再被改写，也应同步到这里的折叠。
 * **幂等判据**：按 slug 查 ``tools``；存在且 ``current_version.version``、``changelog``、
   ``config`` 与期望一致、``status='published'`` 时只记 ``existing``、不写库；任一不符
   （含版本落后、镜像 digest 漂移）则原地 UPDATE，绝不重复 INSERT。
@@ -43,8 +46,10 @@ from __future__ import annotations
 
 import copy
 import importlib.util
+import inspect
 import json
 import logging
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -69,6 +74,12 @@ REQUIRED_TOOL_SLUGS = (
     "molp-pc-property-prediction",
     "msign-affinity-prediction",
     "pocket2mol-pocket-ligand-generation",
+    "autodock-vina-docking",
+    "boltz2-structure-prediction",
+    "boltz2-affinity-prediction",
+    "therapainter-peptide-prediction",
+    "gromacs-md",
+    "gmx-mmpbsa",
 )
 
 
@@ -154,80 +165,146 @@ def _apply_manifest_overrides(
     return cfg
 
 
+def _image_digest_in_upgrade(module) -> str:
+    """取迁移模块 ``upgrade()`` 里写死的镜像 digest。
+
+    ``20261031_13``/``20261031_14`` 把 digest 定义成 ``upgrade()`` 的局部变量再传给
+    ``_model(image_digest)``，模块级没有同名常量。这里从函数代码对象常量中读取，
+    既不复制 digest、也不改动已发布的迁移文件。
+    """
+    pattern = re.compile(r"^sha256:[0-9a-f]{64}$")
+    digests = [
+        const
+        for const in module.upgrade.__code__.co_consts
+        if isinstance(const, str) and pattern.match(const)
+    ]
+    if len(digests) != 1:
+        raise RuntimeError(
+            f"{module.__name__}.upgrade 里应恰有一个 sha256 digest，实际为 {digests!r}"
+        )
+    return digests[0]
+
+
+def _invoke_model_factory(module, factory_name: str) -> list[dict]:
+    """调用迁移模块的 ``_model``/``_models`` 工厂，归一成 model dict 列表。
+
+    需要显式镜像 digest 的工厂（boltz2 / boltz2-affinity）从 ``upgrade()`` 常量取；
+    其余无参工厂直接调用。工厂可能返回单个 dict 或 dict 列表。
+    """
+    factory = getattr(module, factory_name)
+    if inspect.signature(factory).parameters:
+        result = factory(_image_digest_in_upgrade(module))
+    else:
+        result = factory()
+    return [result] if isinstance(result, dict) else list(result)
+
+
+def _lvpocket_model(module) -> dict:
+    """把 lvpocket 迁移的模块级常量 + ``_tool_config()`` 归一成通用 model dict。"""
+    return {
+        "slug": module.SLUG,
+        "name": module.TOOL_NAME,
+        "description": module.DESCRIPTION,
+        "version": module.VERSION,
+        "changelog": "LVpocket-2 真实模型包（GPU，权重外置）",
+        "config": module._tool_config(),
+        "category": module.CATEGORY,
+        "provider": module.PROVIDER,
+        "gpu_required": True,
+        "gpu_memory_mb": 8192,
+        "timeout_sec": module.TIMEOUT_SEC,
+    }
+
+
+def _load_head_models() -> dict[str, dict]:
+    """从各原始迁移模块取 head 工具定义（slug -> model dict），并折叠后续增量迁移。"""
+    models: dict[str, dict] = {}
+
+    # lvpocket：定义在模块级常量 + ``_tool_config()``。
+    lvpocket_mod = _load_migration_module("20261030_01_lvpocket_model_package.py")
+    models[lvpocket_mod.SLUG] = _lvpocket_model(lvpocket_mod)
+
+    # molp / msign / pocket2mol：三条定义集中在 ``20261031_09`` 的 MODELS。
+    models_mod = _load_migration_module("20261031_09_model_packages.py")
+    for model in models_mod.MODELS:
+        models[model["slug"]] = copy.deepcopy(model)
+
+    # 折叠 ``20261031_09`` 之后的原地改写，保证种出来的是 head 契约而非旧契约。
+    msign_v12_mod = _load_migration_module("20261031_11_msign_smiles_input.py")
+    msign = models[msign_v12_mod.SLUG]
+    msign["config"] = _apply_manifest_overrides(
+        msign["config"],
+        inputs=msign_v12_mod.NEW_INPUTS,
+        image_digest=msign_v12_mod.NEW_DIGEST,
+    )
+    msign["version"] = msign_v12_mod.NEW_VERSION
+    msign["changelog"] = msign_v12_mod.NEW_CHANGELOG
+
+    molp_v11_mod = _load_migration_module("20261101_01_molp_pc_gpu_image.py")
+    molp = models[molp_v11_mod.TOOL_SLUG]
+    molp["config"] = _apply_manifest_overrides(
+        molp["config"],
+        image_digest=molp_v11_mod.NEW_DIGEST,
+        cuda=molp_v11_mod.NEW_CUDA,
+    )
+
+    # 单工具 / 多工具迁移：直接调用各自的 model 工厂，不复制任何 manifest。
+    for filename, factory_name in (
+        ("20261031_12_vina_tool.py", "_model"),
+        ("20261031_13_boltz2_tool.py", "_model"),
+        ("20261031_14_boltz2_affinity_tool.py", "_model"),
+        ("20261031_15_therapainter_tool.py", "_model"),
+        ("20261031_16_gromacs_tools.py", "_models"),
+    ):
+        module = _load_migration_module(filename)
+        for model in _invoke_model_factory(module, factory_name):
+            models[model["slug"]] = model
+
+    return models
+
+
+def _spec_from_model(model: dict) -> PlatformToolSpec:
+    """通用 spec 构造器：所有工具（含原有 4 个）统一从 model dict 生成落库定义。
+
+    消除「lvpocket 特例分支 + 20261031_09 循环 + 增量折叠」各自拼 PlatformToolSpec
+    的重复；新增工具只要产出一个同构 model dict 即可走同一路径。
+    """
+    config = model["config"]
+    return PlatformToolSpec(
+        slug=model["slug"],
+        name=model["name"],
+        description=model.get("description"),
+        version=model["version"],
+        changelog=model.get("changelog", ""),
+        config=config,
+        category=model.get("category", "model"),
+        provider=model.get("provider", "platform"),
+        gpu_required=model.get("gpu_required", True),
+        gpu_memory_mb=model.get("gpu_memory_mb", 0),
+        timeout_sec=model.get("timeout_sec") or config.get("timeout_sec") or 3600,
+    )
+
+
 _SPECS_CACHE: list[PlatformToolSpec] | None = None
 
 
 def build_platform_tool_specs() -> list[PlatformToolSpec]:
     """组装平台必备工具的 head 定义（结果缓存）。
 
-    工具定义全部来自原始迁移模块，本函数只负责挑选 slug 并折叠定义之后的增量迁移。
+    工具定义全部来自原始迁移模块，本函数按 ``REQUIRED_TOOL_SLUGS`` 顺序挑选并
+    统一走 :func:`_spec_from_model`；缺失任何 slug 直接报错而非静默少种。
     """
     global _SPECS_CACHE
     if _SPECS_CACHE is not None:
         return _SPECS_CACHE
 
-    lvpocket_mod = _load_migration_module("20261030_01_lvpocket_model_package.py")
-    models_mod = _load_migration_module("20261031_09_model_packages.py")
-    msign_v12_mod = _load_migration_module("20261031_11_msign_smiles_input.py")
-    molp_v11_mod = _load_migration_module("20261101_01_molp_pc_gpu_image.py")
+    models = _load_head_models()
+    missing = [slug for slug in REQUIRED_TOOL_SLUGS if slug not in models]
+    if missing:
+        raise KeyError(f"迁移里找不到这些必备工具的定义: {missing}")
 
-    specs: list[PlatformToolSpec] = [
-        PlatformToolSpec(
-            slug=lvpocket_mod.SLUG,
-            name=lvpocket_mod.TOOL_NAME,
-            description=lvpocket_mod.DESCRIPTION,
-            version=lvpocket_mod.VERSION,
-            changelog="LVpocket-2 真实模型包（GPU，权重外置）",
-            config=lvpocket_mod._tool_config(),
-            category=lvpocket_mod.CATEGORY,
-            provider=lvpocket_mod.PROVIDER,
-            gpu_required=True,
-            gpu_memory_mb=8192,
-            timeout_sec=lvpocket_mod.TIMEOUT_SEC,
-        )
-    ]
-
-    for model in models_mod.MODELS:
-        slug = model["slug"]
-        config = model["config"]
-        version = model["version"]
-        changelog = model["changelog"]
-
-        if slug == msign_v12_mod.SLUG:
-            # msign 在 1.1.0/1.2.0 被改写输入契约与镜像 digest。
-            config = _apply_manifest_overrides(
-                config,
-                inputs=msign_v12_mod.NEW_INPUTS,
-                image_digest=msign_v12_mod.NEW_DIGEST,
-            )
-            version = msign_v12_mod.NEW_VERSION
-            changelog = msign_v12_mod.NEW_CHANGELOG
-        elif slug == molp_v11_mod.TOOL_SLUG:
-            # molp 在 20261101_01 把 CPU 镜像换成 GPU（cu118）镜像，版本号不变。
-            config = _apply_manifest_overrides(
-                config,
-                image_digest=molp_v11_mod.NEW_DIGEST,
-                cuda=molp_v11_mod.NEW_CUDA,
-            )
-
-        specs.append(
-            PlatformToolSpec(
-                slug=slug,
-                name=model["name"],
-                description=model["description"],
-                version=version,
-                changelog=changelog,
-                config=config,
-                category="model",
-                provider="platform",
-                gpu_required=True,
-                gpu_memory_mb=model["gpu_memory_mb"],
-                timeout_sec=3600,
-            )
-        )
-
-    _SPECS_CACHE = specs
-    return specs
+    _SPECS_CACHE = [_spec_from_model(models[slug]) for slug in REQUIRED_TOOL_SLUGS]
+    return _SPECS_CACHE
 
 
 # --------------------------------------------------------------------------- #

@@ -26,6 +26,23 @@ from app.services.platform_tool_seeding import (
 )
 
 
+# 显式列出扩展后应种出的全部 slug（防止 REQUIRED_TOOL_SLUGS 自身写错时测试自我印证）。
+EXPECTED_TOOL_SLUGS = frozenset(
+    {
+        "lvpocket-pocket-prediction",
+        "molp-pc-property-prediction",
+        "msign-affinity-prediction",
+        "pocket2mol-pocket-ligand-generation",
+        "autodock-vina-docking",
+        "boltz2-structure-prediction",
+        "boltz2-affinity-prediction",
+        "therapainter-peptide-prediction",
+        "gromacs-md",
+        "gmx-mmpbsa",
+    }
+)
+
+
 @pytest_asyncio.fixture
 async def seed_db(tmp_path):
     """文件型 SQLite 隔离库（同 test_artifact_gc.py 的做法，避免跨 loop 连接问题）。"""
@@ -76,22 +93,25 @@ async def test_seeds_missing_tools_then_is_idempotent(seed_db, monkeypatch):
     monkeypatch.setattr(settings, "AIDD_SYSTEM_USER_ID", None)
     await _add_admin(db)
 
+    # REQUIRED_TOOL_SLUGS 本身要等于这份显式清单（扩展后应为 10 个）。
+    assert set(REQUIRED_TOOL_SLUGS) == EXPECTED_TOOL_SLUGS
+
     first = await seed_platform_tools(db)
     await db.commit()
-    assert set(first["created"]) == set(REQUIRED_TOOL_SLUGS)
+    assert set(first["created"]) == EXPECTED_TOOL_SLUGS
     assert first["existing"] == []
 
     count_after_first = await _count(db, Tool)
-    assert count_after_first == len(REQUIRED_TOOL_SLUGS)
+    assert count_after_first == len(EXPECTED_TOOL_SLUGS)
     # 必备工具全部以 published 状态落库
     rows = (await db.execute(select(Tool.slug, Tool.status))).all()
-    assert {slug for slug, _ in rows} == set(REQUIRED_TOOL_SLUGS)
+    assert {slug for slug, _ in rows} == EXPECTED_TOOL_SLUGS
     assert all(status == "published" for _, status in rows)
 
     second = await seed_platform_tools(db)
     await db.commit()
     assert second["created"] == []
-    assert set(second["existing"]) == set(REQUIRED_TOOL_SLUGS)
+    assert set(second["existing"]) == EXPECTED_TOOL_SLUGS
     assert await _count(db, Tool) == count_after_first
 
 
@@ -124,6 +144,38 @@ async def test_outdated_tool_is_updated_not_duplicated(seed_db, monkeypatch):
 
     await db.refresh(version)
     assert version.version == "1.2.0"
+    assert version.config.get("type") == "k8s_job"
+    assert "tool_package_manifest" in version.config
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("slug", ["autodock-vina-docking", "gromacs-md", "boltz2-affinity-prediction"])
+async def test_outdated_new_tool_is_updated_not_duplicated(seed_db, monkeypatch, slug):
+    """新增工具（含 gromacs 多工具迁移中的一条）版本落后时也走原地 UPDATE。"""
+    db, _factory = seed_db
+    monkeypatch.setattr(settings, "AIDD_SYSTEM_USER_ID", None)
+    await _add_admin(db)
+    await seed_platform_tools(db)
+    await db.commit()
+
+    tool = (await db.execute(select(Tool).where(Tool.slug == slug))).scalar_one()
+    version = (
+        await db.execute(select(ToolVersion).where(ToolVersion.id == tool.current_version_id))
+    ).scalar_one()
+    version.version = "0.9.0"
+    version.config = {"type": "legacy"}
+    await db.commit()
+
+    count_before = await _count(db, Tool)
+    result = await seed_platform_tools(db)
+    await db.commit()
+
+    assert result["created"] == []
+    assert slug in result["existing"]
+    assert await _count(db, Tool) == count_before  # 没有新增行
+
+    await db.refresh(version)
+    assert version.version == "1.0.0"
     assert version.config.get("type") == "k8s_job"
     assert "tool_package_manifest" in version.config
 
