@@ -9,7 +9,11 @@ BACKEND_ROOT = PROJECT_ROOT / "backend"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.tools.capabilities import AIDD_TOOL_CAPABILITIES
+from app.tools.capabilities import (
+    CapabilityInput,
+    CapabilityOutput,
+    ToolCapability,
+)
 from app.tools.capability_registry import capability_to_tool_summary
 from app.services.tool_contracts import (
     build_tool_contract,
@@ -71,8 +75,8 @@ def _v2_manifest(*, agent_exposure: bool = True) -> dict:
 def test_build_tool_contract_normalizes_identity_executor_schema_and_capability():
     tool = SimpleNamespace(
         id="tool-1",
-        slug="gcdm-pocket-generation",
-        name="GCDM Pocket Generation",
+        slug="example-pocket-generation",
+        name="Example Pocket Generation",
         description="Generate ligands from a pocket",
         status="published",
         is_public=True,
@@ -116,7 +120,7 @@ def test_build_tool_contract_normalizes_identity_executor_schema_and_capability(
 
     assert contract["contract_version"] == "1.0"
     assert contract["id"] == "tool-1"
-    assert contract["slug"] == "gcdm-pocket-generation"
+    assert contract["slug"] == "example-pocket-generation"
     assert contract["executor"] == {"type": "ssh_job", "timeout_sec": 3600}
     assert contract["schema"]["input"]["required"] == ["pocket_pdb"]
     assert contract["schema"]["output"]["properties"]["success"]["type"] == "boolean"
@@ -222,10 +226,22 @@ def test_public_tool_schema_excludes_runtime_version_config():
 
 
 def test_agent_tool_summary_keeps_legacy_tool_slug_but_exposes_contract_slug():
-    summary = capability_to_tool_summary(AIDD_TOOL_CAPABILITIES["gcdm-pocket-generation"])
+    # gcdm-pocket-generation 已从静态能力注册表移除；此处内联构造等价能力，
+    # 仅验证 capability_to_tool_summary 的通用映射行为。
+    capability = ToolCapability(
+        tool_slug="test-molecule-generation",
+        capability="molecule_generation",
+        stage="molecule_generation",
+        inputs=(CapabilityInput("binding_pocket@1", "pocket"),),
+        outputs=(
+            CapabilityOutput("ligand_structure@1", "artifact", path="poses"),
+            CapabilityOutput("molecule_table@1", "artifact", path="molecules"),
+        ),
+    )
+    summary = capability_to_tool_summary(capability)
 
-    assert summary["slug"] == "gcdm-pocket-generation"
-    assert summary["tool_slug"] == "gcdm-pocket-generation"
+    assert summary["slug"] == "test-molecule-generation"
+    assert summary["tool_slug"] == "test-molecule-generation"
     assert summary["capability"] == "molecule_generation"
     assert summary["inputs"] == ["binding_pocket@1"]
     assert summary["outputs"] == ["ligand_structure@1", "molecule_table@1"]
