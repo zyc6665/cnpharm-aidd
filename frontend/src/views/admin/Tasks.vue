@@ -276,13 +276,19 @@
         </a-descriptions>
 
         <a-divider>{{ t('tasks.inputParams') }}</a-divider>
-        <pre class="json-view">{{
-          JSON.stringify(selectedTask.inputs?.params ?? {}, null, 2)
-        }}</pre>
+        <AppRawJson
+          :value="selectedTask.inputs?.params ?? {}"
+          :title="t('tasks.inputParams')"
+          test-id="admin-task-input-raw"
+        />
 
         <template v-if="selectedTask.output_data">
           <a-divider>{{ t('tasks.result') }}</a-divider>
-          <pre class="json-view">{{ JSON.stringify(selectedTask.output_data, null, 2) }}</pre>
+          <AppRawJson
+            :value="selectedTask.output_data"
+            :title="t('tasks.result')"
+            test-id="admin-task-output-raw"
+          />
         </template>
 
         <template v-if="selectedTask.error_message">
@@ -313,6 +319,7 @@
   import AppInlineError from '@/components/common/AppInlineError.vue'
   import SkeletonList from '@/components/common/SkeletonList.vue'
   import SkeletonCard from '@/components/common/SkeletonCard.vue'
+  import AppRawJson from '@/components/common/AppRawJson.vue'
   import { useRemoteToolOptions } from '@/composables/useRemoteToolOptions'
   import {
     getTaskList,
@@ -564,15 +571,6 @@
     .resource-wait-status {
       color: @warning-color;
       font-size: @font-size-sm;
-    }
-
-    .json-view {
-      background: @bg-color-light;
-      padding: @spacing-md;
-      border-radius: @border-radius-base;
-      font-size: @font-size-sm;
-      overflow: auto;
-      max-height: 240px;
     }
   }
 </style>

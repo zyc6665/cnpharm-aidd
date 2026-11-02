@@ -1427,6 +1427,8 @@ export default {
       compoundInfo: '化合物信息',
       properties: '分子性质',
       noStructure: '该候选物没有可渲染的结构',
+      attrs: '候选物属性',
+      attrsHint: '设计过程写入的附加字段，原始键名随工具不同而不同',
       relatedTask: '关联任务',
       relatedResult: '查看结果详情',
       noRelatedTask: '未关联任务'

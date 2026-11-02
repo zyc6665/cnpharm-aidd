@@ -144,13 +144,12 @@
       <section class="result-section">
         <h3 class="section-title">{{ t('results.detail.outputData') }}</h3>
         <p class="section-subtitle">{{ t('results.detail.outputDataHint') }}</p>
-        <a-collapse v-if="hasOutputData" data-testid="result-output-data">
-          <a-collapse-panel :header="t('results.detail.outputData')">
-            <pre class="json-block" data-testid="result-output-data-json">{{
-              outputDataJson
-            }}</pre>
-          </a-collapse-panel>
-        </a-collapse>
+        <AppRawJson
+          v-if="hasOutputData"
+          :value="result?.output_data ?? {}"
+          :title="t('results.detail.outputData')"
+          test-id="result-output-data"
+        />
         <p v-else class="section-empty" data-testid="result-output-data-empty">
           {{ t('results.detail.outputDataEmpty') }}
         </p>
@@ -357,6 +356,7 @@ import { buildArtifactDisplay } from '@/domain/artifacts/presentation'
   import { formatDateTimeMinutes } from '@/utils/datetime'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
+  import AppRawJson from '@/components/common/AppRawJson.vue'
   import { exportTraceability, getResult, getTraceability } from '@/api/results'
   import { TRACEABILITY_SECTIONS, formatBytes, formatExecutionSeconds } from '@/domain/results'
   import { triggerProtectedFileDownload } from '@/utils/protected-file-access'
@@ -401,7 +401,6 @@ import { buildArtifactDisplay } from '@/domain/artifacts/presentation'
   })
 
   /** `output_data` 是后端 `run.output()` 的原样字典，直接折叠展示即可。 */
-  const outputDataJson = computed(() => JSON.stringify(result.value?.output_data ?? {}, null, 2))
 
   const traceInputRows = computed<TraceabilityInput[]>(() => traceability.value?.inputs ?? [])
 

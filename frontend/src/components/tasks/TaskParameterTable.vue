@@ -27,11 +27,11 @@
         </a-descriptions>
       </section>
 
-      <a-collapse ghost class="parameter-raw" data-testid="task-parameter-raw">
-        <a-collapse-panel key="raw" :header="t('tasks.parameters.rawJson')">
-          <pre class="json-display">{{ rawPretty }}</pre>
-        </a-collapse-panel>
-      </a-collapse>
+      <AppRawJson
+        :value="extractToolParams(props.params)"
+        :title="t('tasks.parameters.rawJson')"
+        test-id="task-parameter-raw"
+      />
     </template>
 
     <p v-else class="parameter-empty" data-testid="task-parameter-empty">
@@ -44,6 +44,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { buildParameterGroups, extractToolParams } from '@/domain/tasks/parameters'
+import AppRawJson from '@/components/common/AppRawJson.vue'
 
 const props = defineProps<{
   params?: Record<string, unknown> | null
@@ -61,7 +62,6 @@ const groups = computed(() =>
   }),
 )
 
-const rawPretty = computed(() => JSON.stringify(extractToolParams(props.params), null, 2))
 </script>
 
 <style scoped>
@@ -118,14 +118,4 @@ const rawPretty = computed(() => JSON.stringify(extractToolParams(props.params),
   margin-top: 4px;
 }
 
-.json-display {
-  margin: 0;
-  padding: 10px;
-  max-height: 320px;
-  overflow: auto;
-  background: var(--color-fill-quaternary, #fafafa);
-  border-radius: 4px;
-  font-size: 12px;
-  line-height: 1.6;
-}
 </style>
