@@ -62,8 +62,22 @@ def test_lvpocket_prefers_protein_pocket_residues_for_generation() -> None:
 
 
 def test_extracts_output_data_by_path() -> None:
+    capability = ToolCapability(
+        tool_slug="dynamic-msign",
+        capability="affinity_prediction",
+        stage="affinity_prediction",
+        inputs=(),
+        outputs=(
+            CapabilityOutput(
+                "affinity_report",
+                "output_data",
+                path="result.outputs.prediction",
+            ),
+        ),
+    )
+
     outputs = extract_semantic_outputs(
-        capability=get_capability("msign-affinity-prediction"),
+        capability=capability,
         task_output_files=[],
         output_data={"result": {"outputs": {"prediction": {"predicted_affinity": 7.2}}}},
     )

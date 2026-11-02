@@ -25,8 +25,8 @@ def test_first_wave_capabilities_are_registered() -> None:
     assert get_capability("builtin-sdf-to-pdb").capability == "format_conversion"
     assert get_capability("builtin-vina-docking").capability == "docking_scoring"
     assert get_capability("builtin-rdkit-properties").capability == "property_prediction"
-    assert get_capability("molp-pc-property-prediction").capability == "property_prediction"
-    assert get_capability("msign-affinity-prediction").capability == "affinity_prediction"
+    assert get_capability("molp-pc-property-prediction").capability == "molp-pc-property-prediction"
+    assert get_capability("msign-affinity-prediction").capability == "msign-affinity-prediction"
 
 
 def test_capabilities_advertise_semantic_inputs_and_outputs() -> None:
@@ -66,6 +66,25 @@ def test_capabilities_advertise_semantic_inputs_and_outputs() -> None:
     assert [item.semantic_type for item in rdkit.inputs] == ["smiles_csv"]
     assert [item.semantic_type for item in rdkit.outputs] == ["property_report"]
 
+    molp = get_capability("molp-pc-property-prediction")
+    assert molp.stage == "molp-pc-property-prediction"
+    assert [item.semantic_type for item in molp.inputs] == ["molecule_table@1"]
+    assert [item.field for item in molp.inputs] == ["smiles_csv"]
+    assert [item.semantic_type for item in molp.outputs] == ["molecule_table@1", "run_report@1"]
+    assert molp.outputs[1].required is False
+
+    msign = get_capability("msign-affinity-prediction")
+    assert msign.stage == "msign-affinity-prediction"
+    assert [item.semantic_type for item in msign.inputs] == [
+        "protein_structure@1",
+        "ligand_structure@1",
+        "molecule_table@1",
+    ]
+    assert [item.field for item in msign.inputs] == ["protein_pdb", "ligand_sdf", "ligand_smiles"]
+    assert [item.required for item in msign.inputs] == [True, False, False]
+    assert [item.semantic_type for item in msign.outputs] == ["molecule_table@1", "run_report@1"]
+    assert msign.outputs[1].required is False
+
 
 def test_capability_lookup_by_output() -> None:
     capabilities = get_capabilities_by_output("generated_ligand")
@@ -95,7 +114,4 @@ def test_capability_lookup_by_output() -> None:
     assert [item.tool_slug for item in ranking_capabilities] == ["builtin-vina-docking"]
 
     property_capabilities = get_capabilities_by_output("property_report")
-    assert [item.tool_slug for item in property_capabilities] == [
-        "molp-pc-property-prediction",
-        "builtin-rdkit-properties",
-    ]
+    assert [item.tool_slug for item in property_capabilities] == ["builtin-rdkit-properties"]
