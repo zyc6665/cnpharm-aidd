@@ -9,7 +9,7 @@ from app.tasks.executors.errors import TaskExecutionError
 def build_remote_paths(config: dict[str, Any], task_id: str) -> dict[str, str]:
     host_base_dir = str(config.get("remote_base_dir", "")).rstrip("/")
     if not host_base_dir:
-        raise TaskExecutionError("Missing remote_base_dir in ssh_job config")
+        raise TaskExecutionError("ssh_job 配置缺少 remote_base_dir")
     runtime_base_dir = host_base_dir
     if config.get("runner_mode", "shell") == "docker_exec":
         runtime_base_dir = str(config.get("container_base_dir", host_base_dir)).rstrip("/")

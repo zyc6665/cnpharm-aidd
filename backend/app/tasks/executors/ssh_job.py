@@ -105,7 +105,7 @@ class SSHJobExecutor(BaseExecutor):
                 if download_root
                 else {
                     "success": False,
-                    "message": "SSH job execution failed before output/result.json was produced",
+                    "message": "SSH 作业未产出 output/result.json 即失败",
                 }
             )
             output_file_ids = await self._collect_output_files(download_root)
@@ -116,7 +116,7 @@ class SSHJobExecutor(BaseExecutor):
                 logger.warning("Failed to cleanup remote SSH job directory: %s", cleanup_error)
             if remote_result["exit_status"] != 0:
                 raise TaskExecutionError(
-                    f"SSH job execution failed with code {remote_result['exit_status']}",
+                    f"SSH 作业执行失败，退出码 {remote_result['exit_status']}",
                     details={
                         "stdout": (remote_result.get("stdout") or "")[:1000],
                         "stderr": (remote_result.get("stderr") or "")[:1000],
@@ -127,7 +127,7 @@ class SSHJobExecutor(BaseExecutor):
             if not result.get("success", True):
                 error = result.get("error") or {}
                 raise TaskExecutionError(
-                    result.get("message") or error.get("code") or "SSH job reported failure",
+                    result.get("message") or error.get("code") or "SSH 作业报告执行失败",
                     details={"result": result},
                 )
             return {
@@ -139,13 +139,13 @@ class SSHJobExecutor(BaseExecutor):
             }
         except TimeoutError as exc:
             raise TaskTimeoutError(
-                "SSH job execution timeout",
+                "SSH 作业执行超时",
                 timeout_sec=self.config.get("timeout_sec"),
             ) from exc
         except TaskExecutionError:
             raise
         except Exception as exc:
-            raise TaskExecutionError(f"SSH job execution error: {exc}") from exc
+            raise TaskExecutionError(f"SSH 作业执行异常：{exc}") from exc
         finally:
             if progress_pump_task is not None:
                 progress_events.put(None)
@@ -237,7 +237,7 @@ class SSHJobExecutor(BaseExecutor):
             except Exception as exc:
                 if command_result.exit_status == 0:
                     raise TaskExecutionError(
-                        "Failed to download SSH job outputs",
+                        "下载 SSH 作业输出失败",
                         details={
                             "error": str(exc),
                             "remote_output_dir": remote_paths["host_output_dir"],
@@ -258,7 +258,7 @@ class SSHJobExecutor(BaseExecutor):
                     cleanup_error = str(exc)
             transport.close()
         if workflow_result is None:
-            raise TaskExecutionError("SSH job execution produced no workflow result")
+            raise TaskExecutionError("SSH 作业执行未产生工作流结果")
         workflow_result["cleanup_error"] = cleanup_error
         return workflow_result
 
@@ -357,7 +357,7 @@ class SSHJobExecutor(BaseExecutor):
                         await ensure_local_file(file_record, Path(destination_path))
                     except FileNotFoundError as exc:
                         raise TaskExecutionError(
-                            f"Input file {file_record.filename} not found in storage",
+                            f"输入文件 {file_record.filename} 在存储中不存在",
                             details={"file_id": file_id, "storage_path": file_record.storage_path},
                         ) from exc
                     staged_files.append(
@@ -372,7 +372,7 @@ class SSHJobExecutor(BaseExecutor):
             except TaskExecutionError:
                 raise
             except Exception as exc:
-                raise TaskExecutionError(f"Failed to prepare SSH input files: {exc}") from exc
+                raise TaskExecutionError(f"准备 SSH 输入文件失败：{exc}") from exc
         return staged_files
 
     def _build_params_payload(self, staged_files: list[dict[str, str]]) -> dict[str, Any]:
@@ -399,8 +399,8 @@ class SSHJobExecutor(BaseExecutor):
                 )
                 return request.model_dump(mode="json")
         except StandardRequestBuilderError as exc:
-            raise TaskExecutionError(f"Failed to build standard request.v1: {exc}") from exc
-        raise TaskExecutionError("Failed to open database session for standard request.v1")
+            raise TaskExecutionError(f"构建标准请求 request.v1 失败：{exc}") from exc
+        raise TaskExecutionError("打开数据库会话以构建标准请求 request.v1 失败")
 
     def _standard_input_bindings(self) -> dict[str, str]:
         data = getattr(self.task, "extra_data", None)

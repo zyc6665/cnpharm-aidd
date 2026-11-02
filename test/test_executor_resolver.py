@@ -34,5 +34,5 @@ def test_executor_resolver_resolves_registered_type_and_preserves_aliases():
 def test_executor_resolver_raises_platform_error_for_unknown_type():
     resolver = ExecutorResolver({"fake": FakeExecutor})
 
-    with pytest.raises(TaskExecutionError, match="Unsupported executor type"):
+    with pytest.raises(TaskExecutionError, match="不支持的执行器类型"):
         resolver.resolve("unknown")

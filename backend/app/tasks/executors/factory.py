@@ -333,7 +333,7 @@ class TaskExecutor:
                 )
                 if not result.success:
                     raise GPUAllocationFailed(
-                        result.message or "No GPU resources available",
+                        result.message or "没有可用的 GPU 资源",
                         wait_position=result.wait_position,
                     )
                 self._allocation_id = result.allocation_id
@@ -374,7 +374,7 @@ class TaskExecutor:
                 raise
             except Exception as exc:
                 await session.rollback()
-                raise TaskExecutionError(f"GPU allocation unexpected error: {exc}") from exc
+                raise TaskExecutionError(f"GPU 分配发生未知错误：{exc}") from exc
 
     async def _release_gpu(self) -> None:
         await self._stop_gpu_heartbeat()
@@ -450,7 +450,7 @@ class TaskExecutor:
             raise
         except Exception as exc:
             logger.exception("Task %s unexpected error", self.task.id)
-            raise TaskExecutionError(f"Unexpected error: {exc}") from exc
+            raise TaskExecutionError(f"未知错误：{exc}") from exc
         finally:
             try:
                 await self._release_gpu()
@@ -531,7 +531,7 @@ class TaskExecutor:
         except Exception as exc:
             if self._is_running():
                 TaskStateMachine.complete(self.task, success=False, error_message=str(exc))
-            raise TaskExecutionError(f"Unexpected error: {exc}") from exc
+            raise TaskExecutionError(f"未知错误：{exc}") from exc
         finally:
             try:
                 await self._release_gpu()
