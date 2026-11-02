@@ -4,6 +4,8 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
+import MockDataBanner from '@/components/common/MockDataBanner.vue'
+import { useToolMockBanner } from '@/composables/useToolMockBanner'
 import FunnelChart from './FunnelChart.vue'
 import { estimateFunnel } from './funnel'
 import type { FunnelStageKey } from './funnel'
@@ -17,6 +19,7 @@ import {
 import type { ScreeningParams } from '@/types/screening'
 
 const route = useRoute()
+const { isMock } = useToolMockBanner(VINA_TOOL_SLUG)
 const router = useRouter()
 const { t } = useI18n()
 
@@ -149,11 +152,11 @@ async function handleSubmit(): Promise<void> {
   <main class="screen-config" data-testid="screen-config-page">
     <AppPageHeader :title="t('screening.config.title')" :subtitle="t('screening.config.subtitle')" />
 
-    <a-alert
-      class="screen-config__notice"
-      type="info"
-      show-icon
-      :message="t('screening.banner.disclaimer')"
+    <!-- 演示（mock）工具包才提示；真实模型包不显示任何告警 -->
+    <MockDataBanner
+      v-if="isMock"
+      :mock="true"
+      :disclaimer="t('screening.banner.mockTool')"
     />
 
     <a-card :title="t('screening.config.inputs')">

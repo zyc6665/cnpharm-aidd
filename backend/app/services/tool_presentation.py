@@ -34,6 +34,7 @@ from app.schemas.tools import (
     ToolVersionResponse,
     ToolVersionPublicResponse,
 )
+from app.tool_packages.config_resolver import tool_package_declares_mock
 from app.services.tool_contracts import (
     build_tool_contract,
     collect_tool_contract_validation_errors,
@@ -64,6 +65,11 @@ def serialize_tool(
         else None
     )
     tool_data["deployment"] = build_tool_deployment(tool, tool_data["contract"])
+    # 演示（mock）标记：由工具包清单的 metadata.mock 决定，前端据此决定是否提示
+    # 「结果不可用于科研决策」。真实模型包一律为 False，不能靠页面硬编码。
+    tool_data["mock"] = tool_package_declares_mock(
+        tool.current_version.config if tool.current_version else None
+    )
     if not expose_runtime_config and tool.current_version is not None:
         public_version = serialize_public_tool_version(tool.current_version)
         if tool_package is not None:

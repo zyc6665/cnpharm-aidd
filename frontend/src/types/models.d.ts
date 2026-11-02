@@ -96,6 +96,8 @@ export interface Tool {
   tags: Tag[]
   status: 'draft' | 'published' | 'disabled' | 'deprecated'
   is_public?: boolean
+  /** 工具包是否声明为演示（mock）模型包，决定页面是否提示「结果不可用于科研决策」 */
+  mock?: boolean
   // 原有字段
   current_version_id?: string
   current_version?: ToolVersion
