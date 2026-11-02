@@ -255,7 +255,7 @@
 
       <a-tab-pane key="config" :tab="t('admin.configSnapshot')">
         <a-card :loading="loading">
-          <pre class="json-view">{{ formattedConfig }}</pre>
+          <AppRawJson :value="systemConfig ?? {}" :title="t('admin.systemConfig')" test-id="admin-system-config-raw" />
         </a-card>
       </a-tab-pane>
     </a-tabs>
@@ -276,6 +276,7 @@ import {
 } from '@ant-design/icons-vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
+import AppRawJson from '@/components/common/AppRawJson.vue'
 import {
   formatAdminDateTime,
   getSystemHealthServiceLabel,
@@ -314,9 +315,6 @@ const resourceStatus = ref<WorkerResourceStatusResponse | null>(null)
 const quotaLoading = ref(false)
 const resourceQuotaStatus = ref<ResourceQuotaStatusResponse | null>(null)
 
-const formattedConfig = computed(() => {
-  return JSON.stringify(systemConfig.value ?? {}, null, 2)
-})
 
 const healthServices = computed(() => {
   return sortSystemHealthServices(systemHealth.value?.services)
@@ -557,16 +555,6 @@ onMounted(() => {
 
   .runtime-cell span {
     white-space: nowrap;
-  }
-
-  .json-view {
-    background: @bg-color-light;
-    padding: @spacing-md;
-    border-radius: @border-radius-base;
-    font-size: @font-size-sm;
-    overflow: auto;
-    max-height: 560px;
-    margin: 0;
   }
 
 }

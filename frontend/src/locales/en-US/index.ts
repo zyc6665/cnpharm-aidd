@@ -1432,6 +1432,8 @@ export default {
       compoundInfo: 'Compound information',
       properties: 'Molecular properties',
       noStructure: 'This candidate has no renderable structure',
+      attrs: 'Candidate attributes',
+      attrsHint: 'Extra fields written during design; raw keys differ per tool',
       relatedTask: 'Related task',
       relatedResult: 'View result detail',
       noRelatedTask: 'No related task'

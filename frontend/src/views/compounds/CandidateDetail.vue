@@ -107,6 +107,12 @@
         <p v-else class="section-empty">{{ t('candidates.detail.noStructure') }}</p>
       </section>
 
+      <section v-if="attrSections.length" class="candidate-section">
+        <h3 class="section-title">{{ t('candidates.detail.attrs') }}</h3>
+        <p class="section-subtitle">{{ t('candidates.detail.attrsHint') }}</p>
+        <AppDescriptionList :sections="attrSections" :columns="2" test-id="candidate-attrs" />
+      </section>
+
       <section class="candidate-section">
         <h3 class="section-title">{{ t('candidates.detail.relatedTask') }}</h3>
         <div v-if="candidate.task_id" class="related-links" data-testid="candidate-related-task">
@@ -136,6 +142,7 @@
   import { formatDateTimeMinutes } from '@/utils/datetime'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
+  import AppDescriptionList from '@/components/common/AppDescriptionList.vue'
   import Smiles2DCell from '@/components/tasks/Smiles2DCell.vue'
   import { getCandidate } from '@/api/compounds'
   import {
@@ -145,6 +152,7 @@
     readPropertyValue
   } from '@/domain/compounds'
   import type { Candidate } from '@/types/compounds'
+  import { formatNullable, humanizeKey } from '@/domain/common/format'
 
   const route = useRoute()
   const { t } = useI18n()
@@ -168,6 +176,34 @@
   const loading = ref(false)
   const loadError = ref(false)
   const candidate = ref<Candidate | null>(null)
+
+  /**
+   * 候选物附加属性：键名随生成工具不同而不同，因此不做白名单、不隐藏未识别键，
+   * 只做下划线转空格兜底。空值直接不出现，避免右侧一列「-」占满视线。
+   */
+  const attrSections = computed(() => {
+    const attrs = candidate.value?.attrs ?? {}
+    const entries = Object.entries(attrs).filter(
+      ([, value]) => value !== null && value !== undefined && value !== '',
+    )
+    if (!entries.length) {
+      return []
+    }
+    return [
+      {
+        key: 'attrs',
+        fields: entries.map(([key, value]) => ({
+          key,
+          label: humanizeKey(key),
+          value: formatNullable(value, {
+            yes: t('tasks.parameters.yes'),
+            no: t('tasks.parameters.no'),
+          }),
+          mono: typeof value === 'string' && /^[A-Za-z0-9_\-:.@]{16,}$/.test(value),
+        })),
+      },
+    ]
+  })
 
   const candidateTitle = computed(() => {
     const current = candidate.value
