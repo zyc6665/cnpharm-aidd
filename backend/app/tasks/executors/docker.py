@@ -27,7 +27,7 @@ class DockerExecutor(BaseExecutor):
     async def execute(self) -> dict[str, Any]:
         image = self.config.get("image")
         if not image:
-            raise TaskExecutionError("Missing image in tool config")
+            raise TaskExecutionError("工具配置缺少镜像（image）")
         command = self.config.get("command", [])
         timeout = self.config.get("timeout_sec", 600)
         work_dir = self._get_work_dir()
@@ -46,7 +46,7 @@ class DockerExecutor(BaseExecutor):
             )
             if process.returncode != 0:
                 raise TaskExecutionError(
-                    f"Docker execution failed with code {process.returncode}",
+                    f"Docker 容器执行失败，退出码 {process.returncode}",
                     details={"stderr": (process.stderr or "")[:1000], "stdout": (process.stdout or "")[:1000]},
                 )
             output = self._load_output_result(process.stdout)
@@ -56,13 +56,13 @@ class DockerExecutor(BaseExecutor):
             return {"success": True, "result": output, "stdout": process.stdout, "stderr": process.stderr}
         except subprocess.TimeoutExpired as exc:
             raise TaskTimeoutError(
-                f"Docker execution timeout after {timeout}s",
+                f"Docker 容器执行超时（{timeout} 秒）",
                 timeout_sec=timeout,
             ) from exc
         except TaskExecutionError:
             raise
         except Exception as exc:
-            raise TaskExecutionError(f"Docker execution error: {exc}") from exc
+            raise TaskExecutionError(f"Docker 容器执行异常：{exc}") from exc
         finally:
             self._cleanup_work_dir()
 
@@ -108,13 +108,13 @@ class DockerExecutor(BaseExecutor):
                         await ensure_local_file(file_record, destination)
                     except FileNotFoundError as exc:
                         raise TaskExecutionError(
-                            f"Input file {file_record.filename} not found in storage"
+                            f"输入文件 {file_record.filename} 在存储中不存在"
                         ) from exc
                 break
             except TaskExecutionError:
                 raise
             except Exception as exc:
-                raise TaskExecutionError(f"Failed to prepare input files: {exc}") from exc
+                raise TaskExecutionError(f"准备输入文件失败：{exc}") from exc
 
     async def _collect_output_files(self) -> list[str]:
         output_dir = os.path.join(self._get_work_dir(), "output")

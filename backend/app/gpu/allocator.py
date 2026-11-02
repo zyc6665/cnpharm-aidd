@@ -130,7 +130,7 @@ class GPUAllocator:
         if not lock_acquired:
             return AllocationResult(
                 success=False,
-                message="Failed to acquire allocation lock, please retry"
+                message="获取 GPU 分配锁失败，请重试"
             )
 
         try:
@@ -140,7 +140,7 @@ class GPUAllocator:
             if not available_nodes:
                 return AllocationResult(
                     success=False,
-                    message="No GPU nodes available"
+                    message="没有可用的 GPU 节点"
                 )
 
             # 根据策略分配
@@ -182,7 +182,7 @@ class GPUAllocator:
             wait_position = await self._get_wait_position(task_id)
             return AllocationResult(
                 success=False,
-                message="No GPU resources available",
+                message="没有可用的 GPU 资源",
                 wait_position=wait_position
             )
 
@@ -654,7 +654,7 @@ class GPUAllocator:
                 if task_exists is None:
                     return AllocationResult(
                         success=False,
-                        message=f"Task not found: {task_id}",
+                        message=f"任务不存在：{task_id}",
                     )
 
                 lease = GPUAllocation(
@@ -721,7 +721,7 @@ class GPUAllocator:
             gpu_index=gpu_index,
             allocated_memory_mb=memory_mb,
             allocation_id=allocation_id,
-            message="GPU allocated successfully",
+            message="GPU 分配成功",
             slot_id=slot.get("slot_id"),
             slot_identifier=slot.get("slot_identifier"),
             accelerator_model=slot.get("accelerator_model"),

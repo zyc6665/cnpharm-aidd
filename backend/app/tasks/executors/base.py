@@ -186,7 +186,7 @@ class BaseExecutor(ABC):
                         relative_path,
                     )
                     raise TaskExecutionError(
-                        f"Failed to collect output file {relative_path}: {exc}"
+                        f"收集输出文件失败：{relative_path}：{exc}"
                     ) from exc
 
             if commit:
@@ -195,6 +195,6 @@ class BaseExecutor(ABC):
             logger.error("Failed to collect output files: %s", exc)
             if commit:
                 await session.rollback()
-            raise TaskExecutionError(f"Failed to collect output files: {exc}") from exc
+            raise TaskExecutionError(f"收集输出文件失败：{exc}") from exc
 
         return uploaded_ids

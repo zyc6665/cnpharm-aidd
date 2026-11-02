@@ -27,18 +27,18 @@ def contains_shell_control(value: Any) -> bool:
 def validate_docker_execution_inputs(image: str, command: list[str], task_params: Any) -> None:
     allowed_images = settings.DOCKER_ALLOWED_IMAGES
     if allowed_images and image not in allowed_images:
-        raise TaskExecutionError("Docker image is not in the configured allowlist")
+        raise TaskExecutionError("Docker 镜像不在允许列表中")
     if (
         settings.ENVIRONMENT in {"staging", "production"}
         and settings.DOCKER_REQUIRE_IMAGE_DIGEST_IN_DEPLOYMENT
         and not _DOCKER_IMAGE_DIGEST_PATTERN.fullmatch(image)
     ):
-        raise TaskExecutionError("Docker image must use an immutable digest in deployment")
+        raise TaskExecutionError("部署环境要求 Docker 镜像使用不可变摘要（digest）")
     if not isinstance(command, list) or not all(isinstance(argument, str) for argument in command):
-        raise TaskExecutionError("Docker command must be a string array")
+        raise TaskExecutionError("Docker 命令必须是字符串数组")
     if any(_SHELL_CONTROL_PATTERN.search(argument) for argument in command):
-        raise TaskExecutionError("Docker command contains unsafe shell control characters")
+        raise TaskExecutionError("Docker 命令包含不安全的 Shell 控制字符")
     if command and Path(command[0]).name.lower() in _SHELL_EXECUTABLES:
-        raise TaskExecutionError("Docker command contains unsafe shell control executable")
+        raise TaskExecutionError("Docker 命令包含不安全的 Shell 控制可执行文件")
     if contains_shell_control(task_params):
-        raise TaskExecutionError("Task parameters contain unsafe shell control characters")
+        raise TaskExecutionError("任务参数包含不安全的 Shell 控制字符")
