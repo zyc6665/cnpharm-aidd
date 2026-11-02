@@ -17,8 +17,8 @@ def validate_script_trust(script_content: str | None, script_path: str | None) -
         try:
             content = Path(script_path).read_bytes()
         except OSError as exc:
-            raise TaskExecutionError(f"Unable to read Python script: {script_path}") from exc
+            raise TaskExecutionError(f"无法读取 Python 脚本：{script_path}") from exc
     else:
-        raise TaskExecutionError("Missing Python script content")
+        raise TaskExecutionError("缺少 Python 脚本内容")
     if hashlib.sha256(content).hexdigest() not in trusted_hashes:
-        raise TaskExecutionError("Python script is not in the trusted SHA-256 allowlist")
+        raise TaskExecutionError("Python 脚本不在可信 SHA-256 允许列表中")

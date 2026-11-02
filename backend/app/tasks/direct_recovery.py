@@ -185,7 +185,7 @@ async def reconcile_orphaned_direct_tasks(db: AsyncSession) -> int:
             TaskStateMachine.complete(
                 task,
                 success=False,
-                error_message=remote_result.get("message") or "SSH job reported failure",
+                error_message=remote_result.get("message") or "SSH 作业报告执行失败",
                 progress_message=RECOVERED_FAILURE_MESSAGE,
             )
             await finish_task_execution_record_best_effort(

@@ -36,10 +36,10 @@ class ExecutorResolver:
     def resolve(self, executor_type: str) -> type[BaseExecutor]:
         normalized = str(executor_type or "").strip()
         if not normalized:
-            raise TaskExecutionError("Missing type in tool config")
+            raise TaskExecutionError("工具配置缺少 type")
         executor_class = self._executors.get(normalized)
         if executor_class is None:
-            raise TaskExecutionError(f"Unsupported executor type: {normalized}")
+            raise TaskExecutionError(f"不支持的执行器类型：{normalized}")
         return executor_class
 
     def supported_types(self) -> tuple[str, ...]:

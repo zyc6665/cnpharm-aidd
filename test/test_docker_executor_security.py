@@ -58,7 +58,7 @@ def test_docker_command_enables_required_sandbox_restrictions() -> None:
 def test_docker_command_rejects_shell_control_arguments(command: list[str]) -> None:
     executor = build_executor(image="scitool/docking:v1.0.0", command=command)
 
-    with pytest.raises(TaskExecutionError, match="unsafe shell control"):
+    with pytest.raises(TaskExecutionError, match="不安全的 Shell 控制"):
         executor._build_docker_command(
             "scitool/docking:v1.0.0", command, "/tmp/task-1", gpu_required=False
         )
@@ -71,7 +71,7 @@ def test_docker_command_rejects_shell_control_in_task_params() -> None:
         params={"ligand": "input.sdf;rm -rf /"},
     )
 
-    with pytest.raises(TaskExecutionError, match="unsafe shell control"):
+    with pytest.raises(TaskExecutionError, match="不安全的 Shell 控制"):
         executor._build_docker_command(
             "scitool/docking:v1.0.0", ["python", "/app/dock.py"], "/tmp/task-1", False
         )
@@ -81,7 +81,7 @@ def test_docker_command_requires_digest_in_production(monkeypatch: pytest.Monkey
     monkeypatch.setattr("app.tasks.executors.docker_security.settings.ENVIRONMENT", "production")
     executor = build_executor(image="scitool/docking:v1.0.0", command=["python", "/app/dock.py"])
 
-    with pytest.raises(TaskExecutionError, match="immutable digest"):
+    with pytest.raises(TaskExecutionError, match="不可变摘要"):
         executor._build_docker_command(
             "scitool/docking:v1.0.0", ["python", "/app/dock.py"], "/tmp/task-1", False
         )

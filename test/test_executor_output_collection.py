@@ -250,7 +250,7 @@ async def test_base_executor_raises_and_adds_no_record_when_copy_fails(tmp_path)
     with patch.object(base_module, "get_async_session", fake_get_async_session), patch.object(
         base_module.shutil, "copy2", side_effect=OSError("disk full")
     ):
-        with pytest.raises(TaskExecutionError, match="Failed to collect output file"):
+        with pytest.raises(TaskExecutionError, match="收集输出文件失败"):
             await base_module.BaseExecutor._collect_output_files(
                 executor,
                 [str(source_path)],

@@ -173,7 +173,7 @@ async def test_allocate_handles_local_node_probe_failure(caplog):
         )
 
     assert result.success is False
-    assert result.message == "No GPU nodes available"
+    assert result.message == "没有可用的 GPU 节点"
     assert "Failed to detect local GPU nodes: node probe failed" in caplog.text
 
 

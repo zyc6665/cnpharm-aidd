@@ -9,12 +9,12 @@ from app.tasks.executors.errors import TaskExecutionError
 
 def load_result_json(download_root: str | None) -> dict[str, Any]:
     if not download_root:
-        raise TaskExecutionError("Missing downloaded output directory for ssh_job")
+        raise TaskExecutionError("ssh_job 缺少已下载的输出目录")
     result_path = Path(download_root) / "output" / "result.json"
     if not result_path.exists():
-        raise TaskExecutionError("Missing output/result.json from ssh_job", details={"download_root": download_root})
+        raise TaskExecutionError("ssh_job 缺少 output/result.json", details={"download_root": download_root})
     try:
         with result_path.open("r", encoding="utf-8") as result_file:
             return json.load(result_file)
     except json.JSONDecodeError as exc:
-        raise TaskExecutionError(f"Invalid output/result.json from ssh_job: {exc}", details={"result_path": str(result_path)}) from exc
+        raise TaskExecutionError(f"ssh_job 的 output/result.json 格式无效：{exc}", details={"result_path": str(result_path)}) from exc

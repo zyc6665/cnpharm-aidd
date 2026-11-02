@@ -118,8 +118,8 @@
                     <ToolOutlined v-else />
                   </div>
                 </div>
-                <h3 class="tool-name">{{ tool.name }}</h3>
-                <p class="tool-desc">{{ tool.description }}</p>
+                <h3 class="tool-name" :title="tool.name">{{ tool.name }}</h3>
+                <p class="tool-desc" :title="tool.description">{{ tool.description }}</p>
 
                 <div class="tool-tags" v-if="tool.tags?.length">
                   <a-tag
