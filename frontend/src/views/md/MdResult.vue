@@ -20,18 +20,18 @@
       <a-card :bordered="false" class="md-result__overview">
         <a-descriptions :column="2" size="middle" bordered>
           <a-descriptions-item :label="t('md.result.taskStatus')">
-            <a-tag :color="statusColor">{{ result?.status ?? '—' }}</a-tag>
+            <a-tag :color="statusColor">{{ result?.status ?? '-' }}</a-tag>
           </a-descriptions-item>
-          <a-descriptions-item :label="t('md.result.forceField')">{{ metadata.force_field ?? '—' }}</a-descriptions-item>
-          <a-descriptions-item :label="t('md.result.totalFrames')">{{ totalFrames ?? '—' }}</a-descriptions-item>
+          <a-descriptions-item :label="t('md.result.forceField')">{{ metadata.force_field ?? '-' }}</a-descriptions-item>
+          <a-descriptions-item :label="t('md.result.totalFrames')">{{ totalFrames ?? '-' }}</a-descriptions-item>
           <a-descriptions-item :label="t('md.result.duration')">
-            {{ metadata.duration_ns != null ? `${metadata.duration_ns} ns` : '—' }}
+            {{ metadata.duration_ns != null ? `${metadata.duration_ns} ns` : '-' }}
           </a-descriptions-item>
           <a-descriptions-item :label="t('md.result.temperature')">
-            {{ metadata.temperature_k != null ? `${metadata.temperature_k} K` : '—' }}
+            {{ metadata.temperature_k != null ? `${metadata.temperature_k} K` : '-' }}
           </a-descriptions-item>
           <a-descriptions-item :label="t('md.result.timestep')">
-            {{ metadata.timestep_ps != null ? `${metadata.timestep_ps} ps` : '—' }}
+            {{ metadata.timestep_ps != null ? `${metadata.timestep_ps} ps` : '-' }}
           </a-descriptions-item>
         </a-descriptions>
 

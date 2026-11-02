@@ -158,7 +158,7 @@
   }
 
   function pocketLabel(pocket: PocketSummary): string {
-    const rank = pocket.rank === null ? '—' : `#${pocket.rank}`
+    const rank = pocket.rank === null ? '-' : `#${pocket.rank}`
     const score = pocket.score === null ? '' : ` · ${pocket.score.toFixed(3)}`
     return `${rank}${score}`
   }

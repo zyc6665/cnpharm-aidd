@@ -140,7 +140,7 @@ test('工作台任务文案 key 与时间大小格式保持旧页面约定', () 
   assert.equal(formatWorkspaceTime('2026-08-05T01:02:03Z'), '08-05 01:02')
   assert.equal(formatWorkspaceFileSize(0), '0 B')
   assert.equal(formatWorkspaceFileSize(1536), '1.5 KB')
-  assert.equal(formatWorkspaceFileSize(1048576), '1.0 MB')
+  assert.equal(formatWorkspaceFileSize(1048576), '1 MB')
 })
 
 test('工作台 schema 迁移错误只由 database_schema 非健康状态触发', () => {

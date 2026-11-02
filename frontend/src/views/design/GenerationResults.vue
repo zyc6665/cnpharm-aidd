@@ -127,7 +127,7 @@
           >
             <div class="molecule-card__structure">
               <Smiles2DCell v-if="rowSmiles(row)" :smiles="rowSmiles(row)" :width="200" :height="140" />
-              <div v-else class="molecule-card__sequence">{{ rowSequence(row) || '—' }}</div>
+              <div v-else class="molecule-card__sequence">{{ rowSequence(row) || '-' }}</div>
             </div>
             <dl class="molecule-card__metrics">
               <div v-for="metric in rowMetrics(row)" :key="metric.key" class="molecule-card__metric">
@@ -253,7 +253,7 @@ import { formatNumber } from '@/domain/common/format'
       case 'pending':
         return t('design.status.pending')
       default:
-        return '—'
+        return '-'
     }
   })
 

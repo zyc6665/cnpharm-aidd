@@ -235,7 +235,7 @@ const todoCards = computed(() => {
       hintKey: 'workspace.todo.runningHint',
       to: '/tasks?view=running',
       tone: 'running',
-      value: counts ? counts.running : '—'
+      value: counts ? counts.running : '-'
     },
     {
       key: 'attention',
@@ -243,7 +243,7 @@ const todoCards = computed(() => {
       hintKey: 'workspace.todo.attentionHint',
       to: '/tasks?view=needs_attention',
       tone: 'attention',
-      value: counts ? counts.needs_attention : '—'
+      value: counts ? counts.needs_attention : '-'
     },
     {
       key: 'results',
@@ -251,7 +251,7 @@ const todoCards = computed(() => {
       hintKey: 'workspace.todo.resultsHint',
       to: '/tasks?view=recent_results',
       tone: 'results',
-      value: counts ? counts.recent_results : '—'
+      value: counts ? counts.recent_results : '-'
     }
   ]
 })

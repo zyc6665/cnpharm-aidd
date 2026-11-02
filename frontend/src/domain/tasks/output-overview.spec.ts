@@ -51,7 +51,7 @@ test('产物名缺失时退化可读，不把键名原样丢出来', () => {
     artifacts: { pocket_residues_json: { files: [] } },
   })
   assert.equal(overview.artifacts[0]!.name, 'Pocket residues json')
-  assert.equal(overview.artifacts[0]!.type, '—')
+  assert.equal(overview.artifacts[0]!.type, '-')
 })
 
 test('没有标准结果时返回空概览，不构造假数据', () => {

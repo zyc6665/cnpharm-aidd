@@ -10,9 +10,9 @@ test('email 为 null 时展示名回退到账号名', () => {
 })
 
 test('email 为 null 时邮箱列回退为「—」，不显示 null', () => {
-  assert.equal(formatUserEmail(null), '—')
-  assert.equal(formatUserEmail(undefined), '—')
-  assert.equal(formatUserEmail(''), '—')
+  assert.equal(formatUserEmail(null), '-')
+  assert.equal(formatUserEmail(undefined), '-')
+  assert.equal(formatUserEmail(''), '-')
 })
 
 test('既无账号也无邮箱时不报错，返回空字符串', () => {

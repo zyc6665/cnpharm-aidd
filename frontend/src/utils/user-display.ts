@@ -1,4 +1,5 @@
 import type { UserInfo } from '@/types/models'
+import { EMPTY_DISPLAY } from '@/domain/common/format'
 
 type DisplayableUser = Pick<UserInfo, 'display_name' | 'username' | 'email'>
 
@@ -10,7 +11,7 @@ export function getUserDisplayName(user: DisplayableUser): string {
   return user.display_name || user.username || (user.email ? user.email.split('@')[0] : '') || ''
 }
 
-/** 邮箱列展示：空值统一显示为「—」，避免出现 "null"。 */
+/** 邮箱列展示：空值统一显示为空值占位符（与全平台一致），避免出现 "null"。 */
 export function formatUserEmail(email?: string | null): string {
-  return email || '—'
+  return email || EMPTY_DISPLAY
 }

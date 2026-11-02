@@ -1,5 +1,6 @@
 import { formatDateTimeSeconds, parseServerDate } from '@/utils/datetime'
 import type { Task, TaskStatus } from '@/types/models'
+import { formatBytes } from '@/domain/common/format'
 
 export type TaskCompletedTitleKey =
   | 'tasks.completed'
@@ -150,12 +151,7 @@ export function formatTaskRunningDuration(startTime: string, nowTime?: string | 
 }
 
 export function formatTaskFileSize(bytes?: number): string {
-  if (!bytes || bytes === 0) {
-    return '0 B'
-  }
-
-  const unit = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(unit)), sizes.length - 1)
-  return `${parseFloat((bytes / Math.pow(unit, index)).toFixed(2))} ${sizes[index]}`
+  // 任务产物文件大小：缺省按 0 字节显示（不是「无值」），其余交给共用原语，
+  // 保证与资产页、产物页的 KB/MB/GB 口径一致。
+  return formatBytes(bytes ?? 0)
 }

@@ -1,4 +1,5 @@
 import type { Task } from '@/types/models'
+import { EMPTY_DISPLAY } from '@/domain/common/format'
 
 export type TaskOutputFile = NonNullable<Task['output_files']>[number]
 
@@ -157,7 +158,7 @@ function formatMetricValue(value: unknown): string {
     return value ? '是' : '否'
   }
   if (value === null || value === undefined) {
-    return '—'
+    return EMPTY_DISPLAY
   }
   if (typeof value === 'object') {
     return JSON.stringify(value)
@@ -239,7 +240,7 @@ export function buildOutputOverview(outputData: unknown): OutputOverview {
       const type =
         (typeof raw.type === 'string' && raw.type) ||
         (typeof raw.semantic_type === 'string' && raw.semantic_type) ||
-        '—'
+        EMPTY_DISPLAY
       artifacts.push({
         key,
         name,
