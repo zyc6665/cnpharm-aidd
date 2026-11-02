@@ -3,6 +3,7 @@ import type { ToolContract } from '@/types/models'
 import {
   buildWorkflowToolBindingFromContract,
   deriveArtifactSlotsFromToolContract,
+  STAGE_STEP_MAP,
 } from './contract-bindings'
 
 function makeToolContract(overrides: Partial<ToolContract> = {}): ToolContract {
@@ -192,5 +193,34 @@ describe('contract artifact slots', () => {
       source: 'artifact',
       artifactName: 'pocket',
     })
+  })
+
+  it('maps slug-form capability stages to the same workflow step as their legacy semantic stage', () => {
+    const cases = [
+      {
+        stage: 'msign-affinity-prediction',
+        legacy: 'affinity_prediction',
+        step: 'molecularDockingAndAffinityPrediction',
+      },
+      {
+        stage: 'molp-pc-property-prediction',
+        legacy: 'property_prediction',
+        step: 'propertyPrediction',
+      },
+    ] as const
+
+    for (const { stage, legacy, step } of cases) {
+      const contract = makeToolContract({
+        capability: {
+          ...makeToolContract().capability,
+          capability: stage,
+          stage,
+        },
+      })
+
+      expect(buildWorkflowToolBindingFromContract(contract)?.stepKey).toBe(step)
+      expect(STAGE_STEP_MAP[stage]).toBe(step)
+      expect(STAGE_STEP_MAP[legacy]).toBe(step)
+    }
   })
 })
