@@ -6,7 +6,6 @@ import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import MoleculeViewer from '@/components/tasks/MoleculeViewer.vue'
 import AppDescriptionList from '@/components/common/AppDescriptionList.vue'
 import type { DescriptionSection } from '@/components/common/AppDescriptionList.vue'
-import { useSharedMockBanner } from '@/views/predict/mock-banner'
 import { getResult } from '@/api/results'
 import { getTaskDetail } from '@/api/tasks'
 import { fetchProtectedFileText } from '@/utils/protected-file-access'
@@ -17,11 +16,9 @@ import type { VisualizationScene, VisualizationSceneEntry } from '@/domain/tasks
 
 const route = useRoute()
 const { t } = useI18n()
-const mockBanner = useSharedMockBanner()
 
 const loading = ref(true)
 const errorMessage = ref('')
-const isMock = ref(false)
 const poseMeta = ref<PoseMetadata | null>(null)
 const receptorUrl = ref('')
 const poseUrl = ref('')
@@ -177,7 +174,6 @@ async function load(): Promise<void> {
   try {
     const resultResponse = await getResult(taskId.value)
     const detail: ProjectResultDetail & { mock?: boolean } = resultResponse.data
-    isMock.value = Boolean(detail.mock)
 
     const artifact = findLigandStructureArtifact(detail)
     if (!artifact || !artifact.version_id) {
@@ -243,20 +239,6 @@ onMounted(() => {
         </router-link>
       </template>
     </AppPageHeader>
-
-    <component
-      :is="mockBanner"
-      v-if="isMock && mockBanner"
-      :mock="true"
-      :disclaimer="t('screening.detail.disclaimer')"
-    />
-    <a-alert
-      v-else-if="isMock"
-      type="warning"
-      show-icon
-      data-testid="mock-data-banner"
-      :message="t('screening.detail.disclaimer')"
-    />
 
     <a-alert
       v-if="errorMessage"

@@ -18,7 +18,6 @@
       </template>
     </AppPageHeader>
 
-    <MockDataBanner :mock="mockVisible" :disclaimer="t('design.results.mockDisclaimer')" />
 
     <a-alert
       v-if="loadError"
@@ -175,7 +174,6 @@ import { formatNumber } from '@/domain/common/format'
   import { message } from 'ant-design-vue'
   import { useI18n } from 'vue-i18n'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
-  import MockDataBanner from '@/components/common/MockDataBanner.vue'
   import Smiles2DCell from '@/components/tasks/Smiles2DCell.vue'
   import {
     findMoleculeTableArtifact,
@@ -238,7 +236,6 @@ import { formatNumber } from '@/domain/common/format'
 
   const isTerminal = computed(() => (status.value ? isTaskTerminalStatus(status.value) : false))
   const isFailure = computed(() => status.value === 'failure' || status.value === 'canceled')
-  const mockVisible = computed(() => Boolean(detail.value?.mock))
 
   const statusText = computed(() => {
     switch (status.value) {

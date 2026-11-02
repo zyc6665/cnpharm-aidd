@@ -62,13 +62,13 @@ test('router 注册三条 MD/自由能路由，路径与契约一致', () => {
 
 test('api/md.ts 的 tool slug 与冻结契约一致', () => {
   const apiSource = readSource('src/api/md.ts')
-  assert.ok(apiSource.includes("MD_TOOL_SLUG = 'gromacs-md-simulation'"), 'MD_TOOL_SLUG 不符')
-  assert.ok(apiSource.includes("FREE_ENERGY_TOOL_SLUG = 'gmx-mmpbsa-free-energy'"), 'FREE_ENERGY_TOOL_SLUG 不符')
+  assert.ok(apiSource.includes("MD_TOOL_SLUG = 'gromacs-md'"), 'MD_TOOL_SLUG 不符')
+  assert.ok(apiSource.includes("FREE_ENERGY_TOOL_SLUG = 'gmx-mmpbsa'"), 'FREE_ENERGY_TOOL_SLUG 不符')
   assert.ok(apiSource.includes("MD_TRAJECTORY_STANDARD_TYPE = 'md_trajectory@1'"), 'md_trajectory 标准类型不符')
   assert.ok(apiSource.includes("MOLECULE_TABLE_STANDARD_TYPE = 'molecule_table@1'"), 'molecule_table 标准类型不符')
 })
 
-test('MdSubmit 只提交契约参数并使用 gromacs-md-simulation slug', () => {
+test('MdSubmit 只提交契约参数并使用 gromacs-md slug', () => {
   const source = readSource('src/views/md/MdSubmit.vue')
   for (const key of ['force_field', 'duration_ns', 'temperature_k', 'pressure_bar', 'seed']) {
     assert.ok(source.includes(key), `MdSubmit 缺少参数 ${key}`)
@@ -187,7 +187,7 @@ test('两份语言包都新增了 md 命名空间（submit/result/freeEnergy）'
     assert.ok(/^ {2}md: \{/m.test(source), `${locale} 缺少 md 命名空间`)
     assert.ok(source.includes('freeEnergy: {'), `${locale} 缺少 md.freeEnergy`)
     // 关键锚点
-    for (const anchor of ['decompositionTitle', 'convergenceTitle', 'standardError', 'mockDisclaimer']) {
+    for (const anchor of ['decompositionTitle', 'convergenceTitle', 'standardError']) {
       assert.ok(source.includes(anchor), `${locale} 缺少 md 键 ${anchor}`)
     }
   }

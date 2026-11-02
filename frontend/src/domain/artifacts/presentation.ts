@@ -53,10 +53,19 @@ export function artifactTypeLabelKey(value?: string | null): string {
  * 判据：带扩展名（`.csv` / `.pdb` / `.sdf` …）且不含空格。人的标题几乎不会长成
  * `xxx.csv` 的样子；反过来 `对接结果-1uw6` 这种是标题，不该被丢掉。
  */
+/** 后端/脚本常见的机器命名词：它们不是人写的标题，标题应退化为类型名。 */
+const GENERIC_MACHINE_TOKENS = /^(report|result|results|output|outputs|summary|properties|structure|protein|ligand|pocket|data|file|tmp|temp|final|input|std|out)[a-z0-9]*$/
+
 export function isFileNameLike(value?: string | null): boolean {
   const text = (value ?? '').trim()
   if (!text) return false
-  return /\.[A-Za-z0-9]{1,8}$/.test(text) && !/\s/.test(text)
+  // 带扩展名且无空格：几乎必然是文件名
+  if (/\.[A-Za-z0-9]{1,8}$/.test(text) && !/\s/.test(text)) return true
+  // 纯 ASCII、无空格，但含下划线/双下划线：脚本拼出来的标识（smiles_csv_molp、protein_pdb__tmp_x）
+  if (/^[ -~]+$/.test(text) && !/\s/.test(text) && /[_-]/.test(text)) return true
+  // 纯 ASCII 的通用词（report / properties / structure）：没有信息量，不该当标题
+  if (/^[ -~]+$/.test(text) && !/\s/.test(text) && GENERIC_MACHINE_TOKENS.test(text)) return true
+  return false
 }
 
 export interface ArtifactDisplayInput {

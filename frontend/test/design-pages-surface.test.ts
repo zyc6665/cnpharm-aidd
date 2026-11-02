@@ -3,7 +3,6 @@ import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { mount } from '@vue/test-utils'
-import MockDataBanner from '@/components/common/MockDataBanner.vue'
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -18,7 +17,6 @@ describe('设计页（P-15 / P-16 / P-17）交付面', () => {
       'src/views/design/PeptideDesign.vue',
       'src/views/design/GenerationResults.vue',
       'src/views/design/components/PocketPicker.vue',
-      'src/components/common/MockDataBanner.vue',
       'src/api/design.ts',
       'src/types/design.ts',
     ]
@@ -43,8 +41,8 @@ describe('设计页（P-15 / P-16 / P-17）交付面', () => {
 
   test('tool slug 与冻结契约一致', () => {
     const source = readSource('src/types/design.ts')
-    expect(source).toContain("MOLECULE_GENERATION_TOOL_SLUG = 'std-diff-molecule-generation'")
-    expect(source).toContain("PEPTIDE_DESIGN_TOOL_SLUG = 'therapainter-peptide-design'")
+    expect(source).toContain("MOLECULE_GENERATION_TOOL_SLUG = 'pocket2mol-pocket-ligand-generation'")
+    expect(source).toContain("PEPTIDE_DESIGN_TOOL_SLUG = 'therapainter-peptide-prediction'")
   })
 
   test('api/design.ts 使用契约约定的工具列表与表格下载端点', () => {
@@ -57,13 +55,6 @@ describe('设计页（P-15 / P-16 / P-17）交付面', () => {
     expect(readSource('src/types/design.ts')).toContain("MOLECULE_TABLE_FILE_ROLE = 'table_file'")
   })
 
-  test('MockDataBanner 在 mock 为真时渲染，为假时不渲染任何 DOM', () => {
-    const visible = mount(MockDataBanner, { props: { mock: true } })
-    expect(visible.find('[data-testid="mock-data-banner"]').exists()).toBe(true)
-
-    const hidden = mount(MockDataBanner, { props: { mock: false } })
-    expect(hidden.find('[data-testid="mock-data-banner"]').exists()).toBe(false)
-  })
 
   test('i18n 在 tasks 命名空间之前提供了 design 命名空间（中英双语）', () => {
     for (const locale of ['src/locales/zh-CN/index.ts', 'src/locales/en-US/index.ts']) {

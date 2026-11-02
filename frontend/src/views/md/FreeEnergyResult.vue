@@ -9,7 +9,6 @@
       </template>
     </app-page-header>
 
-    <mock-data-banner :mock="isMock" :disclaimer="t('md.common.mockDisclaimer')" />
 
     <skeleton-detail v-if="loading && !result" />
 
@@ -83,7 +82,6 @@ import { formatFixed } from '@/domain/common/format'
   import Papa from 'papaparse'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
-  import MockDataBanner from '@/components/common/MockDataBanner.vue'
   import MdEchart from './MdEchart.vue'
   import { chartColors } from '@/utils/chartTheme'
   import { getArtifactDetail, getMdResult } from '@/api/md'
@@ -114,7 +112,6 @@ import { formatFixed } from '@/domain/common/format'
   const loading = ref(false)
   const loadError = ref('')
 
-  const isMock = computed(() => Boolean(result.value?.mock))
 
   const EXPORT_COLUMNS = [
     'frame',

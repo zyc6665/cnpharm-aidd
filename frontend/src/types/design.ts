@@ -2,8 +2,8 @@
  * P-15 / P-16 / P-17 设计页（分子生成 / 多肽设计 / 生成结果）的类型定义。
  *
  * 字段名严格对齐后端契约：
- * - 工具 slug 来自 `docs/superpowers/plans/2026-10-28-mock-model-packages-and-remaining-pages.md`
- *   的冻结契约（`std-diff-molecule-generation` / `therapainter-peptide-design`）。
+ * - 工具 slug 与已部署的工具包一致（`pocket2mol-pocket-ligand-generation` /
+ *   `therapainter-peptide-prediction`），见 `docs/06-UI交互与原型说明.md` 与 `docs/05-API接口规格说明书.md`。
  * - 结果读取复用 `GET /api/v1/results/{task_id}` 的既有 `ProjectResultDetail` 结构，
  *   这里只补上契约规定的 `mock` 布尔标记。
  */
@@ -11,9 +11,9 @@ import type { ProjectResultDetail } from '@/types/compounds'
 import type { Tool, ToolVersion } from '@/types/models'
 
 /** P-15 分子生成工具 slug（契约冻结，不可改）。 */
-export const MOLECULE_GENERATION_TOOL_SLUG = 'std-diff-molecule-generation'
+export const MOLECULE_GENERATION_TOOL_SLUG = 'pocket2mol-pocket-ligand-generation'
 /** P-16 多肽设计工具 slug（契约冻结，不可改）。 */
-export const PEPTIDE_DESIGN_TOOL_SLUG = 'therapainter-peptide-design'
+export const PEPTIDE_DESIGN_TOOL_SLUG = 'therapainter-peptide-prediction'
 /** 生成结果表产物的标准类型前缀（`molecule_table@1`）。 */
 export const MOLECULE_TABLE_TYPE_PREFIX = 'molecule_table'
 /** 结果表 SQL/产物下载主文件角色（见 `molecule_table@1` 标准）。 */

@@ -2,8 +2,6 @@
   <main class="design-page" data-testid="peptide-design-page">
     <AppPageHeader :title="t('design.peptide.title')" :subtitle="t('design.peptide.subtitle')" />
 
-    <MockDataBanner :mock="mockBannerVisible" />
-
     <a-spin :spinning="resolving">
       <a-alert
         v-if="toolError"
@@ -90,12 +88,11 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onMounted, reactive, ref } from 'vue'
+  import { onMounted, reactive, ref } from 'vue'
   import { useRouter } from 'vue-router'
   import { message } from 'ant-design-vue'
   import { useI18n } from 'vue-i18n'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
-  import MockDataBanner from '@/components/common/MockDataBanner.vue'
   import PocketPicker from './components/PocketPicker.vue'
   import {
     resolvePocketInputBinding,
@@ -119,17 +116,6 @@
     lengthMin: 8,
     lengthMax: 15,
     seed: 42,
-  })
-
-  const mockBannerVisible = computed(() => {
-    const pkg = resolvedTool.value?.version.tool_package
-    if (pkg && typeof pkg === 'object') {
-      const metadata = (pkg as Record<string, unknown>).metadata
-      if (metadata && typeof metadata === 'object' && 'mock' in (metadata as Record<string, unknown>)) {
-        return Boolean((metadata as Record<string, unknown>).mock)
-      }
-    }
-    return true
   })
 
   function toNumber(value: unknown, fallback: number): number {

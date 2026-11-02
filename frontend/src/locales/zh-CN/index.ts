@@ -1755,8 +1755,8 @@ export default {
     },
     molecule: {
       title: '分子生成',
-      subtitle: '基于选定口袋批量生成候选分子，用于界面与流程验证',
-      toolMissing: '未找到分子生成工具（std-diff-molecule-generation），请先在工具库发布该工具包',
+      subtitle: '基于选定口袋批量生成候选分子，产出可直接进入下一步评估的候选集',
+      toolMissing: '未找到分子生成工具（pocket2mol-pocket-ligand-generation），请先在工具库发布该工具包',
       numMolecules: '生成数量',
       seed: '随机种子',
       mwMin: '分子量下限 (Da)',
@@ -1775,8 +1775,8 @@ export default {
     },
     peptide: {
       title: '多肽设计',
-      subtitle: '基于选定口袋设计候选多肽序列，用于界面与流程验证',
-      toolMissing: '未找到多肽设计工具（therapainter-peptide-design），请先在工具库发布该工具包',
+      subtitle: '基于选定口袋设计候选多肽序列，产出可直接进入下一步评估的候选集',
+      toolMissing: '未找到多肽设计工具（therapainter-peptide-prediction），请先在工具库发布该工具包',
       numPeptides: '生成数量',
       lengthMin: '多肽长度下限',
       lengthMax: '多肽长度上限',
@@ -1802,7 +1802,6 @@ export default {
       subtitle: '查看生成分子的 2D 结构、评分与理化性质',
       viewTask: '查看任务',
       saveToSet: '保存至候选集合',
-      mockDisclaimer: '本页数据由演示模型（mock）生成，仅用于界面与流程验证，不可用于科研决策',
       loadFailed: '结果加载失败，请稍后重试',
       statusLabel: '任务状态',
       taskFailed: '任务执行失败',
@@ -1894,10 +1893,6 @@ export default {
       colAdmetEcotoxicity: '生态毒性',
       colAdmetLd50: 'LD50'
     },
-    banner: {
-      disclaimer: '本结果由 mock 模型包生成，演示数据，不可用于科研决策。',
-      mockTool: '本页使用的工具是演示（mock）模型包，结果仅用于流程验证，不可用于科研决策。'
-    }
   },
 
   // 虚拟筛选（P-23 / P-24 / P-25）
@@ -1984,7 +1979,6 @@ export default {
       distance: '距离 (Å)',
       viewer: '复合物结构',
       noStructure: '缺少可展示的结构文件。',
-      disclaimer: '演示数据，不可用于科研决策。',
       hints: {
         score: '越低结合越牢（kcal/mol）',
         rmsd: '越低越接近晶体构象（Å）'
@@ -1997,18 +1991,13 @@ export default {
       groupPiStacking: 'π 堆积',
       groupOther: '其他'
     },
-    banner: {
-      disclaimer: '本结果由 mock 模型包生成，演示数据，不可用于科研决策。',
-      mockTool: '本页使用的工具是演示（mock）模型包，结果仅用于流程验证，不可用于科研决策。',
-    }
   },
   // MD / 分子动力学与自由能
   md: {
     common: {
       loadFailed: '数据加载失败',
       retry: '重试',
-      refresh: '刷新',
-      mockDisclaimer: '本页数据由 mock 模型包生成，仅供演示与流程联调，不可用于科研决策。'
+      refresh: '刷新'
     },
     submit: {
       title: 'MD 模拟提交',
@@ -2040,7 +2029,7 @@ export default {
       reset: '重置',
       submitSuccess: '任务已提交',
       submitFailed: '任务提交失败',
-      toolMissing: '未找到工具 {slug}，请确认 mock 模型包已发布',
+      toolMissing: '未找到工具 {slug}，请确认该工具包已发布并启用',
       projectRequired: '请先选择项目',
       structureRequired: '请选择复合物结构',
       emptyProject: '暂无可用项目'
