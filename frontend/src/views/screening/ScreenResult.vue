@@ -8,7 +8,6 @@ import { countPasses, funnelFromRankedRows } from './funnel'
 import type { FunnelStageKey } from './funnel'
 import { loadMoleculeTable } from '@/views/predict/molecule-table'
 import { downloadCsv } from '@/views/predict/csv-export'
-import { useSharedMockBanner } from '@/views/predict/mock-banner'
 import {
   SCREENING_RANKED_COLUMNS,
   SCREENING_RANKED_COLUMN_I18N
@@ -18,13 +17,11 @@ import type { CsvPreviewRow } from '@/domain/tasks/csv-result'
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
-const mockBanner = useSharedMockBanner()
 
 const taskId = computed(() => String(route.params.id ?? ''))
 const loading = ref(true)
 const errorMessage = ref('')
 const rows = ref<CsvPreviewRow[]>([])
-const isMock = ref(false)
 
 const NUMERIC_KEYS = ['mol_weight', 'logp', 'qed', 'docking_score', 'rank']
 
@@ -109,7 +106,6 @@ async function load(): Promise<void> {
   try {
     const data = await loadMoleculeTable(taskId.value)
     rows.value = data.rows
-    isMock.value = data.mock
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : t('screening.result.loadFailed')
   } finally {
@@ -139,20 +135,6 @@ onMounted(() => {
         </a-button>
       </template>
     </AppPageHeader>
-
-    <component
-      :is="mockBanner"
-      v-if="isMock && mockBanner"
-      :mock="true"
-      :disclaimer="t('screening.banner.disclaimer')"
-    />
-    <a-alert
-      v-else-if="isMock"
-      type="warning"
-      show-icon
-      data-testid="mock-data-banner"
-      :message="t('screening.banner.disclaimer')"
-    />
 
     <a-alert
       v-if="errorMessage"

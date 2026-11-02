@@ -1,13 +1,13 @@
 /**
  * 中国医药交付线 —— MD（分子动力学）与自由能页面类型定义。
  *
- * 与契约 docs/superpowers/plans/2026-10-28-mock-model-packages-and-remaining-pages.md
+ * 与契约 docs/06-UI交互与原型说明.md 与 docs/05-API接口规格说明书.md
  * 保持一致，不得改变字段名（slug、参数、产物列名、file role）。
  */
 
 import type { ProjectResultDetail } from './compounds'
 
-/** P-26 提交表单的力场可选值（与后端 mock tool 参数枚举一致）。 */
+/** P-26 提交表单的力场可选值（与后端工具参数枚举一致）。 */
 export type MdForceField = 'amber99sb-ildn' | 'charmm36'
 
 /** P-26 提交参数（字段名对齐冻结契约，勿改）。 */
@@ -70,5 +70,5 @@ export interface FreeEnergyRow {
   delta_g_sasa: number | null
 }
 
-/** 结果详情可能携带 mock 标记（MockDataBanner props 之一）。 */
+/** 结果详情可能携带的 mock 标记；平台已不再展示 mock 提示，字段保留供排查历史数据。 */
 export type MdResultDetail = ProjectResultDetail & { mock?: boolean }

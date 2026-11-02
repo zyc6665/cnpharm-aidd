@@ -2,8 +2,6 @@
   <main class="design-page" data-testid="molecule-generation-page">
     <AppPageHeader :title="t('design.molecule.title')" :subtitle="t('design.molecule.subtitle')" />
 
-    <MockDataBanner :mock="mockBannerVisible" />
-
     <a-spin :spinning="resolving">
       <a-alert
         v-if="toolError"
@@ -91,12 +89,11 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onMounted, reactive, ref } from 'vue'
+  import { onMounted, reactive, ref } from 'vue'
   import { useRouter } from 'vue-router'
   import { message } from 'ant-design-vue'
   import { useI18n } from 'vue-i18n'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
-  import MockDataBanner from '@/components/common/MockDataBanner.vue'
   import PocketPicker from './components/PocketPicker.vue'
   import {
     resolvePocketInputBinding,
@@ -122,18 +119,6 @@
     logpMin: -1,
     logpMax: 5,
     seed: 42,
-  })
-
-  const mockBannerVisible = computed(() => {
-    const pkg = resolvedTool.value?.version.tool_package
-    if (pkg && typeof pkg === 'object') {
-      const metadata = (pkg as Record<string, unknown>).metadata
-      if (metadata && typeof metadata === 'object' && 'mock' in (metadata as Record<string, unknown>)) {
-        return Boolean((metadata as Record<string, unknown>).mock)
-      }
-    }
-    // 按冻结契约，这两个 slug 本身就是 mock 模型包。
-    return true
   })
 
   function toNumber(value: unknown, fallback: number): number {

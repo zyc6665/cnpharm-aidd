@@ -6,7 +6,6 @@
       </template>
     </app-page-header>
 
-    <mock-data-banner :mock="isMock" :disclaimer="t('md.common.mockDisclaimer')" />
 
     <skeleton-detail v-if="loading && !result" />
 
@@ -132,7 +131,6 @@
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
   import AppDescriptionList from '@/components/common/AppDescriptionList.vue'
-  import MockDataBanner from '@/components/common/MockDataBanner.vue'
   import StructureArtifactPreview from '@/components/artifacts/StructureArtifactPreview.vue'
   import MdEchart from './MdEchart.vue'
   import { getArtifactDetail, getMdResult } from '@/api/md'
@@ -176,7 +174,6 @@
   const topologyFile = computed(() => roleFile('topology_pdb'))
   const trajectoryFile = computed(() => roleFile('trajectory_dcd'))
 
-  const isMock = computed(() => Boolean(result.value?.mock))
   const status = computed(() => result.value?.status ?? task.value?.status ?? '')
   const isRunning = computed(() => status.value === 'running' || status.value === 'pending' || status.value === 'queued')
   const statusColor = computed(() => {

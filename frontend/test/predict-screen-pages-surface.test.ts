@@ -37,14 +37,14 @@ test('五条路由：P-21..P-25 都在 router 中以正确 path/name/组件注�
   }
 })
 
-test('tool slug 与冻结契约一致（admet-prediction / vina-virtual-screening）', () => {
+test('tool slug 与冻结契约一致（molp-pc-property-prediction / autodock-vina-docking）', () => {
   const predictTypes = read('src/types/predict.ts')
   const screeningTypes = read('src/types/screening.ts')
 
-  assert.ok(predictTypes.includes("'admet-prediction'"), 'predict 侧缺少 admet-prediction slug')
+  assert.ok(predictTypes.includes("'molp-pc-property-prediction'"), 'predict 侧缺少 molp-pc-property-prediction slug')
   assert.ok(
-    screeningTypes.includes("'vina-virtual-screening'"),
-    'screening 侧缺少 vina-virtual-screening slug'
+    screeningTypes.includes("'autodock-vina-docking'"),
+    'screening 侧缺少 autodock-vina-docking slug'
   )
   // 8 个 task_groups 必须与契约完全一致
   const groups = [

@@ -1,8 +1,8 @@
 // P-21 / P-22 性质预测：工具 slug、指标组枚举与列名约定。
-// 契约来源：docs/superpowers/plans/2026-10-28-mock-model-packages-and-remaining-pages.md（冻结）。
+// 契约来源：docs/06-UI交互与原型说明.md 与 docs/05-API接口规格说明书.md（冻结）。
 
 /** 契约规定的提交工具 slug（P-21）。 */
-export const ADMET_TOOL_SLUG = 'admet-prediction'
+export const ADMET_TOOL_SLUG = 'molp-pc-property-prediction'
 
 /** 契约规定的 8 个指标组枚举，顺序即界面展示顺序。 */
 export const PREDICT_TASK_GROUPS = [

@@ -7,20 +7,17 @@ import HistogramChart from './HistogramChart.vue'
 import { loadMoleculeTable } from './molecule-table'
 import { isNumericColumn, toNumericValues } from './histogram'
 import { downloadCsv } from './csv-export'
-import { useSharedMockBanner } from './mock-banner'
 import { PREDICT_COLUMN_I18N } from '@/types/predict'
 import type { CsvPreviewColumn, CsvPreviewRow } from '@/domain/tasks/csv-result'
 
 const route = useRoute()
 const { t } = useI18n()
-const mockBanner = useSharedMockBanner()
 
 const taskId = computed(() => String(route.params.id ?? ''))
 const loading = ref(true)
 const errorMessage = ref('')
 const columns = ref<CsvPreviewColumn[]>([])
 const rows = ref<CsvPreviewRow[]>([])
-const isMock = ref(false)
 
 const searchText = ref('')
 const filterColumn = ref<string>('')
@@ -96,7 +93,6 @@ async function load(): Promise<void> {
     const data = await loadMoleculeTable(taskId.value)
     columns.value = data.columns
     rows.value = data.rows
-    isMock.value = data.mock
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : t('predict.result.loadFailed')
   } finally {
@@ -126,20 +122,6 @@ onMounted(() => {
         </a-button>
       </template>
     </AppPageHeader>
-
-    <component
-      :is="mockBanner"
-      v-if="isMock && mockBanner"
-      :mock="true"
-      :disclaimer="t('predict.banner.disclaimer')"
-    />
-    <a-alert
-      v-else-if="isMock"
-      type="warning"
-      show-icon
-      data-testid="mock-data-banner"
-      :message="t('predict.banner.disclaimer')"
-    />
 
     <a-alert
       v-if="errorMessage"

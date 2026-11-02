@@ -18,10 +18,10 @@ import type { MdResultDetail, MdSubmitParams } from '@/types/md'
 import type { Task, Tool, ToolVersion } from '@/types/models'
 
 /** P-26 提交的 tool slug（冻结契约，勿改）。 */
-export const MD_TOOL_SLUG = 'gromacs-md-simulation'
+export const MD_TOOL_SLUG = 'gromacs-md'
 
 /** P-28 自由能任务的 tool slug（冻结契约，勿改）。 */
-export const FREE_ENERGY_TOOL_SLUG = 'gmx-mmpbsa-free-energy'
+export const FREE_ENERGY_TOOL_SLUG = 'gmx-mmpbsa'
 
 /** P-27 轨迹产物标准类型前缀。 */
 export const MD_TRAJECTORY_STANDARD_TYPE = 'md_trajectory@1'

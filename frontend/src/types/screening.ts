@@ -1,8 +1,8 @@
 // P-23 / P-24 / P-25 虚拟筛选：工具 slug、参数默认值与列名约定。
-// 契约来源：docs/superpowers/plans/2026-10-28-mock-model-packages-and-remaining-pages.md（冻结）。
+// 契约来源：docs/06-UI交互与原型说明.md 与 docs/05-API接口规格说明书.md（冻结）。
 
 /** 契约规定的提交工具 slug（P-23）。 */
-export const VINA_TOOL_SLUG = 'vina-virtual-screening'
+export const VINA_TOOL_SLUG = 'autodock-vina-docking'
 
 /** 与后端 params 完全一致的漏斗参数（snake_case）。 */
 export interface ScreeningParams {
