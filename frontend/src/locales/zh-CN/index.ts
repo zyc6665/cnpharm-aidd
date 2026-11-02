@@ -2086,6 +2086,29 @@ export default {
 
   // 任务
   tasks: {
+    outputMetrics: '关键指标',
+    outputArtifacts: '产物清单',
+    outputRawJson: '查看原始结果 JSON',
+    outputArtifactName: '产物',
+    outputArtifactType: '类型',
+    outputArtifactFileCount: '文件数',
+    outputArtifactPrimaryFile: '主文件',
+    parameters: {
+      group: {
+        basic: '基本参数',
+        dockingBox: '对接盒',
+        device: '计算设备',
+        reproducibility: '可复现性',
+        other: '已在提交中携带、但工具规范未声明'
+      },
+      unset: '未设置',
+      defaultPrefix: '默认',
+      options: '可选项：{options}',
+      rawJson: '查看原始 JSON（提交值原样）',
+      empty: '本次提交没有携带参数（该工具只依赖输入文件）',
+      yes: '是',
+      no: '否'
+    },
     title: '任务中心',
     subtitle: '管理和监控您的计算任务',
     detail: '任务详情',
