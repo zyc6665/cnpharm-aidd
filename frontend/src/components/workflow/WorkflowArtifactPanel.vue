@@ -184,9 +184,10 @@
 </template>
 
 <script setup lang="ts">
+import { formatDateTimeSecondsOrDash } from '@/domain/common/format'
   import { computed, ref, watch } from 'vue'
   import { useRouter } from 'vue-router'
-  import { formatDateTimeSeconds } from '@/utils/datetime'
+  
   import { useI18n } from 'vue-i18n'
   import { useArtifactsStore, useToolsStore, useUserStore } from '@/stores'
   import type { ArtifactFile, WorkbenchGroup } from '@/types/models'
@@ -301,13 +302,7 @@
     return activeTask.value.name?.trim() || `${t('workflow.artifacts.taskLabel')} ${formatTaskShortId(activeTask.value.id)}`
   }
 
-  function formatDateTime(value: string): string {
-    if (!value) {
-      return '--'
-    }
-
-    return formatDateTimeSeconds(value)
-  }
+  const formatDateTime = (value: string) => formatDateTimeSecondsOrDash(value)
 
   function groupKey(scope: 'current' | 'recent', groupId: string): string {
     return `${scope}:${groupId}`

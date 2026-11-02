@@ -56,7 +56,7 @@
               </span>
             </a-descriptions-item>
             <a-descriptions-item :label="t('compounds.columns.createdAt')" :span="2">
-              {{ formatDate(compound.created_at) }}
+              {{ formatDateTimeOrDash(compound.created_at) }}
             </a-descriptions-item>
           </a-descriptions>
         </a-col>
@@ -151,7 +151,7 @@
               </template>
               <template v-else-if="column.key === 'similarity'">
                 <span class="similarity-value" data-testid="compound-similarity-value">
-                  {{ formatSimilarity(record.similarity) }}
+                  {{ formatFixedSimilarity(record.similarity) }}
                 </span>
               </template>
             </template>
@@ -178,8 +178,10 @@
   import { useRoute } from 'vue-router'
   import { useI18n } from 'vue-i18n'
   import { message } from 'ant-design-vue'
-  import { formatDateTimeMinutes } from '@/utils/datetime'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import { formatDateTimeOrDash, formatFixed } from '@/domain/common/format'
+
+  const formatFixedSimilarity = (value: number | null | undefined) => formatFixed(value, 3)
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
   import Smiles2DCell from '@/components/tasks/Smiles2DCell.vue'
   import { getCompound, searchCompounds } from '@/api/compounds'
@@ -234,12 +236,6 @@
   ])
 
   /** Tanimoto 相似度固定三位小数（docs/06 P-13）。 */
-  function formatSimilarity(value: number | null | undefined): string {
-    if (value === null || value === undefined || Number.isNaN(value)) {
-      return '-'
-    }
-    return value.toFixed(3)
-  }
 
   /**
    * 化合物详情路由必须带上 `project_id`，否则目标页拿不到所属项目、
@@ -259,10 +255,6 @@
     }
     const value = source.props?.[key]
     return typeof value === 'number' ? value : null
-  }
-
-  function formatDate(value: string | null | undefined): string {
-    return value ? formatDateTimeMinutes(value) : '-'
   }
 
   async function loadCompound(): Promise<void> {

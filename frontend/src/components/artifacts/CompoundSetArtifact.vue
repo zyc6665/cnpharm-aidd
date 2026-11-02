@@ -15,7 +15,7 @@
         <tr v-for="file in files" :key="file.id">
           <td>{{ file.role }}</td>
           <td class="mono-cell">{{ file.filename || '-' }}</td>
-          <td>{{ formatSize(file.size_bytes) }}</td>
+          <td>{{ formatBytes(file.size_bytes) }}</td>
         </tr>
       </tbody>
     </table>
@@ -31,6 +31,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatBytes } from '@/domain/common/format'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -46,18 +47,6 @@ const { t } = useI18n()
 
 const files = computed(() => props.artifact.latest_version.files || [])
 
-function formatSize(sizeBytes?: number | null): string {
-  if (sizeBytes === undefined || sizeBytes === null) {
-    return '-'
-  }
-  if (sizeBytes < 1024) {
-    return `${sizeBytes} B`
-  }
-  if (sizeBytes < 1024 * 1024) {
-    return `${(sizeBytes / 1024).toFixed(1)} KB`
-  }
-  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`
-}
 </script>
 
 <style scoped lang="less">

@@ -196,7 +196,7 @@
             />
           </template>
           <template v-else-if="column.key === 'created_at'">
-            {{ formatDate(record.created_at) }}
+            {{ formatDateTimeOrDash(record.created_at) }}
           </template>
           <template v-else-if="column.key === 'actions'">
             <a-space>
@@ -259,19 +259,19 @@
               <template #description>
                 <div>{{ selectedTask.resource_wait.reason }}</div>
                 <div v-if="selectedTask.resource_wait.next_attempt_at">
-                  {{ t('tasks.resourceWait.nextAttempt', { time: formatDate(selectedTask.resource_wait.next_attempt_at) }) }}
+                  {{ t('tasks.resourceWait.nextAttempt', { time: formatDateTimeOrDash(selectedTask.resource_wait.next_attempt_at) }) }}
                 </div>
               </template>
             </a-alert>
           </a-descriptions-item>
           <a-descriptions-item :label="t('tasks.createdAt')">
-            {{ formatDate(selectedTask.created_at) }}
+            {{ formatDateTimeOrDash(selectedTask.created_at) }}
           </a-descriptions-item>
           <a-descriptions-item :label="t('tasks.startedAt')">
-            {{ selectedTask.started_at ? formatDate(selectedTask.started_at) : '-' }}
+            {{ selectedTask.started_at ? formatDateTimeOrDash(selectedTask.started_at) : '-' }}
           </a-descriptions-item>
           <a-descriptions-item :label="t('tasks.completedAt')">
-            {{ selectedTask.completed_at ? formatDate(selectedTask.completed_at) : '-' }}
+            {{ selectedTask.completed_at ? formatDateTimeOrDash(selectedTask.completed_at) : '-' }}
           </a-descriptions-item>
         </a-descriptions>
 
@@ -312,7 +312,6 @@
     StopOutlined
   } from '@ant-design/icons-vue'
   import { message, Modal } from 'ant-design-vue'
-  import { formatDateTimeMinutes } from '@/utils/datetime'
   import AppFilterBar from '@/components/common/AppFilterBar.vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import AppEmptyState from '@/components/common/AppEmptyState.vue'
@@ -320,6 +319,7 @@
   import SkeletonList from '@/components/common/SkeletonList.vue'
   import SkeletonCard from '@/components/common/SkeletonCard.vue'
   import AppRawJson from '@/components/common/AppRawJson.vue'
+  import { formatDateTimeOrDash } from '@/domain/common/format'
   import { useRemoteToolOptions } from '@/composables/useRemoteToolOptions'
   import {
     getTaskList,
@@ -393,7 +393,6 @@
     return 'active'
   }
 
-  const formatDate = (date: string) => formatDateTimeMinutes(date)
 
   const formatTaskTitle = (task: Task) => {
     if (task.tool_name) {

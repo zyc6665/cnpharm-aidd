@@ -169,6 +169,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatNumber } from '@/domain/common/format'
   import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { message } from 'ant-design-vue'
@@ -337,9 +338,9 @@
   function formatMetric(raw: string | undefined): string {
     const value = Number((raw ?? '').trim())
     if (!Number.isFinite(value)) {
-      return raw ?? '—'
+      return raw && raw.trim() !== '' ? raw : '-'
     }
-    return Number(value.toFixed(3)).toString()
+    return formatNumber(value, 3)
   }
 
   function rowMetrics(row: DesignTableRow): Array<{ key: string; label: string; value: string }> {

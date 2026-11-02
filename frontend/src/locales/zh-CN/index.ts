@@ -990,6 +990,12 @@ export default {
       info: '基本信息',
       protein: '所属蛋白',
       sourceType: '来源',
+        plddtBand: {
+          veryHigh: '置信度很高',
+          confident: '置信度可信',
+          low: '置信度偏低',
+          veryLow: '置信度很低'
+        },
       plddt: '平均 pLDDT',
       model: '模型',
       tool: '工具',

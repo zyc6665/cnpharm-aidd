@@ -51,10 +51,10 @@
             {{ formatExecutionSeconds(result.execution_time_sec) }}
           </a-descriptions-item>
           <a-descriptions-item :label="t('results.detail.startTime')">
-            {{ formatDate(result.started_at) }}
+            {{ formatDateTimeOrDash(result.started_at) }}
           </a-descriptions-item>
           <a-descriptions-item :label="t('results.detail.finishTime')">
-            {{ formatDate(result.finished_at) }}
+            {{ formatDateTimeOrDash(result.finished_at) }}
           </a-descriptions-item>
           <a-descriptions-item :label="t('results.detail.project')" :span="2">
             <router-link :to="`/projects/${result.project_id}`">
@@ -131,7 +131,7 @@
               <span class="mono-cell">{{ shortHash(record.sha256) }}</span>
             </template>
             <template v-else-if="column.key === 'recordedAt'">
-              {{ formatDate(record.recordedAt) }}
+              {{ formatDateTimeOrDash(record.recordedAt) }}
             </template>
           </template>
         </a-table>
@@ -233,13 +233,13 @@
                   size="small"
                 >
                   <a-descriptions-item :label="t('results.traceability.fields.created')">
-                    {{ formatDate(traceability.timeline?.created) }}
+                    {{ formatDateTimeOrDash(traceability.timeline?.created) }}
                   </a-descriptions-item>
                   <a-descriptions-item :label="t('results.traceability.fields.started')">
-                    {{ formatDate(traceability.timeline?.started) }}
+                    {{ formatDateTimeOrDash(traceability.timeline?.started) }}
                   </a-descriptions-item>
                   <a-descriptions-item :label="t('results.traceability.fields.finished')">
-                    {{ formatDate(traceability.timeline?.finished) }}
+                    {{ formatDateTimeOrDash(traceability.timeline?.finished) }}
                   </a-descriptions-item>
                   <a-descriptions-item :label="t('results.traceability.fields.executionSeconds')">
                     {{ formatExecutionSeconds(traceability.timeline?.executionSeconds) }}
@@ -353,8 +353,8 @@
   import { useI18n } from 'vue-i18n'
 import { buildArtifactDisplay } from '@/domain/artifacts/presentation'
   import { message } from 'ant-design-vue'
-  import { formatDateTimeMinutes } from '@/utils/datetime'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import { formatDateTimeOrDash } from '@/domain/common/format'
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
   import AppRawJson from '@/components/common/AppRawJson.vue'
   import { exportTraceability, getResult, getTraceability } from '@/api/results'
@@ -455,10 +455,6 @@ import { buildArtifactDisplay } from '@/domain/artifacts/presentation'
     { title: t('results.traceability.fields.sha256'), key: 'sha256', width: 140 },
     { title: t('results.columns.size'), key: 'sizeBytes', width: 100 }
   ])
-
-  function formatDate(value: string | null | undefined): string {
-    return value ? formatDateTimeMinutes(value) : '-'
-  }
 
   function shortHash(value: string | null | undefined): string {
     if (!value) return '-'

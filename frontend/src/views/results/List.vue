@@ -80,7 +80,7 @@
           </a-tag>
         </template>
         <template v-else-if="column.key === 'finished_at'">
-          {{ formatDate(record.finished_at) }}
+          {{ formatDateTimeOrDash(record.finished_at) }}
         </template>
         <template v-else-if="column.key === 'submitted_by'">
           {{ record.submitted_by || '-' }}
@@ -109,8 +109,8 @@
   import { computed, onMounted, ref } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { useI18n } from 'vue-i18n'
-  import { formatDateTimeMinutes } from '@/utils/datetime'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import { formatDateTimeOrDash } from '@/domain/common/format'
   import AppEmptyState from '@/components/common/AppEmptyState.vue'
   import AppInlineError from '@/components/common/AppInlineError.vue'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
@@ -161,10 +161,6 @@
     if (status === 'success') return 'green'
     if (status === 'failure') return 'red'
     return 'default'
-  }
-
-  function formatDate(value: string | null | undefined): string {
-    return value ? formatDateTimeMinutes(value) : '-'
   }
 
   function handleRow(record: ProjectResultSummary): { onClick: () => void } {

@@ -46,7 +46,7 @@
           {{ candidate.design_score ?? '-' }}
         </a-descriptions-item>
         <a-descriptions-item :label="t('candidates.fields.createdAt')">
-          {{ formatDate(candidate.created_at) }}
+          {{ formatDateTimeOrDash(candidate.created_at) }}
         </a-descriptions-item>
       </a-descriptions>
 
@@ -139,7 +139,6 @@
   import { computed, onMounted, ref } from 'vue'
   import { useRoute } from 'vue-router'
   import { useI18n } from 'vue-i18n'
-  import { formatDateTimeMinutes } from '@/utils/datetime'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
   import AppDescriptionList from '@/components/common/AppDescriptionList.vue'
@@ -152,7 +151,7 @@
     readPropertyValue
   } from '@/domain/compounds'
   import type { Candidate } from '@/types/compounds'
-  import { formatNullable, humanizeKey } from '@/domain/common/format'
+  import { formatNullable, humanizeKey, formatDateTimeOrDash } from '@/domain/common/format'
 
   const route = useRoute()
   const { t } = useI18n()
@@ -229,10 +228,6 @@
       )
     }))
   })
-
-  function formatDate(value: string | null | undefined): string {
-    return value ? formatDateTimeMinutes(value) : '-'
-  }
 
   async function loadCandidate(): Promise<void> {
     if (!candidateId.value) return

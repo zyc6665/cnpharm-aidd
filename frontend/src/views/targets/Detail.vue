@@ -125,7 +125,7 @@
                       >
                         {{ formatOptionalText(structure.source_type) }}
                         · {{ formatTargetDateTime(structure.created_at) }}
-                        · pLDDT {{ formatPlddtMean(structure.plddt_mean) }}
+                        · pLDDT {{ formatPlddtMean(structure.plddt_mean) }}<span v-if="plddtBand(structure.plddt_mean)">（{{ t(`targets.structure.plddtBand.${plddtBand(structure.plddt_mean)}`) }}）</span>
                       </router-link>
                     </li>
                   </ul>
@@ -226,13 +226,7 @@
     listStructures
   } from '@/api/targets'
   import { uploadFile } from '@/api/files'
-  import {
-    formatOptionalText,
-    formatPlddtMean,
-    formatTargetDateTime,
-    formatTargetType,
-    resolveTargetErrorMessage
-  } from '@/domain/targets'
+  import { formatOptionalText, formatPlddtMean, formatTargetDateTime, formatTargetType, plddtBand, resolveTargetErrorMessage } from '@/domain/targets/display'
   import type {
     ProteinDetail,
     ProteinStructureDetail,

@@ -94,18 +94,7 @@ export function formatExecutionSeconds(seconds: number | null | undefined): stri
 }
 
 /** 产物字节数展示：结果详情与追溯包产物表共用。 */
-export function formatBytes(value: number | null | undefined): string {
-  if (value === null || value === undefined || Number.isNaN(value)) {
-    return '-'
-  }
-  if (value < 1024) {
-    return `${value} B`
-  }
-  if (value < 1024 * 1024) {
-    return `${(value / 1024).toFixed(1)} KB`
-  }
-  return `${(value / (1024 * 1024)).toFixed(1)} MB`
-}
+export { formatBytes } from '@/domain/common/format'
 
 export interface ResultSortSource {
   finished_at?: string | null

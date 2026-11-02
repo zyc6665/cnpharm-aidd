@@ -136,7 +136,7 @@
             <a-badge :status="getStatusBadge(record.status)" :text="t(`admin.${record.status}`)" />
           </template>
           <template v-else-if="column.key === 'created_at'">
-            {{ formatDate(record.created_at) }}
+            {{ formatDateTimeOrDash(record.created_at) }}
           </template>
           <template v-else-if="column.key === 'actions'">
             <a-space size="small" wrap>
@@ -283,9 +283,9 @@ import { ReloadOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import ProtectedAvatar from '@/components/common/ProtectedAvatar.vue'
 import { message, Modal } from 'ant-design-vue'
 import type { FormInstance } from 'ant-design-vue'
-import { formatDateTimeMinutes } from '@/utils/datetime'
 import AppFilterBar from '@/components/common/AppFilterBar.vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
+import { formatDateTimeOrDash } from '@/domain/common/format'
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import AppInlineError from '@/components/common/AppInlineError.vue'
 import SkeletonList from '@/components/common/SkeletonList.vue'
@@ -432,7 +432,6 @@ const getStatusBadge = (status: string) => {
   return badges[status] || 'default'
 }
 
-const formatDate = (date: string) => formatDateTimeMinutes(date)
 
 const fetchUsers = async () => {
   loading.value = true
