@@ -61,7 +61,7 @@ test('Ligand to ADMET preset stays fully offline', () => {
 
   const nodesById = new Map(LIGAND_TO_ADMET_CANVAS_PRESET.nodes.map((node) => [node.id, node]))
   assert.equal(nodesById.get('input-ligand')?.type, 'input')
-  assert.equal(nodesById.get('tool-ligand-preparation')?.recommendedToolSlug, 'ligand-preparation')
+  assert.equal(nodesById.get('tool-ligand-preparation')?.recommendedToolSlug, 'builtin-ligand-preparation')
   assert.equal(nodesById.get('tool-sdf-to-smiles')?.recommendedToolSlug, 'builtin-sdf-to-smiles-csv')
   assert.equal(nodesById.get('tool-rdkit-properties')?.recommendedToolSlug, 'builtin-rdkit-properties')
   assert.equal(nodesById.get('tool-molp-pc-admet')?.recommendedToolSlug, 'molp-pc-property-prediction')

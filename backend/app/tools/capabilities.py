@@ -647,6 +647,189 @@ AIDD_TOOL_CAPABILITIES: dict[str, ToolCapability] = {
         ),
         virtual=False,
     ),
+    # ------------------------------------------------------------------
+    # 真实工具：依据各 ToolVersion.config 的 tool-package v2 manifest
+    # （artifacts.inputs/outputs 标准 Artifact 类型）登记。
+    # capability / stage 取 manifest.metadata.slug，与
+    # capability_from_tool_package_config 的动态推导保持一致。
+    # ------------------------------------------------------------------
+    "autodock-vina-docking": ToolCapability(
+        tool_slug="autodock-vina-docking",
+        capability="autodock-vina-docking",
+        stage="autodock-vina-docking",
+        inputs=(
+            CapabilityInput("protein_structure@1", "protein_pdb"),
+            CapabilityInput("ligand_structure@1", "ligand_sdf"),
+        ),
+        outputs=(
+            CapabilityOutput(
+                "molecule_table@1",
+                "artifact",
+                OutputMatch(content_type="molecule_table@1"),
+                path="docking_results",
+            ),
+            CapabilityOutput(
+                "ligand_structure@1",
+                "artifact",
+                OutputMatch(content_type="ligand_structure@1"),
+                path="docked_poses",
+            ),
+            CapabilityOutput(
+                "run_report@1",
+                "artifact",
+                OutputMatch(content_type="run_report@1"),
+                path="report",
+                required=False,
+            ),
+        ),
+        virtual=False,
+    ),
+    "boltz2-affinity-prediction": ToolCapability(
+        tool_slug="boltz2-affinity-prediction",
+        capability="boltz2-affinity-prediction",
+        stage="boltz2-affinity-prediction",
+        inputs=(
+            CapabilityInput("molecule_table@1", "ligand_smiles"),
+        ),
+        outputs=(
+            CapabilityOutput(
+                "molecule_table@1",
+                "artifact",
+                OutputMatch(content_type="molecule_table@1"),
+                path="affinity_table",
+            ),
+            CapabilityOutput(
+                "run_report@1",
+                "artifact",
+                OutputMatch(content_type="run_report@1"),
+                path="report",
+                required=False,
+            ),
+        ),
+        virtual=False,
+    ),
+    "boltz2-structure-prediction": ToolCapability(
+        tool_slug="boltz2-structure-prediction",
+        capability="boltz2-structure-prediction",
+        stage="boltz2-structure-prediction",
+        inputs=(),
+        outputs=(
+            CapabilityOutput(
+                "protein_structure@1",
+                "artifact",
+                OutputMatch(content_type="protein_structure@1"),
+                path="predicted_structure",
+            ),
+            CapabilityOutput(
+                "run_report@1",
+                "artifact",
+                OutputMatch(content_type="run_report@1"),
+                path="report",
+                required=False,
+            ),
+        ),
+        virtual=False,
+    ),
+    "gmx-mmpbsa": ToolCapability(
+        tool_slug="gmx-mmpbsa",
+        capability="gmx-mmpbsa",
+        stage="gmx-mmpbsa",
+        inputs=(
+            CapabilityInput("protein_structure@1", "protein_pdb"),
+        ),
+        outputs=(
+            CapabilityOutput(
+                "molecule_table@1",
+                "artifact",
+                OutputMatch(content_type="molecule_table@1"),
+                path="binding_energy",
+            ),
+            CapabilityOutput(
+                "run_report@1",
+                "artifact",
+                OutputMatch(content_type="run_report@1"),
+                path="report",
+                required=False,
+            ),
+        ),
+        virtual=False,
+    ),
+    "gromacs-md": ToolCapability(
+        tool_slug="gromacs-md",
+        capability="gromacs-md",
+        stage="gromacs-md",
+        inputs=(
+            CapabilityInput("protein_structure@1", "protein_pdb"),
+        ),
+        outputs=(
+            CapabilityOutput(
+                "md_trajectory@1",
+                "artifact",
+                OutputMatch(content_type="md_trajectory@1"),
+                path="trajectory",
+            ),
+            CapabilityOutput(
+                "run_report@1",
+                "artifact",
+                OutputMatch(content_type="run_report@1"),
+                path="report",
+                required=False,
+            ),
+        ),
+        virtual=False,
+    ),
+    "pocket2mol-pocket-ligand-generation": ToolCapability(
+        tool_slug="pocket2mol-pocket-ligand-generation",
+        capability="pocket2mol-pocket-ligand-generation",
+        stage="pocket2mol-pocket-ligand-generation",
+        inputs=(
+            CapabilityInput("protein_structure@1", "protein_pdb"),
+        ),
+        outputs=(
+            CapabilityOutput(
+                "molecule_table@1",
+                "artifact",
+                OutputMatch(content_type="molecule_table@1"),
+                path="molecules",
+            ),
+            CapabilityOutput(
+                "ligand_structure@1",
+                "artifact",
+                OutputMatch(content_type="ligand_structure@1"),
+                path="ligands",
+            ),
+            CapabilityOutput(
+                "run_report@1",
+                "artifact",
+                OutputMatch(content_type="run_report@1"),
+                path="report",
+                required=False,
+            ),
+        ),
+        virtual=False,
+    ),
+    "therapainter-peptide-prediction": ToolCapability(
+        tool_slug="therapainter-peptide-prediction",
+        capability="therapainter-peptide-prediction",
+        stage="therapainter-peptide-prediction",
+        inputs=(),
+        outputs=(
+            CapabilityOutput(
+                "molecule_table@1",
+                "artifact",
+                OutputMatch(content_type="molecule_table@1"),
+                path="peptides",
+            ),
+            CapabilityOutput(
+                "run_report@1",
+                "artifact",
+                OutputMatch(content_type="run_report@1"),
+                path="report",
+                required=False,
+            ),
+        ),
+        virtual=False,
+    ),
 }
 
 
