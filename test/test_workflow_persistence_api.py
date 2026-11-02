@@ -173,7 +173,7 @@ async def generation_tool(db_session: AsyncSession, owner: User) -> Tool:
     tool = Tool(
         owner_id=owner.id,
         name="STD-Diff",
-        slug="gcdm-pocket-generation",
+        slug="test-molecule-generation",
         status=ToolStatus.PUBLISHED.value,
         is_public=True,
     )

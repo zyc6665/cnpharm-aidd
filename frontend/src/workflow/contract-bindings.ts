@@ -81,9 +81,7 @@ export const STAGE_STEP_MAP: Readonly<Record<string, WorkflowStepKey>> = {
   'lvpocket-pocket-prediction': 'pocketExploration',
   molecule_generation: 'moleculeGenerationOrVirtualScreening',
   virtual_screening: 'moleculeGenerationOrVirtualScreening',
-  'std-diff-molecule-generation': 'moleculeGenerationOrVirtualScreening',
   'pocket2mol-pocket-ligand-generation': 'moleculeGenerationOrVirtualScreening',
-  'vina-virtual-screening': 'moleculeGenerationOrVirtualScreening',
   docking_scoring: 'molecularDockingAndAffinityPrediction',
   docking: 'molecularDockingAndAffinityPrediction',
   affinity_prediction: 'molecularDockingAndAffinityPrediction',
@@ -91,9 +89,7 @@ export const STAGE_STEP_MAP: Readonly<Record<string, WorkflowStepKey>> = {
   'autodock-vina-docking': 'molecularDockingAndAffinityPrediction',
   'boltz2-affinity-prediction': 'molecularDockingAndAffinityPrediction',
   'gmx-mmpbsa': 'molecularDockingAndAffinityPrediction',
-  'gmx-mmpbsa-free-energy': 'molecularDockingAndAffinityPrediction',
   property_prediction: 'propertyPrediction',
-  'admet-prediction': 'propertyPrediction',
   'molp-pc-property-prediction': 'propertyPrediction',
   lead_optimization: 'leadOptimization'
 }
@@ -107,9 +103,7 @@ export const STAGE_STEP_MAP_DEFAULT_ALLOWED: Readonly<Record<string, string>> = 
   'boltz2-structure-prediction':
     '结构预测产出 protein_structure，5 个 WorkflowStepKey 没有结构预测阶段；仅作为输入准备工具，不进画布步骤',
   'gromacs-md': '分子动力学无对应 WorkflowStepKey，走独立 MD 页面，不在 5 步画布中',
-  'gromacs-md-simulation': '分子动力学无对应 WorkflowStepKey（历史别名），走独立 MD 页面，不在 5 步画布中',
-  'therapainter-peptide-prediction': '多肽设计走独立设计页 types/design.ts，不在 5 步画布中',
-  'therapainter-peptide-design': '多肽设计走独立设计页（历史别名），不在 5 步画布中'
+  'therapainter-peptide-prediction': '多肽设计走独立设计页 types/design.ts，不在 5 步画布中'
 }
 
 export interface WorkflowPreflightInputReport {

@@ -49,7 +49,6 @@ import importlib.util
 import inspect
 import json
 import logging
-import re
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -81,6 +80,25 @@ REQUIRED_TOOL_SLUGS = (
     "gromacs-md",
     "gmx-mmpbsa",
 )
+
+# boltz2 两个镜像的 digest 显式常量表。值逐个核对自原始迁移（运行时不再解析
+# 迁移模块的字节码常量）：
+#   - boltz2-structure-prediction：
+#     backend/alembic/versions/20261031_13_boltz2_tool.py:312
+#       image_digest = "sha256:83dc125a83120c746c95446cf3dd1c7cb2edafdf676953b7a14543235d7462eb"
+#   - boltz2-affinity-prediction：
+#     backend/alembic/versions/20261031_14_boltz2_affinity_tool.py:328
+#       image_digest = "sha256:d380abc44ba85c5d0decff05858bef2d203d8d6a05a399fde4ddb1a011b1ae26"
+# 两值均已与本机主库（15432）中对应工具的 ToolVersion.config.image 实际 digest
+# 逐一比对一致，故以此为准写死。
+_HEAD_IMAGE_DIGESTS: dict[str, str] = {
+    "boltz2-structure-prediction": (
+        "sha256:83dc125a83120c746c95446cf3dd1c7cb2edafdf676953b7a14543235d7462eb"
+    ),
+    "boltz2-affinity-prediction": (
+        "sha256:d380abc44ba85c5d0decff05858bef2d203d8d6a05a399fde4ddb1a011b1ae26"
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -165,35 +183,23 @@ def _apply_manifest_overrides(
     return cfg
 
 
-def _image_digest_in_upgrade(module) -> str:
-    """取迁移模块 ``upgrade()`` 里写死的镜像 digest。
-
-    ``20261031_13``/``20261031_14`` 把 digest 定义成 ``upgrade()`` 的局部变量再传给
-    ``_model(image_digest)``，模块级没有同名常量。这里从函数代码对象常量中读取，
-    既不复制 digest、也不改动已发布的迁移文件。
-    """
-    pattern = re.compile(r"^sha256:[0-9a-f]{64}$")
-    digests = [
-        const
-        for const in module.upgrade.__code__.co_consts
-        if isinstance(const, str) and pattern.match(const)
-    ]
-    if len(digests) != 1:
-        raise RuntimeError(
-            f"{module.__name__}.upgrade 里应恰有一个 sha256 digest，实际为 {digests!r}"
-        )
-    return digests[0]
-
-
-def _invoke_model_factory(module, factory_name: str) -> list[dict]:
+def _invoke_model_factory(
+    module, factory_name: str, *, image_digest: str | None = None
+) -> list[dict]:
     """调用迁移模块的 ``_model``/``_models`` 工厂，归一成 model dict 列表。
 
-    需要显式镜像 digest 的工厂（boltz2 / boltz2-affinity）从 ``upgrade()`` 常量取；
-    其余无参工厂直接调用。工厂可能返回单个 dict 或 dict 列表。
+    需要显式镜像 digest 的工厂（boltz2 / boltz2-affinity）由调用方从
+    ``_HEAD_IMAGE_DIGESTS`` 传入 ``image_digest``；其余无参工厂直接调用。
+    工厂可能返回单个 dict 或 dict 列表。
     """
     factory = getattr(module, factory_name)
     if inspect.signature(factory).parameters:
-        result = factory(_image_digest_in_upgrade(module))
+        if image_digest is None:
+            raise RuntimeError(
+                f"{module.__name__}.{factory_name} 需要镜像 digest，但未在 "
+                "_HEAD_IMAGE_DIGESTS 中登记"
+            )
+        result = factory(image_digest)
     else:
         result = factory()
     return [result] if isinstance(result, dict) else list(result)
@@ -257,7 +263,10 @@ def _load_head_models() -> dict[str, dict]:
         ("20261031_16_gromacs_tools.py", "_models"),
     ):
         module = _load_migration_module(filename)
-        for model in _invoke_model_factory(module, factory_name):
+        image_digest = _HEAD_IMAGE_DIGESTS.get(getattr(module, "SLUG", ""))
+        for model in _invoke_model_factory(
+            module, factory_name, image_digest=image_digest
+        ):
             models[model["slug"]] = model
 
     return models

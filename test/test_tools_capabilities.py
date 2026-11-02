@@ -19,7 +19,6 @@ from app.tools.capabilities import (  # noqa: E402
 
 def test_first_wave_capabilities_are_registered() -> None:
     assert get_capability("lvpocket-pocket-prediction").capability == "pocket_prediction"
-    assert get_capability("gcdm-pocket-generation").capability == "molecule_generation"
     assert get_capability("builtin-protein-preparation").capability == "protein_preparation"
     assert get_capability("builtin-sdf-to-smiles-csv").capability == "format_conversion"
     assert get_capability("builtin-sdf-to-pdb").capability == "format_conversion"
@@ -33,11 +32,6 @@ def test_capabilities_advertise_semantic_inputs_and_outputs() -> None:
     lvpocket = get_capability("lvpocket-pocket-prediction")
     assert [item.semantic_type for item in lvpocket.inputs] == ["protein_pdb"]
     assert [item.semantic_type for item in lvpocket.outputs] == ["pocket_pdb"]
-
-    generation = get_capability("gcdm-pocket-generation")
-    assert [item.semantic_type for item in generation.inputs] == ["pocket_pdb"]
-    assert [item.semantic_type for item in generation.outputs] == ["generated_ligand", "smiles_csv"]
-    assert generation.outputs[1].required is False
 
     preparation = get_capability("builtin-protein-preparation")
     assert preparation.virtual is True
@@ -88,7 +82,7 @@ def test_capabilities_advertise_semantic_inputs_and_outputs() -> None:
 
 def test_capability_lookup_by_output() -> None:
     capabilities = get_capabilities_by_output("generated_ligand")
-    assert [item.tool_slug for item in capabilities] == ["gcdm-pocket-generation"]
+    assert [item.tool_slug for item in capabilities] == []
 
     ligand_capabilities = get_capabilities_by_output("ligand_pdb")
     assert [item.tool_slug for item in ligand_capabilities] == ["builtin-sdf-to-pdb"]
@@ -102,7 +96,6 @@ def test_capability_lookup_by_output() -> None:
     assert [item.tool_slug for item in ligand_artifact_capabilities] == [
         "builtin-ligand-preparation",
         "builtin-rdkit-conformer",
-        "vina-virtual-screening",
         "autodock-vina-docking",
         "pocket2mol-pocket-ligand-generation",
     ]

@@ -11,7 +11,12 @@ BACKEND_ROOT = PROJECT_ROOT / "backend"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.tools.capabilities import CapabilityOutput, ToolCapability, get_capability  # noqa: E402
+from app.tools.capabilities import (  # noqa: E402
+    CapabilityOutput,
+    OutputMatch,
+    ToolCapability,
+    get_capability,
+)
 from app.tools.semantic_outputs import extract_semantic_outputs, parse_sdf_smiles  # noqa: E402
 
 
@@ -133,8 +138,32 @@ $$$$
 
 
 def test_generation_output_can_expose_existing_smiles_csv_file() -> None:
+    # gcdm-pocket-generation 已从静态能力注册表移除；此处内联构造等价的
+    # 生成类能力契约，仅用于验证 extract_semantic_outputs 的通用行为。
+    generation_capability = ToolCapability(
+        tool_slug="test-molecule-generation",
+        capability="molecule_generation",
+        stage="molecule_generation",
+        inputs=(),
+        outputs=(
+            CapabilityOutput(
+                "generated_ligand",
+                "output_files",
+                OutputMatch(extension=".sdf"),
+            ),
+            CapabilityOutput(
+                "smiles_csv",
+                "output_files",
+                OutputMatch(
+                    extension=".csv",
+                    filename_contains_any=("smiles", "smile"),
+                ),
+                required=False,
+            ),
+        ),
+    )
     outputs = extract_semantic_outputs(
-        capability=get_capability("gcdm-pocket-generation"),
+        capability=generation_capability,
         task_output_files=[
             {
                 "id": "file-sdf",
