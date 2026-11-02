@@ -9,8 +9,10 @@
           :label="field.label"
           :span="field.span"
         >
-          <span v-if="field.mono" class="app-description-mono">{{ field.value }}</span>
+          <a-tag v-if="field.tagColor" :color="field.tagColor">{{ field.value }}</a-tag>
+          <span v-else-if="field.mono" class="app-description-mono">{{ field.value }}</span>
           <template v-else>{{ field.value }}</template>
+          <span v-if="field.hint" class="app-description-hint">{{ field.hint }}</span>
         </a-descriptions-item>
       </a-descriptions>
     </section>
@@ -31,6 +33,14 @@ export interface DescriptionField {
   value: string
   /** 等宽字体（哈希、序列、SMILES、ID） */
   mono?: boolean
+  /**
+   * 一行灰色提示，用来表达「这个数字怎么算好」——
+   * 例如 pLDDT「越高越好」、对接分「越低越好」。指标方向属于领域知识，
+   * 由页面算好后传入，组件不猜。
+   */
+  hint?: string
+  /** 有值时以 a-tag 渲染（状态枚举），颜色由页面给 */
+  tagColor?: string
   span?: number
 }
 
@@ -59,6 +69,12 @@ withDefaults(
   margin: 0 0 8px;
   font-size: 14px;
   font-weight: 600;
+}
+
+.app-description-hint {
+  margin-left: 6px;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.45);
 }
 
 .app-description-mono {

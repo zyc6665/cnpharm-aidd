@@ -4,6 +4,8 @@ import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import MoleculeViewer from '@/components/tasks/MoleculeViewer.vue'
+import AppDescriptionList from '@/components/common/AppDescriptionList.vue'
+import type { DescriptionSection } from '@/components/common/AppDescriptionList.vue'
 import { useSharedMockBanner } from '@/views/predict/mock-banner'
 import { getResult } from '@/api/results'
 import { getTaskDetail } from '@/api/tasks'
@@ -213,6 +215,23 @@ async function load(): Promise<void> {
 onMounted(() => {
   void load()
 })
+
+  const poseSections = computed<DescriptionSection[]>(() => {
+    const pose = poseMeta.value
+    if (!pose) {
+      return []
+    }
+    const fields: DescriptionSection['fields'] = [
+      { key: 'rank', label: t('screening.detail.rank'), value: String(pose.rank) },
+      { key: 'score', label: t('screening.detail.score'), value: String(pose.docking_score), hint: t('screening.detail.hints.score') },
+      { key: 'rmsdLb', label: t('screening.detail.rmsdLb'), value: String(pose.rmsd_lb), hint: t('screening.detail.hints.rmsd') },
+      { key: 'rmsdUb', label: t('screening.detail.rmsdUb'), value: String(pose.rmsd_ub), hint: t('screening.detail.hints.rmsd') },
+    ]
+    if (pose.ligand_smiles) {
+      fields.push({ key: 'ligandSmiles', label: t('screening.detail.ligandSmiles'), value: pose.ligand_smiles, mono: true, span: 4 })
+    }
+    return [{ key: 'pose', fields }]
+  })
 </script>
 
 <template>
@@ -253,15 +272,7 @@ onMounted(() => {
 
     <template v-else-if="!errorMessage && poseMeta">
       <a-card :title="poseMeta.pose_id" data-testid="docking-detail-score">
-        <a-descriptions bordered :column="4" size="small">
-          <a-descriptions-item :label="t('screening.detail.rank')">{{ poseMeta.rank }}</a-descriptions-item>
-          <a-descriptions-item :label="t('screening.detail.score')">{{ poseMeta.docking_score }}</a-descriptions-item>
-          <a-descriptions-item :label="t('screening.detail.rmsdLb')">{{ poseMeta.rmsd_lb }}</a-descriptions-item>
-          <a-descriptions-item :label="t('screening.detail.rmsdUb')">{{ poseMeta.rmsd_ub }}</a-descriptions-item>
-          <a-descriptions-item v-if="poseMeta.ligand_smiles" :label="t('screening.detail.ligandSmiles')" :span="4">
-            {{ poseMeta.ligand_smiles }}
-          </a-descriptions-item>
-        </a-descriptions>
+        <AppDescriptionList :sections="poseSections" :columns="4" />
       </a-card>
 
       <a-card :title="t('screening.detail.viewer')">

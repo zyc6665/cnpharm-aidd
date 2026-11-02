@@ -1984,6 +1984,10 @@ export default {
       viewer: '复合物结构',
       noStructure: '缺少可展示的结构文件。',
       disclaimer: '演示数据，不可用于科研决策。',
+      hints: {
+        score: '越低结合越牢（kcal/mol）',
+        rmsd: '越低越接近晶体构象（Å）'
+      },
       rank: '排名',
       ligandSmiles: '配体 SMILES',
       groupHydrogenBond: '氢键',
@@ -2042,6 +2046,11 @@ export default {
     result: {
       title: 'MD 模拟结果',
       subtitle: '查看轨迹分析曲线与结构预览',
+      hints: {
+        duration: '模拟总时长',
+        temperature: '人体体温约 310 K',
+        timestep: '常见 2 fs，越小越精确也越慢'
+      },
       taskStatus: '任务状态',
       forceField: '力场',
       totalFrames: '总帧数',

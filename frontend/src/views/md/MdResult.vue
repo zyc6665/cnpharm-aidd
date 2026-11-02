@@ -18,22 +18,7 @@
 
     <template v-else>
       <a-card :bordered="false" class="md-result__overview">
-        <a-descriptions :column="2" size="middle" bordered>
-          <a-descriptions-item :label="t('md.result.taskStatus')">
-            <a-tag :color="statusColor">{{ result?.status ?? '-' }}</a-tag>
-          </a-descriptions-item>
-          <a-descriptions-item :label="t('md.result.forceField')">{{ metadata.force_field ?? '-' }}</a-descriptions-item>
-          <a-descriptions-item :label="t('md.result.totalFrames')">{{ totalFrames ?? '-' }}</a-descriptions-item>
-          <a-descriptions-item :label="t('md.result.duration')">
-            {{ metadata.duration_ns != null ? `${metadata.duration_ns} ns` : '-' }}
-          </a-descriptions-item>
-          <a-descriptions-item :label="t('md.result.temperature')">
-            {{ metadata.temperature_k != null ? `${metadata.temperature_k} K` : '-' }}
-          </a-descriptions-item>
-          <a-descriptions-item :label="t('md.result.timestep')">
-            {{ metadata.timestep_ps != null ? `${metadata.timestep_ps} ps` : '-' }}
-          </a-descriptions-item>
-        </a-descriptions>
+        <AppDescriptionList :sections="overviewSections" :columns="2" test-id="md-overview" />
 
         <div v-if="isRunning" class="md-result__progress" data-testid="md-progress">
           <a-progress :percent="progressPercent" :status="'active'" />
@@ -146,6 +131,7 @@
   import Papa from 'papaparse'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
+  import AppDescriptionList from '@/components/common/AppDescriptionList.vue'
   import MockDataBanner from '@/components/common/MockDataBanner.vue'
   import StructureArtifactPreview from '@/components/artifacts/StructureArtifactPreview.vue'
   import MdEchart from './MdEchart.vue'
@@ -154,6 +140,7 @@
   import { openTaskEventStream } from '@/api/task-events'
   import { fetchProtectedFileText, triggerProtectedFileDownload } from '@/utils/protected-file-access'
   import { buildAnalysisRows, downsampleSeries, findOutputByStandardType } from './analysis'
+  import type { DescriptionSection } from '@/components/common/AppDescriptionList.vue'
   import type { ArtifactVersionFile, TypedArtifact } from '@/types/artifacts'
   import type { MdAnalysisRow, MdResultDetail, MdTrajectoryMetadata, MdTrajectoryRole } from '@/types/md'
   import type { Task } from '@/types/models'
@@ -341,6 +328,35 @@
   onBeforeUnmount(() => {
     stopStream()
   })
+
+  const overviewSections = computed<DescriptionSection[]>(() => [
+    {
+      key: 'overview',
+      fields: [
+        { key: 'status', label: t('md.result.taskStatus'), value: result.value?.status ?? '-', tagColor: statusColor.value },
+        { key: 'forceField', label: t('md.result.forceField'), value: metadata.value.force_field ?? '-' },
+        { key: 'totalFrames', label: t('md.result.totalFrames'), value: totalFrames.value != null ? String(totalFrames.value) : '-' },
+        {
+          key: 'duration',
+          label: t('md.result.duration'),
+          value: metadata.value.duration_ns != null ? `${metadata.value.duration_ns} ns` : '-',
+          hint: t('md.result.hints.duration'),
+        },
+        {
+          key: 'temperature',
+          label: t('md.result.temperature'),
+          value: metadata.value.temperature_k != null ? `${metadata.value.temperature_k} K` : '-',
+          hint: t('md.result.hints.temperature'),
+        },
+        {
+          key: 'timestep',
+          label: t('md.result.timestep'),
+          value: metadata.value.timestep_ps != null ? `${metadata.value.timestep_ps} ps` : '-',
+          hint: t('md.result.hints.timestep'),
+        },
+      ],
+    },
+  ])
 </script>
 
 <style scoped lang="less">

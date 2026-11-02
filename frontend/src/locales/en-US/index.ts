@@ -1996,6 +1996,10 @@ export default {
       viewer: 'Complex structure',
       noStructure: 'No structure file to display.',
       disclaimer: 'Demo data, not for research decisions.',
+      hints: {
+        score: 'Lower means tighter binding (kcal/mol)',
+        rmsd: 'Lower means closer to the crystal pose (Å)'
+      },
       rank: 'Rank',
       ligandSmiles: 'Ligand SMILES',
       groupHydrogenBond: 'Hydrogen bond',
@@ -2054,6 +2058,11 @@ export default {
     result: {
       title: 'MD Simulation Result',
       subtitle: 'Inspect trajectory analysis curves and structure preview',
+      hints: {
+        duration: 'Total simulated time',
+        temperature: 'Body temperature is about 310 K',
+        timestep: 'Typically 2 fs — smaller is more accurate but slower'
+      },
       taskStatus: 'Status',
       forceField: 'Force field',
       totalFrames: 'Total frames',

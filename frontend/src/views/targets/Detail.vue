@@ -30,30 +30,10 @@
       <SkeletonDetail v-if="loading && !target" />
 
       <template v-else-if="target">
-        <a-descriptions
-          class="target-info"
-          data-testid="target-info"
-          :title="t('targets.detail.info')"
-          :column="2"
-          size="middle"
-          bordered
-        >
-          <a-descriptions-item :label="t('targets.list.type')">
-            {{ formatTargetType(target.target_type) }}
-          </a-descriptions-item>
-          <a-descriptions-item :label="t('targets.list.uniprot')">
-            {{ formatOptionalText(target.uniprot_id) }}
-          </a-descriptions-item>
-          <a-descriptions-item :label="t('targets.list.gene')">
-            {{ formatOptionalText(target.gene_name) }}
-          </a-descriptions-item>
-          <a-descriptions-item :label="t('targets.createdAt')">
-            {{ formatTargetDateTime(target.created_at) }}
-          </a-descriptions-item>
-          <a-descriptions-item :label="t('targets.list.description')" :span="2">
-            {{ formatOptionalText(target.description) }}
-          </a-descriptions-item>
-        </a-descriptions>
+        <section class="target-info" data-testid="target-info">
+          <h3 class="section-title">{{ t('targets.detail.info') }}</h3>
+          <AppDescriptionList :sections="infoSections" :columns="2" />
+        </section>
 
         <section class="protein-section" data-testid="protein-section">
           <h2 class="section-title">
@@ -218,6 +198,7 @@
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import AppErrorState from '@/components/common/AppErrorState.vue'
   import AppEmptyState from '@/components/common/AppEmptyState.vue'
+  import AppDescriptionList from '@/components/common/AppDescriptionList.vue'
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
   import {
     createProtein,
@@ -227,6 +208,7 @@
   } from '@/api/targets'
   import { uploadFile } from '@/api/files'
   import { formatOptionalText, formatPlddtMean, formatTargetDateTime, formatTargetType, plddtBand, resolveTargetErrorMessage } from '@/domain/targets/display'
+  import type { DescriptionSection } from '@/components/common/AppDescriptionList.vue'
   import type {
     ProteinDetail,
     ProteinStructureDetail,
@@ -423,6 +405,25 @@
     void load()
   })
 
+
+  const infoSections = computed<DescriptionSection[]>(() => {
+    const item = target.value
+    if (!item) {
+      return []
+    }
+    return [
+      {
+        key: 'target',
+        fields: [
+          { key: 'type', label: t('targets.list.type'), value: formatTargetType(item.target_type) },
+          { key: 'uniprot', label: t('targets.list.uniprot'), value: formatOptionalText(item.uniprot_id), mono: true },
+          { key: 'gene', label: t('targets.list.gene'), value: formatOptionalText(item.gene_name) },
+          { key: 'createdAt', label: t('targets.createdAt'), value: formatTargetDateTime(item.created_at) },
+          { key: 'description', label: t('targets.list.description'), value: formatOptionalText(item.description), span: 2 },
+        ],
+      },
+    ]
+  })
 </script>
 
 <style scoped lang="less">
