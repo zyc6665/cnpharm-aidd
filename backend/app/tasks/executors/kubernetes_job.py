@@ -64,9 +64,9 @@ class KubernetesJobExecutor(BaseExecutor):
         if runtime_env is None:
             runtime_env = {}
         if not isinstance(runtime_env, dict):
-            raise TaskExecutionError("k8s_job runtime.env must be an object")
+            raise TaskExecutionError("k8s_job 的 runtime.env 必须是对象")
         if "SCIMINER_REQUEST_JSON" in runtime_env:
-            raise TaskExecutionError("k8s_job runtime.env cannot override SCIMINER_REQUEST_JSON")
+            raise TaskExecutionError("k8s_job 的 runtime.env 不能覆盖 SCIMINER_REQUEST_JSON")
         runtime["env"] = {
             **runtime_env,
             "SCIMINER_REQUEST_JSON": json.dumps(
@@ -104,11 +104,11 @@ class KubernetesJobExecutor(BaseExecutor):
         for item in inputs:
             if not item.role or not item.artifact_type:
                 raise TaskExecutionError(
-                    "Kubernetes inputs require a materialized standard ArtifactVersion"
+                    "Kubernetes 输入需要已落盘的标准 ArtifactVersion"
                 )
             filename = PurePosixPath(item.uri).name
             if not filename:
-                raise TaskExecutionError("Kubernetes input object key has no filename")
+                raise TaskExecutionError("Kubernetes 输入对象键缺少文件名")
             staged_path = f"input/{item.name}/{filename}"
             artifact = grouped_inputs.get(item.name)
             if artifact is None:
@@ -124,7 +124,7 @@ class KubernetesJobExecutor(BaseExecutor):
                 or artifact["type"] != item.artifact_type
             ):
                 raise TaskExecutionError(
-                    f"Kubernetes input slot has conflicting ArtifactVersions: {item.name}"
+                    f"Kubernetes 输入槽位存在冲突的 ArtifactVersion：{item.name}"
                 )
             file_ref = {
                 "path": staged_path,
@@ -215,7 +215,7 @@ class KubernetesJobExecutor(BaseExecutor):
             return []
         if self.db_session is None:
             raise TaskExecutionError(
-                "k8s_job 输入 staging requires the worker database session"
+                "k8s_job 输入暂存需要 Worker 数据库会话"
             )
         from app.storage.factory import get_storage_backend
 
@@ -235,7 +235,7 @@ class KubernetesJobExecutor(BaseExecutor):
         except Exception as exc:
             if isinstance(exc, TaskExecutionError):
                 raise
-            raise TaskExecutionError(f"Kubernetes input staging failed: {exc}") from exc
+            raise TaskExecutionError(f"Kubernetes 输入暂存失败：{exc}") from exc
 
     async def execute(self) -> dict[str, Any]:
         if self.execution_service is None:
@@ -259,7 +259,7 @@ class KubernetesJobExecutor(BaseExecutor):
             if loop.time() >= deadline:
                 await self.execution_service.cancel("k8s_job", execution_id)
                 raise TaskTimeoutError(
-                    f"Kubernetes Job execution timeout after {timeout}s",
+                    f"Kubernetes Job 执行超时（{timeout} 秒）",
                     timeout_sec=timeout,
                 )
             try:
@@ -291,11 +291,11 @@ class KubernetesJobExecutor(BaseExecutor):
                 await asyncio.sleep(poll_interval)
 
         if state == ExecutionState.CANCELLED:
-            raise TaskExecutionError("Kubernetes Job was cancelled")
+            raise TaskExecutionError("Kubernetes Job 已被取消")
         if state == ExecutionState.FAILED:
-            raise TaskExecutionError("Kubernetes Job reported failure")
+            raise TaskExecutionError("Kubernetes Job 报告执行失败")
         if state != ExecutionState.SUCCEEDED:
-            raise TaskExecutionError(f"Kubernetes Job returned unexpected state: {state}")
+            raise TaskExecutionError(f"Kubernetes Job 返回了意外状态：{state}")
 
         if collection is None:
             collection = await self.execution_service.collect_result(
@@ -305,7 +305,7 @@ class KubernetesJobExecutor(BaseExecutor):
         if collection.source_root is not None:
             if self.db_session is None:
                 raise TaskExecutionError(
-                    "Kubernetes artifact collection requires the worker database session"
+                    "Kubernetes 产物收集需要 Worker 数据库会话"
                 )
             source_root = Path(collection.source_root)
             try:

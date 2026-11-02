@@ -31,7 +31,7 @@ def test_python_script_rejects_untrusted_content_in_production(
     monkeypatch.setattr("app.tasks.executors.script_trust.settings.TRUSTED_PYTHON_SCRIPT_SHA256", [])
     executor = build_executor("print('untrusted')")
 
-    with pytest.raises(TaskExecutionError, match="trusted SHA-256"):
+    with pytest.raises(TaskExecutionError, match="可信 SHA-256"):
         executor._validate_script_trust("print('untrusted')", None)
 
 
@@ -130,5 +130,5 @@ async def test_python_script_rejects_non_string_arguments(
         }
     )
 
-    with pytest.raises(TaskExecutionError, match="args must be a string array"):
+    with pytest.raises(TaskExecutionError, match="必须是字符串数组"):
         await executor.execute()

@@ -48,7 +48,7 @@ def _build_script_env(work_dir: str) -> dict[str, str]:
 def _configured_args(config: dict[str, Any]) -> list[str]:
     args = config.get("args", [])
     if not isinstance(args, list) or not all(isinstance(item, str) for item in args):
-        raise TaskExecutionError("Python script args must be a string array")
+        raise TaskExecutionError("Python 脚本参数必须是字符串数组")
     return args
 
 
@@ -60,7 +60,7 @@ class PythonScriptExecutor(BaseExecutor):
         script_content = self.config.get("script_content")
         timeout = self.config.get("timeout_sec", 600)
         if not script_path and not script_content:
-            raise TaskExecutionError("Missing script_path or script_content in tool config")
+            raise TaskExecutionError("工具配置缺少 script_path 或 script_content")
         validate_script_trust(script_content, script_path)
         configured_args = _configured_args(self.config)
         work_dir = self._get_work_dir()
@@ -91,7 +91,7 @@ class PythonScriptExecutor(BaseExecutor):
             )
             if process.returncode != 0:
                 raise TaskExecutionError(
-                    f"Python script failed with code {process.returncode}",
+                    f"Python 脚本执行失败，退出码 {process.returncode}",
                     details={"stderr": (process.stderr or "")[:1000]},
                 )
             output = parse_script_output(work_dir, process.stdout)
@@ -101,13 +101,13 @@ class PythonScriptExecutor(BaseExecutor):
             return {"success": True, "result": output, "stdout": process.stdout, "stderr": process.stderr}
         except subprocess.TimeoutExpired as exc:
             raise TaskTimeoutError(
-                f"Python script execution timeout after {timeout}s",
+                f"Python 脚本执行超时（{timeout} 秒）",
                 timeout_sec=timeout,
             ) from exc
         except TaskExecutionError:
             raise
         except Exception as exc:
-            raise TaskExecutionError(f"Python script execution error: {exc}") from exc
+            raise TaskExecutionError(f"Python 脚本执行异常：{exc}") from exc
         finally:
             self._cleanup_work_dir()
 

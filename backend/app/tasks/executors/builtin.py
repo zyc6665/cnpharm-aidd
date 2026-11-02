@@ -22,7 +22,7 @@ class BuiltinExecutor(BaseExecutor):
 
         builtin_slug = str(self.config.get("builtin_slug") or "")
         if not builtin_slug:
-            raise TaskExecutionError("Missing builtin_slug in tool config")
+            raise TaskExecutionError("工具配置缺少 builtin_slug")
 
         task_input = getattr(self.task, "inputs", None)
         if task_input is None:
@@ -38,7 +38,7 @@ class BuiltinExecutor(BaseExecutor):
         if semantic_file_ids is None:
             semantic_file_ids = {}
         elif not isinstance(semantic_file_ids, dict):
-            raise TaskExecutionError("Builtin task builtin_inputs must be a mapping")
+            raise TaskExecutionError("内置任务的 builtin_inputs 必须是映射（mapping）")
 
         input_ids = [str(file_id) for file_id in semantic_file_ids.values() if file_id]
         if builtin_slug == "builtin-sdf-to-smiles-csv" and task_input:
@@ -60,14 +60,14 @@ class BuiltinExecutor(BaseExecutor):
         for semantic_type, file_id in semantic_file_ids.items():
             file_record = files_by_id.get(str(file_id))
             if not file_record or not file_record.storage_path:
-                raise TaskExecutionError(f"Builtin input file is unavailable: {semantic_type}")
+                raise TaskExecutionError(f"内置输入文件不可用：{semantic_type}")
             if getattr(file_record, "storage_backend", "local") == "minio":
                 local_path = input_dir / file_record.filename
                 try:
                     await ensure_local_file(file_record, local_path)
                 except FileNotFoundError as exc:
                     raise TaskExecutionError(
-                        f"Builtin input file is unavailable: {semantic_type}"
+                        f"内置输入文件不可用：{semantic_type}"
                     ) from exc
             else:
                 local_path = file_storage_path(file_record)
@@ -87,7 +87,7 @@ class BuiltinExecutor(BaseExecutor):
                 file_record = files_by_id.get(file_id)
                 if not file_record or not file_record.storage_path:
                     raise TaskExecutionError(
-                        f"Builtin input file is unavailable: ligand_structure@1:{index}"
+                        f"内置输入文件不可用：ligand_structure@1:{index}"
                     )
                 if getattr(file_record, "storage_backend", "local") == "minio":
                     local_path = input_dir / file_record.filename
@@ -95,7 +95,7 @@ class BuiltinExecutor(BaseExecutor):
                         await ensure_local_file(file_record, local_path)
                     except FileNotFoundError as exc:
                         raise TaskExecutionError(
-                            f"Builtin input file is unavailable: ligand_structure@1:{index}"
+                            f"内置输入文件不可用：ligand_structure@1:{index}"
                         ) from exc
                 else:
                     local_path = file_storage_path(file_record)

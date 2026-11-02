@@ -9,7 +9,7 @@ from app.tasks.executors.errors import TaskExecutionError
 def build_remote_exec_command(config: dict[str, Any], task_id: str, remote_paths: dict[str, str]) -> str:
     runner_mode = config.get("runner_mode", "shell")
     if runner_mode not in {"docker_exec", "shell"}:
-        raise TaskExecutionError(f"Unsupported ssh_job runner_mode: {runner_mode}")
+        raise TaskExecutionError(f"不支持的 ssh_job runner_mode：{runner_mode}")
     command_parts = [
         "bash", config["entrypoint"], "--task-id", task_id, "--input-dir", remote_paths["runtime_input_dir"],
         "--output-dir", remote_paths["runtime_output_dir"], "--params-json", remote_paths["runtime_params_file"],
