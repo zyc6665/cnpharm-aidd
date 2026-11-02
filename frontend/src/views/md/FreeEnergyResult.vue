@@ -75,6 +75,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatFixed } from '@/domain/common/format'
   import { computed, onMounted, ref } from 'vue'
   import { useRoute } from 'vue-router'
   import { useI18n } from 'vue-i18n'
@@ -135,10 +136,7 @@
 
   const summary = computed(() => summarizeDeltaG(rows.value.map((row) => row.delta_g_total)))
 
-  function formatNumber(value: number): string {
-    if (!Number.isFinite(value)) return '—'
-    return value.toFixed(2)
-  }
+  const formatNumber = (value: number) => formatFixed(value, 2)
 
   const componentMeans = computed<EnergyComponentMean[]>(() => energyComponentMeans(rows.value))
 

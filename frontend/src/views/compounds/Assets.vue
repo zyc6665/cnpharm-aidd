@@ -100,7 +100,7 @@
               {{ propertyText('QED', record.props?.QED) }}
             </template>
             <template v-else-if="column.key === 'created_at'">
-              {{ formatDate(record.created_at) }}
+              {{ formatDateTimeOrDash(record.created_at) }}
             </template>
           </template>
         </a-table>
@@ -142,7 +142,7 @@
               <span class="mono-cell">{{ record.metadata.filename || '-' }}</span>
             </template>
             <template v-else-if="column.key === 'created_at'">
-              {{ formatDate(record.created_at) }}
+              {{ formatDateTimeOrDash(record.created_at) }}
             </template>
           </template>
         </a-table>
@@ -191,7 +191,7 @@
               {{ record.metadata.fileCount ?? '-' }}
             </template>
             <template v-else-if="column.key === 'created_at'">
-              {{ formatDate(record.created_at) }}
+              {{ formatDateTimeOrDash(record.created_at) }}
             </template>
           </template>
         </a-table>
@@ -330,8 +330,8 @@
   import { useRoute } from 'vue-router'
   import { useI18n } from 'vue-i18n'
   import { message } from 'ant-design-vue'
-  import { formatDateTimeMinutes } from '@/utils/datetime'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import { formatDateTimeOrDash } from '@/domain/common/format'
   import AppEmptyState from '@/components/common/AppEmptyState.vue'
   import AppInlineError from '@/components/common/AppInlineError.vue'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
@@ -460,10 +460,6 @@
   const creating = ref(false)
   const createName = ref('')
   const createSmiles = ref('')
-
-  function formatDate(value: string | null | undefined): string {
-    return value ? formatDateTimeMinutes(value) : '-'
-  }
 
   function optionalText(value: string): string | undefined {
     const trimmed = value.trim()

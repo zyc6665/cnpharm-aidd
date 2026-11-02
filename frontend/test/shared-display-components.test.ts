@@ -51,10 +51,42 @@ describe('共用显示组件', () => {
 
   it('格式化原语只有一份，页面不再本地重复实现 humanize/空值兜底', () => {
     const format = read('domain/common/format.ts')
-    for (const name of ['formatNullable', 'formatNumber', 'formatWithUnit', 'humanizeKey']) {
+    for (const name of [
+      'formatNullable', 'formatNumber', 'formatFixed', 'formatWithUnit',
+      'formatBytes', 'humanizeKey', 'formatDateTimeOrDash', 'formatDateOrDash',
+      'formatDateTimeSecondsOrDash',
+    ]) {
       assert.include(format, `export function ${name}`, `format.ts 缺少 ${name}`)
     }
     const candidate = read('views/compounds/CandidateDetail.vue')
     assert.include(candidate, "@/domain/common/format")
   })
 })
+
+  it('页面不再各自实现 formatDate / formatSize / formatNumber', () => {
+    const offenders = [
+      'views/compounds/Assets.vue',
+      'views/compounds/Candidates.vue',
+      'views/compounds/CandidateDetail.vue',
+      'views/compounds/CompoundDetail.vue',
+      'views/results/List.vue',
+      'views/results/ResultDetail.vue',
+      'views/admin/Tasks.vue',
+      'views/admin/Users.vue',
+      'views/user/Profile.vue',
+      'components/artifacts/CompoundSetArtifact.vue',
+      'components/artifacts/DatasetArtifact.vue',
+    ]
+    for (const rel of offenders) {
+      const source = read(rel)
+      for (const pattern of ['function formatDate', 'const formatDate = (', 'function formatSize', 'function formatSimilarity']) {
+        assert.notInclude(source, pattern, `${rel} 仍在本地实现 ${pattern}`)
+      }
+    }
+  })
+
+  it('字节与小数格式化统一到共用原语', () => {
+    assert.include(read('domain/projects/overview.ts'), "from '@/domain/common/format'")
+    assert.include(read('domain/workspace/overview.ts'), "from '@/domain/common/format'")
+    assert.include(read('domain/results/index.ts'), "from '@/domain/common/format'")
+  })

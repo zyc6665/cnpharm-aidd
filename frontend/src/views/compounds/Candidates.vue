@@ -81,7 +81,7 @@
               {{ record.design_score ?? '-' }}
             </template>
             <template v-else-if="column.key === 'created_at'">
-              {{ formatDate(record.created_at) }}
+              {{ formatDateTimeOrDash(record.created_at) }}
             </template>
           </template>
         </a-table>
@@ -129,7 +129,7 @@
               {{ record.description || '-' }}
             </template>
             <template v-else-if="column.key === 'updated_at'">
-              {{ formatDate(record.updated_at) }}
+              {{ formatDateTimeOrDash(record.updated_at) }}
             </template>
           </template>
         </a-table>
@@ -179,8 +179,8 @@
   import { useRoute } from 'vue-router'
   import { useI18n } from 'vue-i18n'
   import { message } from 'ant-design-vue'
-  import { formatDateTimeMinutes } from '@/utils/datetime'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
+  import { formatDateTimeOrDash } from '@/domain/common/format'
   import AppEmptyState from '@/components/common/AppEmptyState.vue'
   import AppInlineError from '@/components/common/AppInlineError.vue'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
@@ -242,10 +242,6 @@
   const creatingSet = ref(false)
   const createSetName = ref('')
   const createSetDescription = ref('')
-
-  function formatDate(value: string | null | undefined): string {
-    return value ? formatDateTimeMinutes(value) : '-'
-  }
 
   function candidateTitle(candidate: Candidate): string {
     return candidate.name || candidate.code || candidate.peptide_sequence || candidate.id

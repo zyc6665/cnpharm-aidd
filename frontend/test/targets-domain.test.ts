@@ -5,6 +5,7 @@ import {
   buildStructurePreviewArtifact,
   findSelectedPocket,
   formatPlddtMean,
+  plddtBand,
   formatSourceType,
   formatTargetType,
   formatPocketCenter,
@@ -234,4 +235,23 @@ test('formatTargetType 把靶点类型枚举翻成中文', () => {
   assert.equal(formatTargetType('PROTEIN'), '蛋白')
   assert.equal(formatTargetType('RNA'), 'RNA')
   assert.equal(formatTargetType(undefined), '-')
+})
+
+test('pLDDT 分档按 AlphaFold 口径给出四档，缺值时不分档', () => {
+  assert.equal(plddtBand(95), 'veryHigh')
+  assert.equal(plddtBand(90), 'veryHigh')
+  assert.equal(plddtBand(89.9), 'confident')
+  assert.equal(plddtBand(70), 'confident')
+  assert.equal(plddtBand(69.9), 'low')
+  assert.equal(plddtBand(50), 'low')
+  assert.equal(plddtBand(49.9), 'veryLow')
+  assert.equal(plddtBand(null), null)
+  assert.equal(plddtBand(undefined), null)
+  assert.equal(plddtBand(Number.NaN), null)
+})
+
+test('pLDDT 数字本身仍保留两位小数，档位只是补充文字', () => {
+  assert.equal(formatPlddtMean(87.3456), '87.35')
+  assert.equal(formatPlddtMean(87.3449), '87.34')
+  assert.equal(formatPlddtMean(null), '-')
 })

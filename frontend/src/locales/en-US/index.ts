@@ -993,6 +993,12 @@ export default {
       info: 'Basic information',
       protein: 'Protein',
       sourceType: 'Source',
+        plddtBand: {
+          veryHigh: 'very high confidence',
+          confident: 'confident',
+          low: 'low confidence',
+          veryLow: 'very low confidence'
+        },
       plddt: 'Mean pLDDT',
       model: 'Model',
       tool: 'Tool',

@@ -43,7 +43,7 @@
         </a-form-item>
 
         <a-form-item :label="t('user.createdAt')">
-          {{ formatDate(userStore.user?.created_at) }}
+          {{ formatDateOrDash(userStore.user?.created_at) }}
         </a-form-item>
 
         <a-form-item :wrapper-col="{ offset: 6, span: 14 }">
@@ -90,8 +90,8 @@ import { useI18n } from 'vue-i18n'
 import { PlusOutlined, CameraOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import type { UploadProps, UploadFile } from 'ant-design-vue'
-import { formatDateOnly } from '@/utils/datetime'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
+import { formatDateOrDash } from '@/domain/common/format'
 import ProtectedAvatar from '@/components/common/ProtectedAvatar.vue'
 import { useUserStore } from '@/stores'
 
@@ -120,10 +120,6 @@ const rules = {
     { required: true, message: t('auth.validation.usernameRequired') },
     { min: 3, max: 20, message: t('auth.validation.usernameLength') }
   ]
-}
-
-const formatDate = (date?: string) => {
-  return date ? formatDateOnly(date) : '-'
 }
 
 const beforeUpload: UploadProps['beforeUpload'] = (file) => {

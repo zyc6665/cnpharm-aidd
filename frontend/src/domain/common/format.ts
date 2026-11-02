@@ -7,6 +7,8 @@
  * 可能是 `-` 或 `—` 或空白。这里收敛成一处，页面只负责取字段。
  */
 
+import { formatDateOnly, formatDateTimeMinutes, formatDateTimeSeconds } from '@/utils/datetime'
+
 export const EMPTY_DISPLAY = '-'
 
 export interface NullableOptions {
@@ -62,4 +64,45 @@ export function humanizeKey(key: string): string {
     return EMPTY_DISPLAY
   }
   return cleaned.charAt(0).toUpperCase() + cleaned.slice(1)
+}
+
+/** 时间统一到分钟粒度，空值给 `-`（等价于 6 个页面各自写的 `value ? fmt(value) : '-'`）。 */
+export function formatDateTimeOrDash(value?: string | null): string {
+  return value ? formatDateTimeMinutes(value) : EMPTY_DISPLAY
+}
+
+/** 只要日期（`YYYY-MM-DD`），空值给 `-`。 */
+export function formatDateOrDash(value?: string | null): string {
+  return value ? formatDateOnly(value) : EMPTY_DISPLAY
+}
+
+/** 字节数转可读大小；空值与 NaN 给 `-`。B/KB/MB 三级即可（平台单文件上限 2GB 也不到 GB 级展示需求）。 */
+export function formatBytes(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return EMPTY_DISPLAY
+  }
+  if (value < 1024) {
+    return `${value} B`
+  }
+  if (value < 1024 * 1024) {
+    return `${(value / 1024).toFixed(1)} KB`
+  }
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`
+}
+
+/**
+ * 固定小数位（保留末尾 0）。与 formatNumber 的区别是**语义**：
+ * 打分/能量这类需要「同一列数字宽度一致、便于逐行比较」的场合用这个
+ * （0.800 与 0.812 一眼可比；写成 0.8 会让列参差）。
+ */
+export function formatFixed(value: unknown, digits = 2): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return EMPTY_DISPLAY
+  }
+  return value.toFixed(digits)
+}
+
+/** 需要秒的场景（任务起止、日志锚点），空值给 `-`。 */
+export function formatDateTimeSecondsOrDash(value?: string | null): string {
+  return value ? formatDateTimeSeconds(value) : EMPTY_DISPLAY
 }

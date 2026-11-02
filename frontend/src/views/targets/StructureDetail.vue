@@ -78,7 +78,12 @@
               {{ formatSourceType(structure.source_type) }}
             </a-descriptions-item>
             <a-descriptions-item :label="t('targets.structure.plddt')">
-              <span data-testid="structure-plddt">{{ formatPlddtMean(structure.plddt_mean) }}</span>
+              <span data-testid="structure-plddt">
+                {{ formatPlddtMean(structure.plddt_mean) }}
+                <span v-if="plddtBand(structure.plddt_mean)" class="plddt-band" data-testid="structure-plddt-band">
+                  {{ t(`targets.structure.plddtBand.${plddtBand(structure.plddt_mean)}`) }}
+                </span>
+              </span>
             </a-descriptions-item>
             <a-descriptions-item :label="t('targets.structure.model')">
               {{ formatToolRef(structure.model) }}
@@ -157,18 +162,8 @@
     predictPockets,
     prepareStructure
   } from '@/api/targets'
-  import {
-    buildStructurePreviewArtifact,
-    formatOptionalText,
-    formatPlddtMean,
-    formatPocketScore,
-    formatSourceType,
-    formatToolRef,
-    pocketScoreTone,
-    resolveTargetErrorMessage,
-    sortPocketsByScore,
-    STRUCTURE_PREVIEW_FILE_ROLES
-  } from '@/domain/targets'
+  import { formatPocketScore, pocketScoreTone, sortPocketsByScore } from '@/domain/targets'
+  import { STRUCTURE_PREVIEW_FILE_ROLES, buildStructurePreviewArtifact, formatOptionalText, formatPlddtMean, formatSourceType, formatToolRef, plddtBand, resolveTargetErrorMessage } from '@/domain/targets/display'
   import type {
     PocketSummary,
     ProteinStructureDetail,

@@ -42,6 +42,23 @@ export function formatTargetDateTime(value: string | null | undefined): string {
 }
 
 /** 平均 pLDDT 展示（保留两位小数）。 */
+/**
+ * pLDDT 置信度分档（AlphaFold/ESMFold 通用口径）：
+ * ≥90 很高、70~90 可信、50~70 低、<50 很低。
+ * 只给数字时研发人员不知道 87 算好还是不好，所以展示层要带一档文字。
+ */
+export type PlddtBand = 'veryHigh' | 'confident' | 'low' | 'veryLow'
+
+export function plddtBand(value: number | null | undefined): PlddtBand | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return null
+  }
+  if (value >= 90) return 'veryHigh'
+  if (value >= 70) return 'confident'
+  if (value >= 50) return 'low'
+  return 'veryLow'
+}
+
 export function formatPlddtMean(value: number | null | undefined): string {
   return typeof value === 'number' && Number.isFinite(value) ? value.toFixed(2) : PLACEHOLDER
 }
