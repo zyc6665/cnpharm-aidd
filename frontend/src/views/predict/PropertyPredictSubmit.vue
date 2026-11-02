@@ -4,6 +4,8 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
+import MockDataBanner from '@/components/common/MockDataBanner.vue'
+import { useToolMockBanner } from '@/composables/useToolMockBanner'
 import { uploadFile } from '@/api/files'
 import { exportCandidateSet, listCandidateSets } from '@/api/compounds'
 import { submitToolTask } from '@/api/predict'
@@ -17,6 +19,7 @@ import type { PredictTaskGroup } from '@/types/predict'
 import type { CandidateSet } from '@/types/compounds'
 
 const route = useRoute()
+const { isMock } = useToolMockBanner(ADMET_TOOL_SLUG)
 const router = useRouter()
 const { t } = useI18n()
 
@@ -132,11 +135,11 @@ onMounted(() => {
   <main class="predict-submit" data-testid="predict-submit-page">
     <AppPageHeader :title="t('predict.submit.title')" :subtitle="t('predict.submit.subtitle')" />
 
-    <a-alert
-      class="predict-submit__notice"
-      type="info"
-      show-icon
-      :message="t('predict.banner.disclaimer')"
+    <!-- 演示（mock）工具包才提示；真实模型包不显示任何告警 -->
+    <MockDataBanner
+      v-if="isMock"
+      :mock="true"
+      :disclaimer="t('predict.banner.mockTool')"
     />
 
     <a-card class="predict-submit__card" :title="t('predict.submit.source')">

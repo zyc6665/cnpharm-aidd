@@ -1906,7 +1906,8 @@ export default {
       colAdmetLd50: 'LD50'
     },
     banner: {
-      disclaimer: 'This result was produced by a mock model package; demo data, not for research decisions.'
+      disclaimer: 'This result was produced by a mock model package; demo data, not for research decisions.',
+      mockTool: 'This page uses a demo (mock) model package. Results are for workflow validation only and must not be used for scientific decisions.'
     }
   },
 
@@ -2009,7 +2010,8 @@ export default {
       groupOther: 'Other'
     },
     banner: {
-      disclaimer: 'This result was produced by a mock model package; demo data, not for research decisions.'
+      disclaimer: 'This result was produced by a mock model package; demo data, not for research decisions.',
+      mockTool: 'This page uses a demo (mock) model package. Results are for workflow validation only and must not be used for scientific decisions.',
     }
   },
   // MD / molecular dynamics & free energy

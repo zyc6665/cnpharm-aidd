@@ -1895,7 +1895,8 @@ export default {
       colAdmetLd50: 'LD50'
     },
     banner: {
-      disclaimer: '本结果由 mock 模型包生成，演示数据，不可用于科研决策。'
+      disclaimer: '本结果由 mock 模型包生成，演示数据，不可用于科研决策。',
+      mockTool: '本页使用的工具是演示（mock）模型包，结果仅用于流程验证，不可用于科研决策。'
     }
   },
 
@@ -1997,7 +1998,8 @@ export default {
       groupOther: '其他'
     },
     banner: {
-      disclaimer: '本结果由 mock 模型包生成，演示数据，不可用于科研决策。'
+      disclaimer: '本结果由 mock 模型包生成，演示数据，不可用于科研决策。',
+      mockTool: '本页使用的工具是演示（mock）模型包，结果仅用于流程验证，不可用于科研决策。',
     }
   },
   // MD / 分子动力学与自由能
