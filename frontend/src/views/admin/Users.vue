@@ -120,7 +120,7 @@
             </div>
           </template>
           <template v-else-if="column.key === 'username'">
-            {{ record.username || '—' }}
+            {{ record.username || '-' }}
           </template>
           <template v-else-if="column.key === 'auth_source'">
             <a-tag :color="record.auth_source === 'ldap' ? 'gold' : 'default'">

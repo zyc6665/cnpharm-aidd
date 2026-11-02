@@ -11,7 +11,7 @@
               </ProtectedAvatar>
               <div class="user-profile-copy">
                 <h3 class="username">{{ userStore.user?.display_name || userStore.user?.username || '' }}</h3>
-                <p class="email">{{ userStore.user?.username || '—' }}</p>
+                <p class="email">{{ userStore.user?.username || '-' }}</p>
                 <a-tag :color="getRoleColor()" class="role-tag">
                   {{ getRoleName() }}
                 </a-tag>

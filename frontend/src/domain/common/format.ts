@@ -84,10 +84,18 @@ export function formatBytes(value: number | null | undefined): string {
   if (value < 1024) {
     return `${value} B`
   }
+  // 整数值不补 `.0`：`2 KB` 比 `2.0 KB` 好读，`1.5 KB` 仍保留一位。
+  const scaled = (v: number, digits: number) => v.toFixed(digits).replace(/\.0+$/, '')
   if (value < 1024 * 1024) {
-    return `${(value / 1024).toFixed(1)} KB`
+    return `${scaled(value / 1024, 1)} KB`
   }
-  return `${(value / (1024 * 1024)).toFixed(1)} MB`
+  if (value < 1024 * 1024 * 1024) {
+    return `${scaled(value / (1024 * 1024), 1)} MB`
+  }
+  if (value < 1024 ** 4) {
+    return `${scaled(value / 1024 ** 3, 2)} GB`
+  }
+  return `${scaled(value / 1024 ** 4, 2)} TB`
 }
 
 /**

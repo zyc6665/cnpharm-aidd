@@ -80,8 +80,8 @@ test('Artifact 类型标签优先使用标准类型和版本', () => {
 
 test('项目资源大小和时间格式保持 Overview 页面约定', () => {
   assert.equal(formatProjectResourceSize(1), '1 B')
-  assert.equal(formatProjectResourceSize(2048), '2.0 KB')
-  assert.equal(formatProjectResourceSize(1024 * 1024), '1.0 MB')
+  assert.equal(formatProjectResourceSize(2048), '2 KB')
+  assert.equal(formatProjectResourceSize(1024 * 1024), '1 MB')
   assert.equal(formatProjectResourceTime('2026-07-31T08:00:00Z'), '2026-07-31 08:00')
 })
 

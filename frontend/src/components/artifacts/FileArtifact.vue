@@ -62,6 +62,7 @@ import { message } from 'ant-design-vue'
 import { buildArtifactVersionDownloadUrl } from '@/api/artifacts'
 import type { ArtifactVersionFile, TypedArtifact } from '@/types/artifacts'
 import { triggerProtectedFileDownload } from '@/utils/protected-file-access'
+import { formatBytes } from '@/domain/common/format'
 
 const props = defineProps<{
   artifact: TypedArtifact
@@ -92,16 +93,7 @@ const extensionLabel = computed(() => {
   const match = version.value.filename.match(/\.([a-z0-9]+)$/i)
   return match?.[1]?.toUpperCase() || 'FILE'
 })
-const fileSize = computed(() => {
-  const bytes = version.value.size_bytes
-  if (!bytes) {
-    return '0 B'
-  }
-
-  const units = ['B', 'KB', 'MB', 'GB']
-  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
-  return `${(bytes / 1024 ** index).toFixed(index === 0 ? 0 : 1)} ${units[index]}`
-})
+const fileSize = computed(() => formatBytes(version.value.size_bytes ?? 0))
 const deliveryMetadataEntries = computed(() => {
   const metadata = version.value.manifest_json?.metadata
   if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {

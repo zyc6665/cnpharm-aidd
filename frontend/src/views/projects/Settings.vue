@@ -59,8 +59,8 @@
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'member'">
               <div class="member-cell">
-                <strong>{{ record.display_name || record.username || record.email || '—' }}</strong>
-                <span>{{ record.email || '—' }}</span>
+                <strong>{{ record.display_name || record.username || record.email || '-' }}</strong>
+                <span>{{ record.email || '-' }}</span>
               </div>
             </template>
             <template v-else-if="column.key === 'role'">

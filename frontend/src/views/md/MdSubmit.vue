@@ -235,7 +235,7 @@
     estimateMdRuntimeHours({ durationNs: Number(form.duration_ns) || 0, gpuCount: 1 })
   )
   const estimateText = computed(() =>
-    Number.isFinite(estimateHours.value) ? `${estimateHours.value}` : '—'
+    Number.isFinite(estimateHours.value) ? `${estimateHours.value}` : '-'
   )
 
   function errorMessage(error: unknown, fallback: string): string {

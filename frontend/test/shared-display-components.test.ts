@@ -1,5 +1,5 @@
 import { assert, describe, it } from 'vitest'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const SRC = resolve(process.cwd(), 'src')
@@ -89,4 +89,31 @@ describe('共用显示组件', () => {
     assert.include(read('domain/projects/overview.ts'), "from '@/domain/common/format'")
     assert.include(read('domain/workspace/overview.ts'), "from '@/domain/common/format'")
     assert.include(read('domain/results/index.ts'), "from '@/domain/common/format'")
+  })
+
+  it('空值占位符全平台只有一种写法', () => {
+    const offenders: string[] = []
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        if (entry.name === 'node_modules' || entry.name === 'dist') continue
+        const full = `${dir}/${entry.name}`
+        if (entry.isDirectory()) {
+          walk(full)
+          continue
+        }
+        if (!/\.(vue|ts)$/.test(entry.name) || /\.spec\.ts$/.test(entry.name)) continue
+        const source = readFileSync(full, 'utf-8')
+        // 只允许 EMPTY_DISPLAY（format.ts 定义）与字面 '-'；禁止全角破折号当占位符
+        if (source.includes("'—'")) offenders.push(full.replace(`${process.cwd()}/src/`, ''))
+      }
+    }
+    walk(`${process.cwd()}/src`)
+    assert.deepEqual(offenders, [], `以下文件仍用全角破折号当空值占位符：${offenders.join(', ')}`)
+  })
+
+  it('字节格式化只有 formatBytes 一份实现', () => {
+    for (const rel of ['components/artifacts/FileArtifact.vue', 'domain/tasks/detail.ts']) {
+      assert.notInclude(read(rel), 'Math.log(', `${rel} 仍在本地换算字节单位`)
+    }
+    assert.include(read('domain/tasks/detail.ts'), "from '@/domain/common/format'")
   })
