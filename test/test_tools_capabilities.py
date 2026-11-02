@@ -74,14 +74,18 @@ def test_capability_lookup_by_output() -> None:
     ligand_capabilities = get_capabilities_by_output("ligand_pdb")
     assert [item.tool_slug for item in ligand_capabilities] == ["builtin-sdf-to-pdb"]
 
-    # 交付线移除了公网取数工具，protein_structure@1 只剩镜像注册类工具产出。
-    assert get_capabilities_by_output("protein_structure@1") == []
+    # 交付线移除了公网取数工具，protein_structure@1 只剩本地结构预测工具产出。
+    assert [item.tool_slug for item in get_capabilities_by_output("protein_structure@1")] == [
+        "boltz2-structure-prediction",
+    ]
 
     ligand_artifact_capabilities = get_capabilities_by_output("ligand_structure@1")
     assert [item.tool_slug for item in ligand_artifact_capabilities] == [
         "builtin-ligand-preparation",
         "builtin-rdkit-conformer",
         "vina-virtual-screening",
+        "autodock-vina-docking",
+        "pocket2mol-pocket-ligand-generation",
     ]
 
     docking_capabilities = get_capabilities_by_output("docking_report")

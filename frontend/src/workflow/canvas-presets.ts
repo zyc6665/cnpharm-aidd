@@ -45,8 +45,8 @@ const WORKFLOW_NODE_LIBRARY = {
   ligandPreparation: {
     id: 'tool-ligand-preparation',
     type: 'tool',
-    toolSlugs: ['ligand-preparation'],
-    recommendedToolSlug: 'ligand-preparation',
+    toolSlugs: ['builtin-ligand-preparation'],
+    recommendedToolSlug: 'builtin-ligand-preparation',
     titleKey: 'workflow.nodes.ligandPreparation.title',
     descriptionKey: 'workflow.nodes.ligandPreparation.description',
     position: { x: 300, y: 360 },
@@ -117,8 +117,8 @@ const WORKFLOW_NODE_LIBRARY = {
     id: 'tool-pocket-exploration',
     type: 'tool',
     stepKey: 'pocketExploration',
-    toolSlugs: ['pocket-explorer'],
-    recommendedToolSlug: 'pocket-explorer',
+    toolSlugs: ['lvpocket-pocket-prediction'],
+    recommendedToolSlug: 'lvpocket-pocket-prediction',
     titleKey: 'home.workflow.items.pocketExploration.title',
     descriptionKey: 'home.workflow.items.pocketExploration.description',
     position: { x: 280, y: 160 },
@@ -129,8 +129,8 @@ const WORKFLOW_NODE_LIBRARY = {
     id: 'tool-molecule-generation',
     type: 'tool',
     stepKey: 'moleculeGenerationOrVirtualScreening',
-    toolSlugs: ['gcdm-pocket-generation', 'targetdiff-service'],
-    recommendedToolSlug: 'gcdm-pocket-generation',
+    toolSlugs: ['pocket2mol-pocket-ligand-generation'],
+    recommendedToolSlug: 'pocket2mol-pocket-ligand-generation',
     titleKey: 'home.workflow.items.moleculeGenerationOrVirtualScreening.title',
     descriptionKey: 'home.workflow.items.moleculeGenerationOrVirtualScreening.description',
     position: { x: 540, y: 80 },
@@ -141,8 +141,8 @@ const WORKFLOW_NODE_LIBRARY = {
     id: 'tool-docking',
     type: 'tool',
     stepKey: 'molecularDockingAndAffinityPrediction',
-    toolSlugs: ['molecular-docking'],
-    recommendedToolSlug: 'molecular-docking',
+    toolSlugs: ['autodock-vina-docking'],
+    recommendedToolSlug: 'autodock-vina-docking',
     titleKey: 'home.workflow.items.molecularDockingAndAffinityPrediction.title',
     descriptionKey: 'home.workflow.items.molecularDockingAndAffinityPrediction.description',
     position: { x: 800, y: 160 },
@@ -162,15 +162,13 @@ const WORKFLOW_NODE_LIBRARY = {
     producedOutputTypes: ['property_report']
   },
   leadOptimization: {
+    // 库中没有部署的“先导化合物优化”工具，占位为人工输入节点，
+    // 由用户直接提供 optimized_lead 产物后交给结果汇总。
     id: 'tool-lead-optimization',
-    type: 'tool',
-    stepKey: 'leadOptimization',
-    toolSlugs: ['lead-optimizer'],
-    recommendedToolSlug: 'lead-optimizer',
+    type: 'input',
     titleKey: 'home.workflow.items.leadOptimization.title',
     descriptionKey: 'home.workflow.items.leadOptimization.description',
     position: { x: 1080, y: 240 },
-    requiredInputTypes: ['generated_ligand', 'affinity_report', 'property_report'],
     producedOutputTypes: ['optimized_lead']
   },
   resultSummary: {
@@ -280,8 +278,6 @@ export const AIDD_WORKFLOW_CANVAS_PRESET: WorkflowCanvasPreset = createCanvasPre
     createEdge('edge-input-docking', 'input-protein', 'tool-docking', 'protein_pdb'),
     createEdge('edge-generation-docking', 'tool-molecule-generation', 'tool-docking', 'generated_ligand'),
     createEdge('edge-generation-property', 'tool-molecule-generation', 'tool-property-prediction', 'generated_ligand'),
-    createEdge('edge-docking-optimization', 'tool-docking', 'tool-lead-optimization', 'affinity_report'),
-    createEdge('edge-property-optimization', 'tool-property-prediction', 'tool-lead-optimization', 'property_report'),
     createEdge('edge-optimization-result', 'tool-lead-optimization', 'result-summary', 'optimized_lead')
   ]
 })
