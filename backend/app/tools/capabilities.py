@@ -210,20 +210,24 @@ AIDD_TOOL_CAPABILITIES: dict[str, ToolCapability] = {
     ),
     "molp-pc-property-prediction": ToolCapability(
         tool_slug="molp-pc-property-prediction",
-        capability="property_prediction",
-        stage="property_prediction",
+        capability="molp-pc-property-prediction",
+        stage="molp-pc-property-prediction",
         inputs=(
-            CapabilityInput(
-                "smiles_csv",
-                "smiles_csv",
-                accepted_extensions=(".csv",),
-            ),
+            CapabilityInput("molecule_table@1", "smiles_csv"),
         ),
         outputs=(
             CapabilityOutput(
-                "property_report",
-                "output_files",
-                OutputMatch(extension=".csv"),
+                "molecule_table@1",
+                "artifact",
+                OutputMatch(content_type="molecule_table@1"),
+                path="properties",
+            ),
+            CapabilityOutput(
+                "run_report@1",
+                "artifact",
+                OutputMatch(content_type="run_report@1"),
+                path="report",
+                required=False,
             ),
         ),
         defaults={"device": "cpu"},
@@ -323,25 +327,26 @@ AIDD_TOOL_CAPABILITIES: dict[str, ToolCapability] = {
     ),
     "msign-affinity-prediction": ToolCapability(
         tool_slug="msign-affinity-prediction",
-        capability="affinity_prediction",
-        stage="affinity_prediction",
+        capability="msign-affinity-prediction",
+        stage="msign-affinity-prediction",
         inputs=(
-            CapabilityInput(
-                "protein_pdb",
-                "protein_pdb",
-                accepted_extensions=(".pdb",),
-            ),
-            CapabilityInput(
-                "ligand_pdb",
-                "ligand_pdb",
-                accepted_extensions=(".pdb",),
-            ),
+            CapabilityInput("protein_structure@1", "protein_pdb"),
+            CapabilityInput("ligand_structure@1", "ligand_sdf", required=False),
+            CapabilityInput("molecule_table@1", "ligand_smiles", required=False),
         ),
         outputs=(
             CapabilityOutput(
-                "affinity_report",
-                "output_data",
-                path="result.outputs.prediction",
+                "molecule_table@1",
+                "artifact",
+                OutputMatch(content_type="molecule_table@1"),
+                path="affinity",
+            ),
+            CapabilityOutput(
+                "run_report@1",
+                "artifact",
+                OutputMatch(content_type="run_report@1"),
+                path="report",
+                required=False,
             ),
         ),
         defaults={"device": "cpu"},

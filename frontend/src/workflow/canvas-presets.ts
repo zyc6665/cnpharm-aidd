@@ -159,7 +159,7 @@ const WORKFLOW_NODE_LIBRARY = {
     descriptionKey: 'home.workflow.items.propertyPrediction.description',
     position: { x: 800, y: 320 },
     requiredInputTypes: ['generated_ligand'],
-    producedOutputTypes: ['property_report']
+    producedOutputTypes: ['molecule_table@1', 'run_report@1']
   },
   leadOptimization: {
     // 库中没有部署的“先导化合物优化”工具，占位为人工输入节点，
