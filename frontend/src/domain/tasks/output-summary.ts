@@ -121,3 +121,134 @@ export function hasTaskOutputSummaryContent(
 ): boolean {
   return getTaskOutputDataEntries(outputData).length > 0 || outputFiles.length > 0
 }
+
+// ---------------------------------------------------------------------------
+// 产物 / 指标概览
+//
+// 任务详情的「输出结果」原先直接把 output_data 整棵树铺出来，一个真模型任务
+// （Boltz-2 亲和力）会得到 2500px 的 JSON，里面 90% 是 artifacts 的文件级清单
+// （path / sha256 / content_type）。真正决定「这次跑得怎么样」的只有十几个标量。
+// 这里把它压成两块：关键指标 + 产物清单，原始 JSON 收进折叠面板备用。
+// ---------------------------------------------------------------------------
+
+export interface OutputMetricSummary {
+  key: string
+  value: string
+}
+
+export interface OutputArtifactSummary {
+  key: string
+  name: string
+  type: string
+  fileCount: number
+  primaryFile: string | null
+}
+
+export interface OutputOverview {
+  metrics: OutputMetricSummary[]
+  artifacts: OutputArtifactSummary[]
+}
+
+function formatMetricValue(value: unknown): string {
+  if (typeof value === 'number') {
+    return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(4)))
+  }
+  if (typeof value === 'boolean') {
+    return value ? '是' : '否'
+  }
+  if (value === null || value === undefined) {
+    return '—'
+  }
+  if (typeof value === 'object') {
+    return JSON.stringify(value)
+  }
+  return String(value)
+}
+
+function firstFileName(files: unknown): string | null {
+  const candidates: unknown[] = Array.isArray(files)
+    ? files
+    : isRecord(files)
+      ? Object.values(files)
+      : []
+
+  for (const candidate of candidates) {
+    if (!isRecord(candidate)) {
+      continue
+    }
+    for (const key of ['relative_path', 'filename', 'name', 'path']) {
+      const value = candidate[key]
+      if (typeof value === 'string' && value.trim()) {
+        return value
+      }
+    }
+  }
+
+  return null
+}
+
+function countFiles(files: unknown): number {
+  if (Array.isArray(files)) {
+    return files.length
+  }
+  if (isRecord(files)) {
+    return Object.keys(files).length
+  }
+  return 0
+}
+
+/** 从 output_data（标准 result 或旧式输出）里提取「关键指标 + 产物清单」。 */
+export function buildOutputOverview(outputData: unknown): OutputOverview {
+  const standardResult = getStandardResult(outputData) ?? (isRecord(outputData) ? outputData : null)
+  if (!standardResult) {
+    return { metrics: [], artifacts: [] }
+  }
+
+  const metrics: OutputMetricSummary[] = []
+  for (const bucketKey of ['metrics', 'summary']) {
+    const bucket = standardResult[bucketKey]
+    if (!isRecord(bucket)) {
+      continue
+    }
+    for (const [key, value] of Object.entries(bucket)) {
+      if (value !== null && typeof value === 'object') {
+        continue
+      }
+      if (metrics.some((metric) => metric.key === key)) {
+        continue
+      }
+      metrics.push({ key, value: formatMetricValue(value) })
+    }
+  }
+
+  const artifacts: OutputArtifactSummary[] = []
+  const artifactBucket = standardResult.artifacts
+  if (isRecord(artifactBucket)) {
+    for (const [key, raw] of Object.entries(artifactBucket)) {
+      if (!isRecord(raw)) {
+        continue
+      }
+      const metadata = isRecord(raw.metadata) ? raw.metadata : {}
+      const explicitName =
+        (typeof metadata.name === 'string' && metadata.name.trim()) ||
+        (typeof raw.name === 'string' && raw.name.trim()) ||
+        ''
+      // 没有可读名时把键名（`affinity_table`）转成「Affinity table」，
+      // 直接把键摆在表格里等于没翻译。
+      const name = explicitName || key.replace(/[_-]+/g, ' ').replace(/^./, (c) => c.toUpperCase())
+      const type =
+        (typeof raw.type === 'string' && raw.type) ||
+        (typeof raw.semantic_type === 'string' && raw.semantic_type) ||
+        '—'
+      artifacts.push({
+        key,
+        name,
+        type,
+        fileCount: countFiles(raw.files),
+        primaryFile: firstFileName(raw.files),
+      })
+    }
+  }
+
+  return { metrics, artifacts }
+}

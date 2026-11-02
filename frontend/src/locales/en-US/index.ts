@@ -2098,6 +2098,29 @@ export default {
 
   // Tasks
   tasks: {
+    outputMetrics: 'Key metrics',
+    outputArtifacts: 'Artifacts',
+    outputRawJson: 'View raw result JSON',
+    outputArtifactName: 'Artifact',
+    outputArtifactType: 'Type',
+    outputArtifactFileCount: 'Files',
+    outputArtifactPrimaryFile: 'Primary file',
+    parameters: {
+      group: {
+        basic: 'Basic',
+        dockingBox: 'Docking box',
+        device: 'Compute device',
+        reproducibility: 'Reproducibility',
+        other: 'Submitted but not declared in the tool spec'
+      },
+      unset: 'Not set',
+      defaultPrefix: 'Default',
+      options: 'Options: {options}',
+      rawJson: 'View raw JSON (as submitted)',
+      empty: 'This submission carried no parameters (the tool only reads input files)',
+      yes: 'Yes',
+      no: 'No'
+    },
     title: 'Task Center',
     subtitle: 'Manage and monitor your computing tasks',
     detail: 'Task Detail',

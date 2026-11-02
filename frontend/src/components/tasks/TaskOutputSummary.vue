@@ -18,9 +18,48 @@
       </dl>
     </section>
 
-    <div v-if="outputDataEntries.length" class="output-data">
-      <JsonResultRenderer :value="outputData" />
-    </div>
+    <section
+      v-if="outputOverview.metrics.length"
+      class="output-metrics"
+      data-testid="task-output-metrics"
+    >
+      <h4>{{ t('tasks.outputMetrics') }}</h4>
+      <a-descriptions :column="2" size="small" bordered>
+        <a-descriptions-item
+          v-for="metric in outputOverview.metrics"
+          :key="metric.key"
+          :label="metricLabel(metric.key)"
+        >
+          {{ metric.value }}
+        </a-descriptions-item>
+      </a-descriptions>
+    </section>
+
+    <section
+      v-if="outputOverview.artifacts.length"
+      class="output-artifacts"
+      data-testid="task-output-artifacts"
+    >
+      <h4>{{ t('tasks.outputArtifacts') }}</h4>
+      <a-table
+        :data-source="artifactRows"
+        :columns="artifactColumns"
+        :pagination="false"
+        size="small"
+        row-key="key"
+      />
+    </section>
+
+    <a-collapse
+      v-if="outputDataEntries.length"
+      ghost
+      class="output-raw"
+      data-testid="task-output-raw"
+    >
+      <a-collapse-panel key="raw" :header="t('tasks.outputRawJson')">
+        <JsonResultRenderer :value="outputData" />
+      </a-collapse-panel>
+    </a-collapse>
 
     <div v-if="outputFiles.length" class="files-section">
       <div class="files-header">
@@ -71,9 +110,12 @@
   import { DownloadOutlined, FileOutlined } from '@ant-design/icons-vue'
   import type { Task } from '@/types/models'
   import { fetchProtectedFileText, triggerProtectedFileDownload } from '@/utils/protected-file-access'
+  import { artifactTypeLabelKey } from '@/domain/artifacts/presentation'
+  import { parameterLabel } from '@/domain/tasks/parameters'
   import JsonResultRenderer from './JsonResultRenderer.vue'
   import {
     buildMolpPcCsv,
+    buildOutputOverview,
     canExportMolpPcCsv,
     formatTaskFileSize,
     getTaskOutputDataEntries,
@@ -92,7 +134,7 @@
     showBatchDownload: true
   })
 
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const exportingMolpPcCsv = ref(false)
 
   const outputDataEntries = computed<[string, unknown][]>(() => {
@@ -100,6 +142,27 @@
   })
 
   const outputData = computed(() => props.task.output_data)
+
+  const outputOverview = computed(() => buildOutputOverview(props.task.output_data))
+
+  function metricLabel(key: string): string {
+    return parameterLabel(key, locale.value)
+  }
+
+  // 类型码（`molecule_table@1`）对使用者没有意义，转成中文名再展示。
+  const artifactRows = computed(() =>
+    outputOverview.value.artifacts.map((artifact) => ({
+      ...artifact,
+      typeLabel: t(artifactTypeLabelKey(artifact.type)),
+    })),
+  )
+
+  const artifactColumns = computed(() => [
+    { title: t('tasks.outputArtifactName'), dataIndex: 'name', key: 'name' },
+    { title: t('tasks.outputArtifactType'), dataIndex: 'typeLabel', key: 'typeLabel' },
+    { title: t('tasks.outputArtifactFileCount'), dataIndex: 'fileCount', key: 'fileCount', width: 96 },
+    { title: t('tasks.outputArtifactPrimaryFile'), dataIndex: 'primaryFile', key: 'primaryFile' }
+  ])
 
   const outputFiles = computed<TaskOutputFile[]>(() => {
     return getTaskOutputFiles(props.task)

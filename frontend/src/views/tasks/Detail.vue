@@ -172,20 +172,10 @@
                   <SettingOutlined />
                   {{ t('tasks.inputParams') }}
                 </h3>
-                <a-descriptions :column="1" bordered size="small">
-                  <a-descriptions-item
-                    v-for="(value, key) in task.inputs?.params"
-                    :key="key"
-                    :label="String(key)"
-                  >
-                    <template v-if="typeof value === 'object'">
-                      <pre class="json-display">{{ JSON.stringify(value, null, 2) }}</pre>
-                    </template>
-                    <template v-else>
-                      {{ value }}
-                    </template>
-                  </a-descriptions-item>
-                </a-descriptions>
+                <TaskParameterTable
+                  :params="task.inputs?.params as Record<string, unknown> | undefined"
+                  :schema="parameterSchema"
+                />
 
                 <!-- 输入文件 -->
                 <div v-if="task.input_files?.length" class="files-section">
@@ -357,6 +347,7 @@ import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
 import ResultVisualizationPanel from '@/components/tasks/ResultVisualizationPanel.vue'
 import TaskLogPreview from '@/components/tasks/TaskLogPreview.vue'
 import TaskOutputSummary from '@/components/tasks/TaskOutputSummary.vue'
+import TaskParameterTable from '@/components/tasks/TaskParameterTable.vue'
 import {
   canDeleteTask as canDeleteTaskForActor,
   formatTaskDetailTime,
@@ -376,6 +367,14 @@ const tasksStore = useTasksStore()
 const userStore = useUserStore()
 
 const taskId = computed(() => route.params.id as string)
+
+// 工具版本 config 里的 parameters_schema 是参数可读化的唯一依据；
+// 老工具可能没声明，此时组件退化为「键名 + 值」并保留原始 JSON。
+const parameterSchema = computed<Record<string, unknown> | null>(() => {
+  const config = task.value?.tool?.current_version?.config
+  const schema = config?.parameters_schema ?? config?.parameter_schema
+  return schema && typeof schema === 'object' ? (schema as Record<string, unknown>) : null
+})
 
 // 进度条渐变色跟随主题（取自 ConfigProvider token，避免写死色值）
 const progressStroke = computed(() => ({
