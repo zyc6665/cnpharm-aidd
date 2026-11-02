@@ -34,6 +34,7 @@ from app.services.artifact_gc import artifact_gc_loop
 from app.services.idempotency_maintenance import idempotency_sweep_loop
 from app.services.queue_timeout import queue_timeout_sweep_loop
 from app.services.quota_maintenance import quota_settlement_loop
+from app.services.platform_tool_seeding import seed_platform_tools_on_startup
 from app.storage.lifecycle import ensure_lifecycle_on_startup
 from app.worker.celery_app import configure_managed_execution_runtime
 
@@ -71,6 +72,12 @@ async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     # 启动时初始化数据库
     await init_db()
+    # 启动期幂等补齐平台必备工具：历史种子迁移在「无 admin」时会静默空转，这里兜底。
+    # 全程 try/except：seeding 失败只记异常日志，绝不能阻断应用启动。
+    try:
+        await seed_platform_tools_on_startup()
+    except Exception:  # noqa: BLE001 - 启动兜底，任何异常都不应拖垮应用
+        logger.exception("启动期平台工具 seeding 异常（启动继续）")
     managed_runtime = configure_direct_managed_execution_runtime()
     workflow_reconcile_loop.start()
     if use_direct_task_execution():
