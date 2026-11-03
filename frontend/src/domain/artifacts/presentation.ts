@@ -56,12 +56,48 @@ export function artifactTypeLabelKey(value?: string | null): string {
 /** 后端/脚本常见的机器命名词：它们不是人写的标题，标题应退化为类型名。 */
 const GENERIC_MACHINE_TOKENS = /^(report|result|results|output|outputs|summary|properties|structure|protein|ligand|pocket|data|file|tmp|temp|final|input|std|out)[a-z0-9]*$/
 
+/** 去掉首尾空白后，是否像一个真正的文件名（带扩展名且不含空白）。 */
+function looksLikeFileName(value: string): boolean {
+  const text = value.trim()
+  if (!text || /\s/.test(text)) return false
+  // 前导点也允许：`.tmp_msign_protein.pdb` 这类隐藏临时文件同样是机器命名
+  return /\.([A-Za-z0-9]{1,8})$/.test(text)
+}
+
+/**
+ * 「槽位名: 文件名」/「槽位名::文件名」这种拼接命名：后端会把字段槽位名和真实
+ * 文件名用冒号连起来当 `name`（`smiles_csv: molp_smiles.csv`、
+ * `protein_pdb::tmp_msign_protein.pdb`）。冒号右侧若像文件名，整串就是机器名。
+ * 注意区分人写的标题（`EGFR: 口袋分析`）——右侧不像文件名时不误判。
+ */
+function isSlotFileNameLike(value: string): boolean {
+  const match = value.match(/^[^:]+::?\s*(.+)$/)
+  return match ? looksLikeFileName(match[1] ?? '') : false
+}
+
+/** 从机器命名里尽量抽出真实文件名，供次要行展示。 */
+export function extractFileNameFromMachineName(value?: string | null): string | null {
+  const text = (value ?? '').trim()
+  if (!text) return null
+  const match = text.match(/^[^:]+::?\s*(.+)$/)
+  if (match) {
+    const right = (match[1] ?? '').trim()
+    if (looksLikeFileName(right)) return right
+  }
+  // 整体就是文件名，或 `tmp_xxx.pdb` 之类的临时文件命名，原样保留
+  if (looksLikeFileName(text)) return text
+  if (/^\.?tmp[_-][^/\\\s]*\.[A-Za-z0-9]{1,8}$/i.test(text)) return text
+  return null
+}
+
 export function isFileNameLike(value?: string | null): boolean {
   const text = (value ?? '').trim()
   if (!text) return false
   // 带扩展名且无空格：几乎必然是文件名
   if (/\.[A-Za-z0-9]{1,8}$/.test(text) && !/\s/.test(text)) return true
-  // 纯 ASCII、无空格，但含下划线/双下划线：脚本拼出来的标识（smiles_csv_molp、protein_pdb__tmp_x）
+  // 槽位名 + 冒号/双冒号 + 文件名（`smiles_csv: molp_smiles.csv`）
+  if (isSlotFileNameLike(text)) return true
+  // 纯 ASCII、无空格，但含下划线/双下划线：脚本拼出来的标识（smiles_csv、protein_pdb__tmp_x）
   if (/^[ -~]+$/.test(text) && !/\s/.test(text) && /[_-]/.test(text)) return true
   // 纯 ASCII 的通用词（report / properties / structure）：没有信息量，不该当标题
   if (/^[ -~]+$/.test(text) && !/\s/.test(text) && GENERIC_MACHINE_TOKENS.test(text)) return true
@@ -108,7 +144,9 @@ export function buildArtifactDisplay(
   const typeLabel = translate(typeKey)
 
   const rawName = (input.name ?? '').trim()
-  const fileNameGuess = (input.filename ?? '').trim() || (isFileNameLike(rawName) ? rawName : '')
+  // 真实文件名优先用版本上的 `filename`；缺失时从机器命名里反推（槽位名: 文件名）。
+  const fileNameGuess =
+    (input.filename ?? '').trim() || extractFileNameFromMachineName(rawName) || ''
 
   const versionSuffix = input.version ? ` · v${input.version}` : ''
   const title = rawName && !isFileNameLike(rawName) ? rawName : `${typeLabel}${versionSuffix}`

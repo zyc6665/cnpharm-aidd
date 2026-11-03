@@ -141,9 +141,11 @@ describe('Project workspace', () => {
     expect(wrapper.text()).toContain('结合口袋')
     expect(wrapper.text()).toContain('egfr-pocket.pdb')
     expect(wrapper.text()).not.toContain('binding_pocket@1')
-    expect(wrapper.find('.artifact-row').attributes('href')).toBe(
-      '/api/v1/artifacts/artifact-1/versions/artifact-version-1/download'
-    )
+    // 最近 Artifact 行改为「先预览」的按钮，不再携带 href 直接下载。
+    const artifactRow = wrapper.find('.artifact-row')
+    expect(artifactRow.element.tagName).toBe('BUTTON')
+    expect(artifactRow.attributes('type')).toBe('button')
+    expect(artifactRow.attributes('href')).toBeUndefined()
     expect(wrapper.text()).not.toContain('任务状态概览')
     expect(wrapper.text()).not.toContain('常用工具')
     expect(wrapper.text()).not.toContain('不应显示的常用工具')
