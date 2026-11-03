@@ -1,11 +1,31 @@
+/**
+ * 真机回归：工作台「最近 Artifact」先预览、再下载。
+ *
+ * 这条用例依赖真实后端（/api/v1/auth/login、真实 artifact 产物数据），而 CI 的
+ * `前端 E2E` 作业只启动前端 dev server、没有后端，登录会一直停在 /login 直到
+ * 超时。因此整份用例默认跳过，只有显式设置 `E2E_REAL_BACKEND=1` 才执行。
+ *
+ * 本地真机跑法：
+ *   E2E_REAL_BACKEND=1 ADMIN_PASSWORD='<admin 密码>' \
+ *     npx playwright test e2e/artifact-preview.spec.ts
+ * 前提：127.0.0.1:8000 后端已启动，且库中存在 report.json / cb_data_result.csv /
+ * molp_smoke.csv / msign_complex.pdb / structure.pdb 等真实产物。
+ */
 import { mkdirSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
 
-const SHOT_DIR = '/tmp/shots-preview'
-mkdirSync(SHOT_DIR, { recursive: true })
+// CI 没有真实后端：整份用例标记 skipped（而不是让登录超时失败）。
+test.skip(!process.env.E2E_REAL_BACKEND, '需要真实后端与已登录会话，仅在 E2E_REAL_BACKEND=1 时运行')
+// 即使显式开启，也必须有管理员密码，否则用例无从登录。
+test.skip(!!process.env.E2E_REAL_BACKEND && !process.env.ADMIN_PASSWORD, '需同时提供 ADMIN_PASSWORD 才能登录真实后端')
 
-const ADMIN_USER = 'admin'
-const ADMIN_PASS = process.env.ADMIN_PASSWORD || 'admin123'
+const SHOT_DIR = process.env.PREVIEW_SHOT_DIR || '/tmp/shots-preview'
+if (process.env.E2E_REAL_BACKEND) {
+  mkdirSync(SHOT_DIR, { recursive: true })
+}
+
+const ADMIN_USER = process.env.ADMIN_USER || 'admin'
+const ADMIN_PASS = process.env.ADMIN_PASSWORD || ''
 
 async function login(page: import('@playwright/test').Page) {
   await page.goto('/login')
