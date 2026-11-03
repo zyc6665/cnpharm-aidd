@@ -21,6 +21,7 @@ from sqlalchemy import (
     JSON,
     Column,
     DateTime,
+    ForeignKey,
     Index,
     Integer,
     String,
@@ -55,7 +56,12 @@ class TaskInputSnapshot(Base, UUIDMixin):
         Index("ix_task_input_snapshots_task_role", "task_id", "input_role"),
     )
 
-    task_id = Column(String(36), nullable=False)
+    # 溯源列必须带真实外键：此前 task_id 只是裸字符串，删任务后快照行会静默悬挂，
+    # 追溯包指向不存在的执行。快照是任务的从属物（任务没了快照即无意义），且本表
+    # 只追加、不会误删业务数据，故用 CASCADE——删任务时连带清理其快照。
+    task_id = Column(
+        String(36), ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False
+    )
     input_role = Column(String(32), nullable=False)
     ordinal = Column(Integer, nullable=False, default=0)
     entity_type = Column(String(64), nullable=True)

@@ -136,7 +136,7 @@ async def main() -> int:
         organization = (await db.execute(select(Organization).limit(1))).scalars().first()
         if organization is None:
             organization = Organization(
-                id=str(uuid.uuid4()), name="演示组织", slug="demo-org", description="本地演示用组织"
+                id=str(uuid.uuid4()), name="演示组织", slug="demo-org"
             )
             db.add(organization)
             await db.flush()

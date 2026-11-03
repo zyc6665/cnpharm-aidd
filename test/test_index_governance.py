@@ -90,6 +90,10 @@ ALLOWED_REDUNDANT_PREFIXES: dict[str, str] = {
     "ix_verification_codes_email": "被 ix_verification_email_purpose 前缀覆盖（历史）",
     # 唯一索引 (email, date) 覆盖 email 单列。
     "ix_verification_daily_counts_email": "被 ix_daily_count_email_date 前缀覆盖（历史）",
+    # 单列 project_id 是 ix_workflow_runs_project_created(project_id, created_at, id)
+    # 的真前缀。库上历史迁移已建该单列索引，此前模型缺失导致 alembic check 误报
+    # "removed index"；为使模型与库收敛在此显式声明，登记为允许的前缀冗余。
+    "ix_workflow_runs_project_id": "被 ix_workflow_runs_project_created 前缀覆盖（为消除双真源而补声明）",
 }
 
 
@@ -164,16 +168,23 @@ def test_audit_logs_index_budget(capsys):
 
 
 def test_no_duplicate_index_on_same_columns():
+    """同一张表上不允许「表达式完全相同」的两个索引。
+
+    按 ``index.expressions`` 的字符串比较，而非裸列名：用户名唯一约束
+    ``uq_users_username_lower`` 建在 ``lower(username)`` 表达式索引上，与普通
+    ``ix_users_username``（裸列）列名同为 username，但语义不同——前者是大小写
+    不敏感唯一约束，后者是精确大小写查询的点查索引，不能算重复。
+    """
     duplicates: list[str] = []
     for table in Base.metadata.tables.values():
         seen: dict[tuple[str, ...], list[str]] = {}
         for index in table.indexes:
-            key = tuple(column.name for column in index.columns)
+            key = tuple(str(expression) for expression in index.expressions)
             seen.setdefault(key, []).append(index.name)
-        for columns, names in seen.items():
+        for expressions, names in seen.items():
             if len(names) > 1:
-                duplicates.append(f"{table.name}{columns}: {names}")
-    assert not duplicates, "同表存在列集合相同的索引:\n" + "\n".join(duplicates)
+                duplicates.append(f"{table.name}{expressions}: {names}")
+    assert not duplicates, "同表存在表达式相同的索引:\n" + "\n".join(duplicates)
 
 
 def test_datasets_unique_constraint_declared():

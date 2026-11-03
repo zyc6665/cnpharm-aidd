@@ -463,8 +463,24 @@ async def test_audit_and_snapshot_rows_reject_update(
 
 
 @pytest.mark.asyncio
-async def test_snapshot_rows_reject_delete(db_session: AsyncSession, users: dict[str, User]):
-    row = TaskInputSnapshot(task_id="task-1", input_role=INPUT_ROLE_FILE, ordinal=0)
+async def test_snapshot_rows_reject_delete(
+    db_session: AsyncSession, users: dict[str, User], project: Project
+):
+    # task_input_snapshots.task_id 现在是真实外键（FK -> tasks.id, ON DELETE CASCADE），
+    # 不能再凭空写假 id；先建一条真实 Task 行。
+    tool = await _create_tool(db_session, users[OWNER])
+    task = Task(
+        tool_id=tool.id,
+        tool_version_id=tool.current_version_id,
+        project_id=project.id,
+        user_id=users[OWNER].id,
+        name="snapshot-delete-guard",
+    )
+    db_session.add(task)
+    await db_session.commit()
+    await db_session.refresh(task)
+
+    row = TaskInputSnapshot(task_id=task.id, input_role=INPUT_ROLE_FILE, ordinal=0)
     db_session.add(row)
     await db_session.commit()
     await db_session.refresh(row)
