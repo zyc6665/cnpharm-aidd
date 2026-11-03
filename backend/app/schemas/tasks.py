@@ -100,6 +100,9 @@ class TaskListResponse(BaseModel):
     created_at: datetime
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
+    # 与详情页同名的完成时间，值等于 finished_at。列表页卡片与管理页都读这个
+    # 字段；不补的话前端 `task.completed_at` 永远为空，界面只显示 '-'。
+    completed_at: Optional[datetime] = None
     # 重试来源：这条重试链的起点任务 id（就地重试时等于自身 id），非重试任务为 None。
     retry_of: Optional[str] = None
 

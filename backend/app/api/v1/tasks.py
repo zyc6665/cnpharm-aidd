@@ -380,6 +380,8 @@ async def list_tasks(
     task_list = []
     for task in page_result.tasks:
         task_dict = TaskListResponse.model_validate(task).model_dump()
+        # 列表与详情保持同一字段名：completed_at 直接镜像 finished_at。
+        task_dict["completed_at"] = task.finished_at
         task_dict["status"] = _normalize_task_status(task.status)
         if task.tool:
             task_dict["tool_name"] = task.tool.name

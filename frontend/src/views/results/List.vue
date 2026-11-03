@@ -92,6 +92,14 @@
     </a-table>
 
     <div v-if="results.length" class="results-pagination" data-testid="results-load-more-area">
+    <AppInlineError
+      v-if="loadMoreError"
+      class="results-load-more-error"
+      :title="t('results.loadMoreFailed')"
+    >
+      <a-button size="small" @click="loadMoreResults">{{ t('tasks.retry') }}</a-button>
+    </AppInlineError>
+
       <a-button
         v-if="hasMore"
         :loading="loadingMore"
@@ -136,6 +144,8 @@
   const loading = ref(false)
   const loadingMore = ref(false)
   const loadError = ref(false)
+  // 与首屏错误分开：加载更多失败不能把已加载的结果整页替换掉
+  const loadMoreError = ref(false)
   const results = ref<ProjectResultSummary[]>([])
   const total = ref(0)
   const nextCursor = ref<string | null>(null)
@@ -224,6 +234,7 @@
 
     loadingMore.value = true
     try {
+      loadMoreError.value = false
       const response = await listProjectResults(projectId.value, {
         page_size: pageSize,
         cursor: nextCursor.value,
@@ -239,7 +250,7 @@
       nextCursor.value = state.nextCursor
       hasMore.value = state.hasMore
     } catch {
-      loadError.value = true
+      loadMoreError.value = true
     } finally {
       loadingMore.value = false
     }

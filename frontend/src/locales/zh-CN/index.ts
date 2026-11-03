@@ -153,11 +153,11 @@ export default {
     artifactPreviewTypeLabel: '类型',
     loadFailed: '研究工作台加载失败',
     loadFailedHint: '无法获取最新项目数据，请检查网络后重试。',
+    retry: '重试',
     overviewLoadFailed: '任务与 Artifact 暂时不可用',
     overviewLoadFailedHint: '项目列表已加载，任务和 Artifact 概览接口暂时失败，可稍后重试。',
     schemaMigrationLoadFailed: '数据库迁移未完成',
     schemaMigrationLoadFailedHint: '当前数据库结构落后于后端代码，请先执行 Alembic 迁移后再刷新工作台。',
-    retry: '重试',
     project: {
       name: '项目名称',
       namePlaceholder: '例如：EGFR 口袋研究',
@@ -1526,6 +1526,7 @@ export default {
     }
   },
   results: {
+    loadMoreFailed: '加载更多失败，已显示的结果不受影响',
     title: '结果中心',
     subtitle: '查看项目内已完成任务的结果、产物与追溯包',
     columns: {
@@ -2107,6 +2108,8 @@ export default {
 
   // 任务
   tasks: {
+    loadFailed: '任务列表加载失败',
+    loadFailedHint: '网络不稳定或服务暂时不可用，可重试',
     outputMetrics: '关键指标',
     outputArtifacts: '产物清单',
     outputRawJson: '查看原始结果 JSON',
@@ -2138,6 +2141,7 @@ export default {
     create: '创建任务',
     name: '任务名称',
     namePlaceholder: '可选，留空将自动生成',
+    missingInputs: '请先选择必需输入：{inputs}',
     // 标签页
     allTasks: '全部任务',
     runningTasks: '运行中',
@@ -2708,6 +2712,7 @@ export default {
     cleanupDaysDesc: '超过此天数的已完成任务将被自动清理',
     runtimeStats: '运行统计',
     configSnapshot: '配置快照',
+    systemConfig: '系统配置',
     environment: '运行环境',
     debugMode: '调试模式',
     hostname: '主机名',
@@ -2753,6 +2758,12 @@ export default {
     gpuName: 'GPU名称',
     gpuUtilization: 'GPU利用率',
     gpuTemperature: '温度'
+  },
+
+  // 表单校验
+  validation: {
+    minLength: '最少 {min} 个字符',
+    maxLength: '最多 {max} 个字符'
   },
 
   // 错误页面

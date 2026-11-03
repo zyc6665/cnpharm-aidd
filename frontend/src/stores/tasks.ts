@@ -29,6 +29,8 @@ export const useTasksStore = defineStore('tasks', () => {
   const tasks = ref<Task[]>([])
   const currentTask = ref<Task | null>(null)
   const loading = ref(false)
+  // 加载失败要能被页面看见：否则 500/断网会和"确实没有任务"长得一模一样
+  const loadError = ref(false)
   const total = ref(0)
   const viewCounts = ref<TaskViewCounts>({ ...EMPTY_TASK_VIEW_COUNTS })
   let taskDetailRequestId = 0
@@ -36,11 +38,15 @@ export const useTasksStore = defineStore('tasks', () => {
   // Actions
   const fetchTasks = async (params?: TaskListParams) => {
     loading.value = true
+    loadError.value = false
     try {
       const res = await getTaskList(params)
       tasks.value = normalizeTaskSummaries(res.data.items)
       total.value = res.data.total
       return res.data
+    } catch (error) {
+      loadError.value = true
+      throw error
     } finally {
       loading.value = false
     }
@@ -192,6 +198,7 @@ export const useTasksStore = defineStore('tasks', () => {
     tasks,
     currentTask,
     loading,
+    loadError,
     total,
     viewCounts,
     // Actions

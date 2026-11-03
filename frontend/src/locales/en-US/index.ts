@@ -154,11 +154,11 @@ export default {
     artifactPreviewTypeLabel: 'Type',
     loadFailed: 'Research workspace failed to load',
     loadFailedHint: 'Latest project data is unavailable. Check your connection and retry.',
+    retry: 'Retry',
     overviewLoadFailed: 'Tasks and artifacts are temporarily unavailable',
     overviewLoadFailedHint: 'Projects loaded, but task and artifact overview failed. Retry when the service recovers.',
     schemaMigrationLoadFailed: 'Database migration is incomplete',
     schemaMigrationLoadFailedHint: 'The current database schema is behind the backend code. Run Alembic migrations before refreshing the workspace.',
-    retry: 'Retry',
     project: {
       name: 'Project name',
       namePlaceholder: 'For example: EGFR pocket study',
@@ -1531,6 +1531,7 @@ export default {
     }
   },
   results: {
+    loadMoreFailed: 'Failed to load more — the results already shown are kept',
     title: 'Results',
     subtitle: 'Inspect results, artifacts and traceability packages of finished tasks',
     columns: {
@@ -2119,6 +2120,8 @@ export default {
 
   // Tasks
   tasks: {
+    loadFailed: 'Failed to load tasks',
+    loadFailedHint: 'Network or service problem — you can retry',
     outputMetrics: 'Key metrics',
     outputArtifacts: 'Artifacts',
     outputRawJson: 'View raw result JSON',
@@ -2150,6 +2153,7 @@ export default {
     create: 'Create Task',
     name: 'Task Name',
     namePlaceholder: 'Optional, leave blank to auto-generate',
+    missingInputs: 'Select required inputs first: {inputs}',
     // Tabs
     allTasks: 'All Tasks',
     runningTasks: 'Running',
@@ -2728,6 +2732,7 @@ export default {
     cleanupDaysDesc: 'Completed tasks older than this will be auto deleted',
     runtimeStats: 'Runtime Stats',
     configSnapshot: 'Configuration Snapshot',
+    systemConfig: 'System Configuration',
     environment: 'Environment',
     debugMode: 'Debug Mode',
     hostname: 'Hostname',
@@ -2773,6 +2778,12 @@ export default {
     gpuName: 'GPU Name',
     gpuUtilization: 'GPU Utilization',
     gpuTemperature: 'Temperature'
+  },
+
+  // Form validation
+  validation: {
+    minLength: 'At least {min} characters',
+    maxLength: 'At most {max} characters'
   },
 
   // Error Pages

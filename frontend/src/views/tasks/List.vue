@@ -181,6 +181,15 @@
       <!-- 原来这里是 `<a-empty>` + `<template #extra>`。antd 的 Empty 只有
            `description`/`image`/默认插槽三个位置，没有 `extra`——那个「去工具页」
            按钮其实从来没有渲染出来过。换成自绘空状态后按钮走默认插槽，真的能点了。 -->
+      <AppInlineError
+        v-if="tasksStore.loadError"
+        class="tasks-list__error"
+        :title="t('tasks.loadFailed')"
+        :description="t('tasks.loadFailedHint')"
+      >
+        <a-button size="small" @click="fetchTasksSafely">{{ t('tasks.retry') }}</a-button>
+      </AppInlineError>
+
       <AppEmptyState
         v-else
         :title="emptyText"
@@ -215,6 +224,7 @@
   import AppFilterBar from '@/components/common/AppFilterBar.vue'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import AppEmptyState from '@/components/common/AppEmptyState.vue'
+  import AppInlineError from '@/components/common/AppInlineError.vue'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import SkeletonList from '@/components/common/SkeletonList.vue'
   import TaskListCard from '@/components/tasks/TaskListCard.vue'

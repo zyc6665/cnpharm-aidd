@@ -18,7 +18,7 @@
               <template #actions>
                 <a-space class="task-detail-actions" wrap>
                   <a-button
-                    v-if="taskStatus === 'running' || taskStatus === 'pending'"
+                    v-if="canCancel"
                     danger
                     @click="handleCancel"
                   >
@@ -26,7 +26,7 @@
                     {{ t('tasks.cancel') }}
                   </a-button>
                   <a-button
-                    v-if="taskStatus === 'failure'"
+                    v-if="canRetry"
                     type="primary"
                     @click="handleRetry"
                   >
@@ -349,7 +349,9 @@ import TaskLogPreview from '@/components/tasks/TaskLogPreview.vue'
 import TaskOutputSummary from '@/components/tasks/TaskOutputSummary.vue'
 import TaskParameterTable from '@/components/tasks/TaskParameterTable.vue'
 import {
+  canCancelTask as canCancelTaskForActor,
   canDeleteTask as canDeleteTaskForActor,
+  canRetryTask as canRetryTaskForActor,
   formatTaskDetailTime,
   formatTaskFileSize,
   buildTaskFailureDiagnostics,
@@ -389,12 +391,25 @@ const taskStatus = computed<TaskStatus>(() => normalizeTaskStatus(task.value?.st
 const detailTitle = computed(() =>
   task.value?.name || task.value?.tool?.name || t('tasks.taskDetail')
 )
+// 权限判定的唯一输入：角色 + 是否管理员。三个动作共用同一份 actor，
+// 避免"删除判了、取消/重试没判"这种同一页两套标准的情况。
+const taskActor = computed(() => ({ isAdmin: userStore.isAdmin }))
+const currentTaskForActor = computed(() =>
+  task.value ? { ...task.value, status: taskStatus.value } : null
+)
 const canDeleteTask = computed(() =>
-  task.value
-    ? canDeleteTaskForActor(
-        { ...task.value, status: taskStatus.value },
-        { isAdmin: userStore.isAdmin }
-      )
+  currentTaskForActor.value
+    ? canDeleteTaskForActor(currentTaskForActor.value, taskActor.value)
+    : false
+)
+const canCancel = computed(() =>
+  currentTaskForActor.value
+    ? canCancelTaskForActor(currentTaskForActor.value, taskActor.value)
+    : false
+)
+const canRetry = computed(() =>
+  currentTaskForActor.value
+    ? canRetryTaskForActor(currentTaskForActor.value, taskActor.value)
     : false
 )
 const detailSubtitle = computed(() => {
