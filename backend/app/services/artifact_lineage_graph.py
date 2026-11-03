@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 def artifact_lineage_graph_data(
@@ -104,6 +107,10 @@ def _add_artifact_version_node_and_edges(
 ) -> None:
     version_ids.add(str(version.id))
     version_node_id = f"version:{version.id}"
+    # 版本自身的来源字段（可空）：即便某个历史版本回退到 artifact 级 produced_by，
+    # 也把版本级真值原样带出，供前端/追溯包区分「该版本到底有没有版本级来源」。
+    version_source_task_id = getattr(version, "source_task_id", None)
+    version_source_attempt_id = getattr(version, "source_attempt_id", None)
     _add_graph_node(
         nodes,
         {
@@ -119,6 +126,8 @@ def _add_artifact_version_node_and_edges(
             "sha256": version.sha256,
             "status": version.status,
             "validation_status": version.validation_status,
+            "source_task_id": version_source_task_id,
+            "source_attempt_id": version_source_attempt_id,
             "created_at": version.created_at,
         },
     )
@@ -131,8 +140,23 @@ def _add_artifact_version_node_and_edges(
             "target": version_node_id,
         },
     )
-    if artifact.source_task_id:
-        task_node_id = f"task:{artifact.source_task_id}"
+    # produced_by 必须落到**版本次**：同一 artifact 由多个任务产出多个版本时，
+    # artifact.source_task_id 只记**首建者**，直接用它会把同一来源任务贴给所有版本，
+    # 「哪次执行产出了这一版」就无法回答（PRD M7「一键还原到那次执行」）。
+    # 因此优先取版本级 source_task_id；迁移前的历史行该列为空时，回退到 artifact
+    # 级字段——这是 best-effort 的旧口径，只能退化到实体级、不能区分多任务。
+    producer_task_id = version_source_task_id or artifact.source_task_id
+    if version_source_task_id is None and artifact.source_task_id is not None:
+        # 可观测性：回退到 artifact 级说明该版本没有版本级来源（历史数据 / 未回填），
+        # 线上可据此统计「还有多少版本在吃回退」、验证回填是否生效。
+        logger.debug(
+            "artifact lineage produced_by falls back to artifact-level source: "
+            "artifact_id=%s version_id=%s",
+            artifact.id,
+            version.id,
+        )
+    if producer_task_id:
+        task_node_id = f"task:{producer_task_id}"
         _add_graph_edge(
             edges,
             {

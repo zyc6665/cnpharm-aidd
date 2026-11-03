@@ -31,6 +31,10 @@ export interface ArtifactVersion {
   } | null
   expires_at?: string | null
   created_at: string
+  // 版本级来源：产出该版本的任务（source_task_id）与该任务的哪次尝试/重试
+  // （source_attempt_id）。历史/上传版本可能为空，追溯 UI 需按可空处理。
+  source_task_id?: string | null
+  source_attempt_id?: string | null
   files?: ArtifactVersionFile[]
 }
 
@@ -90,6 +94,7 @@ export interface ArtifactLineageGraphNode {
   standard_type?: string | null
   standard_version?: number | null
   source_task_id?: string | null
+  source_attempt_id?: string | null
   latest_version_id?: string | null
   version?: number | null
   filename?: string | null

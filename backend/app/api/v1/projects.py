@@ -107,6 +107,9 @@ def _serialize_artifact_version(version: ArtifactVersion) -> dict:
         "status": version.status,
         "expires_at": version.expires_at,
         "created_at": version.created_at,
+        # 版本级来源（哪次执行产出、哪次尝试），供前端追溯与项目文物视图展示。
+        "source_task_id": version.source_task_id,
+        "source_attempt_id": version.source_attempt_id,
     }
 
 

@@ -372,6 +372,14 @@ async def link_artifact_lineage(
     output_version_id: str,
     user_id: str,
 ) -> ArtifactLineage:
+    """手工建立两条 *版本* 之间的 ``ArtifactLineage`` 边（input→output）。
+
+    注意：本函数**不写** ``ArtifactVersion.source_task_id`` / ``source_attempt_id``，
+    也不是自动产出链路（``produced_by``）的写入路径——后者由
+    ``artifact_writer.upsert_version`` 在落库时按任务上下文填写。此函数目前仅被
+    ``test/test_artifact_lineage.py`` 使用，无生产 API 路由调用，属遗留的手工谱系
+    工具，请勿误认为版本来源的真源。
+    """
     rows = (
         await db.execute(
             select(ArtifactVersion.id, Artifact.project_id)

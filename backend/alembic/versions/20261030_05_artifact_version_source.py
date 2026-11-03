@@ -75,13 +75,17 @@ def upgrade() -> None:
     for name, column_type, nullable, server_default in NEW_COLUMNS:
         if name in existing_columns:
             continue
+        # 注意：直接 ``sa.text(server_default)`` 会把 ``standard`` 渲染成裸标识符，
+        # PostgreSQL 会当成「列引用」而报
+        # ``cannot use column reference in DEFAULT expression``（SQLite 容忍）。
+        # 这里显式加单引号，保证在 PG / SQLite 上都渲染为字符串字面量 DEFAULT 'standard'。
         op.add_column(
             ARTIFACT_VERSIONS,
             sa.Column(
                 name,
                 column_type,
                 nullable=nullable,
-                server_default=(sa.text(server_default) if server_default else None),
+                server_default=(sa.text(f"'{server_default}'") if server_default else None),
             ),
         )
 
