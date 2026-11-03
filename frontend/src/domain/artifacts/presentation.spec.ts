@@ -13,6 +13,7 @@ const translate = (key: string): string =>
   ({
     'artifacts.type.moleculeTable': '分子表',
     'artifacts.type.bindingPocket': '结合口袋',
+    'artifacts.type.proteinStructure': '蛋白结构',
     'artifacts.type.runReport': '运行报告',
     'artifacts.type.unknown': '其他产物'
   })[key] ?? key
@@ -86,4 +87,51 @@ test('标准类型优先于语义类型与产物类型', () => {
   )
   assert.equal(display.typeCode, 'binding_pocket')
   assert.equal(display.typeKey, 'artifacts.type.bindingPocket')
+})
+
+// ---- 机器名（槽位名 + 文件名）识别：截图里「smiles_csv: molp_smiles.csv」类标题 ----
+
+test('isFileNameLike 识别「槽位名: 文件名」/「槽位名::文件名」等三种机器命名', () => {
+  // ① 槽位名 + 冒号 + 右侧像文件名（原实现因冒号后有空格漏判）
+  assert.equal(isFileNameLike('smiles_csv: molp_smiles.csv'), true)
+  assert.equal(isFileNameLike('protein_pdb::tmp_msign_protein.pdb'), true)
+  assert.equal(isFileNameLike('protein_pdb: .tmp_msign_protein.pdb'), true)
+  // ② 纯槽位名（下划线分隔，无扩展名）
+  assert.equal(isFileNameLike('smiles_csv'), true)
+  // ③ tmp_ 前缀且含扩展名
+  assert.equal(isFileNameLike('tmp_msign_protein.pdb'), true)
+  assert.equal(isFileNameLike('.tmp_msign_protein.pdb'), true)
+  // 人写标题即使含冒号也不误判
+  assert.equal(isFileNameLike('EGFR: 口袋分析'), false)
+})
+
+test('既有 report / protein_pdb__tmp_x 判据不回归', () => {
+  assert.equal(isFileNameLike('report'), true)
+  assert.equal(isFileNameLike('protein_pdb__tmp_x'), true)
+  assert.equal(isFileNameLike('cb_data_result.csv'), true)
+})
+
+test('槽位名: 文件名 的标题退化为「类型名 · v版本」，原始串只作次要行', () => {
+  const display = buildArtifactDisplay(
+    { name: 'smiles_csv: molp_smiles.csv', artifactType: 'molecule_table', version: 9, filename: 'molp_smoke.csv' },
+    translate
+  )
+  assert.equal(display.title, '分子表 · v9')
+  assert.equal(display.fileName, 'molp_smoke.csv')
+
+  const protein = buildArtifactDisplay(
+    { name: 'protein_pdb::tmp_msign_protein.pdb', artifactType: 'protein_structure', version: 4, filename: 'msign_complex.pdb' },
+    translate
+  )
+  assert.equal(protein.title, '蛋白结构 · v4')
+  assert.equal(protein.fileName, 'msign_complex.pdb')
+})
+
+test('缺少版本 filename 时从机器名里反推文件名', () => {
+  const display = buildArtifactDisplay(
+    { name: 'protein_pdb: .tmp_msign_protein.pdb', artifactType: 'protein_structure', version: 4 },
+    translate
+  )
+  assert.equal(display.title, '蛋白结构 · v4')
+  assert.equal(display.fileName, '.tmp_msign_protein.pdb')
 })

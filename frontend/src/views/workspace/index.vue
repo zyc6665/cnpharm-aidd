@@ -134,11 +134,13 @@
           </div>
 
           <div v-if="recentArtifacts.length" class="artifact-list">
-            <a
+            <button
               v-for="artifact in recentArtifacts"
               :key="artifact.id"
-              :href="artifact.downloadUrl"
+              type="button"
               class="artifact-row"
+              data-testid="recent-artifact-row"
+              @click="openArtifactPreview(artifact)"
             >
               <FileOutlined />
               <div class="artifact-main">
@@ -154,7 +156,7 @@
                 </span>
               </div>
               <time>{{ formatTime(artifact.updatedAt) }}</time>
-            </a>
+            </button>
           </div>
           <AppEmptyState
             v-else
@@ -168,6 +170,13 @@
     <ProjectCreateDialog
       v-model:open="createDialogOpen"
       @created="handleProjectCreated"
+    />
+
+    <WorkspaceArtifactPreview
+      v-model:open="previewOpen"
+      :row="previewRow"
+      :artifact="previewArtifact"
+      :legacy-file="previewLegacyFile"
     />
   </main>
 </template>
@@ -195,6 +204,7 @@ import { getTaskCounts } from '@/api/tasks'
 import ProjectCreateDialog from '@/components/projects/ProjectCreateDialog.vue'
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import ProjectList from '@/components/projects/ProjectList.vue'
+import WorkspaceArtifactPreview from '@/components/workspace/WorkspaceArtifactPreview.vue'
 import {
   buildRecentWorkspaceArtifactRows,
   formatWorkspaceFileSize,
@@ -219,6 +229,11 @@ const projects = ref<ResearchProject[]>([])
 const tasks = ref<WorkspaceAttentionTask[]>([])
 const artifacts = ref<WorkspaceArtifact[]>([])
 const legacyFiles = ref<WorkspaceLegacyFile[]>([])
+// 最近 Artifact 预览抽屉：记录被点击的行，并反查它对应的标准 artifact / 传统文件。
+const previewOpen = ref(false)
+const previewRow = ref<RecentWorkspaceArtifactRow | null>(null)
+const previewArtifact = ref<WorkspaceArtifact | null>(null)
+const previewLegacyFile = ref<WorkspaceLegacyFile | null>(null)
 // 待办计数：来自任务系统视图的口径（running / needs_attention / recent_results），
 // 与任务中心的页签一一对应，点进去就能看到同一批记录。
 const todoCounts = ref<{ running: number; needs_attention: number; recent_results: number } | null>(null)
@@ -320,6 +335,15 @@ async function hasDatabaseSchemaHealthIssue() {
   }
 }
 
+function openArtifactPreview(row: RecentWorkspaceArtifactRow) {
+  previewRow.value = row
+  previewArtifact.value = artifacts.value.find(item => item.id === row.id) ?? null
+  previewLegacyFile.value = previewArtifact.value
+    ? null
+    : legacyFiles.value.find(item => item.id === row.id) ?? null
+  previewOpen.value = true
+}
+
 function handleProjectCreated(project: ResearchProject) {
   projects.value = [project, ...projects.value.filter(item => item.id !== project.id)]
   void router.push(`/projects/${project.id}`)
@@ -406,7 +430,21 @@ onMounted(() => { void loadWorkspace() })
 .status-list, .artifact-list { border-top: 1px solid @border-color; }
 .status-row, .artifact-row { display: grid; align-items: center; gap: @spacing-sm; min-height: 58px; padding: @spacing-sm; color: inherit; border-bottom: 1px solid @border-color; transition: background @transition-fast; }
 .status-row { grid-template-columns: auto minmax(0, 1fr) auto; }
-.artifact-row { grid-template-columns: auto minmax(0, 1fr) auto; }
+.artifact-row {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid @border-color;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.artifact-row:focus-visible {
+  outline: 2px solid @primary-color;
+  outline-offset: -2px;
+}
 .status-row:hover, .artifact-row:hover { background: @bg-hover; }
 .status-marker { width: 8px; height: 8px; border-radius: 50%; background: @text-disabled; }
 .status-pending { background: @warning-color; }
