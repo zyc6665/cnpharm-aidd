@@ -15,12 +15,15 @@
 
 from __future__ import annotations
 
+import importlib.util
+import logging
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, inspect, select
+from sqlalchemy import func, inspect, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -48,6 +51,7 @@ from app.models.tools import ToolStatus
 from app.models.traceability import TaskInputSnapshot
 from app.models.users import UserRole, UserStatus
 from app.services import artifact_writer
+from app.services.artifact_lineage_graph import artifact_lineage_graph_data
 from app.services.artifact_writer import ArtifactSource, upsert_version
 
 
@@ -500,4 +504,234 @@ async def test_attach_version_files_skips_roles_that_already_exist(
         )
     ).scalar_one()
     assert total == 2
+
+
+# ---------------------------------------------------------------------------
+# 重试产生的新版本：同任务、不同尝试（attempt）→ 不同 version、attempt_id 不同
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_retry_produces_new_version_with_different_attempt_id(
+    db_session: AsyncSession,
+) -> None:
+    user, project, task = await _seed(db_session)
+    artifact = _new_artifact(project, user)
+    db_session.add(artifact)
+    await db_session.flush()
+    common = dict(
+        artifact=artifact,
+        filename="out.pdb",
+        content_type="chemical/x-pdb",
+        size_bytes=3,
+        created_by=user.id,
+    )
+
+    v1, c1 = await upsert_version(
+        db_session,
+        storage_key="k/attempt-1",
+        sha256="1" * 64,
+        source=ArtifactSource(task_id=str(task.id), attempt_id="attempt-1"),
+        **common,
+    )
+    # 同任务重试：新尝试产出新内容 → 独立版本，attempt_id 不同。
+    v2, c2 = await upsert_version(
+        db_session,
+        storage_key="k/attempt-2",
+        sha256="2" * 64,
+        source=ArtifactSource(task_id=str(task.id), attempt_id="attempt-2"),
+        **common,
+    )
+    await db_session.commit()
+
+    assert c1 is True and c2 is True
+    assert v1.id != v2.id
+    assert v1.source_task_id == str(task.id) == v2.source_task_id
+    assert v1.source_attempt_id == "attempt-1"
+    assert v2.source_attempt_id == "attempt-2"
+    assert v1.source_attempt_id != v2.source_attempt_id
+
+
+# ---------------------------------------------------------------------------
+# 回填迁移：把 artifact 级 source_task_id 复制到历史 NULL 版本；只回填 task，不回填 attempt
+# ---------------------------------------------------------------------------
+
+
+def _load_backfill_sql() -> str:
+    path = (
+        BACKEND_ROOT
+        / "alembic/versions/20261104_01_backfill_artifact_version_source.py"
+    )
+    spec = importlib.util.spec_from_file_location("backfill_migration", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.BACKFILL_SQL
+
+
+@pytest.mark.asyncio
+async def test_backfill_migration_copies_artifact_source_to_historical_versions(
+    db_session: AsyncSession,
+) -> None:
+    user, project, task = await _seed(db_session)
+    # artifact A：有 artifact 级来源；两个历史版本 source 为 NULL → 应被回填。
+    artifact_a = _new_artifact(project, user)
+    artifact_a.source_task_id = str(task.id)
+    db_session.add(artifact_a)
+    await db_session.flush()
+    va1 = await _add_input_version(db_session, artifact_a, user, "a1" * 32, 1)
+    va2 = await _add_input_version(db_session, artifact_a, user, "a2" * 32, 2)
+    # artifact B：artifact 级来源也为 NULL；其版本应保持 NULL（不能凭空造来源）。
+    artifact_b = _new_artifact(project, user)
+    db_session.add(artifact_b)
+    await db_session.flush()
+    vb = await _add_input_version(db_session, artifact_b, user, "b1" * 32, 1)
+    await db_session.commit()
+
+    async def _null_count() -> int:
+        return await db_session.scalar(
+            select(func.count())
+            .select_from(ArtifactVersion)
+            .where(ArtifactVersion.source_task_id.is_(None))
+        )
+
+    assert await _null_count() == 3
+
+    backfill_sql = _load_backfill_sql()
+    await db_session.execute(text(backfill_sql))
+    await db_session.commit()
+    for version in (va1, va2, vb):
+        await db_session.refresh(version)
+
+    # 历史版本退化到 artifact 级来源（best-effort）。
+    assert va1.source_task_id == str(task.id)
+    assert va2.source_task_id == str(task.id)
+    # artifact 无来源的行保持 NULL。
+    assert vb.source_task_id is None
+    # 绝不回填 attempt（历史没有该信息，假值比 NULL 更糟）。
+    assert va1.source_attempt_id is None
+    assert va2.source_attempt_id is None
+    assert vb.source_attempt_id is None
+    assert await _null_count() == 1
+
+    # 幂等：再跑一次不改变任何行。
+    await db_session.execute(text(backfill_sql))
+    await db_session.commit()
+    assert await _null_count() == 1
+
+
+# ---------------------------------------------------------------------------
+# produced_by 读取侧：优先版本级 source_task_id，缺失回退 artifact 级
+# ---------------------------------------------------------------------------
+
+
+def _ns_version(
+    version_id: str,
+    *,
+    source_task_id: str | None = None,
+    source_attempt_id: str | None = None,
+    number: int = 1,
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        id=version_id,
+        version=number,
+        filename=f"{version_id}.pdb",
+        content_type="chemical/x-pdb",
+        size_bytes=1,
+        sha256="a" * 64,
+        status="available",
+        validation_status="passed",
+        created_at=None,
+        source_task_id=source_task_id,
+        source_attempt_id=source_attempt_id,
+    )
+
+
+def _ns_artifact(
+    artifact_id: str,
+    *,
+    source_task_id: str | None,
+    versions: list[SimpleNamespace],
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        id=artifact_id,
+        project_id="project-1",
+        name=f"{artifact_id}.pdb",
+        artifact_type="protein_structure",
+        semantic_type="protein_structure@1",
+        standard_type="protein_structure",
+        standard_version=1,
+        source_task_id=source_task_id,
+        latest_version_id=versions[-1].id,
+        created_at=None,
+        updated_at=None,
+        versions=versions,
+    )
+
+
+def _produced_by_edge_pairs(graph: dict) -> set[tuple[str, str]]:
+    return {
+        (edge["source"], edge["target"])
+        for edge in graph["edges"]
+        if edge["kind"] == "produced_by"
+    }
+
+
+def test_produced_by_prefers_version_level_over_artifact_level() -> None:
+    # 故意构造两者不一致：artifact 级=task-artifact，版本级=task-version。
+    # 必须取版本级——版本级有值时绝不能被 artifact 级覆盖。
+    version = _ns_version(
+        "v1", source_task_id="task-version", source_attempt_id="att-1"
+    )
+    artifact = _ns_artifact("a1", source_task_id="task-artifact", versions=[version])
+
+    graph = artifact_lineage_graph_data(
+        project_id="project-1",
+        artifacts=[artifact],
+        lineages=[],
+        tasks_by_id={},
+    )
+
+    assert _produced_by_edge_pairs(graph) == {("task:task-version", "version:v1")}
+    node = {n["id"]: n for n in graph["nodes"]}["version:v1"]
+    assert node["source_task_id"] == "task-version"
+    assert node["source_attempt_id"] == "att-1"
+
+
+def test_produced_by_falls_back_to_artifact_level_when_version_source_missing(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.DEBUG, logger="app.services.artifact_lineage_graph")
+    version = _ns_version("v2")  # 版本级来源为 NULL（历史/未回填）
+    artifact = _ns_artifact("a2", source_task_id="task-artifact", versions=[version])
+
+    graph = artifact_lineage_graph_data(
+        project_id="project-1",
+        artifacts=[artifact],
+        lineages=[],
+        tasks_by_id={},
+    )
+
+    assert _produced_by_edge_pairs(graph) == {("task:task-artifact", "version:v2")}
+    # 回退有可观测性：应打出一条 debug 日志（带 artifact_id / version_id）。
+    assert any(
+        "falls back to artifact-level" in record.getMessage()
+        and "a2" in record.getMessage()
+        and "v2" in record.getMessage()
+        for record in caplog.records
+    )
+
+
+def test_produced_by_omits_edge_when_both_sources_missing() -> None:
+    version = _ns_version("v3")
+    artifact = _ns_artifact("a3", source_task_id=None, versions=[version])
+
+    graph = artifact_lineage_graph_data(
+        project_id="project-1",
+        artifacts=[artifact],
+        lineages=[],
+        tasks_by_id={},
+    )
+
+    assert _produced_by_edge_pairs(graph) == set()
 

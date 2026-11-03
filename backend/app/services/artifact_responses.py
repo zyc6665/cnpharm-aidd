@@ -57,6 +57,11 @@ def version_data(
         "manifest_json": version.manifest_json,
         "expires_at": version.expires_at,
         "created_at": version.created_at,
+        # 版本级来源：哪次执行（task）产出了这一版、以及该任务的哪一次尝试（重试/重放
+        # 会产生新的 attempt）。用 getattr 兜底，兼容测试里以 SimpleNamespace 构造的
+        # 轻量版本对象；真实 ORM 实例恒有这两列。
+        "source_task_id": getattr(version, "source_task_id", None),
+        "source_attempt_id": getattr(version, "source_attempt_id", None),
         "files": _version_files_data(artifact_id=artifact_id, version=version)
         if artifact_id
         else [],
