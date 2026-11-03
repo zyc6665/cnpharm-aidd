@@ -11,24 +11,52 @@ from typing import Any, Dict, List, Optional
 import logging
 import json
 
-from sqlalchemy import select, func
+from sqlalchemy import Text, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.time import utcnow
-from app.files.file_records import delete_stored_content
+from app.models.artifacts import ArtifactVersionFile
 from app.models.files import File, FileAccessLog
-from app.models.tasks import Task, TaskInput
+from app.models.tasks import TaskInput, TaskOutput
 
 logger = logging.getLogger(__name__)
+
+# ``_process_expired_file`` 的处置结果取值（供计数分支使用）。
+_OUTCOME_PERMANENT = "skipped_permanent"
+_OUTCOME_REFERENCED = "skipped_referenced"
+_OUTCOME_SOFT_DELETED = "soft_deleted"
+_OUTCOME_ALREADY_DELETED = "skipped_already_deleted"
+
+
+def _as_id_list(value: Any) -> List[str]:
+    """把 JSON 列 ``file_ids`` 归一成字符串列表。
+
+    兼容已反序列化的 list（SQLite/PG 读回）与原始 JSON 字符串（历史脏数据）。
+    """
+    if not value:
+        return []
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (TypeError, ValueError):
+            return []
+    if not isinstance(value, (list, tuple)):
+        return []
+    return [str(item) for item in value]
 
 
 @dataclass
 class CleanupResult:
-    """清理结果"""
-    cleaned_count: int
-    freed_bytes: int
+    """清理结果
+
+    只统计**软删除**，不含物理删除字节数——blob 回收由 ``artifact_gc`` 负责。
+    """
+    scanned: int
+    skipped_referenced: int
+    skipped_permanent: int
+    soft_deleted: int
+    failed: int
     errors: List[Dict[str, Any]]
-    skipped_in_use: int
     timestamp: str
 
 
@@ -233,121 +261,201 @@ class FileLifecycleManager:
     ) -> CleanupResult:
         """清理过期文件（定时任务）
 
+        只做**软删除**（置 ``deleted_at``），绝不删除底层对象存储中的 blob：
+        blob 回收统一交给 ``app.services.artifact_gc``（那里已按
+        ``ArtifactVersionFile`` 引用做孤儿判定，见 ``artifact_gc.py:78-110``）。
+
+        跳过规则：
+
+        * 仍被 ``ArtifactVersionFile`` / ``TaskInput.file_ids`` /
+          ``TaskOutput.file_ids`` 任一引用 → 跳过（计入 ``skipped_referenced``）；
+        * ``is_permanent=True`` → 跳过（计入 ``skipped_permanent``）；
+        * 已 ``deleted_at`` → 跳过（幂等；不计入任何计数器）。
+
+        单条失败只记日志并继续，不会中断整批。返回值携带
+        ``scanned/skipped_referenced/skipped_permanent/soft_deleted/failed``
+        及 ``errors`` 明细，供调用方与日志使用。
+
         Args:
             batch_size: 每批处理的文件数
-            dry_run: 是否为试运行（不实际删除）
+            dry_run: 是否为试运行（不实际写入 soft-delete 标记）
 
         Returns:
             CleanupResult: 清理结果
         """
         now = utcnow()
-        cleaned_count = 0
-        freed_bytes = 0
-        skipped_in_use = 0
-        errors = []
+        skipped_referenced = 0
+        skipped_permanent = 0
+        soft_deleted = 0
+        failed = 0
+        errors: List[Dict[str, Any]] = []
 
-        # 查询过期文件
+        # 查询过期文件（不预过滤 is_permanent/deleted_at，以便如实统计跳过原因；
+        # 已软删的行只是重复扫描，不会造成副作用，且 purge_deleted_files 会物理回收）。
         result = await self.db.execute(
             select(File).where(
                 File.expires_at != None,
                 File.expires_at < now,
-                File.is_permanent == False,
-                File.deleted_at == None  # 未被软删除
             ).limit(batch_size)
         )
-        expired_files = result.scalars().all()
+        expired_files = list(result.scalars().all())
+        scanned = len(expired_files)
+
+        # 一次性批量查询引用关系（每张表至多一条 SQL）。
+        reference_sources = await self._collect_reference_sources(
+            [str(file.id) for file in expired_files]
+        )
 
         for file in expired_files:
             try:
-                # 检查是否有任务正在使用
-                tasks_using = await self._check_active_tasks(file.id)
-                if tasks_using:
-                    logger.info(
-                        f"File {file.id} is in use by tasks {tasks_using}, skipping cleanup"
-                    )
-                    skipped_in_use += 1
-                    # 延长过期时间，等待任务完成
-                    file.expires_at = now + timedelta(hours=24)
-                    continue
-
-                if not dry_run:
-                    # 从存储后端删除
-                    try:
-                        await delete_stored_content(file, self.storage)
-                    except Exception as e:
-                        logger.warning(
-                            f"Failed to delete file from storage: {file.storage_path}, {e}"
-                        )
-
-                    # 软删除（设置deleted_at）
-                    file.deleted_at = now
-
-                freed_bytes += file.size_bytes
-                cleaned_count += 1
-
-            except Exception as e:
-                logger.error(f"Failed to cleanup file {file.id}: {e}")
+                outcome = await self._process_expired_file(
+                    file,
+                    reference_sources,
+                    now=now,
+                    dry_run=dry_run,
+                )
+            except Exception as e:  # noqa: BLE001 - 单条失败不阻塞整批
+                failed += 1
+                logger.error(
+                    "清理过期文件失败: file_id=%s 错误=%s", file.id, e
+                )
                 errors.append({
-                    "file_id": file.id,
+                    "file_id": str(file.id),
                     "filename": file.filename,
-                    "error": str(e)
+                    "error": str(e),
                 })
+                continue
+
+            if outcome == _OUTCOME_REFERENCED:
+                skipped_referenced += 1
+            elif outcome == _OUTCOME_PERMANENT:
+                skipped_permanent += 1
+            elif outcome == _OUTCOME_SOFT_DELETED:
+                soft_deleted += 1
 
         if not dry_run:
             await self.db.commit()
 
         # 构建结果
         cleanup_result = CleanupResult(
-            cleaned_count=cleaned_count,
-            freed_bytes=freed_bytes,
+            scanned=scanned,
+            skipped_referenced=skipped_referenced,
+            skipped_permanent=skipped_permanent,
+            soft_deleted=soft_deleted,
+            failed=failed,
             errors=errors,
-            skipped_in_use=skipped_in_use,
-            timestamp=now.isoformat()
+            timestamp=now.isoformat(),
         )
 
         # 记录清理日志到缓存
         await self._log_cleanup(cleanup_result)
 
         logger.info(
-            f"Cleanup completed: {cleaned_count} files, {freed_bytes // 1024 // 1024}MB freed",
+            "过期文件清理完成: scanned=%s skipped_referenced=%s "
+            "skipped_permanent=%s soft_deleted=%s failed=%s dry_run=%s",
+            scanned,
+            skipped_referenced,
+            skipped_permanent,
+            soft_deleted,
+            failed,
+            dry_run,
             extra={
-                "cleaned_count": cleaned_count,
-                "freed_mb": freed_bytes // 1024 // 1024,
-                "skipped_in_use": skipped_in_use,
-                "errors_count": len(errors),
-                "dry_run": dry_run
-            }
+                "scanned": scanned,
+                "skipped_referenced": skipped_referenced,
+                "skipped_permanent": skipped_permanent,
+                "soft_deleted": soft_deleted,
+                "failed": failed,
+                "dry_run": dry_run,
+            },
         )
 
         return cleanup_result
 
-    async def _check_active_tasks(self, file_id: str) -> List[str]:
-        """检查是否有任务正在使用该文件
+    async def _process_expired_file(
+        self,
+        file: File,
+        reference_sources: Dict[str, List[str]],
+        *,
+        now: datetime,
+        dry_run: bool,
+    ) -> str:
+        """处置单个过期文件并返回结果常量（异常由调用方兜底）。"""
+        file_id = str(file.id)
 
-        Args:
-            file_id: 文件ID
-
-        Returns:
-            List[str]: 正在使用该文件的任务ID列表
-        """
-        try:
-            # 查询正在执行或等待中的任务
-            # 这里假设TaskInput中有file_ids字段存储关联的文件ID
-            result = await self.db.execute(
-                select(Task.id, TaskInput.file_ids).where(
-                    Task.status.in_(["PENDING", "QUEUED", "RUNNING"]),
-                ).join(
-                    TaskInput, Task.id == TaskInput.task_id
-                )
+        if file.is_permanent:
+            logger.info(
+                "跳过永久文件，不做清理: file_id=%s",
+                file_id,
+                extra={"file_id": file_id, "reason": "is_permanent"},
             )
-            return [
-                str(task_id)
-                for task_id, file_ids in result.all()
-                if file_id in (file_ids or [])
+            return _OUTCOME_PERMANENT
+
+        if file.deleted_at is not None:
+            # 已经软删除，幂等跳过。
+            return _OUTCOME_ALREADY_DELETED
+
+        sources = reference_sources.get(file_id) or []
+        if sources:
+            logger.info(
+                "跳过仍被引用的过期文件: file_id=%s 引用来源=%s",
+                file_id,
+                ",".join(sources),
+                extra={"file_id": file_id, "reference_sources": sources},
+            )
+            return _OUTCOME_REFERENCED
+
+        if not dry_run:
+            # 只置软删除标记，绝不删除 blob（blob 由 artifact_gc 孤儿回收负责）。
+            file.deleted_at = now
+        logger.info(
+            "软删除过期文件（保留 blob）: file_id=%s",
+            file_id,
+            extra={"file_id": file_id, "action": "soft_delete"},
+        )
+        return _OUTCOME_SOFT_DELETED
+
+    async def _collect_reference_sources(
+        self, file_ids: List[str]
+    ) -> Dict[str, List[str]]:
+        """返回每个 ``file_id`` 仍被哪些表引用。
+
+        覆盖三张表：``ArtifactVersionFile``、``TaskInput.file_ids``、
+        ``TaskOutput.file_ids``。后两者是 JSON 数组且无外键，数据库拦不住删除，
+        因此用 ``CAST(json AS TEXT) LIKE`` 预筛后，再在 Python 里按数组成员精确
+        判定，避免 ``file-1`` 误命中 ``file-10`` 之类的子串。
+
+        每张表只发一条 SQL（O(1) 往返），不随文件数量线性增长。
+        """
+        sources: Dict[str, List[str]] = {file_id: [] for file_id in file_ids}
+        if not file_ids:
+            return sources
+
+        rows = await self.db.execute(
+            select(ArtifactVersionFile.file_id).where(
+                ArtifactVersionFile.file_id.in_(file_ids)
+            )
+        )
+        for (file_id,) in rows.all():
+            key = str(file_id)
+            if key in sources and "ArtifactVersionFile" not in sources[key]:
+                sources[key].append("ArtifactVersionFile")
+
+        for model, label in ((TaskInput, "TaskInput"), (TaskOutput, "TaskOutput")):
+            predicates = [
+                cast(model.file_ids, Text).like(f'%"{file_id}"%')
+                for file_id in file_ids
             ]
-        except Exception as e:
-            logger.warning(f"Failed to check active tasks for file {file_id}: {e}")
-            return []
+            rows = await self.db.execute(
+                select(model.file_ids).where(or_(*predicates))
+            )
+            blobs = [_as_id_list(row[0]) for row in rows.all()]
+            for file_id in file_ids:
+                if label in sources[file_id]:
+                    continue
+                if any(file_id in blob for blob in blobs):
+                    sources[file_id].append(label)
+
+        return sources
 
     async def get_file_statistics(self) -> FileStatistics:
         """获取文件统计信息
@@ -498,10 +606,12 @@ class FileLifecycleManager:
         try:
             log_data = {
                 "timestamp": result.timestamp,
-                "cleaned_count": result.cleaned_count,
-                "freed_mb": result.freed_bytes // 1024 // 1024,
-                "skipped_in_use": result.skipped_in_use,
-                "errors": result.errors
+                "scanned": result.scanned,
+                "skipped_referenced": result.skipped_referenced,
+                "skipped_permanent": result.skipped_permanent,
+                "soft_deleted": result.soft_deleted,
+                "failed": result.failed,
+                "errors": result.errors,
             }
 
             await self.cache.lpush(

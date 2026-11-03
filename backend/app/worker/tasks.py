@@ -1010,49 +1010,47 @@ def cleanup_expired_files():
     """
     清理过期文件
 
-    定时执行，删除已过期的临时文件
+    定时执行，对无引用且已过期的临时文件做**软删除**（置 ``deleted_at``）。
+    仍被任务/产物引用的文件、永久文件会跳过；blob 不在此删除，由
+    ``app.services.artifact_gc`` 负责孤儿回收。
     """
     logger.info("开始清理过期文件")
 
-    count = run_coro_sync(_cleanup_expired_files_impl())
+    stats = run_coro_sync(_cleanup_expired_files_impl())
 
-    logger.info(f"清理完成，删除 {count} 个过期文件")
-    return {"deleted_count": count}
+    logger.info(
+        "清理完成: scanned=%s skipped_referenced=%s skipped_permanent=%s "
+        "soft_deleted=%s failed=%s",
+        stats.get("scanned"),
+        stats.get("skipped_referenced"),
+        stats.get("skipped_permanent"),
+        stats.get("soft_deleted"),
+        stats.get("failed"),
+    )
+    return stats
 
 
-async def _cleanup_expired_files_impl() -> int:
-    """清理过期文件实现"""
-    from sqlalchemy import select
+async def _cleanup_expired_files_impl() -> dict:
+    """清理过期文件实现：委托给 FileLifecycleManager.cleanup_expired_files。
+
+    安全实现（引用检查 + 软删）长期只在测试里被调用，生产调度却走了一份 naive
+    的硬删逻辑，导致运行中任务的输入文件、带 ``expires_at`` 的产物 blob 被直接
+    删除并留下悬挂的 ``ArtifactVersionFile``。这里统一委托给生命周期管理器，
+    删除 naive 实现，避免两套语义再次分叉。
+    """
     from app.database.session import async_session_factory
-    from app.models.files import File
-    from app.files.file_records import delete_stored_content
-
-    deleted_count = 0
+    from app.files.lifecycle_manager import FileLifecycleManager
 
     async with async_session_factory() as db:
-        # 查找过期文件
-        result = await db.execute(
-            select(File).where(
-                File.expires_at.isnot(None),
-                File.expires_at < utcnow()
-            )
-        )
-        expired_files = result.scalars().all()
+        result = await FileLifecycleManager(db).cleanup_expired_files()
 
-        for file in expired_files:
-            try:
-                # 删除存储文件
-                if file.storage_path:
-                    await delete_stored_content(file)
-                # 删除数据库记录
-                await db.delete(file)
-                deleted_count += 1
-            except Exception as e:
-                logger.error(f"删除文件失败: {file.id}, 错误: {e}")
-
-        await db.commit()
-
-    return deleted_count
+    return {
+        "scanned": result.scanned,
+        "skipped_referenced": result.skipped_referenced,
+        "skipped_permanent": result.skipped_permanent,
+        "soft_deleted": result.soft_deleted,
+        "failed": result.failed,
+    }
 
 
 @shared_task(name="app.worker.tasks.reclaim_stale_gpu_leases")
