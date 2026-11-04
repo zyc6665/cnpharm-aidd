@@ -1769,6 +1769,8 @@ export default {
       title: 'Design Runs',
       subtitle: 'Molecule generation, peptide design, property prediction, virtual screening and MD runs you and your team launched here',
       newRun: 'New design run',
+      continueFlow: 'Continue design flow',
+      nextStep: 'Next step',
       loadError: 'Failed to load design runs',
       empty: 'No design runs yet — start from "New design run"',
       openResult: 'View result',

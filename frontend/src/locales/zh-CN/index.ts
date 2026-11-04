@@ -1761,6 +1761,8 @@ export default {
       title: '设计任务',
       subtitle: '你和团队在这个平台上跑过的分子生成、多肽设计、性质预测、虚拟筛选与分子动力学任务',
       newRun: '新建设计任务',
+      continueFlow: '继续设计流程',
+      nextStep: '下一步',
       loadError: '设计任务加载失败',
       empty: '还没有设计任务，从「新建设计任务」开始',
       openResult: '查看结果',
