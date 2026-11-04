@@ -31,6 +31,9 @@ from app.tool_packages.config_resolver import (
 
 
 STANDARD_RESULT_VERSION = "aidd.sciminer/result"
+STANDARD_RESULT_VERSIONS = frozenset(
+    {"aidd.sciminer/result", "aidd.sciminer/result.v2"}
+)
 
 
 def collected_standard_result_payload(
@@ -44,7 +47,7 @@ def collected_standard_result_payload(
     nested = output_result.get("result")
     if _is_standard_result_payload(nested):
         return nested
-    if output_result.get("result_version") == STANDARD_RESULT_VERSION:
+    if output_result.get("result_version") in STANDARD_RESULT_VERSIONS:
         return output_result
     return None
 
@@ -171,7 +174,7 @@ async def parse_collected_standard_result(
 def _is_standard_result_payload(value: Any) -> bool:
     return (
         isinstance(value, dict)
-        and value.get("result_version") == STANDARD_RESULT_VERSION
+        and value.get("result_version") in STANDARD_RESULT_VERSIONS
     )
 
 

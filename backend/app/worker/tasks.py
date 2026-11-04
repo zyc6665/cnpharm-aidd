@@ -599,18 +599,34 @@ async def _execute_tool_task_impl_inner(
 
             # 创建执行器并执行
             # 使用正确的构造函数签名：TaskExecutor(task, tool_version)
-            executor = TaskExecutor(
-                task,
-                tool_version,
-                tool=tool,
-                progress_callback=progress_callback,
-                worker_capability=load_worker_capability(),
-                execution_service=get_execution_service(),
-                db_session=db,
-            )
+            # threads 池里每个任务都在自己的 asyncio.run() 事件循环中执行；httpx.AsyncClient
+            # 绑定首次使用它的事件循环，进程级单例会跨任务复用导致第二个任务报
+            # "Event loop is closed"。因此这里为 k8s 任务构建任务级 runtime，并在
+            # 同一事件循环内关闭，既修复跨循环复用，也避免并发任务共享客户端。
+            local_runtime = None
+            try:
+                if (tool_version.config or {}).get("type") == "k8s_job":
+                    from app.execution.transports.kubernetes_runtime import build_kubernetes_runtime
 
-            # 执行任务
-            output_result = await executor.execute()
+                    local_runtime = build_kubernetes_runtime(settings)
+                execution_service = (
+                    local_runtime.service if local_runtime is not None else get_execution_service()
+                )
+                executor = TaskExecutor(
+                    task,
+                    tool_version,
+                    tool=tool,
+                    progress_callback=progress_callback,
+                    worker_capability=load_worker_capability(),
+                    execution_service=execution_service,
+                    db_session=db,
+                )
+
+                # 执行任务
+                output_result = await executor.execute()
+            finally:
+                if local_runtime is not None:
+                    await local_runtime.close()
             logger.info(f"任务 {task_id} 执行成功")
 
             # 取消请求可能与执行结果同时到达，用户取消优先于迟到结果。

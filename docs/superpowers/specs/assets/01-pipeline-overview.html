@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><link rel="stylesheet" href="mockup.css">
+<style>
+.wrap{display:flex;flex-direction:column;gap:22px}
+.projbar{display:flex;align-items:center;gap:12px;margin:16px 0 4px;padding:10px 14px;background:var(--elev);border:1px solid var(--border);border-radius:10px}
+.projbar .k{font-size:12px;color:var(--text3)}
+.projbar .v{font-weight:600}
+.projbar .btn{margin-left:auto}
+.pipe{display:flex;align-items:stretch;gap:0}
+.stage{flex:1;min-width:0;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 15px;display:flex;flex-direction:column;gap:10px;position:relative}
+.stage.ready{border-color:rgba(34,197,94,.28)}
+.stage.current{border-color:var(--accent-b);box-shadow:0 0 0 1px var(--accent-b),0 8px 30px rgba(59,130,246,.15)}
+.stage.todo{border-style:dashed}
+.conn{flex:0 0 26px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:16px}
+.stage .no{font-size:11px;font-weight:700;color:var(--accent-h);letter-spacing:.05em}
+.stage h4{font-size:14px;font-weight:600}
+.stage .desc{font-size:12px;color:var(--text2);min-height:32px}
+.stage .stat{font-size:12px;color:var(--text);background:var(--subtle);border:1px solid var(--border);border-radius:7px;padding:7px 9px;line-height:1.5}
+.stage .stat b{color:var(--accent-h);font-weight:600}
+.stage .btn{margin-top:auto;justify-content:center;width:100%}
+.badge-row{display:flex;align-items:center;justify-content:space-between}
+.tlhead{display:flex;align-items:center;padding:12px 14px 4px}
+.tlhead .ttl{font-size:15px;font-weight:600}
+.tlhead .ttl .hint{font-size:12px;font-weight:400;color:var(--text3);margin-left:8px}
+.tlhead .btn{margin-left:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead th{text-align:left;color:var(--text3);font-weight:500;font-size:12px;padding:10px 12px;border-bottom:1px solid var(--border)}
+tbody td{padding:11px 12px;border-bottom:1px solid var(--subtle)}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:var(--bg-hover)}
+.stagecol{display:inline-flex;align-items:center;gap:7px}
+.stagecol .sq{width:18px;height:18px;border-radius:5px;background:var(--accent-l);color:var(--accent-h);font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+.tl-card{padding:6px 6px 2px}
+.note{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2)}
+.note .sq{width:8px;height:8px;border-radius:2px;background:var(--accent)}
+</style></head>
+<body><div class="app">
+  <!-- sidebar -->
+  <aside class="sidebar">
+    <div class="brand"><span class="logo"></span>中国医药 AIDD</div>
+    <nav class="nav">
+      <div class="nav-item"><span class="ic">⌂</span>工作台</div>
+      <div class="nav-item"><span class="ic">▦</span>工具</div>
+      <div class="nav-item"><span class="ic">☰</span>任务</div>
+      <div class="nav-item"><span class="ic">⤳</span>工作流</div>
+      <div class="nav-item"><span class="ic">◈</span>项目成果</div>
+    </nav>
+    <div class="section-label">设计流程</div>
+    <nav class="nav">
+      <div class="nav-item active"><span class="ic">◎</span>流程总览<span class="new-tag">NEW</span></div>
+      <div class="group-label">前期准备</div>
+      <div class="nav-item"><span class="ic">◔</span>结构预测<span class="new-tag">NEW</span></div>
+      <div class="nav-item"><span class="ic">◍</span>口袋预测<span class="new-tag">NEW</span></div>
+      <div class="group-label">分子设计</div>
+      <div class="nav-item"><span class="ic">✦</span>分子生成</div>
+      <div class="nav-item"><span class="ic">❋</span>多肽设计</div>
+      <div class="nav-item"><span class="ic">⧩</span>虚拟筛选</div>
+      <div class="group-label">评估验证</div>
+      <div class="nav-item"><span class="ic">◫</span>性质预测</div>
+      <div class="nav-item"><span class="ic">⚡</span>分子动力学</div>
+      <div class="group-label">记录</div>
+      <div class="nav-item"><span class="ic">◷</span>设计任务</div>
+    </nav>
+    <div class="sidebar-footer"><div class="divider"></div>
+      <div class="nav-item"><span class="ic">☾</span>主题</div>
+      <div class="nav-item"><span class="ic">⚙</span>账户设置</div>
+    </div>
+  </aside>
+
+  <!-- main -->
+  <main class="main">
+    <div class="page-head">
+      <div>
+        <div class="page-title">设计流程</div>
+        <div class="page-sub">从靶点结构一路推进到候选分子，每一步都看得见「上游是否就绪」</div>
+      </div>
+      <div style="display:flex;gap:10px"><button class="btn ghost">刷新</button><button class="btn primary">＋ 继续设计流程</button></div>
+    </div>
+
+    <div class="projbar">
+      <span class="k">当前项目</span><span class="v">GRK4 靶向高血压候选药物研发</span>
+      <span class="pill acc">进行中</span>
+      <button class="btn sm ghost">切换项目 ▾</button>
+    </div>
+
+    <div class="wrap" style="margin-top:8px">
+      <div class="pipe">
+        <div class="stage ready">
+          <div class="badge-row"><span class="no">STEP 01</span><span class="pill ok"><span class="dot" style="background:#22c55e"></span>就绪</span></div>
+          <h4>结构预测</h4>
+          <div class="desc">蛋白序列 → 三维结构（Boltz-2）</div>
+          <div class="stat">已就绪 <b>2 个结构</b><br>最近：10-30 完成</div>
+          <button class="btn sm">查看结构 →</button>
+        </div>
+        <div class="conn">→</div>
+        <div class="stage ready">
+          <div class="badge-row"><span class="no">STEP 02</span><span class="pill ok"><span class="dot" style="background:#22c55e"></span>就绪</span></div>
+          <h4>口袋预测</h4>
+          <div class="desc">结构 → 候选结合口袋（LVpocket）</div>
+          <div class="stat"><b>5 个</b>候选口袋 · <b>1 个</b>已选定<br>Pocket-01 评分 0.94</div>
+          <button class="btn sm">管理口袋 →</button>
+        </div>
+        <div class="conn">→</div>
+        <div class="stage current">
+          <div class="badge-row"><span class="no">STEP 03</span><span class="pill acc">进行中</span></div>
+          <h4>分子设计</h4>
+          <div class="desc">分子生成 / 多肽设计</div>
+          <div class="stat">最近生成 <b>2 批</b> · <b>12 个</b>优选分子<br>已选口袋：Pocket-01</div>
+          <button class="btn sm primary">开始分子生成 →</button>
+        </div>
+        <div class="conn">→</div>
+        <div class="stage todo">
+          <div class="badge-row"><span class="no">STEP 04</span><span class="pill warn">待补</span></div>
+          <h4>筛选与评估</h4>
+          <div class="desc">虚拟筛选 / 性质预测(ADMET)</div>
+          <div class="stat">尚未筛选或评估<br>有 12 个候选可评估</div>
+          <button class="btn sm">去虚拟筛选 →</button>
+        </div>
+        <div class="conn">→</div>
+        <div class="stage todo">
+          <div class="badge-row"><span class="no">STEP 05</span><span class="pill mut">无数据</span></div>
+          <h4>计算验证</h4>
+          <div class="desc">分子动力学 / 自由能计算</div>
+          <div class="stat">尚未运行 MD / 自由能</div>
+          <button class="btn sm" disabled style="opacity:.5">去分子动力学 →</button>
+        </div>
+      </div>
+
+      <div class="card tl-card">
+        <div class="tlhead"><div class="ttl">本项目设计流程时间线 <span class="hint">结构预测、口袋预测现已纳入同一条记录</span></div>
+          <button class="btn link sm">查看全部 →</button></div>
+        <table>
+          <thead><tr><th style="width:120px">时间</th><th style="width:140px">环节</th><th>工具</th><th style="width:110px">状态</th><th style="width:150px">操作</th></tr></thead>
+          <tbody>
+            <tr><td class="muted">11-04 10:20</td><td><span class="stagecol"><span class="sq">02</span>口袋预测</span></td><td class="muted">LVpocket</td><td><span class="pill ok">已完成</span></td><td><span class="btn link sm">查看口袋</span> · <span class="btn link sm">下一步</span></td></tr>
+            <tr><td class="muted">11-04 09:52</td><td><span class="stagecol"><span class="sq">01</span>结构预测</span></td><td class="muted">Boltz-2</td><td><span class="pill ok">已完成</span></td><td><span class="btn link sm">查看结构</span> · <span class="btn link sm">下一步</span></td></tr>
+            <tr><td class="muted">11-03 18:10</td><td><span class="stagecol"><span class="sq">03</span>分子生成</span></td><td class="muted">Pocket2Mol</td><td><span class="pill ok">已完成</span></td><td><span class="btn link sm">查看结果</span> · <span class="btn link sm">下一步</span></td></tr>
+            <tr><td class="muted">11-03 15:40</td><td><span class="stagecol"><span class="sq">04</span>虚拟筛选</span></td><td class="muted">AutoDock Vina</td><td><span class="pill acc">进行中</span></td><td><span class="btn link sm">查看进度</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note"><span class="sq"></span>新增：结构预测 / 口袋预测成为设计流程的一等环节，与「项目成果」页的五段叙事保持一致。</div>
+    </div>
+  </main>
+</div></body></html>

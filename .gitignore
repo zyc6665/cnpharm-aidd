@@ -96,3 +96,6 @@ backend/celerybeat-schedule*
 
 # 本地构建临时目录（Windows 下 esbuild 需要可写的 TMPDIR）
 frontend/.tmp-build/
+
+# local screenshot scratch (may contain dev tokens)
+frontend/_shots/

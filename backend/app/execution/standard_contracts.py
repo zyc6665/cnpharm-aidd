@@ -128,7 +128,7 @@ OutputArtifactValue = StandardOutputArtifact | list[StandardOutputArtifact]
 class StandardExecutionResult(BaseModel):
     """Standard result envelope emitted by Tool Package adapters."""
 
-    result_version: Literal["aidd.sciminer/result"]
+    result_version: Literal["aidd.sciminer/result", "aidd.sciminer/result.v2"]
     artifacts: dict[str, OutputArtifactValue] = Field(default_factory=dict)
     relations: list[StandardRelationDeclaration] = Field(default_factory=list)
     summary: dict[str, Any] = Field(default_factory=dict)

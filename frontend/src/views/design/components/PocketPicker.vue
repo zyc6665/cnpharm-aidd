@@ -126,6 +126,7 @@
 
   const props = defineProps<{
     modelValue: DesignPocketSelection | null
+    defaultProjectId?: string
   }>()
 
   const emit = defineEmits<{
@@ -279,8 +280,12 @@
     })
   }
 
-  onMounted(() => {
-    void loadProjects()
+  onMounted(async () => {
+    await loadProjects()
+    if (!selectedProject.value && props.defaultProjectId) {
+      selectedProject.value = props.defaultProjectId
+      await handleProjectChange(props.defaultProjectId)
+    }
   })
 </script>
 

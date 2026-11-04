@@ -47,7 +47,9 @@
     <template v-if="isTerminal && !isFailure">
       <section class="results-summary" data-testid="results-summary">
         <span class="results-summary__count">
-          {{ t('design.results.moleculeCount', { count: rows.length }) }}
+          {{ isPeptideResult
+            ? t('design.results.peptideCount', { count: rows.length })
+            : t('design.results.moleculeCount', { count: rows.length }) }}
         </span>
       </section>
 
@@ -266,6 +268,7 @@ import { formatNumber } from '@/domain/common/format'
   const qedColumn = computed(() => findColumn([/qed/i]))
   const smilesColumn = computed(() => findColumn([/smiles/i]))
   const sequenceColumn = computed(() => findColumn([/sequence/i, /序列/i]))
+  const isPeptideResult = computed(() => Boolean(sequenceColumn.value) && !smilesColumn.value)
 
   const numericColumns = computed(() => columns.value.filter((column) => column.numeric))
 
@@ -351,6 +354,18 @@ import { formatNumber } from '@/domain/common/format'
     for (const [column, tag] of defs) {
       if (column) {
         entries.push({ key: tag, label: column.title, value: formatMetric(row[column.key]) })
+      }
+    }
+    if (isPeptideResult.value) {
+      for (const column of numericColumns.value) {
+        if (column.key === scoreColumn.value?.key || column.key === 'length') {
+          continue
+        }
+        entries.push({
+          key: column.key,
+          label: column.title,
+          value: formatMetric(row[column.key]),
+        })
       }
     }
     return entries

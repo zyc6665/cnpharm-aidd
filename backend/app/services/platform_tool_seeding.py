@@ -153,6 +153,17 @@ def _apply_manifest_overrides(
     只处理 ``tool_package_manifest`` 的嵌套结构，不复制任何 manifest 文本。
     """
     cfg = copy.deepcopy(config)
+    if cfg.get("type") == "k8s_job" and not cfg.get("resource_profile"):
+        gpu = bool(cfg.get("gpu_required"))
+        cfg["resource_profile"] = {
+            "tier": "gpu" if gpu else "cpu",
+            "cpu": 4,
+            "memory_gb": 16 if gpu else 8,
+            "gpu_required": gpu,
+            "gpu_memory_gb": 8 if gpu else 0,
+            "timeout_minutes": 60,
+            "parallelism": 1,
+        }
     image: str | None = None
     if image_digest:
         base_image = str(cfg.get("image") or "")
@@ -278,7 +289,18 @@ def _spec_from_model(model: dict) -> PlatformToolSpec:
     消除「lvpocket 特例分支 + 20261031_09 循环 + 增量折叠」各自拼 PlatformToolSpec
     的重复；新增工具只要产出一个同构 model dict 即可走同一路径。
     """
-    config = model["config"]
+    config = copy.deepcopy(model["config"])
+    if isinstance(config, dict) and config.get("type") == "k8s_job" and not config.get("resource_profile"):
+        gpu = bool(model.get("gpu_required", True))
+        config["resource_profile"] = {
+            "tier": "gpu" if gpu else "cpu",
+            "cpu": 4,
+            "memory_gb": 16 if gpu else 8,
+            "gpu_required": gpu,
+            "gpu_memory_gb": 8 if gpu else 0,
+            "timeout_minutes": 60,
+            "parallelism": 1,
+        }
     return PlatformToolSpec(
         slug=model["slug"],
         name=model["name"],

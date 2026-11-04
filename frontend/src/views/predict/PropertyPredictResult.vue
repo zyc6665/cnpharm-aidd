@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import HistogramChart from './HistogramChart.vue'
+import MoleculeAdmetDetail from './MoleculeAdmetDetail.vue'
 import { loadMoleculeTable } from './molecule-table'
 import { isNumericColumn, toNumericValues } from './histogram'
 import { downloadCsv } from './csv-export'
@@ -23,6 +24,14 @@ const searchText = ref('')
 const filterColumn = ref<string>('')
 const filterMin = ref<number | null>(null)
 
+const detailOpen = ref(false)
+const detailRow = ref<CsvPreviewRow | null>(null)
+
+function openDetail(record: CsvPreviewRow): void {
+  detailRow.value = record
+  detailOpen.value = true
+}
+
 function columnTitle(key: string, fallback: string): string {
   const suffix = PREDICT_COLUMN_I18N[key]
   return suffix ? t(`predict.result.${suffix}`) : fallback
@@ -36,8 +45,8 @@ const numericColumns = computed(() =>
   columns.value.filter(column => isNumericColumn(rows.value, column.key))
 )
 
-const matrixColumns = computed(() =>
-  columns.value.map((column, index) => {
+const matrixColumns = computed(() => {
+  const mapped = columns.value.map((column, index) => {
     const numeric = isNumericColumn(rows.value, column.key)
     return {
       title: columnTitle(column.key, column.title),
@@ -52,7 +61,18 @@ const matrixColumns = computed(() =>
         : undefined
     }
   })
-)
+  return [
+    ...mapped,
+    {
+      title: t('predict.result.detail'),
+      dataIndex: '__detail',
+      key: '__detail',
+      width: 96,
+      fixed: 'right' as const,
+      align: 'center' as const
+    }
+  ]
+})
 
 const filteredRows = computed(() => {
   const keyword = searchText.value.trim().toLowerCase()
@@ -170,15 +190,25 @@ onMounted(() => {
       </a-card>
 
       <a-card :title="t('predict.result.matrix')">
+        <p class="predict-result__hint">{{ t('predict.result.detailHint') }}</p>
         <a-table
           :columns="matrixColumns"
           :data-source="filteredRows"
           :pagination="{ pageSize: 20, showSizeChanger: true }"
           :scroll="{ x: 'max-content' }"
-          :row-key="(_record: Record<string, string>, index: number) => index"
+          :row-key="(record: CsvPreviewRow) => record.__rowKey"
+          :custom-row="(record: CsvPreviewRow) => ({ onClick: () => openDetail(record), style: 'cursor: pointer;' })"
           size="small"
           data-testid="predict-result-matrix"
-        />
+        >
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === '__detail'">
+              <a-button type="link" size="small" @click.stop="openDetail(record as CsvPreviewRow)">
+                {{ t('predict.result.detail') }}
+              </a-button>
+            </template>
+          </template>
+        </a-table>
       </a-card>
 
       <a-card :title="t('predict.result.histograms')">
@@ -192,6 +222,13 @@ onMounted(() => {
           </div>
         </div>
       </a-card>
+
+      <MoleculeAdmetDetail
+        v-model:open="detailOpen"
+        :row="detailRow"
+        :columns="columns"
+        :task-id="taskId"
+      />
     </template>
   </main>
 </template>
@@ -206,6 +243,12 @@ onMounted(() => {
 
 .predict-result__filters {
   margin-bottom: 0;
+}
+
+.predict-result__hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--ant-color-text-secondary, var(--theme-text-secondary));
 }
 
 .predict-result__count {

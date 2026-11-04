@@ -707,6 +707,7 @@ async def export_candidate_set(
             "design_score",
             "snapshot_score",
             "peptide_sequence",
+            "SMILES",
         ]
     )
     for item, candidate in rows:
@@ -728,6 +729,7 @@ async def export_candidate_set(
                 candidate.design_score if candidate.design_score is not None else "",
                 item.snapshot_score if item.snapshot_score is not None else "",
                 candidate.peptide_sequence or "",
+                compound.canonical_smiles if compound else "",
             ]
         )
 
