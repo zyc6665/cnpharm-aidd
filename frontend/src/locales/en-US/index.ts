@@ -2522,6 +2522,13 @@ export default {
     title: 'Admin Panel',
     dashboard: 'Dashboard',
     dashboardSubtitle: 'Review users, tools and task activity in one operational overview',
+    group: {
+      overview: 'Overview',
+      access: 'Users & Access',
+      tools: 'Tools & Models',
+      tasks: 'Tasks & Compute',
+      system: 'Audit & System'
+    },
     users: 'User Management',
     tools: 'Tool Management',
     tasks: 'Task Management',

@@ -2510,6 +2510,13 @@ export default {
     title: '管理后台',
     dashboard: '仪表盘',
     dashboardSubtitle: '集中查看用户、工具与任务运行情况，快速判断平台健康度',
+    group: {
+      overview: '概览',
+      access: '用户与权限',
+      tools: '工具与模型',
+      tasks: '任务与算力',
+      system: '审计与系统'
+    },
     users: '用户管理',
     tools: '工具管理',
     tasks: '任务管理',

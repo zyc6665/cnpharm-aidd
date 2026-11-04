@@ -126,13 +126,13 @@ test('应存在独立的产物 store 并从 store 入口导出', () => {
   assert.equal(source.includes("export { useArtifactsStore } from './artifacts'"), true)
 })
 
-test('管理后台应存在工作台分组管理路由与导航入口', () => {
+test('管理后台已下线工作台分组管理入口', () => {
   const routerSource = readSource('src/router/index.ts')
   const adminSource = readSource('src/views/admin/index.vue')
 
-  assert.equal(routerSource.includes("path: 'workbench-groups'"), true)
-  assert.equal(routerSource.includes('AdminWorkbenchGroups'), true)
-  assert.equal(adminSource.includes("key: 'workbench-groups'"), true)
+  assert.equal(routerSource.includes("path: 'workbench-groups'"), false)
+  assert.equal(routerSource.includes('AdminWorkbenchGroups'), false)
+  assert.equal(adminSource.includes("key: 'workbench-groups'"), false)
 })
 
 test('后台工作台分组管理页面文件应存在并包含分组与映射维护区', () => {
