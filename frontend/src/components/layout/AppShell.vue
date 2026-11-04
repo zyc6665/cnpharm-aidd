@@ -65,7 +65,7 @@
         <router-link
           to="/design"
           class="nav-item"
-          :class="{ active: route.path === '/design' }"
+          :class="{ active: route.path === '/design' && !route.query.focus }"
           :aria-label="t('nav.designPipeline')"
           :title="collapsed ? t('nav.designPipeline') : undefined"
         >
@@ -79,7 +79,7 @@
             :key="item.key"
             :to="item.to"
             class="nav-item"
-            :class="{ active: isActive([item.to]) }"
+            :class="{ active: isDesignItemActive(item) }"
             :aria-label="t(item.labelKey)"
             :title="collapsed ? t(item.labelKey) : undefined"
           >
@@ -188,7 +188,7 @@ import { useUserStore, useAppStore } from '@/stores'
 import ProtectedAvatar from '@/components/common/ProtectedAvatar.vue'
 import CommandPalette from '@/components/common/CommandPalette.vue'
 import { PLATFORM_NAME, PLATFORM_SHORT_NAME } from '@/config/brand'
-import { buildDesignNavGroups } from '@/domain/design/navigation'
+import { buildDesignNavGroups, isDesignNavItemActive, type DesignNavItem } from '@/domain/design/navigation'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -268,6 +268,11 @@ const DESIGN_NAV_ICONS: Record<string, Component> = {
 }
 function designIcon(key: string): Component {
   return DESIGN_NAV_ICONS[key] ?? AppstoreOutlined
+}
+
+function isDesignItemActive(item: DesignNavItem): boolean {
+  const focus = typeof route.query.focus === 'string' ? route.query.focus : ''
+  return isDesignNavItemActive(item, { path: route.path, focus })
 }
 
 const adminNav: NavItem[] = [

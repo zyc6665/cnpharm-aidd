@@ -143,6 +143,7 @@ import {
 } from '@/api/design'
 import StructurePredictForm from '@/components/design/StructurePredictForm.vue'
 import PocketPredictPanel from '@/components/design/PocketPredictPanel.vue'
+import { selectNewlyAdded } from '@/domain/design/pipeline'
 import type {
   PocketSummary,
   ProteinDetail,
@@ -334,8 +335,7 @@ async function handleStructurePredicted(): Promise<void> {
   try {
     const fresh = await listProteinStructures(selectedProtein.value)
     structures.value = fresh
-    const added =
-      fresh.find(structure => !structureSnapshot.value.includes(structure.id)) ?? fresh[0]
+    const added = selectNewlyAdded(structureSnapshot.value, fresh)
     if (added) {
       selectedStructure.value = added.id
       await loadPocketsForStructure(added.id)

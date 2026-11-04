@@ -28,10 +28,10 @@
             @completed="handleStructureCompleted"
             @error="handleStageError"
           />
-          <p v-else class="stage-note">该靶点下还没有蛋白，请先在「靶点与结构」添加蛋白序列。</p>
+          <p v-else class="stage-note">{{ t('workflow.guided.noProtein') }}</p>
           <div class="stage-actions">
-            <span class="stage-note">就地提交 Boltz-2 结构预测，完成后自动进入口袋预测。</span>
-            <a-button type="link" :disabled="!structureId" @click="goStructureDetail">去结构详情</a-button>
+            <span class="stage-note">{{ t('workflow.guided.structureNote') }}</span>
+            <a-button type="link" :disabled="!structureId" @click="goStructureDetail">{{ t('workflow.guided.goStructureDetail') }}</a-button>
           </div>
         </div>
 
@@ -48,10 +48,10 @@
             @predicted="handlePocketPredicted"
             @selected="handlePocketSelected"
           />
-          <p v-else class="stage-note">还没有可用结构，请先完成结构预测。</p>
+          <p v-else class="stage-note">{{ t('workflow.guided.noStructure') }}</p>
           <div class="stage-actions">
-            <span class="stage-note">就地预测口袋并「选定」一个作为设计起点，完成后自动进入分子生成。</span>
-            <a-button type="link" :disabled="!structureId" @click="goPockets">去口袋页批量管理</a-button>
+            <span class="stage-note">{{ t('workflow.guided.pocketNote') }}</span>
+            <a-button type="link" :disabled="!structureId" @click="goPockets">{{ t('workflow.guided.goPocketManage') }}</a-button>
           </div>
         </div>
 
@@ -97,6 +97,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+import { selectNewlyAdded } from '@/domain/design/pipeline'
 import MoleculeGeneration from '@/views/design/MoleculeGeneration.vue'
 import PeptideDesign from '@/views/design/PeptideDesign.vue'
 import PropertyPredictSubmit from '@/views/predict/PropertyPredictSubmit.vue'
@@ -110,6 +112,7 @@ import { listProjectResults } from '@/api/results'
 
 const props = defineProps<{ projectId: string; initialStep?: number }>()
 const router = useRouter()
+const { t } = useI18n()
 
 const stages = [
   { key: 'structure', title: '结构预测', desc: '为靶点蛋白生成高置信度三维结构，作为后续口袋识别与设计的起点。', hint: '' },
@@ -164,7 +167,7 @@ function snapshotStructures() {
 }
 
 function handleStageError(msg: string) {
-  message.error(msg || '操作失败')
+  message.error(msg || t('workflow.guided.actionFailed'))
 }
 
 async function refreshStructureList(id: string) {
@@ -177,7 +180,7 @@ async function refreshStructureList(id: string) {
 async function handleStructureCompleted() {
   if (!proteinId.value) return
   const fresh = await refreshStructureList(proteinId.value)
-  const added = fresh.find((item: any) => !structureIdSnapshot.value.includes(item.id)) ?? fresh[0] ?? null
+  const added = selectNewlyAdded(structureIdSnapshot.value, fresh)
   structure.value = added
   if (added) current.value = 1
 }

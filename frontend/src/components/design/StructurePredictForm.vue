@@ -86,7 +86,10 @@ async function handleSubmit(): Promise<void> {
     if (result.ok) {
       emit('completed', taskId)
     } else {
-      emit('error', result.status)
+      emit(
+        'error',
+        result.status === 'timeout' ? t('targets.predict.timeout') : t('targets.predict.failed')
+      )
     }
   } finally {
     waiting.value = false

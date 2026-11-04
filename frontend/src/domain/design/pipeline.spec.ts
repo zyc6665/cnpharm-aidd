@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildDesignStages, firstMissingStage, DESIGN_STAGES } from './pipeline'
+import { buildDesignStages, firstMissingStage, selectNewlyAdded, DESIGN_STAGES } from './pipeline'
 import type { ProjectStage } from '@/types/decisions'
 
 const stage: ProjectStage = {
@@ -39,7 +39,7 @@ describe('buildDesignStages', () => {
       key: 'pocket',
       readiness: 'missing',
       count: 0,
-      primaryPath: '/projects/p1/targets',
+      primaryPath: '/design?focus=pocket&project_id=p1',
     })
     expect(states[2]!.primaryPath).toBe('/design/molecules?project_id=p1')
   })
@@ -50,5 +50,17 @@ describe('buildDesignStages', () => {
 
   it('firstMissingStage returns the first non-ready stage', () => {
     expect(firstMissingStage(buildDesignStages(stage, 'p1'))?.key).toBe('pocket')
+  })
+})
+
+describe('selectNewlyAdded', () => {
+  it('picks the item whose id was not present before the run', () => {
+    expect(selectNewlyAdded(['a'], [{ id: 'a' }, { id: 'b' }])?.id).toBe('b')
+  })
+  it('falls back to the first item when nothing is new', () => {
+    expect(selectNewlyAdded(['a', 'b'], [{ id: 'a' }, { id: 'b' }])?.id).toBe('a')
+  })
+  it('returns null for an empty list', () => {
+    expect(selectNewlyAdded(['a'], [])).toBeNull()
   })
 })

@@ -64,4 +64,11 @@ describe('Pipeline', () => {
     await new Promise(r => setTimeout(r))
     expect(w.find('[data-testid="design-pipeline-guided"]').exists()).toBe(true)
   })
+
+  it('guides the user when there are no projects', async () => {
+    vi.mocked(listDesignProjects).mockResolvedValue([] as never)
+    const w = mount(Pipeline, { global: { plugins: [i18n], stubs } })
+    await new Promise(r => setTimeout(r))
+    expect(w.text()).toContain('返回工作台')
+  })
 })

@@ -43,7 +43,7 @@
             :items="stageItems"
           />
           <div class="hero-foot">
-            <span>当前阶段：<b>{{ stage?.stageName || '—' }}</b></span>
+            <span>当前阶段：<b>{{ stage?.stageName || '-' }}</b></span>
             <span v-if="nextStageName">下一步：{{ nextStageName }}</span>
             <span v-else>已到最后一阶段</span>
           </div>
@@ -169,13 +169,13 @@
                 <div v-if="selectedResidue" class="residue-detail">
                   <span class="rd-name">{{ selectedResidue.residue_name }}{{ selectedResidue.residue_seq }}</span>
                   <a-tag v-if="selectedResidue.is_key" color="orange">关键残基</a-tag>
-                  <span class="rd-item">链 {{ selectedResidue.chain || '—' }}</span>
+                  <span class="rd-item">链 {{ selectedResidue.chain || '-' }}</span>
                   <span class="rd-item">
                     贡献度
                     {{
                       selectedResidue.contribution !== null
                         ? (selectedResidue.contribution * 100).toFixed(1) + '%'
-                        : '—'
+                        : '-'
                     }}
                   </span>
                 </div>
@@ -236,7 +236,7 @@
                 </div>
               </template>
               <template v-else-if="column.key === 'weight'">
-                {{ record.compound?.mol_weight ? formatNumber(record.compound.mol_weight, 1) : '—' }}
+                {{ record.compound?.mol_weight ? formatNumber(record.compound.mol_weight, 1) : '-' }}
               </template>
               <template v-else-if="column.key === 'score'">
                 {{ formatNumber(record.design_score, 3) }}
@@ -510,7 +510,7 @@ const resultRows = computed(() =>
   results.value.map((item) => ({
     ...item,
     createdText: formatDateTime(item.created_at),
-    durationText: item.execution_time_sec ? `${Math.round(item.execution_time_sec)} s` : '—'
+    durationText: item.execution_time_sec ? `${Math.round(item.execution_time_sec)} s` : '-'
   }))
 )
 
@@ -529,16 +529,16 @@ const updatedText = computed(() => {
 })
 
 function formatNumber(value: number | null | undefined, digits = 2): string {
-  if (value === null || value === undefined || Number.isNaN(value)) return '—'
+  if (value === null || value === undefined || Number.isNaN(value)) return '-'
   return Number(value).toFixed(digits)
 }
 
 function formatCenter(
   center: { x?: number | null; y?: number | null; z?: number | null } | null | undefined
 ): string {
-  if (!center) return '—'
+  if (!center) return '-'
   const { x, y, z } = center
-  if (typeof x !== 'number' || typeof y !== 'number' || typeof z !== 'number') return '—'
+  if (typeof x !== 'number' || typeof y !== 'number' || typeof z !== 'number') return '-'
   return `${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)}`
 }
 
@@ -547,9 +547,9 @@ function formatClock(value: Date): string {
 }
 
 function formatDateTime(value: string | null | undefined): string {
-  if (!value) return '—'
+  if (!value) return '-'
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '—'
+  if (Number.isNaN(date.getTime())) return '-'
   return date.toLocaleString('zh-CN', {
     year: 'numeric',
     month: '2-digit',

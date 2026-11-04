@@ -51,3 +51,23 @@ export function buildDesignNavGroups(): DesignNavGroup[] {
     },
   ]
 }
+
+export interface DesignNavLocation {
+  path: string
+  focus?: string
+}
+
+/**
+ * 侧栏项是否高亮：`to` 可携带 `?focus=` 查询（结构/口袋入口），
+ * 不能只用 `route.path.startsWith(to)`，否则带 query 的项永远不高亮。
+ */
+export function isDesignNavItemActive(
+  item: DesignNavItem,
+  location: DesignNavLocation
+): boolean {
+  const [path, query] = item.to.split('?')
+  if (location.path !== path) return false
+  if (!query) return true
+  const expectedFocus = new URLSearchParams(query).get('focus') ?? ''
+  return (location.focus ?? '') === expectedFocus
+}

@@ -275,6 +275,15 @@ export default {
   },
 
   workflow: {
+    guided: {
+      noProtein: 'This target has no protein yet — add a protein sequence under Targets & Structures.',
+      structureNote: 'Submit a Boltz-2 structure prediction inline; it advances to pocket prediction when done.',
+      goStructureDetail: 'Structure details',
+      noStructure: 'No structure available yet — run structure prediction first.',
+      pocketNote: 'Predict pockets inline and select one as the design start; it advances to molecule generation when done.',
+      goPocketManage: 'Manage on pockets page',
+      actionFailed: 'Action failed'
+    },
     title: 'Tool Workbench',
     subtitle: 'Browse tools by research group, reuse historical artifacts, and launch the next task from one workspace',
     entry: {
@@ -1002,6 +1011,7 @@ export default {
       submitted: 'Structure prediction task submitted',
       waiting: 'Predicting structure…',
       failed: 'Failed to submit structure prediction task',
+      timeout: 'Structure prediction timed out, please retry',
       sequenceMissing: 'This protein has no sequence, cannot submit structure prediction',
       invalidNumber: 'Enter a valid number',
       backToTarget: 'Back to target details'
@@ -1773,7 +1783,7 @@ export default {
       continueFlow: 'Continue design flow',
       nextStep: 'Next step',
       loadError: 'Failed to load design runs',
-      empty: 'No design runs yet — start from "New design run"',
+      empty: 'No design runs yet — start from "Continue design flow"',
       openResult: 'View result',
       openDetail: 'Task detail',
       columns: {

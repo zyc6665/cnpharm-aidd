@@ -28,7 +28,7 @@ export const DESIGN_STAGES: readonly DesignStageDef[] = [
     labelKey: 'design.pipeline.stage.structure',
     counterKey: 'structures',
     gapCode: 'NO_STRUCTURE',
-    defaultPath: projectId => `/projects/${projectId}/targets`,
+    defaultPath: projectId => `/design?focus=structure&project_id=${projectId}`,
   },
   {
     key: 'pocket',
@@ -36,7 +36,7 @@ export const DESIGN_STAGES: readonly DesignStageDef[] = [
     labelKey: 'design.pipeline.stage.pocket',
     counterKey: 'selected_pockets',
     gapCode: 'NO_POCKET_SELECTED',
-    defaultPath: projectId => `/projects/${projectId}/targets`,
+    defaultPath: projectId => `/design?focus=pocket&project_id=${projectId}`,
   },
   {
     key: 'molecule',
@@ -83,6 +83,9 @@ export function buildDesignStages(
     const gap = stage?.gaps.find(item => item.code === def.gapCode) ?? null
     const readiness: StageReadiness =
       stage === null ? 'empty' : count > 0 ? 'ready' : 'missing'
+    // 结构/口袋「去完成」留在统一设计流程内（就地引导），不跳回旧详情页；
+    // 其余阶段优先用后端各口给的 link。
+    const inFlow = def.key === 'structure' || def.key === 'pocket'
     return {
       key: def.key,
       order: def.order,
@@ -90,7 +93,7 @@ export function buildDesignStages(
       readiness,
       count,
       gap,
-      primaryPath: gap?.link ?? def.defaultPath(projectId),
+      primaryPath: inFlow ? def.defaultPath(projectId) : (gap?.link ?? def.defaultPath(projectId)),
     }
   })
 }
@@ -100,4 +103,15 @@ export function firstMissingStage(
   states: readonly DesignStageState[]
 ): DesignStageState | null {
   return states.find(state => state.readiness !== 'ready') ?? null
+}
+
+/**
+ * 预测完成后「取新增的那一条」而不是盲取 items[0]：
+ * 传入提交前已存在的 id 集合，返回列表中第一个新 id；没有新增时退回第一条。
+ */
+export function selectNewlyAdded<T extends { id: string }>(
+  previousIds: readonly string[],
+  items: readonly T[]
+): T | null {
+  return items.find(item => !previousIds.includes(item.id)) ?? items[0] ?? null
 }

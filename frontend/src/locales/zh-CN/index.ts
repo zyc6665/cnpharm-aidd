@@ -273,6 +273,15 @@ export default {
   },
 
   workflow: {
+    guided: {
+      noProtein: '该靶点下还没有蛋白，请先在「靶点与结构」添加蛋白序列。',
+      structureNote: '就地提交 Boltz-2 结构预测，完成后自动进入口袋预测。',
+      goStructureDetail: '去结构详情',
+      noStructure: '还没有可用结构，请先完成结构预测。',
+      pocketNote: '就地预测口袋并「选定」一个作为设计起点，完成后自动进入分子生成。',
+      goPocketManage: '去口袋页批量管理',
+      actionFailed: '操作失败'
+    },
     title: '工具工作台',
     subtitle: '按研究分组浏览工具，在同一空间复用历史产物并继续发起计算任务',
     entry: {
@@ -999,6 +1008,7 @@ export default {
       submitted: '结构预测任务已提交',
       waiting: '结构预测中…',
       failed: '结构预测任务提交失败',
+      timeout: '结构预测超时，请重试',
       sequenceMissing: '该蛋白缺少序列，无法提交结构预测',
       invalidNumber: '请填写有效的数字',
       backToTarget: '返回靶点详情'
@@ -1765,7 +1775,7 @@ export default {
       continueFlow: '继续设计流程',
       nextStep: '下一步',
       loadError: '设计任务加载失败',
-      empty: '还没有设计任务，从「新建设计任务」开始',
+      empty: '还没有设计任务，从「继续设计流程」开始',
       openResult: '查看结果',
       openDetail: '任务详情',
       columns: {
