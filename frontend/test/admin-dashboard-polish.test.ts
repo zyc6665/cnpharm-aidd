@@ -26,7 +26,9 @@ test('后台仪表盘应提供更易扫描的统计和列表布局', () => {
   assert.equal(source.includes('stat-card--users'), true)
   assert.equal(source.includes('stat-card__accent'), true)
   assert.equal(source.includes('dashboard-panel'), true)
-  assert.equal(source.includes(':scroll="{ x: 560 }"'), true)
+  // 宽屏下不再强制横向滚动（原先 :scroll="{ x: 560 }" 会导致需要拖动查看）。
+  assert.equal(source.includes(':scroll="{ x: 560 }"'), false)
+  assert.equal(source.includes('size="small"'), true)
 })
 
 test('后台仪表盘标题文案应完成中英文配置', () => {

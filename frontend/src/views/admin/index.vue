@@ -110,7 +110,7 @@ function navigate(key: string) {
 @import '@/assets/styles/variables.less';
 
 .admin-page {
-  max-width: @container-xxl;
+  max-width: 1600px;
   margin: 0 auto;
   padding: @spacing-lg;
 }
