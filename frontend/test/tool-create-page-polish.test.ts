@@ -70,16 +70,14 @@ test('工具创建页应以结构化数据编辑全部执行器 map 和 list 字
   const source = readSource('src/views/tools/Create.vue')
   const createFormDomain = readSource('src/domain/tools/tool-create-form.ts')
 
-  for (const marker of [
-    'StructuredKeyValueEditor',
-    'StructuredStringListEditor',
+  for (const removedMarker of [
     'v-model="dockerCommandItems"',
     'v-model="dockerEnvEntries"',
     'v-model="pythonArgumentItems"',
     'v-model="sshEnvEntries"',
     'v-model="sshOutputGlobItems"'
   ]) {
-    assert.equal(source.includes(marker), true, `missing structured field marker ${marker}`)
+    assert.equal(source.includes(removedMarker), false, `执行器专属字段应已移除: ${removedMarker}`)
   }
 
   for (const marker of [
@@ -136,14 +134,21 @@ test('工具创建页应突出 Tool Package v2 主路径并标记旧语义映射
   for (const marker of [
     'tool-package-primary-path',
     'Tool Package v2',
-    '平台标准 Artifact 输入/输出槽',
+    '平台标准 Artifact 输入/输出槽'
+  ]) {
+    assert.equal(source.includes(marker), true, `missing unified contract marker ${marker}`)
+  }
+
+  // 旧版 Agent 语义映射与多执行器类型已下线
+  for (const removedMarker of [
     '旧版 Agent 语义映射（兼容）',
     '输入语义映射（兼容）',
     '输出语义映射（兼容）',
-    'binding_pocket@1',
-    'ligand_structure@1'
+    'Docker镜像',
+    'Python脚本',
+    'SSH作业'
   ]) {
-    assert.equal(source.includes(marker), true, `missing unified contract marker ${marker}`)
+    assert.equal(source.includes(removedMarker), false, `旧执行器/Agent 语义应已移除: ${removedMarker}`)
   }
 
   assert.equal(source.includes("from '@/domain/tools'"), true)

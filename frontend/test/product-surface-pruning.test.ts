@@ -116,11 +116,12 @@ test('管理员工具管理页应保留旧工具编辑并切换到 Tool Package 
 
   assert.equal(createSource.includes("route.name === 'AdminToolEdit'"), true)
   assert.equal(createSource.includes('createToolVersion'), true)
-  assert.equal(createSource.includes("value=\"ssh_job\""), true)
-  assert.equal(createSource.includes('ssh_host'), true)
-  assert.equal(createSource.includes('ssh_auth_type'), true)
-  assert.equal(createSource.includes('ssh_auth_ref'), true)
-  assert.equal(createSource.includes('ssh_password_ref'), true)
+  assert.equal(createSource.includes('k8s_image'), true)
+  // 多执行器（含 SSH）已下线，统一 k8s_job
+  assert.equal(createSource.includes('value="ssh_job"'), false)
+  assert.equal(createSource.includes('ssh_host'), false)
+  assert.equal(createSource.includes('ssh_auth_type'), false)
+  assert.equal(createSource.includes('ssh_auth_ref'), false)
 })
 
 test('管理员工具管理页不应再提供旧 platform_tool.json 导入入口', () => {

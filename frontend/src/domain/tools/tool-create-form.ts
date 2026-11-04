@@ -155,7 +155,7 @@ export function createToolCreateFormState(): ToolCreateFormState {
     version: '1.0.0',
     changelog: '',
     notes: '',
-    tool_type: 'docker_image',
+    tool_type: 'k8s_job',
     docker_image: '',
     python_script: '',
     ssh_host: '',

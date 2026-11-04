@@ -3,12 +3,28 @@
     <div class="container">
       <AppPageHeader :title="isEdit ? t('tools.editTool') : t('tools.createTool')">
         <template #actions>
+        <a-button @click="showGuide = true">
+          模型接入教程
+        </a-button>
         <a-button @click="goBack">
           <ArrowLeftOutlined />
           {{ t('common.back') }}
         </a-button>
         </template>
       </AppPageHeader>
+
+      <a-drawer v-model:open="showGuide" title="模型接入教程" :width="560">
+        <a-typography>
+          <a-typography-title :level="5">1. 构建镜像</a-typography-title>
+          <p>基于与集群匹配的 CUDA 基座；权重外置，通过 runtime.weights.mounts 只读挂载；入口读 <code>DRP_TASK_FILE</code>，写 <code>DRP_RESULT_FILE</code> 与 <code>/work/out</code>。</p>
+          <a-typography-title :level="5">2. 编写 Tool Package v2</a-typography-title>
+          <p>输入/输出用平台标准 Artifact 类型（如 protein_structure@1 / binding_pocket@1 / molecule_table@1 / ligand_structure@1 / run_report@1），参数用 parameters_schema。</p>
+          <a-typography-title :level="5">3. 发布与冒烟</a-typography-title>
+          <p>执行方式固定 k8s_job；填镜像 digest 与资源画像，校验 → 冒烟（K8s Job Succeeded、result.json 合法）→ 发布。已发布版本不可就地改，走“基于当前版本新建版本”。</p>
+          <a-typography-title :level="5">4. 完整教程</a-typography-title>
+          <p>见 <code>docs/28-模型接入教程（镜像构建与ToolPackage v2）.md</code></p>
+        </a-typography>
+      </a-drawer>
 
       <SkeletonDetail v-if="loading" />
         <a-card v-else class="form-card">
@@ -237,274 +253,15 @@
               />
             </a-form-item>
 
-            <!-- 工具类型 -->
-            <a-divider orientation="left">工具类型</a-divider>
-
+            <!-- 执行方式（固定 k8s_job） -->
+            <a-divider orientation="left">执行方式</a-divider>
             <a-alert
               class="tool-package-primary-path"
               type="info"
               show-icon
-              message="新工具主路径：Tool Package v2"
-              description="模型部署时通过 adapter 把原始输入输出转换为平台标准 Artifact 输入/输出槽；下方旧版 ToolVersion.config 表单仅用于兼容已有工具。"
+              message="执行方式：Kubernetes Job（k8s_job）"
+              description="平台统一以 k8s_job 调度（GPU 通过 nvidia.com/gpu 申请）；主路径为 Tool Package v2，输入/输出使用平台标准 Artifact 输入/输出槽。"
             />
-
-            <a-alert
-              v-if="registrationMode === 'package'"
-              type="success"
-              show-icon
-              :message="packageLoading ? '正在载入 Tool Package v2' : '已载入 Tool Package v2'"
-              description="manifest 会自动绑定到新版本。请继续填写执行器连接信息，保存后即可生成平台 ToolVersion。"
-            />
-
-            <a-form-item label="工具类型" name="tool_type">
-              <a-radio-group v-model:value="formState.tool_type">
-                <a-radio value="docker_image">Docker镜像</a-radio>
-                <a-radio value="python_script">Python脚本</a-radio>
-                <a-radio value="ssh_job">SSH作业</a-radio>
-                <a-radio value="k8s_job">Kubernetes Job</a-radio>
-              </a-radio-group>
-            </a-form-item>
-            <!-- Docker配置 -->
-            <template v-if="formState.tool_type === 'docker_image'">
-              <a-divider orientation="left">Docker配置</a-divider>
-
-              <a-form-item label="Docker镜像" name="docker_image" :rules="[{ required: true, message: '请输入Docker镜像名称' }]">
-                <a-input
-                  v-model:value="formState.docker_image"
-                  placeholder="例如：python:3.9-slim"
-                />
-              </a-form-item>
-
-              <a-form-item label="启动命令（可选）" name="docker_command">
-                <StructuredStringListEditor
-                  v-model="dockerCommandItems"
-                  add-label="添加命令参数"
-                  empty-text="未设置时使用镜像默认命令"
-                  placeholder="一个完整命令项，如 /app/main.py"
-                />
-                <template #extra>
-                  <span class="form-extra">每行是一个命令项，包含空格的单项不会被拆分。</span>
-                </template>
-              </a-form-item>
-
-              <a-form-item label="环境变量（可选）" name="docker_env">
-                <StructuredKeyValueEditor
-                  v-model="dockerEnvEntries"
-                  add-label="添加环境变量"
-                  key-placeholder="变量名，如 MODEL_PATH"
-                  value-placeholder="变量值，如 /models"
-                />
-              </a-form-item>
-            </template>
-
-            <!-- Python脚本配置 -->
-            <template v-if="formState.tool_type === 'python_script'">
-              <a-divider orientation="left">Python脚本配置</a-divider>
-
-              <a-form-item label="脚本路径" name="python_script" :rules="[{ required: true, message: '请输入Python脚本路径' }]">
-                <a-input
-                  v-model:value="formState.python_script"
-                  placeholder="例如：/app/scripts/predict.py"
-                />
-              </a-form-item>
-
-              <a-form-item label="脚本参数（可选）" name="python_args">
-                <StructuredStringListEditor
-                  v-model="pythonArgumentItems"
-                  add-label="添加脚本参数"
-                  empty-text="暂无额外脚本参数"
-                  placeholder="一个完整参数，如 --batch-size 或 32"
-                />
-                <template #extra>
-                  <span class="form-extra">参数按列表传递，不经过 shell 解析。</span>
-                </template>
-              </a-form-item>
-            </template>
-
-            <!-- SSH 作业配置 -->
-            <template v-if="formState.tool_type === 'ssh_job'">
-              <a-divider orientation="left">SSH作业配置</a-divider>
-
-              <a-row :gutter="24">
-                <a-col :span="16">
-                  <a-form-item label="远端主机" name="ssh_host" :rules="[{ required: true, message: '请输入远端主机地址' }]">
-                    <a-input
-                      v-model:value="formState.ssh_host"
-                      placeholder="例如：gpu-node-01.internal"
-                    />
-                  </a-form-item>
-                </a-col>
-                <a-col :span="8">
-                  <a-form-item label="SSH端口" name="ssh_port">
-                    <a-input-number
-                      v-model:value="formState.ssh_port"
-                      :min="1"
-                      :max="65535"
-                      style="width: 100%"
-                    />
-                  </a-form-item>
-                </a-col>
-              </a-row>
-
-              <a-row :gutter="24">
-                <a-col :span="12">
-                  <a-form-item label="SSH用户" name="ssh_username" :rules="[{ required: true, message: '请输入SSH用户名' }]">
-                    <a-input
-                      v-model:value="formState.ssh_username"
-                      placeholder="例如：platform_runner"
-                    />
-                  </a-form-item>
-                </a-col>
-                <a-col :span="12">
-                  <a-form-item label="认证方式" name="ssh_auth_type">
-                    <a-select v-model:value="formState.ssh_auth_type">
-                      <a-select-option value="key">私钥引用</a-select-option>
-                      <a-select-option value="password">密码引用</a-select-option>
-                    </a-select>
-                  </a-form-item>
-                </a-col>
-              </a-row>
-
-              <a-row :gutter="24">
-                <a-col :span="12">
-                  <a-form-item
-                    v-if="formState.ssh_auth_type === 'password'"
-                    label="密码引用"
-                    name="ssh_password_ref"
-                    :rules="[{ required: true, message: '请输入密码引用名' }]"
-                  >
-                    <a-input
-                      v-model:value="formState.ssh_password_ref"
-                      placeholder="例如：ssh_gpu_node_01_password"
-                    />
-                    <template #extra>
-                      <span class="form-extra">引用 Worker 节点预置的 SSH 密码，不在配置中保存明文密码</span>
-                    </template>
-                  </a-form-item>
-                  <a-form-item
-                    v-else
-                    label="私钥引用"
-                    name="ssh_auth_ref"
-                    :rules="[{ required: true, message: '请输入私钥引用名' }]"
-                  >
-                    <a-input
-                      v-model:value="formState.ssh_auth_ref"
-                      placeholder="例如：ssh_gpu_node_01"
-                    />
-                    <template #extra>
-                      <span class="form-extra">引用 Worker 节点预置的 SSH 私钥，不在配置中保存明文密钥</span>
-                    </template>
-                  </a-form-item>
-                </a-col>
-              </a-row>
-
-              <a-row :gutter="24">
-                <a-col :span="12">
-                  <a-form-item label="运行模式" name="ssh_runner_mode">
-                    <a-select v-model:value="formState.ssh_runner_mode">
-                      <a-select-option value="docker_exec">docker_exec</a-select-option>
-                      <a-select-option value="shell">shell</a-select-option>
-                    </a-select>
-                  </a-form-item>
-                </a-col>
-                <a-col :span="12">
-                  <a-form-item label="远端任务根目录" name="ssh_remote_base_dir" :rules="[{ required: true, message: '请输入远端任务根目录' }]">
-                    <a-input
-                      v-model:value="formState.ssh_remote_base_dir"
-                      placeholder="例如：/srv/platform-jobs"
-                    />
-                  </a-form-item>
-                </a-col>
-              </a-row>
-
-              <a-row :gutter="24">
-                <a-col :span="12">
-                  <a-form-item label="统一入口脚本" name="ssh_entrypoint" :rules="[{ required: true, message: '请输入统一入口脚本路径' }]">
-                    <a-input
-                      v-model:value="formState.ssh_entrypoint"
-                      placeholder="例如：/app/platform_run.sh"
-                    />
-                  </a-form-item>
-                </a-col>
-                <a-col v-if="formState.ssh_runner_mode === 'docker_exec'" :span="12">
-                  <a-form-item label="远端容器名" name="ssh_container_name" :rules="[{ required: true, message: '请输入远端容器名' }]">
-                    <a-input
-                      v-model:value="formState.ssh_container_name"
-                      placeholder="例如：targetdiff-prod"
-                    />
-                  </a-form-item>
-                </a-col>
-                <a-col v-else :span="12">
-                  <a-form-item label="运行设备（可选）" name="ssh_device">
-                    <a-input
-                      v-model:value="formState.ssh_device"
-                      placeholder="例如：cuda:0"
-                    />
-                  </a-form-item>
-                </a-col>
-              </a-row>
-
-              <a-row v-if="formState.ssh_runner_mode === 'docker_exec'" :gutter="24">
-                <a-col :span="12">
-                  <a-form-item label="容器内任务根目录（可选）" name="ssh_container_base_dir">
-                    <a-input
-                      v-model:value="formState.ssh_container_base_dir"
-                      placeholder="例如：/workspace/platform-jobs"
-                    />
-                    <template #extra>
-                      <span class="form-extra">宿主机与容器内挂载路径不一致时填写</span>
-                    </template>
-                  </a-form-item>
-                </a-col>
-                <a-col :span="12">
-                  <a-form-item label="运行设备（可选）" name="ssh_device">
-                    <a-input
-                      v-model:value="formState.ssh_device"
-                      placeholder="例如：cuda:0"
-                    />
-                  </a-form-item>
-                </a-col>
-              </a-row>
-
-              <a-form-item label="环境变量（可选）" name="ssh_env">
-                <StructuredKeyValueEditor
-                  v-model="sshEnvEntries"
-                  add-label="添加环境变量"
-                  key-placeholder="变量名，如 CUDA_VISIBLE_DEVICES"
-                  value-placeholder="变量值"
-                />
-                <template #extra>
-                  <span class="form-extra">环境变量会在远端入口脚本前注入。</span>
-                </template>
-              </a-form-item>
-
-              <a-form-item label="输出文件匹配规则（可选）" name="ssh_output_globs">
-                <StructuredStringListEditor
-                  v-model="sshOutputGlobItems"
-                  add-label="添加匹配规则"
-                  empty-text="暂无输出文件匹配规则"
-                  placeholder="例如 output/artifacts/**/*"
-                />
-                <template #extra>
-                  <span class="form-extra">只允许匹配 output/ 目录下的文件。</span>
-                </template>
-              </a-form-item>
-
-              <a-row :gutter="24">
-                <a-col :span="12">
-                  <a-form-item label="执行后清理远端目录" name="ssh_cleanup_remote">
-                    <a-switch v-model:checked="formState.ssh_cleanup_remote" />
-                    <span class="switch-label">{{ formState.ssh_cleanup_remote ? '开启' : '关闭' }}</span>
-                  </a-form-item>
-                </a-col>
-                <a-col :span="12">
-                  <a-form-item label="严格校验主机指纹" name="ssh_strict_host_key_checking">
-                    <a-switch v-model:checked="formState.ssh_strict_host_key_checking" />
-                    <span class="switch-label">{{ formState.ssh_strict_host_key_checking ? '开启' : '关闭' }}</span>
-                  </a-form-item>
-                </a-col>
-              </a-row>
-            </template>
 
             <!-- Kubernetes Job 配置 -->
             <template v-if="formState.tool_type === 'k8s_job'">
@@ -582,130 +339,6 @@
               </template>
             </a-form-item>
 
-            <!-- Agent 编排能力 -->
-            <a-divider orientation="left">旧版 Agent 语义映射（兼容）</a-divider>
-
-            <a-form-item label="Agent 可用" name="agent_capability_enabled">
-              <a-switch
-                v-model:checked="formState.agent_capability_enabled"
-                @change="handleAgentCapabilityToggle"
-              />
-              <span class="switch-label">
-                {{ formState.agent_capability_enabled ? '开启' : '关闭' }}
-              </span>
-              <template #extra>
-                <span class="form-extra">仅兼容旧工具；新工具应通过 Tool Package v2 声明标准 Artifact 输入/输出槽。</span>
-              </template>
-            </a-form-item>
-
-            <template v-if="formState.agent_capability_enabled">
-            <a-row :gutter="24">
-              <a-col :span="12">
-                <a-form-item label="Agent 能力" name="agent_capability">
-                  <a-select v-model:value="formState.agent_capability">
-                    <a-select-option value="pocket_prediction">口袋预测 pocket_prediction</a-select-option>
-                    <a-select-option value="molecule_generation">分子生成 molecule_generation</a-select-option>
-                    <a-select-option value="format_conversion">格式转换 format_conversion</a-select-option>
-                    <a-select-option value="docking">分子对接 docking</a-select-option>
-                    <a-select-option value="affinity_prediction">亲和力预测 affinity_prediction</a-select-option>
-                    <a-select-option value="property_prediction">性质预测 property_prediction</a-select-option>
-                    <a-select-option value="general_tool">通用工具 general_tool</a-select-option>
-                  </a-select>
-                </a-form-item>
-              </a-col>
-              <a-col :span="12">
-                <a-form-item label="Agent 阶段" name="agent_stage">
-                  <a-input
-                    v-model:value="formState.agent_stage"
-                    placeholder="默认与能力一致，例如 molecule_generation"
-                  />
-                </a-form-item>
-              </a-col>
-            </a-row>
-
-            <div class="agent-capability-block">
-              <div class="agent-capability-header">
-                <span>输入语义映射（兼容）</span>
-                <a-button size="small" @click="addAgentInput">
-                  <PlusOutlined />
-                  添加输入
-                </a-button>
-              </div>
-              <a-row
-                v-for="(input, index) in formState.agent_inputs"
-                :key="`agent-input-${index}`"
-                :gutter="12"
-                class="agent-capability-row"
-              >
-                <a-col :span="7">
-                  <a-input v-model:value="input.semantic_type" placeholder="semantic_type，如 binding_pocket@1" />
-                </a-col>
-                <a-col :span="7">
-                  <a-input v-model:value="input.field" placeholder="工具字段，如 protein_pdb" />
-                </a-col>
-                <a-col :span="7">
-                  <a-input v-model:value="input.accepted_extensions" placeholder="扩展名，如 .pdb,.sdf" />
-                </a-col>
-                <a-col :span="3">
-                  <a-button block danger @click="removeAgentInput(index)">
-                    <DeleteOutlined />
-                  </a-button>
-                </a-col>
-              </a-row>
-            </div>
-
-            <div class="agent-capability-block">
-              <div class="agent-capability-header">
-                <span>输出语义映射（兼容）</span>
-                <a-button size="small" @click="addAgentOutput">
-                  <PlusOutlined />
-                  添加输出
-                </a-button>
-              </div>
-              <a-row
-                v-for="(output, index) in formState.agent_outputs"
-                :key="`agent-output-${index}`"
-                :gutter="12"
-                class="agent-capability-row"
-              >
-                <a-col :span="5">
-                  <a-input v-model:value="output.semantic_type" placeholder="semantic_type，如 ligand_structure@1" />
-                </a-col>
-                <a-col :span="4">
-                  <a-select v-model:value="output.source">
-                    <a-select-option value="output_files">文件</a-select-option>
-                    <a-select-option value="output_data">结果数据</a-select-option>
-                  </a-select>
-                </a-col>
-                <a-col :span="4">
-                  <a-input v-model:value="output.path" placeholder="数据路径，可选" />
-                </a-col>
-                <a-col :span="4">
-                  <a-input v-model:value="output.match_extension" placeholder="扩展名，如 .sdf" />
-                </a-col>
-                <a-col :span="4">
-                  <a-input v-model:value="output.filename_contains_any" placeholder="文件名关键词，逗号分隔" />
-                </a-col>
-                <a-col :span="2">
-                  <a-switch v-model:checked="output.required" />
-                </a-col>
-                <a-col :span="1">
-                  <a-button danger @click="removeAgentOutput(index)">
-                    <DeleteOutlined />
-                  </a-button>
-                </a-col>
-              </a-row>
-            </div>
-
-            <a-form-item label="Agent 默认参数 JSON" name="agent_defaults">
-              <a-textarea
-                v-model:value="agentDefaultsText"
-                placeholder='{"params.n_samples": 8, "params.device": "cuda:0"}'
-                :rows="3"
-              />
-            </a-form-item>
-            </template>
-
             <!-- 提交按钮 -->
             <a-form-item class="form-actions">
               <a-space size="middle">
@@ -782,6 +415,7 @@
   const formRef = ref<FormInstance>()
   const loading = ref(false)
   const submitting = ref(false)
+  const showGuide = ref(false)
   const toolTemplates = ref<ToolTemplateSummary[]>([])
   const selectedToolTemplateKey = ref<string>()
   const creatingTemplateDraft = ref(false)
