@@ -1761,6 +1761,10 @@ export default {
         validation: 'Validation'
       }
     },
+    upstream: {
+      missingStructure: 'This protein has no structure yet — predict one inline below',
+      missingPocket: 'No selected pocket for this structure yet — predict and select one'
+    },
     runs: {
       title: 'Design Runs',
       subtitle: 'Molecule generation, peptide design, property prediction, virtual screening and MD runs you and your team launched here',

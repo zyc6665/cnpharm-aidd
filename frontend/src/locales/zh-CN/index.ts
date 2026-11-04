@@ -1753,6 +1753,10 @@ export default {
         validation: '计算验证'
       }
     },
+    upstream: {
+      missingStructure: '该蛋白还没有结构，先在下方就地预测一个',
+      missingPocket: '该结构还没有「已选定」的口袋，先预测并选定一个'
+    },
     runs: {
       title: '设计任务',
       subtitle: '你和团队在这个平台上跑过的分子生成、多肽设计、性质预测、虚拟筛选与分子动力学任务',
