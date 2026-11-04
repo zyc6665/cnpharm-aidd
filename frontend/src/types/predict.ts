@@ -4,6 +4,12 @@
 /** 契约规定的提交工具 slug（P-21）。 */
 export const ADMET_TOOL_SLUG = 'molp-pc-property-prediction'
 
+/** 亲和力预测模型（归入「性质预测」环节）：msign 与 boltz2-affinity。 */
+export const AFFINITY_TOOL_SLUGS = [
+  'msign-affinity-prediction',
+  'boltz2-affinity-prediction'
+] as const
+
 /** 契约规定的 8 个指标组枚举，顺序即界面展示顺序。 */
 export const PREDICT_TASK_GROUPS = [
   'Absorption',

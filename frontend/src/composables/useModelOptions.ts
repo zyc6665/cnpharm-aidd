@@ -17,6 +17,8 @@ export interface ModelOption {
   version?: string
   mock?: boolean
   isDefault: boolean
+  /** 该工具契约声明的输入字段（用于亲和力等页按模型动态渲染输入）。 */
+  inputFields: string[]
 }
 
 export interface UseModelOptionsResult {
@@ -73,6 +75,9 @@ export function useModelOptions(
         version: tool.current_version?.version,
         mock: tool.mock,
         isDefault: tool.slug === defaultSlug,
+        inputFields: (tool.contract?.capability?.inputs ?? [])
+          .map(input => input.field)
+          .filter((field): field is string => Boolean(field)),
       }))
       options.value = next
 
