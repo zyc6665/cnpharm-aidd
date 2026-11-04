@@ -368,7 +368,7 @@
               · 当前版本：{{ kubernetesOptions.existing_tool.current_version_id || '未设置' }}
             </p>
             <a-table
-              :scroll="{ x: 720 }"
+              :scroll="{ x: 'max-content' }"
               v-if="kubernetesOptions.tool_versions.length"
               class="tool-version-table"
               size="small"

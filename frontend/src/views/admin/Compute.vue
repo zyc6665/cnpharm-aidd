@@ -122,7 +122,7 @@
 
     <a-card :title="t('admin.compute.allocations')" class="compute-allocations">
       <a-table
-        :scroll="{ x: 900 }"
+        :scroll="{ x: 'max-content' }"
         :columns="allocationColumns"
         :data-source="allocations"
         :loading="allocationLoading"

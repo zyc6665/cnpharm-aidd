@@ -211,6 +211,29 @@ function navigate(key: string) {
   flex: 1;
   min-width: 0;
   min-height: 60vh;
+
+  // 统一后台各页表格/卡片观感（只作用于管理后台内容区）
+  :deep(.ant-table) {
+    font-size: @font-size-sm;
+  }
+
+  :deep(.ant-table-thead > tr > th) {
+    background: @bg-elevated;
+    color: @text-secondary;
+    font-weight: @font-weight-semibold;
+  }
+
+  :deep(.ant-card) {
+    border-radius: @border-radius-lg;
+  }
+
+  :deep(.ant-card-head) {
+    border-bottom-color: @border-color;
+  }
+
+  :deep(.ant-table-pagination.ant-pagination) {
+    margin: @spacing-md 0 0;
+  }
 }
 
 @media (max-width: @screen-md) {
