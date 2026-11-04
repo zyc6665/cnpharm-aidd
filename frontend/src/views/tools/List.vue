@@ -3,18 +3,6 @@
     <div class="container">
       <AppPageHeader :title="t('tools.title')" :subtitle="t('tools.subtitle')" />
 
-      <div class="workflow-entry-card">
-        <div class="workflow-entry-copy">
-          <h2 class="workflow-entry-title">{{ t('workflow.title') }}</h2>
-          <p class="workflow-entry-desc">{{ t('workflow.subtitle') }}</p>
-        </div>
-        <router-link to="/workflow">
-          <a-button type="primary" size="large">
-            {{ t('workflow.entry.tools') }}
-          </a-button>
-        </router-link>
-      </div>
-
       <!-- 视图切换标签 -->
       <div class="view-tabs">
         <a-radio-group v-model:value="currentView" button-style="solid" size="large" @change="handleViewChange">
@@ -29,6 +17,29 @@
         </a-radio-group>
       </div>
 
+      <!-- 分类快捷筛选 -->
+      <div class="category-chips" data-testid="tools-category-chips">
+        <button
+          type="button"
+          class="category-chip"
+          :class="{ active: !selectedCategory }"
+          @click="selectCategory(undefined)"
+        >
+          {{ t('tools.allCategories') }}
+        </button>
+        <button
+          v-for="cat in categories"
+          :key="cat.name"
+          type="button"
+          class="category-chip"
+          :class="{ active: selectedCategory === cat.name }"
+          @click="selectCategory(cat.name)"
+        >
+          {{ cat.name }}
+          <span v-if="cat.count" class="category-count">{{ cat.count }}</span>
+        </button>
+      </div>
+
       <!-- 搜索和筛选 -->
       <AppFilterBar>
         <a-input-search
@@ -39,21 +50,6 @@
           allow-clear
           @search="handleSearch"
         />
-        <a-select
-          v-model:value="selectedCategory"
-          :placeholder="t('tools.allCategories')"
-          class="tool-filter-select"
-          size="large"
-          allow-clear
-          @change="handleCategoryChange"
-        >
-          <a-select-option v-for="cat in categories" :key="cat.name" :value="cat.name">
-            <span class="category-option">
-              {{ cat.name }}
-              <span v-if="cat.count" class="category-count">({{ cat.count }})</span>
-            </span>
-          </a-select-option>
-        </a-select>
         <a-select
           v-model:value="selectedTag"
           :placeholder="t('tools.filterTags')"
@@ -116,6 +112,21 @@
                   <div class="tool-icon">
                     <span v-if="tool.icon">{{ tool.icon }}</span>
                     <ToolOutlined v-else />
+                  </div>
+                  <div class="tool-header-side">
+                    <span v-if="tool.category" class="tool-category">{{ tool.category }}</span>
+                    <button
+                      v-if="isLoggedIn"
+                      type="button"
+                      class="tool-fav-btn"
+                      :aria-label="t('tools.favorites')"
+                      @click.stop="toggleFavorite(tool)"
+                      @keydown.enter.stop="toggleFavorite(tool)"
+                      @keydown.space.prevent.stop="toggleFavorite(tool)"
+                    >
+                      <HeartFilled v-if="tool.is_favorited" class="favorited" />
+                      <HeartOutlined v-else />
+                    </button>
                   </div>
                 </div>
                 <h3 class="tool-name" :title="tool.name">{{ tool.name }}</h3>
@@ -281,6 +292,15 @@
     fetchData()
   }
 
+  const selectCategory = (name?: string) => {
+    selectedCategory.value = name
+    handleCategoryChange()
+  }
+
+  const toggleFavorite = (tool: { id: string }) => {
+    void toolsStore.toggleFavorite(tool.id)
+  }
+
   const handleTagChange = () => {
     currentPage.value = 1
     fetchData()
@@ -337,16 +357,44 @@
   }
 
   .workflow-entry-card {
-    .card();
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: @spacing-lg;
-    margin-bottom: @spacing-xl;
+    display: none;
+  }
 
-    @media (max-width: @screen-md) {
-      flex-direction: column;
-      align-items: flex-start;
+  // 分类快捷筛选
+  .category-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: @spacing-sm;
+    margin-bottom: @spacing-lg;
+  }
+
+  .category-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: 1px solid @border-color;
+    border-radius: 999px;
+    background: @bg-surface;
+    color: @text-color-light-secondary;
+    font-size: @font-size-sm;
+    cursor: pointer;
+    transition: all @transition-fast;
+
+    &:hover {
+      color: @text-color-light-primary;
+      border-color: @border-color-hover;
+    }
+
+    &.active {
+      color: @accent-color;
+      border-color: @accent-color-border;
+      background: @accent-color-light;
+    }
+
+    .category-count {
+      color: @text-color-light-tertiary;
+      font-size: @font-size-xs;
     }
   }
 
@@ -460,6 +508,48 @@
     justify-content: space-between;
     align-items: flex-start;
     margin-bottom: @spacing-md;
+  }
+
+  .tool-header-side {
+    display: flex;
+    align-items: center;
+    gap: @spacing-sm;
+    min-width: 0;
+  }
+
+  .tool-category {
+    max-width: 120px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: @bg-elevated;
+    border: 1px solid @border-color;
+    color: @text-color-light-tertiary;
+    font-size: @font-size-xs;
+    .text-ellipsis();
+  }
+
+  .tool-fav-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: @text-color-light-tertiary;
+    cursor: pointer;
+    transition: all @transition-fast;
+
+    &:hover {
+      color: @accent-color;
+      background: @accent-color-light;
+    }
+
+    .favorited {
+      color: @error-color;
+    }
   }
 
   .tool-icon {
