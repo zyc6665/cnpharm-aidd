@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><link rel="stylesheet" href="mockup.css">
+<style>
+.wrap{max-width:1180px}
+.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.title{font-size:24px;font-weight:700}
+.sub{color:var(--text2);font-size:13px;margin-top:6px}
+.btn-help{display:inline-flex;gap:6px;align-items:center;padding:7px 14px;border:1px solid var(--accent-b);border-radius:8px;background:var(--accent-l);color:var(--accent-h);font-weight:600;font-size:13px}
+.layout{display:flex;gap:18px;align-items:flex-start}
+.steps{flex:0 0 230px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:4px}
+.step{display:flex;gap:10px;align-items:flex-start;padding:10px;border-radius:8px;color:var(--text2)}
+.step.active{background:var(--accent-l)}
+.step.done .num{background:var(--success-l);color:#4ade80;border-color:rgba(34,197,94,.4)}
+.step.active .num{background:var(--accent);color:#fff}
+.num{width:24px;height:24px;border-radius:50%;border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex:0 0 24px}
+.step .t{font-size:13px;font-weight:600}
+.step .d{font-size:11px;color:var(--text3);margin-top:2px}
+.main{flex:1;min-width:0;display:flex;flex-direction:column;gap:16px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px}
+.card h3{font-size:15px;font-weight:600;margin-bottom:14px}
+.field label{display:block;font-size:12px;color:var(--text2);margin-bottom:6px}
+.input{background:var(--elev);border:1px solid var(--border2);border-radius:7px;padding:9px 11px;font-size:13px;color:var(--text)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.slot{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;background:var(--elev)}
+.slot .n{font-weight:600;font-size:13px}
+.slot .ty{font-size:12px;color:var(--accent-h);font-family:monospace}
+.pill{font-size:10px;padding:1px 7px;border-radius:999px;background:var(--accent-l);color:var(--accent-h);font-weight:600}
+.hint{font-size:12px;color:var(--text3);margin-top:6px}
+.side{flex:0 0 210px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;font-size:12px;color:var(--text2);display:flex;flex-direction:column;gap:8px}
+.side b{color:var(--text)}
+.actions{display:flex;justify-content:flex-end;gap:10px}
+</style></head>
+<body><div class="app">
+  <aside class="sidebar">
+    <div class="brand"><span class="logo"></span>中国医药 AIDD</div>
+    <nav class="nav"><div class="nav-item"><span class="ic">⌂</span>工作台</div><div class="nav-item"><span class="ic">▦</span>工具</div><div class="nav-item"><span class="ic">☰</span>任务</div><div class="nav-item"><span class="ic">◈</span>项目成果</div></nav>
+    <div class="section-label">设计流程</div>
+    <nav class="nav"><div class="nav-item"><span class="ic">◎</span>流程总览</div><div class="nav-item"><span class="ic">✦</span>分子生成</div></nav>
+    <div style="margin-top:auto"><div class="nav-item active"><span class="ic">⚙</span>管理</div></div>
+  </aside>
+  <main class="main">
+    <div class="wrap">
+      <div class="top">
+        <div><div class="title">编辑模型 · Pocket2Mol</div><div class="sub">按 k8s_job 统一调度；输入/输出遵循平台标准 Artifact 契约</div></div>
+        <button class="btn-help">📘 模型接入教程</button>
+      </div>
+      <div class="layout">
+        <aside class="steps">
+          <div class="step done"><span class="num">✓</span><div><div class="t">① 基本信息</div><div class="d">名称 / slug / 能力族</div></div></div>
+          <div class="step done"><span class="num">✓</span><div><div class="t">② 镜像与运行</div><div class="d">镜像 digest / 资源画像</div></div></div>
+          <div class="step active"><span class="num">3</span><div><div class="t">③ 输入 / 输出契约</div><div class="d">标准 Artifact 类型</div></div></div>
+          <div class="step"><span class="num">4</span><div><div class="t">④ 运行参数</div><div class="d">parameters_schema</div></div></div>
+          <div class="step"><span class="num">5</span><div><div class="t">⑤ 版本与发布</div><div class="d">版本号 / 变更说明 / 冒烟</div></div></div>
+        </aside>
+        <div class="main">
+          <div class="card">
+            <h3>输入（Artifact inputs）<span class="pill" style="margin-left:8px">平台标准类型</span></h3>
+            <div class="slot"><div><div class="n">protein_pdb <span style="color:var(--text3);font-weight:400">蛋白结构</span></div><div class="ty">protein_structure@1</div></div><div class="pill">必填</div></div>
+            <h3 style="margin-top:18px">输出（Artifact outputs）</h3>
+            <div class="slot"><div><div class="n">molecules <span style="color:var(--text3);font-weight:400">分子表</span></div><div class="ty">molecule_table@1</div></div><div class="pill">必填</div></div>
+            <div class="slot"><div><div class="n">ligands <span style="color:var(--text3);font-weight:400">配体结构</span></div><div class="ty">ligand_structure@1</div></div><div class="pill">必填</div></div>
+            <div class="slot"><div><div class="n">report <span style="color:var(--text3);font-weight:400">运行报告</span></div><div class="ty">run_report@1</div></div><div class="pill">可选</div></div>
+            <div class="hint">输入/输出必须使用平台已支持的标准类型；发布前会校验。</div>
+          </div>
+          <div class="card">
+            <h3>镜像与资源（已固定 k8s_job）</h3>
+            <div class="grid2">
+              <div class="field"><label>镜像（建议 digest）</label><div class="input">10.202.2.228:30500/aidd/compute-pocket2mol@sha256:f834…</div></div>
+              <div class="field"><label>资源画像</label><div class="input">gpu · 4C / 16G · 1×nvidia.com/gpu · 60min</div></div>
+            </div>
+            <div class="hint">不再提供 Docker / Python / SSH 工具类型与旧版 Agent 语义映射。</div>
+          </div>
+          <div class="actions"><button class="btn">保存草稿</button><button class="btn primary">下一步：运行参数 →</button></div>
+        </div>
+        <aside class="side">
+          <div><b>模型摘要</b></div>
+          <div>slug：pocket2mol-pocket-ligand-generation</div>
+          <div>能力族：molecule_generation</div>
+          <div>版本：1.0.0（当前）</div>
+          <div>输入：1 · 输出：3</div>
+          <div>镜像：f834fd01…</div>
+          <div style="margin-top:6px;color:var(--success)">✓ 步骤 1–2 已校验</div>
+          <div style="color:var(--warning)">! 步骤 3 待校验</div>
+        </aside>
+      </div>
+    </div>
+  </main>
+</div></body></html>
