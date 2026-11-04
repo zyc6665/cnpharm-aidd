@@ -108,7 +108,7 @@ import { getTarget, listPockets, listStructures, listTargets } from '@/api/targe
 import { listCandidates } from '@/api/compounds'
 import { listProjectResults } from '@/api/results'
 
-const props = defineProps<{ projectId: string }>()
+const props = defineProps<{ projectId: string; initialStep?: number }>()
 const router = useRouter()
 
 const stages = [
@@ -121,7 +121,7 @@ const stages = [
   { key: 'screen', title: '虚拟筛选', desc: '将候选分子与受体进行分子对接，筛选高潜力候选物。', hint: '' }
 ]
 
-const current = ref(0)
+const current = ref(props.initialStep ?? 0)
 const currentStage = computed(() => stages[current.value] ?? stages[0]!)
 const loading = ref(true)
 const target = ref<any>(null)

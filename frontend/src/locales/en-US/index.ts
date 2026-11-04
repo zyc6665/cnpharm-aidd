@@ -1030,6 +1030,7 @@ export default {
       predictPockets: 'Predict pockets',
       pocketsSubmitted: 'Pocket prediction task submitted',
       pocketsFailed: 'Failed to submit pocket prediction task',
+      pocketsTimeout: 'Pocket prediction timed out, please retry',
       viewAllPockets: 'View all pockets',
       prepare: 'Prepare structure',
       prepareSuccess: 'Structure preparation task submitted',

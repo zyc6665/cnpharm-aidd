@@ -2,7 +2,8 @@
  * 等待一个任务到达终态（用于「就地预测后自动推进」）。
  *
  * 优先走既有 SSE（`openTaskEventStream`）；在没有 EventSource 的环境或连接失败时，
- * 回退到 `getTaskDetail` 轮询。只关心终态与成功与否，不重复实现任务状态机。
+ * 回退到 `getTaskDetail` 轮询。无论走哪条通道，都以 `timeoutMs` 兜底，
+ * 避免任务停滞时 Promise 永远挂起、界面卡在 loading。
  */
 import {
   openTaskEventStream,
@@ -37,16 +38,20 @@ export function waitForTaskCompletion(
 
   return new Promise<TaskCompletionResult>(resolve => {
     let settled = false
-    let timer: ReturnType<typeof setTimeout> | null = null
+    let pollTimer: ReturnType<typeof setTimeout> | null = null
+    let timeoutTimer: ReturnType<typeof setTimeout> | null = null
     let handle: TaskEventStreamHandle = { close: () => undefined, available: false }
-    const startedAt = Date.now()
 
     const finish = (status: TaskStatus) => {
       if (settled) return
       settled = true
-      if (timer) {
-        clearTimeout(timer)
-        timer = null
+      if (pollTimer) {
+        clearTimeout(pollTimer)
+        pollTimer = null
+      }
+      if (timeoutTimer) {
+        clearTimeout(timeoutTimer)
+        timeoutTimer = null
       }
       handle.close()
       resolve({ status, ok: status === 'success' })
@@ -64,11 +69,9 @@ export function waitForTaskCompletion(
       } catch {
         // 单次拉取失败不终止，按轮询继续。
       }
-      if (Date.now() - startedAt >= timeoutMs) {
-        finish('timeout' as TaskStatus)
-        return
+      if (!settled) {
+        pollTimer = setTimeout(() => void poll(), pollMs)
       }
-      timer = setTimeout(() => void poll(), pollMs)
     }
 
     const onEvent = (payload: TaskEventPayload) => {
@@ -82,14 +85,17 @@ export function waitForTaskCompletion(
       onDone: onEvent,
       onError: () => {
         // SSE 不可用/中断 → 回退轮询。
-        if (!settled && !timer) {
-          timer = setTimeout(() => void poll(), pollMs)
+        if (!settled && !pollTimer) {
+          pollTimer = setTimeout(() => void poll(), pollMs)
         }
       },
     })
 
     if (!handle.available) {
-      timer = setTimeout(() => void poll(), pollMs)
+      pollTimer = setTimeout(() => void poll(), pollMs)
     }
+
+    // 无论 SSE 是否可用都必须有超时兜底（SSE 可能连上但任务停滞、一直非终态）。
+    timeoutTimer = setTimeout(() => finish('timeout' as TaskStatus), timeoutMs)
   })
 }

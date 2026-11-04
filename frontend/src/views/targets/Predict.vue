@@ -93,21 +93,16 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onMounted, reactive, ref } from 'vue'
+  import { computed, onMounted, ref } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { message } from 'ant-design-vue'
   import { useI18n } from 'vue-i18n'
   import AppPageHeader from '@/components/common/AppPageHeader.vue'
   import AppErrorState from '@/components/common/AppErrorState.vue'
   import SkeletonDetail from '@/components/common/SkeletonDetail.vue'
-  import { getProtein, predictStructure } from '@/api/targets'
-  import { resolveTargetErrorMessage } from '@/domain/targets'
+  import { getProtein } from '@/api/targets'
+  import { useStructurePrediction } from '@/composables/useStructurePrediction'
   import type { ProteinDetail } from '@/types/targets'
-
-  const DEFAULT_MODEL = 'boltz-2'
-  const DEFAULT_NUM_RECYCLES = 3
-  const DEFAULT_SEED = 42
-  const DEFAULT_USE_MSA = false
 
   const route = useRoute()
   const router = useRouter()
@@ -117,14 +112,9 @@
   const protein = ref<ProteinDetail | null>(null)
   const loading = ref(false)
   const loadError = ref(false)
-  const submitting = ref(false)
 
-  const form = reactive({
-    modelName: DEFAULT_MODEL,
-    numRecycles: DEFAULT_NUM_RECYCLES,
-    seed: DEFAULT_SEED,
-    useMsa: DEFAULT_USE_MSA
-  })
+  // 与「上游接力条」共用同一套结构预测表单/提交逻辑，避免两份实现漂移。
+  const { form, submitting, error, submit } = useStructurePrediction()
 
   const sequenceMissing = computed(() => {
     if (!protein.value) {
@@ -155,40 +145,18 @@
     }
   }
 
-  function normalizeNumber(value: number | string | null | undefined, fallback: number): number {
-    const parsed = typeof value === 'number' ? value : Number(value)
-    return Number.isFinite(parsed) ? parsed : fallback
-  }
-
   async function handleSubmit() {
-    const modelName = form.modelName.trim() || DEFAULT_MODEL
-    const numRecycles = normalizeNumber(form.numRecycles, DEFAULT_NUM_RECYCLES)
-    const seed = normalizeNumber(form.seed, DEFAULT_SEED)
-
-    if (numRecycles < 1 || seed < 0) {
-      message.warning(t('targets.predict.invalidNumber'))
+    const taskId = await submit(proteinId.value)
+    if (!taskId) {
+      message.warning(
+        error.value === 'submit-failed'
+          ? t('targets.predict.failed')
+          : t('targets.predict.invalidNumber')
+      )
       return
     }
-
-    submitting.value = true
-    try {
-      // 键名按 docs/05 §5.1 与 docs/16 的口径（camelCase）；后端 `params` 直接透传，
-      // 没有 snake↔camel 转换层，写成 num_recycles 工具侧会读不到。
-      const response = await predictStructure(proteinId.value, {
-        model_ref: { name: modelName },
-        params: {
-          useMsa: form.useMsa,
-          numRecycles,
-          seed
-        }
-      })
-      message.success(t('targets.predict.submitted'))
-      await router.push({ name: 'TaskDetail', params: { id: response.data.task_id } })
-    } catch (cause) {
-      message.error(resolveTargetErrorMessage(cause, t('targets.predict.failed')))
-    } finally {
-      submitting.value = false
-    }
+    message.success(t('targets.predict.submitted'))
+    await router.push({ name: 'TaskDetail', params: { id: taskId } })
   }
 
   onMounted(() => {

@@ -1,7 +1,7 @@
 <template>
   <main class="design-pipeline-page" data-testid="design-pipeline-page">
     <AppPageHeader :title="t('design.pipeline.title')" :subtitle="t('design.pipeline.subtitle')">
-      <template #extra>
+      <template #actions>
         <a-space>
           <a-select
             v-model:value="projectId"
@@ -68,7 +68,7 @@
       </div>
 
       <div v-if="showGuided && projectId" class="guided-wrap" data-testid="design-pipeline-guided">
-        <GuidedWorkflow :project-id="projectId" />
+        <GuidedWorkflow :project-id="projectId" :initial-step="focusStep" />
       </div>
     </a-spin>
   </main>
@@ -101,6 +101,11 @@ const showGuided = ref(false)
 const projectOptions = computed(() => projects.value.map(p => ({ value: p.id, label: p.name })))
 const stages = computed<DesignStageState[]>(() => buildDesignStages(stage.value, projectId.value))
 const nextStage = computed<DesignStageState | null>(() => firstMissingStage(stages.value))
+const focusStage = computed(() => {
+  const raw = route.query.focus
+  return typeof raw === 'string' ? raw : ''
+})
+const focusStep = computed(() => (focusStage.value === 'pocket' ? 1 : 0))
 
 function goStage(target: DesignStageState): void {
   void router.push(target.primaryPath)
@@ -162,6 +167,9 @@ onMounted(async () => {
   await loadProjects()
   projectId.value = resolveInitialProjectId()
   if (projectId.value) await loadStage(projectId.value)
+  if (focusStage.value === 'structure' || focusStage.value === 'pocket') {
+    showGuided.value = true
+  }
 })
 </script>
 

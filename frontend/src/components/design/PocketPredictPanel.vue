@@ -42,8 +42,7 @@
       </a-table>
     </a-spin>
 
-    <a-alert v-if="errorText" type="error" show-icon :message="errorText" class="panel-error" />
-  </div>
+    <a-alert v-if="errorText" type="error" show-icon :message="errorText" class="panel-error" />  </div>
 </template>
 
 <script setup lang="ts">
@@ -66,6 +65,7 @@ const structureIdRef = toRef(props, 'structureId')
 const { sorted, loading, error, selectingId, selected, load, select } = useStructurePockets(structureIdRef)
 const { predicting, error: predictError, predict } = usePocketPrediction()
 const waiting = ref(false)
+const runError = ref('')
 
 const columns = computed(() => [
   { title: t('targets.pockets.rank'), key: 'rank', width: 70 },
@@ -75,10 +75,11 @@ const columns = computed(() => [
 ])
 
 const errorText = computed(() => {
-  const code = predictError.value || error.value
+  const code = runError.value || predictError.value || error.value
   if (!code) return ''
   if (code === 'select-failed') return t('targets.pockets.selectFailed')
   if (code === 'predict-failed') return t('targets.structure.pocketsFailed')
+  if (code === 'predict-timeout') return t('targets.structure.pocketsTimeout')
   return t('targets.loadFailed')
 })
 
@@ -86,13 +87,18 @@ watch(structureIdRef, () => void load(), { immediate: true })
 
 async function handlePredict(): Promise<void> {
   if (!props.structureId) return
+  runError.value = ''
   const taskId = await predict(props.structureId)
   if (!taskId) return
   emit('predicted', taskId)
   waiting.value = true
   try {
     const result = await waitForTaskCompletion(taskId)
-    if (result.ok) await load()
+    if (result.ok) {
+      await load()
+    } else {
+      runError.value = result.status === 'timeout' ? 'predict-timeout' : 'predict-failed'
+    }
   } finally {
     waiting.value = false
   }

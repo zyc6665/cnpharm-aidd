@@ -1027,6 +1027,7 @@ export default {
       predictPockets: '预测口袋',
       pocketsSubmitted: '口袋预测任务已提交',
       pocketsFailed: '口袋预测任务提交失败',
+      pocketsTimeout: '口袋预测超时，请重试',
       viewAllPockets: '查看全部口袋',
       prepare: '结构准备',
       prepareSuccess: '结构准备任务已提交',
