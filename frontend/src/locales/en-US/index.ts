@@ -993,6 +993,7 @@ export default {
         'Default resource profile is determined by the platform per tool version and cannot be adjusted per run.',
       submit: 'Submit prediction',
       submitted: 'Structure prediction task submitted',
+      waiting: 'Predicting structure…',
       failed: 'Failed to submit structure prediction task',
       sequenceMissing: 'This protein has no sequence, cannot submit structure prediction',
       invalidNumber: 'Enter a valid number',

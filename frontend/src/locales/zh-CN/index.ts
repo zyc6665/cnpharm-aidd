@@ -990,6 +990,7 @@ export default {
         '所选工具版本的默认资源规格由平台按工具版本配置决定，当前不支持按次调整。',
       submit: '提交预测',
       submitted: '结构预测任务已提交',
+      waiting: '结构预测中…',
       failed: '结构预测任务提交失败',
       sequenceMissing: '该蛋白缺少序列，无法提交结构预测',
       invalidNumber: '请填写有效的数字',
