@@ -1743,6 +1743,8 @@ export default {
       },
       category: {
         all: '全部',
+        structure: '结构预测',
+        pocket: '口袋预测',
         molecule: '分子生成',
         peptide: '多肽设计',
         predict: '性质预测',

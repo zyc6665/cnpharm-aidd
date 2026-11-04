@@ -1751,6 +1751,8 @@ export default {
       },
       category: {
         all: 'All',
+        structure: 'Structure prediction',
+        pocket: 'Pocket prediction',
         molecule: 'Molecule generation',
         peptide: 'Peptide design',
         predict: 'Property prediction',
