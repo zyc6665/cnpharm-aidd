@@ -1773,6 +1773,12 @@ export default {
       missingStructure: '该蛋白还没有结构，先在下方就地预测一个',
       missingPocket: '该结构还没有「已选定」的口袋，先预测并选定一个'
     },
+    modelSelect: {
+      label: '模型',
+      placeholder: '选择模型',
+      hint: '存在同类多模型时可自由切换；默认沿用上次选择',
+      mock: '演示模型'
+    },
     runs: {
       title: '设计任务',
       subtitle: '你和团队在这个平台上跑过的分子生成、多肽设计、性质预测、虚拟筛选与分子动力学任务',

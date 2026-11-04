@@ -677,3 +677,38 @@ def get_capabilities_by_output(semantic_type: SemanticType) -> list[ToolCapabili
         for capability in AIDD_TOOL_CAPABILITIES.values()
         if any(output.semantic_type == semantic_type for output in capability.outputs)
     ]
+
+
+#: 规范化的「模型能力族」——把同一类设计环节的模型归到一组，供前端「模型选择」聚合。
+#: 与 ``capability`` / ``stage`` 解耦（后两者被工作流匹配依赖，保持原值不动）。
+MODEL_FAMILY_BY_SLUG: dict[str, str] = {
+    "boltz2-structure-prediction": "structure_prediction",
+    "lvpocket-pocket-prediction": "pocket_prediction",
+    "pocket2mol-pocket-ligand-generation": "molecule_generation",
+    "therapainter-peptide-prediction": "peptide_design",
+    "molp-pc-property-prediction": "admet_prediction",
+    "builtin-admet-prediction": "admet_prediction",
+    "builtin-rdkit-properties": "property_prediction",
+    "builtin-toxicity-prediction": "toxicity_prediction",
+    "builtin-vina-docking": "docking",
+    "autodock-vina-docking": "docking",
+    "builtin-molecular-dynamics": "molecular_dynamics",
+    "gromacs-md": "molecular_dynamics",
+    "msign-affinity-prediction": "affinity",
+    "boltz2-affinity-prediction": "affinity",
+    "gmx-mmpbsa": "free_energy",
+    "builtin-sdf-to-smiles-csv": "format_conversion",
+    "builtin-sdf-to-pdb": "format_conversion",
+    "builtin-protein-preparation": "protein_preparation",
+    "builtin-ligand-preparation": "ligand_preparation",
+    "builtin-rdkit-conformer": "conformer_generation",
+    "builtin-synthetic-accessibility": "synthetic_accessibility",
+    "builtin-interaction-analysis": "interaction_analysis",
+}
+
+
+def resolve_model_family(tool_slug: str | None) -> str | None:
+    """返回工具所属的规范化模型族（未登记则 None）。"""
+    if not tool_slug:
+        return None
+    return MODEL_FAMILY_BY_SLUG.get(tool_slug)

@@ -1781,6 +1781,12 @@ export default {
       missingStructure: 'This protein has no structure yet — predict one inline below',
       missingPocket: 'No selected pocket for this structure yet — predict and select one'
     },
+    modelSelect: {
+      label: 'Model',
+      placeholder: 'Select model',
+      hint: 'Switch freely when several models share this capability; defaults to your last choice',
+      mock: 'demo model'
+    },
     runs: {
       title: 'Design Runs',
       subtitle: 'Molecule generation, peptide design, property prediction, virtual screening and MD runs you and your team launched here',

@@ -4,7 +4,7 @@
       <a-row :gutter="12">
         <a-col :xs="24" :sm="8">
           <a-form-item :label="t('targets.predict.model')">
-            <a-input v-model:value="form.modelName" data-testid="structure-predict-model" />
+            <ModelSelect v-model="selectedSlug" :options="modelOptions" :loading="modelLoading" />
           </a-form-item>
         </a-col>
         <a-col :xs="24" :sm="8">
@@ -48,10 +48,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useStructurePrediction } from '@/composables/useStructurePrediction'
 import { waitForTaskCompletion } from '@/composables/useTaskCompletion'
+import { useModelOptions } from '@/composables/useModelOptions'
+import ModelSelect from '@/components/design/ModelSelect.vue'
+import { STRUCTURE_PREDICT_TOOL_SLUG } from '@/types/design'
 
 const props = defineProps<{ proteinId: string }>()
 const emit = defineEmits<{
@@ -63,6 +66,26 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const { form, submitting, error, submit } = useStructurePrediction()
 const waiting = ref(false)
+
+// 结构预测模型：同类可自由选择，默认 boltz2；把所选写成 model_ref.name(slug)。
+const {
+  options: modelOptions,
+  selectedSlug,
+  loading: modelLoading,
+  load: loadModels
+} = useModelOptions('structure_prediction', { defaultSlug: STRUCTURE_PREDICT_TOOL_SLUG })
+
+watch(
+  selectedSlug,
+  slug => {
+    form.modelName = slug
+  },
+  { immediate: true }
+)
+
+onMounted(() => {
+  void loadModels()
+})
 
 const errorText = computed(() => {
   if (!error.value) return ''

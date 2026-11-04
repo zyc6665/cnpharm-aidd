@@ -14,6 +14,7 @@ from app.services.tool_contract_validation import (  # noqa: F401
 )
 from app.tool_packages.config_resolver import tool_package_manifest_data
 from app.tool_packages.schemas import TOOL_PACKAGE_API_VERSION
+from app.tools.capabilities import resolve_model_family
 
 
 TOOL_CONTRACT_VERSION = "1.0"
@@ -41,8 +42,13 @@ def build_tool_contract(
         else getattr(tool, "current_version", None)
     )
     package_manifest = _package_manifest_from_version(current_version)
+    slug = str(getattr(tool, "slug", None) or "")
+    model_family = resolve_model_family(slug)
     if isinstance(package_manifest, dict):
-        return _build_tool_package_contract(tool, current_version, package_manifest)
+        contract = _build_tool_package_contract(tool, current_version, package_manifest)
+        if isinstance(contract, dict):
+            contract.setdefault("model_family", model_family)
+        return contract
     config = getattr(current_version, "config", None)
     if not isinstance(config, dict):
         config = {}
@@ -71,6 +77,7 @@ def build_tool_contract(
             artifacts=artifacts,
             virtual=False,
         ),
+        "model_family": model_family,
         "validation": {"status": "valid", "errors": []},
     }
 

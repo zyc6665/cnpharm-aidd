@@ -7,6 +7,8 @@ import AppPageHeader from '@/components/common/AppPageHeader.vue'
 import { uploadFile } from '@/api/files'
 import { exportCandidateSet, listCandidateSets } from '@/api/compounds'
 import { submitToolTask } from '@/api/predict'
+import ModelSelect from '@/components/design/ModelSelect.vue'
+import { useModelOptions } from '@/composables/useModelOptions'
 import {
   ADMET_TOOL_SLUG,
   PREDICT_DEFAULT_TASK_GROUPS,
@@ -38,6 +40,14 @@ const smilesFile = ref<File | null>(null)
 const smilesFileName = ref('')
 const candidateSets = ref<CandidateSet[]>([])
 const candidateSetId = ref<string>('')
+
+// 同类 ADMET/性质预测模型可自由选择；默认 molp-pc。
+const {
+  options: modelOptions,
+  selectedSlug,
+  loading: modelLoading,
+  load: loadModels
+} = useModelOptions('admet_prediction', { defaultSlug: ADMET_TOOL_SLUG })
 const selectedGroups = ref<PredictTaskGroup[]>(
   props.initialGroups?.length ? [...props.initialGroups] : [...PREDICT_DEFAULT_TASK_GROUPS]
 )
@@ -118,7 +128,7 @@ async function handleSubmit(): Promise<void> {
   try {
     const fileId = await resolveMoleculesFileId()
     const task = await submitToolTask({
-      toolSlug: ADMET_TOOL_SLUG,
+      toolSlug: selectedSlug.value,
       projectId: projectId.value || undefined,
       name: `ADMET 性质预测 ${new Date().toISOString().slice(0, 10)}`,
       params: { device: 'cpu' },
@@ -134,6 +144,7 @@ async function handleSubmit(): Promise<void> {
 }
 
 onMounted(() => {
+  void loadModels()
   void loadCandidateSets()
 })
 </script>
@@ -141,6 +152,10 @@ onMounted(() => {
 <template>
   <main class="predict-submit" data-testid="predict-submit-page">
     <AppPageHeader :title="t('predict.submit.title')" :subtitle="t('predict.submit.subtitle')" />
+
+    <a-card class="predict-submit__card" :title="t('design.modelSelect.label')">
+      <ModelSelect v-model="selectedSlug" :options="modelOptions" :loading="modelLoading" />
+    </a-card>
 
     <a-card class="predict-submit__card" :title="t('predict.submit.source')">
       <a-radio-group v-model:value="source" button-style="solid">

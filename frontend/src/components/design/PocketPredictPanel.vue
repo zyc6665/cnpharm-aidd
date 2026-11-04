@@ -12,6 +12,10 @@
       </a-button>
     </div>
 
+    <div class="panel-model">
+      <ModelSelect v-model="selectedSlug" :options="modelOptions" :loading="modelLoading" />
+    </div>
+
     <a-spin :spinning="loading">
       <p v-if="!sorted.length && !loading" class="panel-empty">{{ t('targets.pockets.emptyHint') }}</p>
       <a-table
@@ -46,12 +50,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, toRef, watch } from 'vue'
+import { computed, onMounted, ref, toRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { formatPocketScore, formatPocketVolume } from '@/domain/targets'
 import { usePocketPrediction } from '@/composables/usePocketPrediction'
 import { useStructurePockets } from '@/composables/useStructurePockets'
 import { waitForTaskCompletion } from '@/composables/useTaskCompletion'
+import { useModelOptions } from '@/composables/useModelOptions'
+import ModelSelect from '@/components/design/ModelSelect.vue'
+import { POCKET_PREDICT_TOOL_SLUG } from '@/types/design'
 import type { PocketSummary } from '@/types/targets'
 
 const props = defineProps<{ structureId: string }>()
@@ -66,6 +73,18 @@ const { sorted, loading, error, selectingId, selected, load, select } = useStruc
 const { predicting, error: predictError, predict } = usePocketPrediction()
 const waiting = ref(false)
 const runError = ref('')
+
+// 口袋预测模型：同类可自由选择，默认 lvpocket。
+const {
+  options: modelOptions,
+  selectedSlug,
+  loading: modelLoading,
+  load: loadModels
+} = useModelOptions('pocket_prediction', { defaultSlug: POCKET_PREDICT_TOOL_SLUG })
+
+onMounted(() => {
+  void loadModels()
+})
 
 const columns = computed(() => [
   { title: t('targets.pockets.rank'), key: 'rank', width: 70 },
@@ -88,7 +107,7 @@ watch(structureIdRef, () => void load(), { immediate: true })
 async function handlePredict(): Promise<void> {
   if (!props.structureId) return
   runError.value = ''
-  const taskId = await predict(props.structureId)
+  const taskId = await predict(props.structureId, selectedSlug.value)
   if (!taskId) return
   emit('predicted', taskId)
   waiting.value = true
