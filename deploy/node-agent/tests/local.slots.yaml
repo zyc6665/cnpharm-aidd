@@ -1,0 +1,14 @@
+schemaVersion: 2
+nodeId: local-test
+hostname: local-test
+agentEndpoint: http://127.0.0.1:8780
+accelerator:
+  model: "Local Test GPU"
+  count: 1
+  memoryMb: 8192
+slots:
+  - id: A0
+    deviceIds: [0]
+    env: {}
+    dockerArgs: []
+    memoryMb: 8192
