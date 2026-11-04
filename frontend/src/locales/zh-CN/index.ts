@@ -2518,8 +2518,10 @@ export default {
       system: '审计与系统'
     },
     users: '用户管理',
+    usersSubtitle: '管理平台账号、角色与状态',
     tools: '工具管理',
     tasks: '任务管理',
+    tasksSubtitle: '跨用户查看与处理平台任务',
     system: '系统设置',
     backToSite: '返回前台',
     // 列表四态：各页面加载失败与空状态引导文案

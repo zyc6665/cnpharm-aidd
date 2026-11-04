@@ -2530,8 +2530,10 @@ export default {
       system: 'Audit & System'
     },
     users: 'User Management',
+    usersSubtitle: 'Manage platform accounts, roles and status',
     tools: 'Tool Management',
     tasks: 'Task Management',
+    tasksSubtitle: 'Review and handle platform tasks across users',
     system: 'System Settings',
     backToSite: 'Back to Site',
     // List four-state: per-page load-error and guided empty copy

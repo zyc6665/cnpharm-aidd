@@ -1,6 +1,6 @@
 <template>
   <div class="admin-users">
-    <AppPageHeader :title="t('admin.users')">
+    <AppPageHeader :title="t('admin.users')" :subtitle="t('admin.usersSubtitle')">
       <template #actions>
       <a-button type="primary" @click="openCreateModal">
         {{ t('admin.createUser') }}

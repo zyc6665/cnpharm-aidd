@@ -116,7 +116,7 @@
           </div>
 
           <a-table
-            :scroll="{ x: 980 }"
+            :scroll="{ x: 'max-content' }"
             :columns="resourceWorkerColumns"
             :data-source="resourceStatus?.workers ?? []"
             :loading="resourceLoading"
@@ -206,7 +206,7 @@
           </div>
 
           <a-table
-            :scroll="{ x: 1080 }"
+            :scroll="{ x: 'max-content' }"
             :columns="resourceQuotaColumns"
             :data-source="resourceQuotaStatus?.scopes ?? []"
             :loading="quotaLoading"

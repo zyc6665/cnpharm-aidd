@@ -1,6 +1,6 @@
 <template>
   <div class="admin-tasks">
-    <AppPageHeader :title="t('admin.tasks')">
+    <AppPageHeader :title="t('admin.tasks')" :subtitle="t('admin.tasksSubtitle')">
       <template #actions>
         <a-button @click="handleRefresh"> <ReloadOutlined /> {{ t('common.refresh') }} </a-button>
       </template>
