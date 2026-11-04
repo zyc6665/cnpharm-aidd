@@ -284,6 +284,10 @@ export default {
       goPocketManage: 'Manage on pockets page',
       actionFailed: 'Action failed'
     },
+    advanced: {
+      title: 'Advanced Orchestration (Custom Workflow)',
+      subtitle: 'Compose tools freely into a DAG workflow with branching, loops and parallelism — for advanced users who need custom pipelines'
+    },
     title: 'Tool Workbench',
     subtitle: 'Browse tools by research group, reuse historical artifacts, and launch the next task from one workspace',
     entry: {
@@ -1756,6 +1760,7 @@ export default {
       projectPlaceholder: 'Select project',
       continueFlow: 'Continue design flow',
       hideFlow: 'Hide flow',
+      advanced: 'Advanced: custom workflow',
       loadError: 'Failed to load design pipeline',
       noProject: 'No projects yet — create a project first',
       goProjects: 'Back to workspace',

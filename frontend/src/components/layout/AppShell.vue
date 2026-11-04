@@ -239,13 +239,6 @@ const mainNav: NavItem[] = [
     active: ['/tasks'],
   },
   {
-    key: 'workflow',
-    to: '/workflow',
-    icon: ApartmentOutlined,
-    labelKey: 'nav.workflow',
-    active: ['/workflow'],
-  },
-  {
     key: 'achievements',
     to: '/achievements',
     icon: TrophyOutlined,

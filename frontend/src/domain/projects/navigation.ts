@@ -59,7 +59,7 @@ export function buildProjectWorkspaceNavItems(projectId: string): ProjectWorkspa
   return [
     { key: 'overview', label: '项目总览', to: `/projects/${projectId}` },
     { key: 'targets', label: '靶点与结构', to: buildProjectTargetsPath(projectId) },
-    { key: 'workflow', label: 'Workflow', to: buildProjectWorkflowPath(projectId) },
+    { key: 'workflow', label: '高级编排', to: buildProjectWorkflowPath(projectId) },
     { key: 'tasks', label: '任务中心', to: buildProjectTaskPath(projectId) },
     { key: 'assets', label: '数据资产', to: buildProjectAssetsPath(projectId) },
     { key: 'candidates', label: '候选物', to: buildProjectCandidatesPath(projectId) },

@@ -282,6 +282,10 @@ export default {
       goPocketManage: '去口袋页批量管理',
       actionFailed: '操作失败'
     },
+    advanced: {
+      title: '高级编排（自定义流程）',
+      subtitle: '把工具自由组合成 DAG 流程，支持条件分支、循环与并行；面向需要自定义流程的高级用户'
+    },
     title: '工具工作台',
     subtitle: '按研究分组浏览工具，在同一空间复用历史产物并继续发起计算任务',
     entry: {
@@ -1748,6 +1752,7 @@ export default {
       projectPlaceholder: '选择项目',
       continueFlow: '继续设计流程',
       hideFlow: '收起流程',
+      advanced: '高级：自定义工作流',
       loadError: '设计流程加载失败',
       noProject: '还没有项目，先创建一个项目',
       goProjects: '返回工作台',

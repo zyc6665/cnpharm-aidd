@@ -19,6 +19,9 @@
           >
             {{ showGuided ? t('design.pipeline.hideFlow') : t('design.pipeline.continueFlow') }}
           </a-button>
+          <a-button data-testid="design-pipeline-advanced" @click="goAdvanced">
+            {{ t('design.pipeline.advanced') }}
+          </a-button>
         </a-space>
       </template>
     </AppPageHeader>
@@ -113,6 +116,10 @@ function goStage(target: DesignStageState): void {
 
 function goProjects(): void {
   void router.push('/workspace')
+}
+
+function goAdvanced(): void {
+  void router.push('/workflow')
 }
 
 function onProjectChange(value: unknown): void {
