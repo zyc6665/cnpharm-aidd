@@ -24,14 +24,14 @@
       :message="t('admin.compute.emptyState')"
     />
 
-    <a-row :gutter="[16, 16]" class="compute-stats">
+    <a-row :gutter="[16, 16]" class="compute-stats" align="stretch">
       <a-col :xs="24" :sm="12" :xl="6">
-        <a-card :loading="loading">
+        <a-card class="compute-stat-card" :loading="loading">
           <a-statistic :title="t('admin.compute.totalSlots')" :value="capacity.totalSlots" />
         </a-card>
       </a-col>
       <a-col :xs="24" :sm="12" :xl="6">
-        <a-card :loading="loading">
+        <a-card class="compute-stat-card" :loading="loading">
           <a-statistic :title="t('admin.compute.schedulableSlots')" :value="capacity.schedulableSlots" />
         </a-card>
       </a-col>
@@ -257,6 +257,18 @@ onMounted(refreshComputeData)
 
   .compute-stats {
     margin-bottom: @spacing-lg;
+
+    // 让三张卡片等高对齐
+    :deep(.ant-card) {
+      height: 100%;
+    }
+  }
+
+  .compute-stat-card :deep(.ant-card-body) {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
   }
 
   .compute-vendors {
