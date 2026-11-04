@@ -117,9 +117,12 @@ test('List.vue 含空态键与新建靶点入口', () => {
 
 test('Pockets.vue 行内选定调用 selectPocket 且按 score 排序', () => {
   const source = readSource('src/views/targets/Pockets.vue')
+  // 口径：Pockets 页与「上游接力条」共用 useStructurePockets，选定与排序在该 composable 内。
+  const composable = readSource('src/composables/useStructurePockets.ts')
 
-  assert.equal(source.includes('selectPocket'), true, 'Pockets.vue 必须调用 selectPocket')
-  assert.equal(source.includes('sortPocketsByScore'), true, '排序必须来自 @/domain/targets')
+  assert.equal(source.includes('useStructurePockets'), true, 'Pockets.vue 必须复用 useStructurePockets')
+  assert.equal(composable.includes('selectPocket'), true, 'useStructurePockets 必须调用 selectPocket')
+  assert.equal(composable.includes('sortPocketsByScore'), true, '排序必须来自 @/domain/targets')
   assert.equal(source.includes('PocketResidues'), true, '点击行必须跳转 PocketResidues')
 })
 
