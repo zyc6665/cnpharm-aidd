@@ -14,33 +14,44 @@
       </div>
 
       <a-spin :spinning="loading">
-        <!-- 1. 结构预测 -->
+        <!-- 1. 结构预测（就地） -->
         <div v-if="currentStage.key === 'structure'" class="stage-panel">
           <a-descriptions :column="3" size="small" bordered>
             <a-descriptions-item label="靶点">{{ target?.name || '未登记' }}</a-descriptions-item>
             <a-descriptions-item label="蛋白">{{ protein?.name || '未登记' }}</a-descriptions-item>
             <a-descriptions-item label="结构数">{{ structureCount }}</a-descriptions-item>
           </a-descriptions>
+          <StructurePredictForm
+            v-if="proteinId"
+            :protein-id="proteinId"
+            @submitted="snapshotStructures"
+            @completed="handleStructureCompleted"
+            @error="handleStageError"
+          />
+          <p v-else class="stage-note">该靶点下还没有蛋白，请先在「靶点与结构」添加蛋白序列。</p>
           <div class="stage-actions">
-            <a-button type="primary" :disabled="!proteinId" @click="goProteinPredict">
-              去结构预测
-            </a-button>
-            <span class="stage-note">提交 Boltz2 结构预测任务，产出可继续下游的蛋白结构。</span>
+            <span class="stage-note">就地提交 Boltz-2 结构预测，完成后自动进入口袋预测。</span>
+            <a-button type="link" :disabled="!structureId" @click="goStructureDetail">去结构详情</a-button>
           </div>
         </div>
 
-        <!-- 2. 口袋识别 -->
+        <!-- 2. 口袋识别（就地） -->
         <div v-else-if="currentStage.key === 'pocket'" class="stage-panel">
           <a-descriptions :column="3" size="small" bordered>
             <a-descriptions-item label="可用结构">{{ structureCount }}</a-descriptions-item>
             <a-descriptions-item label="已识别口袋">{{ pocketCount }}</a-descriptions-item>
-            <a-descriptions-item label="口袋工具">LVpocket 2.0.0</a-descriptions-item>
+            <a-descriptions-item label="口袋工具">LVpocket</a-descriptions-item>
           </a-descriptions>
+          <PocketPredictPanel
+            v-if="structureId"
+            :structure-id="structureId"
+            @predicted="handlePocketPredicted"
+            @selected="handlePocketSelected"
+          />
+          <p v-else class="stage-note">还没有可用结构，请先完成结构预测。</p>
           <div class="stage-actions">
-            <a-button type="primary" :disabled="!structureId" @click="goPockets">
-              去口袋识别
-            </a-button>
-            <span class="stage-note">基于结构预测潜在结合口袋，并按评分排序候选位点。</span>
+            <span class="stage-note">就地预测口袋并「选定」一个作为设计起点，完成后自动进入分子生成。</span>
+            <a-button type="link" :disabled="!structureId" @click="goPockets">去口袋页批量管理</a-button>
           </div>
         </div>
 
@@ -90,6 +101,9 @@ import MoleculeGeneration from '@/views/design/MoleculeGeneration.vue'
 import PeptideDesign from '@/views/design/PeptideDesign.vue'
 import PropertyPredictSubmit from '@/views/predict/PropertyPredictSubmit.vue'
 import ScreenConfig from '@/views/screening/ScreenConfig.vue'
+import StructurePredictForm from '@/components/design/StructurePredictForm.vue'
+import PocketPredictPanel from '@/components/design/PocketPredictPanel.vue'
+import { message } from 'ant-design-vue'
 import { getTarget, listPockets, listStructures, listTargets } from '@/api/targets'
 import { listCandidates } from '@/api/compounds'
 import { listProjectResults } from '@/api/results'
@@ -113,6 +127,8 @@ const loading = ref(true)
 const target = ref<any>(null)
 const protein = ref<any>(null)
 const structure = ref<any>(null)
+const structures = ref<any[]>([])
+const structureIdSnapshot = ref<string[]>([])
 const structureCount = ref(0)
 const pocketCount = ref(0)
 const candidateCount = ref(0)
@@ -137,6 +153,50 @@ function goPockets() {
   }
 }
 
+function goStructureDetail() {
+  if (structureId.value) {
+    router.push(`/structures/${structureId.value}`)
+  }
+}
+
+function snapshotStructures() {
+  structureIdSnapshot.value = structures.value.map((item: any) => item.id)
+}
+
+function handleStageError(msg: string) {
+  message.error(msg || '操作失败')
+}
+
+async function refreshStructureList(id: string) {
+  const response = await listStructures(id)
+  structures.value = response.data.items ?? []
+  structureCount.value = structures.value.length
+  return structures.value
+}
+
+async function handleStructureCompleted() {
+  if (!proteinId.value) return
+  const fresh = await refreshStructureList(proteinId.value)
+  const added = fresh.find((item: any) => !structureIdSnapshot.value.includes(item.id)) ?? fresh[0] ?? null
+  structure.value = added
+  if (added) current.value = 1
+}
+
+async function refreshPocketCount() {
+  if (!structure.value) return
+  const response = await listPockets(structure.value.id)
+  pocketCount.value = (response.data.items ?? []).length
+}
+
+async function handlePocketPredicted() {
+  await refreshPocketCount()
+}
+
+async function handlePocketSelected() {
+  await refreshPocketCount()
+  current.value = 2
+}
+
 async function load() {
   if (!props.projectId) {
     loading.value = false
@@ -151,9 +211,9 @@ async function load() {
       protein.value = targetDetail.data.proteins?.[0] ?? null
       if (protein.value) {
         const structureResponse = await listStructures(protein.value.id)
-        const structures = structureResponse.data.items ?? []
-        structureCount.value = structures.length
-        structure.value = structures[0] ?? null
+        structures.value = structureResponse.data.items ?? []
+        structureCount.value = structures.value.length
+        structure.value = structures.value[0] ?? null
         if (structure.value) {
           const pocketResponse = await listPockets(structure.value.id)
           pocketCount.value = (pocketResponse.data.items ?? []).length
