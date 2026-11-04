@@ -40,4 +40,19 @@ describe('useModelOptions', () => {
     expect(m.selectedSlug.value).toBe('pocket2mol-pocket-ligand-generation')
     expect(m.hasChoice.value).toBe(false)
   })
+
+  it('groups by known slug when contract.model_family is missing (backend not upgraded)', async () => {
+    vi.mocked(getToolList).mockResolvedValue({
+      data: {
+        items: [
+          { id: 'p1', slug: 'pocket2mol-pocket-ligand-generation', name: 'Pocket2Mol', status: 'published', current_version: { id: 'v', version: '2.0.0' } },
+          { id: 'p2', slug: 'therapainter-peptide-prediction', name: 'TheraPainter', status: 'published' },
+        ],
+      },
+    } as never)
+    const m = useModelOptions('molecule_generation', { defaultSlug: 'pocket2mol-pocket-ligand-generation' })
+    await m.load()
+    expect(m.options.value.map(o => o.slug)).toEqual(['pocket2mol-pocket-ligand-generation'])
+    expect(m.options.value[0]!.name).toBe('Pocket2Mol')
+  })
 })

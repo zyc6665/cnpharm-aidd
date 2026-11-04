@@ -7,6 +7,7 @@
  */
 import { computed, ref, watch, type ComputedRef, type Ref } from 'vue'
 import { getToolList } from '@/api/tools'
+import { resolveModelFamily } from '@/domain/design/modelFamilies'
 import type { Tool } from '@/types/models'
 
 export interface ModelOption {
@@ -63,7 +64,7 @@ export function useModelOptions(
     try {
       const response = await getToolList({ view: 'public', page: 1, page_size: 100 })
       const tools: Tool[] = (response.data.items ?? []).filter(
-        tool => tool.status === 'published' && tool.contract?.model_family === family
+        tool => tool.status === 'published' && resolveModelFamily(tool) === family
       )
       const next: ModelOption[] = tools.map(tool => ({
         slug: tool.slug,
