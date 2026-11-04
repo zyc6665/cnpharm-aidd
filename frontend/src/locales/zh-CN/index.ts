@@ -2197,6 +2197,16 @@ export default {
 
   // 任务
   tasks: {
+    scope: { all: '全部任务', design: '设计任务' },
+    columns: {
+      name: '任务',
+      tool: '工具',
+      project: '项目',
+      status: '状态',
+      progress: '进度',
+      createdAt: '提交时间',
+      actions: '操作'
+    },
     loadFailed: '任务列表加载失败',
     loadFailedHint: '网络不稳定或服务暂时不可用，可重试',
     outputMetrics: '关键指标',

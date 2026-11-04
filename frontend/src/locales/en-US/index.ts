@@ -2209,6 +2209,16 @@ export default {
 
   // Tasks
   tasks: {
+    scope: { all: 'All tasks', design: 'Design tasks' },
+    columns: {
+      name: 'Task',
+      tool: 'Tool',
+      project: 'Project',
+      status: 'Status',
+      progress: 'Progress',
+      createdAt: 'Submitted',
+      actions: 'Actions'
+    },
     loadFailed: 'Failed to load tasks',
     loadFailedHint: 'Network or service problem — you can retry',
     outputMetrics: 'Key metrics',

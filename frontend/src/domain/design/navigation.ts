@@ -44,11 +44,6 @@ export function buildDesignNavGroups(): DesignNavGroup[] {
         { key: 'md', to: '/md', labelKey: 'nav.md' },
       ],
     },
-    {
-      groupKey: 'record',
-      labelKey: 'nav.designGroupRecord',
-      items: [{ key: 'designRuns', to: '/design/runs', labelKey: 'nav.designRuns' }],
-    },
   ]
 }
 

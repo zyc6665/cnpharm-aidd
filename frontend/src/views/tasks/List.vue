@@ -11,6 +11,17 @@
         :message="workflowScopeText"
       />
 
+      <div class="tasks-scope">
+        <a-radio-group v-model:value="scope" button-style="solid" @change="handleScopeChange">
+          <a-radio-button value="all">{{ t('tasks.scope.all') }}</a-radio-button>
+          <a-radio-button value="design" data-testid="tasks-scope-design">{{ t('tasks.scope.design') }}</a-radio-button>
+        </a-radio-group>
+      </div>
+
+      <!-- 设计任务：复用「设计任务」紧凑表格视图（唯一入口在任务中心） -->
+      <DesignRuns v-if="scope === 'design'" embedded />
+
+      <template v-else>
       <!-- 三标签页切换 -->
       <div class="view-tabs">
         <a-tabs v-model:activeKey="currentTab" @change="handleTabChange">
@@ -158,25 +169,79 @@
         </div>
       </div>
 
-      <!-- 任务列表 -->
+      <!-- 任务列表（紧凑表格，与「设计任务」同一视觉） -->
       <SkeletonList v-if="loading" :count="5" />
-      <div v-else-if="hasDisplayItems" class="tasks-list">
-        <section v-if="displayTasks.length > 0" class="task-section standalone-task-section">
-          <TaskListCard
-            v-for="task in displayTasks"
-            :key="task.id"
-            :task="task"
-            :actor="taskActor"
-            :current-project-id="projectId"
-            :current-project-name="project?.name"
-            :project-names="projectNames"
-            @open="goToDetail"
-            @cancel="handleCancel"
-            @retry="handleRetry"
-            @delete="handleDelete"
-          />
-        </section>
-      </div>
+      <a-table
+        v-else-if="hasDisplayItems"
+        class="tasks-table"
+        data-testid="tasks-table"
+        size="middle"
+        row-key="id"
+        :columns="taskColumns"
+        :data-source="displayTasks"
+        :pagination="false"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'name'">
+            <a class="tasks-table__name" @click="goToDetail(record.id)">
+              {{ record.name || record.tool?.name || t('tasks.unknownTool') }}
+            </a>
+            <div v-if="record.error_message" class="tasks-table__error" :title="record.error_message">
+              {{ record.error_message }}
+            </div>
+          </template>
+          <template v-else-if="column.key === 'tool'">{{ record.tool?.name || '-' }}</template>
+          <template v-else-if="column.key === 'project'">
+            {{ projectId ? (project?.name || '-') : (projectNames[record.project_id] || '-') }}
+          </template>
+          <template v-else-if="column.key === 'status'">
+            <a-tag :color="getStatusColor(record.status)">{{ getStatusText(record.status) }}</a-tag>
+          </template>
+          <template v-else-if="column.key === 'progress'">
+            <a-progress
+              :percent="Math.round(record.progress ?? 0)"
+              size="small"
+              :status="getProgressStatus(record.status)"
+              :stroke-color="getProgressColor(record.status)"
+            />
+          </template>
+          <template v-else-if="column.key === 'created_at'">
+            {{ formatServerDateTime(record.created_at) }}
+          </template>
+          <template v-else-if="column.key === 'actions'">
+            <a-space>
+              <a-button type="link" size="small" @click="goToDetail(record.id)">
+                {{ t('tasks.viewDetail') }}
+              </a-button>
+              <a-button
+                v-if="canCancel(record)"
+                type="link"
+                size="small"
+                @click="handleCancel(record.id)"
+              >
+                {{ t('tasks.cancel') }}
+              </a-button>
+              <a-button
+                v-if="canRetry(record)"
+                type="link"
+                size="small"
+                @click="handleRetry(record.id)"
+              >
+                {{ t('tasks.retry') }}
+              </a-button>
+              <a-button
+                v-if="canDelete(record)"
+                type="link"
+                size="small"
+                danger
+                @click="handleDelete(record.id)"
+              >
+                {{ t('tasks.delete') }}
+              </a-button>
+            </a-space>
+          </template>
+        </template>
+      </a-table>
 
       <!-- 原来这里是 `<a-empty>` + `<template #extra>`。antd 的 Empty 只有
            `description`/`image`/默认插槽三个位置，没有 `extra`——那个「去工具页」
@@ -191,7 +256,7 @@
       </AppInlineError>
 
       <AppEmptyState
-        v-else
+        v-else-if="!hasDisplayItems"
         :title="emptyText"
         description="任务按工具版本执行；提交后进入队列、分配算力、产出结果，全过程可追溯。"
       >
@@ -213,6 +278,7 @@
           @change="handlePageChange"
         />
       </div>
+      </template>
     </div>
   </div>
 </template>
@@ -227,7 +293,7 @@
   import AppInlineError from '@/components/common/AppInlineError.vue'
   import ProjectWorkspaceNav from '@/components/projects/ProjectWorkspaceNav.vue'
   import SkeletonList from '@/components/common/SkeletonList.vue'
-  import TaskListCard from '@/components/tasks/TaskListCard.vue'
+  import DesignRuns from '@/views/design/Runs.vue'
   import {
     UnorderedListOutlined,
     SyncOutlined,
@@ -240,6 +306,7 @@
   } from '@ant-design/icons-vue'
   import { message } from 'ant-design-vue'
   import { resolvePaginationChange } from '@/utils/pagination'
+  import { formatServerDateTime } from '@/utils/datetime'
   import type { Dayjs } from 'dayjs'
   import { useTasksStore, useToolsStore, useUserStore } from '@/stores'
   import type { TaskListParams } from '@/api/tasks'
@@ -249,6 +316,9 @@
     buildTaskCountQueryParams,
     buildTaskListQueryParams,
     buildTaskWorkflowScopeParts,
+    canCancelTask,
+    canDeleteTask,
+    canRetryTask,
     formatTaskRunningDuration,
     getTaskListEmptyTextKey,
     getTaskProgressColor,
@@ -274,6 +344,7 @@
   // 状态
   const routeTab = computed<TabKey>(() => taskListTabFromQueryParam(route.query.view))
   const currentTab = ref<TabKey>(routeTab.value)
+  const scope = ref<'all' | 'design'>(route.query.scope === 'design' ? 'design' : 'all')
   const searchKeyword = ref('')
   const selectedTool = ref<string | undefined>()
   const dateRange = ref<[Dayjs, Dayjs] | null>(null)
@@ -292,6 +363,7 @@
     workflowDefinitionId: workflowDefinitionId.value,
     workflowNodeId: workflowNodeId.value,
   }))
+
   const projectMembershipRole = computed<ProjectRole | undefined>(
     () => project.value?.membership?.role
   )
@@ -299,7 +371,7 @@
     isAdmin: userStore.isAdmin,
     userId: userStore.user?.id,
     currentProjectId: projectId.value,
-    projectRole: projectMembershipRole.value
+    projectRole: projectMembershipRole.value,
   }))
 
   // 计算属性
@@ -326,6 +398,20 @@
   const toolOptions = computed(() => toolsStore.tools || [])
 
   const emptyText = computed(() => t(getTaskListEmptyTextKey(currentTab.value)))
+
+  const taskColumns = computed(() => [
+    { title: t('tasks.columns.name'), key: 'name', width: 240 },
+    { title: t('tasks.columns.tool'), key: 'tool', width: 150 },
+    { title: t('tasks.columns.project'), key: 'project', width: 170 },
+    { title: t('tasks.columns.status'), key: 'status', width: 100 },
+    { title: t('tasks.columns.progress'), key: 'progress', width: 150 },
+    { title: t('tasks.columns.createdAt'), key: 'created_at', width: 170 },
+    { title: t('tasks.columns.actions'), key: 'actions', width: 220 },
+  ])
+
+  const canCancel = (task: Task) => canCancelTask({ ...task }, taskActor.value)
+  const canRetry = (task: Task) => canRetryTask({ ...task }, taskActor.value)
+  const canDelete = (task: Task) => canDeleteTask({ ...task }, taskActor.value)
 
   const workflowScopeText = computed(() => {
     if (workflowScopeParts.value.length === 0) {
@@ -440,6 +526,23 @@
     currentPage.value = 1
     void fetchTasksAndCountsSafely()
   }
+
+  const handleScopeChange = () => {
+    const query = { ...route.query }
+    if (scope.value === 'design') {
+      query.scope = 'design'
+    } else {
+      delete query.scope
+    }
+    void router.replace({ query })
+  }
+
+  watch(
+    () => route.query.scope,
+    value => {
+      scope.value = value === 'design' ? 'design' : 'all'
+    }
+  )
 
   const handleDateChange = () => {
     currentPage.value = 1

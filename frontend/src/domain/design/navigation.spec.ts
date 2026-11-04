@@ -2,13 +2,12 @@ import { describe, it, expect } from 'vitest'
 import { buildDesignNavGroups, isDesignNavItemActive } from './navigation'
 
 describe('buildDesignNavGroups', () => {
-  it('groups stages in pipeline order and ends with design runs', () => {
+  it('groups stages in pipeline order; design runs moved into task center', () => {
     const groups = buildDesignNavGroups()
-    expect(groups.map(g => g.groupKey)).toEqual(['prepare', 'design', 'evaluate', 'record'])
+    expect(groups.map(g => g.groupKey)).toEqual(['prepare', 'design', 'evaluate'])
     expect(groups[0]!.items.map(i => i.key)).toEqual(['structurePredict', 'pocketPredict'])
     expect(groups[0]!.items.every(i => !i.isNew)).toBe(true)
-    const last = groups[groups.length - 1]!
-    expect(last.items.map(i => i.key)).toEqual(['designRuns'])
+    expect(groups.flatMap(g => g.items.map(i => i.key))).not.toContain('designRuns')
   })
 })
 
