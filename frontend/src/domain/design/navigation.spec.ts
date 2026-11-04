@@ -6,6 +6,7 @@ describe('buildDesignNavGroups', () => {
     const groups = buildDesignNavGroups()
     expect(groups.map(g => g.groupKey)).toEqual(['prepare', 'design', 'evaluate', 'record'])
     expect(groups[0]!.items.map(i => i.key)).toEqual(['structurePredict', 'pocketPredict'])
+    expect(groups[0]!.items.every(i => !i.isNew)).toBe(true)
     const last = groups[groups.length - 1]!
     expect(last.items.map(i => i.key)).toEqual(['designRuns'])
   })
