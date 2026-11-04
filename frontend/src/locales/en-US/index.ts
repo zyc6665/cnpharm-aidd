@@ -1739,6 +1739,28 @@ export default {
 
   // Design (P-15 molecule generation / P-16 peptide design / P-17 generation results)
   design: {
+    pipeline: {
+      title: 'Design Pipeline',
+      subtitle: 'Advance from target structure to candidate molecules, with upstream readiness visible at every step',
+      projectPlaceholder: 'Select project',
+      continueFlow: 'Continue design flow',
+      hideFlow: 'Hide flow',
+      loadError: 'Failed to load design pipeline',
+      noProject: 'No projects yet — create a project first',
+      goProjects: 'Back to workspace',
+      nextHint: 'Next: {stage}',
+      viewStage: 'View',
+      goStage: 'Complete',
+      stageCount: '{count} item(s)',
+      readiness: { ready: 'Ready', missing: 'To do', empty: 'No data' },
+      stage: {
+        structure: 'Structure prediction',
+        pocket: 'Pocket prediction',
+        molecule: 'Molecule design',
+        evaluation: 'Screening & evaluation',
+        validation: 'Validation'
+      }
+    },
     runs: {
       title: 'Design Runs',
       subtitle: 'Molecule generation, peptide design, property prediction, virtual screening and MD runs you and your team launched here',

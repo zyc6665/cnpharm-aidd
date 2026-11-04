@@ -1731,6 +1731,28 @@ export default {
 
   // 设计（P-15 分子生成 / P-16 多肽设计 / P-17 生成结果）
   design: {
+    pipeline: {
+      title: '设计流程',
+      subtitle: '从靶点结构一路推进到候选分子，每一步都看得见上游是否就绪',
+      projectPlaceholder: '选择项目',
+      continueFlow: '继续设计流程',
+      hideFlow: '收起流程',
+      loadError: '设计流程加载失败',
+      noProject: '还没有项目，先创建一个项目',
+      goProjects: '返回工作台',
+      nextHint: '下一步：{stage}',
+      viewStage: '查看',
+      goStage: '去完成',
+      stageCount: '当前 {count} 项',
+      readiness: { ready: '就绪', missing: '待补', empty: '无数据' },
+      stage: {
+        structure: '结构预测',
+        pocket: '口袋预测',
+        molecule: '分子设计',
+        evaluation: '筛选与评估',
+        validation: '计算验证'
+      }
+    },
     runs: {
       title: '设计任务',
       subtitle: '你和团队在这个平台上跑过的分子生成、多肽设计、性质预测、虚拟筛选与分子动力学任务',

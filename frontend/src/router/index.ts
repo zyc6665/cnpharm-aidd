@@ -115,6 +115,12 @@ const routes: RouteRecordRaw[] = [
   },
   // 设计（分子生成 / 多肽设计 / 生成结果）
   {
+    path: '/design',
+    name: 'DesignPipeline',
+    component: () => import('@/views/design/Pipeline.vue'),
+    meta: { title: 'design.pipeline.title', requiresAuth: true }
+  },
+  {
     path: '/design/molecules',
     name: 'MoleculeGeneration',
     component: () => import('@/views/design/MoleculeGeneration.vue'),
