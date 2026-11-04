@@ -5,7 +5,7 @@ import enum
 import re
 import uuid
 
-from sqlalchemy import Column, DateTime, Integer, String, event, func, select
+from sqlalchemy import Column, DateTime, Index, Integer, String, event, func, select, text
 from sqlalchemy.orm import object_session, relationship
 
 from app.database.base import Base, TimestampMixin, UUIDMixin
@@ -64,6 +64,29 @@ class User(Base, UUIDMixin, TimestampMixin):
     # 配额相关
     daily_task_limit = Column(Integer, default=50)
     max_file_size_mb = Column(Integer, default=100)
+
+    # 双真源收敛：下面两条唯一性此前只在迁移 20261031_07 的原生 SQL 里存在，
+    # 模型不声明会导致 SQLite（测试/dev 的 create_all）没有任何唯一约束，且
+    # ``alembic check`` 把它们误判为 "removed index"（autogenerate 会生成
+    # drop_index 把生产唯一约束删掉）。这里补齐声明，让两方言与迁移一致。
+    # （放在列定义之后，才能直接引用 username / ldap_dn 的 Column 对象。）
+    __table_args__ = (
+        # 用户名大小写不敏感唯一：PostgreSQL 用 lower(username) 表达式索引，
+        # SQLite 同样支持表达式索引，故两方言可共用同一声明。
+        Index("uq_users_username_lower", func.lower(username), unique=True),
+        # ldap_dn 仅在非空时唯一（部分唯一索引）。本地账号（auth_source=local）
+        # 的 ldap_dn 为 NULL，不能被当作重复值互相冲突。
+        Index(
+            "uq_users_ldap_dn",
+            "ldap_dn",
+            unique=True,
+            postgresql_where=text("ldap_dn IS NOT NULL"),
+            sqlite_where=text("ldap_dn IS NOT NULL"),
+        ),
+        # 注意：列上的 ``index=True`` 生成的是普通非唯一索引 ix_users_username，
+        # 它与上面的 uq_users_username_lower 语义不同——前者服务于「按原始大小写
+        # 精确匹配用户名」的点查，后者是「大小写不敏感唯一约束」。两者都保留。
+    )
 
     # 关系
     tools = relationship("Tool", back_populates="owner", foreign_keys="Tool.owner_id")

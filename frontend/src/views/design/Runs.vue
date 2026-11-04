@@ -5,15 +5,15 @@
         :title="t('design.runs.title')"
         :subtitle="t('design.runs.subtitle')"
       >
-        <template #extra>
+        <template #actions>
           <a-space>
             <a-button :loading="loading" @click="load(false)">
               <ReloadOutlined />
               {{ t('common.refresh') }}
             </a-button>
-            <a-button type="primary" @click="goSubmit">
+            <a-button type="primary" data-testid="design-runs-continue" @click="goSubmit">
               <PlusOutlined />
-              {{ t('design.runs.newRun') }}
+              {{ t('design.runs.continueFlow') }}
             </a-button>
           </a-space>
         </template>
@@ -90,6 +90,15 @@
               </a-button>
               <a-button type="link" size="small" @click="openDetail(record)">
                 {{ t('design.runs.openDetail') }}
+              </a-button>
+              <a-button
+                v-if="nextStepPath(record)"
+                type="link"
+                size="small"
+                data-testid="design-runs-next-step"
+                @click="openNext(record)"
+              >
+                {{ t('design.runs.nextStep') }}
               </a-button>
             </a-space>
           </template>
@@ -197,7 +206,33 @@ function openDetail(task: Task) {
 }
 
 function goSubmit() {
-  void router.push('/design/molecules')
+  void router.push('/design')
+}
+
+/**
+ * 任务行的「下一步」目标：按类别给出后继环节。
+ * 结构与口袋无专属结果页，统一落到「设计流程总览」并聚焦对应阶段。
+ */
+function nextStepPath(record: Task): string | null {
+  const category = findDesignRunCategory(record.tool_slug)
+  if (!category) return null
+  const pid = record.project_id
+  const q = pid ? `?project_id=${pid}` : ''
+  switch (category.key) {
+    case 'structure':
+      return pid ? `/design?focus=pocket&project_id=${pid}` : '/design?focus=pocket'
+    case 'pocket':
+      return `/design/molecules${q}`
+    case 'molecule':
+      return `/predict${q}`
+    default:
+      return null
+  }
+}
+
+function openNext(record: Task) {
+  const path = nextStepPath(record)
+  if (path) void router.push(path)
 }
 
 async function loadProjectNames() {

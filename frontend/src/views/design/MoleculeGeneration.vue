@@ -13,7 +13,7 @@
 
       <section class="design-section">
         <h3 class="design-section__title">{{ t('design.section.inputs') }}</h3>
-        <PocketPicker v-model="pocketSelection" />
+        <PocketPicker v-model="pocketSelection" :default-project-id="initialProjectId" />
       </section>
 
       <section class="design-section">
@@ -105,6 +105,10 @@
 
   const router = useRouter()
   const { t } = useI18n()
+
+  const props = withDefaults(defineProps<{ initialProjectId?: string }>(), {
+    initialProjectId: ''
+  })
 
   const resolving = ref(false)
   const submitting = ref(false)

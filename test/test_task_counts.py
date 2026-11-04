@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import AsyncIterator
+from datetime import datetime
 
 import pytest
 import pytest_asyncio
@@ -246,3 +247,34 @@ async def test_tool_slugs_filter_rejects_unknown_slug_as_empty(
 
     assert response.status_code == 200
     assert response.json()["data"]["items"] == []
+
+
+@pytest.mark.asyncio
+async def test_task_list_exposes_completed_at_matching_finished_at(
+    db_session: AsyncSession,
+    owner: User,
+    project: Project,
+    api_client: AsyncClient,
+) -> None:
+    """列表项必须同时给出 completed_at（与详情页同名字段），否则前端卡片/管理页永远显示 '-'。"""
+    tool = await _make_tool(db_session, owner.id, "tool-completed-at")
+    task = await _make_task(
+        db_session,
+        owner=owner,
+        project=project,
+        tool=tool,
+        status=TaskStatus.SUCCESS.value,
+        name="已完成任务",
+    )
+    finished_at = datetime(2026, 10, 25, 13, 0, 0)
+    task.finished_at = finished_at
+    await db_session.commit()
+
+    response = await api_client.get("/api/v1/tasks", params={"project_id": project.id})
+
+    assert response.status_code == 200
+    items = response.json()["data"]["items"]
+    row = next(item for item in items if item["id"] == task.id)
+    assert row["finished_at"] is not None
+    assert row["completed_at"] is not None
+    assert row["completed_at"] == row["finished_at"]

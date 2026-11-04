@@ -50,6 +50,7 @@
 </template>
 
 <script setup lang="ts">
+import { parseServerDate } from '@/utils/datetime'
   import { useI18n } from 'vue-i18n'
   import { ReloadOutlined } from '@ant-design/icons-vue'
   import type { WorkflowRun } from '@/types/models'
@@ -73,7 +74,8 @@
   const { t } = useI18n()
 
   function formatRunTime(value: string): string {
-    const date = new Date(value)
+    const date = parseServerDate(value)
+    if (!date) return '-'
     if (Number.isNaN(date.getTime())) {
       return value
     }

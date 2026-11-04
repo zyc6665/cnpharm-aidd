@@ -60,7 +60,11 @@ class Artifact(Base, UUIDMixin, TimestampMixin):
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
     latest_version_id = Column(String(36), nullable=True)
-    source_task_id = Column(String(36), nullable=True, index=True)
+    # 产物是独立资产：任务删除不得带走产物，溯源退化为未知但数据完整，故 SET NULL。
+    # 需保留索引：SET NULL 更新 source_task_id 时若无索引会触发全表锁。
+    source_task_id = Column(
+        String(36), ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     versions = relationship(
         "ArtifactVersion",
@@ -110,7 +114,11 @@ class ArtifactVersion(Base, UUIDMixin, TimestampMixin):
     summary_json = Column(JSON, nullable=False, default=dict)
     metrics_json = Column(JSON, nullable=False, default=dict)
     expires_at = Column(DateTime, nullable=True, index=True)
-    source_task_id = Column(String(36), nullable=True, index=True)
+    # 同 Artifact.source_task_id：产物版本是独立资产，任务删除只把来源置空（SET NULL），
+    # 不丢产物；索引保留以避免 SET NULL 时的全表锁。
+    source_task_id = Column(
+        String(36), ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     source_attempt_id = Column(String(64), nullable=True)
     source_tool_version_id = Column(String(36), nullable=True)
     storage_tier = Column(

@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><link rel="stylesheet" href="mockup.css">
+<style>
+.wrap{display:flex;flex-direction:column;gap:18px;max-width:1120px}
+.stepper{display:flex;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px;gap:10px}
+.step{display:flex;align-items:center;gap:10px;min-width:0}
+.step .num{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex:0 0 26px}
+.step.done .num{background:var(--success-l);color:#4ade80;border:1px solid rgba(34,197,94,.4)}
+.step.cur .num{background:var(--accent);color:#fff;box-shadow:0 0 0 4px var(--accent-l)}
+.step .lab{display:flex;flex-direction:column;line-height:1.25}
+.step .lab .k{font-size:11px;color:var(--text3)}
+.step .lab .v{font-size:13px;font-weight:600;white-space:nowrap}
+.step.cur .lab .v{color:var(--accent-h)}
+.stepbar{flex:1;height:2px;background:var(--border2);min-width:12px}
+.stepbar.done{background:rgba(34,197,94,.5)}
+.card{padding:18px 20px}
+.relay{border-color:var(--accent-b);background:linear-gradient(180deg,rgba(59,130,246,.06),transparent)}
+.relay-head{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.relay-head h3{font-size:15px;font-weight:600}
+.relay-sub{color:var(--text2);font-size:13px;margin-bottom:14px}
+.ptable{width:100%;border-collapse:collapse;font-size:13px}
+.ptable th{text-align:left;color:var(--text3);font-weight:500;font-size:12px;padding:8px 10px;border-bottom:1px solid var(--border)}
+.ptable td{padding:9px 10px;border-bottom:1px solid var(--subtle)}
+.bar{height:6px;border-radius:4px;background:rgba(255,255,255,.08);overflow:hidden;width:110px;display:inline-block;vertical-align:middle}
+.bar>i{display:block;height:100%;background:var(--accent)}
+.score{font-variant-numeric:tabular-nums;color:var(--text)}
+.relay-actions{display:flex;gap:10px;margin-top:14px;align-items:center}
+.relay-actions .right{margin-left:auto;color:var(--text3);font-size:12px}
+.sec-title{font-size:15px;font-weight:600;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.field label{display:block;font-size:12px;color:var(--text2);margin-bottom:6px}
+.input{background:var(--elev);border:1px solid var(--border2);border-radius:7px;padding:8px 11px;font-size:13px;color:var(--text)}
+.dim{opacity:.5}
+.actions{display:flex;justify-content:flex-end;align-items:center;gap:12px}
+.hintline{color:var(--warning);font-size:12px}
+.callout{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--accent-h);background:var(--accent-l);border:1px solid var(--accent-b);padding:3px 10px;border-radius:999px;font-weight:500}
+.legend{display:flex;gap:14px;color:var(--text3);font-size:12px;margin-top:2px}
+.legend b{color:var(--text2);font-weight:600}
+</style></head>
+<body><div class="app">
+  <aside class="sidebar">
+    <div class="brand"><span class="logo"></span>中国医药 AIDD</div>
+    <nav class="nav">
+      <div class="nav-item"><span class="ic">⌂</span>工作台</div>
+      <div class="nav-item"><span class="ic">▦</span>工具</div>
+      <div class="nav-item"><span class="ic">☰</span>任务</div>
+      <div class="nav-item"><span class="ic">⤳</span>工作流</div>
+      <div class="nav-item"><span class="ic">◈</span>项目成果</div>
+    </nav>
+    <div class="section-label">设计流程</div>
+    <nav class="nav">
+      <div class="nav-item"><span class="ic">◎</span>流程总览<span class="new-tag">NEW</span></div>
+      <div class="group-label">前期准备</div>
+      <div class="nav-item"><span class="ic">◔</span>结构预测<span class="new-tag">NEW</span></div>
+      <div class="nav-item"><span class="ic">◍</span>口袋预测<span class="new-tag">NEW</span></div>
+      <div class="group-label">分子设计</div>
+      <div class="nav-item active"><span class="ic">✦</span>分子生成</div>
+      <div class="nav-item"><span class="ic">❋</span>多肽设计</div>
+      <div class="nav-item"><span class="ic">⧩</span>虚拟筛选</div>
+      <div class="group-label">评估验证</div>
+      <div class="nav-item"><span class="ic">◫</span>性质预测</div>
+      <div class="nav-item"><span class="ic">⚡</span>分子动力学</div>
+      <div class="group-label">记录</div>
+      <div class="nav-item"><span class="ic">◷</span>设计任务</div>
+    </nav>
+    <div class="sidebar-footer"><div class="divider"></div>
+      <div class="nav-item"><span class="ic">☾</span>主题</div>
+      <div class="nav-item"><span class="ic">⚙</span>账户设置</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="page-head">
+      <div>
+        <div class="page-title">分子生成</div>
+        <div class="page-sub">基于选定口袋批量生成候选分子，产出可直接进入下一步评估的候选集</div>
+      </div>
+    </div>
+
+    <div class="wrap" style="margin-top:20px">
+      <!-- upstream relay stepper -->
+      <div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <span class="callout">① 上游接力条 · 一眼看到断在哪一步</span>
+        </div>
+        <div class="stepper">
+          <div class="step done"><span class="num">✓</span><span class="lab"><span class="k">项目</span><span class="v">GRK4 高血压</span></span></div>
+          <span class="stepbar done"></span>
+          <div class="step done"><span class="num">✓</span><span class="lab"><span class="k">靶点</span><span class="v">GRK4</span></span></div>
+          <span class="stepbar done"></span>
+          <div class="step done"><span class="num">✓</span><span class="lab"><span class="k">蛋白</span><span class="v">GRK4 激酶域</span></span></div>
+          <span class="stepbar done"></span>
+          <div class="step done"><span class="num">✓</span><span class="lab"><span class="k">结构</span><span class="v">Boltz-2 · #1</span></span></div>
+          <span class="stepbar"></span>
+          <div class="step cur"><span class="num">5</span><span class="lab"><span class="k">口袋</span><span class="v" style="color:var(--warning)">待选定</span></span></div>
+        </div>
+      </div>
+
+      <!-- inline relay -->
+      <div class="card relay">
+        <div class="relay-head"><h3>该结构已预测出 5 个口袋，但还没有「选定」</h3><span class="pill warn">待补</span>
+          <span style="margin-left:auto" class="callout">② 就地补票 · 不用离开本页</span></div>
+        <div class="relay-sub">选一个作为本次设计的结合口袋即可继续；无需再跳到「靶点与结构」页。</div>
+        <table class="ptable">
+          <thead><tr><th style="width:70px">排名</th><th style="width:210px">综合评分</th><th style="width:120px">体积 (Å³)</th><th style="width:110px">残基数</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr><td>#1</td><td><span class="bar"><i style="width:94%"></i></span> <span class="score" style="margin-left:8px">0.94</span></td><td>1284.6</td><td>17</td><td><button class="btn sm primary">选定并继续</button></td></tr>
+            <tr><td>#2</td><td><span class="bar"><i style="width:87%"></i></span> <span class="score" style="margin-left:8px">0.87</span></td><td>946.2</td><td>14</td><td><button class="btn sm ghost">选定</button></td></tr>
+            <tr><td>#3</td><td><span class="bar"><i style="width:81%"></i></span> <span class="score" style="margin-left:8px">0.81</span></td><td>812.4</td><td>13</td><td><button class="btn sm ghost">选定</button></td></tr>
+            <tr><td>#4</td><td><span class="bar"><i style="width:76%"></i></span> <span class="score" style="margin-left:8px">0.76</span></td><td>704.8</td><td>12</td><td><button class="btn sm ghost">选定</button></td></tr>
+            <tr><td>#5</td><td><span class="bar"><i style="width:68%"></i></span> <span class="score" style="margin-left:8px">0.68</span></td><td>588.3</td><td>9</td><td><button class="btn sm ghost">选定</button></td></tr>
+          </tbody>
+        </table>
+        <div class="relay-actions">
+          <button class="btn sm ghost">↻ 重新预测口袋</button>
+          <span class="right">高级：去「靶点与结构」页批量管理 →</span>
+        </div>
+      </div>
+
+      <!-- params (disabled until pocket chosen) -->
+      <div class="card" style="padding:20px">
+        <div class="sec-title">参数配置 <span class="pill mut" style="font-weight:500">选定口袋后启用</span></div>
+        <div class="grid dim">
+          <div class="field"><label>生成数量</label><div class="input">100</div></div>
+          <div class="field"><label>随机种子</label><div class="input">42</div></div>
+          <div class="field"><label>分子量下限 (Da)</label><div class="input">200</div></div>
+          <div class="field"><label>分子量上限 (Da)</label><div class="input">600</div></div>
+          <div class="field"><label>logP 下限</label><div class="input">-1</div></div>
+          <div class="field"><label>logP 上限</label><div class="input">5</div></div>
+        </div>
+        <div class="actions" style="margin-top:18px">
+          <span class="hintline">还有 1 步未完成：请先在下方选定一个结合口袋</span>
+          <button class="btn primary" disabled style="opacity:.5">提交生成任务</button>
+        </div>
+      </div>
+
+      <div class="legend"><span><b>旧：</b>「请先在结构详情中标记口袋」→ 用户跳出本页找口袋 → 再跳回</span><span><b>新：</b>断点直接在本页给出候选口袋与「选定」按钮</span></div>
+    </div>
+  </main>
+</div></body></html>

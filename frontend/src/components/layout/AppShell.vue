@@ -59,21 +59,35 @@
         </router-link>
       </nav>
 
-      <!-- 设计工具导航（直达页入口；移动端底部 Tab 不显示，避免项过多） -->
+      <!-- 设计流程导航（按 AIDD 阶段分组；直达页入口） -->
       <nav class="sidebar-nav sidebar-design-nav" :aria-label="t('nav.designSection')">
         <div v-if="!collapsed" class="sidebar-section-label">{{ t('nav.designSection') }}</div>
         <router-link
-          v-for="item in designNav"
-          :key="item.key"
-          :to="item.to"
+          to="/design"
           class="nav-item"
-          :class="{ active: isActive(item.active) }"
-          :aria-label="t(item.labelKey)"
-          :title="collapsed ? t(item.labelKey) : undefined"
+          :class="{ active: route.path === '/design' && !route.query.focus }"
+          :aria-label="t('nav.designPipeline')"
+          :title="collapsed ? t('nav.designPipeline') : undefined"
         >
-          <component :is="item.icon" class="nav-icon" />
-          <span v-if="!collapsed" class="nav-label">{{ t(item.labelKey) }}</span>
+          <ApartmentOutlined class="nav-icon" />
+          <span v-if="!collapsed" class="nav-label">{{ t('nav.designPipeline') }}</span>
         </router-link>
+        <template v-for="group in designNavGroups" :key="group.groupKey">
+          <div v-if="!collapsed" class="sidebar-group-label">{{ t(group.labelKey) }}</div>
+          <router-link
+            v-for="item in group.items"
+            :key="item.key"
+            :to="item.to"
+            class="nav-item"
+            :class="{ active: isDesignItemActive(item) }"
+            :aria-label="t(item.labelKey)"
+            :title="collapsed ? t(item.labelKey) : undefined"
+          >
+            <component :is="designIcon(item.key)" class="nav-icon" />
+            <span v-if="!collapsed" class="nav-label">{{ t(item.labelKey) }}</span>
+            <span v-if="item.isNew && !collapsed" class="nav-new-tag">NEW</span>
+          </router-link>
+        </template>
       </nav>
 
       <!-- 分隔 -->
@@ -166,12 +180,15 @@ import {
   FilterOutlined,
   HistoryOutlined,
   ThunderboltOutlined,
+  NodeIndexOutlined,
+  AimOutlined,
   TrophyOutlined,
 } from '@ant-design/icons-vue'
 import { useUserStore, useAppStore } from '@/stores'
 import ProtectedAvatar from '@/components/common/ProtectedAvatar.vue'
 import CommandPalette from '@/components/common/CommandPalette.vue'
 import { PLATFORM_NAME, PLATFORM_SHORT_NAME } from '@/config/brand'
+import { buildDesignNavGroups, isDesignNavItemActive, type DesignNavItem } from '@/domain/design/navigation'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -237,52 +254,26 @@ const mainNav: NavItem[] = [
   },
 ]
 
-// 直达设计/分析页入口。这些页面此前「有路由、零入口」（docs/18 收口项），
-// 补到侧栏与命令面板，避免用户只能靠手敲 URL 进入。
-const designNav: NavItem[] = [
-  {
-    key: 'molecules',
-    to: '/design/molecules',
-    icon: DeploymentUnitOutlined,
-    labelKey: 'nav.molecules',
-    active: ['/design/molecules'],
-  },
-  {
-    key: 'peptides',
-    to: '/design/peptides',
-    icon: ClusterOutlined,
-    labelKey: 'nav.peptides',
-    active: ['/design/peptides'],
-  },
-  {
-    key: 'predict',
-    to: '/predict',
-    icon: LineChartOutlined,
-    labelKey: 'nav.predict',
-    active: ['/predict'],
-  },
-  {
-    key: 'screen',
-    to: '/screen',
-    icon: FilterOutlined,
-    labelKey: 'nav.screen',
-    active: ['/screen'],
-  },
-  {
-    key: 'md',
-    to: '/md',
-    icon: ThunderboltOutlined,
-    labelKey: 'nav.md',
-    active: ['/md'],
-  },
-  {
-    key: 'designRuns',
-    to: '/design/runs',
-    icon: HistoryOutlined,
-    labelKey: 'nav.designRuns',
-    active: ['/design/runs'],
-  },
-]
+// 设计流程导航：按 AIDD 阶段分组（见 domain/design/navigation）。
+const designNavGroups = buildDesignNavGroups()
+const DESIGN_NAV_ICONS: Record<string, Component> = {
+  structurePredict: NodeIndexOutlined,
+  pocketPredict: AimOutlined,
+  molecules: DeploymentUnitOutlined,
+  peptides: ClusterOutlined,
+  screen: FilterOutlined,
+  predict: LineChartOutlined,
+  md: ThunderboltOutlined,
+  designRuns: HistoryOutlined,
+}
+function designIcon(key: string): Component {
+  return DESIGN_NAV_ICONS[key] ?? AppstoreOutlined
+}
+
+function isDesignItemActive(item: DesignNavItem): boolean {
+  const focus = typeof route.query.focus === 'string' ? route.query.focus : ''
+  return isDesignNavItemActive(item, { path: route.path, focus })
+}
 
 const adminNav: NavItem[] = [
   {
@@ -503,6 +494,15 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   letter-spacing: 0.05em;
 }
 
+.sidebar-group-label {
+  padding: 2px @spacing-sm;
+  margin-top: @spacing-sm;
+  color: @text-tertiary;
+  font-size: 11px;
+  font-weight: @font-weight-medium;
+  letter-spacing: 0.03em;
+}
+
 .nav-item {
   position: relative;
   display: flex;
@@ -574,6 +574,17 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   background: @accent-color-light;
   padding: 1px 6px;
   border-radius: 999px;
+}
+
+.nav-new-tag {
+  font-size: 9px;
+  font-weight: @font-weight-semibold;
+  color: @accent-color;
+  background: @accent-color-light;
+  border: 1px solid @accent-color-border;
+  padding: 0 5px;
+  border-radius: 999px;
+  line-height: 1.5;
 }
 
 // ── 分隔线 ──

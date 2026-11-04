@@ -159,9 +159,9 @@
     getProtein,
     getStructure,
     getStructurePdbManifest,
-    predictPockets,
     prepareStructure
   } from '@/api/targets'
+  import { usePocketPrediction } from '@/composables/usePocketPrediction'
   import { formatPocketScore, pocketScoreTone, sortPocketsByScore } from '@/domain/targets'
   import { STRUCTURE_PREVIEW_FILE_ROLES, buildStructurePreviewArtifact, formatOptionalText, formatPlddtMean, formatSourceType, formatToolRef, plddtBand, resolveTargetErrorMessage } from '@/domain/targets/display'
   import type {
@@ -178,8 +178,10 @@
   const structureFiles = ref<StructureFileLink[]>([])
   const loading = ref(false)
   const loadError = ref(false)
-  const pocketSubmitting = ref(false)
   const preparing = ref(false)
+
+  // 与「上游接力条」共用同一套口袋预测提交逻辑。
+  const { predicting: pocketSubmitting, predict: predictPocketsTask } = usePocketPrediction()
 
   const pockets = computed<PocketSummary[]>(() =>
     sortPocketsByScore(structure.value?.pockets ?? [])
@@ -245,20 +247,12 @@
     if (!structure.value) {
       return
     }
-    pocketSubmitting.value = true
-    try {
-      const response = await predictPockets(structure.value.id, {
-        model_ref: { name: 'lvpocket-pocket-prediction' },
-        params: {}
-      })
-      message.success(
-        `${t('targets.structure.pocketsSubmitted')} (${response.data.task_id})`
-      )
-    } catch (cause) {
-      message.error(resolveTargetErrorMessage(cause, t('targets.structure.pocketsFailed')))
-    } finally {
-      pocketSubmitting.value = false
+    const taskId = await predictPocketsTask(structure.value.id)
+    if (!taskId) {
+      message.error(t('targets.structure.pocketsFailed'))
+      return
     }
+    message.success(`${t('targets.structure.pocketsSubmitted')} (${taskId})`)
   }
 
   async function handlePrepare() {

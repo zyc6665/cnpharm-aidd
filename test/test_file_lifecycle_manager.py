@@ -82,9 +82,10 @@ async def test_file_statistics_sum_size_bytes(db_session: AsyncSession) -> None:
 
 
 @pytest.mark.asyncio
-async def test_cleanup_expired_files_reports_size_bytes_and_uses_record_backend(
+async def test_cleanup_expired_files_soft_deletes_without_touching_blob(
     db_session: AsyncSession,
 ) -> None:
+    """过期且无引用的文件只软删，blob 保持不动（blob 由 artifact_gc 回收）。"""
     file_record = make_file(
         "expired.txt",
         4096,
@@ -93,6 +94,7 @@ async def test_cleanup_expired_files_reports_size_bytes_and_uses_record_backend(
     )
     db_session.add(file_record)
     await db_session.commit()
+    file_id = file_record.id
 
     class FakeStorage:
         def __init__(self) -> None:
@@ -104,14 +106,16 @@ async def test_cleanup_expired_files_reports_size_bytes_and_uses_record_backend(
 
     storage = FakeStorage()
     manager = FileLifecycleManager(db_session, storage_backend=storage)
-    manager._check_active_tasks = lambda _file_id: _empty_tasks()
 
     result = await manager.cleanup_expired_files()
 
-    assert result.cleaned_count == 1
-    assert result.freed_bytes == 4096
-    assert storage.deleted == ["/tmp/expired.txt"]
-
-
-async def _empty_tasks() -> list[str]:
-    return []
+    assert result.scanned == 1
+    assert result.soft_deleted == 1
+    assert result.skipped_referenced == 0
+    assert result.skipped_permanent == 0
+    assert result.failed == 0
+    # 新版语义：绝不删 blob，storage 后端不应被调用。
+    assert storage.deleted == []
+    refreshed = await db_session.get(File, file_id)
+    assert refreshed is not None
+    assert refreshed.deleted_at is not None

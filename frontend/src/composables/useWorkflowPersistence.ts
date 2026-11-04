@@ -1,3 +1,4 @@
+import { parseServerDate } from '@/utils/datetime'
 import { computed, ref, watch, type ComputedRef } from 'vue'
 import { Modal, message } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
@@ -1024,7 +1025,7 @@ function resolveWorkflowEdgeId(edgeId: unknown, index: number): string {
 function isProjectArtifactUsableForInput(artifact: TypedArtifact, semanticType: string): boolean {
   const version = artifact.latest_version
   if (!version || version.status !== 'available') return false
-  if (version.expires_at && new Date(version.expires_at).getTime() <= Date.now()) return false
+  if (version.expires_at && (parseServerDate(version.expires_at)?.getTime() ?? 0) <= Date.now()) return false
 
   const expectedType = normalizeWorkflowSemanticType(semanticType)
   const artifactType = artifact.standard_type && artifact.standard_version

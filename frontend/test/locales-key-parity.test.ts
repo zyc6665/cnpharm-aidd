@@ -1,4 +1,7 @@
 import { assert, describe, it } from 'vitest'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import zhCN from '@/locales/zh-CN'
 import enUS from '@/locales/en-US'
 
@@ -62,4 +65,78 @@ describe('语言包词条一致性', () => {
     const zhPockets = leavesUnder(zhCN, 'targets.structure.pockets')
     assert.notInclude([...zhPockets], 'targets.structure.pockets.hints.score')
   })
+
+  it('源码中所有 t(\'字面量\') 键都在中英语言包里存在', () => {
+    const missing = collectMissingLiteralKeys()
+    assert.deepEqual(
+      missing,
+      [],
+      `以下 t() 字面量键在语言包里缺失：\n${missing.slice(0, 40).join('\n')}`,
+    )
+  })
+
+  it('本次修复涉及的 5 个键在中英两边都存在', () => {
+    const required = [
+      // 系统设置页标题
+      'admin.systemConfig',
+      // 工具详情页「缺少必需输入」（带 {inputs} 插值）
+      'tasks.missingInputs',
+      // 工具详情页参数长度校验（顶层 validation 命名空间）
+      'validation.minLength',
+      'validation.maxLength',
+      // 工作流画布标题回退：改指向已存在键，不新增重复键
+      'workflow.workbenchHeader.titleFallback',
+    ]
+    for (const key of required) {
+      assert.include([...zhKeys], key, `zh-CN 缺少 ${key}`)
+      assert.include([...enKeys], key, `en-US 缺少 ${key}`)
+    }
+  })
 })
+
+const SRC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'src')
+
+/**
+ * 递归收集 `src/**\/*.{vue,ts}` 里所有 `t('...')` / `$t("...")` 的字面量键。
+ *
+ * 豁免规则（在注释里说明，避免静默漏检）：
+ * - 模板字符串 `` t(`...`) `` 与含 `${...}` 的键：键名在运行时拼接，无法静态展开，
+ *   跳过（例如 `` t(`tasks.status.${status}`) ``）。
+ * - 非键名形态（含空格、花括号、非标识符字符）的字面量：不是 i18n key，跳过。
+ * - 单文件测试（*.spec.ts）与类型声明（*.d.ts）不参与扫描。
+ */
+function collectMissingLiteralKeys(): string[] {
+  const files: string[] = []
+  const walk = (dir: string): void => {
+    for (const name of readdirSync(dir)) {
+      const path = join(dir, name)
+      if (statSync(path).isDirectory()) {
+        walk(path)
+        continue
+      }
+      if (!/\.(vue|ts)$/.test(name)) continue
+      if (name.endsWith('.spec.ts') || name.endsWith('.d.ts')) continue
+      if (path.includes(`${join('src', 'locales')}`)) continue
+      files.push(path)
+    }
+  }
+  walk(SRC_DIR)
+
+  const literal = /(?<![A-Za-z0-9_])\$?t\(\s*(['"])([^'"]+)\1/g
+  const found = new Map<string, string[]>()
+  for (const file of files) {
+    const source = readFileSync(file, 'utf8')
+    for (const match of source.matchAll(literal)) {
+      const key = match[2].trim()
+      // 只保留合法的键名形态；模板字符串/含插值的键不会被这条正则匹配到。
+      if (!/^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/.test(key)) continue
+      const list = found.get(key) ?? []
+      list.push(file)
+      found.set(key, list)
+    }
+  }
+
+  return [...found.keys()]
+    .filter((key) => !zhKeys.has(key) || !enKeys.has(key))
+    .sort()
+}

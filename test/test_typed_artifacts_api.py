@@ -560,10 +560,32 @@ async def test_project_artifacts_can_filter_by_type_and_source(
     artifact_context: dict[str, object],
 ):
     from app.models.artifacts import Artifact, ArtifactVersion
+    from app.models.tasks import Task
+    from app.models.tools import Tool, ToolVersion
 
     client, _ = artifact_client
     project = artifact_context["project"]
     owner = artifact_context["owner"]
+    # source_task_id 现在是真实外键（FK -> tasks.id）；测试里按来源任务过滤，
+    # 必须建出 id 为 task-rdkit / task-molp-pc 的真实 Task 行，否则写 Artifact 会违反外键。
+    tool = Tool(owner_id=owner.id, name="typed-artifact-tool", slug="typed-artifact-tool")
+    artifact_db.add(tool)
+    await artifact_db.flush()
+    tool_version = ToolVersion(tool_id=tool.id, version="1.0", config={})
+    artifact_db.add(tool_version)
+    await artifact_db.flush()
+    for task_id in ("task-rdkit", "task-molp-pc"):
+        artifact_db.add(
+            Task(
+                id=task_id,
+                tool_id=tool.id,
+                tool_version_id=tool_version.id,
+                project_id=project.id,
+                user_id=owner.id,
+                name=task_id,
+            )
+        )
+    await artifact_db.flush()
     matching = Artifact(
         project_id=project.id,
         created_by=owner.id,

@@ -1,4 +1,5 @@
 import type { TypedArtifact } from '@/types/artifacts'
+import { parseServerDate } from '@/utils/datetime'
 
 export function formatToolMetricCount(num?: number | null): string {
   if (num == null) {
@@ -14,7 +15,7 @@ export function formatToolMetricCount(num?: number | null): string {
 }
 
 export function formatToolDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString()
+  return parseServerDate(dateStr)?.toLocaleDateString() ?? '-'
 }
 
 export function getToolStatusColor(status: string): string {

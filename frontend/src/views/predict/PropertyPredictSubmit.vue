@@ -16,13 +16,21 @@ import {
 import type { PredictTaskGroup } from '@/types/predict'
 import type { CandidateSet } from '@/types/compounds'
 
+const props = withDefaults(
+  defineProps<{ projectIdOverride?: string; initialGroups?: PredictTaskGroup[] }>(),
+  { projectIdOverride: '', initialGroups: undefined }
+)
+
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 
 const projectId = computed(() => {
+  if (props.projectIdOverride) return props.projectIdOverride
   const raw = route.query.project_id
-  return typeof raw === 'string' ? raw : ''
+  if (typeof raw === 'string' && raw) return raw
+  const paramId = route.params?.projectId
+  return typeof paramId === 'string' ? paramId : ''
 })
 
 const source = ref<'upload' | 'candidate'>('upload')
@@ -30,7 +38,9 @@ const smilesFile = ref<File | null>(null)
 const smilesFileName = ref('')
 const candidateSets = ref<CandidateSet[]>([])
 const candidateSetId = ref<string>('')
-const selectedGroups = ref<PredictTaskGroup[]>([...PREDICT_DEFAULT_TASK_GROUPS])
+const selectedGroups = ref<PredictTaskGroup[]>(
+  props.initialGroups?.length ? [...props.initialGroups] : [...PREDICT_DEFAULT_TASK_GROUPS]
+)
 const submitting = ref(false)
 const formError = ref('')
 
@@ -111,8 +121,8 @@ async function handleSubmit(): Promise<void> {
       toolSlug: ADMET_TOOL_SLUG,
       projectId: projectId.value || undefined,
       name: `ADMET 性质预测 ${new Date().toISOString().slice(0, 10)}`,
-      params: { task_groups: [...selectedGroups.value] },
-      standardInputUploads: { molecules: fileId }
+      params: { device: 'cpu' },
+      standardInputUploads: { smiles_csv: fileId }
     })
     message.success(t('predict.submit.success'))
     await router.push(`/tasks/${task.id}/predictions`)

@@ -43,7 +43,9 @@ async def test_standard_artifact_version_can_reference_multiple_file_roles():
             semantic_type="binding_pocket",
             standard_type="binding_pocket",
             standard_version=1,
-            source_task_id="task-1",
+            # source_task_id 现在是真实外键（FK -> tasks.id）：本用例不需要来源任务，
+            # 原假 id "task-1" 若在开启 PRAGMA foreign_keys 的库上会违反外键，故留空。
+            source_task_id=None,
             name="Top pocket",
         )
         session.add(artifact)

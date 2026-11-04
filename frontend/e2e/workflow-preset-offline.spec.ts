@@ -67,6 +67,8 @@ test('工作流页面可切换到配体结构到基础 ADMET 预设', async ({ p
   await installWorkflowMocks(page)
 
   await page.goto(`/projects/${projectId}/workflow`)
+  // 工作流页默认进入「引导式」页签；预设选择位于「手动模式」页签下。
+  await page.getByRole('tab', { name: '手动模式' }).click()
   await page.getByTestId('workflow-preset-select').click()
   await page.getByTitle('配体结构到基础 ADMET').click()
 
@@ -81,6 +83,7 @@ test('工作流预设不再包含联网抓取配体的流程', async ({ page }) 
   await installWorkflowMocks(page)
 
   await page.goto(`/projects/${projectId}/workflow`)
+  await page.getByRole('tab', { name: '手动模式' }).click()
   await page.getByTestId('workflow-preset-select').click()
 
   await expect(page.getByTitle('PubChem 到基础 ADMET')).toHaveCount(0)

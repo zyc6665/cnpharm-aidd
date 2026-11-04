@@ -15,7 +15,12 @@ import type { TaskStatus } from '@/types/models'
  * slug 全部来自各域已冻结的契约常量（`types/design.ts`、`types/predict.ts`、
  * `types/screening.ts`、`api/md.ts`），此处只做集中引用，不重复声明字面量。
  */
-import { MOLECULE_GENERATION_TOOL_SLUG, PEPTIDE_DESIGN_TOOL_SLUG } from '@/types/design'
+import {
+  MOLECULE_GENERATION_TOOL_SLUG,
+  PEPTIDE_DESIGN_TOOL_SLUG,
+  STRUCTURE_PREDICT_TOOL_SLUG,
+  POCKET_PREDICT_TOOL_SLUG,
+} from '@/types/design'
 import { ADMET_TOOL_SLUG } from '@/types/predict'
 import { VINA_TOOL_SLUG } from '@/types/screening'
 import { FREE_ENERGY_TOOL_SLUG, MD_TOOL_SLUG } from '@/api/md'
@@ -29,6 +34,16 @@ export interface DesignRunCategory {
 }
 
 export const DESIGN_RUN_CATEGORIES: readonly DesignRunCategory[] = [
+  {
+    key: 'structure',
+    slugs: [STRUCTURE_PREDICT_TOOL_SLUG],
+    resultPath: taskId => `/tasks/${taskId}`,
+  },
+  {
+    key: 'pocket',
+    slugs: [POCKET_PREDICT_TOOL_SLUG],
+    resultPath: taskId => `/tasks/${taskId}`,
+  },
   {
     key: 'molecule',
     slugs: [MOLECULE_GENERATION_TOOL_SLUG],

@@ -87,8 +87,14 @@ def test_celery_sync_tasks_run_without_a_preexisting_event_loop(
     async def fake_execute(task_id: str, tool_version_id: str) -> dict[str, str]:
         return {"task_id": task_id, "tool_version_id": tool_version_id}
 
-    async def fake_cleanup() -> int:
-        return 3
+    async def fake_cleanup() -> dict[str, int]:
+        return {
+            "scanned": 3,
+            "skipped_referenced": 0,
+            "skipped_permanent": 0,
+            "soft_deleted": 3,
+            "failed": 0,
+        }
 
     async def fake_reclaim() -> int:
         return 2
@@ -142,7 +148,13 @@ def test_celery_sync_tasks_run_without_a_preexisting_event_loop(
         ).result()
 
     assert task_result == {"task_id": "task-1", "tool_version_id": "version-1"}
-    assert cleanup_result == {"deleted_count": 3}
+    assert cleanup_result == {
+        "scanned": 3,
+        "skipped_referenced": 0,
+        "skipped_permanent": 0,
+        "soft_deleted": 3,
+        "failed": 0,
+    }
     assert reclaim_result == {"reclaimed_count": 2}
     assert reservation_reclaim_result == {"reclaimed_count": 5}
     assert cancellation_reclaim_result == {"timed_out_count": 6}

@@ -30,8 +30,11 @@ test('5 个直达页必须在路由表注册', () => {
 
 test('5 个直达页必须在侧边栏导航可达', () => {
   const appShell = readSource('src/components/layout/AppShell.vue')
+  const designNav = readSource('src/domain/design/navigation.ts')
+  // 设计流程导航数据集中在 domain/design/navigation.ts，侧栏消费它渲染。
+  assert.equal(appShell.includes('buildDesignNavGroups'), true, '侧边栏必须消费设计流程导航分组')
   for (const path of DESIGN_ROUTES) {
-    assert.equal(appShell.includes(`to: '${path}'`), true, `侧边栏缺少入口: ${path}`)
+    assert.equal(designNav.includes(`to: '${path}'`), true, `侧边栏缺少入口: ${path}`)
   }
 })
 

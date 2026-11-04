@@ -180,7 +180,7 @@
   } | null>(null)
   const isPanning = computed(() => Boolean(panState.value))
 
-  const presetName = computed(() => resolveWorkflowLabel(props.preset.nameKey, t, te, t('workflow.definition.titleFallback')))
+  const presetName = computed(() => resolveWorkflowLabel(props.preset.nameKey, t, te, t('workflow.workbenchHeader.titleFallback')))
 
   function resolveCanvasNodeLabel(key: unknown): string {
     return resolveWorkflowLabel(key, t, te, t('workflow.canvasNode.titleFallback'))

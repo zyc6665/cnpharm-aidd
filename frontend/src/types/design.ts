@@ -14,6 +14,10 @@ import type { Tool, ToolVersion } from '@/types/models'
 export const MOLECULE_GENERATION_TOOL_SLUG = 'pocket2mol-pocket-ligand-generation'
 /** P-16 多肽设计工具 slug（契约冻结，不可改）。 */
 export const PEPTIDE_DESIGN_TOOL_SLUG = 'therapainter-peptide-prediction'
+/** 结构预测工具 slug（对齐后端 `app/services/domain_targets.py` 的 STRUCTURE_PREDICT_TOOL_SLUGS）。 */
+export const STRUCTURE_PREDICT_TOOL_SLUG = 'boltz2-structure-prediction'
+/** 口袋预测工具 slug（对齐后端 `POCKET_PREDICT_TOOL_SLUGS`）。 */
+export const POCKET_PREDICT_TOOL_SLUG = 'lvpocket-pocket-prediction'
 /** 生成结果表产物的标准类型前缀（`molecule_table@1`）。 */
 export const MOLECULE_TABLE_TYPE_PREFIX = 'molecule_table'
 /** 结果表 SQL/产物下载主文件角色（见 `molecule_table@1` 标准）。 */

@@ -48,9 +48,15 @@ class Task(Base, UUIDMixin, TimestampMixin):
         # 结果中心：project_id + status IN (...) + ORDER BY finished_at DESC, created_at DESC。
         # 等值列在前、排序列在后，才能消掉 ``results.py`` 的 USE TEMP B-TREE。
         # PG 侧建索引必须用 ``finished_at DESC NULLS LAST, created_at DESC``（见
-        # 迁移 20261031_01）；普通升序索引反扫会得到 NULLS FIRST，与查询语义不符。
-        # SQLite 不支持 NULLS LAST 索引语法，迁移里建普通升序即可（其 DESC 扫描天然
-        # 把 NULL 放到最后）。
+        # 迁移 20261031_01 / 20261031_03）；普通升序索引反扫会得到 NULLS FIRST，与
+        # 查询语义不符。SQLite 不支持 NULLS LAST 索引语法，迁移里建普通升序即可
+        # （其 DESC 扫描天然把 NULL 放到最后）。
+        #
+        # 双真源说明：NULLS LAST 无法用 SQLAlchemy 声明式无损表达（写了会破坏 SQLite
+        # create_all / 迁移 dry-run），因此**本索引的排序定义由迁移手写 DDL 持有**
+        # （模型这里只保留列顺序以服务 test_index_governance 的列名断言）。为阻止
+        # autogenerate 生成的 "changed index" 把 DB 的 DESC NULLS LAST 覆盖成升序，
+        # ``alembic/env.py`` 的 include_object 已显式排除本索引——勿用 autogenerate 覆盖。
         Index(
             "ix_tasks_project_status_finished",
             "project_id",

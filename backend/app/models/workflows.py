@@ -45,11 +45,14 @@ class WorkflowRun(Base, UUIDMixin, TimestampMixin):
         # 时 SQLite 仍会对同一毫秒的并列行做「RIGHT PART OF ORDER BY」内存排序。
         Index("ix_workflow_runs_project_created", "project_id", "created_at", "id"),
         Index("ix_workflow_runs_owner_created", "owner_id", "created_at", "id"),
+        # project_id 单列索引：数据库上实际存在（历史迁移建立），模型此前缺失，
+        # 导致 alembic check 误报 "removed index"。它是复合索引 ix_workflow_runs_project_created
+        # 的前缀，对纯等值过滤并非最优替代（复合索引同样可用），但为了消除模型与库
+        # 的双真源漂移而在此显式声明；test_index_governance 已将本索引登记为允许的
+        # 「前缀冗余」（见 ALLOWED_REDUNDANT_PREFIXES）。
+        Index("ix_workflow_runs_project_id", "project_id"),
     )
 
-    # 单列索引不单独建：下面的 (project_id, created_at) / (owner_id, created_at)
-    # 复合索引以它们为等值前缀，已覆盖「按项目 / 按 owner 过滤」的查询（与
-    # candidates 模型同款写法）。保留单列只会多维护一棵 B 树（见 test_index_governance）。
     project_id = Column(String(36), ForeignKey("projects.id"), nullable=True)
     owner_id = Column(String(36), ForeignKey("users.id"), nullable=False)
     workflow_definition_id = Column(

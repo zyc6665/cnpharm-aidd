@@ -102,7 +102,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onMounted, ref } from 'vue'
+  import { computed, onMounted } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { message } from 'ant-design-vue'
   import { useI18n } from 'vue-i18n'
@@ -110,15 +110,13 @@
   import AppErrorState from '@/components/common/AppErrorState.vue'
   import AppEmptyState from '@/components/common/AppEmptyState.vue'
   import SkeletonList from '@/components/common/SkeletonList.vue'
-  import { listPockets, selectPocket } from '@/api/targets'
+  import { useStructurePockets } from '@/composables/useStructurePockets'
   import {
-    findSelectedPocket,
     formatPocketCenter,
     formatPocketScore,
     formatPocketVolume,
     pocketScoreTone,
-    resolveTargetErrorMessage,
-    sortPocketsByScore
+    resolveTargetErrorMessage
   } from '@/domain/targets'
   import type { PocketSummary } from '@/types/targets'
 
@@ -127,13 +125,20 @@
   const { t } = useI18n()
 
   const structureId = computed(() => String(route.params.structureId || ''))
-  const rawPockets = ref<PocketSummary[]>([])
-  const loading = ref(false)
-  const loadError = ref(false)
-  const selectingId = ref('')
 
-  const pockets = computed<PocketSummary[]>(() => sortPocketsByScore(rawPockets.value))
-  const selectedPocket = computed<PocketSummary | null>(() => findSelectedPocket(rawPockets.value))
+  // 与「上游接力条」共用同一套口袋列表/选定逻辑。
+  const {
+    pockets: rawPockets,
+    sorted: pockets,
+    selected: selectedPocket,
+    loading,
+    error,
+    selectingId,
+    load,
+    select
+  } = useStructurePockets(structureId)
+
+  const loadError = computed(() => Boolean(error.value))
   const selectionBroken = computed(
     () => rawPockets.value.filter((pocket) => pocket.selected).length > 1
   )
@@ -147,35 +152,12 @@
     { title: t('targets.actions'), key: 'actions', width: 120 }
   ])
 
-  async function load() {
-    if (!structureId.value) {
-      return
-    }
-    loading.value = true
-    loadError.value = false
-    try {
-      const response = await listPockets(structureId.value)
-      rawPockets.value = response.data.items
-    } catch {
-      loadError.value = true
-      rawPockets.value = []
-    } finally {
-      loading.value = false
-    }
-  }
-
   async function handleSelect(pocket: PocketSummary) {
-    selectingId.value = pocket.id
-    try {
-      await selectPocket(pocket.id, !pocket.selected)
-      // 选定是「同结构内互斥」语义：后端会连带把其余口袋置为未选。
-      // 本地手工 patch 必须复刻这条连带规则，一旦后端再演化（如新增取消语义）就会漏；整表重拉最稳。
-      await load()
+    await select(pocket.id)
+    if (error.value) {
+      message.error(resolveTargetErrorMessage(undefined, t('targets.pockets.selectFailed')))
+    } else {
       message.success(t('targets.pockets.selectSuccess'))
-    } catch (cause) {
-      message.error(resolveTargetErrorMessage(cause, t('targets.pockets.selectFailed')))
-    } finally {
-      selectingId.value = ''
     }
   }
 

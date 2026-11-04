@@ -95,7 +95,14 @@ export default {
     screen: 'Virtual Screening',
     md: 'Molecular Dynamics',
     designRuns: 'Design Runs',
-    designSection: 'Design Tools'
+    designSection: 'Design Flow',
+    designPipeline: 'Pipeline Overview',
+    designGroupPrepare: 'Preparation',
+    designGroupDesign: 'Molecule Design',
+    designGroupEvaluate: 'Evaluation',
+    designGroupRecord: 'Records',
+    structurePredict: 'Structure Prediction',
+    pocketPredict: 'Pocket Prediction'
   },
   command: {
     placeholder: 'Search pages, commands…',
@@ -154,11 +161,11 @@ export default {
     artifactPreviewTypeLabel: 'Type',
     loadFailed: 'Research workspace failed to load',
     loadFailedHint: 'Latest project data is unavailable. Check your connection and retry.',
+    retry: 'Retry',
     overviewLoadFailed: 'Tasks and artifacts are temporarily unavailable',
     overviewLoadFailedHint: 'Projects loaded, but task and artifact overview failed. Retry when the service recovers.',
     schemaMigrationLoadFailed: 'Database migration is incomplete',
     schemaMigrationLoadFailedHint: 'The current database schema is behind the backend code. Run Alembic migrations before refreshing the workspace.',
-    retry: 'Retry',
     project: {
       name: 'Project name',
       namePlaceholder: 'For example: EGFR pocket study',
@@ -268,6 +275,15 @@ export default {
   },
 
   workflow: {
+    guided: {
+      noProtein: 'This target has no protein yet — add a protein sequence under Targets & Structures.',
+      structureNote: 'Submit a Boltz-2 structure prediction inline; it advances to pocket prediction when done.',
+      goStructureDetail: 'Structure details',
+      noStructure: 'No structure available yet — run structure prediction first.',
+      pocketNote: 'Predict pockets inline and select one as the design start; it advances to molecule generation when done.',
+      goPocketManage: 'Manage on pockets page',
+      actionFailed: 'Action failed'
+    },
     title: 'Tool Workbench',
     subtitle: 'Browse tools by research group, reuse historical artifacts, and launch the next task from one workspace',
     entry: {
@@ -993,7 +1009,9 @@ export default {
         'Default resource profile is determined by the platform per tool version and cannot be adjusted per run.',
       submit: 'Submit prediction',
       submitted: 'Structure prediction task submitted',
+      waiting: 'Predicting structure…',
       failed: 'Failed to submit structure prediction task',
+      timeout: 'Structure prediction timed out, please retry',
       sequenceMissing: 'This protein has no sequence, cannot submit structure prediction',
       invalidNumber: 'Enter a valid number',
       backToTarget: 'Back to target details'
@@ -1022,6 +1040,7 @@ export default {
       predictPockets: 'Predict pockets',
       pocketsSubmitted: 'Pocket prediction task submitted',
       pocketsFailed: 'Failed to submit pocket prediction task',
+      pocketsTimeout: 'Pocket prediction timed out, please retry',
       viewAllPockets: 'View all pockets',
       prepare: 'Prepare structure',
       prepareSuccess: 'Structure preparation task submitted',
@@ -1531,6 +1550,7 @@ export default {
     }
   },
   results: {
+    loadMoreFailed: 'Failed to load more — the results already shown are kept',
     title: 'Results',
     subtitle: 'Inspect results, artifacts and traceability packages of finished tasks',
     columns: {
@@ -1730,12 +1750,40 @@ export default {
 
   // Design (P-15 molecule generation / P-16 peptide design / P-17 generation results)
   design: {
+    pipeline: {
+      title: 'Design Pipeline',
+      subtitle: 'Advance from target structure to candidate molecules, with upstream readiness visible at every step',
+      projectPlaceholder: 'Select project',
+      continueFlow: 'Continue design flow',
+      hideFlow: 'Hide flow',
+      loadError: 'Failed to load design pipeline',
+      noProject: 'No projects yet — create a project first',
+      goProjects: 'Back to workspace',
+      nextHint: 'Next: {stage}',
+      viewStage: 'View',
+      goStage: 'Complete',
+      stageCount: '{count} item(s)',
+      readiness: { ready: 'Ready', missing: 'To do', empty: 'No data' },
+      stage: {
+        structure: 'Structure prediction',
+        pocket: 'Pocket prediction',
+        molecule: 'Molecule design',
+        evaluation: 'Screening & evaluation',
+        validation: 'Validation'
+      }
+    },
+    upstream: {
+      missingStructure: 'This protein has no structure yet — predict one inline below',
+      missingPocket: 'No selected pocket for this structure yet — predict and select one'
+    },
     runs: {
       title: 'Design Runs',
       subtitle: 'Molecule generation, peptide design, property prediction, virtual screening and MD runs you and your team launched here',
       newRun: 'New design run',
+      continueFlow: 'Continue design flow',
+      nextStep: 'Next step',
       loadError: 'Failed to load design runs',
-      empty: 'No design runs yet — start from "New design run"',
+      empty: 'No design runs yet — start from "Continue design flow"',
       openResult: 'View result',
       openDetail: 'Task detail',
       columns: {
@@ -1750,6 +1798,8 @@ export default {
       },
       category: {
         all: 'All',
+        structure: 'Structure prediction',
+        pocket: 'Pocket prediction',
         molecule: 'Molecule generation',
         peptide: 'Peptide design',
         predict: 'Property prediction',
@@ -1827,6 +1877,7 @@ export default {
       statusLabel: 'Task status',
       taskFailed: 'Task execution failed',
       moleculeCount: '{count} molecules',
+      peptideCount: '{count} peptides',
       tableMissing: 'molecule_table artifact not found; cannot render structure cards',
       sortBy: 'Sort by',
       desc: 'Desc',
@@ -1884,7 +1935,7 @@ export default {
     result: {
       title: 'Prediction Results',
       subtitle:
-        'Molecule × property matrix; sort/filter by column and inspect distribution histograms.',
+        'Molecule × property matrix; sort/filter columns, inspect distribution histograms, and open a per-molecule ADMET report.',
       loading: 'Loading prediction results…',
       loadFailed: 'Failed to load prediction results.',
       empty: 'No prediction table found.',
@@ -1898,6 +1949,34 @@ export default {
       noHistogram: 'No numeric columns.',
       backToTask: 'Back to task',
       count: 'Molecules',
+      detail: 'Details',
+      detailHint: 'Click any molecule row to open the full per-molecule ADMET report.',
+      detailTitle: 'Molecule ADMET Report',
+      detailTable: 'Table view',
+      detailRadar: 'Radar view',
+      detailDownloadCsv: 'Download CSV',
+      detailDownloadPdf: 'Download PDF',
+      detailNoData: 'No data available for this molecule.',
+      detailSectionStructure: 'Structure',
+      detailSectionBasic: 'Physicochemical property',
+      detailSectionAbsorption: 'Absorption',
+      detailSectionDistribution: 'Distribution',
+      detailSectionMetabolism: 'Metabolism',
+      detailSectionExcretion: 'Excretion',
+      detailSectionToxicity: 'Toxicity',
+      detailSectionTox21: 'Tox21 pathway',
+      detailSectionEcotoxicity: 'Ecotoxicity',
+      detailSectionLd50: 'LD50',
+      detailLegendGood: 'Good · low risk / favorable',
+      detailLegendWarn: 'Medium',
+      detailLegendBad: 'Poor · high risk / unfavorable',
+      detailLegendNeutral: 'Numeric metric',
+      detailReportInfo: 'Report info',
+      detailTask: 'Task ID',
+      detailTool: 'Model',
+      detailMetricCount: 'Metrics',
+      detailSource: 'Source',
+      detailSourceValue: 'Real task result table',
       colSmiles: 'SMILES',
       colInchiKey: 'InChIKey',
       colMolWeight: 'Mol weight',
@@ -2119,6 +2198,8 @@ export default {
 
   // Tasks
   tasks: {
+    loadFailed: 'Failed to load tasks',
+    loadFailedHint: 'Network or service problem — you can retry',
     outputMetrics: 'Key metrics',
     outputArtifacts: 'Artifacts',
     outputRawJson: 'View raw result JSON',
@@ -2150,6 +2231,7 @@ export default {
     create: 'Create Task',
     name: 'Task Name',
     namePlaceholder: 'Optional, leave blank to auto-generate',
+    missingInputs: 'Select required inputs first: {inputs}',
     // Tabs
     allTasks: 'All Tasks',
     runningTasks: 'Running',
@@ -2728,6 +2810,7 @@ export default {
     cleanupDaysDesc: 'Completed tasks older than this will be auto deleted',
     runtimeStats: 'Runtime Stats',
     configSnapshot: 'Configuration Snapshot',
+    systemConfig: 'System Configuration',
     environment: 'Environment',
     debugMode: 'Debug Mode',
     hostname: 'Hostname',
@@ -2773,6 +2856,12 @@ export default {
     gpuName: 'GPU Name',
     gpuUtilization: 'GPU Utilization',
     gpuTemperature: 'Temperature'
+  },
+
+  // Form validation
+  validation: {
+    minLength: 'At least {min} characters',
+    maxLength: 'At most {max} characters'
   },
 
   // Error Pages

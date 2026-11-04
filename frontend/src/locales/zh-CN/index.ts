@@ -94,7 +94,14 @@ export default {
     screen: '虚拟筛选',
     md: '分子动力学',
     designRuns: '设计任务',
-    designSection: '设计工具'
+    designSection: '设计流程',
+    designPipeline: '流程总览',
+    designGroupPrepare: '前期准备',
+    designGroupDesign: '分子设计',
+    designGroupEvaluate: '评估验证',
+    designGroupRecord: '记录',
+    structurePredict: '结构预测',
+    pocketPredict: '口袋预测'
   },
   command: {
     placeholder: '搜索页面、命令…',
@@ -153,11 +160,11 @@ export default {
     artifactPreviewTypeLabel: '类型',
     loadFailed: '研究工作台加载失败',
     loadFailedHint: '无法获取最新项目数据，请检查网络后重试。',
+    retry: '重试',
     overviewLoadFailed: '任务与 Artifact 暂时不可用',
     overviewLoadFailedHint: '项目列表已加载，任务和 Artifact 概览接口暂时失败，可稍后重试。',
     schemaMigrationLoadFailed: '数据库迁移未完成',
     schemaMigrationLoadFailedHint: '当前数据库结构落后于后端代码，请先执行 Alembic 迁移后再刷新工作台。',
-    retry: '重试',
     project: {
       name: '项目名称',
       namePlaceholder: '例如：EGFR 口袋研究',
@@ -266,6 +273,15 @@ export default {
   },
 
   workflow: {
+    guided: {
+      noProtein: '该靶点下还没有蛋白，请先在「靶点与结构」添加蛋白序列。',
+      structureNote: '就地提交 Boltz-2 结构预测，完成后自动进入口袋预测。',
+      goStructureDetail: '去结构详情',
+      noStructure: '还没有可用结构，请先完成结构预测。',
+      pocketNote: '就地预测口袋并「选定」一个作为设计起点，完成后自动进入分子生成。',
+      goPocketManage: '去口袋页批量管理',
+      actionFailed: '操作失败'
+    },
     title: '工具工作台',
     subtitle: '按研究分组浏览工具，在同一空间复用历史产物并继续发起计算任务',
     entry: {
@@ -990,7 +1006,9 @@ export default {
         '所选工具版本的默认资源规格由平台按工具版本配置决定，当前不支持按次调整。',
       submit: '提交预测',
       submitted: '结构预测任务已提交',
+      waiting: '结构预测中…',
       failed: '结构预测任务提交失败',
+      timeout: '结构预测超时，请重试',
       sequenceMissing: '该蛋白缺少序列，无法提交结构预测',
       invalidNumber: '请填写有效的数字',
       backToTarget: '返回靶点详情'
@@ -1019,6 +1037,7 @@ export default {
       predictPockets: '预测口袋',
       pocketsSubmitted: '口袋预测任务已提交',
       pocketsFailed: '口袋预测任务提交失败',
+      pocketsTimeout: '口袋预测超时，请重试',
       viewAllPockets: '查看全部口袋',
       prepare: '结构准备',
       prepareSuccess: '结构准备任务已提交',
@@ -1526,6 +1545,7 @@ export default {
     }
   },
   results: {
+    loadMoreFailed: '加载更多失败，已显示的结果不受影响',
     title: '结果中心',
     subtitle: '查看项目内已完成任务的结果、产物与追溯包',
     columns: {
@@ -1722,12 +1742,40 @@ export default {
 
   // 设计（P-15 分子生成 / P-16 多肽设计 / P-17 生成结果）
   design: {
+    pipeline: {
+      title: '设计流程',
+      subtitle: '从靶点结构一路推进到候选分子，每一步都看得见上游是否就绪',
+      projectPlaceholder: '选择项目',
+      continueFlow: '继续设计流程',
+      hideFlow: '收起流程',
+      loadError: '设计流程加载失败',
+      noProject: '还没有项目，先创建一个项目',
+      goProjects: '返回工作台',
+      nextHint: '下一步：{stage}',
+      viewStage: '查看',
+      goStage: '去完成',
+      stageCount: '当前 {count} 项',
+      readiness: { ready: '就绪', missing: '待补', empty: '无数据' },
+      stage: {
+        structure: '结构预测',
+        pocket: '口袋预测',
+        molecule: '分子设计',
+        evaluation: '筛选与评估',
+        validation: '计算验证'
+      }
+    },
+    upstream: {
+      missingStructure: '该蛋白还没有结构，先在下方就地预测一个',
+      missingPocket: '该结构还没有「已选定」的口袋，先预测并选定一个'
+    },
     runs: {
       title: '设计任务',
       subtitle: '你和团队在这个平台上跑过的分子生成、多肽设计、性质预测、虚拟筛选与分子动力学任务',
       newRun: '新建设计任务',
+      continueFlow: '继续设计流程',
+      nextStep: '下一步',
       loadError: '设计任务加载失败',
-      empty: '还没有设计任务，从「新建设计任务」开始',
+      empty: '还没有设计任务，从「继续设计流程」开始',
       openResult: '查看结果',
       openDetail: '任务详情',
       columns: {
@@ -1742,6 +1790,8 @@ export default {
       },
       category: {
         all: '全部',
+        structure: '结构预测',
+        pocket: '口袋预测',
         molecule: '分子生成',
         peptide: '多肽设计',
         predict: '性质预测',
@@ -1819,6 +1869,7 @@ export default {
       statusLabel: '任务状态',
       taskFailed: '任务执行失败',
       moleculeCount: '共 {count} 个分子',
+      peptideCount: '共 {count} 条多肽',
       tableMissing: '未找到分子表产物（molecule_table），无法渲染结构卡片',
       sortBy: '排序',
       desc: '降序',
@@ -1846,7 +1897,7 @@ export default {
       source: '分子来源',
       sourceUpload: '上传 SMILES CSV',
       sourceCandidateSet: '从项目候选集选择',
-      uploadHint: 'CSV 需包含 smiles 列，首行为表头。',
+      uploadHint: 'CSV 需包含 SMILES 列，首行为表头。',
       chooseFile: '选择 CSV 文件',
       selectedFile: '已选择文件',
       candidateSet: '候选集',
@@ -1873,7 +1924,7 @@ export default {
     },
     result: {
       title: '预测结果',
-      subtitle: '分子 × 性质矩阵，可按列排序/筛选并查看分布直方图。',
+      subtitle: '分子 × 性质矩阵，可按列排序/筛选、查看分布直方图，并点开单分子 ADMET 详细报告。',
       loading: '正在加载预测结果…',
       loadFailed: '加载预测结果失败。',
       empty: '没有找到预测结果表。',
@@ -1887,6 +1938,34 @@ export default {
       noHistogram: '无可用数值列。',
       backToTask: '返回任务',
       count: '分子数',
+      detail: '详情',
+      detailHint: '点击任意分子行查看单分子 ADMET 完整报告。',
+      detailTitle: '单分子 ADMET 报告',
+      detailTable: '列表视图',
+      detailRadar: '雷达视图',
+      detailDownloadCsv: '下载 CSV',
+      detailDownloadPdf: '下载 PDF',
+      detailNoData: '该分子无可用数据。',
+      detailSectionStructure: '分子结构',
+      detailSectionBasic: '基本属性',
+      detailSectionAbsorption: '吸收',
+      detailSectionDistribution: '分布',
+      detailSectionMetabolism: '代谢',
+      detailSectionExcretion: '排泄',
+      detailSectionToxicity: '毒性',
+      detailSectionTox21: 'Tox21 通路',
+      detailSectionEcotoxicity: '生态毒性',
+      detailSectionLd50: 'LD50',
+      detailLegendGood: '优 · 风险低/性质好',
+      detailLegendWarn: '中',
+      detailLegendBad: '差 · 风险高/性质弱',
+      detailLegendNeutral: '数值指标',
+      detailReportInfo: '报告信息',
+      detailTask: '任务编号',
+      detailTool: '预测工具',
+      detailMetricCount: '指标数量',
+      detailSource: '数据来源',
+      detailSourceValue: '真实任务结果表',
       colSmiles: 'SMILES',
       colInchiKey: 'InChIKey',
       colMolWeight: '分子量',
@@ -2107,6 +2186,8 @@ export default {
 
   // 任务
   tasks: {
+    loadFailed: '任务列表加载失败',
+    loadFailedHint: '网络不稳定或服务暂时不可用，可重试',
     outputMetrics: '关键指标',
     outputArtifacts: '产物清单',
     outputRawJson: '查看原始结果 JSON',
@@ -2138,6 +2219,7 @@ export default {
     create: '创建任务',
     name: '任务名称',
     namePlaceholder: '可选，留空将自动生成',
+    missingInputs: '请先选择必需输入：{inputs}',
     // 标签页
     allTasks: '全部任务',
     runningTasks: '运行中',
@@ -2708,6 +2790,7 @@ export default {
     cleanupDaysDesc: '超过此天数的已完成任务将被自动清理',
     runtimeStats: '运行统计',
     configSnapshot: '配置快照',
+    systemConfig: '系统配置',
     environment: '运行环境',
     debugMode: '调试模式',
     hostname: '主机名',
@@ -2753,6 +2836,12 @@ export default {
     gpuName: 'GPU名称',
     gpuUtilization: 'GPU利用率',
     gpuTemperature: '温度'
+  },
+
+  // 表单校验
+  validation: {
+    minLength: '最少 {min} 个字符',
+    maxLength: '最多 {max} 个字符'
   },
 
   // 错误页面

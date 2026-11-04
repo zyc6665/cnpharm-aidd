@@ -16,13 +16,20 @@ import {
 } from '@/types/screening'
 import type { ScreeningParams } from '@/types/screening'
 
+const props = withDefaults(defineProps<{ projectIdOverride?: string }>(), {
+  projectIdOverride: ''
+})
+
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 
 const projectId = computed(() => {
+  if (props.projectIdOverride) return props.projectIdOverride
   const raw = route.query.project_id
-  return typeof raw === 'string' ? raw : ''
+  if (typeof raw === 'string' && raw) return raw
+  const paramId = route.params?.projectId
+  return typeof paramId === 'string' ? paramId : ''
 })
 
 const receptorFile = ref<File | null>(null)
