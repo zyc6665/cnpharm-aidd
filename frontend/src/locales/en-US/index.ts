@@ -95,7 +95,14 @@ export default {
     screen: 'Virtual Screening',
     md: 'Molecular Dynamics',
     designRuns: 'Design Runs',
-    designSection: 'Design Tools'
+    designSection: 'Design Flow',
+    designPipeline: 'Pipeline Overview',
+    designGroupPrepare: 'Preparation',
+    designGroupDesign: 'Molecule Design',
+    designGroupEvaluate: 'Evaluation',
+    designGroupRecord: 'Records',
+    structurePredict: 'Structure Prediction',
+    pocketPredict: 'Pocket Prediction'
   },
   command: {
     placeholder: 'Search pages, commands…',

@@ -94,7 +94,14 @@ export default {
     screen: '虚拟筛选',
     md: '分子动力学',
     designRuns: '设计任务',
-    designSection: '设计工具'
+    designSection: '设计流程',
+    designPipeline: '流程总览',
+    designGroupPrepare: '前期准备',
+    designGroupDesign: '分子设计',
+    designGroupEvaluate: '评估验证',
+    designGroupRecord: '记录',
+    structurePredict: '结构预测',
+    pocketPredict: '口袋预测'
   },
   command: {
     placeholder: '搜索页面、命令…',
