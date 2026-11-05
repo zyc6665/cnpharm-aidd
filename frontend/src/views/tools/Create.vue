@@ -28,6 +28,10 @@
 
       <SkeletonDetail v-if="loading" />
         <a-card v-else class="form-card">
+          <a-steps :current="activeStep - 1" size="small" class="tool-editor-steps">
+            <a-step v-for="(label, index) in wizardSteps" :key="index" :title="label" />
+          </a-steps>
+
           <a-form
             ref="formRef"
             class="tool-form"
@@ -36,6 +40,7 @@
             layout="vertical"
             @finish="handleSubmit"
           >
+            <div v-show="activeStep === 1">
             <template v-if="showTemplateQuickStart">
               <a-divider orientation="left">药物研发工具模板</a-divider>
 
@@ -200,6 +205,8 @@
               </a-col>
             </a-row>
 
+            </div>
+            <div v-show="activeStep === 2">
             <!-- 运行配置 -->
             <a-divider orientation="left">{{ t('tools.runConfig') }}</a-divider>
 
@@ -223,6 +230,8 @@
               </span>
             </a-form-item>
 
+            </div>
+            <div v-show="activeStep === 5">
             <!-- 版本信息 -->
             <a-divider orientation="left">版本信息</a-divider>
 
@@ -253,6 +262,8 @@
               />
             </a-form-item>
 
+            </div>
+            <div v-show="activeStep === 2">
             <!-- 执行方式（固定 k8s_job） -->
             <a-divider orientation="left">执行方式</a-divider>
             <a-alert
@@ -298,6 +309,17 @@
               </a-row>
             </template>
 
+            </div>
+            <div v-show="activeStep === 3">
+              <a-divider orientation="left">输入 / 输出契约</a-divider>
+              <a-alert
+                type="info"
+                show-icon
+                message="输入/输出使用平台标准 Artifact 类型"
+                description="protein_structure@1 / binding_pocket@1 / molecule_table@1 / ligand_structure@1 / run_report@1；运行参数由 Tool Package v2 管理。"
+              />
+            </div>
+            <div v-show="activeStep === 4">
             <!-- 参数定义 -->
             <a-divider orientation="left">科学运行参数</a-divider>
 
@@ -339,6 +361,13 @@
               </template>
             </a-form-item>
 
+            </div>
+            <a-form-item class="wizard-nav">
+              <a-space size="middle">
+                <a-button v-if="activeStep > 1" @click="activeStep -= 1">上一步</a-button>
+                <a-button v-if="activeStep < 5" type="primary" @click="activeStep += 1">下一步</a-button>
+              </a-space>
+            </a-form-item>
             <!-- 提交按钮 -->
             <a-form-item class="form-actions">
               <a-space size="middle">
@@ -416,6 +445,8 @@
   const loading = ref(false)
   const submitting = ref(false)
   const showGuide = ref(false)
+  const activeStep = ref(1)
+  const wizardSteps = ['基本信息', '镜像与运行', '输入/输出契约', '运行参数', '版本与发布']
   const toolTemplates = ref<ToolTemplateSummary[]>([])
   const selectedToolTemplateKey = ref<string>()
   const creatingTemplateDraft = ref(false)
