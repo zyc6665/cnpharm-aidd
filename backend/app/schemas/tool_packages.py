@@ -10,6 +10,12 @@ class ToolPackageCreate(BaseModel):
     signature: str | None = Field(default=None, min_length=1, max_length=4096)
 
 
+class ToolPackageValidate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    manifest: AnyToolPackageManifest
+
+
 class ToolPackageKubernetesRegistrationCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

@@ -262,6 +262,32 @@
               />
             </a-form-item>
 
+            <a-divider orientation="left">发布前校验</a-divider>
+            <a-alert
+              type="info"
+              show-icon
+              message="一键校验模型的发布条件"
+              description="检查必填信息、镜像 digest 格式、资源档位、输入/输出契约与 Tool Package manifest（若存在）。校验通过后仍可保存，平台会在提交时再次校验。"
+              style="margin-bottom: 12px"
+            />
+            <a-space direction="vertical" style="width: 100%">
+              <a-button data-testid="tool-validate-button" :loading="validationRunning" @click="runValidation">
+                {{ validationRunning ? '校验中…' : '一键校验' }}
+              </a-button>
+              <div v-if="validationChecks.length" class="validation-list" data-testid="tool-validation-results">
+                <div
+                  v-for="check in validationChecks"
+                  :key="check.key"
+                  class="validation-item"
+                  :class="check.ok ? 'is-ok' : 'is-fail'"
+                >
+                  <span class="validation-mark">{{ check.ok ? '✓' : '✗' }}</span>
+                  <span class="validation-label">{{ check.label }}</span>
+                  <span v-if="check.detail" class="validation-detail">{{ check.detail }}</span>
+                </div>
+              </div>
+            </a-space>
+
             </div>
             <div v-show="activeStep === 2">
             <!-- 执行方式（固定 k8s_job） -->
@@ -463,7 +489,7 @@
   import type { ToolSchema } from '@/types/models'
   import type { ToolPackage } from '@/types/tool-packages'
   import { useToolsStore } from '@/stores'
-  import { getToolPackage } from '@/api/tool-packages'
+  import { getToolPackage, validateToolPackage } from '@/api/tool-packages'
   import {
     createTool,
     createToolDraftFromTemplate,
@@ -485,6 +511,62 @@
   const showGuide = ref(false)
   const activeStep = ref(1)
   const wizardSteps = ['基本信息', '镜像与运行', '输入/输出契约', '运行参数', '版本与发布']
+  interface ValidationCheck { key: string; label: string; ok: boolean; detail?: string }
+  const validationRunning = ref(false)
+  const validationChecks = ref<ValidationCheck[]>([])
+
+  function pushCheck(key: string, label: string, ok: boolean, detail?: string) {
+    validationChecks.value.push({ key, label, ok, detail })
+  }
+
+  async function runValidation() {
+    validationRunning.value = true
+    validationChecks.value = []
+    try {
+      pushCheck('name', '模型名称', Boolean(formState.name && String(formState.name).trim()), '必填')
+      pushCheck('slug', '模型标识（slug）', /^[a-z0-9][a-z0-9-]*$/.test(String(formState.slug || '')), '小写字母、数字与连字符')
+      pushCheck('description', '模型简介', Boolean(formState.description && String(formState.description).trim()), '必填')
+      pushCheck(
+        'image',
+        '镜像 digest',
+        /@sha256:[a-fA-F0-9]{64}$/.test(String(formState.k8s_image || '')),
+        '需为 registry/image@sha256:<64 位>'
+      )
+      pushCheck('resource', '资源档位', Boolean(formState.k8s_resource_profile), '必填')
+      pushCheck('version', '版本号', /^\d+\.\d+\.\d+/.test(String(formState.version || '')), '建议语义化版本，如 1.0.0')
+
+      if (hasContractManifest.value) {
+        const inNames = contractInputs.value.map(i => String(i.name || '').trim())
+        const outNames = contractOutputs.value.map(o => String(o.name || '').trim())
+        const missing = [...inNames, ...outNames].some(n => !n)
+        const dupIn = new Set(inNames).size !== inNames.length
+        const dupOut = new Set(outNames).size !== outNames.length
+        pushCheck('contract', '输入/输出契约', !missing && !dupIn && !dupOut,
+          missing ? '存在空槽名称' : dupIn || dupOut ? '存在重复槽名称' : `${inNames.length} 个输入 / ${outNames.length} 个输出`)
+      } else {
+        pushCheck('contract', '输入/输出契约', true, '无 Tool Package manifest，跳过（提交时由后端校验）')
+      }
+
+      if (registrationMode.value !== 'package') {
+        const schemaErrors = validateParameterSchema(inputParameterSchema.value)
+        pushCheck('params', '运行参数 Schema', inputSchemaEditorValid.value && schemaErrors.length === 0,
+          schemaErrors[0] || '参数 Schema 合法')
+      }
+
+      if (packageManifest.value) {
+        try {
+          const response = await validateToolPackage(packageManifest.value as Record<string, unknown>)
+          const result = response.data
+          pushCheck('manifest', 'Tool Package manifest 校验', result.isValid, result.errors.join('；') || '通过')
+        } catch (error) {
+          pushCheck('manifest', 'Tool Package manifest 校验', false, '调用校验接口失败，请确认后端已更新')
+        }
+      }
+      syncContractToManifest()
+    } finally {
+      validationRunning.value = false
+    }
+  }
   const toolTemplates = ref<ToolTemplateSummary[]>([])
   const selectedToolTemplateKey = ref<string>()
   const creatingTemplateDraft = ref(false)
@@ -1026,5 +1108,39 @@
     align-items: center;
     margin-bottom: 8px;
     flex-wrap: wrap;
+  }
+
+  .validation-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .validation-item {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    font-size: @font-size-sm;
+
+    &.is-ok .validation-mark {
+      color: @success-color;
+    }
+
+    &.is-fail .validation-mark {
+      color: @error-color;
+    }
+  }
+
+  .validation-mark {
+    font-weight: 600;
+  }
+
+  .validation-label {
+    color: @text-primary;
+    min-width: 160px;
+  }
+
+  .validation-detail {
+    color: @text-secondary;
   }
 </style>
